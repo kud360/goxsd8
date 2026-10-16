@@ -49,25 +49,24 @@ func WithURI(uri string) Option {
 // and (result, nil) otherwise; a result it returns never carries
 // [validate.Result.Err]. The faults are: a nil v or r; JSON that is malformed
 // or absent, or followed by further content; and every input the mapping
-// DECLINES —
-// a top level that is not an object with exactly one member, and, anywhere in
-// the document, a member the implemented arms do not map (a key whose colon
-// makes no QName or whose prefix no "$xmlns" in scope binds; a key no child
-// element declaration and no attribute use carries whose namespace neither a
-// prefix nor the type's wildcards fix, or whose kind a type with both an
-// element wildcard and an {attribute wildcard} leaves open, or which a
-// wildcard puts in the xsi or xml namespace, or a prefix in the xsi namespace
-// or, as a child element, in the xml namespace; a member of an object under
-// a child no contained and no top-level declaration names; an unprefixed key
-// two expanded names carry, a key both a child declaration and an
-// attribute use carry, an attribute member after a child member or repeated,
-// an attribute member whose value is null, an object or an array, a "$type"
-// or "$xmlns" member out of its leading place or of the wrong shape, a
-// "$type" whose parent's ·governing type definition· the mapping does not
+// DECLINES — a top level that is not an object with exactly one member, and,
+// anywhere in the document, a member the implemented arms do not map (a key
+// whose colon makes no QName or whose prefix no "$xmlns" in scope binds; a
+// key no child element declaration and no attribute use carries whose
+// namespace neither a prefix nor the type's wildcards fix, or whose kind a
+// type with both an element wildcard and an {attribute wildcard} leaves open,
+// or which a wildcard puts in the xsi or xml namespace, or a prefix in the
+// xsi namespace or, as a child element, in the xml namespace; a member of an
+// object under a child no contained and no top-level declaration names; an
+// unprefixed key two expanded names carry, a key both a child declaration and
+// an attribute use carry, an attribute member after a child member or
+// repeated, an attribute member whose value is null, an object or an array, a
+// "$type" or "$xmlns" member out of its leading place or of the wrong shape,
+// a "$type" whose parent's ·governing type definition· the mapping does not
 // determine or that the types a {type table} can select for it settle
-// differently, any other "$"-prefixed reserved member, a nested
-// array, a member of an element whose declaration carries a {type table} that
-// its declared {type definition} and a type the table can select classify
+// differently, any other "$"-prefixed reserved member, a nested array, a
+// member of an element whose declaration carries a {type table} that its
+// declared {type definition} and a type the table can select classify
 // differently; the package doc lists them all). A decline names the arm it is
 // not, and for an input with no XML twin the spelling the mapping takes
 // instead where one exists; it is never a silent drop or a guessed mapping: a

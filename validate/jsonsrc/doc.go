@@ -275,20 +275,19 @@
 // [Validate], which [errors.As] matches, naming the arm it is not — never a
 // silent drop and never a guessed mapping. Malformed or absent JSON, content
 // after the top-level object and a fault reading the input are no declines,
-// and no error but a decline is a DeclineError.
-// Each entry below whose XML twin the engine assesses is tracked by a
-// GAP(jsonsrc) marker at the function that declines it — rootMember,
-// childNamed, useNamed, wildcardMember, classify, members.key, reserved,
-// instanceGoverned and declaredType; one more at classify tracks the mapping's
-// own choice of a declaration or use over a wildcard, under "The mapping". A
-// repeated attribute member, an attribute member whose value is null, an
-// object or an array, an array item that is itself an array, a key whose colon
-// makes no QName, a prefix no "$xmlns" in scope binds, a repeated "$xmlns" or
-// "$type", a reserved member other than those two or at the top level, the
-// malformed "$xmlns" and "$type" values below, and the top-level shapes and
-// array root value that "The validation root" declines have no XML twin, and
-// no marker; the error for each names the spelling the mapping takes instead,
-// where one exists:
+// and no error but a decline is a DeclineError. Each entry below whose XML
+// twin the engine assesses is tracked by a GAP(jsonsrc) marker at the function
+// that declines it — rootMember, childNamed, useNamed, wildcardMember,
+// classify, members.key, reserved, instanceGoverned and declaredType; one more
+// at classify tracks the mapping's own choice of a declaration or use over a
+// wildcard, under "The mapping". A repeated attribute member, an attribute
+// member whose value is null, an object or an array, an array item that is
+// itself an array, a key whose colon makes no QName, a prefix no "$xmlns" in
+// scope binds, a repeated "$xmlns" or "$type", a reserved member other than
+// those two or at the top level, the malformed "$xmlns" and "$type" values
+// below, and the top-level shapes and array root value that "The validation
+// root" declines have no XML twin, and no marker; the error for each names the
+// spelling the mapping takes instead, where one exists:
 //
 //   - an unprefixed key two expanded names carry: among the top-level
 //     declarations at the root, among the declarations a type contains, or
