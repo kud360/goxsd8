@@ -259,12 +259,17 @@ func (w *walker) rootMember(key string, sc *scope, scalar bool, loc xsderr.Loc) 
 	case 1:
 		return declaredElement{decl: match[0]}, nil
 	}
-	if scalar {
-		return nil, w.declinef(loc, "root member %q names top-level element declarations of %d expanded names (%s and %s); an unprefixed key does not choose between them, and a prefixed one, \"p:%s\", is bound only by a \"$xmlns\" member leading an object value, which a root whose value is a scalar or null has not, so no key names either root with this value",
+	if !scalar {
+		return nil, w.declinef(loc, "root member %q names top-level element declarations of %d expanded names (%s and %s); an unprefixed key does not choose between them, and a prefixed one, \"p:%s\", names one",
 			key, len(match), match[0].Name(), match[1].Name(), key)
 	}
-	return nil, w.declinef(loc, "root member %q names top-level element declarations of %d expanded names (%s and %s); an unprefixed key does not choose between them, and a prefixed one, \"p:%s\", names one",
-		key, len(match), match[0].Name(), match[1].Name(), key)
+	inXML := slices.IndexFunc(match, func(d xsd.ElementDeclaration) bool { return d.Name().Space == xmlNamespace })
+	if inXML < 0 {
+		return nil, w.declinef(loc, "root member %q names top-level element declarations of %d expanded names (%s and %s); an unprefixed key does not choose between them, and a root whose value is a scalar or null has no object for a \"$xmlns\" member to lead, so \"xml\" is the one prefix bound there and no key names any of them with this value",
+			key, len(match), match[0].Name(), match[1].Name())
+	}
+	return nil, w.declinef(loc, "root member %q names top-level element declarations of %d expanded names (%s and %s); an unprefixed key does not choose between them, and a root whose value is a scalar or null has no object for a \"$xmlns\" member to lead, so \"xml\" is the one prefix bound there: key it \"xml:%s\" for %s, and no key names any other of them with this value",
+		key, len(match), match[0].Name(), match[1].Name(), key, match[inXML].Name())
 }
 
 // keyName is a member's key as classification reads it: name.Local, the local
@@ -301,9 +306,9 @@ func (k keyName) carries(n xsd.QName) bool {
 // namespace declaration, which a "$xmlns" member spells. The unbound-prefix
 // decline names the "$xmlns" member that would bind the prefix, except under
 // scalarRoot, a root whose value is a scalar or null: such a root has no
-// object of its own and no ancestor, so no "$xmlns" scopes it, and the decline
-// names the unprefixed key instead (rootMember), the one key that gives such a
-// root a namespace.
+// object of its own and no ancestor, so no "$xmlns" scopes it and "xml" is the
+// one prefix bound there; the decline names the "xml:" key and the unprefixed
+// key (rootMember) instead.
 func (w *walker) keyName(key string, sc *scope, scalarRoot bool, loc xsderr.Loc) (keyName, error) {
 	prefix, local, prefixed := strings.Cut(key, ":")
 	if !prefixed {
@@ -317,7 +322,7 @@ func (w *walker) keyName(key string, sc *scope, scalarRoot bool, loc xsderr.Loc)
 		return keyName{}, w.declinef(loc, "member %q: no \"$xmlns\" in scope binds its prefix %q; a namespace declaration is a \"$xmlns\" member, {%q:\"<namespace name>\"}, leading the object of the element it scopes, and never an xmlns: key", key, prefix, key[len(prefix)+1:])
 	}
 	if !ok && scalarRoot {
-		return keyName{}, w.declinef(loc, "member %q: no \"$xmlns\" in scope binds its prefix %q, and a root whose value is a scalar or null has no object for a \"$xmlns\" member to lead; key it by its local name alone, {%q:...}, which names the top-level element declaration of that local name where exactly one carries it, since no other key gives such a root a namespace", key, prefix, key[len(prefix)+1:])
+		return keyName{}, w.declinef(loc, "member %q: no \"$xmlns\" in scope binds its prefix %q, and a root whose value is a scalar or null has no object for a \"$xmlns\" member to lead, so \"xml\" is the one prefix bound there; key it {\"xml:%s\":...} for the element of that local name in the namespace %s, or by its local name alone, {%q:...}, which names the top-level element declaration of that local name where exactly one carries it", key, prefix, key[len(prefix)+1:], xmlNamespace, key[len(prefix)+1:])
 	}
 	if !ok {
 		return keyName{}, w.declinef(loc, "member %q: no \"$xmlns\" in scope binds its prefix %q; a prefixed key names the expanded name its prefix's binding gives it, so bind %q in a \"$xmlns\" member, {%q:\"<namespace name>\"}, leading the object of the element the key names or is an attribute of, or of an ancestor", key, prefix, prefix, prefix)

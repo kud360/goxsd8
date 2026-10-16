@@ -216,9 +216,9 @@ func TestPrefixedKeyDeclines(t *testing.T) {
 		{"unbound prefix at the root", `{"p:doc":{}}`,
 			"jsonsrc: instance.json:1:2: ", `member "p:doc": no "$xmlns" in scope binds its prefix "p"; a prefixed key names the expanded name its prefix's binding gives it, so bind "p" in a "$xmlns" member, {"p":"<namespace name>"}, leading the object of the element the key names or is an attribute of, or of an ancestor`},
 		{"unbound prefix, a scalar root", `{"p:doc":"x"}`,
-			"jsonsrc: instance.json:1:2: ", `member "p:doc": no "$xmlns" in scope binds its prefix "p", and a root whose value is a scalar or null has no object for a "$xmlns" member to lead; key it by its local name alone, {"doc":...}, which names the top-level element declaration of that local name where exactly one carries it, since no other key gives such a root a namespace`},
+			"jsonsrc: instance.json:1:2: ", `member "p:doc": no "$xmlns" in scope binds its prefix "p", and a root whose value is a scalar or null has no object for a "$xmlns" member to lead, so "xml" is the one prefix bound there; key it {"xml:doc":...} for the element of that local name in the namespace http://www.w3.org/XML/1998/namespace, or by its local name alone, {"doc":...}, which names the top-level element declaration of that local name where exactly one carries it`},
 		{"unbound prefix, a null root", `{"p:w":null}`,
-			"jsonsrc: instance.json:1:2: ", `member "p:w": no "$xmlns" in scope binds its prefix "p", and a root whose value is a scalar or null has no object for a "$xmlns" member to lead; key it by its local name alone, {"w":...}, which names the top-level element declaration of that local name where exactly one carries it, since no other key gives such a root a namespace`},
+			"jsonsrc: instance.json:1:2: ", `member "p:w": no "$xmlns" in scope binds its prefix "p", and a root whose value is a scalar or null has no object for a "$xmlns" member to lead, so "xml" is the one prefix bound there; key it {"xml:w":...} for the element of that local name in the namespace http://www.w3.org/XML/1998/namespace, or by its local name alone, {"w":...}, which names the top-level element declaration of that local name where exactly one carries it`},
 		{"unbound prefix in a child", pDoc + `"z:k":1}}`,
 			"jsonsrc: instance.json:1:46: ", `member "z:k": no "$xmlns" in scope binds its prefix "z"; a prefixed key names the expanded name its prefix's binding gives it, so bind "z" in a "$xmlns" member, {"z":"<namespace name>"}, leading the object of the element the key names or is an attribute of, or of an ancestor`},
 		{"bound in a sibling only", pDoc + `"o:k":{"$xmlns":{"z":"urn:o"}},"z:k":{}}}`,
@@ -236,7 +236,7 @@ func TestPrefixedKeyDeclines(t *testing.T) {
 		{"unprefixed root of two expanded names", `{"doc":{}}`,
 			"jsonsrc: instance.json:1:2: ", `root member "doc" names top-level element declarations of 2 expanded names ({urn:p}doc and {urn:o}doc); an unprefixed key does not choose between them, and a prefixed one, "p:doc", names one`},
 		{"unprefixed scalar root of two expanded names", `{"doc":"x"}`,
-			"jsonsrc: instance.json:1:2: ", `root member "doc" names top-level element declarations of 2 expanded names ({urn:p}doc and {urn:o}doc); an unprefixed key does not choose between them, and a prefixed one, "p:doc", is bound only by a "$xmlns" member leading an object value, which a root whose value is a scalar or null has not, so no key names either root with this value`},
+			"jsonsrc: instance.json:1:2: ", `root member "doc" names top-level element declarations of 2 expanded names ({urn:p}doc and {urn:o}doc); an unprefixed key does not choose between them, and a root whose value is a scalar or null has no object for a "$xmlns" member to lead, so "xml" is the one prefix bound there and no key names any of them with this value`},
 		{"unprefixed child of two expanded names", pDoc + `"k":1}}`,
 			"jsonsrc: instance.json:1:46: ", `member "k" names child element declarations of two expanded names in the type of {urn:p}doc ({urn:p}k and {urn:o}k); an unprefixed key does not choose between them`},
 		{"unprefixed attribute of two expanded names", pDoc + `"a":1}}`,
@@ -270,6 +270,62 @@ func TestPrefixedKeyDeclines(t *testing.T) {
 			}
 			if !strings.HasPrefix(err.Error(), tc.prefix) || !strings.Contains(err.Error(), tc.says) {
 				t.Errorf("Validate(%s) = %q, want it to open %q and say %q", tc.json, err, tc.prefix, tc.says)
+			}
+		})
+	}
+}
+
+// xmlRootSchema declares doc in urn:p and imports xmlRootXMLSchema, which
+// declares doc and note in the xml namespace: doc at the root is carried by
+// two expanded names, one of them the xml namespace's.
+const xmlRootSchema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" targetNamespace="urn:p">
+  <xs:import namespace="http://www.w3.org/XML/1998/namespace" schemaLocation="xml.xsd"/>
+  <xs:element name="doc" type="xs:string"/>
+</xs:schema>`
+
+// xmlRootXMLSchema is xmlRootSchema's xml-namespace document.
+const xmlRootXMLSchema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+    targetNamespace="http://www.w3.org/XML/1998/namespace">
+  <xs:element name="doc" type="xs:string"/>
+  <xs:element name="note" type="xs:string"/>
+</xs:schema>`
+
+// TestScalarRootXMLPrefix pins the "xml" prefix as the one bound at a root
+// whose value is a scalar or null (walker.keyName, rootMember): an "xml:" key
+// names the xml namespace's declaration, as its XML twin does, and the
+// declines that a prefixed key such a root cannot bind, and an unprefixed key
+// two expanded names carry, name that "xml:" key.
+func TestScalarRootXMLPrefix(t *testing.T) {
+	backend := strict.New()
+	schema, err := parser.Parse("p.xsd", parser.WithResolver(loader.Map(map[string]string{
+		"p.xsd":   xmlRootSchema,
+		"xml.xsd": xmlRootXMLSchema,
+	})), parser.WithBackend(backend))
+	if err != nil {
+		t.Fatalf("parser.Parse: %v", err)
+	}
+	v, err := validate.New(schema, backend)
+	if err != nil {
+		t.Fatalf("validate.New: %v", err)
+	}
+	twin(t, v, `{"xml:note":"x"}`, `<xml:note>x</xml:note>`, nil)
+	twin(t, v, `{"xml:doc":"x"}`, `<xml:doc>x</xml:doc>`, nil)
+	for _, tc := range []struct {
+		name, json string
+		says       string
+	}{
+		{"unbound prefix", `{"p:note":"x"}`,
+			`member "p:note": no "$xmlns" in scope binds its prefix "p", and a root whose value is a scalar or null has no object for a "$xmlns" member to lead, so "xml" is the one prefix bound there; key it {"xml:note":...} for the element of that local name in the namespace http://www.w3.org/XML/1998/namespace, or by its local name alone, {"note":...}, which names the top-level element declaration of that local name where exactly one carries it`},
+		{"unprefixed key of two expanded names", `{"doc":"x"}`,
+			`root member "doc" names top-level element declarations of 2 expanded names ({urn:p}doc and {http://www.w3.org/XML/1998/namespace}doc); an unprefixed key does not choose between them, and a root whose value is a scalar or null has no object for a "$xmlns" member to lead, so "xml" is the one prefix bound there: key it "xml:doc" for {http://www.w3.org/XML/1998/namespace}doc, and no key names any other of them with this value`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			res, err := Validate(v, strings.NewReader(tc.json), WithURI(jsonURI))
+			if err == nil {
+				t.Fatalf("Validate(%s) = %v violations, nil error; want the decline", tc.json, rules(res))
+			}
+			if want := "jsonsrc: instance.json:1:2: " + tc.says; err.Error() != want {
+				t.Errorf("Validate(%s) = %q, want %q", tc.json, err, want)
 			}
 		})
 	}
