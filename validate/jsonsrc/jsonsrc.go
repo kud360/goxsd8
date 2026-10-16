@@ -1216,10 +1216,11 @@ func (w *walker) typeMember(e *element, tok json.Token, loc xsderr.Loc) (*attrib
 // non-empty prefix that is no NCName, which no xmlns:prefix attribute can
 // declare (Namespaces in XML [2] PrefixedAttName); a prefix bound twice; the
 // prefixes "xml" and "xmlns", which Namespaces in XML §3 reserves, "xml" being
-// bound already (element.LookupPrefix); and a non-empty prefix bound to the
-// empty string, which would undeclare it. The empty prefix may be bound, and
-// is shadowed: the element's default namespace stays its own namespace name
-// (package doc).
+// bound already (element.LookupPrefix) — the decline says to drop an "xml"
+// binding to that namespace name or to "", and to bind another prefix for any
+// other; and a non-empty prefix bound to the empty string, which would
+// undeclare it. The empty prefix may be bound, and is shadowed: the element's
+// default namespace stays its own namespace name (package doc).
 func (w *walker) xmlns(key string) ([]binding, error) {
 	tok, loc, err := w.token()
 	if err != nil {
@@ -1248,6 +1249,9 @@ func (w *walker) xmlns(key string) ([]binding, error) {
 		}
 		if prefix != "" && !xmlname.IsNCName(prefix) {
 			return nil, w.declinef(loc, "the \"$xmlns\" member of %q binds %q, which is not an NCName; no xmlns:prefix attribute declares it, so bind an NCName prefix instead", key, prefix)
+		}
+		if prefix == "xml" && uri != xmlNamespace && uri != "" {
+			return nil, w.declinef(loc, "the \"$xmlns\" member of %q binds the reserved prefix %q to %q, but every element binds it to %s and none to any other namespace name, so bind another prefix to %q and use it in place of %q on the keys meant to be in that namespace", key, prefix, uri, xmlNamespace, uri, prefix)
 		}
 		if prefix == "xml" {
 			return nil, w.declinef(loc, "the \"$xmlns\" member of %q binds the reserved prefix %q, which every element binds already, so drop the binding", key, prefix)
