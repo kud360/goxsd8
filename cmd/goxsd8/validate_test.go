@@ -894,9 +894,9 @@ func TestValidateFormatVocabulary(t *testing.T) {
 // XML instance's do, at jsonsrc's line and byte column, and earn the same
 // codes, while jsonsrc's one error channel — malformed JSON and every decline
 // alike — prints "<loc>: [jsonsrc] <message>", the source name standing where
-// a rule ID stands, and exits 4: it is no validity verdict. Every row runs with and without
-// -no-hints and must answer the same, because a JSON instance carries no
-// hints.
+// a rule ID stands, and exits 4: it is no validity verdict. Every row runs
+// with and without -no-hints and must answer the same, because a JSON instance
+// carries no hints.
 func TestValidateJSONInstance(t *testing.T) {
 	cases := []struct {
 		name      string

@@ -80,8 +80,8 @@ func formatVocabulary() string {
 // into ONE schema set and assesses every positional argument against it,
 // writing each violation, and each check the assessment declined, to stdout as
 // the contract's "<loc>: [<rule>] <message>", and a JSON instance jsonsrc
-// could not assess as jsonsrc's own error line (assessJSON). args excludes the
-// subcommand name itself.
+// could not assess as "<loc>: [jsonsrc] <message>" (assessJSON). args excludes
+// the subcommand name itself.
 //
 // Every instance is assessed, in argument order: a violation in one never
 // stops the next, so a script gets the whole report from one run. The exit
