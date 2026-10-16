@@ -652,7 +652,7 @@ func (w *walker) classify(o *object, key string, sc *scope, loc xsderr.Loc, scal
 	if err != nil {
 		return nil, err
 	}
-	ms, err := w.membersOf(append([]*object{o}, o.selectable...), key, k, loc)
+	ms, err := w.membersOf(append([]*object{o}, o.selectable...), key, k, loc, w.notAlike)
 	if err != nil {
 		return nil, err
 	}
@@ -664,13 +664,14 @@ func (w *walker) classify(o *object, key string, sc *scope, loc xsderr.Loc, scal
 
 // membersOf classifies the key, read as k, at loc, under each of objects, one
 // owner's: the first one's decline is the key's own, and another's is
-// notAlike's.
-func (w *walker) membersOf(objects []*object, key string, k keyName, loc xsderr.Loc) ([]member, error) {
+// declined's, given objects[0] — notAlike below the root, undetermined in a
+// root's attribute run.
+func (w *walker) membersOf(objects []*object, key string, k keyName, loc xsderr.Loc, declined func(*object, string, xsderr.Loc) error) ([]member, error) {
 	ms := make([]member, 0, len(objects))
 	for i, o := range objects {
 		m, err := w.memberOf(o, key, k, loc)
 		if err != nil && i > 0 {
-			return nil, w.notAlike(objects[0], key, loc)
+			return nil, declined(objects[0], key, loc)
 		}
 		if err != nil {
 			return nil, err
@@ -697,6 +698,17 @@ func (w *walker) allAlike(ms []member, scalar bool) bool {
 // the owner (selection).
 func (w *walker) notAlike(o *object, key string, loc xsderr.Loc) error {
 	return w.declinef(loc, "member %q of %s is not classified alike under its declaration's {type definition} and every type its {type table} can select; the mapping reads no ·selected type definition· for it",
+		key, o.owner)
+}
+
+// undetermined declines the member key, at loc, of o's object, the attribute
+// run of a root whose {type table} the mapping reads the selection of
+// (walker.attributes), which a type the table can select declines while
+// another still reads attributes: the selection reads the whole run
+// (key-cta-ta-select clause 1.1.2), so it turns on a member the mapping does
+// not map, and walker.attributes' GAP(jsonsrc) marker tracks the decline.
+func (w *walker) undetermined(o *object, key string, loc xsderr.Loc) error {
+	return w.declinef(loc, "member %q of %s is declined under a type its {type table} can select, while another reads the attribute members before it; the type the table ·conditionally selects· reads the whole run of them, so the mapping declines rather than drop that type",
 		key, o.owner)
 }
 
@@ -1909,8 +1921,24 @@ func (w *walker) object(owner xsd.QName, td xsd.TypeDefinition) *object {
 // reading attributes — o and each of o.selectable at the start — and where
 // one classifies it as no attribute, the type the attributes before it select
 // decides whether the run ends there.
+//
+// GAP(jsonsrc): in the attribute run of a root whose declaration carries a
+// {type table}, a member declines where any one live candidate declines it,
+// though the engine assesses the XML twin under the one type the table
+// selects, which may map it. Each member is classified under every live
+// candidate (walker.membersOf): a later candidate's decline is undetermined's,
+// and the first live candidate's — the declared {type definition}'s while it
+// is live — passes through alone as its own exit's, wildcardMember's for a key
+// under an element wildcard of variety any. No candidate that declines a
+// member is dropped: the selection reads the whole run (key-cta-ta-select
+// clause 1.1.2), so the reading that ends the run at that member would go
+// unexamined. Owned by #2703.
 func (w *walker) attributes(o *object, sc *scope, tok json.Token, loc xsderr.Loc, attrs []validate.Attribute, table *xsd.TypeTable) ([]validate.Attribute, peeked, *object, error) {
 	r := &attributeRun{owner: o, live: append([]*object{o}, o.selectable...), table: table, attrs: attrs}
+	declined := w.notAlike
+	if table != nil {
+		declined = w.undetermined
+	}
 	for {
 		key, ok := tok.(string)
 		if !ok {
@@ -1932,7 +1960,7 @@ func (w *walker) attributes(o *object, sc *scope, tok json.Token, loc xsderr.Loc
 			if next.k, err = w.keyName(key, v.scope, false, loc); err != nil {
 				return nil, peeked{}, nil, err
 			}
-			if next.ms, err = w.membersOf(r.live, key, next.k, loc); err != nil {
+			if next.ms, err = w.membersOf(r.live, key, next.k, loc, declined); err != nil {
 				return nil, peeked{}, nil, err
 			}
 		}
@@ -2104,8 +2132,7 @@ func (w *walker) settled(r *attributeRun, next *runMember, loc xsderr.Loc) (*obj
 	slot, decided := w.selected(*r.table, r.attrs, nil)
 	if !decided {
 		if len(r.live) < len(r.owner.selectable)+1 {
-			return nil, nil, w.declinef(loc, "the members of %s are classified differently under the types its {type table} can select, and the engine withholds the type the table ·conditionally selects·: a {test} it reaches is outside its compiler's subset",
-				r.owner.owner)
+			return nil, nil, w.withheld(r.owner, loc)
 		}
 		return w.unselected(r, next)
 	}
@@ -2136,16 +2163,30 @@ func (w *walker) settled(r *attributeRun, next *runMember, loc xsderr.Loc) (*obj
 // unselected ends r's run at next, or at the object's close where next is
 // nil, under r.owner, every live candidate classifying next alike
 // (walker.allAlike), and returns next's classification as a child, nil for an
-// array value. It DECLINES next where they do not (notAlike).
+// array value. It DECLINES next where they do not: notAlike's where r reads
+// no selection, and withheld's where the engine withholds it.
 func (w *walker) unselected(r *attributeRun, next *runMember) (*object, elementMember, error) {
 	if next == nil || next.ms == nil {
 		return r.owner, nil, nil
 	}
-	if !w.allAlike(next.ms, scalarValue(next.val.tok)) {
+	alike := w.allAlike(next.ms, scalarValue(next.val.tok))
+	if !alike && r.table != nil {
+		return nil, nil, w.withheld(r.owner, next.loc)
+	}
+	if !alike {
 		return nil, nil, w.notAlike(r.owner, next.key, next.loc)
 	}
 	child, _ := next.ms[0].(elementMember) // every one is: next.child holds
 	return r.owner, child, nil
+}
+
+// withheld declines the members of o's object, at loc, a root's whose {type
+// table} the types it can select classify differently, where the engine
+// withholds the type the table ·conditionally selects· (walker.settled's
+// GAP(jsonsrc) marker).
+func (w *walker) withheld(o *object, loc xsderr.Loc) error {
+	return w.declinef(loc, "the members of %s are classified differently under the types its {type table} can select, and the engine withholds the type the table ·conditionally selects·: a {test} it reaches is outside its compiler's subset",
+		o.owner)
 }
 
 // agrees reports whether so classifies each member of run as the attribute
