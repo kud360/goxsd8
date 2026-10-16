@@ -1274,11 +1274,7 @@ func (w *walker) objectElement(m elementMember, loc xsderr.Loc, v value, at plac
 	if err != nil {
 		return nil, err
 	}
-	var attrs []validate.Attribute
-	if typ != nil {
-		attrs = []validate.Attribute{typ}
-	}
-	attrs, head, o, err := w.attributes(o, e.scope, tok, tokAt, attrs, selection(m, o, at))
+	attrs, head, o, err := w.attributes(o, e.scope, tok, tokAt, typ, selection(m, o, at))
 	if err != nil {
 		return nil, err
 	}
@@ -1887,12 +1883,12 @@ func (w *walker) object(owner xsd.QName, td xsd.TypeDefinition) *object {
 
 // attributes reads the members of o's object that classify as attributes,
 // their prefixes read through sc, the element's scope, from tok at loc, the
-// first after its reserved members, each an attribute of the element appended
-// to attrs, which holds its xsi:type where a "$type" presents one; and returns
-// them with the member that ends the run — the first whose key names a child
-// or whose value is an array, as far as walker.value read it, or the object's
-// close — for the element's members cursor to start from, and the object the
-// members after the run are classified against.
+// first after its reserved members, each an attribute of the element after
+// typ, its xsi:type where a "$type" presents one and nil where none does; and
+// returns them, typ first, with the member that ends the run — the first
+// whose key names a child or whose value is an array, as far as walker.value
+// read it, or the object's close — for the element's members cursor to start
+// from, and the object the members after the run are classified against.
 //
 // The engine reads an element's [[attributes]] at its entry, before its
 // [[children]], and again after them, so they must be whole and unchanged
@@ -1933,8 +1929,8 @@ func (w *walker) object(owner xsd.QName, td xsd.TypeDefinition) *object {
 // member is dropped: the selection reads the whole run (key-cta-ta-select
 // clause 1.1.2), so the reading that ends the run at that member would go
 // unexamined. Owned by #2703.
-func (w *walker) attributes(o *object, sc *scope, tok json.Token, loc xsderr.Loc, attrs []validate.Attribute, table *xsd.TypeTable) ([]validate.Attribute, peeked, *object, error) {
-	r := &attributeRun{owner: o, live: append([]*object{o}, o.selectable...), table: table, attrs: attrs}
+func (w *walker) attributes(o *object, sc *scope, tok json.Token, loc xsderr.Loc, typ *attribute, table *xsd.TypeTable) ([]validate.Attribute, peeked, *object, error) {
+	r := &attributeRun{owner: o, live: append([]*object{o}, o.selectable...), table: table, typ: typ}
 	declined := w.notAlike
 	if table != nil {
 		declined = w.undetermined
@@ -1946,7 +1942,7 @@ func (w *walker) attributes(o *object, sc *scope, tok json.Token, loc xsderr.Loc
 			if err != nil {
 				return nil, peeked{}, nil, err
 			}
-			return r.attrs, peeked{tok: tok, loc: loc}, final, nil
+			return r.attributes(), peeked{tok: tok, loc: loc}, final, nil
 		}
 		if isReserved(key) {
 			return nil, peeked{}, nil, w.reserved(key, loc)
@@ -1970,7 +1966,7 @@ func (w *walker) attributes(o *object, sc *scope, tok json.Token, loc xsderr.Loc
 				return nil, peeked{}, nil, err
 			}
 			if final != nil {
-				return r.attrs, peeked{tok: tok, loc: loc, member: child, val: v}, final, nil
+				return r.attributes(), peeked{tok: tok, loc: loc, member: child, val: v}, final, nil
 			}
 		}
 		if err := w.extend(r, next); err != nil {
@@ -1986,15 +1982,37 @@ func (w *walker) attributes(o *object, sc *scope, tok json.Token, loc xsderr.Loc
 // reads: owner, the object the element's members are classified against
 // before any selection; live, the candidates still reading attributes, owner
 // and each of owner.selectable at the start; table, the {type table} whose
-// selection settles the run, nil where none does (selection); attrs, the
-// element's attributes so far; and run, the members among them, which the
-// selected type classifies again (walker.agrees).
+// selection settles the run, nil where none does (selection); typ, the
+// element's xsi:type, nil where no "$type" presents one; and run, the members
+// taken as attributes so far, which the selected type classifies again
+// (walker.agrees).
 type attributeRun struct {
 	owner *object
 	live  []*object
 	table *xsd.TypeTable
-	attrs []validate.Attribute
+	typ   *attribute
 	run   []*runMember
+}
+
+// attributes is the element's attributes so far: r.typ, where it is not nil,
+// then the attribute each member of r.run is (runMember.asAttribute).
+func (r *attributeRun) attributes() []validate.Attribute {
+	attrs := make([]validate.Attribute, 0, len(r.run)+1)
+	if r.typ != nil {
+		attrs = append(attrs, r.typ)
+	}
+	for _, m := range r.run {
+		attrs = append(attrs, m.asAttribute())
+	}
+	return attrs
+}
+
+// has reports whether r already holds an attribute named name.
+func (r *attributeRun) has(name xsd.QName) bool {
+	if r.typ != nil && r.typ.name == name {
+		return true
+	}
+	return slices.ContainsFunc(r.run, func(m *runMember) bool { return m.attributeName() == name })
 }
 
 // runMember is one member walker.attributes reads: its key, read as k, at
@@ -2018,6 +2036,17 @@ func (m *runMember) attributeName() xsd.QName {
 		}
 	}
 	panic("jsonsrc: attributeName of a member no candidate takes as an attribute")
+}
+
+// asAttribute is the attribute m is where the run takes it (walker.extend),
+// named by attributeName, valued by its scalar's lexical form and located at
+// its key.
+func (m *runMember) asAttribute() *attribute {
+	lexical, ok := scalarLexical(m.val.tok)
+	if !ok {
+		panic("jsonsrc: asAttribute of a member whose value is no scalar")
+	}
+	return &attribute{name: m.attributeName(), value: lexical, loc: m.loc}
 }
 
 // child reports whether some live candidate classifies m as no attribute, an
@@ -2073,16 +2102,14 @@ func (w *walker) extend(r *attributeRun, next *runMember) error {
 		}
 		live, name = append(live, r.live[i]), a.name
 	}
-	if slices.ContainsFunc(r.attrs, func(a validate.Attribute) bool { return a.Name() == name }) {
+	if r.has(name) {
 		return w.declinef(next.loc, "attribute member %q repeats in the object of %s; an element carries one attribute of each expanded name, so give it once", next.key, r.owner.owner)
 	}
-	lexical, ok := scalarLexical(next.val.tok)
-	if !ok {
+	if _, ok := scalarLexical(next.val.tok); !ok {
 		return w.notScalar(r.owner, next.key, next.val.loc)
 	}
 	r.live = live
 	r.run = append(r.run, next)
-	r.attrs = append(r.attrs, &attribute{name: name, value: lexical, loc: next.loc})
 	return nil
 }
 
@@ -2129,7 +2156,7 @@ func (w *walker) settled(r *attributeRun, next *runMember, loc xsderr.Loc) (*obj
 	if r.table == nil {
 		return w.unselected(r, next)
 	}
-	slot, decided := w.selected(*r.table, r.attrs, nil)
+	slot, decided := w.selected(*r.table, r.attributes(), nil)
 	if !decided {
 		if len(r.live) < len(r.owner.selectable)+1 {
 			return nil, nil, w.withheld(r.owner, loc)
