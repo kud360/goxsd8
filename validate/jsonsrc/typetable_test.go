@@ -173,9 +173,9 @@ func TestTypeTableSelected(t *testing.T) {
 // outside the §3.12.6 compiler's subset. P extends U with the attribute p, and
 // tp is of type T and selects P where it has a p. V extends T with the
 // attribute p, and tv is of type T and selects T where it has an m, else P
-// where it has a p, else V where it has a zzz. t0 is of type Q and selects Q2 where
-// it has an m in no namespace and Q1 where it has one in urn:s. Under T a key
-// "m" is a child no wildcard names (walker.namedChild).
+// where it has a p, else V where it has a zzz. t0 is of type Q and selects Q2
+// where it has an m in no namespace and Q1 where it has one in urn:s. Under T
+// a key "m" is a child no wildcard names (walker.namedChild).
 const runSchema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
     targetNamespace="urn:s" xmlns:s="urn:s" elementFormDefault="qualified">
   <xs:complexType name="T"><xs:attribute name="a" type="xs:string"/></xs:complexType>

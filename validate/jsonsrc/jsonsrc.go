@@ -2112,8 +2112,8 @@ func (m *runMember) attribute() bool {
 // governs the root under it (key-governing-type-elem clause 4), so its
 // decline of the member is a decline of that reading, and the mapping maps
 // only where no such reading remains. A reading that takes a member after it
-// as an attribute too is walker.readAhead's, which counts only a reading its
-// own selected type classifies as it reads.
+// as an attribute too is walker.readAhead's, which counts a reading only where
+// its own selected type does not rule it out.
 //
 // GAP(jsonsrc): the same decline stands where the engine withholds the type
 // one of those readings selects, a {test} it reaches being outside its
@@ -2305,11 +2305,13 @@ func (w *walker) extend(r *attributeRun, next *runMember) (unsettled, err error)
 // Structures ranks the readings, so naming either would guess a mapping.
 //
 // GAP(jsonsrc): the root declines where the type a reading selects declines
-// a member that reading reads, its attributes or the member after them, and
-// no other member rules that reading out, though the engine assesses each XML
-// twin. RULED permanent by #2703: the type a reading selects governs the root
-// under it (key-governing-type-elem clause 4), so its decline of the member
-// is a decline of that reading.
+// a member that reading reads, its attributes or the member after them, or
+// takes that member after them as an attribute while its value is no scalar,
+// which the mapping declines as an attribute (notScalar), and no other member
+// rules that reading out, though the engine assesses each XML twin. RULED
+// permanent by #2703: the type a reading selects governs the root under it
+// (key-governing-type-elem clause 4), so its decline of the member is a
+// decline of that reading.
 //
 // GAP(jsonsrc): the root declines where a candidate type takes no member of a
 // reading otherwise than the reading does but declines so many of its
@@ -2319,13 +2321,19 @@ func (w *walker) extend(r *attributeRun, next *runMember) (unsettled, err error)
 // member, and the mapping reads a selection at most nameBudget times per
 // candidate and reading.
 //
-// The root declines too where the engine withholds the type a reading
-// selects, under walker.settled's GAP(jsonsrc) marker owned by #2702, and
-// where no reading stands, under its marker owned by #2701. A reading whose
-// attributes repeat an expanded name, or whose selected type takes as an
-// attribute the member after them whose value is no scalar, has no XML twin
-// (XML 1.0 §3.1, Unique Att Spec; an attribute's value is a string), and
-// declines with no marker.
+// GAP(jsonsrc): the root declines where the engine withholds the type a
+// reading selects, a {test} it reaches being outside its §3.12.6 compiler's
+// subset, the mapping then not knowing whether that reading stands, though
+// the engine assesses each XML twin. Owned by #2702.
+//
+// GAP(jsonsrc): the root declines where no reading stands, though the engine
+// assesses each XML twin, whichever members it takes as attributes: the
+// mapping names a member an attribute only where the type the root is
+// assessed under classifies it as one, as walker.settled's marker of the same
+// owner says. Owned by #2701.
+//
+// A reading whose attributes repeat an expanded name has no XML twin (XML 1.0
+// §3.1, Unique Att Spec), and declines with no marker.
 func (w *walker) readAhead(r *attributeRun, next *runMember, sc *scope, unsettled error) ([]validate.Attribute, []peeked, *object, error) {
 	la, err := w.lookAhead(r, next, sc)
 	if err != nil {
@@ -2434,10 +2442,12 @@ type reading struct {
 }
 
 // fit is how a reading's selected type classifies the members it reads, the
-// worst of each member's: consistent, as the reading does; undecided, where it
-// declines one, or the reading's selection is withheld; excluded, where it
-// classifies one otherwise, which rules the reading out whatever any other
-// member is.
+// worst of each member's: consistent, as the reading does; undecided, where
+// the mapping cannot settle the reading — the type declines one, or takes the
+// one after the attributes as an attribute while its value is no scalar, or
+// the reading's selection is withheld, or its attributes repeat a name;
+// excluded, where the type classifies one otherwise, which rules the reading
+// out whatever any other member is.
 type fit int
 
 const (
@@ -2447,12 +2457,13 @@ const (
 )
 
 // oneReading is the one reading of la, past r's run, that stands (walker.judge),
-// and false where none does, where two do, and where one is undecided. It
-// reads each reading's selection under the names each candidate type gives
-// its attributes (walker.namesUnder): a reading that stands is the one its
-// own selected type, a candidate, names so, but for the names of members that
-// type declines, which are read in each class attributeNames gives them
-// (walker.assignments).
+// and false where none does, where two do, where one is undecided, and where
+// a candidate's assignments outnumber nameBudget. It reads each reading's
+// selection under the names each candidate type gives its attributes
+// (walker.namesUnder): a reading that stands is the one its own selected
+// type, a candidate, names so, but for the names of members that type
+// declines, which are read in each class attributeNames gives them
+// (assignments).
 func (w *walker) oneReading(r *attributeRun, la lookahead) (reading, bool) {
 	var found []reading
 	for k := 0; k <= la.scalars(); k++ {
@@ -2568,12 +2579,12 @@ func assignments(table xsd.TypeTable, items []*runMember, names []xsd.QName, fre
 // judge is the reading of la taking its first k items as attributes, of
 // names, beside r's run, and how the type their selection names
 // (walker.selected, key-cta-select) fits it: undecided where the engine
-// withholds that type or it does not resolve; else the fit of each member of
-// the run, each of those items, which the type must take as the attributes
-// the reading does, and the item after them, which it must take as no
-// attribute, or, where that one's value is no scalar, decline as an attribute
-// (walker.fits). A reading that fits but repeats an expanded name among its
-// attributes is undecided: it has no XML twin.
+// withholds that type or it does not resolve; else the worst fit of each
+// member of the run and each of those items, which the type must take as the
+// attributes the reading does (walker.fitsAttribute), and of the item after
+// them, which it must take as no attribute (walker.fitsChild). A reading that
+// fits but repeats an expanded name among its attributes is undecided: it has
+// no XML twin.
 func (w *walker) judge(r *attributeRun, la lookahead, k int, names []xsd.QName) (reading, fit) {
 	attrs := r.attributes()
 	for i, it := range la.items[:k] {
@@ -2625,8 +2636,8 @@ func (w *walker) fitsAttribute(so *object, m *runMember, name xsd.QName) fit {
 
 // fitsChild is how so classifies m, the member after a reading's attributes:
 // consistent where so takes it as no attribute; undecided where it declines
-// m, or takes it as an attribute while its value is no scalar, the one
-// longer reading then having no XML twin; and excluded where it takes a
+// m, or takes it as an attribute while its value is no scalar, which the
+// mapping declines as an attribute (notScalar); and excluded where it takes a
 // scalar-valued m as an attribute.
 func (w *walker) fitsChild(so *object, m *runMember) fit {
 	got, err := w.memberOf(so, m.key, m.k, m.loc)
