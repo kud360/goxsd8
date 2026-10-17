@@ -10,29 +10,39 @@ import (
 )
 
 // inheritSchema declares, in urn:i, the top-level attribute ia, inheritable;
-// T, empty content with the attribute a; and U, which extends T with the
-// attribute m, so that under T a key "m" is a child no wildcard names
-// (walker.namedChild) and under U an attribute. tu is of type T and selects U
-// where its a is "u", ti where its i:ia is "u", and tb where its i:ib is "u";
-// no top-level ib exists. p holds an optional p and then an optional tu, and
-// carries a, inheritable; pd carries a, inheritable, defaulting to "u"; pn
-// carries a, not inheritable, and pnd carries it defaulting to "u"; each holds
-// an optional tu. pw holds an optional ti and an optional tb under a lax
-// {attribute wildcard} of urn:i, and pk holds an optional ti under a skip one.
-// pt is of type P0, which holds an optional tu, and PT extends P0 with a,
-// inheritable. po holds an optional x of type T that selects U where its a is
-// "u", and has a lax interleave {open content}; ps is po with a skip one. mid
-// holds an optional tu. H holds an optional mid and carries a, and H2
-// extends it with ib, inheritable, defaulting to "v"; rw is of type H and
-// selects H2 where it counts an a, a {test} outside the §3.12.6 compiler's
-// subset. big's {content type} is one xsd.Schema.ContentMatcher declines (its
-// GAP(xsd) ceiling), holding mids.
+// T, an optional child m of xs:int, the attribute a and a lax ##local
+// {attribute wildcard}; and U, which restricts T to no child and the
+// attribute m of xs:string. Under T a key "m" is the child, whose "x" charges
+// cvc-type, and under U the attribute; an infoset built under the type the
+// engine does not select charges otherwise — a child m under U charges
+// cvc-complex-type, and an attribute m under T, which its wildcard admits,
+// nothing — so each row's verdict tells the two selections apart. tu is of
+// type T and selects U where its a is "u", ti where its i:ia is "u", and tb
+// where its i:ib is "u"; no top-level ib exists. p holds an optional p and
+// then an optional tu, and carries a, inheritable; pd carries a, inheritable,
+// defaulting to "u"; pn carries a, not inheritable, and pnd carries it
+// defaulting to "u"; each holds an optional tu. pw holds an optional ti and an
+// optional tb under a lax {attribute wildcard} of urn:i, and pk holds an
+// optional ti under a skip one. pt is of type P0, which holds an optional tu,
+// and PT extends P0 with a, inheritable. po holds an optional x of type T that
+// selects U where its a is "u", and has a lax interleave {open content}; ps is
+// po with a skip one. mid holds an optional tu. H holds an optional mid and
+// carries a, and H2 extends it with ib, inheritable, defaulting to "v"; rw is
+// of type H and selects H2 where it counts an a, a {test} outside the §3.12.6
+// compiler's subset. big's {content type} is one xsd.Schema.ContentMatcher
+// declines (its GAP(xsd) ceiling), holding mids.
 const inheritSchema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
     targetNamespace="urn:i" xmlns:i="urn:i" elementFormDefault="qualified">
   <xs:attribute name="ia" type="xs:string" inheritable="true"/>
-  <xs:complexType name="T"><xs:attribute name="a" type="xs:string"/></xs:complexType>
+  <xs:complexType name="T">
+    <xs:sequence><xs:element name="m" type="xs:int" minOccurs="0"/></xs:sequence>
+    <xs:attribute name="a" type="xs:string"/>
+    <xs:anyAttribute namespace="##local" processContents="lax"/>
+  </xs:complexType>
   <xs:complexType name="U">
-    <xs:complexContent><xs:extension base="i:T"><xs:attribute name="m" type="xs:string"/></xs:extension></xs:complexContent>
+    <xs:complexContent>
+      <xs:restriction base="i:T"><xs:sequence/><xs:attribute name="m" type="xs:string"/></xs:restriction>
+    </xs:complexContent>
   </xs:complexType>
   <xs:element name="tu" type="i:T"><xs:alternative test="@a = 'u'" type="i:U"/></xs:element>
   <xs:element name="ti" type="i:T"><xs:alternative test="@i:ia = 'u'" type="i:U"/></xs:element>
@@ -137,21 +147,21 @@ func TestInheritedSelected(t *testing.T) {
 		{"a defaulted inheritable attribute", `{"pd":{"tu":{"m":"x"}}}`,
 			`<pd ` + i + `><tu m="x"/></pd>`, none},
 		{"an attribute that is not inheritable", `{"pn":{"a":"u","tu":{"m":"x"}}}`,
-			`<pn ` + i + `a="u"><tu><m>x</m></tu></pn>`, complexType},
+			`<pn ` + i + `a="u"><tu><m>x</m></tu></pn>`, typ},
 		{"a defaulted attribute that is not inheritable", `{"pnd":{"tu":{"m":"x"}}}`,
-			`<pnd ` + i + `><tu><m>x</m></tu></pnd>`, complexType},
+			`<pnd ` + i + `><tu><m>x</m></tu></pnd>`, typ},
 		{"the nearer of two inheritable attributes", `{"p":{"a":"z","p":{"a":"u","tu":{"m":"x"}}}}`,
 			`<p ` + i + `a="z"><p a="u"><tu m="x"/></p></p>`, none},
 		{"the nearer of two inheritable attributes, the farther selecting", `{"p":{"a":"u","p":{"a":"z","tu":{"m":"x"}}}}`,
-			`<p ` + i + `a="u"><p a="z"><tu><m>x</m></tu></p></p>`, complexType},
+			`<p ` + i + `a="u"><p a="z"><tu><m>x</m></tu></p></p>`, typ},
 		{"the element's own attribute over an inherited one", `{"p":{"a":"u","tu":{"a":"z","m":"x"}}}`,
-			`<p ` + i + `a="u"><tu a="z"><m>x</m></tu></p>`, complexType},
+			`<p ` + i + `a="u"><tu a="z"><m>x</m></tu></p>`, typ},
 		{"a wildcard's attribute whose declaration is inheritable", `{"pw":{"$xmlns":{"i":"urn:i"},"i:ia":"u","ti":{"m":"x"}}}`,
 			`<pw ` + i + `i:ia="u"><ti m="x"/></pw>`, none},
 		{"a skipped attribute", `{"pk":{"$xmlns":{"i":"urn:i"},"i:ia":"u","ti":{"m":"x"}}}`,
-			`<pk ` + i + `i:ia="u"><ti><m>x</m></ti></pk>`, complexType},
+			`<pk ` + i + `i:ia="u"><ti><m>x</m></ti></pk>`, typ},
 		{"a wildcard's attribute with no declaration", `{"pw":{"$xmlns":{"i":"urn:i"},"i:ib":"u","tb":{"m":"x"}}}`,
-			`<pw ` + i + `i:ib="u"><tb><m>x</m></tb></pw>`, complexType},
+			`<pw ` + i + `i:ib="u"><tb><m>x</m></tb></pw>`, typ},
 		{"an inheritable attribute of the type a \"$type\" names", `{"pt":{"$xmlns":{"i":"urn:i"},"$type":"i:PT","a":"u","tu":{"m":"x"}}}`,
 			`<pt ` + i + xsiDecl + ` xsi:type="i:PT" a="u"><tu m="x"/></pt>`, none},
 	} {
@@ -175,7 +185,7 @@ func TestNoGoverningDeclaration(t *testing.T) {
 		want            []xsderr.Rule
 	}{
 		{"a locally declared type", `{"po":{"x":[{},{"a":"u","m":"x"}]}}`,
-			`<po ` + i + `><x/><x a="u"><m>x</m></x></po>`, complexType},
+			`<po ` + i + `><x/><x a="u"><m>x</m></x></po>`, typ},
 		{"skipped", `{"ps":{"x":[{},{"a":"u","m":"x"}]}}`,
 			`<ps ` + i + `><x/><x a="u"><m>x</m></x></ps>`, none},
 	} {
