@@ -39,7 +39,8 @@ import (
 // an optional tu and carries k; X holds an optional tu and carries a,
 // inheritable, defaulting to "u", and derives from no B; X2 extends B with
 // that a, and N extends B with nothing. e is of type B, r holds an e,
-// and et is of type B and selects N where its k is "n". big's {content type}
+// and et is of type B and selects N where its k is "n"; pq holds one q of
+// type B. big's {content type}
 // is one xsd.Schema.ContentMatcher declines (its GAP(xsd) ceiling), holding
 // mids.
 const inheritSchema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
@@ -167,6 +168,7 @@ const inheritSchema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
   <xs:element name="e" type="i:B"/>
   <xs:element name="r"><xs:complexType><xs:sequence><xs:element ref="i:e"/></xs:sequence></xs:complexType></xs:element>
   <xs:element name="et" type="i:B"><xs:alternative test="@k = 'n'" type="i:N"/></xs:element>
+  <xs:element name="pq"><xs:complexType><xs:sequence><xs:element name="q" type="i:B"/></xs:sequence></xs:complexType></xs:element>
   <xs:element name="big">
     <xs:complexType>
       <xs:sequence>
@@ -252,7 +254,10 @@ func TestInheritedSelected(t *testing.T) {
 // and governed by B, which hands tu no a, and tu, governed by T, takes m as a
 // child, at the root and below it. X2 ·overrides· B, the type et selects
 // without a k, and hands down its ·defaulted· a, but not N, the one it selects
-// where its k is "n", which then governs et (walker.governOverriding).
+// where its k is "n", which then governs et (walker.governOverriding). The
+// second q of pq, which pq's content model rejects, has no ·governing element
+// declaration·, and X does not ·override· its ·locally declared type· B, which
+// governs it (key-governing-type-elem clause 7).
 func TestOverriddenTypeHandsDown(t *testing.T) {
 	v := validatorOver(t, inheritSchema)
 	const i = `xmlns="urn:i" xmlns:i="urn:i" `
@@ -269,6 +274,8 @@ func TestOverriddenTypeHandsDown(t *testing.T) {
 			`<et ` + i + xsiDecl + ` xsi:type="i:X2"><tu m="x"/></et>`, none},
 		{"not overriding the selected type", `{"et":{"$xmlns":{"i":"urn:i"},"$type":"i:X2","k":"n","tu":{"m":"x"}}}`,
 			`<et ` + i + xsiDecl + ` xsi:type="i:X2" k="n"><tu><m>x</m></tu></et>`, charged},
+		{"a locally declared type it does not override", `{"pq":{"q":[{},{"$xmlns":{"i":"urn:i"},"$type":"i:X","tu":{"m":"x"}}]}}`,
+			`<pq ` + i + xsiDecl + `><q/><q xsi:type="i:X"><tu><m>x</m></tu></q></pq>`, []xsderr.Rule{"cvc-complex-content", "cvc-type"}},
 	} {
 		t.Run(tc.name, func(t *testing.T) { twin(t, v, tc.json, tc.xml, tc.want) })
 	}
