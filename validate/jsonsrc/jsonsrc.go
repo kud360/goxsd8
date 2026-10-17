@@ -722,8 +722,8 @@ func (w *walker) notAlike(o *object, key string, loc xsderr.Loc) error {
 // (walker.attributes), which a live candidate other than the first declines,
 // the first classifying it, where walker.candidates may not drop the one that
 // declines it: a type some reading of the run selects declines it, the
-// engine withholds one reading's selection, or another member follows it.
-// walker.candidates' GAP(jsonsrc) markers track the decline.
+// engine withholds one reading's selection, or the member is a scalar another
+// member follows. walker.candidates' GAP(jsonsrc) markers track the decline.
 func (w *walker) undetermined(o *object, key string, loc xsderr.Loc) error {
 	return w.declinef(loc, "member %q of %s is declined under a type its {type table} can select and classified under another; the type the table ·conditionally selects· reads the whole run of attribute members, and the mapping drops a type that declines a member only where no reading of the run, read up to the object's close, selects one that does",
 		key, o.owner)
@@ -1933,8 +1933,9 @@ func (w *walker) object(owner xsd.QName, td xsd.TypeDefinition) *object {
 // (walker.settled): each member is classified under every candidate still
 // reading attributes — o and each of o.selectable at the start — a candidate
 // that declines it dropping from the run where no reading of the run selects
-// it (walker.candidates), and where one classifies it as no attribute, the
-// type the attributes before it select decides whether the run ends there.
+// a type that declines it (walker.candidates), and where one classifies it as
+// no attribute, the type the attributes before it select decides whether the
+// run ends there.
 func (w *walker) attributes(o *object, sc *scope, tok json.Token, loc xsderr.Loc, typ *attribute, table *xsd.TypeTable) ([]validate.Attribute, peeked, *object, error) {
 	r := &attributeRun{owner: o, live: append([]*object{o}, o.selectable...), table: table, typ: typ}
 	for {

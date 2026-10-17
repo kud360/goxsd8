@@ -357,13 +357,14 @@ const anyWildcardSchema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema
 </xs:schema>`
 
 // TestTypeTableCandidateDrops pins a root whose candidate type declines a
-// member of the attribute run that no reading of the run selects
-// (walker.candidates, walker.droppable): under laxExtensionSchema, y is a child
-// no wildcard names under T and declines under U, whose two wildcards leave
-// its kind open; no reading selects U, a never being "u", so U drops and the
-// root maps as T, the one type any reading selects, classifies it. Under r3,
-// whose y selects U where it is an attribute, a null y is no attribute under
-// any reading, so the one that takes it as an attribute is never read.
+// member of the attribute run where no reading of the run selects a type that
+// declines it (walker.candidates, walker.droppable): under
+// laxExtensionSchema, y is a child no wildcard names under T and declines
+// under U, whose two wildcards leave its kind open; no reading selects U, a
+// never being "u", so U drops and the root maps as T, the one type any
+// reading selects, classifies it. Under r3, whose y selects U where it is an
+// attribute, a null y is no attribute under any reading, so the one that
+// takes it as an attribute is never read.
 func TestTypeTableCandidateDrops(t *testing.T) {
 	v := validatorOver(t, laxExtensionSchema)
 	for _, tc := range []struct {
