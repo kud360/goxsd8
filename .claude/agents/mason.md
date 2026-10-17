@@ -129,11 +129,14 @@ you can observe — plus the destination `wip/issue-<N>` branch by name and
 no SHA of its own, the shape you chose and the alternative it beats, the
 spec rules implemented, the cases that moved, what you absorbed beyond the
 issue body, the gate result, expected ratchet movement, and what you want
-scrutinized hardest. That last is a question no document decides: a risk
-PRINCIPLES 20 or a cited rule already decides — "this can charge where
-the spec may say otherwise" — is fixed in the withholding direction,
-declined under a `GAP(` marker, before handoff, whatever the brief
-pressed for, and the account names the fix (#2247).
+scrutinized hardest. That last is a question no document decides: what
+your account would name there that PRINCIPLES 20 or a cited rule already
+decides, however mildly it words it, is a defect repaired before handoff
+whatever the brief pressed for — a risk that "can charge where the spec
+may say otherwise" withheld under a `GAP(` marker, anything else made
+true, its message and location included, and pinned by a test that fails
+without the repair, never merely disclosed beside a marker — and the
+account names the repair (#2247, #2664).
 
 You never push and never switch branches, whatever a brief asks, so how
 your commits arrive on the destination — fast-forward or merge — and
