@@ -400,7 +400,9 @@ func TestTypeTableWithheldMaps(t *testing.T) {
 // where its a is "u". Each of r3, r4, r5 and r6 is of type T and selects U
 // where it has the attribute y in one class of names attributeNames tells
 // apart: in no namespace, in urn:p, which its {test} binds to p, in a
-// namespace its {test} binds none to, and in the xml namespace.
+// namespace its {test} binds none to, and in the xml namespace. r7 selects U
+// where it has no a, r9 where its a is counted, a {test} outside the §3.12.6
+// compiler's subset, and r10 where it has a y and no a.
 const laxExtensionSchema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
   <xs:complexType name="T">
     <xs:sequence><xs:element name="z" minOccurs="0"/></xs:sequence>
@@ -419,6 +421,7 @@ const laxExtensionSchema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchem
   <xs:element name="r6" type="T"><xs:alternative test="@xml:y" type="U"/></xs:element>
   <xs:element name="r7" type="T"><xs:alternative test="not(@a)" type="U"/></xs:element>
   <xs:element name="r9" type="T"><xs:alternative test="count(@a) > 0" type="U"/></xs:element>
+  <xs:element name="r10" type="T"><xs:alternative test="@y and not(@a)" type="U"/></xs:element>
 </xs:schema>`
 
 // unboundSchema declares, in no namespace and with the XSD namespace the
@@ -525,7 +528,10 @@ func TestTypeTableCandidateDrops(t *testing.T) {
 // an attribute, each where y is in one class of names attributeNames gives
 // it; r7 selects U under the reading that takes no attribute, though that
 // reading is inconsistent, U taking a as an attribute, and the one reading
-// that is, T's taking a alone, would map; r9's {test} is outside the §3.12.6
+// that is, T's taking a alone, would map; r10 selects U under the reading
+// that takes y alone as an attribute, though another member follows and that
+// reading is inconsistent, U taking a as an attribute, and the one reading
+// that is, the children's, would map; r9's {test} is outside the §3.12.6
 // compiler's subset, so the engine withholds every reading's selection, and
 // charges neither twin. Under unboundSchema, r8 selects the type that
 // declines y where y is in a namespace no {test} binds, and the declared
@@ -576,6 +582,9 @@ func TestTypeTableCandidateDeclines(t *testing.T) {
 		{"an earlier reading selects the declining type", lax, `{"r7":{"a":"t","y":"1"}}`,
 			`<r7 a="t"><y>1</y></r7>`, content, `<r7 a="t" y="1"/>`, complexType,
 			`jsonsrc: instance.json:1:16: member "y" of r7` + undetermined},
+		{"the attribute reading selects the declining type, another member following", lax, `{"r10":{"y":"1","a":"t"}}`,
+			`<r10><y>1</y><a>t</a></r10>`, content, `<r10 y="1"><a>t</a></r10>`, none,
+			`jsonsrc: instance.json:1:9: member "y" of r10` + undetermined},
 		{"the engine withholds a reading's selection", lax, `{"r9":{"y":"1"}}`,
 			`<r9><y>1</y></r9>`, none, `<r9 y="1"/>`, none,
 			`jsonsrc: instance.json:1:8: member "y" of r9` + undetermined},
