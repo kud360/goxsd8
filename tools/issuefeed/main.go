@@ -37,7 +37,9 @@
 //
 // Exit status is 0 when both files are written, 2 for a usage error, and 1
 // for a failed fetch, a failed check or a failed write — and after a non-zero
-// exit -dir holds neither file.
+// exit -dir holds neither file. A usage error clears a -dir the parse read
+// before it; an unknown flag ahead of -dir stops the parse before -dir is
+// read, so that command line names no directory and nothing is cleared.
 package main
 
 import (
@@ -105,10 +107,10 @@ func run(stdout, stderr io.Writer, args []string, fetch fetchFunc, pause func())
 	flags.SetOutput(io.Discard)
 	dir := flags.String("dir", "", "directory to write issues.json and gapissues.json into (required)")
 	if err := flags.Parse(args); err != nil {
-		return fmt.Errorf("%w: %w\n%s", errUsage, err, usage)
+		return usageError(*dir, fmt.Errorf("%w\n%s", err, usage))
 	}
 	if flags.NArg() != 0 {
-		return fmt.Errorf("%w: unexpected argument %q\n%s", errUsage, flags.Arg(0), usage)
+		return usageError(*dir, fmt.Errorf("unexpected argument %q\n%s", flags.Arg(0), usage))
 	}
 	if *dir == "" {
 		return fmt.Errorf("%w: -dir is required, so the files never land in the working directory\n%s", errUsage, usage)
@@ -141,6 +143,19 @@ func run(stdout, stderr io.Writer, args []string, fetch fetchFunc, pause func())
 	_, _ = fmt.Fprintln(stdout, filepath.Join(*dir, issuesFile))
 	_, _ = fmt.Fprintln(stdout, filepath.Join(*dir, gapIssuesFile))
 	return nil
+}
+
+// usageError wraps err in errUsage after clearing the earlier outputs from
+// dir, so a usage error that still named a -dir leaves neither file there. It
+// clears nothing when dir is empty: an unknown flag before -dir stops the
+// parse before -dir is read, and no directory was named at all. A failed
+// removal is reported beside the usage error, which still exits 2.
+func usageError(dir string, err error) error {
+	err = fmt.Errorf("%w: %w", errUsage, err)
+	if dir == "" {
+		return err
+	}
+	return errors.Join(err, removeOutputs(dir))
 }
 
 // ghArgs is the `gh` argv requesting one page: an explicit page number, never
