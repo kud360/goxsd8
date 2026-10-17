@@ -262,20 +262,19 @@ func TestTypeTableRunDeclines(t *testing.T) {
 
 // TestTypeTableReadAhead pins a root whose attribute run the member-by-member
 // walk leaves more than one reading of open, which maps by reading on to the
-// one reading its own selected type classifies as it reads
-// (walker.readAhead): xml is that reading's twin; other, where it is not
-// empty, the twin of a reading that type rules out, which otherWant measures.
-// Under runSchema, tu's a = "z" selects T, which ends the run at m, though U
-// takes m as an attribute: a and m together select T again, which takes m as
-// no attribute. tq's Q takes m as an attribute in no namespace and Q2 in urn:s;
-// m alone selects Q, which names it in no namespace, and beside a = "1" or
-// "2" selects Q1, which does too, or Q2, which names it in urn:s. tn's m alone
-// selects T, which takes it as no attribute, U taking it as one. Under
-// laxExtensionSchema, U declines y and every key no declaration carries, and
-// no a = "u" ever selects it: the reading taking y, and b, c and d, as
-// attributes selects T, which takes y as no attribute, so the children's
-// reading stands alone, and U drops. Each row fails with walker.readAhead
-// returning unsettled at once.
+// one reading its own selected type classifies as it reads (walker.readAhead):
+// xml is that reading's twin; other, where it is not empty, the twin of a
+// reading that type rules out, which otherWant measures. Under runSchema, tu's
+// a = "z" selects T, which ends the run at m, though U takes m as an attribute:
+// a and m together select T again, which takes m as no attribute. tq's Q takes
+// m as an attribute in no namespace and Q2 in urn:s; m alone selects Q, which
+// names it in no namespace, and beside a = "1" or "2" selects Q1, which does
+// too, or Q2, which names it in urn:s. tn's m alone selects T, which takes it
+// as no attribute, U taking it as one. Under laxExtensionSchema, U declines y
+// and every key no declaration carries, and no a = "u" ever selects it: the
+// reading taking y, and b, c and d, as attributes selects T, which takes y as
+// no attribute, so the children's reading stands alone, and U drops. Each row
+// fails with walker.readAhead returning unsettled at once.
 func TestTypeTableReadAhead(t *testing.T) {
 	run := validatorOver(t, runSchema)
 	lax := validatorOver(t, laxExtensionSchema)
