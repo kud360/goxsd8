@@ -171,7 +171,9 @@ func TestTypeTableSelected(t *testing.T) {
 // it is "2". t2 is of type T and selects U where it has an m. tz is of type T
 // and selects T where it has no m, and its second {test}, selecting U, is
 // outside the §3.12.6 compiler's subset. P extends U with the attribute p, and
-// tp is of type T and selects P where it has a p. t0 is of type Q and selects Q2 where
+// tp is of type T and selects P where it has a p. V extends T with the
+// attribute p, and tv is of type T and selects T where it has an m, else P
+// where it has a p, else V where it has a zzz. t0 is of type Q and selects Q2 where
 // it has an m in no namespace and Q1 where it has one in urn:s. Under T a key
 // "m" is a child no wildcard names (walker.namedChild).
 const runSchema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
@@ -211,6 +213,14 @@ const runSchema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
     <xs:complexContent><xs:extension base="s:U"><xs:attribute name="p" type="xs:string"/></xs:extension></xs:complexContent>
   </xs:complexType>
   <xs:element name="tp" type="s:T"><xs:alternative test="@p" type="s:P"/></xs:element>
+  <xs:complexType name="V">
+    <xs:complexContent><xs:extension base="s:T"><xs:attribute name="p" type="xs:string"/></xs:extension></xs:complexContent>
+  </xs:complexType>
+  <xs:element name="tv" type="s:T">
+    <xs:alternative test="@m" type="s:T"/>
+    <xs:alternative test="@p" type="s:P"/>
+    <xs:alternative test="@zzz" type="s:V"/>
+  </xs:element>
   <xs:element name="t0" type="s:Q">
     <xs:alternative test="@m" type="s:Q2"/>
     <xs:alternative test="@s:m" type="s:Q1"/>
@@ -269,17 +279,20 @@ func TestTypeTableRunDeclines(t *testing.T) {
 // walk leaves more than one reading of open, which maps by reading on to the
 // one reading its own selected type classifies as it reads (walker.readAhead):
 // xml is that reading's twin; other, where it is not empty, the twin of a
-// reading that type rules out, which otherWant measures. Under runSchema, tu's
-// a = "z" selects T, which ends the run at m, though U takes m as an attribute:
-// a and m together select T again, which takes m as no attribute. tq's Q takes
-// m as an attribute in no namespace and Q2 in urn:s; m alone selects Q, which
-// names it in no namespace, and beside a = "1" or "2" selects Q1, which does
-// too, or Q2, which names it in urn:s. tn's m alone selects T, which takes it
-// as no attribute, U taking it as one. Under laxExtensionSchema, U declines y
-// and every key no declaration carries, and no a = "u" ever selects it: the
-// reading taking y, and b, c and d, as attributes selects T, which takes y as
-// no attribute, so the children's reading stands alone, and U drops. Each row
-// fails with walker.readAhead returning unsettled at once.
+// reading its own selected type rules out, which otherWant measures. Under
+// runSchema, tv's p alone, as V names it, selects P, which takes m after it
+// as an attribute, and p and m together select T, which takes p as none, so
+// the children's reading stands alone under T. tu's a = "z" selects T, which
+// ends the run at m, though U takes m as an attribute: a and m together select
+// T again, which takes m as no attribute. tq's Q takes m as an attribute in no
+// namespace and Q2 in urn:s; m alone selects Q, which names it in no namespace,
+// and beside a = "1" or "2" selects Q1, which does too, or Q2, which names it
+// in urn:s. tn's m alone selects T, which takes it as no attribute, U taking it
+// as one. Under laxExtensionSchema, U declines y and every key no declaration
+// carries, and no a = "u" ever selects it: the reading taking y, and b, c and
+// d, as attributes selects T, which takes y as no attribute, so the children's
+// reading stands alone. Each row fails with walker.readAhead returning
+// unsettled at once.
 func TestTypeTableReadAhead(t *testing.T) {
 	run := validatorOver(t, runSchema)
 	lax := validatorOver(t, laxExtensionSchema)
@@ -301,6 +314,8 @@ func TestTypeTableReadAhead(t *testing.T) {
 			`<tq xmlns="urn:s" xmlns:s="urn:s" a="2" s:m="x"/>`, none, "", nil},
 		{"an attribute under one type where the selected type ends the run before it", run, `{"tn":{"m":"x"}}`,
 			`<tn xmlns="urn:s"><m>x</m></tn>`, complexType, `<tn xmlns="urn:s" m="x"/>`, complexType},
+		{"a candidate's names select a type taking the member after them as an attribute", run, `{"tv":{"p":"1","m":"x"}}`,
+			`<tv xmlns="urn:s"><p>1</p><m>x</m></tv>`, []xsderr.Rule{"cvc-complex-type", "cvc-complex-type"}, `<tv xmlns="urn:s" p="1"><m>x</m></tv>`, complexType},
 		{"another member follows the member", lax, `{"r":{"y":"1","z":"2"}}`,
 			`<r><y>1</y><z>2</z></r>`, content, `<r y="1"><z>2</z></r>`, complexType},
 		{"three members a candidate declines", lax, `{"r":{"b":"1","c":"2","d":"3","z":"4"}}`,
