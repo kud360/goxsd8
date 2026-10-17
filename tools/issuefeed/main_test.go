@@ -348,23 +348,25 @@ func TestDirRequired(t *testing.T) {
 // still named a -dir leaves neither output file there, stale ones included,
 // and requests no page.
 func TestUsageErrorClearsNamedDir(t *testing.T) {
-	for _, tail := range [][]string{{"extra"}, {"-bogus"}} {
-		dir := t.TempDir()
-		for _, name := range []string{issuesFile, gapIssuesFile} {
-			if err := os.WriteFile(filepath.Join(dir, name), []byte("stale"), 0o644); err != nil {
-				t.Fatal(err)
+	for _, tail := range []string{"extra", "-bogus"} {
+		t.Run(tail, func(t *testing.T) {
+			dir := t.TempDir()
+			for _, name := range []string{issuesFile, gapIssuesFile} {
+				if err := os.WriteFile(filepath.Join(dir, name), []byte("stale"), 0o644); err != nil {
+					t.Fatal(err)
+				}
 			}
-		}
-		f := &fake{script: map[int][]answer{1: {rows(1, 3)}}}
-		args := append([]string{"-dir", dir}, tail...)
-		err := run(&bytes.Buffer{}, &bytes.Buffer{}, args, f.fetch, func() {})
-		if !errors.Is(err, errUsage) {
-			t.Errorf("run(%q) err = %v, want errUsage", args, err)
-		}
-		if len(f.calls) != 0 {
-			t.Errorf("run(%q) pages requested = %v, want none", args, f.calls)
-		}
-		assertNoOutputs(t, dir)
+			f := &fake{script: map[int][]answer{1: {rows(1, 3)}}}
+			args := []string{"-dir", dir, tail}
+			err := run(&bytes.Buffer{}, &bytes.Buffer{}, args, f.fetch, func() {})
+			if !errors.Is(err, errUsage) {
+				t.Errorf("run(%q) err = %v, want errUsage", args, err)
+			}
+			if len(f.calls) != 0 {
+				t.Errorf("run(%q) pages requested = %v, want none", args, f.calls)
+			}
+			assertNoOutputs(t, dir)
+		})
 	}
 }
 
