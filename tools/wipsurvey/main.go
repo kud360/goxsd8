@@ -195,14 +195,13 @@ func main() {
 // run drives the survey end to end: discover every head from the remote,
 // read optional issue data from stdin, classify the wip/issue-<N>
 // branches, read the Working band from the roadmap at planPath, and render
-// the report ([renderReport]). A wip/ branch whose
-// name does not fit the wip/issue-<N> shape is skipped with a warning to
-// stderr rather than aborting the whole report — an unexpected
-// refs/heads/wip/* branch is evidence worth a warning, not a reason to
-// withhold every other row. A fed list missing `state` is the same kind of
-// evidence, and stronger: run discards that list and hands its error to
-// renderReport, which owns when it is returned. A band that cannot be read
-// is handed over the same way.
+// the report ([renderReport]). A wip/ branch whose name does not fit the
+// wip/issue-<N> shape is skipped with a warning to stderr rather than
+// aborting the whole report — an unexpected refs/heads/wip/* branch is
+// evidence worth a warning, not a reason to withhold every other row. A
+// fed list missing `state` is the same kind of evidence, and stronger: run
+// discards that list and hands its error to renderReport, which owns when
+// it is returned. A band that cannot be read is handed over the same way.
 func run(stdout, stderr io.Writer, stdin io.Reader, now time.Time, planPath string) error {
 	buckets, err := remoteRefs()
 	if err != nil {
@@ -306,8 +305,7 @@ type refSHA struct {
 // remoteRefs asks the origin remote directly for every head it carries,
 // main's included — one network call for the whole report, so neither the
 // ancestry test nor the two sections for the other heads costs extra
-// remote access.
-// See the package doc comment for why this — not the local
+// remote access. See the package doc comment for why this — not the local
 // refs/remotes/origin/* cache — is the authoritative branch set, and why
 // the request carries no pattern.
 func remoteRefs() (refBuckets, error) {
@@ -822,10 +820,9 @@ func newestHeartbeat(comments []ghComment) *time.Time {
 // — is not an error: it means the caller has no issue data to offer, and
 // readIssues returns a nil map so every branch is judged lease-only and
 // every band row's state is UNKNOWN ([bandStatus]). A fed list, even an
-// empty one, returns a non-nil map. The
-// comments field is likewise optional, per issue: without it that issue's
-// branch can still be retired or dated from its own tip, only an empty
-// claim goes undated.
+// empty one, returns a non-nil map. The comments field is likewise
+// optional, per issue: without it that issue's branch can still be retired
+// or dated from its own tip, only an empty claim goes undated.
 //
 // The state field is not optional: a list with any row lacking it returns
 // a nil map and an error wrapping errMissingState ([missingState]); run
