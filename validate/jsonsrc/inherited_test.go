@@ -19,7 +19,10 @@ import (
 // carries a, not inheritable, and pnd carries it defaulting to "u"; each holds
 // an optional tu. pw holds an optional ti and an optional tb under a lax
 // {attribute wildcard} of urn:i, and pk holds an optional ti under a skip one.
-// mid holds an optional tu. H holds an optional mid and carries a, and H2
+// pt is of type P0, which holds an optional tu, and PT extends P0 with a,
+// inheritable. po holds an optional x of type T that selects U where its a is
+// "u", and has a lax interleave {open content}; ps is po with a skip one. mid
+// holds an optional tu. H holds an optional mid and carries a, and H2
 // extends it with ib, inheritable, defaulting to "v"; rw is of type H and
 // selects H2 where it counts an a, a {test} outside the §3.12.6 compiler's
 // subset. big's {content type} is one xsd.Schema.ContentMatcher declines (its
@@ -70,6 +73,23 @@ const inheritSchema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
       <xs:anyAttribute namespace="##targetNamespace" processContents="skip"/>
     </xs:complexType>
   </xs:element>
+  <xs:complexType name="P0"><xs:sequence><xs:element ref="i:tu" minOccurs="0"/></xs:sequence></xs:complexType>
+  <xs:complexType name="PT">
+    <xs:complexContent><xs:extension base="i:P0"><xs:attribute name="a" type="xs:string" inheritable="true"/></xs:extension></xs:complexContent>
+  </xs:complexType>
+  <xs:element name="pt" type="i:P0"/>
+  <xs:element name="po">
+    <xs:complexType>
+      <xs:openContent mode="interleave"><xs:any processContents="lax"/></xs:openContent>
+      <xs:sequence><xs:element name="x" type="i:T" minOccurs="0"><xs:alternative test="@a = 'u'" type="i:U"/></xs:element></xs:sequence>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="ps">
+    <xs:complexType>
+      <xs:openContent mode="interleave"><xs:any processContents="skip"/></xs:openContent>
+      <xs:sequence><xs:element name="x" type="i:T" minOccurs="0"><xs:alternative test="@a = 'u'" type="i:U"/></xs:element></xs:sequence>
+    </xs:complexType>
+  </xs:element>
   <xs:element name="mid"><xs:complexType><xs:sequence><xs:element ref="i:tu" minOccurs="0"/></xs:sequence></xs:complexType></xs:element>
   <xs:complexType name="H">
     <xs:sequence><xs:element ref="i:mid" minOccurs="0"/></xs:sequence>
@@ -98,11 +118,13 @@ const inheritSchema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
 // clause 1.1.3). The rows read, in turn: a specified attribute whose use is
 // inheritable (clause 3.1); one ·defaulted· from such a use; one whose use is
 // not inheritable, specified and ·defaulted·; the nearer of two same-named
-// inheritable ones (e-inherited_attributes clause 2); the element's own
-// attribute over an inherited one of its name (key-cta-ta-select clause
-// 1.1.3); an attribute an {attribute wildcard} admits, whose top-level
-// declaration is inheritable (clause 3.2); the same attribute ·skipped· by a
-// skip wildcard; and one a lax wildcard admits with no declaration.
+// inheritable ones (e-inherited_attributes clause 2), in either order; the
+// element's own attribute over an inherited one of its name
+// (key-cta-ta-select clause 1.1.3); an attribute an {attribute wildcard}
+// admits, whose top-level declaration is inheritable (clause 3.2); the same
+// attribute ·skipped· by a skip wildcard; one a lax wildcard admits with no
+// declaration; and an attribute whose use the type a "$type" names, which
+// ·overrides· the declared one, makes inheritable.
 func TestInheritedSelected(t *testing.T) {
 	v := validatorOver(t, inheritSchema)
 	const i = `xmlns="urn:i" xmlns:i="urn:i" `
@@ -118,7 +140,9 @@ func TestInheritedSelected(t *testing.T) {
 			`<pn ` + i + `a="u"><tu><m>x</m></tu></pn>`, complexType},
 		{"a defaulted attribute that is not inheritable", `{"pnd":{"tu":{"m":"x"}}}`,
 			`<pnd ` + i + `><tu><m>x</m></tu></pnd>`, complexType},
-		{"the nearer of two inheritable attributes", `{"p":{"a":"u","p":{"a":"z","tu":{"m":"x"}}}}`,
+		{"the nearer of two inheritable attributes", `{"p":{"a":"z","p":{"a":"u","tu":{"m":"x"}}}}`,
+			`<p ` + i + `a="z"><p a="u"><tu m="x"/></p></p>`, none},
+		{"the nearer of two inheritable attributes, the farther selecting", `{"p":{"a":"u","p":{"a":"z","tu":{"m":"x"}}}}`,
 			`<p ` + i + `a="u"><p a="z"><tu><m>x</m></tu></p></p>`, complexType},
 		{"the element's own attribute over an inherited one", `{"p":{"a":"u","tu":{"a":"z","m":"x"}}}`,
 			`<p ` + i + `a="u"><tu a="z"><m>x</m></tu></p>`, complexType},
@@ -128,6 +152,32 @@ func TestInheritedSelected(t *testing.T) {
 			`<pk ` + i + `i:ia="u"><ti><m>x</m></ti></pk>`, complexType},
 		{"a wildcard's attribute with no declaration", `{"pw":{"$xmlns":{"i":"urn:i"},"i:ib":"u","tb":{"m":"x"}}}`,
 			`<pw ` + i + `i:ib="u"><tb><m>x</m></tb></pw>`, complexType},
+		{"an inheritable attribute of the type a \"$type\" names", `{"pt":{"$xmlns":{"i":"urn:i"},"$type":"i:PT","a":"u","tu":{"m":"x"}}}`,
+			`<pt ` + i + xsiDecl + ` xsi:type="i:PT" a="u"><tu m="x"/></pt>`, none},
+	} {
+		t.Run(tc.name, func(t *testing.T) { twin(t, v, tc.json, tc.xml, tc.want) })
+	}
+}
+
+// TestNoGoverningDeclaration pins walker.selector's arm for an element its
+// parent's ·governing type definition· leaves with no ·governing element
+// declaration·: the second x of po is ·attributed to· the lax {open content}
+// and governed by its ·locally declared type· T (key-governing-ed clause 4.3,
+// key-governing-type-elem clause 7), and the second x of ps is ·skipped· by
+// the skip one, so the engine reads no {type table} for either, and the
+// mapping classifies the members under the declaration's T alone: a an
+// attribute and m a child, where U would take m as an attribute.
+func TestNoGoverningDeclaration(t *testing.T) {
+	v := validatorOver(t, inheritSchema)
+	const i = `xmlns="urn:i" `
+	for _, tc := range []struct {
+		name, json, xml string
+		want            []xsderr.Rule
+	}{
+		{"a locally declared type", `{"po":{"x":[{},{"a":"u","m":"x"}]}}`,
+			`<po ` + i + `><x/><x a="u"><m>x</m></x></po>`, complexType},
+		{"skipped", `{"ps":{"x":[{},{"a":"u","m":"x"}]}}`,
+			`<ps ` + i + `><x/><x a="u"><m>x</m></x></ps>`, none},
 	} {
 		t.Run(tc.name, func(t *testing.T) { twin(t, v, tc.json, tc.xml, tc.want) })
 	}
