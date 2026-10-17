@@ -336,6 +336,27 @@ func TestTypeTableReadAhead(t *testing.T) {
 	}
 }
 
+// repeatSchema declares, in urn:p, X, empty; A, which extends X with the
+// attribute y in no namespace and a lax {attribute wildcard}; B, which extends
+// X with the attribute y in urn:p; and D, which extends X with a lax element
+// wildcard. e and d are of type X; each selects B where it has an attribute
+// y in urn:p, and otherwise A and D respectively.
+const repeatSchema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+    targetNamespace="urn:p" xmlns:p="urn:p" elementFormDefault="qualified">
+  <xs:complexType name="X"/>
+  <xs:complexType name="A">
+    <xs:complexContent><xs:extension base="p:X"><xs:attribute name="y" type="xs:string"/><xs:anyAttribute processContents="lax"/></xs:extension></xs:complexContent>
+  </xs:complexType>
+  <xs:complexType name="B">
+    <xs:complexContent><xs:extension base="p:X"><xs:attribute name="y" form="qualified" type="xs:string"/></xs:extension></xs:complexContent>
+  </xs:complexType>
+  <xs:complexType name="D">
+    <xs:complexContent><xs:extension base="p:X"><xs:sequence><xs:any processContents="lax" minOccurs="0" maxOccurs="unbounded"/></xs:sequence></xs:extension></xs:complexContent>
+  </xs:complexType>
+  <xs:element name="e" type="p:X"><xs:alternative test="@p:y" type="p:B"/><xs:alternative type="p:A"/></xs:element>
+  <xs:element name="d" type="p:X"><xs:alternative test="@p:y" type="p:B"/><xs:alternative type="p:D"/></xs:element>
+</xs:schema>`
+
 // TestTypeTableReadAheadDeclines pins walker.readAhead's declines, each
 // beside the verdicts the engine gives the twins of the readings in play,
 // withheld saying whether it withholds a selection for one: under runSchema,
@@ -349,10 +370,14 @@ func TestTypeTableReadAhead(t *testing.T) {
 // (walker.candidates' fallback, undetermined); four members U declines make
 // more name assignments than nameBudget; and where the one reading standing
 // leaves an attribute member after a child, it declines as one read from the
-// stream does (members.key).
+// stream does (members.key). Under repeatSchema, the one reading of e's y and
+// p:y that B classifies as it reads names both {urn:p}y, and d's p:y and q:y,
+// both {urn:p}y, are such a reading under B beside the children's reading,
+// which stands under D: neither repeating reading has an XML twin.
 func TestTypeTableReadAheadDeclines(t *testing.T) {
 	run := validatorOver(t, runSchema)
 	lax := validatorOver(t, laxExtensionSchema)
+	rep := validatorOver(t, repeatSchema)
 	type measured struct {
 		doc      string
 		want     []xsderr.Rule
@@ -387,6 +412,18 @@ func TestTypeTableReadAheadDeclines(t *testing.T) {
 		{"an attribute member after a child the reading leaves", lax, `{"r":{"y":"1","a":"t","z":"2"}}`,
 			[]measured{{`<r a="t"><y>1</y><z>2</z></r>`, content, false}},
 			`jsonsrc: instance.json:1:15: attribute member "a" follows a child member of r`},
+		{"the one reading standing repeats an expanded name", rep, `{"e":{"$xmlns":{"p":"urn:p"},"y":"1","p:y":"2"}}`,
+			[]measured{
+				{`<e xmlns="urn:p" xmlns:p="urn:p"><y>1</y><p:y>2</p:y></e>`, complexType, false},
+				{`<e xmlns="urn:p" xmlns:p="urn:p" y="1"><p:y>2</p:y></e>`, complexType, false},
+				{`<e xmlns="urn:p" xmlns:p="urn:p" p:y="1"><p:y>2</p:y></e>`, complexType, false},
+				{`<e xmlns="urn:p" xmlns:p="urn:p" y="1" p:y="2"/>`, complexType, false}},
+			`jsonsrc: instance.json:1:30: member "y" of {urn:p}e is an attribute of the expanded names`},
+		{"a reading repeats an expanded name beside one that stands", rep, `{"d":{"$xmlns":{"p":"urn:p","q":"urn:p"},"p:y":"1","q:y":"2"}}`,
+			[]measured{
+				{`<d xmlns="urn:p" xmlns:p="urn:p" xmlns:q="urn:p"><p:y>1</p:y><q:y>2</q:y></d>`, none, false},
+				{`<d xmlns="urn:p" xmlns:p="urn:p" xmlns:q="urn:p" p:y="1"><q:y>2</q:y></d>`, complexType, false}},
+			`jsonsrc: instance.json:1:42: member "p:y" of {urn:p}d is an attribute under a type its {type table} can select and a child under the one`},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			for _, x := range tc.twins {

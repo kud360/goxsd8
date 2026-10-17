@@ -433,11 +433,11 @@
 //     reads, a reading whose type declines a member it reads, a reading with
 //     no XML twin that its type classifies as it reads — one whose type takes
 //     a null member as an attribute, or whose attributes repeat an expanded
-//     name — even beside another that stands, and a type
-//     declining more of a reading's attributes than the mapping reads every
-//     name of; members no run of attributes settles, and members the candidate
-//     types classify differently where the engine withholds the selection, a
-//     {test} it reaches being outside its compiler's §3.12.6 subset;
+//     name — even beside another that stands, and a type declining more of a
+//     reading's attributes than the mapping reads every name of; members no
+//     run of attributes settles, and members the candidate types classify
+//     differently where the engine withholds the selection, a {test} it
+//     reaches being outside its compiler's §3.12.6 subset;
 //   - a {type definition} that does not resolve, under an object value.
 //
 // # Locations
