@@ -154,18 +154,24 @@ func TestBandReport(t *testing.T) {
 
 // TestBandStatusWithoutAList pins that no list — empty stdin, or a feed
 // discarded for a row missing `state` — reads UNKNOWN on every row, never
-// OPEN, and that a fed empty list reads UNLISTED.
+// OPEN, and that a fed empty list reads UNLISTED. Each case pins
+// readIssues' error too, so the stateless feed reads UNKNOWN through
+// errMissingState and not through some other parse failure.
 func TestBandStatusWithoutAList(t *testing.T) {
 	for _, tc := range []struct {
 		name, in string
+		wantErr  error
 		want     issueStatus
 	}{
-		{"empty stdin", "", statusUnknown},
-		{"stateless feed", `[{"number":10,"labels":[]}]`, statusUnknown},
-		{"empty list", `[]`, statusUnlisted},
+		{"empty stdin", "", nil, statusUnknown},
+		{"stateless feed", `[{"number":10,"labels":[]}]`, errMissingState, statusUnknown},
+		{"empty list", `[]`, nil, statusUnlisted},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			issues, _ := readIssues(strings.NewReader(tc.in))
+			issues, err := readIssues(strings.NewReader(tc.in))
+			if !errors.Is(err, tc.wantErr) {
+				t.Fatalf("readIssues error = %v, want %v", err, tc.wantErr)
+			}
 			if got := bandStatus(10, issues); got != tc.want {
 				t.Errorf("bandStatus = %s, want %s", got, tc.want)
 			}

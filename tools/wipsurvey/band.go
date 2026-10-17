@@ -12,7 +12,8 @@ import (
 )
 
 // defaultPlanPath is the roadmap whose Working band the report prints,
-// relative to the module root `go tool wipsurvey` runs from.
+// resolved against the working directory, so it names docs/PLAN.md only
+// when `go tool wipsurvey` runs from the module root.
 const defaultPlanPath = "docs/PLAN.md"
 
 // bandHeading is the line that opens docs/PLAN.md's Working band section.
