@@ -32,7 +32,7 @@
 // PLAN.md stamps reported a parked/* count taken from a refspec that
 // never carried parked/*, and the count was right every time, which is
 // the hazard rather than the reprieve (#1627). So wip/issue-<N> refs are
-// the classified rows, and two trailing sections report the rest: the
+// the classified rows, and two further sections report the rest: the
 // parked/* branches WORKFLOW.md keeps for human triage, and every head
 // outside both namespaces. Each section prints a "none" line when its
 // namespace is empty, so a zero this tool measured never reads like a
@@ -305,7 +305,8 @@ type refSHA struct {
 
 // remoteRefs asks the origin remote directly for every head it carries,
 // main's included — one network call for the whole report, so neither the
-// ancestry test nor the two trailing sections costs extra remote access.
+// ancestry test nor the two sections for the other heads costs extra
+// remote access.
 // See the package doc comment for why this — not the local
 // refs/remotes/origin/* cache — is the authoritative branch set, and why
 // the request carries no pattern.
