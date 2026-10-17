@@ -168,7 +168,11 @@ func TestTypeTableSelected(t *testing.T) {
 // has an m, else U where its a is "u". tw selects U where its a is "u" and it
 // has no m, and its second {test} is outside the §3.12.6 compiler's subset, as
 // tx's first is. tq is of type Q and selects Q1 where its a is "1" and Q2 where
-// it is "2". Under T a key "m" is a child no wildcard names (walker.namedChild).
+// it is "2". t2 is of type T and selects U where it has an m. tz is of type T
+// and selects T where it has no m, and its second {test}, selecting U, is
+// outside the §3.12.6 compiler's subset. t0 is of type Q and selects Q2 where
+// it has an m in no namespace and Q1 where it has one in urn:s. Under T a key
+// "m" is a child no wildcard names (walker.namedChild).
 const runSchema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
     targetNamespace="urn:s" xmlns:s="urn:s" elementFormDefault="qualified">
   <xs:complexType name="T"><xs:attribute name="a" type="xs:string"/></xs:complexType>
@@ -197,18 +201,25 @@ const runSchema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
     <xs:alternative test="@a = '1'" type="s:Q1"/>
     <xs:alternative test="@a = '2'" type="s:Q2"/>
   </xs:element>
+  <xs:element name="t2" type="s:T"><xs:alternative test="@m" type="s:U"/></xs:element>
+  <xs:element name="tz" type="s:T">
+    <xs:alternative test="not(@m)" type="s:T"/>
+    <xs:alternative test="count(@m) > 0" type="s:U"/>
+  </xs:element>
+  <xs:element name="t0" type="s:Q">
+    <xs:alternative test="@m" type="s:Q2"/>
+    <xs:alternative test="@s:m" type="s:Q1"/>
+  </xs:element>
 </xs:schema>`
 
 // TestTypeTableRunDeclines pins the declines the selection leaves, each
 // beside the verdict the engine gives its XML twin: below the root, where the
 // mapping computes no [inherited attributes] (selection's GAP(jsonsrc)
-// marker); a member one type takes as an attribute while the type the
-// attributes before it select ends the run on it, and one two types take as
-// attributes of different names (walker.extend's); a run no selection
-// settles: under T, a = "u" selects U, which takes m as an attribute, and
-// under U, m selects T, which does not (walker.settled's); and a {test} the
-// engine withholds the selection at, after a candidate dropped or where the
-// candidates classify a member differently (walker.settled's).
+// marker); a run no selection settles: under T, a = "u" selects U, which
+// takes m as an attribute, and under U, m selects T, which does not
+// (walker.settled's); and a {test} the engine withholds the selection at,
+// after a candidate dropped or where the candidates classify a member
+// differently (walker.settled's).
 func TestTypeTableRunDeclines(t *testing.T) {
 	v := validatorOver(t, runSchema)
 	for _, tc := range []struct {
@@ -220,12 +231,6 @@ func TestTypeTableRunDeclines(t *testing.T) {
 		{"below the root", `{"p":{"tu":{"a":"u","m":"x"}}}`,
 			`<p xmlns="urn:s"><tu a="u" m="x"/></p>`, none, false,
 			`jsonsrc: instance.json:1:21: member "m" of {urn:s}tu is not classified alike`},
-		{"an attribute under one type where the selected type ends the run", `{"tu":{"a":"z","m":"x"}}`,
-			`<tu xmlns="urn:s" a="z"><m>x</m></tu>`, complexType, false,
-			`jsonsrc: instance.json:1:16: member "m" of {urn:s}tu is an attribute under a type its {type table} can select and a child under the one`},
-		{"attributes of two expanded names", `{"tq":{"m":"x"}}`,
-			`<tq xmlns="urn:s" m="x"/>`, none, false,
-			`jsonsrc: instance.json:1:8: member "m" of {urn:s}tq is an attribute of the expanded names`},
 		{"no run settled", `{"tn":{"a":"u","m":"x"}}`,
 			`<tn xmlns="urn:s" a="u" m="x"/>`, complexType, false,
 			`jsonsrc: instance.json:1:23: the members of {urn:s}tn settle no type`},
@@ -245,6 +250,131 @@ func TestTypeTableRunDeclines(t *testing.T) {
 				t.Fatalf("XML twin %s charges %v, %d unevaluated; want %v, withheld %t", tc.xml, got, len(xres.Unevaluated()), tc.want, tc.withheld)
 			}
 			res, err := Validate(v, strings.NewReader(tc.json), WithURI(jsonURI))
+			if err == nil {
+				t.Fatalf("Validate(%s) = %v violations, nil error; want the decline", tc.json, rules(res))
+			}
+			if !strings.HasPrefix(err.Error(), tc.opens) {
+				t.Errorf("Validate(%s) = %q, want it to open %q", tc.json, err, tc.opens)
+			}
+		})
+	}
+}
+
+// TestTypeTableReadAhead pins a root whose attribute run the member-by-member
+// walk leaves more than one reading of open, which maps by reading on to the
+// one reading its own selected type classifies as it reads
+// (walker.readAhead): xml is that reading's twin; other, where it is not
+// empty, the twin of a reading that type rules out, which otherWant measures.
+// Under runSchema, tu's a = "z" selects T, which ends the run at m, though U
+// takes m as an attribute: a and m together select T again, which takes m as
+// no attribute. tq's Q takes m as an attribute in no namespace and Q2 in urn:s;
+// m alone selects Q, which names it in no namespace, and beside a = "1" or
+// "2" selects Q1, which does too, or Q2, which names it in urn:s. tn's m alone
+// selects T, which takes it as no attribute, U taking it as one. Under
+// laxExtensionSchema, U declines y and every key no declaration carries, and
+// no a = "u" ever selects it: the reading taking y, and b, c and d, as
+// attributes selects T, which takes y as no attribute, so the children's
+// reading stands alone, and U drops. Each row fails with walker.readAhead
+// returning unsettled at once.
+func TestTypeTableReadAhead(t *testing.T) {
+	run := validatorOver(t, runSchema)
+	lax := validatorOver(t, laxExtensionSchema)
+	for _, tc := range []struct {
+		name      string
+		v         *validate.Validator
+		json, xml string
+		want      []xsderr.Rule
+		other     string
+		otherWant []xsderr.Rule
+	}{
+		{"an attribute under one type where the selected type ends the run", run, `{"tu":{"a":"z","m":"x"}}`,
+			`<tu xmlns="urn:s" a="z"><m>x</m></tu>`, complexType, `<tu xmlns="urn:s" a="z" m="x"/>`, complexType},
+		{"attributes of two expanded names", run, `{"tq":{"m":"x"}}`,
+			`<tq xmlns="urn:s" m="x"/>`, none, `<tq xmlns="urn:s"><m>x</m></tq>`, complexType},
+		{"attributes of two expanded names, after an attribute selecting the type naming one", run, `{"tq":{"a":"1","m":"x"}}`,
+			`<tq xmlns="urn:s" a="1" m="x"/>`, none, "", nil},
+		{"attributes of two expanded names, after an attribute selecting the type naming the other", run, `{"tq":{"a":"2","m":"x"}}`,
+			`<tq xmlns="urn:s" xmlns:s="urn:s" a="2" s:m="x"/>`, none, "", nil},
+		{"an attribute under one type where the selected type ends the run before it", run, `{"tn":{"m":"x"}}`,
+			`<tn xmlns="urn:s"><m>x</m></tn>`, complexType, `<tn xmlns="urn:s" m="x"/>`, complexType},
+		{"another member follows the member", lax, `{"r":{"y":"1","z":"2"}}`,
+			`<r><y>1</y><z>2</z></r>`, content, `<r y="1"><z>2</z></r>`, complexType},
+		{"three members a candidate declines", lax, `{"r":{"b":"1","c":"2","d":"3","z":"4"}}`,
+			`<r><b>1</b><c>2</c><d>3</d><z>4</z></r>`, content, "", nil},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if tc.other != "" {
+				xres, err := xmlsrc.Validate(tc.v, strings.NewReader(tc.other), xmlsrc.WithURI("instance.xml"))
+				if err != nil || xres.Err() != nil {
+					t.Fatalf("xmlsrc.Validate(%s): %v / %v", tc.other, err, xres.Err())
+				}
+				if got := rules(xres); !slices.Equal(got, tc.otherWant) {
+					t.Fatalf("XML twin %s charges %v, want %v", tc.other, got, tc.otherWant)
+				}
+			}
+			twin(t, tc.v, tc.json, tc.xml, tc.want)
+		})
+	}
+}
+
+// TestTypeTableReadAheadDeclines pins walker.readAhead's declines, each
+// beside the verdicts the engine gives the twins of the readings in play,
+// withheld saying whether it withholds a selection for one: under runSchema,
+// t2's two readings each stand, the children's under T and the attribute's
+// under U; tz's attribute reading reaches a {test} outside the §3.12.6
+// compiler's subset; and no reading of t0's m stands, m alone selecting Q,
+// which takes it as an attribute, m in no namespace Q2, which names it in
+// urn:s, and m in urn:s Q1, which names it in none. Under laxExtensionSchema,
+// y and a together select U, which declines y (walker.candidates' fallback,
+// undetermined); four members U declines make more name assignments than
+// nameBudget; and where the one reading standing leaves an attribute member
+// after a child, it declines as one read from the stream does (members.key).
+func TestTypeTableReadAheadDeclines(t *testing.T) {
+	run := validatorOver(t, runSchema)
+	lax := validatorOver(t, laxExtensionSchema)
+	type measured struct {
+		doc      string
+		want     []xsderr.Rule
+		withheld bool
+	}
+	const undetermined = ` is declined under a type its {type table} can select`
+	for _, tc := range []struct {
+		name  string
+		v     *validate.Validator
+		json  string
+		twins []measured
+		opens string
+	}{
+		{"two readings stand", run, `{"t2":{"m":"x"}}`,
+			[]measured{{`<t2 xmlns="urn:s"><m>x</m></t2>`, complexType, false}, {`<t2 xmlns="urn:s" m="x"/>`, none, false}},
+			`jsonsrc: instance.json:1:8: member "m" of {urn:s}t2 is an attribute under a type its {type table} can select and a child under the one`},
+		{"the engine withholds a longer reading's selection", run, `{"tz":{"m":"x"}}`,
+			[]measured{{`<tz xmlns="urn:s"><m>x</m></tz>`, complexType, false}, {`<tz xmlns="urn:s" m="x"/>`, none, true}},
+			`jsonsrc: instance.json:1:8: member "m" of {urn:s}tz is an attribute under a type its {type table} can select and a child under the one`},
+		{"no reading stands", run, `{"t0":{"m":"x"}}`,
+			[]measured{{`<t0 xmlns="urn:s"><m>x</m></t0>`, complexType, false}, {`<t0 xmlns="urn:s" m="x"/>`, none, false}, {`<t0 xmlns="urn:s" xmlns:s="urn:s" s:m="x"/>`, complexType, false}},
+			`jsonsrc: instance.json:1:8: member "m" of {urn:s}t0 is an attribute of the expanded names`},
+		{"a longer reading's type declines the member", lax, `{"r":{"y":"1","a":"u"}}`,
+			[]measured{{`<r><y>1</y><a>u</a></r>`, content, false}, {`<r y="1" a="u"/>`, content, false}},
+			`jsonsrc: instance.json:1:7: member "y" of r` + undetermined},
+		{"four members a candidate declines", lax, `{"r":{"b":"1","c":"2","d":"3","e":"4","z":"5"}}`,
+			[]measured{{`<r><b>1</b><c>2</c><d>3</d><e>4</e><z>5</z></r>`, content, false}},
+			`jsonsrc: instance.json:1:7: member "b" of r` + undetermined},
+		{"an attribute member after a child the reading leaves", lax, `{"r":{"y":"1","a":"t","z":"2"}}`,
+			[]measured{{`<r a="t"><y>1</y><z>2</z></r>`, content, false}},
+			`jsonsrc: instance.json:1:15: attribute member "a" follows a child member of r`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			for _, x := range tc.twins {
+				xres, err := xmlsrc.Validate(tc.v, strings.NewReader(x.doc), xmlsrc.WithURI("instance.xml"))
+				if err != nil || xres.Err() != nil {
+					t.Fatalf("xmlsrc.Validate(%s): %v / %v", x.doc, err, xres.Err())
+				}
+				if got := rules(xres); !slices.Equal(got, x.want) || (len(xres.Unevaluated()) > 0) != x.withheld {
+					t.Fatalf("XML twin %s charges %v, %d unevaluated; want %v, withheld %t", x.doc, got, len(xres.Unevaluated()), x.want, x.withheld)
+				}
+			}
+			res, err := Validate(tc.v, strings.NewReader(tc.json), WithURI(jsonURI))
 			if err == nil {
 				t.Fatalf("Validate(%s) = %v violations, nil error; want the decline", tc.json, rules(res))
 			}
@@ -364,7 +494,8 @@ const anyWildcardSchema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema
 // never being "u", so U drops and the root maps as T, the one type any
 // reading selects, classifies it. Under r3, whose y selects U where it is an
 // attribute, a null y is no attribute under any reading, so the one that
-// takes it as an attribute is never read.
+// takes it as an attribute is never read. Each row's y closes the object;
+// TestTypeTableReadAhead pins a y another member follows.
 func TestTypeTableCandidateDrops(t *testing.T) {
 	v := validatorOver(t, laxExtensionSchema)
 	for _, tc := range []struct {
@@ -397,8 +528,7 @@ func TestTypeTableCandidateDrops(t *testing.T) {
 // reading is inconsistent, U taking a as an attribute, and the one reading
 // that is, T's taking a alone, would map; r9's {test} is outside the §3.12.6
 // compiler's subset, so the engine withholds every reading's selection, and
-// charges neither twin; and under r another member follows y, which the mapping
-// does not read ahead to. Under unboundSchema, r8 selects the type that
+// charges neither twin. Under unboundSchema, r8 selects the type that
 // declines y where y is in a namespace no {test} binds, and the declared
 // xs:anyType, which no reading selects, declines first. Under settleSchema,
 // every live candidate declines y, X alone having taken both a and b as
@@ -453,9 +583,6 @@ func TestTypeTableCandidateDeclines(t *testing.T) {
 		{"every live candidate declines the member", settle, `{"q":{"a":"1","b":"2","y":"3"}}`,
 			`<q a="1" b="2"><y>3</y></q>`, twoComplexType, `<q a="1" b="2" y="3"/>`, twoComplexType,
 			`jsonsrc: instance.json:1:23: the members of q settle no type`},
-		{"another member follows the member", lax, `{"r":{"y":"1","z":"2"}}`,
-			`<r><y>1</y><z>2</z></r>`, content, `<r y="1"><z>2</z></r>`, complexType,
-			`jsonsrc: instance.json:1:7: member "y" of r` + undetermined},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			for _, x := range []struct {
