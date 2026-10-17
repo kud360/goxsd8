@@ -455,8 +455,7 @@ type AttributeResolver interface {
 // top-level type definition (simple or complex) by its expanded name (STYLE
 // T3). [*Schema] implements it over a finalized schema; parser answers one over
 // the built-in datatypes alone, before any *Schema exists. Its consumers are
-// finalize's cross-reference resolution and simple-type readers in this
-// package, and packages value, builtin, xpath, and validate.
+// this package and packages value, builtin, xpath, and validate.
 type TypeResolver interface {
 	Type(name QName) (TypeDefinition, bool)
 }
