@@ -340,8 +340,8 @@
 // guessed mapping. [Validate]'s doc states every error class it returns. Each
 // entry below whose XML twin the engine assesses is tracked by a GAP(jsonsrc)
 // marker at the function that declines it — rootMember, childNamed, useNamed,
-// wildcardMember, classify, selection, attributes, candidates, readAhead, settled,
-// members.key, reserved, instanceGoverned and declaredType; one more at
+// wildcardMember, classify, selection, attributes, candidates, readAhead,
+// settled, members.key, reserved, instanceGoverned and declaredType; one more at
 // classify tracks the mapping's own choice of a declaration or use over a
 // wildcard, under "The mapping". A repeated attribute member, an attribute
 // member whose value is null, an object or an array, an array item that is

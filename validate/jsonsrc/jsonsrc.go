@@ -434,12 +434,12 @@ type object struct {
 	// (walker.governing) or its "$type" (walker.instanceGoverned), which need
 	// not be the type the members are classified under: one where the mapping
 	// determines it, the type a root's {type table} selects included
-	// (walker.settled, walker.take); each type a {type table} can select where the
-	// declaration that governs the owner below the root, or one an ancestor's,
-	// carries one whose types differ (walker.declarationType), the engine
-	// selecting among them by a {test} the mapping does not evaluate there
-	// (selection); and none where the mapping does not determine it, or the
-	// owner has no declaration. A child's "$type" is settled under each
+	// (walker.settled, walker.take); each type a {type table} can select where
+	// the declaration that governs the owner below the root, or one an
+	// ancestor's, carries one whose types differ (walker.declarationType), the
+	// engine selecting among them by a {test} the mapping does not evaluate
+	// there (selection); and none where the mapping does not determine it, or
+	// the owner has no declaration. A child's "$type" is settled under each
 	// (walker.instanceGoverned), and the children are ·attributed· under each
 	// one's content model (object.attribute).
 	governing []governingType
@@ -1679,11 +1679,11 @@ func openContent(t xsd.ComplexType) bool {
 // It DECLINES typ where parent.governing is empty, the mapping determining no
 // type that governs the parent, and where two of parent.governing settle on
 // different types, which a {type table} below the root makes several
-// (walker.declarationType); a root's is the one type it selects (walker.settled,
-// walker.take). It declines too where ·override· is not decided, an error of
-// xsd.Schema.ValidlySubstitutable unreachable for a finalized Schema, which the engine
-// declines for the XML twin as well (walk.instanceOverride, walk.localGovernance), so no
-// marker tracks it.
+// (walker.declarationType); a root's is the one type it selects
+// (walker.settled, walker.take). It declines too where ·override· is not
+// decided, an error of xsd.Schema.ValidlySubstitutable unreachable for a
+// finalized Schema, which the engine declines for the XML twin as well
+// (walk.instanceOverride, walk.localGovernance), so no marker tracks it.
 //
 // The parent's governing types are empty where the schema view lacks the
 // governor capability, which validate.Validator.Schema never returns, and
