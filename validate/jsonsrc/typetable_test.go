@@ -170,7 +170,8 @@ func TestTypeTableSelected(t *testing.T) {
 // tx's first is. tq is of type Q and selects Q1 where its a is "1" and Q2 where
 // it is "2". t2 is of type T and selects U where it has an m. tz is of type T
 // and selects T where it has no m, and its second {test}, selecting U, is
-// outside the §3.12.6 compiler's subset. t0 is of type Q and selects Q2 where
+// outside the §3.12.6 compiler's subset. P extends U with the attribute p, and
+// tp is of type T and selects P where it has a p. t0 is of type Q and selects Q2 where
 // it has an m in no namespace and Q1 where it has one in urn:s. Under T a key
 // "m" is a child no wildcard names (walker.namedChild).
 const runSchema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
@@ -206,6 +207,10 @@ const runSchema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
     <xs:alternative test="not(@m)" type="s:T"/>
     <xs:alternative test="count(@m) > 0" type="s:U"/>
   </xs:element>
+  <xs:complexType name="P">
+    <xs:complexContent><xs:extension base="s:U"><xs:attribute name="p" type="xs:string"/></xs:extension></xs:complexContent>
+  </xs:complexType>
+  <xs:element name="tp" type="s:T"><xs:alternative test="@p" type="s:P"/></xs:element>
   <xs:element name="t0" type="s:Q">
     <xs:alternative test="@m" type="s:Q2"/>
     <xs:alternative test="@s:m" type="s:Q1"/>
@@ -321,13 +326,15 @@ func TestTypeTableReadAhead(t *testing.T) {
 // withheld saying whether it withholds a selection for one: under runSchema,
 // t2's two readings each stand, the children's under T and the attribute's
 // under U; tz's attribute reading reaches a {test} outside the §3.12.6
-// compiler's subset; and no reading of t0's m stands, m alone selecting Q,
-// which takes it as an attribute, m in no namespace Q2, which names it in
-// urn:s, and m in urn:s Q1, which names it in none. Under laxExtensionSchema,
-// y and a together select U, which declines y (walker.candidates' fallback,
-// undetermined); four members U declines make more name assignments than
-// nameBudget; and where the one reading standing leaves an attribute member
-// after a child, it declines as one read from the stream does (members.key).
+// compiler's subset; tp's p selects P, which takes the null m after it as an
+// attribute, where the children's reading stands under T; and no reading of
+// t0's m stands, m alone selecting Q, which takes it as an attribute, m in no
+// namespace Q2, which names it in urn:s, and m in urn:s Q1, which names it in
+// none. Under laxExtensionSchema, y and a together select U, which declines y
+// (walker.candidates' fallback, undetermined); four members U declines make
+// more name assignments than nameBudget; and where the one reading standing
+// leaves an attribute member after a child, it declines as one read from the
+// stream does (members.key).
 func TestTypeTableReadAheadDeclines(t *testing.T) {
 	run := validatorOver(t, runSchema)
 	lax := validatorOver(t, laxExtensionSchema)
@@ -350,6 +357,9 @@ func TestTypeTableReadAheadDeclines(t *testing.T) {
 		{"the engine withholds a longer reading's selection", run, `{"tz":{"m":"x"}}`,
 			[]measured{{`<tz xmlns="urn:s"><m>x</m></tz>`, complexType, false}, {`<tz xmlns="urn:s" m="x"/>`, none, true}},
 			`jsonsrc: instance.json:1:8: member "m" of {urn:s}tz is an attribute under a type its {type table} can select and a child under the one`},
+		{"a longer reading's type takes a null member as an attribute", run, `{"tp":{"p":"1","m":null}}`,
+			[]measured{{`<tp xmlns="urn:s" ` + xsiDecl + `><p>1</p><m xsi:nil="true"/></tp>`, []xsderr.Rule{"cvc-complex-type", "cvc-complex-type"}, false}, {`<tp xmlns="urn:s" ` + xsiDecl + ` p="1"><m xsi:nil="true"/></tp>`, complexType, false}},
+			`jsonsrc: instance.json:1:8: member "p" of {urn:s}tp is an attribute under a type its {type table} can select and a child under the one`},
 		{"no reading stands", run, `{"t0":{"m":"x"}}`,
 			[]measured{{`<t0 xmlns="urn:s"><m>x</m></t0>`, complexType, false}, {`<t0 xmlns="urn:s" m="x"/>`, none, false}, {`<t0 xmlns="urn:s" xmlns:s="urn:s" s:m="x"/>`, complexType, false}},
 			`jsonsrc: instance.json:1:8: member "m" of {urn:s}t0 is an attribute of the expanded names`},
