@@ -333,9 +333,8 @@
 //
 // An input the implemented arms do not map is a [*DeclineError] from
 // [Validate], which [errors.As] matches, naming the arm it is not — never a
-// silent drop and never a guessed mapping. Malformed or absent JSON, content
-// after the top-level object and a fault reading the input are no declines,
-// and no error but a decline is a DeclineError. Each entry below whose XML
+// silent drop and never a guessed mapping. [Validate]'s doc states every error
+// class it returns. Each entry below whose XML
 // twin the engine assesses is tracked by a GAP(jsonsrc) marker at the function
 // that declines it — rootMember, childNamed, useNamed, wildcardMember,
 // classify, selection, attributes, extend, settled, members.key, reserved,

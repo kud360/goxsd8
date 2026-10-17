@@ -80,9 +80,25 @@ func WithURI(uri string) Option {
 // marshals a struct whose child field is declared before an attribute field:
 // declare a struct's attribute fields first, or the document declines.
 //
-// An input the mapping declines comes back as a [*DeclineError]; match it with
-// [errors.As]. No other error is one: the nil checks, malformed or absent JSON,
-// content after the top-level object and a fault reading r are plain errors.
+// Every error it returns is of one of four classes. Only a decline has a type
+// of its own; the other three are plain errors, by design, and no sentinel
+// value marks any of them:
+//
+//   - A nil argument: "jsonsrc: Validate: nil *validate.Validator" or
+//     "jsonsrc: Validate: nil io.Reader". It wraps nothing.
+//   - Malformed JSON: an input that is not exactly one JSON value (RFC 8259
+//     §2), spelled "malformed JSON: …", "the document holds no JSON value; …"
+//     or "content follows the top-level object". The first may wrap an error,
+//     whose identity is not part of this contract; the other two wrap
+//     nothing.
+//   - A fault reading r: "fault reading the input: …", wrapping the error r
+//     returned, which [errors.Is] reaches. Because r may return any error,
+//     io.ErrUnexpectedEOF among them, no matchable value separates this class
+//     from malformed JSON: a caller that needs the split checks whether its
+//     own r returned an error.
+//   - A decline: a [*DeclineError], matched with [errors.As]. It wraps
+//     nothing.
+//
 // Every error is prefixed "jsonsrc: " and, past the nil checks, the location of
 // the construct it names. None is an [xsderr.Error]: none is a validity verdict
 // about a document.
@@ -119,8 +135,8 @@ func Validate(v *validate.Validator, r io.Reader, opts ...Option) (*validate.Res
 
 // DeclineError is the error [Validate] returns for an input the mapping
 // declines: one the implemented arms do not map, as the package doc's
-// "Declines" section lists, never malformed JSON or a fault reading the input.
-// Validate is what builds one. It wraps no other error, so it is never an
+// "Declines" section lists. Validate is what builds one, and its doc states the
+// other error classes it returns. It wraps no other error, so it is never an
 // [xsderr.Error]: a decline is not a validity verdict.
 type DeclineError struct {
 	loc xsderr.Loc
