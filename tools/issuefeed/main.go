@@ -292,15 +292,29 @@ func reshape(rows []row) (issues, gapIssues []byte, err error) {
 		is = append(is, issueOut{Number: r.Number, State: r.State, Labels: labels})
 		gs = append(gs, gapIssueOut{Number: r.Number, Title: r.Title, State: r.State, Body: r.Body, Labels: labels})
 	}
-	issues, err = json.MarshalIndent(is, "", "  ")
+	issues, err = encode(is)
 	if err != nil {
 		return nil, nil, fmt.Errorf("encoding %s: %w", issuesFile, err)
 	}
-	gapIssues, err = json.MarshalIndent(gs, "", "  ")
+	gapIssues, err = encode(gs)
 	if err != nil {
 		return nil, nil, fmt.Errorf("encoding %s: %w", gapIssuesFile, err)
 	}
-	return append(issues, '\n'), append(gapIssues, '\n'), nil
+	return issues, gapIssues, nil
+}
+
+// encode renders v as jq prints it: two-space indent, a trailing newline, and
+// `<`, `>` and `&` left as written rather than escaped, so a grep of a file
+// finds the text the issue carries.
+func encode(v any) ([]byte, error) {
+	var buf bytes.Buffer
+	enc := json.NewEncoder(&buf)
+	enc.SetEscapeHTML(false)
+	enc.SetIndent("", "  ")
+	if err := enc.Encode(v); err != nil {
+		return nil, err
+	}
+	return buf.Bytes(), nil
 }
 
 // removeOutputs deletes both output files from dir if present, so a failed

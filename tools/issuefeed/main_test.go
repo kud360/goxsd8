@@ -233,10 +233,11 @@ func TestWalkAborts(t *testing.T) {
 
 // TestReshape pins both output shapes: pull requests dropped, labels reduced
 // to {name}, title and body carried into gapissues.json only, state passed
-// through unchanged (absent written as null) and a null body written as "".
+// through unchanged (absent written as null), a null body written as "", and
+// `<`, `>` and `&` written as themselves.
 func TestReshape(t *testing.T) {
 	page := `[
-	 {"number":3,"title":"a gap","state":"open","body":"see x.go","labels":[{"name":"kind/gap","color":"c"}],"user":{}},
+	 {"number":3,"title":"a gap","state":"open","body":"see <x> & y.go","labels":[{"name":"kind/gap","color":"c"}],"user":{}},
 	 {"number":2,"title":"a pr","state":"closed","body":"pr","labels":[],"pull_request":{"url":"u"}},
 	 {"number":1,"title":"no body","body":null,"labels":[],"pull_request":null}
 	]`
@@ -266,7 +267,7 @@ func TestReshape(t *testing.T) {
     "number": 3,
     "title": "a gap",
     "state": "open",
-    "body": "see x.go",
+    "body": "see <x> & y.go",
     "labels": [
       {
         "name": "kind/gap"
