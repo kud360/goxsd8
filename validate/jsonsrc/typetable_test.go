@@ -266,7 +266,12 @@ func TestTypeTableWithheldMaps(t *testing.T) {
 
 // laxExtensionSchema declares, in no namespace, T, an optional child z and the
 // attribute a, and U, which extends T with a lax element wildcard and a lax
-// {attribute wildcard}. r is of type T and selects U where its a is "u".
+// {attribute wildcard}, under both of which an unprefixed key's kind and
+// namespace are open (walker.wildcardMember). r is of type T and selects U
+// where its a is "u". Each of r3, r4, r5 and r6 is of type T and selects U
+// where it has the attribute y in one class of names attributeNames tells
+// apart: in no namespace, in urn:p, which its {test} binds to p, in a
+// namespace its {test} binds none to, and in the xml namespace.
 const laxExtensionSchema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
   <xs:complexType name="T">
     <xs:sequence><xs:element name="z" minOccurs="0"/></xs:sequence>
@@ -279,6 +284,10 @@ const laxExtensionSchema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchem
     </xs:extension></xs:complexContent>
   </xs:complexType>
   <xs:element name="r" type="T"><xs:alternative test="@a = 'u'" type="U"/></xs:element>
+  <xs:element name="r3" type="T"><xs:alternative test="@y" type="U"/></xs:element>
+  <xs:element name="r4" type="T" xmlns:p="urn:p"><xs:alternative test="@p:y" type="U"/></xs:element>
+  <xs:element name="r5" type="T"><xs:alternative test="@*:y and not(@y) and not(@xml:y)" type="U"/></xs:element>
+  <xs:element name="r6" type="T"><xs:alternative test="@xml:y" type="U"/></xs:element>
 </xs:schema>`
 
 // anyWildcardSchema declares, in no namespace, T, a lax ##any element wildcard
@@ -306,21 +315,45 @@ const anyWildcardSchema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema
   </xs:element>
 </xs:schema>`
 
-// TestTypeTableCandidateDeclines pins walker.attributes' GAP(jsonsrc) marker
-// (#2703): a member of a root's attribute run that one live candidate type
-// declines declines the whole root, though the engine assesses the XML twin
-// under the one type the table selects, each twin's verdict measured beside
-// the decline. Under laxExtensionSchema, y is a child no wildcard names under
-// T and declines under U, whose two wildcards leave its kind open: a later
-// candidate's decline (walker.undetermined). Under anyWildcardSchema, y
-// declines under T, the declared {type definition}, whose element wildcard of
-// variety any fixes no namespace for it, alone through wildcardMember's own
-// exit; xml is the child reading's twin and attr the attribute reading's,
-// which attrWant measures.
+// TestTypeTableCandidateDrops pins a root whose candidate type declines a
+// member of the attribute run that no reading of the run selects
+// (walker.candidates, walker.droppable): under laxExtensionSchema, y is a child
+// no wildcard names under T and declines under U, whose two wildcards leave
+// its kind open; no reading selects U, a never being "u", so U drops and the
+// root maps as T, the one type any reading selects, classifies it.
+func TestTypeTableCandidateDrops(t *testing.T) {
+	v := validatorOver(t, laxExtensionSchema)
+	for _, tc := range []struct {
+		name, json, xml string
+		want            []xsderr.Rule
+	}{
+		{"a later candidate declines a member after an attribute", `{"r":{"a":"t","y":"1"}}`,
+			`<r a="t"><y>1</y></r>`, content},
+		{"a later candidate declines the run's first member", `{"r":{"y":"1"}}`,
+			`<r><y>1</y></r>`, content},
+	} {
+		t.Run(tc.name, func(t *testing.T) { twin(t, v, tc.json, tc.xml, tc.want) })
+	}
+}
+
+// TestTypeTableCandidateDeclines pins walker.candidates' GAP(jsonsrc) markers:
+// a member of a root's attribute run that one live candidate type declines
+// declines the whole root where a reading of the run may select that type,
+// each twin's verdict measured beside the decline; xml is the child reading's
+// twin and attr the attribute reading's, which attrWant measures. Under
+// anyWildcardSchema, y declines under T, the declared {type definition},
+// whose element wildcard of variety any fixes no namespace for it, alone
+// through wildcardMember's own exit, and T is the type the reading that takes
+// no attribute selects. Under laxExtensionSchema, y declines under U alone
+// (walker.undetermined): r3 to r6 select U under the reading that takes y as
+// an attribute, each where y is in one class of names attributeNames gives
+// it, and under r another member follows y, which the mapping does not read
+// ahead to.
 func TestTypeTableCandidateDeclines(t *testing.T) {
 	lax := validatorOver(t, laxExtensionSchema)
 	anyWildcard := validatorOver(t, anyWildcardSchema)
 	const wildcardDecline = `names no child element declaration and no attribute use of the type of `
+	const undetermined = ` is declined under a type its {type table} can select`
 	for _, tc := range []struct {
 		name     string
 		v        *validate.Validator
@@ -331,27 +364,33 @@ func TestTypeTableCandidateDeclines(t *testing.T) {
 		attrWant []xsderr.Rule
 		opens    string
 	}{
-		{"a later candidate declines a member after an attribute", lax, `{"r":{"a":"t","y":"1"}}`,
-			`<r a="t"><y>1</y></r>`, content, "", nil,
-			`jsonsrc: instance.json:1:15: member "y" of r is declined under a type its {type table} can select`},
-		{"a later candidate declines the run's first member", lax, `{"r":{"y":"1"}}`,
-			`<r><y>1</y></r>`, content, "", nil,
-			`jsonsrc: instance.json:1:7: member "y" of r is declined under a type its {type table} can select`},
 		{"the declared type declines a member alone", anyWildcard, `{"r":{"y":"x"}}`,
 			`<r><y>x</y></r>`, none, `<r y="x"/>`, []xsderr.Rule{"cvc-attribute"},
 			`jsonsrc: instance.json:1:7: member "y" ` + wildcardDecline + `r, and its element wildcard set includes one of variety any`},
 		{"the declared type declines a member alone, beside two alternatives", anyWildcard, `{"r2":{"y":"x"}}`,
 			`<r2><y>x</y></r2>`, none, `<r2 y="x"/>`, []xsderr.Rule{"cvc-attribute"},
 			`jsonsrc: instance.json:1:8: member "y" ` + wildcardDecline + `r2, and its element wildcard set includes one of variety any`},
+		{"the attribute reading selects the declining type", lax, `{"r3":{"y":"1"}}`,
+			`<r3><y>1</y></r3>`, content, `<r3 y="1"/>`, content,
+			`jsonsrc: instance.json:1:8: member "y" of r3` + undetermined},
+		{"the attribute reading selects it in a namespace the test binds", lax, `{"r4":{"y":"1"}}`,
+			`<r4><y>1</y></r4>`, content, `<r4 xmlns:p="urn:p" p:y="1"/>`, content,
+			`jsonsrc: instance.json:1:8: member "y" of r4` + undetermined},
+		{"the attribute reading selects it in a namespace the test binds none to", lax, `{"r5":{"y":"1"}}`,
+			`<r5><y>1</y></r5>`, content, `<r5 xmlns:q="urn:q" q:y="1"/>`, content,
+			`jsonsrc: instance.json:1:8: member "y" of r5` + undetermined},
+		{"the attribute reading selects it in the xml namespace", lax, `{"r6":{"y":"1"}}`,
+			`<r6><y>1</y></r6>`, content, `<r6 xml:y="1"/>`, content,
+			`jsonsrc: instance.json:1:8: member "y" of r6` + undetermined},
+		{"another member follows the member", lax, `{"r":{"y":"1","z":"2"}}`,
+			`<r><y>1</y><z>2</z></r>`, content, `<r y="1"><z>2</z></r>`, complexType,
+			`jsonsrc: instance.json:1:7: member "y" of r` + undetermined},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			for _, x := range []struct {
 				doc  string
 				want []xsderr.Rule
 			}{{tc.xml, tc.want}, {tc.attr, tc.attrWant}} {
-				if x.doc == "" {
-					continue
-				}
 				xres, err := xmlsrc.Validate(tc.v, strings.NewReader(x.doc), xmlsrc.WithURI("instance.xml"))
 				if err != nil || xres.Err() != nil {
 					t.Fatalf("xmlsrc.Validate(%s): %v / %v", x.doc, err, xres.Err())
