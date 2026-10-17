@@ -35,9 +35,13 @@ import (
 // an optional tu. H holds an optional mid and an optional mid2 and carries a;
 // H2 extends it with ib, inheritable, defaulting to "v", and H3 with ic, not
 // inheritable. rw is of type H and selects H2 where it counts an a, a {test}
-// outside the §3.12.6 compiler's subset, and re selects H3 likewise. big's
-// {content type} is one xsd.Schema.ContentMatcher declines (its GAP(xsd)
-// ceiling), holding mids.
+// outside the §3.12.6 compiler's subset, and re selects H3 likewise. B holds
+// an optional tu and carries k; X holds an optional tu and carries a,
+// inheritable, defaulting to "u", and derives from no B; X2 extends B with
+// that a, and N extends B with nothing. e is of type B, r holds an e,
+// and et is of type B and selects N where its k is "n". big's {content type}
+// is one xsd.Schema.ContentMatcher declines (its GAP(xsd) ceiling), holding
+// mids.
 const inheritSchema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
     xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" targetNamespace="urn:i" xmlns:i="urn:i" elementFormDefault="qualified">
   <xs:attribute name="ia" type="xs:string" inheritable="true"/>
@@ -148,6 +152,21 @@ const inheritSchema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
   </xs:complexType>
   <xs:element name="rw" type="i:H"><xs:alternative test="count(@a) > 0" type="i:H2"/></xs:element>
   <xs:element name="re" type="i:H"><xs:alternative test="count(@a) > 0" type="i:H3"/></xs:element>
+  <xs:complexType name="B">
+    <xs:sequence><xs:element ref="i:tu" minOccurs="0"/></xs:sequence>
+    <xs:attribute name="k" type="xs:string"/>
+  </xs:complexType>
+  <xs:complexType name="X">
+    <xs:sequence><xs:element ref="i:tu" minOccurs="0"/></xs:sequence>
+    <xs:attribute name="a" type="xs:string" default="u" inheritable="true"/>
+  </xs:complexType>
+  <xs:complexType name="X2">
+    <xs:complexContent><xs:extension base="i:B"><xs:attribute name="a" type="xs:string" default="u" inheritable="true"/></xs:extension></xs:complexContent>
+  </xs:complexType>
+  <xs:complexType name="N"><xs:complexContent><xs:extension base="i:B"/></xs:complexContent></xs:complexType>
+  <xs:element name="e" type="i:B"/>
+  <xs:element name="r"><xs:complexType><xs:sequence><xs:element ref="i:e"/></xs:sequence></xs:complexType></xs:element>
+  <xs:element name="et" type="i:B"><xs:alternative test="@k = 'n'" type="i:N"/></xs:element>
   <xs:element name="big">
     <xs:complexType>
       <xs:sequence>
@@ -218,6 +237,38 @@ func TestInheritedSelected(t *testing.T) {
 			`<px ` + i + `><tn><m>x</m></tn></px>`, typ},
 		{"a governing element declaration other than the classifying one", `{"wy":{"y":[{},{"x":{"a":"u","m":"x"}}]}}`,
 			`<wy ` + i + `><y/><y><x a="u" m="x"/></y></wy>`, complexType},
+	} {
+		t.Run(tc.name, func(t *testing.T) { twin(t, v, tc.json, tc.xml, tc.want) })
+	}
+}
+
+// TestOverriddenTypeHandsDown pins the [inherited attributes] an element
+// carrying a "$type" hands down (walker.instanceGoverning): under the type
+// that governs it as the engine determines it, which is the type the "$type"
+// names only where that type ·overrides· the ·selected type definition· of
+// its ·governing element declaration· (key-governing-type-elem clauses 3 and
+// 4), and not the type its members are classified under (walker.
+// instanceGoverned). X does not ·override· B, so e is charged cvc-elt clause 4
+// and governed by B, which hands tu no a, and tu, governed by T, takes m as a
+// child, at the root and below it. X2 ·overrides· B, the type et selects
+// without a k, and hands down its ·defaulted· a, but not N, the one it selects
+// where its k is "n", which then governs et (walker.governOverriding).
+func TestOverriddenTypeHandsDown(t *testing.T) {
+	v := validatorOver(t, inheritSchema)
+	const i = `xmlns="urn:i" xmlns:i="urn:i" `
+	charged := []xsderr.Rule{"cvc-elt", "cvc-type"}
+	for _, tc := range []struct {
+		name, json, xml string
+		want            []xsderr.Rule
+	}{
+		{"charged at the root", `{"e":{"$xmlns":{"i":"urn:i"},"$type":"i:X","tu":{"m":"x"}}}`,
+			`<e ` + i + xsiDecl + ` xsi:type="i:X"><tu><m>x</m></tu></e>`, charged},
+		{"charged below the root", `{"r":{"e":{"$xmlns":{"i":"urn:i"},"$type":"i:X","tu":{"m":"x"}}}}`,
+			`<r ` + i + xsiDecl + `><e xsi:type="i:X"><tu><m>x</m></tu></e></r>`, charged},
+		{"overriding the selected type", `{"et":{"$xmlns":{"i":"urn:i"},"$type":"i:X2","tu":{"m":"x"}}}`,
+			`<et ` + i + xsiDecl + ` xsi:type="i:X2"><tu m="x"/></et>`, none},
+		{"not overriding the selected type", `{"et":{"$xmlns":{"i":"urn:i"},"$type":"i:X2","k":"n","tu":{"m":"x"}}}`,
+			`<et ` + i + xsiDecl + ` xsi:type="i:X2" k="n"><tu><m>x</m></tu></et>`, charged},
 	} {
 		t.Run(tc.name, func(t *testing.T) { twin(t, v, tc.json, tc.xml, tc.want) })
 	}

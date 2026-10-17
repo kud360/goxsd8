@@ -203,7 +203,12 @@
 //     over the siblings before it ([xsd.Schema.ContentMatcher]) — and not
 //     from the declaration its members are classified under; the root takes
 //     the type it names, which ·overrides· its declaration's or is charged.
-//     Under an element with no declaration the members decline as every
+//     Its children are ·attributed·, and handed its [inherited attributes],
+//     under the type the engine governs it by: the type it names only where
+//     that ·overrides· the type the element would otherwise take — its
+//     ·governing element declaration·'s, the one a {type table} there
+//     selects, or its ·locally declared type· — and that type where it does
+//     not. Under an element with no declaration the members decline as every
 //     member there does. The type is resolved through the engine's own
 //     resolver (cvc-resolve-instance, §3.17.6.3), so the two agree on it. A
 //     "$type" rides an object value only: a scalar or null element carries no

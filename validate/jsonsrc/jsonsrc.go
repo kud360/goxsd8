@@ -444,7 +444,7 @@ type object struct {
 	undeclared bool
 	// governing is each type that may be the owner's ·governing type
 	// definition·, as the engine determines it from the owner's ·attribution·
-	// (walker.governing) or its "$type" (walker.instanceGoverned), which need
+	// (walker.governing) or its "$type" (walker.instanceGoverning), which need
 	// not be the type the members are classified under: one where the mapping
 	// determines it, the type a {type table} selects included (walker.settled,
 	// walker.take); each type a {type table} can select where the declaration that
@@ -455,11 +455,24 @@ type object struct {
 	// child's "$type" is settled under each (walker.instanceGoverned), and the
 	// children are ·attributed· under each one's content model (object.attribute).
 	governing []governingType
+	// overriding is, until walker.governOverriding settles governing once the
+	// owner's attributes are read, the owner's ·governing element declaration·,
+	// whose {type table} selection the mapping reads, and the type the owner's
+	// "$type" names (walker.instanceGoverning); nil otherwise.
+	overriding *overriding
 	// unattributed is the mapping attributing none of the owner's children
 	// under governing: the element content of one of them is one
 	// xsd.Schema.ContentMatcher declines, or the schema view lacks the
 	// governor capability (walker.govern).
 	unattributed bool
+}
+
+// overriding is an element's ·governing element declaration· decl, which
+// carries a {type table}, and instance, the type the element's xsi:type names
+// (object.overriding).
+type overriding struct {
+	decl     xsd.ElementDeclaration
+	instance xsd.TypeDefinition
 }
 
 // governingType is one type that may govern an object's owner
@@ -570,18 +583,19 @@ func (d declaredElement) elementName() xsd.QName { return d.decl.Name() }
 func (b bareElement) elementName() xsd.QName     { return b.name }
 
 // object classifies e's members, where e carries an xsi:type typ naming a type
-// (instanceType), under the one walker.instanceGoverned settles, which then
-// governs e; and otherwise under d's {type definition} (declaredType), whatever
-// types walker.governing finds may govern e from its ·attribution·, and, where
-// the declaration walker.selector names carries a {type table}, under every
-// type the table can select as well (walker.selectable), until
-// walker.attributes reads the one the table selects (object.table), or, where
-// the mapping reads no selection, alike under every one (walker.classify).
+// (instanceType), under the one walker.instanceGoverned settles, whatever
+// types walker.instanceGoverning finds may govern e; and otherwise under d's
+// {type definition} (declaredType), whatever types walker.governing finds may
+// govern e from its ·attribution·, and, where the declaration walker.selector
+// names carries a {type table}, under every type the table can select as well
+// (walker.selectable), until walker.attributes reads the one the table selects
+// (object.table), or, where the mapping reads no selection, alike under every
+// one (walker.classify).
 //
-// The "$type" arm reads no {type table}: an xsi:type naming a type T
-// ·overrides· e's ·selected type definition· or is charged cvc-elt clause 4
-// (key-governing-type-elem clauses 3 and 4), so T governs e wherever its
-// verdict stands uncharged, whichever type the table selects.
+// The "$type" arm classifies under no {type table}'s selection: an xsi:type
+// naming a type T ·overrides· e's ·selected type definition· or is charged
+// cvc-elt clause 4 (key-governing-type-elem clauses 3 and 4), so T governs e
+// wherever its verdict stands uncharged, whichever type the table selects.
 func (d declaredElement) object(w *walker, e *element, typ *attribute, at placement, loc xsderr.Loc) (*object, error) {
 	declared, err := w.declaredType(d.decl, loc)
 	if err != nil {
@@ -594,8 +608,7 @@ func (d declaredElement) object(w *walker, e *element, typ *attribute, at placem
 				return nil, err
 			}
 			o := w.object(e.name, td)
-			w.govern(o, []xsd.TypeDefinition{td})
-			return o, nil
+			return o, w.instanceGoverning(o, e, typ, d.decl, declared, instance, td, at)
 		}
 	}
 	o := w.object(e.name, declared)
@@ -1302,7 +1315,9 @@ func (w *walker) element(m elementMember, loc xsderr.Loc, key string, v value, i
 // objectElement builds an object-valued element from its value v, standing at
 // at among its parent's members: its scope, v's, its "$type" (typeMember),
 // then its attribute members (attributes), each classified under the type its
-// members are (elementMember.object), and a cursor over the rest.
+// members are (elementMember.object), the type that governs it where its
+// "$type" leaves that to a {type table}'s selection (walker.governOverriding),
+// what it hands its children (walker.handDown), and a cursor over the rest.
 func (w *walker) objectElement(m elementMember, loc xsderr.Loc, v value, at placement) (*element, error) {
 	e := &element{w: w, name: m.elementName(), loc: loc, scope: v.scope}
 	typ, tok, tokAt, err := w.typeMember(e, v.next, v.nextLoc)
@@ -1319,6 +1334,11 @@ func (w *walker) objectElement(m elementMember, loc xsderr.Loc, v value, at plac
 		return nil, err
 	}
 	e.attrs = attrs
+	if o.overriding != nil {
+		if err := w.governOverriding(o, e, typ, attrs, inherited); err != nil {
+			return nil, err
+		}
+	}
 	o.handed, o.handedKnown = w.handDown(attrs, o, inherited, known)
 	e.kids = &members{w: w, owner: e, object: o, ahead: ahead}
 	return e, nil
@@ -1507,7 +1527,8 @@ func (w *walker) instanceType(e *element, lexical string) (xsd.TypeDefinition, b
 // this capability keeps one encoding of each (STYLE T4) without widening
 // SchemaView's exported surface. Under a view without it, which
 // validate.Validator.Schema never returns, the mapping determines no type
-// governing an element below the root (walker.govern), reads no {type table}'s
+// governing an element below the root (walker.govern), or a root carrying a
+// "$type" (walker.instanceGoverning), reads no {type table}'s
 // selection there (walker.selector), and every "$type" there declines
 // (walker.instanceGoverned).
 type governor interface {
@@ -1636,6 +1657,9 @@ func (w *walker) governingUnder(g governor, name xsd.QName, declared, p xsd.Type
 // A name that ·resolves· to no declaration leaves none, and t ·xs:anyType·
 // (key-lva), nil where that does not resolve.
 func (w *walker) governs(g governor, name xsd.QName, declared, p xsd.TypeDefinition, a xsd.Attribution) (d xsd.ElementDeclaration, declares bool, t xsd.TypeDefinition) {
+	if skips(a) {
+		return xsd.ElementDeclaration{}, false, declared
+	}
 	switch a := a.(type) {
 	case xsd.ElementDeclaration:
 		if a.Name() == name {
@@ -1643,14 +1667,7 @@ func (w *walker) governs(g governor, name xsd.QName, declared, p xsd.TypeDefinit
 		}
 		return w.resolved(name)
 	case xsd.Wildcard:
-		if a.ProcessContents() == xsd.ProcessSkip {
-			return xsd.ElementDeclaration{}, false, declared
-		}
 		return w.resolved(name)
-	case *xsd.OpenContent:
-		if a.Wildcard().ProcessContents() == xsd.ProcessSkip {
-			return xsd.ElementDeclaration{}, false, declared
-		}
 	}
 	if ct, ok := p.(xsd.ComplexType); ok {
 		if ldt, local := g.LocallyDeclaredElementType(ct, name); local {
@@ -1658,6 +1675,19 @@ func (w *walker) governs(g governor, name xsd.QName, declared, p xsd.TypeDefinit
 		}
 	}
 	return w.resolved(name)
+}
+
+// skips reports whether a ·attributes· an element to a skip wildcard or an
+// {open content} whose {wildcard} is skip, which leaves it ·skipped·
+// (cvc-assess-elt clause 2, key-skipped).
+func skips(a xsd.Attribution) bool {
+	switch a := a.(type) {
+	case xsd.Wildcard:
+		return a.ProcessContents() == xsd.ProcessSkip
+	case *xsd.OpenContent:
+		return a.Wildcard().ProcessContents() == xsd.ProcessSkip
+	}
+	return false
 }
 
 // resolved is what governs an element named name that carries no xsi:type
@@ -1755,7 +1785,9 @@ func openContent(t xsd.ComplexType) bool {
 // different types, which a {type table} whose selection the mapping does not
 // read makes several (walker.declarationType, walker.selector); where it reads
 // the selection, the parent's is the one type the table selects
-// (walker.settled, walker.take). It declines too where ·override· is not
+// (walker.settled, walker.take), or, under the parent's own "$type", that one
+// or the type the "$type" names (walker.governOverriding). It declines too
+// where ·override· is not
 // decided, an error of xsd.Schema.ValidlySubstitutable unreachable for a
 // finalized Schema, which the engine declines for the XML twin as well
 // (walk.instanceOverride, walk.localGovernance), so no marker tracks it.
@@ -1763,7 +1795,8 @@ func openContent(t xsd.ComplexType) bool {
 // The parent's governing types are empty where the schema view lacks the
 // governor capability, which validate.Validator.Schema never returns, and
 // where xsd.Schema.ContentMatcher declines the content model of a type that
-// may govern the grandparent (object.unattributed).
+// may govern the grandparent (object.unattributed), the parent's "$type"
+// included (walker.instanceGoverning).
 //
 // GAP(jsonsrc): a "$type" declines where the types its parent's or an
 // ancestor's {type table} can select settle it on different types, and the
@@ -1805,6 +1838,142 @@ func (w *walker) instanceGoverned(e *element, typ *attribute, instance xsd.TypeD
 		settled = td
 	}
 	return settled, nil
+}
+
+// instanceGoverning makes the types that may govern e o's (object.governing)
+// — the engine's ·governing type definition·, which o's children are
+// ·attributed· under and each child's "$type" is settled under, and which
+// e's [inherited attributes] are handed down under (walker.handDown) — where
+// e's xsi:type typ names instance, d is the declaration e's members are
+// classified by, under td (walker.instanceGoverned), declared d's {type
+// definition}, and at where e stands. It reads them off e's ·governing element
+// declaration·, as validate's walk does (walk.childGoverning), and not off td,
+// which governs e only where its verdict stands uncharged:
+//
+//   - with a ·governing element declaration· D — the root's d, or below it
+//     the one walker.governs finds under each type that may govern the parent
+//     — each type D can give e without an xsi:type (walker.declarationType),
+//     or instance where it ·overrides· that type under D's {disallowed
+//     substitutions} (key-governing-type-elem clauses 3 and 4, cvc-elt clause
+//     4; walk.instanceOverride). Where D carries a {type table} whose
+//     selection the mapping reads (walker.selector), it is left to
+//     walker.governOverriding, which reads the selection once e's attributes
+//     are read (object.overriding);
+//   - with none, ·skipped·: td, nothing below e being assessed;
+//   - with none otherwise: instance where it ·overrides·, ·without
+//     limitation·, e's ·locally declared type· or ·xs:anyType· — the type
+//     walker.governs finds — and that type where it does not
+//     (key-governing-type-elem clauses 6 to 8; walk.localGovernance,
+//     walk.instanceGovernance).
+//
+// It leaves none where the mapping cannot attribute e (placement.attributed),
+// where under some type walker.governs finds no type, and where the schema
+// view lacks the governor capability. It DECLINES typ where ·override· is not
+// decided, as walker.instanceGoverned does.
+func (w *walker) instanceGoverning(o *object, e *element, typ *attribute, d xsd.ElementDeclaration, declared, instance, td xsd.TypeDefinition, at placement) error {
+	from, declares, read := w.selector(d, declared, at)
+	if _, tabled := from.TypeTable(); declares && read && tabled {
+		o.overriding = &overriding{decl: from, instance: instance}
+		return nil
+	}
+	g, ok := w.schema.(governor)
+	if !ok {
+		return nil
+	}
+	if at.parent == nil {
+		ts, err := w.overridden(e, typ, g, instance, w.declarationType(d), d.DisallowedSubstitutions())
+		if err != nil {
+			return err
+		}
+		w.govern(o, ts)
+		return nil
+	}
+	if !at.attributed {
+		return nil
+	}
+	var types []xsd.TypeDefinition
+	for i, p := range at.parent.governing {
+		if skips(at.a[i]) {
+			types = appendTypes(types, []xsd.TypeDefinition{td})
+			continue
+		}
+		dd, declares, t := w.governs(g, d.Name(), declared, p.typ, at.a[i])
+		var under []xsd.TypeDefinition
+		var err error
+		switch {
+		case declares:
+			under, err = w.overridden(e, typ, g, instance, w.declarationType(dd), dd.DisallowedSubstitutions())
+		case t != nil:
+			under, err = w.overridden(e, typ, g, instance, []xsd.TypeDefinition{t}, nil)
+		}
+		if err != nil {
+			return err
+		}
+		if len(under) == 0 {
+			return nil
+		}
+		types = appendTypes(types, under)
+	}
+	w.govern(o, types)
+	return nil
+}
+
+// governOverriding settles o.overriding, the ·governing element declaration·
+// D of e, whose xsi:type typ names instance, and whose attributes are attrs
+// and [inherited attributes] inherited: it makes the type D's {type table}
+// selects for them (walker.selected, key-cta-select), or instance where that
+// one ·overrides· it under D's {disallowed substitutions}, the type that
+// governs e (object.governing; walk.declaredGovernance). Where the engine
+// withholds the selection, it makes each type the table can select, or
+// instance for each it ·overrides·, those that may govern e, as
+// walker.instanceGoverning does where the mapping reads no selection, under
+// walker.classify's GAP(jsonsrc) marker of the same owner. It DECLINES typ
+// where ·override· is not decided, as walker.instanceGoverned does.
+func (w *walker) governOverriding(o *object, e *element, typ *attribute, attrs, inherited []validate.Attribute) error {
+	ov := o.overriding
+	o.overriding = nil
+	g, ok := w.schema.(governor)
+	if !ok {
+		return nil
+	}
+	types := w.declarationType(ov.decl)
+	table, _ := ov.decl.TypeTable()
+	if slot, decided := w.selected(table, attrs, inherited); decided {
+		if s, ok := w.schema.ResolvedType(slot); ok {
+			types = []xsd.TypeDefinition{s}
+		}
+	}
+	ts, err := w.overridden(e, typ, g, ov.instance, types, ov.decl.DisallowedSubstitutions())
+	if err != nil {
+		return err
+	}
+	w.govern(o, ts)
+	return nil
+}
+
+// overridden is, for each of types, instance where it ·overrides· that type
+// under blocked (key-overrides; xsd.Schema.ValidlySubstitutable, which joins
+// the type's own {prohibited substitutions}), and that type where it does not,
+// each type once (appendTypes): the ·governing type definition· an element
+// whose xsi:type typ, on e, names instance takes where that type is its
+// ·selected type definition· or ·locally declared type·. It DECLINES typ where
+// ·override· is not decided, an error unreachable for a finalized Schema, which
+// the engine declines for the XML twin as well (walk.instanceOverride,
+// walk.localGovernance), so no marker tracks it.
+func (w *walker) overridden(e *element, typ *attribute, g governor, instance xsd.TypeDefinition, types []xsd.TypeDefinition, blocked []xsd.DerivationMethod) ([]xsd.TypeDefinition, error) {
+	var ts []xsd.TypeDefinition
+	for _, t := range types {
+		overrides, err := g.ValidlySubstitutable(instance, t, blocked)
+		if err != nil {
+			return nil, w.declinef(typ.loc, "the \"$type\" member of %s: whether the type it names ·overrides· the one %s would otherwise take could not be settled: %v",
+				e.name, e.name, err)
+		}
+		if overrides {
+			t = instance
+		}
+		ts = appendTypes(ts, []xsd.TypeDefinition{t})
+	}
+	return ts, nil
 }
 
 // instanceUnder is the ·governing type definition· an element named name
