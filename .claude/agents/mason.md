@@ -55,8 +55,8 @@ permanent by #N` — never a closed issue, the one this landing closes
 included), P3a (a marker or comment the diff adds or rewrites that states
 a direction — "fail-open", "the direction is the withhold", "can only cost
 a win" — names the consumers by identifier and the direction each charges
-in, points at the marker that does, or claims none). Check the diff
-against these before handoff.
+in, points at the marker that does, or claims none and says the direction
+is unestablished). Check the diff against these before handoff.
 
 Spec-derived data tables — builtin properties, hfn definitions, regex and
 facet tables, rule catalogs — are NEVER hand-typed: write or extend a
