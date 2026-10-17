@@ -204,7 +204,7 @@ real is settled under **Environment requirements**. Its package doc owns how
 it walks and checks the listing.
 
 **A non-zero exit means there is no feed: re-run the command.** A failed
-fetch or a failed check exits 1 naming the page, a missing `-dir` exits 2,
+fetch, check or write exits 1 with its reason, a missing `-dir` exits 2,
 and either way `<dir>` holds neither file afterwards, an earlier run's copies
 included.
 
