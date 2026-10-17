@@ -1983,11 +1983,12 @@ func (w *walker) attributes(o *object, sc *scope, tok json.Token, loc xsderr.Loc
 // attributeRun is the leading run of attribute members walker.attributes
 // reads: owner, the object the element's members are classified against
 // before any selection; live, the candidates still reading attributes, owner
-// and each of owner.selectable at the start; table, the {type table} whose
-// selection settles the run, nil where none does (selection); typ, the
-// element's xsi:type, nil where no "$type" presents one; and run, the members
-// taken as attributes so far, which the selected type classifies again
-// (walker.agrees).
+// and each of owner.selectable at the start, less each one that took a member
+// as no attribute (walker.extend) or declined one (walker.candidates); table,
+// the {type table} whose selection settles the run, nil where none does
+// (selection); typ, the element's xsi:type, nil where no "$type" presents
+// one; and run, the members taken as attributes so far, which the selected
+// type classifies again (walker.agrees).
 type attributeRun struct {
 	owner *object
 	live  []*object
@@ -2077,28 +2078,29 @@ func (m *runMember) attribute() bool {
 // it (walker.membersOf). Where r reads one, the candidates that decline next
 // drop from r.live, and next.ms holds the others' classifications, where no
 // reading of the run selects a type that declines next (walker.droppable):
-// the root is assessed under the type S_k its first k members select, read
-// as its attributes (key-selected-type clause 1, key-cta-select), so a
-// candidate no reading selects classifies no member of any twin. Otherwise it
-// DECLINES next, with the first live candidate's own decline where that one
-// declines it, and undetermined's where it does not.
+// the root is assessed under the type its leading attributes select alone
+// (key-selected-type clause 1, key-cta-select), so a candidate no reading
+// selects governs no twin. Where every live candidate declines next, next.ms
+// is empty and the run ends at it (runMember.child) under walker.settled's
+// declines. Otherwise it DECLINES next, with the first live candidate's own
+// decline where that one declines it, and undetermined's where it does not.
 //
 // GAP(jsonsrc): in the attribute run of a root whose declaration carries a
 // {type table}, a member some live candidate declines declines the root where
 // a type some reading of the run selects declines it — a reading that ends
 // the run at or before the member, or, for a scalar member that closes the
-// object, the one that takes it as an attribute too — though the engine
-// assesses each XML twin and that reading's may be one whose type places no
-// member as the reading does. RULED permanent by #2703: the type a reading
-// selects is what governs the root under it (key-governing-type-elem clause
+// object, the one that takes it as an attribute too, under any name an
+// attribute keyed so can take — though the engine assesses each XML twin, and
+// that reading may place another member as its type does not, leaving one
+// other reading the only consistent one. RULED permanent by #2703: the type a
+// reading selects governs the root under it (key-governing-type-elem clause
 // 4), so its decline of the member is a decline of that reading, and the
-// mapping maps only where one reading remains.
+// mapping maps only where no such reading remains.
 //
 // GAP(jsonsrc): the same decline stands where the engine withholds the type
 // one of those readings selects, a {test} it reaches being outside its
-// §3.12.6 compiler's subset, or that type does not resolve, the mapping then
-// not knowing which type governs that reading. Owned by #2702, which reads
-// past a withheld selection.
+// §3.12.6 compiler's subset, the mapping then not knowing which type governs
+// that reading. Owned by #2702.
 //
 // GAP(jsonsrc): a scalar member some live candidate declines, followed by
 // another member, declines the root, though the engine assesses each XML
@@ -2154,7 +2156,7 @@ func (w *walker) candidates(r *attributeRun, next *runMember) error {
 //
 // No reading past j+1 exists for a member droppable admits, so no candidate it
 // drops classifies any member after next. It is false where the engine
-// withholds a selection or its type does not resolve.
+// withholds a selection (walker.classifiedUnder).
 func (w *walker) droppable(r *attributeRun, next *runMember) bool {
 	attrs := r.attributes()
 	for k := len(attrs) - len(r.run); k <= len(attrs); k++ {
@@ -2180,8 +2182,10 @@ func (w *walker) droppable(r *attributeRun, next *runMember) bool {
 
 // classifiedUnder reports whether the type r's {type table} selects for the
 // attributes attrs (walker.selected, key-cta-select) classifies next, its
-// decline being the one fact read: false where it declines next, where the
-// engine withholds the selection, and where the type does not resolve.
+// decline being the one fact read: false where it declines next, and where the
+// engine withholds the selection. Every type the table can select resolves,
+// walker.selectable having declined the root before its run otherwise, so the
+// false an unresolved one answers is never read.
 func (w *walker) classifiedUnder(r *attributeRun, attrs []validate.Attribute, next *runMember) bool {
 	slot, decided := w.selected(*r.table, attrs, nil)
 	if !decided {
@@ -2197,18 +2201,18 @@ func (w *walker) classifiedUnder(r *attributeRun, attrs []validate.Attribute, ne
 
 // attributeNames is an expanded name for an attribute keyed k in each class
 // of names the {test}s of table cannot tell apart: the one a prefixed key
-// spells; for an unprefixed key, its local name in no namespace, in the xml
-// namespace, in each namespace a {test}'s {namespace bindings} bind, and in
-// one namespace none binds. Every name test a {test} the engine evaluates
-// carries reads an attribute's namespace as no namespace (an unprefixed
-// name), one of those bindings, or the xml namespace, or does not read it
-// (`*`, `*:local`) (xpath.CompileCTATest's subset), so each class selects
-// one type.
+// spells; for an unprefixed key, its local name in no namespace, in each
+// namespace a {test}'s {namespace bindings} bind — the xml namespace among
+// them wherever a name test can spell it — and in one namespace none binds,
+// longer than every one of them. Every name test a {test} the engine
+// evaluates carries reads an attribute's namespace as no namespace (an
+// unprefixed name) or one of those bindings, or does not read it (`*`,
+// `*:local`) (xpath.CompileCTATest's subset), so each class selects one type.
 func attributeNames(table xsd.TypeTable, k keyName) []xsd.QName {
 	if k.prefixed {
 		return []xsd.QName{k.name}
 	}
-	spaces := []string{"", xmlNamespace}
+	spaces := []string{""}
 	for _, alt := range table.Alternatives() {
 		test, ok := alt.Test()
 		if !ok {
@@ -2220,12 +2224,9 @@ func attributeNames(table xsd.TypeTable, k keyName) []xsd.QName {
 			}
 		}
 	}
-	unbound := "urn:goxsd8:jsonsrc:unbound"
-	for slices.Contains(spaces, unbound) {
-		unbound += ":"
-	}
-	names := make([]xsd.QName, 0, len(spaces)+1)
-	for _, space := range append(spaces, unbound) {
+	spaces = append(spaces, strings.Join(spaces, " ")+" unbound")
+	names := make([]xsd.QName, 0, len(spaces))
+	for _, space := range spaces {
 		names = append(names, xsd.QName{Space: space, Local: k.name.Local})
 	}
 	return names

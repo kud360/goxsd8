@@ -288,6 +288,47 @@ const laxExtensionSchema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchem
   <xs:element name="r4" type="T" xmlns:p="urn:p"><xs:alternative test="@p:y" type="U"/></xs:element>
   <xs:element name="r5" type="T"><xs:alternative test="@*:y and not(@y) and not(@xml:y)" type="U"/></xs:element>
   <xs:element name="r6" type="T"><xs:alternative test="@xml:y" type="U"/></xs:element>
+  <xs:element name="r7" type="T"><xs:alternative test="not(@a)" type="U"/></xs:element>
+  <xs:element name="r9" type="T"><xs:alternative test="count(@a) > 0" type="U"/></xs:element>
+</xs:schema>`
+
+// unboundSchema declares, in no namespace and with the XSD namespace the
+// default one, so that a {test}'s {namespace bindings} bind the xml namespace
+// alone, r8 of xs:anyType, which selects a type like laxExtensionSchema's U
+// where it has the attribute y in a namespace its {test} binds none to, and
+// otherwise one like its T.
+const unboundSchema = `<schema xmlns="http://www.w3.org/2001/XMLSchema">
+  <element name="r8">
+    <alternative test="@*:y and not(@y) and not(@xml:y)">
+      <complexType><sequence><any processContents="lax"/></sequence><anyAttribute processContents="lax"/></complexType>
+    </alternative>
+    <alternative>
+      <complexType><sequence><element name="z" minOccurs="0"/></sequence><attribute name="a" type="string"/></complexType>
+    </alternative>
+  </element>
+</schema>`
+
+// settleSchema declares, in no namespace, V, empty content with the attribute
+// a; W, which restricts V, prohibiting a; and X, which extends V with the
+// attribute b, a lax element wildcard and a lax {attribute wildcard}. q is of
+// type V and selects W where it has an a and no b, X where it has a zzz, and
+// V otherwise.
+const settleSchema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:complexType name="V"><xs:attribute name="a" type="xs:string"/></xs:complexType>
+  <xs:complexType name="W">
+    <xs:complexContent><xs:restriction base="V"><xs:attribute name="a" use="prohibited"/></xs:restriction></xs:complexContent>
+  </xs:complexType>
+  <xs:complexType name="X">
+    <xs:complexContent><xs:extension base="V">
+      <xs:sequence><xs:any processContents="lax"/></xs:sequence>
+      <xs:attribute name="b" type="xs:string"/>
+      <xs:anyAttribute processContents="lax"/>
+    </xs:extension></xs:complexContent>
+  </xs:complexType>
+  <xs:element name="q" type="V">
+    <xs:alternative test="@a and not(@b)" type="W"/>
+    <xs:alternative test="@zzz" type="X"/>
+  </xs:element>
 </xs:schema>`
 
 // anyWildcardSchema declares, in no namespace, T, a lax ##any element wildcard
@@ -320,7 +361,9 @@ const anyWildcardSchema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema
 // (walker.candidates, walker.droppable): under laxExtensionSchema, y is a child
 // no wildcard names under T and declines under U, whose two wildcards leave
 // its kind open; no reading selects U, a never being "u", so U drops and the
-// root maps as T, the one type any reading selects, classifies it.
+// root maps as T, the one type any reading selects, classifies it. Under r3,
+// whose y selects U where it is an attribute, a null y is no attribute under
+// any reading, so the one that takes it as an attribute is never read.
 func TestTypeTableCandidateDrops(t *testing.T) {
 	v := validatorOver(t, laxExtensionSchema)
 	for _, tc := range []struct {
@@ -331,6 +374,8 @@ func TestTypeTableCandidateDrops(t *testing.T) {
 			`<r a="t"><y>1</y></r>`, content},
 		{"a later candidate declines the run's first member", `{"r":{"y":"1"}}`,
 			`<r><y>1</y></r>`, content},
+		{"a member no attribute reading can take", `{"r3":{"y":null}}`,
+			`<r3 ` + xsiDecl + `><y xsi:nil="true"/></r3>`, content},
 	} {
 		t.Run(tc.name, func(t *testing.T) { twin(t, v, tc.json, tc.xml, tc.want) })
 	}
@@ -347,11 +392,24 @@ func TestTypeTableCandidateDrops(t *testing.T) {
 // no attribute selects. Under laxExtensionSchema, y declines under U alone
 // (walker.undetermined): r3 to r6 select U under the reading that takes y as
 // an attribute, each where y is in one class of names attributeNames gives
-// it, and under r another member follows y, which the mapping does not read
-// ahead to.
+// it; r7 selects U under the reading that takes no attribute, though that
+// reading is inconsistent, U taking a as an attribute, and the one reading
+// that is, T's taking a alone, would map; r9's {test} is outside the §3.12.6
+// compiler's subset, so the engine withholds every reading's selection, and
+// charges neither twin; and under r another member follows y, which the mapping
+// does not read ahead to. Under unboundSchema, r8 selects the type that
+// declines y where y is in a namespace no {test} binds, and the declared
+// xs:anyType, which no reading selects, declines first. Under settleSchema,
+// every live candidate declines y, X alone having taken both a and b as
+// attributes, and no reading selects X, so the run ends at y under the type a
+// and b select, which classifies b as no attribute: walker.settled's #2701
+// decline, no reading being consistent.
 func TestTypeTableCandidateDeclines(t *testing.T) {
 	lax := validatorOver(t, laxExtensionSchema)
 	anyWildcard := validatorOver(t, anyWildcardSchema)
+	unbound := validatorOver(t, unboundSchema)
+	settle := validatorOver(t, settleSchema)
+	twoComplexType := []xsderr.Rule{"cvc-complex-type", "cvc-complex-type"}
 	const wildcardDecline = `names no child element declaration and no attribute use of the type of `
 	const undetermined = ` is declined under a type its {type table} can select`
 	for _, tc := range []struct {
@@ -382,6 +440,18 @@ func TestTypeTableCandidateDeclines(t *testing.T) {
 		{"the attribute reading selects it in the xml namespace", lax, `{"r6":{"y":"1"}}`,
 			`<r6><y>1</y></r6>`, content, `<r6 xml:y="1"/>`, content,
 			`jsonsrc: instance.json:1:8: member "y" of r6` + undetermined},
+		{"the attribute reading selects it in a namespace no test binds", unbound, `{"r8":{"y":"1"}}`,
+			`<r8><y>1</y></r8>`, content, `<r8 xmlns:q="urn:q" q:y="1"/>`, content,
+			`jsonsrc: instance.json:1:8: member "y" names no child element declaration and no attribute use of the type of r8, which has both`},
+		{"an earlier reading selects the declining type", lax, `{"r7":{"a":"t","y":"1"}}`,
+			`<r7 a="t"><y>1</y></r7>`, content, `<r7 a="t" y="1"/>`, complexType,
+			`jsonsrc: instance.json:1:16: member "y" of r7` + undetermined},
+		{"the engine withholds a reading's selection", lax, `{"r9":{"y":"1"}}`,
+			`<r9><y>1</y></r9>`, none, `<r9 y="1"/>`, none,
+			`jsonsrc: instance.json:1:8: member "y" of r9` + undetermined},
+		{"every live candidate declines the member", settle, `{"q":{"a":"1","b":"2","y":"3"}}`,
+			`<q a="1" b="2"><y>3</y></q>`, twoComplexType, `<q a="1" b="2" y="3"/>`, twoComplexType,
+			`jsonsrc: instance.json:1:23: the members of q settle no type`},
 		{"another member follows the member", lax, `{"r":{"y":"1","z":"2"}}`,
 			`<r><y>1</y><z>2</z></r>`, content, `<r y="1"><z>2</z></r>`, complexType,
 			`jsonsrc: instance.json:1:7: member "y" of r` + undetermined},
