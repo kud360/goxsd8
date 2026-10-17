@@ -62,13 +62,14 @@ func WithURI(uri string) Option {
 // child member or repeated, an attribute member whose value is null, an object
 // or an array, a "$type" or "$xmlns" member out of its leading place or of the
 // wrong shape, a "$type" whose parent's ·governing type definition· the
-// mapping does not determine or that the types a {type table} below the root
-// can select for it settle differently, any other "$"-prefixed reserved
-// member, a nested array, a member of an element below the root whose
-// declaration carries a {type table} that its declared {type definition} and a
-// type the table can select classify differently, and, at such a root, the
-// leading attribute members no run settles by the type the table
-// ·conditionally selects· for them; the package doc lists them all). A decline
+// mapping does not determine or that the types a {type table} whose selection
+// it does not read can select for it settle differently, any other
+// "$"-prefixed reserved member, a nested array, a member of an element whose
+// declaration carries a {type table} whose selection the mapping does not
+// read that its declared {type definition} and a type the table can select
+// classify differently, and, where it reads the selection, the leading
+// attribute members no run settles by the type the table ·conditionally
+// selects· for them; the package doc lists them all). A decline
 // names the arm it is not, and for an input with no XML twin the spelling the
 // mapping takes instead where one exists; it is never a silent drop or a
 // guessed mapping: a member the mapping cannot name is not part of the
@@ -165,8 +166,8 @@ type walker struct {
 	uri    string
 	schema validate.SchemaView
 	// selected is validate.Validator.ConditionallySelected, the engine's own
-	// key-cta-select scan, which walker.attributes reads a root's {type table}
-	// through.
+	// key-cta-select scan, which walker.attributes reads an element's {type
+	// table} through.
 	selected func(table xsd.TypeTable, attributes, inherited []validate.Attribute) (xsd.TypeDefinitionOrRef, bool)
 	// err is the walk's single latched fault, a malformed document, a fault
 	// reading the input or a decline. Every cursor reports this one field
@@ -1506,8 +1507,9 @@ func (w *walker) instanceType(e *element, lexical string) (xsd.TypeDefinition, b
 // this capability keeps one encoding of each (STYLE T4) without widening
 // SchemaView's exported surface. Under a view without it, which
 // validate.Validator.Schema never returns, the mapping determines no type
-// governing an element below the root (walker.govern), and every "$type"
-// there declines (walker.instanceGoverned).
+// governing an element below the root (walker.govern), reads no {type table}'s
+// selection there (walker.selector), and every "$type" there declines
+// (walker.instanceGoverned).
 type governor interface {
 	LocallyDeclaredElementType(within xsd.ComplexType, name xsd.QName) (xsd.TypeDefinition, bool)
 	ValidlySubstitutable(sub, super xsd.TypeDefinition, blocked []xsd.DerivationMethod) (bool, error)
