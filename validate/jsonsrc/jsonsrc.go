@@ -1778,7 +1778,9 @@ func openContent(t xsd.ComplexType) bool {
 // ·attribution· it may give e charges it — the cvc-elt clause 4 and
 // cvc-complex-type clause 5 branches included — where every one settles on one
 // type (oneType). The engine selects the one that governs the parent, so
-// whichever it is, e's members are classified under that type.
+// whichever it is, e's members are classified under that type. The types e's
+// children are ·attributed· and handed down under, which the engine
+// determines whatever e's verdict, are walker.instanceGoverning's.
 //
 // It DECLINES typ where parent.governing is empty, the mapping determining no
 // type that governs the parent, and where two of parent.governing settle on
@@ -1787,10 +1789,10 @@ func openContent(t xsd.ComplexType) bool {
 // the selection, the parent's is the one type the table selects
 // (walker.settled, walker.take), or, under the parent's own "$type", that one
 // or the type the "$type" names (walker.governOverriding). It declines too
-// where ·override· is not
-// decided, an error of xsd.Schema.ValidlySubstitutable unreachable for a
-// finalized Schema, which the engine declines for the XML twin as well
-// (walk.instanceOverride, walk.localGovernance), so no marker tracks it.
+// where ·override· is not decided, an error of xsd.Schema.ValidlySubstitutable
+// unreachable for a finalized Schema, which the engine declines for the XML
+// twin as well (walk.instanceOverride, walk.localGovernance), so no marker
+// tracks it.
 //
 // The parent's governing types are empty where the schema view lacks the
 // governor capability, which validate.Validator.Schema never returns, and

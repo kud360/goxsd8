@@ -40,9 +40,8 @@ import (
 // inheritable, defaulting to "u", and derives from no B; X2 extends B with
 // that a, and N extends B with nothing. e is of type B, r holds an e,
 // and et is of type B and selects N where its k is "n"; pq holds one q of
-// type B. big's {content type}
-// is one xsd.Schema.ContentMatcher declines (its GAP(xsd) ceiling), holding
-// mids.
+// type B. big's {content type} is one xsd.Schema.ContentMatcher declines (its
+// GAP(xsd) ceiling), holding mids.
 const inheritSchema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
     xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" targetNamespace="urn:i" xmlns:i="urn:i" elementFormDefault="qualified">
   <xs:attribute name="ia" type="xs:string" inheritable="true"/>
@@ -249,15 +248,14 @@ func TestInheritedSelected(t *testing.T) {
 // that governs it as the engine determines it, which is the type the "$type"
 // names only where that type ·overrides· the ·selected type definition· of
 // its ·governing element declaration· (key-governing-type-elem clauses 3 and
-// 4), and not the type its members are classified under (walker.
-// instanceGoverned). X does not ·override· B, so e is charged cvc-elt clause 4
-// and governed by B, which hands tu no a, and tu, governed by T, takes m as a
-// child, at the root and below it. X2 ·overrides· B, the type et selects
-// without a k, and hands down its ·defaulted· a, but not N, the one it selects
-// where its k is "n", which then governs et (walker.governOverriding). The
-// second q of pq, which pq's content model rejects, has no ·governing element
-// declaration·, and X does not ·override· its ·locally declared type· B, which
-// governs it (key-governing-type-elem clause 7).
+// 4), and not the type its members are classified under (walker.instanceGoverned). X
+// does not ·override· B, so e is charged cvc-elt clause 4 and governed by B, which
+// hands tu no a, and tu, governed by T, takes m as a child, at the root and below it.
+// X2 ·overrides· B, the type et selects without a k, and hands down its ·defaulted· a,
+// but not N, the one it selects where its k is "n", which then governs et
+// (walker.governOverriding). The second q of pq, which pq's content model rejects, has
+// no ·governing element declaration·, and X does not ·override· its ·locally declared
+// type· B, which governs it (key-governing-type-elem clause 7).
 func TestOverriddenTypeHandsDown(t *testing.T) {
 	v := validatorOver(t, inheritSchema)
 	const i = `xmlns="urn:i" xmlns:i="urn:i" `
