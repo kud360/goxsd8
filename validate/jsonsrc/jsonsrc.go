@@ -2305,13 +2305,22 @@ func (w *walker) extend(r *attributeRun, next *runMember) (unsettled, err error)
 // Structures ranks the readings, so naming either would guess a mapping.
 //
 // GAP(jsonsrc): the root declines where the type a reading selects declines
-// a member that reading reads, its attributes or the member after them, or
-// takes that member after them as an attribute while its value is no scalar,
-// which the mapping declines as an attribute (notScalar), and no other member
-// rules that reading out, though the engine assesses each XML twin. RULED
-// permanent by #2703: the type a reading selects governs the root under it
-// (key-governing-type-elem clause 4), so its decline of the member is a
-// decline of that reading.
+// a member that reading reads, its attributes or the member after them, and
+// no other member rules that reading out, though the engine assesses each XML
+// twin. RULED permanent by #2703: the type a reading selects governs the root
+// under it (key-governing-type-elem clause 4), so its decline of the member
+// is a decline of that reading.
+//
+// GAP(jsonsrc): the root declines where a reading its selected type
+// classifies as it reads has no XML twin — that type takes the member after
+// the reading's attributes as an attribute while its value is no scalar,
+// which the mapping declines as an attribute (notScalar), or the reading's
+// attributes, xsi:type among them, repeat an expanded name (XML 1.0 §3.1,
+// Unique Att Spec; Namespaces in XML §6.3) — even where another reading
+// stands, though the engine assesses that other reading's XML twin. RULED
+// permanent by #2700: a reading with no XML twin cannot be assessed by the
+// engine and so cannot be excluded, and nothing in Structures ranks the
+// readings.
 //
 // GAP(jsonsrc): the root declines where a candidate type takes no member of a
 // reading otherwise than the reading does but declines so many of its
@@ -2331,9 +2340,6 @@ func (w *walker) extend(r *attributeRun, next *runMember) (unsettled, err error)
 // mapping names a member an attribute only where the type the root is
 // assessed under classifies it as one, as walker.settled's marker of the same
 // owner says. Owned by #2701.
-//
-// A reading whose attributes repeat an expanded name has no XML twin (XML 1.0
-// §3.1, Unique Att Spec), and declines with no marker.
 func (w *walker) readAhead(r *attributeRun, next *runMember, sc *scope, unsettled error) ([]validate.Attribute, []peeked, *object, error) {
 	la, err := w.lookAhead(r, next, sc)
 	if err != nil {
@@ -2583,8 +2589,10 @@ func assignments(table xsd.TypeTable, items []*runMember, names []xsd.QName, fre
 // member of the run and each of those items, which the type must take as the
 // attributes the reading does (walker.fitsAttribute), and of the item after
 // them, which it must take as no attribute (walker.fitsChild). A reading that
-// fits but repeats an expanded name among its attributes is undecided: it has
-// no XML twin.
+// fits but repeats an expanded name among its attributes, xsi:type among
+// them, is undecided: it has no XML twin, and walker.readAhead's GAP(jsonsrc)
+// marker RULED permanent by #2700 tracks the decline, another reading
+// standing or not.
 func (w *walker) judge(r *attributeRun, la lookahead, k int, names []xsd.QName) (reading, fit) {
 	attrs := r.attributes()
 	for i, it := range la.items[:k] {
@@ -2637,8 +2645,9 @@ func (w *walker) fitsAttribute(so *object, m *runMember, name xsd.QName) fit {
 // fitsChild is how so classifies m, the member after a reading's attributes:
 // consistent where so takes it as no attribute; undecided where it declines
 // m, or takes it as an attribute while its value is no scalar, which the
-// mapping declines as an attribute (notScalar); and excluded where it takes a
-// scalar-valued m as an attribute.
+// mapping declines as an attribute (notScalar), a reading with no XML twin
+// (walker.readAhead's GAP(jsonsrc) marker RULED permanent by #2700); and
+// excluded where it takes a scalar-valued m as an attribute.
 func (w *walker) fitsChild(so *object, m *runMember) fit {
 	got, err := w.memberOf(so, m.key, m.k, m.loc)
 	if err != nil {
