@@ -78,10 +78,10 @@ func TestValidateJSONMemberLine(t *testing.T) {
 // TestValidateFormatMismatchHint pins the clause a -format forcing a format
 // the instance's extension does not name adds to the line of an instance not
 // well-formed in it, in both directions, and the lines it adds nothing to: a
-// right-format malformed instance, one no extension names a format of,
-// standard input, a decline, and a fault reading the instance. want is the
-// whole of stdout, and the rule token and exit code are those of the same
-// fault without the clause.
+// right-format malformed instance, one no extension names a format of, one
+// whose extension names the reserved ber, standard input, a decline, and a
+// fault reading the instance. want is the whole of stdout, and the rule token
+// and exit code are those of the same fault without the clause.
 func TestValidateFormatMismatchHint(t *testing.T) {
 	dir := writeFiles(t, map[string]string{
 		"order.xml":    "<order/>\n",
@@ -89,6 +89,7 @@ func TestValidateFormatMismatchHint(t *testing.T) {
 		"hello.json":   "hello\n",
 		"declined.xml": `{"z:nosuch":{}}` + "\n",
 		"order.txt":    "<order/>\n",
+		"order.ber":    "<order/>\n",
 	})
 	at := func(name string) string { return filepath.Join(dir, name) }
 	for _, c := range []struct {
@@ -109,6 +110,8 @@ func TestValidateFormatMismatchHint(t *testing.T) {
 			at("hello.json") + ":1:1: [jsonsrc] malformed JSON: invalid character 'h' looking for beginning of value\n", false},
 		{"json forced on an extension naming none", []string{"-format", "json", at("order.txt")}, "", exitUndecided,
 			at("order.txt") + ":1:1: [jsonsrc] malformed JSON: invalid character '<' looking for beginning of value\n", false},
+		{"json forced on an extension naming the reserved ber", []string{"-format", "json", at("order.ber")}, "", exitUndecided,
+			at("order.ber") + ":1:1: [jsonsrc] malformed JSON: invalid character '<' looking for beginning of value\n", false},
 		{"json forced on standard input", []string{"-format", "json", "-"}, "<order/>\n", exitUndecided,
 			"-:1:1: [jsonsrc] malformed JSON: invalid character '<' looking for beginning of value\n", false},
 		{"json forced on a decline", []string{"-format", "json", at("declined.xml")}, "", exitUndecided,

@@ -315,10 +315,15 @@ func (vn *validation) assessJSON(instance string, src *watchedReader, stdout, st
 // of xmlsrc.Validate's error, an [xml-wf] one, that no read fault caused: the
 // format the flag forced, and the one the extension names. It is "" where
 // -format was not given, and where the instance's extension names no format,
-// standard input having none, or names the forced one.
+// standard input having none, names the forced one, or names one the command
+// assesses no instance in, ber being reserved (validation.one), which the
+// clause's "pass -format" would offer in vain.
 func (vn *validation) formatHint(instance string) string {
 	named, err := formatOf(instance, "")
 	if vn.forced == "" || err != nil || named == vn.forced {
+		return ""
+	}
+	if named != formatXML && named != formatJSON {
 		return ""
 	}
 	return fmt.Sprintf("; -format %s read %s as %s, but its extension names %s: drop -format, or pass -format %s", vn.forced, instance, vn.forced, named, named)
