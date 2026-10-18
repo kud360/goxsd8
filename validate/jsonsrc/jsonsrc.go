@@ -124,7 +124,8 @@ func WithURI(uri string) Option {
 //   - a cvc-complex-content charge at a child member no child element
 //     declaration, attribute use or wildcard of its parent's type names: the
 //     clause lists the keys the type carries, and, for a key that is an
-//     attribute use's name behind one "@", "_" or "-", names the key itself;
+//     attribute use's name behind one "@", "_" or "-", names that name as the
+//     key;
 //   - a cvc-type charge at a member of the object of an element whose type
 //     is a simple type: scalar expected;
 //   - a cvc-complex-type charge at the scalar of an element whose declared

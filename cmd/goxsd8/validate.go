@@ -333,6 +333,8 @@ type watchedReader struct {
 	fault error
 }
 
+// Read is io.Reader's Read over r, keeping fault, for jsonsrc.Validate, and
+// for instanceHints and xmlsrc.Validate.
 func (w *watchedReader) Read(p []byte) (int, error) {
 	n, err := w.r.Read(p)
 	if err != nil && !errors.Is(err, io.EOF) && w.fault == nil {
