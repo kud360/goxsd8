@@ -85,10 +85,16 @@
 //	    A JSON instance is mapped onto the infoset by validate/jsonsrc
 //	    and assessed against the -schema documents; its violations and
 //	    undecided checks print and exit as an XML instance's do, <loc>
-//	    being jsonsrc's line and byte column. An input jsonsrc's
-//	    mapping declines, malformed JSON, content after the top-level
-//	    object and an I/O fault reading the instance once it is open
-//	    all reach jsonsrc's one error channel, and the line names
+//	    being jsonsrc's line and byte column. A violation charged at a
+//	    member jsonsrc names in JSON terms — a key no declaration,
+//	    attribute use or wildcard of its parent's type carries, a member
+//	    of an object whose type is simple, a scalar whose type admits no
+//	    character content — ends with a clause, opening ; JSON member,
+//	    that names the member's key as spelled and what was expected.
+//	    An input jsonsrc's mapping declines, malformed JSON, content
+//	    after the top-level object and an I/O fault reading the
+//	    instance once it is open all reach jsonsrc's one error
+//	    channel, and the line names
 //	    none of them: each prints <loc>: [jsonsrc] <message> on
 //	    stdout, [jsonsrc] standing where [<rule>] stands and naming
 //	    the source that raised the error, not a rule, and exits 4,
@@ -97,6 +103,11 @@
 //	    because the line names no class, and nothing tells a shape
 //	    the mapping rejects from an arm it does not implement, so
 //	    charging 1 would charge every decline as invalid.
+//	    Where -format forces a format the instance's extension does
+//	    not name, a malformed-JSON line under -format json and an
+//	    [xml-wf] line under -format xml end with a clause naming the
+//	    format forced and the one the extension names, unless the
+//	    line reports a fault reading the instance.
 //	    The JSON shape in brief: the top-level object has exactly one
 //	    member, whose key names the root element. In an element's
 //	    object a "$xmlns" member, {"prefix":"uri",...}, comes first
