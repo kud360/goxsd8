@@ -23,6 +23,7 @@ import (
 	"github.com/kud360/goxsd8/validate/xmlsrc"
 	"github.com/kud360/goxsd8/value"
 	"github.com/kud360/goxsd8/xsd"
+	"github.com/kud360/goxsd8/xsderr"
 )
 
 // stdinArg is the instance argument naming standard input. It is an INSTANCE
@@ -241,16 +242,17 @@ func (vn *validation) one(instance string, stdout, stderr io.Writer) int {
 		// answer is the usage code and this diagnosis, never a silent pass.
 		return usageError(stderr, fmt.Sprintf("goxsd8: validate: %s: -format %s is reserved by the contract and not yet implemented; only %s and %s instances are assessed today", instance, format, formatXML, formatJSON))
 	}
-	src, closeSrc, err := openInstance(instance)
+	opened, closeSrc, err := openInstance(instance)
 	if err != nil {
 		return usageError(stderr, fmt.Sprintf("goxsd8: validate: %v", err))
 	}
 	defer closeSrc()
+	read := &watchedReader{r: opened}
 
 	if format == formatJSON {
-		return vn.assessJSON(instance, src, stdout, stderr)
+		return vn.assessJSON(instance, read, stdout, stderr)
 	}
-	v, src, code := vn.validatorFor(instance, src, stderr)
+	v, src, code := vn.validatorFor(instance, read, stderr)
 	if code != exitOK {
 		return code
 	}
@@ -263,7 +265,11 @@ func (vn *validation) one(instance string, stdout, stderr io.Writer) int {
 		// verdict about the instance in the same rendering a violation gets,
 		// so it lands on stdout with them and counts as invalid — nothing in
 		// the document was shown valid.
-		return reportLines(stdout, stderr, instance, []string{violationLine(err)}, exitInvalid)
+		line := violationLine(err)
+		if rule, _ := xsderr.RuleOf(err); rule == xsderr.RuleXMLWellFormed && read.fault == nil {
+			line += vn.formatHint(instance)
+		}
+		return reportLines(stdout, stderr, instance, []string{line}, exitInvalid)
 	}
 	lines, code := assessmentLines(result)
 	return reportLines(stdout, stderr, instance, lines, code)
@@ -287,13 +293,53 @@ func (vn *validation) one(instance string, stdout, stderr io.Writer) int {
 // exitUndecided whatever the class: charging exitInvalid would charge every
 // decline as invalid. Malformed XML is charged exitInvalid instead, on one's
 // reasoning for xmlsrc's fault.
-func (vn *validation) assessJSON(instance string, src io.Reader, stdout, stderr io.Writer) int {
+//
+// A line for malformed JSON — neither a decline nor a fault src returned —
+// ends with formatHint's clause.
+func (vn *validation) assessJSON(instance string, src *watchedReader, stdout, stderr io.Writer) int {
 	result, err := jsonsrc.Validate(vn.base, src, jsonsrc.WithURI(instance))
 	if err != nil {
-		return reportLines(stdout, stderr, instance, []string{jsonErrorLine(instance, err)}, exitUndecided)
+		line := jsonErrorLine(instance, err)
+		var decline *jsonsrc.DeclineError
+		if !errors.As(err, &decline) && src.fault == nil {
+			line += vn.formatHint(instance)
+		}
+		return reportLines(stdout, stderr, instance, []string{line}, exitUndecided)
 	}
 	lines, code := assessmentLines(result)
 	return reportLines(stdout, stderr, instance, lines, code)
+}
+
+// formatHint is the clause an instance's line ends with where -format forced a
+// format its extension does not name and the instance is not well-formed in
+// it, which assessJSON and one append to a malformed-JSON line and to an
+// [xml-wf] line no read fault caused: the format the flag forced, and the one
+// the extension names. It is "" where -format was not given, and where the
+// instance's extension names no format, standard input having none, or names
+// the forced one.
+func (vn *validation) formatHint(instance string) string {
+	named, err := formatOf(instance, "")
+	if vn.forced == "" || err != nil || named == vn.forced {
+		return ""
+	}
+	return fmt.Sprintf("; -format %s read %s as %s, but its extension names %s: drop -format, or pass -format %s", vn.forced, instance, vn.forced, named, named)
+}
+
+// watchedReader is an instance's reader, keeping fault, the first error other
+// than io.EOF it returned: jsonsrc's doc leaves a caller that needs to tell a
+// read fault from malformed JSON to check its own reader, and xmlsrc charges a
+// read fault [xml-wf] as it does malformed XML.
+type watchedReader struct {
+	r     io.Reader
+	fault error
+}
+
+func (w *watchedReader) Read(p []byte) (int, error) {
+	n, err := w.r.Read(p)
+	if err != nil && !errors.Is(err, io.EOF) && w.fault == nil {
+		w.fault = err
+	}
+	return n, err
 }
 
 // jsonsrcToken stands where a diagnostic line's [<rule>] stands on every line
