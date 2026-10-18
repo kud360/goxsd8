@@ -33,7 +33,9 @@ import (
 // derives from no B; X2 extends B with that a, and N extends B with nothing. e is of type B, r holds an
 // e, and et is of type B and selects N where its k is "n"; pq holds one q of type B. Z0 holds an
 // optional tu, and Z1 extends it with a, inheritable, defaulting to "z"; z is of type Z0 and selects Z1
-// where its a is "u", and pa holds an optional z and carries a, inheritable. big's {content type} is one
+// where its a is "u", and pa holds an optional z and carries a, inheritable. O1 holds an optional c of
+// type T under a lax interleave {open content} and carries a, and O2 restricts it to no {open content};
+// ro is of type O1 and selects O2 where it counts an a. big's {content type} is one
 // xsd.Schema.ContentMatcher declines (its GAP(xsd) ceiling), holding mids.
 const inheritSchema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
     xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" targetNamespace="urn:i" xmlns:i="urn:i" elementFormDefault="qualified">
@@ -167,6 +169,19 @@ const inheritSchema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
     <xs:complexContent><xs:extension base="i:Z0"><xs:attribute name="a" type="xs:string" default="z" inheritable="true"/></xs:extension></xs:complexContent>
   </xs:complexType>
   <xs:element name="z" type="i:Z0"><xs:alternative test="@a = 'u'" type="i:Z1"/></xs:element>
+  <xs:complexType name="O1">
+    <xs:openContent mode="interleave"><xs:any processContents="lax"/></xs:openContent>
+    <xs:sequence><xs:element name="c" type="i:T" minOccurs="0"/></xs:sequence>
+    <xs:attribute name="a" type="xs:string"/>
+  </xs:complexType>
+  <xs:complexType name="O2">
+    <xs:complexContent>
+      <xs:restriction base="i:O1">
+        <xs:sequence><xs:element name="c" type="i:T" minOccurs="0"/></xs:sequence>
+      </xs:restriction>
+    </xs:complexContent>
+  </xs:complexType>
+  <xs:element name="ro" type="i:O1"><xs:alternative test="count(@a) > 0" type="i:O2"/></xs:element>
   <xs:element name="pa">
     <xs:complexType>
       <xs:sequence><xs:element ref="i:z" minOccurs="0"/></xs:sequence>
@@ -319,12 +334,16 @@ func TestNoGoverningDeclaration(t *testing.T) {
 // selection of its {type table} (walker.selector), and m, a child under T and
 // an attribute under U, declines, where the engine walks each XML twin's
 // subtree undecided. rw's selection is withheld, and the types it may select,
-// H and H2, hand down different attributes, H2 a ·defaulted· ib
-// (walker.handDown), so neither mid nor mid2, governed by M alone, hands down
-// any determined; re's is withheld too, and H and H3 hand down alike, but mid
-// may be governed by its anonymous type under each, which walker.selector
-// counts as two types governing tu's parent; big's content model is one
-// xsd.Schema.ContentMatcher declines, so mid is attributed to nothing.
+// H and H2, hand down different attributes, H2 a ·defaulted· ib (walker.handDown),
+// so neither mid nor mid2, governed by M alone, hands down any determined; re's is
+// withheld too, and H and H3 hand down alike, but mid may be governed by its
+// anonymous type under each, which walker.selector counts as two types governing
+// tu's parent; big's content model is one xsd.Schema.ContentMatcher declines, so mid
+// is attributed to nothing. It pins walker.instanceGoverned's marker of the same
+// ruling too: ro's selection is withheld, and Z0, which does not ·override· T, c's
+// ·locally declared type·, leaves T governing c under O1's {open content} and
+// charges c under O2, which has none, so the "$type" settles differently under the
+// two (walker.instanceUnder).
 func TestInheritedUndetermined(t *testing.T) {
 	v := validatorOver(t, inheritSchema)
 	for _, tc := range []struct {
@@ -340,6 +359,9 @@ func TestInheritedUndetermined(t *testing.T) {
 		{"below a withheld selection whose types hand down alike", `{"re":{"a":"1","mid":{"tu":{"a":"u","m":"x"}}}}`,
 			`<re xmlns="urn:i" a="1"><mid><tu a="u" m="x"/></mid></re>`,
 			`jsonsrc: instance.json:1:37: member "m" of {urn:i}tu is not classified alike`},
+		{"a \"$type\" below a withheld selection", `{"ro":{"a":"1","c":{"$xmlns":{"i":"urn:i"},"$type":"i:Z0"}}}`,
+			`<ro xmlns="urn:i" xmlns:i="urn:i" ` + xsiDecl + ` a="1"><c xsi:type="i:Z0"/></ro>`,
+			`jsonsrc: instance.json:1:44: the "$type" member of {urn:i}c: the types the {type table} of {urn:i}ro`},
 		{"below an unattributed parent", `{"big":{"mid":{"tu":{"a":"u","m":"x"}},"b":""}}`,
 			`<big xmlns="urn:i"><mid><tu a="u" m="x"/></mid><b/></big>`,
 			`jsonsrc: instance.json:1:30: member "m" of {urn:i}tu is not classified alike`},
