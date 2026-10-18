@@ -15,10 +15,10 @@ import (
 //
 // Lines are counted at '\n' and columns in bytes from the start of the line,
 // both from 1, as parser/xmltree counts them. A leading byte order mark is
-// never counted: r is a bomless reader, which drops it before any byte reaches
-// positions, as xmltree's decoding discards it before tokenizing.
+// never counted: r drops it before any byte reaches positions, as xmltree's
+// decoding discards it before tokenizing.
 type positions struct {
-	r io.Reader
+	r *bomless
 	// pending is every byte read from r at or after base, the offset of the
 	// last token located.
 	pending []byte
@@ -32,11 +32,11 @@ type positions struct {
 }
 
 func newPositions(r io.Reader) *positions {
-	return &positions{r: r, line: 1, col: 1}
+	return &positions{r: &bomless{r: r}, line: 1, col: 1}
 }
 
 func (p *positions) Read(b []byte) (int, error) {
-	n, err := p.r.Read(b)
+	n, err := p.r.read(b)
 	p.pending = append(p.pending, b[:n]...)
 	if err != nil && !errors.Is(err, io.EOF) && p.fault == nil {
 		p.fault = err
@@ -95,14 +95,15 @@ type bomless struct {
 	// ruled reports whether the leading bytes have been read far enough to
 	// rule the mark in or out.
 	ruled bool
-	// lead is the leading bytes read while ruling that Read has yet to
+	// lead is the leading bytes read while ruling that read has yet to
 	// return; once ruled, it never holds the whole mark.
 	lead []byte
 	// err is the error r returned while ruling, returned once lead is.
 	err error
 }
 
-func (b *bomless) Read(p []byte) (int, error) {
+// read is io.Reader's Read over r with the mark dropped.
+func (b *bomless) read(p []byte) (int, error) {
 	if !b.ruled {
 		b.rule()
 	}
@@ -120,7 +121,7 @@ func (b *bomless) Read(p []byte) (int, error) {
 // rule reads r while every byte read is the mark's next, until lead holds the
 // whole mark or a byte that is not the mark's, or r returns an error, which it
 // keeps as err. It drops the whole mark, and the beginning of one that a fault
-// other than io.EOF cut off, so that fault is the first thing Read returns
+// other than io.EOF cut off, so that fault is the first thing read returns
 // rather than a byte the decoder rejects before reading on to it.
 func (b *bomless) rule() {
 	b.ruled = true

@@ -180,7 +180,7 @@ type walker struct {
 }
 
 func newWalker(uri string, r io.Reader, schema validate.SchemaView, selected func(xsd.TypeTable, []validate.Attribute, []validate.Attribute) (xsd.TypeDefinitionOrRef, bool)) *walker {
-	pos := newPositions(&bomless{r: r})
+	pos := newPositions(r)
 	dec := json.NewDecoder(pos)
 	// A number's lexical form is its source text, never a float64 round trip:
 	// 12345678901234567890 under xs:integer is that integer.
