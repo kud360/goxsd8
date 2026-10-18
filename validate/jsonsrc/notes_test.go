@@ -19,7 +19,8 @@ import (
 // beside the parent's charge there: item of a simple type, num of xs:int, eo
 // with element-only content, e0 with empty content, and ra with element-only
 // content and a required attribute, an array item of which lst's content
-// model takes.
+// model takes. tt's {type definition} is ·xs:anyType·, whose content is
+// mixed, and its {type table} selects eoT's element-only content.
 const notedSchema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
   <xs:complexType name="abs" abstract="true">
     <xs:sequence><xs:element name="z" type="xs:string"/></xs:sequence>
@@ -39,6 +40,10 @@ const notedSchema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
       <xs:attribute name="req" use="required"/>
     </xs:complexType>
   </xs:element>
+  <xs:complexType name="eoT">
+    <xs:sequence><xs:element name="q" type="xs:string"/></xs:sequence>
+  </xs:complexType>
+  <xs:element name="tt"><xs:alternative type="eoT"/></xs:element>
   <xs:element name="lst">
     <xs:complexType>
       <xs:sequence><xs:element ref="ra" maxOccurs="unbounded"/></xs:sequence>
@@ -159,6 +164,9 @@ func TestNoteHints(t *testing.T) {
 		{"array item with a scalar under an empty parent", notedSchema, `{"e0":{"eo":["x"]}}`, []charge{
 			{ruleCvcComplexType, ":1:14", ""},
 			{ruleCvcComplexType, ":1:14", charactersHint("eo", "x")},
+		}},
+		{"scalar root whose {type table} selects element-only content", notedSchema, `{"tt":"x"}`, []charge{
+			{ruleCvcComplexType, ":1:7", charactersHint("tt", "x")},
 		}},
 		{"array item with a scalar missing a required attribute", notedSchema, `{"lst":{"ra":["x"]}}`, []charge{
 			{ruleCvcComplexType, ":1:15", ""},
