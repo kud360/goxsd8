@@ -262,6 +262,24 @@ func TestConditionalInclusionRootStub(t *testing.T) {
 	}
 }
 
+// TestConditionalInclusionParseOverAStubRoot pins the contract parser/doc.go
+// states for Parse: a root document whose own <schema> vc:maxVersion ignores
+// assembles as the stub — the call succeeds, follows none of its directives and
+// yields none of its components.
+func TestConditionalInclusionParseOverAStubRoot(t *testing.T) {
+	s, err := parseMap(t, "main.xsd", map[string]string{
+		"main.xsd": vcWrap(`targetNamespace="urn:a" vc:maxVersion="1.1"`,
+			`<xs:include schemaLocation="nowhere.xsd"/>`+
+				`<xs:element name="e" type="xs:int"/>`),
+	})
+	if err != nil {
+		t.Fatalf("Parse: %v, but the stub root has no children to fail on", err)
+	}
+	if _, ok := s.Element(xsd.QName{Space: "urn:a", Local: "e"}); ok {
+		t.Fatalf("element {urn:a}e was declared, but its <schema> is ignored and S2's [children] is empty")
+	}
+}
+
 // TestConditionalInclusionMaxVersionInComposedDocument pins the max arm on the
 // documents a closure fetches: an <include> it ignores is never followed, and an
 // included document whose own <schema> it ignores contributes the stub and
