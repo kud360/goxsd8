@@ -11,8 +11,7 @@ import (
 	"github.com/kud360/goxsd8/xsderr"
 )
 
-// attr is the caller's own [validate.Attribute]: the package exports no
-// constructor for one, so a source adapter implements the interface.
+// attr is this example's [validate.Attribute].
 type attr struct {
 	name  xsd.QName
 	value string
