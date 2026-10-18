@@ -1,6 +1,7 @@
 package jsonsrc
 
 import (
+	"bytes"
 	"errors"
 	"io"
 )
@@ -13,7 +14,9 @@ import (
 // P4).
 //
 // Lines are counted at '\n' and columns in bytes from the start of the line,
-// both from 1, as parser/xmltree counts them.
+// both from 1, as parser/xmltree counts them. A leading byte order mark is
+// never counted: r is a bomless reader, which drops it before any byte reaches
+// positions, as xmltree's decoding discards it before tokenizing.
 type positions struct {
 	r io.Reader
 	// pending is every byte read from r at or after base, the offset of the
@@ -75,4 +78,60 @@ func skipped(c byte) bool {
 		return true
 	}
 	return false
+}
+
+// utf8BOM is U+FEFF, the byte order mark, in UTF-8.
+var utf8BOM = []byte{0xEF, 0xBB, 0xBF}
+
+// bomless is r with one leading UTF-8 byte order mark dropped, which RFC 8259
+// §8.1 lets a parser ignore. Only the document's first three bytes are the
+// mark: a U+FEFF anywhere else reaches the decoder, outside a string as
+// malformed JSON and inside one as its content. It reads r a byte at a time
+// until the mark is ruled in or out, so a mark split across reads is dropped
+// whatever sizes r returns, and an error r returns meanwhile is returned
+// unchanged, after the bytes read before it.
+type bomless struct {
+	r io.Reader
+	// ruled reports whether the leading bytes have been read far enough to
+	// rule the mark in or out.
+	ruled bool
+	// lead is the leading bytes read while ruling that Read has yet to
+	// return; once ruled, it never holds the whole mark.
+	lead []byte
+	// err is the error r returned while ruling, returned once lead is.
+	err error
+}
+
+func (b *bomless) Read(p []byte) (int, error) {
+	if !b.ruled {
+		b.rule()
+	}
+	if len(b.lead) > 0 {
+		n := copy(p, b.lead)
+		b.lead = b.lead[n:]
+		return n, nil
+	}
+	if b.err != nil {
+		return 0, b.err
+	}
+	return b.r.Read(p)
+}
+
+// rule reads r while every byte read is the mark's next, until lead holds the
+// whole mark, which it drops, or a byte that is not the mark's, or r returns
+// an error, which it keeps as err.
+func (b *bomless) rule() {
+	b.ruled = true
+	var c [1]byte
+	for len(b.lead) < len(utf8BOM) && bytes.HasPrefix(utf8BOM, b.lead) {
+		n, err := b.r.Read(c[:])
+		b.lead = append(b.lead, c[:n]...)
+		if err != nil {
+			b.err = err
+			break
+		}
+	}
+	if bytes.Equal(b.lead, utf8BOM) {
+		b.lead = nil
+	}
 }

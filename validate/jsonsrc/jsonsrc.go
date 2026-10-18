@@ -80,6 +80,11 @@ func WithURI(uri string) Option {
 // marshals a struct whose child field is declared before an attribute field:
 // declare a struct's attribute fields first, or the document declines.
 //
+// One UTF-8 byte order mark (U+FEFF) opening r is ignored, as RFC 8259 §8.1
+// permits, and every location is the one the document without it gets; a
+// U+FEFF anywhere else is malformed JSON outside a string and content inside
+// one.
+//
 // Every error it returns is of one of four classes. Only a decline has a type
 // of its own; the other three are plain errors, by design, and no sentinel
 // value marks any of them:
@@ -175,7 +180,7 @@ type walker struct {
 }
 
 func newWalker(uri string, r io.Reader, schema validate.SchemaView, selected func(xsd.TypeTable, []validate.Attribute, []validate.Attribute) (xsd.TypeDefinitionOrRef, bool)) *walker {
-	pos := newPositions(r)
+	pos := newPositions(&bomless{r: r})
 	dec := json.NewDecoder(pos)
 	// A number's lexical form is its source text, never a float64 round trip:
 	// 12345678901234567890 under xs:integer is that integer.
