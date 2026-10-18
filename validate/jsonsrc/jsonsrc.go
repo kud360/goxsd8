@@ -311,7 +311,7 @@ func (w *walker) root() (*element, error) {
 // which the mapping declines rather than give the unprefixed key either
 // meaning.
 func (w *walker) rootMember(key string, sc *scope, scalar bool, loc xsderr.Loc) (elementMember, error) {
-	k, err := w.keyName(key, sc, scalar, loc)
+	k, err := w.keyName(key, nil, sc, scalar, loc)
 	if err != nil {
 		return nil, err
 	}
@@ -367,18 +367,27 @@ func (k keyName) carries(n xsd.QName) bool {
 // the empty prefix is never consulted, so neither a "$xmlns" binding of "" nor
 // any default namespace reaches a key (Namespaces in XML §6.2).
 //
-// It DECLINES a key with a colon whose prefix or local part is empty or no
-// NCName, a second colon among them, and a prefix sc does not bind, "xmlns"
-// included. None has an XML twin, so no marker tracks them: such a name is not
-// namespace-well-formed (Namespaces in XML §7), and an xmlns:p attribute is a
-// namespace declaration, which a "$xmlns" member spells. The unbound-prefix
+// It DECLINES a key with no colon that is no NCName — the empty key, or one
+// whose first character is no NameStartChar, "@kind", "-kind" and "1bad"
+// among them, or a later one no NameChar (XML 1.0 §2.3 [4]-[5]) — a key with
+// a colon whose prefix or local part is empty or no NCName, a second colon
+// among them, and a prefix sc does not bind, "xmlns" included. None has an XML
+// twin, so no marker tracks them: such a name is not namespace-well-formed
+// (Namespaces in XML §7), and an xmlns:p attribute is a namespace declaration,
+// which a "$xmlns" member spells. The no-NCName decline names the key an
+// attribute use of o, the object the member is classified against, is named
+// by, where the key is "@" or "-" before that use's local name (notNCName); o
+// is nil at the root (rootMember). The unbound-prefix
 // decline names the "$xmlns" member that would bind the prefix, except under
 // scalarRoot, a root whose value is a scalar or null: such a root has no
 // object of its own and no ancestor, so no "$xmlns" scopes it and "xml" is the
 // one prefix bound there; the decline names the "xml:" key and the unprefixed
 // key (rootMember) instead.
-func (w *walker) keyName(key string, sc *scope, scalarRoot bool, loc xsderr.Loc) (keyName, error) {
+func (w *walker) keyName(key string, o *object, sc *scope, scalarRoot bool, loc xsderr.Loc) (keyName, error) {
 	prefix, local, prefixed := strings.Cut(key, ":")
+	if !prefixed && !xmlname.IsNCName(key) {
+		return keyName{}, w.notNCName(key, o, loc)
+	}
 	if !prefixed {
 		return keyName{name: xsd.QName{Local: key}}, nil
 	}
@@ -396,6 +405,25 @@ func (w *walker) keyName(key string, sc *scope, scalarRoot bool, loc xsderr.Loc)
 		return keyName{}, w.declinef(loc, "member %q: no \"$xmlns\" in scope binds its prefix %q; a prefixed key names the expanded name its prefix's binding gives it, so bind %q in a \"$xmlns\" member, {%q:\"<namespace name>\"}, leading the object of the element the key names or is an attribute of, or of an ancestor", key, prefix, prefix, prefix)
 	}
 	return keyName{name: xsd.QName{Space: space, Local: local}, prefixed: true}, nil
+}
+
+// notNCName declines key, at loc, a key with no colon that is no NCName
+// (walker.keyName). Where key is "@" or "-" before the local name of an
+// attribute use among o.uses, o nil at the root, it names the key that use is
+// named by: that local name alone, as the package doc's "The mapping" spells
+// an attribute member.
+func (w *walker) notNCName(key string, o *object, loc xsderr.Loc) error {
+	const base = "member %q is no NCName; a key with no colon is the local name of the element or attribute it names, an NCName (XML 1.0 §2.3, Namespaces in XML §7)"
+	if o == nil || (!strings.HasPrefix(key, "@") && !strings.HasPrefix(key, "-")) {
+		return w.declinef(loc, base, key)
+	}
+	i := slices.IndexFunc(o.uses, func(u xsd.AttributeUse) bool { return u.DeclarationName().Local == key[1:] })
+	if i < 0 {
+		return w.declinef(loc, base, key)
+	}
+	name := o.uses[i].DeclarationName()
+	return w.declinef(loc, base+", and an attribute member's key takes no \"@\" or \"-\": the attribute use %s of the type of %s is named by the key %q",
+		key, name, o.owner, name.Local)
 }
 
 // object is what an object-valued element's members are classified against,
@@ -726,7 +754,7 @@ func (b bareElement) object(*walker, *element, *attribute, placement, xsderr.Loc
 // the xsi-namespace, two-expanded-name and simple-content declines among the
 // uses useNamed's, each under its function's GAP(jsonsrc) markers.
 func (w *walker) classify(o *object, key string, sc *scope, loc xsderr.Loc, scalar bool) (member, error) {
-	k, err := w.keyName(key, sc, false, loc)
+	k, err := w.keyName(key, o, sc, false, loc)
 	if err != nil {
 		return nil, err
 	}
@@ -2270,7 +2298,7 @@ func (w *walker) attributes(o *object, sc *scope, tok json.Token, loc xsderr.Loc
 		next := &runMember{key: key, loc: loc, val: v}
 		var unsettled error
 		if v.tok != json.Delim('[') {
-			if next.k, err = w.keyName(key, v.scope, false, loc); err != nil {
+			if next.k, err = w.keyName(key, r.owner, v.scope, false, loc); err != nil {
 				return nil, nil, nil, err
 			}
 			if unsettled, err = w.candidates(r, next); err != nil {
@@ -2760,7 +2788,7 @@ func (w *walker) lookAhead(r *attributeRun, next *runMember, sc *scope) (lookahe
 		}
 		rm := &runMember{key: key, loc: loc, val: v}
 		if v.tok != json.Delim('[') {
-			if rm.k, err = w.keyName(key, v.scope, false, loc); err != nil {
+			if rm.k, err = w.keyName(key, r.owner, v.scope, false, loc); err != nil {
 				return lookahead{}, err
 			}
 		}
