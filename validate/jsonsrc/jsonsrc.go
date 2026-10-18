@@ -375,15 +375,15 @@ func (k keyName) carries(n xsd.QName) bool {
 // twin, so no marker tracks them: such a name is not namespace-well-formed
 // (Namespaces in XML §7), and an xmlns:p attribute is a namespace declaration,
 // which a "$xmlns" member spells. Where the key is "@" or "-" before a local
-// name that maps, under o, the object the member is classified against, to an
-// attribute use of o's, the no-NCName decline names that local name as the key
-// the use is named by (notNCName); o is nil at the root (rootMember), where it
-// names none. The unbound-prefix decline names the
-// "$xmlns" member that would bind the prefix, except under scalarRoot, a root
-// whose value is a scalar or null: such a root has no object of its own and no
-// ancestor, so no "$xmlns" scopes it and "xml" is the one prefix bound there;
-// the decline names the "xml:" key and the unprefixed key (rootMember)
-// instead.
+// name that maps, under o, the object the member is classified against, and
+// each type o's owner's {type table} can select alike, to an attribute use of
+// o's, the no-NCName decline names that local name as the key the use is
+// named by (notNCName); o is nil at the root (rootMember), where it names
+// none. The unbound-prefix decline names the "$xmlns" member that would bind
+// the prefix, except under scalarRoot, a root whose value is a scalar or null:
+// such a root has no object of its own and no ancestor, so no "$xmlns" scopes
+// it and "xml" is the one prefix bound there; the decline names the "xml:" key
+// and the unprefixed key (rootMember) instead.
 func (w *walker) keyName(key string, o *object, sc *scope, scalarRoot bool, loc xsderr.Loc) (keyName, error) {
 	prefix, local, prefixed := strings.Cut(key, ":")
 	if !prefixed && !xmlname.IsNCName(key) {
