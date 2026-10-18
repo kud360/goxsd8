@@ -20,7 +20,8 @@ import (
 // with element-only content, e0 with empty content, and ra with element-only
 // content and a required attribute, an array item of which lst's content
 // model takes. tt's {type definition} is ·xs:anyType·, whose content is
-// mixed, and its {type table} selects eoT's element-only content.
+// mixed, and its {type table} can select either that or eoT's element-only
+// content, and selects eoT for an element with no attribute m.
 const notedSchema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
   <xs:complexType name="abs" abstract="true">
     <xs:sequence><xs:element name="z" type="xs:string"/></xs:sequence>
@@ -43,7 +44,10 @@ const notedSchema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
   <xs:complexType name="eoT">
     <xs:sequence><xs:element name="q" type="xs:string"/></xs:sequence>
   </xs:complexType>
-  <xs:element name="tt"><xs:alternative type="eoT"/></xs:element>
+  <xs:element name="tt">
+    <xs:alternative test="@m" type="xs:anyType"/>
+    <xs:alternative type="eoT"/>
+  </xs:element>
   <xs:element name="lst">
     <xs:complexType>
       <xs:sequence><xs:element ref="ra" maxOccurs="unbounded"/></xs:sequence>
