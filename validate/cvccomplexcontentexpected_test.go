@@ -213,3 +213,64 @@ func TestContentChargeNamesAnExpectedWildcardByNamespaceConstraint(t *testing.T)
 
 	cWantMsg(t, got, cUnadmitted("q", `wildcard not ·absent· "urn:no"`))
 }
+
+// Under {mode} suffix, once an item has begun S2 the {particle} can take
+// nothing more (clause 2.1's S = S1 + S2), so [[children]] that end with a
+// {min occurs} still owed are charged with that fact and not with a list the
+// {open content} filter left empty.
+func TestContentChargeAtTheEndStatesTheSuffixHasBegun(t *testing.T) {
+	schema := cSchema(t, cOpenContent(t, xsd.OpenContentSuffix, xsd.ProcessSkip,
+		cNamespaceConstraint(t, xsd.NamespaceConstraintAny),
+		cParticle(t, "a", 1, 1), cParticle(t, "b", 1, 1)))
+
+	got := cAssess(t, schema, cRoot("a", "x"))
+
+	wantContentCharge(t, got, "cvc-complex-content", "2", loc(1, 1))
+	cWantMsg(t, got, "the [[children]] of root end before every particle of the {content type} of its ·governing type definition· has taken the occurrences its {min occurs} requires, where the {particle} can take no further element information item, the {open content} suffix having begun, so the sequence is not ·valid· with respect to that {content type} as cvc-complex-content clause 2 requires")
+}
+
+// cDisallowingQ is the {namespace constraint} any whose {disallowed names}
+// holds the unqualified name q.
+func cDisallowingQ(t *testing.T) xsd.NamespaceConstraint {
+	t.Helper()
+	nc, err := xsd.NewNamespaceConstraint(xsderr.Loc{}, xsd.NamespaceConstraintAny, nil, []xsd.QName{{Local: "q"}}, nil)
+	if err != nil {
+		t.Fatalf("NewNamespaceConstraint: %v", err)
+	}
+	return nc
+}
+
+// A ·wildcard particle· that allows the item's namespace and still declined it
+// did so under its {disallowed names}, and the charge says it disallows the
+// item rather than listing a wildcard the item seems to match.
+func TestContentChargeNamesAWildcardThatDisallowsTheItem(t *testing.T) {
+	w, err := xsd.NewWildcard(xsderr.Loc{}, cDisallowingQ(t), xsd.ProcessSkip)
+	if err != nil {
+		t.Fatalf("NewWildcard: %v", err)
+	}
+	o, err := xsd.NewOccurs(xsderr.Loc{}, 1, 1)
+	if err != nil {
+		t.Fatalf("NewOccurs: %v", err)
+	}
+	p, err := xsd.NewParticle(xsderr.Loc{}, o, xsd.ResolvedTerm{Term: w})
+	if err != nil {
+		t.Fatalf("NewParticle: %v", err)
+	}
+	schema := cSchema(t, cSequence(t, false, p))
+
+	got := cAssess(t, schema, cRoot("q"))
+
+	wantContentCharge(t, got, "cvc-complex-content", "1", loc(2, 1))
+	cWantMsg(t, got, cUnadmitted("q", "wildcard any, which disallows q"))
+}
+
+// The {open content} arm is named as disallowing the item on the same terms.
+func TestOpenContentChargeNamesAnOpenWildcardThatDisallowsTheItem(t *testing.T) {
+	schema := cSchema(t, cOpenContent(t, xsd.OpenContentInterleave, xsd.ProcessSkip, cDisallowingQ(t),
+		cParticle(t, "a", 1, 1), cParticle(t, "b", 1, 1)))
+
+	got := cAssess(t, schema, cRoot("a", "q"))
+
+	wantContentCharge(t, got, "cvc-complex-content", "3", loc(3, 1))
+	cWantMsg(t, got, `the element information item q is ·attributed to· no particle of the {content type} of root at its position in the [[children]], and its ·expanded name· is not ·valid· with respect to that {content type}'s {open content} wildcard either, where the content model expects one of element declaration b, open content wildcard any, which disallows q, so the sequence is not ·valid· with respect to that {content type} as cvc-complex-content clause 3 requires`)
+}
