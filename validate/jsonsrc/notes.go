@@ -161,10 +161,10 @@ func (w *walker) noteUnnamed(m elementMember, loc xsderr.Loc, key string, in *me
 	if !settled || !in.object.namesNone(m) {
 		return
 	}
-	switch rule {
-	case ruleCvcType:
+	if rule == ruleCvcType {
 		w.notes[noteAt{loc: loc, rule: rule}] = scalarExpected{key: key, owner: in.owner.key}
-	case ruleCvcComplexContent:
+	}
+	if rule == ruleCvcComplexContent {
 		w.notes[noteAt{loc: loc, rule: rule}] = unnamed{key: key, owner: in.owner.key, object: in.object}
 	}
 }
