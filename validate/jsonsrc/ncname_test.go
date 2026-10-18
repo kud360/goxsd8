@@ -37,7 +37,12 @@ func notNCName(key string) string {
 // an element or attribute no XML document can spell. Each decline is the
 // whole message at the key; one whose key is "@" or "-" before the local name
 // of an attribute use of the object it is classified against names the key
-// that use is named by (walker.notNCName), and every other names none.
+// that use is named by (walker.notNCName), and every other names none. Every
+// row fails with keyName's NCName test removed, the ones under a skip ##local
+// wildcard mapping and charging nothing; each row naming a key fails with the
+// object its caller hands keyName set to nil (classify, attributes,
+// lookAhead), "@other" with notNCName naming any use, and "1kind" with it
+// naming for any leading character.
 func TestKeyNotNCNameDeclines(t *testing.T) {
 	readme := validatorOver(t, readmeSchema)
 	wild := validatorOver(t, ncnameSchema)
@@ -64,6 +69,8 @@ func TestKeyNotNCNameDeclines(t *testing.T) {
 			`jsonsrc: instance.json:1:36: ` + named("@kind", "kind", "{urn:o}order", "kind")},
 		{"a key opening with a digit", readme, order + `"1bad":"x","item":["a"]}}`,
 			`jsonsrc: instance.json:1:36: ` + notNCName("1bad")},
+		{"a key opening with a digit before a use's name", readme, order + `"1kind":"x","item":["a"]}}`,
+			`jsonsrc: instance.json:1:36: ` + notNCName("1kind")},
 		{"a key with a later character no NameChar", readme, order + `"item":["a"],"a b":"x"}}`,
 			`jsonsrc: instance.json:1:49: ` + notNCName("a b")},
 		{"the empty key", readme, order + `"":"x","item":["a"]}}`,
