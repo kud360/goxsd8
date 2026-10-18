@@ -23,7 +23,6 @@ import (
 	"github.com/kud360/goxsd8/validate/xmlsrc"
 	"github.com/kud360/goxsd8/value"
 	"github.com/kud360/goxsd8/xsd"
-	"github.com/kud360/goxsd8/xsderr"
 )
 
 // stdinArg is the instance argument naming standard input. It is an INSTANCE
@@ -266,7 +265,7 @@ func (vn *validation) one(instance string, stdout, stderr io.Writer) int {
 		// so it lands on stdout with them and counts as invalid — nothing in
 		// the document was shown valid.
 		line := violationLine(err)
-		if rule, _ := xsderr.RuleOf(err); rule == xsderr.RuleXMLWellFormed && read.fault == nil {
+		if read.fault == nil {
 			line += vn.formatHint(instance)
 		}
 		return reportLines(stdout, stderr, instance, []string{line}, exitInvalid)
@@ -312,11 +311,11 @@ func (vn *validation) assessJSON(instance string, src *watchedReader, stdout, st
 
 // formatHint is the clause an instance's line ends with where -format forced a
 // format its extension does not name and the instance is not well-formed in
-// it, which assessJSON and one append to a malformed-JSON line and to an
-// [xml-wf] line no read fault caused: the format the flag forced, and the one
-// the extension names. It is "" where -format was not given, and where the
-// instance's extension names no format, standard input having none, or names
-// the forced one.
+// it, which assessJSON and one append to a malformed-JSON line and to the line
+// of xmlsrc.Validate's error, an [xml-wf] one, that no read fault caused: the
+// format the flag forced, and the one the extension names. It is "" where
+// -format was not given, and where the instance's extension names no format,
+// standard input having none, or names the forced one.
 func (vn *validation) formatHint(instance string) string {
 	named, err := formatOf(instance, "")
 	if vn.forced == "" || err != nil || named == vn.forced {
