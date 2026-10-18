@@ -181,8 +181,10 @@ func carriesVersioningAttr(el *Element) bool {
 //
 // The conditions are a disjunction, tested here in the order §4.2.2 states them
 // rather than in the order the author happened to write the attributes. That
-// choice is user-visible in exactly one place — an element carrying two
-// ill-formed values is charged src-cip for the first in SPEC order — and it
+// choice is user-visible wherever an ill-formed value shares an element with
+// another versioning attribute — whether src-cip is charged, and for which
+// attribute, follows SPEC order: a condition firing earlier in it ends the scan
+// (below), and of two ill-formed values the first in it is charged — and it
 // keeps the verdict independent of tag layout (STYLE D1).
 //
 // A condition that fires ends the scan, so the ill-formed value of a LATER

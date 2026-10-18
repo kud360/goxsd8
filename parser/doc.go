@@ -79,10 +79,14 @@
 // keeping only targetNamespace and the two version attributes and no children
 // at all, so [Parse] succeeds over such a root and assembles none of that
 // document's components. An ill-formed value is charged src-cip, not guessed
-// at, unless the element carrying it is already ignored — by an earlier
-// attribute of its own or by an ancestor — since S2 does not carry it. A
-// retained construct that references a declaration §4.2.2 removed is a
-// reference to nothing and is rejected under src-resolve.
+// at, unless the element carrying it is already ignored — by an ancestor, or
+// by an attribute of its own earlier in the order listed above (§4.2.2's
+// order, not the start tag's) — since S2 does not carry it. A retained
+// construct that references a declaration §4.2.2 removed is a reference to
+// nothing, and is treated as any unresolved QName is: rejected under
+// src-resolve in every slot but {substitution group affiliations}, which
+// keeps it as an ·absent· member — see the §5.3 bullet under Composition
+// gaps.
 //
 // It runs FIRST, before every other pre-processing kind and before any
 // directive of the document is followed, which is what makes a declaration

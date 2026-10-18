@@ -133,20 +133,44 @@ func TestConditionalInclusionMaxVersionRetiresOneOfTwoSiblings(t *testing.T) {
 
 // TestConditionalInclusionReferenceToPrunedDeclaration pins what pruning costs
 // a retained construct: a reference to a declaration §4.2.2 removed resolves to
-// nothing in S2 and is charged src-resolve.
+// nothing in S2 and is treated as any unresolved QName is — an <element ref> is
+// charged src-resolve, while a substitutionGroup= naming it is kept as an
+// ·absent· {substitution group affiliations} member and the schema is accepted
+// (§5.3; xsd/resolve.go's resolveElementDecl).
 func TestConditionalInclusionReferenceToPrunedDeclaration(t *testing.T) {
-	_, err := produce(t, vcWrap("",
-		`<xs:element name="gone" type="xs:string" vc:maxVersion="1.1"/>`+
-			`<xs:element name="r"><xs:complexType><xs:sequence>`+
-			`<xs:element ref="gone"/>`+
-			`</xs:sequence></xs:complexType></xs:element>`))
-	var xerr *xsderr.Error
-	if !errors.As(err, &xerr) {
-		t.Fatalf("Produce error = %v, want an *xsderr.Error", err)
-	}
-	if xerr.Rule != "src-resolve" {
-		t.Fatalf("rule = %s, want src-resolve: %v", xerr.Rule, xerr)
-	}
+	t.Run("element ref", func(t *testing.T) {
+		_, err := produce(t, vcWrap("",
+			`<xs:element name="gone" type="xs:string" vc:maxVersion="1.1"/>`+
+				`<xs:element name="r"><xs:complexType><xs:sequence>`+
+				`<xs:element ref="gone"/>`+
+				`</xs:sequence></xs:complexType></xs:element>`))
+		var xerr *xsderr.Error
+		if !errors.As(err, &xerr) {
+			t.Fatalf("Produce error = %v, want an *xsderr.Error", err)
+		}
+		if xerr.Rule != "src-resolve" {
+			t.Fatalf("rule = %s, want src-resolve: %v", xerr.Rule, xerr)
+		}
+	})
+	t.Run("substitutionGroup", func(t *testing.T) {
+		s, err := produce(t, vcWrap("",
+			`<xs:element name="head" type="xs:string" vc:maxVersion="1.1"/>`+
+				`<xs:element name="m" type="xs:string" substitutionGroup="head"/>`))
+		if err != nil {
+			t.Fatalf("Produce: %v, want the dangling affiliation kept as ·absent· (§5.3)", err)
+		}
+		if _, ok := s.Element(xsd.QName{Local: "head"}); ok {
+			t.Fatalf("head reached the schema, but vc:maxVersion ignores it")
+		}
+		m, ok := s.Element(xsd.QName{Local: "m"})
+		if !ok {
+			t.Fatalf("element m not found")
+		}
+		names := m.SubstitutionGroupAffiliationNames()
+		if len(names) != 1 || names[0] != (xsd.QName{Local: "head"}) {
+			t.Fatalf("m's affiliation names = %v, want [head] kept as an ·absent· member", names)
+		}
+	})
 }
 
 // TestConditionalInclusionAvailability pins §4.2.2's four availability clauses
@@ -386,6 +410,7 @@ func TestConditionalInclusionSrcCIP(t *testing.T) {
 		{"maxVersion in exponent notation", `vc:maxVersion="1e1"`, "xs:decimal"},
 		{"minVersion ill-formed beside a pruning maxVersion", `vc:minVersion="x" vc:maxVersion="1.0"`, "vc:minVersion"},
 		{"maxVersion ill-formed beside a retaining minVersion", `vc:minVersion="1.0" vc:maxVersion="x"`, "vc:maxVersion"},
+		{"minVersion ill-formed after a pruning maxVersion in the tag", `vc:maxVersion="1.0" vc:minVersion="x"`, "vc:minVersion"},
 		{"typeAvailable item is no NCName", `vc:typeAvailable="xs:integer 23"`, "xs:QName"},
 		{"typeAvailable item has an empty local part", `vc:typeAvailable="xs:"`, "xs:QName"},
 		{"typeUnavailable item has an unbound prefix", `vc:typeUnavailable="vx:t"`, "in-scope namespace"},
@@ -437,6 +462,15 @@ func TestConditionalInclusionIgnoredSubtreeEscapesSrcCIP(t *testing.T) {
 		t.Run("maxVersion before "+later, func(t *testing.T) {
 			if declarationRetained(t, markedDeclaration(`vc:maxVersion="1.1" `+later)) {
 				t.Fatalf("the declaration was retained, but vc:maxVersion ignores it")
+			}
+		})
+	}
+	// §4.2.2's order, not the start tag's: written first, the ill-formed value
+	// still comes after the version attribute that ignores the element.
+	for _, gone := range []string{`vc:minVersion="2.0"`, `vc:maxVersion="1.1"`} {
+		t.Run(`vc:typeAvailable="23" before `+gone+" in the tag", func(t *testing.T) {
+			if declarationRetained(t, markedDeclaration(`vc:typeAvailable="23" `+gone)) {
+				t.Fatalf("the declaration was retained, but %s ignores it", gone)
 			}
 		})
 	}
