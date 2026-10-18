@@ -257,7 +257,12 @@ counts.
    **arbiter**, with worktree isolation like any subagent that writes: on
    accept it runs and banks the ratchet as its agent file requires, and its
    bank commit comes onto `wip/issue-<N>` under the same hand-off clause as
-   mason's (#1812). On reject: one repair round by mason, briefed from the
+   mason's (#1812). A bank commit behind a reject — a superseded-pass bank
+   whose gate rerun failed — never comes onto `wip/issue-<N>`, and the
+   repair round starts from the branch without it (#1880). A mason report
+   whose gate fails only in part 4, on cases it names as candidate
+   superseded passes, goes to the arbiter like a green one. On reject: one
+   repair round by mason, briefed from the
    whole posted verdict, each defect class's site list carried whole with
    the sites it rules sound (#2449) — never from a partial finding set, and
    never before the verdict is posted (#1426) — then re-judge in full. On a
