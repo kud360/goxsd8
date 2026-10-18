@@ -45,14 +45,20 @@ func notNCName(key string) string {
 // TestKeyNotNCNameDeclines pins an unprefixed key that is no NCName declined
 // (walker.keyName): it has no XML twin, and the mapping would otherwise name
 // an element or attribute no XML document can spell. Each decline is the
-// whole message at the key; one whose key is "@" or "-" before the local name
-// of an attribute use of the object it is classified against names the key
-// that use is named by (walker.notNCName), and every other names none. Every
-// row fails with keyName's NCName test removed, the ones under a skip ##local
-// wildcard mapping and charging nothing; each row naming a key fails with the
-// object its caller hands keyName set to nil (classify, attributes,
-// lookAhead), "@other" with notNCName naming any use, and "1kind" with it
-// naming for any leading character.
+// whole message at the key; one whose key is "@" or "-" before a local name
+// that maps, under the object it is classified against and each type that
+// object's {type table} can select alike, to an attribute use of the object
+// names that local name as the key the use is named by (walker.notNCName),
+// and every other names none. Every row fails with keyName's NCName test
+// removed, the ones under a skip ##local wildcard mapping and charging
+// nothing; each row naming a key fails with the object its caller hands
+// keyName set to nil (classify, attributes, lookAhead), "@other" with
+// notNCName naming any use, and "1kind" with it naming for any leading
+// character. With notNCName naming wherever a use of the object has the local
+// name, the "@x" row under ty and the five under attributeDeclinesSchema fail;
+// with it naming what the type's {attribute wildcard} maps, the two under a
+// skip ##local {attribute wildcard}; with it classifying under the object
+// alone, the "@x" row under ty.
 func TestKeyNotNCNameDeclines(t *testing.T) {
 	readme := validatorOver(t, readmeSchema)
 	wild := validatorOver(t, ncnameSchema)

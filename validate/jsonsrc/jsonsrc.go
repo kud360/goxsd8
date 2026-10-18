@@ -413,17 +413,14 @@ func (w *walker) keyName(key string, o *object, sc *scope, scalarRoot bool, loc 
 // walker.classifyKey maps, under o and each of o.selectable alike, to an
 // attribute use among o.uses, it names that local name as the key the use is
 // named by, as the package doc's "The mapping" spells an attribute member; it
-// names no key at the root, o being nil, and none where the local name is no
-// NCName, or classifyKey declines it or maps it to anything else.
+// names no key at the root, o being nil, and none where classifyKey declines
+// the local name or maps it to anything else, a use's name being an NCName.
 func (w *walker) notNCName(key string, o *object, loc xsderr.Loc) error {
 	const base = "member %q is no NCName; a key with no colon is the local name of the element or attribute it names, an NCName (XML 1.0 §2.3, Namespaces in XML §7)"
 	if o == nil || (!strings.HasPrefix(key, "@") && !strings.HasPrefix(key, "-")) {
 		return w.declinef(loc, base, key)
 	}
 	local := key[1:]
-	if !xmlname.IsNCName(local) {
-		return w.declinef(loc, base, key)
-	}
 	m, err := w.classifyKey(o, local, keyName{name: xsd.QName{Local: local}}, loc, true)
 	if err != nil {
 		return w.declinef(loc, base, key)
