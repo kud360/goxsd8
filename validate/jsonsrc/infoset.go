@@ -95,7 +95,8 @@ type element struct {
 	name xsd.QName
 	// key is the member's key as spelled, an array item's being its array's,
 	// for an object-valued element, which a note on a member of its object
-	// names it by (unnamed.hint); empty for a scalar or null one.
+	// names it by (unnamed.hint, scalarExpected.hint); empty for a scalar or null
+	// one.
 	key string
 	// loc is where the member's key, or the array item, begins.
 	loc xsderr.Loc
