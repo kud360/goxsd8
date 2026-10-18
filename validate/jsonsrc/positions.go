@@ -89,7 +89,7 @@ var utf8BOM = []byte{0xEF, 0xBB, 0xBF}
 // malformed JSON and inside one as its content. It reads r a byte at a time
 // until the mark is ruled in or out, so a mark split across reads is dropped
 // whatever sizes r returns, and an error r returns meanwhile is returned
-// unchanged, after the bytes read before it.
+// unchanged, after the bytes read before it that are no part of a mark.
 type bomless struct {
 	r io.Reader
 	// ruled reports whether the leading bytes have been read far enough to
@@ -118,8 +118,10 @@ func (b *bomless) Read(p []byte) (int, error) {
 }
 
 // rule reads r while every byte read is the mark's next, until lead holds the
-// whole mark, which it drops, or a byte that is not the mark's, or r returns
-// an error, which it keeps as err.
+// whole mark or a byte that is not the mark's, or r returns an error, which it
+// keeps as err. It drops the whole mark, and the beginning of one that a fault
+// other than io.EOF cut off, so that fault is the first thing Read returns
+// rather than a byte the decoder rejects before reading on to it.
 func (b *bomless) rule() {
 	b.ruled = true
 	var c [1]byte
@@ -131,7 +133,8 @@ func (b *bomless) rule() {
 			break
 		}
 	}
-	if bytes.Equal(b.lead, utf8BOM) {
+	cut := b.err != nil && !errors.Is(b.err, io.EOF) && bytes.HasPrefix(utf8BOM, b.lead)
+	if cut || bytes.Equal(b.lead, utf8BOM) {
 		b.lead = nil
 	}
 }
