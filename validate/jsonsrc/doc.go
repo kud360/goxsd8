@@ -434,8 +434,8 @@
 //   - a "$type" naming a type that the types a {type table} of its parent's
 //     declaration, or of an ancestor's, can select settle on different types,
 //     where the mapping reads no ·selected type definition· for that table:
-//     below an element whose selection the engine withholds, the mapping
-//     determining no [inherited attributes] there for a {test} to read, so it
+//     below an element whose selection the engine withholds, where the
+//     mapping reads a selection only as the member entry below says, so it
 //     maps only what settles alike whichever type is selected; and one whose
 //     parent's ·governing type definition· the mapping does not determine,
 //     where [xsd.Schema.ContentMatcher] declines the content model the parent
@@ -444,11 +444,15 @@
 //   - an array item that is itself an array;
 //   - a member of an object under a declaration carrying a {type table} that
 //     the declaration's {type definition} and a type the table can select
-//     classify differently, or that one of them declines, below an element
-//     whose selection the engine withholds or whose parent's content model
-//     [xsd.Schema.ContentMatcher] declines: there the mapping determines no
-//     [inherited attributes] and reads no ·selected type definition·, so it
-//     maps only what classifies alike whichever type is selected, and the
+//     classify differently, or that one of them declines, where the mapping
+//     reads no ·selected type definition· for the table: below an element
+//     whose selection the engine withholds, where it determines the
+//     [inherited attributes] an element hands its children only where every
+//     type that may govern that element hands down the same ones, and reads a
+//     selection only where it determines them and one type may govern the
+//     parent; and below an element whose parent's content model
+//     [xsd.Schema.ContentMatcher] declines, where it determines none. There
+//     it maps only what classifies alike whichever type is selected, and the
 //     engine walks the twin undecided; and, where it reads the selection, a
 //     member of the attribute run a candidate type still reading attributes
 //     declines, where the type some reading of the run selects — one ending

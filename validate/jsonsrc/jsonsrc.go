@@ -681,28 +681,37 @@ func (b bareElement) object(*walker, *element, *attribute, placement, xsderr.Loc
 //
 // Under an owner whose declaration carries a {type table} and whose
 // ·selected type definition· the mapping does not read — walker.selector
-// determining no [inherited attributes] for it, or the engine withholding the
-// selection (walker.unselected) — the key is classified under the
-// declaration's {type definition}, o, and again under each of o.selectable,
-// and maps only where every one classifies it alike (walker.alike), scalar
-// saying whether the member's value is a scalar or null (scalarValue). The
-// element is assessed under its ·selected type definition· (key-selected-type
-// clause 1, key-cta-select), so it maps only a key that classifies the same
-// whichever type the table selects, and the infoset is the one any of them
-// would give. It DECLINES a key any one of them declines or classifies
-// otherwise. Where the mapping reads the selection, walker.attributes does,
-// and the members after the attribute run are classified here under the
-// selected type alone, o.selectable being nil.
+// reading none for it, or the engine withholding the selection
+// (walker.unselected) — the key is classified under the declaration's {type
+// definition}, o, and again under each of o.selectable, and maps only where
+// every one classifies it alike (walker.alike), scalar saying whether the
+// member's value is a scalar or null (scalarValue). The element is assessed
+// under its ·selected type definition· (key-selected-type clause 1,
+// key-cta-select), so it maps only a key that classifies the same whichever
+// type the table selects, and the infoset is the one any of them would give.
+// It DECLINES a key any one of them declines or classifies otherwise. Where
+// the mapping reads the selection, walker.attributes does, and the members
+// after the attribute run are classified here under the selected type alone,
+// o.selectable being nil.
 //
 // GAP(jsonsrc): a member of an element whose declaration carries a {type
 // table} declines where the types the table can select classify it
-// differently, or one of them declines it alone, below an element whose {type
-// table} selection the engine withholds, a {test} it reaches being outside
-// its §3.12.6 compiler's subset (walker.settled's marker): no type is
-// determined to govern that element, so the mapping determines no [inherited
-// attributes] below it (walker.handDown) and reads no selection there
-// (walker.selector), and the engine walks the XML twin's subtree undecided
-// (validate's walk.child), consulting no {type table}. Owned by #2702.
+// differently, or one of them declines it alone, and the mapping reads no
+// selection of that table, below an element whose {type table} selection the
+// engine withholds, a {test} it reaches being outside its §3.12.6 compiler's
+// subset (walker.settled's marker): each type that table can select may
+// govern the withheld element, and the engine determines none of them and
+// walks the XML twin's subtree undecided (validate's walk.child), consulting
+// no {type table}. The mapping determines the [inherited attributes] an
+// element hands its children wherever every type that may govern it hands
+// down the same ones (walker.handDown), and reads a selection below where it
+// determines them and one type may govern the parent (walker.selector); where
+// the types hand down differently, or several may govern the parent, it reads
+// none and classifies the members alike here. RULED permanent by #2702:
+// selecting past a withheld key-cta-select alternative is unsound, and
+// classifying the member under one type the withheld table can select, or
+// under the type a table below selects from what that one alone hands down,
+// would select past it.
 //
 // GAP(jsonsrc): the same decline stands below an element whose parent's
 // content model xsd.Schema.ContentMatcher declines (its GAP(xsd) marker, the
@@ -1809,8 +1818,12 @@ func openContent(t xsd.ComplexType) bool {
 // ancestor's {type table} can select settle it on different types, and the
 // mapping reads no selection of that table: below an element whose {type
 // table} selection the engine withholds, a {test} it reaches being outside its
-// §3.12.6 compiler's subset, where the engine walks the XML twin undecided, as
-// walker.classify's marker of the same owner says. Owned by #2702.
+// §3.12.6 compiler's subset, where the engine walks the XML twin undecided, and
+// where the types that may govern the grandparent hand down differently, or
+// several may govern it, as walker.classify's marker of the same ruling says.
+// RULED permanent by #2702: selecting past a withheld key-cta-select
+// alternative is unsound, and settling the "$type" under one type the withheld
+// table can select would select past it.
 //
 // GAP(jsonsrc): a "$type" declines where the content model of its
 // grandparent's ·governing type definition· is one xsd.Schema.ContentMatcher
@@ -1932,10 +1945,14 @@ func (w *walker) instanceGoverning(o *object, e *element, typ *attribute, d xsd.
 // one ·overrides· it under D's {disallowed substitutions}, the type that
 // governs e (object.governing; walk.declaredGovernance). Where the engine
 // withholds the selection, it makes each type the table can select, or
-// instance for each it ·overrides·, those that may govern e, as
-// walker.instanceGoverning does where the mapping reads no selection, under
-// walker.classify's GAP(jsonsrc) marker of the same owner. It DECLINES typ
-// where ·override· is not decided, as walker.instanceGoverned does.
+// instance for each it ·overrides·, each type once, those that may govern e,
+// as walker.instanceGoverning does where the mapping reads no selection. They
+// are one type where instance ·overrides· every one, below which the mapping
+// hands down and reads selections as under any one governing type; where they
+// are several, it maps below e only what each settles alike (walker.handDown,
+// walker.classify's GAP(jsonsrc) marker RULED permanent by #2702). It
+// DECLINES typ where ·override· is not decided, as walker.instanceGoverned
+// does.
 func (w *walker) governOverriding(o *object, e *element, typ *attribute, attrs, inherited []validate.Attribute) error {
 	ov := o.overriding
 	o.overriding = nil
