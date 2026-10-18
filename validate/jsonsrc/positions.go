@@ -85,11 +85,11 @@ var utf8BOM = []byte{0xEF, 0xBB, 0xBF}
 
 // bomless is r with one leading UTF-8 byte order mark dropped, which RFC 8259
 // §8.1 lets a parser ignore. Only the document's first three bytes are the
-// mark: a U+FEFF anywhere else reaches the decoder, outside a string as
-// malformed JSON and inside one as its content. It reads r a byte at a time
-// until the mark is ruled in or out, so a mark split across reads is dropped
-// whatever sizes r returns, and an error r returns meanwhile is returned
-// unchanged, after the bytes read before it that are no part of a mark.
+// mark: a U+FEFF anywhere else reaches the decoder, and [Validate] says what
+// it answers for one. It reads r a byte at a time until the mark is ruled in
+// or out, so a mark split across reads is dropped whatever sizes r returns,
+// and an error r returns meanwhile is returned unchanged, after the bytes
+// read before it that are no part of a mark.
 type bomless struct {
 	r io.Reader
 	// ruled reports whether the leading bytes have been read far enough to
