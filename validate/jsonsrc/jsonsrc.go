@@ -374,10 +374,11 @@ func (k keyName) carries(n xsd.QName) bool {
 // among them, and a prefix sc does not bind, "xmlns" included. None has an XML
 // twin, so no marker tracks them: such a name is not namespace-well-formed
 // (Namespaces in XML §7), and an xmlns:p attribute is a namespace declaration,
-// which a "$xmlns" member spells. The no-NCName decline names the key an
-// attribute use of o, the object the member is classified against, is named
-// by, where the key is "@" or "-" before that use's local name (notNCName); o
-// is nil at the root (rootMember). The unbound-prefix decline names the
+// which a "$xmlns" member spells. Where the key is "@" or "-" before a local
+// name that maps, under o, the object the member is classified against, to an
+// attribute use of o's, the no-NCName decline names that local name as the key
+// the use is named by (notNCName); o is nil at the root (rootMember), where it
+// names none. The unbound-prefix decline names the
 // "$xmlns" member that would bind the prefix, except under scalarRoot, a root
 // whose value is a scalar or null: such a root has no object of its own and no
 // ancestor, so no "$xmlns" scopes it and "xml" is the one prefix bound there;
@@ -408,22 +409,31 @@ func (w *walker) keyName(key string, o *object, sc *scope, scalarRoot bool, loc 
 }
 
 // notNCName declines key, at loc, a key with no colon that is no NCName
-// (walker.keyName). Where key is "@" or "-" before the local name of an
-// attribute use among o.uses, o nil at the root, it names the key that use is
-// named by: that local name alone, as the package doc's "The mapping" spells
-// an attribute member.
+// (walker.keyName). Where key is "@" or "-" before a local name that
+// walker.classifyKey maps, under o and each of o.selectable alike, to an
+// attribute use among o.uses, it names that local name as the key the use is
+// named by, as the package doc's "The mapping" spells an attribute member; it
+// names no key at the root, o being nil, and none where the local name is no
+// NCName, or classifyKey declines it or maps it to anything else.
 func (w *walker) notNCName(key string, o *object, loc xsderr.Loc) error {
 	const base = "member %q is no NCName; a key with no colon is the local name of the element or attribute it names, an NCName (XML 1.0 §2.3, Namespaces in XML §7)"
 	if o == nil || (!strings.HasPrefix(key, "@") && !strings.HasPrefix(key, "-")) {
 		return w.declinef(loc, base, key)
 	}
-	i := slices.IndexFunc(o.uses, func(u xsd.AttributeUse) bool { return u.DeclarationName().Local == key[1:] })
-	if i < 0 {
+	local := key[1:]
+	if !xmlname.IsNCName(local) {
 		return w.declinef(loc, base, key)
 	}
-	name := o.uses[i].DeclarationName()
+	m, err := w.classifyKey(o, local, keyName{name: xsd.QName{Local: local}}, loc, true)
+	if err != nil {
+		return w.declinef(loc, base, key)
+	}
+	a, ok := m.(attributeMember)
+	if !ok || !slices.ContainsFunc(o.uses, func(u xsd.AttributeUse) bool { return u.DeclarationName() == a.name }) {
+		return w.declinef(loc, base, key)
+	}
 	return w.declinef(loc, base+", and an attribute member's key takes no \"@\" or \"-\": the attribute use %s of the type of %s is named by the key %q",
-		key, name, o.owner, name.Local)
+		key, a.name, o.owner, local)
 }
 
 // object is what an object-valued element's members are classified against,
@@ -758,6 +768,12 @@ func (w *walker) classify(o *object, key string, sc *scope, loc xsderr.Loc, scal
 	if err != nil {
 		return nil, err
 	}
+	return w.classifyKey(o, key, k, loc, scalar)
+}
+
+// classifyKey is classify's arms past keyName: it classifies the key, read as
+// k, at loc, under o and each of o.selectable alike.
+func (w *walker) classifyKey(o *object, key string, k keyName, loc xsderr.Loc, scalar bool) (member, error) {
 	ms, err := w.membersOf(append([]*object{o}, o.selectable...), key, k, loc)
 	if err != nil {
 		return nil, err

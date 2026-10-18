@@ -10,7 +10,10 @@ import (
 
 // ncnameSchema declares, in no namespace, s, whose sequence is a skip ##local
 // element wildcard of any number; a, whose {attribute wildcard} is a skip
-// ##local one; and es and ea, the same under ##any wildcards.
+// ##local one; es and ea, the same under ##any wildcards; and ty, of type X,
+// with the attribute uses a and x, whose {type table} selects R, X restricted
+// to prohibit x, by a {test} outside the §3.12.6 compiler's subset, so that
+// the mapping reads no selection of it.
 const ncnameSchema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
   <xs:element name="s"><xs:complexType><xs:sequence>
     <xs:any namespace="##local" processContents="skip" minOccurs="0" maxOccurs="unbounded"/>
@@ -24,6 +27,13 @@ const ncnameSchema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
   <xs:element name="ea"><xs:complexType>
     <xs:anyAttribute processContents="skip"/>
   </xs:complexType></xs:element>
+  <xs:complexType name="X">
+    <xs:attribute name="a" type="xs:string"/><xs:attribute name="x" type="xs:string"/>
+  </xs:complexType>
+  <xs:complexType name="R"><xs:complexContent><xs:restriction base="X">
+    <xs:attribute name="x" use="prohibited"/>
+  </xs:restriction></xs:complexContent></xs:complexType>
+  <xs:element name="ty" type="X"><xs:alternative test="count(@a) > 0" type="R"/></xs:element>
 </xs:schema>`
 
 // notNCName is the opening of the decline of an unprefixed key that is no
@@ -47,6 +57,7 @@ func TestKeyNotNCNameDeclines(t *testing.T) {
 	readme := validatorOver(t, readmeSchema)
 	wild := validatorOver(t, ncnameSchema)
 	run := validatorOver(t, runSchema)
+	declines := validatorOver(t, attributeDeclinesSchema)
 	const order = `{"o:order":{"$xmlns":{"o":"urn:o"},`
 	named := func(key, use, owner, as string) string {
 		return notNCName(key) + `, and an attribute member's key takes no "@" or "-": the attribute use ` + use + ` of the type of ` + owner + ` is named by the key "` + as + `"`
@@ -95,12 +106,26 @@ func TestKeyNotNCNameDeclines(t *testing.T) {
 			`jsonsrc: instance.json:1:7: ` + notNCName("-kind")},
 		{"an \"@\" key under a ##any element wildcard", wild, `{"es":{"@kind":{}}}`,
 			`jsonsrc: instance.json:1:8: ` + notNCName("@kind")},
+		{"an \"@\" key before a use's name a type the {type table} can select lacks", wild, `{"ty":{"@x":"1"}}`,
+			`jsonsrc: instance.json:1:8: ` + notNCName("@x")},
+		{"an \"@\" key before a use's name every type the {type table} can select has", wild, `{"ty":{"@a":"1"}}`,
+			`jsonsrc: instance.json:1:8: ` + named("@a", "a", "ty", "a")},
 		{"an \"@\" key under a ##any {attribute wildcard}", wild, `{"ea":{"@kind":"x"}}`,
 			`jsonsrc: instance.json:1:8: ` + notNCName("@kind")},
 		{"an \"@\" key opening the attribute run of an element with a {type table}", run, `{"tu":{"@a":"u"}}`,
 			`jsonsrc: instance.json:1:8: ` + named("@a", "a", "{urn:s}tu", "a")},
 		{"a \"-\" key the attribute run reads ahead to", run, `{"tu":{"a":"z","m":"x","-a":"1"}}`,
 			`jsonsrc: instance.json:1:24: ` + named("-a", "a", "{urn:s}tu", "a")},
+		{"an \"@\" key before an xsi:type use's name", declines, `{"r":{"x":{"@type":"t:r"}}}`,
+			`jsonsrc: instance.json:1:12: ` + notNCName("@type")},
+		{"a \"-\" key before an xsi:schemaLocation use's name", declines, `{"r":{"s":{"-schemaLocation":"u"}}}`,
+			`jsonsrc: instance.json:1:12: ` + notNCName("-schemaLocation")},
+		{"an \"@\" key before the name of a use of a type with simple content", declines, `{"r":{"price":{"@currency":"EUR"}}}`,
+			`jsonsrc: instance.json:1:16: ` + notNCName("@currency")},
+		{"an \"@\" key before the local name of uses of two expanded names", declines, `{"r":{"@k":"1"}}`,
+			`jsonsrc: instance.json:1:7: ` + notNCName("@k")},
+		{"an \"@\" key before a name a child declaration and a use carry", declines, `{"r":{"@n":"1"}}`,
+			`jsonsrc: instance.json:1:7: ` + notNCName("@n")},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			res, err := Validate(tc.v, strings.NewReader(tc.json), WithURI(jsonURI))
