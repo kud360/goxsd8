@@ -115,6 +115,20 @@ func WithURI(uri string) Option {
 // with an empty [validate.Result.Unevaluated] means not proven invalid, not
 // valid, and a non-empty Unevaluated leaves the document undecided against the
 // rules its entries name.
+//
+// A violation's rule ID and location are the engine's, and so is its
+// message, but for a clause opening "; JSON member" that Validate appends
+// where the charge names a member the mapping can place in the instance's own
+// terms, the member's key as spelled leading it:
+//
+//   - a cvc-complex-content charge at a child member no child element
+//     declaration, attribute use or wildcard of its parent's type names: the
+//     clause lists the keys the type carries, and, for a key that is an
+//     attribute use's name behind one "@", "_" or "-", names the key itself;
+//   - a cvc-type charge at a member of the object of an element whose type
+//     is a simple type: scalar expected;
+//   - a cvc-complex-type charge at the scalar of an element whose declared
+//     {type definition} has empty or element-only content: object expected.
 func Validate(v *validate.Validator, r io.Reader, opts ...Option) (*validate.Result, error) {
 	if v == nil {
 		return nil, fmt.Errorf("jsonsrc: Validate: nil *validate.Validator")
@@ -135,6 +149,7 @@ func Validate(v *validate.Validator, r io.Reader, opts ...Option) (*validate.Res
 	if err := w.end(root); err != nil {
 		return nil, err
 	}
+	w.annotate(res)
 	return res, nil
 }
 
@@ -177,6 +192,9 @@ type walker struct {
 	// reading the input or a decline. Every cursor reports this one field
 	// and none keeps a copy of it (STYLE D3).
 	err error
+	// notes is what the mapping knows, in JSON terms, about each member the
+	// engine may charge at its location (walker.annotate).
+	notes map[xsderr.Loc]note
 }
 
 func newWalker(uri string, r io.Reader, schema validate.SchemaView, selected func(xsd.TypeTable, []validate.Attribute, []validate.Attribute) (xsd.TypeDefinitionOrRef, bool)) *walker {
@@ -185,7 +203,7 @@ func newWalker(uri string, r io.Reader, schema validate.SchemaView, selected fun
 	// A number's lexical form is its source text, never a float64 round trip:
 	// 12345678901234567890 under xs:integer is that integer.
 	dec.UseNumber()
-	return &walker{dec: dec, pos: pos, uri: uri, schema: schema, selected: selected}
+	return &walker{dec: dec, pos: pos, uri: uri, schema: schema, selected: selected, notes: map[xsderr.Loc]note{}}
 }
 
 // token pulls the next token and the location it starts at.
@@ -430,6 +448,10 @@ type object struct {
 	// (walker.attributes), and below the root a key maps only where each
 	// classifies it as the declaration's type does (walker.classify).
 	selectable []*object
+	// simpleType is the type being a Simple Type Definition, whose object has
+	// no member a declaration, a use or a wildcard names: cvc-type clause 3.1.2
+	// charges each child member (unnamed.hint).
+	simpleType bool
 	// undeclared is the owner having no declaration: a child wildcardMember
 	// names whose expanded name no top-level declaration carries (bareElement),
 	// which has no type to classify a member against.
@@ -1241,7 +1263,8 @@ func (w *walker) entry(sc *scope, key string, loc xsderr.Loc) (value, error) {
 // its value as walker.value read it, and in, the members cursor of the
 // parent's object — nil for the root. Every element below the root is
 // ·attributed· under its parent's governing type as it is built
-// (object.attribute), whatever its value.
+// (object.attribute), whatever its value, and keeps the note walker.annotate
+// reads for it where it is one (walker.noteUnnamed, walker.noteCharacters).
 //
 // It DECLINES an array item that is itself an array. That has no XML twin, so
 // no marker tracks it: an item maps to exactly one element, and an array to
@@ -1251,6 +1274,7 @@ func (w *walker) element(m elementMember, loc xsderr.Loc, key string, v value, i
 	if in != nil {
 		at.parent = in.object
 		at.a, at.attributed = in.object.attribute(m.elementName())
+		w.noteUnnamed(m, loc, key, in)
 	}
 	switch t := v.tok.(type) {
 	case nil:
@@ -1261,21 +1285,23 @@ func (w *walker) element(m elementMember, loc xsderr.Loc, key string, v value, i
 			// where a value is due.
 			return nil, w.declinef(v.loc, "an array is an item of the array of member %q; only an object or a scalar maps to one element", key)
 		}
-		return w.objectElement(m, loc, v, at)
+		return w.objectElement(m, loc, key, v, at)
 	}
 	lexical, ok := scalarLexical(v.tok)
 	if !ok {
 		panic(fmt.Sprintf("jsonsrc: Token yielded %T", v.tok))
 	}
+	w.noteCharacters(m, key, lexical, v.loc)
 	return w.scalar(m.elementName(), loc, lexical, v.loc, v.scope), nil
 }
 
-// objectElement builds an object-valued element from its value v, standing at
-// at among its parent's members: its scope, v's, its "$type" (typeMember),
-// then its attribute members (attributes), each classified under the type its
-// members are (elementMember.object), and a cursor over the rest.
-func (w *walker) objectElement(m elementMember, loc xsderr.Loc, v value, at placement) (*element, error) {
-	e := &element{w: w, name: m.elementName(), loc: loc, scope: v.scope}
+// objectElement builds an object-valued element under the member key from its
+// value v, standing at at among its parent's members: its scope, v's, its
+// "$type" (typeMember), then its attribute members (attributes), each
+// classified under the type its members are (elementMember.object), and a
+// cursor over the rest.
+func (w *walker) objectElement(m elementMember, loc xsderr.Loc, key string, v value, at placement) (*element, error) {
+	e := &element{w: w, name: m.elementName(), key: key, loc: loc, scope: v.scope}
 	typ, tok, tokAt, err := w.typeMember(e, v.next, v.nextLoc)
 	if err != nil {
 		return nil, err
@@ -1886,7 +1912,7 @@ func (w *walker) object(owner xsd.QName, td xsd.TypeDefinition) *object {
 		}
 		return o
 	case *xsd.SimpleType:
-		return &object{owner: owner}
+		return &object{owner: owner, simpleType: true}
 	}
 	panic(fmt.Sprintf("jsonsrc: TypeDefinition arm %T", td))
 }
