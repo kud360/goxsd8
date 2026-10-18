@@ -9,39 +9,32 @@ import (
 	"github.com/kud360/goxsd8/xsderr"
 )
 
-// inheritSchema declares, in urn:i, the top-level attribute ia, inheritable;
-// T, an optional child m of xs:int, the attribute a and a lax ##local
-// {attribute wildcard}; and U, which restricts T to no child and the
-// attribute m of xs:string. Under T a key "m" is the child, whose "x" charges
-// cvc-type, and under U the attribute; an infoset built under the type the
-// engine does not select charges otherwise — a child m under U charges
-// cvc-complex-type, and an attribute m under T, which its wildcard admits,
-// nothing — so each row's verdict tells the two selections apart. tu is of
-// type T and selects U where its a is "u", ti where its i:ia is "u", and tb
-// where its i:ib is "u"; no top-level ib exists. p holds an optional p and
-// then an optional tu, and carries a, inheritable; pd carries a, inheritable,
-// defaulting to "u"; pn carries a, not inheritable, and pnd carries it
-// defaulting to "u"; each holds an optional tu. pw holds an optional ti and an
-// optional tb under a lax {attribute wildcard} of urn:i, and pk holds an
-// optional ti under a skip one. pt is of type P0, which holds an optional tu,
-// and PT extends P0 with a, inheritable. po holds an optional x of type T that
-// selects U where its a is "u", and has a lax interleave {open content}; ps is
-// po with a skip one. pr carries a, required, inheritable and fixed to "u",
-// and holds an optional tu. tn is of type T and selects U where its xsi:nil is
-// "true", and px holds an optional tn and carries xsi:nil, inheritable,
-// defaulting to "true". wy holds an optional y of type Yd and then a lax
-// wildcard, and the top-level y is of type Yg: each holds an optional x of
-// type T, Yg's selecting U where its a is "u". mid, and mid2 of type M, hold
-// an optional tu. H holds an optional mid and an optional mid2 and carries a;
-// H2 extends it with ib, inheritable, defaulting to "v", and H3 with ic, not
-// inheritable. rw is of type H and selects H2 where it counts an a, a {test}
-// outside the §3.12.6 compiler's subset, and re selects H3 likewise. B holds
-// an optional tu and carries k; X holds an optional tu and carries a,
-// inheritable, defaulting to "u", and derives from no B; X2 extends B with
-// that a, and N extends B with nothing. e is of type B, r holds an e,
-// and et is of type B and selects N where its k is "n"; pq holds one q of
-// type B. big's {content type} is one xsd.Schema.ContentMatcher declines (its
-// GAP(xsd) ceiling), holding mids.
+// inheritSchema declares, in urn:i, the top-level attribute ia, inheritable; T, an optional child m of
+// xs:int, the attribute a and a lax ##local {attribute wildcard}; and U, which restricts T to no child
+// and the attribute m of xs:string. Under T a key "m" is the child, whose "x" charges cvc-type, and
+// under U the attribute; an infoset built under the type the engine does not select charges otherwise —
+// a child m under U charges cvc-complex-type, and an attribute m under T, which its wildcard admits,
+// nothing — so each row's verdict tells the two selections apart. tu is of type T and selects U where
+// its a is "u", ti where its i:ia is "u", and tb where its i:ib is "u"; no top-level ib exists. p holds
+// an optional p and then an optional tu, and carries a, inheritable; pd carries a, inheritable,
+// defaulting to "u"; pn carries a, not inheritable, and pnd carries it defaulting to "u"; each holds an
+// optional tu. pw holds an optional ti and an optional tb under a lax {attribute wildcard} of urn:i, and
+// pk holds an optional ti under a skip one. pt is of type P0, which holds an optional tu, and PT extends
+// P0 with a, inheritable. po holds an optional x of type T that selects U where its a is "u", and has a
+// lax interleave {open content}; ps is po with a skip one. pr carries a, required, inheritable and fixed
+// to "u", and holds an optional tu. tn is of type T and selects U where its xsi:nil is "true", and px
+// holds an optional tn and carries xsi:nil, inheritable, defaulting to "true". wy holds an optional y of
+// type Yd and then a lax wildcard, and the top-level y is of type Yg: each holds an optional x of type
+// T, Yg's selecting U where its a is "u". mid, and mid2 of type M, hold an optional tu. H holds an
+// optional mid and an optional mid2 and carries a; H2 extends it with ib, inheritable, defaulting to
+// "v", and H3 with ic, not inheritable; H4 extends H2 with nothing. rw is of type H and selects H2 where
+// it counts an a, a {test} outside the §3.12.6 compiler's subset, and re selects H3 likewise. B holds an
+// optional tu and carries k; X holds an optional tu and carries a, inheritable, defaulting to "u", and
+// derives from no B; X2 extends B with that a, and N extends B with nothing. e is of type B, r holds an
+// e, and et is of type B and selects N where its k is "n"; pq holds one q of type B. Z0 holds an
+// optional tu, and Z1 extends it with a, inheritable, defaulting to "z"; z is of type Z0 and selects Z1
+// where its a is "u", and pa holds an optional z and carries a, inheritable. big's {content type} is one
+// xsd.Schema.ContentMatcher declines (its GAP(xsd) ceiling), holding mids.
 const inheritSchema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
     xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" targetNamespace="urn:i" xmlns:i="urn:i" elementFormDefault="qualified">
   <xs:attribute name="ia" type="xs:string" inheritable="true"/>
@@ -150,6 +143,7 @@ const inheritSchema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
   <xs:complexType name="H3">
     <xs:complexContent><xs:extension base="i:H"><xs:attribute name="ic" type="xs:string"/></xs:extension></xs:complexContent>
   </xs:complexType>
+  <xs:complexType name="H4"><xs:complexContent><xs:extension base="i:H2"/></xs:complexContent></xs:complexType>
   <xs:element name="rw" type="i:H"><xs:alternative test="count(@a) > 0" type="i:H2"/></xs:element>
   <xs:element name="re" type="i:H"><xs:alternative test="count(@a) > 0" type="i:H3"/></xs:element>
   <xs:complexType name="B">
@@ -168,6 +162,17 @@ const inheritSchema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
   <xs:element name="r"><xs:complexType><xs:sequence><xs:element ref="i:e"/></xs:sequence></xs:complexType></xs:element>
   <xs:element name="et" type="i:B"><xs:alternative test="@k = 'n'" type="i:N"/></xs:element>
   <xs:element name="pq"><xs:complexType><xs:sequence><xs:element name="q" type="i:B"/></xs:sequence></xs:complexType></xs:element>
+  <xs:complexType name="Z0"><xs:sequence><xs:element ref="i:tu" minOccurs="0"/></xs:sequence></xs:complexType>
+  <xs:complexType name="Z1">
+    <xs:complexContent><xs:extension base="i:Z0"><xs:attribute name="a" type="xs:string" default="z" inheritable="true"/></xs:extension></xs:complexContent>
+  </xs:complexType>
+  <xs:element name="z" type="i:Z0"><xs:alternative test="@a = 'u'" type="i:Z1"/></xs:element>
+  <xs:element name="pa">
+    <xs:complexType>
+      <xs:sequence><xs:element ref="i:z" minOccurs="0"/></xs:sequence>
+      <xs:attribute name="a" type="xs:string" inheritable="true"/>
+    </xs:complexType>
+  </xs:element>
   <xs:element name="big">
     <xs:complexType>
       <xs:sequence>
@@ -255,7 +260,11 @@ func TestInheritedSelected(t *testing.T) {
 // but not N, the one it selects where its k is "n", which then governs et
 // (walker.governOverriding). The second q of pq, which pq's content model rejects, has
 // no ·governing element declaration·, and X does not ·override· its ·locally declared
-// type· B, which governs it (key-governing-type-elem clause 7).
+// type· B, which governs it (key-governing-type-elem clause 7). The z of pa reads
+// pa's a, "u", among its [inherited attributes] and selects Z1, which Z0 does not
+// ·override· (cvc-elt clause 4), so Z1 governs z and hands tu its ·defaulted· a,
+// "z", the nearer, and tu, governed by T, takes m as a child
+// (walker.governOverriding).
 func TestOverriddenTypeHandsDown(t *testing.T) {
 	v := validatorOver(t, inheritSchema)
 	const i = `xmlns="urn:i" xmlns:i="urn:i" `
@@ -274,6 +283,8 @@ func TestOverriddenTypeHandsDown(t *testing.T) {
 			`<et ` + i + xsiDecl + ` xsi:type="i:X2" k="n"><tu><m>x</m></tu></et>`, charged},
 		{"a locally declared type it does not override", `{"pq":{"q":[{},{"$xmlns":{"i":"urn:i"},"$type":"i:X","tu":{"m":"x"}}]}}`,
 			`<pq ` + i + xsiDecl + `><q/><q xsi:type="i:X"><tu><m>x</m></tu></q></pq>`, []xsderr.Rule{"cvc-complex-content", "cvc-type"}},
+		{"a selection read with inherited attributes", `{"pa":{"a":"u","z":{"$xmlns":{"i":"urn:i"},"$type":"i:Z0","tu":{"m":"x"}}}}`,
+			`<pa ` + i + xsiDecl + ` a="u"><z xsi:type="i:Z0"><tu><m>x</m></tu></z></pa>`, charged},
 	} {
 		t.Run(tc.name, func(t *testing.T) { twin(t, v, tc.json, tc.xml, tc.want) })
 	}
@@ -349,5 +360,29 @@ func TestInheritedUndetermined(t *testing.T) {
 				t.Errorf("Validate(%s) = %q, want it to open %q", tc.json, err, tc.opens)
 			}
 		})
+	}
+}
+
+// TestInheritedBelowWithheld pins walker.handDown's alike rule below an element
+// whose selection the engine withholds: the mapping determines the [inherited
+// attributes] a child is handed wherever every type that may govern its parent
+// hands down the same ones, and a {type table} below reads its selection where
+// one type may govern that table's element's parent (walker.selector), while
+// the engine, walking each XML twin's subtree undecided, charges nothing. re's
+// selection is withheld, H and H3 hand down alike, and M governs mid2 under
+// both, so tu reads its own a and selects U; rw's "$type" names H4, which
+// ·overrides· both H and H2, so H4 alone may govern rw (walker.governOverriding).
+func TestInheritedBelowWithheld(t *testing.T) {
+	v := validatorOver(t, inheritSchema)
+	const i = `xmlns="urn:i" xmlns:i="urn:i" `
+	for _, tc := range []struct {
+		name, json, xml string
+	}{
+		{"types handing down alike", `{"re":{"a":"1","mid2":{"tu":{"a":"u","m":"x"}}}}`,
+			`<re ` + i + `a="1"><mid2><tu a="u" m="x"/></mid2></re>`},
+		{"a \"$type\" overriding every type the table can select", `{"rw":{"$xmlns":{"i":"urn:i"},"$type":"i:H4","a":"1","mid2":{"tu":{"a":"u","m":"x"}}}}`,
+			`<rw ` + i + xsiDecl + ` xsi:type="i:H4" a="1"><mid2><tu a="u" m="x"/></mid2></rw>`},
+	} {
+		t.Run(tc.name, func(t *testing.T) { twin(t, v, tc.json, tc.xml, none) })
 	}
 }
