@@ -86,10 +86,11 @@
 //	    and assessed against the -schema documents; its violations and
 //	    undecided checks print and exit as an XML instance's do, <loc>
 //	    being jsonsrc's line and byte column. A violation charged at a
-//	    member jsonsrc names in JSON terms — a key no declaration,
-//	    attribute use or wildcard of its parent's type carries, a member
-//	    of an object whose type is simple, a scalar whose type admits no
-//	    character content — ends with a clause, opening ; JSON member,
+//	    member jsonsrc names in JSON terms — a key no declaration or
+//	    attribute use of its parent's type carries where that type has
+//	    no wildcard, a member of an object whose type is simple, a
+//	    scalar whose type admits no character content — ends with a
+//	    clause, opening ; JSON member,
 //	    that names the member's key as spelled and what was expected.
 //	    An input jsonsrc's mapping declines, malformed JSON, content
 //	    after the top-level object and an I/O fault reading the

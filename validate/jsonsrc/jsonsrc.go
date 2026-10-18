@@ -121,15 +121,21 @@ func WithURI(uri string) Option {
 // where the charge names a member the mapping can place in the instance's own
 // terms, the member's key as spelled leading it:
 //
-//   - a cvc-complex-content charge at a child member no child element
-//     declaration, attribute use or wildcard of its parent's type names: the
-//     clause lists the keys the type carries, and, for a key that is an
-//     attribute use's name behind one "@", "_" or "-", names that name as the
-//     key;
-//   - a cvc-type charge at a member of the object of an element whose type
-//     is a simple type: scalar expected;
-//   - a cvc-complex-type charge at the scalar of an element whose declared
-//     {type definition} has empty or element-only content: object expected.
+//   - the cvc-complex-content charge the parent's content model makes at a
+//     child member that no child element declaration and no attribute use of
+//     the parent's type names, where that type has no element wildcard and no
+//     {attribute wildcard}: the clause lists the keys the type carries, and,
+//     for a key that is an attribute use's name behind one "@", "_" or "-",
+//     names that name as the key;
+//   - the cvc-type clause 3.1.2 charge at the first child member of the object of
+//     an element whose type is a simple type: scalar expected;
+//   - the cvc-complex-type charge at the scalar of an element whose type has
+//     empty or element-only content: object expected.
+//
+// A clause answers that one charge, never another the engine makes at the
+// same rule and location, and is appended only where the mapping settles
+// which type governs the element the charge names (walker.noteUnnamed's and
+// walker.noteCharacters' GAP(jsonsrc) markers).
 func Validate(v *validate.Validator, r io.Reader, opts ...Option) (*validate.Result, error) {
 	if v == nil {
 		return nil, fmt.Errorf("jsonsrc: Validate: nil *validate.Validator")
@@ -194,8 +200,9 @@ type walker struct {
 	// and none keeps a copy of it (STYLE D3).
 	err error
 	// notes is what the mapping knows, in JSON terms, about each member the
-	// engine may charge at its location (walker.annotate).
-	notes map[xsderr.Loc]note
+	// engine charges, kept by the rule and location of the charge it answers
+	// (walker.annotate).
+	notes map[noteAt]note
 }
 
 func newWalker(uri string, r io.Reader, schema validate.SchemaView, selected func(xsd.TypeTable, []validate.Attribute, []validate.Attribute) (xsd.TypeDefinitionOrRef, bool)) *walker {
@@ -204,7 +211,7 @@ func newWalker(uri string, r io.Reader, schema validate.SchemaView, selected fun
 	// A number's lexical form is its source text, never a float64 round trip:
 	// 12345678901234567890 under xs:integer is that integer.
 	dec.UseNumber()
-	return &walker{dec: dec, pos: pos, uri: uri, schema: schema, selected: selected, notes: map[xsderr.Loc]note{}}
+	return &walker{dec: dec, pos: pos, uri: uri, schema: schema, selected: selected, notes: map[noteAt]note{}}
 }
 
 // token pulls the next token and the location it starts at.
@@ -449,10 +456,6 @@ type object struct {
 	// (walker.attributes), and below the root a key maps only where each
 	// classifies it as the declaration's type does (walker.classify).
 	selectable []*object
-	// simpleType is the type being a Simple Type Definition, whose object has
-	// no member a declaration, a use or a wildcard names: cvc-type clause 3.1.2
-	// charges each child member (unnamed.hint).
-	simpleType bool
 	// undeclared is the owner having no declaration: a child wildcardMember
 	// names whose expanded name no top-level declaration carries (bareElement),
 	// which has no type to classify a member against.
@@ -480,51 +483,98 @@ type object struct {
 
 // governingType is one type that may govern an object's owner
 // (object.governing), with matcher, its content model, fed the owner's child
-// elements in document order (object.attribute): nil where it has no element
-// content, and from the first child it rejects on, after which validate
-// advances it no further (validate's contentCheck.element).
+// elements in document order (object.attribute), nil where it has no element
+// content; and closed, the owner's content having been charged at a child
+// under it, after which validate's content check charges no further child
+// and advances the matcher no further (validate's contentCheck.charged).
 type governingType struct {
 	typ     xsd.TypeDefinition
 	matcher *xsd.Matcher
+	closed  bool
 }
 
 // attribute feeds name, the expanded name of the owner's next child element,
-// to the matcher of each of o.governing, and returns what each ·attributes·
-// that child to (§3.4.4.4), in o.governing's order: nil where nothing does —
-// no element content, or a child at or before it rejected (cvc-complex-content
-// charges the parent) — and false where the mapping cannot attribute it
+// to the matcher of each of o.governing, and returns, in o.governing's order,
+// what each ·attributes· that child to (§3.4.4.4), nil where nothing does, and
+// the rule each charges the owner under at that child, "" where it charges
+// none (contentCharge); false where the mapping cannot attribute it
 // (object.unattributed, or o.governing empty). Every child element of the
 // owner is fed in document order, whatever its value, as validate's walk feeds
 // its matcher, so each attribution depends on the siblings before it alone
 // (STYLE P4).
-func (o *object) attribute(name xsd.QName) ([]xsd.Attribution, bool) {
+//
+// Under each type the owner's content is charged at the first child its
+// matcher rejects, and at its first child where it has no matcher, and at no
+// child after that one, as validate's contentCheck.element charges: an object
+// spells no character content, so no charge of the owner's text closes the
+// check first, and a null, xsi:nil's one spelling, has no members.
+func (o *object) attribute(name xsd.QName) ([]xsd.Attribution, []xsderr.Rule, bool) {
 	if len(o.governing) == 0 || o.unattributed {
-		return nil, false
+		return nil, nil, false
 	}
 	as := make([]xsd.Attribution, len(o.governing))
+	charges := make([]xsderr.Rule, len(o.governing))
 	for i := range o.governing {
 		gt := &o.governing[i]
-		if gt.matcher == nil {
+		if gt.closed {
 			continue
 		}
-		a, ok := gt.matcher.Next(name)
-		if !ok {
-			gt.matcher = nil
+		if gt.matcher != nil {
+			if a, ok := gt.matcher.Next(name); ok {
+				as[i] = a
+				continue
+			}
 		}
-		as[i] = a
+		gt.closed = true
+		charges[i] = contentCharge(gt.typ)
 	}
-	return as, true
+	return as, charges, true
+}
+
+// contentCharge is the rule validate's contentCheck.element charges an
+// element governed by t under at the element information item [[child]] it
+// charges: cvc-type clause 3.1.2 under a simple type, cvc-complex-content at a
+// child the content model ·attributes· to nothing where the {content type}
+// has element content, and cvc-complex-type clauses 1.1 and 1.2 where it is
+// empty or simple.
+func contentCharge(t xsd.TypeDefinition) xsderr.Rule {
+	ct, ok := t.(xsd.ComplexType)
+	if !ok {
+		return ruleCvcType
+	}
+	if _, element := ct.ContentType().(xsd.ElementContent); element {
+		return ruleCvcComplexContent
+	}
+	return ruleCvcComplexType
 }
 
 // placement is where a child element stands among its parent's members:
 // parent, the object it is a member of, nil for the root; a, what each of
 // parent.governing ·attributes· it to, in its order, nil where nothing does;
-// and attributed, false where the mapping cannot attribute it
+// charges, the rule each charges the parent under at it, "" where it charges
+// none; and attributed, false where the mapping cannot attribute it
 // (object.attribute).
 type placement struct {
 	parent     *object
 	a          []xsd.Attribution
+	charges    []xsderr.Rule
 	attributed bool
+}
+
+// parentCharge is the rule the parent's content is charged under at the
+// child at stands for, "" where it is charged none, whichever of
+// parent.governing governs the parent; false where those differ or the
+// mapping cannot attribute the child.
+func (at placement) parentCharge() (xsderr.Rule, bool) {
+	if !at.attributed {
+		return "", false
+	}
+	for _, r := range at.charges[1:] {
+		if r != at.charges[0] {
+			return "", false
+		}
+	}
+	return at.charges[0], true
 }
 
 // member is one key's classification, a closed sum of two arms: an
@@ -1274,8 +1324,8 @@ func (w *walker) element(m elementMember, loc xsderr.Loc, key string, v value, i
 	var at placement
 	if in != nil {
 		at.parent = in.object
-		at.a, at.attributed = in.object.attribute(m.elementName())
-		w.noteUnnamed(m, loc, key, in)
+		at.a, at.charges, at.attributed = in.object.attribute(m.elementName())
+		w.noteUnnamed(m, loc, key, in, at)
 	}
 	switch t := v.tok.(type) {
 	case nil:
@@ -1292,7 +1342,7 @@ func (w *walker) element(m elementMember, loc xsderr.Loc, key string, v value, i
 	if !ok {
 		panic(fmt.Sprintf("jsonsrc: Token yielded %T", v.tok))
 	}
-	w.noteCharacters(m, key, lexical, v.loc)
+	w.noteCharacters(m, key, lexical, v.loc, at)
 	return w.scalar(m.elementName(), loc, lexical, v.loc, v.scope), nil
 }
 
@@ -1913,7 +1963,7 @@ func (w *walker) object(owner xsd.QName, td xsd.TypeDefinition) *object {
 		}
 		return o
 	case *xsd.SimpleType:
-		return &object{owner: owner, simpleType: true}
+		return &object{owner: owner}
 	}
 	panic(fmt.Sprintf("jsonsrc: TypeDefinition arm %T", td))
 }

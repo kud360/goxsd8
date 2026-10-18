@@ -10,67 +10,87 @@ import (
 	"github.com/kud360/goxsd8/xsderr"
 )
 
-// The engine rules whose charges a note extends (note.hint).
+// The engine rules whose charges a note answers, and that validate's
+// contentCheck.element charges a parent's content under (contentCharge).
 const (
 	ruleCvcType           xsderr.Rule = "cvc-type"
 	ruleCvcComplexType    xsderr.Rule = "cvc-complex-type"
 	ruleCvcComplexContent xsderr.Rule = "cvc-complex-content"
 )
 
-// note is what the mapping knows about one member, in the instance's own
-// terms, kept at the location the engine charges that member at: hint is the
-// clause [Validate] appends to the Msg of a charge of rule there, and "" for
-// a rule the note says nothing about. Its arms are characters and unnamed.
-type note interface {
-	hint(rule xsderr.Rule) string
+// noteAt is the charge a note answers: its rule and its location.
+type noteAt struct {
+	loc  xsderr.Loc
+	rule xsderr.Rule
 }
 
-// characters is a scalar member whose element's declared {type definition}
-// admits no character content, kept at the scalar's location: key is the
-// member's key as spelled, an array item's being its array's, and lexical the
-// scalar's lexical form (walker.noteCharacters).
+// note is what the mapping knows about one member, in the instance's own
+// terms, kept at the charge it answers (noteAt): hint is the clause
+// [Validate] appends to that charge's Msg, and own reports whether the charge
+// is the element's own, which follows any charge its parent makes at the same
+// rule and location, rather than the parent's, which precedes every charge of
+// the element's (walker.annotate). Its arms are characters, scalarExpected and
+// unnamed.
+type note interface {
+	hint() string
+	own() bool
+}
+
+// characters is a scalar member whose element has no type that admits
+// character content, kept at the cvc-complex-type charge at the scalar's
+// location: key is the member's key as spelled, an array item's being its
+// array's, and lexical the scalar's lexical form (walker.noteCharacters).
 type characters struct {
 	key, lexical string
 }
 
-// hint answers a cvc-complex-type charge. The engine charges that rule at a
-// character information item's location under clause 1.1, where the
-// {content type} is empty, and clause 1.3, where it is element-only and the
-// text is not white space; a JSON object spells either element's content, and
-// a scalar spells none.
-func (c characters) hint(rule xsderr.Rule) string {
-	if rule != ruleCvcComplexType {
-		return ""
-	}
+// hint answers the element's own cvc-complex-type charge, which the engine
+// makes at a character information item's location under clause 1.1, where
+// the {content type} is empty, and clause 1.3, where it is element-only and
+// the text is not white space; a JSON object spells either element's content,
+// and a scalar spells none.
+func (c characters) hint() string {
 	return fmt.Sprintf("; JSON member %q has the scalar value %q, where the type of its element admits no character content: object expected, {%q:{...}}",
 		c.key, c.lexical, c.key)
 }
 
-// unnamed is a child member no child element declaration, no attribute use
-// and no wildcard of its parent's type names (object.namesNone), kept at the
-// member's location: key is its key as spelled, owner the parent's, and
-// object what the parent's members are classified against
-// (walker.noteUnnamed).
+// own is true: at an array item, whose location is its scalar's, the parent's
+// cvc-complex-type charge where its {content type} is empty or simple
+// precedes it.
+func (characters) own() bool { return true }
+
+// scalarExpected is the first child member of the object of an element whose
+// type is a simple type, kept at the cvc-type charge clause 3.1.2 makes there
+// (walker.noteUnnamed): key is the member's key as spelled, and owner the
+// parent's.
+type scalarExpected struct {
+	key, owner string
+}
+
+// hint answers the parent's cvc-type clause 3.1.2 charge.
+func (s scalarExpected) hint() string {
+	return fmt.Sprintf("; JSON member %q is a member of the object of %q, whose type is a simple type: scalar expected, {%q:<string, number or boolean>}",
+		s.key, s.owner, s.owner)
+}
+
+func (scalarExpected) own() bool { return false }
+
+// unnamed is a child member no child element declaration and no attribute use
+// of its parent's type names, where that type has no element wildcard and no
+// {attribute wildcard} (object.namesNone), kept at the cvc-complex-content
+// charge the parent's content model makes at the member's location
+// (walker.noteUnnamed): key is its key as spelled, owner the parent's, and
+// object what the parent's members are classified against.
 type unnamed struct {
 	key, owner string
 	object     *object
 }
 
-// hint answers a cvc-type charge where the parent's type is a simple type,
-// whose element cvc-type clause 3.1.2 charges at its first child, and a
-// cvc-complex-content charge where it is a complex type, which charges a child
-// the content model ·attributes· to no particle at the child's location. It
-// names the keys the type does carry, its attribute uses' and then its child
-// declarations' local names, and, for a key that is one use's local name
-// behind one "@", "_" or "-", the key that names it.
-func (u unnamed) hint(rule xsderr.Rule) string {
-	if u.object.simpleType && rule == ruleCvcType {
-		return fmt.Sprintf("; JSON member %q is a member of the object of %q, whose type is a simple type: scalar expected, {%q:<string, number or boolean>}",
-			u.key, u.owner, u.owner)
-	}
-	if u.object.simpleType || rule != ruleCvcComplexContent {
-		return ""
-	}
+// hint answers the parent's cvc-complex-content charge. It names the keys the
+// type does carry, its attribute uses' and then its child declarations' local
+// names, and, for a key that is one use's local name behind one "@", "_" or
+// "-", the key that names it.
+func (u unnamed) hint() string {
 	var keys, uses []string
 	for _, a := range u.object.uses {
 		uses = append(uses, a.DeclarationName().Local)
@@ -91,6 +111,8 @@ func (u unnamed) hint(rule xsderr.Rule) string {
 	return hint
 }
 
+func (unnamed) own() bool { return false }
+
 // appendKey appends local, quoted as a key spells it, to keys unless it is
 // there already.
 func appendKey(keys []string, local string) []string {
@@ -104,7 +126,8 @@ func appendKey(keys []string, local string) []string {
 // namesNone reports whether m, a member classified against o, is a child no
 // declaration o contains, no use and no wildcard of its type names: the child
 // walker.wildcardMember names through namedChild where the type has no
-// wildcard, a declaredElement it contains being one it names.
+// element wildcard and no {attribute wildcard}, a declaredElement it contains
+// being one it names.
 func (o *object) namesNone(m elementMember) bool {
 	if len(o.elementWildcards) > 0 || o.attributeWildcard != nil {
 		return false
@@ -115,53 +138,129 @@ func (o *object) namesNone(m elementMember) bool {
 	return true
 }
 
-// noteUnnamed keeps an unnamed note at loc, for the child member key that m
-// classifies under in's object, where that object's type names none of it
-// (object.namesNone). The notes kept grow with the members no type names, not
-// with the document (STYLE P4).
-func (w *walker) noteUnnamed(m elementMember, loc xsderr.Loc, key string, in *members) {
-	if !in.object.namesNone(m) {
+// noteUnnamed keeps a note at loc, for the child member key that m classifies
+// under in's object, standing at at, where that object's type names none of
+// it (object.namesNone) and the parent's content is charged there
+// (placement.parentCharge): a scalarExpected at cvc-type clause 3.1.2's
+// charge, and an unnamed at cvc-complex-content's. The notes kept grow with
+// the members no type names, not with the document (STYLE P4).
+//
+// GAP(jsonsrc): no note is kept where the types that may govern the parent
+// differ on the charge at the member, a {type table} below the root
+// selecting among them by a {test} the mapping does not evaluate (selection),
+// though the engine charges the one it selects; the charge carries no clause.
+// Owned by #2699, which computes the [inherited attributes] such a {test}
+// reads.
+//
+// GAP(jsonsrc): no note is kept where the mapping attributes none of the
+// parent's children (object.unattributed), xsd.Schema.ContentMatcher
+// declining the content model of a type that may govern it; the charge
+// carries no clause. Owned by #2670, which retires with #1601's ruling.
+func (w *walker) noteUnnamed(m elementMember, loc xsderr.Loc, key string, in *members, at placement) {
+	rule, settled := at.parentCharge()
+	if !settled || !in.object.namesNone(m) {
 		return
 	}
-	w.notes[loc] = unnamed{key: key, owner: in.owner.key, object: in.object}
+	switch rule {
+	case ruleCvcType:
+		w.notes[noteAt{loc: loc, rule: rule}] = scalarExpected{key: key, owner: in.owner.key}
+	case ruleCvcComplexContent:
+		w.notes[noteAt{loc: loc, rule: rule}] = unnamed{key: key, owner: in.owner.key, object: in.object}
+	}
 }
 
 // noteCharacters keeps a characters note at loc, the location of the scalar
-// whose lexical form is lexical, for the member key that m classifies, where
-// lexical is not empty and m's declaration's {type definition} is a complex
-// type whose {content type} is empty or element-only. The {type definition}
-// bounds the notes kept to the scalars the engine charges, the document never
-// being held (STYLE P4); a type a {type table} selects instead is not read,
-// and a charge under one carries no hint.
-func (w *walker) noteCharacters(m elementMember, key, lexical string, loc xsderr.Loc) {
+// whose lexical form is lexical, for the member key that m classifies,
+// standing at at, where lexical is not empty and each type that may govern
+// its element (walker.scalarTypes) is a complex type whose {content type} is
+// empty or element-only. The types bound the notes kept to the scalars the
+// engine charges, the document never being held (STYLE P4).
+//
+// GAP(jsonsrc): no note is kept where those types differ on whether their
+// {content type} admits the scalar, a {type table} below the root selecting
+// among them by a {test} the mapping does not evaluate (selection), though
+// the engine charges the one it selects; the charge carries no clause. Owned
+// by #2699, which computes the [inherited attributes] such a {test} reads.
+//
+// GAP(jsonsrc): no note is kept where the mapping attributes none of the
+// element's siblings (object.unattributed), so that no type is determined to
+// govern it; the charge carries no clause. Owned by #2670, which retires with
+// #1601's ruling.
+func (w *walker) noteCharacters(m elementMember, key, lexical string, loc xsderr.Loc, at placement) {
 	d, ok := m.(declaredElement)
 	if !ok || lexical == "" {
 		return
 	}
-	t, ok := w.schema.ResolvedType(d.decl.TypeDefinition())
-	if !ok {
+	ts := w.scalarTypes(d, at)
+	if len(ts) == 0 {
 		return
 	}
-	ct, ok := t.(xsd.ComplexType)
-	if !ok {
-		return
+	for _, t := range ts {
+		ct, ok := t.(xsd.ComplexType)
+		if !ok {
+			return
+		}
+		if v := ct.ContentType().Variety(); v != xsd.ContentEmpty && v != xsd.ContentElementOnly {
+			return
+		}
 	}
-	if v := ct.ContentType().Variety(); v != xsd.ContentEmpty && v != xsd.ContentElementOnly {
-		return
-	}
-	w.notes[loc] = characters{key: key, lexical: lexical}
+	w.notes[noteAt{loc: loc, rule: ruleCvcComplexType}] = characters{key: key, lexical: lexical}
 }
 
-// annotate appends to the Msg of each violation of res that a note is kept at
-// the location of the clause that note's hint gives its rule. The violations
-// are res's own *xsderr.Error values, so the result Validate returns carries
-// the extended messages; the rule ID and location stay the engine's.
+// scalarTypes is each type that may govern the scalar-valued element d
+// declares, standing at at: below the root, walker.governing's; at the root,
+// the type d's {type table} selects where it carries one, which the root's
+// attributes, none for a scalar, decide alone (key-cta-ta-select clause
+// 1.1.2, key-p-inherited clause 1), and d's {type definition} otherwise. It is
+// empty where none is determined.
+func (w *walker) scalarTypes(d declaredElement, at placement) []xsd.TypeDefinition {
+	table, tabled := d.decl.TypeTable()
+	if at.parent == nil && tabled {
+		slot, decided := w.selected(table, nil, nil)
+		if !decided {
+			return nil
+		}
+		t, ok := w.schema.ResolvedType(slot)
+		if !ok {
+			return nil
+		}
+		return []xsd.TypeDefinition{t}
+	}
+	declared, ok := w.schema.ResolvedType(d.decl.TypeDefinition())
+	if !ok {
+		return nil
+	}
+	return w.governing(d.decl, declared, at)
+}
+
+// annotate appends to the Msg of each violation of res that a note answers
+// the clause that note's hint gives: a note kept at a charge's rule and
+// location answers the first violation there where the charge is the
+// parent's, and the last where it is the element's own (note.own), so that a
+// note answers neither the parent's charge nor the element's at a rule and
+// location they share. Writing Msg through res.Violations() writes res's own
+// violations, as validate.Result.Violations states; the rule ID and location
+// stay the engine's.
 func (w *walker) annotate(res *validate.Result) {
+	var answers []*xsderr.Error
+	answered := map[noteAt]int{}
 	for _, e := range res.Violations() {
-		n, ok := w.notes[e.Loc]
+		at := noteAt{loc: e.Loc, rule: e.Rule}
+		n, ok := w.notes[at]
 		if !ok {
 			continue
 		}
-		e.Msg += n.hint(e.Rule)
+		i, seen := answered[at]
+		if !seen {
+			answered[at] = len(answers)
+			answers = append(answers, e)
+			continue
+		}
+		if n.own() {
+			answers[i] = e
+		}
+	}
+	for _, e := range answers {
+		e.Msg += w.notes[noteAt{loc: e.Loc, rule: e.Rule}].hint()
 	}
 }
