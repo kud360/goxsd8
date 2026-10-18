@@ -335,11 +335,9 @@ func TestNoGoverningDeclaration(t *testing.T) {
 // an attribute under U, declines, where the engine walks each XML twin's
 // subtree undecided. rw's selection is withheld, and the types it may select,
 // H and H2, hand down different attributes, H2 a ·defaulted· ib (walker.handDown),
-// so neither mid nor mid2, governed by M alone, hands down any determined; re's is
-// withheld too, and H and H3 hand down alike, but mid may be governed by its
-// anonymous type under each, which walker.selector counts as two types governing
-// tu's parent; big's content model is one xsd.Schema.ContentMatcher declines, so mid
-// is attributed to nothing. It pins walker.instanceGoverned's marker of the same
+// so neither mid nor mid2, governed by M alone, hands down any determined; big's
+// content model is one xsd.Schema.ContentMatcher declines, so mid is attributed to
+// nothing. It pins walker.instanceGoverned's marker of the same
 // ruling too: ro's selection is withheld, and Z0, which does not ·override· T, c's
 // ·locally declared type·, leaves T governing c under O1's {open content} and
 // charges c under O2, which has none, so the "$type" settles differently under the
@@ -356,9 +354,6 @@ func TestInheritedUndetermined(t *testing.T) {
 		{"below a withheld selection, under one named type", `{"rw":{"a":"1","mid2":{"tu":{"a":"u","m":"x"}}}}`,
 			`<rw xmlns="urn:i" a="1"><mid2><tu a="u" m="x"/></mid2></rw>`,
 			`jsonsrc: instance.json:1:38: member "m" of {urn:i}tu is not classified alike`},
-		{"below a withheld selection whose types hand down alike", `{"re":{"a":"1","mid":{"tu":{"a":"u","m":"x"}}}}`,
-			`<re xmlns="urn:i" a="1"><mid><tu a="u" m="x"/></mid></re>`,
-			`jsonsrc: instance.json:1:37: member "m" of {urn:i}tu is not classified alike`},
 		{"a \"$type\" below a withheld selection", `{"ro":{"a":"1","c":{"$xmlns":{"i":"urn:i"},"$type":"i:Z0"}}}`,
 			`<ro xmlns="urn:i" xmlns:i="urn:i" ` + xsiDecl + ` a="1"><c xsi:type="i:Z0"/></ro>`,
 			`jsonsrc: instance.json:1:44: the "$type" member of {urn:i}c: the types the {type table} of {urn:i}ro`},
@@ -392,7 +387,10 @@ func TestInheritedUndetermined(t *testing.T) {
 // one type may govern that table's element's parent (walker.selector), while
 // the engine, walking each XML twin's subtree undecided, charges nothing. re's
 // selection is withheld, H and H3 hand down alike, and M governs mid2 under
-// both, so tu reads its own a and selects U; rw's "$type" names H4, which
+// both, so tu reads its own a and selects U; mid's anonymous type governs it
+// under both, which gathered keeps once (walker.governing), as it does where
+// mid's "$type" names M, which ·overrides· no type of mid's and leaves that one
+// governing it (walker.instanceGoverning); rw's "$type" names H4, which
 // ·overrides· both H and H2, so H4 alone may govern rw (walker.governOverriding).
 func TestInheritedBelowWithheld(t *testing.T) {
 	v := validatorOver(t, inheritSchema)
@@ -402,6 +400,10 @@ func TestInheritedBelowWithheld(t *testing.T) {
 	}{
 		{"types handing down alike", `{"re":{"a":"1","mid2":{"tu":{"a":"u","m":"x"}}}}`,
 			`<re ` + i + `a="1"><mid2><tu a="u" m="x"/></mid2></re>`},
+		{"one anonymous type under types handing down alike", `{"re":{"a":"1","mid":{"tu":{"a":"u","m":"x"}}}}`,
+			`<re ` + i + `a="1"><mid><tu a="u" m="x"/></mid></re>`},
+		{"one anonymous type under a \"$type\" it is not overridden by", `{"re":{"a":"1","mid":{"$xmlns":{"i":"urn:i"},"$type":"i:M","tu":{"a":"u","m":"x"}}}}`,
+			`<re ` + i + xsiDecl + ` a="1"><mid xsi:type="i:M"><tu a="u" m="x"/></mid></re>`},
 		{"a \"$type\" overriding every type the table can select", `{"rw":{"$xmlns":{"i":"urn:i"},"$type":"i:H4","a":"1","mid2":{"tu":{"a":"u","m":"x"}}}}`,
 			`<rw ` + i + xsiDecl + ` xsi:type="i:H4" a="1"><mid2><tu a="u" m="x"/></mid2></rw>`},
 	} {

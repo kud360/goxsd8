@@ -1599,7 +1599,7 @@ func (w *walker) govern(o *object, ts []xsd.TypeDefinition) {
 // root's is d's, walker.declarationType: d is its ·governing element
 // declaration·. Below the root it is, for each type P that may govern the
 // parent, what governingUnder reads off what P ·attributes· it to (at.a,
-// object.attribute), each type once (appendTypes). Where the mapping reads the
+// object.attribute), as gathered collects them. Where the mapping reads the
 // selection of a {type table} among them (walker.selector), walker.settled or
 // walker.take replaces them with the one type the table selects once the
 // element's attributes are read.
@@ -1621,15 +1621,15 @@ func (w *walker) governing(d xsd.ElementDeclaration, declared xsd.TypeDefinition
 	if !ok || !at.attributed {
 		return nil
 	}
-	var types []xsd.TypeDefinition
+	unders := make([][]xsd.TypeDefinition, 0, len(at.parent.governing))
 	for i, p := range at.parent.governing {
 		under := w.governingUnder(g, d.Name(), declared, p.typ, at.a[i])
 		if len(under) == 0 {
 			return nil
 		}
-		types = appendTypes(types, under)
+		unders = append(unders, under)
 	}
-	return types
+	return gathered(unders)
 }
 
 // governingUnder is each type that may govern an element named name, whose
@@ -1761,11 +1761,54 @@ func tableAlternatives(table xsd.TypeTable) []xsd.TypeAlternative {
 	return append(table.Alternatives(), table.DefaultTypeDefinition())
 }
 
+// gathered is the types that may govern an element below the root, given
+// unders, what each type that may govern its parent gives it, in that type's
+// order (walker.governing, walker.instanceGoverning): the first's one type
+// where each gives one type and every one is that type (oneType), and
+// otherwise each of every one, appendTypes keeping each named type once.
+//
+// oneType is the type's identity there. Each one type is named, or anonymous
+// with a {context} D: D's {type definition}, which a declaration taking its
+// type from D as its substitution-group head shares, or the type of the one
+// Type Alternative of D's {type table} where the table can select no other —
+// walker.declarationType's one type, a ·locally declared type·, the {type
+// definition} of the declaration the element's members are classified by
+// under a skip ·attribution·, or one walker.instanceUnder settles a "$type"
+// on. Two of D's {type definition}s are one (§3.4.6.5, the type definitions
+// of two element declarations discovered to be the same declaration), and
+// two tables that can select one anonymous type of {context} D are D's one
+// table. An anonymous {type definition} of D and an anonymous type of D's
+// table are never both there: e-props-correct clause 7 makes the
+// alternative's type ·xs:error·, which is named, or ·validly substitutable·
+// for the {type definition}, which an anonymous type is only by deriving from
+// it, and an anonymous type is no {base type definition} another type can
+// name. So walker.selector reads a selection below a parent one anonymous
+// type governs under every type that may govern the grandparent. It is nil
+// where unders is.
+func gathered(unders [][]xsd.TypeDefinition) []xsd.TypeDefinition {
+	if len(unders) == 0 {
+		return nil
+	}
+	if !slices.ContainsFunc(unders, func(u []xsd.TypeDefinition) bool { return len(u) != 1 || !oneType(u[0], unders[0][0]) }) {
+		return unders[0]
+	}
+	var types []xsd.TypeDefinition
+	for _, under := range unders {
+		types = appendTypes(types, under)
+	}
+	return types
+}
+
 // appendTypes appends to types each of ts no member of types is the same
 // named type as (sameNamed), so that a set of types that may govern an
 // element holds each named type once however deeply {type table}s nest above
-// it. An anonymous type is appended however often it recurs. Every reader
-// settles its answer under each member alike, so a repeat changes no answer.
+// it. An anonymous type is appended however often it recurs: oneType does not
+// tell the types of one {type table} apart. gathered keeps one type where every
+// type that may govern the parent gives the element that one, so a repeat
+// stays only beside a type it may differ from, where walker.selector's count
+// reads no selection with or without it; every other reader — walker.handDown,
+// walker.instanceGoverned, object.attribute — settles its answer under each
+// member alike, so a repeat changes no answer.
 func appendTypes(types, ts []xsd.TypeDefinition) []xsd.TypeDefinition {
 	for _, t := range ts {
 		if !slices.ContainsFunc(types, func(u xsd.TypeDefinition) bool { return sameNamed(t, u) }) {
@@ -1911,10 +1954,10 @@ func (w *walker) instanceGoverning(o *object, e *element, typ *attribute, d xsd.
 	if !at.attributed {
 		return nil
 	}
-	var types []xsd.TypeDefinition
+	unders := make([][]xsd.TypeDefinition, 0, len(at.parent.governing))
 	for i, p := range at.parent.governing {
 		if skips(at.a[i]) {
-			types = appendTypes(types, []xsd.TypeDefinition{td})
+			unders = append(unders, []xsd.TypeDefinition{td})
 			continue
 		}
 		dd, declares, t := w.governs(g, d.Name(), declared, p.typ, at.a[i])
@@ -1932,9 +1975,9 @@ func (w *walker) instanceGoverning(o *object, e *element, typ *attribute, d xsd.
 		if len(under) == 0 {
 			return nil
 		}
-		types = appendTypes(types, under)
+		unders = append(unders, under)
 	}
-	w.govern(o, types)
+	w.govern(o, gathered(unders))
 	return nil
 }
 
