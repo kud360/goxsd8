@@ -83,10 +83,9 @@
 // by an attribute of its own earlier in the order listed above (§4.2.2's
 // order, not the start tag's) — since S2 does not carry it. A retained
 // construct that references a declaration §4.2.2 removed is a reference to
-// nothing, and is treated as any unresolved QName is: rejected under
-// src-resolve in every slot but {substitution group affiliations}, which
-// keeps it as an ·absent· member — see the §5.3 bullet under Composition
-// gaps.
+// nothing, and is treated as any unresolved QName is: the §5.3 bullet under
+// Composition gaps states which slots reject it under src-resolve and which
+// one keeps it as an ·absent· member.
 //
 // It runs FIRST, before every other pre-processing kind and before any
 // directive of the document is followed, which is what makes a declaration
