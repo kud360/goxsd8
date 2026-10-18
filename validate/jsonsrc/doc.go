@@ -348,14 +348,19 @@
 //	"$type" or "$xmlns" value malformed   a string "$type"; a "$xmlns" binding
 //	                                        each NCName prefix once, not xml or
 //	                                        xmlns, to a non-empty name
-//	"$type" a {type table} settles        none in the input; an open gap
+//	"$type" a {type table} settles        none: a permanent limitation
 //	  differently below a withheld
-//	  selection, or under a parent
-//	  whose type is undetermined
+//	  selection
+//	"$type" under a parent whose type     none in the input; an open gap
+//	  is undetermined
 //	other "$" member                      key it by its own name, with no "$"
 //	array item that is an array           an object, a scalar or null item
+//	member a {type table}'s types         none: a permanent limitation
+//	  classify differently, at or below
+//	  a withheld selection
 //	member a {type table}'s types         none in the input; an open gap
-//	  classify differently, unselected
+//	  classify differently, below an
+//	  unattributed element
 //	unresolved {type definition}          none: a permanent limitation
 //
 // An input the implemented arms do not map is a [*DeclineError] from

@@ -705,9 +705,11 @@ func (b bareElement) object(*walker, *element, *attribute, placement, xsderr.Loc
 // no {type table}. The mapping determines the [inherited attributes] an
 // element hands its children wherever every type that may govern it hands
 // down the same ones (walker.handDown), and reads a selection below where it
-// determines them and one type may govern the parent (walker.selector); where
-// the types hand down differently, or several may govern the parent, it reads
-// none and classifies the members alike here. RULED permanent by #2702:
+// determines them and one type may govern the parent (walker.selector), as it
+// does where every type that may govern the grandparent gives the parent one
+// type (gathered); where the types hand down differently, or the types that
+// may govern the grandparent give the parent distinct ones, it reads none and
+// classifies the members alike here. RULED permanent by #2702:
 // selecting past a withheld key-cta-select alternative is unsound, and
 // classifying the member under one type the withheld table can select, or
 // under the type a table below selects from what that one alone hands down,
@@ -1379,7 +1381,8 @@ func (w *walker) objectElement(m elementMember, loc xsderr.Loc, v value, at plac
 // the element's members are classified under declared alone.
 //
 // It is d, unread, where the mapping determines no [inherited attributes]
-// for the element, or several types may govern its parent, or it attributes
+// for the element, or several types may govern its parent, which gathered
+// keeps only where they need not be one type, or it attributes
 // the element to nothing (placement.attributed): the members are then
 // classified alike under every type d's table can select (walker.classify),
 // and a "$type" below settled alike under each (walker.instanceGoverned),
@@ -1863,10 +1866,10 @@ func openContent(t xsd.ComplexType) bool {
 // table} selection the engine withholds, a {test} it reaches being outside its
 // §3.12.6 compiler's subset, where the engine walks the XML twin undecided, and
 // where the types that may govern the grandparent hand down differently, or
-// several may govern it, as walker.classify's marker of the same ruling says.
-// RULED permanent by #2702: selecting past a withheld key-cta-select
-// alternative is unsound, and settling the "$type" under one type the withheld
-// table can select would select past it.
+// give the parent distinct types (gathered), as walker.classify's marker of
+// the same ruling says. RULED permanent by #2702: selecting past a withheld
+// key-cta-select alternative is unsound, and settling the "$type" under one
+// type the withheld table can select would select past it.
 //
 // GAP(jsonsrc): a "$type" declines where the content model of its
 // grandparent's ·governing type definition· is one xsd.Schema.ContentMatcher
@@ -1992,7 +1995,8 @@ func (w *walker) instanceGoverning(o *object, e *element, typ *attribute, d xsd.
 // as walker.instanceGoverning does where the mapping reads no selection. They
 // are one type where instance ·overrides· every one, below which the mapping
 // hands down and reads selections as under any one governing type; where they
-// are several, it maps below e only what each settles alike (walker.handDown,
+// are several, distinct types the withheld table can select or instance beside
+// one, it maps below e only what each settles alike (walker.handDown,
 // walker.classify's GAP(jsonsrc) marker RULED permanent by #2702). It
 // DECLINES typ where ·override· is not decided, as walker.instanceGoverned
 // does.
