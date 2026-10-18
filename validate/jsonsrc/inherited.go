@@ -48,6 +48,12 @@ type inheritor interface {
 // key-p-inherited clause 2, the same [validation context], holds for every
 // pair this is asked of: one mapping builds one infoset under one ·validation
 // root·.
+//
+// handedUnder and inheritable restate validate's walk.handedDown and
+// walk.inheritable, which hand down under the one governance the engine has
+// determined for an element it is walking. The mapping runs before the engine
+// and holds several types that may govern an element, so it composes under
+// each and compares, which no export of validate answers (#2791).
 func (w *walker) handDown(attrs []validate.Attribute, o *object, inherited []validate.Attribute, known bool) ([]validate.Attribute, bool) {
 	s, ok := w.schema.(inheritor)
 	if !ok || !known || len(o.governing) == 0 {
