@@ -769,11 +769,12 @@ func (c *contentCheck) initialValue(w *walk, st *xsd.SimpleType) {
 // ([xsd.Matcher.Admissible], rendered by expected) with the {open content}
 // arm filtered out: an item the open wildcard takes is S2's and never advances
 // S1, so it pays none of the {min occurs} that clauses 2.2 and 3.2 find owed.
-// That filter empties the list in one case only, {mode} suffix once an item has
-// begun S2: clause 2.1's S = S1 + S2 is a concatenation, so the {particle} can
-// take no further item, and the charge states that fact in place of a list.
-// Anywhere else a false Accepting leaves a leaf short of its {min occurs} on
-// the frontier, which Admissible lists.
+// The charge says the {particle} expects the list, not the content model, since
+// the {open content} may still take items the list leaves out. The list can be
+// empty — under {mode} suffix once an item has begun S2 (clause 2.1's S = S1 +
+// S2 being a concatenation), and where what is owed is a choice with no
+// members, which accepts nothing — and expected then says the {particle}
+// expects no further element information item, which is true of both.
 //
 // Under a nil matcher clause 1.4 is undecided for the sequence as a whole, the
 // EMPTY sequence included: whether a {content type} accepts no element
@@ -800,14 +801,8 @@ func (c *contentCheck) sequenceEnd(w *walk) {
 		_, open := a.(*xsd.OpenContent)
 		return open
 	})
-	if len(owed) == 0 {
-		c.charge(w, ruleCvcComplexContent, clause, c.e.Loc(),
-			"the [[children]] of %s end before every particle of the {content type} of its ·governing type definition· has taken the occurrences its {min occurs} requires, where the {particle} can take no further element information item, the {open content} suffix having begun, so the sequence is not ·valid· with respect to that {content type} as cvc-complex-content clause %s requires",
-			c.e.Name(), clause)
-		return
-	}
 	c.charge(w, ruleCvcComplexContent, clause, c.e.Loc(),
-		"the [[children]] of %s end before every particle of the {content type} of its ·governing type definition· has taken the occurrences its {min occurs} requires, where the content model expects %s, so the sequence is not ·valid· with respect to that {content type} as cvc-complex-content clause %s requires",
+		"the [[children]] of %s end before every particle of the {content type} of its ·governing type definition· has taken the occurrences its {min occurs} requires, where that {content type}'s {particle} expects %s, so the sequence is not ·valid· with respect to that {content type} as cvc-complex-content clause %s requires",
 		c.e.Name(), expected(owed, attributedTo), clause)
 }
 
@@ -841,35 +836,50 @@ func (c *contentCheck) log(w *walk, name xsd.QName, loc xsderr.Loc, rule xsderr.
 	w.logDecision("assessing content", name, loc, rule, clause, outcome)
 }
 
-// maxExpectedListed is how many arms of [xsd.Matcher.Admissible] a content
-// charge names before it counts the rest: past it, expected ends the list with
-// "and K more", K the exact number left unnamed, so a wide choice or all group
-// cannot make one violation as long as its model.
+// maxExpectedListed is how many particle arms of [xsd.Matcher.Admissible] a
+// content charge names before it counts the rest: past it, expected adds "and K
+// more", K the exact number of particle arms left unnamed, so a wide choice or
+// all group cannot make one violation as long as its model. The {open content}
+// arm is outside the bound and always named.
 const maxExpectedListed = 5
 
-// expected renders the arms a content charge names as what the content model
-// expects at the charged position, in the order the arms come in, each by
-// name — attributedTo, or declining at a rejected item: one arm by itself,
-// several as "one of" a comma-separated list, at most maxExpectedListed of them
-// and then "and K more", and none as "no further element information item",
-// never an empty list.
+// expected renders the arms a content charge names as what is expected at the
+// charged position, each by name — attributedTo, or declining at a rejected
+// item. The particle arms are named in the order they come in, at most
+// maxExpectedListed of them and then "and K more"; an [*xsd.OpenContent] arm,
+// which Admissible puts last, is always named, after them. One arm is named by
+// itself, several as "one of" a comma-separated list — the {open content} arm
+// joined by ", or" after an "and K more" — and none as "no further element
+// information item", never an empty list.
 func expected(arms []xsd.Attribution, name func(xsd.Attribution) string) string {
 	if len(arms) == 0 {
 		return "no further element information item"
 	}
-	listed := arms[:min(len(arms), maxExpectedListed)]
-	names := make([]string, 0, len(listed))
+	last := arms[len(arms)-1]
+	particles := arms
+	_, hasOpen := last.(*xsd.OpenContent)
+	if hasOpen {
+		particles = arms[:len(arms)-1]
+	}
+	listed := particles[:min(len(particles), maxExpectedListed)]
+	names := make([]string, 0, len(listed)+1)
 	for _, a := range listed {
 		names = append(names, name(a))
 	}
-	if len(arms) == 1 {
+	if rest := len(particles) - len(listed); rest > 0 {
+		list := "one of " + strings.Join(names, ", ") + " and " + strconv.Itoa(rest) + " more"
+		if !hasOpen {
+			return list
+		}
+		return list + ", or " + name(last)
+	}
+	if hasOpen {
+		names = append(names, name(last))
+	}
+	if len(names) == 1 {
 		return names[0]
 	}
-	list := "one of " + strings.Join(names, ", ")
-	if rest := len(arms) - len(listed); rest > 0 {
-		return list + " and " + strconv.Itoa(rest) + " more"
-	}
-	return list
+	return "one of " + strings.Join(names, ", ")
 }
 
 // attributedTo names what an item was or could be ·attributed to· (§3.4.4.4),

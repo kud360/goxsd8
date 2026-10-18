@@ -51,7 +51,7 @@ func cUnadmitted(item, expects string) string {
 // cEndsShort is the message for [[children]] that end with a {min occurs}
 // owed, naming what the {particle} expected next.
 func cEndsShort(expects, clause string) string {
-	return "the [[children]] of root end before every particle of the {content type} of its ·governing type definition· has taken the occurrences its {min occurs} requires, where the content model expects " + expects + ", so the sequence is not ·valid· with respect to that {content type} as cvc-complex-content clause " + clause + " requires"
+	return "the [[children]] of root end before every particle of the {content type} of its ·governing type definition· has taken the occurrences its {min occurs} requires, where that {content type}'s {particle} expects " + expects + ", so the sequence is not ·valid· with respect to that {content type} as cvc-complex-content clause " + clause + " requires"
 }
 
 // A sequence that skips a required member is charged at the member after it,
@@ -216,9 +216,9 @@ func TestContentChargeNamesAnExpectedWildcardByNamespaceConstraint(t *testing.T)
 
 // Under {mode} suffix, once an item has begun S2 the {particle} can take
 // nothing more (clause 2.1's S = S1 + S2), so [[children]] that end with a
-// {min occurs} still owed are charged with that fact and not with a list the
-// {open content} filter left empty.
-func TestContentChargeAtTheEndStatesTheSuffixHasBegun(t *testing.T) {
+// {min occurs} still owed are charged with the {particle} expecting nothing,
+// not the content model, whose {open content} would still take another item.
+func TestContentChargeAtTheEndOnceTheSuffixHasBegun(t *testing.T) {
 	schema := cSchema(t, cOpenContent(t, xsd.OpenContentSuffix, xsd.ProcessSkip,
 		cNamespaceConstraint(t, xsd.NamespaceConstraintAny),
 		cParticle(t, "a", 1, 1), cParticle(t, "b", 1, 1)))
@@ -226,7 +226,40 @@ func TestContentChargeAtTheEndStatesTheSuffixHasBegun(t *testing.T) {
 	got := cAssess(t, schema, cRoot("a", "x"))
 
 	wantContentCharge(t, got, "cvc-complex-content", "2", loc(1, 1))
-	cWantMsg(t, got, "the [[children]] of root end before every particle of the {content type} of its ·governing type definition· has taken the occurrences its {min occurs} requires, where the {particle} can take no further element information item, the {open content} suffix having begun, so the sequence is not ·valid· with respect to that {content type} as cvc-complex-content clause 2 requires")
+	cWantMsg(t, got, cEndsShort("no further element information item", "2"))
+}
+
+// A choice with no members accepts nothing, so [[children]] that end where
+// one is owed leave no leaf on the frontier, with no {open content} and no
+// suffix in sight, and the charge says the {particle} expects nothing.
+func TestContentChargeAtTheEndOfAnEmptyChoice(t *testing.T) {
+	schema := cSchema(t, xsd.ElementContent{Particle: cGroup(t, xsd.CompositorSequence,
+		cParticle(t, "a", 1, 1), cGroup(t, xsd.CompositorChoice))})
+
+	got := cAssess(t, schema, cRoot("a"))
+
+	wantContentCharge(t, got, "cvc-complex-content", "1", loc(1, 1))
+	cWantMsg(t, got, cEndsShort("no further element information item", "1"))
+}
+
+// The bound counts particle arms only: past it the {open content} arm is still
+// named, last, after the count.
+func TestOpenContentChargeNamesTheOpenWildcardPastTheBound(t *testing.T) {
+	var members []xsd.Particle
+	for _, local := range []string{"a", "b", "c", "d", "e", "f"} {
+		members = append(members, cParticle(t, local, 1, 1))
+	}
+	if len(members) != maxExpectedListed+1 {
+		t.Fatalf("the fixture has %d members, want maxExpectedListed+1 = %d", len(members), maxExpectedListed+1)
+	}
+	schema := cSchema(t, cOpenContent(t, xsd.OpenContentInterleave, xsd.ProcessSkip,
+		cNamespaceConstraint(t, xsd.NamespaceConstraintEnumeration, "urn:open"),
+		cGroup(t, xsd.CompositorChoice, members...), cParticle(t, "z", 1, 1)))
+
+	got := cAssess(t, schema, cRoot("z"))
+
+	wantContentCharge(t, got, "cvc-complex-content", "3", loc(2, 1))
+	cWantMsg(t, got, `the element information item z is ·attributed to· no particle of the {content type} of root at its position in the [[children]], and its ·expanded name· is not ·valid· with respect to that {content type}'s {open content} wildcard either, where the content model expects one of element declaration a, element declaration b, element declaration c, element declaration d, element declaration e and 1 more, or open content wildcard enumeration "urn:open", so the sequence is not ·valid· with respect to that {content type} as cvc-complex-content clause 3 requires`)
 }
 
 // cDisallowingQ is the {namespace constraint} any whose {disallowed names}

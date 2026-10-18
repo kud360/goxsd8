@@ -280,7 +280,8 @@
 // suffix and clause 3 for interleave, which is the clause each charge
 // names. Each such charge names what the content model expected at that
 // position — the first few element declarations and wildcards in content-model
-// order, the {open content} wildcard last, then a count of the rest — and no
+// order, then a count of the rest, and at a rejected item the {open content}
+// wildcard, if present, always named and last — and no
 // later child of a charged element is matched, so a second misplaced child goes
 // unreported until the first is fixed. Clause 1.2 additionally reads a VALUE,
 // through the same backend the attribute charges use: a simple {content type}
