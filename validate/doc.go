@@ -75,8 +75,7 @@
 //     evaluator DOES compile is recorded by nothing: clause 2 of that rule
 //     makes it a decided false, so the alternative was tried and the scan
 //     continues. [Validator.ConditionallySelected] exports that one scan,
-//     withhold and all, for an adapter that settles which members of its
-//     source are attributes by the type the selection gives.
+//     withhold and all; its doc says for which adapter.
 //   - Identity constraints: node tables propagate UPWARD — a keyref on
 //     element E resolves only against key sequences sourced within E's
 //     own subtree; selector/field paths honor xpathDefaultNamespace for
