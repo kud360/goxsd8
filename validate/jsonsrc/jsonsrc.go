@@ -132,12 +132,24 @@ func WithURI(uri string) Option {
 //     "_" before an attribute use's name, names that name as the key.
 //   - the cvc-type clause 3.1.2 charge at the first child member of the
 //     object of an element whose type is a simple type: scalar expected.
+//   - the cvc-complex-content charge the parent's content model makes at an
+//     item of an array that the clause above does not go on: the item's place
+//     in the array.
+//   - the cvc-elt clause 4 charge at an element whose "$type" names a type
+//     that does not ·override· the one its declaration selects, and the
+//     cvc-attribute clause 3 charge at a "$type" whose value has no xs:QName
+//     value: "$type" spells xsi:type, and, where the fault is a prefix no
+//     "$xmlns" in scope binds, a "$xmlns" member binds it.
+//   - the cvc-elt clause 3.1 charge at a null member whose element's
+//     declaration is not nillable: null spells xsi:nil="true".
 //
 // The clause goes on that one charge alone, never on another charge at the
-// same rule and location, such as the parent's at an array item or the
-// child's own at its member, and only where the mapping determines the type
-// that governs the element the charge is against, or every type that may
-// govern it agrees on the charge and on the keys the clause lists
+// same rule and location, such as the child's own at its member or array
+// item, or the element's cvc-elt clause 2 charge beside its clause 3.1 or 4
+// one; and, but on the cvc-attribute clause 3 charge, whose clause reads the
+// "$type" alone, only where the mapping determines the type or the
+// declaration that governs the element the charge is against, or every one
+// that may govern it agrees on the charge and on what the clause names
 // (walker.noteCharacters' and walker.noteChild's GAP(jsonsrc) markers).
 func Validate(v *validate.Validator, r io.Reader, opts ...Option) (*validate.Result, error) {
 	if v == nil {
