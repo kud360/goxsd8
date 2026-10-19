@@ -40,14 +40,14 @@ import (
 // declaration and carrying no xsi:type, which it admits unread because the walk
 // charges that child's parent for it (subtreeGate.resolvedChild).
 
-// assessedSubtreeRoot admits the instance document at doc, against schema as
-// assembled into report, where it has the assessed-subtree-root shape an empty
-// validate.Result may be read as "valid" for: a root, with content or without,
-// whose subtree meets every condition subtreeGate.root names, in a document
-// whose DTD, if any, defaults no attribute (rootStart). It answers the zero
-// refusal where it admits the document, and otherwise the refusal naming the
-// first condition it could not establish — an unreadable document, a decoder
-// error, an unresolvable component — never a guess.
+// assessedSubtreeRoot admits the instance document at doc, against schema,
+// where it has the assessed-subtree-root shape an empty validate.Result may be
+// read as "valid" for: a root, with content or without, whose subtree meets
+// every condition subtreeGate.root names, in a document whose DTD, if any,
+// defaults no attribute (rootStart). It answers the zero refusal where it
+// admits the document, and otherwise the refusal naming the first condition it
+// could not establish — an unreadable document, a decoder error, an
+// unresolvable component — never a guess.
 //
 // backend is the one the walk was given (execInstanceCase's validate.New), in
 // which a Type Alternative's {test} evaluates (subtreeGate.selectedType).
