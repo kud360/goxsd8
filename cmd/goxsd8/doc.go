@@ -101,6 +101,14 @@
 //	    because the line names no class, and nothing tells a shape
 //	    the mapping rejects from an arm it does not implement, so
 //	    charging 1 would charge every decline as invalid.
+//	    Where -format forces xml or json on an instance whose
+//	    extension names the other, a malformed-JSON line under -format
+//	    json and an [xml-wf] line under -format xml keep their token
+//	    and exit code and end with a clause naming the format forced
+//	    and the one the extension names, ; -format F read <instance>
+//	    as F, but its extension names G: drop -format, or pass
+//	    -format G, unless the line reports a fault reading the
+//	    instance.
 //	    The JSON shape in brief: the top-level object has exactly one
 //	    member, whose key names the root element. In an element's
 //	    object a "$xmlns" member, {"prefix":"uri",...}, comes first
