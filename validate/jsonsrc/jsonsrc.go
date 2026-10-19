@@ -138,8 +138,10 @@ func WithURI(uri string) Option {
 //   - the cvc-elt clause 4 charge at an element whose "$type" names a type
 //     that does not ·override· the one its declaration selects, and the
 //     cvc-attribute clause 3 charge at a "$type" whose value has no xs:QName
-//     value: "$type" spells xsi:type, and, where the fault is a prefix no
-//     "$xmlns" in scope binds, a "$xmlns" member binds it.
+//     value, under builtin/strict, or a backend whose xs:QName mapping is its:
+//     "$type" spells xsi:type, and, where the fault is a prefix no "$xmlns" in
+//     scope binds, a "$xmlns" member binds it (walker.noteTypeLexical's
+//     GAP(jsonsrc) marker).
 //   - the cvc-elt clause 3.1 charge at a null member whose element's
 //     declaration is not nillable: null spells xsi:nil="true".
 //

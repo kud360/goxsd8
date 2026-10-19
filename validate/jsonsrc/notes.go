@@ -531,10 +531,14 @@ func (w *walker) affiliated(d xsd.ElementDeclaration) bool {
 // is the prefix, and the local part it returns where it splits no QName is
 // empty, which is no NCName; the NCName test is [xmlname.IsNCName], which
 // accepts the strings builtin/strict's xs:QName mapping accepts as NCNames.
-// Under a backend that does not map xs:QName, or maps it otherwise, the
-// engine charges a lexical of no QName under clause 5 at that key, or
+//
+// GAP(jsonsrc): under a value backend that does not map xs:QName, or maps it
+// otherwise than builtin/strict, the engine declines clause 3 and charges a
+// lexical of no QName under cvc-attribute clause 5 at the "$type"'s key, or
 // nothing (walk.instanceTypeLexical's GAP(validate) marker), and the note
-// then goes on that charge, whose lexical is no QName there too, or on none.
+// goes on that clause 5 charge, which its clause does not answer, or on none.
+// RULED permanent by #774: mapping xs:QName is backend coverage, not this
+// package's, and the mapping reads no backend.
 func (w *walker) noteTypeLexical(e *element, typ *attribute) {
 	if typ == nil {
 		return
