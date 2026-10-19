@@ -406,9 +406,8 @@ func TestLocations(t *testing.T) {
 }
 
 // TestEndOfInputLocation pins the location of an error at the end of the
-// input, the package doc's "Locations" section's: on the line holding the
-// input's last byte, at that byte where it is a final '\n', one past it
-// otherwise, whatever sizes the reader returns (positions.start, #2723).
+// input, as the package doc's "Locations" section places it, whatever sizes
+// the reader returns (positions.start, #2723).
 func TestEndOfInputLocation(t *testing.T) {
 	v := validatorOver(t, orderSchema)
 	const (

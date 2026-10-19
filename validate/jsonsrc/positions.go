@@ -56,10 +56,10 @@ func (p *positions) Read(b []byte) (int, error) {
 // advances.
 //
 // Past the bytes read so far it locates one past the last of them, but at the
-// last where r ended and that byte is '\n': the end of the input, which the
-// package doc's "Locations" section places on the line holding its last byte,
-// so the final '\n' opens no line. Where r has not ended, as after a fault
-// reading it, a last '\n' read is counted, since the input goes on past it.
+// last where r ended and that byte is '\n': the end of the input, as the
+// package doc's "Locations" section places it. Where r has not ended, as after
+// a fault reading it, a last '\n' read is counted, since the input goes on
+// past it.
 func (p *positions) start(off int64) (line, col int) {
 	i := int(off - p.base)
 	for i < len(p.pending) && skipped(p.pending[i]) && !p.finalNewline(i) {
