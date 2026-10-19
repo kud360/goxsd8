@@ -559,6 +559,27 @@ func TestTypeWithoutGovernor(t *testing.T) {
 	}
 }
 
+// TestAbsentAffiliationLax pins the governance validate.Validator.Governing
+// gives an element whose declaration has an ·absent· {substitution group
+// affiliations} member: §5.3 sends it to ·lax assessment·, cvc-elt clause 1
+// charged, so its children are ·attributed to· xs:anyType's lax wildcard and
+// not to its declaration's content model. c then ·resolves· to no
+// declaration and its "$type" governs it (key-governing-type-elem clause 8),
+// so k maps as an attribute of X, as its XML twin carries it, and not under
+// c's local declaration, of type Tc, which X does not ·override·.
+func TestAbsentAffiliationLax(t *testing.T) {
+	v := validatorOver(t, `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+    targetNamespace="urn:t" xmlns:t="urn:t" elementFormDefault="qualified">
+  <xs:complexType name="X"><xs:attribute name="k" type="xs:string"/></xs:complexType>
+  <xs:complexType name="Tc"/>
+  <xs:element name="e" substitutionGroup="t:rotten">
+    <xs:complexType><xs:sequence><xs:element name="c" type="t:Tc"/></xs:sequence></xs:complexType>
+  </xs:element>
+</xs:schema>`)
+	twin(t, v, `{"e":{"c":{"$xmlns":{"t":"urn:t"},"$type":"t:X","k":"1"}}}`,
+		`<e xmlns="urn:t" xmlns:t="urn:t" `+xsiDecl+`><c xsi:type="t:X" k="1"/></e>`, []xsderr.Rule{"cvc-elt"})
+}
+
 // TestTypeOnUndeclaredElement pins a "$type" on an element a wildcard names
 // with no declaration: it maps to the element's xsi:type, as its XML twin
 // carries one, and the members after it decline as every member of such an
