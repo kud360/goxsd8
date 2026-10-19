@@ -34,7 +34,8 @@ import (
 // e, and et is of type B and selects N where its k is "n"; pq holds one q of type B. Z0 holds an
 // optional tu, and Z1 extends it with a, inheritable, defaulting to "z"; z is of type Z0 and selects Z1
 // where its a is "u", and pa holds an optional z and carries a, inheritable. O1 holds an optional c of
-// type T under a lax interleave {open content} and carries a, and O2 restricts it to no {open content};
+// type T under a lax interleave {open content} and carries a, and O2 restricts it to no {open content},
+// its c blocking restriction;
 // ro is of type O1 and selects O2 where it counts an a. big's {content type} is one
 // xsd.Schema.ContentMatcher declines (its GAP(xsd) ceiling), holding mids.
 const inheritSchema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
@@ -177,7 +178,7 @@ const inheritSchema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
   <xs:complexType name="O2">
     <xs:complexContent>
       <xs:restriction base="i:O1">
-        <xs:sequence><xs:element name="c" type="i:T" minOccurs="0"/></xs:sequence>
+        <xs:sequence><xs:element name="c" type="i:T" minOccurs="0" block="restriction"/></xs:sequence>
       </xs:restriction>
     </xs:complexContent>
   </xs:complexType>
@@ -338,10 +339,11 @@ func TestNoGoverningDeclaration(t *testing.T) {
 // so neither mid nor mid2, governed by M alone, hands down any determined; big's
 // content model is one xsd.Schema.ContentMatcher declines, so mid is attributed to
 // nothing. It pins walker.instanceGoverned's marker of the same
-// ruling too: ro's selection is withheld, and Z0, which does not ·override· T, c's
-// ·locally declared type·, leaves T governing c under O1's {open content} and
-// charges c under O2, which has none, so the "$type" settles differently under the
-// two (walker.instanceUnder).
+// ruling too: ro's selection is withheld, and c is ·attributed· to an element
+// particle of type T under either, which its "$type" U ·overrides· under O1's, so
+// U governs it, and not under O2's, which blocks restriction, so T governs it,
+// cvc-elt clause 4 charged: the "$type" settles differently under the two
+// (walker.overriddenUnder).
 func TestInheritedUndetermined(t *testing.T) {
 	v := validatorOver(t, inheritSchema)
 	for _, tc := range []struct {
@@ -354,8 +356,8 @@ func TestInheritedUndetermined(t *testing.T) {
 		{"below a withheld selection, under one named type", `{"rw":{"a":"1","mid2":{"tu":{"a":"u","m":"x"}}}}`,
 			`<rw xmlns="urn:i" a="1"><mid2><tu a="u" m="x"/></mid2></rw>`,
 			`jsonsrc: instance.json:1:38: member "m" of {urn:i}tu is not classified alike`},
-		{"a \"$type\" below a withheld selection", `{"ro":{"a":"1","c":{"$xmlns":{"i":"urn:i"},"$type":"i:Z0"}}}`,
-			`<ro xmlns="urn:i" xmlns:i="urn:i" ` + xsiDecl + ` a="1"><c xsi:type="i:Z0"/></ro>`,
+		{"a \"$type\" below a withheld selection", `{"ro":{"a":"1","c":{"$xmlns":{"i":"urn:i"},"$type":"i:U"}}}`,
+			`<ro xmlns="urn:i" xmlns:i="urn:i" ` + xsiDecl + ` a="1"><c xsi:type="i:U"/></ro>`,
 			`jsonsrc: instance.json:1:44: the "$type" member of {urn:i}c: the types the {type table} of {urn:i}ro`},
 		{"below an unattributed parent", `{"big":{"mid":{"tu":{"a":"u","m":"x"}},"b":""}}`,
 			`<big xmlns="urn:i"><mid><tu a="u" m="x"/></mid><b/></big>`,

@@ -698,15 +698,15 @@ func TestUngovernedParentType(t *testing.T) {
 // top-level yt is of type Tt, which restricts Ta and whose x carries a {type
 // table}. big's {content type} is one xsd.Schema.ContentMatcher declines (its
 // GAP(xsd) ceiling), holding a of type Ta. X, unrelated to L, has the
-// attribute k; there is no top-level x. Tn restricts Ta to its x alone, of
-// type Lr, with no {open content}, and the top-level gd is of type Ta and selects Tn where
-// it has an attribute a. Le extends L with the attribute a; ht holds an
+// attribute k; there is no top-level x. Tn restricts Ta to its x alone, which
+// blocks extension, with no {open content}, and the top-level gd is of type
+// Ta and selects Tn where it has an attribute a. Le extends L with the attribute a; ht holds an
 // optional x of type L that selects Lr where its a is present, and the
 // top-level hr is of type L and selects Lr likewise. Gw takes one optional q
 // of type L and then a lax wildcard, Gq restricts it to the q alone, and the
 // top-level gw is of type Gw and selects Gq where it has an attribute a; the
 // top-level q is of type Qo, which has a lax {open content} and declares k of
-// xs:string. hold holds an optional gd and then an optional gw.
+// xs:token. hold holds an optional gd and then an optional gw.
 const ancestrySchema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
     targetNamespace="urn:t" xmlns:t="urn:t" elementFormDefault="qualified">
   <xs:complexType name="L"><xs:sequence><xs:element name="k" type="xs:string" minOccurs="0"/></xs:sequence></xs:complexType>
@@ -824,7 +824,7 @@ const ancestrySchema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
   </xs:element>
   <xs:complexType name="Tn">
     <xs:complexContent>
-      <xs:restriction base="t:Ta"><xs:sequence><xs:element name="x" type="t:Lr" minOccurs="0"/></xs:sequence></xs:restriction>
+      <xs:restriction base="t:Ta"><xs:sequence><xs:element name="x" type="t:L" minOccurs="0" block="extension"/></xs:sequence></xs:restriction>
     </xs:complexContent>
   </xs:complexType>
   <xs:element name="gd" type="t:Ta">
@@ -843,7 +843,7 @@ const ancestrySchema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
   </xs:element>
   <xs:complexType name="Qo">
     <xs:openContent mode="interleave"><xs:any processContents="lax"/></xs:openContent>
-    <xs:sequence><xs:element name="k" type="xs:string" minOccurs="0"/></xs:sequence>
+    <xs:sequence><xs:element name="k" type="xs:token" minOccurs="0"/></xs:sequence>
   </xs:complexType>
   <xs:element name="q" type="t:Qo"/>
   <xs:complexType name="Gw">
@@ -873,17 +873,18 @@ const ancestrySchema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
 // content} and Tn to nothing, is governed by x's L under either, t:X not
 // ·overriding· it, so k is a child (key-governing-type-elem clause 7), and its
 // row settles the "$type" alike whether the mapping reads the selection or
-// not. Its one x, ·attributed· to the element particle, is charged cvc-elt
-// clause 4 under either, and walker.instanceUnder settles its "$type" on L
-// under Ta, which has an {open content}, and on t:X under Tn, which has none,
-// so k is an attribute: the particle row fails where the mapping reads no
+// not. Its one x is ·attributed· to the element particle of type L under
+// either: t:Le ·overrides· L under Ta's x and governs it, so a is an
+// attribute, and not under Tn's, which blocks extension, so the engine
+// charges cvc-elt clause 4 and L governs it, of which a is a child
+// (walker.overriddenUnder): the particle row fails where the mapping reads no
 // selection. gd has no a, so its table selects Ta. gw may be governed by Gq,
 // which rejects its second q, so that q's ·locally declared type· L governs
 // it, or by Gw, which ·attributes· it to the lax wildcard, so that the
-// top-level q's Qo does (walker.governing): t:X ·overrides· k's xs:string
-// under neither, so under L, with no {open content}, it is charged and t:X
-// classifies k's members, and under Qo, whose {open content} may take k,
-// xs:string does. gw has no a, so its table selects Gw.
+// top-level q's Qo does (walker.governing): xs:string ·overrides· the
+// xs:string of L's k and governs it, and not the xs:token of Qo's, which
+// governs it, cvc-elt clause 4 charged, so that row fails where the mapping
+// reads no selection too. gw has no a, so its table selects Gw.
 func TestAncestrySelected(t *testing.T) {
 	v := validatorOver(t, ancestrySchema)
 	const x = `xmlns="urn:t" xmlns:t="urn:t" ` + xsiDecl
@@ -893,8 +894,8 @@ func TestAncestrySelected(t *testing.T) {
 	}{
 		{"a type table's types settling a child's $type differently", `{"gd":{"x":[{},{"$xmlns":{"t":"urn:t"},"$type":"t:X","k":"zz"}]}}`,
 			`<gd ` + x + `><x/><x xsi:type="t:X"><k>zz</k></x></gd>`, none},
-		{"a type table's types governing a child differently", `{"gw":{"q":[{},{"k":{"$xmlns":{"t":"urn:t"},"$type":"t:X"}}]}}`,
-			`<gw ` + x + `><q/><q><k xsi:type="t:X"/></q></gw>`, []xsderr.Rule{"cvc-complex-type", "cvc-elt"}},
+		{"a type table's types governing a child differently", `{"gw":{"q":[{},{"k":{"$xmlns":{"xs":"http://www.w3.org/2001/XMLSchema"},"$type":"xs:string"}}]}}`,
+			`<gw ` + x + ` xmlns:xs="http://www.w3.org/2001/XMLSchema"><q/><q><k xsi:type="xs:string"/></q></gw>`, []xsderr.Rule{"cvc-complex-type", "cvc-elt"}},
 		{"a type table's types settling a particle's $type differently", `{"gd":{"x":{"$xmlns":{"t":"urn:t"},"$type":"t:Le","a":"1"}}}`,
 			`<gd ` + x + `><x xsi:type="t:Le" a="1"/></gd>`, none},
 	} {
@@ -916,8 +917,8 @@ func TestAncestrySelectedBelowRoot(t *testing.T) {
 	}{
 		{"a type table's types settling a child's $type differently", `{"hold":{"gd":{"x":[{},{"$xmlns":{"t":"urn:t"},"$type":"t:X","k":"zz"}]}}}`,
 			`<hold ` + x + `><gd><x/><x xsi:type="t:X"><k>zz</k></x></gd></hold>`, none},
-		{"a type table's types governing a child differently", `{"hold":{"gw":{"q":[{},{"k":{"$xmlns":{"t":"urn:t"},"$type":"t:X"}}]}}}`,
-			`<hold ` + x + `><gw><q/><q><k xsi:type="t:X"/></q></gw></hold>`, []xsderr.Rule{"cvc-complex-type", "cvc-elt"}},
+		{"a type table's types governing a child differently", `{"hold":{"gw":{"q":[{},{"k":{"$xmlns":{"xs":"http://www.w3.org/2001/XMLSchema"},"$type":"xs:string"}}]}}}`,
+			`<hold ` + x + ` xmlns:xs="http://www.w3.org/2001/XMLSchema"><gw><q/><q><k xsi:type="xs:string"/></q></gw></hold>`, []xsderr.Rule{"cvc-complex-type", "cvc-elt"}},
 		{"a type table's types settling a particle's $type differently", `{"hold":{"gd":{"x":{"$xmlns":{"t":"urn:t"},"$type":"t:Le","a":"1"}}}}`,
 			`<hold ` + x + `><gd><x xsi:type="t:Le" a="1"/></gd></hold>`, none},
 	} {
