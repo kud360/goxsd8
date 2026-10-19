@@ -308,18 +308,19 @@ func missingHead(s *xsd.Schema, ref xsd.TypeDefinitionOrRef) bool {
 //
 //   - Skipped. a is a skip Wildcard, or an [*xsd.OpenContent] whose {wildcard}
 //     is skip: assessed false and every other result zero (cvc-assess-elt
-//     clause 2). selected is not called. assessed is false nowhere else. The
-//     {open content} half is a reading and not a quotation (#1969, reversing
-//     #1576): key-skipped, clause 3.2 of ·strictly assessed· and cvc-wildcard
-//     name a skip Wildcard and never an Open Content, and key-att-to
-//     ·attributes· the item to the {open content} record. The ·default
-//     binding· of cos-content-act-restrict (§3.4.6.4, key-dft-binding) clause
-//     6 binds an item ·attributed· to "an Open Content with a skip Wildcard"
-//     to the keyword skip, beside a skip ·wildcard particle·'s, where a
-//     declaration key-governing-ed clause 4 resolved would have bound it to
-//     that declaration by clause 1 instead. cos-element-consistent clause 2.2
-//     likewise counts only an {open content} "with a strict or lax Wildcard",
-//     which is evidence of the exclusion and not a rule of assessment.
+//     clause 2). selected is not called. assessed is false nowhere else where
+//     err is nil. The {open content} half is a reading and not a quotation
+//     (#1969, reversing #1576): key-skipped, clause 3.2 of ·strictly assessed·
+//     and cvc-wildcard name a skip Wildcard and never an Open Content, and
+//     key-att-to ·attributes· the item to the {open content} record. The
+//     ·default binding· of cos-content-act-restrict (§3.4.6.4,
+//     key-dft-binding) clause 6 binds an item ·attributed· to "an Open Content
+//     with a skip Wildcard" to the keyword skip, beside a skip ·wildcard
+//     particle·'s, where a declaration key-governing-ed clause 4 resolved
+//     would have bound it to that declaration by clause 1 instead.
+//     cos-element-consistent clause 2.2 likewise counts only an {open content}
+//     "with a strict or lax Wildcard", which is evidence of the exclusion and
+//     not a rule of assessment.
 //   - A ·governing element declaration· D: an ElementDeclaration a of E's
 //     name (key-governing-ed clause 2); the top-level declaration name
 //     ·resolves· to for an ElementDeclaration a of another name (the

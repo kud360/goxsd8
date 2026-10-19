@@ -1877,11 +1877,12 @@ func (w *walker) governing(d xsd.ElementDeclaration, declared xsd.TypeDefinition
 // so that each type D's {type table} can select, or instance where it
 // ·overrides· that one, is among them (key-governing-type-elem clauses 3 and
 // 4, key-selected-type clause 1); and, where Governing answers neither, the
-// element being ·laxly assessed· (key-lva), ·xs:anyType·. It is empty where a
-// slot answers no type — a nil one, which the engine declines, or an ·absent·
-// head, which it assesses laxly; declaredType's marker rules both
-// unreachable — and false, with no type, where a ·skips· the element
-// (cvc-assess-elt clause 2).
+// element being ·laxly assessed· (key-lva), ·xs:anyType·. It is empty where an
+// alternative's slot answers no type — a nil one, which the engine declines,
+// or an ·absent· head, which it assesses laxly; a declaration with no {type
+// table} whose own {type definition} is an ·absent· head is answered laxly,
+// so xs:anyType; declaredType's marker rules both unreachable — and false,
+// with no type, where a ·skips· the element (cvc-assess-elt clause 2).
 //
 // The mapping evaluates no {test} here: where a table can select several
 // types and the mapping reads its selection (walker.selector), walker.settled,
