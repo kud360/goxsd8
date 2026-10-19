@@ -170,11 +170,9 @@ func (notOverriding) answers(int) int { return 0 }
 // nonNillable is a null member whose element's ·governing element
 // declaration· is not nillable, kept at the cvc-elt clause 3.1 charge the
 // engine makes at the element (walker.noteNil): key is the member's key as
-// spelled, an array item's being its array's, and abstract whether that
-// declaration is abstract.
+// spelled, an array item's being its array's.
 type nonNillable struct {
-	key      string
-	abstract bool
+	key string
 }
 
 // hint answers the element's cvc-elt clause 3.1 charge: null spells
@@ -184,18 +182,17 @@ func (n nonNillable) hint() string {
 		n.key)
 }
 
-// answers is the second where the declaration is abstract and the first
-// otherwise: validate's walk charges clause 2 (walk.abstractDeclaration)
-// before clause 3.1 (walk.nilCheck), and clause 5 after the [[children]]; a
-// clause 1 charge leaves no clause 3.1 one, clause 4 reads an xsi:type, which
-// only an object member carries, and no charge of the parent's at the
+// answers is the last: validate's walk charges clause 2
+// (walk.abstractDeclaration) before clause 3.1 (walk.nilCheck), and no
+// clause after it. Clause 5 is charged after the [[children]], and none of
+// its arms is charged at a null: an element that is not ·nilled· and has no
+// [[children]] takes clause 5.1 wherever its declaration has a {value
+// constraint}, and clause 5.1.1, its one cvc-elt charge, reads an
+// ·instance-specified type definition· (contentCheck.defaultValid), which
+// only an object's "$type" presents. A clause 1 charge leaves no clause 3.1
+// one, clause 4 reads an xsi:type too, and no charge of the parent's at the
 // element's location is a cvc-elt one, the parent being no null.
-func (n nonNillable) answers(int) int {
-	if n.abstract {
-		return 1
-	}
-	return 0
-}
+func (nonNillable) answers(n int) int { return n - 1 }
 
 // typeLexical is a "$type" member whose value has no xs:QName ·actual value·,
 // kept at the cvc-attribute clause 3 charge the engine makes at its key
@@ -446,11 +443,10 @@ func (w *walker) noteOverride(e *element, typ *attribute, d xsd.ElementDeclarati
 // declaration· is not nillable, has no ·absent· {substitution group
 // affiliations} member (walker.affiliated) and every type it can select
 // resolving (walker.declarationType), so that no cvc-elt clause 1 charge takes
-// the element to ·lax assessment· first (walk.declaredGovernance), and each
-// is abstract or each is not. Clause 3.1 reads the declaration's {nillable}
-// alone, whatever type governs the element (walk.nilCheck), so a nillable
-// declaration, whose ·nilled· element the engine charges under clause
-// 3.2.3.2 where it is fixed, keeps none.
+// the element to ·lax assessment· instead (walk.declaredGovernance). Clause
+// 3.1 reads the declaration's {nillable} alone, whatever type governs the
+// element (walk.nilCheck), so a nillable declaration, whose ·nilled· element
+// the engine charges under clause 3.2.3.2 where it is fixed, keeps none.
 func (w *walker) noteNil(m elementMember, key string, loc xsderr.Loc, at placement) {
 	d, ok := m.(declaredElement)
 	if !ok {
@@ -465,11 +461,11 @@ func (w *walker) noteNil(m elementMember, key string, loc xsderr.Loc, at placeme
 		return
 	}
 	for _, gd := range ds {
-		if gd.Nillable() || gd.Abstract() != ds[0].Abstract() || !w.affiliated(gd) || len(w.declarationType(gd)) == 0 {
+		if gd.Nillable() || !w.affiliated(gd) || len(w.declarationType(gd)) == 0 {
 			return
 		}
 	}
-	w.notes[noteAt{loc: loc, rule: ruleCvcElt}] = nonNillable{key: key, abstract: ds[0].Abstract()}
+	w.notes[noteAt{loc: loc, rule: ruleCvcElt}] = nonNillable{key: key}
 }
 
 // governingDeclarations is each declaration that may be the ·governing
