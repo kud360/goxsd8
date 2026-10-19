@@ -415,7 +415,7 @@ func TestGovernedType(t *testing.T) {
 
 // chargedSchema declares L, with an optional child k; M, which extends L with
 // the attribute m; Xe, which extends L with the attribute b; and X, unrelated
-// to L, with the attributes k and m. The top-level y is of type L, ytm of type
+// to L, with the attribute k. The top-level y is of type L, ytm of type
 // L with a {type table} whose one Type Alternative, a default, selects M, and
 // yb of type L, blocking extension. q2 holds one e and declares no y, ytm or
 // yb; q holds an optional x of type L, and qt an optional x of type L whose
@@ -433,7 +433,7 @@ const chargedSchema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
   <xs:complexType name="Xe">
     <xs:complexContent><xs:extension base="t:L"><xs:attribute name="b" type="xs:string"/></xs:extension></xs:complexContent>
   </xs:complexType>
-  <xs:complexType name="X"><xs:attribute name="k" type="xs:string"/><xs:attribute name="m" type="xs:string"/></xs:complexType>
+  <xs:complexType name="X"><xs:attribute name="k" type="xs:string"/></xs:complexType>
   <xs:element name="y" type="t:L"/>
   <xs:element name="ytm" type="t:L"><xs:alternative type="t:M"/></xs:element>
   <xs:element name="yb" type="t:L" block="extension"/>
@@ -454,7 +454,7 @@ const chargedSchema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
 // definition· of the element's ·governing element declaration·, which then
 // governs it (the Note closing cvc-elt): the members are classified under
 // that type, so k is a child of L, where X would make it an attribute, and m
-// an attribute of M, where L would make it a child. The declaration is the
+// an attribute of M, where X and L would make it a child. The declaration is the
 // top-level one the name ·resolves· to under a parent whose content model
 // ·attributes· the element to nothing (key-governing-ed clause 4) — q2's,
 // which rejects it, s's simple type and sc's simple content, each charged at
