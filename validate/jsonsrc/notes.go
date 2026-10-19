@@ -53,7 +53,34 @@ func (c characters) hint() string {
 // item (walker.scalar), and is charged under neither. A bareElement has no
 // declaration, and the engine assesses it under ·xs:anyType· (key-lva), whose
 // content is mixed. The notes kept grow with the scalars those types charge,
-// the document never being held (STYLE P4).
+// the document never being held (STYLE P4). walker.scalarGoverning
+// determines no type at the two sites below.
+//
+// GAP(jsonsrc): no note is kept where the mapping attributes the element to
+// nothing (placement.attributed): its parent's content model, or one above it,
+// is one xsd.Schema.ContentMatcher declines (object.unattributed, its GAP(xsd)
+// marker, the maxPartitionStates ceiling RULED permanent there), or the schema
+// view lacks the governor capability, which validate.Validator.Schema never
+// returns. validate walks the XML twin's subtree undecided there (its
+// GAP(validate) marker in walk.child) and charges it no text, so
+// walker.annotate, the note's one consumer, leaves no charge the engine makes
+// without a clause it would carry. Owned by #2670, which retires with #1601's
+// ruling.
+//
+// GAP(jsonsrc): no note is kept where the declaration carries a {type table}
+// whose selection the engine withholds, a {test} it reaches being outside its
+// §3.12.6 compiler's subset, or where the mapping reads no selection
+// (walker.selector): the types that may govern the parent differ, or hand
+// down different [inherited attributes] (walker.handDown). That holds whether
+// or not the types the table can select, or the types that may govern the
+// element, agree on charging the scalar. The engine walks each such element
+// undecided, its own selection withheld or one above it, and charges it no
+// text, so walker.annotate, the note's one consumer, leaves no charge the
+// engine makes without a clause it would carry; where the element's own
+// selection is withheld, its parent can still charge at an array item's
+// location, and a note kept there would answer that charge. RULED permanent
+// by #2702: selecting past a withheld key-cta-select alternative is unsound,
+// as walker.classify's marker of the same ruling says.
 func (w *walker) noteCharacters(m elementMember, key, lexical string, loc xsderr.Loc, at placement) {
 	d, ok := m.(declaredElement)
 	if !ok || lexical == "" {
@@ -88,40 +115,14 @@ func (w *walker) noteCharacters(m elementMember, key, lexical string, loc xsderr
 // [inherited attributes] at hands it (key-cta-ta-select clauses 1.1.2 and
 // 1.1.3), as validate.Validator.ConditionallySelected, the engine's own scan,
 // answers. It is false for an element ·skipped· by a skip wildcard, which
-// nothing assesses (cvc-assess-elt clause 2).
+// nothing assesses (cvc-assess-elt clause 2), and at the sites
+// walker.noteCharacters' GAP(jsonsrc) markers name.
 //
 // Below an element whose selection the engine withholds, the mapping can
 // determine a type where every type that may govern each element between
 // hands down alike (walker.selector), while the engine walks the subtree
 // undecided and charges nothing there, the scalar's parent included; the note
 // kept then answers no charge (walker.annotate).
-//
-// GAP(jsonsrc): no type is determined, and so no note kept, where the mapping
-// attributes the element to nothing (placement.attributed): its parent's
-// content model, or one above it, is one xsd.Schema.ContentMatcher declines
-// (object.unattributed, its GAP(xsd) marker, the maxPartitionStates ceiling
-// RULED permanent there), or the schema view lacks the governor capability,
-// which validate.Validator.Schema never returns. validate walks the XML twin's
-// subtree undecided there (its GAP(validate) marker in walk.child) and charges
-// it no text, so walker.annotate, the note's one consumer, leaves no charge
-// the engine makes without a clause it would carry. Owned by #2670, which
-// retires with #1601's ruling.
-//
-// GAP(jsonsrc): no type is determined, and so no note kept, where the
-// declaration carries a {type table} whose selection the engine withholds, a
-// {test} it reaches being outside its §3.12.6 compiler's subset, or where the
-// mapping reads no selection (walker.selector): the types that may govern the
-// parent differ, or hand down different [inherited attributes]
-// (walker.handDown). That holds whether or not the types the table can
-// select, or the types that may govern the element, agree on charging the
-// scalar. The engine walks each such element undecided, its own selection
-// withheld or one above it, and charges it no text, so walker.annotate, the
-// note's one consumer, leaves no charge the engine makes without a clause it
-// would carry; where the element's own selection is withheld, its parent can
-// still charge at an array item's location, and a note kept there would
-// answer that charge. RULED permanent by #2702: selecting past a withheld
-// key-cta-select alternative is unsound, as walker.classify's marker of the
-// same ruling says.
 func (w *walker) scalarGoverning(d xsd.ElementDeclaration, at placement) (xsd.TypeDefinition, bool) {
 	declared, ok := w.schema.ResolvedType(d.TypeDefinition())
 	if !ok {

@@ -128,7 +128,7 @@ func WithURI(uri string) Option {
 // The clause goes on that element's own charge alone, never on another charge
 // at the same rule and location, such as the parent's at an array item, and
 // only where the mapping determines the type that governs the element
-// (walker.scalarGoverning's GAP(jsonsrc) markers).
+// (walker.noteCharacters' GAP(jsonsrc) markers).
 func Validate(v *validate.Validator, r io.Reader, opts ...Option) (*validate.Result, error) {
 	if v == nil {
 		return nil, fmt.Errorf("jsonsrc: Validate: nil *validate.Validator")
@@ -177,8 +177,9 @@ func (e *DeclineError) Loc() xsderr.Loc {
 
 // walker is the one token stream a whole mapping pulls from: a single
 // json.Decoder over the positions its tokens are located by, the schema view
-// members are classified against, the selection a {type table} makes, and the
-// one fault that can stop it.
+// members are classified against, the selection a {type table} makes, the
+// notes Validate's message clauses come from, and the one fault that can stop
+// it.
 type walker struct {
 	dec    *json.Decoder
 	pos    *positions
