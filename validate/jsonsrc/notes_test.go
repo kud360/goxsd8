@@ -552,9 +552,10 @@ const spellSchema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" xmln
 // is of base and its {type table} selects baseM for an element with an
 // attribute m; tw's selects it by a {test} outside the engine's §3.12.6
 // compiler's subset, so that the engine withholds its selection; ta is
-// abstract and carries tt's table, and twa is abstract and carries tw's. dq is of ·xs:anySimpleType· with the
-// default "abc", and its {type table} selects xs:int for an element with no
-// attribute m. w's one particle is a lax ##local wildcard.
+// abstract and carries tt's table, and twa is abstract and carries tw's. dq is
+// of ·xs:anySimpleType· with the default "abc", and its {type table} selects
+// xs:int for an element with no attribute m. w's one particle is a lax ##local
+// wildcard.
 const spellProbeSchema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:o="urn:o" targetNamespace="urn:o">
   <xs:element name="order" type="o:base"/>
   <xs:element name="ao" type="o:base" abstract="true"/>
@@ -617,10 +618,11 @@ func arrayItemHint(key, n string) string {
 // an array item's own content charge, an unnamed note's charge at an item, the
 // cvc-type charge over the empty value that follows — nor where the engine
 // makes no such charge: a "$type" that ·overrides·, one naming no type
-// (cvc-attribute clause 5), a nillable fixed declaration's clause 3.2.3.2
-// charge, a parent's content charged at an earlier child, an element the
-// engine walks undecided below a withheld selection or an unattributed parent,
-// and an undeclared null. Each charge's rule and location are the engine's.
+// (cvc-attribute clause 5), one whose element's own {type table} selection
+// the engine withholds, a nillable fixed declaration's clause 3.2.3.2 charge,
+// a parent's content charged at an earlier child, an element the engine walks
+// undecided below a withheld selection or an unattributed parent, and a null
+// no declaration governs. Each charge's rule and location are the engine's.
 func TestSpellingNoteHints(t *testing.T) {
 	const (
 		content = ruleCvcComplexContent

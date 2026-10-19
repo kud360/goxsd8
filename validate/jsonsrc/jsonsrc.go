@@ -130,11 +130,11 @@ func WithURI(uri string) Option {
 //     {attribute wildcard}: the clause lists the keys that map to the type's
 //     attribute uses and child element declarations, and, for a key that is
 //     "_" before an attribute use's name, names that name as the key.
+//   - the cvc-complex-content charge the parent's content model makes at an
+//     item of an array, where the clause above does not go on it: the item's
+//     place in the array.
 //   - the cvc-type clause 3.1.2 charge at the first child member of the
 //     object of an element whose type is a simple type: scalar expected.
-//   - the cvc-complex-content charge the parent's content model makes at an
-//     item of an array that the clause above does not go on: the item's place
-//     in the array.
 //   - the cvc-elt clause 4 charge at an element whose "$type" names a type
 //     that does not ·override· the one its declaration selects, and the
 //     cvc-attribute clause 3 charge at a "$type" whose value has no xs:QName
