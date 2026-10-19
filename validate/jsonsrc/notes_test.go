@@ -22,7 +22,9 @@ import (
 // (cvc-complex-type clause 5). Under pdfl, dfl's ·defaulted attribute· n of
 // xs:ENTITY names no unparsed entity, a JSON document having no DTD
 // (cvc-complex-type clause 4). abd is an abstract declaration (cvc-elt
-// clause 2), and as carries a false assertion (cvc-assertion).
+// clause 2), and as carries a false assertion (cvc-assertion). mx has mixed
+// content, any is of ·xs:anyType·, whose content is mixed, and str is of
+// xs:string: none charges its text.
 const notedSchema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
   <xs:complexType name="eoT"><xs:sequence><xs:element name="q" type="xs:string"/></xs:sequence></xs:complexType>
   <xs:complexType name="eoT2"><xs:complexContent><xs:extension base="eoT"><xs:attribute name="a"/></xs:extension></xs:complexContent></xs:complexType>
@@ -30,6 +32,11 @@ const notedSchema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
   <xs:element name="eo" type="eoT"/>
   <xs:element name="e0" type="e0T"/>
   <xs:element name="sc"><xs:complexType><xs:simpleContent><xs:extension base="xs:string"/></xs:simpleContent></xs:complexType></xs:element>
+  <xs:element name="mx">
+    <xs:complexType mixed="true"><xs:sequence><xs:element name="q" type="xs:string" minOccurs="0"/></xs:sequence></xs:complexType>
+  </xs:element>
+  <xs:element name="any"/>
+  <xs:element name="str" type="xs:string"/>
   <xs:element name="ra">
     <xs:complexType>
       <xs:sequence><xs:element name="q" type="xs:string"/></xs:sequence>
@@ -103,6 +110,21 @@ func TestNoteHints(t *testing.T) {
 		}},
 		{"white space under empty content", notedSchema, `{"e0":"  "}`, []charge{
 			{ruleCvcComplexType, ":1:7", charactersHint("e0", "  ", "empty")},
+		}},
+		{"mixed-content item under an empty parent", notedSchema, `{"e0":{"mx":["x"]}}`, []charge{
+			{ruleCvcComplexType, ":1:14", ""},
+		}},
+		{"xs:anyType item under an empty parent", notedSchema, `{"e0":{"any":["x"]}}`, []charge{
+			{ruleCvcComplexType, ":1:15", ""},
+		}},
+		{"simple-content item under an empty parent", notedSchema, `{"e0":{"sc":["x"]}}`, []charge{
+			{ruleCvcComplexType, ":1:14", ""},
+		}},
+		{"mixed-content item under a simple-content parent", notedSchema, `{"sc":{"mx":["x"]}}`, []charge{
+			{ruleCvcComplexType, ":1:14", ""},
+		}},
+		{"simple-type item under an empty parent", notedSchema, `{"e0":{"str":["x"]}}`, []charge{
+			{ruleCvcComplexType, ":1:15", ""},
 		}},
 		{"white space under element-only content", notedSchema, `{"eo":"  "}`, []charge{
 			{complexContent, ":1:2", ""},
