@@ -692,6 +692,10 @@ func TestSpellingNoteHints(t *testing.T) {
 		{"array items after the parent's content is charged", spellProbeSchema, order + `"zz":1,"qty":[1,2,3]}}`, []charge{
 			{content, ":1:36", unnamedHint("zz", "o:order", `"m", "qty", "ab", "fx", "line"`)},
 		}},
+		{"a null array item the parent's content model rejects", spellProbeSchema, order + `"qty":[1,2,null]}}`, []charge{
+			{content, ":1:47", arrayItemHint("qty", "3")},
+			{ruleCvcType, ":1:47", ""},
+		}},
 		{"a null array item", spellProbeSchema, order + `"qty":[1,null]}}`, []charge{
 			{ruleCvcElt, ":1:45", nilHint("qty")},
 			{ruleCvcType, ":1:45", ""},
