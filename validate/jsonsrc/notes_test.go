@@ -244,7 +244,9 @@ func wantCharges(t *testing.T, schema, doc string, want []charge) {
 // kT, and its {type table} selects kExt for an element with an attribute m;
 // tr's k selects kR so, and tw's k selects kR by a {test} outside the engine's
 // §3.12.6 compiler's subset, so that the engine withholds its selection. st is
-// of kT and ab of abs. Under p5 the second x is ·attributed to· the lax
+// of kT and ab of abs; uT, from which neither kT nor aW is derived, has the
+// attribute use u; sa is of aW, whose {attribute wildcard} is a lax ##local
+// one. Under p5 the second x is ·attributed to· the lax
 // wildcard, so the top-level x, of kExt, governs it, while its members are
 // classified under kT, the local x's type. xu's type has an attribute use of
 // xsi:type, cu's an attribute use and a child declaration both named kind, and
@@ -301,6 +303,15 @@ const childSchema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
       <xs:element name="k" type="kT"><xs:alternative test="count(@m) > 0" type="kR"/></xs:element>
     </xs:sequence></xs:complexType>
   </xs:element>
+  <xs:complexType name="uT">
+    <xs:sequence><xs:element name="n" type="xs:string" minOccurs="0"/></xs:sequence>
+    <xs:attribute name="u"/>
+  </xs:complexType>
+  <xs:complexType name="aW">
+    <xs:sequence><xs:element name="n" type="xs:string" minOccurs="0"/></xs:sequence>
+    <xs:anyAttribute namespace="##local" processContents="lax"/>
+  </xs:complexType>
+  <xs:element name="sa" type="aW"/>
   <xs:element name="st" type="kT"/>
   <xs:element name="ab" type="abs"/>
   <xs:element name="x" type="kExt"/>
@@ -455,6 +466,14 @@ func TestChildNoteHints(t *testing.T) {
 		{"a \"$type\" that does not override", childSchema, `{"st":{"$type":"abs","zz":"1"}}`, []charge{
 			{"cvc-elt", ":1:2", ""},
 			{content, ":1:22", unnamedHint("zz", "st", `"m", "n"`)},
+		}},
+		{"_ before a use of the \"$type\" that does not override", childSchema, `{"st":{"$type":"uT","_u":"1"}}`, []charge{
+			{"cvc-elt", ":1:2", ""},
+			{content, ":1:21", unnamedHint("_u", "st", `"m", "n"`)},
+		}},
+		{"a \"$type\" that does not override a type with an {attribute wildcard}", childSchema, `{"sa":{"$type":"uT","zz":"1"}}`, []charge{
+			{"cvc-elt", ":1:2", ""},
+			{content, ":1:21", ""},
 		}},
 		{"an abstract parent with \"$type\"", childSchema, `{"ab":{"$type":"conc","zz":"1"}}`, []charge{
 			{content, ":1:23", unnamedHint("zz", "ab", `"z", "c"`)},

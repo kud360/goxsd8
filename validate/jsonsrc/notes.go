@@ -167,16 +167,18 @@ func (w *walker) noteChild(m elementMember, key string, loc xsderr.Loc, sc *scop
 // scope sc, of in's object, o, whose parent's content is charged
 // cvc-complex-content there, and false where none is kept. One is kept where
 // every type that may govern the parent (object.governing) has no element
-// wildcard and no {attribute wildcard} (object.carried), carries the same
-// keys, the expanded names of its attribute uses and child element
-// declarations, as each other one, and classifies the key as a child none of
-// its declarations names (walker.memberOf, declaredElement.named,
-// bareElement): the keys that map to those names (walker.mapsKey) are then the
-// list, in the first type's order, each local name being one key's, since
-// memberOf declines an unprefixed key two of them carry. The
-// note names the attribute use behind a key "_" before its local name where
-// walker.attributeKeyed names that use under o, as the mapping classifies the
-// members, and the same one under every such type.
+// wildcard (object.carried), carries the same keys, the expanded names of its
+// attribute uses and child element declarations, as each other one, and
+// classifies the key as a child none of its declarations names
+// (walker.memberOf, declaredElement.named, bareElement), which no type with
+// an {attribute wildcard} does: walker.wildcardMember classifies a key no
+// declaration or use carries as an attribute under one, or declines it. The
+// keys that map to those names (walker.mapsKey) are then the list, in the
+// first type's order, each local name being one key's, since memberOf
+// declines an unprefixed key two of them carry. The note names the attribute
+// use behind a key "_" before its local name where walker.attributeKeyed
+// names that use under o, as the mapping classifies the members, and the same
+// one under every such type.
 func (w *walker) unnamedNote(key string, loc xsderr.Loc, sc *scope, in *members) (unnamed, bool) {
 	o := in.object
 	k, err := w.keyName(key, o, sc, false, loc)
@@ -222,9 +224,9 @@ func (w *walker) unnamedNote(key string, loc xsderr.Loc, sc *scope, in *members)
 
 // carried is the expanded names of o's attribute uses and then of its child
 // element declarations, each once, in that order, and false where o has an
-// element wildcard or an {attribute wildcard}, which names keys beyond them.
+// element wildcard, which names children beyond them.
 func (o *object) carried() ([]xsd.QName, bool) {
-	if len(o.elementWildcards) > 0 || o.attributeWildcard != nil {
+	if len(o.elementWildcards) > 0 {
 		return nil, false
 	}
 	var names []xsd.QName
