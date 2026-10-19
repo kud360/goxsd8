@@ -640,6 +640,18 @@ func TestSpellingNoteHints(t *testing.T) {
 			{ruleCvcAttribute, ":1:43", typeLexicalHint("qty", "")},
 			{ruleCvcType, ":1:36", ""},
 		}},
+		{"a \"$type\" whose prefix is no NCName", spellSchema, order + `"qty":{"$type":"1x:short"}}}`, []charge{
+			{ruleCvcAttribute, ":1:43", typeLexicalHint("qty", "")},
+			{ruleCvcType, ":1:36", ""},
+		}},
+		{"a \"$type\" of two colons", spellSchema, order + `"qty":{"$type":"a:b:c"}}}`, []charge{
+			{ruleCvcAttribute, ":1:43", typeLexicalHint("qty", "")},
+			{ruleCvcType, ":1:36", ""},
+		}},
+		{"an empty \"$type\"", spellSchema, order + `"qty":{"$type":" "}}}`, []charge{
+			{ruleCvcAttribute, ":1:43", typeLexicalHint("qty", "")},
+			{ruleCvcType, ":1:36", ""},
+		}},
 		{"a null under a declaration that is not nillable", spellSchema, order + `"qty":null}}`, []charge{
 			{ruleCvcElt, ":1:36", nilHint("qty")},
 			{ruleCvcType, ":1:36", ""},
