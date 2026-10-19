@@ -257,6 +257,16 @@ func (vn *validation) one(instance string, stdout, stderr io.Writer) int {
 	}
 
 	result, err := xmlsrc.Validate(v, src, xmlsrc.WithURI(instance))
+	// Every *xsderr.Error xmlsrc.Validate returns, and every validate.Result.Err
+	// its result carries, is an [xml-wf] one, so the line of either takes
+	// formatHint's clause unless a fault reading the instance raised it, which
+	// xmlsrc charges [xml-wf] too. Which channel a fault inside the document
+	// element reaches turns on whether the walk met it (xmlsrc.Validate), so
+	// the clause goes on both.
+	hint := ""
+	if read.fault == nil {
+		hint = vn.formatHint(instance)
+	}
 	if err != nil {
 		// No assessment stands: the document is malformed before its document
 		// element, holds none at all, or is malformed in what the walk left
@@ -264,17 +274,9 @@ func (vn *validation) one(instance string, stdout, stderr io.Writer) int {
 		// verdict about the instance in the same rendering a violation gets,
 		// so it lands on stdout with them and counts as invalid — nothing in
 		// the document was shown valid.
-		//
-		// Every *xsderr.Error xmlsrc.Validate returns is an [xml-wf] one, so the
-		// line takes formatHint's clause unless a fault reading the instance
-		// raised it, which xmlsrc charges [xml-wf] too.
-		line := violationLine(err)
-		if read.fault == nil {
-			line += vn.formatHint(instance)
-		}
-		return reportLines(stdout, stderr, instance, []string{line}, exitInvalid)
+		return reportLines(stdout, stderr, instance, []string{violationLine(err) + hint}, exitInvalid)
 	}
-	lines, code := assessmentLines(result)
+	lines, code := assessmentLines(result, hint)
 	return reportLines(stdout, stderr, instance, lines, code)
 }
 
@@ -297,8 +299,10 @@ func (vn *validation) one(instance string, stdout, stderr io.Writer) int {
 // decline as invalid. Malformed XML is charged exitInvalid instead, on one's
 // reasoning for xmlsrc's fault.
 //
-// A line for malformed JSON — neither a decline nor a fault src returned —
-// ends with formatHint's clause.
+// Every line but a decline's and one for a fault src returned ends with
+// formatHint's clause: malformed JSON, content after the top-level object and
+// an input holding no JSON value alike, which jsonsrc.Validate's doc classes
+// together as an input that is not exactly one JSON value.
 func (vn *validation) assessJSON(instance string, src *watchedReader, stdout, stderr io.Writer) int {
 	result, err := jsonsrc.Validate(vn.base, src, jsonsrc.WithURI(instance))
 	if err != nil {
@@ -309,16 +313,19 @@ func (vn *validation) assessJSON(instance string, src *watchedReader, stdout, st
 		}
 		return reportLines(stdout, stderr, instance, []string{line}, exitUndecided)
 	}
-	lines, code := assessmentLines(result)
+	// jsonsrc.Validate's result carries no validate.Result.Err: every fault
+	// comes back as err.
+	lines, code := assessmentLines(result, "")
 	return reportLines(stdout, stderr, instance, lines, code)
 }
 
 // formatHint is the clause an instance's line ends with where -format forced a
 // format its extension does not name and the instance is not well-formed in
-// it: assessJSON appends it to a malformed-JSON line, and one to the [xml-wf]
-// line of xmlsrc.Validate's error, each only where no fault reading the
-// instance raised the error. It names the format the flag forced and the one
-// the extension names.
+// it: assessJSON appends it to every line of jsonsrc's error channel but a
+// decline's, and one to the [xml-wf] line of xmlsrc.Validate's error or of its
+// result's validate.Result.Err, each only where no fault reading the instance
+// raised the error. It names the format the flag forced and the one the
+// extension names.
 //
 // It is "" where -format was not given; where the extension names no format,
 // as standard input's absent one names none; where it names the forced one;
@@ -496,7 +503,10 @@ func reportUnfollowedHints(stderr io.Writer, instance string, compiled bool, rep
 // The code comes back with the lines because it is the one thing their
 // rendering does not carry: undecided records print exactly like charges, so
 // nothing in the text tells a reader which kind of report this is.
-func assessmentLines(result *validate.Result) ([]string, int) {
+//
+// errClause ends the source fault's line, and no other: one passes
+// formatHint's clause, assessJSON "".
+func assessmentLines(result *validate.Result, errClause string) ([]string, int) {
 	violations := result.Violations()
 	undecided := result.Unevaluated()
 	lines := make([]string, 0, len(violations)+len(undecided)+1)
@@ -504,7 +514,7 @@ func assessmentLines(result *validate.Result) ([]string, int) {
 		lines = append(lines, violationLine(v))
 	}
 	if result.Err() != nil {
-		lines = append(lines, violationLine(result.Err()))
+		lines = append(lines, violationLine(result.Err())+errClause)
 	}
 	for _, u := range undecided {
 		lines = append(lines, undecidedLine(u))

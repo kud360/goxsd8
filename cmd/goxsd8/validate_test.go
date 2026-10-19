@@ -1109,7 +1109,10 @@ func TestValidateJSONMemberClauses(t *testing.T) {
 // TestValidateFormatMismatchClause pins the clause formatHint ends a line
 // with, on README's order.xsd (readme-order.xsd here) and order.json, with a
 // well-formed order.xml: -format json over order.xml and -format xml over
-// order.json, each keeping its token and exit code. The other rows print no
+// order.json, each keeping its token and exit code. Three more rows carry it:
+// content after the top-level object and no JSON value at all under -format
+// json, and under -format xml a fault the walk meets inside the document
+// element, which reaches validate.Result.Err. The other rows print no
 // clause, each under the guard named in its name: the forced format matching
 // the extension, no -format, an extension naming no format and standard input,
 // an extension naming the reserved ber, a decline, and a read fault under each
@@ -1125,6 +1128,9 @@ func TestValidateFormatMismatchClause(t *testing.T) {
 		"order.ber":    orderXML,
 		"hello.json":   "hello\n",
 		"declined.xml": `{"z:nosuch":{}}` + "\n",
+		"after.xml":    `{"o:order":{"$xmlns":{"o":"urn:o"},"kind":"x","item":["a"]}} {}` + "\n",
+		"empty.xml":    "",
+		"mid.json":     `<o:order xmlns:o="urn:o"><o:item>a</o:order>` + "\n",
 	} {
 		if err := os.WriteFile(at(name), []byte(body), 0o600); err != nil {
 			t.Fatal(err)
@@ -1142,6 +1148,12 @@ func TestValidateFormatMismatchClause(t *testing.T) {
 			at("order.xml") + notJSON + "; -format json read " + at("order.xml") + " as json, but its extension names xml: drop -format, or pass -format xml\n"},
 		{"xml forced on json", []string{"-format", "xml", at("order.json")}, "", exitInvalid,
 			at("order.json") + ":1:1: [xml-wf] character data before the document element: only an XML declaration, a DOCTYPE, comments, processing instructions and white space may precede it (XML 1.0 [1] document, [22] prolog, [27] Misc); -format xml read " + at("order.json") + " as xml, but its extension names json: drop -format, or pass -format json\n"},
+		{"json forced on xml, content after the top-level object", []string{"-format", "json", at("after.xml")}, "", exitUndecided,
+			at("after.xml") + ":1:62: [jsonsrc] content follows the top-level object; -format json read " + at("after.xml") + " as json, but its extension names xml: drop -format, or pass -format xml\n"},
+		{"json forced on xml, no JSON value", []string{"-format", "json", at("empty.xml")}, "", exitUndecided,
+			at("empty.xml") + `:1:1: [jsonsrc] the document holds no JSON value; a JSON instance is one object whose one member names the validation root, {"<root>":...}; -format json read ` + at("empty.xml") + " as json, but its extension names xml: drop -format, or pass -format xml\n"},
+		{"xml forced on json, fault the walk meets", []string{"-format", "xml", at("mid.json")}, "", exitInvalid,
+			at("mid.json") + ":1:35: [xml-wf] end tag </o:order> does not match open element {urn:o}item; -format xml read " + at("mid.json") + " as xml, but its extension names json: drop -format, or pass -format json\n"},
 		{"forced format named by the extension", []string{"-format", "json", malformedJSON}, "", exitUndecided,
 			malformedJSON + ":1:18: [jsonsrc] malformed JSON: unexpected EOF\n"},
 		{"no -format", []string{at("hello.json")}, "", exitUndecided,
