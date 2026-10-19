@@ -499,6 +499,20 @@ func TestChargedType(t *testing.T) {
 	}
 }
 
+// TestUnresolvedWildcardType pins walker.overriddenUnder where a ·wildcard
+// particle· ·attributes· a child whose name ·resolves· to no declaration: the
+// child has no ·governing element declaration·, so no cvc-elt clause 4 is
+// charged, its "$type" governs it (key-governing-type-elem clause 8), and the
+// engine charges the parent cvc-complex-type clause 5 against the child's
+// ·locally declared type·. The second z of zw is such a child, of ·locally
+// declared type· zt, and k is an attribute of X, where zt would make it a
+// child. It agrees with its XML twin.
+func TestUnresolvedWildcardType(t *testing.T) {
+	v := validatorOver(t, ancestrySchema)
+	twin(t, v, `{"zw":{"z":[{},{"$xmlns":{"t":"urn:t"},"$type":"t:X","k":"zz"}]}}`,
+		`<zw xmlns="urn:t" xmlns:t="urn:t" `+xsiDecl+`><z/><z xsi:type="t:X" k="zz"/></zw>`, complexType)
+}
+
 // viewOnly is a schema view without the governor capability.
 type viewOnly struct{ validate.SchemaView }
 
