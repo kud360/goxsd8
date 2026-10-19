@@ -532,7 +532,7 @@ type viewOnly struct{ validate.SchemaView }
 func TestTypeWithoutGovernor(t *testing.T) {
 	v := validatorOver(t, governedSchema)
 	for _, c := range []struct {
-		doc     string
+		doc    string
 		charge string
 	}{
 		{`{"p":{"x":[{},{"$xmlns":{"t":"urn:t"},"$type":"t:Xe","b":"1"}]}}`, ""},
