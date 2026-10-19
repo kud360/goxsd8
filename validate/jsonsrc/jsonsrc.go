@@ -549,10 +549,11 @@ type object struct {
 	unattributed bool
 }
 
-// overriding is an element's ·governing element declaration· decl, which
-// carries a {type table}, and instance, the type the element's xsi:type names
+// overriding is an element e's ·governing element declaration· decl, which
+// carries a {type table}, and instance, the type e's xsi:type names
 // (object.overriding).
 type overriding struct {
+	e        *element
 	decl     xsd.ElementDeclaration
 	instance xsd.TypeDefinition
 }
@@ -724,7 +725,8 @@ func (b bareElement) elementName() xsd.QName     { return b.name }
 // names carries a {type table}, under every type the table can select as well
 // (walker.selectable), until walker.attributes reads the one the table selects
 // (object.table), or, where the mapping reads no selection, alike under every
-// one (walker.classify).
+// one (walker.classify). Under a "$type" it keeps the note walker.annotate
+// reads for e's cvc-elt clause 4 charge (walker.noteOverride).
 func (d declaredElement) object(w *walker, e *element, typ *attribute, at placement, loc xsderr.Loc) (*object, error) {
 	declared, err := w.declaredType(d.decl, loc)
 	if err != nil {
@@ -737,7 +739,11 @@ func (d declaredElement) object(w *walker, e *element, typ *attribute, at placem
 				return nil, err
 			}
 			o := w.object(e.name, td)
-			return o, w.instanceGoverning(o, e, typ, d.decl, declared, instance, td, at)
+			if err := w.instanceGoverning(o, e, typ, d.decl, declared, instance, td, at); err != nil {
+				return nil, err
+			}
+			w.noteOverride(e, typ, d.decl, instance, at)
+			return o, nil
 		}
 	}
 	o := w.object(e.name, declared)
@@ -1430,8 +1436,9 @@ func (w *walker) entry(sc *scope, key string, loc xsderr.Loc) (value, error) {
 // parent's object — nil for the root. Every element below the root is
 // ·attributed· under its parent's governing type as it is built
 // (object.attribute), whatever its value, and keeps the notes walker.annotate
-// reads for the parent's content charge at it (walker.noteChild) and for its
-// own text charge (walker.noteCharacters).
+// reads for the parent's content charge at it (walker.noteChild), for its own
+// text charge (walker.noteCharacters), and for its own cvc-elt clause 3.1
+// charge where its value is null (walker.noteNil).
 //
 // It DECLINES an array item that is itself an array. That has no XML twin, so
 // no marker tracks it: an item maps to exactly one element, and an array to
@@ -1445,6 +1452,7 @@ func (w *walker) element(m elementMember, loc xsderr.Loc, key string, v value, i
 	}
 	switch t := v.tok.(type) {
 	case nil:
+		w.noteNil(m, key, loc, at)
 		return w.nilled(m.elementName(), loc, v.loc, v.scope), nil
 	case json.Delim:
 		if t != json.Delim('{') {
@@ -1468,13 +1476,16 @@ func (w *walker) element(m elementMember, loc xsderr.Loc, key string, v value, i
 // classified under the type its members are (elementMember.object), the type
 // that governs it where its "$type" leaves that to a {type table}'s selection
 // (walker.overrode, walker.governOverriding), what it hands its children
-// (walker.handDown), and a cursor over the rest.
+// (walker.handDown), and a cursor over the rest. It keeps the note
+// walker.annotate reads for the "$type"'s cvc-attribute clause 3 charge
+// (walker.noteTypeLexical).
 func (w *walker) objectElement(m elementMember, loc xsderr.Loc, key string, v value, at placement) (*element, error) {
 	e := &element{w: w, name: m.elementName(), key: key, loc: loc, scope: v.scope}
 	typ, tok, tokAt, err := w.typeMember(e, v.next, v.nextLoc)
 	if err != nil {
 		return nil, err
 	}
+	w.noteTypeLexical(e, typ)
 	o, err := m.object(w, e, typ, at, v.loc)
 	if err != nil {
 		return nil, err
@@ -2088,7 +2099,7 @@ func (w *walker) instanceGoverned(e *element, typ *attribute, d xsd.ElementDecla
 func (w *walker) instanceGoverning(o *object, e *element, typ *attribute, d xsd.ElementDeclaration, declared, instance, td xsd.TypeDefinition, at placement) error {
 	from, declares, read := w.selector(d, declared, at)
 	if _, tabled := from.TypeTable(); declares && read && tabled {
-		o.overriding = &overriding{decl: from, instance: instance}
+		o.overriding = &overriding{e: e, decl: from, instance: instance}
 		return nil
 	}
 	g, ok := w.schema.(governor)
@@ -3303,7 +3314,12 @@ func (w *walker) settled(r *attributeRun, next *runMember, loc xsderr.Loc) (fina
 // it returns the object of the type that governs the element
 // (key-governing-type-elem clauses 3 and 4; walk.declaredGovernance): instance
 // where it ·overrides· S under D's {disallowed substitutions}, and S, cvc-elt
-// clause 4 charged, where it does not (walker.overridden). The members after
+// clause 4 charged, where it does not (walker.overridden), keeping there the
+// notOverriding note walker.annotate reads for that charge, where no ·absent·
+// {substitution group affiliations} member of D takes the element to cvc-elt
+// clause 1 instead (walker.affiliated); instance being a named type, the one
+// type overridden returns is instance exactly where it ·overrides· S
+// (sameNamed). The members after
 // the run are classified under that type, which classifies the run and next
 // as r.owner did (walker.agrees), so that S is the type the twin's attributes
 // select too. Where the engine withholds S, or S does not resolve, the run
@@ -3353,6 +3369,9 @@ func (w *walker) overrode(r *attributeRun, next *runMember) (final *object, unse
 	if !agrees {
 		return nil, nil, w.declinef(r.typ.loc, "the \"$type\" member of %s: the type its {type table} selects for the attributes its members are classified with, %s, is one the type it names does not ·override·, so it governs %s, and it classifies those members otherwise",
 			r.owner.owner, typeName(s), r.owner.owner)
+	}
+	if !sameNamed(ts[0], ov.instance) && w.affiliated(ov.decl) {
+		w.notes[noteAt{loc: ov.e.loc, rule: ruleCvcElt}] = notOverriding{key: ov.e.key, lexical: r.typ.value}
 	}
 	w.govern(so, ts)
 	return so, nil, nil
