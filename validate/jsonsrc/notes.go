@@ -522,12 +522,12 @@ func (w *walker) affiliated(d xsd.ElementDeclaration) bool {
 // (element.LookupPrefix). The split is [xmlqname.Resolve]'s, read through a
 // lookup that binds every prefix to itself, so that the namespace it returns
 // is the prefix, and the local part it returns where it splits no QName is
-// empty, which is no NCName; the NCName test is [xmlname.IsNCName], which accepts the
-// strings the default value backend's xs:QName mapping accepts as NCNames.
-// Under a backend that maps xs:QName otherwise the engine may charge clause 5
-// at that key instead, or nothing, and the note then answers that charge or
-// none (walk.instanceTypeLexical's GAP(validate) marker, RULED permanent by
-// #774).
+// empty, which is no NCName; the NCName test is [xmlname.IsNCName], which
+// accepts the strings builtin/strict's xs:QName mapping accepts as NCNames.
+// Under a backend that does not map xs:QName, or maps it otherwise, the
+// engine charges a lexical of no QName under clause 5 at that key, or
+// nothing (walk.instanceTypeLexical's GAP(validate) marker), and the note
+// then goes on that charge, whose lexical is no QName there too, or on none.
 func (w *walker) noteTypeLexical(e *element, typ *attribute) {
 	if typ == nil {
 		return
