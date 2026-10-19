@@ -1,0 +1,174 @@
+package jsonsrc
+
+import (
+	"fmt"
+	"strings"
+
+	"github.com/kud360/goxsd8/validate"
+	"github.com/kud360/goxsd8/xsd"
+	"github.com/kud360/goxsd8/xsderr"
+)
+
+// ruleCvcComplexType is the rule of the charge a characters note answers.
+const ruleCvcComplexType xsderr.Rule = "cvc-complex-type"
+
+// xmlWhitespace is white space as XML defines it (S ::= (#x20 | #x9 | #xD |
+// #xA)+), the text cvc-complex-type clause 1.3 leaves uncharged under an
+// element-only {content type}. It restates validate's xmlWhitespace across the
+// package boundary, which exports no such test.
+const xmlWhitespace = " \t\r\n"
+
+// noteAt is the charge a note answers: its rule and its location.
+type noteAt struct {
+	loc  xsderr.Loc
+	rule xsderr.Rule
+}
+
+// characters is a scalar member whose element the engine charges
+// cvc-complex-type for the scalar's text, kept at that charge's rule and
+// location (walker.noteCharacters): key is the member's key as spelled, an
+// array item's being its array's, lexical the scalar's lexical form, and
+// variety the {content type}.{variety} of the element's ·governing type
+// definition·, empty or element-only.
+type characters struct {
+	key, lexical string
+	variety      xsd.ContentTypeVariety
+}
+
+// hint is the clause [Validate] appends to the charge c answers: a JSON object
+// spells an element's element content or its empty content, and a scalar
+// spells text.
+func (c characters) hint() string {
+	return fmt.Sprintf("; JSON member %q has the scalar value %q, but the type of its element has %s content: object expected, {%q:{...}}",
+		c.key, c.lexical, c.variety, c.key)
+}
+
+// noteCharacters keeps a characters note at loc, the location of the scalar
+// whose lexical form is lexical, for the member key that m classifies,
+// standing at at, where the engine charges the element's text: its
+// ·governing type definition·, as walker.scalarGoverning determines it, is a
+// complex type whose {content type} is empty, which cvc-complex-type clause
+// 1.1 charges for any character information item, or element-only, which
+// clause 1.3 charges for one that is not all white space (xmlWhitespace). An
+// empty lexical is no character information item (walker.scalar), and is
+// charged under neither. The notes kept grow with the charges the engine
+// makes, the document never being held (STYLE P4).
+func (w *walker) noteCharacters(m elementMember, key, lexical string, loc xsderr.Loc, at placement) {
+	d, ok := m.(declaredElement)
+	if !ok || lexical == "" {
+		return
+	}
+	t, ok := w.scalarGoverning(d.decl, at)
+	if !ok {
+		return
+	}
+	ct, ok := t.(xsd.ComplexType)
+	if !ok {
+		return
+	}
+	v := ct.ContentType().Variety()
+	if v != xsd.ContentEmpty && v != xsd.ContentElementOnly {
+		return
+	}
+	if v == xsd.ContentElementOnly && strings.TrimLeft(lexical, xmlWhitespace) == "" {
+		return
+	}
+	w.notes[noteAt{loc: loc, rule: ruleCvcComplexType}] = characters{key: key, lexical: lexical, variety: v}
+}
+
+// scalarGoverning is the ·governing type definition· of a scalar-valued
+// element the declaration d names, standing at at, where the mapping
+// determines the one the engine assesses it under, and false otherwise: a
+// scalar carries no attribute, so no xsi:type, and its type is what its
+// ·governing element declaration· gives it (key-governing-type-elem clause
+// 4), or, where it has none, walker.governs's type. The declaration is the one
+// walker.selector names; where it carries a {type table}, its type is the one
+// the table selects for an element with no [attributes] and the [inherited
+// attributes] at hands it (key-cta-ta-select clauses 1.1.2 and 1.1.3), which
+// validate.Validator.ConditionallySelected answers as the engine selects. It is
+// false for an element ·skipped· by a skip wildcard, which nothing assesses
+// (cvc-assess-elt clause 2).
+//
+// GAP(jsonsrc): no type is determined, and so no note kept, where the mapping
+// attributes the element to nothing (placement.attributed): its parent's
+// content model, or one above it, is one xsd.Schema.ContentMatcher declines
+// (object.unattributed, its GAP(xsd) marker, the maxPartitionStates ceiling
+// RULED permanent there), or the schema view lacks the governor capability,
+// which validate.Validator.Schema never returns. validate walks the XML twin's
+// subtree undecided there (its GAP(validate) marker in walk.child), charging
+// no text, so walker.annotate, the note's one consumer, loses no clause on
+// any charge the engine makes. Owned by #2670, which retires with #1601's
+// ruling.
+//
+// GAP(jsonsrc): no type is determined, and so no note kept, where the
+// declaration carries a {type table} whose selection the engine withholds, a
+// {test} it reaches being outside its §3.12.6 compiler's subset, or where the
+// mapping reads no selection (walker.selector), the types that may govern the
+// parent differing or handing down different [inherited attributes]
+// (walker.handDown), whether or not those types agree on charging the
+// scalar. The engine walks such an element undecided: its own selection
+// withheld, or below one whose selection is. No text charge stands there to
+// answer, while a charge of the parent's can share the scalar's location, an
+// array item's (walker.annotate), so a note kept there would answer the
+// parent's. RULED permanent by #2702: selecting past a withheld
+// key-cta-select alternative is unsound, as walker.classify's marker of the
+// same ruling says.
+func (w *walker) scalarGoverning(d xsd.ElementDeclaration, at placement) (xsd.TypeDefinition, bool) {
+	if at.parent != nil && !at.attributed {
+		return nil, false
+	}
+	declared, ok := w.schema.ResolvedType(d.TypeDefinition())
+	if !ok {
+		return nil, false
+	}
+	from, declares, read := w.selector(d, declared, at)
+	if !read {
+		return nil, false
+	}
+	if at.parent != nil && skips(at.a[0]) {
+		return nil, false
+	}
+	if declares {
+		if table, tabled := from.TypeTable(); tabled {
+			inherited, _ := at.inherited()
+			slot, decided := w.selected(table, nil, inherited)
+			if !decided {
+				return nil, false
+			}
+			return w.schema.ResolvedType(slot)
+		}
+	}
+	ts := w.governing(d, declared, at)
+	if len(ts) != 1 {
+		return nil, false
+	}
+	return ts[0], true
+}
+
+// annotate appends to the Msg of the charge each note answers the clause its
+// hint gives: the last violation of res at the note's rule and location. A
+// note is kept only where the engine makes the element's own text charge
+// (walker.noteCharacters), and that charge is the last cvc-complex-type
+// violation at the scalar's location: at a member's scalar no other charge
+// stands, the element's own location being its key's; at an array item, whose
+// location is its scalar's, the parent's clause 1.1 and 1.2 charges and its
+// clause 5 charge at the item, and the item's clause 3 and 4 charges, all
+// precede the item's [[children]] (validate's walk.child and walk.element),
+// and no cvc-complex-type charge at the item follows its text charge, its
+// content check charging once (validate's contentCheck.charged) and clause
+// 1.2's ·initial value· charge needing simple content. Writing Msg through
+// res.Violations() writes res's own violations, as validate.Result.Violations
+// states; the rule ID and location stay the engine's.
+func (w *walker) annotate(res *validate.Result) {
+	answered := map[noteAt]bool{}
+	vs := res.Violations()
+	for i := len(vs) - 1; i >= 0; i-- {
+		at := noteAt{loc: vs[i].Loc, rule: vs[i].Rule}
+		n, ok := w.notes[at]
+		if !ok || answered[at] {
+			continue
+		}
+		answered[at] = true
+		vs[i].Msg += n.hint()
+	}
+}

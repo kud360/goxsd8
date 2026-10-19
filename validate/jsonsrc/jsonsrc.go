@@ -136,6 +136,7 @@ func Validate(v *validate.Validator, r io.Reader, opts ...Option) (*validate.Res
 	if err := w.end(root); err != nil {
 		return nil, err
 	}
+	w.annotate(res)
 	return res, nil
 }
 
@@ -178,6 +179,10 @@ type walker struct {
 	// reading the input or a decline. Every cursor reports this one field
 	// and none keeps a copy of it (STYLE D3).
 	err error
+	// notes is what the mapping knows, in JSON terms, about each member whose
+	// charge Validate appends a clause to, kept by the rule and location of
+	// that charge (walker.annotate).
+	notes map[noteAt]characters
 }
 
 func newWalker(uri string, r io.Reader, schema validate.SchemaView, selected func(xsd.TypeTable, []validate.Attribute, []validate.Attribute) (xsd.TypeDefinitionOrRef, bool)) *walker {
@@ -186,7 +191,7 @@ func newWalker(uri string, r io.Reader, schema validate.SchemaView, selected fun
 	// A number's lexical form is its source text, never a float64 round trip:
 	// 12345678901234567890 under xs:integer is that integer.
 	dec.UseNumber()
-	return &walker{dec: dec, pos: pos, uri: uri, schema: schema, selected: selected}
+	return &walker{dec: dec, pos: pos, uri: uri, schema: schema, selected: selected, notes: map[noteAt]characters{}}
 }
 
 // token pulls the next token and the location it starts at.
@@ -1366,6 +1371,7 @@ func (w *walker) element(m elementMember, loc xsderr.Loc, key string, v value, i
 	if !ok {
 		panic(fmt.Sprintf("jsonsrc: Token yielded %T", v.tok))
 	}
+	w.noteCharacters(m, key, lexical, v.loc, at)
 	return w.scalar(m.elementName(), loc, lexical, v.loc, v.scope), nil
 }
 
