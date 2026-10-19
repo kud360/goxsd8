@@ -39,14 +39,23 @@ type noteAt struct {
 
 // note is what the mapping knows about one member, in the instance's own
 // terms, kept at the charge it answers (noteAt): hint is the clause [Validate]
-// appends to that charge's Msg, and answers the index of that charge among the
-// n violations at its rule and location, in the result's order
-// (walker.annotate). Its arms are characters, scalarExpected, unnamed,
-// arrayItem, notOverriding, nonNillable and typeLexical.
+// appends to that charge's Msg, and answers which of the violations at its
+// rule and location, in the result's order, that charge is (walker.annotate).
+// Its arms are characters, scalarExpected, unnamed, arrayItem, notOverriding,
+// nonNillable and typeLexical.
 type note interface {
 	hint() string
-	answers(n int) int
+	answers() chargeOrder
 }
+
+// chargeOrder is which of the violations at a note's rule and location the
+// charge it answers is: the first or the last, in the result's order.
+type chargeOrder uint8
+
+const (
+	firstCharge chargeOrder = iota
+	lastCharge
+)
 
 // characters is a scalar member whose element the engine charges
 // cvc-complex-type for the scalar's text, kept at that charge's rule and
@@ -69,7 +78,7 @@ func (c characters) hint() string {
 
 // answers is the last: the element's text charge follows the parent's charges
 // at an array item's location, which is its scalar's (walker.annotate).
-func (characters) answers(n int) int { return n - 1 }
+func (characters) answers() chargeOrder { return lastCharge }
 
 // scalarExpected is the first child member of the object of an element whose
 // every type that may govern it is a simple type, kept at the cvc-type clause
@@ -88,7 +97,7 @@ func (s scalarExpected) hint() string {
 
 // answers is the first: the parent's charge at a child precedes the child's
 // own there (walker.annotate).
-func (scalarExpected) answers(int) int { return 0 }
+func (scalarExpected) answers() chargeOrder { return firstCharge }
 
 // unnamed is a child member that no child element declaration and no
 // attribute use of its parent's type names, kept at the cvc-complex-content
@@ -119,7 +128,7 @@ func (u unnamed) hint() string {
 }
 
 // answers is the first, as scalarExpected's is.
-func (unnamed) answers(int) int { return 0 }
+func (unnamed) answers() chargeOrder { return firstCharge }
 
 // arrayItem is an item of an array-valued member, kept at the
 // cvc-complex-content charge the parent's content model makes there where no
@@ -140,7 +149,7 @@ func (a arrayItem) hint() string {
 // answers is the first, as scalarExpected's is: the item's own
 // cvc-complex-content charges at its location, an object item's at its '{',
 // follow the parent's.
-func (arrayItem) answers(int) int { return 0 }
+func (arrayItem) answers() chargeOrder { return firstCharge }
 
 // notOverriding is an object member whose "$type" names a type that does not
 // ·override· the ·selected type definition· of the element's ·governing
@@ -165,7 +174,7 @@ func (n notOverriding) hint() string {
 // (walk.declaredGovernance); clause 3 reads an xsi:nil, which only a null
 // member carries, and no charge of the parent's at the element's location is
 // a cvc-elt one, the parent being no null.
-func (notOverriding) answers(int) int { return 0 }
+func (notOverriding) answers() chargeOrder { return firstCharge }
 
 // nonNillable is a null member whose element's ·governing element
 // declaration· is not nillable, kept at the cvc-elt clause 3.1 charge the
@@ -192,7 +201,7 @@ func (n nonNillable) hint() string {
 // only an object's "$type" presents. A clause 1 charge leaves no clause 3.1
 // one, clause 4 reads an xsi:type too, and no charge of the parent's at the
 // element's location is a cvc-elt one, the parent being no null.
-func (nonNillable) answers(n int) int { return n - 1 }
+func (nonNillable) answers() chargeOrder { return lastCharge }
 
 // typeLexical is a "$type" member whose value has no xs:QName ·actual value·,
 // kept at the cvc-attribute clause 3 charge the engine makes at its key
@@ -218,7 +227,7 @@ func (t typeLexical) hint() string {
 // answers is the first, and the only: the engine charges an xsi:type under
 // cvc-attribute clause 3 or clause 5, never both (walk.instanceTypeResolves),
 // and every other attribute stands at a key of its own.
-func (typeLexical) answers(int) int { return 0 }
+func (typeLexical) answers() chargeOrder { return firstCharge }
 
 // noteChild keeps a note at loc for the child member key that m classifies
 // under in's object, its value's scope sc, standing at at, where every type
@@ -655,8 +664,8 @@ func (w *walker) scalarGoverning(d xsd.ElementDeclaration, at placement) (xsd.Ty
 
 // annotate appends to the Msg of the charge each note answers the clause its
 // hint gives: of the violations of res at the note's rule and location, in
-// res's order, the one note.answers names, and none where no violation is
-// there. Each arm's answers states the order its charge takes among the
+// res's order, the first or the last as note.answers says, and none where no
+// violation is there. Each arm's answers states the order its charge takes among the
 // others there; the two paragraphs below state it for characters and for
 // the parent's notes.
 //
@@ -701,8 +710,10 @@ func (w *walker) annotate(res *validate.Result) {
 	}
 	for _, at := range noted {
 		n, es := w.notes[at], charges[at]
-		if i := n.answers(len(es)); i < len(es) {
-			es[i].Msg += n.hint()
+		e := es[0]
+		if n.answers() == lastCharge {
+			e = es[len(es)-1]
 		}
+		e.Msg += n.hint()
 	}
 }
