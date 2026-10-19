@@ -160,11 +160,11 @@ func (n notOverriding) hint() string {
 
 // answers is the first: validate's walk charges clause 4 as it settles the
 // element's governance (walk.instanceOverride), before its clause 2 charge
-// (walk.abstractDeclaration) and its clause 5 charges after its [[children]],
-// and a clause 1 charge leaves no clause 4 one (walk.declaredGovernance);
-// clause 3 reads an xsi:nil, which only a null member carries, and no charge
-// of the parent's at the element's location is a cvc-elt one, the parent
-// being no null.
+// (walk.abstractDeclaration) and its clause 5 charges, which follow its
+// [[children]], and a clause 1 charge leaves no clause 4 one
+// (walk.declaredGovernance); clause 3 reads an xsi:nil, which only a null
+// member carries, and no charge of the parent's at the element's location is
+// a cvc-elt one, the parent being no null.
 func (notOverriding) answers(int) int { return 0 }
 
 // nonNillable is a null member whose element's ·governing element
