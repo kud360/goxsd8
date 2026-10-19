@@ -552,7 +552,8 @@ const spellSchema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" xmln
 // is of base and its {type table} selects baseM for an element with an
 // attribute m; tw's selects it by a {test} outside the engine's §3.12.6
 // compiler's subset, so that the engine withholds its selection; ta is
-// abstract and carries tt's table, and twa is abstract and carries tw's. dq is
+// abstract and carries tt's table, and twa is abstract and carries tw's; tw1's
+// table selects base itself by tw's {test}, so that it can select one type. dq is
 // of ·xs:anySimpleType· with the default "abc", and its {type table} selects
 // xs:int for an element with no attribute m. w's one particle is a lax ##local
 // wildcard.
@@ -564,6 +565,7 @@ const spellProbeSchema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
   <xs:element name="tt" type="o:base"><xs:alternative test="@m" type="o:baseM"/></xs:element>
   <xs:element name="tw" type="o:base"><xs:alternative test="count(@m) > 0" type="o:baseM"/></xs:element>
   <xs:element name="ta" type="o:base" abstract="true"><xs:alternative test="@m" type="o:baseM"/></xs:element>
+  <xs:element name="tw1" type="o:base"><xs:alternative test="count(@m) > 0" type="o:base"/></xs:element>
   <xs:element name="twa" type="o:base" abstract="true"><xs:alternative test="count(@m) > 0" type="o:baseM"/></xs:element>
   <xs:element name="dq" type="xs:anySimpleType" default="abc"><xs:alternative test="not(@m)" type="xs:int"/></xs:element>
   <xs:element name="w"><xs:complexType><xs:sequence><xs:any namespace="##local" processContents="lax" maxOccurs="unbounded"/></xs:sequence></xs:complexType></xs:element>
@@ -769,6 +771,8 @@ func TestNotesKept(t *testing.T) {
 		{"\"$type\"s of no QName below a withheld selection", spellProbeSchema, tw + `"qty":[{"$type":"1bad"},{"$type":"1bad"}]}}`, 0, 0},
 		{"\"$type\"s that do not override below a withheld selection", spellProbeSchema, tw + `"qty":[{"$type":"o:other"},{"$type":"o:other"}]}}`, 0, 0},
 		{"nulls two levels below a withheld selection", spellProbeSchema, tw + `"line":{"a":[null,null]}}}`, 0, 0},
+		{"nulls below a withheld selection of one type", spellProbeSchema, `{"o:tw1":{"$xmlns":{"o":"urn:o"},"qty":[null,null]}}`, 0, 0},
+		{"nulls below a \"$type\" over a withheld selection of one type", spellProbeSchema, `{"o:tw1":{"$xmlns":{"o":"urn:o"},"$type":"o:baseM","qty":[null,null]}}`, 0, 0},
 		{"unnamed members two levels below a withheld selection", spellProbeSchema, tw + `"line":{"zz":1,"zy":2}}}`, 0, 0},
 		{"scalars of element-only content below a withheld selection", spellProbeSchema, tw + `"line":["x","y"]}}`, 0, 0},
 		{"\"$type\"s two levels below a withheld selection", spellProbeSchema, tw + `"line":{"a":{"$type":"1bad"}}}}`, 0, 0},
