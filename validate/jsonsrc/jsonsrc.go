@@ -127,9 +127,9 @@ func WithURI(uri string) Option {
 //   - the cvc-complex-content charge the parent's content model makes at a
 //     child member that no child element declaration and no attribute use of
 //     the parent's type names, where that type has no element wildcard and no
-//     {attribute wildcard}: the clause lists the keys the type carries, and,
-//     for a key that is "_" before an attribute use's name, names that name
-//     as the key.
+//     {attribute wildcard}: the clause lists the keys that map to the type's
+//     attribute uses and child element declarations, and, for a key that is
+//     "_" before an attribute use's name, names that name as the key.
 //   - the cvc-type clause 3.1.2 charge at the first child member of the
 //     object of an element whose type is a simple type: scalar expected.
 //
@@ -1467,11 +1467,11 @@ func (w *walker) element(m elementMember, loc xsderr.Loc, key string, v value, i
 
 // objectElement builds an object-valued element under the member key from its
 // value v, standing at at among its parent's members: its scope, v's, its
-// "$type" (typeMember),
-// then its attribute members (attributes), each classified under the type its
-// members are (elementMember.object), the type that governs it where its
-// "$type" leaves that to a {type table}'s selection (walker.governOverriding),
-// what it hands its children (walker.handDown), and a cursor over the rest.
+// "$type" (typeMember), then its attribute members (attributes), each
+// classified under the type its members are (elementMember.object), the type
+// that governs it where its "$type" leaves that to a {type table}'s selection
+// (walker.governOverriding), what it hands its children (walker.handDown), and
+// a cursor over the rest.
 func (w *walker) objectElement(m elementMember, loc xsderr.Loc, key string, v value, at placement) (*element, error) {
 	e := &element{w: w, name: m.elementName(), key: key, loc: loc, scope: v.scope}
 	typ, tok, tokAt, err := w.typeMember(e, v.next, v.nextLoc)

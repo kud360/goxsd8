@@ -246,11 +246,11 @@ func wantCharges(t *testing.T, schema, doc string, want []charge) {
 // §3.12.6 compiler's subset, so that the engine withholds its selection. st is
 // of kT and ab of abs; uT, from which neither kT nor aW is derived, has the
 // attribute use u; sa is of aW, whose {attribute wildcard} is a lax ##local
-// one. Under p5 the second x is ·attributed to· the lax
-// wildcard, so the top-level x, of kExt, governs it, while its members are
-// classified under kT, the local x's type. xu's type has an attribute use of
-// xsi:type, cu's an attribute use and a child declaration both named kind, and
-// pr's simple content an attribute use kind.
+// one. Under p5 the second x is ·attributed to· the lax wildcard, so the
+// top-level x, of kExt, governs it, while its members are classified under kT,
+// the local x's type. xu's type has an attribute use of xsi:type, cu's an
+// attribute use and a child declaration both named kind, and pr's simple
+// content an attribute use kind.
 const childSchema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
     xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
   <xs:import namespace="http://www.w3.org/2001/XMLSchema-instance"/>
