@@ -552,7 +552,7 @@ const spellSchema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" xmln
 // is of base and its {type table} selects baseM for an element with an
 // attribute m; tw's selects it by a {test} outside the engine's §3.12.6
 // compiler's subset, so that the engine withholds its selection; ta is
-// abstract and carries tt's table. dq is of ·xs:anySimpleType· with the
+// abstract and carries tt's table, and twa is abstract and carries tw's. dq is of ·xs:anySimpleType· with the
 // default "abc", and its {type table} selects xs:int for an element with no
 // attribute m. w's one particle is a lax ##local wildcard.
 const spellProbeSchema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:o="urn:o" targetNamespace="urn:o">
@@ -563,6 +563,7 @@ const spellProbeSchema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
   <xs:element name="tt" type="o:base"><xs:alternative test="@m" type="o:baseM"/></xs:element>
   <xs:element name="tw" type="o:base"><xs:alternative test="count(@m) > 0" type="o:baseM"/></xs:element>
   <xs:element name="ta" type="o:base" abstract="true"><xs:alternative test="@m" type="o:baseM"/></xs:element>
+  <xs:element name="twa" type="o:base" abstract="true"><xs:alternative test="count(@m) > 0" type="o:baseM"/></xs:element>
   <xs:element name="dq" type="xs:anySimpleType" default="abc"><xs:alternative test="not(@m)" type="xs:int"/></xs:element>
   <xs:element name="w"><xs:complexType><xs:sequence><xs:any namespace="##local" processContents="lax" maxOccurs="unbounded"/></xs:sequence></xs:complexType></xs:element>
   <xs:complexType name="base">
@@ -714,6 +715,9 @@ func TestSpellingNoteHints(t *testing.T) {
 			{ruleCvcElt, ":1:2", ""},
 		}},
 		{"a \"$type\" under a withheld {type table} selection", spellProbeSchema, `{"o:tw":{"$xmlns":{"o":"urn:o"},"$type":"o:other"}}`, nil},
+		{"a \"$type\" under a withheld {type table} selection, of an abstract declaration", spellProbeSchema, `{"o:twa":{"$xmlns":{"o":"urn:o"},"$type":"o:other"}}`, []charge{
+			{ruleCvcElt, ":1:2", ""},
+		}},
 		{"a null below a withheld {type table} selection", spellProbeSchema, `{"o:tw":{"$xmlns":{"o":"urn:o"},"qty":null}}`, nil},
 		{"a null of an abstract declaration under a lax wildcard", spellProbeSchema, `{"o:w":{"$xmlns":{"o":"urn:o"},"o:ao":null}}`, []charge{
 			{content, ":1:32", ""},
