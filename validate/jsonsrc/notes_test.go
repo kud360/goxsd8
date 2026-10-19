@@ -108,6 +108,9 @@ func TestNoteHints(t *testing.T) {
 			{complexContent, ":1:2", ""},
 		}},
 		{"the empty string under empty content", notedSchema, `{"e0":""}`, nil},
+		{"the empty string as an item under an empty parent", notedSchema, `{"e0":{"e0":[""]}}`, []charge{
+			{ruleCvcComplexType, ":1:14", ""},
+		}},
 		{"array item with a scalar under an empty parent", notedSchema, `{"e0":{"eo":["x"]}}`, []charge{
 			{ruleCvcComplexType, ":1:14", ""},
 			{ruleCvcComplexType, ":1:14", charactersHint("eo", "x", "element-only")},

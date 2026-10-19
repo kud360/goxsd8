@@ -114,9 +114,6 @@ func (w *walker) noteCharacters(m elementMember, key, lexical string, loc xsderr
 // key-cta-select alternative is unsound, as walker.classify's marker of the
 // same ruling says.
 func (w *walker) scalarGoverning(d xsd.ElementDeclaration, at placement) (xsd.TypeDefinition, bool) {
-	if at.parent != nil && !at.attributed {
-		return nil, false
-	}
 	declared, ok := w.schema.ResolvedType(d.TypeDefinition())
 	if !ok {
 		return nil, false
