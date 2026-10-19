@@ -551,8 +551,9 @@ const spellSchema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" xmln
 // nothing too; other is a sequence of an optional z, derived from no base. tt
 // is of base and its {type table} selects baseM for an element with an
 // attribute m; tw's selects it by a {test} outside the engine's §3.12.6
-// compiler's subset, so that the engine withholds its selection. w's one
-// particle is a lax ##local wildcard.
+// compiler's subset, so that the engine withholds its selection; ta is
+// abstract and carries tt's table. w's one particle is a lax ##local
+// wildcard.
 const spellProbeSchema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:o="urn:o" targetNamespace="urn:o">
   <xs:element name="order" type="o:base"/>
   <xs:element name="ao" type="o:base" abstract="true"/>
@@ -560,6 +561,7 @@ const spellProbeSchema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
   <xs:element name="fx" type="xs:int" nillable="true" fixed="3"/>
   <xs:element name="tt" type="o:base"><xs:alternative test="@m" type="o:baseM"/></xs:element>
   <xs:element name="tw" type="o:base"><xs:alternative test="count(@m) > 0" type="o:baseM"/></xs:element>
+  <xs:element name="ta" type="o:base" abstract="true"><xs:alternative test="@m" type="o:baseM"/></xs:element>
   <xs:element name="w"><xs:complexType><xs:sequence><xs:any namespace="##local" processContents="lax" maxOccurs="unbounded"/></xs:sequence></xs:complexType></xs:element>
   <xs:complexType name="base">
     <xs:sequence>
@@ -689,6 +691,13 @@ func TestSpellingNoteHints(t *testing.T) {
 		}},
 		{"a \"$type\" that does not override the type a {type table} selects", spellProbeSchema, `{"o:tt":{"$xmlns":{"o":"urn:o"},"$type":"o:other"}}`, []charge{
 			{ruleCvcElt, ":1:2", overrideHint("o:tt", "o:other")},
+		}},
+		{"a \"$type\" that does not override the type a {type table} selects, of an abstract declaration", spellProbeSchema, `{"o:ta":{"$xmlns":{"o":"urn:o"},"$type":"o:other"}}`, []charge{
+			{ruleCvcElt, ":1:2", overrideHint("o:ta", "o:other")},
+			{ruleCvcElt, ":1:2", ""},
+		}},
+		{"a \"$type\" that overrides the type a {type table} selects, of an abstract declaration", spellProbeSchema, `{"o:ta":{"$xmlns":{"o":"urn:o"},"$type":"o:baseM"}}`, []charge{
+			{ruleCvcElt, ":1:2", ""},
 		}},
 		{"a \"$type\" under a withheld {type table} selection", spellProbeSchema, `{"o:tw":{"$xmlns":{"o":"urn:o"},"$type":"o:other"}}`, nil},
 		{"a null below a withheld {type table} selection", spellProbeSchema, `{"o:tw":{"$xmlns":{"o":"urn:o"},"qty":null}}`, nil},
