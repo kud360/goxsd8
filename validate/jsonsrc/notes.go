@@ -521,7 +521,8 @@ func (w *walker) affiliated(d xsd.ElementDeclaration) bool {
 // that is no NCName — or its prefix is one no "$xmlns" in scope binds
 // (element.LookupPrefix). The split is [xmlqname.Resolve]'s, read through a
 // lookup that binds every prefix to itself, so that the namespace it returns
-// is the prefix; the NCName test is [xmlname.IsNCName], which accepts the
+// is the prefix, and the local part it returns where it splits no QName is
+// empty, which is no NCName; the NCName test is [xmlname.IsNCName], which accepts the
 // strings the default value backend's xs:QName mapping accepts as NCNames.
 // Under a backend that maps xs:QName otherwise the engine may charge clause 5
 // at that key instead, or nothing, and the note then answers that charge or
@@ -532,8 +533,8 @@ func (w *walker) noteTypeLexical(e *element, typ *attribute) {
 		return
 	}
 	at := noteAt{loc: typ.loc, rule: ruleCvcAttribute}
-	prefix, local, ok := xmlqname.Resolve(typ.value, func(p string) (string, bool) { return p, true })
-	if !ok || !xmlname.IsNCName(local) || (prefix != "" && !xmlname.IsNCName(prefix)) {
+	prefix, local, _ := xmlqname.Resolve(typ.value, func(p string) (string, bool) { return p, true })
+	if !xmlname.IsNCName(local) || (prefix != "" && !xmlname.IsNCName(prefix)) {
 		w.notes[at] = typeLexical{key: e.key}
 		return
 	}

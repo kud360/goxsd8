@@ -3331,14 +3331,13 @@ func (w *walker) settled(r *attributeRun, next *runMember, loc xsderr.Loc) (fina
 // {substitution group affiliations} member of D takes the element to cvc-elt
 // clause 1 instead (walker.affiliated); instance being a named type, the one
 // type overridden returns is instance exactly where it ·overrides· S
-// (sameNamed). The members after
-// the run are classified under that type, which classifies the run and next
-// as r.owner did (walker.agrees), so that S is the type the twin's attributes
-// select too. Where the engine withholds S, or S does not resolve, the run
-// ends under r.owner (walker.unselected), and walker.governOverriding makes
-// each type that may govern the element. It DECLINES typ where ·override· is
-// not decided (walker.overridden), and where the governing type declines a
-// member of the run, or next (walker.agrees).
+// (sameNamed). The members after the run are classified under that type, which
+// classifies the run and next as r.owner did (walker.agrees), so that S is the
+// type the twin's attributes select too. Where the engine withholds S, or S
+// does not resolve, the run ends under r.owner (walker.unselected), and
+// walker.governOverriding makes each type that may govern the element. It
+// DECLINES typ where ·override· is not decided (walker.overridden), and where
+// the governing type declines a member of the run, or next (walker.agrees).
 //
 // It DECLINES typ too where the governing type classifies the run, or next,
 // otherwise than r.owner did.
