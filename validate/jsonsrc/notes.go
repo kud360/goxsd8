@@ -154,7 +154,7 @@ func (arrayItem) answers() chargeOrder { return firstCharge }
 // notOverriding is an object member whose "$type" names a type that does not
 // ·override· the ·selected type definition· of the element's ·governing
 // element declaration·, kept at the cvc-elt clause 4 charge the engine makes
-// at the element (walker.noteOverride, walker.overrode): key is the member's
+// at the element (walker.noteOverride, walker.noteOverrode): key is the member's
 // key as spelled, an array item's being its array's, and lexical the
 // "$type"'s value.
 type notOverriding struct {
@@ -410,52 +410,68 @@ func namesNone(m member) bool {
 // noteOverride keeps a notOverriding note at e's location for e, whose
 // "$type" typ names instance and whose members are classified by d, standing
 // at at, where the engine charges cvc-elt clause 4 there under a declaration
-// with no {type table}: each declaration walker.governingDeclarations finds
-// that may be e's ·governing element declaration· carries no {type table}, no
-// ·absent· {substitution group affiliations} member (walker.affiliated), and a
-// {type definition} that resolves to a type S, its ·selected type
-// definition· (key-selected-type clause 2), that instance does not ·override·
-// under its {disallowed substitutions} (key-overrides, walk.instanceOverride).
-// Under a declaration with a {type table} whose selection the mapping reads,
-// walker.overrode keeps the note; where it reads none, or the engine withholds
-// the selection, the engine determines no ·selected type definition· and
-// charges no clause 4 (walk.declaredGovernance).
+// with no {type table}: the declaration walker.governingDeclaration finds
+// governing e carries no {type table}, no ·absent· {substitution group
+// affiliations} member (walker.affiliated), and a {type definition} that
+// resolves to a type S, its ·selected type definition· (key-selected-type
+// clause 2), that instance does not ·override· under its {disallowed
+// substitutions} (key-overrides, walk.instanceOverride). Under a declaration
+// with a {type table} whose selection the mapping reads, walker.noteOverrode keeps
+// the note; where it reads none, or the engine withholds the selection, the
+// engine determines no ·selected type definition· and charges no clause 4
+// (walk.declaredGovernance).
 func (w *walker) noteOverride(e *element, typ *attribute, d xsd.ElementDeclaration, instance xsd.TypeDefinition, at placement) {
 	g, ok := w.schema.(governor)
 	if !ok {
 		return
 	}
-	ds, ok := w.governingDeclarations(g, d, at)
+	gd, ok := w.governingDeclaration(g, d, at)
 	if !ok {
 		return
 	}
-	for _, gd := range ds {
-		if _, tabled := gd.TypeTable(); tabled || !w.affiliated(gd) {
-			return
-		}
-		s, ok := w.schema.ResolvedType(gd.TypeDefinition())
-		if !ok {
-			return
-		}
-		overrides, err := g.ValidlySubstitutable(instance, s, gd.DisallowedSubstitutions())
-		if err != nil || overrides {
-			return
-		}
+	if _, tabled := gd.TypeTable(); tabled || !w.affiliated(gd) {
+		return
+	}
+	s, ok := w.schema.ResolvedType(gd.TypeDefinition())
+	if !ok {
+		return
+	}
+	overrides, err := g.ValidlySubstitutable(instance, s, gd.DisallowedSubstitutions())
+	if err != nil || overrides {
+		return
+	}
+	w.notes[noteAt{loc: e.loc, rule: ruleCvcElt}] = notOverriding{key: e.key, lexical: typ.value}
+}
+
+// noteOverrode keeps a notOverriding note at e's location for e, whose
+// "$type" typ names ov.instance and whose ·governing element declaration·
+// ov.decl carries a {type table} whose selection the mapping reads, where the
+// engine charges cvc-elt clause 4 there: walker.overrode decided the type S the
+// table selects, leaving o, the object e's members after the run are
+// classified against, no overriding, and the one type governing it is S, not
+// instance, which, a named type, is the one type walker.overridden returns
+// exactly where it ·overrides· S (sameNamed); and no ·absent· {substitution
+// group affiliations} member of ov.decl takes e to cvc-elt clause 1 instead
+// (walker.affiliated). Where the engine withholds S, walker.overrode leaves o
+// its overriding and the engine charges no clause 4.
+func (w *walker) noteOverrode(e *element, typ *attribute, ov *overriding, o *object) {
+	if o.overriding != nil || sameNamed(o.governing[0].typ, ov.instance) || !w.affiliated(ov.decl) {
+		return
 	}
 	w.notes[noteAt{loc: e.loc, rule: ruleCvcElt}] = notOverriding{key: e.key, lexical: typ.value}
 }
 
 // noteNil keeps a nonNillable note at loc, the location of the null-valued
 // element m classifies under the member key, standing at at, where the engine
-// charges cvc-elt clause 3.1 there: each declaration
-// walker.governingDeclarations finds that may be its ·governing element
-// declaration· is not nillable, has no ·absent· {substitution group
-// affiliations} member (walker.affiliated) and every type it can select
-// resolving (walker.declarationType), so that no cvc-elt clause 1 charge takes
-// the element to ·lax assessment· instead (walk.declaredGovernance). Clause
-// 3.1 reads the declaration's {nillable} alone, whatever type governs the
-// element (walk.nilCheck), so a nillable declaration, whose ·nilled· element
-// the engine charges under clause 3.2.3.2 where it is fixed, keeps none.
+// charges cvc-elt clause 3.1 there: the declaration
+// walker.governingDeclaration finds governing it is not nillable, has no
+// ·absent· {substitution group affiliations} member (walker.affiliated) and
+// every type it can select resolving (walker.declarationType), so that no
+// cvc-elt clause 1 charge takes the element to ·lax assessment· instead
+// (walk.declaredGovernance). Clause 3.1 reads the declaration's {nillable}
+// alone, whatever type governs the element (walk.nilCheck), so a nillable
+// declaration, whose ·nilled· element the engine charges under clause 3.2.3.2
+// where it is fixed, keeps none.
 func (w *walker) noteNil(m elementMember, key string, loc xsderr.Loc, at placement) {
 	d, ok := m.(declaredElement)
 	if !ok {
@@ -465,48 +481,30 @@ func (w *walker) noteNil(m elementMember, key string, loc xsderr.Loc, at placeme
 	if !ok {
 		return
 	}
-	ds, ok := w.governingDeclarations(g, d.decl, at)
-	if !ok {
+	gd, ok := w.governingDeclaration(g, d.decl, at)
+	if !ok || gd.Nillable() || !w.affiliated(gd) || len(w.declarationType(gd)) == 0 {
 		return
-	}
-	for _, gd := range ds {
-		if gd.Nillable() || !w.affiliated(gd) || len(w.declarationType(gd)) == 0 {
-			return
-		}
 	}
 	w.notes[noteAt{loc: loc, rule: ruleCvcElt}] = nonNillable{key: key}
 }
 
-// governingDeclarations is each declaration that may be the ·governing
-// element declaration· of an element whose members are classified by d,
-// standing at at, as validate's walk determines it (walk.childGoverning): at
-// the root d, the top-level declaration of its name; below it, for each type
-// that may govern the parent, the one walker.governs reads off what that type
-// ·attributes· the element to. It is false where the mapping attributes the
-// element to nothing (placement.attributed), where a type ·skips· it, and
-// where under one it has none; the engine then walks the element undecided,
-// skips it, or assesses it with no declaration, and charges it no cvc-elt
-// clause under either type where the types that may govern the parent are
-// several (walker.selector).
-func (w *walker) governingDeclarations(g governor, d xsd.ElementDeclaration, at placement) ([]xsd.ElementDeclaration, bool) {
+// governingDeclaration is the ·governing element declaration· of an element
+// whose members are classified by d, standing at at, as validate's walk
+// determines it (walk.childGoverning): at the root d, the top-level
+// declaration of its name; below it, the one walker.governs reads off what
+// the one type governing the parent ·attributes· the element to. It is false
+// where the element stands nowhere the engine assesses it (placement.assessed),
+// and where that type gives it none, the engine then assessing it with no
+// declaration and charging it no cvc-elt clause.
+func (w *walker) governingDeclaration(g governor, d xsd.ElementDeclaration, at placement) (xsd.ElementDeclaration, bool) {
 	if at.parent == nil {
-		return []xsd.ElementDeclaration{d}, true
+		return d, true
 	}
-	if !at.attributed {
-		return nil, false
+	if !at.assessed() {
+		return xsd.ElementDeclaration{}, false
 	}
-	ds := make([]xsd.ElementDeclaration, 0, len(at.parent.governing))
-	for i, p := range at.parent.governing {
-		if skips(at.a[i]) {
-			return nil, false
-		}
-		gd, declares, _ := w.governs(g, d.Name(), nil, p.typ, at.a[i])
-		if !declares {
-			return nil, false
-		}
-		ds = append(ds, gd)
-	}
-	return ds, true
+	gd, declares, _ := w.governs(g, d.Name(), nil, at.parent.governing[0].typ, at.a[0])
+	return gd, declares
 }
 
 // affiliated reports whether every member of d's {substitution group
@@ -625,14 +623,12 @@ func (w *walker) noteCharacters(m elementMember, key, lexical string, loc xsderr
 // [inherited attributes] at hands it (key-cta-ta-select clauses 1.1.2 and
 // 1.1.3), as validate.Validator.ConditionallySelected, the engine's own scan,
 // answers. It is false for an element ·skipped· by a skip wildcard, which
-// nothing assesses (cvc-assess-elt clause 2), and at the sites
-// walker.noteCharacters' GAP(jsonsrc) markers name.
-//
-// Below an element whose selection the engine withholds, the mapping can
-// determine a type where every type that may govern each element between
-// hands down alike (walker.selector), while the engine walks the subtree
-// undecided and charges nothing there, the scalar's parent included; the note
-// kept then answers no charge (walker.annotate).
+// nothing assesses (cvc-assess-elt clause 2), for a child of a parent whose
+// children the engine walks undecided (object.unassessed), below an element
+// whose selection it withholds, though the mapping can determine a type there
+// where every type that may govern each element between hands down alike
+// (walker.selector), and at the sites walker.noteCharacters' GAP(jsonsrc)
+// markers name.
 func (w *walker) scalarGoverning(d xsd.ElementDeclaration, at placement) (xsd.TypeDefinition, bool) {
 	declared, ok := w.schema.ResolvedType(d.TypeDefinition())
 	if !ok {
@@ -642,7 +638,7 @@ func (w *walker) scalarGoverning(d xsd.ElementDeclaration, at placement) (xsd.Ty
 	if !read {
 		return nil, false
 	}
-	if at.parent != nil && skips(at.a[0]) {
+	if at.parent != nil && (at.parent.unassessed || skips(at.a[0])) {
 		return nil, false
 	}
 	if declares {

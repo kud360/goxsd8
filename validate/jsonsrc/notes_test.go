@@ -751,3 +751,45 @@ func TestSpellingNoteHints(t *testing.T) {
 		})
 	}
 }
+
+// TestNotesKept pins how many notes the mapping keeps for a document, as
+// Validate keeps them, beside the charges they answer: one per charge where
+// the engine assesses the elements, and none where it walks them undecided —
+// below an element whose {type table} selection it withholds, or a parent
+// whose content model xsd.Schema.ContentMatcher declines — or skips them, so
+// that the notes kept there do not grow with the document (STYLE P4).
+func TestNotesKept(t *testing.T) {
+	const tw = `{"o:tw":{"$xmlns":{"o":"urn:o"},`
+	for _, c := range []struct {
+		name, schema, doc string
+		notes, charges    int
+	}{
+		{"nulls the engine charges", spellProbeSchema, `{"o:order":{"$xmlns":{"o":"urn:o"},"qty":[null,null]}}`, 2, 4},
+		{"nulls below a withheld selection", spellProbeSchema, tw + `"qty":[null,null]}}`, 0, 0},
+		{"\"$type\"s of no QName below a withheld selection", spellProbeSchema, tw + `"qty":[{"$type":"1bad"},{"$type":"1bad"}]}}`, 0, 0},
+		{"\"$type\"s that do not override below a withheld selection", spellProbeSchema, tw + `"qty":[{"$type":"o:other"},{"$type":"o:other"}]}}`, 0, 0},
+		{"nulls two levels below a withheld selection", spellProbeSchema, tw + `"line":{"a":[null,null]}}}`, 0, 0},
+		{"unnamed members two levels below a withheld selection", spellProbeSchema, tw + `"line":{"zz":1,"zy":2}}}`, 0, 0},
+		{"scalars of element-only content below a withheld selection", spellProbeSchema, tw + `"line":["x","y"]}}`, 0, 0},
+		{"\"$type\"s two levels below a withheld selection", spellProbeSchema, tw + `"line":{"a":{"$type":"1bad"}}}}`, 0, 0},
+		{"nulls below an unattributed parent", inheritSchema, `{"big":{"mid":[null,null],"b":""}}`, 0, 0},
+		{"a skipped \"$type\" of no QName", childSchema, `{"sk":{"r":{"$type":"1bad"}}}`, 0, 0},
+		{"a skipped null", childSchema, `{"sk":{"r":null}}`, 0, 0},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			v := validatorOver(t, c.schema)
+			w := newWalker(jsonURI, strings.NewReader(c.doc), v.Schema(), v.ConditionallySelected)
+			root, err := w.root()
+			if err != nil {
+				t.Fatalf("root(%s): %v", c.doc, err)
+			}
+			res := v.Assess(root)
+			if err := w.end(root); err != nil {
+				t.Fatalf("end(%s): %v", c.doc, err)
+			}
+			if len(w.notes) != c.notes || len(res.Violations()) != c.charges {
+				t.Errorf("%s keeps %d notes beside %d charges, want %d beside %d", c.doc, len(w.notes), len(res.Violations()), c.notes, c.charges)
+			}
+		})
+	}
+}
