@@ -338,6 +338,19 @@ const childSchema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
   </xs:element>
 </xs:schema>`
 
+// selectedSimpleSchema declares a, of ·xs:anyType·, and ta, whose {type
+// table} selects xs:string for an element with no attribute m, and pt, whose
+// child c carries that table.
+const selectedSimpleSchema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="a"/>
+  <xs:element name="ta"><xs:alternative test="@m" type="xs:anyType"/><xs:alternative type="xs:string"/></xs:element>
+  <xs:element name="pt">
+    <xs:complexType><xs:sequence>
+      <xs:element name="c"><xs:alternative test="@m" type="xs:anyType"/><xs:alternative type="xs:string"/></xs:element>
+    </xs:sequence></xs:complexType>
+  </xs:element>
+</xs:schema>`
+
 // kindsSchema declares, in urn:t, du, whose type has an optional child c and
 // the attribute uses kind, unqualified, and t:kind, of two expanded names.
 const kindsSchema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" targetNamespace="urn:t" xmlns:t="urn:t">
@@ -433,6 +446,15 @@ func TestChildNoteHints(t *testing.T) {
 		{"array item with a scalar under a simple parent", childSchema, `{"item":{"eo":["x"]}}`, []charge{
 			{simple, ":1:16", scalarExpectedHint("eo", "item")},
 			{ruleCvcComplexType, ":1:16", charactersHint("eo", "x", "element-only")},
+		}},
+		{"a \"$type\" naming a simple type", selectedSimpleSchema, `{"a":{"$xmlns":{"xs":"http://www.w3.org/2001/XMLSchema"},"$type":"xs:string","y":"1","z":"2"}}`, []charge{
+			{simple, ":1:78", scalarExpectedHint("y", "a")},
+		}},
+		{"a root {type table} selecting a simple type", selectedSimpleSchema, `{"ta":{"y":"1","z":"2"}}`, []charge{
+			{simple, ":1:8", scalarExpectedHint("y", "ta")},
+		}},
+		{"a {type table} below the root selecting a simple type", selectedSimpleSchema, `{"pt":{"c":{"y":"1","z":"2"}}}`, []charge{
+			{simple, ":1:13", scalarExpectedHint("y", "c")},
 		}},
 		{"unknown key under an empty parent", childSchema, `{"e0":{"zz":"1"}}`, []charge{
 			{ruleCvcComplexType, ":1:8", ""},
