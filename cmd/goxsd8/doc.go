@@ -85,7 +85,12 @@
 //	    A JSON instance is mapped onto the infoset by validate/jsonsrc
 //	    and assessed against the -schema documents; its violations and
 //	    undecided checks print and exit as an XML instance's do, <loc>
-//	    being jsonsrc's line and byte column. An input jsonsrc's
+//	    being jsonsrc's line and byte column. A cvc-complex-type
+//	    violation at a scalar member whose element's type has empty or
+//	    element-only content ends with a clause naming the member in
+//	    JSON terms, ; JSON member "<key>" ... object expected; go doc
+//	    github.com/kud360/goxsd8/validate/jsonsrc Validate lists every
+//	    clause jsonsrc appends. An input jsonsrc's
 //	    mapping declines, malformed JSON, content after the top-level
 //	    object and an I/O fault reading the instance once it is open
 //	    all reach jsonsrc's one error channel, and the line names

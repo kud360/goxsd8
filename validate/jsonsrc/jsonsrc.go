@@ -116,6 +116,19 @@ func WithURI(uri string) Option {
 // with an empty [validate.Result.Unevaluated] means not proven invalid, not
 // valid, and a non-empty Unevaluated leaves the document undecided against the
 // rules its entries name.
+//
+// A violation's rule ID and location are the engine's, and so is its message
+// but for one clause Validate appends to it, opening "; JSON member" and
+// naming the member's key as spelled, an array item's being its array's:
+//
+//   - the cvc-complex-type charge at the scalar of an element whose type has
+//     empty content (clause 1.1), or element-only content where the scalar's
+//     lexical form is not all white space (clause 1.3): object expected.
+//
+// The clause goes on that element's own charge alone, never on another charge
+// at the same rule and location, such as the parent's at an array item, and
+// only where the mapping determines the type that governs the element
+// (walker.scalarGoverning's GAP(jsonsrc) markers).
 func Validate(v *validate.Validator, r io.Reader, opts ...Option) (*validate.Result, error) {
 	if v == nil {
 		return nil, fmt.Errorf("jsonsrc: Validate: nil *validate.Validator")

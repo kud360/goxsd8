@@ -45,14 +45,15 @@ func (c characters) hint() string {
 
 // noteCharacters keeps a characters note at loc, the location of the scalar
 // whose lexical form is lexical, for the member key that m classifies,
-// standing at at, where the engine charges the element's text: its
-// ·governing type definition·, as walker.scalarGoverning determines it, is a
-// complex type whose {content type} is empty, which cvc-complex-type clause
-// 1.1 charges for any character information item, or element-only, which
-// clause 1.3 charges for one that is not all white space (xmlWhitespace). An
-// empty lexical is no character information item (walker.scalar), and is
-// charged under neither. The notes kept grow with the charges the engine
-// makes, the document never being held (STYLE P4).
+// standing at at, where the type walker.scalarGoverning finds governing the
+// element charges its text: a complex type whose {content type} is empty,
+// which cvc-complex-type clause 1.1 charges for any character information
+// item, or element-only, which clause 1.3 charges for one that is not all
+// white space (xmlWhitespace). An empty lexical is no character information
+// item (walker.scalar), and is charged under neither. A bareElement has no
+// declaration, and the engine assesses it under ·xs:anyType· (key-lva), whose
+// content is mixed. The notes kept grow with the scalars those types charge,
+// the document never being held (STYLE P4).
 func (w *walker) noteCharacters(m elementMember, key, lexical string, loc xsderr.Loc, at placement) {
 	d, ok := m.(declaredElement)
 	if !ok || lexical == "" {
@@ -76,18 +77,24 @@ func (w *walker) noteCharacters(m elementMember, key, lexical string, loc xsderr
 	w.notes[noteAt{loc: loc, rule: ruleCvcComplexType}] = characters{key: key, lexical: lexical, variety: v}
 }
 
-// scalarGoverning is the ·governing type definition· of a scalar-valued
-// element the declaration d names, standing at at, where the mapping
-// determines the one the engine assesses it under, and false otherwise: a
-// scalar carries no attribute, so no xsi:type, and its type is what its
-// ·governing element declaration· gives it (key-governing-type-elem clause
-// 4), or, where it has none, walker.governs's type. The declaration is the one
-// walker.selector names; where it carries a {type table}, its type is the one
-// the table selects for an element with no [attributes] and the [inherited
-// attributes] at hands it (key-cta-ta-select clauses 1.1.2 and 1.1.3), which
-// validate.Validator.ConditionallySelected answers as the engine selects. It is
-// false for an element ·skipped· by a skip wildcard, which nothing assesses
-// (cvc-assess-elt clause 2).
+// scalarGoverning is the type that governs a scalar-valued element the
+// declaration d names, standing at at, as the engine determines it, and false
+// where the mapping does not determine it: a scalar carries no attribute, so
+// no xsi:type, and its ·governing type definition· is what its ·governing
+// element declaration· gives it (key-governing-type-elem clause 4), or, where
+// it has none, the type walker.governs finds governing it. That declaration
+// is the one walker.selector names; where it carries a {type table}, the type
+// is the one the table selects for an element with no [attributes] and the
+// [inherited attributes] at hands it (key-cta-ta-select clauses 1.1.2 and
+// 1.1.3), as validate.Validator.ConditionallySelected, the engine's own scan,
+// answers. It is false for an element ·skipped· by a skip wildcard, which
+// nothing assesses (cvc-assess-elt clause 2).
+//
+// Below an element whose selection the engine withholds, the mapping can
+// determine a type where every type that may govern each element between
+// hands down alike (walker.selector), while the engine walks the subtree
+// undecided and charges nothing there, the scalar's parent included; the note
+// kept then answers no charge (walker.annotate).
 //
 // GAP(jsonsrc): no type is determined, and so no note kept, where the mapping
 // attributes the element to nothing (placement.attributed): its parent's
@@ -95,22 +102,24 @@ func (w *walker) noteCharacters(m elementMember, key, lexical string, loc xsderr
 // (object.unattributed, its GAP(xsd) marker, the maxPartitionStates ceiling
 // RULED permanent there), or the schema view lacks the governor capability,
 // which validate.Validator.Schema never returns. validate walks the XML twin's
-// subtree undecided there (its GAP(validate) marker in walk.child), charging
-// no text, so walker.annotate, the note's one consumer, loses no clause on
-// any charge the engine makes. Owned by #2670, which retires with #1601's
-// ruling.
+// subtree undecided there (its GAP(validate) marker in walk.child) and charges
+// it no text, so walker.annotate, the note's one consumer, leaves no charge
+// the engine makes without a clause it would carry. Owned by #2670, which
+// retires with #1601's ruling.
 //
 // GAP(jsonsrc): no type is determined, and so no note kept, where the
 // declaration carries a {type table} whose selection the engine withholds, a
 // {test} it reaches being outside its §3.12.6 compiler's subset, or where the
-// mapping reads no selection (walker.selector), the types that may govern the
-// parent differing or handing down different [inherited attributes]
-// (walker.handDown), whether or not those types agree on charging the
-// scalar. The engine walks such an element undecided: its own selection
-// withheld, or below one whose selection is. No text charge stands there to
-// answer, while a charge of the parent's can share the scalar's location, an
-// array item's (walker.annotate), so a note kept there would answer the
-// parent's. RULED permanent by #2702: selecting past a withheld
+// mapping reads no selection (walker.selector): the types that may govern the
+// parent differ, or hand down different [inherited attributes]
+// (walker.handDown). That holds whether or not the types the table can
+// select, or the types that may govern the element, agree on charging the
+// scalar. The engine walks each such element undecided, its own selection
+// withheld or one above it, and charges it no text, so walker.annotate, the
+// note's one consumer, leaves no charge the engine makes without a clause it
+// would carry; where the element's own selection is withheld, its parent can
+// still charge at an array item's location, and a note kept there would
+// answer that charge. RULED permanent by #2702: selecting past a withheld
 // key-cta-select alternative is unsound, as walker.classify's marker of the
 // same ruling says.
 func (w *walker) scalarGoverning(d xsd.ElementDeclaration, at placement) (xsd.TypeDefinition, bool) {
@@ -143,19 +152,23 @@ func (w *walker) scalarGoverning(d xsd.ElementDeclaration, at placement) (xsd.Ty
 }
 
 // annotate appends to the Msg of the charge each note answers the clause its
-// hint gives: the last violation of res at the note's rule and location. A
-// note is kept only where the engine makes the element's own text charge
-// (walker.noteCharacters), and that charge is the last cvc-complex-type
-// violation at the scalar's location: at a member's scalar no other charge
-// stands, the element's own location being its key's; at an array item, whose
-// location is its scalar's, the parent's clause 1.1 and 1.2 charges and its
-// clause 5 charge at the item, and the item's clause 3 and 4 charges, all
-// precede the item's [[children]] (validate's walk.child and walk.element),
-// and no cvc-complex-type charge at the item follows its text charge, its
-// content check charging once (validate's contentCheck.charged) and clause
-// 1.2's ·initial value· charge needing simple content. Writing Msg through
-// res.Violations() writes res's own violations, as validate.Result.Violations
-// states; the rule ID and location stay the engine's.
+// hint gives: the last violation of res at the note's rule and location, and
+// none where no violation is there. Where the engine determines the type
+// walker.scalarGoverning determines, a note is kept exactly where the engine
+// makes the element's own text charge (walker.noteCharacters), and that
+// charge is the last cvc-complex-type violation at the scalar's location: at
+// a member's scalar no other charge stands, the element's own location being
+// its key's; at an array item, whose location is its scalar's, the parent's
+// clause 1.1 and 1.2 charges and its clause 5 charge at the item, and the
+// item's clause 3 and 4 charges, all precede the item's [[children]]
+// (validate's walk.child and walk.element), and no cvc-complex-type charge at
+// the item follows its text charge, its content check charging once
+// (validate's contentCheck.charged) and clause 1.2's ·initial value· charge
+// needing simple content. Where the engine walks the element undecided
+// instead, it charges nothing at that location (walker.scalarGoverning).
+// Writing Msg through res.Violations() writes res's own violations, as
+// validate.Result.Violations states; the rule ID and location stay the
+// engine's.
 func (w *walker) annotate(res *validate.Result) {
 	answered := map[noteAt]bool{}
 	vs := res.Violations()
