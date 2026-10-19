@@ -58,8 +58,9 @@ const typeSchema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
 
 // TestTypeMember pins the "$type" arm: a "$type" member is the element's
 // xsi:type, resolved against the "$xmlns" bindings in scope, and the members
-// after it are classified under the type it names wherever that resolves and
-// the element is the root, which its declaration governs
+// after it are classified under the type that governs the root: the type it
+// names where that resolves and ·overrides· the declared type, and the
+// declared type where it does not, cvc-elt clause 4 charged
 // (walker.instanceGoverned). Each row agrees with its XML twin.
 func TestTypeMember(t *testing.T) {
 	v := validatorOver(t, typeSchema)
@@ -263,7 +264,7 @@ const openContentSchema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema
   </xs:element>
 </xs:schema>`
 
-// TestOpenContentType pins walker.instanceUnder's {open content} arm: a
+// TestOpenContentType pins walker.overriddenUnder's {open content} arm: a
 // "$type" on an element a non-skip {open content} may take, whose name has a
 // ·locally declared type· dt within the type, classifies the element's
 // members under dt where the type it names does not ·override· dt, and under
@@ -368,7 +369,7 @@ const governedSchema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
   </xs:element>
 </xs:schema>`
 
-// TestGovernedType pins walker.instanceUnder against governedSchema: the
+// TestGovernedType pins walker.overriddenUnder against governedSchema: the
 // members of the second x are classified under the type its "$type" names
 // where that type ·overrides· L ·without limitation·, and under L where it
 // does not, uncharged (key-governing-type-elem clauses 6 and 7). The
@@ -700,13 +701,14 @@ func TestUngovernedParentType(t *testing.T) {
 // GAP(xsd) ceiling), holding a of type Ta. X, unrelated to L, has the
 // attribute k; there is no top-level x. Tn restricts Ta to its x alone, which
 // blocks extension, with no {open content}, and the top-level gd is of type
-// Ta and selects Tn where it has an attribute a. Le extends L with the attribute a; ht holds an
-// optional x of type L that selects Lr where its a is present, and the
-// top-level hr is of type L and selects Lr likewise. Gw takes one optional q
-// of type L and then a lax wildcard, Gq restricts it to the q alone, and the
-// top-level gw is of type Gw and selects Gq where it has an attribute a; the
-// top-level q is of type Qo, which has a lax {open content} and declares k of
-// xs:token. hold holds an optional gd and then an optional gw.
+// Ta and selects Tn where it has an attribute a. Le extends L with the
+// attribute a; ht holds an optional x of type L that selects Lr where its a is
+// present, and the top-level hr is of type L and selects Lr likewise. Gw takes
+// one optional q of type L and then a lax wildcard, Gq restricts it to the q
+// alone, and the top-level gw is of type Gw and selects Gq where it has an
+// attribute a; the top-level q is of type Qo, which has a lax {open content}
+// and declares k of xs:token. hold holds an optional gd and then an optional
+// gw.
 const ancestrySchema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
     targetNamespace="urn:t" xmlns:t="urn:t" elementFormDefault="qualified">
   <xs:complexType name="L"><xs:sequence><xs:element name="k" type="xs:string" minOccurs="0"/></xs:sequence></xs:complexType>

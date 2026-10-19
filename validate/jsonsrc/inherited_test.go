@@ -35,9 +35,8 @@ import (
 // optional tu, and Z1 extends it with a, inheritable, defaulting to "z"; z is of type Z0 and selects Z1
 // where its a is "u", and pa holds an optional z and carries a, inheritable. O1 holds an optional c of
 // type T under a lax interleave {open content} and carries a, and O2 restricts it to no {open content},
-// its c blocking restriction;
-// ro is of type O1 and selects O2 where it counts an a. big's {content type} is one
-// xsd.Schema.ContentMatcher declines (its GAP(xsd) ceiling), holding mids.
+// its c blocking restriction; ro is of type O1 and selects O2 where it counts an a. big's {content type}
+// is one xsd.Schema.ContentMatcher declines (its GAP(xsd) ceiling), holding mids.
 const inheritSchema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
     xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" targetNamespace="urn:i" xmlns:i="urn:i" elementFormDefault="qualified">
   <xs:attribute name="ia" type="xs:string" inheritable="true"/>
@@ -269,18 +268,17 @@ func TestInheritedSelected(t *testing.T) {
 // that governs it as the engine determines it, which is the type the "$type"
 // names only where that type ·overrides· the ·selected type definition· of
 // its ·governing element declaration· (key-governing-type-elem clauses 3 and
-// 4), and not the type its members are classified under (walker.instanceGoverned). X
+// 4), which its members are classified under too (walker.instanceGoverned). X
 // does not ·override· B, so e is charged cvc-elt clause 4 and governed by B, which
 // hands tu no a, and tu, governed by T, takes m as a child, at the root and below it.
 // X2 ·overrides· B, the type et selects without a k, and hands down its ·defaulted· a,
 // but not N, the one it selects where its k is "n", which then governs et
-// (walker.governOverriding). The second q of pq, which pq's content model rejects, has
+// (walker.overrode). The second q of pq, which pq's content model rejects, has
 // no ·governing element declaration·, and X does not ·override· its ·locally declared
 // type· B, which governs it (key-governing-type-elem clause 7). The z of pa reads
 // pa's a, "u", among its [inherited attributes] and selects Z1, which Z0 does not
 // ·override· (cvc-elt clause 4), so Z1 governs z and hands tu its ·defaulted· a,
-// "z", the nearer, and tu, governed by T, takes m as a child
-// (walker.governOverriding).
+// "z", the nearer, and tu, governed by T, takes m as a child (walker.overrode).
 func TestOverriddenTypeHandsDown(t *testing.T) {
 	v := validatorOver(t, inheritSchema)
 	const i = `xmlns="urn:i" xmlns:i="urn:i" `
