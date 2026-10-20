@@ -134,14 +134,7 @@ func (v *Validator) Schema() SchemaView { return v.schema }
 
 // Result is the outcome of one [Validator.Assess] call. Read it through
 // [Result.Standing], the acceptance test, and not through an empty
-// [Result.Violations]. Standing answers one of three arms: [Charged] when
-// the assessment charged a violation, whatever else the Result holds;
-// [Undecided] when it charged none but reached a check it did not perform
-// ([Result.Unevaluated]) or stopped at a fault in the source ([Result.Err]),
-// which leaves the assessment INCOMPLETE rather than the document invalid; and
-// [NotProvenInvalid] when the Result holds none of the three, which is NOT PROVEN
-// INVALID rather than valid. Only NotProvenInvalid leaves nothing charged and
-// nothing undecided.
+// [Result.Violations].
 type Result struct {
 	violations  []*xsderr.Error
 	unevaluated []Unevaluated
@@ -257,8 +250,10 @@ func (r *Result) Unevaluated() []Unevaluated {
 func (r *Result) Err() error { return r.err }
 
 // Standing is where one returned [Result] leaves its document: [Charged],
-// [Undecided] or [NotProvenInvalid], ranked by severity in that order. The
-// numeric values promise no order, and the zero value is no arm.
+// [Undecided] or [NotProvenInvalid], each constant's doc stating its
+// condition. They rank by meaning, most severe first in that order, and not
+// by numeric value: compare two Standings with a switch over the three
+// constants, never with <. The zero value is no arm.
 //
 // It answers a Result that was returned. An error a source adapter
 // (validate/xmlsrc, validate/jsonsrc) returns in its place means no Result

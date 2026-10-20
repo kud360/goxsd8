@@ -329,6 +329,35 @@ func TestValidateUndecidedIsLessSevereThanInvalid(t *testing.T) {
 	}
 }
 
+// TestStandingCode pins the exit code each [validate.Standing] arm earns, and
+// that a Standing no arm matches never answers exitOK.
+func TestStandingCode(t *testing.T) {
+	for _, c := range []struct {
+		name     string
+		standing validate.Standing
+		want     int
+	}{
+		{"Charged", validate.Charged, exitInvalid},
+		{"Undecided", validate.Undecided, exitUndecided},
+		{"NotProvenInvalid", validate.NotProvenInvalid, exitOK},
+	} {
+		if got := standingCode(c.standing); got != c.want {
+			t.Errorf("standingCode(%s) = %d, want %d", c.name, got, c.want)
+		}
+	}
+	for _, c := range []struct {
+		name     string
+		standing validate.Standing
+	}{
+		{"Standing(0)", validate.Standing(0)},
+		{"Standing(NotProvenInvalid+1)", validate.NotProvenInvalid + 1},
+	} {
+		if got := standingCode(c.standing); got == exitOK {
+			t.Errorf("standingCode(%s) = exitOK, want any other code: a Standing no arm matches must not pass a gate", c.name)
+		}
+	}
+}
+
 // TestValidateQuietDoesNotSuppressUndecidedChecks holds the new stream to the
 // settled scope of -q: it silences a subcommand's informational output, and
 // the checks the assessment declined are a verdict about the instance.
