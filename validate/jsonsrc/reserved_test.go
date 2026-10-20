@@ -1072,14 +1072,17 @@ const selfSelectedSchema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchem
   <xs:element name="hc" type="t:L"><xs:alternative test="@a" type="t:Lr"/></xs:element>
 </xs:schema>`
 
-// TestTabledElementTypeShorterReading pins walker.overrode's shorter reading
-// (walker.shorterReading): in selfSelectedSchema Lc ·overrides· L but not Lr,
-// which hc's table selects where a is present. Under Lc a and c are
-// attributes, and they select Lr, of which c is a child; the reading that
-// takes a alone as an attribute selects Lr again, of which a is an attribute
-// and c a child, so Lr governs hc, cvc-elt clause 4 charged, and c is a child
-// its content model does not take, as for the XML twin. The first row's run
-// ends at the object's close, the second's at the child k.
+// TestTabledElementTypeShorterReading pins walker.overrode where the one
+// reading that stands is shorter than the run: in selfSelectedSchema Lc
+// ·overrides· L but not Lr, which hc's table selects where a is present.
+// Under Lc a and c are attributes, and they select Lr, of which c is a child;
+// the reading that takes a alone as an attribute selects Lr again, of which a
+// is an attribute and c a child, so Lr governs hc, cvc-elt clause 4 charged,
+// and c is a child its content model does not take, as for the XML twin. The
+// reading that takes neither selects L, which Lc ·overrides·, of which a is
+// an attribute, so it does not stand. The first row's run ends at the
+// object's close, the second's at the child k, which no type takes as an
+// attribute, so no longer reading stands.
 func TestTabledElementTypeShorterReading(t *testing.T) {
 	v := validatorOver(t, selfSelectedSchema)
 	const x = `xmlns="urn:t" xmlns:t="urn:t" ` + xsiDecl
@@ -1133,21 +1136,80 @@ const twoReadingsSchema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema
   </xs:element>
 </xs:schema>`
 
+// longerReadingSchema declares L, whose content is a lax wildcard of urn:t,
+// with the attributes a, a string, and c, a decimal; Lc, which restricts L
+// with c prohibited; Lk, which restricts it to the same attributes; Lr, which
+// restricts it with c an integer; Ld, which restricts it with neither; and h,
+// of type L, which selects Lr where it has an a and Ld otherwise.
+const longerReadingSchema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+    targetNamespace="urn:t" xmlns:t="urn:t" elementFormDefault="qualified">
+  <xs:complexType name="L">
+    <xs:sequence><xs:any namespace="##targetNamespace" processContents="lax" minOccurs="0" maxOccurs="unbounded"/></xs:sequence>
+    <xs:attribute name="a" type="xs:string"/>
+    <xs:attribute name="c" type="xs:decimal"/>
+  </xs:complexType>
+  <xs:complexType name="Lc">
+    <xs:complexContent>
+      <xs:restriction base="t:L">
+        <xs:sequence><xs:any namespace="##targetNamespace" processContents="lax" minOccurs="0" maxOccurs="unbounded"/></xs:sequence>
+        <xs:attribute name="a" type="xs:string"/>
+        <xs:attribute name="c" use="prohibited"/>
+      </xs:restriction>
+    </xs:complexContent>
+  </xs:complexType>
+  <xs:complexType name="Lk">
+    <xs:complexContent>
+      <xs:restriction base="t:L">
+        <xs:sequence><xs:any namespace="##targetNamespace" processContents="lax" minOccurs="0" maxOccurs="unbounded"/></xs:sequence>
+        <xs:attribute name="a" type="xs:string"/>
+        <xs:attribute name="c" type="xs:decimal"/>
+      </xs:restriction>
+    </xs:complexContent>
+  </xs:complexType>
+  <xs:complexType name="Lr">
+    <xs:complexContent>
+      <xs:restriction base="t:L">
+        <xs:sequence><xs:any namespace="##targetNamespace" processContents="lax" minOccurs="0" maxOccurs="unbounded"/></xs:sequence>
+        <xs:attribute name="a" type="xs:string"/>
+        <xs:attribute name="c" type="xs:integer"/>
+      </xs:restriction>
+    </xs:complexContent>
+  </xs:complexType>
+  <xs:complexType name="Ld">
+    <xs:complexContent>
+      <xs:restriction base="t:L">
+        <xs:sequence><xs:any namespace="##targetNamespace" processContents="lax" minOccurs="0" maxOccurs="unbounded"/></xs:sequence>
+        <xs:attribute name="a" use="prohibited"/>
+        <xs:attribute name="c" use="prohibited"/>
+      </xs:restriction>
+    </xs:complexContent>
+  </xs:complexType>
+  <xs:element name="h" type="t:L">
+    <xs:alternative test="@a" type="t:Lr"/>
+    <xs:alternative type="t:Ld"/>
+  </xs:element>
+</xs:schema>`
+
 // TestTabledElementTypeDeclines pins walker.overrode's GAP(jsonsrc) marker and
-// walker.shorterReading's declines: a "$type" whose members, classified under
-// the type it names, select a type it does not ·override·, which governs the
-// element and classifies them otherwise, declines where no one shorter
-// reading of them is classified as it reads by the type that governs it; its
-// XML twin is charged cvc-elt clause 4. In ancestrySchema Le, which extends L
-// with the attribute a, ·overrides· L but not Lr, which x's and hr's {type
-// table}s select where a is present: a, an attribute of Le, selects Lr, of
-// which it is a child, and as a child it selects L, which Le ·overrides·, and
-// of which it is an attribute (#2831), so no reading stands. In
-// twoReadingsSchema We ·overrides· neither W1 nor W0: under We a and b are
-// attributes and select W1, of which b is a child; the reading that takes a
-// alone selects W1 again, of which a is an attribute and b a child, and the
-// one that takes neither selects W0, of which a is a child, so two readings
-// stand (#2700).
+// its declines where no one reading stands: a "$type" whose members,
+// classified under the type it names, select a type it does not ·override·,
+// which governs the element and classifies them otherwise, declines where no
+// one reading of them, shorter than the run or longer, is classified as it
+// reads by the type that governs it; its XML twin is charged cvc-elt clause
+// 4. In ancestrySchema Le, which extends L with the attribute a, ·overrides·
+// L but not Lr, which x's and hr's {type table}s select where a is present:
+// a, an attribute of Le, selects Lr, of which it is a child, and as a child
+// it selects L, which Le ·overrides·, and of which it is an attribute
+// (#2831), so no reading stands. In twoReadingsSchema We ·overrides· neither
+// W1 nor W0: under We a and b are attributes and select W1, of which b is a
+// child; the reading that takes a alone selects W1 again, of which a is an
+// attribute and b a child, and the one that takes neither selects W0, of
+// which a is a child, so two shorter readings stand (#2700). In
+// longerReadingSchema Lc ·overrides· neither Lr nor Ld: under Lc a is an
+// attribute and c a child, and a selects Lr, of which c is an attribute; the
+// reading that takes neither selects Ld, of which both are children, and the
+// one that takes c too selects Lr, of which both are attributes, so a shorter
+// and a longer reading stand (#2700).
 func TestTabledElementTypeDeclines(t *testing.T) {
 	const x = `xmlns="urn:t" xmlns:t="urn:t" ` + xsiDecl
 	for _, tc := range []struct {
@@ -1165,6 +1227,9 @@ func TestTabledElementTypeDeclines(t *testing.T) {
 		{"two shorter readings", twoReadingsSchema, `{"hw":{"$xmlns":{"t":"urn:t"},"$type":"t:We","a":"1","b":"1"}}`,
 			`<hw ` + x + ` xsi:type="t:We" a="1"><b>1</b></hw>`, []xsderr.Rule{"cvc-elt"},
 			"jsonsrc: instance.json:1:31: ", "{urn:t}hw", "{urn:t}W1"},
+		{"a shorter and a longer reading", longerReadingSchema, `{"h":{"$xmlns":{"t":"urn:t"},"$type":"t:Lc","a":"1","c":"1.5"}}`,
+			`<h ` + x + ` xsi:type="t:Lc"><a>1</a><c>1.5</c></h>`, []xsderr.Rule{"cvc-elt"},
+			"jsonsrc: instance.json:1:30: ", "{urn:t}h", "{urn:t}Lr"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			v := validatorOver(t, tc.schema)
@@ -1181,6 +1246,41 @@ func TestTabledElementTypeDeclines(t *testing.T) {
 				t.Fatalf("Validate(%s) = %v, want it to open %q", tc.json, err, want)
 			}
 		})
+	}
+}
+
+// TestTabledElementTypeRunNotAlone pins walker.overrode's decline where the
+// type that governs the element for the run's attributes classifies the run
+// as it reads, but another reading stands too (walker.readAhead's
+// GAP(jsonsrc) marker RULED permanent by #2700): in longerReadingSchema Lk
+// ·overrides· neither Lr nor Ld; under Lk a and c are attributes and select
+// Lr, of which both are attributes, and the reading that takes neither
+// selects Ld, of which both are children. Each XML twin is charged cvc-elt
+// clause 4, and the one with the attributes cvc-attribute too, 1.5 being no
+// integer, so the two readings' verdicts differ.
+func TestTabledElementTypeRunNotAlone(t *testing.T) {
+	v := validatorOver(t, longerReadingSchema)
+	const x = `xmlns="urn:t" xmlns:t="urn:t" ` + xsiDecl
+	for _, tc := range []struct {
+		xml  string
+		want []xsderr.Rule
+	}{
+		{`<h ` + x + ` xsi:type="t:Lk"><a>1</a><c>1.5</c></h>`, []xsderr.Rule{"cvc-elt"}},
+		{`<h ` + x + ` xsi:type="t:Lk" a="1" c="1.5"/>`, []xsderr.Rule{"cvc-elt", "cvc-attribute"}},
+	} {
+		xres, err := xmlsrc.Validate(v, strings.NewReader(tc.xml), xmlsrc.WithURI("instance.xml"))
+		if err != nil || xres.Err() != nil {
+			t.Fatalf("xmlsrc.Validate(%s): %v / %v", tc.xml, err, xres.Err())
+		}
+		if got := rules(xres); !slices.Equal(got, tc.want) {
+			t.Fatalf("XML twin %s charges %v, want %v", tc.xml, got, tc.want)
+		}
+	}
+	const in = `{"h":{"$xmlns":{"t":"urn:t"},"$type":"t:Lk","a":"1","c":"1.5"}}`
+	_, err := Validate(v, strings.NewReader(in), WithURI(jsonURI))
+	const want = `jsonsrc: instance.json:1:30: the "$type" member of {urn:t}h: the type that governs {urn:t}h for the attributes its members are classified with, {urn:t}Lr, classifies those members as they read, but another reading`
+	if err == nil || !strings.HasPrefix(err.Error(), want) {
+		t.Fatalf("Validate(%s) = %v, want it to open %q", in, err, want)
 	}
 }
 
