@@ -144,9 +144,15 @@ func WithURI(uri string) Option {
 //     value, under builtin/strict, or a backend whose xs:QName mapping is its:
 //     "$type" spells xsi:type, and, where the fault is a prefix no "$xmlns" in
 //     scope binds, a "$xmlns" member binds it. Under a backend that does not
-//     map xs:QName, the engine charges a "$type" that is no QName under
-//     cvc-attribute clause 5 instead, the clause going on that charge, and one
-//     whose prefix no "$xmlns" binds under neither clause.
+//     map xs:QName, or maps it otherwise than builtin/strict, the engine's
+//     charge at a "$type" is that backend's: clause 3 where its mapping
+//     rejects the value, and otherwise clause 5's, which charges a "$type"
+//     naming no type and declines one that is empty, of a colon structure no
+//     QName has, or of a prefix no "$xmlns" binds. The clause then goes on the
+//     cvc-attribute charge the engine makes at a "$type" that builtin/strict's
+//     mapping finds no QName or whose prefix no "$xmlns" binds, under whichever
+//     clause, clause 5's included though the clause does not answer it, and on
+//     no charge at any other "$type".
 //   - the cvc-elt clause 3.1 charge at a null member whose element's
 //     declaration is not nillable: null spells xsi:nil="true".
 //
