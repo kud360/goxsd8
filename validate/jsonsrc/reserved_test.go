@@ -1072,17 +1072,72 @@ const selfSelectedSchema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchem
   <xs:element name="hc" type="t:L"><xs:alternative test="@a" type="t:Lr"/></xs:element>
 </xs:schema>`
 
-// TestTabledElementTypeDeclines pins walker.overrode's GAP(jsonsrc) markers: a
-// "$type" whose members, classified under the type it names, select a type
-// it does not ·override·, which governs the element and classifies them
-// otherwise, declines; its XML twin is charged cvc-elt clause 4. In
-// ancestrySchema Le, which extends L with the attribute a, ·overrides· L but
-// not Lr, which x's and hr's {type table}s select where a is present: a,
-// an attribute of Le, selects Lr, of which it is a child, and as a child it
-// selects L, which Le ·overrides·, and of which it is an attribute (#2831). In
-// selfSelectedSchema Lc ·overrides· L but not Lr, which hc's table selects
-// where a is present: under Lr, a is an attribute and selects Lr again, but c
-// is a child, where Lc makes it an attribute (#2832).
+// TestTabledElementTypeShorterReading pins walker.overrode's shorter reading
+// (walker.shorterReading): in selfSelectedSchema Lc ·overrides· L but not Lr,
+// which hc's table selects where a is present. Under Lc a and c are
+// attributes, and they select Lr, of which c is a child; the reading that
+// takes a alone as an attribute selects Lr again, of which a is an attribute
+// and c a child, so Lr governs hc, cvc-elt clause 4 charged, and c is a child
+// its content model does not take, as for the XML twin.
+func TestTabledElementTypeShorterReading(t *testing.T) {
+	twin(t, validatorOver(t, selfSelectedSchema), `{"hc":{"$xmlns":{"t":"urn:t"},"$type":"t:Lc","a":"1","c":"1"}}`,
+		`<hc xmlns="urn:t" xmlns:t="urn:t" `+xsiDecl+` xsi:type="t:Lc" a="1"><c>1</c></hc>`,
+		[]xsderr.Rule{"cvc-elt", "cvc-complex-content"})
+}
+
+// twoReadingsSchema declares W, whose content is a lax wildcard of urn:t,
+// with the attributes a and b; W1, which restricts W to the same with a alone;
+// W0, which restricts it with neither; We, which extends W with nothing; and
+// hw, of type W, which selects W1 where it has an a and W0 otherwise.
+const twoReadingsSchema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+    targetNamespace="urn:t" xmlns:t="urn:t" elementFormDefault="qualified">
+  <xs:complexType name="W">
+    <xs:sequence><xs:any namespace="##targetNamespace" processContents="lax" minOccurs="0" maxOccurs="unbounded"/></xs:sequence>
+    <xs:attribute name="a" type="xs:string"/>
+    <xs:attribute name="b" type="xs:string"/>
+  </xs:complexType>
+  <xs:complexType name="W1">
+    <xs:complexContent>
+      <xs:restriction base="t:W">
+        <xs:sequence><xs:any namespace="##targetNamespace" processContents="lax" minOccurs="0" maxOccurs="unbounded"/></xs:sequence>
+        <xs:attribute name="a" type="xs:string"/>
+        <xs:attribute name="b" use="prohibited"/>
+      </xs:restriction>
+    </xs:complexContent>
+  </xs:complexType>
+  <xs:complexType name="W0">
+    <xs:complexContent>
+      <xs:restriction base="t:W">
+        <xs:sequence><xs:any namespace="##targetNamespace" processContents="lax" minOccurs="0" maxOccurs="unbounded"/></xs:sequence>
+        <xs:attribute name="a" use="prohibited"/>
+        <xs:attribute name="b" use="prohibited"/>
+      </xs:restriction>
+    </xs:complexContent>
+  </xs:complexType>
+  <xs:complexType name="We">
+    <xs:complexContent><xs:extension base="t:W"/></xs:complexContent>
+  </xs:complexType>
+  <xs:element name="hw" type="t:W">
+    <xs:alternative test="@a" type="t:W1"/>
+    <xs:alternative type="t:W0"/>
+  </xs:element>
+</xs:schema>`
+
+// TestTabledElementTypeDeclines pins walker.overrode's GAP(jsonsrc) marker and
+// walker.shorterReading's declines: a "$type" whose members, classified under
+// the type it names, select a type it does not ·override·, which governs the
+// element and classifies them otherwise, declines where no one shorter
+// reading of them is classified as it reads by the type that governs it; its
+// XML twin is charged cvc-elt clause 4. In ancestrySchema Le, which extends L
+// with the attribute a, ·overrides· L but not Lr, which x's and hr's {type
+// table}s select where a is present: a, an attribute of Le, selects Lr, of
+// which it is a child, and as a child it selects L, which Le ·overrides·, and
+// of which it is an attribute (#2831), so no reading stands. In
+// twoReadingsSchema We ·overrides· neither W1 nor W0: under We a and b are
+// attributes and select W1, of which b is a child; the reading that takes a
+// alone selects W1 again, of which a is an attribute and b a child, and the
+// one that takes neither selects W0, of which a is a child, so two readings
+// stand (#2700).
 func TestTabledElementTypeDeclines(t *testing.T) {
 	const x = `xmlns="urn:t" xmlns:t="urn:t" ` + xsiDecl
 	for _, tc := range []struct {
@@ -1097,9 +1152,9 @@ func TestTabledElementTypeDeclines(t *testing.T) {
 		{"the root's, Lr selected", ancestrySchema, `{"hr":{"$xmlns":{"t":"urn:t"},"$type":"t:Le","a":"1"}}`,
 			`<hr ` + x + ` xsi:type="t:Le" a="1"/>`, []xsderr.Rule{"cvc-elt", "cvc-complex-type"},
 			"jsonsrc: instance.json:1:31: ", "{urn:t}hr", "{urn:t}Lr"},
-		{"a selection the other attribute does not read", selfSelectedSchema, `{"hc":{"$xmlns":{"t":"urn:t"},"$type":"t:Lc","a":"1","c":"1"}}`,
-			`<hc ` + x + ` xsi:type="t:Lc" a="1"><c>1</c></hc>`, []xsderr.Rule{"cvc-elt", "cvc-complex-content"},
-			"jsonsrc: instance.json:1:31: ", "{urn:t}hc", "{urn:t}Lr"},
+		{"two shorter readings", twoReadingsSchema, `{"hw":{"$xmlns":{"t":"urn:t"},"$type":"t:We","a":"1","b":"1"}}`,
+			`<hw ` + x + ` xsi:type="t:We" a="1"><b>1</b></hw>`, []xsderr.Rule{"cvc-elt"},
+			"jsonsrc: instance.json:1:31: ", "{urn:t}hw", "{urn:t}W1"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			v := validatorOver(t, tc.schema)

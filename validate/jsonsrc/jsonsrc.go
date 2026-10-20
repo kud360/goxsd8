@@ -2494,12 +2494,13 @@ func (w *walker) attributes(o *object, sc *scope, tok json.Token, loc xsderr.Loc
 	r.live = r.candidates()
 	for {
 		key, ok := tok.(string)
+		run := r.run
 		if !ok {
 			final, _, err := w.settled(r, nil, loc)
 			if err != nil {
 				return nil, nil, nil, err
 			}
-			return r.attributes(), []peeked{{tok: tok, loc: loc}}, final, nil
+			return r.attributes(), append(children(run[len(r.run):]), peeked{tok: tok, loc: loc}), final, nil
 		}
 		if isReserved(key) {
 			return nil, nil, nil, w.reserved(key, loc)
@@ -2524,7 +2525,7 @@ func (w *walker) attributes(o *object, sc *scope, tok json.Token, loc xsderr.Loc
 				return nil, nil, nil, err
 			}
 			if final != nil {
-				return r.attributes(), []peeked{{tok: tok, loc: loc, val: v}}, final, nil
+				return r.attributes(), append(children(run[len(r.run):]), peeked{tok: tok, loc: loc, val: v}), final, nil
 			}
 		}
 		if unsettled == nil {
@@ -3253,10 +3254,7 @@ func (w *walker) take(r *attributeRun, la lookahead, rd reading) ([]validate.Att
 	}
 	so := w.object(r.owner.owner, rd.typ)
 	w.govern(so, []xsd.TypeDefinition{rd.typ})
-	ahead := make([]peeked, 0, len(la.items)-rd.k+1)
-	for _, it := range la.items[rd.k:] {
-		ahead = append(ahead, peeked{tok: it.key, loc: it.loc, val: it.val})
-	}
+	ahead := children(la.items[rd.k:])
 	if la.closed != nil {
 		ahead = append(ahead, *la.closed)
 	}
@@ -3387,16 +3385,10 @@ func (w *walker) settled(r *attributeRun, next *runMember, loc xsderr.Loc) (fina
 // the members under it selects it again, and the mapping, reading no member
 // past next, does not reclassify the run under it. Owned by #2832.
 func (w *walker) overrode(r *attributeRun, next *runMember) (final *object, unsettled, err error) {
-	ov := r.owner.overriding
-	var slot xsd.TypeDefinitionOrRef
-	withheld := false
-	_, _, t, _, err := w.governance(complexOf(ov.parent), ov.a, r.owner.owner, ov.instance, func(table xsd.TypeTable) (xsd.TypeDefinitionOrRef, bool) {
-		selected, decided := w.selected(table, r.attributes(), r.inherited)
-		slot, withheld = selected, !decided
-		return selected, decided
-	})
+	attrs := r.attributes()
+	t, slot, withheld, err := w.overridden(r, attrs)
 	if err != nil {
-		return nil, nil, w.overrideUndecided(r.owner.owner, r.typ, err)
+		return nil, nil, err
 	}
 	if withheld {
 		r.owner.unassessed = true
@@ -3410,13 +3402,94 @@ func (w *walker) overrode(r *attributeRun, next *runMember) (final *object, unse
 	if err != nil {
 		return nil, nil, err
 	}
-	if !agrees {
+	if agrees {
+		w.govern(so, []xsd.TypeDefinition{t})
+		return so, nil, nil
+	}
+	so, k, err := w.shorterReading(r, attrs)
+	if err != nil {
+		return nil, nil, err
+	}
+	if so == nil {
 		s, _ := w.schema.ResolvedType(slot)
-		return nil, nil, w.declinef(r.typ.loc, "the \"$type\" member of %s: the type its {type table} selects for the attributes its members are classified with, %s, is one the type it names does not ·override·, so it governs %s, and it classifies those members otherwise",
+		return nil, nil, w.declinef(r.typ.loc, "the \"$type\" member of %s: the type its {type table} selects for the attributes its members are classified with, %s, is one the type it names does not ·override·, so it governs %s, and it classifies those members otherwise; and no one shorter reading of its attribute members is classified as it reads by the type that governs it",
 			r.owner.owner, typeName(s), r.owner.owner)
 	}
-	w.govern(so, []xsd.TypeDefinition{t})
+	r.run = r.run[:k]
 	return so, nil, nil
+}
+
+// overridden is the type validate.Validator.Governing decides governs r's
+// element, read off r.owner.overriding, where its attributes are attrs, its
+// xsi:type r.typ among them (walker.selected, key-cta-select), and the slot
+// its {type table} selects; nil where Governing decides none. withheld is
+// whether the engine withholds that selection. It DECLINES r.typ where
+// ·override· is not decided (walker.overrideUndecided).
+func (w *walker) overridden(r *attributeRun, attrs []validate.Attribute) (t xsd.TypeDefinition, slot xsd.TypeDefinitionOrRef, withheld bool, err error) {
+	ov := r.owner.overriding
+	_, _, t, _, err = w.governance(complexOf(ov.parent), ov.a, r.owner.owner, ov.instance, func(table xsd.TypeTable) (xsd.TypeDefinitionOrRef, bool) {
+		selected, decided := w.selected(table, attrs, r.inherited)
+		slot, withheld = selected, !decided
+		return selected, decided
+	})
+	if err != nil {
+		return nil, nil, false, w.overrideUndecided(r.owner.owner, r.typ, err)
+	}
+	return t, slot, withheld, nil
+}
+
+// shorterReading is the object of the type that governs r's element under
+// the one reading k < len(r.run) that type classifies as it reads, and k: the
+// reading takes r.run[:k] as the element's attributes, beside r.typ, and
+// r.run[k] on as its children, and attrs is r.attributes(). Each reading is
+// an XML twin of its own (walker.readAhead), whose governing type
+// walker.overridden decides from its own attributes, and it stands where
+// that type classifies r.run[:k] as the attributes the run took them as and
+// r.run[k] as no attribute (walker.agrees). It returns a nil object where no
+// reading stands; where two do, as walker.readAhead's GAP(jsonsrc) marker
+// RULED permanent by #2700 says; and where the engine withholds a reading's
+// selection or Governing decides no type for it, as walker.readAhead's
+// GAP(jsonsrc) marker RULED permanent by #2702 says. Its error is the decline
+// of a member of a reading that reading's type declines (walker.agrees), as
+// walker.readAhead's GAP(jsonsrc) marker RULED permanent by #2703 says, and
+// walker.overridden's.
+func (w *walker) shorterReading(r *attributeRun, attrs []validate.Attribute) (*object, int, error) {
+	fixed := len(attrs) - len(r.run)
+	var found *object
+	k := 0
+	for j := range r.run {
+		t, _, withheld, err := w.overridden(r, attrs[:fixed+j])
+		if err != nil {
+			return nil, 0, err
+		}
+		if withheld || t == nil {
+			return nil, 0, nil
+		}
+		so := w.object(r.owner.owner, t)
+		agrees, err := w.agrees(so, r.run[:j], r.run[j])
+		if err != nil {
+			return nil, 0, err
+		}
+		if !agrees {
+			continue
+		}
+		if found != nil {
+			return nil, 0, nil
+		}
+		w.govern(so, []xsd.TypeDefinition{t})
+		found, k = so, j
+	}
+	return found, k, nil
+}
+
+// children is the peeked member for each of ms, members walker.attributes
+// read whose element's members cursor reads them as children.
+func children(ms []*runMember) []peeked {
+	ahead := make([]peeked, 0, len(ms)+1)
+	for _, m := range ms {
+		ahead = append(ahead, peeked{tok: m.key, loc: m.loc, val: m.val})
+	}
+	return ahead
 }
 
 // typeName names a type definition for a message: its ·expanded name·, or
