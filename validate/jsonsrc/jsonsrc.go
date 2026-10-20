@@ -48,29 +48,9 @@ func WithURI(uri string) Option {
 // It returns (nil, err) whenever no assessment of the whole document stands,
 // and (result, nil) otherwise; a result it returns never carries
 // [validate.Result.Err]. Its faults are the four error classes listed below.
-// The inputs the mapping DECLINES are a top level that is not an object with
-// exactly one member, and, anywhere in the document, a member the implemented
-// arms do not map (a key with no colon that is no NCName, such as "@kind"; a
-// key whose colon makes no QName or whose prefix no "$xmlns" in scope binds; a
-// key no child element declaration and no attribute use carries whose
-// namespace neither a prefix nor the type's wildcards fix, or whose kind a
-// type with both an element wildcard and an {attribute wildcard} leaves open,
-// or which a wildcard puts in the xsi or xml namespace, or a prefix in the xsi
-// namespace or, as a child element, in the xml namespace; a member of an
-// object under a child no contained and no top-level declaration names; an
-// unprefixed key two expanded names carry, a key both a child declaration and
-// an attribute use carry, an attribute member after a child member or
-// repeated, an attribute member whose value is null, an object or an array, a
-// "$type" or "$xmlns" member out of its leading place or of the wrong shape, a
-// "$type" whose parent's ·governing type definition· the mapping does not
-// determine or that the types a {type table} whose selection it does not read
-// can select for it settle differently, any other "$"-prefixed reserved
-// member, a nested array, a member of an element whose declaration carries a
-// {type table} whose selection the mapping does not read that its declared
-// {type definition} and a type the table can select classify differently, and,
-// where it reads the selection, the leading attribute members no run settles
-// by the type the table ·conditionally selects· for them; the package doc
-// lists them all). A decline names the arm it is not, and for an input with no
+// The mapping DECLINES every input none of its arms maps: the package doc's
+// "What declines" lists each with its remedy, and "Every decline" states each
+// in full. A decline names the arm it is not, and for an input with no
 // XML twin the spelling the mapping takes instead where one exists; it is
 // never a silent drop or a guessed mapping: a member the mapping cannot name
 // is not part of the document the assessment saw, so its result is discarded
