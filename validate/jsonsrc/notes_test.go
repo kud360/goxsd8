@@ -620,18 +620,18 @@ func arrayItemHint(key, n string) string {
 // not ·override·, the "$type"'s cvc-attribute clause 3 charge, the element's
 // cvc-elt clause 3.1 charge at a null under a declaration that is not
 // nillable, and the parent's cvc-complex-content charge at an array item, and
-// at a member walker.shorterReading's reading takes as a child, which keeps an
-// unnamed note; and that it appends none to any other charge at the same rule
-// and location — the element's cvc-elt clause 2 charge before or after its
-// clause 3.1 or 4 one, an array item's own content charge, an unnamed note's
-// charge at an item, the cvc-type charge over the empty value that follows —
-// nor where the engine makes no such charge: a "$type" that ·overrides·, one
-// naming no type (cvc-attribute clause 5), one whose element's own {type
-// table} selection the engine withholds, a nillable fixed declaration's clause
-// 3.2.3.2 charge, a parent's content charged at an earlier child, an element
-// the engine walks undecided below a withheld selection or an unattributed
-// parent, and a null no declaration governs. Each charge's rule and location
-// are the engine's.
+// at a member of the run the reading walker.overrode takes reads as a child,
+// which keeps an unnamed note; and that it appends none to any other charge at
+// the same rule and location — the element's cvc-elt clause 2 charge before or
+// after its clause 3.1 or 4 one, an array item's own content charge, an
+// unnamed note's charge at an item, the cvc-type charge over the empty value
+// that follows — nor where the engine makes no such charge: a "$type" that
+// ·overrides·, one naming no type (cvc-attribute clause 5), one whose
+// element's own {type table} selection the engine withholds, a nillable fixed
+// declaration's clause 3.2.3.2 charge, a parent's content charged at an
+// earlier child, an element the engine walks undecided below a withheld
+// selection or an unattributed parent, and a null no declaration governs. Each
+// charge's rule and location are the engine's.
 func TestSpellingNoteHints(t *testing.T) {
 	const (
 		content = ruleCvcComplexContent
