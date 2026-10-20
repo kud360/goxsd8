@@ -3474,17 +3474,16 @@ func (w *walker) overridden(r *attributeRun, attrs []validate.Attribute) (t xsd.
 
 // readers is each type that can govern r's element under a reading of its
 // members, where its "$type" stands beside a {type table} whose selection the
-// mapping reads (object.overriding): r.owner, whose names the run carries,
-// the type the "$type" names, and each type the table can select
-// (walker.selectable), Governing deciding one of the last two for every
-// reading. It DECLINES as walker.selectable does.
+// mapping reads (object.overriding): the type the "$type" names, and each type
+// the table can select (walker.selectable), Governing deciding one of them for
+// every reading. It DECLINES as walker.selectable does.
 func (w *walker) readers(r *attributeRun) ([]*object, error) {
 	ov := r.owner.overriding
 	selectable, err := w.selectable(ov.decl, r.owner.owner, r.typ.loc)
 	if err != nil {
 		return nil, err
 	}
-	return append([]*object{r.owner, w.object(r.owner.owner, ov.instance)}, selectable...), nil
+	return append([]*object{w.object(r.owner.owner, ov.instance)}, selectable...), nil
 }
 
 // readingType is the type that governs r's element under a reading whose

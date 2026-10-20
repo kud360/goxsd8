@@ -1139,8 +1139,9 @@ const twoReadingsSchema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema
 // longerReadingSchema declares L, whose content is a lax wildcard of urn:t,
 // with the attributes a, a string, and c, a decimal; Lc, which restricts L
 // with c prohibited; Lk, which restricts it to the same attributes; Lr, which
-// restricts it with c an integer; Ld, which restricts it with neither; and h,
-// of type L, which selects Lr where it has an a and Ld otherwise.
+// restricts it with c an integer; Ld, which restricts it with neither; Lb,
+// which extends Ld with the attribute b; and h, of type L, which selects Lr
+// where it has an a and Ld otherwise.
 const longerReadingSchema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
     targetNamespace="urn:t" xmlns:t="urn:t" elementFormDefault="qualified">
   <xs:complexType name="L">
@@ -1184,11 +1185,28 @@ const longerReadingSchema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSche
       </xs:restriction>
     </xs:complexContent>
   </xs:complexType>
+  <xs:complexType name="Lb">
+    <xs:complexContent>
+      <xs:extension base="t:Ld"><xs:attribute name="b" type="xs:string"/></xs:extension>
+    </xs:complexContent>
+  </xs:complexType>
   <xs:element name="h" type="t:L">
     <xs:alternative test="@a" type="t:Lr"/>
     <xs:alternative type="t:Ld"/>
   </xs:element>
 </xs:schema>`
+
+// TestTabledElementTypeInstanceReading pins walker.readers' instance
+// candidate: in longerReadingSchema Lb extends Ld with the attribute b, which
+// no type h's {type table} can select takes as an attribute. Under Lb b is an
+// attribute and selects Ld, which Lb ·overrides·, so Lb governs h and the
+// reading that takes b stands, named as Lb names it; the one that takes
+// neither selects Ld too, and Lb takes b as an attribute, so it does not.
+func TestTabledElementTypeInstanceReading(t *testing.T) {
+	v := validatorOver(t, longerReadingSchema)
+	const x = `xmlns="urn:t" xmlns:t="urn:t" ` + xsiDecl
+	twin(t, v, `{"h":{"$xmlns":{"t":"urn:t"},"$type":"t:Lb","b":"1"}}`, `<h `+x+` xsi:type="t:Lb" b="1"/>`, none)
+}
 
 // TestTabledElementTypeDeclines pins walker.overrode's GAP(jsonsrc) marker and
 // its declines where no one reading stands: a "$type" whose members,
