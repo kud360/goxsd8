@@ -89,9 +89,11 @@ func WithURI(uri string) Option {
 // Every error it returns is of one of four classes. Past a nil argument, each
 // is an [*Error], matched with [errors.As]: [Error.Class] is its class,
 // [Error.Loc] the location of the construct it names, and [Error.Msg] its
-// message alone, with no "jsonsrc: " and no location; its Error() is always
-// "jsonsrc: " + Loc().String() + ": " + Msg(). No sentinel value marks any
-// class:
+// message alone, with no "jsonsrc: " and no location. Its Error() is always
+//
+//	"jsonsrc: " + Loc().String() + ": " + Msg()
+//
+// No sentinel value marks any class:
 //
 //   - A nil argument: "jsonsrc: Validate: nil *validate.Validator" or
 //     "jsonsrc: Validate: nil io.Reader", a plain error and no *Error. It
@@ -106,7 +108,8 @@ func WithURI(uri string) Option {
 //     decided by whether the decoder's error is the one r returned, never by
 //     its type: bytes r returned that are malformed ahead of r's error are
 //     [Malformed], and a document r's error cuts off is [ReadFault].
-//   - A decline, class [Decline]. It wraps nothing.
+//   - A decline, class [Decline], matched with errors.As(err, &e) &&
+//     e.Class() == Decline. It wraps nothing.
 //
 // None is an [xsderr.Error], and none wraps one Validate builds: none is a
 // validity verdict about a document. A read fault wraps whatever r returned.
