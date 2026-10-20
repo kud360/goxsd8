@@ -1140,8 +1140,9 @@ const twoReadingsSchema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema
 // with the attributes a, a string, and c, a decimal; Lc, which restricts L
 // with c prohibited; Lk, which restricts it to the same attributes; Lr, which
 // restricts it with c an integer; Ld, which restricts it with neither; Lb,
-// which extends Ld with the attribute b; and h, of type L, which selects Lr
-// where it has an a and Ld otherwise.
+// which extends Ld with the attribute b; h, of type L, which selects Lr where
+// it has an a and Ld otherwise; and hl, of type L, which selects Lr where it
+// has an a.
 const longerReadingSchema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
     targetNamespace="urn:t" xmlns:t="urn:t" elementFormDefault="qualified">
   <xs:complexType name="L">
@@ -1194,7 +1195,33 @@ const longerReadingSchema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSche
     <xs:alternative test="@a" type="t:Lr"/>
     <xs:alternative type="t:Ld"/>
   </xs:element>
+  <xs:element name="hl" type="t:L"><xs:alternative test="@a" type="t:Lr"/></xs:element>
 </xs:schema>`
+
+// TestTabledElementTypeLongerReading pins walker.overrode where the one
+// reading that stands is longer than the run: in longerReadingSchema Lc
+// ·overrides· L but not Lr, which hl's {type table} selects where it has an
+// a. Under Lc a is an attribute and c a child, and a selects Lr, of which c
+// is an attribute; the reading that takes c too selects Lr again, of which
+// both are attributes, so Lr governs hl, cvc-elt clause 4 charged, and c's
+// 1.5 is no integer, as for the XML twin. The reading that takes neither
+// selects L, which Lc ·overrides·, of which a is an attribute, so it does not
+// stand. The first row's object closes after c; the second's reads on to the
+// child z, whose value is no scalar, so no reading takes it as an attribute.
+func TestTabledElementTypeLongerReading(t *testing.T) {
+	v := validatorOver(t, longerReadingSchema)
+	const x = `xmlns="urn:t" xmlns:t="urn:t" ` + xsiDecl
+	for _, tc := range []struct {
+		name, json, xml string
+	}{
+		{"at the close", `{"hl":{"$xmlns":{"t":"urn:t"},"$type":"t:Lc","a":"1","c":"1.5"}}`,
+			`<hl ` + x + ` xsi:type="t:Lc" a="1" c="1.5"/>`},
+		{"at a child", `{"hl":{"$xmlns":{"t":"urn:t"},"$type":"t:Lc","a":"1","c":"1.5","z":{}}}`,
+			`<hl ` + x + ` xsi:type="t:Lc" a="1" c="1.5"><z/></hl>`},
+	} {
+		t.Run(tc.name, func(t *testing.T) { twin(t, v, tc.json, tc.xml, []xsderr.Rule{"cvc-elt", "cvc-attribute"}) })
+	}
+}
 
 // TestTabledElementTypeInstanceReading pins walker.readers' instance
 // candidate: in longerReadingSchema Lb extends Ld with the attribute b, which
