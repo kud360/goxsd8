@@ -461,11 +461,11 @@
 //   - a "$type" on an element whose {type table} selects, for the attributes
 //     its members are classified as under the type the "$type" names, a type
 //     the "$type" does not ·override·, which governs the element and
-//     classifies those members otherwise: where the selection reads an
-//     attribute the classification decides, neither classification is a
-//     fixed point (#2831); where it reads none, the mapping does not
-//     reclassify the members under the type that governs (#2832). The engine
-//     charges the twin cvc-elt clause 4;
+//     classifies those members otherwise, unless one shorter reading of them
+//     is classified as it reads by the type that governs it, which the
+//     mapping then takes: where the selection reads an attribute the
+//     classification decides, neither classification is a fixed point
+//     (#2831). The engine charges the twin cvc-elt clause 4;
 //   - any other "$"-prefixed reserved member, "$" being no XML NameStartChar;
 //   - an array item that is itself an array;
 //   - a member of an object under a declaration carrying a {type table} that

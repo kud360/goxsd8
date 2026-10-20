@@ -1078,11 +1078,21 @@ const selfSelectedSchema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchem
 // attributes, and they select Lr, of which c is a child; the reading that
 // takes a alone as an attribute selects Lr again, of which a is an attribute
 // and c a child, so Lr governs hc, cvc-elt clause 4 charged, and c is a child
-// its content model does not take, as for the XML twin.
+// its content model does not take, as for the XML twin. The first row's run
+// ends at the object's close, the second's at the child k.
 func TestTabledElementTypeShorterReading(t *testing.T) {
-	twin(t, validatorOver(t, selfSelectedSchema), `{"hc":{"$xmlns":{"t":"urn:t"},"$type":"t:Lc","a":"1","c":"1"}}`,
-		`<hc xmlns="urn:t" xmlns:t="urn:t" `+xsiDecl+` xsi:type="t:Lc" a="1"><c>1</c></hc>`,
-		[]xsderr.Rule{"cvc-elt", "cvc-complex-content"})
+	v := validatorOver(t, selfSelectedSchema)
+	const x = `xmlns="urn:t" xmlns:t="urn:t" ` + xsiDecl
+	for _, tc := range []struct {
+		name, json, xml string
+	}{
+		{"at the close", `{"hc":{"$xmlns":{"t":"urn:t"},"$type":"t:Lc","a":"1","c":"1"}}`,
+			`<hc ` + x + ` xsi:type="t:Lc" a="1"><c>1</c></hc>`},
+		{"at a child", `{"hc":{"$xmlns":{"t":"urn:t"},"$type":"t:Lc","a":"1","c":"1","k":"z"}}`,
+			`<hc ` + x + ` xsi:type="t:Lc" a="1"><c>1</c><k>z</k></hc>`},
+	} {
+		t.Run(tc.name, func(t *testing.T) { twin(t, v, tc.json, tc.xml, []xsderr.Rule{"cvc-elt", "cvc-complex-content"}) })
+	}
 }
 
 // twoReadingsSchema declares W, whose content is a lax wildcard of urn:t,

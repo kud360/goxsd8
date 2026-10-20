@@ -2447,7 +2447,8 @@ func (w *walker) object(owner xsd.QName, td xsd.TypeDefinition) *object {
 // first after its reserved members, each an attribute of the element after
 // typ, its xsi:type where a "$type" presents one and nil where none does; and
 // returns them, typ first, with what it read past the run, for the element's
-// members cursor to start from — the member that ends the run, the first
+// members cursor to start from — the members walker.overrode cuts from the
+// run (walker.shorterReading), then the member that ends the run, the first
 // whose key names a child or whose value is an array, as far as walker.value
 // read it, or the object's close, then any member walker.readAhead read after
 // it — and the object the members after the run are classified against.
@@ -3362,16 +3363,19 @@ func (w *walker) settled(r *attributeRun, next *runMember, loc xsderr.Loc) (fina
 // substitutions}, and S, cvc-elt clause 4 charged, where it does not — it
 // returns that type's object, and walker.objectElement keeps the note for
 // that charge (walker.noteOverride). The members after the run are classified
-// under that type, which classifies the run and next as r.owner did
+// under that type, where it classifies the run and next as r.owner did
 // (walker.agrees), so that S is the type the twin's attributes select too.
-// Where the engine withholds S, or S does not resolve, the run ends under
-// r.owner (walker.unselected), and walker.governOverriding makes each type
-// that may govern the element. It DECLINES typ where ·override· is not decided
-// (walker.overrideUndecided), and where the governing type declines a member
-// of the run, or next (walker.agrees).
-//
-// It DECLINES typ too where the governing type classifies the run, or next,
-// otherwise than r.owner did.
+// Where it classifies them otherwise, the run is the one shorter reading of it
+// the type that governs that reading classifies as it reads
+// (walker.shorterReading): the run is cut to that reading's attributes, and
+// walker.attributes hands the members after them to the element's members
+// cursor, classified under that reading's governing type. Where the engine
+// withholds S, or S does not resolve, the run ends under r.owner
+// (walker.unselected), and walker.governOverriding makes each type that may
+// govern the element. It DECLINES typ where ·override· is not decided
+// (walker.overrideUndecided), where the governing type declines a member of
+// the run, or next (walker.agrees), and where it classifies them otherwise
+// and walker.shorterReading finds no one shorter reading.
 //
 // GAP(jsonsrc): a "$type" declines where the type its element's {type table}
 // selects for the attributes its members are classified with under r.owner
@@ -3379,11 +3383,6 @@ func (w *walker) settled(r *attributeRun, next *runMember, loc xsderr.Loc) (fina
 // classifies an attribute the selection reads otherwise: classified under
 // either type, the attributes select the other, so neither classification
 // is a fixed point, though the engine assesses each XML twin. Owned by #2831.
-//
-// GAP(jsonsrc): the same decline stands where the attribute that type
-// classifies otherwise is not one the selection reads, so that classifying
-// the members under it selects it again, and the mapping, reading no member
-// past next, does not reclassify the run under it. Owned by #2832.
 func (w *walker) overrode(r *attributeRun, next *runMember) (final *object, unsettled, err error) {
 	attrs := r.attributes()
 	t, slot, withheld, err := w.overridden(r, attrs)
@@ -3443,19 +3442,21 @@ func (w *walker) overridden(r *attributeRun, attrs []validate.Attribute) (t xsd.
 // reading takes r.run[:k] as the element's attributes, beside r.typ, and
 // r.run[k] on as its children, and attrs is r.attributes(). Each reading is
 // an XML twin of its own (walker.readAhead), whose governing type
-// walker.overridden decides from its own attributes, and it stands where
-// that type classifies r.run[:k] as the attributes the run took them as and
-// r.run[k] as no attribute (walker.agrees). It returns a nil object where no
-// reading stands; where two do, as walker.readAhead's GAP(jsonsrc) marker
-// RULED permanent by #2700 says; and where the engine withholds a reading's
-// selection or Governing decides no type for it, as walker.readAhead's
-// GAP(jsonsrc) marker RULED permanent by #2702 says. Its error is the decline
-// of a member of a reading that reading's type declines (walker.agrees), as
-// walker.readAhead's GAP(jsonsrc) marker RULED permanent by #2703 says, and
-// walker.overridden's.
+// walker.overridden decides from that reading's attributes, and it stands
+// where that type classifies r.run[:k] as the attributes the run took them as
+// and r.run[k] as no attribute (walker.agrees). It returns a nil object where
+// no reading stands; where two do, under walker.readAhead's GAP(jsonsrc)
+// marker RULED permanent by #2700; where the engine withholds a reading's
+// selection, under walker.readAhead's GAP(jsonsrc) marker RULED permanent by
+// #2702; and where Governing decides no type for a reading whose selection
+// it makes, the slot naming none, under declaredType's GAP(jsonsrc) marker
+// RULED permanent by #2625. Its error is walker.overridden's, or the decline
+// of a member of a reading that reading's type declines (walker.agrees), under
+// walker.readAhead's GAP(jsonsrc) marker RULED permanent by #2703.
 func (w *walker) shorterReading(r *attributeRun, attrs []validate.Attribute) (*object, int, error) {
 	fixed := len(attrs) - len(r.run)
 	var found *object
+	var governing xsd.TypeDefinition
 	k := 0
 	for j := range r.run {
 		t, _, withheld, err := w.overridden(r, attrs[:fixed+j])
@@ -3476,9 +3477,12 @@ func (w *walker) shorterReading(r *attributeRun, attrs []validate.Attribute) (*o
 		if found != nil {
 			return nil, 0, nil
 		}
-		w.govern(so, []xsd.TypeDefinition{t})
-		found, k = so, j
+		found, governing, k = so, t, j
 	}
+	if found == nil {
+		return nil, 0, nil
+	}
+	w.govern(found, []xsd.TypeDefinition{governing})
 	return found, k, nil
 }
 
