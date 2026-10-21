@@ -79,9 +79,9 @@ func formatVocabulary() string {
 // into ONE schema set and assesses every positional argument against it,
 // writing each violation to stdout as the contract's "<loc>: [<rule>]
 // <message>", each check the assessment declined in the marked rendering
-// undecidedLine states, and a JSON instance jsonsrc could not assess as
-// "<loc>: [jsonsrc] <message>" (assessJSON). args excludes the subcommand
-// name itself.
+// undecidedLine states, and a JSON instance jsonsrc could not assess in the
+// line jsonsrcLine renders for its error's class. args excludes the
+// subcommand name itself.
 //
 // Every instance is assessed, in argument order: a violation in one never
 // stops the next, so a script gets the whole report from one run. The exit
@@ -288,33 +288,13 @@ func (vn *validation) one(instance string, stdout, stderr io.Writer) int {
 // (#2627), so a JSON instance carries none, and -no-hints changes nothing for
 // it. instanceHints, an XML tokenizer, is never run over JSON bytes.
 //
-// jsonsrc's error channel is one (nil, err), every error of which but a nil
-// argument's is a *jsonsrc.Error of a class jsonsrc.Validate's doc lists:
-// malformed JSON, a fault reading src, or an input the mapping declines.
-// jsonsrc's doc makes none of them a validity verdict, and nothing tells a
-// shape the mapping rejects from an arm it does not implement, so the line —
-// "<loc>: [jsonsrc] <message>", built from the error's Loc and Msg and naming
-// no class — lands on stdout with the report and is charged exitUndecided
-// whatever the class: charging exitInvalid would charge every decline as
-// invalid. Malformed XML is charged exitInvalid instead, on one's reasoning for
-// xmlsrc's fault.
-//
-// A line of class jsonsrc.Malformed, and no other, ends with formatHint's
-// clause. An error that is no *jsonsrc.Error, which only the nil arguments
-// assessJSON never passes are, is located at instance alone, with its own
-// text as the message and no clause.
+// jsonsrc's error channel is one (nil, err), and its one line lands on stdout
+// with the report, rendered and charged by jsonsrcLine.
 func (vn *validation) assessJSON(instance string, src io.Reader, stdout, stderr io.Writer) int {
 	result, err := jsonsrc.Validate(vn.base, src, jsonsrc.WithURI(instance))
 	if err != nil {
-		var e *jsonsrc.Error
-		if !errors.As(err, &e) {
-			return reportLines(stdout, stderr, instance, []string{fmt.Sprintf("%s: [%s] %s", instance, jsonsrcToken, err)}, exitUndecided)
-		}
-		line := fmt.Sprintf("%s: [%s] %s", e.Loc(), jsonsrcToken, e.Msg())
-		if e.Class() == jsonsrc.Malformed {
-			line += vn.formatHint(instance)
-		}
-		return reportLines(stdout, stderr, instance, []string{line}, exitUndecided)
+		line, code := vn.jsonsrcLine(instance, err)
+		return reportLines(stdout, stderr, instance, []string{line}, code)
 	}
 	// jsonsrc.Validate's result carries no validate.Result.Err: every fault
 	// comes back as err.
@@ -322,9 +302,44 @@ func (vn *validation) assessJSON(instance string, src io.Reader, stdout, stderr 
 	return reportLines(stdout, stderr, instance, lines, code)
 }
 
+// jsonsrcLine renders err, an error off jsonsrc.Validate's one error channel
+// for instance, as that instance's line, and returns the exit code it earns.
+// The *jsonsrc.Error's Class() alone decides both, here and nowhere else, so
+// an unmarked [jsonsrc] line always earns exitInvalid and a marked one
+// exitUndecided:
+//
+//   - jsonsrc.Malformed: "<loc>: [jsonsrc] <message>", ending with
+//     formatHint's clause, exitInvalid, as malformed XML is charged on one's
+//     reasoning for xmlsrc's fault.
+//   - jsonsrc.ReadFault: the same line with no clause, exitInvalid, as an I/O
+//     fault reading an XML instance is charged, xmlsrc charging it [xml-wf].
+//   - jsonsrc.Decline: undecidedLine's "<loc>: [jsonsrc] undecided:
+//     <message>", exitUndecided: a decline is a withhold, never a verdict.
+//
+// A Class with no arm here, the zero value included, takes the Decline arm,
+// so a class this switch has not been taught can never charge an instance.
+// So does an error that is no *jsonsrc.Error, which only the nil arguments
+// assessJSON never passes are, located at instance alone with its own text as
+// the message. <loc> and <message> are the error's Loc and Msg.
+func (vn *validation) jsonsrcLine(instance string, err error) (string, int) {
+	var e *jsonsrc.Error
+	if !errors.As(err, &e) {
+		return markUndecided(instance, jsonsrcToken, err.Error()), exitUndecided
+	}
+	switch e.Class() {
+	case jsonsrc.Malformed:
+		return fmt.Sprintf("%s: [%s] %s", e.Loc(), jsonsrcToken, e.Msg()) + vn.formatHint(instance), exitInvalid
+	case jsonsrc.ReadFault:
+		return fmt.Sprintf("%s: [%s] %s", e.Loc(), jsonsrcToken, e.Msg()), exitInvalid
+	case jsonsrc.Decline:
+		// The return below, which a Class with no arm takes too.
+	}
+	return markUndecided(e.Loc().String(), jsonsrcToken, e.Msg()), exitUndecided
+}
+
 // formatHint is the clause an instance's line ends with where -format forced a
 // format its extension does not name and the instance is not well-formed in
-// it: assessJSON appends it to the line of a jsonsrc.Malformed error, and one
+// it: jsonsrcLine appends it to the line of a jsonsrc.Malformed error, and one
 // to the [xml-wf] line of xmlsrc.Validate's error or of its result's
 // validate.Result.Err where no fault reading the instance raised the error. It
 // names the format the flag forced and the one the extension names.
@@ -364,7 +379,7 @@ func (w *watchedReader) Read(p []byte) (int, error) {
 }
 
 // jsonsrcToken stands where a diagnostic line's [<rule>] stands on every line
-// assessJSON renders from jsonsrc's error channel. It names the source that
+// jsonsrcLine renders from jsonsrc's error channel. It names the source that
 // raised the error, not a spec rule: no jsonsrc error is an xsderr.Error
 // (#2721).
 const jsonsrcToken = "jsonsrc"
@@ -519,7 +534,15 @@ func standingCode(s validate.Standing) int {
 // must not be made to: it decides nothing about the document, and a consumer
 // that could errors.Is it would be one join away from a false reject.
 func undecidedLine(u validate.Unevaluated) string {
-	return fmt.Sprintf("%s: [%s] undecided: %s", u.Loc(), u.Rule(), u.Msg())
+	return markUndecided(u.Loc().String(), string(u.Rule()), u.Msg())
+}
+
+// markUndecided renders a withheld answer as "<loc>: [<token>] undecided:
+// <msg>", the one encoding of the "undecided: " literal: undecidedLine's
+// declined check passes its rule ID as token, and jsonsrcLine's decline
+// jsonsrcToken.
+func markUndecided(loc, token, msg string) string {
+	return fmt.Sprintf("%s: [%s] undecided: %s", loc, token, msg)
 }
 
 // reportLines writes one instance's report to stdout and reports the exit code

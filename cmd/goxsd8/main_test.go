@@ -292,18 +292,29 @@ func TestUsageCoversContract(t *testing.T) {
 	if !strings.Contains(usage, "gen is reserved but "+verb) {
 		t.Errorf("usage does not state gen's status in the wording notImplementedFmt prints (%q)", verb)
 	}
-	// Why every jsonsrc error exits 4, whether the input is malformed, a shape
-	// the mapping rejects or an arm it does not implement (#2686), now that
-	// jsonsrc classes its errors (#2710, #2792). Matched over the text with
-	// its line breaks folded, as the sentence wraps.
-	why := "They share 4 because the line names no class, and nothing tells a shape the mapping rejects from an arm it does not implement, so charging 1 would charge every decline as invalid."
-	if !strings.Contains(strings.Join(strings.Fields(usage), " "), why) {
-		t.Errorf("usage does not state why every jsonsrc error exits 4 (%q)", why)
+	// jsonsrcLine's routing of jsonsrc's error channel by class, each class's
+	// line shape and exit code, which jsonsrcLine renders (#2721, #2893).
+	// Matched over the text with its line breaks folded, as the sentences wrap.
+	folded := strings.Join(strings.Fields(usage), " ")
+	for _, want := range []string{
+		"validate routes each by the class jsonsrc gives it",
+		fmt.Sprintf("Malformed JSON and content after the top-level object print <loc>: [%s] <message> and exit 1, as malformed XML does", jsonsrcToken),
+		"an I/O fault reading the instance prints the same line and exits 1, as an I/O fault reading an XML instance does",
+		fmt.Sprintf("A decline prints <loc>: [%s] undecided: <message> and exits 4", jsonsrcToken),
+	} {
+		if !strings.Contains(folded, want) {
+			t.Errorf("usage does not state how a jsonsrc error routes (%q)", want)
+		}
 	}
-	// The jsonsrc error line's shape, which assessJSON renders (#2721).
-	shape := "each prints " + fmt.Sprintf("<loc>: [%s] <message>", jsonsrcToken) + " on stdout"
-	if !strings.Contains(strings.Join(strings.Fields(usage), " "), shape) {
-		t.Errorf("usage does not state the jsonsrc error line's shape (%q)", shape)
+	// The one statement that the undecided: literal marks both withholds,
+	// which doc.go's hand-written Diagnostic lines section carries (#2893).
+	src, err := os.ReadFile("doc.go")
+	if err != nil {
+		t.Fatalf("reading doc.go: %v", err)
+	}
+	both := "The literal undecided: marks both withholds on purpose, a declined check and a jsonsrc decline, and the token before it, a rule ID or jsonsrc, tells them apart."
+	if !strings.Contains(strings.Join(strings.Fields(strings.ReplaceAll(string(src), "\n//", "\n")), " "), both) {
+		t.Errorf("doc.go does not state that undecided: marks both withholds (%q)", both)
 	}
 }
 

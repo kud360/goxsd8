@@ -114,27 +114,28 @@ Usage (contract; subcommands land with their milestones):
       can end with a clause jsonsrc appends naming a member in JSON
       terms, such as ; JSON member "<key>" ... object expected; go
       doc github.com/kud360/goxsd8/validate/jsonsrc Validate lists
-      each clause and the one charge it goes on. An input jsonsrc's
-      mapping declines, malformed JSON, content after the top-level
-      object and an I/O fault reading the instance once it is open
-      all reach jsonsrc's one error channel, and the line names
-      none of them: each prints <loc>: [jsonsrc] <message> on
-      stdout, [jsonsrc] standing where [<rule>] stands and naming
-      the source that raised the error, not a rule, and exits 4,
-      where malformed XML and an I/O fault reading an XML instance
-      exit 1. They share 4
-      because the line names no class, and nothing tells a shape
-      the mapping rejects from an arm it does not implement, so
-      charging 1 would charge every decline as invalid.
+      each clause and the one charge it goes on. Malformed JSON,
+      content after the top-level object, an I/O fault reading the
+      instance once it is open and an input jsonsrc's mapping
+      declines all reach jsonsrc's one error channel, and validate
+      routes each by the class jsonsrc gives it, printing one line on
+      stdout with [jsonsrc] standing where [<rule>] stands and naming
+      the source that raised the error, not a rule. Malformed JSON
+      and content after the top-level object print <loc>: [jsonsrc]
+      <message> and exit 1, as malformed XML does; an I/O fault
+      reading the instance prints the same line and exits 1, as an
+      I/O fault reading an XML instance does. A decline prints
+      <loc>: [jsonsrc] undecided: <message> and exits 4: the
+      instance stands undecided, not invalid.
       Where -format forces xml or json on an instance whose
       extension names the other, a line saying it is not well-formed
       in the forced format keeps its token and exit code and ends
       with a clause naming the format forced and the one the
       extension names, ; -format F read <instance> as F, but its
       extension names G: drop -format, or pass -format G. Under
-      -format json that is every [jsonsrc] line but a decline's:
-      malformed JSON, no JSON value and content after the top-level
-      object alike. Under -format xml it is every [xml-wf] line,
+      -format json that is every malformed JSON line: malformed
+      JSON, no JSON value and content after the top-level object
+      alike. Under -format xml it is every [xml-wf] line,
       wherever in the document its fault lies. A line reporting a
       fault reading the instance gets no clause.
       The JSON shape in brief: the top-level object has exactly one
@@ -189,11 +190,11 @@ Usage (contract; subcommands land with their milestones):
       assessment declined to decide: no violation charged, and a
       check it reached not performed, so the instance stands
       undecided against the rule that check answers to rather than
-      clean; a JSON instance on jsonsrc's error channel is 4 too,
+      clean; a JSON instance jsonsrc's mapping declines is 4 too,
       with no assessment standing. The code is the worst outcome over
       the instances, by severity and not by number: undecided is less
-      severe than invalid, so a run holding one of each — a JSON
-      instance on the error channel beside an invalid one included —
+      severe than invalid, so a run holding one of each — a declined
+      JSON instance beside an invalid one included —
       exits 1, and 4 answers a run where something was left undecided
       and nothing was worse.
       Every instance is assessed — the run never stops at the first
