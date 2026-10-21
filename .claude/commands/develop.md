@@ -192,6 +192,13 @@ counts.
    the issue whose scope is least understood is the one most likely to
    read `none` (#484).
 
+   ```
+   SURFACE:
+   new identifier: <package.Name, each> | none
+   change to what an existing one accepts, returns or promises in its doc: <package.Name and the move, each> | none
+   pre-flight: owed | not owed
+   ```
+
    **PREDICTION** — turn the `Ratchet:` claim into a lane-movement
    prediction before step 4 delegates. A bullet that measures a population
    and disclaims a prediction is this block's input, not an exemption.
@@ -224,9 +231,9 @@ counts.
    <candidates discarded, each by ID and the case text that rules it out — or none>
    ```
 
-4. **Implement.** Where step 3's SURFACE found an exported contract added
-   or altered — a new identifier, or a change to what an existing one
-   accepts, returns or promises in its doc — have **warden** pre-flight
+4. **Implement.** Where step 3's SURFACE ends `pre-flight: owed` — owed
+   for a new identifier, or a change to what an existing one accepts,
+   returns or promises in its doc — have **warden** pre-flight
    the planned shape before any code exists. `go tool surface` answers the
    signature question alone and is not that ruling. Where the body offers
    arms, a `RULING:` comment picks the arm and its constraints and quotes
