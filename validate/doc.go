@@ -2,6 +2,27 @@
 // set, over an abstract infoset so XML, JSON, and BER sources plug in as
 // adapters.
 //
+// # Using validate
+//
+// [New] builds a [Validator] from the *xsd.Schema parser.Parse assembles and
+// the value.Backend that schema was compiled with. A source adapter hands it
+// an instance: validate/xmlsrc.Validate for XML and validate/jsonsrc.Validate
+// for JSON each read the document from an io.Reader, build the infoset below
+// and call [Validator.Assess] on its root, returning the [Result]. An adapter
+// of your own implements [Element] and calls Assess itself; [Validator.Schema],
+// [Validator.Governing] and [Validator.ConditionallySelected] are for it.
+//
+// Read the verdict off [Result.Standing], not off an empty [Result.Violations].
+// A Result keeps two lists apart: its violations, the charges the assessment
+// made, and [Result.Unevaluated], the checks it reached and did not perform,
+// which are not a pass. [Standing] states how the two lists and a source fault
+// decide the verdict; the Contract section below states what each verdict does
+// and does not establish.
+//
+// ExampleValidate in validate/jsonsrc runs New, an adapter and the Result end
+// to end; ExampleValidate_sourceFault in validate/xmlsrc reads a source fault
+// beside Standing.
+//
 // # The abstract infoset
 //
 // The engine consumes [Element], [Attribute], [Text] and the [Children]
@@ -63,15 +84,15 @@
 //   - Conditional type assignment: a declaration's {type table}
 //     ·conditionally selects· the ·selected type definition· an xsi:type
 //     then ·overrides· or does not, through xpath's §3.12.6 required-subset
-//     evaluator (cta.go). A {test} reads the element's own [[attributes]] and,
+//     evaluator. A {test} reads the element's own [[attributes]] and,
 //     behind them, its [inherited attributes] (§3.3.5.6), which the descent
-//     computes top-down and threads to every child it does not skip
-//     (inherited.go). The scan is exported as [Validator.ConditionallySelected],
-//     whose doc says which {test}s withhold the selection, which count as false,
-//     and what Assess records for a withheld one; nothing else in the [Result]
-//     reports a withheld selection, since a withheld type charges the element
-//     nothing. The governance that selection feeds, the ·override· included,
-//     is exported as [Validator.Governing].
+//     computes top-down and threads to every child it does not skip. The scan is
+//     exported as [Validator.ConditionallySelected], whose doc says which
+//     {test}s withhold the selection, which count as false, and what Assess
+//     records for a withheld one; nothing else in the [Result] reports a
+//     withheld selection, since a withheld type charges the element nothing. The
+//     governance that selection feeds, the ·override· included, is exported as
+//     [Validator.Governing].
 //   - Identity constraints: node tables propagate UPWARD — a keyref on
 //     element E resolves only against key sequences sourced within E's
 //     own subtree; selector/field paths honor xpathDefaultNamespace for
@@ -94,11 +115,11 @@
 //     comparison (cvc-attribute clause 4, cvc-au, cvc-elt clause 5.2.2.2.2,
 //     value.ConstraintMatches), where a {test} it declines or fails leaves
 //     that clause's own [Unevaluated]. No unevaluated site is ever reported as
-//     satisfied (PRINCIPLES 12, cvcassertion.go). Every {test} of one
-//     [Validator.Assess] call, of either kind, is evaluated at one current
-//     dateTime, which fn:current-date reads: the clock is read once, at the
-//     start of the call, and held constant for the assessment episode
-//     (cvc-xpath clause 6, §3.13.4.2).
+//     satisfied (PRINCIPLES 12). Every {test} of one [Validator.Assess] call,
+//     of either kind, is evaluated at one current dateTime, which
+//     fn:current-date reads: the clock is read once, at the start of the call,
+//     and held constant for the assessment episode (cvc-xpath clause 6,
+//     §3.13.4.2).
 //   - A *Validator is safe for concurrent use by multiple goroutines: [New]
 //     builds it once from an already-finalized [xsd.Schema] and a
 //     [value.Backend], and every [Validator.Assess] call builds and drops
@@ -116,17 +137,17 @@
 // descent assesses — against a ·governing element declaration·, against a
 // ·governing type definition· alone, or, ·laxly assessed·, against xs:anyType.
 //
-// Read the verdict off [Result.Standing], whose doc states its arms and their
-// order; [Result.Err] reports whether the walk finished, not whether the
-// document is valid. [NotProvenInvalid] means NOT PROVEN INVALID rather than
-// valid: [Validator.Assess] decides local validity alone, which is clause
-// 1.1.1 of the [validity] property (§3.3.5.1), plus clause 1.1.3 for an
+// Read the verdict off [Result.Standing], whose arms and their order the
+// [Standing] doc states; [Result.Err] reports whether the walk finished, not
+// whether the document is valid. [NotProvenInvalid] means NOT PROVEN INVALID
+// rather than valid: [Validator.Assess] decides local validity alone, which is
+// clause 1.1.1 of the [validity] property (§3.3.5.1), plus clause 1.1.3 for an
 // element [[child]] ·attributed· to a strict ·wildcard particle· whose own
-// validity is notKnown, charged at the ENCLOSING element (assess.go). It
-// evaluates neither clause 1.1.2 — an invalid descendant or attribute — nor
-// clause 2, which makes an item that was not ·strictly assessed· notKnown
-// rather than valid. A consumer that may accept only what has been shown valid
-// cannot read NotProvenInvalid as that showing.
+// validity is notKnown, charged at the ENCLOSING element. It evaluates neither
+// clause 1.1.2 — an invalid descendant or attribute — nor clause 2, which makes
+// an item that was not ·strictly assessed· notKnown rather than valid. A
+// consumer that may accept only what has been shown valid cannot read
+// NotProvenInvalid as that showing.
 //
 // [Undecided] is not a pass either: each [Result.Unevaluated] entry is a check
 // the assessment REACHED and did not perform, so the document stands undecided
@@ -174,7 +195,7 @@
 // ·selected type definition· names a substitution group head, that no
 // declaration carries, and the element then falls back to ·lax assessment·
 // against xs:anyType; a nil {type definition} on a directly built declaration is
-// recorded as an [Unevaluated] instead (cta.go). Clause 2 decides {abstract}: an
+// recorded as an [Unevaluated] instead. Clause 2 decides {abstract}: an
 // element whose ·governing element declaration· is abstract, whether the root's
 // top-level declaration, a particle's, or the one a strict or lax wildcard's
 // child ·resolves· to. Clause 3 decides xsi:nil: an xsi:nil attribute on a
@@ -316,8 +337,8 @@
 // key-governing-ad (§3.2.4.2) clause 3 resolves by name only "provided the
 // attribute is not ·skipped·" and key-skipped makes such an item ·skipped·, so
 // it has no ·governing attribute declaration· to bind and case 6's keyword is
-// already the whole binding. cvcid.go's skippedAttribute encodes that reading
-// for the attribute side, as the paragraph below does for the element side.
+// already the whole binding. This package applies that reading on the attribute
+// side, as the paragraph below states it for the element side.
 //
 // Every one of those charges reaches a DESCENDANT on the same terms, against
 // the ·governing type definition· the particle its parent's {content type}
@@ -352,7 +373,7 @@
 // xsi:type alone (key-governing-type-elem clause 8), else it is ·laxly
 // assessed·. A child whose name ·resolves· to no declaration, and that
 // exception does not reach, is likewise ·laxly assessed· against xs:anyType
-// (key-lva, walk.child, #1823).
+// (key-lva, #1823).
 //
 // The eighth is cvc-identity-constraint (§3.11.4), over the {identity-constraint
 // definitions} of the ·governing element declaration· of every element the
@@ -392,9 +413,13 @@
 // value·, save two such members with byte-identical lexicals, which are the
 // same — and cvc-id clause 1 additionally declines for the whole document once
 // any item of the subtree did, since an unread declaration is exactly what an
-// empty binding would misreport. What a ·nilled· element is to each rule is
-// walk.idElement's doc to say for cvc-id and icCheck.fill's for
-// cvc-identity-constraint.
+// empty binding would misreport. A ·nilled· element, its [schema actual value]
+// being ·absent·, contributes nothing to cvc-id's [ID/IDREF table] and withholds
+// nothing from it. As a cvc-identity-constraint field node of a simple-valued
+// ·governing type definition· it contributes an ·absent· value, which leaves the
+// ·key-sequence· short and so keeps its target out of the ·qualified node set·,
+// and it is still the one node clause 3 admits; of any other type it is one of
+// clause 3's other nodes, ·nilled· or not.
 //
 // The tenth is cvc-assertion (§3.13.4.1), cvc-complex-type clause 6, at every
 // element whose ·governing type definition· is a complex type with
@@ -438,10 +463,18 @@
 // not settle ·valid· among them — whose simple content's ·actual value· is undecided,
 // or whose string value was not gathered because it has simple content and element
 // [[children]] or is ·nilled· and has any [[children]] under simple content or a
-// {test} reading `.`, are recorded as [Unevaluated] under cvc-assertion instead
-// (cvcassertion.go).
+// {test} reading `.`, are recorded as [Unevaluated] under cvc-assertion instead.
 //
 // The rest of the cvc- decisions land on the walk [Validator.Assess]
 // already makes. Non-fatal warnings get an accessor of their own the day
 // something produces one.
 package validate
+
+// Where the package doc's mechanisms live, for a maintainer: conditional type
+// assignment in cta.go and the [inherited attributes] descent in inherited.go;
+// the strict-wildcard [validity] charge at the enclosing element in assess.go;
+// the nil {type definition} decline in cta.go; assertion evaluation and its
+// declines in cvcassertion.go. The skip {attribute wildcard} reading is
+// [walk.skippedAttribute]; a resolving-to-nothing child's ·lax assessment· is
+// [walk.child]'s; a ·nilled· element is read for cvc-id by [walk.idElement]
+// and for cvc-identity-constraint by [icCheck.fill].

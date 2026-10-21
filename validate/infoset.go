@@ -147,7 +147,7 @@ type Text interface {
 // The engine reads an element's Attributes before it calls Children, calls
 // Children at most once per element, and drains the cursor before it
 // advances past that element; a cursor is abandoned undrained when a fault
-// stops the walk. An implementation need not support a second call, two
+// stops the walk early. An implementation need not support a second call, two
 // live cursors over one element, or a cursor read after the walk has left
 // its element.
 type Children interface {
@@ -182,7 +182,7 @@ type Child struct {
 
 // ElementChild returns the [Child] holding e. It panics if e is nil: an
 // absent child is not yielded at all, so a nil one is an adapter bug, and
-// catching it here beats a nil dereference mid-walk.
+// catching it here beats a nil dereference deep in the assessment.
 func ElementChild(e Element) Child {
 	if e == nil {
 		panic("validate: ElementChild: nil Element")

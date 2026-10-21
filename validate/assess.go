@@ -80,31 +80,27 @@ const ruleCvcType xsderr.Rule = "cvc-type"
 // declaration to read cvc-elt against.
 //
 // A declaration whose {abstract} is true is charged cvc-elt clause 2 at the
-// root as at every descendant, and the walk still runs
-// ([walk.abstractDeclaration]).
+// root as at every descendant, and the walk still runs.
 //
 // cvc-elt clause 1 (D ·non-absent·, E and D sharing an ·expanded name·) is
 // satisfied by construction — D is the declaration found BY that expanded
 // name. It is charged only as §5.3 directs, "as if clause 1 ... had failed",
-// for an ·absent· {substitution group affiliations} member of D
-// ([walk.absentAffiliation]) or an ·absent· ·selected type definition·
-// ([walk.absentSelection]), at the root as at every descendant, and the
+// for an ·absent· {substitution group affiliations} member of D or an ·absent·
+// ·selected type definition·, at the root as at every descendant, and the
 // element is then ·laxly assessed·.
 //
 // Where the root's ·governing type definition· is determinable (see
 // [Validator.Governing]), the root itself is additionally assessed against it: cvc-type
 // (§3.3.4.4) clause 2 is charged where that type is complex and its {abstract}
-// is true, without halting the walk ([walk.abstractType]); clause 3 dispatches
-// on that type.
+// is true, without halting the walk; clause 3 dispatches on that type.
 //
 // Clause 3.2, for a COMPLEX type, assesses it in both directions
 // cvc-complex-type (§3.4.4.2) quantifies in. Its [[attributes]] go to clauses
 // 2, 3 and 4, and through clause 2.1 to the cvc-attribute (§3.2.4.1) and cvc-au
-// (§3.5.4) charges the value space decides (see [walk.attributes] and
-// cvcattribute.go). Its [[children]] go to clause 1, and through clause 1.4 to
-// cvc-complex-content (§3.4.4.3) over [xsd.Matcher] (see cvccomplexcontent.go),
+// (§3.5.4) charges the value space decides. Its [[children]] go to clause 1,
+// and through clause 1.4 to cvc-complex-content (§3.4.4.3) over [xsd.Matcher],
 // and each element [[child]] to clause 5, its ·governing type definition·
-// against its ·locally declared type· ([walk.locallyDeclaredType]).
+// against its ·locally declared type·.
 //
 // Clause 3.1, for a SIMPLE one, is charged in three sub-clauses of its own:
 // 3.1.1, admitting no [[attributes]] but xsi:type, xsi:nil, xsi:schemaLocation
@@ -115,34 +111,38 @@ const ruleCvcType xsderr.Rule = "cvc-type"
 //
 // A DESCENDANT is assessed the same way, against the ·governing element
 // declaration· the particle its parent's content model ·attributes· it to
-// supplies (key-sva (§3.3.4.6) clause 3.1 over §3.4.4.4,
-// [walk.childGoverning]): its own [[attributes]], its own [[children]] and its
-// own ·initial value· reach the same charges the root's do. Two shapes below
-// the root are not: a child ·attributed to· a skip Wildcard or to an {open
-// content} with a skip {wildcard}, which is ·skipped· along with every element
-// beneath it (clause 3.2, clause 2), and a child whose governance this package
-// could not decide, which is walked against no type along with its whole
-// subtree ([governance], [walk.child]). A child its parent ·attributed· to
-// nothing on any other ground, and a child whose name ·resolves· to no
-// declaration, are neither: the package doc states how each is governed, the
-// second being ·strictly assessed· (key-sva) clause 3.3's ·lax assessment·
-// against xs:anyType, whose {content type} and {attribute uses} constrain
-// nothing any of these charges reads (#1823).
+// supplies (key-sva (§3.3.4.6) clause 3.1 over §3.4.4.4): its own
+// [[attributes]], its own [[children]] and its own ·initial value· reach the
+// same charges the root's do. Two shapes below the root are not: a child
+// ·attributed to· a skip Wildcard or to an {open content} with a skip
+// {wildcard}, which is ·skipped· along with every element beneath it (clause
+// 3.2, clause 2), and a child whose governance this package could not decide,
+// which is walked against no type along with its whole subtree. A child its
+// parent ·attributed· to nothing on any other ground, and a child whose name
+// ·resolves· to no declaration, are neither: the package doc states how each
+// is governed, the second being ·strictly assessed· (key-sva) clause 3.3's
+// ·lax assessment· against xs:anyType, whose {content type} and {attribute
+// uses} constrain nothing any of these charges reads (#1823).
 //
 // Nothing else is decided: the remaining cvc-elt clauses, cvc-type's own
 // clause 1 (T ·non-absent·) and cvc-complex-type clause 5 over [[attributes]]
 // (key-ldt-att) are not evaluated, and clause 6 only for the assertions xpath
-// compiles (cvcassertion.go), so a [Result] carrying no violation says that
-// the root is declared, and that every element is governed by no abstract
-// declaration and — where its type was determinable — is governed by no
-// abstract complex type, carries no attribute clause 2 or clause 3.1.1 rejects
-// and no attribute whose value this backend could read and found invalid,
-// lacks no required attribute clause 3 asks for, has no content reject its
-// ·governing type definition· could settle and no child clause 5 rejects, and
-// fails no assertion it evaluated. It says nothing else about the document.
+// compiles, so a [Result] carrying no violation says that the root is
+// declared, and that every element is governed by no abstract declaration and
+// — where its type was determinable — is governed by no abstract complex type,
+// carries no attribute clause 2 or clause 3.1.1 rejects and no attribute whose
+// value this backend could read and found invalid, lacks no required attribute
+// clause 3 asks for, has no content reject its ·governing type definition·
+// could settle and no child clause 5 rejects, and fails no assertion it
+// evaluated. It says nothing else about the document.
 //
 // It panics if root is nil, on the same grounds as [ElementChild].
 func (v *Validator) Assess(root Element) *Result {
+	// Where the doc above is carried out: [walk.abstractDeclaration],
+	// [walk.absentAffiliation], [walk.absentSelection], [walk.abstractType],
+	// [walk.attributes] (with cvcattribute.go), cvccomplexcontent.go,
+	// [walk.locallyDeclaredType], [walk.childGoverning], an undecided child's
+	// [governance] in [walk.child], and the assertions in cvcassertion.go.
 	if root == nil {
 		panic("validate: Assess: nil root Element")
 	}
