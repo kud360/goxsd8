@@ -24,7 +24,7 @@ func afUses(t *testing.T) AttributeTypes {
 // and asChildTypes, reporting whether it compiled.
 func afCompile(t *testing.T, expr string, content xsd.ContentType) (AssertionTest, bool) {
 	t.Helper()
-	return CompileAssertionTest(asRecord(expr), seededTypes, content, afUses(t), asChildTypes(t))
+	return compiledAssertionTest(CompileAssertionTest(asRecord(expr), seededTypes, content, afUses(t), asChildTypes(t)))
 }
 
 // afEval compiles expr for an E with empty content, or fails the test, and
@@ -254,7 +254,7 @@ func TestAssertionStringArgumentTypeErrors(t *testing.T) {
 		{"string-length($value) = 0", "", true},
 		{"exists($value)", "abc def", true},
 	} {
-		test, ok := CompileAssertionTest(asRecord(tc.expr), types, xsd.SimpleContent{SimpleType: list}, afUses(t), asNoElems)
+		test, ok := compiledAssertionTest(CompileAssertionTest(asRecord(tc.expr), types, xsd.SimpleContent{SimpleType: list}, afUses(t), asNoElems))
 		if !ok {
 			t.Fatalf("CompileAssertionTest(%q) over a list: declined, want compiled", tc.expr)
 		}

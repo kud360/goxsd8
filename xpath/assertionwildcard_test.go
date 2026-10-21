@@ -20,7 +20,7 @@ import (
 // AttributeTypes or ElementTypes.
 func awCompile(t *testing.T, record xsd.XPathExpression) AssertionTest {
 	t.Helper()
-	test, ok := CompileAssertionTest(record, seededTypes, asElementContent(t, false), asUses(t, nil), asNoElems)
+	test, ok := compiledAssertionTest(CompileAssertionTest(record, seededTypes, asElementContent(t, false), asUses(t, nil), asNoElems))
 	if !ok {
 		t.Fatalf("CompileAssertionTest(%q): declined, want compiled", record.Expression())
 	}
@@ -298,7 +298,7 @@ func TestWildcardAndHavingStillDecline(t *testing.T) {
 		{"a/b[c]", "a predicate on a later step"},
 		{"a[*]", "a wildcard in the predicate"},
 	} {
-		if _, ok := CompileAssertionTest(asRecord(tc.expr), seededTypes, asElementContent(t, false), asUses(t, nil), asNoElems); ok {
+		if _, ok := compiledAssertionTest(CompileAssertionTest(asRecord(tc.expr), seededTypes, asElementContent(t, false), asUses(t, nil), asNoElems)); ok {
 			t.Errorf("CompileAssertionTest(%q): compiled, want declined (%s)", tc.expr, tc.why)
 		}
 	}

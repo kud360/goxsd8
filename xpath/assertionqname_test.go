@@ -136,7 +136,7 @@ func TestAssertionQNameEqual(t *testing.T) {
 		{"'xsd:element' castable as xsd:QName", "", nil, true},
 		{"'xsd:1bad' castable as xsd:QName", "", nil, false},
 	} {
-		c, ok := CompileAssertionTest(qnRecord(tc.expr, tc.defaultNS), seededTypes, xsd.EmptyContent{}, uses, asNoElems)
+		c, ok := compiledAssertionTest(CompileAssertionTest(qnRecord(tc.expr, tc.defaultNS), seededTypes, xsd.EmptyContent{}, uses, asNoElems))
 		if !ok {
 			t.Errorf("CompileAssertionTest(%q): declined, want compiled", tc.expr)
 			continue
@@ -182,7 +182,7 @@ func TestAssertionQNameOperands(t *testing.T) {
 		{"@u = xsd:QName('xsd:element')", []qnAttr{{"u", "anySimpleType", "xsd:element", nil}}, false},
 		{"not(@u = xsd:QName('xsd:element'))", []qnAttr{{"u", "anySimpleType", "xsd:element", nil}}, false},
 	} {
-		c, ok := CompileAssertionTest(qnRecord(tc.expr, ""), seededTypes, xsd.EmptyContent{}, uses, asNoElems)
+		c, ok := compiledAssertionTest(CompileAssertionTest(qnRecord(tc.expr, ""), seededTypes, xsd.EmptyContent{}, uses, asNoElems))
 		if !ok {
 			t.Errorf("CompileAssertionTest(%q): declined, want compiled", tc.expr)
 			continue
@@ -221,7 +221,7 @@ func TestAssertionQNameDeclines(t *testing.T) {
 		{"@name cast as xsd:string = 'q:element'", "a cast from an xs:QName to another type"},
 		{"string(@name) = 'q:element'", "fn:string over an xs:QName"},
 	} {
-		if _, ok := CompileAssertionTest(qnRecord(tc.expr, ""), seededTypes, xsd.EmptyContent{}, uses, asNoElems); ok {
+		if _, ok := compiledAssertionTest(CompileAssertionTest(qnRecord(tc.expr, ""), seededTypes, xsd.EmptyContent{}, uses, asNoElems)); ok {
 			t.Errorf("CompileAssertionTest(%q): compiled, want declined (%s)", tc.expr, tc.why)
 		}
 	}

@@ -171,7 +171,7 @@ func TestArithmeticPromotion(t *testing.T) {
 		t.Error("Evaluate(@f + @m = xs:float('1.5')) over f=1, m=0.5 = false, want true")
 	}
 	for _, expr := range []string{"@f + @d = 1", "@d * @f = 1", "@u + @f = 1", "@f - @u = 1"} {
-		if _, ok := CompileAssertionTest(asRecord(expr), seededTypes, xsd.EmptyContent{}, aaUses(t), asNoElems); ok {
+		if _, ok := compiledAssertionTest(CompileAssertionTest(asRecord(expr), seededTypes, xsd.EmptyContent{}, aaUses(t), asNoElems)); ok {
 			t.Errorf("CompileAssertionTest(%q): compiled, want declined (#889)", expr)
 		}
 	}
@@ -188,7 +188,7 @@ func TestArithmeticPromotion(t *testing.T) {
 func TestArithmeticDeclines(t *testing.T) {
 	uses := asUses(t, map[string]string{"s": "string", "dur": "dayTimeDuration", "i": "integer"})
 	for _, expr := range []string{"@s + 1 = 2", "@dur + @dur = @dur", "-@i = 1", "+@i = 1", "xs:integer(@i div 2) = 1"} {
-		if _, ok := CompileAssertionTest(asRecord(expr), seededTypes, xsd.EmptyContent{}, uses, asNoElems); ok {
+		if _, ok := compiledAssertionTest(CompileAssertionTest(asRecord(expr), seededTypes, xsd.EmptyContent{}, uses, asNoElems)); ok {
 			t.Errorf("CompileAssertionTest(%q): compiled, want declined", expr)
 		}
 	}
@@ -205,7 +205,7 @@ func TestArithmeticDeclines(t *testing.T) {
 // over three. With ctaArith.readsChild or ctaArith.counted answering nothing
 // for its operands, the matching row fails.
 func TestArithmeticReadsItsOperands(t *testing.T) {
-	test, ok := CompileAssertionTest(asRecord("n + 1 = 3"), seededTypes, xsd.EmptyContent{}, asUses(t, nil), asChildTypes(t))
+	test, ok := compiledAssertionTest(CompileAssertionTest(asRecord("n + 1 = 3"), seededTypes, xsd.EmptyContent{}, asUses(t, nil), asChildTypes(t)))
 	if !ok {
 		t.Fatal("CompileAssertionTest(n + 1 = 3): declined, want compiled")
 	}

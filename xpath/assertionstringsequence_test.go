@@ -59,7 +59,7 @@ func TestAssertionStringSequences(t *testing.T) {
 		{"not(n = ('1', '2'))", n, false},
 	} {
 		t.Run(tc.expr, func(t *testing.T) {
-			test, ok := CompileAssertionTest(asRecord(tc.expr), seededTypes, xsd.ElementContent{}, asUses(t, nil), elems)
+			test, ok := compiledAssertionTest(CompileAssertionTest(asRecord(tc.expr), seededTypes, xsd.ElementContent{}, asUses(t, nil), elems))
 			if !ok {
 				t.Fatalf("CompileAssertionTest(%q): declined, want compiled", tc.expr)
 			}
@@ -89,7 +89,7 @@ func TestAssertionStringSequences(t *testing.T) {
 // stored in reverse order.
 func TestStringSequenceKeepsWrittenOrder(t *testing.T) {
 	expr := "r = ('b', 'a', 'a')"
-	test, ok := CompileAssertionTest(asRecord(expr), seededTypes, xsd.ElementContent{}, asUses(t, nil), ssElems(t))
+	test, ok := compiledAssertionTest(CompileAssertionTest(asRecord(expr), seededTypes, xsd.ElementContent{}, asUses(t, nil), ssElems(t)))
 	if !ok {
 		t.Fatalf("CompileAssertionTest(%q): declined, want compiled", expr)
 	}
@@ -130,7 +130,7 @@ func TestStringSequencesDecline(t *testing.T) {
 		"('a', 'b')",
 		"r = ()",
 	} {
-		if _, ok := CompileAssertionTest(asRecord(expr), seededTypes, xsd.ElementContent{}, asUses(t, nil), elems); ok {
+		if _, ok := compiledAssertionTest(CompileAssertionTest(asRecord(expr), seededTypes, xsd.ElementContent{}, asUses(t, nil), elems)); ok {
 			t.Errorf("CompileAssertionTest(%q): compiled, want declined", expr)
 		}
 	}

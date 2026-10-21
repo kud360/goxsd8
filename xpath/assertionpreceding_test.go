@@ -201,7 +201,7 @@ func TestPrecedingStillDeclines(t *testing.T) {
 		{"a[not(b)]", "fn:not alone"},
 		{"preceding::a", "the step off E"},
 	} {
-		if _, ok := CompileAssertionTest(asRecord(tc.expr), seededTypes, asElementContent(t, false), asUses(t, nil), asNoElems); ok {
+		if _, ok := compiledAssertionTest(CompileAssertionTest(asRecord(tc.expr), seededTypes, asElementContent(t, false), asUses(t, nil), asNoElems)); ok {
 			t.Errorf("CompileAssertionTest(%q): compiled, want declined (%s)", tc.expr, tc.why)
 		}
 	}

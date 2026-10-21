@@ -30,7 +30,7 @@ func esElems(t *testing.T) ElementTypes {
 // fails the test.
 func esCompile(t *testing.T, expr string) AssertionTest {
 	t.Helper()
-	test, ok := CompileAssertionTest(asRecord(expr), seededTypes, asElementContent(t, false), asUses(t, map[string]string{"x": "int"}), esElems(t))
+	test, ok := compiledAssertionTest(CompileAssertionTest(asRecord(expr), seededTypes, asElementContent(t, false), asUses(t, map[string]string{"x": "int"}), esElems(t)))
 	if !ok {
 		t.Fatalf("CompileAssertionTest(%q): declined, want compiled", expr)
 	}
@@ -147,7 +147,7 @@ func TestAssertionValueStepStillReadsChildElements(t *testing.T) {
 		}
 	}
 	for _, expr := range []string{"a = 1", "a eq 1", ".//d = 'x'", "exists(.//d = 'x')", "./d eq 'x'", "string(a) = ''", "exists(.//*)", "not(.//@x)"} {
-		if _, ok := CompileAssertionTest(asRecord(expr), seededTypes, asElementContent(t, false), asUses(t, map[string]string{"x": "int"}), esElems(t)); ok {
+		if _, ok := compiledAssertionTest(CompileAssertionTest(asRecord(expr), seededTypes, asElementContent(t, false), asUses(t, map[string]string{"x": "int"}), esElems(t))); ok {
 			t.Errorf("CompileAssertionTest(%q): compiled, want declined", expr)
 		}
 	}

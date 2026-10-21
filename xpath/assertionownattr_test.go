@@ -50,7 +50,7 @@ func TestOwnAttributeStepOutsideTheAssertionFacade(t *testing.T) {
 		}
 	}
 	for _, expr := range []string{"count(e1[./@a = 'x']) = 1", "count(e1[. = ./@s]) = 1"} {
-		if _, ok := CompileAssertionTest(asRecord(expr), seededTypes, asElementContent(t, false), afUses(t), asChildTypes(t)); ok {
+		if _, ok := compiledAssertionTest(CompileAssertionTest(asRecord(expr), seededTypes, asElementContent(t, false), afUses(t), asChildTypes(t))); ok {
 			t.Errorf("CompileAssertionTest(%q): compiled, want declined", expr)
 		}
 	}

@@ -27,7 +27,7 @@ func dsUses(t *testing.T) AttributeTypes {
 // whether it compiled.
 func dsCompile(t *testing.T, expr string) (AssertionTest, bool) {
 	t.Helper()
-	return CompileAssertionTest(asRecord(expr), seededTypes, xsd.EmptyContent{}, dsUses(t), asNoElems)
+	return compiledAssertionTest(CompileAssertionTest(asRecord(expr), seededTypes, xsd.EmptyContent{}, dsUses(t), asNoElems))
 }
 
 // assert-simple006's {test} over a restriction of union(xs:date,

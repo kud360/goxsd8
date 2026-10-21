@@ -36,7 +36,7 @@ func TestAssertionCastableOverValue(t *testing.T) {
 		{"$value castable as xs:boolean = true()", "", "1", true},
 		{"$value castable as xs:boolean = true()", "", "2", false},
 	} {
-		test, ok := CompileAssertionTest(ctaExprRecord(tc.expr, tc.defaultNS, "xs", xsd.XMLSchemaNS), seededTypes, content, asUses(t, nil), asNoElems)
+		test, ok := compiledAssertionTest(CompileAssertionTest(ctaExprRecord(tc.expr, tc.defaultNS, "xs", xsd.XMLSchemaNS), seededTypes, content, asUses(t, nil), asNoElems))
 		if !ok {
 			t.Errorf("CompileAssertionTest(%q): declined, want compiled", tc.expr)
 			continue
@@ -99,7 +99,7 @@ func TestAssertionCastableOverAListedValue(t *testing.T) {
 		{"$value castable as xs:int", "", false},
 		{"$value castable as xs:int?", "", true},
 	} {
-		test, ok := CompileAssertionTest(asRecord(tc.expr), types, content, asUses(t, nil), asNoElems)
+		test, ok := compiledAssertionTest(CompileAssertionTest(asRecord(tc.expr), types, content, asUses(t, nil), asNoElems))
 		if !ok {
 			t.Fatalf("CompileAssertionTest(%q) over a list: declined, want compiled", tc.expr)
 		}
@@ -165,7 +165,7 @@ func TestCastableDeclines(t *testing.T) {
 		"xs:string(@a) castable as xs:date",
 		"count(n[. castable as xs:int = . castable as xs:int]) = 1",
 	} {
-		if _, ok := CompileAssertionTest(asRecord(expr), seededTypes, xsd.EmptyContent{}, uses, asChildTypes(t)); ok {
+		if _, ok := compiledAssertionTest(CompileAssertionTest(asRecord(expr), seededTypes, xsd.EmptyContent{}, uses, asChildTypes(t))); ok {
 			t.Errorf("CompileAssertionTest(%q): compiled, want declined", expr)
 		}
 	}
