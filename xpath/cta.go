@@ -89,18 +89,19 @@ import (
 //
 // THREE ERROR DIRECTIONS MEET HERE AND NO TWO OF THEM ARE ONE.
 //
-// A test the engine cannot evaluate is declined at COMPILE time ([CompileCTATest]
-// returning a non-nil [Decline]), and its consequence — the caller withholding the
-// element's ·governing type definition· — is argued at that caller
-// (validate/cta.go). A dynamic or type error inside a test the engine CAN evaluate
-// is a decided false, because key-cta-ta-select clause 2 (§3.12.4) says so: "If a
-// dynamic error or a type error is raised during evaluation, then the {test} is
-// treated as if it had evaluated (without error) to false." That is spec-normative
-// behavior and not this module's fail-open contract, so it carries no GAP marker and
-// never reaches the caller as a decline. An XPath STATIC error is neither: it is a
-// ta-props-correct clause 2 (§3.12.6) violation the assembler charges before any
-// instance exists, reported by [CTATestStaticError] and by nothing else in this
-// package.
+// A test the engine cannot evaluate is declined at COMPILE time
+// ([CompileCTATest] returning a non-nil [Decline]), and its consequence —
+// the caller withholding the element's ·governing type definition· — is
+// argued at that caller (validate/cta.go). A dynamic or type error inside a
+// test the engine CAN evaluate is a decided false, because key-cta-ta-select
+// clause 2 (§3.12.4) says so: "If a dynamic error or a type error is raised
+// during evaluation, then the {test} is treated as if it had evaluated
+// (without error) to false." That is spec-normative behavior and not this
+// module's fail-open contract, so it carries no GAP marker and never reaches
+// the caller as a decline. An XPath STATIC error is neither: it is a
+// ta-props-correct clause 2 (§3.12.6) violation the assembler charges before
+// any instance exists, reported by [CTATestStaticError] and by nothing else
+// in this package.
 //
 // The nodes of the XDM instance a {test} runs against are UNTYPED
 // (key-cta-ta-select clause 1's Note), so an UNCAST attribute operand
