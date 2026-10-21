@@ -257,7 +257,7 @@ if err := res.Err(); err != nil { // the assessment is INCOMPLETE, not invalid
 	fmt.Println(err)
 }
 for _, u := range res.Unevaluated() { // no String method: this is the CLI's form
-	fmt.Println(fmt.Sprintf("%s: [%s] %s", u.Loc(), u.Rule(), u.Msg()))
+	fmt.Println(fmt.Sprintf("%s: [%s] undecided: %s", u.Loc(), u.Rule(), u.Msg()))
 }
 ```
 
@@ -266,8 +266,8 @@ maps it onto the infoset, read as the CLI section's JSON example says, and
 hands it to the same engine, so its violations
 carry the same `cvc-` rule IDs, located by jsonsrc's line and byte column.
 `go doc github.com/kud360/goxsd8/validate/jsonsrc` opens on the JSON shape in
-brief. Continuing the program, add `github.com/kud360/goxsd8/validate/jsonsrc`
-to its imports:
+brief. Continuing the program, add `errors` and
+`github.com/kud360/goxsd8/validate/jsonsrc` to its imports:
 
 ```go
 jf, err := os.Open("order.json") // the CLI section's order.json
@@ -276,12 +276,21 @@ if err != nil {
 }
 defer jf.Close()
 
-// err is every fault: a nil argument, malformed JSON or content after it, a
-// read fault, and every input the mapping declines. res.Err() is nil on every
-// result jsonsrc returns, so Standing() is Undecided by Unevaluated() alone.
-// Pass WithURI: without it, a decline or a violation is located at ?, as in
-// ?:1:2.
+// err is every fault, with no result: a nil argument, malformed JSON or
+// content after it, a read fault, or a decline of an input the mapping does
+// not map. res.Err() is nil on every result jsonsrc returns, so Standing() is
+// Undecided by Unevaluated() alone. Pass WithURI: without it, a decline or a
+// violation is located at ?, as in ?:1:2.
 res, err = jsonsrc.Validate(v, jf, jsonsrc.WithURI("order.json"))
+// A decline is no verdict on the document: report it as undecided, in the
+// line the CLI prints for it before exiting 4.
+var je *jsonsrc.Error
+if errors.As(err, &je) && je.Class() == jsonsrc.Decline {
+	fmt.Printf("%s: [jsonsrc] undecided: %s\n", je.Loc(), je.Msg())
+	return
+}
+// Every other error stays fatal. The CLI exits 1 on malformed JSON and on a
+// read fault.
 if err != nil {
 	log.Fatal(err)
 }
