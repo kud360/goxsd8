@@ -1,0 +1,4 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- An instance of asserted.xsd charged an attribute its type does not
+     declare, beside the assertion nobody evaluated. -->
+<a:box xmlns:a="http://example.com/asserted" width="3" extra="1"/>

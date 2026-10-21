@@ -23,8 +23,10 @@ import (
 // outside its Sku pattern, a second namespace's schema paired with an
 // instance that names it through xsi:schemaLocation and nothing else, and a
 // schema carrying an <xs:assert> whose instance charges nothing and leaves
-// the assertion unevaluated, and a schema whose own <xs:include> names a
-// document that is not there with an instance of it either way.
+// the assertion unevaluated, with two more instances of it that leave the
+// assertion unevaluated beside a charge and beside a stopped walk, and a
+// schema whose own <xs:include> names a document that is not there with an
+// instance of it either way.
 const (
 	validInstance        = "testdata/order-valid.xml"
 	invalidInstance      = "testdata/order-invalid.xml"
@@ -33,6 +35,8 @@ const (
 	hintedSchema         = "testdata/hinted.xsd"
 	assertedSchema       = "testdata/asserted.xsd"
 	assertedInstance     = "testdata/asserted.xml"
+	assertedCharged      = "testdata/asserted-charged.xml"
+	assertedUnclosed     = "testdata/asserted-unclosed.xml"
 	brokenSchema         = "testdata/broken.xsd"
 	shortSchema          = "testdata/unresolved-include.xsd"
 	shortValidInstance   = "testdata/unresolved-include-valid.xml"
@@ -354,6 +358,41 @@ func TestStandingCode(t *testing.T) {
 	} {
 		if got := standingCode(c.standing); got == exitOK {
 			t.Errorf("standingCode(%s) = exitOK, want any other code: a Standing no arm matches must not pass a gate", c.name)
+		}
+	}
+}
+
+// TestValidateUndecidedBesideInvalidIsInvalid pins that one instance whose
+// Result carries an undecided check beside a charge, or beside a stopped walk,
+// exits exitInvalid: the undecided check does not soften the instance's code.
+// The charged row reaches exitInvalid through standingCode's Charged arm; the
+// unclosed row's Standing is Undecided, and only assessmentLines raising it
+// through worse for result.Err() reaches exitInvalid. Each row asserts the
+// charge or fault line, then the [cvc-assertion] line, in that order.
+func TestValidateUndecidedBesideInvalidIsInvalid(t *testing.T) {
+	for _, c := range []struct {
+		name     string
+		instance string
+		first    string
+	}{
+		{"charge", assertedCharged, assertedCharged + ":4:1: [cvc-complex-type] "},
+		{"stopped walk", assertedUnclosed, assertedUnclosed + ":4:1: [xml-wf] "},
+	} {
+		var stdout, stderr bytes.Buffer
+		code := run([]string{"validate", "-schema", assertedSchema, c.instance}, &stdout, &stderr)
+		if code != exitInvalid {
+			t.Errorf("%s: code = %d, want %d (stdout %q, stderr %q)", c.name, code, exitInvalid, stdout.String(), stderr.String())
+		}
+		lines := strings.Split(strings.TrimSuffix(stdout.String(), "\n"), "\n")
+		if len(lines) != 2 {
+			t.Errorf("%s: stdout =\n%s\nwant two lines, the %q one then the [cvc-assertion] one", c.name, stdout.String(), c.first)
+			continue
+		}
+		if !strings.HasPrefix(lines[0], c.first) {
+			t.Errorf("%s: first line = %q, want prefix %q", c.name, lines[0], c.first)
+		}
+		if !strings.HasPrefix(lines[1], c.instance+":") || !strings.Contains(lines[1], "[cvc-assertion]") {
+			t.Errorf("%s: second line = %q, want the instance's [cvc-assertion] undecided line", c.name, lines[1])
 		}
 	}
 }
