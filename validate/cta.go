@@ -140,13 +140,15 @@ func (w *walk) conditionallySelected(e Element, table xsd.TypeTable, inherited [
 		"the {type definition} of the {default type definition} of the {type table} of its ·governing element declaration·, which the table ·conditionally selects· because no alternative ·successfully selects· a type definition,", true
 }
 
-// ConditionallySelected is the {type definition} slot table ·conditionally
-// selects· (§3.3.4.1, key-cta-select) for an element E whose [attributes] are
-// attributes, in source order, and whose [inherited attributes] are inherited
-// (§3.3.5.6, e-inherited_attributes): the slot of the first of table's
-// {alternatives} whose {test} evaluates to true (§3.12.4, key-cta-ta-select),
-// or, where none does, the slot of its {default type definition}, with ok
-// true. The slot is unresolved; [SchemaView]'s ResolvedType resolves it.
+// ConditionallySelected is, for a source adapter that settles which members of
+// its source are attributes by the type the selection gives, the {type
+// definition} slot table ·conditionally selects· (§3.3.4.1, key-cta-select)
+// for an element E whose [attributes] are attributes, in source order, and
+// whose [inherited attributes] are inherited (§3.3.5.6,
+// e-inherited_attributes): the slot of the first of table's {alternatives}
+// whose {test} evaluates to true (§3.12.4, key-cta-ta-select), or, where none
+// does, the slot of its {default type definition}, with ok true. The slot is
+// unresolved; [SchemaView]'s ResolvedType resolves it.
 //
 // table is the {type table} of E's ·governing element declaration·, as
 // [xsd.ElementDeclaration.TypeTable] returns it. Where that reports false, do
@@ -189,12 +191,11 @@ func (w *walk) conditionallySelected(e Element, table xsd.TypeTable, inherited [
 // [Unevaluated] under cvc-elt clause 1, or charges that clause where the head
 // is ·absent· (§5.3).
 //
-// The method is exported for a source adapter that settles which members of
-// its source are attributes by the type the selection gives; validate/jsonsrc
-// is the in-module instance. The result is the slot of the ·selected type
-// definition·, which an xsi:type may ·override· (key-governing-type-elem
-// clause 3); that override is [Validator.Governing]'s to decide, handed this
-// method partly applied as its selection, and not the adapter's.
+// validate/jsonsrc is the in-module adapter. The result is the slot of the
+// ·selected type definition·, which an xsi:type may ·override·
+// (key-governing-type-elem clause 3); that override is
+// [Validator.Governing]'s to decide, handed this method partly applied as
+// its selection, and not the adapter's.
 func (v *Validator) ConditionallySelected(table xsd.TypeTable, attributes, inherited []Attribute) (xsd.TypeDefinitionOrRef, bool) {
 	copied := make([]inheritedAttribute, 0, len(inherited))
 	for _, a := range inherited {

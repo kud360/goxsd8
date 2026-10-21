@@ -584,18 +584,14 @@ func (w *walk) identityExit(c *icCheck) {
 // A determined one that is neither a simple type definition nor a complex type
 // with {content type}.{variety} simple — governance.valueType's nil — makes
 // the node one of cvc-identity-constraint clause 3's "other nodes", and the
-// slot is charged for it ([icSlot.other]), ·nilled· or not: clause 3's list is
-// closed and reads only the governing type.
+// slot is charged for it ([icSlot.other]): clause 3's list is closed and reads
+// only the governing type.
 //
-// An element of a simple-valued type that is ·nilled· (§3.3.4.3, key-nilled)
-// contributes an ABSENT value, and withholds nothing: §3.3.5.4 gives it an
-// absent [schema actual value], and §3.11.4 clause 3's own Note names a field
-// evaluating to "a sequence consisting only of ·skipped· or ·nilled· nodes" as
-// leaving the ·key-sequence· short, which keeps the target out of the
-// ·qualified node set· ([icFrame.keyOnly] charges a key for it under clause
-// 4.2.1). It is still the one node of a simple ·governing type definition·
-// clause 3 admits, so a second such node beside it, ·nilled· or not, is
-// charged ([icSlot.record]); the Note exempts nothing from that count.
+// The package doc's Contract section states what a ·nilled· element (§3.3.4.3,
+// key-nilled) contributes as a field node, of either kind of type (§3.3.5.4;
+// §3.11.4 clause 3's Note). [icFrame.keyOnly] charges a key for the short
+// ·key-sequence· under clause 4.2.1, and [icSlot.record] counts the node toward
+// clause 3.
 //
 // An EMPTY element whose declaration carries a {value constraint} is not among
 // them: cvc-elt clause 5.1 replaces the item assessed with one whose ·normalized

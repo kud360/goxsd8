@@ -170,35 +170,39 @@ func (r *Result) Violations() []*xsderr.Error {
 // Every site is reached by the walk, one record per withheld check at the item
 // it withheld a verdict on:
 //
-//   - assertions (cvcassertion.go): each {assertions} member of a complex
-//     ·governing type definition· left unevaluated (cvc-assertion), and the
-//     first assertions-facet {test} the value pipeline declined in place of
-//     the String Valid decline it causes (cvc-assertions-valid);
-//   - the ·governing type definition· (assess.go, cta.go): each withheld one,
-//     not one per alternative the {type table} scan never tried — a {test}
-//     outside the §3.12.6 subset (key-cta-ta-select), a selected {type
-//     definition} that is nil (cvc-elt clause 1, §5.3), and an undecided
-//     ·override· of the ·selected type definition· (cvc-elt clause 4) or of a
-//     ·locally declared type· (key-sva (§3.3.4.6) clause 1.2);
-//   - content (cvccomplexcontent.go): String Valid (§3.16.4) over an element's
-//     ·initial value· (cvc-type clause 3.1.3, cvc-complex-type clause 1.2), a
-//     fixed {value constraint} comparison (cvc-elt clause 5.2.2.2.2), and,
-//     where xsd.Schema.ContentMatcher does not decide an element's {content
-//     type}, each element [[child]] left unmatched, or the element itself where
-//     it has none (cvc-complex-content);
-//   - attributes (cvcattribute.go): cvc-attribute clauses 3, 4 and 5, cvc-au,
-//     and a ·defaulted attribute·'s {lexical form} (cvc-complex-type clause 4);
-//   - the ID/IDREF table (cvcid.go): each item that could have been in the
+//   - assertions: each {assertions} member of a complex ·governing type
+//     definition· left unevaluated (cvc-assertion), and the first
+//     assertions-facet {test} the value pipeline declined in place of the
+//     String Valid decline it causes (cvc-assertions-valid);
+//   - the ·governing type definition·: each withheld one, not one per
+//     alternative the {type table} scan never tried — a {test} outside the
+//     §3.12.6 subset (key-cta-ta-select), a selected {type definition} that
+//     is nil (cvc-elt clause 1, §5.3), and an undecided ·override· of the
+//     ·selected type definition· (cvc-elt clause 4) or of a ·locally declared
+//     type· (key-sva (§3.3.4.6) clause 1.2);
+//   - content: String Valid (§3.16.4) over an element's ·initial value·
+//     (cvc-type clause 3.1.3, cvc-complex-type clause 1.2), a fixed {value
+//     constraint} comparison (cvc-elt clause 5.2.2.2.2), and, where
+//     xsd.Schema.ContentMatcher does not decide an element's {content type},
+//     each element [[child]] left unmatched, or the element itself where it has
+//     none (cvc-complex-content);
+//   - attributes: cvc-attribute clauses 3, 4 and 5, cvc-au, and a ·defaulted
+//     attribute·'s {lexical form} (cvc-complex-type clause 4);
+//   - the ID/IDREF table: each item that could have been in the
 //     ·eligible item set· and could not be read (cvc-id clause 1), an element
 //     whose ·governing type definition· was withheld among them;
-//   - identity constraints (cvcidentityconstraint.go): a path outside the
-//     subset, a field node with no readable value, and an undecided
-//     ·key-sequence· comparison (cvc-identity-constraint clauses 3 and 4).
+//   - identity constraints: a path outside the subset, a field node with
+//     no readable value, and an undecided ·key-sequence· comparison
+//     (cvc-identity-constraint clauses 3 and 4).
 //
 // One decline is NOT recorded, so an empty Unevaluated is not by itself a claim
 // that the walk performed every check it reached: an unresolvable {attribute
 // declaration}, which no *xsd.Schema that exists carries.
 type Unevaluated struct {
+	// The sites the doc above lists are recorded from cvcassertion.go
+	// (assertions), assess.go and cta.go (the governing type definition),
+	// cvccomplexcontent.go (content), cvcattribute.go (attributes), cvcid.go
+	// (the ID/IDREF table) and cvcidentityconstraint.go (identity constraints).
 	rule xsderr.Rule
 	loc  xsderr.Loc
 	msg  string
@@ -216,7 +220,7 @@ func newUnevaluated(rule xsderr.Rule, loc xsderr.Loc, format string, args ...any
 // cvc-elt or cvc-complex-content all are, the clause going in [Unevaluated.Msg].
 // It is NOT always a chargeable rule: §3.12.4 gives conditional type assignment
 // no Validation Rule of its own, so a withheld Type Alternative {test} is
-// recorded under the [Definition:] anchor key-cta-ta-select (cta.go), whose
+// recorded under the [Definition:] anchor key-cta-ta-select, whose
 // failure selects no type rather than charging one.
 func (u Unevaluated) Rule() xsderr.Rule { return u.rule }
 

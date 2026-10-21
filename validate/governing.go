@@ -281,13 +281,13 @@ func missingHead(s *xsd.Schema, ref xsd.TypeDefinitionOrRef) bool {
 	return !found
 }
 
-// Governing is the governance [Validator.Assess] decides for an element E
-// named name (§3.3.4.6): its ·governing element declaration· decl, where
-// declared, and its ·governing type definition· typ, where typ is not nil, or
-// assessed false where E is ·skipped·. It is exported for a source adapter
-// that must know an element's governance before the engine sees the element,
-// to settle which members of its source are attributes and children by it;
-// validate/jsonsrc is the in-module instance.
+// Governing is, for a source adapter that must know an element's governance
+// before the engine sees the element, the governance [Validator.Assess] decides
+// for an element E named name (§3.3.4.6): its ·governing element declaration·
+// decl, where declared, and its ·governing type definition· typ, where typ is
+// not nil, or assessed false where E is ·skipped·. The adapter settles by it
+// which members of its source are attributes and children; validate/jsonsrc is
+// the in-module instance.
 //
 // parent is the complex ·governing type definition· of E's parent, nil where
 // it has none and at the ·validation root·; narrow a simple or undetermined
