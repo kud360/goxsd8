@@ -1,0 +1,4 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- An instance of asserted.xsd that ends inside boxes after one closed box:
+     the walk stops at the fault, with that box's assertion unevaluated. -->
+<a:boxes xmlns:a="http://example.com/asserted"><a:box width="3"/>

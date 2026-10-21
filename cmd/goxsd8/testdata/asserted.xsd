@@ -3,13 +3,23 @@
      quantified expression, outside what this engine's XPath evaluator
      compiles. An instance of it is charged nothing and records one
      Result.Unevaluated under cvc-assertion: the undecided outcome the CLI
-     must not report as a clean pass. -->
+     must not report as a clean pass. The global boxes element wraps box, so
+     an instance can end inside an element still open after a box is
+     assessed. -->
 <xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
            xmlns:a="http://example.com/asserted"
            targetNamespace="http://example.com/asserted"
            elementFormDefault="qualified">
 
   <xs:element name="box" type="a:BoxType"/>
+
+  <xs:element name="boxes">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element ref="a:box" maxOccurs="unbounded"/>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
 
   <xs:complexType name="BoxType">
     <xs:attribute name="width" type="xs:int"/>
