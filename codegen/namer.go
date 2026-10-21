@@ -22,13 +22,8 @@ func newNamer() *namer {
 	return &namer{claimed: map[string]bool{}}
 }
 
-// claim returns a fresh identifier for the path of XSD local names: the
-// ancestor rule names an anonymous type by concatenating its nearest named
-// ancestor's name with every element name below it (purchaseOrder, shipTo →
-// PurchaseOrderShipTo). A candidate already claimed in this scope — two names
-// that fold to one identifier, like a and A — takes the smallest numeric
-// suffix from 2 up that is still free, so the earlier claim in document order
-// keeps the bare name.
+// claim returns a fresh identifier in this scope for the path of XSD local
+// names, by the package doc's "# Naming" rules for paths and collisions.
 func (n *namer) claim(path ...string) string {
 	var b strings.Builder
 	for _, local := range path {
@@ -44,13 +39,7 @@ func (n *namer) claim(path ...string) string {
 }
 
 // identifier maps one XSD local name (an NCName) to an exported Go
-// identifier. A rune Go does not admit in an identifier — '-', '.', '·', a
-// combining mark — and '_' are word breaks: each is dropped and the next
-// letter is upper-cased, as the first letter is. A result whose first rune is
-// not an upper-case letter (an NCName starting with '_' then a digit, or with
-// a letter that has no upper case) is prefixed with X. Every result therefore
-// begins with an upper-case letter, which is what keeps it exported and keeps
-// it from ever spelling a Go keyword, every one of which is lower-case.
+// identifier by the package doc's "# Naming" rules for one name.
 func identifier(local string) string {
 	var b strings.Builder
 	breakWord := true
