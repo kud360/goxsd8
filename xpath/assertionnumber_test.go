@@ -143,7 +143,7 @@ func TestAssertionNumberAndSubstringAfterDecline(t *testing.T) {
 		}
 	}
 	for _, expr := range []string{"number(@a) = 1", "substring-after(@a, 'v') = '1'"} {
-		if _, ok := CompileCTATest(ctaExprRecord(expr, ""), seededTypes); ok {
+		if _, declined := CompileCTATest(ctaExprRecord(expr, ""), seededTypes); declined == nil {
 			t.Errorf("CompileCTATest(%q): compiled, want declined", expr)
 		}
 	}

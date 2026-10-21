@@ -296,14 +296,14 @@ type syntaxStatic struct {
 	first ctaDefect
 }
 
-// ctaFullStaticError is the first static error, in expression order, that a
-// Type Alternative {test} inside the full XPath 2.0 grammar carries, or nil:
-// the static pass of [CTATestStaticError] for a text the subset parser
-// declined with no static error proved, wherever in the text the error sits
-// and whether or not ctaTokenize reads the text at all. It answers nil for a
-// text outside the grammar, whose err:XPST0003 is syntaxError's, and for
-// types that hold no builtins (ctaResolveTypes), against which no name
-// resolves.
+// ctaFullStaticError is the ctaStaticError defect that is the first static
+// error, in expression order, a Type Alternative {test} inside the full XPath
+// 2.0 grammar carries, or the zero ctaDefect: the static pass of
+// ctaTypeAlternativeTest for a text the subset parser declined with no static
+// error proved, wherever in the text the error sits and whether or not
+// ctaTokenize reads the text at all. It answers the zero ctaDefect for a text
+// outside the grammar, whose err:XPST0003 is syntaxError's, and for types that
+// hold no builtins (ctaResolveTypes), against which no name resolves.
 //
 // The static errors it proves are:
 //
@@ -334,21 +334,21 @@ type syntaxStatic struct {
 // further signature ·implementation-defined·, so no name or arity is outside
 // every conforming set, and an unknown name, a constructor for a non-built-in
 // type and an F&O function this engine does not implement are withheld alike.
-func ctaFullStaticError(expr xsd.XPathExpression, types xsd.TypeResolver) *xsderr.Error {
+func ctaFullStaticError(expr xsd.XPathExpression, types xsd.TypeResolver) ctaDefect {
 	toks, _, ok := syntaxTokenize(expr.Expression())
 	if !ok {
-		return nil
+		return ctaDefect{}
 	}
 	known, ok := ctaResolveTypes(types)
 	if !ok {
-		return nil
+		return ctaDefect{}
 	}
 	static := &syntaxStatic{names: ctaNamesOf(expr), types: known}
 	r := syntaxRecognizer{toks: toks, static: static}
-	if !r.expr() || r.peek().kind != syntaxEOF || static.first.kind == ctaNoDefect {
-		return nil
+	if !r.expr() || r.peek().kind != syntaxEOF {
+		return ctaDefect{}
 	}
-	return static.first.staticError()
+	return static.first
 }
 
 // record keeps d where it is the first static error the static pass found;

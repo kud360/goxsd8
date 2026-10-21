@@ -90,18 +90,18 @@ import (
 // THREE ERROR DIRECTIONS MEET HERE AND NO TWO OF THEM ARE ONE.
 //
 // A test the engine cannot evaluate is declined at COMPILE time
-// ([CompileCTATest] reporting false), and its consequence — the caller
-// withholding the element's ·governing type definition· — is argued at that
-// caller (validate/cta.go). A dynamic or type error inside a test the engine
-// CAN evaluate is a decided false, because key-cta-ta-select clause 2
-// (§3.12.4) says so: "If a dynamic error or a type error is raised during
-// evaluation, then the {test} is treated as if it had evaluated (without
-// error) to false." That is spec-normative behavior and not this module's
-// fail-open contract, so it carries no GAP marker and never reaches the
-// caller as a decline. An XPath STATIC error is neither: it is a
+// ([CompileCTATest] returning a non-nil [Decline]), and its consequence —
+// the caller withholding the element's ·governing type definition· — is
+// argued at that caller (validate/cta.go). A dynamic or type error inside a
+// test the engine CAN evaluate is a decided false, because key-cta-ta-select
+// clause 2 (§3.12.4) says so: "If a dynamic error or a type error is raised
+// during evaluation, then the {test} is treated as if it had evaluated
+// (without error) to false." That is spec-normative behavior and not this
+// module's fail-open contract, so it carries no GAP marker and never reaches
+// the caller as a decline. An XPath STATIC error is neither: it is a
 // ta-props-correct clause 2 (§3.12.6) violation the assembler charges before
-// any instance exists, reported by [CTATestStaticError] and by nothing else in
-// this package.
+// any instance exists, reported by [CTATestStaticError] and by nothing else
+// in this package.
 //
 // The nodes of the XDM instance a {test} runs against are UNTYPED
 // (key-cta-ta-select clause 1's Note), so an UNCAST attribute operand
@@ -153,8 +153,10 @@ type Attributes func(yield func(name xsd.QName, lexical string) bool)
 type CTATest struct{ root ctaExpr }
 
 // CompileCTATest compiles the {test} of a Type Alternative (§3.12.1, an
-// [xsd.XPathExpression] property record) into an evaluable [CTATest],
-// reporting ok false for an {expression} this engine cannot evaluate.
+// [xsd.XPathExpression] property record) into an evaluable [CTATest]. It
+// returns a nil [*Decline] exactly when it compiled, and a non-nil one, with
+// the zero CTATest, exactly when it did not: the reason the {expression} is
+// one this engine cannot evaluate.
 //
 // types resolves every QName the expression names a datatype with — [15]
 // ta-CastExpr's target, [18] ta-ConstructorFunction's function name, and the
@@ -163,8 +165,9 @@ type CTATest struct{ root ctaExpr }
 // components themselves, which is why [CTATest.Evaluate] takes a resolver
 // again rather than reading one off the tree.
 //
-// ok false is the WITHHOLD direction and covers every such {expression} under
-// one encoding, because they all have one consequence at the caller:
+// A non-nil Decline is the WITHHOLD direction and covers every such
+// {expression} under one encoding, because they all have one consequence at
+// the caller; only its reason tells them apart:
 //
 //   - text that is not a [8] ta-Test production at all. A legal full XPath 2.0
 //     {test} looks exactly like this to a restricted-subset parser, and
@@ -211,10 +214,15 @@ type CTATest struct{ root ctaExpr }
 // It never returns an error: a decline is not a verdict about the schema. The
 // verdict the STATIC errors those bullets name does carry is
 // [CTATestStaticError]'s to report, over the same traversal and the
-// full-grammar static pass, disagreeing with nothing here — this entry point
-// still withholds them, because a tree built over a text outside the grammar,
-// an unresolved name or an unadmitted cast target is not evaluable whatever
-// the schema's fate.
+// full-grammar static pass, disagreeing with nothing here: where that reports
+// an error on the same arguments, the Decline's reason names that static
+// error, and this entry point still withholds, because a tree built over a
+// text outside the grammar, an unresolved name or an unadmitted cast target is
+// not evaluable whatever the schema's fate.
+//
+// The zero CTATest is no tree to evaluate: its [CTATest.Evaluate] answers a
+// DECIDED false, so a caller ignoring the Decline falls through to the next
+// alternative, the wrong direction. A caller checks the Decline first.
 //
 // The static context is xpath-valid clause 2.2's: XPath 1.0 compatibility mode
 // false (2.2.1), statically known namespaces from expr.NamespaceBindings()
@@ -233,12 +241,12 @@ type CTATest struct{ root ctaExpr }
 // always in no namespace (xpath20.md §3.2.1.2, PRINCIPLES 15), and a child-axis
 // step, whose NameTest would read it, is the assertion façade's and declined
 // here (ctaFacade.child).
-func CompileCTATest(expr xsd.XPathExpression, types xsd.TypeResolver) (CTATest, bool) {
-	root, defect := compileCTATest(expr, types, ctaTypeAlternativeFacade{})
+func CompileCTATest(expr xsd.XPathExpression, types xsd.TypeResolver) (CTATest, *Decline) {
+	root, defect := ctaTypeAlternativeTest(expr, types)
 	if defect.kind != ctaNoDefect {
-		return CTATest{}, false
+		return CTATest{}, declineOf(defect)
 	}
-	return CTATest{root: root}, true
+	return CTATest{root: root}, nil
 }
 
 // ruleXPST0081 is the XPath static error an unbound namespace prefix is
@@ -356,22 +364,39 @@ const ruleXPST0008 xsderr.Rule = "err:XPST0008"
 // reads no schema document and so has no position to report — the real one is
 // the <alternative>'s, attached by the assembler that charges over this.
 func CTATestStaticError(expr xsd.XPathExpression, types xsd.TypeResolver) error {
-	_, defect := compileCTATest(expr, types, ctaTypeAlternativeFacade{})
-	if defect.kind == ctaNoDefect {
+	_, defect := ctaTypeAlternativeTest(expr, types)
+	if defect.kind != ctaStaticError {
+		// An untyped nil, never a nil *xsderr.Error in an error interface: a
+		// caller's `!= nil` must mean what it says.
 		return nil
 	}
+	return defect.staticError()
+}
+
+// ctaTypeAlternativeTest is the one compile of a Type Alternative {test} both
+// [CompileCTATest] and [CTATestStaticError] read, and it owns the precedence
+// between what can be wrong with one: the tree with the zero ctaDefect where
+// the subset parse completed with nothing wrong, and otherwise a nil tree with
+// the first of err:XPST0003 for a text outside the full grammar (syntaxError),
+// the static error the subset parse recorded, the static error the
+// full-grammar static pass proves (ctaFullStaticError), and the ctaUnsupported
+// defect the subset parse declined with. The defect is a ctaStaticError one
+// exactly where [CTATestStaticError] reports an error, and is that error.
+func ctaTypeAlternativeTest(expr xsd.XPathExpression, types xsd.TypeResolver) (ctaExpr, ctaDefect) {
+	root, defect := compileCTATest(expr, types, ctaTypeAlternativeFacade{})
+	if defect.kind == ctaNoDefect {
+		return root, defect
+	}
 	if syntax := syntaxError(expr.Expression()); syntax.kind != ctaNoDefect {
-		return syntax.staticError()
+		return nil, syntax
 	}
 	if defect.kind == ctaStaticError {
-		return defect.staticError()
+		return nil, defect
 	}
-	if static := ctaFullStaticError(expr, types); static != nil {
-		return static
+	if static := ctaFullStaticError(expr, types); static.kind != ctaNoDefect {
+		return nil, static
 	}
-	// An untyped nil, never a nil *xsderr.Error in an error interface: a
-	// caller's `!= nil` must mean what it says.
-	return nil
+	return nil, defect
 }
 
 // compileCTATest is the ONE traversal the entry points above and
@@ -391,16 +416,17 @@ func CTATestStaticError(expr xsd.XPathExpression, types xsd.TypeResolver) error 
 // ctaStaticError defect where there is one, whether the parse completed or
 // not, and ctaUnsupported only where nothing was recorded: a later decline
 // does not discard what the walk proved (#2631). Whether a defective text is
-// XPath at all is asked by [CTATestStaticError] alone, of the full grammar
-// (syntaxError), and never here: the assertion and facet façades decline
-// every defect alike, a text outside the grammar included, and charge nothing.
+// XPath at all is never asked here: ctaTypeAlternativeTest asks the full
+// grammar (syntaxError) for a Type Alternative, [CompileAssertionTest] asks it
+// itself, and the facet façade declines every defect alike, a text outside the
+// grammar included.
 //
 // Only the static errors the subset parse reaches are recorded here. One past
 // the construct the parse declines at, such as the err:XPST0051 of
 // `count(//a:x) > 1 and @kind cast as xs:Missing = 'x'`, and one in a
 // construct the subset never resolves — err:XPST0008 for `$value`
 // (ctaTypeAlternativeFacade.variable), err:XPST0051 for an `instance of` type
-// — leave the text ctaUnsupported, and [CTATestStaticError] asks the
+// — leave the text ctaUnsupported, and ctaTypeAlternativeTest asks the
 // full-grammar static pass (ctaFullStaticError) for them.
 //
 // A ctaUnsupported defect carries what the parse declined first

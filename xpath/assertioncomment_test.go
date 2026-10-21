@@ -106,7 +106,7 @@ func TestAssertionCommentStepElsewhereDeclines(t *testing.T) {
 // returning ctaEmptyValue.
 func TestCommentStepOutsideTheAssertionFacade(t *testing.T) {
 	for _, expr := range []string{"comment()", "./comment()", ".//comment()", "not(.//comment())", "empty(.//comment())"} {
-		if _, ok := CompileCTATest(ctaExprRecord(expr, ""), seededTypes); ok {
+		if _, declined := CompileCTATest(ctaExprRecord(expr, ""), seededTypes); declined == nil {
 			t.Errorf("CompileCTATest(%q): compiled, want declined", expr)
 		}
 	}

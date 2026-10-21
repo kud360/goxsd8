@@ -167,7 +167,7 @@ func TestFacetAssertionsDataChildAt(t *testing.T) {
 // returning a ctaUntypedChild step unfiltered.
 func TestDataChildAtStillDeclines(t *testing.T) {
 	for _, expr := range []string{"data(child::d[1]) instance of xs:date", "data(child::d) instance of xs:date", "child::d = 1", "d[1] = 1"} {
-		if _, ok := CompileCTATest(ctaExprRecord(expr, "", "xs", xsd.XMLSchemaNS), seededTypes); ok {
+		if _, declined := CompileCTATest(ctaExprRecord(expr, "", "xs", xsd.XMLSchemaNS), seededTypes); declined == nil {
 			t.Errorf("CompileCTATest(%q): compiled, want declined", expr)
 		}
 	}

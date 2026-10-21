@@ -244,7 +244,7 @@ func TestAssertionContextItemDeclines(t *testing.T) {
 		}
 	}
 	for _, expr := range []string{". = 'x'", "string-length(.) = 1"} {
-		if _, ok := CompileCTATest(ctaExprRecord(expr, ""), seededTypes); ok {
+		if _, declined := CompileCTATest(ctaExprRecord(expr, ""), seededTypes); declined == nil {
 			t.Errorf("CompileCTATest(%q): compiled, want declined", expr)
 		}
 	}
@@ -336,7 +336,7 @@ func TestIntegerSequencesDecline(t *testing.T) {
 		t.Error("CompileAssertionTest(. = 1 to 4096): declined, want compiled at ctaMaxSequenceLength")
 	}
 	for _, expr := range []string{"@a = (1 to 3)", "@a = 1 to 3", "(1 to 3) = @a"} {
-		if _, ok := CompileCTATest(ctaExprRecord(expr, ""), seededTypes); ok {
+		if _, declined := CompileCTATest(ctaExprRecord(expr, ""), seededTypes); declined == nil {
 			t.Errorf("CompileCTATest(%q): compiled, want declined", expr)
 		}
 	}

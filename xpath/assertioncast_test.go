@@ -274,8 +274,8 @@ func cfFacades() []cfFacade {
 			return test.Evaluate(backend(), seededTypes, asElem, asValues(t), asNoChildren, nil, ValueBinding{}, time.Time{}), true
 		}},
 		{"CompileCTATest", func(t *testing.T, expr string) (bool, bool) {
-			test, ok := CompileCTATest(asRecord(expr), seededTypes)
-			if !ok {
+			test, declined := CompileCTATest(asRecord(expr), seededTypes)
+			if declined != nil {
 				return false, false
 			}
 			return test.Evaluate(backend(), seededTypes, ctaAttrs()), true

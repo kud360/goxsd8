@@ -285,8 +285,8 @@ func (g *subtreeGate) selectedType(start xml.StartElement, d xsd.ElementDeclarat
 	attrs, normalized := ctaAttributes(start, inherited)
 	for _, alt := range table.Alternatives() {
 		test, _ := alt.Test()
-		compiled, evaluable := xpath.CompileCTATest(test, g.schema)
-		if !evaluable {
+		compiled, declined := xpath.CompileCTATest(test, g.schema)
+		if declined != nil {
 			return nil, refuseTypeTableUndecided
 		}
 		if !normalized {

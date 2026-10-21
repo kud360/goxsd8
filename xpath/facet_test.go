@@ -226,7 +226,7 @@ func TestFacetAssertionsOverAUnionBindTheActiveBasicMember(t *testing.T) {
 // `. = 'x'` (TestAssertionContextItemIsTheStringValue).
 func TestContextItemDeclinesOutsideTheFacet(t *testing.T) {
 	for _, expr := range []string{".", ". = 'x'", "not(.)"} {
-		if _, ok := CompileCTATest(ctaExprRecord(expr, ""), seededTypes); ok {
+		if _, declined := CompileCTATest(ctaExprRecord(expr, ""), seededTypes); declined == nil {
 			t.Errorf("CompileCTATest(%q): compiled, want declined", expr)
 		}
 	}
@@ -265,7 +265,7 @@ func TestFacetFocusIsAnIntegerThatRaises(t *testing.T) {
 // value.
 func TestFocusDeclinesOutsideTheFacet(t *testing.T) {
 	for _, expr := range []string{"position() = 1", "last() = 1"} {
-		if _, ok := CompileCTATest(ctaExprRecord(expr, ""), seededTypes); ok {
+		if _, declined := CompileCTATest(ctaExprRecord(expr, ""), seededTypes); declined == nil {
 			t.Errorf("CompileCTATest(%q): compiled, want declined", expr)
 		}
 	}

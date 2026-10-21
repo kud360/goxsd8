@@ -261,7 +261,7 @@ func TestCountAndDistinctValuesDecline(t *testing.T) {
 		}
 	}
 	for _, expr := range []string{"count(()) = 0", "count('a') = 1", "count(distinct-values(@a)) = 1"} {
-		if _, ok := CompileCTATest(ctaExprRecord(expr, ""), seededTypes); ok {
+		if _, declined := CompileCTATest(ctaExprRecord(expr, ""), seededTypes); declined == nil {
 			t.Errorf("CompileCTATest(%q): compiled, want declined", expr)
 		}
 	}

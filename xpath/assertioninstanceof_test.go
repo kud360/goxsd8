@@ -362,7 +362,7 @@ func TestAssertionInstanceOfAttributeTest(t *testing.T) {
 // literal check, and the arithmetic row with instanceItem admitting ctaArith.
 func TestInstanceOfDeclines(t *testing.T) {
 	for _, expr := range []string{"@a instance of xs:string", "not(@a instance of xs:string)", "data(@a) instance of xs:untypedAtomic", "@a instance of attribute()"} {
-		if _, ok := CompileCTATest(ctaExprRecord(expr, "", "xs", xsd.XMLSchemaNS), seededTypes); ok {
+		if _, declined := CompileCTATest(ctaExprRecord(expr, "", "xs", xsd.XMLSchemaNS), seededTypes); declined == nil {
 			t.Errorf("CompileCTATest(%q): compiled, want declined", expr)
 		}
 	}

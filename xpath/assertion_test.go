@@ -617,7 +617,7 @@ func TestCompileAssertionTestDeclinesValue(t *testing.T) {
 // the grammar CompileCTATest admits.
 func TestCompileCTATestStillDeclinesAssertionOnlyForms(t *testing.T) {
 	for _, expr := range []string{"$value > 0", "@min le @max", "@x eq 5", "e1 = 'present'", "/r = 'present'", "//r"} {
-		if _, ok := CompileCTATest(ctaExprRecord(expr, ""), seededTypes); ok {
+		if _, declined := CompileCTATest(ctaExprRecord(expr, ""), seededTypes); declined == nil {
 			t.Errorf("CompileCTATest(%q): compiled, want declined", expr)
 		}
 	}

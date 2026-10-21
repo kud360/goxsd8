@@ -243,7 +243,7 @@ func TestCompileCTATestDeclinesIfExpr(t *testing.T) {
 		"not(if (@kind = 'square') then @a = @b else @c = 'x')",
 		"if (@kind = 'square') then (a = b and b = c and c = d) else true()",
 	} {
-		if _, ok := CompileCTATest(ctaExprRecord(expr, ""), seededTypes); ok {
+		if _, declined := CompileCTATest(ctaExprRecord(expr, ""), seededTypes); declined == nil {
 			t.Errorf("CompileCTATest(%q): compiled, want declined", expr)
 		}
 		if err := CTATestStaticError(ctaExprRecord(expr, ""), seededTypes); err != nil {
