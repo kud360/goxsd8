@@ -414,12 +414,12 @@
 // same — and cvc-id clause 1 additionally declines for the whole document once
 // any item of the subtree did, since an unread declaration is exactly what an
 // empty binding would misreport. A ·nilled· element, its [schema actual value]
-// being ·absent·, contributes nothing to the [ID/IDREF table] and withholds
-// nothing from it. As a field node of a simple-valued ·governing type
-// definition· it contributes an ·absent· value, which leaves the ·key-sequence·
-// short and so keeps its target out of the ·qualified node set·, and it is
-// still the one node clause 3 admits; of any other type it is one of clause 3's
-// other nodes, ·nilled· or not.
+// being ·absent·, contributes nothing to cvc-id's [ID/IDREF table] and withholds
+// nothing from it. As a cvc-identity-constraint field node of a simple-valued
+// ·governing type definition· it contributes an ·absent· value, which leaves the
+// ·key-sequence· short and so keeps its target out of the ·qualified node set·,
+// and it is still the one node clause 3 admits; of any other type it is one of
+// clause 3's other nodes, ·nilled· or not.
 //
 // The tenth is cvc-assertion (§3.13.4.1), cvc-complex-type clause 6, at every
 // element whose ·governing type definition· is a complex type with
