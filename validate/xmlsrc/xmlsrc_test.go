@@ -8,6 +8,8 @@ import (
 	"testing"
 
 	"github.com/kud360/goxsd8/builtin/strict"
+	"github.com/kud360/goxsd8/loader"
+	"github.com/kud360/goxsd8/parser"
 	"github.com/kud360/goxsd8/validate"
 	"github.com/kud360/goxsd8/xsd"
 	"github.com/kud360/goxsd8/xsderr"
@@ -507,5 +509,93 @@ func TestOneFaultIsLatchedForEveryCursor(t *testing.T) {
 	}
 	if _, ok := outer.Next(); ok {
 		t.Error("the outer cursor kept reading after the walk's fault")
+	}
+}
+
+// errRead is the error readFailure returns.
+var errRead = errors.New("the source went away")
+
+// readFailure is an io.Reader whose every Read fails with errRead.
+type readFailure struct{}
+
+func (readFailure) Read([]byte) (int, error) { return 0, errRead }
+
+// failingReader yields text and then fails with errRead, so the read fault
+// lands wherever text leaves the document standing.
+func failingReader(text string) io.Reader {
+	return io.MultiReader(strings.NewReader(text), readFailure{})
+}
+
+// skipCountSchema declares r, whose children a skip wildcard admits and whose
+// one assertion counts the elements below it, so a fault inside a ·skipped·
+// child reaches Result.Err through the assertion ancestry's tally of that
+// subtree rather than through the walk's own reading of [[children]].
+const skipCountSchema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="r">
+    <xs:complexType>
+      <xs:sequence><xs:any processContents="skip" minOccurs="0" maxOccurs="unbounded"/></xs:sequence>
+      <xs:assert test="count(.//y) ge 0"/>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>`
+
+// TestEverySourceFaultCarriesTheWellFormedRule pins the claim Validate's doc
+// makes: every *xsderr.Error it returns, and every Result.Err it leaves,
+// carries xsderr.RuleXMLWellFormed, reached through errors.As and
+// xsderr.RuleOf, and a fault reading r reaches the reader's own error through
+// errors.Is on either channel. The rows cover a fault before the root, after
+// the walk, in a subtree the walk did not descend into, in the walk itself, and
+// in a ·skipped· subtree a counting assertion tallies.
+func TestEverySourceFaultCarriesTheWellFormedRule(t *testing.T) {
+	backend := strict.New()
+	schema, err := parser.Parse("main.xsd",
+		parser.WithBackend(backend),
+		parser.WithResolver(loader.Map(map[string]string{"main.xsd": skipCountSchema})))
+	if err != nil {
+		t.Fatalf("parser.Parse: %v", err)
+	}
+	v, err := validate.New(schema, backend)
+	if err != nil {
+		t.Fatalf("validate.New: %v", err)
+	}
+	for _, tc := range []struct {
+		name      string
+		r         io.Reader
+		inResult  bool // the fault is Result.Err, not the returned error
+		readFault bool // the fault is errRead's, which errors.Is must reach
+	}{
+		{name: "malformed before the root", r: strings.NewReader("</oops>")},
+		{name: "a second root", r: strings.NewReader("<r/><r/>")},
+		{name: "a fault in an undescended subtree", r: strings.NewReader("<u><x></y></u>")},
+		{name: "a read fault before the root", r: failingReader("<?xml version='1.0'?>"), readFault: true},
+		{name: "an unclosed child", r: strings.NewReader("<r><x>"), inResult: true},
+		{name: "a mismatched tag in a skipped subtree", r: strings.NewReader("<r><x><y></x></r>"), inResult: true},
+		{name: "an unbound prefix in a skipped subtree", r: strings.NewReader("<r><x><p:y/></x></r>"), inResult: true},
+		{name: "a read fault in a skipped subtree", r: failingReader("<r><x><y>"), inResult: true, readFault: true},
+		{name: "a read fault under the root", r: failingReader("<r>"), inResult: true, readFault: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			res, err := Validate(v, tc.r, WithURI(fixtureURI))
+			fault := err
+			if tc.inResult {
+				if err != nil {
+					t.Fatalf("Validate = %v, want the fault in the Result alone", err)
+				}
+				fault = res.Err()
+			}
+			if fault == nil {
+				t.Fatalf("no fault on the channel the row names (inResult=%v)", tc.inResult)
+			}
+			var xerr *xsderr.Error
+			if !errors.As(fault, &xerr) {
+				t.Fatalf("fault %v: errors.As reaches no *xsderr.Error", fault)
+			}
+			if rule, ok := xsderr.RuleOf(fault); !ok || rule != xsderr.RuleXMLWellFormed {
+				t.Errorf("fault %v: rule = %q (ok=%v), want %q", fault, rule, ok, xsderr.RuleXMLWellFormed)
+			}
+			if got := errors.Is(fault, errRead); got != tc.readFault {
+				t.Errorf("fault %v: errors.Is(fault, errRead) = %v, want %v", fault, got, tc.readFault)
+			}
+		})
 	}
 }
