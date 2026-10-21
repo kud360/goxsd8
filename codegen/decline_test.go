@@ -68,7 +68,7 @@ func TestGenerateDeclines(t *testing.T) {
 			"a restriction of b rather than of xs:anyType"},
 		{"simple content restriction of anyType", `<xs:element name="e"><xs:complexType><xs:simpleContent><xs:restriction base="xs:anyType"><xs:simpleType><xs:restriction base="xs:string"/></xs:simpleType></xs:restriction></xs:simpleContent></xs:complexType></xs:element>`,
 			"complex type (anonymous) of element e with simple content"},
-		{"empty sequence",`<xs:element name="e"><xs:complexType><xs:sequence/></xs:complexType></xs:element>`,
+		{"empty sequence", `<xs:element name="e"><xs:complexType><xs:sequence/></xs:complexType></xs:element>`,
 			"with empty content"},
 		{"maxOccurs 0 sequence", `<xs:element name="e"><xs:complexType><xs:sequence minOccurs="0" maxOccurs="0"><xs:element name="a" ` + str + `/></xs:sequence></xs:complexType></xs:element>`,
 			"with empty content"},
