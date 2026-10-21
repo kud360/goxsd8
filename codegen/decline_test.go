@@ -9,6 +9,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/kud360/goxsd8/builtin"
+	"github.com/kud360/goxsd8/builtin/strict"
 	"github.com/kud360/goxsd8/loader"
 	xsdparser "github.com/kud360/goxsd8/parser"
 	"github.com/kud360/goxsd8/xsd"
@@ -64,6 +66,8 @@ func TestGenerateDeclines(t *testing.T) {
 			"derived by extension"},
 		{"simple content restriction", `<xs:complexType name="b"><xs:simpleContent><xs:extension base="xs:string"/></xs:simpleContent></xs:complexType><xs:element name="e"><xs:complexType><xs:simpleContent><xs:restriction base="b"/></xs:simpleContent></xs:complexType></xs:element>`,
 			"a restriction of b rather than of xs:anyType"},
+		{"simple content restriction of anyType", `<xs:element name="e"><xs:complexType><xs:simpleContent><xs:restriction base="xs:anyType"><xs:simpleType><xs:restriction base="xs:string"/></xs:simpleType></xs:restriction></xs:simpleContent></xs:complexType></xs:element>`,
+			"complex type (anonymous) of element e with simple content"},
 		{"empty sequence", `<xs:element name="e"><xs:complexType><xs:sequence/></xs:complexType></xs:element>`,
 			"with empty content"},
 		{"maxOccurs 0 sequence", `<xs:element name="e"><xs:complexType><xs:sequence minOccurs="0" maxOccurs="0"><xs:element name="a" ` + str + `/></xs:sequence></xs:complexType></xs:element>`,
@@ -137,5 +141,83 @@ func TestGenerateDeclines(t *testing.T) {
 				t.Errorf("Dir %s exists after a decline (stat: %v)", out, err)
 			}
 		})
+	}
+}
+
+// TestGenerateDeclinesVacuousParticle pins the decline of a particle whose
+// {max occurs} is 0. No schema document yields one, since an <element> with
+// minOccurs=maxOccurs=0 maps to no component at all (§3.3.2), but
+// xsd.NewParticle accepts a vacuous Occurs, so the schema is built through the
+// constructors.
+func TestGenerateDeclinesVacuousParticle(t *testing.T) {
+	ctName := xsd.QName{Local: "c"}
+	scope, err := xsd.NewLocalScope(xsderr.Loc{}, xsd.ComplexTypeScopeParent{Name: ctName})
+	if err != nil {
+		t.Fatal(err)
+	}
+	local, err := xsd.NewElementDeclaration(xsderr.Loc{}, xsd.QName{Local: "a"},
+		xsd.TypeDefinitionRef{Name: stringPrimitive}, nil, scope, nil, false, nil, nil, nil, false, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	vacuous, err := xsd.NewOccurs(xsderr.Loc{}, 0, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	inner, err := xsd.NewParticle(xsderr.Loc{}, vacuous, xsd.ResolvedTerm{Term: local})
+	if err != nil {
+		t.Fatal(err)
+	}
+	group, err := xsd.NewModelGroup(xsderr.Loc{}, xsd.CompositorSequence, []xsd.Particle{inner})
+	if err != nil {
+		t.Fatal(err)
+	}
+	outer, err := xsd.NewParticle(xsderr.Loc{}, exactlyOnce, xsd.ResolvedTerm{Term: group})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ct, err := xsd.NewComplexType(xsderr.Loc{}, ctName, anyTypeName, nil, xsd.DerivationRestriction, false,
+		nil, nil, nil, xsd.ElementContent{Particle: outer}, nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	e, err := xsd.NewElementDeclaration(xsderr.Loc{}, xsd.QName{Local: "e"},
+		xsd.TypeDefinitionRef{Name: ctName}, nil, xsd.NewGlobalScope(), nil, false, nil, nil, nil, false, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The builtins and an xs:anyType stand-in are what the local element's
+	// type and c's base resolve against.
+	anyType, err := xsd.NewComplexType(xsderr.Loc{}, anyTypeName, anyTypeName, nil, xsd.DerivationRestriction, false,
+		nil, nil, nil, xsd.EmptyContent{}, nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	seeded, err := builtin.Seed(strict.New())
+	if err != nil {
+		t.Fatal(err)
+	}
+	b := xsd.NewSchemaBuilder()
+	for _, st := range seeded {
+		b.AddType(st)
+	}
+	b.AddType(anyType)
+	b.AddType(ct)
+	b.AddElement(e)
+	schema, err := b.Finalize()
+	if err != nil {
+		t.Fatalf("Finalize: %v", err)
+	}
+	out := filepath.Join(t.TempDir(), "out")
+	err = Generate([]Target{{Schema: schema, Dir: out, Package: "p"}})
+	if !errors.Is(err, errors.ErrUnsupported) {
+		t.Fatalf("Generate = %v, want a decline wrapping errors.ErrUnsupported", err)
+	}
+	const want = "codegen: target 0: a particle of element a with {max occurs} 0 in complex type c of element e at "
+	if !strings.HasPrefix(err.Error(), want) {
+		t.Errorf("error %q does not start with %q", err, want)
+	}
+	if _, err := os.Stat(out); !errors.Is(err, os.ErrNotExist) {
+		t.Errorf("Dir %s exists after a decline (stat: %v)", out, err)
 	}
 }

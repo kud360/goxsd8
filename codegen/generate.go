@@ -33,14 +33,16 @@ type Target struct {
 	// process working directory when it is not absolute.
 	Dir string
 	// Package is the emitted package's name: a Go identifier that is neither a
-	// keyword nor the blank identifier.
+	// keyword, the blank identifier, nor main.
 	Package string
 }
 
 // Generate emits, for each target, one Go package of type declarations: the
-// file xsd_gen.go in the target's Dir, declaring one type per top-level
-// element declaration of the target's Schema, in document order. Targets are
-// generated independently: no emitted package imports another.
+// file xsd_gen.go in the target's Dir, declaring, in document order, one type
+// per top-level element declaration of the target's Schema and one struct per
+// anonymous complex type nested in its type definition, each emitted after
+// its parent (the package doc's "Coverage" and "Naming" say which). Targets
+// are generated independently: no emitted package imports another.
 //
 // Generate runs in two phases. Phase 1 builds every target's source in
 // memory, in slice order, and checks every destination; phase 2 writes. A
@@ -92,6 +94,9 @@ func prepare(t Target, earlier []Target) ([]byte, error) {
 	}
 	if !token.IsIdentifier(t.Package) || t.Package == "_" {
 		return nil, fmt.Errorf("the Package field %q is not a Go identifier usable as a package name", t.Package)
+	}
+	if t.Package == "main" {
+		return nil, errors.New(`the Package field is "main", but the emitted package declares no func main and would not build`)
 	}
 	for j, e := range earlier {
 		if filepath.Clean(e.Dir) == filepath.Clean(t.Dir) {

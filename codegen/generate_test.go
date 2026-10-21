@@ -32,6 +32,8 @@ func TestGenerateInvalidTargets(t *testing.T) {
 			`codegen: target 1: the Package field "_" is not`},
 		{"non-identifier package", func(dir string) Target { return Target{Schema: schema, Dir: filepath.Join(dir, "b"), Package: "1p"} },
 			`codegen: target 1: the Package field "1p" is not`},
+		{"main package", func(dir string) Target { return Target{Schema: schema, Dir: filepath.Join(dir, "b"), Package: "main"} },
+			`codegen: target 1: the Package field is "main", but the emitted package declares no func main`},
 		{"duplicate dir", func(dir string) Target {
 			return Target{Schema: schema, Dir: filepath.Join(dir, "a") + "/./", Package: "q"}
 		},
@@ -120,10 +122,11 @@ func TestGenerateDestination(t *testing.T) {
 }
 
 // TestGenerateVacuousSequence pins that a sequence whose children all have
-// maxOccurs 0 is accepted as an empty struct: those children map to no
-// particle (§3.9.2), and dcl.ctd.ctcc.common clause 2.1 makes the explicit
-// content empty only for a group with no children or a group whose own
-// maxOccurs is 0, so the {content type} is element-only.
+// maxOccurs 0 is accepted as an empty struct: an <element> with
+// minOccurs=maxOccurs=0 maps to no component at all (§3.3.2), and
+// dcl.ctd.ctcc.common clause 2.1 makes the explicit content empty only for
+// a group with no children or a group whose own maxOccurs is 0, so the
+// {content type} is element-only.
 func TestGenerateVacuousSequence(t *testing.T) {
 	schema := parseString(t, `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"><xs:element name="e"><xs:complexType><xs:sequence><xs:element name="a" minOccurs="0" maxOccurs="0" type="xs:int"/></xs:sequence></xs:complexType></xs:element></xs:schema>`)
 	dir := t.TempDir()

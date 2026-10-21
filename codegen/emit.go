@@ -5,6 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"go/format"
+	"slices"
+	"strings"
 
 	"github.com/kud360/goxsd8/xsd"
 	"github.com/kud360/goxsd8/xsderr"
@@ -21,6 +23,10 @@ var (
 // decline reports a construct the generator does not cover. It is a plain
 // error wrapping errors.ErrUnsupported, never an *xsderr.Error: no schema
 // rule is violated (STYLE E2).
+//
+// GAP(codegen): every construct outside the package doc's "# Coverage" slice
+// declines here; that section lists them under the same marker. No tracking
+// issue owns lifting a decline yet.
 func decline(loc xsderr.Loc, format string, args ...any) error {
 	return fmt.Errorf("%s at %s is not supported by codegen, a generator limitation, not a schema fault: %w",
 		fmt.Sprintf(format, args...), loc, errors.ErrUnsupported)
@@ -28,17 +34,40 @@ func decline(loc xsderr.Loc, format string, args ...any) error {
 
 // emitter builds one target's source. decls holds each emitted type
 // declaration in emission order: a top-level element's type, then the
-// structs nested in it, depth first in particle order.
+// structs nested in its type definition that no earlier element emitted,
+// depth first in particle order.
 type emitter struct {
 	schema *xsd.Schema
 	types  *namer
 	decls  []string
+	// emitted names the struct emitted for each anonymous complex type nested
+	// in a named complex type, so that every top-level element whose type is
+	// that named type shares it; it is a lookup index only and never iterated
+	// (STYLE D2).
+	emitted map[nestedKey]string
+}
+
+// scope is where the structs nested in one struct take their names from: the
+// path of XSD local names from their nearest named ancestor, and that
+// ancestor's name when it is a named complex type (zero when it is a
+// top-level element whose type is anonymous).
+type scope struct {
+	namedType xsd.QName
+	path      []string
+}
+
+// nestedKey identifies an anonymous complex type nested in a named complex
+// type: the named type, and the path of local names from it joined by a
+// space, which no NCName contains.
+type nestedKey struct {
+	namedType xsd.QName
+	path      string
 }
 
 // emit returns the gofmt-formatted source of package pkg for schema, or the
 // first decline in document order.
 func emit(schema *xsd.Schema, pkg string) ([]byte, error) {
-	e := &emitter{schema: schema, types: newNamer()}
+	e := &emitter{schema: schema, types: newNamer(), emitted: map[nestedKey]string{}}
 	for _, decl := range schema.Elements() {
 		if err := e.topLevel(decl); err != nil {
 			return nil, err
@@ -66,7 +95,9 @@ func header(name string, decl xsd.ElementDeclaration) string {
 
 // topLevel emits the type of one top-level element declaration: a named type
 // over a builtin for an atomic simple {type definition}, a struct for an
-// accepted complex one, named or anonymous.
+// accepted complex one, named or anonymous. The struct is named from the
+// element; the structs nested in it are named from the type when it is named,
+// and from the element when it is anonymous.
 func (e *emitter) topLevel(decl xsd.ElementDeclaration) error {
 	td, err := e.declaredType(decl)
 	if err != nil {
@@ -82,8 +113,11 @@ func (e *emitter) topLevel(decl xsd.ElementDeclaration) error {
 		e.decls = append(e.decls, header(name, decl)+fmt.Sprintf("type %s %s\n", name, builtin))
 		return nil
 	case xsd.ComplexType:
-		_, err := e.structType([]string{decl.Name().Local}, decl, t)
-		return err
+		nested := scope{path: []string{decl.Name().Local}}
+		if t.Name() != (xsd.QName{}) {
+			nested = scope{namedType: t.Name(), path: []string{t.Name().Local}}
+		}
+		return e.structType(e.types.claim(decl.Name().Local), nested, decl, t)
 	}
 	return fmt.Errorf("element %s at %s: unexpected type definition %T", decl.Name(), decl.Loc(), td)
 }
@@ -165,29 +199,27 @@ func typeName(t xsd.TypeDefinition) string {
 	return t.Name().String()
 }
 
-// structType emits the struct for decl's complex {type definition} t, named
-// by path, then the structs of its anonymous-typed particles, and returns the
-// struct's name.
-func (e *emitter) structType(path []string, decl xsd.ElementDeclaration, t xsd.ComplexType) (string, error) {
+// structType emits the struct name for decl's complex {type definition} t,
+// then the structs of its anonymous-typed particles, named in nested.
+func (e *emitter) structType(name string, nested scope, decl xsd.ElementDeclaration, t xsd.ComplexType) error {
 	subject := "complex type " + typeName(t) + " of element " + decl.Name().String()
 	particles, err := e.sequence(subject, t)
 	if err != nil {
-		return "", err
+		return err
 	}
-	name := e.types.claim(path...)
 	slot := len(e.decls)
 	e.decls = append(e.decls, "")
 	fields := newNamer()
 	var body bytes.Buffer
 	for _, p := range particles {
-		field, err := e.field(path, subject, t.Loc(), p)
+		field, err := e.field(nested, subject, t.Loc(), p)
 		if err != nil {
-			return "", err
+			return err
 		}
 		fmt.Fprintf(&body, "\t%s %s\n", fields.claim(field.local), field.goType)
 	}
 	e.decls[slot] = header(name, decl) + fmt.Sprintf("type %s struct {\n%s}\n", name, body.String())
-	return name, nil
+	return nil
 }
 
 // exactlyOnce is the {min occurs} = {max occurs} = 1 range the slice requires
@@ -204,10 +236,11 @@ func mustOccurs(o xsd.Occurs, err error) xsd.Occurs {
 }
 
 // sequence checks the complex type t, named in declines by subject, against
-// the package doc's "# Coverage" struct shape (§3.4.2.3.2
-// dcl.ctd.ctcc.implicit, §3.4.2.3.3 dcl.ctd.ctcc.common) and returns the
-// particles of its sequence. Particles and model groups carry no Loc, so
-// their declines cite t's.
+// the package doc's "# Coverage" struct shape — a restriction of xs:anyType,
+// implicit (§3.4.2.3.2 dcl.ctd.ctcc.implicit) or explicit (§3.4.2.3.1
+// dcl.ctd.ctcc.explicit), with the content §3.4.2.3.3 dcl.ctd.ctcc.common
+// maps — and returns the particles of its sequence. Particles and model
+// groups carry no Loc, so their declines cite t's.
 func (e *emitter) sequence(subject string, t xsd.ComplexType) ([]xsd.Particle, error) {
 	if t.DerivationMethod() != xsd.DerivationRestriction {
 		return nil, decline(t.Loc(), "%s, derived by %s", subject, t.DerivationMethod())
@@ -263,10 +296,10 @@ type fieldSpec struct {
 	goType string
 }
 
-// field returns the field of particle p in the struct named by path, for the
-// complex type at loc named in declines by subject, typed by the package
-// doc's "# Coverage" field rules.
-func (e *emitter) field(path []string, subject string, loc xsderr.Loc, p xsd.Particle) (fieldSpec, error) {
+// field returns the field of particle p in a struct whose nested structs are
+// named in nested, for the complex type at loc named in declines by subject,
+// typed by the package doc's "# Coverage" field rules.
+func (e *emitter) field(nested scope, subject string, loc xsderr.Loc, p xsd.Particle) (fieldSpec, error) {
 	decl, err := localElement(subject, loc, p.Term())
 	if err != nil {
 		return fieldSpec{}, err
@@ -280,7 +313,7 @@ func (e *emitter) field(path []string, subject string, loc xsderr.Loc, p xsd.Par
 	case *xsd.SimpleType:
 		goType, err = e.builtinType(decl, ft)
 	case xsd.ComplexType:
-		goType, err = e.nestedStruct(path, decl, ft)
+		goType, err = e.nestedStruct(nested, decl, ft)
 	default:
 		err = fmt.Errorf("element %s at %s: unexpected type definition %T", decl.Name(), decl.Loc(), td)
 	}
@@ -292,20 +325,32 @@ func (e *emitter) field(path []string, subject string, loc xsderr.Loc, p xsd.Par
 	switch {
 	case !bounded || upper > 1:
 		goType = "[]" + goType
-	case occurs.Min() == 0:
+	case upper == 0:
+		return fieldSpec{}, decline(loc, "a particle of element %s with {max occurs} 0 in %s", decl.Name(), subject)
+	case upper == 1 && occurs.Min() == 0:
 		goType = "*" + goType
 	}
 	return fieldSpec{local: decl.Name().Local, goType: goType}, nil
 }
 
-// nestedStruct emits the struct of a local element declaration's anonymous
-// complex type, named by the ancestor rule, and returns its name.
-func (e *emitter) nestedStruct(path []string, decl xsd.ElementDeclaration, t xsd.ComplexType) (string, error) {
+// nestedStruct returns the struct name of a local element declaration's
+// anonymous complex type, named by the path from its nearest named ancestor in
+// parent. Under a named complex type the struct is emitted once, by the first
+// top-level element that reaches it, and later ones share it.
+func (e *emitter) nestedStruct(parent scope, decl xsd.ElementDeclaration, t xsd.ComplexType) (string, error) {
 	if t.Name() != (xsd.QName{}) {
 		return "", decline(decl.Loc(), "local element %s with named complex {type definition} %s", decl.Name(), t.Name())
 	}
-	child := append(append([]string(nil), path...), decl.Name().Local)
-	return e.structType(child, decl, t)
+	child := scope{namedType: parent.namedType, path: append(slices.Clone(parent.path), decl.Name().Local)}
+	key := nestedKey{namedType: child.namedType, path: strings.Join(child.path, " ")}
+	if name, ok := e.emitted[key]; ok {
+		return name, nil
+	}
+	name := e.types.claim(child.path...)
+	if child.namedType != (xsd.QName{}) {
+		e.emitted[key] = name
+	}
+	return name, e.structType(name, child, decl, t)
 }
 
 // localElement returns the local element declaration a sequence particle's
