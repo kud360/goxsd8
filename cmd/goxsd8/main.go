@@ -197,9 +197,10 @@ Usage (contract; subcommands land with their milestones):
       exits 1, and 4 answers a run where something was left undecided
       and nothing was worse.
       Every instance is assessed — the run never stops at the first
-      invalid one — and each violation, and each check the assessment
-      declined, prints one line on stdout:
-      <loc>: [<rule>] <message>.
+      invalid one — and each violation prints one line on stdout,
+      <loc>: [<rule>] <message>, and each check the assessment
+      declined one line beside them, carrying the literal undecided:
+      after the rule: <loc>: [<rule>] undecided: <message>.
 
   goxsd8 gen -schema <schema.xsd> -out <dir> [-schema <s2> -out <d2>]... [-backend strict|native]
       Generate Go types; repeated -schema/-out pairs map schemas to
