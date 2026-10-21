@@ -2,6 +2,27 @@
 // set, over an abstract infoset so XML, JSON, and BER sources plug in as
 // adapters.
 //
+// # Using validate
+//
+// [New] builds a [Validator] from the *xsd.Schema parser.Parse assembles and
+// the value.Backend that schema was compiled with. A source adapter hands it
+// an instance: validate/xmlsrc.Validate for XML and validate/jsonsrc.Validate
+// for JSON each read the document from an io.Reader, build the infoset below
+// and call [Validator.Assess] on its root, returning the [Result]. An adapter
+// of your own implements [Element] and calls Assess itself; [Validator.Schema],
+// [Validator.Governing] and [Validator.ConditionallySelected] are for it.
+//
+// Read the verdict off [Result.Standing], not off an empty [Result.Violations].
+// A Result keeps two lists apart: its violations, the charges the assessment
+// made, and [Result.Unevaluated], the checks it reached and did not perform,
+// which are not a pass. [Standing] states how the two lists and a source fault
+// decide the verdict; the Contract section below states what each verdict does
+// and does not establish.
+//
+// ExampleValidate in validate/jsonsrc runs New, an adapter and the Result end
+// to end; ExampleValidate_sourceFault in validate/xmlsrc reads a source fault
+// beside Standing.
+//
 // # The abstract infoset
 //
 // The engine consumes [Element], [Attribute], [Text] and the [Children]
