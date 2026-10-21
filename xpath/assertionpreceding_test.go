@@ -168,7 +168,7 @@ func TestPrecedingCounters(t *testing.T) {
 // calling no library function.
 func TestPrecedingStillDeclines(t *testing.T) {
 	for _, expr := range []string{"not(a[preceding::a[not(b)]])", "a[preceding::a]", "exists(a[preceding::a[b]])"} {
-		if _, ok := CompileCTATest(ctaExprRecord(expr, ""), seededTypes); ok {
+		if _, declined := CompileCTATest(ctaExprRecord(expr, ""), seededTypes); declined == nil {
 			t.Errorf("CompileCTATest(%q): compiled, want declined", expr)
 		}
 	}

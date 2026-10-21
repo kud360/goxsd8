@@ -272,7 +272,7 @@ func TestTallyRefusesAnOutOfOrderReport(t *testing.T) {
 // ctaTypeAlternativeFacade.childPath and childrenHaving admitting the path.
 func TestWildcardAndHavingStillDecline(t *testing.T) {
 	for _, expr := range []string{"a/*", "not(a/*)", "a[b and c]", "a[b] and @x"} {
-		if _, ok := CompileCTATest(ctaExprRecord(expr, ""), seededTypes); ok {
+		if _, declined := CompileCTATest(ctaExprRecord(expr, ""), seededTypes); declined == nil {
 			t.Errorf("CompileCTATest(%q): compiled, want declined", expr)
 		}
 	}

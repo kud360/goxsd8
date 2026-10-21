@@ -308,7 +308,7 @@ func TestAssertionQuantifiedOutsideTheAssertionFacade(t *testing.T) {
 	}
 	str := asBuiltin(t, "string")
 	for _, expr := range forms {
-		if _, ok := CompileCTATest(ctaExprRecord(expr, ""), seededTypes); ok {
+		if _, declined := CompileCTATest(ctaExprRecord(expr, ""), seededTypes); declined == nil {
 			t.Errorf("CompileCTATest(%q): compiled, want declined", expr)
 		}
 		if got := FacetAssertions(time.Time{}).Evaluate(backend(), seededTypes, str, ctaExprRecord(expr, ""), fcValue(t, str, "x")); got != value.AssertionDeclined {
@@ -316,7 +316,7 @@ func TestAssertionQuantifiedOutsideTheAssertionFacade(t *testing.T) {
 		}
 	}
 	for _, expr := range []string{"preceding::c", "@a and preceding::c"} {
-		if _, ok := CompileCTATest(ctaExprRecord(expr, ""), seededTypes); ok {
+		if _, declined := CompileCTATest(ctaExprRecord(expr, ""), seededTypes); declined == nil {
 			t.Errorf("CompileCTATest(%q): compiled, want declined", expr)
 		}
 	}

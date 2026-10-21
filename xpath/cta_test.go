@@ -108,9 +108,9 @@ func backend() value.Backend { return seededBackend }
 // silently degrades into a decline case.
 func compile(t *testing.T, expr string, bindings ...string) CTATest {
 	t.Helper()
-	c, ok := CompileCTATest(ctaExprRecord(expr, "", bindings...), seededTypes)
-	if !ok {
-		t.Fatalf("CompileCTATest(%q): declined, want compiled", expr)
+	c, declined := CompileCTATest(ctaExprRecord(expr, "", bindings...), seededTypes)
+	if declined != nil {
+		t.Fatalf("CompileCTATest(%q): declined because %s, want compiled", expr, declined)
 	}
 	return c
 }
@@ -147,8 +147,8 @@ func TestCompileAdmitsRequiredSubset(t *testing.T) {
 		"@kind = \"it's\"",
 		"@a.b = 'x'",
 	} {
-		if _, ok := CompileCTATest(ctaExprRecord(expr, "", "fn", ctaFunctionNS), seededTypes); !ok {
-			t.Errorf("CompileCTATest(%q): declined, want compiled", expr)
+		if _, declined := CompileCTATest(ctaExprRecord(expr, "", "fn", ctaFunctionNS), seededTypes); declined != nil {
+			t.Errorf("CompileCTATest(%q): declined because %s, want compiled", expr, declined)
 		}
 	}
 }
@@ -157,11 +157,11 @@ func TestCompileAdmitsRequiredSubset(t *testing.T) {
 // xpath-valid clause 2.2.4: a bare not(...) IS fn:not, with no binding needed,
 // while a prefix bound elsewhere is a different function and declines.
 func TestCompileResolvesUnprefixedFunctionInDefaultFunctionNamespace(t *testing.T) {
-	if _, ok := CompileCTATest(ctaExprRecord("not(@k = 'x')", ""), seededTypes); !ok {
+	if _, declined := CompileCTATest(ctaExprRecord("not(@k = 'x')", ""), seededTypes); declined != nil {
 		t.Error("an unprefixed not(...) declined; it is fn:not by clause 2.2.4")
 	}
 	elsewhere := ctaExprRecord("p:not(@k = 'x')", "", "p", "http://example.com/p")
-	if _, ok := CompileCTATest(elsewhere, seededTypes); ok {
+	if _, declined := CompileCTATest(elsewhere, seededTypes); declined == nil {
 		t.Error("p:not bound outside the F&O namespace compiled as fn:not")
 	}
 }
@@ -212,9 +212,57 @@ func TestCompileDeclines(t *testing.T) {
 		{"@a < @f cast as xs:float", "the same clause 2.1 pair under an ordering comparator"},
 	} {
 		bindings := []string{"a", "http://example.com/a", "xs", xsd.XMLSchemaNS}
-		if _, ok := CompileCTATest(ctaExprRecord(tc.expr, "", bindings...), seededTypes); ok {
+		if _, declined := CompileCTATest(ctaExprRecord(tc.expr, "", bindings...), seededTypes); declined == nil {
 			t.Errorf("CompileCTATest(%q): compiled, want declined (%s)", tc.expr, tc.why)
 		}
+	}
+}
+
+// TestCompileCTATestDeclineNamesTheReason pins the reason CompileCTATest's
+// *Decline carries. A {test} carrying no static error names the construct the
+// subset parse declined first; one carrying a static error names the error
+// CTATestStaticError reports on the same arguments, in its precedence:
+// err:XPST0003 from the full grammar, then the static error the subset parse
+// recorded, then the one the full-grammar static pass proves.
+func TestCompileCTATestDeclineNamesTheReason(t *testing.T) {
+	for _, tc := range []struct{ expr, why string }{
+		{"b eq 'x'", "the child step b read for its value is not supported in this position or over its declared type"},
+		{"count(@a) > 0", "this call to fn:count is not supported in this form"},
+		{"every $x in @a satisfies $x", "this form of quantified expression is not supported"},
+		{"@a eq 'x'", `the expression is outside the XPath subset this engine evaluates, which stops reading it at the string literal "x"`},
+		{"@a = (", `it carries the XPath static error err:XPST0003: "@a = (" is not an XPath 2.0 expression: the grammar needs more than its end, which err:XPST0003 forbids`},
+		{"p:f(@a)", `it carries the XPath static error err:XPST0081: no statically-known namespace binding for prefix "p", which err:XPST0081 forbids`},
+		{"$value = 1", `it carries the XPath static error err:XPST0008: the variable reference $value names no in-scope variable, which err:XPST0008 forbids`},
+	} {
+		record := ctaExprRecord(tc.expr, "")
+		compiled, declined := CompileCTATest(record, seededTypes)
+		if declined == nil {
+			t.Errorf("CompileCTATest(%q): compiled, want declined because %s", tc.expr, tc.why)
+			continue
+		}
+		if compiled != (CTATest{}) {
+			t.Errorf("CompileCTATest(%q) declined with %v, want the zero CTATest", tc.expr, compiled)
+		}
+		if got := declined.String(); got != tc.why {
+			t.Errorf("CompileCTATest(%q) declined because %q, want %q", tc.expr, got, tc.why)
+		}
+		var verdict *xsderr.Error
+		if !errors.As(CTATestStaticError(record, seededTypes), &verdict) {
+			continue
+		}
+		if want := "it carries the XPath static error " + string(verdict.Rule) + ": " + verdict.Msg; declined.String() != want {
+			t.Errorf("CompileCTATest(%q) declined because %q, want the error CTATestStaticError reports, %q", tc.expr, declined, want)
+		}
+	}
+}
+
+// TestZeroCTATestEvaluatesFalse pins why a caller checks CompileCTATest's
+// *Decline before it evaluates: the zero CTATest a decline comes with answers
+// a DECIDED false, which a caller would read as "this alternative did not
+// select" and fall through on.
+func TestZeroCTATestEvaluatesFalse(t *testing.T) {
+	if (CTATest{}).Evaluate(backend(), seededTypes, ctaAttrs(at("k", "book"))) {
+		t.Error("CTATest{}.Evaluate = true, want the decided false")
 	}
 }
 
@@ -271,7 +319,7 @@ func TestCTATestStaticErrorReportsUnboundPrefix(t *testing.T) {
 		if verdict.Loc != (xsderr.Loc{}) {
 			t.Errorf("CTATestStaticError(%q) reports location %v, want the zero Loc: this package reads no schema document", tc.expr, verdict.Loc)
 		}
-		if _, ok := CompileCTATest(record, seededTypes); ok {
+		if _, declined := CompileCTATest(record, seededTypes); declined == nil {
 			t.Errorf("CompileCTATest(%q) compiled; a tree holding an unresolved name must never reach Evaluate", tc.expr)
 		}
 	}
@@ -294,8 +342,8 @@ func TestCompileAdmitsCasts(t *testing.T) {
 		"xs:date('2026-01-01') = @d cast as xs:date",
 		"not(@n cast as xs:integer > 3)",
 	} {
-		if _, ok := CompileCTATest(ctaExprRecord(expr, "", "xs", xsd.XMLSchemaNS), seededTypes); !ok {
-			t.Errorf("CompileCTATest(%q): declined, want compiled", expr)
+		if _, declined := CompileCTATest(ctaExprRecord(expr, "", "xs", xsd.XMLSchemaNS), seededTypes); declined != nil {
+			t.Errorf("CompileCTATest(%q): declined because %s, want compiled", expr, declined)
 		}
 	}
 }
@@ -387,7 +435,7 @@ func TestCTATestStaticErrorBeforeADeclineIsCharged(t *testing.T) {
 		if verdict.Msg != tc.msg {
 			t.Errorf("CTATestStaticError(%q).Msg = %q, want %q", tc.expr, verdict.Msg, tc.msg)
 		}
-		if _, ok := CompileCTATest(record, seededTypes); ok {
+		if _, declined := CompileCTATest(record, seededTypes); declined == nil {
 			t.Errorf("CompileCTATest(%q) compiled, want declined", tc.expr)
 		}
 		if _, ok := compiledAssertionTest(CompileAssertionTest(record, seededTypes, xsd.EmptyContent{}, asUses(t, nil), asNoElems)); ok {
@@ -461,7 +509,7 @@ func TestCTATestStaticErrorTheSubsetNeverReachesIsCharged(t *testing.T) {
 		if verdict.Msg != tc.msg {
 			t.Errorf("CTATestStaticError(%q).Msg = %q, want %q", tc.expr, verdict.Msg, tc.msg)
 		}
-		if _, ok := CompileCTATest(record, seededTypes); ok {
+		if _, declined := CompileCTATest(record, seededTypes); declined == nil {
 			t.Errorf("CompileCTATest(%q) compiled, want declined", tc.expr)
 		}
 	}
@@ -562,7 +610,7 @@ func TestCTATestStaticErrorReportsCastTarget(t *testing.T) {
 		if tc.msg != "" && verdict.Msg != tc.msg {
 			t.Errorf("CTATestStaticError(%q).Msg = %q, want %q", tc.expr, verdict.Msg, tc.msg)
 		}
-		if _, ok := CompileCTATest(record, seededTypes); ok {
+		if _, declined := CompileCTATest(record, seededTypes); declined == nil {
 			t.Errorf("CompileCTATest(%q) compiled; a tree holding a stand-in cast must never reach Evaluate", tc.expr)
 		}
 	}
@@ -612,7 +660,7 @@ func TestCTATestStaticErrorReportsSyntaxError(t *testing.T) {
 		if verdict.Loc != (xsderr.Loc{}) {
 			t.Errorf("CTATestStaticError(%q) reports location %v, want the zero Loc", tc.expr, verdict.Loc)
 		}
-		if _, ok := CompileCTATest(record, seededTypes); ok {
+		if _, declined := CompileCTATest(record, seededTypes); declined == nil {
 			t.Errorf("CompileCTATest(%q) compiled, want declined", tc.expr)
 		}
 		if _, ok := compiledAssertionTest(CompileAssertionTest(record, seededTypes, xsd.EmptyContent{}, asUses(t, nil), asNoElems)); ok {
@@ -681,8 +729,8 @@ func TestCompileClassifiesCastTargets(t *testing.T) {
 		"xs:int(@k)",
 		"@k cast as xs:date",
 	} {
-		if _, ok := CompileCTATest(ctaExprRecord(expr, "", bindings...), types); !ok {
-			t.Errorf("CompileCTATest(%q): declined, want compiled — (a) is a builtin atomic datatype", expr)
+		if _, declined := CompileCTATest(ctaExprRecord(expr, "", bindings...), types); declined != nil {
+			t.Errorf("CompileCTATest(%q): declined because %s, want compiled — (a) is a builtin atomic datatype", expr, declined)
 		}
 	}
 	for _, tc := range []struct{ expr, rule, why string }{
@@ -698,7 +746,7 @@ func TestCompileClassifiesCastTargets(t *testing.T) {
 		{"@k cast as Kind", "err:XPST0051", "an unprefixed target is in the {default namespace}, which declares none"},
 	} {
 		record := ctaExprRecord(tc.expr, "", bindings...)
-		if _, ok := CompileCTATest(record, types); ok {
+		if _, declined := CompileCTATest(record, types); declined == nil {
 			t.Errorf("CompileCTATest(%q): compiled, want declined (%s)", tc.expr, tc.why)
 		}
 		err := CTATestStaticError(record, types)
@@ -735,10 +783,10 @@ func TestCTATestStaticErrorKindTestTypeNameIgnoresTheSchemasOwnTypes(t *testing.
 // {default namespace}, so the test would notice a compiler that ignored the
 // property.
 func TestCompileResolvesCastTargetInDefaultNamespace(t *testing.T) {
-	if _, ok := CompileCTATest(ctaExprRecord("@k cast as string", xsd.XMLSchemaNS), seededTypes); !ok {
+	if _, declined := CompileCTATest(ctaExprRecord("@k cast as string", xsd.XMLSchemaNS), seededTypes); declined != nil {
 		t.Error("an unprefixed cast target did not resolve in the {default namespace}")
 	}
-	if _, ok := CompileCTATest(ctaExprRecord("@k cast as string", ""), seededTypes); ok {
+	if _, declined := CompileCTATest(ctaExprRecord("@k cast as string", ""), seededTypes); declined == nil {
 		t.Error("an unprefixed cast target resolved with no {default namespace} to take")
 	}
 }
@@ -999,9 +1047,9 @@ func TestEvaluateAbsentAttributeIsFalse(t *testing.T) {
 // axis's principal node kind is never element (PRINCIPLES 15).
 func TestEvaluateUnprefixedNameTestIsInNoNamespace(t *testing.T) {
 	const ns = "http://example.com/d"
-	c, ok := CompileCTATest(ctaExprRecord("@k = 'book'", ns), seededTypes)
-	if !ok {
-		t.Fatal("CompileCTATest: declined")
+	c, declined := CompileCTATest(ctaExprRecord("@k = 'book'", ns), seededTypes)
+	if declined != nil {
+		t.Fatalf("CompileCTATest: declined because %s", declined)
 	}
 	if !c.Evaluate(backend(), seededTypes, ctaAttrs(at("k", "book"))) {
 		t.Error("an unprefixed NameTest did not match the no-namespace attribute")
@@ -1065,8 +1113,8 @@ func TestCompileAdmitsWildcardNameTest(t *testing.T) {
 		"xs:integer(@*) = 1",
 		"@* = 'x' or @*:kind = 'y'",
 	} {
-		if _, ok := CompileCTATest(ctaExprRecord(expr, "", "w", ctaWildcardNS, "xs", xsd.XMLSchemaNS), seededTypes); !ok {
-			t.Errorf("CompileCTATest(%q): declined, want compiled", expr)
+		if _, declined := CompileCTATest(ctaExprRecord(expr, "", "w", ctaWildcardNS, "xs", xsd.XMLSchemaNS), seededTypes); declined != nil {
+			t.Errorf("CompileCTATest(%q): declined because %s, want compiled", expr, declined)
 		}
 	}
 }
@@ -1937,7 +1985,7 @@ func TestCTANCNamePatternPinned(t *testing.T) {
 // an AttrName the class does not admit is no [17] ta-AttrName at all, and one
 // it does admit is a single name token however Unicode's categories read it.
 func TestCompileFollowsTheXMLNameClass(t *testing.T) {
-	if _, ok := CompileCTATest(ctaExprRecord("@\u00b5 = 'x'", ""), seededTypes); ok {
+	if _, declined := CompileCTATest(ctaExprRecord("@\u00b5 = 'x'", ""), seededTypes); declined == nil {
 		t.Error(`CompileCTATest("@µ = 'x'"): compiled, want declined — U+00B5 opens no NCName`)
 	}
 	attrs := ctaAttrs(at("a\u00b7b", "x"))

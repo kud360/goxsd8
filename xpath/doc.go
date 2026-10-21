@@ -414,15 +414,16 @@
 // An unsupported construct must NEVER cause a false rejection, and each
 // consumer takes that in the direction its own rule allows. A CTA
 // {test} the implemented subset cannot evaluate is DECLINED at compile
-// time, and the caller withholds the element's ·governing type
-// definition· rather than assessing it against a guess — never
-// "unmatched", which would fall through to another alternative or to
-// the {default type definition} and select a type the rule may not have
-// selected. An assertion whose {test} falls outside the implemented
-// subset is DECLINED at compile time too, and its caller records it as
-// unevaluated — never satisfied and never charged — naming the reason
-// CompileAssertionTest's *Decline carries, which is no error and no verdict.
-// Every fail-open site carries a greppable marker:
+// time, and the caller records the withhold of the element's ·governing
+// type definition·, naming the reason CompileCTATest's *Decline carries,
+// rather than assessing it against a guess — never "unmatched", which would
+// fall through to another alternative or to the {default type definition}
+// and select a type the rule may not have selected. An assertion whose
+// {test} falls outside the implemented subset is DECLINED at compile time
+// too, and its caller records it as unevaluated — never satisfied and never
+// charged — naming the reason CompileAssertionTest's *Decline carries, which
+// is no error and no verdict. Every fail-open site carries a greppable
+// marker:
 //
 //	// GAP(xpath): <construct>
 //
@@ -475,10 +476,12 @@
 // §3.2.7 xsi declarations, err:XPST0051 for an `instance of` or `treat as`
 // AtomicType, and err:XPST0051 or err:XPST0080 for a `cast as` or
 // `castable as` target, in a text ctaTokenize never reads too. Only
-// CTATestStaticError reports any of them: CompileAssertionTest and
-// FacetAssertions decline every one like any other defect. An unknown
-// function name or arity, err:XPST0017, is withheld under the GAP(xpath) at
-// ctaFullStaticError, RULED permanent by #2690.
+// CTATestStaticError reports any of them as an error: CompileCTATest
+// declines each one, its *Decline naming the error CTATestStaticError
+// reports, and CompileAssertionTest and FacetAssertions decline every one
+// like any other defect. An unknown function name or arity, err:XPST0017,
+// is withheld under the GAP(xpath) at ctaFullStaticError, RULED permanent
+// by #2690.
 //
 // A constructor call naming such a type is withheld, never charged: it
 // names a function, not a cast target. So is err:FONS0004, an unbound

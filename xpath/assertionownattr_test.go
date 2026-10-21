@@ -45,7 +45,7 @@ func TestAssertionOwnAttributeStep(t *testing.T) {
 // fails the facet, as `@a` does.
 func TestOwnAttributeStepOutsideTheAssertionFacade(t *testing.T) {
 	for _, expr := range []string{"./@a = 'x'", "./attribute::a = 'x'"} {
-		if _, ok := CompileCTATest(ctaExprRecord(expr, ""), seededTypes); ok {
+		if _, declined := CompileCTATest(ctaExprRecord(expr, ""), seededTypes); declined == nil {
 			t.Errorf("CompileCTATest(%q): compiled, want declined", expr)
 		}
 	}

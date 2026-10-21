@@ -95,6 +95,15 @@ func (w *walk) resolvedSelection(e Element, slot string) {
 // false reject in both directions (the charge [walk.charged]'s doc rules out).
 // Withholding can only cost a rejection.
 //
+// The decline is licensed by ta-props-correct clause 2's Note (§3.12.6):
+// "Conforming processors may but are not required to support XPath
+// expressions not belonging to the required subset of XPath" (PRINCIPLES 20).
+// That licence covers a {test} outside the subset, and the reason the
+// [xpath.Decline] carries is not always one: a {test} carrying an XPath
+// static error, which ta-props-correct clause 2 forbids and package parser
+// charges as it builds the component, is declined too, its reason naming that
+// error, because a tree over it is not evaluable whatever the schema's fate.
+//
 // That withhold is RECORDED, as one [Unevaluated] under ruleKeyCTATASelect at
 // the element's own location, and logged as declined at clause 2, the {test}
 // evaluation the compiler declined ([walk.decline]): nothing downstream charges
@@ -123,12 +132,12 @@ func (w *walk) resolvedSelection(e Element, slot string) {
 // no {expression} is a Test production.
 func (w *walk) conditionallySelected(e Element, table xsd.TypeTable, inherited []inheritedAttribute) (xsd.TypeDefinitionOrRef, string, bool) {
 	alts := table.Alternatives()
-	i, decided := selectAlternative(table, w.backend, w.schema, ctaAttributes(e.Attributes(), inherited))
-	if !decided {
+	i, declined := selectAlternative(table, w.backend, w.schema, ctaAttributes(e.Attributes(), inherited))
+	if declined != nil {
 		test, _ := alts[i].Test()
 		w.decline("assessing element", e.Name(), e.Loc(), ruleKeyCTATASelect, "2",
-			"alternative %d of %d in the {alternatives} of the {type table} of %s's ·governing element declaration·, whose {test} is %q, was not evaluated: this engine's §3.12.6 required-subset compiler declined it, which ta-props-correct clause 2 licenses (a conforming processor may but is not required to support XPath outside that subset), so whether it ·successfully selects· its {type definition} is undecided and the type the table ·conditionally selects· (§3.3.4.1, key-cta-select) is withheld along with it, together with every alternative behind it",
-			i+1, len(alts), e.Name(), test.Expression())
+			"alternative %d of %d in the {alternatives} of the {type table} of %s's ·governing element declaration·, whose {test} is %q, was not evaluated: this engine's XPath evaluator declined it because %s, so whether it ·successfully selects· its {type definition} is undecided and the type the table ·conditionally selects· (§3.3.4.1, key-cta-select) is withheld along with it, together with every alternative behind it",
+			i+1, len(alts), e.Name(), test.Expression(), declined)
 		return nil, "", false
 	}
 	if i < len(alts) {
@@ -201,8 +210,8 @@ func (v *Validator) ConditionallySelected(table xsd.TypeTable, attributes, inher
 	for _, a := range inherited {
 		copied = append(copied, inheritedAttribute{name: a.Name(), value: a.Value()})
 	}
-	i, decided := selectAlternative(table, v.backend, v.schema, ctaAttributes(attributes, copied))
-	if !decided {
+	i, declined := selectAlternative(table, v.backend, v.schema, ctaAttributes(attributes, copied))
+	if declined != nil {
 		return nil, false
 	}
 	alts := table.Alternatives()
@@ -212,28 +221,30 @@ func (v *Validator) ConditionallySelected(table xsd.TypeTable, attributes, inher
 	return table.DefaultTypeDefinition().TypeDefinition(), true
 }
 
-// selectAlternative is key-cta-select's scan of table over attrs: the index of
-// the first of its {alternatives} that ·successfully selects· its {type
-// definition} (key-cta-ta-select), or len of them where none does and the
-// {default type definition} is selected, with decided true; and, decided
-// false, the index of the alternative whose {test} [xpath.CompileCTATest]
-// declined, which the scan reached before any success and stopped at. types
-// is the xsd.TypeResolver both halves of the engine take, and backend the
-// value space the evaluation casts in. It is the one scan
-// [walk.conditionallySelected] and [Validator.ConditionallySelected] share.
-func selectAlternative(table xsd.TypeTable, backend value.Backend, types xsd.TypeResolver, attrs xpath.Attributes) (int, bool) {
+// selectAlternative is key-cta-select's scan of table over attrs. With a nil
+// [xpath.Decline], the index is that of the first of its {alternatives} that
+// ·successfully selects· its {type definition} (key-cta-ta-select), or len of
+// them where none does and the {default type definition} is selected. With a
+// non-nil one, the index is that of the alternative whose {test}
+// [xpath.CompileCTATest] declined, always less than len, the Decline is the
+// one that compile returned, and the scan, having reached it before any
+// success, stopped there. types is the xsd.TypeResolver both halves of the
+// engine take, and backend the value space the evaluation casts in. It is the
+// one scan [walk.conditionallySelected] and [Validator.ConditionallySelected]
+// share.
+func selectAlternative(table xsd.TypeTable, backend value.Backend, types xsd.TypeResolver, attrs xpath.Attributes) (int, *xpath.Decline) {
 	alts := table.Alternatives()
 	for i, alt := range alts {
 		test, _ := alt.Test()
-		compiled, evaluable := xpath.CompileCTATest(test, types)
-		if !evaluable {
-			return i, false
+		compiled, declined := xpath.CompileCTATest(test, types)
+		if declined != nil {
+			return i, declined
 		}
 		if compiled.Evaluate(backend, types, attrs) {
-			return i, true
+			return i, nil
 		}
 	}
-	return len(alts), true
+	return len(alts), nil
 }
 
 // ctaAttributes is the attribute sequence a {test} evaluates against, the two

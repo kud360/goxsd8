@@ -375,7 +375,7 @@ func TestCompileAssertionTestDeclinesCounts(t *testing.T) {
 func TestCountDeclinesOutsideTheAssertionFacade(t *testing.T) {
 	str := asBuiltin(t, "string")
 	for _, expr := range []string{"count(@a) = 0", "count(.//e1) = 0", "count(//e1) = 0", "//@a = 'x'"} {
-		if _, ok := CompileCTATest(ctaExprRecord(expr, ""), seededTypes); ok {
+		if _, declined := CompileCTATest(ctaExprRecord(expr, ""), seededTypes); declined == nil {
 			t.Errorf("CompileCTATest(%q): compiled, want declined", expr)
 		}
 	}
@@ -759,7 +759,7 @@ func TestCompileAssertionTestDeclinesValuePredicates(t *testing.T) {
 func TestPredicatesDeclineOutsideTheAssertionFacade(t *testing.T) {
 	str := asBuiltin(t, "string")
 	for _, expr := range []string{"count(c[@a]) = 0", "count(white[. = 'x']) = 0", "count(@a | @b) = 0"} {
-		if _, ok := CompileCTATest(ctaExprRecord(expr, ""), seededTypes); ok {
+		if _, declined := CompileCTATest(ctaExprRecord(expr, ""), seededTypes); declined == nil {
 			t.Errorf("CompileCTATest(%q): compiled, want declined", expr)
 		}
 		if got := FacetAssertions(time.Time{}).Evaluate(backend(), seededTypes, str, ctaExprRecord(expr, ""), fcValue(t, str, "x")); got != value.AssertionDeclined {

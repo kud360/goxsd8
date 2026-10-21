@@ -193,7 +193,7 @@ func TestArithmeticDeclines(t *testing.T) {
 		}
 	}
 	for _, expr := range []string{"@a mod 2 = 0", "@a + 1 = 2"} {
-		if _, ok := CompileCTATest(ctaExprRecord(expr, ""), seededTypes); ok {
+		if _, declined := CompileCTATest(ctaExprRecord(expr, ""), seededTypes); declined == nil {
 			t.Errorf("CompileCTATest(%q): compiled, want declined", expr)
 		}
 	}

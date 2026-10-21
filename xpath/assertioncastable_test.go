@@ -150,7 +150,7 @@ func TestFacetAssertionsCastable(t *testing.T) {
 // So does a `castable` tail over a cast, and one inside a value predicate.
 func TestCastableDeclines(t *testing.T) {
 	for _, expr := range []string{"@a castable as xs:date", "not(@a castable as xs:date)", "(@a castable as xs:date)"} {
-		if _, ok := CompileCTATest(ctaExprRecord(expr, "", "xs", xsd.XMLSchemaNS), seededTypes); ok {
+		if _, declined := CompileCTATest(ctaExprRecord(expr, "", "xs", xsd.XMLSchemaNS), seededTypes); declined == nil {
 			t.Errorf("CompileCTATest(%q): compiled, want declined", expr)
 		}
 	}

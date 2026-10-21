@@ -219,7 +219,7 @@ func TestAssertionElementPathDeclines(t *testing.T) {
 // with dataInstanceOf routing no path to dataElementPath; the Type Alternative
 // row is a guard.
 func TestAssertionElementPathOtherFacades(t *testing.T) {
-	if _, ok := CompileCTATest(asRecord("data(a/b) instance of xs:int*"), seededTypes); ok {
+	if _, declined := CompileCTATest(asRecord("data(a/b) instance of xs:int*"), seededTypes); declined == nil {
 		t.Error("CompileCTATest(data(a/b) instance of xs:int*): compiled, want declined")
 	}
 	str := asBuiltin(t, "string")
