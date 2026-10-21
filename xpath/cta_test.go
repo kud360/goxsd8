@@ -257,16 +257,6 @@ func TestCompileCTATestDeclineNamesTheReason(t *testing.T) {
 	}
 }
 
-// TestZeroCTATestEvaluatesFalse pins why a caller checks CompileCTATest's
-// *Decline before it evaluates: the zero CTATest a decline comes with answers
-// a DECIDED false, which a caller would read as "this alternative did not
-// select" and fall through on.
-func TestZeroCTATestEvaluatesFalse(t *testing.T) {
-	if (CTATest{}).Evaluate(backend(), seededTypes, ctaAttrs(at("k", "book"))) {
-		t.Error("CTATest{}.Evaluate = true, want the decided false")
-	}
-}
-
 // TestCTATestStaticErrorReportsUnboundPrefix pins the static direction of
 // ta-props-correct clause 2: an unbound prefix inside a COMPLETE ta-Test is
 // err:XPST0081, reported as a fact about the schema — and CompileCTATest goes on
@@ -1455,7 +1445,9 @@ func TestEvaluateStringLiteralEscapes(t *testing.T) {
 }
 
 // TestEvaluateZeroTestDecides pins that the zero CTATest — which no successful
-// CompileCTATest produces — still decides rather than panicking.
+// CompileCTATest produces — still decides rather than panicking, and decides
+// false: the reason CompileCTATest's doc tells a caller to check the *Decline
+// first.
 func TestEvaluateZeroTestDecides(t *testing.T) {
 	var zero CTATest
 	if zero.Evaluate(backend(), seededTypes, ctaAttrs()) {
