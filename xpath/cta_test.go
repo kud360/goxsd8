@@ -231,6 +231,7 @@ func TestCompileCTATestDeclineNamesTheReason(t *testing.T) {
 		{"every $x in @a satisfies $x", "this form of quantified expression is not supported"},
 		{"@a eq 'x'", `the expression is outside the XPath subset this engine evaluates, which stops reading it at the string literal "x"`},
 		{"@a = (", `it carries the XPath static error err:XPST0003: "@a = (" is not an XPath 2.0 expression: the grammar needs more than its end, which err:XPST0003 forbids`},
+		{"@p:a = (", `it carries the XPath static error err:XPST0003: "@p:a = (" is not an XPath 2.0 expression: the grammar needs more than its end, which err:XPST0003 forbids`},
 		{"p:f(@a)", `it carries the XPath static error err:XPST0081: no statically-known namespace binding for prefix "p", which err:XPST0081 forbids`},
 		{"$value = 1", `it carries the XPath static error err:XPST0008: the variable reference $value names no in-scope variable, which err:XPST0008 forbids`},
 	} {
