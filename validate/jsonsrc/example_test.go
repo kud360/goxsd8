@@ -1,6 +1,7 @@
 package jsonsrc_test
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 
@@ -15,8 +16,9 @@ import (
 // one the engine charges nothing, one whose empty array leaves order without
 // the item child its sequence requires, and one the mapping declines because
 // an attribute member follows a child member. The violation is a verdict in
-// the result; the decline is an error, with no result. Clean output is still
-// not "valid": see [validate.Result].
+// the result; the decline is an error, with no result and no verdict, so the
+// example reports it as undecided and every other error as an error. Clean
+// output is still not "valid": see [validate.Result].
 func ExampleValidate() {
 	const orderXSD = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
            targetNamespace="urn:o" elementFormDefault="qualified">
@@ -50,6 +52,11 @@ func ExampleValidate() {
 		`{"o:order":{"$xmlns":{"o":"urn:o"},"item":["a"],"kind":"x"}}`,
 	} {
 		res, err := jsonsrc.Validate(v, strings.NewReader(doc), jsonsrc.WithURI("order.json"))
+		var je *jsonsrc.Error
+		if errors.As(err, &je) && je.Class() == jsonsrc.Decline { // no verdict: goxsd8 validate exits 4
+			fmt.Printf("undecided: %s [jsonsrc] %s\n", je.Loc(), je.Msg())
+			continue
+		}
 		if err != nil {
 			fmt.Println("error:", err)
 			continue
@@ -68,5 +75,5 @@ func ExampleValidate() {
 	// Output:
 	// no violations, nothing undecided
 	// violation: order.json:1:2 [cvc-complex-content]
-	// error: jsonsrc: order.json:1:49: attribute member "kind" follows a child member of {urn:o}order; move attribute members ahead of the first child member, or declare a struct's attribute fields before its child fields, as an element's attributes are read before its children
+	// undecided: order.json:1:49 [jsonsrc] attribute member "kind" follows a child member of {urn:o}order; move attribute members ahead of the first child member, or declare a struct's attribute fields before its child fields, as an element's attributes are read before its children
 }
