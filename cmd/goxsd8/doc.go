@@ -360,10 +360,11 @@
 // assessment is validate/jsonsrc's Validate, which -format json calls. That
 // mapping is not whole: the inputs it still declines (its doc's Every decline)
 // reach the exit-4 error channel above rather than a verdict. The capabilities
-// this page reserves have no library route either: codegen (M9) with codec
-// (M10) and validate/bersrc (M11) each export nothing yet, so for code
-// generation and BER instances there is no second route to document until
-// those milestones land. Error output is stable and line-oriented for
+// this page reserves are not whole library routes either: codegen.Generate
+// emits Go types for M9's first slice of schema shapes and gen does not call
+// it yet, while codec (M10) and validate/bersrc (M11) export nothing yet, so
+// for decode/encode and BER instances there is no second route to document
+// until those milestones land. Error output is stable and line-oriented for
 // scripting.
 //
 // # Diagnostic lines
