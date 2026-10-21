@@ -14,8 +14,8 @@
 //
 // Read the verdict off [Result.Standing], not off an empty [Result.Violations].
 // A Result keeps two lists apart: its violations, the charges the assessment
-// made, and [Result.Unevaluated], the checks it reached and did not perform,
-// which are not a pass. [Standing] states how the two lists and a source fault
+// made, and [Result.Unevaluated], which the Contract section's [Undecided]
+// paragraph defines. [Standing] states how the two lists and a source fault
 // decide the verdict; the Contract section below states what each verdict does
 // and does not establish.
 //
@@ -137,17 +137,16 @@
 // descent assesses — against a ·governing element declaration·, against a
 // ·governing type definition· alone, or, ·laxly assessed·, against xs:anyType.
 //
-// Read the verdict off [Result.Standing], whose arms and their order the
-// [Standing] doc states; [Result.Err] reports whether the walk finished, not
-// whether the document is valid. [NotProvenInvalid] means NOT PROVEN INVALID
-// rather than valid: [Validator.Assess] decides local validity alone, which is
-// clause 1.1.1 of the [validity] property (§3.3.5.1), plus clause 1.1.3 for an
-// element [[child]] ·attributed· to a strict ·wildcard particle· whose own
-// validity is notKnown, charged at the ENCLOSING element. It evaluates neither
-// clause 1.1.2 — an invalid descendant or attribute — nor clause 2, which makes
-// an item that was not ·strictly assessed· notKnown rather than valid. A
-// consumer that may accept only what has been shown valid cannot read
-// NotProvenInvalid as that showing.
+// [Result.Err] reports whether the walk finished, not whether the document is
+// valid. [NotProvenInvalid] means NOT PROVEN INVALID rather than valid:
+// [Validator.Assess] decides local validity alone, which is clause 1.1.1 of the
+// [validity] property (§3.3.5.1), plus clause 1.1.3 for an element [[child]]
+// ·attributed· to a strict ·wildcard particle· whose own validity is notKnown,
+// charged at the ENCLOSING element. It evaluates neither clause 1.1.2 — an
+// invalid descendant or attribute — nor clause 2, which makes an item that was
+// not ·strictly assessed· notKnown rather than valid. A consumer that may
+// accept only what has been shown valid cannot read NotProvenInvalid as that
+// showing.
 //
 // [Undecided] is not a pass either: each [Result.Unevaluated] entry is a check
 // the assessment REACHED and did not perform, so the document stands undecided
