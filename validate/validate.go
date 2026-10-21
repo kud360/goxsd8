@@ -258,8 +258,9 @@ func (r *Result) Err() error { return r.err }
 // It answers a Result that was returned. An error a source adapter
 // (validate/xmlsrc, validate/jsonsrc) returns in its place means no Result
 // stands, and so no Standing. A consumer that ranks a source fault above
-// Undecided, as the goxsd8 CLI's exit code does, reads [Result.Err] itself
-// beside Standing.
+// Undecided, as the goxsd8 CLI's exit code does, reads [Result.Err] beside
+// Standing, and the adapter's returned error before either;
+// validate/xmlsrc.Validate's doc gives the test.
 type Standing int
 
 const (

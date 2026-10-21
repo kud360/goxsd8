@@ -50,13 +50,28 @@ func WithURI(uri string) Option {
 //
 // A fault inside the document element can land in either channel: in
 // [validate.Result.Err] when the walk met it, in err when it lies in what the
-// walk left unread when it returned. Read both as "not well-formed; no
-// verdict".
+// walk left unread when it returned. Read either as a source fault: the
+// document is not well-formed, or reading r failed. Under err no Result
+// stands. Under [validate.Result.Err] the Result stands: the violations the
+// walk charged before the fault stay in it, so its [validate.Result.Standing]
+// is [validate.Charged] when there are any and [validate.Undecided]
+// otherwise, never [validate.NotProvenInvalid]. To ask whether a source fault
+// stopped the read, whichever channel holds it, test both:
+//
+//	res, err := xmlsrc.Validate(v, r)
+//	if err != nil || res.Err() != nil {
+//
+// ExampleValidate_sourceFault runs it.
 //
 // A nil argument yields a plain error rather than an [xsderr.Error], on
 // [validate.New]'s reasoning about its own nil schema: it is a caller's
 // bug, not a verdict about a document. A document that is malformed, or
-// holds no document element, yields the reader's own *[xsderr.Error].
+// holds no document element, yields the reader's own *[xsderr.Error]. Every
+// *[xsderr.Error] Validate returns, and every [validate.Result.Err] it leaves,
+// carries [xsderr.RuleXMLWellFormed] (rendered xml-wf): [errors.As] and
+// [xsderr.RuleOf] reach it. A fault reading r carries the same rule, so the
+// rule does not tell malformed markup from a failed read; [errors.Is] reaches
+// the error r returned through the wrap.
 func Validate(v *validate.Validator, r io.Reader, opts ...Option) (*validate.Result, error) {
 	if v == nil {
 		return nil, fmt.Errorf("xmlsrc: Validate: nil *validate.Validator")

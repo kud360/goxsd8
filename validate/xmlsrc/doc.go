@@ -37,5 +37,5 @@
 // read, rather than that the name is undeclared.
 //
 // Validate's doc comment owns which of its two error channels a source fault
-// reaches.
+// reaches, the rule that fault carries, and the test for one on either.
 package xmlsrc
