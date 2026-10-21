@@ -277,9 +277,8 @@ func (w *walk) idDefaultedAttributes(c *icCheck, attrs []Attribute, ct xsd.Compl
 // own turn ([walk.child]). An undecided one ([governance]) is [walk.child]'s
 // decline, not this one's.
 //
-// A ·nilled· element contributes nothing and withholds nothing: §3.3.5.4 gives
-// it an absent [schema actual value], and clause 2 of the ·eligible item set·
-// excludes every item whose [schema actual value] is ·absent·.
+// The package doc's Contract section states what a ·nilled· element contributes
+// to the [ID/IDREF table] (§3.3.5.4; clause 2 of the ·eligible item set·).
 func (w *walk) idElement(c *icCheck) {
 	if c.g.hasDecl && c.g.typ == nil {
 		w.declineID(c.e, c.e.Loc(),
