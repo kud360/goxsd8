@@ -234,7 +234,7 @@ type CTATest struct{ root ctaExpr }
 // step, whose NameTest would read it, is the assertion façade's and declined
 // here (ctaFacade.child).
 func CompileCTATest(expr xsd.XPathExpression, types xsd.TypeResolver) (CTATest, bool) {
-	root, defect := compileCTATest(expr, types, ctaTypeAlternativeFacade{})
+	root, defect := ctaTypeAlternativeTest(expr, types)
 	if defect.kind != ctaNoDefect {
 		return CTATest{}, false
 	}
@@ -356,22 +356,39 @@ const ruleXPST0008 xsderr.Rule = "err:XPST0008"
 // reads no schema document and so has no position to report — the real one is
 // the <alternative>'s, attached by the assembler that charges over this.
 func CTATestStaticError(expr xsd.XPathExpression, types xsd.TypeResolver) error {
-	_, defect := compileCTATest(expr, types, ctaTypeAlternativeFacade{})
-	if defect.kind == ctaNoDefect {
+	_, defect := ctaTypeAlternativeTest(expr, types)
+	if defect.kind != ctaStaticError {
+		// An untyped nil, never a nil *xsderr.Error in an error interface: a
+		// caller's `!= nil` must mean what it says.
 		return nil
 	}
+	return defect.staticError()
+}
+
+// ctaTypeAlternativeTest is the one compile of a Type Alternative {test} both
+// [CompileCTATest] and [CTATestStaticError] read, and it owns the precedence
+// between what can be wrong with one: the tree with the zero ctaDefect where
+// the subset parse completed with nothing wrong, and otherwise a nil tree with
+// the first of err:XPST0003 for a text outside the full grammar (syntaxError),
+// the static error the subset parse recorded, the static error the
+// full-grammar static pass proves (ctaFullStaticError), and the ctaUnsupported
+// defect the subset parse declined with. The defect is a ctaStaticError one
+// exactly where [CTATestStaticError] reports an error, and is that error.
+func ctaTypeAlternativeTest(expr xsd.XPathExpression, types xsd.TypeResolver) (ctaExpr, ctaDefect) {
+	root, defect := compileCTATest(expr, types, ctaTypeAlternativeFacade{})
+	if defect.kind == ctaNoDefect {
+		return root, defect
+	}
 	if syntax := syntaxError(expr.Expression()); syntax.kind != ctaNoDefect {
-		return syntax.staticError()
+		return nil, syntax
 	}
 	if defect.kind == ctaStaticError {
-		return defect.staticError()
+		return nil, defect
 	}
-	if static := ctaFullStaticError(expr, types); static != nil {
-		return static
+	if static := ctaFullStaticError(expr, types); static.kind != ctaNoDefect {
+		return nil, static
 	}
-	// An untyped nil, never a nil *xsderr.Error in an error interface: a
-	// caller's `!= nil` must mean what it says.
-	return nil
+	return nil, defect
 }
 
 // compileCTATest is the ONE traversal the entry points above and
@@ -391,16 +408,17 @@ func CTATestStaticError(expr xsd.XPathExpression, types xsd.TypeResolver) error 
 // ctaStaticError defect where there is one, whether the parse completed or
 // not, and ctaUnsupported only where nothing was recorded: a later decline
 // does not discard what the walk proved (#2631). Whether a defective text is
-// XPath at all is asked by [CTATestStaticError] alone, of the full grammar
-// (syntaxError), and never here: the assertion and facet façades decline
-// every defect alike, a text outside the grammar included, and charge nothing.
+// XPath at all is never asked here: ctaTypeAlternativeTest asks the full
+// grammar (syntaxError) for a Type Alternative, [CompileAssertionTest] asks it
+// itself, and the facet façade declines every defect alike, a text outside the
+// grammar included.
 //
 // Only the static errors the subset parse reaches are recorded here. One past
 // the construct the parse declines at, such as the err:XPST0051 of
 // `count(//a:x) > 1 and @kind cast as xs:Missing = 'x'`, and one in a
 // construct the subset never resolves — err:XPST0008 for `$value`
 // (ctaTypeAlternativeFacade.variable), err:XPST0051 for an `instance of` type
-// — leave the text ctaUnsupported, and [CTATestStaticError] asks the
+// — leave the text ctaUnsupported, and ctaTypeAlternativeTest asks the
 // full-grammar static pass (ctaFullStaticError) for them.
 //
 // A ctaUnsupported defect carries what the parse declined first
