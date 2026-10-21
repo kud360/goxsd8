@@ -2,6 +2,7 @@ package xpath
 
 import (
 	"errors"
+	"fmt"
 	"math/big"
 	"strconv"
 	"strings"
@@ -173,7 +174,7 @@ func (t ctaTypes) ancestor(st *xsd.SimpleType, name xsd.QName) (*xsd.SimpleType,
 // here (ctaParser.constructorFunction).
 func (t ctaTypes) castTarget(name xsd.QName) (*xsd.SimpleType, ctaDefect) {
 	if name == ctaBuiltin("untypedAtomic") {
-		return nil, ctaDefect{kind: ctaUnsupported}
+		return nil, ctaUnsupportedDefect("a cast to xs:untypedAtomic is not supported")
 	}
 	if name == ctaBuiltin("anyAtomicType") || name == ctaBuiltin("NOTATION") {
 		return nil, ctaStaticDefect(ruleXPST0080, "the cast target %q is xs:NOTATION or xs:anyAtomicType, which err:XPST0080 forbids", name)
@@ -239,7 +240,7 @@ func (t ctaTypes) atomicType(role string, name xsd.QName) (*xsd.SimpleType, ctaD
 	// xs:anyAtomicType, which is excluded by name above.
 	p, err := st.Primitive(t.resolver)
 	if err != nil {
-		return nil, ctaDefect{kind: ctaUnsupported}
+		return nil, ctaUnsupportedDefect(fmt.Sprintf("the type resolver cannot walk the base type chain of %s", ctaDisplayName(name)))
 	}
 	if p == nil {
 		return nil, ctaStaticDefect(ruleXPST0051, "%s %q is no atomic type, which err:XPST0051 forbids", role, name)

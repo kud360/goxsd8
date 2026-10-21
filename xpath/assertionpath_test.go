@@ -26,7 +26,7 @@ func apCompile(t *testing.T, record xsd.XPathExpression) AssertionTest {
 		uq("b"): asComplex(t, "AnyLike", asElementContent(t, true)),
 	})
 	uses := asUses(t, map[string]string{"x": "anySimpleType", "y": "anySimpleType"})
-	test, ok := CompileAssertionTest(record, seededTypes, asElementContent(t, false), uses, elems)
+	test, ok := compiledAssertionTest(CompileAssertionTest(record, seededTypes, asElementContent(t, false), uses, elems))
 	if !ok {
 		t.Fatalf("CompileAssertionTest(%q): declined, want compiled", record.Expression())
 	}
@@ -277,7 +277,7 @@ func TestCompileAssertionTestDeclinesChildPaths(t *testing.T) {
 		{"exists(a/b c)", "a stray token before the call's ')'"},
 		{"exists(a/p:b)", "an unbound prefix"},
 	} {
-		if _, ok := CompileAssertionTest(asRecord(tc.expr), seededTypes, asElementContent(t, false), uses, elems); ok {
+		if _, ok := compiledAssertionTest(CompileAssertionTest(asRecord(tc.expr), seededTypes, asElementContent(t, false), uses, elems)); ok {
 			t.Errorf("CompileAssertionTest(%q): compiled, want declined (%s)", tc.expr, tc.why)
 		}
 	}
@@ -288,12 +288,12 @@ func TestCompileAssertionTestDeclinesChildPaths(t *testing.T) {
 // false whatever the subtree holds, inside fn:exists too.
 func TestAssertionRootedChildPath(t *testing.T) {
 	for _, expr := range []string{"/a/b", "//a/b", "exists(/a/b)", "exists(//a/b)"} {
-		if _, ok := CompileAssertionTest(asRecord(expr), seededTypes, asElementContent(t, false), asUses(t, nil), asNoElems); ok {
+		if _, ok := compiledAssertionTest(CompileAssertionTest(asRecord(expr), seededTypes, asElementContent(t, false), asUses(t, nil), asNoElems)); ok {
 			t.Errorf("CompileAssertionTest(%q): compiled, want declined", expr)
 		}
 	}
 	for _, expr := range []string{"exists(/a)", "exists(//a)", "not(exists(//a))"} {
-		test, ok := CompileAssertionTest(asRecord(expr), seededTypes, asElementContent(t, false), asUses(t, nil), asNoElems)
+		test, ok := compiledAssertionTest(CompileAssertionTest(asRecord(expr), seededTypes, asElementContent(t, false), asUses(t, nil), asNoElems))
 		if !ok {
 			t.Fatalf("CompileAssertionTest(%q): declined, want compiled", expr)
 		}

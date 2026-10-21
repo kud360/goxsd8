@@ -40,7 +40,7 @@ func aqcTypes(t *testing.T) xsd.TypeResolver {
 // children aqcElems types, reporting whether it compiled.
 func aqcCompile(t *testing.T, expr string) (AssertionTest, bool) {
 	t.Helper()
-	return CompileAssertionTest(asRecord(expr), aqcTypes(t), asElementContent(t, false), asUses(t, nil), aqcElems(t))
+	return compiledAssertionTest(CompileAssertionTest(asRecord(expr), aqcTypes(t), asElementContent(t, false), asUses(t, nil), aqcElems(t)))
 }
 
 // aqcDecides compiles expr, failing the test where it declines, and evaluates
@@ -309,7 +309,7 @@ func TestAssertionQuantifiedChildrenInAValueBodyDeclines(t *testing.T) {
 		"some $x in $value satisfies (every $y in y satisfies $y = $x)",
 		"some $x in $value satisfies $x/following-sibling::y[1] = 1",
 	} {
-		if _, ok := CompileAssertionTest(asRecord(expr), aqcTypes(t), content, asUses(t, nil), aqcElems(t)); ok {
+		if _, ok := compiledAssertionTest(CompileAssertionTest(asRecord(expr), aqcTypes(t), content, asUses(t, nil), aqcElems(t))); ok {
 			t.Errorf("CompileAssertionTest(%q): compiled, want declined", expr)
 		}
 	}

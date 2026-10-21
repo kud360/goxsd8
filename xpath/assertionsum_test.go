@@ -49,7 +49,7 @@ func smElems(t *testing.T) ElementTypes {
 // smPath is typ, or fails the test.
 func smCompile(t *testing.T, expr, typ string) AssertionTest {
 	t.Helper()
-	test, ok := CompileAssertionTest(asRecord(expr), seededTypes, asElementContent(t, false), smUses(t, typ), smElems(t))
+	test, ok := compiledAssertionTest(CompileAssertionTest(asRecord(expr), seededTypes, asElementContent(t, false), smUses(t, typ), smElems(t)))
 	if !ok {
 		t.Fatalf("CompileAssertionTest(%q): declined, want compiled", expr)
 	}
@@ -395,7 +395,7 @@ func TestFacetSumOverAPathFails(t *testing.T) {
 func TestAssertionSumInsideAQuantifierBody(t *testing.T) {
 	intType := asBuiltin(t, "int")
 	content := xsd.SimpleContent{SimpleType: asList(t, "Ints", intType.Name())}
-	test, ok := CompileAssertionTest(asRecord("some $x in data($value) satisfies $x = sum(a/b/@p)"), seededTypes, content, smUses(t, "decimal"), smElems(t))
+	test, ok := compiledAssertionTest(CompileAssertionTest(asRecord("some $x in data($value) satisfies $x = sum(a/b/@p)"), seededTypes, content, smUses(t, "decimal"), smElems(t)))
 	if !ok {
 		t.Fatal("CompileAssertionTest: declined, want compiled")
 	}
@@ -448,7 +448,7 @@ func TestCompileAssertionTestDeclinesSums(t *testing.T) {
 		{"not(distinct-values(sum(a/b/@p)) div 0 = 1)", "double"},
 		{"distinct-values(sum(a/b/@p)) + 0.1 + 0.2 = 0.3", "anySimpleType"},
 	} {
-		if _, ok := CompileAssertionTest(asRecord(tc.expr), seededTypes, asElementContent(t, false), smUses(t, tc.typ), smElems(t)); ok {
+		if _, ok := compiledAssertionTest(CompileAssertionTest(asRecord(tc.expr), seededTypes, asElementContent(t, false), smUses(t, tc.typ), smElems(t))); ok {
 			t.Errorf("CompileAssertionTest(%q) over xs:%s p: compiled, want declined", tc.expr, tc.typ)
 		}
 	}

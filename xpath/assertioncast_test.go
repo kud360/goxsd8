@@ -82,7 +82,7 @@ func TestAssertionCastsToItsOwnTypeOrAnAncestor(t *testing.T) {
 		{"2010-01-02", "2010-01-01", true},
 		{"2010-01-01", "2010-01-02", false},
 	} {
-		test, ok := CompileAssertionTest(asRecord("$value gt xs:date(@start)"), seededTypes, xsd.SimpleContent{SimpleType: date}, csUses(t), asNoElems)
+		test, ok := compiledAssertionTest(CompileAssertionTest(asRecord("$value gt xs:date(@start)"), seededTypes, xsd.SimpleContent{SimpleType: date}, csUses(t), asNoElems))
 		if !ok {
 			t.Errorf("CompileAssertionTest($value gt xs:date(@start)): declined, want compiled")
 			continue
@@ -94,7 +94,7 @@ func TestAssertionCastsToItsOwnTypeOrAnAncestor(t *testing.T) {
 	}
 
 	for _, expr := range []string{"xs:decimal(n) eq 5", "xs:decimal(c) eq 5", "xs:int(n) eq 5"} {
-		test, ok := CompileAssertionTest(asRecord(expr), seededTypes, xsd.EmptyContent{}, asUses(t, nil), asChildTypes(t))
+		test, ok := compiledAssertionTest(CompileAssertionTest(asRecord(expr), seededTypes, xsd.EmptyContent{}, asUses(t, nil), asChildTypes(t)))
 		if !ok {
 			t.Errorf("CompileAssertionTest(%q): declined, want compiled", expr)
 			continue
@@ -129,7 +129,7 @@ func TestAssertionCastsAListedValue(t *testing.T) {
 		{"xs:int($value) = 1", "1 2", false},
 		{"not(xs:int($value) = 1)", "1 2", false},
 	} {
-		test, ok := CompileAssertionTest(asRecord(tc.expr), types, content, asUses(t, nil), asNoElems)
+		test, ok := compiledAssertionTest(CompileAssertionTest(asRecord(tc.expr), types, content, asUses(t, nil), asNoElems))
 		if !ok {
 			t.Fatalf("CompileAssertionTest(%q) over a list: declined, want compiled", tc.expr)
 		}
@@ -182,7 +182,7 @@ func TestAssertionCastUpTheHierarchyRendersNothing(t *testing.T) {
 		"@ym eq xs:yearMonthDuration('P0M')",
 		"exists(xs:precisionDecimal(@p))",
 	} {
-		test, ok := CompileAssertionTest(asRecord(expr), types, xsd.EmptyContent{}, uses, asNoElems)
+		test, ok := compiledAssertionTest(CompileAssertionTest(asRecord(expr), types, xsd.EmptyContent{}, uses, asNoElems))
 		if !ok {
 			t.Fatalf("CompileAssertionTest(%q): declined, want compiled", expr)
 		}
@@ -243,7 +243,7 @@ func TestCompileAssertionTestDeclinesCastsDownOrAcross(t *testing.T) {
 		{"xs:string(@i) eq '5'", "a cast across primitives"},
 		{"xs:date(@dt) eq xs:date('2000-01-01')", "a cast across primitives"},
 	} {
-		if _, ok := CompileAssertionTest(asRecord(tc.expr), seededTypes, xsd.EmptyContent{}, csUses(t), asNoElems); ok {
+		if _, ok := compiledAssertionTest(CompileAssertionTest(asRecord(tc.expr), seededTypes, xsd.EmptyContent{}, csUses(t), asNoElems)); ok {
 			t.Errorf("CompileAssertionTest(%q): compiled, want declined (%s)", tc.expr, tc.why)
 		}
 	}

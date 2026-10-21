@@ -118,7 +118,7 @@ func acSharedPrefix(last, chain []xsd.QName) int {
 // name it counts.
 func acCompile(t *testing.T, record xsd.XPathExpression) AssertionTest {
 	t.Helper()
-	test, ok := CompileAssertionTest(record, seededTypes, xsd.ElementContent{}, asUses(t, map[string]string{"length": "int"}), asNoElems)
+	test, ok := compiledAssertionTest(CompileAssertionTest(record, seededTypes, xsd.ElementContent{}, asUses(t, map[string]string{"length": "int"}), asNoElems))
 	if !ok {
 		t.Fatalf("CompileAssertionTest(%q): declined, want compiled", record.Expression())
 	}
@@ -226,7 +226,7 @@ func TestAssertionRootedCountRaises(t *testing.T) {
 		"count(//@a) eq 1", "count(/@a) eq 1", "not(count(//@a) eq 1)",
 		"/@a = 'a'", "//@a", "not(//@a)", "//@a eq 'a'",
 	} {
-		test, ok := CompileAssertionTest(asRecord(expr), seededTypes, xsd.ElementContent{}, asUses(t, map[string]string{"a": "string"}), asChildTypes(t))
+		test, ok := compiledAssertionTest(CompileAssertionTest(asRecord(expr), seededTypes, xsd.ElementContent{}, asUses(t, map[string]string{"a": "string"}), asChildTypes(t)))
 		if !ok {
 			t.Errorf("CompileAssertionTest(%q): declined, want compiled", expr)
 			continue
@@ -357,7 +357,7 @@ func TestCompileAssertionTestDeclinesCounts(t *testing.T) {
 		{"./e1 = 'a'", "a child step behind ./ in a comparison"},
 		{"count(e1) cast as xs:string = '1'", "a cast from an xs:integer count"},
 	} {
-		if _, ok := CompileAssertionTest(asRecord(tc.expr), seededTypes, xsd.ElementContent{}, asUses(t, map[string]string{"length": "int"}), asChildTypes(t)); ok {
+		if _, ok := compiledAssertionTest(CompileAssertionTest(asRecord(tc.expr), seededTypes, xsd.ElementContent{}, asUses(t, map[string]string{"length": "int"}), asChildTypes(t))); ok {
 			t.Errorf("CompileAssertionTest(%q): compiled, want declined (%s)", tc.expr, tc.why)
 		}
 	}
@@ -569,7 +569,7 @@ func TestCompileAssertionTestDeclinesPredicatesAndUnions(t *testing.T) {
 		{"exists(@a | @b)", "a union in fn:exists"},
 		{"@a | @b", "a union as an effective boolean value"},
 	} {
-		if _, ok := CompileAssertionTest(asRecord(tc.expr), seededTypes, xsd.ElementContent{}, asUses(t, map[string]string{"a": "int", "b": "int"}), asChildTypes(t)); ok {
+		if _, ok := compiledAssertionTest(CompileAssertionTest(asRecord(tc.expr), seededTypes, xsd.ElementContent{}, asUses(t, map[string]string{"a": "int", "b": "int"}), asChildTypes(t))); ok {
 			t.Errorf("CompileAssertionTest(%q): compiled, want declined (%s)", tc.expr, tc.why)
 		}
 	}
@@ -588,7 +588,7 @@ func vpElems(t *testing.T, whiteType xsd.TypeDefinition) ElementTypes {
 // content and an xs:int attribute a, reporting whether it compiled.
 func vpCompile(t *testing.T, expr string, whiteType xsd.TypeDefinition) (AssertionTest, bool) {
 	t.Helper()
-	return CompileAssertionTest(asRecord(expr), seededTypes, xsd.ElementContent{}, asUses(t, map[string]string{"a": "int"}), vpElems(t, whiteType))
+	return compiledAssertionTest(CompileAssertionTest(asRecord(expr), seededTypes, xsd.ElementContent{}, asUses(t, map[string]string{"a": "int"}), vpElems(t, whiteType)))
 }
 
 // vpWhite is a child named white of type typ holding lexical.

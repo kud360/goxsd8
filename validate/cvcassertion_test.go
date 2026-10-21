@@ -710,12 +710,23 @@ func TestAssertionCallingDocIsCharged(t *testing.T) {
 
 // A {test} outside what xpath compiles is DECLINED through walk.decline —
 // recorded under cvc-assertion at the element, never charged, never satisfied
-// — whatever the attribute values would have made of it.
+// — whatever the attribute values would have made of it, and the record names
+// why xpath declined it: the reason xpath.CompileAssertionTest's *Decline
+// carries, verbatim, between "declined it because" and the rest of the
+// sentence.
 func TestOutOfFamilyAssertionIsDeclined(t *testing.T) {
-	for _, expr := range []string{"$other > 0", "@x eq 5 eq 5", "count(@*) = 1", "@* = 5", "@y = 5"} {
-		schema := aTyped(t, []string{"x", "integer"}, expr)
+	for _, tc := range []struct{ expr, why string }{
+		{"$other > 0", "the variable reference $other is not one this engine binds in this position"},
+		{"@x eq 5 eq 5", `it carries the XPath static error err:XPST0003: "@x eq 5 eq 5" is not an XPath 2.0 expression: the grammar takes nothing at byte offset 8, which err:XPST0003 forbids`},
+		{"count(@*) = 1", "this call to fn:count is not supported in this form"},
+		{"@* = 5", "the attribute step @* is not supported in this position or over its declared type"},
+		{"@y = 5", "the attribute step @y is not supported in this position or over its declared type"},
+		{"unparsed-text('x') eq ''", "function fn:unparsed-text is not supported"},
+		{"matches(string(@x), '^a', 'x') or (some $i in (1,2) satisfies $i eq 3)", "function fn:matches is not supported"},
+	} {
+		schema := aTyped(t, []string{"x", "integer"}, tc.expr)
 		res := aAssess(t, schema, aRoot("x", "500"))
-		wantRecords(t, res, "cvc-assertion", loc(1, 1), "whose {test} is "+strconv.Quote(expr)+", was not evaluated: this engine's XPath evaluator declined it")
+		wantRecords(t, res, "cvc-assertion", loc(1, 1), "whose {test} is "+strconv.Quote(tc.expr)+", was not evaluated: this engine's XPath evaluator declined it because "+tc.why+", so whether the element root is ·valid·")
 	}
 }
 

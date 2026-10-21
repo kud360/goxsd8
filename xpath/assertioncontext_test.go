@@ -16,7 +16,7 @@ import (
 // types, or fails the test, and evaluates it under bound.
 func cxEval(t *testing.T, expr string, types xsd.TypeResolver, st *xsd.SimpleType, bound ValueBinding) bool {
 	t.Helper()
-	test, ok := CompileAssertionTest(asRecord(expr), types, xsd.SimpleContent{SimpleType: st}, asUses(t, nil), asNoElems)
+	test, ok := compiledAssertionTest(CompileAssertionTest(asRecord(expr), types, xsd.SimpleContent{SimpleType: st}, asUses(t, nil), asNoElems))
 	if !ok {
 		t.Fatalf("CompileAssertionTest(%q) over %s content: declined, want compiled", expr, st.Name().Local)
 	}
@@ -159,7 +159,7 @@ func TestAssertionContextItemOverEveryContentType(t *testing.T) {
 			{"normalize-space() = 'a b'", " a  b ", true},
 			{"empty($value) and . = 'ab'", "ab", true},
 		} {
-			test, ok := CompileAssertionTest(asRecord(row.expr), seededTypes, tc.content, asUses(t, nil), asNoElems)
+			test, ok := compiledAssertionTest(CompileAssertionTest(asRecord(row.expr), seededTypes, tc.content, asUses(t, nil), asNoElems))
 			if !ok {
 				t.Errorf("CompileAssertionTest(%q) over %s content: declined, want compiled", row.expr, tc.why)
 				continue
@@ -208,7 +208,7 @@ func TestAssertionReadsContextItem(t *testing.T) {
 			{"count(.//a) = 1", false},
 			{"count(a[. = 'x']) = 1", false},
 		} {
-			test, ok := CompileAssertionTest(asRecord(tc.expr), seededTypes, content, asUses(t, map[string]string{"a": "string"}), elems)
+			test, ok := compiledAssertionTest(CompileAssertionTest(asRecord(tc.expr), seededTypes, content, asUses(t, map[string]string{"a": "string"}), elems))
 			if !ok {
 				t.Errorf("CompileAssertionTest(%q) over %T: declined, want compiled", tc.expr, content)
 				continue
@@ -233,13 +233,13 @@ func TestAssertionContextItemDeclines(t *testing.T) {
 	simple := xsd.SimpleContent{SimpleType: asBuiltin(t, "string")}
 	for _, content := range []xsd.ContentType{simple, asElementContent(t, false)} {
 		for _, expr := range []string{".", "not(.)", "exists(.)", "empty(.)", "not(exists(.))", "count(.) eq 1", ". and true()"} {
-			if _, ok := CompileAssertionTest(asRecord(expr), seededTypes, content, asUses(t, nil), asNoElems); ok {
+			if _, ok := compiledAssertionTest(CompileAssertionTest(asRecord(expr), seededTypes, content, asUses(t, nil), asNoElems)); ok {
 				t.Errorf("CompileAssertionTest(%q) over %T: compiled, want declined", expr, content)
 			}
 		}
 	}
 	for _, expr := range []string{". = 'x'", "string-length() = 0", "string(.) = ''", "normalize-space() = ''", "string() = ''"} {
-		if _, ok := CompileAssertionTest(asRecord(expr), seededTypes, nil, asUses(t, nil), asNoElems); ok {
+		if _, ok := compiledAssertionTest(CompileAssertionTest(asRecord(expr), seededTypes, nil, asUses(t, nil), asNoElems)); ok {
 			t.Errorf("CompileAssertionTest(%q) over no content: compiled, want declined", expr)
 		}
 	}
@@ -328,11 +328,11 @@ func TestIntegerSequencesDecline(t *testing.T) {
 		"1 to 3 eq .",
 		"1 to 3",
 	} {
-		if _, ok := CompileAssertionTest(asRecord(expr), seededTypes, simple, asUses(t, nil), asNoElems); ok {
+		if _, ok := compiledAssertionTest(CompileAssertionTest(asRecord(expr), seededTypes, simple, asUses(t, nil), asNoElems)); ok {
 			t.Errorf("CompileAssertionTest(%q): compiled, want declined", expr)
 		}
 	}
-	if _, ok := CompileAssertionTest(asRecord(". = 1 to 4096"), seededTypes, simple, asUses(t, nil), asNoElems); !ok {
+	if _, ok := compiledAssertionTest(CompileAssertionTest(asRecord(". = 1 to 4096"), seededTypes, simple, asUses(t, nil), asNoElems)); !ok {
 		t.Error("CompileAssertionTest(. = 1 to 4096): declined, want compiled at ctaMaxSequenceLength")
 	}
 	for _, expr := range []string{"@a = (1 to 3)", "@a = 1 to 3", "(1 to 3) = @a"} {
@@ -376,7 +376,7 @@ func TestIntegerSequenceStoresNoEmptyRange(t *testing.T) {
 		{". = (1 to 0, 5)", []ctaIntegerRange{{lo: 5, hi: 5}}},
 		{". = (3 to 1, 1 to 2)", []ctaIntegerRange{{lo: 1, hi: 2}}},
 	} {
-		test, ok := CompileAssertionTest(asRecord(tc.expr), seededTypes, simple, asUses(t, nil), asNoElems)
+		test, ok := compiledAssertionTest(CompileAssertionTest(asRecord(tc.expr), seededTypes, simple, asUses(t, nil), asNoElems))
 		if !ok {
 			t.Fatalf("CompileAssertionTest(%q): declined, want compiled", tc.expr)
 		}

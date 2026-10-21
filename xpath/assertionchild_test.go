@@ -146,7 +146,7 @@ func TestAssertionReadsChildElements(t *testing.T) {
 		{"e1 = 'present' and @x = 1", []asChild{present}, false},
 	} {
 		t.Run(tc.expr, func(t *testing.T) {
-			test, ok := CompileAssertionTest(asRecord(tc.expr), seededTypes, xsd.ElementContent{}, asUses(t, map[string]string{"x": "int"}), elems)
+			test, ok := compiledAssertionTest(CompileAssertionTest(asRecord(tc.expr), seededTypes, xsd.ElementContent{}, asUses(t, map[string]string{"x": "int"}), elems))
 			if !ok {
 				t.Fatalf("CompileAssertionTest(%q): declined, want compiled", tc.expr)
 			}
@@ -163,7 +163,7 @@ func TestAssertionReadsChildElements(t *testing.T) {
 func TestAssertionRaisesOnAnUntypedChild(t *testing.T) {
 	children := func(yield func(ChildElement) bool) { yield(Child(uq("e1"), Untyped("present"))) }
 	for _, expr := range []string{"e1 = 'present'", "not(e1 = 'present')", "e1 cast as xs:string"} {
-		test, ok := CompileAssertionTest(asRecord(expr), seededTypes, xsd.ElementContent{}, asUses(t, nil), asChildTypes(t))
+		test, ok := compiledAssertionTest(CompileAssertionTest(asRecord(expr), seededTypes, xsd.ElementContent{}, asUses(t, nil), asChildTypes(t)))
 		if !ok {
 			t.Fatalf("CompileAssertionTest(%q): declined, want compiled", expr)
 		}
@@ -183,7 +183,7 @@ func TestAssertionRaisesOnAnUntypedChild(t *testing.T) {
 func TestAssertionRootedPathRaises(t *testing.T) {
 	elems := asChildTypes(t)
 	for _, expr := range []string{"/r = 'present'", "not(/r = 'present')", "/r", "//e1 = 'present'", "/e1 eq 'present'"} {
-		test, ok := CompileAssertionTest(asRecord(expr), seededTypes, xsd.ElementContent{}, asUses(t, nil), elems)
+		test, ok := compiledAssertionTest(CompileAssertionTest(asRecord(expr), seededTypes, xsd.ElementContent{}, asUses(t, nil), elems))
 		if !ok {
 			t.Fatalf("CompileAssertionTest(%q): declined, want compiled", expr)
 		}
@@ -221,7 +221,7 @@ func TestAssertionChildStepReadsTheDefaultNamespace(t *testing.T) {
 		{"an absent default namespace misses the qualified child", ctaExprRecord("e1 = 'present'", ""), tns, false},
 		{"a prefix names its binding whatever the default", ctaExprRecord("t:e1 = 'present'", "", "t", "urn:t"), tns, true},
 	} {
-		test, ok := CompileAssertionTest(tc.record, seededTypes, xsd.ElementContent{}, asUses(t, nil), elems)
+		test, ok := compiledAssertionTest(CompileAssertionTest(tc.record, seededTypes, xsd.ElementContent{}, asUses(t, nil), elems))
 		if !ok {
 			t.Fatalf("%s: CompileAssertionTest(%q) declined, want compiled", tc.why, tc.record.Expression())
 		}
@@ -277,7 +277,7 @@ func TestCompileAssertionTestDeclinesChildSteps(t *testing.T) {
 		{"// = 'a'", "a bare double slash"},
 		{"/p:r = 'a'", "an unbound prefix in a rooted step"},
 	} {
-		if _, ok := CompileAssertionTest(asRecord(tc.expr), types, xsd.ElementContent{}, asUses(t, nil), elems); ok {
+		if _, ok := compiledAssertionTest(CompileAssertionTest(asRecord(tc.expr), types, xsd.ElementContent{}, asUses(t, nil), elems)); ok {
 			t.Errorf("CompileAssertionTest(%q): compiled, want declined (%s)", tc.expr, tc.why)
 		}
 	}
@@ -304,7 +304,7 @@ func TestAssertionTestReadsChild(t *testing.T) {
 		{"$value eq 1", nil},
 		{"/e1 = 'present'", nil},
 	} {
-		test, ok := CompileAssertionTest(asRecord(tc.expr), seededTypes, content, uses, elems)
+		test, ok := compiledAssertionTest(CompileAssertionTest(asRecord(tc.expr), seededTypes, content, uses, elems))
 		if !ok {
 			t.Fatalf("CompileAssertionTest(%q): declined, want compiled", tc.expr)
 		}

@@ -17,7 +17,7 @@ import (
 // types, or fails the test, and evaluates it under attrs, children and bound.
 func ioEval(t *testing.T, expr string, types xsd.TypeResolver, content xsd.ContentType, uses AttributeTypes, elems ElementTypes, attrs TypedAttributes, children ChildElements, bound ValueBinding) bool {
 	t.Helper()
-	test, ok := CompileAssertionTest(asRecord(expr), types, content, uses, elems)
+	test, ok := compiledAssertionTest(CompileAssertionTest(asRecord(expr), types, content, uses, elems))
 	if !ok {
 		t.Fatalf("CompileAssertionTest(%q): declined, want compiled", expr)
 	}
@@ -70,7 +70,7 @@ func TestAssertionInstanceOfValue(t *testing.T) {
 			}
 			bound = BindValue(tc.lexical, Typed(v))
 		}
-		test, ok := CompileAssertionTest(ctaExprRecord(tc.expr, tc.defaultNS, "xs", xsd.XMLSchemaNS), types, xsd.SimpleContent{SimpleType: tc.st}, asUses(t, nil), asNoElems)
+		test, ok := compiledAssertionTest(CompileAssertionTest(ctaExprRecord(tc.expr, tc.defaultNS, "xs", xsd.XMLSchemaNS), types, xsd.SimpleContent{SimpleType: tc.st}, asUses(t, nil), asNoElems))
 		if !ok {
 			t.Errorf("CompileAssertionTest(%q) over %s: declined, want compiled", tc.expr, tc.st.Name().Local)
 			continue
@@ -193,7 +193,7 @@ func TestAssertionInstanceOfData(t *testing.T) {
 // readsChild answering false.
 func TestAssertionInstanceOfReadsChild(t *testing.T) {
 	elems := asElems(map[xsd.QName]xsd.TypeDefinition{uq("e"): asBuiltin(t, "date")})
-	test, ok := CompileAssertionTest(asRecord("data(e) instance of xs:date*"), seededTypes, xsd.EmptyContent{}, asUses(t, nil), elems)
+	test, ok := compiledAssertionTest(CompileAssertionTest(asRecord("data(e) instance of xs:date*"), seededTypes, xsd.EmptyContent{}, asUses(t, nil), elems))
 	if !ok {
 		t.Fatal("CompileAssertionTest: declined, want compiled")
 	}
@@ -413,7 +413,7 @@ func TestInstanceOfDeclines(t *testing.T) {
 		"count(n[. instance of xs:int]) = 1",
 		"count(n[. = 1 and . = 'a' instance of xs:string]) = 1",
 	} {
-		if _, ok := CompileAssertionTest(asRecord(expr), types, xsd.SimpleContent{SimpleType: date}, uses, elems); ok {
+		if _, ok := compiledAssertionTest(CompileAssertionTest(asRecord(expr), types, xsd.SimpleContent{SimpleType: date}, uses, elems)); ok {
 			t.Errorf("CompileAssertionTest(%q): compiled, want declined", expr)
 		}
 	}

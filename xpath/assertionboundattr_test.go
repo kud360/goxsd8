@@ -53,7 +53,7 @@ func baUses(t *testing.T) AttributeTypes {
 // baElems types and whose children's attributes baUses types.
 func baCompile(t *testing.T, expr string) (AssertionTest, bool) {
 	t.Helper()
-	return CompileAssertionTest(asRecord(expr), seededTypes, asElementContent(t, false), baUses(t), baElems(t))
+	return compiledAssertionTest(CompileAssertionTest(asRecord(expr), seededTypes, asElementContent(t, false), baUses(t), baElems(t)))
 }
 
 // baChild is one child of E: its name, its xs:integer lexical, "" for a child
@@ -305,7 +305,7 @@ func TestAssertionBoundAttributesDecline(t *testing.T) {
 		"some $v in $value satisfies number($v/@a) lt 3",
 		"some $v in $value satisfies number($v/@a/substring-after(., 'val')) lt 3",
 	} {
-		if _, ok := CompileAssertionTest(asRecord(expr), asTypesWith(list), xsd.SimpleContent{SimpleType: list}, baUses(t), baElems(t)); ok {
+		if _, ok := compiledAssertionTest(CompileAssertionTest(asRecord(expr), asTypesWith(list), xsd.SimpleContent{SimpleType: list}, baUses(t), baElems(t))); ok {
 			t.Errorf("CompileAssertionTest(%q) over a `$value` list: compiled, want declined", expr)
 		}
 	}

@@ -75,13 +75,14 @@ const ruleCvcAssertionsValid xsderr.Rule = "cvc-assertions-valid"
 // string-value frame ([ownStringValue]), nil where e opened none.
 //
 // Each assertion takes exactly one of three outcomes: DECLINED, where
-// [xpath.CompileAssertionTest] reported false or e's attributes, the children
-// a {test} reads, or `$value` cannot be read; CHARGED under cvc-assertion, where
+// [xpath.CompileAssertionTest] returned a [xpath.Decline], whose reason the
+// record names, or e's attributes, the children a {test} reads, or `$value`
+// cannot be read; CHARGED under cvc-assertion, where
 // [xpath.AssertionTest.Evaluate] reports false — the {test} was false or raised
 // a dynamic or type error, which cvc-assertion's opening sentence treats alike
-// ("evaluates to true ... without raising any dynamic error or type error");
-// and SATISFIED otherwise. The log names no clause: cvc-assertion's verdict is
-// that opening sentence, and its numbered clauses only build the evaluation's
+// ("evaluates to true ... without raising any dynamic error or type error"); and
+// SATISFIED otherwise. The log names no clause: cvc-assertion's verdict is that
+// opening sentence, and its numbered clauses only build the evaluation's
 // context.
 //
 // GAP(validate): an assertion this package does not evaluate is DECLINED —
@@ -135,14 +136,13 @@ func (w *walk) elementAssertions(e Element, asserts *assertionCheck, content *co
 				site, lack.declined(e.Name()))
 			continue
 		}
-		test := c.test
-		if test == nil {
+		if c.declined != nil {
 			w.decline("assessing element", e.Name(), e.Loc(), ruleCvcAssertion, "",
-				"%s was not evaluated: this engine's XPath evaluator declined it, so whether the element %s is ·valid· with respect to it, as cvc-complex-type clause 6 requires (Assertion Satisfied, §3.13.4.1), is undecided",
-				site, e.Name())
+				"%s was not evaluated: this engine's XPath evaluator declined it because %s, so whether the element %s is ·valid· with respect to it, as cvc-complex-type clause 6 requires, is undecided",
+				site, c.declined, e.Name())
 			continue
 		}
-		if test.Evaluate(w.backend, w.schema, e, in.yield, asserts.yieldChildren, c.tally, in.value, w.now) {
+		if c.test.Evaluate(w.backend, w.schema, e, in.yield, asserts.yieldChildren, c.tally, in.value, w.now) {
 			w.logDecision("assessing element", e.Name(), e.Loc(), ruleCvcAssertion, "", "satisfied")
 			continue
 		}
@@ -294,7 +294,7 @@ func (c *assertionCheck) readsContextItem() bool {
 		return false
 	}
 	for _, t := range c.tests {
-		if t.test != nil && t.test.ReadsContextItem() {
+		if t.test.ReadsContextItem() {
 			return true
 		}
 	}
@@ -309,7 +309,7 @@ func (c *assertionCheck) reads(name xsd.QName) bool {
 		return false
 	}
 	for _, t := range c.tests {
-		if t.test != nil && t.test.ReadsChild(name) {
+		if t.test.ReadsChild(name) {
 			return true
 		}
 	}
@@ -326,9 +326,7 @@ func (c *assertionCheck) childAttributesRead(name xsd.QName) []xsd.QName {
 	}
 	var names []xsd.QName
 	for _, t := range c.tests {
-		if t.test != nil {
-			names = append(names, t.test.ReadsChildAttributes(name)...)
-		}
+		names = append(names, t.test.ReadsChildAttributes(name)...)
 	}
 	return names
 }
@@ -1055,13 +1053,16 @@ func (c *assertionCheck) yieldChildren(yield func(xpath.ChildElement) bool) {
 }
 
 // assertionTest is one member of ct.{assertions}, its {test} as
-// [xpath.CompileAssertionTest] compiled it, nil where that declined, and the
-// [xpath.Tally] that test's evaluation reads ([xpath.AssertionTest.Tally]),
-// nil where it counts nothing.
+// [xpath.CompileAssertionTest] compiled it, the zero one where that declined,
+// why it declined, nil where it compiled, and the [xpath.Tally] that test's
+// evaluation reads ([xpath.AssertionTest.Tally]), nil where it counts nothing.
+// The zero [xpath.AssertionTest] reads and counts nothing, so only
+// [walk.elementAssertions] asks declined.
 type assertionTest struct {
-	a     xsd.Assertion
-	test  *xpath.AssertionTest
-	tally *xpath.Tally
+	a        xsd.Assertion
+	test     xpath.AssertionTest
+	declined *xpath.Decline
+	tally    *xpath.Tally
 }
 
 // compileAssertions compiles every assertion of g's complex ·governing type
@@ -1123,12 +1124,8 @@ func (w *walk) compileAssertions(g governance, verdicts []attributeVerdict) *ass
 // [xpath.AssertionTest.ReadsContextItem]'s answer, which
 // [assertionCheck.readsContextItem] reads.
 func (w *walk) compileAssertion(a xsd.Assertion, c *assertionCheck) assertionTest {
-	t := assertionTest{a: a}
-	if test, compiled := xpath.CompileAssertionTest(a.Test(), w.schema, c.ct.ContentType(), w.annotations(c), w.assertionElementTypes(c.ct)); compiled {
-		t.test = &test
-		t.tally = test.Tally()
-	}
-	return t
+	test, declined := xpath.CompileAssertionTest(a.Test(), w.schema, c.ct.ContentType(), w.annotations(c), w.assertionElementTypes(c.ct))
+	return assertionTest{a: a, test: test, declined: declined, tally: test.Tally()}
 }
 
 // annotations is the [xpath.AttributeTypes] the {test}s of the element whose
