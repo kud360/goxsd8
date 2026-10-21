@@ -172,9 +172,10 @@
 //	    exits 1, and 4 answers a run where something was left undecided
 //	    and nothing was worse.
 //	    Every instance is assessed — the run never stops at the first
-//	    invalid one — and each violation, and each check the assessment
-//	    declined, prints one line on stdout:
-//	    <loc>: [<rule>] <message>.
+//	    invalid one — and each violation prints one line on stdout,
+//	    <loc>: [<rule>] <message>, and each check the assessment
+//	    declined one line beside them, carrying the literal undecided:
+//	    after the rule: <loc>: [<rule>] undecided: <message>.
 //
 //	goxsd8 gen -schema <schema.xsd> -out <dir> [-schema <s2> -out <d2>]... [-backend strict|native]
 //	    Generate Go types; repeated -schema/-out pairs map schemas to
@@ -276,11 +277,12 @@
 // document stands undecided against exactly the rules those checks answer to,
 // which is what [validate.Result.Unevaluated] records (its own doc lists every
 // kind, and the few declines it does not record) and validate's own doc.go
-// calls not a pass. Each such check prints the "<loc>: [<rule>] <message>" line a
-// violation prints, on stdout, so a script scanning for a rule ID reads them
-// with the charges. 4 is the least severe outcome after 0 and the codes
-// aggregate by severity rather than by number, so a run whose instances mix
-// invalid with undecided exits 1: a gate acts on the verdict it has.
+// calls not a pass. Each such check prints a line on stdout in the shape
+// Diagnostic lines below states for a declined check, so a script scanning
+// for a rule ID reads them with the charges and a reader tells them apart. 4
+// is the least severe outcome after 0 and the codes aggregate by severity
+// rather than by number, so a run whose instances mix invalid with undecided
+// exits 1: a gate acts on the verdict it has.
 //
 // A JSON instance on validate/jsonsrc's error channel exits 4 too, with no
 // Unevaluated record and no assessment standing. That channel is one error
@@ -367,14 +369,19 @@
 // # Diagnostic lines
 //
 // A diagnostic line is <loc>: [<rule>] <message>, on stderr for a schema error
-// and on stdout for a violation or a declined check. <loc> is
-// <file>:<line>:<col>, ? when unknown, and <rule> is the spec validation rule
-// ID. validate renders its violations the way parse renders a schema error,
-// the no-rule-to-cite exception included, which on validate's path is the line
-// naming the source fault that stopped the walk. A JSON instance on
-// validate/jsonsrc's error channel is no exception: jsonsrc, the source that
-// raised the error and no rule ID, stands where <rule> stands, so the line
-// splits like every other:
+// and on stdout for a violation. A check the assessment declined prints on
+// stdout too, with the literal undecided: after [<rule>], which tells it from
+// a charge on the line itself while keeping the split every other line has:
+//
+//	<loc>: [<rule>] undecided: <message>
+//
+// <loc> is <file>:<line>:<col>, ? when unknown, and <rule> is the spec
+// validation rule ID. validate renders its violations the way parse renders a
+// schema error, the no-rule-to-cite exception included, which on validate's
+// path is the line naming the source fault that stopped the walk. A JSON
+// instance on validate/jsonsrc's error channel is no exception: jsonsrc, the
+// source that raised the error and no rule ID, stands where <rule> stands, so
+// the line splits like every other:
 //
 //	<loc>: [jsonsrc] <message>
 //

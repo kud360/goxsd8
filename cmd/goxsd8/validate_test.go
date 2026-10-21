@@ -287,9 +287,10 @@ func TestValidateSchemaFaultHasItsOwnExitCode(t *testing.T) {
 // TestValidateUndecidedInstanceHasItsOwnExitCode is this issue's witness: an
 // instance charged no violation whose assessment DECLINED a check it reached
 // is not the clean pass exit 0 names, and the CLI must say so on the same
-// stream and in the same shape a violation gets. asserted.xml charges nothing
-// and leaves the <xs:assert> of its governing type unevaluated, which
-// validate/doc.go's Contract calls undecided rather than a pass.
+// stream a violation gets, opening "<loc>: [<rule>] " as a violation line
+// does. asserted.xml charges nothing and leaves the <xs:assert> of its
+// governing type unevaluated, which validate/doc.go's Contract calls
+// undecided rather than a pass.
 func TestValidateUndecidedInstanceHasItsOwnExitCode(t *testing.T) {
 	// The code is its own before any run earns it, on the reasoning
 	// TestValidateSchemaFaultHasItsOwnExitCode states.
@@ -368,7 +369,10 @@ func TestStandingCode(t *testing.T) {
 // The charged row reaches exitInvalid through standingCode's Charged arm; the
 // unclosed row's Standing is Undecided, and only assessmentLines raising it
 // through worse for result.Err() reaches exitInvalid. Each row asserts the
-// charge or fault line, then the [cvc-assertion] line, in that order.
+// charge or fault line, then the [cvc-assertion] line, in that order, and that
+// the two render apart from the same run: the undecided line carries
+// "<loc>: [cvc-assertion] undecided: " and the charge line carries no
+// "undecided: " after its rule.
 func TestValidateUndecidedBesideInvalidIsInvalid(t *testing.T) {
 	for _, c := range []struct {
 		name     string
@@ -391,8 +395,11 @@ func TestValidateUndecidedBesideInvalidIsInvalid(t *testing.T) {
 		if !strings.HasPrefix(lines[0], c.first) {
 			t.Errorf("%s: first line = %q, want prefix %q", c.name, lines[0], c.first)
 		}
-		if !strings.HasPrefix(lines[1], c.instance+":") || !strings.Contains(lines[1], "[cvc-assertion]") {
-			t.Errorf("%s: second line = %q, want the instance's [cvc-assertion] undecided line", c.name, lines[1])
+		if strings.HasPrefix(lines[0], c.first+"undecided: ") {
+			t.Errorf("%s: first line = %q, want no undecided: mark: it is a charge", c.name, lines[0])
+		}
+		if !strings.HasPrefix(lines[1], c.instance+":") || !strings.Contains(lines[1], ": [cvc-assertion] undecided: ") {
+			t.Errorf("%s: second line = %q, want the instance's \"<loc>: [cvc-assertion] undecided: \" line: the declined check marks itself apart from the charge", c.name, lines[1])
 		}
 	}
 }
@@ -964,8 +971,9 @@ func TestValidateFormatVocabulary(t *testing.T) {
 }
 
 // TestValidateJSONInstance pins a .json instance's route through
-// validate/jsonsrc: its verdicts print the "<loc>: [<rule>] <message>" line an
-// XML instance's do, at jsonsrc's line and byte column, and earn the same
+// validate/jsonsrc: its violations print the "<loc>: [<rule>] <message>" line
+// an XML instance's do, and its declined checks the "<loc>: [<rule>]
+// undecided: <message>" one, at jsonsrc's line and byte column, and earn the same
 // codes, while jsonsrc's one error channel — malformed JSON and every decline
 // alike — prints "<loc>: [jsonsrc] <message>", the source name standing where
 // a rule ID stands, and exits 4: it is no validity verdict. Every row runs
@@ -978,7 +986,8 @@ func TestValidateJSONInstance(t *testing.T) {
 		instances []string
 		code      int
 		// lines are the report's whole lines, in order; a line ending in
-		// "] " is a prefix, the message after it being the engine's.
+		// "] " or "] undecided: " is a prefix, the message after it being
+		// the engine's.
 		lines []string
 	}{
 		{"valid", orderSchema, []string{validJSON}, exitOK, nil},
@@ -987,7 +996,7 @@ func TestValidateJSONInstance(t *testing.T) {
 			invalidJSON + ":1:11: [cvc-identity-constraint] ",
 		}},
 		{"unevaluated", assertedSchema, []string{assertedJSON}, exitUndecided, []string{
-			assertedJSON + ":1:2: [cvc-assertion] ",
+			assertedJSON + ":1:2: [cvc-assertion] undecided: ",
 		}},
 		{"malformed", orderSchema, []string{malformedJSON}, exitUndecided, []string{
 			malformedJSON + ":1:18: [jsonsrc] malformed JSON: unexpected EOF",
@@ -1023,7 +1032,8 @@ func TestValidateJSONInstance(t *testing.T) {
 					t.Fatalf("run(%q) stdout =\n%s\nwant %d lines", args, stdout.String(), len(c.lines))
 				}
 				for i, want := range c.lines {
-					if got[i] == want || (strings.HasSuffix(want, "] ") && strings.HasPrefix(got[i], want)) {
+					prefix := strings.HasSuffix(want, "] ") || strings.HasSuffix(want, "] undecided: ")
+					if got[i] == want || (prefix && strings.HasPrefix(got[i], want)) {
 						continue
 					}
 					t.Errorf("run(%q) line %d = %q, want %q", args, i+1, got[i], want)

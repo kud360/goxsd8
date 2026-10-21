@@ -77,10 +77,11 @@ func formatVocabulary() string {
 
 // runValidate implements `goxsd8 validate`: it compiles the -schema arguments
 // into ONE schema set and assesses every positional argument against it,
-// writing each violation, and each check the assessment declined, to stdout as
-// the contract's "<loc>: [<rule>] <message>", and a JSON instance jsonsrc
-// could not assess as "<loc>: [jsonsrc] <message>" (assessJSON). args excludes
-// the subcommand name itself.
+// writing each violation to stdout as the contract's "<loc>: [<rule>]
+// <message>", each check the assessment declined in the marked rendering
+// undecidedLine states, and a JSON instance jsonsrc could not assess as
+// "<loc>: [jsonsrc] <message>" (assessJSON). args excludes the subcommand
+// name itself.
 //
 // Every instance is assessed, in argument order: a violation in one never
 // stops the next, so a script gets the whole report from one run. The exit
@@ -460,9 +461,10 @@ func reportUnfollowedHints(stderr io.Writer, instance string, compiled bool, rep
 // against exactly the rules those records name, not a pass (#1223).
 //
 // The code comes back with the lines because it is the one thing their
-// rendering does not carry: undecided records print exactly like charges, so
-// nothing in the text tells a reader which kind of report this is. It is the
-// result's [validate.Result.Standing] (standingCode), raised through worse to
+// rendering does not carry: each line says whether it is a charge or a
+// declined check (undecidedLine), but no line says where the instance stands
+// over all of them, a stopped walk included. It is the result's
+// [validate.Result.Standing] (standingCode), raised through worse to
 // exitInvalid by a stopped walk, which this CLI ranks above undecided where
 // the library's Standing does not.
 //
@@ -504,16 +506,20 @@ func standingCode(s validate.Standing) int {
 	return exitInvalid
 }
 
-// undecidedLine renders one check the assessment declined in the rendering a
-// violation gets, so that a script scanning stdout for "[<rule>]" sees the
-// rules a document stands undecided against alongside the ones it was charged.
+// undecidedLine renders one check the assessment declined as "<loc>: [<rule>]
+// undecided: <message>". It keeps a violation line's "<loc>: [<rule>] " opening,
+// so that a script scanning stdout for "[<rule>]" sees the rules a document
+// stands undecided against alongside the ones it was charged (#1223), and
+// follows it with the fixed literal "undecided: ", so that a reader tells a
+// declined check from a charge on the line itself. The literal is this CLI's,
+// written whatever message text the library gives the record.
 //
 // It formats the three accessors rather than routing through violationLine,
 // because a [validate.Unevaluated] deliberately does not satisfy error and
 // must not be made to: it decides nothing about the document, and a consumer
 // that could errors.Is it would be one join away from a false reject.
 func undecidedLine(u validate.Unevaluated) string {
-	return fmt.Sprintf("%s: [%s] %s", u.Loc(), u.Rule(), u.Msg())
+	return fmt.Sprintf("%s: [%s] undecided: %s", u.Loc(), u.Rule(), u.Msg())
 }
 
 // reportLines writes one instance's report to stdout and reports the exit code
