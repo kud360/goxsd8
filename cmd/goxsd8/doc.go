@@ -89,27 +89,28 @@
 //	    can end with a clause jsonsrc appends naming a member in JSON
 //	    terms, such as ; JSON member "<key>" ... object expected; go
 //	    doc github.com/kud360/goxsd8/validate/jsonsrc Validate lists
-//	    each clause and the one charge it goes on. An input jsonsrc's
-//	    mapping declines, malformed JSON, content after the top-level
-//	    object and an I/O fault reading the instance once it is open
-//	    all reach jsonsrc's one error channel, and the line names
-//	    none of them: each prints <loc>: [jsonsrc] <message> on
-//	    stdout, [jsonsrc] standing where [<rule>] stands and naming
-//	    the source that raised the error, not a rule, and exits 4,
-//	    where malformed XML and an I/O fault reading an XML instance
-//	    exit 1. They share 4
-//	    because the line names no class, and nothing tells a shape
-//	    the mapping rejects from an arm it does not implement, so
-//	    charging 1 would charge every decline as invalid.
+//	    each clause and the one charge it goes on. Malformed JSON,
+//	    content after the top-level object, an I/O fault reading the
+//	    instance once it is open and an input jsonsrc's mapping
+//	    declines all reach jsonsrc's one error channel, and validate
+//	    routes each by the class jsonsrc gives it, printing one line on
+//	    stdout with [jsonsrc] standing where [<rule>] stands and naming
+//	    the source that raised the error, not a rule. Malformed JSON
+//	    and content after the top-level object print <loc>: [jsonsrc]
+//	    <message> and exit 1, as malformed XML does; an I/O fault
+//	    reading the instance prints the same line and exits 1, as an
+//	    I/O fault reading an XML instance does. A decline prints
+//	    <loc>: [jsonsrc] undecided: <message> and exits 4: the
+//	    instance stands undecided, not invalid.
 //	    Where -format forces xml or json on an instance whose
 //	    extension names the other, a line saying it is not well-formed
 //	    in the forced format keeps its token and exit code and ends
 //	    with a clause naming the format forced and the one the
 //	    extension names, ; -format F read <instance> as F, but its
 //	    extension names G: drop -format, or pass -format G. Under
-//	    -format json that is every [jsonsrc] line but a decline's:
-//	    malformed JSON, no JSON value and content after the top-level
-//	    object alike. Under -format xml it is every [xml-wf] line,
+//	    -format json that is every malformed JSON line: malformed
+//	    JSON, no JSON value and content after the top-level object
+//	    alike. Under -format xml it is every [xml-wf] line,
 //	    wherever in the document its fault lies. A line reporting a
 //	    fault reading the instance gets no clause.
 //	    The JSON shape in brief: the top-level object has exactly one
@@ -164,11 +165,11 @@
 //	    assessment declined to decide: no violation charged, and a
 //	    check it reached not performed, so the instance stands
 //	    undecided against the rule that check answers to rather than
-//	    clean; a JSON instance on jsonsrc's error channel is 4 too,
+//	    clean; a JSON instance jsonsrc's mapping declines is 4 too,
 //	    with no assessment standing. The code is the worst outcome over
 //	    the instances, by severity and not by number: undecided is less
-//	    severe than invalid, so a run holding one of each — a JSON
-//	    instance on the error channel beside an invalid one included —
+//	    severe than invalid, so a run holding one of each — a declined
+//	    JSON instance beside an invalid one included —
 //	    exits 1, and 4 answers a run where something was left undecided
 //	    and nothing was worse.
 //	    Every instance is assessed — the run never stops at the first
@@ -284,20 +285,23 @@
 // rather than by number, so a run whose instances mix invalid with undecided
 // exits 1: a gate acts on the verdict it has.
 //
-// A JSON instance on validate/jsonsrc's error channel exits 4 too, with no
-// Unevaluated record and no assessment standing. That channel is one error
-// carrying malformed JSON, content after the top-level object, an I/O fault
-// reading the instance once it is open (which jsonsrc reports as a fault
-// reading the input) and every input jsonsrc's mapping declines, and jsonsrc's
-// doc makes none of them a validity verdict. jsonsrc classes each one in a
-// *jsonsrc.Error, but the line names no class, and nothing tells a shape the
-// mapping rejects from an arm it does not implement, so charging 1
-// would charge every decline as invalid: all of them are undecided — unlike
-// malformed XML, and an I/O fault reading an XML instance, which exit 1. It
-// aggregates like any 4: beside an invalid instance the run exits 1. Its line
-// is on stdout with the report, in the shape Diagnostic lines below states:
+// A JSON instance on validate/jsonsrc's error channel has no Unevaluated
+// record and no assessment standing. That channel is one error carrying
+// malformed JSON, content after the top-level object, an I/O fault reading the
+// instance once it is open (which jsonsrc reports as a fault reading the
+// input) or an input jsonsrc's mapping declines, and validate routes it by the
+// class jsonsrc gives it in a *jsonsrc.Error. Its one line is on stdout with
+// the report, in the shapes Diagnostic lines below states:
 //
-//	<loc>: [jsonsrc] <message>
+//   - Malformed JSON, class jsonsrc.Malformed, exits 1, as malformed XML does:
+//     <loc>: [jsonsrc] <message>, ending with the -format clause the usage
+//     block states where it applies.
+//   - A fault reading the input, class jsonsrc.ReadFault, exits 1, as an I/O
+//     fault reading an XML instance does: <loc>: [jsonsrc] <message>.
+//   - A decline, class jsonsrc.Decline, exits 4: <loc>: [jsonsrc] undecided:
+//     <message>. A decline is a withhold, never a verdict, so the instance
+//     stands undecided and not invalid, and it aggregates like any 4: beside
+//     an invalid instance the run exits 1.
 //
 // validate assesses its instances in argument order. An instance argument
 // spelled - is standard input, which has no extension to name a source format,
@@ -359,7 +363,7 @@
 // validate does, and the README shows both routes for them; JSON instance
 // assessment is validate/jsonsrc's Validate, which -format json calls. That
 // mapping is not whole: the inputs it still declines (its doc's Every decline)
-// reach the exit-4 error channel above rather than a verdict. The capabilities
+// reach the exit-4 decline line above rather than a verdict. The capabilities
 // this page reserves have no library route either: codegen (M9) with codec
 // (M10) and validate/bersrc (M11) each export nothing yet, so for code
 // generation and BER instances there is no second route to document until
@@ -381,9 +385,17 @@
 // path is the line naming the source fault that stopped the walk. A JSON
 // instance on validate/jsonsrc's error channel is no exception: jsonsrc, the
 // source that raised the error and no rule ID, stands where <rule> stands, so
-// the line splits like every other:
+// the line splits like every other, unmarked for malformed JSON and a fault
+// reading the input and marked for a decline:
 //
 //	<loc>: [jsonsrc] <message>
+//	<loc>: [jsonsrc] undecided: <message>
+//
+// The literal undecided: marks both withholds on purpose, a declined check and
+// a jsonsrc decline, and the token before it, a rule ID or jsonsrc, tells them
+// apart. The line does not tell malformed JSON from a fault reading the input,
+// as an [xml-wf] line does not tell malformed XML from a fault reading an XML
+// instance.
 //
 // A decimal element holding "12,50" prints:
 //

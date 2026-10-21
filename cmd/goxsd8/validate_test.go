@@ -16,6 +16,7 @@ import (
 	"github.com/kud360/goxsd8/builtin/strict"
 	"github.com/kud360/goxsd8/parser"
 	"github.com/kud360/goxsd8/validate"
+	"github.com/kud360/goxsd8/validate/jsonsrc"
 )
 
 // The fixtures every outcome test turns on: the schema parse's own tests
@@ -973,12 +974,13 @@ func TestValidateFormatVocabulary(t *testing.T) {
 // TestValidateJSONInstance pins a .json instance's route through
 // validate/jsonsrc: its violations print the "<loc>: [<rule>] <message>" line
 // an XML instance's do, and its declined checks the "<loc>: [<rule>]
-// undecided: <message>" one, at jsonsrc's line and byte column, and earn the same
-// codes, while jsonsrc's one error channel — malformed JSON and every decline
-// alike — prints "<loc>: [jsonsrc] <message>", the source name standing where
-// a rule ID stands, and exits 4: it is no validity verdict. Every row runs
-// with and without -no-hints and must answer the same, because a JSON instance
-// carries no hints.
+// undecided: <message>" one, at jsonsrc's line and byte column, and earn the
+// same codes, while jsonsrc's one error channel, the source name standing
+// where a rule ID stands, is routed by class: malformed JSON prints
+// "<loc>: [jsonsrc] <message>" and exits 1, as malformed XML does, and a
+// decline prints "<loc>: [jsonsrc] undecided: <message>" and exits 4. Every
+// row runs with and without -no-hints and must answer the same, because a JSON
+// instance carries no hints.
 func TestValidateJSONInstance(t *testing.T) {
 	cases := []struct {
 		name      string
@@ -998,17 +1000,22 @@ func TestValidateJSONInstance(t *testing.T) {
 		{"unevaluated", assertedSchema, []string{assertedJSON}, exitUndecided, []string{
 			assertedJSON + ":1:2: [cvc-assertion] undecided: ",
 		}},
-		{"malformed", orderSchema, []string{malformedJSON}, exitUndecided, []string{
+		{"malformed", orderSchema, []string{malformedJSON}, exitInvalid, []string{
 			malformedJSON + ":1:18: [jsonsrc] malformed JSON: unexpected EOF",
 		}},
 		{"declined", orderSchema, []string{declinedJSON}, exitUndecided, []string{
-			declinedJSON + `:1:2: [jsonsrc] member "z:nosuch": no "$xmlns" in scope binds its prefix "z"; a prefixed key names the expanded name its prefix's binding gives it, so bind "z" in a "$xmlns" member, {"z":"<namespace name>"}, leading the object of the element the key names or is an attribute of, or of an ancestor`,
+			declinedJSON + `:1:2: [jsonsrc] undecided: member "z:nosuch": no "$xmlns" in scope binds its prefix "z"; a prefixed key names the expanded name its prefix's binding gives it, so bind "z" in a "$xmlns" member, {"z":"<namespace name>"}, leading the object of the element the key names or is an attribute of, or of an ancestor`,
 		}},
 		// A decline is less severe than a violation, as an undecided check is.
 		{"declined beside invalid", orderSchema, []string{declinedJSON, invalidJSON}, exitInvalid, []string{
-			declinedJSON + `:1:2: [jsonsrc] member "z:nosuch": no "$xmlns" in scope binds its prefix "z"; a prefixed key names the expanded name its prefix's binding gives it, so bind "z" in a "$xmlns" member, {"z":"<namespace name>"}, leading the object of the element the key names or is an attribute of, or of an ancestor`,
+			declinedJSON + `:1:2: [jsonsrc] undecided: member "z:nosuch": no "$xmlns" in scope binds its prefix "z"; a prefixed key names the expanded name its prefix's binding gives it, so bind "z" in a "$xmlns" member, {"z":"<namespace name>"}, leading the object of the element the key names or is an attribute of, or of an ancestor`,
 			invalidJSON + ":1:19: [cvc-attribute] ",
 			invalidJSON + ":1:11: [cvc-identity-constraint] ",
+		}},
+		// Malformed JSON ranks as invalid, above a decline beside it.
+		{"declined beside malformed", orderSchema, []string{declinedJSON, malformedJSON}, exitInvalid, []string{
+			declinedJSON + `:1:2: [jsonsrc] undecided: member "z:nosuch": no "$xmlns" in scope binds its prefix "z"; a prefixed key names the expanded name its prefix's binding gives it, so bind "z" in a "$xmlns" member, {"z":"<namespace name>"}, leading the object of the element the key names or is an attribute of, or of an ancestor`,
+			malformedJSON + ":1:18: [jsonsrc] malformed JSON: unexpected EOF",
 		}},
 	}
 	for _, c := range cases {
@@ -1048,12 +1055,13 @@ func TestValidateJSONInstance(t *testing.T) {
 	}
 }
 
-// TestValidateJSONReadFaultIsUndecided pins what the contract promises for an
+// TestValidateJSONReadFaultIsInvalid pins what the contract promises for an
 // I/O fault reading a JSON instance after it is opened: jsonsrc reports it as
-// a fault reading the input on its one error channel, so it exits 4, where
-// the same fault under an XML instance is an [xml-wf] verdict exiting 1.
-// /proc/self/mem opens, and its first read faults (EIO at offset 0).
-func TestValidateJSONReadFaultIsUndecided(t *testing.T) {
+// a fault reading the input, class jsonsrc.ReadFault, and it exits 1 on an
+// unmarked [jsonsrc] line, as the same fault under an XML instance exits 1 on
+// an [xml-wf] line. The xml row is the parity pin: the json row's code moves
+// with it. /proc/self/mem opens, and its first read faults (EIO at offset 0).
+func TestValidateJSONReadFaultIsInvalid(t *testing.T) {
 	const faulting = "/proc/self/mem"
 	if _, err := os.ReadFile(faulting); err == nil || !strings.Contains(err.Error(), "input/output error") {
 		t.Skipf("reading %s gives %v here, not the EIO this test needs", faulting, err)
@@ -1063,7 +1071,7 @@ func TestValidateJSONReadFaultIsUndecided(t *testing.T) {
 		code   int
 		prefix string
 	}{
-		{"json", exitUndecided, faulting + ":1:1: [jsonsrc] fault reading the input: read " + faulting + ": input/output error"},
+		{"json", exitInvalid, faulting + ":1:1: [jsonsrc] fault reading the input: read " + faulting + ": input/output error"},
 		{"xml", exitInvalid, faulting + ":1:1: [xml-wf] read " + faulting + ": input/output error"},
 	} {
 		var stdout, stderr bytes.Buffer
@@ -1091,8 +1099,8 @@ func TestValidateJSONErrorLineSplitsByURI(t *testing.T) {
 	}
 	var stdout, stderr bytes.Buffer
 	args := []string{"validate", "-schema", orderSchema, instance}
-	if code := run(args, &stdout, &stderr); code != exitUndecided {
-		t.Errorf("run(%q) = %d, want %d (stdout %q, stderr %q)", args, code, exitUndecided, stdout.String(), stderr.String())
+	if code := run(args, &stdout, &stderr); code != exitInvalid {
+		t.Errorf("run(%q) = %d, want %d (stdout %q, stderr %q)", args, code, exitInvalid, stdout.String(), stderr.String())
 	}
 	want := instance + ":1:18: [jsonsrc] malformed JSON: unexpected EOF\n"
 	if stdout.String() != want {
@@ -1136,11 +1144,37 @@ func TestAssessJSONHintFollowsClass(t *testing.T) {
 			"order.xml:1:11: [jsonsrc] fault reading the input: disk on fire\n"},
 	} {
 		var stdout, stderr bytes.Buffer
-		if code := vn.assessJSON("order.xml", c.src, &stdout, &stderr); code != exitUndecided {
-			t.Errorf("%s: assessJSON = %d, want %d (stderr %q)", c.name, code, exitUndecided, stderr.String())
+		if code := vn.assessJSON("order.xml", c.src, &stdout, &stderr); code != exitInvalid {
+			t.Errorf("%s: assessJSON = %d, want %d (stderr %q)", c.name, code, exitInvalid, stderr.String())
 		}
 		if stdout.String() != c.want {
 			t.Errorf("%s: stdout = %q, want %q", c.name, stdout.String(), c.want)
+		}
+	}
+}
+
+// TestJSONSrcLineUntaughtClassIsDeclined pins jsonsrcLine's fallbacks: a
+// *jsonsrc.Error whose Class() has no arm there, the zero value being the one
+// a caller can build, and an error that is no *jsonsrc.Error each print the
+// marked decline line and exit 4, never charging the instance. Under -format
+// json on an xml-named instance, so a fallback taking the Malformed arm would
+// also add formatHint's clause.
+func TestJSONSrcLineUntaughtClassIsDeclined(t *testing.T) {
+	vn := &validation{forced: formatJSON}
+	for _, c := range []struct {
+		name string
+		err  error
+		want string
+	}{
+		{"zero Class", &jsonsrc.Error{}, "?: [jsonsrc] undecided: "},
+		{"no *jsonsrc.Error", errors.New("jsonsrc: Validate: nil io.Reader"), "order.xml: [jsonsrc] undecided: jsonsrc: Validate: nil io.Reader"},
+	} {
+		line, code := vn.jsonsrcLine("order.xml", c.err)
+		if code != exitUndecided {
+			t.Errorf("%s: jsonsrcLine code = %d, want %d", c.name, code, exitUndecided)
+		}
+		if line != c.want {
+			t.Errorf("%s: jsonsrcLine line = %q, want %q", c.name, line, c.want)
 		}
 	}
 }
@@ -1254,29 +1288,29 @@ func TestValidateFormatMismatchClause(t *testing.T) {
 		code  int
 		want  string
 	}{
-		{"json forced on xml", []string{"-format", "json", at("order.xml")}, "", exitUndecided,
+		{"json forced on xml", []string{"-format", "json", at("order.xml")}, "", exitInvalid,
 			at("order.xml") + notJSON + "; -format json read " + at("order.xml") + " as json, but its extension names xml: drop -format, or pass -format xml\n"},
 		{"xml forced on json", []string{"-format", "xml", at("order.json")}, "", exitInvalid,
 			at("order.json") + ":1:1: [xml-wf] character data before the document element: only an XML declaration, a DOCTYPE, comments, processing instructions and white space may precede it (XML 1.0 [1] document, [22] prolog, [27] Misc); -format xml read " + at("order.json") + " as xml, but its extension names json: drop -format, or pass -format json\n"},
-		{"json forced on xml, content after the top-level object", []string{"-format", "json", at("after.xml")}, "", exitUndecided,
+		{"json forced on xml, content after the top-level object", []string{"-format", "json", at("after.xml")}, "", exitInvalid,
 			at("after.xml") + ":1:62: [jsonsrc] content follows the top-level object; -format json read " + at("after.xml") + " as json, but its extension names xml: drop -format, or pass -format xml\n"},
-		{"json forced on xml, no JSON value", []string{"-format", "json", at("empty.xml")}, "", exitUndecided,
+		{"json forced on xml, no JSON value", []string{"-format", "json", at("empty.xml")}, "", exitInvalid,
 			at("empty.xml") + `:1:1: [jsonsrc] the document holds no JSON value; a JSON instance is one object whose one member names the validation root, {"<root>":...}; -format json read ` + at("empty.xml") + " as json, but its extension names xml: drop -format, or pass -format xml\n"},
 		{"xml forced on json, fault the walk meets", []string{"-format", "xml", at("mid.json")}, "", exitInvalid,
 			at("mid.json") + ":1:35: [xml-wf] end tag </o:order> does not match open element {urn:o}item; -format xml read " + at("mid.json") + " as xml, but its extension names json: drop -format, or pass -format json\n"},
-		{"forced format named by the extension", []string{"-format", "json", malformedJSON}, "", exitUndecided,
+		{"forced format named by the extension", []string{"-format", "json", malformedJSON}, "", exitInvalid,
 			malformedJSON + ":1:18: [jsonsrc] malformed JSON: unexpected EOF\n"},
-		{"no -format", []string{at("hello.json")}, "", exitUndecided,
+		{"no -format", []string{at("hello.json")}, "", exitInvalid,
 			at("hello.json") + ":1:1: [jsonsrc] malformed JSON: invalid character 'h' looking for beginning of value\n"},
-		{"extension naming no format", []string{"-format", "json", at("order.txt")}, "", exitUndecided,
+		{"extension naming no format", []string{"-format", "json", at("order.txt")}, "", exitInvalid,
 			at("order.txt") + notJSON + "\n"},
-		{"standard input", []string{"-format", "json", stdinArg}, orderXML, exitUndecided,
+		{"standard input", []string{"-format", "json", stdinArg}, orderXML, exitInvalid,
 			stdinArg + notJSON + "\n"},
-		{"extension naming the reserved ber", []string{"-format", "json", at("order.ber")}, "", exitUndecided,
+		{"extension naming the reserved ber", []string{"-format", "json", at("order.ber")}, "", exitInvalid,
 			at("order.ber") + notJSON + "\n"},
 		{"decline", []string{"-format", "json", at("declined.xml")}, "", exitUndecided,
-			at("declined.xml") + `:1:2: [jsonsrc] member "z:nosuch": no "$xmlns" in scope binds its prefix "z"; a prefixed key names the expanded name its prefix's binding gives it, so bind "z" in a "$xmlns" member, {"z":"<namespace name>"}, leading the object of the element the key names or is an attribute of, or of an ancestor` + "\n"},
-		{"read fault under json", []string{"-format", "json", at("fault.xml")}, "", exitUndecided,
+			at("declined.xml") + `:1:2: [jsonsrc] undecided: member "z:nosuch": no "$xmlns" in scope binds its prefix "z"; a prefixed key names the expanded name its prefix's binding gives it, so bind "z" in a "$xmlns" member, {"z":"<namespace name>"}, leading the object of the element the key names or is an attribute of, or of an ancestor` + "\n"},
+		{"read fault under json", []string{"-format", "json", at("fault.xml")}, "", exitInvalid,
 			at("fault.xml") + ":1:1: [jsonsrc] fault reading the input: read " + at("fault.xml") + ": input/output error\n"},
 		{"read fault under xml", []string{"-format", "xml", at("fault.json")}, "", exitInvalid,
 			at("fault.json") + ":1:1: [xml-wf] read " + at("fault.json") + ": input/output error\n"},
@@ -1284,7 +1318,7 @@ func TestValidateFormatMismatchClause(t *testing.T) {
 		t.Run(c.name, func(t *testing.T) {
 			if strings.HasPrefix(c.name, "read fault") {
 				// /proc/self/mem opens, and its first read faults (EIO at offset
-				// 0), as TestValidateJSONReadFaultIsUndecided reads it; the link
+				// 0), as TestValidateJSONReadFaultIsInvalid reads it; the link
 				// gives it an extension naming the other format.
 				const faulting = "/proc/self/mem"
 				if _, err := os.ReadFile(faulting); err == nil || !strings.Contains(err.Error(), "input/output error") {
