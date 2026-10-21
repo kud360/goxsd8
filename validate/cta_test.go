@@ -5,6 +5,7 @@ import (
 	goparser "go/parser"
 	"go/token"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -250,6 +251,28 @@ func TestUnevaluableTestIsRecordedAsUnevaluated(t *testing.T) {
 	for _, want := range []string{"alternative 2 of 3", "count(@kind) > 0", "key-cta-select"} {
 		if !strings.Contains(got[0].Msg(), want) {
 			t.Errorf("Msg() = %q, want it to name %s", got[0].Msg(), want)
+		}
+	}
+}
+
+// The key-cta-ta-select record names WHY the {test} was not evaluated: the
+// reason xpath.CompileCTATest's *Decline carries, verbatim, between "declined
+// it because" and the rest of the sentence — a construct outside the subset,
+// or, for a builder-built schema no parser charged, the static error the
+// {test} carries.
+func TestUnevaluableTestRecordNamesTheReason(t *testing.T) {
+	for _, tc := range []struct{ expr, why string }{
+		{"count(@kind) > 0", "this call to fn:count is not supported in this form"},
+		{"b eq 'x'", "the child step b read for its value is not supported in this position or over its declared type"},
+		{"$value = 1", "it carries the XPath static error err:XPST0008: the variable reference $value names no in-scope variable, which err:XPST0008 forbids"},
+	} {
+		got := ctaResult(t, ctaRoot("book"), ctaAlt{tc.expr, "First"}).Unevaluated()
+		if len(got) == 0 || got[0].Rule() != ruleKeyCTATASelect {
+			t.Errorf("%q: Unevaluated() = %v, want the withheld type's key-cta-ta-select record first", tc.expr, messages(got))
+			continue
+		}
+		if want := "whose {test} is " + strconv.Quote(tc.expr) + ", was not evaluated: this engine's XPath evaluator declined it because " + tc.why + ", so whether it ·successfully selects·"; !strings.Contains(got[0].Msg(), want) {
+			t.Errorf("%q: Msg() = %q, want it to contain %q", tc.expr, got[0].Msg(), want)
 		}
 	}
 }

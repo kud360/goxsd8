@@ -1583,13 +1583,18 @@ func CompileAssertionTest(expr xsd.XPathExpression, types xsd.TypeResolver, cont
 	return AssertionTest{}, declineOf(defect)
 }
 
-// Decline is why [CompileAssertionTest] did not compile a {test}. Its consumer
-// is validate's cvc-assertion site (validate/cvcassertion.go), which prints the
-// reason in the Unevaluated entry it records for the assertion.
+// Decline is why [CompileAssertionTest] or [CompileCTATest] did not compile a
+// {test}. validate prints the reason in the Msg of the Unevaluated entry that
+// Result.Unevaluated returns, after "declined it because": the entry under
+// cvc-assertion for a [CompileAssertionTest] decline, and the one under
+// key-cta-ta-select for a [CompileCTATest] decline.
 //
-// [Decline.String] is the reason: what the compile declined first, which is
-// the first decline its forward parse made and not necessarily the earliest
-// construct in the source. It is one of
+// [Decline.String] is the reason: what the compile declined first. Where a
+// static error is found the reason is that error — for [CompileCTATest] the
+// one [CTATestStaticError] returns on the same arguments, and for
+// [CompileAssertionTest] err:XPST0003 or a static error the subset parse
+// recorded — and otherwise it is the first decline the forward parse made,
+// not necessarily the earliest construct in the source. It is one of
 //
 //   - a construct of the {test} this engine does not evaluate: a function by
 //     its `fn:`- or `xs:`-prefixed or its expanded name, an expression kind, or
@@ -1604,15 +1609,20 @@ func CompileAssertionTest(expr xsd.XPathExpression, types xsd.TypeResolver, cont
 // The reason is a clause that is a fact, with no leading capital, no terminal
 // punctuation, no location and no rule prefix, so a caller embeds it
 // mid-sentence. It is for people, and a caller must not parse it. It is
-// relative to CompileAssertionTest's arguments: under other attribute or
-// element types the same {test} can decline for another reason, or compile.
+// relative to the compile's arguments: for [CompileAssertionTest], under other
+// attribute or element types the same {test} can decline for another reason,
+// or compile; for [CompileCTATest] the arguments are expr and types, and a
+// types that does not resolve the built-in datatypes turns the reason of every
+// text inside the full XPath 2.0 grammar into that resolver's, but for a text
+// holding a token outside what the engine reads.
 //
 // Decline is not an error and exposes no kind: a decline is a withhold, never a
 // verdict (PRINCIPLES 20). The package never returns a zero Decline, whose
 // String is "", which is never a reason.
 type Decline struct{ reason string }
 
-// String is the reason [CompileAssertionTest] declined, on [Decline]'s terms.
+// String is the reason the compile that returned d declined, on [Decline]'s
+// terms.
 func (d *Decline) String() string { return d.reason }
 
 // declineOf is the [Decline] d is, d being a defect of either declining kind:

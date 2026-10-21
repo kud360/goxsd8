@@ -90,7 +90,7 @@ func TestAssertionDocDeclines(t *testing.T) {
 // (ctaFacetFacade.document) and decides `doc(())`, the empty sequence.
 func TestDocOutsideTheAssertionFacade(t *testing.T) {
 	for _, expr := range []string{"@a = doc('x.xml')", "doc('x.xml')", "not(doc('x.xml'))"} {
-		if _, ok := CompileCTATest(ctaExprRecord(expr, ""), seededTypes); ok {
+		if _, declined := CompileCTATest(ctaExprRecord(expr, ""), seededTypes); declined == nil {
 			t.Errorf("CompileCTATest(%q): compiled, want declined", expr)
 		}
 	}

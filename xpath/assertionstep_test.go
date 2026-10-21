@@ -186,7 +186,7 @@ func TestSelectedElementsRefusesAttributeAxes(t *testing.T) {
 // with its elements admitting the step.
 func TestElementStepOutsideTheAssertionFacade(t *testing.T) {
 	for _, expr := range []string{"a", "not(a)", "exists(a)", ".//a", "not(.//a)", "./a and @x"} {
-		if _, ok := CompileCTATest(ctaExprRecord(expr, ""), seededTypes); ok {
+		if _, declined := CompileCTATest(ctaExprRecord(expr, ""), seededTypes); declined == nil {
 			t.Errorf("CompileCTATest(%q): compiled, want declined", expr)
 		}
 	}

@@ -312,7 +312,7 @@ func TestAssertionRootedChildPath(t *testing.T) {
 // the path.
 func TestChildPathOutsideTheAssertionFacade(t *testing.T) {
 	for _, expr := range []string{"a/b", "not(a/b)", "a/b and @x"} {
-		if _, ok := CompileCTATest(ctaExprRecord(expr, ""), seededTypes); ok {
+		if _, declined := CompileCTATest(ctaExprRecord(expr, ""), seededTypes); declined == nil {
 			t.Errorf("CompileCTATest(%q): compiled, want declined", expr)
 		}
 	}

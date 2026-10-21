@@ -267,7 +267,7 @@ func TestCTAQNameCast(t *testing.T) {
 	}
 	for _, expr := range []string{"xs:QName(@k) = xs:QName('p:a')", "@k cast as xs:QName = xs:QName('p:a')", "xs:QName('zz:a') = xs:QName('p:a')"} {
 		record := ctaExprRecord(expr, "", bindings...)
-		if _, ok := CompileCTATest(record, seededTypes); ok {
+		if _, declined := CompileCTATest(record, seededTypes); declined == nil {
 			t.Errorf("CompileCTATest(%q): compiled, want declined", expr)
 		}
 		if err := CTATestStaticError(record, seededTypes); err != nil {

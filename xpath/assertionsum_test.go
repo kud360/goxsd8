@@ -462,7 +462,7 @@ func zeros(n int) string { return string(slices.Repeat([]byte{'0'}, n)) }
 // declines there.
 func TestCompileCTATestDeclinesSum(t *testing.T) {
 	for _, expr := range []string{"sum(@p) = 0", "sum(a/b/@p) = 0"} {
-		if _, ok := CompileCTATest(ctaExprRecord(expr, ""), seededTypes); ok {
+		if _, declined := CompileCTATest(ctaExprRecord(expr, ""), seededTypes); declined == nil {
 			t.Errorf("CompileCTATest(%q): compiled, want declined", expr)
 		}
 	}

@@ -522,18 +522,18 @@ func TestCompileCTATestDeclinesLibraryFunctions(t *testing.T) {
 		"empty(@a)", "exists(@a)", "distinct-values(@a) = 'x'", "true()", "false()", "not(true())",
 		"current-date() = current-date()", "concat(@a, 'x') = 'ax'", "year-from-date(@a) eq 2008",
 	} {
-		if _, ok := CompileCTATest(ctaExprRecord(expr, ""), seededTypes); ok {
+		if _, declined := CompileCTATest(ctaExprRecord(expr, ""), seededTypes); declined == nil {
 			t.Errorf("CompileCTATest(%q): compiled, want declined", expr)
 		}
 	}
 	for _, expr := range []string{"xs:string(xs:string(@a)) = 'x'", "xs:date(concat(@a, '')) = xs:date('2008-01-01')"} {
-		if _, ok := CompileCTATest(asRecord(expr), seededTypes); ok {
+		if _, declined := CompileCTATest(asRecord(expr), seededTypes); declined == nil {
 			t.Errorf("CompileCTATest(%q): compiled, want declined", expr)
 		}
 	}
 	for _, expr := range []string{"not(@a = 'x')", "xs:string(@a) = 'x'"} {
-		if _, ok := CompileCTATest(asRecord(expr), seededTypes); !ok {
-			t.Errorf("CompileCTATest(%q): declined, want compiled", expr)
+		if _, declined := CompileCTATest(asRecord(expr), seededTypes); declined != nil {
+			t.Errorf("CompileCTATest(%q): declined because %s, want compiled", expr, declined)
 		}
 	}
 }
