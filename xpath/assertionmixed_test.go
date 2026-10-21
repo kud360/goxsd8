@@ -35,7 +35,7 @@ func amElems(t *testing.T) ElementTypes {
 // amCompile compiles expr over amElems, or fails the test.
 func amCompile(t *testing.T, expr string) AssertionTest {
 	t.Helper()
-	test, ok := CompileAssertionTest(asRecord(expr), seededTypes, asElementContent(t, true), asUses(t, nil), amElems(t))
+	test, ok := compiledAssertionTest(CompileAssertionTest(asRecord(expr), seededTypes, asElementContent(t, true), asUses(t, nil), amElems(t)))
 	if !ok {
 		t.Fatalf("CompileAssertionTest(%q): declined, want compiled", expr)
 	}
@@ -158,7 +158,7 @@ func TestAssertionMixedChildReadsAndCounts(t *testing.T) {
 // declines, a guard: its atomization is a type error (xpath-datamodel §6.2.4).
 func TestAssertionMixedChildDeclines(t *testing.T) {
 	for _, expr := range []string{"count(body[. = 'x']) eq 1", "count(um[. = 'x']) ge 0", "eo = 1", "string-length(eo) eq 0"} {
-		if _, ok := CompileAssertionTest(asRecord(expr), seededTypes, asElementContent(t, true), asUses(t, nil), amElems(t)); ok {
+		if _, ok := compiledAssertionTest(CompileAssertionTest(asRecord(expr), seededTypes, asElementContent(t, true), asUses(t, nil), amElems(t))); ok {
 			t.Errorf("CompileAssertionTest(%q): compiled, want declined", expr)
 		}
 	}

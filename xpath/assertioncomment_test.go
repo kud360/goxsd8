@@ -88,7 +88,7 @@ func TestAssertionCommentStepElsewhereDeclines(t *testing.T) {
 		"empty(.//processing-instruction())", "processing-instruction()", "empty(.//processing-instruction(x))",
 		"empty(.//text())", "empty(.//node())",
 	} {
-		if _, ok := CompileAssertionTest(asRecord(expr), seededTypes, asElementContent(t, false), asUses(t, map[string]string{"x": "int"}), esElems(t)); ok {
+		if _, ok := compiledAssertionTest(CompileAssertionTest(asRecord(expr), seededTypes, asElementContent(t, false), asUses(t, map[string]string{"x": "int"}), esElems(t))); ok {
 			t.Errorf("CompileAssertionTest(%q): compiled, want declined", expr)
 		}
 	}

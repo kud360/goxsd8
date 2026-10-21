@@ -1,6 +1,7 @@
 package xpath
 
 import (
+	"fmt"
 	"slices"
 	"strconv"
 	"strings"
@@ -359,11 +360,11 @@ func CTATestStaticError(expr xsd.XPathExpression, types xsd.TypeResolver) error 
 	if defect.kind == ctaNoDefect {
 		return nil
 	}
-	if syntax := syntaxError(expr.Expression()); syntax != nil {
-		return syntax
+	if syntax := syntaxError(expr.Expression()); syntax.kind != ctaNoDefect {
+		return syntax.staticError()
 	}
 	if defect.kind == ctaStaticError {
-		return defect.static
+		return defect.staticError()
 	}
 	if static := ctaFullStaticError(expr, types); static != nil {
 		return static
@@ -401,14 +402,18 @@ func CTATestStaticError(expr xsd.XPathExpression, types xsd.TypeResolver) error 
 // (ctaTypeAlternativeFacade.variable), err:XPST0051 for an `instance of` type
 // — leave the text ctaUnsupported, and [CTATestStaticError] asks the
 // full-grammar static pass (ctaFullStaticError) for them.
+//
+// A ctaUnsupported defect carries what the parse declined first
+// (ctaParser.decline), and where no production recorded one, where the parse
+// stopped (ctaParser.stopped).
 func compileCTATest(expr xsd.XPathExpression, types xsd.TypeResolver, facade ctaFacade) (ctaExpr, ctaDefect) {
 	toks, ok := ctaTokenize(expr.Expression())
 	if !ok {
-		return nil, ctaDefect{kind: ctaUnsupported}
+		return nil, ctaUnsupportedDefect("its text holds a token outside the XPath subset this engine reads")
 	}
 	known, ok := ctaResolveTypes(types)
 	if !ok {
-		return nil, ctaDefect{kind: ctaUnsupported}
+		return nil, ctaUnsupportedDefect("the type resolver does not resolve the built-in datatypes this engine's XPath evaluator names")
 	}
 	p := ctaParser{toks: toks, names: ctaNamesOf(expr), types: known, facade: facade}
 	root, ok := p.test()
@@ -418,33 +423,52 @@ func compileCTATest(expr xsd.XPathExpression, types xsd.TypeResolver, facade cta
 	if p.defect.kind != ctaNoDefect {
 		return nil, p.defect
 	}
-	return nil, ctaDefect{kind: ctaUnsupported}
+	if p.declined != "" {
+		return nil, ctaUnsupportedDefect(p.declined)
+	}
+	return nil, ctaUnsupportedDefect(p.stopped())
 }
 
 // ctaDefect is what compileCTATest found wrong with an {expression}. The three
 // states are sealed inside this package and none of them crosses the boundary:
 // each exported entry point answers about ONE of them, so no caller ever
-// classifies a defect and no caller can mistake a decline for a verdict.
+// classifies a defect and no caller can mistake a decline for a verdict. A
+// [Decline] carries a defect's text and never its kind.
 //
 // The zero value is "nothing wrong", which is the only state that yields an
-// evaluable tree.
+// evaluable tree. ctaStaticDefect and ctaUnsupportedDefect build the other two,
+// and nothing else does.
 type ctaDefect struct {
 	kind ctaDefectKind
-	// static is the verdict of a ctaStaticError defect, carrying the XPath error
-	// code it violates as its [xsderr.Rule] — the error [CTATestStaticError]
-	// hands the assembler to wrap. The other kinds leave it nil because they
-	// have nothing to say: an {expression} outside what this engine evaluates is
-	// not a verdict about the schema, so there is no fact to report about it —
-	// the err:XPST0003 of one outside the grammar is syntaxError's, not this
-	// traversal's.
-	static *xsderr.Error
+	// rule is the XPath error code a ctaStaticError defect violates, and empty
+	// for every other kind.
+	rule xsderr.Rule
+	// fact is what is wrong, as a clause with no leading capital, no terminal
+	// punctuation, no location and no rule prefix: for a ctaStaticError defect
+	// the static error's message, which staticError mints the verdict
+	// [CTATestStaticError] hands the assembler from, and for a ctaUnsupported
+	// one what the compile declined, which [Decline] renders. It is empty for
+	// ctaNoDefect only.
+	fact string
 }
 
-// ctaStaticDefect is the ctaStaticError defect carrying rule, its message
-// formatted from format and args, at the zero [xsderr.Loc]: this package
-// holds no schema position.
+// ctaStaticDefect is the ctaStaticError defect violating rule, its fact
+// formatted from format and args.
 func ctaStaticDefect(rule xsderr.Rule, format string, args ...any) ctaDefect {
-	return ctaDefect{kind: ctaStaticError, static: xsderr.New(rule, xsderr.Loc{}, format, args...)}
+	return ctaDefect{kind: ctaStaticError, rule: rule, fact: fmt.Sprintf(format, args...)}
+}
+
+// ctaUnsupportedDefect is the ctaUnsupported defect whose fact is reason, the
+// construct the compile declined or, where it names none, what the exit that
+// declined is. reason is never empty.
+func ctaUnsupportedDefect(reason string) ctaDefect {
+	return ctaDefect{kind: ctaUnsupported, fact: reason}
+}
+
+// staticError is the verdict a ctaStaticError defect is, carrying its rule at
+// the zero [xsderr.Loc]: this package holds no schema position.
+func (d ctaDefect) staticError() *xsderr.Error {
+	return xsderr.New(d.rule, xsderr.Loc{}, "%s", d.fact)
 }
 
 // ctaDefectKind is the kind of a [ctaDefect].

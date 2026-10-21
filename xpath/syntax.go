@@ -94,20 +94,19 @@ type syntaxToken struct {
 // as ruleXPST0081 is.
 const ruleXPST0003 xsderr.Rule = "err:XPST0003"
 
-// syntaxError is the err:XPST0003 verdict over expr, or nil where expr is an
-// XPath 2.0 expression. The message names the expression and where the
+// syntaxError is the err:XPST0003 defect expr is, or the zero ctaDefect where
+// expr is an XPath 2.0 expression. Its fact names the expression and where the
 // grammar stopped: a byte offset into it, or its end.
-func syntaxError(expr string) *xsderr.Error {
+func syntaxError(expr string) ctaDefect {
 	at, bad := xpathSyntaxError(expr)
 	if !bad {
-		return nil
+		return ctaDefect{}
 	}
 	where := fmt.Sprintf("takes nothing at byte offset %d", at)
 	if at == len(expr) {
 		where = "needs more than its end"
 	}
-	return xsderr.New(ruleXPST0003, xsderr.Loc{},
-		"%q is not an XPath 2.0 expression: the grammar %s, which err:XPST0003 forbids", expr, where)
+	return ctaStaticDefect(ruleXPST0003, "%q is not an XPath 2.0 expression: the grammar %s, which err:XPST0003 forbids", expr, where)
 }
 
 // xpathSyntaxError reports whether s is NOT an XPath 2.0 expression — no
@@ -292,8 +291,9 @@ type syntaxStatic struct {
 	// innermost last. A ForExpr or QuantifiedExpr binds every one of them: the
 	// in-scope variables of the static context are the empty set (2.2.6).
 	vars []xsd.QName
-	// first is the first static error in expression order, or nil.
-	first *xsderr.Error
+	// first is the first static error in expression order, or the zero
+	// ctaDefect.
+	first ctaDefect
 }
 
 // ctaFullStaticError is the first static error, in expression order, that a
@@ -345,20 +345,20 @@ func ctaFullStaticError(expr xsd.XPathExpression, types xsd.TypeResolver) *xsder
 	}
 	static := &syntaxStatic{names: ctaNamesOf(expr), types: known}
 	r := syntaxRecognizer{toks: toks, static: static}
-	if !r.expr() || r.peek().kind != syntaxEOF {
+	if !r.expr() || r.peek().kind != syntaxEOF || static.first.kind == ctaNoDefect {
 		return nil
 	}
-	return static.first
+	return static.first.staticError()
 }
 
 // record keeps d where it is the first static error the static pass found;
 // it keeps nothing for the recognizer syntaxError runs, nor for a defect of
 // another kind.
 func (r *syntaxRecognizer) record(d ctaDefect) {
-	if r.static == nil || r.static.first != nil || d.kind != ctaStaticError {
+	if r.static == nil || r.static.first.kind != ctaNoDefect || d.kind != ctaStaticError {
 		return
 	}
-	r.static.first = d.static
+	r.static.first = d
 }
 
 // qname resolves the QName or `NCName ':' '*'` wildcard t spells, an

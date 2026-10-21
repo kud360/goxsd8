@@ -276,7 +276,7 @@ func TestAssertionQuantifiedDeclines(t *testing.T) {
 		{"count(every $c in c satisfies $c/@a) = 1", "a quantifier as a value"},
 		{"every $c in c satisfies $c/following-sibling::*[1][self::c] and count(c) = 1", "a body followed by and"},
 	} {
-		if _, ok := CompileAssertionTest(asRecord(tc.expr), seededTypes, asElementContent(t, false), asUses(t, nil), elems); ok {
+		if _, ok := compiledAssertionTest(CompileAssertionTest(asRecord(tc.expr), seededTypes, asElementContent(t, false), asUses(t, nil), elems)); ok {
 			t.Errorf("CompileAssertionTest(%q): compiled, want declined (%s)", tc.expr, tc.why)
 		}
 	}
@@ -331,7 +331,7 @@ func TestAssertionQuantifiedOutsideTheAssertionFacade(t *testing.T) {
 func TestAssertionQuantifiedInAPredicateDeclines(t *testing.T) {
 	elems := func([]xsd.QName) (xsd.TypeDefinition, bool) { return asBuiltin(t, "string"), true }
 	expr := "count(c[(every $d in d satisfies $d/@a)]) = 0"
-	if _, ok := CompileAssertionTest(asRecord(expr), seededTypes, asElementContent(t, false), asUses(t, nil), elems); ok {
+	if _, ok := compiledAssertionTest(CompileAssertionTest(asRecord(expr), seededTypes, asElementContent(t, false), asUses(t, nil), elems)); ok {
 		t.Errorf("CompileAssertionTest(%q): compiled, want declined", expr)
 	}
 }

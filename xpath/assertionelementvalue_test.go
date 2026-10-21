@@ -65,7 +65,7 @@ func evUses(t *testing.T) AttributeTypes {
 // compiled.
 func evCompileAs(t *testing.T, expr, last string) (AssertionTest, bool) {
 	t.Helper()
-	return CompileAssertionTest(asRecord(expr), seededTypes, asElementContent(t, false), evUses(t), evElems(t, asBuiltin(t, last)))
+	return compiledAssertionTest(CompileAssertionTest(asRecord(expr), seededTypes, asElementContent(t, false), evUses(t), evElems(t, asBuiltin(t, last))))
 }
 
 // evCompile is evCompileAs over xs:date b grandchildren, failing the test where
@@ -398,7 +398,7 @@ func TestAssertionElementPathInQuantifierBodies(t *testing.T) {
 		holds bool
 	}{{[]TypedValue{d}, true}, {[]TypedValue{d, d}, false}} {
 		expr := "some $x in data($value) satisfies data(a/b) instance of xs:date"
-		test, ok := CompileAssertionTest(asRecord(expr), types, xsd.SimpleContent{SimpleType: list}, evUses(t), evElems(t, asBuiltin(t, "date")))
+		test, ok := compiledAssertionTest(CompileAssertionTest(asRecord(expr), types, xsd.SimpleContent{SimpleType: list}, evUses(t), evElems(t, asBuiltin(t, "date"))))
 		if !ok {
 			t.Errorf("CompileAssertionTest(%q): declined, want compiled", expr)
 		}

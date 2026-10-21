@@ -75,7 +75,7 @@ func TestAssertionQuantifiedOverNilValue(t *testing.T) {
 		{"every $x in data($value) satisfies $x gt 0", true},
 		{"some $x in data($value) satisfies $x gt 0", false},
 	} {
-		test, ok := CompileAssertionTest(asRecord(tc.expr), types, xsd.SimpleContent{SimpleType: list}, asUses(t, nil), asNoElems)
+		test, ok := compiledAssertionTest(CompileAssertionTest(asRecord(tc.expr), types, xsd.SimpleContent{SimpleType: list}, asUses(t, nil), asNoElems))
 		if !ok {
 			t.Fatalf("CompileAssertionTest(%q): declined, want compiled", tc.expr)
 		}
@@ -153,7 +153,7 @@ func TestAssertionQuantifiedOverValueReads(t *testing.T) {
 	elems := func([]xsd.QName) (xsd.TypeDefinition, bool) { return asBuiltin(t, "integer"), true }
 	compile := func(expr string) AssertionTest {
 		t.Helper()
-		test, ok := CompileAssertionTest(asRecord(expr), types, content, asUses(t, nil), elems)
+		test, ok := compiledAssertionTest(CompileAssertionTest(asRecord(expr), types, content, asUses(t, nil), elems))
 		if !ok {
 			t.Fatalf("CompileAssertionTest(%q): declined, want compiled", expr)
 		}
@@ -245,7 +245,7 @@ func TestAssertionQuantifiedOverValueDeclines(t *testing.T) {
 		{"count($value[every $x in data($value) satisfies $x gt 0]) = 1", simpleList, "a quantifier in a predicate"},
 		{"count(c[every $x in data($value) satisfies $x gt 0]) = 1", simpleList, "a quantifier in a value predicate"},
 	} {
-		if _, ok := CompileAssertionTest(asRecord(tc.expr), types, tc.content, asUses(t, nil), asNoElems); ok {
+		if _, ok := compiledAssertionTest(CompileAssertionTest(asRecord(tc.expr), types, tc.content, asUses(t, nil), asNoElems)); ok {
 			t.Errorf("CompileAssertionTest(%q): compiled, want declined (%s)", tc.expr, tc.why)
 		}
 	}

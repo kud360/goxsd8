@@ -25,7 +25,7 @@ func aiElems(t *testing.T) ElementTypes {
 // test.
 func aiCompile(t *testing.T, expr string) AssertionTest {
 	t.Helper()
-	test, ok := CompileAssertionTest(asRecord(expr), seededTypes, xsd.ElementContent{}, asUses(t, map[string]string{"t": "string"}), aiElems(t))
+	test, ok := compiledAssertionTest(CompileAssertionTest(asRecord(expr), seededTypes, xsd.ElementContent{}, asUses(t, map[string]string{"t": "string"}), aiElems(t)))
 	if !ok {
 		t.Fatalf("CompileAssertionTest(%q): declined, want compiled", expr)
 	}
@@ -105,7 +105,7 @@ func TestAssertionIfExpr(t *testing.T) {
 func TestAssertionIfExprBranchAsksExistence(t *testing.T) {
 	elems := asElems(map[xsd.QName]xsd.TypeDefinition{uq("p"): asComplex(t, "POnly", asElementContent(t, false))})
 	const expr = "if (@t eq 'x') then p else false()"
-	test, ok := CompileAssertionTest(asRecord(expr), seededTypes, xsd.ElementContent{}, asUses(t, map[string]string{"t": "string"}), elems)
+	test, ok := compiledAssertionTest(CompileAssertionTest(asRecord(expr), seededTypes, xsd.ElementContent{}, asUses(t, map[string]string{"t": "string"}), elems))
 	if !ok {
 		t.Fatalf("CompileAssertionTest(%q): declined, want compiled", expr)
 	}
@@ -200,7 +200,7 @@ func TestAssertionIfExprDeclines(t *testing.T) {
 		"contains(if (@t) then 'x' else 'y', 'x')",
 		"(if (@t) then 1 else 2) = 1",
 	} {
-		if _, ok := CompileAssertionTest(asRecord(expr), seededTypes, xsd.ElementContent{}, asUses(t, map[string]string{"t": "string"}), aiElems(t)); ok {
+		if _, ok := compiledAssertionTest(CompileAssertionTest(asRecord(expr), seededTypes, xsd.ElementContent{}, asUses(t, map[string]string{"t": "string"}), aiElems(t))); ok {
 			t.Errorf("CompileAssertionTest(%q): compiled, want declined", expr)
 		}
 	}

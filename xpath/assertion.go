@@ -1,6 +1,7 @@
 package xpath
 
 import (
+	"fmt"
 	"slices"
 	"time"
 
@@ -1096,11 +1097,11 @@ func (c *Tally) fits(keys ctaKeys) bool {
 // assertion can never be evaluated over a Type Alternative's [Attributes],
 // nor a Type Alternative tree over [TypedAttributes].
 //
-// The zero AssertionTest, which [CompileAssertionTest] returns with ok false,
-// holds no {test} and is safe to use: [AssertionTest.ReadsContextItem] is
-// false, [AssertionTest.ReadsChild] is false for every name,
-// [AssertionTest.Tally] is nil, and [AssertionTest.Evaluate] answers false for
-// every non-nil e.
+// The zero AssertionTest, which [CompileAssertionTest] returns with a non-nil
+// [*Decline], holds no {test} and is safe to use: [AssertionTest.ReadsContextItem] is
+// false, [AssertionTest.ReadsChild] is false and [AssertionTest.ReadsChildAttributes]
+// nil for every name, [AssertionTest.Tally] is nil, and [AssertionTest.Evaluate]
+// answers false for every non-nil e.
 type AssertionTest struct {
 	root             ctaExpr
 	readsContextItem bool
@@ -1110,9 +1111,11 @@ type AssertionTest struct {
 // [xsd.XPathExpression] property record) for the element whose ·governing
 // type definition· has the {content type} content, whose attribute types
 // attrs answers and the types of whose child elements, and of the elements
-// below them, elems answers by path, reporting ok false for a {test} this
-// engine cannot evaluate. Its consumer is validate's cvc-assertion site
-// (validate/cvcassertion.go), which declines the assertion on ok false.
+// below them, elems answers by path. It returns a nil [*Decline] exactly when
+// it compiled the {test}, and a non-nil one, saying why, exactly when it did
+// not, with the zero AssertionTest. Its consumer is validate's cvc-assertion
+// site (validate/cvcassertion.go), which declines the assertion on a non-nil
+// *Decline.
 //
 // content fixes `$value`'s static type, which is what cvc-assertion clause
 // 2.3.1.3 reads: under an [xsd.SimpleContent] it is the {simple type
@@ -1486,9 +1489,12 @@ type AssertionTest struct {
 // item as xs:string; and two items eq does not relate as two, never an error.
 // Which of two equal items survives is the first.
 //
-// An XPath STATIC error is declined too and never reported: the
-// static-error question about an assertion is the schema assembler's, and
-// [CTATestStaticError] answers it for a Type Alternative only.
+// An XPath STATIC error is declined too and never charged: the static-error
+// question about an assertion is the schema assembler's, and
+// [CTATestStaticError] answers it for a Type Alternative only. The [*Decline]
+// names it, in [CTATestStaticError]'s order: the err:XPST0003 of a text
+// outside the XPath 2.0 grammar first, and otherwise the static error the
+// parse proved first.
 //
 // A leading "/" or "//" followed by one child or attribute step is not a
 // decline, inside an fn:count call or outside one: E is the root of the data
@@ -1565,13 +1571,58 @@ type AssertionTest struct {
 // satisfied (PRINCIPLES 20). (#1042)
 //
 // types is read as [CompileCTATest] reads it and stored nowhere.
-func CompileAssertionTest(expr xsd.XPathExpression, types xsd.TypeResolver, content xsd.ContentType, attrs AttributeTypes, elems ElementTypes) (AssertionTest, bool) {
+func CompileAssertionTest(expr xsd.XPathExpression, types xsd.TypeResolver, content xsd.ContentType, attrs AttributeTypes, elems ElementTypes) (AssertionTest, *Decline) {
 	var readsContextItem bool
 	root, defect := compileCTATest(expr, types, ctaAssertionFacade{content: content, attrs: attrs, elems: elems, readsContextItem: &readsContextItem})
-	if defect.kind != ctaNoDefect {
-		return AssertionTest{}, false
+	if defect.kind == ctaNoDefect {
+		return AssertionTest{root: root, readsContextItem: readsContextItem}, nil
 	}
-	return AssertionTest{root: root, readsContextItem: readsContextItem}, true
+	if syntax := syntaxError(expr.Expression()); syntax.kind != ctaNoDefect {
+		return AssertionTest{}, declineOf(syntax)
+	}
+	return AssertionTest{}, declineOf(defect)
+}
+
+// Decline is why [CompileAssertionTest] did not compile a {test}. Its consumer
+// is validate's cvc-assertion site (validate/cvcassertion.go), which prints the
+// reason in the Unevaluated entry it records for the assertion.
+//
+// [Decline.String] is the reason: what the compile declined first, which is
+// the first decline its forward parse made and not necessarily the earliest
+// construct in the source. It is one of
+//
+//   - a construct of the {test} this engine does not evaluate: a function by
+//     its `fn:`- or `xs:`-prefixed or its expanded name, an expression kind, or
+//     an operand type;
+//   - an XPath static error the {test} carries, by its code and its fact, such
+//     as "it carries the XPath static error err:XPST0081: no statically-known
+//     namespace binding for prefix "p", which err:XPST0081 forbids";
+//   - for a decline that names no construct, what that decline is: the token
+//     the parse stopped at, a token outside what the engine reads, or a type
+//     resolver that does not resolve the built-in datatypes.
+//
+// The reason is a clause that is a fact, with no leading capital, no terminal
+// punctuation, no location and no rule prefix, so a caller embeds it
+// mid-sentence. It is for people, and a caller must not parse it. It is
+// relative to CompileAssertionTest's arguments: under other attribute or
+// element types the same {test} can decline for another reason, or compile.
+//
+// Decline is not an error and exposes no kind: a decline is a withhold, never a
+// verdict (PRINCIPLES 20). The package never returns a zero Decline, whose
+// String is "", which is never a reason.
+type Decline struct{ reason string }
+
+// String is the reason [CompileAssertionTest] declined, on [Decline]'s terms.
+func (d *Decline) String() string { return d.reason }
+
+// declineOf is the [Decline] d is, d being a defect of either declining kind:
+// a ctaStaticError one names its code and its fact, and a ctaUnsupported one is
+// its fact.
+func declineOf(d ctaDefect) *Decline {
+	if d.kind == ctaStaticError {
+		return &Decline{reason: fmt.Sprintf("it carries the XPath static error %s: %s", d.rule, d.fact)}
+	}
+	return &Decline{reason: d.fact}
 }
 
 // ReadsContextItem reports whether the compiled {test} reads E's string value,
@@ -1615,14 +1666,15 @@ func (t AssertionTest) ReadsContextItem() bool { return t.readsContextItem }
 // whose quotient overflows to an infinity) — and either way E is not ·valid· with
 // respect to the assertion. A processor that raises a type error dynamically
 // "will treat the expression as having evaluated to false" (cvc-xpath,
-// §3.13.4.2). Every decline happened at [CompileAssertionTest].
+// §3.13.4.2). Every decline happened at [CompileAssertionTest], whose
+// [*Decline] carries its reason.
 //
 // The bool carries no diagnostic; validate makes the one its caller reads. It
 // charges a false answer as an entry of validate's Result.Violations() under
 // cvc-assertion, at E's location. An assertion it does not evaluate — one whose
 // {test} [CompileAssertionTest] declined, or one validate itself declines —
 // never reaches Evaluate, and is an entry of Result.Unevaluated() under
-// cvc-assertion instead.
+// cvc-assertion instead, which prints the [*Decline]'s reason for the first.
 //
 // The dynamic context is cvc-xpath's — context item E, position and size 1 —
 // with the one variable cvc-assertion clause 2.3 adds to it, `$value`, bound

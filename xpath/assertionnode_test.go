@@ -171,7 +171,7 @@ func TestAssertionNodeArgumentsReadNoStringValue(t *testing.T) {
 		}
 	}
 	for _, expr := range []string{"namespace-uri(.) = 'urn:x'", "in-scope-prefixes(.) = 'a'"} {
-		test, ok := CompileAssertionTest(asRecord(expr), seededTypes, nil, asUses(t, nil), asNoElems)
+		test, ok := compiledAssertionTest(CompileAssertionTest(asRecord(expr), seededTypes, nil, asUses(t, nil), asNoElems))
 		if !ok {
 			t.Errorf("CompileAssertionTest(%q) under a nil content: declined, want compiled", expr)
 			continue
@@ -180,7 +180,7 @@ func TestAssertionNodeArgumentsReadNoStringValue(t *testing.T) {
 			t.Errorf("Evaluate(%q) under a nil content = false, want true", expr)
 		}
 	}
-	if _, ok := CompileAssertionTest(asRecord(". = 'x'"), seededTypes, nil, asUses(t, nil), asNoElems); ok {
+	if _, ok := compiledAssertionTest(CompileAssertionTest(asRecord(". = 'x'"), seededTypes, nil, asUses(t, nil), asNoElems)); ok {
 		t.Errorf("CompileAssertionTest(\". = 'x'\") under a nil content: compiled, want declined")
 	}
 }
@@ -220,7 +220,7 @@ func TestAssertionNodeFunctionsDeclineOtherShapes(t *testing.T) {
 		"count(c[namespace-uri(.) = '']) = 1",
 		"count(c[in-scope-prefixes(.) = 'a']) = 1",
 	} {
-		if _, ok := CompileAssertionTest(asRecord(expr), seededTypes, xsd.SimpleContent{SimpleType: asBuiltin(t, "string")}, uses, elems); ok {
+		if _, ok := compiledAssertionTest(CompileAssertionTest(asRecord(expr), seededTypes, xsd.SimpleContent{SimpleType: asBuiltin(t, "string")}, uses, elems)); ok {
 			t.Errorf("CompileAssertionTest(%q): compiled, want declined", expr)
 		}
 	}

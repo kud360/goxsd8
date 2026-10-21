@@ -420,8 +420,9 @@
 // the {default type definition} and select a type the rule may not have
 // selected. An assertion whose {test} falls outside the implemented
 // subset is DECLINED at compile time too, and its caller records it as
-// unevaluated — never satisfied and never charged. Every fail-open site
-// carries a greppable marker:
+// unevaluated — never satisfied and never charged — naming the reason
+// CompileAssertionTest's *Decline carries, which is no error and no verdict.
+// Every fail-open site carries a greppable marker:
 //
 //	// GAP(xpath): <construct>
 //

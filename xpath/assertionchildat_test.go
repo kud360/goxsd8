@@ -74,7 +74,7 @@ func TestAssertionDataChildAt(t *testing.T) {
 		{"data(d[1]) instance of xs:date", nil, false},
 		{"not(data(child::d[1]) instance of xs:date)", nil, true},
 	} {
-		test, ok := CompileAssertionTest(asRecord(tc.expr), seededTypes, asElementContent(t, false), asUses(t, nil), acaElems(t))
+		test, ok := compiledAssertionTest(CompileAssertionTest(asRecord(tc.expr), seededTypes, asElementContent(t, false), asUses(t, nil), acaElems(t)))
 		if !ok {
 			t.Errorf("CompileAssertionTest(%q): declined, want compiled", tc.expr)
 			continue
@@ -106,7 +106,7 @@ func TestAssertionDataChildAtInQuantifier(t *testing.T) {
 		{"every $x in data($value) satisfies data(d[2]) instance of xs:date", one, false},
 		{"every $x in data($value) satisfies data(d[2]) instance of xs:date", two, true},
 	} {
-		test, ok := CompileAssertionTest(asRecord(tc.expr), seededTypes, xsd.SimpleContent{SimpleType: date}, asUses(t, nil), acaElems(t))
+		test, ok := compiledAssertionTest(CompileAssertionTest(asRecord(tc.expr), seededTypes, xsd.SimpleContent{SimpleType: date}, asUses(t, nil), acaElems(t)))
 		if !ok {
 			t.Errorf("CompileAssertionTest(%q): declined, want compiled", tc.expr)
 			continue
@@ -121,7 +121,7 @@ func TestAssertionDataChildAtInQuantifier(t *testing.T) {
 // yields every d child and the first is found among them; it reports no other
 // name. The d row fails with ctaChildAt.readsChild answering false.
 func TestAssertionDataChildAtReadsChild(t *testing.T) {
-	test, ok := CompileAssertionTest(asRecord("data(child::d[1]) instance of xs:date"), seededTypes, asElementContent(t, false), asUses(t, nil), acaElems(t))
+	test, ok := compiledAssertionTest(CompileAssertionTest(asRecord("data(child::d[1]) instance of xs:date"), seededTypes, asElementContent(t, false), asUses(t, nil), acaElems(t)))
 	if !ok {
 		t.Fatal("CompileAssertionTest: declined, want compiled")
 	}
@@ -171,7 +171,7 @@ func TestDataChildAtStillDeclines(t *testing.T) {
 			t.Errorf("CompileCTATest(%q): compiled, want declined", expr)
 		}
 	}
-	if _, ok := CompileAssertionTest(asRecord("data(m) instance of xs:untypedAtomic"), seededTypes, asElementContent(t, false), asUses(t, nil), acaElems(t)); !ok {
+	if _, ok := compiledAssertionTest(CompileAssertionTest(asRecord("data(m) instance of xs:untypedAtomic"), seededTypes, asElementContent(t, false), asUses(t, nil), acaElems(t))); !ok {
 		t.Error("CompileAssertionTest(data(m) ...): declined, want compiled")
 	}
 	for _, tc := range []struct{ expr, why string }{
@@ -202,7 +202,7 @@ func TestDataChildAtStillDeclines(t *testing.T) {
 		{"sum(child::d/@p) = 0", "the spelled-out axis in an fn:sum argument"},
 		{"sum(d[1]/@p) = 0", "a numeric predicate in an fn:sum argument"},
 	} {
-		if _, ok := CompileAssertionTest(asRecord(tc.expr), seededTypes, asElementContent(t, false), asUses(t, map[string]string{"a": "string", "p": "int"}), acaElems(t)); ok {
+		if _, ok := compiledAssertionTest(CompileAssertionTest(asRecord(tc.expr), seededTypes, asElementContent(t, false), asUses(t, map[string]string{"a": "string", "p": "int"}), acaElems(t))); ok {
 			t.Errorf("CompileAssertionTest(%q): compiled, want declined (%s)", tc.expr, tc.why)
 		}
 	}

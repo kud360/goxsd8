@@ -1,6 +1,7 @@
 package xpath
 
 import (
+	"fmt"
 	"math"
 	"regexp"
 	"strconv"
@@ -733,9 +734,118 @@ type ctaParser struct {
 	facade ctaFacade
 	// defect is the first static error the walk found (record), which is the
 	// one defect kind the walk itself has to carry: every other one is the false
-	// a production returns. It lives here rather than on ctaNames because a
-	// value receiver cannot keep it.
+	// a production returns, whose reason is declined's. It lives here rather
+	// than on ctaNames because a value receiver cannot keep it.
 	defect ctaDefect
+	// declined is the reason the first production that recorded one declined
+	// for (decline), or empty. It is not a ctaDefect: a static error recorded
+	// after it still wins, and a parse that completes never reports it
+	// (compileCTATest).
+	declined string
+}
+
+// decline records, as the reason the parse declines, the construct a
+// production is about to return false over, where no production recorded one
+// before it, and lets that production return its false. A production records
+// only on a path whose false every caller returns in turn — the parse never
+// rewinds and no caller recovers from a declined production — so the first
+// record is the innermost construct of the decline the compile made first,
+// and a production around it adds its own only where nothing inside it did.
+// The order is the compile's and not the source's, which is why
+// constructorFunction judges a function's name before it reads the argument.
+//
+// The reason is a clause on ctaDefect.fact's terms that names a construct of
+// the {expression}: a function, an expression kind or an operand type.
+func (p *ctaParser) decline(format string, args ...any) {
+	if p.declined != "" {
+		return
+	}
+	p.declined = fmt.Sprintf(format, args...)
+}
+
+// stopped is the reason a parse that declined with no reason recorded
+// (decline) declines for: the construct it stopped at, by the token the
+// cursor is on.
+func (p *ctaParser) stopped() string {
+	return "the expression is outside the XPath subset this engine evaluates, which stops reading it at " + p.peek(0).spelling()
+}
+
+// spelling is how a reason names t: its source spelling quoted, a
+// StringLiteral as one, and the EOF sentinel as the end of the expression.
+func (t ctaToken) spelling() string {
+	switch t.kind {
+	case ctaEOF:
+		return "the end of the expression"
+	case ctaNameTok, ctaWildcardTok, ctaNumberTok, ctaCompTok:
+		return strconv.Quote(t.text)
+	case ctaStringTok:
+		return "the string literal " + strconv.Quote(t.text)
+	case ctaLParen:
+		return `"("`
+	case ctaRParen:
+		return `")"`
+	case ctaAtTok:
+		return `"@"`
+	case ctaAxisTok:
+		return `"::"`
+	case ctaQuestionTok:
+		return `"?"`
+	case ctaDollarTok:
+		return `"$"`
+	case ctaSlashTok:
+		return `"/"`
+	case ctaSlashSlashTok:
+		return `"//"`
+	case ctaDotTok:
+		return `"."`
+	case ctaPlusTok:
+		return `"+"`
+	case ctaMinusTok:
+		return `"-"`
+	case ctaCommaTok:
+		return `","`
+	case ctaLBracketTok:
+		return `"["`
+	case ctaRBracketTok:
+		return `"]"`
+	case ctaBarTok:
+		return `"|"`
+	}
+	return "an unnamed token"
+}
+
+// ctaDisplayName is how a reason names q: `fn:` for a name in the default
+// function namespace, `xs:` for one in the XSD namespace, and Clark notation
+// otherwise.
+func ctaDisplayName(q xsd.QName) string {
+	switch q.Space {
+	case ctaFunctionNS:
+		return "fn:" + q.Local
+	case xsd.XMLSchemaNS:
+		return "xs:" + q.Local
+	}
+	return q.String()
+}
+
+// ctaTypePhrase is how a reason names the static type of v (ctaStaticOf), as
+// the phrase completing "an operand …".
+func ctaTypePhrase(v ctaValue) string {
+	switch s := ctaStaticOf(v).(type) {
+	case ctaTyped:
+		return ctaSimpleTypePhrase(s.st)
+	case ctaEmptySequence:
+		return "of type empty-sequence()"
+	}
+	return "of type xs:untypedAtomic"
+}
+
+// ctaSimpleTypePhrase is how a reason names st, on ctaTypePhrase's terms: by
+// its name, or as anonymous.
+func ctaSimpleTypePhrase(st *xsd.SimpleType) string {
+	if st.Name() == (xsd.QName{}) {
+		return "of an anonymous type"
+	}
+	return "of type " + ctaDisplayName(st.Name())
 }
 
 // peek reports the token at offset ahead of the cursor, or the EOF sentinel.
@@ -786,7 +896,11 @@ func (p *ctaParser) exprSingle() (ctaExpr, bool) {
 		return p.ifExpr()
 	}
 	if (p.atName("some") || p.atName("every")) && p.peek(1).kind == ctaDollarTok {
-		return p.quantifiedExpr()
+		x, ok := p.quantifiedExpr()
+		if !ok {
+			p.decline("this form of quantified expression is not supported")
+		}
+		return x, ok
 	}
 	return p.orExpr()
 }
@@ -1332,6 +1446,7 @@ func (p *ctaParser) generalComparison(op ctaComparator, left ctaValue) (ctaExpr,
 	}
 	comparison, typing := p.types.comparison(op, left, right)
 	if typing == ctaTypeDeclined {
+		p.decline("a general comparison of an operand %s with an operand %s is not supported", ctaTypePhrase(left), ctaTypePhrase(right))
 		return nil, false
 	}
 	if typing == ctaTypeErrored {
@@ -1442,6 +1557,7 @@ func (p *ctaParser) valueComparison(op ctaComparator, left ctaValue) (ctaExpr, b
 	}
 	comparison, typing := p.types.valueComparison(op, left, right)
 	if typing == ctaTypeDeclined {
+		p.decline("a value comparison of an operand %s with an operand %s is not supported", ctaTypePhrase(left), ctaTypePhrase(right))
 		return nil, false
 	}
 	if typing == ctaTypeErrored {
@@ -1571,12 +1687,15 @@ func (p *ctaParser) instanceofExpr() (ctaValue, bool) {
 		return v, true
 	}
 	if !p.facade.instanceOf() {
+		p.decline("an instance of expression is not supported in this position")
 		return nil, false
 	}
 	if _, isStep := v.(ctaStep); isStep {
+		p.decline("an instance of expression over a node operand is not supported")
 		return nil, false
 	}
 	if _, isContext := v.(ctaContextAtom); isContext {
+		p.decline("an instance of expression over a node operand is not supported")
 		return nil, false
 	}
 	return p.instanceTail(v)
@@ -1653,6 +1772,7 @@ func (p *ctaParser) attributeInstanceOf() (ctaValue, bool) {
 	p.advance()
 	matches, ok := p.attributeKindTest(v, name)
 	if !ok {
+		p.decline("this SequenceType in an instance of expression over an attribute step is not supported")
 		return nil, false
 	}
 	occurrence := p.occurrenceIndicator()
@@ -1885,10 +2005,12 @@ func (p *ctaParser) instanceTail(v ctaValue) (ctaValue, bool) {
 	}
 	item, derived, decides := p.types.instanceItem(v)
 	if !decides {
+		p.decline("an instance of expression over an operand %s is not supported", ctaTypePhrase(v))
 		return nil, false
 	}
 	matches, ok := p.sequenceType(item)
 	if !ok {
+		p.decline("this SequenceType in an instance of expression is not supported")
 		return nil, false
 	}
 	// GAP(xpath): over a typed child, an AtomicType its compiled type does not
@@ -1897,6 +2019,7 @@ func (p *ctaParser) instanceTail(v ctaValue) (ctaValue, bool) {
 	// rather than answer false. The direction is the withhold
 	// [CompileAssertionTest] reports. (#1042)
 	if derived && !matches {
+		p.decline("an instance of expression whose AtomicType an xsi:type on its operand can still match is not supported")
 		return nil, false
 	}
 	occurrence := p.occurrenceIndicator()
@@ -1982,9 +2105,14 @@ func (p *ctaParser) occurrenceIndicator() ctaOccurrence {
 // the pair.
 func (p *ctaParser) arithmetic(op ctaArithOp, left, right ctaValue) (ctaValue, bool) {
 	if !p.facade.computes() {
+		p.decline("arithmetic is not supported in this position")
 		return nil, false
 	}
-	return p.types.arithmetic(op, left, right)
+	v, ok := p.types.arithmetic(op, left, right)
+	if !ok {
+		p.decline("arithmetic over an operand %s and an operand %s is not supported", ctaTypePhrase(left), ctaTypePhrase(right))
+	}
+	return v, ok
 }
 
 // valueExpr parses [14] ta-ValueExpr, dispatching on whether a function call
@@ -2001,13 +2129,18 @@ func (p *ctaParser) valueExpr() (ctaValue, bool) {
 		return p.castExpr()
 	}
 	name := p.functionName(p.peek(0).text)
-	if name == ctaCountFunction {
-		return p.countCall()
+	parse := p.constructorFunction
+	switch {
+	case name == ctaCountFunction:
+		parse = p.countCall
+	case p.facade.callsLibrary() && name.Space == ctaFunctionNS:
+		parse = func() (ctaValue, bool) { return p.libraryCall(name.Local) }
 	}
-	if p.facade.callsLibrary() && name.Space == ctaFunctionNS {
-		return p.libraryCall(name.Local)
+	v, ok := parse()
+	if !ok {
+		p.decline("this call to %s is not supported in this form", ctaDisplayName(name))
 	}
-	return p.constructorFunction()
+	return v, ok
 }
 
 // libraryCall parses a call, xpath20.md [48] FunctionCall, to the function
@@ -3174,6 +3307,7 @@ func (p *ctaParser) singleType(v ctaValue) (ctaCast, bool) {
 		p.record(defect)
 		return ctaCast{operand: v, target: p.types.str, allowsEmpty: allowsEmpty}, true
 	default:
+		p.decline("%s", defect.fact)
 		return ctaCast{}, false
 	}
 }
@@ -3197,6 +3331,7 @@ func (p *ctaParser) singleType(v ctaValue) (ctaCast, bool) {
 // withhold [CompileAssertionTest] reports. (#1042)
 func (p *ctaParser) cast(v ctaValue, target *xsd.SimpleType, allowsEmpty bool) (ctaCast, bool) {
 	if !p.types.castsFrom(v, target) {
+		p.decline("a cast from an operand %s to %s is not supported", ctaTypePhrase(v), ctaDisplayName(target.Name()))
 		return ctaCast{}, false
 	}
 	cast := ctaCast{operand: v, target: target, allowsEmpty: allowsEmpty}
@@ -3205,6 +3340,7 @@ func (p *ctaParser) cast(v ctaValue, target *xsd.SimpleType, allowsEmpty bool) (
 		return cast, true
 	}
 	if !p.names.resolvesLiteral(lit.text) {
+		p.decline("the string literal %q cast to xs:QName has a prefix the static context does not bind, which err:FONS0004 forbids", lit.text)
 		return ctaCast{}, false
 	}
 	cast.names = p.names
@@ -3237,16 +3373,24 @@ func (p *ctaParser) cast(v ctaValue, target *xsd.SimpleType, allowsEmpty bool) (
 // and facet façades `xs:date(concat(string($value), '!!!'))` is the cast of a
 // function result, judged by castsFrom on its static type.
 //
+// The name is judged before the argument is read, so the decline names the
+// function (ctaParser.decline) and not what the argument declines at, and the
+// argument is read all the same, so a static error in it is still recorded.
+//
 // Every defect castTarget finds in the name DECLINES here, the static ones
-// too, and none is recorded: err:XPST0051 and err:XPST0080 are cast and
-// castable TARGET errors (xpath20.md §3.10.2, §3.10.3), and a name with no
-// constructor is a call to a function the static context has no signature
-// for, err:XPST0017 at most — which xpath-valid clause 2.2.8 leaves
-// ·implementation-defined·, withheld as RULED permanent by #2690
-// (ctaFullStaticError). So `string(@k)` and `xs:anyAtomicType(@k)` are
-// withheld, never charged.
+// too, and none is recorded as a static error: err:XPST0051 and
+// err:XPST0080 are cast and castable TARGET errors (xpath20.md §3.10.2,
+// §3.10.3), and a name with no constructor is a call to a function the
+// static context has no signature for, err:XPST0017 at most — which
+// xpath-valid clause 2.2.8 leaves ·implementation-defined·, withheld as
+// RULED permanent by #2690 (ctaFullStaticError). So `string(@k)` and
+// `xs:anyAtomicType(@k)` are withheld, never charged.
 func (p *ctaParser) constructorFunction() (ctaValue, bool) {
 	name := p.functionName(p.peek(0).text)
+	target, defect := p.types.castTarget(name)
+	if defect.kind != ctaNoDefect {
+		p.decline("function %s is not supported", ctaDisplayName(name))
+	}
 	p.advance() // the function name
 	p.advance() // '('
 	arg, ok := p.constructorOperand()
@@ -3257,7 +3401,6 @@ func (p *ctaParser) constructorFunction() (ctaValue, bool) {
 		return nil, false
 	}
 	p.advance()
-	target, defect := p.types.castTarget(name)
 	if defect.kind != ctaNoDefect {
 		return nil, false
 	}
@@ -3346,7 +3489,11 @@ func (p *ctaParser) varRef() (ctaValue, bool) {
 	}
 	text := p.peek(0).text
 	p.advance()
-	return p.facade.variable(p.attributeName(text), p.types)
+	v, ok := p.facade.variable(p.attributeName(text), p.types)
+	if !ok {
+		p.decline("the variable reference $%s is not one this engine binds in this position", text)
+	}
+	return v, ok
 }
 
 // variablePath parses a [44] VarRef (varRef), or `$v/following-sibling::M[1]`
@@ -3436,8 +3583,21 @@ func (p *ctaParser) boundSibling() (ctaValue, bool) {
 // production takes, and declines.
 func (p *ctaParser) childStep() (ctaValue, bool) {
 	text := p.peek(0).text
+	switch {
+	case p.peek(1).kind == ctaAxisTok:
+		// The name is an axis spelled out, and no child step: no production
+		// in this position takes the `::` after it.
+		p.decline("the %s axis is not supported in this position", text)
+	case text == "for" && p.peek(1).kind == ctaDollarTok:
+		// xpath20.md [4] ForExpr, which no production here parses.
+		p.decline("a for expression is not supported")
+	}
 	p.advance()
-	return p.facade.child(ctaExactName{name: p.elementName(text)}, p.types)
+	step, ok := p.facade.child(ctaExactName{name: p.elementName(text)}, p.types)
+	if !ok {
+		p.decline("the child step %s read for its value is not supported in this position or over its declared type", text)
+	}
+	return step, ok
 }
 
 // childPathLength is how many tokens, from offset at ahead of the cursor,
@@ -3817,14 +3977,19 @@ func (p *ctaParser) attrName() (ctaValue, bool) {
 		return nil, false
 	}
 	text := p.peek(0).text
+	var test ctaNameTest
 	switch p.peek(0).kind {
 	case ctaNameTok:
-		p.advance()
-		return p.facade.attribute(ctaExactName{name: p.attributeName(text)}, p.types)
+		test = ctaExactName{name: p.attributeName(text)}
 	case ctaWildcardTok:
-		p.advance()
-		return p.facade.attribute(p.wildcardTest(text), p.types)
+		test = p.wildcardTest(text)
 	default:
 		return nil, false
 	}
+	p.advance()
+	attr, ok := p.facade.attribute(test, p.types)
+	if !ok {
+		p.decline("the attribute step @%s is not supported in this position or over its declared type", text)
+	}
+	return attr, ok
 }

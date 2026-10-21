@@ -27,7 +27,7 @@ type vcCase struct {
 // The test counts no path, so it has no Tally to hand over.
 func vcAssertion(t *testing.T, types xsd.TypeResolver, tc vcCase) bool {
 	t.Helper()
-	test, ok := CompileAssertionTest(asRecord(tc.expr), types, xsd.SimpleContent{SimpleType: tc.st}, asUses(t, nil), asNoElems)
+	test, ok := compiledAssertionTest(CompileAssertionTest(asRecord(tc.expr), types, xsd.SimpleContent{SimpleType: tc.st}, asUses(t, nil), asNoElems))
 	if !ok {
 		t.Errorf("CompileAssertionTest(%q) over %s: declined, want compiled", tc.expr, tc.st.Name().Local)
 		return tc.want
@@ -172,7 +172,7 @@ func TestCountValueOverSpecialAndNonSimpleContent(t *testing.T) {
 		{"count($value) eq 0", xsd.ElementContent{}, ValueBinding{}, true},
 		{"count(distinct-values($value)) eq 0", xsd.EmptyContent{}, ValueBinding{}, true},
 	} {
-		test, ok := CompileAssertionTest(asRecord(tc.expr), seededTypes, tc.content, asUses(t, nil), asNoElems)
+		test, ok := compiledAssertionTest(CompileAssertionTest(asRecord(tc.expr), seededTypes, tc.content, asUses(t, nil), asNoElems))
 		if !ok {
 			t.Fatalf("CompileAssertionTest(%q): declined, want compiled", tc.expr)
 		}
@@ -205,7 +205,7 @@ func TestCountValueOverAUnionFacet(t *testing.T) {
 func TestCountOfAnOperandKeysWhatItCounts(t *testing.T) {
 	acDecides(t, "count(count(e1)) eq 1", true)
 	acCounters(t, "count(count(e1)) eq 1", 1)
-	test, ok := CompileAssertionTest(asRecord("count(string(a)) eq 1"), seededTypes, xsd.ElementContent{}, asUses(t, nil), asChildTypes(t))
+	test, ok := compiledAssertionTest(CompileAssertionTest(asRecord("count(string(a)) eq 1"), seededTypes, xsd.ElementContent{}, asUses(t, nil), asChildTypes(t)))
 	if !ok {
 		t.Fatal("CompileAssertionTest(count(string(a)) eq 1): declined, want compiled")
 	}
@@ -213,7 +213,7 @@ func TestCountOfAnOperandKeysWhatItCounts(t *testing.T) {
 		t.Error("(count(string(a)) eq 1).ReadsChild(a) = false, want true")
 	}
 	list := asList(t, "IntList", ctaBuiltin("int"))
-	test, ok = CompileAssertionTest(asRecord("count($value) le 2"), asTypesWith(list), xsd.SimpleContent{SimpleType: list}, asUses(t, nil), asNoElems)
+	test, ok = compiledAssertionTest(CompileAssertionTest(asRecord("count($value) le 2"), asTypesWith(list), xsd.SimpleContent{SimpleType: list}, asUses(t, nil), asNoElems))
 	if !ok {
 		t.Fatal("CompileAssertionTest(count($value) le 2): declined, want compiled")
 	}
@@ -236,7 +236,7 @@ func TestCountAndDistinctValuesDecline(t *testing.T) {
 		"count(distinct-values()) eq 0",
 		"count(.) eq 1",
 	} {
-		if _, ok := CompileAssertionTest(asRecord(expr), types, xsd.SimpleContent{SimpleType: list}, asUses(t, nil), asNoElems); ok {
+		if _, ok := compiledAssertionTest(CompileAssertionTest(asRecord(expr), types, xsd.SimpleContent{SimpleType: list}, asUses(t, nil), asNoElems)); ok {
 			t.Errorf("CompileAssertionTest(%q): compiled, want declined", expr)
 		}
 		v := fcValue(t, list, "1 2")
@@ -252,7 +252,7 @@ func TestCountAndDistinctValuesDecline(t *testing.T) {
 	doubles := asList(t, "DoubleList", ctaBuiltin("double"))
 	dtypes := asTypesWith(doubles)
 	for _, expr := range []string{"string(distinct-values($value)) = '1'", "string(distinct-values($value)) = '1.0E0'"} {
-		if _, ok := CompileAssertionTest(asRecord(expr), dtypes, xsd.SimpleContent{SimpleType: doubles}, asUses(t, nil), asNoElems); ok {
+		if _, ok := compiledAssertionTest(CompileAssertionTest(asRecord(expr), dtypes, xsd.SimpleContent{SimpleType: doubles}, asUses(t, nil), asNoElems)); ok {
 			t.Errorf("CompileAssertionTest(%q) over a double list: compiled, want declined", expr)
 		}
 		v := fcValue(t, doubles, "1")

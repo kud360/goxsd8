@@ -231,7 +231,7 @@ func TestContextItemDeclinesOutsideTheFacet(t *testing.T) {
 		}
 	}
 	for _, expr := range []string{".", "not(.)"} {
-		if _, ok := CompileAssertionTest(ctaExprRecord(expr, ""), seededTypes, xsd.SimpleContent{SimpleType: asBuiltin(t, "string")}, asUses(t, nil), asNoElems); ok {
+		if _, ok := compiledAssertionTest(CompileAssertionTest(ctaExprRecord(expr, ""), seededTypes, xsd.SimpleContent{SimpleType: asBuiltin(t, "string")}, asUses(t, nil), asNoElems)); ok {
 			t.Errorf("CompileAssertionTest(%q): compiled, want declined", expr)
 		}
 	}
@@ -270,7 +270,7 @@ func TestFocusDeclinesOutsideTheFacet(t *testing.T) {
 		}
 	}
 	for _, expr := range []string{"position() le 50", "last() le 50", "not(position() le 50)", "position() = '1'", "xs:integer(position())", "xs:string(position()) = '1'"} {
-		if _, ok := CompileAssertionTest(asRecord(expr), seededTypes, xsd.SimpleContent{SimpleType: asBuiltin(t, "string")}, asUses(t, nil), asNoElems); ok {
+		if _, ok := compiledAssertionTest(CompileAssertionTest(asRecord(expr), seededTypes, xsd.SimpleContent{SimpleType: asBuiltin(t, "string")}, asUses(t, nil), asNoElems)); ok {
 			t.Errorf("CompileAssertionTest(%q): compiled, want declined", expr)
 		}
 	}

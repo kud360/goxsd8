@@ -128,11 +128,17 @@ func asCompile(t *testing.T, expr string, uses AttributeTypes) AssertionTest {
 // is content, or fails the test.
 func asCompileFor(t *testing.T, expr string, content xsd.ContentType, uses AttributeTypes) AssertionTest {
 	t.Helper()
-	c, ok := CompileAssertionTest(asRecord(expr), seededTypes, content, uses, asNoElems)
+	c, ok := compiledAssertionTest(CompileAssertionTest(asRecord(expr), seededTypes, content, uses, asNoElems))
 	if !ok {
 		t.Fatalf("CompileAssertionTest(%q): declined, want compiled", expr)
 	}
 	return c
+}
+
+// compiledAssertionTest is [CompileAssertionTest]'s results with the
+// [*Decline] read as whether it compiled, for a test that asks only that.
+func compiledAssertionTest(test AssertionTest, declined *Decline) (AssertionTest, bool) {
+	return test, declined == nil
 }
 
 // asRecord is expr's XPath Expression property record, binding xs and a.
@@ -332,7 +338,7 @@ func TestCompileAssertionTestDeclines(t *testing.T) {
 		{"@x eq 5 eq 5", "ValueComp is non-associative, so a second one is an unparsed tail"},
 		{"upper-case(@x) = '1'", "a function call outside fn:not, fn:count, the constructors and the string and sequence core"},
 	} {
-		if _, ok := CompileAssertionTest(asRecord(tc.expr), seededTypes, xsd.EmptyContent{}, uses, asNoElems); ok {
+		if _, ok := compiledAssertionTest(CompileAssertionTest(asRecord(tc.expr), seededTypes, xsd.EmptyContent{}, uses, asNoElems)); ok {
 			t.Errorf("CompileAssertionTest(%q): compiled, want declined (%s)", tc.expr, tc.why)
 		}
 	}
@@ -512,7 +518,7 @@ func TestAssertionValueOverListContent(t *testing.T) {
 		{"not($value)", "1 2", false},
 		{"$value", "7", true},
 	} {
-		test, ok := CompileAssertionTest(asRecord(tc.expr), types, content, asUses(t, nil), asNoElems)
+		test, ok := compiledAssertionTest(CompileAssertionTest(asRecord(tc.expr), types, content, asUses(t, nil), asNoElems))
 		if !ok {
 			t.Fatalf("CompileAssertionTest(%q) over a list: declined, want compiled", tc.expr)
 		}
@@ -600,7 +606,7 @@ func TestCompileAssertionTestDeclinesValue(t *testing.T) {
 		{"$value cast as xs:string = '5'", xsd.SimpleContent{SimpleType: asBuiltin(t, "int")}, "a cast from a typed non-string $value"},
 		{"$ eq 1", xsd.SimpleContent{SimpleType: asBuiltin(t, "int")}, "a '$' with no name"},
 	} {
-		if _, ok := CompileAssertionTest(asRecord(tc.expr), types, tc.content, asUses(t, nil), asNoElems); ok {
+		if _, ok := compiledAssertionTest(CompileAssertionTest(asRecord(tc.expr), types, tc.content, asUses(t, nil), asNoElems)); ok {
 			t.Errorf("CompileAssertionTest(%q): compiled, want declined (%s)", tc.expr, tc.why)
 		}
 	}
