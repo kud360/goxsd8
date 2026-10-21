@@ -286,6 +286,9 @@ counts.
    the session ends, read that PR's state back: an open one is yours to
    land, merged forward with WORKFLOW's positional `docs/LOG` resolution,
    because an entry left on a branch is read by no later session (#1897).
+   Brief no edit to a closed issue's `docs/PLAN.md` Working band row: the
+   row waits for the next `/backlog` stamp, and it is not a post-land debt
+   — `.claude/agents/cartographer.md` step 6 owns the rule (#1630).
 
 Ending early at a checkpoint with a good `RESUME:` comment is a successful
 session. Budget: one landing.
