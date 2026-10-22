@@ -30,7 +30,9 @@
 // four letters stripped, '\n' kept as a word, function words and the
 // document-reference words "package", "doc", "section" and "see" dropped. A
 // pair overlaps when one clause shares at least two distinct adjacent
-// content-word pairs with the owner sentence.
+// content-word pairs with the owner sentence, counting only pairs that at
+// most 20 owner sentences of the working tree hold: a pair more hold is the
+// tree's common phrasing, not one fact's.
 //
 // A summary line closes every run, saying how many added sentences overlap
 // an owner and that the matching is heuristic. Exit codes: 0 whatever it

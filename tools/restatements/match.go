@@ -70,13 +70,36 @@ func pairs(text string) map[pair]bool {
 	return set
 }
 
-// shared is the most distinct pairs any one of clauses shares with owner.
-func shared(clauses []map[pair]bool, owner map[pair]bool) int {
+// maxHolders is the overlap measure's bound on how many owner sentences may
+// hold a pair it counts, which the package doc states.
+const maxHolders = 20
+
+// common is the set of pairs more than maxHolders of owners hold, a lookup
+// index (STYLE D2's permitted use of a map).
+func common(owners []map[pair]bool) map[pair]bool {
+	holders := make(map[pair]int)
+	for _, o := range owners {
+		for p := range o {
+			holders[p]++
+		}
+	}
+	set := make(map[pair]bool)
+	for p, n := range holders {
+		if n > maxHolders {
+			set[p] = true
+		}
+	}
+	return set
+}
+
+// shared is the most distinct pairs any one of clauses shares with owner,
+// pairs in skip aside.
+func shared(clauses []map[pair]bool, owner, skip map[pair]bool) int {
 	best := 0
 	for _, c := range clauses {
 		n := 0
 		for p := range c {
-			if owner[p] {
+			if owner[p] && !skip[p] {
 				n++
 			}
 		}
@@ -152,6 +175,7 @@ func survey(base, head string) (report, error) {
 	for i, o := range owners {
 		ownerPairs[i] = pairs(o.text)
 	}
+	skip := common(ownerPairs)
 	rep := report{added: len(added)}
 	for _, a := range added {
 		cs := clauses(a.text)
@@ -160,7 +184,7 @@ func survey(base, head string) (report, error) {
 			if o == a {
 				continue
 			}
-			if n := shared(cs, ownerPairs[i]); n >= minShared {
+			if n := shared(cs, ownerPairs[i], skip); n >= minShared {
 				ms = append(ms, match{owner: o, shared: n})
 			}
 		}
@@ -184,8 +208,8 @@ func (r report) write(w io.Writer) error {
 			fmt.Fprintf(&b, "\t%s:%d: (%d shared) %s\n", m.owner.file, m.owner.line, m.shared, m.owner.text)
 		}
 	}
-	fmt.Fprintf(&b, "restatements: %d of %d added sentence(s) overlap a sentence of a package doc, an exported identifier's doc or cmd/goxsd8's usage; the matching is heuristic (%d adjacent content-word pairs shared with one clause), so read each pair before acting on it\n",
-		len(r.findings), r.added, minShared)
+	fmt.Fprintf(&b, "restatements: %d of %d added sentence(s) overlap a sentence of a package doc, an exported identifier's doc or cmd/goxsd8's usage; the matching is heuristic (%d adjacent content-word pairs shared with one clause, each held by at most %d owner sentences), so read each pair before acting on it\n",
+		len(r.findings), r.added, minShared, maxHolders)
 	if _, err := io.WriteString(w, b.String()); err != nil {
 		return fmt.Errorf("writing the report: %w", err)
 	}

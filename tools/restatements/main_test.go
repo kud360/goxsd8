@@ -2,6 +2,8 @@ package main
 
 import (
 	"bytes"
+	"fmt"
+	"maps"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -379,7 +381,7 @@ func TestCLIExitsZero(t *testing.T) {
 	if code := cli([]string{"-base", "HEAD"}, &out, &errOut); code != 0 {
 		t.Fatalf("no change: exit %d, want 0; stderr: %s", code, errOut.String())
 	}
-	if out.String() != "restatements: 0 of 0 added sentence(s) overlap a sentence of a package doc, an exported identifier's doc or cmd/goxsd8's usage; the matching is heuristic (2 adjacent content-word pairs shared with one clause), so read each pair before acting on it\n" {
+	if out.String() != "restatements: 0 of 0 added sentence(s) overlap a sentence of a package doc, an exported identifier's doc or cmd/goxsd8's usage; the matching is heuristic (2 adjacent content-word pairs shared with one clause, each held by at most 20 owner sentences), so read each pair before acting on it\n" {
 		t.Errorf("no change printed %q", out.String())
 	}
 
@@ -404,6 +406,32 @@ func TestCLIExitsZero(t *testing.T) {
 		}
 		if !strings.HasPrefix(errOut.String(), "restatements: ") {
 			t.Errorf("cli(%q) stderr %q", args, errOut.String())
+		}
+	}
+}
+
+// TestCommonPairsNotCounted holds the bound on a counted pair's holders: an
+// added sentence sharing two pairs with each of maxHolders owner sentences is
+// printed against them, and with one owner more holding them it is not.
+func TestCommonPairsNotCounted(t *testing.T) {
+	const added = "Every check reads the compiled schema set."
+	for _, holders := range []int{maxHolders, maxHolders + 1} {
+		base := baseTree()
+		var b strings.Builder
+		b.WriteString("package jsonsrc\n\n")
+		for i := range holders {
+			fmt.Fprintf(&b, "// Q%d is answered by the compiled schema set.\nconst Q%d = %d\n\n", i, i, i)
+		}
+		base["validate/jsonsrc/queries.go"] = b.String()
+		head := maps.Clone(base)
+		head["validate/jsonsrc/check.go"] = "package jsonsrc\n\n// " + added + "\nvar check = 0\n"
+		rep := surveyTrees(t, base, head)
+		f, printed := findingAt(rep, site{"validate/jsonsrc/check.go", 3})
+		if want := holders <= maxHolders; printed != want {
+			t.Errorf("%d holders: printed = %v, want %v", holders, printed, want)
+		}
+		if printed && len(f.matches) != holders {
+			t.Errorf("%d holders: printed against %d owners", holders, len(f.matches))
 		}
 	}
 }
