@@ -62,7 +62,7 @@ func cli(args []string, stdout, stderr io.Writer) int {
 		return 2
 	}
 	if err := run(*base, stdout, stderr); err != nil {
-		fmt.Fprintf(stderr, "restatements: %v\n", err)
+		_, _ = fmt.Fprintf(stderr, "restatements: %v\n", err)
 		return 2
 	}
 	return 0
@@ -85,7 +85,7 @@ func run(base string, stdout, stderr io.Writer) error {
 	}
 	defer func() {
 		if err := remove(); err != nil {
-			fmt.Fprintf(stderr, "restatements: %v\n", err)
+			_, _ = fmt.Fprintf(stderr, "restatements: %v\n", err)
 		}
 	}()
 	rep, err := survey(baseDir, root)
