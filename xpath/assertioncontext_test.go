@@ -175,10 +175,14 @@ func TestAssertionContextItemOverEveryContentType(t *testing.T) {
 // cast, castable, fn:data or arithmetic, or implicit in a zero-argument
 // fn:string, fn:string-length or fn:normalize-space — and false for one
 // reading `$value`, attributes or children alone, a predicate's candidate `.`
-// among them, which is the child and not E; every {content type} compiling the
-// {test} answers alike. The true rows fail with contextItem not setting
-// f.readsContextItem, and the false rows with it set unconditionally in
-// CompileAssertionTest.
+// among them, which is the child and not E, or one whose `.` the compile
+// discarded: `. eq 4` and `string(.) = (1 to 3)` are the err:XPTY0004 of
+// xs:string against a numeric operand, ctaTypeError, which reads neither
+// operand. Every {content type} compiling the {test} answers alike. The true
+// rows fail with ctaReadsContextItem answering false for ctaContextAtom, the
+// false rows with it answering true for every node, and the three rows over a
+// discarded `.` with the answer recorded as contextItem admits `.`, as it was
+// before #2599.
 func TestAssertionReadsContextItem(t *testing.T) {
 	elems := asChildTypes(t)
 	for _, content := range []xsd.ContentType{
@@ -207,6 +211,9 @@ func TestAssertionReadsContextItem(t *testing.T) {
 			{"exists(./a)", false},
 			{"count(.//a) = 1", false},
 			{"count(a[. = 'x']) = 1", false},
+			{". eq 4", false},
+			{"not(. eq 4)", false},
+			{"not(string(.) = (1 to 3))", false},
 		} {
 			test, ok := compiledAssertionTest(CompileAssertionTest(asRecord(tc.expr), seededTypes, content, asUses(t, map[string]string{"a": "string"}), elems))
 			if !ok {

@@ -716,21 +716,17 @@ func ctaYield[N ctaNode](yield func(ctaNode) bool, nodes ...N) {
 // ctaExpr is the sealed sum of the BOOLEAN-valued nodes of the compiled tree.
 // The grammar closes the set (STYLE T2's schema-closed-set exception), so
 // consumers type-switch over the branches and no further branch is
-// representable outside this package. Every branch answers readsChild
-// ([AssertionTest.ReadsChild]), childAttributes
-// ([AssertionTest.ReadsChildAttributes]) and counted ([AssertionTest.Tally]) as
-// methods, so a branch added without them does not compile.
+// representable outside this package. Every branch lists its operands
+// (ctaNode), so a branch added without them does not compile. The static
+// questions the assertion façade asks of a tree are folds over those operands
+// — ctaReadsChild ([AssertionTest.ReadsChild]), ctaChildAttributes
+// ([AssertionTest.ReadsChildAttributes]), ctaKeysOf ([AssertionTest.Tally])
+// and ctaReadsContextItem ([AssertionTest.ReadsContextItem]) — each answering
+// a branch it names no case for by its operands' answers, so a branch added is
+// checked against each fold's cases, which its doc lists, by whoever adds it.
 type ctaExpr interface {
 	ctaNode
 	ctaExpr()
-	readsChild(name xsd.QName) bool
-	// childAttributes appends to into each attribute of a child named name a
-	// range variable bound to it reads, at any depth, in written order, and
-	// returns the extended slice ([AssertionTest.ReadsChildAttributes]).
-	childAttributes(name xsd.QName, into []xsd.QName) []xsd.QName
-	// counted appends to into each path an fn:count call in the node counts, at
-	// any depth, in written order, and returns the extended slice.
-	counted(into []ctaKey) []ctaKey
 }
 
 // ctaOr is [9] ta-OrExpr: existential over its operands, in written order.
@@ -961,17 +957,11 @@ func (n ctaQuantifiedChildren) eachOperand(yield func(ctaNode) bool) {
 // (ctaBoundChild, ctaBoundSibling, ctaBoundAttribute, ctaBoundAttributeCall;
 // ctaFacade.childScope, ctaFacade.boundSibling, ctaFacade.boundAttribute). `.`
 // as the node fn:namespace-uri and fn:in-scope-prefixes take is no branch: it
-// is ctaNodeArg (ctaFacade.contextNode). Every branch answers readsChild,
-// childAttributes and counted on ctaExpr's terms.
+// is ctaNodeArg (ctaFacade.contextNode). Every branch lists its operands, and
+// the façade's folds read it, on ctaExpr's terms.
 type ctaValue interface {
 	ctaNode
 	ctaValue()
-	readsChild(name xsd.QName) bool
-	// childAttributes appends to into each attribute of a child named name a
-	// range variable bound to it reads, at any depth, in written order, and
-	// returns the extended slice ([AssertionTest.ReadsChildAttributes]).
-	childAttributes(name xsd.QName, into []xsd.QName) []xsd.QName
-	counted(into []ctaKey) []ctaKey
 }
 
 // ctaAttr is [17] ta-AttrName over an UNTYPED attribute: the attribute step
@@ -1863,18 +1853,13 @@ type ctaCount struct {
 // raises err:XPDY0050 before it selects a node and so before fn:count sees a
 // sequence (ctaNoDocumentRoot, xpath20.md §3.2), or an operand that is no
 // path, whose own items are counted (ctaCountedItems). The grammar closes the set
-// (STYLE T2's schema-closed-set exception). Every arm answers readsChild,
-// childAttributes and counted on ctaExpr's terms, and nodes, how many items it
-// evaluates to — the nodes a path selects — reporting false where it raises.
+// (STYLE T2's schema-closed-set exception). Every arm lists its operands, and
+// the façade's folds read it, on ctaExpr's terms, and answers nodes, how many
+// items it evaluates to — the nodes a path selects — reporting false where it
+// raises.
 type ctaCounted interface {
 	ctaNode
 	ctaCounted()
-	readsChild(name xsd.QName) bool
-	// childAttributes appends to into each attribute of a child named name a
-	// range variable bound to it reads, at any depth, in written order, and
-	// returns the extended slice ([AssertionTest.ReadsChildAttributes]).
-	childAttributes(name xsd.QName, into []xsd.QName) []xsd.QName
-	counted(into []ctaKey) []ctaKey
 	nodes(env ctaEnv) (int, bool)
 }
 
