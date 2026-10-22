@@ -13,10 +13,9 @@ import (
 // newlines in them as the walk moves past. It never holds the document (STYLE
 // P4).
 //
-// Lines are counted at '\n' and columns in bytes from the start of the line,
-// both from 1, as parser/xmltree counts them. A leading byte order mark is
-// never counted: r drops it before any byte reaches positions, as xmltree's
-// decoding discards it before tokenizing.
+// Lines are counted at '\n' and columns as xsderr.Loc's Col states. A
+// leading byte order mark is never counted: r drops it before any byte
+// reaches positions, as xmltree's decoding discards it before tokenizing.
 type positions struct {
 	r *bomless
 	// pending is every byte read from r at or after base, the offset of the

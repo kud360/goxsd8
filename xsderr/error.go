@@ -48,15 +48,20 @@ const RuleXMLWellFormed Rule = "xml-wf"
 const RuleComponentInvariant Rule = "component-invariant"
 
 // Loc identifies where an offending construct lives — the schema document or
-// the instance document. Its fields are threaded from parser/xmltree
-// positions, never reconstructed (STYLE E3). The zero Loc means the location is
-// unknown, and should be rare.
+// the instance document. Its fields are threaded from the positions the
+// reader of that document reports — parser/xmltree for XML, validate/jsonsrc
+// for JSON — never reconstructed (STYLE E3). The zero Loc means the location
+// is unknown, and should be rare.
 type Loc struct {
 	// URI is the document the construct was read from.
 	URI string
 	// Line is the 1-based line number, or 0 when unknown.
 	Line int
-	// Col is the 1-based column number, or 0 when unknown.
+	// Col is the 1-based column, counted in bytes from the start of the line
+	// — not in runes or UTF-16 code units — or 0 when unknown. Which byte
+	// stream it counts, the source or a decoding of it, is the producing
+	// reader's to state (parser/xmltree.NewReader, validate/jsonsrc's
+	// "Locations" section).
 	Col int
 }
 
