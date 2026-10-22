@@ -1355,6 +1355,104 @@ func TestValidateFormatMismatchClause(t *testing.T) {
 	}
 }
 
+// reportLine is one line a report is expected to hold: its opening, the
+// "<loc>: [<rule>] " a line's own location and rule spell, and whether it ends
+// with formatHint's clause.
+type reportLine struct {
+	opening string
+	clause  bool
+}
+
+// mustReport fails unless report holds exactly want's lines, in want's order,
+// each opening with its opening and holding clause, at its end, exactly when
+// its clause is set. The message text between them is the library's, which
+// these rows do not pin.
+func mustReport(t *testing.T, report, clause string, want []reportLine) {
+	t.Helper()
+	lines := strings.Split(strings.TrimSuffix(report, "\n"), "\n")
+	if len(lines) != len(want) || !strings.HasSuffix(report, "\n") {
+		t.Fatalf("report =\n%s\nwant %d lines", report, len(want))
+	}
+	for i, w := range want {
+		if !strings.HasPrefix(lines[i], w.opening) {
+			t.Errorf("line %d = %q, want it to open %q", i+1, lines[i], w.opening)
+		}
+		if strings.Contains(lines[i], clause) != w.clause {
+			t.Errorf("line %d = %q holds %q: %v, want %v", i+1, lines[i], clause, !w.clause, w.clause)
+		}
+		if w.clause && !strings.HasSuffix(lines[i], clause) {
+			t.Errorf("line %d = %q, want it to end %q", i+1, lines[i], clause)
+		}
+	}
+}
+
+// TestAssessXMLReadFaultTheWalkMeetsTakesNoClause pins that a fault reading
+// the instance keeps formatHint's clause off its [xml-wf] line when the walk
+// meets it inside the document element, where it reaches validate.Result.Err
+// rather than xmlsrc.Validate's error. The reader serves one byte at a time,
+// so instanceHints' read of the start tag never reaches the fault, and the
+// undecided lines after the fault line, one per box the walk assessed before
+// it, are what only the Result.Err arm prints. -format xml over a json-named
+// instance, so a clause the guard let through would end the fault line.
+func TestAssessXMLReadFaultTheWalkMeetsTakesNoClause(t *testing.T) {
+	path, err := rootLocation(assertedSchema)
+	if err != nil {
+		t.Fatal(err)
+	}
+	roots := []parser.Root{parser.RootAt(path)}
+	backend := strict.New()
+	schema, _, err := compileSet(roots, backend, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	v, err := validate.New(schema, backend)
+	if err != nil {
+		t.Fatal(err)
+	}
+	vn := &validation{roots: roots, base: v, backend: backend, forced: formatXML, hints: true}
+	const instance = "midfault.json"
+	const doc = `<a:boxes xmlns:a="http://example.com/asserted"><a:box width="3"/>` + "\n" + `<a:box width="3"/>`
+	src := iotest.OneByteReader(io.MultiReader(strings.NewReader(doc), iotest.ErrReader(errors.New("disk on fire"))))
+	var stdout, stderr bytes.Buffer
+	if code := vn.assessXML(instance, src, &stdout, &stderr); code != exitInvalid {
+		t.Errorf("assessXML = %d, want %d (stderr %q)", code, exitInvalid, stderr.String())
+	}
+	mustReport(t, stdout.String(), "; -format xml read "+instance, []reportLine{
+		{instance + ":2:19: [xml-wf] disk on fire", false},
+		{instance + ":1:48: [cvc-assertion] undecided: ", false},
+		{instance + ":2:1: [cvc-assertion] undecided: ", false},
+	})
+}
+
+// TestValidateViolationsBeforeAWalkMetFaultTakeNoClause pins that formatHint's
+// clause ends the [xml-wf] line of the fault the walk met and no other: the
+// violations charged before it and the undecided lines after it print without
+// it. -format xml over a json-named instance of asserted.xsd whose first box
+// is charged an undeclared attribute, whose second box's width is no int, and
+// whose boxes is closed by a mismatched end tag. The lines are pinned in
+// order, so the row pins the report's order too: violations, then the fault,
+// then the undecided checks.
+func TestValidateViolationsBeforeAWalkMetFaultTakeNoClause(t *testing.T) {
+	instance := filepath.Join(t.TempDir(), "boxes.json")
+	const doc = `<a:boxes xmlns:a="http://example.com/asserted"><a:box width="3" extra="1"/><a:box width="x"/></a:wrong>` + "\n"
+	if err := os.WriteFile(instance, []byte(doc), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	args := []string{"validate", "-format", "xml", "-schema", assertedSchema, instance}
+	var stdout, stderr bytes.Buffer
+	if code := run(args, &stdout, &stderr); code != exitInvalid {
+		t.Errorf("run(%q) = %d, want %d (stderr %q)", args, code, exitInvalid, stderr.String())
+	}
+	mustReport(t, stdout.String(), "; -format xml read "+instance+" as xml, but its extension names json: drop -format, or pass -format json", []reportLine{
+		{instance + ":1:48: [cvc-complex-type] ", false},
+		{instance + ":1:76: [cvc-attribute] ", false},
+		{instance + ":1:94: [xml-wf] end tag </a:wrong> does not match open element {http://example.com/asserted}boxes", true},
+		{instance + ":1:48: [cvc-assertion] undecided: ", false},
+		{instance + ":1:76: [cvc-assertion] undecided: ", false},
+	})
+	mustCiteOpenableLocations(t, "stdout", stdout.String())
+}
+
 // TestValidateSchemaFlagIsRepeatable pins the grammar doc.go states and the
 // flag.Value implements: every schema needs its own -schema, so a second
 // location standing beside the first is a positional argument — an instance —

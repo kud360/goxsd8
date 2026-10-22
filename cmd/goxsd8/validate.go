@@ -250,7 +250,19 @@ func (vn *validation) one(instance string, stdout, stderr io.Writer) int {
 	if format == formatJSON {
 		return vn.assessJSON(instance, opened, stdout, stderr)
 	}
-	read := &watchedReader{r: opened}
+	return vn.assessXML(instance, opened, stdout, stderr)
+}
+
+// assessXML assesses the XML instance in src through xmlsrc.Validate, against
+// the -schema set augmented by the instance's own schema location hints unless
+// -no-hints was given (validatorFor), and reports its exit code.
+//
+// It reads src through a watchedReader, and decides formatHint's clause only
+// once xmlsrc.Validate has returned, so a fault reading src anywhere in the
+// stream, the prefix instanceHints reads included, keeps the clause off the
+// [xml-wf] line on either channel the fault reaches.
+func (vn *validation) assessXML(instance string, src io.Reader, stdout, stderr io.Writer) int {
+	read := &watchedReader{r: src}
 	v, src, code := vn.validatorFor(instance, read, stderr)
 	if code != exitOK {
 		return code
