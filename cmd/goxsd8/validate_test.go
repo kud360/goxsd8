@@ -289,9 +289,10 @@ func TestValidateSchemaFaultHasItsOwnExitCode(t *testing.T) {
 // table states for 3, which never passes through worse (#1232): a set that does
 // not compile answers 3 beside an instance argument that is itself a usage
 // error, since no instance is examined, and a 2 raised before compiling — a
-// bad -format, an unreadable -schema, a flag after a positional — answers
-// instead of the 3. Each instance argument is first shown to answer 2 against
-// a set that compiles, so the 3 is not an argument that was never a fault.
+// bad -format, an unreadable -schema, a -schema of -, a flag after a
+// positional — answers instead of the 3. Each instance argument is first shown
+// to answer 2 against a set that compiles, so the 3 is not an argument that was
+// never a fault.
 func TestValidateSchemaFaultPrecedesInstanceUsage(t *testing.T) {
 	dir := t.TempDir()
 	unnamed := filepath.Join(dir, "order.txt")
@@ -317,6 +318,7 @@ func TestValidateSchemaFaultPrecedesInstanceUsage(t *testing.T) {
 		{"validate", "-schema", brokenSchema, "-schema", "testdata/nosuch.xsd", validInstance},
 		{"validate", "-schema", "testdata/nosuch.xsd", "-schema", brokenSchema, validInstance},
 		{"validate", "-schema", brokenSchema, validInstance, "-q"},
+		{"validate", "-schema", brokenSchema, "-schema", stdinArg, validInstance},
 	} {
 		var stdout, stderr bytes.Buffer
 		if code := run(args, &stdout, &stderr); code != exitUsage {

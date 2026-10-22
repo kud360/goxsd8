@@ -46,8 +46,8 @@ Usage (contract; subcommands land with their milestones):
               fault reading a document it references included. Unranked:
               it answers before any instance is opened, so no instance's
               4, 1 or 2 is reached, and a 2 raised before compiling (a
-              flag, a missing or misplaced argument, an unreadable
-              -schema) answers instead of it.
+              flag, a missing or misplaced argument, a -schema that is
+              - or cannot be read) answers instead of it.
   4     2     validate only: an instance left undecided, by a check the
               assessment declined or by a jsonsrc decline. Nothing was
               proven invalid and something was not decided: not a pass,
@@ -200,11 +200,8 @@ Usage (contract; subcommands land with their milestones):
       that the name is undeclared.
       The -schema set is compiled before any instance is opened,
       since without a set there is nothing to assess an instance
-      against, and the flags and the argument list, each -schema
-      argument's readability included, are read before that. That
-      order is the whole of 3's place among the codes: its error
-      prints on stderr once, and no instance argument is examined,
-      not even one that would itself be a usage error.
+      against; the exit-code table's 3 row says what answers before
+      it and what it preempts. A 3's error prints on stderr once.
       An I/O fault reading a document a -schema argument REFERENCES,
       through <xs:include>, <xs:import>, <xs:override> or
       <xs:redefine>, is charged 3: the schema set does not compile,
@@ -236,9 +233,9 @@ Usage (contract; subcommands land with their milestones):
       rejected, its first error on stderr as <loc>: [<rule>]
       <message>; 2 when an argument cannot be read, an output
       directory cannot be written, or a -schema stands without its
-      -out. Those are the codes gen answers with once M9 builds it: until then every
-      gen invocation exits 2, reporting that gen is not yet
-      implemented.
+      -out. Those are the codes gen answers with once M9 builds
+      it: until then every gen invocation exits 2, reporting that
+      gen is not yet implemented.
 
 Flags common to all subcommands: -q (quiet), -v (debug logging via
 slog to stderr; scope with GOXSD_DEBUG=parser,validate,codec). They

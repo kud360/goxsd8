@@ -176,7 +176,7 @@ func TestExitSeverityRanksEveryCode(t *testing.T) {
 		t.Errorf("worse(%d, %d) = %d, want %d: undecided is not a clean run", exitOK, exitUndecided, worse(exitOK, exitUndecided), exitUndecided)
 	}
 	if worse(exitSchema, exitUsage) != exitSchema {
-		t.Errorf("worse(%d, %d) = %d, want %d: a schema set that does not compile leaves every instance unassessed", exitSchema, exitUsage, worse(exitSchema, exitUsage), exitSchema)
+		t.Errorf("worse(%d, %d) = %d, want %d: exitSeverity ranks exitSchema last only so that every code has a rank", exitSchema, exitUsage, worse(exitSchema, exitUsage), exitSchema)
 	}
 }
 
