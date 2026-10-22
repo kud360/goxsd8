@@ -135,9 +135,9 @@ type Line struct {
 	Body string
 }
 
-// Indent is how far the line's text sits past its `//`, counting a tab as a
+// indent is how far the line's text sits past its `//`, counting a tab as a
 // full verbatim step since that is how `go doc` reads it.
-func (l Line) Indent() int {
+func (l Line) indent() int {
 	n := 0
 	for _, r := range l.Body {
 		if r == ' ' {
@@ -157,7 +157,7 @@ func (l Line) Indent() int {
 // hand: indented to where `go doc` renders it preformatted, and not a list
 // item.
 func (l Line) IsVerbatim() bool {
-	return l.Indent() >= verbatimIndent && !l.IsListItem()
+	return l.indent() >= verbatimIndent && !l.isListItem()
 }
 
 // isBreak reports whether a comment line can carry no wrapped paragraph text
@@ -196,11 +196,11 @@ func (l Line) isExampleOutput() bool {
 	return strings.HasPrefix(trimmed, "output:")
 }
 
-// IsListItem reports whether a comment line opens a list item — a bullet
+// isListItem reports whether a comment line opens a list item — a bullet
 // (`- `, `* `, `• `) or an enumerator (`1. `, `2) `, `(3) `, `a. `). Its
 // continuation lines belong to it, so it opens a paragraph rather than
 // breaking one, and the line above it is a legitimate short last line.
-func (l Line) IsListItem() bool {
+func (l Line) isListItem() bool {
 	trimmed := strings.TrimSpace(l.Body)
 	for _, bullet := range []string{"- ", "* ", "• "} {
 		if strings.HasPrefix(trimmed, bullet) {
@@ -295,8 +295,8 @@ func split(block []Line) [][]Line {
 			flush()
 			continue
 		}
-		indent := line.Indent()
-		if line.IsListItem() || indent < margin || indent > margin+hangingIndent {
+		indent := line.indent()
+		if line.isListItem() || indent < margin || indent > margin+hangingIndent {
 			flush()
 		}
 		if len(cur) == 0 {
