@@ -22,16 +22,17 @@ type Rule string
 // documented, non-spec exemption from the generated catalog.
 const RuleXMLWellFormed Rule = "xml-wf"
 
-// RuleComponentInvariant is the sentinel Rule for a component constructor
-// rejecting a state the spec never names as a numbered clause because the XML
-// mapping layer above it makes the state unrepresentable — an absent (zero)
-// QName in a slot that exists only to carry a present reference, for example.
-// Such a rejection is a representation-invariant fault of the caller, not a
-// schema- or instance-validity verdict, so citing a cvc-*/src-*/*-props-correct
-// rule would misclassify it for RuleOf/errors.As consumers. Like
-// RuleXMLWellFormed it lets the Error carry a recognizable, non-empty Rule
-// instead of "", and IsValidRule accepts it as a documented, non-spec exemption
-// from the generated catalog.
+// RuleComponentInvariant is the sentinel Rule for a representation-invariant
+// fault: a component constructor, or a later reader of a component such as a
+// resolver or the value pipeline, rejecting a state the spec never names as a
+// numbered clause because the XML mapping layer above it makes the state
+// unrepresentable — an absent (zero) QName in a slot that exists only to carry
+// a present reference, for example. Such a rejection is a
+// representation-invariant fault of the caller, not a schema- or
+// instance-validity verdict, so citing a cvc-*/src-*/*-props-correct rule would
+// misclassify it for RuleOf/errors.As consumers. Like RuleXMLWellFormed it lets
+// the Error carry a recognizable, non-empty Rule instead of "", and IsValidRule
+// accepts it as a documented, non-spec exemption from the generated catalog.
 //
 // UNREACHABILITY IS THE PRECONDITION, and it is the standing convention for
 // every future guard (#343): a rejection may cite RuleComponentInvariant only
@@ -47,8 +48,9 @@ const RuleXMLWellFormed Rule = "xml-wf"
 const RuleComponentInvariant Rule = "component-invariant"
 
 // Loc identifies where an offending construct lives — the schema document or
-// the instance document. Its fields are threaded from parser positions, never
-// reconstructed. The zero Loc means the location is unknown.
+// the instance document. Its fields are threaded from parser/xmltree
+// positions, never reconstructed (STYLE E3). The zero Loc means the location is
+// unknown, and should be rare.
 type Loc struct {
 	// URI is the document the construct was read from.
 	URI string
@@ -76,11 +78,22 @@ func (l Loc) String() string {
 	return fmt.Sprintf("%s:%d:%d", uri, l.Line, l.Col)
 }
 
-// Error is the module's structured error currency: a validity verdict carrying
-// the spec Rule it violates and the source Loc of the offending construct.
-// Every schema- or instance-validity violation in the module is an *Error.
+// Error is the module's structured error currency: an error carrying the spec
+// Rule it concerns and the source Loc of the offending construct. Not every
+// *Error is a validity verdict.
+//
+// An *Error whose Rule is RuleXMLWellFormed is an XML well-formedness fault,
+// and one whose Rule is RuleComponentInvariant is a representation-invariant
+// fault such as a component constructor's rejection; neither is a verdict, and
+// comparing Rule with those two sentinels identifies those two classes.
+// IsValidRule is not that test, because it accepts both sentinels. Nor is the
+// comparison sufficient: an *Error under a catalog Rule can still be a fault
+// rather than a verdict — a facet-pipeline precondition charged under
+// cos-applicable-facets, or a foreign value handed to a canonical mapping.
+// Whether such an *Error is a verdict is the producing API's to document;
+// value.ValidateLexical's caller tests value.IsDatatypeVerdict.
 type Error struct {
-	// Rule is the spec validation rule the construct violates.
+	// Rule is the spec rule the error concerns, or one of the two sentinels.
 	Rule Rule
 	// Loc is where the offending construct lives; the zero Loc means unknown.
 	Loc Loc
@@ -159,6 +172,9 @@ func LocOf(err error) (Loc, bool) {
 // where any string would serve identically. Should a call site ever genuinely
 // need to cite a clause-level rule, extend tools/rulecat to emit it rather than
 // weakening this check.
+//
+// The sentinel set stays closed at two; the package doc's "The s4s-grammar
+// class" says why that class gets none.
 func IsValidRule(r Rule) bool {
 	if r == RuleXMLWellFormed || r == RuleComponentInvariant {
 		return true

@@ -70,9 +70,8 @@ func parseYearMonthDuration(lexical string, _ value.Context) (value.Value, error
 // string outside yearMonthDuration's [^DT]* lexical space (§3.4.26.2). A foreign
 // value is a caller-contract violation (*xsderr.Error, like canonicalDuration);
 // the zero value is a legally VALID value that simply has no canonical form
-// (§3.4.26.1 Note, licensed by §2.3.1's "(where possible)"), so it is a plain
-// error, NOT a validity verdict (xsderr/error.go: an *Error means a validity
-// violation, which this is not).
+// (§3.4.26.1 Note, licensed by §2.3.1's "(where possible)"), so it violates no
+// rule and is a plain error carrying none, NOT a validity verdict.
 func canonicalYearMonthDuration(v value.Value) (string, error) {
 	d, ok := v.(durationVal)
 	if !ok {

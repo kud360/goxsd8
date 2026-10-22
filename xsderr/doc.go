@@ -1,11 +1,11 @@
 // Package xsderr is the error currency of the module: structured errors
-// that carry a spec validation rule ID and a source location.
+// that carry a spec rule ID and a source location.
 //
 // It is a pure leaf — stdlib imports only. Every schema- or
 // instance-validity violation the spec CATALOGS is an *Error carrying that
-// catalog's rule ID (STYLE E2); free-form errors are for I/O faults,
-// programming faults, and the one validity class the spec catalogs nowhere,
-// below.
+// catalog's rule ID (STYLE E2), and the one validity class the spec catalogs
+// nowhere, below, is a plain error. The converse does not hold: an *Error is
+// not by itself a verdict, and Error's doc says how a caller tells.
 //
 // # The s4s-grammar class
 //
@@ -25,53 +25,14 @@
 //
 // So a rejection in this class carries no Rule and is not an *Error at all.
 // It is a plain error whose message names the offending item, its location
-// and the Appendix A production it violates — parser's
-// rejectProhibitedAttrs and checkS4SChildOrder are the shape to copy. Do
-// not charge it sd-valid, which is not a catalog ID and would read as one
-// in the Rule position, and do not borrow the nearest src-*, which states a
-// different constraint (#966).
-//
-// # Contract (implemented in M2)
-//
-//	type Rule string
-//	    A spec rule ID: "cvc-complex-type", "cos-st-restricts",
-//	    "src-resolve", "derivation-ok-restriction". Exactly one rule per
-//	    error. Usually a validation rule; see Rule's own doc for the case
-//	    where the spec names a check and states no rule for it.
-//
-//	const RuleXMLWellFormed Rule = "xml-wf"
-//	const RuleComponentInvariant Rule = "component-invariant"
-//	    The two non-spec sentinel Rules, for faults that are not schema- or
-//	    instance-validity violations and so have no cvc-*/src-* ID but must
-//	    still carry a recognizable, non-empty Rule: XML well-formedness
-//	    faults (unbound prefixes, mismatched/unclosed tags, malformed XML),
-//	    and component-constructor rejections of a state the XML mapping
-//	    makes unrepresentable rather than any numbered clause forbidding.
-//	    IsValidRule accepts both. The set stays closed at two: the
-//	    s4s-grammar class above is the converse case — a real validity
-//	    verdict the spec declines to catalog, not a non-validity fault — and
-//	    gets no sentinel, because a Rule minted for it would be read as a
-//	    citation of a rule the spec does not state.
-//
-//	type Loc struct { URI string; Line, Col int }
-//	    Where the offending construct lives — the schema document or the
-//	    instance document. Threaded from parser/xmltree positions, never
-//	    reconstructed (STYLE E3). The zero Loc means "location unknown"
-//	    and should be rare.
-//
-//	type Error struct { Rule Rule; Loc Loc; Msg string; Err error }
-//	    Error() renders "loc: [rule] msg"; Unwrap() returns Err so
-//	    errors.Is/As reach through wrapping (a wrapper that hides its
-//	    cause breaks sentinel detection up the chain).
-//
-//	func New(rule Rule, loc Loc, format string, args ...any) *Error
-//	func Wrap(rule Rule, loc Loc, err error) *Error
-//	    Wrap attaches a rule and location to a deeper plain error,
-//	    preserving its message verbatim and its identity via Unwrap.
-//
-//	func RuleOf(err error) (Rule, bool)
-//	func LocOf(err error) (Loc, bool)
-//	    errors.As-based narrowing for callers that hold a plain error.
+// and the Appendix A production it violates — parser's rejectProhibitedAttrs
+// and checkS4SChildOrder are the shape to copy. Do not charge it sd-valid,
+// which is not a catalog ID and would read as one in the Rule position, and
+// do not borrow the nearest src-*, which states a different constraint
+// (#966). Nor does the class get a sentinel Rule of its own: it is a real
+// validity verdict the spec declines to catalog, not a non-validity fault,
+// and a Rule minted for it would be read as a citation of a rule the spec
+// does not state.
 //
 // # The rule catalog
 //
@@ -92,7 +53,6 @@
 // constant or as a literal in those four positions. That is a syntactic floor,
 // not a dataflow proof: a Rule that reaches New/Wrap through a variable or
 // another expression is not scanned, and the test's header comment names the
-// residual holes it deliberately leaves open. The generate directive
-// (`//go:generate go tool rulecat`) is wired here in M2 together with the
-// Rule type it emits against.
+// residual holes it deliberately leaves open. The generate directive lives in
+// gen.go.
 package xsderr
