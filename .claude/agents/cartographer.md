@@ -92,11 +92,10 @@ already done, and the commit body says so.
 3. **Reconcile the issues**: close stale and obsolete, merge duplicates,
    split anything too big for one session, file `kind/gap` issues for
    untracked GAP sites. A stale premise in an open body is fixed by
-   editing that body, not by commenting only. **Read the thread of every
-   `blocked` issue whose `## Depends on` names an owner's ruling.** Every
-   agent comment posts under the owner's login through the Claude app, so
-   the owner's own comment is the one whose REST `performed_via_github_app`
-   is `null`; one posted since the issue was blocked fires its trigger —
+   editing that body, not by commenting only. **Run `go tool issuefeed
+   -owner-comments`**: each `#N <comment id> <created_at>` line it prints
+   is a comment the owner wrote outside the Claude app since issue N was
+   labelled `blocked`. Read it; a ruling fires the issue's trigger —
    re-scope the body to the ruling and relabel it `ready` (#1880).
    **Fold bookkeeping into sweeps**: comment corrections, marker repoints
    and reflows in one package are one issue, taken in one landing, rather
