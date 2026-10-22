@@ -1582,10 +1582,8 @@ func CompileAssertionTest(expr xsd.XPathExpression, types xsd.TypeResolver, cont
 }
 
 // Decline is why [CompileAssertionTest] or [CompileCTATest] did not compile a
-// {test}. validate prints the reason in the Msg of the Unevaluated entry that
-// Result.Unevaluated returns, after "declined it because": the entry under
-// cvc-assertion for a [CompileAssertionTest] decline, and the one under
-// key-cta-ta-select for a [CompileCTATest] decline.
+// {test}; [github.com/kud360/goxsd8/validate.Unevaluated] says where validate
+// reports it.
 //
 // [Decline.String] is the reason: what the compile declined first. Where a
 // static error is found the reason is that error — for [CompileCTATest] the
