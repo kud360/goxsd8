@@ -687,23 +687,46 @@ func (ctaLexicalInput) facets() value.AssertionEvaluator { return ctaAssertionsD
 // facets is [FacetAssertions] at the evaluation's own instant, now.
 func (in ctaTypedInput) facets() value.AssertionEvaluator { return FacetAssertions(in.now) }
 
+// ctaNode is the union of the three sums of the compiled tree's nodes —
+// ctaExpr, ctaValue and ctaCounted — by the one method each of their arms
+// has: eachOperand, which lists the node's operands. It is sealed by that
+// unexported method, and its consumers type-switch over the three sums' arms
+// (STYLE T2's schema-closed-set exception).
+type ctaNode interface {
+	// eachOperand yields, in written order, each of the node's operands: each
+	// field typed ctaExpr, ctaValue or ctaCounted or a concrete arm of one,
+	// the arm a ctaAtomicArgument holds, and each element of a slice of them.
+	// It never yields a field typed ctaKey, ctaTallied, ctaRangeKey,
+	// ctaBoundOwner, ctaNodeArg or ctaElementTest, none of which is a node of
+	// the tree, and never nil. It is structural: it answers no question about
+	// what the node reads.
+	eachOperand(yield func(ctaNode) bool)
+}
+
+// ctaYield yields each of nodes, in order, until yield reports false — a node's
+// eachOperand over its operands.
+func ctaYield[N ctaNode](yield func(ctaNode) bool, nodes ...N) {
+	for _, n := range nodes {
+		if !yield(n) {
+			return
+		}
+	}
+}
+
 // ctaExpr is the sealed sum of the BOOLEAN-valued nodes of the compiled tree.
 // The grammar closes the set (STYLE T2's schema-closed-set exception), so
 // consumers type-switch over the branches and no further branch is
-// representable outside this package. Every branch answers readsChild
-// ([AssertionTest.ReadsChild]), childAttributes
-// ([AssertionTest.ReadsChildAttributes]) and counted ([AssertionTest.Tally]) as
-// methods, so a branch added without them does not compile.
+// representable outside this package. Every branch lists its operands
+// (ctaNode), so a branch added without them does not compile. The static
+// questions the assertion façade asks of a tree are folds over those operands
+// — ctaReadsChild ([AssertionTest.ReadsChild]), ctaChildAttributes
+// ([AssertionTest.ReadsChildAttributes]), ctaKeysOf ([AssertionTest.Tally])
+// and ctaReadsContextItem ([AssertionTest.ReadsContextItem]) — each answering
+// a branch it names no case for by its operands' answers, so a branch added is
+// checked against each fold's cases, which its doc lists, by whoever adds it.
 type ctaExpr interface {
+	ctaNode
 	ctaExpr()
-	readsChild(name xsd.QName) bool
-	// childAttributes appends to into each attribute of a child named name a
-	// range variable bound to it reads, at any depth, in written order, and
-	// returns the extended slice ([AssertionTest.ReadsChildAttributes]).
-	childAttributes(name xsd.QName, into []xsd.QName) []xsd.QName
-	// counted appends to into each path an fn:count call in the node counts, at
-	// any depth, in written order, and returns the extended slice.
-	counted(into []ctaKey) []ctaKey
 }
 
 // ctaOr is [9] ta-OrExpr: existential over its operands, in written order.
@@ -887,6 +910,22 @@ func (ctaQuantified) ctaExpr()         {}
 func (ctaQuantifiedValue) ctaExpr()    {}
 func (ctaQuantifiedChildren) ctaExpr() {}
 
+func (n ctaOr) eachOperand(yield func(ctaNode) bool)               { ctaYield(yield, n.operands...) }
+func (n ctaAnd) eachOperand(yield func(ctaNode) bool)              { ctaYield(yield, n.operands...) }
+func (n ctaNot) eachOperand(yield func(ctaNode) bool)              { yield(n.operand) }
+func (n ctaCompare) eachOperand(yield func(ctaNode) bool)          { ctaYield(yield, n.left, n.right) }
+func (n ctaValueCompare) eachOperand(yield func(ctaNode) bool)     { ctaYield(yield, n.left, n.right) }
+func (n ctaEffectiveBoolean) eachOperand(yield func(ctaNode) bool) { yield(n.operand) }
+func (ctaTypeError) eachOperand(func(ctaNode) bool)                {}
+func (n ctaIf) eachOperand(yield func(ctaNode) bool)               { ctaYield(yield, n.test, n.then, n.otherwise) }
+func (ctaQuantified) eachOperand(func(ctaNode) bool)               {}
+func (n ctaQuantifiedValue) eachOperand(yield func(ctaNode) bool) {
+	ctaYield[ctaNode](yield, n.over, n.body)
+}
+func (n ctaQuantifiedChildren) eachOperand(yield func(ctaNode) bool) {
+	ctaYield[ctaNode](yield, n.over, n.body)
+}
+
 // ctaValue is the sealed sum of the ITEM-valued nodes: the arms of [16]
 // ta-SimpleValue — its AttrName arm in the untyped and the typed form
 // (ctaFacade.attribute), its Literal arm, and the assertion façade's `$value`
@@ -918,16 +957,11 @@ func (ctaQuantifiedChildren) ctaExpr() {}
 // (ctaBoundChild, ctaBoundSibling, ctaBoundAttribute, ctaBoundAttributeCall;
 // ctaFacade.childScope, ctaFacade.boundSibling, ctaFacade.boundAttribute). `.`
 // as the node fn:namespace-uri and fn:in-scope-prefixes take is no branch: it
-// is ctaNodeArg (ctaFacade.contextNode). Every branch answers readsChild,
-// childAttributes and counted on ctaExpr's terms.
+// is ctaNodeArg (ctaFacade.contextNode). Every branch lists its operands, and
+// the façade's folds read it, on ctaExpr's terms.
 type ctaValue interface {
+	ctaNode
 	ctaValue()
-	readsChild(name xsd.QName) bool
-	// childAttributes appends to into each attribute of a child named name a
-	// range variable bound to it reads, at any depth, in written order, and
-	// returns the extended slice ([AssertionTest.ReadsChildAttributes]).
-	childAttributes(name xsd.QName, into []xsd.QName) []xsd.QName
-	counted(into []ctaKey) []ctaKey
 }
 
 // ctaAttr is [17] ta-AttrName over an UNTYPED attribute: the attribute step
@@ -1819,17 +1853,13 @@ type ctaCount struct {
 // raises err:XPDY0050 before it selects a node and so before fn:count sees a
 // sequence (ctaNoDocumentRoot, xpath20.md §3.2), or an operand that is no
 // path, whose own items are counted (ctaCountedItems). The grammar closes the set
-// (STYLE T2's schema-closed-set exception). Every arm answers readsChild,
-// childAttributes and counted on ctaExpr's terms, and nodes, how many items it
-// evaluates to — the nodes a path selects — reporting false where it raises.
+// (STYLE T2's schema-closed-set exception). Every arm lists its operands, and
+// the façade's folds read it, on ctaExpr's terms, and answers nodes, how many
+// items it evaluates to — the nodes a path selects — reporting false where it
+// raises.
 type ctaCounted interface {
+	ctaNode
 	ctaCounted()
-	readsChild(name xsd.QName) bool
-	// childAttributes appends to into each attribute of a child named name a
-	// range variable bound to it reads, at any depth, in written order, and
-	// returns the extended slice ([AssertionTest.ReadsChildAttributes]).
-	childAttributes(name xsd.QName, into []xsd.QName) []xsd.QName
-	counted(into []ctaKey) []ctaKey
 	nodes(env ctaEnv) (int, bool)
 }
 
@@ -1865,6 +1895,12 @@ func (ctaUnion) ctaCounted()            {}
 func (ctaMatchingChildren) ctaCounted() {}
 func (ctaNoDocumentRoot) ctaCounted()   {}
 func (ctaCountedItems) ctaCounted()     {}
+
+func (ctaCountPath) eachOperand(func(ctaNode) bool)                {}
+func (ctaFilteredChildren) eachOperand(func(ctaNode) bool)         {}
+func (ctaUnion) eachOperand(func(ctaNode) bool)                    {}
+func (n ctaMatchingChildren) eachOperand(yield func(ctaNode) bool) { yield(n.pred) }
+func (n ctaCountedItems) eachOperand(yield func(ctaNode) bool)     { yield(n.operand) }
 
 // ctaMatchingChildren is a child step with a QName NameTest filtered by a
 // predicate that reads the child's VALUE, `N[. = 'x']` (xpath20.md §3.2.2),
@@ -2658,6 +2694,38 @@ func (ctaValueVar) ctaValue()           {}
 func (ctaEmptyValue) ctaValue()         {}
 func (ctaUntypedValue) ctaValue()       {}
 func (ctaContextAtom) ctaValue()        {}
+
+func (ctaAttr) eachOperand(func(ctaNode) bool)           {}
+func (ctaTypedAttr) eachOperand(func(ctaNode) bool)      {}
+func (ctaTypedChild) eachOperand(func(ctaNode) bool)     {}
+func (ctaUntypedChild) eachOperand(func(ctaNode) bool)   {}
+func (ctaCandidate) eachOperand(func(ctaNode) bool)      {}
+func (ctaRangeItem) eachOperand(func(ctaNode) bool)      {}
+func (ctaBoundChild) eachOperand(func(ctaNode) bool)     {}
+func (ctaBoundAttribute) eachOperand(func(ctaNode) bool) {}
+func (n ctaBoundAttributeCall) eachOperand(yield func(ctaNode) bool) {
+	ctaYield[ctaNode](yield, n.attr, n.call)
+}
+func (n ctaBoundSibling) eachOperand(yield func(ctaNode) bool)     { yield(n.step) }
+func (n ctaChildAt) eachOperand(yield func(ctaNode) bool)          { yield(n.step) }
+func (ctaChildPath) eachOperand(func(ctaNode) bool)                {}
+func (ctaAttributePath) eachOperand(func(ctaNode) bool)            {}
+func (ctaElementPath) eachOperand(func(ctaNode) bool)              {}
+func (ctaChildrenHaving) eachOperand(func(ctaNode) bool)           {}
+func (ctaChildrenPreceded) eachOperand(func(ctaNode) bool)         {}
+func (n ctaSelectedElements) eachOperand(yield func(ctaNode) bool) { yield(n.path) }
+func (ctaNoDocumentRoot) eachOperand(func(ctaNode) bool)           {}
+func (ctaNoContextItem) eachOperand(func(ctaNode) bool)            {}
+func (ctaNoDocument) eachOperand(func(ctaNode) bool)               {}
+func (ctaLiteral) eachOperand(func(ctaNode) bool)                  {}
+func (n ctaCast) eachOperand(yield func(ctaNode) bool)             { yield(n.operand) }
+func (n ctaCastable) eachOperand(yield func(ctaNode) bool)         { yield(n.cast) }
+func (n ctaInstanceOf) eachOperand(yield func(ctaNode) bool)       { yield(n.operand) }
+func (n ctaCount) eachOperand(yield func(ctaNode) bool)            { yield(n.arg) }
+func (ctaValueVar) eachOperand(func(ctaNode) bool)                 {}
+func (ctaEmptyValue) eachOperand(func(ctaNode) bool)               {}
+func (ctaUntypedValue) eachOperand(func(ctaNode) bool)             {}
+func (ctaContextAtom) eachOperand(func(ctaNode) bool)              {}
 
 // ctaStatic is one operand's static type, which is what xpath20.md §3.5.2's
 // casting rules dispatch on. It is a sealed sum of the three states this

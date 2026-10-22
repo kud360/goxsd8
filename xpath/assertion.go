@@ -1103,8 +1103,7 @@ func (c *Tally) fits(keys ctaKeys) bool {
 // nil for every name, [AssertionTest.Tally] is nil, and [AssertionTest.Evaluate]
 // answers false for every non-nil e.
 type AssertionTest struct {
-	root             ctaExpr
-	readsContextItem bool
+	root ctaExpr
 }
 
 // CompileAssertionTest compiles an assertion's {test} (§3.13.1, an
@@ -1572,10 +1571,9 @@ type AssertionTest struct {
 //
 // types is read as [CompileCTATest] reads it and stored nowhere.
 func CompileAssertionTest(expr xsd.XPathExpression, types xsd.TypeResolver, content xsd.ContentType, attrs AttributeTypes, elems ElementTypes) (AssertionTest, *Decline) {
-	var readsContextItem bool
-	root, defect := compileCTATest(expr, types, ctaAssertionFacade{content: content, attrs: attrs, elems: elems, readsContextItem: &readsContextItem})
+	root, defect := compileCTATest(expr, types, ctaAssertionFacade{content: content, attrs: attrs, elems: elems})
 	if defect.kind == ctaNoDefect {
-		return AssertionTest{root: root, readsContextItem: readsContextItem}, nil
+		return AssertionTest{root: root}, nil
 	}
 	if syntax := syntaxError(expr.Expression()); syntax.kind != ctaNoDefect {
 		return AssertionTest{}, declineOf(syntax)
@@ -1637,7 +1635,7 @@ func declineOf(d ctaDefect) *Decline {
 
 // ReadsContextItem reports whether the compiled {test} reads E's string value,
 // which the [47] ContextItemExpr `.` atomizes to and [BindValue]'s text
-// supplies: true wherever the compile admitted `.`, written or implicit — the
+// supplies: true wherever the compiled tree reads `.`, written or implicit — the
 // zero-argument fn:string, fn:string-length and fn:normalize-space read it
 // (xpath-functions.md §2.3, §7.4.4, §7.4.5) — and false for a {test} reading
 // only `$value`, attributes or children, whose evaluation reads no text of
@@ -1648,14 +1646,21 @@ func declineOf(d ctaDefect) *Decline {
 // bindings ([ContextElement]), never its string value, so a {test} whose only
 // `.` is such an argument reports false.
 //
-// The answer is recorded as the compile admits each `.`, not read back off the
-// tree, so it may over-report — a `.` admitted on a parse the compile then
-// abandoned — and never under-reports: a {test} for which it is false
-// evaluates to the same answer over every binding's text. Its consumer is
-// validate's walk, which gathers E's string value under a {content type} that
-// is not simple only for an element one of whose {test}s reads it, and binds
-// the zero-length string otherwise.
-func (t AssertionTest) ReadsContextItem() bool { return t.readsContextItem }
+// The answer is read off the tree itself, so a `.` the compile admitted and
+// then discarded is not read: `. eq 4` compiles to the err:XPTY0004 of
+// xs:string against xs:decimal, which reads no operand, and reports false. A
+// {test} for which it is false evaluates to the same answer over every
+// binding's text. Its consumer is validate's walk, which gathers E's string
+// value under a {content type} that is not simple only for an element one of
+// whose {test}s reads it, and binds the zero-length string otherwise.
+func (t AssertionTest) ReadsContextItem() bool {
+	if t.root == nil {
+		// The zero AssertionTest, which no successful CompileAssertionTest
+		// produces, holds nothing.
+		return false
+	}
+	return ctaReadsContextItem(t.root)
+}
 
 // Evaluate reports whether the compiled {test} evaluates to true for the
 // element whose attributes attrs yields, whose element [[children]] children
@@ -1795,7 +1800,7 @@ func (t AssertionTest) countedPaths() ctaKeys {
 		// produces, holds nothing.
 		return keys
 	}
-	for _, key := range t.root.counted(nil) {
+	for _, key := range ctaKeysOf(t.root, nil) {
 		key.file(&keys)
 	}
 	return keys
@@ -1862,7 +1867,7 @@ func (t AssertionTest) ReadsChild(name xsd.QName) bool {
 		// produces, holds nothing.
 		return false
 	}
-	return t.root.readsChild(name)
+	return ctaReadsChild(t.root, name)
 }
 
 // ReadsChildAttributes is the names of the attributes of a child named name
@@ -1882,7 +1887,7 @@ func (t AssertionTest) ReadsChildAttributes(name xsd.QName) []xsd.QName {
 		return nil
 	}
 	var names []xsd.QName
-	for _, a := range t.root.childAttributes(name, nil) {
+	for _, a := range ctaChildAttributes(t.root, name, nil) {
 		if !slices.Contains(names, a) {
 			names = append(names, a)
 		}
@@ -1890,628 +1895,129 @@ func (t AssertionTest) ReadsChildAttributes(name xsd.QName) []xsd.QName {
 	return names
 }
 
-// readsChild reports whether any of operands holds a child value step naming
-// name, at any depth.
-func (n ctaOr) readsChild(name xsd.QName) bool { return ctaAnyReadsChild(n.operands, name) }
-
-// readsChild is ctaOr.readsChild's.
-func (n ctaAnd) readsChild(name xsd.QName) bool { return ctaAnyReadsChild(n.operands, name) }
-
-// readsChild reports whether the operand holds a child value step naming name.
-func (n ctaNot) readsChild(name xsd.QName) bool { return n.operand.readsChild(name) }
-
-// readsChild reports whether either operand is, or casts, a child value step
-// naming name.
-func (n ctaCompare) readsChild(name xsd.QName) bool {
-	return n.left.readsChild(name) || n.right.readsChild(name)
-}
-
-// readsChild is ctaCompare.readsChild's.
-func (n ctaValueCompare) readsChild(name xsd.QName) bool {
-	return n.left.readsChild(name) || n.right.readsChild(name)
-}
-
-// readsChild reports whether the operand is, or casts, a child value step
-// naming name.
-func (n ctaEffectiveBoolean) readsChild(name xsd.QName) bool { return n.operand.readsChild(name) }
-
-// readsChild is false: the node holds no operand.
-func (ctaTypeError) readsChild(xsd.QName) bool { return false }
-
-// readsChild is false, on ctaChildPath's terms: neither the binding step nor
-// the body reads a value, and what each counts is the [Tally]'s.
-func (ctaQuantified) readsChild(xsd.QName) bool { return false }
-
-// readsChild reports whether the body holds a child value step naming name:
-// the binding sequence, `$value`, reads no child.
-func (n ctaQuantifiedValue) readsChild(name xsd.QName) bool { return n.body.readsChild(name) }
-
-// readsChild reports whether the body reads the value of a child named name —
-// the bound child's (ctaBoundChild.readsChild) or `$v/following-sibling::M[1]`'s
-// M among them — or name is the binding step's and the body reads no attribute
-// of a child so named: its children are then bound off [ChildElements] for
-// their positions and the last of them alone, which are read off the children
-// yielded for their values. A body reading the bound children's attributes
-// has them yielded for those (ReadsChildAttributes), and reads their values
-// only where it says so.
-func (n ctaQuantifiedChildren) readsChild(name xsd.QName) bool {
-	return n.body.readsChild(name) || n.over.name == name && len(n.body.childAttributes(name, nil)) == 0
-}
-
-// readsChild reports whether the test or either branch holds a child value
-// step naming name: which branch is evaluated is not known until E is.
-func (n ctaIf) readsChild(name xsd.QName) bool {
-	return n.test.readsChild(name) || n.then.readsChild(name) || n.otherwise.readsChild(name)
-}
-
-// ctaAnyReadsChild is readsChild over each of operands.
-func ctaAnyReadsChild(operands []ctaExpr, name xsd.QName) bool {
-	for _, o := range operands {
-		if o.readsChild(name) {
+// ctaReadsChild reports whether n holds a child value step naming name, at any
+// depth ([AssertionTest.ReadsChild]). A node it names no case for answers its
+// operands' ([ctaNode].eachOperand): ctaBoundSibling and ctaChildAt by their
+// step, ctaBoundAttributeCall by its call, a quantifier over `$value` by its
+// body, and every node holding no operand — a counted, existence-asked or
+// collected path among them, whose reads are the [Tally]'s — false. The cases
+// answer for themselves:
+//
+//   - ctaTypedChild, ctaUntypedChild and ctaBoundChild select children named
+//     their name, each read for its value: the bound child is the range
+//     variable read as an operand.
+//   - ctaMatchingChildren filters children named its name, whose values its
+//     predicate reads: they are counted over [ChildElements], never the
+//     [Tally]. Its predicate's `.` is the candidate (ctaCandidate), so it does
+//     not descend.
+//   - ctaQuantifiedChildren reads what its body reads, and also its binding
+//     step's name where the body reads no attribute of a child so named: the
+//     children are then bound off [ChildElements] for their positions and the
+//     last of them alone, which are read off the children yielded for their
+//     values. A body reading the bound children's attributes has them yielded
+//     for those ([AssertionTest.ReadsChildAttributes]), and reads their values
+//     only where it says so.
+func ctaReadsChild(n ctaNode, name xsd.QName) bool {
+	switch n := n.(type) {
+	case ctaTypedChild:
+		return n.name == name
+	case ctaUntypedChild:
+		return n.name == name
+	case ctaBoundChild:
+		return n.name == name
+	case ctaMatchingChildren:
+		return n.name == name
+	case ctaQuantifiedChildren:
+		return ctaReadsChild(n.body, name) || n.over.name == name && len(ctaChildAttributes(n.body, name, nil)) == 0
+	}
+	for o := range n.eachOperand {
+		if ctaReadsChild(o, name) {
 			return true
 		}
 	}
 	return false
 }
 
-// readsChild reports whether the step selects children named name. It and
-// ctaUntypedChild are the child value steps every readsChild here looks for.
-func (n ctaTypedChild) readsChild(name xsd.QName) bool { return n.name == name }
-
-// readsChild is ctaTypedChild.readsChild's.
-func (n ctaUntypedChild) readsChild(name xsd.QName) bool { return n.name == name }
-
-// readsChild reports whether the cast's operand is a child value step naming
-// name.
-func (n ctaCast) readsChild(name xsd.QName) bool { return n.operand.readsChild(name) }
-
-// readsChild is its cast's.
-func (n ctaCastable) readsChild(name xsd.QName) bool { return n.cast.readsChild(name) }
-
-// readsChild is its operand's: fn:data over a child step reads each child's
-// typed value.
-func (n ctaInstanceOf) readsChild(name xsd.QName) bool { return n.operand.readsChild(name) }
-
-// readsChild reports whether either operand of the arithmetic holds a
-// child value step naming name.
-func (n ctaArith) readsChild(name xsd.QName) bool {
-	return n.left.readsChild(name) || n.right.readsChild(name)
-}
-
-// readsChild reports whether either argument holds a child value step naming
-// name.
-func (n ctaMatch) readsChild(name xsd.QName) bool {
-	return n.left.operand.readsChild(name) || n.right.operand.readsChild(name)
-}
-
-// readsChild reports whether the argument holds a child value step naming name.
-func (n ctaUnaryString) readsChild(name xsd.QName) bool { return n.arg.operand.readsChild(name) }
-
-// readsChild reports whether the operand holds a child value step naming name:
-// fn:exists over a cast of a child step reads its value off [ChildElements].
-func (n ctaPresence) readsChild(name xsd.QName) bool { return n.operand.readsChild(name) }
-
-// readsChild reports whether the cast fn:string is holds a child value step
-// naming name.
-func (n ctaStringFunction) readsChild(name xsd.QName) bool { return n.cast.readsChild(name) }
-
-// readsChild reports whether any argument holds a child value step naming
-// name.
-func (n ctaConcat) readsChild(name xsd.QName) bool {
-	for _, arg := range n.args {
-		if arg.readsChild(name) {
-			return true
-		}
-	}
-	return false
-}
-
-// readsChild reports whether either argument holds a child value step naming
-// name.
-func (n ctaSubstringAfter) readsChild(name xsd.QName) bool {
-	return n.left.operand.readsChild(name) || n.right.operand.readsChild(name)
-}
-
-// readsChild reports whether the argument holds a child value step naming name.
-func (n ctaYearFromDate) readsChild(name xsd.QName) bool { return n.arg.operand.readsChild(name) }
-
-// readsChild reports whether the argument holds a child value step naming name.
-func (n ctaNumber) readsChild(name xsd.QName) bool { return n.operand.readsChild(name) }
-
-// readsChild reports whether the argument holds a child value step naming name.
-func (n ctaDistinctValues) readsChild(name xsd.QName) bool { return n.operand.readsChild(name) }
-
-// readsChild is false for each of these: none is a child-axis step or holds an
-// operand but the node E is, which no child is.
-func (ctaAttr) readsChild(xsd.QName) bool           { return false }
-func (ctaTypedAttr) readsChild(xsd.QName) bool      { return false }
-func (ctaNoDocumentRoot) readsChild(xsd.QName) bool { return false }
-func (ctaNoContextItem) readsChild(xsd.QName) bool  { return false }
-func (ctaNoDocument) readsChild(xsd.QName) bool     { return false }
-func (ctaLiteral) readsChild(xsd.QName) bool        { return false }
-func (ctaValueVar) readsChild(xsd.QName) bool       { return false }
-func (ctaEmptyValue) readsChild(xsd.QName) bool     { return false }
-func (ctaUntypedValue) readsChild(xsd.QName) bool   { return false }
-func (ctaCurrentDate) readsChild(xsd.QName) bool    { return false }
-func (ctaNoFocus) readsChild(xsd.QName) bool        { return false }
-func (ctaContextAtom) readsChild(xsd.QName) bool    { return false }
-func (ctaNamespaceURI) readsChild(xsd.QName) bool   { return false }
-func (ctaPrefixMember) readsChild(xsd.QName) bool   { return false }
-
-// readsChild reports whether the call's argument reads the value of a child
-// named name.
-func (n ctaCount) readsChild(name xsd.QName) bool { return n.arg.readsChild(name) }
-
-// readsChild is false for each of these: a counted path reads no child's
-// value, and what it counts is the [Tally]'s.
-func (ctaCountPath) readsChild(xsd.QName) bool        { return false }
-func (ctaFilteredChildren) readsChild(xsd.QName) bool { return false }
-func (ctaUnion) readsChild(xsd.QName) bool            { return false }
-
-// readsChild reports whether the counted operand holds a child value step
-// naming name: `count($value)` reads none.
-func (c ctaCountedItems) readsChild(name xsd.QName) bool { return c.operand.readsChild(name) }
-
-// readsChild reports whether m filters children named name, whose values its
-// predicate reads: they are counted over [ChildElements], never the [Tally].
-func (m ctaMatchingChildren) readsChild(name xsd.QName) bool { return m.name == name }
-
-// readsChild is false: the candidate's value is the enclosing
-// ctaMatchingChildren's read, which reports its name.
-func (ctaCandidate) readsChild(xsd.QName) bool { return false }
-
-// readsChild is false: the range variable is an item of `$value`, no child.
-func (ctaRangeItem) readsChild(xsd.QName) bool { return false }
-
-// readsChild reports whether the bound children are named name: the range
-// variable read as an operand reads its child's value.
-func (n ctaBoundChild) readsChild(name xsd.QName) bool { return n.name == name }
-
-// readsChild is false: the attribute's value is no child's
-// (ReadsChildAttributes).
-func (ctaBoundAttribute) readsChild(xsd.QName) bool { return false }
-
-// readsChild is its call's, which reads no child (ctaStepFacade).
-func (n ctaBoundAttributeCall) readsChild(name xsd.QName) bool { return n.call.readsChild(name) }
-
-// readsChild reports whether the step selects children named name, read off
-// [ChildElements] beside the bound one.
-func (n ctaBoundSibling) readsChild(name xsd.QName) bool { return n.step.name == name }
-
-// readsChild reports whether the filtered step selects children named name:
-// which of them is the k-th is read off [ChildElements], so each is yielded.
-func (n ctaChildAt) readsChild(name xsd.QName) bool { return n.step.readsChild(name) }
-
-// readsChild is false, on ctaCount's terms: a child path reads no node's value,
-// and how many nodes it selects is the [Tally]'s.
-func (ctaChildPath) readsChild(xsd.QName) bool { return false }
-
-// readsChild is false: the attribute values a path to an attribute reads are
-// the [Tally]'s, never a child's ([ChildElements]).
-func (ctaAttributePath) readsChild(xsd.QName) bool { return false }
-
-// readsChild is false, on ctaAttributePath's terms: the element values a path
-// of child steps reads are the [Tally]'s ([Tally.ElementValue]).
-func (ctaElementPath) readsChild(xsd.QName) bool { return false }
-
-// readsChild is its argument's.
-func (n ctaSum) readsChild(name xsd.QName) bool { return n.arg.readsChild(name) }
-
-// readsChild is its fn:sum call's.
-func (n ctaSumInstance) readsChild(name xsd.QName) bool { return n.sum.readsChild(name) }
-
-// readsChild is false, on ctaChildPath's terms.
-func (ctaSelectedElements) readsChild(xsd.QName) bool { return false }
-
-// readsChild is false, on ctaChildPath's terms: neither the child step nor a
-// step of its predicate reads a value.
-func (ctaChildrenHaving) readsChild(xsd.QName) bool { return false }
-
-// readsChild is false, on ctaChildrenHaving's terms.
-func (ctaChildrenPreceded) readsChild(xsd.QName) bool { return false }
-
-// childAttributes appends to into the name of each attribute of a child named
-// name that a ctaBoundAttribute in the tree reads, at any depth, in written
+// ctaChildAttributes appends to into the name of each attribute of a child
+// named name that a ctaBoundAttribute in n reads, at any depth, in written
 // order, and returns the extended slice ([AssertionTest.ReadsChildAttributes]).
-func (n ctaOr) childAttributes(name xsd.QName, into []xsd.QName) []xsd.QName {
-	return ctaAnyChildAttributes(n.operands, name, into)
-}
-
-// childAttributes is ctaOr.childAttributes'.
-func (n ctaAnd) childAttributes(name xsd.QName, into []xsd.QName) []xsd.QName {
-	return ctaAnyChildAttributes(n.operands, name, into)
-}
-
-// ctaAnyChildAttributes is childAttributes over each of operands, in written
-// order.
-func ctaAnyChildAttributes(operands []ctaExpr, name xsd.QName, into []xsd.QName) []xsd.QName {
-	for _, o := range operands {
-		into = o.childAttributes(name, into)
+// ctaBoundAttribute is its one case: it appends its name where its owner, the
+// bound child or the sibling after it, is named name. Every other node appends
+// its operands' ([ctaNode].eachOperand), ctaBoundAttributeCall its attribute
+// step's and then its call's.
+func ctaChildAttributes(n ctaNode, name xsd.QName, into []xsd.QName) []xsd.QName {
+	if a, isAttribute := n.(ctaBoundAttribute); isAttribute {
+		if a.owner.element() != name {
+			return into
+		}
+		return append(into, a.name)
+	}
+	for o := range n.eachOperand {
+		into = ctaChildAttributes(o, name, into)
 	}
 	return into
 }
 
-// childAttributes is its operand's.
-func (n ctaNot) childAttributes(name xsd.QName, into []xsd.QName) []xsd.QName {
-	return n.operand.childAttributes(name, into)
-}
-
-// childAttributes is either operand's, the left one first.
-func (n ctaCompare) childAttributes(name xsd.QName, into []xsd.QName) []xsd.QName {
-	return n.right.childAttributes(name, n.left.childAttributes(name, into))
-}
-
-// childAttributes is ctaCompare.childAttributes'.
-func (n ctaValueCompare) childAttributes(name xsd.QName, into []xsd.QName) []xsd.QName {
-	return n.right.childAttributes(name, n.left.childAttributes(name, into))
-}
-
-// childAttributes is its operand's.
-func (n ctaEffectiveBoolean) childAttributes(name xsd.QName, into []xsd.QName) []xsd.QName {
-	return n.operand.childAttributes(name, into)
-}
-
-// childAttributes is the test's, then either branch's, on readsChild's terms.
-func (n ctaIf) childAttributes(name xsd.QName, into []xsd.QName) []xsd.QName {
-	return n.otherwise.childAttributes(name, n.then.childAttributes(name, n.test.childAttributes(name, into)))
-}
-
-// childAttributes is its body's.
-func (n ctaQuantifiedValue) childAttributes(name xsd.QName, into []xsd.QName) []xsd.QName {
-	return n.body.childAttributes(name, into)
-}
-
-// childAttributes is its body's: the binding step reads no attribute.
-func (n ctaQuantifiedChildren) childAttributes(name xsd.QName, into []xsd.QName) []xsd.QName {
-	return n.body.childAttributes(name, into)
-}
-
-// childAttributes is its operand's.
-func (n ctaCast) childAttributes(name xsd.QName, into []xsd.QName) []xsd.QName {
-	return n.operand.childAttributes(name, into)
-}
-
-// childAttributes is its cast's.
-func (n ctaCastable) childAttributes(name xsd.QName, into []xsd.QName) []xsd.QName {
-	return n.cast.childAttributes(name, into)
-}
-
-// childAttributes is its operand's.
-func (n ctaInstanceOf) childAttributes(name xsd.QName, into []xsd.QName) []xsd.QName {
-	return n.operand.childAttributes(name, into)
-}
-
-// childAttributes is either operand's, the left one first.
-func (n ctaArith) childAttributes(name xsd.QName, into []xsd.QName) []xsd.QName {
-	return n.right.childAttributes(name, n.left.childAttributes(name, into))
-}
-
-// childAttributes is either argument's, the left one first.
-func (n ctaMatch) childAttributes(name xsd.QName, into []xsd.QName) []xsd.QName {
-	return n.right.operand.childAttributes(name, n.left.operand.childAttributes(name, into))
-}
-
-// childAttributes is its argument's.
-func (n ctaUnaryString) childAttributes(name xsd.QName, into []xsd.QName) []xsd.QName {
-	return n.arg.operand.childAttributes(name, into)
-}
-
-// childAttributes is its operand's.
-func (n ctaPresence) childAttributes(name xsd.QName, into []xsd.QName) []xsd.QName {
-	return n.operand.childAttributes(name, into)
-}
-
-// childAttributes is its cast's.
-func (n ctaStringFunction) childAttributes(name xsd.QName, into []xsd.QName) []xsd.QName {
-	return n.cast.childAttributes(name, into)
-}
-
-// childAttributes is each argument's, in written order.
-func (n ctaConcat) childAttributes(name xsd.QName, into []xsd.QName) []xsd.QName {
-	for _, arg := range n.args {
-		into = arg.childAttributes(name, into)
+// ctaKeysOf appends to into each key n counts or collects under, at any depth,
+// in written order, and returns the extended slice
+// ([AssertionTest.countedPaths]). A node it names no case for appends its
+// operands' ([ctaNode].eachOperand): an element step whose existence is asked
+// (ctaSelectedElements) its path's, the key an fn:count over the same step
+// counts under too; a quantifier over `$value` or a typed child step its
+// body's, its binding sequence keying nothing; a child step filtered by its
+// value (ctaMatchingChildren), which is counted over [ChildElements] and never
+// keyed in the [Tally], its predicate's, which are none — ctaPredicateFacade
+// declines every production that builds a key. The cases answer for
+// themselves:
+//
+//   - a ctaKey — an fn:count path, a filtered child step, a union, a child
+//     path, a child step filtered by its children's existence or by a
+//     `preceding::` step, a path to an attribute, a path of child steps read
+//     for its values — appends itself: the [Tally] counts the nodes it
+//     selects, or collects the values it reads.
+//   - ctaQuantified appends the key counting the bindings that satisfy its
+//     body and, under `every`, the key counting every binding, the one
+//     `count(N)` counts under too, so a {test} writing both keeps one counter.
+func ctaKeysOf(n ctaNode, into []ctaKey) []ctaKey {
+	switch n := n.(type) {
+	case ctaKey:
+		return append(into, n)
+	case ctaQuantified:
+		into = append(into, n.satisfying)
+		if n.q != ctaEvery {
+			return into
+		}
+		return append(into, n.satisfying.bound())
+	}
+	for o := range n.eachOperand {
+		into = ctaKeysOf(o, into)
 	}
 	return into
 }
 
-// childAttributes is either argument's, the left one first.
-func (n ctaSubstringAfter) childAttributes(name xsd.QName, into []xsd.QName) []xsd.QName {
-	return n.right.operand.childAttributes(name, n.left.operand.childAttributes(name, into))
-}
-
-// childAttributes is its argument's.
-func (n ctaYearFromDate) childAttributes(name xsd.QName, into []xsd.QName) []xsd.QName {
-	return n.arg.operand.childAttributes(name, into)
-}
-
-// childAttributes is its argument's.
-func (n ctaNumber) childAttributes(name xsd.QName, into []xsd.QName) []xsd.QName {
-	return n.operand.childAttributes(name, into)
-}
-
-// childAttributes is its argument's.
-func (n ctaDistinctValues) childAttributes(name xsd.QName, into []xsd.QName) []xsd.QName {
-	return n.operand.childAttributes(name, into)
-}
-
-// childAttributes is its argument's.
-func (n ctaCount) childAttributes(name xsd.QName, into []xsd.QName) []xsd.QName {
-	return n.arg.childAttributes(name, into)
-}
-
-// childAttributes is its counted operand's.
-func (c ctaCountedItems) childAttributes(name xsd.QName, into []xsd.QName) []xsd.QName {
-	return c.operand.childAttributes(name, into)
-}
-
-// childAttributes is its argument's.
-func (n ctaSum) childAttributes(name xsd.QName, into []xsd.QName) []xsd.QName {
-	return n.arg.childAttributes(name, into)
-}
-
-// childAttributes is its fn:sum call's.
-func (n ctaSumInstance) childAttributes(name xsd.QName, into []xsd.QName) []xsd.QName {
-	return n.sum.childAttributes(name, into)
-}
-
-// childAttributes appends the attribute's name where its owner, the bound
-// child or the sibling after it, is named name.
-func (n ctaBoundAttribute) childAttributes(name xsd.QName, into []xsd.QName) []xsd.QName {
-	if n.owner.element() != name {
-		return into
+// ctaReadsContextItem reports whether n holds a ctaContextAtom, at any depth
+// ([AssertionTest.ReadsContextItem]): it is the one node reading E's string
+// value, and every other node answers its operands' ([ctaNode].eachOperand).
+func ctaReadsContextItem(n ctaNode) bool {
+	if _, isAtom := n.(ctaContextAtom); isAtom {
+		return true
 	}
-	return append(into, n.name)
-}
-
-// childAttributes is the attribute step's, then its call's.
-func (n ctaBoundAttributeCall) childAttributes(name xsd.QName, into []xsd.QName) []xsd.QName {
-	return n.call.childAttributes(name, n.attr.childAttributes(name, into))
-}
-
-// childAttributes appends nothing for each of these: none holds a
-// ctaBoundAttribute, a predicate's façade and the [Tally]'s keys reading no
-// attribute through a range variable.
-func (ctaTypeError) childAttributes(_ xsd.QName, into []xsd.QName) []xsd.QName        { return into }
-func (ctaQuantified) childAttributes(_ xsd.QName, into []xsd.QName) []xsd.QName       { return into }
-func (ctaPrefixMember) childAttributes(_ xsd.QName, into []xsd.QName) []xsd.QName     { return into }
-func (ctaTypedChild) childAttributes(_ xsd.QName, into []xsd.QName) []xsd.QName       { return into }
-func (ctaUntypedChild) childAttributes(_ xsd.QName, into []xsd.QName) []xsd.QName     { return into }
-func (ctaAttr) childAttributes(_ xsd.QName, into []xsd.QName) []xsd.QName             { return into }
-func (ctaTypedAttr) childAttributes(_ xsd.QName, into []xsd.QName) []xsd.QName        { return into }
-func (ctaNoDocumentRoot) childAttributes(_ xsd.QName, into []xsd.QName) []xsd.QName   { return into }
-func (ctaNoContextItem) childAttributes(_ xsd.QName, into []xsd.QName) []xsd.QName    { return into }
-func (ctaNoDocument) childAttributes(_ xsd.QName, into []xsd.QName) []xsd.QName       { return into }
-func (ctaLiteral) childAttributes(_ xsd.QName, into []xsd.QName) []xsd.QName          { return into }
-func (ctaValueVar) childAttributes(_ xsd.QName, into []xsd.QName) []xsd.QName         { return into }
-func (ctaEmptyValue) childAttributes(_ xsd.QName, into []xsd.QName) []xsd.QName       { return into }
-func (ctaUntypedValue) childAttributes(_ xsd.QName, into []xsd.QName) []xsd.QName     { return into }
-func (ctaCurrentDate) childAttributes(_ xsd.QName, into []xsd.QName) []xsd.QName      { return into }
-func (ctaNoFocus) childAttributes(_ xsd.QName, into []xsd.QName) []xsd.QName          { return into }
-func (ctaContextAtom) childAttributes(_ xsd.QName, into []xsd.QName) []xsd.QName      { return into }
-func (ctaNamespaceURI) childAttributes(_ xsd.QName, into []xsd.QName) []xsd.QName     { return into }
-func (ctaCountPath) childAttributes(_ xsd.QName, into []xsd.QName) []xsd.QName        { return into }
-func (ctaFilteredChildren) childAttributes(_ xsd.QName, into []xsd.QName) []xsd.QName { return into }
-func (ctaUnion) childAttributes(_ xsd.QName, into []xsd.QName) []xsd.QName            { return into }
-func (ctaMatchingChildren) childAttributes(_ xsd.QName, into []xsd.QName) []xsd.QName { return into }
-func (ctaCandidate) childAttributes(_ xsd.QName, into []xsd.QName) []xsd.QName        { return into }
-func (ctaRangeItem) childAttributes(_ xsd.QName, into []xsd.QName) []xsd.QName        { return into }
-func (ctaBoundChild) childAttributes(_ xsd.QName, into []xsd.QName) []xsd.QName       { return into }
-func (ctaBoundSibling) childAttributes(_ xsd.QName, into []xsd.QName) []xsd.QName     { return into }
-func (ctaChildAt) childAttributes(_ xsd.QName, into []xsd.QName) []xsd.QName          { return into }
-func (ctaChildPath) childAttributes(_ xsd.QName, into []xsd.QName) []xsd.QName        { return into }
-func (ctaAttributePath) childAttributes(_ xsd.QName, into []xsd.QName) []xsd.QName    { return into }
-func (ctaElementPath) childAttributes(_ xsd.QName, into []xsd.QName) []xsd.QName      { return into }
-func (ctaSelectedElements) childAttributes(_ xsd.QName, into []xsd.QName) []xsd.QName { return into }
-func (ctaChildrenHaving) childAttributes(_ xsd.QName, into []xsd.QName) []xsd.QName   { return into }
-func (ctaChildrenPreceded) childAttributes(_ xsd.QName, into []xsd.QName) []xsd.QName { return into }
-func (ctaIntegerRanges) childAttributes(_ xsd.QName, into []xsd.QName) []xsd.QName    { return into }
-func (ctaStringSequence) childAttributes(_ xsd.QName, into []xsd.QName) []xsd.QName   { return into }
-
-// counted appends each path any of operands counts over.
-func (n ctaOr) counted(into []ctaKey) []ctaKey { return ctaAnyCounted(n.operands, into) }
-
-// counted is ctaOr.counted's.
-func (n ctaAnd) counted(into []ctaKey) []ctaKey { return ctaAnyCounted(n.operands, into) }
-
-// counted appends each path the operand counts over.
-func (n ctaNot) counted(into []ctaKey) []ctaKey { return n.operand.counted(into) }
-
-// counted appends each path either operand counts over, the left one first.
-func (n ctaCompare) counted(into []ctaKey) []ctaKey {
-	return n.right.counted(n.left.counted(into))
-}
-
-// counted is ctaCompare.counted's.
-func (n ctaValueCompare) counted(into []ctaKey) []ctaKey {
-	return n.right.counted(n.left.counted(into))
-}
-
-// counted appends each path the operand counts over.
-func (n ctaEffectiveBoolean) counted(into []ctaKey) []ctaKey {
-	return n.operand.counted(into)
-}
-
-// counted appends each path the test, then either branch, counts over, on
-// readsChild's terms.
-func (n ctaIf) counted(into []ctaKey) []ctaKey {
-	return n.otherwise.counted(n.then.counted(n.test.counted(into)))
-}
-
-// counted appends each path the cast's operand counts over.
-func (n ctaCast) counted(into []ctaKey) []ctaKey { return n.operand.counted(into) }
-
-// counted is its cast's.
-func (n ctaCastable) counted(into []ctaKey) []ctaKey { return n.cast.counted(into) }
-
-// counted is its operand's.
-func (n ctaInstanceOf) counted(into []ctaKey) []ctaKey { return n.operand.counted(into) }
-
-// counted appends each path either operand of the arithmetic counts over, the
-// left one first.
-func (n ctaArith) counted(into []ctaKey) []ctaKey {
-	return n.right.counted(n.left.counted(into))
-}
-
-// counted appends each path either argument counts over, the left one first.
-func (n ctaMatch) counted(into []ctaKey) []ctaKey {
-	return n.right.operand.counted(n.left.operand.counted(into))
-}
-
-// counted appends each path the argument counts over.
-func (n ctaUnaryString) counted(into []ctaKey) []ctaKey {
-	return n.arg.operand.counted(into)
-}
-
-// counted appends each path the operand counts over.
-func (n ctaPresence) counted(into []ctaKey) []ctaKey { return n.operand.counted(into) }
-
-// counted appends each path the cast fn:string is counts over.
-func (n ctaStringFunction) counted(into []ctaKey) []ctaKey {
-	return n.cast.counted(into)
-}
-
-// counted appends each path any argument counts over, in written order.
-func (n ctaConcat) counted(into []ctaKey) []ctaKey {
-	for _, arg := range n.args {
-		into = arg.counted(into)
+	for o := range n.eachOperand {
+		if ctaReadsContextItem(o) {
+			return true
+		}
 	}
-	return into
+	return false
 }
-
-// counted appends each path either argument counts over, the left one first.
-func (n ctaSubstringAfter) counted(into []ctaKey) []ctaKey {
-	return n.right.operand.counted(n.left.operand.counted(into))
-}
-
-// counted appends each path the argument counts over.
-func (n ctaYearFromDate) counted(into []ctaKey) []ctaKey { return n.arg.operand.counted(into) }
-
-// counted appends each path the argument counts over.
-func (n ctaNumber) counted(into []ctaKey) []ctaKey { return n.operand.counted(into) }
-
-// counted appends each path the argument counts over.
-func (n ctaDistinctValues) counted(into []ctaKey) []ctaKey {
-	return n.operand.counted(into)
-}
-
-// counted appends the path the call's argument counts over, if any.
-func (n ctaCount) counted(into []ctaKey) []ctaKey { return n.arg.counted(into) }
-
-// counted appends the key itself: the [Tally] counts the nodes it selects.
-func (p ctaCountPath) counted(into []ctaKey) []ctaKey        { return append(into, p) }
-func (f ctaFilteredChildren) counted(into []ctaKey) []ctaKey { return append(into, f) }
-func (u ctaUnion) counted(into []ctaKey) []ctaKey            { return append(into, u) }
-
-// counted appends each path the counted operand counts over, and never c
-// itself: its items are read off the operand, so `count($value)` keys nothing
-// in the [Tally].
-func (c ctaCountedItems) counted(into []ctaKey) []ctaKey { return c.operand.counted(into) }
-
-// counted appends nothing: m is counted over [ChildElements], never keyed in
-// the [Tally], and its predicate counts nothing (ctaPredicateFacade.count).
-func (ctaMatchingChildren) counted(into []ctaKey) []ctaKey { return into }
-
-// counted appends nothing: the candidate is no fn:count call.
-func (ctaCandidate) counted(into []ctaKey) []ctaKey { return into }
-
-// counted appends nothing: the range variable is no fn:count call.
-func (ctaRangeItem) counted(into []ctaKey) []ctaKey { return into }
-
-// counted appends nothing for each of these: each is read off [ChildElements],
-// never keyed in the [Tally].
-func (ctaBoundChild) counted(into []ctaKey) []ctaKey     { return into }
-func (ctaBoundSibling) counted(into []ctaKey) []ctaKey   { return into }
-func (ctaBoundAttribute) counted(into []ctaKey) []ctaKey { return into }
-func (ctaChildAt) counted(into []ctaKey) []ctaKey        { return into }
-
-// counted is its call's, which counts no path (ctaStepFacade).
-func (n ctaBoundAttributeCall) counted(into []ctaKey) []ctaKey { return n.call.counted(into) }
-
-// counted appends the path itself: the [Tally] counts the nodes it selects.
-func (n ctaChildPath) counted(into []ctaKey) []ctaKey { return append(into, n) }
-
-// counted appends the path itself: the [Tally] collects the values it reads.
-func (n ctaAttributePath) counted(into []ctaKey) []ctaKey { return append(into, n) }
-
-// counted appends the path itself: the [Tally] collects the values it reads.
-func (n ctaElementPath) counted(into []ctaKey) []ctaKey { return append(into, n) }
-
-// counted is its argument's.
-func (n ctaSum) counted(into []ctaKey) []ctaKey { return n.arg.counted(into) }
-
-// counted is its fn:sum call's.
-func (n ctaSumInstance) counted(into []ctaKey) []ctaKey { return n.sum.counted(into) }
-
-// counted appends the key itself, on ctaChildPath's terms.
-func (n ctaChildrenHaving) counted(into []ctaKey) []ctaKey { return append(into, n) }
-
-// counted appends the key itself, on ctaChildPath's terms.
-func (n ctaChildrenPreceded) counted(into []ctaKey) []ctaKey { return append(into, n) }
-
-// counted appends the key counting the bindings that satisfy the body, and,
-// for `every`, the key counting every binding, the one `count(N)` counts under
-// too, so a {test} writing both keeps one counter for it.
-func (n ctaQuantified) counted(into []ctaKey) []ctaKey {
-	into = append(into, n.satisfying)
-	if n.q != ctaEvery {
-		return into
-	}
-	return append(into, n.satisfying.bound())
-}
-
-// counted appends each path the body counts over: the binding sequence,
-// `$value`, keys nothing, and the quantifier none of its own.
-func (n ctaQuantifiedValue) counted(into []ctaKey) []ctaKey { return n.body.counted(into) }
-
-// counted appends each path the body counts over: the binding step is read
-// off [ChildElements], keying nothing, and the quantifier keys none of its
-// own.
-func (n ctaQuantifiedChildren) counted(into []ctaKey) []ctaKey { return n.body.counted(into) }
-
-// counted appends the step's path, the key an fn:count over the same step
-// counts under too.
-func (n ctaSelectedElements) counted(into []ctaKey) []ctaKey {
-	return append(into, n.path)
-}
-
-// ctaAnyCounted is counted over each of operands, in written order.
-func ctaAnyCounted(operands []ctaExpr, into []ctaKey) []ctaKey {
-	for _, o := range operands {
-		into = o.counted(into)
-	}
-	return into
-}
-
-// counted appends nothing for each of these: none is an fn:count call or holds
-// an operand but the node E is, which counts nothing.
-func (ctaTypeError) counted(into []ctaKey) []ctaKey      { return into }
-func (ctaAttr) counted(into []ctaKey) []ctaKey           { return into }
-func (ctaTypedAttr) counted(into []ctaKey) []ctaKey      { return into }
-func (ctaTypedChild) counted(into []ctaKey) []ctaKey     { return into }
-func (ctaUntypedChild) counted(into []ctaKey) []ctaKey   { return into }
-func (ctaNoDocumentRoot) counted(into []ctaKey) []ctaKey { return into }
-func (ctaNoContextItem) counted(into []ctaKey) []ctaKey  { return into }
-func (ctaNoDocument) counted(into []ctaKey) []ctaKey     { return into }
-func (ctaLiteral) counted(into []ctaKey) []ctaKey        { return into }
-func (ctaValueVar) counted(into []ctaKey) []ctaKey       { return into }
-func (ctaEmptyValue) counted(into []ctaKey) []ctaKey     { return into }
-func (ctaUntypedValue) counted(into []ctaKey) []ctaKey   { return into }
-func (ctaContextAtom) counted(into []ctaKey) []ctaKey    { return into }
-func (ctaCurrentDate) counted(into []ctaKey) []ctaKey    { return into }
-func (ctaNoFocus) counted(into []ctaKey) []ctaKey        { return into }
-func (ctaNamespaceURI) counted(into []ctaKey) []ctaKey   { return into }
-func (ctaPrefixMember) counted(into []ctaKey) []ctaKey   { return into }
 
 // ctaAssertionFacade is the assertion façade compileCTATest parses for: its
 // attribute nodes are typed by attrs, its child element nodes by elems, its
 // `$value` by content, a nil one of which also declines `.`, and it declines
-// the comparison types it cannot yet decide. readsContextItem, never nil, is
-// set each time contextItem admits `.` ([AssertionTest.ReadsContextItem]).
+// the comparison types it cannot yet decide.
 type ctaAssertionFacade struct {
-	content          xsd.ContentType
-	attrs            AttributeTypes
-	elems            ElementTypes
-	readsContextItem *bool
+	content xsd.ContentType
+	attrs   AttributeTypes
+	elems   ElementTypes
 }
 
 func (ctaAssertionFacade) ctaFacade() {}
@@ -2807,7 +2313,7 @@ func (ctaAssertionFacade) boundSibling(xsd.QName, ctaNameTest, ctaTypes) (ctaVal
 // its in-scope variables (xpath20.md §3.9), compiled to item. It embeds the concrete
 // ctaAssertionFacade, so no other façade's scope can hold a range variable,
 // and every production it does not override is the assertion's own — a `.`
-// in the body records its read through the embedded readsContextItem.
+// in the body is the ctaContextAtom the assertion's contextItem compiles.
 //
 // Its scope is the body alone: the parser swaps it in for the body and the
 // outer façade back after, so `$x` beyond the body is the err:XPST0008 the
@@ -2994,8 +2500,8 @@ func ctaCountOf(arg ctaCounted, types ctaTypes) (ctaValue, bool) {
 // under element-only, empty and mixed content as under simple, and under a
 // list or union {simple type definition} as under an atomic one, the variety
 // deciding `$value`'s type alone. Which text that string value is, is
-// [BindValue]'s caller's to supply, and contextItem records that it is read
-// (f.readsContextItem), which [AssertionTest.ReadsContextItem] answers.
+// [BindValue]'s caller's to supply, and the ctaContextAtom it compiles to is
+// the node [AssertionTest.ReadsContextItem] looks for in the tree.
 //
 // GAP(xpath): a nil content, whose governing type was not determined, declines
 // `.`. The direction is the withhold [CompileAssertionTest] reports. (#1042)
@@ -3003,7 +2509,6 @@ func (f ctaAssertionFacade) contextItem() (ctaValue, bool) {
 	if f.content == nil {
 		return nil, false
 	}
-	*f.readsContextItem = true
 	return ctaContextAtom{}, true
 }
 
@@ -3011,9 +2516,9 @@ func (f ctaAssertionFacade) contextItem() (ctaValue, bool) {
 // fn:in-scope-prefixes take to ctaContextNode, E itself (cvc-xpath clause 1),
 // under every {content type} and under a nil one: E's name and in-scope
 // namespaces are E's own whatever its governing type, and neither function
-// reads E's string value, so contextNode records no read of it
-// (f.readsContextItem) and [AssertionTest.ReadsContextItem] stays false for a
-// {test} whose only `.` is such an argument.
+// reads E's string value, so contextNode builds no ctaContextAtom and
+// [AssertionTest.ReadsContextItem] stays false for a {test} whose only `.` is
+// such an argument.
 func (ctaAssertionFacade) contextNode() (ctaNodeArg, bool) {
 	return ctaContextNode{}, true
 }

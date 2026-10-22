@@ -200,8 +200,8 @@ func TestCountValueOverAUnionFacet(t *testing.T) {
 // are: a count of a count is one item, whose own path the Tally keys. Its
 // counted operand reads a child's value where it holds a value step, so
 // ReadsChild reports it; `count($value)` reads none. The count-of-a-count rows
-// fail with ctaCountedItems.counted appending nothing, and the ReadsChild row
-// with ctaCountedItems.readsChild answering false.
+// fail with ctaKeysOf appending nothing for ctaCountedItems, and the ReadsChild
+// row with ctaReadsChild answering false for it.
 func TestCountOfAnOperandKeysWhatItCounts(t *testing.T) {
 	acDecides(t, "count(count(e1)) eq 1", true)
 	acCounters(t, "count(count(e1)) eq 1", 1)

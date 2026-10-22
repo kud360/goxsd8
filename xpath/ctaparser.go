@@ -2717,8 +2717,8 @@ func (p *ctaParser) namespaceURICall() (ctaValue, bool) {
 // cursor is on where it is `(.)`, or `()` where admitsNone, into the node the
 // façade compiles `.` to as a NODE (ctaFacade.contextNode) — never through
 // ctaFacade.contextItem, whose atom a node parameter does not take, so the
-// call records no read of E's string value ([AssertionTest.ReadsContextItem]).
-// Every other list declines.
+// call holds no ctaContextAtom and reads no string value of E
+// ([AssertionTest.ReadsContextItem]). Every other list declines.
 func (p *ctaParser) contextNodeArgument(admitsNone bool) (ctaNodeArg, bool) {
 	n := p.contextNodeCallLength(0, admitsNone)
 	if n == 0 {

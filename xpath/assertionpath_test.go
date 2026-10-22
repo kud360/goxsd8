@@ -116,9 +116,9 @@ func TestAssertionChildPathCountsNilledNodes(t *testing.T) {
 // A child path reads no child's value: ReadsChild is false for each of its
 // names, so the caller keeps no child — and records no lack for an a of
 // element-only type, whose value it could not read — while Tally is non-nil, so
-// the caller reports E's subtree. With ctaChildPath.readsChild answering true
-// for its first step the a row fails, and with ctaChildPath.counted appending
-// nothing the Tally row does.
+// the caller reports E's subtree. With ctaReadsChild answering true for a
+// ctaChildPath's first step the a row fails, and with ctaKeysOf appending
+// nothing for ctaChildPath the Tally row does.
 func TestAssertionChildPathReadsNoChild(t *testing.T) {
 	test := apCompile(t, asRecord("exists(a/b)"))
 	for _, name := range []string{"a", "b"} {

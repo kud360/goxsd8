@@ -50,6 +50,8 @@ type ctaArith struct {
 
 func (ctaArith) ctaValue() {}
 
+func (n ctaArith) eachOperand(yield func(ctaNode) bool) { ctaYield(yield, n.left, n.right) }
+
 // ctaDecimalDivisionDigits is the number of fractional digits an xs:decimal
 // quotient that does not terminate is rounded to: F&O §6.2 makes "the number
 // of digits of precision returned by the numeric operators" for xs:decimal

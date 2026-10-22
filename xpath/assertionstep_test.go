@@ -97,9 +97,10 @@ func TestAssertionElementStepExistence(t *testing.T) {
 // is false for its name even where that name is xs:string and its value could
 // be read — the position decides, not the type — and its Tally counts the
 // step under the key an fn:count over the same step counts under, so
-// `count(a) ge 1 and a` keeps one counter and `./a` is `a`. With
-// ctaSelectedElements.readsChild answering true the exists(d) row fails, and
-// with ctaSelectedElements.counted appending nothing the Tally rows do.
+// `count(a) ge 1 and a` keeps one counter and `./a` is `a`. With ctaReadsChild
+// answering true for a ctaSelectedElements' own name every row fails, and with
+// ctaKeysOf appending nothing for it the Tally rows of `exists(d)`,
+// `d and not(empty(./d))` and `a and .//a` do.
 func TestAssertionElementStepReadsNoChild(t *testing.T) {
 	for _, tc := range []struct {
 		expr     string

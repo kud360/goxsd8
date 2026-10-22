@@ -253,6 +253,25 @@ func (ctaNamespaceURI) ctaValue()   {}
 func (ctaSum) ctaValue()            {}
 func (ctaSumInstance) ctaValue()    {}
 
+func (n ctaMatch) eachOperand(yield func(ctaNode) bool) {
+	ctaYield(yield, n.left.operand, n.right.operand)
+}
+func (n ctaUnaryString) eachOperand(yield func(ctaNode) bool)    { yield(n.arg.operand) }
+func (n ctaPresence) eachOperand(yield func(ctaNode) bool)       { yield(n.operand) }
+func (n ctaStringFunction) eachOperand(yield func(ctaNode) bool) { yield(n.cast) }
+func (n ctaConcat) eachOperand(yield func(ctaNode) bool)         { ctaYield(yield, n.args...) }
+func (n ctaSubstringAfter) eachOperand(yield func(ctaNode) bool) {
+	ctaYield(yield, n.left.operand, n.right.operand)
+}
+func (n ctaNumber) eachOperand(yield func(ctaNode) bool)         { yield(n.operand) }
+func (n ctaDistinctValues) eachOperand(yield func(ctaNode) bool) { yield(n.operand) }
+func (ctaCurrentDate) eachOperand(func(ctaNode) bool)            {}
+func (n ctaYearFromDate) eachOperand(yield func(ctaNode) bool)   { yield(n.arg.operand) }
+func (ctaNoFocus) eachOperand(func(ctaNode) bool)                {}
+func (ctaNamespaceURI) eachOperand(func(ctaNode) bool)           {}
+func (n ctaSum) eachOperand(yield func(ctaNode) bool)            { yield(n.arg) }
+func (n ctaSumInstance) eachOperand(yield func(ctaNode) bool)    { yield(n.sum) }
+
 // ctaSum is a call to fn:sum with its one `xs:anyAtomicType*` argument
 // (xpath-functions.md §15.4.5, ctaParser.sumCall), arg, whose types
 // ctaTypes.sum settled: item is the type arg's items are read in — their own
@@ -408,6 +427,8 @@ type ctaPrefixMember struct {
 }
 
 func (ctaPrefixMember) ctaExpr() {}
+
+func (ctaPrefixMember) eachOperand(func(ctaNode) bool) {}
 
 // eval decides n: true where some literal is a prefix of E's [in-scope
 // namespaces], in written order, and the err:XPDY0002 of a facet's absent

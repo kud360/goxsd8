@@ -222,10 +222,11 @@ func TestAssertionBoundAttributesBreach(t *testing.T) {
 // is false for a binding step whose body reads its children's attributes and
 // not their values; a body reading neither keeps the binding step's ReadsChild,
 // its children then yielded for their places. No row counts a path, so Tally
-// is nil. With ctaQuantifiedChildren.readsChild back to `n.over.name == name
-// || n.body.readsChild(name)`, ReadsChild(x) fails in the test15 row and the
-// `@c` row; with ctaBoundChild.readsChild answering false, it fails in the
-// `$x = …` row; with AssertionTest.ReadsChildAttributes keeping a name twice,
+// is nil. With ctaReadsChild's ctaQuantifiedChildren case deleted, so that the
+// binding step answers its own name whatever the body reads, ReadsChild(x)
+// fails in the test15 row and the `@c` row; with its ctaBoundChild case
+// answering false, it fails in the `$x = …` row; with
+// AssertionTest.ReadsChildAttributes keeping a name twice,
 // ReadsChildAttributes(x) fails in the test15 row and the `@c` row.
 func TestAssertionBoundAttributesReads(t *testing.T) {
 	for _, tc := range []struct {

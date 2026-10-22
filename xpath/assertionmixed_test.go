@@ -136,7 +136,8 @@ func TestAssertionRaisesOnATypedMixedChild(t *testing.T) {
 // type, so a mixed child's `body`, `exists(body)` and `.//body` are counted by
 // the [Tally] and ReadsChild(body) is false for them; a value read of it,
 // `string-length(body) gt 0`, reads it off [ChildElements] with no Tally.
-// With ctaUntypedChild.readsChild false, the value row fails.
+// With ctaReadsChild's ctaUntypedChild case answering false, the value row
+// fails.
 func TestAssertionMixedChildReadsAndCounts(t *testing.T) {
 	read := amCompile(t, "string-length(body) gt 0")
 	if !read.ReadsChild(uq("body")) || read.ReadsChild(uq("um")) || read.Tally() != nil {

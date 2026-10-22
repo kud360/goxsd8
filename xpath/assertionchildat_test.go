@@ -119,7 +119,7 @@ func TestAssertionDataChildAtInQuantifier(t *testing.T) {
 
 // AssertionTest.ReadsChild reports the step `d[1]` filters, so the caller
 // yields every d child and the first is found among them; it reports no other
-// name. The d row fails with ctaChildAt.readsChild answering false.
+// name. The d row fails with ctaReadsChild answering false for ctaChildAt.
 func TestAssertionDataChildAtReadsChild(t *testing.T) {
 	test, ok := compiledAssertionTest(CompileAssertionTest(asRecord("data(child::d[1]) instance of xs:date"), seededTypes, asElementContent(t, false), asUses(t, nil), acaElems(t)))
 	if !ok {
