@@ -160,10 +160,8 @@ func (r *Result) Violations() []*xsderr.Error {
 // constructor.
 //
 // It is not a violation and deliberately does NOT satisfy error: it has no
-// Error method, and must not grow one. [xsderr.Error]'s own doc fixes that
-// interface's meaning in this module — every schema- or instance-validity
-// violation is an *xsderr.Error — so a value that decides nothing about a
-// document must not be one, or a consumer can errors.Is it, join it into a
+// Error method, and must not grow one. A value that decides nothing about a
+// document must not be an error, or a consumer can errors.Is it, join it into a
 // violation list, or append it to the violations of a Result and turn a
 // skipped check into a false reject.
 //
