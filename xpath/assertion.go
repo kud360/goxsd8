@@ -1964,7 +1964,10 @@ func ctaChildAttributes(n ctaNode, name xsd.QName, into []xsd.QName) []xsd.QName
 // operands' ([ctaNode].eachOperand): an element step whose existence is asked
 // (ctaSelectedElements) its path's, the key an fn:count over the same step
 // counts under too; a quantifier over `$value` or a typed child step its
-// body's, its binding sequence keying nothing. The cases answer for
+// body's, its binding sequence keying nothing; a child step filtered by its
+// value (ctaMatchingChildren), which is counted over [ChildElements] and never
+// keyed in the [Tally], its predicate's, which are none — ctaPredicateFacade
+// declines every production that builds a key. The cases answer for
 // themselves:
 //
 //   - a ctaKey — an fn:count path, a filtered child step, a union, a child
@@ -1975,9 +1978,6 @@ func ctaChildAttributes(n ctaNode, name xsd.QName, into []xsd.QName) []xsd.QName
 //   - ctaQuantified appends the key counting the bindings that satisfy its
 //     body and, under `every`, the key counting every binding, the one
 //     `count(N)` counts under too, so a {test} writing both keeps one counter.
-//   - ctaMatchingChildren appends nothing: it is counted over [ChildElements],
-//     never keyed in the [Tally], and its predicate counts nothing
-//     (ctaPredicateFacade.count).
 func ctaKeysOf(n ctaNode, into []ctaKey) []ctaKey {
 	switch n := n.(type) {
 	case ctaKey:
@@ -1988,8 +1988,6 @@ func ctaKeysOf(n ctaNode, into []ctaKey) []ctaKey {
 			return into
 		}
 		return append(into, n.satisfying.bound())
-	case ctaMatchingChildren:
-		return into
 	}
 	for o := range n.eachOperand {
 		into = ctaKeysOf(o, into)
