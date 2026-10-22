@@ -9,9 +9,9 @@
 // (#2235).
 //
 // Every listing — the issue listing, and the survey's per-issue events and
-// comments — is walked under the rules this paragraph and the next two
-// state. The walk requests every page by an explicit `page=N` and never
-// through `gh api --paginate`, whose Link header carries numeric-ID repository paths the
+// comments — is walked under the rules this paragraph and the next state.
+// The walk requests every page by an explicit `page=N` and never through `gh
+// api --paginate`, whose Link header carries numeric-ID repository paths the
 // session proxy answers with a 403 after writing the pages it did fetch. A
 // failed fetch — `gh` exiting non-zero, or stdout that is not a JSON array,
 // as the proxy's error body is not — aborts the run and is never retried.
@@ -89,8 +89,7 @@ import (
 // the tool's only consumer.
 const issuesPath = "repos/kud360/goxsd8/issues"
 
-// blockedLabel is the label whose latest `labeled` event dates an issue's
-// block for the -owner-comments survey.
+// blockedLabel is the label the -owner-comments survey selects and dates.
 const blockedLabel = "blocked"
 
 // listing is the issue listing the feed walks; blockedListing is the one the
@@ -528,9 +527,8 @@ func ownerComments(stdout io.Writer, fetch fetchFunc, pause func()) error {
 	return nil
 }
 
-// ownerCommentsOn returns issue n's `#N <comment id> <created_at>` lines, in
-// REST order, for each comment with a null `performed_via_github_app`
-// created strictly after n's latest `labeled` event for blockedLabel.
+// ownerCommentsOn returns issue n's lines of the -owner-comments survey, which
+// the package doc states.
 func ownerCommentsOn(fetch fetchFunc, pause func(), n int) ([]string, error) {
 	events, err := fetchAll(fetch, fmt.Sprintf("%s/%d/events", issuesPath, n), pause, eventKey)
 	if err != nil {
