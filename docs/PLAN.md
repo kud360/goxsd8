@@ -17,13 +17,13 @@ read them. One stamp for the whole section, so a reader can tell staleness
 from wrongness at a glance. Never add a dated paragraph beside the old
 one — appending is what this replaces.
 
-## Status — 2026-10-21 (`/backlog`, on `main` at `6516c99c`)
+## Status — 2026-10-22 (`/backlog`, on `main` at `0b25df16`)
 
-**North star: M9, codegen, opens with #2896.** M8's three ready issues from the last stamp (#2855, #2861, #2865) have landed. A fresh `GOXSD_DECLINES=1` partition on `6516c99c` matches `20650a72`'s cell for cell, so no W3C lane has an unruled lead. #2896 is M9's first vertical slice: struct types for sequence-of-simple-type content, golden-pinned, with a warden pre-flight on `codegen`'s surface first. M8 keeps two persona follow-ups, #2893 and #2894. **Lean: product.** Since the last stamp the log shows 11 develop landings: 9 product or its documentation, and 2 process (#2852, #2838). This pass's persona round found contract and documentation defects and no lane work.
+**North star: M9, codegen, through #2899.** #2896 was parked after its second arbiter reject. #2899 replaces it: it merges the parked branch, which was ruled delivered except for one unsound emit-once key, and fixes that key. M8's last two persona follow-ups and every other row of the previous band have landed, except #2748. A fresh `GOXSD_DECLINES=1` partition on `0b25df16` matches `6516c99c`'s cell for cell, so no W3C lane has an unruled lead. **Lean: product.** Since the last stamp the log shows 10 develop landings and one park. 7 are product or its documentation (#2893, #2894, #2887, #2895, #2884, #2824, #2862), 1 is a refactor (#2599) and 2 are tooling (#2819, #2789). The park (#2896) cost M9's first slice two rounds. This pass's persona round found documentation and contract defects and no lane work.
 
 ### Conformance lanes
 
-**This table is `go tool lanestatus`, pasted verbatim, on `main` at `6516c99c`.** It is the committed expectations census, which `docs/WORKFLOW.md` names as the lane score (#1120).
+**This table is `go tool lanestatus`, pasted verbatim, on `main` at `0b25df16`.** It is the committed expectations census, which `docs/WORKFLOW.md` names as the lane score (#1120).
 
 | Lane | Pass | Fail | Total |
 |---|---:|---:|---:|
@@ -34,11 +34,11 @@ one — appending is what this replaces.
 | `schema` | 15302 | 96 | 15398 |
 | `xpath` | — | — | 0 |
 
-**No lane moved since `aaa3cb14`.** **`datatypes ⊆ instance` is intended** (#1507). **An em dash means a lane with no cases yet, not a lane scoring zero.** `datatypes` is M3 and is complete. `schema` is M4, `instance` is M5 and `json` is M8, and all three are active. `json` moves only by the curated cases a landing adds. `xpath` waits on M7, `ber` on M11, and M9 has no lane: #2896 pins golden files.
+**No lane moved since `aaa3cb14`.** **`datatypes ⊆ instance` is intended** (#1507). **An em dash means a lane with no cases yet, not a lane scoring zero.** `datatypes` is M3 and is complete. `schema` is M4, `instance` is M5 and `json` is M8, and all three are active. `json` moves only by the curated cases a landing adds. `xpath` waits on M7, `ber` on M11, and M9 has no lane: #2899 pins golden files.
 
 ### What holds each active lane's failures
 
-**Measured on `6516c99c`** with a read-only `GOXSD_DECLINES=1` run (exit 0, 655 s, expectations untouched), fed to `go tool lanepartition`. Every figure is a part of the banked fails and a bound from above.
+**Measured on `0b25df16`** with a read-only `GOXSD_DECLINES=1` run (exit 0, 672 s, expectations untouched), fed to `go tool lanepartition`. Every figure is a part of the banked fails and a bound from above.
 
 | lane | banked fail | declined | indeterminate (#277) | decided against the suite |
 |---|---:|---:|---:|---:|
@@ -46,10 +46,10 @@ one — appending is what this replaces.
 | `schema` | 96 | 1 | 11 | 84 |
 | `datatypes` | 10 | 6 | — | 4 |
 
-- **The figures match `20650a72`'s cell for cell.** The landings since touched `validate`, `validate/jsonsrc`, `validate/xmlsrc`, `xpath` and `cmd/goxsd8`, and no banked case changed class.
+- **The figures match `6516c99c`'s cell for cell.** The landings since touched `validate`, `validate/jsonsrc`, `xpath`, `xsderr` and `cmd/goxsd8`, and no banked case changed class.
 - **Every larger `instance` cluster is ruled or recorded.**
   - Ruled: `MS-Regex`'s 18 by #1899, `MS-Attribute`'s 11 by #2151, and `MS-Particles`' 3 by #1601.
-  - Recorded: `MS-Additional`'s 5 in #2171. The 7 `strict-attribute-unresolved` declines are #1912's ruled divergence, and #2237 turns them into decided disagreements, fail to fail.
+  - Recorded: `MS-Additional`'s 5 in #2171 (closed). The 7 `strict-attribute-unresolved` declines, across five test sets, are #1912's ruled divergence, and #2237 turns them into decided disagreements, fail to fail.
   - `MS-Schema`'s 4 and 3 match #744 and #921 by test-set name only.
   - `lanepartition` reads open issues only, so a ruled cluster prints "no open issue names it" (#2542).
 - **`schema`:** `MS-Wildcards`' 49 are a recorded divergence (#1809). `Open`'s 5 are `blocked` on #1374. `Simple`'s 5 match #513, #620, #634, #1236 and #2624 by test-set name.
@@ -57,24 +57,25 @@ one — appending is what this replaces.
 
 ### Branch namespace, `origin` (report-only; containers cannot delete a ref)
 
-**`go tool wipsurvey`, fed by `go tool issuefeed`** (`rows 2892 distinct 2892 min 1 max 2892 no gaps`), on an unshallowed clone. No `wip/issue-<N>` is LIVE.
+**`go tool wipsurvey`, fed by `go tool issuefeed`** (`rows 2927 distinct 2927 min 1 max 2927 no gaps`), on an unshallowed clone. No `wip/issue-<N>` is LIVE.
 
-- **RETIRED, deletable now:** `wip/issue-2013`, `wip/issue-2332`, `wip/issue-2696`, `wip/issue-2699` and `wip/issue-2722`. Each one's issue is closed, and nothing is owed from any of them.
-- **EXPIRED:** `wip/issue-2081`, a parked grounding with no code, on an issue `blocked` on the owner.
-- **Deletable now, superseded passes:** `meta/backlog-2026-10-01-b` and `meta/backlog-20261013-0808`. The survey calls both STRANDED PASS, a false positive (#1897): `git log origin/main --since=<tip date> --grep='^meta: backlog'` prints `a0adf077` (#2011), `1dfc11c2` (#2056), `8d91fcfd` (#2609) and `be6ae905` (#2611), and later passes supersede them. `meta/backlog-20261021-1410` is this pass's claim.
+- **RETIRED, deletable now:** `wip/issue-2013`, `wip/issue-2332`, `wip/issue-2696`, `wip/issue-2699` and `wip/issue-2722`. Each one's issue is closed `not_planned` after a park, and nothing is owed from any of them.
+- **RETIRED, keep until #2899 lands:** `wip/issue-2896`. #2899's first step merges `origin/wip/issue-2896` at `4b9864b8` so that #2896's MASON SHAs still resolve, so deleting the ref first loses the slice.
+- **EXPIRED:** `wip/issue-2081`, a parked grounding with no code, on an issue `blocked` on the owner. #2916 makes the survey stop calling it resumable.
+- **Deletable now, superseded passes:** `meta/backlog-2026-10-01-b` (tip `a9e2b09b`) and `meta/backlog-20261013-0808` (tip `71738b02`). The survey calls both STRANDED PASS, a false positive (#1897): `git log origin/main --since=<tip date> --grep='^meta: backlog'` prints later passes, the newest `8d56c6be` (#2897) and `5409be63` (#2866). `meta/backlog-20261021-1410` is already gone from `origin`. `meta/backlog-20261022-1413` is this pass's claim.
 - **Certified for deletion and still standing:** `chronicler-345`, `meta/post-land-1816`, `meta/post-land-1908`, `postland-2099` and `postland/issue-2284`. The survey reads each AHEAD OF MAIN; the certification stands from the 2026-10-19 triage.
 - **For human triage:** `parked/untriaged-20260930-110432` and `parked/untriaged-20260930-215455`. The survey skips eight subagent branches: `wip/issue-1861-{mason,chronicler}`, `wip/issue-1926-{mason,chronicler}`, `wip/issue-2008-{mason,chronicler}`, `wip/issue-1988-mason-repair` and `wip/issue-1988-chron2`. Each one's issue is closed and landed.
 
 ### Marker census
 
-**`go tool gapaudit` on `6516c99c`, fed the same walk:** 185 markers across 11 areas (xpath 63, jsonsrc 35, xsd 32, validate 23, value 11, conformance 7, parser 6, xml 3, landcheck 2, regex 2, cmd 1). None is a dead end.
+**`go tool gapaudit` on `0b25df16`, fed the same walk:** 185 markers across 11 areas (xpath 63, jsonsrc 35, xsd 32, validate 23, value 11, conformance 7, parser 6, xml 3, landcheck 2, regex 2, cmd 1). None is a dead end.
 
 - **Group 1 has 11 rows**, unchanged. Eight are #2719's. The other three have an owner written into the body: `xsd/derivation.go:1293` (#555), `value/valuespace.go:152` (#462) and `tools/landcheck/keywords.go:48` (#2541).
-- **Group 2 has 28 rows**, unchanged.
+- **Group 2 has 28 rows.** #2900 is new: it is the `GAP(codegen)` tracker, and no marker cites it until #2899 writes it into `codegen`'s two markers.
 
 ### Milestones and queue
 
-**Read from GitHub after this pass: 335 open issues.**
+**Read from GitHub after this pass: 331 open issues.**
 
 | milestone | open | closed | state |
 |---|---:|---:|---|
@@ -85,77 +86,80 @@ one — appending is what this replaces.
 | **M5 — Instance validation (XML)** | **8** | **137** | active |
 | **M6 — XPath required subset** | **6** | **46** | active |
 | M7 — XPath 2.0 growth | 1 | 1 | #2619 open |
-| **M8 — JSON instance adapter** | **3** | **53** | active; `json` 43 |
-| **M9 — Codegen** | **1** | **0** | opened: #2896 |
+| **M8 — JSON instance adapter** | **1** | **55** | active; `json` 43; #2670 `blocked` |
+| **M9 — Codegen** | **2** | **1** | active: #2899, and the #2900 tracker |
 | M10–M12 | 0 | 0 | not started |
 
-The open issues are **319 `ready`, 14 `blocked` and 2 `epic`**, which sums to 335. No issue is `needs-replan` or unlabelled. Open `kind/process` is 4: #1885, #2803, #2810 and #2868.
+The open issues are **314 `ready`, 14 `blocked` and 3 `epic`**, which sums to 331. No issue is `needs-replan` or unlabelled. Open `kind/process` is 7: #1885, #2803, #2810, #2868, #2901, #2906 and #2920.
 
-- **`blocked` is 14:** #16, #555, #1042, #1051, #1374, #1609, #1790, #1885, #2022, #2081, #2376, #2533, #2670 and #2749. No trigger fired. No blocked thread carries an owner comment (REST `performed_via_github_app` null), every named dependency is still open, no landing touched `xsd/contentrestricts.go` (#1609's arm 3), and #2864's compile-time `*xpath.Decline` is not an evaluation-time decline (#2533).
-- **Measured refactors over the files touched since `20650a72`,** re-run at `6516c99c`: #2370 down to 31, #2663 at 4, #2237 at 24 refusal tokens, #2359 at 14, #2601 at 0, #2793 at 3, and **#2599 at 189**, up from the 186 recorded, so it enters the band. Each body now carries its new figure. Every other figure stands from the 2026-10-19 stamp.
+- **`blocked` is 14:** #16, #555, #1042, #1051, #1374, #1609, #1790, #1885, #2022, #2081, #2376, #2533, #2670 and #2749. No trigger fired. `go tool issuefeed -owner-comments` prints no owner comment since the label on any of them. Every named dependency is still open. No landing touched `xsd/contentrestricts.go` (#1609's arm 3). #2887's compile-time `*xpath.Decline` is not an evaluation-time decline (#2533).
+- **Measured refactors over the files touched since `6516c99c`,** re-run at `0b25df16`, all unchanged: #2370 at 31, #2675 at 3/1/1, #2595's four greps, #2601 at 0, #2359 at 14, #2239 at 2, #2663 at 4 and #2237 at 24. Every other figure stands from its last stamp.
 
 ### Persona consultations
 
-**Last round: 2026-10-21 at `6516c99c`** (libuser and cliuser, README and `go doc`/`-help` only). #2893's issuecomment-6318524846 disposes of every finding. It filed #2893, #2894 and #2895, folded the rest into 17 open bodies as Notes bullets, and dismissed the remainder on rulings (#1292, #2865) or on evidence from the tree. **The next round is due when the published surface changes:** #2896 adds `codegen`'s first exports, and #2887 changes `xpath.CompileCTATest`.
+**Last round: 2026-10-22 at `0b25df16`** (libuser and cliuser, README and `go doc`/`-help` only). It was due because #2887 changed `xpath.CompileCTATest`'s result. `go tool surface` printed `unchanged` for that change, which is #2203's blind spot. #2928's issuecomment-6343372366 disposes of all 15 findings. It filed #2928, folded five findings into #1407, #2314, #2313, #488 and #2203, pointed three at #1521, #2370 and #1570, and dismissed five. **The next round is due when the published surface changes:** #2899 adds `codegen`'s first exports.
 
 ### Working band
 
 This is ordered for a `/develop` session: take the highest row you can start. **Run `wipsurvey` fed before starting**; its WORKING BAND section prints each row's state. Each row names one issue (#1636).
 
-**Tier A: the north star and M8's residue.**
+**Tier A: the north star and the persona contract.**
 
 | # | issue | why here |
 |---|---|---|
-| 1 | #2896 | **M9's first slice.** The warden pre-flight on `Generate`/`Target` comes first, then struct emission, the namer and golden files. Everything outside the slice declines with a located error. |
-| 2 | #2893 | **A ruling, then maybe a CLI change.** `jsonsrc.Class` (#2792) now defines the boundary #2686 ruled undefined. The warden picks exit 1 for Malformed/ReadFault plus an `undecided:` mark on declines, or keeps 4 with a true reason sentence. |
-| 3 | #2894 | **Doc only.** README's JSON snippet `log.Fatal`s on a decline. Read row 2's ruling first. Absorbs #2879 (same file). |
+| 1 | #2899 | **M9's first slice.** Merge `origin/wip/issue-2896` (never cherry-pick it), then fix `nestedKey` to use expanded names or component identity, and pin it with the `form` qualified/unqualified golden. The rest is ruled delivered. |
+| 2 | #2928 | **Doc only, filed this round.** `Unevaluated`'s doc never names `xpath.Decline` or the "declined it because" form, so #2887's cross-reference runs one way. |
+| 3 | #1407 | **The exit-code table.** It was asked for in five persona rounds, and #2893's ruling has now fixed every row. It absorbs #1232's 3-over-2 sentence, this round's 2-over-1 finding and README:65. |
+| 4 | #1571 | **The same `usage` paragraph as row 3.** It names the declined kinds behind exit 4. Take it with row 3 when the scope allows. |
+| 5 | #2912 | **Doc only.** Five comments outside `validate` still paraphrase what an `Unevaluated` is (#2884's follow-up). |
+| 6 | #2919 | **Doc only.** Three texts still call `parser/xmltree` the origin of every `xsderr.Loc`. |
 
-**Tier B: the library and CLI contract.**
-
-| # | issue | why here |
-|---|---|---|
-| 4 | #2887 | **Changes `xpath`'s surface.** A declined Type Alternative names no cause. It reuses #2864's `*xpath.Decline`, and its doc rewrite now also drops the file-path citation (libuser 6). |
-| 5 | #2895 | **Doc only.** `xsderr.Error` calls every `*Error` a verdict, though an `xml-wf` one is not, and the package doc restates its declarations as pseudo-Go. |
-| 6 | #2879 | **One format string**, unless row 3 absorbed it. |
-| 7 | #2884 | **Doc only.** Two `validate` facts stated in three places (STYLE D3). |
-| 8 | #2824 | **Tests.** #2780's format-clause cases, plus the undocumented violations, fault, undecided line order (cliuser 8). |
-| 9 | #2862 | **One sentence.** `Loc.Col` counts bytes. |
-
-**Tier C: refactor, process and tooling.**
+**Tier B: library-contract rulings that persona rounds keep re-sighting.**
 
 | # | issue | why here |
 |---|---|---|
-| 10 | #2599 | **Measured growth.** The assertion façade's static-query methods stand at 189, up from the 186 recorded. |
-| 11 | #2819 | **A STYLE D3 prose-restatement lister**, for consecutive round-1 D3 findings. |
-| 12 | #2789 | **The fired-trigger blind spot**, a check this pass still did by hand. |
-| 13 | #2748 | **`issuefeed -comments`.** It closes #1153 and #1217. |
+| 7 | #2313 | **The citation ruling.** Sighted in every round since 2026-10-05. This round's census: `go doc -all ./xpath` carries 26 unexported `cta*` names. |
+| 8 | #2314 | **The schema-time decline report, or a recorded "Unevaluated is the contract".** This round added libuser 1's missing route. |
+| 9 | #488 | **`xsderr` doc residues**, now including libuser 4's open non-verdict list. It shares files with #486 and #1454. |
+
+**Tier C: process and tooling, ranked by what the log shows them costing.**
+
+| # | issue | why here |
+|---|---|---|
+| 10 | #2916 | **More than twenty develop sessions** have read `wip/issue-2081` as EXPIRED and declined it by hand. |
+| 11 | #2901 | **A repair round's new mechanism** cost #2896 its second round, with three earlier sightings. |
+| 12 | #2203 | **`surface` is blind to signature changes.** It misled this pass's persona-round brief. It absorbed #741 (closed as a duplicate). |
+| 13 | #2906 | **Backgrounded part-4 timeouts.** Two sightings, about 13 minutes of wall time each. |
+| 14 | #2920 | **`claude/*` versus `wip/issue-N`.** Two sightings, no round lost. |
+| 15 | #2748 | **`issuefeed -comments`.** It closes #1153 and #1217. |
 
 **Named below the band, on purpose.**
-- **M8:** #2670 (waits on #1601).
-- **Process:** #2868 (two placeholder-brief sightings and no round lost; its Acceptance is a `/retro` decision), #2803 and #2810.
-- **Library contract:** #1291 (a violation's instance path), #1406 (`Unevaluated` versus `*xsderr.Error`'s shape) and #2314 (a schema-time decline report; read it with row 4). #486 bears on #1406.
-- **M5, `conformance/subtreeroot.go`:** #2237 (24; the 7 `strict-attribute-unresolved` declines become decided disagreements, fail to fail) and #755 (the hint reader's home).
-- **Persona documentation, re-sighted this round:**
-  - `validate`: #1088, #1595, #2313 (the citation ruling) and #1408 (M tokens and "Ten rules are charged today").
-  - `cmd/goxsd8`: #1407 (the exit table, after row 2's ruling), #1571, #1570, #1409, #1521, #1433, #2419, #1549, #1845, #1318, #1144, #1185, #1596, #2797 and #1089.
-  - Library: #1094 (a declined `{test}`'s schema location) and #1371 (`parser.Parse`'s error contract).
+- **M9:** #2900 (the decline tracker; each lifted decline is a later slice).
+- **M8:** #2670 (waits on #1601's ruling reopening).
+- **Process:** #2868 (its Acceptance is a `/retro` decision), #2803 and #2810.
+- **Library contract:** #1291 (a violation's instance path), #1406 (`Unevaluated`'s machine-readable cause; it bears on #2928's sentence) and #1094 (a declined `{test}`'s schema location). #486 bears on #1406.
+- **M5, `conformance/subtreeroot.go`:** #2237 (24; the `strict-attribute-unresolved` declines become decided disagreements, fail to fail) and #755 (the hint reader's home).
+- **Persona documentation, re-sighted:**
+  - `validate`: #1088, #1595 and #1408 (M tokens and "Ten rules are charged today").
+  - `cmd/goxsd8`: #1570, #1521, #1409, #1433, #2419, #1549, #1845, #1318, #1144, #1185, #1596, #2797, #1089 and #1232 (row 3 absorbs it).
+  - Library: #1371 (`parser.Parse`'s error contract).
   - README: #1143 and #1003.
 - **Marker bookkeeping:** #2719 (gapaudit's 8 Group 1 rows). A session in `value/valuespace.go`, `xsd/defaultbinding.go` or `xsd/contentrestricts.go` absorbs its row.
 - **M7:** #2619 (`as-props-correct` clause 2; it needs a warden ruling on its `xpath` export).
-- **`xpath/cta.go` and `xpath/ctaparser.go`:** #2675, #2416, #2595 and #2533. A session taking row 4 reads the others.
-- **M6:** #2663 (4) and #2662 share `validate/cvcassertion.go`. #2455, #2437 and #2394 are in `xpath/assertion.go`. Take them one at a time, together with #2370, #2314 and #889.
+- **`xpath/cta.go` and `xpath/ctaparser.go`:** #2675, #2416, #2595 and #2533.
+- **M6:** #2663 (4) and #2662 share `validate/cvcassertion.go`. #2455, #2437 and #2394 are in `xpath/assertion.go`. Take them one at a time, together with #2370 and #889.
 - **STYLE E5 sweeps:** #2370 (31), #2372, #2373, #2374 and #2375. #2376 waits on #2370.
 - **M5 residue:** #2764 (a repeated attribute name, `parser/xmltree`), #2494, #1825, #1382, #1250 and #920.
 - **M4, where `Ratchet: unchanged` is expected or the bound is small:** #2087, #2052, #1873, #1877, #1883, #1887, #1801 and #1777. #1998 and #1953 are in `xsd/contentrestricts.go`, so either one fires #1609's arm 3.
 - **Docs and bookkeeping:** #2679, #2624 with #793, #1803, #1881, #785, #1343 and #1502. **`value`:** #721, #2045 and #462. **`regex`:** #2148 and #2147.
-- **Tooling, after row 13:** #1897, #2542, #2203, #2539, #2605, #2541, #1935, #2070, #2066, #678, #1464, #1838, #1794 and #1735.
-- **Refactors:** #2601 (0), #2793 (3), and the E5 list above. #989, #1736, #1701, #845, #1757, #1825, #2416, #2419 and #2437 are unmeasured.
+- **Tooling, after row 15:** #1897, #2542, #2539, #2605, #2541, #1935, #2070, #2066, #678, #1464, #1838, #1794 and #1735.
+- **Refactors:** #2601 (0), #2793 (3), #2239 (2), #2359 (14), and the E5 list above. #989, #1736, #1701, #845, #1757, #1825, #2416, #2419 and #2437 are unmeasured.
 
 ### Next planning action
 
-1. **Post-land for #2896,** band row 1. When it lands, file M9's next slice (xs:choice to a sealed interface, `codegen/doc.go`'s "Type narrowing") so the north star always has one ready slice.
-2. **Post-land for #2893** re-reads #2894's and #1407's bodies against the ruling.
-3. **The next `/retro`** reads #2868 and checks this stamp's product lean against the develop sessions since 2026-10-18.
+1. **Post-land for #2899,** band row 1. When it lands, file M9's next slice (xs:choice to a sealed interface, `codegen/doc.go`'s "Type narrowing") so the north star always has one ready slice. Then report `wip/issue-2896` deletable.
+2. **Post-land for #1407** re-reads #1571's and #1232's bodies against the table.
+3. **The next `/retro`** reads #2868 and #2901. It checks this stamp's product lean against the two rounds the #2896 park cost.
 4. **Owed to a human:**
    - #1885 (arbiter.md's Ratchet integrity), #2081, #1790, #2022 and #2749.
    - The ref deletions under Branch namespace.
