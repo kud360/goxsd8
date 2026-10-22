@@ -24,11 +24,8 @@
 // With -base <ref>, surface also computes the same listing at <ref> and
 // prints only what changed: lines added (prefixed "+") and removed
 // (prefixed "-"), followed by a one-line summary ("surface: +3 -1" or
-// "surface: unchanged"). The ref's tree is materialized in a temporary
-// detached git worktree (`git worktree add --detach`), read, and removed
-// again (`git worktree remove --force`) so the caller's checkout and
-// branch are never touched — docs/WORKFLOW.md's "one writer per checkout"
-// forbids stashing or checking out in place.
+// "surface: unchanged"). The ref's tree is materialized beside the checkout
+// as tools/internal/reftree's package doc states.
 //
 // Exit codes: 0 on success (with or without a diff), 2 on an operational
 // error (an unparseable go.mod, an unwalkable directory, a failed git
@@ -43,10 +40,11 @@ import (
 	"go/token"
 	"io/fs"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"sort"
 	"strings"
+
+	"github.com/kud360/goxsd8/tools/internal/reftree"
 )
 
 func main() {
@@ -62,7 +60,7 @@ func main() {
 // run is main's testable body: compute the current surface, and either
 // print it (base == "") or diff it against base and print the diff.
 func run(base string) error {
-	root, err := moduleRoot()
+	root, err := reftree.ModuleRoot()
 	if err != nil {
 		return err
 	}
@@ -84,15 +82,19 @@ func run(base string) error {
 	return runDiff(root, base, cur)
 }
 
-// runDiff materializes base in a temporary detached worktree, computes its
-// surface there, diffs it against cur, and prints the result. The worktree
-// is always removed before returning, including on an error path.
+// runDiff materializes base with reftree.Checkout, computes its surface
+// there, diffs it against cur, and prints the result. The worktree is
+// always removed before returning, including on an error path.
 func runDiff(root, base string, cur []string) error {
-	wtDir, cleanup, err := worktreeAt(root, base)
+	wtDir, remove, err := reftree.Checkout(root, base)
 	if err != nil {
 		return err
 	}
-	defer cleanup()
+	defer func() {
+		if err := remove(); err != nil {
+			fmt.Fprintf(os.Stderr, "surface: %v\n", err)
+		}
+	}()
 
 	baseModulePath, err := readModulePath(wtDir)
 	if err != nil {
@@ -403,27 +405,6 @@ func valueSurface(importPath, kind string, d *ast.GenDecl) []string {
 	return lines
 }
 
-// moduleRoot walks up from the current working directory until it finds
-// the directory containing go.mod, so the tool works the same way whether
-// it is run from the module root or from a package directory beneath it
-// (the same approach tools/rulecat uses for the same reason).
-func moduleRoot() (string, error) {
-	dir, err := os.Getwd()
-	if err != nil {
-		return "", fmt.Errorf("getting working directory: %w", err)
-	}
-	for {
-		if _, err := os.Stat(filepath.Join(dir, "go.mod")); err == nil {
-			return dir, nil
-		}
-		parent := filepath.Dir(dir)
-		if parent == dir {
-			return "", fmt.Errorf("go.mod not found from working directory")
-		}
-		dir = parent
-	}
-}
-
 // readModulePath extracts the `module` directive from the go.mod file at
 // root, without a full go.mod parser: a hand-rolled tool has no need for
 // the replace/require directives a module graph resolver would.
@@ -441,31 +422,4 @@ func readModulePath(root string) (string, error) {
 		return strings.TrimSpace(mod), nil
 	}
 	return "", fmt.Errorf("no module directive found in %s", path)
-}
-
-// worktreeAt materializes ref as a temporary detached git worktree of the
-// repository rooted at repoRoot, returning its path and a cleanup func the
-// caller must defer. It never touches repoRoot's own checked-out branch:
-// `git worktree add --detach` leaves HEAD there untouched.
-func worktreeAt(repoRoot, ref string) (string, func(), error) {
-	dir, err := os.MkdirTemp("", "goxsd8-surface-*")
-	if err != nil {
-		return "", nil, fmt.Errorf("creating temp dir for %s worktree: %w", ref, err)
-	}
-
-	add := exec.Command("git", "worktree", "add", "--detach", dir, ref)
-	add.Dir = repoRoot
-	if out, err := add.CombinedOutput(); err != nil {
-		_ = os.RemoveAll(dir) // best effort: add failed, nothing was checked out into dir
-		return "", nil, fmt.Errorf("git worktree add --detach %s %s: %w\n%s", dir, ref, err, out)
-	}
-
-	cleanup := func() {
-		remove := exec.Command("git", "worktree", "remove", "--force", dir)
-		remove.Dir = repoRoot
-		if out, err := remove.CombinedOutput(); err != nil {
-			fmt.Fprintf(os.Stderr, "surface: removing temp worktree %s: %v\n%s\n", dir, err, out)
-		}
-	}
-	return dir, cleanup, nil
 }
