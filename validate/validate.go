@@ -231,12 +231,9 @@ func (u Unevaluated) Loc() xsderr.Loc { return u.loc }
 // which component.
 func (u Unevaluated) Msg() string { return u.msg }
 
-// Unevaluated returns the checks the assessment reached and did not perform,
-// in document order. The slice is copied: mutating the result does not affect
-// r. No such check yields nil.
-//
-// A non-empty result here beside an empty [Result.Violations] is [Undecided],
-// NOT a pass; [Result.Standing] answers it.
+// Unevaluated returns r's [Unevaluated] checks, in document order. The slice
+// is copied: mutating the result does not affect r. No such check yields nil.
+// [Result.Standing] says where they leave the document.
 func (r *Result) Unevaluated() []Unevaluated {
 	if len(r.unevaluated) == 0 {
 		return nil

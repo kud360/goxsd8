@@ -148,9 +148,9 @@
 // accept only what has been shown valid cannot read NotProvenInvalid as that
 // showing.
 //
-// [Undecided] is not a pass either: each [Result.Unevaluated] entry is a check
-// the assessment REACHED and did not perform, so the document stands undecided
-// against exactly the rules those entries name.
+// [Undecided] is not a pass either: each [Result.Unevaluated] entry is an
+// [Unevaluated] check, so the document stands undecided against exactly the
+// rules those entries name.
 //
 // All four charges below that DELEGATE to String Valid (§3.16.4,
 // cvc-simple-type) carry the delegated verdict as their wrapped cause, so
