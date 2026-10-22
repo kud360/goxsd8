@@ -16,6 +16,7 @@ tool (
 	github.com/kud360/goxsd8/tools/lanestatus
 	github.com/kud360/goxsd8/tools/lint
 	github.com/kud360/goxsd8/tools/opmapgen
+	github.com/kud360/goxsd8/tools/restatements
 	github.com/kud360/goxsd8/tools/rulecat
 	github.com/kud360/goxsd8/tools/spec2md
 	github.com/kud360/goxsd8/tools/suiteindex
