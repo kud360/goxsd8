@@ -308,9 +308,8 @@ func idNilled(line int, nil_ string) *testElement {
 	return icElem(xsd.QName{Local: "item"}, line, nil, ElementChild(name))
 }
 
-// A ·nilled· element is outside the ·eligible item set· and withholds nothing:
-// §3.3.5.4 gives it an absent [schema actual value], and §3.17.5.2's clause 2
-// excludes every such item. The dangling reference is charged under cvc-id
+// The package doc's Contract section states what a ·nilled· element contributes
+// to the [ID/IDREF table]. The dangling reference is charged under cvc-id
 // clause 1 whether <name> is ·nilled· (key-nilled: D.{nillable} = true AND an
 // ·actual value· of true), not ·nilled·, or carries an xsi:nil clause 3.1
 // charges, and nothing is recorded as unevaluated in any of the three.
