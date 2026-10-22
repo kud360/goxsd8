@@ -28,6 +28,31 @@ const usage = `goxsd8 — XSD 1.1 schema compilation, instance validation, and c
 
 Usage (contract; subcommands land with their milestones):
 
+  Exit codes. A run over several arguments exits with its highest-ranked
+  outcome: rank, not number, orders the codes.
+
+  code  rank  meaning
+  0     1     parse: every schema compiled. validate: every instance's
+              assessment ran to its end, charging no violation and
+              leaving no check undecided; that is not proven invalid,
+              which is not proven valid.
+  1     3     parse: a schema rejected, an I/O fault reading a document
+              it references included. validate: an instance invalid, not
+              well-formed XML, its walk stopped by a fault, malformed
+              JSON, or a fault reading a JSON instance once it is open.
+  2     4     usage, or an I/O fault on an argument or on stdout: never
+              a verdict about a schema or an instance.
+  3     none  validate only: the -schema set does not compile, an I/O
+              fault reading a document it references included. Unranked:
+              it answers before any instance is opened, so no instance's
+              4, 1 or 2 is reached, and a 2 raised before compiling (a
+              flag, a missing or misplaced argument, an unreadable
+              -schema) answers instead of it.
+  4     2     validate only: an instance left undecided, by a check the
+              assessment declined or by a jsonsrc decline. Nothing was
+              proven invalid and something was not decided: not a pass,
+              so a gate that must fail closed treats 4 as a failure.
+
   goxsd8 parse [-q] [-v] <schema.xsd>...
       Compile each schema argument and print its summary on stdout:
       the argument as it was spelled, then a block of lines indented
@@ -46,11 +71,10 @@ Usage (contract; subcommands land with their milestones):
       which no namespace line is counted into. Each argument is its
       own root document and its own run, in argument order — several
       arguments are several compilations, not one set.
-      Exit 0 when every one compiles; 1 when any is rejected, its
-      first error on stderr as <loc>: [<rule>] <message> (assembly
-      stops there, so a rejected schema is one error line); 2 when an
-      argument cannot be read, which is never a verdict about a
-      schema. The exit code is the worst of those outcomes.
+      A rejected schema prints its first error on stderr as <loc>:
+      [<rule>] <message> (assembly stops there, so a rejected schema
+      is one error line). An argument that cannot be read stops no
+      run but its own: the arguments after it are still compiled.
       Some errors have no rule to cite and print the producing
       component's own message instead, carrying what location they
       have inside the sentence rather than as the <loc>: prefix.
@@ -174,10 +198,13 @@ Usage (contract; subcommands land with their milestones):
       never fetched, so a name declared only there is charged with
       a cvc-simple-type cause saying the DTD was not fully read, not
       that the name is undeclared.
-      Exit 0 when no instance was charged a violation, none left a
-      check undecided and none reached jsonsrc's error channel, 1
-      invalid, 2 usage or I/O on an argument or on stdout, and 3 when
-      the schema set does not compile.
+      The -schema set is compiled before any instance is opened,
+      since without a set there is nothing to assess an instance
+      against, and the flags and the argument list, each -schema
+      argument's readability included, are read before that. That
+      order is the whole of 3's place among the codes: its error
+      prints on stderr once, and no instance argument is examined,
+      not even one that would itself be a usage error.
       An I/O fault reading a document a -schema argument REFERENCES,
       through <xs:include>, <xs:import>, <xs:override> or
       <xs:redefine>, is charged 3: the schema set does not compile,
@@ -191,19 +218,16 @@ Usage (contract; subcommands land with their milestones):
       check it reached not performed, so the instance stands
       undecided against the rule that check answers to rather than
       clean; a JSON instance jsonsrc's mapping declines is 4 too,
-      with no assessment standing. The code is the worst outcome over
-      the instances, by severity and not by number: undecided is less
-      severe than invalid, so a run holding one of each — a declined
-      JSON instance beside an invalid one included —
-      exits 1, and 4 answers a run where something was left undecided
-      and nothing was worse.
+      with no assessment standing.
       Every instance is assessed — the run never stops at the first
-      invalid one — and each violation prints one line on stdout,
-      <loc>: [<rule>] <message>, and each check the assessment
-      declined one line beside them, carrying the literal undecided:
-      after the rule: <loc>: [<rule>] undecided: <message>. An
-      instance's violations print first, then the line of the fault
-      that stopped its walk if one did, then its undecided checks.
+      invalid one, nor at an instance argument charged 2, whose 2
+      stands beside the verdicts of the rest — and each violation
+      prints one line on stdout, <loc>: [<rule>] <message>, and
+      each check the assessment declined one line beside them,
+      carrying the literal undecided: after the rule: <loc>: [<rule>]
+      undecided: <message>. An instance's violations print first,
+      then the line of the fault that stopped its walk if one did,
+      then its undecided checks.
 
   goxsd8 gen -schema <schema.xsd> -out <dir> [-schema <s2> -out <d2>]... [-backend strict|native]
       Generate Go types; repeated -schema/-out pairs map schemas to
@@ -212,8 +236,7 @@ Usage (contract; subcommands land with their milestones):
       rejected, its first error on stderr as <loc>: [<rule>]
       <message>; 2 when an argument cannot be read, an output
       directory cannot be written, or a -schema stands without its
-      -out. The exit code is the worst of those outcomes. Those are
-      the codes gen answers with once M9 builds it: until then every
+      -out. Those are the codes gen answers with once M9 builds it: until then every
       gen invocation exits 2, reporting that gen is not yet
       implemented.
 
@@ -261,14 +284,15 @@ const (
 // published meanings of 0 through 3 do not move (#720), while ranking below
 // exitInvalid — a batch mixing an instance shown invalid with one merely left
 // undecided answers with the invalid one, which is the verdict a gate acts on.
-// exitSchema stays the most severe: it leaves every instance unassessed rather
-// than any one of them decided.
+// exitSchema ranks last only so that every code has a rank: no caller passes it
+// to worse, runValidate answering it before any instance is assessed, which is
+// why usage's exit-code table gives it none.
 var exitSeverity = []int{exitOK, exitUndecided, exitInvalid, exitUsage, exitSchema}
 
 // worse returns the more severe of two exit codes. Both subcommands aggregate
-// their argument list through it, which is the one encoding of the contract's
-// "the exit code is the worst of those outcomes" (STYLE D3) — and taking the
-// numeric maximum instead would answer a mixed batch with exitUndecided.
+// their argument list through it, which is the one encoding of the rank column
+// of usage's exit-code table (STYLE D3) — and taking the numeric maximum
+// instead would answer a mixed batch with exitUndecided.
 func worse(a, b int) int {
 	if slices.Index(exitSeverity, a) > slices.Index(exitSeverity, b) {
 		return a
