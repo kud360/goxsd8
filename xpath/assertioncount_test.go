@@ -605,10 +605,10 @@ func vpWhite(typ, lexical string) asChild { return asChild{uq("white"), typ, lex
 // comparison, arithmetic and a cast are admitted over the candidate. Every
 // row declines, and fails, with ctaParser.predicate declining a predicate that
 // is not an attribute-existence conjunction, and so does the ReadsChild check
-// with ctaMatchingChildren.readsChild false; every row whose predicate is
-// false for some candidate — "one of two", the ·nilled· rows, or, and, the
-// value comparison, the arithmetic and "beside a counted step" — fails with
-// ctaMatchingChildren.nodes counting every candidate.
+// with ctaReadsChild's ctaMatchingChildren case answering false; every row
+// whose predicate is false for some candidate — "one of two", the ·nilled·
+// rows, or, and, the value comparison, the arithmetic and "beside a counted
+// step" — fails with ctaMatchingChildren.nodes counting every candidate.
 func TestAssertionCountsChildrenFilteredByValue(t *testing.T) {
 	str := asBuiltin(t, "string")
 	nilled := asChild{name: uq("white"), nilled: true}

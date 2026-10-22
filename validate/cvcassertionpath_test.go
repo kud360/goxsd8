@@ -39,9 +39,10 @@ const apSchema003 = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" elem
 // valid cases need. Neither <a>, whose type is element-only and so has no value
 // a {test} could read, nor <b> is read for its value
 // (xpath.AssertionTest.ReadsChild), so no lackingChild declines the
-// assertion: the satisfied rows record an Unevaluated instead with
-// ctaChildPath.readsChild answering true. Every row is declined instead with
-// xpath's child path declining.
+// assertion: the n2 row records an Unevaluated in place of its charge, which
+// stops the test, with xpath's ctaReadsChild answering true for a
+// ctaChildPath's first step. Every row is declined instead with xpath's child
+// path declining.
 func TestAssertionChildPathAssert003(t *testing.T) {
 	schema := parsedSchema(t, map[string]string{"main.xsd": apSchema003})
 	x, y := ccAttr(local("x"), "205", 1), ccAttr(local("y"), "204", 1)

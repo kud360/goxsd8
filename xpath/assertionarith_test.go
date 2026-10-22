@@ -202,8 +202,8 @@ func TestArithmeticDeclines(t *testing.T) {
 // An arithmetic node reads what its operands read: a typed child it holds is
 // reported by ReadsChild, and an fn:count call under it is counted by the
 // Tally — `count(inner) mod 2 = 0` holds over two inner children and is false
-// over three. With ctaArith.readsChild or ctaArith.counted answering nothing
-// for its operands, the matching row fails.
+// over three. With ctaReadsChild answering false for ctaArith the ReadsChild
+// row fails, and with ctaKeysOf appending nothing for it the count row does.
 func TestArithmeticReadsItsOperands(t *testing.T) {
 	test, ok := compiledAssertionTest(CompileAssertionTest(asRecord("n + 1 = 3"), seededTypes, xsd.EmptyContent{}, asUses(t, nil), asChildTypes(t)))
 	if !ok {

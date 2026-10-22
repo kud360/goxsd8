@@ -110,8 +110,9 @@ func TestAssertionReadsElementOnlyStringValue(t *testing.T) {
 // same — `count(d) = 0`, and `empty($value)`, which reads `$value` alone, the
 // empty sequence under element-only content (cvc-assertion clause 2.3.2). Both
 // are declined with assertionCheck.readsContextItem answering true for every
-// compiled {test}, and the `$value` row alone with ctaAssertionFacade.variable
-// recording a read of `.` for `$value`.
+// compiled {test}, and the `$value` row alone with xpath's ctaReadsContextItem
+// answering true for ctaEmptyValue, the empty `$value` under element-only
+// content.
 func TestAssertionOverAnUndecidedOwnStringValueIsDeclined(t *testing.T) {
 	skipped := ElementChild(&testElement{name: xsd.QName{Space: "urn:other", Local: "z"}, loc: loc(3, 3),
 		kids: []Child{mxText("y", 3)}})

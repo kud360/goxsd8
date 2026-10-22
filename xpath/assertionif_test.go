@@ -149,7 +149,7 @@ func TestAssertionIfExprEvaluatesOneBranch(t *testing.T) {
 
 // A child either branch or the test reads for its value is reported, and a
 // path either branch counts is tallied, whichever branch an evaluation will
-// select: with ctaIf.readsChild or ctaIf.counted reading the test alone, the
+// select: with ctaReadsChild or ctaKeysOf reading a ctaIf's test alone, the
 // branch rows fail.
 func TestAssertionIfExprReadsEveryBranch(t *testing.T) {
 	for _, tc := range []struct {

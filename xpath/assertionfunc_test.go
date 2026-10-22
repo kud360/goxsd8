@@ -352,8 +352,9 @@ func TestStringArgumentNamesEveryStaticArm(t *testing.T) {
 // A new node reads what its arguments read: a typed child under each is
 // reported by ReadsChild — fn:exists over a cast of one reads its value off
 // ChildElements — and an fn:count call under one is counted by the Tally, so
-// `exists(count(inner))` holds. With an arm's readsChild or counted answering
-// nothing for its arguments, that arm's row fails.
+// `exists(count(inner))` holds. With ctaReadsChild answering false, or
+// ctaKeysOf appending nothing, for one of these arms, each row holding that arm
+// fails, and no other row of this test.
 func TestStringFunctionsReadTheirArguments(t *testing.T) {
 	for _, expr := range []string{"contains('x', e1)", "string-length(e1) = 0", "exists(e1 cast as xs:string)", "string(e1) = ''", "distinct-values(e1) = ''"} {
 		test, ok := afCompile(t, expr, xsd.EmptyContent{})
@@ -419,9 +420,9 @@ func TestAssertionConcat(t *testing.T) {
 // `concat('a', 'b')` rows fail; from ctaTypes.instanceItem the instance row
 // declines; with ctaEffectiveBoolean.eval's ctaCarriedType read deleted
 // `concat('a', 'b')` fails; from ctaItemOf the instance, item and
-// `concat('a', 'b')` rows fail; with ctaConcat.readsChild answering false the
-// ReadsChild row fails, and with ctaConcat.counted appending nothing the
-// Tally row does.
+// `concat('a', 'b')` rows fail; with ctaReadsChild answering false for
+// ctaConcat the ReadsChild row fails, and with ctaKeysOf appending nothing for
+// it the Tally row does.
 func TestConcatArmsInEverySwitch(t *testing.T) {
 	for _, tc := range []struct {
 		expr string

@@ -211,9 +211,10 @@ func TestAssertionQuantifiedChildrenTyped(t *testing.T) {
 // The quantifier reads its binding step's children, and the body's sibling
 // step's, off [ChildElements] and counts nothing: ReadsChild reports y, and z
 // where `following-sibling::z[1]` reads it, and Tally is nil. With
-// ctaQuantifiedChildren.readsChild reporting the body's reads alone, y fails in
-// the last three rows (the first row's sibling step reads y itself); with
-// ctaBoundSibling.readsChild answering false, the second row's z fails.
+// ctaReadsChild's ctaQuantifiedChildren case answering the body's reads alone,
+// y fails in the second and fourth rows (the first row's sibling step and the
+// third row's `$y` read y themselves); with ctaReadsChild answering false for
+// ctaBoundSibling, the second row's z fails.
 func TestAssertionQuantifiedChildrenReads(t *testing.T) {
 	for _, tc := range []struct {
 		expr  string

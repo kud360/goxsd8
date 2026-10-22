@@ -144,8 +144,8 @@ func TestAssertionQuantifiedRangeItem(t *testing.T) {
 // ReadsChild and ReadsContextItem are its body's. A body over `count(c)` keys
 // c's counter and decides off it; one comparing a child's value reads that
 // child; one reading `.` reads E's string value. The Tally row fails with
-// ctaQuantifiedValue.counted appending nothing, and the ReadsChild(c) row with
-// ctaQuantifiedValue.readsChild answering false.
+// ctaKeysOf appending nothing for ctaQuantifiedValue, and the ReadsChild(c) row
+// with ctaReadsChild answering false for it.
 func TestAssertionQuantifiedOverValueReads(t *testing.T) {
 	list := asList(t, "IntegerList", ctaBuiltin("integer"))
 	types := asTypesWith(list)

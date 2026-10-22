@@ -135,7 +135,7 @@ func TestPrecedingResolvesNames(t *testing.T) {
 // The step reads no child's value, and the same key written twice keeps one
 // counter; the positive and the negated filter keep two, and so do the
 // unfiltered step and a filtered one. The ReadsChild rows fail with
-// ctaChildrenPreceded.readsChild true, and the two-counter rows with
+// ctaReadsChild answering true for ctaChildrenPreceded, and the two-counter rows with
 // ctaChildrenPreceded.same comparing the child step's name alone.
 func TestPrecedingCounters(t *testing.T) {
 	test := awCompile(t, asRecord("not(a[preceding::a[not(b)]])"))
