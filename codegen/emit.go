@@ -50,12 +50,12 @@ type emitter struct {
 
 // scope is where the structs nested in one struct take their names from: the
 // path of expanded names from their nearest named ancestor, that ancestor's
-// first, and that ancestor's name when it is a named complex type (zero when
-// it is a top-level element whose type is anonymous). A struct is named from
-// the path's local names and keyed by its expanded names (nestedKey).
+// first, and whether that ancestor is a named complex type (false when it is a
+// top-level element whose type is anonymous). A struct is named from the
+// path's local names and keyed by its expanded names (nestedKey).
 type scope struct {
-	namedType xsd.QName
-	path      []xsd.QName
+	underNamedType bool
+	path           []xsd.QName
 }
 
 // locals returns the local names of the path, the names the namer joins.
@@ -68,13 +68,10 @@ func (s scope) locals() []string {
 }
 
 // nestedKey identifies an anonymous complex type nested in a named complex
-// type: the named type, and the expanded names along the path from it — each
+// type by the expanded names along its path: the named type's, then each
 // element's {target namespace} and {name} (§3.3.2.3), each Go-quoted so that
 // the concatenation is unambiguous.
-type nestedKey struct {
-	namedType xsd.QName
-	path      string
-}
+type nestedKey string
 
 // key returns the nestedKey of the struct whose path is s's.
 func (s scope) key() nestedKey {
@@ -83,7 +80,7 @@ func (s scope) key() nestedKey {
 		b.WriteString(strconv.Quote(name.Space))
 		b.WriteString(strconv.Quote(name.Local))
 	}
-	return nestedKey{namedType: s.namedType, path: b.String()}
+	return nestedKey(b.String())
 }
 
 // emit returns the gofmt-formatted source of package pkg for schema, or the
@@ -137,7 +134,7 @@ func (e *emitter) topLevel(decl xsd.ElementDeclaration) error {
 	case xsd.ComplexType:
 		nested := scope{path: []xsd.QName{decl.Name()}}
 		if t.Name() != (xsd.QName{}) {
-			nested = scope{namedType: t.Name(), path: []xsd.QName{t.Name()}}
+			nested = scope{underNamedType: true, path: []xsd.QName{t.Name()}}
 		}
 		return e.structType(e.types.claim(decl.Name().Local), nested, decl, t)
 	}
@@ -363,13 +360,13 @@ func (e *emitter) nestedStruct(parent scope, decl xsd.ElementDeclaration, t xsd.
 	if t.Name() != (xsd.QName{}) {
 		return "", decline(decl.Loc(), "local element %s with named complex {type definition} %s", decl.Name(), t.Name())
 	}
-	child := scope{namedType: parent.namedType, path: append(slices.Clone(parent.path), decl.Name())}
+	child := scope{underNamedType: parent.underNamedType, path: append(slices.Clone(parent.path), decl.Name())}
 	key := child.key()
 	if name, ok := e.emitted[key]; ok {
 		return name, nil
 	}
 	name := e.types.claim(child.locals()...)
-	if child.namedType != (xsd.QName{}) {
+	if child.underNamedType {
 		e.emitted[key] = name
 	}
 	return name, e.structType(name, child, decl, t)
