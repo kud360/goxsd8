@@ -31,12 +31,13 @@ import (
 	"fmt"
 	"go/parser"
 	"go/token"
-	"io/fs"
 	"os"
 	"path/filepath"
 	"sort"
 	"strings"
 	"unicode/utf8"
+
+	"github.com/kud360/goxsd8/tools/internal/commentpara"
 )
 
 const (
@@ -65,16 +66,6 @@ const (
 	// a quoted lexical form, a short spec extract, a two-word aside — so there
 	// is no width for its breaks to be ragged against.
 	minWrapWidth = 60
-	// verbatimIndent is the comment-body indentation (in columns after the
-	// `//`) at which `go doc` stops treating text as prose and renders it
-	// preformatted: spec quotes, XML fragments, code samples. A paragraph that
-	// opens there is laid out by hand on purpose and is never judged.
-	verbatimIndent = 4
-	// hangingIndent is how far a continuation line may be indented past the
-	// line that opened its paragraph and still belong to it — enough for a list
-	// item's hanging indent ("//   - text" continued at "//     text"), not
-	// enough for a nested block.
-	hangingIndent = 3
 )
 
 func main() {
@@ -100,7 +91,7 @@ func main() {
 // it found. It returns false when it reported anything, which is the exit
 // status main turns it into.
 func run(args []string, fix bool) (bool, error) {
-	files, err := collect(args)
+	files, err := commentpara.Files(args)
 	if err != nil {
 		return false, err
 	}
@@ -137,78 +128,6 @@ type finding struct {
 	msg  string
 }
 
-// collect expands the command-line path arguments into a sorted, de-duplicated
-// list of Go files, so a rerun on an unchanged tree prints byte-identical
-// output (STYLE D1). A `...` suffix (as in `./...`) walks the directory
-// recursively; a plain directory takes the Go files directly inside it; a file
-// argument is taken as given.
-func collect(args []string) ([]string, error) {
-	seen := make(map[string]struct{})
-	var files []string
-	add := func(path string) {
-		if _, dup := seen[path]; dup {
-			return
-		}
-		seen[path] = struct{}{}
-		files = append(files, path)
-	}
-
-	for _, arg := range args {
-		cleaned := filepath.Clean(arg)
-		root, recursive := strings.CutSuffix(cleaned, string(filepath.Separator)+"...")
-		if cleaned == "..." {
-			root, recursive = ".", true
-		}
-
-		info, err := os.Stat(root)
-		if err != nil {
-			return nil, fmt.Errorf("resolving path %s: %w", arg, err)
-		}
-		if !info.IsDir() {
-			add(root)
-			continue
-		}
-		if err := walk(root, recursive, add); err != nil {
-			return nil, fmt.Errorf("collecting from %s: %w", arg, err)
-		}
-	}
-
-	sort.Strings(files)
-	return files, nil
-}
-
-// walk feeds every Go file under root to add. Directories holding no
-// hand-written comment prose of ours — the git store, the vendored W3C suite
-// and other testdata — are skipped wholesale.
-func walk(root string, recursive bool, add func(string)) error {
-	err := filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
-		if d.IsDir() {
-			if path == root {
-				return nil
-			}
-			if !recursive || skipDir(d.Name()) {
-				return fs.SkipDir
-			}
-			return nil
-		}
-		if filepath.Ext(path) == ".go" {
-			add(path)
-		}
-		return nil
-	})
-	if err != nil {
-		return fmt.Errorf("walking directory tree: %w", err)
-	}
-	return nil
-}
-
-func skipDir(name string) bool {
-	return name == "testdata" || name == "vendor" || strings.HasPrefix(name, ".")
-}
-
 // process reports the ragged lines of one file, or reflows them when fix is
 // set. Waivers matched along the way are recorded in used so a waiver that has
 // stopped matching can be reported as stale.
@@ -241,8 +160,8 @@ func process(path string, fix bool, used map[int]bool) ([]finding, error) {
 		}
 		from := flaws[0].line
 		splices = append(splices, splice{
-			start: para[from].num,
-			end:   para[len(para)-1].num,
+			start: para[from].Num,
+			end:   para[len(para)-1].Num,
 			lines: reflow(para, width, from),
 		})
 	}
@@ -257,226 +176,42 @@ func process(path string, fix bool, used map[int]bool) ([]finding, error) {
 }
 
 // comments parses src for its comments and returns the paragraphs a reflow
-// acts on, in source order.
-func comments(path, src string, lines []string) ([][]commentLine, error) {
+// acts on, in source order: commentpara's, less the one-line ones, since a
+// single line has no wrap to be ragged.
+func comments(path, src string, lines []string) ([][]commentpara.Line, error) {
 	fset := token.NewFileSet()
 	file, err := parser.ParseFile(fset, path, src, parser.ParseComments|parser.SkipObjectResolution)
 	if err != nil {
 		return nil, fmt.Errorf("parsing %s: %w", path, err)
 	}
-	if isGenerated(lines) {
+	if commentpara.IsGenerated(lines) {
 		// A generated file's layout belongs to its generator, not to whoever
 		// last edited the tree.
 		return nil, nil
 	}
 
-	var paras [][]commentLine
+	var paras [][]commentpara.Line
 	for _, group := range file.Comments {
-		// A comment group runs `//` lines and `/* */` blocks together, so a line
-		// this check cannot carry paragraph text on ends the run rather than
-		// being stepped over: a paragraph accumulated across it would span its
-		// line, and a reflow splices over every line it spans, deleting it
-		// (#329).
-		block := make([]commentLine, 0, len(group.List))
-		flush := func() {
-			paras = append(paras, paragraphs(block)...)
-			block = nil
-		}
-		for _, c := range group.List {
-			pos := fset.Position(c.Slash)
-			if !strings.HasPrefix(c.Text, "//") || pos.Line > len(lines) {
-				flush()
-				continue
+		for _, para := range commentpara.Paragraphs(fset, group, lines) {
+			if len(para) > 1 {
+				paras = append(paras, para)
 			}
-			raw := lines[pos.Line-1]
-			// A comment sharing its line with code is not part of a wrapped
-			// paragraph: the code to its left, not a wrap width, decides where
-			// it starts and how much room is left.
-			if strings.TrimSpace(raw) != c.Text {
-				flush()
-				continue
-			}
-			block = append(block, commentLine{
-				num:  pos.Line,
-				raw:  raw,
-				body: strings.TrimPrefix(c.Text, "//"),
-			})
 		}
-		flush()
 	}
 	return paras, nil
 }
 
-// isGenerated reports whether the file carries the conventional generated-code
-// header (https://go.dev/s/generatedcode), which by convention precedes the
-// package clause.
-func isGenerated(lines []string) bool {
-	for _, line := range lines {
-		if strings.HasPrefix(line, "package ") {
-			return false
-		}
-		if strings.HasPrefix(line, "// Code generated ") && strings.HasSuffix(line, " DO NOT EDIT.") {
-			return true
-		}
-	}
-	return false
+// columns is the line's total width in columns, the quantity a wrap width bounds.
+func columns(l commentpara.Line) int {
+	return utf8.RuneCountInString(l.Raw)
 }
 
-// commentLine is one whole-line `//` comment: its source line number, the raw
-// line (indentation and marker included, since a reflow preserves both) and
-// the text after the marker, which classifies the line.
-type commentLine struct {
-	num  int
-	raw  string
-	body string
-}
-
-// width is the line's total width in columns, the quantity a wrap width bounds.
-func (l commentLine) width() int {
-	return utf8.RuneCountInString(l.raw)
-}
-
-// indent is how far the line's text sits past its `//`, counting a tab as a
-// full verbatim step since that is how `go doc` reads it.
-func (l commentLine) indent() int {
-	n := 0
-	for _, r := range l.body {
-		if r == ' ' {
-			n++
-			continue
-		}
-		if r == '\t' {
-			n += verbatimIndent
-			continue
-		}
-		break
-	}
-	return n
-}
-
-// prefix is everything a reflowed line repeats verbatim: the line's
+// lead is everything a reflowed line repeats verbatim: the line's
 // indentation, its `//`, and the body indentation that follows.
-func (l commentLine) prefix() string {
-	marker := strings.Index(l.raw, "//") + len("//")
-	body := l.raw[marker:]
-	return l.raw[:marker] + body[:len(body)-len(strings.TrimLeft(body, " \t"))]
-}
-
-// isBreak reports whether a comment line can carry no wrapped paragraph text
-// at all: a blank `//`, a directive (`//go:generate`, `//nolint:…` — no space
-// after the marker), a `#` heading marker inside a package doc, or a markdown
-// table row.
-func (l commentLine) isBreak() bool {
-	trimmed := strings.TrimSpace(l.body)
-	if trimmed == "" {
-		return true
-	}
-	if !strings.HasPrefix(l.body, " ") && !strings.HasPrefix(l.body, "\t") {
-		return true
-	}
-	return isHeading(trimmed) || strings.HasPrefix(trimmed, "|")
-}
-
-// isHeading reports whether trimmed is a `#`-style section marker: one or more
-// hashes, then a space or nothing. The space is load-bearing — this repo's
-// comments open lines with "#329" issue references constantly, and those are
-// ordinary paragraph text.
-func isHeading(trimmed string) bool {
-	hashes := len(trimmed) - len(strings.TrimLeft(trimmed, "#"))
-	if hashes == 0 {
-		return false
-	}
-	return len(trimmed) == hashes || trimmed[hashes] == ' '
-}
-
-// isExampleOutput reports whether a comment line opens the expected-output
-// block of an [Example function]. Everything from there to the end of the
-// comment is the string `go test` compares against, not prose: rewrapping it
-// changes what the example asserts.
-//
-// [Example function]: https://pkg.go.dev/testing#hdr-Examples
-func (l commentLine) isExampleOutput() bool {
-	trimmed := strings.ToLower(strings.TrimSpace(l.body))
-	trimmed = strings.TrimPrefix(trimmed, "unordered ")
-	return strings.HasPrefix(trimmed, "output:")
-}
-
-// isListItem reports whether a comment line opens a list item — a bullet
-// (`- `, `* `, `• `) or an enumerator (`1. `, `2) `, `(3) `, `a. `). Its
-// continuation lines belong to it, so it opens a paragraph rather than
-// breaking one, and the line above it is a legitimate short last line.
-func (l commentLine) isListItem() bool {
-	trimmed := strings.TrimSpace(l.body)
-	for _, bullet := range []string{"- ", "* ", "• "} {
-		if strings.HasPrefix(trimmed, bullet) {
-			return true
-		}
-	}
-	return isEnumerator(trimmed)
-}
-
-// isEnumerator reports whether trimmed opens with a numbered or lettered list
-// marker: an optional "(", then digits or a single letter, then "." or ")" and
-// a space.
-func isEnumerator(trimmed string) bool {
-	rest := strings.TrimPrefix(trimmed, "(")
-	n := 0
-	for n < len(rest) && rest[n] >= '0' && rest[n] <= '9' {
-		n++
-	}
-	if n == 0 && len(rest) > 0 && isLetter(rest[0]) {
-		n = 1
-	}
-	if n == 0 || len(rest) < n+2 {
-		return false
-	}
-	if rest[n] != '.' && rest[n] != ')' {
-		return false
-	}
-	return rest[n+1] == ' '
-}
-
-func isLetter(b byte) bool {
-	return (b >= 'a' && b <= 'z') || (b >= 'A' && b <= 'Z')
-}
-
-// paragraphs splits a run of whole-line comments into the units a reflow acts
-// on, dropping the one-line ones (a single line has no wrap to be ragged). A
-// paragraph ends at a break line, where a list item starts, and where the
-// indentation leaves the opening line's band — each of those is a boundary a
-// reflow must not cross, which is exactly what makes the line before it a
-// legitimate short line.
-func paragraphs(block []commentLine) [][]commentLine {
-	var out [][]commentLine
-	var cur []commentLine
-	margin := 0
-	flush := func() {
-		if len(cur) > 1 {
-			out = append(out, cur)
-		}
-		cur = nil
-	}
-
-	for _, line := range block {
-		if line.isExampleOutput() {
-			flush()
-			return out
-		}
-		if line.isBreak() {
-			flush()
-			continue
-		}
-		indent := line.indent()
-		if line.isListItem() || indent < margin || indent > margin+hangingIndent {
-			flush()
-		}
-		if len(cur) == 0 {
-			margin = indent
-		}
-		cur = append(cur, line)
-	}
-	flush()
-	return out
+func lead(l commentpara.Line) string {
+	marker := strings.Index(l.Raw, "//") + len("//")
+	body := l.Raw[marker:]
+	return l.Raw[:marker] + body[:len(body)-len(strings.TrimLeft(body, " \t"))]
 }
 
 // flaw is one line of a paragraph whose break a reflow would move: line is its
@@ -491,8 +226,8 @@ type flaw struct {
 // flaws returns the paragraph's wrap width and the lines that miss it. A
 // paragraph whose opening line is verbatim-indented, or that was never filled
 // to a wrap width at all, has none by construction.
-func flaws(para []commentLine) (int, []flaw) {
-	if para[0].indent() >= verbatimIndent && !para[0].isListItem() {
+func flaws(para []commentpara.Line) (int, []flaw) {
+	if para[0].IsVerbatim() {
 		return 0, nil
 	}
 	width := wrapWidth(para)
@@ -502,18 +237,18 @@ func flaws(para []commentLine) (int, []flaw) {
 
 	var out []flaw
 	for i, line := range para {
-		if line.width() > width+longSlack && len(strings.Fields(line.body)) > 1 {
-			out = append(out, flaw{line: i, over: true, off: line.width() - width})
+		if columns(line) > width+longSlack && len(strings.Fields(line.Body)) > 1 {
+			out = append(out, flaw{line: i, over: true, off: columns(line) - width})
 			continue
 		}
-		if i == len(para)-1 || width-line.width() < shortSlack {
+		if i == len(para)-1 || width-columns(line) < shortSlack {
 			continue
 		}
-		word := firstWord(para[i+1].body)
-		if word == 0 || line.width()+1+word > width {
+		word := firstWord(para[i+1].Body)
+		if word == 0 || columns(line)+1+word > width {
 			continue
 		}
-		out = append(out, flaw{line: i, off: width - line.width()})
+		out = append(out, flaw{line: i, off: width - columns(line)})
 	}
 	return width, out
 }
@@ -524,10 +259,10 @@ func flaws(para []commentLine) (int, []flaw) {
 // get to define the width it broke; the runner-up does. Standing clear takes at
 // least two other lines to stand clear of, so a two-line paragraph is always
 // its own width.
-func wrapWidth(para []commentLine) int {
+func wrapWidth(para []commentpara.Line) int {
 	widths := make([]int, len(para))
 	for i, line := range para {
-		widths[i] = line.width()
+		widths[i] = columns(line)
 	}
 	sort.Sort(sort.Reverse(sort.IntSlice(widths)))
 
@@ -548,14 +283,14 @@ func firstWord(body string) int {
 }
 
 // report renders one paragraph's flaws as findings.
-func report(path string, para []commentLine, width int, flaws []flaw) []finding {
+func report(path string, para []commentpara.Line, width int, flaws []flaw) []finding {
 	findings := make([]finding, 0, len(flaws))
 	for _, f := range flaws {
 		msg := fmt.Sprintf("comment line ends %d columns short of the paragraph's %d-column wrap width, and the next line's first word would fit", f.off, width)
 		if f.over {
 			msg = fmt.Sprintf("comment line runs %d columns past the paragraph's %d-column wrap width", f.off, width)
 		}
-		findings = append(findings, finding{file: path, line: para[f.line].num, msg: msg})
+		findings = append(findings, finding{file: path, line: para[f.line].Num, msg: msg})
 	}
 	return findings
 }
@@ -564,20 +299,20 @@ func report(path string, para []commentLine, width int, flaws []flaw) []finding 
 // the paragraph's own wrap width. Everything above that line is left byte-identical:
 // the break the edit disturbed is the first one that has to move, and a reflow
 // that reaches further would rewrite lines no edit touched.
-func reflow(para []commentLine, width, from int) []string {
-	prefix := para[from].prefix()
-	cont := prefix
+func reflow(para []commentpara.Line, width, from int) []string {
+	first := lead(para[from])
+	cont := first
 	if from+1 < len(para) {
-		cont = para[from+1].prefix()
+		cont = lead(para[from+1])
 	}
 
 	var words []string
 	for _, line := range para[from:] {
-		words = append(words, strings.Fields(line.body)...)
+		words = append(words, strings.Fields(line.Body)...)
 	}
 
 	var out []string
-	cur := prefix
+	cur := first
 	empty := true
 	for _, w := range words {
 		if !empty && utf8.RuneCountInString(cur)+1+utf8.RuneCountInString(w) > width {
@@ -655,13 +390,13 @@ func (w waiver) covers(path string) bool {
 // paragraph is waived, not the single line: a reflow rewrites the paragraph
 // from its first ragged break onward, so there is no way to fix a neighbouring
 // break without touching the waived one.
-func waivedBy(path string, para []commentLine) (int, bool) {
+func waivedBy(path string, para []commentpara.Line) (int, bool) {
 	for i, w := range waivers {
 		if !w.covers(path) {
 			continue
 		}
 		for _, line := range para {
-			if strings.TrimSpace(line.raw) == w.text {
+			if strings.TrimSpace(line.Raw) == w.text {
 				return i, true
 			}
 		}
