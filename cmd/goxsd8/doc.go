@@ -24,7 +24,8 @@
 //	            flag, a missing or misplaced argument, a -schema that is
 //	            - or cannot be read) answers instead of it.
 //	4     2     validate only: an instance left undecided, by a check the
-//	            assessment declined or by a jsonsrc decline. Nothing was
+//	            assessment declined (validate below names its kinds)
+//	            or by a jsonsrc decline. Nothing was
 //	            proven invalid and something was not decided: not a pass,
 //	            so a gate that must fail closed treats 4 as a failure.
 //
@@ -185,12 +186,17 @@
 //	    argument that cannot be read. The fault is not the legal skip
 //	    of a schemaLocation resolving to no document, which moves no
 //	    exit code, though the faulting run names the directive on
-//	    stderr too, before printing the fault. 4 is an instance the
-//	    assessment declined to decide: no violation charged, and a
-//	    check it reached not performed, so the instance stands
-//	    undecided against the rule that check answers to rather than
-//	    clean; a JSON instance jsonsrc's mapping declines is 4 too,
-//	    with no assessment standing.
+//	    stderr too, before printing the fault.
+//	    The checks the assessment declines include an <xs:assert>,
+//	    and an <xs:alternative> in an element's {type table}, whose
+//	    {test} this build does not evaluate. A declined alternative
+//	    withholds the type the table would select, so checks needing
+//	    that type can print undecided lines of their own. A {test}
+//	    this build evaluates is checked as usual and prints no
+//	    undecided line. Every kind is listed by go doc
+//	    github.com/kud360/goxsd8/validate Unevaluated, which needs the
+//	    module source; without it, read type Unevaluated in
+//	    validate/validate.go at https://github.com/kud360/goxsd8.
 //	    Every instance is assessed — the run never stops at the first
 //	    invalid one, nor at an instance argument charged 2, whose 2
 //	    stands beside the verdicts of the rest — and each violation
