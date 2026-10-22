@@ -7,6 +7,8 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+
+	"github.com/kud360/goxsd8/tools/internal/reftree"
 )
 
 const (
@@ -104,7 +106,7 @@ var irregularRules = []string{
 }
 
 func main() {
-	root, err := moduleRoot()
+	root, err := reftree.ModuleRoot()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "locating module root: %v\n", err)
 		os.Exit(1)
@@ -160,27 +162,6 @@ func main() {
 	if err := f.Close(); err != nil {
 		fmt.Fprintf(os.Stderr, "closing output file %s: %v\n", dst, err)
 		os.Exit(1)
-	}
-}
-
-// moduleRoot walks up from the current working directory until it finds the
-// directory containing go.mod, so the tool resolves its spec inputs and catalog
-// output the same way whether `go generate` runs it in the module root or in the
-// xsderr package directory.
-func moduleRoot() (string, error) {
-	dir, err := os.Getwd()
-	if err != nil {
-		return "", err
-	}
-	for {
-		if _, err := os.Stat(filepath.Join(dir, "go.mod")); err == nil {
-			return dir, nil
-		}
-		parent := filepath.Dir(dir)
-		if parent == dir {
-			return "", fmt.Errorf("go.mod not found from working directory")
-		}
-		dir = parent
 	}
 }
 

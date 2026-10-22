@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/kud360/goxsd8/tools/internal/commentpara"
 )
 
 // mkLine builds a comment line of exactly width columns out of four-letter
@@ -357,7 +359,7 @@ func TestFixKeepsABlockCommentInsideItsGroup(t *testing.T) {
 		t.Fatalf("got %d paragraph(s), want 2: one on each side of the block comment", len(paras))
 	}
 	for _, para := range paras {
-		first, last := para[0].num, para[len(para)-1].num
+		first, last := para[0].Num, para[len(para)-1].Num
 		if first < blockLine && last > blockLine {
 			t.Fatalf("paragraph spans lines %d-%d, the range -fix splices over, and line %d in it is %q",
 				first, last, blockLine, block)
@@ -370,9 +372,9 @@ func TestWaiverCoversItsParagraph(t *testing.T) {
 		t.Skip("no waivers to exercise")
 	}
 	w := waivers[0]
-	para := []commentLine{
-		{num: 1, raw: "// abcd", body: " abcd"},
-		{num: 2, raw: w.text, body: strings.TrimPrefix(w.text, "//")},
+	para := []commentpara.Line{
+		{Num: 1, Raw: "// abcd", Body: " abcd"},
+		{Num: 2, Raw: w.text, Body: strings.TrimPrefix(w.text, "//")},
 	}
 	if _, ok := waivedBy(filepath.Join("some", "root", w.file), para); !ok {
 		t.Fatalf("waiver %s did not cover the paragraph carrying its line", w.issue)
