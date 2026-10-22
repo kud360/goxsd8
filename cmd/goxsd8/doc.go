@@ -176,7 +176,9 @@
 //	    invalid one — and each violation prints one line on stdout,
 //	    <loc>: [<rule>] <message>, and each check the assessment
 //	    declined one line beside them, carrying the literal undecided:
-//	    after the rule: <loc>: [<rule>] undecided: <message>.
+//	    after the rule: <loc>: [<rule>] undecided: <message>. An
+//	    instance's violations print first, then the line of the fault
+//	    that stopped its walk if one did, then its undecided checks.
 //
 //	goxsd8 gen -schema <schema.xsd> -out <dir> [-schema <s2> -out <d2>]... [-backend strict|native]
 //	    Generate Go types; repeated -schema/-out pairs map schemas to
