@@ -27,23 +27,33 @@ func rows(from, n int) answer {
 	return answer{raw: "[" + strings.Join(entries, ",") + "]"}
 }
 
-// fake is a page source scripted per (page, attempt): script[p][a] answers
-// attempt a+1 of page p, the last entry repeating for later attempts, and an
-// unscripted page answers []. It records every page requested, in order.
+// fake is a page source scripted per (endpoint, page, attempt): script[p][a]
+// answers attempt a+1 of the feed listing's page p, others[e][p][a] the same
+// for any other endpoint e, the last entry repeating for later attempts, and
+// an unscripted page answers []. calls records every feed listing page
+// requested, in order, and requests every request of any endpoint.
 type fake struct {
-	script map[int][]answer
-	calls  []int
+	script   map[int][]answer
+	others   map[string]map[int][]answer
+	calls    []int
+	requests []string
 }
 
-func (f *fake) fetch(page int) ([]byte, error) {
+func (f *fake) fetch(endpoint string, page int) ([]byte, error) {
+	req := fmt.Sprintf("%s page %d", endpoint, page)
 	attempt := 0
-	for _, c := range f.calls {
-		if c == page {
+	for _, r := range f.requests {
+		if r == req {
 			attempt++
 		}
 	}
-	f.calls = append(f.calls, page)
-	as, ok := f.script[page]
+	f.requests = append(f.requests, req)
+	pages := f.others[endpoint]
+	if endpoint == listing {
+		f.calls = append(f.calls, page)
+		pages = f.script
+	}
+	as, ok := pages[page]
 	if !ok {
 		return []byte("[]"), nil
 	}
@@ -106,13 +116,19 @@ func assertNoOutputs(t *testing.T, dir string) {
 }
 
 func TestGhArgs(t *testing.T) {
-	got := ghArgs(7)
-	want := []string{"api", "repos/kud360/goxsd8/issues?state=all&per_page=100&page=7"}
-	if !slices.Equal(got, want) {
-		t.Errorf("ghArgs(7) = %q, want %q", got, want)
+	cases := []struct{ endpoint, want string }{
+		{listing, "repos/kud360/goxsd8/issues?state=all&per_page=100&page=7"},
+		{blockedListing, "repos/kud360/goxsd8/issues?state=open&labels=blocked&per_page=100&page=7"},
+		{issuesPath + "/16/events", "repos/kud360/goxsd8/issues/16/events?per_page=100&page=7"},
 	}
-	if slices.Contains(got, "--paginate") {
-		t.Errorf("ghArgs(7) = %q carries --paginate", got)
+	for _, tc := range cases {
+		got := ghArgs(tc.endpoint, 7)
+		if want := []string{"api", tc.want}; !slices.Equal(got, want) {
+			t.Errorf("ghArgs(%q, 7) = %q, want %q", tc.endpoint, got, want)
+		}
+		if slices.Contains(got, "--paginate") {
+			t.Errorf("ghArgs(%q, 7) = %q carries --paginate", tc.endpoint, got)
+		}
 	}
 }
 
