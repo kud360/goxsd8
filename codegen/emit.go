@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"go/format"
 	"slices"
+	"strconv"
 	"strings"
 
 	"github.com/kud360/goxsd8/xsd"
@@ -25,8 +26,8 @@ var (
 // rule is violated (STYLE E2).
 //
 // GAP(codegen): every construct outside the package doc's "# Coverage" slice
-// declines here; that section lists them under the same marker. No tracking
-// issue owns lifting a decline yet.
+// declines here; that section lists them under the same marker. #2900 owns
+// lifting them.
 func decline(loc xsderr.Loc, format string, args ...any) error {
 	return fmt.Errorf("%s at %s is not supported by codegen, a generator limitation, not a schema fault: %w",
 		fmt.Sprintf(format, args...), loc, errors.ErrUnsupported)
@@ -48,20 +49,41 @@ type emitter struct {
 }
 
 // scope is where the structs nested in one struct take their names from: the
-// path of XSD local names from their nearest named ancestor, and that
-// ancestor's name when it is a named complex type (zero when it is a
-// top-level element whose type is anonymous).
+// path of expanded names from their nearest named ancestor, that ancestor's
+// first, and that ancestor's name when it is a named complex type (zero when
+// it is a top-level element whose type is anonymous). A struct is named from
+// the path's local names and keyed by its expanded names (nestedKey).
 type scope struct {
 	namedType xsd.QName
-	path      []string
+	path      []xsd.QName
+}
+
+// locals returns the local names of the path, the names the namer joins.
+func (s scope) locals() []string {
+	locals := make([]string, len(s.path))
+	for i, name := range s.path {
+		locals[i] = name.Local
+	}
+	return locals
 }
 
 // nestedKey identifies an anonymous complex type nested in a named complex
-// type: the named type, and the path of local names from it joined by a
-// space, which no NCName contains.
+// type: the named type, and the expanded names along the path from it — each
+// element's {target namespace} and {name} (§3.3.2.3), each Go-quoted so that
+// the concatenation is unambiguous.
 type nestedKey struct {
 	namedType xsd.QName
 	path      string
+}
+
+// key returns the nestedKey of the struct whose path is s's.
+func (s scope) key() nestedKey {
+	var b strings.Builder
+	for _, name := range s.path {
+		b.WriteString(strconv.Quote(name.Space))
+		b.WriteString(strconv.Quote(name.Local))
+	}
+	return nestedKey{namedType: s.namedType, path: b.String()}
 }
 
 // emit returns the gofmt-formatted source of package pkg for schema, or the
@@ -113,9 +135,9 @@ func (e *emitter) topLevel(decl xsd.ElementDeclaration) error {
 		e.decls = append(e.decls, header(name, decl)+fmt.Sprintf("type %s %s\n", name, builtin))
 		return nil
 	case xsd.ComplexType:
-		nested := scope{path: []string{decl.Name().Local}}
+		nested := scope{path: []xsd.QName{decl.Name()}}
 		if t.Name() != (xsd.QName{}) {
-			nested = scope{namedType: t.Name(), path: []string{t.Name().Local}}
+			nested = scope{namedType: t.Name(), path: []xsd.QName{t.Name()}}
 		}
 		return e.structType(e.types.claim(decl.Name().Local), nested, decl, t)
 	}
@@ -335,18 +357,18 @@ func (e *emitter) field(nested scope, subject string, loc xsderr.Loc, p xsd.Part
 
 // nestedStruct returns the struct name of a local element declaration's
 // anonymous complex type, named by the path from its nearest named ancestor in
-// parent. Under a named complex type the struct is emitted once, by the first
-// top-level element that reaches it, and later ones share it.
+// parent. Under a named complex type the struct is emitted once per nestedKey,
+// by the first top-level element that reaches it, and later ones share it.
 func (e *emitter) nestedStruct(parent scope, decl xsd.ElementDeclaration, t xsd.ComplexType) (string, error) {
 	if t.Name() != (xsd.QName{}) {
 		return "", decline(decl.Loc(), "local element %s with named complex {type definition} %s", decl.Name(), t.Name())
 	}
-	child := scope{namedType: parent.namedType, path: append(slices.Clone(parent.path), decl.Name().Local)}
-	key := nestedKey{namedType: child.namedType, path: strings.Join(child.path, " ")}
+	child := scope{namedType: parent.namedType, path: append(slices.Clone(parent.path), decl.Name())}
+	key := child.key()
 	if name, ok := e.emitted[key]; ok {
 		return name, nil
 	}
-	name := e.types.claim(child.path...)
+	name := e.types.claim(child.locals()...)
 	if child.namedType != (xsd.QName{}) {
 		e.emitted[key] = name
 	}

@@ -37,9 +37,12 @@
 //   - Each such particle gives one field, in particle order: a local element
 //     with an atomic simple type gets its builtin, one with an anonymous
 //     complex type of the same shape gets a struct of its own, emitted after
-//     its parent. A struct nested in a named complex type is emitted once,
-//     after the first top-level element of that type, and every element of
-//     that type shares it. {max occurs} above 1 or unbounded gives a slice
+//     its parent. A struct nested in a named complex type is emitted once
+//     per path of expanded names from that type, after the first top-level
+//     element of that type, and every element of that type shares it; two
+//     sibling local elements whose expanded names differ only in {target
+//     namespace} (§3.3.2.3), a qualified x beside an unqualified x, get a
+//     struct each. {max occurs} above 1 or unbounded gives a slice
 //     whatever {min occurs} is; {min occurs} 0 with {max occurs} 1 gives a
 //     pointer.
 //   - Every element declaration emitted from has {nillable} and {abstract}
@@ -51,8 +54,8 @@
 // particle with {max occurs} 0, attributes, mixed, simple and empty content,
 // extension, restriction of any base but xs:anyType, a local element with a
 // named complex type, xs:anyType, the special simple types, list and union
-// types, and every primitive but the three above. No tracking issue owns
-// lifting a decline yet; decline in emit.go carries the same marker.
+// types, and every primitive but the three above. #2900 owns lifting
+// them; decline in emit.go carries the same marker.
 //
 // # Determinism (STYLE D1/D2)
 //
