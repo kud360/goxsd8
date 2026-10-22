@@ -193,9 +193,17 @@ func (r *Result) Violations() []*xsderr.Error {
 //     no readable value, and an undecided ·key-sequence· comparison
 //     (cvc-identity-constraint clauses 3 and 4).
 //
-// One decline is NOT recorded, so an empty Unevaluated is not by itself a claim
-// that the walk performed every check it reached: an unresolvable {attribute
-// declaration}, which no *xsd.Schema that exists carries.
+// Where the XPath evaluator declined a {test} — a cvc-assertion entry for an
+// {assertions} member, the key-cta-ta-select entry for a Type Alternative —
+// Msg carries the [xpath.Decline]'s reason after "declined it because". No
+// exported field or method carries that cause, and [Unevaluated.Rule] does not
+// tell a declined cvc-assertion {test} from one whose data model input was
+// missing. Msg is for people, and a caller must not parse it.
+//
+// An empty Unevaluated claims that the walk performed every check it reached.
+// The walk records nothing for an attribute use whose {attribute declaration}
+// does not resolve, and no *xsd.Schema carries one: Finalize charges src-resolve
+// on a dangling <attribute ref>, and the zero Schema holds no attribute use.
 type Unevaluated struct {
 	// The sites the doc above lists are recorded from cvcassertion.go
 	// (assertions), assess.go and cta.go (the governing type definition),
@@ -273,8 +281,7 @@ const (
 	// NotProvenInvalid is a Result with no violation, no unevaluated check and
 	// no source fault. It means NOT PROVEN INVALID, not valid: the assessment
 	// evaluates neither clause 1.1.2 nor clause 2 of the [validity] property
-	// (§3.3.5.1), as the package's Contract section details, and
-	// [Unevaluated]'s doc names the one decline that is not recorded.
+	// (§3.3.5.1), as the package's Contract section details.
 	NotProvenInvalid
 )
 
