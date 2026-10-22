@@ -193,9 +193,11 @@ func (r *Result) Violations() []*xsderr.Error {
 //     no readable value, and an undecided ·key-sequence· comparison
 //     (cvc-identity-constraint clauses 3 and 4).
 //
-// Where the XPath evaluator declined a {test} — a cvc-assertion entry for an
-// {assertions} member, the key-cta-ta-select entry for a Type Alternative —
-// Msg carries the [xpath.Decline]'s reason after "declined it because". No
+// Where [xpath.CompileAssertionTest] or [xpath.CompileCTATest] declined a
+// {test} — the cvc-assertion entry for an {assertions} member, the
+// key-cta-ta-select entry for a Type Alternative — Msg carries the
+// [xpath.Decline]'s reason after "declined it because". A cvc-assertions-valid
+// entry names the assertions-facet {test} that was declined and no reason. No
 // exported field or method carries that cause, and [Unevaluated.Rule] does not
 // tell a declined cvc-assertion {test} from one whose data model input was
 // missing. Msg is for people, and a caller must not parse it.
