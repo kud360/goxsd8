@@ -5,13 +5,13 @@
 // restatements`, so the two cannot disagree about where a paragraph starts or
 // ends.
 //
-// A paragraph is a run of whole-line `//` comments. It ends at a line that
-// can carry no paragraph text (a blank `//`, a directive, a `#` heading, a
-// markdown table row, a `/* */` block, a comment sharing its line with code),
-// where a list item starts, and where the indentation leaves the band of the
-// line that opened it; an [Example function]'s expected-output block ends the
-// group's prose. A generated file carries none: its comments belong to its
-// generator.
+// A paragraph is a run of whole-line `//` comments. A `/* */` block, a
+// comment sharing its line with code, and a line isBreak names end it, and so
+// do the start of a list item and indentation leaving the band of the line
+// that opened it; an [Example function]'s expected-output block ends the
+// group's prose. Which files are generated, and so hold their generator's
+// comments rather than ours, is [IsGenerated]'s to answer and its caller's
+// to act on.
 //
 // [Example function]: https://pkg.go.dev/testing#hdr-Examples
 package commentpara

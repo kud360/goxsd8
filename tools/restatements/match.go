@@ -8,12 +8,11 @@ import (
 	"strings"
 )
 
-// minShared is how many distinct adjacent content-word pairs one clause of an
-// added sentence must share with an owner sentence for the pair to print.
+// minShared is the overlap measure's threshold, which the package doc states.
 const minShared = 2
 
-// clauseBreak cuts an added sentence into clauses: at , ; : ( ) and at a
-// dash with space on both sides.
+// clauseBreak is where the overlap measure cuts an added sentence into
+// clauses.
 var clauseBreak = regexp.MustCompile(`[,;:()]|\s[-–—]\s`)
 
 // wordPattern finds a sentence's words once it is lowercased: '\n' as written
@@ -21,8 +20,7 @@ var clauseBreak = regexp.MustCompile(`[,;:()]|\s[-–—]\s`)
 // punctuation of an identifier, a rule ID, a path or a possessive.
 var wordPattern = regexp.MustCompile(`'\\n'|[a-z0-9][a-z0-9.\-:#_/'’]*`)
 
-// stopWords are dropped from a sentence's content words: function words, and
-// the words a pointer to a document's part is spelled with.
+// stopWords are the words the overlap measure drops.
 var stopWords = func() map[string]bool {
 	set := make(map[string]bool)
 	for _, w := range strings.Fields(`a all also an and any are as at be been being but by can
@@ -35,10 +33,8 @@ var stopWords = func() map[string]bool {
 	return set
 }()
 
-// contentWords reduces text to its content words, in order: lowercased, a
-// trailing possessive 's (or bare ') and trailing punctuation stripped, a
-// plural s stripped from a word of more than four letters not ending in ss,
-// and stopWords dropped.
+// contentWords reduces text to the overlap measure's content words, in order.
+// A word's trailing punctuation goes with its possessive.
 func contentWords(text string) []string {
 	var out []string
 	for _, w := range wordPattern.FindAllString(strings.ToLower(text), -1) {

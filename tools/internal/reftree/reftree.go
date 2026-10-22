@@ -37,11 +37,9 @@ func ModuleRoot() (string, error) {
 	}
 }
 
-// Checkout materialises ref as a temporary detached git worktree of the
-// repository rooted at repoRoot, returning its path and a remove func the
-// caller must defer, which reports a failed removal as its error. It never
-// touches repoRoot's own checked-out branch: `git worktree add --detach`
-// leaves HEAD there untouched.
+// Checkout materialises ref beside the repository rooted at repoRoot, as the
+// package doc states, returning the tree's path and a remove func the caller
+// must defer, which reports a failed removal as its error.
 func Checkout(repoRoot, ref string) (string, func() error, error) {
 	dir, err := os.MkdirTemp("", "goxsd8-reftree-*")
 	if err != nil {

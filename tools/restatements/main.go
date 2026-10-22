@@ -3,6 +3,9 @@
 // (any comment in a `doc.go`, or a package clause's doc), the doc comment of
 // an exported identifier, or `cmd/goxsd8`'s usage text. It is a survey
 // (PRINCIPLES 27) for STYLE D3 applied to prose, "One fact, one encoding".
+// Any comment can be an added sentence, but only an owner's is compared
+// against: a copy in an unexported identifier's doc or a test comment is
+// listed only when it is the added one.
 //
 // Usage:
 //
@@ -14,9 +17,9 @@
 // the directories it skips, less generated files and preformatted paragraphs,
 // plus usage's prose, cut into sentences. A sentence is added when its file
 // at the ref holds no sentence of the same words, so a reflow adds none. A
-// comment sentence spelling a usage sentence word for word is its rendering
-// (cmd/goxsd8/doc.go's "# Usage" section) and is read only at usage, whose
-// sentences are located at the main.go line each starts on.
+// sentence of cmd/goxsd8/doc.go spelling a usage sentence word for word is
+// usage rendered (cmd/goxsd8's TestDocRendersUsage) and is read only at
+// usage, whose sentences are located at the main.go line each starts on.
 //
 // Every added sentence is compared with every owner sentence of the working
 // tree but itself, and each pair that overlaps is printed: the added

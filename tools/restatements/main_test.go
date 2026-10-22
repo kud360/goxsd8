@@ -309,16 +309,19 @@ func TestUsageNotPairedWithItsRendering(t *testing.T) {
 }
 
 // TestReflowAddsNothing rewraps an unchanged owner paragraph and an unchanged
-// test comment: no sentence is added.
+// test comment, moving the owner sentence down a line: no sentence is added.
 func TestReflowAddsNothing(t *testing.T) {
 	base := withOwner(baseTree(), 76)
 	base["validate/jsonsrc/positions_test.go"] = "package jsonsrc\n\n" + wrap(76, "", f1) + "var x = 1\n"
-	head := withOwner(baseTree(), 50)
-	head["validate/jsonsrc/positions_test.go"] = "package jsonsrc\n\n" + wrap(50, "", f1) + "var x = 1\n"
+	head := withOwner(baseTree(), 40)
+	head["validate/jsonsrc/positions_test.go"] = "package jsonsrc\n\n" + wrap(40, "", f1) + "var x = 1\n"
 	for _, rel := range []string{"validate/jsonsrc/doc.go", "validate/jsonsrc/positions_test.go"} {
 		if head[rel] == base[rel] {
 			t.Fatalf("the fixture reflowed nothing in %s", rel)
 		}
+	}
+	if b, h := lineOf(t, base, "validate/jsonsrc/doc.go", ownerLocations), lineOf(t, head, "validate/jsonsrc/doc.go", ownerLocations); b == h {
+		t.Fatalf("the reflow left the owner sentence on line %d", b)
 	}
 	rep := surveyTrees(t, base, head)
 	if rep.added != 0 {

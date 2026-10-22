@@ -14,9 +14,8 @@ import (
 	"github.com/kud360/goxsd8/tools/internal/commentpara"
 )
 
-// usageFile and usageConst name the one text read that is not a comment:
-// cmd/goxsd8's usage, the CLI's contract. renderFile holds usage rendered as
-// its package doc's "# Usage" section (cmd/goxsd8's TestDocRendersUsage).
+// usageFile and usageConst name the one text read that is not a comment, and
+// renderFile the file holding it rendered.
 const (
 	usageFile  = "cmd/goxsd8/main.go"
 	usageConst = "usage"
@@ -40,9 +39,8 @@ type word struct {
 }
 
 // readTree returns the sentences of every Go file under root: the comments',
-// file by file in path order and in source order within a file, then usage's.
-// A renderFile comment sentence spelling a usage sentence word for word is
-// usage rendered and is dropped, so that text is read once, at usage.
+// file by file in path order and in source order within a file, less usage's
+// rendering as the package doc states, then usage's.
 func readTree(root string) ([]sentence, error) {
 	files, err := commentpara.Files([]string{filepath.Join(root, "...")})
 	if err != nil {
@@ -115,12 +113,12 @@ func readFile(path, rel string) (comments, usage []sentence, err error) {
 	return comments, usage, nil
 }
 
-// ownerDocs returns the comment groups of file that are owners' — every one in
-// a doc.go, otherwise the package clause's doc and the doc comment of each
-// exported identifier: a func, a method of an exported type, a type, a const
-// or var, a struct field or interface method of an exported type, and a
-// declaration group declaring any of those. A test file has none. The map is
-// a lookup index (STYLE D2's permitted use).
+// ownerDocs returns the comment groups of file that are owners', the package
+// doc naming them, file being named name. An exported identifier is a func, a
+// method of an exported type, a type, a const or var, or a struct field or
+// interface method of an exported type, and a declaration group declaring any
+// of those has its doc read too. A test file has none. The map is a lookup
+// index (STYLE D2's permitted use).
 func ownerDocs(file *ast.File, name string) map[*ast.CommentGroup]bool {
 	docs := make(map[*ast.CommentGroup]bool)
 	if strings.HasSuffix(name, "_test.go") {

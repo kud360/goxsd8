@@ -106,9 +106,6 @@ var irregularRules = []string{
 }
 
 func main() {
-	// reftree.ModuleRoot resolves the spec inputs and the catalog output the
-	// same way whether `go generate` runs the tool in the module root or in the
-	// xsderr package directory.
 	root, err := reftree.ModuleRoot()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "locating module root: %v\n", err)
