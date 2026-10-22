@@ -1,10 +1,15 @@
-// Command issuefeed writes the issue lists `go tool wipsurvey`, `go tool
+// Command issuefeed reads the repository's issues over REST in one of two
+// modes. Its feed writes the issue lists `go tool wipsurvey`, `go tool
 // gapaudit` and `go tool lanepartition` read on stdin: `issues.json`, rows of
 // `{number, state, labels: [{name}]}`, and `gapissues.json`, the same rows
-// plus `title` and `body`. It walks the repository's REST issue listing page
-// by page through `gh api`, as one plain command the worktree-isolation guard
-// admits, where a shell loop is refused (#2235).
+// plus `title` and `body`. Its -owner-comments survey prints the comments the
+// repository owner wrote outside the Claude app on `blocked` issues. Each
+// mode walks REST listings page by page through `gh api`, as one plain
+// command the worktree-isolation guard admits, where a shell loop is refused
+// (#2235).
 //
+// Every listing — the issue listing, and the survey's per-issue events and
+// comments — is walked under the rules this paragraph and the next state.
 // The walk requests every page by an explicit `page=N` and never through `gh
 // api --paginate`, whose Link header carries numeric-ID repository paths the
 // session proxy answers with a 403 after writing the pages it did fetch. A
@@ -17,10 +22,11 @@
 // (#1145). The walk ends at the first page still empty after its re-request.
 // Two checks then guard against what a re-request cannot catch: every page
 // but the last non-empty one must hold exactly per_page rows, and no page may
-// repeat an issue number an earlier page — or itself — already carried, which
-// is how a page served from another page's offset shows (#1520).
+// repeat a row an earlier page — or itself — already carried, which is how a
+// page served from another page's offset shows (#1520). An issue row is keyed
+// by its number, an event or comment row by its id.
 //
-// The distinct-number stamp printed to stderr — `rows N distinct D min A max
+// The feed's distinct-number stamp printed to stderr — `rows N distinct D min A max
 // B no gaps`, or `... missing numbers K` — is computed over every row the
 // walk kept, pull requests included, because issues and pull requests share
 // one number space; it is informational and a gap does not abort.
@@ -28,18 +34,38 @@
 // Usage:
 //
 //	go tool issuefeed -dir /abs/dir/outside/the/checkout
+//	go tool issuefeed -owner-comments
 //
-// -dir is required and created if absent; the two files are written there
+// The feed's -dir is required and created if absent; the two files are written there
 // and nowhere else, so a directory outside the checkout keeps them out of a
 // `git add -A` (#1217). Both files are written or neither is: the run first
 // removes any earlier copies, builds both in memory, and renames them into
 // place only once every check has passed.
 //
-// Exit status is 0 when both files are written, 2 for a usage error, and 1
-// for a failed fetch, a failed check or a failed write — and after a non-zero
-// exit -dir holds neither file. A usage error clears a -dir the parse read
-// before it; an unknown flag ahead of -dir stops the parse before -dir is
-// read, so that command line names no directory and nothing is cleared.
+// The feed's exit status is 0 when both files are written, 2 for a usage
+// error, and 1 for a failed fetch, a failed check or a failed write — and
+// after a non-zero exit -dir holds neither file. A usage error clears a -dir
+// the parse read before it, unless the parse also read -owner-comments,
+// whose survey writes no -dir and so clears none; an unknown flag ahead of
+// -dir stops the parse before -dir is read, so that command line names no
+// directory and nothing is cleared.
+//
+// The -owner-comments survey takes no -dir and writes no file. It lists the
+// open issues labelled `blocked`, pull requests dropped, and for each walks
+// its events and its comments. A comment is the owner's own when its REST
+// `performed_via_github_app` is null: every agent comment posts under the
+// owner's login through the Claude app, which that field names, a session
+// container's `gh api` writes included. The survey prints each owner comment
+// whose `created_at` is strictly later than the issue's latest `labeled`
+// event for `blocked`, one `#N <comment id> <created_at>` line each, issues
+// in ascending number and each issue's comments in REST order. When none
+// qualifies it prints one line saying so, which does not start with `#`. An
+// open `blocked` issue whose events carry no `labeled` event for `blocked`,
+// or a comment carrying no `performed_via_github_app` field, aborts the
+// survey, since neither can be dated or attributed. Nothing is printed to
+// stdout until every fetch has succeeded; exit status is 0 when the lines
+// are printed, 2 for a usage error, and 1 for a failed fetch, a failed check
+// or either abort, with stdout empty.
 package main
 
 import (
@@ -58,9 +84,20 @@ import (
 	"time"
 )
 
-// listing is the repository-scoped REST issue listing the walk pages through.
-// The slug is fixed: this repository's surveys are the tool's only consumer.
-const listing = "repos/kud360/goxsd8/issues"
+// issuesPath is the repository-scoped REST issues path every endpoint the
+// tool walks starts with. The slug is fixed: this repository's surveys are
+// the tool's only consumer.
+const issuesPath = "repos/kud360/goxsd8/issues"
+
+// blockedLabel is the label the -owner-comments survey selects and dates.
+const blockedLabel = "blocked"
+
+// listing is the issue listing the feed walks; blockedListing is the one the
+// -owner-comments survey walks.
+const (
+	listing        = issuesPath + "?state=all"
+	blockedListing = issuesPath + "?state=open&labels=" + blockedLabel
+)
 
 // perPage is the page size every request asks for, REST's maximum.
 const perPage = 100
@@ -76,15 +113,16 @@ const (
 	gapIssuesFile = "gapissues.json"
 )
 
-const usage = "usage: issuefeed -dir <dir>   (dir outside the checkout; created if absent)"
+const usage = "usage: issuefeed -dir <dir>   (dir outside the checkout; created if absent)\n       issuefeed -owner-comments"
 
 // errUsage is what every command-line error wraps, so main exits 2 for it and
 // 1 for everything else.
 var errUsage = errors.New("usage error")
 
-// fetchFunc returns the raw stdout of one listing request for the 1-based
-// page. ghFetch is the real one; tests substitute a fake page source.
-type fetchFunc func(page int) ([]byte, error)
+// fetchFunc returns the raw stdout of one request for the 1-based page of
+// endpoint, a path under issuesPath with any query but the paging. ghFetch is
+// the real one; tests substitute a fake page source.
+type fetchFunc func(endpoint string, page int) ([]byte, error)
 
 func main() {
 	err := run(os.Stdout, os.Stderr, os.Args[1:], ghFetch, func() { time.Sleep(retryPause) })
@@ -98,37 +136,45 @@ func main() {
 	os.Exit(1)
 }
 
-// run drives one feed end to end: parse -dir, clear the earlier outputs from
-// it, walk the listing through fetch (calling pause before each re-request),
-// check the walk, print the stamp to stderr, and write both files, naming
-// each on stdout.
+// run parses the command line and runs the mode it names. Fetches go through
+// fetch, and pause runs before each re-request.
 func run(stdout, stderr io.Writer, args []string, fetch fetchFunc, pause func()) error {
 	flags := flag.NewFlagSet("issuefeed", flag.ContinueOnError)
 	flags.SetOutput(io.Discard)
 	dir := flags.String("dir", "", "directory to write issues.json and gapissues.json into (required)")
+	owner := flags.Bool("owner-comments", false, "print the owner's comments on blocked issues since each was blocked")
 	if err := flags.Parse(args); err != nil {
-		return usageError(*dir, fmt.Errorf("%w\n%s", err, usage))
+		return usageError(*dir, *owner, fmt.Errorf("%w\n%s", err, usage))
 	}
 	if flags.NArg() != 0 {
-		return usageError(*dir, fmt.Errorf("unexpected argument %q\n%s", flags.Arg(0), usage))
+		return usageError(*dir, *owner, fmt.Errorf("unexpected argument %q\n%s", flags.Arg(0), usage))
 	}
-	if *dir == "" {
+	if *owner && *dir != "" {
+		return fmt.Errorf("%w: -owner-comments writes no file and takes no -dir\n%s", errUsage, usage)
+	}
+	if *owner {
+		return ownerComments(stdout, fetch, pause)
+	}
+	return writeFeed(stdout, stderr, *dir, fetch, pause)
+}
+
+// writeFeed drives one feed end to end: clear the earlier outputs from dir,
+// walk the listing, print the stamp to stderr, and write both files, naming
+// each on stdout.
+func writeFeed(stdout, stderr io.Writer, dir string, fetch fetchFunc, pause func()) error {
+	if dir == "" {
 		return fmt.Errorf("%w: -dir is required, so the files never land in the working directory\n%s", errUsage, usage)
 	}
-	if err := os.MkdirAll(*dir, 0o755); err != nil {
+	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return fmt.Errorf("creating -dir: %w", err)
 	}
-	if err := removeOutputs(*dir); err != nil {
+	if err := removeOutputs(dir); err != nil {
 		return err
 	}
-	pages, err := walk(fetch, pause)
+	all, err := fetchAll(fetch, listing, pause, issueKey)
 	if err != nil {
 		return err
 	}
-	if err := checkFullness(pages); err != nil {
-		return err
-	}
-	all := slices.Concat(pages...)
 	if len(all) == 0 {
 		return errors.New("the walk found no rows at all; re-run it")
 	}
@@ -137,44 +183,51 @@ func run(stdout, stderr io.Writer, args []string, fetch fetchFunc, pause func())
 	if err != nil {
 		return err
 	}
-	if err := writeOutputs(*dir, issues, gapIssues); err != nil {
+	if err := writeOutputs(dir, issues, gapIssues); err != nil {
 		return err
 	}
-	_, _ = fmt.Fprintln(stdout, filepath.Join(*dir, issuesFile))
-	_, _ = fmt.Fprintln(stdout, filepath.Join(*dir, gapIssuesFile))
+	_, _ = fmt.Fprintln(stdout, filepath.Join(dir, issuesFile))
+	_, _ = fmt.Fprintln(stdout, filepath.Join(dir, gapIssuesFile))
 	return nil
 }
 
 // usageError wraps err in errUsage after clearing the earlier outputs from
 // dir, so a usage error that still named a -dir leaves neither file there. It
-// clears nothing when dir is empty: an unknown flag before -dir stops the
-// parse before -dir is read, and no directory was named at all. A failed
-// removal is reported beside the usage error, which still exits 2.
-func usageError(dir string, err error) error {
+// clears nothing when dir is empty — an unknown flag before -dir stops the
+// parse before -dir is read, and no directory was named at all — nor when
+// owner is set, since the -owner-comments survey writes no -dir and must not
+// clear a feed another run wrote. A failed removal is reported beside the
+// usage error, which still exits 2.
+func usageError(dir string, owner bool, err error) error {
 	err = fmt.Errorf("%w: %w", errUsage, err)
-	if dir == "" {
+	if dir == "" || owner {
 		return err
 	}
 	return errors.Join(err, removeOutputs(dir))
 }
 
-// ghArgs is the `gh` argv requesting one page: an explicit page number, never
-// --paginate.
-func ghArgs(page int) []string {
-	return []string{"api", fmt.Sprintf("%s?state=all&per_page=%d&page=%d", listing, perPage, page)}
+// ghArgs is the `gh` argv requesting one page of endpoint: an explicit page
+// number, never --paginate.
+func ghArgs(endpoint string, page int) []string {
+	sep := "?"
+	if strings.Contains(endpoint, "?") {
+		sep = "&"
+	}
+	return []string{"api", fmt.Sprintf("%s%sper_page=%d&page=%d", endpoint, sep, perPage, page)}
 }
 
-// ghFetch execs `gh api` for one page and returns its stdout.
-func ghFetch(page int) ([]byte, error) {
-	out, err := exec.Command("gh", ghArgs(page)...).Output()
+// ghFetch execs `gh api` for one page of endpoint and returns its stdout.
+func ghFetch(endpoint string, page int) ([]byte, error) {
+	args := ghArgs(endpoint, page)
+	out, err := exec.Command("gh", args...).Output()
 	if err == nil {
 		return out, nil
 	}
 	var exitErr *exec.ExitError
 	if errors.As(err, &exitErr) {
-		return nil, fmt.Errorf("gh %s: %w: %s", strings.Join(ghArgs(page), " "), err, strings.TrimSpace(string(exitErr.Stderr)))
+		return nil, fmt.Errorf("gh %s: %w: %s", strings.Join(args, " "), err, strings.TrimSpace(string(exitErr.Stderr)))
 	}
-	return nil, fmt.Errorf("gh %s: %w", strings.Join(ghArgs(page), " "), err)
+	return nil, fmt.Errorf("gh %s: %w", strings.Join(args, " "), err)
 }
 
 // row is one listing entry as the walk reads it. State passes through
@@ -194,10 +247,15 @@ type label struct {
 	Name string `json:"name"`
 }
 
-// fetchPage requests one page and decodes it. A fetch error, or stdout that
-// is not a JSON array of entries, is a failed fetch.
-func fetchPage(fetch fetchFunc, page int) ([]row, error) {
-	out, err := fetch(page)
+// issueKey keys an issue row for the repeated-row check by its number.
+func issueKey(r row) string {
+	return fmt.Sprintf("#%d", r.Number)
+}
+
+// fetchPage requests one page of endpoint and decodes it. A fetch error, or
+// stdout that is not a JSON array of entries, is a failed fetch.
+func fetchPage[T any](fetch fetchFunc, endpoint string, page int) ([]T, error) {
+	out, err := fetch(endpoint, page)
 	if err != nil {
 		return nil, fmt.Errorf("fetching page %d: %w", page, err)
 	}
@@ -205,30 +263,43 @@ func fetchPage(fetch fetchFunc, page int) ([]row, error) {
 	if !bytes.HasPrefix(trimmed, []byte("[")) {
 		return nil, fmt.Errorf("fetching page %d: the answer is not a JSON array: %.200s", page, trimmed)
 	}
-	var rows []row
+	var rows []T
 	if err := json.Unmarshal(trimmed, &rows); err != nil {
 		return nil, fmt.Errorf("fetching page %d: decoding the answer: %w", page, err)
 	}
 	return rows, nil
 }
 
-// walk returns the listing's non-empty pages in page order. A page shorter
-// than perPage, empty included, is re-requested once after pause and the
-// longer answer kept; the walk ends at the first page still empty after
-// that. A page repeating a number already seen — on an earlier page or on
-// itself — aborts the walk (#1520), which also bounds it against a source
-// serving the same page forever.
-func walk(fetch fetchFunc, pause func()) ([][]row, error) {
-	var pages [][]row
-	seen := map[int]int{}
+// fetchAll walks endpoint and checks the walk, returning every row it kept in
+// page order.
+func fetchAll[T any](fetch fetchFunc, endpoint string, pause func(), key func(T) string) ([]T, error) {
+	pages, err := walk(fetch, endpoint, pause, key)
+	if err != nil {
+		return nil, err
+	}
+	if err := checkFullness(pages); err != nil {
+		return nil, err
+	}
+	return slices.Concat(pages...), nil
+}
+
+// walk returns endpoint's non-empty pages in page order. A page shorter than
+// perPage, empty included, is re-requested once after pause and the longer
+// answer kept; the walk ends at the first page still empty after that. A
+// page repeating a row key already seen — on an earlier page or on itself —
+// aborts the walk (#1520), which also bounds it against a source serving the
+// same page forever.
+func walk[T any](fetch fetchFunc, endpoint string, pause func(), key func(T) string) ([][]T, error) {
+	var pages [][]T
+	seen := map[string]int{}
 	for page := 1; ; page++ {
-		rows, err := fetchPage(fetch, page)
+		rows, err := fetchPage[T](fetch, endpoint, page)
 		if err != nil {
 			return nil, err
 		}
 		if len(rows) < perPage {
 			pause()
-			again, err := fetchPage(fetch, page)
+			again, err := fetchPage[T](fetch, endpoint, page)
 			if err != nil {
 				return nil, err
 			}
@@ -240,10 +311,11 @@ func walk(fetch fetchFunc, pause func()) ([][]row, error) {
 			return pages, nil
 		}
 		for _, r := range rows {
-			if first, ok := seen[r.Number]; ok {
-				return nil, fmt.Errorf("page %d repeats #%d from page %d; re-run the walk", page, r.Number, first)
+			k := key(r)
+			if first, ok := seen[k]; ok {
+				return nil, fmt.Errorf("page %d repeats %s from page %d; re-run the walk", page, k, first)
 			}
-			seen[r.Number] = page
+			seen[k] = page
 		}
 		pages = append(pages, rows)
 	}
@@ -252,7 +324,7 @@ func walk(fetch fetchFunc, pause func()) ([][]row, error) {
 // checkFullness reports the first page other than the last that does not
 // hold exactly perPage rows: a short page the walk passed is a transient
 // truncation its re-request did not recover.
-func checkFullness(pages [][]row) error {
+func checkFullness[T any](pages [][]T) error {
 	for i, rows := range pages[:max(len(pages)-1, 0)] {
 		if len(rows) != perPage {
 			return fmt.Errorf("page %d came back with %d rows and is not the last page; re-run the walk", i+1, len(rows))
@@ -400,4 +472,93 @@ func writeTemp(dir, name string, data []byte) (string, error) {
 		return "", fmt.Errorf("writing %s: %w", name, err)
 	}
 	return f.Name(), nil
+}
+
+// event is one issue-events entry as the survey reads it. Label is nil for
+// an event that carries none.
+type event struct {
+	ID        int64     `json:"id"`
+	Event     string    `json:"event"`
+	Label     *label    `json:"label"`
+	CreatedAt time.Time `json:"created_at"`
+}
+
+// comment is one issue-comments entry as the survey reads it. App holds the
+// raw `performed_via_github_app` value, nil when the field is absent.
+type comment struct {
+	ID        int64           `json:"id"`
+	CreatedAt time.Time       `json:"created_at"`
+	App       json.RawMessage `json:"performed_via_github_app"`
+}
+
+func eventKey(e event) string     { return fmt.Sprintf("id %d", e.ID) }
+func commentKey(c comment) string { return fmt.Sprintf("id %d", c.ID) }
+
+// ownerComments runs the -owner-comments survey the package doc states,
+// buffering every line until the last fetch has succeeded.
+func ownerComments(stdout io.Writer, fetch fetchFunc, pause func()) error {
+	listed, err := fetchAll(fetch, blockedListing, pause, issueKey)
+	if err != nil {
+		return fmt.Errorf("listing the open %s issues: %w", blockedLabel, err)
+	}
+	var nums []int
+	for _, r := range listed {
+		if r.PullRequest != nil {
+			continue
+		}
+		nums = append(nums, r.Number)
+	}
+	slices.Sort(nums)
+	var lines []string
+	for _, n := range nums {
+		found, err := ownerCommentsOn(fetch, pause, n)
+		if err != nil {
+			return err
+		}
+		lines = append(lines, found...)
+	}
+	if len(lines) == 0 {
+		_, _ = fmt.Fprintf(stdout, "no owner comment since the %s label on any of the %d open %s issues\n", blockedLabel, len(nums), blockedLabel)
+		return nil
+	}
+	for _, l := range lines {
+		_, _ = fmt.Fprintln(stdout, l)
+	}
+	return nil
+}
+
+// ownerCommentsOn returns issue n's lines of the -owner-comments survey, which
+// the package doc states.
+func ownerCommentsOn(fetch fetchFunc, pause func(), n int) ([]string, error) {
+	events, err := fetchAll(fetch, fmt.Sprintf("%s/%d/events", issuesPath, n), pause, eventKey)
+	if err != nil {
+		return nil, fmt.Errorf("issue #%d events: %w", n, err)
+	}
+	var since time.Time
+	for _, e := range events {
+		if e.Event != "labeled" || e.Label == nil || e.Label.Name != blockedLabel {
+			continue
+		}
+		if e.CreatedAt.After(since) {
+			since = e.CreatedAt
+		}
+	}
+	if since.IsZero() {
+		return nil, fmt.Errorf("issue #%d events: no labeled event for %s dates the block", n, blockedLabel)
+	}
+	comments, err := fetchAll(fetch, fmt.Sprintf("%s/%d/comments", issuesPath, n), pause, commentKey)
+	if err != nil {
+		return nil, fmt.Errorf("issue #%d comments: %w", n, err)
+	}
+	var lines []string
+	for _, c := range comments {
+		if c.App == nil {
+			return nil, fmt.Errorf("issue #%d comments: comment id %d carries no performed_via_github_app field", n, c.ID)
+		}
+		if string(c.App) != "null" || !c.CreatedAt.After(since) {
+			continue
+		}
+		lines = append(lines, fmt.Sprintf("#%d %d %s", n, c.ID, c.CreatedAt.Format(time.RFC3339)))
+	}
+	return lines, nil
 }
