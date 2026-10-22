@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 	"os"
 	"path/filepath"
 	"slices"
@@ -435,5 +436,234 @@ func TestWriteOutputsBothOrNeither(t *testing.T) {
 			names = append(names, e.Name())
 		}
 		t.Errorf("dir holds %v, want only the blocking %s directory", names, gapIssuesFile)
+	}
+}
+
+// at renders hour h of 2026-10-10 as REST writes created_at.
+func at(h int) string {
+	return fmt.Sprintf("2026-10-10T%02d:00:00Z", h)
+}
+
+// arr renders entries as one page's JSON array.
+func arr(entries ...string) answer {
+	return answer{raw: "[" + strings.Join(entries, ",") + "]"}
+}
+
+// blockedRow is a listing entry for open blocked issue n; prRow one for a
+// pull request.
+func blockedRow(n int) string {
+	return fmt.Sprintf(`{"number":%d,"state":"open","labels":[{"name":"blocked"}]}`, n)
+}
+
+func prRow(n int) string {
+	return fmt.Sprintf(`{"number":%d,"state":"open","labels":[{"name":"blocked"}],"pull_request":{"url":"u"}}`, n)
+}
+
+// ev is an events entry; lbl "" carries no label.
+func ev(id int, kind, lbl string, hour int) string {
+	if lbl == "" {
+		return fmt.Sprintf(`{"id":%d,"event":%q,"created_at":%q}`, id, kind, at(hour))
+	}
+	return fmt.Sprintf(`{"id":%d,"event":%q,"label":{"name":%q,"color":"c"},"created_at":%q}`, id, kind, lbl, at(hour))
+}
+
+// cm is a comments entry, posted through the Claude app when app is set and
+// with a null performed_via_github_app otherwise.
+func cm(id, hour int, app bool) string {
+	via := "null"
+	if app {
+		via = `{"id":1,"slug":"claude","name":"Claude"}`
+	}
+	return fmt.Sprintf(`{"id":%d,"created_at":%q,"user":{"login":"kud360"},"performed_via_github_app":%s}`, id, at(hour), via)
+}
+
+func eventsOf(n int) string   { return fmt.Sprintf("%s/%d/events", issuesPath, n) }
+func commentsOf(n int) string { return fmt.Sprintf("%s/%d/comments", issuesPath, n) }
+
+// blockedAt is an events page labelling an issue blocked at hour.
+func blockedAt(hour int) answer {
+	return arr(ev(1, "labeled", "blocked", hour))
+}
+
+// survey runs -owner-comments against f with a -dir-less command line.
+func survey(f *fake) (stdout, stderr string, err error) {
+	var out, errOut bytes.Buffer
+	err = run(&out, &errOut, []string{"-owner-comments"}, f.fetch, func() {})
+	return out.String(), errOut.String(), err
+}
+
+// TestOwnerCommentsLists covers the surveys that must end at exit 0: each row
+// names the endpoints the source serves and the exact stdout.
+func TestOwnerCommentsLists(t *testing.T) {
+	full := func(from, hour int, app bool) answer {
+		entries := make([]string, 0, perPage)
+		for i := range perPage {
+			entries = append(entries, cm(from+i, hour, app))
+		}
+		return arr(entries...)
+	}
+	cases := []struct {
+		name   string
+		others map[string]map[int][]answer
+		want   string
+	}{{
+		name: "only a null-app comment strictly after the blocked label",
+		others: map[string]map[int][]answer{
+			blockedListing: {1: {arr(blockedRow(16))}},
+			eventsOf(16):   {1: {arr(ev(1, "labeled", "blocked", 10), ev(2, "labeled", "ready", 13))}},
+			commentsOf(16): {1: {arr(cm(101, 9, false), cm(102, 11, true), cm(103, 10, false), cm(104, 12, false))}},
+		},
+		want: "#16 104 " + at(12) + "\n",
+	}, {
+		name: "ascending issue order, comments in REST order, pull request dropped",
+		others: map[string]map[int][]answer{
+			blockedListing: {1: {arr(blockedRow(30), prRow(25), blockedRow(20))}},
+			eventsOf(30):   {1: {blockedAt(10)}},
+			commentsOf(30): {1: {arr(cm(301, 11, false))}},
+			eventsOf(25):   {1: {blockedAt(10)}},
+			commentsOf(25): {1: {arr(cm(251, 11, false))}},
+			eventsOf(20):   {1: {blockedAt(10)}},
+			commentsOf(20): {1: {arr(cm(205, 12, false), cm(204, 13, false))}},
+		},
+		want: "#20 205 " + at(12) + "\n#20 204 " + at(13) + "\n#30 301 " + at(11) + "\n",
+	}, {
+		name: "multi-page comments, the owner's on page 2",
+		others: map[string]map[int][]answer{
+			blockedListing: {1: {arr(blockedRow(16))}},
+			eventsOf(16):   {1: {blockedAt(10)}},
+			commentsOf(16): {1: {full(1000, 11, true)}, 2: {arr(cm(2000, 12, false))}},
+		},
+		want: "#16 2000 " + at(12) + "\n",
+	}, {
+		name: "multi-page events, the latest blocked label on page 2",
+		others: map[string]map[int][]answer{
+			blockedListing: {1: {arr(blockedRow(16))}},
+			eventsOf(16): {1: {func() answer {
+				entries := []string{ev(1, "labeled", "blocked", 10)}
+				for i := 2; i <= perPage; i++ {
+					entries = append(entries, ev(i, "subscribed", "", 10))
+				}
+				return arr(entries...)
+			}()}, 2: {arr(ev(101, "unlabeled", "blocked", 11), ev(102, "labeled", "blocked", 14))}},
+			commentsOf(16): {1: {arr(cm(1, 13, false), cm(2, 15, false))}},
+		},
+		want: "#16 2 " + at(15) + "\n",
+	}, {
+		name: "no owner comment says so in one line",
+		others: map[string]map[int][]answer{
+			blockedListing: {1: {arr(blockedRow(16))}},
+			eventsOf(16):   {1: {blockedAt(10)}},
+			commentsOf(16): {1: {arr(cm(1, 9, false), cm(2, 11, true))}},
+		},
+		want: "no owner comment since the blocked label on any of the 1 open blocked issues\n",
+	}, {
+		name:   "no blocked issue at all",
+		others: map[string]map[int][]answer{},
+		want:   "no owner comment since the blocked label on any of the 0 open blocked issues\n",
+	}}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			stdout, stderr, err := survey(&fake{others: tc.others})
+			if err != nil {
+				t.Fatalf("run: %v", err)
+			}
+			if stdout != tc.want {
+				t.Errorf("stdout = %q, want %q", stdout, tc.want)
+			}
+			if stderr != "" {
+				t.Errorf("stderr = %q, want empty", stderr)
+			}
+		})
+	}
+}
+
+// TestOwnerCommentsAborts covers every failed survey: each must return an
+// error opening with wantPrefix and print nothing, though issue #10, read
+// first, carries an owner comment a printer that streamed would have shown.
+func TestOwnerCommentsAborts(t *testing.T) {
+	cases := []struct {
+		name       string
+		others     map[string]map[int][]answer
+		wantPrefix string
+	}{{
+		name:       "failed listing",
+		others:     map[string]map[int][]answer{blockedListing: {1: {{err: errors.New("HTTP 502")}}}},
+		wantPrefix: "listing the open blocked issues: fetching page 1: HTTP 502",
+	}, {
+		name:       "failed events fetch on a later issue",
+		others:     map[string]map[int][]answer{eventsOf(20): {1: {{err: errors.New("HTTP 502")}}}},
+		wantPrefix: "issue #20 events: fetching page 1: HTTP 502",
+	}, {
+		name:       "failed comments fetch on a later issue",
+		others:     map[string]map[int][]answer{eventsOf(20): {1: {blockedAt(10)}}, commentsOf(20): {1: {{err: errors.New("HTTP 502")}}}},
+		wantPrefix: "issue #20 comments: fetching page 1: HTTP 502",
+	}, {
+		name: "comment page repeating an id",
+		others: map[string]map[int][]answer{eventsOf(20): {1: {blockedAt(10)}}, commentsOf(20): {1: {func() answer {
+			entries := make([]string, 0, perPage)
+			for i := 1; i <= perPage; i++ {
+				entries = append(entries, cm(i, 11, true))
+			}
+			return arr(entries...)
+		}()}, 2: {arr(cm(1, 11, true))}}},
+		wantPrefix: "issue #20 comments: page 2 repeats id 1 from page 1",
+	}, {
+		name:       "no labeled event for blocked",
+		others:     map[string]map[int][]answer{eventsOf(20): {1: {arr(ev(1, "labeled", "ready", 10), ev(2, "unlabeled", "blocked", 11))}}},
+		wantPrefix: "issue #20 events: no labeled event for blocked dates the block",
+	}, {
+		name:       "comment without the app field",
+		others:     map[string]map[int][]answer{eventsOf(20): {1: {blockedAt(10)}}, commentsOf(20): {1: {arr(fmt.Sprintf(`{"id":7,"created_at":%q}`, at(11)))}}},
+		wantPrefix: "issue #20 comments: comment id 7 carries no performed_via_github_app field",
+	}}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			others := map[string]map[int][]answer{
+				blockedListing: {1: {arr(blockedRow(20), blockedRow(10))}},
+				eventsOf(10):   {1: {blockedAt(10)}},
+				commentsOf(10): {1: {arr(cm(1, 11, false))}},
+			}
+			maps.Copy(others, tc.others)
+			stdout, stderr, err := survey(&fake{others: others})
+			if err == nil || !strings.HasPrefix(err.Error(), tc.wantPrefix) {
+				t.Fatalf("run err = %v, want prefix %q", err, tc.wantPrefix)
+			}
+			if errors.Is(err, errUsage) {
+				t.Errorf("run err = %v wraps errUsage, want exit 1", err)
+			}
+			if stdout != "" || stderr != "" {
+				t.Errorf("stdout %q, stderr %q, want both empty on a failed survey", stdout, stderr)
+			}
+		})
+	}
+}
+
+// TestOwnerCommentsLeavesFeed pins that a usage error on a command line
+// naming -owner-comments requests nothing and leaves a -dir's feed in place,
+// -owner-comments with -dir included.
+func TestOwnerCommentsLeavesFeed(t *testing.T) {
+	for _, tail := range [][]string{{"-owner-comments"}, {"-owner-comments", "extra"}, {"-owner-comments", "-bogus"}} {
+		t.Run(strings.Join(tail, " "), func(t *testing.T) {
+			dir := t.TempDir()
+			for _, name := range []string{issuesFile, gapIssuesFile} {
+				if err := os.WriteFile(filepath.Join(dir, name), []byte("feed"), 0o644); err != nil {
+					t.Fatal(err)
+				}
+			}
+			f := &fake{}
+			args := append([]string{"-dir", dir}, tail...)
+			err := run(&bytes.Buffer{}, &bytes.Buffer{}, args, f.fetch, func() {})
+			if !errors.Is(err, errUsage) {
+				t.Errorf("run(%q) err = %v, want errUsage", args, err)
+			}
+			if len(f.requests) != 0 {
+				t.Errorf("run(%q) requested %v, want nothing", args, f.requests)
+			}
+			for _, name := range []string{issuesFile, gapIssuesFile} {
+				if got, err := os.ReadFile(filepath.Join(dir, name)); err != nil || string(got) != "feed" {
+					t.Errorf("run(%q) left %s = %q (err %v), want the feed untouched", args, name, got, err)
+				}
+			}
+		})
 	}
 }
