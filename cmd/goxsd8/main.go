@@ -39,7 +39,7 @@ Usage (contract; subcommands land with their milestones):
   1     3     parse: a schema rejected, an I/O fault reading a document
               it references included. validate: an instance invalid, not
               well-formed XML, its walk stopped by a fault, malformed
-              JSON, or a fault reading a JSON instance.
+              JSON, or a fault reading a JSON instance once it is open.
   2     4     usage, or an I/O fault on an argument or on stdout: never
               a verdict about a schema or an instance.
   3     none  validate only: the -schema set does not compile, an I/O
