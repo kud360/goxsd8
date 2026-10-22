@@ -49,6 +49,8 @@ type ctaIntegerRange struct{ lo, hi int64 }
 
 func (ctaIntegerRanges) ctaValue() {}
 
+func (ctaIntegerRanges) eachOperand(func(ctaNode) bool) {}
+
 // readsChild is false: the sequence reads nothing of the instance.
 func (ctaIntegerRanges) readsChild(xsd.QName) bool { return false }
 
@@ -240,6 +242,8 @@ type ctaStringSequence struct {
 }
 
 func (ctaStringSequence) ctaValue() {}
+
+func (ctaStringSequence) eachOperand(func(ctaNode) bool) {}
 
 // readsChild is false: the sequence reads nothing of the instance.
 func (ctaStringSequence) readsChild(xsd.QName) bool { return false }

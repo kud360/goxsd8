@@ -1575,13 +1575,23 @@ func CompileAssertionTest(expr xsd.XPathExpression, types xsd.TypeResolver, cont
 	var readsContextItem bool
 	root, defect := compileCTATest(expr, types, ctaAssertionFacade{content: content, attrs: attrs, elems: elems, readsContextItem: &readsContextItem})
 	if defect.kind == ctaNoDefect {
-		return AssertionTest{root: root, readsContextItem: readsContextItem}, nil
+		compiled := AssertionTest{root: root, readsContextItem: readsContextItem}
+		if ctaCompiledAssertion != nil {
+			ctaCompiledAssertion(expr.Expression(), compiled)
+		}
+		return compiled, nil
 	}
 	if syntax := syntaxError(expr.Expression()); syntax.kind != ctaNoDefect {
 		return AssertionTest{}, declineOf(syntax)
 	}
 	return AssertionTest{}, declineOf(defect)
 }
+
+// ctaCompiledAssertion, where non-nil, is handed the text and the result of
+// each {test} [CompileAssertionTest] compiles. Its one setter is
+// TestMain (zz_foldcompare_test.go), which compares the folds over the tree
+// against the per-node methods they replace (#2599); it goes with them.
+var ctaCompiledAssertion func(expr string, t AssertionTest)
 
 // Decline is why [CompileAssertionTest] or [CompileCTATest] did not compile a
 // {test}. validate prints the reason in the Msg of the Unevaluated entry that
@@ -1888,6 +1898,123 @@ func (t AssertionTest) ReadsChildAttributes(name xsd.QName) []xsd.QName {
 		}
 	}
 	return names
+}
+
+// ctaReadsChild reports whether n holds a child value step naming name, at any
+// depth ([AssertionTest.ReadsChild]). A node it names no case for answers its
+// operands' ([ctaNode].eachOperand): ctaBoundSibling and ctaChildAt by their
+// step, ctaBoundAttributeCall by its call, a quantifier over `$value` by its
+// body, and every node holding no operand — a counted, existence-asked or
+// collected path among them, whose reads are the [Tally]'s — false. The cases
+// answer for themselves:
+//
+//   - ctaTypedChild, ctaUntypedChild and ctaBoundChild select children named
+//     their name, each read for its value: the bound child is the range
+//     variable read as an operand.
+//   - ctaMatchingChildren filters children named its name, whose values its
+//     predicate reads: they are counted over [ChildElements], never the
+//     [Tally]. Its predicate's `.` is the candidate (ctaCandidate), so it does
+//     not descend.
+//   - ctaQuantifiedChildren reads what its body reads, and also its binding
+//     step's name where the body reads no attribute of a child so named: the
+//     children are then bound off [ChildElements] for their positions and the
+//     last of them alone, which are read off the children yielded for their
+//     values. A body reading the bound children's attributes has them yielded
+//     for those ([AssertionTest.ReadsChildAttributes]), and reads their values
+//     only where it says so.
+func ctaReadsChild(n ctaNode, name xsd.QName) bool {
+	switch n := n.(type) {
+	case ctaTypedChild:
+		return n.name == name
+	case ctaUntypedChild:
+		return n.name == name
+	case ctaBoundChild:
+		return n.name == name
+	case ctaMatchingChildren:
+		return n.name == name
+	case ctaQuantifiedChildren:
+		return ctaReadsChild(n.body, name) || n.over.name == name && len(ctaChildAttributes(n.body, name, nil)) == 0
+	}
+	for o := range n.eachOperand {
+		if ctaReadsChild(o, name) {
+			return true
+		}
+	}
+	return false
+}
+
+// ctaChildAttributes appends to into the name of each attribute of a child
+// named name that a ctaBoundAttribute in n reads, at any depth, in written
+// order, and returns the extended slice ([AssertionTest.ReadsChildAttributes]).
+// ctaBoundAttribute is its one case: it appends its name where its owner, the
+// bound child or the sibling after it, is named name. Every other node appends
+// its operands' ([ctaNode].eachOperand), ctaBoundAttributeCall its attribute
+// step's and then its call's.
+func ctaChildAttributes(n ctaNode, name xsd.QName, into []xsd.QName) []xsd.QName {
+	if a, isAttribute := n.(ctaBoundAttribute); isAttribute {
+		if a.owner.element() != name {
+			return into
+		}
+		return append(into, a.name)
+	}
+	for o := range n.eachOperand {
+		into = ctaChildAttributes(o, name, into)
+	}
+	return into
+}
+
+// ctaKeysOf appends to into each key n counts or collects under, at any depth,
+// in written order, and returns the extended slice
+// ([AssertionTest.countedPaths]). A node it names no case for appends its
+// operands' ([ctaNode].eachOperand): an element step whose existence is asked
+// (ctaSelectedElements) its path's, the key an fn:count over the same step
+// counts under too; a quantifier over `$value` or a typed child step its
+// body's, its binding sequence keying nothing. The cases answer for
+// themselves:
+//
+//   - a ctaKey — an fn:count path, a filtered child step, a union, a child
+//     path, a child step filtered by its children's existence or by a
+//     `preceding::` step, a path to an attribute, a path of child steps read
+//     for its values — appends itself: the [Tally] counts the nodes it
+//     selects, or collects the values it reads.
+//   - ctaQuantified appends the key counting the bindings that satisfy its
+//     body and, under `every`, the key counting every binding, the one
+//     `count(N)` counts under too, so a {test} writing both keeps one counter.
+//   - ctaMatchingChildren appends nothing: it is counted over [ChildElements],
+//     never keyed in the [Tally], and its predicate counts nothing
+//     (ctaPredicateFacade.count).
+func ctaKeysOf(n ctaNode, into []ctaKey) []ctaKey {
+	switch n := n.(type) {
+	case ctaKey:
+		return append(into, n)
+	case ctaQuantified:
+		into = append(into, n.satisfying)
+		if n.q != ctaEvery {
+			return into
+		}
+		return append(into, n.satisfying.bound())
+	case ctaMatchingChildren:
+		return into
+	}
+	for o := range n.eachOperand {
+		into = ctaKeysOf(o, into)
+	}
+	return into
+}
+
+// ctaReadsContextItem reports whether n holds a ctaContextAtom, at any depth
+// ([AssertionTest.ReadsContextItem]): it is the one node reading E's string
+// value, and every other node answers its operands' ([ctaNode].eachOperand).
+func ctaReadsContextItem(n ctaNode) bool {
+	if _, isAtom := n.(ctaContextAtom); isAtom {
+		return true
+	}
+	for o := range n.eachOperand {
+		if ctaReadsContextItem(o) {
+			return true
+		}
+	}
+	return false
 }
 
 // readsChild reports whether any of operands holds a child value step naming
