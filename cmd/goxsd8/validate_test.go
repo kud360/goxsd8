@@ -285,6 +285,49 @@ func TestValidateSchemaFaultHasItsOwnExitCode(t *testing.T) {
 	}
 }
 
+// TestValidateSchemaFaultPrecedesInstanceUsage pins the order usage's exit-code
+// table states for 3, which never passes through worse (#1232): a set that does
+// not compile answers 3 beside an instance argument that is itself a usage
+// error, since no instance is examined, and a 2 raised before compiling — a
+// bad -format, an unreadable -schema, a flag after a positional — answers
+// instead of the 3. Each instance argument is first shown to answer 2 against
+// a set that compiles, so the 3 is not an argument that was never a fault.
+func TestValidateSchemaFaultPrecedesInstanceUsage(t *testing.T) {
+	dir := t.TempDir()
+	unnamed := filepath.Join(dir, "order.txt")
+	if err := os.WriteFile(unnamed, []byte("<order/>\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	for _, instance := range []string{"testdata/nosuch.xml", unnamed, dir, stdinArg} {
+		var stdout, stderr bytes.Buffer
+		if code := run([]string{"validate", "-schema", orderSchema, instance}, &stdout, &stderr); code != exitUsage {
+			t.Fatalf("instance %q against a set that compiles = %d, want %d: it is no usage error to preempt (stderr %q)", instance, code, exitUsage, stderr.String())
+		}
+		stdout.Reset()
+		stderr.Reset()
+		if code := run([]string{"validate", "-schema", brokenSchema, instance}, &stdout, &stderr); code != exitSchema {
+			t.Errorf("instance %q beside a set that does not compile = %d, want %d (stderr %q)", instance, code, exitSchema, stderr.String())
+		}
+		if got := strings.Count(stderr.String(), "\n"); got != 1 || !strings.Contains(stderr.String(), "[src-resolve]") {
+			t.Errorf("instance %q: stderr = %q, want the set's one src-resolve line and nothing about the instance", instance, stderr.String())
+		}
+	}
+	for _, args := range [][]string{
+		{"validate", "-format", "bogus", "-schema", brokenSchema, validInstance},
+		{"validate", "-schema", brokenSchema, "-schema", "testdata/nosuch.xsd", validInstance},
+		{"validate", "-schema", "testdata/nosuch.xsd", "-schema", brokenSchema, validInstance},
+		{"validate", "-schema", brokenSchema, validInstance, "-q"},
+	} {
+		var stdout, stderr bytes.Buffer
+		if code := run(args, &stdout, &stderr); code != exitUsage {
+			t.Errorf("run(%q) = %d, want %d: a fault read before compiling answers before the set does (stderr %q)", args, code, exitUsage, stderr.String())
+		}
+		if strings.Contains(stderr.String(), "[src-resolve]") {
+			t.Errorf("run(%q): stderr = %q, want no compilation reached", args, stderr.String())
+		}
+	}
+}
+
 // TestValidateUndecidedInstanceHasItsOwnExitCode is this issue's witness: an
 // instance charged no violation whose assessment DECLINED a check it reached
 // is not the clean pass exit 0 names, and the CLI must say so on the same
