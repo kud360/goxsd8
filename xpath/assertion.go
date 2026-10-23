@@ -1112,9 +1112,8 @@ type AssertionTest struct {
 // attrs answers and the types of whose child elements, and of the elements
 // below them, elems answers by path. It returns a nil [*Decline] exactly when
 // it compiled the {test}, and a non-nil one, saying why, exactly when it did
-// not, with the zero AssertionTest. Its consumer is validate's cvc-assertion
-// site (validate/cvcassertion.go), which declines the assertion on a non-nil
-// *Decline.
+// not, with the zero AssertionTest. A library caller learns which {test}s
+// this engine declines from validate.Result.Unevaluated, not by calling it.
 //
 // content fixes `$value`'s static type, which is what cvc-assertion clause
 // 2.3.1.3 reads: under an [xsd.SimpleContent] it is the {simple type
