@@ -369,11 +369,10 @@ func (e *emitter) contentGroup(subject string, t xsd.ComplexType) (xsd.ModelGrou
 	if !ok {
 		return xsd.ModelGroup{}, fmt.Errorf("%s at %s: unexpected content particle term %T", subject, t.Loc(), resolved.Term)
 	}
-	switch group.Compositor() {
-	case xsd.CompositorSequence, xsd.CompositorChoice:
-		return group, nil
+	if group.Compositor() == xsd.CompositorAll {
+		return xsd.ModelGroup{}, decline(t.Loc(), "%s with a %s compositor", subject, group.Compositor())
 	}
-	return xsd.ModelGroup{}, decline(t.Loc(), "%s with a %s compositor", subject, group.Compositor())
+	return group, nil
 }
 
 // fieldSpec is one struct field before its name is claimed.
