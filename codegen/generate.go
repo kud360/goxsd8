@@ -45,6 +45,9 @@ type Target struct {
 // after its parent (the package doc's "Coverage" and "Naming" say which). Targets
 // are generated independently: no emitted package imports another.
 //
+// The file is gofmt-formatted. Generate writes no go.mod and adds no
+// //go:generate line: the module the caller puts Dir in owns both.
+//
 // Generate runs in two phases. Phase 1 builds every target's source in
 // memory, in slice order, and checks every destination; phase 2 writes. A
 // target that fails phase 1 — an invalid Target, a Dir that equals an earlier
