@@ -19,9 +19,8 @@
 // The same thread decides BLOCKED: a branch whose open issue carries the
 // `blocked` label waits on that issue's `## Depends on`, so no age makes
 // it resumable, and it is not RETIRED either — the branch keeps work that
-// resumes once the dependency clears (#2916). It reads BLOCKED whatever
-// its tip, ancestry or heartbeat would otherwise say, the way RETIRED
-// does; a closed issue reads RETIRED, label or none.
+// resumes once the dependency clears (#2916). classify's doc owns where
+// that question sits among the others.
 //
 // The branch set itself must come from the remote, not from local
 // remote-tracking refs. `git for-each-ref refs/remotes/origin/wip/*`
