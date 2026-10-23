@@ -446,7 +446,8 @@ Two access styles over the compiled model, one shared core:
 ## Parsing & loading
 
 - `parser/xmltree`: streaming, bounded-memory XML reader that records
-  line/column for every node; the origin of every `xsderr.Loc`. No
+  line/column for every node; the origin of every `xsderr.Loc` in an XML
+  document. No
   `io.ReadAll` (STYLE P4).
 - `loader`: the IO seam. `Resolver` answers "give me the schema document
   for (namespace, location hint)"; helpers provided for files, HTTP, and
