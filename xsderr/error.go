@@ -97,10 +97,9 @@ func (l Loc) String() string {
 // cos-applicable-facets, or a foreign value handed to a canonical mapping.
 // Whether such an *Error is a verdict is the producing API's to document;
 // value.ValidateLexical's caller tests value.IsDatatypeVerdict. A validate
-// caller reads the split from the channel: a fault that stopped the walk is
-// validate.Result.Err, a fault validate/xmlsrc.Validate met outside the walk is
-// its returned error, and no entry of validate.Result.Violations carries
-// RuleXMLWellFormed; validate's docs own the rest.
+// caller reads the split from two channels, validate.Result.Err and
+// validate/xmlsrc.Validate's returned error; xmlsrc.Validate's doc comment owns
+// which fault reaches which.
 type Error struct {
 	// Rule is the spec rule the error concerns, or one of the two sentinels.
 	Rule Rule
