@@ -171,12 +171,9 @@ func LocOf(err error) (Loc, bool) {
 // IsValidRule("cvc-complex-type.2.1") and IsValidRule("cvc-elt.1") are false,
 // and stay false. That costs nothing: no non-test construction site in the
 // module cites a dotted rule ID, because the convention here is one coarse rule
-// ID plus the clause number in prose (see xsd/complexextension.go). And the
-// "cvc-elt.1" fixtures in error_test.go are incidental, not a deliberate claim
-// of validity — those tests exercise Error()/Wrap() rendering and nil handling,
-// where any string would serve identically. Should a call site ever genuinely
-// need to cite a clause-level rule, extend tools/rulecat to emit it rather than
-// weakening this check.
+// ID plus the clause number in prose (see xsd/complexextension.go). Should a
+// call site ever genuinely need to cite a clause-level rule, extend
+// tools/rulecat to emit it rather than weakening this check.
 //
 // The sentinel set stays closed at two; the package doc's "The s4s-grammar
 // class" says why that class gets none.
