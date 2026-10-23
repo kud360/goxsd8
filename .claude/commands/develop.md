@@ -63,16 +63,18 @@ counts.
 
 2. **Pick.** Run `go tool wipsurvey` — CLAUDE.md spells its input — rather
    than re-deriving the branch namespace by hand (#399). It reports each
-   `wip/issue-<N>` as LIVE, CLAIMED, EXPIRED, RETIRED or UNKNOWN. LIVE
-   branches and their issues are off-limits; RETIRED ones are not work;
-   UNKNOWN — and an EXPIRED row whose reason says its ancestry is
+   `wip/issue-<N>` as LIVE, CLAIMED, EXPIRED, BLOCKED, RETIRED or UNKNOWN.
+   LIVE branches and their issues are off-limits; BLOCKED ones wait on
+   their issue's `## Depends on` and are not resumed; RETIRED ones are not
+   work; UNKNOWN — and an EXPIRED row whose reason says its ancestry is
    undecided — wants `git fetch origin` and a re-run (#810). A CLAIMED
    branch is dated by its thread's `RESUME:`/`TAKEOVER:` comments, not by
    git. If no channel yields an issue list, run it on empty stdin: the
-   lease-only report classifies everything but RETIRED, which is not a
-   reason to survey by hand, and prints every band row's state UNKNOWN.
+   lease-only report classifies everything but BLOCKED and RETIRED —
+   neither gap is a reason to survey by hand — and prints every band row's
+   state UNKNOWN.
    - **Resuming beats starting.** Take the oldest EXPIRED — or takeable
-     CLAIMED — `wip/issue-<N>` whose issue is open and not `needs-replan`,
+     CLAIMED — `wip/issue-<N>` whose issue is open and neither `needs-replan` nor `blocked`,
      and take it over per WORKFLOW's lease invariant before anything else.
      Then merge `origin/main` in if main moved (never rebase; if the
      conflicts are not tractable, park it and pick again), read the newest
