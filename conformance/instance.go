@@ -706,7 +706,7 @@ func execInstanceCase(backend value.Backend, c caseSpec) (Status, refusal) {
 		return decideAgreement(false, c.expect.wantsValid()), ""
 	}
 	// An empty Result is "valid" for the gated shape alone, and only where the
-	// walk recorded no check it reached and did not perform.
+	// walk recorded no `Unevaluated` record.
 	if unevaluated := result.Unevaluated(); len(unevaluated) > 0 {
 		return Fail(), unevaluatedRefusal(unevaluated)
 	}
@@ -716,11 +716,11 @@ func execInstanceCase(backend value.Backend, c caseSpec) (Status, refusal) {
 	return decideAgreement(true, c.expect.wantsValid()), ""
 }
 
-// unevaluatedRefusal is refuseUnevaluated's token for records, the checks an
-// assessment reached and did not perform: `unevaluated:<rule>[,<rule>…]`,
-// naming each distinct Unevaluated.Rule once, in the order records first lists
-// it (#2106). The token carries no whitespace and no `=`, so the
-// GOXSD_DECLINES=1 listing's `<id>=<refusal>` entry still parses as one field.
+// unevaluatedRefusal is refuseUnevaluated's token for records:
+// `unevaluated:<rule>[,<rule>…]`, naming each distinct Unevaluated.Rule once,
+// in the order records first lists it (#2106). The token carries no whitespace
+// and no `=`, so the GOXSD_DECLINES=1 listing's `<id>=<refusal>` entry still
+// parses as one field.
 func unevaluatedRefusal(records []validate.Unevaluated) refusal {
 	var rules []string
 	for _, u := range records {
