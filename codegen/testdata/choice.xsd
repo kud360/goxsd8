@@ -1,0 +1,83 @@
+<?xml version="1.0"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+           xmlns="urn:choice"
+           targetNamespace="urn:choice">
+  <xs:element name="pick">
+    <xs:complexType>
+      <xs:choice>
+        <xs:element name="text" type="xs:string"/>
+        <xs:element name="flag" type="xs:boolean" maxOccurs="unbounded"/>
+        <xs:element name="box">
+          <xs:complexType>
+            <xs:sequence>
+              <xs:element name="label" type="xs:string"/>
+            </xs:sequence>
+          </xs:complexType>
+        </xs:element>
+      </xs:choice>
+    </xs:complexType>
+  </xs:element>
+  <xs:complexType name="shape">
+    <xs:choice>
+      <xs:element name="round" type="xs:boolean"/>
+      <xs:element name="corner">
+        <xs:complexType>
+          <xs:sequence>
+            <xs:element name="count" type="xs:string"/>
+          </xs:sequence>
+        </xs:complexType>
+      </xs:element>
+    </xs:choice>
+  </xs:complexType>
+  <xs:element name="first" type="shape"/>
+  <xs:element name="second" type="shape"/>
+  <xs:complexType name="holder">
+    <xs:sequence>
+      <xs:element name="slot">
+        <xs:complexType>
+          <xs:choice>
+            <xs:element name="name" type="xs:string"/>
+            <xs:element name="empty" type="xs:boolean"/>
+          </xs:choice>
+        </xs:complexType>
+      </xs:element>
+    </xs:sequence>
+  </xs:complexType>
+  <xs:element name="left" type="holder"/>
+  <xs:element name="right" type="holder"/>
+  <xs:element name="record">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element name="many" maxOccurs="3">
+          <xs:complexType>
+            <xs:choice>
+              <xs:element name="a" type="xs:string"/>
+            </xs:choice>
+          </xs:complexType>
+        </xs:element>
+        <xs:element name="opt" minOccurs="0">
+          <xs:complexType>
+            <xs:choice>
+              <xs:element name="b" type="xs:string"/>
+            </xs:choice>
+          </xs:complexType>
+        </xs:element>
+        <xs:element name="one">
+          <xs:complexType>
+            <xs:choice>
+              <xs:element name="c" type="xs:string"/>
+            </xs:choice>
+          </xs:complexType>
+        </xs:element>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="dual">
+    <xs:complexType>
+      <xs:choice>
+        <xs:element name="x" form="qualified" type="xs:string"/>
+        <xs:element name="x" type="xs:boolean"/>
+      </xs:choice>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>
