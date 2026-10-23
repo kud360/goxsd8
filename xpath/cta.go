@@ -156,7 +156,10 @@ type CTATest struct{ root ctaExpr }
 // [xsd.XPathExpression] property record) into an evaluable [CTATest]. It
 // returns a nil [*Decline] exactly when it compiled, and a non-nil one, with
 // the zero CTATest, exactly when it did not: the reason the {expression} is
-// one this engine cannot evaluate.
+// one this engine cannot evaluate. It is this internal engine's entry point
+// for package validate, which records a non-nil *Decline as an Unevaluated
+// key-cta-ta-select entry; a library caller learns which {test}s are declined
+// from validate.Result.Unevaluated, not by calling it.
 //
 // types resolves every QName the expression names a datatype with — [15]
 // ta-CastExpr's target, [18] ta-ConstructorFunction's function name, and the
