@@ -119,10 +119,11 @@ memoized caches without a profile showing a hot path. Two encodings of one
 fact will drift; fewer fields, fewer invariants, fewer bugs.
 
 This binds prose as well as fields. A fact stated in a doc comment, a test
-comment or a package doc is stated once and the other sites point at it — a
-paraphrase is a second encoding, so a verdict that corrects one copy leaves
-the reviewer no text to grep for the rest, and the copy that survives
-longest is the one inside the test that pins the behaviour (#925). Leave a
+comment or a package doc is stated once and the other sites point at it
+(T5a bounds where an exported comment's pointer may land) — a paraphrase is
+a second encoding, so a verdict that corrects one copy leaves the reviewer
+no text to grep for the rest, and the copy that survives longest is the one
+inside the test that pins the behaviour (#925). Leave a
 package's export inventory to `go doc`: a count of its exported identifiers,
 or a list that reads as all of them ("Its top-level exports are …"), is a
 second encoding, and prose names an exported identifier only where it states
@@ -177,6 +178,30 @@ justification). The exported surface IS the product the library user sees
 via `go doc`; every addition is a compatibility promise. Reviews inspect
 the exported-surface diff of every change.
 
+**T5a. An exported comment cites only what its `go doc` reader can
+resolve.** In every comment `go doc -all` renders — a package doc and the
+doc comment of an exported identifier — in every package outside `tools/`
+and `internal/`, cite no `STYLE` or `PRINCIPLES` ID, no `#N` issue number,
+no unexported identifier or file name, no repo-internal path, and no line
+locator into `docs/specs/md`. Move each to where its agent reader looks: the
+unexported comment at the site it governs, the commit message, or the issue
+thread. Spec rule IDs (`cvc-…`, `cos-…`) and section numbers stay.
+
+A gap's tracking citation is the one exception. Put a `GAP(` marker in an
+exported comment only where that comment discloses behaviour the caller
+observes; there it keeps P3's owner `#N` or P3b's `RULED permanent by #N`
+and nothing else this rule bars. Anything more the marker would say — a
+provenance number, a `STYLE` or `PRINCIPLES` ID, an unexported consumer
+P3a names — goes in a marker citing the same owner at the unexported site
+that implements the fallback, and every gap the caller cannot observe is
+marked only there.
+
+D3's pointer from an exported comment lands on an exported identifier or a
+package doc. When a fact's owning statement sits in an unexported
+comment, a fact the caller needs moves into the exported comment and the
+unexported sites point at it; any other fact leaves the exported comment.
+A pointer from an unexported comment may name an unexported identifier.
+
 **T6. Package-doc status tells the truth about what ships today.** A
 package `doc.go`'s status prose — "Current coverage", "Contract (implemented
 in M…)", coverage lists, "ships in-repo" claims — describes what `go doc`
@@ -213,7 +238,8 @@ the prose around it is. `<area>` is the package or spec area
 number — rule IDs go in the text after the colon. A gap whose retirement
 is owned by an issue names that issue in the text, and the issue must
 still be open: a marker pointing at a closed issue is a dead end, so
-repoint it in the landing that closes the owner.
+repoint it in the landing that closes the owner. T5a says when a marker may
+sit in an exported comment and what it carries there.
 
 Prose that discloses a gap — a decline, a fail-open, an uncharged rule, a
 test asserting the incomplete behaviour — sits in the same comment block as
@@ -267,8 +293,8 @@ exhaustive (T1/T2 closed sums), sloglint no-global (L1), forbidigo banning
 io.ReadAll and fmt.Print* in library code (P4, L1), plus govet/staticcheck/
 unused/ineffassign/bodyclose and gofmt. Everything needing judgment — T4
 duplicates, D2 map-iteration-into-output, D3 derivable state, D5, E2 rule
-mapping, T5 justification — is the arbiter's and warden's job; keep the
-linter set lean rather than approximating those.
+mapping, T5 justification, T5a citations — is the arbiter's and warden's
+job; keep the linter set lean rather than approximating those.
 
 ## Logging
 
