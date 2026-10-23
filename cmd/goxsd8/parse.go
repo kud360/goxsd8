@@ -74,9 +74,32 @@ func runParse(args []string, stdout, stderr io.Writer) int {
 // stops the run: every argument is compiled and reported, so one broken schema
 // does not hide the next argument's verdict.
 func parseOne(location string, quiet bool, log *slog.Logger, stdout, stderr io.Writer) int {
+	schema, code := compileArgument("parse", location, log, stderr)
+	if schema == nil {
+		return code
+	}
+	if quiet {
+		return exitOK
+	}
+	if _, err := io.WriteString(stdout, summarize(location, schema)); err != nil {
+		// The summary the user asked for never arrived; that is an IO fault,
+		// not a verdict about the schema.
+		return usageError(stderr, fmt.Sprintf("goxsd8: parse: writing the summary for %s: %v", location, err))
+	}
+	return exitOK
+}
+
+// compileArgument compiles one schema argument as its own root document, the
+// way parse and gen both do, and returns the schema, or nil and the exit code
+// its failure is charged: 2 for an argument that cannot be read, 1 for a
+// rejection, whose first error it prints on stderr. verb is the subcommand the
+// diagnoses are charged to. Every directive the assembly reached whose
+// schemaLocation resolved to no document is named on stderr either way, ahead
+// of the error on the rejected path.
+func compileArgument(verb, location string, log *slog.Logger, stderr io.Writer) (*xsd.Schema, int) {
 	root, err := rootLocation(location)
 	if err != nil {
-		return usageError(stderr, fmt.Sprintf("goxsd8: parse: %v", err))
+		return nil, usageError(stderr, fmt.Sprintf("goxsd8: %s: %v", verb, err))
 	}
 	// The resolver is rooted at the filesystem root and the document is named
 	// by its absolute path, so that an argument spelled absolutely or through
@@ -95,7 +118,7 @@ func parseOne(location string, quiet bool, log *slog.Logger, stdout, stderr io.W
 		// error came out of, and this report carries it (#1312). A root document
 		// that could not be read returns an empty report, so that third error
 		// shape still prints nothing here.
-		reportUnfollowed(stderr, "parse", assemblyRejected, report)
+		reportUnfollowed(stderr, verb, assemblyRejected, report)
 		// Exit 1 covers more than a schema verdict. rootLocation already opened
 		// the ARGUMENT, so an argument that cannot be read is charged 2 and
 		// never reaches here; an I/O fault reading a document that argument
@@ -106,21 +129,14 @@ func parseOne(location string, quiet bool, log *slog.Logger, stdout, stderr io.W
 		// document. Errors reach stderr whatever -q says, so a script can grep
 		// them.
 		_, _ = fmt.Fprintln(stderr, violationLine(err))
-		return exitInvalid
+		return nil, exitInvalid
 	}
-	// Before the summary and ahead of the -q gate: the summary is this
-	// subcommand's informational output, and a directive the assembly behind it
-	// could not follow is a diagnosis, which doc.go forbids -q to silence.
-	reportUnfollowed(stderr, "parse", assemblyCompiled, report)
-	if quiet {
-		return exitOK
-	}
-	if _, err := io.WriteString(stdout, summarize(location, schema)); err != nil {
-		// The summary the user asked for never arrived; that is an IO fault,
-		// not a verdict about the schema.
-		return usageError(stderr, fmt.Sprintf("goxsd8: parse: writing the summary for %s: %v", location, err))
-	}
-	return exitOK
+	// Before the caller writes anything and so ahead of parse's -q gate: the
+	// summary is parse's informational output, and a directive the assembly
+	// behind it could not follow is a diagnosis, which doc.go forbids -q to
+	// silence.
+	reportUnfollowed(stderr, verb, assemblyCompiled, report)
+	return schema, exitOK
 }
 
 // rootLocation opens location to prove it is a readable file and returns its
