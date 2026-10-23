@@ -163,11 +163,10 @@
 // member of a complex type, the declared types of the attributes and elements
 // it reads, except that an attribute charged under cvc-attribute on that
 // element is read as xs:anySimpleType; for an assertions-facet {test}, the
-// type a [value.AssertionEvaluator] is handed as st, a member rather than the
-// union where the facet's type is a union; for a Type Alternative, the schema
-// alone. So one {test} can be declined at one element and compiled at
-// another, and a compiled {test} is still recorded under cvc-assertion where
-// its data model input could not be read.
+// type a [value.AssertionEvaluator] is handed as st: where the facet's type is
+// a union, its ·active basic member·, never the union; for a Type
+// Alternative, the schema alone. So one {test} can be declined at one element
+// and compiled at another.
 //
 // All four charges below that DELEGATE to String Valid (§3.16.4,
 // cvc-simple-type) carry the delegated verdict as their wrapped cause, so
