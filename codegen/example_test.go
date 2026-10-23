@@ -24,7 +24,11 @@ func ExampleGenerate() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	defer os.RemoveAll(root)
+	defer func() {
+		if err := os.RemoveAll(root); err != nil {
+			log.Fatal(err)
+		}
+	}()
 	dir := filepath.Join(root, "gen", "order")
 
 	if err := codegen.Generate([]codegen.Target{{Schema: s, Dir: dir, Package: "order"}}); err != nil {
