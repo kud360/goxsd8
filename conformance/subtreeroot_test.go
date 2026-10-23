@@ -1526,7 +1526,7 @@ func TestInstanceExecutorChargesAbstractComplexType(t *testing.T) {
 }
 
 // TestInstanceExecutorDeclinesUnevaluatedRoot proves a root the gate admits
-// whose walk RECORDED a check it did not perform declines rather than reading
+// whose walk RECORDED a [validate.Unevaluated] declines rather than reading
 // the empty violation list as "valid": an identity constraint whose
 // {selector} icpath does not compile, an assertions facet whose {test} calls
 // fn:upper-case — a function outside the string and sequence core xpath

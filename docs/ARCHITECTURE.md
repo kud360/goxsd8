@@ -637,8 +637,7 @@ plus `New`/`Validator`/`Result`/`Option`/`WithLogger`, `SchemaView` (what
 an adapter that classifies members by the type a {type table} selects),
 `Validator.Governing` (the governance `Assess` decides for an element, for an
 adapter that must know it before the engine sees the element) and `Unevaluated`
-(`Rule`/`Loc`/`Msg`, read off `Result.Unevaluated`: one check the assessment
-reached and did not perform, deliberately not an `error`), and `Assess` walks a
+(`Rule`/`Loc`/`Msg`, read off `Result.Unevaluated`), and `Assess` walks a
 source once. **Read which rules it charges, which clauses of each, and which
 are declined in `validate/doc.go`; do not enumerate them here.** A union-governed
 value is classified by its ·validating type· (#813). Identity-constraint

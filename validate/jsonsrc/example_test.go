@@ -67,7 +67,7 @@ func ExampleValidate() {
 		for _, e := range res.Violations() { // []*xsderr.Error, in document order
 			fmt.Printf("violation: %s [%s]\n", e.Loc, e.Rule)
 		}
-		for _, u := range res.Unevaluated() { // a check reached and not performed
+		for _, u := range res.Unevaluated() { // []validate.Unevaluated
 			fmt.Printf("undecided: %s [%s]\n", u.Loc(), u.Rule())
 		}
 	}

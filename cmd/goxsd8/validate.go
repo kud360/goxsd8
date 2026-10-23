@@ -476,8 +476,8 @@ func reportUnfollowedHints(stderr io.Writer, instance string, compiled bool, rep
 
 // assessmentLines renders one assessment's report, in document order — every
 // violation it charged, then the source fault that stopped the walk if one
-// did, then every check it REACHED and did not perform — together with the
-// exit code those lines earn.
+// did, then every [validate.Unevaluated] record — together with the exit code
+// those lines earn.
 //
 // A stopped walk is not a violation, but it is a verdict about the instance in
 // the same shape — the document was not read to its end, so nothing past the
