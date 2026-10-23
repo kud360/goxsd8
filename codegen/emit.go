@@ -259,21 +259,19 @@ func (e *emitter) complexType(name string, nested scope, decl xsd.ElementDeclara
 
 // sealedType emits the sealed interface name for decl's complex {type
 // definition} t, whose content particle's term is a choice of particles
-// (§3.8.4.1.2 sec-choices: one alternative per pass), then one branch struct
-// per alternative in particle order, each followed by the types of its
-// anonymous-typed particle, named in nested. A branch is named by the namer
-// from name plus the alternative's local name, holds the one field that
-// field computes for its particle, and implements the interface's unexported
-// marker method "is" plus name (STYLE T2's closed-sum exception).
+// (§3.8.4.1.2 sec-choices: one alternative per pass), in the package doc's
+// "# Coverage" shape: the interface, then each branch struct in particle
+// order, followed by the types of its anonymous-typed particle, named in
+// nested.
 //
-// The choice is declined unless every alternative is a local element
-// declaration and the content particle is not emptiable (§3.9.6.3
-// cos-group-emptiable). contentGroup has already required the particle's
-// {min occurs} to be 1, so the particle is emptiable exactly when the minimum
-// of its effective total range (§3.8.6.6 cos-choice-range) is 0: that minimum
-// is 1 times the least {min occurs} among the alternatives, or 0 when there
-// are no {particles}. Every alternative being a local element declaration, no
-// wildcard or group particle enters the minimum.
+// contentGroup has already required the content particle's {min occurs} to be
+// 1, so the minimum of its effective total range (§3.8.6.6 cos-choice-range)
+// is the least {min occurs} or range minimum among the alternatives, or 0 when
+// there are no {particles}, and the particle is emptiable (§3.9.6.3
+// cos-group-emptiable) exactly when that minimum is 0. An alternative with
+// {min occurs} 0 makes it 0 whatever the others are; any alternative but a
+// local element declaration is declined in particle order, so when no decline
+// fires every alternative is a local element with {min occurs} at least 1.
 func (e *emitter) sealedType(name string, nested scope, subject string, decl xsd.ElementDeclaration, t xsd.ComplexType, particles []xsd.Particle) error {
 	if len(particles) == 0 {
 		return decline(t.Loc(), "%s whose choice has no {particles}", subject)
