@@ -229,17 +229,6 @@ Usage (contract; subcommands land with their milestones):
       of a schemaLocation resolving to no document, which moves no
       exit code, though the faulting run names the directive on
       stderr too, before printing the fault.
-      The checks the assessment declines include an <xs:assert>,
-      and an <xs:alternative> in an element's {type table}, whose
-      {test} this build does not evaluate. A declined alternative
-      withholds the type the table would select, so checks needing
-      that type can print undecided lines of their own. A {test}
-      this build evaluates is checked as usual and prints no
-      undecided line. Whether a {test} is evaluated turns on the
-      XPath forms it uses, so one assertion can be decided in one
-      spelling and declined in another; go doc
-      github.com/kud360/goxsd8/xpath lists which forms are evaluated,
-      under # Forms each entry point evaluates.
       A declined check is one of these kinds:
         - assertions: an <xs:assert> {test}, or an assertions
           facet's, left unevaluated;
@@ -255,9 +244,17 @@ Usage (contract; subcommands land with their milestones):
         - identity constraints: a selector or field path outside
           the evaluated subset, an unreadable field value, or an
           undecided key comparison.
-      An XPath function this build does not evaluate is not a kind
-      of its own but a cause inside assertions and the governing
-      type definition, not necessarily only those. The authority on
+      The type a declined <xs:alternative> withholds can leave the
+      checks needing it undecided too, each on an undecided line of
+      its own. A {test} this build evaluates is checked as usual and
+      prints no undecided line. Whether a {test} is evaluated turns
+      on the XPath forms it uses, so one assertion can be decided in
+      one spelling and declined in another; go doc
+      github.com/kud360/goxsd8/xpath lists which forms are evaluated,
+      under # Forms each entry point evaluates. An XPath function
+      this build does not evaluate is not a kind of its own but a
+      cause inside assertions and the governing type definition, not
+      necessarily only those. The authority on
       the kinds is go doc github.com/kud360/goxsd8/validate
       Unevaluated, which needs the module source; without it, read
       type Unevaluated in validate/validate.go at
