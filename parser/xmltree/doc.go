@@ -1,5 +1,5 @@
 // Package xmltree is a streaming, position-tracking XML reader: the
-// origin of every xsderr.Loc in the module.
+// origin of every xsderr.Loc in an XML document.
 //
 // It is independent of the rest of the module (leaf besides xsderr and the
 // internal/ leaves internal/xmldecl, internal/xmlenc, internal/xmlname,

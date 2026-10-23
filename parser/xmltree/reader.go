@@ -15,8 +15,7 @@ import (
 	"github.com/kud360/goxsd8/xsderr"
 )
 
-// Reader is a streaming, namespace-scoped XML token reader: the origin of
-// every xsderr.Loc a schema or instance document produces. It wraps an
+// Reader is a streaming, namespace-scoped XML token reader. It wraps an
 // io.Reader and yields resolved Nodes one at a time from Token, holding only
 // bounded state — a namespace-scope chain, an open-element stack, and an
 // index of newline offsets — never the whole document (STYLE P4).
