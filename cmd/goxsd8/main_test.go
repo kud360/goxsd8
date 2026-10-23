@@ -18,9 +18,9 @@ import (
 // vocabulary states rather than an accident — a help flag before its
 // subcommand, a help flag alongside an unrecognized one, -- with no
 // end-of-options meaning, a help flag after a name outside the vocabulary
-// altogether, and `parse -h` / `validate -h`: those two own the flag.FlagSets
-// in the binary, so they are the rows where a subcommand's own flag parsing
-// could take -h away from the help path.
+// altogether, and `parse -h`, `validate -h` and `gen -h`: those three own the
+// flag.FlagSets in the binary, so they are the rows where a subcommand's own
+// flag parsing could take -h away from the help path.
 var helpCases = [][]string{
 	nil,
 	{"-h"},
@@ -34,26 +34,27 @@ var helpCases = [][]string{
 	{"parse", "-h"},
 	{"validate", "-h"},
 	{"validate", "-schema", "testdata/order.xsd", "-h"},
+	{"gen", "-h"},
+	{"gen", "-schema", "testdata/order.xsd", "-out", "d", "-h"},
 }
 
 // dispatchCases is the diagnosis every non-help invocation that reaches no
-// built subcommand earns: a reserved name, a name outside the vocabulary, a
-// help request carrying a value, a flag before the subcommand it qualifies, or
-// no subcommand at all. Each is followed on stderr by helpPointer. One
-// encoding of the matrix, driven twice — through run below and through the
-// built binary in TestBuiltBinaryMatrix.
+// subcommand earns: a name outside the vocabulary, a help request carrying a
+// value, a flag before the subcommand it qualifies, or no subcommand at all.
+// Each is followed on stderr by helpPointer. One encoding of the matrix, driven
+// twice — through run below and through the built binary in
+// TestBuiltBinaryMatrix.
 //
-// parse and validate have no row here: both are built, and parse_test.go and
-// validate_test.go are their matrices.
+// parse, validate and gen have no row here: all three are built, and
+// parse_test.go, validate_test.go and gen_test.go are their matrices.
 var dispatchCases = []struct {
 	args []string
 	want string
 }{
-	{[]string{"gen", "-schema", "a.xsd", "-out", "d"}, `goxsd8: gen is not yet implemented`},
 	{[]string{"frobnicate"}, `goxsd8: unknown subcommand "frobnicate"`},
 	{[]string{"parsee", "a.xsd"}, `goxsd8: unknown subcommand "parsee"`},
 	// Case-sensitive matching: a contract name in the wrong case is unknown,
-	// not reserved.
+	// not that subcommand.
 	{[]string{"VALIDATE"}, `goxsd8: unknown subcommand "VALIDATE"`},
 	// help is not a contract name (doc.go); version is not one either.
 	{[]string{"help"}, `goxsd8: unknown subcommand "help"`},
@@ -65,7 +66,7 @@ var dispatchCases = []struct {
 	{[]string{"-xyz"}, noSubcommand},
 	{[]string{"-version"}, noSubcommand},
 	{[]string{"-q", "frobnicate"}, noSubcommand},
-	// A valued help spelling is the fifth answer (#1189): it is a usage error
+	// A valued help spelling is an answer of its own (#1189): it is a usage error
 	// in every position, and before a subcommand it names the three spellings
 	// rather than a rewrite that fails there too. The first row expected
 	// noSubcommand until this landed.
@@ -99,12 +100,12 @@ func TestRunHelp(t *testing.T) {
 	}
 }
 
-// TestRunDispatch pins #514, #472 and #1189: the five diagnoses are distinct,
-// and each is the true one for its input. It supersedes TestDiagnosesAreDistinct
+// TestRunDispatch pins #472 and #1189: the four diagnoses are distinct, and
+// each is the true one for its input. It supersedes TestDiagnosesAreDistinct
 // (removed, #999): that test asserted the same distinctness by comparing
 // diagnose's rendered strings, which cannot fail on a collapse between two
-// branches whose diagnosis interpolates the input argument — notImplementedFmt,
-// unknownSubcommandFmt and leadingFlagFmt all do, so two inputs those branches
+// branches whose diagnosis interpolates the input argument —
+// unknownSubcommandFmt and leadingFlagFmt both do, so two inputs those branches
 // misclassify as the same kind still render different strings. It stays armed
 // against a collapse into noSubcommand, a bare constant with nothing to
 // interpolate — which is exactly the collapse a pre-#472 diagnose regresses to,
@@ -283,15 +284,6 @@ func TestUsageCoversContract(t *testing.T) {
 			t.Errorf("usage documents no %q subcommand, but dispatch reserves it", name)
 		}
 	}
-	// The status paragraph states gen's status in the wording the binary
-	// prints, not in a second one of its own: both prose copies said "not yet
-	// built" where notImplementedFmt printed "not yet implemented", and nothing
-	// held them together (#1231). Derived from the constant rather than quoted,
-	// so a change to either side fails here.
-	verb := strings.TrimPrefix(fmt.Sprintf(notImplementedFmt, "gen"), "goxsd8: gen is ")
-	if !strings.Contains(usage, "gen is reserved but "+verb) {
-		t.Errorf("usage does not state gen's status in the wording notImplementedFmt prints (%q)", verb)
-	}
 	// jsonsrcLine's routing of jsonsrc's error channel by class, each class's
 	// line shape and exit code, which jsonsrcLine renders (#2721, #2893).
 	// Matched over the text with its line breaks folded, as the sentences wrap.
@@ -401,6 +393,12 @@ func TestBuiltBinaryMatrix(t *testing.T) {
 			stdin: readFixture(t, validJSON), code: 0},
 		{args: []string{"validate", "-format", "json", "-schema", orderSchema, "-"},
 			stdin: readFixture(t, invalidJSON), code: 1, stdoutMatch: "-:1:19: [cvc-attribute]"},
+		// gen's outcomes through the shipped binary; gen_test.go is the matrix.
+		{args: []string{"gen", "-schema", flatFixture, "-out", filepath.Join(t.TempDir(), "flat")}, code: 0},
+		{args: []string{"gen", "-schema", "testdata/broken.xsd", "-out", filepath.Join(t.TempDir(), "broken")}, code: 1,
+			stderrMatch: "[src-resolve]"},
+		{args: []string{"gen", "-schema", flatFixture}, code: 2,
+			stderrMatch: "goxsd8: gen: -schema " + flatFixture + " stands without its -out"},
 	} {
 		stdout, stderr, code := runBinaryStdin(t, bin, c.args, c.stdin)
 		if code != c.code {

@@ -35,24 +35,30 @@ Usage (contract; subcommands land with their milestones):
   0     1     parse: every schema compiled. validate: every instance's
               assessment ran to its end, charging no violation and
               leaving no check undecided; that is not proven invalid,
-              which is not proven valid.
-  1     3     parse: a schema rejected, an I/O fault reading a document
-              it references included. validate: an instance invalid, not
-              well-formed XML, its walk stopped by a fault, malformed
-              JSON, or a fault reading a JSON instance once it is open.
-  2     4     usage, or an I/O fault on an argument or on stdout: never
-              a verdict about a schema or an instance.
+              which is not proven valid. gen: every pair generated.
+  1     3     parse and gen: a schema rejected, an I/O fault reading a
+              document it references included. validate: an instance
+              invalid, not well-formed XML, its walk stopped by a fault,
+              malformed JSON, or a fault reading a JSON instance once it
+              is open.
+  2     4     usage, or an I/O fault on an argument or on stdout, gen's
+              refusal of an -out included: never a verdict about a
+              schema or an instance.
   3     none  validate only: the -schema set does not compile, an I/O
               fault reading a document it references included. Unranked:
               it answers before any instance is opened, so no instance's
               4, 1 or 2 is reached, and a 2 raised before compiling (a
               flag, a missing or misplaced argument, a -schema that is
               - or cannot be read) answers instead of it.
-  4     2     validate only: an instance left undecided, by a check the
+  4     2     validate: an instance left undecided, by a check the
               assessment declined (validate below names its kinds)
               or by a jsonsrc decline. Nothing was
               proven invalid and something was not decided: not a pass,
               so a gate that must fail closed treats 4 as a failure.
+              gen: a construct the generator declines, a generator
+              limitation and not a schema fault, so nothing is written.
+              Nothing was proven wrong and something was not done: not
+              a pass either.
 
   goxsd8 parse [-q] [-v] <schema.xsd>...
       Compile each schema argument and print its summary on stdout:
@@ -232,16 +238,35 @@ Usage (contract; subcommands land with their milestones):
       then the line of the fault that stopped its walk if one did,
       then its undecided checks.
 
-  goxsd8 gen -schema <schema.xsd> -out <dir> [-schema <s2> -out <d2>]... [-backend strict|native]
-      Generate Go types; repeated -schema/-out pairs map schemas to
-      output directories (multiple schemas, multiple output dirs).
-      Exit 0 when every pair is generated; 1 when a schema is
-      rejected, its first error on stderr as <loc>: [<rule>]
-      <message>; 2 when an argument cannot be read, an output
-      directory cannot be written, or a -schema stands without its
-      -out. Those are the codes gen answers with once M9 builds
-      it: until then every gen invocation exits 2, reporting that
-      gen is not yet implemented.
+  goxsd8 gen [-q] [-v] -schema <schema.xsd> -out <dir> [-schema <s2> -out <d2>]...
+      For example: goxsd8 gen -schema order.xsd -out ./gen/order
+      Generate Go types, one package per -schema/-out pair: the file
+      xsd_gen.go in the -out directory, which is created with its
+      parents when absent, declaring a package named by the
+      directory's last path element (./gen/order/ is package order).
+      Each -schema needs the -out after it and each -out the -schema
+      before it; gen takes no positional argument. Each -schema is
+      compiled alone, as a parse argument is: its path is resolved
+      absolute before it is read, so the comments of the generated
+      file name absolute locations. A rejected -schema prints its
+      first error on stderr as parse's does, the no-rule-to-cite
+      lines and the unresolved-directive lines included.
+      Every pair is compiled, and every failure to compile reported,
+      before anything is written; then either every pair is
+      generated or none is, except that a fault while writing can
+      leave some pairs written and others not.
+      The generator's refusals of a pair exit 2, named on stderr
+      against the pair as -schema <s> -out <d>: among them a last
+      path element that is not a Go package name, as with -out
+      my-pkg or -out ., and an existing xsd_gen.go whose first line
+      does not mark it generated, which gen never overwrites. A
+      fault creating or writing the output exits 2 the same way.
+      A construct the generator declines exits 4, on a stderr line
+      naming the pair, the construct and its location; go doc
+      github.com/kud360/goxsd8/codegen says what it accepts, which
+      needs the module source; without it, read codegen/doc.go at
+      https://github.com/kud360/goxsd8. gen writes nothing on
+      stdout.
 
 Flags common to all subcommands: -q (quiet), -v (debug logging via
 slog to stderr; scope with GOXSD_DEBUG=parser,validate,codec). They
@@ -251,27 +276,28 @@ output, which is parse's summary, and never a diagnosis: neither the
 error lines above nor validate's violations and undecided checks are
 silenced by it.
 
-Implemented today: the help path, parse and validate. With no arguments,
-or with -h, -help or --help in any argument position, goxsd8 prints this
-usage to stdout and exits 0. goxsd8 parse compiles its arguments as above
-and honours -q and -v; goxsd8 validate assesses XML and JSON instances as
-above and honours -v, -q silencing nothing there because it writes no
-informational output. GOXSD_DEBUG scopes -v for neither. Every other
-invocation exits 2, reporting on stderr that the subcommand
-gen is reserved but not yet implemented, that the name is not one of the
-three, that a help flag is spelled with a value, as -help=<value>, that a
-flag stands before the subcommand it qualifies, or that the first argument
-is a flag and no subcommand was given.
+Implemented today: the help path, parse, validate and gen. With no
+arguments, or with -h, -help or --help in any argument position, goxsd8
+prints this usage to stdout and exits 0. goxsd8 parse compiles its
+arguments as above and honours -q and -v; goxsd8 validate assesses XML and
+JSON instances and goxsd8 gen generates as above, and both honour -v, -q
+silencing nothing there because neither writes informational output.
+GOXSD_DEBUG scopes -v for none of them. Every other invocation exits 2,
+reporting on stderr that the name is not one of the three, that a help
+flag is spelled with a value, as -help=<value>, that a flag stands before
+the subcommand it qualifies, or that the first argument is a flag and no
+subcommand was given.
 `
 
 // The exit codes the CLI answers with: a clean run, a rejected document, an
-// argument list or a file this process could not work with at all, and — for
-// validate alone — a schema set that does not compile and an instance the
-// assessment declined to decide.
+// argument list or a file this process could not work with at all, a schema set
+// that does not compile (validate alone), and an instance the assessment
+// declined to decide or a schema the generator declined (validate and gen).
 //
-// Which fault each code names is per subcommand and stated in doc.go: parse
-// charges exitInvalid for the schema it was asked to compile, where validate
-// charges it for an instance and answers exitSchema for its schema set.
+// Which fault each code names is per subcommand and stated in doc.go: parse and
+// gen charge exitInvalid for the schema they were asked to compile, where
+// validate charges it for an instance and answers exitSchema for its schema
+// set.
 const (
 	exitOK        = 0
 	exitInvalid   = 1
@@ -292,8 +318,8 @@ const (
 // why usage's exit-code table gives it none.
 var exitSeverity = []int{exitOK, exitUndecided, exitInvalid, exitUsage, exitSchema}
 
-// worse returns the more severe of two exit codes. Both subcommands aggregate
-// their argument list through it, which is the one encoding of the rank column
+// worse returns the more severe of two exit codes. Every subcommand aggregates
+// its argument list through it, which is the one encoding of the rank column
 // of usage's exit-code table (STYLE D3) — and taking the numeric maximum
 // instead would answer a mixed batch with exitUndecided.
 func worse(a, b int) int {
@@ -327,11 +353,6 @@ const (
 	// `go doc <import path>` invocation needs the module tree and fails for
 	// an installed binary (#870).
 	helpPointer = "run `goxsd8 -help` for the usage contract, or see https://github.com/kud360/goxsd8"
-
-	// notImplementedFmt answers a name the contract reserves and no milestone
-	// has built yet. Reserved to those names: its promise that a planned
-	// interface documents the name is false for anything else (#514).
-	notImplementedFmt = "goxsd8: %s is not yet implemented"
 
 	// unknownSubcommandFmt answers a name outside the vocabulary.
 	unknownSubcommandFmt = "goxsd8: unknown subcommand %q"
@@ -381,13 +402,17 @@ func run(args []string, stdout, stderr io.Writer) int {
 	if args[0] == "validate" {
 		return runValidate(args[1:], stdout, stderr)
 	}
+	if args[0] == "gen" {
+		return runGen(args[1:], stderr)
+	}
 	return usageError(stderr, diagnose(args))
 }
 
 // diagnose names what is wrong with an invocation that neither requests help
-// nor names a built subcommand. Matching is case-sensitive per Go CLI
-// convention, so goxsd8 VALIDATE is an unknown subcommand rather than a
-// reserved one.
+// nor names a subcommand: every name in subcommands is dispatched by run
+// before diagnose is reached. Matching is case-sensitive per Go CLI
+// convention, so goxsd8 VALIDATE is an unknown subcommand rather than
+// validate.
 //
 // It reads past the first argument for one purpose only: a flag standing where
 // a subcommand belongs is a different fault depending on whether a subcommand
@@ -408,10 +433,7 @@ func diagnose(args []string) string {
 		}
 		return noSubcommand
 	}
-	if !slices.Contains(subcommands, arg) {
-		return fmt.Sprintf(unknownSubcommandFmt, arg)
-	}
-	return fmt.Sprintf(notImplementedFmt, arg)
+	return fmt.Sprintf(unknownSubcommandFmt, arg)
 }
 
 // subcommandIn returns the first argument that is a contract subcommand name.

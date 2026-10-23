@@ -10,24 +10,30 @@
 //	0     1     parse: every schema compiled. validate: every instance's
 //	            assessment ran to its end, charging no violation and
 //	            leaving no check undecided; that is not proven invalid,
-//	            which is not proven valid.
-//	1     3     parse: a schema rejected, an I/O fault reading a document
-//	            it references included. validate: an instance invalid, not
-//	            well-formed XML, its walk stopped by a fault, malformed
-//	            JSON, or a fault reading a JSON instance once it is open.
-//	2     4     usage, or an I/O fault on an argument or on stdout: never
-//	            a verdict about a schema or an instance.
+//	            which is not proven valid. gen: every pair generated.
+//	1     3     parse and gen: a schema rejected, an I/O fault reading a
+//	            document it references included. validate: an instance
+//	            invalid, not well-formed XML, its walk stopped by a fault,
+//	            malformed JSON, or a fault reading a JSON instance once it
+//	            is open.
+//	2     4     usage, or an I/O fault on an argument or on stdout, gen's
+//	            refusal of an -out included: never a verdict about a
+//	            schema or an instance.
 //	3     none  validate only: the -schema set does not compile, an I/O
 //	            fault reading a document it references included. Unranked:
 //	            it answers before any instance is opened, so no instance's
 //	            4, 1 or 2 is reached, and a 2 raised before compiling (a
 //	            flag, a missing or misplaced argument, a -schema that is
 //	            - or cannot be read) answers instead of it.
-//	4     2     validate only: an instance left undecided, by a check the
+//	4     2     validate: an instance left undecided, by a check the
 //	            assessment declined (validate below names its kinds)
 //	            or by a jsonsrc decline. Nothing was
 //	            proven invalid and something was not decided: not a pass,
 //	            so a gate that must fail closed treats 4 as a failure.
+//	            gen: a construct the generator declines, a generator
+//	            limitation and not a schema fault, so nothing is written.
+//	            Nothing was proven wrong and something was not done: not
+//	            a pass either.
 //
 //	goxsd8 parse [-q] [-v] <schema.xsd>...
 //	    Compile each schema argument and print its summary on stdout:
@@ -207,16 +213,35 @@
 //	    then the line of the fault that stopped its walk if one did,
 //	    then its undecided checks.
 //
-//	goxsd8 gen -schema <schema.xsd> -out <dir> [-schema <s2> -out <d2>]... [-backend strict|native]
-//	    Generate Go types; repeated -schema/-out pairs map schemas to
-//	    output directories (multiple schemas, multiple output dirs).
-//	    Exit 0 when every pair is generated; 1 when a schema is
-//	    rejected, its first error on stderr as <loc>: [<rule>]
-//	    <message>; 2 when an argument cannot be read, an output
-//	    directory cannot be written, or a -schema stands without its
-//	    -out. Those are the codes gen answers with once M9 builds
-//	    it: until then every gen invocation exits 2, reporting that
-//	    gen is not yet implemented.
+//	goxsd8 gen [-q] [-v] -schema <schema.xsd> -out <dir> [-schema <s2> -out <d2>]...
+//	    For example: goxsd8 gen -schema order.xsd -out ./gen/order
+//	    Generate Go types, one package per -schema/-out pair: the file
+//	    xsd_gen.go in the -out directory, which is created with its
+//	    parents when absent, declaring a package named by the
+//	    directory's last path element (./gen/order/ is package order).
+//	    Each -schema needs the -out after it and each -out the -schema
+//	    before it; gen takes no positional argument. Each -schema is
+//	    compiled alone, as a parse argument is: its path is resolved
+//	    absolute before it is read, so the comments of the generated
+//	    file name absolute locations. A rejected -schema prints its
+//	    first error on stderr as parse's does, the no-rule-to-cite
+//	    lines and the unresolved-directive lines included.
+//	    Every pair is compiled, and every failure to compile reported,
+//	    before anything is written; then either every pair is
+//	    generated or none is, except that a fault while writing can
+//	    leave some pairs written and others not.
+//	    The generator's refusals of a pair exit 2, named on stderr
+//	    against the pair as -schema <s> -out <d>: among them a last
+//	    path element that is not a Go package name, as with -out
+//	    my-pkg or -out ., and an existing xsd_gen.go whose first line
+//	    does not mark it generated, which gen never overwrites. A
+//	    fault creating or writing the output exits 2 the same way.
+//	    A construct the generator declines exits 4, on a stderr line
+//	    naming the pair, the construct and its location; go doc
+//	    github.com/kud360/goxsd8/codegen says what it accepts, which
+//	    needs the module source; without it, read codegen/doc.go at
+//	    https://github.com/kud360/goxsd8. gen writes nothing on
+//	    stdout.
 //
 // Flags common to all subcommands: -q (quiet), -v (debug logging via
 // slog to stderr; scope with GOXSD_DEBUG=parser,validate,codec). They
@@ -226,17 +251,17 @@
 // error lines above nor validate's violations and undecided checks are
 // silenced by it.
 //
-// Implemented today: the help path, parse and validate. With no arguments,
-// or with -h, -help or --help in any argument position, goxsd8 prints this
-// usage to stdout and exits 0. goxsd8 parse compiles its arguments as above
-// and honours -q and -v; goxsd8 validate assesses XML and JSON instances as
-// above and honours -v, -q silencing nothing there because it writes no
-// informational output. GOXSD_DEBUG scopes -v for neither. Every other
-// invocation exits 2, reporting on stderr that the subcommand
-// gen is reserved but not yet implemented, that the name is not one of the
-// three, that a help flag is spelled with a value, as -help=<value>, that a
-// flag stands before the subcommand it qualifies, or that the first argument
-// is a flag and no subcommand was given.
+// Implemented today: the help path, parse, validate and gen. With no
+// arguments, or with -h, -help or --help in any argument position, goxsd8
+// prints this usage to stdout and exits 0. goxsd8 parse compiles its
+// arguments as above and honours -q and -v; goxsd8 validate assesses XML and
+// JSON instances and goxsd8 gen generates as above, and both honour -v, -q
+// silencing nothing there because neither writes informational output.
+// GOXSD_DEBUG scopes -v for none of them. Every other invocation exits 2,
+// reporting on stderr that the name is not one of the three, that a help
+// flag is spelled with a value, as -help=<value>, that a flag stands before
+// the subcommand it qualifies, or that the first argument is a flag and no
+// subcommand was given.
 //
 // # Argument vocabulary
 //
@@ -374,9 +399,6 @@
 // for is charged cvc-assess-elt (§3.3.4.6) instead of the run quietly
 // succeeding on a schema document the instance itself named.
 //
-// gen's -backend strict|native names the value backend, builtin/strict or
-// builtin/native, that the generated code is emitted against.
-//
 // There is no version entry point and none is planned before 1.0: run
 // go version -m $(which goxsd8) for the module version of a tagged build.
 // -v is not available for one, being already assigned to debug logging.
@@ -387,13 +409,14 @@
 // validate does, and the README shows both routes for them; JSON instance
 // assessment is validate/jsonsrc's Validate, which -format json calls. That
 // mapping is not whole: the inputs it still declines (its doc's Every decline)
-// reach the exit-4 decline line above rather than a verdict. The capabilities
-// this page reserves are not whole library routes either: codegen.Generate
-// emits Go types for M9's first slice of schema shapes and gen does not call
-// it yet, while codec (M10) and validate/bersrc (M11) export nothing yet, so
-// for decode/encode and BER instances there is no second route to document
-// until those milestones land. Error output is stable and line-oriented for
-// scripting.
+// reach the exit-4 decline line above rather than a verdict. Code generation is
+// codegen.Generate, which gen calls once with one Target per -schema/-out pair;
+// it emits Go types for M9's first slice of schema shapes, and the constructs
+// outside that slice reach gen's exit-4 decline line. The capabilities this
+// page reserves are not whole library routes either: codec (M10) and
+// validate/bersrc (M11) export nothing yet, so for decode/encode and BER
+// instances there is no second route to document until those milestones land.
+// Error output is stable and line-oriented for scripting.
 //
 // # Diagnostic lines
 //
