@@ -50,15 +50,17 @@ func assertAbsent(t *testing.T, path string) {
 // TestGenWritesWhatGenerateWrites pins exit 0: each pair's -out receives the
 // file codegen.Generate writes for a Target built from parser.Parse of the
 // absolute location gen hands the parser, in the package the -out's last path
-// element names, a trailing slash included. Before #2964 this run exited 2,
-// reporting gen as not yet implemented.
+// element after filepath.Clean names: a trailing slash and a trailing ..
+// included. -q changes nothing. Before #2964 this run exited 2, reporting gen
+// as not yet implemented.
 func TestGenWritesWhatGenerateWrites(t *testing.T) {
 	flat := absFixture(t, flatFixture)
 	tmp := t.TempDir()
 	out := filepath.Join(tmp, "cli", "flat")
 	order := filepath.Join(tmp, "cli", "order") + string(filepath.Separator)
+	up := filepath.Join(tmp, "cli", "up", "sub") + string(filepath.Separator) + ".."
 	var stdout, stderr bytes.Buffer
-	code := run([]string{"gen", "-schema", flatFixture, "-out", out, "-schema", flatFixture, "-out", order}, &stdout, &stderr)
+	code := run([]string{"gen", "-q", "-schema", flatFixture, "-out", out, "-schema", flatFixture, "-out", order, "-schema", flatFixture, "-out", up}, &stdout, &stderr)
 	if code != exitOK {
 		t.Fatalf("gen = %d, want %d (stderr %q)", code, exitOK, stderr.String())
 	}
@@ -74,10 +76,11 @@ func TestGenWritesWhatGenerateWrites(t *testing.T) {
 	if err := codegen.Generate([]codegen.Target{
 		{Schema: schema, Dir: filepath.Join(lib, "flat"), Package: "flat"},
 		{Schema: schema, Dir: filepath.Join(lib, "order"), Package: "order"},
+		{Schema: schema, Dir: filepath.Join(lib, "up"), Package: "up"},
 	}); err != nil {
 		t.Fatal(err)
 	}
-	for _, dir := range []string{"flat", "order"} {
+	for _, dir := range []string{"flat", "order", "up"} {
 		got := generatedFile(t, filepath.Join(tmp, "cli", dir))
 		want := generatedFile(t, filepath.Join(lib, dir))
 		if !bytes.Equal(got, want) {
@@ -117,12 +120,13 @@ func TestGenRejectedSchemaWritesNothing(t *testing.T) {
 }
 
 // TestGenReportsEveryPair pins that every pair is compiled and reported before
-// the run answers: a rejection does not hide the next pair's fault, and the
-// run answers with the higher-ranked of the two.
+// the run answers: an unreadable -schema does not hide the next pair's
+// rejection, and the run answers with the higher-ranked of the two, which is
+// the first.
 func TestGenReportsEveryPair(t *testing.T) {
 	tmp := t.TempDir()
 	var stdout, stderr bytes.Buffer
-	code := run([]string{"gen", "-schema", "testdata/broken.xsd", "-out", filepath.Join(tmp, "a"), "-schema", "testdata/nosuch.xsd", "-out", filepath.Join(tmp, "b")}, &stdout, &stderr)
+	code := run([]string{"gen", "-schema", "testdata/nosuch.xsd", "-out", filepath.Join(tmp, "a"), "-schema", "testdata/broken.xsd", "-out", filepath.Join(tmp, "b")}, &stdout, &stderr)
 	if code != exitUsage {
 		t.Fatalf("gen = %d, want %d (stderr %q)", code, exitUsage, stderr.String())
 	}
@@ -155,6 +159,20 @@ func TestGenNamesAnUnresolvedDirective(t *testing.T) {
 	want := "goxsd8: gen: " + schema + ":2:1: this schemaLocation resolved to no document"
 	if !strings.HasPrefix(stderr.String(), want) {
 		t.Errorf("gen stderr = %q, want it to open %q", stderr.String(), want)
+	}
+	generatedFile(t, out)
+}
+
+// TestGenVerboseLogs pins -v: the parser's assembly is logged at debug level
+// on stderr, and the run still generates.
+func TestGenVerboseLogs(t *testing.T) {
+	out := filepath.Join(t.TempDir(), "flat")
+	var stdout, stderr bytes.Buffer
+	if code := run([]string{"gen", "-v", "-schema", flatFixture, "-out", out}, &stdout, &stderr); code != exitOK {
+		t.Fatalf("gen -v = %d, want %d (stderr %q)", code, exitOK, stderr.String())
+	}
+	if !strings.Contains(stderr.String(), "level=DEBUG") {
+		t.Errorf("gen -v stderr = %q, want debug log lines", stderr.String())
 	}
 	generatedFile(t, out)
 }
