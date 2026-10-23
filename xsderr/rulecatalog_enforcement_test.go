@@ -363,9 +363,13 @@ func stringLit(e ast.Expr) (string, bool) {
 	return v, true
 }
 
-// goFiles lists the module's .go files in a stable walk order, skipping dot
-// directories (.git, .claude) and every testdata tree — those hold fixtures and
-// vendored suites, not module code. withTests keeps _test.go files.
+// goFiles lists the module's .go files in a stable walk order, skipping every
+// directory whose name starts with a dot, not only .git, and every testdata
+// tree. The dot-directory skip keeps agent worktrees out of the walk: a
+// gitignored .claude/worktrees/ holds whole checkouts of the module, and WalkDir
+// does not stop at their nested go.mod, so without it the scan would judge
+// other branches' code. A testdata tree holds fixtures and vendored suites, not
+// module code. withTests keeps _test.go files.
 func goFiles(t *testing.T, root string, withTests bool) []string {
 	t.Helper()
 	var out []string
