@@ -33,7 +33,7 @@
   <xs:element name="second" type="shape"/>
   <xs:complexType name="holder">
     <xs:sequence>
-      <xs:element name="slot">
+      <xs:element name="slot" minOccurs="0">
         <xs:complexType>
           <xs:choice>
             <xs:element name="name" type="xs:string"/>
