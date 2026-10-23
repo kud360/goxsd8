@@ -60,6 +60,17 @@ Usage (contract; subcommands land with their milestones):
               Nothing was proven wrong and something was not done: not
               a pass either.
 
+  Precedence, by that rank: 2 over 1 over 4 over 0, with validate's 3
+  answering alone, before any instance is opened.
+
+  Streams: stdout carries this help text, parse's summary and each
+  instance's report lines — its violations, its undecided checks, the
+  line of the fault that stopped its walk, and the line of an instance
+  not well-formed or unreadable once open — and stderr carries every
+  other line: schema rejections (parse and gen 1, validate 3), usage
+  errors and the I/O faults charged 2, gen's refusals and its 4
+  decline, unresolved-directive and hint notes, and -v logging.
+
   goxsd8 parse [-q] [-v] <schema.xsd>...
       Compile each schema argument and print its summary on stdout:
       the argument as it was spelled, then a block of lines indented
@@ -224,10 +235,33 @@ Usage (contract; subcommands land with their milestones):
       withholds the type the table would select, so checks needing
       that type can print undecided lines of their own. A {test}
       this build evaluates is checked as usual and prints no
-      undecided line. Every kind is listed by go doc
-      github.com/kud360/goxsd8/validate Unevaluated, which needs the
-      module source; without it, read type Unevaluated in
-      validate/validate.go at https://github.com/kud360/goxsd8.
+      undecided line. Whether a {test} is evaluated turns on the
+      XPath forms it uses, so one assertion can be decided in one
+      spelling and declined in another; go doc
+      github.com/kud360/goxsd8/xpath lists which forms are evaluated,
+      under # Forms each entry point evaluates.
+      A declined check is one of these kinds:
+        - assertions: an <xs:assert> {test}, or an assertions
+          facet's, left unevaluated;
+        - the governing type definition: an element's type
+          withheld, by an <xs:alternative> {test} left unevaluated
+          among other causes;
+        - content: an element's value, its fixed value, or its
+          children against its content model, left undecided;
+        - attributes: an attribute's value against its declaration
+          or use, or a defaulted attribute's value, left undecided;
+        - the ID/IDREF table: an item that might hold an ID or
+          IDREF and could not be read;
+        - identity constraints: a selector or field path outside
+          the evaluated subset, an unreadable field value, or an
+          undecided key comparison.
+      An XPath function this build does not evaluate is not a kind
+      of its own but a cause inside assertions and the governing
+      type definition, not necessarily only those. The authority on
+      the kinds is go doc github.com/kud360/goxsd8/validate
+      Unevaluated, which needs the module source; without it, read
+      type Unevaluated in validate/validate.go at
+      https://github.com/kud360/goxsd8.
       Every instance is assessed — the run never stops at the first
       invalid one, nor at an instance argument charged 2, whose 2
       stands beside the verdicts of the rest — and each violation
