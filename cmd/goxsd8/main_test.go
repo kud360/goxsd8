@@ -5,10 +5,16 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"go/ast"
+	"go/doc/comment"
+	"go/parser"
+	"go/token"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -179,6 +185,165 @@ func TestExitSeverityRanksEveryCode(t *testing.T) {
 	if worse(exitSchema, exitUsage) != exitSchema {
 		t.Errorf("worse(%d, %d) = %d, want %d: exitSeverity ranks exitSchema last only so that every code has a rank", exitSchema, exitUsage, worse(exitSchema, exitUsage), exitSchema)
 	}
+}
+
+// usageRankRow is a row of usage's exit-code table: its code and its rank,
+// a number or none.
+var usageRankRow = regexp.MustCompile(`(?m)^  (\d)     (\d|none)  `)
+
+// usagePrecedence is the one-line reading of the rank column under the table:
+// the ranked codes, highest first, then the unranked one.
+var usagePrecedence = regexp.MustCompile(`Precedence, by that rank: (\d) over (\d) over (\d) over (\d), with validate's (\d) answering alone`)
+
+// TestUsagePrecedenceReadsTheRanks holds usage's precedence line to both the
+// rank column it reads and exitSeverity, which worse orders by (#2967): each
+// code the line puts over the next one must win over it through worse, in both
+// argument orders, and must hold the next rank up in the table. The unranked
+// code is exitSchema, which the line ranks against nothing.
+func TestUsagePrecedenceReadsTheRanks(t *testing.T) {
+	ranks := map[int]string{}
+	for _, m := range usageRankRow.FindAllStringSubmatch(usage, -1) {
+		code, err := strconv.Atoi(m[1])
+		if err != nil {
+			t.Fatalf("rank row %q: %v", m[0], err)
+		}
+		ranks[code] = m[2]
+	}
+	if len(ranks) != len(exitSeverity) {
+		t.Fatalf("usage's exit-code table has %d rows, and exitSeverity ranks %d codes", len(ranks), len(exitSeverity))
+	}
+	for i, code := range exitSeverity {
+		want := strconv.Itoa(i + 1)
+		if code == exitSchema {
+			want = "none"
+		}
+		if ranks[code] != want {
+			t.Errorf("usage's exit-code table ranks %d as %s, and exitSeverity as %s", code, ranks[code], want)
+		}
+	}
+
+	m := usagePrecedence.FindStringSubmatch(strings.Join(strings.Fields(usage), " "))
+	if m == nil {
+		t.Fatalf("usage has no line matching %q", usagePrecedence)
+	}
+	var line []int
+	for _, s := range m[1:] {
+		code, err := strconv.Atoi(s)
+		if err != nil {
+			t.Fatalf("precedence code %q: %v", s, err)
+		}
+		line = append(line, code)
+	}
+	ranked, alone := line[:len(line)-1], line[len(line)-1]
+	if alone != exitSchema {
+		t.Errorf("usage's precedence line leaves %d unranked, and the table leaves %d", alone, exitSchema)
+	}
+	for i := 0; i+1 < len(ranked); i++ {
+		hi, lo := ranked[i], ranked[i+1]
+		if worse(hi, lo) != hi || worse(lo, hi) != hi {
+			t.Errorf("usage's precedence line puts %d over %d, and worse answers %d and %d", hi, lo, worse(hi, lo), worse(lo, hi))
+		}
+		hiRank, errHi := strconv.Atoi(ranks[hi])
+		loRank, errLo := strconv.Atoi(ranks[lo])
+		if errHi != nil || errLo != nil || hiRank != loRank+1 {
+			t.Errorf("usage's precedence line puts %d over %d, and the table ranks them %s and %s", hi, lo, ranks[hi], ranks[lo])
+		}
+	}
+	if len(ranked) != len(exitSeverity)-1 {
+		t.Errorf("usage's precedence line ranks %d codes, and exitSeverity ranks %d besides exitSchema", len(ranked), len(exitSeverity)-1)
+	}
+}
+
+// usageKindsLead opens usage's list of the kinds of declined check, whose
+// items follow it one per "- <kind>:" line.
+const usageKindsLead = "A declined check is one of these kinds:\n"
+
+// usageKindItem is one item of that list.
+var usageKindItem = regexp.MustCompile(`^        - ([^:]+):`)
+
+// TestUsageListsEveryDeclinedKind holds usage's list of the kinds of declined
+// check to the bullet labels of validate.Unevaluated's doc, read from its
+// source, which stays their owner (#2967): a kind missing from usage, one usage
+// adds, or one out of the doc's order fails it. Labels compare with the doc's
+// · marks dropped.
+func TestUsageListsEveryDeclinedKind(t *testing.T) {
+	want := unevaluatedKinds(t)
+
+	_, rest, ok := strings.Cut(usage, usageKindsLead)
+	if !ok {
+		t.Fatalf("usage has no %q line", strings.TrimSpace(usageKindsLead))
+	}
+	var got []string
+	for _, line := range strings.Split(rest, "\n") {
+		if strings.HasPrefix(line, "          ") {
+			continue // an item's continuation line
+		}
+		m := usageKindItem.FindStringSubmatch(line)
+		if m == nil {
+			break
+		}
+		got = append(got, m[1])
+	}
+	if !slices.Equal(got, want) {
+		t.Errorf("usage lists the declined kinds %q, and validate.Unevaluated's doc names %q", got, want)
+	}
+}
+
+// unevaluatedKinds returns the labels of the first list in the doc comment of
+// validate.Unevaluated, parsed from validate/validate.go: each item's text up
+// to its first colon, · marks dropped.
+func unevaluatedKinds(t *testing.T) []string {
+	t.Helper()
+	path := filepath.Join("..", "..", "validate", "validate.go")
+	f, err := parser.ParseFile(token.NewFileSet(), path, nil, parser.ParseComments)
+	if err != nil {
+		t.Fatalf("parsing %s: %v", path, err)
+	}
+	var doc *ast.CommentGroup
+	for _, decl := range f.Decls {
+		gen, ok := decl.(*ast.GenDecl)
+		if !ok || gen.Tok != token.TYPE {
+			continue
+		}
+		for _, spec := range gen.Specs {
+			if spec.(*ast.TypeSpec).Name.Name == "Unevaluated" {
+				doc = gen.Doc
+			}
+		}
+	}
+	if doc == nil {
+		t.Fatalf("%s declares no documented type Unevaluated", path)
+	}
+	var p comment.Parser
+	for _, block := range p.Parse(doc.Text()).Content {
+		list, ok := block.(*comment.List)
+		if !ok {
+			continue
+		}
+		var kinds []string
+		for _, item := range list.Items {
+			var text strings.Builder
+			for _, b := range item.Content {
+				para, ok := b.(*comment.Paragraph)
+				if !ok {
+					continue
+				}
+				for _, s := range para.Text {
+					if plain, ok := s.(comment.Plain); ok {
+						text.WriteString(string(plain))
+					}
+				}
+			}
+			label, _, ok := strings.Cut(text.String(), ":")
+			if !ok {
+				t.Fatalf("validate.Unevaluated's list item %q has no colon ending its kind", text.String())
+			}
+			kinds = append(kinds, strings.ReplaceAll(label, "·", ""))
+		}
+		return kinds
+	}
+	t.Fatalf("validate.Unevaluated's doc has no list of kinds")
+	return nil
 }
 
 // update makes TestDocRendersUsage rewrite doc.go's # Usage section instead of
