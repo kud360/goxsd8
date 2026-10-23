@@ -1,6 +1,6 @@
-// Package codegen emits Go source from a compiled schema set:
-// deterministic, type-narrowed (planned, see below), and
-// allocation-conscious.
+// Package codegen emits Go type declarations from a compiled schema set. It
+// emits no decode or encode code: that arrives with package codec (M10), whose
+// package doc states that contract.
 //
 // # Entry point
 //
@@ -67,9 +67,9 @@
 // extension, restriction of any base but xs:anyType, a local element with a
 // named complex type, xs:anyType, the special simple types, list and union
 // types, and every primitive but the three above. #2900 owns lifting
-// them; decline in emit.go carries the same marker.
+// them.
 //
-// # Determinism (STYLE D1/D2)
+// # Determinism
 //
 // Identical schema input produces byte-identical output. No map
 // iteration anywhere near the emitter; emission order is document order.

@@ -297,6 +297,25 @@ if err != nil {
 // Read res.Standing(), res.Violations() and res.Unevaluated() as above.
 ```
 
+Code generation runs today for a narrow slice of schema shapes:
+`codegen.Generate` emits Go type declarations for that slice and declines
+every other construct. `go doc github.com/kud360/goxsd8/codegen`'s "Coverage"
+section states the slice. `order.xsd` below is a placeholder for a schema
+inside it: the CLI section's `order.xsd` falls outside it and `Generate`
+declines it, while `codegen/testdata/flat.xsd` in a checkout falls inside it.
+Add `github.com/kud360/goxsd8/codegen` to the imports:
+
+```go
+s, err := parser.Parse("order.xsd")
+if err != nil {
+	log.Fatal(err)
+}
+// Writes package order into gen/order.
+if err := codegen.Generate([]codegen.Target{{Schema: s, Dir: "gen/order", Package: "order"}}); err != nil {
+	log.Fatal(err)
+}
+```
+
 Start at `go doc github.com/kud360/goxsd8` and follow the package list;
 each package's godoc is its contract. Plain-text `go doc` does not print
 the runnable `Example*` funcs; pkg.go.dev
@@ -308,6 +327,7 @@ directly: `validate/jsonsrc/example_test.go` (`ExampleValidate`),
 `value/example_test.go` (`ExampleOverride`, `ExampleValidateLexical`),
 `builtin/example_test.go` (`ExampleSeed`, `ExampleSeed_missingPrimitive`),
 `builtin/strict/example_test.go` (`ExampleNew`),
+`codegen/example_test.go` (`ExampleGenerate`),
 `loader/example_test.go` (`Example_chain`), `xsd/example_test.go`
 (`Example_termOrRefDiscrimination`, `Example_buildFinalizeQuery`,
 `Example_schemaEnumeration`, `Example_contentModelTraversal`,
