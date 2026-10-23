@@ -6,6 +6,11 @@ import (
 	"testing"
 )
 
+// The "cvc-elt.1" Rule in TestErrorRendering, TestErrorRenderingUnknownLoc and
+// TestWrapNil is incidental, not a claim that it is valid — IsValidRule rejects
+// it. Those tests exercise Error() and Wrap() rendering and nil handling, where
+// any string would serve identically.
+
 func TestErrorRendering(t *testing.T) {
 	err := New("cvc-elt.1", Loc{URI: "doc.xsd", Line: 12, Col: 4}, "element %q not resolvable", "foo")
 	got := err.Error()
