@@ -17,8 +17,9 @@
 // # Coverage
 //
 // Generate emits, in document order, one Go type per top-level element
-// declaration and one struct per anonymous complex type nested in its type
-// definition, and declines everything outside this slice:
+// declaration, one per anonymous complex type nested in its type definition,
+// and one branch struct per alternative of each choice it emits as a sealed
+// interface, and declines everything outside this slice:
 //
 //   - An element whose {type definition} is an atomic simple type gets a
 //     named type over a Go builtin, chosen by the type's {primitive type
@@ -26,32 +27,43 @@
 //     bool. Facets are not represented, and a named user simple type gets no
 //     Go type of its own.
 //   - An element whose {type definition} is a complex type, named or
-//     anonymous, gets a struct of its own when the type is a restriction of
+//     anonymous, gets a type of its own when the type is a restriction of
 //     xs:anyType, implicit (§3.4.2.3.2 dcl.ctd.ctcc.implicit) or explicit
 //     (<complexContent><restriction base="xs:anyType">, §3.4.2.3.1
 //     dcl.ctd.ctcc.explicit), with element-only content (§3.4.2.3.3
 //     dcl.ctd.ctcc.common) and no {open content}, {attribute uses},
 //     {attribute wildcard}, {assertions} or {abstract}, whose {particle}
-//     occurs exactly once and holds a sequence of local element
-//     declarations.
-//   - Each such particle gives one field, in particle order: a local element
-//     with an atomic simple type gets its builtin, one with an anonymous
-//     complex type of the same shape gets a struct of its own, emitted after
-//     its parent. A struct nested in a named complex type is emitted once
-//     per path of expanded names from that type, after the first top-level
-//     element of that type, and every element of that type shares it; two
-//     sibling local elements whose expanded names differ only in {target
-//     namespace} (§3.3.2.3), a qualified x beside an unqualified x, get a
-//     struct each. {max occurs} above 1 or unbounded gives a slice
-//     whatever {min occurs} is; {min occurs} 0 with {max occurs} 1 gives a
-//     pointer.
+//     occurs exactly once and holds a sequence or a choice of local element
+//     declarations. A sequence gives a struct.
+//   - A choice gives a sealed interface, the closed-sum exception: an
+//     interface whose one method is unexported, "is" plus the interface's
+//     name, and one branch struct per alternative in particle order, emitted
+//     after the interface, each holding the one field the alternative's
+//     particle gives and implementing the method; consumers type-switch over
+//     the branches, and "N pointer fields, exactly one non-nil" never
+//     appears. A choice is accepted only when its particle is not emptiable
+//     (§3.9.6.3 cos-group-emptiable): it has {particles}, and each has
+//     {min occurs} at least 1 (§3.8.6.6 cos-choice-range).
+//   - Each particle of a sequence gives one field, in particle order: a
+//     local element with an atomic simple type gets its builtin, one with an
+//     anonymous complex type of the same shape gets a struct or interface of
+//     its own, emitted after its parent. A type nested in a named complex
+//     type is emitted once per path of expanded names from that type, after
+//     the first top-level element of that type, and every element of that
+//     type shares it; two sibling local elements whose expanded names differ
+//     only in {target namespace} (§3.3.2.3), a qualified x beside an
+//     unqualified x, get a type each. {max occurs} above 1 or unbounded
+//     gives a slice whatever {min occurs} is; {min occurs} 0 with {max
+//     occurs} 1 gives a pointer to a struct or builtin, and the bare
+//     interface, never a pointer to one, nil meaning absent.
 //   - Every element declaration emitted from has {nillable} and {abstract}
 //     false and no {value constraint}, {type table}, {substitution group
 //     affiliations} or {identity-constraint definitions}.
 //
-// GAP(codegen): every other construct declines: choice and all compositors,
-// nested model groups, <group ref> and <element ref> particles, wildcards, a
-// particle with {max occurs} 0, attributes, mixed, simple and empty content,
+// GAP(codegen): every other construct declines: the all compositor, an
+// emptiable choice, a choice with no {particles}, nested model groups,
+// <group ref> and <element ref> particles, wildcards, a particle with {max
+// occurs} 0, attributes, mixed, simple and empty content,
 // extension, restriction of any base but xs:anyType, a local element with a
 // named complex type, xs:anyType, the special simple types, list and union
 // types, and every primitive but the three above. #2900 owns lifting
@@ -75,7 +87,10 @@
 // named ancestor: the top-level element when the element's own type is
 // anonymous (element shipTo under element purchaseOrder → PurchaseOrderShipTo),
 // the complex type when that type is named (element x in complex type ct → CtX,
-// whichever elements have type ct). A residual collision — two
+// whichever elements have type ct). A choice's branch struct is named from its
+// interface's name plus the alternative's local name (alternative a of
+// interface First → FirstA), so two top-level elements of one named choice
+// type get distinct interfaces and branches. A residual collision — two
 // names folding to one identifier, among a package's types or one struct's
 // fields — is disambiguated deterministically by document order: the later
 // name takes the smallest free numeric suffix from 2. Every generated
@@ -90,11 +105,6 @@
 //
 // Type narrowing in interfaces, the generated-code idiom:
 //
-//   - An xs:choice becomes a SEALED INTERFACE: an interface with an
-//     unexported marker method, one concrete branch type per
-//     alternative; consumers type-switch over the branches. This is the
-//     closed-sum exception to STYLE T2 — "N pointer fields, exactly one
-//     non-nil" never appears in generated code.
 //   - Generated readers/views expose the narrowest interface a consumer
 //     needs; optionality and nillability are modeled in the types, not
 //     in comments.
