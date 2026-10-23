@@ -1553,6 +1553,124 @@ func TestEmptyClaimLeaseFixtures(t *testing.T) {
 	}
 }
 
+// TestClassifyBlocked feeds each issue through readIssues, so the `blocked`
+// label is read from a `labels` array the way `gh issue list` prints it,
+// and pins that an open blocked issue's branch reads BLOCKED on every path
+// classify takes — tip age, an empty claim's aged heartbeat, a fresh tip,
+// an unfetched one — while the same branch under a `ready` issue keeps the
+// verdict it had, and a closed or needs-replan issue still retires (#2916).
+func TestClassifyBlocked(t *testing.T) {
+	stale := fixedNow.Add(-10 * time.Hour)
+	fresh := fixedNow.Add(-5 * time.Minute)
+	const agedTakeover = `"comments":[{"body":"TAKEOVER: resuming.","createdAt":"2026-08-09T02:00:00Z"}]`
+	const blockedReason = "wip/issue-2081: issue #2081 is labelled blocked -- resumes when its `## Depends on` clears, not on age"
+
+	cases := []struct {
+		name       string
+		json       string
+		tip        *time.Time
+		anc        ancestry
+		want       verdict
+		wantReason string // substring
+		wantCell   string
+	}{
+		{
+			name:       "open blocked issue, own commits, tip past the TTL",
+			json:       `[{"number":2081,"state":"OPEN","labels":[{"name":"area/xpath"},{"name":"blocked"}]}]`,
+			tip:        &stale,
+			anc:        ancestryOwnCommits,
+			want:       blocked,
+			wantReason: blockedReason,
+			wantCell:   "10h0m0s",
+		},
+		{
+			name:       "open ready issue, own commits, tip past the TTL, stays EXPIRED",
+			json:       `[{"number":2081,"state":"OPEN","labels":[{"name":"ready"}]}]`,
+			tip:        &stale,
+			anc:        ancestryOwnCommits,
+			want:       expired,
+			wantReason: "past the 2h0m0s claim TTL",
+			wantCell:   "10h0m0s",
+		},
+		{
+			name:       "open blocked issue, empty claim, heartbeat past the TTL",
+			json:       `[{"number":2081,"state":"OPEN","labels":[{"name":"blocked"}],` + agedTakeover + `}]`,
+			tip:        &stale,
+			anc:        ancestryNoCommits,
+			want:       blocked,
+			wantReason: blockedReason,
+			wantCell:   "main's",
+		},
+		{
+			name:       "open ready issue, empty claim, heartbeat past the TTL, stays EXPIRED",
+			json:       `[{"number":2081,"state":"OPEN","labels":[{"name":"ready"}],` + agedTakeover + `}]`,
+			tip:        &stale,
+			anc:        ancestryNoCommits,
+			want:       expired,
+			wantReason: "takeable",
+			wantCell:   "10h0m0s",
+		},
+		{
+			name:       "open blocked issue, tip within the TTL",
+			json:       `[{"number":2081,"state":"OPEN","labels":[{"name":"blocked"}]}]`,
+			tip:        &fresh,
+			anc:        ancestryOwnCommits,
+			want:       blocked,
+			wantReason: blockedReason,
+			wantCell:   "5m0s",
+		},
+		{
+			name:       "open blocked issue, tip never fetched",
+			json:       `[{"number":2081,"state":"OPEN","labels":[{"name":"blocked"}]}]`,
+			tip:        nil,
+			anc:        ancestryUnresolved,
+			want:       blocked,
+			wantReason: blockedReason,
+			wantCell:   "unknown",
+		},
+		{
+			name:       "closed issue still labelled blocked retires",
+			json:       `[{"number":2081,"state":"CLOSED","labels":[{"name":"blocked"}]}]`,
+			tip:        &stale,
+			anc:        ancestryOwnCommits,
+			want:       retired,
+			wantReason: "wip/issue-2081: issue #2081 is closed",
+			wantCell:   "10h0m0s",
+		},
+		{
+			name:       "open issue labelled both needs-replan and blocked retires",
+			json:       `[{"number":2081,"state":"OPEN","labels":[{"name":"blocked"},{"name":"needs-replan"}]}]`,
+			tip:        &stale,
+			anc:        ancestryOwnCommits,
+			want:       retired,
+			wantReason: "wip/issue-2081: issue #2081 is labelled needs-replan",
+			wantCell:   "10h0m0s",
+		},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			issues, err := readIssues(strings.NewReader(c.json))
+			if err != nil {
+				t.Fatalf("readIssues: %v", err)
+			}
+			state, ok := issues[2081]
+			if !ok {
+				t.Fatalf("readIssues dropped #2081: %+v", issues)
+			}
+			got, lease, reason := classify("wip/issue-2081", c.tip, c.anc, diffNonEmpty, fixedNow, &state)
+			if got != c.want {
+				t.Fatalf("verdict = %s, want %s (reason: %s)", got, c.want, reason)
+			}
+			if !strings.Contains(reason, c.wantReason) {
+				t.Errorf("reason = %q, want it to contain %q", reason, c.wantReason)
+			}
+			if cell := leaseAgeCell(row{lease: lease, anc: c.anc}); cell != c.wantCell {
+				t.Errorf("LEASE AGE cell = %q, want %q", cell, c.wantCell)
+			}
+		})
+	}
+}
+
 // TestSortRowsAndRenderTable exercises row ordering and rendering
 // together: rows are built out of issue-number order on purpose, so a
 // broken sort would show up as a non-ascending ISSUE column.

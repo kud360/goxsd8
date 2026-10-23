@@ -1,5 +1,5 @@
 // Command wipsurvey classifies every wip/issue-<N> branch on the origin
-// remote as LIVE, CLAIMED, EXPIRED, RETIRED, or UNKNOWN, so a /develop
+// remote as LIVE, CLAIMED, EXPIRED, BLOCKED, RETIRED, or UNKNOWN, so a /develop
 // session does not have to re-derive by hand which branches are contended
 // and which are dead. Issue #399 measured seven consecutive develop
 // passes each re-deriving the same three unchanged facts about the same
@@ -15,6 +15,13 @@
 //     since closed or been retired with needs-replan — retirement is
 //     recorded on the issue, never in the branch namespace, so a survey
 //     built from git alone cannot see it.
+//
+// The same thread decides BLOCKED: a branch whose open issue carries the
+// `blocked` label waits on that issue's `## Depends on`, so no age makes
+// it resumable, and it is not RETIRED either — the branch keeps work that
+// resumes once the dependency clears (#2916). It reads BLOCKED whatever
+// its tip, ancestry or heartbeat would otherwise say, the way RETIRED
+// does; a closed issue reads RETIRED, label or none.
 //
 // The branch set itself must come from the remote, not from local
 // remote-tracking refs. `git for-each-ref refs/remotes/origin/wip/*`
@@ -725,12 +732,14 @@ type ghIssue struct {
 
 // issueState is the subset of a GitHub issue's state classify needs:
 // whether it is closed, whether it carries the needs-replan label
-// WORKFLOW.md uses to retire an abandoned attempt in place, and what the
-// thread says about an empty claim's lease.
+// WORKFLOW.md uses to retire an abandoned attempt in place or the blocked
+// label that holds one until its dependency clears, and what the thread
+// says about an empty claim's lease.
 type issueState struct {
 	number      int
 	closed      bool
 	needsReplan bool
+	blocked     bool
 	// commentsRead records that the input carried this issue's comments,
 	// so a nil heartbeat means "the thread has none" rather than "nobody
 	// looked".
@@ -847,8 +856,11 @@ func readIssues(r io.Reader) (map[int]issueState, error) {
 			closed: strings.EqualFold(*gi.State, "CLOSED"),
 		}
 		for _, l := range gi.Labels {
-			if l.Name == "needs-replan" {
+			switch l.Name {
+			case "needs-replan":
 				state.needsReplan = true
+			case "blocked":
+				state.blocked = true
 			}
 		}
 		if gi.Comments != nil {
@@ -903,6 +915,7 @@ const (
 	live    verdict = "LIVE"
 	claimed verdict = "CLAIMED"
 	expired verdict = "EXPIRED"
+	blocked verdict = "BLOCKED"
 	retired verdict = "RETIRED"
 	unknown verdict = "UNKNOWN"
 )
@@ -917,9 +930,9 @@ const (
 // The lease age is the tip's age for a branch with commits of its own and
 // the newest heartbeat comment's age for one with none. It is nil where
 // nothing in this input dates the lease: an unfetched tip, an empty claim
-// no heartbeat dates, or a retired branch with no commits of its own —
-// retirement does not turn a landing's tip into the branch's own lease
-// (#809). It is what the report's LEASE AGE column prints, which renders
+// no heartbeat dates, or a retired or blocked branch with no commits of
+// its own — neither verdict turns a landing's tip into the branch's own
+// lease (#809). It is what the report's LEASE AGE column prints, which renders
 // the nil cases as "main's" or "unknown" rather than as a duration.
 //
 // tip is nil when the branch's SHA has never been fetched into this
@@ -931,7 +944,7 @@ const (
 // when the branch's issue number was not present in it; the reason then notes
 // the verdict is lease-only.
 //
-// The order of the four questions is itself the contract:
+// The order of the five questions is itself the contract:
 //
 //   - Retirement first: a closed or needs-replan issue retires its branch
 //     outright, with or without a fetched tip and with or without commits
@@ -939,6 +952,11 @@ const (
 //     place ... never resumed." The verdict ignores the ancestry, but the
 //     lease age reads it: a retired branch that never committed has no
 //     more age of its own than a live one does.
+//   - Then an open issue labelled blocked, which is blocked on the same
+//     terms: no tip, ancestry or heartbeat reaches the verdict, so neither
+//     clock makes the branch EXPIRED while its issue waits on its
+//     dependency (#2916). Retirement answers first, so a closed issue
+//     still wearing the label reads RETIRED.
 //   - Then an unfetched tip, which is unknown.
 //   - Then anc == ancestryNoCommits, which classifyEmptyClaim dates from
 //     the issue thread: the tip belongs to a landing, not to this branch,
@@ -962,10 +980,13 @@ const (
 // its own EXPIRED.
 func classify(branch string, tip *time.Time, anc ancestry, diff netDiff, now time.Time, issue *issueState) (verdict, *time.Duration, string) {
 	if issue != nil && issue.closed {
-		return retired, retiredLease(tip, anc, now), fmt.Sprintf("%s: issue #%d is closed", branch, issue.number)
+		return retired, ownTipLease(tip, anc, now), fmt.Sprintf("%s: issue #%d is closed", branch, issue.number)
 	}
 	if issue != nil && issue.needsReplan {
-		return retired, retiredLease(tip, anc, now), fmt.Sprintf("%s: issue #%d is labelled needs-replan", branch, issue.number)
+		return retired, ownTipLease(tip, anc, now), fmt.Sprintf("%s: issue #%d is labelled needs-replan", branch, issue.number)
+	}
+	if issue != nil && issue.blocked {
+		return blocked, ownTipLease(tip, anc, now), fmt.Sprintf("%s: issue #%d is labelled blocked -- resumes when its `## Depends on` clears, not on age", branch, issue.number)
 	}
 	if tip == nil {
 		return unknown, nil, fmt.Sprintf("%s: tip not fetched -- run `git fetch origin`", branch)
@@ -1071,11 +1092,11 @@ func classifyEmptyClaim(branch string, diff netDiff, now time.Time, issue *issue
 	return expired, &age, fmt.Sprintf("%s: no commits of its own; newest %s comment posted %s ago, past the %s claim TTL -- takeable%s", branch, heartbeatMarkers, formatAge(age), formatAge(claimTTL), remedyClause(ancestryNoCommits, diff, issue))
 }
 
-// retiredLease is a retired branch's lease age: its tip's, or nil when the
-// branch pushed no commits of its own and that tip is therefore the
-// landing it branched from. Retirement changes the verdict, not whose
-// clock the tip is, and the LEASE AGE column is read (#809).
-func retiredLease(tip *time.Time, anc ancestry, now time.Time) *time.Duration {
+// ownTipLease is a RETIRED or BLOCKED branch's lease age: its tip's, or nil
+// when the branch pushed no commits of its own and that tip is therefore
+// the landing it branched from. Those verdicts change what the row means,
+// not whose clock the tip is, and the LEASE AGE column is read (#809).
+func ownTipLease(tip *time.Time, anc ancestry, now time.Time) *time.Duration {
 	if anc == ancestryNoCommits {
 		return nil
 	}
@@ -1151,8 +1172,8 @@ func renderTable(w io.Writer, rows []row) error {
 // branch has no commits of its own reads "main's" rather than a duration:
 // the number would be a real duration attached to the wrong branch, and a
 // column scanned faster than it is read is the whole reason that age got
-// acted on (#722). That is every CLAIMED row and the RETIRED rows that
-// never committed (#809). Any other row with nothing dating it reads
+// acted on (#722). That is every CLAIMED row and the RETIRED and BLOCKED
+// rows that never committed (#809). Any other row with nothing dating it reads
 // "unknown", and its REASON says which kind of nothing.
 //
 // A non-nil lease always prints: classify hands one back only from the
