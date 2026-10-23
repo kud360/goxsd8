@@ -180,10 +180,12 @@ the exported-surface diff of every change.
 
 **T5a. An exported comment cites only what its `go doc` reader can
 resolve.** In every comment `go doc -all` renders — a package doc and the
-doc comment of an exported identifier — in every package outside `tools/`
-and `internal/`, cite no `STYLE` or `PRINCIPLES` ID, no `#N` issue number,
-no unexported identifier or file name, no repo-internal path, and no line
-locator into `docs/specs/md`. Move each to where its agent reader looks: the
+doc comment of an exported identifier — in every package whose `go doc`
+reader is a library, backend or CLI user, which is every package outside
+`tools/`, `internal/` and the test-only `conformance`, cite no `STYLE` or
+`PRINCIPLES` ID, no `#N` issue number, no unexported identifier or file
+name, no repo-internal path, and no line locator into `docs/specs/md`.
+Move each to where its agent reader looks: the
 unexported comment at the site it governs, the commit message, or the issue
 thread. Spec rule IDs (`cvc-…`, `cos-…`) and section numbers stay.
 
@@ -191,10 +193,13 @@ A gap's tracking citation is the one exception. Put a `GAP(` marker in an
 exported comment only where that comment discloses behaviour the caller
 observes; there it keeps P3's owner `#N` or P3b's `RULED permanent by #N`
 and nothing else this rule bars. Anything more the marker would say — a
-provenance number, a `STYLE` or `PRINCIPLES` ID, an unexported consumer
-P3a names — goes in a marker citing the same owner at the unexported site
-that implements the fallback, and every gap the caller cannot observe is
-marked only there.
+provenance number, a `STYLE` or `PRINCIPLES` ID, and a P3a direction claim
+whose consumers include an unexported identifier, together with its
+consumer list — goes in a marker citing the same owner at the unexported
+site that implements the fallback. A direction claim whose consumers are
+all exported may stay with its list in the exported marker. A gap the
+caller cannot observe is marked only at that unexported site, and the
+exported prose disclosing it moves there with its marker (P3).
 
 D3's pointer from an exported comment lands on an exported identifier or a
 package doc. When a fact's owning statement sits in an unexported
