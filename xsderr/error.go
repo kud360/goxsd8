@@ -96,7 +96,11 @@ func (l Loc) String() string {
 // rather than a verdict — a facet-pipeline precondition charged under
 // cos-applicable-facets, or a foreign value handed to a canonical mapping.
 // Whether such an *Error is a verdict is the producing API's to document;
-// value.ValidateLexical's caller tests value.IsDatatypeVerdict.
+// value.ValidateLexical's caller tests value.IsDatatypeVerdict. A validate
+// caller reads the split from the channel: a fault that stopped the walk is
+// validate.Result.Err, a fault validate/xmlsrc.Validate met outside the walk is
+// its returned error, and no entry of validate.Result.Violations carries
+// RuleXMLWellFormed; validate's docs own the rest.
 type Error struct {
 	// Rule is the spec rule the error concerns, or one of the two sentinels.
 	Rule Rule
