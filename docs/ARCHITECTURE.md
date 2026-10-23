@@ -89,11 +89,13 @@ Value implementations, parsing, validation, and generation live above them.
 ```
 
 **[1] These boxes are DESTINATIONS, not shipped layers.**
-`validate/bersrc`, `codegen`, `codec` and
+`validate/bersrc`, `codec` and
 `builtin/native` are `doc.go`-only today: `go doc` renders no exported
 identifier for any of them and they import nothing from this module, so the
 edges drawn above do not exist yet in `go list -deps`. Read every
 present-tense sentence in their sections below as "will", not "does".
+`codegen` has left this note: it exports `Generate` and `Target` and imports
+`xsd` and `xsderr` (its section says which slice is shipped).
 `xpath` has left this note: it exports the CTA compile, evaluate and
 statically-check entry points, and the assertion compile and evaluate ones,
 and imports `xsd`, `value`, `regex` and
@@ -127,7 +129,7 @@ Only `xsderr`, `xsd`, `internal/schemaloc`, `internal/xmldecl`,
 `internal/xmlenc`, `internal/xmlname`, `internal/xmlchar`,
 `internal/xmlqname`, `internal/xmltok`, `value`, `value/backendtest`, `regex`, `builtin`, `builtin/strict`, `loader`,
 `parser`, `parser/xmltree`, `xpath`, `icpath`, `validate`,
-`validate/xmlsrc`, `validate/jsonsrc`, `conformance` and `cmd/goxsd8` carry
+`validate/xmlsrc`, `validate/jsonsrc`, `codegen`, `conformance` and `cmd/goxsd8` carry
 code today.
 
 **The module has two tiers, and the dependency rules govern the first.**
@@ -676,10 +678,13 @@ design contract.
 
 ## Codegen & codec
 
-**Status: neither package ships anything.** `codegen` (M9) and `codec`
-(M10) are `doc.go`-only today — `go doc` renders no exported identifier for
-either, and `value.Emitter` does not exist (its API is frozen for M9, not
-declared). Everything below is the destination, stated in present tense
+**Status: `codegen` ships its first slice; `codec` ships nothing.**
+`codegen` (M9) exports `Generate` and `Target`, which emit Go type
+declarations for the schema shapes `codegen/doc.go`'s "Coverage" states and
+decline every other; its "Naming" states what the namer does today. `codec`
+(M10) is `doc.go`-only — `go doc` renders no exported identifier for it —
+and `value.Emitter` does not exist (its API is frozen for M9, not
+declared). Everything else below is the destination, stated in present tense
 because it is a design contract; read it as "will", not "does" (steward
 audit 2026-08-02).
 

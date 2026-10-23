@@ -1,0 +1,32 @@
+<?xml version="1.0"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <!-- The complex type ct and the top-level element ct share an expanded
+       name, in separate symbol spaces (§3.3.2), so the element's nested x
+       gets a struct of its own rather than the one emitted for the type's x
+       when first was emitted. -->
+  <xs:complexType name="ct">
+    <xs:sequence>
+      <xs:element name="x">
+        <xs:complexType>
+          <xs:sequence>
+            <xs:element name="a" type="xs:string"/>
+          </xs:sequence>
+        </xs:complexType>
+      </xs:element>
+    </xs:sequence>
+  </xs:complexType>
+  <xs:element name="first" type="ct"/>
+  <xs:element name="ct">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element name="x">
+          <xs:complexType>
+            <xs:sequence>
+              <xs:element name="b" type="xs:boolean"/>
+            </xs:sequence>
+          </xs:complexType>
+        </xs:element>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>
