@@ -1,0 +1,23 @@
+<?xml version="1.0"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="type" type="xs:string"/>
+  <xs:element name="a" type="xs:string"/>
+  <xs:element name="A" type="xs:boolean"/>
+  <xs:element name="record">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element name="x" type="xs:string"/>
+        <xs:element name="X" type="xs:string"/>
+        <xs:element name="item-list">
+          <xs:complexType>
+            <xs:sequence>
+              <xs:element name="func" type="xs:string"/>
+            </xs:sequence>
+          </xs:complexType>
+        </xs:element>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="recordItemList" type="xs:string"/>
+  <xs:element name="_1st" type="xs:string"/>
+</xs:schema>

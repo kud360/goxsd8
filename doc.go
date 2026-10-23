@@ -12,7 +12,8 @@
 //     backends (spec-exact strict, Go-friendly native); bring your own
 //     backend via value.Backend and prove it with value/backendtest
 //   - codegen, codec — schema-directed Go code generation and dataset
-//     serialization (M9, M10 — not yet implemented)
+//     serialization (codegen's first M9 slice ships; codec, M10, is not yet
+//     implemented)
 //   - cmd/goxsd8 — the command-line interface
 //
 // This root package holds no code; it exists to document the module and
