@@ -17,8 +17,9 @@
 // # Coverage
 //
 // Generate emits, in document order, one Go type per top-level element
-// declaration and one per anonymous complex type nested in its type
-// definition, and declines everything outside this slice:
+// declaration, one per anonymous complex type nested in its type definition,
+// and one branch struct per alternative of each choice it emits as a sealed
+// interface, and declines everything outside this slice:
 //
 //   - An element whose {type definition} is an atomic simple type gets a
 //     named type over a Go builtin, chosen by the type's {primitive type
@@ -34,7 +35,7 @@
 //     {attribute wildcard}, {assertions} or {abstract}, whose {particle}
 //     occurs exactly once and holds a sequence or a choice of local element
 //     declarations. A sequence gives a struct.
-//   - A choice gives a sealed interface, STYLE T2's closed-sum exception: an
+//   - A choice gives a sealed interface, the closed-sum exception: an
 //     interface whose one method is unexported, "is" plus the interface's
 //     name, and one branch struct per alternative in particle order, emitted
 //     after the interface, each holding the one field the alternative's

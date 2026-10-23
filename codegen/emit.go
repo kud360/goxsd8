@@ -45,9 +45,9 @@ type emitter struct {
 	// emitted holds the type emitted for each anonymous complex type nested in
 	// a named complex type, so that every top-level element whose type is that
 	// named type shares it; it is a lookup index only and never iterated
-	// (STYLE D2). A branch struct is never stored here: its name is built from
-	// the same path as the nestedKey of an anonymous-complex alternative of the
-	// same name, and it rides with its interface.
+	// (STYLE D2). It is keyed by anonymous complex types, and a branch struct
+	// is not one: a branch is never stored here, and it rides with its
+	// interface.
 	emitted map[nestedKey]emittedType
 }
 

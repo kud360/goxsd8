@@ -39,9 +39,10 @@ type Target struct {
 
 // Generate emits, for each target, one Go package of type declarations: the
 // file xsd_gen.go in the target's Dir, declaring, in document order, one type
-// per top-level element declaration of the target's Schema and one per
-// anonymous complex type nested in its type definition, each emitted after
-// its parent (the package doc's "Coverage" and "Naming" say which). Targets
+// per top-level element declaration of the target's Schema, one per
+// anonymous complex type nested in its type definition, and one branch struct
+// per alternative of each choice emitted as a sealed interface, each emitted
+// after its parent (the package doc's "Coverage" and "Naming" say which). Targets
 // are generated independently: no emitted package imports another.
 //
 // Generate runs in two phases. Phase 1 builds every target's source in
