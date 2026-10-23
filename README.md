@@ -301,8 +301,8 @@ Code generation runs today for a narrow slice of schema shapes:
 `codegen.Generate` emits Go type declarations for that slice and declines
 every other construct. `go doc github.com/kud360/goxsd8/codegen`'s "Coverage"
 section states the slice. `order.xsd` below is a placeholder for a schema
-inside it: the CLI section's `order.xsd` falls outside it and `Generate`
-declines it, while `codegen/testdata/flat.xsd` in a checkout falls inside it.
+inside it; `codegen/testdata/flat.xsd` in a checkout is one, and
+`ExampleGenerate` runs it.
 Add `github.com/kud360/goxsd8/codegen` to the imports:
 
 ```go
