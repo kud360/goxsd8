@@ -101,7 +101,7 @@
 //
 // Shortening an anonymous type's path to only as much of it as uniqueness
 // requires. Cross-target type references import across the generated
-// packages. The CLI maps its repeated -schema/-out flag pairs onto targets.
+// packages.
 //
 // Type narrowing in interfaces, the generated-code idiom:
 //

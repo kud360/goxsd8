@@ -466,7 +466,7 @@ func TestParseNamesAnUnresolvedDirectiveOfARejectedSchema(t *testing.T) {
 		t.Errorf("stderr =\n%s\nwant no line calling this a compiled schema", stderr.String())
 	}
 	// The shortfall stands above the verdict it may or may not explain, which
-	// is the order both subcommands report in.
+	// is the order every subcommand reports in.
 	if strings.Index(stderr.String(), note) > strings.Index(stderr.String(), brokenRule) {
 		t.Errorf("stderr =\n%s\nwant the note before the error line", stderr.String())
 	}
@@ -639,9 +639,9 @@ func TestParseUsageErrors(t *testing.T) {
 
 // TestParseFaultsAreDistinguishable is the cliuser criterion this issue was
 // filed to satisfy: a script must be able to tell "your command line is wrong"
-// from "that subcommand does nothing yet" from "your schema is invalid",
-// without parsing prose. The exit code separates the last from the first two,
-// and the stderr line separates those two from each other.
+// from "your schema is invalid", and one usage fault from another, without
+// parsing prose. The exit code separates the first two, and the stderr line
+// separates the usage faults from each other.
 func TestParseFaultsAreDistinguishable(t *testing.T) {
 	kinds := []struct {
 		name string
@@ -650,7 +650,7 @@ func TestParseFaultsAreDistinguishable(t *testing.T) {
 	}{
 		{"no schema argument", []string{"parse"}, 2},
 		{"unreadable schema", []string{"parse", "testdata/nosuch.xsd"}, 2},
-		{"reserved subcommand", []string{"validate", "a.xml"}, 2},
+		{"another subcommand's usage fault", []string{"validate", "a.xml"}, 2},
 		{"invalid schema", []string{"parse", "testdata/broken.xsd"}, 1},
 		{"valid schema", []string{"parse", "testdata/order.xsd"}, 0},
 	}

@@ -84,8 +84,8 @@ Value implementations, parsing, validation, and generation live above them.
                  validate        (instance validation; adapters xmlsrc, jsonsrc, bersrc) [2]
                  codegen  codec  (generation; dataset ser/de)               [1]
                  conformance     (harness + ratchet; repo infrastructure)
-                 cmd/goxsd8      (the CLI; help, parse and validate ship — validate
-                                  over XML and JSON instances — gen does not)
+                 cmd/goxsd8      (the CLI; help, parse, validate and gen ship —
+                                  validate over XML and JSON instances)
 ```
 
 **[1] These boxes are DESTINATIONS, not shipped layers.**

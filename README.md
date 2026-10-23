@@ -50,7 +50,7 @@ go install ./cmd/goxsd8                         # goxsd8 onto $(go env GOPATH)/b
 `go install` line is what produces the `goxsd8` binary the CLI section below
 invokes.
 
-### CLI (contract; `parse` and `validate` are implemented, `gen` is not)
+### CLI (contract; `parse`, `validate` and `gen` are implemented)
 
 This block is a **contract**, exactly like the Library one below, and it
 lives in one place: `goxsd8 -help` prints its usage block, and
@@ -64,7 +64,7 @@ goxsd8 parse order.xsd items.xsd                # compile + summary, exit 0/1/2
 goxsd8 validate -schema order.xsd -schema items.xsd order1.xml order2.xml
                                                 # exit codes: the table in goxsd8 -help
 goxsd8 gen -schema order.xsd -out ./gen/order \
-           -schema items.xsd -out ./gen/items  # one package per pair; exit 0/1/2 once M9 builds it
+           -schema items.xsd -out ./gen/items  # packages order and items; exit 0/1/2/4
 ```
 
 A JSON instance validates the same way. With this schema as `order.xsd`:
