@@ -356,13 +356,17 @@ func (e *emitter) field(nested scope, subject string, loc xsderr.Loc, p xsd.Part
 // anonymous complex type, named by the path from its nearest named ancestor in
 // parent. Under a named complex type the struct is emitted once per nestedKey,
 // by the first top-level element that reaches it, and later ones share it.
+// Both the emitted lookup and the store run only under a named complex type:
+// a top-level element may share a complex type's expanded name, since the two
+// are separate symbol spaces (§3.3.2), so a key whose path starts at an
+// element must never read an entry stored from a type.
 func (e *emitter) nestedStruct(parent scope, decl xsd.ElementDeclaration, t xsd.ComplexType) (string, error) {
 	if t.Name() != (xsd.QName{}) {
 		return "", decline(decl.Loc(), "local element %s with named complex {type definition} %s", decl.Name(), t.Name())
 	}
 	child := scope{underNamedType: parent.underNamedType, path: append(slices.Clone(parent.path), decl.Name())}
 	key := child.key()
-	if name, ok := e.emitted[key]; ok {
+	if name, ok := e.emitted[key]; ok && child.underNamedType {
 		return name, nil
 	}
 	name := e.types.claim(child.locals()...)
