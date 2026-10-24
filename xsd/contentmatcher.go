@@ -362,6 +362,9 @@ type Matcher struct {
 //     the sequences the Matcher would be put to. It is a resource ceiling and
 //     no spec rule licenses it: cvc-accept bounds no partition set. RULED
 //     permanent by #1601.
+//
+// Neither decline charges anything, and neither claims an error direction: what
+// a decline costs is whatever its caller does with (nil, false).
 func (s *Schema) ContentMatcher(t ComplexType) (*Matcher, bool) {
 	ec, ok := t.ContentType().(ElementContent)
 	if !ok {
@@ -384,10 +387,9 @@ func (s *Schema) ContentMatcher(t ComplexType) (*Matcher, bool) {
 	// b" — and so now is the WIDTH a partition-per-cursor encoding could not
 	// carry: (a{1,500}){1,500} reaches a quarter of a million live partitions and
 	// the spans of a region cover them in about a thousand. What stays declined
-	// is what outgrows maxPartitionStates, and partitionsBounded products over
-	// EVERY widened node of the flattened tree, so sibling repeating groups under
-	// a non-repeating one, and a row of repeating leaves under one repeating
-	// group, reach it with no nesting at all.
+	// is what outgrows maxPartitionStates, which partitionsBounded estimates over
+	// every widened node of the flattened tree — the breadth the exported doc
+	// states.
 	//
 	// Declining withholds the whole element-sequence verdict, whose consumers are
 	// validate's Result.violations and its one reader Result.Violations, both of
