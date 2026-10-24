@@ -1,11 +1,20 @@
 // Package xsderr is the error currency of the module: structured errors
 // that carry a spec rule ID and a source location.
 //
+// # Using xsderr
+//
+// A caller holding an error from this module reaches its structured part
+// with errors.As to an *xsderr.Error, which yields the Rule, the Loc and the
+// Msg together; RuleOf and LocOf read the Rule or the Loc alone. Error's doc
+// says how a caller tells an *Error that is a validity verdict from one that
+// is a fault.
+//
+// # Design
+//
 // It is a pure leaf — stdlib imports only. Every schema- or
 // instance-validity violation the spec CATALOGS is an *Error carrying that
 // catalog's rule ID (STYLE E2), and the one validity class the spec catalogs
-// nowhere, below, is a plain error. The converse does not hold: an *Error is
-// not by itself a verdict, and Error's doc says how a caller tells.
+// nowhere, below, is a plain error.
 //
 // # The s4s-grammar class
 //
