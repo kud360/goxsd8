@@ -38,26 +38,42 @@ type word struct {
 	line int
 }
 
+// ident is an exported identifier of a package of a tree: the slash-separated
+// directory of its package relative to the tree's root, "" for the root, and
+// its name, a member's qualified by its type's ("Result.Err").
+type ident struct {
+	dir  string
+	name string
+}
+
 // readTree returns the sentences of every Go file under root: the comments',
 // file by file in path order and in source order within a file, less usage's
-// rendering as the package doc states, then usage's.
-func readTree(root string) ([]sentence, error) {
+// rendering as the package doc states, then usage's. It returns too the
+// sentences of each exported identifier's doc outside package main, in
+// source order: a lookup index (STYLE D2's permitted use of a map).
+func readTree(root string) ([]sentence, map[ident][]sentence, error) {
 	files, err := commentpara.Files([]string{filepath.Join(root, "...")})
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	var comments, usage []sentence
+	idents := make(map[ident][]sentence)
 	for _, path := range files {
 		rel, err := filepath.Rel(root, path)
 		if err != nil {
-			return nil, fmt.Errorf("relativizing %s to %s: %w", path, root, err)
+			return nil, nil, fmt.Errorf("relativizing %s to %s: %w", path, root, err)
 		}
-		c, u, err := readFile(path, filepath.ToSlash(rel))
+		rel = filepath.ToSlash(rel)
+		c, u, docs, err := readFile(path, rel)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		comments = append(comments, c...)
 		usage = append(usage, u...)
+		for _, d := range docs {
+			k := ident{dir: dirOf(rel), name: d.name}
+			idents[k] = append(idents[k], d.sentences...)
+		}
 	}
 
 	rendered := make(map[string]bool, len(usage))
@@ -70,35 +86,56 @@ func readTree(root string) ([]sentence, error) {
 			out = append(out, s)
 		}
 	}
-	return append(out, usage...), nil
+	return append(out, usage...), idents, nil
 }
 
-// readFile returns one file's comment sentences and, for usageFile, usage's,
-// rel being the file's path as sentence.file spells it.
-func readFile(path, rel string) (comments, usage []sentence, err error) {
+// dirOf is the slash-separated directory of a file named by its
+// slash-separated path relative to a tree's root, "" for the root.
+func dirOf(rel string) string {
+	i := strings.LastIndex(rel, "/")
+	if i < 0 {
+		return ""
+	}
+	return rel[:i]
+}
+
+// identDoc is the sentences of one exported identifier's doc, the identifier
+// named as ident.name spells it.
+type identDoc struct {
+	name      string
+	sentences []sentence
+}
+
+// readFile returns one file's comment sentences, for usageFile usage's, and,
+// in a package other than main, the doc of each exported identifier it
+// declares, in source order, rel being the file's path as sentence.file
+// spells it.
+func readFile(path, rel string) (comments, usage []sentence, docs []identDoc, err error) {
 	src, err := os.ReadFile(path)
 	if err != nil {
-		return nil, nil, fmt.Errorf("reading %s: %w", path, err)
+		return nil, nil, nil, fmt.Errorf("reading %s: %w", path, err)
 	}
 	lines := strings.Split(string(src), "\n")
 	if commentpara.IsGenerated(lines) {
-		return nil, nil, nil
+		return nil, nil, nil, nil
 	}
 	fset := token.NewFileSet()
 	file, err := parser.ParseFile(fset, path, src, parser.ParseComments|parser.SkipObjectResolution)
 	if err != nil {
-		return nil, nil, fmt.Errorf("parsing %s: %w", path, err)
+		return nil, nil, nil, fmt.Errorf("parsing %s: %w", path, err)
 	}
 
 	if rel == usageFile {
 		usage, err = usageSentences(fset, file)
 		if err != nil {
-			return nil, nil, fmt.Errorf("reading %s's %s: %w", rel, usageConst, err)
+			return nil, nil, nil, fmt.Errorf("reading %s's %s: %w", rel, usageConst, err)
 		}
 	}
 
 	owners := ownerDocs(file, filepath.Base(rel))
+	byGroup := make(map[*ast.CommentGroup][]sentence)
 	for _, group := range file.Comments {
+		_, owner := owners[group]
 		for _, para := range commentpara.Paragraphs(fset, group, lines) {
 			if para[0].IsVerbatim() {
 				continue
@@ -107,44 +144,63 @@ func readFile(path, rel string) (comments, usage []sentence, err error) {
 			for _, l := range para {
 				words = appendWords(words, l.Body, l.Num)
 			}
-			comments = append(comments, sentences(words, rel, owners[group])...)
+			ss := sentences(words, rel, owner)
+			comments = append(comments, ss...)
+			byGroup[group] = append(byGroup[group], ss...)
 		}
 	}
-	return comments, usage, nil
+	if file.Name.Name == "main" {
+		return comments, usage, nil, nil
+	}
+	for _, group := range file.Comments {
+		for _, name := range owners[group] {
+			docs = append(docs, identDoc{name: name, sentences: byGroup[group]})
+		}
+	}
+	return comments, usage, docs, nil
 }
 
 // ownerDocs returns the comment groups of file that are owners', the package
-// doc naming them, file being named name. An exported identifier is a func, a
-// method of an exported type, a type, a const or var, or a struct field or
-// interface method of an exported type, and a declaration group declaring any
-// of those has its doc read too. A test file has none. The map is a lookup
-// index (STYLE D2's permitted use).
-func ownerDocs(file *ast.File, name string) map[*ast.CommentGroup]bool {
-	docs := make(map[*ast.CommentGroup]bool)
+// doc naming them, file being named name, each with the exported identifiers
+// it documents as ident.name spells them, none for the package clause's doc
+// or a doc.go comment documenting no declaration. An exported identifier is a
+// func, a method of an exported type, a type, a const or var, or a struct
+// field or interface method of an exported type, and a declaration group
+// declaring any of those has its doc read too, documenting each of those
+// names whose spec has no doc of its own. A test file has none. The map is a
+// lookup index (STYLE D2's permitted use).
+func ownerDocs(file *ast.File, name string) map[*ast.CommentGroup][]string {
+	docs := make(map[*ast.CommentGroup][]string)
 	if strings.HasSuffix(name, "_test.go") {
 		return docs
 	}
 	if name == "doc.go" {
 		for _, g := range file.Comments {
-			docs[g] = true
+			docs[g] = nil
 		}
-		return docs
 	}
-	add := func(g *ast.CommentGroup) {
+	add := func(g *ast.CommentGroup, names ...string) {
 		if g != nil {
-			docs[g] = true
+			docs[g] = append(docs[g], names...)
 		}
 	}
 	add(file.Doc)
 	for _, decl := range file.Decls {
 		switch d := decl.(type) {
 		case *ast.FuncDecl:
-			if d.Name.IsExported() && (d.Recv == nil || len(d.Recv.List) == 0 || ast.IsExported(recvName(d.Recv.List[0].Type))) {
-				add(d.Doc)
+			if !d.Name.IsExported() {
+				continue
+			}
+			if d.Recv == nil || len(d.Recv.List) == 0 {
+				add(d.Doc, d.Name.Name)
+				continue
+			}
+			if recv := recvName(d.Recv.List[0].Type); ast.IsExported(recv) {
+				add(d.Doc, recv+"."+d.Name.Name)
 			}
 		case *ast.GenDecl:
-			if specDocs(d.Specs, add) {
-				add(d.Doc)
+			if exported, undocumented := specDocs(d.Specs, add); exported {
+				add(d.Doc, undocumented...)
 			}
 		}
 	}
@@ -153,36 +209,45 @@ func ownerDocs(file *ast.File, name string) map[*ast.CommentGroup]bool {
 
 // specDocs adds the doc comment of every spec declaring an exported name, and
 // of the exported fields and methods of an exported struct or interface type,
-// and reports whether any spec declared one.
-func specDocs(specs []ast.Spec, add func(*ast.CommentGroup)) bool {
-	exported := false
+// each with the names it documents. It reports whether any spec declared an
+// exported name, and returns the exported names whose spec has no doc.
+func specDocs(specs []ast.Spec, add func(*ast.CommentGroup, ...string)) (exported bool, undocumented []string) {
 	for _, spec := range specs {
+		var names []string
+		var doc *ast.CommentGroup
 		switch s := spec.(type) {
 		case *ast.TypeSpec:
 			if !s.Name.IsExported() {
 				continue
 			}
-			exported = true
-			add(s.Doc)
-			memberDocs(s.Type, add)
+			names, doc = []string{s.Name.Name}, s.Doc
+			memberDocs(s.Type, s.Name.Name, add)
 		case *ast.ValueSpec:
 			for _, n := range s.Names {
 				if n.IsExported() {
-					exported = true
-					add(s.Doc)
-					break
+					names = append(names, n.Name)
 				}
 			}
+			doc = s.Doc
+		}
+		if len(names) == 0 {
+			continue
+		}
+		exported = true
+		add(doc, names...)
+		if doc == nil {
+			undocumented = append(undocumented, names...)
 		}
 	}
-	return exported
+	return exported, undocumented
 }
 
 // memberDocs adds the doc comment of every exported field of a struct type
-// and every exported method of an interface type.
-func memberDocs(typ ast.Expr, add func(*ast.CommentGroup)) {
+// and every exported method of an interface type, the type being named typ,
+// each with the member names it documents qualified by typ.
+func memberDocs(expr ast.Expr, typ string, add func(*ast.CommentGroup, ...string)) {
 	var fields *ast.FieldList
-	switch t := typ.(type) {
+	switch t := expr.(type) {
 	case *ast.StructType:
 		fields = t.Fields
 	case *ast.InterfaceType:
@@ -192,11 +257,14 @@ func memberDocs(typ ast.Expr, add func(*ast.CommentGroup)) {
 		return
 	}
 	for _, f := range fields.List {
+		var names []string
 		for _, n := range f.Names {
 			if n.IsExported() {
-				add(f.Doc)
-				break
+				names = append(names, typ+"."+n.Name)
 			}
+		}
+		if len(names) > 0 {
+			add(f.Doc, names...)
 		}
 	}
 }
