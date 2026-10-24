@@ -32,13 +32,15 @@ var (
 
 // decline reports a construct the generator does not cover. It is a plain
 // error wrapping errors.ErrUnsupported, never an *xsderr.Error: no schema
-// rule is violated (STYLE E2).
+// rule is violated (STYLE E2). Its text already says the construct is
+// unsupported, so the %.0w verb wraps the sentinel while printing none of
+// its text: precision 0 truncates the operand's Error string to nothing.
 //
 // GAP(codegen): every construct outside the package doc's "# Coverage" slice
 // declines here; that section lists them under the same marker. #2900 owns
 // lifting them.
 func decline(loc xsderr.Loc, format string, args ...any) error {
-	return fmt.Errorf("%s at %s is not supported by codegen, a generator limitation, not a schema fault: %w",
+	return fmt.Errorf("%s at %s is not supported by codegen, a generator limitation, not a schema fault%.0w",
 		fmt.Sprintf(format, args...), loc, errors.ErrUnsupported)
 }
 
@@ -431,7 +433,7 @@ func (e *emitter) contentGroup(subject string, t xsd.ComplexType) (xsd.ModelGrou
 		return xsd.ModelGroup{}, fmt.Errorf("%s at %s: unexpected content particle term %T", subject, t.Loc(), resolved.Term)
 	}
 	if group.Compositor() == xsd.CompositorAll {
-		return xsd.ModelGroup{}, decline(t.Loc(), "%s with a %s compositor", subject, group.Compositor())
+		return xsd.ModelGroup{}, decline(t.Loc(), "%s with an all compositor", subject)
 	}
 	return group, nil
 }

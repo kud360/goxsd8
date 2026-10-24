@@ -94,17 +94,23 @@ func prepare(t Target, earlier []Target) ([]byte, error) {
 		return nil, errors.New("the Schema field is nil")
 	}
 	if t.Dir == "" {
-		return nil, errors.New("the Dir field is empty")
+		return nil, errors.New("no output directory given")
 	}
-	if !token.IsIdentifier(t.Package) || t.Package == "_" {
-		return nil, fmt.Errorf("the Package field %q is not a Go identifier usable as a package name", t.Package)
+	if token.IsKeyword(t.Package) {
+		return nil, fmt.Errorf("the package name %q is a Go keyword", t.Package)
+	}
+	if t.Package == "_" {
+		return nil, errors.New(`the package name "_" is the blank identifier`)
+	}
+	if !token.IsIdentifier(t.Package) {
+		return nil, fmt.Errorf("the package name %q is not a Go identifier", t.Package)
 	}
 	if t.Package == "main" {
-		return nil, errors.New(`the Package field is "main", but the emitted package declares no func main and would not build`)
+		return nil, errors.New(`the package name is "main", but the emitted package declares no func main and would not build`)
 	}
 	for j, e := range earlier {
 		if filepath.Clean(e.Dir) == filepath.Clean(t.Dir) {
-			return nil, fmt.Errorf("the Dir field %s is target %d's Dir too", t.Dir, j)
+			return nil, fmt.Errorf("the output directory %s is also the output directory of target %d", t.Dir, j)
 		}
 	}
 	src, err := emit(t.Schema, t.Package)
@@ -129,7 +135,7 @@ func checkDestination(dir string) error {
 		return fmt.Errorf("checking %s: %w", dir, err)
 	}
 	if !info.IsDir() {
-		return fmt.Errorf("the Dir field %s is not a directory", dir)
+		return fmt.Errorf("the output directory %s exists and is not a directory", dir)
 	}
 	path := filepath.Join(dir, fileName)
 	info, err = os.Lstat(path)
@@ -147,7 +153,7 @@ func checkDestination(dir string) error {
 		return err
 	}
 	if !generated {
-		return fmt.Errorf("%s exists and its first line does not mark it generated, so Generate will not overwrite it", path)
+		return fmt.Errorf("%s exists and its first line does not mark it generated, so it is never overwritten", path)
 	}
 	return nil
 }
