@@ -129,11 +129,10 @@
 //   - Generated readers/views expose the narrowest interface a consumer
 //     needs; optionality and nillability are modeled in the types, not
 //     in comments.
-//   - Simple-content fields are typed by the chosen backend's
-//     representation (strict or native, per generation option). The option
-//     governs only the types whose strict and native representations differ;
-//     the eight bounded integer types, string and boolean keep the mapping
-//     "# Coverage" states.
+//   - Simple-content fields of a type "# Coverage" maps to no Go builtin are
+//     typed by the chosen backend's representation (strict or native, per
+//     generation option). A field of a type "# Coverage" maps keeps that
+//     mapping whichever backend is chosen.
 //
 // # The Emitter seam (value.Emitter; API frozen in M9; not yet declared here)
 //
