@@ -11,7 +11,7 @@ import (
 )
 
 // Option configures [Validate]. The zero set of options is a complete,
-// usable configuration: options only replace defaults (STYLE T1).
+// usable configuration: options only replace defaults.
 type Option func(*config)
 
 // config is the resolved [Validate] configuration.

@@ -3,12 +3,12 @@
 //
 // The engine never imports a JSON package; this adapter builds infoset
 // values over the stdlib streaming json.Decoder token walk — member order
-// preserved, the document never held whole (STYLE P4) — and hands them to
+// preserved, the document never held whole — and hands them to
 // [validate.Validator.Assess] through [Validate]. Verdicts are the engine's,
 // with the same cvc-* rule IDs as for the XML document the JSON maps to, and
 // [Validate]'s doc lists the clause it appends to a violation's message in
 // the instance's own terms; the json conformance lane pins the mapping with
-// curated cases (conformance/testdata/json).
+// curated cases.
 //
 // # The JSON shape in brief
 //
@@ -51,8 +51,8 @@
 //
 //	{"o:order":{"$xmlns":{"o":"urn:o"},"kind":"x","item":["a","b"]}}
 //
-// ExampleValidate, in example_test.go, assesses it beside an instance the
-// engine charges and one the mapping declines.
+// ExampleValidate assesses it beside an instance the engine charges and one
+// the mapping declines.
 //
 // "What declines" below gives each decline its remedy. "The validation root"
 // and "The mapping" state each arm exactly — keys no declaration or use
@@ -192,22 +192,21 @@
 //     (cvc-wildcard), and so is a {process contents}, as for the XML twin. A
 //     name the wildcards reject is soundly invalid: the input spells it, or
 //     every other namespace is outside every wildcard of that kind, and no
-//     declaration or use carries the key. A key a declaration or use carries is
-//     named by it and never by a wildcard: that is the mapping's own rule, as
-//     the NAMESPACE TRAP below says, and no spec text makes it in general; for
-//     a prefixed key it only chooses the kind, the declaration's or use's
-//     expanded name being the one it spells; it is RULED permanent by #2634
-//     because the spec is silent between the two names, and because a decline
-//     instead would refuse inputs it maps, the curated json cases wildcard-attribute.v
-//     and .i among them. The spec makes the same choice for one item matched both ways,
-//     which here is where the wildcard's one namespace is the declaration's or the use's
-//     own: the Note under cvc-accept matches an element information item "accepted by
-//     either a Wildcard or an Element Declaration" against the Element Declaration, and
-//     the Note after cvc-complex-type clause 4 gives an attribute use "whose name and
-//     target namespace match" precedence over the {attribute wildcard}. Neither Note
-//     chooses between two expanded names, the declaration's or use's and the (N,key) a
-//     wildcard would give, nor across kinds, a declaration over an {attribute wildcard}
-//     or a use over an element wildcard.
+//     declaration or use carries the key. GAP(jsonsrc): a key a declaration or
+//     use carries is named by it and never by a wildcard, the mapping's own
+//     rule, as the NAMESPACE TRAP below says, which no spec text makes in
+//     general; for a prefixed key it only chooses the kind, the declaration's
+//     or use's expanded name being the one it spells. RULED permanent by #2634.
+//     The spec makes the same choice for one item matched both ways, which here
+//     is where the wildcard's one namespace is the declaration's or the use's
+//     own: the Note under cvc-accept matches an element information item
+//     "accepted by either a Wildcard or an Element Declaration" against the
+//     Element Declaration, and the Note after cvc-complex-type clause 4 gives
+//     an attribute use "whose name and target namespace match" precedence over
+//     the {attribute wildcard}. Neither Note chooses between two expanded
+//     names, the declaration's or use's and the (N,key) a wildcard would give,
+//     nor across kinds, a declaration over an {attribute wildcard} or a use
+//     over an element wildcard.
 //   - A member whose key neither carries, of a type with no wildcard of either
 //     kind — a simple type included — is the child a prefixed key spells, or
 //     (O,key), O the enclosing element's own namespace name, under the
@@ -388,62 +387,49 @@
 // # Every decline
 //
 // Each entry below whose XML twin the engine assesses is tracked by a
-// GAP(jsonsrc) marker at the function that declines it; one more tracks the
-// mapping's own choice of a declaration or use over a wildcard, under "The
-// mapping". A repeated attribute member, an attribute member whose value is
-// null, an object or an array, an array item that is itself an array, a key
-// with no colon that is no NCName, a key whose colon makes no QName, a prefix
-// no "$xmlns" in scope binds, a repeated "$xmlns" or "$type", a reserved member
-// other than those two or at the top level, the malformed "$xmlns" and "$type"
-// values below, and the top-level shapes and array root value that "The
-// validation root" declines have no XML twin, and no marker; the error for
-// each names the spelling the mapping takes instead, where one exists:
+// GAP(jsonsrc) marker at the function that declines it, and a marker below,
+// inside an entry, cites the ruling that keeps that entry's decline; one more
+// marker, under "The mapping", tracks the mapping's own choice of a
+// declaration or use over a wildcard. A repeated attribute member, an attribute
+// member whose value is null, an object or an array, an array item that is
+// itself an array, a key with no colon that is no NCName, a key whose colon
+// makes no QName, a prefix no "$xmlns" in scope binds, a repeated "$xmlns" or
+// "$type", a reserved member other than those two or at the top level, the
+// malformed "$xmlns" and "$type" values below, and the top-level shapes and
+// array root value that "The validation root" declines have no XML twin, and no
+// marker; the error for each names the spelling the mapping takes instead,
+// where one exists:
 //
-//   - an unprefixed key two expanded names carry: among the top-level
-//     declarations at the root, among the declarations a type contains, or
-//     among its attribute uses. RULED permanent by #2623: the verdict turns on
-//     which expanded name the key is given, a prefixed key "p:local" spells
+//   - GAP(jsonsrc): an unprefixed key two expanded names carry: among the
+//     top-level declarations at the root, among the declarations a type
+//     contains, or among its attribute uses. A prefixed key "p:local" spells
 //     each one in a namespace, and one in no namespace beside one in a
 //     namespace is spelled by no key, since no prefix is bound to the absent
-//     namespace, which the mapping declines rather than give the unprefixed
-//     key either meaning;
-//   - a key no contained declaration and no attribute use carries, where the
-//     key and the type's wildcards do not fix its namespace or kind: for an
-//     unprefixed key, a wildcard of variety any or not (xs:anyType's included),
-//     or several enumerated namespaces; a key a wildcard's single namespace, of
-//     either kind, puts in the xsi or the xml namespace, and a prefixed key no
-//     declaration or use carries that spells a name in the xsi namespace, or a
-//     child element's in the xml namespace; a key of a type with both an
-//     element wildcard and an {attribute wildcard}, whose kind the key does not
-//     say, prefixed or not; and a member of an object under a child no
-//     contained and no top-level declaration names. The xsi- and xml-namespace
-//     class is RULED permanent by #2635: an element in the xml namespace would
-//     bind the default namespace to it, which no XML twin has, and the
-//     attribute kind is ruled with it; the four xsi attributes cvc-complex-type
-//     clause 2 excepts must keep declining, xsi:nil and xsi:type having their
-//     own spellings, and the rest of the xsi namespace is not worth a half-arm;
-//     a prefixed key in the xml namespace under a type with only an {attribute
-//     wildcard} maps, to the attribute it spells, which binds no default
-//     namespace. The others are RULED permanent by #2634, and a prefix lifts
-//     the namespace ones but not the kind ones: whichever (N,key) the mapping
-//     chose, its verdict depends on N through declaration lookup, attribution
-//     and an ancestor's identity-constraint paths and assertions. Conditions
-//     under which the verdict is the same for every admitted N exist — no
-//     {disallowed names} entry of the key's local name and ##defined and
-//     ##definedSibling inert for it, skip or no global declaration of it in an
-//     admitted namespace, one particle accepting every (N,key), no
-//     ancestor-or-self assertion, identity constraint or {type table} — and
-//     they are unbuilt by decision, not by oversight: testing the last needs a
-//     census of every ancestor, which the walker does not keep;
+//     namespace. RULED permanent by #2623;
+//   - GAP(jsonsrc): a key no contained declaration and no attribute use
+//     carries, where the key and the type's wildcards do not fix its namespace
+//     or kind: for an unprefixed key, a wildcard of variety any or not
+//     (xs:anyType's included), or several enumerated namespaces; a key of a
+//     type with both an element wildcard and an {attribute wildcard}, whose
+//     kind the key does not say, prefixed or not; and a member of an object
+//     under a child no contained and no top-level declaration names. A prefix
+//     lifts the namespace declines but not the kind ones. RULED permanent by
+//     #2634;
+//   - GAP(jsonsrc): a key a wildcard's single namespace, of either kind, puts
+//     in the xsi or the xml namespace, and a prefixed key no declaration or use
+//     carries that spells a name in the xsi namespace, or a child element's in
+//     the xml namespace. xsi:nil and xsi:type have their own spellings, and a
+//     prefixed key in the xml namespace under a type with only an {attribute
+//     wildcard} maps, to the attribute it spells. RULED permanent by #2635;
 //   - a key both a contained declaration and an attribute use carry, which no
 //     spec rule decides between;
 //   - an attribute member after a child member, a repeated attribute member,
 //     and an attribute member whose value is null, an object or an array;
 //   - an attribute use in the xsi namespace: xsi:nil is spelled by a null
-//     value alone, xsi:type by a "$type" member alone, and
-//     xsi:schemaLocation and xsi:noNamespaceSchemaLocation, schema-location
-//     hints (§2.7.3, §4.3.2) a JSON instance carries none of, are RULED
-//     permanent by #2627;
+//     value alone and xsi:type by a "$type" member alone. GAP(jsonsrc): an
+//     xsi:schemaLocation or xsi:noNamespaceSchemaLocation attribute use,
+//     schema-location hints (§2.7.3, §4.3.2) a JSON instance carries none of,
+//     declines. RULED permanent by #2627;
 //   - an attribute member of an element whose type has simple content, a
 //     use's or one its {attribute wildcard} alone admits: the mapping spells
 //     no text beside attribute members, so an object value carries no simple
@@ -470,13 +456,14 @@
 //     the "$type" names takes as attributes, or before or after it — is
 //     classified as it reads by the type that governs the element under that
 //     reading's attributes, the "$type"'s type where it ·overrides· the one
-//     they select and that one otherwise: where two readings stand, or a
-//     reading's type declines a member it reads; and where none stands, as
+//     they select and that one otherwise: where two readings stand, where a
+//     reading's type declines a member it reads, and where none stands. The
+//     engine charges cvc-elt clause 4 on the twin of each such reading whose
+//     type the "$type"'s does not ·override·. GAP(jsonsrc): none stands, as
 //     where the type selected for the attributes the run reads, one the
 //     "$type" does not ·override·, classifies an attribute the selection reads
-//     otherwise, so that neither classification is a fixed point, RULED
-//     permanent by #2831. The engine charges cvc-elt clause 4 on the twin of
-//     each such reading whose type the "$type"'s does not ·override·;
+//     otherwise, so that neither classification is a fixed point. RULED
+//     permanent by #2831;
 //   - any other "$"-prefixed reserved member, "$" being no XML NameStartChar;
 //   - an array item that is itself an array;
 //   - a member of an object under a declaration carrying a {type table} that

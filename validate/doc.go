@@ -26,10 +26,10 @@
 // # The abstract infoset
 //
 // The engine consumes [Element], [Attribute], [Text] and the [Children]
-// cursor over the [Child] sum — never a concrete decoder's types
-// (PRINCIPLES 8). They carry the Appendix D properties a cvc- rule reads
-// off an information item, plus the Loc a diagnostic cites. Adapters
-// construct infoset values and hand them over:
+// cursor over the [Child] sum — never a concrete decoder's types. They
+// carry the Appendix D properties a cvc- rule reads off an information
+// item, plus the Loc a diagnostic cites. Adapters construct infoset
+// values and hand them over:
 //
 //	validate/xmlsrc   XML instances via parser/xmltree      implemented
 //	validate/jsonsrc  JSON instances                        implemented
@@ -46,12 +46,12 @@
 //
 // A later infoset property arrives as a NEW optional capability
 // interface the engine narrows to, and NEVER as a method added to
-// Element, Attribute or Text (PRINCIPLES 3). Those three are implemented
-// by adapter packages in this module and outside it, so a method added to one
-// breaks every adapter at once. [UnparsedEntities] and
-// [DeclarationsProcessed] are the capabilities that have shipped: the
-// document's [unparsedEntities] and [all declarations processed], each
-// narrowed once off the root [Validator.Assess] is handed.
+// Element, Attribute or Text. Those three are implemented by adapter packages
+// in this module and outside it, so a method added to one breaks every
+// adapter at once. [UnparsedEntities] and [DeclarationsProcessed] are the
+// capabilities that have shipped: the document's [unparsedEntities] and [all
+// declarations processed], each narrowed once off the root [Validator.Assess]
+// is handed.
 //
 // Each capability's own doc comment decides what its absence means, and
 // the contracts differ. [unparsedEntities] absent REJECTS: Appendix
@@ -71,11 +71,11 @@
 //   - Content-model matching NEVER BACKTRACKS — UPA fixes which particle
 //     takes each item, and a bounded set of live partitions decides which
 //     iteration of a repeated ancestor it falls in — and explicit content
-//     beats an open-content wildcard at the current state (PRINCIPLES 14).
+//     beats an open-content wildcard at the current state.
 //     The matcher is xsd's pull walk driver.
 //   - Empty content is stricter than element-only: a type whose particle
 //     can never match an element admits no character content at all, not
-//     even whitespace (PRINCIPLES 13).
+//     even whitespace.
 //   - Parent element context is threaded through the whole chain: ID
 //     harvesting under value constraints, EDC's post-xsi:type governing
 //     type, and namespace context for identity constraints all need it. An
@@ -96,10 +96,9 @@
 //   - Identity constraints: node tables propagate UPWARD — a keyref on
 //     element E resolves only against key sequences sourced within E's
 //     own subtree; selector/field paths honor xpathDefaultNamespace for
-//     element steps and never for attribute steps (PRINCIPLES 15).
+//     element steps and never for attribute steps.
 //   - Union values validate against DirectMembers in order, with the
-//     validating member's whiteSpace driving pattern normalization
-//     (PRINCIPLES 11).
+//     validating member's whiteSpace driving pattern normalization.
 //   - Assertions are VISITED at every variety level. A complex type's
 //     {assertions} member is EVALUATED where xpath compiles its {test}
 //     over the element's typed attributes and children, and charged under
@@ -115,7 +114,7 @@
 //     comparison (cvc-attribute clause 4, cvc-au, cvc-elt clause 5.2.2.2.2,
 //     value.ConstraintMatches), where a {test} it declines or fails leaves
 //     that clause's own [Unevaluated]. No unevaluated site is ever reported as
-//     satisfied (PRINCIPLES 12). Every {test} of one [Validator.Assess] call,
+//     satisfied. Every {test} of one [Validator.Assess] call,
 //     of either kind, is evaluated at one current dateTime, which
 //     fn:current-date reads: the clock is read once, at the start of the call,
 //     and held constant for the assessment episode (cvc-xpath clause 6,
@@ -346,8 +345,8 @@
 // an item ·attributed· to it to a SYNTHESIZED Attribute Use over the ·governing
 // attribute declaration· its ·expanded name· ·resolves· to, which only an
 // assessment episode can ·resolve· — so xsd's static c-ran rendering reports the
-// keyword there by a ruling, not by an omission for this layer's carve to repair
-// (#267). A skip {attribute wildcard} is outside that obligation as squarely as
+// keyword there by a ruling, not by an omission for this layer's carve to repair.
+// A skip {attribute wildcard} is outside that obligation as squarely as
 // a ##defined one, and this layer owes it no case-3 rendering at all:
 // key-governing-ad (§3.2.4.2) clause 3 resolves by name only "provided the
 // attribute is not ·skipped·" and key-skipped makes such an item ·skipped·, so
@@ -369,12 +368,12 @@
 // ·skipped· along with every element beneath it (cvc-assess-elt clause 2,
 // key-sva (§3.3.4.6) clause 3.2) — for the {open content} a reading and not a
 // quotation, key-skipped naming a skip wildcard and never an Open Content,
-// which the ·default binding· of cos-content-act-restrict clause 6 settles
-// (#1969) — and an undecided child, whose governance this package could not
+// which the ·default binding· of cos-content-act-restrict clause 6 settles —
+// and an undecided child, whose governance this package could not
 // decide at all: a child of a parent whose own type it could not determine,
-// ·nilled· or not (#2211), or whose clause 1.4 xsd.Schema.ContentMatcher does
+// ·nilled· or not, or whose clause 1.4 xsd.Schema.ContentMatcher does
 // not decide, which is assessed against nothing along with its whole subtree
-// and withholds cvc-id clause 1 (#1892).
+// and withholds cvc-id clause 1.
 //
 // A child its parent DECIDEDLY ·attributes· to nothing — a ·nilled· parent
 // whose type this package determined, a simple-typed parent, an empty or
@@ -388,7 +387,7 @@
 // xsi:type alone (key-governing-type-elem clause 8), else it is ·laxly
 // assessed·. A child whose name ·resolves· to no declaration, and that
 // exception does not reach, is likewise ·laxly assessed· against xs:anyType
-// (key-lva, #1823).
+// (key-lva).
 //
 // The eighth is cvc-identity-constraint (§3.11.4), over the {identity-constraint
 // definitions} of the ·governing element declaration· of every element the
@@ -496,3 +495,16 @@ package validate
 // [walk.skippedAttribute]; a resolving-to-nothing child's ·lax assessment· is
 // [walk.child]'s; a ·nilled· element is read for cvc-id by [walk.idElement]
 // and for cvc-identity-constraint by [icCheck.fill].
+//
+// The package doc's design commitments are PRINCIPLES 8 (the abstract
+// infoset carries no concrete decoder's types), PRINCIPLES 3 (a later
+// property arrives as a new capability interface), and, under "Assessment
+// semantics designed in from the start", PRINCIPLES 14 (no backtracking),
+// PRINCIPLES 13 (empty content), PRINCIPLES 15 (identity constraints),
+// PRINCIPLES 11 (union members) and PRINCIPLES 12 (no unevaluated site
+// reported satisfied). Its Contract's readings were settled on their threads:
+// the case-3 {attribute wildcard} rendering left to this layer by #267, the
+// skip {open content} reading by #1969 (reversing #1576), an undecided child
+// below a parent of undetermined type, ·nilled· or not, by #2211, the
+// undecided subtree withholding cvc-id clause 1 by #1892, and the ·lax
+// assessment· of a child resolving to no declaration by #1823.

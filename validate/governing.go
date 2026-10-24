@@ -19,7 +19,7 @@ type governed interface{ governed() }
 // {open content} whose {wildcard} is skip: it is not ·assessed·
 // (cvc-assess-elt clause 2), and neither is any element below it
 // (key-skipped). The {open content} half is a reading, which
-// [Validator.Governing] states.
+// [Validator.Governing] states, settled by #1969 (reversing #1576).
 type skippedGovernance struct{}
 
 // decidedGovernance is an element whose ·governing type definition· typ is
@@ -309,18 +309,17 @@ func missingHead(s *xsd.Schema, ref xsd.TypeDefinitionOrRef) bool {
 //   - Skipped. a is a skip Wildcard, or an [*xsd.OpenContent] whose {wildcard}
 //     is skip: assessed false and every other result zero (cvc-assess-elt
 //     clause 2). selected is not called. assessed is false nowhere else where
-//     err is nil. The {open content} half is a reading and not a quotation
-//     (#1969, reversing #1576): key-skipped, clause 3.2 of ·strictly assessed·
-//     and cvc-wildcard name a skip Wildcard and never an Open Content, and
-//     key-att-to ·attributes· the item to the {open content} record. The
-//     ·default binding· of cos-content-act-restrict (§3.4.6.4,
-//     key-dft-binding) clause 6 binds an item ·attributed· to "an Open Content
-//     with a skip Wildcard" to the keyword skip, beside a skip ·wildcard
-//     particle·'s, where a declaration key-governing-ed clause 4 resolved
-//     would have bound it to that declaration by clause 1 instead.
-//     cos-element-consistent clause 2.2 likewise counts only an {open content}
-//     "with a strict or lax Wildcard", which is evidence of the exclusion and
-//     not a rule of assessment.
+//     err is nil. The {open content} half is a reading and not a quotation:
+//     key-skipped, clause 3.2 of ·strictly assessed· and cvc-wildcard name a
+//     skip Wildcard and never an Open Content, and key-att-to ·attributes· the
+//     item to the {open content} record. The ·default binding· of
+//     cos-content-act-restrict (§3.4.6.4, key-dft-binding) clause 6 binds an
+//     item ·attributed· to "an Open Content with a skip Wildcard" to the
+//     keyword skip, beside a skip ·wildcard particle·'s, where a declaration
+//     key-governing-ed clause 4 resolved would have bound it to that
+//     declaration by clause 1 instead. cos-element-consistent clause 2.2
+//     likewise counts only an {open content} "with a strict or lax Wildcard",
+//     which is evidence of the exclusion and not a rule of assessment.
 //   - A ·governing element declaration· D: an ElementDeclaration a of E's
 //     name (key-governing-ed clause 2); the top-level declaration name
 //     ·resolves· to for an ElementDeclaration a of another name (the
@@ -355,9 +354,8 @@ func missingHead(s *xsd.Schema, ref xsd.TypeDefinitionOrRef) bool {
 //     nil, but for an ·absent· affiliation or head above.
 //
 // err is non-nil only where [xsd.Schema.ValidlySubstitutable] cannot settle
-// the ·override·, an exit unreachable for a finalized Schema (RULED permanent
-// by #2174); every other result is then zero, and Assess records an
-// [Unevaluated].
+// the ·override·, an exit unreachable for a finalized Schema; every other
+// result is then zero, and Assess records an [Unevaluated].
 func (v *Validator) Governing(parent *xsd.ComplexType, a xsd.Attribution, name xsd.QName, instance xsd.TypeDefinition, selected func(xsd.TypeTable) (xsd.TypeDefinitionOrRef, bool)) (decl xsd.ElementDeclaration, declared bool, typ xsd.TypeDefinition, assessed bool, err error) {
 	if selected == nil {
 		panic("validate: Governing: nil selected")
