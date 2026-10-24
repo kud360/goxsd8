@@ -12,19 +12,19 @@
 // and model groups, particles, wildcards, identity constraints, type
 // alternatives (CTA), assertions, and notations. Structures §3.15
 // {annotation} is not modelled: no cvc-/src-/cos- rule consumes it, so no
-// component carries it and no accessor reports it (#407).
+// component carries it and no accessor reports it.
 //
-// Design rules (see docs/STYLE.md, docs/PRINCIPLES.md):
+// Design rules:
 //
 //   - Immutable after construction. Construction happens in phases
 //     (parse → resolve → finalize) so no traversal ever needs a cycle
-//     check (D4); spec-forbidden circularities are rejected at finalize
+//     check; spec-forbidden circularities are rejected at finalize
 //     with their named src-/cos- rule. That covers the SIMPLE-type
 //     {base type definition} chain too, now that the slot holds a
 //     deferred reference (SimpleTypeOrRef): st-props-correct clause 2 is
 //     charged by a finalize check like its complex-type twin, and the
 //     unguarded chain walks behind Variety/Primitive/Item/Members/
-//     EffectiveFacets rest on it having run — see Schema.resolve. The
+//     EffectiveFacets rest on it having run — see SchemaBuilder.Finalize. The
 //     {item type definition} and {member type definitions} slots hold
 //     that same sum, so an itemType= or memberTypes= naming a
 //     forward-declared type defers exactly as a base= does.
@@ -37,15 +37,15 @@
 //     doc says so.
 //
 //   - Every child collection is a slice in document order. Maps exist
-//     only as internal lookup indexes and never determine order (D2).
+//     only as internal lookup indexes and never determine order.
 //
-//   - One fact, one encoding (D3): nothing derivable is stored. There is
+//   - One fact, one encoding: nothing derivable is stored. There is
 //     no Primitive bool — a type that defines its own fundamental facets
 //     is a primitive, answered by IsPrimitive(); effective facets are
 //     computed on demand by merging the base chain, never cached.
 //
 //   - Closed sets (variety, derivation method, process-contents, use)
-//     are typed constants with unexported tags, never strings (T1).
+//     are typed constants with unexported tags, never strings.
 //
 // Names are expanded QNames:
 //
@@ -61,7 +61,7 @@
 // the producer with NewComponentID before either endpoint is built, and
 // threaded into both. It is compared with ==, never rendered (its
 // underlying value is an address, so any textual or sorted form would be
-// nondeterministic, D1/D2), and never derived from position — Loc is
+// nondeterministic), and never derived from position — Loc is
 // provenance, not identity. ComplexType's {context} (§3.4.1) is the first
 // slot to use it, and the reciprocal second is the anonymous-container arm
 // of each scope-parent sum — ElementScopeParent's
@@ -79,40 +79,29 @@
 // position is PROVENANCE, not a component property at all — no kind's
 // §3.x.1 property list has it. It is where the declaring element sits in
 // the schema document, retained from the constructor so a finalize-time
-// rejection can cite file:line:column instead of "?" — sch-props-correct
-// clause 2 (schema.go) was the first such consumer, resolve.go's Phase
-// A/B rejections (src-resolve, c-props-correct, ct-props-correct,
-// mg-props-correct, e-props-correct) the second, defaultbinding.go's
-// derivation-ok-restriction clause 3 rejections the third, and
-// complexderivation.go's derivation-ok-restriction, ct-props-correct and
-// cos-ct-extends rejections the fourth, and allgrouplimited.go's
-// cos-all-limited rejections the fifth: each is charged to the REFERRING
-// or offending component's own Loc, per the referrer-Loc convention
-// documented on resolveReferences — for every derivation-ok-restriction
+// rejection can cite file:line:column instead of "?". Finalize charges its
+// sch-props-correct clause 2, src-resolve, c-props-correct, ct-props-correct,
+// mg-props-correct, e-props-correct, derivation-ok-restriction,
+// cos-ct-extends and cos-all-limited rejections each to the REFERRING or
+// offending component's own Loc — for every derivation-ok-restriction
 // clause that is the RESTRICTING complex type, the spec's T, which the
 // constraint is stated against and every one of its messages already
-// names, and for ct-props-correct the complex type whose properties it
-// checks. cos-ct-extends clause 1.6 (c-vs-ctd-e) is positioned by the
-// same two charge sites: derivation-ok-restriction clause 4's attribute
-// and element halves are parameterized by locallyDeclaredTypeCheck, whose
-// second literal is checkExtensionLocallyDeclaredTypes' — so a c-vs-ctd-e
-// rejection carries the EXTENDING type's Loc, charged from
-// complexderivation.go and NOT from any of complexextension.go's own
-// twenty charges. The zero xsderr.Loc means the position is unknown, and
-// is the correct value for a component with no schema document behind it —
-// parser.Produce's synthesized xs:anyType and §3.2.7 xsi: attribute
-// declarations, the four xml: attribute declarations and the
-// xml:specialAttrs attribute group definition the parser supplies for an
-// <import> of the §1.3.2 XML namespace it cannot fetch, and package
-// builtin's seeded built-in datatypes, are the legitimate zero-Loc
-// producers. Other constructors take a loc to charge their own rejections
-// but do not retain it: nothing consumes those positions yet, so no
-// accessor is exported for them (T5).
+// names; for ct-props-correct the complex type whose properties it checks;
+// and for cos-ct-extends clause 1.6 (c-vs-ctd-e) the EXTENDING type. The
+// zero xsderr.Loc means the position is unknown, and is the correct value for
+// a component with no schema document behind it — parser.Produce's
+// synthesized xs:anyType and §3.2.7 xsi: attribute declarations, the four
+// xml: attribute declarations and the xml:specialAttrs attribute group
+// definition the parser supplies for an <import> of the §1.3.2 XML namespace
+// it cannot fetch, and package builtin's seeded built-in datatypes, are the
+// legitimate zero-Loc producers. Other constructors take a loc to charge
+// their own rejections but do not retain it: nothing consumes those positions
+// yet, so no accessor is exported for them.
 //
 // # Query API
 //
 // Direct lookups over a compiled schema set — element, attribute, and
-// type definitions by QName — exposed as minimal capability views (T3):
+// type definitions by QName — exposed as minimal capability views:
 // a consumer that needs only element lookup receives an interface with
 // exactly that method, not the whole schema. Those by-QName views are
 // read-only windows onto the compiled set; they never copy it.
@@ -130,7 +119,7 @@
 // components in it are shared and immutable), so a caller cannot mutate
 // through the result and desync a source-of-truth slice from the index
 // derived from it. They are methods on *Schema and nothing more; no
-// capability view bundles them until a second consumer needs one (T5).
+// capability view bundles them until a second consumer needs one.
 //
 // Two SLOT resolvers sit beside the by-QName lookups, for a consumer
 // holding a component rather than a name: Schema.ResolvedType turns a
@@ -160,7 +149,7 @@
 // extension point. Every other mapping rule this package completes —
 // the §3.6.2.1/§3.6.2.2 attribute group fold, the §3.4.2.4 clause 3 and
 // §3.4.2.5 clause 2 folds, and this one's structural inverse — stays
-// in-package (T5).
+// in-package.
 //
 // # Value spaces
 //
@@ -173,9 +162,10 @@
 // lexical to a value needs package value, which is layered above this pure
 // leaf — so the whole capability is taken as an INPUT: the ValueSpace
 // interface, passed to SchemaBuilder.FinalizeWith. Every ValueSpace method
-// may answer "undecided", and undecided always accepts, so plain Finalize
-// (which installs undecidedValueSpace) is the fully fail-open configuration.
-// value.NewValueSpace is the implementation the parser installs.
+// may answer "undecided", and undecided always accepts, so plain Finalize,
+// which installs a value space answering every question undecided, is the
+// fully fail-open configuration. value.NewValueSpace is the implementation
+// the parser installs.
 //
 // One exported method takes a ValueSpace PER CALL instead of reading the
 // installed one: Schema.ElementDefaultValid, whose caller charges
@@ -193,8 +183,8 @@
 // REJECT-CAPABLE: it answers with an error carrying a per-facet rule ID,
 // which finalize returns as the schema's rejection, so bundling it with the
 // fail-open comparisons would make an incoherent capability mix
-// representable (T1). checkSimpleTypeDerivations puts every simple type
-// the assembled schema reaches to it, anonymous inline ones included;
+// representable. Finalize puts every simple type the assembled schema
+// reaches to it, anonymous inline ones included;
 // builtin.NewRestrictionChecker is the implementation the parser installs.
 //
 // Both capabilities' methods take a TypeResolver and none may store one: a
@@ -250,21 +240,20 @@
 // cvc-complex-content charge names. A present {open content} is DECIDED, in both
 // {mode}s: cvc-complex-content clauses 2 and 3 split the sequence into the part
 // {particle} takes and the part the open wildcard does, and the split each
-// clause admits is unique (contentmatcher.go). The walk never backtracks and
-// never re-reads an item, and it COUNTS occurrences rather than unfolding them.
-// WHICH particle takes each item is fixed by cos-nonambig; WHICH ITERATION of a
-// repeated ancestor the item falls in is the non-determinism cvc-accept's
-// closing Note leaves open, and clause 3.1 asks it existentially, so the walk
-// carries the live partitions as runs of occurrence counts rather than one entry
-// each, and widens the set only where a repeating particle can take an item on
-// either side of a repeating ancestor's iteration boundary (contentmatcher.go
-// for that condition and for the bound that keeps the set a constant of the
-// schema). It decides once, at construction, whether it decides at all:
-// ContentMatcher reports false for a {content type} holding no particle and for
-// the shapes contentmatcher.go declines, and a Matcher that exists never
-// declines a name mid-sequence. Substitution groups are not expanded at
-// construction — Next resolves membership per name, as cvc-accept clause 2.3.2
-// states it.
+// clause admits is unique. The walk never backtracks and never re-reads an item,
+// and it COUNTS occurrences rather than unfolding them. WHICH particle takes each
+// item is fixed by cos-nonambig; WHICH ITERATION of a repeated ancestor the item
+// falls in is the non-determinism cvc-accept's closing Note leaves open, and
+// clause 3.1 asks it existentially, so the walk carries the live partitions as
+// runs of occurrence counts rather than one entry each, and widens the set only
+// where a repeating particle can take an item on either side of a repeating
+// ancestor's iteration boundary (Schema.ContentMatcher states that condition and
+// the bound that keeps the set a constant of the schema). It decides once, at
+// construction, whether it decides at all: ContentMatcher reports false for a
+// {content type} holding no particle and for a content model too wide to track,
+// and a Matcher that exists never declines a name mid-sequence. Substitution
+// groups are not expanded at construction — Next resolves membership per name, as
+// cvc-accept clause 2.3.2 states it.
 //
 // A consumer that wants the whole model rather than one sequence still
 // traverses it by hand, switching Particle.Term over the TermOrRef sealed

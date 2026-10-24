@@ -650,6 +650,12 @@ func (s *Schema) baseChainToAnyType(t ComplexType) (steps []ComplexType, a Compl
 // The ONE load-bearing difference is the blocking-keyword set: ·without
 // limitation· is the empty set (extensionBlockingKeywords), never
 // restrictionBlockingKeywords.
+//
+// A c-vs-ctd-e rejection is therefore charged from complexderivation.go's two
+// charge sites, checkLocallyDeclaredAttributeTypes and
+// checkLocallyDeclaredElementTypes, and from none of this file's own, at t's
+// Loc: the EXTENDING type's, which the package doc states as the position a
+// c-vs-ctd-e rejection carries.
 func (s *Schema) checkExtensionLocallyDeclaredTypes(t, b ComplexType) error {
 	return s.checkLocallyDeclaredTypes(t, b, locallyDeclaredTypeCheck{
 		rule:       ruleCosCTExtends,
