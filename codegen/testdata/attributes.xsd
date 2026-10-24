@@ -1,0 +1,43 @@
+<?xml version="1.0"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+           xmlns:t="urn:t" targetNamespace="urn:t">
+  <!-- Attribute uses give fields after the particle fields, in
+       {attribute uses} order: the type's own and its attribute groups'
+       (§3.4.2.4). {required} true gives the builtin, false a pointer.
+       The attribute kind beside the element kind, and the qualified lang
+       beside the unqualified lang, take the namer's suffix. A prohibited
+       use is no attribute use at all and gives no field. -->
+  <xs:attribute name="code" type="xs:anyURI"/>
+  <xs:attributeGroup name="g">
+    <xs:attribute name="id" type="xs:string" use="required"/>
+  </xs:attributeGroup>
+  <xs:element name="order">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element name="kind" type="xs:string"/>
+        <xs:element name="line">
+          <xs:complexType>
+            <xs:sequence>
+              <xs:element name="sku" type="xs:string"/>
+            </xs:sequence>
+            <xs:attribute name="gift" type="xs:boolean"/>
+          </xs:complexType>
+        </xs:element>
+      </xs:sequence>
+      <xs:attribute name="kind" type="xs:string" use="required"/>
+      <xs:attribute name="urgent" type="xs:boolean"/>
+      <xs:attributeGroup ref="t:g"/>
+      <xs:attribute name="lang" type="xs:string" form="qualified"/>
+      <xs:attribute name="lang" type="xs:string"/>
+      <xs:attribute ref="t:code"/>
+      <xs:attribute name="note">
+        <xs:simpleType>
+          <xs:restriction base="xs:string">
+            <xs:maxLength value="8"/>
+          </xs:restriction>
+        </xs:simpleType>
+      </xs:attribute>
+      <xs:attribute name="gone" type="xs:string" use="prohibited"/>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>

@@ -231,8 +231,10 @@ func typeName(t xsd.TypeDefinition) string {
 }
 
 // complexType emits the type name for decl's complex {type definition} t — a
-// struct for sequence content, a sealed interface for choice content — then
-// the types of its anonymous-typed particles, named in nested.
+// struct for sequence content, holding a field per particle and then one per
+// attribute use, or a sealed interface for choice content, which declines
+// {attribute uses} — then the types of its anonymous-typed particles, named in
+// nested.
 func (e *emitter) complexType(name string, nested scope, decl xsd.ElementDeclaration, t xsd.ComplexType) (emittedType, error) {
 	subject := "complex type " + typeName(t) + " of element " + decl.Name().String()
 	group, err := e.contentGroup(subject, t)
@@ -240,6 +242,9 @@ func (e *emitter) complexType(name string, nested scope, decl xsd.ElementDeclara
 		return emittedType{}, err
 	}
 	if group.Compositor() == xsd.CompositorChoice {
+		if len(t.AttributeUses()) > 0 {
+			return emittedType{}, decline(t.Loc(), "%s whose content is a choice, with {attribute uses}", subject)
+		}
 		return emittedType{name: name, sealed: true}, e.sealedType(name, nested, subject, decl, t, group.Particles())
 	}
 	slot := len(e.decls)
@@ -248,6 +253,13 @@ func (e *emitter) complexType(name string, nested scope, decl xsd.ElementDeclara
 	var body bytes.Buffer
 	for _, p := range group.Particles() {
 		field, err := e.field(nested, subject, t.Loc(), p)
+		if err != nil {
+			return emittedType{}, err
+		}
+		fmt.Fprintf(&body, "\t%s %s\n", fields.claim(field.local), field.goType)
+	}
+	for _, u := range t.AttributeUses() {
+		field, err := e.attributeField(subject, t.Loc(), u)
 		if err != nil {
 			return emittedType{}, err
 		}
@@ -340,8 +352,6 @@ func (e *emitter) contentGroup(subject string, t xsd.ComplexType) (xsd.ModelGrou
 	switch {
 	case t.Abstract():
 		return xsd.ModelGroup{}, decline(t.Loc(), "%s with {abstract} true", subject)
-	case len(t.AttributeUses()) > 0:
-		return xsd.ModelGroup{}, decline(t.Loc(), "%s with {attribute uses}", subject)
 	case len(t.Assertions()) > 0:
 		return xsd.ModelGroup{}, decline(t.Loc(), "%s with {assertions}", subject)
 	}
@@ -417,6 +427,42 @@ func (e *emitter) field(nested scope, subject string, loc xsderr.Loc, p xsd.Part
 		goType = "*" + goType
 	}
 	return fieldSpec{local: decl.Name().Local, goType: goType}, nil
+}
+
+// attributeField returns the field of attribute use u (§3.5.1) of the complex
+// type at loc named in declines by subject, typed by the package doc's "# Coverage"
+// field rules: the builtin of its {attribute declaration}'s {type definition}
+// when {required} is true, a pointer to it when false. A use cites the Loc of
+// the declaration it resolves to, the global one for an <attribute ref>, since
+// an attribute use carries none. The value-constraint decline reads the use's
+// effective value constraint (§3.5.4 key-evc), so a default or fixed value on a
+// global declaration reached through a ref declines as one on the use does.
+func (e *emitter) attributeField(subject string, loc xsderr.Loc, u xsd.AttributeUse) (fieldSpec, error) {
+	name := u.DeclarationName()
+	attr := "attribute " + name.String() + " of " + subject
+	decl, ok := e.schema.ResolvedAttributeDeclaration(u)
+	if !ok {
+		return fieldSpec{}, fmt.Errorf("%s at %s: its {attribute declaration} does not resolve", attr, loc)
+	}
+	if vc, ok := e.schema.EffectiveValueConstraint(u); ok {
+		return fieldSpec{}, decline(decl.Loc(), "%s with a %s effective value constraint (§3.5.4 key-evc)", attr, vc.Kind())
+	}
+	td, ok := e.schema.ResolvedType(decl.TypeDefinition())
+	if !ok {
+		return fieldSpec{}, fmt.Errorf("%s at %s: its {type definition} does not resolve", attr, decl.Loc())
+	}
+	st, ok := td.(*xsd.SimpleType)
+	if !ok {
+		return fieldSpec{}, fmt.Errorf("%s at %s: unexpected type definition %T", attr, decl.Loc(), td)
+	}
+	goType, err := e.builtinType(attr, decl.Loc(), st)
+	if err != nil {
+		return fieldSpec{}, err
+	}
+	if !u.Required() {
+		goType = "*" + goType
+	}
+	return fieldSpec{local: name.Local, goType: goType}, nil
 }
 
 // nestedType returns the type emitted for a local element declaration's
