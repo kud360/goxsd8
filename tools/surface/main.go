@@ -64,7 +64,7 @@ func run(base string) error {
 	if err != nil {
 		return err
 	}
-	modulePath, err := readModulePath(root)
+	modulePath, err := reftree.ModulePath(root)
 	if err != nil {
 		return err
 	}
@@ -96,7 +96,7 @@ func runDiff(root, base string, cur []string) error {
 		}
 	}()
 
-	baseModulePath, err := readModulePath(wtDir)
+	baseModulePath, err := reftree.ModulePath(wtDir)
 	if err != nil {
 		return err
 	}
@@ -403,23 +403,4 @@ func valueSurface(importPath, kind string, d *ast.GenDecl) []string {
 		}
 	}
 	return lines
-}
-
-// readModulePath extracts the `module` directive from the go.mod file at
-// root, without a full go.mod parser: a hand-rolled tool has no need for
-// the replace/require directives a module graph resolver would.
-func readModulePath(root string) (string, error) {
-	path := filepath.Join(root, "go.mod")
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return "", fmt.Errorf("reading %s: %w", path, err)
-	}
-	for _, line := range strings.Split(string(data), "\n") {
-		mod, ok := strings.CutPrefix(strings.TrimSpace(line), "module ")
-		if !ok {
-			continue
-		}
-		return strings.TrimSpace(mod), nil
-	}
-	return "", fmt.Errorf("no module directive found in %s", path)
 }
