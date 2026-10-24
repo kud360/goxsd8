@@ -10,7 +10,7 @@ import (
 // adapter presents it. It carries the Appendix D properties a cvc- rule
 // actually reads off an element — expanded name, [[attributes]],
 // [[children]], [[in-scope namespaces]] — plus the location diagnostics
-// need, and nothing a concrete decoder would add (PRINCIPLES 8).
+// need, and nothing a concrete decoder would add.
 //
 // Implementations live outside this package, so this interface is complete
 // as it stands: a property a later rule needs arrives as a separate
@@ -34,7 +34,7 @@ type Element interface {
 	//
 	// Source order is the implementer's obligation, not a courtesy: the
 	// engine reports violations in the order it meets them, so an order
-	// that varies per run varies the diagnostics (STYLE D1/D2). No element
+	// that varies per run varies the diagnostics. No element
 	// of the slice is nil.
 	Attributes() []Attribute
 
@@ -89,12 +89,12 @@ type UnparsedEntities interface {
 
 // DeclarationsProcessed is the optional capability through which a source
 // presents the [all declarations processed] property of the document
-// information item (XML Infoset §2.1, docs/specs/md/xml-infoset.md): whether it
-// read the complete DTD. False means some declaration went unread — an external
-// DTD subset, or a parameter entity the source did not read — so a name absent
-// from [unparsedEntities] may be declared there. The engine reads it only to
-// word the cvc-simple-type clause 3 diagnostic; the verdict is the same either
-// way, since a declaration that was not read declares nothing (Appendix D).
+// information item (XML Infoset §2.1): whether it read the complete DTD. False
+// means some declaration went unread — an external DTD subset, or a parameter
+// entity the source did not read — so a name absent from [unparsedEntities] may
+// be declared there. The engine reads it only to word the cvc-simple-type
+// clause 3 diagnostic; the verdict is the same either way, since a declaration
+// that was not read declares nothing (Appendix D).
 //
 // A source that does not implement it is taken to have processed every
 // declaration, and a miss is reported as plainly undeclared. Like
@@ -140,9 +140,8 @@ type Text interface {
 
 // Children is a cursor over one [Element]'s [[children]], in document
 // order. It is a pull cursor rather than a slice so a streaming source
-// yields one child at a time and no walk ever holds a document (STYLE P4);
-// its shape is bufio.Scanner's and parser/xmltree's Reader.Token's (STYLE
-// T4).
+// yields one child at a time and no walk ever holds a document; its shape is
+// bufio.Scanner's and parser/xmltree's Reader.Token's.
 //
 // The engine reads an element's Attributes before it calls Children, calls
 // Children at most once per element, and drains the cursor before it
@@ -164,7 +163,7 @@ type Children interface {
 
 // Child is one item of an [Element]'s [[children]]: exactly one of an
 // element or a run of text. The item kinds are closed by Appendix D, so
-// this is a sum (STYLE T2) — but a struct sum rather than an interface
+// this is a sum — but a struct sum rather than an interface
 // sealed by an unexported method, because the adapters that construct one
 // live outside this package and could not implement a sealed interface.
 // [ElementChild] and [TextChild] are the only way to build one and the two

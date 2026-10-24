@@ -12,7 +12,7 @@ import (
 
 // Option configures [New]. The zero set of options is a complete, usable
 // configuration: options only replace defaults, never combine into an
-// invalid one (STYLE T1).
+// invalid one.
 type Option func(*config)
 
 // config is the resolved [New] configuration. Every field is non-nil from
@@ -31,7 +31,7 @@ func newConfig(opts []Option) config {
 }
 
 // WithLogger sets the logger the validator reports assessment progress on,
-// at debug level, under the "validate" group [New] installs (STYLE L1). A
+// at debug level, under the "validate" group [New] installs. A
 // nil logger selects the silent default ([slog.DiscardHandler]), so
 // assessment is quiet unless a logger is asked for.
 func WithLogger(l *slog.Logger) Option {
@@ -45,8 +45,8 @@ func WithLogger(l *slog.Logger) Option {
 //
 // It is immutable and reusable by layout, not by promise: it holds the
 // schema, the backend and the logger and nothing else — no cache of a
-// governing mapping, no compiled facets (STYLE D3; package value recomputes
-// both by design) — and every piece of walk state lives in a struct
+// governing mapping, no compiled facets (package value recomputes both by
+// design) — and every piece of walk state lives in a struct
 // [Validator.Assess] creates and drops, so a second assessment cannot
 // observe the first one's state.
 type Validator struct {
@@ -94,7 +94,7 @@ func New(schema *xsd.Schema, backend value.Backend, opts ...Option) (*Validator,
 }
 
 // SchemaView is the read-only view of the compiled schema a source adapter
-// reads to build the infoset it hands [Validator.Assess] (STYLE T3): a root
+// reads to build the infoset it hands [Validator.Assess]: a root
 // element declaration resolved by expanded name, the top-level declarations
 // to choose one from when the source names a root by local name alone, a
 // declaration's {type definition} resolved to its component, and the

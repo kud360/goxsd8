@@ -16,7 +16,7 @@ import (
 )
 
 // Option configures [Validate]. The zero set of options is a complete,
-// usable configuration: options only replace defaults (STYLE T1).
+// usable configuration: options only replace defaults.
 type Option func(*config)
 
 // config is the resolved [Validate] configuration.
@@ -915,7 +915,9 @@ func (b bareElement) object(*walker, *element, *attribute, placement, xsderr.Loc
 // the Note after cvc-complex-type clause 4 giving a declaration or use
 // precedence only over a wildcard of its own kind that admits the same
 // expanded name. A prefixed key spells (N,key) itself, which a declaration or
-// use of another namespace does not carry.
+// use of another namespace does not carry. A decline instead would refuse
+// inputs the mapping maps, the curated json cases wildcard-attribute.v and .i
+// (conformance/testdata/json) among them.
 //
 // Under an owner whose declaration carries a {type table} and whose
 // ·selected type definition· the mapping does not read — walker.selector
@@ -1214,7 +1216,13 @@ func sameNamed(s, t xsd.TypeDefinition) bool {
 // (c-selector-xpath, c-fields-xpaths) and assertions (cvc-assertion), which
 // the mapping cannot fix without an ancestor census. A prefix fixes N, so it
 // lifts the namespace declines; it does not say the kind, so it keeps the
-// other two.
+// other two. Conditions under which the verdict is the same for every admitted
+// N exist — no {disallowed names} entry of the key's local name and ##defined
+// and ##definedSibling inert for it, skip or no global declaration of it in an
+// admitted namespace, one particle accepting every (N,key), no ancestor-or-self
+// assertion, identity constraint or {type table} — and they are unbuilt by
+// decision, not by oversight: testing the last needs a census of every
+// ancestor, which the walker does not keep.
 //
 // GAP(jsonsrc): a key a wildcard's single namespace, of either kind, puts in
 // the xml or the xsi namespace declines, and so does a prefixed key no
