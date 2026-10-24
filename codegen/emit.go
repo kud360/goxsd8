@@ -32,27 +32,17 @@ var (
 
 // decline reports a construct the generator does not cover. It is a plain
 // error wrapping errors.ErrUnsupported, never an *xsderr.Error: no schema
-// rule is violated (STYLE E2).
+// rule is violated (STYLE E2). Its text already says the construct is
+// unsupported, so the %.0w verb wraps the sentinel while printing none of
+// its text: precision 0 truncates the operand's Error string to nothing.
 //
 // GAP(codegen): every construct outside the package doc's "# Coverage" slice
 // declines here; that section lists them under the same marker. #2900 owns
 // lifting them.
 func decline(loc xsderr.Loc, format string, args ...any) error {
-	return &declineError{msg: fmt.Sprintf("%s at %s is not supported by codegen, a generator limitation, not a schema fault",
-		fmt.Sprintf(format, args...), loc)}
+	return fmt.Errorf("%s at %s is not supported by codegen, a generator limitation, not a schema fault%.0w",
+		fmt.Sprintf(format, args...), loc, errors.ErrUnsupported)
 }
-
-// declineError is decline's error. Its text already says the construct is
-// unsupported, so it leaves out errors.ErrUnsupported's own text, which
-// would only repeat it; Unwrap keeps errors.Is matching the sentinel.
-type declineError struct {
-	msg string
-}
-
-func (e *declineError) Error() string { return e.msg }
-
-// Unwrap returns errors.ErrUnsupported, which every decline wraps.
-func (e *declineError) Unwrap() error { return errors.ErrUnsupported }
 
 // emitter builds one target's source. decls holds each emitted type
 // declaration in emission order: a top-level element's type, then the types
