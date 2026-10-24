@@ -473,12 +473,12 @@ const (
 
 // namesTree is baseTree with the validate and validate/xmlsrc packages
 // holding ownerErr and ownerValidate, and an xsderr package. Result's
-// unexported field err and xmlsrc's unexported func validate carry docs, so
-// only the exported filter keeps noIdent unpaired.
+// unexported field err carries a doc, so only memberDocs' exported filter
+// keeps noIdent's validate.Result.err unpaired.
 func namesTree() map[string]string {
 	tree := baseTree()
 	tree["validate/validate.go"] = "package validate\n\n" +
-		comment("", ownerResult) + "type Result struct {\n" + comment("\t", "err is the fault in the source that stopped the walk.") + "\terr error\n}\n\n" +
+		comment("", ownerResult) + "type Result struct {\n" + comment("\t", "err is set once, by Assess.") + "\terr error\n}\n\n" +
 		comment("", "Unevaluated is an element no rule reached.") + "type Unevaluated struct {\n" + comment("\t", ownerPath) + "\tPath string\n}\n\n" +
 		comment("", ownerErr) + "func (r *Result) Err() error { return r.err }\n\n" +
 		comment("", "Violations are the violations the walk charged.") + "func (r *Result) Violations() []error { return nil }\n"
