@@ -599,7 +599,7 @@ func TestSelectors(t *testing.T) {
 		got = append(got, s.String())
 	}
 	want := []string{"xmlsrc.Validate", "validate.Result", "validate.Error", "goxsd8.Parse",
-		"validate/xmlsrc.Validate", "github.com/a/b.C", "validate.Result.Err"}
+		"validate/xmlsrc.Validate", "github.com/a/b.C", "validate.Result.Err", "validate.Result.err"}
 	if strings.Join(got, " ") != strings.Join(want, " ") {
 		t.Errorf("selectors = %q, want %q", got, want)
 	}
@@ -627,19 +627,23 @@ func TestNamesRootNotMain(t *testing.T) {
 // TestNamedPairWritten pins how write prints a names pair beside an overlap
 // pair, and the summary's count of sentences naming an identifier.
 func TestNamedPairWritten(t *testing.T) {
-	rep := report{added: 3, naming: 1, findings: []finding{{
+	rep := report{added: 5, naming: 1, findings: []finding{{
 		added: sentence{file: "a/a.go", line: 3, text: "Added."},
 		matches: []match{
 			{owner: sentence{file: "b/b.go", line: 5, text: "Overlapped."}, shared: 2},
 			{owner: sentence{file: "c/c.go", line: 7, text: "Named."}, names: "c.Named"},
 		},
+	}, {
+		added:   sentence{file: "a/a.go", line: 9, text: "Again."},
+		matches: []match{{owner: sentence{file: "b/b.go", line: 5, text: "Overlapped."}, shared: 3}},
 	}}}
 	var b strings.Builder
 	if err := rep.write(&b); err != nil {
 		t.Fatal(err)
 	}
 	const want = "a/a.go:3: Added.\n\tb/b.go:5: (2 shared) Overlapped.\n\tc/c.go:7: (names c.Named) Named.\n" +
-		"restatements: 1 of 3 added sentence(s) overlap a sentence of a package doc, an exported identifier's doc or cmd/goxsd8's usage, or name another package's exported identifier (1 naming one);"
+		"a/a.go:9: Again.\n\tb/b.go:5: (3 shared) Overlapped.\n" +
+		"restatements: 2 of 5 added sentence(s) overlap a sentence of a package doc, an exported identifier's doc or cmd/goxsd8's usage, or name another package's exported identifier (1 naming one);"
 	if !strings.HasPrefix(b.String(), want) {
 		t.Errorf("write printed %q, want the prefix %q", b.String(), want)
 	}

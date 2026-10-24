@@ -3,7 +3,6 @@ package main
 import (
 	"bufio"
 	"fmt"
-	"go/token"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -13,10 +12,10 @@ import (
 
 // selectorPattern finds the selectors an added sentence names, as the package
 // doc states: a qualifier (an import path's last element, or a slash-separated
-// tail of one) and a name, optionally a member's after a second dot. The
-// first group is the character before the qualifier, so a qualifier never
-// starts inside a word, a path or another selector.
-var selectorPattern = regexp.MustCompile(`(^|[^\w./-])((?:[\w.-]+/)*[a-z_]\w*)\.(\w+)(?:\.(\w+))?`)
+// tail of one) and an exported name, optionally a member's after a second
+// dot. The first group is the character before the qualifier, so a qualifier
+// never starts inside a word, a path or another selector.
+var selectorPattern = regexp.MustCompile(`(^|[^\w./-])((?:[\w.-]+/)*[a-z_]\w*)\.([A-Z]\w*)(?:\.(\w+))?`)
 
 // selector is one selector of an added sentence: its qualifier, and the name
 // it selects as ident.name spells it.
@@ -29,15 +28,13 @@ type selector struct {
 // aside.
 func (s selector) String() string { return s.qual + "." + s.name }
 
-// selectors returns the distinct selectors text names, in text order, less
-// those selecting an unexported name or member.
+// selectors returns the distinct selectors text names, in text order. A
+// member is read whatever its case, so a selector of an unexported member
+// names no type: no identifier is indexed under it.
 func selectors(text string) []selector {
 	var out []selector
 	seen := make(map[selector]bool)
 	for _, m := range selectorPattern.FindAllStringSubmatch(text, -1) {
-		if !token.IsExported(m[3]) || m[4] != "" && !token.IsExported(m[4]) {
-			continue
-		}
 		s := selector{qual: m[2], name: m[3]}
 		if m[4] != "" {
 			s.name += "." + m[4]
