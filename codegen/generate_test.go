@@ -10,7 +10,7 @@ import (
 
 const (
 	acceptedDoc = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"><xs:element name="e" type="xs:string"/></xs:schema>`
-	declinedDoc = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"><xs:element name="e" type="xs:int"/></xs:schema>`
+	declinedDoc = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"><xs:element name="e" type="xs:decimal"/></xs:schema>`
 )
 
 // TestGenerateInvalidTargets pins the Target checks: each fails phase 1, so

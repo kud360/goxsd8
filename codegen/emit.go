@@ -19,6 +19,15 @@ var (
 	stringPrimitive  = xsd.QName{Space: xsd.XMLSchemaNS, Local: "string"}
 	anyURIPrimitive  = xsd.QName{Space: xsd.XMLSchemaNS, Local: "anyURI"}
 	booleanPrimitive = xsd.QName{Space: xsd.XMLSchemaNS, Local: "boolean"}
+
+	longBuiltin          = xsd.QName{Space: xsd.XMLSchemaNS, Local: "long"}
+	intBuiltin           = xsd.QName{Space: xsd.XMLSchemaNS, Local: "int"}
+	shortBuiltin         = xsd.QName{Space: xsd.XMLSchemaNS, Local: "short"}
+	byteBuiltin          = xsd.QName{Space: xsd.XMLSchemaNS, Local: "byte"}
+	unsignedLongBuiltin  = xsd.QName{Space: xsd.XMLSchemaNS, Local: "unsignedLong"}
+	unsignedIntBuiltin   = xsd.QName{Space: xsd.XMLSchemaNS, Local: "unsignedInt"}
+	unsignedShortBuiltin = xsd.QName{Space: xsd.XMLSchemaNS, Local: "unsignedShort"}
+	unsignedByteBuiltin  = xsd.QName{Space: xsd.XMLSchemaNS, Local: "unsignedByte"}
 )
 
 // decline reports a construct the generator does not cover. It is a plain
@@ -185,10 +194,10 @@ func (e *emitter) declaredType(decl xsd.ElementDeclaration) (xsd.TypeDefinition,
 }
 
 // builtinType is the Go builtin a simple-typed element's or attribute's field,
-// or an element's named type, is declared over, chosen from t's {primitive type
-// definition} (Datatypes §4.1.1) by the package doc's "# Coverage". subject
-// names the declaration the type is read from, and loc, its Loc, is a
-// decline's.
+// or an element's named type, is declared over, chosen by the package doc's
+// "# Coverage" through boundedInteger and then t's {primitive type definition}
+// (Datatypes §4.1.1). subject names the declaration the type is read from, and
+// loc, its Loc, is a decline's.
 func (e *emitter) builtinType(subject string, loc xsderr.Loc, t *xsd.SimpleType) (string, error) {
 	typed := fmt.Sprintf("%s with {type definition} %s", subject, typeName(t))
 	if t.IsSpecial() {
@@ -207,6 +216,13 @@ func (e *emitter) builtinType(subject string, loc xsderr.Loc, t *xsd.SimpleType)
 	default:
 		return "", decline(loc, "%s, of absent {variety}", typed)
 	}
+	integer, err := e.boundedInteger(t)
+	if err != nil {
+		return "", fmt.Errorf("%s at %s: %w", subject, loc, err)
+	}
+	if integer != "" {
+		return integer, nil
+	}
 	primitive, err := t.Primitive(e.schema)
 	if err != nil {
 		return "", fmt.Errorf("%s at %s: %w", subject, loc, err)
@@ -221,6 +237,40 @@ func (e *emitter) builtinType(subject string, loc xsderr.Loc, t *xsd.SimpleType)
 		return "bool", nil
 	}
 	return "", decline(loc, "%s, whose {primitive type definition} is %s", typed, primitive.Name())
+}
+
+// boundedInteger is the Go integer "# Coverage" maps t to through the eight
+// bounded builtin integer types (Datatypes §3.4.16–§3.4.19, §3.4.21–§3.4.24),
+// walking t's {base type definition} chain (Structures §3.16.1) from t itself,
+// or "" when the walk ends at xs:anySimpleType's absent base without meeting
+// one. Each Go type's range equals its XSD type's value space.
+func (e *emitter) boundedInteger(t *xsd.SimpleType) (string, error) {
+	for step := t; step != nil; {
+		switch step.Name() {
+		case longBuiltin:
+			return "int64", nil
+		case intBuiltin:
+			return "int32", nil
+		case shortBuiltin:
+			return "int16", nil
+		case byteBuiltin:
+			return "int8", nil
+		case unsignedLongBuiltin:
+			return "uint64", nil
+		case unsignedIntBuiltin:
+			return "uint32", nil
+		case unsignedShortBuiltin:
+			return "uint16", nil
+		case unsignedByteBuiltin:
+			return "uint8", nil
+		}
+		base, err := step.Base(e.schema)
+		if err != nil {
+			return "", err
+		}
+		step = base
+	}
+	return "", nil
 }
 
 // typeName names a type definition in a decline message.

@@ -22,10 +22,15 @@
 // interface, and declines everything outside this slice:
 //
 //   - An element whose {type definition} is an atomic simple type gets a
-//     named type over a Go builtin, chosen by the type's {primitive type
-//     definition} (Datatypes §4.1.1): string and anyURI give string, boolean gives
-//     bool. Facets are not represented, and a named user simple type gets no
-//     Go type of its own.
+//     named type over a Go builtin. The nearest of the eight bounded integer
+//     types on the type's {base type definition} chain (§3.16.1), the type
+//     itself first, gives the Go integer whose range is exactly its value
+//     space (Datatypes §3.4.16–§3.4.19, §3.4.21–§3.4.24): long gives int64,
+//     int int32, short int16, byte int8, unsignedLong uint64, unsignedInt
+//     uint32, unsignedShort uint16, unsignedByte uint8. Failing one, the
+//     type's {primitive type definition} (Datatypes §4.1.1) chooses: string
+//     and anyURI give string, boolean gives bool. Facets are not represented,
+//     and a named user simple type gets no Go type of its own.
 //   - An element whose {type definition} is a complex type, named or
 //     anonymous, gets a type of its own when the type is a restriction of
 //     xs:anyType, implicit (§3.4.2.3.2 dcl.ctd.ctcc.implicit) or explicit
@@ -79,8 +84,11 @@
 // choice, attribute uses with an effective value constraint, mixed, simple
 // and empty content, extension, restriction of any base but xs:anyType, a
 // local element with a named complex type, xs:anyType, the special simple
-// types, list and union types, and every primitive but the three above, for
-// an element or an attribute alike. #2900 owns lifting them.
+// types, list and union types, and every primitive but the three above —
+// decimal among them, so xs:integer, the four unbounded integer types and
+// every type derived from them other than through the eight bounded ones
+// decline, as do float and double — for an element or an attribute alike.
+// #2900 owns lifting them.
 //
 // # Determinism
 //
@@ -122,7 +130,10 @@
 //     needs; optionality and nillability are modeled in the types, not
 //     in comments.
 //   - Simple-content fields are typed by the chosen backend's
-//     representation (strict or native, per generation option).
+//     representation (strict or native, per generation option). The option
+//     governs only the types whose strict and native representations differ;
+//     the eight bounded integer types, string and boolean keep the mapping
+//     "# Coverage" states.
 //
 // # The Emitter seam (value.Emitter; API frozen in M9; not yet declared here)
 //
