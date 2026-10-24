@@ -80,6 +80,12 @@ file:line and list what you changed per finding, in **The implementation
 account** below — which is on the thread, and covers the items you did not
 change too.
 
+**When a finding admits both a decline or narrowing and a new mechanism
+that each close it, take the decline or narrowing**, and name the
+mechanism in your account as a follow-up issue — for the post-land pass
+to file on accept, and for the re-planning docs/WORKFLOW.md "## Parking"
+hands the thread to on a second reject (#2901).
+
 **Half-applying a finding is worse than not applying it**, because it also
 plants a comment asserting the whole. If you apply only part of one, say
 which part and why, and make sure no comment, marker or commit message
@@ -92,7 +98,9 @@ class names a condition: list every site where that condition can hold —
 the sites the verdict ruled sound, the ones the original mechanism
 reaches, and the ones your repair's own new mechanism creates — with the
 probe you ran at each, and mark any site you did not probe as unprobed
-(#2784).
+(#2784). A repair that adds a mechanism — new state, a new key or index,
+a new emission path — lists the same way every condition under which that
+mechanism can be wrong, whatever class the finding named (#2896).
 
 ## Before handoff
 
