@@ -843,6 +843,10 @@ func (t ctaTypes) valueVariable(st *xsd.SimpleType) (ctaValue, bool) {
 //     as xs:double against xs:float.
 //   - The result type is B.2's (arithmeticResult).
 //
+// B.2's six numeric rows are transcribed here and in arithmeticResult rather
+// than generated: those rows' result cell is the prose rule "numeric" with two
+// exceptions, which a generator would have to hard-code as well.
+//
 // GAP(xpath): an operand whose {primitive type definition} is not numeric
 // declines. B.2 gives `+`, `-`, `*` and `div` rows over the duration and
 // date/time types, which this engine computes nothing in, and every other
