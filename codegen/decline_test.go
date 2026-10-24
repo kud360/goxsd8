@@ -98,6 +98,9 @@ func TestGenerateDeclines(t *testing.T) {
 			"attribute t of complex type (anonymous) of element e with a default effective value constraint (§3.5.4 key-evc)"},
 		{"required attribute fixed", `<xs:element name="e"><xs:complexType><xs:sequence><xs:element name="a" ` + str + `/></xs:sequence><xs:attribute name="t" use="required" fixed="f" ` + str + `/></xs:complexType></xs:element>`,
 			"attribute t of complex type (anonymous) of element e with a fixed effective value constraint (§3.5.4 key-evc)"},
+		// The two ref rows carry the value constraint on the global declaration
+		// only, so they fail when the decline reads the use's own {value
+		// constraint} rather than its effective one (§3.5.4 key-evc).
 		{"attribute ref default", `<xs:attribute name="t" default="d" ` + str + `/>` + `<xs:element name="e"><xs:complexType><xs:sequence><xs:element name="a" ` + str + `/></xs:sequence><xs:attribute ref="t"/></xs:complexType></xs:element>`,
 			"attribute t of complex type (anonymous) of element e with a default effective value constraint (§3.5.4 key-evc)"},
 		{"attribute ref fixed", `<xs:attribute name="t" fixed="f" ` + str + `/>` + `<xs:element name="e"><xs:complexType><xs:sequence><xs:element name="a" ` + str + `/></xs:sequence><xs:attribute ref="t"/></xs:complexType></xs:element>`,

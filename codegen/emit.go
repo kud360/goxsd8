@@ -186,8 +186,9 @@ func (e *emitter) declaredType(decl xsd.ElementDeclaration) (xsd.TypeDefinition,
 
 // builtinType is the Go builtin a simple-typed element's or attribute's field,
 // or an element's named type, is declared over, chosen from t's {primitive type
-// definition} (§3.16.1) by the package doc's "# Coverage". subject names the
-// declaration the type is read from, and loc, its Loc, is a decline's.
+// definition} (Datatypes §4.1.1) by the package doc's "# Coverage". subject
+// names the declaration the type is read from, and loc, its Loc, is a
+// decline's.
 func (e *emitter) builtinType(subject string, loc xsderr.Loc, t *xsd.SimpleType) (string, error) {
 	typed := fmt.Sprintf("%s with {type definition} %s", subject, typeName(t))
 	if t.IsSpecial() {

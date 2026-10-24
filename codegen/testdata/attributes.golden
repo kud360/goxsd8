@@ -9,8 +9,7 @@ type Order struct {
 	Kind2  string
 	Urgent *bool
 	Id     string
-	Lang   *string
-	Lang2  *string
+	Kind3  *string
 	Code   *string
 	Note   *string
 }
