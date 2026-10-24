@@ -143,7 +143,7 @@ const generatePrefix = "codegen: target "
 
 // earlierDir is the one other place a Generate error names a target by index:
 // a Dir equal, after filepath.Clean, to an earlier target's.
-var earlierDir = regexp.MustCompile(`target (\d+)'s Dir`)
+var earlierDir = regexp.MustCompile(`the output directory of target (\d+)`)
 
 // generateLine renders an error from codegen.Generate as gen's line, with each
 // target index Generate names replaced by the pair it was built from: an index
@@ -162,7 +162,7 @@ func generateLine(err error, pairs []genPair) string {
 		if err != nil || j < 0 || j >= len(pairs) {
 			return m
 		}
-		return "the Dir of " + pairs[j].label()
+		return "the output directory of " + pairs[j].label()
 	})
 	return "goxsd8: gen: " + pairs[i].label() + ": " + rest
 }

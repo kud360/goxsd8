@@ -25,19 +25,19 @@ func TestGenerateInvalidTargets(t *testing.T) {
 		{"nil schema", func(dir string) Target { return Target{Dir: filepath.Join(dir, "b"), Package: "p"} },
 			"codegen: target 1: the Schema field is nil"},
 		{"empty dir", func(string) Target { return Target{Schema: schema, Package: "p"} },
-			"codegen: target 1: the Dir field is empty"},
+			"codegen: target 1: no output directory given"},
 		{"keyword package", func(dir string) Target { return Target{Schema: schema, Dir: filepath.Join(dir, "b"), Package: "type"} },
-			`codegen: target 1: the Package field "type" is not`},
+			`codegen: target 1: the package name "type" is a Go keyword`},
 		{"blank package", func(dir string) Target { return Target{Schema: schema, Dir: filepath.Join(dir, "b"), Package: "_"} },
-			`codegen: target 1: the Package field "_" is not`},
+			`codegen: target 1: the package name "_" is the blank identifier`},
 		{"non-identifier package", func(dir string) Target { return Target{Schema: schema, Dir: filepath.Join(dir, "b"), Package: "1p"} },
-			`codegen: target 1: the Package field "1p" is not`},
+			`codegen: target 1: the package name "1p" is not a Go identifier`},
 		{"main package", func(dir string) Target { return Target{Schema: schema, Dir: filepath.Join(dir, "b"), Package: "main"} },
-			`codegen: target 1: the Package field is "main", but the emitted package declares no func main`},
+			`codegen: target 1: the package name is "main", but the emitted package declares no func main`},
 		{"duplicate dir", func(dir string) Target {
 			return Target{Schema: schema, Dir: filepath.Join(dir, "a") + "/./", Package: "q"}
 		},
-			"codegen: target 1: the Dir field " + "%DIR%/a/./ is target 0's Dir too"},
+			"codegen: target 1: the output directory %DIR%/a/./ is also the output directory of target 0"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
