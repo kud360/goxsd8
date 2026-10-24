@@ -135,7 +135,7 @@ func (e *emitter) topLevel(decl xsd.ElementDeclaration) error {
 	}
 	switch t := td.(type) {
 	case *xsd.SimpleType:
-		builtin, err := e.builtinType(decl, t)
+		builtin, err := e.builtinType("element "+decl.Name().String(), decl.Loc(), t)
 		if err != nil {
 			return err
 		}
@@ -184,34 +184,34 @@ func (e *emitter) declaredType(decl xsd.ElementDeclaration) (xsd.TypeDefinition,
 	return td, nil
 }
 
-// builtinType is the Go builtin a simple-typed element's field or named type
-// is declared over, chosen from t's {primitive type definition} (§3.16.1) by
-// the package doc's "# Coverage". decl is the element the type is read from,
-// and its Loc is a decline's.
-func (e *emitter) builtinType(decl xsd.ElementDeclaration, t *xsd.SimpleType) (string, error) {
-	subject := fmt.Sprintf("element %s with {type definition} %s", decl.Name(), typeName(t))
+// builtinType is the Go builtin a simple-typed element's or attribute's field,
+// or an element's named type, is declared over, chosen from t's {primitive type
+// definition} (§3.16.1) by the package doc's "# Coverage". subject names the
+// declaration the type is read from, and loc, its Loc, is a decline's.
+func (e *emitter) builtinType(subject string, loc xsderr.Loc, t *xsd.SimpleType) (string, error) {
+	typed := fmt.Sprintf("%s with {type definition} %s", subject, typeName(t))
 	if t.IsSpecial() {
-		return "", decline(decl.Loc(), "%s, a special type", subject)
+		return "", decline(loc, "%s, a special type", typed)
 	}
 	variety, err := t.Variety(e.schema)
 	if err != nil {
-		return "", fmt.Errorf("element %s at %s: %w", decl.Name(), decl.Loc(), err)
+		return "", fmt.Errorf("%s at %s: %w", subject, loc, err)
 	}
 	switch variety.(type) {
 	case xsd.Atomic:
 	case xsd.List:
-		return "", decline(decl.Loc(), "%s, a list type", subject)
+		return "", decline(loc, "%s, a list type", typed)
 	case xsd.Union:
-		return "", decline(decl.Loc(), "%s, a union type", subject)
+		return "", decline(loc, "%s, a union type", typed)
 	default:
-		return "", decline(decl.Loc(), "%s, of absent {variety}", subject)
+		return "", decline(loc, "%s, of absent {variety}", typed)
 	}
 	primitive, err := t.Primitive(e.schema)
 	if err != nil {
-		return "", fmt.Errorf("element %s at %s: %w", decl.Name(), decl.Loc(), err)
+		return "", fmt.Errorf("%s at %s: %w", subject, loc, err)
 	}
 	if primitive == nil {
-		return "", decline(decl.Loc(), "%s, with no {primitive type definition}", subject)
+		return "", decline(loc, "%s, with no {primitive type definition}", typed)
 	}
 	switch primitive.Name() {
 	case stringPrimitive, anyURIPrimitive:
@@ -219,7 +219,7 @@ func (e *emitter) builtinType(decl xsd.ElementDeclaration, t *xsd.SimpleType) (s
 	case booleanPrimitive:
 		return "bool", nil
 	}
-	return "", decline(decl.Loc(), "%s, whose {primitive type definition} is %s", subject, primitive.Name())
+	return "", decline(loc, "%s, whose {primitive type definition} is %s", typed, primitive.Name())
 }
 
 // typeName names a type definition in a decline message.
@@ -396,7 +396,7 @@ func (e *emitter) field(nested scope, subject string, loc xsderr.Loc, p xsd.Part
 	var typ emittedType
 	switch ft := td.(type) {
 	case *xsd.SimpleType:
-		typ.name, err = e.builtinType(decl, ft)
+		typ.name, err = e.builtinType("element "+decl.Name().String(), decl.Loc(), ft)
 	case xsd.ComplexType:
 		typ, err = e.nestedType(nested, decl, ft)
 	default:
