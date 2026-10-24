@@ -145,11 +145,10 @@ import (
 // Attribution is what one element information item of a matched child sequence
 // is ·attributed to· (§3.4.4.4, key-att-to): the {term} of the particle
 // [Matcher.Next] advanced over, or a present {open content} itself. It is a
-// sealed sum (STYLE T2's closed-sum exception) with exactly three variants.
-// [ElementDeclaration] (cvc-accept clause 2) and [Wildcard] (cvc-accept clause
-// 1) are the two kinds of ·basic particle· an item can be attributed to — a
-// Model Group is not one, and returning [Term] would make an attribution to one
-// representable (STYLE T1). [*OpenContent] is the third, for an item
+// sealed sum with exactly three variants. [ElementDeclaration] (cvc-accept
+// clause 2) and [Wildcard] (cvc-accept clause 1) are the two kinds of ·basic
+// particle· an item can be attributed to; a Model Group is neither, and no
+// variant holds one. [*OpenContent] is the third, for an item
 // cvc-complex-content clause 2.4 or 3.4 admitted, which §3.4.4.4 ·attributes
 // to· the {open content} and not to any particle: the spec keeps the two apart
 // throughout — §3.4.5.2 gives this case the [match information] keyword open
@@ -177,7 +176,9 @@ import (
 type Attribution interface{ attribution() }
 
 // attribution marks ElementDeclaration as an Attribution (cvc-accept clause
-// 2.3); see the Attribution doc comment.
+// 2.3); see the Attribution doc comment. Attribution is a sealed sum under
+// STYLE T2's closed-sum exception, and it is not [Term] because returning Term
+// would make an attribution to a Model Group representable (STYLE T1).
 func (ElementDeclaration) attribution() {}
 
 // attribution marks Wildcard as an Attribution (cvc-accept clause 1); see the
@@ -273,7 +274,7 @@ func (c *region) clone() region {
 // zero value is not usable.
 //
 // A Matcher is single-use and stateful: it holds every position in the content
-// model the items so far can have reached (region) and, under a {mode} suffix
+// model the items so far can have reached and, under a {mode} suffix
 // {open content}, whether the sequence has left clause 2's S1 for its S2 — so
 // the caller feeds it one element's [[children]] in document order and drops
 // it. It is not safe for concurrent use, and nothing in it is shared with the
@@ -327,8 +328,8 @@ type Matcher struct {
 // It is a method on *Schema rather than a free constructor because the walk
 // rests on constraints Finalize has already decided — cos-nonambig (§3.8.6.4)
 // for the determinism it never re-derives, mg-props-correct clause 2 for the
-// <group ref> acyclicity that lets the flattening carry no visited set (STYLE
-// D4) — and a *Schema is the one thing that cannot exist before they ran.
+// <group ref> acyclicity that lets the flattening carry no visited set — and a
+// *Schema is the one thing that cannot exist before they ran.
 //
 // t must be a complex type of s, because the walk follows an <element ref> or
 // <group ref> in t's particle by NAME through s's own indexes rather than
@@ -340,62 +341,30 @@ type Matcher struct {
 //
 // A present {open content} is DECIDED rather than declined: the Matcher holds
 // it and [Matcher.Next] offers the open wildcard whatever {particle} cannot
-// take, per cvc-complex-content clauses 2 and 3 (see the file comment).
+// take, per cvc-complex-content clauses 2 and 3.
 //
 // The two declines, none of them a violation:
 //
 //   - a {content type} whose {variety} is empty or simple, which holds no
 //     particle at all. cvc-complex-type clauses 1.1 and 1.2 govern those
 //     directly and need no matcher.
-//   - GAP(xsd): an ·ambiguous· node whose widened subtrees need more than
-//     maxPartitionStates regions to cover the partitions they put in flight at
-//     once. RULED permanent by #1601 (STYLE P3b) rather than a ceiling waiting
-//     on its next raise: that thread carries the ruling in full, and it rests
-//     on the measured cost below rather than on a spec licence. No spec licence
-//     covers this branch and this marker claims none — cvc-accept (§3.9.4.3)
-//     clause 3.1 is a bare existential over ·partitions· with no search
-//     procedure and no bound, §3.9.4.1.1's L(P) attaches none either, and
-//     neither Appendix C nor Appendix E.1's implementation-defined checklist
-//     lets a processor decline what it cannot afford. The SHAPE is decided —
-//     (a{1,2}, b?){2,2} takes "a a b" — and so now is the WIDTH a
-//     partition-per-cursor encoding could not carry: (a{1,500}){1,500} reaches
-//     a quarter of a million live partitions and the spans of a region cover
-//     them in about a thousand. What stays declined is what outgrows the
-//     ceiling, and a model gets there by BREADTH as readily as by depth:
-//     partitionsBounded products over EVERY widened node of the flattened tree,
-//     so sibling repeating groups under a non-repeating one, and a row of
-//     repeating leaves under one repeating group, reach it with no nesting at
-//     all. Declining withholds the whole element-sequence verdict, whose
-//     consumers are validate's Result.violations and its one reader
-//     Result.Violations, both of which carry violations PRESENT — so the
-//     decline costs a rejection and manufactures none; validate records each
-//     child it leaves unmatched, or the element where it has no child, as an
-//     Unevaluated instead. What makes the approximation permanent is the
-//     distance between the ceiling and what still reaches it. A walk over every
-//     buildable complex type in testdata/xsdtests finds THREE declining here,
-//     all on this arm — particlesZ035_a, particlesZ036_b and particlesZ036_c —
-//     and each carries at least one model-group counter whose clamped range
-//     ALONE outruns the ceiling, past 10^8 in the two Z036s and past 10^11 in
-//     Z035_a. A single factor with no room ends the count, so deciding them
-//     means a per-item budget of that many regions: at the ≈1.5 KB per region
-//     maxPartitionStates' doc measures, over a hundred gigabytes and over a
-//     hundred terabytes for ONE item. Four instance cases sit on those three,
-//     all banked fail, and three of the four are suite-declared VALID, which
-//     that lane decides valid for a complex-typed root with content only where
-//     a Matcher decides that content (#1841) — so what the residual costs the
-//     suite is one missed rejection, particlesZ035_a.i, and at most three valid
-//     observations. It is retired by an encoding that carries a live partition
-//     set without enumerating its cover, never by moving the constant. Two
-//     findings reopen the ruling, and a case merely declining here is neither,
-//     since three already do. One is a schema whose partitionsBounded product
-//     lands BETWEEN the ceiling and what a measured per-region cost can afford
-//     — the plateau above 40804, the figure maxPartitionStates' doc derives, is
-//     empty today, so a model in it would mean a raise buys verdicts again. The
-//     other is a per-region cost measured low enough to bring one of the three
-//     counters named above inside an affordable ceiling. Re-measure rather than
-//     quoting these figures: the instrument is that corpus walk over buildable
-//     complex types, not suiteindex, which cannot reach a population defined by
-//     a resource product rather than by a name or a nesting.
+//   - GAP(xsd): a content model too wide to track. Where a repeating model
+//     group's body holds a repeating particle with only ·emptiable· particles
+//     before and after it, an item that particle takes can fall on either
+//     side of the group's iteration boundary, and the Matcher tracks every
+//     ·partition· (cvc-accept clause 3.1) the items so far can have. It
+//     declines where its estimate of that tracking passes 65536 states: the
+//     product, over every particle at or below such a group, of {max occurs}+1
+//     for a model group ({min occurs}+1 where {max occurs} is unbounded) and
+//     of at most four for an element or wildcard particle. The product grows
+//     with breadth as readily as with depth, so sibling repeating groups reach
+//     the ceiling with no nesting at all. The decline is made however short
+//     the sequences the Matcher would be put to. It is a resource ceiling and
+//     no spec rule licenses it: cvc-accept bounds no partition set. RULED
+//     permanent by #1601.
+//
+// Neither decline charges anything, and neither claims an error direction: what
+// a decline costs is whatever its caller does with (nil, false).
 func (s *Schema) ContentMatcher(t ComplexType) (*Matcher, bool) {
 	ec, ok := t.ContentType().(ElementContent)
 	if !ok {
@@ -406,6 +375,57 @@ func (s *Schema) ContentMatcher(t ComplexType) (*Matcher, bool) {
 		return nil, false
 	}
 	m.markAmbiguous(0)
+	// GAP(xsd): this is the ceiling the exported doc's second decline states,
+	// RULED permanent by #1601 (STYLE P3b) rather than a ceiling waiting on its
+	// next raise: that thread carries the ruling in full, and it rests on the
+	// measured cost below rather than on a spec licence. No spec licence covers
+	// this branch and this marker claims none — cvc-accept (§3.9.4.3) clause 3.1
+	// is a bare existential over ·partitions· with no search procedure and no
+	// bound, §3.9.4.1.1's L(P) attaches none either, and neither Appendix C nor
+	// Appendix E.1's implementation-defined checklist lets a processor decline
+	// what it cannot afford. The SHAPE is decided — (a{1,2}, b?){2,2} takes "a a
+	// b" — and so now is the WIDTH a partition-per-cursor encoding could not
+	// carry: (a{1,500}){1,500} reaches a quarter of a million live partitions and
+	// the spans of a region cover them in about a thousand. What stays declined
+	// is what outgrows maxPartitionStates, which partitionsBounded estimates over
+	// every widened node of the flattened tree — the breadth the exported doc
+	// states.
+	//
+	// Declining withholds the whole element-sequence verdict, whose consumers are
+	// validate's Result.violations and its one reader Result.Violations, both of
+	// which carry violations PRESENT — so the decline costs a rejection and
+	// manufactures none; validate records each child it leaves unmatched, or the
+	// element where it has no child, as an Unevaluated instead. The module's two
+	// other callers withhold as well: validate/jsonsrc's walker.govern marks the
+	// parent object.unattributed, under markers of its own owned by #2670, and
+	// the conformance gate refuses the case (refuseContentMatcher).
+	//
+	// What makes the approximation permanent is the distance between the ceiling
+	// and what still reaches it. A walk over every buildable complex type in
+	// testdata/xsdtests finds THREE declining here, all on this arm —
+	// particlesZ035_a, particlesZ036_b and particlesZ036_c — and each carries at
+	// least one model-group counter whose clamped range ALONE outruns the
+	// ceiling, past 10^8 in the two Z036s and past 10^11 in Z035_a. A single
+	// factor with no room ends the count, so deciding them means a per-item
+	// budget of that many regions: at the ≈1.5 KB per region maxPartitionStates'
+	// doc measures, over a hundred gigabytes and over a hundred terabytes for ONE
+	// item. Four instance cases sit on those three, all banked fail, and three of
+	// the four are suite-declared VALID, which that lane decides valid for a
+	// complex-typed root with content only where a Matcher decides that content
+	// (#1841) — so what the residual costs the suite is one missed rejection,
+	// particlesZ035_a.i, and at most three valid observations. It is retired by
+	// an encoding that carries a live partition set without enumerating its
+	// cover, never by moving the constant. Two findings reopen the ruling, and a
+	// case merely declining here is neither, since three already do. One is a
+	// schema whose partitionsBounded product lands BETWEEN the ceiling and what a
+	// measured per-region cost can afford — the plateau above 40804, the figure
+	// maxPartitionStates' doc derives, is empty today, so a model in it would
+	// mean a raise buys verdicts again. The other is a per-region cost measured
+	// low enough to bring one of the three counters named above inside an
+	// affordable ceiling. Re-measure rather than quoting these figures: the
+	// instrument is that corpus walk over buildable complex types, not
+	// suiteindex, which cannot reach a population defined by a resource product
+	// rather than by a name or a nesting.
 	if !m.partitionsBounded() {
 		return nil, false
 	}
@@ -798,9 +818,7 @@ func compareRegions(a, b region) int {
 //
 // A third search follows them where the {content type}'s {open content} is
 // present, and is reachable only once both have failed — which is exactly
-// cvc-complex-content clause 2.3's and 3.3's "has no ·path· in {particle}"
-// (openNext, and the file comment for why the resulting split is the only one
-// those clauses admit).
+// cvc-complex-content clause 2.3's and 3.3's "has no ·path· in {particle}".
 func (m *Matcher) Next(name QName) (Attribution, bool) {
 	if m.inS2 {
 		return m.openNext(name)
@@ -817,7 +835,10 @@ func (m *Matcher) Next(name QName) (Attribution, bool) {
 // openNext offers name to {open content}.{wildcard}, the third tier
 // cvc-complex-content clauses 2.4 and 3.4 add over cvc-accept's two, and
 // reports the admitted item as ·attributed to· the {open content} (§3.4.4.4) —
-// the record itself, on [Attribution]'s terms, and not its {wildcard}.
+// the record itself, on [Attribution]'s terms, and not its {wildcard}. Next
+// reaches it only once both particle searches have failed, and the file
+// comment says why the S1/S2 split that order produces is the only one
+// clauses 2.3 and 3.3 admit.
 //
 // The walk is not advanced: an S2 member is matched against the wildcard alone,
 // so {particle} stands where S1 left it and [Matcher.Accepting] still asks
@@ -864,12 +885,13 @@ func (m *Matcher) Accepting() bool {
 
 // Admissible reports what the next element information item could be
 // ·attributed to· (§3.4.4.4) where the sequence stands: the {term} of every
-// leaf particle [Matcher.Next]'s walk offers a name to, across every live
-// partition, before it reports (nil, false), and then the {open content} where
-// Next would offer it the name too. It is the expected set a caller names when
-// it charges cvc-complex-content (§3.4.4.3) at a rejected item or at a
-// sequence that ended short; neither that rule nor cvc-accept (§3.9.4.3)
-// prescribes message content, and this prescribes none either.
+// element and wildcard particle [Matcher.Next] would offer a name to, under
+// every ·partition· of the items so far that is still live, before reporting
+// (nil, false), and then the {open content} where Next would offer it the name
+// too. It is the expected set a caller names when it charges
+// cvc-complex-content (§3.4.4.3) at a rejected item or at a sequence that
+// ended short; neither that rule nor cvc-accept (§3.9.4.3) prescribes message
+// content, and this prescribes none either.
 //
 // Next(n) succeeds exactly where some returned arm admits n: an
 // [ElementDeclaration] by its ·expanded name· or a member of its ·substitution
@@ -879,27 +901,32 @@ func (m *Matcher) Accepting() bool {
 // none — and an [ElementDeclaration] is the particle's own declaration D, never
 // the ·substitution group· members it stands for.
 //
-// What the result holds follows from Next's own walk and from no rule stated
-// here: a member of an all group is listed while it is short of its {max
-// occurs}, through the gate every leaf Next reaches passes; the [*OpenContent]
-// is listed under {mode} interleave always, under {mode} suffix alongside the
-// particles until an item has started clause 2's S2, and alone once one has
-// (clause 2.1's S = S1 + S2 being a concatenation).
+// A member of an all group is listed while it is short of its {max occurs}.
+// The [*OpenContent] is listed under {mode} interleave always, under {mode}
+// suffix alongside the particles until an item has started clause 2's S2, and
+// alone once one has.
 //
-// The particles are in ascending order of their place in the content model —
-// the preorder of its flattened {particles}, which is document order — with the
-// [*OpenContent] last. A particle reached from several live partitions is
-// listed once, and no two listed element particles share an ·expanded name·:
-// both would ·compete· for it, which cos-nonambig (§3.8.6.4) has already
-// rejected. The result is empty where the content model admits no further item.
+// The particles are in document order, with the [*OpenContent] last. A
+// particle reached under several live partitions is listed once, and no two
+// listed element particles share an ·expanded name· (cos-nonambig, §3.8.6.4).
+// The result is empty where the content model admits no further item.
 //
 // It is read-only: [Matcher.Next] and [Matcher.Accepting] answer identically
 // before and after it. Each call returns a fresh slice the caller may keep; its
 // elements are the schema's immutable components on [Attribution]'s terms, the
-// [*OpenContent] being the pointer [ElementContent] carries. One call walks
-// every live region once, which is what one rejected name costs Next, so it is
-// priced for a charge and not for every item.
+// [*OpenContent] being the pointer [ElementContent] carries. One call costs
+// what one rejected name costs Next, so it is priced for a charge and not for
+// every item.
 func (m *Matcher) Admissible() []Attribution {
+	// The set is what advance offers a name to under frontierTest, so it follows
+	// from Next's own walk and from no rule stated here. Its order is ascending
+	// node index, the preorder of the flattened {particles}, which is document
+	// order; an all-group member is listed while short of its {max occurs}
+	// because that is the gate every leaf Next reaches passes; two listed element
+	// particles sharing an ·expanded name· would ·compete·, which cos-nonambig
+	// has rejected at finalize; and the open content is listed alone once inS2
+	// because clause 2.1's S = S1 + S2 is a concatenation. One call walks every
+	// live region once, which is what one rejected name costs Next.
 	var out []Attribution
 	if !m.inS2 {
 		f := &frontierTest{}

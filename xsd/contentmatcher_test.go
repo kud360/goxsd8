@@ -401,6 +401,43 @@ func TestContentMatcherDeclinesAParticlelessContentType(t *testing.T) {
 	}
 }
 
+// The ceiling ContentMatcher's doc states as behaviour is decided at exactly
+// the figure it names: a model group's {max occurs}+1 — {min occurs}+1 where
+// unbounded — times each element particle's at most four, against 65536.
+// a{1,2} contributes three, so (a{1,2}){1,n} declines from n = 21845, where
+// 3 × 21846 first passes 65536, and the unbounded twin turns on {min occurs}
+// alike. Two sibling groups under a non-repeating sequence decline by breadth,
+// and a body whose repeating member is followed by a mandatory one is never
+// widened, however wide its own range.
+func TestContentMatcherDeclinesPastTheStatedCeiling(t *testing.T) {
+	wide := func(o Occurs) Particle {
+		return cmGroup(t, uOccurs(t, 1, 1), CompositorSequence,
+			cmGroup(t, o, CompositorSequence, cmLeaf(t, "a", uOccurs(t, 1, 2))))
+	}
+	tests := []struct {
+		name string
+		p    Particle
+		want bool
+	}{
+		{"(a{1,2}){1,21844}", wide(uOccurs(t, 1, 21844)), true},
+		{"(a{1,2}){1,21845}", wide(uOccurs(t, 1, 21845)), false},
+		{"(a{1,2}){21844,unbounded}", wide(uUnbounded(t, 21844)), true},
+		{"(a{1,2}){21845,unbounded}", wide(uUnbounded(t, 21845)), false},
+		{"((a{1,2}){1,200}, (b{1,2}){1,200})", cmGroup(t, uOccurs(t, 1, 1), CompositorSequence,
+			cmGroup(t, uOccurs(t, 1, 200), CompositorSequence, cmLeaf(t, "a", uOccurs(t, 1, 2))),
+			cmGroup(t, uOccurs(t, 1, 200), CompositorSequence, cmLeaf(t, "b", uOccurs(t, 1, 2)))), false},
+		{"(a{1,2}, b){1,100000}", cmGroup(t, uOccurs(t, 1, 1), CompositorSequence,
+			cmGroup(t, uOccurs(t, 1, 100000), CompositorSequence,
+				cmLeaf(t, "a", uOccurs(t, 1, 2)), cmLeaf(t, "b", uOccurs(t, 1, 1)))), true},
+	}
+	for _, tt := range tests {
+		s, ct := cmSchema(t, tt.p, nil)
+		if _, got := s.ContentMatcher(ct); got != tt.want {
+			t.Errorf("ContentMatcher over %s decided = %t, want %t", tt.name, got, tt.want)
+		}
+	}
+}
+
 // cmOpenMatcher is cmMatcher over a {content type} whose {open content} is
 // PRESENT, carrying mode and the wildcard w. The type is built here rather than
 // through uCT because that fixture takes no {open content}, and the schema is
