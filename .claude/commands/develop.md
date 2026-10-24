@@ -275,7 +275,15 @@ counts.
    defect class's site list carried whole with the sites it rules sound
    (#2449) — never from a partial finding set, and never before the
    verdict is posted (#1426) — then re-judge in full. On a second reject:
-   park per WORKFLOW, then go to step 6's log entry and stop. On accept,
+   park per WORKFLOW's **Parking**, and skip steps 6 and 7. Delegate the
+   park's log entry to **chronicler** and land it as WORKFLOW's
+   **Landing** lands an iteration that lands no code — never onto
+   `wip/issue-<N>`. Then delegate to **cartographer** the entry's items
+   owed to the post-land pass — the replacement issue **Parking** assigns
+   it, widened bodies, friction — telling it that unblocking is the zero
+   case its entry records and that the entry lands through its own PR, as
+   step 7 does. Read both PRs' state back under step 7's rule, then stop
+   (#2803). On accept,
    dispose of the verdict's remaining findings per WORKFLOW's **After the
    verdict** before step 6.
 
