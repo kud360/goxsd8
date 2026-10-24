@@ -23,7 +23,7 @@
 //
 //   - An element whose {type definition} is an atomic simple type gets a
 //     named type over a Go builtin, chosen by the type's {primitive type
-//     definition} (§3.16.1): string and anyURI give string, boolean gives
+//     definition} (Datatypes §4.1.1): string and anyURI give string, boolean gives
 //     bool. Facets are not represented, and a named user simple type gets no
 //     Go type of its own.
 //   - An element whose {type definition} is a complex type, named or
@@ -31,10 +31,10 @@
 //     xs:anyType, implicit (§3.4.2.3.2 dcl.ctd.ctcc.implicit) or explicit
 //     (<complexContent><restriction base="xs:anyType">, §3.4.2.3.1
 //     dcl.ctd.ctcc.explicit), with element-only content (§3.4.2.3.3
-//     dcl.ctd.ctcc.common) and no {open content}, {attribute uses},
-//     {attribute wildcard}, {assertions} or {abstract}, whose {particle}
-//     occurs exactly once and holds a sequence or a choice of local element
-//     declarations. A sequence gives a struct.
+//     dcl.ctd.ctcc.common) and no {open content}, {attribute wildcard},
+//     {assertions} or {abstract}, whose {particle} occurs exactly once and
+//     holds a sequence or a choice of local element declarations. A sequence
+//     gives a struct.
 //   - A choice gives a sealed interface, the closed-sum exception: an
 //     interface whose one method is unexported, "is" plus the interface's
 //     name, and one branch struct per alternative in particle order, emitted
@@ -56,6 +56,18 @@
 //     gives a slice whatever {min occurs} is; {min occurs} 0 with {max
 //     occurs} 1 gives a pointer to a struct or builtin, and the bare
 //     interface, never a pointer to one, nil meaning absent.
+//   - Each attribute use of a sequence's type gives one field after the
+//     particle fields, in the order [xsd.ComplexType.AttributeUses] returns
+//     its {attribute uses} (§3.4.2.4). The field is named from the
+//     attribute declaration's local name, so a qualified and an unqualified
+//     attribute of one local name, or an attribute named like an element of
+//     the struct, take the suffix "Naming" states, the later field taking it.
+//     Its {type definition} must be an atomic simple type and gives a builtin as
+//     an element's does; {required} true gives the builtin, false a pointer to
+//     it, nil meaning absent. The use's effective value constraint (§3.5.4
+//     key-evc) must be absent, whether the use or a global declaration it
+//     references carries the default or fixed value. A choice is accepted only
+//     when its type has no {attribute uses}.
 //   - Every element declaration emitted from has {nillable} and {abstract}
 //     false and no {value constraint}, {type table}, {substitution group
 //     affiliations} or {identity-constraint definitions}.
@@ -63,11 +75,12 @@
 // GAP(codegen): every other construct declines: the all compositor, an
 // emptiable choice, a choice with no {particles}, nested model groups,
 // <group ref> and <element ref> particles, wildcards, a particle with {max
-// occurs} 0, attributes, mixed, simple and empty content,
-// extension, restriction of any base but xs:anyType, a local element with a
-// named complex type, xs:anyType, the special simple types, list and union
-// types, and every primitive but the three above. #2900 owns lifting
-// them.
+// occurs} 0, attribute wildcards, attribute uses on a type whose content is a
+// choice, attribute uses with an effective value constraint, mixed, simple
+// and empty content, extension, restriction of any base but xs:anyType, a
+// local element with a named complex type, xs:anyType, the special simple
+// types, list and union types, and every primitive but the three above, for
+// an element or an attribute alike. #2900 owns lifting them.
 //
 // # Determinism
 //

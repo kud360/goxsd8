@@ -135,7 +135,7 @@ func (e *emitter) topLevel(decl xsd.ElementDeclaration) error {
 	}
 	switch t := td.(type) {
 	case *xsd.SimpleType:
-		builtin, err := e.builtinType(decl, t)
+		builtin, err := e.builtinType("element "+decl.Name().String(), decl.Loc(), t)
 		if err != nil {
 			return err
 		}
@@ -184,34 +184,35 @@ func (e *emitter) declaredType(decl xsd.ElementDeclaration) (xsd.TypeDefinition,
 	return td, nil
 }
 
-// builtinType is the Go builtin a simple-typed element's field or named type
-// is declared over, chosen from t's {primitive type definition} (§3.16.1) by
-// the package doc's "# Coverage". decl is the element the type is read from,
-// and its Loc is a decline's.
-func (e *emitter) builtinType(decl xsd.ElementDeclaration, t *xsd.SimpleType) (string, error) {
-	subject := fmt.Sprintf("element %s with {type definition} %s", decl.Name(), typeName(t))
+// builtinType is the Go builtin a simple-typed element's or attribute's field,
+// or an element's named type, is declared over, chosen from t's {primitive type
+// definition} (Datatypes §4.1.1) by the package doc's "# Coverage". subject
+// names the declaration the type is read from, and loc, its Loc, is a
+// decline's.
+func (e *emitter) builtinType(subject string, loc xsderr.Loc, t *xsd.SimpleType) (string, error) {
+	typed := fmt.Sprintf("%s with {type definition} %s", subject, typeName(t))
 	if t.IsSpecial() {
-		return "", decline(decl.Loc(), "%s, a special type", subject)
+		return "", decline(loc, "%s, a special type", typed)
 	}
 	variety, err := t.Variety(e.schema)
 	if err != nil {
-		return "", fmt.Errorf("element %s at %s: %w", decl.Name(), decl.Loc(), err)
+		return "", fmt.Errorf("%s at %s: %w", subject, loc, err)
 	}
 	switch variety.(type) {
 	case xsd.Atomic:
 	case xsd.List:
-		return "", decline(decl.Loc(), "%s, a list type", subject)
+		return "", decline(loc, "%s, a list type", typed)
 	case xsd.Union:
-		return "", decline(decl.Loc(), "%s, a union type", subject)
+		return "", decline(loc, "%s, a union type", typed)
 	default:
-		return "", decline(decl.Loc(), "%s, of absent {variety}", subject)
+		return "", decline(loc, "%s, of absent {variety}", typed)
 	}
 	primitive, err := t.Primitive(e.schema)
 	if err != nil {
-		return "", fmt.Errorf("element %s at %s: %w", decl.Name(), decl.Loc(), err)
+		return "", fmt.Errorf("%s at %s: %w", subject, loc, err)
 	}
 	if primitive == nil {
-		return "", decline(decl.Loc(), "%s, with no {primitive type definition}", subject)
+		return "", decline(loc, "%s, with no {primitive type definition}", typed)
 	}
 	switch primitive.Name() {
 	case stringPrimitive, anyURIPrimitive:
@@ -219,7 +220,7 @@ func (e *emitter) builtinType(decl xsd.ElementDeclaration, t *xsd.SimpleType) (s
 	case booleanPrimitive:
 		return "bool", nil
 	}
-	return "", decline(decl.Loc(), "%s, whose {primitive type definition} is %s", subject, primitive.Name())
+	return "", decline(loc, "%s, whose {primitive type definition} is %s", typed, primitive.Name())
 }
 
 // typeName names a type definition in a decline message.
@@ -231,8 +232,10 @@ func typeName(t xsd.TypeDefinition) string {
 }
 
 // complexType emits the type name for decl's complex {type definition} t — a
-// struct for sequence content, a sealed interface for choice content — then
-// the types of its anonymous-typed particles, named in nested.
+// struct for sequence content, holding a field per particle and then one per
+// attribute use, or a sealed interface for choice content, which declines
+// {attribute uses} — then the types of its anonymous-typed particles, named in
+// nested.
 func (e *emitter) complexType(name string, nested scope, decl xsd.ElementDeclaration, t xsd.ComplexType) (emittedType, error) {
 	subject := "complex type " + typeName(t) + " of element " + decl.Name().String()
 	group, err := e.contentGroup(subject, t)
@@ -240,6 +243,9 @@ func (e *emitter) complexType(name string, nested scope, decl xsd.ElementDeclara
 		return emittedType{}, err
 	}
 	if group.Compositor() == xsd.CompositorChoice {
+		if len(t.AttributeUses()) > 0 {
+			return emittedType{}, decline(t.Loc(), "%s whose content is a choice, with {attribute uses}", subject)
+		}
 		return emittedType{name: name, sealed: true}, e.sealedType(name, nested, subject, decl, t, group.Particles())
 	}
 	slot := len(e.decls)
@@ -248,6 +254,13 @@ func (e *emitter) complexType(name string, nested scope, decl xsd.ElementDeclara
 	var body bytes.Buffer
 	for _, p := range group.Particles() {
 		field, err := e.field(nested, subject, t.Loc(), p)
+		if err != nil {
+			return emittedType{}, err
+		}
+		fmt.Fprintf(&body, "\t%s %s\n", fields.claim(field.local), field.goType)
+	}
+	for _, u := range t.AttributeUses() {
+		field, err := e.attributeField(subject, t.Loc(), u)
 		if err != nil {
 			return emittedType{}, err
 		}
@@ -340,8 +353,6 @@ func (e *emitter) contentGroup(subject string, t xsd.ComplexType) (xsd.ModelGrou
 	switch {
 	case t.Abstract():
 		return xsd.ModelGroup{}, decline(t.Loc(), "%s with {abstract} true", subject)
-	case len(t.AttributeUses()) > 0:
-		return xsd.ModelGroup{}, decline(t.Loc(), "%s with {attribute uses}", subject)
 	case len(t.Assertions()) > 0:
 		return xsd.ModelGroup{}, decline(t.Loc(), "%s with {assertions}", subject)
 	}
@@ -396,7 +407,7 @@ func (e *emitter) field(nested scope, subject string, loc xsderr.Loc, p xsd.Part
 	var typ emittedType
 	switch ft := td.(type) {
 	case *xsd.SimpleType:
-		typ.name, err = e.builtinType(decl, ft)
+		typ.name, err = e.builtinType("element "+decl.Name().String(), decl.Loc(), ft)
 	case xsd.ComplexType:
 		typ, err = e.nestedType(nested, decl, ft)
 	default:
@@ -417,6 +428,41 @@ func (e *emitter) field(nested scope, subject string, loc xsderr.Loc, p xsd.Part
 		goType = "*" + goType
 	}
 	return fieldSpec{local: decl.Name().Local, goType: goType}, nil
+}
+
+// attributeField returns the field of attribute use u (§3.5.1) of the complex
+// type at loc named in declines by subject, typed and declined by the package
+// doc's "# Coverage" attribute-use rule. It reads the effective value
+// constraint through Schema.EffectiveValueConstraint, never u.ValueConstraint,
+// which holds the use's own alone. An attribute use carries no Loc, so its
+// declines cite the declaration it resolves to, the global one for an
+// <attribute ref>.
+func (e *emitter) attributeField(subject string, loc xsderr.Loc, u xsd.AttributeUse) (fieldSpec, error) {
+	name := u.DeclarationName()
+	attr := "attribute " + name.String() + " of " + subject
+	decl, ok := e.schema.ResolvedAttributeDeclaration(u)
+	if !ok {
+		return fieldSpec{}, fmt.Errorf("%s at %s: its {attribute declaration} does not resolve", attr, loc)
+	}
+	if vc, ok := e.schema.EffectiveValueConstraint(u); ok {
+		return fieldSpec{}, decline(decl.Loc(), "%s with a %s effective value constraint (§3.5.4 key-evc)", attr, vc.Kind())
+	}
+	td, ok := e.schema.ResolvedType(decl.TypeDefinition())
+	if !ok {
+		return fieldSpec{}, fmt.Errorf("%s at %s: its {type definition} does not resolve", attr, decl.Loc())
+	}
+	st, ok := td.(*xsd.SimpleType)
+	if !ok {
+		return fieldSpec{}, fmt.Errorf("%s at %s: unexpected type definition %T", attr, decl.Loc(), td)
+	}
+	goType, err := e.builtinType(attr, decl.Loc(), st)
+	if err != nil {
+		return fieldSpec{}, err
+	}
+	if !u.Required() {
+		goType = "*" + goType
+	}
+	return fieldSpec{local: name.Local, goType: goType}, nil
 }
 
 // nestedType returns the type emitted for a local element declaration's
