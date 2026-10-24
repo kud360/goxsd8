@@ -50,7 +50,11 @@ type namesIndex struct {
 }
 
 // newNamesIndex indexes docs, the packages being those of the module whose
-// root holds the go.mod declaring its path module.
+// root holds the go.mod declaring its path module. It drains docs' keys into
+// sorted dirs, which resolve ranges over (STYLE D2), rather than readTree
+// keeping a slice alongside: readTree reads files in sorted path order, which
+// splits a directory's files ("a/b.go", "a/b/c.go", "a/c.go"), so a slice it
+// kept would need this same set and sort.
 func newNamesIndex(module string, docs map[ident][]sentence) namesIndex {
 	seen := make(map[string]bool)
 	var dirs []string
