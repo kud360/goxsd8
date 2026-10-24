@@ -55,7 +55,7 @@
 // an owner or name an identifier, how many of those name one, and that the
 // matching is heuristic. Exit codes: 0 whatever it prints, 2 on an
 // operational error (a missing -base, an unresolvable ref, an unreadable or
-// unparseable file, a working tree whose go.mod declares no module path).
+// unparseable file, a working tree whose go.mod has no module directive).
 package main
 
 import (

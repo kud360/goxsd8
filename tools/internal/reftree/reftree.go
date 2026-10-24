@@ -1,6 +1,7 @@
-// Package reftree finds the module a tool runs in and materialises another git
-// ref's tree beside it, for the tools that compare the working tree against a
-// base (`go tool surface -base`, `go tool restatements -base`).
+// Package reftree finds the module a tool runs in, reads a tree's module path,
+// and materialises another git ref's tree beside it, for the tools that
+// compare the working tree against a base (`go tool surface -base`, `go tool
+// restatements -base`).
 //
 // The ref's tree is checked out in a temporary detached git worktree (`git
 // worktree add --detach`), read, and removed again (`git worktree remove
@@ -15,6 +16,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 )
 
 // ModuleRoot walks up from the current working directory until it finds the
@@ -35,6 +37,25 @@ func ModuleRoot() (string, error) {
 		}
 		dir = parent
 	}
+}
+
+// ModulePath extracts the `module` directive from the go.mod file at root,
+// without a full go.mod parser: a hand-rolled tool has no need for the
+// replace/require directives a module graph resolver would.
+func ModulePath(root string) (string, error) {
+	path := filepath.Join(root, "go.mod")
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return "", fmt.Errorf("reading %s: %w", path, err)
+	}
+	for _, line := range strings.Split(string(data), "\n") {
+		mod, ok := strings.CutPrefix(strings.TrimSpace(line), "module ")
+		if !ok {
+			continue
+		}
+		return strings.TrimSpace(mod), nil
+	}
+	return "", fmt.Errorf("no module directive found in %s", path)
 }
 
 // Checkout materialises ref beside the repository rooted at repoRoot, as the

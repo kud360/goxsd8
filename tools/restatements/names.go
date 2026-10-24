@@ -1,20 +1,14 @@
 package main
 
 import (
-	"bufio"
-	"fmt"
-	"os"
-	"path/filepath"
 	"regexp"
 	"sort"
 	"strings"
 )
 
-// selectorPattern finds the selectors an added sentence names, as the package
-// doc states: a qualifier (an import path's last element, or a slash-separated
-// tail of one) and an exported name, optionally a member's after a second
-// dot. The first group is the character before the qualifier, so a qualifier
-// never starts inside a word, a path or another selector.
+// selectorPattern finds the selectors an added sentence names, which the
+// package doc states. The first group is the character before the qualifier,
+// so a qualifier never starts inside a word, a path or another selector.
 var selectorPattern = regexp.MustCompile(`(^|[^\w./-])((?:[\w.-]+/)*[a-z_]\w*)\.([A-Z]\w*)(?:\.(\w+))?`)
 
 // selector is one selector of an added sentence: its qualifier, and the name
@@ -30,7 +24,7 @@ func (s selector) String() string { return s.qual + "." + s.name }
 
 // selectors returns the distinct selectors text names, in text order. A
 // member is read whatever its case, so a selector of an unexported member
-// names no type: no identifier is indexed under it.
+// resolves to nothing: no identifier is indexed under it.
 func selectors(text string) []selector {
 	var out []selector
 	seen := make(map[selector]bool)
@@ -70,9 +64,8 @@ func newNamesIndex(module string, docs map[ident][]sentence) namesIndex {
 	return namesIndex{module: module, dirs: dirs, docs: docs}
 }
 
-// resolve returns the identifiers s names outside the directory own, in
-// directory order: each package whose import path is s's qualifier or ends in
-// a slash and the qualifier, and that documents s's name.
+// resolve returns the identifiers s names, as the package doc states, from a
+// sentence in the directory own, in directory order.
 func (x namesIndex) resolve(s selector, own string) []ident {
 	var out []ident
 	for _, dir := range x.dirs {
@@ -92,24 +85,4 @@ func (x namesIndex) resolve(s selector, own string) []ident {
 		}
 	}
 	return out
-}
-
-// modulePath reads the module path from the go.mod at root.
-func modulePath(root string) (string, error) {
-	name := filepath.Join(root, "go.mod")
-	f, err := os.Open(name)
-	if err != nil {
-		return "", fmt.Errorf("reading the module path: %w", err)
-	}
-	defer func() { _ = f.Close() }()
-	sc := bufio.NewScanner(f)
-	for sc.Scan() {
-		if rest, ok := strings.CutPrefix(strings.TrimSpace(sc.Text()), "module "); ok {
-			return strings.Trim(strings.TrimSpace(rest), `"`), nil
-		}
-	}
-	if err := sc.Err(); err != nil {
-		return "", fmt.Errorf("reading %s: %w", name, err)
-	}
-	return "", fmt.Errorf("%s declares no module path", name)
 }

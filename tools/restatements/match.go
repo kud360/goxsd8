@@ -6,6 +6,8 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+
+	"github.com/kud360/goxsd8/tools/internal/reftree"
 )
 
 // minShared is the overlap measure's threshold, which the package doc states.
@@ -156,7 +158,7 @@ func survey(base, head string) (report, error) {
 	if err != nil {
 		return report{}, fmt.Errorf("reading the working tree: %w", err)
 	}
-	module, err := modulePath(head)
+	module, err := reftree.ModulePath(head)
 	if err != nil {
 		return report{}, err
 	}
@@ -213,10 +215,9 @@ func survey(base, head string) (report, error) {
 	return rep, nil
 }
 
-// namedMatches pairs added, cut into clauses cs, with one sentence of the doc
-// of each identifier it names outside its own directory whose doc holds no
-// sentence of overlaps: the doc's sentence sharing the most pairs outside
-// skip with one clause, the first of them on a tie.
+// namedMatches returns added's names pairs, which the package doc states,
+// added being cut into clauses cs and already paired with overlaps, and skip
+// being the pairs not counted.
 func namedMatches(added sentence, cs []map[pair]bool, overlaps []match, names namesIndex, skip map[pair]bool) []match {
 	var out []match
 	for _, s := range selectors(added.text) {
