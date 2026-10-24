@@ -117,38 +117,50 @@ func clauses(text string) []map[pair]bool {
 	return out
 }
 
-// match is one owner sentence an added sentence overlaps, and by how many
-// pairs.
+// match is one owner sentence an added sentence is paired with: by how many
+// pairs it overlaps, or, for a sentence of the doc of an identifier the added
+// sentence names, that selector as the added sentence spells it.
 type match struct {
 	owner  sentence
 	shared int
+	names  string
 }
 
-// finding is one added sentence and every owner sentence it overlaps, the
-// most-shared first.
+// finding is one added sentence and every owner sentence it is paired with:
+// those it overlaps, the most-shared first, then one per identifier it names,
+// in the order it names them.
 type finding struct {
 	added   sentence
 	matches []match
 }
 
 // report is a survey's result: how many sentences the working tree added,
-// and the ones that overlap an owner, in file and line order.
+// the ones paired with an owner, in file and line order, and how many of
+// those name an identifier.
 type report struct {
 	added    int
 	findings []finding
+	naming   int
 }
 
 // survey reads the trees rooted at base and head and pairs every sentence
-// head added with the owner sentences of head it overlaps.
+// head added with the owner sentences of head it overlaps, and with a
+// sentence of the doc of each exported identifier of another package it
+// names.
 func survey(base, head string) (report, error) {
-	before, err := readTree(base)
+	before, _, err := readTree(base)
 	if err != nil {
 		return report{}, fmt.Errorf("reading the base tree: %w", err)
 	}
-	after, err := readTree(head)
+	after, docs, err := readTree(head)
 	if err != nil {
 		return report{}, fmt.Errorf("reading the working tree: %w", err)
 	}
+	module, err := modulePath(head)
+	if err != nil {
+		return report{}, err
+	}
+	names := newNamesIndex(module, docs)
 
 	type key struct{ file, text string }
 	existed := make(map[key]bool, len(before))
@@ -188,28 +200,72 @@ func survey(base, head string) (report, error) {
 				ms = append(ms, match{owner: o, shared: n})
 			}
 		}
-		if len(ms) == 0 {
+		sort.SliceStable(ms, func(i, j int) bool { return ms[i].shared > ms[j].shared })
+		named := namedMatches(a, cs, ms, names, skip)
+		if len(ms)+len(named) == 0 {
 			continue
 		}
-		sort.SliceStable(ms, func(i, j int) bool { return ms[i].shared > ms[j].shared })
-		rep.findings = append(rep.findings, finding{added: a, matches: ms})
+		if len(named) > 0 {
+			rep.naming++
+		}
+		rep.findings = append(rep.findings, finding{added: a, matches: append(ms, named...)})
 	}
 	return rep, nil
 }
 
+// namedMatches pairs added, cut into clauses cs, with one sentence of the doc
+// of each identifier it names outside its own directory whose doc holds no
+// sentence of overlaps: the doc's sentence sharing the most pairs outside
+// skip with one clause, the first of them on a tie.
+func namedMatches(added sentence, cs []map[pair]bool, overlaps []match, names namesIndex, skip map[pair]bool) []match {
+	var out []match
+	for _, s := range selectors(added.text) {
+		for _, id := range names.resolve(s, dirOf(added.file)) {
+			doc := names.docs[id]
+			if overlapsAny(doc, overlaps) {
+				continue
+			}
+			best, most := doc[0], shared(cs, pairs(doc[0].text), skip)
+			for _, d := range doc[1:] {
+				if n := shared(cs, pairs(d.text), skip); n > most {
+					best, most = d, n
+				}
+			}
+			out = append(out, match{owner: best, names: s.String()})
+		}
+	}
+	return out
+}
+
+// overlapsAny reports whether any of doc is the owner of one of ms.
+func overlapsAny(doc []sentence, ms []match) bool {
+	for _, d := range doc {
+		for _, m := range ms {
+			if m.owner == d {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 // write prints the report: each finding's added sentence, then each owner
-// sentence it overlaps indented beneath it, then the summary line every run
-// ends with.
+// sentence it is paired with indented beneath it, then the summary line every
+// run ends with.
 func (r report) write(w io.Writer) error {
 	var b strings.Builder
 	for _, f := range r.findings {
 		fmt.Fprintf(&b, "%s:%d: %s\n", f.added.file, f.added.line, f.added.text)
 		for _, m := range f.matches {
+			if m.names != "" {
+				fmt.Fprintf(&b, "\t%s:%d: (names %s) %s\n", m.owner.file, m.owner.line, m.names, m.owner.text)
+				continue
+			}
 			fmt.Fprintf(&b, "\t%s:%d: (%d shared) %s\n", m.owner.file, m.owner.line, m.shared, m.owner.text)
 		}
 	}
-	fmt.Fprintf(&b, "restatements: %d of %d added sentence(s) overlap a sentence of a package doc, an exported identifier's doc or cmd/goxsd8's usage; the matching is heuristic (%d adjacent content-word pairs shared with one clause, each held by at most %d owner sentences), so read each pair before acting on it\n",
-		len(r.findings), r.added, minShared, maxHolders)
+	fmt.Fprintf(&b, "restatements: %d of %d added sentence(s) overlap a sentence of a package doc, an exported identifier's doc or cmd/goxsd8's usage, or name another package's exported identifier (%d naming one); the matching is heuristic (%d adjacent content-word pairs shared with one clause, each held by at most %d owner sentences; a name resolved lexically), so read each pair before acting on it\n",
+		len(r.findings), r.added, r.naming, minShared, maxHolders)
 	if _, err := io.WriteString(w, b.String()); err != nil {
 		return fmt.Errorf("writing the report: %w", err)
 	}
