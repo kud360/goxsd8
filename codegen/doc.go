@@ -57,9 +57,8 @@
 //     occurs} 1 gives a pointer to a struct or builtin, and the bare
 //     interface, never a pointer to one, nil meaning absent.
 //   - Each attribute use of a sequence's type gives one field after the
-//     particle fields, in the order of its {attribute uses} (§3.4.2.4), which
-//     hold the type's own uses and those its <attributeGroup ref>s reach, a
-//     use="prohibited" attribute giving none. The field is named from the
+//     particle fields, in the order [xsd.ComplexType.AttributeUses] returns
+//     its {attribute uses} (§3.4.2.4). The field is named from the
 //     attribute declaration's local name, so a qualified and an unqualified
 //     attribute of one local name, or an attribute named like an element of
 //     the struct, take the suffix "Naming" states, the later field taking it.

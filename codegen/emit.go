@@ -431,13 +431,12 @@ func (e *emitter) field(nested scope, subject string, loc xsderr.Loc, p xsd.Part
 }
 
 // attributeField returns the field of attribute use u (§3.5.1) of the complex
-// type at loc named in declines by subject, typed by the package doc's "# Coverage"
-// field rules: the builtin of its {attribute declaration}'s {type definition}
-// when {required} is true, a pointer to it when false. A use cites the Loc of
-// the declaration it resolves to, the global one for an <attribute ref>, since
-// an attribute use carries none. The value-constraint decline reads the use's
-// effective value constraint (§3.5.4 key-evc), so a default or fixed value on a
-// global declaration reached through a ref declines as one on the use does.
+// type at loc named in declines by subject, typed and declined by the package
+// doc's "# Coverage" attribute-use rule. It reads the effective value
+// constraint through Schema.EffectiveValueConstraint, never u.ValueConstraint,
+// which holds the use's own alone. An attribute use carries no Loc, so its
+// declines cite the declaration it resolves to, the global one for an
+// <attribute ref>.
 func (e *emitter) attributeField(subject string, loc xsderr.Loc, u xsd.AttributeUse) (fieldSpec, error) {
 	name := u.DeclarationName()
 	attr := "attribute " + name.String() + " of " + subject
