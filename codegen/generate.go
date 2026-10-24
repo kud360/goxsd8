@@ -35,6 +35,26 @@ type Target struct {
 	// Package is the emitted package's name: a Go identifier that is neither a
 	// keyword, the blank identifier, nor main.
 	Package string
+	// Name names the target in Generate's errors; it may be empty.
+	Name string
+}
+
+// name is the target's name, as Generate's doc defines it, for the target at
+// slice index i.
+func (t Target) name(i int) string {
+	if t.Name != "" {
+		return t.Name
+	}
+	return fmt.Sprintf("target %d", i)
+}
+
+// failed is err as Generate returns it for the target at slice index i,
+// opened as Generate's doc states.
+func (t Target) failed(i int, err error) error {
+	if t.Name != "" {
+		return fmt.Errorf("%s: %w", t.name(i), err)
+	}
+	return fmt.Errorf("codegen: %s: %w", t.name(i), err)
 }
 
 // Generate emits, for each target, one Go package of type declarations: the
@@ -53,8 +73,13 @@ type Target struct {
 // target that fails phase 1 — an invalid Target, a Dir that equals an earlier
 // target's after filepath.Clean, a construct the generator declines, or a
 // failed destination check — means no target is written, and the error is
-// the first failure in target order and then document order, naming the
-// target's index.
+// the first failure in target order and then document order.
+//
+// Every error Generate returns opens with the failing target's name: its Name,
+// or "target N" for the target at slice index N when Name is empty. An unnamed
+// target's error opens "codegen: target N: ", a named one's "<Name>: " with no
+// "codegen: " before it. The refusal of a Dir equal to an earlier target's
+// names that earlier target the same way.
 //
 // A decline is a generator limitation, not a schema fault: it is a plain
 // error wrapping errors.ErrUnsupported, never an *xsderr.Error, and it names
@@ -71,17 +96,17 @@ func Generate(targets []Target) error {
 	for i, t := range targets {
 		src, err := prepare(t, targets[:i])
 		if err != nil {
-			return fmt.Errorf("codegen: target %d: %w", i, err)
+			return t.failed(i, err)
 		}
 		sources[i] = src
 	}
 	for i, t := range targets {
 		if err := os.MkdirAll(t.Dir, 0o755); err != nil {
-			return fmt.Errorf("codegen: target %d: creating %s: %w", i, t.Dir, err)
+			return t.failed(i, fmt.Errorf("creating %s: %w", t.Dir, err))
 		}
 		path := filepath.Join(t.Dir, fileName)
 		if err := os.WriteFile(path, sources[i], 0o644); err != nil {
-			return fmt.Errorf("codegen: target %d: writing %s: %w", i, path, err)
+			return t.failed(i, fmt.Errorf("writing %s: %w", path, err))
 		}
 	}
 	return nil
@@ -110,7 +135,7 @@ func prepare(t Target, earlier []Target) ([]byte, error) {
 	}
 	for j, e := range earlier {
 		if filepath.Clean(e.Dir) == filepath.Clean(t.Dir) {
-			return nil, fmt.Errorf("the output directory %s is also the output directory of target %d", t.Dir, j)
+			return nil, fmt.Errorf("the output directory %s is also the output directory of %s", t.Dir, e.name(j))
 		}
 	}
 	src, err := emit(t.Schema, t.Package)
