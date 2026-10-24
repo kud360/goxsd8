@@ -116,8 +116,8 @@ import (
 // [validity]. So the ·governing type definition· of an element below E can
 // differ from the type the compile read, and [Tally.Attribute] states which
 // values agree with the answer. Its one consumer is validate's cvc-assertion
-// site (validate/cvcassertion.go), which builds it, [TypedAttributes] and what
-// it reports to [Tally.Attribute] from one lookup so they cannot disagree.
+// site, which builds it, [TypedAttributes] and what it reports to
+// [Tally.Attribute] from one lookup so they cannot disagree.
 type AttributeTypes func(path []xsd.QName, name xsd.QName) (*xsd.SimpleType, bool)
 
 // ElementTypes answers, for the element information item E whose assertions are
@@ -142,9 +142,8 @@ type AttributeTypes func(path []xsd.QName, name xsd.QName) (*xsd.SimpleType, boo
 // type definition· of an element below E can differ from the type the compile
 // reads, below a child even without being substitutable for it, and
 // [ChildElements] and [Tally.ElementValue] state which values agree with it.
-// Its one consumer is validate's cvc-assertion site
-// (validate/cvcassertion.go), which builds it and maps the values it reports
-// from one lookup, so they cannot disagree.
+// Its one consumer is validate's cvc-assertion site, which builds it and maps
+// the values it reports from one lookup, so they cannot disagree.
 type ElementTypes func(path []xsd.QName) (xsd.TypeDefinition, bool)
 
 // ChildElement is one element [[child]] of E as an assertion {test} reads it:
@@ -191,7 +190,7 @@ func ChildWithAttributes(name xsd.QName, v TypedValue, attrs TypedAttributes) Ch
 }
 
 // ChildElements yields E's element [[children]] a compiled {test} reads, in
-// DOCUMENT ORDER (STYLE D1), each as a [ChildElement]. It must be non-nil, and
+// DOCUMENT ORDER, each as a [ChildElement]. It must be non-nil, and
 // a yield reporting false ends the walk. A child no compiled step names need
 // not be yielded: [AssertionTest.ReadsChild] reports which names one reads for
 // their values, or binds for their places alone, and
@@ -263,7 +262,7 @@ type ChildElements func(yield func(ChildElement) bool)
 // element's string-value under mixed content (§6.2.4). Datatypes dt-xdmrep
 // clause 1 gives a ·special· type's value that dynamic type. It is a sealed
 // sum of exactly those two arms, so no value carries both a lexical and a
-// typed value (STYLE T1).
+// typed value.
 type TypedValue interface{ typedValue() }
 
 // tvTyped is [Typed]'s arm: an ·actual value· of the type the tree holds.
@@ -302,7 +301,7 @@ func Untyped(lexical string) TypedValue { return tvUntyped{lexical: lexical} }
 
 // TypedAttributes yields E's attributes that matched an {attribute use} of its
 // ·governing type definition·, each as its ·expanded name· and its typed
-// value: those E carries, in DOCUMENT ORDER (STYLE D1), then its ·defaulted
+// value: those E carries, in DOCUMENT ORDER, then its ·defaulted
 // attributes· (key-dflt-att), which the partial ·PSVI· cvc-assertion clause
 // 1.2 builds from holds too, in an order the caller fixes. It must be non-nil,
 // and a yield reporting false ends the walk.
@@ -370,17 +369,16 @@ type ValueBinding struct {
 // [[children]], the {value constraint}'s {lexical form}, the one text node
 // J.2's "may" lets the data model build from the [schema normalized value] of
 // a defaulted element. Each is a processor's choice J.2 leaves open, and
-// validate's caller makes it (the GAP(xpath) at its cvc-assertion site,
-// validate/cvcassertion.go). It is never re-normalized under the {simple type
-// definition}'s whiteSpace: `.` over xs:integer content "0030" is "0030",
-// where `$value` is 30. Under every other {content type} it is the
-// concatenation of the string values of all E's Text Node descendants in
-// document order (xpath-datamodel.md:1304): each character [[child]] of E,
-// white space alone included — E is annotated xs:anyType, whose content is
-// mixed (cvc-assertion clause 1.2) — and each of a descendant, except a run
-// that is white space alone under a descendant whose {content type} is
-// element-only or empty, which is no Text Node (:2202). An invalid E has a
-// string value all the same, so text is bound where v is nil.
+// validate makes it at its cvc-assertion check. It is never re-normalized
+// under the {simple type definition}'s whiteSpace: `.` over xs:integer
+// content "0030" is "0030", where `$value` is 30. Under every other {content
+// type} it is the concatenation of the string values of all E's Text Node
+// descendants in document order (xpath-datamodel §6.2.4): each character
+// [[child]] of E, white space alone included — E is annotated xs:anyType,
+// whose content is mixed (cvc-assertion clause 1.2) — and each of a
+// descendant, except a run that is white space alone under a descendant whose
+// {content type} is element-only or empty, which is no Text Node (§6.7.4). An
+// invalid E has a string value all the same, so text is bound where v is nil.
 //
 // v is the typed value of E's [schema actual value] (cvc-assertion clause
 // 2.3.1), whose arm and type the {simple type definition} of the
@@ -451,9 +449,9 @@ type ContextElement interface {
 // §3.2), atomized (§2.4.2) — the typed value of every attribute node the path
 // selects, kept as a slice in the order the caller reported them
 // ([Tally.Attribute]). Every node one such path selects sits at the one depth
-// its steps fix, so that report order is document order (STYLE D1). The
+// its steps fix, so that report order is document order. The
 // values are kept and nothing derived from them — the sum is computed when
-// [AssertionTest.Evaluate] reads them (STYLE D3) — so what the Tally holds for
+// [AssertionTest.Evaluate] reads them — so what the Tally holds for
 // such a path is O(nodes it selects), which is the size of the sequence the
 // {test} reads. So it carries, for each path of two or more child steps whose
 // elements' typed values the {test} reads — fn:data's argument `N1/…/Nk`
@@ -514,11 +512,10 @@ type ContextElement interface {
 // `$value`, and never reports a stand-in. Under-reporting would make a count
 // too small, or a sum or sequence short, and could fabricate a charge.
 //
-// Its consumer is validate's cvc-assertion site (validate/cvcassertion.go),
-// which reports each element it walks, and each element of a ·skipped· subtree
-// by name, to the Tally of every enclosing element's {assertions} that has one.
-// Its methods exist for package validate, and a caller outside the module is
-// not expected to drive them.
+// Its consumer is validate's cvc-assertion site, which reports each element it
+// walks, and each element of a ·skipped· subtree by name, to the Tally of every
+// enclosing element's {assertions} that has one. Its methods exist for package
+// validate, and a caller outside the module is not expected to drive them.
 type Tally struct {
 	// counters holds one counter per counted key, in the order
 	// [AssertionTest.Tally] made them (fits).
@@ -837,9 +834,8 @@ func (c *Tally) Element(path []xsd.QName, attrs []xsd.QName) {
 // are [TypedAttributes]' alone — and for every name and path no such path
 // reads.
 //
-// Its consumer is validate's walk (validate/cvcassertion.go), which reports
-// the value of each attribute node of a reported element it is true for with
-// [Tally.Attribute].
+// Its consumer is validate's walk, which reports the value of each attribute
+// node of a reported element it is true for with [Tally.Attribute].
 func (c *Tally) ReadsAttribute(path []xsd.QName, name xsd.QName) bool {
 	if c == nil || len(path) == 0 {
 		return false
@@ -903,9 +899,9 @@ func (c *Tally) Attribute(name xsd.QName, v TypedValue) {
 // for every path shorter than two: a child's value is [ChildElements]' alone,
 // and E's is [ValueBinding]'s.
 //
-// Its consumer is validate's walk (validate/cvcassertion.go), which reports
-// the value of each element it is true for with [Tally.ElementValue], once
-// that element's subtree is walked.
+// Its consumer is validate's walk, which reports the value of each element
+// it is true for with [Tally.ElementValue], once that element's subtree is
+// walked.
 func (c *Tally) ReadsElementValue(path []xsd.QName) bool {
 	if c == nil || len(path) < 2 {
 		return false
@@ -1030,10 +1026,10 @@ func ctaSelected(key ctaTallied, path, attrs []xsd.QName) int {
 // `data(N1/…/Nk)`, reads no attribute name at any depth. It is false for a nil
 // Tally and for a depth below 0, where no [Tally.Element] report stands.
 //
-// Its consumer is validate's walk (validate/cvcassertion.go), which asks it of
-// an element whose ·defaulted attributes· it cannot know: where it is false,
-// no attribute name reported for that element could change any count or any
-// value read, and the element is reported with none.
+// Its consumer is validate's walk, which asks it of an element whose
+// ·defaulted attributes· it cannot know: where it is false, no attribute
+// name reported for that element could change any count or any value read,
+// and the element is reported with none.
 func (c *Tally) ReadsAttributesAt(depth int) bool {
 	if c == nil {
 		return false
@@ -1233,10 +1229,9 @@ type AssertionTest struct {
 //   - a QName for which attrs reports false;
 //   - an attribute whose type is not ·special· and does not atomize to one
 //     atomic value of a type known at compile time — a list or union {variety}
-//     — or whose {primitive type definition} is xs:NOTATION
-//     (ctaTypes.typedAtomic). The variety is classified here, not trusted to
-//     attrs. An attribute attrs annotates ·special· is read as
-//     xs:untypedAtomic and is admitted;
+//     — or whose {primitive type definition} is xs:NOTATION. The variety is
+//     classified here, not trusted to attrs. An attribute attrs annotates
+//     ·special· is read as xs:untypedAtomic and is admitted;
 //   - a `$value` over an [xsd.SimpleContent] whose {simple type definition} the
 //     bullet above declines as an attribute's type, unless it is a list whose
 //     {item type definition} that bullet admits — so a union, a list of a
@@ -1347,8 +1342,7 @@ type AssertionTest struct {
 //     decline — and a predicate whose root is a bare value, `N[1]`, `N[1 + 0]`
 //     or `N[.]`, which a numeric value would make positional (§3.2.2);
 //     position() and last() decline here, the predicate calling no library
-//     function (ctaPredicateFacade.callsLibrary), and outside a predicate too
-//     (ctaAssertionFacade.focus);
+//     function, and outside a predicate too;
 //   - a predicate over a child whose type elems answers is not one a child
 //     read for its value is admitted under as a TYPED value, on that bullet's
 //     terms — so a predicate over a mixed child, `count(body[. = 'x'])`,
@@ -1376,7 +1370,7 @@ type AssertionTest struct {
 //     xs:decimal, xs:float or xs:double — so the duration and date/time
 //     arithmetic B.2 defines declines, and so does the err:XPTY0004 of any
 //     other type — and an xs:float operand against an xs:double or
-//     xs:untypedAtomic one, which needs B.1 rule 1.1 (#889); a unary `+` or
+//     xs:untypedAtomic one, which needs B.1 rule 1.1; a unary `+` or
 //     `-`, and a parenthesized operand, which [11]'s `(` arm reads as a
 //     boolean expression;
 //   - a conditional anywhere but in the positions listed above — so a
@@ -1566,7 +1560,7 @@ type AssertionTest struct {
 // [in-scope namespaces], a capability validate.Element lacks, [ContextElement]
 // answering one prefix at a time. The direction is the withhold: the caller
 // records the assertion as unevaluated and neither charges it nor shows it
-// satisfied (PRINCIPLES 20). (#1042)
+// satisfied. (#1042)
 //
 // types is read as [CompileCTATest] reads it and stored nowhere.
 func CompileAssertionTest(expr xsd.XPathExpression, types xsd.TypeResolver, content xsd.ContentType, attrs AttributeTypes, elems ElementTypes) (AssertionTest, *Decline) {
@@ -1612,8 +1606,8 @@ func CompileAssertionTest(expr xsd.XPathExpression, types xsd.TypeResolver, cont
 // holding a token outside what the engine reads.
 //
 // Decline is not an error and exposes no kind: a decline is a withhold, never a
-// verdict (PRINCIPLES 20). The package never returns a zero Decline, whose
-// String is "", which is never a reason.
+// verdict. The package never returns a zero Decline, whose String is "", which
+// is never a reason.
 type Decline struct{ reason string }
 
 // String is the reason the compile that returned d declined, on [Decline]'s
@@ -1762,12 +1756,11 @@ func (t AssertionTest) Evaluate(b value.Backend, types xsd.TypeResolver, e Conte
 // itself is not changed, so one compiled test serves any number of evaluations,
 // each with its own Tally.
 //
-// Its consumer is validate's walk (validate/cvcassertion.go), which reads the
-// nil as its gate: only an element one of whose {test}s has a Tally reports its
-// subtree to one, and which children a value step reads stays
-// [AssertionTest.ReadsChild]'s answer alone. The Tally's methods exist for
-// package validate, and a caller outside the module is not expected to drive
-// them.
+// Its consumer is validate's walk, which reads the nil as its gate: only an
+// element one of whose {test}s has a Tally reports its subtree to one, and
+// which children a value step reads stays [AssertionTest.ReadsChild]'s answer
+// alone. The Tally's methods exist for package validate, and a caller outside
+// the module is not expected to drive them.
 func (t AssertionTest) Tally() *Tally {
 	keys := t.countedPaths()
 	if len(keys.counted) == 0 && len(keys.collected) == 0 {

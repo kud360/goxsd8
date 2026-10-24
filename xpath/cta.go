@@ -129,8 +129,7 @@ import (
 // It is the ONE way this package reads an attribute, whatever NameTest [17]
 // ta-AttrName carries: a QName NameTest filters this sequence to the one
 // ·expanded name· it names, and each [37] Wildcard arm filters it its own way,
-// so no second entry point encodes "read an attribute" a second time (STYLE
-// D4).
+// so no second entry point encodes "read an attribute" a second time.
 //
 // The sequence a NameTest matches is the operand xpath20.md §3.5.2 quantifies
 // a general comparison over: true only when "there is a pair of atomic values,
@@ -182,35 +181,33 @@ type CTATest struct{ root ctaExpr }
 //   - a prefix with no binding in the record's {namespace bindings}
 //     (err:XPST0081), which is a STATIC error and so not clause 2's false;
 //   - a comparison whose two operands need a type promotion this engine cannot
-//     perform, which today is exactly B.1 rule 1.1's xs:float to xs:double
-//     (ctaWider). Declining is what keeps the withhold and the DECIDED false
+//     perform, which today is exactly B.1 rule 1.1's xs:float to xs:double.
+//     Declining is what keeps the withhold and the DECIDED false
 //     apart: a promotion that cannot be performed is not err:XPTY0004 and must
 //     not become one, because that error is a decided false the caller reads as
 //     "this alternative did not select";
-//   - a cast target this engine does not cast to (ctaTypes.castTarget): every
-//     target but a builtin atomic datatype. Written as a cast, every such
-//     target but xs:untypedAtomic is err:XPST0051 or err:XPST0080, a STATIC
-//     error and so an xpath-valid clause 2 failure — one naming the schema's
-//     OWN type among them, since xpath-valid clause 2.2.5 puts only the
-//     built-ins in the in-scope schema definitions; written as a constructor
-//     call, it names a function with no constructor signature. The
-//     consequence is the one withhold validate/cta.go's conditionallySelected
-//     argues: the element's ·governing type definition· is not determined, and
-//     no type is assessed against in its place;
+//   - a cast target this engine does not cast to: every target but a builtin
+//     atomic datatype. Written as a cast, every such target but
+//     xs:untypedAtomic is err:XPST0051 or err:XPST0080, a STATIC error and
+//     so an xpath-valid clause 2 failure — one naming the schema's OWN type
+//     among them, since xpath-valid clause 2.2.5 puts only the built-ins in
+//     the in-scope schema definitions; written as a constructor call, it
+//     names a function with no constructor signature. The consequence is
+//     validate's withhold: the element's ·governing type definition· is not
+//     determined, and no type is assessed against in its place;
 //   - a cast of a numeric literal that F&O §17 does not define over its
 //     ·canonical representation·, the one cast this façade declines for its
-//     OPERAND (ctaTypes.castsFrom, literalCastsTo): a DoubleLiteral to any
-//     target but xs:double, such as `xs:string(1.5e0)`, and an IntegerLiteral
-//     or a DecimalLiteral to a target outside the string family, xs:float,
-//     xs:double, xs:decimal and — for an IntegerLiteral — xs:integer's
-//     branch, such as `xs:integer(1.5)` or `xs:boolean(2)`. To a target F&O
-//     §17.1's casting table marks Y or M from the literal's type, §17.1.2,
-//     §17.1.3 and §17.1.6 define the cast over the value, not over the
-//     canonical lexical this engine would re-validate, and it is valid XPath
-//     with a defined result; to a target it marks N, such as
-//     `xs:date(1.5e0)` or `xs:anyURI(1.5)`, §17.1 raises err:XPTY0004, a type
-//     error, which this façade declines too rather than raising — a withhold,
-//     as the defined result's decline is.
+//     OPERAND: a DoubleLiteral to any target but xs:double, such as
+//     `xs:string(1.5e0)`, and an IntegerLiteral or a DecimalLiteral to a
+//     target outside the string family, xs:float, xs:double, xs:decimal and —
+//     for an IntegerLiteral — xs:integer's branch, such as `xs:integer(1.5)`
+//     or `xs:boolean(2)`. To a target F&O §17.1's casting table marks Y or M
+//     from the literal's type, §17.1.2, §17.1.3 and §17.1.6 define the cast
+//     over the value, not over the canonical lexical this engine would
+//     re-validate, and it is valid XPath with a defined result; to a target
+//     it marks N, such as `xs:date(1.5e0)` or `xs:anyURI(1.5)`, §17.1 raises
+//     err:XPTY0004, a type error, which this façade declines too rather than
+//     raising — a withhold, as the defined result's decline is.
 //
 // It never returns an error: a decline is not a verdict about the schema. The
 // verdict the STATIC errors those bullets name does carry is
@@ -232,16 +229,15 @@ type CTATest struct{ root ctaExpr }
 // http://www.w3.org/2005/xpath-functions (2.2.4). The default element/type
 // namespace is read only where [xsd.XPathExpression.DefaultNamespace] reports
 // it present, because that accessor's own doc makes the first result "not
-// meaningful" otherwise; an ABSENT one leaves ctaNames.defaultNamespace the
-// empty string, which is the no-namespace answer §3.10.2 wants. A Type
-// Alternative's {test} consults it for an unprefixed cast TARGET and for
-// nothing else (xpath20.md §3.10.2: "If the target type has no namespace
+// meaningful" otherwise; an ABSENT one leaves the default element/type
+// namespace the empty string, which is the no-namespace answer §3.10.2 wants.
+// A Type Alternative's {test} consults it for an unprefixed cast TARGET and
+// for nothing else (xpath20.md §3.10.2: "If the target type has no namespace
 // prefix, it is considered to be in the default element/type namespace"): [17]
 // ta-AttrName makes every NameTest its grammar reaches an attribute-axis one,
 // whose principal node kind is never element, so an unprefixed NameTest is
-// always in no namespace (xpath20.md §3.2.1.2, PRINCIPLES 15), and a child-axis
-// step, whose NameTest would read it, is the assertion façade's and declined
-// here (ctaFacade.child).
+// always in no namespace (xpath20.md §3.2.1.2), and a child-axis step, whose
+// NameTest would read it, is the assertion façade's and declined here.
 func CompileCTATest(expr xsd.XPathExpression, types xsd.TypeResolver) (CTATest, *Decline) {
 	root, defect := ctaTypeAlternativeTest(expr, types)
 	if defect.kind != ctaNoDefect {
@@ -293,8 +289,8 @@ const ruleXPST0008 xsderr.Rule = "err:XPST0008"
 // assembler: it mints ta-props-correct at the <alternative>'s location and
 // wraps what this returns as the cause. The CODE is this package's, because
 // the errors below are XPath's static errors and not the assembler's rule, so
-// the result is an *[xsderr.Error] carrying one (ruleXPST0003, ruleXPST0081,
-// ruleXPST0008, ruleXPST0051, ruleXPST0080) and a consumer reads it with
+// the result is an *[xsderr.Error] carrying one (err:XPST0003, err:XPST0081,
+// err:XPST0008, err:XPST0051 or err:XPST0080) and a consumer reads it with
 // [xsderr.RuleOf] after one errors.Unwrap of the charge.
 //
 // Two kinds of static error are reported, and they read the {expression}
@@ -311,30 +307,33 @@ const ruleXPST0008 xsderr.Rule = "err:XPST0008"
 //     order: the one the subset parse proved, whether the parse then completed
 //     an [8] ta-Test or declined at a later construct — err:XPST0081 for a
 //     prefix with no binding among the statically known namespaces, and
-//     err:XPST0051 or err:XPST0080 for the target of a `cast as` tail
-//     (ctaTypes.castTarget, the oracle's #894 ruling) — and where it proved
-//     none, the one the full-grammar static pass proves wherever in the text it
-//     sits (ctaFullStaticError): err:XPST0081 again, err:XPST0008 for a
+//     err:XPST0051 or err:XPST0080 for the target of a `cast as` tail — and
+//     where it proved none, the one the full-grammar static pass proves
+//     wherever in the text it sits: err:XPST0081 again, err:XPST0008 for a
 //     variable reference no ForExpr or QuantifiedExpr binds, `$value` included,
 //     err:XPST0008 for a KindTest TypeName outside the in-scope schema types,
 //     for every schema-element name, and for a schema-attribute name other than
 //     the four xsi declarations of §3.2.7 (xpath20.md §2.5.4.3–§2.5.4.6),
 //     err:XPST0051 for an `instance of` or `treat as` AtomicType, and
-//     err:XPST0051 or err:XPST0080 for a `cast as` or `castable as` target. A
-//     constructor call naming such a type is no cast target and is not charged
-//     (ctaParser.constructorFunction): a function name or arity no signature
-//     has, err:XPST0017, is withheld as RULED permanent by #2690.
+//     err:XPST0051 or err:XPST0080 for a `cast as` or `castable as` target.
 //
 // A decline excuses none of them: §3.12.6 clause 2's Note licenses declining
 // only "Any XPath expression containing no static errors", and xpath-valid
 // clause 2 reads the whole text, so `count(//p:a) > 1` with p unbound is
-// err:XPST0081 although this engine declines the text (#2631), and so is
+// err:XPST0081 although this engine declines the text, and so is
 // `count(//a:x) > 1 and @kind cast as xs:Missing = 'x'` err:XPST0051, past
 // the construct the subset parse declines at. Text the full grammar accepts
 // and neither proves a static error in answers nil: the Note lets this engine
 // decline it, and charging what it cannot prove would reject a conforming
-// schema. ctaFullStaticError's GAP(xpath) names the static error neither
-// proves.
+// schema.
+//
+// GAP(xpath): a function name or arity no signature has, err:XPST0017, is
+// withheld, never charged, and so is a constructor call naming a type that is
+// no builtin atomic type, which names a function and not a cast target:
+// RULED permanent by #2690.
+//
+// GAP(xpath): err:FONS0004, an unbound prefix in the StringLiteral a cast to
+// xs:QName converts, is withheld, never charged. (#1042)
 //
 // types is the IN-SCOPE SCHEMA DEFINITIONS of the static context this question
 // is asked in, which xpath-valid clause 2.2.5 fixes as "those components that
@@ -353,7 +352,7 @@ const ruleXPST0008 xsderr.Rule = "err:XPST0008"
 //
 //	?: [err:XPST0081] no statically-known namespace binding for prefix "p", which err:XPST0081 forbids
 //
-// naming the FIRST unbound prefix in expression order (STYLE D2), or as
+// naming the FIRST unbound prefix in expression order, or as
 //
 //	?: [err:XPST0051] the cast target "{http://www.w3.org/2001/XMLSchema}Missing" is no simple type in the in-scope schema types, which err:XPST0051 forbids
 //
@@ -530,9 +529,9 @@ const (
 // rather than an error or a decline. The declines all happened at
 // [CompileCTATest] but one.
 //
-// GAP(xpath): an assertions facet on a cast's target is declined at evaluation
-// (ctaValidate), and the decline reads as false like an error, where clause 2
-// makes only an error false (#2533).
+// GAP(xpath): an assertions facet on a cast's target is declined at evaluation,
+// and the decline reads as false like an error, where clause 2 makes only an
+// error false (#2533).
 //
 // Clause 2's subject is "the {test}", not the sub-expression that raised, so
 // this is the ONE place the substitution happens: a raised error travels up
@@ -543,8 +542,8 @@ const (
 // b supplies the value spaces the comparisons and the casts run in and must be
 // non-nil. types resolves the {base type definition} chain of every type the
 // compiled tree holds — the same capability [CompileCTATest] classified those
-// types with, threaded as a parameter and stored nowhere (ARCHITECTURE), so
-// one compiled [CTATest] serves any resolver that answers for its components.
+// types with, threaded as a parameter and stored nowhere, so one compiled
+// [CTATest] serves any resolver that answers for its components.
 func (t CTATest) Evaluate(b value.Backend, types xsd.TypeResolver, attrs Attributes) bool {
 	return ctaEval(t.root, ctaEnv{backend: b, types: types, input: ctaLexicalInput{attrs: attrs}}) == ctaTrue
 }

@@ -1,18 +1,21 @@
-// Package xpath is the XSD processor's internal XPath 2.0 engine, serving
-// conditional type assignment (CTA) and assertions, and it offers no
-// free-standing Compile(expr) and no evaluation of an expression outside a
-// schema component. CompileCTATest, CTATestStaticError and
-// CompileAssertionTest take xsd components, an xsd.XPathExpression and an
-// xsd.TypeResolver among them, and FacetAssertions returns the
-// value.AssertionEvaluator that does. Package parser calls CTATestStaticError
-// when it assembles a schema; package validate calls the rest when it assesses
-// an instance, and drives the compiled tests and the Tally they return. The
-// full grammar and function library are tier 3 below (docs/ARCHITECTURE.md §
-// XPath, PLAN M7).
+// Package xpath is the XPath 2.0 engine that package parser and package
+// validate call to compile and evaluate the {test} of a Type Alternative
+// (conditional type assignment, CTA) and of an assertion, and most callers
+// never import it: its entry points are exported because those two packages
+// call them across a package boundary, and a library caller reads their
+// answers off parser's and validate's results. It offers no free-standing
+// Compile(expr) and no evaluation of an expression outside a schema
+// component. CompileCTATest, CTATestStaticError and CompileAssertionTest take
+// xsd components, an xsd.XPathExpression and an xsd.TypeResolver among them,
+// and FacetAssertions returns the value.AssertionEvaluator that does. Package
+// parser calls CTATestStaticError when it assembles a schema; package validate
+// calls the rest when it assesses an instance, and drives the compiled tests
+// and the Tally they return. The full grammar and function library are tier 3
+// below.
 //
 // Identity-constraint {selector}/{fields} (§3.11.6.2/3) are compiled and
 // evaluated by icpath against the restricted selector/field path grammar those
-// sections define, never through this engine (docs/ARCHITECTURE.md).
+// sections define, never through this engine.
 //
 // # Growth tiers
 //
@@ -32,9 +35,8 @@
 //  2. Assertion essentials: axes, predicates, quantified expressions, typed
 //     comparisons, the F&O function core — M6. FIRST SLICES SHIPPED: the
 //     assert and facet columns of the table below.
-//  3. The full grammar (docs/specs/md/xpath20.md) and function library
-//     (docs/specs/md/xpath-functions.md) — M7 onward, ratcheted.
-//     PLANNED.
+//  3. The full grammar (xpath20.md) and function library
+//     (xpath-functions.md) — M7 onward, ratcheted. PLANNED.
 //
 // # Forms each entry point evaluates
 //
@@ -392,24 +394,26 @@
 //	                   or a cast of one, outside that family and those
 //	                   primitives
 //
-// #1042 tracks the PLANNED rows and tier 1's declined casts to xs:QName and of
-// literal and floating operands, and #889 the xs:float-to-xs:double promotion.
+// GAP(xpath): the rows ending PLANNED, and tier 1's declined casts to xs:QName
+// and of literal and floating operands, are this engine's declines and not the
+// spec's (#1042); so is the row needing the xs:float-to-xs:double promotion
+// (#889).
 //
 // # One parser, one AST
 //
 // One lexer and one recursive-descent parser build one AST that serves
 // both static analysis (schema-time: name resolution, type references)
 // and evaluation (instance-time). There is never a second, lenient
-// parser (STYLE T4). Beside it stands one RECOGNIZER for the full
+// parser. Beside it stands one RECOGNIZER for the full
 // xpath20.md Appendix A grammar, which builds no tree and answers only
 // whether a text the parser declined is XPath 2.0 at all (err:XPST0003)
 // and, for a Type Alternative {test}, which static error its names carry
-// where the parser proved none (ctaFullStaticError). It accepts exactly
-// A.1's language, a superset of what the parser admits, and is no T4
-// lenient parser: it is consulted only on a decline, and its acceptance
+// where the parser proved none. It accepts exactly A.1's language, a
+// superset of what the parser admits, and is no second, lenient parser:
+// it is consulted only on a decline, and its acceptance
 // compiles nothing. It shares the parser's lexical scanners.
 //
-// # The fail-open contract (PRINCIPLES 20)
+// # The fail-open contract
 //
 // An unsupported construct must NEVER cause a false rejection, and each
 // consumer takes that in the direction its own rule allows. A CTA
@@ -452,7 +456,7 @@
 // processor decline only an expression "containing no static errors", so
 // an {expression} outside the required subset is declined uncharged only
 // where no static error is proved in it, wherever in the text one sits:
-// before the construct the subset parse declines at (#2631), past it, or
+// before the construct the subset parse declines at, past it, or
 // in a construct the subset never resolves.
 //
 // The static conditions proven today are err:XPST0003 for a {test} no
@@ -463,46 +467,37 @@
 // completes a ta-Test, of err:XPST0081 for an unbound prefix and
 // err:XPST0051 or err:XPST0080 for a `cast as` target that is no builtin
 // atomic type, xs:untypedAtomic aside — the schema's own types included,
-// since xpath-valid clause 2.2.5 puts only the built-ins in scope. The
-// parse runs past a failed target on a stand-in cast to xs:string
-// (ctaParser.singleType). Where the subset parse proves none, a static
-// pass over the full-grammar recognizer (ctaFullStaticError) proves the
-// first of err:XPST0081, err:XPST0008 for a variable reference no
-// ForExpr or QuantifiedExpr binds — `$value` among them, since clause
-// 2.2.6 leaves the in-scope variables empty — err:XPST0008 for a
-// KindTest TypeName outside the in-scope schema types (xs:anyType,
+// since xpath-valid clause 2.2.5 puts only the built-ins in scope. Where
+// the subset parse proves none, a static pass over the full-grammar
+// recognizer proves the first of err:XPST0081, err:XPST0008 for a variable
+// reference no ForExpr or QuantifiedExpr binds — `$value` among them,
+// since clause 2.2.6 leaves the in-scope variables empty — err:XPST0008
+// for a KindTest TypeName outside the in-scope schema types (xs:anyType,
 // xs:untyped and xs:untypedAtomic are in scope by name), for every
 // schema-element name and for a schema-attribute name other than the four
 // §3.2.7 xsi declarations, err:XPST0051 for an `instance of` or `treat as`
 // AtomicType, and err:XPST0051 or err:XPST0080 for a `cast as` or
-// `castable as` target, in a text ctaTokenize never reads too. Only
-// CTATestStaticError reports any of them as an error: CompileCTATest
-// declines each one, its *Decline naming the error CTATestStaticError
-// reports, and CompileAssertionTest and FacetAssertions decline every one
-// like any other defect. An unknown function name or arity, err:XPST0017,
-// is withheld under the GAP(xpath) at ctaFullStaticError, RULED permanent
-// by #2690.
-//
-// A constructor call naming such a type is withheld, never charged: it
-// names a function, not a cast target. So is err:FONS0004, an unbound
-// prefix in the StringLiteral a cast to xs:QName converts, under
-// ctaParser.cast's marker.
+// `castable as` target, in a text holding a token the subset parse never
+// reads too. Only CTATestStaticError reports any of them as an error:
+// CompileCTATest declines each one, its *Decline naming the error
+// CTATestStaticError reports, and CompileAssertionTest and FacetAssertions
+// decline every one like any other defect. CTATestStaticError states the
+// static errors it withholds.
 //
 // # Static context
 //
-//   - $value binds a typed value, never a bare string (PRINCIPLES 17):
-//     ValueBinding carries E's ·actual value·, and the compiled tree
-//     holds the {simple type definition} it is of, which every comparison and cast
-//     reads — or, over a ·special· {simple type definition}, an xs:untypedAtomic
-//     value (Datatypes dt-xdmrep clause 1), which XPath's own casting rules type.
-//     Beside it ValueBinding carries E's string value, which `.` reads as one
-//     xs:untypedAtomic whatever `$value` is: the context item is E, annotated
-//     xs:anyType in the partial ·PSVI· (cvc-assertion clause 1.2).
-//     It is an ASSERTION binding: ta-props-correct adds no variable, so no CTA
-//     {test} sees one.
+//   - $value binds a typed value, never a bare string: ValueBinding carries E's
+//     ·actual value·, and the compiled tree holds the {simple type definition} it
+//     is of, which every comparison and cast reads — or, over a ·special· {simple
+//     type definition}, an xs:untypedAtomic value (Datatypes dt-xdmrep clause 1),
+//     which XPath's own casting rules type. Beside it ValueBinding carries E's
+//     string value, which `.` reads as one xs:untypedAtomic whatever `$value` is:
+//     the context item is E, annotated xs:anyType in the partial ·PSVI·
+//     (cvc-assertion clause 1.2). It is an ASSERTION binding: ta-props-correct
+//     adds no variable, so no CTA {test} sees one.
 //   - xpathDefaultNamespace supplies the default ELEMENT/TYPE namespace
 //     for unprefixed element steps (never attribute steps) in
-//     assertions and IDC selector/field paths (PRINCIPLES 15), and for
+//     assertions and IDC selector/field paths, and for
 //     an unprefixed cast TARGET (xpath20.md §3.10.2), and for the
 //     unprefixed StringLiteral a cast to xs:QName converts
 //     (xpath-functions.md §5.3). The CTA subset declines every element
@@ -518,30 +513,27 @@
 // lexical against the result type — a datatype validation, as every value
 // this engine builds is. Which operand types a comparison operator admits at
 // ALL is xpath20.md B.2's answer rather than a capability's, generated from
-// the spec into the package (tools/opmapgen) and enforced at compile time.
-// Arithmetic's operand admission and result types are B.2's six numeric
-// rows, transcribed in ctaTypes.arithmetic and arithmeticResult rather than
-// generated: those rows' result cell is the prose rule "numeric" with two
-// exceptions, which a generator would have to hard-code as well.
+// the spec into the package and enforced at compile time. Arithmetic's
+// operand admission and result types are B.2's six numeric rows.
 //
 // # Dynamic context
 //
 // The implicit timezone is Z, the zero offset PT0S, for every evaluation of
-// either façade (cvc-xpath clause 7 leaves it ·implementation-defined·);
-// ctaImplicitTimezone holds it, and F&O §10.4 assumes it on whichever operand
-// of a date/time comparison has no timezone of its own.
+// either façade (cvc-xpath clause 7 leaves it ·implementation-defined·), and
+// F&O §10.4 assumes it on whichever operand of a date/time comparison has no
+// timezone of its own.
 //
 // The current dateTime (xpath20.md §2.1.2) is the caller's: an assertion or
 // facet evaluation is handed it as a time.Time (AssertionTest.Evaluate,
 // FacetAssertions), which validate reads off the clock once per
 // Validator.Assess, constant for the assessment episode (cvc-xpath clause 6).
 // fn:current-date is its date in its own UTC offset (F&O §16.4, §17.1.5), not
-// in the implicit timezone, or in UTC where no timezoneFrag spells that offset
-// (ctaCurrentDateInstant). A Type Alternative's evaluation carries none: its
+// in the implicit timezone, or in UTC where no timezoneFrag spells that
+// offset. A Type Alternative's evaluation carries none: its
 // grammar calls no function that reads one.
 //
-// An xs:decimal quotient that does not terminate is rounded to
-// ctaDecimalDivisionDigits fractional digits, the precision F&O §6.2 leaves
-// ·implementation-defined·; every other xs:decimal and xs:integer result is
-// exact.
+// An xs:decimal quotient that does not terminate is rounded to nearest,
+// halves away from zero, at 18 fractional digits, the precision F&O §6.2
+// leaves ·implementation-defined·; every other xs:decimal and xs:integer
+// result is exact.
 package xpath
