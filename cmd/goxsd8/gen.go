@@ -7,9 +7,6 @@ import (
 	"io"
 	"log/slog"
 	"path/filepath"
-	"regexp"
-	"strconv"
-	"strings"
 
 	"github.com/kud360/goxsd8/codegen"
 )
@@ -40,7 +37,8 @@ type genPair struct {
 //
 // runGen restates none of Generate's own checks (STYLE D3): it routes
 // Generate's one error by errors.ErrUnsupported alone, a decline to exit 4 and
-// anything else to 2, each line naming the pair the error came from.
+// anything else to 2. Each Target is named by its pair's label, so Generate's
+// error already names the pair it came from, and any earlier pair it cites.
 //
 // The flags are parsed here rather than by run, for the reason runParse states.
 func runGen(args []string, stderr io.Writer) int {
@@ -95,6 +93,7 @@ func runGen(args []string, stderr io.Writer) int {
 			Schema:  schema,
 			Dir:     p.out,
 			Package: filepath.Base(filepath.Clean(p.out)),
+			Name:    p.label(),
 		})
 	}
 	if code != exitOK {
@@ -104,7 +103,7 @@ func runGen(args []string, stderr io.Writer) int {
 	if err == nil {
 		return exitOK
 	}
-	line := generateLine(err, pairs)
+	line := "goxsd8: gen: " + err.Error()
 	if errors.Is(err, errors.ErrUnsupported) {
 		// A failed stderr write cannot change the outcome: the exit code is
 		// settled either way, and stderr is the only channel this line has.
@@ -133,38 +132,6 @@ func pairTargets(occurrences []genFlag) ([]genPair, error) {
 		return nil, fmt.Errorf("no -%s/-%s pair given", schemaFlag, outFlag)
 	}
 	return pairs, nil
-}
-
-// generatePrefix opens every error codegen.Generate returns, followed by the
-// failing target's index and ": ". Generate's doc promises the index, and this
-// spelling, like earlierDir's, is its code's (codegen/generate.go):
-// TestGenDeclines and TestGenUsageAndIOFaults pin the mapping against it.
-const generatePrefix = "codegen: target "
-
-// earlierDir is the one other place a Generate error names a target by index:
-// a Dir equal, after filepath.Clean, to an earlier target's.
-var earlierDir = regexp.MustCompile(`the output directory of target (\d+)`)
-
-// generateLine renders an error from codegen.Generate as gen's line, with each
-// target index Generate names replaced by the pair it was built from: an index
-// means nothing to a user who spelled pairs. An error not in Generate's shape
-// is printed whole behind the lead-in, so nothing it says is lost.
-func generateLine(err error, pairs []genPair) string {
-	msg := err.Error()
-	after, prefixed := strings.CutPrefix(msg, generatePrefix)
-	index, rest, indexed := strings.Cut(after, ": ")
-	i, convErr := strconv.Atoi(index)
-	if !prefixed || !indexed || convErr != nil || i < 0 || i >= len(pairs) {
-		return "goxsd8: gen: " + msg
-	}
-	rest = earlierDir.ReplaceAllStringFunc(rest, func(m string) string {
-		j, err := strconv.Atoi(earlierDir.FindStringSubmatch(m)[1])
-		if err != nil || j < 0 || j >= len(pairs) {
-			return m
-		}
-		return "the output directory of " + pairs[j].label()
-	})
-	return "goxsd8: gen: " + pairs[i].label() + ": " + rest
 }
 
 // label names a pair on a diagnosis as its user spelled it.

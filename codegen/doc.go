@@ -4,7 +4,7 @@
 //
 // # Entry point
 //
-//	type Target struct { Schema *xsd.Schema; Dir, Package string }
+//	type Target struct { Schema *xsd.Schema; Dir, Package, Name string }
 //	func Generate(targets []Target) error
 //
 // Each target carries one finalized [xsd.Schema] — what parser.Parse

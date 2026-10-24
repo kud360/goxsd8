@@ -56,6 +56,67 @@ func TestGenerateInvalidTargets(t *testing.T) {
 	}
 }
 
+// TestGenerateNamedTargets pins that a named target's error opens with its
+// Name and no "codegen: " lead-in, and that the duplicate-Dir refusal names
+// the earlier target by its Name, or by "target N" when it has none.
+func TestGenerateNamedTargets(t *testing.T) {
+	accepted := parseString(t, acceptedDoc)
+	declined := parseString(t, declinedDoc)
+	tests := []struct {
+		name    string
+		targets func(dir string) []Target
+		want    string
+		decline bool
+	}{
+		{"phase-1 refusal", func(dir string) []Target {
+			return []Target{
+				{Schema: accepted, Dir: filepath.Join(dir, "a"), Package: "p", Name: "first"},
+				{Schema: accepted, Dir: filepath.Join(dir, "b"), Package: "type", Name: "second"},
+			}
+		}, `second: the package name "type" is a Go keyword`, false},
+		{"decline", func(dir string) []Target {
+			return []Target{
+				{Schema: accepted, Dir: filepath.Join(dir, "a"), Package: "p", Name: "first"},
+				{Schema: declined, Dir: filepath.Join(dir, "b"), Package: "q", Name: "second"},
+			}
+		}, "second: element e with {type definition}", true},
+		{"duplicate dir", func(dir string) []Target {
+			return []Target{
+				{Schema: accepted, Dir: filepath.Join(dir, "a"), Package: "p", Name: "first"},
+				{Schema: accepted, Dir: filepath.Join(dir, "a") + "/./", Package: "q", Name: "second"},
+			}
+		}, "second: the output directory %DIR%/a/./ is also the output directory of first", false},
+		{"duplicate of an unnamed dir", func(dir string) []Target {
+			return []Target{
+				{Schema: accepted, Dir: filepath.Join(dir, "a"), Package: "p", Name: "first"},
+				{Schema: accepted, Dir: filepath.Join(dir, "b"), Package: "q"},
+				{Schema: accepted, Dir: filepath.Join(dir, "b") + "/./", Package: "r", Name: "third"},
+			}
+		}, "third: the output directory %DIR%/b/./ is also the output directory of target 1", false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			dir := t.TempDir()
+			targets := tt.targets(dir)
+			err := Generate(targets)
+			want := strings.ReplaceAll(tt.want, "%DIR%", dir)
+			if err == nil || !strings.HasPrefix(err.Error(), want) {
+				t.Fatalf("Generate = %v, want an error starting %q", err, want)
+			}
+			if !tt.decline && err.Error() != want {
+				t.Errorf("Generate = %q, want exactly %q", err, want)
+			}
+			if got := errors.Is(err, errors.ErrUnsupported); got != tt.decline {
+				t.Errorf("errors.Is(err, errors.ErrUnsupported) = %v, want %v", got, tt.decline)
+			}
+			if strings.Contains(err.Error(), "codegen: ") {
+				t.Errorf("a named target's error carries the codegen: lead-in: %v", err)
+			}
+			assertAbsent(t, targets[0].Dir)
+		})
+	}
+}
+
 // TestGenerateAllOrNothing pins that a decline in a later target leaves an
 // earlier, accepted one unwritten, and that the error names the later one.
 func TestGenerateAllOrNothing(t *testing.T) {
