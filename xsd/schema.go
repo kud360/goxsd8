@@ -32,9 +32,9 @@ const ruleSchPropsCorrect xsderr.Rule = "sch-props-correct"
 // for a producer synthesizing components some other way, and for the tests and
 // Examples that need one component graph without a document behind it.
 //
-// Each slice holds its kind's components in the document order they were added
-// (STYLE D2/D3); that order is the source of truth the Finalize indexes are
-// derived from, never the reverse.
+// Each slice holds its kind's components in the document order they were added;
+// that order is the source of truth the Finalize indexes are derived from,
+// never the reverse.
 type SchemaBuilder struct {
 	types               []TypeDefinition
 	elements            []ElementDeclaration
@@ -65,7 +65,7 @@ func NewSchemaBuilder() *SchemaBuilder { return &SchemaBuilder{} }
 // non-nil interface wrapping a nil *SimpleType. A nil type definition is a
 // caller/producer bug (the wrong constructor or an unchecked error), not a
 // schema-validity condition, so a panic — not an xsderr rejection — is the
-// right guard, mirroring NewFacet's wrong-constructor panic in simpletype.go.
+// right guard, mirroring NewFacet's wrong-constructor panic.
 func (b *SchemaBuilder) AddType(t TypeDefinition) {
 	if t == nil {
 		panic("xsd: SchemaBuilder.AddType: nil TypeDefinition")
@@ -133,36 +133,33 @@ func (b *SchemaBuilder) AddIdentityConstraint(c IdentityConstraint) {
 // assembled per §4.2.1's "schema(D)"). It is constructible ONLY via
 // SchemaBuilder.Finalize or SchemaBuilder.FinalizeWith: its fields are
 // unexported and it has no other constructor, so a not-yet-finalized accumulator
-// can never be handed off as a finalized Schema (STYLE T1) — "not finalized"
+// can never be handed off as a finalized Schema — "not finalized"
 // (SchemaBuilder) and "finalized" (Schema) are distinct Go types, not two states
-// of one type. The two entry points differ only in whether a [ValueSpace] is
-// installed.
+// of one type. The two entry points differ only in which capabilities they
+// install.
 //
-// *Schema is the Query API (xsd/doc.go): it satisfies TypeResolver,
+// *Schema is the package doc's Query API: it satisfies TypeResolver,
 // ElementResolver, and AttributeResolver through its Type, Element, and
 // Attribute methods. Go's structural typing leaves that unprinted by go doc, so
 // it is stated here — a consumer needing only one of the three takes the
-// matching capability view rather than the whole *Schema (STYLE T3). Those
-// three by-name lookups copy nothing; the seven document-order enumerators
-// (Types, Elements, Attributes, AttributeGroups, ModelGroups, Notations,
-// IdentityConstraints) each return a COPY of their slice, so no
-// caller holds an aliasing handle with which to mutate a source-of-truth slice
-// out of step with the index derived from it (STYLE T1).
+// matching capability view rather than the whole *Schema. Those three by-name
+// lookups copy nothing; the seven document-order enumerators (Types, Elements,
+// Attributes, AttributeGroups, ModelGroups, Notations, IdentityConstraints) each
+// return a COPY of their slice, so no caller holds an aliasing handle with which
+// to mutate a source-of-truth slice out of step with the index derived from it.
 //
-// The document-order slices are the source of truth; the by-expanded-QName maps
-// are indexes DERIVED from those slices at Finalize and exist only for O(1)
-// lookup — they never determine iteration order (STYLE D2/D3; see xsd/doc.go's
-// "Maps exist only as internal lookup indexes and never determine order").
+// The document-order slices are the source of truth; the by-expanded-QName
+// lookups read indexes DERIVED from those slices at Finalize, which never
+// determine iteration order.
 //
 // Cross-reference resolution (src-resolve §3.17.6.2) is a VALIDATION pass run at
-// Finalize (resolve.go, #173): it verifies every retained QName reference
-// resolves against these indexes and that no spec-forbidden circularity exists,
-// but it stores no resolved-component pointer — a consumer follows a reference by
-// a read-time index lookup (schema.Type/Element/Attribute), because a stored
-// pointer would be state derivable from the QName plus the index (STYLE D3). The
-// remaining sch-props-correct clause-1 requirements stay deferred; Finalize's own
-// duplicate-name check is sch-props-correct §3.17.6.1 clause 2, locally decidable
-// without any cross-reference resolution.
+// Finalize: it verifies every retained QName reference resolves against these
+// indexes and that no spec-forbidden circularity exists, but it stores no
+// resolved-component pointer — a consumer follows a reference by a read-time
+// lookup (Type, Element, Attribute). The remaining sch-props-correct clause-1
+// requirements stay deferred; Finalize's own duplicate-name check is
+// sch-props-correct §3.17.6.1 clause 2, locally decidable without any
+// cross-reference resolution.
 type Schema struct {
 	types               []TypeDefinition
 	elements            []ElementDeclaration
@@ -184,6 +181,11 @@ type Schema struct {
 	// {model group} for src-resolve.
 	modelGroupRedefinitions []modelGroupRedefinition
 
+	// The indexes are derived from the document-order slices above at finalize,
+	// exist only for O(1) lookup and never determine iteration order (STYLE
+	// D2/D3). No resolved-component pointer is stored beside them: the
+	// resolution pass (resolve.go) only validates references, because a stored
+	// pointer would be state derivable from the QName plus the index (STYLE D3).
 	typeIndex           map[QName]TypeDefinition
 	elementIndex        map[QName]ElementDeclaration
 	attributeIndex      map[QName]AttributeDeclaration
@@ -225,7 +227,7 @@ type Schema struct {
 // It rejects, charging Schema Properties Correct (§3.17.6.1, sch-props-correct)
 // clause 2: two components of the same kind (the same §3.17.1 {…definitions}/
 // {…declarations} property) sharing an expanded name — target namespace plus
-// local name. The scan is deterministic (STYLE D2): each kind's slice is walked
+// local name. The scan is deterministic: each kind's slice is walked
 // in document order and each name tested against a seen-set map, so the first
 // duplicate by index is the one reported (the map is never ranged to produce
 // the verdict). The rejection is charged to the LATER of the two — the
@@ -238,13 +240,13 @@ type Schema struct {
 // §3.16.1) and belong to no §3.17.1 by-name symbol table, so any number of them
 // may be added and none is reachable through Type.
 //
-// After the indexes are built, Finalize runs the resolution pass (resolve.go):
-// it walks the assembled components in document order and rejects any
-// unresolvable QName reference (src-resolve, §3.17.6.2) or spec-forbidden named
-// circularity. HARD-FAIL POLICY: §5.3 (Missing Sub-components) permits an
-// unresolved *required* reference to degrade assessment to lax rather than
-// reject the schema; goxsd8 deliberately hard-fails instead, as the right stance
-// for a conformance processor validated against the W3C test suite. That is an
+// After the indexes are built, Finalize runs the resolution pass: it walks the
+// assembled components in document order and rejects any unresolvable QName
+// reference (src-resolve, §3.17.6.2) or spec-forbidden named circularity.
+// HARD-FAIL POLICY: §5.3 (Missing Sub-components) permits an unresolved
+// *required* reference to degrade assessment to lax rather than reject the
+// schema; goxsd8 deliberately hard-fails instead, as the right stance for a
+// conformance processor validated against the W3C test suite. That is an
 // implementation policy choice, not something §5.3 mandates.
 //
 // Every OTHER sch-props-correct clause (in particular clause 1's remaining
@@ -271,7 +273,7 @@ func (b *SchemaBuilder) Finalize() (*Schema, error) {
 // clause 3, loc-testSubP (§3.4.6.4) clauses 4.2 and 5.2.2, and Simple Default
 // Valid (§3.2.6.2) under a-props-correct (§3.2.6.1) clause 2 and au-props-correct
 // clause 2, instead of waving them through. rc answers the other one (see
-// [SimpleTypeRestrictionChecker]), so checkSimpleTypeDerivations can charge the
+// [SimpleTypeRestrictionChecker]), so the resolution pass can charge the
 // facet-VALUE half of Derivation Valid (Restriction, Simple) (§3.16.6.2,
 // cos-st-restricts) against every simple type the schema reaches. It is otherwise
 // identical to Finalize — same components, same indexes — and can only NARROW
@@ -285,19 +287,18 @@ func (b *SchemaBuilder) Finalize() (*Schema, error) {
 // (a union is exempt, not faulty: §4.1.5 leaves whiteSpace out of its applicable
 // set). What a caller does NOT get is a wrong answer: a value space asked to
 // validate a default against such a type reports the fault undecided rather than
-// as a verdict, so this entry point neither rejects the schema for it nor fails
-// (see checkSimpleDefault, valueconstraintvalid.go). The sibling fault — a facet
-// that is not applicable to its type (cos-applicable-facets, Datatypes §4.1.5) —
-// used to be undiagnosable here too and no longer is: its ATOMIC case is exactly
-// what rc charges, over the whole reachable simple-type graph, and the list and
-// union cases were already decided by checkVarietyApplicableFacets
-// (derivation.go) at construction.
+// as a verdict, so this entry point neither rejects the schema for it nor fails.
+// The sibling fault — a facet that is not applicable to its type
+// (cos-applicable-facets, Datatypes §4.1.5) — is diagnosed: its ATOMIC case is
+// exactly what rc charges, over the whole reachable simple-type graph, and the
+// list and union cases are decided by [SimpleType.CheckDerivation], which the
+// resolution pass runs on that same graph whether or not rc is installed.
 //
 // It is a second entry point rather than a pair of setters on the builder because
 // both are finalize-time INPUTS, not accumulated schema state: a mutable setter
 // would make "builder with a capability installed" and "builder without" two
 // states of one type, which is exactly what the SchemaBuilder/Schema split exists
-// to avoid (STYLE T1). For the same reason the two arrive at ONE seam and not
+// to avoid. For the same reason the two arrive at ONE seam and not
 // two: a third entry point, or an options struct whose nil members were legal,
 // would make a partially installed schema representable.
 //
@@ -315,7 +316,11 @@ func (b *SchemaBuilder) FinalizeWith(vs ValueSpace, rc SimpleTypeRestrictionChec
 }
 
 // finalize is the one assembly path both entry points take; they differ only in
-// the capabilities they install (STYLE T4).
+// the capabilities they install (STYLE T4). Schema being a distinct type that
+// only this path builds is what keeps a not-yet-finalized accumulator from being
+// handed off as a finalized one, and FinalizeWith installing both capabilities
+// at one seam is what keeps a partially installed schema unrepresentable (STYLE
+// T1).
 func (b *SchemaBuilder) finalize(vs ValueSpace, rc SimpleTypeRestrictionChecker) (*Schema, error) {
 	typeIndex, err := indexByName(b.types, "type definitions")
 	if err != nil {
@@ -426,7 +431,10 @@ func indexByName[T namedComponent](items []T, kind string) (map[QName]T, error) 
 
 // cloneSlice returns a copy of s on a fresh backing array, holding an empty
 // input as nil (this package's standing empty-is-nil convention). It is used by
-// Finalize to decouple the compiled Schema's slices from the builder's.
+// Finalize to decouple the compiled Schema's slices from the builder's, and by
+// the seven *Schema enumerators so no caller holds an aliasing handle to a
+// source-of-truth slice (STYLE T1). It copies interface values, never pointees,
+// so a *SimpleType's pointer identity survives the copy.
 func cloneSlice[T any](s []T) []T {
 	if len(s) == 0 {
 		return nil
@@ -435,24 +443,24 @@ func cloneSlice[T any](s []T) []T {
 }
 
 // ElementResolver is the minimal capability a consumer needs to look up a
-// top-level element declaration by its expanded name (STYLE T3). Its consumers
-// are validate.SchemaView, which embeds it, and element-reference resolution
-// during finalize (src-resolve clause 1.3).
+// top-level element declaration by its expanded name. Its consumers are
+// validate.SchemaView, which embeds it, and element-reference resolution during
+// finalize (src-resolve clause 1.3).
 type ElementResolver interface {
 	Element(name QName) (ElementDeclaration, bool)
 }
 
 // AttributeResolver is the minimal capability a consumer needs to look up a
-// top-level attribute declaration by its expanded name (STYLE T3). Its
-// consumers are validate.SchemaView, which embeds it, and attribute-use
-// resolution during finalize (#173).
+// top-level attribute declaration by its expanded name. Its consumers are
+// validate.SchemaView, which embeds it, and attribute-use resolution during
+// finalize (src-resolve).
 type AttributeResolver interface {
 	Attribute(name QName) (AttributeDeclaration, bool)
 }
 
 // TypeResolver is the minimal capability a consumer needs to look up a
-// top-level type definition (simple or complex) by its expanded name (STYLE
-// T3). [*Schema] implements it over a finalized schema; parser answers one over
+// top-level type definition (simple or complex) by its expanded name.
+// [*Schema] implements it over a finalized schema; parser answers one over
 // the built-in datatypes alone, before any *Schema exists. Its consumers are
 // this package and packages value, builtin, xpath, and validate.
 type TypeResolver interface {
@@ -460,11 +468,13 @@ type TypeResolver interface {
 }
 
 // *Schema implements every Query capability view; these assertions keep that
-// promise checked at compile time. It is not the only TypeResolver in the
-// module: the parser answers one over the built-in datatypes ALONE, at
-// construction time, for the ·in-scope schema definitions· §3.13.6.2 xpath-valid
-// clause 2.2.5 fixes for a Type Alternative {test} — no finalized Schema exists
-// at that point, and clause 2.2.5 would not put its types in scope anyway.
+// promise checked at compile time. Each view is the minimal capability one
+// consumer needs, so it takes that view rather than the whole *Schema (STYLE
+// T3). It is not the only TypeResolver in the module: the parser answers one
+// over the built-in datatypes ALONE, at construction time, for the ·in-scope
+// schema definitions· §3.13.6.2 xpath-valid clause 2.2.5 fixes for a Type
+// Alternative {test} — no finalized Schema exists at that point, and clause
+// 2.2.5 would not put its types in scope anyway.
 var (
 	_ ElementResolver   = (*Schema)(nil)
 	_ AttributeResolver = (*Schema)(nil)
@@ -518,11 +528,11 @@ func (s *Schema) ModelGroup(name QName) (ModelGroupDefinition, bool) {
 //
 // The SLICE is copied: mutating the result does not affect s. Its ELEMENTS are
 // not copied — the components are shared with s and immutable, and a
-// *SimpleType's pointer identity is preserved (cloneSlice copies interface
-// values, never pointees), which is load-bearing per [SimpleType] and Finalize.
+// *SimpleType's pointer identity is preserved, which is load-bearing per
+// [SimpleType] and Finalize.
 //
 // For a schema obtained from parser.Parse, the leading entries are components
-// no schema document declares: parser.Produce (parser/produce.go) calls AddType
+// no schema document declares: parser.Produce calls AddType
 // for every seeded builtin simple type and for the synthesized xs:anyType
 // BEFORE any document type, so the order is builtins first, then each
 // document's top-level types in document order.
@@ -532,7 +542,7 @@ func (s *Schema) ModelGroup(name QName) (ModelGroupDefinition, bool) {
 // owned by a declaration is never added to this set, so a consumer needing
 // those must walk the declarations itself. Anonymous top-level type definitions
 // — {name} absent — ARE included even though Type cannot reach them: §3.4.1 and
-// §3.16.1 exempt them from the by-name symbol table (see indexByName).
+// §3.16.1 exempt them from the by-name symbol table (see Finalize).
 //
 // An empty {type definitions} yields nil.
 func (s *Schema) Types() []TypeDefinition {
