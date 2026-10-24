@@ -38,9 +38,21 @@ var (
 // declines here; that section lists them under the same marker. #2900 owns
 // lifting them.
 func decline(loc xsderr.Loc, format string, args ...any) error {
-	return fmt.Errorf("%s at %s is not supported by codegen, a generator limitation, not a schema fault: %w",
-		fmt.Sprintf(format, args...), loc, errors.ErrUnsupported)
+	return &declineError{msg: fmt.Sprintf("%s at %s is not supported by codegen, a generator limitation, not a schema fault",
+		fmt.Sprintf(format, args...), loc)}
 }
+
+// declineError is decline's error. Its text already says the construct is
+// unsupported, so it leaves out errors.ErrUnsupported's own text, which
+// would only repeat it; Unwrap keeps errors.Is matching the sentinel.
+type declineError struct {
+	msg string
+}
+
+func (e *declineError) Error() string { return e.msg }
+
+// Unwrap returns errors.ErrUnsupported, which every decline wraps.
+func (e *declineError) Unwrap() error { return errors.ErrUnsupported }
 
 // emitter builds one target's source. decls holds each emitted type
 // declaration in emission order: a top-level element's type, then the types
@@ -431,7 +443,7 @@ func (e *emitter) contentGroup(subject string, t xsd.ComplexType) (xsd.ModelGrou
 		return xsd.ModelGroup{}, fmt.Errorf("%s at %s: unexpected content particle term %T", subject, t.Loc(), resolved.Term)
 	}
 	if group.Compositor() == xsd.CompositorAll {
-		return xsd.ModelGroup{}, decline(t.Loc(), "%s with a %s compositor", subject, group.Compositor())
+		return xsd.ModelGroup{}, decline(t.Loc(), "%s with an all compositor", subject)
 	}
 	return group, nil
 }

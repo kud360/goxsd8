@@ -205,26 +205,32 @@ func TestGenUsageAndIOFaults(t *testing.T) {
 				fmt.Sprintf(flagAfterPositionalFmt, "gen", "-out"), []string{at("d")}},
 			{"valued help", []string{"-help=true"}, fmt.Sprintf(helpNotAFlagValueFmt, "gen"), nil},
 			{"package not an identifier", []string{"-schema", flat, "-out", at("my-pkg")},
-				"goxsd8: gen: -schema " + flat + " -out " + at("my-pkg") + `: the Package field "my-pkg" is not a Go identifier usable as a package name`,
+				"goxsd8: gen: -schema " + flat + " -out " + at("my-pkg") + `: the package name "my-pkg" is not a Go identifier`,
 				[]string{at("my-pkg")}},
 			{"package a keyword", []string{"-schema", flat, "-out", at("type")},
-				"goxsd8: gen: -schema " + flat + " -out " + at("type") + `: the Package field "type" is not a Go identifier usable as a package name`,
+				"goxsd8: gen: -schema " + flat + " -out " + at("type") + `: the package name "type" is a Go keyword`,
 				[]string{at("type")}},
+			{"package blank", []string{"-schema", flat, "-out", at("_")},
+				"goxsd8: gen: -schema " + flat + " -out " + at("_") + `: the package name "_" is the blank identifier`,
+				[]string{at("_")}},
+			{"empty -out", []string{"-schema", flat, "-out", ""},
+				"goxsd8: gen: -schema " + flat + " -out : no output directory given",
+				[]string{at("xsd_gen.go")}},
 			{"package main", []string{"-schema", flat, "-out", at("main")},
-				"goxsd8: gen: -schema " + flat + " -out " + at("main") + `: the Package field is "main", but the emitted package declares no func main and would not build`,
+				"goxsd8: gen: -schema " + flat + " -out " + at("main") + `: the package name is "main", but the emitted package declares no func main and would not build`,
 				[]string{at("main")}},
 			{"-out .", []string{"-schema", flat, "-out", "."},
-				"goxsd8: gen: -schema " + flat + ` -out .: the Package field "." is not a Go identifier usable as a package name`,
+				"goxsd8: gen: -schema " + flat + ` -out .: the package name "." is not a Go identifier`,
 				[]string{at("xsd_gen.go")}},
 			// Phase 1 fails on the second pair, so the first is not written.
 			{"duplicate -out", []string{"-schema", flat, "-out", at("d"), "-schema", flat, "-out", at("d") + "/"},
-				"goxsd8: gen: -schema " + flat + " -out " + at("d") + "/: the Dir field " + at("d") + "/ is the Dir of -schema " + flat + " -out " + at("d") + " too",
+				"goxsd8: gen: -schema " + flat + " -out " + at("d") + "/: the output directory " + at("d") + "/ is also the output directory of -schema " + flat + " -out " + at("d"),
 				[]string{at("d")}},
 			{"-out a regular file", []string{"-schema", flat, "-out", at("ok"), "-schema", flat, "-out", at("file")},
-				"goxsd8: gen: -schema " + flat + " -out " + at("file") + ": the Dir field " + at("file") + " is not a directory",
+				"goxsd8: gen: -schema " + flat + " -out " + at("file") + ": the output directory " + at("file") + " exists and is not a directory",
 				[]string{at("ok")}},
 			{"existing file not generated", []string{"-schema", flat, "-out", at("ok"), "-schema", flat, "-out", at("keep")},
-				"goxsd8: gen: -schema " + flat + " -out " + at("keep") + ": " + filepath.Join(at("keep"), "xsd_gen.go") + " exists and its first line does not mark it generated, so Generate will not overwrite it",
+				"goxsd8: gen: -schema " + flat + " -out " + at("keep") + ": " + filepath.Join(at("keep"), "xsd_gen.go") + " exists and its first line does not mark it generated, so it is never overwritten",
 				[]string{at("ok")}},
 			// Phase 2: the dangling symlink passes every check and fails
 			// creating the directory, after the first pair was written.
@@ -298,7 +304,7 @@ func TestGenDeclines(t *testing.T) {
 	if stdout.Len() != 0 {
 		t.Errorf("gen stdout = %q, want empty", stdout.String())
 	}
-	want := "goxsd8: gen: -schema " + schema + " -out " + out + ": complex type (anonymous) of element e with a all compositor at " + schema + ":2:22 is not supported by codegen, a generator limitation, not a schema fault: unsupported operation\n"
+	want := "goxsd8: gen: -schema " + schema + " -out " + out + ": complex type (anonymous) of element e with an all compositor at " + schema + ":2:22 is not supported by codegen, a generator limitation, not a schema fault\n"
 	if stderr.String() != want {
 		t.Errorf("gen stderr = %q, want %q", stderr.String(), want)
 	}
