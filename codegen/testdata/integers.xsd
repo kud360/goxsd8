@@ -1,0 +1,36 @@
+<?xml version="1.0"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+           xmlns="urn:integers" targetNamespace="urn:integers"
+           elementFormDefault="qualified">
+  <xs:element name="total" type="xs:long"/>
+  <xs:element name="counts">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element name="long" type="xs:long"/>
+        <xs:element name="int" type="xs:int"/>
+        <xs:element name="short" type="xs:short"/>
+        <xs:element name="byte" type="xs:byte"/>
+        <xs:element name="unsignedLong" type="xs:unsignedLong"/>
+        <xs:element name="unsignedInt" type="xs:unsignedInt"/>
+        <xs:element name="unsignedShort" type="xs:unsignedShort"/>
+        <xs:element name="unsignedByte" type="xs:unsignedByte"/>
+        <xs:element name="percent" type="percent" minOccurs="0"/>
+        <xs:element name="tenth" maxOccurs="unbounded">
+          <xs:simpleType>
+            <xs:restriction base="percent">
+              <xs:maxInclusive value="10"/>
+            </xs:restriction>
+          </xs:simpleType>
+        </xs:element>
+      </xs:sequence>
+      <xs:attribute name="version" type="xs:unsignedByte" use="required"/>
+      <xs:attribute name="offset" type="percent"/>
+    </xs:complexType>
+  </xs:element>
+  <xs:simpleType name="percent">
+    <xs:restriction base="xs:int">
+      <xs:minInclusive value="0"/>
+      <xs:maxInclusive value="100"/>
+    </xs:restriction>
+  </xs:simpleType>
+</xs:schema>

@@ -138,25 +138,19 @@ func TestGenReportsEveryPair(t *testing.T) {
 }
 
 // TestGenNamesAnUnresolvedDirective pins that gen names a schemaLocation
-// resolving to no document as parse does, and still generates. The schema is
-// written here because testdata/unresolved-include.xsd declares an xs:int
-// element, which codegen declines.
+// resolving to no document as parse does, and still generates.
 func TestGenNamesAnUnresolvedDirective(t *testing.T) {
-	tmp := t.TempDir()
-	schema := filepath.Join(tmp, "short.xsd")
-	doc := "<xs:schema xmlns:xs=\"http://www.w3.org/2001/XMLSchema\">\n" +
-		`<xs:include schemaLocation="nosuchdocument.xsd"/><xs:element name="present" type="xs:string"/>` +
-		"\n</xs:schema>\n"
-	if err := os.WriteFile(schema, []byte(doc), 0o644); err != nil {
+	abs, err := filepath.Abs(shortSchema)
+	if err != nil {
 		t.Fatal(err)
 	}
-	out := filepath.Join(tmp, "short")
+	out := filepath.Join(t.TempDir(), "short")
 	var stdout, stderr bytes.Buffer
-	code := run([]string{"gen", "-schema", schema, "-out", out}, &stdout, &stderr)
+	code := run([]string{"gen", "-schema", shortSchema, "-out", out}, &stdout, &stderr)
 	if code != exitOK {
 		t.Fatalf("gen = %d, want %d (stderr %q)", code, exitOK, stderr.String())
 	}
-	want := "goxsd8: gen: " + schema + ":2:1: this schemaLocation resolved to no document"
+	want := "goxsd8: gen: " + abs + ":10:3: this schemaLocation resolved to no document"
 	if !strings.HasPrefix(stderr.String(), want) {
 		t.Errorf("gen stderr = %q, want it to open %q", stderr.String(), want)
 	}
