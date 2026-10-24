@@ -217,11 +217,17 @@ func survey(base, head string) (report, error) {
 
 // namedMatches returns added's names pairs, which the package doc states,
 // added being cut into clauses cs and already paired with overlaps, and skip
-// being the pairs not counted.
+// being the pairs not counted. An identifier two selectors name is paired
+// once, marked by the first.
 func namedMatches(added sentence, cs []map[pair]bool, overlaps []match, names namesIndex, skip map[pair]bool) []match {
 	var out []match
+	seen := make(map[ident]bool)
 	for _, s := range selectors(added.text) {
 		for _, id := range names.resolve(s, dirOf(added.file)) {
+			if seen[id] {
+				continue
+			}
+			seen[id] = true
 			doc := names.docs[id]
 			if overlapsAny(doc, overlaps) {
 				continue

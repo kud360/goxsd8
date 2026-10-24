@@ -37,14 +37,15 @@
 // An added sentence that names an exported identifier of another package is
 // also printed beside one sentence of that identifier's doc, whatever their
 // overlap, marked "(names <selector>)" where an overlap pair prints "(N
-// shared)", unless a sentence of that doc already overlaps it: the doc's
-// sentence sharing the most counted pairs with one clause, the first on a
-// tie. A name is resolved lexically, from the sentence's raw text: a selector
-// q.Ident or q.Type.Member, a `*`, `[` or possessive 's beside it read as
-// any other punctuation, names the identifier Ident, or Type's method, field
-// or interface method Member, declared and documented outside package main
-// and outside the added sentence's own directory, in a package whose import
-// path is q or ends in a slash and q. It does not resolve an import alias, an
+// shared)", the selector being the first of the sentence naming it, unless a
+// sentence of that doc already overlaps it: the doc's sentence sharing the
+// most counted pairs with one clause, the first on a tie. A name is resolved
+// lexically, from the sentence's raw text: a selector q.Ident or
+// q.Type.Member, a `*`, `[` or possessive 's beside it read as any other
+// punctuation, names the identifier Ident, or Type's method, field or
+// interface method Member, declared and documented outside package main and
+// outside the added sentence's own directory, in a package whose import path
+// is q or ends in a slash and q. It does not resolve an import alias, an
 // unqualified Ident, an embedded or promoted member, or (*q.Type).Member past
 // q.Type; and it reads a standard-library selector whose qualifier is a
 // module package's last element as that package's, so it pairs only where

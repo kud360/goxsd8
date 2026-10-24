@@ -590,6 +590,21 @@ func TestNamedOverlapPrintedOnce(t *testing.T) {
 	}
 }
 
+// TestNamedIdentifierPairedOnce adds a sentence naming xmlsrc.Validate by two
+// spellings: it is paired with that doc once, marked by the first.
+func TestNamedIdentifierPairedOnce(t *testing.T) {
+	const text = `A fault xmlsrc.Validate met, which validate/xmlsrc.Validate reports, is its returned error.`
+	head := withSentence(namesTree(), "xsderr/added.go", "xsderr", text)
+	rep := surveyTrees(t, namesTree(), head)
+	f, ok := findingAt(rep, site{"xsderr/added.go", lineOf(t, head, "xsderr/added.go", text)})
+	if !ok {
+		t.Fatalf("no finding: %+v", rep.findings)
+	}
+	if len(f.matches) != 1 || f.matches[0].names != "xmlsrc.Validate" || f.matches[0].owner.file != "validate/xmlsrc/xmlsrc.go" {
+		t.Errorf("matches = %+v, want one (names xmlsrc.Validate) pair with validate/xmlsrc/xmlsrc.go", f.matches)
+	}
+}
+
 // TestSelectors pins the selectors a sentence names, as the package doc
 // states them.
 func TestSelectors(t *testing.T) {
