@@ -122,7 +122,7 @@ const ruleCvcType xsderr.Rule = "cvc-type"
 // ·resolves· to no declaration, are neither: the package doc states how each
 // is governed, the second being ·strictly assessed· (key-sva) clause 3.3's
 // ·lax assessment· against xs:anyType, whose {content type} and {attribute
-// uses} constrain nothing any of these charges reads (#1823).
+// uses} constrain nothing any of these charges reads.
 //
 // Nothing else is decided: the remaining cvc-elt clauses, cvc-type's own
 // clause 1 (T ·non-absent·) and cvc-complex-type clause 5 over [[attributes]]
