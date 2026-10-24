@@ -397,8 +397,8 @@ func (s *Schema) ContentMatcher(t ComplexType) (*Matcher, bool) {
 	// manufactures none; validate records each child it leaves unmatched, or the
 	// element where it has no child, as an Unevaluated instead. The module's two
 	// other callers withhold as well: validate/jsonsrc's walker.govern marks the
-	// parent object.unattributed, under GAP(jsonsrc) markers of its own owned by
-	// #2670, and the conformance gate refuses the case (refuseContentMatcher).
+	// parent object.unattributed, under markers of its own owned by #2670, and
+	// the conformance gate refuses the case (refuseContentMatcher).
 	//
 	// What makes the approximation permanent is the distance between the ceiling
 	// and what still reaches it. A walk over every buildable complex type in
