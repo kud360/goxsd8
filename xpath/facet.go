@@ -68,15 +68,13 @@ import (
 // member and declines only where it would over the member itself.
 //
 // GAP(xpath): an fn:count call over a path is declined, whose argument would
-// raise err:XPDY0002 over the absent context item (ctaFacetFacade.count), and
-// so is a quantified expression, whose binding step would raise it
-// (ctaFacetFacade.quantified, ctaParser.childQuantified), and one over
-// `$value`, which would not (ctaFacetFacade.rangeScope), and an fn:doc call
-// over a StringLiteral, which [CompileAssertionTest] admits and which would
-// raise err:FODC0005 (ctaFacetFacade.document). Every other decline
-// is [CompileAssertionTest]'s, under its GAP(xpath). The direction is the
-// withhold: the caller declines the value's Datatype Valid verdict, never
-// charging it and never showing it satisfied. (#1042)
+// raise err:XPDY0002 over the absent context item, and so is a quantified
+// expression, whose binding step would raise it, and one over `$value`, which
+// would not, and an fn:doc call over a StringLiteral, which
+// [CompileAssertionTest] admits and which would raise err:FODC0005. Every
+// other decline is [CompileAssertionTest]'s, under its GAP(xpath). The
+// direction is the withhold: the caller declines the value's Datatype Valid
+// verdict, never charging it and never showing it satisfied. (#1042)
 //
 // now is the dynamic context's current dateTime, which every {test} the
 // evaluator decides reads on [AssertionTest.Evaluate]'s terms: fn:current-date
@@ -87,7 +85,7 @@ import (
 // each Validator.Assess, so every facet of one assessment episode sees the
 // same current dateTime (cvc-xpath clause 6).
 //
-// Nothing is cached: each call compiles its {test} afresh (STYLE D3), and b and
+// Nothing is cached: each call compiles its {test} afresh, and b and
 // r are read as [AssertionTest.Evaluate] reads them and stored nowhere.
 func FacetAssertions(now time.Time) value.AssertionEvaluator { return facetAssertions{now: now} }
 

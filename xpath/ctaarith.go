@@ -56,9 +56,10 @@ func (n ctaArith) eachOperand(yield func(ctaNode) bool) { ctaYield(yield, n.left
 // quotient that does not terminate is rounded to: F&O §6.2 makes "the number
 // of digits of precision returned by the numeric operators" for xs:decimal
 // ·implementation-defined·, and lets a result exceeding it be "truncated or
-// rounded in an ·implementation-defined· manner". This engine rounds to
-// nearest, halves away from zero ([big.Rat.FloatString]). Every other
-// xs:decimal result, a terminating quotient included, is exact.
+// rounded in an ·implementation-defined· manner". The package doc's Dynamic
+// context states this engine's choice to the caller — this precision, the
+// rounding [big.Rat.FloatString] does, and that every other result is exact —
+// and changes with it.
 const ctaDecimalDivisionDigits = 18
 
 // ctaArithItem evaluates n and converts its result into c on ctaTypedAttrItem's
