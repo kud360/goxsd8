@@ -381,7 +381,7 @@ func TestCLIExitsZero(t *testing.T) {
 	if code := cli([]string{"-base", "HEAD"}, &out, &errOut); code != 0 {
 		t.Fatalf("no change: exit %d, want 0; stderr: %s", code, errOut.String())
 	}
-	if out.String() != "restatements: 0 of 0 added sentence(s) overlap a sentence of a package doc, an exported identifier's doc or cmd/goxsd8's usage; the matching is heuristic (2 adjacent content-word pairs shared with one clause, each held by at most 20 owner sentences), so read each pair before acting on it\n" {
+	if out.String() != "restatements: 0 of 0 added sentence(s) overlap a sentence of a package doc, an exported identifier's doc or cmd/goxsd8's usage, or name another package's exported identifier (0 naming one); the matching is heuristic (2 adjacent content-word pairs shared with one clause, each held by at most 20 owner sentences; a name resolved lexically), so read each pair before acting on it\n" {
 		t.Errorf("no change printed %q", out.String())
 	}
 
@@ -433,5 +433,218 @@ func TestCommonPairsNotCounted(t *testing.T) {
 		if printed && len(f.matches) != holders {
 			t.Errorf("%d holders: printed against %d owners", holders, len(f.matches))
 		}
+	}
+}
+
+// The names rows rebuild #488's round-1 miss (issuecomment-6363163316 finding
+// 1): roundOne, quoted verbatim from issuecomment-6362894250, restates
+// xmlsrc.Validate's channel split, which ownerValidate1-4 quote from
+// validate/xmlsrc/xmlsrc.go's doc of Validate, and shares fewer than minShared
+// pairs with every sentence of it; ownerValidate3 shares the most.
+const (
+	roundOne = `A validate caller reads the split from the channel: a fault that stopped the walk is validate.Result.Err, a fault validate/xmlsrc.Validate met outside the walk is its returned error, and no entry of validate.Result.Violations carries RuleXMLWellFormed; validate's docs own the rest.`
+
+	ownerValidate1 = `Validate assesses the XML instance in r against v's schema and reports what the assessment found.`
+	ownerValidate2 = `It returns (nil, err) when no assessment stands: v or r is nil, or the source is faulty outside [validate.Validator.Assess] — before the document element starts, or in the read to the stream's end that Validate makes once the walk returns, which covers a subtree the walk did not descend into and what follows the document element, where only Misc may stand (XML 1.0 [1] document, [27] Misc).`
+	ownerValidate3 = `It returns (result, nil) in every other case, and a source fault that stopped Assess lives in [validate.Result.Err] alone, never also returned here.`
+	ownerValidate4 = `A fault inside the document element can land in either channel: in [validate.Result.Err] when the walk met it, in err when it lies in what the walk left unread when it returned.`
+
+	// ownerErr is validate.Result.Err's doc.
+	ownerErr = `Err reports the fault in the source that stopped the walk, or nil when the walk reached the end of the document.`
+
+	// ownerResult is validate.Result's doc, on its declaration group, and
+	// ownerPath validate.Unevaluated.Path's, a field's.
+	ownerResult = `Result is what one assessment found.`
+	ownerPath   = `Path is the location of the element no rule reached.`
+
+	// threeSegment names validate.Result.Err and no other identifier,
+	// typeName validate.Result and fieldName validate.Unevaluated.Path.
+	threeSegment = `A walk the source stopped leaves its fault in validate.Result.Err for the caller.`
+	typeName     = `Every finding sits in a validate.Result value.`
+	fieldName    = `The walk records each unreached node at validate.Unevaluated.Path for the caller.`
+
+	// ownName names xmlsrc.Validate alone, in a paraphrase of its doc.
+	ownName = `A fault validate/xmlsrc.Validate met outside the walk is its returned error.`
+
+	// noIdent names an unexported identifier, an unexported member of an
+	// exported type, and an exported identifier no package declares.
+	noIdent = `A fault xmlsrc.validate met outside the walk is in validate.Result.err or xmlsrc.Missing's returned error.`
+)
+
+// namesTree is baseTree with the validate and validate/xmlsrc packages
+// holding ownerErr and ownerValidate, and an xsderr package.
+func namesTree() map[string]string {
+	tree := baseTree()
+	tree["validate/validate.go"] = "package validate\n\n" +
+		comment("", ownerResult) + "type Result struct{ err error }\n\n" +
+		comment("", "Unevaluated is an element no rule reached.") + "type Unevaluated struct {\n" + comment("\t", ownerPath) + "\tPath string\n}\n\n" +
+		comment("", ownerErr) + "func (r *Result) Err() error { return r.err }\n\n" +
+		comment("", "Violations are the violations the walk charged.") + "func (r *Result) Violations() []error { return nil }\n"
+	tree["validate/xmlsrc/xmlsrc.go"] = "package xmlsrc\n\n" +
+		comment("", ownerValidate1) + "//\n" + comment("", ownerValidate2, ownerValidate3) + "//\n" + comment("", ownerValidate4) +
+		"func Validate() {}\n\n" +
+		comment("", "validate is Validate's body.") + "func validate() {}\n"
+	tree["xsderr/error.go"] = "package xsderr\n\n" +
+		comment("", "Error is a spec rule violation.") + "type Error struct{}\n"
+	return tree
+}
+
+// withSentence adds text to the doc of a declaration in a file of its own,
+// rel, of package pkg.
+func withSentence(tree map[string]string, rel, pkg, text string) map[string]string {
+	tree[rel] = "package " + pkg + "\n\n" + comment("", "Added is a fixture.", text) + "const Added = 0\n"
+	return tree
+}
+
+// TestNamedIdentifierPrinted holds N1-N4: an added sentence naming an
+// exported identifier of another package, as path/pkg.Ident (N1, the #488
+// miss), pkg.Type.Method (N2), pkg.Type (N3) or pkg.Type.Field (N4), is
+// printed with a sentence of that identifier's doc, marked by the selector,
+// though it overlaps no sentence of that doc.
+func TestNamedIdentifierPrinted(t *testing.T) {
+	rows := []struct {
+		name, text, names, ownerFile, owner string
+	}{
+		{"N1 path/pkg.Ident, the #488 round-1 sentence", roundOne, "validate/xmlsrc.Validate", "validate/xmlsrc/xmlsrc.go", ownerValidate3},
+		{"N2 pkg.Type.Method", threeSegment, "validate.Result.Err", "validate/validate.go", ownerErr},
+		{"N3 pkg.Type", typeName, "validate.Result", "validate/validate.go", ownerResult},
+		{"N4 pkg.Type.Field", fieldName, "validate.Unevaluated.Path", "validate/validate.go", ownerPath},
+	}
+	for _, row := range rows {
+		t.Run(row.name, func(t *testing.T) {
+			head := withSentence(namesTree(), "xsderr/added.go", "xsderr", row.text)
+			cs := clauses(row.text)
+			for _, o := range []string{ownerValidate1, ownerValidate2, ownerValidate3, ownerValidate4, ownerErr, ownerResult, ownerPath} {
+				if n := shared(cs, pairs(o), nil); n >= minShared {
+					t.Fatalf("the fixture overlaps %q by %d pairs: not a paraphrase", o, n)
+				}
+			}
+			rep := surveyTrees(t, namesTree(), head)
+			at := site{"xsderr/added.go", lineOf(t, head, "xsderr/added.go", row.text)}
+			f, ok := findingAt(rep, at)
+			if !ok {
+				t.Fatalf("no finding at %s:%d; findings: %+v", at.file, at.line, rep.findings)
+			}
+			want := site{row.ownerFile, lineOf(t, head, row.ownerFile, row.owner)}
+			for _, m := range f.matches {
+				if m.names == row.names && m.owner.file == want.file && m.owner.line == want.line {
+					if rep.naming != 1 {
+						t.Errorf("naming = %d, want 1", rep.naming)
+					}
+					return
+				}
+			}
+			t.Fatalf("finding at %s:%d does not pair (names %s) with %s:%d: %+v", at.file, at.line, row.names, want.file, want.line, f.matches)
+		})
+	}
+}
+
+// TestNamesNotPaired holds the names guards: a sentence naming an identifier
+// of its own package (O1), and one naming only unexported or undeclared
+// identifiers (O2), gain no pairing. O1's sentence is paired from another
+// package, so its fixture discriminates the own-package rule.
+func TestNamesNotPaired(t *testing.T) {
+	rows := []struct {
+		name, rel, pkg, text string
+	}{
+		{"O1 own package", "validate/xmlsrc/added.go", "xmlsrc", ownName},
+		{"O2 unexported and undeclared", "xsderr/added.go", "xsderr", noIdent},
+	}
+	for _, row := range rows {
+		t.Run(row.name, func(t *testing.T) {
+			head := withSentence(namesTree(), row.rel, row.pkg, row.text)
+			rep := surveyTrees(t, namesTree(), head)
+			if f, ok := findingAt(rep, site{row.rel, lineOf(t, head, row.rel, row.text)}); ok {
+				t.Errorf("%q is printed against %+v", row.text, f.matches)
+			}
+			if rep.naming != 0 {
+				t.Errorf("naming = %d, want 0", rep.naming)
+			}
+		})
+	}
+	head := withSentence(namesTree(), "xsderr/added.go", "xsderr", ownName)
+	rep := surveyTrees(t, namesTree(), head)
+	if _, ok := findingAt(rep, site{"xsderr/added.go", lineOf(t, head, "xsderr/added.go", ownName)}); !ok {
+		t.Errorf("O1's sentence is not paired from xsderr: %+v", rep.findings)
+	}
+}
+
+// TestNamedOverlapPrintedOnce adds a sentence naming validate.Result.Err that
+// overlaps its doc: it is printed against that doc's sentence once, as an
+// overlap pair, and counted as naming none.
+func TestNamedOverlapPrintedOnce(t *testing.T) {
+	const text = `validate.Result.Err reports the fault in the source that stopped the walk.`
+	head := withSentence(namesTree(), "xsderr/added.go", "xsderr", text)
+	rep := surveyTrees(t, namesTree(), head)
+	f, ok := findingAt(rep, site{"xsderr/added.go", lineOf(t, head, "xsderr/added.go", text)})
+	if !ok {
+		t.Fatalf("no finding: %+v", rep.findings)
+	}
+	if len(f.matches) != 1 || f.matches[0].names != "" || f.matches[0].owner.text != ownerErr {
+		t.Errorf("matches = %+v, want one overlap pair with %q", f.matches, ownerErr)
+	}
+	if rep.naming != 0 {
+		t.Errorf("naming = %d, want 0", rep.naming)
+	}
+}
+
+// TestSelectors pins the selectors a sentence names, as the package doc
+// states them.
+func TestSelectors(t *testing.T) {
+	const text = "[xmlsrc.Validate] takes *validate.Result, (*validate.Error).Loc and " +
+		"`goxsd8.Parse`; validate/xmlsrc.Validate's doc, github.com/a/b.C, " +
+		"validate.Result.Err and validate.Result.Err again, not validate.Result.err, xmlsrc.validate or doc.go."
+	var got []string
+	for _, s := range selectors(text) {
+		got = append(got, s.String())
+	}
+	want := []string{"xmlsrc.Validate", "validate.Result", "validate.Error", "goxsd8.Parse",
+		"validate/xmlsrc.Validate", "github.com/a/b.C", "validate.Result.Err", "validate.Result.err"}
+	if strings.Join(got, " ") != strings.Join(want, " ") {
+		t.Errorf("selectors = %q, want %q", got, want)
+	}
+}
+
+// TestNamesRootNotMain adds a sentence naming m.Parse, where the module
+// example.com/m declares Parse both in its root package and in cmd/m, a main
+// package: it is paired with the root package's doc alone.
+func TestNamesRootNotMain(t *testing.T) {
+	base := namesTree()
+	base["m.go"] = "package m\n\n" + comment("", "Parse compiles a schema document.") + "func Parse() {}\n"
+	base["cmd/m/main.go"] = "package main\n\n" + comment("", "Parse is the parse subcommand.") + "func Parse() {}\n\nfunc main() {}\n"
+	const text = `A schema m.Parse rejects is reported once.`
+	head := withSentence(maps.Clone(base), "xsderr/added.go", "xsderr", text)
+	rep := surveyTrees(t, base, head)
+	f, ok := findingAt(rep, site{"xsderr/added.go", lineOf(t, head, "xsderr/added.go", text)})
+	if !ok {
+		t.Fatalf("no finding: %+v", rep.findings)
+	}
+	if len(f.matches) != 1 || f.matches[0].owner.file != "m.go" || f.matches[0].names != "m.Parse" {
+		t.Errorf("matches = %+v, want one (names m.Parse) pair with m.go", f.matches)
+	}
+}
+
+// TestNamedPairWritten pins how write prints a names pair beside an overlap
+// pair, and the summary's count of sentences naming an identifier.
+func TestNamedPairWritten(t *testing.T) {
+	rep := report{added: 5, naming: 1, findings: []finding{{
+		added: sentence{file: "a/a.go", line: 3, text: "Added."},
+		matches: []match{
+			{owner: sentence{file: "b/b.go", line: 5, text: "Overlapped."}, shared: 2},
+			{owner: sentence{file: "c/c.go", line: 7, text: "Named."}, names: "c.Named"},
+		},
+	}, {
+		added:   sentence{file: "a/a.go", line: 9, text: "Again."},
+		matches: []match{{owner: sentence{file: "b/b.go", line: 5, text: "Overlapped."}, shared: 3}},
+	}}}
+	var b strings.Builder
+	if err := rep.write(&b); err != nil {
+		t.Fatal(err)
+	}
+	const want = "a/a.go:3: Added.\n\tb/b.go:5: (2 shared) Overlapped.\n\tc/c.go:7: (names c.Named) Named.\n" +
+		"a/a.go:9: Again.\n\tb/b.go:5: (3 shared) Overlapped.\n" +
+		"restatements: 2 of 5 added sentence(s) overlap a sentence of a package doc, an exported identifier's doc or cmd/goxsd8's usage, or name another package's exported identifier (1 naming one);"
+	if !strings.HasPrefix(b.String(), want) {
+		t.Errorf("write printed %q, want the prefix %q", b.String(), want)
 	}
 }

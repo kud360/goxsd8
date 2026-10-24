@@ -34,10 +34,28 @@
 // most 20 owner sentences of the working tree hold: a pair more hold is the
 // tree's common phrasing, not one fact's.
 //
+// An added sentence that names an exported identifier of another package is
+// also printed beside one sentence of that identifier's doc, whatever their
+// overlap, marked "(names <selector>)" where an overlap pair prints "(N
+// shared)", unless a sentence of that doc already overlaps it: the doc's
+// sentence sharing the most counted pairs with one clause, the first on a
+// tie. A name is resolved lexically, from the sentence's raw text: a selector
+// q.Ident or q.Type.Member, a `*`, `[` or possessive 's beside it read as
+// any other punctuation, names the identifier Ident, or Type's method, field
+// or interface method Member, declared and documented outside package main
+// and outside the added sentence's own directory, in a package whose import
+// path is q or ends in a slash and q. It does not resolve an import alias, an
+// unqualified Ident, an embedded or promoted member, or (*q.Type).Member past
+// q.Type; and it reads a standard-library selector whose qualifier is a
+// module package's last element as that package's, so it pairs only where
+// that package exports the same name. A main package exports nothing to
+// resolve, so goxsd8 names the module's root package and not cmd/goxsd8.
+//
 // A summary line closes every run, saying how many added sentences overlap
-// an owner and that the matching is heuristic. Exit codes: 0 whatever it
-// prints, 2 on an operational error (a missing -base, an unresolvable ref, an
-// unreadable or unparseable file).
+// an owner or name an identifier, how many of those name one, and that the
+// matching is heuristic. Exit codes: 0 whatever it prints, 2 on an
+// operational error (a missing -base, an unresolvable ref, an unreadable or
+// unparseable file, a working tree whose go.mod has no module directive).
 package main
 
 import (
