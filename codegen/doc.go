@@ -74,8 +74,12 @@
 //     references carries the default or fixed value. A choice is accepted only
 //     when its type has no {attribute uses}.
 //   - Every element declaration emitted from has {nillable} and {abstract}
-//     false and no {value constraint}, {type table}, {substitution group
-//     affiliations} or {identity-constraint definitions}.
+//     false and no {value constraint}, {type table} or {substitution group
+//     affiliations}. Its {identity-constraint definitions} are accepted and
+//     not represented: an identity constraint restricts the values an
+//     instance holds and adds no content or attribute (§3.11.1), so the
+//     element emits exactly as it would without one, and enforcing it is
+//     the validator's.
 //
 // GAP(codegen): every other construct declines: the all compositor, an
 // emptiable choice, a choice with no {particles}, nested model groups,
