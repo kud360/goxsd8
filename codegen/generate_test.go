@@ -220,8 +220,51 @@ func TestGenerateVacuousSequence(t *testing.T) {
 	if err := Generate([]Target{{Schema: schema, Dir: dir, Package: "p"}}); err != nil {
 		t.Fatal(err)
 	}
-	if got := read(t, filepath.Join(dir, fileName)); !strings.Contains(got, "type E struct {\n}\n") {
+	if got := read(t, filepath.Join(dir, fileName)); !strings.Contains(got, "type E struct{}\n") {
 		t.Errorf("want an empty struct E:\n%s", got)
+	}
+}
+
+// TestGenerateEmptyContent pins the forms whose {content type} has {variety}
+// empty (§3.4.1) beyond the golden's, each emitted as the package doc's
+// "# Coverage" states. Explicit content is empty for no model group child, an
+// all or sequence with no children, a choice with minOccurs 0 and no
+// children, or a model group with maxOccurs 0 (§3.4.2.3.3 dcl.ctd.ctcc.common
+// clause 2.1); {variety} is then empty when effective mixed is false (clause
+// 4.1.1), and a <defaultOpenContent> without appliesToEmpty is no wildcard
+// element for it (clause 5.2), so clause 6.1 keeps that empty content type.
+func TestGenerateEmptyContent(t *testing.T) {
+	tests := []struct{ name, body, want string }{
+		{"empty all", `<xs:element name="e"><xs:complexType><xs:all/></xs:complexType></xs:element>`,
+			"type E struct{}\n"},
+		{"empty sequence", `<xs:element name="e"><xs:complexType><xs:sequence/></xs:complexType></xs:element>`,
+			"type E struct{}\n"},
+		{"optional empty choice", `<xs:element name="e"><xs:complexType><xs:choice minOccurs="0"/></xs:complexType></xs:element>`,
+			"type E struct{}\n"},
+		{"maxOccurs 0 sequence", `<xs:element name="e"><xs:complexType><xs:sequence minOccurs="0" maxOccurs="0"><xs:element name="a" type="xs:string"/></xs:sequence></xs:complexType></xs:element>`,
+			"type E struct{}\n"},
+		{"explicit restriction of anyType", `<xs:element name="e"><xs:complexType><xs:complexContent><xs:restriction base="xs:anyType"><xs:attribute name="a" type="xs:string"/></xs:restriction></xs:complexContent></xs:complexType></xs:element>`,
+			"type E struct {\n\tA *string\n}\n"},
+		{"named type", `<xs:complexType name="c"><xs:attribute name="a" type="xs:boolean" use="required"/></xs:complexType><xs:element name="e" type="c"/>`,
+			"type E struct {\n\tA bool\n}\n"},
+		{"default open content", `<xs:defaultOpenContent><xs:any/></xs:defaultOpenContent><xs:element name="e"><xs:complexType/></xs:element>`,
+			"type E struct{}\n"},
+		{"choice alternative", `<xs:element name="e"><xs:complexType><xs:choice><xs:element name="a"><xs:complexType/></xs:element><xs:element name="b" type="xs:string"/></xs:choice></xs:complexType></xs:element>`,
+			"type EA struct {\n\tA EA2\n}\n\nfunc (EA) isE() {}\n\n// EA2 is generated from element a declared at s.xsd:1:"},
+		{"repeated local element", `<xs:element name="e"><xs:complexType><xs:sequence><xs:element name="a" maxOccurs="unbounded"><xs:complexType/></xs:element></xs:sequence></xs:complexType></xs:element>`,
+			"type E struct {\n\tA []EA\n}\n"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			schema := parseString(t, `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">`+tt.body+`</xs:schema>`)
+			dir := t.TempDir()
+			if err := Generate([]Target{{Schema: schema, Dir: dir, Package: "p"}}); err != nil {
+				t.Fatal(err)
+			}
+			if got := read(t, filepath.Join(dir, fileName)); !strings.Contains(got, tt.want) {
+				t.Errorf("want %q in:\n%s", tt.want, got)
+			}
+		})
 	}
 }
 

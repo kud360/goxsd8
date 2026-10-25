@@ -71,7 +71,6 @@ const (
 	constructComplexTypeAbstract
 	constructAssertions
 	constructAttributeWildcard
-	constructEmptyContent
 	constructSimpleContent
 	constructMixedContent
 	constructOpenContent
@@ -111,7 +110,6 @@ var constructs = [...]struct{ name, format string }{
 	constructComplexTypeAbstract:      {"complex type {abstract}", "%s with {abstract} true"},
 	constructAssertions:               {"{assertions}", "%s with {assertions}"},
 	constructAttributeWildcard:        {"{attribute wildcard}", "%s with an {attribute wildcard}"},
-	constructEmptyContent:             {"empty content", "%s with empty content"},
 	constructSimpleContent:            {"simple content", "%s with simple content"},
 	constructMixedContent:             {"mixed content", "%s with mixed content"},
 	constructOpenContent:              {"{open content}", "%s with {open content}"},
