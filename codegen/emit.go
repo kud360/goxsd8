@@ -397,13 +397,13 @@ func mustOccurs(o xsd.Occurs, err error) xsd.Occurs {
 // against the package doc's "# Coverage" complex-type shape — a restriction
 // of xs:anyType, implicit (§3.4.2.3.2 dcl.ctd.ctcc.implicit) or explicit
 // (§3.4.2.3.1 dcl.ctd.ctcc.explicit), with the content §3.4.2.3.3
-// dcl.ctd.ctcc.common maps. ok answers whether t's {content type} has a
-// {particle}: for element-only content it is true and group is the sequence or
-// choice model group that is the {particle}'s term, never the source <choice>
-// itself; for {variety} empty (§3.4.1), which has no {particle}, it is false,
-// err is nil and group is the zero value, which callers must not read. Every
-// other content declines. Particles and model groups carry no Loc, so their
-// declines cite t's.
+// dcl.ctd.ctcc.common maps. When err is nil, ok answers whether t's {content
+// type} has a {particle}: for element-only content it is true and group is
+// the sequence or choice model group that is the {particle}'s term, never the
+// source <choice> itself; for {variety} empty (§3.4.1), which has no
+// {particle}, it is false, err is nil and group is the zero value, which
+// callers must not read. Every other content declines. Particles and model
+// groups carry no Loc, so their declines cite t's.
 func (e *emitter) contentGroup(subject string, t xsd.ComplexType) (group xsd.ModelGroup, ok bool, err error) {
 	if t.DerivationMethod() != xsd.DerivationRestriction {
 		return xsd.ModelGroup{}, false, decline(t.Loc(), constructDerivation, subject, t.DerivationMethod())

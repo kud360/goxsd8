@@ -36,12 +36,12 @@
 //     xs:anyType, implicit (§3.4.2.3.2 dcl.ctd.ctcc.implicit) or explicit
 //     (<complexContent><restriction base="xs:anyType">, §3.4.2.3.1
 //     dcl.ctd.ctcc.explicit), with no {attribute wildcard}, {assertions} or
-//     {abstract}, and with either empty content or element-only content
-//     (§3.4.2.3.3 dcl.ctd.ctcc.common) with no {open content}, whose
-//     {particle} occurs exactly once and holds a sequence or a choice of local
-//     element declarations. A sequence gives a struct, and so does empty
-//     content ({variety} empty, §3.4.1), with no particle field; a struct with
-//     no field is spelled struct{}.
+//     {abstract}, and with one of two contents: empty content ({variety}
+//     empty, §3.4.1); or element-only content (§3.4.2.3.3 dcl.ctd.ctcc.common)
+//     that has no {open content} and whose {particle} occurs exactly once and
+//     holds a sequence or a choice of local element declarations. A sequence
+//     gives a struct, and so does empty content, with no particle field; a
+//     struct with no field is spelled struct{}.
 //   - A choice gives a sealed interface, the closed-sum exception: an
 //     interface whose one method is unexported, "is" plus the interface's
 //     name, and one branch struct per alternative in particle order, emitted
