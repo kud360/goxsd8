@@ -54,7 +54,6 @@ const (
 	constructElementNillable construct = iota + 1
 	constructElementAbstract
 	constructSubstitutionGroup
-	constructIdentityConstraints
 	constructElementValueConstraint
 	constructTypeTable
 	constructAnyTypeElement
@@ -95,7 +94,6 @@ var constructs = [...]struct{ name, format string }{
 	constructElementNillable:          {"element {nillable}", "%s with {nillable} true"},
 	constructElementAbstract:          {"element {abstract}", "%s with {abstract} true"},
 	constructSubstitutionGroup:        {"{substitution group affiliations}", "%s with {substitution group affiliations}"},
-	constructIdentityConstraints:      {"{identity-constraint definitions}", "%s with {identity-constraint definitions}"},
 	constructElementValueConstraint:   {"element {value constraint}", "%s with a {value constraint}"},
 	constructTypeTable:                {"{type table}", "%s with a {type table}"},
 	constructAnyTypeElement:           {"element of type xs:anyType", "%s with {type definition} xs:anyType"},

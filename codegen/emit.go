@@ -182,8 +182,6 @@ func (e *emitter) declaredType(decl xsd.ElementDeclaration) (xsd.TypeDefinition,
 		return nil, decline(decl.Loc(), constructElementAbstract, subject)
 	case len(decl.SubstitutionGroupAffiliationNames()) > 0:
 		return nil, decline(decl.Loc(), constructSubstitutionGroup, subject)
-	case len(decl.IdentityConstraints()) > 0:
-		return nil, decline(decl.Loc(), constructIdentityConstraints, subject)
 	}
 	if _, ok := decl.ValueConstraint(); ok {
 		return nil, decline(decl.Loc(), constructElementValueConstraint, subject)
