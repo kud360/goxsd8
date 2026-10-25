@@ -67,7 +67,7 @@ which the checkout ignores.
 cd testdata/readme                              # from the checkout root
 goxsd8 parse order.xsd items.xsd                # two compilations, not one set; a summary each, exit 0
 goxsd8 validate -schema order.xsd -schema items.xsd order.xml order.json
-                                                # one set; exit 0, the table in goxsd8 -help
+                                                # one set; exit 0 (codes: the table in goxsd8 -help)
 goxsd8 gen -schema order.xsd -out ./gen/order \
            -schema items.xsd -out ./gen/items  # packages order and items; exit 0
 ```
