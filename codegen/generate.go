@@ -138,7 +138,11 @@ func prepare(t Target, earlier []Target) ([]byte, error) {
 			return nil, fmt.Errorf("the output directory %s is also the output directory of %s", t.Dir, e.name(j))
 		}
 	}
-	src, err := emit(t.Schema, t.Package)
+	base, err := filepath.Abs(t.Dir)
+	if err != nil {
+		return nil, fmt.Errorf("resolving the output directory %s: %w", t.Dir, err)
+	}
+	src, err := emit(t.Schema, t.Package, base)
 	if err != nil {
 		return nil, err
 	}
