@@ -1224,14 +1224,17 @@ func TestJSONSrcLineUntaughtClassIsDeclined(t *testing.T) {
 	}
 }
 
+// readmeOrderXSD is README's order.xsd, as the README examples run it.
+const readmeOrderXSD = "../../testdata/readme/order.xsd"
+
 // TestValidateJSONScalarWhereObjectExpected pins the clause jsonsrc appends to
 // the cvc-complex-type charge at a scalar member whose element's type has
-// element-only content: README's order.xsd, readme-order.xsd here, on
+// element-only content: README's order.xsd, readmeOrderXSD, on
 // readme-text.json, {"order":"just text"}, which exits 1 on one line opening
 // at the scalar's location and naming "order" in the clause.
 func TestValidateJSONScalarWhereObjectExpected(t *testing.T) {
 	const instance = "testdata/readme-text.json"
-	args := []string{"validate", "-schema", "testdata/readme-order.xsd", instance}
+	args := []string{"validate", "-schema", readmeOrderXSD, instance}
 	var stdout, stderr bytes.Buffer
 	if code := run(args, &stdout, &stderr); code != exitInvalid {
 		t.Errorf("run(%q) = %d, want %d (stdout %q, stderr %q)", args, code, exitInvalid, stdout.String(), stderr.String())
@@ -1253,7 +1256,7 @@ func TestValidateJSONScalarWhereObjectExpected(t *testing.T) {
 
 // TestValidateJSONMemberClauses pins the clauses jsonsrc appends to the charge
 // a parent's content takes at a child member, on README's order.xsd,
-// readme-order.xsd here: an unknown key, which lists the keys the type
+// readmeOrderXSD: an unknown key, which lists the keys the type
 // carries; "_kind", which also names kind as the attribute's key; and an
 // object under the simple-typed item, which says a scalar is expected. Each
 // instance exits 1 on one line opening at the member's location and rule and
@@ -1274,7 +1277,7 @@ func TestValidateJSONMemberClauses(t *testing.T) {
 			if err := os.WriteFile(instance, []byte(c.doc), 0o600); err != nil {
 				t.Fatal(err)
 			}
-			args := []string{"validate", "-schema", "testdata/readme-order.xsd", instance}
+			args := []string{"validate", "-schema", readmeOrderXSD, instance}
 			var stdout, stderr bytes.Buffer
 			if code := run(args, &stdout, &stderr); code != exitInvalid {
 				t.Errorf("run(%q) = %d, want %d (stdout %q, stderr %q)", args, code, exitInvalid, stdout.String(), stderr.String())
@@ -1296,7 +1299,7 @@ func TestValidateJSONMemberClauses(t *testing.T) {
 }
 
 // TestValidateFormatMismatchClause pins the clause formatHint ends a line
-// with, on README's order.xsd (readme-order.xsd here) and order.json, with a
+// with, on README's order.xsd (readmeOrderXSD) and order.json, with a
 // well-formed order.xml: -format json over order.xml and -format xml over
 // order.json, each keeping its token and exit code. Three more rows carry it:
 // content after the top-level object and no JSON value at all under -format
@@ -1388,7 +1391,7 @@ func TestValidateFormatMismatchClause(t *testing.T) {
 				os.Stdin = r
 				t.Cleanup(func() { os.Stdin = old; _ = r.Close() })
 			}
-			args := append([]string{"validate", "-schema", "testdata/readme-order.xsd"}, c.args...)
+			args := append([]string{"validate", "-schema", readmeOrderXSD}, c.args...)
 			var stdout, stderr bytes.Buffer
 			if code := run(args, &stdout, &stderr); code != c.code {
 				t.Errorf("run(%q) = %d, want %d (stderr %q)", args, code, c.code, stderr.String())
