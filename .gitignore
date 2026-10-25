@@ -38,6 +38,9 @@ go.work.sum
 # Build output
 bin/
 
+# What README's gen examples write when run in testdata/readme/
+/testdata/readme/gen/
+
 # Isolated agent worktrees (Agent tool isolation:"worktree" scratch checkouts)
 .claude/worktrees/
 

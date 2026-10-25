@@ -59,15 +59,22 @@ that usage block plus what `-help` does not print: the argument vocabulary,
 the shape of a diagnostic line and the CLI's relationship to the library. The
 invocations below are worked examples of it.
 
+Every file these examples and the Library ones name is committed in
+`testdata/readme/`; run them from there. `gen` writes `./gen/` beside them,
+which the checkout ignores.
+
 ```sh
-goxsd8 parse order.xsd items.xsd                # compile + summary, exit 0/1/2
-goxsd8 validate -schema order.xsd -schema items.xsd order1.xml order2.xml
-                                                # exit codes: the table in goxsd8 -help
+cd testdata/readme                              # from the checkout root
+goxsd8 parse order.xsd items.xsd                # two compilations, not one set; a summary each, exit 0
+goxsd8 validate -schema order.xsd -schema items.xsd order.xml order.json
+                                                # one set; exit 0, the table in goxsd8 -help
 goxsd8 gen -schema order.xsd -out ./gen/order \
-           -schema items.xsd -out ./gen/items  # packages order and items; exit 0/1/2/4
+           -schema items.xsd -out ./gen/items  # packages order and items; exit 0
 ```
 
-A JSON instance validates the same way. With this schema as `order.xsd`:
+`order.xsd` declares `{urn:o}order` and `items.xsd` `{urn:i}items`, unrelated
+schemas; `order.xml` and `order.json` are the same order. A JSON instance
+validates the way an XML one does. `order.xsd` is this schema:
 
 ```xml
 <xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
@@ -83,7 +90,7 @@ A JSON instance validates the same way. With this schema as `order.xsd`:
 </xs:schema>
 ```
 
-and this instance as `order.json`:
+and `order.json` this instance:
 
 ```json
 {"o:order":{"$xmlns":{"o":"urn:o"},"kind":"x","item":["a","b"]}}
@@ -113,9 +120,8 @@ spelled. A repeated attribute key, `"$xmlns"` or `"$type"` is declined
 a fault reading an XML instance do; a decline prints
 `<loc>: [jsonsrc] undecided: <message>` and exits 4.
 `jsonsrc` names the source of the error where a violation's line names its
-rule. With
-`{"o:order":{"$xmlns":{"o":"urn:o"},"kind":"x","kind":"y","item":["a"]}}` as
-`twice.json`:
+rule. `twice.json` is
+`{"o:order":{"$xmlns":{"o":"urn:o"},"kind":"x","kind":"y","item":["a"]}}`:
 
 ```sh
 $ goxsd8 validate -schema order.xsd twice.json    # exit 4
@@ -127,7 +133,9 @@ twice.json:1:47: [jsonsrc] undecided: attribute member "kind" repeats in the obj
 
 ### Library
 
-Seeding the builtin datatypes and compiling a schema set both work TODAY:
+Seeding the builtin datatypes and compiling a schema set both work TODAY.
+The program below and its continuations open the CLI section's files, so run
+it with `testdata/readme/` as the working directory:
 
 ```go
 package main
@@ -162,9 +170,9 @@ func main() {
 	// namespace — and returns it finalized. Every option has a default, so
 	// parser.Parse("order.xsd") alone is valid too.
 	schema, err := parser.Parse("order.xsd",
-		parser.WithBackend(backend),                // default: builtin/strict
-		parser.WithResolver(loader.Dir("schemas")), // default: loader.Dir(".")
-		parser.WithLogger(slog.Default()),          // default: silent
+		parser.WithBackend(backend),          // default: builtin/strict
+		parser.WithResolver(loader.Dir(".")), // default: loader.Dir("."), the working directory
+		parser.WithLogger(slog.Default()),    // default: silent
 	)
 	if err != nil {
 		log.Fatal(err)
@@ -300,18 +308,13 @@ if err != nil {
 Code generation runs today for a narrow slice of schema shapes:
 `codegen.Generate` emits Go type declarations for that slice and declines
 every other construct. `go doc github.com/kud360/goxsd8/codegen`'s "Coverage"
-section states the slice. `order.xsd` below is a placeholder for a schema
-inside it; `codegen/testdata/flat.xsd` in a checkout is one, and
-`ExampleGenerate` runs it.
-Add `github.com/kud360/goxsd8/codegen` to the imports:
+section states the slice, and the program's `order.xsd` is inside it, as is
+`codegen/testdata/flat.xsd`, which `ExampleGenerate` runs. Continuing the
+program, add `github.com/kud360/goxsd8/codegen` to the imports:
 
 ```go
-s, err := parser.Parse("order.xsd")
-if err != nil {
-	log.Fatal(err)
-}
 // Writes package order into gen/order.
-if err := codegen.Generate([]codegen.Target{{Schema: s, Dir: "gen/order", Package: "order"}}); err != nil {
+if err := codegen.Generate([]codegen.Target{{Schema: schema, Dir: "gen/order", Package: "order"}}); err != nil {
 	log.Fatal(err)
 }
 ```
