@@ -126,108 +126,97 @@ const (
 
 // CheckDerivation enforces the cross-reference Simple Type Definition
 // constraints that need t's RESOLVED {base type definition}, {item type
-// definition} and {member type definitions} — the checks checkSTProps
-// (simpletype.go) cannot make at the pure-property layer, because the base slot
-// may be a deferred SimpleTypeRef that only a resolver can follow
-// (simpletyperef.go). It reads the four derived properties through
+// definition} and {member type definitions} — the checks NewSimpleType cannot
+// make, because the base slot may be a deferred SimpleTypeRef that only a
+// resolver can follow. It reads the four derived properties through
 // SimpleType.Variety/Primitive/Item/Members, which resolve them off the declared
 // derivation and the base chain (§3.16.2.1) against r.
 //
-// It is EXPORTED because it has two real consumers, and one implementation
-// serving both is what keeps the rule single (STYLE T5/T4):
+// It has two kinds of caller:
 //
-//   - finalize. Schema.checkSimpleTypeDerivations (resolve.go) runs it over
-//     every Simple Type Definition an assembled Schema reaches, with the Schema
-//     itself as the resolver. That is where a parsed schema's simple types are
-//     charged.
+//   - finalize. Finalize runs it over every Simple Type Definition an assembled
+//     Schema reaches, with the Schema itself as the resolver. That is where a
+//     parsed schema's simple types are charged.
 //   - a Schema-LESS assembler. A caller that builds a *SimpleType graph
-//     programmatically and never finalizes — builtin.Seed, and the conformance
-//     datatypes lane, which synthesizes types with no Schema anywhere — runs it
-//     itself against a resolver of its own. Before the base deferred, those
-//     callers got these rejections from NewSimpleType; without this entry point
-//     they would get them from nowhere, deciding cases against types the schema
-//     does not define.
+//     programmatically and never finalizes — builtin.Seed is one — runs it
+//     itself against a resolver of its own. Nothing else charges these
+//     constraints on such a graph.
 //
 // An unresolvable base is returned VERBATIM as the src-resolve clause 1.1 error
 // SimpleType.Base produces, not folded into one of the clauses below: the
 // clauses each presuppose a base that exists, and charging "no such type" as,
 // say, cos-st-restricts clause 1.1 would name a constraint with nothing to say
-// about it (STYLE E2).
+// about it.
 //
 // It charges, per clause:
 //
 //   - st-props-correct clause 5 (each member of {facets} is supported by the
-//     processor) — via checkFacetsSupported.
+//     processor).
 //   - st-props-correct clause 1 for the property tableau's {variety} clause
 //     (Datatypes §4.1.1 dc-defn: "Required for all Simple Type Definitions
 //     except ·xs:anySimpleType·, in which it is ·absent·"): only the type that
 //     IS xs:anySimpleType — the anchor, by identity (IsAnySimpleType) — may
 //     carry an absent {variety}. This is what rejects a user-defined type on
-//     xs:anySimpleType (#480): the XML mapping gives a ·restriction· the
-//     {variety} of its {base type definition} (§3.16.2.1), so such a type
-//     inherits xs:anySimpleType's absent {variety} and violates the tableau.
+//     xs:anySimpleType: the XML mapping gives a ·restriction· the {variety} of
+//     its {base type definition} (§3.16.2.1), so such a type inherits
+//     xs:anySimpleType's absent {variety} and violates the tableau.
 //     cos-st-restricts clause 1.1 does NOT reach that schema — its case 1
 //     selects on D.{variety} = atomic, which such a D does not have; 1.1 stays
-//     live in checkAtomicGraph for a producer that asserts an atomic D over a
-//     non-atomic B.
+//     live for a producer that asserts an atomic D over a non-atomic B.
 //   - st-props-correct clause 3 (D.{base type definition}.{final} does not
-//     contain restriction). This single site also discharges cos-st-restricts
+//     contain restriction). This single check also discharges cos-st-restricts
 //     clauses 1.2, 2.2.2.2, and 3.2.2.2 ("B.{final} does not contain
 //     restriction"): B is by definition D's {base type definition}, so those
-//     clauses are the identical predicate on the identical component and are not
-//     re-checked here — a second, unreachable rejection would be charge-imprecise
-//     (STYLE E2).
-//   - the per-variety shape and cos-st-restricts case constraints — via
-//     checkAtomicGraph / checkListGraph / checkUnionGraph.
+//     clauses are the identical predicate on the identical component, and a
+//     violation is charged once, as st-props-correct clause 3.
+//   - the per-variety shape and cos-st-restricts case constraints for an
+//     atomic, list or union t.
 //   - the precisionDecimal scale-facet Schema Component Constraints
 //     (maxScale-valid-restriction, minScale-valid-restriction, minScale ≤
-//     maxScale, f-ms-fixed, f-mns-fixed) — via checkScaleFacets, which compares
-//     t's {facets} against the base's through EffectiveFacets.
+//     maxScale, f-ms-fixed, f-mns-fixed), comparing t's {facets} against the
+//     base's through EffectiveFacets.
 //   - the count- and token-valued §4.3 facet Schema Component Constraints
 //     (length/minLength/maxLength/totalDigits/fractionDigits valid restriction,
 //     whiteSpace valid restriction, timezone valid restriction, and the
-//     consistency SCCs minLength ≤ maxLength and fractionDigits ≤ totalDigits)
-//     — via checkFacetRestrictions. These are the part of cos-st-restricts
-//     clause 1.3.2 / 2.2.2.5 / 3.2.2.5 decidable without a value space.
+//     consistency SCCs minLength ≤ maxLength and fractionDigits ≤ totalDigits).
+//     These are the part of cos-st-restricts clause 1.3.2 / 2.2.2.5 / 3.2.2.5
+//     decidable without a value space.
 //   - maxInclusive-maxExclusive (§4.3.8.4) and minInclusive-minExclusive
 //     (§4.3.9.4), which forbid specifying both bounds of one side at one
-//     derivation step — also via checkFacetRestrictions, in
-//     checkSameStepBoundPairs. They read which facets t's own step specifies and
-//     no {value}, so they need no value space either.
-//   - length-minLength-maxLength (§4.3.1.4) in FULL, also via
-//     checkFacetRestrictions: clauses 1.1/2.1, the same-{facets} value ordering,
-//     in checkLengthCoexistence, and clauses 1.2/2.2, the derivation-history
-//     demand that length and the coexisting minLength/maxLength not be specified
-//     at one step, in checkLengthDerivationHistory (which carries a GAP for the
-//     strictest reading of those two clauses). 1.2/2.2 were deferred until the
-//     base chain modeled every ·restriction· step the clause quantifies over,
-//     including #319's anonymous intermediate list.
+//     derivation step. They read which facets t's own step specifies and no
+//     {value}, so they need no value space either.
+//   - length-minLength-maxLength (§4.3.1.4): clauses 1.1/2.1, the same-{facets}
+//     value ordering, and clauses 1.2/2.2, the derivation-history demand that
+//     length and the coexisting minLength/maxLength not be specified at one
+//     step, over every ·restriction· step of the base chain.
+//     GAP(xsd): clauses 1.2/2.2 are read the accepting way, so a minLength or
+//     maxLength added at or below the step that introduced length is not
+//     rejected, as the strictest reading of those clauses would; owned by
+//     #555.
 //   - the list- and union-variety applicable-facet sets, cos-st-restricts
-//     clauses 2.2.2.4 and 3.2.2.4 — via checkVarietyApplicableFacets, whose
-//     applicable sets are the fixed literals cos-applicable-facets (§4.1.5)
-//     gives for those two varieties.
+//     clauses 2.2.2.4 and 3.2.2.4, as the fixed literals cos-applicable-facets
+//     (§4.1.5) gives for those two varieties.
+//   - the constructed-variety facet-shape clauses, 2.2.1.2 for a list and its
+//     union sibling 3.2.1.2. A named list datatype such as xs:NMTOKENS
+//     restricts an anonymous intermediate list (§3.4.5/§3.4.10/§3.4.12), so
+//     2.2.1.2 does not touch it.
 //
 // st-props-correct clause 2 (the {base} chain terminates at a primitive or
 // xs:anySimpleType — no circular derivation) is NOT charged here, and its
-// verdict is PRESUPPOSED by every unguarded chain walk below. With a deferred
-// {base type definition} a cycle is representable, so the clause is a real check
-// again: Schema.checkSimpleBaseAcyclic charges it in finalize's Phase B, which
-// runs BEFORE the Phase D pass that calls this one (resolve.go, PRINCIPLES 9).
-// A Schema-less caller running this method owes the same guarantee, and gets it
-// for free on an OwnedSimpleType-only chain, where a base must pre-exist the
-// type holding it.
+// verdict is PRESUPPOSED by every chain walk this method makes. With a deferred
+// {base type definition} a cycle is representable, so the clause is a real
+// check: Finalize charges it before it calls this method. A Schema-less caller
+// running this method owes the same guarantee, and gets it for free on an
+// OwnedSimpleType-only chain, where a base must pre-exist the type holding it.
 //
 // cos-st-restricts clause 3.3 (no-self-membership) is NOT charged here either,
-// and its verdict is PRESUPPOSED by every unguarded MEMBERSHIP walk below, on
+// and its verdict is PRESUPPOSED by every membership walk this method makes, on
 // the same terms. UnionDerivation.Members is a SimpleTypeOrRef sequence, so a
-// by-name member can name a union that reaches back — the exact repeal
-// SimpleTypeRef bases performed on the base chain — and unionMembershipHasList
-// and derivedOKSimple would not terminate on one. Schema.checkUnionMembershipAcyclic
-// charges the clause in finalize's Phase B, immediately after checkSimpleBaseAcyclic
-// and before the Phase D pass that calls this one (resolve.go, PRINCIPLES 9). A
-// Schema-less caller running this method owes the same guarantee, and gets it for
-// free on an OwnedSimpleType-only membership, where every member must pre-exist the
-// union holding it.
+// by-name member can name a union that reaches back, and a walk over such a
+// membership would not terminate. Finalize charges the clause before it calls
+// this method. A Schema-less caller running this method owes the same
+// guarantee, and gets it for free on an OwnedSimpleType-only membership, where
+// every member must pre-exist the union holding it.
 //
 // Still deferred here, and why:
 //
@@ -239,18 +228,37 @@ const (
 //     minLength ≤ maxLength charged here. All live above this pure leaf:
 //     applicability against the generated per-primitive table, the value-space
 //     comparisons in value.CheckFacetRestriction. They are taken back as a
-//     finalize-time capability, SimpleTypeRestrictionChecker
-//     (restrictionchecker.go), which checkSimpleTypeDerivations puts every
-//     simple type an assembled Schema reaches to; builtin.NewRestrictionChecker
-//     is the implementation that wires the two halves together.
-//
-// The two constructed-variety facet-shape clauses — 2.2.1.2 for a list and its
-// union sibling 3.2.1.2 — are BOTH charged here, in checkListGraph and
-// checkUnionGraph respectively. 2.2.1.2 was deferred until builtin.Seed modeled
-// the anonymous intermediate list a named list datatype restricts (§3.4.5/
-// §3.4.10/§3.4.12); with that node interposed, xs:NMTOKENS/xs:IDREFS/xs:ENTITIES
-// are restrictions of a real list and the clause no longer touches them.
+//     finalize-time capability, [SimpleTypeRestrictionChecker], to which
+//     [SchemaBuilder.FinalizeWith] puts every simple type an assembled Schema
+//     reaches; builtin.NewRestrictionChecker is the implementation that wires
+//     the two halves together.
 func (t *SimpleType) CheckDerivation(r TypeResolver) error {
+	// Where each clause above is charged: st-props-correct clause 5 in
+	// checkFacetsSupported; the per-variety cos-st-restricts cases in
+	// checkAtomicGraph / checkListGraph / checkUnionGraph (1.1 stays live in
+	// checkAtomicGraph; 2.2.1.2 and 3.2.1.2 in checkListGraph and
+	// checkUnionGraph, the former deferred until builtin.Seed modeled the
+	// anonymous intermediate list); the scale facets in checkScaleFacets; the
+	// count- and token-valued SCCs in checkFacetRestrictions, the same-step
+	// bound pairs in its checkSameStepBoundPairs, length-minLength-maxLength
+	// 1.1/2.1 in checkLengthCoexistence and 1.2/2.2 in
+	// checkLengthDerivationHistory, whose GAP marker carries the readings and
+	// the consumer list (1.2/2.2 waited on #319's anonymous intermediate list);
+	// the list/union applicable sets in checkVarietyApplicableFacets. The
+	// absent-{variety} rejection is #480's. The once-only charge and the
+	// verbatim src-resolve error the doc states are STYLE E2's. The method is
+	// exported because one implementation serving both callers keeps the rule
+	// single (STYLE T5/T4); the conformance datatypes lane is the second
+	// Schema-less caller.
+	//
+	// Ordering: Schema.checkSimpleBaseAcyclic charges st-props-correct clause 2
+	// in finalize's Phase B, and Schema.checkUnionMembershipAcyclic charges
+	// cos-st-restricts clause 3.3 immediately after it, both BEFORE the Phase D
+	// pass (Schema.checkSimpleTypeDerivations, resolve.go) that calls this one
+	// (PRINCIPLES 9 for the base chain; PRINCIPLES 9 again for the membership
+	// walks unionMembershipHasList and derivedOKSimple, which would not
+	// terminate on a cycle). The restriction checker is applied by the same
+	// checkSimpleTypeDerivations (restrictionchecker.go).
 	if err := checkFacetsSupported(t.loc, t.ownFacets); err != nil {
 		return err
 	}
@@ -1290,18 +1298,18 @@ func checkLengthDerivationHistory(r TypeResolver, t *SimpleType, eff []Effective
 // wanted (STYLE D4): the chain's acyclicity is the proof CheckDerivation's doc
 // states, established by Phase B before this runs.
 //
-// GAP(xsd): the two readings above make this check REJECT LESS than the
-// strictest reading of clauses 1.2/2.2 — one that admits only STRICT ancestors
-// as candidates and reads "length is not specified" against the overlay. Under
-// that stricter reading a minLength/maxLength introduced at or below the step
-// that introduced length is also an error, so a schema deriving st2 from
-// st = string(length=5) by adding maxLength=5 would be rejected. It is not
-// rejected here. That shape is the W3C suite's MS-Errata102006-07-15/errF001,
-// which the suite declares VALID while flagging its own expectation
-// status="queried" against W3C bug 4681 since 2007-06-21 — i.e. the one
-// published fixture bearing on the divergence reads it the accepting way, and
-// the erratum's prose agrees with it, so the stricter reading is not adopted
-// without an oracle grounding that reaches this fixture.
+// GAP(xsd): owned by #555. The two readings above make this check REJECT LESS
+// than the strictest reading of clauses 1.2/2.2 — one that admits only STRICT
+// ancestors as candidates and reads "length is not specified" against the
+// overlay. Under that stricter reading a minLength/maxLength introduced at or
+// below the step that introduced length is also an error, so a schema deriving
+// st2 from st = string(length=5) by adding maxLength=5 would be rejected. It is
+// not rejected here. That shape is the W3C suite's
+// MS-Errata102006-07-15/errF001, which the suite declares VALID while flagging
+// its own expectation status="queried" against W3C bug 4681 since 2007-06-21 —
+// i.e. the one published fixture bearing on the divergence reads it the
+// accepting way, and the erratum's prose agrees with it, so the stricter reading
+// is not adopted without an oracle grounding that reaches this fixture.
 //
 // The withheld rejection is an UNDER-rejection for every consumer of this
 // error, so no valid schema can be false-rejected by it. The error returned here

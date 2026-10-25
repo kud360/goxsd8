@@ -33,34 +33,38 @@ import (
 //
 //   - 4.2.1 (c-ctes): a simple base, or a complex base whose {content type} has
 //     {variety} empty or simple, contributes no particle — the result is clause
-//     4.1.1/4.1.2's, delegated to explicitContentType;
+//     4.1.1/4.1.2's;
 //   - 4.2.2: a complex base with element-only or mixed content and an ***empty***
 //     ·effective content· yields the base's ENTIRE Content Type record, {open
 //     content} included — a different sharing rule from 4.2.3, which takes only
 //     {open content} from the base;
 //   - 4.2.3: otherwise {variety} is mixed iff ·effective mixed·, {particle} is
-//     extensionParticle's merge of the ·base particle· with the ·effective
-//     content·, {open content} is the base's, and {simple type definition} is
+//     the merge of the ·base particle· with the ·effective content·, {open
+//     content} is the base's, and {simple type definition} is
 //     ·absent· — automatic here, since ElementContent has no such field.
 //
 // Nothing is deep-copied: the base particle and the effective content enter the
 // synthesized structure as the very values the base and this derivation already
 // hold, so "the same particles appear in both the base type definition and the
 // extension" (xr.ctd.n4-bis). A Go copy of an immutable value component IS that
-// component; no identity marker is added to carry the fact (STYLE D3).
+// component; no identity marker is added to carry the fact.
 //
 // allGroup reads a <group ref> to the Model Group it denotes (§3.7.2, xr.mgd3),
-// which clause 4.2.3's sub-case test needs — see allGroupOfParticle. It is a
-// parameter and NOT a general extension point: this package's own caller has
-// s.modelGroupIndex and passes Schema.modelGroupNamed, while the producer calls
-// at produce time, before any *Schema exists, and must build a referenced
-// definition on demand. Two call sites, two lookup regimes, one merge. An error
-// it returns is wrapped at this boundary (STYLE E1) so a producer-built failure
-// arrives naming the clause it was consulted for.
+// which clause 4.2.3's sub-case test needs. It is a parameter and NOT a general
+// extension point: the schema producer calls this before any *Schema exists,
+// and must build a referenced definition on demand, while Finalize, the other
+// caller, looks the group up by name. An error it returns is wrapped
+// here so the failure arrives naming the clause it was consulted for.
 //
 // loc is charged to every rejection this construction can raise; a caller with
 // no real source position passes the zero xsderr.Loc{}.
 func ExtensionContentType(loc xsderr.Loc, base TypeDefinition, effective *Particle, explicitEmpty, effectiveMixed bool, allGroup func(QName) (ModelGroup, bool, error)) (ContentType, error) {
+	// 4.2.1 is explicitContentType's, 4.2.3's merge is extensionParticle's, and
+	// allGroup feeds allGroupOfParticle. This package's own caller has
+	// s.modelGroupIndex and passes Schema.modelGroupNamed; the producer builds
+	// on demand. Two call sites, two lookup regimes, one merge. No identity
+	// marker rides the shared particles (STYLE D3), and allGroup's error is
+	// wrapped at this boundary (STYLE E1).
 	switch b := base.(type) {
 	case *SimpleType:
 		return explicitContentType(effective, effectiveMixed), nil // 4.2.1, simple base

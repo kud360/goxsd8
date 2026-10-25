@@ -8,10 +8,9 @@ import "github.com/kud360/goxsd8/xsderr"
 // into one lookup bucket — a shared name between a simple and a complex type in
 // one namespace is exactly the sch-props-correct (§3.17.6.1 clause 2)
 // collision, so one sum keyed once makes the two-map illegal state
-// unrepresentable (STYLE T1). The unexported typeDefinition marker method seals
-// it (STYLE T2): consumers exhaustively switch these two variants and no
-// third is representable, mirroring term.go's Term and complextype.go's
-// ContentType sealed sums.
+// unrepresentable. It is a sealed sum, as [Term] and [ContentType] are: no type
+// outside this package can implement it, so consumers exhaustively switch these
+// two variants and no third is representable.
 //
 // The two variants satisfy TypeDefinition with different receiver kinds, a
 // deliberate asymmetry a consumer must respect: ComplexType satisfies it BY
@@ -32,12 +31,16 @@ type TypeDefinition interface {
 	// doc's Components section). Both variants already expose it
 	// (ComplexType.Loc, (*SimpleType).Loc), so it is promoted into the sum to
 	// let the one {type definitions} bucket cite a position without a type
-	// switch (STYLE T2).
+	// switch.
 	Loc() xsderr.Loc
 }
 
 // typeDefinition marks ComplexType as a TypeDefinition (§3.17.1); see the
-// TypeDefinition doc. ComplexType satisfies the sum by value.
+// TypeDefinition doc. ComplexType satisfies the sum by value. This unexported
+// marker is what seals TypeDefinition (STYLE T2's closed-sum exception),
+// mirroring term.go's Term and complextype.go's ContentType; the one sum keyed
+// once is the STYLE T1 move, and promoting Name and Loc into it is what spares
+// a consumer the type switch T2 bars.
 func (ComplexType) typeDefinition() {}
 
 // typeDefinition marks *SimpleType as a TypeDefinition (§3.17.1); see the
@@ -60,13 +63,12 @@ func (*SimpleType) typeDefinition() {}
 //     <simpleType> child, and which §3.3.2.1's synthesized {default type
 //     definition} fills by copying the declaring element's own slot.
 //
-// It is a sealed sum (STYLE T2): TypeDefinitionRef, InlineTypeDefinition and
-// SubstitutionGroupHeadTypeRef are its only implementations, sealed by the
-// unexported typeDefinitionOrRef method, so consumers exhaustively switch the
-// three branches and no fourth variant is representable. It copies
-// attributeuse.go's AttributeDeclarationOrRef precedent exactly, and for the same
-// reason: the XML mappings that populate the slot differ fundamentally in
-// OWNERSHIP of the type definition they yield.
+// It is a sealed sum: TypeDefinitionRef, InlineTypeDefinition and
+// SubstitutionGroupHeadTypeRef are its only implementations, so consumers
+// exhaustively switch the three branches and no fourth variant is
+// representable. It follows [AttributeDeclarationOrRef]'s precedent exactly,
+// and for the same reason: the XML mappings that populate the slot differ
+// fundamentally in OWNERSHIP of the type definition they yield.
 //
 //   - TypeDefinitionRef covers §3.3.2.1 dcl.elt.common clauses 2 and 4, clause
 //     3's NAMED-head case, §3.2.2.2 dcl.att.local's type= and xs:anySimpleType
@@ -80,18 +82,14 @@ func (*SimpleType) typeDefinition() {}
 //     owns nor can name, because the OWNER is another Element Declaration. See
 //     that type.
 //
-// NOT EVERY ARM IS LEGAL IN EVERY SLOT, and the whole arm × slot legality table
-// lives in exactly one place, checkTypeDefinitionOrRef's typeDefinitionSlot
-// switch: SubstitutionGroupHeadTypeRef is admitted by an ELEMENT declaration's
-// {type definition} and by a Type Alternative's, which §3.3.2.1 fills by copying
-// that same slot, since neither §3.2.2.2 nor §3.4.2 has a clause-3 analog to
-// produce one. Making that unrepresentable at COMPILE time would take a second
-// sealed interface for the element slot alone, which forks ResolvedType and
-// checkTypeDefinitionOrRef (STYLE T4) and changes
-// ElementDeclaration.TypeDefinition()'s return type; it is deliberately not
-// done. A runtime rejection charged to xsderr.RuleComponentInvariant is the
-// established precedent here — NewElementDeclaration rejects an
-// InlineTypeDefinition wrapping a ComplexType the same way.
+// NOT EVERY ARM IS LEGAL IN EVERY SLOT: SubstitutionGroupHeadTypeRef is
+// admitted by an ELEMENT declaration's {type definition} and by a Type
+// Alternative's, which §3.3.2.1 fills by copying that same slot, since neither
+// §3.2.2.2 nor §3.4.2 has a clause-3 analog to produce one. The constructors of
+// every other slot's owner reject it at run time, charged to
+// xsderr.RuleComponentInvariant — as NewElementDeclaration rejects an
+// InlineTypeDefinition wrapping a ComplexType — rather than the type system
+// making it unrepresentable.
 //
 // A nil TypeDefinitionOrRef is the single encoding of an ABSENT slot, in EVERY
 // property this sum serves — the state a programmatically built declaration is
@@ -99,11 +97,9 @@ func (*SimpleType) typeDefinition() {}
 // ComplexType built with no base name is in. The meaning of nil is a property of
 // the SUM, not of the slot the caller reached it through: a consumer that
 // followed a slot must never read nil as "the ur-type" or as any other present
-// component, because ResolvedType and resolveTypeDefinitionSlot answer for all slots at
-// once and cannot be made arm-meaning-dependent on the caller's origin. It
-// replaces the zero QName that used to carry that meaning, which was ambiguous:
-// the same QName{} also had to stand for "anonymous type" (STYLE D3, one fact
-// one encoding). Anonymity is now DERIVED from which arm the slot holds, never
+// component, because ResolvedType answers for all slots at once. The zero QName
+// never encodes absence, because QName{} would also have to stand for
+// "anonymous type". Anonymity is DERIVED from which arm the slot holds, never
 // separately stored: an InlineTypeDefinition is anonymous by construction, a
 // TypeDefinitionRef never is.
 type TypeDefinitionOrRef interface{ typeDefinitionOrRef() }
@@ -155,7 +151,7 @@ type TypeDefinitionRef struct{ Name QName }
 //     — it is registered nowhere, it is built in the same producer call, the
 //     {base type definition} slot holding it is its sole owner, and its {name}
 //     is absent — so it is this arm rather than a fourth one recording
-//     provenance the component model does not otherwise carry (STYLE T4).
+//     provenance the component model does not otherwise carry.
 //
 // The wrapped definition is deliberately NOT registered in the schema's
 // {type definitions} (SchemaBuilder.AddType). §3.17.2's XML Mapping Summary
@@ -169,8 +165,8 @@ type TypeDefinitionRef struct{ Name QName }
 // unrelated anonymous types collide. Registering would also fork the component
 // in two: ComplexType is a value type, this slot holds its own copy, and
 // finalize's attribute folds write back through the Schema's own type slice —
-// so a registered copy would DIVERGE from the one a consumer reads here (STYLE
-// D3), which is worse than the fold not running. It is reachable only through
+// so a registered copy would DIVERGE from the one a consumer reads here, which
+// is worse than the fold not running. It is reachable only through
 // the owning declaration's TypeDefinition accessor; see Schema.Types.
 //
 // This slot does not populate the wrapped type's own {context} property, and it
@@ -179,8 +175,8 @@ type TypeDefinitionRef struct{ Name QName }
 // either component exists and threads it into both — into the wrapped type
 // through NewAnonymousComplexType's context argument, and into the owner through
 // the one entry point that accepts a wrapped COMPLEX type and checks the two
-// agree: NewElementDeclarationOwningTypes for a declaration (#340),
-// NewComplexTypeOwningBase for a redefining complex type (#505). That property
+// agree: NewElementDeclarationOwningTypes for a declaration,
+// NewComplexTypeOwningBase for a redefining complex type. That property
 // is §3.4.1 ctd-context; see ComplexTypeContext. A wrapped SIMPLE type's own
 // {context} (§3.16.1 std-context) is a separate property and is still unmodeled
 // here.
@@ -224,7 +220,7 @@ type InlineTypeDefinition struct{ Definition TypeDefinition }
 // defaults to being the same type definition as that of its substitution-group
 // head" among the cases where component identity IS determined by this
 // specification. This arm is how that identity is encoded — one component, one
-// owner, one {context}, referenced from a second slot (STYLE D3).
+// owner, one {context}, referenced from a second slot.
 //
 // Head names an ELEMENT DECLARATION, a different symbol space from
 // TypeDefinitionRef.Name: it is followed through Schema.Element, never
@@ -237,9 +233,9 @@ type InlineTypeDefinition struct{ Definition TypeDefinition }
 //
 // Head is a PRESENT reference, never the absent (zero) QName, on the same
 // footing as TypeDefinitionRef.Name. The arm is legal ONLY in an Element
-// Declaration's {type definition} slot; see TypeDefinitionOrRef for the arm ×
-// slot table and checkTypeDefinitionOrRef for its one implementation. The field
-// is read-only by convention; do not mutate it after construction.
+// Declaration's {type definition} slot and a Type Alternative's; see
+// TypeDefinitionOrRef. The field is read-only by convention; do not mutate it
+// after construction.
 type SubstitutionGroupHeadTypeRef struct{ Head QName }
 
 // typeDefinitionOrRef marks TypeDefinitionRef as a TypeDefinitionOrRef; see the
@@ -262,34 +258,39 @@ func (SubstitutionGroupHeadTypeRef) typeDefinitionOrRef() {}
 // read of that head's own {type definition} slot. ok is false for an absent
 // (nil) slot and for an unresolvable name — the cases every caller treats as
 // "not decidable by this clause", never as a violation. A dangling type name
-// was already charged src-resolve by resolve.go's Phase A; a head naming no
-// declaration was not, and survives finalize (§5.3, resolveTypeDefinitionSlot).
+// was already charged src-resolve by Finalize; a head naming no declaration
+// was not, and survives finalize (§5.3).
 //
 // It is exported for the instance validator, which reads an element
 // declaration's {type definition} slot to reach the ·selected type definition·
-// §3.3.4.6 makes the ·governing type definition· of a validation root (#714).
+// §3.3.4.6 makes the ·governing type definition· of a validation root.
 // A consumer outside this package must not re-derive the lookup: the three arms
 // do not agree on where the component lives, and the head arm is not a name
 // lookup at all.
 //
-// The head read is DEPTH-1 and carries no recursion and no visited set (STYLE
-// D4): SubstitutionGroupHeadTypeRef.Head names the OWNER of the anonymous type,
-// so the owner's own slot holds the component itself and never a second head
+// The head read is DEPTH-1 and carries no recursion:
+// SubstitutionGroupHeadTypeRef.Head names the OWNER of the anonymous type, so
+// the owner's own slot holds the component itself and never a second head
 // reference. That is enforced rather than assumed — an owner-of-owner chain
-// answers ok=false here, and Phase A rejects one outright
-// (resolveTypeDefinitionSlot), so for any schema that survived finalize this branch
-// is unreachable. A read-time accessor must not loop on a programmatically built
-// graph that checkSubstitutionGroupsAcyclic has not yet seen, which is why the
-// non-recursion is a rule of this function and not a caller's obligation.
+// answers ok=false here, and Finalize rejects one outright, so for any schema
+// that survived finalize this branch is unreachable. A read-time accessor must
+// not loop on a programmatically built graph Finalize has not yet checked,
+// which is why the non-recursion is a rule of this function and not a caller's
+// obligation.
 //
 // It answers for EVERY slot the sum serves — an element or attribute
 // declaration's {type definition} and a complex type's {base type definition}
 // alike — and deliberately takes the slot rather than the owning component, so
-// it can never become arm-meaning-dependent on where the caller came from. Every
-// consumer goes through this helper, through its complex-only narrowing
-// baseComplexType (complexderivation.go), or through its narrowed sibling
-// ResolvedSimpleType; none re-derives a bare-name lookup of its own (STYLE T4).
+// it can never become arm-meaning-dependent on where the caller came from. Its
+// narrowed sibling is ResolvedSimpleType.
 func (s *Schema) ResolvedType(ref TypeDefinitionOrRef) (TypeDefinition, bool) {
+	// The Finalize steps the doc names are resolve.go's Phase A:
+	// resolveTypeDefinitionSlot charges the dangling name and rejects the
+	// owner-of-owner chain, and the doc's not-yet-checked graph is one
+	// checkSubstitutionGroupsAcyclic has not seen; the depth-1 read is STYLE
+	// D4's. In-package consumers go through this helper or its complex-only
+	// narrowing baseComplexType (complexderivation.go) and re-derive no lookup
+	// (STYLE T4). The validator export is #714's.
 	switch r := ref.(type) {
 	case nil:
 		return nil, false
@@ -381,6 +382,14 @@ func (s typeDefinitionSlot) admitsHeadInherited() bool {
 // and slot supplies the property name that completes the phrase, so no caller
 // spells "{type definition}" as a literal: hard-coding it made every message lie
 // the moment {base type definition} adopted the sum (#505).
+//
+// Its typeDefinitionSlot switch is the whole arm × slot legality table
+// TypeDefinitionOrRef's doc states, in exactly one place. Making the
+// element-slot-only arm unrepresentable at COMPILE time would take a second
+// sealed interface for the element slot alone, which forks ResolvedType and
+// this check (STYLE T4) and changes ElementDeclaration.TypeDefinition()'s
+// return type; it is deliberately not done. The nil-is-absent encoding
+// replaced a zero QName that also had to mean "anonymous" (STYLE D3).
 func checkTypeDefinitionOrRef(loc xsderr.Loc, ref TypeDefinitionOrRef, slot typeDefinitionSlot, owner string) error {
 	ctx := owner + " " + slot.property()
 	switch r := ref.(type) {
