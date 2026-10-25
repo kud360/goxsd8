@@ -68,17 +68,16 @@ const ruleCTPropsCorrect xsderr.Rule = "ct-props-correct"
 // ContentType is the sealed sum of the four Content Type varieties of a Complex
 // Type Definition (Structures §3.4.1 "Content Type" property record, id="ct").
 // The spec's {variety} property is closed to exactly {empty, simple,
-// element-only, mixed}, so the set of variant shapes is closed. The unexported
-// contentType marker method seals it (STYLE T2) — consumers exhaustively
-// switch these variants and no further one is representable — mirroring
-// term.go's Term sealed sum.
+// element-only, mixed}, so the set of variant shapes is closed. It is a sealed
+// sum: no type outside this package can implement it, so a consumer switches
+// exhaustively over [EmptyContent], [SimpleContent] and [ElementContent] and no
+// further variant is representable.
 //
 // The four spec varieties collapse into THREE variant types because
 // element-only and mixed share an identical property shape (a Required
 // {particle} plus an Optional {open content}); they are one struct
 // (ElementContent) distinguished only by its Mixed bool, and Variety() derives
-// the element-only/mixed token from that bool rather than storing it (STYLE D3,
-// one fact one encoding).
+// the element-only/mixed token from that bool rather than storing it.
 //
 // Variety reports the {variety} property (§3.4.1) without a stored field: each
 // variant answers it from its own type (and, for ElementContent, its Mixed
@@ -97,7 +96,9 @@ type ContentType interface {
 type EmptyContent struct{}
 
 // contentType marks EmptyContent as a ContentType (§3.4.1); see the ContentType
-// doc.
+// doc. This unexported marker is what seals ContentType (STYLE T2's closed-sum
+// exception), mirroring term.go's Term; Variety is derived from each variant's
+// own type rather than stored (STYLE D3).
 func (EmptyContent) contentType() {}
 
 // Variety returns ContentEmpty (§3.4.1).
@@ -121,8 +122,8 @@ func (SimpleContent) Variety() ContentTypeVariety { return ContentSimple }
 // (§3.4.1), collapsed into one struct because the two varieties share an
 // identical property shape: a Required {particle} and an Optional {open
 // content}. Mixed is the single distinguishing fact — false for element-only,
-// true for mixed — and Variety() derives the token from it (STYLE D3), so the
-// variety is never stored twice.
+// true for mixed — and Variety() derives the token from it, so the variety is
+// never stored twice.
 //
 // Particle is the Required {particle} property (§3.4.1 ct-particle);
 // NewComplexType rejects an ElementContent whose Particle has an absent {term}
@@ -142,7 +143,7 @@ type ElementContent struct {
 func (ElementContent) contentType() {}
 
 // Variety returns ContentMixed when Mixed is true, otherwise ContentElementOnly
-// (§3.4.1). The token is derived from Mixed, never stored (STYLE D3).
+// (§3.4.1). The token is derived from Mixed, never stored.
 func (e ElementContent) Variety() ContentTypeVariety {
 	if e.Mixed {
 		return ContentMixed
@@ -151,19 +152,20 @@ func (e ElementContent) Variety() ContentTypeVariety {
 }
 
 // OpenContent is the Open Content property record of a Content Type (Structures
-// §3.4.1, id="oc"): {mode} (Required, one of interleave/suffix — closedsets.go)
-// and {wildcard} (Required, a Wildcard — §3.10.1). It appears only on an
-// element-only or mixed Content Type (as ElementContent.OpenContent), and its
-// absence is modeled by a nil *OpenContent there, not by a "none" mode (see
-// OpenContentMode's doc for why there is no "none" member).
+// §3.4.1, id="oc"): {mode} (Required, one of interleave/suffix — an
+// [OpenContentMode]) and {wildcard} (Required, a Wildcard — §3.10.1). It
+// appears only on an element-only or mixed Content Type (as
+// ElementContent.OpenContent), and its absence is modeled by a nil *OpenContent
+// there, not by a "none" mode (see OpenContentMode's doc for why there is no
+// "none" member).
 //
 // The zero value is NOT a valid OpenContent (its {mode} is the invalid zero
 // OpenContentMode); construct only through NewOpenContent, which rejects an
-// out-of-range {mode}, so an ill-formed record is unrepresentable (STYLE T1).
+// out-of-range {mode}, so an ill-formed record is unrepresentable.
 // OpenContent is immutable after construction.
 //
-// A *OpenContent is also one arm of the Attribution sealed sum
-// (contentmatcher.go): Matcher.Next hands back this record, not its {wildcard},
+// A *OpenContent is also one arm of the [Attribution] sealed sum:
+// [Matcher.Next] hands back this record, not its {wildcard},
 // for an item cvc-complex-content clause 2.4 or 3.4 admitted, because §3.4.4.4
 // ·attributes· such an item to the {open content} and to no particle.
 type OpenContent struct {
@@ -210,9 +212,8 @@ func (o OpenContent) Wildcard() Wildcard {
 // ComplexTypeContext is the sealed sum of the two component kinds an anonymous
 // complex type definition's {context} property may name (Structures §3.4.1,
 // id="ctd-context": "Either an Element Declaration or a Complex Type
-// Definition"). The unexported complexTypeContext marker method seals it (STYLE
-// T2), mirroring this file's ContentType and elementdeclaration.go's
-// ElementScopeParent.
+// Definition"). It is a sealed sum, as [ContentType] and [ElementScopeParent]
+// are: no type outside this package can implement it.
 //
 // Each arm carries a ComponentID, not a QName: §3.4.2.1 dcl.ctd.common makes
 // the target the nearest ancestor <element>, frequently a LOCAL element
@@ -233,8 +234,8 @@ func (o OpenContent) Wildcard() Wildcard {
 // group definition" representable. Separate sums, one shared primitive.
 //
 // The ElementDeclarationContext arm — the only arm any mapping rule reaches — is
-// populated by the parser as of #340, for the inline anonymous <complexType> of
-// a local or a global <element> alike. ComplexTypeDefinitionContext stays
+// populated by the parser for the inline anonymous <complexType> of a local or
+// a global <element> alike. ComplexTypeDefinitionContext stays
 // producer-unreachable by construction, not by omission; see its own doc.
 type ComplexTypeContext interface {
 	complexTypeContext()
@@ -254,16 +255,16 @@ type ComplexTypeContext interface {
 // The field is read-only by convention; do not mutate it after construction.
 //
 // A mis-pointing {context} — an InlineTypeDefinition wrapping an anonymous
-// ComplexType whose {context} names some OTHER component — is unrepresentable as
-// of #340: NewElementDeclarationOwningTypes is the only construction path for a
+// ComplexType whose {context} names some OTHER component — is unrepresentable:
+// NewElementDeclarationOwningTypes is the only construction path for a
 // declaration that owns an anonymous complex type, and it rejects a Component
 // that differs from the identity the caller minted for the declaration itself.
 //
 // That same identity is what the anonymous type's own nested local element
 // declarations report as their {scope}.{parent}, through
-// AnonymousComplexTypeScopeParent.Owner (elementdeclaration.go): the {context}
-// back-pointer here and that forward reference are ONE fact with one encoding
-// (STYLE D3), one mint per inline construct. See that type for the other half.
+// [AnonymousComplexTypeScopeParent].Owner: the {context} back-pointer here and
+// that forward reference are ONE fact with one encoding, one mint per inline
+// construct. See that type for the other half.
 type ElementDeclarationContext struct{ Component ComponentID }
 
 // ComplexTypeDefinitionContext is the {context} arm naming a containing Complex
@@ -277,10 +278,9 @@ type ElementDeclarationContext struct{ Component ComponentID }
 // which for a redefining <complexType> is a Complex Type Definition. That is the
 // arm's producer-reachable case, minted and checked by NewComplexTypeOwningBase,
 // and by NewAnonymousComplexTypeOwningBase when the redefining component is
-// itself such an original (a chained <redefine>, #585). Before that landing the
-// arm existed only so the §3.4.1 value space stayed whole for ct-props-correct
-// (§3.4.6.1) clause 1 bookkeeping and so a caller assembling a schema
-// programmatically was not rejected for building a legal component state.
+// itself such an original (a chained <redefine>). The arm also keeps the §3.4.1
+// value space whole, so a caller assembling a schema programmatically is not
+// rejected for building a legal component state.
 //
 // Component is the containing definition's minted identity, present under the
 // same rule as ElementDeclarationContext's. The field is read-only by
@@ -327,73 +327,36 @@ func checkComplexTypeContext(loc xsderr.Loc, context ComplexTypeContext) error {
 
 // ComplexType is the Complex Type Definition component (Structures §3.4.1,
 // id="Complex_Type_Definition_details"): a kind of Type Definition with
-// {name} (bundled with {target namespace} as an xsd.QName per
-// this package's "Names are expanded QNames" convention — doc.go; the zero
-// QName is an anonymous complex type), {context}, {base type definition},
-// {final}, {derivation method}, {abstract}, {attribute uses}, {attribute
-// wildcard} (Optional), {content type}, {prohibited substitutions}, and
-// {assertions}.
+// {name} (bundled with {target namespace} as an xsd.QName, per the package
+// doc's naming convention; the zero QName is an anonymous complex type),
+// {context}, {base type definition}, {final}, {derivation method}, {abstract},
+// {attribute uses}, {attribute wildcard} (Optional), {content type},
+// {prohibited substitutions}, and {assertions}.
 //
 // Like the other §3 component shapes in this package, ComplexType is a
 // STRUCTURAL holder built before resolution. {base type definition} is carried
-// as a TypeDefinitionOrRef (typedefinition.go): ordinarily a pre-resolution
-// TypeDefinitionRef naming a top-level type, and for the one mapping rule that
-// needs an already-resolved anonymous base — §4.2.4 src-expredef clause 1.1's
-// redefine pairing — an InlineTypeDefinition owning it outright. Finalize
-// (resolve.go, #173) VALIDATES that a named reference resolves to a type
-// definition (src-resolve clause 1.1) and that the complex-type base chain is
-// acyclic except xs:anyType's self-derivation (ct-props-correct clause 3), but
-// does NOT rewrite a name into a resolved component: the QName is retained, and
-// a consumer follows the slot with Base. Finalize also charges ct-props-correct
-// clauses 2 and 4 and, against the resolved base, derivation-ok-restriction
-// (§3.4.6.3) for a restriction and cos-ct-extends (§3.4.6.2) for an extension
-// (Phase D, complexderivation.go and complexextension.go, #262/#264). Clause 1's
+// as a [TypeDefinitionOrRef]: ordinarily a pre-resolution TypeDefinitionRef
+// naming a top-level type, and for the one mapping rule that needs an
+// already-resolved anonymous base — §4.2.4 src-expredef clause 1.1's redefine
+// pairing — an InlineTypeDefinition owning it outright. Finalize VALIDATES that
+// a named reference resolves to a type definition (src-resolve clause 1.1) and
+// that the complex-type base chain is acyclic except xs:anyType's
+// self-derivation (ct-props-correct clause 3), but does NOT rewrite a name into
+// a resolved component: the QName is retained, and a consumer follows the slot
+// with Base. Finalize also charges ct-props-correct clauses 2 and 4 and,
+// against the resolved base, derivation-ok-restriction (§3.4.6.3) for a
+// restriction and cos-ct-extends (§3.4.6.2) for an extension. Clause 1's
 // remaining resolved parts stay deferred.
 //
 // {attribute uses} and {attribute wildcard} are the TWO properties Finalize
 // completes rather than merely checks, because each has mapping clauses that
 // need other components. §3.4.2.4 clause 2 and §3.4.2.5 clause 1's ·complete
 // wildcard· fold in the attribute groups the type's <attributeGroup ref>s
-// ·resolve· to, which Phase D does first, from attributeContent
-// (attributegroupfold.go, #479). §3.4.2.4 clause 3 then folds the {base type
-// definition}'s uses into the type's own (attributeusefold.go, #401), and
-// §3.4.2.5 clause 2.2 unions an EXTENSION's ·complete wildcard· with the base's
-// (attributewildcardfold.go, #265); for a restriction clause 2.1 makes the
-// ·complete wildcard· final. See AttributeUses and AttributeWildcard.
-//
-// attributeContent, prohibitedAttributeNames and ownAttributeUses are the three
-// fields here that are NOT §3.4.1 properties, and all three are retained MAPPING
-// INPUTS.
-//
-// attributeContent is the type's own <attribute> and <attributeGroup ref>
-// children in document order — clauses 1 and 2's input, as the
-// AttributeUseOrGroupRef sum — retained because a referenced group is reachable
-// only once the schema is assembled. The group fold overwrites attributeUses
-// with the clause 1 and 2 union and sets attributeContent to nil, so a finalized
-// type holds no reference; until then attributeUses holds only the
-// ResolvedAttributeUse arms, and that duplication ends at the fold (STYLE D3).
-//
-// prohibitedAttributeNames carries clause 3.2.2's input: the fold excludes the
-// expanded name of "what would have been an attribute use corresponding to an
-// <attribute> child, if the <attribute> had not had use = prohibited", and
-// §3.4.2.4's Note makes such an <attribute> correspond to no component at all —
-// so nothing among the properties records it and absence from {attribute uses}
-// cannot distinguish "never declared" from "explicitly prohibited". The fold
-// runs after the producer is gone, so the fact travels on the component. It is
-// about ONE type's own source declaration, consulted once at that type's own
-// fold step, and is never walked up a base chain.
-//
-// ownAttributeUses carries the clause 1 and clause 2 value the group fold
-// computed from attributeContent — this type's own <attribute> children and the
-// {attribute uses} of the attribute groups its <attributeGroup ref> children
-// ·resolve· to — retained past the clause 3 fold that overwrites {attribute
-// uses} with the union of all three. cos-ct-extends (§3.4.6.2) clause 1.5 needs
-// exactly that per-step value to collapse a chain's extension steps, and clause
-// 3.1's fold is not invertible, so it is retained rather than recovered
-// (extensionStepAttributeUses, attributeusefold.go). The fold WRITES it, at the
-// one site that overwrites the property it copies; nothing else does, and a
-// component the fold has not reached carries nil as one whose own source
-// declaration contributed no use does.
+// ·resolve· to, which Finalize does first. §3.4.2.4 clause 3 then folds the
+// {base type definition}'s uses into the type's own, and §3.4.2.5 clause 2.2
+// unions an EXTENSION's ·complete wildcard· with the base's; for a restriction
+// clause 2.1 makes the ·complete wildcard· final. See AttributeUses and
+// AttributeWildcard.
 //
 // {context} (§3.4.1 ctd-context) is the component an ANONYMOUS type appears in,
 // and the §3.4.1 tableau makes it and {name} a strict XOR: "Required if {name}
@@ -424,13 +387,21 @@ func checkComplexTypeContext(loc xsderr.Loc, context ComplexTypeContext) error {
 // owning its base), NewAnonymousComplexType (anonymous) or
 // NewAnonymousComplexTypeOwningBase (anonymous, owning its base), which reject the
 // tableau-shape states ct-props-correct (§3.4.6.1) clause 1 forbids so they are
-// unrepresentable (STYLE T1). None is the full property-correctness check (see
-// ruleCTPropsCorrect's doc for exactly which clauses are deferred). ComplexType
-// is immutable after construction, and remains so with a {context}: the cell a
-// ComponentID points at is opaque and holds no mutable state, so copying a
-// ComplexType is still a complete copy — the copies share one {context} identity,
-// which is the point.
+// unrepresentable. None is the full property-correctness check: clauses 2, 3
+// and 4 are Finalize's, as above, and clause 5 needs no check, because an
+// {open content} can sit only on an ElementContent, whose {variety} is always
+// element-only or mixed. ComplexType is immutable after construction, and
+// remains so with a {context}: the cell a ComponentID points at is opaque and
+// holds no mutable state, so copying a ComplexType is still a complete copy —
+// the copies share one {context} identity, which is the point.
 type ComplexType struct {
+	// The constructors make the clause-1 tableau-shape states unrepresentable
+	// (STYLE T1); ruleCTPropsCorrect's doc says exactly which ct-props-correct
+	// clauses are deferred and where each is charged (complexderivation.go and
+	// complexextension.go, #262/#264; resolve.go, #173). The three fields below
+	// that are NOT §3.4.1 properties — attributeContent,
+	// prohibitedAttributeNames and ownAttributeUses — are retained MAPPING
+	// INPUTS; each field's comment says why.
 	loc  xsderr.Loc // source position; provenance, not a §3.4.1 property
 	name QName
 	// context is the {context} property: nil ⇔ absent, which the §3.4.1
@@ -447,20 +418,48 @@ type ComplexType struct {
 	derivationMethod DerivationMethod
 	final            []DerivationMethod
 	abstract         bool
-	attributeUses    []AttributeUse
-	// attributeContent is a mapping input, not a §3.4.1 property: §3.4.2.4
-	// clauses 1 and 2's source, nil once the group fold has consumed it
-	// (attributegroupfold.go). See the type doc.
+	// attributeUses is the {attribute uses} property, completed at Finalize by
+	// the group fold (attributegroupfold.go, #479) and then the base fold
+	// (attributeusefold.go, #401), reaching anonymous types through
+	// ownedtypefold.go (#414) and a src-expredef clause 1.1 original through
+	// baseAttributeUses (#505); attributeWildcard is completed alongside it
+	// (attributewildcardfold.go, #265; baseAttributeWildcard, #505).
+	attributeUses []AttributeUse
+	// attributeContent is a mapping input, not a §3.4.1 property: the type's
+	// own <attribute> and <attributeGroup ref> children in document order —
+	// §3.4.2.4 clauses 1 and 2's input, as the AttributeUseOrGroupRef sum —
+	// retained because a referenced group is reachable only once the schema is
+	// assembled. The group fold (attributegroupfold.go, #479) overwrites
+	// attributeUses with the clause 1 and 2 union and sets attributeContent to
+	// nil, so a finalized type holds no reference; until then attributeUses
+	// holds only the ResolvedAttributeUse arms, and that duplication ends at
+	// the fold (STYLE D3).
 	attributeContent []AttributeUseOrGroupRef
-	// ownAttributeUses is a mapping input, not a §3.4.1 property: the
-	// §3.4.2.4 clause 1 and clause 2 uses this type's OWN source declaration
-	// gave it, retained past the clause 3 fold that overwrites attributeUses
-	// (attributeusefold.go). nil ⇔ ·absent·, never a companion bool (STYLE
-	// D3). See the type doc.
+	// ownAttributeUses is a mapping input, not a §3.4.1 property: the §3.4.2.4
+	// clause 1 and clause 2 value the group fold computed from attributeContent
+	// — this type's own <attribute> children and the {attribute uses} of the
+	// attribute groups its <attributeGroup ref> children ·resolve· to —
+	// retained past the clause 3 fold (attributeusefold.go, #401) that
+	// overwrites attributeUses with the union of all three. cos-ct-extends
+	// (§3.4.6.2) clause 1.5 needs exactly that per-step value to collapse a
+	// chain's extension steps, and clause 3.1's fold is not invertible, so it
+	// is retained rather than recovered (extensionStepAttributeUses). The fold
+	// WRITES it, at the one site that overwrites the property it copies;
+	// nothing else does, and a component the fold has not reached carries nil
+	// as one whose own source declaration contributed no use does. nil ⇔
+	// ·absent·, never a companion bool (STYLE D3).
 	ownAttributeUses []AttributeUse
 	// prohibitedAttributeNames is a mapping input, not a §3.4.1 property: the
-	// expanded names this type's OWN source declaration gave use="prohibited"
-	// (§3.4.2.4 clause 3.2.2). See the type doc.
+	// expanded names this type's OWN source declaration gave use="prohibited",
+	// §3.4.2.4 clause 3.2.2's input. The fold excludes the expanded name of
+	// "what would have been an attribute use corresponding to an <attribute>
+	// child, if the <attribute> had not had use = prohibited", and §3.4.2.4's
+	// Note makes such an <attribute> correspond to no component at all — so
+	// nothing among the properties records it and absence from {attribute
+	// uses} cannot distinguish "never declared" from "explicitly prohibited".
+	// The fold runs after the producer is gone, so the fact travels on the
+	// component. It is about ONE type's own source declaration, consulted once
+	// at that type's own fold step, and is never walked up a base chain.
 	prohibitedAttributeNames []QName
 	attributeWildcard        Wildcard
 	hasAttributeWildcard     bool
@@ -495,43 +494,42 @@ type ComplexType struct {
 // w-props-correct) clause 5 forbids, charged to that rule rather than to
 // ct-props-correct: an {attribute wildcard} whose {namespace constraint}
 // carries the sibling keyword. This slot is one of the two places an attribute
-// wildcard is identifiable as such; see rejectSiblingOnAttributeWildcard.
+// wildcard is identifiable as such.
 //
 // The substantive cross-component clauses (base-type resolution, circularity,
 // attribute-use expanded-name uniqueness) and the derivation-validity rules are
-// NOT checked here — see ruleCTPropsCorrect's doc.
+// NOT checked here; Finalize charges them (see ComplexType).
 //
 // attributeContent is the type's OWN attribute content in document order — a
 // ResolvedAttributeUse per <attribute> child and an AttributeGroupRef per
 // <attributeGroup ref> child, the synthesized <schema defaultAttributes>
-// reference last (§3.4.2.4's precondition) — and checkAttributeContent rejects a
-// member no arm describes. attributeWildcard is the type's OWN <anyAttribute>
-// only: §3.6.2.2's ·local wildcard·, which Finalize intersects with the
-// referenced groups' {attribute wildcard}s to form §3.4.2.5 clause 1's ·complete
-// wildcard· (attributegroupfold.go). Neither is the property its accessor
-// reports until Finalize has folded it; see AttributeUses and AttributeWildcard.
+// reference last (§3.4.2.4's precondition) — and a member that is neither arm
+// is rejected. attributeWildcard is the type's OWN <anyAttribute> only:
+// §3.6.2.2's ·local wildcard·, which Finalize intersects with the referenced
+// groups' {attribute wildcard}s to form §3.4.2.5 clause 1's ·complete
+// wildcard·. Neither is the property its accessor reports until Finalize has
+// folded it; see AttributeUses and AttributeWildcard.
 //
 // prohibitedAttributeNames is not a §3.4.1 property and is not validated here:
 // it is the mapping input §3.4.2.4 clause 3.2.2 needs and any set of expanded
 // names is legal (the Note makes a prohibited <attribute> "pointless, though not
 // an error" outside a restriction). It arrives through this constructor rather
 // than through a setter because ComplexType is immutable after construction and
-// this is its single construction path (STYLE T1); the alternative — an
-// exported With… copier — would add a second way to build the value for the sake
-// of one field that has nothing to check.
+// this is its single construction path; the alternative — an exported With…
+// copier — would add a second way to build the value for the sake of one field
+// that has nothing to check.
 //
 // baseTypeDefinitionName is a pre-resolution QName reference, not a resolved
-// component; nothing resolves it yet (#173). It is lifted into the {base type
-// definition} slot by baseTypeDefinitionRef, so the zero QName is stored as the
-// nil (·absent·) slot rather than as a nameless reference — see Base. A base
-// this entry point cannot express, the anonymous already-resolved one of
-// src-expredef clause 1.1, has its own entry point in NewComplexTypeOwningBase.
-// attributeWildcard is a pointer so absence (nil) is distinct from a present
-// zero record (mirroring attributegroupdefinition.go's *Wildcard slot); when
-// non-nil the pointed-to value is COPIED into the struct and
-// hasAttributeWildcard is set — the pointer itself is never stored, so the
-// caller's value is not aliased. Every slice parameter is copied; the caller's
-// backing arrays are not aliased, and an empty input is held as nil.
+// component; Finalize validates that it resolves but does not rewrite it. The
+// zero QName is stored as the nil (·absent·) slot rather than as a nameless
+// reference — see Base. A base this entry point cannot express, the anonymous
+// already-resolved one of src-expredef clause 1.1, has its own entry point in
+// NewComplexTypeOwningBase. attributeWildcard is a pointer so absence (nil) is
+// distinct from a present zero record, as in [NewAttributeGroupDefinition];
+// when non-nil the pointed-to value is COPIED — the pointer itself is never
+// stored, so the caller's value is not aliased. Every slice parameter is
+// copied; the caller's backing arrays are not aliased, and an empty input is
+// held as nil.
 //
 // loc is the source position charged to any rejection AND retained: Loc reports
 // it back as the definition's provenance. Pass the position of this
@@ -574,12 +572,10 @@ func baseTypeDefinitionRef(name QName) TypeDefinitionOrRef {
 //
 // It is the ONLY construction path for a complex type that owns its base, and it
 // exists to make ONE state unrepresentable that no shape check could reach: an
-// owned original whose {context} names some OTHER component, which is the
-// redefine-side form of the context-tracking hazard PRINCIPLES 16 names for
-// <override>. It adds three rejections beyond NewComplexType's, all charged to
+// owned original whose {context} names some OTHER component. It adds three
+// rejections beyond NewComplexType's, all charged to
 // xsderr.RuleComponentInvariant because a ComponentID is this package's
-// representation rather than a spec-visible name — the footing
-// checkComplexTypeContext already stands on:
+// representation rather than a spec-visible name:
 //
 //   - an unminted (zero) id: there would be nothing to compare the {context}
 //     against;
@@ -590,20 +586,17 @@ func baseTypeDefinitionRef(name QName) TypeDefinitionOrRef {
 //     <complexType> is a Complex Type Definition and never a declaration.
 //
 // A base that is NAMED (its {context} therefore ·absent· per §3.4.1's XOR) is
-// rejected by the shared core's checkTypeDefinitionOrRef, which admits only an
-// anonymous type in the InlineTypeDefinition arm.
+// rejected, because only an anonymous type can be owned.
 //
 // # Why an identity, and why it is not stored
 //
 // id is NOT stored on the built type. Its whole role is this construction-time
-// comparison, and a field written but never read is dead state (STYLE D3); the
-// landing that adds an ID→component resolver adds the field together with its
-// reader (see ComponentID), exactly as NewElementDeclarationOwningTypes's doc
-// already commits this repo to. That makes the back-pointer's target
-// unobservable, which is admissible only BECAUSE the token is never stored: for
-// a NAMED, top-level component like this one, identity normally IS its expanded
-// name, so a stored token would be a second encoding of that identity (STYLE
-// D3).
+// comparison, so nothing on the result reports it, as with
+// NewElementDeclarationOwningTypes's id (see ComponentID). That makes the
+// back-pointer's target unobservable, which is admissible only BECAUSE the
+// token is never stored: for a NAMED, top-level component like this one,
+// identity normally IS its expanded name, so a stored token would be a second
+// encoding of that identity.
 //
 // The name cannot serve in the token's place. §3.4.1's {context} is carried as a
 // ComplexTypeContext, whose arms hold a ComponentID and not a QName (see
@@ -611,7 +604,7 @@ func baseTypeDefinitionRef(name QName) TypeDefinitionOrRef {
 // element declaration, which is not name-unique). Adding a name-carrying arm to
 // make this one case expressible would fork the §3.4.1 sum in two for a single
 // mapping rule, and every exhaustive switch over it would grow a case that means
-// the same thing as an existing one (STYLE T4).
+// the same thing as an existing one.
 func NewComplexTypeOwningBase(loc xsderr.Loc, id ComponentID, name QName, base ComplexType, final []DerivationMethod, derivationMethod DerivationMethod, abstract bool, attributeContent []AttributeUseOrGroupRef, prohibitedAttributeNames []QName, attributeWildcard *Wildcard, contentType ContentType, prohibitedSubstitutions []DerivationMethod, assertions []Assertion) (ComplexType, error) {
 	if name.Local == "" {
 		return ComplexType{}, xsderr.New(ruleCTPropsCorrect, loc,
@@ -635,10 +628,9 @@ func NewComplexTypeOwningBase(loc xsderr.Loc, id ComponentID, name QName, base C
 //
 // It is NewComplexTypeOwningBase's parameter list with the name argument replaced,
 // in place, by the context, and it applies both entry points' checks: the
-// nil-context and unminted-context rejections NewAnonymousComplexType charges
-// (checkAnonymousComplexTypeContext), and the unminted-id and
-// {context}-must-name-the-owner rejections NewComplexTypeOwningBase charges
-// (checkOwnedBaseContext).
+// nil-context and unminted-context rejections NewAnonymousComplexType charges,
+// and the unminted-id and {context}-must-name-the-owner rejections
+// NewComplexTypeOwningBase charges.
 //
 // id is this type's identity AS AN OWNER, and is DISTINCT from the identity its
 // own {context} carries: one ComponentID is minted per ownership edge, so a chain
@@ -668,6 +660,16 @@ func NewAnonymousComplexTypeOwningBase(loc xsderr.Loc, id ComponentID, context C
 // id. An ABSENT {context} means base is NAMED, which the shared core's
 // checkTypeDefinitionOrRef rejects with the message that fits it; this checker
 // passes it through rather than duplicating that verdict (STYLE T4).
+//
+// The {context}-must-name-the-owner rejection is the redefine-side form of the
+// context-tracking hazard PRINCIPLES 16 names for <override>, charged to
+// xsderr.RuleComponentInvariant on the footing checkComplexTypeContext already
+// stands on. Neither owning entry point stores id: a field written but never
+// read is dead state (STYLE D3), and for a NAMED owner a stored token would be
+// a second encoding of its expanded name (STYLE D3); the landing that adds an
+// ID→component resolver adds the field together with its reader. A
+// name-carrying ComplexTypeContext arm would instead fork the §3.4.1 sum for
+// one mapping rule (STYLE T4).
 //
 // The unminted-id rejection precedes the ABSENT-{context} pass-through, so it is
 // charged for a named base too: it is a fault in what the CALLER minted, and an
@@ -720,14 +722,14 @@ func checkOwnedBaseContext(loc xsderr.Loc, id ComponentID, label string, base Co
 //   - a context arm carrying an unminted (zero) ComponentID, charged to
 //     xsderr.RuleComponentInvariant instead: a ComponentID is this package's
 //     representation, not a spec-visible name, so a malformed one is an
-//     invariant we own. See checkComplexTypeContext.
+//     invariant this package owns.
 //
 // There is no third check for "named AND contexted": that state does not
 // type-check at this layer, because this constructor accepts no name and neither
 // NewComplexType nor NewComplexTypeOwningBase accepts a context.
 //
 // The parser calls this for the inline anonymous <complexType> of a local or a
-// global <element> (#340), always with an ElementDeclarationContext naming the
+// global <element>, always with an ElementDeclarationContext naming the
 // declaration it is building; see ComplexTypeContext.
 func NewAnonymousComplexType(loc xsderr.Loc, context ComplexTypeContext, baseTypeDefinitionName QName, final []DerivationMethod, derivationMethod DerivationMethod, abstract bool, attributeContent []AttributeUseOrGroupRef, prohibitedAttributeNames []QName, attributeWildcard *Wildcard, contentType ContentType, prohibitedSubstitutions []DerivationMethod, assertions []Assertion) (ComplexType, error) {
 	if err := checkAnonymousComplexTypeContext(loc, context); err != nil {
@@ -991,11 +993,11 @@ func (c ComplexType) Loc() xsderr.Loc {
 // TypeDefinitionOrRef sum, which a consumer switches exhaustively over:
 //
 //   - TypeDefinitionRef is the ordinary case, a PRE-RESOLUTION reference by
-//     name. Finalize (#173) validates that it resolves to a type definition
+//     name. Finalize validates that it resolves to a type definition
 //     (src-resolve clause 1.1) and that the base chain is acyclic
 //     (ct-props-correct clause 3), but does not rewrite it: the QName is
 //     retained, and a consumer obtains the component by a read-time
-//     schema.Type(name) lookup, exactly as for ElementDeclaration.TypeDefinition.
+//     [Schema.Type] lookup, exactly as for ElementDeclaration.TypeDefinition.
 //   - InlineTypeDefinition is the ALREADY-RESOLVED anonymous component §4.2.4
 //     src-expredef clause 1.1 pairs a redefining <complexType> with; it is in no
 //     symbol table, so it is reachable only through this slot, and no lookup
@@ -1004,9 +1006,7 @@ func (c ComplexType) Loc() xsderr.Loc {
 //     type definition} Required, so nil is a state the spec's tableau does not
 //     describe — but it IS representable, deliberately: the constructors do not
 //     reject it, and finalize reads it as "the chain ends here" rather than as a
-//     violation. Clause 1's Required-ness is not enforced at construction, and
-//     closing that state is a behaviour change with its own ratchet risk, kept
-//     apart from the slot's re-encoding (#505).
+//     violation. Clause 1's Required-ness is not enforced at construction.
 func (c ComplexType) Base() TypeDefinitionOrRef {
 	return c.base
 }
@@ -1053,21 +1053,19 @@ func (c ComplexType) Abstract() bool {
 //
 // On a type reached through a finalized [Schema] this is the whole §3.4.2.4
 // property — the type's own uses and those of every attribute group its
-// <attributeGroup ref>s reach, transitively (clause 2, attributegroupfold.go,
-// #479), followed by those inherited from its {base type definition}, less what
-// clauses 3.2.1 and 3.2.2 exclude (clause 3) — because Finalize materialises
-// both folds (attributeusefold.go, #401). §3.4.2.4 makes that mapping
-// rule "the same for all complex type definitions", and an ANONYMOUS type gets
-// it too at the slots Finalize walks: an element declaration's own {type
-// definition}, a {type table} alternative's, and every such slot those two nest,
-// at top level or down a particle tree (ownedtypefold.go, #414). The
+// <attributeGroup ref>s reach, transitively (clause 2), followed by those
+// inherited from its {base type definition}, less what clauses 3.2.1 and 3.2.2
+// exclude (clause 3) — because Finalize materialises both folds. §3.4.2.4 makes
+// that mapping rule "the same for all complex type definitions", and an
+// ANONYMOUS type gets it too at the slots Finalize walks: an element
+// declaration's own {type definition}, a {type table} alternative's, and every
+// such slot those two nest, at top level or down a particle tree. The
 // src-expredef clause 1.1 ORIGINAL a redefining complex type owns in its {base
-// type definition} is anonymous and folded too, by a different route:
-// baseAttributeUses re-seats the owned inline base (attributeusefold.go, #505),
-// not the owned descent. An ATTRIBUTE declaration's own {type definition} is in
-// neither route and needs neither: §3.2.1 types that slot as a Simple Type
-// Definition and [NewAttributeDeclaration] enforces it (a-props-correct clause
-// 1), so no complex type can be seated there to fold.
+// type definition} is anonymous and folded too, as the base of the type that
+// owns it. An ATTRIBUTE declaration's own {type definition} needs no fold:
+// §3.2.1 types that slot as a Simple Type Definition and
+// [NewAttributeDeclaration] enforces it (a-props-correct clause 1), so no
+// complex type can be seated there to fold.
 //
 // On a ComplexType a caller built with [NewComplexType] and has not yet
 // finalized, it is only the ResolvedAttributeUse members that caller passed in:
@@ -1087,16 +1085,14 @@ func (c ComplexType) AttributeUses() []AttributeUse {
 // On a type reached through a finalized [Schema] this is the §3.4.2.5 clause 2
 // property, built on clause 1's ·complete wildcard·: the type's own
 // <anyAttribute> intersected (cos-aw-intersect, §3.6.2.2) with the {attribute
-// wildcard}s of every attribute group its <attributeGroup ref>s reach
-// (attributegroupfold.go, #479). For a restriction the property is that
-// ·complete wildcard· (clause 2.1); for an EXTENSION it is that wildcard's
-// {namespace constraint} unioned with the {base type definition}'s per
-// cos-aw-union, under the extension's own {process contents} (clause 2.2),
-// because Finalize materialises both folds (attributewildcardfold.go, #265). The
-// §3.4.2.5 mapping rule is likewise "the same for all complex type definitions",
-// and an anonymous type gets it at the slots AttributeUses names, by the two
-// routes that entry distinguishes (ownedtypefold.go, #414; baseAttributeWildcard,
-// #505).
+// wildcard}s of every attribute group its <attributeGroup ref>s reach. For a
+// restriction the property is that ·complete wildcard· (clause 2.1); for an
+// EXTENSION it is that wildcard's {namespace constraint} unioned with the {base
+// type definition}'s per cos-aw-union, under the extension's own {process
+// contents} (clause 2.2), because Finalize materialises both folds. The
+// §3.4.2.5 mapping rule is likewise "the same for all complex type
+// definitions", and an anonymous type gets it at the same slots AttributeUses
+// names.
 //
 // On a ComplexType a caller built with [NewComplexType] and has not yet
 // finalized, it is only the ·local wildcard· that caller passed in: clause 1
