@@ -288,17 +288,17 @@ func typeName(t xsd.TypeDefinition) string {
 }
 
 // complexType emits the type name for decl's complex {type definition} t — a
-// struct for sequence content, holding a field per particle and then one per
-// attribute use, or a sealed interface for choice content, which declines
-// {attribute uses} — then the types of its anonymous-typed particles, named in
-// nested.
+// struct for sequence or empty content, holding a field per particle and then
+// one per attribute use, or a sealed interface for choice content, which
+// declines {attribute uses} — then the types of its anonymous-typed particles,
+// named in nested, in the package doc's "# Coverage" shape.
 func (e *emitter) complexType(name string, nested scope, decl xsd.ElementDeclaration, t xsd.ComplexType) (emittedType, error) {
 	subject := "complex type " + typeName(t) + " of element " + decl.Name().String()
-	group, err := e.contentGroup(subject, t)
+	group, hasParticle, err := e.contentGroup(subject, t)
 	if err != nil {
 		return emittedType{}, err
 	}
-	if group.Compositor() == xsd.CompositorChoice {
+	if hasParticle && group.Compositor() == xsd.CompositorChoice {
 		if len(t.AttributeUses()) > 0 {
 			return emittedType{}, decline(t.Loc(), constructChoiceAttributeUses, subject)
 		}
@@ -308,12 +308,14 @@ func (e *emitter) complexType(name string, nested scope, decl xsd.ElementDeclara
 	e.decls = append(e.decls, "")
 	fields := newNamer()
 	var body bytes.Buffer
-	for _, p := range group.Particles() {
-		field, err := e.field(nested, subject, t.Loc(), p)
-		if err != nil {
-			return emittedType{}, err
+	if hasParticle {
+		for _, p := range group.Particles() {
+			field, err := e.field(nested, subject, t.Loc(), p)
+			if err != nil {
+				return emittedType{}, err
+			}
+			fmt.Fprintf(&body, "\t%s %s\n", fields.claim(field.local), field.goType)
 		}
-		fmt.Fprintf(&body, "\t%s %s\n", fields.claim(field.local), field.goType)
 	}
 	for _, u := range t.AttributeUses() {
 		field, err := e.attributeField(subject, t.Loc(), u)
@@ -322,7 +324,11 @@ func (e *emitter) complexType(name string, nested scope, decl xsd.ElementDeclara
 		}
 		fmt.Fprintf(&body, "\t%s %s\n", fields.claim(field.local), field.goType)
 	}
-	e.decls[slot] = e.header(name, decl) + fmt.Sprintf("type %s struct {\n%s}\n", name, body.String())
+	typeDecl := fmt.Sprintf("type %s struct {\n%s}\n", name, body.String())
+	if body.Len() == 0 {
+		typeDecl = fmt.Sprintf("type %s struct{}\n", name)
+	}
+	e.decls[slot] = e.header(name, decl) + typeDecl
 	return emittedType{name: name}, nil
 }
 
@@ -391,62 +397,65 @@ func mustOccurs(o xsd.Occurs, err error) xsd.Occurs {
 // against the package doc's "# Coverage" complex-type shape — a restriction
 // of xs:anyType, implicit (§3.4.2.3.2 dcl.ctd.ctcc.implicit) or explicit
 // (§3.4.2.3.1 dcl.ctd.ctcc.explicit), with the content §3.4.2.3.3
-// dcl.ctd.ctcc.common maps — and returns the sequence or choice model group
-// that is its {content type}.{particle}'s term, never the source <choice>
-// itself. Particles and model groups carry no Loc, so their declines cite
-// t's.
-func (e *emitter) contentGroup(subject string, t xsd.ComplexType) (xsd.ModelGroup, error) {
+// dcl.ctd.ctcc.common maps. When err is nil, ok answers whether t's {content
+// type} has a {particle}: for element-only content it is true and group is
+// the sequence or choice model group that is the {particle}'s term, never the
+// source <choice> itself; for {variety} empty (§3.4.1), which has no
+// {particle}, it is false, err is nil and group is the zero value, which
+// callers must not read. Every other content declines. Particles and model
+// groups carry no Loc, so their declines cite t's.
+func (e *emitter) contentGroup(subject string, t xsd.ComplexType) (group xsd.ModelGroup, ok bool, err error) {
 	if t.DerivationMethod() != xsd.DerivationRestriction {
-		return xsd.ModelGroup{}, decline(t.Loc(), constructDerivation, subject, t.DerivationMethod())
+		return xsd.ModelGroup{}, false, decline(t.Loc(), constructDerivation, subject, t.DerivationMethod())
 	}
-	base, ok := e.schema.ResolvedType(t.Base())
-	if !ok {
-		return xsd.ModelGroup{}, fmt.Errorf("%s at %s: its {base type definition} does not resolve", subject, t.Loc())
+	base, found := e.schema.ResolvedType(t.Base())
+	if !found {
+		return xsd.ModelGroup{}, false, fmt.Errorf("%s at %s: its {base type definition} does not resolve", subject, t.Loc())
 	}
 	if base.Name() != anyTypeName {
-		return xsd.ModelGroup{}, decline(t.Loc(), constructRestrictionBase, subject, typeName(base))
+		return xsd.ModelGroup{}, false, decline(t.Loc(), constructRestrictionBase, subject, typeName(base))
 	}
 	switch {
 	case t.Abstract():
-		return xsd.ModelGroup{}, decline(t.Loc(), constructComplexTypeAbstract, subject)
+		return xsd.ModelGroup{}, false, decline(t.Loc(), constructComplexTypeAbstract, subject)
 	case len(t.Assertions()) > 0:
-		return xsd.ModelGroup{}, decline(t.Loc(), constructAssertions, subject)
+		return xsd.ModelGroup{}, false, decline(t.Loc(), constructAssertions, subject)
 	}
-	if _, ok := t.AttributeWildcard(); ok {
-		return xsd.ModelGroup{}, decline(t.Loc(), constructAttributeWildcard, subject)
+	if _, has := t.AttributeWildcard(); has {
+		return xsd.ModelGroup{}, false, decline(t.Loc(), constructAttributeWildcard, subject)
 	}
-	content, ok := t.ContentType().(xsd.ElementContent)
-	if !ok {
+	content, isElement := t.ContentType().(xsd.ElementContent)
+	if !isElement {
 		switch variety := t.ContentType().Variety(); variety {
 		case xsd.ContentEmpty:
-			return xsd.ModelGroup{}, decline(t.Loc(), constructEmptyContent, subject)
+			return xsd.ModelGroup{}, false, nil
 		case xsd.ContentSimple:
-			return xsd.ModelGroup{}, decline(t.Loc(), constructSimpleContent, subject)
+			return xsd.ModelGroup{}, false, decline(t.Loc(), constructSimpleContent, subject)
 		default:
-			return xsd.ModelGroup{}, fmt.Errorf("%s at %s: unexpected content type %T of {variety} %s", subject, t.Loc(), t.ContentType(), variety)
+			return xsd.ModelGroup{}, false, fmt.Errorf("%s at %s: unexpected content type %T of {variety} %s", subject, t.Loc(), t.ContentType(), variety)
 		}
 	}
 	if content.Mixed {
-		return xsd.ModelGroup{}, decline(t.Loc(), constructMixedContent, subject)
+		return xsd.ModelGroup{}, false, decline(t.Loc(), constructMixedContent, subject)
 	}
 	if content.OpenContent != nil {
-		return xsd.ModelGroup{}, decline(t.Loc(), constructOpenContent, subject)
+		return xsd.ModelGroup{}, false, decline(t.Loc(), constructOpenContent, subject)
 	}
 	if occurs := content.Particle.Occurs(); occurs != exactlyOnce {
-		return xsd.ModelGroup{}, decline(t.Loc(), constructContentOccurs, subject, occurs)
+		return xsd.ModelGroup{}, false, decline(t.Loc(), constructContentOccurs, subject, occurs)
 	}
-	resolved, ok := content.Particle.Term().(xsd.ResolvedTerm)
-	if !ok {
-		return xsd.ModelGroup{}, decline(t.Loc(), constructContentGroupRef, subject)
+	resolved, isResolved := content.Particle.Term().(xsd.ResolvedTerm)
+	if !isResolved {
+		return xsd.ModelGroup{}, false, decline(t.Loc(), constructContentGroupRef, subject)
 	}
-	group, ok := resolved.Term.(xsd.ModelGroup)
-	if !ok {
-		return xsd.ModelGroup{}, fmt.Errorf("%s at %s: unexpected content particle term %T", subject, t.Loc(), resolved.Term)
+	group, isGroup := resolved.Term.(xsd.ModelGroup)
+	if !isGroup {
+		return xsd.ModelGroup{}, false, fmt.Errorf("%s at %s: unexpected content particle term %T", subject, t.Loc(), resolved.Term)
 	}
 	if group.Compositor() == xsd.CompositorAll {
-		return xsd.ModelGroup{}, decline(t.Loc(), constructAll, subject)
+		return xsd.ModelGroup{}, false, decline(t.Loc(), constructAll, subject)
 	}
-	return group, nil
+	return group, true, nil
 }
 
 // fieldSpec is one struct field before its name is claimed.
