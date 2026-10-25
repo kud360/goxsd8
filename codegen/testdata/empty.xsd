@@ -1,0 +1,30 @@
+<?xml version="1.0"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <!-- A complex type whose {content type} has {variety} empty (§3.4.1)
+       gives a struct holding only its attribute fields, and struct{} when
+       it has none. Each type here has no model group child, so its
+       explicit content is empty (§3.4.2.3.3 dcl.ctd.ctcc.common clause
+       2.1.1) and, not mixed, so is its {variety} (clause 4.1.1). A local
+       element of such a type takes the particle field rules. -->
+  <xs:element name="marker">
+    <xs:complexType/>
+  </xs:element>
+  <xs:element name="ref">
+    <xs:complexType>
+      <xs:attribute name="id" type="xs:string" use="required"/>
+      <xs:attribute name="weight" type="xs:int"/>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="flags">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element name="on">
+          <xs:complexType/>
+        </xs:element>
+        <xs:element name="off" minOccurs="0">
+          <xs:complexType/>
+        </xs:element>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>
