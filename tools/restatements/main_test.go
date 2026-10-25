@@ -289,7 +289,10 @@ func TestPointersNotPrinted(t *testing.T) {
 // TestNonOwnersNotCompared holds U1-U4: an added sentence copying the doc of
 // an unexported func (U1), of an exported method of an unexported type (U2),
 // of an unexported type (U3), or of a func in a test file (U4) is not
-// printed, the copied doc being in the base tree and unchanged.
+// printed, the copied doc being in the base tree and unchanged. Each row fails
+// alone when its filter is removed: ownerDocs' unexported-func test (U1), its
+// exported-receiver test (U2), specDocs' unexported-type test (U3) and
+// ownerDocs' _test.go return (U4).
 func TestNonOwnersNotCompared(t *testing.T) {
 	rows := []struct {
 		name, rel, src, doc, text string
