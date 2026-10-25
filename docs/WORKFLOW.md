@@ -570,6 +570,16 @@ applied before filing and again before grounding something already filed:
   absolute banked figure; where one is needed it names
   `conformance/testdata/expectations/<lane>.txt` as the thing to read at
   work time (#646).
+- **Cite a commit SHA only if `git merge-base --is-ancestor <sha>
+  origin/main` exits 0** in a non-shallow checkout (docs/ROUTINES.md's
+  shallow-checkout bullet: `git fetch --unshallow origin`). Only exit 0
+  passes; in a shallow checkout a nonzero exit proves nothing, because exit
+  1 there also answers for a main commit outside the visible history. Cite
+  a tree that existed only on a `wip/issue-<N>` branch — a round-1 commit,
+  a rejected tree, a mason's probe — as its base on `origin/main` plus the
+  change verbatim: the quoted sentence or hunk, or the thread comment that
+  quotes it. Its branch SHA may follow as provenance, marked unreachable
+  after the squash (#2960).
 - **A marker arm never asks this issue's landing to cite this issue.**
   It says to remove the marker where the landing closes the gap, and
   names a separate open tracker for any part left open; `Tracked by
