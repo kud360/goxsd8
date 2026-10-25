@@ -254,9 +254,11 @@ counts.
    Mason may absorb adjacent work under docs/WORKFLOW.md's scope rule.
    Absorbed items belong in the commit body, not in a new issue.
 
-5. **Judge.** `git fetch origin main` first and merge it forward if it
-   moved — before the arbiter, per WORKFLOW's **After the verdict**, where
-   it costs no round instead of one. After every merge forward that
+5. **Judge.** Where step 4 owed a warden diff review, delegate the
+   arbiter only once that verdict is posted and, on revise, its fix is on
+   `wip/issue-<N>`. Then `git fetch origin main` and merge it forward if
+   it moved — before the arbiter, per WORKFLOW's **After the verdict**,
+   where it costs no round instead of one. After every merge forward that
    precedes an arbiter round — this one, and the re-judge step 6's
    Landing precondition 2 calls for — run `go vet ./...` on the committed
    merged tree before you delegate; it type-checks the test files
