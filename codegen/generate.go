@@ -82,10 +82,14 @@ func (t Target) failed(i int, err error) error {
 // "codegen: " before it. The refusal of a Dir equal to an earlier target's
 // names that earlier target the same way.
 //
-// A decline is a generator limitation, not a schema fault: it is a plain
-// error wrapping errors.ErrUnsupported, never an *xsderr.Error, and it names
-// the construct and the Loc of the nearest component that carries one. The
-// package doc's "Coverage" section states what the generator accepts.
+// A decline is a generator limitation, not a schema fault: it is a
+// *DeclineError, never an *xsderr.Error, and it wraps errors.ErrUnsupported,
+// so errors.Is(err, errors.ErrUnsupported) reports every decline and
+// errors.As retrieves the *DeclineError from the error Generate returns. Its
+// Construct method returns the construct declined, and its Loc method the Loc
+// of the nearest component that carries one. Its text names both; the opening
+// with the target's name, stated above, precedes that text and is no part of
+// it. The package doc's "Coverage" section states what the generator accepts.
 //
 // Phase 2 creates Dir and its parents when absent. An existing xsd_gen.go is
 // overwritten only when its first line matches `^// Code generated .* DO NOT
