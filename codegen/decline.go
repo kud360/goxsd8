@@ -18,7 +18,7 @@ type DeclineError struct {
 	detail string
 }
 
-// Construct returns the construct declined.
+// Construct returns the decline's Construct, as Generate's doc defines it.
 func (e *DeclineError) Construct() Construct { return Construct{e.construct} }
 
 // Loc returns the decline's Loc, as Generate's doc defines it.
@@ -129,11 +129,11 @@ var constructs = [...]struct{ name, format string }{
 	constructWildcard:                 {"wildcard particle", "a wildcard particle in %s"},
 }
 
-// decline reports construct c, which the generator does not cover, at loc, its
-// detail c's format over args. It is a *DeclineError, never an *xsderr.Error:
-// no schema rule is violated (STYLE E2). Its text already says the construct
-// is unsupported, so DeclineError.Error prints none of errors.ErrUnsupported's
-// text.
+// decline returns the *DeclineError for construct c, which the generator does
+// not cover, at loc, its detail c's format over args. No schema rule is
+// violated, so it carries no xsderr rule (STYLE E2). Its text already says the
+// construct is unsupported, so DeclineError.Error prints none of
+// errors.ErrUnsupported's text.
 //
 // GAP(codegen): every construct outside the package doc's "# Coverage" slice
 // declines here; that section lists them under the same marker. #2900 owns
