@@ -1298,18 +1298,18 @@ func checkLengthDerivationHistory(r TypeResolver, t *SimpleType, eff []Effective
 // wanted (STYLE D4): the chain's acyclicity is the proof CheckDerivation's doc
 // states, established by Phase B before this runs.
 //
-// GAP(xsd): the two readings above make this check REJECT LESS than the
-// strictest reading of clauses 1.2/2.2 — one that admits only STRICT ancestors
-// as candidates and reads "length is not specified" against the overlay. Under
-// that stricter reading a minLength/maxLength introduced at or below the step
-// that introduced length is also an error, so a schema deriving st2 from
-// st = string(length=5) by adding maxLength=5 would be rejected. It is not
-// rejected here. That shape is the W3C suite's MS-Errata102006-07-15/errF001,
-// which the suite declares VALID while flagging its own expectation
-// status="queried" against W3C bug 4681 since 2007-06-21 — i.e. the one
-// published fixture bearing on the divergence reads it the accepting way, and
-// the erratum's prose agrees with it, so the stricter reading is not adopted
-// without an oracle grounding that reaches this fixture.
+// GAP(xsd): owned by #555. The two readings above make this check REJECT LESS
+// than the strictest reading of clauses 1.2/2.2 — one that admits only STRICT
+// ancestors as candidates and reads "length is not specified" against the
+// overlay. Under that stricter reading a minLength/maxLength introduced at or
+// below the step that introduced length is also an error, so a schema deriving
+// st2 from st = string(length=5) by adding maxLength=5 would be rejected. It is
+// not rejected here. That shape is the W3C suite's
+// MS-Errata102006-07-15/errF001, which the suite declares VALID while flagging
+// its own expectation status="queried" against W3C bug 4681 since 2007-06-21 —
+// i.e. the one published fixture bearing on the divergence reads it the
+// accepting way, and the erratum's prose agrees with it, so the stricter reading
+// is not adopted without an oracle grounding that reaches this fixture.
 //
 // The withheld rejection is an UNDER-rejection for every consumer of this
 // error, so no valid schema can be false-rejected by it. The error returned here
