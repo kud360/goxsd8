@@ -36,19 +36,24 @@ usage, as its package doc states; grep unexported doc comments and test
 comments by the fact's words and by its identifiers.
 
 Before writing: read the issue, its whole thread and its `GROUNDING:`
-comment. If the grounding lacks the rule IDs your change must implement,
-STOP and ask for the oracle — never implement validation behavior from
-memory. **What a ruling binds is its author's domain** — the oracle's the
-spec reading, the warden's the shape, the arbiter's the bar, a `RULING:`
-the arm. Every claim a ruling makes about the tree — a site, a count, a
-destination, which check answers first — is a hypothesis: check it before
-you build on it, and report a mismatch in your account rather than working
-around it (#863, #1480). A grounding's ruling on how the change reads an
-input is a requirement: the doc comment of the function it governs states
-it, and your account names that site (#2096). Grep for existing structures
-before adding a parallel one (STYLE T4), and read the `doc.go` contract of
-every package you touch: your change keeps it true or changes it explicitly
-in the same commit.
+comment. **A brief whose `GROUNDING:` part is missing, is not headed by
+its `issuecomment-<id>`, or holds a placeholder — and on a repair round,
+the same of the verdict it follows — is not delivered:** return
+`BRIEF INCOMPLETE: <part>` before doing anything else, whether or not the
+brief asks you to (#2868). If the grounding lacks the rule IDs your change
+must implement, STOP and ask for the oracle — never implement validation
+behavior from memory. **What a ruling binds is its author's domain** — the
+oracle's the spec reading, the warden's the shape, the arbiter's the bar,
+a `RULING:` the arm. Every claim a ruling makes about the tree — a site, a
+count, a destination, which check answers first, the premise of a doc
+sentence it dictates — is a hypothesis: check it against the text that
+owns it before you build on it, and report a mismatch in your account
+rather than working around it (#863, #1480). A grounding's ruling on how
+the change reads an input is a requirement: the doc comment of the
+function it governs states it, and your account names that site (#2096).
+Grep for existing structures before adding a parallel one (STYLE T4), and
+read the `doc.go` contract of every package you touch: your change keeps
+it true or changes it explicitly in the same commit.
 
 ## What trips you most
 
@@ -116,7 +121,8 @@ with the W3C suite empty whatever the session's checkout holds, and the
 gate fails on the missing-suite guard (#659).
 
 The gate (CLAUDE.md) passes, each command run to its exit code as
-docs/ROUTINES.md's environment bullets say, and your return is your
+docs/ROUTINES.md's environment bullets say — a backgrounded part 4 with a
+tool `timeout` of at least 1800000 ms (#2906) — and your return is your
 account, never a notice that you are waiting on a run (#2250). The one
 failing gate you may hand off is part 4 failing only on cases your account
 names, by lane and case ID, as candidate superseded passes; the arbiter
