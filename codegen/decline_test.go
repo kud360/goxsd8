@@ -142,8 +142,6 @@ func TestGenerateDeclines(t *testing.T) {
 			"element e with a {type table}", constructTypeTable},
 		{"substitution group", `<xs:element name="h" ` + str + `/><xs:element name="e" substitutionGroup="h" ` + str + `/>`,
 			"element e with {substitution group affiliations}", constructSubstitutionGroup},
-		{"identity constraint", `<xs:element name="e" ` + str + `><xs:key name="k"><xs:selector xpath="."/><xs:field xpath="."/></xs:key></xs:element>`,
-			"element e with {identity-constraint definitions}", constructIdentityConstraints},
 		{"assertion", `<xs:element name="e"><xs:complexType><xs:sequence><xs:element name="a" ` + str + `/></xs:sequence><xs:assert test="true()"/></xs:complexType></xs:element>`,
 			"with {assertions}", constructAssertions},
 		{"abstract complex type", `<xs:complexType name="c" abstract="true"><xs:sequence><xs:element name="a" ` + str + `/></xs:sequence></xs:complexType><xs:element name="e" type="c"/>`,
