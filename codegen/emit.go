@@ -2,7 +2,6 @@ package codegen
 
 import (
 	"bytes"
-	"errors"
 	"fmt"
 	"go/format"
 	"path/filepath"
@@ -30,20 +29,6 @@ var (
 	unsignedShortBuiltin = xsd.QName{Space: xsd.XMLSchemaNS, Local: "unsignedShort"}
 	unsignedByteBuiltin  = xsd.QName{Space: xsd.XMLSchemaNS, Local: "unsignedByte"}
 )
-
-// decline reports a construct the generator does not cover. It is a plain
-// error wrapping errors.ErrUnsupported, never an *xsderr.Error: no schema
-// rule is violated (STYLE E2). Its text already says the construct is
-// unsupported, so the %.0w verb wraps the sentinel while printing none of
-// its text: precision 0 truncates the operand's Error string to nothing.
-//
-// GAP(codegen): every construct outside the package doc's "# Coverage" slice
-// declines here; that section lists them under the same marker. #2900 owns
-// lifting them.
-func decline(loc xsderr.Loc, format string, args ...any) error {
-	return fmt.Errorf("%s at %s is not supported by codegen, a generator limitation, not a schema fault%.0w",
-		fmt.Sprintf(format, args...), loc, errors.ErrUnsupported)
-}
 
 // emitter builds one target's source. decls holds each emitted type
 // declaration in emission order: a top-level element's type, then the types
@@ -192,26 +177,26 @@ func (e *emitter) declaredType(decl xsd.ElementDeclaration) (xsd.TypeDefinition,
 	subject := "element " + decl.Name().String()
 	switch {
 	case decl.Nillable():
-		return nil, decline(decl.Loc(), "%s with {nillable} true", subject)
+		return nil, decline(decl.Loc(), constructElementNillable, subject)
 	case decl.Abstract():
-		return nil, decline(decl.Loc(), "%s with {abstract} true", subject)
+		return nil, decline(decl.Loc(), constructElementAbstract, subject)
 	case len(decl.SubstitutionGroupAffiliationNames()) > 0:
-		return nil, decline(decl.Loc(), "%s with {substitution group affiliations}", subject)
+		return nil, decline(decl.Loc(), constructSubstitutionGroup, subject)
 	case len(decl.IdentityConstraints()) > 0:
-		return nil, decline(decl.Loc(), "%s with {identity-constraint definitions}", subject)
+		return nil, decline(decl.Loc(), constructIdentityConstraints, subject)
 	}
 	if _, ok := decl.ValueConstraint(); ok {
-		return nil, decline(decl.Loc(), "%s with a {value constraint}", subject)
+		return nil, decline(decl.Loc(), constructElementValueConstraint, subject)
 	}
 	if _, ok := decl.TypeTable(); ok {
-		return nil, decline(decl.Loc(), "%s with a {type table}", subject)
+		return nil, decline(decl.Loc(), constructTypeTable, subject)
 	}
 	td, ok := e.schema.ResolvedType(decl.TypeDefinition())
 	if !ok {
 		return nil, fmt.Errorf("%s at %s: its {type definition} does not resolve", subject, decl.Loc())
 	}
 	if td.Name() == anyTypeName {
-		return nil, decline(decl.Loc(), "%s with {type definition} xs:anyType", subject)
+		return nil, decline(decl.Loc(), constructAnyTypeElement, subject)
 	}
 	return td, nil
 }
@@ -224,7 +209,7 @@ func (e *emitter) declaredType(decl xsd.ElementDeclaration) (xsd.TypeDefinition,
 func (e *emitter) builtinType(subject string, loc xsderr.Loc, t *xsd.SimpleType) (string, error) {
 	typed := fmt.Sprintf("%s with {type definition} %s", subject, typeName(t))
 	if t.IsSpecial() {
-		return "", decline(loc, "%s, a special type", typed)
+		return "", decline(loc, constructSpecialType, typed)
 	}
 	variety, err := t.Variety(e.schema)
 	if err != nil {
@@ -233,11 +218,11 @@ func (e *emitter) builtinType(subject string, loc xsderr.Loc, t *xsd.SimpleType)
 	switch variety.(type) {
 	case xsd.Atomic:
 	case xsd.List:
-		return "", decline(loc, "%s, a list type", typed)
+		return "", decline(loc, constructListType, typed)
 	case xsd.Union:
-		return "", decline(loc, "%s, a union type", typed)
+		return "", decline(loc, constructUnionType, typed)
 	default:
-		return "", decline(loc, "%s, of absent {variety}", typed)
+		return "", decline(loc, constructAbsentVariety, typed)
 	}
 	integer, err := e.boundedInteger(t)
 	if err != nil {
@@ -251,7 +236,7 @@ func (e *emitter) builtinType(subject string, loc xsderr.Loc, t *xsd.SimpleType)
 		return "", fmt.Errorf("%s at %s: %w", subject, loc, err)
 	}
 	if primitive == nil {
-		return "", decline(loc, "%s, with no {primitive type definition}", typed)
+		return "", decline(loc, constructNoPrimitive, typed)
 	}
 	switch primitive.Name() {
 	case stringPrimitive, anyURIPrimitive:
@@ -259,7 +244,7 @@ func (e *emitter) builtinType(subject string, loc xsderr.Loc, t *xsd.SimpleType)
 	case booleanPrimitive:
 		return "bool", nil
 	}
-	return "", decline(loc, "%s, whose {primitive type definition} is %s", typed, primitive.Name())
+	return "", decline(loc, constructUncoveredPrimitive, typed, primitive.Name())
 }
 
 // boundedInteger is the Go integer "# Coverage" maps t to through the eight
@@ -317,7 +302,7 @@ func (e *emitter) complexType(name string, nested scope, decl xsd.ElementDeclara
 	}
 	if group.Compositor() == xsd.CompositorChoice {
 		if len(t.AttributeUses()) > 0 {
-			return emittedType{}, decline(t.Loc(), "%s whose content is a choice, with {attribute uses}", subject)
+			return emittedType{}, decline(t.Loc(), constructChoiceAttributeUses, subject)
 		}
 		return emittedType{name: name, sealed: true}, e.sealedType(name, nested, subject, decl, t, group.Particles())
 	}
@@ -360,7 +345,7 @@ func (e *emitter) complexType(name string, nested scope, decl xsd.ElementDeclara
 // fires every alternative is a local element with {min occurs} at least 1.
 func (e *emitter) sealedType(name string, nested scope, subject string, decl xsd.ElementDeclaration, t xsd.ComplexType, particles []xsd.Particle) error {
 	if len(particles) == 0 {
-		return decline(t.Loc(), "%s whose choice has no {particles}", subject)
+		return decline(t.Loc(), constructEmptyChoice, subject)
 	}
 	for _, p := range particles {
 		alt, err := localElement(subject, t.Loc(), p.Term())
@@ -368,7 +353,7 @@ func (e *emitter) sealedType(name string, nested scope, subject string, decl xsd
 			return err
 		}
 		if p.Occurs().Min() == 0 {
-			return decline(t.Loc(), "%s whose choice is emptiable: its alternative element %s has {min occurs} 0", subject, alt.Name())
+			return decline(t.Loc(), constructEmptiableChoice, subject, alt.Name())
 		}
 	}
 	marker := "is" + name
@@ -414,47 +399,54 @@ func mustOccurs(o xsd.Occurs, err error) xsd.Occurs {
 // t's.
 func (e *emitter) contentGroup(subject string, t xsd.ComplexType) (xsd.ModelGroup, error) {
 	if t.DerivationMethod() != xsd.DerivationRestriction {
-		return xsd.ModelGroup{}, decline(t.Loc(), "%s, derived by %s", subject, t.DerivationMethod())
+		return xsd.ModelGroup{}, decline(t.Loc(), constructDerivation, subject, t.DerivationMethod())
 	}
 	base, ok := e.schema.ResolvedType(t.Base())
 	if !ok {
 		return xsd.ModelGroup{}, fmt.Errorf("%s at %s: its {base type definition} does not resolve", subject, t.Loc())
 	}
 	if base.Name() != anyTypeName {
-		return xsd.ModelGroup{}, decline(t.Loc(), "%s, a restriction of %s rather than of xs:anyType", subject, typeName(base))
+		return xsd.ModelGroup{}, decline(t.Loc(), constructRestrictionBase, subject, typeName(base))
 	}
 	switch {
 	case t.Abstract():
-		return xsd.ModelGroup{}, decline(t.Loc(), "%s with {abstract} true", subject)
+		return xsd.ModelGroup{}, decline(t.Loc(), constructComplexTypeAbstract, subject)
 	case len(t.Assertions()) > 0:
-		return xsd.ModelGroup{}, decline(t.Loc(), "%s with {assertions}", subject)
+		return xsd.ModelGroup{}, decline(t.Loc(), constructAssertions, subject)
 	}
 	if _, ok := t.AttributeWildcard(); ok {
-		return xsd.ModelGroup{}, decline(t.Loc(), "%s with an {attribute wildcard}", subject)
+		return xsd.ModelGroup{}, decline(t.Loc(), constructAttributeWildcard, subject)
 	}
 	content, ok := t.ContentType().(xsd.ElementContent)
 	if !ok {
-		return xsd.ModelGroup{}, decline(t.Loc(), "%s with %s content", subject, t.ContentType().Variety())
+		switch variety := t.ContentType().Variety(); variety {
+		case xsd.ContentEmpty:
+			return xsd.ModelGroup{}, decline(t.Loc(), constructEmptyContent, subject)
+		case xsd.ContentSimple:
+			return xsd.ModelGroup{}, decline(t.Loc(), constructSimpleContent, subject)
+		default:
+			return xsd.ModelGroup{}, fmt.Errorf("%s at %s: unexpected content type %T of {variety} %s", subject, t.Loc(), t.ContentType(), variety)
+		}
 	}
 	if content.Mixed {
-		return xsd.ModelGroup{}, decline(t.Loc(), "%s with mixed content", subject)
+		return xsd.ModelGroup{}, decline(t.Loc(), constructMixedContent, subject)
 	}
 	if content.OpenContent != nil {
-		return xsd.ModelGroup{}, decline(t.Loc(), "%s with {open content}", subject)
+		return xsd.ModelGroup{}, decline(t.Loc(), constructOpenContent, subject)
 	}
 	if occurs := content.Particle.Occurs(); occurs != exactlyOnce {
-		return xsd.ModelGroup{}, decline(t.Loc(), "%s whose content particle occurs %s times rather than exactly once", subject, occurs)
+		return xsd.ModelGroup{}, decline(t.Loc(), constructContentOccurs, subject, occurs)
 	}
 	resolved, ok := content.Particle.Term().(xsd.ResolvedTerm)
 	if !ok {
-		return xsd.ModelGroup{}, decline(t.Loc(), "%s whose content particle is a <group ref>", subject)
+		return xsd.ModelGroup{}, decline(t.Loc(), constructContentGroupRef, subject)
 	}
 	group, ok := resolved.Term.(xsd.ModelGroup)
 	if !ok {
 		return xsd.ModelGroup{}, fmt.Errorf("%s at %s: unexpected content particle term %T", subject, t.Loc(), resolved.Term)
 	}
 	if group.Compositor() == xsd.CompositorAll {
-		return xsd.ModelGroup{}, decline(t.Loc(), "%s with an all compositor", subject)
+		return xsd.ModelGroup{}, decline(t.Loc(), constructAll, subject)
 	}
 	return group, nil
 }
@@ -496,7 +488,7 @@ func (e *emitter) field(nested scope, subject string, loc xsderr.Loc, p xsd.Part
 	case !bounded || upper > 1:
 		goType = "[]" + goType
 	case upper == 0:
-		return fieldSpec{}, decline(loc, "a particle of element %s with {max occurs} 0 in %s", decl.Name(), subject)
+		return fieldSpec{}, decline(loc, constructVacuousParticle, decl.Name(), subject)
 	case upper == 1 && occurs.Min() == 0 && !typ.sealed:
 		goType = "*" + goType
 	}
@@ -518,7 +510,7 @@ func (e *emitter) attributeField(subject string, loc xsderr.Loc, u xsd.Attribute
 		return fieldSpec{}, fmt.Errorf("%s at %s: its {attribute declaration} does not resolve", attr, loc)
 	}
 	if vc, ok := e.schema.EffectiveValueConstraint(u); ok {
-		return fieldSpec{}, decline(decl.Loc(), "%s with a %s effective value constraint (§3.5.4 key-evc)", attr, vc.Kind())
+		return fieldSpec{}, decline(decl.Loc(), constructAttributeValueConstraint, attr, vc.Kind())
 	}
 	td, ok := e.schema.ResolvedType(decl.TypeDefinition())
 	if !ok {
@@ -548,7 +540,7 @@ func (e *emitter) attributeField(subject string, loc xsderr.Loc, u xsd.Attribute
 // element must never read an entry stored from a type.
 func (e *emitter) nestedType(parent scope, decl xsd.ElementDeclaration, t xsd.ComplexType) (emittedType, error) {
 	if t.Name() != (xsd.QName{}) {
-		return emittedType{}, decline(decl.Loc(), "local element %s with named complex {type definition} %s", decl.Name(), t.Name())
+		return emittedType{}, decline(decl.Loc(), constructNamedComplexLocal, decl.Name(), t.Name())
 	}
 	child := scope{underNamedType: parent.underNamedType, path: append(slices.Clone(parent.path), decl.Name())}
 	key := child.key()
@@ -571,17 +563,17 @@ func (e *emitter) nestedType(parent scope, decl xsd.ElementDeclaration, t xsd.Co
 func localElement(subject string, loc xsderr.Loc, term xsd.TermOrRef) (xsd.ElementDeclaration, error) {
 	switch term := term.(type) {
 	case xsd.ElementDeclarationRef:
-		return xsd.ElementDeclaration{}, decline(loc, "an <element ref> particle to %s in %s", term.Name, subject)
+		return xsd.ElementDeclaration{}, decline(loc, constructElementRef, term.Name, subject)
 	case xsd.ModelGroupRef:
-		return xsd.ElementDeclaration{}, decline(loc, "a <group ref> particle to %s in %s", term.Name, subject)
+		return xsd.ElementDeclaration{}, decline(loc, constructGroupRef, term.Name, subject)
 	case xsd.ResolvedTerm:
 		switch inner := term.Term.(type) {
 		case xsd.ElementDeclaration:
 			return inner, nil
 		case xsd.ModelGroup:
-			return xsd.ElementDeclaration{}, decline(loc, "a nested %s model group particle in %s", inner.Compositor(), subject)
+			return xsd.ElementDeclaration{}, decline(loc, constructNestedGroup, inner.Compositor(), subject)
 		case xsd.Wildcard:
-			return xsd.ElementDeclaration{}, decline(loc, "a wildcard particle in %s", subject)
+			return xsd.ElementDeclaration{}, decline(loc, constructWildcard, subject)
 		}
 	}
 	return xsd.ElementDeclaration{}, fmt.Errorf("%s at %s: unexpected particle term %T", subject, loc, term)
