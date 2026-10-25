@@ -286,6 +286,61 @@ func TestPointersNotPrinted(t *testing.T) {
 	}
 }
 
+// TestNonOwnersNotCompared holds U1-U4: an added sentence copying the doc of
+// an unexported func (U1), of an exported method of an unexported type (U2),
+// of an unexported type (U3), or of a func in a test file (U4) is not
+// printed, the copied doc being in the base tree and unchanged.
+func TestNonOwnersNotCompared(t *testing.T) {
+	rows := []struct {
+		name, rel, src, doc, text string
+	}{{
+		name: "U1 unexported func",
+		rel:  "validate/jsonsrc/drain.go",
+		doc:  "drain discards the bytes the walk left unread once the document element closes.",
+		src:  "func drain() {}\n",
+		text: "Every caller discards the bytes the walk left unread once the document element closes.",
+	}, {
+		name: "U2 exported method of an unexported type",
+		rel:  "validate/jsonsrc/walker.go",
+		doc:  "Close releases the decoder the walker holds and flushes its pending violations.",
+		src:  "func (w *walker) Close() {}\n\ntype walker struct{}\n",
+		text: "Shutting down releases the decoder the walker holds and flushes its pending violations.",
+	}, {
+		name: "U3 unexported type",
+		rel:  "validate/jsonsrc/cursor.go",
+		doc:  "cursor tracks the line and column of the next byte the scanner reads.",
+		src:  "type cursor struct{}\n",
+		text: "Each position tracks the line and column of the next byte the scanner reads.",
+	}, {
+		name: "U4 test file",
+		rel:  "validate/jsonsrc/scan_test.go",
+		doc:  "TestScanComment pins that the scanner rejects a comment between two members of an object.",
+		src:  "func TestScanComment(t *testing.T) {}\n",
+		text: "Reading an instance, the scanner rejects a comment between two members of an object.",
+	}}
+	for _, row := range rows {
+		t.Run(row.name, func(t *testing.T) {
+			if n := shared(clauses(row.text), pairs(row.doc), nil); n < minShared {
+				t.Fatalf("the fixture overlaps %q by %d pairs, fewer than minShared", row.doc, n)
+			}
+			imports := ""
+			if strings.HasSuffix(row.rel, "_test.go") {
+				imports = "import \"testing\"\n\n"
+			}
+			base := baseTree()
+			base[row.rel] = "package jsonsrc\n\n" + imports + comment("", row.doc) + row.src
+			head := withSentence(maps.Clone(base), "xsderr/added.go", "xsderr", row.text)
+			rep := surveyTrees(t, base, head)
+			if rep.added == 0 {
+				t.Fatal("the working tree added no sentence")
+			}
+			if f, ok := findingAt(rep, site{"xsderr/added.go", lineOf(t, head, "xsderr/added.go", row.text)}); ok {
+				t.Errorf("%q is printed against %+v", row.text, f.matches)
+			}
+		})
+	}
+}
+
 // TestUsageNotPairedWithItsRendering adds a top-level usage sentence and its
 // cmd/goxsd8/doc.go rendering: neither is paired with the other or with
 // itself, and the rendering is read as no added sentence.
