@@ -92,9 +92,11 @@
 //
 // # Determinism
 //
-// Identical schema input produces byte-identical output. No map
-// iteration anywhere near the emitter; emission order is document order.
-// Golden-file tests pin the output.
+// The output is a function of the schema and of each document's location
+// relative to the target's Dir, so two trees laid out alike under different
+// absolute roots produce byte-identical output; "Naming" states where a
+// header's location is not relative. No map iteration anywhere near the
+// emitter; emission order is document order. Golden-file tests pin the output.
 //
 // # Naming
 //
@@ -116,7 +118,14 @@
 // fields — is disambiguated deterministically by document order: the later
 // name takes the smallest free numeric suffix from 2. Every generated
 // type's header comment records the element declaration's QName and its
-// schema Loc.
+// schema Loc. A Loc whose URI filepath.IsAbs accepts renders relative to the
+// target's Dir made absolute against the working directory, slash-separated
+// and climbing with ".." out of Dir. A document outside the tree laid out
+// alike, such as one an absolute schemaLocation names, renders a climbing
+// path that differs with that tree's depth below the filesystem root. Any
+// other URI renders as is, a URL or a relative loader key alike, as does one
+// with no path relative to Dir, such as one on another Windows volume.
+// Symbolic links are not resolved.
 //
 // # Planned (M9 — not yet implemented)
 //

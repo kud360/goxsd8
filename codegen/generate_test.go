@@ -56,6 +56,32 @@ func TestGenerateInvalidTargets(t *testing.T) {
 	}
 }
 
+// TestGenerateUnresolvableDir pins that a relative Dir that cannot be made
+// absolute, because the working directory was removed, fails phase 1 as a
+// plain error, not a decline, and writes no target.
+func TestGenerateUnresolvableDir(t *testing.T) {
+	schema := parseString(t, acceptedDoc)
+	dir := t.TempDir()
+	gone := filepath.Join(dir, "gone")
+	if err := os.Mkdir(gone, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Chdir(gone)
+	if err := os.Remove(gone); err != nil {
+		t.Fatal(err)
+	}
+	first := Target{Schema: schema, Dir: filepath.Join(dir, "a"), Package: "p"}
+	err := Generate([]Target{first, {Schema: schema, Dir: "b", Package: "p"}})
+	want := "codegen: target 1: resolving the output directory b: "
+	if err == nil || !strings.HasPrefix(err.Error(), want) {
+		t.Fatalf("Generate = %v, want an error starting %q", err, want)
+	}
+	if errors.Is(err, errors.ErrUnsupported) {
+		t.Errorf("an unresolvable Dir wraps errors.ErrUnsupported: %v", err)
+	}
+	assertAbsent(t, first.Dir)
+}
+
 // TestGenerateNamedTargets pins that a named target's error opens with its
 // Name and no "codegen: " lead-in, and that the duplicate-Dir refusal names
 // the earlier target by its Name, or by "target N" when it has none.
