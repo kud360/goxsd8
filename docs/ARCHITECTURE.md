@@ -162,7 +162,9 @@ checks. [5] `Name` over those tables is still written twice, as `isName` in
 gives it its one home there. Whether that table is generated is
 #989's question, asked of `internal/xmlname`. [2] `Char` lives in
 `internal/xmlchar`, read by `parser/xmltree`'s character-reference check and
-markup check and `internal/xmltok`'s text check (#2187, #2265). The
+markup check and `internal/xmltok`'s text check (#2187, #2265). [3] `S`
+is still spelled package-locally across the library, and #3033 gives it
+its one home in `internal/xmlchar`; do not write another copy. The
 [7]-[11] `QName` split and prefix resolution of an xsi:type lexical lives in
 `internal/xmlqname`, read by `validate`'s walk and `validate/jsonsrc`'s
 "$type" member (#2615).
@@ -634,7 +636,9 @@ descent types; the XML adapter and the JSON adapter ship over it.**
 `Children`, `Child`, with `ElementChild`/`TextChild` constructing the sum),
 the two optional document-level capabilities an adapter may implement
 (`UnparsedEntities`, `DeclarationsProcessed`, narrowed off the root),
-plus `New`/`Validator`/`Result`/`Option`/`WithLogger`, `SchemaView` (what
+plus `New`/`Validator`/`Result`/`Option`/`WithLogger`, `Standing` with its
+three constants (what `Result.Standing` returns: the acceptance test over a
+`Result`), `SchemaView` (what
 `Validator.Schema` returns: the schema reads an adapter makes),
 `Validator.ConditionallySelected` (the key-cta-select scan `Assess` makes, for
 an adapter that classifies members by the type a {type table} selects),
@@ -646,7 +650,7 @@ are declined in `validate/doc.go`; do not enumerate them here.** A union-governe
 value is classified by its ·validating type· (#813). Identity-constraint
 `{selector}`/`{fields}` are compiled and evaluated directly as the
 restricted path subsets of §3.11.6.2/§3.11.6.3 (`icpath`) and deliberately
-NOT through the future XPath engine. **`validate/doc.go` is the authoritative per-rule statement and is
+NOT through the XPath engine (`xpath`). **`validate/doc.go` is the authoritative per-rule statement and is
 current; do not restate it here beyond this list.** The value-space
 charges reach a `value.Backend` through `New`'s required second parameter,
 which must be the backend the schema was compiled with.
@@ -679,15 +683,17 @@ design contract.
 
 ## Codegen & codec
 
-**Status: `codegen` ships its first slice; `codec` ships nothing.**
-`codegen` (M9) exports `Generate` and `Target`, which emit Go type
+**Status: `codegen` ships the slice its `doc.go` states; `codec` ships
+nothing.** `codegen` (M9) exports `Generate` and `Target`, which emit Go type
 declarations for the schema shapes `codegen/doc.go`'s "Coverage" states and
-decline every other; its "Naming" states what the namer does today. `codec`
-(M10) is `doc.go`-only — `go doc` renders no exported identifier for it —
-and `value.Emitter` does not exist (its API is frozen for M9, not
-declared). Everything else below is the destination, stated in present tense
-because it is a design contract; read it as "will", not "does" (steward
-audit 2026-08-02).
+decline every other. **Read which of the bullets below ship in
+`codegen/doc.go`, not here:** its "Coverage", "Determinism" and "Naming"
+sections state what `Generate` does today, and its "Planned" section what it
+does not. `codec` (M10) is `doc.go`-only — `go doc` renders no exported
+identifier for it — and `value.Emitter` does not exist (its API is frozen
+for M9, not declared). A bullet `codegen/doc.go` does not state as shipped,
+and everything about `codec`, is the destination, stated in present tense
+because it is a design contract; read it as "will", not "does".
 
 - `codegen` emits Go types from a compiled schema, deterministically
   (D1/D2). Multiple schemas map to multiple output directories — one
@@ -776,14 +782,14 @@ compiles, is documented, and has **zero** callers module-wide.
   assembling function (`compile`) is unexported, and no exported API takes
   or returns a stage, so no consumer can exist. Either grow the composition
   seam the docs promise, or unexport the interfaces.
-- **`loader.FS`/`HTTP`/`Chain`/`Map`** — no non-test consumer, but
+- **`loader.FS`/`HTTP`/`ResolverFunc`** — no non-test consumer, but
   **justified and not to be filed**: the resolver helpers are declared
   library surface in `loader/doc.go` for external users, which is the
   "documented contract it fulfills" half of T5. Re-check, do not re-file.
-  `Chain` and `Map` returned to this list when `parser.ParseSet` replaced
-  `cmd/goxsd8`'s in-memory wrapper (#1283); `Map` is still every `parser`
-  test's resolver. `Dir` has consumers in both tiers, and `ResolverFunc` is
-  exercised by `parser`'s tests.
+  `ResolverFunc` is exercised by `parser`'s tests. `Chain` and `Map` are off
+  this list: `conformance`'s inline-schema hint resolver composes them
+  (#2180), though no library package does, and `Map` is still every
+  `parser` test's resolver. `Dir` has consumers in both tiers.
   `regex.FlavorFO` sat here on the same terms until `xpath` and `icpath`
   took it for their NCName prefix scanners (#979; `validate`'s scanner moved
   to `icpath`); the F&O functions it was built for still arrive at M6/M7.
