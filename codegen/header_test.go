@@ -6,9 +6,8 @@ import (
 	"github.com/kud360/goxsd8/xsderr"
 )
 
-// TestHeaderLoc pins headerLoc: an absolute URI renders relative to base,
-// climbing out of it with "..", and every other URI renders as is, each under
-// xsderr.Loc.String's line and column rules.
+// TestHeaderLoc pins headerLoc against the package doc's "Naming" rule, under
+// xsderr.Loc.String's "?", line and column rules.
 func TestHeaderLoc(t *testing.T) {
 	const base = "/root/gen/x"
 	for _, tt := range []struct {

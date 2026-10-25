@@ -71,9 +71,10 @@ func (t Target) failed(i int, err error) error {
 // Generate runs in two phases. Phase 1 builds every target's source in
 // memory, in slice order, and checks every destination; phase 2 writes. A
 // target that fails phase 1 — an invalid Target, a Dir that equals an earlier
-// target's after filepath.Clean, a construct the generator declines, or a
-// failed destination check — means no target is written, and the error is
-// the first failure in target order and then document order.
+// target's after filepath.Clean, a Dir that filepath.Abs cannot make
+// absolute, a construct the generator declines, or a failed destination check
+// — means no target is written, and the error is the first failure in target
+// order and then document order.
 //
 // Every error Generate returns opens with the failing target's name: its Name,
 // or "target N" for the target at slice index N when Name is empty. An unnamed

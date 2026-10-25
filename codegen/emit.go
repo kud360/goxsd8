@@ -141,13 +141,8 @@ func (e *emitter) header(name string, decl xsd.ElementDeclaration) string {
 	return fmt.Sprintf("// %s is generated from element %s declared at %s.\n", name, decl.Name(), headerLoc(e.base, decl.Loc()))
 }
 
-// headerLoc renders loc as xsderr.Loc.String does, with a URI that
-// filepath.IsAbs accepts replaced by its path relative to the absolute
-// directory base, slash-separated and climbing with ".." when it lies outside
-// base. Any other URI — a URL, a relative loader key — renders as is, and so
-// does one filepath.Rel finds no relative path for (a URI on another Windows
-// volume than base). The test is lexical and does no I/O: symbolic links are
-// not resolved.
+// headerLoc renders loc for a header against the absolute directory base, by
+// the rule the package doc's "Naming" states for a target's Dir.
 func headerLoc(base string, loc xsderr.Loc) string {
 	if !filepath.IsAbs(loc.URI) {
 		return loc.String()
