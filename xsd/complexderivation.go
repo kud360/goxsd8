@@ -626,18 +626,20 @@ func (s *Schema) locallyDeclaredAttributeType(c ComplexType, name QName) (TypeDe
 // simple {base type definition}; no type on it containing such a
 // declaration; or a matched declaration whose own {type definition} is
 // ·absent· (§5.3). It is never an undecided answer: a finalized Schema has resolved
-// every {type definition} and {base type definition} the chain reads (Phase A),
-// so a failed resolution is unreachable on this path, and no caller may read
-// false as anything but ·absent·.
+// every {type definition} and {base type definition} the chain reads, so a
+// failed resolution is unreachable on this path, and no caller may read false
+// as anything but ·absent·.
 //
-// It is EXPORTED for validate's walk, which charges clause 5, and governs an
-// {open content} child by the answer where it is non-·absent·
-// (key-governing-ed clause 4.3), and cannot re-derive the answer without a
-// third content-model walk and a second copy of substitution-group
-// membership (STYLE T4/T5). The schema-side check derivation-ok-restriction
-// clause 4 reads the same chain walk with implicit containment left out
-// (locallyDeclaredElementType).
+// It is EXPORTED for the instance validator, which charges clause 5, and
+// governs an {open content} child by the answer where it is non-·absent·
+// (key-governing-ed clause 4.3). The schema-side check derivation-ok-restriction
+// clause 4 reads the same chain walk with implicit containment left out.
 func (s *Schema) LocallyDeclaredElementType(within ComplexType, name QName) (TypeDefinition, bool) {
+	// Exported because validate's walk cannot re-derive the answer without a
+	// third content-model walk and a second copy of substitution-group
+	// membership (STYLE T4/T5). The resolution the doc relies on is Phase A's;
+	// derivation-ok-restriction clause 4's explicit-only reading is
+	// locallyDeclaredElementType under explicitOnly.
 	return s.locallyDeclaredElementType(within, name, withImplicit)
 }
 
@@ -655,15 +657,17 @@ func (s *Schema) LocallyDeclaredElementType(within ComplexType, name QName) (Typ
 // that name as the representative of every other: cos-element-consistent
 // (§3.8.6.3) holds same-named declarations of one content model to one
 // {type definition} and to ·equivalent· {type table}s, clauses 1-4, which
-// checkSameTypeDefinition and checkTopLevelTypeTable (elementconsistent.go)
-// enforce on every Schema that finalized.
+// Finalize enforces on every Schema it returns.
 //
-// It is EXPORTED for validate/jsonsrc, which classifies a JSON object's
-// member keys against the declarations an element's type contains and cannot
-// re-derive the set without a second content-model walk and a second copy of
-// substitution-group membership (STYLE T4/T5). It is contentModelDeclarations
-// under withImplicit and nothing more.
+// It is EXPORTED for the JSON source adapter, package jsonsrc, which classifies
+// a JSON object's member keys against the declarations an element's type
+// contains.
 func (s *Schema) ContainedElementDeclarations(within ComplexType) []ElementDeclaration {
+	// Exported because validate/jsonsrc cannot re-derive the set without a
+	// second content-model walk and a second copy of substitution-group
+	// membership (STYLE T4/T5). It is contentModelDeclarations under
+	// withImplicit and nothing more; cos-element-consistent is charged by
+	// checkSameTypeDefinition and checkTopLevelTypeTable (elementconsistent.go).
 	contained := s.contentModelDeclarations(within, withImplicit)
 	if len(contained) == 0 {
 		return nil
@@ -684,12 +688,13 @@ func (s *Schema) ContainedElementDeclarations(within ComplexType) []ElementDecla
 // containing no wildcard. within must be a Complex Type Definition of s: the
 // <group ref>s its content model holds resolve against s. The slice is fresh.
 //
-// It is EXPORTED for validate/jsonsrc, which reads the namespaces a JSON
-// object's element wildcards admit to name a member key no contained
-// declaration carries, and cannot re-derive the set without a second
-// content-model walk (STYLE T4/T5). It is the walk contentModelDeclarations
-// reads, gatherTermContents, and nothing more.
+// It is EXPORTED for the JSON source adapter, package jsonsrc, which reads the
+// namespaces a JSON object's element wildcards admit to name a member key no
+// contained declaration carries.
 func (s *Schema) ContainedWildcards(within ComplexType) []Wildcard {
+	// Exported because validate/jsonsrc cannot re-derive the set without a
+	// second content-model walk (STYLE T4/T5). It is the walk
+	// contentModelDeclarations reads, gatherTermContents, and nothing more.
 	ec, ok := within.ContentType().(ElementContent)
 	if !ok {
 		return nil
@@ -782,29 +787,30 @@ func (s *Schema) baseComplexType(c ComplexType) (ComplexType, bool) {
 //   - sub simple: sub is validly derived from super subject to blocked, per
 //     cos-st-derived-ok.
 //
-// The union is the ONLY thing this adds over validlyDerived below, and it is
-// the whole of the first case: super's own {prohibited substitutions} joins the
+// The union is the ONLY thing this adds over validly-derived, and it is the
+// whole of the first case: super's own {prohibited substitutions} joins the
 // caller's blocking keywords, so a type that blocks restriction admits no
 // restriction of itself however empty the caller's set was.
 //
-// It is EXPORTED for the same reason SimpleType.CheckDerivation is
-// (derivation.go): the relation has two real consumers and one implementation
-// serving both is what keeps the rule single (STYLE T4/T5). The second is the
-// instance side — cvc-elt clause 4 asks whether an element's
-// ·instance-specified type definition· ·overrides· its ·selected type
-// definition· (§3.3.4.2, key-overrides), which is this predicate under the
-// ·governing element declaration·'s {disallowed substitutions}, and package
-// validate cannot re-derive it without a second copy of cos-ct-derived-ok and
-// cos-st-derived-ok.
+// It is EXPORTED for the instance side: cvc-elt clause 4 asks whether an
+// element's ·instance-specified type definition· ·overrides· its ·selected
+// type definition· (§3.3.4.2, key-overrides), which is this predicate under
+// the ·governing element declaration·'s {disallowed substitutions}. Finalize's
+// own schema-side checks read the same relation.
 //
-// blocked is read and never retained or mutated: unionDerivationMethods and
-// complexBlockingSubset both build fresh slices, so a caller may pass a slice it
-// goes on to reuse.
+// blocked is read and never retained or mutated, so a caller may pass a slice
+// it goes on to reuse.
 //
-// The error is validlyDerived's, an unresolvable simple-type reference (see
-// there), and never a verdict about sub and super: a caller that cannot
-// propagate it must not fold it into either answer.
+// The error reports an unresolvable simple-type reference, and is never a
+// verdict about sub and super: a caller that cannot propagate it must not fold
+// it into either answer.
 func (s *Schema) ValidlySubstitutable(sub, super TypeDefinition, blocked []DerivationMethod) (bool, error) {
+	// Exported for the same reason SimpleType.CheckDerivation is: the relation
+	// has two real consumers, and one implementation serving both keeps the rule
+	// single (STYLE T4/T5) — package validate cannot re-derive it without a
+	// second copy of cos-ct-derived-ok and cos-st-derived-ok. blocked stays
+	// unaliased because unionDerivationMethods and complexBlockingSubset both
+	// build fresh slices; the error is validlyDerived's (see there).
 	if sup, ok := super.(ComplexType); ok {
 		blocked = unionDerivationMethods(blocked, sup.prohibitedSubstitutions)
 	}
