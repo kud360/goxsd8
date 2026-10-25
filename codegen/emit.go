@@ -141,10 +141,11 @@ func headerLoc(base string, loc xsderr.Loc) string {
 }
 
 // topLevel emits the type of one top-level element declaration: a named type
-// over a builtin for an atomic simple {type definition}, a struct or sealed
-// interface for an accepted complex one, named or anonymous. That type is
-// named from the element; the types nested in it are named from the type when
-// it is named, and from the element when it is anonymous.
+// over a builtin for an atomic simple {type definition}, over a slice of one
+// for a list, a struct or sealed interface for an accepted complex one, named
+// or anonymous. That type is named from the element; the types nested in it
+// are named from the type when it is named, and from the element when it is
+// anonymous.
 func (e *emitter) topLevel(decl xsd.ElementDeclaration) error {
 	td, err := e.declaredType(decl)
 	if err != nil {
@@ -199,13 +200,24 @@ func (e *emitter) declaredType(decl xsd.ElementDeclaration) (xsd.TypeDefinition,
 	return td, nil
 }
 
-// builtinType is the Go builtin a simple-typed element's or attribute's field,
-// or an element's named type, is declared over, chosen by the package doc's
-// "# Coverage" through boundedInteger and then t's {primitive type definition}
-// (Datatypes §4.1.1). subject names the declaration the type is read from, and
+// builtinType is the Go type a simple-typed element's or attribute's field, or
+// an element's named type, is declared over, chosen by the package doc's "#
+// Coverage" (goType). subject names the declaration the type is read from, and
 // loc, its Loc, is a decline's.
 func (e *emitter) builtinType(subject string, loc xsderr.Loc, t *xsd.SimpleType) (string, error) {
-	typed := fmt.Sprintf("%s with {type definition} %s", subject, typeName(t))
+	return e.goType(subject, fmt.Sprintf("%s with {type definition} %s", subject, typeName(t)), loc, t)
+}
+
+// goType is the Go type "# Coverage" maps the simple type t to: for an atomic
+// t, a Go builtin chosen through boundedInteger and then t's {primitive type
+// definition} (Datatypes §4.1.1); for a list (Datatypes §2.4.1.2, a finite
+// sequence of its item type's values), a slice of the type its {item type
+// definition} (§3.16.1) maps to, read through [xsd.SimpleType.Item], which
+// takes a restriction's item from its base (§3.16.2.3), never by walking t to
+// a builtin. typed names t in a decline, and a list's item is named in it
+// after the list, so an anonymous item still has a named context. subject and
+// loc are builtinType's.
+func (e *emitter) goType(subject, typed string, loc xsderr.Loc, t *xsd.SimpleType) (string, error) {
 	if t.IsSpecial() {
 		return "", decline(loc, constructSpecialType, typed)
 	}
@@ -216,7 +228,15 @@ func (e *emitter) builtinType(subject string, loc xsderr.Loc, t *xsd.SimpleType)
 	switch variety.(type) {
 	case xsd.Atomic:
 	case xsd.List:
-		return "", decline(loc, constructListType, typed)
+		item, err := t.Item(e.schema)
+		if err != nil {
+			return "", fmt.Errorf("%s at %s: %w", subject, loc, err)
+		}
+		elem, err := e.goType(subject, typed+", whose {item type definition} is "+typeName(item), loc, item)
+		if err != nil {
+			return "", err
+		}
+		return "[]" + elem, nil
 	case xsd.Union:
 		return "", decline(loc, constructUnionType, typed)
 	default:
