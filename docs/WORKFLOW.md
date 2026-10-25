@@ -570,6 +570,12 @@ applied before filing and again before grounding something already filed:
   absolute banked figure; where one is needed it names
   `conformance/testdata/expectations/<lane>.txt` as the thing to read at
   work time (#646).
+- **An `## Acceptance` bar that counts a phrase in prose searches across
+  line breaks**, a wrapped comment's prefix included: join the phrase's
+  words with `\s+(?://\s*)?` under `rg -U`, as `rg -U -n -i
+  'origin\s+(?://\s*)?of\s+(?://\s*)?every'` does. A line-bound `grep`
+  misses the wrapped phrase, and an absence bar then passes vacuously
+  (#2919).
 - **Cite a commit SHA only if `git merge-base --is-ancestor <sha>
   origin/main` exits 0** in a non-shallow checkout (docs/ROUTINES.md's
   shallow-checkout bullet: `git fetch --unshallow origin`). Only exit 0
