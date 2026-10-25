@@ -25,12 +25,11 @@ push the heartbeat WORKFLOW's lease invariant requires before a round.
   account and the verdict a repair or round-2 judge follows, so the
   delegate states its outcome with no GitHub read of the thread (#2449).
 - **Each pasted part is headed by its source** — the body section, or the
-  comment's `issuecomment-<id>` — and the brief ends with this line, which
-  makes the delegate the check an orchestrator's re-read alone has not
-  been (#2513, #2683): *"A part above that is missing or a placeholder is
-  a brief not delivered: return `BRIEF INCOMPLETE: <part>` before doing
-  anything else."* Answer that return by sending the brief again, whole;
-  it is not a round, and no cap counts it.
+  comment's `issuecomment-<id>`. The mason's and the arbiter's own files
+  have them refuse a round brief with a part missing or a placeholder in
+  it, `BRIEF INCOMPLETE: <part>`, whatever the brief says (#2683, #2868).
+  Answer that return by sending the brief again, whole; it is not a
+  round, and no cap counts it.
 - **It never reshapes a duty.** It names the gate only as CLAUDE.md's
   gate, whole (#1959); never bars or reshapes a duty the delegate's agent
   file assigns it, the arbiter's ratchet run on accept above all (#1812);
@@ -45,11 +44,16 @@ a placeholder counting as none, or the session that delegated it is gone.
 Elapsed time is not a signature; a round still running is not lost
 however long it takes (#1426), and an interim notice that the agent is
 waiting on its own background work is neither its report nor a loss:
-wait for the report (#2250). Re-delegate a lost round from the thread as
-it stands, never re-grounding: a mason round from the `GROUNDING:`
-comment, naming the dead
-worktree in the new prompt if it is still on disk with commits so the
-round resumes from them; a judge round from the tree it was judging.
+wait for the report (#2250). **An agent that returned without its report
+is first asked for it with `SendMessage`** while its conversation is
+still addressable: a report it then delivers is the round's report, the
+round is not lost, and no `RESUME:` is owed. Either way the log entry's
+Friction names what the agent last printed or ran, so the cause of a
+silent end can be classified (#2810). Re-delegate a lost round from the
+thread as it stands, never re-grounding: a mason round from the
+`GROUNDING:` comment, naming the dead worktree in the new prompt if it is
+still on disk with commits so the round resumes from them; a judge round
+from the tree it was judging.
 **Every re-delegation after a loss posts a `RESUME:` or `TAKEOVER:`
 comment naming the lost round and its evidence, whatever the branch
 holds** (#1468) — those comments are what WORKFLOW's **Parking** cap
@@ -96,7 +100,9 @@ counts.
      still wear `ready`, and the band keeps landed rows until its next
      stamp, so take each row's state and branch from `wipsurvey`'s WORKING
      BAND section, never issue by issue (#2399). Claim with a commit only
-     this session could write, then push it:
+     this session could write, on `wip/issue-<N>` whatever session branch
+     the harness or the brief designates — a `claude/<slug>` name is not a
+     lease (WORKFLOW's branch scheme, #2920) — then push it:
 
      ```sh
      git switch -c wip/issue-<N> origin/main
@@ -255,9 +261,13 @@ counts.
    Absorbed items belong in the commit body, not in a new issue.
 
 5. **Judge.** Where step 4 owed a warden diff review, delegate the
-   arbiter only once that verdict is posted and, on revise, its fix is on
-   `wip/issue-<N>`. Then `git fetch origin main` and merge it forward if
-   it moved — before the arbiter, per WORKFLOW's **After the verdict**,
+   arbiter only once that verdict is posted and, on revise, each finding
+   is fixed on `wip/issue-<N>`: by your transcription where the revise
+   states the replacement text (WORKFLOW's pen), otherwise by a mason
+   repair round briefed from the revise, which no reject cap counts. The
+   warden does not re-review the fix; the arbiter judges it with the rest
+   of the diff (#2978). Then `git fetch origin main` and merge it forward
+   if it moved — before the arbiter, per WORKFLOW's **After the verdict**,
    where it costs no round instead of one. After every merge forward that
    precedes an arbiter round — this one, and the re-judge step 6's
    Landing precondition 2 calls for — run `go vet ./...` on the committed

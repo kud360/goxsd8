@@ -39,10 +39,13 @@ carries a paragraph returns paragraphs.
 **Friction is what the documents did not predict.** A documented setup
 step, a cost a retro has already ruled on, a `docs/PLAN.md` Status stale
 between stamps — those are the process working, and they earn a clause
-naming the rule, not a paragraph re-deriving it. Before calling a cost
-open or queued for `/retro`, search the closed `kind/process` queue for a
-ruling on its subject and cite that ruling instead; the full gate on a
-diff that touches no `.go` file is ruled — keep the gate uniform (#881).
+naming the rule, not a paragraph re-deriving it. A refusal
+docs/ROUTINES.md gives a respelling for — the anchored `-skip`, a chained
+or looped command, GraphQL `gh`, `--paginate` — and an interim "waiting
+on background work" notice earn no Friction line at all. Before calling a
+cost open or queued for `/retro`, search the closed `kind/process` queue
+for a ruling on its subject and cite that ruling instead; the full gate on
+a diff that touches no `.go` file is ruled — keep the gate uniform (#881).
 A documented thing that keeps costing is a finding about the document:
 file it, and stop paying for it once per session in prose. A first
 sighting of new friction is recorded here, named in words a later search
@@ -67,7 +70,9 @@ landing off the expectations files, the share of develop sessions spent on
 product, and each active lane's failures partitioned as the cartographer's
 backlog survey partitions them. Ask whether the largest cluster of
 failures had an issue and a session. A process that ran smoothly while the
-lanes stood still is the finding (#1738).
+lanes stood still is the finding (#1738). A north star whose milestone has
+no lane — codegen — is read by the measure its epic names, and an epic
+that names none is the finding: lane movement cannot see that work.
 
 Then gather the process evidence since the last retro: docs/LOG, the
 `needs-replan` and `blocked` queues, the `ready` `kind/process` queue, and

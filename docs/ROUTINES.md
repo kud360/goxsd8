@@ -51,8 +51,13 @@ translate the local times above and mind DST drift. Keep develop slots
     API path is not available: sessions are bound to their configured
     repositories. Use repository-scoped endpoints
     (repos/{owner}/{repo}/...)."*
+  - **`gh api --paginate` past page 1**, because GitHub's `Link` header
+    addresses the next page as `repositories/<id>/...`, which the binding
+    refuses as non-repository-scoped. Fetch each page on the
+    `{owner}/{repo}` path with `&page=N`, or let `go tool issuefeed` walk
+    them.
 
-  Recognize either text and re-spell the call against the repository, or
+  Recognize each and re-spell the call against the repository, or
   fall through — never conclude the thread is unreadable or file it again
   (#527). `gh auth status` reporting an invalid token is not evidence
   against any of this: it checks account-level auth, which repository-scoped
