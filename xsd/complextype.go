@@ -664,12 +664,11 @@ func NewAnonymousComplexTypeOwningBase(loc xsderr.Loc, id ComponentID, context C
 // The {context}-must-name-the-owner rejection is the redefine-side form of the
 // context-tracking hazard PRINCIPLES 16 names for <override>, charged to
 // xsderr.RuleComponentInvariant on the footing checkComplexTypeContext already
-// stands on. Neither owning entry point stores id: a field written but never
-// read is dead state (STYLE D3), and for a NAMED owner a stored token would be
-// a second encoding of its expanded name (STYLE D3); the landing that adds an
-// ID→component resolver adds the field together with its reader. A
-// name-carrying ComplexTypeContext arm would instead fork the §3.4.1 sum for
-// one mapping rule (STYLE T4).
+// stands on. NewComplexTypeOwningBase's doc states why id is not stored and why
+// no name-carrying arm stands in for it; those grounds are STYLE D3 (dead state;
+// a second encoding of a named owner's expanded name) and STYLE T4, and the
+// landing that adds an ID→component resolver adds the field together with its
+// reader.
 //
 // The unminted-id rejection precedes the ABSENT-{context} pass-through, so it is
 // charged for a named base too: it is a fault in what the CALLER minted, and an

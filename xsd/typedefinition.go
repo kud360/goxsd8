@@ -284,14 +284,13 @@ func (SubstitutionGroupHeadTypeRef) typeDefinitionOrRef() {}
 // it can never become arm-meaning-dependent on where the caller came from. Its
 // narrowed sibling is ResolvedSimpleType.
 func (s *Schema) ResolvedType(ref TypeDefinitionOrRef) (TypeDefinition, bool) {
-	// A dangling type name is charged src-resolve in resolve.go's Phase A, and
-	// an owner-of-owner head chain is rejected there by
-	// resolveTypeDefinitionSlot; checkSubstitutionGroupsAcyclic need not have
-	// run, so the head read stays depth-1 with no visited set (STYLE D4). Every
-	// consumer goes through this helper, through its complex-only narrowing
-	// baseComplexType (complexderivation.go), or through ResolvedSimpleType;
-	// none re-derives a bare-name lookup of its own (STYLE T4). Exported for the
-	// instance validator (#714).
+	// The Finalize steps the doc names are resolve.go's Phase A:
+	// resolveTypeDefinitionSlot charges the dangling name and rejects the
+	// owner-of-owner chain, and the doc's not-yet-checked graph is one
+	// checkSubstitutionGroupsAcyclic has not seen; the depth-1 read is STYLE
+	// D4's. In-package consumers go through this helper or its complex-only
+	// narrowing baseComplexType (complexderivation.go) and re-derive no lookup
+	// (STYLE T4). The validator export is #714's.
 	switch r := ref.(type) {
 	case nil:
 		return nil, false

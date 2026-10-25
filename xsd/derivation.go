@@ -245,12 +245,11 @@ func (t *SimpleType) CheckDerivation(r TypeResolver) error {
 	// checkLengthDerivationHistory, whose GAP marker carries the readings and
 	// the consumer list (1.2/2.2 waited on #319's anonymous intermediate list);
 	// the list/union applicable sets in checkVarietyApplicableFacets. The
-	// absent-{variety} rejection is #480's. Charging cos-st-restricts 1.2 /
-	// 2.2.2.2 / 3.2.2.2 a second time would be unreachable and charge-imprecise
-	// (STYLE E2), as would folding an unresolvable base into a clause (STYLE
-	// E2). The method is exported because one implementation serving both
-	// callers keeps the rule single (STYLE T5/T4); the conformance datatypes
-	// lane is the second Schema-less caller.
+	// absent-{variety} rejection is #480's. The once-only charge and the
+	// verbatim src-resolve error the doc states are STYLE E2's. The method is
+	// exported because one implementation serving both callers keeps the rule
+	// single (STYLE T5/T4); the conformance datatypes lane is the second
+	// Schema-less caller.
 	//
 	// Ordering: Schema.checkSimpleBaseAcyclic charges st-props-correct clause 2
 	// in finalize's Phase B, and Schema.checkUnionMembershipAcyclic charges
