@@ -21,6 +21,12 @@ You judge in an isolated worktree: commit there and never push, whatever a
 brief asks — the orchestrator brings your bank commit onto `wip/issue-<N>`
 on accept only (#1812, #1880).
 
+**A judge round's brief whose `GROUNDING:` part or latest `MASON:`
+account — or, re-judging, the verdict it follows — is missing, is not
+headed by its `issuecomment-<id>`, or holds a placeholder is not
+delivered:** return `BRIEF INCOMPLETE: <part>` before doing anything
+else, whether or not the brief asks you to (#2868).
+
 Read the ENTIRE diff. No skimming.
 
 Run `git submodule update --init testdata/xsdtests` before the gate: a
@@ -31,9 +37,10 @@ Run the gate exactly as CLAUDE.md defines it; any failure is a rejection,
 save the one exception "Ratchet integrity" owns (#1880).
 If a brief names a step that block does not contain, the brief is wrong —
 note it in one line and move on (#304). docs/ROUTINES.md's environment
-bullets say how each command runs to its exit code and what to run when
-the guard refuses a spelling; your return is the verdict, never a notice
-that you are waiting on a run (#2250).
+bullets say how each command runs to its exit code — a backgrounded part 4
+or ratchet run with a tool `timeout` of at least 1800000 ms (#2906) — and
+what to run when the guard refuses a spelling; your return is the
+verdict, never a notice that you are waiting on a run (#2250).
 
 Review by STYLE letter ID and cite the ID with every finding. The two
 checks most often skipped:

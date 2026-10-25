@@ -120,6 +120,11 @@ section for heads outside `wip/*` and `parked/*`, for as long as
 it is landing: that section is cleanup for a human, never a lease row, so a
 branch listed there is not in-flight work.
 
+**A session branch the harness or a brief designates — `claude/<slug>` —
+is not a lease.** `/develop` claims, checkpoints and lands from
+`wip/issue-<N>` whatever name was designated; a maintenance command may
+land from the designated branch as its short-lived branch (#2920).
+
 Invariants:
 
 - **The name is the claim; the tip time is the lease.** `wip/issue-<N>`
@@ -570,12 +575,12 @@ applied before filing and again before grounding something already filed:
   absolute banked figure; where one is needed it names
   `conformance/testdata/expectations/<lane>.txt` as the thing to read at
   work time (#646).
-- **An `## Acceptance` bar that counts a phrase in prose searches across
-  line breaks**, a wrapped comment's prefix included: join the phrase's
-  words with `\s+(?://\s*)?` under `rg -U`, as `rg -U -n -i
-  'origin\s+(?://\s*)?of\s+(?://\s*)?every'` does. A line-bound `grep`
-  misses the wrapped phrase, and an absence bar then passes vacuously
-  (#2919).
+- **An `## Acceptance` bar or `## Cost of delay` figure that counts a
+  phrase in prose searches across line breaks**, a wrapped comment's
+  prefix included: join the phrase's words with `\s+(?://\s*)?` under
+  `rg -U`, as `rg -U -n -i 'origin\s+(?://\s*)?of\s+(?://\s*)?every'`
+  does. A line-bound `grep` misses the wrapped phrase, and an absence bar
+  then passes vacuously (#2919).
 - **Cite a commit SHA only if `git merge-base --is-ancestor <sha>
   origin/main` exits 0** in a non-shallow checkout (docs/ROUTINES.md's
   shallow-checkout bullet: `git fetch --unshallow origin`). Only exit 0

@@ -44,13 +44,16 @@ use instead — not just the objection.
 A pre-flight settles **shape**: signatures, sums, which package owns what,
 which return channel carries which distinction. It does not settle a
 lane-affecting gate or a list of sites; where it names sites, it says
-whether each was read or inferred, since mason checks them against the tree
-before building on them (#863). A contract it approves types each field
-and parameter to the arms legal at that site, never to a wider sum that
-contains them, and states what each `ok` or boolean result answers at the
-input the spec makes a boundary; a ruling that a construct declines or
-keeps its behaviour is checked against the landed tests for that
-production (#2503).
+whether each was read or inferred, since mason checks them against the
+tree before building on them (#863). Where it dictates doc wording, it
+names, for each premise the wording rests on, the owning text — file and
+sentence, another package's `doc.go` included — marked read or inferred; a
+premise it cannot locate is not dictated (#3007). A contract it approves
+types each field and parameter to the arms legal at that site, never to a
+wider sum that contains them, and states what each `ok` or boolean result
+answers at the input the spec makes a boundary; a ruling that a construct
+declines or keeps its behaviour is checked against the landed tests for
+that production (#2503).
 
 Your verdict is read by agents with no other context, and is often
 transcribed into an issue body. So make it internally consistent: if a
