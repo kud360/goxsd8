@@ -1,0 +1,53 @@
+<?xml version="1.0"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+           xmlns:t="urn:t" targetNamespace="urn:t">
+  <!-- The list types the package doc's "# Coverage" maps: builtin and user
+       lists, a restriction of a list, an anonymous list and an anonymous
+       item, each as a top-level element, a required, optional and repeated
+       local element, a required and optional attribute, and a choice
+       alternative, once and repeated. -->
+  <xs:simpleType name="ints">
+    <xs:list itemType="xs:int"/>
+  </xs:simpleType>
+  <xs:simpleType name="fewInts">
+    <xs:restriction base="t:ints">
+      <xs:maxLength value="3"/>
+    </xs:restriction>
+  </xs:simpleType>
+  <xs:simpleType name="smalls">
+    <xs:list>
+      <xs:simpleType>
+        <xs:restriction base="xs:unsignedByte">
+          <xs:maxInclusive value="9"/>
+        </xs:restriction>
+      </xs:simpleType>
+    </xs:list>
+  </xs:simpleType>
+  <xs:element name="tokens" type="xs:NMTOKENS"/>
+  <xs:element name="few" type="t:fewInts"/>
+  <xs:element name="record">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element name="refs" type="xs:IDREFS"/>
+        <xs:element name="counts" type="t:ints" minOccurs="0"/>
+        <xs:element name="rows" type="t:smalls" maxOccurs="unbounded"/>
+        <xs:element name="flags">
+          <xs:simpleType>
+            <xs:list itemType="xs:boolean"/>
+          </xs:simpleType>
+        </xs:element>
+      </xs:sequence>
+      <xs:attribute name="tags" type="xs:NMTOKENS" use="required"/>
+      <xs:attribute name="sizes" type="t:fewInts"/>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="pick">
+    <xs:complexType>
+      <xs:choice>
+        <xs:element name="one" type="t:ints"/>
+        <xs:element name="many" type="xs:anyURI" maxOccurs="2"/>
+        <xs:element name="lists" type="xs:IDREFS" maxOccurs="2"/>
+      </xs:choice>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>

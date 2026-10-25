@@ -21,16 +21,24 @@
 // and one branch struct per alternative of each choice it emits as a sealed
 // interface, and declines everything outside this slice:
 //
-//   - An element whose {type definition} is an atomic simple type gets a
-//     named type over a Go builtin. The nearest of the eight bounded integer
-//     types on the type's {base type definition} chain (§3.16.1), the type
-//     itself first, gives the Go integer whose range is exactly its value
-//     space (Datatypes §3.4.16–§3.4.19, §3.4.21–§3.4.24): long gives int64,
-//     int int32, short int16, byte int8, unsignedLong uint64, unsignedInt
-//     uint32, unsignedShort uint16, unsignedByte uint8. Failing one, the
-//     type's {primitive type definition} (Datatypes §4.1.1) chooses: string
-//     and anyURI give string, boolean gives bool. Facets are not represented,
-//     and a named user simple type gets no Go type of its own.
+//   - An element whose {type definition} is an atomic or list simple type
+//     gets a named type over a Go builtin, or over a slice of one. For an
+//     atomic type, the nearest of the eight bounded integer types on the
+//     type's {base type definition} chain (§3.16.1), the type itself first,
+//     gives the Go integer whose range is exactly its value space (Datatypes
+//     §3.4.16–§3.4.19, §3.4.21–§3.4.24): long gives int64, int int32, short
+//     int16, byte int8, unsignedLong uint64, unsignedInt uint32,
+//     unsignedShort uint16, unsignedByte uint8. Failing one, the type's
+//     {primitive type definition} (Datatypes §4.1.1) chooses: string and
+//     anyURI give string, boolean gives bool. A list type (Datatypes
+//     §2.4.1.2) gives a slice of the builtin its {item type definition}
+//     (§3.16.1) gives, a restriction of a list taking its base's item
+//     (§3.16.2.3); the list declines exactly when its item does, by the
+//     item's construct. Wherever a field holds a list, the pointer and slice
+//     rules below apply to that slice as to any builtin; in a field that is
+//     not a pointer, nil and the empty slice are one value, the empty list.
+//     Facets are not represented, and a named user simple type gets no Go
+//     type of its own.
 //   - An element whose {type definition} is a complex type, named or
 //     anonymous, gets a type of its own when the type is a restriction of
 //     xs:anyType, implicit (§3.4.2.3.2 dcl.ctd.ctcc.implicit) or explicit
@@ -52,7 +60,8 @@
 //     (§3.9.6.3 cos-group-emptiable): it has {particles}, and each has
 //     {min occurs} at least 1 (§3.8.6.6 cos-choice-range).
 //   - Each particle of a sequence gives one field, in particle order: a
-//     local element with an atomic simple type gets its builtin, one with an
+//     local element with an atomic or list simple type gets the builtin or
+//     slice an element's type is declared over, one with an
 //     anonymous complex type of the same shape gets a struct or interface of
 //     its own, emitted after its parent. A type nested in a named complex
 //     type is emitted once per path of expanded names from that type, after
@@ -60,21 +69,23 @@
 //     type shares it; two sibling local elements whose expanded names differ
 //     only in {target namespace} (§3.3.2.3), a qualified x beside an
 //     unqualified x, get a type each. {max occurs} above 1 or unbounded
-//     gives a slice whatever {min occurs} is; {min occurs} 0 with {max
-//     occurs} 1 gives a pointer to a struct or builtin, and the bare
-//     interface, never a pointer to one, nil meaning absent.
+//     gives a slice whatever {min occurs} is, of a list's slice too ([][]T);
+//     {min occurs} 0 with {max occurs} 1 gives a pointer to a struct,
+//     builtin or list's slice (*[]T), and the bare interface, never a
+//     pointer to one, nil meaning absent.
 //   - Each attribute use of a type with sequence or empty content gives one
 //     field after the particle fields, if any, in the order
 //     [xsd.ComplexType.AttributeUses] returns its {attribute uses}
 //     (§3.4.2.4). The field is named from the attribute declaration's local
 //     name, so a qualified and an unqualified attribute of one local name, or an
 //     attribute named like an element of the struct, take the suffix "Naming"
-//     states, the later field taking it. Its {type definition} must be an atomic
-//     simple type and gives a builtin as an element's does; {required} true
-//     gives the builtin, false a pointer to it, nil meaning absent. The use's
-//     effective value constraint (§3.5.4 key-evc) must be absent, whether the
-//     use or a global declaration it references carries the default or fixed
-//     value. A choice is accepted only when its type has no {attribute uses}.
+//     states, the later field taking it. Its {type definition} must be an
+//     atomic or list simple type and gives a builtin or slice as an
+//     element's does; {required} true gives that type, false a pointer to it
+//     (*[]T for a list), nil meaning absent. The use's effective value
+//     constraint (§3.5.4 key-evc) must be absent, whether the use or a global
+//     declaration it references carries the default or fixed value. A choice is
+//     accepted only when its type has no {attribute uses}.
 //   - Every element declaration emitted from has {nillable} and {abstract}
 //     false and no {value constraint}, {type table} or {substitution group
 //     affiliations}. Its {identity-constraint definitions} are accepted and
@@ -90,11 +101,11 @@
 // choice, attribute uses with an effective value constraint, mixed and
 // simple content, extension, restriction of any base but xs:anyType, a
 // local element with a named complex type, xs:anyType, the special simple
-// types, list and union types, and every primitive but the three above —
-// decimal among them, so xs:integer, the four unbounded integer types and
-// every type derived from them other than through the eight bounded ones
-// decline, as do float and double — for an element or an attribute alike.
-// #2900 owns lifting them.
+// types, union types, a list whose {item type definition} declines, and
+// every primitive but the three above — decimal among them, so xs:integer,
+// the four unbounded integer types and every type derived from them other
+// than through the eight bounded ones decline, as do float and double — for
+// an element or an attribute alike. #2900 owns lifting them.
 //
 // # Determinism
 //
@@ -144,7 +155,7 @@
 //   - Generated readers/views expose the narrowest interface a consumer
 //     needs; optionality and nillability are modeled in the types, not
 //     in comments.
-//   - Simple-content fields of a type "# Coverage" maps to no Go builtin are
+//   - Simple-content fields of a type "# Coverage" maps to no Go type are
 //     typed by the chosen backend's representation (strict or native, per
 //     generation option). A field of a type "# Coverage" maps keeps that
 //     mapping whichever backend is chosen.

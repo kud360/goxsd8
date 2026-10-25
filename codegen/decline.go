@@ -58,7 +58,6 @@ const (
 	constructTypeTable
 	constructAnyTypeElement
 	constructSpecialType
-	constructListType
 	constructUnionType
 	constructAbsentVariety
 	constructNoPrimitive
@@ -97,7 +96,6 @@ var constructs = [...]struct{ name, format string }{
 	constructTypeTable:                {"{type table}", "%s with a {type table}"},
 	constructAnyTypeElement:           {"element of type xs:anyType", "%s with {type definition} xs:anyType"},
 	constructSpecialType:              {"special type", "%s, a special type"},
-	constructListType:                 {"list type", "%s, a list type"},
 	constructUnionType:                {"union type", "%s, a union type"},
 	constructAbsentVariety:            {"absent {variety}", "%s, of absent {variety}"},
 	constructNoPrimitive:              {"no {primitive type definition}", "%s, with no {primitive type definition}"},
