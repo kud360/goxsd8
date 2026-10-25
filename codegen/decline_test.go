@@ -168,8 +168,8 @@ func TestGenerateDeclines(t *testing.T) {
 			"{http://www.w3.org/2001/XMLSchema}anySimpleType, a special type", constructSpecialType},
 		{"anyAtomicType", `<xs:element name="e" type="xs:anyAtomicType"/>`,
 			"{http://www.w3.org/2001/XMLSchema}anyAtomicType, a special type", constructSpecialType},
-		// A list declines exactly when its {item type definition} does, by the
-		// item's own construct; the message names the list and then the item.
+		// The list rows pin "# Coverage"'s list decline, and that its message
+		// names the list and then its {item type definition}.
 		{"list of named union", `<xs:simpleType name="u"><xs:union memberTypes="xs:string xs:int"/></xs:simpleType><xs:simpleType name="l"><xs:list itemType="u"/></xs:simpleType><xs:element name="e" type="l"/>`,
 			"element e with {type definition} l, whose {item type definition} is u, a union type", constructUnionType},
 		{"list of anonymous union", `<xs:element name="e"><xs:simpleType><xs:list><xs:simpleType><xs:union memberTypes="xs:string xs:int"/></xs:simpleType></xs:list></xs:simpleType></xs:element>`,

@@ -2,13 +2,13 @@
 
 package lists
 
-// Tokens is generated from element {urn:t}tokens declared at testdata/lists.xsd:27:3.
+// Tokens is generated from element {urn:t}tokens declared at testdata/lists.xsd:26:3.
 type Tokens []string
 
-// Few is generated from element {urn:t}few declared at testdata/lists.xsd:28:3.
+// Few is generated from element {urn:t}few declared at testdata/lists.xsd:27:3.
 type Few []int32
 
-// Record is generated from element {urn:t}record declared at testdata/lists.xsd:29:3.
+// Record is generated from element {urn:t}record declared at testdata/lists.xsd:28:3.
 type Record struct {
 	Refs   []string
 	Counts *[]int32
@@ -18,26 +18,26 @@ type Record struct {
 	Sizes  *[]int32
 }
 
-// Pick is generated from element {urn:t}pick declared at testdata/lists.xsd:45:3.
+// Pick is generated from element {urn:t}pick declared at testdata/lists.xsd:44:3.
 type Pick interface {
 	isPick()
 }
 
-// PickOne is generated from element one declared at testdata/lists.xsd:48:9.
+// PickOne is generated from element one declared at testdata/lists.xsd:47:9.
 type PickOne struct {
 	One []int32
 }
 
 func (PickOne) isPick() {}
 
-// PickMany is generated from element many declared at testdata/lists.xsd:49:9.
+// PickMany is generated from element many declared at testdata/lists.xsd:48:9.
 type PickMany struct {
 	Many []string
 }
 
 func (PickMany) isPick() {}
 
-// PickLists is generated from element lists declared at testdata/lists.xsd:50:9.
+// PickLists is generated from element lists declared at testdata/lists.xsd:49:9.
 type PickLists struct {
 	Lists [][]string
 }

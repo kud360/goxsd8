@@ -155,7 +155,7 @@
 //   - Generated readers/views expose the narrowest interface a consumer
 //     needs; optionality and nillability are modeled in the types, not
 //     in comments.
-//   - Simple-content fields of a type "# Coverage" maps to no Go builtin are
+//   - Simple-content fields of a type "# Coverage" maps to no Go type are
 //     typed by the chosen backend's representation (strict or native, per
 //     generation option). A field of a type "# Coverage" maps keeps that
 //     mapping whichever backend is chosen.

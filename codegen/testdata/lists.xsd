@@ -1,12 +1,11 @@
 <?xml version="1.0"?>
 <xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
            xmlns:t="urn:t" targetNamespace="urn:t">
-  <!-- A list type (Datatypes §2.4.1.2) gives a slice of the Go type its
-       {item type definition} gives (§3.16.1), and the pointer and slice
-       rules apply to that slice as to any builtin: an optional element or
-       attribute gives a pointer to it, a repeated element a slice of it.
-       A restriction of a list takes its base's item (§3.16.2.3), and its
-       facets are not represented. -->
+  <!-- The list types the package doc's "# Coverage" maps: builtin and user
+       lists, a restriction of a list, an anonymous list and an anonymous
+       item, each as a top-level element, a required, optional and repeated
+       local element, a required and optional attribute, and a choice
+       alternative, once and repeated. -->
   <xs:simpleType name="ints">
     <xs:list itemType="xs:int"/>
   </xs:simpleType>
