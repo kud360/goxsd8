@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"go/format"
+	"path/filepath"
 	"slices"
 	"strconv"
 	"strings"
@@ -52,7 +53,10 @@ func decline(loc xsderr.Loc, format string, args ...any) error {
 type emitter struct {
 	schema *xsd.Schema
 	types  *namer
-	decls  []string
+	// base is the target's Dir made absolute, the directory each header
+	// renders its declaration's location against (headerLoc).
+	base  string
+	decls []string
 	// emitted holds the type emitted for each anonymous complex type nested in
 	// a named complex type, so that every top-level element whose type is that
 	// named type shares it; it is a lookup index only and never iterated
@@ -106,9 +110,10 @@ func (s scope) key() nestedKey {
 }
 
 // emit returns the gofmt-formatted source of package pkg for schema, or the
-// first decline in document order.
-func emit(schema *xsd.Schema, pkg string) ([]byte, error) {
-	e := &emitter{schema: schema, types: newNamer(), emitted: map[nestedKey]emittedType{}}
+// first decline in document order. base is the absolute directory the source
+// is written into.
+func emit(schema *xsd.Schema, pkg, base string) ([]byte, error) {
+	e := &emitter{schema: schema, types: newNamer(), base: base, emitted: map[nestedKey]emittedType{}}
 	for _, decl := range schema.Elements() {
 		if err := e.topLevel(decl); err != nil {
 			return nil, err
@@ -129,9 +134,25 @@ func emit(schema *xsd.Schema, pkg string) ([]byte, error) {
 
 // header is the doc comment of an emitted type: the declaration's expanded
 // name, whose namespace is its {target namespace} (for a local declaration,
-// as form and elementFormDefault set it, §3.3.2.3), and its Loc.
-func header(name string, decl xsd.ElementDeclaration) string {
-	return fmt.Sprintf("// %s is generated from element %s declared at %s.\n", name, decl.Name(), decl.Loc())
+// as form and elementFormDefault set it, §3.3.2.3), and its Loc as headerLoc
+// renders it against e.base. Only the header renders a Loc so: every decline
+// and error names the Loc as the declaration carries it.
+func (e *emitter) header(name string, decl xsd.ElementDeclaration) string {
+	return fmt.Sprintf("// %s is generated from element %s declared at %s.\n", name, decl.Name(), headerLoc(e.base, decl.Loc()))
+}
+
+// headerLoc renders loc for a header against the absolute directory base, by
+// the rule the package doc's "Naming" states for a target's Dir.
+func headerLoc(base string, loc xsderr.Loc) string {
+	if !filepath.IsAbs(loc.URI) {
+		return loc.String()
+	}
+	rel, err := filepath.Rel(base, loc.URI)
+	if err != nil {
+		return loc.String()
+	}
+	loc.URI = filepath.ToSlash(rel)
+	return loc.String()
 }
 
 // topLevel emits the type of one top-level element declaration: a named type
@@ -151,7 +172,7 @@ func (e *emitter) topLevel(decl xsd.ElementDeclaration) error {
 			return err
 		}
 		name := e.types.claim(decl.Name().Local)
-		e.decls = append(e.decls, header(name, decl)+fmt.Sprintf("type %s %s\n", name, builtin))
+		e.decls = append(e.decls, e.header(name, decl)+fmt.Sprintf("type %s %s\n", name, builtin))
 		return nil
 	case xsd.ComplexType:
 		nested := scope{path: []xsd.QName{decl.Name()}}
@@ -318,7 +339,7 @@ func (e *emitter) complexType(name string, nested scope, decl xsd.ElementDeclara
 		}
 		fmt.Fprintf(&body, "\t%s %s\n", fields.claim(field.local), field.goType)
 	}
-	e.decls[slot] = header(name, decl) + fmt.Sprintf("type %s struct {\n%s}\n", name, body.String())
+	e.decls[slot] = e.header(name, decl) + fmt.Sprintf("type %s struct {\n%s}\n", name, body.String())
 	return emittedType{name: name}, nil
 }
 
@@ -351,7 +372,7 @@ func (e *emitter) sealedType(name string, nested scope, subject string, decl xsd
 		}
 	}
 	marker := "is" + name
-	e.decls = append(e.decls, header(name, decl)+fmt.Sprintf("type %s interface {\n\t%s()\n}\n", name, marker))
+	e.decls = append(e.decls, e.header(name, decl)+fmt.Sprintf("type %s interface {\n\t%s()\n}\n", name, marker))
 	for _, p := range particles {
 		alt, err := localElement(subject, t.Loc(), p.Term())
 		if err != nil {
@@ -364,7 +385,7 @@ func (e *emitter) sealedType(name string, nested scope, subject string, decl xsd
 		if err != nil {
 			return err
 		}
-		e.decls[slot] = header(branch, alt) + fmt.Sprintf("type %s struct {\n\t%s %s\n}\n\nfunc (%s) %s() {}\n",
+		e.decls[slot] = e.header(branch, alt) + fmt.Sprintf("type %s struct {\n\t%s %s\n}\n\nfunc (%s) %s() {}\n",
 			branch, newNamer().claim(field.local), field.goType, branch, marker)
 	}
 	return nil

@@ -278,8 +278,9 @@ Usage (contract; subcommands land with their milestones):
       Each -schema needs the -out after it and each -out the -schema
       before it; gen takes no positional argument. Each -schema is
       compiled alone, as a parse argument is: its path is resolved
-      absolute before it is read, so the comments of the generated
-      file name absolute locations. A rejected -schema prints its
+      absolute before it is read. The comments of the generated file
+      name each document by its path relative to the -out directory,
+      climbing with ../ out of it. A rejected -schema prints its
       first error on stderr as parse's does, the no-rule-to-cite
       lines and the unresolved-directive lines included.
       Every pair is compiled, and every failure to compile reported,
