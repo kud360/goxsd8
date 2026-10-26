@@ -75,3 +75,15 @@ func typeCheck(t *testing.T, src []byte) {
 		t.Fatalf("type-checking the emitted source: %v", err)
 	}
 }
+
+// TestGenerateImportsBig pins the import of math/big for each Go type that
+// brings it: a schema whose one field type is big.Int, or big.Rat, emits a
+// package that type-checks only when that type alone sets the import.
+func TestGenerateImportsBig(t *testing.T) {
+	for _, typ := range []string{"xs:integer", "xs:decimal"} {
+		t.Run(typ, func(t *testing.T) {
+			schema := parseString(t, `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"><xs:element name="e" type="`+typ+`"/></xs:schema>`)
+			typeCheck(t, generateOne(t, Target{Schema: schema, Dir: filepath.Join(t.TempDir(), "out"), Package: "p"}))
+		})
+	}
+}
