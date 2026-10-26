@@ -63,8 +63,10 @@ func (t Target) failed(i int, err error) error {
 // anonymous complex type nested in its type definition, one per named
 // complex type a local element declaration reaches, and one branch struct
 // per alternative of each choice emitted as a sealed interface, each emitted
-// after its parent (the package doc's "Coverage" and "Naming" say which). Targets
-// are generated independently: no emitted package imports another.
+// after its parent, then one struct per date, time or duration datatype a
+// declaration's type is declared over (the package doc's "Coverage" and
+// "Naming" say which). Targets are generated independently: no emitted
+// package imports another.
 //
 // The file is gofmt-formatted. Generate writes no go.mod and adds no
 // //go:generate line: the module the caller puts Dir in owns both.

@@ -1,0 +1,52 @@
+<?xml version="1.0"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+           xmlns="urn:temporal" targetNamespace="urn:temporal"
+           elementFormDefault="qualified">
+  <xs:element name="time" type="xs:string"/>
+  <xs:element name="date" type="xs:date"/>
+  <xs:element name="stamp" type="xs:dateTimeStamp"/>
+  <xs:element name="span" type="xs:duration"/>
+  <xs:element name="window">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element name="opens" type="xs:dateTime"/>
+        <xs:element name="at" type="xs:time" minOccurs="0"/>
+        <xs:element name="month" type="xs:gYearMonth" maxOccurs="unbounded"/>
+        <xs:element name="year" type="xs:gYear"/>
+        <xs:element name="anniversary" type="xs:gMonthDay"/>
+        <xs:element name="day" type="xs:gDay"/>
+        <xs:element name="monthOnly" type="xs:gMonth"/>
+        <xs:element name="elapsed" type="xs:dayTimeDuration"/>
+        <xs:element name="term" type="xs:yearMonthDuration"/>
+        <xs:element name="closes" type="closing"/>
+        <xs:element name="pause" type="shortPause" minOccurs="0"/>
+        <xs:element name="holidays" type="dateList" minOccurs="0"/>
+      </xs:sequence>
+      <xs:attribute name="since" type="xs:date"/>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="dates" type="dateList"/>
+  <xs:simpleType name="stamped">
+    <xs:restriction base="xs:dateTime">
+      <xs:explicitTimezone value="required"/>
+    </xs:restriction>
+  </xs:simpleType>
+  <xs:simpleType name="closing">
+    <xs:restriction base="stamped">
+      <xs:minInclusive value="2000-01-01T00:00:00Z"/>
+    </xs:restriction>
+  </xs:simpleType>
+  <xs:simpleType name="pause">
+    <xs:restriction base="xs:dayTimeDuration">
+      <xs:maxInclusive value="PT1H"/>
+    </xs:restriction>
+  </xs:simpleType>
+  <xs:simpleType name="shortPause">
+    <xs:restriction base="pause">
+      <xs:maxInclusive value="PT5M"/>
+    </xs:restriction>
+  </xs:simpleType>
+  <xs:simpleType name="dateList">
+    <xs:list itemType="xs:date"/>
+  </xs:simpleType>
+</xs:schema>
