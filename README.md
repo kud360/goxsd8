@@ -5,11 +5,17 @@ An **XSD 1.1 processor for Go**: schema parser, instance validator
 support, and a code generator that emits allocation-frugal, type-safe
 marshalling code.
 
-> **Status: early.** The architecture, package contracts, and conformance
-> harness are committed; implementations land milestone by milestone
-> (see [docs/PLAN.md](docs/PLAN.md)). Every package's `doc.go` states its
-> committed contract — `go doc` is the source of truth for what each
-> package will do.
+> **Status: early.** XML and JSON instances validate today; BER is
+> planned (M11). The code generator ships Go type declarations for a slice
+> of schema shapes, with no decoder or encoder to fill them yet (package
+> `codec`, M10). The XPath engine evaluates a conditional type assignment's
+> `{test}` over Structures §3.12.6's restricted subset, less some forms it
+> declines (M6), and an assertion's `{test}` in first slices (M6), reporting
+> one it declines as unevaluated, never as satisfied; the full XPath 2.0
+> grammar and function library are planned (M7 onward). Implementations
+> land milestone by milestone (see [docs/PLAN.md](docs/PLAN.md)). Every
+> package's `doc.go` states its committed contract — `go doc` is the source
+> of truth for what each package will do.
 
 ## What it does (the contract)
 
@@ -18,12 +24,12 @@ marshalling code.
   component model with **query** (lookup by name) and **walk**
   (content-model traversal) APIs.
 - **Validate** instance documents against the compiled set. Sources are
-  adapters over one abstract infoset: XML and JSON today, BER planned.
+  adapters over one abstract infoset: XML, JSON, and BER.
   Every violation carries the spec rule ID (`cvc-…`) and an exact
   file:line:column location.
-- **XPath 2.0** for assertions, conditional type assignment, and
-  identity constraints — the required subset first, growing to the full
-  grammar and F&O function library, conformance-tracked.
+- **XPath 2.0** for assertions and conditional type assignment — the
+  required subset first, growing to the full grammar and F&O function
+  library, conformance-tracked.
 - **Generate Go code**: `xs:choice` becomes a sealed interface (one
   concrete type per branch — no "five pointers, one non-nil" structs),
   values typed by your chosen backend, decode paths specialized for
