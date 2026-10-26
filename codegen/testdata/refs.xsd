@@ -1,0 +1,56 @@
+<?xml version="1.0"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+           xmlns="urn:refs:a"
+           xmlns:b="urn:refs:b"
+           targetNamespace="urn:refs:a"
+           elementFormDefault="qualified">
+  <xs:import namespace="urn:refs:b" schemaLocation="refsimport.xsd"/>
+  <xs:element name="order">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element ref="id"/>
+        <xs:element ref="note" minOccurs="0"/>
+        <xs:element ref="item" maxOccurs="unbounded"/>
+        <xs:element ref="shipTo" minOccurs="0"/>
+        <xs:element ref="payment"/>
+        <xs:element ref="b:id"/>
+        <xs:element ref="tag" maxOccurs="3"/>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="id" type="xs:string"/>
+  <xs:element name="note" type="xs:string"/>
+  <xs:element name="item">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element name="sku" type="xs:string"/>
+        <xs:element ref="note" minOccurs="0"/>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="shipTo" type="address"/>
+  <xs:complexType name="address">
+    <xs:sequence>
+      <xs:element name="street" type="xs:string"/>
+    </xs:sequence>
+  </xs:complexType>
+  <xs:element name="payment">
+    <xs:complexType>
+      <xs:choice>
+        <xs:element ref="card"/>
+        <xs:element ref="b:voucher" maxOccurs="unbounded"/>
+        <xs:element name="cash" type="xs:boolean"/>
+      </xs:choice>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="card" type="xs:string"/>
+  <xs:element name="tag" type="xs:string"/>
+  <xs:element name="receipt">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element ref="payment" minOccurs="0"/>
+        <xs:element ref="shipTo"/>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>

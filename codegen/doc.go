@@ -20,7 +20,9 @@
 // declaration, one per anonymous complex type nested in its type definition,
 // one per named complex type a local element declaration reaches, and one
 // branch struct per alternative of each choice it emits as a sealed
-// interface, then, after every other declaration and in the order the walk
+// interface — an <element ref> particle gets none of its own, its field
+// holding the type emitted for the top-level element declaration it names —
+// then, after every other declaration and in the order the walk
 // first needs each, one datatype struct per date, time or duration datatype
 // a declaration's type is declared over, and declines everything outside this
 // slice:
@@ -80,7 +82,9 @@
 //     {abstract}, and with one of two contents: empty content ({variety}
 //     empty, §3.4.1); or element-only content (§3.4.2.3.3 dcl.ctd.ctcc.common)
 //     that has no {open content} and whose {particle} occurs exactly once and
-//     holds a sequence or a choice of local element declarations. A sequence
+//     holds a sequence or a choice of element particles: local element
+//     declarations, and <element ref> particles, whose {term} is the
+//     top-level declaration the ref names (§3.3.2.4). A sequence
 //     gives a struct, and so does empty content, with no particle field; a
 //     struct with no field is spelled struct{}.
 //   - A choice gives a sealed interface, the closed-sum exception: an
@@ -93,23 +97,25 @@
 //     (§3.9.6.3 cos-group-emptiable): it has {particles}, and each has
 //     {min occurs} at least 1 (§3.8.6.6 cos-choice-range).
 //   - Each particle of a sequence gives one field, in particle order: a local element with
-//     an atomic or list simple type gets the atomic Go type, or the slice, an
-//     element's type is declared over, one with an anonymous complex type of the same shape
-//     gets a struct or interface of its own, emitted after its parent. One with a named
-//     complex type of the same shape gets the struct or interface emitted for that type,
-//     once per expanded name, after the parent of the first local element of that type, and
-//     shared by every local element of that type in any parent, the type's own included; a
-//     top-level element of that type keeps the type named from the element. A type nested in
-//     a named complex type is emitted once per path of expanded names from that type, after
-//     the first element whose walk reaches it, and every element of that type, top-level or
-//     local, shares it; two sibling local elements whose expanded names differ only in
-//     {target namespace} (§3.3.2.3), a qualified x beside an unqualified x, get a type each.
-//     A named complex type that reaches itself through elements that each occur exactly once
-//     in a sequence, and whose types are not choices, declines: its Go type would hold
-//     itself as a struct value. {max occurs} above 1 or unbounded gives a slice whatever
-//     {min occurs} is, of a list's slice too ([][]T); {min occurs} 0 with {max occurs} 1
-//     gives a pointer to a struct, atomic Go type, or list's slice (*[]T), and
-//     the bare interface, never a pointer to one, nil meaning absent.
+//     an atomic or list simple type gets the atomic Go type, or the slice, an element's type is
+//     declared over, one with an anonymous complex type of the same shape gets a struct or
+//     interface of its own, emitted after its parent. One with a named complex type of the same
+//     shape gets the struct or interface emitted for that type, once per expanded name, after the
+//     parent of the first local element of that type, and shared by every local element of that
+//     type in any parent, the type's own included; a top-level element of that type keeps the type
+//     named from the element. A type nested in a named complex type is emitted once per path of
+//     expanded names from that type, after the first element whose walk reaches it, and every
+//     element of that type, top-level or local, shares it; two sibling local elements whose
+//     expanded names differ only in {target namespace} (§3.3.2.3), a qualified x beside an
+//     unqualified x, get a type each. An <element ref> particle gets the type emitted for the
+//     top-level element declaration it names, named from that element whatever its type definition,
+//     and its field is named from that declaration's local name. A named complex type, or a
+//     top-level element through <element ref> particles, that reaches itself through elements that
+//     each occur exactly once in a sequence, and whose types are not choices, declines: its Go type
+//     would hold itself as a struct value. {max occurs} above 1 or unbounded gives a slice whatever
+//     {min occurs} is, of a list's slice too ([][]T); {min occurs} 0 with {max occurs} 1 gives a
+//     pointer to a struct, atomic Go type, or list's slice (*[]T), and the bare interface, never a
+//     pointer to one, nil meaning absent.
 //   - Each attribute use of a type with sequence or empty content gives one
 //     field after the particle fields, if any, in the order [xsd.ComplexType.AttributeUses]
 //     returns its {attribute uses} (§3.4.2.4). The field is named from the attribute
@@ -131,14 +137,15 @@
 //
 // GAP(codegen): every other construct declines: the all compositor, an
 // emptiable choice, a choice with no {particles}, nested model groups,
-// <group ref> and <element ref> particles, wildcards, a particle with {max
-// occurs} 0, attribute wildcards, attribute uses on a type whose content is a
-// choice, attribute uses with an effective value constraint, mixed and
-// simple content, extension, restriction of any base but xs:anyType, a
-// named complex type reaching itself through struct values, xs:anyType, the
-// special simple types, union types, a list whose {item type definition}
-// declines, and every primitive the first bullet does not map, for an element
-// or an attribute alike. #2900 owns lifting them.
+// <group ref> particles, wildcards, a particle with {max occurs} 0,
+// attribute wildcards, attribute uses on a type whose content is a choice,
+// attribute uses with an effective value constraint, mixed and simple
+// content, extension, restriction of any base but xs:anyType, a named
+// complex type, or a top-level element through <element ref> particles,
+// reaching itself through struct values, xs:anyType, the special simple
+// types, union types, a list whose {item type definition} declines, and every
+// primitive the first bullet does not map, for an element or an attribute
+// alike. #2900 owns lifting them.
 //
 // # Determinism
 //
@@ -157,7 +164,9 @@
 // does not admit in an identifier break words, every word starts upper-case,
 // and a result with no upper-case first letter is prefixed with
 // X. That upper-case start is also what keeps every identifier clear of the
-// Go keywords. A top-level element's type is named from the element. A named
+// Go keywords. A top-level element's type is named from the element, its name
+// claimed when the walk first reaches the element: at its own position, or at
+// the first <element ref> particle to it met before that. A named
 // complex type a local element reaches is named from the type (complex type
 // ct → Ct), whichever local elements have type ct. An anonymous type nested
 // in either is named by the path of names from its nearest named ancestor:

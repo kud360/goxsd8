@@ -269,6 +269,38 @@ func TestGenerateEmptyContent(t *testing.T) {
 	}
 }
 
+// TestGenerateElementRefs pins <element ref> particles beyond the golden's:
+// each field holds the type emitted for the top-level declaration the ref
+// names, and the emitted package type-checks. The recursion rows close a
+// cycle through refs that is not a struct-value recursion, since one ref is
+// a slice or a pointer field; the symbol-space row has an element and a
+// complex type share the expanded name n, which no cycle passes through twice.
+func TestGenerateElementRefs(t *testing.T) {
+	const str = `type="xs:string"`
+	tests := []struct{ name, body, want string }{
+		{"sequence", `<xs:element name="h" ` + str + `/><xs:element name="e"><xs:complexType><xs:sequence><xs:element ref="h"/></xs:sequence></xs:complexType></xs:element>`,
+			"type E struct {\n\tH H\n}\n"},
+		{"choice", `<xs:element name="h" ` + str + `/><xs:element name="e"><xs:complexType><xs:choice><xs:element name="a" ` + str + `/><xs:element ref="h"/></xs:choice></xs:complexType></xs:element>`,
+			"type EH struct {\n\tH H\n}\n\nfunc (EH) isE() {}\n"},
+		{"recursion through a repeated ref", `<xs:element name="a"><xs:complexType><xs:sequence><xs:element ref="b" maxOccurs="unbounded"/></xs:sequence></xs:complexType></xs:element><xs:element name="b"><xs:complexType><xs:sequence><xs:element ref="a"/></xs:sequence></xs:complexType></xs:element>`,
+			"type A struct {\n\tB []B\n}\n"},
+		{"recursion through an optional ref", `<xs:element name="a"><xs:complexType><xs:sequence><xs:element ref="b" minOccurs="0"/></xs:sequence></xs:complexType></xs:element><xs:element name="b"><xs:complexType><xs:sequence><xs:element ref="a"/></xs:sequence></xs:complexType></xs:element>`,
+			"type A struct {\n\tB *B\n}\n"},
+		{"element and complex type of one name", `<xs:element name="n" type="t"/><xs:complexType name="t"><xs:sequence><xs:element name="m" type="n"/></xs:sequence></xs:complexType><xs:complexType name="n"><xs:sequence><xs:element ref="o"/></xs:sequence></xs:complexType><xs:element name="o" ` + str + `/>`,
+			"type N struct {\n\tM N2\n}\n"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			schema := parseString(t, `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">`+tt.body+`</xs:schema>`)
+			src := generateOne(t, Target{Schema: schema, Dir: t.TempDir(), Package: "p"})
+			if got := string(src); !strings.Contains(got, tt.want) {
+				t.Errorf("want %q in:\n%s", tt.want, got)
+			}
+			typeCheck(t, src)
+		})
+	}
+}
+
 // TestGenerateDiamond pins that a struct-value recursion check costs time
 // linear in the named types it reaches: each complex type d<i> holds two value
 // fields of type d<i+1>, so a check that walks a type again on every reach

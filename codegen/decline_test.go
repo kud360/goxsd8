@@ -61,8 +61,6 @@ func TestGenerateDeclines(t *testing.T) {
 			"a nested sequence model group particle", constructNestedGroup},
 		{"emptiable group in choice", `<xs:element name="e"><xs:complexType><xs:choice><xs:element name="a" ` + str + `/><xs:sequence><xs:element name="b" minOccurs="0" ` + str + `/></xs:sequence></xs:choice></xs:complexType></xs:element>`,
 			"a nested sequence model group particle", constructNestedGroup},
-		{"element ref in choice", `<xs:element name="h" ` + str + `/><xs:element name="e"><xs:complexType><xs:choice><xs:element name="a" ` + str + `/><xs:element ref="h"/></xs:choice></xs:complexType></xs:element>`,
-			"an <element ref> particle to h", constructElementRef},
 		{"group ref in choice", `<xs:group name="g"><xs:sequence><xs:element name="b" ` + str + `/></xs:sequence></xs:group><xs:element name="e"><xs:complexType><xs:choice><xs:element name="a" ` + str + `/><xs:group ref="g"/></xs:choice></xs:complexType></xs:element>`,
 			"a <group ref> particle to g", constructGroupRef},
 		{"wildcard in choice", `<xs:element name="e"><xs:complexType><xs:choice><xs:element name="a" ` + str + `/><xs:any/></xs:choice></xs:complexType></xs:element>`,
@@ -83,8 +81,21 @@ func TestGenerateDeclines(t *testing.T) {
 			"a <group ref> particle to g", constructGroupRef},
 		{"group ref content", `<xs:group name="g"><xs:sequence><xs:element name="a" ` + str + `/></xs:sequence></xs:group><xs:element name="e"><xs:complexType><xs:group ref="g"/></xs:complexType></xs:element>`,
 			"whose content particle is a <group ref>", constructContentGroupRef},
-		{"element ref", `<xs:element name="h" ` + str + `/><xs:element name="e"><xs:complexType><xs:sequence><xs:element ref="h"/></xs:sequence></xs:complexType></xs:element>`,
-			"an <element ref> particle to h", constructElementRef},
+		// In the five ref rows below, h is declared after e, so its decline
+		// is met at e's ref to it.
+		{"element ref to nillable", `<xs:element name="e"><xs:complexType><xs:sequence><xs:element ref="h"/></xs:sequence></xs:complexType></xs:element><xs:element name="h" nillable="true" ` + str + `/>`,
+			"element h with {nillable} true at s.xsd:2:116 ", constructElementNillable},
+		{"element ref in choice to nillable", `<xs:element name="e"><xs:complexType><xs:choice><xs:element name="a" ` + str + `/><xs:element ref="h"/></xs:choice></xs:complexType></xs:element><xs:element name="h" nillable="true" ` + str + `/>`,
+			"element h with {nillable} true", constructElementNillable},
+		// A member of h's substitution group is top-level, and its own
+		// declaration declines.
+		{"element ref to substitution group head", `<xs:element name="e"><xs:complexType><xs:sequence><xs:element ref="h"/></xs:sequence></xs:complexType></xs:element><xs:element name="h" ` + str + `/><xs:element name="m" substitutionGroup="h" ` + str + `/>`,
+			"element m with {substitution group affiliations}", constructSubstitutionGroup},
+		// h's type is checked where e's ref meets it, ahead of z's decline.
+		{"element ref to complex type outside the slice", `<xs:element name="e"><xs:complexType><xs:sequence><xs:element ref="h"/><xs:element name="z" type="xs:QName"/></xs:sequence></xs:complexType></xs:element><xs:element name="h"><xs:complexType><xs:all><xs:element name="a" ` + str + `/></xs:all></xs:complexType></xs:element>`,
+			"complex type (anonymous) of element h with an all compositor", constructAll},
+		{"element ref to simple type outside the slice", `<xs:element name="e"><xs:complexType><xs:sequence><xs:element ref="h"/><xs:element name="z" type="xs:hexBinary"/></xs:sequence></xs:complexType></xs:element><xs:element name="h" type="xs:QName"/>`,
+			"element h with {type definition} {http://www.w3.org/2001/XMLSchema}QName, whose {primitive type definition} is", constructUncoveredPrimitive},
 		{"wildcard", `<xs:element name="e"><xs:complexType><xs:sequence><xs:any/></xs:sequence></xs:complexType></xs:element>`,
 			"a wildcard particle", constructWildcard},
 		{"attribute", `<xs:element name="e"><xs:complexType><xs:sequence><xs:element name="a" ` + str + `/></xs:sequence><xs:attribute name="t"/></xs:complexType></xs:element>`,
@@ -208,6 +219,24 @@ func TestGenerateDeclines(t *testing.T) {
 			"local element y reaching complex type c again through elements that each occur exactly once", constructValueCycle},
 		{"value cycle in choice branch", `<xs:complexType name="t1"><xs:sequence><xs:element name="b" type="t2"/></xs:sequence></xs:complexType><xs:complexType name="t2"><xs:sequence><xs:element name="c" type="t1"/></xs:sequence></xs:complexType><xs:element name="e"><xs:complexType><xs:choice><xs:element name="a" type="t1"/></xs:choice></xs:complexType></xs:element>`,
 			"local element c reaching complex type t1 again through elements that each occur exactly once", constructValueCycle},
+		// The ref-cycle rows close a cycle through <element ref> particles,
+		// which the emitting walk treats as leaves, so only the recursion check
+		// of each ref finds it; each decline cites the Loc of the top-level
+		// declaration the closing ref names.
+		{"ref cycle through a named type", `<xs:element name="r" type="c"/><xs:complexType name="c"><xs:sequence><xs:element ref="r"/></xs:sequence></xs:complexType>`,
+			"<element ref> particle to element r reaching element r again through elements that each occur exactly once at s.xsd:2:1 ", constructValueCycle},
+		{"ref cycle through anonymous types", `<xs:element name="a"><xs:complexType><xs:sequence><xs:element ref="b"/></xs:sequence></xs:complexType></xs:element><xs:element name="b"><xs:complexType><xs:sequence><xs:element ref="a"/></xs:sequence></xs:complexType></xs:element>`,
+			"<element ref> particle to element a reaching element a again through elements that each occur exactly once at s.xsd:2:1 ", constructValueCycle},
+		// g's own element node is new to the chain f starts, and the type t
+		// it shares with f closes the cycle.
+		{"ref cycle closing at a complex type", `<xs:element name="f" type="t"/><xs:complexType name="t"><xs:sequence><xs:element ref="g"/></xs:sequence></xs:complexType><xs:element name="g" type="t"/>`,
+			"<element ref> particle to element g reaching complex type t again through elements that each occur exactly once", constructValueCycle},
+		{"ref cycle through a local element", `<xs:element name="a"><xs:complexType><xs:sequence><xs:element name="l"><xs:complexType><xs:sequence><xs:element ref="a"/></xs:sequence></xs:complexType></xs:element></xs:sequence></xs:complexType></xs:element>`,
+			"<element ref> particle to element a reaching element a again through elements that each occur exactly once", constructValueCycle},
+		// The ref to a is checked for recursion where it is met, ahead of the
+		// decline of z after it.
+		{"ref cycle ahead of a later decline", `<xs:element name="e"><xs:complexType><xs:sequence><xs:element ref="a"/><xs:element name="z" type="xs:QName"/></xs:sequence></xs:complexType></xs:element><xs:element name="a"><xs:complexType><xs:sequence><xs:element ref="b"/></xs:sequence></xs:complexType></xs:element><xs:element name="b"><xs:complexType><xs:sequence><xs:element ref="a"/></xs:sequence></xs:complexType></xs:element>`,
+			"<element ref> particle to element a reaching element a again through elements that each occur exactly once", constructValueCycle},
 		// x's walk emits z through the pointer field p before it reaches the
 		// value field v, and z's walk meets x already stored: a check carried
 		// by the emitting walk, which never walks a stored type again, lets
