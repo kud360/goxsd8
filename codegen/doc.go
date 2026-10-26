@@ -146,7 +146,9 @@
 // relative to the target's Dir, so two trees laid out alike under different
 // absolute roots produce byte-identical output; "Naming" states where a
 // header's location is not relative. No map iteration anywhere near the
-// emitter; emission order is document order. Golden-file tests pin the output.
+// emitter; emission order is the walk's, which document order alone fixes, as
+// the first paragraph states (datatype structs last, in the order the walk
+// first needs each). Golden-file tests pin the output.
 //
 // # Naming
 //
