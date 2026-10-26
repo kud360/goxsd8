@@ -715,6 +715,7 @@ func (e *emitter) valueCycle(chain []xsd.QName, decl xsd.ElementDeclaration, sub
 	}
 	group, hasParticle, err := e.contentGroup(subject, t)
 	if err != nil || hasParticle && group.Compositor() == xsd.CompositorChoice {
+		//nolint:nilerr // a decline of t ends this path: the emitting walk meets it and returns it in walk order.
 		return nil
 	}
 	chain, err = valueChain(chain, true, decl, t)
