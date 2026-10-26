@@ -210,11 +210,9 @@ func (s scope) key() nestedKey {
 	return nestedKey(b.String())
 }
 
-// emit returns the gofmt-formatted source of package pkg for schema; or the
-// declines it collects, in the order Generate's doc states; or a failure that
-// is not a decline, which ends the walk and follows the declines collected
-// before it. Each top-level element declaration's turn contributes at most its
-// first decline, and none when that decline equals one already collected. It
+// emit returns the gofmt-formatted source of package pkg for schema, or the
+// declines and the failure that is not a decline that Generate's doc states
+// for one target's walk, one turn per top-level element declaration. It
 // returns source only when it collects no decline, and err carries no
 // decline. base is the absolute directory the source is written into.
 func emit(schema *xsd.Schema, pkg, base string) (src []byte, declines []*DeclineError, err error) {
