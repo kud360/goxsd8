@@ -83,37 +83,45 @@ func (t Target) failed(i int, err error) error {
 // Generate runs in two phases. Phase 1 checks every target and builds its
 // source in memory, in slice order; phase 2 writes. A target that fails phase
 // 1 — a nil Schema, a refusal CheckTargets reports, or a construct the
-// generator declines — means no target is written, and the error is the first
-// failure in target order. Within one target a nil Schema comes first, then
-// its refusal, then its declines, in the order the generator meets them: each
-// top-level element declaration in document order, depth first through the
-// types its particles reach (the package doc's "Coverage"). A local element
-// that occurs exactly once and whose type, not a choice, is already emitted
-// has that type checked again, through such elements, for a type reaching
-// itself, and the decline "Coverage" states for one found there precedes
-// every decline the depth-first walk meets after that element. The walk does
-// not enter the type of the top-level declaration an <element ref> particle
-// names, which that declaration's own turn emits; a ref to a declaration not
-// yet reached checks that declaration's properties and the shape of its type
-// where the ref is met, and a ref that occurs exactly once to a complex type
-// that is not a choice has that type checked there, in the same way, for an
-// element or type reaching itself, ahead of every decline the depth-first
-// walk meets after the ref.
+// generator declines — means no target is written. Phase 1 collects every
+// decline, in target order, and stops at the first failure that is not a
+// decline, which follows the declines collected before it. Within one target a
+// nil Schema comes first, then its refusal, either of which ends phase 1 before
+// its declines; then its declines, at most one for each top-level element
+// declaration, each declaration's walk ending at its first decline in the
+// order the generator meets them: each top-level element declaration in
+// document order, depth first through the types its particles reach (the
+// package doc's "Coverage"). A decline equal to one already collected for the
+// target, met again through an <element ref> particle, the declaration's own
+// turn or a type two declarations share, is collected once, where first met. A
+// local element that occurs exactly once and whose type, not a choice, is
+// already emitted has that type checked again, through such elements, for a
+// type reaching itself, and the decline "Coverage" states for one found there
+// precedes every decline the depth-first walk meets after that element. The
+// walk does not enter the type of the top-level declaration an <element ref>
+// particle names, which that declaration's own turn emits; a ref to a
+// declaration not yet reached checks that declaration's properties and the
+// shape of its type where the ref is met, and a ref that occurs exactly once
+// to a complex type that is not a choice has that type checked there, in the
+// same way, for an element or type reaching itself, ahead of every decline the
+// depth-first walk meets after the ref.
 //
-// Every error Generate returns opens with the failing target's name: its Name,
-// or "target N" for the target at slice index N when Name is empty. An unnamed
-// target's error opens "codegen: target N: ", a named one's "<Name>: " with no
-// "codegen: " before it. The refusal of a Dir equal to an earlier target's
-// names that earlier target the same way.
+// Every non-nil error Generate returns is an errors.Join of one error per
+// failure, in that order, a phase-2 fault alone; each opens with the failing
+// target's name: its Name, or "target N" for the target at slice index N when
+// Name is empty. An unnamed target's error opens "codegen: target N: ", a
+// named one's "<Name>: " with no "codegen: " before it. The refusal of a Dir
+// equal to an earlier target's names that earlier target the same way.
 //
 // A decline is a generator limitation, not a schema fault: it is a
 // *DeclineError, never an *xsderr.Error, and it wraps errors.ErrUnsupported,
-// so errors.Is(err, errors.ErrUnsupported) reports every decline and
-// errors.As retrieves the *DeclineError from the error Generate returns. Its
-// Construct method returns the construct declined, and its Loc method the Loc
-// of the nearest component that carries one. Its text names both; the opening
-// with the target's name, stated above, precedes that text and is no part of
-// it. The package doc's "Coverage" section states what the generator accepts.
+// so errors.Is(err, errors.ErrUnsupported) reports that the error holds a
+// decline, and errors.As retrieves the first one's *DeclineError; each decline
+// is retrieved from its own element. Its Construct method returns the
+// construct declined, and its Loc method the Loc of the nearest component that
+// carries one. Its text names both; the opening with the target's name, stated
+// above, precedes that text and is no part of it. The package doc's
+// "Coverage" section states what the generator accepts.
 //
 // Phase 2 creates Dir and its parents when absent. An existing xsd_gen.go is
 // overwritten only when its first line matches `^// Code generated .* DO NOT
@@ -121,36 +129,44 @@ func (t Target) failed(i int, err error) error {
 // touches another file in Dir. An I/O failure during phase 2 is the only
 // failure that can leave some targets written and others not.
 func Generate(targets []Target) error {
+	var errs []error
 	sources := make([][]byte, len(targets))
 	for i, t := range targets {
-		src, err := prepare(t, targets[:i])
+		src, declines, err := prepare(t, targets[:i])
+		for _, d := range declines {
+			errs = append(errs, t.failed(i, d))
+		}
 		if err != nil {
-			return t.failed(i, err)
+			return errors.Join(append(errs, t.failed(i, err))...)
 		}
 		sources[i] = src
 	}
+	if len(errs) > 0 {
+		return errors.Join(errs...)
+	}
 	for i, t := range targets {
 		if err := os.MkdirAll(t.Dir, 0o755); err != nil {
-			return t.failed(i, fmt.Errorf("creating %s: %w", t.Dir, err))
+			return errors.Join(t.failed(i, fmt.Errorf("creating %s: %w", t.Dir, err)))
 		}
 		path := filepath.Join(t.Dir, fileName)
 		if err := os.WriteFile(path, sources[i], 0o644); err != nil {
-			return t.failed(i, fmt.Errorf("writing %s: %w", path, err))
+			return errors.Join(t.failed(i, fmt.Errorf("writing %s: %w", path, err)))
 		}
 	}
 	return nil
 }
 
 // prepare is phase 1 for one target: it checks t's Schema, then checkTarget
-// against the targets before it, then builds its source, so a target's refusal
-// precedes its declines.
-func prepare(t Target, earlier []Target) ([]byte, error) {
+// against the targets before it, then returns emit's triple, so a nil Schema
+// or a refusal, returned as err, precedes and suppresses the target's
+// declines.
+func prepare(t Target, earlier []Target) (src []byte, declines []*DeclineError, err error) {
 	if t.Schema == nil {
-		return nil, errors.New("the Schema field is nil")
+		return nil, nil, errors.New("the Schema field is nil")
 	}
 	base, err := checkTarget(t, earlier)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	return emit(t.Schema, t.Package, base)
 }
