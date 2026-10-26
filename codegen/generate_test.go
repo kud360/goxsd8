@@ -209,6 +209,95 @@ func TestGenerateDestination(t *testing.T) {
 	})
 }
 
+// TestGenerateRefusalPrecedesDecline pins that a target's own refusal is the
+// error Generate returns even when its Schema also holds a construct the
+// generator declines: a plain error naming the destination, or the Dir that
+// cannot be checked, not a decline.
+func TestGenerateRefusalPrecedesDecline(t *testing.T) {
+	declined := parseString(t, declinedDoc)
+	tests := []struct {
+		name  string
+		setup func(t *testing.T, dir string) string
+		want  string
+	}{
+		{"hand-written xsd_gen.go", func(t *testing.T, dir string) string {
+			if err := os.Mkdir(filepath.Join(dir, "q"), 0o755); err != nil {
+				t.Fatal(err)
+			}
+			write(t, filepath.Join(dir, "q", fileName), "package q\n")
+			return filepath.Join(dir, "q")
+		}, "codegen: target 0: %DIR%/q/xsd_gen.go exists and its first line does not mark it generated, so it is never overwritten"},
+		{"xsd_gen.go a directory", func(t *testing.T, dir string) string {
+			if err := os.MkdirAll(filepath.Join(dir, "q", fileName), 0o755); err != nil {
+				t.Fatal(err)
+			}
+			return filepath.Join(dir, "q")
+		}, "codegen: target 0: %DIR%/q/xsd_gen.go exists and is not a regular file"},
+		{"Dir under a file", func(t *testing.T, dir string) string {
+			write(t, filepath.Join(dir, "f"), "")
+			return filepath.Join(dir, "f", "q")
+		}, "codegen: target 0: checking %DIR%/f/q: stat %DIR%/f/q: not a directory"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			dir := t.TempDir()
+			err := Generate([]Target{{Schema: declined, Dir: tt.setup(t, dir), Package: "q"}})
+			want := strings.ReplaceAll(tt.want, "%DIR%", dir)
+			if err == nil || err.Error() != want {
+				t.Fatalf("Generate = %v, want %q", err, want)
+			}
+			if errors.Is(err, errors.ErrUnsupported) {
+				t.Errorf("the refusal wraps errors.ErrUnsupported: %v", err)
+			}
+		})
+	}
+}
+
+// TestCheckTargets pins CheckTargets: with every Schema nil it reports each
+// refused target once, in slice order, opened with the target's name as
+// Generate's errors are, checks a Dir against an earlier refused target's too,
+// writes nothing, and returns nil when no target is refused.
+func TestCheckTargets(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.Mkdir(filepath.Join(dir, "keep"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	write(t, filepath.Join(dir, "keep", fileName), "package keep\n")
+	write(t, filepath.Join(dir, "file"), "")
+	targets := []Target{
+		{Dir: filepath.Join(dir, "a"), Package: "a"},
+		{Dir: filepath.Join(dir, "b"), Package: "type"},
+		{Dir: filepath.Join(dir, "b") + "/", Package: "b", Name: "dup"},
+		{Dir: filepath.Join(dir, "keep"), Package: "keep"},
+		{Dir: filepath.Join(dir, "file"), Package: "file", Name: "file"},
+		{Dir: "", Package: "main"},
+		{Dir: filepath.Join(dir, "c"), Package: "c"},
+	}
+	want := []string{
+		`codegen: target 1: the package name "type" is a Go keyword`,
+		"dup: the output directory %DIR%/b/ is also the output directory of target 1",
+		"codegen: target 3: %DIR%/keep/xsd_gen.go exists and its first line does not mark it generated, so it is never overwritten",
+		"file: the output directory %DIR%/file exists and is not a directory",
+		"codegen: target 5: no output directory given",
+	}
+	for i := range want {
+		want[i] = strings.ReplaceAll(want[i], "%DIR%", dir)
+	}
+	errs := CheckTargets(targets)
+	got := make([]string, len(errs))
+	for i, err := range errs {
+		got[i] = err.Error()
+	}
+	if strings.Join(got, "\n") != strings.Join(want, "\n") {
+		t.Errorf("CheckTargets =\n%s\nwant\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))
+	}
+	assertAbsent(t, targets[0].Dir)
+	assertAbsent(t, targets[6].Dir)
+	if errs := CheckTargets([]Target{targets[0], targets[6]}); errs != nil {
+		t.Errorf("CheckTargets of accepted targets = %v, want nil", errs)
+	}
+}
+
 // TestGenerateVacuousSequence pins that a sequence whose children all have
 // maxOccurs 0 is accepted as an empty struct: an <element> with
 // minOccurs=maxOccurs=0 maps to no component at all (§3.3.2), and
