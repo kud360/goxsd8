@@ -81,8 +81,9 @@ func TestGenerateDeclines(t *testing.T) {
 			"a <group ref> particle to g", constructGroupRef},
 		{"group ref content", `<xs:group name="g"><xs:sequence><xs:element name="a" ` + str + `/></xs:sequence></xs:group><xs:element name="e"><xs:complexType><xs:group ref="g"/></xs:complexType></xs:element>`,
 			"whose content particle is a <group ref>", constructContentGroupRef},
-		// In the five ref rows below, h is declared after e, so its decline
-		// is met at e's ref to it.
+		// In the ref rows below, h is declared after e. Where a row places a
+		// later decline after the ref, the ref's check is shown to come
+		// first. The substitution row declines at the member's own turn.
 		{"element ref to nillable", `<xs:element name="e"><xs:complexType><xs:sequence><xs:element ref="h"/></xs:sequence></xs:complexType></xs:element><xs:element name="h" nillable="true" ` + str + `/>`,
 			"element h with {nillable} true at s.xsd:2:116 ", constructElementNillable},
 		{"element ref in choice to nillable", `<xs:element name="e"><xs:complexType><xs:choice><xs:element name="a" ` + str + `/><xs:element ref="h"/></xs:choice></xs:complexType></xs:element><xs:element name="h" nillable="true" ` + str + `/>`,
