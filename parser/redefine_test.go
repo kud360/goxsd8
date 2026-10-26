@@ -1436,6 +1436,13 @@ func TestParseRedefineMergedWithPlainIncludeRegistersTheRedefinition(t *testing.
 				`</xs:restriction></xs:complexContent></xs:complexType>`,
 		},
 		{
+			name:     "simpleType",
+			property: "{type definitions}",
+			original: `<xs:simpleType name="st"><xs:restriction base="xs:string"/></xs:simpleType>`,
+			redefine: `<xs:simpleType name="st"><xs:restriction base="tns:st">` +
+				`<xs:maxLength value="3"/></xs:restriction></xs:simpleType>`,
+		},
+		{
 			name:     "attributeGroup",
 			property: "{attribute group definitions}",
 			original: `<xs:attributeGroup name="ag">` +
