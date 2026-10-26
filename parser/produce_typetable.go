@@ -50,13 +50,10 @@ const ruleTAPropsCorrect xsderr.Rule = "ta-props-correct"
 // by name, so neither is asked of this resolver.
 //
 // It answers from symbols.builtins, the fixed [builtin.Seed] set newSymbols
-// indexes once — NOT from the build-once memo symbols.built, which starts as a
-// copy of that set and then grows with every named simple type the assembly
-// builds. Answering from the memo would make the answer depend on how far the
-// parse had reached, and a schema whose own targetNamespace is the XSD namespace
-// (unusual, but no rule forbids it) would put its top-level types in scope for
-// some <alternative> tests and not others, purely by declaration order — a false
-// reject of a legal schema in the over-charging direction.
+// indexes once, so the answer never depends on how far the parse has reached:
+// a schema whose own targetNamespace is the XSD namespace (unusual, but no rule
+// forbids it) puts none of its top-level types in scope for an <alternative>
+// test, whatever its declaration order.
 type ctaStaticTypes struct{ syms *symbols }
 
 // Type resolves a datatype name to the builtin declared under it, reporting
