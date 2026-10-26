@@ -78,10 +78,10 @@ func (t Target) failed(i int, err error) error {
 // order and then the order the generator meets declines: each top-level
 // element declaration in document order, depth first through the types its
 // particles reach (the package doc's "Coverage"). A local element that
-// occurs exactly once and whose type, not a choice, is already emitted walks
-// that type again through such elements, and a type found there reaching
-// itself, the decline "Coverage" states, precedes every decline the
-// depth-first walk meets after that element.
+// occurs exactly once and whose type, not a choice, is already emitted has
+// that type checked again, through such elements, for a type reaching
+// itself, and the decline "Coverage" states for one found there precedes
+// every decline the depth-first walk meets after that element.
 //
 // Every error Generate returns opens with the failing target's name: its Name,
 // or "target N" for the target at slice index N when Name is empty. An unnamed
