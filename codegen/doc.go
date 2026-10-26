@@ -6,13 +6,15 @@
 //
 //	type Target struct { Schema *xsd.Schema; Dir, Package, Name string }
 //	func Generate(targets []Target) error
+//	func CheckTargets(targets []Target) []error
 //
 // Each target carries one finalized [xsd.Schema] — what parser.Parse
 // assembles from a root location and its composition closure; the
 // §3.17.1 Schema component is already multi-namespace-capable, so there
 // is no separate schema-set type. Each target emits one package into its
 // own directory. [Generate] states the phases, the decline and destination
-// rules, and the file it writes.
+// rules, and the file it writes; [CheckTargets] states which targets it
+// refuses whatever their Schemas hold.
 //
 // # Coverage
 //

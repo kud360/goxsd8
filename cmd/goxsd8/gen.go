@@ -30,15 +30,18 @@ type genPair struct {
 	schema, out string
 }
 
-// runGen implements `goxsd8 gen`: it compiles the -schema of each -schema/-out
-// pair alone, as parse compiles an argument, and, when every one compiled,
-// calls codegen.Generate once with one Target per pair in argument order.
-// args excludes the subcommand name itself.
+// runGen implements `goxsd8 gen`: it checks every -out through
+// codegen.CheckTargets before compiling any -schema, compiles the -schema of
+// each -schema/-out pair alone, as parse compiles an argument, and, when no
+// -out was refused and every -schema compiled, calls codegen.Generate once with
+// one Target per pair in argument order. args excludes the subcommand name
+// itself.
 //
-// runGen restates none of Generate's own checks (STYLE D3): it routes
-// Generate's one error by errors.ErrUnsupported alone, a decline to exit 4 and
-// anything else to 2. Each Target is named by its pair's label, so Generate's
-// error already names the pair it came from, and any earlier pair it cites.
+// runGen restates none of codegen's checks (STYLE D3): it charges each refusal
+// CheckTargets reports exit 2, and routes Generate's one error by
+// errors.ErrUnsupported alone, a decline to exit 4 and anything else to 2. Each
+// Target is named by its pair's label, so every error codegen returns already
+// names the pair it came from, and any earlier pair it cites.
 //
 // The flags are parsed here rather than by run, for the reason runParse states.
 func runGen(args []string, stderr io.Writer) int {
@@ -82,19 +85,25 @@ func runGen(args []string, stderr io.Writer) int {
 		log = slog.New(slog.NewTextHandler(stderr, &slog.HandlerOptions{Level: slog.LevelDebug}))
 	}
 
-	// Every pair is compiled and reported before Generate is called, as
-	// usage's gen block states.
-	code := exitOK
-	targets := make([]codegen.Target, 0, len(pairs))
-	for _, p := range pairs {
-		schema, c := compileArgument("gen", p.schema, log, stderr)
-		code = worse(code, c)
-		targets = append(targets, codegen.Target{
-			Schema:  schema,
+	// Every -out is checked before any -schema is compiled, and every pair is
+	// compiled and reported before Generate is called, as usage's gen block
+	// states.
+	targets := make([]codegen.Target, len(pairs))
+	for i, p := range pairs {
+		targets[i] = codegen.Target{
 			Dir:     p.out,
 			Package: filepath.Base(filepath.Clean(p.out)),
 			Name:    p.label(),
-		})
+		}
+	}
+	code := exitOK
+	for _, err := range codegen.CheckTargets(targets) {
+		code = worse(code, usageError(stderr, "goxsd8: gen: "+err.Error()))
+	}
+	for i, p := range pairs {
+		schema, c := compileArgument("gen", p.schema, log, stderr)
+		code = worse(code, c)
+		targets[i].Schema = schema
 	}
 	if code != exitOK {
 		return code
