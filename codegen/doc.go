@@ -13,8 +13,8 @@
 // §3.17.1 Schema component is already multi-namespace-capable, so there
 // is no separate schema-set type. Each target emits one package into its
 // own directory. [Generate] states the phases, the decline and destination
-// rules, and the file it writes. [CheckTargets] reports, reading no Schema,
-// every target Generate refuses whatever its Schema holds.
+// rules, and the file it writes; [CheckTargets] states which targets it
+// refuses whatever their Schemas hold.
 //
 // # Coverage
 //

@@ -327,7 +327,8 @@ func TestGenUsageAndIOFaults(t *testing.T) {
 			{"-out .", []string{"-schema", flat, "-out", "."},
 				"goxsd8: gen: -schema " + flat + ` -out .: the package name "." is not a Go identifier`,
 				[]string{at("xsd_gen.go")}},
-			// Phase 1 fails on the second pair, so the first is not written.
+			// The second pair's -out is refused, so the first is not
+			// written either.
 			{"duplicate -out", []string{"-schema", flat, "-out", at("d"), "-schema", flat, "-out", at("d") + "/"},
 				"goxsd8: gen: -schema " + flat + " -out " + at("d") + "/: the output directory " + at("d") + "/ is also the output directory of -schema " + flat + " -out " + at("d"),
 				[]string{at("d")}},
