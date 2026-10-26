@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -154,6 +155,49 @@ func TestGenIsCheckoutIndependent(t *testing.T) {
 				t.Errorf("gen wrote:\n%s\nwant:\n%s", got, want)
 			}
 		})
+	}
+}
+
+// typeDecl matches a top-level type declaration line of a generated file.
+var typeDecl = regexp.MustCompile(`(?m)^type `)
+
+// TestGenDeclaresTheComposedSet pins the usage block's sentence on what a
+// pair's package declares, each run exiting 0 with empty stdout and stderr: a
+// document two pairs' schemas share has its element's type declared in both
+// packages, imports.xsd's by import and imported.xsd's as its own root, and a
+// schema declaring no top-level element, only a named simple type, gives a
+// file with a package clause and no type declaration.
+func TestGenDeclaresTheComposedSet(t *testing.T) {
+	tmp := t.TempDir()
+	simple := filepath.Join(tmp, "types.xsd")
+	const body = "<xs:schema xmlns:xs=\"http://www.w3.org/2001/XMLSchema\">\n" +
+		"  <xs:simpleType name=\"code\"><xs:restriction base=\"xs:string\"/></xs:simpleType>\n" +
+		"</xs:schema>\n"
+	if err := os.WriteFile(simple, []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	importer, imported := filepath.Join(tmp, "gen", "a"), filepath.Join(tmp, "gen", "b")
+	types := filepath.Join(tmp, "gen", "types")
+	for _, args := range [][]string{
+		{"gen", "-schema", "testdata/imports.xsd", "-out", importer, "-schema", "testdata/imported.xsd", "-out", imported},
+		{"gen", "-schema", simple, "-out", types},
+	} {
+		var stdout, stderr bytes.Buffer
+		if code := run(args, &stdout, &stderr); code != exitOK {
+			t.Fatalf("%v = %d, want %d (stderr %q)", args, code, exitOK, stderr.String())
+		}
+		if stdout.Len() != 0 || stderr.Len() != 0 {
+			t.Errorf("%v stdout = %q, stderr = %q, want both empty", args, stdout.String(), stderr.String())
+		}
+	}
+	for _, dir := range []string{importer, imported} {
+		if got := generatedFile(t, dir); !bytes.Contains(got, []byte("\ntype Carried string\n")) {
+			t.Errorf("gen wrote for -out %s no declaration of imported.xsd's element carried:\n%s", dir, got)
+		}
+	}
+	got := generatedFile(t, types)
+	if !bytes.Contains(got, []byte("\npackage types\n")) || typeDecl.Match(got) {
+		t.Errorf("gen wrote for a schema with no top-level element:\n%s\nwant a package types clause and no type declaration", got)
 	}
 }
 
