@@ -38,7 +38,11 @@ func parseString(t *testing.T, doc string) *xsd.Schema {
 // whose text names the construct and its Loc, and writes nothing. Each body
 // is one line, so every Loc is on line 2.
 func TestGenerateDeclines(t *testing.T) {
-	const str = `type="xs:string"`
+	const (
+		str         = `type="xs:string"`
+		pastDecline = `<xs:complexType name="m"><xs:sequence><xs:element name="q" type="t"/><xs:element name="r" type="xs:decimal"/></xs:sequence></xs:complexType><xs:complexType name="t"><xs:sequence><xs:element name="f1" type="m" minOccurs="0"/>%s</xs:sequence></xs:complexType>%s<xs:element name="root"><xs:complexType><xs:sequence><xs:element name="x" type="t"/></xs:sequence></xs:complexType></xs:element>`
+		uncoveredR  = "element r with {type definition} {http://www.w3.org/2001/XMLSchema}decimal, whose {primitive type definition} is {http://www.w3.org/2001/XMLSchema}decimal at s.xsd:2:70 "
+	)
 	tests := []struct {
 		name, body, detail string
 		kind               construct
@@ -216,11 +220,17 @@ func TestGenerateDeclines(t *testing.T) {
 		// so it is the decline returned.
 		{"value cycle after an earlier decline", `<xs:complexType name="c"><xs:sequence><xs:element name="p" minOccurs="0"><xs:complexType><xs:sequence><xs:any/></xs:sequence></xs:complexType></xs:element><xs:element name="v" type="c"/></xs:sequence></xs:complexType><xs:element name="e"><xs:complexType><xs:sequence><xs:element name="l" type="c"/></xs:sequence></xs:complexType></xs:element>`,
 			"a wildcard particle in complex type (anonymous) of element p", constructWildcard},
-		// q reaches t while t's body is being emitted, so the recursion check
-		// walks t again and meets its wildcard; only the emitting walk
-		// returns that decline, which r's precedes.
-		{"value cycle check past another decline", `<xs:complexType name="m"><xs:sequence><xs:element name="q" type="t"/><xs:element name="r" type="xs:decimal"/></xs:sequence></xs:complexType><xs:complexType name="t"><xs:sequence><xs:element name="f1" type="m" minOccurs="0"/><xs:any/></xs:sequence></xs:complexType><xs:element name="root"><xs:complexType><xs:sequence><xs:element name="x" type="t"/></xs:sequence></xs:complexType></xs:element>`,
-			"element r with {type definition} {http://www.w3.org/2001/XMLSchema}decimal, whose {primitive type definition} is {http://www.w3.org/2001/XMLSchema}decimal at s.xsd:2:70 ", constructUncoveredPrimitive},
+		// In the three rows below, q reaches t while t's body is being
+		// emitted, so the recursion check walks t again and meets a decline
+		// after f1: a wildcard, an element declaration property, and a
+		// complex type outside the slice. Only the emitting walk returns that
+		// decline, which r's precedes.
+		{"value cycle check past a wildcard", fmt.Sprintf(pastDecline, `<xs:any/>`, ""),
+			uncoveredR, constructUncoveredPrimitive},
+		{"value cycle check past an element property", fmt.Sprintf(pastDecline, `<xs:element name="g" nillable="true" `+str+`/>`, ""),
+			uncoveredR, constructUncoveredPrimitive},
+		{"value cycle check past a complex type", fmt.Sprintf(pastDecline, `<xs:element name="g" type="a"/>`, `<xs:complexType name="a"><xs:all><xs:element name="h" `+str+`/></xs:all></xs:complexType>`),
+			uncoveredR, constructUncoveredPrimitive},
 		// e's walk reaches t, declared after f, before f's walk begins.
 		{"named type body before a later top-level element", `<xs:element name="e"><xs:complexType><xs:sequence><xs:element name="l" type="t"/></xs:sequence></xs:complexType></xs:element><xs:element name="f" type="xs:decimal"/><xs:complexType name="t"><xs:sequence><xs:any/></xs:sequence></xs:complexType>`,
 			"a wildcard particle in complex type t at s.xsd:2:166 ", constructWildcard},
