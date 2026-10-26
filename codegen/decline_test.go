@@ -187,7 +187,7 @@ func TestGenerateDeclines(t *testing.T) {
 		{"uncovered primitive", `<xs:element name="e" type="xs:QName"/>`,
 			"whose {primitive type definition} is {http://www.w3.org/2001/XMLSchema}QName", constructUncoveredPrimitive},
 		// The derived rows reach an uncovered primitive along {base type
-		// definition} chains of one to three steps, through no bounded integer type.
+		// definition} chains of one to three steps.
 		{"dayTimeDuration", `<xs:element name="e" type="xs:dayTimeDuration"/>`,
 			"element e with {type definition} {http://www.w3.org/2001/XMLSchema}dayTimeDuration, whose {primitive type definition} is {http://www.w3.org/2001/XMLSchema}duration", constructUncoveredPrimitive},
 		{"yearMonthDuration", `<xs:element name="e" type="xs:yearMonthDuration"/>`,
