@@ -9,6 +9,7 @@ tool (
 	github.com/kud360/goxsd8/tools/commentwrap
 	github.com/kud360/goxsd8/tools/fetchspecs
 	github.com/kud360/goxsd8/tools/gapaudit
+	github.com/kud360/goxsd8/tools/gencensus
 	github.com/kud360/goxsd8/tools/hfnextract
 	github.com/kud360/goxsd8/tools/issuefeed
 	github.com/kud360/goxsd8/tools/landcheck
