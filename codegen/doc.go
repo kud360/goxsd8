@@ -31,7 +31,9 @@
 //     int16, byte int8, unsignedLong uint64, unsignedInt uint32,
 //     unsignedShort uint16, unsignedByte uint8. Failing one, the type's
 //     {primitive type definition} (Datatypes §4.1.1) chooses: string and
-//     anyURI give string, boolean gives bool. A list type (Datatypes
+//     anyURI give string, boolean gives bool, float gives float32 and double
+//     float64, whose IEEE 754 binary32 and binary64 value spaces (Datatypes
+//     §3.3.4.1, §3.3.5.1) those Go types hold exactly. A list type (Datatypes
 //     §2.4.1.2) gives a slice of the builtin its {item type definition}
 //     (§3.16.1) gives, a restriction of a list taking its base's item
 //     (§3.16.2.3); the list declines exactly when its item does, by the
@@ -111,10 +113,10 @@
 // simple content, extension, restriction of any base but xs:anyType, a
 // named complex type reaching itself through struct values, xs:anyType, the
 // special simple types, union types, a list whose {item type definition}
-// declines, and every primitive but the three above — decimal among them, so
+// declines, and every primitive but the five above — decimal among them, so
 // xs:integer, the four unbounded integer types and every type derived from
-// them other than through the eight bounded ones decline, as do float and
-// double — for an element or an attribute alike. #2900 owns lifting them.
+// them other than through the eight bounded ones decline — for an element or
+// an attribute alike. #2900 owns lifting them.
 //
 // # Determinism
 //

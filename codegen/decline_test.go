@@ -196,10 +196,6 @@ func TestGenerateDeclines(t *testing.T) {
 			"element e with {type definition} {http://www.w3.org/2001/XMLSchema}nonPositiveInteger, whose {primitive type definition} is {http://www.w3.org/2001/XMLSchema}decimal", constructUncoveredPrimitive},
 		{"negativeInteger", `<xs:element name="e" type="xs:negativeInteger"/>`,
 			"element e with {type definition} {http://www.w3.org/2001/XMLSchema}negativeInteger, whose {primitive type definition} is {http://www.w3.org/2001/XMLSchema}decimal", constructUncoveredPrimitive},
-		{"float", `<xs:element name="e" type="xs:float"/>`,
-			"element e with {type definition} {http://www.w3.org/2001/XMLSchema}float, whose {primitive type definition} is {http://www.w3.org/2001/XMLSchema}float", constructUncoveredPrimitive},
-		{"double", `<xs:element name="e" type="xs:double"/>`,
-			"element e with {type definition} {http://www.w3.org/2001/XMLSchema}double, whose {primitive type definition} is {http://www.w3.org/2001/XMLSchema}double", constructUncoveredPrimitive},
 		// The value-cycle rows each give Go types that would hold one another
 		// as struct values.
 		{"value cycle direct", `<xs:complexType name="c"><xs:sequence><xs:element name="x" type="c"/></xs:sequence></xs:complexType><xs:element name="e" type="c"/>`,
