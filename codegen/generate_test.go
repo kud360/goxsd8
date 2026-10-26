@@ -298,6 +298,145 @@ func TestCheckTargets(t *testing.T) {
 	}
 }
 
+// TestGenerateCollectsDeclines pins that Generate's error holds every decline,
+// in target order and then document order, each opened with its target's
+// name: one per top-level element declaration's turn, a decline met again
+// collected once where first met, and a named type whose body declined
+// entered again by a later turn, which here meets the same decline and
+// contributes nothing.
+func TestGenerateCollectsDeclines(t *testing.T) {
+	const tail = " is not supported by codegen, a generator limitation, not a schema fault"
+	const qname = " with {type definition} {http://www.w3.org/2001/XMLSchema}QName, whose {primitive type definition} is {http://www.w3.org/2001/XMLSchema}QName"
+	uncovered := Construct{constructUncoveredPrimitive}
+	nillable := Construct{constructElementNillable}
+	type decline struct {
+		text      string
+		construct Construct
+	}
+	tests := []struct {
+		name    string
+		targets func(dir string) []Target
+		want    []decline
+	}{
+		{"two targets, one with two", func(dir string) []Target {
+			return []Target{
+				{Schema: parseString(t, `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+<xs:element name="a" type="xs:QName"/>
+<xs:element name="c"><xs:complexType><xs:sequence><xs:element ref="b"/></xs:sequence></xs:complexType></xs:element>
+<xs:element name="b" nillable="true" type="xs:string"/>
+</xs:schema>`), Dir: filepath.Join(dir, "a"), Package: "a", Name: "first"},
+				{Schema: parseString(t, declinedDoc), Dir: filepath.Join(dir, "b"), Package: "b"},
+			}
+		}, []decline{
+			{"first: element a" + qname + " at s.xsd:2:1" + tail, uncovered},
+			// Met at c's turn, through its ref; b's own turn is the dropped duplicate.
+			{"first: element b with {nillable} true at s.xsd:4:1" + tail, nillable},
+			{"codegen: target 1: element e" + qname + " at s.xsd:1:56" + tail, uncovered},
+		}},
+		{"a named type two top-level elements share", func(dir string) []Target {
+			return []Target{{Schema: parseString(t, `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+<xs:complexType name="T"><xs:sequence><xs:element name="x" nillable="true" type="xs:string"/></xs:sequence></xs:complexType>
+<xs:element name="e1" type="T"/>
+<xs:element name="e2" type="T"/>
+</xs:schema>`), Dir: filepath.Join(dir, "a"), Package: "a"}}
+		}, []decline{
+			{"codegen: target 0: element x with {nillable} true at s.xsd:2:39" + tail, nillable},
+		}},
+		// b's walk enters T again, whose body declined at a's turn, so its first
+		// decline is x's duplicate, and m's decline after it is never met.
+		{"a named type whose body declined, reached again locally", func(dir string) []Target {
+			return []Target{{Schema: parseString(t, `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+<xs:complexType name="T"><xs:sequence><xs:element name="x" nillable="true" type="xs:string"/></xs:sequence></xs:complexType>
+<xs:element name="a"><xs:complexType><xs:sequence><xs:element name="l1" type="T"/></xs:sequence></xs:complexType></xs:element>
+<xs:element name="b"><xs:complexType><xs:sequence><xs:element name="l2" type="T"/><xs:element name="m" type="xs:QName"/></xs:sequence></xs:complexType></xs:element>
+</xs:schema>`), Dir: filepath.Join(dir, "a"), Package: "a"}}
+		}, []decline{
+			{"codegen: target 0: element x with {nillable} true at s.xsd:2:39" + tail, nillable},
+		}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			targets := tt.targets(t.TempDir())
+			err := Generate(targets)
+			if !errors.Is(err, errors.ErrUnsupported) {
+				t.Errorf("errors.Is(%v, errors.ErrUnsupported) = false, want true", err)
+			}
+			elems := joined(t, err)
+			want := make([]string, len(tt.want))
+			for i, d := range tt.want {
+				want[i] = d.text
+			}
+			got := make([]string, len(elems))
+			for i, e := range elems {
+				got[i] = e.Error()
+			}
+			if strings.Join(got, "\n") != strings.Join(want, "\n") {
+				t.Fatalf("Generate's elements =\n%s\nwant\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))
+			}
+			if err.Error() != strings.Join(want, "\n") {
+				t.Errorf("Generate = %q, want %q", err.Error(), strings.Join(want, "\n"))
+			}
+			for i, e := range elems {
+				var de *DeclineError
+				if !errors.As(e, &de) || de.Construct() != tt.want[i].construct {
+					t.Errorf("element %d: errors.As = %v, Construct %v, want %v", i, de != nil, de.Construct(), tt.want[i].construct)
+				}
+			}
+			for _, target := range targets {
+				assertAbsent(t, target.Dir)
+			}
+		})
+	}
+}
+
+// TestGenerateStopsAtNonDecline pins that phase 1 stops at a failure that is
+// not a decline, which follows the declines collected before it: the third
+// target's decline is never collected.
+func TestGenerateStopsAtNonDecline(t *testing.T) {
+	const first = "first: element e with {type definition} {http://www.w3.org/2001/XMLSchema}QName, whose {primitive type definition} is {http://www.w3.org/2001/XMLSchema}QName at s.xsd:1:56 is not supported by codegen, a generator limitation, not a schema fault"
+	declined := parseString(t, declinedDoc)
+	tests := []struct {
+		name   string
+		second Target
+		want   string
+	}{
+		{"refusal", Target{Schema: parseString(t, acceptedDoc), Package: "type", Name: "second"}, `second: the package name "type" is a Go keyword`},
+		{"nil Schema", Target{Package: "q", Name: "second"}, "second: the Schema field is nil"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			dir := t.TempDir()
+			tt.second.Dir = filepath.Join(dir, "b")
+			targets := []Target{
+				{Schema: declined, Dir: filepath.Join(dir, "a"), Package: "p", Name: "first"},
+				tt.second,
+				{Schema: declined, Dir: filepath.Join(dir, "c"), Package: "r", Name: "third"},
+			}
+			err := Generate(targets)
+			if !errors.Is(err, errors.ErrUnsupported) {
+				t.Errorf("errors.Is(%v, errors.ErrUnsupported) = false, want true", err)
+			}
+			elems := joined(t, err)
+			if len(elems) != 2 || elems[0].Error() != first || elems[1].Error() != tt.want {
+				t.Errorf("Generate's elements = %q, want [%q %q]", elems, first, tt.want)
+			}
+			for _, target := range targets {
+				assertAbsent(t, target.Dir)
+			}
+		})
+	}
+}
+
+// joined returns the elements of the errors.Join Generate returned as err.
+func joined(t *testing.T, err error) []error {
+	t.Helper()
+	j, ok := err.(interface{ Unwrap() []error })
+	if !ok {
+		t.Fatalf("Generate = %v, want an errors.Join", err)
+	}
+	return j.Unwrap()
+}
+
 // TestGenerateVacuousSequence pins that a sequence whose children all have
 // maxOccurs 0 is accepted as an empty struct: an <element> with
 // minOccurs=maxOccurs=0 maps to no component at all (§3.3.2), and

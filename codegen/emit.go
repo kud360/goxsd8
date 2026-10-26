@@ -2,6 +2,7 @@ package codegen
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"go/format"
 	"path/filepath"
@@ -132,9 +133,11 @@ type emitter struct {
 	// so that every element whose walk reaches that named type shares it; it
 	// is a lookup index only and never iterated (STYLE D2). nestedType stores
 	// an entry before walking its type's body, so a type that reaches itself
-	// reads it. A top-level element's type is named from the element and is
-	// never stored, nor is a type nested in an anonymous top-level type, and a
-	// branch struct is never stored: it rides with its interface.
+	// reads it, and removes it when the body fails, so that it holds only
+	// types emitted whole or still being walked. A top-level element's type is
+	// named from the element and is never stored, nor is a type nested in an
+	// anonymous top-level type, and a branch struct is never stored: it rides
+	// with its interface.
 	emitted map[nestedKey]emittedType
 	// elements holds the type emitted for each top-level element declaration,
 	// keyed by its expanded name and stored by elementType when the walk first
@@ -152,8 +155,8 @@ type emitter struct {
 	acyclic map[valueNode]struct{}
 	// usesBig records that goType produced a math/big type, or emitted a
 	// datatype struct with a math/big field, so that emit imports math/big;
-	// any decline aborts emit, so a set flag means an emitted declaration
-	// names the package.
+	// emit builds source only for a target that declines nothing, so there a
+	// set flag means an emitted declaration names the package.
 	usesBig bool
 	// datatypes holds the name claimed for each datatype struct emitted, so
 	// that each is emitted once per package; it is a lookup index only and
@@ -208,14 +211,27 @@ func (s scope) key() nestedKey {
 }
 
 // emit returns the gofmt-formatted source of package pkg for schema, or the
-// first decline in the order Generate's doc states. base is the absolute
-// directory the source is written into.
-func emit(schema *xsd.Schema, pkg, base string) ([]byte, error) {
+// declines and the failure that is not a decline that Generate's doc states
+// for one target's walk, one turn per top-level element declaration. It
+// returns source only when it collects no decline, and err carries no
+// decline. base is the absolute directory the source is written into.
+func emit(schema *xsd.Schema, pkg, base string) (src []byte, declines []*DeclineError, err error) {
 	e := &emitter{schema: schema, types: newNamer(), base: base, emitted: map[nestedKey]emittedType{}, elements: map[xsd.QName]emittedType{}, acyclic: map[valueNode]struct{}{}, datatypes: map[xsd.QName]string{}}
 	for _, decl := range schema.Elements() {
-		if err := e.topLevel(decl); err != nil {
-			return nil, err
+		err := e.topLevel(decl)
+		if err == nil {
+			continue
 		}
+		var de *DeclineError
+		if !errors.As(err, &de) {
+			return nil, declines, err
+		}
+		if !slices.ContainsFunc(declines, func(d *DeclineError) bool { return *d == *de }) {
+			declines = append(declines, de)
+		}
+	}
+	if len(declines) > 0 {
+		return nil, declines, nil
 	}
 	var b bytes.Buffer
 	fmt.Fprintf(&b, "%s\n\npackage %s\n", generatedHeader, pkg)
@@ -226,11 +242,11 @@ func emit(schema *xsd.Schema, pkg, base string) ([]byte, error) {
 		b.WriteString("\n")
 		b.WriteString(d)
 	}
-	src, err := format.Source(b.Bytes())
+	src, err = format.Source(b.Bytes())
 	if err != nil {
-		return nil, fmt.Errorf("formatting the emitted source: %w", err)
+		return nil, nil, fmt.Errorf("formatting the emitted source: %w", err)
 	}
-	return src, nil
+	return src, nil, nil
 }
 
 // header is the doc comment of the emitted type name, generated from the
@@ -863,21 +879,22 @@ func (e *emitter) attributeField(subject string, loc xsderr.Loc, u xsd.Attribute
 	return fieldSpec{local: name.Local, goType: goType}, nil
 }
 
-// nestedType returns the type emitted for a local element declaration's
-// complex type t, whose particle occurs exactly once when value is true and
-// whose parent's particles chain is valueChain's for. A named t gets one type,
-// named from t and generated from it, whose nested types take their names
-// from the path at t, as under a top-level element of type t (topLevel). An
-// anonymous t gets a type named by the path from its nearest named ancestor
-// in parent. Each named type, and each anonymous type under one, is emitted
-// once per nestedKey, by the first element whose walk reaches it, and later
-// ones share it; its entry is stored before its body is walked. A shared
-// type reached by a value field is walked again by valueCycle, which the
-// emitting walk does not do. Both the emitted lookup and the store run only
-// under a named complex type: a top-level element may share a complex type's
-// expanded name, since the two are separate symbol spaces (§3.3.2), so a key
-// whose path starts at an element must never read an entry stored from a
-// type.
+// nestedType returns the type emitted for a local element declaration's complex
+// type t, whose particle occurs exactly once when value is true and whose
+// parent's particles chain is valueChain's for. A named t gets one type, named
+// from t and generated from it, whose nested types take their names from the
+// path at t, as under a top-level element of type t (topLevel). An anonymous t
+// gets a type named by the path from its nearest named ancestor in parent. Each
+// named type, and each anonymous type under one, is emitted once per nestedKey,
+// by the first element whose walk reaches it, and later ones share it; its
+// entry is stored before its body is walked, and removed when that body fails,
+// so that a later turn's walk, which emit runs after a decline, enters the type
+// again rather than sharing a type never emitted. A shared type reached by a
+// value field is walked again by valueCycle, which the emitting walk does not
+// do. The emitted lookup, the store and the removal run only under a named
+// complex type: a top-level element may share a complex type's expanded name,
+// since the two are separate symbol spaces (§3.3.2), so a key whose path starts
+// at an element must never read an entry stored from a type.
 func (e *emitter) nestedType(parent scope, chain []valueNode, value bool, decl xsd.ElementDeclaration, t xsd.ComplexType) (emittedType, error) {
 	child := scope{underNamedType: parent.underNamedType, path: append(slices.Clone(parent.path), decl.Name())}
 	locals := child.locals()
@@ -904,7 +921,13 @@ func (e *emitter) nestedType(parent scope, chain []valueNode, value bool, decl x
 	if child.underNamedType {
 		e.emitted[key] = typ
 	}
-	return typ, e.body(typ, child, next, o, t, particles)
+	if err := e.body(typ, child, next, o, t, particles); err != nil {
+		if child.underNamedType {
+			delete(e.emitted, key)
+		}
+		return emittedType{}, err
+	}
+	return typ, nil
 }
 
 // localOrigin is the origin of the type emitted for the local element decl's

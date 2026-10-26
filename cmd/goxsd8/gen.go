@@ -38,10 +38,11 @@ type genPair struct {
 // itself.
 //
 // runGen restates none of codegen's checks (STYLE D3): it charges each refusal
-// CheckTargets reports exit 2, and routes Generate's one error by
-// errors.ErrUnsupported alone, a decline to exit 4 and anything else to 2. Each
-// Target is named by its pair's label, so every error codegen returns already
-// names the pair it came from, and any earlier pair it cites.
+// CheckTargets reports exit 2, and prints each element of Generate's error on
+// its own line, routed by errors.ErrUnsupported alone, charging a decline exit
+// 4 and anything else exit 2. Each Target is named by its pair's label, so
+// every error codegen returns already names the pair it came from, and any
+// earlier pair it cites.
 //
 // The flags are parsed here rather than by run, for the reason runParse states.
 func runGen(args []string, stderr io.Writer) int {
@@ -112,14 +113,22 @@ func runGen(args []string, stderr io.Writer) int {
 	if err == nil {
 		return exitOK
 	}
-	line := "goxsd8: gen: " + err.Error()
-	if errors.Is(err, errors.ErrUnsupported) {
+	errs := []error{err}
+	if j, ok := err.(interface{ Unwrap() []error }); ok {
+		errs = j.Unwrap()
+	}
+	for _, e := range errs {
+		line := "goxsd8: gen: " + e.Error()
+		if !errors.Is(e, errors.ErrUnsupported) {
+			code = worse(code, usageError(stderr, line))
+			continue
+		}
 		// A failed stderr write cannot change the outcome: the exit code is
 		// settled either way, and stderr is the only channel this line has.
 		_, _ = fmt.Fprintln(stderr, line)
-		return exitUndecided
+		code = worse(code, exitUndecided)
 	}
-	return usageError(stderr, line)
+	return code
 }
 
 // pairTargets reads the -schema/-out occurrences as pairs, each -schema

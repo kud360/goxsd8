@@ -388,33 +388,68 @@ func TestGenUsageAndIOFaults(t *testing.T) {
 	}
 }
 
-// TestGenDeclines pins exit 4: a construct outside codegen's slice prints one
-// line on stderr naming the pair, the construct and its absolute location, with
-// no helpPointer under it, and nothing is written. The body is
-// codegen/decline_test.go's all row.
+// genRow is one -schema/-out pair of a TestGenDeclines row: the schema's file
+// name, the -out directory's name, and the schema's body.
+type genRow struct{ file, out, body string }
+
+// TestGenDeclines pins exit 4: each construct outside codegen's slice prints
+// one line on stderr naming the pair, the construct and its absolute location,
+// with no helpPointer under it, in argument order and then document order, and
+// nothing is written. The all-compositor body is codegen/decline_test.go's all
+// row.
 func TestGenDeclines(t *testing.T) {
-	tmp := t.TempDir()
-	schema := filepath.Join(tmp, "s.xsd")
-	doc := "<xs:schema xmlns:xs=\"http://www.w3.org/2001/XMLSchema\">\n" +
-		`<xs:element name="e"><xs:complexType><xs:all><xs:element name="a" type="xs:string"/></xs:all></xs:complexType></xs:element>` +
-		"\n</xs:schema>\n"
-	if err := os.WriteFile(schema, []byte(doc), 0o644); err != nil {
-		t.Fatal(err)
+	const (
+		all   = `<xs:element name="e"><xs:complexType><xs:all><xs:element name="a" type="xs:string"/></xs:all></xs:complexType></xs:element>`
+		qname = " with {type definition} {http://www.w3.org/2001/XMLSchema}QName, whose {primitive type definition} is {http://www.w3.org/2001/XMLSchema}QName at "
+		tail  = " is not supported by codegen, a generator limitation, not a schema fault\n"
+	)
+	rows := []struct {
+		name string
+		// pairs holds each pair's schema file name, -out name and schema
+		// body, one declaration per line from line 2.
+		pairs []genRow
+		// want is stderr for the pairs' schema paths and -out paths.
+		want func(schemas, outs []string) string
+	}{
+		{"one decline", []genRow{{"s.xsd", "e", all}}, func(s, o []string) string {
+			return "goxsd8: gen: -schema " + s[0] + " -out " + o[0] + ": complex type (anonymous) of element e with an all compositor at " + s[0] + ":2:22" + tail
+		}},
+		{"two pairs, three declines", []genRow{{"s.xsd", "e", all + "\n" + `<xs:element name="f" type="xs:QName"/>`}, {"t.xsd", "g", `<xs:element name="g" type="xs:QName"/>`}}, func(s, o []string) string {
+			return "goxsd8: gen: -schema " + s[0] + " -out " + o[0] + ": complex type (anonymous) of element e with an all compositor at " + s[0] + ":2:22" + tail +
+				"goxsd8: gen: -schema " + s[0] + " -out " + o[0] + ": element f" + qname + s[0] + ":3:1" + tail +
+				"goxsd8: gen: -schema " + s[1] + " -out " + o[1] + ": element g" + qname + s[1] + ":2:1" + tail
+		}},
 	}
-	out := filepath.Join(tmp, "e")
-	var stdout, stderr bytes.Buffer
-	code := run([]string{"gen", "-schema", schema, "-out", out}, &stdout, &stderr)
-	if code != exitUndecided {
-		t.Errorf("gen = %d, want %d", code, exitUndecided)
+	for _, tt := range rows {
+		t.Run(tt.name, func(t *testing.T) {
+			tmp := t.TempDir()
+			var args, schemas, outs []string
+			for _, p := range tt.pairs {
+				schema := filepath.Join(tmp, p.file)
+				doc := "<xs:schema xmlns:xs=\"http://www.w3.org/2001/XMLSchema\">\n" + p.body + "\n</xs:schema>\n"
+				if err := os.WriteFile(schema, []byte(doc), 0o644); err != nil {
+					t.Fatal(err)
+				}
+				out := filepath.Join(tmp, p.out)
+				schemas, outs = append(schemas, schema), append(outs, out)
+				args = append(args, "-schema", schema, "-out", out)
+			}
+			var stdout, stderr bytes.Buffer
+			code := run(append([]string{"gen"}, args...), &stdout, &stderr)
+			if code != exitUndecided {
+				t.Errorf("gen = %d, want %d", code, exitUndecided)
+			}
+			if stdout.Len() != 0 {
+				t.Errorf("gen stdout = %q, want empty", stdout.String())
+			}
+			if want := tt.want(schemas, outs); stderr.String() != want {
+				t.Errorf("gen stderr = %q, want %q", stderr.String(), want)
+			}
+			for _, out := range outs {
+				assertAbsent(t, out)
+			}
+		})
 	}
-	if stdout.Len() != 0 {
-		t.Errorf("gen stdout = %q, want empty", stdout.String())
-	}
-	want := "goxsd8: gen: -schema " + schema + " -out " + out + ": complex type (anonymous) of element e with an all compositor at " + schema + ":2:22 is not supported by codegen, a generator limitation, not a schema fault\n"
-	if stderr.String() != want {
-		t.Errorf("gen stderr = %q, want %q", stderr.String(), want)
-	}
-	assertAbsent(t, out)
 }
 
 // TestGenRefusalsOutrankEveryPair pins exit 2 for every refused -out, whatever
