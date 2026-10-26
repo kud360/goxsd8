@@ -212,6 +212,8 @@ func TestGenerateDeclines(t *testing.T) {
 		// the cycle v, w through.
 		{"value cycle behind a pointer", `<xs:complexType name="x"><xs:sequence><xs:element name="p" type="z" minOccurs="0"/><xs:element name="v" type="z"/></xs:sequence></xs:complexType><xs:complexType name="z"><xs:sequence><xs:element name="w" type="x"/></xs:sequence></xs:complexType><xs:element name="e"><xs:complexType><xs:sequence><xs:element name="a" type="x"/></xs:sequence></xs:complexType></xs:element>`,
 			"local element w reaching complex type x again through elements that each occur exactly once", constructValueCycle},
+		{"named complex local body", `<xs:complexType name="c"><xs:sequence><xs:any minOccurs="0"/></xs:sequence></xs:complexType><xs:element name="e"><xs:complexType><xs:sequence><xs:element name="l" type="c"/></xs:sequence></xs:complexType></xs:element>`,
+			"a wildcard particle in complex type c at s.xsd:2:1 ", constructWildcard},
 		{"local element property", `<xs:element name="e"><xs:complexType><xs:sequence><xs:element name="l" nillable="true" ` + str + `/></xs:sequence></xs:complexType></xs:element>`,
 			"element l with {nillable} true", constructElementNillable},
 		{"nested struct", `<xs:element name="e"><xs:complexType><xs:sequence><xs:element name="l"><xs:complexType><xs:all><xs:element name="a" ` + str + `/></xs:all></xs:complexType></xs:element></xs:sequence></xs:complexType></xs:element>`,
