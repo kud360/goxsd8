@@ -1,0 +1,58 @@
+<?xml version="1.0"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+           xmlns="urn:decimals" targetNamespace="urn:decimals"
+           elementFormDefault="qualified">
+  <xs:element name="amount" type="xs:decimal"/>
+  <xs:element name="count" type="xs:positiveInteger"/>
+  <xs:element name="prices" type="priceList"/>
+  <xs:element name="order">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element name="total" type="xs:decimal"/>
+        <xs:element name="discount" type="money" minOccurs="0"/>
+        <xs:element name="lines" type="xs:integer" maxOccurs="unbounded"/>
+        <xs:element name="codes" type="codeList" minOccurs="0"/>
+        <xs:element name="batches" type="priceList" maxOccurs="unbounded"/>
+        <xs:element name="whole" type="whole"/>
+        <xs:element name="level" type="level"/>
+        <xs:element name="nonPositive" type="xs:nonPositiveInteger"/>
+        <xs:element name="negative" type="xs:negativeInteger" minOccurs="0"/>
+        <xs:element name="nonNegative" type="xs:nonNegativeInteger"/>
+        <xs:element name="positive" type="xs:positiveInteger" maxOccurs="2"/>
+      </xs:sequence>
+      <xs:attribute name="qty" type="xs:integer" use="required"/>
+      <xs:attribute name="rebate" type="xs:decimal"/>
+      <xs:attribute name="price" type="money" use="required"/>
+      <xs:attribute name="rank" type="level"/>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="pick">
+    <xs:complexType>
+      <xs:choice>
+        <xs:element name="amount" type="xs:decimal"/>
+        <xs:element name="count" type="xs:integer"/>
+      </xs:choice>
+    </xs:complexType>
+  </xs:element>
+  <xs:simpleType name="money">
+    <xs:restriction base="xs:decimal">
+      <xs:fractionDigits value="2"/>
+    </xs:restriction>
+  </xs:simpleType>
+  <xs:simpleType name="whole">
+    <xs:restriction base="xs:decimal">
+      <xs:fractionDigits value="0"/>
+    </xs:restriction>
+  </xs:simpleType>
+  <xs:simpleType name="level">
+    <xs:restriction base="xs:integer">
+      <xs:maxInclusive value="5"/>
+    </xs:restriction>
+  </xs:simpleType>
+  <xs:simpleType name="priceList">
+    <xs:list itemType="xs:decimal"/>
+  </xs:simpleType>
+  <xs:simpleType name="codeList">
+    <xs:list itemType="xs:integer"/>
+  </xs:simpleType>
+</xs:schema>
