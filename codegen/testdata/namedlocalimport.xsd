@@ -1,0 +1,15 @@
+<?xml version="1.0"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+           targetNamespace="urn:namedlocal:b">
+  <xs:complexType name="ct">
+    <xs:sequence>
+      <xs:element name="x">
+        <xs:complexType>
+          <xs:sequence>
+            <xs:element name="z" type="xs:boolean"/>
+          </xs:sequence>
+        </xs:complexType>
+      </xs:element>
+    </xs:sequence>
+  </xs:complexType>
+</xs:schema>

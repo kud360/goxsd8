@@ -2,6 +2,7 @@ package codegen
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -263,6 +264,37 @@ func TestGenerateEmptyContent(t *testing.T) {
 			}
 			if got := read(t, filepath.Join(dir, fileName)); !strings.Contains(got, tt.want) {
 				t.Errorf("want %q in:\n%s", tt.want, got)
+			}
+		})
+	}
+}
+
+// TestGenerateDiamond pins that a struct-value recursion check costs time
+// linear in the named types it reaches: each complex type d<i> holds two value
+// fields of type d<i+1>, so a check that walks a type again on every reach
+// doubles per level and does not return. In "rewalked", the value field v
+// reaches p while p's body is being emitted, so the check walks p, and through
+// it the whole diamond, before the emitting walk reaches d0.
+func TestGenerateDiamond(t *testing.T) {
+	const depth = 40
+	var diamond strings.Builder
+	for i := range depth {
+		fmt.Fprintf(&diamond, `<xs:complexType name="d%d"><xs:sequence><xs:element name="a" type="d%d"/><xs:element name="b" type="d%d"/></xs:sequence></xs:complexType>`, i, i+1, i+1)
+	}
+	fmt.Fprintf(&diamond, `<xs:complexType name="d%d"><xs:sequence><xs:element name="s" type="xs:string"/></xs:sequence></xs:complexType>`, depth)
+	tests := []struct{ name, body string }{
+		{"emitted", `<xs:element name="e"><xs:complexType><xs:sequence><xs:element name="x" type="d0"/></xs:sequence></xs:complexType></xs:element>`},
+		{"rewalked", `<xs:complexType name="p"><xs:sequence><xs:element name="w" type="w" minOccurs="0"/><xs:element name="d" type="d0"/></xs:sequence></xs:complexType><xs:complexType name="w"><xs:sequence><xs:element name="v" type="p"/></xs:sequence></xs:complexType><xs:element name="e"><xs:complexType><xs:sequence><xs:element name="x" type="p"/></xs:sequence></xs:complexType></xs:element>`},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			schema := parseString(t, `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">`+tt.body+diamond.String()+`</xs:schema>`)
+			dir := t.TempDir()
+			if err := Generate([]Target{{Schema: schema, Dir: dir, Package: "p"}}); err != nil {
+				t.Fatal(err)
+			}
+			if got, want := read(t, filepath.Join(dir, fileName)), fmt.Sprintf("type D%d struct {\n\tA D%d\n\tB D%d\n}\n", depth-1, depth, depth); !strings.Contains(got, want) {
+				t.Errorf("want %q in:\n%s", want, got)
 			}
 		})
 	}

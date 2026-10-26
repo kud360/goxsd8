@@ -34,9 +34,10 @@ var (
 
 // emitter builds one target's source. decls holds each emitted type
 // declaration in emission order: a top-level element's type, then the types
-// nested in its type definition that no earlier element emitted, depth first
-// in particle order; a sealed interface's branch structs follow it, each
-// before the types nested in its alternative.
+// its particles reach that no earlier element emitted — anonymous complex
+// types nested in its type definition and named complex types of local
+// elements — depth first in particle order; a sealed interface's branch
+// structs follow it, each before the types its alternative reaches.
 type emitter struct {
 	schema *xsd.Schema
 	types  *namer
@@ -44,13 +45,23 @@ type emitter struct {
 	// renders its declaration's location against (headerLoc).
 	base  string
 	decls []string
-	// emitted holds the type emitted for each anonymous complex type nested in
-	// a named complex type, so that every top-level element whose type is that
-	// named type shares it; it is a lookup index only and never iterated
-	// (STYLE D2). It is keyed by anonymous complex types, and a branch struct
-	// is not one: a branch is never stored here, and it rides with its
-	// interface.
+	// emitted holds the type emitted for each named complex type a local
+	// element reaches, so that every later local element of that type shares
+	// it, and for each anonymous complex type nested in a named complex type,
+	// so that every element whose walk reaches that named type shares it; it
+	// is a lookup index only and never iterated (STYLE D2). nestedType stores
+	// an entry before walking its type's body, so a type that reaches itself
+	// reads it. A top-level element's type is named from the element and is
+	// never stored, nor is a type nested in an anonymous top-level type, and a
+	// branch struct is never stored: it rides with its interface.
 	emitted map[nestedKey]emittedType
+	// acyclic holds the named complex types whose value fields valueCycle
+	// followed to the end with the type in its chain (valueChain), so that no
+	// value cycle passes through them and valueCycle never walks one again; it
+	// is a lookup index only and never iterated (STYLE D2), kept for a
+	// measured hot path: without it a schema whose named types each reach the
+	// next twice costs double per level (#3037).
+	acyclic map[xsd.QName]struct{}
 }
 
 // emittedType is the Go type emitted for one complex type definition: its
@@ -80,10 +91,11 @@ func (s scope) locals() []string {
 	return locals
 }
 
-// nestedKey identifies an anonymous complex type nested in a named complex
-// type by the expanded names along its path: the named type's, then each
-// element's {target namespace} and {name} (§3.3.2.3), each Go-quoted so that
-// the concatenation is unambiguous.
+// nestedKey identifies a named complex type by its expanded name, and an
+// anonymous complex type nested in one by the expanded names along its path:
+// the named type's, then each element's {target namespace} and {name}
+// (§3.3.2.3), each Go-quoted so that the concatenation is unambiguous and a
+// named type's one-name key differs from every nested type's.
 type nestedKey string
 
 // key returns the nestedKey of the struct whose path is s's.
@@ -97,10 +109,10 @@ func (s scope) key() nestedKey {
 }
 
 // emit returns the gofmt-formatted source of package pkg for schema, or the
-// first decline in document order. base is the absolute directory the source
-// is written into.
+// first decline in the order Generate's doc states. base is the absolute
+// directory the source is written into.
 func emit(schema *xsd.Schema, pkg, base string) ([]byte, error) {
-	e := &emitter{schema: schema, types: newNamer(), base: base, emitted: map[nestedKey]emittedType{}}
+	e := &emitter{schema: schema, types: newNamer(), base: base, emitted: map[nestedKey]emittedType{}, acyclic: map[xsd.QName]struct{}{}}
 	for _, decl := range schema.Elements() {
 		if err := e.topLevel(decl); err != nil {
 			return nil, err
@@ -119,13 +131,43 @@ func emit(schema *xsd.Schema, pkg, base string) ([]byte, error) {
 	return src, nil
 }
 
-// header is the doc comment of an emitted type: the declaration's expanded
-// name, whose namespace is its {target namespace} (for a local declaration,
-// as form and elementFormDefault set it, §3.3.2.3), and its Loc as headerLoc
-// renders it against e.base. Only the header renders a Loc so: every decline
-// and error names the Loc as the declaration carries it.
-func (e *emitter) header(name string, decl xsd.ElementDeclaration) string {
-	return fmt.Sprintf("// %s is generated from element %s declared at %s.\n", name, decl.Name(), headerLoc(e.base, decl.Loc()))
+// header is the doc comment of the emitted type name, generated from the
+// declaration from renders (elementFrom, typeOrigin).
+func header(name, from string) string {
+	return fmt.Sprintf("// %s is generated from %s.\n", name, from)
+}
+
+// elementFrom renders an element declaration for a header: its expanded name,
+// whose namespace is its {target namespace} (for a local declaration, as form
+// and elementFormDefault set it, §3.3.2.3), and its Loc as headerLoc renders
+// it against e.base. Only a header renders a Loc so: every decline and error
+// names the Loc as the declaration carries it.
+func (e *emitter) elementFrom(decl xsd.ElementDeclaration) string {
+	return fmt.Sprintf("element %s declared at %s", decl.Name(), headerLoc(e.base, decl.Loc()))
+}
+
+// origin is what one complex type's emitted declarations are generated from:
+// from renders it for their headers, and subject names the complex type in
+// declines.
+type origin struct {
+	from, subject string
+}
+
+// elementOrigin is the origin of the type emitted for decl's complex {type
+// definition} t and named from decl: a top-level element's type, or a local
+// element's anonymous one.
+func (e *emitter) elementOrigin(decl xsd.ElementDeclaration, t xsd.ComplexType) origin {
+	return origin{from: e.elementFrom(decl), subject: "complex type " + typeName(t) + " of element " + decl.Name().String()}
+}
+
+// typeOrigin is the origin of the type emitted for the named complex type t
+// that a local element reaches and named from t: t's expanded name and its
+// Loc, rendered as elementFrom renders an element's.
+func (e *emitter) typeOrigin(t xsd.ComplexType) origin {
+	return origin{
+		from:    fmt.Sprintf("complex type %s declared at %s", t.Name(), headerLoc(e.base, t.Loc())),
+		subject: "complex type " + typeName(t),
+	}
 }
 
 // headerLoc renders loc for a header against the absolute directory base, by
@@ -145,9 +187,10 @@ func headerLoc(base string, loc xsderr.Loc) string {
 // topLevel emits the type of one top-level element declaration: a named type
 // over a builtin for an atomic simple {type definition}, over a slice of one
 // for a list, a struct or sealed interface for an accepted complex one, named
-// or anonymous. That type is named from the element; the types nested in it
-// are named from the type when it is named, and from the element when it is
-// anonymous.
+// or anonymous. That type is named from the element, and a local element of
+// the same named type never shares it (nestedType); the types nested in it are
+// named from the type when it is named, and shared with that type's every
+// other use, and from the element when it is anonymous.
 func (e *emitter) topLevel(decl xsd.ElementDeclaration) error {
 	td, err := e.declaredType(decl)
 	if err != nil {
@@ -160,15 +203,22 @@ func (e *emitter) topLevel(decl xsd.ElementDeclaration) error {
 			return err
 		}
 		name := e.types.claim(decl.Name().Local)
-		e.decls = append(e.decls, e.header(name, decl)+fmt.Sprintf("type %s %s\n", name, builtin))
+		e.decls = append(e.decls, header(name, e.elementFrom(decl))+fmt.Sprintf("type %s %s\n", name, builtin))
 		return nil
 	case xsd.ComplexType:
 		nested := scope{path: []xsd.QName{decl.Name()}}
+		var chain []xsd.QName
 		if t.Name() != (xsd.QName{}) {
 			nested = scope{underNamedType: true, path: []xsd.QName{t.Name()}}
+			chain = []xsd.QName{t.Name()}
 		}
-		_, err := e.complexType(e.types.claim(decl.Name().Local), nested, decl, t)
-		return err
+		name := e.types.claim(decl.Name().Local)
+		o := e.elementOrigin(decl, t)
+		typ, particles, err := e.shape(name, o, t)
+		if err != nil {
+			return err
+		}
+		return e.body(typ, nested, chain, o, t, particles)
 	}
 	return fmt.Errorf("element %s at %s: unexpected type definition %T", decl.Name(), decl.Loc(), td)
 }
@@ -313,57 +363,69 @@ func typeName(t xsd.TypeDefinition) string {
 	return t.Name().String()
 }
 
-// complexType emits the type name for decl's complex {type definition} t — a
-// struct for sequence or empty content, holding a field per particle and then
-// one per attribute use, or a sealed interface for choice content, which
-// declines {attribute uses} — then the types of its anonymous-typed particles,
-// named in nested, in the package doc's "# Coverage" shape.
-func (e *emitter) complexType(name string, nested scope, decl xsd.ElementDeclaration, t xsd.ComplexType) (emittedType, error) {
-	subject := "complex type " + typeName(t) + " of element " + decl.Name().String()
-	group, hasParticle, err := e.contentGroup(subject, t)
+// shape checks the complex type t against the package doc's "# Coverage"
+// shape, naming it in declines by o's subject, and returns the type it emits
+// as name — a struct for sequence or empty content, or a sealed interface for
+// choice content, which declines {attribute uses} — and the particles of its
+// content model group, nil for empty content. It emits nothing: body does,
+// so that a caller can store the type in e.emitted before its body is walked.
+func (e *emitter) shape(name string, o origin, t xsd.ComplexType) (emittedType, []xsd.Particle, error) {
+	group, hasParticle, err := e.contentGroup(o.subject, t)
 	if err != nil {
-		return emittedType{}, err
+		return emittedType{}, nil, err
 	}
-	if hasParticle && group.Compositor() == xsd.CompositorChoice {
-		if len(t.AttributeUses()) > 0 {
-			return emittedType{}, decline(t.Loc(), constructChoiceAttributeUses, subject)
-		}
-		return emittedType{name: name, sealed: true}, e.sealedType(name, nested, subject, decl, t, group.Particles())
+	if !hasParticle {
+		return emittedType{name: name}, nil, nil
+	}
+	if group.Compositor() != xsd.CompositorChoice {
+		return emittedType{name: name}, group.Particles(), nil
+	}
+	if len(t.AttributeUses()) > 0 {
+		return emittedType{}, nil, decline(t.Loc(), constructChoiceAttributeUses, o.subject)
+	}
+	return emittedType{name: name, sealed: true}, group.Particles(), nil
+}
+
+// body emits typ, which shape returned for the complex type t with particles,
+// generated from o: a struct holding a field per particle and then one per
+// attribute use, or the sealed interface sealedType emits; then the types its
+// particles reach, the anonymous ones named in nested. chain is valueChain's
+// for a walk of t's particles.
+func (e *emitter) body(typ emittedType, nested scope, chain []xsd.QName, o origin, t xsd.ComplexType, particles []xsd.Particle) error {
+	if typ.sealed {
+		return e.sealedType(typ.name, nested, o, t, particles)
 	}
 	slot := len(e.decls)
 	e.decls = append(e.decls, "")
 	fields := newNamer()
 	var body bytes.Buffer
-	if hasParticle {
-		for _, p := range group.Particles() {
-			field, err := e.field(nested, subject, t.Loc(), p)
-			if err != nil {
-				return emittedType{}, err
-			}
-			fmt.Fprintf(&body, "\t%s %s\n", fields.claim(field.local), field.goType)
-		}
-	}
-	for _, u := range t.AttributeUses() {
-		field, err := e.attributeField(subject, t.Loc(), u)
+	for _, p := range particles {
+		field, err := e.field(nested, chain, o.subject, t.Loc(), p)
 		if err != nil {
-			return emittedType{}, err
+			return err
 		}
 		fmt.Fprintf(&body, "\t%s %s\n", fields.claim(field.local), field.goType)
 	}
-	typeDecl := fmt.Sprintf("type %s struct {\n%s}\n", name, body.String())
-	if body.Len() == 0 {
-		typeDecl = fmt.Sprintf("type %s struct{}\n", name)
+	for _, u := range t.AttributeUses() {
+		field, err := e.attributeField(o.subject, t.Loc(), u)
+		if err != nil {
+			return err
+		}
+		fmt.Fprintf(&body, "\t%s %s\n", fields.claim(field.local), field.goType)
 	}
-	e.decls[slot] = e.header(name, decl) + typeDecl
-	return emittedType{name: name}, nil
+	typeDecl := fmt.Sprintf("type %s struct {\n%s}\n", typ.name, body.String())
+	if body.Len() == 0 {
+		typeDecl = fmt.Sprintf("type %s struct{}\n", typ.name)
+	}
+	e.decls[slot] = header(typ.name, o.from) + typeDecl
+	return nil
 }
 
-// sealedType emits the sealed interface name for decl's complex {type
-// definition} t, whose content particle's term is a choice of particles
-// (§3.8.4.1.2 sec-choices: one alternative per pass), in the package doc's
-// "# Coverage" shape: the interface, then each branch struct in particle
-// order, followed by the types of its anonymous-typed particle, named in
-// nested.
+// sealedType emits the sealed interface name for the complex type t generated
+// from o, whose content particle's term is a choice of particles (§3.8.4.1.2
+// sec-choices: one alternative per pass), in the package doc's "# Coverage"
+// shape: the interface, then each branch struct in particle order, followed
+// by the types its particle reaches, the anonymous ones named in nested.
 //
 // contentGroup has already required the content particle's {min occurs} to be
 // 1, so the minimum of its effective total range (§3.8.6.6 cos-choice-range)
@@ -373,34 +435,34 @@ func (e *emitter) complexType(name string, nested scope, decl xsd.ElementDeclara
 // {min occurs} 0 makes it 0 whatever the others are; any alternative but a
 // local element declaration is declined in particle order, so when no decline
 // fires every alternative is a local element with {min occurs} at least 1.
-func (e *emitter) sealedType(name string, nested scope, subject string, decl xsd.ElementDeclaration, t xsd.ComplexType, particles []xsd.Particle) error {
+func (e *emitter) sealedType(name string, nested scope, o origin, t xsd.ComplexType, particles []xsd.Particle) error {
 	if len(particles) == 0 {
-		return decline(t.Loc(), constructEmptyChoice, subject)
+		return decline(t.Loc(), constructEmptyChoice, o.subject)
 	}
 	for _, p := range particles {
-		alt, err := localElement(subject, t.Loc(), p.Term())
+		alt, err := localElement(o.subject, t.Loc(), p.Term())
 		if err != nil {
 			return err
 		}
 		if p.Occurs().Min() == 0 {
-			return decline(t.Loc(), constructEmptiableChoice, subject, alt.Name())
+			return decline(t.Loc(), constructEmptiableChoice, o.subject, alt.Name())
 		}
 	}
 	marker := "is" + name
-	e.decls = append(e.decls, e.header(name, decl)+fmt.Sprintf("type %s interface {\n\t%s()\n}\n", name, marker))
+	e.decls = append(e.decls, header(name, o.from)+fmt.Sprintf("type %s interface {\n\t%s()\n}\n", name, marker))
 	for _, p := range particles {
-		alt, err := localElement(subject, t.Loc(), p.Term())
+		alt, err := localElement(o.subject, t.Loc(), p.Term())
 		if err != nil {
 			return err
 		}
 		branch := e.types.claim(name, alt.Name().Local)
 		slot := len(e.decls)
 		e.decls = append(e.decls, "")
-		field, err := e.field(nested, subject, t.Loc(), p)
+		field, err := e.field(nested, nil, o.subject, t.Loc(), p)
 		if err != nil {
 			return err
 		}
-		e.decls[slot] = e.header(branch, alt) + fmt.Sprintf("type %s struct {\n\t%s %s\n}\n\nfunc (%s) %s() {}\n",
+		e.decls[slot] = header(branch, e.elementFrom(alt)) + fmt.Sprintf("type %s struct {\n\t%s %s\n}\n\nfunc (%s) %s() {}\n",
 			branch, newNamer().claim(field.local), field.goType, branch, marker)
 	}
 	return nil
@@ -491,9 +553,10 @@ type fieldSpec struct {
 }
 
 // field returns the field of particle p in a struct whose nested types are
-// named in nested, for the complex type at loc named in declines by subject,
-// typed by the package doc's "# Coverage" field rules.
-func (e *emitter) field(nested scope, subject string, loc xsderr.Loc, p xsd.Particle) (fieldSpec, error) {
+// named in nested and whose particles chain is valueChain's for, for the
+// complex type at loc named in declines by subject, typed by the package doc's
+// "# Coverage" field rules.
+func (e *emitter) field(nested scope, chain []xsd.QName, subject string, loc xsderr.Loc, p xsd.Particle) (fieldSpec, error) {
 	decl, err := localElement(subject, loc, p.Term())
 	if err != nil {
 		return fieldSpec{}, err
@@ -507,7 +570,7 @@ func (e *emitter) field(nested scope, subject string, loc xsderr.Loc, p xsd.Part
 	case *xsd.SimpleType:
 		typ.name, err = e.builtinType("element "+decl.Name().String(), decl.Loc(), ft)
 	case xsd.ComplexType:
-		typ, err = e.nestedType(nested, decl, ft)
+		typ, err = e.nestedType(nested, chain, p.Occurs() == exactlyOnce, decl, ft)
 	default:
 		err = fmt.Errorf("element %s at %s: unexpected type definition %T", decl.Name(), decl.Loc(), td)
 	}
@@ -564,30 +627,135 @@ func (e *emitter) attributeField(subject string, loc xsderr.Loc, u xsd.Attribute
 }
 
 // nestedType returns the type emitted for a local element declaration's
-// anonymous complex type, named by the path from its nearest named ancestor in
-// parent. Under a named complex type the type is emitted once per nestedKey,
-// by the first top-level element that reaches it, and later ones share it.
-// Both the emitted lookup and the store run only under a named complex type:
-// a top-level element may share a complex type's expanded name, since the two
-// are separate symbol spaces (§3.3.2), so a key whose path starts at an
-// element must never read an entry stored from a type.
-func (e *emitter) nestedType(parent scope, decl xsd.ElementDeclaration, t xsd.ComplexType) (emittedType, error) {
-	if t.Name() != (xsd.QName{}) {
-		return emittedType{}, decline(decl.Loc(), constructNamedComplexLocal, decl.Name(), t.Name())
-	}
+// complex type t, whose particle occurs exactly once when value is true and
+// whose parent's particles chain is valueChain's for. A named t gets one type,
+// named from t and generated from it, whose nested types take their names
+// from the path at t, as under a top-level element of type t (topLevel). An
+// anonymous t gets a type named by the path from its nearest named ancestor
+// in parent. Each named type, and each anonymous type under one, is emitted
+// once per nestedKey, by the first element whose walk reaches it, and later
+// ones share it; its entry is stored before its body is walked. A shared
+// type reached by a value field is walked again by valueCycle, which the
+// emitting walk does not do. Both the emitted lookup and the store run only
+// under a named complex type: a top-level element may share a complex type's
+// expanded name, since the two are separate symbol spaces (§3.3.2), so a key
+// whose path starts at an element must never read an entry stored from a
+// type.
+func (e *emitter) nestedType(parent scope, chain []xsd.QName, value bool, decl xsd.ElementDeclaration, t xsd.ComplexType) (emittedType, error) {
 	child := scope{underNamedType: parent.underNamedType, path: append(slices.Clone(parent.path), decl.Name())}
+	locals := child.locals()
+	if t.Name() != (xsd.QName{}) {
+		child = scope{underNamedType: true, path: []xsd.QName{t.Name()}}
+		locals = []string{t.Name().Local}
+	}
+	o := e.localOrigin(decl, t)
 	key := child.key()
 	if typ, ok := e.emitted[key]; ok && child.underNamedType {
-		return typ, nil
+		if !value || typ.sealed {
+			return typ, nil
+		}
+		return typ, e.valueCycle(chain, decl, o.subject, t)
 	}
-	typ, err := e.complexType(e.types.claim(child.locals()...), child, decl, t)
+	typ, particles, err := e.shape(e.types.claim(locals...), o, t)
+	if err != nil {
+		return emittedType{}, err
+	}
+	next, err := valueChain(chain, value && !typ.sealed, decl, t)
 	if err != nil {
 		return emittedType{}, err
 	}
 	if child.underNamedType {
 		e.emitted[key] = typ
 	}
-	return typ, nil
+	return typ, e.body(typ, child, next, o, t, particles)
+}
+
+// localOrigin is the origin of the type emitted for the local element decl's
+// complex type t: typeOrigin's for a named t, elementOrigin's for an anonymous
+// one.
+func (e *emitter) localOrigin(decl xsd.ElementDeclaration, t xsd.ComplexType) origin {
+	if t.Name() != (xsd.QName{}) {
+		return e.typeOrigin(t)
+	}
+	return e.elementOrigin(decl, t)
+}
+
+// valueChain returns the chain for a walk of the particles of the complex
+// type t, reached by the local element decl from particles whose chain is
+// chain, or declines a struct-value recursion. A chain is the named complex
+// types a walk has reached through value fields only since its last other
+// field, in path order: a value field is one "# Coverage" types by the bare
+// struct, which needs a particle that occurs exactly once (value) and a t
+// that is not a choice. A value field appends a named t, and declines one
+// already in chain, since the emitted Go types would hold one another as
+// struct values, which Go rejects; it keeps chain for an anonymous t. Any
+// other field starts afresh, holding a named t alone, and nothing for an
+// anonymous one. A top-level element's walk starts as one of its type, and
+// each branch of a sealed interface starts empty.
+func valueChain(chain []xsd.QName, value bool, decl xsd.ElementDeclaration, t xsd.ComplexType) ([]xsd.QName, error) {
+	switch {
+	case t.Name() == (xsd.QName{}) && value:
+		return chain, nil
+	case t.Name() == (xsd.QName{}):
+		return nil, nil
+	case !value:
+		return []xsd.QName{t.Name()}, nil
+	case slices.Contains(chain, t.Name()):
+		return nil, decline(decl.Loc(), constructValueCycle, decl.Name(), t.Name())
+	}
+	return append(slices.Clone(chain), t.Name()), nil
+}
+
+// valueCycle walks, through value fields only, the particles of the complex
+// type t that the local element decl reaches by a value field from particles
+// whose chain is chain, applying valueChain at each field; subject names t to
+// the checks it calls. A choice t, and a named t in e.acyclic, end the walk.
+// It reads the schema, never e.emitted, so a type the emitting walk shares is
+// walked again here unless e.acyclic holds it, and a named t whose particles
+// it walks to the end joins e.acyclic. It returns only a struct-value
+// recursion: every other failure on its path ends that path, since the
+// emitting walk meets it.
+func (e *emitter) valueCycle(chain []xsd.QName, decl xsd.ElementDeclaration, subject string, t xsd.ComplexType) error {
+	if _, done := e.acyclic[t.Name()]; done {
+		return nil
+	}
+	group, hasParticle, err := e.contentGroup(subject, t)
+	if err != nil || hasParticle && group.Compositor() == xsd.CompositorChoice {
+		//nolint:nilerr // a decline of t ends this path: the emitting walk meets it and returns it in walk order.
+		return nil
+	}
+	chain, err = valueChain(chain, true, decl, t)
+	if err != nil {
+		return err
+	}
+	var particles []xsd.Particle
+	if hasParticle {
+		particles = group.Particles()
+	}
+	for _, p := range particles {
+		if p.Occurs() != exactlyOnce {
+			continue
+		}
+		local, err := localElement(subject, t.Loc(), p.Term())
+		if err != nil {
+			continue
+		}
+		td, err := e.declaredType(local)
+		if err != nil {
+			continue
+		}
+		ct, isComplex := td.(xsd.ComplexType)
+		if !isComplex {
+			continue
+		}
+		if err := e.valueCycle(chain, local, e.localOrigin(local, ct).subject, ct); err != nil {
+			return err
+		}
+	}
+	if t.Name() != (xsd.QName{}) {
+		e.acyclic[t.Name()] = struct{}{}
+	}
+	return nil
 }
 
 // localElement returns the local element declaration a sequence or choice
