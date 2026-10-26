@@ -53,6 +53,13 @@ type emitter struct {
 	// never stored, nor is a type nested in an anonymous top-level type, and a
 	// branch struct is never stored: it rides with its interface.
 	emitted map[nestedKey]emittedType
+	// acyclic holds the named complex types whose value fields valueCycle
+	// followed to the end with the type in its chain (valueChain), so that no
+	// value cycle passes through them and valueCycle never walks one again; it
+	// is a lookup index only and never iterated (STYLE D2), kept for a
+	// measured hot path: without it a schema whose named types each reach the
+	// next twice costs double per level (#3037).
+	acyclic map[xsd.QName]struct{}
 }
 
 // emittedType is the Go type emitted for one complex type definition: its
@@ -100,10 +107,10 @@ func (s scope) key() nestedKey {
 }
 
 // emit returns the gofmt-formatted source of package pkg for schema, or the
-// first decline in document order. base is the absolute directory the source
-// is written into.
+// first decline in the order Generate's doc states. base is the absolute
+// directory the source is written into.
 func emit(schema *xsd.Schema, pkg, base string) ([]byte, error) {
-	e := &emitter{schema: schema, types: newNamer(), base: base, emitted: map[nestedKey]emittedType{}}
+	e := &emitter{schema: schema, types: newNamer(), base: base, emitted: map[nestedKey]emittedType{}, acyclic: map[xsd.QName]struct{}{}}
 	for _, decl := range schema.Elements() {
 		if err := e.topLevel(decl); err != nil {
 			return nil, err
@@ -695,36 +702,51 @@ func valueChain(chain []xsd.QName, value bool, decl xsd.ElementDeclaration, t xs
 
 // valueCycle walks, through value fields only, the particles of the complex
 // type t that the local element decl reaches by a value field from particles
-// whose chain is chain, applying valueChain at each field, and subject names
-// t in declines. A choice t ends the walk. It reads the schema, never
-// e.emitted, so a type the emitting walk shares is walked again here, and it
-// declines whatever the emitting walk would decline on the same path.
+// whose chain is chain, applying valueChain at each field; subject names t to
+// the checks it calls. A choice t, and a named t in e.acyclic, end the walk.
+// It reads the schema, never e.emitted, so a type the emitting walk shares is
+// walked again here unless e.acyclic holds it, and a named t whose particles
+// it walks to the end joins e.acyclic. It returns only a struct-value
+// recursion: every other failure on its path ends that path, since the
+// emitting walk meets it.
 func (e *emitter) valueCycle(chain []xsd.QName, decl xsd.ElementDeclaration, subject string, t xsd.ComplexType) error {
+	if _, done := e.acyclic[t.Name()]; done {
+		return nil
+	}
 	group, hasParticle, err := e.contentGroup(subject, t)
 	if err != nil || hasParticle && group.Compositor() == xsd.CompositorChoice {
-		return err
+		return nil
 	}
 	chain, err = valueChain(chain, true, decl, t)
-	if err != nil || !hasParticle {
+	if err != nil {
 		return err
 	}
-	for _, p := range group.Particles() {
+	var particles []xsd.Particle
+	if hasParticle {
+		particles = group.Particles()
+	}
+	for _, p := range particles {
 		if p.Occurs() != exactlyOnce {
 			continue
 		}
 		local, err := localElement(subject, t.Loc(), p.Term())
 		if err != nil {
-			return err
+			continue
 		}
 		td, err := e.declaredType(local)
 		if err != nil {
+			continue
+		}
+		ct, isComplex := td.(xsd.ComplexType)
+		if !isComplex {
+			continue
+		}
+		if err := e.valueCycle(chain, local, e.localOrigin(local, ct).subject, ct); err != nil {
 			return err
 		}
-		if ct, isComplex := td.(xsd.ComplexType); isComplex {
-			if err := e.valueCycle(chain, local, e.localOrigin(local, ct).subject, ct); err != nil {
-				return err
-			}
-		}
+	}
+	if t.Name() != (xsd.QName{}) {
+		e.acyclic[t.Name()] = struct{}{}
 	}
 	return nil
 }

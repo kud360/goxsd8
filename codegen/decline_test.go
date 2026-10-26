@@ -216,6 +216,14 @@ func TestGenerateDeclines(t *testing.T) {
 		// so it is the decline returned.
 		{"value cycle after an earlier decline", `<xs:complexType name="c"><xs:sequence><xs:element name="p" minOccurs="0"><xs:complexType><xs:sequence><xs:any/></xs:sequence></xs:complexType></xs:element><xs:element name="v" type="c"/></xs:sequence></xs:complexType><xs:element name="e"><xs:complexType><xs:sequence><xs:element name="l" type="c"/></xs:sequence></xs:complexType></xs:element>`,
 			"a wildcard particle in complex type (anonymous) of element p", constructWildcard},
+		// q reaches t while t's body is being emitted, so the recursion check
+		// walks t again and meets its wildcard; only the emitting walk
+		// returns that decline, which r's precedes.
+		{"value cycle check past another decline", `<xs:complexType name="m"><xs:sequence><xs:element name="q" type="t"/><xs:element name="r" type="xs:decimal"/></xs:sequence></xs:complexType><xs:complexType name="t"><xs:sequence><xs:element name="f1" type="m" minOccurs="0"/><xs:any/></xs:sequence></xs:complexType><xs:element name="root"><xs:complexType><xs:sequence><xs:element name="x" type="t"/></xs:sequence></xs:complexType></xs:element>`,
+			"element r with {type definition} {http://www.w3.org/2001/XMLSchema}decimal, whose {primitive type definition} is {http://www.w3.org/2001/XMLSchema}decimal at s.xsd:2:70 ", constructUncoveredPrimitive},
+		// e's walk reaches t, declared after f, before f's walk begins.
+		{"named type body before a later top-level element", `<xs:element name="e"><xs:complexType><xs:sequence><xs:element name="l" type="t"/></xs:sequence></xs:complexType></xs:element><xs:element name="f" type="xs:decimal"/><xs:complexType name="t"><xs:sequence><xs:any/></xs:sequence></xs:complexType>`,
+			"a wildcard particle in complex type t at s.xsd:2:166 ", constructWildcard},
 		{"named complex local body", `<xs:complexType name="c"><xs:sequence><xs:any minOccurs="0"/></xs:sequence></xs:complexType><xs:element name="e"><xs:complexType><xs:sequence><xs:element name="l" type="c"/></xs:sequence></xs:complexType></xs:element>`,
 			"a wildcard particle in complex type c at s.xsd:2:1 ", constructWildcard},
 		{"local element property", `<xs:element name="e"><xs:complexType><xs:sequence><xs:element name="l" nillable="true" ` + str + `/></xs:sequence></xs:complexType></xs:element>`,

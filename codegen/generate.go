@@ -75,7 +75,9 @@ func (t Target) failed(i int, err error) error {
 // target's after filepath.Clean, a Dir that filepath.Abs cannot make
 // absolute, a construct the generator declines, or a failed destination check
 // — means no target is written, and the error is the first failure in target
-// order and then document order.
+// order and then the order the generator meets declines: each top-level
+// element declaration in document order, depth first through the types its
+// particles reach (the package doc's "Coverage").
 //
 // Every error Generate returns opens with the failing target's name: its Name,
 // or "target N" for the target at slice index N when Name is empty. An unnamed
