@@ -23,22 +23,28 @@
 // interface, and declines everything outside this slice:
 //
 //   - An element whose {type definition} is an atomic or list simple type
-//     gets a named type over a Go builtin, or over a slice of one. For an
-//     atomic type, the nearest of the eight bounded integer types on the
-//     type's {base type definition} chain (§3.16.1), the type itself first,
-//     gives the Go integer whose range is exactly its value space (Datatypes
-//     §3.4.16–§3.4.19, §3.4.21–§3.4.24): long gives int64, int int32, short
-//     int16, byte int8, unsignedLong uint64, unsignedInt uint32,
-//     unsignedShort uint16, unsignedByte uint8. Failing one, the type's
-//     {primitive type definition} (Datatypes §4.1.1) chooses: string and
-//     anyURI give string, boolean gives bool, float gives float32 and double
-//     float64, whose IEEE 754 binary32 and binary64 value spaces (Datatypes
-//     §3.3.4.1, §3.3.5.1) those Go types hold exactly. A list type (Datatypes
-//     §2.4.1.2) gives a slice of the builtin its {item type definition}
-//     (§3.16.1) gives, a restriction of a list taking its base's item
-//     (§3.16.2.3); the list declines exactly when its item does, by the
-//     item's construct. Wherever a field holds a list, the pointer and slice
-//     rules below apply to that slice as to any builtin; in a field that is
+//     gets a named type over a Go builtin or math/big type, or over a slice
+//     of one. For an atomic type, the nearest of the eight bounded integer
+//     types on the type's {base type definition} chain (§3.16.1), the type
+//     itself first, gives the Go integer whose range is exactly its value
+//     space (Datatypes §3.4.16–§3.4.19, §3.4.21–§3.4.24): long gives int64,
+//     int int32, short int16, byte int8, unsignedLong uint64, unsignedInt
+//     uint32, unsignedShort uint16, unsignedByte uint8. Failing one, a chain
+//     that reaches xs:integer gives big.Int, which holds every integer
+//     (Datatypes §3.4.13): xs:integer, the four unbounded integer types and
+//     every type derived from them other than through the eight bounded ones.
+//     Failing that, the type's {primitive type definition} (Datatypes §4.1.1)
+//     chooses: string and anyURI give string, boolean gives bool, float gives
+//     float32 and double float64, whose IEEE 754 binary32 and binary64 value
+//     spaces (Datatypes §3.3.4.1, §3.3.5.1) those Go types hold exactly, and
+//     decimal gives big.Rat, which holds every decimal value exactly
+//     (Datatypes §3.3.3). The generated file imports math/big exactly when a
+//     declaration names it. A list type (Datatypes §2.4.1.2) gives a slice of
+//     the Go builtin or math/big type its {item type definition} (§3.16.1)
+//     gives, a restriction of a list taking its base's item (§3.16.2.3); the
+//     list declines exactly when its item does, by the item's construct.
+//     Wherever a field holds a list, the pointer and slice rules below apply
+//     to that slice as to any Go builtin or math/big type; in a field that is
 //     not a pointer, nil and the empty slice are one value, the empty list.
 //     Facets are not represented, and a named user simple type gets no Go
 //     type of its own.
@@ -62,41 +68,35 @@
 //     appears. A choice is accepted only when its particle is not emptiable
 //     (§3.9.6.3 cos-group-emptiable): it has {particles}, and each has
 //     {min occurs} at least 1 (§3.8.6.6 cos-choice-range).
-//   - Each particle of a sequence gives one field, in particle order: a
-//     local element with an atomic or list simple type gets the builtin or
-//     slice an element's type is declared over, one with an anonymous
-//     complex type of the same shape gets a struct or interface of its own,
-//     emitted after its parent. One with a named complex type of the same
-//     shape gets the struct or interface emitted for that type, once per
-//     expanded name, after the parent of the first local element of that
-//     type, and shared by every local element of that type in any parent,
-//     the type's own included; a top-level element of that type keeps the
-//     type named from the element. A type nested in a named complex type is
-//     emitted once per path of expanded names from that type, after the
-//     first element whose walk reaches it, and every element of that type,
-//     top-level or local, shares it; two sibling local elements whose
-//     expanded names differ only in {target namespace} (§3.3.2.3), a
-//     qualified x beside an unqualified x, get a type each. A named complex
-//     type that reaches itself through elements that each occur exactly once
-//     in a sequence, and whose types are not choices, declines: its Go type
-//     would hold itself as a struct value. {max occurs} above 1 or unbounded
-//     gives a slice whatever {min occurs} is, of a list's slice too ([][]T);
-//     {min occurs} 0 with {max occurs} 1 gives a pointer to a struct,
-//     builtin or list's slice (*[]T), and the bare interface, never a
-//     pointer to one, nil meaning absent.
+//   - Each particle of a sequence gives one field, in particle order: a local element with
+//     an atomic or list simple type gets the Go builtin or math/big type, or the slice, an
+//     element's type is declared over, one with an anonymous complex type of the same shape
+//     gets a struct or interface of its own, emitted after its parent. One with a named
+//     complex type of the same shape gets the struct or interface emitted for that type,
+//     once per expanded name, after the parent of the first local element of that type, and
+//     shared by every local element of that type in any parent, the type's own included; a
+//     top-level element of that type keeps the type named from the element. A type nested in
+//     a named complex type is emitted once per path of expanded names from that type, after
+//     the first element whose walk reaches it, and every element of that type, top-level or
+//     local, shares it; two sibling local elements whose expanded names differ only in
+//     {target namespace} (§3.3.2.3), a qualified x beside an unqualified x, get a type each.
+//     A named complex type that reaches itself through elements that each occur exactly once
+//     in a sequence, and whose types are not choices, declines: its Go type would hold
+//     itself as a struct value. {max occurs} above 1 or unbounded gives a slice whatever
+//     {min occurs} is, of a list's slice too ([][]T); {min occurs} 0 with {max occurs} 1
+//     gives a pointer to a struct, Go builtin or math/big type, or list's slice (*[]T), and
+//     the bare interface, never a pointer to one, nil meaning absent.
 //   - Each attribute use of a type with sequence or empty content gives one
-//     field after the particle fields, if any, in the order
-//     [xsd.ComplexType.AttributeUses] returns its {attribute uses}
-//     (§3.4.2.4). The field is named from the attribute declaration's local
-//     name, so a qualified and an unqualified attribute of one local name, or an
-//     attribute named like an element of the struct, take the suffix "Naming"
-//     states, the later field taking it. Its {type definition} must be an
-//     atomic or list simple type and gives a builtin or slice as an
-//     element's does; {required} true gives that type, false a pointer to it
-//     (*[]T for a list), nil meaning absent. The use's effective value
-//     constraint (§3.5.4 key-evc) must be absent, whether the use or a global
-//     declaration it references carries the default or fixed value. A choice is
-//     accepted only when its type has no {attribute uses}.
+//     field after the particle fields, if any, in the order [xsd.ComplexType.AttributeUses]
+//     returns its {attribute uses} (§3.4.2.4). The field is named from the attribute
+//     declaration's local name, so a qualified and an unqualified attribute of one local
+//     name, or an attribute named like an element of the struct, take the suffix "Naming"
+//     states, the later field taking it. Its {type definition} must be an atomic or list
+//     simple type and gives a Go builtin or math/big type, or a slice, as an element's
+//     does; {required} true gives that type, false a pointer to it (*[]T for a list), nil
+//     meaning absent. The use's effective value constraint (§3.5.4 key-evc) must be absent,
+//     whether the use or a global declaration it references carries the default or fixed
+//     value. A choice is accepted only when its type has no {attribute uses}.
 //   - Every element declaration emitted from has {nillable} and {abstract}
 //     false and no {value constraint}, {type table} or {substitution group
 //     affiliations}. Its {identity-constraint definitions} are accepted and
@@ -113,10 +113,8 @@
 // simple content, extension, restriction of any base but xs:anyType, a
 // named complex type reaching itself through struct values, xs:anyType, the
 // special simple types, union types, a list whose {item type definition}
-// declines, and every primitive but the five above — decimal among them, so
-// xs:integer, the four unbounded integer types and every type derived from
-// them other than through the eight bounded ones decline — for an element or
-// an attribute alike. #2900 owns lifting them.
+// declines, and every primitive but the six above, for an element or an
+// attribute alike. #2900 owns lifting them.
 //
 // # Determinism
 //
