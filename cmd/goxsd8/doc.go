@@ -43,8 +43,8 @@
 //	line of the fault that stopped its walk, and the line of an instance
 //	not well-formed or unreadable once open — and stderr carries every
 //	other line: schema rejections (parse and gen 1, validate 3), usage
-//	errors and the I/O faults charged 2, gen's refusals and its 4
-//	decline, unresolved-directive and hint notes, and -v logging.
+//	errors and the I/O faults charged 2, gen's refusals and its exit-4
+//	declines, unresolved-directive and hint notes, and -v logging.
 //
 //	goxsd8 parse [-q] [-v] <schema.xsd>...
 //	    Compile each schema argument and print its summary on stdout:
@@ -278,12 +278,14 @@
 //	    except that a fault while writing can leave some pairs written
 //	    and others not. A fault creating or writing the output exits
 //	    2, named against its pair the same way.
-//	    A construct the generator declines exits 4, on a stderr line
-//	    naming the pair, the construct and its location; go doc
-//	    github.com/kud360/goxsd8/codegen says what it accepts, which
-//	    needs the module source; without it, read codegen/doc.go at
-//	    https://github.com/kud360/goxsd8. gen writes nothing on
-//	    stdout.
+//	    Each construct the generator declines prints on one stderr
+//	    line naming the pair, the construct and its location, in
+//	    argument order and then document order, at most one for each
+//	    top-level element declaration of the pair's -schema, and gen
+//	    then exits 4; go doc github.com/kud360/goxsd8/codegen says
+//	    what it accepts, which needs the module source; without it,
+//	    read codegen/doc.go at https://github.com/kud360/goxsd8. gen
+//	    writes nothing on stdout.
 //
 // Flags common to all subcommands: -q (quiet), -v (debug logging via
 // slog to stderr; scope with GOXSD_DEBUG=parser,validate,codec). They
