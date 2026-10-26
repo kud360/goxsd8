@@ -91,20 +91,19 @@ func (t Target) failed(i int, err error) error {
 // declaration, each declaration's walk ending at its first decline in the
 // order the generator meets them: each top-level element declaration in
 // document order, depth first through the types its particles reach (the
-// package doc's "Coverage"). A decline equal to one already collected for the
-// target, met again through an <element ref> particle, the declaration's own
-// turn or a type two declarations share, is collected once, where first met. A
-// local element that occurs exactly once and whose type, not a choice, is
-// already emitted has that type checked again, through such elements, for a
-// type reaching itself, and the decline "Coverage" states for one found there
-// precedes every decline the depth-first walk meets after that element. The
-// walk does not enter the type of the top-level declaration an <element ref>
-// particle names, which that declaration's own turn emits; a ref to a
-// declaration not yet reached checks that declaration's properties and the
-// shape of its type where the ref is met, and a ref that occurs exactly once
-// to a complex type that is not a choice has that type checked there, in the
-// same way, for an element or type reaching itself, ahead of every decline the
-// depth-first walk meets after the ref.
+// package doc's "Coverage"). A decline with the same Construct and the same
+// text as one already collected for the target is collected once, where first
+// met, whatever meets it again. A local element that occurs exactly once and
+// whose type, not a choice, is already emitted has that type checked again,
+// through such elements, for a type reaching itself, and the decline "Coverage"
+// states for one found there precedes every decline the depth-first walk meets
+// after that element. The walk does not enter the type of the top-level
+// declaration an <element ref> particle names, which that declaration's own
+// turn emits; a ref to a declaration not yet reached checks that declaration's
+// properties and the shape of its type where the ref is met, and a ref that
+// occurs exactly once to a complex type that is not a choice has that type
+// checked there, in the same way, for an element or type reaching itself, ahead
+// of every decline the depth-first walk meets after the ref.
 //
 // Every non-nil error Generate returns is an errors.Join of one error per
 // failure, in that order, a phase-2 fault alone; each opens with the failing
@@ -115,13 +114,13 @@ func (t Target) failed(i int, err error) error {
 //
 // A decline is a generator limitation, not a schema fault: it is a
 // *DeclineError, never an *xsderr.Error, and it wraps errors.ErrUnsupported,
-// so errors.Is(err, errors.ErrUnsupported) reports that the error holds a
+// so errors.Is(err, errors.ErrUnsupported) reports every error that holds a
 // decline, and errors.As retrieves the first one's *DeclineError; each decline
 // is retrieved from its own element. Its Construct method returns the
 // construct declined, and its Loc method the Loc of the nearest component that
 // carries one. Its text names both; the opening with the target's name, stated
-// above, precedes that text and is no part of it. The package doc's
-// "Coverage" section states what the generator accepts.
+// above, precedes that text and is no part of it. The package doc's "Coverage"
+// section states what the generator accepts.
 //
 // Phase 2 creates Dir and its parents when absent. An existing xsd_gen.go is
 // overwritten only when its first line matches `^// Code generated .* DO NOT

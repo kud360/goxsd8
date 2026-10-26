@@ -302,8 +302,8 @@ func TestCheckTargets(t *testing.T) {
 // in target order and then document order, each opened with its target's
 // name: one per top-level element declaration's turn, a decline met again
 // collected once where first met, and a named type whose body declined
-// entered again by a later turn, which meets the same decline and contributes
-// nothing.
+// entered again by a later turn, which here meets the same decline and
+// contributes nothing.
 func TestGenerateCollectsDeclines(t *testing.T) {
 	const tail = " is not supported by codegen, a generator limitation, not a schema fault"
 	const qname = " with {type definition} {http://www.w3.org/2001/XMLSchema}QName, whose {primitive type definition} is {http://www.w3.org/2001/XMLSchema}QName"

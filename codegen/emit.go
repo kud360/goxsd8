@@ -879,23 +879,22 @@ func (e *emitter) attributeField(subject string, loc xsderr.Loc, u xsd.Attribute
 	return fieldSpec{local: name.Local, goType: goType}, nil
 }
 
-// nestedType returns the type emitted for a local element declaration's
-// complex type t, whose particle occurs exactly once when value is true and
-// whose parent's particles chain is valueChain's for. A named t gets one type,
-// named from t and generated from it, whose nested types take their names
-// from the path at t, as under a top-level element of type t (topLevel). An
-// anonymous t gets a type named by the path from its nearest named ancestor
-// in parent. Each named type, and each anonymous type under one, is emitted
-// once per nestedKey, by the first element whose walk reaches it, and later
-// ones share it; its entry is stored before its body is walked, and removed
-// when that body fails, so that a later turn's walk, which emit runs after a
-// decline, enters the type again and meets the same decline. A shared
-// type reached by a value field is walked again by valueCycle, which the
-// emitting walk does not do. Both the emitted lookup and the store run only
-// under a named complex type: a top-level element may share a complex type's
-// expanded name, since the two are separate symbol spaces (§3.3.2), so a key
-// whose path starts at an element must never read an entry stored from a
-// type.
+// nestedType returns the type emitted for a local element declaration's complex
+// type t, whose particle occurs exactly once when value is true and whose
+// parent's particles chain is valueChain's for. A named t gets one type, named
+// from t and generated from it, whose nested types take their names from the
+// path at t, as under a top-level element of type t (topLevel). An anonymous t
+// gets a type named by the path from its nearest named ancestor in parent. Each
+// named type, and each anonymous type under one, is emitted once per nestedKey,
+// by the first element whose walk reaches it, and later ones share it; its
+// entry is stored before its body is walked, and removed when that body fails,
+// so that a later turn's walk, which emit runs after a decline, enters the type
+// again rather than sharing a type never emitted. A shared type reached by a
+// value field is walked again by valueCycle, which the emitting walk does not
+// do. The emitted lookup, the store and the removal run only under a named
+// complex type: a top-level element may share a complex type's expanded name,
+// since the two are separate symbol spaces (§3.3.2), so a key whose path starts
+// at an element must never read an entry stored from a type.
 func (e *emitter) nestedType(parent scope, chain []valueNode, value bool, decl xsd.ElementDeclaration, t xsd.ComplexType) (emittedType, error) {
 	child := scope{underNamedType: parent.underNamedType, path: append(slices.Clone(parent.path), decl.Name())}
 	locals := child.locals()
@@ -923,7 +922,9 @@ func (e *emitter) nestedType(parent scope, chain []valueNode, value bool, decl x
 		e.emitted[key] = typ
 	}
 	if err := e.body(typ, child, next, o, t, particles); err != nil {
-		delete(e.emitted, key)
+		if child.underNamedType {
+			delete(e.emitted, key)
+		}
 		return emittedType{}, err
 	}
 	return typ, nil

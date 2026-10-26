@@ -15,8 +15,10 @@
 //
 // A decline is counted by the codegen.Construct of the *codegen.DeclineError
 // that errors.As retrieves from Generate's error, and by nothing parsed from
-// its text; a construct's line prints its Construct's String. Any other error
-// Generate returns is counted on a line of its own, never under a construct.
+// its text; a construct's line prints its Construct's String. Any other
+// error Generate returns, one holding no decline, is counted on a line of
+// its own, never under a construct; a failure that follows a document's
+// declines in Generate's error is not counted.
 //
 // Usage:
 //
