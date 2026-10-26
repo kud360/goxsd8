@@ -1,0 +1,95 @@
+<?xml version="1.0"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+           xmlns="urn:namedlocal:a"
+           xmlns:b="urn:namedlocal:b"
+           targetNamespace="urn:namedlocal:a">
+  <xs:import namespace="urn:namedlocal:b" schemaLocation="namedlocalimport.xsd"/>
+  <xs:complexType name="point">
+    <xs:sequence>
+      <xs:element name="x">
+        <xs:complexType>
+          <xs:sequence>
+            <xs:element name="v" type="xs:string"/>
+          </xs:sequence>
+        </xs:complexType>
+      </xs:element>
+      <xs:element name="label" type="xs:string"/>
+    </xs:sequence>
+  </xs:complexType>
+  <xs:complexType name="shape">
+    <xs:choice>
+      <xs:element name="circle" type="xs:string"/>
+      <xs:element name="square" type="xs:boolean"/>
+    </xs:choice>
+  </xs:complexType>
+  <xs:complexType name="marker">
+    <xs:attribute name="id" type="xs:string"/>
+  </xs:complexType>
+  <xs:complexType name="nothing"/>
+  <xs:complexType name="node">
+    <xs:sequence>
+      <xs:element name="value" type="xs:string"/>
+      <xs:element name="child" type="node" minOccurs="0"/>
+      <xs:element name="kids" type="node" maxOccurs="unbounded"/>
+    </xs:sequence>
+  </xs:complexType>
+  <xs:complexType name="tree">
+    <xs:choice>
+      <xs:element name="leaf" type="xs:string"/>
+      <xs:element name="branch" type="tree"/>
+    </xs:choice>
+  </xs:complexType>
+  <xs:complexType name="ct">
+    <xs:sequence>
+      <xs:element name="x">
+        <xs:complexType>
+          <xs:sequence>
+            <xs:element name="y" type="xs:string"/>
+          </xs:sequence>
+        </xs:complexType>
+      </xs:element>
+    </xs:sequence>
+  </xs:complexType>
+  <xs:element name="first" type="point"/>
+  <xs:element name="marker" type="xs:boolean"/>
+  <xs:element name="route">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element name="from" type="point"/>
+        <xs:element name="to" type="point" minOccurs="0"/>
+        <xs:element name="via" type="point" maxOccurs="unbounded"/>
+        <xs:element name="shape" type="shape"/>
+        <xs:element name="mark" type="shape" minOccurs="0"/>
+        <xs:element name="pin" type="marker"/>
+        <xs:element name="none" type="nothing" minOccurs="0"/>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="area">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element name="corner" type="point"/>
+        <xs:element name="size" type="xs:string"/>
+        <xs:element name="corner" type="point"/>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="forest">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element name="root" type="node"/>
+        <xs:element name="top" type="tree"/>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="pair">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element name="here" type="ct"/>
+        <xs:element name="there" type="b:ct"/>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="ct" type="xs:string"/>
+  <xs:element name="last" type="point"/>
+</xs:schema>
