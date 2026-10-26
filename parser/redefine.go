@@ -537,12 +537,11 @@ func (p *producer) originalFor(decl *Element, qn xsd.QName, kinds ...string) (ty
 // definition item of that name and kind in the <redefine>d schema document" the
 // next level pairs with, so a cycle of <redefine>s over one name makes the
 // pairing's own base chain re-enter itself. No hop of that chain passes through
-// a named build: redefinedComplexBase goes DIRECT to produceComplexType, since
-// buildComplexType's memo is keyed by the declaration mapped and this one maps
+// a named build: redefinedComplexBase goes DIRECT to produceComplexType and
+// resolveBase to constructSimpleType, since buildComplexType's and
+// buildSimpleType's memos are keyed by the declaration mapped and this one maps
 // to two components — the ordinary named one and clause 1.1's original — that a
-// single entry cannot hold (see redefinedComplexBase); resolveBase goes direct
-// to constructSimpleType, the original's ·absent· {name} leaving
-// buildSimpleType's by-name memo nothing to hold. buildComplexType's on-stack
+// single entry cannot hold (see redefinedComplexBase). buildComplexType's on-stack
 // sentinel, the only other guard that could bound this chain, therefore never
 // sees a hop of it. Its two callers charge the acyclicity rule for the kind they
 // build.

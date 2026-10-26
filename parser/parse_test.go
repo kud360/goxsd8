@@ -622,6 +622,23 @@ func TestParseDuplicateTypeLocatesTheSecondDeclaration(t *testing.T) {
 	}
 }
 
+// TestParseDuplicateSimpleTypeIsItselfConstructed pins that the second
+// <simpleType> of a repeated name is mapped in its own right: a facet value only
+// it gets wrong is charged at mapping time, at that declaration, ahead of the
+// sch-props-correct clause 2 collision finalize would charge. A name-keyed memo
+// handed it the first declaration's component and never read its children
+// (#3008).
+func TestParseDuplicateSimpleTypeIsItselfConstructed(t *testing.T) {
+	_, err := parseMap(t, "m.xsd", map[string]string{"m.xsd": wrap("urn:t", "\n  "+
+		`<xs:simpleType name="foo"><xs:restriction base="xs:string"/></xs:simpleType>`+"\n  "+
+		`<xs:simpleType name="foo"><xs:restriction base="xs:string">`+
+		`<xs:maxLength value="abc"/></xs:restriction></xs:simpleType>`)})
+	mustRule(t, err, "cvc-datatype-valid")
+	if !strings.HasPrefix(err.Error(), "m.xsd:3:") {
+		t.Fatalf("error %q is not located on the second declaration's line", err)
+	}
+}
+
 // TestParseIdentityConstraintRefAcrossDocuments exercises the ASSEMBLY-WIDE
 // identity-constraint pre-scan: a <key ref="…"> in the INCLUDING document, which
 // is produced first, resolves to a definition the INCLUDED document declares

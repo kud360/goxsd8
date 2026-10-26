@@ -2,7 +2,6 @@ package parser
 
 import (
 	"fmt"
-	"maps"
 	"regexp"
 	"slices"
 	"strings"
@@ -303,25 +302,32 @@ type symbols struct {
 	// builtins is the FIXED set of Built-in Simple Type Definitions (§3.16.7),
 	// exactly what [builtin.Seed] yields, keyed by ·expanded name·. newSymbols
 	// fills it once and nothing writes it again, so it answers the same for a
-	// given backend whatever any schema document declares — which is what
-	// ctaStaticTypes needs, and what built cannot supply because a schema
-	// TARGETING the XSD namespace writes its own top-level types into that memo.
+	// given backend whatever any schema document declares. It is what gives a
+	// base= naming a builtin the canonical component by pointer identity
+	// (resolveBaseType), even where a schema TARGETING the XSD namespace declares
+	// a type of the same name, which sch-props-correct clause 2 then rejects.
 	builtins map[xsd.QName]*xsd.SimpleType
 
-	// built is the build-once MEMO for simple-type construction: an ABSENT key is
-	// unbuilt, a PRESENT one is done, and there is no third state. It starts as a
-	// copy of builtins, so a builtin starts out done, which is also what gives a
-	// base= naming one the canonical component by pointer identity. The two maps
-	// diverge from there and neither is derivable from the other: this one grows
-	// with every named simple type the assembly builds.
+	// builtSimple is the build-once MEMO for NAMED simple-type construction: an
+	// ABSENT key is unbuilt, a PRESENT one is done, and there is no third state.
+	//
+	// It is keyed by DECLARATION and not by expanded name, for the reason
+	// builtGroups states in full: a name addresses one declaration only in an
+	// assembly sch-props-correct (§3.17.6.1) clause 2 accepts. Keyed by name, the
+	// second <simpleType> of a repeated name — or of a builtin's name, in a schema
+	// targeting the XSD namespace — was handed the first one's component (or the
+	// seeded builtin), so clause 2 charged one location twice, and a redefining
+	// <simpleType> whose redefined document is also reached plainly registered
+	// the ORIGINAL in its place (#3008).
 	//
 	// It is deliberately NOT a cycle guard, unlike its complex-type sibling
 	// builtComplex: a simple type's base= is deferred to a name at mapping time
 	// (xsd.SimpleTypeRef), so constructing one recurses into no other named
-	// simple type and there is nothing to bound. What still reads this map is
+	// simple type and there is nothing to bound. What needs the memo, beside
+	// run's and produceRedefinition's one build per declaration, is
 	// resolveBaseType, which needs a live *xsd.SimpleType for a COMPLEX type's
 	// base= — see buildSimpleType.
-	built map[xsd.QName]*xsd.SimpleType
+	builtSimple map[*Element]*xsd.SimpleType
 
 	// builtComplex is the memo + cycle guard for COMPLEX-type construction. An
 	// absent key is unstarted, and a present one holds the complexBuild arm the
@@ -523,7 +529,7 @@ func newSymbols(builder *xsd.SchemaBuilder, backend value.Backend) (*symbols, er
 		elements:            make(map[xsd.QName]typeSource),
 		identityConstraints: make(map[xsd.QName]identityConstraintSource),
 		builtins:            builtins,
-		built:               maps.Clone(builtins),
+		builtSimple:         make(map[*Element]*xsd.SimpleType),
 		builtGroups:         make(map[*Element]*xsd.ModelGroupDefinition),
 		builtIC:             make(map[xsd.QName]xsd.IdentityConstraint),
 		redefineOriginals:   make(map[*Element]struct{}),
@@ -1920,9 +1926,12 @@ func rejectXSITargetNamespace(name xsd.QName, el *Element) error {
 		"attribute declaration %s has the XML Schema Instance namespace as its {target namespace}, which no-xsi (§3.2.6.4) forbids whether the declaration is local or top-level: the only attribute declarations in that namespace are the four Built-in Attribute Declarations of §3.2.7 — xsi:type, xsi:nil, xsi:schemaLocation, xsi:noNamespaceSchemaLocation — which every schema holds by definition and no schema document may declare", name)
 }
 
-// buildSimpleType returns the compiled simple type named name, building it once
-// and memoizing the result. name is the zero QName only via constructSimpleType
-// for anonymous inline types, which never enter this memoized path.
+// buildSimpleType returns the compiled simple type the top-level declaration
+// elem maps to under the {name} name, building it once and memoizing the result
+// under elem (symbols.builtSimple), so name and elem are not two encodings of one
+// fact: two declarations of one expanded name are two components, which
+// sch-props-correct clause 2 charges at finalize. Anonymous inline types never
+// enter this memoized path; they call constructSimpleType with the zero QName.
 //
 // IT CARRIES NO CYCLE GUARD, and no longer needs one. The tri-state on-stack
 // sentinel this used to keep — and the st-props-correct clause 2 rejection built
@@ -1936,21 +1945,21 @@ func rejectXSITargetNamespace(name xsd.QName, el *Element) error {
 // clause 1.1 for a simple type's base; finalize charges both, from xsd's
 // checkSimpleBaseAcyclic and simpleTypeOfRef.
 //
-// The MEMO survives, and is not optional: resolveBaseType reads it (and falls
-// through here on a miss) to obtain the live component a COMPLEX type's base=
-// still needs, because xsd.NewComplexType demands a complete base component at
-// construction. Its states are now two, not three — absent means unbuilt,
-// present means built — so "started but unrecorded" is not representable
-// (STYLE T1/D3).
+// The MEMO survives, and is not optional: resolveBaseType builds through here
+// to obtain the live component a COMPLEX type's base= still needs, because
+// xsd.NewComplexType demands a complete base component at construction, and
+// that component must be the one run or produceRedefinition registers. Its
+// states are now two, not three — absent means unbuilt, present means built —
+// so "started but unrecorded" is not representable (STYLE T1/D3).
 func (p *producer) buildSimpleType(name xsd.QName, elem *Element) (*xsd.SimpleType, error) {
-	if st, done := p.symbols.built[name]; done {
+	if st, done := p.symbols.builtSimple[elem]; done {
 		return st, nil
 	}
 	st, err := p.constructSimpleType(name, elem)
 	if err != nil {
 		return nil, err
 	}
-	p.symbols.built[name] = st
+	p.symbols.builtSimple[elem] = st
 	return st, nil
 }
 
@@ -2116,11 +2125,13 @@ func (p *producer) namedComplexTypeIdentity(name xsd.QName, elem *Element) compl
 //
 // A base of either variety is built through its OWN document's producer
 // (typeSource's owner), never through p: see symbols.simpleTypes and
-// symbols.complexTypes. An already-built simple base returns the very
-// *xsd.SimpleType symbols.built holds — never a rebuilt twin, whose component
-// identity would silently diverge (xsd/typedefinition.go); routing through the
-// owner does not change that, since the memo is assembly-wide and every producer
-// of the assembly shares it.
+// symbols.complexTypes. A builtin's name resolves to the seeded component in
+// symbols.builtins, ahead of any schema-declared simple type of that name. An
+// already-built simple base returns the very *xsd.SimpleType symbols.builtSimple
+// holds for its declaration — never a rebuilt twin, whose component identity
+// would silently diverge (xsd/typedefinition.go); routing through the owner does
+// not change that, since the memo is assembly-wide and every producer of the
+// assembly shares it.
 //
 // A name that resolves to no type at all is charged src-resolve clause 1.1
 // (§3.17.6.2) — the same rule, at the same clause, that resolveBase charges for
@@ -2155,7 +2166,7 @@ func (p *producer) resolveBaseType(id complexTypeIdentity, at *Element, name xsd
 		}
 		return finishedBase{def: ct}, xsd.TypeDefinitionRef{Name: name}, nil
 	}
-	if st, ok := p.symbols.built[name]; ok && st != nil {
+	if st, ok := p.symbols.builtins[name]; ok {
 		return finishedBase{def: st}, xsd.TypeDefinitionRef{Name: name}, nil
 	}
 	if src, ok := p.symbols.simpleTypes[name]; ok {
@@ -2425,9 +2436,8 @@ func rejectLocalSimpleTypeAttrs(elem *Element) error {
 // forbids (rejectDuplicateRestrictionChildren), then a child out of the order
 // s4sSimpleTypeRestriction gives the rest (#1951), resolves the base, maps the
 // own facets and {final} (simpleTypeFinal), and constructs. It does NOT memoize
-// — the memo/cycle bookkeeping lives in buildSimpleType; an anonymous inline
-// type has no name to key on and is unreferenceable, so it is built here
-// directly, once.
+// — the memo lives in buildSimpleType; an anonymous inline type is
+// unreferenceable, so it is built here directly, once.
 //
 // It does NOT charge the facet-VALUE sub-clauses of cos-st-restricts (§3.16.6.2)
 // — facet applicability against the primitive, and the bound/enumeration
