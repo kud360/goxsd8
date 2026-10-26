@@ -196,7 +196,8 @@
 //
 // Shortening an anonymous type's path to only as much of it as uniqueness
 // requires. Cross-target type references import across the generated
-// packages.
+// packages, in place of each target declaring the types of a document its
+// Schema shares with another.
 //
 // Type narrowing in interfaces, the generated-code idiom:
 //

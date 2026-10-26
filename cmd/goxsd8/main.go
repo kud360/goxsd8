@@ -278,11 +278,17 @@ Usage (contract; subcommands land with their milestones):
       Each -schema needs the -out after it and each -out the -schema
       before it; gen takes no positional argument. Each -schema is
       compiled alone, as a parse argument is: its path is resolved
-      absolute before it is read. The comments of the generated file
-      name each document by its path relative to the -out directory,
-      climbing with ../ out of it. A rejected -schema prints its
-      first error on stderr as parse's does, the no-rule-to-cite
-      lines and the unresolved-directive lines included.
+      absolute before it is read. The package declares a type for
+      every top-level element declaration of the -schema's composed
+      set, an imported or included document's among them; no
+      package imports another, so two pairs whose schemas share a
+      document each declare its elements' types, and a set declaring
+      no top-level element gives a package with no type. The
+      comments of the generated file name each document by its path
+      relative to the -out directory, climbing with ../ out of it. A
+      rejected -schema prints its first error on stderr as parse's
+      does, the no-rule-to-cite lines and the unresolved-directive
+      lines included.
       Every pair is compiled, and every failure to compile reported,
       before anything is written; then either every pair is
       generated or none is, except that a fault while writing can
