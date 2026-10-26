@@ -37,6 +37,13 @@
     <xs:choice>
       <xs:element name="leaf" type="xs:string"/>
       <xs:element name="branch" type="tree"/>
+      <xs:element name="wrap">
+        <xs:complexType>
+          <xs:sequence>
+            <xs:element name="opt" type="tree" minOccurs="0"/>
+          </xs:sequence>
+        </xs:complexType>
+      </xs:element>
     </xs:choice>
   </xs:complexType>
   <xs:complexType name="ct">

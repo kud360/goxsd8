@@ -2,7 +2,7 @@
 
 package namedlocal
 
-// First is generated from element {urn:namedlocal:a}first declared at testdata/namedlocal.xsd:53:3.
+// First is generated from element {urn:namedlocal:a}first declared at testdata/namedlocal.xsd:60:3.
 type First struct {
 	X     PointX
 	Label string
@@ -13,10 +13,10 @@ type PointX struct {
 	V string
 }
 
-// Marker is generated from element {urn:namedlocal:a}marker declared at testdata/namedlocal.xsd:54:3.
+// Marker is generated from element {urn:namedlocal:a}marker declared at testdata/namedlocal.xsd:61:3.
 type Marker bool
 
-// Route is generated from element {urn:namedlocal:a}route declared at testdata/namedlocal.xsd:55:3.
+// Route is generated from element {urn:namedlocal:a}route declared at testdata/namedlocal.xsd:62:3.
 type Route struct {
 	From  Point
 	To    *Point
@@ -60,14 +60,14 @@ type Marker2 struct {
 // Nothing is generated from complex type {urn:namedlocal:a}nothing declared at testdata/namedlocal.xsd:28:3.
 type Nothing struct{}
 
-// Area is generated from element {urn:namedlocal:a}area declared at testdata/namedlocal.xsd:68:3.
+// Area is generated from element {urn:namedlocal:a}area declared at testdata/namedlocal.xsd:75:3.
 type Area struct {
 	Corner  Point
 	Size    string
 	Corner2 Point
 }
 
-// Forest is generated from element {urn:namedlocal:a}forest declared at testdata/namedlocal.xsd:77:3.
+// Forest is generated from element {urn:namedlocal:a}forest declared at testdata/namedlocal.xsd:84:3.
 type Forest struct {
 	Root Node
 	Top  Tree
@@ -99,18 +99,30 @@ type TreeBranch struct {
 
 func (TreeBranch) isTree() {}
 
-// Pair is generated from element {urn:namedlocal:a}pair declared at testdata/namedlocal.xsd:85:3.
+// TreeWrap is generated from element wrap declared at testdata/namedlocal.xsd:40:7.
+type TreeWrap struct {
+	Wrap TreeWrap2
+}
+
+func (TreeWrap) isTree() {}
+
+// TreeWrap2 is generated from element wrap declared at testdata/namedlocal.xsd:40:7.
+type TreeWrap2 struct {
+	Opt Tree
+}
+
+// Pair is generated from element {urn:namedlocal:a}pair declared at testdata/namedlocal.xsd:92:3.
 type Pair struct {
 	Here  Ct
 	There Ct2
 }
 
-// Ct is generated from complex type {urn:namedlocal:a}ct declared at testdata/namedlocal.xsd:42:3.
+// Ct is generated from complex type {urn:namedlocal:a}ct declared at testdata/namedlocal.xsd:49:3.
 type Ct struct {
 	X CtX
 }
 
-// CtX is generated from element x declared at testdata/namedlocal.xsd:44:7.
+// CtX is generated from element x declared at testdata/namedlocal.xsd:51:7.
 type CtX struct {
 	Y string
 }
@@ -125,10 +137,10 @@ type CtX2 struct {
 	Z bool
 }
 
-// Ct3 is generated from element {urn:namedlocal:a}ct declared at testdata/namedlocal.xsd:93:3.
+// Ct3 is generated from element {urn:namedlocal:a}ct declared at testdata/namedlocal.xsd:100:3.
 type Ct3 string
 
-// Last is generated from element {urn:namedlocal:a}last declared at testdata/namedlocal.xsd:94:3.
+// Last is generated from element {urn:namedlocal:a}last declared at testdata/namedlocal.xsd:101:3.
 type Last struct {
 	X     PointX
 	Label string
