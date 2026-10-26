@@ -21,6 +21,9 @@ var (
 	booleanPrimitive = xsd.QName{Space: xsd.XMLSchemaNS, Local: "boolean"}
 	floatPrimitive   = xsd.QName{Space: xsd.XMLSchemaNS, Local: "float"}
 	doublePrimitive  = xsd.QName{Space: xsd.XMLSchemaNS, Local: "double"}
+	decimalPrimitive = xsd.QName{Space: xsd.XMLSchemaNS, Local: "decimal"}
+
+	integerBuiltin = xsd.QName{Space: xsd.XMLSchemaNS, Local: "integer"}
 
 	longBuiltin          = xsd.QName{Space: xsd.XMLSchemaNS, Local: "long"}
 	intBuiltin           = xsd.QName{Space: xsd.XMLSchemaNS, Local: "int"}
@@ -62,6 +65,10 @@ type emitter struct {
 	// measured hot path: without it a schema whose named types each reach the
 	// next twice costs double per level (#3037).
 	acyclic map[xsd.QName]struct{}
+	// usesBig records that goType produced a math/big type for some field or
+	// named type, so that emit imports math/big; any decline aborts emit, so a
+	// set flag means an emitted declaration names the package.
+	usesBig bool
 }
 
 // emittedType is the Go type emitted for one complex type definition: its
@@ -120,6 +127,9 @@ func emit(schema *xsd.Schema, pkg, base string) ([]byte, error) {
 	}
 	var b bytes.Buffer
 	fmt.Fprintf(&b, "%s\n\npackage %s\n", generatedHeader, pkg)
+	if e.usesBig {
+		b.WriteString("\nimport \"math/big\"\n")
+	}
 	for _, d := range e.decls {
 		b.WriteString("\n")
 		b.WriteString(d)
@@ -185,12 +195,12 @@ func headerLoc(base string, loc xsderr.Loc) string {
 }
 
 // topLevel emits the type of one top-level element declaration: a named type
-// over a builtin for an atomic simple {type definition}, over a slice of one
-// for a list, a struct or sealed interface for an accepted complex one, named
-// or anonymous. That type is named from the element, and a local element of
-// the same named type never shares it (nestedType); the types nested in it are
-// named from the type when it is named, and shared with that type's every
-// other use, and from the element when it is anonymous.
+// over a Go builtin or math/big type for an atomic simple {type definition},
+// over a slice of one for a list, a struct or sealed interface for an accepted
+// complex one, named or anonymous. That type is named from the element, and a
+// local element of the same named type never shares it (nestedType); the types
+// nested in it are named from the type when it is named, and shared with that
+// type's every other use, and from the element when it is anonymous.
 func (e *emitter) topLevel(decl xsd.ElementDeclaration) error {
 	td, err := e.declaredType(decl)
 	if err != nil {
@@ -198,12 +208,12 @@ func (e *emitter) topLevel(decl xsd.ElementDeclaration) error {
 	}
 	switch t := td.(type) {
 	case *xsd.SimpleType:
-		builtin, err := e.builtinType("element "+decl.Name().String(), decl.Loc(), t)
+		underlying, err := e.simpleGoType("element "+decl.Name().String(), decl.Loc(), t)
 		if err != nil {
 			return err
 		}
 		name := e.types.claim(decl.Name().Local)
-		e.decls = append(e.decls, header(name, e.elementFrom(decl))+fmt.Sprintf("type %s %s\n", name, builtin))
+		e.decls = append(e.decls, header(name, e.elementFrom(decl))+fmt.Sprintf("type %s %s\n", name, underlying))
 		return nil
 	case xsd.ComplexType:
 		nested := scope{path: []xsd.QName{decl.Name()}}
@@ -252,23 +262,25 @@ func (e *emitter) declaredType(decl xsd.ElementDeclaration) (xsd.TypeDefinition,
 	return td, nil
 }
 
-// builtinType is the Go type a simple-typed element's or attribute's field, or
-// an element's named type, is declared over, chosen by the package doc's "#
-// Coverage" (goType). subject names the declaration the type is read from, and
-// loc, its Loc, is a decline's.
-func (e *emitter) builtinType(subject string, loc xsderr.Loc, t *xsd.SimpleType) (string, error) {
+// simpleGoType is the Go builtin or math/big type, or the slice of one, that a
+// simple-typed element's or attribute's field, or an element's named type, is
+// declared over, chosen by the package doc's "# Coverage" (goType). subject
+// names the declaration the type is read from, and loc, its Loc, is a
+// decline's.
+func (e *emitter) simpleGoType(subject string, loc xsderr.Loc, t *xsd.SimpleType) (string, error) {
 	return e.goType(subject, fmt.Sprintf("%s with {type definition} %s", subject, typeName(t)), loc, t)
 }
 
 // goType is the Go type "# Coverage" maps the simple type t to: for an atomic
-// t, a Go builtin chosen through boundedInteger and then t's {primitive type
-// definition} (Datatypes §4.1.1); for a list (Datatypes §2.4.1.2, a finite
-// sequence of its item type's values), a slice of the type its {item type
-// definition} (§3.16.1) maps to, read through [xsd.SimpleType.Item], which
-// takes a restriction's item from its base (§3.16.2.3), never by walking t to
-// a builtin. typed names t in a decline, and a list's item is named in it
-// after the list, so an anonymous item still has a named context. subject and
-// loc are builtinType's.
+// t, a Go builtin or math/big type chosen through integerType and then t's
+// {primitive type definition} (Datatypes §4.1.1), setting e.usesBig for a
+// math/big one; for a list (Datatypes §2.4.1.2, a finite sequence of its item
+// type's values), a slice of the type its {item type definition} (§3.16.1)
+// maps to, read through [xsd.SimpleType.Item], which takes a restriction's
+// item from its base (§3.16.2.3), never by walking t to a builtin. typed
+// names t in a decline, and a list's item is named in it after the list, so
+// an anonymous item still has a named context. subject and loc are
+// simpleGoType's.
 func (e *emitter) goType(subject, typed string, loc xsderr.Loc, t *xsd.SimpleType) (string, error) {
 	if t.IsSpecial() {
 		return "", decline(loc, constructSpecialType, typed)
@@ -294,7 +306,7 @@ func (e *emitter) goType(subject, typed string, loc xsderr.Loc, t *xsd.SimpleTyp
 	default:
 		return "", decline(loc, constructAbsentVariety, typed)
 	}
-	integer, err := e.boundedInteger(t)
+	integer, err := e.integerType(t)
 	if err != nil {
 		return "", fmt.Errorf("%s at %s: %w", subject, loc, err)
 	}
@@ -317,18 +329,26 @@ func (e *emitter) goType(subject, typed string, loc xsderr.Loc, t *xsd.SimpleTyp
 		return "float32", nil
 	case doublePrimitive: // Datatypes §3.3.5.1, as "# Coverage" states
 		return "float64", nil
+	case decimalPrimitive: // Datatypes §3.3.3, as "# Coverage" states
+		e.usesBig = true
+		return "big.Rat", nil
 	}
 	return "", decline(loc, constructUncoveredPrimitive, typed, primitive.Name())
 }
 
-// boundedInteger is the Go integer "# Coverage" maps t to through the eight
-// bounded builtin integer types (Datatypes §3.4.16–§3.4.19, §3.4.21–§3.4.24),
-// walking t's {base type definition} chain (Structures §3.16.1) from t itself,
-// or "" when the walk ends at xs:anySimpleType's absent base without meeting
-// one. Each Go type's range equals its XSD type's value space.
-func (e *emitter) boundedInteger(t *xsd.SimpleType) (string, error) {
+// integerType is the Go type "# Coverage" maps t to through the eight bounded
+// builtin integer types (Datatypes §3.4.16–§3.4.19, §3.4.21–§3.4.24) and
+// xs:integer (§3.4.13), walking t's {base type definition} chain (Structures
+// §3.16.1) from t itself and stopping at the first of the nine it meets, or ""
+// when the walk ends at xs:anySimpleType's absent base without meeting one.
+// Every bounded type lies below xs:integer on its chain, so the nearest
+// bounded type wins over it. Returning big.Int sets e.usesBig.
+func (e *emitter) integerType(t *xsd.SimpleType) (string, error) {
 	for step := t; step != nil; {
 		switch step.Name() {
+		case integerBuiltin:
+			e.usesBig = true
+			return "big.Int", nil
 		case longBuiltin:
 			return "int64", nil
 		case intBuiltin:
@@ -568,7 +588,7 @@ func (e *emitter) field(nested scope, chain []xsd.QName, subject string, loc xsd
 	var typ emittedType
 	switch ft := td.(type) {
 	case *xsd.SimpleType:
-		typ.name, err = e.builtinType("element "+decl.Name().String(), decl.Loc(), ft)
+		typ.name, err = e.simpleGoType("element "+decl.Name().String(), decl.Loc(), ft)
 	case xsd.ComplexType:
 		typ, err = e.nestedType(nested, chain, p.Occurs() == exactlyOnce, decl, ft)
 	default:
@@ -616,7 +636,7 @@ func (e *emitter) attributeField(subject string, loc xsderr.Loc, u xsd.Attribute
 	if !ok {
 		return fieldSpec{}, fmt.Errorf("%s at %s: unexpected type definition %T", attr, decl.Loc(), td)
 	}
-	goType, err := e.builtinType(attr, decl.Loc(), st)
+	goType, err := e.simpleGoType(attr, decl.Loc(), st)
 	if err != nil {
 		return fieldSpec{}, err
 	}

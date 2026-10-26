@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"flag"
 	"go/ast"
+	"go/importer"
 	"go/parser"
 	"go/token"
 	"go/types"
@@ -19,7 +20,7 @@ var update = flag.Bool("update", false, "rewrite codegen/testdata/*.golden from 
 // TestGenerateGolden pins Generate's output for each fixture. The fixtures are
 // parsed by a relative location, so the Loc in every header is portable.
 func TestGenerateGolden(t *testing.T) {
-	for _, name := range []string{"flat", "nested", "collision", "named", "expanded", "symbolspaces", "choice", "attributes", "integers", "identity", "empty", "lists", "namedlocal", "floats"} {
+	for _, name := range []string{"flat", "nested", "collision", "named", "expanded", "symbolspaces", "choice", "attributes", "integers", "identity", "empty", "lists", "namedlocal", "floats", "decimals"} {
 		t.Run(name, func(t *testing.T) {
 			schema, err := xsdparser.Parse("testdata/" + name + ".xsd")
 			if err != nil {
@@ -61,8 +62,8 @@ func generateOne(t *testing.T, target Target) []byte {
 	return src
 }
 
-// typeCheck fails unless src is a package that compiles. The emitted package
-// imports nothing, so no importer is configured: an import would fail here.
+// typeCheck fails unless src is a package that compiles, resolving its imports
+// through the default importer; the emitted package imports math/big at most.
 func typeCheck(t *testing.T, src []byte) {
 	t.Helper()
 	fset := token.NewFileSet()
@@ -70,7 +71,7 @@ func typeCheck(t *testing.T, src []byte) {
 	if err != nil {
 		t.Fatalf("parsing the emitted source: %v", err)
 	}
-	if _, err := new(types.Config).Check(file.Name.Name, fset, []*ast.File{file}, nil); err != nil {
+	if _, err := (&types.Config{Importer: importer.Default()}).Check(file.Name.Name, fset, []*ast.File{file}, nil); err != nil {
 		t.Fatalf("type-checking the emitted source: %v", err)
 	}
 }
