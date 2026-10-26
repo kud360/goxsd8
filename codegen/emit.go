@@ -35,6 +35,84 @@ var (
 	unsignedByteBuiltin  = xsd.QName{Space: xsd.XMLSchemaNS, Local: "unsignedByte"}
 )
 
+// The math/big types "# Coverage" maps to; a field or named type of either
+// makes the generated file import math/big (emitter.usesBig).
+const (
+	bigInt = "big.Int"
+	bigRat = "big.Rat"
+)
+
+// datatypeStruct is the struct "# Coverage" maps one date, time or duration
+// datatype to (Datatypes §3.3.6–§3.3.14, §3.4.26–§3.4.28): one field per
+// property its values carry, in the order of the seven-property model
+// (§D.2.1) or of duration's two properties (§3.3.6.1). doc is the header's
+// line after its first, "" for none.
+type datatypeStruct struct {
+	datatype xsd.QName
+	doc      string
+	fields   []datatypeField
+}
+
+// datatypeField is one field of a datatypeStruct: its Go name, which is its
+// property's, and its Go type.
+type datatypeField struct {
+	name, goType string
+}
+
+// The header lines the datatype structs share.
+const (
+	optionalOffsetDoc = "TimezoneOffset is in minutes from UTC, nil when absent."
+	requiredOffsetDoc = "TimezoneOffset is in minutes from UTC."
+)
+
+// The fields the datatype structs share: uint8 is the narrowest Go integer
+// holding month 1–12, day 1–31, hour 0–23 and minute 0–59, int16 the narrowest
+// holding a timezoneOffset of −840..840 (§D.2.1), and year, second, months and
+// seconds are unbounded (§D.2.1, §3.3.6.1).
+var (
+	yearField           = datatypeField{"Year", bigInt}
+	monthField          = datatypeField{"Month", "uint8"}
+	dayField            = datatypeField{"Day", "uint8"}
+	hourField           = datatypeField{"Hour", "uint8"}
+	minuteField         = datatypeField{"Minute", "uint8"}
+	secondField         = datatypeField{"Second", bigRat}
+	optionalOffsetField = datatypeField{"TimezoneOffset", "*int16"}
+	requiredOffsetField = datatypeField{"TimezoneOffset", "int16"}
+	monthsField         = datatypeField{"Months", bigInt}
+	secondsField        = datatypeField{"Seconds", bigRat}
+)
+
+// The twelve datatype structs: one per date, time or duration primitive, and
+// one per builtin derived from one whose values carry fewer properties or a
+// required one (§3.4.26 yearMonthDuration, §3.4.27 dayTimeDuration, §3.4.28
+// dateTimeStamp).
+var (
+	dateTimeStruct = datatypeStruct{xsd.QName{Space: xsd.XMLSchemaNS, Local: "dateTime"}, optionalOffsetDoc,
+		[]datatypeField{yearField, monthField, dayField, hourField, minuteField, secondField, optionalOffsetField}}
+	dateTimeStampStruct = datatypeStruct{xsd.QName{Space: xsd.XMLSchemaNS, Local: "dateTimeStamp"}, requiredOffsetDoc,
+		[]datatypeField{yearField, monthField, dayField, hourField, minuteField, secondField, requiredOffsetField}}
+	timeStruct = datatypeStruct{xsd.QName{Space: xsd.XMLSchemaNS, Local: "time"}, optionalOffsetDoc,
+		[]datatypeField{hourField, minuteField, secondField, optionalOffsetField}}
+	dateStruct = datatypeStruct{xsd.QName{Space: xsd.XMLSchemaNS, Local: "date"}, optionalOffsetDoc,
+		[]datatypeField{yearField, monthField, dayField, optionalOffsetField}}
+	gYearMonthStruct = datatypeStruct{xsd.QName{Space: xsd.XMLSchemaNS, Local: "gYearMonth"}, optionalOffsetDoc,
+		[]datatypeField{yearField, monthField, optionalOffsetField}}
+	gYearStruct = datatypeStruct{xsd.QName{Space: xsd.XMLSchemaNS, Local: "gYear"}, optionalOffsetDoc,
+		[]datatypeField{yearField, optionalOffsetField}}
+	gMonthDayStruct = datatypeStruct{xsd.QName{Space: xsd.XMLSchemaNS, Local: "gMonthDay"}, optionalOffsetDoc,
+		[]datatypeField{monthField, dayField, optionalOffsetField}}
+	gDayStruct = datatypeStruct{xsd.QName{Space: xsd.XMLSchemaNS, Local: "gDay"}, optionalOffsetDoc,
+		[]datatypeField{dayField, optionalOffsetField}}
+	gMonthStruct = datatypeStruct{xsd.QName{Space: xsd.XMLSchemaNS, Local: "gMonth"}, optionalOffsetDoc,
+		[]datatypeField{monthField, optionalOffsetField}}
+	durationStruct = datatypeStruct{xsd.QName{Space: xsd.XMLSchemaNS, Local: "duration"}, "Months and Seconds share one sign.",
+		[]datatypeField{monthsField, secondsField}}
+	dayTimeDurationStruct = datatypeStruct{xsd.QName{Space: xsd.XMLSchemaNS, Local: "dayTimeDuration"}, "",
+		[]datatypeField{secondsField}}
+	yearMonthDurationStruct = datatypeStruct{xsd.QName{Space: xsd.XMLSchemaNS, Local: "yearMonthDuration"}, "",
+		[]datatypeField{monthsField}}
+)
+
 // emitter builds one target's source. decls holds each emitted type
 // declaration in emission order: a top-level element's type, then the types
 // its particles reach that no earlier element emitted — anonymous complex
@@ -65,10 +143,17 @@ type emitter struct {
 	// measured hot path: without it a schema whose named types each reach the
 	// next twice costs double per level (#3037).
 	acyclic map[xsd.QName]struct{}
-	// usesBig records that goType produced a math/big type for some field or
-	// named type, so that emit imports math/big; any decline aborts emit, so a
-	// set flag means an emitted declaration names the package.
+	// usesBig records that goType produced a math/big type, or emitted a
+	// datatype struct with a math/big field, so that emit imports math/big;
+	// any decline aborts emit, so a set flag means an emitted declaration
+	// names the package.
 	usesBig bool
+	// datatypes holds the name claimed for each datatype struct emitted, so
+	// that each is emitted once per package; it is a lookup index only and
+	// never iterated (STYLE D2). datatypeDecls holds those structs'
+	// declarations in first-use order, emitted after decls.
+	datatypes     map[xsd.QName]string
+	datatypeDecls []string
 }
 
 // emittedType is the Go type emitted for one complex type definition: its
@@ -119,7 +204,7 @@ func (s scope) key() nestedKey {
 // first decline in the order Generate's doc states. base is the absolute
 // directory the source is written into.
 func emit(schema *xsd.Schema, pkg, base string) ([]byte, error) {
-	e := &emitter{schema: schema, types: newNamer(), base: base, emitted: map[nestedKey]emittedType{}, acyclic: map[xsd.QName]struct{}{}}
+	e := &emitter{schema: schema, types: newNamer(), base: base, emitted: map[nestedKey]emittedType{}, acyclic: map[xsd.QName]struct{}{}, datatypes: map[xsd.QName]string{}}
 	for _, decl := range schema.Elements() {
 		if err := e.topLevel(decl); err != nil {
 			return nil, err
@@ -130,7 +215,7 @@ func emit(schema *xsd.Schema, pkg, base string) ([]byte, error) {
 	if e.usesBig {
 		b.WriteString("\nimport \"math/big\"\n")
 	}
-	for _, d := range e.decls {
+	for _, d := range slices.Concat(e.decls, e.datatypeDecls) {
 		b.WriteString("\n")
 		b.WriteString(d)
 	}
@@ -195,7 +280,7 @@ func headerLoc(base string, loc xsderr.Loc) string {
 }
 
 // topLevel emits the type of one top-level element declaration: a named type
-// over a Go builtin or math/big type for an atomic simple {type definition},
+// over an atomic Go type ("# Coverage") for an atomic simple {type definition},
 // over a slice of one for a list, a struct or sealed interface for an accepted
 // complex one, named or anonymous. That type is named from the element, and a
 // local element of the same named type never shares it (nestedType); the types
@@ -262,7 +347,7 @@ func (e *emitter) declaredType(decl xsd.ElementDeclaration) (xsd.TypeDefinition,
 	return td, nil
 }
 
-// simpleGoType is the Go builtin or math/big type, or the slice of one, that a
+// simpleGoType is the atomic Go type, or the slice of one, that a
 // simple-typed element's or attribute's field, or an element's named type, is
 // declared over, chosen by the package doc's "# Coverage" (goType). subject
 // names the declaration the type is read from, and loc, its Loc, is a
@@ -272,15 +357,15 @@ func (e *emitter) simpleGoType(subject string, loc xsderr.Loc, t *xsd.SimpleType
 }
 
 // goType is the Go type "# Coverage" maps the simple type t to: for an atomic
-// t, a Go builtin or math/big type chosen through integerType and then t's
-// {primitive type definition} (Datatypes §4.1.1), setting e.usesBig for a
-// math/big one; for a list (Datatypes §2.4.1.2, a finite sequence of its item
-// type's values), a slice of the type its {item type definition} (§3.16.1)
-// maps to, read through [xsd.SimpleType.Item], which takes a restriction's
-// item from its base (§3.16.2.3), never by walking t to a builtin. typed
-// names t in a decline, and a list's item is named in it after the list, so
-// an anonymous item still has a named context. subject and loc are
-// simpleGoType's.
+// t, its atomic Go type, chosen through builtinType and then t's {primitive
+// type definition} (Datatypes §4.1.1), setting e.usesBig for a math/big type
+// or a datatype struct holding one; for a list (Datatypes §2.4.1.2, a finite
+// sequence of its item type's values), a slice of the type its {item type
+// definition} (§3.16.1) maps to, read through [xsd.SimpleType.Item], which
+// takes a restriction's item from its base (§3.16.2.3), never by walking t to
+// a builtin. typed names t in a decline, and a list's item is named in it
+// after the list, so an anonymous item still has a named context. subject and
+// loc are simpleGoType's.
 func (e *emitter) goType(subject, typed string, loc xsderr.Loc, t *xsd.SimpleType) (string, error) {
 	if t.IsSpecial() {
 		return "", decline(loc, constructSpecialType, typed)
@@ -306,12 +391,12 @@ func (e *emitter) goType(subject, typed string, loc xsderr.Loc, t *xsd.SimpleTyp
 	default:
 		return "", decline(loc, constructAbsentVariety, typed)
 	}
-	integer, err := e.integerType(t)
+	mapped, err := e.builtinType(t)
 	if err != nil {
 		return "", fmt.Errorf("%s at %s: %w", subject, loc, err)
 	}
-	if integer != "" {
-		return integer, nil
+	if mapped != "" {
+		return mapped, nil
 	}
 	primitive, err := t.Primitive(e.schema)
 	if err != nil {
@@ -330,25 +415,83 @@ func (e *emitter) goType(subject, typed string, loc xsderr.Loc, t *xsd.SimpleTyp
 	case doublePrimitive: // Datatypes §3.3.5.1, as "# Coverage" states
 		return "float64", nil
 	case decimalPrimitive: // Datatypes §3.3.3, as "# Coverage" states
-		e.usesBig = true
-		return "big.Rat", nil
+		return e.useBig(bigRat), nil
+	case dateTimeStruct.datatype: // Datatypes §3.3.7
+		return e.datatypeType(dateTimeStruct), nil
+	case timeStruct.datatype: // Datatypes §3.3.8
+		return e.datatypeType(timeStruct), nil
+	case dateStruct.datatype: // Datatypes §3.3.9
+		return e.datatypeType(dateStruct), nil
+	case gYearMonthStruct.datatype: // Datatypes §3.3.10
+		return e.datatypeType(gYearMonthStruct), nil
+	case gYearStruct.datatype: // Datatypes §3.3.11
+		return e.datatypeType(gYearStruct), nil
+	case gMonthDayStruct.datatype: // Datatypes §3.3.12
+		return e.datatypeType(gMonthDayStruct), nil
+	case gDayStruct.datatype: // Datatypes §3.3.13
+		return e.datatypeType(gDayStruct), nil
+	case gMonthStruct.datatype: // Datatypes §3.3.14
+		return e.datatypeType(gMonthStruct), nil
+	case durationStruct.datatype: // Datatypes §3.3.6
+		return e.datatypeType(durationStruct), nil
 	}
 	return "", decline(loc, constructUncoveredPrimitive, typed, primitive.Name())
 }
 
-// integerType is the Go type "# Coverage" maps t to through the eight bounded
-// builtin integer types (Datatypes §3.4.16–§3.4.19, §3.4.21–§3.4.24) and
-// xs:integer (§3.4.13), walking t's {base type definition} chain (Structures
-// §3.16.1) from t itself and stopping at the first of the nine it meets, or ""
-// when the walk ends at xs:anySimpleType's absent base without meeting one.
-// Every bounded type lies below xs:integer on its chain, so the nearest
-// bounded type wins over it. Returning big.Int sets e.usesBig.
-func (e *emitter) integerType(t *xsd.SimpleType) (string, error) {
+// useBig returns the math/big type typ, setting e.usesBig.
+func (e *emitter) useBig(typ string) string {
+	e.usesBig = true
+	return typ
+}
+
+// datatypeType returns the name of the struct ds, emitting it when no earlier
+// declaration did: its name is claimed in e.types at that first use, by the
+// package doc's "Naming", and its declaration joins e.datatypeDecls. Emitting
+// a struct with a math/big field sets e.usesBig.
+func (e *emitter) datatypeType(ds datatypeStruct) string {
+	if name, ok := e.datatypes[ds.datatype]; ok {
+		return name
+	}
+	name := e.types.claim(ds.datatype.Local)
+	e.datatypes[ds.datatype] = name
+	var b strings.Builder
+	fmt.Fprintf(&b, "// %s is generated from datatype %s.\n", name, ds.datatype)
+	if ds.doc != "" {
+		fmt.Fprintf(&b, "// %s\n", ds.doc)
+	}
+	fmt.Fprintf(&b, "type %s struct {\n", name)
+	for _, f := range ds.fields {
+		if f.goType == bigInt || f.goType == bigRat {
+			e.usesBig = true
+		}
+		fmt.Fprintf(&b, "\t%s %s\n", f.name, f.goType)
+	}
+	b.WriteString("}\n")
+	e.datatypeDecls = append(e.datatypeDecls, b.String())
+	return name
+}
+
+// builtinType is the Go type "# Coverage" maps t to through the eight bounded
+// builtin integer types (Datatypes §3.4.16–§3.4.19, §3.4.21–§3.4.24),
+// xs:integer (§3.4.13), and the three builtins derived from a date, time or
+// duration primitive that get a datatype struct of their own (§3.4.26–§3.4.28),
+// walking t's {base type definition} chain (Structures §3.16.1) from t itself
+// and stopping at the first of the twelve it meets, or "" when the walk ends
+// at xs:anySimpleType's absent base without meeting one. Every bounded type
+// lies below xs:integer on its chain, so the nearest bounded type wins over
+// it; no chain meets both an integer builtin and a temporal one. Returning
+// big.Int, or a datatype struct with a math/big field, sets e.usesBig.
+func (e *emitter) builtinType(t *xsd.SimpleType) (string, error) {
 	for step := t; step != nil; {
 		switch step.Name() {
 		case integerBuiltin:
-			e.usesBig = true
-			return "big.Int", nil
+			return e.useBig(bigInt), nil
+		case dateTimeStampStruct.datatype: // Datatypes §3.4.28
+			return e.datatypeType(dateTimeStampStruct), nil
+		case dayTimeDurationStruct.datatype: // Datatypes §3.4.27
+			return e.datatypeType(dayTimeDurationStruct), nil
+		case yearMonthDurationStruct.datatype: // Datatypes §3.4.26
+			return e.datatypeType(yearMonthDurationStruct), nil
 		case longBuiltin:
 			return "int64", nil
 		case intBuiltin:

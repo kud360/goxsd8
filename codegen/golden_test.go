@@ -20,7 +20,7 @@ var update = flag.Bool("update", false, "rewrite codegen/testdata/*.golden from 
 // TestGenerateGolden pins Generate's output for each fixture. The fixtures are
 // parsed by a relative location, so the Loc in every header is portable.
 func TestGenerateGolden(t *testing.T) {
-	for _, name := range []string{"flat", "nested", "collision", "named", "expanded", "symbolspaces", "choice", "attributes", "integers", "identity", "empty", "lists", "namedlocal", "floats", "decimals"} {
+	for _, name := range []string{"flat", "nested", "collision", "named", "expanded", "symbolspaces", "choice", "attributes", "integers", "identity", "empty", "lists", "namedlocal", "floats", "decimals", "temporal"} {
 		t.Run(name, func(t *testing.T) {
 			schema, err := xsdparser.Parse("testdata/" + name + ".xsd")
 			if err != nil {
@@ -76,11 +76,17 @@ func typeCheck(t *testing.T, src []byte) {
 	}
 }
 
-// TestGenerateImportsBig pins the import of math/big for each Go type that
-// brings it: a schema whose one field type is big.Int, or big.Rat, emits a
-// package that type-checks only when that type alone sets the import.
+// TestGenerateImportsBig pins the math/big import for each site that sets it:
+// a schema whose one element has the row's type, so that the row's Go type
+// alone decides the import, emits a package that type-checks only when the
+// import is emitted exactly when a declaration names math/big, since a missing
+// and an unused import are both type errors. big.Int, big.Rat and every
+// datatype struct but GMonthDay, GDay and GMonth bring the import; those three
+// rows pin its absence.
 func TestGenerateImportsBig(t *testing.T) {
-	for _, typ := range []string{"xs:integer", "xs:decimal"} {
+	for _, typ := range []string{"xs:integer", "xs:decimal",
+		"xs:dateTime", "xs:dateTimeStamp", "xs:time", "xs:date", "xs:gYearMonth", "xs:gYear",
+		"xs:gMonthDay", "xs:gDay", "xs:gMonth", "xs:duration", "xs:dayTimeDuration", "xs:yearMonthDuration"} {
 		t.Run(typ, func(t *testing.T) {
 			schema := parseString(t, `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"><xs:element name="e" type="`+typ+`"/></xs:schema>`)
 			typeCheck(t, generateOne(t, Target{Schema: schema, Dir: filepath.Join(t.TempDir(), "out"), Package: "p"}))
