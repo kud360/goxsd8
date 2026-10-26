@@ -1385,8 +1385,10 @@ func mergedPlainAndRedefine(original, redefining string) map[string]string {
 // lib.xsd twice and, for <group>, the pairing handed
 // xsd.SchemaBuilder.AddRedefiningModelGroup was (original, original), so
 // src-redefine (§4.2.4) clause 6.2.2 would have decided V(R) ⊆ V(R) (#1361).
-// <attributeGroup> is the control: buildAttributeGroup memoises nothing
-// (redefinedAttributeGroupRestricted), and it named both positions throughout.
+// The <simpleType> memo answered the same way until it too was keyed by
+// declaration (#3008). <attributeGroup> is the control: buildAttributeGroup
+// memoises nothing (redefinedAttributeGroupRestricted), and it named both
+// positions throughout.
 //
 // Each position is pinned as ONE contiguous substring, the offending one as the
 // message's own prefix through the property name (#1048), so a message that
@@ -1434,6 +1436,13 @@ func TestParseRedefineMergedWithPlainIncludeRegistersTheRedefinition(t *testing.
 				`<xs:restriction base="tns:ct"><xs:sequence>` +
 				`<xs:element name="a" type="xs:string"/></xs:sequence>` +
 				`</xs:restriction></xs:complexContent></xs:complexType>`,
+		},
+		{
+			name:     "simpleType",
+			property: "{type definitions}",
+			original: `<xs:simpleType name="st"><xs:restriction base="xs:string"/></xs:simpleType>`,
+			redefine: `<xs:simpleType name="st"><xs:restriction base="tns:st">` +
+				`<xs:maxLength value="3"/></xs:restriction></xs:simpleType>`,
 		},
 		{
 			name:     "attributeGroup",
@@ -1526,9 +1535,8 @@ func TestParseRedefineSameDocumentTwiceDiffers(t *testing.T) {
 //
 // Every hop of that chain is a clause 1.1 original, built by a direct call to
 // produceComplexType or constructSimpleType rather than through a named build
-// (buildComplexType's memo is keyed by the declaration, which contributes the
-// ordinary named component too, and the original's ·absent· {name} gives
-// buildSimpleType's by-name memo nothing to hold), so buildComplexType's
+// (buildComplexType's and buildSimpleType's memos are keyed by the declaration,
+// which contributes the ordinary named component too), so buildComplexType's
 // on-stack sentinel never sees a hop; enterOriginal is what bounds it, and the
 // verdict is the acyclicity rule for the kind — the same rule the finalize-side
 // walks charge. Without the bound the walk recurses until the stack dies, which

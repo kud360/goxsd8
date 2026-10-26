@@ -18,7 +18,7 @@ var anyTypeName = xsd.QName{Space: xsd.XMLSchemaNS, Local: "anyType"}
 // anySimpleTypeName is the expanded name of xs:anySimpleType: the default
 // {type definition} of a type=-less <attribute> (§3.2.2.1) and the fallback
 // {simple type definition} of §3.4.2.2 case 5. [builtin.Seed] always seeds it,
-// so symbols.built holds it before any document is produced.
+// so symbols.builtins holds it before any document is produced.
 var anySimpleTypeName = xsd.QName{Space: xsd.XMLSchemaNS, Local: "anySimpleType"}
 
 // qNameName, booleanName and anyURIName are the expanded names of the three
@@ -906,7 +906,7 @@ func repeatedFacetChild(restriction *Element, method xsd.DerivationMethod) *Elem
 // unseeded backend) is rejected downstream by xsd.NewComplexType as an absent
 // Required {simple type definition}.
 func (p *producer) simpleContentSimpleType(derivation *Element, method xsd.DerivationMethod, base xsd.TypeDefinition) (*xsd.SimpleType, error) {
-	anySimpleType := p.symbols.built[anySimpleTypeName]
+	anySimpleType := p.symbols.builtins[anySimpleTypeName]
 	if method == xsd.DerivationExtension {
 		return extendedSimpleType(base, anySimpleType), nil // cases 3, 4 and 5
 	}

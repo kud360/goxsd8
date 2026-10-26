@@ -569,6 +569,76 @@ func TestParseDuplicateAcrossDocuments(t *testing.T) {
 	}
 }
 
+// TestParseDuplicateTypeLocatesTheSecondDeclaration pins the two positions a
+// sch-props-correct (§3.17.6.1) clause 2 charge over {type definitions} carries
+// when one document declares a name twice: the charge is located at the SECOND
+// declaration and names the first one's position. Each position is pinned as one
+// contiguous substring, the offending one as the message's own prefix (#1048).
+//
+// A name-keyed simple-type memo handed the second <simpleType> the first one's
+// component, so both positions were the first declaration's, and for a builtin's
+// name the seeded builtin's, which has no location (#3008). The <complexType>
+// row is the control: its memo is keyed by declaration (#1361). The XSD-namespace
+// row pins only the offending position, since the first occurrence is the seeded
+// builtin.
+func TestParseDuplicateTypeLocatesTheSecondDeclaration(t *testing.T) {
+	for _, c := range []struct {
+		name, target, body, offending, first string
+	}{
+		{
+			name:   "simpleType",
+			target: "urn:t",
+			body: "\n  " + `<xs:simpleType name="foo"><xs:restriction base="xs:string"/></xs:simpleType>` +
+				"\n  " + `<xs:simpleType name="foo"><xs:restriction base="xs:string"/></xs:simpleType>`,
+			offending: "m.xsd:3:3: [sch-props-correct] schema {type definitions}",
+			first:     "{urn:t}foo (first declared at m.xsd:2:3)",
+		},
+		{
+			name:   "complexType",
+			target: "urn:t",
+			body: "\n  " + `<xs:complexType name="foo"/>` +
+				"\n  " + `<xs:complexType name="foo"/>`,
+			offending: "m.xsd:3:3: [sch-props-correct] schema {type definitions}",
+			first:     "{urn:t}foo (first declared at m.xsd:2:3)",
+		},
+		{
+			name:      "simpleType named for a builtin in the XSD namespace",
+			target:    xsdNS,
+			body:      "\n  " + `<xs:simpleType name="int"><xs:restriction base="xs:integer"/></xs:simpleType>`,
+			offending: "m.xsd:2:3: [sch-props-correct] schema {type definitions}",
+			first:     "{" + xsdNS + "}int (first declared at ",
+		},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			_, err := parseMap(t, "m.xsd", map[string]string{"m.xsd": wrap(c.target, c.body)})
+			mustRule(t, err, "sch-props-correct")
+			if !strings.HasPrefix(err.Error(), c.offending) {
+				t.Fatalf("error %q does not open %q: the charge is not located at the second declaration", err, c.offending)
+			}
+			if !strings.Contains(err.Error(), c.first) {
+				t.Fatalf("error %q does not contain %q", err, c.first)
+			}
+		})
+	}
+}
+
+// TestParseDuplicateSimpleTypeIsItselfConstructed pins that the second
+// <simpleType> of a repeated name is mapped in its own right: a facet value only
+// it gets wrong is charged at mapping time, at that declaration, ahead of the
+// sch-props-correct clause 2 collision finalize would charge. A name-keyed memo
+// handed it the first declaration's component and never read its children
+// (#3008).
+func TestParseDuplicateSimpleTypeIsItselfConstructed(t *testing.T) {
+	_, err := parseMap(t, "m.xsd", map[string]string{"m.xsd": wrap("urn:t", "\n  "+
+		`<xs:simpleType name="foo"><xs:restriction base="xs:string"/></xs:simpleType>`+"\n  "+
+		`<xs:simpleType name="foo"><xs:restriction base="xs:string">`+
+		`<xs:maxLength value="abc"/></xs:restriction></xs:simpleType>`)})
+	mustRule(t, err, "cvc-datatype-valid")
+	if !strings.HasPrefix(err.Error(), "m.xsd:3:") {
+		t.Fatalf("error %q is not located on the second declaration's line", err)
+	}
+}
+
 // TestParseIdentityConstraintRefAcrossDocuments exercises the ASSEMBLY-WIDE
 // identity-constraint pre-scan: a <key ref="…"> in the INCLUDING document, which
 // is produced first, resolves to a definition the INCLUDED document declares
