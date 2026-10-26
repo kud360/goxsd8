@@ -1,0 +1,47 @@
+<?xml version="1.0"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+           xmlns="urn:floats" targetNamespace="urn:floats"
+           elementFormDefault="qualified">
+  <xs:element name="ratio" type="xs:double"/>
+  <xs:element name="reading">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element name="float" type="xs:float"/>
+        <xs:element name="double" type="xs:double"/>
+        <xs:element name="probability" type="probability" minOccurs="0"/>
+        <xs:element name="weight" maxOccurs="unbounded">
+          <xs:simpleType>
+            <xs:restriction base="xs:float">
+              <xs:minExclusive value="0"/>
+            </xs:restriction>
+          </xs:simpleType>
+        </xs:element>
+        <xs:element name="samples" type="samples"/>
+      </xs:sequence>
+      <xs:attribute name="scale" type="xs:float" use="required"/>
+      <xs:attribute name="offset" type="xs:double"/>
+      <xs:attribute name="bounds">
+        <xs:simpleType>
+          <xs:list itemType="xs:float"/>
+        </xs:simpleType>
+      </xs:attribute>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="measure">
+    <xs:complexType>
+      <xs:choice>
+        <xs:element name="single" type="xs:float"/>
+        <xs:element name="dual" type="probability"/>
+      </xs:choice>
+    </xs:complexType>
+  </xs:element>
+  <xs:simpleType name="probability">
+    <xs:restriction base="xs:double">
+      <xs:minInclusive value="0"/>
+      <xs:maxInclusive value="1"/>
+    </xs:restriction>
+  </xs:simpleType>
+  <xs:simpleType name="samples">
+    <xs:list itemType="xs:double"/>
+  </xs:simpleType>
+</xs:schema>

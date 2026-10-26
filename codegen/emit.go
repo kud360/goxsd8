@@ -19,6 +19,8 @@ var (
 	stringPrimitive  = xsd.QName{Space: xsd.XMLSchemaNS, Local: "string"}
 	anyURIPrimitive  = xsd.QName{Space: xsd.XMLSchemaNS, Local: "anyURI"}
 	booleanPrimitive = xsd.QName{Space: xsd.XMLSchemaNS, Local: "boolean"}
+	floatPrimitive   = xsd.QName{Space: xsd.XMLSchemaNS, Local: "float"}
+	doublePrimitive  = xsd.QName{Space: xsd.XMLSchemaNS, Local: "double"}
 
 	longBuiltin          = xsd.QName{Space: xsd.XMLSchemaNS, Local: "long"}
 	intBuiltin           = xsd.QName{Space: xsd.XMLSchemaNS, Local: "int"}
@@ -261,6 +263,10 @@ func (e *emitter) goType(subject, typed string, loc xsderr.Loc, t *xsd.SimpleTyp
 		return "string", nil
 	case booleanPrimitive:
 		return "bool", nil
+	case floatPrimitive: // Datatypes §3.3.4.1, as "# Coverage" states
+		return "float32", nil
+	case doublePrimitive: // Datatypes §3.3.5.1, as "# Coverage" states
+		return "float64", nil
 	}
 	return "", decline(loc, constructUncoveredPrimitive, typed, primitive.Name())
 }
