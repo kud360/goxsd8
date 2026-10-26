@@ -201,7 +201,7 @@ func TestGenerateDeclines(t *testing.T) {
 		{"value cycle direct", `<xs:complexType name="c"><xs:sequence><xs:element name="x" type="c"/></xs:sequence></xs:complexType><xs:element name="e" type="c"/>`,
 			"local element x reaching complex type c again through elements that each occur exactly once at s.xsd:2:39", constructValueCycle},
 		{"value cycle mutual", `<xs:complexType name="c1"><xs:sequence><xs:element name="x" type="c2"/></xs:sequence></xs:complexType><xs:complexType name="c2"><xs:sequence><xs:element name="y" type="c1"/></xs:sequence></xs:complexType><xs:element name="e" type="c1"/>`,
-			"local element x reaching complex type c2 again through elements that each occur exactly once", constructValueCycle},
+			"local element y reaching complex type c1 again through elements that each occur exactly once", constructValueCycle},
 		{"value cycle through anonymous type", `<xs:complexType name="c"><xs:sequence><xs:element name="x"><xs:complexType><xs:sequence><xs:element name="y" type="c"/></xs:sequence></xs:complexType></xs:element></xs:sequence></xs:complexType><xs:element name="e" type="c"/>`,
 			"local element y reaching complex type c again through elements that each occur exactly once", constructValueCycle},
 		{"value cycle in choice branch", `<xs:complexType name="t1"><xs:sequence><xs:element name="b" type="t2"/></xs:sequence></xs:complexType><xs:complexType name="t2"><xs:sequence><xs:element name="c" type="t1"/></xs:sequence></xs:complexType><xs:element name="e"><xs:complexType><xs:choice><xs:element name="a" type="t1"/></xs:choice></xs:complexType></xs:element>`,
@@ -211,7 +211,11 @@ func TestGenerateDeclines(t *testing.T) {
 		// by the emitting walk, which never walks a stored type again, lets
 		// the cycle v, w through.
 		{"value cycle behind a pointer", `<xs:complexType name="x"><xs:sequence><xs:element name="p" type="z" minOccurs="0"/><xs:element name="v" type="z"/></xs:sequence></xs:complexType><xs:complexType name="z"><xs:sequence><xs:element name="w" type="x"/></xs:sequence></xs:complexType><xs:element name="e"><xs:complexType><xs:sequence><xs:element name="a" type="x"/></xs:sequence></xs:complexType></xs:element>`,
-			"local element w reaching complex type x again through elements that each occur exactly once", constructValueCycle},
+			"local element v reaching complex type z again through elements that each occur exactly once", constructValueCycle},
+		// The wildcard under p precedes the cycle v closes in particle order,
+		// so it is the decline returned.
+		{"value cycle after an earlier decline", `<xs:complexType name="c"><xs:sequence><xs:element name="p" minOccurs="0"><xs:complexType><xs:sequence><xs:any/></xs:sequence></xs:complexType></xs:element><xs:element name="v" type="c"/></xs:sequence></xs:complexType><xs:element name="e"><xs:complexType><xs:sequence><xs:element name="l" type="c"/></xs:sequence></xs:complexType></xs:element>`,
+			"a wildcard particle in complex type (anonymous) of element p", constructWildcard},
 		{"named complex local body", `<xs:complexType name="c"><xs:sequence><xs:any minOccurs="0"/></xs:sequence></xs:complexType><xs:element name="e"><xs:complexType><xs:sequence><xs:element name="l" type="c"/></xs:sequence></xs:complexType></xs:element>`,
 			"a wildcard particle in complex type c at s.xsd:2:1 ", constructWildcard},
 		{"local element property", `<xs:element name="e"><xs:complexType><xs:sequence><xs:element name="l" nillable="true" ` + str + `/></xs:sequence></xs:complexType></xs:element>`,
