@@ -59,8 +59,8 @@
 //     property values the model stores rather than converted to UTC
 //     (§D.2.1). It also holds struct values no value maps to, such as a Month
 //     of 13, a Day beyond its month's last, or Months and Seconds of
-//     opposite signs, and Go's == on it is neither its datatype's equality
-//     nor its order. The generated file imports math/big exactly when a
+//     opposite signs, and it represents neither its datatype's equality nor
+//     its order. The generated file imports math/big exactly when a
 //     declaration names it: a big.Int or big.Rat, or a datatype struct, all
 //     but GMonthDay, GDay and GMonth holding one.
 //   - A list type (Datatypes §2.4.1.2) gives a slice of the atomic Go type
@@ -178,17 +178,17 @@
 // type's header comment records the QName and the schema Loc of the
 // declaration it is named from: the element declaration, or the complex type
 // definition for a type named from one. A datatype struct's header records
-// its datatype's QName alone, a builtin having no schema document, and states
-// in a second line what a field's name does not: TimezoneOffset's unit, and
-// whether it may be absent; that duration's Months and Seconds share one sign.
-// A Loc whose URI filepath.IsAbs accepts renders relative to the target's Dir
-// made absolute against the working directory, slash-separated and climbing
-// with ".." out of Dir. A document outside the tree laid out alike, such as
-// one an absolute schemaLocation names, renders a climbing path that differs
-// with that tree's depth below the filesystem root. Any other URI renders as
-// is, a URL or a relative loader key alike, as does one with no path relative
-// to Dir, such as one on another Windows volume. Symbolic links are not
-// resolved.
+// its datatype's QName alone, a builtin having no schema document, then a
+// second line stating what its fields' names do not, when there is any:
+// TimezoneOffset's unit and whether it may be absent, or that duration's
+// Months and Seconds share one sign. A Loc whose URI filepath.IsAbs accepts
+// renders relative to the target's Dir made absolute against the working
+// directory, slash-separated and climbing with ".." out of Dir. A document
+// outside the tree laid out alike, such as one an absolute schemaLocation
+// names, renders a climbing path that differs with that tree's depth below
+// the filesystem root. Any other URI renders as is, a URL or a relative
+// loader key alike, as does one with no path relative to Dir, such as one on
+// another Windows volume. Symbolic links are not resolved.
 //
 // # Planned (M9 — not yet implemented)
 //
