@@ -239,7 +239,7 @@ func printAbsent(w io.Writer, root, reason string) error {
 
 // caveats are the limits on reading any figure the census prints.
 var caveats = []string{
-	"One decline per document: Generate reports the first construct it declines (#2976), so a document counts once, under its first decline.",
+	"One decline per document: the census counts the first decline in Generate's error, so a document counts once, under its first decline.",
 	"Documents, not cases: every .xsd is taken as a root, once, however many test cases name it and whether or not any case uses it as one.",
 	"The suite's schemas exercise the spec; they do not resemble an adopter's, so a count ranks a construct within this corpus only.",
 	"No count is a yield: lifting a construct exposes each of its documents' next decline, so its count bounds from above the documents lifting it alone makes generate.",
