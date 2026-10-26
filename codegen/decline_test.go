@@ -206,11 +206,11 @@ func TestGenerateDeclines(t *testing.T) {
 			"local element y reaching complex type c again through elements that each occur exactly once", constructValueCycle},
 		{"value cycle in choice branch", `<xs:complexType name="t1"><xs:sequence><xs:element name="b" type="t2"/></xs:sequence></xs:complexType><xs:complexType name="t2"><xs:sequence><xs:element name="c" type="t1"/></xs:sequence></xs:complexType><xs:element name="e"><xs:complexType><xs:choice><xs:element name="a" type="t1"/></xs:choice></xs:complexType></xs:element>`,
 			"local element c reaching complex type t1 again through elements that each occur exactly once", constructValueCycle},
-		// z is first emitted through the pointer field p, so a check that
-		// skipped a type already in e.emitted would let the value field v, and
-		// with it the cycle v, w, through.
-		{"value cycle behind a pointer", `<xs:complexType name="x"><xs:sequence><xs:element name="p" type="z" minOccurs="0"/><xs:element name="v" type="z"/></xs:sequence></xs:complexType><xs:complexType name="z"><xs:sequence><xs:element name="w" type="x"/></xs:sequence></xs:complexType><xs:element name="e" type="x"/>`,
-			"local element v reaching complex type z again through elements that each occur exactly once", constructValueCycle},
+		// x's walk emits z through the pointer field p before it reaches the
+		// value field v, so a check that skips a type already in e.emitted
+		// misses the cycle v, w.
+		{"value cycle behind a pointer", `<xs:complexType name="x"><xs:sequence><xs:element name="p" type="z" minOccurs="0"/><xs:element name="v" type="z"/></xs:sequence></xs:complexType><xs:complexType name="z"><xs:sequence><xs:element name="w" type="x"/></xs:sequence></xs:complexType><xs:element name="e"><xs:complexType><xs:sequence><xs:element name="a" type="x"/></xs:sequence></xs:complexType></xs:element>`,
+			"local element w reaching complex type x again through elements that each occur exactly once", constructValueCycle},
 		{"local element property", `<xs:element name="e"><xs:complexType><xs:sequence><xs:element name="l" nillable="true" ` + str + `/></xs:sequence></xs:complexType></xs:element>`,
 			"element l with {nillable} true", constructElementNillable},
 		{"nested struct", `<xs:element name="e"><xs:complexType><xs:sequence><xs:element name="l"><xs:complexType><xs:all><xs:element name="a" ` + str + `/></xs:all></xs:complexType></xs:element></xs:sequence></xs:complexType></xs:element>`,
