@@ -18,7 +18,8 @@
 //
 // Generate emits, in document order, one Go type per top-level element
 // declaration, one per anonymous complex type nested in its type definition,
-// and one branch struct per alternative of each choice it emits as a sealed
+// one per named complex type a local element declaration reaches, and one
+// branch struct per alternative of each choice it emits as a sealed
 // interface, and declines everything outside this slice:
 //
 //   - An element whose {type definition} is an atomic or list simple type
@@ -61,14 +62,22 @@
 //     {min occurs} at least 1 (§3.8.6.6 cos-choice-range).
 //   - Each particle of a sequence gives one field, in particle order: a
 //     local element with an atomic or list simple type gets the builtin or
-//     slice an element's type is declared over, one with an
-//     anonymous complex type of the same shape gets a struct or interface of
-//     its own, emitted after its parent. A type nested in a named complex
-//     type is emitted once per path of expanded names from that type, after
-//     the first top-level element of that type, and every element of that
-//     type shares it; two sibling local elements whose expanded names differ
-//     only in {target namespace} (§3.3.2.3), a qualified x beside an
-//     unqualified x, get a type each. {max occurs} above 1 or unbounded
+//     slice an element's type is declared over, one with an anonymous
+//     complex type of the same shape gets a struct or interface of its own,
+//     emitted after its parent. One with a named complex type of the same
+//     shape gets the struct or interface emitted for that type, once per
+//     expanded name, after the parent of the first local element of that
+//     type, and shared by every local element of that type in any parent,
+//     the type's own included; a top-level element of that type keeps the
+//     type named from the element. A type nested in a named complex type is
+//     emitted once per path of expanded names from that type, after the
+//     first element whose walk reaches it, and every element of that type,
+//     top-level or local, shares it; two sibling local elements whose
+//     expanded names differ only in {target namespace} (§3.3.2.3), a
+//     qualified x beside an unqualified x, get a type each. A named complex
+//     type that reaches itself through elements that each occur exactly once
+//     in a sequence, and whose types are not choices, declines: its Go type
+//     would hold itself as a struct value. {max occurs} above 1 or unbounded
 //     gives a slice whatever {min occurs} is, of a list's slice too ([][]T);
 //     {min occurs} 0 with {max occurs} 1 gives a pointer to a struct,
 //     builtin or list's slice (*[]T), and the bare interface, never a
@@ -100,12 +109,12 @@
 // occurs} 0, attribute wildcards, attribute uses on a type whose content is a
 // choice, attribute uses with an effective value constraint, mixed and
 // simple content, extension, restriction of any base but xs:anyType, a
-// local element with a named complex type, xs:anyType, the special simple
-// types, union types, a list whose {item type definition} declines, and
-// every primitive but the three above — decimal among them, so xs:integer,
-// the four unbounded integer types and every type derived from them other
-// than through the eight bounded ones decline, as do float and double — for
-// an element or an attribute alike. #2900 owns lifting them.
+// named complex type reaching itself through struct values, xs:anyType, the
+// special simple types, union types, a list whose {item type definition}
+// declines, and every primitive but the three above — decimal among them, so
+// xs:integer, the four unbounded integer types and every type derived from
+// them other than through the eight bounded ones decline, as do float and
+// double — for an element or an attribute alike. #2900 owns lifting them.
 //
 // # Determinism
 //
@@ -122,20 +131,25 @@
 // does not admit in an identifier break words, every word starts upper-case,
 // and a result with no upper-case first letter is prefixed with
 // X. That upper-case start is also what keeps every identifier clear of the
-// Go keywords. A top-level element's type is named from the element. An
-// anonymous type nested in it is named by the path of names from its nearest
-// named ancestor: the top-level element when the element's own type is
-// anonymous (element shipTo under element purchaseOrder → PurchaseOrderShipTo),
-// the complex type when that type is named (element x in complex type ct → CtX,
-// whichever elements have type ct). A choice's branch struct is named from its
+// Go keywords. A top-level element's type is named from the element. A named
+// complex type a local element reaches is named from the type (complex type
+// ct → Ct), whichever local elements have type ct. An anonymous type nested
+// in either is named by the path of names from its nearest named ancestor:
+// the top-level element when the element's own type is anonymous (element
+// shipTo under element purchaseOrder → PurchaseOrderShipTo), the complex type
+// when that type is named (element x in complex type ct → CtX, whichever
+// elements have type ct). A choice's branch struct is named from its
 // interface's name plus the alternative's local name (alternative a of
 // interface First → FirstA), so two top-level elements of one named choice
 // type get distinct interfaces and branches. A residual collision — two
 // names folding to one identifier, among a package's types or one struct's
 // fields — is disambiguated deterministically by document order: the later
-// name takes the smallest free numeric suffix from 2. Every generated
-// type's header comment records the element declaration's QName and its
-// schema Loc. A Loc whose URI filepath.IsAbs accepts renders relative to the
+// name takes the smallest free numeric suffix from 2, so a top-level element
+// ct and a complex type ct reached locally take Ct in the order they are
+// first reached. Every generated type's header comment records the QName and
+// the schema Loc of the declaration it is named from: the element
+// declaration, or the complex type definition for a type named from one. A
+// Loc whose URI filepath.IsAbs accepts renders relative to the
 // target's Dir made absolute against the working directory, slash-separated
 // and climbing with ".." out of Dir. A document outside the tree laid out
 // alike, such as one an absolute schemaLocation names, renders a climbing

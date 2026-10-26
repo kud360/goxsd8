@@ -60,7 +60,8 @@ func (t Target) failed(i int, err error) error {
 // Generate emits, for each target, one Go package of type declarations: the
 // file xsd_gen.go in the target's Dir, declaring, in document order, one type
 // per top-level element declaration of the target's Schema, one per
-// anonymous complex type nested in its type definition, and one branch struct
+// anonymous complex type nested in its type definition, one per named
+// complex type a local element declaration reaches, and one branch struct
 // per alternative of each choice emitted as a sealed interface, each emitted
 // after its parent (the package doc's "Coverage" and "Naming" say which). Targets
 // are generated independently: no emitted package imports another.
@@ -74,7 +75,13 @@ func (t Target) failed(i int, err error) error {
 // target's after filepath.Clean, a Dir that filepath.Abs cannot make
 // absolute, a construct the generator declines, or a failed destination check
 // — means no target is written, and the error is the first failure in target
-// order and then document order.
+// order and then the order the generator meets declines: each top-level
+// element declaration in document order, depth first through the types its
+// particles reach (the package doc's "Coverage"). A local element that
+// occurs exactly once and whose type, not a choice, is already emitted has
+// that type checked again, through such elements, for a type reaching
+// itself, and the decline "Coverage" states for one found there precedes
+// every decline the depth-first walk meets after that element.
 //
 // Every error Generate returns opens with the failing target's name: its Name,
 // or "target N" for the target at slice index N when Name is empty. An unnamed

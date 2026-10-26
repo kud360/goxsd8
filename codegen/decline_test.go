@@ -38,7 +38,11 @@ func parseString(t *testing.T, doc string) *xsd.Schema {
 // whose text names the construct and its Loc, and writes nothing. Each body
 // is one line, so every Loc is on line 2.
 func TestGenerateDeclines(t *testing.T) {
-	const str = `type="xs:string"`
+	const (
+		str         = `type="xs:string"`
+		pastDecline = `<xs:complexType name="m"><xs:sequence><xs:element name="q" type="t"/><xs:element name="r" type="xs:decimal"/></xs:sequence></xs:complexType><xs:complexType name="t"><xs:sequence><xs:element name="f1" type="m" minOccurs="0"/>%s</xs:sequence></xs:complexType>%s<xs:element name="root"><xs:complexType><xs:sequence><xs:element name="x" type="t"/></xs:sequence></xs:complexType></xs:element>`
+		uncoveredR  = "element r with {type definition} {http://www.w3.org/2001/XMLSchema}decimal, whose {primitive type definition} is {http://www.w3.org/2001/XMLSchema}decimal at s.xsd:2:70 "
+	)
 	tests := []struct {
 		name, body, detail string
 		kind               construct
@@ -196,8 +200,46 @@ func TestGenerateDeclines(t *testing.T) {
 			"element e with {type definition} {http://www.w3.org/2001/XMLSchema}float, whose {primitive type definition} is {http://www.w3.org/2001/XMLSchema}float", constructUncoveredPrimitive},
 		{"double", `<xs:element name="e" type="xs:double"/>`,
 			"element e with {type definition} {http://www.w3.org/2001/XMLSchema}double, whose {primitive type definition} is {http://www.w3.org/2001/XMLSchema}double", constructUncoveredPrimitive},
-		{"named complex local", `<xs:complexType name="c"><xs:sequence><xs:element name="a" ` + str + `/></xs:sequence></xs:complexType><xs:element name="e"><xs:complexType><xs:sequence><xs:element name="l" type="c"/></xs:sequence></xs:complexType></xs:element>`,
-			"local element l with named complex {type definition} c", constructNamedComplexLocal},
+		// The value-cycle rows each give Go types that would hold one another
+		// as struct values.
+		{"value cycle direct", `<xs:complexType name="c"><xs:sequence><xs:element name="x" type="c"/></xs:sequence></xs:complexType><xs:element name="e" type="c"/>`,
+			"local element x reaching complex type c again through elements that each occur exactly once at s.xsd:2:39", constructValueCycle},
+		{"value cycle mutual", `<xs:complexType name="c1"><xs:sequence><xs:element name="x" type="c2"/></xs:sequence></xs:complexType><xs:complexType name="c2"><xs:sequence><xs:element name="y" type="c1"/></xs:sequence></xs:complexType><xs:element name="e" type="c1"/>`,
+			"local element y reaching complex type c1 again through elements that each occur exactly once", constructValueCycle},
+		{"value cycle through anonymous type", `<xs:complexType name="c"><xs:sequence><xs:element name="x"><xs:complexType><xs:sequence><xs:element name="y" type="c"/></xs:sequence></xs:complexType></xs:element></xs:sequence></xs:complexType><xs:element name="e" type="c"/>`,
+			"local element y reaching complex type c again through elements that each occur exactly once", constructValueCycle},
+		{"value cycle in choice branch", `<xs:complexType name="t1"><xs:sequence><xs:element name="b" type="t2"/></xs:sequence></xs:complexType><xs:complexType name="t2"><xs:sequence><xs:element name="c" type="t1"/></xs:sequence></xs:complexType><xs:element name="e"><xs:complexType><xs:choice><xs:element name="a" type="t1"/></xs:choice></xs:complexType></xs:element>`,
+			"local element c reaching complex type t1 again through elements that each occur exactly once", constructValueCycle},
+		// x's walk emits z through the pointer field p before it reaches the
+		// value field v, and z's walk meets x already stored: a check carried
+		// by the emitting walk, which never walks a stored type again, lets
+		// the cycle v, w through.
+		{"value cycle behind a pointer", `<xs:complexType name="x"><xs:sequence><xs:element name="p" type="z" minOccurs="0"/><xs:element name="v" type="z"/></xs:sequence></xs:complexType><xs:complexType name="z"><xs:sequence><xs:element name="w" type="x"/></xs:sequence></xs:complexType><xs:element name="e"><xs:complexType><xs:sequence><xs:element name="a" type="x"/></xs:sequence></xs:complexType></xs:element>`,
+			"local element v reaching complex type z again through elements that each occur exactly once", constructValueCycle},
+		// The wildcard under p precedes the cycle v closes in particle order,
+		// so it is the decline returned.
+		{"value cycle after an earlier decline", `<xs:complexType name="c"><xs:sequence><xs:element name="p" minOccurs="0"><xs:complexType><xs:sequence><xs:any/></xs:sequence></xs:complexType></xs:element><xs:element name="v" type="c"/></xs:sequence></xs:complexType><xs:element name="e"><xs:complexType><xs:sequence><xs:element name="l" type="c"/></xs:sequence></xs:complexType></xs:element>`,
+			"a wildcard particle in complex type (anonymous) of element p", constructWildcard},
+		// In the three rows below, q reaches t while t's body is being
+		// emitted, so the recursion check walks t again and meets a decline
+		// after f1: a wildcard, an element declaration property, and a
+		// complex type outside the slice. Only the emitting walk returns that
+		// decline, which r's precedes.
+		{"value cycle check past a wildcard", fmt.Sprintf(pastDecline, `<xs:any/>`, ""),
+			uncoveredR, constructUncoveredPrimitive},
+		{"value cycle check past an element property", fmt.Sprintf(pastDecline, `<xs:element name="g" nillable="true" `+str+`/>`, ""),
+			uncoveredR, constructUncoveredPrimitive},
+		{"value cycle check past a complex type", fmt.Sprintf(pastDecline, `<xs:element name="g" type="a"/>`, `<xs:complexType name="a"><xs:all><xs:element name="h" `+str+`/></xs:all></xs:complexType>`),
+			uncoveredR, constructUncoveredPrimitive},
+		// The same walk of t again meets the recursion s closes after f1, and
+		// Generate's doc puts that recursion ahead of r's decline.
+		{"value cycle check past a recursion", fmt.Sprintf(pastDecline, `<xs:element name="g" type="cyc"/>`, `<xs:complexType name="cyc"><xs:sequence><xs:element name="s" type="cyc"/></xs:sequence></xs:complexType>`),
+			"local element s reaching complex type cyc again through elements that each occur exactly once", constructValueCycle},
+		// e's walk reaches t, declared after f, before f's walk begins.
+		{"named type body before a later top-level element", `<xs:element name="e"><xs:complexType><xs:sequence><xs:element name="l" type="t"/></xs:sequence></xs:complexType></xs:element><xs:element name="f" type="xs:decimal"/><xs:complexType name="t"><xs:sequence><xs:any/></xs:sequence></xs:complexType>`,
+			"a wildcard particle in complex type t at s.xsd:2:166 ", constructWildcard},
+		{"named complex local body", `<xs:complexType name="c"><xs:sequence><xs:any minOccurs="0"/></xs:sequence></xs:complexType><xs:element name="e"><xs:complexType><xs:sequence><xs:element name="l" type="c"/></xs:sequence></xs:complexType></xs:element>`,
+			"a wildcard particle in complex type c at s.xsd:2:1 ", constructWildcard},
 		{"local element property", `<xs:element name="e"><xs:complexType><xs:sequence><xs:element name="l" nillable="true" ` + str + `/></xs:sequence></xs:complexType></xs:element>`,
 			"element l with {nillable} true", constructElementNillable},
 		{"nested struct", `<xs:element name="e"><xs:complexType><xs:sequence><xs:element name="l"><xs:complexType><xs:all><xs:element name="a" ` + str + `/></xs:all></xs:complexType></xs:element></xs:sequence></xs:complexType></xs:element>`,
