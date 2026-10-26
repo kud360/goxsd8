@@ -264,16 +264,20 @@
 //	    rejected -schema prints its first error on stderr as parse's
 //	    does, the no-rule-to-cite lines and the unresolved-directive
 //	    lines included.
-//	    Every pair is compiled, and every failure to compile reported,
-//	    before anything is written; then either every pair is
-//	    generated or none is, except that a fault while writing can
-//	    leave some pairs written and others not.
-//	    The generator's refusals of a pair exit 2, named on stderr
-//	    against the pair as -schema <s> -out <d>: among them a last
+//	    Every -out is checked before any -schema is compiled. The
+//	    generator's refusals of a pair exit 2 whatever any pair
+//	    compiles or declines, each on one stderr line naming the pair
+//	    as -schema <s> -out <d>, in argument order: among them a last
 //	    path element that is not a Go package name, as with -out
-//	    my-pkg or -out ., and an existing xsd_gen.go whose first line
-//	    does not mark it generated, which gen never overwrites. A
-//	    fault creating or writing the output exits 2 the same way.
+//	    my-pkg or -out ., an -out repeating an earlier pair's, an -out
+//	    that exists and is not a directory, and an existing xsd_gen.go
+//	    whose first line does not mark it generated, which gen never
+//	    overwrites. Then every pair is compiled, and every failure to
+//	    compile reported after those lines, before anything is
+//	    written; then either every pair is generated or none is,
+//	    except that a fault while writing can leave some pairs written
+//	    and others not. A fault creating or writing the output exits
+//	    2, named against its pair the same way.
 //	    A construct the generator declines exits 4, on a stderr line
 //	    naming the pair, the construct and its location; go doc
 //	    github.com/kud360/goxsd8/codegen says what it accepts, which

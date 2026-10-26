@@ -27,7 +27,8 @@ var generatedLine = regexp.MustCompile(`^// Code generated .* DO NOT EDIT\.$`)
 // Target pairs one finalized schema with the package Generate emits for it. A
 // field that breaks its rule below is a plain error before any write.
 type Target struct {
-	// Schema is the finalized schema to generate from; it must be non-nil.
+	// Schema is the finalized schema to generate from. Generate requires it
+	// non-nil; CheckTargets does not read it.
 	Schema *xsd.Schema
 	// Dir is the output directory, non-empty, resolved relative to the
 	// process working directory when it is not absolute.
@@ -79,17 +80,16 @@ func (t Target) failed(i int, err error) error {
 // The file is gofmt-formatted. Generate writes no go.mod and adds no
 // //go:generate line: the module the caller puts Dir in owns both.
 //
-// Generate runs in two phases. Phase 1 builds every target's source in
-// memory, in slice order, and checks every destination; phase 2 writes. A
-// target that fails phase 1 — an invalid Target, a Dir that equals an earlier
-// target's after filepath.Clean, a Dir that filepath.Abs cannot make
-// absolute, a construct the generator declines, or a failed destination check
-// — means no target is written, and the error is the first failure in target
-// order and then the order the generator meets declines: each top-level
-// element declaration in document order, depth first through the types its
-// particles reach (the package doc's "Coverage"). A local element that
-// occurs exactly once and whose type, not a choice, is already emitted has
-// that type checked again, through such elements, for a type reaching
+// Generate runs in two phases. Phase 1 checks every target and builds its
+// source in memory, in slice order; phase 2 writes. A target that fails phase
+// 1 — a nil Schema, a refusal CheckTargets reports, or a construct the
+// generator declines — means no target is written, and the error is the first
+// failure in target order. Within one target a nil Schema comes first, then
+// its refusal, then its declines, in the order the generator meets them: each
+// top-level element declaration in document order, depth first through the
+// types its particles reach (the package doc's "Coverage"). A local element
+// that occurs exactly once and whose type, not a choice, is already emitted
+// has that type checked again, through such elements, for a type reaching
 // itself, and the decline "Coverage" states for one found there precedes
 // every decline the depth-first walk meets after that element. The walk does
 // not enter the type of the top-level declaration an <element ref> particle
@@ -141,44 +141,74 @@ func Generate(targets []Target) error {
 	return nil
 }
 
-// prepare is phase 1 for one target: it validates t against the targets
-// before it, builds its source and checks its destination.
+// prepare is phase 1 for one target: it checks t's Schema, then checkTarget
+// against the targets before it, then builds its source, so a target's refusal
+// precedes its declines.
 func prepare(t Target, earlier []Target) ([]byte, error) {
 	if t.Schema == nil {
 		return nil, errors.New("the Schema field is nil")
 	}
+	base, err := checkTarget(t, earlier)
+	if err != nil {
+		return nil, err
+	}
+	return emit(t.Schema, t.Package, base)
+}
+
+// CheckTargets reports, without reading any Schema and without writing, the
+// targets Generate refuses whatever their Schemas hold: for each refused
+// target, in slice order, the first of its refusals below, opened with the
+// target's name as Generate's errors are. It returns nil when no target is
+// refused. A target is refused, in this order, when its Dir or Package breaks
+// its field's rule; when its Dir equals an earlier target's after
+// filepath.Clean, the earlier target refused or not; when filepath.Abs cannot
+// make its Dir absolute; and when its Dir exists and is not a directory, or
+// holds an xsd_gen.go that is not a regular file or that Generate's overwrite
+// rule does not let it replace, or either cannot be checked or read. Generate
+// states how the duplicate-Dir refusal names the earlier target and the
+// overwrite rule.
+func CheckTargets(targets []Target) []error {
+	var errs []error
+	for i, t := range targets {
+		if _, err := checkTarget(t, targets[:i]); err != nil {
+			errs = append(errs, t.failed(i, err))
+		}
+	}
+	return errs
+}
+
+// checkTarget is the one encoding of the refusals CheckTargets' doc lists, in
+// that order, for t against the targets before it. It reads no Schema and
+// returns Dir made absolute.
+func checkTarget(t Target, earlier []Target) (base string, err error) {
 	if t.Dir == "" {
-		return nil, errors.New("no output directory given")
+		return "", errors.New("no output directory given")
 	}
 	if token.IsKeyword(t.Package) {
-		return nil, fmt.Errorf("the package name %q is a Go keyword", t.Package)
+		return "", fmt.Errorf("the package name %q is a Go keyword", t.Package)
 	}
 	if t.Package == "_" {
-		return nil, errors.New(`the package name "_" is the blank identifier`)
+		return "", errors.New(`the package name "_" is the blank identifier`)
 	}
 	if !token.IsIdentifier(t.Package) {
-		return nil, fmt.Errorf("the package name %q is not a Go identifier", t.Package)
+		return "", fmt.Errorf("the package name %q is not a Go identifier", t.Package)
 	}
 	if t.Package == "main" {
-		return nil, errors.New(`the package name is "main", but the emitted package declares no func main and would not build`)
+		return "", errors.New(`the package name is "main", but the emitted package declares no func main and would not build`)
 	}
 	for j, e := range earlier {
 		if filepath.Clean(e.Dir) == filepath.Clean(t.Dir) {
-			return nil, fmt.Errorf("the output directory %s is also the output directory of %s", t.Dir, e.name(j))
+			return "", fmt.Errorf("the output directory %s is also the output directory of %s", t.Dir, e.name(j))
 		}
 	}
-	base, err := filepath.Abs(t.Dir)
+	base, err = filepath.Abs(t.Dir)
 	if err != nil {
-		return nil, fmt.Errorf("resolving the output directory %s: %w", t.Dir, err)
-	}
-	src, err := emit(t.Schema, t.Package, base)
-	if err != nil {
-		return nil, err
+		return "", fmt.Errorf("resolving the output directory %s: %w", t.Dir, err)
 	}
 	if err := checkDestination(t.Dir); err != nil {
-		return nil, err
+		return "", err
 	}
-	return src, nil
+	return base, nil
 }
 
 // checkDestination fails unless phase 2 may write xsd_gen.go into dir: dir is
