@@ -231,6 +231,10 @@ func TestGenerateDeclines(t *testing.T) {
 			uncoveredR, constructUncoveredPrimitive},
 		{"value cycle check past a complex type", fmt.Sprintf(pastDecline, `<xs:element name="g" type="a"/>`, `<xs:complexType name="a"><xs:all><xs:element name="h" `+str+`/></xs:all></xs:complexType>`),
 			uncoveredR, constructUncoveredPrimitive},
+		// The same walk of t again meets the recursion s closes after f1, and
+		// Generate's doc puts that recursion ahead of r's decline.
+		{"value cycle check past a recursion", fmt.Sprintf(pastDecline, `<xs:element name="g" type="cyc"/>`, `<xs:complexType name="cyc"><xs:sequence><xs:element name="s" type="cyc"/></xs:sequence></xs:complexType>`),
+			"local element s reaching complex type cyc again through elements that each occur exactly once", constructValueCycle},
 		// e's walk reaches t, declared after f, before f's walk begins.
 		{"named type body before a later top-level element", `<xs:element name="e"><xs:complexType><xs:sequence><xs:element name="l" type="t"/></xs:sequence></xs:complexType></xs:element><xs:element name="f" type="xs:decimal"/><xs:complexType name="t"><xs:sequence><xs:any/></xs:sequence></xs:complexType>`,
 			"a wildcard particle in complex type t at s.xsd:2:166 ", constructWildcard},

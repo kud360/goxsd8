@@ -77,7 +77,10 @@ func (t Target) failed(i int, err error) error {
 // — means no target is written, and the error is the first failure in target
 // order and then the order the generator meets declines: each top-level
 // element declaration in document order, depth first through the types its
-// particles reach (the package doc's "Coverage").
+// particles reach (the package doc's "Coverage"). A field whose particle
+// occurs exactly once, reaching a complex type already emitted, walks that
+// type again through such fields, and a struct-value recursion found there
+// precedes every decline the depth-first walk meets after that field.
 //
 // Every error Generate returns opens with the failing target's name: its Name,
 // or "target N" for the target at slice index N when Name is empty. An unnamed
