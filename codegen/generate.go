@@ -63,16 +63,18 @@ func (t Target) failed(i int, err error) error {
 // anonymous complex type nested in its type definition, one per named
 // complex type a local element declaration reaches, and one branch struct
 // per alternative of each choice emitted as a sealed interface, each emitted
-// after its parent, then one struct per date, time or duration datatype a
-// declaration's type is declared over (the package doc's "Coverage" and
-// "Naming" say which). A target's Schema is its whole composed set, so its
-// {element declarations} (§3.17.1), and with them its file's top-level types,
-// include those of every imported or included document, the overriding
-// declaration standing in for each one an <xs:override> replaces, and a
-// Schema with none gives a file that declares no type. Targets are generated
-// independently: no emitted package imports another, so two targets whose
-// Schemas share a document each declare types for its top-level element
-// declarations, not necessarily under the same names.
+// after its parent, a field of an <element ref> particle holding the type
+// emitted for the top-level element declaration it names, then one struct
+// per date, time or duration datatype a declaration's type is declared over
+// (the package doc's "Coverage" and "Naming" say which). A target's Schema is
+// its whole composed set, so its {element declarations} (§3.17.1), and with
+// them its file's top-level types, include those of every imported or
+// included document, the overriding declaration standing in for each one an
+// <xs:override> replaces, and a Schema with none gives a file that declares
+// no type. Targets are generated independently: no emitted package imports
+// another, so two targets whose Schemas share a document each declare types
+// for its top-level element declarations, not necessarily under the same
+// names.
 //
 // The file is gofmt-formatted. Generate writes no go.mod and adds no
 // //go:generate line: the module the caller puts Dir in owns both.
@@ -89,7 +91,14 @@ func (t Target) failed(i int, err error) error {
 // occurs exactly once and whose type, not a choice, is already emitted has
 // that type checked again, through such elements, for a type reaching
 // itself, and the decline "Coverage" states for one found there precedes
-// every decline the depth-first walk meets after that element.
+// every decline the depth-first walk meets after that element. The walk does
+// not enter the type of the top-level declaration an <element ref> particle
+// names, which that declaration's own turn emits; a ref to a declaration not
+// yet reached checks that declaration's properties and the shape of its type
+// where the ref is met, and a ref that occurs exactly once to a complex type
+// that is not a choice has that type checked there, in the same way, for an
+// element or type reaching itself, ahead of every decline the depth-first
+// walk meets after the ref.
 //
 // Every error Generate returns opens with the failing target's name: its Name,
 // or "target N" for the target at slice index N when Name is empty. An unnamed

@@ -79,7 +79,6 @@ const (
 	constructVacuousParticle
 	constructAttributeValueConstraint
 	constructValueCycle
-	constructElementRef
 	constructGroupRef
 	constructNestedGroup
 	constructWildcard
@@ -116,8 +115,7 @@ var constructs = [...]struct{ name, format string }{
 	constructAll:                      {"all compositor", "%s with an all compositor"},
 	constructVacuousParticle:          {"particle with {max occurs} 0", "a particle of element %s with {max occurs} 0 in %s"},
 	constructAttributeValueConstraint: {"attribute effective value constraint", "%s with a %s effective value constraint (§3.5.4 key-evc)"},
-	constructValueCycle:               {"struct-value recursion", "local element %s reaching complex type %s again through elements that each occur exactly once"},
-	constructElementRef:               {"<element ref> particle", "an <element ref> particle to %s in %s"},
+	constructValueCycle:               {"struct-value recursion", "%s reaching %s again through elements that each occur exactly once"},
 	constructGroupRef:                 {"<group ref> particle", "a <group ref> particle to %s in %s"},
 	constructNestedGroup:              {"nested model group particle", "a nested %s model group particle in %s"},
 	constructWildcard:                 {"wildcard particle", "a wildcard particle in %s"},
