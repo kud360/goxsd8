@@ -199,7 +199,7 @@ func TestGenerateDeclines(t *testing.T) {
 		// The value-cycle rows each give Go types that would hold one another
 		// as struct values.
 		{"value cycle direct", `<xs:complexType name="c"><xs:sequence><xs:element name="x" type="c"/></xs:sequence></xs:complexType><xs:element name="e" type="c"/>`,
-			"local element x reaching complex type c again through elements that each occur exactly once", constructValueCycle},
+			"local element x reaching complex type c again through elements that each occur exactly once at s.xsd:2:39", constructValueCycle},
 		{"value cycle mutual", `<xs:complexType name="c1"><xs:sequence><xs:element name="x" type="c2"/></xs:sequence></xs:complexType><xs:complexType name="c2"><xs:sequence><xs:element name="y" type="c1"/></xs:sequence></xs:complexType><xs:element name="e" type="c1"/>`,
 			"local element x reaching complex type c2 again through elements that each occur exactly once", constructValueCycle},
 		{"value cycle through anonymous type", `<xs:complexType name="c"><xs:sequence><xs:element name="x"><xs:complexType><xs:sequence><xs:element name="y" type="c"/></xs:sequence></xs:complexType></xs:element></xs:sequence></xs:complexType><xs:element name="e" type="c"/>`,
