@@ -178,8 +178,15 @@ func TestGenerateDeclines(t *testing.T) {
 			"with {assertions}", constructAssertions},
 		{"abstract complex type", `<xs:complexType name="c" abstract="true"><xs:sequence><xs:element name="a" ` + str + `/></xs:sequence></xs:complexType><xs:element name="e" type="c"/>`,
 			"complex type c of element e with {abstract} true", constructComplexTypeAbstract},
-		{"anyType", `<xs:element name="e"/>`,
-			"element e with {type definition} xs:anyType", constructAnyTypeElement},
+		// The three guard rows pin that the xs:anyType arm keys on identity: c
+		// copies xs:anyType's §3.4.7 shape, or derives from it by extension,
+		// and still declines as the complex type it is.
+		{"copy of anyType's shape", `<xs:complexType name="c" mixed="true"><xs:sequence><xs:any processContents="lax" minOccurs="0" maxOccurs="unbounded"/></xs:sequence><xs:anyAttribute processContents="lax"/></xs:complexType><xs:element name="e" type="c"/>`,
+			"complex type c of element e with an {attribute wildcard}", constructAttributeWildcard},
+		{"copy of anyType's shape without anyAttribute", `<xs:complexType name="c" mixed="true"><xs:sequence><xs:any processContents="lax" minOccurs="0" maxOccurs="unbounded"/></xs:sequence></xs:complexType><xs:element name="e" type="c"/>`,
+			"complex type c of element e with mixed content", constructMixedContent},
+		{"extension of anyType", `<xs:complexType name="c"><xs:complexContent><xs:extension base="xs:anyType"/></xs:complexContent></xs:complexType><xs:element name="e" type="c"/>`,
+			"complex type c of element e, derived by extension", constructDerivation},
 		{"anySimpleType", `<xs:element name="e" type="xs:anySimpleType"/>`,
 			"{http://www.w3.org/2001/XMLSchema}anySimpleType, a special type", constructSpecialType},
 		{"anyAtomicType", `<xs:element name="e" type="xs:anyAtomicType"/>`,

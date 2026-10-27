@@ -1,0 +1,32 @@
+<?xml version="1.0"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="anyType"/>
+  <xs:element name="free"/>
+  <xs:element name="explicit" type="xs:anyType"/>
+  <xs:element name="holder">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element name="once" type="xs:anyType"/>
+        <xs:element name="maybe" type="xs:anyType" minOccurs="0"/>
+        <xs:element name="many" maxOccurs="unbounded"/>
+        <xs:element ref="free"/>
+        <xs:element ref="explicit" minOccurs="0"/>
+        <xs:element name="inner" type="wrapper"/>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="pick">
+    <xs:complexType>
+      <xs:choice>
+        <xs:element name="raw"/>
+        <xs:element name="text" type="xs:string"/>
+      </xs:choice>
+    </xs:complexType>
+  </xs:element>
+  <xs:complexType name="wrapper">
+    <xs:sequence>
+      <xs:element name="payload" type="xs:anyType"/>
+      <xs:element ref="anyType" maxOccurs="2"/>
+    </xs:sequence>
+  </xs:complexType>
+</xs:schema>
