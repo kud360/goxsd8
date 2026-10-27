@@ -136,8 +136,6 @@ func TestGenerateDeclines(t *testing.T) {
 			"with an {attribute wildcard}", constructAttributeWildcard},
 		{"empty type extension", `<xs:complexType name="b"/><xs:element name="e"><xs:complexType><xs:complexContent><xs:extension base="b"/></xs:complexContent></xs:complexType></xs:element>`,
 			"derived by extension", constructDerivation},
-		{"empty type restriction of another base", `<xs:complexType name="b"/><xs:element name="e"><xs:complexType><xs:complexContent><xs:restriction base="b"/></xs:complexContent></xs:complexType></xs:element>`,
-			"a restriction of b rather than of xs:anyType", constructRestrictionBase},
 		{"mixed empty", `<xs:element name="e"><xs:complexType mixed="true"/></xs:element>`,
 			"with mixed content", constructMixedContent},
 		{"default open content applies to empty", `<xs:defaultOpenContent appliesToEmpty="true"><xs:any/></xs:defaultOpenContent><xs:element name="e"><xs:complexType/></xs:element>`,
@@ -151,7 +149,7 @@ func TestGenerateDeclines(t *testing.T) {
 		{"simple content", `<xs:element name="e"><xs:complexType><xs:simpleContent><xs:extension base="xs:string"/></xs:simpleContent></xs:complexType></xs:element>`,
 			"derived by extension", constructDerivation},
 		{"simple content restriction", `<xs:complexType name="b"><xs:simpleContent><xs:extension base="xs:string"/></xs:simpleContent></xs:complexType><xs:element name="e"><xs:complexType><xs:simpleContent><xs:restriction base="b"/></xs:simpleContent></xs:complexType></xs:element>`,
-			"a restriction of b rather than of xs:anyType", constructRestrictionBase},
+			"a simple-content restriction of b rather than of xs:anyType", constructRestrictionBase},
 		{"simple content restriction of anyType", `<xs:element name="e"><xs:complexType><xs:simpleContent><xs:restriction base="xs:anyType"><xs:simpleType><xs:restriction base="xs:string"/></xs:simpleType></xs:restriction></xs:simpleContent></xs:complexType></xs:element>`,
 			"complex type (anonymous) of element e with simple content", constructSimpleContent},
 		{"open content", `<xs:element name="e"><xs:complexType><xs:openContent><xs:any/></xs:openContent><xs:sequence><xs:element name="a" ` + str + `/></xs:sequence></xs:complexType></xs:element>`,
@@ -160,8 +158,15 @@ func TestGenerateDeclines(t *testing.T) {
 			"with {open content}", constructOpenContent},
 		{"extension", `<xs:complexType name="b"><xs:sequence><xs:element name="a" ` + str + `/></xs:sequence></xs:complexType><xs:element name="e"><xs:complexType><xs:complexContent><xs:extension base="b"/></xs:complexContent></xs:complexType></xs:element>`,
 			"derived by extension", constructDerivation},
-		{"restriction of another base", `<xs:complexType name="b"><xs:sequence><xs:element name="a" ` + str + `/></xs:sequence></xs:complexType><xs:element name="e"><xs:complexType><xs:complexContent><xs:restriction base="b"><xs:sequence><xs:element name="a" ` + str + `/></xs:sequence></xs:restriction></xs:complexContent></xs:complexType></xs:element>`,
-			"a restriction of b rather than of xs:anyType", constructRestrictionBase},
+		// The restriction rows pin that a complex-content restriction of a
+		// base other than xs:anyType is checked from its own finalized
+		// component: c writes no <attribute> or <assert>, and declines for
+		// the {attribute uses} or {assertions} it inherits from b (§3.4.2.4
+		// dcl.ctd.attuses, §3.4.2.1 dcl.ctd.common).
+		{"restriction choice with inherited attribute", `<xs:complexType name="b"><xs:choice><xs:element name="a" ` + str + `/><xs:element name="x" ` + str + `/></xs:choice><xs:attribute name="t" ` + str + `/></xs:complexType><xs:complexType name="c"><xs:complexContent><xs:restriction base="b"><xs:choice><xs:element name="a" ` + str + `/></xs:choice></xs:restriction></xs:complexContent></xs:complexType><xs:element name="e" type="c"/>`,
+			"complex type c of element e whose content is a choice, with {attribute uses}", constructChoiceAttributeUses},
+		{"restriction with inherited assertion", `<xs:complexType name="b"><xs:sequence><xs:element name="a" ` + str + `/></xs:sequence><xs:assert test="true()"/></xs:complexType><xs:complexType name="c"><xs:complexContent><xs:restriction base="b"><xs:sequence><xs:element name="a" ` + str + `/></xs:sequence></xs:restriction></xs:complexContent></xs:complexType><xs:element name="e" type="c"/>`,
+			"complex type c of element e with {assertions}", constructAssertions},
 		{"outer occurrence", `<xs:element name="e"><xs:complexType><xs:sequence minOccurs="0"><xs:element name="a" ` + str + `/></xs:sequence></xs:complexType></xs:element>`,
 			"whose content particle occurs 0..1 times", constructContentOccurs},
 		{"nillable", `<xs:element name="e" nillable="true" ` + str + `/>`,

@@ -119,7 +119,7 @@ var constructs = [...]struct{ name, format string }{
 	constructEmptyChoice:              {"choice with no {particles}", "%s whose choice has no {particles}"},
 	constructEmptiableChoice:          {"emptiable choice", "%s whose choice is emptiable: its alternative element %s has {min occurs} 0"},
 	constructDerivation:               {"derivation other than restriction", "%s, derived by %s"},
-	constructRestrictionBase:          {"restriction of a type other than xs:anyType", "%s, a restriction of %s rather than of xs:anyType"},
+	constructRestrictionBase:          {"simple-content restriction of a type other than xs:anyType", "%s, a simple-content restriction of %s rather than of xs:anyType"},
 	constructComplexTypeAbstract:      {"complex type {abstract}", "%s with {abstract} true"},
 	constructAssertions:               {"{assertions}", "%s with {assertions}"},
 	constructAttributeWildcard:        {"{attribute wildcard}", "%s with an {attribute wildcard}"},

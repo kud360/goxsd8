@@ -103,15 +103,20 @@
 //     xs:anyType, named or anonymous, gets a type of its own when the type is
 //     a restriction of xs:anyType, implicit (§3.4.2.3.2 dcl.ctd.ctcc.implicit)
 //     or explicit (<complexContent><restriction base="xs:anyType">, §3.4.2.3.1
-//     dcl.ctd.ctcc.explicit), with no {attribute wildcard}, {assertions} or
-//     {abstract}, and with one of two contents: empty content ({variety}
-//     empty, §3.4.1); or element-only content (§3.4.2.3.3 dcl.ctd.ctcc.common)
-//     that has no {open content} and whose {particle} occurs exactly once and
-//     holds a sequence or a choice of element particles: local element
-//     declarations, and <element ref> particles, whose {term} is the top-level
-//     declaration the ref names (§3.3.2.4). A sequence gives a struct, and so
-//     does empty content, with no particle field; a struct with no field is
-//     spelled struct{}.
+//     dcl.ctd.ctcc.explicit), or a <complexContent> restriction of any other
+//     complex type. A restriction's type is built from its own {content type}
+//     (§3.4.2.3.3 dcl.ctd.ctcc.common) and {attribute uses}, which hold the
+//     uses it inherits and none it prohibits (§3.4.2.4 dcl.ctd.attuses), and
+//     has no Go-level relation to its base's: no embedding, no conversion. The
+//     type has no {attribute wildcard}, no {assertions}, inherited ones
+//     included (§3.4.2.1 dcl.ctd.common), and {abstract} false, and has one of
+//     two contents: empty content ({variety} empty, §3.4.1); or element-only
+//     content (§3.4.2.3.3 dcl.ctd.ctcc.common) that has no {open content} and
+//     whose {particle} occurs exactly once and holds a sequence or a choice of
+//     element particles: local element declarations, and <element ref>
+//     particles, whose {term} is the top-level declaration the ref names
+//     (§3.3.2.4). A sequence gives a struct, and so does empty content, with
+//     no particle field; a struct with no field is spelled struct{}.
 //   - A choice gives a sealed interface, the closed-sum exception: an
 //     interface whose one method is unexported, "is" plus the interface's
 //     name, and one branch struct per alternative in particle order, emitted
@@ -168,12 +173,12 @@
 // <group ref> particles, wildcards, a particle with {max occurs} 0,
 // attribute wildcards, attribute uses on a type whose content is a choice,
 // attribute uses with an effective value constraint, mixed and simple
-// content, extension, restriction of any base but xs:anyType, a named
-// complex type, or a top-level element through <element ref> particles,
-// reaching itself through struct values, the special simple types, union
-// types, a list whose {item type definition} declines, and every primitive
-// the first bullet does not map, for an element or an attribute alike.
-// #2900 owns lifting them.
+// content, extension, a simple-content restriction of any base but
+// xs:anyType, a named complex type, or a top-level element through
+// <element ref> particles, reaching itself through struct values, the
+// special simple types, union types, a list whose {item type definition}
+// declines, and every primitive the first bullet does not map, for an
+// element or an attribute alike. #2900 owns lifting them.
 //
 // # Determinism
 //
