@@ -65,7 +65,7 @@ func (c Construct) String() string {
 
 // construct is the closed set of constructs the generator declines, one per
 // declining site but constructVacuousParticle, which field's wildcard and
-// element paths each decline. The zero value is invalid (STYLE T1).
+// element paths and contentGroup each decline. The zero value is invalid (STYLE T1).
 type construct uint8
 
 // The construct values, in the order of their declining sites in emit.go.
@@ -91,7 +91,6 @@ const (
 	constructSimpleContent
 	constructMixedContent
 	constructOpenContent
-	constructContentOccurs
 	constructContentGroupRef
 	constructAll
 	constructVacuousParticle
@@ -127,7 +126,6 @@ var constructs = [...]struct{ name, format string }{
 	constructSimpleContent:            {"simple content", "%s with simple content"},
 	constructMixedContent:             {"mixed content", "%s with mixed content"},
 	constructOpenContent:              {"{open content}", "%s with {open content}"},
-	constructContentOccurs:            {"content particle not exactly once", "%s whose content particle occurs %s times rather than exactly once"},
 	constructContentGroupRef:          {"content particle <group ref>", "%s whose content particle is a <group ref>"},
 	constructAll:                      {"all compositor", "%s with an all compositor"},
 	constructVacuousParticle:          {"particle with {max occurs} 0", "a particle of %s with {max occurs} 0 in %s"},
