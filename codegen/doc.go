@@ -109,14 +109,14 @@
 //     uses it inherits and none it prohibits (§3.4.2.4 dcl.ctd.attuses), and
 //     has no Go-level relation to its base's: no embedding, no conversion. The
 //     type has no {attribute wildcard}, no {assertions}, inherited ones
-//     included, and {abstract} false, and has one of two contents: empty
-//     content ({variety} empty, §3.4.1); or element-only content (§3.4.2.3.3
-//     dcl.ctd.ctcc.common) that has no {open content} and whose {particle}
-//     occurs exactly once and holds a sequence or a choice of element
-//     particles: local element declarations, and <element ref> particles,
-//     whose {term} is the top-level declaration the ref names (§3.3.2.4). A
-//     sequence gives a struct, and so does empty content, with no particle
-//     field; a struct with no field is spelled struct{}.
+//     included (§3.4.2.1 dcl.ctd.common), and {abstract} false, and has one of
+//     two contents: empty content ({variety} empty, §3.4.1); or element-only
+//     content (§3.4.2.3.3 dcl.ctd.ctcc.common) that has no {open content} and
+//     whose {particle} occurs exactly once and holds a sequence or a choice of
+//     element particles: local element declarations, and <element ref>
+//     particles, whose {term} is the top-level declaration the ref names
+//     (§3.3.2.4). A sequence gives a struct, and so does empty content, with
+//     no particle field; a struct with no field is spelled struct{}.
 //   - A choice gives a sealed interface, the closed-sum exception: an
 //     interface whose one method is unexported, "is" plus the interface's
 //     name, and one branch struct per alternative in particle order, emitted

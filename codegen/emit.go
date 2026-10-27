@@ -770,16 +770,16 @@ func mustOccurs(o xsd.Occurs, err error) xsd.Occurs {
 // of xs:anyType, implicit (§3.4.2.3.2 dcl.ctd.ctcc.implicit) or explicit
 // (§3.4.2.3.1 dcl.ctd.ctcc.explicit), or a complex-content restriction of
 // any other complex type, with the content §3.4.2.3.3 dcl.ctd.ctcc.common
-// maps. It reads t's own {content type} and the rest of t's finalized component, never
-// its base's: a restriction's {content type} is mapped from its own content alone
-// (dcl.ctd.ctcc.common 4.1), and its {attribute uses} already hold the uses it inherits
-// (§3.4.2.4 dcl.ctd.attuses), so a base that itself declines does not block t. When err
-// is nil, ok answers whether t's {content type} has a {particle}: for element-only
-// content it is true and group is the sequence or choice model group that is the
-// {particle}'s term, never the source <choice> itself; for {variety} empty (§3.4.1),
-// which has no {particle}, it is false, err is nil and group is the zero value, which
-// callers must not read. Every other content declines. Particles and model groups carry
-// no Loc, so their declines cite t's.
+// maps. Of t's base it reads only the identity, to test for xs:anyType and
+// to name the base in a simple-content restriction's decline; every other
+// check reads t's finalized component, so a base that itself declines does
+// not block t. When err is nil, ok answers whether t's {content type} has a
+// {particle}: for element-only content it is true and group is the sequence
+// or choice model group that is the {particle}'s term, never the source
+// <choice> itself; for {variety} empty (§3.4.1), which has no {particle}, it
+// is false, err is nil and group is the zero value, which callers must not
+// read. Every other content declines. Particles and model
+// groups carry no Loc, so their declines cite t's.
 func (e *emitter) contentGroup(subject string, t xsd.ComplexType) (group xsd.ModelGroup, ok bool, err error) {
 	if t.DerivationMethod() != xsd.DerivationRestriction {
 		return xsd.ModelGroup{}, false, decline(t.Loc(), constructDerivation, subject, t.DerivationMethod())
