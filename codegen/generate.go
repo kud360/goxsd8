@@ -50,15 +50,15 @@ func targetName(name string, i int) string {
 }
 
 // TargetError is one failure of one target, as Generate and CheckTargets
-// report it. Its text is the failure's, opened with the target's name as
-// Generate's doc states.
+// report it.
 type TargetError struct {
 	index int
 	name  string
 	err   error
 }
 
-// Error returns the failure's text opened with the target's name.
+// Error returns the failure's text opened with the target's name, as
+// Generate's doc states.
 func (e *TargetError) Error() string {
 	if e.name != "" {
 		return e.name + ": " + e.err.Error()
