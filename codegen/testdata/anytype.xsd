@@ -1,5 +1,6 @@
 <?xml version="1.0"?>
 <xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="anyChild" type="xs:string"/>
   <xs:element name="anyType"/>
   <xs:element name="free"/>
   <xs:element name="explicit" type="xs:anyType"/>
