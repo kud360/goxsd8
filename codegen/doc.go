@@ -27,8 +27,8 @@
 // then, after every other declaration and in the order the walk
 // first needs each, one datatype struct per date, time or duration datatype
 // a declaration's type is declared over and the four raw-content structs
-// once an element's type is xs:anyType, and declines everything outside this
-// slice:
+// once an element's type is xs:anyType or a sequence holds a wildcard
+// particle, and declines everything outside this slice:
 //
 //   - An element whose {type definition} is an atomic or list simple type
 //     gets a named type over the atomic Go type an atomic simple type gets,
@@ -93,7 +93,7 @@
 //     Element and as Tail the characters after it, before the next child or
 //     the end, so that each gap between children is one string. An AnyElement
 //     holds a child's expanded name, Space and Local, and its own content as
-//     an AnyType: a lax ##any wildcard's match is held raw, whether or not a
+//     an AnyType: a wildcard's match is held raw, whether or not a
 //     declaration or an xsi:type would govern it. Namespace declarations are
 //     not represented, so a prefix inside a value, such as an xsi:type's, does
 //     not resolve from the struct. AnyType reaches itself only through the
@@ -112,11 +112,13 @@
 //     included (§3.4.2.1 dcl.ctd.common), and {abstract} false, and has one of
 //     two contents: empty content ({variety} empty, §3.4.1); or element-only
 //     content (§3.4.2.3.3 dcl.ctd.ctcc.common) that has no {open content} and
-//     whose {particle} occurs exactly once and holds a sequence or a choice of
-//     element particles: local element declarations, and <element ref>
-//     particles, whose {term} is the top-level declaration the ref names
-//     (§3.3.2.4). A sequence gives a struct, and so does empty content, with
-//     no particle field; a struct with no field is spelled struct{}.
+//     whose {particle} occurs exactly once and holds a sequence of element
+//     and wildcard particles (§3.10.2.1 dcl.wc.p), or a choice of element
+//     particles: element particles are local element declarations, and
+//     <element ref> particles, whose {term} is the top-level declaration the
+//     ref names (§3.3.2.4). A sequence gives a struct, and so does empty
+//     content, with no particle field; a struct with no field is spelled
+//     struct{}.
 //   - A choice gives a sealed interface, the closed-sum exception: an
 //     interface whose one method is unexported, "is" plus the interface's
 //     name, and one branch struct per alternative in particle order, emitted
@@ -139,13 +141,17 @@
 //     expanded names differ only in {target namespace} (§3.3.2.3), a qualified x beside an
 //     unqualified x, get a type each. An <element ref> particle gets the type emitted for the
 //     top-level element declaration it names, named from that element whatever its type definition,
-//     and its field is named from that declaration's local name. A named complex type, or a
-//     top-level element through <element ref> particles, that reaches itself through elements that
-//     each occur exactly once in a sequence, and whose types are not choices, declines: its Go type
-//     would hold itself as a struct value. {max occurs} above 1 or unbounded gives a slice whatever
-//     {min occurs} is, of a list's slice too ([][]T); {min occurs} 0 with {max occurs} 1 gives a
-//     pointer to a struct, atomic Go type, or list's slice (*[]T), and the bare interface, never a
-//     pointer to one, nil meaning absent.
+//     and its field is named from that declaration's local name. A wildcard particle gives one
+//     field named Any by "Naming", holding AnyElement by the occurrence rules below. Neither its
+//     {namespace constraint} nor its {process contents} (§3.10.1) is represented: the field holds
+//     elements the wildcard would not admit (cvc-wildcard), and holds every match raw whether a
+//     strict or lax wildcard would assess it; enforcing either is the validator's. A named complex
+//     type, or a top-level element through <element ref> particles, that reaches itself through
+//     elements that each occur exactly once in a sequence, and whose types are not choices,
+//     declines: its Go type would hold itself as a struct value. {max occurs} above 1 or unbounded
+//     gives a slice whatever {min occurs} is, of a list's slice too ([][]T); {min occurs} 0 with
+//     {max occurs} 1 gives a pointer to a struct, atomic Go type, or list's slice (*[]T), and the
+//     bare interface, never a pointer to one, nil meaning absent.
 //   - Each attribute use of a type with sequence or empty content gives one
 //     field after the particle fields, if any, in the order [xsd.ComplexType.AttributeUses]
 //     returns its {attribute uses} (§3.4.2.4). The field is named from the attribute
@@ -170,11 +176,11 @@
 //
 // GAP(codegen): every other construct declines: the all compositor, an
 // emptiable choice, a choice with no {particles}, nested model groups,
-// <group ref> particles, wildcards, a particle with {max occurs} 0,
-// attribute wildcards, attribute uses on a type whose content is a choice,
-// attribute uses with an effective value constraint, mixed and simple
-// content, extension, a simple-content restriction of any base but
-// xs:anyType, a named complex type, or a top-level element through
+// <group ref> particles, a wildcard alternative of a choice, a particle with
+// {max occurs} 0, attribute wildcards, attribute uses on a type whose
+// content is a choice, attribute uses with an effective value constraint,
+// mixed and simple content, extension, a simple-content restriction of any
+// base but xs:anyType, a named complex type, or a top-level element through
 // <element ref> particles, reaching itself through struct values, the
 // special simple types, union types, a list whose {item type definition}
 // declines, and every primitive the first bullet does not map, for an
@@ -221,9 +227,10 @@
 // element date of type xs:date names its type Date2. The raw-content
 // structs are named AnyType, AnyAttribute, AnyChild and AnyElement, claimed
 // together in that order when the walk first reaches a declaration of type
-// xs:anyType, ahead of that declaration's own type, so that a top-level
-// element anyType with no type names its type AnyType2. Every other generated
-// type's header comment records the QName and the schema Loc of the
+// xs:anyType or a wildcard particle, ahead of that declaration's own type, so
+// that a top-level element anyType with no type names its type AnyType2. A
+// wildcard particle's field is named as if from local name any. Every other
+// generated type's header comment records the QName and the schema Loc of the
 // declaration it is named from: the element declaration, or the complex type
 // definition for a type named from one. A datatype struct's header records
 // its datatype's QName alone, a builtin having no schema document, then a

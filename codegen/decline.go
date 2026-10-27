@@ -64,7 +64,8 @@ func (c Construct) String() string {
 }
 
 // construct is the closed set of constructs the generator declines, one per
-// declining site. The zero value is invalid (STYLE T1).
+// declining site but constructVacuousParticle, which field's wildcard and
+// element paths each decline. The zero value is invalid (STYLE T1).
 type construct uint8
 
 // The construct values, in the order of their declining sites in emit.go.
@@ -129,7 +130,7 @@ var constructs = [...]struct{ name, format string }{
 	constructContentOccurs:            {"content particle not exactly once", "%s whose content particle occurs %s times rather than exactly once"},
 	constructContentGroupRef:          {"content particle <group ref>", "%s whose content particle is a <group ref>"},
 	constructAll:                      {"all compositor", "%s with an all compositor"},
-	constructVacuousParticle:          {"particle with {max occurs} 0", "a particle of element %s with {max occurs} 0 in %s"},
+	constructVacuousParticle:          {"particle with {max occurs} 0", "a particle of %s with {max occurs} 0 in %s"},
 	constructAttributeValueConstraint: {"attribute effective value constraint", "%s with a %s effective value constraint (§3.5.4 key-evc)"},
 	constructValueCycle:               {"struct-value recursion", "%s reaching %s again through elements that each occur exactly once"},
 	constructGroupRef:                 {"<group ref> particle", "a <group ref> particle to %s in %s"},
