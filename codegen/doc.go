@@ -137,6 +137,9 @@
 //     element emits exactly as it would without one, and enforcing it is
 //     the validator's.
 //
+// ExampleGenerate prints the whole file Generate writes for a schema inside
+// this slice.
+//
 // GAP(codegen): every other construct declines: the all compositor, an
 // emptiable choice, a choice with no {particles}, nested model groups,
 // <group ref> particles, wildcards, a particle with {max occurs} 0,
