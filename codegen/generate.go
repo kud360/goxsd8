@@ -175,8 +175,8 @@ func prepare(t Target, earlier []Target) (src []byte, declines []*DeclineError, 
 // target, in slice order, the first of its refusals below, opened with the
 // target's name as Generate's errors are. It returns nil when no target is
 // refused. A target is refused, in this order, when its Dir or Package breaks
-// its field's rule; when its Dir equals an earlier target's after
-// filepath.Clean, the earlier target refused or not; when filepath.Abs cannot
+// its field's rule; when its Dir equals an earlier target's non-empty Dir
+// after filepath.Clean, the earlier target refused or not; when filepath.Abs cannot
 // make its Dir absolute; and when its Dir exists and is not a directory, or
 // holds an xsd_gen.go that is not a regular file or that Generate's overwrite
 // rule does not let it replace, or either cannot be checked or read. Generate
@@ -212,7 +212,7 @@ func checkTarget(t Target, earlier []Target) (base string, err error) {
 		return "", errors.New(`the package name is "main", but the emitted package declares no func main and would not build`)
 	}
 	for j, e := range earlier {
-		if filepath.Clean(e.Dir) == filepath.Clean(t.Dir) {
+		if e.Dir != "" && filepath.Clean(e.Dir) == filepath.Clean(t.Dir) {
 			return "", fmt.Errorf("the output directory %s is also the output directory of %s", t.Dir, e.name(j))
 		}
 	}

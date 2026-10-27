@@ -298,6 +298,33 @@ func TestCheckTargets(t *testing.T) {
 	}
 }
 
+// TestCheckTargetsEmptyEarlierDir pins that an earlier target with an empty
+// Dir, which filepath.Clean makes ".", is no duplicate of a later "." Dir,
+// while two "." Dirs still are.
+func TestCheckTargetsEmptyEarlierDir(t *testing.T) {
+	tests := []struct {
+		name    string
+		targets []Target
+		want    string
+	}{
+		{"empty then dot", []Target{{Dir: "", Package: "p"}, {Dir: ".", Package: "p"}},
+			"codegen: target 0: no output directory given"},
+		{"dot twice", []Target{{Dir: ".", Package: "p"}, {Dir: ".", Package: "q"}},
+			"codegen: target 1: the output directory . is also the output directory of target 0"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := make([]string, 0, 1)
+			for _, err := range CheckTargets(tt.targets) {
+				got = append(got, err.Error())
+			}
+			if len(got) != 1 || got[0] != tt.want {
+				t.Errorf("CheckTargets = %q, want [%q]", got, tt.want)
+			}
+		})
+	}
+}
+
 // TestGenerateCollectsDeclines pins that Generate's error holds every decline,
 // in target order and then document order, each opened with its target's
 // name: one per top-level element declaration's turn, a decline met again
