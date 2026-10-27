@@ -160,11 +160,28 @@ type emitter struct {
 	usesBig bool
 	// datatypes holds the name claimed for each datatype struct emitted, so
 	// that each is emitted once per package; it is a lookup index only and
-	// never iterated (STYLE D2). datatypeDecls holds those structs'
-	// declarations in first-use order, emitted after decls.
-	datatypes     map[xsd.QName]string
-	datatypeDecls []string
+	// never iterated (STYLE D2). tailDecls holds those structs' declarations,
+	// and the raw-content structs' (anyTypeType), in first-use order, emitted
+	// after decls.
+	datatypes map[xsd.QName]string
+	tailDecls []string
+	// raw holds the names claimed for the four raw-content structs, which
+	// anyTypeType emits once per package; its zero value means they are
+	// unclaimed and unemitted.
+	raw rawNames
 }
+
+// rawNames is the names claimed for the four raw-content structs "# Coverage"
+// gives an element of type xs:anyType (§3.4.7 any-type-itself), in claim
+// order.
+type rawNames struct {
+	anyType, attribute, child, element string
+}
+
+// isAnyType reports whether td is xs:anyType itself, by identity: every other
+// type definition is derived from it (§2.2.1.1 key-derived), whatever its
+// shape, and so is never xs:anyType.
+func isAnyType(td xsd.TypeDefinition) bool { return td.Name() == anyTypeName }
 
 // emittedType is the Go type emitted for one complex type definition or
 // top-level element declaration: its name, and whether it is a sealed
@@ -238,7 +255,7 @@ func emit(schema *xsd.Schema, pkg, base string) (src []byte, declines []*Decline
 	if e.usesBig {
 		b.WriteString("\nimport \"math/big\"\n")
 	}
-	for _, d := range slices.Concat(e.decls, e.datatypeDecls) {
+	for _, d := range slices.Concat(e.decls, e.tailDecls) {
 		b.WriteString("\n")
 		b.WriteString(d)
 	}
@@ -303,13 +320,14 @@ func headerLoc(base string, loc xsderr.Loc) string {
 }
 
 // topLevel emits the type of one top-level element declaration: a named type
-// over an atomic Go type ("# Coverage") for an atomic simple {type definition},
-// over a slice of one for a list, a struct or sealed interface for an accepted
-// complex one, named or anonymous. That type is named from the element
-// (elementType), and a local element of the same named type never shares it
-// (nestedType), while every <element ref> particle to the element does; the
-// types nested in it are named from the type when it is named, and shared with
-// that type's every other use, and from the element when it is anonymous.
+// over the raw-content struct AnyType ("# Coverage") for xs:anyType, over an
+// atomic Go type for an atomic simple {type definition}, over a slice of one
+// for a list, a struct or sealed interface for an accepted complex one, named
+// or anonymous. That type is named from the element (elementType), and a local
+// element of the same named type never shares it (nestedType), while every
+// <element ref> particle to the element does; the types nested in it are named
+// from the type when it is named, and shared with that type's every other use,
+// and from the element when it is anonymous.
 func (e *emitter) topLevel(decl xsd.ElementDeclaration) error {
 	td, err := e.declaredType(decl)
 	if err != nil {
@@ -318,6 +336,10 @@ func (e *emitter) topLevel(decl xsd.ElementDeclaration) error {
 	typ, err := e.elementType(decl, td)
 	if err != nil {
 		return err
+	}
+	if isAnyType(td) {
+		e.decls = append(e.decls, header(typ.name, e.elementFrom(decl))+fmt.Sprintf("type %s %s\n", typ.name, e.raw.anyType))
+		return nil
 	}
 	switch t := td.(type) {
 	case *xsd.SimpleType:
@@ -349,24 +371,31 @@ func (e *emitter) topLevel(decl xsd.ElementDeclaration) error {
 // elementType returns the type emitted for the top-level element declaration
 // decl, whose {type definition} declaredType resolved to td, claiming its name
 // and checking its type when the walk first reaches decl: at its own topLevel
-// visit, or at an <element ref> particle to it met earlier. For a simple td
-// that check is simpleGoType's, run before the name is claimed so that a
-// datatype struct claims its name first ("# Naming"); for a complex one it is
-// shape's, run after. It emits nothing: topLevel emits the type's declaration
+// visit, or at an <element ref> particle to it met earlier. For xs:anyType
+// there is no check, and anyTypeType claims the raw-content structs' names
+// before decl's is claimed ("# Naming"); for a simple td the check is
+// simpleGoType's, run before the name is claimed so that a datatype struct
+// claims its name first; for a complex one it is shape's, run after. It emits
+// nothing but the raw-content structs: topLevel emits the type's declaration
 // at decl's own visit, in document order, whichever reached decl first.
 func (e *emitter) elementType(decl xsd.ElementDeclaration, td xsd.TypeDefinition) (emittedType, error) {
 	if typ, ok := e.elements[decl.Name()]; ok {
 		return typ, nil
 	}
 	var typ emittedType
-	switch t := td.(type) {
-	case *xsd.SimpleType:
-		if _, err := e.simpleGoType("element "+decl.Name().String(), decl.Loc(), t); err != nil {
+	st, isSimple := td.(*xsd.SimpleType)
+	ct, isComplex := td.(xsd.ComplexType)
+	switch {
+	case isAnyType(td):
+		e.anyTypeType()
+		typ = emittedType{name: e.types.claim(decl.Name().Local)}
+	case isSimple:
+		if _, err := e.simpleGoType("element "+decl.Name().String(), decl.Loc(), st); err != nil {
 			return emittedType{}, err
 		}
 		typ = emittedType{name: e.types.claim(decl.Name().Local)}
-	case xsd.ComplexType:
-		shaped, _, err := e.shape(e.types.claim(decl.Name().Local), e.elementOrigin(decl, t), t)
+	case isComplex:
+		shaped, _, err := e.shape(e.types.claim(decl.Name().Local), e.elementOrigin(decl, ct), ct)
 		if err != nil {
 			return emittedType{}, err
 		}
@@ -380,7 +409,7 @@ func (e *emitter) elementType(decl xsd.ElementDeclaration, td xsd.TypeDefinition
 
 // declaredType checks the element declaration properties the slice declines
 // on every declaration it emits from, and returns the resolved {type
-// definition}, declining xs:anyType.
+// definition}.
 func (e *emitter) declaredType(decl xsd.ElementDeclaration) (xsd.TypeDefinition, error) {
 	subject := "element " + decl.Name().String()
 	switch {
@@ -400,9 +429,6 @@ func (e *emitter) declaredType(decl xsd.ElementDeclaration) (xsd.TypeDefinition,
 	td, ok := e.schema.ResolvedType(decl.TypeDefinition())
 	if !ok {
 		return nil, fmt.Errorf("%s at %s: its {type definition} does not resolve", subject, decl.Loc())
-	}
-	if td.Name() == anyTypeName {
-		return nil, decline(decl.Loc(), constructAnyTypeElement, subject)
 	}
 	return td, nil
 }
@@ -506,8 +532,8 @@ func (e *emitter) useBig(typ string) string {
 
 // datatypeType returns the name of the struct ds, emitting it when no earlier
 // declaration did: its name is claimed in e.types at that first use, by the
-// package doc's "Naming", and its declaration joins e.datatypeDecls. Emitting
-// a struct with a math/big field sets e.usesBig.
+// package doc's "Naming", and its declaration joins e.tailDecls. Emitting a
+// struct with a math/big field sets e.usesBig.
 func (e *emitter) datatypeType(ds datatypeStruct) string {
 	if name, ok := e.datatypes[ds.datatype]; ok {
 		return name
@@ -527,8 +553,41 @@ func (e *emitter) datatypeType(ds datatypeStruct) string {
 		fmt.Fprintf(&b, "\t%s %s\n", f.name, f.goType)
 	}
 	b.WriteString("}\n")
-	e.datatypeDecls = append(e.datatypeDecls, b.String())
+	e.tailDecls = append(e.tailDecls, b.String())
 	return name
+}
+
+// anyTypeType returns the name of the raw-content struct AnyType, which holds
+// the content of an element of type xs:anyType: mixed, a lax ##any wildcard
+// any number of times, and a lax ##any {attribute wildcard} (§3.4.7
+// any-type-itself). When no earlier declaration needed them, it claims the four
+// raw-content structs' names in e.types, in rawNames' order, by the package
+// doc's "Naming", and appends their declarations to e.tailDecls in that order.
+// No field names math/big.
+func (e *emitter) anyTypeType() string {
+	if e.raw.anyType != "" {
+		return e.raw.anyType
+	}
+	n := rawNames{
+		anyType:   e.types.claim("anyType"),
+		attribute: e.types.claim("anyAttribute"),
+		child:     e.types.claim("anyChild"),
+		element:   e.types.claim("anyElement"),
+	}
+	e.raw = n
+	from := "complex type " + anyTypeName.String()
+	e.tailDecls = append(e.tailDecls,
+		header(n.anyType, from)+
+			"// Text is the characters before the first of Children, \"\" for none.\n"+
+			fmt.Sprintf("type %s struct {\n\tAttributes []%s\n\tText string\n\tChildren []%s\n}\n", n.anyType, n.attribute, n.child),
+		header(n.attribute, from)+
+			fmt.Sprintf("type %s struct {\n\tSpace, Local, Value string\n}\n", n.attribute),
+		header(n.child, from)+
+			"// Tail is the characters after Element, before the next child or the end.\n"+
+			fmt.Sprintf("type %s struct {\n\tElement %s\n\tTail string\n}\n", n.child, n.element),
+		header(n.element, from)+
+			fmt.Sprintf("type %s struct {\n\tSpace, Local string\n\tContent %s\n}\n", n.element, n.anyType))
+	return n.anyType
 }
 
 // builtinType is the Go type "# Coverage" maps t to through the eight bounded
@@ -784,8 +843,10 @@ type fieldSpec struct {
 // referenced declaration, after declaredType has checked that declaration as
 // it checks every one; the walk does not enter that type's body, which
 // topLevel emits, but valueCycle checks it when the particle occurs exactly
-// once and the type is a complex type emitted as a struct. A global
-// declaration never reaches nestedType.
+// once and the type is a complex type other than xs:anyType emitted as a
+// struct. A local declaration of type xs:anyType holds the raw-content struct
+// AnyType (anyTypeType). Neither a global declaration nor xs:anyType ever
+// reaches nestedType.
 func (e *emitter) field(nested scope, chain []valueNode, subject string, loc xsderr.Loc, p xsd.Particle) (fieldSpec, error) {
 	decl, err := e.elementTerm(subject, loc, p.Term())
 	if err != nil {
@@ -802,6 +863,8 @@ func (e *emitter) field(nested scope, chain []valueNode, subject string, loc xsd
 	switch {
 	case decl.ScopeVariety() == xsd.ScopeGlobal:
 		typ, err = e.refType(chain, value, decl, td)
+	case isAnyType(td):
+		typ.name = e.anyTypeType()
 	case isSimple:
 		typ.name, err = e.simpleGoType("element "+decl.Name().String(), decl.Loc(), st)
 	case isComplex:
@@ -829,16 +892,17 @@ func (e *emitter) field(nested scope, chain []valueNode, subject string, loc xsd
 // refType returns the type of the field of an <element ref> particle to the
 // top-level element declaration decl, whose {type definition} declaredType
 // resolved to td: elementType's. When value is true, the particle occurring
-// exactly once, and that type is a struct emitted for a complex td,
-// valueCycle walks td's body from the particles whose chain is chain, as it
-// does whether or not decl's type was emitted earlier.
+// exactly once, and that type is a struct emitted for a complex td other than
+// xs:anyType, valueCycle walks td's body from the particles whose chain is
+// chain, as it does whether or not decl's type was emitted earlier. A td of
+// xs:anyType gets no walk: AnyType reaches itself only through slices.
 func (e *emitter) refType(chain []valueNode, value bool, decl xsd.ElementDeclaration, td xsd.TypeDefinition) (emittedType, error) {
 	typ, err := e.elementType(decl, td)
 	if err != nil {
 		return emittedType{}, err
 	}
 	ct, isComplex := td.(xsd.ComplexType)
-	if !value || !isComplex || typ.sealed {
+	if isAnyType(td) || !value || !isComplex || typ.sealed {
 		return typ, nil
 	}
 	return typ, e.valueCycle(chain, decl, e.elementOrigin(decl, ct).subject, ct)
@@ -1032,14 +1096,15 @@ func reacher(decl xsd.ElementDeclaration) string {
 // <element ref> particle names, reaches by a value field from particles whose
 // chain is chain, applying valueChain at each field; subject names t to the
 // checks it calls. A choice t, and a step whose first node (valueNodes) is in
-// e.acyclic, end the walk. It reads the schema, never e.emitted or
-// e.elements, so a type the emitting walk shares, and the type of a
-// declaration an <element ref> particle names, is walked again here unless
-// e.acyclic holds its step's first node; that node joins e.acyclic once the
-// walk of t's particles reaches the end, and a step that pushes none, a
-// local decl of an anonymous t, is never memoized. It returns only a
-// struct-value recursion: every other failure on its path ends that path,
-// since the emitting walk meets it.
+// e.acyclic, end the walk, and it never steps to an element of type
+// xs:anyType, whose AnyType reaches itself only through slices. It reads the
+// schema, never e.emitted or e.elements, so a type the emitting walk shares,
+// and the type of a declaration an <element ref> particle names, is walked
+// again here unless e.acyclic holds its step's first node; that node joins
+// e.acyclic once the walk of t's particles reaches the end, and a step that
+// pushes none, a local decl of an anonymous t, is never memoized. It returns
+// only a struct-value recursion: every other failure on its path ends that
+// path, since the emitting walk meets it.
 func (e *emitter) valueCycle(chain []valueNode, decl xsd.ElementDeclaration, subject string, t xsd.ComplexType) error {
 	nodes := valueNodes(decl, t)
 	if len(nodes) > 0 {
@@ -1073,7 +1138,7 @@ func (e *emitter) valueCycle(chain []valueNode, decl xsd.ElementDeclaration, sub
 			continue
 		}
 		ct, isComplex := td.(xsd.ComplexType)
-		if !isComplex {
+		if isAnyType(td) || !isComplex {
 			continue
 		}
 		elSubject := e.localOrigin(el, ct).subject
