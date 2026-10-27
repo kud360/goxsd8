@@ -337,11 +337,11 @@
 // neither reports the flag as one to move: no argument position accepts a
 // valued help spelling, so there is nowhere to move it to.
 //
-// Help is never scoped to a subcommand: a help flag in any argument position
-// prints the usage above and no other argument is examined, so both
-// goxsd8 parse -h and goxsd8 -xyz -help print it and exit 0. That scan is
-// positional-blind, which is also why -- carries no end-of-options meaning:
-// goxsd8 -- -help is a help request.
+// The usage above owns where a help flag is read and why help is unscoped.
+// No argument beside a help flag is examined, so goxsd8 -xyz -help prints
+// the usage and exits 0 as well. That scan is positional-blind, which is
+// also why -- carries no end-of-options meaning: goxsd8 -- -help is a help
+// request.
 //
 // Everything else is positional. The subcommand name comes first and the
 // common flags are its own, following it: goxsd8 parse -q a.xsd, never

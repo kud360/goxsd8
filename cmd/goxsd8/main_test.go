@@ -20,8 +20,8 @@ import (
 )
 
 // helpCases reach the help path: usage on stdout, nothing on stderr, exit 0.
-// Everything after the four bare spellings pins a decision doc.go's argument
-// vocabulary states rather than an accident — a help flag before its
+// Everything after the four bare spellings pins a decision usage or doc.go's
+// argument vocabulary states rather than an accident — a help flag before its
 // subcommand, a help flag alongside an unrecognized one, -- with no
 // end-of-options meaning, a help flag after a name outside the vocabulary
 // altogether, and `parse -h`, `validate -h` and `gen -h`: those three own the
