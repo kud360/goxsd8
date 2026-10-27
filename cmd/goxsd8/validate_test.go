@@ -113,6 +113,86 @@ func TestValidateViolationsGoToStdout(t *testing.T) {
 	}
 }
 
+// TestValidatePathRendering pins usage's Paths paragraph from a known working
+// directory: every line of an instance's report opens with the instance
+// argument as it was typed, whichever of the four spellings that is, and a
+// schema rejection's location is absolute whichever spelling named the schema.
+func TestValidatePathRendering(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.Mkdir(filepath.Join(dir, "sub"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for _, f := range []string{orderSchema, invalidInstance, brokenSchema} {
+		data, err := os.ReadFile(f)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(dir, "sub", filepath.Base(f)), data, 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	instanceXML, err := os.ReadFile(invalidInstance)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Chdir(dir)
+	const schema, instance, broken = "sub/order.xsd", "sub/order-invalid.xml", "sub/broken.xsd"
+	absInstance := filepath.Join(dir, instance)
+	absBroken := filepath.Join(dir, broken)
+
+	t.Run("instance", func(t *testing.T) {
+		for _, c := range []struct{ arg, opening string }{
+			{instance, instance + ":5:3: [cvc-"},
+			{"./" + instance, "./" + instance + ":5:3: [cvc-"},
+			{absInstance, absInstance + ":5:3: [cvc-"},
+			{stdinArg, stdinArg + ":5:3: [cvc-"},
+		} {
+			if c.arg == stdinArg {
+				r, w, err := os.Pipe()
+				if err != nil {
+					t.Fatal(err)
+				}
+				if _, err := w.Write(instanceXML); err != nil {
+					t.Fatal(err)
+				}
+				if err := w.Close(); err != nil {
+					t.Fatal(err)
+				}
+				old := os.Stdin
+				os.Stdin = r
+				t.Cleanup(func() { os.Stdin = old; _ = r.Close() })
+			}
+			args := []string{"validate", "-format", "xml", "-schema", schema, c.arg}
+			var stdout, stderr bytes.Buffer
+			if code := run(args, &stdout, &stderr); code != exitInvalid {
+				t.Fatalf("run(%q) = %d, want %d (stderr %q)", args, code, exitInvalid, stderr.String())
+			}
+			lines := strings.Split(strings.TrimSuffix(stdout.String(), "\n"), "\n")
+			if len(lines) != 2 {
+				t.Errorf("run(%q) stdout =\n%s\nwant 2 lines", args, stdout.String())
+			}
+			for _, line := range lines {
+				if !strings.HasPrefix(line, c.opening) {
+					t.Errorf("run(%q) line = %q, want it to open %q", args, line, c.opening)
+				}
+			}
+		}
+	})
+
+	t.Run("schema", func(t *testing.T) {
+		for _, arg := range []string{broken, "./" + broken, absBroken} {
+			args := []string{"validate", "-schema", arg, instance}
+			var stdout, stderr bytes.Buffer
+			if code := run(args, &stdout, &stderr); code != exitSchema {
+				t.Fatalf("run(%q) = %d, want %d (stderr %q)", args, code, exitSchema, stderr.String())
+			}
+			if want := absBroken + ":9:3: [src-resolve] "; !strings.HasPrefix(stderr.String(), want) {
+				t.Errorf("run(%q) stderr = %q, want it to open %q", args, stderr.String(), want)
+			}
+		}
+	})
+}
+
 // TestValidateRendersDelegatedVerdictWithoutPlaceholder pins the whole line a
 // delegating charge prints: the String Valid verdict it wraps carries no
 // position of its own, and renders as "[rule] msg" after the outer charge's
