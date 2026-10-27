@@ -40,22 +40,43 @@ type Target struct {
 	Name string
 }
 
-// name is the target's name, as Generate's doc defines it, for the target at
-// slice index i.
-func (t Target) name(i int) string {
-	if t.Name != "" {
-		return t.Name
+// targetName is the name Generate's doc gives the target at slice index i
+// whose Name is name.
+func targetName(name string, i int) string {
+	if name != "" {
+		return name
 	}
 	return fmt.Sprintf("target %d", i)
 }
 
-// failed is err as Generate returns it for the target at slice index i,
-// opened as Generate's doc states.
-func (t Target) failed(i int, err error) error {
-	if t.Name != "" {
-		return fmt.Errorf("%s: %w", t.name(i), err)
+// TargetError is one failure of one target, as Generate and CheckTargets
+// report it. Its text is the failure's, opened with the target's name as
+// Generate's doc states.
+type TargetError struct {
+	index int
+	name  string
+	err   error
+}
+
+// Error returns the failure's text opened with the target's name.
+func (e *TargetError) Error() string {
+	if e.name != "" {
+		return e.name + ": " + e.err.Error()
 	}
-	return fmt.Errorf("codegen: %s: %w", t.name(i), err)
+	return "codegen: " + targetName("", e.index) + ": " + e.err.Error()
+}
+
+// Index returns the failing target's index in the slice passed to Generate or
+// CheckTargets.
+func (e *TargetError) Index() int { return e.index }
+
+// Unwrap returns the failure the target's name opens.
+func (e *TargetError) Unwrap() error { return e.err }
+
+// failed is err as Generate and CheckTargets return it for the target at slice
+// index i, and the one construction site of a TargetError.
+func (t Target) failed(i int, err error) error {
+	return &TargetError{index: i, name: t.Name, err: err}
 }
 
 // Generate emits, for each target, one Go package of type declarations: the
@@ -110,7 +131,9 @@ func (t Target) failed(i int, err error) error {
 // target's name: its Name, or "target N" for the target at slice index N when
 // Name is empty. An unnamed target's error opens "codegen: target N: ", a
 // named one's "<Name>: " with no "codegen: " before it. The refusal of a Dir
-// equal to an earlier target's names that earlier target the same way.
+// equal to an earlier target's names that earlier target the same way. Each
+// element is a *TargetError, which errors.As retrieves: its Index method
+// returns N, and it unwraps to the failure the opening precedes.
 //
 // A decline is a generator limitation, not a schema fault: it is a
 // *DeclineError, never an *xsderr.Error, and it wraps errors.ErrUnsupported,
@@ -173,7 +196,7 @@ func prepare(t Target, earlier []Target) (src []byte, declines []*DeclineError, 
 // CheckTargets reports, without reading any Schema and without writing, the
 // targets Generate refuses whatever their Schemas hold: for each refused
 // target, in slice order, the first of its refusals below, opened with the
-// target's name as Generate's errors are. It returns nil when no target is
+// target's name and each a *TargetError, as Generate's errors are. It returns nil when no target is
 // refused. A target is refused, in this order, when its Dir or Package breaks
 // its field's rule; when its Dir equals an earlier target's non-empty Dir
 // after filepath.Clean, the earlier target refused or not; when filepath.Abs cannot
@@ -213,7 +236,7 @@ func checkTarget(t Target, earlier []Target) (base string, err error) {
 	}
 	for j, e := range earlier {
 		if e.Dir != "" && filepath.Clean(e.Dir) == filepath.Clean(t.Dir) {
-			return "", fmt.Errorf("the output directory %s is also the output directory of %s", t.Dir, e.name(j))
+			return "", fmt.Errorf("the output directory %s is also the output directory of %s", t.Dir, targetName(e.Name, j))
 		}
 	}
 	base, err = filepath.Abs(t.Dir)
