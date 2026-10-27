@@ -359,11 +359,11 @@ func (e *emitter) topLevel(decl xsd.ElementDeclaration) error {
 			return err
 		}
 		o := e.elementOrigin(decl, t)
-		_, particles, err := e.shape(typ.name, o, t)
+		_, content, err := e.shape(typ.name, o, t)
 		if err != nil {
 			return err
 		}
-		return e.body(typ, nested, chain, o, t, particles)
+		return e.body(typ, nested, chain, o, t, content)
 	}
 	return fmt.Errorf("element %s at %s: unexpected type definition %T", decl.Name(), decl.Loc(), td)
 }
@@ -649,59 +649,82 @@ func typeName(t xsd.TypeDefinition) string {
 // shape checks the complex type t against the package doc's "# Coverage"
 // shape, naming it in declines by o's subject, and returns the type it emits
 // as name — a struct for sequence or empty content, or a sealed interface for
-// choice content, which declines {attribute uses} — and the particles of its
-// content model group, nil for empty content. It emits nothing: body does,
-// so that a caller can store the type in e.emitted before its body is walked.
-func (e *emitter) shape(name string, o origin, t xsd.ComplexType) (emittedType, []xsd.Particle, error) {
-	group, hasParticle, err := e.contentGroup(o.subject, t)
+// choice content, which declines {attribute uses} — and its content particle
+// (contentGroup), nil for empty content. It emits nothing: body does, so that
+// a caller can store the type in e.emitted before its body is walked.
+func (e *emitter) shape(name string, o origin, t xsd.ComplexType) (emittedType, *contentParticle, error) {
+	content, err := e.contentGroup(o.subject, t)
 	if err != nil {
 		return emittedType{}, nil, err
 	}
-	if !hasParticle {
-		return emittedType{name: name}, nil, nil
-	}
-	if group.Compositor() != xsd.CompositorChoice {
-		return emittedType{name: name}, group.Particles(), nil
+	if content == nil || content.group.Compositor() != xsd.CompositorChoice {
+		return emittedType{name: name}, content, nil
 	}
 	if len(t.AttributeUses()) > 0 {
 		return emittedType{}, nil, decline(t.Loc(), constructChoiceAttributeUses, o.subject)
 	}
-	return emittedType{name: name, sealed: true}, group.Particles(), nil
+	return emittedType{name: name, sealed: true}, content, nil
 }
 
-// body emits typ, which shape returned for the complex type t with particles,
+// body emits typ, which shape returned for the complex type t with content,
 // generated from o: a struct holding a field per particle and then one per
 // attribute use, or the sealed interface sealedType emits; then the types its
 // particles reach, the anonymous ones named in nested. chain is valueChain's
 // for a walk of t's particles.
-func (e *emitter) body(typ emittedType, nested scope, chain []valueNode, o origin, t xsd.ComplexType, particles []xsd.Particle) error {
+func (e *emitter) body(typ emittedType, nested scope, chain []valueNode, o origin, t xsd.ComplexType, content *contentParticle) error {
 	if typ.sealed {
-		return e.sealedType(typ.name, nested, o, t, particles)
+		return e.sealedType(typ.name, nested, o, t, content.group.Particles())
 	}
 	slot := len(e.decls)
 	e.decls = append(e.decls, "")
-	fields := newNamer()
-	var body bytes.Buffer
-	for _, p := range particles {
-		field, err := e.field(nested, chain, o.subject, t.Loc(), p)
+	var fields []fieldSpec
+	if content != nil {
+		particleFields, err := e.particleFields(nested, chain, o.subject, t.Loc(), content.group.Particles())
 		if err != nil {
 			return err
 		}
-		fmt.Fprintf(&body, "\t%s %s\n", fields.claim(field.local), field.goType)
+		fields = particleFields
 	}
 	for _, u := range t.AttributeUses() {
 		field, err := e.attributeField(o.subject, t.Loc(), u)
 		if err != nil {
 			return err
 		}
-		fmt.Fprintf(&body, "\t%s %s\n", fields.claim(field.local), field.goType)
+		fields = append(fields, field)
 	}
-	typeDecl := fmt.Sprintf("type %s struct {\n%s}\n", typ.name, body.String())
-	if body.Len() == 0 {
-		typeDecl = fmt.Sprintf("type %s struct{}\n", typ.name)
-	}
-	e.decls[slot] = header(typ.name, o.from) + typeDecl
+	e.decls[slot] = header(typ.name, o.from) + structDecl(typ.name, fields)
 	return nil
+}
+
+// particleFields returns the fields of particles, in particle order, in a
+// struct whose nested types are named in nested and whose particles chain is
+// valueChain's for, for the complex type at loc named in declines by subject
+// (field).
+func (e *emitter) particleFields(nested scope, chain []valueNode, subject string, loc xsderr.Loc, particles []xsd.Particle) ([]fieldSpec, error) {
+	fields := make([]fieldSpec, 0, len(particles))
+	for _, p := range particles {
+		field, err := e.field(nested, chain, subject, loc, p)
+		if err != nil {
+			return nil, err
+		}
+		fields = append(fields, field)
+	}
+	return fields, nil
+}
+
+// structDecl renders the declaration of the struct name holding fields in
+// order, their names claimed in a namer of its own, and spelled struct{} when
+// there is no field.
+func structDecl(name string, fields []fieldSpec) string {
+	if len(fields) == 0 {
+		return fmt.Sprintf("type %s struct{}\n", name)
+	}
+	names := newNamer()
+	var b strings.Builder
+	for _, f := range fields {
+		fmt.Fprintf(&b, "\t%s %s\n", names.claim(f.local), f.goType)
+	}
+	return fmt.Sprintf("type %s struct {\n%s}\n", name, b.String())
 }
 
 // sealedType emits the sealed interface name for the complex type t generated
@@ -765,70 +788,76 @@ func mustOccurs(o xsd.Occurs, err error) xsd.Occurs {
 	return o
 }
 
+// contentParticle is a complex type's content {particle} as contentGroup
+// accepted it (§3.4.2.3.3 dcl.ctd.ctcc.common): group, the sequence or choice
+// model group that is its term, never the source <choice> itself, and occurs,
+// its {min occurs} and {max occurs}.
+type contentParticle struct {
+	group  xsd.ModelGroup
+	occurs xsd.Occurs
+}
+
 // contentGroup checks the complex type t, named in declines by subject,
 // against the package doc's "# Coverage" complex-type shape. Of t's base it
 // reads only the identity, to test for xs:anyType and to name the base in a
 // simple-content restriction's decline; every other check reads t's
 // finalized component, so a base that itself declines does not block t.
-// When err is nil, ok answers whether t's {content type} has a
-// {particle}: for element-only content it is true and group is the sequence
-// or choice model group that is the {particle}'s term, never the source
-// <choice> itself; for {variety} empty (§3.4.1), which has no {particle}, it
-// is false, err is nil and group is the zero value, which callers must not
-// read. Every other content declines. Particles and model
-// groups carry no Loc, so their declines cite t's.
-func (e *emitter) contentGroup(subject string, t xsd.ComplexType) (group xsd.ModelGroup, ok bool, err error) {
+// For element-only content it returns t's content particle; for {variety}
+// empty (§3.4.1), which has no {particle}, it returns nil and a nil error.
+// Every other content declines. Particles and model groups carry no Loc, so
+// their declines cite t's.
+func (e *emitter) contentGroup(subject string, t xsd.ComplexType) (*contentParticle, error) {
 	if t.DerivationMethod() != xsd.DerivationRestriction {
-		return xsd.ModelGroup{}, false, decline(t.Loc(), constructDerivation, subject, t.DerivationMethod())
+		return nil, decline(t.Loc(), constructDerivation, subject, t.DerivationMethod())
 	}
 	base, found := e.schema.ResolvedType(t.Base())
 	if !found {
-		return xsd.ModelGroup{}, false, fmt.Errorf("%s at %s: its {base type definition} does not resolve", subject, t.Loc())
+		return nil, fmt.Errorf("%s at %s: its {base type definition} does not resolve", subject, t.Loc())
 	}
 	if !isAnyType(base) && t.ContentType().Variety() == xsd.ContentSimple {
-		return xsd.ModelGroup{}, false, decline(t.Loc(), constructRestrictionBase, subject, typeName(base))
+		return nil, decline(t.Loc(), constructRestrictionBase, subject, typeName(base))
 	}
 	switch {
 	case t.Abstract():
-		return xsd.ModelGroup{}, false, decline(t.Loc(), constructComplexTypeAbstract, subject)
+		return nil, decline(t.Loc(), constructComplexTypeAbstract, subject)
 	case len(t.Assertions()) > 0:
-		return xsd.ModelGroup{}, false, decline(t.Loc(), constructAssertions, subject)
+		return nil, decline(t.Loc(), constructAssertions, subject)
 	}
 	if _, has := t.AttributeWildcard(); has {
-		return xsd.ModelGroup{}, false, decline(t.Loc(), constructAttributeWildcard, subject)
+		return nil, decline(t.Loc(), constructAttributeWildcard, subject)
 	}
 	content, isElement := t.ContentType().(xsd.ElementContent)
 	if !isElement {
 		switch variety := t.ContentType().Variety(); variety {
 		case xsd.ContentEmpty:
-			return xsd.ModelGroup{}, false, nil
+			return nil, nil
 		case xsd.ContentSimple:
-			return xsd.ModelGroup{}, false, decline(t.Loc(), constructSimpleContent, subject)
+			return nil, decline(t.Loc(), constructSimpleContent, subject)
 		default:
-			return xsd.ModelGroup{}, false, fmt.Errorf("%s at %s: unexpected content type %T of {variety} %s", subject, t.Loc(), t.ContentType(), variety)
+			return nil, fmt.Errorf("%s at %s: unexpected content type %T of {variety} %s", subject, t.Loc(), t.ContentType(), variety)
 		}
 	}
 	if content.Mixed {
-		return xsd.ModelGroup{}, false, decline(t.Loc(), constructMixedContent, subject)
+		return nil, decline(t.Loc(), constructMixedContent, subject)
 	}
 	if content.OpenContent != nil {
-		return xsd.ModelGroup{}, false, decline(t.Loc(), constructOpenContent, subject)
+		return nil, decline(t.Loc(), constructOpenContent, subject)
 	}
 	if occurs := content.Particle.Occurs(); occurs != exactlyOnce {
-		return xsd.ModelGroup{}, false, decline(t.Loc(), constructContentOccurs, subject, occurs)
+		return nil, decline(t.Loc(), constructContentOccurs, subject, occurs)
 	}
 	resolved, isResolved := content.Particle.Term().(xsd.ResolvedTerm)
 	if !isResolved {
-		return xsd.ModelGroup{}, false, decline(t.Loc(), constructContentGroupRef, subject)
+		return nil, decline(t.Loc(), constructContentGroupRef, subject)
 	}
 	group, isGroup := resolved.Term.(xsd.ModelGroup)
 	if !isGroup {
-		return xsd.ModelGroup{}, false, fmt.Errorf("%s at %s: unexpected content particle term %T", subject, t.Loc(), resolved.Term)
+		return nil, fmt.Errorf("%s at %s: unexpected content particle term %T", subject, t.Loc(), resolved.Term)
 	}
 	if group.Compositor() == xsd.CompositorAll {
-		return xsd.ModelGroup{}, false, decline(t.Loc(), constructAll, subject)
+		return nil, decline(t.Loc(), constructAll, subject)
 	}
-	return group, true, nil
+	return &contentParticle{group: group, occurs: content.Particle.Occurs()}, nil
 }
 
 // fieldSpec is one struct field before its name is claimed.
@@ -1015,7 +1044,7 @@ func (e *emitter) nestedType(parent scope, chain []valueNode, value bool, decl x
 		}
 		return typ, e.valueCycle(chain, decl, o.subject, t)
 	}
-	typ, particles, err := e.shape(e.types.claim(locals...), o, t)
+	typ, content, err := e.shape(e.types.claim(locals...), o, t)
 	if err != nil {
 		return emittedType{}, err
 	}
@@ -1026,7 +1055,7 @@ func (e *emitter) nestedType(parent scope, chain []valueNode, value bool, decl x
 	if child.underNamedType {
 		e.emitted[key] = typ
 	}
-	if err := e.body(typ, child, next, o, t, particles); err != nil {
+	if err := e.body(typ, child, next, o, t, content); err != nil {
 		if child.underNamedType {
 			delete(e.emitted, key)
 		}
@@ -1155,8 +1184,8 @@ func (e *emitter) valueCycle(chain []valueNode, decl xsd.ElementDeclaration, sub
 			return nil
 		}
 	}
-	group, hasParticle, err := e.contentGroup(subject, t)
-	if err != nil || hasParticle && group.Compositor() == xsd.CompositorChoice {
+	content, err := e.contentGroup(subject, t)
+	if err != nil || content != nil && content.group.Compositor() == xsd.CompositorChoice {
 		//nolint:nilerr // a decline of t ends this path: the emitting walk meets it and returns it in walk order.
 		return nil
 	}
@@ -1165,8 +1194,8 @@ func (e *emitter) valueCycle(chain []valueNode, decl xsd.ElementDeclaration, sub
 		return err
 	}
 	var particles []xsd.Particle
-	if hasParticle {
-		particles = group.Particles()
+	if content != nil {
+		particles = content.group.Particles()
 	}
 	for _, p := range particles {
 		if p.Occurs() != exactlyOnce || wildcardTerm(p.Term()) {
