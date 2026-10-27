@@ -49,12 +49,16 @@ git clone https://github.com/kud360/goxsd8
 cd goxsd8
 git submodule update --init testdata/xsdtests   # W3C suite, ~215 MB
 go build ./... && go test ./...
-go install ./cmd/goxsd8                         # goxsd8 onto $(go env GOPATH)/bin
+go install ./cmd/goxsd8                         # needs Go 1.26 or newer, as go.mod sets
+export PATH="$(go env GOPATH)/bin:$PATH"
+command -v goxsd8                               # prints the binary's path
 ```
 
 `go build ./...` compiles every package and writes no executable; the
 `go install` line is what produces the `goxsd8` binary the CLI section below
-invokes.
+invokes. It writes the binary to `go env GOBIN`, or to `$(go env GOPATH)/bin`
+when that is empty, and neither is on `$PATH` by default: the `export` line
+adds the default one, so put `go env GOBIN` there instead when it is set.
 
 ### CLI (contract; `parse`, `validate` and `gen` are implemented)
 
@@ -140,8 +144,16 @@ twice.json:1:47: [jsonsrc] undecided: attribute member "kind" repeats in the obj
 ### Library
 
 Seeding the builtin datatypes and compiling a schema set both work TODAY.
+A program in your own module depends on the library through one line, run in
+that module's root, and needs no `replace` directive:
+
+```sh
+go get github.com/kud360/goxsd8@main            # in YOUR module, not this checkout
+```
+
 The program below and its continuations open the CLI section's files, so run
-it with `testdata/readme/` as the working directory:
+it with `testdata/readme/` as the working directory. That directory sits
+inside the goxsd8 module, so the program needs no `go get`:
 
 ```go
 package main
