@@ -140,8 +140,8 @@ func (t Target) failed(i int, err error) error {
 // so errors.Is(err, errors.ErrUnsupported) reports every error that holds a
 // decline, and errors.As retrieves the first one's *DeclineError; each decline
 // is retrieved from its own element. Its Construct method returns the
-// construct declined, and its Loc method the Loc of the nearest component that
-// carries one. Its text names both; the opening with the target's name, stated
+// construct declined, and its Loc method the Loc that method's doc states. Its
+// text names both; the opening with the target's name, stated
 // above, precedes that text and is no part of it. The package doc's "Coverage"
 // section states what the generator accepts.
 //

@@ -21,7 +21,18 @@ type DeclineError struct {
 // Construct returns the decline's Construct, as Generate's doc defines it.
 func (e *DeclineError) Construct() Construct { return Construct{e.construct} }
 
-// Loc returns the decline's Loc, as Generate's doc defines it.
+// Loc returns the Loc of the component the decline is charged to: the element
+// declaration, for a property of that declaration or of its simple type, or
+// for its reaching an element or complex type again through elements that
+// each occur exactly once; the complex type, for a property of that type, its
+// content or its particles; and for an attribute use, the attribute
+// declaration it resolves to, the global one for an <attribute ref>.
+//
+// Loc is the zero xsderr.Loc exactly when that component's Loc is zero: a
+// component built through xsd.SchemaBuilder with a zero Loc, or one of the
+// built-in xsi: and xml: attribute declarations parser.Parse supplies itself
+// rather than reading from a schema document. Every other decline from a
+// parsed schema carries the declining component's location in its document.
 func (e *DeclineError) Loc() xsderr.Loc { return e.loc }
 
 // Error names the construct and the Loc; it does not name the target.
@@ -33,11 +44,18 @@ func (e *DeclineError) Error() string {
 func (e *DeclineError) Unwrap() error { return errors.ErrUnsupported }
 
 // A Construct is a construct Generate declines: two declines of the same
-// construct have equal Constructs; the zero Construct names none.
+// construct have equal Constructs; the zero Construct names none. A Construct
+// is comparable: == reports whether two name the same construct, and it may be
+// used as a map key. The package doc's "Coverage" section states what
+// declines.
 type Construct struct{ c construct }
 
-// String returns the construct's name, distinct for each Construct; it is not
-// the decline's message.
+// String returns the construct's name for display, distinct for each
+// Construct; it is not the decline's message. The names are not stable across
+// releases: a release may rename a construct, split one into several, or stop
+// returning a name once the generator covers its construct, and no name is
+// reserved. To tell constructs apart, compare Construct values or key a map by
+// them; never match a name.
 func (c Construct) String() string {
 	if c.c == 0 || int(c.c) >= len(constructs) {
 		return "Construct(" + strconv.Itoa(int(c.c)) + ")"

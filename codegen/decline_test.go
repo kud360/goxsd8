@@ -389,7 +389,12 @@ func TestGenerateDeclinesVacuousParticle(t *testing.T) {
 	}
 	var de *DeclineError
 	if !errors.As(err, &de) || de.Construct() != (Construct{constructVacuousParticle}) {
-		t.Errorf("Generate = %v, want a *DeclineError of Construct %v", err, Construct{constructVacuousParticle})
+		t.Fatalf("Generate = %v, want a *DeclineError of Construct %v", err, Construct{constructVacuousParticle})
+	}
+	// Every component is built at the zero Loc, so DeclineError.Loc's doc
+	// makes the decline's Loc zero.
+	if loc := de.Loc(); loc != (xsderr.Loc{}) {
+		t.Errorf("Loc() = %+v, want the zero xsderr.Loc", loc)
 	}
 	if _, err := os.Stat(out); !errors.Is(err, os.ErrNotExist) {
 		t.Errorf("Dir %s exists after a decline (stat: %v)", out, err)
@@ -457,5 +462,78 @@ func TestConstructString(t *testing.T) {
 		if got, want := (Construct{c}).String(), fmt.Sprintf("Construct(%d)", c); got != want {
 			t.Errorf("Construct{%d}.String() = %q, want %q", c, got, want)
 		}
+	}
+}
+
+// parsedDecline parses body as line 2 of the one schema document s.xsd, its
+// <xs:schema> start tag declaring the xs and xsi prefixes, and returns the
+// *DeclineError Generate returns for it.
+func parsedDecline(t *testing.T, body string) *DeclineError {
+	t.Helper()
+	schema := parseString(t, "<xs:schema xmlns:xs=\"http://www.w3.org/2001/XMLSchema\" xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\">\n"+body+"\n</xs:schema>\n")
+	err := Generate([]Target{{Schema: schema, Dir: filepath.Join(t.TempDir(), "out"), Package: "p"}})
+	var de *DeclineError
+	if !errors.As(err, &de) {
+		t.Fatalf("Generate = %v, want an error errors.As retrieves a *DeclineError from", err)
+	}
+	return de
+}
+
+// TestConstructMapKey pins Construct's doc: a Construct is comparable and may
+// key a map. Each Construct comes from a decline, never a literal: two empty
+// choices declining at different elements share one key, and a nillable
+// element's decline keys another.
+func TestConstructMapKey(t *testing.T) {
+	first := parsedDecline(t, `<xs:element name="e"><xs:complexType><xs:choice/></xs:complexType></xs:element>`).Construct()
+	second := parsedDecline(t, `<xs:element name="f"><xs:complexType><xs:choice/></xs:complexType></xs:element>`).Construct()
+	third := parsedDecline(t, `<xs:element name="n" nillable="true" type="xs:string"/>`).Construct()
+	counts := make(map[Construct]int)
+	for _, c := range []Construct{first, second, third} {
+		counts[c]++
+	}
+	if got := len(counts); got != 2 {
+		t.Errorf("map holds %d keys, want 2: %v", got, counts)
+	}
+	if got := counts[first]; got != 2 {
+		t.Errorf("counts[%v] = %d, want 2", first, got)
+	}
+	if got := counts[third]; got != 1 {
+		t.Errorf("counts[%v] = %d, want 1", third, got)
+	}
+	if first != second {
+		t.Errorf("two empty-choice declines have Constructs %v and %v, want them ==", first, second)
+	}
+	if first == third {
+		t.Errorf("an empty-choice and a nillable decline both have Construct %v, want them !=", first)
+	}
+}
+
+// TestDeclineErrorLoc pins DeclineError.Loc's doc for parsed schemas: a
+// decline charged to a built-in xsi: or xml: attribute declaration the parser
+// supplies has the zero Loc, and one charged to a declaration read from the
+// document has that declaration's location.
+func TestDeclineErrorLoc(t *testing.T) {
+	tests := []struct {
+		name, body string
+		kind       construct
+		want       xsderr.Loc
+	}{
+		{"xsi:type attribute", `<xs:element name="e"><xs:complexType><xs:attribute ref="xsi:type"/></xs:complexType></xs:element>`,
+			constructUncoveredPrimitive, xsderr.Loc{}},
+		{"xml:lang attribute", `<xs:import namespace="http://www.w3.org/XML/1998/namespace"/><xs:element name="e"><xs:complexType><xs:attribute ref="xml:lang"/></xs:complexType></xs:element>`,
+			constructUnionType, xsderr.Loc{}},
+		{"nillable element", `<xs:element name="e" nillable="true" type="xs:string"/>`,
+			constructElementNillable, xsderr.Loc{URI: "s.xsd", Line: 2, Col: 1}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			de := parsedDecline(t, tt.body)
+			if got, want := de.Construct(), (Construct{tt.kind}); got != want {
+				t.Errorf("Construct() = %v, want %v", got, want)
+			}
+			if got := de.Loc(); got != tt.want {
+				t.Errorf("Loc() = %+v, want %+v", got, tt.want)
+			}
+		})
 	}
 }
