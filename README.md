@@ -196,8 +196,8 @@ One limit of `parser.Parse` worth knowing up front: it returns only the
 FIRST error, not a list of them.
 
 `parser.ParseReport(location string, opts ...Option) (*xsd.Schema,
-*AssemblyReport, error)` is the primitive, and `parser.Parse` is it without
-the report. Reach for it to diagnose an assembly that came back smaller than
+*AssemblyReport, error)` returns that report alongside the schema, and
+`parser.Parse` is it without the report. Reach for it to diagnose an assembly that came back smaller than
 expected: `AssemblyReport.Documents()` lists the readings the assembly
 performed, and `Unfollowed()` the `xs:include` / `xs:redefine` /
 `xs:override` / `xs:import` references that yielded no document, each with
@@ -208,6 +208,21 @@ assembly got even when an error comes back; `go doc
 github.com/kud360/goxsd8/parser AssemblyReport` is its contract. It does not
 lift the first-error limit above — `ParseReport` stops at the first error
 too, so directives it never reached are neither followed nor reported.
+
+Several schema documents compiled as one set go through
+`parser.ParseSet(roots []parser.Root, opts ...Option)`, which returns the
+same three values. `parser.RootAt(location)` names a document the caller
+vouches for, so failing to read it is an error; `parser.HintAt(namespace,
+location)` names a schema location hint whose document may legally be
+absent, and is then skipped and listed by
+`AssemblyReport.UnfollowedRoots()`. `Parse` and `ParseReport` are
+`ParseSet` over one `RootAt`. Sharing a set licenses nothing: a root whose
+QNames name a namespace other than its own target namespace (or the XSD and
+XSI namespaces) — another root's, or a document another root includes —
+must `xs:import` that namespace in its own document, `<xs:import
+namespace="urn:b"/>` with no `schemaLocation`, or `ParseSet` charges
+`src-resolve`. `go doc github.com/kud360/goxsd8/parser ParseSet` is the
+contract.
 
 The component model is also constructible directly, without a schema
 document: `xsd.NewSchemaBuilder()` → `Add*` → `Finalize()` returns an
