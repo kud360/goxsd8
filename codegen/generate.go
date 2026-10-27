@@ -196,14 +196,14 @@ func prepare(t Target, earlier []Target) (src []byte, declines []*DeclineError, 
 // CheckTargets reports, without reading any Schema and without writing, the
 // targets Generate refuses whatever their Schemas hold: for each refused
 // target, in slice order, the first of its refusals below, opened with the
-// target's name and each a *TargetError, as Generate's errors are. It returns nil when no target is
-// refused. A target is refused, in this order, when its Dir or Package breaks
-// its field's rule; when its Dir equals an earlier target's non-empty Dir
-// after filepath.Clean, the earlier target refused or not; when filepath.Abs cannot
-// make its Dir absolute; and when its Dir exists and is not a directory, or
-// holds an xsd_gen.go that is not a regular file or that Generate's overwrite
-// rule does not let it replace, or either cannot be checked or read. Generate
-// states how the duplicate-Dir refusal names the earlier target and the
+// target's name and each a *TargetError, as Generate's errors are. It returns nil
+// when no target is refused. A target is refused, in this order, when its Dir or
+// Package breaks its field's rule; when its Dir equals an earlier target's
+// non-empty Dir after filepath.Clean, the earlier target refused or not; when
+// filepath.Abs cannot make its Dir absolute; and when its Dir exists and is not a
+// directory, or holds an xsd_gen.go that is not a regular file or that Generate's
+// overwrite rule does not let it replace, or either cannot be checked or read.
+// Generate states how the duplicate-Dir refusal names the earlier target and the
 // overwrite rule.
 func CheckTargets(targets []Target) []error {
 	var errs []error
