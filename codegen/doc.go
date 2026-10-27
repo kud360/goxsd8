@@ -26,7 +26,8 @@
 // holding the type emitted for the top-level element declaration it names —
 // then, after every other declaration and in the order the walk
 // first needs each, one datatype struct per date, time or duration datatype
-// a declaration's type is declared over, and declines everything outside this
+// a declaration's type is declared over and the four raw-content structs
+// once an element's type is xs:anyType, and declines everything outside this
 // slice:
 //
 //   - An element whose {type definition} is an atomic or list simple type
@@ -76,19 +77,41 @@
 //     value, the empty list. Facets are not represented and do not change an
 //     atomic Go type, and a named user simple type gets no Go type of its
 //     own.
-//   - An element whose {type definition} is a complex type, named or
-//     anonymous, gets a type of its own when the type is a restriction of
-//     xs:anyType, implicit (§3.4.2.3.2 dcl.ctd.ctcc.implicit) or explicit
-//     (<complexContent><restriction base="xs:anyType">, §3.4.2.3.1
+//   - An element whose {type definition} is xs:anyType (§3.4.7
+//     any-type-itself), named by its type attribute or the default for an
+//     element declared with no type and no substitutionGroup (§3.3.2), holds
+//     its raw content. A top-level element gets a named type over the struct
+//     AnyType. A local element's field, and a choice alternative's branch,
+//     holds AnyType, by the occurrence rules below. This is xs:anyType's
+//     alone: a user complex type of the same shape, or derived from
+//     xs:anyType, is a complex type as the next bullet states. AnyType holds
+//     the element's [attributes], xsi: ones included, in document order as
+//     AnyAttribute values of Space, Local and Value, at most one per expanded
+//     name, which the struct does not enforce; then its mixed content as Text,
+//     the characters before the first child element, "" for none, and
+//     Children, one AnyChild per child element in order, holding that child as
+//     Element and as Tail the characters after it, before the next child or
+//     the end, so that each gap between children is one string. An AnyElement
+//     holds a child's expanded name, Space and Local, and its own content as
+//     an AnyType: a lax ##any wildcard's match is held raw, whether or not a
+//     declaration or an xsi:type would govern it. Namespace declarations are
+//     not represented, so a prefix inside a value, such as an xsi:type's, does
+//     not resolve from the struct. AnyType reaches itself only through the
+//     slice Children, so no element of type xs:anyType closes a struct-value
+//     recursion, and none of the four names math/big.
+//   - An element whose {type definition} is a complex type other than
+//     xs:anyType, named or anonymous, gets a type of its own when the type is
+//     a restriction of xs:anyType, implicit (§3.4.2.3.2 dcl.ctd.ctcc.implicit)
+//     or explicit (<complexContent><restriction base="xs:anyType">, §3.4.2.3.1
 //     dcl.ctd.ctcc.explicit), with no {attribute wildcard}, {assertions} or
 //     {abstract}, and with one of two contents: empty content ({variety}
 //     empty, §3.4.1); or element-only content (§3.4.2.3.3 dcl.ctd.ctcc.common)
 //     that has no {open content} and whose {particle} occurs exactly once and
 //     holds a sequence or a choice of element particles: local element
-//     declarations, and <element ref> particles, whose {term} is the
-//     top-level declaration the ref names (§3.3.2.4). A sequence
-//     gives a struct, and so does empty content, with no particle field; a
-//     struct with no field is spelled struct{}.
+//     declarations, and <element ref> particles, whose {term} is the top-level
+//     declaration the ref names (§3.3.2.4). A sequence gives a struct, and so
+//     does empty content, with no particle field; a struct with no field is
+//     spelled struct{}.
 //   - A choice gives a sealed interface, the closed-sum exception: an
 //     interface whose one method is unexported, "is" plus the interface's
 //     name, and one branch struct per alternative in particle order, emitted
@@ -147,10 +170,10 @@
 // attribute uses with an effective value constraint, mixed and simple
 // content, extension, restriction of any base but xs:anyType, a named
 // complex type, or a top-level element through <element ref> particles,
-// reaching itself through struct values, xs:anyType, the special simple
-// types, union types, a list whose {item type definition} declines, and every
-// primitive the first bullet does not map, for an element or an attribute
-// alike. #2900 owns lifting them.
+// reaching itself through struct values, the special simple types, union
+// types, a list whose {item type definition} declines, and every primitive
+// the first bullet does not map, for an element or an attribute alike.
+// #2900 owns lifting them.
 //
 // # Determinism
 //
@@ -159,8 +182,8 @@
 // absolute roots produce byte-identical output; "Naming" states where a
 // header's location is not relative. No map iteration anywhere near the
 // emitter; emission order is the walk's, which document order alone fixes, as
-// the first paragraph states (datatype structs last, in the order the walk
-// first needs each). Golden-file tests pin the output.
+// the first paragraph states (datatype structs and raw-content structs last,
+// in the order the walk first needs each). Golden-file tests pin the output.
 //
 // # Naming
 //
@@ -190,14 +213,20 @@
 // (dateTime → DateTime, gYearMonth → GYearMonth, dayTimeDuration →
 // DayTimeDuration), claimed when the walk first reaches a declaration whose
 // type needs it, ahead of that declaration's own type, so that a top-level
-// element date of type xs:date names its type Date2. Every other generated
+// element date of type xs:date names its type Date2. The raw-content
+// structs are named AnyType, AnyAttribute, AnyChild and AnyElement, claimed
+// together in that order when the walk first reaches a declaration of type
+// xs:anyType, ahead of that declaration's own type, so that a top-level
+// element anyType with no type names its type AnyType2. Every other generated
 // type's header comment records the QName and the schema Loc of the
 // declaration it is named from: the element declaration, or the complex type
 // definition for a type named from one. A datatype struct's header records
 // its datatype's QName alone, a builtin having no schema document, then a
 // second line stating what its fields' names do not, when there is any:
 // TimezoneOffset's unit and whether it may be absent, or that duration's
-// Months and Seconds share one sign. A Loc whose URI filepath.IsAbs accepts
+// Months and Seconds share one sign. A raw-content struct's header records
+// xs:anyType's QName alone, then, for AnyType and AnyChild, a second line
+// stating what Text or Tail holds. A Loc whose URI filepath.IsAbs accepts
 // renders relative to the target's Dir made absolute against the working
 // directory, slash-separated and climbing with ".." out of Dir. A document
 // outside the tree laid out alike, such as one an absolute schemaLocation

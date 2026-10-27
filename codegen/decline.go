@@ -74,7 +74,6 @@ const (
 	constructSubstitutionGroup
 	constructElementValueConstraint
 	constructTypeTable
-	constructAnyTypeElement
 	constructSpecialType
 	constructUnionType
 	constructAbsentVariety
@@ -111,7 +110,6 @@ var constructs = [...]struct{ name, format string }{
 	constructSubstitutionGroup:        {"{substitution group affiliations}", "%s with {substitution group affiliations}"},
 	constructElementValueConstraint:   {"element {value constraint}", "%s with a {value constraint}"},
 	constructTypeTable:                {"{type table}", "%s with a {type table}"},
-	constructAnyTypeElement:           {"element of type xs:anyType", "%s with {type definition} xs:anyType"},
 	constructSpecialType:              {"special type", "%s, a special type"},
 	constructUnionType:                {"union type", "%s, a union type"},
 	constructAbsentVariety:            {"absent {variety}", "%s, of absent {variety}"},
