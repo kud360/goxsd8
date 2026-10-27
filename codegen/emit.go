@@ -766,14 +766,11 @@ func mustOccurs(o xsd.Occurs, err error) xsd.Occurs {
 }
 
 // contentGroup checks the complex type t, named in declines by subject,
-// against the package doc's "# Coverage" complex-type shape — a restriction
-// of xs:anyType, implicit (§3.4.2.3.2 dcl.ctd.ctcc.implicit) or explicit
-// (§3.4.2.3.1 dcl.ctd.ctcc.explicit), or a complex-content restriction of
-// any other complex type, with the content §3.4.2.3.3 dcl.ctd.ctcc.common
-// maps. Of t's base it reads only the identity, to test for xs:anyType and
-// to name the base in a simple-content restriction's decline; every other
-// check reads t's finalized component, so a base that itself declines does
-// not block t. When err is nil, ok answers whether t's {content type} has a
+// against the package doc's "# Coverage" complex-type shape. Of t's base it
+// reads only the identity, to test for xs:anyType and to name the base in a
+// simple-content restriction's decline; every other check reads t's
+// finalized component, so a base that itself declines does not block t.
+// When err is nil, ok answers whether t's {content type} has a
 // {particle}: for element-only content it is true and group is the sequence
 // or choice model group that is the {particle}'s term, never the source
 // <choice> itself; for {variety} empty (§3.4.1), which has no {particle}, it
