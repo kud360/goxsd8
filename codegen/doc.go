@@ -20,7 +20,8 @@
 //
 // Generate emits, in document order, one Go type per top-level element
 // declaration, one per anonymous complex type nested in its type definition,
-// one per named complex type a local element declaration reaches, and one
+// one per named complex type a local element declaration reaches, one per
+// content model group whose particle occurs other than exactly once, and one
 // branch struct per alternative of each choice it emits as a sealed
 // interface — an <element ref> particle gets none of its own, its field
 // holding the type emitted for the top-level element declaration it names —
@@ -112,7 +113,8 @@
 //     included (§3.4.2.1 dcl.ctd.common), and {abstract} false, and has one of
 //     two contents: empty content ({variety} empty, §3.4.1); or element-only
 //     content (§3.4.2.3.3 dcl.ctd.ctcc.common) that has no {open content} and
-//     whose {particle} occurs exactly once and holds a sequence of element
+//     whose {particle}, which carries the <sequence>'s or <choice>'s own
+//     {min occurs} and {max occurs} (§3.9.1), holds a sequence of element
 //     and wildcard particles (§3.10.2.1 dcl.wc.p), or a choice of element
 //     particles: element particles are local element declarations, and
 //     <element ref> particles, whose {term} is the top-level declaration the
@@ -125,9 +127,18 @@
 //     after the interface, each holding the one field the alternative's
 //     particle gives and implementing the method; consumers type-switch over
 //     the branches, and "N pointer fields, exactly one non-nil" never
-//     appears. A choice is accepted only when its particle is not emptiable
-//     (§3.9.6.3 cos-group-emptiable): it has {particles}, and each has
-//     {min occurs} at least 1 (§3.8.6.6 cos-choice-range).
+//     appears. A choice is accepted only when one occurrence of it is not
+//     emptiable: it has {particles}, and each has {min occurs} at least 1,
+//     so that a particle of it with {min occurs} 1 is not emptiable
+//     (§3.8.6.6 cos-choice-range, §3.9.6.3 cos-group-emptiable).
+//   - A {particle} that occurs other than exactly once gives a struct whose
+//     first field holds what one occurrence of its model group gives — a
+//     struct of the sequence's particle fields alone, or the choice's sealed
+//     interface — by the occurrence rules below, followed by the attribute
+//     fields; the field and that type are named as if from the local name
+//     sequence or choice ("Naming"). The occurrence's fields lie behind that
+//     slice, pointer or interface, so no struct-value recursion passes
+//     through it.
 //   - Each particle of a sequence gives one field, in particle order: a local element with
 //     an atomic or list simple type gets the atomic Go type, or the slice, an element's type is
 //     declared over, one with an anonymous complex type of the same shape gets a struct or
@@ -147,22 +158,23 @@
 //     elements the wildcard would not admit (cvc-wildcard), and holds every match raw whether a
 //     strict or lax wildcard would assess it; enforcing either is the validator's. A named complex
 //     type, or a top-level element through <element ref> particles, that reaches itself through
-//     elements that each occur exactly once in a sequence, and whose types are not choices,
-//     declines: its Go type would hold itself as a struct value. {max occurs} above 1 or unbounded
-//     gives a slice whatever {min occurs} is, of a list's slice too ([][]T); {min occurs} 0 with
-//     {max occurs} 1 gives a pointer to a struct, atomic Go type, or list's slice (*[]T), and the
-//     bare interface, never a pointer to one, nil meaning absent.
-//   - Each attribute use of a type with sequence or empty content gives one
-//     field after the particle fields, if any, in the order [xsd.ComplexType.AttributeUses]
-//     returns its {attribute uses} (§3.4.2.4). The field is named from the attribute
-//     declaration's local name, so a qualified and an unqualified attribute of one local
-//     name, or an attribute named like an element of the struct, take the suffix "Naming"
-//     states, the later field taking it. Its {type definition} must be an atomic or list
-//     simple type and gives an atomic Go type, or a slice, as an element's
-//     does; {required} true gives that type, false a pointer to it (*[]T for a list), nil
-//     meaning absent. The use's effective value constraint (§3.5.4 key-evc) must be absent,
-//     whether the use or a global declaration it references carries the default or fixed
-//     value. A choice is accepted only when its type has no {attribute uses}.
+//     elements that each occur exactly once in a sequence that is a {particle} occurring
+//     exactly once, and whose types are not choices, declines: its Go type would hold itself as a
+//     struct value. {max occurs} above 1 or unbounded gives a slice whatever {min occurs} is, of a
+//     list's slice too ([][]T); {min occurs} 0 with {max occurs} 1 gives a pointer to a struct,
+//     atomic Go type, or list's slice (*[]T), and the bare interface, never a pointer to one, nil
+//     meaning absent.
+//   - Each attribute use of a type emitted as a struct gives one field after the particle
+//     fields, if any, in the order [xsd.ComplexType.AttributeUses] returns its {attribute
+//     uses} (§3.4.2.4). The field is named from the attribute declaration's local name, so
+//     a qualified and an unqualified attribute of one local name, or an attribute named
+//     like an element of the struct, take the suffix "Naming" states, the later field
+//     taking it. Its {type definition} must be an atomic or list simple type and gives an
+//     atomic Go type, or a slice, as an element's does; {required} true gives that type,
+//     false a pointer to it (*[]T for a list), nil meaning absent. The use's effective
+//     value constraint (§3.5.4 key-evc) must be absent, whether the use or a global
+//     declaration it references carries the default or fixed value. A choice {particle}
+//     that occurs exactly once is accepted only when its type has no {attribute uses}.
 //   - Every element declaration emitted from has {nillable} and {abstract}
 //     false and no {value constraint}, {type table} or {substitution group
 //     affiliations}. Its {identity-constraint definitions} are accepted and
@@ -178,13 +190,14 @@
 // emptiable choice, a choice with no {particles}, nested model groups,
 // <group ref> particles, a wildcard alternative of a choice, a particle with
 // {max occurs} 0, attribute wildcards, attribute uses on a type whose
-// content is a choice, attribute uses with an effective value constraint,
-// mixed and simple content, extension, a simple-content restriction of any
-// base but xs:anyType, a named complex type, or a top-level element through
-// <element ref> particles, reaching itself through struct values, the
-// special simple types, union types, a list whose {item type definition}
-// declines, and every primitive the first bullet does not map, for an
-// element or an attribute alike. #2900 owns lifting them.
+// content is a choice occurring exactly once, attribute uses with an
+// effective value constraint, mixed and simple content, extension, a
+// simple-content restriction of any base but xs:anyType, a named complex
+// type, or a top-level element through <element ref> particles, reaching
+// itself through struct values, the special simple types, union types, a
+// list whose {item type definition} declines, and every primitive the first
+// bullet does not map, for an element or an attribute alike. #2900 owns
+// lifting them.
 //
 // # Determinism
 //
@@ -212,40 +225,43 @@
 // the top-level element when the element's own type is anonymous (element
 // shipTo under element purchaseOrder → PurchaseOrderShipTo), the complex type
 // when that type is named (element x in complex type ct → CtX, whichever
-// elements have type ct). A choice's branch struct is named from its
-// interface's name plus the alternative's local name (alternative a of
-// interface First → FirstA), so two top-level elements of one named choice
-// type get distinct interfaces and branches. A residual collision — two
-// names folding to one identifier, among a package's types or one struct's
-// fields — is disambiguated deterministically by document order: the later
-// name takes the smallest free numeric suffix from 2, so a top-level element
-// ct and a complex type ct reached locally take Ct in the order they are
-// first reached. A datatype struct is named from its datatype's local name
-// (dateTime → DateTime, gYearMonth → GYearMonth, dayTimeDuration →
-// DayTimeDuration), claimed when the walk first reaches a declaration whose
-// type needs it, ahead of that declaration's own type, so that a top-level
-// element date of type xs:date names its type Date2. The raw-content
-// structs are named AnyType, AnyAttribute, AnyChild and AnyElement, claimed
-// together in that order when the walk first reaches a declaration of type
-// xs:anyType or a wildcard particle, ahead of that declaration's own type, so
-// that a top-level element anyType with no type names its type AnyType2. A
-// wildcard particle's field is named as if from local name any. Every other
-// generated type's header comment records the QName and the schema Loc of the
-// declaration it is named from: the element declaration, or the complex type
-// definition for a type named from one. A datatype struct's header records
-// its datatype's QName alone, a builtin having no schema document, then a
-// second line stating what its fields' names do not, when there is any:
-// TimezoneOffset's unit and whether it may be absent, or that duration's
-// Months and Seconds share one sign. A raw-content struct's header records
-// xs:anyType's QName alone, then, for AnyType and AnyChild, a second line
-// stating what Text or Tail holds. A Loc whose URI filepath.IsAbs accepts
-// renders relative to the target's Dir made absolute against the working
-// directory, slash-separated and climbing with ".." out of Dir. A document
-// outside the tree laid out alike, such as one an absolute schemaLocation
-// names, renders a climbing path that differs with that tree's depth below
-// the filesystem root. Any other URI renders as is, a URL or a relative
-// loader key alike, as does one with no path relative to Dir, such as one on
-// another Windows volume. Symbolic links are not resolved.
+// elements have type ct). The type for one occurrence of a content model
+// group is named by the path with the local name sequence or choice last
+// (CtSequence), and the types nested in its particles as if it were absent. A
+// choice's branch struct is named from its interface's name plus the
+// alternative's local name (alternative a of interface First → FirstA), so
+// two top-level elements of one named choice type get distinct interfaces and
+// branches. A residual collision — two names folding to one identifier, among
+// a package's types or one struct's fields — is disambiguated
+// deterministically by document order: the later name takes the smallest free
+// numeric suffix from 2, so a top-level element ct and a complex type ct
+// reached locally take Ct in the order they are first reached. A datatype
+// struct is named from its datatype's local name (dateTime → DateTime,
+// gYearMonth → GYearMonth, dayTimeDuration → DayTimeDuration), claimed when
+// the walk first reaches a declaration whose type needs it, ahead of that
+// declaration's own type, so that a top-level element date of type xs:date
+// names its type Date2. The raw-content structs are named AnyType,
+// AnyAttribute, AnyChild and AnyElement, claimed together in that order when
+// the walk first reaches a declaration of type xs:anyType or a wildcard
+// particle, ahead of that declaration's own type, so that a top-level element
+// anyType with no type names its type AnyType2. A wildcard particle's field
+// is named as if from local name any. Every other generated type's header
+// comment records the QName and the schema Loc of the declaration it is named
+// from: the element declaration, or the complex type definition for a type
+// named from one. A datatype struct's header records its datatype's QName
+// alone, a builtin having no schema document, then a second line stating what
+// its fields' names do not, when there is any: TimezoneOffset's unit and
+// whether it may be absent, or that duration's Months and Seconds share one
+// sign. A raw-content struct's header records xs:anyType's QName alone, then,
+// for AnyType and AnyChild, a second line stating what Text or Tail holds. A
+// Loc whose URI filepath.IsAbs accepts renders relative to the target's Dir
+// made absolute against the working directory, slash-separated and climbing
+// with ".." out of Dir. A document outside the tree laid out alike, such as
+// one an absolute schemaLocation names, renders a climbing path that differs
+// with that tree's depth below the filesystem root. Any other URI renders as
+// is, a URL or a relative loader key alike, as does one with no path relative
+// to Dir, such as one on another Windows volume. Symbolic links are not
+// resolved.
 //
 // # Planned (M9 — not yet implemented)
 //

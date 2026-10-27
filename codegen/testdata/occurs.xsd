@@ -1,0 +1,96 @@
+<?xml version="1.0"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+           xmlns="urn:occurs"
+           targetNamespace="urn:occurs">
+  <xs:element name="list">
+    <xs:complexType>
+      <xs:sequence maxOccurs="unbounded">
+        <xs:element name="a" type="xs:string"/>
+        <xs:element name="b" type="xs:int"/>
+      </xs:sequence>
+      <xs:attribute name="id" type="xs:string"/>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="maybe">
+    <xs:complexType>
+      <xs:sequence minOccurs="0">
+        <xs:element name="inner">
+          <xs:complexType>
+            <xs:sequence>
+              <xs:element name="x" type="xs:string"/>
+            </xs:sequence>
+          </xs:complexType>
+        </xs:element>
+      </xs:sequence>
+      <xs:attribute name="sequence" type="xs:string" use="required"/>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="picks">
+    <xs:complexType>
+      <xs:choice maxOccurs="unbounded">
+        <xs:element name="a" type="xs:string"/>
+        <xs:element name="b" type="xs:boolean"/>
+      </xs:choice>
+      <xs:attribute name="tag" type="xs:string"/>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="pair">
+    <xs:complexType>
+      <xs:choice maxOccurs="2">
+        <xs:element name="a" type="xs:string"/>
+      </xs:choice>
+    </xs:complexType>
+  </xs:element>
+  <xs:complexType name="opt">
+    <xs:choice minOccurs="0">
+      <xs:element name="a" type="xs:string"/>
+      <xs:element name="b" type="xs:boolean"/>
+    </xs:choice>
+    <xs:attribute name="tag" type="xs:string"/>
+  </xs:complexType>
+  <xs:element name="optional" type="opt"/>
+  <xs:complexType name="tree">
+    <xs:sequence maxOccurs="unbounded">
+      <xs:element name="node" type="tree"/>
+    </xs:sequence>
+  </xs:complexType>
+  <xs:element name="root" type="tree"/>
+  <xs:complexType name="chain">
+    <xs:sequence minOccurs="0">
+      <xs:element name="next" type="chain"/>
+    </xs:sequence>
+  </xs:complexType>
+  <xs:element name="head" type="chain"/>
+  <xs:complexType name="item">
+    <xs:sequence maxOccurs="unbounded">
+      <xs:element name="v" type="xs:string"/>
+    </xs:sequence>
+  </xs:complexType>
+  <xs:element name="entry" type="item"/>
+  <xs:element name="bag">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element name="it" type="item"/>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+  <xs:complexType name="m1">
+    <xs:sequence>
+      <xs:element name="x" type="m2"/>
+    </xs:sequence>
+  </xs:complexType>
+  <xs:complexType name="m2">
+    <xs:sequence maxOccurs="unbounded">
+      <xs:element name="y" type="m1"/>
+    </xs:sequence>
+  </xs:complexType>
+  <xs:element name="mutual" type="m1"/>
+  <xs:element name="mutual2" type="m2"/>
+  <xs:element name="self">
+    <xs:complexType>
+      <xs:sequence minOccurs="0">
+        <xs:element ref="self"/>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>

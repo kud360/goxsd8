@@ -53,10 +53,10 @@ func TestGenerateDeclines(t *testing.T) {
 			"complex type (anonymous) of element e whose choice has no {particles}", constructEmptyChoice},
 		{"emptiable choice", `<xs:element name="e"><xs:complexType><xs:choice><xs:element name="a" ` + str + `/><xs:element name="b" minOccurs="0" ` + str + `/></xs:choice></xs:complexType></xs:element>`,
 			"complex type (anonymous) of element e whose choice is emptiable: its alternative element b has {min occurs} 0", constructEmptiableChoice},
-		{"optional choice", `<xs:element name="e"><xs:complexType><xs:choice minOccurs="0"><xs:element name="a" ` + str + `/></xs:choice></xs:complexType></xs:element>`,
-			"whose content particle occurs 0..1 times", constructContentOccurs},
-		{"repeated choice", `<xs:element name="e"><xs:complexType><xs:choice maxOccurs="2"><xs:element name="a" ` + str + `/></xs:choice></xs:complexType></xs:element>`,
-			"whose content particle occurs 1..2 times", constructContentOccurs},
+		// A repeated choice reads its alternatives alone for the emptiable gate,
+		// its own {min occurs} 0 notwithstanding (cos-group-emptiable).
+		{"repeated emptiable choice", `<xs:element name="e"><xs:complexType><xs:choice minOccurs="0" maxOccurs="unbounded"><xs:element name="a" ` + str + `/><xs:element name="b" minOccurs="0" ` + str + `/></xs:choice></xs:complexType></xs:element>`,
+			"complex type (anonymous) of element e whose choice is emptiable: its alternative element b has {min occurs} 0", constructEmptiableChoice},
 		{"group in choice", `<xs:element name="e"><xs:complexType><xs:choice><xs:element name="a" ` + str + `/><xs:sequence><xs:element name="b" ` + str + `/></xs:sequence></xs:choice></xs:complexType></xs:element>`,
 			"a nested sequence model group particle", constructNestedGroup},
 		{"emptiable group in choice", `<xs:element name="e"><xs:complexType><xs:choice><xs:element name="a" ` + str + `/><xs:sequence><xs:element name="b" minOccurs="0" ` + str + `/></xs:sequence></xs:choice></xs:complexType></xs:element>`,
@@ -165,8 +165,6 @@ func TestGenerateDeclines(t *testing.T) {
 			"complex type c of element e whose content is a choice, with {attribute uses}", constructChoiceAttributeUses},
 		{"restriction with inherited assertion", `<xs:complexType name="b"><xs:sequence><xs:element name="a" ` + str + `/></xs:sequence><xs:assert test="true()"/></xs:complexType><xs:complexType name="c"><xs:complexContent><xs:restriction base="b"><xs:sequence><xs:element name="a" ` + str + `/></xs:sequence></xs:restriction></xs:complexContent></xs:complexType><xs:element name="e" type="c"/>`,
 			"complex type c of element e with {assertions}", constructAssertions},
-		{"outer occurrence", `<xs:element name="e"><xs:complexType><xs:sequence minOccurs="0"><xs:element name="a" ` + str + `/></xs:sequence></xs:complexType></xs:element>`,
-			"whose content particle occurs 0..1 times", constructContentOccurs},
 		{"nillable", `<xs:element name="e" nillable="true" ` + str + `/>`,
 			"element e with {nillable} true", constructElementNillable},
 		{"abstract element", `<xs:element name="e" abstract="true" ` + str + `/>`,
@@ -325,11 +323,13 @@ func TestGenerateDeclines(t *testing.T) {
 }
 
 // TestGenerateDeclinesVacuousParticle pins the decline of a particle whose
-// {max occurs} is 0, naming its term: a local element, or a wildcard. No
-// schema document yields one, since an <element> or <any> with
-// minOccurs=maxOccurs=0 maps to no component at all (§3.3.2, §3.10.2), but
-// xsd.NewParticle accepts a vacuous Occurs, so the schema is built through the
-// constructors.
+// {max occurs} is 0, naming its term: a local element, a wildcard, or the
+// sequence model group of a content particle. No schema document yields one,
+// since an <element> or <any> with minOccurs=maxOccurs=0 maps to no component
+// at all (§3.3.2, §3.10.2) and a <sequence> or <choice> with maxOccurs=0 makes
+// the content empty (§3.4.2.3.3 dcl.ctd.ctcc.common 2.1.4), but
+// xsd.NewParticle and xsd.NewComplexType accept a vacuous Occurs, so the
+// schema is built through the constructors.
 func TestGenerateDeclinesVacuousParticle(t *testing.T) {
 	ctName := xsd.QName{Local: "c"}
 	scope, err := xsd.NewLocalScope(xsderr.Loc{}, xsd.ComplexTypeScopeParent{Name: ctName})
@@ -349,17 +349,23 @@ func TestGenerateDeclinesVacuousParticle(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	vacuous, err := xsd.NewOccurs(xsderr.Loc{}, 0, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
 	tests := []struct {
-		name string
-		term xsd.Term
-		want string
+		name         string
+		term         xsd.Term
+		inner, outer xsd.Occurs
+		want         string
 	}{
-		{"element", local, "codegen: target 0: a particle of element a with {max occurs} 0 in complex type c of element e at "},
-		{"wildcard", wildcard, "codegen: target 0: a particle of a wildcard with {max occurs} 0 in complex type c of element e at "},
+		{"element", local, vacuous, exactlyOnce, "codegen: target 0: a particle of element a with {max occurs} 0 in complex type c of element e at "},
+		{"wildcard", wildcard, vacuous, exactlyOnce, "codegen: target 0: a particle of a wildcard with {max occurs} 0 in complex type c of element e at "},
+		{"content particle", local, exactlyOnce, vacuous, "codegen: target 0: a particle of a sequence model group with {max occurs} 0 in complex type c of element e at "},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			schema := vacuousSchema(t, ctName, tt.term)
+			schema := vacuousSchema(t, ctName, tt.term, tt.inner, tt.outer)
 			out := filepath.Join(t.TempDir(), "out")
 			err := Generate([]Target{{Schema: schema, Dir: out, Package: "p"}})
 			if !errors.Is(err, errors.ErrUnsupported) {
@@ -386,14 +392,11 @@ func TestGenerateDeclinesVacuousParticle(t *testing.T) {
 
 // vacuousSchema builds the schema TestGenerateDeclinesVacuousParticle
 // generates from: a top-level element e of the complex type ctName, whose
-// content is a sequence of one particle of term with {max occurs} 0.
-func vacuousSchema(t *testing.T, ctName xsd.QName, term xsd.Term) *xsd.Schema {
+// content particle, occurring outerOccurs times, is a sequence of one particle
+// of term occurring innerOccurs times.
+func vacuousSchema(t *testing.T, ctName xsd.QName, term xsd.Term, innerOccurs, outerOccurs xsd.Occurs) *xsd.Schema {
 	t.Helper()
-	vacuous, err := xsd.NewOccurs(xsderr.Loc{}, 0, 0)
-	if err != nil {
-		t.Fatal(err)
-	}
-	inner, err := xsd.NewParticle(xsderr.Loc{}, vacuous, xsd.ResolvedTerm{Term: term})
+	inner, err := xsd.NewParticle(xsderr.Loc{}, innerOccurs, xsd.ResolvedTerm{Term: term})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -401,7 +404,7 @@ func vacuousSchema(t *testing.T, ctName xsd.QName, term xsd.Term) *xsd.Schema {
 	if err != nil {
 		t.Fatal(err)
 	}
-	outer, err := xsd.NewParticle(xsderr.Loc{}, exactlyOnce, xsd.ResolvedTerm{Term: group})
+	outer, err := xsd.NewParticle(xsderr.Loc{}, outerOccurs, xsd.ResolvedTerm{Term: group})
 	if err != nil {
 		t.Fatal(err)
 	}
