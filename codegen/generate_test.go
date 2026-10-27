@@ -298,6 +298,111 @@ func TestCheckTargets(t *testing.T) {
 	}
 }
 
+// TestTargetError pins that every element of Generate's error, in phase 1 and
+// phase 2, and every element of CheckTargets' result is a *TargetError whose
+// Index is the failing target's slice index and whose Unwrap is the failure
+// its opening precedes, a decline's *DeclineError reached through it.
+func TestTargetError(t *testing.T) {
+	accepted := parseString(t, acceptedDoc)
+	declined := parseString(t, declinedDoc)
+	tests := []struct {
+		name    string
+		errs    func(dir string) []error
+		cause   string
+		decline bool
+	}{
+		{"phase-1 refusal", func(dir string) []error {
+			return elements(t, Generate([]Target{
+				{Schema: accepted, Dir: filepath.Join(dir, "a"), Package: "p"},
+				{Schema: accepted, Dir: filepath.Join(dir, "b"), Package: "type"},
+			}))
+		}, `the package name "type"`, false},
+		{"decline", func(dir string) []error {
+			return elements(t, Generate([]Target{
+				{Schema: accepted, Dir: filepath.Join(dir, "a"), Package: "p"},
+				{Schema: declined, Dir: filepath.Join(dir, "b"), Package: "q"},
+			}))
+		}, "element e with {type definition}", true},
+		{"phase-2 fault", func(dir string) []error {
+			return elements(t, Generate([]Target{
+				{Schema: accepted, Dir: filepath.Join(dir, "a"), Package: "p"},
+				{Schema: accepted, Dir: filepath.Join(dir, "a", fileName, "sub"), Package: "q"},
+			}))
+		}, "creating ", false},
+		{"CheckTargets refusal", func(dir string) []error {
+			return CheckTargets([]Target{
+				{Dir: filepath.Join(dir, "a"), Package: "p"},
+				{Dir: filepath.Join(dir, "b"), Package: "type"},
+			})
+		}, `the package name "type"`, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			errs := tt.errs(t.TempDir())
+			if len(errs) != 1 {
+				t.Fatalf("got %d errors %q, want 1", len(errs), errs)
+			}
+			var te *TargetError
+			if !errors.As(errs[0], &te) {
+				t.Fatalf("errors.As(%v, *TargetError) = false", errs[0])
+			}
+			if te.Index() != 1 {
+				t.Errorf("Index() = %d, want 1", te.Index())
+			}
+			if te.Unwrap() == nil || !strings.HasPrefix(te.Unwrap().Error(), tt.cause) || te.Error() != "codegen: target 1: "+te.Unwrap().Error() {
+				t.Errorf("Unwrap() = %v, want the failure starting %q that %q opens", te.Unwrap(), tt.cause, te.Error())
+			}
+			var de *DeclineError
+			if errors.As(errs[0], &de) != tt.decline {
+				t.Fatalf("errors.As(%v, *DeclineError) = %t, want %t", errs[0], !tt.decline, tt.decline)
+			}
+			if tt.decline && de.Construct() != (Construct{constructUncoveredPrimitive}) {
+				t.Errorf("Construct() = %v, want %v", de.Construct(), Construct{constructUncoveredPrimitive})
+			}
+			if errors.Is(errs[0], errors.ErrUnsupported) != tt.decline {
+				t.Errorf("errors.Is(%v, errors.ErrUnsupported) = %t, want %t", errs[0], !tt.decline, tt.decline)
+			}
+		})
+	}
+}
+
+// elements is the errors.Join elements of Generate's error err.
+func elements(t *testing.T, err error) []error {
+	t.Helper()
+	joined, ok := err.(interface{ Unwrap() []error })
+	if !ok {
+		t.Fatalf("Generate = %v, want an errors.Join", err)
+	}
+	return joined.Unwrap()
+}
+
+// TestCheckTargetsEmptyEarlierDir pins that an earlier target with an empty
+// Dir, which filepath.Clean makes ".", is no duplicate of a later "." Dir,
+// while two "." Dirs still are.
+func TestCheckTargetsEmptyEarlierDir(t *testing.T) {
+	tests := []struct {
+		name    string
+		targets []Target
+		want    string
+	}{
+		{"empty then dot", []Target{{Dir: "", Package: "p"}, {Dir: ".", Package: "p"}},
+			"codegen: target 0: no output directory given"},
+		{"dot twice", []Target{{Dir: ".", Package: "p"}, {Dir: ".", Package: "q"}},
+			"codegen: target 1: the output directory . is also the output directory of target 0"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := make([]string, 0, 1)
+			for _, err := range CheckTargets(tt.targets) {
+				got = append(got, err.Error())
+			}
+			if len(got) != 1 || got[0] != tt.want {
+				t.Errorf("CheckTargets = %q, want [%q]", got, tt.want)
+			}
+		})
+	}
+}
+
 // TestGenerateCollectsDeclines pins that Generate's error holds every decline,
 // in target order and then document order, each opened with its target's
 // name: one per top-level element declaration's turn, a decline met again
