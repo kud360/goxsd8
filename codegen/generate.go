@@ -81,22 +81,22 @@ func (t Target) failed(i int, err error) error {
 
 // Generate emits, for each target, one Go package of type declarations: the
 // file xsd_gen.go in the target's Dir, declaring, in document order, one type
-// per top-level element declaration of the target's Schema, one per
-// anonymous complex type nested in its type definition, one per named
-// complex type a local element declaration reaches, and one branch struct
-// per alternative of each choice emitted as a sealed interface, each emitted
-// after its parent, a field of an <element ref> particle holding the type
-// emitted for the top-level element declaration it names, then one struct
-// per date, time or duration datatype a declaration's type is declared over
-// (the package doc's "Coverage" and "Naming" say which). A target's Schema is
-// its whole composed set, so its {element declarations} (§3.17.1), and with
-// them its file's top-level types, include those of every imported or
-// included document, the overriding declaration standing in for each one an
-// <xs:override> replaces, and a Schema with none gives a file that declares
-// no type. Targets are generated independently: no emitted package imports
-// another, so two targets whose Schemas share a document each declare types
-// for its top-level element declarations, not necessarily under the same
-// names.
+// per top-level element declaration of the target's Schema, one per anonymous
+// complex type nested in its type definition, one per named complex type a
+// local element declaration reaches, and one branch struct per alternative of
+// each choice emitted as a sealed interface, each emitted after its parent, a
+// field of an <element ref> particle holding the type emitted for the
+// top-level element declaration it names, then one struct per date, time or
+// duration datatype a declaration's type is declared over and the four structs
+// holding raw content once an element's type is xs:anyType (the package doc's
+// "Coverage" and "Naming" say which). A target's Schema is its whole composed
+// set, so its {element declarations} (§3.17.1), and with them its file's
+// top-level types, include those of every imported or included document, the
+// overriding declaration standing in for each one an <xs:override> replaces,
+// and a Schema with none gives a file that declares no type. Targets are
+// generated independently: no emitted package imports another, so two targets
+// whose Schemas share a document each declare types for its top-level element
+// declarations, not necessarily under the same names.
 //
 // The file is gofmt-formatted. Generate writes no go.mod and adds no
 // //go:generate line: the module the caller puts Dir in owns both.

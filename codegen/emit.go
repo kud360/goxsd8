@@ -323,11 +323,11 @@ func headerLoc(base string, loc xsderr.Loc) string {
 // over the raw-content struct AnyType ("# Coverage") for xs:anyType, over an
 // atomic Go type for an atomic simple {type definition}, over a slice of one
 // for a list, a struct or sealed interface for an accepted complex one, named
-// or anonymous. That type is named from the element
-// (elementType), and a local element of the same named type never shares it
-// (nestedType), while every <element ref> particle to the element does; the
-// types nested in it are named from the type when it is named, and shared with
-// that type's every other use, and from the element when it is anonymous.
+// or anonymous. That type is named from the element (elementType), and a local
+// element of the same named type never shares it (nestedType), while every
+// <element ref> particle to the element does; the types nested in it are named
+// from the type when it is named, and shared with that type's every other use,
+// and from the element when it is anonymous.
 func (e *emitter) topLevel(decl xsd.ElementDeclaration) error {
 	td, err := e.declaredType(decl)
 	if err != nil {
@@ -1097,14 +1097,14 @@ func reacher(decl xsd.ElementDeclaration) string {
 // chain is chain, applying valueChain at each field; subject names t to the
 // checks it calls. A choice t, and a step whose first node (valueNodes) is in
 // e.acyclic, end the walk, and it never steps to an element of type
-// xs:anyType, whose AnyType reaches itself only through slices. It reads the schema, never e.emitted or
-// e.elements, so a type the emitting walk shares, and the type of a
-// declaration an <element ref> particle names, is walked again here unless
-// e.acyclic holds its step's first node; that node joins e.acyclic once the
-// walk of t's particles reaches the end, and a step that pushes none, a
-// local decl of an anonymous t, is never memoized. It returns only a
-// struct-value recursion: every other failure on its path ends that path,
-// since the emitting walk meets it.
+// xs:anyType, whose AnyType reaches itself only through slices. It reads the
+// schema, never e.emitted or e.elements, so a type the emitting walk shares,
+// and the type of a declaration an <element ref> particle names, is walked
+// again here unless e.acyclic holds its step's first node; that node joins
+// e.acyclic once the walk of t's particles reaches the end, and a step that
+// pushes none, a local decl of an anonymous t, is never memoized. It returns
+// only a struct-value recursion: every other failure on its path ends that
+// path, since the emitting walk meets it.
 func (e *emitter) valueCycle(chain []valueNode, decl xsd.ElementDeclaration, subject string, t xsd.ComplexType) error {
 	nodes := valueNodes(decl, t)
 	if len(nodes) > 0 {
