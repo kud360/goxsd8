@@ -71,6 +71,18 @@ Usage (contract; subcommands land with their milestones):
   errors and the I/O faults charged 2, gen's refusals and its exit-4
   declines, unresolved-directive and hint notes, and -v logging.
 
+  Paths, in parse, validate and gen alike: a line about an argument
+  itself names it as it was typed, relative or ./ or absolute, and
+  standard input as -. That is the I/O fault opening an argument,
+  gen's -schema <s> -out <d> pair, the instance a hint note names,
+  and every line of an instance's report, its <loc> included. A
+  location in a schema document is absolute whatever the argument's
+  spelling: the location a schema rejection names (parse and gen 1,
+  validate 3), a gen decline's, an unresolved-directive note's, and
+  every schemaLocation or hint the run resolved. So an instance's
+  lines repeat wherever the same command line runs, and a schema's
+  lines carry the running host's own path.
+
   goxsd8 parse [-q] [-v] <schema.xsd>...
       Compile each schema argument and print its summary on stdout:
       the argument as it was spelled, then a block of lines indented
