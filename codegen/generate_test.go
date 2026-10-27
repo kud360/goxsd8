@@ -602,6 +602,37 @@ func TestGenerateEmptyContent(t *testing.T) {
 	}
 }
 
+// TestGenerateRestriction pins complex-content restrictions of a base other
+// than xs:anyType beyond the golden's: each gets a type from its own {content
+// type} (§3.4.2.3.3 dcl.ctd.ctcc.common) and {attribute uses} (§3.4.2.4
+// dcl.ctd.attuses), whatever its base declines for. The base's {abstract}
+// (§3.4.2.1 dcl.ctd.common), mixed content (dcl.ctd.ctcc.common 1.3) and
+// {attribute wildcard} (§3.4.2.5 dcl.ctd.anyatt 2.1) are none of the
+// derived type's, and e inherits b's attribute a.
+func TestGenerateRestriction(t *testing.T) {
+	const str = `type="xs:string"`
+	tests := []struct{ name, body, want string }{
+		{"empty", `<xs:complexType name="b"/><xs:element name="e"><xs:complexType><xs:complexContent><xs:restriction base="b"/></xs:complexContent></xs:complexType></xs:element>`,
+			"type E struct{}\n"},
+		{"abstract base", `<xs:complexType name="b" abstract="true"><xs:attribute name="a" ` + str + `/></xs:complexType><xs:element name="e"><xs:complexType><xs:complexContent><xs:restriction base="b"/></xs:complexContent></xs:complexType></xs:element>`,
+			"type E struct {\n\tA *string\n}\n"},
+		{"mixed base", `<xs:complexType name="b" mixed="true"><xs:sequence><xs:element name="a" minOccurs="0" ` + str + `/></xs:sequence></xs:complexType><xs:element name="e"><xs:complexType><xs:complexContent><xs:restriction base="b"><xs:sequence><xs:element name="a" ` + str + `/></xs:sequence></xs:restriction></xs:complexContent></xs:complexType></xs:element>`,
+			"type E struct {\n\tA string\n}\n"},
+		{"attribute wildcard base", `<xs:complexType name="b"><xs:sequence><xs:element name="a" ` + str + `/></xs:sequence><xs:anyAttribute/></xs:complexType><xs:element name="e"><xs:complexType><xs:complexContent><xs:restriction base="b"><xs:sequence><xs:element name="a" ` + str + `/></xs:sequence></xs:restriction></xs:complexContent></xs:complexType></xs:element>`,
+			"type E struct {\n\tA string\n}\n"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			schema := parseString(t, `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">`+tt.body+`</xs:schema>`)
+			src := generateOne(t, Target{Schema: schema, Dir: t.TempDir(), Package: "p"})
+			if got := string(src); !strings.Contains(got, tt.want) {
+				t.Errorf("want %q in:\n%s", tt.want, got)
+			}
+			typeCheck(t, src)
+		})
+	}
+}
+
 // TestGenerateElementRefs pins <element ref> particles beyond the golden's:
 // each field holds the type emitted for the top-level declaration the ref
 // names, and the emitted package type-checks. The recursion rows close a
