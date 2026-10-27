@@ -96,9 +96,9 @@
 //     an AnyType: a lax ##any wildcard's match is held raw, whether or not a
 //     declaration or an xsi:type would govern it. Namespace declarations are
 //     not represented, so a prefix inside a value, such as an xsi:type's, does
-//     not resolve from the struct. The four structs reach one another only
-//     through slices, so no element of type xs:anyType closes a struct-value
-//     recursion, and none names math/big.
+//     not resolve from the struct. AnyType reaches itself only through the
+//     slice Children, so no element of type xs:anyType closes a struct-value
+//     recursion, and none of the four names math/big.
 //   - An element whose {type definition} is a complex type other than
 //     xs:anyType, named or anonymous, gets a type of its own when the type is
 //     a restriction of xs:anyType, implicit (§3.4.2.3.2 dcl.ctd.ctcc.implicit)

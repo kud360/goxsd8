@@ -375,9 +375,10 @@ func (e *emitter) topLevel(decl xsd.ElementDeclaration) error {
 // there is no check, and anyTypeType claims the raw-content structs' names
 // before decl's is claimed ("# Naming"); for a simple td the check is
 // simpleGoType's, run before the name is claimed so that a datatype struct
-// claims its name first; for a complex one it is shape's, run after. It emits
-// nothing but the raw-content structs: topLevel emits the type's declaration
-// at decl's own visit, in document order, whichever reached decl first.
+// claims its name first; for a complex one it is shape's, run after. It emits no
+// declaration of its own, only the datatype or raw-content structs it first
+// needs: topLevel emits the type's declaration at decl's own visit, in document
+// order, whichever reached decl first.
 func (e *emitter) elementType(decl xsd.ElementDeclaration, td xsd.TypeDefinition) (emittedType, error) {
 	if typ, ok := e.elements[decl.Name()]; ok {
 		return typ, nil
