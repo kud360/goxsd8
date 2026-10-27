@@ -665,6 +665,47 @@ func TestGenerateElementRefs(t *testing.T) {
 	}
 }
 
+// TestGenerateWildcardVariants pins that a wildcard particle of a sequence
+// gives the same field whatever its {namespace constraint} and {process
+// contents} (§3.10.1), neither of which "# Coverage" represents: each row's
+// output is byte-identical to that of a lax ##any wildcard in the same schema
+// element, whose attributes the row's schema field holds.
+func TestGenerateWildcardVariants(t *testing.T) {
+	tests := []struct{ name, schema, wildcard string }{
+		{"bare", ``, `<xs:any/>`},
+		{"skip", ``, `<xs:any processContents="skip"/>`},
+		{"other", ``, `<xs:any namespace="##other"/>`},
+		{"local and target namespace", ` targetNamespace="urn:t"`, `<xs:any namespace="##local ##targetNamespace"/>`},
+		{"notNamespace", ``, `<xs:any notNamespace="urn:x"/>`},
+		{"notQName defined and sibling", ``, `<xs:any notQName="##defined ##definedSibling"/>`},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			gen := func(wildcard string) []byte {
+				schema := parseString(t, `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"`+tt.schema+">\n"+
+					`<xs:element name="e"><xs:complexType><xs:sequence>`+wildcard+`</xs:sequence></xs:complexType></xs:element></xs:schema>`)
+				return generateOne(t, Target{Schema: schema, Dir: t.TempDir(), Package: "p"})
+			}
+			want := gen(`<xs:any processContents="lax"/>`)
+			if got := gen(tt.wildcard); string(got) != string(want) {
+				t.Errorf("output for %s differs from the lax ##any wildcard's:\n%s\n---\n%s", tt.wildcard, got, want)
+			}
+		})
+	}
+}
+
+// TestGenerateWildcardName pins that a wildcard particle's field is claimed
+// from the local name any in particle order, before every attribute field, so
+// that beside a local element any and an attribute any it takes the suffix 2.
+func TestGenerateWildcardName(t *testing.T) {
+	schema := parseString(t, `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"><xs:element name="e"><xs:complexType><xs:sequence><xs:element name="any" type="xs:string"/><xs:any/></xs:sequence><xs:attribute name="any" type="xs:string"/></xs:complexType></xs:element></xs:schema>`)
+	src := generateOne(t, Target{Schema: schema, Dir: t.TempDir(), Package: "p"})
+	if got, want := string(src), "type E struct {\n\tAny  string\n\tAny2 AnyElement\n\tAny3 *string\n}\n"; !strings.Contains(got, want) {
+		t.Errorf("want %q in:\n%s", want, got)
+	}
+	typeCheck(t, src)
+}
+
 // TestGenerateDiamond pins that a struct-value recursion check costs time
 // linear in the named types it reaches: each complex type d<i> holds two value
 // fields of type d<i+1>, so a check that walks a type again on every reach

@@ -172,8 +172,8 @@ type emitter struct {
 }
 
 // rawNames is the names claimed for the four raw-content structs "# Coverage"
-// gives an element of type xs:anyType (§3.4.7 any-type-itself), in claim
-// order.
+// gives an element of type xs:anyType (§3.4.7 any-type-itself) and a wildcard
+// particle of a sequence, in claim order.
 type rawNames struct {
 	anyType, attribute, child, element string
 }
@@ -561,10 +561,10 @@ func (e *emitter) datatypeType(ds datatypeStruct) string {
 // anyTypeType returns the name of the raw-content struct AnyType, which holds
 // the content of an element of type xs:anyType: mixed, a lax ##any wildcard
 // any number of times, and a lax ##any {attribute wildcard} (§3.4.7
-// any-type-itself). When no earlier declaration needed them, it claims the four
-// raw-content structs' names in e.types, in rawNames' order, by the package
-// doc's "Naming", and appends their declarations to e.tailDecls in that order.
-// No field names math/big.
+// any-type-itself). When no earlier declaration or wildcard particle needed
+// them, it claims the four raw-content structs' names in e.types, in rawNames'
+// order, by the package doc's "Naming", and appends their declarations to
+// e.tailDecls in that order. No field names math/big.
 func (e *emitter) anyTypeType() string {
 	if e.raw.anyType != "" {
 		return e.raw.anyType
@@ -840,7 +840,13 @@ type fieldSpec struct {
 // field returns the field of particle p in a struct whose nested types are
 // named in nested and whose particles chain is valueChain's for, for the
 // complex type at loc named in declines by subject, typed by the package doc's
-// "# Coverage" field rules. The field of an <element ref> particle, whose
+// "# Coverage" field rules. The field of a wildcard particle (wildcardTerm) is
+// named from the local name any and holds the raw-content struct AnyElement
+// (anyTypeType) by p's occurrence (occursGoType), whatever the wildcard's
+// {namespace constraint} and {process contents}, which it never reads; that
+// path never calls shape, contentGroup, nestedType or valueChain, and is
+// reached only from body, since sealedType declines a wildcard alternative in
+// elementTerm first. The field of an <element ref> particle, whose
 // declaration is global, holds the type elementType returns for the
 // referenced declaration, after declaredType has checked that declaration as
 // it checks every one; the walk does not enter that type's body, which
@@ -850,6 +856,14 @@ type fieldSpec struct {
 // AnyType (anyTypeType). Neither a global declaration nor xs:anyType ever
 // reaches nestedType.
 func (e *emitter) field(nested scope, chain []valueNode, subject string, loc xsderr.Loc, p xsd.Particle) (fieldSpec, error) {
+	if wildcardTerm(p.Term()) {
+		e.anyTypeType()
+		goType, ok := occursGoType(emittedType{name: e.raw.element}, p.Occurs())
+		if !ok {
+			return fieldSpec{}, decline(loc, constructVacuousParticle, "a wildcard", subject)
+		}
+		return fieldSpec{local: "any", goType: goType}, nil
+	}
 	decl, err := e.elementTerm(subject, loc, p.Term())
 	if err != nil {
 		return fieldSpec{}, err
@@ -877,18 +891,43 @@ func (e *emitter) field(nested scope, chain []valueNode, subject string, loc xsd
 	if err != nil {
 		return fieldSpec{}, err
 	}
-	goType := typ.name
-	occurs := p.Occurs()
+	goType, ok := occursGoType(typ, p.Occurs())
+	if !ok {
+		return fieldSpec{}, decline(loc, constructVacuousParticle, "element "+decl.Name().String(), subject)
+	}
+	return fieldSpec{local: decl.Name().Local, goType: goType}, nil
+}
+
+// occursGoType is the Go type of a field holding typ under occurs, by the
+// package doc's "# Coverage" pointer and slice rules: a slice for {max occurs}
+// above 1 or unbounded, a pointer for {min occurs} 0 with {max occurs} 1
+// unless typ is a sealed interface, and typ itself otherwise. ok is false, and
+// goType "", exactly when {max occurs} is 0; the caller declines that particle
+// naming its own term.
+func occursGoType(typ emittedType, occurs xsd.Occurs) (goType string, ok bool) {
 	upper, bounded := occurs.Max()
 	switch {
 	case !bounded || upper > 1:
-		goType = "[]" + goType
+		return "[]" + typ.name, true
 	case upper == 0:
-		return fieldSpec{}, decline(loc, constructVacuousParticle, decl.Name(), subject)
+		return "", false
 	case upper == 1 && occurs.Min() == 0 && !typ.sealed:
-		goType = "*" + goType
+		return "*" + typ.name, true
 	}
-	return fieldSpec{local: decl.Name().Local, goType: goType}, nil
+	return typ.name, true
+}
+
+// wildcardTerm reports whether a particle's term is a wildcard (§3.10.1): an
+// xsd.ResolvedTerm whose Term is an xsd.Wildcard. The particle term is a
+// closed sum, so this assertion is STYLE T2's sealed-sum exception, as
+// elementTerm's switch is.
+func wildcardTerm(term xsd.TermOrRef) bool {
+	resolved, ok := term.(xsd.ResolvedTerm)
+	if !ok {
+		return false
+	}
+	_, ok = resolved.Term.(xsd.Wildcard)
+	return ok
 }
 
 // refType returns the type of the field of an <element ref> particle to the
@@ -1099,14 +1138,16 @@ func reacher(decl xsd.ElementDeclaration) string {
 // chain is chain, applying valueChain at each field; subject names t to the
 // checks it calls. A choice t, and a step whose first node (valueNodes) is in
 // e.acyclic, end the walk, and it never steps to an element of type
-// xs:anyType, whose AnyType reaches itself only through slices. It reads the
-// schema, never e.emitted or e.elements, so a type the emitting walk shares,
-// and the type of a declaration an <element ref> particle names, is walked
-// again here unless e.acyclic holds its step's first node; that node joins
-// e.acyclic once the walk of t's particles reaches the end, and a step that
-// pushes none, a local decl of an anonymous t, is never memoized. It returns
-// only a struct-value recursion: every other failure on its path ends that
-// path, since the emitting walk meets it.
+// xs:anyType, whose AnyType reaches itself only through slices. A wildcard
+// particle (wildcardTerm) is a leaf, passed before elementTerm: its field holds
+// AnyElement, which reaches AnyType, which reaches itself only through the
+// slice Children. It reads the schema, never e.emitted or e.elements, so a type
+// the emitting walk shares, and the type of a declaration an <element ref>
+// particle names, is walked again here unless e.acyclic holds its step's first
+// node; that node joins e.acyclic once the walk of t's particles reaches the
+// end, and a step that pushes none, a local decl of an anonymous t, is never
+// memoized. It returns only a struct-value recursion: every other failure on
+// its path ends that path, since the emitting walk meets it.
 func (e *emitter) valueCycle(chain []valueNode, decl xsd.ElementDeclaration, subject string, t xsd.ComplexType) error {
 	nodes := valueNodes(decl, t)
 	if len(nodes) > 0 {
@@ -1128,7 +1169,7 @@ func (e *emitter) valueCycle(chain []valueNode, decl xsd.ElementDeclaration, sub
 		particles = group.Particles()
 	}
 	for _, p := range particles {
-		if p.Occurs() != exactlyOnce {
+		if p.Occurs() != exactlyOnce || wildcardTerm(p.Term()) {
 			continue
 		}
 		el, err := e.elementTerm(subject, t.Loc(), p.Term())

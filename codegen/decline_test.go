@@ -84,8 +84,8 @@ func TestGenerateDeclines(t *testing.T) {
 		// In the ref rows below, h is declared after e. Where a row places a
 		// later decline after the ref, the ref's check is shown to come
 		// first. The substitution row declines at the member's own turn.
-		{"element ref to nillable", `<xs:element name="e"><xs:complexType><xs:sequence><xs:element ref="h"/></xs:sequence></xs:complexType></xs:element><xs:element name="h" nillable="true" ` + str + `/>`,
-			"element h with {nillable} true at s.xsd:2:116 ", constructElementNillable},
+		{"element ref to nillable", `<xs:element name="e"><xs:complexType><xs:sequence><xs:element ref="h"/></xs:sequence></xs:complexType></xs:element><xs:element name="z" type="xs:QName"/><xs:element name="h" nillable="true" ` + str + `/>`,
+			"element h with {nillable} true at s.xsd:2:154 ", constructElementNillable},
 		{"element ref in choice to nillable", `<xs:element name="e"><xs:complexType><xs:choice><xs:element name="a" ` + str + `/><xs:element ref="h"/></xs:choice></xs:complexType></xs:element><xs:element name="h" nillable="true" ` + str + `/>`,
 			"element h with {nillable} true", constructElementNillable},
 		// A member of h's substitution group is top-level, and its own
@@ -97,8 +97,6 @@ func TestGenerateDeclines(t *testing.T) {
 			"complex type (anonymous) of element h with an all compositor", constructAll},
 		{"element ref to simple type outside the slice", `<xs:element name="e"><xs:complexType><xs:sequence><xs:element ref="h"/><xs:element name="z" type="xs:hexBinary"/></xs:sequence></xs:complexType></xs:element><xs:element name="h" type="xs:QName"/>`,
 			"element h with {type definition} {http://www.w3.org/2001/XMLSchema}QName, whose {primitive type definition} is", constructUncoveredPrimitive},
-		{"wildcard", `<xs:element name="e"><xs:complexType><xs:sequence><xs:any/></xs:sequence></xs:complexType></xs:element>`,
-			"a wildcard particle", constructWildcard},
 		{"attribute", `<xs:element name="e"><xs:complexType><xs:sequence><xs:element name="a" ` + str + `/></xs:sequence><xs:attribute name="t"/></xs:complexType></xs:element>`,
 			"attribute t of complex type (anonymous) of element e with {type definition} {http://www.w3.org/2001/XMLSchema}anySimpleType, a special type", constructSpecialType},
 		{"attribute anyAtomicType", `<xs:element name="e"><xs:complexType><xs:sequence><xs:element name="a" ` + str + `/></xs:sequence><xs:attribute name="t" type="xs:anyAtomicType"/></xs:complexType></xs:element>`,
@@ -256,15 +254,15 @@ func TestGenerateDeclines(t *testing.T) {
 		// the cycle v, w through.
 		{"value cycle behind a pointer", `<xs:complexType name="x"><xs:sequence><xs:element name="p" type="z" minOccurs="0"/><xs:element name="v" type="z"/></xs:sequence></xs:complexType><xs:complexType name="z"><xs:sequence><xs:element name="w" type="x"/></xs:sequence></xs:complexType><xs:element name="e"><xs:complexType><xs:sequence><xs:element name="a" type="x"/></xs:sequence></xs:complexType></xs:element>`,
 			"local element v reaching complex type z again through elements that each occur exactly once", constructValueCycle},
-		// The wildcard under p precedes the cycle v closes in particle order,
-		// so it is the decline returned.
-		{"value cycle after an earlier decline", `<xs:complexType name="c"><xs:sequence><xs:element name="p" minOccurs="0"><xs:complexType><xs:sequence><xs:any/></xs:sequence></xs:complexType></xs:element><xs:element name="v" type="c"/></xs:sequence></xs:complexType><xs:element name="e"><xs:complexType><xs:sequence><xs:element name="l" type="c"/></xs:sequence></xs:complexType></xs:element>`,
+		// The wildcard alternative under p precedes the cycle v closes in
+		// particle order, so it is the decline returned.
+		{"value cycle after an earlier decline", `<xs:complexType name="c"><xs:sequence><xs:element name="p" minOccurs="0"><xs:complexType><xs:choice><xs:any/></xs:choice></xs:complexType></xs:element><xs:element name="v" type="c"/></xs:sequence></xs:complexType><xs:element name="e"><xs:complexType><xs:sequence><xs:element name="l" type="c"/></xs:sequence></xs:complexType></xs:element>`,
 			"a wildcard particle in complex type (anonymous) of element p", constructWildcard},
 		// In the three rows below, q reaches t while t's body is being
-		// emitted, so the recursion check walks t again and meets a decline
-		// after f1: a wildcard, an element declaration property, and a
-		// complex type outside the slice. Only the emitting walk returns that
-		// decline, which r's precedes.
+		// emitted, so the recursion check walks t again past f1: it passes
+		// the wildcard as a leaf, and meets an element declaration property
+		// and a complex type outside the slice as declines it leaves to the
+		// emitting walk, which returns r's first.
 		{"value cycle check past a wildcard", fmt.Sprintf(pastDecline, `<xs:any/>`, ""),
 			uncoveredR, constructUncoveredPrimitive},
 		{"value cycle check past an element property", fmt.Sprintf(pastDecline, `<xs:element name="g" nillable="true" `+str+`/>`, ""),
@@ -276,9 +274,9 @@ func TestGenerateDeclines(t *testing.T) {
 		{"value cycle check past a recursion", fmt.Sprintf(pastDecline, `<xs:element name="g" type="cyc"/>`, `<xs:complexType name="cyc"><xs:sequence><xs:element name="s" type="cyc"/></xs:sequence></xs:complexType>`),
 			"local element s reaching complex type cyc again through elements that each occur exactly once", constructValueCycle},
 		// e's walk reaches t, declared after f, before f's walk begins.
-		{"named type body before a later top-level element", `<xs:element name="e"><xs:complexType><xs:sequence><xs:element name="l" type="t"/></xs:sequence></xs:complexType></xs:element><xs:element name="f" type="xs:QName"/><xs:complexType name="t"><xs:sequence><xs:any/></xs:sequence></xs:complexType>`,
+		{"named type body before a later top-level element", `<xs:element name="e"><xs:complexType><xs:sequence><xs:element name="l" type="t"/></xs:sequence></xs:complexType></xs:element><xs:element name="f" type="xs:QName"/><xs:complexType name="t"><xs:choice><xs:any/></xs:choice></xs:complexType>`,
 			"a wildcard particle in complex type t at s.xsd:2:164 ", constructWildcard},
-		{"named complex local body", `<xs:complexType name="c"><xs:sequence><xs:any minOccurs="0"/></xs:sequence></xs:complexType><xs:element name="e"><xs:complexType><xs:sequence><xs:element name="l" type="c"/></xs:sequence></xs:complexType></xs:element>`,
+		{"named complex local body", `<xs:complexType name="c"><xs:choice><xs:any minOccurs="0"/></xs:choice></xs:complexType><xs:element name="e"><xs:complexType><xs:sequence><xs:element name="l" type="c"/></xs:sequence></xs:complexType></xs:element>`,
 			"a wildcard particle in complex type c at s.xsd:2:1 ", constructWildcard},
 		{"local element property", `<xs:element name="e"><xs:complexType><xs:sequence><xs:element name="l" nillable="true" ` + str + `/></xs:sequence></xs:complexType></xs:element>`,
 			"element l with {nillable} true", constructElementNillable},
@@ -327,8 +325,9 @@ func TestGenerateDeclines(t *testing.T) {
 }
 
 // TestGenerateDeclinesVacuousParticle pins the decline of a particle whose
-// {max occurs} is 0. No schema document yields one, since an <element> with
-// minOccurs=maxOccurs=0 maps to no component at all (§3.3.2), but
+// {max occurs} is 0, naming its term: a local element, or a wildcard. No
+// schema document yields one, since an <element> or <any> with
+// minOccurs=maxOccurs=0 maps to no component at all (§3.3.2, §3.10.2), but
 // xsd.NewParticle accepts a vacuous Occurs, so the schema is built through the
 // constructors.
 func TestGenerateDeclinesVacuousParticle(t *testing.T) {
@@ -342,11 +341,59 @@ func TestGenerateDeclinesVacuousParticle(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	anyNamespace, err := xsd.NewNamespaceConstraint(xsderr.Loc{}, xsd.NamespaceConstraintAny, nil, nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	wildcard, err := xsd.NewWildcard(xsderr.Loc{}, anyNamespace, xsd.ProcessLax)
+	if err != nil {
+		t.Fatal(err)
+	}
+	tests := []struct {
+		name string
+		term xsd.Term
+		want string
+	}{
+		{"element", local, "codegen: target 0: a particle of element a with {max occurs} 0 in complex type c of element e at "},
+		{"wildcard", wildcard, "codegen: target 0: a particle of a wildcard with {max occurs} 0 in complex type c of element e at "},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			schema := vacuousSchema(t, ctName, tt.term)
+			out := filepath.Join(t.TempDir(), "out")
+			err := Generate([]Target{{Schema: schema, Dir: out, Package: "p"}})
+			if !errors.Is(err, errors.ErrUnsupported) {
+				t.Fatalf("Generate = %v, want a decline wrapping errors.ErrUnsupported", err)
+			}
+			if !strings.HasPrefix(err.Error(), tt.want) {
+				t.Errorf("error %q does not start with %q", err, tt.want)
+			}
+			var de *DeclineError
+			if !errors.As(err, &de) || de.Construct() != (Construct{constructVacuousParticle}) {
+				t.Fatalf("Generate = %v, want a *DeclineError of Construct %v", err, Construct{constructVacuousParticle})
+			}
+			// Every component is built at the zero Loc, so DeclineError.Loc's
+			// doc makes the decline's Loc zero.
+			if loc := de.Loc(); loc != (xsderr.Loc{}) {
+				t.Errorf("Loc() = %+v, want the zero xsderr.Loc", loc)
+			}
+			if _, err := os.Stat(out); !errors.Is(err, os.ErrNotExist) {
+				t.Errorf("Dir %s exists after a decline (stat: %v)", out, err)
+			}
+		})
+	}
+}
+
+// vacuousSchema builds the schema TestGenerateDeclinesVacuousParticle
+// generates from: a top-level element e of the complex type ctName, whose
+// content is a sequence of one particle of term with {max occurs} 0.
+func vacuousSchema(t *testing.T, ctName xsd.QName, term xsd.Term) *xsd.Schema {
+	t.Helper()
 	vacuous, err := xsd.NewOccurs(xsderr.Loc{}, 0, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
-	inner, err := xsd.NewParticle(xsderr.Loc{}, vacuous, xsd.ResolvedTerm{Term: local})
+	inner, err := xsd.NewParticle(xsderr.Loc{}, vacuous, xsd.ResolvedTerm{Term: term})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -390,27 +437,7 @@ func TestGenerateDeclinesVacuousParticle(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Finalize: %v", err)
 	}
-	out := filepath.Join(t.TempDir(), "out")
-	err = Generate([]Target{{Schema: schema, Dir: out, Package: "p"}})
-	if !errors.Is(err, errors.ErrUnsupported) {
-		t.Fatalf("Generate = %v, want a decline wrapping errors.ErrUnsupported", err)
-	}
-	const want = "codegen: target 0: a particle of element a with {max occurs} 0 in complex type c of element e at "
-	if !strings.HasPrefix(err.Error(), want) {
-		t.Errorf("error %q does not start with %q", err, want)
-	}
-	var de *DeclineError
-	if !errors.As(err, &de) || de.Construct() != (Construct{constructVacuousParticle}) {
-		t.Fatalf("Generate = %v, want a *DeclineError of Construct %v", err, Construct{constructVacuousParticle})
-	}
-	// Every component is built at the zero Loc, so DeclineError.Loc's doc
-	// makes the decline's Loc zero.
-	if loc := de.Loc(); loc != (xsderr.Loc{}) {
-		t.Errorf("Loc() = %+v, want the zero xsderr.Loc", loc)
-	}
-	if _, err := os.Stat(out); !errors.Is(err, os.ErrNotExist) {
-		t.Errorf("Dir %s exists after a decline (stat: %v)", out, err)
-	}
+	return schema
 }
 
 // TestDeclineErrorAs pins that errors.As retrieves the *DeclineError from the
