@@ -24,9 +24,9 @@ func (e *DeclineError) Construct() Construct { return Construct{e.construct} }
 // Loc returns the Loc of the component the decline is charged to: the element
 // declaration, for a property of that declaration or of its simple type, or
 // for its reaching an element or complex type again through elements that
-// each occur exactly once; the complex type, for its derivation, its content
-// or its particles; and for an attribute use, the attribute declaration it
-// resolves to, the global one for an <attribute ref>.
+// each occur exactly once; the complex type, for a property of that type, its
+// content or its particles; and for an attribute use, the attribute
+// declaration it resolves to, the global one for an <attribute ref>.
 //
 // Loc is the zero xsderr.Loc exactly when that component's Loc is zero: a
 // component built through xsd.SchemaBuilder with a zero Loc, or one of the
