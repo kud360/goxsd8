@@ -334,15 +334,16 @@ silenced by it.
 
 Implemented today: the help path, parse, validate and gen. With no
 arguments, or with -h, -help or --help in any argument position, goxsd8
-prints this usage to stdout and exits 0. goxsd8 parse compiles its
-arguments as above and honours -q and -v; goxsd8 validate assesses XML and
-JSON instances and goxsd8 gen generates as above, and both honour -v, -q
-silencing nothing there because neither writes informational output.
-GOXSD_DEBUG scopes -v for none of them. Every other invocation exits 2,
-reporting on stderr that the name is not one of the three, that a help
-flag is spelled with a value, as -help=<value>, that a flag stands before
-the subcommand it qualifies, or that the first argument is a flag and no
-subcommand was given.
+prints this usage to stdout and exits 0, the whole of it even after a
+subcommand name, because a per-subcommand copy could drift from this one.
+goxsd8 parse compiles its arguments as above and honours -q and -v;
+goxsd8 validate assesses XML and JSON instances and goxsd8 gen generates
+as above, and both honour -v, -q silencing nothing there because neither
+writes informational output. GOXSD_DEBUG scopes -v for none of them.
+Every other invocation exits 2, reporting on stderr that the name is not
+one of the three, that a help flag is spelled with a value, as
+-help=<value>, that a flag stands before the subcommand it qualifies, or
+that the first argument is a flag and no subcommand was given.
 `
 
 // The exit codes the CLI answers with: a clean run, a rejected document, an
