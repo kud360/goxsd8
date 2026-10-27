@@ -315,7 +315,7 @@ Code generation runs today for a narrow slice of schema shapes:
 `codegen.Generate` emits Go type declarations for that slice and declines
 every other construct. `go doc github.com/kud360/goxsd8/codegen`'s "Coverage"
 section states the slice, and the program's `order.xsd` is inside it, as is
-`codegen/testdata/flat.xsd`, which `ExampleGenerate` runs. Continuing the
+`codegen/testdata/example.xsd`, which `ExampleGenerate` runs. Continuing the
 program, add `github.com/kud360/goxsd8/codegen` to the imports:
 
 ```go

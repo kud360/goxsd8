@@ -49,6 +49,17 @@ func TestGenerateGolden(t *testing.T) {
 	}
 }
 
+// TestGenerateExampleTypeChecks type-checks the file ExampleGenerate prints,
+// generated from the same schema into the same package. The example's Output
+// block is the one committed copy of those bytes, so no golden row pins them.
+func TestGenerateExampleTypeChecks(t *testing.T) {
+	schema, err := xsdparser.Parse("testdata/example.xsd")
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	typeCheck(t, generateOne(t, Target{Schema: schema, Dir: filepath.Join(t.TempDir(), "order"), Package: "order"}))
+}
+
 // generateOne runs Generate on the one target and returns the file it wrote.
 func generateOne(t *testing.T, target Target) []byte {
 	t.Helper()
