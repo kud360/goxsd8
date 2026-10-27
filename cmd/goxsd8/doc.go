@@ -309,15 +309,16 @@
 //
 // Implemented today: the help path, parse, validate and gen. With no
 // arguments, or with -h, -help or --help in any argument position, goxsd8
-// prints this usage to stdout and exits 0. goxsd8 parse compiles its
-// arguments as above and honours -q and -v; goxsd8 validate assesses XML and
-// JSON instances and goxsd8 gen generates as above, and both honour -v, -q
-// silencing nothing there because neither writes informational output.
-// GOXSD_DEBUG scopes -v for none of them. Every other invocation exits 2,
-// reporting on stderr that the name is not one of the three, that a help
-// flag is spelled with a value, as -help=<value>, that a flag stands before
-// the subcommand it qualifies, or that the first argument is a flag and no
-// subcommand was given.
+// prints this usage to stdout and exits 0, the whole of it even after a
+// subcommand name, because a per-subcommand copy could drift from this one.
+// goxsd8 parse compiles its arguments as above and honours -q and -v;
+// goxsd8 validate assesses XML and JSON instances and goxsd8 gen generates
+// as above, and both honour -v, -q silencing nothing there because neither
+// writes informational output. GOXSD_DEBUG scopes -v for none of them.
+// Every other invocation exits 2, reporting on stderr that the name is not
+// one of the three, that a help flag is spelled with a value, as
+// -help=<value>, that a flag stands before the subcommand it qualifies, or
+// that the first argument is a flag and no subcommand was given.
 //
 // # Argument vocabulary
 //
@@ -337,7 +338,7 @@
 // valued help spelling, so there is nowhere to move it to.
 //
 // Help is never scoped to a subcommand: a help flag in any argument position
-// prints this whole contract and no other argument is examined, so both
+// prints the usage above and no other argument is examined, so both
 // goxsd8 parse -h and goxsd8 -xyz -help print it and exit 0. That scan is
 // positional-blind, which is also why -- carries no end-of-options meaning:
 // goxsd8 -- -help is a help request.
