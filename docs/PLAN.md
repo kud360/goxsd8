@@ -17,13 +17,13 @@ read them. One stamp for the whole section, so a reader can tell staleness
 from wrongness at a glance. Never add a dated paragraph beside the old
 one — appending is what this replaces.
 
-## Status — 2026-10-26 (`/backlog`, on `main` at `9d07789d`)
+## Status — 2026-10-27 (`/backlog`, on `main` at `9f3c1574`)
 
-**North star: M9, codegen. #3030 (`go tool gencensus`) leads because it gives M9 its measure, and #3072 (`<element ref>`) is the next lifting slice.** Since the last stamp, 11 develop landings were all accepted, and only #3037 took a second round. Eight were M9 product: #2975, which added the typed decline, and the lifting slices #3035–#3041. One was M9 documentation (#3042), one was a parser defect (#3008), and one was README (#1003). There were no process landings, and no lane moved. Every slice the 2026-10-25 band named has landed, so M9's Tier A is now the measure, one new slice, and the error-contract work both personas hit. **Lean: product, M9 first.** Nine of the 11 landings were product (the eight M9 slices and #3008), and no process cost was logged against a round.
+**North star: M9, codegen. Its measure is `go tool gencensus`: 8253 of 11868 assembled suite documents generate and 3615 decline. Each Tier A row lifts one of its largest first-decline constructs.** Since the last stamp, 11 develop landings were all accepted in round 1. Seven were M9: #3030 (the census), #3072 (`<element ref>`, 705 documents newly generating), #3073, #2976, #3048, #3071 and #3043. Four were persona documentation: #1895, #1521, #1570 (KEEP ruled) and #1000. No lane moved. The 2026-10-26 band is spent but for #3074, #3044, #2203 and #2748. **Lean: product, M9 first.** Every landing took one round and no process cost was logged, so nothing tilts the band toward process.
 
 ### Conformance lanes
 
-**This table is `go tool lanestatus`, pasted verbatim, on `main` at `9d07789d`.** It is the committed expectations census, which `docs/WORKFLOW.md` names as the lane score (#1120).
+**This table is `go tool lanestatus`, pasted verbatim, on `main` at `9f3c1574`.** It is the committed expectations census, which `docs/WORKFLOW.md` names as the lane score (#1120).
 
 | Lane | Pass | Fail | Total |
 |---|---:|---:|---:|
@@ -34,46 +34,48 @@ one — appending is what this replaces.
 | `schema` | 15302 | 96 | 15398 |
 | `xpath` | — | — | 0 |
 
-**No lane moved since `aaa3cb14`.** **`datatypes ⊆ instance` is intended** (#1507). **An em dash means a lane with no cases yet, not a lane scoring zero.** `datatypes` is M3 and is complete. `schema` is M4, `instance` is M5 and `json` is M8, and all three are active. `json` moves only by the curated cases a landing adds. `xpath` waits on M7, `ber` on M11, and M9 has no lane: its goldens pin it, and #3030 will measure it.
+**No lane moved since `aaa3cb14`.** **`datatypes ⊆ instance` is intended** (#1507). **An em dash means a lane with no cases yet, not a lane scoring zero.** `datatypes` is M3 and is complete. `schema` is M4, `instance` is M5 and `json` is M8, and all three are active. `json` moves only by the curated cases a landing adds. `xpath` waits on M7 and `ber` on M11. M9 has no lane: its goldens pin it, and `gencensus` measures it.
 
-### What holds each active lane's failures
+### What holds each lane's failures
 
-**Measured on `9d07789d`** with a read-only `GOXSD_DECLINES=1` run (`--- PASS: TestConformance (695.09s)`, expectations untouched), fed to `go tool lanepartition`. Every figure is a part of the banked fails and a bound from above.
+**The W3C lanes: carried from `9d07789d` by construction.** No package that `go list -deps -test ./conformance` lists changed between `9d07789d` and `9f3c1574` (the window touched `codegen`, `cmd/goxsd8`, `tools/gencensus`, README and docs), so no `GOXSD_DECLINES=1` run was taken. The figures are the last stamp's: `instance` 71 banked fails (39 declined, 5 indeterminate, 27 decided against the suite) and `schema` 96 (1, 11 and 84). Every cluster of five or more is ruled, recorded or held by an open issue: `MS-Regex` 18 (#1899), `MS-Attribute` 11 (#2151), `MS-Wildcards` 49 (#1809), `Open` 5 (`blocked` on #1374) and `Simple` 5. The levers left are rulings, not sessions: #2081 (the owner's) and #1809's recorded divergence.
 
-| lane | banked fail | declined | indeterminate (#277) | decided against the suite |
-|---|---:|---:|---:|---:|
-| `instance` | 71 | 39 | 5 | 27 |
-| `schema` | 96 | 1 | 11 | 84 |
-| `datatypes` | 10 | 6 | — | 4 |
+**M9: `go tool gencensus` at `9f3c1574`.** It found 15470 documents and assembled 11868. Of those, 8253 generate, 3615 decline and 0 fail any other way. Each count below is a bound from above, not a yield.
 
-- **Every figure matches `2dc327b3`'s cell for cell, and so do the largest clusters.** #3008 is the only engine-package code change since then (`parser`), and it moved where a charge is located, not which cases pass.
-- **The W3C lanes stand at a ruled floor.** Every cluster of five or more is ruled, recorded or held by an open issue:
-  - `instance`: `MS-Regex` 18 (#1899), `MS-Attribute` 11 (#2151) and `MS-Additional` 5 (#2171, closed).
-  - `schema`: `MS-Wildcards` 49 (#1809), `Open` 5 (`blocked` on #1374) and `Simple` 5 (#513 and four others, by test-set name).
-  - `lanepartition` reads open issues only, so a ruled cluster prints "no open issue names it" (#2542).
-- **The levers left are rulings, not sessions:** #2081 (the owner's) and #1809's recorded divergence. The band banks no develop capacity against these lanes.
+| first decline | documents | lifted by |
+|---|---:|---|
+| derivation other than restriction | 475 | #3078 (simple content) and #3079 (complex extension), split lexically, as a hypothesis |
+| element of type xs:anyType | 450 | #3080 |
+| restriction of a type other than xs:anyType | 449 | #3077 (complex content) and #3078 (simple content) |
+| wildcard particle | 373 | #3081 |
+| content particle not exactly once | 335 | #3082 |
+| uncovered primitive | 282 | #3107 (hexBinary 79 and base64Binary 82, a lexical split); QName 94, precisionDecimal 24 and NOTATION 3 have no slice |
+| `<group ref>`, as content particle (161) and inside a group (34) | 195 | #3108 |
+| union type | 153 | #3109 |
+
+The 18 smaller rows (142 down to 1) have no slice and stay with #2900.
 
 ### Branch namespace, `origin` (report-only; this pass deletes no ref)
 
-**`go tool wipsurvey`, fed by `go tool issuefeed`** (`rows 3070 distinct 3070 min 1 max 3070 no gaps`). The clone is shallow, so the OTHER section's ahead/behind reads `?`. No `wip/issue-<N>` is LIVE.
+**`go tool wipsurvey`, fed by `go tool issuefeed`** (`rows 3114 distinct 3114 min 1 max 3114 no gaps`), in a clone made complete with `git fetch --unshallow origin`. No `wip/issue-<N>` is LIVE.
 
-- **RETIRED, deletable now:** `wip/issue-2013`, `wip/issue-2332`, `wip/issue-2696`, `wip/issue-2699`, `wip/issue-2722`, `wip/issue-2896` and `wip/issue-2899`. Each issue is closed, and an earlier stamp verified each one's content on `main`. Every wip branch of this window's landings was auto-deleted at merge.
+- **RETIRED, deletable now, re-verified:** `wip/issue-2013`, `wip/issue-2332`, `wip/issue-2696`, `wip/issue-2699`, `wip/issue-2722`, `wip/issue-2896` and `wip/issue-2899`. `wipsurvey` reads each issue closed, and an earlier stamp verified each one's content on `main`. Every wip branch of this window's eleven landings was auto-deleted at merge.
 - **BLOCKED:** `wip/issue-2081`, a parked grounding with no code, on an issue `blocked` on the owner.
-- **Deletable now, superseded passes:** `meta/backlog-2026-10-01-b` (tip `a9e2b09b`) and `meta/backlog-20261013-0808` (tip `71738b02`). `git log origin/main --since=<tip date> --grep='^meta: backlog'` prints commits for both. `meta/backlog-20261026-1414` is this pass's claim.
-- **New, parked, deletable:** `parked/untriaged-20261026-084521` (tip `0d07455d`). Its one commit stages the removal of #3042's develop entry from `docs/LOG/2026-10.md`, an index artifact. #3042 landed on `main` with that entry (`4c606e0d`), so nothing on the branch is owed.
-- **Certified for deletion and still standing:** `chronicler-345`, `meta/post-land-1816`, `meta/post-land-1908`, `postland-2099` and `postland/issue-2284`. The certification stands from the 2026-10-19 triage.
+- **Deletable now, superseded passes:** `meta/backlog-2026-10-01-b` (tip `a9e2b09b`) and `meta/backlog-20261013-0808` (tip `71738b02`). `git log origin/main --since=<tip date> --grep='^meta: backlog'` prints `eeefc08c` and older for both, so each was superseded (`.claude/commands/backlog.md`). `wipsurvey` reads both as STRANDED PASS because it matches no `meta: backlog` subject on `main`. The command's own test above rules them superseded, and #1897 (the same classifier) records the misread. `meta/backlog-20261027-1416` is this pass's claim.
+- **Parked, deletable:** `parked/untriaged-20261026-084521` (tip `0d07455d`). #3042 landed the entry its one commit removes, so nothing on it is owed.
+- **Certified for deletion and still standing:** `chronicler-345` (4 ahead), `meta/post-land-1816`, `meta/post-land-1908`, `postland-2099` and `postland/issue-2284` (1 ahead each). The certification stands from the 2026-10-19 triage.
 - **For human triage:** `parked/untriaged-20260930-110432` and `parked/untriaged-20260930-215455`. The survey skips eight subagent branches: `wip/issue-1861-{mason,chronicler}`, `wip/issue-1926-{mason,chronicler}`, `wip/issue-2008-{mason,chronicler}`, `wip/issue-1988-mason-repair` and `wip/issue-1988-chron2`. Each one's issue is closed and landed.
 
 ### Marker census
 
-**`go tool gapaudit` on `9d07789d`, fed the same walk:** 198 markers across 12 areas (xpath 66, jsonsrc 41, xsd 34, validate 23, value 11, conformance 7, parser 6, xml 3, codegen 2, landcheck 2, regex 2, cmd 1). This is unchanged.
+**`go tool gapaudit` on `9f3c1574`, fed the same walk:** 198 markers across 12 areas (xpath 66, jsonsrc 41, xsd 34, validate 23, value 11, conformance 7, parser 6, xml 3, codegen 2, landcheck 2, regex 2, cmd 1). This is unchanged.
 
 - **Group 1 has 10 rows.** Eight are #2719's. The other two have an owner written into the body: `value/valuespace.go:152` (#462) and `tools/landcheck/keywords.go:48` (#2541).
 - **Group 2 has 27 rows.** #3019 (three unmarked `xsd` disclosures) stays there until it lands its markers.
 
 ### Milestones and queue
 
-**Read from GitHub after this pass: 333 open issues** (`issuefeed`: `rows 3074 distinct 3074 min 1 max 3074 no gaps`).
+**Read from GitHub after this pass: 338 open issues** (`issuefeed`: `rows 3114 distinct 3114 min 1 max 3114 no gaps`).
 
 | milestone | open | closed | state |
 |---|---:|---:|---|
@@ -85,36 +87,36 @@ one — appending is what this replaces.
 | **M6 — XPath required subset** | **6** | **46** | active |
 | M7 — XPath 2.0 growth | 1 | 1 | #2619 open |
 | **M8 — JSON instance adapter** | **2** | **55** | active; #2670 `blocked`, #3044 `ready` |
-| **M9 — Codegen** | **9** | **19** | active: #3030, #3072, #3073, #2976, #3048, #3071 and #3043 `ready`, #2977 `blocked`, and the #2900 epic |
+| **M9 — Codegen** | **14** | **27** | active: 12 `ready`, #2977 `blocked` and the #2900 epic |
 | M10–M12 | 0 | 0 | not started |
 
-The open issues are **314 `ready`, 16 `blocked` and 3 `epic`**, which sums to 333. No issue is `needs-replan` or unlabelled. Open `kind/process` is 2: #1885 (`blocked`) and #3057 (`ready`, the pre-flight graph-ruling friction from #3037's post-land).
+The open issues are **319 `ready`, 16 `blocked` and 3 `epic`**, which sums to 338. No issue is `needs-replan` or unlabelled. Open `kind/process` is 2: #1885 (`blocked`) and #3057 (`ready`).
 
-- **`blocked` is 16:** #16, #555, #1042, #1051, #1374, #1609, #1790, #1885, #2022, #2081, #2376, #2533, #2670, #2749, #2977 and #3031. #2976 and #3030 left the list at #2975's post-land. No trigger fired, and every named dependency is still open. `go tool issuefeed -owner-comments` prints no owner comment since the label on any of them. #1609's arms read `schema` Fail 96 and Total 15398, and no commit since `2dc327b3` touches `xsd/contentrestricts.go`. #2977's trigger is a filed `gen` check-mode story or an in-tree caller, and this round's libuser request is neither. #16's `gen` criteria are now filed (#2976, #3073, #1570). It stays a reference.
-- **Measured refactors, every `## Cost of delay` command re-run at `9d07789d`: all unchanged.** #3033 14/3, #2793 3, #2675 3/1, #2663 4, #2601 0, #2600 2, the four #2595 figures 1/1/3/1, #2375 1/1, #2374 22, #2373 16, #2372 27, #2370 31, #2359 14, #2329 1, #2239 2, #2237 24, #2205 2, #2101 1/1, #1958 2, #1865 2, #1757 1, #1080 8 and #363 2.
+- **`blocked` is 16:** #16, #555, #1042, #1051, #1374, #1609, #1790, #1885, #2022, #2081, #2376, #2533, #2670, #2749, #2977 and #3031. No trigger fired, and every named dependency is still open. `go tool issuefeed -owner-comments` prints no owner comment since the label on any of them. #1609's arms read `schema` Fail 96 and Total 15398. #2977 waits on a consumer, and this round's personas named none.
+- **Measured refactors.** The window touched only `codegen`, `cmd/goxsd8`, `tools/gencensus` and docs. So every `## Cost of delay` command confined to other paths reads its `9d07789d` figure by construction. The four that span the whole tree were re-run at `9f3c1574` and are unchanged: #3033 14/3, #2601 0, #2359 14 and #363 2. #2370 is 31.
 
 ### Persona consultations
 
-**This round: 2026-10-26 at `9d07789d`, libuser and cliuser** (README, `go doc` and `-help`). The published surface changed since 8f2cc129: `codegen.Construct` and `codegen.DeclineError` were added (#2975), and gen's usage and README changed (#3042, #1003). Each claim was checked against the tree, and the CLI claims against a binary built from it, before it entered a body. One claim was false: libuser 5's "the module is unpublished, so a `replace` is needed". The repository is public, and the false conclusion was filed as an arrival in #1000.
+**This round: 2026-10-27 at `9f3c1574`, libuser and cliuser** (README, `go doc` and `-help`). The published surface changed: `codegen.TargetError` (#3048) and `CheckTargets` (#3073) were added, and `Generate`'s doc, gen's usage and README changed. Each claim was checked against the tree, and each CLI claim against a binary built from it, before it entered a body. One claim was not reproduced: cliuser 5's "clause 2 has no third arm". It is quoted nowhere as a message.
 
 - **Filed:**
-  - #3073 (cliuser 2): gen's exit code depends on pair order. A compile failure (1) or an earlier pair's decline (4) hides a later `-out` refusal, against "2 over 1 over 4 over 0". Reproduced, the hand-written `xsd_gen.go` refusal included.
-  - #3071 (libuser 1, 2 and 7): `Construct`'s doc says neither that it is comparable nor whether `String`'s names are stable, and `DeclineError.Loc` does not say when it is zero. It opens on a warden pre-flight.
-  - #3072 (cliuser 4's product half): the `<element ref>` lifting slice.
-  - #3074 (cliuser 11): README's JSON paragraphs restate `-help` verbatim.
-- **Folded into open issues:** libuser 3 and cliuser 3 into #2976 (body: a re-sighting and the #3073 relation). libuser 3's dry-run half into #2977, as a sighting and not its trigger. libuser 5 into #1000 (body: a new `go get` Acceptance bullet). cliuser 1 and 8 into #1570. cliuser 5's absolute-path half into #1521.
+  - #3110 (cliuser 3 and 2): an exit-2 diagnosis prints the subcommand's synopsis line. This is consistent with #1570's KEEP ruling.
+  - #3111 (cliuser 1): a clone-free `go install …@main` line and the toolchain auto-download. #1000 did not cover either.
+  - #3112 (libuser 4): README's codegen paragraph says the structs carry no tags, so `encoding/xml` cannot fill them.
+  - #3113 (libuser 6): `Generate`'s phase-1 paragraph leads with the rule.
+  - #3114 (libuser 5): a violation's clause is prose-only. It needs a warden ruling and sits below the band.
+- **Folded into open issues:**
+  - libuser 1 into #1894, as item 4: `RootAt` is resolver-relative, and the default `loader.Dir(".")` refuses an absolute root.
+  - cliuser 4 into #2402, as a reproduced sighting.
+  - cliuser 5 into #2370, as its seventh recorded round. It is now banded.
 - **Dismissed:**
-  - libuser 1's exported constants: #2975's pre-flight ruled them out because no consumer names a construct. Story B needs only `String()`.
-  - libuser 3's "say only the first decline is reported": `Generate`'s doc already says "the error is the first failure".
-  - libuser 4: `Standing` gets no `String`, by #1292's ruling (no consumer, T5).
-  - libuser 6: `Generate`'s doc says "never an *xsderr.Error", and `LocOf`'s says it reads `*Error`.
-  - libuser 8: `Generate`'s doc owns the file name, and README points at it (STYLE D3).
-  - cliuser 4's help-listed constructs: `-help` gives the URL of `codegen/doc.go` "# Coverage", which owns the list (D3).
-  - cliuser 5's `[rule]` form: a decline charges no rule.
-  - cliuser 6: the gen block states the positional pair rule.
-  - cliuser 7: a `-schema` is compiled as a parse argument, as the help states, so its open fault is parse's line.
-  - cliuser 9 and 10: documented, and no defect.
-- **Consumed:** every finding of both reports is disposed of above. Re-sighted again: #2976 three times, #1570 nine times, #1521 eight times, and #1000 three times. The next round is due when an M9 slice changes generated output, `-help` or `codegen`'s exported surface.
+  - libuser 2: `Standing` and `Unevaluated` get no `String`, by #1292's ruling (no consumer, T5). This is its second sighting.
+  - libuser 3: README's own program binds `schema, err := parser.Parse(…)`, and the `ParseReport` sentence spells its three results.
+  - cliuser 6 and 7: a `-schema` is compiled as a parse argument, so its open fault is parse's line and not an output fault. The 2026-10-26 round ruled the same.
+  - cliuser 8: #1521 (`34e38f9c`) states how each line names a path.
+  - cliuser 9: `-help` says `ber` is reserved and exits 2. The violations of the other instances still print, and 2 outranks 1 by the published precedence.
+  - cliuser 10: `-help` says `-q` silences nothing on validate and gen.
+- **Consumed:** every finding of both reports is disposed of above. The next round is due when an M9 slice changes generated output, `-help` or `codegen`'s exported surface.
 
 M9 faces the API through `codegen` and the CLI through `goxsd8 gen`. M4, M5, M6 and M8 face the API through `parser`, `xsd`, `validate`, `xpath` and `validate/jsonsrc`, and the CLI through `goxsd8 parse` and `validate`.
 
@@ -122,62 +124,69 @@ M9 faces the API through `codegen` and the CLI through `goxsd8 gen`. M4, M5, M6 
 
 This is ordered for a `/develop` session: take the highest row you can start. **Run `wipsurvey` fed before starting**; its WORKING BAND section prints each row's state. Each row names one issue (#1636).
 
-**Tier A: the north star, M9.**
+**Tier A: the north star, M9, ranked by `gencensus` bound.**
 
 | # | issue | why here |
 |---|---|---|
-| 1 | #3030 | **`go tool gencensus`.** It turns M9's throwaway census into a measure each slice's Acceptance can cite. It needs no pre-flight. |
-| 2 | #3072 | **`<element ref>` particles** (413 first declines at `79375fe`, a bound). It is the largest construct the retro's census named that no slice has taken, and the persona's multi-schema workflow needs it. Warden pre-flight on the field type and on recursion through refs. |
-| 3 | #3073 | **gen's exit code depends on pair order.** A product defect against the published precedence. Arm (a) is `cmd`-only. |
-| 4 | #2976 | **Every decline in one run.** Asked for in three persona rounds. Pre-flight on the aggregate's shape. Same file as #3048. |
-| 5 | #3048 | **The failing target's index as a value.** Same file as #2976, so a session taking one absorbs the other where it can. |
-| 6 | #3071 | **What `Construct` and `Loc` promise.** If the pre-flight rules the `String` names stable, that binds every later slice, so it ranks ahead of the slices filed after #3030. |
-| 7 | #3043 | **`ExampleGenerate` shows generated source.** |
+| 1 | #3080 | **xs:anyType elements** (450). Its warden pre-flight rules the any-content representation, which #3081 reuses. |
+| 2 | #3077 | **Complex-content restriction of a complex base** (up to 449). Pre-flight on base and derived Go types. |
+| 3 | #3081 | **Wildcard particles** (373). Same function as #3082 and #3108. It carries #3072's warden note (b). |
+| 4 | #3082 | **A content particle that is optional or repeats** (335). Same walk as #3081. |
+| 5 | #3078 | **Simple content**, the simple-content share of the derivation (475) and restriction (449) rows. |
+| 6 | #3079 | **Complex-content extension**, the rest of the 475 row. Pre-flight on splicing the base particle. |
+| 7 | #3108 | **`<group ref>` particles** (195). Same function as #3081 and #3082. |
+| 8 | #3107 | **hexBinary and base64Binary** (161 of the 282). |
+| 9 | #3109 | **Union types** (153). Pre-flight on the representation. |
+| 10 | #3091 | **Two anonymous-type declines collapse into one text.** A reporting defect; the pre-flight rules the subject. |
+| 11 | #3090 | **gen routes by `ErrUnsupported`, so an OS fault can exit 4.** A real defect, reached only by an errno that answers `ErrUnsupported`. |
 
-**Tier B: persona documentation and one defect.**
+**Tier B: persona-facing defects and documentation.**
 
 | # | issue | why here |
 |---|---|---|
-| 8 | #1895 | **README never names `ParseSet` and calls `ParseReport` the primitive.** |
-| 9 | #1521 | **Absolute schema-side paths against as-spelled instance paths**, now on gen's decline line too. Re-sighted in eight rounds. |
-| 10 | #1570 | **A ruling on subcommand-scoped help.** Re-sighted in nine rounds, now as `gen -help`. |
-| 11 | #1000 | **The Quickstart's `$PATH`, Go version and `go get` line.** |
-| 12 | #3074 | **README restates `-help`'s JSON mapping.** |
-| 13 | #3044 | **jsonsrc's trailing-content label.** Low severity; exit and class are right. |
+| 12 | #2370 | **validate's messages in STYLE E5's shape** (31). Seven persona rounds have asked for it, and #2376 waits on it. |
+| 13 | #3110 | **The subcommand synopsis on an exit-2 diagnosis.** It answers two cliuser findings at once. |
+| 14 | #2402 | **An attribute violation is located at its element.** Reproduced this round. |
+| 15 | #1894 | **`ParseSet`'s surface docs**, now with `RootAt`'s resolver-relative location. Same package as #2953. |
+| 16 | #3111 | **The Quickstart's clone-free install line.** |
+| 17 | #3112 | **README says the generated structs carry no tags.** |
+| 18 | #3113 | **`Generate`'s phase-1 paragraph.** Same function as #3091; take it after #3091 if both are open. |
+| 19 | #3074 | **README restates `-help`'s JSON mapping.** |
+| 20 | #3044 | **jsonsrc's trailing-content label.** Low severity; exit and class are right. |
 
 **Tier C: tooling.** No process issue costs a round: #3057 is a first sighting at no round's cost.
 
 | # | issue | why here |
 |---|---|---|
-| 14 | #2203 | **`surface` is blind to signature changes.** It decides when a persona round is due. |
-| 15 | #2748 | **`issuefeed -comments`.** It closes #1153 and #1217. |
+| 21 | #2203 | **`surface` is blind to signature changes.** It decides when a persona round is due. |
+| 22 | #2748 | **`issuefeed -comments`.** It closes #1153 and #1217. |
 
 **Named below the band, on purpose.**
-- **M9:** #2900 (the decline epic). #2977 waits on a consumer. The slices after #3072 (extension 382, xs:anyType 324, as first declines at `79375fe`) are filed from #3030's first run, not from the throwaway figures.
+- **M9:** #2900 (the decline epic; QName, NOTATION, precisionDecimal and the 18 smaller rows have no slice yet). #2977 waits on a consumer.
 - **M8:** #2670 (waits on #1601's ruling reopening).
 - **Process:** #3057 (the pre-flight graph-ruling friction; a first sighting).
-- **T5a sweeps:** #2948, #2949, #2950, #2953, #2954 (it takes #1496's paragraph) and #2955. #2985 (jsonsrc's doubled #2634 rationale) goes with #2955 or alone.
+- **T5a sweeps:** #2948, #2949, #2950, #2953, #2954 (it takes #1496's paragraph) and #2955. #2985 (jsonsrc's doubled rationale) goes with #2955 or alone.
 - **Marker bookkeeping:** #3019 (three unmarked `xsd` disclosures) and #2719 (gapaudit's 8 Group 1 rows). A session in `value/valuespace.go`, `xsd/defaultbinding.go` or `xsd/contentrestricts.go` absorbs its #2719 row.
-- **Library contract:** #1291 (a violation's instance path), #1406 (`Unevaluated`'s machine-readable cause), #1094 (a declined `{test}`'s schema location) and #1234 (the root doc's "Start here" list, now with #1003's public-versus-internal line). #486 bears on #1406. #1382 (the backend-must-match invariant).
+- **Library contract:** #3114 (a violation's clause; warden ruling first, after #2370), #1291 (a violation's instance path), #1406 (`Unevaluated`'s machine-readable cause), #1094 (a declined `{test}`'s schema location) and #1234 (the root doc's "Start here" list). #486 bears on #1406. #1382 (the backend-must-match invariant).
 - **M5, `conformance/subtreeroot.go`:** #2237 (24; fail to fail) and #755 (the hint reader's home).
 - **Persona documentation, re-sighted:**
   - `validate`: #1088, #1595 and #1408.
-  - `cmd/goxsd8`: #1409, #1433, #2419, #1549, #1845, #1318, #1144, #1185, #2797, #2402, #1089, #1626 and #398.
-  - Library: #1371 (`parser.Parse`'s error contract) and #1593 (`parser`'s overview order).
+  - `cmd/goxsd8`: #1409, #1433, #2419, #1549, #1845, #1318, #1144, #1185, #2797, #1089, #1626 and #398. #3110 shares `helpPointer` with #1089 and #1626.
+  - Library: #1371 (`parser.Parse`'s error contract), #1593 (`parser`'s overview order) and #1685 (pre-1.0 mobility).
 - **M7:** #2619 (`as-props-correct` clause 2; it needs a warden ruling on its `xpath` export).
 - **`xpath/cta.go` and `xpath/ctaparser.go`:** #2595, #2675, #2416 and #2533.
-- **M6:** #2663 (4) and #2662 share `validate/cvcassertion.go`. #2455, #2437 and #2394 are in `xpath/assertion.go`. Take them one at a time, together with #2370 and #889.
-- **STYLE E5 sweeps:** #2370 (31), #2372 (27), #2373 (16), #2374 (22) and #2375. #2376 waits on #2370.
-- **M5 residue:** #2764 (a repeated attribute name, `parser/xmltree`), #2494, #1825, #1382, #1250 and #920.
+- **M6:** #2663 (4) and #2662 share `validate/cvcassertion.go`. #2455, #2437 and #2394 are in `xpath/assertion.go`. Take them one at a time, together with #889.
+- **STYLE E5 sweeps after row 12:** #2372 (27), #2373 (16), #2374 (22) and #2375. #2376 waits on #2370.
+- **M5 residue:** #2764 (a repeated attribute name, `parser/xmltree`), #2494, #1825, #1250 and #920.
 - **M4, where `Ratchet: unchanged` is expected or the bound is small:** #2087, #2052, #1873, #1877, #1883, #1887, #1801 and #1777. #1998 and #1953 are in `xsd/contentrestricts.go`, so either one fires #1609's arm 3.
 - **Docs and bookkeeping:** #2679, #2624 with #793, #1803, #1881, #785, #1343, #1502 and #656. **`value`:** #721, #2045 and #462. **`regex`:** #2148 and #2147.
-- **Tooling, after row 15:** #1897, #2542, #2539, #2605, #2541, #1935, #2070, #2066, #678, #1464, #1838, #1794 and #1735.
+- **Tooling, after row 22:** #1897 (it now also records the superseded-pass misread), #2542, #2539, #2605, #2541, #1935, #2070, #2066, #678, #1464, #1838, #1794 and #1735.
 - **Refactors:** #3033 (14/3), #2601 (0), #2600 (2), #2793 (3), #2239 (2), #2359 (14), #2205 (2), and the E5 list above. #3034, #989, #1736, #1701, #845, #1757, #1825, #2416, #2419 and #2437 are unmeasured.
 
 ### Next planning action
 
-1. **Post-land for #3030** runs `go tool gencensus` on its landing commit and writes the figure into #3072's body, replacing the `79375fe` bound. The next `/backlog` files the next lifting slices from its largest-first list.
-2. **Post-land for #3071**, if its pre-flight rules `String`'s names stable, records that ruling on #2900, so every later slice's deletion of a construct kind honours it.
+1. **Post-land for #3080** records its representation ruling on #3081's body, so the wildcard slice starts from it. It also re-runs `gencensus`, because lifting xs:anyType exposes each document's next decline.
+2. **The next `/backlog`** files slices for QName and NOTATION and for whichever smaller `gencensus` row has grown past #3109's 153. It also re-runs the persona round if an M9 slice changed `-help` or `codegen`'s surface.
 3. **Owed to a human:**
    - #1885 (arbiter.md's Ratchet integrity), #2081, #1790, #2022, #2749 and #3031 (CLAUDE.md's gate part 1 spelling).
    - The ref deletions under Branch namespace.
