@@ -445,17 +445,17 @@ func headerLoc(base string, loc xsderr.Loc) string {
 }
 
 // topLevel emits the type of one top-level element declaration: a named type
-// over the raw-content struct AnyType ("# Coverage") for xs:anyType, over an
-// atomic Go type for an atomic simple {type definition}, over a slice of one
-// for a list, over a union's sealed interface for a union (unionType), a
-// struct or sealed interface for an accepted complex one, named
-// or anonymous. That type is named from the element (elementType), and a local
-// element of the same named type never shares it (nestedType), while every
-// <element ref> particle to the element does; the types nested in it are named
-// from the type when it is named, and shared with that type's every other use,
-// and from the element when it is anonymous, but for those of the elements a
-// model group definition declares, named from the group and shared with its
-// every <group ref> particle (nestedType).
+// over the raw-content struct AnyType ("# Coverage") for xs:anyType, over
+// string for a special one, over an atomic Go type for an atomic simple {type
+// definition}, over a slice of one for a list, over a union's sealed interface
+// for a union (unionType), a struct or sealed interface for an accepted
+// complex one, named or anonymous. That type is named from the element
+// (elementType), and a local element of the same named type never shares it
+// (nestedType), while every <element ref> particle to the element does; the
+// types nested in it are named from the type when it is named, and shared with
+// that type's every other use, and from the element when it is anonymous, but
+// for those of the elements a model group definition declares, named from the
+// group and shared with its every <group ref> particle (nestedType).
 func (e *emitter) topLevel(decl xsd.ElementDeclaration) error {
 	td, err := e.declaredType(decl)
 	if err != nil {
@@ -563,16 +563,19 @@ func (e *emitter) declaredType(decl xsd.ElementDeclaration) (xsd.TypeDefinition,
 	return td, nil
 }
 
-// simpleGoType is the atomic Go type, the slice, or the union's sealed
-// interface that a simple-typed element's or attribute's field, or an
-// element's named type, is declared over, chosen by the package doc's "#
-// Coverage" (goType). subject names the declaration the type is read from,
-// and loc, its Loc, is a decline's; path is goType's.
+// simpleGoType is a special type's string, the atomic Go type, the slice,
+// or the union's sealed interface that a simple-typed element's or
+// attribute's field, or an element's named type, is declared over, chosen
+// by the package doc's "# Coverage" (goType). subject names the
+// declaration the type is read from, and loc, its Loc, is a decline's;
+// path is goType's.
 func (e *emitter) simpleGoType(subject string, loc xsderr.Loc, t *xsd.SimpleType, path []string) (emittedType, error) {
 	return e.goType(subject, fmt.Sprintf("%s with {type definition} %s", subject, typeName(t)), loc, t, path)
 }
 
-// goType is the Go type "# Coverage" maps the simple type t to: for an atomic
+// goType is the Go type "# Coverage" maps the simple type t to: for a special
+// t (Datatypes §2.4.1 dt-special), xs:anySimpleType or xs:anyAtomicType known
+// by identity ahead of its {variety}, string, holding the literal; for an atomic
 // t, its atomic Go type, chosen through builtinType and then t's {primitive
 // type definition} (Datatypes §4.1.1), setting e.usesBig for a math/big type
 // or a datatype struct holding one; for a list (Datatypes §2.4.1.2, a finite
@@ -588,7 +591,7 @@ func (e *emitter) simpleGoType(subject string, loc xsderr.Loc, t *xsd.SimpleType
 // simpleGoType's.
 func (e *emitter) goType(subject, typed string, loc xsderr.Loc, t *xsd.SimpleType, path []string) (emittedType, error) {
 	if t.IsSpecial() {
-		return emittedType{}, decline(loc, constructSpecialType, typed)
+		return emittedType{name: "string"}, nil
 	}
 	variety, err := t.Variety(e.schema)
 	if err != nil {
