@@ -24,6 +24,9 @@ var (
 	doublePrimitive  = xsd.QName{Space: xsd.XMLSchemaNS, Local: "double"}
 	decimalPrimitive = xsd.QName{Space: xsd.XMLSchemaNS, Local: "decimal"}
 
+	hexBinaryPrimitive    = xsd.QName{Space: xsd.XMLSchemaNS, Local: "hexBinary"}
+	base64BinaryPrimitive = xsd.QName{Space: xsd.XMLSchemaNS, Local: "base64Binary"}
+
 	integerBuiltin = xsd.QName{Space: xsd.XMLSchemaNS, Local: "integer"}
 
 	longBuiltin          = xsd.QName{Space: xsd.XMLSchemaNS, Local: "long"}
@@ -545,6 +548,8 @@ func (e *emitter) goType(subject, typed string, loc xsderr.Loc, t *xsd.SimpleTyp
 		return "float64", nil
 	case decimalPrimitive: // Datatypes §3.3.3, as "# Coverage" states
 		return e.useBig(bigRat), nil
+	case hexBinaryPrimitive, base64BinaryPrimitive: // Datatypes §3.3.15.1, §3.3.16.1, as "# Coverage" states
+		return "[]byte", nil
 	case dateTimeStruct.datatype: // Datatypes §3.3.7
 		return e.datatypeType(dateTimeStruct), nil
 	case timeStruct.datatype: // Datatypes §3.3.8

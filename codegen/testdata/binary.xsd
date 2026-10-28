@@ -1,0 +1,39 @@
+<?xml version="1.0"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+           xmlns="urn:binary" targetNamespace="urn:binary"
+           elementFormDefault="qualified">
+  <xs:element name="digest" type="xs:hexBinary"/>
+  <xs:element name="payload" type="xs:base64Binary"/>
+  <xs:element name="blob">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element name="hex" type="xs:hexBinary"/>
+        <xs:element name="base64" type="xs:base64Binary"/>
+        <xs:element name="key" type="key" minOccurs="0"/>
+        <xs:element name="chunk" type="xs:base64Binary" maxOccurs="unbounded"/>
+        <xs:element name="keys" type="keys"/>
+      </xs:sequence>
+      <xs:attribute name="checksum" type="xs:hexBinary" use="required"/>
+      <xs:attribute name="signature" type="xs:base64Binary"/>
+      <xs:attribute name="salt" type="xs:hexBinary"/>
+      <xs:attribute name="nonces" type="keys"/>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="sealed">
+    <xs:complexType>
+      <xs:simpleContent>
+        <xs:extension base="xs:base64Binary">
+          <xs:attribute name="key" type="key"/>
+        </xs:extension>
+      </xs:simpleContent>
+    </xs:complexType>
+  </xs:element>
+  <xs:simpleType name="key">
+    <xs:restriction base="xs:hexBinary">
+      <xs:length value="16"/>
+    </xs:restriction>
+  </xs:simpleType>
+  <xs:simpleType name="keys">
+    <xs:list itemType="key"/>
+  </xs:simpleType>
+</xs:schema>
