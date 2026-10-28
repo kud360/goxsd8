@@ -21,20 +21,25 @@
 // Generate emits, in document order, one Go type per top-level element
 // declaration, one per anonymous complex type nested in its type definition or
 // in a model group definition a <group ref> particle names, one per named
-// complex type a local element declaration reaches, one per model group
-// particle but a content particle occurring exactly once and a sequence
-// occurring exactly once in a sequence or as a choice's alternative, and one
-// branch struct per alternative of each choice it emits as a sealed
-// interface — an <element ref> particle gets none of its own, its field
-// holding the type emitted for the top-level element declaration it names —
-// then, after every other declaration and in the order the walk
-// first needs each, one datatype struct per date, time or duration datatype
-// a declaration's type or a value field is declared over, the four
-// raw-content structs once an element's type is xs:anyType, a sequence
-// holds a wildcard particle, or a type has an {attribute wildcard}, and one
-// sealed interface per union simple type a declaration's type, a value field,
-// a list's item or a union's member is declared over, each followed by one
-// variant type per basic member, and declines everything outside this slice:
+// complex type a local element declaration reaches, one per place a struct's
+// or a branch struct's particles hold a choice or a sequence occurring other
+// than exactly once — a sequence occurring exactly once in a sequence or as a
+// choice's alternative giving the places of its own particles, and a complex
+// type's own content particle counting only when it occurs other than exactly
+// once — so a particle that a model group definition or an extension's base
+// holds gets one in each struct that holds it, each shared as an anonymous
+// complex type nested beside it is, and one branch struct per alternative of
+// each choice it emits as a sealed interface — an <element ref> particle gets
+// none of its own, its field holding the type emitted for the top-level
+// element declaration it names — then, after every other declaration and in
+// the order the walk first needs each, one datatype struct per date, time or
+// duration datatype a declaration's type or a value field is declared over,
+// the four raw-content structs once an element's type is xs:anyType, a
+// sequence holds a wildcard particle, or a type has an {attribute wildcard},
+// and one sealed interface per union simple type a declaration's type, a value
+// field, a list's item or a union's member is declared over, each followed by
+// one variant type per basic member, and declines everything outside this
+// slice:
 //
 //   - An element whose {type definition} is an atomic, list or union simple
 //     type gets a named type over the atomic Go type an atomic simple type
@@ -297,21 +302,25 @@
 // element a model group definition declares, and every type nested in it, is
 // named by the path of names from that group (element e in group g → GE),
 // whichever <group ref> particles reach it. The type for one occurrence of a
-// model group particle is named by the path of the struct whose content model
-// holds it, followed by the local name sequence or choice of each occurrence
-// type enclosing it and then its own (CtSequence; a choice in that sequence →
-// CtSequenceChoice), and the types nested in its particles as if it were
-// absent; it is named and keyed under that struct whichever <group ref>
-// particle brought its group, so two structs referencing one group get an
-// occurrence type each. A choice's branch struct is named from its
+// model group particle is named by the path of names of the complex type whose
+// content model holds it — Ct for a named complex type ct, the path an anonymous
+// one is named by above, GE for the anonymous type of element e in group g —
+// never from a name its interface or a branch claimed, followed by the local
+// name sequence or choice of each occurrence type enclosing it and then its own
+// (CtSequence; a choice in that sequence → CtSequenceChoice; a repeated sequence
+// in a branch of named choice type alt, reached by element fifth → AltSequence,
+// never FifthSequenceSequence), and the types nested in its particles as if it
+// were absent; it is named and keyed under that complex type whichever <group
+// ref> particle brought its group, so two complex types referencing one group
+// get an occurrence type each. A choice's branch struct is named from its
 // interface's name plus the alternative's local name, or its compositor for a
-// model group alternative (alternative a of interface First → FirstA, a
-// sequence alternative → FirstSequence), so two top-level elements of one
-// named choice type get distinct interfaces and branches. A residual collision —
-// two names folding to one identifier, among a package's types or one struct's
-// fields — is disambiguated deterministically by document order: the later name
-// takes the smallest free numeric suffix from 2, so a top-level element ct and a
-// complex type ct reached locally take Ct in the order they are first reached. A
+// model group alternative (alternative a of interface First → FirstA, a sequence
+// alternative → FirstSequence), so two top-level elements of one named choice
+// type get distinct interfaces and branches. A residual collision — two names
+// folding to one identifier, among a package's types or one struct's fields — is
+// disambiguated deterministically by document order: the later name takes the
+// smallest free numeric suffix from 2, so a top-level element ct and a complex
+// type ct reached locally take Ct in the order they are first reached. A
 // datatype struct is named from its datatype's local name (dateTime → DateTime,
 // gYearMonth → GYearMonth, dayTimeDuration → DayTimeDuration), claimed when the
 // walk first needs it: for a top-level element of a simple type, ahead of that
