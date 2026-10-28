@@ -1286,9 +1286,8 @@ func (e *emitter) field(nested scope, chain []valueNode, subject string, loc xsd
 // package doc's "# Coverage" pointer and slice rules: a slice for {max occurs}
 // above 1 or unbounded, a pointer for {min occurs} 0 with {max occurs} 1
 // unless typ is a sealed interface, a choice's or a union's, and typ itself
-// otherwise. ok is false, and
-// goType "", exactly when {max occurs} is 0; the caller declines that particle
-// naming its own term.
+// otherwise. ok is false, and goType "", exactly when {max occurs} is 0; the
+// caller declines that particle naming its own term.
 func occursGoType(typ emittedType, occurs xsd.Occurs) (goType string, ok bool) {
 	upper, bounded := occurs.Max()
 	switch {
