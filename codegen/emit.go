@@ -187,8 +187,9 @@ type emitter struct {
 }
 
 // rawNames is the names claimed for the four raw-content structs "# Coverage"
-// gives an element of type xs:anyType (§3.4.7 any-type-itself) and a wildcard
-// particle of a sequence, in claim order.
+// gives an element of type xs:anyType (§3.4.7 any-type-itself), a wildcard
+// particle of a sequence, and an {attribute wildcard} (§3.4.2.5
+// dcl.ctd.anyatt), in claim order.
 type rawNames struct {
 	anyType, attribute, child, element string
 }
@@ -816,10 +817,11 @@ func (e *emitter) datatypeType(ds datatypeStruct) string {
 // anyTypeType returns the name of the raw-content struct AnyType, which holds
 // the content of an element of type xs:anyType: mixed, a lax ##any wildcard
 // any number of times, and a lax ##any {attribute wildcard} (§3.4.7
-// any-type-itself). When no earlier declaration or wildcard particle needed
-// them, it claims the four raw-content structs' names in e.types, in rawNames'
-// order, by the package doc's "Naming", and appends their declarations to
-// e.tailDecls in that order. No field names math/big.
+// any-type-itself). When no earlier declaration, wildcard particle or
+// {attribute wildcard} needed them, it claims the four raw-content structs'
+// names in e.types, in rawNames' order, by the package doc's "Naming", and
+// appends their declarations to e.tailDecls in that order. No field names
+// math/big.
 func (e *emitter) anyTypeType() string {
 	if e.raw.anyType != "" {
 		return e.raw.anyType
@@ -904,10 +906,11 @@ func typeName(t xsd.TypeDefinition) string {
 // shape checks the complex type t against the package doc's "# Coverage"
 // shape, naming it in declines by o's subject, and returns the type it emits
 // as name — a sealed interface for a choice content particle that occurs
-// exactly once, which declines {attribute uses}, and a struct otherwise — and
-// its content particle (contentGroup), nil for empty content. It emits
-// nothing: body does, so that a caller can store the type in e.emitted before
-// its body is walked.
+// exactly once, which declines {attribute uses} or an {attribute wildcard},
+// naming the uses when it has both, since an interface has no field to hold
+// either, and a struct otherwise — and its content particle (contentGroup), nil
+// for empty content. It emits nothing: body does, so that a caller can store the type
+// in e.emitted before its body is walked.
 func (e *emitter) shape(name string, o origin, t xsd.ComplexType) (emittedType, *contentParticle, error) {
 	content, err := e.contentGroup(o.subject, t)
 	if err != nil {
@@ -916,10 +919,15 @@ func (e *emitter) shape(name string, o origin, t xsd.ComplexType) (emittedType, 
 	if content == nil || content.group.Compositor() != xsd.CompositorChoice || content.occurs != exactlyOnce {
 		return emittedType{name: name}, content, nil
 	}
-	if len(t.AttributeUses()) > 0 {
-		return emittedType{}, nil, decline(t.Loc(), constructChoiceAttributeUses, o.subject)
+	_, hasWildcard := t.AttributeWildcard()
+	if len(t.AttributeUses()) == 0 && !hasWildcard {
+		return emittedType{name: name, sealed: true}, content, nil
 	}
-	return emittedType{name: name, sealed: true}, content, nil
+	held := "an {attribute wildcard}"
+	if len(t.AttributeUses()) > 0 {
+		held = "{attribute uses}"
+	}
+	return emittedType{}, nil, decline(t.Loc(), constructChoiceAttributes, o.subject, held)
 }
 
 // body emits typ, which shape returned for the complex type t with content,
@@ -928,7 +936,11 @@ func (e *emitter) shape(name string, o origin, t xsd.ComplexType) (emittedType, 
 // simple content (§3.4.2.2 dcl.ctd.ctsc) the value field, named from the local
 // name value and holding, never through a pointer, what goType maps its
 // {simple type definition} to, an anonymous union named by nested's path with
-// value last, and then one per attribute use (attributeField); or the sealed
+// value last, then one per attribute use (attributeField), and then, when t
+// has an {attribute wildcard} (§3.4.2.5 dcl.ctd.anyatt), its own, inherited or
+// brought by an attribute group, one named from the local name anyAttribute
+// holding a slice of the raw-content struct AnyAttribute (anyTypeType, which
+// claims the raw-content structs' names there when nothing earlier did); or the sealed
 // interface sealedType emits; then the types its fields reach, the anonymous
 // ones named in nested. chain is valueChain's for a walk of t's particles.
 func (e *emitter) body(typ emittedType, nested scope, chain []valueNode, o origin, t xsd.ComplexType, content *contentParticle) error {
@@ -965,6 +977,10 @@ func (e *emitter) body(typ emittedType, nested scope, chain []valueNode, o origi
 			return err
 		}
 		fields = append(fields, field)
+	}
+	if _, has := t.AttributeWildcard(); has {
+		e.anyTypeType()
+		fields = append(fields, fieldSpec{local: "anyAttribute", goType: "[]" + e.raw.attribute})
 	}
 	e.decls[slot] = header(typ.name, o.from) + structDecl(typ.name, fields)
 	return nil
@@ -1233,9 +1249,6 @@ func (e *emitter) contentGroup(subject string, t xsd.ComplexType) (*contentParti
 		return nil, decline(t.Loc(), constructComplexTypeAbstract, subject)
 	case len(t.Assertions()) > 0:
 		return nil, decline(t.Loc(), constructAssertions, subject)
-	}
-	if _, has := t.AttributeWildcard(); has {
-		return nil, decline(t.Loc(), constructAttributeWildcard, subject)
 	}
 	content, isElement := t.ContentType().(xsd.ElementContent)
 	if !isElement {

@@ -79,12 +79,11 @@ const (
 	constructAbsentVariety
 	constructNoPrimitive
 	constructUncoveredPrimitive
-	constructChoiceAttributeUses
+	constructChoiceAttributes
 	constructEmptyChoice
 	constructEmptiableChoice
 	constructComplexTypeAbstract
 	constructAssertions
-	constructAttributeWildcard
 	constructMixedContent
 	constructOpenContent
 	constructAll
@@ -108,12 +107,11 @@ var constructs = [...]struct{ name, format string }{
 	constructAbsentVariety:            {"absent {variety}", "%s, of absent {variety}"},
 	constructNoPrimitive:              {"no {primitive type definition}", "%s, with no {primitive type definition}"},
 	constructUncoveredPrimitive:       {"uncovered primitive", "%s, whose {primitive type definition} is %s"},
-	constructChoiceAttributeUses:      {"choice with {attribute uses}", "%s whose content is a choice, with {attribute uses}"},
+	constructChoiceAttributes:         {"choice with attributes", "%s whose content is a choice, with %s"},
 	constructEmptyChoice:              {"choice with no {particles}", "%s whose choice has no {particles}"},
 	constructEmptiableChoice:          {"emptiable choice", "%s whose choice is emptiable: its alternative element %s has {min occurs} 0"},
 	constructComplexTypeAbstract:      {"complex type {abstract}", "%s with {abstract} true"},
 	constructAssertions:               {"{assertions}", "%s with {assertions}"},
-	constructAttributeWildcard:        {"{attribute wildcard}", "%s with an {attribute wildcard}"},
 	constructMixedContent:             {"mixed content", "%s with mixed content"},
 	constructOpenContent:              {"{open content}", "%s with {open content}"},
 	constructAll:                      {"all compositor", "%s with an all compositor"},
