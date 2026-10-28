@@ -75,7 +75,9 @@ func TestGenerateDeclines(t *testing.T) {
 			"element a with {type definition} {http://www.w3.org/2001/XMLSchema}QName, whose {primitive type definition} is", constructUncoveredPrimitive},
 		{"all", `<xs:element name="e"><xs:complexType><xs:all><xs:element name="a" ` + str + `/></xs:all></xs:complexType></xs:element>`,
 			"with an all compositor", constructAll},
-		{"nested group", `<xs:element name="e"><xs:complexType><xs:sequence><xs:sequence><xs:element name="a" ` + str + `/></xs:sequence></xs:sequence></xs:complexType></xs:element>`,
+		// A nested sequence occurring exactly once is spliced into its parent;
+		// one occurring otherwise still declines.
+		{"nested group", `<xs:element name="e"><xs:complexType><xs:sequence><xs:sequence maxOccurs="2"><xs:element name="a" ` + str + `/></xs:sequence></xs:sequence></xs:complexType></xs:element>`,
 			"a nested sequence model group particle", constructNestedGroup},
 		{"group ref particle", `<xs:group name="g"><xs:sequence><xs:element name="a" ` + str + `/></xs:sequence></xs:group><xs:element name="e"><xs:complexType><xs:sequence><xs:group ref="g"/></xs:sequence></xs:complexType></xs:element>`,
 			"a <group ref> particle to g", constructGroupRef},
@@ -249,6 +251,11 @@ func TestGenerateDeclines(t *testing.T) {
 		// it shares with f closes the cycle.
 		{"ref cycle closing at a complex type", `<xs:element name="f" type="t"/><xs:complexType name="t"><xs:sequence><xs:element ref="g"/></xs:sequence></xs:complexType><xs:element name="g" type="t"/>`,
 			"<element ref> particle to element g reaching complex type t again through elements that each occur exactly once", constructValueCycle},
+		// Each ref sits in a nested sequence occurring exactly once, so the
+		// recursion check finds the cycle only by walking a's and b's
+		// particles as particleFields does (spliced).
+		{"ref cycle through nested sequences", `<xs:element name="a"><xs:complexType><xs:sequence><xs:sequence><xs:element ref="b"/></xs:sequence></xs:sequence></xs:complexType></xs:element><xs:element name="b"><xs:complexType><xs:sequence><xs:sequence><xs:element ref="a"/></xs:sequence></xs:sequence></xs:complexType></xs:element>`,
+			"<element ref> particle to element a reaching element a again through elements that each occur exactly once at s.xsd:2:1 ", constructValueCycle},
 		{"ref cycle through a local element", `<xs:element name="a"><xs:complexType><xs:sequence><xs:element name="l"><xs:complexType><xs:sequence><xs:element ref="a"/></xs:sequence></xs:complexType></xs:element></xs:sequence></xs:complexType></xs:element>`,
 			"<element ref> particle to element a reaching element a again through elements that each occur exactly once", constructValueCycle},
 		// The ref to a is checked for recursion where it is met, ahead of the

@@ -679,7 +679,7 @@ func (e *emitter) shape(name string, o origin, t xsd.ComplexType) (emittedType, 
 }
 
 // body emits typ, which shape returned for the complex type t with content,
-// generated from o: a struct holding a field per particle, or for content
+// generated from o: a struct holding particleFields' fields, or for content
 // occurring other than exactly once the one field groupField returns, or for
 // simple content (§3.4.2.2 dcl.ctd.ctsc) the value field, named from the local
 // name value and holding, never through a pointer, what goType maps its
@@ -799,13 +799,14 @@ func (e *emitter) occurrence(typ emittedType, nested scope, o origin, t xsd.Comp
 	return nil
 }
 
-// particleFields returns the fields of particles, in particle order, in a
-// struct whose nested types are named in nested and whose particles chain is
-// valueChain's for, for the complex type at loc named in declines by subject
-// (field).
+// particleFields returns the fields of particles, one per particle spliced
+// returns for them, in that order, in a struct whose nested types are named in
+// nested and whose particles chain is valueChain's for, for the complex type
+// at loc named in declines by subject (field).
 func (e *emitter) particleFields(nested scope, chain []valueNode, subject string, loc xsderr.Loc, particles []xsd.Particle) ([]fieldSpec, error) {
-	fields := make([]fieldSpec, 0, len(particles))
-	for _, p := range particles {
+	leaves := spliced(particles)
+	fields := make([]fieldSpec, 0, len(leaves))
+	for _, p := range leaves {
 		field, err := e.field(nested, chain, subject, loc, p)
 		if err != nil {
 			return nil, err
@@ -813,6 +814,28 @@ func (e *emitter) particleFields(nested scope, chain []valueNode, subject string
 		fields = append(fields, field)
 	}
 	return fields, nil
+}
+
+// spliced returns particles in order with each particle whose term is a
+// sequence model group and which occurs exactly once replaced, recursively, by
+// that group's own particles: one occurrence of such a particle is one pass
+// through its particles in order (§3.8.4.1.1 sec-sequences), so its fields are
+// theirs. Every other particle is kept as is: a choice, a sequence occurring other
+// than exactly once, and a <group ref> particle (xsd.ModelGroupRef), which is
+// never followed, are left to field to decline. The term is a closed sum, so
+// the assertion is STYLE T2's sealed-sum exception, as wildcardTerm's is.
+func spliced(particles []xsd.Particle) []xsd.Particle {
+	var leaves []xsd.Particle
+	for _, p := range particles {
+		resolved, _ := p.Term().(xsd.ResolvedTerm)
+		group, isGroup := resolved.Term.(xsd.ModelGroup)
+		if isGroup && group.Compositor() == xsd.CompositorSequence && p.Occurs() == exactlyOnce {
+			leaves = append(leaves, spliced(group.Particles())...)
+			continue
+		}
+		leaves = append(leaves, p)
+	}
+	return leaves
 }
 
 // structDecl renders the declaration of the struct name holding fields in
@@ -1267,7 +1290,11 @@ func reacher(decl xsd.ElementDeclaration) string {
 // type t that the element declaration decl, local or the top-level one an
 // <element ref> particle names, reaches by a value field from particles whose
 // chain is chain, applying valueChain at each field; subject names t to the
-// checks it calls. A choice t, a t whose content particle occurs other than
+// checks it calls. It walks the particles spliced returns for t's content
+// particle's group, the list particleFields gives fields for, so a sequence
+// spliced into its parent is a value edge that pushes no node, and every other
+// nested model group particle ends its path at elementTerm, whose decline the
+// emitting walk meets in field. A choice t, a t whose content particle occurs other than
 // exactly once, and a step whose first node (valueNodes) is in e.acyclic, end
 // the walk, and it never steps to an element of type xs:anyType, whose AnyType
 // reaches itself only through slices. A wildcard particle (wildcardTerm) is a
@@ -1298,7 +1325,7 @@ func (e *emitter) valueCycle(chain []valueNode, decl xsd.ElementDeclaration, sub
 	}
 	var particles []xsd.Particle
 	if content != nil {
-		particles = content.group.Particles()
+		particles = spliced(content.group.Particles())
 	}
 	for _, p := range particles {
 		if p.Occurs() != exactlyOnce || wildcardTerm(p.Term()) {
