@@ -76,7 +76,6 @@ const (
 	constructSubstitutionGroup
 	constructElementValueConstraint
 	constructTypeTable
-	constructSpecialType
 	constructAbsentVariety
 	constructNoPrimitive
 	constructUncoveredPrimitive
@@ -103,7 +102,6 @@ var constructs = [...]struct{ name, format string }{
 	constructSubstitutionGroup:        {"{substitution group affiliations}", "%s with {substitution group affiliations}"},
 	constructElementValueConstraint:   {"element {value constraint}", "%s with a {value constraint}"},
 	constructTypeTable:                {"{type table}", "%s with a {type table}"},
-	constructSpecialType:              {"special type", "%s, a special type"},
 	constructAbsentVariety:            {"absent {variety}", "%s, of absent {variety}"},
 	constructNoPrimitive:              {"no {primitive type definition}", "%s, with no {primitive type definition}"},
 	constructUncoveredPrimitive:       {"uncovered primitive", "%s, whose {primitive type definition} is %s"},
