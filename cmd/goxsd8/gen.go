@@ -38,11 +38,9 @@ type genPair struct {
 // itself.
 //
 // runGen restates none of codegen's checks (STYLE D3): it charges each refusal
-// CheckTargets reports exit 2, and prints each element of Generate's error on
-// its own line, routed by errors.ErrUnsupported alone, charging a decline exit
-// 4 and anything else exit 2. Each Target is named by its pair's label, so
-// every error codegen returns already names the pair it came from, and any
-// earlier pair it cites.
+// CheckTargets reports exit 2, and hands Generate's error to reportGenerate.
+// Each Target is named by its pair's label, so every error codegen returns
+// already names the pair it came from, and any earlier pair it cites.
 //
 // The flags are parsed here rather than by run, for the reason runParse states.
 func runGen(args []string, stderr io.Writer) int {
@@ -109,7 +107,18 @@ func runGen(args []string, stderr io.Writer) int {
 	if code != exitOK {
 		return code
 	}
-	err = codegen.Generate(targets)
+	return reportGenerate(codegen.Generate(targets), stderr)
+}
+
+// reportGenerate prints each element of codegen.Generate's error err on its
+// own line on stderr and returns the exit code they charge, exitOK for a nil
+// err. An element holding a *codegen.DeclineError, which errors.As retrieves,
+// charges exit 4 with no helpPointer under it; every other element charges
+// exit 2 as usageError prints it. errors.Is(e, errors.ErrUnsupported) does not
+// route: it also answers true for an OS fault whose syscall.Errno is ENOSYS,
+// ENOTSUP or EOPNOTSUPP, which Generate wraps with %w and which is no decline
+// (#3090).
+func reportGenerate(err error, stderr io.Writer) int {
 	if err == nil {
 		return exitOK
 	}
@@ -117,9 +126,11 @@ func runGen(args []string, stderr io.Writer) int {
 	if j, ok := err.(interface{ Unwrap() []error }); ok {
 		errs = j.Unwrap()
 	}
+	code := exitOK
 	for _, e := range errs {
 		line := "goxsd8: gen: " + e.Error()
-		if !errors.Is(e, errors.ErrUnsupported) {
+		var de *codegen.DeclineError
+		if !errors.As(e, &de) {
 			code = worse(code, usageError(stderr, line))
 			continue
 		}
