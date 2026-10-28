@@ -5,22 +5,22 @@ package extension
 // Staff is generated from element {urn:extension}staff declared at testdata/extension.xsd:38:3.
 type Staff struct {
 	Name    string
-	Address EmployeeAddress
+	Address PersonAddress
 	Company string
 	Name2   *string
 	Dept    *string
 	Id      string
 }
 
-// EmployeeAddress is generated from element address declared at testdata/extension.xsd:8:7.
-type EmployeeAddress struct {
+// PersonAddress is generated from element address declared at testdata/extension.xsd:8:7.
+type PersonAddress struct {
 	City string
 }
 
 // Boss is generated from element {urn:extension}boss declared at testdata/extension.xsd:39:3.
 type Boss struct {
 	Name    string
-	Address ManagerAddress
+	Address PersonAddress
 	Company string
 	Name2   *string
 	Report  []Employee
@@ -28,15 +28,10 @@ type Boss struct {
 	Id      string
 }
 
-// ManagerAddress is generated from element address declared at testdata/extension.xsd:8:7.
-type ManagerAddress struct {
-	City string
-}
-
 // Employee is generated from complex type {urn:extension}employee declared at testdata/extension.xsd:18:3.
 type Employee struct {
 	Name    string
-	Address EmployeeAddress
+	Address PersonAddress
 	Company string
 	Name2   *string
 	Dept    *string
@@ -46,14 +41,9 @@ type Employee struct {
 // Marked is generated from element {urn:extension}marked declared at testdata/extension.xsd:47:3.
 type Marked struct {
 	Name    string
-	Address FlaggedAddress
+	Address PersonAddress
 	Flag    *bool
 	Id      string
-}
-
-// FlaggedAddress is generated from element address declared at testdata/extension.xsd:8:7.
-type FlaggedAddress struct {
-	City string
 }
 
 // Item is generated from element {urn:extension}item declared at testdata/extension.xsd:51:3.
@@ -86,3 +76,11 @@ type PickedB struct {
 }
 
 func (PickedB) isPicked() {}
+
+// Visitor is generated from element {urn:extension}visitor declared at testdata/extension.xsd:84:3.
+type Visitor struct {
+	Name    string
+	Address PersonAddress
+	Badge   string
+	Id      string
+}

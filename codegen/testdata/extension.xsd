@@ -81,4 +81,15 @@
       </xs:complexContent>
     </xs:complexType>
   </xs:element>
+  <xs:element name="visitor">
+    <xs:complexType>
+      <xs:complexContent>
+        <xs:extension base="person">
+          <xs:sequence>
+            <xs:element name="badge" type="xs:string"/>
+          </xs:sequence>
+        </xs:extension>
+      </xs:complexContent>
+    </xs:complexType>
+  </xs:element>
 </xs:schema>

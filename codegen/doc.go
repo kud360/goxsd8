@@ -239,14 +239,14 @@
 // the top-level element when the element's own type is anonymous (element
 // shipTo under element purchaseOrder → PurchaseOrderShipTo), the complex type
 // when that type is named (element x in complex type ct → CtX, whichever
-// elements have type ct). The type for one occurrence of a content model
-// group is named by the path with the local name sequence or choice last
-// (CtSequence), and the types nested in its particles as if it were absent. A
-// choice's branch struct is named from its interface's name plus the
-// alternative's local name (alternative a of interface First → FirstA), so
-// two top-level elements of one named choice type get distinct interfaces and
-// branches. A residual collision — two names folding to one identifier, among
-// a package's types or one struct's fields — is disambiguated
+// elements have type ct or a type extending ct). The type for one occurrence
+// of a content model group is named by the path with the local name sequence
+// or choice last (CtSequence), and the types nested in its particles as if it
+// were absent. A choice's branch struct is named from its interface's name
+// plus the alternative's local name (alternative a of interface First →
+// FirstA), so two top-level elements of one named choice type get distinct
+// interfaces and branches. A residual collision — two names folding to one
+// identifier, among a package's types or one struct's fields — is disambiguated
 // deterministically by document order: the later name takes the smallest free
 // numeric suffix from 2, so a top-level element ct and a complex type ct
 // reached locally take Ct in the order they are first reached. A datatype

@@ -195,7 +195,8 @@ type emittedType struct {
 }
 
 // scope is where the structs nested in one struct take their names from: the
-// path of expanded names from their nearest named ancestor, that ancestor's
+// path of expanded names from their nearest named ancestor, or from the named
+// complex type that declares their element (nestedType), that ancestor's
 // first, and whether that ancestor is a named complex type (false when it is a
 // top-level element whose type is anonymous). A struct is named from the
 // path's local names and keyed by its expanded names (nestedKey).
@@ -1144,7 +1145,11 @@ func (e *emitter) attributeField(subject string, loc xsderr.Loc, u xsd.Attribute
 // parent's particles chain is valueChain's for. A named t gets one type, named
 // from t and generated from it, whose nested types take their names from the
 // path at t, as under a top-level element of type t (topLevel). An anonymous t
-// gets a type named by the path from its nearest named ancestor in parent. Each
+// gets a type named by the path from the named complex type that declares decl
+// ({scope}.{parent}, §3.3.2.3 dcl.elt.local) when decl has one, so that every
+// type extending that complex type shares it, and otherwise from its nearest
+// named ancestor in parent. The {parent} is a closed sum, so the assertion is
+// STYLE T2's sealed-sum exception, as wildcardTerm's is. Each
 // named type, and each anonymous type under one, is emitted once per nestedKey,
 // by the first element whose walk reaches it, and later ones share it; its
 // entry is stored before its body is walked, and removed when that body fails,
@@ -1157,6 +1162,11 @@ func (e *emitter) attributeField(subject string, loc xsderr.Loc, u xsd.Attribute
 // at an element must never read an entry stored from a type.
 func (e *emitter) nestedType(parent scope, chain []valueNode, value bool, decl xsd.ElementDeclaration, t xsd.ComplexType) (emittedType, error) {
 	child := scope{underNamedType: parent.underNamedType, path: append(slices.Clone(parent.path), decl.Name())}
+	if sp, ok := decl.Scope().Parent(); ok {
+		if owner, named := sp.(xsd.ComplexTypeScopeParent); named {
+			child = scope{underNamedType: true, path: []xsd.QName{owner.Name, decl.Name()}}
+		}
+	}
 	locals := child.locals()
 	if t.Name() != (xsd.QName{}) {
 		child = scope{underNamedType: true, path: []xsd.QName{t.Name()}}
