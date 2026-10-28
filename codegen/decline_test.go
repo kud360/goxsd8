@@ -128,7 +128,7 @@ func TestGenerateDeclines(t *testing.T) {
 		// h's type is checked where e's ref meets it, ahead of z's decline.
 		{"element ref to complex type outside the slice", `<xs:element name="e"><xs:complexType><xs:sequence><xs:element ref="h"/><xs:element name="z" type="xs:QName"/></xs:sequence></xs:complexType></xs:element><xs:element name="h"><xs:complexType><xs:all><xs:element name="a" ` + str + `/></xs:all></xs:complexType></xs:element>`,
 			"complex type (anonymous) of element h with an all compositor", constructAll},
-		{"element ref to simple type outside the slice", `<xs:element name="e"><xs:complexType><xs:sequence><xs:element ref="h"/><xs:element name="z" type="xs:hexBinary"/></xs:sequence></xs:complexType></xs:element><xs:element name="h" type="xs:QName"/>`,
+		{"element ref to simple type outside the slice", `<xs:element name="e"><xs:complexType><xs:sequence><xs:element ref="h"/><xs:element name="z" type="xs:precisionDecimal"/></xs:sequence></xs:complexType></xs:element><xs:element name="h" type="xs:QName"/>`,
 			"element h with {type definition} {http://www.w3.org/2001/XMLSchema}QName, whose {primitive type definition} is", constructUncoveredPrimitive},
 		{"attribute", `<xs:element name="e"><xs:complexType><xs:sequence><xs:element name="a" ` + str + `/></xs:sequence><xs:attribute name="t"/></xs:complexType></xs:element>`,
 			"attribute t of complex type (anonymous) of element e with {type definition} {http://www.w3.org/2001/XMLSchema}anySimpleType, a special type", constructSpecialType},
@@ -138,8 +138,8 @@ func TestGenerateDeclines(t *testing.T) {
 			"attribute t of complex type (anonymous) of element e with {type definition} (anonymous), whose {item type definition} is {http://www.w3.org/2001/XMLSchema}QName, whose {primitive type definition} is {http://www.w3.org/2001/XMLSchema}QName", constructUncoveredPrimitive},
 		{"attribute union", `<xs:element name="e"><xs:complexType><xs:sequence><xs:element name="a" ` + str + `/></xs:sequence><xs:attribute name="t"><xs:simpleType><xs:union memberTypes="xs:string xs:int"/></xs:simpleType></xs:attribute></xs:complexType></xs:element>`,
 			"attribute t of complex type (anonymous) of element e with {type definition} (anonymous), a union type", constructUnionType},
-		{"attribute uncovered primitive", `<xs:element name="e"><xs:complexType><xs:sequence><xs:element name="a" ` + str + `/></xs:sequence><xs:attribute name="t" type="xs:hexBinary"/></xs:complexType></xs:element>`,
-			"attribute t of complex type (anonymous) of element e with {type definition} {http://www.w3.org/2001/XMLSchema}hexBinary, whose {primitive type definition} is {http://www.w3.org/2001/XMLSchema}hexBinary", constructUncoveredPrimitive},
+		{"attribute uncovered primitive", `<xs:element name="e"><xs:complexType><xs:sequence><xs:element name="a" ` + str + `/></xs:sequence><xs:attribute name="t" type="xs:precisionDecimal"/></xs:complexType></xs:element>`,
+			"attribute t of complex type (anonymous) of element e with {type definition} {http://www.w3.org/2001/XMLSchema}precisionDecimal, whose {primitive type definition} is {http://www.w3.org/2001/XMLSchema}precisionDecimal", constructUncoveredPrimitive},
 		{"attribute QName", `<xs:element name="e"><xs:complexType><xs:sequence><xs:element name="a" ` + str + `/></xs:sequence><xs:attribute name="t" type="xs:QName"/></xs:complexType></xs:element>`,
 			"attribute t of complex type (anonymous) of element e with {type definition} {http://www.w3.org/2001/XMLSchema}QName, whose {primitive type definition} is {http://www.w3.org/2001/XMLSchema}QName", constructUncoveredPrimitive},
 		{"attribute default", `<xs:element name="e"><xs:complexType><xs:sequence><xs:element name="a" ` + str + `/></xs:sequence><xs:attribute name="t" default="d" ` + str + `/></xs:complexType></xs:element>`,
@@ -244,18 +244,22 @@ func TestGenerateDeclines(t *testing.T) {
 			"element e with {type definition} (anonymous), a union type", constructUnionType},
 		{"uncovered primitive", `<xs:element name="e" type="xs:QName"/>`,
 			"whose {primitive type definition} is {http://www.w3.org/2001/XMLSchema}QName", constructUncoveredPrimitive},
+		{"precisionDecimal", `<xs:element name="e" type="xs:precisionDecimal"/>`,
+			"element e with {type definition} {http://www.w3.org/2001/XMLSchema}precisionDecimal, whose {primitive type definition} is {http://www.w3.org/2001/XMLSchema}precisionDecimal", constructUncoveredPrimitive},
 		// The derived rows reach an uncovered primitive along {base type
 		// definition} chains of one to three steps.
-		{"restriction of hexBinary", `<xs:simpleType name="d"><xs:restriction base="xs:hexBinary"/></xs:simpleType><xs:element name="e" type="d"/>`,
-			"element e with {type definition} d, whose {primitive type definition} is {http://www.w3.org/2001/XMLSchema}hexBinary", constructUncoveredPrimitive},
-		{"restriction of base64Binary", `<xs:simpleType name="d"><xs:restriction base="xs:base64Binary"/></xs:simpleType><xs:element name="e" type="d"/>`,
-			"element e with {type definition} d, whose {primitive type definition} is {http://www.w3.org/2001/XMLSchema}base64Binary", constructUncoveredPrimitive},
-		{"anonymous restriction of hexBinary", `<xs:element name="e"><xs:simpleType><xs:restriction base="xs:hexBinary"><xs:length value="2"/></xs:restriction></xs:simpleType></xs:element>`,
-			"element e with {type definition} (anonymous), whose {primitive type definition} is {http://www.w3.org/2001/XMLSchema}hexBinary", constructUncoveredPrimitive},
-		{"restriction of a restriction of hexBinary", `<xs:simpleType name="d"><xs:restriction base="xs:hexBinary"/></xs:simpleType><xs:simpleType name="d2"><xs:restriction base="d"/></xs:simpleType><xs:element name="e" type="d2"/>`,
-			"element e with {type definition} d2, whose {primitive type definition} is {http://www.w3.org/2001/XMLSchema}hexBinary", constructUncoveredPrimitive},
-		{"restriction of a restriction of a restriction of hexBinary", `<xs:simpleType name="d"><xs:restriction base="xs:hexBinary"/></xs:simpleType><xs:simpleType name="d2"><xs:restriction base="d"/></xs:simpleType><xs:simpleType name="d3"><xs:restriction base="d2"/></xs:simpleType><xs:element name="e" type="d3"/>`,
-			"element e with {type definition} d3, whose {primitive type definition} is {http://www.w3.org/2001/XMLSchema}hexBinary", constructUncoveredPrimitive},
+		{"restriction of precisionDecimal", `<xs:simpleType name="d"><xs:restriction base="xs:precisionDecimal"/></xs:simpleType><xs:element name="e" type="d"/>`,
+			"element e with {type definition} d, whose {primitive type definition} is {http://www.w3.org/2001/XMLSchema}precisionDecimal", constructUncoveredPrimitive},
+		{"anonymous restriction of precisionDecimal", `<xs:element name="e"><xs:simpleType><xs:restriction base="xs:precisionDecimal"><xs:totalDigits value="2"/></xs:restriction></xs:simpleType></xs:element>`,
+			"element e with {type definition} (anonymous), whose {primitive type definition} is {http://www.w3.org/2001/XMLSchema}precisionDecimal", constructUncoveredPrimitive},
+		{"restriction of a restriction of precisionDecimal", `<xs:simpleType name="d"><xs:restriction base="xs:precisionDecimal"/></xs:simpleType><xs:simpleType name="d2"><xs:restriction base="d"/></xs:simpleType><xs:element name="e" type="d2"/>`,
+			"element e with {type definition} d2, whose {primitive type definition} is {http://www.w3.org/2001/XMLSchema}precisionDecimal", constructUncoveredPrimitive},
+		{"restriction of a restriction of a restriction of precisionDecimal", `<xs:simpleType name="d"><xs:restriction base="xs:precisionDecimal"/></xs:simpleType><xs:simpleType name="d2"><xs:restriction base="d"/></xs:simpleType><xs:simpleType name="d3"><xs:restriction base="d2"/></xs:simpleType><xs:element name="e" type="d3"/>`,
+			"element e with {type definition} d3, whose {primitive type definition} is {http://www.w3.org/2001/XMLSchema}precisionDecimal", constructUncoveredPrimitive},
+		// Only a type derived from NOTATION by an enumeration validates a
+		// literal (Datatypes §3.3.19 enumeration-required-notation).
+		{"enumerated restriction of NOTATION", `<xs:notation name="n" public="p"/><xs:simpleType name="d"><xs:restriction base="xs:NOTATION"><xs:enumeration value="n"/></xs:restriction></xs:simpleType><xs:element name="e" type="d"/>`,
+			"element e with {type definition} d, whose {primitive type definition} is {http://www.w3.org/2001/XMLSchema}NOTATION", constructUncoveredPrimitive},
 		// The value-cycle rows each give Go types that would hold one another
 		// as struct values.
 		{"value cycle direct", `<xs:complexType name="c"><xs:sequence><xs:element name="x" type="c"/></xs:sequence></xs:complexType><xs:element name="e" type="c"/>`,

@@ -50,10 +50,13 @@
 //     float gives float32 and double float64, whose IEEE 754 binary32 and
 //     binary64 value spaces (Datatypes §3.3.4.1, §3.3.5.1) those Go types
 //     hold exactly, decimal gives big.Rat, which holds every decimal value
-//     exactly (Datatypes §3.3.3), and dateTime, time, date, gYearMonth, gYear,
-//     gMonthDay, gDay, gMonth and duration each give their datatype struct.
-//     That Go integer, string, bool, float32, float64, big.Int, big.Rat or
-//     datatype struct is the type's atomic Go type.
+//     exactly (Datatypes §3.3.3), hexBinary and base64Binary give []byte,
+//     which holds every finite sequence of octets exactly (Datatypes
+//     §3.3.15.1, §3.3.16.1), nil and the empty slice being one value, no
+//     octets, and dateTime, time, date, gYearMonth, gYear, gMonthDay, gDay,
+//     gMonth and duration each give their datatype struct. That Go integer,
+//     string, bool, float32, float64, big.Int, big.Rat, []byte or datatype
+//     struct is the type's atomic Go type.
 //   - A datatype struct has one field per property its datatype's values
 //     carry (Datatypes §3.3.6.1, §3.3.7.1–§3.3.14.1, §3.4.26–§3.4.28), in
 //     the order of the seven-property model (§D.2.1) or of duration's two
