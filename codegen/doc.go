@@ -240,10 +240,11 @@
 //     absent. The use's effective value constraint (§3.5.4 key-evc), default or fixed, whether the
 //     use or a global declaration it references carries it, is accepted and not represented. The
 //     field holds the attribute as the element's [attributes] carry it, so a nil field still means
-//     absent from the instance, although the post-schema-validation infoset supplies the
-//     constraint's value for an absent attribute (§3.2.1, §3.4.5). Supplying that value and
-//     enforcing a fixed one are the validator's. A choice {particle} that occurs exactly once is
-//     accepted only when its type has no {attribute uses} and no {attribute wildcard}.
+//     absent from the instance, although for an optional use whose declaration is not a built-in
+//     xsi: one the post-schema-validation infoset supplies the constraint's value when the
+//     attribute is absent (§3.4.5.1 key-dflt-att). Supplying that value and enforcing a fixed
+//     one are the validator's. A choice {particle} that occurs exactly once is accepted only when its
+//     type has no {attribute uses} and no {attribute wildcard}.
 //   - An {attribute wildcard} of a type emitted as a struct, its own, one an extension inherits,
 //     or one an attribute group reference or the schema's defaultAttributes brings (§3.4.2.5
 //     dcl.ctd.anyatt), gives one field after every attribute field, the struct's last, named as
