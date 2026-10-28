@@ -88,12 +88,10 @@ const (
 	constructAttributeWildcard
 	constructMixedContent
 	constructOpenContent
-	constructContentGroupRef
 	constructAll
 	constructVacuousParticle
 	constructAttributeValueConstraint
 	constructValueCycle
-	constructGroupRef
 	constructNestedGroup
 	constructWildcard
 )
@@ -120,12 +118,10 @@ var constructs = [...]struct{ name, format string }{
 	constructAttributeWildcard:        {"{attribute wildcard}", "%s with an {attribute wildcard}"},
 	constructMixedContent:             {"mixed content", "%s with mixed content"},
 	constructOpenContent:              {"{open content}", "%s with {open content}"},
-	constructContentGroupRef:          {"content particle <group ref>", "%s whose content particle is a <group ref>"},
 	constructAll:                      {"all compositor", "%s with an all compositor"},
 	constructVacuousParticle:          {"particle with {max occurs} 0", "a particle of %s with {max occurs} 0 in %s"},
 	constructAttributeValueConstraint: {"attribute effective value constraint", "%s with a %s effective value constraint (§3.5.4 key-evc)"},
 	constructValueCycle:               {"struct-value recursion", "%s reaching %s again through elements that each occur exactly once"},
-	constructGroupRef:                 {"<group ref> particle", "a <group ref> particle to %s in %s"},
 	constructNestedGroup:              {"nested model group particle", "a nested %s model group particle in %s"},
 	constructWildcard:                 {"wildcard particle", "a wildcard particle in %s"},
 }

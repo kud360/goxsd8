@@ -1,0 +1,77 @@
+<?xml version="1.0"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+           xmlns="urn:groupref"
+           targetNamespace="urn:groupref">
+  <xs:group name="pair">
+    <xs:sequence>
+      <xs:element name="a" type="xs:string"/>
+      <xs:element name="b" type="xs:int"/>
+    </xs:sequence>
+  </xs:group>
+  <xs:element name="whole">
+    <xs:complexType>
+      <xs:group ref="pair"/>
+      <xs:attribute name="id" type="xs:string"/>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="inner">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element name="first" type="xs:string"/>
+        <xs:group ref="pair"/>
+        <xs:element name="last" type="xs:boolean"/>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="many">
+    <xs:complexType>
+      <xs:group ref="pair" maxOccurs="unbounded"/>
+    </xs:complexType>
+  </xs:element>
+  <xs:group name="pick">
+    <xs:choice>
+      <xs:element name="x" type="xs:string"/>
+      <xs:element name="y" type="xs:int"/>
+    </xs:choice>
+  </xs:group>
+  <xs:element name="either">
+    <xs:complexType>
+      <xs:group ref="pick"/>
+    </xs:complexType>
+  </xs:element>
+  <xs:complexType name="base">
+    <xs:group ref="pair"/>
+  </xs:complexType>
+  <xs:element name="extended">
+    <xs:complexType>
+      <xs:complexContent>
+        <xs:extension base="base">
+          <xs:sequence>
+            <xs:element name="c" type="xs:string"/>
+          </xs:sequence>
+        </xs:extension>
+      </xs:complexContent>
+    </xs:complexType>
+  </xs:element>
+  <xs:group name="node">
+    <xs:sequence>
+      <xs:element name="label" type="xs:string"/>
+      <xs:element name="child" minOccurs="0">
+        <xs:complexType>
+          <xs:group ref="node"/>
+        </xs:complexType>
+      </xs:element>
+    </xs:sequence>
+  </xs:group>
+  <xs:element name="tree">
+    <xs:complexType>
+      <xs:group ref="node"/>
+    </xs:complexType>
+  </xs:element>
+  <xs:complexType name="forest">
+    <xs:sequence>
+      <xs:group ref="node"/>
+    </xs:sequence>
+  </xs:complexType>
+  <xs:element name="wood" type="forest"/>
+</xs:schema>
