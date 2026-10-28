@@ -144,12 +144,21 @@ func TestGenerateDeclines(t *testing.T) {
 			"with an {attribute wildcard}", constructAttributeWildcard},
 		{"mixed", `<xs:element name="e"><xs:complexType mixed="true"><xs:sequence><xs:element name="a" ` + str + `/></xs:sequence></xs:complexType></xs:element>`,
 			"with mixed content", constructMixedContent},
-		{"simple content", `<xs:element name="e"><xs:complexType><xs:simpleContent><xs:extension base="xs:string"/></xs:simpleContent></xs:complexType></xs:element>`,
-			"derived by extension", constructDerivation},
-		{"simple content restriction", `<xs:complexType name="b"><xs:simpleContent><xs:extension base="xs:string"/></xs:simpleContent></xs:complexType><xs:element name="e"><xs:complexType><xs:simpleContent><xs:restriction base="b"/></xs:simpleContent></xs:complexType></xs:element>`,
-			"a simple-content restriction of b rather than of xs:anyType", constructRestrictionBase},
-		{"simple content restriction of anyType", `<xs:element name="e"><xs:complexType><xs:simpleContent><xs:restriction base="xs:anyType"><xs:simpleType><xs:restriction base="xs:string"/></xs:simpleType></xs:restriction></xs:simpleContent></xs:complexType></xs:element>`,
-			"complex type (anonymous) of element e with simple content", constructSimpleContent},
+		// The simple-content rows pin the value field's declines: its
+		// {simple type definition} (§3.4.2.2 dcl.ctd.ctsc) declines by that
+		// type's construct, and an {attribute wildcard}, the type's own or
+		// one an extension inherits (§3.4.2.5 dcl.ctd.anyatt), declines
+		// before it.
+		{"simple content extension of anySimpleType", `<xs:element name="e"><xs:complexType><xs:simpleContent><xs:extension base="xs:anySimpleType"/></xs:simpleContent></xs:complexType></xs:element>`,
+			"complex type (anonymous) of element e with {simple type definition} {http://www.w3.org/2001/XMLSchema}anySimpleType, a special type", constructSpecialType},
+		{"simple content extension of union", `<xs:simpleType name="u"><xs:union memberTypes="xs:string xs:int"/></xs:simpleType><xs:element name="e"><xs:complexType><xs:simpleContent><xs:extension base="u"/></xs:simpleContent></xs:complexType></xs:element>`,
+			"complex type (anonymous) of element e with {simple type definition} u, a union type", constructUnionType},
+		{"simple content extension of QName", `<xs:element name="e"><xs:complexType><xs:simpleContent><xs:extension base="xs:QName"/></xs:simpleContent></xs:complexType></xs:element>`,
+			"complex type (anonymous) of element e with {simple type definition} {http://www.w3.org/2001/XMLSchema}QName, whose {primitive type definition} is {http://www.w3.org/2001/XMLSchema}QName at s.xsd:2:22 ", constructUncoveredPrimitive},
+		{"simple content attribute wildcard", `<xs:element name="e"><xs:complexType><xs:simpleContent><xs:extension base="xs:QName"><xs:anyAttribute/></xs:extension></xs:simpleContent></xs:complexType></xs:element>`,
+			"complex type (anonymous) of element e with an {attribute wildcard}", constructAttributeWildcard},
+		{"simple content inherited attribute wildcard", `<xs:complexType name="b"><xs:simpleContent><xs:extension base="xs:string"><xs:anyAttribute/></xs:extension></xs:simpleContent></xs:complexType><xs:complexType name="c"><xs:simpleContent><xs:extension base="b"/></xs:simpleContent></xs:complexType><xs:element name="e" type="c"/>`,
+			"complex type c of element e with an {attribute wildcard}", constructAttributeWildcard},
 		{"open content", `<xs:element name="e"><xs:complexType><xs:openContent><xs:any/></xs:openContent><xs:sequence><xs:element name="a" ` + str + `/></xs:sequence></xs:complexType></xs:element>`,
 			"with {open content}", constructOpenContent},
 		{"default open content", `<xs:defaultOpenContent><xs:any/></xs:defaultOpenContent><xs:element name="e"><xs:complexType><xs:sequence><xs:element name="a" ` + str + `/></xs:sequence></xs:complexType></xs:element>`,

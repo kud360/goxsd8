@@ -27,9 +27,9 @@
 // holding the type emitted for the top-level element declaration it names —
 // then, after every other declaration and in the order the walk
 // first needs each, one datatype struct per date, time or duration datatype
-// a declaration's type is declared over and the four raw-content structs
-// once an element's type is xs:anyType or a sequence holds a wildcard
-// particle, and declines everything outside this slice:
+// a declaration's type or a value field is declared over and the four
+// raw-content structs once an element's type is xs:anyType or a sequence
+// holds a wildcard particle, and declines everything outside this slice:
 //
 //   - An element whose {type definition} is an atomic or list simple type
 //     gets a named type over the atomic Go type an atomic simple type gets,
@@ -104,14 +104,20 @@
 //     xs:anyType, named or anonymous, gets a type of its own when the type is
 //     a restriction of xs:anyType, implicit (§3.4.2.3.2 dcl.ctd.ctcc.implicit)
 //     or explicit (<complexContent><restriction base="xs:anyType">, §3.4.2.3.1
-//     dcl.ctd.ctcc.explicit), or a <complexContent> restriction of any other
-//     complex type. A restriction's type is built from its own {content type}
-//     (§3.4.2.3.3 dcl.ctd.ctcc.common) and {attribute uses}, which hold the
-//     uses it inherits and none it prohibits (§3.4.2.4 dcl.ctd.attuses), and
+//     dcl.ctd.ctcc.explicit), a <complexContent> restriction of any other
+//     complex type, or a type with simple content (§3.4.1), by <simpleContent>
+//     extension or restriction of any base (§3.4.2.2 dcl.ctd.ctsc). The type
+//     is built from its own {content type} (§3.4.2.3.3 dcl.ctd.ctcc.common,
+//     §3.4.2.2 dcl.ctd.ctsc) and {attribute uses}, which hold the uses it
+//     inherits, all of an extension's base's and those of a restriction's
+//     base it neither overrides nor prohibits (§3.4.2.4 dcl.ctd.attuses), and
 //     has no Go-level relation to its base's: no embedding, no conversion. The
-//     type has no {attribute wildcard}, no {assertions}, inherited ones
-//     included (§3.4.2.1 dcl.ctd.common), and {abstract} false, and has one of
-//     two contents: empty content ({variety} empty, §3.4.1); or element-only
+//     type has no {attribute wildcard}, its own or one an extension inherits
+//     (§3.4.2.5 dcl.ctd.anyatt), no {assertions}, inherited ones included
+//     (§3.4.2.1 dcl.ctd.common), and {abstract} false, and has one of three
+//     contents: empty content ({variety} empty, §3.4.1); simple content
+//     ({variety} simple), which gives a struct of the value field the next
+//     bullet states and the attribute fields; or element-only
 //     content (§3.4.2.3.3 dcl.ctd.ctcc.common) that has no {open content} and
 //     whose {particle}, which carries the <sequence>'s or <choice>'s own
 //     {min occurs} and {max occurs} (§3.9.1), holds a sequence of element
@@ -121,6 +127,15 @@
 //     ref names (§3.3.2.4). A sequence gives a struct, and so does empty
 //     content, with no particle field; a struct with no field is spelled
 //     struct{}.
+//   - Simple content gives a struct whose first field, the value field, is
+//     named from the local name value and holds the atomic Go type, or the
+//     slice, its {simple type definition} gives as an element's {type
+//     definition} does, never a pointer to it; the value field declines
+//     exactly when that type does, by the type's construct. That type is the
+//     base itself for an extension of a simple type, the base's own for an
+//     extension of a complex type, and for a restriction an anonymous
+//     restriction of the base's own or of an inline <simpleType>, whose
+//     facets are not represented (§3.4.2.2 dcl.ctd.ctsc).
 //   - A choice gives a sealed interface, the closed-sum exception: an
 //     interface whose one method is unexported, "is" plus the interface's
 //     name, and one branch struct per alternative in particle order, emitted
@@ -165,16 +180,17 @@
 //     atomic Go type, or list's slice (*[]T), and the bare interface, never a pointer to one, nil
 //     meaning absent.
 //   - Each attribute use of a type emitted as a struct gives one field after the particle
-//     fields, if any, in the order [xsd.ComplexType.AttributeUses] returns its {attribute
-//     uses} (§3.4.2.4). The field is named from the attribute declaration's local name, so
-//     a qualified and an unqualified attribute of one local name, or an attribute named
-//     like an element of the struct, take the suffix "Naming" states, the later field
-//     taking it. Its {type definition} must be an atomic or list simple type and gives an
+//     fields or the value field, if any, in the order [xsd.ComplexType.AttributeUses] returns
+//     its {attribute uses} (§3.4.2.4). The field is named from the attribute declaration's
+//     local name, so a qualified and an unqualified attribute of one local name, or an
+//     attribute named like an element of the struct or like the value field, take the
+//     suffix "Naming" states, the later field taking it: an attribute value beside the
+//     value field gives Value2. Its {type definition} must be an atomic or list simple type and gives an
 //     atomic Go type, or a slice, as an element's does; {required} true gives that type,
 //     false a pointer to it (*[]T for a list), nil meaning absent. The use's effective
-//     value constraint (§3.5.4 key-evc) must be absent, whether the use or a global
-//     declaration it references carries the default or fixed value. A choice {particle}
-//     that occurs exactly once is accepted only when its type has no {attribute uses}.
+//     value constraint (§3.5.4 key-evc) must be absent, whether the use or a global declaration it
+//     references carries the default or fixed value. A choice {particle} that occurs exactly once is
+//     accepted only when its type has no {attribute uses}.
 //   - Every element declaration emitted from has {nillable} and {abstract}
 //     false and no {value constraint}, {type table} or {substitution group
 //     affiliations}. Its {identity-constraint definitions} are accepted and
@@ -191,9 +207,8 @@
 // <group ref> particles, a wildcard alternative of a choice, a particle with
 // {max occurs} 0, attribute wildcards, attribute uses on a type whose
 // content is a choice occurring exactly once, attribute uses with an
-// effective value constraint, mixed and simple content, extension, a
-// simple-content restriction of any base but xs:anyType, a named complex
-// type, or a top-level element through <element ref> particles, reaching
+// effective value constraint, mixed content, complex-content extension, a
+// named complex type, or a top-level element through <element ref> particles, reaching
 // itself through struct values, the special simple types, union types, a
 // list whose {item type definition} declines, and every primitive the first
 // bullet does not map, for an element or an attribute alike. #2900 owns
@@ -238,9 +253,12 @@
 // reached locally take Ct in the order they are first reached. A datatype
 // struct is named from its datatype's local name (dateTime → DateTime,
 // gYearMonth → GYearMonth, dayTimeDuration → DayTimeDuration), claimed when
-// the walk first reaches a declaration whose type needs it, ahead of that
-// declaration's own type, so that a top-level element date of type xs:date
-// names its type Date2. The raw-content structs are named AnyType,
+// the walk first needs it: for a top-level element of a simple type, ahead
+// of that element's own type, so that a top-level element date of type
+// xs:date names its type Date2; for a field of a struct, the value field and
+// attribute fields included, after that struct's own name, so that a
+// top-level element date whose complex type extends xs:date names its type
+// Date and the datatype struct Date2. The raw-content structs are named AnyType,
 // AnyAttribute, AnyChild and AnyElement, claimed together in that order when
 // the walk first reaches a declaration of type xs:anyType or a wildcard
 // particle, ahead of that declaration's own type, so that a top-level element

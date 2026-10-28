@@ -680,10 +680,12 @@ func (e *emitter) shape(name string, o origin, t xsd.ComplexType) (emittedType, 
 
 // body emits typ, which shape returned for the complex type t with content,
 // generated from o: a struct holding a field per particle, or for content
-// occurring other than exactly once the one field groupField returns, and then
-// one per attribute use; or the sealed interface sealedType emits; then the
-// types its fields reach, the anonymous ones named in nested. chain is
-// valueChain's for a walk of t's particles.
+// occurring other than exactly once the one field groupField returns, or for
+// simple content (§3.4.2.2 dcl.ctd.ctsc) the value field, named from the local
+// name value and holding, never through a pointer, what goType maps its
+// {simple type definition} to, and then one per attribute use; or the sealed
+// interface sealedType emits; then the types its fields reach, the anonymous
+// ones named in nested. chain is valueChain's for a walk of t's particles.
 func (e *emitter) body(typ emittedType, nested scope, chain []valueNode, o origin, t xsd.ComplexType, content *contentParticle) error {
 	if typ.sealed {
 		return e.sealedType(typ.name, nested, o, t, content.group.Particles())
@@ -691,6 +693,13 @@ func (e *emitter) body(typ emittedType, nested scope, chain []valueNode, o origi
 	slot := len(e.decls)
 	e.decls = append(e.decls, "")
 	var fields []fieldSpec
+	if simple, ok := t.ContentType().(xsd.SimpleContent); ok {
+		goType, err := e.goType(o.subject, fmt.Sprintf("%s with {simple type definition} %s", o.subject, typeName(simple.SimpleType)), t.Loc(), simple.SimpleType)
+		if err != nil {
+			return err
+		}
+		fields = append(fields, fieldSpec{local: "value", goType: goType})
+	}
 	if content != nil && content.occurs == exactlyOnce {
 		particleFields, err := e.particleFields(nested, chain, o.subject, t.Loc(), content.group.Particles())
 		if err != nil {
@@ -896,25 +905,18 @@ type contentParticle struct {
 }
 
 // contentGroup checks the complex type t, named in declines by subject,
-// against the package doc's "# Coverage" complex-type shape. Of t's base it
-// reads only the identity, to test for xs:anyType and to name the base in a
-// simple-content restriction's decline; every other check reads t's
-// finalized component, so a base that itself declines does not block t.
-// For element-only content it returns t's content particle, whatever its
-// {min occurs} and {max occurs} but a {max occurs} of 0, which declines; for
-// {variety} empty (§3.4.1), which has no {particle}, it returns nil and a nil
-// error. Every other content declines. Particles and model groups carry no
-// Loc, so their declines cite t's.
+// against the package doc's "# Coverage" complex-type shape. It reads t's
+// finalized component alone, never its base, so a base that itself declines
+// does not block t. An extension declines unless its content has {variety}
+// simple (§3.4.2.2 dcl.ctd.ctsc), whatever its base. For element-only content
+// it returns t's content particle, whatever its {min occurs} and {max occurs}
+// but a {max occurs} of 0, which declines; for {variety} empty (§3.4.1),
+// which has no {particle}, and for {variety} simple, whose value field body
+// gives, it returns nil and a nil error. Mixed content declines. Particles
+// and model groups carry no Loc, so their declines cite t's.
 func (e *emitter) contentGroup(subject string, t xsd.ComplexType) (*contentParticle, error) {
-	if t.DerivationMethod() != xsd.DerivationRestriction {
+	if t.DerivationMethod() != xsd.DerivationRestriction && t.ContentType().Variety() != xsd.ContentSimple {
 		return nil, decline(t.Loc(), constructDerivation, subject, t.DerivationMethod())
-	}
-	base, found := e.schema.ResolvedType(t.Base())
-	if !found {
-		return nil, fmt.Errorf("%s at %s: its {base type definition} does not resolve", subject, t.Loc())
-	}
-	if !isAnyType(base) && t.ContentType().Variety() == xsd.ContentSimple {
-		return nil, decline(t.Loc(), constructRestrictionBase, subject, typeName(base))
 	}
 	switch {
 	case t.Abstract():
@@ -928,10 +930,8 @@ func (e *emitter) contentGroup(subject string, t xsd.ComplexType) (*contentParti
 	content, isElement := t.ContentType().(xsd.ElementContent)
 	if !isElement {
 		switch variety := t.ContentType().Variety(); variety {
-		case xsd.ContentEmpty:
+		case xsd.ContentEmpty, xsd.ContentSimple:
 			return nil, nil
-		case xsd.ContentSimple:
-			return nil, decline(t.Loc(), constructSimpleContent, subject)
 		default:
 			return nil, fmt.Errorf("%s at %s: unexpected content type %T of {variety} %s", subject, t.Loc(), t.ContentType(), variety)
 		}
