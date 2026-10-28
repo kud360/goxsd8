@@ -82,7 +82,7 @@ func TestGenerateDeclines(t *testing.T) {
 		{"extension of a choice by a sequence", `<xs:complexType name="b"><xs:choice><xs:element name="a" ` + str + `/></xs:choice></xs:complexType><xs:element name="e"><xs:complexType><xs:complexContent><xs:extension base="b"><xs:sequence><xs:element name="c" ` + str + `/></xs:sequence></xs:extension></xs:complexContent></xs:complexType></xs:element>`,
 			"a nested choice model group particle in complex type (anonymous) of element e", constructNestedGroup},
 		{"extension of a choice by an attribute", `<xs:complexType name="b"><xs:choice><xs:element name="a" ` + str + `/></xs:choice></xs:complexType><xs:element name="e"><xs:complexType><xs:complexContent><xs:extension base="b"><xs:attribute name="t" ` + str + `/></xs:extension></xs:complexContent></xs:complexType></xs:element>`,
-			"complex type (anonymous) of element e whose content is a choice, with {attribute uses}", constructChoiceAttributeUses},
+			"complex type (anonymous) of element e whose content is a choice, with {attribute uses}", constructChoiceAttributes},
 		{"choice alternative type", `<xs:element name="e"><xs:complexType><xs:choice><xs:element name="a" type="xs:QName"/></xs:choice></xs:complexType></xs:element>`,
 			"element a with {type definition} {http://www.w3.org/2001/XMLSchema}QName, whose {primitive type definition} is", constructUncoveredPrimitive},
 		{"all", `<xs:element name="e"><xs:complexType><xs:all><xs:element name="a" ` + str + `/></xs:all></xs:complexType></xs:element>`,
@@ -164,33 +164,35 @@ func TestGenerateDeclines(t *testing.T) {
 			"complex type c of element e with {abstract} true", constructComplexTypeAbstract},
 		{"empty type assertion", `<xs:element name="e"><xs:complexType><xs:assert test="true()"/></xs:complexType></xs:element>`,
 			"with {assertions}", constructAssertions},
-		{"empty type attribute wildcard", `<xs:element name="e"><xs:complexType><xs:anyAttribute/></xs:complexType></xs:element>`,
-			"with an {attribute wildcard}", constructAttributeWildcard},
 		{"mixed empty", `<xs:element name="e"><xs:complexType mixed="true"/></xs:element>`,
 			"with mixed content", constructMixedContent},
 		{"default open content applies to empty", `<xs:defaultOpenContent appliesToEmpty="true"><xs:any/></xs:defaultOpenContent><xs:element name="e"><xs:complexType/></xs:element>`,
 			"with {open content}", constructOpenContent},
 		{"choice with attribute", `<xs:element name="e"><xs:complexType><xs:choice><xs:element name="a" ` + str + `/></xs:choice><xs:attribute name="t" ` + str + `/></xs:complexType></xs:element>`,
-			"complex type (anonymous) of element e whose content is a choice, with {attribute uses}", constructChoiceAttributeUses},
-		{"attribute wildcard", `<xs:element name="e"><xs:complexType><xs:sequence><xs:element name="a" ` + str + `/></xs:sequence><xs:anyAttribute/></xs:complexType></xs:element>`,
-			"with an {attribute wildcard}", constructAttributeWildcard},
+			"complex type (anonymous) of element e whose content is a choice, with {attribute uses}", constructChoiceAttributes},
+		// An {attribute wildcard} gives a field only to a struct: a choice
+		// occurring exactly once declines it as it declines {attribute uses},
+		// and {assertions} and mixed content, both checked first, still
+		// decline a type that has one.
+		{"choice with attribute wildcard", `<xs:element name="e"><xs:complexType><xs:choice><xs:element name="a" ` + str + `/></xs:choice><xs:anyAttribute/></xs:complexType></xs:element>`,
+			"complex type (anonymous) of element e whose content is a choice, with an {attribute wildcard}", constructChoiceAttributes},
+		{"choice with attribute and attribute wildcard", `<xs:element name="e"><xs:complexType><xs:choice><xs:element name="a" ` + str + `/></xs:choice><xs:attribute name="t" ` + str + `/><xs:anyAttribute/></xs:complexType></xs:element>`,
+			"complex type (anonymous) of element e whose content is a choice, with {attribute uses} at ", constructChoiceAttributes},
+		{"attribute wildcard with assertion", `<xs:element name="e"><xs:complexType><xs:sequence><xs:element name="a" ` + str + `/></xs:sequence><xs:anyAttribute/><xs:assert test="true()"/></xs:complexType></xs:element>`,
+			"complex type (anonymous) of element e with {assertions}", constructAssertions},
+		{"attribute wildcard with mixed content", `<xs:element name="e"><xs:complexType mixed="true"><xs:sequence><xs:element name="a" ` + str + `/></xs:sequence><xs:anyAttribute/></xs:complexType></xs:element>`,
+			"complex type (anonymous) of element e with mixed content", constructMixedContent},
 		{"mixed", `<xs:element name="e"><xs:complexType mixed="true"><xs:sequence><xs:element name="a" ` + str + `/></xs:sequence></xs:complexType></xs:element>`,
 			"with mixed content", constructMixedContent},
 		// The simple-content rows pin the value field's declines: its
 		// {simple type definition} (§3.4.2.2 dcl.ctd.ctsc) declines by that
-		// type's construct, and an {attribute wildcard}, the type's own or
-		// one an extension inherits (§3.4.2.5 dcl.ctd.anyatt), declines
-		// before it.
+		// type's construct.
 		{"simple content extension of anySimpleType", `<xs:element name="e"><xs:complexType><xs:simpleContent><xs:extension base="xs:anySimpleType"/></xs:simpleContent></xs:complexType></xs:element>`,
 			"complex type (anonymous) of element e with {simple type definition} {http://www.w3.org/2001/XMLSchema}anySimpleType, a special type", constructSpecialType},
 		{"simple content extension of union", `<xs:simpleType name="u"><xs:union memberTypes="xs:int xs:precisionDecimal"/></xs:simpleType><xs:element name="e"><xs:complexType><xs:simpleContent><xs:extension base="u"/></xs:simpleContent></xs:complexType></xs:element>`,
 			"complex type (anonymous) of element e with {simple type definition} u, whose basic member is {http://www.w3.org/2001/XMLSchema}precisionDecimal, whose {primitive type definition} is {http://www.w3.org/2001/XMLSchema}precisionDecimal", constructUncoveredPrimitive},
 		{"simple content extension of QName", `<xs:element name="e"><xs:complexType><xs:simpleContent><xs:extension base="xs:QName"/></xs:simpleContent></xs:complexType></xs:element>`,
 			"complex type (anonymous) of element e with {simple type definition} {http://www.w3.org/2001/XMLSchema}QName, whose {primitive type definition} is {http://www.w3.org/2001/XMLSchema}QName at s.xsd:2:22 ", constructUncoveredPrimitive},
-		{"simple content attribute wildcard", `<xs:element name="e"><xs:complexType><xs:simpleContent><xs:extension base="xs:QName"><xs:anyAttribute/></xs:extension></xs:simpleContent></xs:complexType></xs:element>`,
-			"complex type (anonymous) of element e with an {attribute wildcard}", constructAttributeWildcard},
-		{"simple content inherited attribute wildcard", `<xs:complexType name="b"><xs:simpleContent><xs:extension base="xs:string"><xs:anyAttribute/></xs:extension></xs:simpleContent></xs:complexType><xs:complexType name="c"><xs:simpleContent><xs:extension base="b"/></xs:simpleContent></xs:complexType><xs:element name="e" type="c"/>`,
-			"complex type c of element e with an {attribute wildcard}", constructAttributeWildcard},
 		{"open content", `<xs:element name="e"><xs:complexType><xs:openContent><xs:any/></xs:openContent><xs:sequence><xs:element name="a" ` + str + `/></xs:sequence></xs:complexType></xs:element>`,
 			"with {open content}", constructOpenContent},
 		{"default open content", `<xs:defaultOpenContent><xs:any/></xs:defaultOpenContent><xs:element name="e"><xs:complexType><xs:sequence><xs:element name="a" ` + str + `/></xs:sequence></xs:complexType></xs:element>`,
@@ -201,7 +203,7 @@ func TestGenerateDeclines(t *testing.T) {
 		// the {attribute uses} or {assertions} it inherits from b (§3.4.2.4
 		// dcl.ctd.attuses, §3.4.2.1 dcl.ctd.common).
 		{"restriction choice with inherited attribute", `<xs:complexType name="b"><xs:choice><xs:element name="a" ` + str + `/><xs:element name="x" ` + str + `/></xs:choice><xs:attribute name="t" ` + str + `/></xs:complexType><xs:complexType name="c"><xs:complexContent><xs:restriction base="b"><xs:choice><xs:element name="a" ` + str + `/></xs:choice></xs:restriction></xs:complexContent></xs:complexType><xs:element name="e" type="c"/>`,
-			"complex type c of element e whose content is a choice, with {attribute uses}", constructChoiceAttributeUses},
+			"complex type c of element e whose content is a choice, with {attribute uses}", constructChoiceAttributes},
 		{"restriction with inherited assertion", `<xs:complexType name="b"><xs:sequence><xs:element name="a" ` + str + `/></xs:sequence><xs:assert test="true()"/></xs:complexType><xs:complexType name="c"><xs:complexContent><xs:restriction base="b"><xs:sequence><xs:element name="a" ` + str + `/></xs:sequence></xs:restriction></xs:complexContent></xs:complexType><xs:element name="e" type="c"/>`,
 			"complex type c of element e with {assertions}", constructAssertions},
 		{"nillable", `<xs:element name="e" nillable="true" ` + str + `/>`,
@@ -222,11 +224,11 @@ func TestGenerateDeclines(t *testing.T) {
 		// copies xs:anyType's §3.4.7 shape, or derives from it by extension,
 		// and still declines as the complex type it is.
 		{"copy of anyType's shape", `<xs:complexType name="c" mixed="true"><xs:sequence><xs:any processContents="lax" minOccurs="0" maxOccurs="unbounded"/></xs:sequence><xs:anyAttribute processContents="lax"/></xs:complexType><xs:element name="e" type="c"/>`,
-			"complex type c of element e with an {attribute wildcard}", constructAttributeWildcard},
+			"complex type c of element e with mixed content", constructMixedContent},
 		{"copy of anyType's shape without anyAttribute", `<xs:complexType name="c" mixed="true"><xs:sequence><xs:any processContents="lax" minOccurs="0" maxOccurs="unbounded"/></xs:sequence></xs:complexType><xs:element name="e" type="c"/>`,
 			"complex type c of element e with mixed content", constructMixedContent},
 		{"extension of anyType", `<xs:complexType name="c"><xs:complexContent><xs:extension base="xs:anyType"/></xs:complexContent></xs:complexType><xs:element name="e" type="c"/>`,
-			"complex type c of element e with an {attribute wildcard}", constructAttributeWildcard},
+			"complex type c of element e with mixed content", constructMixedContent},
 		{"anySimpleType", `<xs:element name="e" type="xs:anySimpleType"/>`,
 			"{http://www.w3.org/2001/XMLSchema}anySimpleType, a special type", constructSpecialType},
 		{"anyAtomicType", `<xs:element name="e" type="xs:anyAtomicType"/>`,
