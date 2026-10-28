@@ -503,6 +503,44 @@ func vacuousSchema(t *testing.T, ctName xsd.QName, term xsd.Term, innerOccurs, o
 	return schema
 }
 
+// TestGenerateEmptyUnion pins that a union with no {member type definitions},
+// which xsd.NewSimpleType accepts though no schema document yields one
+// (src-simple-type clause 4), fails Generate with a plain error, not a decline.
+func TestGenerateEmptyUnion(t *testing.T) {
+	u, err := xsd.NewSimpleType(xsderr.Loc{}, xsd.QName{Local: "u"}, xsd.UnionDerivation{},
+		xsd.OwnedSimpleType{Definition: xsd.AnySimpleType()}, nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	e, err := xsd.NewElementDeclaration(xsderr.Loc{}, xsd.QName{Local: "e"},
+		xsd.TypeDefinitionRef{Name: u.Name()}, nil, xsd.NewGlobalScope(), nil, false, nil, nil, nil, false, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	seeded, err := builtin.Seed(strict.New())
+	if err != nil {
+		t.Fatal(err)
+	}
+	b := xsd.NewSchemaBuilder()
+	for _, st := range seeded {
+		b.AddType(st)
+	}
+	b.AddType(u)
+	b.AddElement(e)
+	schema, err := b.Finalize()
+	if err != nil {
+		t.Fatalf("Finalize: %v", err)
+	}
+	err = Generate([]Target{{Schema: schema, Dir: filepath.Join(t.TempDir(), "out"), Package: "p"}})
+	if err == nil || errors.Is(err, errors.ErrUnsupported) {
+		t.Fatalf("Generate = %v, want a failure that is not a decline", err)
+	}
+	const want = "codegen: target 0: element e at ?: element e with {type definition} u, a union with no {member type definitions}"
+	if err.Error() != want {
+		t.Errorf("error %q, want %q", err, want)
+	}
+}
+
 // TestDeclineErrorAs pins that errors.As retrieves the *DeclineError from the
 // error Generate returns for a named and an unnamed target, with its Construct
 // and Loc as values, and that the target's name opens the error outside the
