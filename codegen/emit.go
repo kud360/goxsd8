@@ -195,7 +195,8 @@ type emittedType struct {
 }
 
 // scope is where the structs nested in one struct take their names from: the
-// path of expanded names from their nearest named ancestor, that ancestor's
+// path of expanded names from their nearest named ancestor, or from the named
+// complex type that declares their element (nestedType), that ancestor's
 // first, and whether that ancestor is a named complex type (false when it is a
 // top-level element whose type is anonymous). A struct is named from the
 // path's local names and keyed by its expanded names (nestedKey).
@@ -679,7 +680,7 @@ func (e *emitter) shape(name string, o origin, t xsd.ComplexType) (emittedType, 
 }
 
 // body emits typ, which shape returned for the complex type t with content,
-// generated from o: a struct holding a field per particle, or for content
+// generated from o: a struct holding particleFields' fields, or for content
 // occurring other than exactly once the one field groupField returns, or for
 // simple content (§3.4.2.2 dcl.ctd.ctsc) the value field, named from the local
 // name value and holding, never through a pointer, what goType maps its
@@ -799,13 +800,14 @@ func (e *emitter) occurrence(typ emittedType, nested scope, o origin, t xsd.Comp
 	return nil
 }
 
-// particleFields returns the fields of particles, in particle order, in a
-// struct whose nested types are named in nested and whose particles chain is
-// valueChain's for, for the complex type at loc named in declines by subject
-// (field).
+// particleFields returns the fields of particles, one per particle spliced
+// returns for them, in that order, in a struct whose nested types are named in
+// nested and whose particles chain is valueChain's for, for the complex type
+// at loc named in declines by subject (field).
 func (e *emitter) particleFields(nested scope, chain []valueNode, subject string, loc xsderr.Loc, particles []xsd.Particle) ([]fieldSpec, error) {
-	fields := make([]fieldSpec, 0, len(particles))
-	for _, p := range particles {
+	leaves := spliced(particles)
+	fields := make([]fieldSpec, 0, len(leaves))
+	for _, p := range leaves {
 		field, err := e.field(nested, chain, subject, loc, p)
 		if err != nil {
 			return nil, err
@@ -813,6 +815,32 @@ func (e *emitter) particleFields(nested scope, chain []valueNode, subject string
 		fields = append(fields, field)
 	}
 	return fields, nil
+}
+
+// spliced returns particles in order with each particle whose term is a
+// sequence model group and which occurs exactly once replaced, recursively, by
+// that group's own particles: one occurrence of such a particle is one pass
+// through its particles in order (§3.8.4.1.1 sec-sequences), so its fields are
+// theirs. A complex-content extension's content particle (§3.4.2.3.3
+// dcl.ctd.ctcc.common clause 4.2.3.3) is one such sequence, nesting its base's
+// when the base is itself an extension, so the splice recurses; the package
+// doc's "# Coverage" states the fields that gives. Every other particle is
+// kept as is, and field declines a choice, a sequence occurring other than
+// exactly once, and a <group ref> particle (xsd.ModelGroupRef), which spliced
+// never follows. The term is a closed sum, so the assertion is STYLE T2's
+// sealed-sum exception, as wildcardTerm's is.
+func spliced(particles []xsd.Particle) []xsd.Particle {
+	var leaves []xsd.Particle
+	for _, p := range particles {
+		resolved, _ := p.Term().(xsd.ResolvedTerm)
+		group, isGroup := resolved.Term.(xsd.ModelGroup)
+		if isGroup && group.Compositor() == xsd.CompositorSequence && p.Occurs() == exactlyOnce {
+			leaves = append(leaves, spliced(group.Particles())...)
+			continue
+		}
+		leaves = append(leaves, p)
+	}
+	return leaves
 }
 
 // structDecl renders the declaration of the struct name holding fields in
@@ -907,17 +935,15 @@ type contentParticle struct {
 // contentGroup checks the complex type t, named in declines by subject,
 // against the package doc's "# Coverage" complex-type shape. It reads t's
 // finalized component alone, never its base, so a base that itself declines
-// does not block t. An extension declines unless its content has {variety}
-// simple (§3.4.2.2 dcl.ctd.ctsc), whatever its base. For element-only content
+// does not block t, and an extension is checked as a restriction is: its
+// {content type} already holds what it takes from its base (§3.4.2.3.3
+// dcl.ctd.ctcc.common clause 4.2, §3.4.2.2 dcl.ctd.ctsc). For element-only content
 // it returns t's content particle, whatever its {min occurs} and {max occurs}
 // but a {max occurs} of 0, which declines; for {variety} empty (§3.4.1),
 // which has no {particle}, and for {variety} simple, whose value field body
 // gives, it returns nil and a nil error. Mixed content declines. Particles
 // and model groups carry no Loc, so their declines cite t's.
 func (e *emitter) contentGroup(subject string, t xsd.ComplexType) (*contentParticle, error) {
-	if t.DerivationMethod() != xsd.DerivationRestriction && t.ContentType().Variety() != xsd.ContentSimple {
-		return nil, decline(t.Loc(), constructDerivation, subject, t.DerivationMethod())
-	}
 	switch {
 	case t.Abstract():
 		return nil, decline(t.Loc(), constructComplexTypeAbstract, subject)
@@ -1119,7 +1145,11 @@ func (e *emitter) attributeField(subject string, loc xsderr.Loc, u xsd.Attribute
 // parent's particles chain is valueChain's for. A named t gets one type, named
 // from t and generated from it, whose nested types take their names from the
 // path at t, as under a top-level element of type t (topLevel). An anonymous t
-// gets a type named by the path from its nearest named ancestor in parent. Each
+// gets a type named by the path from the named complex type that declares decl
+// ({scope}.{parent}, §3.3.2.3 dcl.elt.local) when decl has one, so that every
+// type extending that complex type shares it, and otherwise from its nearest
+// named ancestor in parent. The {parent} is a closed sum, so the assertion is
+// STYLE T2's sealed-sum exception, as wildcardTerm's is. Each
 // named type, and each anonymous type under one, is emitted once per nestedKey,
 // by the first element whose walk reaches it, and later ones share it; its
 // entry is stored before its body is walked, and removed when that body fails,
@@ -1132,6 +1162,11 @@ func (e *emitter) attributeField(subject string, loc xsderr.Loc, u xsd.Attribute
 // at an element must never read an entry stored from a type.
 func (e *emitter) nestedType(parent scope, chain []valueNode, value bool, decl xsd.ElementDeclaration, t xsd.ComplexType) (emittedType, error) {
 	child := scope{underNamedType: parent.underNamedType, path: append(slices.Clone(parent.path), decl.Name())}
+	if sp, ok := decl.Scope().Parent(); ok {
+		if owner, named := sp.(xsd.ComplexTypeScopeParent); named {
+			child = scope{underNamedType: true, path: []xsd.QName{owner.Name, decl.Name()}}
+		}
+	}
 	locals := child.locals()
 	if t.Name() != (xsd.QName{}) {
 		child = scope{underNamedType: true, path: []xsd.QName{t.Name()}}
@@ -1267,7 +1302,11 @@ func reacher(decl xsd.ElementDeclaration) string {
 // type t that the element declaration decl, local or the top-level one an
 // <element ref> particle names, reaches by a value field from particles whose
 // chain is chain, applying valueChain at each field; subject names t to the
-// checks it calls. A choice t, a t whose content particle occurs other than
+// checks it calls. It walks the particles spliced returns for t's content
+// particle's group, the list particleFields gives fields for, so a sequence
+// spliced into its parent is a value edge that pushes no node, and every other
+// nested model group particle ends its path at elementTerm, whose decline the
+// emitting walk meets in field. A choice t, a t whose content particle occurs other than
 // exactly once, and a step whose first node (valueNodes) is in e.acyclic, end
 // the walk, and it never steps to an element of type xs:anyType, whose AnyType
 // reaches itself only through slices. A wildcard particle (wildcardTerm) is a
@@ -1298,7 +1337,7 @@ func (e *emitter) valueCycle(chain []valueNode, decl xsd.ElementDeclaration, sub
 	}
 	var particles []xsd.Particle
 	if content != nil {
-		particles = content.group.Particles()
+		particles = spliced(content.group.Particles())
 	}
 	for _, p := range particles {
 		if p.Occurs() != exactlyOnce || wildcardTerm(p.Term()) {

@@ -101,12 +101,9 @@
 //     slice Children, so no element of type xs:anyType closes a struct-value
 //     recursion, and none of the four names math/big.
 //   - An element whose {type definition} is a complex type other than
-//     xs:anyType, named or anonymous, gets a type of its own when the type is
-//     a restriction of xs:anyType, implicit (§3.4.2.3.2 dcl.ctd.ctcc.implicit)
-//     or explicit (<complexContent><restriction base="xs:anyType">, §3.4.2.3.1
-//     dcl.ctd.ctcc.explicit), a <complexContent> restriction of any other
-//     complex type, or a type with simple content (§3.4.1), by <simpleContent>
-//     extension or restriction of any base (§3.4.2.2 dcl.ctd.ctsc). The type
+//     xs:anyType, named or anonymous, gets a type of its own whatever its
+//     derivation, restriction or extension, of complex or simple content
+//     (§3.4.2.2 dcl.ctd.ctsc, §3.4.2.3 dcl.ctd.ctcc). The type
 //     is built from its own {content type} (§3.4.2.3.3 dcl.ctd.ctcc.common,
 //     §3.4.2.2 dcl.ctd.ctsc) and {attribute uses}, which hold the uses it
 //     inherits, all of an extension's base's and those of a restriction's
@@ -121,7 +118,8 @@
 //     content (§3.4.2.3.3 dcl.ctd.ctcc.common) that has no {open content} and
 //     whose {particle}, which carries the <sequence>'s or <choice>'s own
 //     {min occurs} and {max occurs} (§3.9.1), holds a sequence of element
-//     and wildcard particles (§3.10.2.1 dcl.wc.p), or a choice of element
+//     and wildcard particles (§3.10.2.1 dcl.wc.p) and of sequence particles
+//     occurring exactly once that hold the same, or a choice of element
 //     particles: element particles are local element declarations, and
 //     <element ref> particles, whose {term} is the top-level declaration the
 //     ref names (§3.3.2.4). A sequence gives a struct, and so does empty
@@ -154,16 +152,18 @@
 //     sequence or choice ("Naming"). The occurrence's fields lie behind that
 //     slice, pointer or interface, so no struct-value recursion passes
 //     through it.
-//   - Each particle of a sequence gives one field, in particle order: a local element with
-//     an atomic or list simple type gets the atomic Go type, or the slice, an element's type is
-//     declared over, one with an anonymous complex type of the same shape gets a struct or
-//     interface of its own, emitted after its parent. One with a named complex type of the same
-//     shape gets the struct or interface emitted for that type, once per expanded name, after the
-//     parent of the first local element of that type, and shared by every local element of that
-//     type in any parent, the type's own included; a top-level element of that type keeps the type
-//     named from the element. A type nested in a named complex type is emitted once per path of
-//     expanded names from that type, after the first element whose walk reaches it, and every
-//     element of that type, top-level or local, shares it; two sibling local elements whose
+//   - Each particle of a sequence gives one field, in particle order, but a sequence particle
+//     occurring exactly once, which gives in its place the fields its own particles give, so an
+//     extension (§3.4.2.3.3 clause 4.2.3.3) gives its base particle's fields and then its own: a local
+//     element with an atomic or list simple type gets the atomic Go type, or the slice, an
+//     element's type is declared over, one with an anonymous complex type of the same shape gets a
+//     struct or interface of its own, emitted after its parent. One with a named complex type of
+//     the same shape gets the struct or interface emitted for that type, once per expanded name,
+//     after the parent of the first local element of that type, and shared by every local element
+//     of that type in any parent, the type's own included; a top-level element of that type keeps
+//     the type named from the element. A type nested in a named complex type is emitted once per
+//     path of expanded names from that type, after the first element whose walk reaches it, and
+//     every element of that type, top-level or local, shares it; two sibling local elements whose
 //     expanded names differ only in {target namespace} (§3.3.2.3), a qualified x beside an
 //     unqualified x, get a type each. An <element ref> particle gets the type emitted for the
 //     top-level element declaration it names, named from that element whatever its type definition,
@@ -173,12 +173,12 @@
 //     elements the wildcard would not admit (cvc-wildcard), and holds every match raw whether a
 //     strict or lax wildcard would assess it; enforcing either is the validator's. A named complex
 //     type, or a top-level element through <element ref> particles, that reaches itself through
-//     elements that each occur exactly once in a sequence that is a {particle} occurring
-//     exactly once, and whose types are not choices, declines: its Go type would hold itself as a
-//     struct value. {max occurs} above 1 or unbounded gives a slice whatever {min occurs} is, of a
-//     list's slice too ([][]T); {min occurs} 0 with {max occurs} 1 gives a pointer to a struct,
-//     atomic Go type, or list's slice (*[]T), and the bare interface, never a pointer to one, nil
-//     meaning absent.
+//     elements that each occur exactly once in a sequence that is a {particle} occurring exactly
+//     once or in a sequence spliced into one, and whose types are not choices, declines: its Go
+//     type would hold itself as a struct value. {max occurs} above 1 or unbounded gives a slice
+//     whatever {min occurs} is, of a list's slice too ([][]T); {min occurs} 0 with {max occurs} 1
+//     gives a pointer to a struct, atomic Go type, or list's slice (*[]T), and the bare interface,
+//     never a pointer to one, nil meaning absent.
 //   - Each attribute use of a type emitted as a struct gives one field after the particle
 //     fields or the value field, if any, in the order [xsd.ComplexType.AttributeUses] returns
 //     its {attribute uses} (§3.4.2.4). The field is named from the attribute declaration's
@@ -203,16 +203,15 @@
 // this slice.
 //
 // GAP(codegen): every other construct declines: the all compositor, an
-// emptiable choice, a choice with no {particles}, nested model groups,
-// <group ref> particles, a wildcard alternative of a choice, a particle with
-// {max occurs} 0, attribute wildcards, attribute uses on a type whose
-// content is a choice occurring exactly once, attribute uses with an
-// effective value constraint, mixed content, complex-content extension, a
-// named complex type, or a top-level element through <element ref> particles, reaching
-// itself through struct values, the special simple types, union types, a
-// list whose {item type definition} declines, and every primitive the first
-// bullet does not map, for an element or an attribute alike. #2900 owns
-// lifting them.
+// emptiable choice, a choice with no {particles}, nested model groups but a
+// sequence occurring exactly once in a sequence, <group ref> particles, a wildcard
+// alternative of a choice, a particle with {max occurs} 0, attribute wildcards,
+// attribute uses on a type whose content is a choice occurring exactly once, attribute
+// uses with an effective value constraint, mixed content, a named complex type, or a
+// top-level element through <element ref> particles, reaching itself through struct
+// values, the special simple types, union types, a list whose {item type definition}
+// declines, and every primitive the first bullet does not map, for an element or an
+// attribute alike. #2900 owns lifting them.
 //
 // # Determinism
 //
@@ -240,14 +239,14 @@
 // the top-level element when the element's own type is anonymous (element
 // shipTo under element purchaseOrder → PurchaseOrderShipTo), the complex type
 // when that type is named (element x in complex type ct → CtX, whichever
-// elements have type ct). The type for one occurrence of a content model
-// group is named by the path with the local name sequence or choice last
-// (CtSequence), and the types nested in its particles as if it were absent. A
-// choice's branch struct is named from its interface's name plus the
-// alternative's local name (alternative a of interface First → FirstA), so
-// two top-level elements of one named choice type get distinct interfaces and
-// branches. A residual collision — two names folding to one identifier, among
-// a package's types or one struct's fields — is disambiguated
+// elements have type ct or a type extending ct). The type for one occurrence
+// of a content model group is named by the path with the local name sequence
+// or choice last (CtSequence), and the types nested in its particles as if it
+// were absent. A choice's branch struct is named from its interface's name
+// plus the alternative's local name (alternative a of interface First →
+// FirstA), so two top-level elements of one named choice type get distinct
+// interfaces and branches. A residual collision — two names folding to one
+// identifier, among a package's types or one struct's fields — is disambiguated
 // deterministically by document order: the later name takes the smallest free
 // numeric suffix from 2, so a top-level element ct and a complex type ct
 // reached locally take Ct in the order they are first reached. A datatype
