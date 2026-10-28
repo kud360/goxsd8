@@ -84,11 +84,9 @@ const (
 	constructEmptyChoice
 	constructEmptiableChoice
 	constructDerivation
-	constructRestrictionBase
 	constructComplexTypeAbstract
 	constructAssertions
 	constructAttributeWildcard
-	constructSimpleContent
 	constructMixedContent
 	constructOpenContent
 	constructContentGroupRef
@@ -119,11 +117,9 @@ var constructs = [...]struct{ name, format string }{
 	constructEmptyChoice:              {"choice with no {particles}", "%s whose choice has no {particles}"},
 	constructEmptiableChoice:          {"emptiable choice", "%s whose choice is emptiable: its alternative element %s has {min occurs} 0"},
 	constructDerivation:               {"derivation other than restriction", "%s, derived by %s"},
-	constructRestrictionBase:          {"simple-content restriction of a type other than xs:anyType", "%s, a simple-content restriction of %s rather than of xs:anyType"},
 	constructComplexTypeAbstract:      {"complex type {abstract}", "%s with {abstract} true"},
 	constructAssertions:               {"{assertions}", "%s with {assertions}"},
 	constructAttributeWildcard:        {"{attribute wildcard}", "%s with an {attribute wildcard}"},
-	constructSimpleContent:            {"simple content", "%s with simple content"},
 	constructMixedContent:             {"mixed content", "%s with mixed content"},
 	constructOpenContent:              {"{open content}", "%s with {open content}"},
 	constructContentGroupRef:          {"content particle <group ref>", "%s whose content particle is a <group ref>"},
