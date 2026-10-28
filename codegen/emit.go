@@ -117,8 +117,9 @@ var (
 // emitter builds one target's source. decls holds each emitted type
 // declaration in emission order: a top-level element's type, then the types
 // its particles reach that no earlier element emitted — anonymous complex
-// types nested in its type definition and named complex types of local
-// elements — depth first in particle order; the type for one occurrence of a
+// types nested in its type definition or in a model group definition a
+// <group ref> particle names, and named complex types of local elements —
+// depth first in particle order; the type for one occurrence of a
 // struct's content model group follows that struct, before the types its
 // particles reach, and a sealed interface's branch structs follow it, each
 // before the types its alternative reaches.
@@ -131,16 +132,18 @@ type emitter struct {
 	decls []string
 	// emitted holds the type emitted for each named complex type a local
 	// element reaches, so that every later local element of that type shares
-	// it, and for each anonymous complex type nested in a named complex type,
-	// and each type for one occurrence of a content model group in either
-	// (occurrenceType), so that every element whose walk reaches that named
-	// type shares it; it is a lookup index only and never iterated (STYLE D2).
-	// nestedType and occurrenceType store an entry before walking its type's
-	// particles, so a type that reaches itself reads it, and remove it when
-	// that walk fails, so that it holds only types emitted whole or still being
-	// walked. A top-level element's type is named from the element and is
-	// never stored, nor is a type nested in an anonymous top-level type, and a
-	// branch struct is never stored: it rides with its interface.
+	// it, and for each anonymous complex type nested in a named complex type
+	// or in a model group definition, and each type for one occurrence of a
+	// content model group in either (occurrenceType), so that every element
+	// whose walk reaches that named type, and every <group ref> particle to
+	// that group, shares it; it is a lookup index only and never iterated
+	// (STYLE D2). nestedType and occurrenceType store an entry before walking
+	// its type's particles, so a type that reaches itself reads it, and remove
+	// it when that walk fails, so that it holds only types emitted whole or
+	// still being walked. A top-level element's type is named from the element
+	// and is never stored, nor is a type nested in an anonymous top-level type
+	// outside a model group definition (scope.shared), and a branch struct is
+	// never stored: it rides with its interface.
 	emitted map[nestedKey]emittedType
 	// elements holds the type emitted for each top-level element declaration,
 	// keyed by its expanded name and stored by elementType when the walk first
@@ -196,14 +199,36 @@ type emittedType struct {
 
 // scope is where the structs nested in one struct take their names from: the
 // path of expanded names from their nearest named ancestor, or from the named
-// complex type that declares their element (nestedType), that ancestor's
-// first, and whether that ancestor is a named complex type (false when it is a
-// top-level element whose type is anonymous). A struct is named from the
-// path's local names and keyed by its expanded names (nestedKey).
+// complex type or model group definition that declares their element
+// (nestedType), that ancestor's first, and the kind of component that
+// ancestor is (scopeRoot). A struct is named from the path's local names and
+// keyed by its root and its expanded names (nestedKey).
 type scope struct {
-	underNamedType bool
-	path           []xsd.QName
+	root scopeRoot
+	path []xsd.QName
 }
+
+// scopeRoot is the kind of component a scope's path starts at: a top-level
+// element declaration whose type is anonymous, a named complex type
+// definition, or a model group definition. The three are separate symbol
+// spaces that may share an expanded name (§3.3.2, §3.17.1). The zero value is
+// invalid (STYLE T1).
+type scopeRoot uint8
+
+// The scopeRoot values.
+const (
+	elementRoot scopeRoot = iota + 1
+	typeRoot
+	groupRoot
+)
+
+// shared reports whether a type emitted under s is emitted once and shared by
+// every walk that reaches s's path (e.emitted): under a named complex type,
+// whichever elements have that type, and under a model group definition,
+// whichever particles reference it, each element declared in the group being
+// one component (§3.7.2). A top-level element's anonymous type is reached from
+// that element alone.
+func (s scope) shared() bool { return s.root != elementRoot }
 
 // locals returns the local names of the path, the names the namer joins.
 func (s scope) locals() []string {
@@ -215,17 +240,20 @@ func (s scope) locals() []string {
 }
 
 // nestedKey identifies a named complex type by its expanded name, and an
-// anonymous complex type nested in one by the expanded names along its path:
-// the named type's, then each element's {target namespace} and {name}
-// (§3.3.2.3), each Go-quoted so that the concatenation is unambiguous and a
-// named type's one-name key differs from every nested type's; and the type
-// for one occurrence of the content model group of either by that key and
-// one quoted empty string more (groupKey).
+// anonymous complex type nested in one or in a model group definition by the
+// expanded names along its path: the named type's or group's, then each
+// element's {target namespace} and {name} (§3.3.2.3), each Go-quoted so that
+// the concatenation is unambiguous and a named type's one-name key differs
+// from every nested type's, all after the path's scopeRoot in decimal, so that
+// a type and a group of one expanded name never share a key; and the type for
+// one occurrence of the content model group of either by that key and one
+// quoted empty string more (groupKey).
 type nestedKey string
 
 // key returns the nestedKey of the struct whose path is s's.
 func (s scope) key() nestedKey {
 	var b strings.Builder
+	b.WriteString(strconv.Itoa(int(s.root)))
 	for _, name := range s.path {
 		b.WriteString(strconv.Quote(name.Space))
 		b.WriteString(strconv.Quote(name.Local))
@@ -339,7 +367,9 @@ func headerLoc(base string, loc xsderr.Loc) string {
 // element of the same named type never shares it (nestedType), while every
 // <element ref> particle to the element does; the types nested in it are named
 // from the type when it is named, and shared with that type's every other use,
-// and from the element when it is anonymous.
+// and from the element when it is anonymous, but for those of the elements a
+// model group definition declares, named from the group and shared with its
+// every <group ref> particle (nestedType).
 func (e *emitter) topLevel(decl xsd.ElementDeclaration) error {
 	td, err := e.declaredType(decl)
 	if err != nil {
@@ -362,9 +392,9 @@ func (e *emitter) topLevel(decl xsd.ElementDeclaration) error {
 		e.decls = append(e.decls, header(typ.name, e.elementFrom(decl))+fmt.Sprintf("type %s %s\n", typ.name, underlying))
 		return nil
 	case xsd.ComplexType:
-		nested := scope{path: []xsd.QName{decl.Name()}}
+		nested := scope{root: elementRoot, path: []xsd.QName{decl.Name()}}
 		if t.Name() != (xsd.QName{}) {
-			nested = scope{underNamedType: true, path: []xsd.QName{t.Name()}}
+			nested = scope{root: typeRoot, path: []xsd.QName{t.Name()}}
 		}
 		chain, err := valueChain(nil, false, decl, t)
 		if err != nil {
@@ -753,26 +783,27 @@ func (e *emitter) groupField(nested scope, o origin, t xsd.ComplexType, c conten
 // declaration that path is named from — t when t is named (typeOrigin), and
 // o's element otherwise — and emitted after the struct holding its field; its
 // particles take their nested types' names from nested as if it were absent.
-// Under a named complex type it is stored in e.emitted under nested.groupKey
-// before its particles are walked, shared by every later walk of nested's
-// path, and removed when that walk fails, as nestedType stores a type.
+// Under a named complex type or a model group definition (scope.shared) it is
+// stored in e.emitted under nested.groupKey before its particles are walked,
+// shared by every later walk of nested's path, and removed when that walk
+// fails, as nestedType stores a type.
 func (e *emitter) occurrenceType(nested scope, o origin, t xsd.ComplexType, group xsd.ModelGroup) (emittedType, error) {
 	key := nested.groupKey()
-	if typ, ok := e.emitted[key]; ok && nested.underNamedType {
+	if typ, ok := e.emitted[key]; ok && nested.shared() {
 		return typ, nil
 	}
 	typ := emittedType{
 		name:   e.types.claim(append(nested.locals(), group.Compositor().String())...),
 		sealed: group.Compositor() == xsd.CompositorChoice,
 	}
-	if nested.underNamedType {
+	if nested.shared() {
 		e.emitted[key] = typ
 	}
 	if t.Name() != (xsd.QName{}) {
 		o.from = e.typeOrigin(t).from
 	}
 	if err := e.occurrence(typ, nested, o, t, group.Particles()); err != nil {
-		if nested.underNamedType {
+		if nested.shared() {
 			delete(e.emitted, key)
 		}
 		return emittedType{}, err
@@ -805,7 +836,10 @@ func (e *emitter) occurrence(typ emittedType, nested scope, o origin, t xsd.Comp
 // nested and whose particles chain is valueChain's for, for the complex type
 // at loc named in declines by subject (field).
 func (e *emitter) particleFields(nested scope, chain []valueNode, subject string, loc xsderr.Loc, particles []xsd.Particle) ([]fieldSpec, error) {
-	leaves := spliced(particles)
+	leaves, err := e.spliced(subject, loc, particles)
+	if err != nil {
+		return nil, err
+	}
 	fields := make([]fieldSpec, 0, len(leaves))
 	for _, p := range leaves {
 		field, err := e.field(nested, chain, subject, loc, p)
@@ -818,29 +852,60 @@ func (e *emitter) particleFields(nested scope, chain []valueNode, subject string
 }
 
 // spliced returns particles in order with each particle whose term is a
-// sequence model group and which occurs exactly once replaced, recursively, by
-// that group's own particles: one occurrence of such a particle is one pass
-// through its particles in order (§3.8.4.1.1 sec-sequences), so its fields are
-// theirs. A complex-content extension's content particle (§3.4.2.3.3
-// dcl.ctd.ctcc.common clause 4.2.3.3) is one such sequence, nesting its base's
-// when the base is itself an extension, so the splice recurses; the package
-// doc's "# Coverage" states the fields that gives. Every other particle is
-// kept as is, and field declines a choice, a sequence occurring other than
-// exactly once, and a <group ref> particle (xsd.ModelGroupRef), which spliced
-// never follows. The term is a closed sum, so the assertion is STYLE T2's
-// sealed-sum exception, as wildcardTerm's is.
-func spliced(particles []xsd.Particle) []xsd.Particle {
+// sequence model group (modelGroupTerm), inline or the {model group} of the
+// definition a <group ref> names (§3.7.2), and which occurs exactly once
+// replaced, recursively, by that group's own particles: one occurrence of such
+// a particle is one pass through its particles in order (§3.8.4.1.1
+// sec-sequences), so its fields are theirs. A complex-content extension's
+// content particle (§3.4.2.3.3 dcl.ctd.ctcc.common clause 4.2.3.3) is one such
+// sequence, nesting its base's when the base is itself an extension, so the
+// splice recurses; the package doc's "# Coverage" states the fields that
+// gives. Every other particle is kept as is, and field declines a choice and
+// a sequence occurring other than exactly once, inline or referenced alike.
+// subject and loc name the complex type holding particles in the error
+// modelGroupTerm returns.
+func (e *emitter) spliced(subject string, loc xsderr.Loc, particles []xsd.Particle) ([]xsd.Particle, error) {
 	var leaves []xsd.Particle
 	for _, p := range particles {
-		resolved, _ := p.Term().(xsd.ResolvedTerm)
-		group, isGroup := resolved.Term.(xsd.ModelGroup)
-		if isGroup && group.Compositor() == xsd.CompositorSequence && p.Occurs() == exactlyOnce {
-			leaves = append(leaves, spliced(group.Particles())...)
+		group, isGroup, err := e.modelGroupTerm(subject, loc, p.Term())
+		if err != nil {
+			return nil, err
+		}
+		if !isGroup || group.Compositor() != xsd.CompositorSequence || p.Occurs() != exactlyOnce {
+			leaves = append(leaves, p)
 			continue
 		}
-		leaves = append(leaves, p)
+		inner, err := e.spliced(subject, loc, group.Particles())
+		if err != nil {
+			return nil, err
+		}
+		leaves = append(leaves, inner...)
 	}
-	return leaves
+	return leaves, nil
+}
+
+// modelGroupTerm returns the model group a particle's term holds and true: an
+// inline <sequence>, <choice> or <all>, or the {model group} of the top-level
+// model group definition a <group ref> names (§3.7.2 declare-namedModelGroup),
+// followed through [xsd.Schema.ModelGroup], so that every site reads the two
+// alike. It returns false for an element declaration, an <element ref> or a
+// wildcard. A <group ref> that does not resolve is an error naming subject and
+// loc, the complex type holding the particle, and never a decline: finalize
+// guarantees it resolves (src-resolve clause 1.5). The term is a closed sum,
+// so the switch is STYLE T2's sealed-sum exception, as elementTerm's is.
+func (e *emitter) modelGroupTerm(subject string, loc xsderr.Loc, term xsd.TermOrRef) (xsd.ModelGroup, bool, error) {
+	switch term := term.(type) {
+	case xsd.ModelGroupRef:
+		def, ok := e.schema.ModelGroup(term.Name)
+		if !ok {
+			return xsd.ModelGroup{}, false, fmt.Errorf("%s at %s: its <group ref> particle to %s does not resolve", subject, loc, term.Name)
+		}
+		return def.ModelGroup(), true, nil
+	case xsd.ResolvedTerm:
+		group, isGroup := term.Term.(xsd.ModelGroup)
+		return group, isGroup, nil
+	}
+	return xsd.ModelGroup{}, false, nil
 }
 
 // structDecl renders the declaration of the struct name holding fields in
@@ -925,7 +990,8 @@ func mustOccurs(o xsd.Occurs, err error) xsd.Occurs {
 
 // contentParticle is a complex type's content {particle} as contentGroup
 // accepted it (§3.4.2.3.3 dcl.ctd.ctcc.common): group, the sequence or choice
-// model group that is its term, never the source <choice> itself, and occurs,
+// model group that is its term, inline or the {model group} a <group ref>
+// names (§3.7.2), never the source <choice> itself, and occurs,
 // its {min occurs} and {max occurs}, {max occurs} never 0.
 type contentParticle struct {
 	group  xsd.ModelGroup
@@ -939,7 +1005,11 @@ type contentParticle struct {
 // {content type} already holds what it takes from its base (§3.4.2.3.3
 // dcl.ctd.ctcc.common clause 4.2, §3.4.2.2 dcl.ctd.ctsc). For element-only content
 // it returns t's content particle, whatever its {min occurs} and {max occurs}
-// but a {max occurs} of 0, which declines; for {variety} empty (§3.4.1),
+// but a {max occurs} of 0, which declines, its group the particle's own model
+// group or, for a <group ref>, the referenced definition's {model group}
+// (modelGroupTerm), read before the all and {max occurs} tests, so that a
+// referenced group is checked and emitted as an inline one with the ref's
+// {min occurs} and {max occurs} (§3.7.2); for {variety} empty (§3.4.1),
 // which has no {particle}, and for {variety} simple, whose value field body
 // gives, it returns nil and a nil error. Mixed content declines. Particles
 // and model groups carry no Loc, so their declines cite t's.
@@ -968,13 +1038,12 @@ func (e *emitter) contentGroup(subject string, t xsd.ComplexType) (*contentParti
 	if content.OpenContent != nil {
 		return nil, decline(t.Loc(), constructOpenContent, subject)
 	}
-	resolved, isResolved := content.Particle.Term().(xsd.ResolvedTerm)
-	if !isResolved {
-		return nil, decline(t.Loc(), constructContentGroupRef, subject)
+	group, isGroup, err := e.modelGroupTerm(subject, t.Loc(), content.Particle.Term())
+	if err != nil {
+		return nil, err
 	}
-	group, isGroup := resolved.Term.(xsd.ModelGroup)
 	if !isGroup {
-		return nil, fmt.Errorf("%s at %s: unexpected content particle term %T", subject, t.Loc(), resolved.Term)
+		return nil, fmt.Errorf("%s at %s: unexpected content particle term %T", subject, t.Loc(), content.Particle.Term())
 	}
 	if group.Compositor() == xsd.CompositorAll {
 		return nil, decline(t.Loc(), constructAll, subject)
@@ -1145,36 +1214,41 @@ func (e *emitter) attributeField(subject string, loc xsderr.Loc, u xsd.Attribute
 // parent's particles chain is valueChain's for. A named t gets one type, named
 // from t and generated from it, whose nested types take their names from the
 // path at t, as under a top-level element of type t (topLevel). An anonymous t
-// gets a type named by the path from the named complex type that declares decl
-// ({scope}.{parent}, §3.3.2.3 dcl.elt.local) when decl has one, so that every
-// type extending that complex type shares it, and otherwise from its nearest
-// named ancestor in parent. The {parent} is a closed sum, so the assertion is
-// STYLE T2's sealed-sum exception, as wildcardTerm's is. Each
-// named type, and each anonymous type under one, is emitted once per nestedKey,
-// by the first element whose walk reaches it, and later ones share it; its
-// entry is stored before its body is walked, and removed when that body fails,
-// so that a later turn's walk, which emit runs after a decline, enters the type
-// again rather than sharing a type never emitted. A shared type reached by a
-// value field is walked again by valueCycle, which the emitting walk does not
-// do. The emitted lookup, the store and the removal run only under a named
-// complex type: a top-level element may share a complex type's expanded name,
-// since the two are separate symbol spaces (§3.3.2), so a key whose path starts
-// at an element must never read an entry stored from a type.
+// gets a type named by the path from the named complex type or the model group
+// definition that declares decl ({scope}.{parent}, §3.3.2.3 dcl.elt.local)
+// when decl has one, so that every type extending that complex type, and every
+// particle referencing that group, shares it, and otherwise from its nearest
+// named ancestor in parent. The {parent} is a closed sum, so the switch is
+// STYLE T2's sealed-sum exception, as wildcardTerm's assertion is. Each
+// named type, and each anonymous type under one or under a model group
+// definition, is emitted once per nestedKey, by the first element whose walk
+// reaches it, and later ones share it; its entry is stored before its body is
+// walked, and removed when that body fails, so that a later turn's walk, which
+// emit runs after a decline, enters the type again rather than sharing a type
+// never emitted, and so that a walk reaching the type again inside its own
+// body, through a <group ref> to the group that declares decl, ends there. A
+// shared type reached by a value field is walked again by valueCycle, which the
+// emitting walk does not do. The emitted lookup, the store and the removal run
+// only under a shared scope (scope.shared): a key whose path starts at a
+// top-level element is reached from that element alone.
 func (e *emitter) nestedType(parent scope, chain []valueNode, value bool, decl xsd.ElementDeclaration, t xsd.ComplexType) (emittedType, error) {
-	child := scope{underNamedType: parent.underNamedType, path: append(slices.Clone(parent.path), decl.Name())}
+	child := scope{root: parent.root, path: append(slices.Clone(parent.path), decl.Name())}
 	if sp, ok := decl.Scope().Parent(); ok {
-		if owner, named := sp.(xsd.ComplexTypeScopeParent); named {
-			child = scope{underNamedType: true, path: []xsd.QName{owner.Name, decl.Name()}}
+		switch owner := sp.(type) {
+		case xsd.ComplexTypeScopeParent:
+			child = scope{root: typeRoot, path: []xsd.QName{owner.Name, decl.Name()}}
+		case xsd.ModelGroupScopeParent:
+			child = scope{root: groupRoot, path: []xsd.QName{owner.Name, decl.Name()}}
 		}
 	}
 	locals := child.locals()
 	if t.Name() != (xsd.QName{}) {
-		child = scope{underNamedType: true, path: []xsd.QName{t.Name()}}
+		child = scope{root: typeRoot, path: []xsd.QName{t.Name()}}
 		locals = []string{t.Name().Local}
 	}
 	o := e.localOrigin(decl, t)
 	key := child.key()
-	if typ, ok := e.emitted[key]; ok && child.underNamedType {
+	if typ, ok := e.emitted[key]; ok && child.shared() {
 		if !value || typ.sealed {
 			return typ, nil
 		}
@@ -1188,11 +1262,11 @@ func (e *emitter) nestedType(parent scope, chain []valueNode, value bool, decl x
 	if err != nil {
 		return emittedType{}, err
 	}
-	if child.underNamedType {
+	if child.shared() {
 		e.emitted[key] = typ
 	}
 	if err := e.body(typ, child, next, o, t, content); err != nil {
-		if child.underNamedType {
+		if child.shared() {
 			delete(e.emitted, key)
 		}
 		return emittedType{}, err
@@ -1210,23 +1284,29 @@ func (e *emitter) localOrigin(decl xsd.ElementDeclaration, t xsd.ComplexType) or
 	return e.elementOrigin(decl, t)
 }
 
-// symbolSpace is the symbol space a valueNode's name is in: element
-// declarations or type definitions, which may share an expanded name (§3.3.2).
-// The zero value is invalid (STYLE T1).
+// symbolSpace is the symbol space a valueNode's name is in: top-level element
+// declarations, type definitions, or the local element declarations of model
+// group definitions, which may share an expanded name (§3.3.2, §3.17.1). The
+// zero value is invalid (STYLE T1).
 type symbolSpace uint8
 
 // The symbolSpace values.
 const (
 	elementSpace symbolSpace = iota + 1
 	typeSpace
+	groupElementSpace
 )
 
 // valueNode is one node of a chain (valueChain): a top-level element
-// declaration or a named complex type definition, by its expanded name. Build
-// one with elementNode or typeNode.
+// declaration or a named complex type definition, by its expanded name, or
+// the anonymous complex type of a local element declaration that a model
+// group definition declares, by the group's expanded name and the element's,
+// the path nestedType keys that type's struct by. Build one with elementNode,
+// typeNode or groupElementNode; element is the zero QName but in the last.
 type valueNode struct {
-	space symbolSpace
-	name  xsd.QName
+	space   symbolSpace
+	name    xsd.QName
+	element xsd.QName
 }
 
 // elementNode returns the valueNode of the top-level element declaration name.
@@ -1235,26 +1315,51 @@ func elementNode(name xsd.QName) valueNode { return valueNode{space: elementSpac
 // typeNode returns the valueNode of the named complex type definition name.
 func typeNode(name xsd.QName) valueNode { return valueNode{space: typeSpace, name: name} }
 
+// groupElementNode returns the valueNode of the anonymous complex type of the
+// local element declaration element that the model group definition group
+// declares.
+func groupElementNode(group, element xsd.QName) valueNode {
+	return valueNode{space: groupElementSpace, name: group, element: element}
+}
+
 // String names the node in a struct-value recursion decline.
 func (n valueNode) String() string {
-	if n.space == elementSpace {
+	switch n.space {
+	case elementSpace:
 		return "element " + n.name.String()
+	case typeSpace:
+		return "complex type " + n.name.String()
+	case groupElementSpace:
+		return "element " + n.element.String() + " of model group " + n.name.String()
 	}
-	return "complex type " + n.name.String()
+	return fmt.Sprintf("valueNode(%d)", n.space)
 }
 
 // valueNodes returns the nodes a walk's step through the element declaration
 // decl to its complex type t pushes, in order: a global decl, a top-level
 // element or the declaration an <element ref> particle names, pushes its
 // element node, and a named t its type node; a local decl of an anonymous t
-// pushes none.
+// pushes its groupElementNode when a model group definition declares decl
+// ({scope}.{parent} a xsd.ModelGroupScopeParent, §3.3.2.3 dcl.elt.local),
+// and none when a complex type declares it. That node bounds a cycle that
+// reaches decl again through a <group ref> to the group declaring it, which
+// mg-props-correct clause 2 leaves legal: it bounds group containment alone,
+// not the path from a group through an element's type back to it. It names
+// decl as well as the group, since a step through a sibling of decl in the
+// same group reaches no cycle by that alone. The {parent} is a closed sum, so
+// the assertion is STYLE T2's sealed-sum exception, as nestedType's switch is.
 func valueNodes(decl xsd.ElementDeclaration, t xsd.ComplexType) []valueNode {
 	var nodes []valueNode
 	if decl.ScopeVariety() == xsd.ScopeGlobal {
 		nodes = append(nodes, elementNode(decl.Name()))
 	}
 	if t.Name() != (xsd.QName{}) {
-		nodes = append(nodes, typeNode(t.Name()))
+		return append(nodes, typeNode(t.Name()))
+	}
+	if sp, ok := decl.Scope().Parent(); ok {
+		if owner, inGroup := sp.(xsd.ModelGroupScopeParent); inGroup {
+			nodes = append(nodes, groupElementNode(owner.Name, decl.Name()))
+		}
 	}
 	return nodes
 }
@@ -1303,22 +1408,22 @@ func reacher(decl xsd.ElementDeclaration) string {
 // <element ref> particle names, reaches by a value field from particles whose
 // chain is chain, applying valueChain at each field; subject names t to the
 // checks it calls. It walks the particles spliced returns for t's content
-// particle's group, the list particleFields gives fields for, so a sequence
-// spliced into its parent is a value edge that pushes no node, and every other
-// nested model group particle ends its path at elementTerm, whose decline the
-// emitting walk meets in field. A choice t, a t whose content particle occurs other than
-// exactly once, and a step whose first node (valueNodes) is in e.acyclic, end
-// the walk, and it never steps to an element of type xs:anyType, whose AnyType
-// reaches itself only through slices. A wildcard particle (wildcardTerm) is a
-// leaf, passed before elementTerm: its field holds AnyElement, which reaches
-// AnyType, which reaches itself only through the slice Children. It reads the
-// schema, never e.emitted or e.elements, so a type the emitting walk shares,
-// and the type of a declaration an <element ref> particle names, is walked
-// again here unless e.acyclic holds its step's first node; that node joins
-// e.acyclic once the walk of t's particles reaches the end, and a step that
-// pushes none, a local decl of an anonymous t, is never memoized. It returns
-// only a struct-value recursion: every other failure on its path ends that
-// path, since the emitting walk meets it.
+// particle's group, a <group ref> content particle followed by contentGroup,
+// the list particleFields gives fields for, so a sequence spliced into its
+// parent, inline or through a <group ref>, is a value edge that pushes no
+// node, and every other nested model group particle ends its path at elementTerm, whose
+// decline the emitting walk meets in field. A choice t, a t whose content particle
+// occurs other than exactly once, and a step whose first node (valueNodes) is in
+// e.acyclic, end the walk, and it never steps to an element of type xs:anyType, whose
+// AnyType reaches itself only through slices. A wildcard particle (wildcardTerm) is a
+// leaf, passed before elementTerm: its field holds AnyElement, which reaches AnyType,
+// which reaches itself only through the slice Children. It reads the schema, never
+// e.emitted or e.elements, so a type the emitting walk shares, and the type of a
+// declaration an <element ref> particle names, is walked again here unless e.acyclic
+// holds its step's first node; that node joins e.acyclic once the walk of t's particles
+// reaches the end, and a step that pushes none, a local decl of an anonymous t that a
+// complex type declares, is never memoized. It returns only a struct-value recursion:
+// every other failure on its path ends that path, since the emitting walk meets it.
 func (e *emitter) valueCycle(chain []valueNode, decl xsd.ElementDeclaration, subject string, t xsd.ComplexType) error {
 	nodes := valueNodes(decl, t)
 	if len(nodes) > 0 {
@@ -1337,7 +1442,11 @@ func (e *emitter) valueCycle(chain []valueNode, decl xsd.ElementDeclaration, sub
 	}
 	var particles []xsd.Particle
 	if content != nil {
-		particles = spliced(content.group.Particles())
+		particles, err = e.spliced(subject, t.Loc(), content.group.Particles())
+	}
+	if err != nil {
+		//nolint:nilerr // a <group ref> that does not resolve ends this path: the emitting walk meets it in particleFields.
+		return nil
 	}
 	for _, p := range particles {
 		if p.Occurs() != exactlyOnce || wildcardTerm(p.Term()) {
@@ -1372,9 +1481,18 @@ func (e *emitter) valueCycle(chain []valueNode, decl xsd.ElementDeclaration, sub
 // elementTerm returns the element declaration a sequence or choice particle's
 // term holds: a local declaration, or the top-level one an <element ref>
 // particle names (§3.3.2.4 ref.elt.global), followed through
-// [xsd.Schema.Element]. It declines every other term. subject and loc name
-// the complex type holding the particle.
+// [xsd.Schema.Element]. It declines every other term: a model group, inline
+// or the {model group} a <group ref> names (modelGroupTerm), as a nested
+// model group particle of that group's compositor, and a wildcard. subject
+// and loc name the complex type holding the particle.
 func (e *emitter) elementTerm(subject string, loc xsderr.Loc, term xsd.TermOrRef) (xsd.ElementDeclaration, error) {
+	group, isGroup, err := e.modelGroupTerm(subject, loc, term)
+	if err != nil {
+		return xsd.ElementDeclaration{}, err
+	}
+	if isGroup {
+		return xsd.ElementDeclaration{}, decline(loc, constructNestedGroup, group.Compositor(), subject)
+	}
 	switch term := term.(type) {
 	case xsd.ElementDeclarationRef:
 		// No substitution check: every member of the named declaration's
@@ -1385,14 +1503,10 @@ func (e *emitter) elementTerm(subject string, loc xsderr.Loc, term xsd.TermOrRef
 			return xsd.ElementDeclaration{}, fmt.Errorf("%s at %s: its <element ref> particle to %s does not resolve", subject, loc, term.Name)
 		}
 		return decl, nil
-	case xsd.ModelGroupRef:
-		return xsd.ElementDeclaration{}, decline(loc, constructGroupRef, term.Name, subject)
 	case xsd.ResolvedTerm:
 		switch inner := term.Term.(type) {
 		case xsd.ElementDeclaration:
 			return inner, nil
-		case xsd.ModelGroup:
-			return xsd.ElementDeclaration{}, decline(loc, constructNestedGroup, inner.Compositor(), subject)
 		case xsd.Wildcard:
 			return xsd.ElementDeclaration{}, decline(loc, constructWildcard, subject)
 		}

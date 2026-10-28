@@ -61,8 +61,10 @@ func TestGenerateDeclines(t *testing.T) {
 			"a nested sequence model group particle", constructNestedGroup},
 		{"emptiable group in choice", `<xs:element name="e"><xs:complexType><xs:choice><xs:element name="a" ` + str + `/><xs:sequence><xs:element name="b" minOccurs="0" ` + str + `/></xs:sequence></xs:choice></xs:complexType></xs:element>`,
 			"a nested sequence model group particle", constructNestedGroup},
+		// A <group ref> alternative is a nested model group particle, as an
+		// inline group alternative is, until #3128 lifts it.
 		{"group ref in choice", `<xs:group name="g"><xs:sequence><xs:element name="b" ` + str + `/></xs:sequence></xs:group><xs:element name="e"><xs:complexType><xs:choice><xs:element name="a" ` + str + `/><xs:group ref="g"/></xs:choice></xs:complexType></xs:element>`,
-			"a <group ref> particle to g", constructGroupRef},
+			"a nested sequence model group particle in complex type (anonymous) of element e", constructNestedGroup},
 		{"wildcard in choice", `<xs:element name="e"><xs:complexType><xs:choice><xs:element name="a" ` + str + `/><xs:any/></xs:choice></xs:complexType></xs:element>`,
 			"a wildcard particle", constructWildcard},
 		{"mixed choice", `<xs:element name="e"><xs:complexType mixed="true"><xs:choice><xs:element name="a" ` + str + `/></xs:choice></xs:complexType></xs:element>`,
@@ -88,10 +90,30 @@ func TestGenerateDeclines(t *testing.T) {
 		// one occurring otherwise still declines.
 		{"nested group", `<xs:element name="e"><xs:complexType><xs:sequence><xs:sequence maxOccurs="2"><xs:element name="a" ` + str + `/></xs:sequence></xs:sequence></xs:complexType></xs:element>`,
 			"a nested sequence model group particle", constructNestedGroup},
-		{"group ref particle", `<xs:group name="g"><xs:sequence><xs:element name="a" ` + str + `/></xs:sequence></xs:group><xs:element name="e"><xs:complexType><xs:sequence><xs:group ref="g"/></xs:sequence></xs:complexType></xs:element>`,
-			"a <group ref> particle to g", constructGroupRef},
-		{"group ref content", `<xs:group name="g"><xs:sequence><xs:element name="a" ` + str + `/></xs:sequence></xs:group><xs:element name="e"><xs:complexType><xs:group ref="g"/></xs:complexType></xs:element>`,
-			"whose content particle is a <group ref>", constructContentGroupRef},
+		// A <group ref> in a sequence splices exactly as its inline group
+		// would: one to a sequence group occurring other than exactly once,
+		// and one to a choice group, are nested model group particles of the
+		// referenced compositor until #3128 lifts them.
+		{"repeated group ref particle", `<xs:group name="g"><xs:sequence><xs:element name="a" ` + str + `/></xs:sequence></xs:group><xs:element name="e"><xs:complexType><xs:sequence><xs:group ref="g" maxOccurs="2"/></xs:sequence></xs:complexType></xs:element>`,
+			"a nested sequence model group particle in complex type (anonymous) of element e", constructNestedGroup},
+		{"optional group ref particle", `<xs:group name="g"><xs:sequence><xs:element name="a" ` + str + `/></xs:sequence></xs:group><xs:element name="e"><xs:complexType><xs:sequence><xs:group ref="g" minOccurs="0"/></xs:sequence></xs:complexType></xs:element>`,
+			"a nested sequence model group particle in complex type (anonymous) of element e", constructNestedGroup},
+		{"choice group ref particle", `<xs:group name="g"><xs:choice><xs:element name="a" ` + str + `/></xs:choice></xs:group><xs:element name="e"><xs:complexType><xs:sequence><xs:group ref="g"/></xs:sequence></xs:complexType></xs:element>`,
+			"a nested choice model group particle in complex type (anonymous) of element e", constructNestedGroup},
+		// A <group ref> content particle is checked as its referenced group
+		// would be inline: an all group declines whatever the ref's occurs.
+		{"all group ref content", `<xs:group name="g"><xs:all><xs:element name="a" ` + str + `/></xs:all></xs:group><xs:element name="e"><xs:complexType><xs:group ref="g" maxOccurs="1"/></xs:complexType></xs:element>`,
+			"complex type (anonymous) of element e with an all compositor", constructAll},
+		// The group-cycle rows reach e again through a <group ref> to the
+		// group declaring it (legal: mg-props-correct clause 2 bounds group
+		// containment alone), as e's content particle and inside an inline
+		// sequence, and as a named type's content.
+		{"group cycle through content particle", `<xs:group name="g"><xs:sequence><xs:element name="e"><xs:complexType><xs:group ref="g"/></xs:complexType></xs:element></xs:sequence></xs:group><xs:element name="r"><xs:complexType><xs:group ref="g"/></xs:complexType></xs:element>`,
+			"local element e reaching element e of model group g again through elements that each occur exactly once at s.xsd:2:33 ", constructValueCycle},
+		{"group cycle through inline sequence", `<xs:group name="g"><xs:sequence><xs:element name="e"><xs:complexType><xs:sequence><xs:group ref="g"/></xs:sequence></xs:complexType></xs:element></xs:sequence></xs:group><xs:element name="r"><xs:complexType><xs:sequence><xs:group ref="g"/></xs:sequence></xs:complexType></xs:element>`,
+			"local element e reaching element e of model group g again through elements that each occur exactly once at s.xsd:2:33 ", constructValueCycle},
+		{"group cycle through named type", `<xs:complexType name="t"><xs:group ref="g"/></xs:complexType><xs:group name="g"><xs:sequence><xs:element name="e" type="t"/></xs:sequence></xs:group><xs:element name="r" type="t"/>`,
+			"local element e reaching complex type t again through elements that each occur exactly once", constructValueCycle},
 		// In the ref rows below, h is declared after e. Where a row places a
 		// later decline after the ref, the ref's check is shown to come
 		// first. The substitution row declines at the member's own turn.

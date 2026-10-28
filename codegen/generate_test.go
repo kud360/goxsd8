@@ -665,6 +665,38 @@ func TestGenerateElementRefs(t *testing.T) {
 	}
 }
 
+// TestGenerateGroupRefs pins <group ref> particles beyond the golden's. The
+// recursion rows reach the local element e again through a <group ref> to the
+// group g declaring it, as e's type's content particle and inside an inline
+// sequence; e occurs optionally, so the cycle passes through a pointer, and
+// the walk ends at e's type, emitted once under g. In the sibling row a's type
+// reaches g again only through a pointer, and its value field b, a sibling of
+// a in g, closes no cycle. In the symbol-space row a complex type and a model
+// group share the expanded name g, and each declares a local element e of an
+// anonymous type: the two types are distinct.
+func TestGenerateGroupRefs(t *testing.T) {
+	tests := []struct{ name, body, want string }{
+		{"recursion through content particle", `<xs:group name="g"><xs:sequence><xs:element name="e" minOccurs="0"><xs:complexType><xs:group ref="g"/></xs:complexType></xs:element></xs:sequence></xs:group><xs:element name="r"><xs:complexType><xs:group ref="g"/></xs:complexType></xs:element>`,
+			"type R struct {\n\tE *GE\n}\n\n// GE is generated from element e declared at s.xsd:1:88.\ntype GE struct {\n\tE *GE\n}\n"},
+		{"recursion through inline sequence", `<xs:group name="g"><xs:sequence><xs:element name="e" minOccurs="0"><xs:complexType><xs:sequence><xs:group ref="g"/></xs:sequence></xs:complexType></xs:element></xs:sequence></xs:group><xs:element name="r"><xs:complexType><xs:sequence><xs:group ref="g"/></xs:sequence></xs:complexType></xs:element>`,
+			"type R struct {\n\tE *GE\n}\n\n// GE is generated from element e declared at s.xsd:1:88.\ntype GE struct {\n\tE *GE\n}\n"},
+		{"value field to a sibling", `<xs:group name="g"><xs:sequence><xs:element name="a" minOccurs="0"><xs:complexType><xs:group ref="g"/></xs:complexType></xs:element><xs:element name="b"><xs:complexType><xs:sequence><xs:element name="s" type="xs:string"/></xs:sequence></xs:complexType></xs:element></xs:sequence></xs:group><xs:element name="r"><xs:complexType><xs:group ref="g"/></xs:complexType></xs:element>`,
+			"type GA struct {\n\tA *GA\n\tB GB\n}\n"},
+		{"complex type and group of one name", `<xs:complexType name="g"><xs:sequence><xs:element name="e"><xs:complexType><xs:sequence><xs:element name="i" type="xs:string"/></xs:sequence></xs:complexType></xs:element></xs:sequence></xs:complexType><xs:group name="g"><xs:sequence><xs:element name="e"><xs:complexType><xs:sequence><xs:element name="j" type="xs:int"/></xs:sequence></xs:complexType></xs:element></xs:sequence></xs:group><xs:element name="r"><xs:complexType><xs:sequence><xs:element name="x" type="g"/><xs:group ref="g"/></xs:sequence></xs:complexType></xs:element>`,
+			"type GE struct {\n\tI string\n}\n\n// GE2 is generated from element e declared at s.xsd:1:"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			schema := parseString(t, `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">`+tt.body+`</xs:schema>`)
+			src := generateOne(t, Target{Schema: schema, Dir: t.TempDir(), Package: "p"})
+			if got := string(src); !strings.Contains(got, tt.want) {
+				t.Errorf("want %q in:\n%s", tt.want, got)
+			}
+			typeCheck(t, src)
+		})
+	}
+}
+
 // TestGenerateWildcardVariants pins that a wildcard particle of a sequence
 // gives the same field whatever its {namespace constraint} and {process
 // contents} (§3.10.1), neither of which "# Coverage" represents: each row's
@@ -711,7 +743,8 @@ func TestGenerateWildcardName(t *testing.T) {
 // fields of type d<i+1>, so a check that walks a type again on every reach
 // doubles per level and does not return. In "rewalked", the value field v
 // reaches p while p's body is being emitted, so the check walks p, and through
-// it the whole diamond, before the emitting walk reaches d0.
+// it the whole diamond, before the emitting walk reaches d0. TestGenerateGroupDiamond
+// is the same diamond through model groups.
 func TestGenerateDiamond(t *testing.T) {
 	const depth = 40
 	var diamond strings.Builder
@@ -734,6 +767,30 @@ func TestGenerateDiamond(t *testing.T) {
 				t.Errorf("want %q in:\n%s", want, got)
 			}
 		})
+	}
+}
+
+// TestGenerateGroupDiamond pins that a struct-value recursion check costs time
+// linear in the model groups it reaches: each group g<i> declares two local
+// elements a and b, each of an anonymous type whose content is a <group ref>
+// to g<i+1>, so b's type reaches the types of g<i+1>'s a and b, which a's
+// walk emitted, as value fields, and a check that walks each such type again
+// doubles per level and does not return.
+func TestGenerateGroupDiamond(t *testing.T) {
+	const depth = 40
+	var b strings.Builder
+	b.WriteString(`<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"><xs:element name="r"><xs:complexType><xs:group ref="g0"/></xs:complexType></xs:element>`)
+	for i := range depth {
+		fmt.Fprintf(&b, `<xs:group name="g%d"><xs:sequence><xs:element name="a"><xs:complexType><xs:group ref="g%d"/></xs:complexType></xs:element><xs:element name="b"><xs:complexType><xs:group ref="g%d"/></xs:complexType></xs:element></xs:sequence></xs:group>`, i, i+1, i+1)
+	}
+	fmt.Fprintf(&b, `<xs:group name="g%d"><xs:sequence><xs:element name="s" type="xs:string"/></xs:sequence></xs:group></xs:schema>`, depth)
+	schema := parseString(t, b.String())
+	dir := t.TempDir()
+	if err := Generate([]Target{{Schema: schema, Dir: dir, Package: "p"}}); err != nil {
+		t.Fatal(err)
+	}
+	if got, want := read(t, filepath.Join(dir, fileName)), fmt.Sprintf("type G%dA struct {\n\tA G%dA\n\tB G%dB\n}\n", depth-2, depth-1, depth-1); !strings.Contains(got, want) {
+		t.Errorf("want %q in:\n%s", want, got)
 	}
 }
 
