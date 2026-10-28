@@ -880,7 +880,7 @@ func repeatedFacetChild(restriction *Element, method xsd.DerivationMethod) *Elem
 //
 // CASE 2's ·emptiable· HALF IS NOT TESTED, and the omission changes no verdict.
 // Emptiability is Particle Emptiable (§3.9.6.3, cos-group-emptiable), which
-// xsd's particleEmptiable answers off an assembled Schema — <group ref> edges
+// xsd's ParticleEmptiable answers off an assembled Schema — <group ref> edges
 // resolved and the effective total range computed — and no Schema exists at
 // mapping time. What the untested half would decide is case 2 against case 5 for
 // a mixed base whose particle is NOT ·emptiable·, and a complex type restricting

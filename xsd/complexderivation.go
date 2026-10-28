@@ -350,7 +350,7 @@ func (s *Schema) restrictionSimpleContentOK(t, b ComplexType) (bool, error) {
 	if !ok || !bc.Mixed {
 		return false, nil
 	}
-	return s.particleEmptiable(bc.Particle), nil // clause 2.2.2.2
+	return s.ParticleEmptiable(bc.Particle), nil // clause 2.2.2.2
 }
 
 // restrictionEmptyContentOK is clause 2.3: 2.3.1 T's {content type}.{variety} is
@@ -367,7 +367,7 @@ func (s *Schema) restrictionEmptyContentOK(t, b ComplexType) bool {
 	if !ok {
 		return false
 	}
-	return s.particleEmptiable(bc.Particle) // clause 2.3.2.2
+	return s.ParticleEmptiable(bc.Particle) // clause 2.3.2.2
 }
 
 // restrictionComplexContentOK is clause 2.4: the 2.4.1 variety match, decided
