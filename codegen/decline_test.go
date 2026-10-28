@@ -120,23 +120,6 @@ func TestGenerateDeclines(t *testing.T) {
 			"attribute t of complex type (anonymous) of element e with {type definition} {http://www.w3.org/2001/XMLSchema}precisionDecimal, whose {primitive type definition} is {http://www.w3.org/2001/XMLSchema}precisionDecimal", constructUncoveredPrimitive},
 		{"attribute QName", `<xs:element name="e"><xs:complexType><xs:sequence><xs:element name="a" ` + str + `/></xs:sequence><xs:attribute name="t" type="xs:QName"/></xs:complexType></xs:element>`,
 			"attribute t of complex type (anonymous) of element e with {type definition} {http://www.w3.org/2001/XMLSchema}QName, whose {primitive type definition} is {http://www.w3.org/2001/XMLSchema}QName", constructUncoveredPrimitive},
-		{"attribute default", `<xs:element name="e"><xs:complexType><xs:sequence><xs:element name="a" ` + str + `/></xs:sequence><xs:attribute name="t" default="d" ` + str + `/></xs:complexType></xs:element>`,
-			"attribute t of complex type (anonymous) of element e with a default effective value constraint (§3.5.4 key-evc)", constructAttributeValueConstraint},
-		{"required attribute fixed", `<xs:element name="e"><xs:complexType><xs:sequence><xs:element name="a" ` + str + `/></xs:sequence><xs:attribute name="t" use="required" fixed="f" ` + str + `/></xs:complexType></xs:element>`,
-			"attribute t of complex type (anonymous) of element e with a fixed effective value constraint (§3.5.4 key-evc)", constructAttributeValueConstraint},
-		// The two ref rows carry the value constraint on the global declaration
-		// only, so they fail when the decline reads the use's own {value
-		// constraint} rather than its effective one (§3.5.4 key-evc).
-		{"attribute ref default", `<xs:attribute name="t" default="d" ` + str + `/>` + `<xs:element name="e"><xs:complexType><xs:sequence><xs:element name="a" ` + str + `/></xs:sequence><xs:attribute ref="t"/></xs:complexType></xs:element>`,
-			"attribute t of complex type (anonymous) of element e with a default effective value constraint (§3.5.4 key-evc)", constructAttributeValueConstraint},
-		{"attribute ref fixed", `<xs:attribute name="t" fixed="f" ` + str + `/>` + `<xs:element name="e"><xs:complexType><xs:sequence><xs:element name="a" ` + str + `/></xs:sequence><xs:attribute ref="t"/></xs:complexType></xs:element>`,
-			"attribute t of complex type (anonymous) of element e with a fixed effective value constraint (§3.5.4 key-evc)", constructAttributeValueConstraint},
-		// The empty-content rows reach attributeField with no particle field
-		// before it, and contentGroup's checks ahead of its content-type switch.
-		{"empty type attribute default", `<xs:element name="e"><xs:complexType><xs:attribute name="t" default="d" ` + str + `/></xs:complexType></xs:element>`,
-			"attribute t of complex type (anonymous) of element e with a default effective value constraint (§3.5.4 key-evc)", constructAttributeValueConstraint},
-		{"empty type attribute ref fixed", `<xs:attribute name="t" fixed="f" ` + str + `/>` + `<xs:element name="e"><xs:complexType><xs:attribute ref="t"/></xs:complexType></xs:element>`,
-			"attribute t of complex type (anonymous) of element e with a fixed effective value constraint (§3.5.4 key-evc)", constructAttributeValueConstraint},
 		{"empty type abstract", `<xs:complexType name="c" abstract="true"/><xs:element name="e" type="c"/>`,
 			"complex type c of element e with {abstract} true", constructComplexTypeAbstract},
 		{"empty type assertion", `<xs:element name="e"><xs:complexType><xs:assert test="true()"/></xs:complexType></xs:element>`,
@@ -181,15 +164,16 @@ func TestGenerateDeclines(t *testing.T) {
 			"complex type c of element e whose content is a choice, with {attribute uses}", constructChoiceAttributes},
 		{"restriction with inherited assertion", `<xs:complexType name="b"><xs:sequence><xs:element name="a" ` + str + `/></xs:sequence><xs:assert test="true()"/></xs:complexType><xs:complexType name="c"><xs:complexContent><xs:restriction base="b"><xs:sequence><xs:element name="a" ` + str + `/></xs:sequence></xs:restriction></xs:complexContent></xs:complexType><xs:element name="e" type="c"/>`,
 			"complex type c of element e with {assertions}", constructAssertions},
-		{"nillable", `<xs:element name="e" nillable="true" ` + str + `/>`,
+		// The four rows below carry a {value constraint} beside the declining
+		// property, so they pin that the value constraint, accepted, is not
+		// checked ahead of it.
+		{"nillable", `<xs:element name="e" nillable="true" default="d" ` + str + `/>`,
 			"element e with {nillable} true", constructElementNillable},
-		{"abstract element", `<xs:element name="e" abstract="true" ` + str + `/>`,
+		{"abstract element", `<xs:element name="e" abstract="true" fixed="f" ` + str + `/>`,
 			"element e with {abstract} true", constructElementAbstract},
-		{"value constraint", `<xs:element name="e" default="d" ` + str + `/>`,
-			"element e with a {value constraint}", constructElementValueConstraint},
-		{"type table", `<xs:element name="e" ` + str + `><xs:alternative test="true()" type="xs:token"/></xs:element>`,
+		{"type table", `<xs:element name="e" default="d" ` + str + `><xs:alternative test="true()" type="xs:token"/></xs:element>`,
 			"element e with a {type table}", constructTypeTable},
-		{"substitution group", `<xs:element name="h" ` + str + `/><xs:element name="e" substitutionGroup="h" ` + str + `/>`,
+		{"substitution group", `<xs:element name="h" ` + str + `/><xs:element name="e" substitutionGroup="h" fixed="f" ` + str + `/>`,
 			"element e with {substitution group affiliations}", constructSubstitutionGroup},
 		{"assertion", `<xs:element name="e"><xs:complexType><xs:sequence><xs:element name="a" ` + str + `/></xs:sequence><xs:assert test="true()"/></xs:complexType></xs:element>`,
 			"with {assertions}", constructAssertions},
@@ -706,7 +690,7 @@ func TestConstructMapKey(t *testing.T) {
 }
 
 // TestDeclineErrorLoc pins DeclineError.Loc's doc for parsed schemas: a
-// decline charged to a built-in xsi: or xml: attribute declaration the parser
+// decline charged to a built-in xsi: attribute declaration the parser
 // supplies has the zero Loc, and one charged to a declaration read from the
 // document has that declaration's location.
 func TestDeclineErrorLoc(t *testing.T) {
@@ -717,8 +701,6 @@ func TestDeclineErrorLoc(t *testing.T) {
 	}{
 		{"xsi:type attribute", `<xs:element name="e"><xs:complexType><xs:attribute ref="xsi:type"/></xs:complexType></xs:element>`,
 			constructUncoveredPrimitive, xsderr.Loc{}},
-		{"xml:lang attribute", `<xs:import namespace="http://www.w3.org/XML/1998/namespace"/><xs:element name="e"><xs:complexType><xs:attribute ref="xml:lang" default="en"/></xs:complexType></xs:element>`,
-			constructAttributeValueConstraint, xsderr.Loc{}},
 		{"nillable element", `<xs:element name="e" nillable="true" type="xs:string"/>`,
 			constructElementNillable, xsderr.Loc{URI: "s.xsd", Line: 2, Col: 1}},
 	}
