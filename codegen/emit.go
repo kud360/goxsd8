@@ -574,7 +574,7 @@ func (e *emitter) simpleGoType(subject string, loc xsderr.Loc, t *xsd.SimpleType
 }
 
 // goType is the Go type "# Coverage" maps the simple type t to: for a special
-// t (Datatypes §2.4.1 dt-special), xs:anySimpleType or xs:anyAtomicType known
+// t (Datatypes §2.4.2 dt-special), xs:anySimpleType or xs:anyAtomicType known
 // by identity ahead of its {variety}, string, holding the literal; for an atomic
 // t, its atomic Go type, chosen through builtinType and then t's {primitive
 // type definition} (Datatypes §4.1.1), setting e.usesBig for a math/big type

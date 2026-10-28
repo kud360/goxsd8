@@ -42,7 +42,7 @@
 // slice:
 //
 //   - An element whose {type definition} is a simple type gets a named type
-//     over string for a special type (Datatypes §2.4.1 dt-special),
+//     over string for a special type (Datatypes §2.4.2 dt-special),
 //     xs:anySimpleType or xs:anyAtomicType, known by identity whatever its
 //     {variety}, and otherwise over the atomic Go type an atomic simple type
 //     gets, over a slice of one, or over the union's sealed interface. A
