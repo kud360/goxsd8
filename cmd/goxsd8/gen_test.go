@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"syscall"
 	"testing"
 
 	"github.com/kud360/goxsd8/codegen"
@@ -449,6 +450,24 @@ func TestGenDeclines(t *testing.T) {
 				assertAbsent(t, out)
 			}
 		})
+	}
+}
+
+// TestReportGenerateOSFaultNotDecline pins exit 2 with helpPointer for an
+// element of Generate's error that answers errors.Is(_, errors.ErrUnsupported)
+// but holds no *codegen.DeclineError: a phase-2 OS fault whose errno is
+// ENOTSUP, wrapped with %w as Generate wraps it (#3090).
+func TestReportGenerateOSFaultNotDecline(t *testing.T) {
+	fault := fmt.Errorf("target 0: writing x/xsd_gen.go: %w", syscall.ENOTSUP)
+	if !errors.Is(fault, errors.ErrUnsupported) {
+		t.Fatalf("errors.Is(%v, errors.ErrUnsupported) = false on this platform; the row tests nothing", fault)
+	}
+	var stderr bytes.Buffer
+	if code := reportGenerate(errors.Join(fault), &stderr); code != exitUsage {
+		t.Errorf("reportGenerate = %d, want %d", code, exitUsage)
+	}
+	if want := "goxsd8: gen: " + fault.Error() + "\n" + helpPointer + "\n"; stderr.String() != want {
+		t.Errorf("reportGenerate stderr = %q, want %q", stderr.String(), want)
 	}
 }
 
