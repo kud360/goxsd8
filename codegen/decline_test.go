@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -315,7 +316,7 @@ func TestGenerateDeclines(t *testing.T) {
 		// The wildcard alternative under p precedes the cycle v closes in
 		// particle order, so it is the decline returned.
 		{"value cycle after an earlier decline", `<xs:complexType name="c"><xs:sequence><xs:element name="p" minOccurs="0"><xs:complexType><xs:choice><xs:any/></xs:choice></xs:complexType></xs:element><xs:element name="v" type="c"/></xs:sequence></xs:complexType><xs:element name="e"><xs:complexType><xs:sequence><xs:element name="l" type="c"/></xs:sequence></xs:complexType></xs:element>`,
-			"a wildcard particle in complex type (anonymous) of element p", constructWildcard},
+			"a wildcard particle in complex type (anonymous) of element p of complex type c at ", constructWildcard},
 		// In the three rows below, q reaches t while t's body is being
 		// emitted, so the recursion check walks t again past f1: it passes
 		// the wildcard as a leaf, and meets an element declaration property
@@ -339,11 +340,11 @@ func TestGenerateDeclines(t *testing.T) {
 		{"local element property", `<xs:element name="e"><xs:complexType><xs:sequence><xs:element name="l" nillable="true" ` + str + `/></xs:sequence></xs:complexType></xs:element>`,
 			"element l with {nillable} true", constructElementNillable},
 		{"nested struct", `<xs:element name="e"><xs:complexType><xs:sequence><xs:element name="l"><xs:complexType><xs:all><xs:element name="a" ` + str + `/></xs:all></xs:complexType></xs:element></xs:sequence></xs:complexType></xs:element>`,
-			"complex type (anonymous) of element l with an all compositor", constructAll},
+			"complex type (anonymous) of element l of element e with an all compositor at ", constructAll},
 		{"nested choice", `<xs:element name="e"><xs:complexType><xs:sequence><xs:element name="l"><xs:complexType><xs:choice><xs:element name="a" ` + str + `/><xs:any/></xs:choice></xs:complexType></xs:element></xs:sequence></xs:complexType></xs:element>`,
-			"a wildcard particle in complex type (anonymous) of element l", constructWildcard},
+			"a wildcard particle in complex type (anonymous) of element l of element e at ", constructWildcard},
 		{"branch struct", `<xs:element name="e"><xs:complexType><xs:choice><xs:element name="l"><xs:complexType><xs:all><xs:element name="a" ` + str + `/></xs:all></xs:complexType></xs:element></xs:choice></xs:complexType></xs:element>`,
-			"complex type (anonymous) of element l with an all compositor", constructAll},
+			"complex type (anonymous) of element l of element e with an all compositor at ", constructAll},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -377,6 +378,64 @@ func TestGenerateDeclines(t *testing.T) {
 			}
 			if _, err := os.Stat(out); !errors.Is(err, os.ErrNotExist) {
 				t.Errorf("Dir %s exists after a decline (stat: %v)", out, err)
+			}
+		})
+	}
+}
+
+// TestGenerateDeclinesLocalAnonymousPlace pins that a decline met in a local
+// element's anonymous complex type names the type's declaring place, so that
+// two sites charged at one Loc, here the global attribute g every site
+// references, print distinct texts and Generate reports each, in document
+// order, while one site reached by two walks stays one element.
+func TestGenerateDeclinesLocalAnonymousPlace(t *testing.T) {
+	const (
+		g    = `<xs:attribute name="g" type="xs:QName"/>`
+		anon = `<xs:complexType><xs:attribute ref="g"/></xs:complexType>`
+		x    = `<xs:element name="x">` + anon + `</xs:element>`
+		a    = `<xs:element name="a"><xs:complexType><xs:sequence>` + x + `</xs:sequence></xs:complexType></xs:element>`
+	)
+	top := func(name, content string) string {
+		return `<xs:element name="` + name + `"><xs:complexType>` + content + `</xs:complexType></xs:element>`
+	}
+	seq := func(particle string) string { return `<xs:sequence>` + particle + `</xs:sequence>` }
+	decline := func(subject string) string {
+		return "codegen: target 0: attribute g of " + subject + " with {type definition} {http://www.w3.org/2001/XMLSchema}QName, whose {primitive type definition} is {http://www.w3.org/2001/XMLSchema}QName at s.xsd:2:1 is not supported by codegen, a generator limitation, not a schema fault"
+	}
+	tests := []struct {
+		name, body string
+		want       []string
+	}{
+		{"two top-level elements", g + top("p", seq(x)) + top("q", seq(x)), []string{
+			decline("complex type (anonymous) of element x of element p"),
+			decline("complex type (anonymous) of element x of element q"),
+		}},
+		{"one model group definition", g + `<xs:group name="m">` + seq(x) + `</xs:group>` + top("p", `<xs:group ref="m"/>`) + top("q", `<xs:group ref="m"/>`), []string{
+			decline("complex type (anonymous) of element x of model group m"),
+		}},
+		{"named complex type and top-level element", g + `<xs:complexType name="c">` + seq(x) + `</xs:complexType><xs:element name="r" type="c"/>` + top("p", seq(x)), []string{
+			decline("complex type (anonymous) of element x of complex type c"),
+			decline("complex type (anonymous) of element x of element p"),
+		}},
+		{"top-level and local element", g + `<xs:element name="x">` + anon + `</xs:element>` + top("p", seq(x)), []string{
+			decline("complex type (anonymous) of element x"),
+			decline("complex type (anonymous) of element x of element p"),
+		}},
+		{"two levels down", g + top("p", seq(a)) + top("q", seq(a)), []string{
+			decline("complex type (anonymous) of element x of element a of element p"),
+			decline("complex type (anonymous) of element x of element a of element q"),
+		}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			schema := parseString(t, "<xs:schema xmlns:xs=\"http://www.w3.org/2001/XMLSchema\">\n"+tt.body+"\n</xs:schema>\n")
+			errs := elements(t, Generate([]Target{{Schema: schema, Dir: filepath.Join(t.TempDir(), "out"), Package: "p"}}))
+			got := make([]string, len(errs))
+			for i, err := range errs {
+				got[i] = err.Error()
+			}
+			if !slices.Equal(got, tt.want) {
+				t.Errorf("Generate's elements =\n%q\nwant\n%q", got, tt.want)
 			}
 		})
 	}

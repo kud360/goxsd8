@@ -271,6 +271,33 @@ func (s scope) key() nestedKey {
 	return nestedKey(b.String())
 }
 
+// place names, in declines, the declaring place of an anonymous complex type
+// whose struct's path is s's: the path innermost first, each local element
+// declaration as "element N", the path's root by its kind (scopeRoot) as
+// "element N", "complex type N" or "model group N", joined by " of ", so that
+// anonymous types sharing a struct (nestedKey) share a place.
+func (s scope) place() string {
+	parts := make([]string, 0, len(s.path))
+	for i := len(s.path) - 1; i > 0; i-- {
+		parts = append(parts, "element "+s.path[i].String())
+	}
+	return strings.Join(append(parts, s.root.noun()+" "+s.path[0].String()), " of ")
+}
+
+// noun names the kind of component a scope's path starts at in declines
+// (scope.place).
+func (r scopeRoot) noun() string {
+	switch r {
+	case elementRoot:
+		return "element"
+	case typeRoot:
+		return "complex type"
+	case groupRoot:
+		return "model group"
+	}
+	return fmt.Sprintf("scopeRoot(%d)", r)
+}
+
 // groupKey returns the nestedKey of the type for one occurrence of the content
 // model group of the struct whose path is s's (occurrenceType): s's key
 // followed by one Go-quoted empty string. A path key holds an even number of
@@ -338,9 +365,8 @@ type origin struct {
 	from, subject string
 }
 
-// elementOrigin is the origin of the type emitted for decl's complex {type
-// definition} t and named from decl: a top-level element's type, or a local
-// element's anonymous one.
+// elementOrigin is the origin of the type emitted for the top-level element
+// declaration decl's complex {type definition} t and named from decl.
 func (e *emitter) elementOrigin(decl xsd.ElementDeclaration, t xsd.ComplexType) origin {
 	return origin{from: e.elementFrom(decl), subject: "complex type " + typeName(t) + " of element " + decl.Name().String()}
 }
@@ -403,10 +429,7 @@ func (e *emitter) topLevel(decl xsd.ElementDeclaration) error {
 		e.decls = append(e.decls, header(typ.name, e.elementFrom(decl))+fmt.Sprintf("type %s %s\n", typ.name, underlying.name))
 		return nil
 	case xsd.ComplexType:
-		nested := scope{root: elementRoot, path: []xsd.QName{decl.Name()}}
-		if t.Name() != (xsd.QName{}) {
-			nested = scope{root: typeRoot, path: []xsd.QName{t.Name()}}
-		}
+		nested := structScope(scope{}, decl, t)
 		chain, err := valueChain(nil, false, decl, t)
 		if err != nil {
 			return err
@@ -1362,7 +1385,7 @@ func (e *emitter) refType(chain []valueNode, value bool, decl xsd.ElementDeclara
 	if isAnyType(td) || !value || !isComplex || typ.sealed {
 		return typ, nil
 	}
-	return typ, e.valueCycle(chain, decl, e.elementOrigin(decl, ct).subject, ct)
+	return typ, e.valueCycle(chain, decl, structScope(scope{}, decl, ct), ct)
 }
 
 // attributeField returns the field of attribute use u (§3.5.1) of the complex
@@ -1449,21 +1472,16 @@ func attributePath(nested scope, decl xsd.AttributeDeclaration) []string {
 // only under a shared scope (scope.shared): a key whose path starts at a
 // top-level element is reached from that element alone.
 func (e *emitter) nestedType(parent scope, chain []valueNode, value bool, decl xsd.ElementDeclaration, t xsd.ComplexType) (emittedType, error) {
-	child := localScope(parent, decl)
-	locals := child.locals()
-	if t.Name() != (xsd.QName{}) {
-		child = scope{root: typeRoot, path: []xsd.QName{t.Name()}}
-		locals = []string{t.Name().Local}
-	}
-	o := e.localOrigin(decl, t)
+	child := structScope(parent, decl, t)
+	o := e.localOrigin(decl, child, t)
 	key := child.key()
 	if typ, ok := e.emitted[key]; ok && child.shared() {
 		if !value || typ.sealed {
 			return typ, nil
 		}
-		return typ, e.valueCycle(chain, decl, o.subject, t)
+		return typ, e.valueCycle(chain, decl, child, t)
 	}
-	typ, content, err := e.shape(e.types.claim(locals...), o, t)
+	typ, content, err := e.shape(e.types.claim(child.locals()...), o, t)
 	if err != nil {
 		return emittedType{}, err
 	}
@@ -1502,14 +1520,30 @@ func localScope(parent scope, decl xsd.ElementDeclaration) scope {
 	return scope{root: parent.root, path: append(slices.Clone(parent.path), decl.Name())}
 }
 
+// structScope is the scope of the struct emitted for the element declaration
+// decl's complex type t, its parent's particles taking their names from
+// parent: the path at t for a named t, the path at decl for a top-level decl
+// of an anonymous t, and localScope's otherwise, the one case that reads
+// parent.
+func structScope(parent scope, decl xsd.ElementDeclaration, t xsd.ComplexType) scope {
+	switch {
+	case t.Name() != (xsd.QName{}):
+		return scope{root: typeRoot, path: []xsd.QName{t.Name()}}
+	case decl.ScopeVariety() == xsd.ScopeGlobal:
+		return scope{root: elementRoot, path: []xsd.QName{decl.Name()}}
+	}
+	return localScope(parent, decl)
+}
+
 // localOrigin is the origin of the type emitted for the local element decl's
-// complex type t: typeOrigin's for a named t, elementOrigin's for an anonymous
-// one.
-func (e *emitter) localOrigin(decl xsd.ElementDeclaration, t xsd.ComplexType) origin {
+// complex type t, whose struct's scope is nested (structScope): typeOrigin's
+// for a named t, and for an anonymous one generated from decl and named in
+// declines by its declaring place (scope.place).
+func (e *emitter) localOrigin(decl xsd.ElementDeclaration, nested scope, t xsd.ComplexType) origin {
 	if t.Name() != (xsd.QName{}) {
 		return e.typeOrigin(t)
 	}
-	return e.elementOrigin(decl, t)
+	return origin{from: e.elementFrom(decl), subject: "complex type " + typeName(t) + " of " + nested.place()}
 }
 
 // symbolSpace is the symbol space a valueNode's name is in: top-level element
@@ -1631,28 +1665,31 @@ func reacher(decl xsd.ElementDeclaration) string {
 	return "local element " + decl.Name().String()
 }
 
-// valueCycle walks, through value fields only, the particles of the complex
-// type t that the element declaration decl, local or the top-level one an
-// <element ref> particle names, reaches by a value field from particles whose
-// chain is chain, applying valueChain at each field; subject names t to the
-// checks it calls. It walks the particles spliced returns for t's content
-// particle's group, a <group ref> content particle followed by contentGroup,
-// the list particleFields gives fields for, so a sequence spliced into its
-// parent, inline or through a <group ref>, is a value edge that pushes no
-// node, and every other nested model group particle ends its path at elementTerm, whose
-// decline the emitting walk meets in field. A choice t, a t whose content particle
-// occurs other than exactly once, and a step whose first node (valueNodes) is in
-// e.acyclic, end the walk, and it never steps to an element of type xs:anyType, whose
-// AnyType reaches itself only through slices. A wildcard particle (wildcardTerm) is a
-// leaf, passed before elementTerm: its field holds AnyElement, which reaches AnyType,
-// which reaches itself only through the slice Children. It reads the schema, never
-// e.emitted or e.elements, so a type the emitting walk shares, and the type of a
-// declaration an <element ref> particle names, is walked again here unless e.acyclic
-// holds its step's first node; that node joins e.acyclic once the walk of t's particles
-// reaches the end, and a step that pushes none, a local decl of an anonymous t that a
-// complex type declares, is never memoized. It returns only a struct-value recursion:
-// every other failure on its path ends that path, since the emitting walk meets it.
-func (e *emitter) valueCycle(chain []valueNode, decl xsd.ElementDeclaration, subject string, t xsd.ComplexType) error {
+// valueCycle walks, through value fields only, the particles of the complex type t that the
+// element declaration decl, local or the top-level one an <element ref> particle names, reaches
+// by a value field from particles whose chain is chain, applying valueChain at each field; t's
+// struct's scope is nested (structScope), and t is named to the checks it calls as decl's
+// elementOrigin or localOrigin names it. It walks the particles spliced returns for t's content
+// particle's group, a <group ref> content particle followed by contentGroup, the list
+// particleFields gives fields for, so a sequence spliced into its parent, inline or through a
+// <group ref>, is a value edge that pushes no node, and every other nested model group particle
+// ends its path at elementTerm, whose decline the emitting walk meets in field. A choice t, a t
+// whose content particle occurs other than exactly once, and a step whose first node
+// (valueNodes) is in e.acyclic, end the walk, and it never steps to an element of type
+// xs:anyType, whose AnyType reaches itself only through slices. A wildcard particle
+// (wildcardTerm) is a leaf, passed before elementTerm: its field holds AnyElement, which
+// reaches AnyType, which reaches itself only through the slice Children. It reads the schema,
+// never e.emitted or e.elements, so a type the emitting walk shares, and the type of a
+// declaration an <element ref> particle names, is walked again here unless e.acyclic holds its
+// step's first node; that node joins e.acyclic once the walk of t's particles reaches the end,
+// and a step that pushes none, a local decl of an anonymous t that a complex type declares, is
+// never memoized. It returns only a struct-value recursion: every other failure on its path
+// ends that path, since the emitting walk meets it.
+func (e *emitter) valueCycle(chain []valueNode, decl xsd.ElementDeclaration, nested scope, t xsd.ComplexType) error {
+	subject := e.localOrigin(decl, nested, t).subject
+	if decl.ScopeVariety() == xsd.ScopeGlobal {
+		subject = e.elementOrigin(decl, t).subject
+	}
 	nodes := valueNodes(decl, t)
 	if len(nodes) > 0 {
 		if _, done := e.acyclic[nodes[0]]; done {
@@ -1692,11 +1729,7 @@ func (e *emitter) valueCycle(chain []valueNode, decl xsd.ElementDeclaration, sub
 		if isAnyType(td) || !isComplex {
 			continue
 		}
-		elSubject := e.localOrigin(el, ct).subject
-		if el.ScopeVariety() == xsd.ScopeGlobal {
-			elSubject = e.elementOrigin(el, ct).subject
-		}
-		if err := e.valueCycle(chain, el, elSubject, ct); err != nil {
+		if err := e.valueCycle(chain, el, structScope(nested, el, ct), ct); err != nil {
 			return err
 		}
 	}
