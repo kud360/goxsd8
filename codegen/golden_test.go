@@ -20,7 +20,7 @@ var update = flag.Bool("update", false, "rewrite codegen/testdata/*.golden from 
 // TestGenerateGolden pins Generate's output for each fixture. The fixtures are
 // parsed by a relative location, so the Loc in every header is portable.
 func TestGenerateGolden(t *testing.T) {
-	for _, name := range []string{"flat", "nested", "collision", "named", "expanded", "symbolspaces", "choice", "attributes", "integers", "identity", "empty", "lists", "namedlocal", "floats", "decimals", "binary", "temporal", "refs", "anytype", "restriction", "wildcard", "occurs", "simplecontent", "spliced", "extension", "groupref", "unions"} {
+	for _, name := range []string{"flat", "nested", "collision", "named", "expanded", "symbolspaces", "choice", "attributes", "integers", "identity", "empty", "lists", "namedlocal", "floats", "decimals", "binary", "temporal", "refs", "anytype", "restriction", "wildcard", "occurs", "simplecontent", "spliced", "extension", "groupref", "unions", "anyattribute"} {
 		t.Run(name, func(t *testing.T) {
 			schema, err := xsdparser.Parse("testdata/" + name + ".xsd")
 			if err != nil {

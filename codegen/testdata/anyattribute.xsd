@@ -1,0 +1,59 @@
+<?xml version="1.0"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+           xmlns="urn:anyattribute"
+           targetNamespace="urn:anyattribute">
+  <xs:complexType name="open">
+    <xs:sequence>
+      <xs:element name="name" type="xs:string"/>
+    </xs:sequence>
+    <xs:attribute name="id" type="xs:string" use="required"/>
+    <xs:attribute name="lang" type="xs:string"/>
+    <xs:anyAttribute namespace="##other" processContents="lax"/>
+  </xs:complexType>
+  <xs:element name="record" type="open"/>
+  <xs:element name="marker">
+    <xs:complexType>
+      <xs:anyAttribute/>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="label">
+    <xs:complexType>
+      <xs:simpleContent>
+        <xs:extension base="xs:string">
+          <xs:attribute name="lang" type="xs:string"/>
+          <xs:anyAttribute processContents="skip"/>
+        </xs:extension>
+      </xs:simpleContent>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="extended">
+    <xs:complexType>
+      <xs:complexContent>
+        <xs:extension base="open">
+          <xs:sequence>
+            <xs:element name="note" type="xs:string"/>
+          </xs:sequence>
+          <xs:attribute name="rev" type="xs:int"/>
+        </xs:extension>
+      </xs:complexContent>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="repeated">
+    <xs:complexType>
+      <xs:sequence maxOccurs="unbounded">
+        <xs:element name="item" type="xs:string"/>
+      </xs:sequence>
+      <xs:attribute name="count" type="xs:int"/>
+      <xs:anyAttribute/>
+    </xs:complexType>
+  </xs:element>
+  <xs:attributeGroup name="common">
+    <xs:attribute name="class" type="xs:string"/>
+    <xs:anyAttribute namespace="##local"/>
+  </xs:attributeGroup>
+  <xs:element name="grouped">
+    <xs:complexType>
+      <xs:attributeGroup ref="common"/>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>

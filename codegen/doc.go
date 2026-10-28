@@ -29,11 +29,11 @@
 // then, after every other declaration and in the order the walk
 // first needs each, one datatype struct per date, time or duration datatype
 // a declaration's type or a value field is declared over, the four
-// raw-content structs once an element's type is xs:anyType or a sequence
-// holds a wildcard particle, and one sealed interface per union simple type
-// a declaration's type, a value field, a list's item or a union's member is
-// declared over, each followed by one variant type per basic member, and
-// declines everything outside this slice:
+// raw-content structs once an element's type is xs:anyType, a sequence
+// holds a wildcard particle, or a type has an {attribute wildcard}, and one
+// sealed interface per union simple type a declaration's type, a value field,
+// a list's item or a union's member is declared over, each followed by one
+// variant type per basic member, and declines everything outside this slice:
 //
 //   - An element whose {type definition} is an atomic, list or union simple
 //     type gets a named type over the atomic Go type an atomic simple type
@@ -137,24 +137,22 @@
 //     inherits, all of an extension's base's and those of a restriction's
 //     base it neither overrides nor prohibits (§3.4.2.4 dcl.ctd.attuses), and
 //     has no Go-level relation to its base's: no embedding, no conversion. The
-//     type has no {attribute wildcard}, its own or one an extension inherits
-//     (§3.4.2.5 dcl.ctd.anyatt), no {assertions}, inherited ones included
-//     (§3.4.2.1 dcl.ctd.common), and {abstract} false, and has one of three
-//     contents: empty content ({variety} empty, §3.4.1); simple content
-//     ({variety} simple), which gives a struct of the value field the next
-//     bullet states and the attribute fields; or element-only
-//     content (§3.4.2.3.3 dcl.ctd.ctcc.common) that has no {open content} and
-//     whose {particle}, which carries the <sequence>'s or <choice>'s own
-//     {min occurs} and {max occurs} (§3.9.1), or a <group ref>'s, whose
-//     {term} is the referenced definition's {model group} (§3.7.2), holds a
-//     sequence of element and wildcard particles (§3.10.2.1 dcl.wc.p) and of
-//     sequence particles occurring exactly once that hold the same, inline or
-//     a <group ref> to a sequence group, or a choice of element
-//     particles: element particles are local element declarations, and
-//     <element ref> particles, whose {term} is the top-level declaration the
-//     ref names (§3.3.2.4). A sequence gives a struct, and so does empty
-//     content, with no particle field; a struct with no field is spelled
-//     struct{}.
+//     type has no {assertions}, inherited ones included (§3.4.2.1
+//     dcl.ctd.common), and {abstract} false, and has one of three contents:
+//     empty content ({variety} empty, §3.4.1); simple content ({variety}
+//     simple), which gives a struct of the value field the next bullet states
+//     and the attribute fields; or element-only content (§3.4.2.3.3
+//     dcl.ctd.ctcc.common) that has no {open content} and whose {particle},
+//     which carries the <sequence>'s or <choice>'s own {min occurs} and {max
+//     occurs} (§3.9.1), or a <group ref>'s, whose {term} is the referenced
+//     definition's {model group} (§3.7.2), holds a sequence of element and
+//     wildcard particles (§3.10.2.1 dcl.wc.p) and of sequence particles
+//     occurring exactly once that hold the same, inline or a <group ref> to a
+//     sequence group, or a choice of element particles: element particles are
+//     local element declarations, and <element ref> particles, whose {term} is
+//     the top-level declaration the ref names (§3.3.2.4). A sequence gives a
+//     struct, and so does empty content, with no particle field; a struct with
+//     no field is spelled struct{}.
 //   - Simple content gives a struct whose first field, the value field, is
 //     named from the local name value and holds the atomic Go type, the
 //     slice, or the union's sealed interface its {simple type definition}
@@ -225,7 +223,21 @@
 //     union, nil meaning absent. The use's effective value constraint (§3.5.4 key-evc) must be absent,
 //     whether the use or a global declaration it references carries the default or fixed value. A
 //     choice {particle} that occurs exactly once is accepted only when its type has no {attribute
-//     uses}.
+//     uses} and no {attribute wildcard}.
+//   - An {attribute wildcard} of a type emitted as a struct, its own, one an extension inherits,
+//     or one an attribute group reference or the schema's defaultAttributes brings (§3.4.2.5
+//     dcl.ctd.anyatt), gives one field after every attribute field, the struct's last, named as
+//     if from the local name anyAttribute ("Naming"), so that an attribute anyAttribute gives the
+//     wildcard's field AnyAttribute2. It is a slice of AnyAttribute, never a pointer, nil and the
+//     empty slice being one value, and holds the element's [attributes] that no attribute use's
+//     declaration names, in document order, but xsi:type, xsi:nil, xsi:schemaLocation and
+//     xsi:noNamespaceSchemaLocation (cvc-complex-type clause 2, a use taking precedence by clause
+//     2.1), at most one per expanded name and none named like a declared use, which the struct
+//     does not enforce; AnyType's Attributes, by contrast, holds the xsi: ones. Neither the
+//     wildcard's {namespace constraint} nor its {process contents} (§3.10.1) is represented: the
+//     field holds attributes the wildcard would not admit (cvc-wildcard, cvc-complex-type clause
+//     2.2.2), and holds every match raw whether a strict or lax wildcard would assess it;
+//     enforcing either is the validator's.
 //   - Every element declaration emitted from has {nillable} and {abstract}
 //     false and no {value constraint}, {type table} or {substitution group
 //     affiliations}. Its {identity-constraint definitions} are accepted and
@@ -240,8 +252,8 @@
 // GAP(codegen): every other construct declines: the all compositor, an emptiable choice, a
 // choice with no {particles}, nested model groups, inline or through a <group ref>, but a
 // sequence occurring exactly once in a sequence, a wildcard alternative of a choice, a
-// particle with {max occurs} 0, attribute wildcards, attribute uses on a type whose content
-// is a choice occurring exactly once, attribute uses with an effective value constraint,
+// particle with {max occurs} 0, attribute uses or an attribute wildcard on a type whose
+// content is a choice occurring exactly once, attribute uses with an effective value constraint,
 // mixed content, a named complex type, a top-level element through <element ref> particles,
 // or a local element of a model group through <group ref> particles, reaching itself
 // through struct values, the special simple types, a list whose {item type definition}
@@ -300,44 +312,49 @@
 // AnyAttribute, AnyChild and AnyElement, claimed together in that order when
 // the walk first reaches a declaration of type xs:anyType or a wildcard
 // particle, ahead of that declaration's own type, so that a top-level element
-// anyType with no type names its type AnyType2. A wildcard particle's field
-// is named as if from local name any. A union's interface is named from the
-// type when it is named (simple type size → Size), claimed when the walk first
-// needs it as a datatype struct is: for a top-level element of a union type,
-// ahead of that element's own type, so that a top-level element size of type
-// size names its type Size2; for a field of a struct, after that struct's own
-// name. An anonymous union is named by the path of names an anonymous complex
-// type would take in its place, with the local name union last: a top-level
-// element's (element pin → PinUnion), a local element's (element code in complex
-// type box → BoxCodeUnion), an attribute's from the global attribute
-// declaration, the named complex type or attribute group definition declaring
-// it, or the path of the struct holding it for an anonymous complex type
-// (attribute mode in attribute group shared → SharedModeUnion, attribute kind of
-// element tag → TagKindUnion), and a value field's from its struct's path with
-// value before union (complex type narrow → NarrowValueUnion). A list's item
-// is named from the list whose <list> declares it: from that list's local name
-// when it is named (simple type codes → CodesUnion, for codes and every
-// restriction of it), and from the path the list takes otherwise. A variant is
-// named from its interface's name plus its member's local name: an anonymous
-// list member's is list, and any other anonymous member's is that of the nearest
-// named type on its {base type definition} chain, the member itself first
-// (xs:int in Size → SizeInt, an anonymous restriction of xs:string →
-// SizeString). The variants are claimed after their interface in basic-member
-// order, each ahead of its member's own Go type, which takes the variant's name
-// as its path (an anonymous union item of the list variant MixedList →
-// MixedListUnion). Every other generated type's header comment but a union
-// interface's or variant's records the QName and the schema Loc of the
-// declaration it is named from: the element declaration, or the complex type
-// definition for a type named from one. A union interface's header records the
-// simple type it is generated from, by its QName or as (anonymous), and that
-// type's schema Loc, and a variant's header its member the same way, a builtin
-// member, having no schema document, by its QName alone. A datatype struct's
-// header records its datatype's QName alone, a builtin having no schema
-// document, then a second line stating what its fields' names do not, when there
-// is any: TimezoneOffset's unit and whether it may be absent, or that duration's
-// Months and Seconds share one sign. A raw-content struct's header records
-// xs:anyType's QName alone, then, for AnyType and AnyChild, a second line
-// stating what Text or Tail holds. A Loc whose URI filepath.IsAbs accepts
+// anyType with no type names its type AnyType2; or when it first reaches the
+// {attribute wildcard} of a type emitted as a struct, after that struct's own
+// name and the types its other fields first need, so that a top-level element
+// anyType whose anonymous complex type has an <anyAttribute> names its type
+// AnyType and the raw-content structs AnyType2, AnyAttribute, AnyChild and
+// AnyElement. A wildcard particle's field is named as if from local name any,
+// and an {attribute wildcard}'s as if from local name anyAttribute. A union's
+// interface is named from the type when it is named (simple type size → Size),
+// claimed when the walk first needs it as a datatype struct is: for a top-level
+// element of a union type, ahead of that element's own type, so that a top-level
+// element size of type size names its type Size2; for a field of a struct, after
+// that struct's own name. An anonymous union is named by the path of names an
+// anonymous complex type would take in its place, with the local name union
+// last: a top-level element's (element pin → PinUnion), a local element's
+// (element code in complex type box → BoxCodeUnion), an attribute's from the
+// global attribute declaration, the named complex type or attribute group
+// definition declaring it, or the path of the struct holding it for an anonymous
+// complex type (attribute mode in attribute group shared → SharedModeUnion,
+// attribute kind of element tag → TagKindUnion), and a value field's from its
+// struct's path with value before union (complex type narrow →
+// NarrowValueUnion). A list's item is named from the list whose <list> declares
+// it: from that list's local name when it is named (simple type codes →
+// CodesUnion, for codes and every restriction of it), and from the path the list
+// takes otherwise. A variant is named from its interface's name plus its
+// member's local name: an anonymous list member's is list, and any other
+// anonymous member's is that of the nearest named type on its {base type
+// definition} chain, the member itself first (xs:int in Size → SizeInt, an
+// anonymous restriction of xs:string → SizeString). The variants are claimed
+// after their interface in basic-member order, each ahead of its member's own Go
+// type, which takes the variant's name as its path (an anonymous union item of
+// the list variant MixedList → MixedListUnion). Every other generated type's
+// header comment but a union interface's or variant's records the QName and the
+// schema Loc of the declaration it is named from: the element declaration, or
+// the complex type definition for a type named from one. A union interface's
+// header records the simple type it is generated from, by its QName or as
+// (anonymous), and that type's schema Loc, and a variant's header its member the
+// same way, a builtin member, having no schema document, by its QName alone. A
+// datatype struct's header records its datatype's QName alone, a builtin having
+// no schema document, then a second line stating what its fields' names do not,
+// when there is any: TimezoneOffset's unit and whether it may be absent, or that
+// duration's Months and Seconds share one sign. A raw-content struct's header
+// records xs:anyType's QName alone, then, for AnyType and AnyChild, a second
+// line stating what Text or Tail holds. A Loc whose URI filepath.IsAbs accepts
 // renders relative to the target's Dir made absolute against the working
 // directory, slash-separated and climbing with ".." out of Dir. A document
 // outside the tree laid out alike, such as one an absolute schemaLocation names,

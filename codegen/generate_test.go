@@ -738,6 +738,36 @@ func TestGenerateWildcardName(t *testing.T) {
 	typeCheck(t, src)
 }
 
+// TestGenerateAttributeWildcardName pins how an {attribute wildcard}'s field
+// and the raw-content structs are named ("Naming"): the field is claimed from
+// the local name anyAttribute after every attribute field, so that beside an
+// attribute anyAttribute it takes the suffix 2; and the raw-content structs are
+// claimed at that field, after the struct's own name, so that a top-level
+// element anyType names its type AnyType and the raw-content struct AnyType2.
+func TestGenerateAttributeWildcardName(t *testing.T) {
+	tests := []struct {
+		name, body string
+		want       []string
+	}{
+		{"attribute anyAttribute", `<xs:element name="e"><xs:complexType><xs:attribute name="anyAttribute" type="xs:string"/><xs:anyAttribute/></xs:complexType></xs:element>`,
+			[]string{"type E struct {\n\tAnyAttribute  *string\n\tAnyAttribute2 []AnyAttribute\n}\n"}},
+		{"element anyType", `<xs:element name="anyType"><xs:complexType><xs:anyAttribute/></xs:complexType></xs:element>`,
+			[]string{"type AnyType struct {\n\tAnyAttribute []AnyAttribute\n}\n", "type AnyType2 struct {\n\tAttributes []AnyAttribute\n"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			schema := parseString(t, `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">`+tt.body+`</xs:schema>`)
+			src := generateOne(t, Target{Schema: schema, Dir: t.TempDir(), Package: "p"})
+			for _, want := range tt.want {
+				if got := string(src); !strings.Contains(got, want) {
+					t.Errorf("want %q in:\n%s", want, got)
+				}
+			}
+			typeCheck(t, src)
+		})
+	}
+}
+
 // TestGenerateDiamond pins that a struct-value recursion check costs time
 // linear in the named types it reaches: each complex type d<i> holds two value
 // fields of type d<i+1>, so a check that walks a type again on every reach
