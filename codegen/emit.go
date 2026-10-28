@@ -308,13 +308,14 @@ func (r scopeRoot) noun() string {
 	return fmt.Sprintf("scopeRoot(%d)", r)
 }
 
-// groupSite is the position of a model group particle in the walk of one
-// struct's content model whose occurrence type occurrenceType emits: ordinals
-// holds one step per enclosing occurrence type or branch, outermost first, and
-// words the compositor of each enclosing occurrence type, "sequence" or
-// "choice", outermost first. The zero value is the position of a struct's
-// body or of a sealed interface emitted for a type's content particle; group
-// and branch return every other, each a copy that never aliases its receiver.
+// groupSite is a position in the walk of one struct's content model: the
+// struct's body, an occurrence type (occurrenceType), or a sealed interface's
+// branch. ordinals holds one step per occurrence type or branch from the body
+// to the position, the position's own last, and words the compositor,
+// "sequence" or "choice", of each occurrence type among them, in the same
+// order. The zero value is the body, or a sealed interface emitted for a
+// type's content particle; group and branch return every other, each a copy
+// that never aliases its receiver.
 //
 // The steps are these. The content particle occurring other than exactly once
 // is ordinal 0 of the body. Under any other struct, the leaves spliced returns
@@ -1233,11 +1234,10 @@ func structDecl(name string, fields []fieldSpec) string {
 // {particles}, and is emptiable (§3.9.6.3 cos-group-emptiable) exactly when
 // that minimum is 0, so one occurrence the interface holds is never empty and
 // absence is only a nil interface or an empty slice. An alternative that is
-// itself emptiable (xsd.Schema.ParticleEmptiable) — one with {min occurs} 0,
-// or a model group alternative whose effective total range has minimum 0 —
-// makes it 0 whatever the others are. Each alternative in particle order is
-// checked for its kind first, a wildcard declining (alternative), and then
-// for emptiability, so when no decline fires no alternative is emptiable.
+// itself emptiable (xsd.Schema.ParticleEmptiable) makes it 0 whatever the
+// others are. Each alternative in particle order is checked for its kind
+// first, a wildcard declining (alternative), and then for emptiability, so
+// when no decline fires no alternative is emptiable.
 func (e *emitter) sealedType(name string, nested scope, site groupSite, o origin, t xsd.ComplexType, particles []xsd.Particle) error {
 	if len(particles) == 0 {
 		return decline(t.Loc(), constructEmptyChoice, o.subject)

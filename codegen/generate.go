@@ -84,8 +84,9 @@ func (t Target) failed(i int, err error) error {
 // per top-level element declaration of the target's Schema, one per anonymous
 // complex type nested in its type definition or in a model group definition a
 // <group ref> particle names, one per named complex type a local element
-// declaration reaches, one per content model group whose particle occurs other than
-// exactly once, and one branch struct per alternative of each choice emitted as a
+// declaration reaches, one per model group particle but a content particle occurring
+// exactly once and a sequence occurring exactly once in a sequence or as a choice's
+// alternative, and one branch struct per alternative of each choice emitted as a
 // sealed interface, each emitted after its parent, a field of an <element ref>
 // particle holding the type emitted for the top-level element declaration it names,
 // then one struct per date, time or duration datatype a declaration's type or a
