@@ -504,16 +504,28 @@ func vacuousSchema(t *testing.T, ctName xsd.QName, term xsd.Term, innerOccurs, o
 }
 
 // TestGenerateEmptyUnion pins that a union with no {member type definitions},
-// which xsd.NewSimpleType accepts though no schema document yields one
-// (src-simple-type clause 4), fails Generate with a plain error, not a decline.
+// which §3.16.1 admits and xsd.NewSimpleType accepts though no schema document
+// yields one (src-union-memberTypes-or-simpleTypes), generates its interface
+// alone, which no variant implements, and so does v, whose one member is u.
 func TestGenerateEmptyUnion(t *testing.T) {
 	u, err := xsd.NewSimpleType(xsderr.Loc{}, xsd.QName{Local: "u"}, xsd.UnionDerivation{},
 		xsd.OwnedSimpleType{Definition: xsd.AnySimpleType()}, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
+	v, err := xsd.NewSimpleType(xsderr.Loc{}, xsd.QName{Local: "v"},
+		xsd.UnionDerivation{Members: []xsd.SimpleTypeOrRef{xsd.OwnedSimpleType{Definition: u}}},
+		xsd.OwnedSimpleType{Definition: xsd.AnySimpleType()}, nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
 	e, err := xsd.NewElementDeclaration(xsderr.Loc{}, xsd.QName{Local: "e"},
 		xsd.TypeDefinitionRef{Name: u.Name()}, nil, xsd.NewGlobalScope(), nil, false, nil, nil, nil, false, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	f, err := xsd.NewElementDeclaration(xsderr.Loc{}, xsd.QName{Local: "f"},
+		xsd.TypeDefinitionRef{Name: v.Name()}, nil, xsd.NewGlobalScope(), nil, false, nil, nil, nil, false, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -526,18 +538,22 @@ func TestGenerateEmptyUnion(t *testing.T) {
 		b.AddType(st)
 	}
 	b.AddType(u)
+	b.AddType(v)
 	b.AddElement(e)
+	b.AddElement(f)
 	schema, err := b.Finalize()
 	if err != nil {
 		t.Fatalf("Finalize: %v", err)
 	}
-	err = Generate([]Target{{Schema: schema, Dir: filepath.Join(t.TempDir(), "out"), Package: "p"}})
-	if err == nil || errors.Is(err, errors.ErrUnsupported) {
-		t.Fatalf("Generate = %v, want a failure that is not a decline", err)
+	src := generateOne(t, Target{Schema: schema, Dir: filepath.Join(t.TempDir(), "out"), Package: "p"})
+	typeCheck(t, src)
+	for _, want := range []string{"type U interface {\n\tisU()\n}\n", "type V interface {\n\tisV()\n}\n"} {
+		if !strings.Contains(string(src), want) {
+			t.Errorf("source does not declare %q:\n%s", want, src)
+		}
 	}
-	const want = "codegen: target 0: element e at ?: element e with {type definition} u, a union with no {member type definitions}"
-	if err.Error() != want {
-		t.Errorf("error %q, want %q", err, want)
+	if strings.Contains(string(src), "func (") {
+		t.Errorf("source declares a method, want no variant implementing isU or isV:\n%s", src)
 	}
 }
 

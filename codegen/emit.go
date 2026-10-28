@@ -511,8 +511,9 @@ func (e *emitter) simpleGoType(subject string, loc xsderr.Loc, t *xsd.SimpleType
 // answer that is sealed. typed names t in a decline, and a list's item, or a
 // union's basic member, is named in it after the list or union, so an
 // anonymous item or member still has a named context. path is the local names
-// an anonymous union reached through t is named from ("# Naming"), a list's
-// item taking the list's path. subject and loc are simpleGoType's.
+// an anonymous union reached through t is named from ("# Naming"); a list's
+// item takes the path listItemPath returns. subject and loc are
+// simpleGoType's.
 func (e *emitter) goType(subject, typed string, loc xsderr.Loc, t *xsd.SimpleType, path []string) (emittedType, error) {
 	if t.IsSpecial() {
 		return emittedType{}, decline(loc, constructSpecialType, typed)
@@ -528,7 +529,11 @@ func (e *emitter) goType(subject, typed string, loc xsderr.Loc, t *xsd.SimpleTyp
 		if err != nil {
 			return emittedType{}, fmt.Errorf("%s at %s: %w", subject, loc, err)
 		}
-		elem, err := e.goType(subject, typed+", whose {item type definition} is "+typeName(item), loc, item, path)
+		itemPath, err := e.listItemPath(t, path)
+		if err != nil {
+			return emittedType{}, fmt.Errorf("%s at %s: %w", subject, loc, err)
+		}
+		elem, err := e.goType(subject, typed+", whose {item type definition} is "+typeName(item), loc, item, itemPath)
 		if err != nil {
 			return emittedType{}, err
 		}
@@ -543,6 +548,36 @@ func (e *emitter) goType(subject, typed string, loc xsderr.Loc, t *xsd.SimpleTyp
 		return emittedType{}, err
 	}
 	return emittedType{name: atomic}, nil
+}
+
+// listItemPath is the path an anonymous union that is the {item type
+// definition} of the list t is named from ("# Naming"): the item belongs to the
+// list whose <list> declares it, the last type with {variety} list on t's {base
+// type definition} chain (§3.16.1), t first, since a restriction of a list
+// takes its base's item (§3.16.2.3). That list's local name alone when it is
+// named, and path, the one t was handed, when it is anonymous. The walk stops
+// at the first base whose {variety} is not list, xs:anySimpleType's absent one
+// included, so it never asks xs:anySimpleType for its absent base.
+func (e *emitter) listItemPath(t *xsd.SimpleType, path []string) ([]string, error) {
+	declaring := t
+	for {
+		base, err := declaring.Base(e.schema)
+		if err != nil {
+			return nil, err
+		}
+		variety, err := base.Variety(e.schema)
+		if err != nil {
+			return nil, err
+		}
+		if _, isList := variety.(xsd.List); !isList {
+			break
+		}
+		declaring = base
+	}
+	if declaring.Name() == (xsd.QName{}) {
+		return path, nil
+	}
+	return []string{declaring.Name().Local}, nil
 }
 
 // atomicType is the atomic Go type goType maps the atomic simple type t to;
@@ -600,15 +635,15 @@ func (e *emitter) atomicType(subject, typed string, loc xsderr.Loc, t *xsd.Simpl
 // unionType returns the sealed interface "# Coverage" gives the union simple
 // type t (Datatypes §2.4.1.3), emitting it and its variants when no earlier
 // declaration did: the interface's name is claimed first (unionName), then
-// each variant's, the interface's name plus variantWord's, in
-// basicMembers' order, each before its member's Go type is computed with the
-// variant's own name as its path. The interface and its variants join
-// e.tailDecls together at that first use, ahead of whatever their members'
-// types first need. A basic member that declines declines t by the member's
-// construct, typed naming the member after t, and t is stored in e.unions only
-// once every member has its variant. A union with no basic member is an
-// error, never a decline: a parsed schema holds none (src-simple-type clause
-// 4). Facets on t are not represented. The arguments are goType's.
+// each variant's, the interface's name plus variantWord's, in basicMembers' order,
+// each before its member's Go type is computed with the variant's own name as its
+// path. The interface and its variants join e.tailDecls together at that first
+// use, ahead of whatever their members' types first need. A basic member that
+// declines declines t by the member's construct, typed naming the member after t,
+// and t is stored in e.unions only once every member has its variant. A union with
+// no basic member, which §3.16.1 admits though no schema document yields one
+// (src-union-memberTypes-or-simpleTypes), gets its interface alone, which no
+// variant implements. Facets on t are not represented. The arguments are goType's.
 func (e *emitter) unionType(subject, typed string, loc xsderr.Loc, t *xsd.SimpleType, path []string) (emittedType, error) {
 	if name, ok := e.unions[t]; ok {
 		return emittedType{name: name, sealed: true}, nil
@@ -616,9 +651,6 @@ func (e *emitter) unionType(subject, typed string, loc xsderr.Loc, t *xsd.Simple
 	members, err := e.basicMembers(t)
 	if err != nil {
 		return emittedType{}, fmt.Errorf("%s at %s: %w", subject, loc, err)
-	}
-	if len(members) == 0 {
-		return emittedType{}, fmt.Errorf("%s at %s: %s, a union with no {member type definitions}", subject, loc, typed)
 	}
 	name := e.unionName(t, path)
 	marker := "is" + name

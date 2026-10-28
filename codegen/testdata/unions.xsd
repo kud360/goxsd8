@@ -11,9 +11,11 @@
        a simple-content restriction's value, and of an attribute of a named
        complex type, of an anonymous one and of a global declaration; one
        anonymous union two complex types reach through one attribute group;
-       an optional <element ref> to an element of union type; and box's
+       an optional <element ref> to an element of union type; box's
        anonymous unions reached first through crate, which extends it, and
-       named from box, which declares them. -->
+       named from box, which declares them; and the anonymous union item of
+       the named list codes, reached first through an anonymous restriction
+       of codes and then by two elements of type codes, named from codes. -->
   <xs:simpleType name="size">
     <xs:union memberTypes="xs:int">
       <xs:simpleType>
@@ -40,6 +42,13 @@
         </xs:list>
       </xs:simpleType>
     </xs:union>
+  </xs:simpleType>
+  <xs:simpleType name="codes">
+    <xs:list>
+      <xs:simpleType>
+        <xs:union memberTypes="xs:int xs:NMTOKEN"/>
+      </xs:simpleType>
+    </xs:list>
   </xs:simpleType>
   <xs:attribute name="lang">
     <xs:simpleType>
@@ -112,6 +121,15 @@
       </xs:list>
     </xs:simpleType>
   </xs:element>
+  <xs:element name="first">
+    <xs:simpleType>
+      <xs:restriction base="t:codes">
+        <xs:maxLength value="3"/>
+      </xs:restriction>
+    </xs:simpleType>
+  </xs:element>
+  <xs:element name="second" type="t:codes"/>
+  <xs:element name="third" type="t:codes"/>
   <xs:element name="tag">
     <xs:complexType>
       <xs:attribute name="kind">

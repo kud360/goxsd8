@@ -102,9 +102,10 @@
 //     in basic-member order. The interface does not enforce the ·active basic
 //     member·, the first member in order that accepts a literal: with xs:int
 //     first, a string variant can hold "5", which xs:int accepts. Facets on
-//     the union itself are not represented. A union with no {member type
-//     definitions}, which no schema document yields (src-simple-type clause
-//     4), fails Generate with an error that is not a decline.
+//     the union itself are not represented. A union with no basic member,
+//     which §3.16.1 admits though no schema document yields one
+//     (src-union-memberTypes-or-simpleTypes), gets its interface alone, which
+//     no variant implements.
 //   - An element whose {type definition} is xs:anyType (§3.4.7
 //     any-type-itself), named by its type attribute or the default for an
 //     element declared with no type and no substitutionGroup (§3.3.2), holds
@@ -314,27 +315,29 @@
 // (attribute mode in attribute group shared → SharedModeUnion, attribute kind of
 // element tag → TagKindUnion), and a value field's from its struct's path with
 // value before union (complex type narrow → NarrowValueUnion). A list's item
-// takes the list's path, and a union reached through several declarations is
-// named from the first. A variant is named from its interface's name plus its
-// member's local name: an anonymous list member's is list, and any other
-// anonymous member's is that of the nearest named type on its {base type
-// definition} chain, the member itself first (xs:int in Size → SizeInt, an
-// anonymous restriction of xs:string → SizeString). The variants are claimed
-// after their interface in basic-member order, each ahead of its member's own Go
-// type, which takes the variant's name as its path (an anonymous union item of
-// the list variant MixedList → MixedListUnion). Every other generated type's
-// header comment but a union interface's or variant's records the QName and the
-// schema Loc of the declaration it is named from: the element declaration, or
-// the complex type definition for a type named from one. A union interface's
-// header records the simple type it is generated from, by its QName or as
-// (anonymous), and that type's schema Loc, and a variant's header its member the
-// same way, a builtin member, having no schema document, by its QName alone. A
-// datatype struct's header records its datatype's QName alone, a builtin having
-// no schema document, then a second line stating what its fields' names do not,
-// when there is any: TimezoneOffset's unit and whether it may be absent, or that
-// duration's Months and Seconds share one sign. A raw-content struct's header
-// records xs:anyType's QName alone, then, for AnyType and AnyChild, a second
-// line stating what Text or Tail holds. A Loc whose URI filepath.IsAbs accepts
+// is named from the list whose <list> declares it: from that list's local name
+// when it is named (simple type codes → CodesUnion, for codes and every
+// restriction of it), and from the path the list takes otherwise. A variant is
+// named from its interface's name plus its member's local name: an anonymous
+// list member's is list, and any other anonymous member's is that of the nearest
+// named type on its {base type definition} chain, the member itself first
+// (xs:int in Size → SizeInt, an anonymous restriction of xs:string →
+// SizeString). The variants are claimed after their interface in basic-member
+// order, each ahead of its member's own Go type, which takes the variant's name
+// as its path (an anonymous union item of the list variant MixedList →
+// MixedListUnion). Every other generated type's header comment but a union
+// interface's or variant's records the QName and the schema Loc of the
+// declaration it is named from: the element declaration, or the complex type
+// definition for a type named from one. A union interface's header records the
+// simple type it is generated from, by its QName or as (anonymous), and that
+// type's schema Loc, and a variant's header its member the same way, a builtin
+// member, having no schema document, by its QName alone. A datatype struct's
+// header records its datatype's QName alone, a builtin having no schema
+// document, then a second line stating what its fields' names do not, when there
+// is any: TimezoneOffset's unit and whether it may be absent, or that duration's
+// Months and Seconds share one sign. A raw-content struct's header records
+// xs:anyType's QName alone, then, for AnyType and AnyChild, a second line
+// stating what Text or Tail holds. A Loc whose URI filepath.IsAbs accepts
 // renders relative to the target's Dir made absolute against the working
 // directory, slash-separated and climbing with ".." out of Dir. A document
 // outside the tree laid out alike, such as one an absolute schemaLocation names,
