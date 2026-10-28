@@ -170,10 +170,16 @@ type emitter struct {
 	// datatypes holds the name claimed for each datatype struct emitted, so
 	// that each is emitted once per package; it is a lookup index only and
 	// never iterated (STYLE D2). tailDecls holds those structs' declarations,
-	// and the raw-content structs' (anyTypeType), in first-use order, emitted
-	// after decls.
+	// the raw-content structs' (anyTypeType), and each union's interface and
+	// variants (unionType), in first-use order, emitted after decls.
 	datatypes map[xsd.QName]string
 	tailDecls []string
+	// unions holds the name of the sealed interface emitted for each union
+	// simple type, keyed by component identity, so that each is emitted once
+	// per package whatever reaches it; unionType stores an entry only once
+	// every basic member has its variant. It is a lookup index only and never
+	// iterated (STYLE D2).
+	unions map[*xsd.SimpleType]string
 	// raw holds the names claimed for the four raw-content structs, which
 	// anyTypeType emits once per package; its zero value means they are
 	// unclaimed and unemitted.
@@ -193,8 +199,9 @@ type rawNames struct {
 func isAnyType(td xsd.TypeDefinition) bool { return td.Name() == anyTypeName }
 
 // emittedType is the Go type emitted for one complex type definition or
-// top-level element declaration: its name, and whether it is a sealed
-// interface, which a field holds bare rather than through a pointer.
+// top-level element declaration, or the Go type goType maps a simple type to:
+// its name, and whether it is a sealed interface, a choice's or a union's,
+// which a field holds bare rather than through a pointer.
 type emittedType struct {
 	name   string
 	sealed bool
@@ -276,7 +283,7 @@ func (s scope) groupKey() nestedKey { return s.key() + nestedKey(strconv.Quote("
 // returns source only when it collects no decline, and err carries no
 // decline. base is the absolute directory the source is written into.
 func emit(schema *xsd.Schema, pkg, base string) (src []byte, declines []*DeclineError, err error) {
-	e := &emitter{schema: schema, types: newNamer(), base: base, emitted: map[nestedKey]emittedType{}, elements: map[xsd.QName]emittedType{}, acyclic: map[valueNode]struct{}{}, datatypes: map[xsd.QName]string{}}
+	e := &emitter{schema: schema, types: newNamer(), base: base, emitted: map[nestedKey]emittedType{}, elements: map[xsd.QName]emittedType{}, acyclic: map[valueNode]struct{}{}, datatypes: map[xsd.QName]string{}, unions: map[*xsd.SimpleType]string{}}
 	for _, decl := range schema.Elements() {
 		err := e.topLevel(decl)
 		if err == nil {
@@ -365,7 +372,8 @@ func headerLoc(base string, loc xsderr.Loc) string {
 // topLevel emits the type of one top-level element declaration: a named type
 // over the raw-content struct AnyType ("# Coverage") for xs:anyType, over an
 // atomic Go type for an atomic simple {type definition}, over a slice of one
-// for a list, a struct or sealed interface for an accepted complex one, named
+// for a list, over a union's sealed interface for a union (unionType), a
+// struct or sealed interface for an accepted complex one, named
 // or anonymous. That type is named from the element (elementType), and a local
 // element of the same named type never shares it (nestedType), while every
 // <element ref> particle to the element does; the types nested in it are named
@@ -388,11 +396,11 @@ func (e *emitter) topLevel(decl xsd.ElementDeclaration) error {
 	}
 	switch t := td.(type) {
 	case *xsd.SimpleType:
-		underlying, err := e.simpleGoType("element "+decl.Name().String(), decl.Loc(), t)
+		underlying, err := e.simpleGoType("element "+decl.Name().String(), decl.Loc(), t, []string{decl.Name().Local})
 		if err != nil {
 			return err
 		}
-		e.decls = append(e.decls, header(typ.name, e.elementFrom(decl))+fmt.Sprintf("type %s %s\n", typ.name, underlying))
+		e.decls = append(e.decls, header(typ.name, e.elementFrom(decl))+fmt.Sprintf("type %s %s\n", typ.name, underlying.name))
 		return nil
 	case xsd.ComplexType:
 		nested := scope{root: elementRoot, path: []xsd.QName{decl.Name()}}
@@ -419,11 +427,14 @@ func (e *emitter) topLevel(decl xsd.ElementDeclaration) error {
 // visit, or at an <element ref> particle to it met earlier. For xs:anyType
 // there is no check, and anyTypeType claims the raw-content structs' names
 // before decl's is claimed ("# Naming"); for a simple td the check is
-// simpleGoType's, run before the name is claimed so that a datatype struct
-// claims its name first; for a complex one it is shape's, run after. It emits no
-// declaration of its own, only the datatype or raw-content structs it first
-// needs: topLevel emits the type's declaration at decl's own visit, in document
-// order, whichever reached decl first.
+// simpleGoType's, run before the name is claimed so that a datatype struct or a
+// union's interface and variants claim their names first, and the type it
+// records is sealed exactly when td is a union, whose interface the named type
+// is declared over; for a complex one it is shape's, run after. It emits no
+// declaration of its own, only the datatype or raw-content structs, or the
+// union interfaces and variants, it first needs: topLevel emits the type's
+// declaration at decl's own visit, in document order, whichever reached decl
+// first.
 func (e *emitter) elementType(decl xsd.ElementDeclaration, td xsd.TypeDefinition) (emittedType, error) {
 	if typ, ok := e.elements[decl.Name()]; ok {
 		return typ, nil
@@ -436,10 +447,11 @@ func (e *emitter) elementType(decl xsd.ElementDeclaration, td xsd.TypeDefinition
 		e.anyTypeType()
 		typ = emittedType{name: e.types.claim(decl.Name().Local)}
 	case isSimple:
-		if _, err := e.simpleGoType("element "+decl.Name().String(), decl.Loc(), st); err != nil {
+		underlying, err := e.simpleGoType("element "+decl.Name().String(), decl.Loc(), st, []string{decl.Name().Local})
+		if err != nil {
 			return emittedType{}, err
 		}
-		typ = emittedType{name: e.types.claim(decl.Name().Local)}
+		typ = emittedType{name: e.types.claim(decl.Name().Local), sealed: underlying.sealed}
 	case isComplex:
 		shaped, _, err := e.shape(e.types.claim(decl.Name().Local), e.elementOrigin(decl, ct), ct)
 		if err != nil {
@@ -479,13 +491,13 @@ func (e *emitter) declaredType(decl xsd.ElementDeclaration) (xsd.TypeDefinition,
 	return td, nil
 }
 
-// simpleGoType is the atomic Go type, or the slice of one, that a
-// simple-typed element's or attribute's field, or an element's named type, is
-// declared over, chosen by the package doc's "# Coverage" (goType). subject
-// names the declaration the type is read from, and loc, its Loc, is a
-// decline's.
-func (e *emitter) simpleGoType(subject string, loc xsderr.Loc, t *xsd.SimpleType) (string, error) {
-	return e.goType(subject, fmt.Sprintf("%s with {type definition} %s", subject, typeName(t)), loc, t)
+// simpleGoType is the atomic Go type, the slice, or the union's sealed
+// interface that a simple-typed element's or attribute's field, or an
+// element's named type, is declared over, chosen by the package doc's "#
+// Coverage" (goType). subject names the declaration the type is read from,
+// and loc, its Loc, is a decline's; path is goType's.
+func (e *emitter) simpleGoType(subject string, loc xsderr.Loc, t *xsd.SimpleType, path []string) (emittedType, error) {
+	return e.goType(subject, fmt.Sprintf("%s with {type definition} %s", subject, typeName(t)), loc, t, path)
 }
 
 // goType is the Go type "# Coverage" maps the simple type t to: for an atomic
@@ -495,34 +507,47 @@ func (e *emitter) simpleGoType(subject string, loc xsderr.Loc, t *xsd.SimpleType
 // sequence of its item type's values), a slice of the type its {item type
 // definition} (§3.16.1) maps to, read through [xsd.SimpleType.Item], which
 // takes a restriction's item from its base (§3.16.2.3), never by walking t to
-// a builtin. typed names t in a decline, and a list's item is named in it
-// after the list, so an anonymous item still has a named context. subject and
-// loc are simpleGoType's.
-func (e *emitter) goType(subject, typed string, loc xsderr.Loc, t *xsd.SimpleType) (string, error) {
+// a builtin; for a union, the sealed interface unionType emits, the one
+// answer that is sealed. typed names t in a decline, and a list's item, or a
+// union's basic member, is named in it after the list or union, so an
+// anonymous item or member still has a named context. path is the local names
+// an anonymous union reached through t is named from ("# Naming"), a list's
+// item taking the list's path. subject and loc are simpleGoType's.
+func (e *emitter) goType(subject, typed string, loc xsderr.Loc, t *xsd.SimpleType, path []string) (emittedType, error) {
 	if t.IsSpecial() {
-		return "", decline(loc, constructSpecialType, typed)
+		return emittedType{}, decline(loc, constructSpecialType, typed)
 	}
 	variety, err := t.Variety(e.schema)
 	if err != nil {
-		return "", fmt.Errorf("%s at %s: %w", subject, loc, err)
+		return emittedType{}, fmt.Errorf("%s at %s: %w", subject, loc, err)
 	}
 	switch variety.(type) {
 	case xsd.Atomic:
 	case xsd.List:
 		item, err := t.Item(e.schema)
 		if err != nil {
-			return "", fmt.Errorf("%s at %s: %w", subject, loc, err)
+			return emittedType{}, fmt.Errorf("%s at %s: %w", subject, loc, err)
 		}
-		elem, err := e.goType(subject, typed+", whose {item type definition} is "+typeName(item), loc, item)
+		elem, err := e.goType(subject, typed+", whose {item type definition} is "+typeName(item), loc, item, path)
 		if err != nil {
-			return "", err
+			return emittedType{}, err
 		}
-		return "[]" + elem, nil
+		return emittedType{name: "[]" + elem.name}, nil
 	case xsd.Union:
-		return "", decline(loc, constructUnionType, typed)
+		return e.unionType(subject, typed, loc, t, path)
 	default:
-		return "", decline(loc, constructAbsentVariety, typed)
+		return emittedType{}, decline(loc, constructAbsentVariety, typed)
 	}
+	atomic, err := e.atomicType(subject, typed, loc, t)
+	if err != nil {
+		return emittedType{}, err
+	}
+	return emittedType{name: atomic}, nil
+}
+
+// atomicType is the atomic Go type goType maps the atomic simple type t to;
+// its arguments are goType's.
+func (e *emitter) atomicType(subject, typed string, loc xsderr.Loc, t *xsd.SimpleType) (string, error) {
 	mapped, err := e.builtinType(t)
 	if err != nil {
 		return "", fmt.Errorf("%s at %s: %w", subject, loc, err)
@@ -570,6 +595,134 @@ func (e *emitter) goType(subject, typed string, loc xsderr.Loc, t *xsd.SimpleTyp
 		return e.datatypeType(durationStruct), nil
 	}
 	return "", decline(loc, constructUncoveredPrimitive, typed, primitive.Name())
+}
+
+// unionType returns the sealed interface "# Coverage" gives the union simple
+// type t (Datatypes §2.4.1.3), emitting it and its variants when no earlier
+// declaration did: the interface's name is claimed first (unionName), then
+// each variant's, the interface's name plus variantWord's, in
+// basicMembers' order, each before its member's Go type is computed with the
+// variant's own name as its path. The interface and its variants join
+// e.tailDecls together at that first use, ahead of whatever their members'
+// types first need. A basic member that declines declines t by the member's
+// construct, typed naming the member after t, and t is stored in e.unions only
+// once every member has its variant. A union with no basic member is an
+// error, never a decline: a parsed schema holds none (src-simple-type clause
+// 4). Facets on t are not represented. The arguments are goType's.
+func (e *emitter) unionType(subject, typed string, loc xsderr.Loc, t *xsd.SimpleType, path []string) (emittedType, error) {
+	if name, ok := e.unions[t]; ok {
+		return emittedType{name: name, sealed: true}, nil
+	}
+	members, err := e.basicMembers(t)
+	if err != nil {
+		return emittedType{}, fmt.Errorf("%s at %s: %w", subject, loc, err)
+	}
+	if len(members) == 0 {
+		return emittedType{}, fmt.Errorf("%s at %s: %s, a union with no {member type definitions}", subject, loc, typed)
+	}
+	name := e.unionName(t, path)
+	marker := "is" + name
+	slot := len(e.tailDecls)
+	e.tailDecls = append(e.tailDecls, make([]string, 1+len(members))...)
+	e.tailDecls[slot] = header(name, e.simpleFrom(t)) + fmt.Sprintf("type %s interface {\n\t%s()\n}\n", name, marker)
+	for i, m := range members {
+		word, err := e.variantWord(m)
+		if err != nil {
+			return emittedType{}, fmt.Errorf("%s at %s: %w", subject, loc, err)
+		}
+		variant := e.types.claim(name, word)
+		under, err := e.goType(subject, typed+", whose basic member is "+typeName(m), loc, m, []string{variant})
+		if err != nil {
+			return emittedType{}, err
+		}
+		e.tailDecls[slot+1+i] = header(variant, e.simpleFrom(m)) + fmt.Sprintf("type %s %s\n\nfunc (%s) %s() {}\n", variant, under.name, variant, marker)
+	}
+	e.unions[t] = name
+	return emittedType{name: name, sealed: true}, nil
+}
+
+// unionName claims the name of the sealed interface unionType emits for the
+// union t: from t's local name when t is named, and from path with the local
+// name union last when it is anonymous.
+func (e *emitter) unionName(t *xsd.SimpleType, path []string) string {
+	if t.Name() != (xsd.QName{}) {
+		return e.types.claim(t.Name().Local)
+	}
+	return e.types.claim(append(slices.Clone(path), "union")...)
+}
+
+// basicMembers returns the basic members of the union simple type t
+// (Datatypes §2.4.1.3 dt-basicmember): its {member type definitions}
+// (§3.16.1), read through [xsd.SimpleType.Members], which takes a
+// restriction's from its base (§3.16.2.1), depth first in member order, each
+// union member replaced by its own basic members, and each component kept at
+// its first position only, by identity. A list member is basic. No union
+// reaches itself through its members (cos-st-restricts clause 3.3
+// no-self-membership, which finalize checks), so the walk carries no visited
+// set.
+func (e *emitter) basicMembers(t *xsd.SimpleType) ([]*xsd.SimpleType, error) {
+	members, err := t.Members(e.schema)
+	if err != nil {
+		return nil, err
+	}
+	var basic []*xsd.SimpleType
+	for _, m := range members {
+		variety, err := m.Variety(e.schema)
+		if err != nil {
+			return nil, err
+		}
+		reached := []*xsd.SimpleType{m}
+		if _, isUnion := variety.(xsd.Union); isUnion {
+			reached, err = e.basicMembers(m)
+			if err != nil {
+				return nil, err
+			}
+		}
+		for _, b := range reached {
+			if !slices.Contains(basic, b) {
+				basic = append(basic, b)
+			}
+		}
+	}
+	return basic, nil
+}
+
+// variantWord is the local name a union's variant for its basic member m is
+// named from after the interface's name ("# Naming"): m's own when m is named,
+// list for an anonymous list, and otherwise that of the nearest named type on
+// m's {base type definition} chain (§3.16.1). Every chain ends at the named
+// xs:anySimpleType, so the walk always meets one.
+func (e *emitter) variantWord(m *xsd.SimpleType) (string, error) {
+	variety, err := m.Variety(e.schema)
+	if err != nil {
+		return "", err
+	}
+	if _, isList := variety.(xsd.List); isList && m.Name() == (xsd.QName{}) {
+		return "list", nil
+	}
+	step := m
+	for step.Name() == (xsd.QName{}) {
+		base, err := step.Base(e.schema)
+		if err != nil {
+			return "", err
+		}
+		if base == nil {
+			return "", fmt.Errorf("simple type (anonymous) at %s: its {base type definition} chain ends unnamed", m.Loc())
+		}
+		step = base
+	}
+	return step.Name().Local, nil
+}
+
+// simpleFrom renders the simple type t for a header: "simple type", its
+// expanded name or (anonymous), and its Loc as headerLoc renders it against
+// e.base, which is omitted when t's Loc is zero, as a builtin's is.
+func (e *emitter) simpleFrom(t *xsd.SimpleType) string {
+	from := "simple type " + typeName(t)
+	if t.Loc() == (xsderr.Loc{}) {
+		return from
+	}
+	return from + " declared at " + headerLoc(e.base, t.Loc())
 }
 
 // useBig returns the math/big type typ, setting e.usesBig.
@@ -719,7 +872,8 @@ func (e *emitter) shape(name string, o origin, t xsd.ComplexType) (emittedType, 
 // occurring other than exactly once the one field groupField returns, or for
 // simple content (§3.4.2.2 dcl.ctd.ctsc) the value field, named from the local
 // name value and holding, never through a pointer, what goType maps its
-// {simple type definition} to, and then one per attribute use; or the sealed
+// {simple type definition} to, an anonymous union named by nested's path with
+// value last, and then one per attribute use (attributeField); or the sealed
 // interface sealedType emits; then the types its fields reach, the anonymous
 // ones named in nested. chain is valueChain's for a walk of t's particles.
 func (e *emitter) body(typ emittedType, nested scope, chain []valueNode, o origin, t xsd.ComplexType, content *contentParticle) error {
@@ -730,11 +884,11 @@ func (e *emitter) body(typ emittedType, nested scope, chain []valueNode, o origi
 	e.decls = append(e.decls, "")
 	var fields []fieldSpec
 	if simple, ok := t.ContentType().(xsd.SimpleContent); ok {
-		goType, err := e.goType(o.subject, fmt.Sprintf("%s with {simple type definition} %s", o.subject, typeName(simple.SimpleType)), t.Loc(), simple.SimpleType)
+		goType, err := e.goType(o.subject, fmt.Sprintf("%s with {simple type definition} %s", o.subject, typeName(simple.SimpleType)), t.Loc(), simple.SimpleType, append(nested.locals(), "value"))
 		if err != nil {
 			return err
 		}
-		fields = append(fields, fieldSpec{local: "value", goType: goType})
+		fields = append(fields, fieldSpec{local: "value", goType: goType.name})
 	}
 	if content != nil && content.occurs == exactlyOnce {
 		particleFields, err := e.particleFields(nested, chain, o.subject, t.Loc(), content.group.Particles())
@@ -751,7 +905,7 @@ func (e *emitter) body(typ emittedType, nested scope, chain []valueNode, o origi
 		fields = append(fields, field)
 	}
 	for _, u := range t.AttributeUses() {
-		field, err := e.attributeField(o.subject, t.Loc(), u)
+		field, err := e.attributeField(nested, o.subject, t.Loc(), u)
 		if err != nil {
 			return err
 		}
@@ -1112,7 +1266,7 @@ func (e *emitter) field(nested scope, chain []valueNode, subject string, loc xsd
 	case isAnyType(td):
 		typ.name = e.anyTypeType()
 	case isSimple:
-		typ.name, err = e.simpleGoType("element "+decl.Name().String(), decl.Loc(), st)
+		typ, err = e.simpleGoType("element "+decl.Name().String(), decl.Loc(), st, localScope(nested, decl).locals())
 	case isComplex:
 		typ, err = e.nestedType(nested, chain, value, decl, ct)
 	default:
@@ -1131,9 +1285,9 @@ func (e *emitter) field(nested scope, chain []valueNode, subject string, loc xsd
 // occursGoType is the Go type of a field holding typ under occurs, by the
 // package doc's "# Coverage" pointer and slice rules: a slice for {max occurs}
 // above 1 or unbounded, a pointer for {min occurs} 0 with {max occurs} 1
-// unless typ is a sealed interface, and typ itself otherwise. ok is false, and
-// goType "", exactly when {max occurs} is 0; the caller declines that particle
-// naming its own term.
+// unless typ is a sealed interface, a choice's or a union's, and typ itself
+// otherwise. ok is false, and goType "", exactly when {max occurs} is 0; the
+// caller declines that particle naming its own term.
 func occursGoType(typ emittedType, occurs xsd.Occurs) (goType string, ok bool) {
 	upper, bounded := occurs.Max()
 	switch {
@@ -1185,8 +1339,11 @@ func (e *emitter) refType(chain []valueNode, value bool, decl xsd.ElementDeclara
 // constraint through Schema.EffectiveValueConstraint, never u.ValueConstraint,
 // which holds the use's own alone. An attribute use carries no Loc, so its
 // declines cite the declaration it resolves to, the global one for an
-// <attribute ref>.
-func (e *emitter) attributeField(subject string, loc xsderr.Loc, u xsd.AttributeUse) (fieldSpec, error) {
+// <attribute ref>. An anonymous union type is named by attributePath, nested
+// being the scope of the struct holding the field. The field holds a pointer
+// to its type for a use with {required} false unless that type is a union's
+// sealed interface, held bare.
+func (e *emitter) attributeField(nested scope, subject string, loc xsderr.Loc, u xsd.AttributeUse) (fieldSpec, error) {
 	name := u.DeclarationName()
 	attr := "attribute " + name.String() + " of " + subject
 	decl, ok := e.schema.ResolvedAttributeDeclaration(u)
@@ -1204,14 +1361,37 @@ func (e *emitter) attributeField(subject string, loc xsderr.Loc, u xsd.Attribute
 	if !ok {
 		return fieldSpec{}, fmt.Errorf("%s at %s: unexpected type definition %T", attr, decl.Loc(), td)
 	}
-	goType, err := e.simpleGoType(attr, decl.Loc(), st)
+	typ, err := e.simpleGoType(attr, decl.Loc(), st, attributePath(nested, decl))
 	if err != nil {
 		return fieldSpec{}, err
 	}
-	if !u.Required() {
-		goType = "*" + goType
+	if !u.Required() && !typ.sealed {
+		return fieldSpec{local: name.Local, goType: "*" + typ.name}, nil
 	}
-	return fieldSpec{local: name.Local, goType: goType}, nil
+	return fieldSpec{local: name.Local, goType: typ.name}, nil
+}
+
+// attributePath is the path of local names an anonymous union type of the
+// attribute declaration decl is named from ("# Naming"): decl's local name
+// alone for a global decl; after it, that of the named complex type or
+// attribute group definition its {scope}.{parent} names (§3.2.2.2
+// dcl.att.local); and for an anonymous complex type, decl's local name after
+// the path of nested, the scope of the struct holding its field. The {parent}
+// is a closed sum, so the switch is STYLE T2's sealed-sum exception, as
+// nestedType's is.
+func attributePath(nested scope, decl xsd.AttributeDeclaration) []string {
+	local := decl.Name().Local
+	sp, ok := decl.Scope().Parent()
+	if !ok {
+		return []string{local}
+	}
+	switch owner := sp.(type) {
+	case xsd.AttributeComplexTypeScopeParent:
+		return []string{owner.Name.Local, local}
+	case xsd.AttributeGroupScopeParent:
+		return []string{owner.Name.Local, local}
+	}
+	return append(nested.locals(), local)
 }
 
 // nestedType returns the type emitted for a local element declaration's complex
@@ -1237,15 +1417,7 @@ func (e *emitter) attributeField(subject string, loc xsderr.Loc, u xsd.Attribute
 // only under a shared scope (scope.shared): a key whose path starts at a
 // top-level element is reached from that element alone.
 func (e *emitter) nestedType(parent scope, chain []valueNode, value bool, decl xsd.ElementDeclaration, t xsd.ComplexType) (emittedType, error) {
-	child := scope{root: parent.root, path: append(slices.Clone(parent.path), decl.Name())}
-	if sp, ok := decl.Scope().Parent(); ok {
-		switch owner := sp.(type) {
-		case xsd.ComplexTypeScopeParent:
-			child = scope{root: typeRoot, path: []xsd.QName{owner.Name, decl.Name()}}
-		case xsd.ModelGroupScopeParent:
-			child = scope{root: groupRoot, path: []xsd.QName{owner.Name, decl.Name()}}
-		}
-	}
+	child := localScope(parent, decl)
 	locals := child.locals()
 	if t.Name() != (xsd.QName{}) {
 		child = scope{root: typeRoot, path: []xsd.QName{t.Name()}}
@@ -1277,6 +1449,25 @@ func (e *emitter) nestedType(parent scope, chain []valueNode, value bool, decl x
 		return emittedType{}, err
 	}
 	return typ, nil
+}
+
+// localScope is the scope an anonymous type of the local element declaration
+// decl is named and keyed in, its parent's particles taking their names from
+// parent: the path from the named complex type or the model group definition
+// that declares decl ({scope}.{parent}, §3.3.2.3 dcl.elt.local) when decl has
+// one, and parent's path followed by decl's expanded name otherwise. The
+// {parent} is a closed sum, so the switch is STYLE T2's sealed-sum exception,
+// as wildcardTerm's assertion is.
+func localScope(parent scope, decl xsd.ElementDeclaration) scope {
+	if sp, ok := decl.Scope().Parent(); ok {
+		switch owner := sp.(type) {
+		case xsd.ComplexTypeScopeParent:
+			return scope{root: typeRoot, path: []xsd.QName{owner.Name, decl.Name()}}
+		case xsd.ModelGroupScopeParent:
+			return scope{root: groupRoot, path: []xsd.QName{owner.Name, decl.Name()}}
+		}
+	}
+	return scope{root: parent.root, path: append(slices.Clone(parent.path), decl.Name())}
 }
 
 // localOrigin is the origin of the type emitted for the local element decl's

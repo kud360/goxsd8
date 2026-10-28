@@ -136,8 +136,8 @@ func TestGenerateDeclines(t *testing.T) {
 			"attribute t of complex type (anonymous) of element e with {type definition} {http://www.w3.org/2001/XMLSchema}anyAtomicType, a special type", constructSpecialType},
 		{"attribute list of uncovered primitive", `<xs:element name="e"><xs:complexType><xs:sequence><xs:element name="a" ` + str + `/></xs:sequence><xs:attribute name="t"><xs:simpleType><xs:list itemType="xs:QName"/></xs:simpleType></xs:attribute></xs:complexType></xs:element>`,
 			"attribute t of complex type (anonymous) of element e with {type definition} (anonymous), whose {item type definition} is {http://www.w3.org/2001/XMLSchema}QName, whose {primitive type definition} is {http://www.w3.org/2001/XMLSchema}QName", constructUncoveredPrimitive},
-		{"attribute union", `<xs:element name="e"><xs:complexType><xs:sequence><xs:element name="a" ` + str + `/></xs:sequence><xs:attribute name="t"><xs:simpleType><xs:union memberTypes="xs:string xs:int"/></xs:simpleType></xs:attribute></xs:complexType></xs:element>`,
-			"attribute t of complex type (anonymous) of element e with {type definition} (anonymous), a union type", constructUnionType},
+		{"attribute union", `<xs:element name="e"><xs:complexType><xs:sequence><xs:element name="a" ` + str + `/></xs:sequence><xs:attribute name="t"><xs:simpleType><xs:union memberTypes="xs:int xs:precisionDecimal"/></xs:simpleType></xs:attribute></xs:complexType></xs:element>`,
+			"attribute t of complex type (anonymous) of element e with {type definition} (anonymous), whose basic member is {http://www.w3.org/2001/XMLSchema}precisionDecimal, whose {primitive type definition} is {http://www.w3.org/2001/XMLSchema}precisionDecimal", constructUncoveredPrimitive},
 		{"attribute uncovered primitive", `<xs:element name="e"><xs:complexType><xs:sequence><xs:element name="a" ` + str + `/></xs:sequence><xs:attribute name="t" type="xs:precisionDecimal"/></xs:complexType></xs:element>`,
 			"attribute t of complex type (anonymous) of element e with {type definition} {http://www.w3.org/2001/XMLSchema}precisionDecimal, whose {primitive type definition} is {http://www.w3.org/2001/XMLSchema}precisionDecimal", constructUncoveredPrimitive},
 		{"attribute QName", `<xs:element name="e"><xs:complexType><xs:sequence><xs:element name="a" ` + str + `/></xs:sequence><xs:attribute name="t" type="xs:QName"/></xs:complexType></xs:element>`,
@@ -182,8 +182,8 @@ func TestGenerateDeclines(t *testing.T) {
 		// before it.
 		{"simple content extension of anySimpleType", `<xs:element name="e"><xs:complexType><xs:simpleContent><xs:extension base="xs:anySimpleType"/></xs:simpleContent></xs:complexType></xs:element>`,
 			"complex type (anonymous) of element e with {simple type definition} {http://www.w3.org/2001/XMLSchema}anySimpleType, a special type", constructSpecialType},
-		{"simple content extension of union", `<xs:simpleType name="u"><xs:union memberTypes="xs:string xs:int"/></xs:simpleType><xs:element name="e"><xs:complexType><xs:simpleContent><xs:extension base="u"/></xs:simpleContent></xs:complexType></xs:element>`,
-			"complex type (anonymous) of element e with {simple type definition} u, a union type", constructUnionType},
+		{"simple content extension of union", `<xs:simpleType name="u"><xs:union memberTypes="xs:int xs:precisionDecimal"/></xs:simpleType><xs:element name="e"><xs:complexType><xs:simpleContent><xs:extension base="u"/></xs:simpleContent></xs:complexType></xs:element>`,
+			"complex type (anonymous) of element e with {simple type definition} u, whose basic member is {http://www.w3.org/2001/XMLSchema}precisionDecimal, whose {primitive type definition} is {http://www.w3.org/2001/XMLSchema}precisionDecimal", constructUncoveredPrimitive},
 		{"simple content extension of QName", `<xs:element name="e"><xs:complexType><xs:simpleContent><xs:extension base="xs:QName"/></xs:simpleContent></xs:complexType></xs:element>`,
 			"complex type (anonymous) of element e with {simple type definition} {http://www.w3.org/2001/XMLSchema}QName, whose {primitive type definition} is {http://www.w3.org/2001/XMLSchema}QName at s.xsd:2:22 ", constructUncoveredPrimitive},
 		{"simple content attribute wildcard", `<xs:element name="e"><xs:complexType><xs:simpleContent><xs:extension base="xs:QName"><xs:anyAttribute/></xs:extension></xs:simpleContent></xs:complexType></xs:element>`,
@@ -232,16 +232,21 @@ func TestGenerateDeclines(t *testing.T) {
 			"{http://www.w3.org/2001/XMLSchema}anyAtomicType, a special type", constructSpecialType},
 		// The list rows pin "# Coverage"'s list decline, and that its message
 		// names the list and then its {item type definition}.
-		{"list of named union", `<xs:simpleType name="u"><xs:union memberTypes="xs:string xs:int"/></xs:simpleType><xs:simpleType name="l"><xs:list itemType="u"/></xs:simpleType><xs:element name="e" type="l"/>`,
-			"element e with {type definition} l, whose {item type definition} is u, a union type", constructUnionType},
-		{"list of anonymous union", `<xs:element name="e"><xs:simpleType><xs:list><xs:simpleType><xs:union memberTypes="xs:string xs:int"/></xs:simpleType></xs:list></xs:simpleType></xs:element>`,
-			"element e with {type definition} (anonymous), whose {item type definition} is (anonymous), a union type", constructUnionType},
-		{"restriction of a list of union", `<xs:simpleType name="u"><xs:union memberTypes="xs:string xs:int"/></xs:simpleType><xs:simpleType name="l"><xs:list itemType="u"/></xs:simpleType><xs:simpleType name="r"><xs:restriction base="l"><xs:maxLength value="2"/></xs:restriction></xs:simpleType><xs:element name="e" type="r"/>`,
-			"element e with {type definition} r, whose {item type definition} is u, a union type", constructUnionType},
+		{"list of named union", `<xs:simpleType name="u"><xs:union memberTypes="xs:int xs:precisionDecimal"/></xs:simpleType><xs:simpleType name="l"><xs:list itemType="u"/></xs:simpleType><xs:element name="e" type="l"/>`,
+			"element e with {type definition} l, whose {item type definition} is u, whose basic member is {http://www.w3.org/2001/XMLSchema}precisionDecimal, whose {primitive type definition} is {http://www.w3.org/2001/XMLSchema}precisionDecimal", constructUncoveredPrimitive},
+		{"list of anonymous union", `<xs:element name="e"><xs:simpleType><xs:list><xs:simpleType><xs:union memberTypes="xs:int xs:precisionDecimal"/></xs:simpleType></xs:list></xs:simpleType></xs:element>`,
+			"element e with {type definition} (anonymous), whose {item type definition} is (anonymous), whose basic member is {http://www.w3.org/2001/XMLSchema}precisionDecimal, whose {primitive type definition} is {http://www.w3.org/2001/XMLSchema}precisionDecimal", constructUncoveredPrimitive},
+		{"restriction of a list of union", `<xs:simpleType name="u"><xs:union memberTypes="xs:int xs:precisionDecimal"/></xs:simpleType><xs:simpleType name="l"><xs:list itemType="u"/></xs:simpleType><xs:simpleType name="r"><xs:restriction base="l"><xs:maxLength value="2"/></xs:restriction></xs:simpleType><xs:element name="e" type="r"/>`,
+			"element e with {type definition} r, whose {item type definition} is u, whose basic member is {http://www.w3.org/2001/XMLSchema}precisionDecimal, whose {primitive type definition} is {http://www.w3.org/2001/XMLSchema}precisionDecimal", constructUncoveredPrimitive},
 		{"list of uncovered primitive", `<xs:simpleType name="l"><xs:list itemType="xs:QName"/></xs:simpleType><xs:element name="e" type="l"/>`,
 			"element e with {type definition} l, whose {item type definition} is {http://www.w3.org/2001/XMLSchema}QName, whose {primitive type definition} is {http://www.w3.org/2001/XMLSchema}QName", constructUncoveredPrimitive},
-		{"union", `<xs:element name="e"><xs:simpleType><xs:union memberTypes="xs:string xs:int"/></xs:simpleType></xs:element>`,
-			"element e with {type definition} (anonymous), a union type", constructUnionType},
+		// The union rows pin that a union declines exactly when a basic member
+		// does, by the member's construct, naming that member after the union:
+		// one listed second, and one reached through a nested union.
+		{"union", `<xs:element name="e"><xs:simpleType><xs:union memberTypes="xs:int xs:precisionDecimal"/></xs:simpleType></xs:element>`,
+			"element e with {type definition} (anonymous), whose basic member is {http://www.w3.org/2001/XMLSchema}precisionDecimal, whose {primitive type definition} is {http://www.w3.org/2001/XMLSchema}precisionDecimal", constructUncoveredPrimitive},
+		{"union of a union", `<xs:simpleType name="inner"><xs:union memberTypes="xs:int xs:precisionDecimal"/></xs:simpleType><xs:element name="e"><xs:simpleType><xs:union memberTypes="xs:boolean inner"/></xs:simpleType></xs:element>`,
+			"element e with {type definition} (anonymous), whose basic member is {http://www.w3.org/2001/XMLSchema}precisionDecimal, whose {primitive type definition} is {http://www.w3.org/2001/XMLSchema}precisionDecimal", constructUncoveredPrimitive},
 		{"uncovered primitive", `<xs:element name="e" type="xs:QName"/>`,
 			"whose {primitive type definition} is {http://www.w3.org/2001/XMLSchema}QName", constructUncoveredPrimitive},
 		{"precisionDecimal", `<xs:element name="e" type="xs:precisionDecimal"/>`,
@@ -498,6 +503,44 @@ func vacuousSchema(t *testing.T, ctName xsd.QName, term xsd.Term, innerOccurs, o
 	return schema
 }
 
+// TestGenerateEmptyUnion pins that a union with no {member type definitions},
+// which xsd.NewSimpleType accepts though no schema document yields one
+// (src-simple-type clause 4), fails Generate with a plain error, not a decline.
+func TestGenerateEmptyUnion(t *testing.T) {
+	u, err := xsd.NewSimpleType(xsderr.Loc{}, xsd.QName{Local: "u"}, xsd.UnionDerivation{},
+		xsd.OwnedSimpleType{Definition: xsd.AnySimpleType()}, nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	e, err := xsd.NewElementDeclaration(xsderr.Loc{}, xsd.QName{Local: "e"},
+		xsd.TypeDefinitionRef{Name: u.Name()}, nil, xsd.NewGlobalScope(), nil, false, nil, nil, nil, false, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	seeded, err := builtin.Seed(strict.New())
+	if err != nil {
+		t.Fatal(err)
+	}
+	b := xsd.NewSchemaBuilder()
+	for _, st := range seeded {
+		b.AddType(st)
+	}
+	b.AddType(u)
+	b.AddElement(e)
+	schema, err := b.Finalize()
+	if err != nil {
+		t.Fatalf("Finalize: %v", err)
+	}
+	err = Generate([]Target{{Schema: schema, Dir: filepath.Join(t.TempDir(), "out"), Package: "p"}})
+	if err == nil || errors.Is(err, errors.ErrUnsupported) {
+		t.Fatalf("Generate = %v, want a failure that is not a decline", err)
+	}
+	const want = "codegen: target 0: element e at ?: element e with {type definition} u, a union with no {member type definitions}"
+	if err.Error() != want {
+		t.Errorf("error %q, want %q", err, want)
+	}
+}
+
 // TestDeclineErrorAs pins that errors.As retrieves the *DeclineError from the
 // error Generate returns for a named and an unnamed target, with its Construct
 // and Loc as values, and that the target's name opens the error outside the
@@ -617,8 +660,8 @@ func TestDeclineErrorLoc(t *testing.T) {
 	}{
 		{"xsi:type attribute", `<xs:element name="e"><xs:complexType><xs:attribute ref="xsi:type"/></xs:complexType></xs:element>`,
 			constructUncoveredPrimitive, xsderr.Loc{}},
-		{"xml:lang attribute", `<xs:import namespace="http://www.w3.org/XML/1998/namespace"/><xs:element name="e"><xs:complexType><xs:attribute ref="xml:lang"/></xs:complexType></xs:element>`,
-			constructUnionType, xsderr.Loc{}},
+		{"xml:lang attribute", `<xs:import namespace="http://www.w3.org/XML/1998/namespace"/><xs:element name="e"><xs:complexType><xs:attribute ref="xml:lang" default="en"/></xs:complexType></xs:element>`,
+			constructAttributeValueConstraint, xsderr.Loc{}},
 		{"nillable element", `<xs:element name="e" nillable="true" type="xs:string"/>`,
 			constructElementNillable, xsderr.Loc{URI: "s.xsd", Line: 2, Col: 1}},
 	}

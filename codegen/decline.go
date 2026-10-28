@@ -76,7 +76,6 @@ const (
 	constructElementValueConstraint
 	constructTypeTable
 	constructSpecialType
-	constructUnionType
 	constructAbsentVariety
 	constructNoPrimitive
 	constructUncoveredPrimitive
@@ -106,7 +105,6 @@ var constructs = [...]struct{ name, format string }{
 	constructElementValueConstraint:   {"element {value constraint}", "%s with a {value constraint}"},
 	constructTypeTable:                {"{type table}", "%s with a {type table}"},
 	constructSpecialType:              {"special type", "%s, a special type"},
-	constructUnionType:                {"union type", "%s, a union type"},
 	constructAbsentVariety:            {"absent {variety}", "%s, of absent {variety}"},
 	constructNoPrimitive:              {"no {primitive type definition}", "%s, with no {primitive type definition}"},
 	constructUncoveredPrimitive:       {"uncovered primitive", "%s, whose {primitive type definition} is %s"},

@@ -1,0 +1,126 @@
+<?xml version="1.0"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+           xmlns:t="urn:t" targetNamespace="urn:t">
+  <!-- The union types the package doc's "# Coverage" maps: a named union of
+       a builtin and an anonymous enumeration, read by an optional local
+       element, an optional attribute, a simple-content extension, a list and
+       a top-level element of the type's own name; a union whose members
+       repeat size's, flattened and deduplicated; a union with an anonymous
+       list member of an anonymous union; anonymous unions of a top-level
+       element, of a list a top-level element holds, of a local element, of
+       a simple-content restriction's value, and of an attribute of a named
+       complex type, of an anonymous one and of a global declaration; one
+       anonymous union two complex types reach through one attribute group;
+       an optional <element ref> to an element of union type; and box's
+       anonymous unions reached first through crate, which extends it, and
+       named from box, which declares them. -->
+  <xs:simpleType name="size">
+    <xs:union memberTypes="xs:int">
+      <xs:simpleType>
+        <xs:restriction base="xs:string">
+          <xs:enumeration value="small"/>
+          <xs:enumeration value="large"/>
+        </xs:restriction>
+      </xs:simpleType>
+    </xs:union>
+  </xs:simpleType>
+  <xs:simpleType name="flag">
+    <xs:union memberTypes="t:size xs:int xs:boolean"/>
+  </xs:simpleType>
+  <xs:simpleType name="sizes">
+    <xs:list itemType="t:size"/>
+  </xs:simpleType>
+  <xs:simpleType name="mixed">
+    <xs:union memberTypes="xs:date">
+      <xs:simpleType>
+        <xs:list>
+          <xs:simpleType>
+            <xs:union memberTypes="xs:int xs:boolean"/>
+          </xs:simpleType>
+        </xs:list>
+      </xs:simpleType>
+    </xs:union>
+  </xs:simpleType>
+  <xs:attribute name="lang">
+    <xs:simpleType>
+      <xs:union memberTypes="xs:language xs:int"/>
+    </xs:simpleType>
+  </xs:attribute>
+  <xs:attributeGroup name="shared">
+    <xs:attribute name="mode">
+      <xs:simpleType>
+        <xs:union memberTypes="xs:boolean xs:string"/>
+      </xs:simpleType>
+    </xs:attribute>
+  </xs:attributeGroup>
+  <xs:complexType name="box">
+    <xs:sequence>
+      <xs:element name="size" type="t:size" minOccurs="0"/>
+      <xs:element name="flags" type="t:flag" maxOccurs="unbounded"/>
+      <xs:element name="all" type="t:sizes"/>
+      <xs:element name="mix" type="t:mixed"/>
+      <xs:element name="code">
+        <xs:simpleType>
+          <xs:union memberTypes="xs:int xs:anyURI"/>
+        </xs:simpleType>
+      </xs:element>
+      <xs:element ref="t:pin" minOccurs="0"/>
+    </xs:sequence>
+    <xs:attribute name="width" type="t:size"/>
+    <xs:attribute name="unit">
+      <xs:simpleType>
+        <xs:union memberTypes="xs:string xs:int"/>
+      </xs:simpleType>
+    </xs:attribute>
+    <xs:attributeGroup ref="t:shared"/>
+  </xs:complexType>
+  <xs:complexType name="crate">
+    <xs:complexContent>
+      <xs:extension base="t:box"/>
+    </xs:complexContent>
+  </xs:complexType>
+  <xs:complexType name="measured">
+    <xs:simpleContent>
+      <xs:extension base="t:size">
+        <xs:attribute name="unit" type="xs:string" use="required"/>
+      </xs:extension>
+    </xs:simpleContent>
+  </xs:complexType>
+  <xs:complexType name="narrow">
+    <xs:simpleContent>
+      <xs:restriction base="t:measured">
+        <xs:enumeration value="small"/>
+      </xs:restriction>
+    </xs:simpleContent>
+  </xs:complexType>
+  <xs:element name="crate" type="t:crate"/>
+  <xs:element name="box" type="t:box"/>
+  <xs:element name="size" type="t:size"/>
+  <xs:element name="measure" type="t:measured"/>
+  <xs:element name="narrow" type="t:narrow"/>
+  <xs:element name="pin">
+    <xs:simpleType>
+      <xs:union memberTypes="xs:boolean xs:int"/>
+    </xs:simpleType>
+  </xs:element>
+  <xs:element name="ids">
+    <xs:simpleType>
+      <xs:list>
+        <xs:simpleType>
+          <xs:union memberTypes="xs:int xs:boolean"/>
+        </xs:simpleType>
+      </xs:list>
+    </xs:simpleType>
+  </xs:element>
+  <xs:element name="tag">
+    <xs:complexType>
+      <xs:attribute name="kind">
+        <xs:simpleType>
+          <xs:union memberTypes="xs:int xs:string"/>
+        </xs:simpleType>
+      </xs:attribute>
+      <xs:attribute ref="t:lang"/>
+      <xs:attributeGroup ref="t:shared"/>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>

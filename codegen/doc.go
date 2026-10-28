@@ -28,35 +28,38 @@
 // holding the type emitted for the top-level element declaration it names —
 // then, after every other declaration and in the order the walk
 // first needs each, one datatype struct per date, time or duration datatype
-// a declaration's type or a value field is declared over and the four
+// a declaration's type or a value field is declared over, the four
 // raw-content structs once an element's type is xs:anyType or a sequence
-// holds a wildcard particle, and declines everything outside this slice:
+// holds a wildcard particle, and one sealed interface per union simple type
+// a declaration's type, a value field, a list's item or a union's member is
+// declared over, each followed by one variant type per basic member, and
+// declines everything outside this slice:
 //
-//   - An element whose {type definition} is an atomic or list simple type
-//     gets a named type over the atomic Go type an atomic simple type gets,
-//     or over a slice of one. For an atomic type, the nearest of the eight
-//     bounded integer types on the type's {base type definition} chain
-//     (§3.16.1), the type itself first, gives the Go integer whose range is
-//     exactly its value space (Datatypes §3.4.16–§3.4.19, §3.4.21–§3.4.24):
-//     long gives int64, int int32, short int16, byte int8, unsignedLong
-//     uint64, unsignedInt uint32, unsignedShort uint16, unsignedByte uint8.
-//     Failing one, a chain that reaches xs:integer gives big.Int, which holds
-//     every integer (Datatypes §3.4.13): xs:integer, the four unbounded
-//     integer types and every type derived from them other than through the
-//     eight bounded ones; and a chain that reaches dateTimeStamp,
-//     dayTimeDuration or yearMonthDuration gives that builtin's datatype
-//     struct. Failing that, the type's {primitive type definition} (Datatypes
-//     §4.1.1) chooses: string and anyURI give string, boolean gives bool,
-//     float gives float32 and double float64, whose IEEE 754 binary32 and
-//     binary64 value spaces (Datatypes §3.3.4.1, §3.3.5.1) those Go types
-//     hold exactly, decimal gives big.Rat, which holds every decimal value
-//     exactly (Datatypes §3.3.3), hexBinary and base64Binary give []byte,
-//     which holds every finite sequence of octets exactly (Datatypes
-//     §3.3.15.1, §3.3.16.1), nil and the empty slice being one value, no
-//     octets, and dateTime, time, date, gYearMonth, gYear, gMonthDay, gDay,
-//     gMonth and duration each give their datatype struct. That Go integer,
-//     string, bool, float32, float64, big.Int, big.Rat, []byte or datatype
-//     struct is the type's atomic Go type.
+//   - An element whose {type definition} is an atomic, list or union simple
+//     type gets a named type over the atomic Go type an atomic simple type
+//     gets, over a slice of one, or over the union's sealed interface. For an
+//     atomic type, the nearest of the eight bounded integer types on the
+//     type's {base type definition} chain (§3.16.1), the type itself first,
+//     gives the Go integer whose range is exactly its value space (Datatypes
+//     §3.4.16–§3.4.19, §3.4.21–§3.4.24): long gives int64, int int32, short
+//     int16, byte int8, unsignedLong uint64, unsignedInt uint32,
+//     unsignedShort uint16, unsignedByte uint8. Failing one, a chain that
+//     reaches xs:integer gives big.Int, which holds every integer (Datatypes
+//     §3.4.13): xs:integer, the four unbounded integer types and every type
+//     derived from them other than through the eight bounded ones; and a
+//     chain that reaches dateTimeStamp, dayTimeDuration or yearMonthDuration
+//     gives that builtin's datatype struct. Failing that, the type's
+//     {primitive type definition} (Datatypes §4.1.1) chooses: string and
+//     anyURI give string, boolean gives bool, float gives float32 and double
+//     float64, whose IEEE 754 binary32 and binary64 value spaces (Datatypes
+//     §3.3.4.1, §3.3.5.1) those Go types hold exactly, decimal gives big.Rat,
+//     which holds every decimal value exactly (Datatypes §3.3.3), hexBinary
+//     and base64Binary give []byte, which holds every finite sequence of
+//     octets exactly (Datatypes §3.3.15.1, §3.3.16.1), nil and the empty
+//     slice being one value, no octets, and dateTime, time, date, gYearMonth,
+//     gYear, gMonthDay, gDay, gMonth and duration each give their datatype
+//     struct. That Go integer, string, bool, float32, float64, big.Int,
+//     big.Rat, []byte or datatype struct is the type's atomic Go type.
 //   - A datatype struct has one field per property its datatype's values
 //     carry (Datatypes §3.3.6.1, §3.3.7.1–§3.3.14.1, §3.4.26–§3.4.28), in
 //     the order of the seven-property model (§D.2.1) or of duration's two
@@ -73,15 +76,35 @@
 //     its order. The generated file imports math/big exactly when a
 //     declaration names it: a big.Int or big.Rat, or a datatype struct, all
 //     but GMonthDay, GDay and GMonth holding one.
-//   - A list type (Datatypes §2.4.1.2) gives a slice of the atomic Go type
-//     its {item type definition} (§3.16.1) gives, a restriction of a list
-//     taking its base's item (§3.16.2.3); the list declines exactly when its
-//     item does, by the item's construct. Wherever a field holds a list, the
-//     pointer and slice rules below apply to that slice as to any atomic Go
-//     type; in a field that is not a pointer, nil and the empty slice are one
-//     value, the empty list. Facets are not represented and do not change an
-//     atomic Go type, and a named user simple type gets no Go type of its
-//     own.
+//   - A list type (Datatypes §2.4.1.2) gives a slice of the Go type its
+//     {item type definition} (§3.16.1) gets, an atomic Go type or a union's
+//     sealed interface, a restriction of a list taking its base's item
+//     (§3.16.2.3); the list declines exactly when its item does, by the
+//     item's construct. Wherever a field holds a list, the pointer and slice
+//     rules below apply to that slice as to any atomic Go type; in a field
+//     that is not a pointer, nil and the empty slice are one value, the empty
+//     list. Facets are not represented and do not change the Go type a simple
+//     type gets, and a named user simple type other than a union gets no Go
+//     type of its own.
+//   - A union type (Datatypes §2.4.1.3) gives a sealed interface whose one
+//     method is unexported, "is" plus the interface's name, and one variant
+//     type per basic member (dt-basicmember), emitted after the interface in
+//     basic-member order: its {member type definitions} (§3.16.1), a
+//     restriction of a union taking its base's (§3.16.2.1), in order, each
+//     member that is itself a union replaced by its own basic members, and
+//     each member kept at its first position only, a list member being basic.
+//     Each variant is a named type over the Go type its member gets, an
+//     atomic Go type or a list's slice, and implements the method; consumers
+//     type-switch over the variants. Each union, named or anonymous, gets one
+//     interface however many declarations reach it, and a restriction of a
+//     union gets its own. The union declines exactly when one of its basic
+//     members does, by that member's construct, at the first declining member
+//     in basic-member order. The interface does not enforce the ·active basic
+//     member·, the first member in order that accepts a literal: with xs:int
+//     first, a string variant can hold "5", which xs:int accepts. Facets on
+//     the union itself are not represented. A union with no {member type
+//     definitions}, which no schema document yields (src-simple-type clause
+//     4), fails Generate with an error that is not a decline.
 //   - An element whose {type definition} is xs:anyType (§3.4.7
 //     any-type-itself), named by its type attribute or the default for an
 //     element declared with no type and no substitutionGroup (§3.3.2), holds
@@ -132,14 +155,15 @@
 //     content, with no particle field; a struct with no field is spelled
 //     struct{}.
 //   - Simple content gives a struct whose first field, the value field, is
-//     named from the local name value and holds the atomic Go type, or the
-//     slice, its {simple type definition} gives as an element's {type
-//     definition} does, never a pointer to it; the value field declines
-//     exactly when that type does, by the type's construct. That type is the
-//     base itself for an extension of a simple type, the base's own for an
-//     extension of a complex type, and for a restriction an anonymous
-//     restriction of the base's own or of an inline <simpleType>, whose
-//     facets are not represented (§3.4.2.2 dcl.ctd.ctsc).
+//     named from the local name value and holds the atomic Go type, the
+//     slice, or the union's sealed interface its {simple type definition}
+//     gives as an element's {type definition} does, never a pointer to it;
+//     the value field declines exactly when that type does, by the type's
+//     construct. That type is the base itself for an extension of a simple
+//     type, the base's own for an extension of a complex type, and for a
+//     restriction an anonymous restriction of the base's own or of an inline
+//     <simpleType>, whose facets are not represented (§3.4.2.2
+//     dcl.ctd.ctsc).
 //   - A choice gives a sealed interface, the closed-sum exception: an
 //     interface whose one method is unexported, "is" plus the interface's
 //     name, and one branch struct per alternative in particle order, emitted
@@ -161,44 +185,46 @@
 //   - Each particle of a sequence gives one field, in particle order, but a sequence particle
 //     occurring exactly once, inline or a <group ref> to a sequence group, which gives in its
 //     place the fields its own particles give, so an extension (§3.4.2.3.3 clause 4.2.3.3) gives its base
-//     particle's fields and then its own: a local element with an atomic or list simple type gets the
-//     atomic Go type, or the slice, an element's type is declared over, one with an anonymous complex
-//     type of the same shape gets a struct or interface of its own, emitted after its parent. One with a
-//     named complex type of the same shape gets the struct or interface emitted for that type, once per
-//     expanded name, after the parent of the first local element of that type, and shared by every local
-//     element of that type in any parent, the type's own included; a top-level element of that type keeps
-//     the type named from the element. A type nested in a named complex type is emitted once per path of
-//     expanded names from that type, after the first element whose walk reaches it, and every element of
-//     that type, top-level or local, shares it; a type nested in a model group definition is emitted once
-//     per path of expanded names from that group, after the first element whose walk reaches it, and
-//     every <group ref> particle to the group shares it, each element the group declares being one
-//     component (§3.7.2); two sibling local elements whose expanded names differ only in {target
-//     namespace} (§3.3.2.3), a qualified x beside an unqualified x, get a type each. An <element ref>
-//     particle gets the type emitted for the top-level element declaration it names, named from that
-//     element whatever its type definition, and its field is named from that declaration's local name. A
-//     wildcard particle gives one field named Any by "Naming", holding AnyElement by the occurrence rules
-//     below. Neither its {namespace constraint} nor its {process contents} (§3.10.1) is represented: the
-//     field holds elements the wildcard would not admit (cvc-wildcard), and holds every match raw whether
-//     a strict or lax wildcard would assess it; enforcing either is the validator's. A named complex
-//     type, a top-level element through <element ref> particles, or a local element of an anonymous type
-//     through <group ref> particles to the group declaring it, that reaches itself through elements that
-//     each occur exactly once in a sequence that is a {particle} occurring exactly once or in a sequence
-//     spliced into one, and whose types are not choices, declines: its Go type would hold itself as a
-//     struct value. {max occurs} above 1 or unbounded gives a slice whatever {min occurs} is, of a list's
-//     slice too ([][]T); {min occurs} 0 with {max occurs} 1 gives a pointer to a struct, atomic Go type,
-//     or list's slice (*[]T), and the bare interface, never a pointer to one, nil meaning absent.
+//     particle's fields and then its own: a local element with an atomic, list or union simple type gets
+//     the atomic Go type, the slice, or the interface an element's type is declared over, one with an
+//     anonymous complex type of the same shape gets a struct or interface of its own, emitted after its
+//     parent. One with a named complex type of the same shape gets the struct or interface emitted for
+//     that type, once per expanded name, after the parent of the first local element of that type, and
+//     shared by every local element of that type in any parent, the type's own included; a top-level
+//     element of that type keeps the type named from the element. A type nested in a named complex type
+//     is emitted once per path of expanded names from that type, after the first element whose walk
+//     reaches it, and every element of that type, top-level or local, shares it; a type nested in a model
+//     group definition is emitted once per path of expanded names from that group, after the first
+//     element whose walk reaches it, and every <group ref> particle to the group shares it, each element
+//     the group declares being one component (§3.7.2); two sibling local elements whose expanded names
+//     differ only in {target namespace} (§3.3.2.3), a qualified x beside an unqualified x, get a type
+//     each. An <element ref> particle gets the type emitted for the top-level element declaration it
+//     names, named from that element whatever its type definition, and its field is named from that
+//     declaration's local name. A wildcard particle gives one field named Any by "Naming", holding
+//     AnyElement by the occurrence rules below. Neither its {namespace constraint} nor its {process
+//     contents} (§3.10.1) is represented: the field holds elements the wildcard would not admit
+//     (cvc-wildcard), and holds every match raw whether a strict or lax wildcard would assess it;
+//     enforcing either is the validator's. A named complex type, a top-level element through <element
+//     ref> particles, or a local element of an anonymous type through <group ref> particles to the group
+//     declaring it, that reaches itself through elements that each occur exactly once in a sequence that
+//     is a {particle} occurring exactly once or in a sequence spliced into one, and whose types are not
+//     choices, declines: its Go type would hold itself as a struct value. {max occurs} above 1 or
+//     unbounded gives a slice whatever {min occurs} is, of a list's slice too ([][]T); {min occurs} 0
+//     with {max occurs} 1 gives a pointer to a struct, atomic Go type, or list's slice (*[]T), and the
+//     bare interface, a choice's or a union's, never a pointer to one, nil meaning absent.
 //   - Each attribute use of a type emitted as a struct gives one field after the particle
 //     fields or the value field, if any, in the order [xsd.ComplexType.AttributeUses] returns
 //     its {attribute uses} (§3.4.2.4). The field is named from the attribute declaration's
 //     local name, so a qualified and an unqualified attribute of one local name, or an
 //     attribute named like an element of the struct or like the value field, take the
 //     suffix "Naming" states, the later field taking it: an attribute value beside the
-//     value field gives Value2. Its {type definition} must be an atomic or list simple type and gives an
-//     atomic Go type, or a slice, as an element's does; {required} true gives that type,
-//     false a pointer to it (*[]T for a list), nil meaning absent. The use's effective
-//     value constraint (§3.5.4 key-evc) must be absent, whether the use or a global declaration it
-//     references carries the default or fixed value. A choice {particle} that occurs exactly once is
-//     accepted only when its type has no {attribute uses}.
+//     value field gives Value2. Its {type definition} must be an atomic, list or union simple type and
+//     gives an atomic Go type, a slice, or a union's sealed interface, as an element's does; {required}
+//     true gives that type, false a pointer to it (*[]T for a list), but the bare interface for a
+//     union, nil meaning absent. The use's effective value constraint (§3.5.4 key-evc) must be absent,
+//     whether the use or a global declaration it references carries the default or fixed value. A
+//     choice {particle} that occurs exactly once is accepted only when its type has no {attribute
+//     uses}.
 //   - Every element declaration emitted from has {nillable} and {abstract}
 //     false and no {value constraint}, {type table} or {substitution group
 //     affiliations}. Its {identity-constraint definitions} are accepted and
@@ -217,9 +243,9 @@
 // is a choice occurring exactly once, attribute uses with an effective value constraint,
 // mixed content, a named complex type, a top-level element through <element ref> particles,
 // or a local element of a model group through <group ref> particles, reaching itself
-// through struct values, the special simple types, union types, a list whose {item type
-// definition} declines, and every primitive the first bullet does not map, for an element
-// or an attribute alike. #2900 owns lifting them.
+// through struct values, the special simple types, a list whose {item type definition}
+// declines, a union one of whose basic members declines, and every primitive the first
+// bullet does not map, for an element or an attribute alike. #2900 owns lifting them.
 //
 // # Determinism
 //
@@ -228,8 +254,9 @@
 // absolute roots produce byte-identical output; "Naming" states where a
 // header's location is not relative. No map iteration anywhere near the
 // emitter; emission order is the walk's, which document order alone fixes, as
-// the first paragraph states (datatype structs and raw-content structs last,
-// in the order the walk first needs each). Golden-file tests pin the output.
+// the first paragraph states (datatype structs, raw-content structs, and union
+// interfaces with their variants last, in the order the walk first needs
+// each). Golden-file tests pin the output.
 //
 // # Naming
 //
@@ -273,23 +300,48 @@
 // the walk first reaches a declaration of type xs:anyType or a wildcard
 // particle, ahead of that declaration's own type, so that a top-level element
 // anyType with no type names its type AnyType2. A wildcard particle's field
-// is named as if from local name any. Every other generated type's header
-// comment records the QName and the schema Loc of the declaration it is named
-// from: the element declaration, or the complex type definition for a type
-// named from one. A datatype struct's header records its datatype's QName
-// alone, a builtin having no schema document, then a second line stating what
-// its fields' names do not, when there is any: TimezoneOffset's unit and
-// whether it may be absent, or that duration's Months and Seconds share one
-// sign. A raw-content struct's header records xs:anyType's QName alone, then,
-// for AnyType and AnyChild, a second line stating what Text or Tail holds. A
-// Loc whose URI filepath.IsAbs accepts renders relative to the target's Dir
-// made absolute against the working directory, slash-separated and climbing
-// with ".." out of Dir. A document outside the tree laid out alike, such as
-// one an absolute schemaLocation names, renders a climbing path that differs
-// with that tree's depth below the filesystem root. Any other URI renders as
-// is, a URL or a relative loader key alike, as does one with no path relative
-// to Dir, such as one on another Windows volume. Symbolic links are not
-// resolved.
+// is named as if from local name any. A union's interface is named from the
+// type when it is named (simple type size → Size), claimed when the walk first
+// needs it as a datatype struct is: for a top-level element of a union type,
+// ahead of that element's own type, so that a top-level element size of type
+// size names its type Size2; for a field of a struct, after that struct's own
+// name. An anonymous union is named by the path of names an anonymous complex
+// type would take in its place, with the local name union last: a top-level
+// element's (element pin → PinUnion), a local element's (element code in complex
+// type box → BoxCodeUnion), an attribute's from the global attribute
+// declaration, the named complex type or attribute group definition declaring
+// it, or the path of the struct holding it for an anonymous complex type
+// (attribute mode in attribute group shared → SharedModeUnion, attribute kind of
+// element tag → TagKindUnion), and a value field's from its struct's path with
+// value before union (complex type narrow → NarrowValueUnion). A list's item
+// takes the list's path, and a union reached through several declarations is
+// named from the first. A variant is named from its interface's name plus its
+// member's local name: an anonymous list member's is list, and any other
+// anonymous member's is that of the nearest named type on its {base type
+// definition} chain, the member itself first (xs:int in Size → SizeInt, an
+// anonymous restriction of xs:string → SizeString). The variants are claimed
+// after their interface in basic-member order, each ahead of its member's own Go
+// type, which takes the variant's name as its path (an anonymous union item of
+// the list variant MixedList → MixedListUnion). Every other generated type's
+// header comment but a union interface's or variant's records the QName and the
+// schema Loc of the declaration it is named from: the element declaration, or
+// the complex type definition for a type named from one. A union interface's
+// header records the simple type it is generated from, by its QName or as
+// (anonymous), and that type's schema Loc, and a variant's header its member the
+// same way, a builtin member, having no schema document, by its QName alone. A
+// datatype struct's header records its datatype's QName alone, a builtin having
+// no schema document, then a second line stating what its fields' names do not,
+// when there is any: TimezoneOffset's unit and whether it may be absent, or that
+// duration's Months and Seconds share one sign. A raw-content struct's header
+// records xs:anyType's QName alone, then, for AnyType and AnyChild, a second
+// line stating what Text or Tail holds. A Loc whose URI filepath.IsAbs accepts
+// renders relative to the target's Dir made absolute against the working
+// directory, slash-separated and climbing with ".." out of Dir. A document
+// outside the tree laid out alike, such as one an absolute schemaLocation names,
+// renders a climbing path that differs with that tree's depth below the
+// filesystem root. Any other URI renders as is, a URL or a relative loader key
+// alike, as does one with no path relative to Dir, such as one on another
+// Windows volume. Symbolic links are not resolved.
 //
 // # Planned (M9 — not yet implemented)
 //
