@@ -64,8 +64,9 @@ func (c Construct) String() string {
 }
 
 // construct is the closed set of constructs the generator declines, one per
-// declining site but constructVacuousParticle, which field's wildcard and
-// element paths and contentGroup each decline. The zero value is invalid (STYLE T1).
+// declining site but constructVacuousParticle, which field's wildcard, model
+// group and element paths and contentGroup each decline. The zero value is
+// invalid (STYLE T1).
 type construct uint8
 
 // The construct values, in the order of their declining sites in emit.go.
@@ -90,7 +91,6 @@ const (
 	constructVacuousParticle
 	constructAttributeValueConstraint
 	constructValueCycle
-	constructNestedGroup
 	constructWildcard
 )
 
@@ -109,7 +109,7 @@ var constructs = [...]struct{ name, format string }{
 	constructUncoveredPrimitive:       {"uncovered primitive", "%s, whose {primitive type definition} is %s"},
 	constructChoiceAttributes:         {"choice with attributes", "%s whose content is a choice, with %s"},
 	constructEmptyChoice:              {"choice with no {particles}", "%s whose choice has no {particles}"},
-	constructEmptiableChoice:          {"emptiable choice", "%s whose choice is emptiable: its alternative element %s has {min occurs} 0"},
+	constructEmptiableChoice:          {"emptiable choice", "%s whose choice is emptiable: its alternative %d, %s, is emptiable"},
 	constructComplexTypeAbstract:      {"complex type {abstract}", "%s with {abstract} true"},
 	constructAssertions:               {"{assertions}", "%s with {assertions}"},
 	constructMixedContent:             {"mixed content", "%s with mixed content"},
@@ -118,7 +118,6 @@ var constructs = [...]struct{ name, format string }{
 	constructVacuousParticle:          {"particle with {max occurs} 0", "a particle of %s with {max occurs} 0 in %s"},
 	constructAttributeValueConstraint: {"attribute effective value constraint", "%s with a %s effective value constraint (§3.5.4 key-evc)"},
 	constructValueCycle:               {"struct-value recursion", "%s reaching %s again through elements that each occur exactly once"},
-	constructNestedGroup:              {"nested model group particle", "a nested %s model group particle in %s"},
 	constructWildcard:                 {"wildcard particle", "a wildcard particle in %s"},
 }
 

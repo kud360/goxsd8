@@ -53,54 +53,35 @@ func TestGenerateDeclines(t *testing.T) {
 		{"choice of vacuous elements", `<xs:element name="e"><xs:complexType><xs:choice><xs:element name="a" minOccurs="0" maxOccurs="0" ` + str + `/></xs:choice></xs:complexType></xs:element>`,
 			"complex type (anonymous) of element e whose choice has no {particles}", constructEmptyChoice},
 		{"emptiable choice", `<xs:element name="e"><xs:complexType><xs:choice><xs:element name="a" ` + str + `/><xs:element name="b" minOccurs="0" ` + str + `/></xs:choice></xs:complexType></xs:element>`,
-			"complex type (anonymous) of element e whose choice is emptiable: its alternative element b has {min occurs} 0", constructEmptiableChoice},
+			"complex type (anonymous) of element e whose choice is emptiable: its alternative 2, element b, is emptiable", constructEmptiableChoice},
 		// A repeated choice reads its alternatives alone for the emptiable gate,
 		// its own {min occurs} 0 notwithstanding (cos-group-emptiable).
 		{"repeated emptiable choice", `<xs:element name="e"><xs:complexType><xs:choice minOccurs="0" maxOccurs="unbounded"><xs:element name="a" ` + str + `/><xs:element name="b" minOccurs="0" ` + str + `/></xs:choice></xs:complexType></xs:element>`,
-			"complex type (anonymous) of element e whose choice is emptiable: its alternative element b has {min occurs} 0", constructEmptiableChoice},
-		{"group in choice", `<xs:element name="e"><xs:complexType><xs:choice><xs:element name="a" ` + str + `/><xs:sequence><xs:element name="b" ` + str + `/></xs:sequence></xs:choice></xs:complexType></xs:element>`,
-			"a nested sequence model group particle", constructNestedGroup},
+			"complex type (anonymous) of element e whose choice is emptiable: its alternative 2, element b, is emptiable", constructEmptiableChoice},
+		// A model group alternative occurring exactly once is emptiable by
+		// cos-group-emptiable clause 2: its effective total range has minimum
+		// 0 (cos-seq-range, cos-choice-range), inline or through a <group ref>.
 		{"emptiable group in choice", `<xs:element name="e"><xs:complexType><xs:choice><xs:element name="a" ` + str + `/><xs:sequence><xs:element name="b" minOccurs="0" ` + str + `/></xs:sequence></xs:choice></xs:complexType></xs:element>`,
-			"a nested sequence model group particle", constructNestedGroup},
-		// A <group ref> alternative is a nested model group particle, as an
-		// inline group alternative is, until #3128 lifts it.
-		{"group ref in choice", `<xs:group name="g"><xs:sequence><xs:element name="b" ` + str + `/></xs:sequence></xs:group><xs:element name="e"><xs:complexType><xs:choice><xs:element name="a" ` + str + `/><xs:group ref="g"/></xs:choice></xs:complexType></xs:element>`,
-			"a nested sequence model group particle in complex type (anonymous) of element e", constructNestedGroup},
+			"complex type (anonymous) of element e whose choice is emptiable: its alternative 2, a sequence model group particle, is emptiable", constructEmptiableChoice},
+		{"emptiable choice in choice", `<xs:element name="e"><xs:complexType><xs:choice><xs:element name="a" ` + str + `/><xs:choice><xs:element name="b" ` + str + `/><xs:element name="c" minOccurs="0" ` + str + `/></xs:choice></xs:choice></xs:complexType></xs:element>`,
+			"complex type (anonymous) of element e whose choice is emptiable: its alternative 2, a choice model group particle, is emptiable", constructEmptiableChoice},
+		{"emptiable group ref in choice", `<xs:group name="g"><xs:sequence><xs:element name="b" minOccurs="0" ` + str + `/></xs:sequence></xs:group><xs:element name="e"><xs:complexType><xs:choice><xs:element name="a" ` + str + `/><xs:group ref="g"/></xs:choice></xs:complexType></xs:element>`,
+			"complex type (anonymous) of element e whose choice is emptiable: its alternative 2, a sequence model group particle, is emptiable", constructEmptiableChoice},
 		{"wildcard in choice", `<xs:element name="e"><xs:complexType><xs:choice><xs:element name="a" ` + str + `/><xs:any/></xs:choice></xs:complexType></xs:element>`,
 			"a wildcard particle", constructWildcard},
 		{"mixed choice", `<xs:element name="e"><xs:complexType mixed="true"><xs:choice><xs:element name="a" ` + str + `/></xs:choice></xs:complexType></xs:element>`,
 			"with mixed content", constructMixedContent},
 		{"open content choice", `<xs:element name="e"><xs:complexType><xs:openContent><xs:any/></xs:openContent><xs:choice><xs:element name="a" ` + str + `/></xs:choice></xs:complexType></xs:element>`,
 			"with {open content}", constructOpenContent},
-		// The extension rows pin that an extension of a choice-content base
-		// is its own {content type} (§3.4.2.3.3 dcl.ctd.ctcc.common clause
-		// 4.2): with an ·effective content· of its own the base's choice is
-		// nested in the clause 4.2.3.3 sequence, and with none (clause 4.2.2)
-		// it is the base's choice, its {attribute uses} declining it.
-		{"extension of a choice", `<xs:complexType name="b"><xs:choice><xs:element name="a" ` + str + `/></xs:choice></xs:complexType><xs:element name="e"><xs:complexType><xs:complexContent><xs:extension base="b"><xs:choice><xs:element name="c" ` + str + `/></xs:choice></xs:extension></xs:complexContent></xs:complexType></xs:element>`,
-			"a nested choice model group particle in complex type (anonymous) of element e", constructNestedGroup},
-		{"extension of a choice by a sequence", `<xs:complexType name="b"><xs:choice><xs:element name="a" ` + str + `/></xs:choice></xs:complexType><xs:element name="e"><xs:complexType><xs:complexContent><xs:extension base="b"><xs:sequence><xs:element name="c" ` + str + `/></xs:sequence></xs:extension></xs:complexContent></xs:complexType></xs:element>`,
-			"a nested choice model group particle in complex type (anonymous) of element e", constructNestedGroup},
+		// An extension of a choice-content base with no ·effective content·
+		// of its own is the base's choice (§3.4.2.3.3 dcl.ctd.ctcc.common
+		// clause 4.2.2), its {attribute uses} declining it.
 		{"extension of a choice by an attribute", `<xs:complexType name="b"><xs:choice><xs:element name="a" ` + str + `/></xs:choice></xs:complexType><xs:element name="e"><xs:complexType><xs:complexContent><xs:extension base="b"><xs:attribute name="t" ` + str + `/></xs:extension></xs:complexContent></xs:complexType></xs:element>`,
 			"complex type (anonymous) of element e whose content is a choice, with {attribute uses}", constructChoiceAttributes},
 		{"choice alternative type", `<xs:element name="e"><xs:complexType><xs:choice><xs:element name="a" type="xs:QName"/></xs:choice></xs:complexType></xs:element>`,
 			"element a with {type definition} {http://www.w3.org/2001/XMLSchema}QName, whose {primitive type definition} is", constructUncoveredPrimitive},
 		{"all", `<xs:element name="e"><xs:complexType><xs:all><xs:element name="a" ` + str + `/></xs:all></xs:complexType></xs:element>`,
 			"with an all compositor", constructAll},
-		// A nested sequence occurring exactly once is spliced into its parent;
-		// one occurring otherwise still declines.
-		{"nested group", `<xs:element name="e"><xs:complexType><xs:sequence><xs:sequence maxOccurs="2"><xs:element name="a" ` + str + `/></xs:sequence></xs:sequence></xs:complexType></xs:element>`,
-			"a nested sequence model group particle", constructNestedGroup},
-		// A <group ref> in a sequence splices exactly as its inline group
-		// would: one to a sequence group occurring other than exactly once,
-		// and one to a choice group, are nested model group particles of the
-		// referenced compositor until #3128 lifts them.
-		{"repeated group ref particle", `<xs:group name="g"><xs:sequence><xs:element name="a" ` + str + `/></xs:sequence></xs:group><xs:element name="e"><xs:complexType><xs:sequence><xs:group ref="g" maxOccurs="2"/></xs:sequence></xs:complexType></xs:element>`,
-			"a nested sequence model group particle in complex type (anonymous) of element e", constructNestedGroup},
-		{"optional group ref particle", `<xs:group name="g"><xs:sequence><xs:element name="a" ` + str + `/></xs:sequence></xs:group><xs:element name="e"><xs:complexType><xs:sequence><xs:group ref="g" minOccurs="0"/></xs:sequence></xs:complexType></xs:element>`,
-			"a nested sequence model group particle in complex type (anonymous) of element e", constructNestedGroup},
-		{"choice group ref particle", `<xs:group name="g"><xs:choice><xs:element name="a" ` + str + `/></xs:choice></xs:group><xs:element name="e"><xs:complexType><xs:sequence><xs:group ref="g"/></xs:sequence></xs:complexType></xs:element>`,
-			"a nested choice model group particle in complex type (anonymous) of element e", constructNestedGroup},
 		// A <group ref> content particle is checked as its referenced group
 		// would be inline: an all group declines whatever the ref's occurs.
 		{"all group ref content", `<xs:group name="g"><xs:all><xs:element name="a" ` + str + `/></xs:all></xs:group><xs:element name="e"><xs:complexType><xs:group ref="g" maxOccurs="1"/></xs:complexType></xs:element>`,
@@ -444,13 +425,13 @@ func TestGenerateDeclinesLocalAnonymousPlace(t *testing.T) {
 }
 
 // TestGenerateDeclinesVacuousParticle pins the decline of a particle whose
-// {max occurs} is 0, naming its term: a local element, a wildcard, or the
-// sequence model group of a content particle. No schema document yields one,
-// since an <element> or <any> with minOccurs=maxOccurs=0 maps to no component
-// at all (§3.3.2, §3.10.2) and a <sequence> or <choice> with maxOccurs=0 makes
-// the content empty (§3.4.2.3.3 dcl.ctd.ctcc.common 2.1.4), but
-// xsd.NewParticle and xsd.NewComplexType accept a vacuous Occurs, so the
-// schema is built through the constructors.
+// {max occurs} is 0, naming its term: a local element, a wildcard, the
+// sequence model group of a content particle, or a choice model group nested
+// in it. No schema document yields one, since an <element> or <any> with
+// minOccurs=maxOccurs=0 maps to no component at all (§3.3.2, §3.10.2) and a
+// <sequence> or <choice> with maxOccurs=0 makes the content empty (§3.4.2.3.3
+// dcl.ctd.ctcc.common 2.1.4), but xsd.NewParticle and xsd.NewComplexType
+// accept a vacuous Occurs, so the schema is built through the constructors.
 func TestGenerateDeclinesVacuousParticle(t *testing.T) {
 	ctName := xsd.QName{Local: "c"}
 	scope, err := xsd.NewLocalScope(xsderr.Loc{}, xsd.ComplexTypeScopeParent{Name: ctName})
@@ -474,6 +455,14 @@ func TestGenerateDeclinesVacuousParticle(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	localParticle, err := xsd.NewParticle(xsderr.Loc{}, exactlyOnce, xsd.ResolvedTerm{Term: local})
+	if err != nil {
+		t.Fatal(err)
+	}
+	nested, err := xsd.NewModelGroup(xsderr.Loc{}, xsd.CompositorChoice, []xsd.Particle{localParticle})
+	if err != nil {
+		t.Fatal(err)
+	}
 	tests := []struct {
 		name         string
 		term         xsd.Term
@@ -483,6 +472,7 @@ func TestGenerateDeclinesVacuousParticle(t *testing.T) {
 		{"element", local, vacuous, exactlyOnce, "codegen: target 0: a particle of element a with {max occurs} 0 in complex type c of element e at "},
 		{"wildcard", wildcard, vacuous, exactlyOnce, "codegen: target 0: a particle of a wildcard with {max occurs} 0 in complex type c of element e at "},
 		{"content particle", local, exactlyOnce, vacuous, "codegen: target 0: a particle of a sequence model group with {max occurs} 0 in complex type c of element e at "},
+		{"nested group", nested, vacuous, exactlyOnce, "codegen: target 0: a particle of a choice model group with {max occurs} 0 in complex type c of element e at "},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

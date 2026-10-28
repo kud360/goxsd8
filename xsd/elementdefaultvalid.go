@@ -41,7 +41,7 @@ const ruleCosValidDefault xsderr.Rule = "cos-valid-default"
 //   - clause 2 — T is complex with {content type}.{variety} ≠ simple. Then BOTH
 //     2.1 ({content type}.{variety} = mixed) and 2.2 (the particle
 //     T.{content type}.{particle} is ·emptiable· per §3.9.6.3) must hold. 2.2 is
-//     particleEmptiable (effectivetotalrange.go), likewise reused rather than
+//     ParticleEmptiable (effectivetotalrange.go), likewise reused rather than
 //     re-derived.
 //
 // Clause 2.1 is where this landing adds a REJECTION SHAPE nothing else in the
@@ -190,7 +190,7 @@ func (s *Schema) checkComplexDefaultValid(vs ValueSpace, rule xsderr.Rule, claus
 		if !ct.Mixed {
 			return notMixedDefault(rule, clause, loc, owner, c, vc) // clause 2.1
 		}
-		if s.particleEmptiable(ct.Particle) {
+		if s.ParticleEmptiable(ct.Particle) {
 			return nil // clause 2.2 holds, and 2.1 held above
 		}
 		return xsderr.New(rule, loc,

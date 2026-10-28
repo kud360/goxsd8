@@ -22,14 +22,15 @@ package xsd
 //
 // The walk below follows ModelGroupRef edges into their definitions with NO
 // cycle guard. That is licensed, not overlooked: it runs only in Phase D
-// (resolve.go), strictly after Phase B's checkModelGroupsAcyclic has rejected a
+// (resolve.go), or through the exported ParticleEmptiable on a finalized
+// Schema, so strictly after Phase B's checkModelGroupsAcyclic has rejected a
 // circular <group ref> graph (PRINCIPLES 9).
 
 // maxFiniteRange caps the saturating arithmetic below. An effective total range
 // is a product of a particle's {min occurs}/{max occurs} with a sum over its
 // group's members, so nesting a handful of maxOccurs="100000" groups overflows
 // int. Saturating is sound because NO consumer of an effective total range
-// distinguishes one large finite value from another: particleEmptiable asks only
+// distinguishes one large finite value from another: ParticleEmptiable asks only
 // whether the minimum is 0, and the maximum rule asks only whether a value is
 // unbounded or non-zero. Wrapping, by contrast, could turn a huge positive
 // minimum into 0 and make a non-emptiable particle look ·emptiable· — the one
@@ -233,16 +234,21 @@ func (s *Schema) resolveTermGroup(t TermOrRef) (ModelGroup, bool) {
 	}
 }
 
-// particleEmptiable is ·emptiable· (Particle Emptiable, §3.9.6.3,
-// cos-group-emptiable): clause 1, p.{min occurs} is 0; or clause 2, p.{term} is
-// a group whose effective total range has minimum 0.
+// ParticleEmptiable reports whether the particle p is ·emptiable· (Particle
+// Emptiable, §3.9.6.3 cos-group-emptiable): clause 1, p's {min occurs} is 0;
+// or clause 2, p's {term} is a model group, inline or the {model group} of the
+// definition a <group ref> names on s (§3.7.2), and the minimum of p's
+// effective total range (§3.8.6.5 cos-seq-range for a sequence or all,
+// §3.8.6.6 cos-choice-range for a choice, 0 for a group with no {particles})
+// is 0. For a <group ref> that does not resolve on s, clause 2's antecedent
+// fails, so the answer is whether p's {min occurs} is 0.
 //
 // Clause 2's "the effective total range of that group" is the range of the
 // PARTICLE whose {term} is that group — §3.8.6.5/6 define the pair for a
 // particle P, folding P.{min occurs} in as a factor — so clause 2 is read off
 // effectiveTotalRange(p) directly. A zero p.{min occurs} would already have
 // satisfied clause 1, so the two readings never disagree.
-func (s *Schema) particleEmptiable(p Particle) bool {
+func (s *Schema) ParticleEmptiable(p Particle) bool {
 	if p.Occurs().Min() == 0 {
 		return true // clause 1
 	}

@@ -158,8 +158,8 @@ func TestEffectiveTotalRangeSaturates(t *testing.T) {
 	}
 }
 
-// TestParticleEmptiable covers both cos-group-emptiable clauses and the two
-// negatives.
+// TestParticleEmptiable covers both cos-group-emptiable clauses, the two
+// negatives, and a <group ref> that does not resolve.
 func TestParticleEmptiable(t *testing.T) {
 	s := rSchema(t, nil)
 	elem := ResolvedTerm{Term: uLocal(t, uq("e"), uq("T"))}
@@ -180,10 +180,14 @@ func TestParticleEmptiable(t *testing.T) {
 			uOne(t, ResolvedTerm{Term: uGroup(t, CompositorChoice, rElem(t, 1, 1), rElem(t, 2, 2))}), false},
 		{"clause 2: an EMPTY choice is emptiable — the divergence from UPA's own notion",
 			uOne(t, ResolvedTerm{Term: uGroup(t, CompositorChoice)}), true},
+		{"a <group ref> that does not resolve fails clause 2's antecedent",
+			uOne(t, ModelGroupRef{Name: uq("absent")}), false},
+		{"a <group ref> that does not resolve with {min occurs} 0 meets clause 1",
+			uParticle(t, uOccurs(t, 0, 1), ModelGroupRef{Name: uq("absent")}), true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			if got := s.particleEmptiable(tc.p); got != tc.want {
-				t.Fatalf("particleEmptiable = %t, want %t", got, tc.want)
+			if got := s.ParticleEmptiable(tc.p); got != tc.want {
+				t.Fatalf("ParticleEmptiable = %t, want %t", got, tc.want)
 			}
 		})
 	}

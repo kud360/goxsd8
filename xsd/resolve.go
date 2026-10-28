@@ -126,7 +126,7 @@ var anyTypeName = QName{Space: XMLSchemaNS, Local: "anyType"}
 //     charges e-props-correct (§3.3.6.1) clause 2 against every Element
 //     Declaration it passes through, global or local, deciding cos-valid-default
 //     (§3.3.6.2) — clause 1 through that same shared predicate, clause 2 through
-//     particleEmptiable (elementdefaultvalid.go, #463). The DECLARATION-side
+//     ParticleEmptiable (elementdefaultvalid.go, #463). The DECLARATION-side
 //     walk charges a-props-correct clause 2 against every GLOBAL Attribute
 //     Declaration. Both walks are needed and neither duplicates the other: a
 //     local declaration is reachable only through its owning use, a global one

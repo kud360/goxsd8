@@ -1,0 +1,188 @@
+<?xml version="1.0"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+           xmlns="urn:nestedgroups"
+           targetNamespace="urn:nestedgroups">
+  <xs:element name="order">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element name="id" type="xs:string"/>
+        <xs:sequence>
+          <xs:element name="spliced" type="xs:int"/>
+        </xs:sequence>
+        <xs:sequence maxOccurs="unbounded">
+          <xs:element name="line" type="xs:string"/>
+          <xs:element name="qty" type="xs:int"/>
+        </xs:sequence>
+        <xs:choice>
+          <xs:element name="cash" type="xs:boolean"/>
+          <xs:element name="card" type="xs:string"/>
+        </xs:choice>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+  <xs:complexType name="ct">
+    <xs:sequence>
+      <xs:sequence maxOccurs="unbounded">
+        <xs:element name="a" type="xs:string"/>
+        <xs:choice maxOccurs="2">
+          <xs:element name="b" type="xs:int"/>
+          <xs:element name="c" type="xs:boolean"/>
+        </xs:choice>
+      </xs:sequence>
+      <xs:sequence minOccurs="0">
+        <xs:element name="d" type="xs:string"/>
+      </xs:sequence>
+    </xs:sequence>
+  </xs:complexType>
+  <xs:element name="first" type="ct"/>
+  <xs:element name="second" type="ct"/>
+  <xs:complexType name="rep">
+    <xs:sequence maxOccurs="unbounded">
+      <xs:element name="k" type="xs:string"/>
+      <xs:choice minOccurs="0">
+        <xs:element name="v" type="xs:int"/>
+        <xs:element name="w" type="xs:string"/>
+      </xs:choice>
+    </xs:sequence>
+  </xs:complexType>
+  <xs:element name="third" type="rep"/>
+  <xs:element name="fourth" type="rep"/>
+  <xs:complexType name="node">
+    <xs:sequence>
+      <xs:element name="label" type="xs:string"/>
+      <xs:sequence minOccurs="0">
+        <xs:element name="next" type="node"/>
+      </xs:sequence>
+    </xs:sequence>
+  </xs:complexType>
+  <xs:element name="list" type="node"/>
+  <xs:complexType name="pick">
+    <xs:choice>
+      <xs:element name="p" type="xs:string"/>
+    </xs:choice>
+  </xs:complexType>
+  <xs:element name="byChoice">
+    <xs:complexType>
+      <xs:complexContent>
+        <xs:extension base="pick">
+          <xs:choice>
+            <xs:element name="q" type="xs:string"/>
+          </xs:choice>
+        </xs:extension>
+      </xs:complexContent>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="bySequence">
+    <xs:complexType>
+      <xs:complexContent>
+        <xs:extension base="pick">
+          <xs:sequence>
+            <xs:element name="r" type="xs:string"/>
+          </xs:sequence>
+        </xs:extension>
+      </xs:complexContent>
+    </xs:complexType>
+  </xs:element>
+  <xs:group name="g">
+    <xs:sequence>
+      <xs:element name="s" type="xs:string"/>
+    </xs:sequence>
+  </xs:group>
+  <xs:group name="h">
+    <xs:choice>
+      <xs:element name="u" type="xs:string"/>
+      <xs:element name="x" type="xs:int"/>
+    </xs:choice>
+  </xs:group>
+  <xs:element name="repeatedRef">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:group ref="g" maxOccurs="2"/>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="optionalRef">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:group ref="g" minOccurs="0"/>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="choiceRef">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:group ref="h"/>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="seqAlt">
+    <xs:complexType>
+      <xs:choice>
+        <xs:element name="a" type="xs:string"/>
+        <xs:sequence>
+          <xs:element name="b" type="xs:string"/>
+        </xs:sequence>
+      </xs:choice>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="refAlt">
+    <xs:complexType>
+      <xs:choice>
+        <xs:element name="a" type="xs:string"/>
+        <xs:group ref="g"/>
+        <xs:group ref="h"/>
+      </xs:choice>
+    </xs:complexType>
+  </xs:element>
+  <xs:complexType name="alt">
+    <xs:choice>
+      <xs:sequence>
+        <xs:element name="m" type="xs:string"/>
+        <xs:sequence maxOccurs="unbounded">
+          <xs:element name="n" type="xs:int"/>
+        </xs:sequence>
+      </xs:sequence>
+      <xs:sequence>
+        <xs:element name="o" type="xs:string"/>
+        <xs:sequence maxOccurs="unbounded">
+          <xs:element name="r" type="xs:boolean"/>
+        </xs:sequence>
+      </xs:sequence>
+    </xs:choice>
+  </xs:complexType>
+  <xs:element name="fifth" type="alt"/>
+  <xs:element name="sixth" type="alt"/>
+  <xs:element name="mixedAlts">
+    <xs:complexType>
+      <xs:choice>
+        <xs:sequence>
+          <xs:element name="y1" type="xs:string"/>
+        </xs:sequence>
+        <xs:sequence maxOccurs="2">
+          <xs:element name="y2" type="xs:int"/>
+        </xs:sequence>
+      </xs:choice>
+    </xs:complexType>
+  </xs:element>
+  <xs:group name="withChoice">
+    <xs:sequence>
+      <xs:element name="z" type="xs:string"/>
+      <xs:choice maxOccurs="unbounded">
+        <xs:element name="z1" type="xs:string"/>
+        <xs:element name="z2" type="xs:int"/>
+      </xs:choice>
+    </xs:sequence>
+  </xs:group>
+  <xs:element name="refA">
+    <xs:complexType>
+      <xs:group ref="withChoice"/>
+    </xs:complexType>
+  </xs:element>
+  <xs:complexType name="refB">
+    <xs:sequence>
+      <xs:element name="lead" type="xs:string"/>
+      <xs:group ref="withChoice"/>
+    </xs:sequence>
+  </xs:complexType>
+  <xs:element name="refB" type="refB"/>
+</xs:schema>
