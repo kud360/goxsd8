@@ -4,7 +4,12 @@
        accepted and not represented: each element below emits exactly as it
        would without one. greeting and version are top-level; record's
        local elements carry each variety, one of them optional; amount has
-       simple content and a fixed value. -->
+       simple content and a fixed value. An attribute use's effective value
+       constraint (§3.5.4 key-evc) is accepted and not represented in the
+       same way: lang is optional with a default and keeps its pointer,
+       revision is required and fixed, and currency, an <attribute ref>,
+       takes the default its global declaration carries. -->
+  <xs:attribute name="currency" type="xs:token" default="EUR"/>
   <xs:element name="greeting" type="xs:string" default="hello"/>
   <xs:element name="version" type="xs:int" fixed="2"/>
   <xs:complexType name="amount">
@@ -20,6 +25,9 @@
         <xs:element name="count" type="xs:int" minOccurs="0" default="0"/>
         <xs:element name="total" type="amount" fixed="1.5"/>
       </xs:sequence>
+      <xs:attribute name="lang" type="xs:language" default="en"/>
+      <xs:attribute name="revision" type="xs:int" use="required" fixed="1"/>
+      <xs:attribute ref="currency"/>
     </xs:complexType>
   </xs:element>
 </xs:schema>

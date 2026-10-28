@@ -237,10 +237,13 @@
 //     child (§3.2.2.1 dcl.att.global, §3.2.2.2 dcl.att.local), gives a special type's string, an atomic
 //     Go type, a slice, or a union's sealed interface, as an element's does; {required} true gives that
 //     type, false a pointer to it (*[]T for a list), but the bare interface for a union, nil meaning
-//     absent. The use's effective value constraint (§3.5.4 key-evc) must be absent, whether the use or a
-//     global declaration it references carries the default or fixed value. A choice {particle} that
-//     occurs exactly once is accepted only when its type has no {attribute uses} and no {attribute
-//     wildcard}.
+//     absent. The use's effective value constraint (§3.5.4 key-evc), default or fixed, whether the
+//     use or a global declaration it references carries it, is accepted and not represented. The
+//     field holds the attribute as the element's [attributes] carry it, so a nil field still means
+//     absent from the instance, although the post-schema-validation infoset supplies the
+//     constraint's value for an absent attribute (§3.2.1, §3.4.5). Supplying that value and
+//     enforcing a fixed one are the validator's. A choice {particle} that occurs exactly once is
+//     accepted only when its type has no {attribute uses} and no {attribute wildcard}.
 //   - An {attribute wildcard} of a type emitted as a struct, its own, one an extension inherits,
 //     or one an attribute group reference or the schema's defaultAttributes brings (§3.4.2.5
 //     dcl.ctd.anyatt), gives one field after every attribute field, the struct's last, named as
@@ -272,12 +275,11 @@
 // GAP(codegen): every other construct declines: the all compositor, an emptiable choice, a
 // choice with no {particles}, a wildcard alternative of a choice, a particle with {max occurs}
 // 0, attribute uses or an attribute wildcard on a type whose content is a choice occurring
-// exactly once, attribute uses with an effective value constraint, mixed content, a named
-// complex type, a top-level element through <element ref> particles, or a local element of a
-// model group through <group ref> particles, reaching itself through struct values, a list
-// whose {item type definition} declines, a union one of whose basic members declines, and
-// every primitive the first bullet does not map, for an element or an attribute alike. #2900
-// owns lifting them.
+// exactly once, mixed content, a named complex type, a top-level element through <element ref>
+// particles, or a local element of a model group through <group ref> particles, reaching
+// itself through struct values, a list whose {item type definition} declines, a union one of
+// whose basic members declines, and every primitive the first bullet does not map, for an
+// element or an attribute alike. #2900 owns lifting them.
 //
 // # Determinism
 //

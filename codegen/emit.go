@@ -1519,9 +1519,7 @@ func (e *emitter) refType(chain []valueNode, value bool, decl xsd.ElementDeclara
 
 // attributeField returns the field of attribute use u (§3.5.1) of the complex
 // type at loc named in declines by subject, typed and declined by the package
-// doc's "# Coverage" attribute-use rule. It reads the effective value
-// constraint through Schema.EffectiveValueConstraint, never u.ValueConstraint,
-// which holds the use's own alone. An attribute use carries no Loc, so its
+// doc's "# Coverage" attribute-use rule. An attribute use carries no Loc, so its
 // declines cite the declaration it resolves to, the global one for an
 // <attribute ref>. An anonymous union type is named by attributePath, nested
 // being the scope of the struct holding the field. The field holds a pointer
@@ -1533,9 +1531,6 @@ func (e *emitter) attributeField(nested scope, subject string, loc xsderr.Loc, u
 	decl, ok := e.schema.ResolvedAttributeDeclaration(u)
 	if !ok {
 		return fieldSpec{}, fmt.Errorf("%s at %s: its {attribute declaration} does not resolve", attr, loc)
-	}
-	if vc, ok := e.schema.EffectiveValueConstraint(u); ok {
-		return fieldSpec{}, decline(decl.Loc(), constructAttributeValueConstraint, attr, vc.Kind())
 	}
 	td, ok := e.schema.ResolvedType(decl.TypeDefinition())
 	if !ok {

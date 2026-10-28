@@ -30,7 +30,7 @@ func (e *DeclineError) Construct() Construct { return Construct{e.construct} }
 //
 // Loc is the zero xsderr.Loc exactly when that component's Loc is zero: a
 // component built through xsd.SchemaBuilder with a zero Loc, or one of the
-// built-in xsi: and xml: attribute declarations parser.Parse supplies itself
+// built-in xsi: attribute declarations parser.Parse supplies itself
 // rather than reading from a schema document. Every other decline from a
 // parsed schema carries the declining component's location in its document.
 func (e *DeclineError) Loc() xsderr.Loc { return e.loc }
@@ -87,7 +87,6 @@ const (
 	constructOpenContent
 	constructAll
 	constructVacuousParticle
-	constructAttributeValueConstraint
 	constructValueCycle
 	constructWildcard
 )
@@ -96,25 +95,24 @@ const (
 // Construct.String returns, and the format its decline's detail is rendered
 // from. Index 0, the invalid construct, holds neither.
 var constructs = [...]struct{ name, format string }{
-	constructElementNillable:          {"element {nillable}", "%s with {nillable} true"},
-	constructElementAbstract:          {"element {abstract}", "%s with {abstract} true"},
-	constructSubstitutionGroup:        {"{substitution group affiliations}", "%s with {substitution group affiliations}"},
-	constructTypeTable:                {"{type table}", "%s with a {type table}"},
-	constructAbsentVariety:            {"absent {variety}", "%s, of absent {variety}"},
-	constructNoPrimitive:              {"no {primitive type definition}", "%s, with no {primitive type definition}"},
-	constructUncoveredPrimitive:       {"uncovered primitive", "%s, whose {primitive type definition} is %s"},
-	constructChoiceAttributes:         {"choice with attributes", "%s whose content is a choice, with %s"},
-	constructEmptyChoice:              {"choice with no {particles}", "%s whose choice has no {particles}"},
-	constructEmptiableChoice:          {"emptiable choice", "%s whose choice is emptiable: its alternative %d, %s, is emptiable"},
-	constructComplexTypeAbstract:      {"complex type {abstract}", "%s with {abstract} true"},
-	constructAssertions:               {"{assertions}", "%s with {assertions}"},
-	constructMixedContent:             {"mixed content", "%s with mixed content"},
-	constructOpenContent:              {"{open content}", "%s with {open content}"},
-	constructAll:                      {"all compositor", "%s with an all compositor"},
-	constructVacuousParticle:          {"particle with {max occurs} 0", "a particle of %s with {max occurs} 0 in %s"},
-	constructAttributeValueConstraint: {"attribute effective value constraint", "%s with a %s effective value constraint (§3.5.4 key-evc)"},
-	constructValueCycle:               {"struct-value recursion", "%s reaching %s again through elements that each occur exactly once"},
-	constructWildcard:                 {"wildcard particle", "a wildcard particle in %s"},
+	constructElementNillable:     {"element {nillable}", "%s with {nillable} true"},
+	constructElementAbstract:     {"element {abstract}", "%s with {abstract} true"},
+	constructSubstitutionGroup:   {"{substitution group affiliations}", "%s with {substitution group affiliations}"},
+	constructTypeTable:           {"{type table}", "%s with a {type table}"},
+	constructAbsentVariety:       {"absent {variety}", "%s, of absent {variety}"},
+	constructNoPrimitive:         {"no {primitive type definition}", "%s, with no {primitive type definition}"},
+	constructUncoveredPrimitive:  {"uncovered primitive", "%s, whose {primitive type definition} is %s"},
+	constructChoiceAttributes:    {"choice with attributes", "%s whose content is a choice, with %s"},
+	constructEmptyChoice:         {"choice with no {particles}", "%s whose choice has no {particles}"},
+	constructEmptiableChoice:     {"emptiable choice", "%s whose choice is emptiable: its alternative %d, %s, is emptiable"},
+	constructComplexTypeAbstract: {"complex type {abstract}", "%s with {abstract} true"},
+	constructAssertions:          {"{assertions}", "%s with {assertions}"},
+	constructMixedContent:        {"mixed content", "%s with mixed content"},
+	constructOpenContent:         {"{open content}", "%s with {open content}"},
+	constructAll:                 {"all compositor", "%s with an all compositor"},
+	constructVacuousParticle:     {"particle with {max occurs} 0", "a particle of %s with {max occurs} 0 in %s"},
+	constructValueCycle:          {"struct-value recursion", "%s reaching %s again through elements that each occur exactly once"},
+	constructWildcard:            {"wildcard particle", "a wildcard particle in %s"},
 }
 
 // decline returns the *DeclineError for construct c, which the generator does
