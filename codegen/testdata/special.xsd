@@ -1,6 +1,6 @@
 <?xml version="1.0"?>
 <xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
-  <!-- The special types (Datatypes §2.4.1 dt-special), xs:anySimpleType and
+  <!-- The special types (Datatypes §2.4.2 dt-special), xs:anySimpleType and
        xs:anyAtomicType, give string, holding the literal. simple and atomic
        are elements of each; holder has a local element of each, one
        optional, an attribute declared with no type, which takes
