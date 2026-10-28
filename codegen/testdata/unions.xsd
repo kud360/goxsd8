@@ -11,7 +11,9 @@
        a simple-content restriction's value, and of an attribute of a named
        complex type, of an anonymous one and of a global declaration; one
        anonymous union two complex types reach through one attribute group;
-       and an optional <element ref> to an element of union type. -->
+       an optional <element ref> to an element of union type; and box's
+       anonymous unions reached first through crate, which extends it, and
+       named from box, which declares them. -->
   <xs:simpleType name="size">
     <xs:union memberTypes="xs:int">
       <xs:simpleType>
@@ -72,6 +74,11 @@
     </xs:attribute>
     <xs:attributeGroup ref="t:shared"/>
   </xs:complexType>
+  <xs:complexType name="crate">
+    <xs:complexContent>
+      <xs:extension base="t:box"/>
+    </xs:complexContent>
+  </xs:complexType>
   <xs:complexType name="measured">
     <xs:simpleContent>
       <xs:extension base="t:size">
@@ -86,6 +93,7 @@
       </xs:restriction>
     </xs:simpleContent>
   </xs:complexType>
+  <xs:element name="crate" type="t:crate"/>
   <xs:element name="box" type="t:box"/>
   <xs:element name="size" type="t:size"/>
   <xs:element name="measure" type="t:measured"/>

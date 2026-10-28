@@ -4,7 +4,20 @@ package unions
 
 import "math/big"
 
-// Box is generated from element {urn:t}box declared at testdata/unions.xsd:89:3.
+// Crate is generated from element {urn:t}crate declared at testdata/unions.xsd:96:3.
+type Crate struct {
+	Size  Size
+	Flags []Flag
+	All   []Size
+	Mix   Mixed
+	Code  BoxCodeUnion
+	Pin   Pin
+	Width Size
+	Unit  BoxUnitUnion
+	Mode  SharedModeUnion
+}
+
+// Box is generated from element {urn:t}box declared at testdata/unions.xsd:97:3.
 type Box struct {
 	Size  Size
 	Flags []Flag
@@ -17,35 +30,35 @@ type Box struct {
 	Mode  SharedModeUnion
 }
 
-// Size2 is generated from element {urn:t}size declared at testdata/unions.xsd:90:3.
+// Size2 is generated from element {urn:t}size declared at testdata/unions.xsd:98:3.
 type Size2 Size
 
-// Measure is generated from element {urn:t}measure declared at testdata/unions.xsd:91:3.
+// Measure is generated from element {urn:t}measure declared at testdata/unions.xsd:99:3.
 type Measure struct {
 	Value Size
 	Unit  string
 }
 
-// Narrow is generated from element {urn:t}narrow declared at testdata/unions.xsd:92:3.
+// Narrow is generated from element {urn:t}narrow declared at testdata/unions.xsd:100:3.
 type Narrow struct {
 	Value NarrowValueUnion
 	Unit  string
 }
 
-// Pin is generated from element {urn:t}pin declared at testdata/unions.xsd:93:3.
+// Pin is generated from element {urn:t}pin declared at testdata/unions.xsd:101:3.
 type Pin PinUnion
 
-// Ids is generated from element {urn:t}ids declared at testdata/unions.xsd:98:3.
+// Ids is generated from element {urn:t}ids declared at testdata/unions.xsd:106:3.
 type Ids []IdsUnion
 
-// Tag is generated from element {urn:t}tag declared at testdata/unions.xsd:107:3.
+// Tag is generated from element {urn:t}tag declared at testdata/unions.xsd:115:3.
 type Tag struct {
 	Kind TagKindUnion
 	Lang LangUnion
 	Mode SharedModeUnion
 }
 
-// Size is generated from simple type {urn:t}size declared at testdata/unions.xsd:15:3.
+// Size is generated from simple type {urn:t}size declared at testdata/unions.xsd:17:3.
 type Size interface {
 	isSize()
 }
@@ -55,12 +68,12 @@ type SizeInt int32
 
 func (SizeInt) isSize() {}
 
-// SizeString is generated from simple type (anonymous) declared at testdata/unions.xsd:17:7.
+// SizeString is generated from simple type (anonymous) declared at testdata/unions.xsd:19:7.
 type SizeString string
 
 func (SizeString) isSize() {}
 
-// Flag is generated from simple type {urn:t}flag declared at testdata/unions.xsd:25:3.
+// Flag is generated from simple type {urn:t}flag declared at testdata/unions.xsd:27:3.
 type Flag interface {
 	isFlag()
 }
@@ -70,7 +83,7 @@ type FlagInt int32
 
 func (FlagInt) isFlag() {}
 
-// FlagString is generated from simple type (anonymous) declared at testdata/unions.xsd:17:7.
+// FlagString is generated from simple type (anonymous) declared at testdata/unions.xsd:19:7.
 type FlagString string
 
 func (FlagString) isFlag() {}
@@ -80,7 +93,7 @@ type FlagBoolean bool
 
 func (FlagBoolean) isFlag() {}
 
-// Mixed is generated from simple type {urn:t}mixed declared at testdata/unions.xsd:31:3.
+// Mixed is generated from simple type {urn:t}mixed declared at testdata/unions.xsd:33:3.
 type Mixed interface {
 	isMixed()
 }
@@ -90,7 +103,7 @@ type MixedDate Date
 
 func (MixedDate) isMixed() {}
 
-// MixedList is generated from simple type (anonymous) declared at testdata/unions.xsd:33:7.
+// MixedList is generated from simple type (anonymous) declared at testdata/unions.xsd:35:7.
 type MixedList []MixedListUnion
 
 func (MixedList) isMixed() {}
@@ -104,7 +117,7 @@ type Date struct {
 	TimezoneOffset *int16
 }
 
-// MixedListUnion is generated from simple type (anonymous) declared at testdata/unions.xsd:35:11.
+// MixedListUnion is generated from simple type (anonymous) declared at testdata/unions.xsd:37:11.
 type MixedListUnion interface {
 	isMixedListUnion()
 }
@@ -119,7 +132,7 @@ type MixedListUnionBoolean bool
 
 func (MixedListUnionBoolean) isMixedListUnion() {}
 
-// BoxCodeUnion is generated from simple type (anonymous) declared at testdata/unions.xsd:61:9.
+// BoxCodeUnion is generated from simple type (anonymous) declared at testdata/unions.xsd:63:9.
 type BoxCodeUnion interface {
 	isBoxCodeUnion()
 }
@@ -134,7 +147,7 @@ type BoxCodeUnionAnyURI string
 
 func (BoxCodeUnionAnyURI) isBoxCodeUnion() {}
 
-// PinUnion is generated from simple type (anonymous) declared at testdata/unions.xsd:94:5.
+// PinUnion is generated from simple type (anonymous) declared at testdata/unions.xsd:102:5.
 type PinUnion interface {
 	isPinUnion()
 }
@@ -149,7 +162,7 @@ type PinUnionInt int32
 
 func (PinUnionInt) isPinUnion() {}
 
-// BoxUnitUnion is generated from simple type (anonymous) declared at testdata/unions.xsd:69:7.
+// BoxUnitUnion is generated from simple type (anonymous) declared at testdata/unions.xsd:71:7.
 type BoxUnitUnion interface {
 	isBoxUnitUnion()
 }
@@ -164,7 +177,7 @@ type BoxUnitUnionInt int32
 
 func (BoxUnitUnionInt) isBoxUnitUnion() {}
 
-// SharedModeUnion is generated from simple type (anonymous) declared at testdata/unions.xsd:49:7.
+// SharedModeUnion is generated from simple type (anonymous) declared at testdata/unions.xsd:51:7.
 type SharedModeUnion interface {
 	isSharedModeUnion()
 }
@@ -179,7 +192,7 @@ type SharedModeUnionString string
 
 func (SharedModeUnionString) isSharedModeUnion() {}
 
-// NarrowValueUnion is generated from simple type (anonymous) declared at testdata/unions.xsd:84:7.
+// NarrowValueUnion is generated from simple type (anonymous) declared at testdata/unions.xsd:91:7.
 type NarrowValueUnion interface {
 	isNarrowValueUnion()
 }
@@ -189,12 +202,12 @@ type NarrowValueUnionInt int32
 
 func (NarrowValueUnionInt) isNarrowValueUnion() {}
 
-// NarrowValueUnionString is generated from simple type (anonymous) declared at testdata/unions.xsd:17:7.
+// NarrowValueUnionString is generated from simple type (anonymous) declared at testdata/unions.xsd:19:7.
 type NarrowValueUnionString string
 
 func (NarrowValueUnionString) isNarrowValueUnion() {}
 
-// IdsUnion is generated from simple type (anonymous) declared at testdata/unions.xsd:101:9.
+// IdsUnion is generated from simple type (anonymous) declared at testdata/unions.xsd:109:9.
 type IdsUnion interface {
 	isIdsUnion()
 }
@@ -209,7 +222,7 @@ type IdsUnionBoolean bool
 
 func (IdsUnionBoolean) isIdsUnion() {}
 
-// TagKindUnion is generated from simple type (anonymous) declared at testdata/unions.xsd:110:9.
+// TagKindUnion is generated from simple type (anonymous) declared at testdata/unions.xsd:118:9.
 type TagKindUnion interface {
 	isTagKindUnion()
 }
@@ -224,7 +237,7 @@ type TagKindUnionString string
 
 func (TagKindUnionString) isTagKindUnion() {}
 
-// LangUnion is generated from simple type (anonymous) declared at testdata/unions.xsd:43:5.
+// LangUnion is generated from simple type (anonymous) declared at testdata/unions.xsd:45:5.
 type LangUnion interface {
 	isLangUnion()
 }
