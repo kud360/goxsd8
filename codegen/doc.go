@@ -302,45 +302,46 @@
 // anyType with no type names its type AnyType2. A wildcard particle's field
 // is named as if from local name any. A union's interface is named from the
 // type when it is named (simple type size → Size), claimed when the walk first
-// needs it, ahead of the type of the declaration whose type needs it, so that
-// a top-level element size of type size names its type Size2. An anonymous
-// union is named by the path of names an anonymous complex type would take in
-// its place, with the local name union last: a top-level element's (element
-// pin → PinUnion), a local element's (element code in complex type box →
-// BoxCodeUnion), an attribute's from the global attribute declaration, the
-// named complex type or attribute group definition declaring it, or the path
-// of the struct holding it for an anonymous complex type (attribute mode in
-// attribute group shared → SharedModeUnion, attribute kind of element tag →
-// TagKindUnion), and a value field's from its struct's path with value before
-// union (complex type narrow → NarrowValueUnion). A list's item takes the
-// list's path, and a union reached through several declarations is named from
-// the first. A variant is named from its interface's name plus its member's
-// local name: an anonymous list member's is list, and any other anonymous
-// member's is that of the nearest named type on its {base type definition}
-// chain, the member itself first (xs:int in Size → SizeInt, an anonymous
-// restriction of xs:string → SizeString). The variants are claimed after
-// their interface in basic-member order, each ahead of its member's own Go
-// type, which takes the variant's name as its path (an anonymous union item
-// of the list variant MixedList → MixedListUnion). Every other generated
-// type's header comment but a union interface's or variant's records the QName
-// and the schema Loc of the declaration it is named from: the element
-// declaration, or the complex type definition for a type named from one. A union
-// interface's header records the simple type it is generated from, by its QName
-// or as (anonymous), and that type's schema Loc, and a variant's header its
-// member the same way, a builtin member, having no schema document, by its QName
-// alone. A datatype struct's header records its datatype's QName alone, a
-// builtin having no schema document, then a second line stating what its fields'
-// names do not, when there is any: TimezoneOffset's unit and whether it may be
-// absent, or that duration's Months and Seconds share one sign. A raw-content
-// struct's header records xs:anyType's QName alone, then, for AnyType and
-// AnyChild, a second line stating what Text or Tail holds. A Loc whose URI
-// filepath.IsAbs accepts renders relative to the target's Dir made absolute
-// against the working directory, slash-separated and climbing with ".." out of
-// Dir. A document outside the tree laid out alike, such as one an absolute
-// schemaLocation names, renders a climbing path that differs with that tree's
-// depth below the filesystem root. Any other URI renders as is, a URL or a
-// relative loader key alike, as does one with no path relative to Dir, such as
-// one on another Windows volume. Symbolic links are not resolved.
+// needs it as a datatype struct is: for a top-level element of a union type,
+// ahead of that element's own type, so that a top-level element size of type
+// size names its type Size2; for a field of a struct, after that struct's own
+// name. An anonymous union is named by the path of names an anonymous complex
+// type would take in its place, with the local name union last: a top-level
+// element's (element pin → PinUnion), a local element's (element code in complex
+// type box → BoxCodeUnion), an attribute's from the global attribute
+// declaration, the named complex type or attribute group definition declaring
+// it, or the path of the struct holding it for an anonymous complex type
+// (attribute mode in attribute group shared → SharedModeUnion, attribute kind of
+// element tag → TagKindUnion), and a value field's from its struct's path with
+// value before union (complex type narrow → NarrowValueUnion). A list's item
+// takes the list's path, and a union reached through several declarations is
+// named from the first. A variant is named from its interface's name plus its
+// member's local name: an anonymous list member's is list, and any other
+// anonymous member's is that of the nearest named type on its {base type
+// definition} chain, the member itself first (xs:int in Size → SizeInt, an
+// anonymous restriction of xs:string → SizeString). The variants are claimed
+// after their interface in basic-member order, each ahead of its member's own Go
+// type, which takes the variant's name as its path (an anonymous union item of
+// the list variant MixedList → MixedListUnion). Every other generated type's
+// header comment but a union interface's or variant's records the QName and the
+// schema Loc of the declaration it is named from: the element declaration, or
+// the complex type definition for a type named from one. A union interface's
+// header records the simple type it is generated from, by its QName or as
+// (anonymous), and that type's schema Loc, and a variant's header its member the
+// same way, a builtin member, having no schema document, by its QName alone. A
+// datatype struct's header records its datatype's QName alone, a builtin having
+// no schema document, then a second line stating what its fields' names do not,
+// when there is any: TimezoneOffset's unit and whether it may be absent, or that
+// duration's Months and Seconds share one sign. A raw-content struct's header
+// records xs:anyType's QName alone, then, for AnyType and AnyChild, a second
+// line stating what Text or Tail holds. A Loc whose URI filepath.IsAbs accepts
+// renders relative to the target's Dir made absolute against the working
+// directory, slash-separated and climbing with ".." out of Dir. A document
+// outside the tree laid out alike, such as one an absolute schemaLocation names,
+// renders a climbing path that differs with that tree's depth below the
+// filesystem root. Any other URI renders as is, a URL or a relative loader key
+// alike, as does one with no path relative to Dir, such as one on another
+// Windows volume. Symbolic links are not resolved.
 //
 // # Planned (M9 — not yet implemented)
 //
