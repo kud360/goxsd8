@@ -53,19 +53,20 @@ func TestGenerateDeclines(t *testing.T) {
 		{"choice of vacuous elements", `<xs:element name="e"><xs:complexType><xs:choice><xs:element name="a" minOccurs="0" maxOccurs="0" ` + str + `/></xs:choice></xs:complexType></xs:element>`,
 			"complex type (anonymous) of element e whose choice has no {particles}", constructEmptyChoice},
 		{"emptiable choice", `<xs:element name="e"><xs:complexType><xs:choice><xs:element name="a" ` + str + `/><xs:element name="b" minOccurs="0" ` + str + `/></xs:choice></xs:complexType></xs:element>`,
-			"complex type (anonymous) of element e whose choice is emptiable: its alternative element b has {min occurs} 0", constructEmptiableChoice},
+			"complex type (anonymous) of element e whose choice is emptiable: its alternative 2, element b, is emptiable", constructEmptiableChoice},
 		// A repeated choice reads its alternatives alone for the emptiable gate,
 		// its own {min occurs} 0 notwithstanding (cos-group-emptiable).
 		{"repeated emptiable choice", `<xs:element name="e"><xs:complexType><xs:choice minOccurs="0" maxOccurs="unbounded"><xs:element name="a" ` + str + `/><xs:element name="b" minOccurs="0" ` + str + `/></xs:choice></xs:complexType></xs:element>`,
-			"complex type (anonymous) of element e whose choice is emptiable: its alternative element b has {min occurs} 0", constructEmptiableChoice},
-		{"group in choice", `<xs:element name="e"><xs:complexType><xs:choice><xs:element name="a" ` + str + `/><xs:sequence><xs:element name="b" ` + str + `/></xs:sequence></xs:choice></xs:complexType></xs:element>`,
-			"a nested sequence model group particle", constructNestedGroup},
+			"complex type (anonymous) of element e whose choice is emptiable: its alternative 2, element b, is emptiable", constructEmptiableChoice},
+		// A model group alternative occurring exactly once is emptiable by
+		// cos-group-emptiable clause 2: its effective total range has minimum
+		// 0 (cos-seq-range, cos-choice-range), inline or through a <group ref>.
 		{"emptiable group in choice", `<xs:element name="e"><xs:complexType><xs:choice><xs:element name="a" ` + str + `/><xs:sequence><xs:element name="b" minOccurs="0" ` + str + `/></xs:sequence></xs:choice></xs:complexType></xs:element>`,
-			"a nested sequence model group particle", constructNestedGroup},
-		// A <group ref> alternative is a nested model group particle, as an
-		// inline group alternative is, until #3128 lifts it.
-		{"group ref in choice", `<xs:group name="g"><xs:sequence><xs:element name="b" ` + str + `/></xs:sequence></xs:group><xs:element name="e"><xs:complexType><xs:choice><xs:element name="a" ` + str + `/><xs:group ref="g"/></xs:choice></xs:complexType></xs:element>`,
-			"a nested sequence model group particle in complex type (anonymous) of element e", constructNestedGroup},
+			"complex type (anonymous) of element e whose choice is emptiable: its alternative 2, a sequence model group particle, is emptiable", constructEmptiableChoice},
+		{"emptiable choice in choice", `<xs:element name="e"><xs:complexType><xs:choice><xs:element name="a" ` + str + `/><xs:choice><xs:element name="b" ` + str + `/><xs:element name="c" minOccurs="0" ` + str + `/></xs:choice></xs:choice></xs:complexType></xs:element>`,
+			"complex type (anonymous) of element e whose choice is emptiable: its alternative 2, a choice model group particle, is emptiable", constructEmptiableChoice},
+		{"emptiable group ref in choice", `<xs:group name="g"><xs:sequence><xs:element name="b" minOccurs="0" ` + str + `/></xs:sequence></xs:group><xs:element name="e"><xs:complexType><xs:choice><xs:element name="a" ` + str + `/><xs:group ref="g"/></xs:choice></xs:complexType></xs:element>`,
+			"complex type (anonymous) of element e whose choice is emptiable: its alternative 2, a sequence model group particle, is emptiable", constructEmptiableChoice},
 		{"wildcard in choice", `<xs:element name="e"><xs:complexType><xs:choice><xs:element name="a" ` + str + `/><xs:any/></xs:choice></xs:complexType></xs:element>`,
 			"a wildcard particle", constructWildcard},
 		{"mixed choice", `<xs:element name="e"><xs:complexType mixed="true"><xs:choice><xs:element name="a" ` + str + `/></xs:choice></xs:complexType></xs:element>`,

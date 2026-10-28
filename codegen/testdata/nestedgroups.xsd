@@ -115,4 +115,74 @@
       </xs:sequence>
     </xs:complexType>
   </xs:element>
+  <xs:element name="seqAlt">
+    <xs:complexType>
+      <xs:choice>
+        <xs:element name="a" type="xs:string"/>
+        <xs:sequence>
+          <xs:element name="b" type="xs:string"/>
+        </xs:sequence>
+      </xs:choice>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="refAlt">
+    <xs:complexType>
+      <xs:choice>
+        <xs:element name="a" type="xs:string"/>
+        <xs:group ref="g"/>
+        <xs:group ref="h"/>
+      </xs:choice>
+    </xs:complexType>
+  </xs:element>
+  <xs:complexType name="alt">
+    <xs:choice>
+      <xs:sequence>
+        <xs:element name="m" type="xs:string"/>
+        <xs:sequence maxOccurs="unbounded">
+          <xs:element name="n" type="xs:int"/>
+        </xs:sequence>
+      </xs:sequence>
+      <xs:sequence>
+        <xs:element name="o" type="xs:string"/>
+        <xs:sequence maxOccurs="unbounded">
+          <xs:element name="r" type="xs:boolean"/>
+        </xs:sequence>
+      </xs:sequence>
+    </xs:choice>
+  </xs:complexType>
+  <xs:element name="fifth" type="alt"/>
+  <xs:element name="sixth" type="alt"/>
+  <xs:element name="mixedAlts">
+    <xs:complexType>
+      <xs:choice>
+        <xs:sequence>
+          <xs:element name="y1" type="xs:string"/>
+        </xs:sequence>
+        <xs:sequence maxOccurs="2">
+          <xs:element name="y2" type="xs:int"/>
+        </xs:sequence>
+      </xs:choice>
+    </xs:complexType>
+  </xs:element>
+  <xs:group name="withChoice">
+    <xs:sequence>
+      <xs:element name="z" type="xs:string"/>
+      <xs:choice maxOccurs="unbounded">
+        <xs:element name="z1" type="xs:string"/>
+        <xs:element name="z2" type="xs:int"/>
+      </xs:choice>
+    </xs:sequence>
+  </xs:group>
+  <xs:element name="refA">
+    <xs:complexType>
+      <xs:group ref="withChoice"/>
+    </xs:complexType>
+  </xs:element>
+  <xs:complexType name="refB">
+    <xs:sequence>
+      <xs:element name="lead" type="xs:string"/>
+      <xs:group ref="withChoice"/>
+    </xs:sequence>
+  </xs:complexType>
+  <xs:element name="refB" type="refB"/>
 </xs:schema>

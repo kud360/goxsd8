@@ -220,3 +220,194 @@ type ChoiceRefChoiceX struct {
 }
 
 func (ChoiceRefChoiceX) isChoiceRefChoice() {}
+
+// SeqAlt is generated from element {urn:nestedgroups}seqAlt declared at testdata/nestedgroups.xsd:118:3.
+type SeqAlt interface {
+	isSeqAlt()
+}
+
+// SeqAltA is generated from element a declared at testdata/nestedgroups.xsd:121:9.
+type SeqAltA struct {
+	A string
+}
+
+func (SeqAltA) isSeqAlt() {}
+
+// SeqAltSequence is generated from element {urn:nestedgroups}seqAlt declared at testdata/nestedgroups.xsd:118:3.
+type SeqAltSequence struct {
+	B string
+}
+
+func (SeqAltSequence) isSeqAlt() {}
+
+// RefAlt is generated from element {urn:nestedgroups}refAlt declared at testdata/nestedgroups.xsd:128:3.
+type RefAlt interface {
+	isRefAlt()
+}
+
+// RefAltA is generated from element a declared at testdata/nestedgroups.xsd:131:9.
+type RefAltA struct {
+	A string
+}
+
+func (RefAltA) isRefAlt() {}
+
+// RefAltSequence is generated from element {urn:nestedgroups}refAlt declared at testdata/nestedgroups.xsd:128:3.
+type RefAltSequence struct {
+	S string
+}
+
+func (RefAltSequence) isRefAlt() {}
+
+// RefAltChoice is generated from element {urn:nestedgroups}refAlt declared at testdata/nestedgroups.xsd:128:3.
+type RefAltChoice struct {
+	Choice RefAltChoice2
+}
+
+func (RefAltChoice) isRefAlt() {}
+
+// RefAltChoice2 is generated from element {urn:nestedgroups}refAlt declared at testdata/nestedgroups.xsd:128:3.
+type RefAltChoice2 interface {
+	isRefAltChoice2()
+}
+
+// RefAltChoice2U is generated from element u declared at testdata/nestedgroups.xsd:93:7.
+type RefAltChoice2U struct {
+	U string
+}
+
+func (RefAltChoice2U) isRefAltChoice2() {}
+
+// RefAltChoice2X is generated from element x declared at testdata/nestedgroups.xsd:94:7.
+type RefAltChoice2X struct {
+	X int32
+}
+
+func (RefAltChoice2X) isRefAltChoice2() {}
+
+// Fifth is generated from element {urn:nestedgroups}fifth declared at testdata/nestedgroups.xsd:153:3.
+type Fifth interface {
+	isFifth()
+}
+
+// FifthSequence is generated from element {urn:nestedgroups}fifth declared at testdata/nestedgroups.xsd:153:3.
+type FifthSequence struct {
+	M        string
+	Sequence []AltSequence
+}
+
+func (FifthSequence) isFifth() {}
+
+// AltSequence is generated from complex type {urn:nestedgroups}alt declared at testdata/nestedgroups.xsd:137:3.
+type AltSequence struct {
+	N int32
+}
+
+// FifthSequence2 is generated from element {urn:nestedgroups}fifth declared at testdata/nestedgroups.xsd:153:3.
+type FifthSequence2 struct {
+	O        string
+	Sequence []AltSequence2
+}
+
+func (FifthSequence2) isFifth() {}
+
+// AltSequence2 is generated from complex type {urn:nestedgroups}alt declared at testdata/nestedgroups.xsd:137:3.
+type AltSequence2 struct {
+	R bool
+}
+
+// Sixth is generated from element {urn:nestedgroups}sixth declared at testdata/nestedgroups.xsd:154:3.
+type Sixth interface {
+	isSixth()
+}
+
+// SixthSequence is generated from element {urn:nestedgroups}sixth declared at testdata/nestedgroups.xsd:154:3.
+type SixthSequence struct {
+	M        string
+	Sequence []AltSequence
+}
+
+func (SixthSequence) isSixth() {}
+
+// SixthSequence2 is generated from element {urn:nestedgroups}sixth declared at testdata/nestedgroups.xsd:154:3.
+type SixthSequence2 struct {
+	O        string
+	Sequence []AltSequence2
+}
+
+func (SixthSequence2) isSixth() {}
+
+// MixedAlts is generated from element {urn:nestedgroups}mixedAlts declared at testdata/nestedgroups.xsd:155:3.
+type MixedAlts interface {
+	isMixedAlts()
+}
+
+// MixedAltsSequence is generated from element {urn:nestedgroups}mixedAlts declared at testdata/nestedgroups.xsd:155:3.
+type MixedAltsSequence struct {
+	Y1 string
+}
+
+func (MixedAltsSequence) isMixedAlts() {}
+
+// MixedAltsSequence2 is generated from element {urn:nestedgroups}mixedAlts declared at testdata/nestedgroups.xsd:155:3.
+type MixedAltsSequence2 struct {
+	Sequence []MixedAltsSequence3
+}
+
+func (MixedAltsSequence2) isMixedAlts() {}
+
+// MixedAltsSequence3 is generated from element {urn:nestedgroups}mixedAlts declared at testdata/nestedgroups.xsd:155:3.
+type MixedAltsSequence3 struct {
+	Y2 int32
+}
+
+// RefA is generated from element {urn:nestedgroups}refA declared at testdata/nestedgroups.xsd:176:3.
+type RefA struct {
+	Z      string
+	Choice []RefAChoice
+}
+
+// RefAChoice is generated from element {urn:nestedgroups}refA declared at testdata/nestedgroups.xsd:176:3.
+type RefAChoice interface {
+	isRefAChoice()
+}
+
+// RefAChoiceZ1 is generated from element z1 declared at testdata/nestedgroups.xsd:171:9.
+type RefAChoiceZ1 struct {
+	Z1 string
+}
+
+func (RefAChoiceZ1) isRefAChoice() {}
+
+// RefAChoiceZ2 is generated from element z2 declared at testdata/nestedgroups.xsd:172:9.
+type RefAChoiceZ2 struct {
+	Z2 int32
+}
+
+func (RefAChoiceZ2) isRefAChoice() {}
+
+// RefB is generated from element {urn:nestedgroups}refB declared at testdata/nestedgroups.xsd:187:3.
+type RefB struct {
+	Lead   string
+	Z      string
+	Choice []RefBChoice
+}
+
+// RefBChoice is generated from complex type {urn:nestedgroups}refB declared at testdata/nestedgroups.xsd:181:3.
+type RefBChoice interface {
+	isRefBChoice()
+}
+
+// RefBChoiceZ1 is generated from element z1 declared at testdata/nestedgroups.xsd:171:9.
+type RefBChoiceZ1 struct {
+	Z1 string
+}
+
+func (RefBChoiceZ1) isRefBChoice() {}
+
+// RefBChoiceZ2 is generated from element z2 declared at testdata/nestedgroups.xsd:172:9.
+type RefBChoiceZ2 struct {
+	Z2 int32
+}
+
+func (RefBChoiceZ2) isRefBChoice() {}
