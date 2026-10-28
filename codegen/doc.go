@@ -256,12 +256,15 @@
 //     2.2.2), and holds every match raw whether a strict or lax wildcard would assess it;
 //     enforcing either is the validator's.
 //   - Every element declaration emitted from has {nillable} and {abstract}
-//     false and no {value constraint}, {type table} or {substitution group
-//     affiliations}. Its {identity-constraint definitions} are accepted and
-//     not represented: an identity constraint restricts the values an
-//     instance holds and adds no content or attribute (§3.11.1), so the
-//     element emits exactly as it would without one, and enforcing it is
-//     the validator's.
+//     false and no {type table} or {substitution group affiliations}. Its
+//     {value constraint}, default or fixed, and its {identity-constraint
+//     definitions} are accepted and not represented. A value constraint
+//     supplies a value only for an empty element and changes neither its
+//     content nor the type its value is drawn from (§3.3.1). An identity
+//     constraint restricts the values an instance holds and adds no content
+//     or attribute (§3.11.1). So the element emits exactly as it would
+//     without either, and supplying a default and enforcing a fixed value or
+//     an identity constraint are the validator's.
 //
 // ExampleGenerate prints the whole file Generate writes for a schema inside
 // this slice.

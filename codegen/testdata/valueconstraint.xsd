@@ -1,0 +1,25 @@
+<?xml version="1.0"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <!-- An element's {value constraint} (§3.3.1), default or fixed, is
+       accepted and not represented: each element below emits exactly as it
+       would without one. greeting and version are top-level; record's
+       local elements carry each variety, one of them optional; amount has
+       simple content and a fixed value. -->
+  <xs:element name="greeting" type="xs:string" default="hello"/>
+  <xs:element name="version" type="xs:int" fixed="2"/>
+  <xs:complexType name="amount">
+    <xs:simpleContent>
+      <xs:extension base="xs:decimal"/>
+    </xs:simpleContent>
+  </xs:complexType>
+  <xs:element name="record">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element name="status" type="xs:token" default="open"/>
+        <xs:element name="kind" type="xs:string" fixed="note"/>
+        <xs:element name="count" type="xs:int" minOccurs="0" default="0"/>
+        <xs:element name="total" type="amount" fixed="1.5"/>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>

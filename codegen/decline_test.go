@@ -181,15 +181,16 @@ func TestGenerateDeclines(t *testing.T) {
 			"complex type c of element e whose content is a choice, with {attribute uses}", constructChoiceAttributes},
 		{"restriction with inherited assertion", `<xs:complexType name="b"><xs:sequence><xs:element name="a" ` + str + `/></xs:sequence><xs:assert test="true()"/></xs:complexType><xs:complexType name="c"><xs:complexContent><xs:restriction base="b"><xs:sequence><xs:element name="a" ` + str + `/></xs:sequence></xs:restriction></xs:complexContent></xs:complexType><xs:element name="e" type="c"/>`,
 			"complex type c of element e with {assertions}", constructAssertions},
-		{"nillable", `<xs:element name="e" nillable="true" ` + str + `/>`,
+		// The four rows below carry a {value constraint} beside the declining
+		// property, so they pin that the value constraint, accepted, is not
+		// checked ahead of it.
+		{"nillable", `<xs:element name="e" nillable="true" default="d" ` + str + `/>`,
 			"element e with {nillable} true", constructElementNillable},
-		{"abstract element", `<xs:element name="e" abstract="true" ` + str + `/>`,
+		{"abstract element", `<xs:element name="e" abstract="true" fixed="f" ` + str + `/>`,
 			"element e with {abstract} true", constructElementAbstract},
-		{"value constraint", `<xs:element name="e" default="d" ` + str + `/>`,
-			"element e with a {value constraint}", constructElementValueConstraint},
-		{"type table", `<xs:element name="e" ` + str + `><xs:alternative test="true()" type="xs:token"/></xs:element>`,
+		{"type table", `<xs:element name="e" default="d" ` + str + `><xs:alternative test="true()" type="xs:token"/></xs:element>`,
 			"element e with a {type table}", constructTypeTable},
-		{"substitution group", `<xs:element name="h" ` + str + `/><xs:element name="e" substitutionGroup="h" ` + str + `/>`,
+		{"substitution group", `<xs:element name="h" ` + str + `/><xs:element name="e" substitutionGroup="h" fixed="f" ` + str + `/>`,
 			"element e with {substitution group affiliations}", constructSubstitutionGroup},
 		{"assertion", `<xs:element name="e"><xs:complexType><xs:sequence><xs:element name="a" ` + str + `/></xs:sequence><xs:assert test="true()"/></xs:complexType></xs:element>`,
 			"with {assertions}", constructAssertions},

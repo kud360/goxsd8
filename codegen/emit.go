@@ -550,9 +550,6 @@ func (e *emitter) declaredType(decl xsd.ElementDeclaration) (xsd.TypeDefinition,
 	case len(decl.SubstitutionGroupAffiliationNames()) > 0:
 		return nil, decline(decl.Loc(), constructSubstitutionGroup, subject)
 	}
-	if _, ok := decl.ValueConstraint(); ok {
-		return nil, decline(decl.Loc(), constructElementValueConstraint, subject)
-	}
 	if _, ok := decl.TypeTable(); ok {
 		return nil, decline(decl.Loc(), constructTypeTable, subject)
 	}
