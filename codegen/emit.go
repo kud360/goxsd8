@@ -820,10 +820,14 @@ func (e *emitter) particleFields(nested scope, chain []valueNode, subject string
 // sequence model group and which occurs exactly once replaced, recursively, by
 // that group's own particles: one occurrence of such a particle is one pass
 // through its particles in order (§3.8.4.1.1 sec-sequences), so its fields are
-// theirs. Every other particle is kept as is: a choice, a sequence occurring other
-// than exactly once, and a <group ref> particle (xsd.ModelGroupRef), which is
-// never followed, are left to field to decline. The term is a closed sum, so
-// the assertion is STYLE T2's sealed-sum exception, as wildcardTerm's is.
+// theirs. A complex-content extension's content particle (§3.4.2.3.3
+// dcl.ctd.ctcc.common clause 4.2.3.3) is one such sequence, nesting its base's
+// when the base is itself an extension, so the splice recurses; the package
+// doc's "# Coverage" states the fields that gives. Every other particle is
+// kept as is, and field declines a choice, a sequence occurring other than
+// exactly once, and a <group ref> particle (xsd.ModelGroupRef), which spliced
+// never follows. The term is a closed sum, so the assertion is STYLE T2's
+// sealed-sum exception, as wildcardTerm's is.
 func spliced(particles []xsd.Particle) []xsd.Particle {
 	var leaves []xsd.Particle
 	for _, p := range particles {
@@ -930,17 +934,15 @@ type contentParticle struct {
 // contentGroup checks the complex type t, named in declines by subject,
 // against the package doc's "# Coverage" complex-type shape. It reads t's
 // finalized component alone, never its base, so a base that itself declines
-// does not block t. An extension declines unless its content has {variety}
-// simple (§3.4.2.2 dcl.ctd.ctsc), whatever its base. For element-only content
+// does not block t, and an extension is checked as a restriction is: its
+// {content type} already holds what it takes from its base (§3.4.2.3.3
+// dcl.ctd.ctcc.common clause 4.2, §3.4.2.2 dcl.ctd.ctsc). For element-only content
 // it returns t's content particle, whatever its {min occurs} and {max occurs}
 // but a {max occurs} of 0, which declines; for {variety} empty (§3.4.1),
 // which has no {particle}, and for {variety} simple, whose value field body
 // gives, it returns nil and a nil error. Mixed content declines. Particles
 // and model groups carry no Loc, so their declines cite t's.
 func (e *emitter) contentGroup(subject string, t xsd.ComplexType) (*contentParticle, error) {
-	if t.DerivationMethod() != xsd.DerivationRestriction && t.ContentType().Variety() != xsd.ContentSimple {
-		return nil, decline(t.Loc(), constructDerivation, subject, t.DerivationMethod())
-	}
 	switch {
 	case t.Abstract():
 		return nil, decline(t.Loc(), constructComplexTypeAbstract, subject)

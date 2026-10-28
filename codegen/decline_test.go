@@ -69,8 +69,17 @@ func TestGenerateDeclines(t *testing.T) {
 			"with mixed content", constructMixedContent},
 		{"open content choice", `<xs:element name="e"><xs:complexType><xs:openContent><xs:any/></xs:openContent><xs:choice><xs:element name="a" ` + str + `/></xs:choice></xs:complexType></xs:element>`,
 			"with {open content}", constructOpenContent},
+		// The extension rows pin that an extension of a choice-content base
+		// is its own {content type} (§3.4.2.3.3 dcl.ctd.ctcc.common clause
+		// 4.2): with an ·effective content· of its own the base's choice is
+		// nested in the clause 4.2.3.3 sequence, and with none (clause 4.2.2)
+		// it is the base's choice, its {attribute uses} declining it.
 		{"extension of a choice", `<xs:complexType name="b"><xs:choice><xs:element name="a" ` + str + `/></xs:choice></xs:complexType><xs:element name="e"><xs:complexType><xs:complexContent><xs:extension base="b"><xs:choice><xs:element name="c" ` + str + `/></xs:choice></xs:extension></xs:complexContent></xs:complexType></xs:element>`,
-			"derived by extension", constructDerivation},
+			"a nested choice model group particle in complex type (anonymous) of element e", constructNestedGroup},
+		{"extension of a choice by a sequence", `<xs:complexType name="b"><xs:choice><xs:element name="a" ` + str + `/></xs:choice></xs:complexType><xs:element name="e"><xs:complexType><xs:complexContent><xs:extension base="b"><xs:sequence><xs:element name="c" ` + str + `/></xs:sequence></xs:extension></xs:complexContent></xs:complexType></xs:element>`,
+			"a nested choice model group particle in complex type (anonymous) of element e", constructNestedGroup},
+		{"extension of a choice by an attribute", `<xs:complexType name="b"><xs:choice><xs:element name="a" ` + str + `/></xs:choice></xs:complexType><xs:element name="e"><xs:complexType><xs:complexContent><xs:extension base="b"><xs:attribute name="t" ` + str + `/></xs:extension></xs:complexContent></xs:complexType></xs:element>`,
+			"complex type (anonymous) of element e whose content is a choice, with {attribute uses}", constructChoiceAttributeUses},
 		{"choice alternative type", `<xs:element name="e"><xs:complexType><xs:choice><xs:element name="a" type="xs:QName"/></xs:choice></xs:complexType></xs:element>`,
 			"element a with {type definition} {http://www.w3.org/2001/XMLSchema}QName, whose {primitive type definition} is", constructUncoveredPrimitive},
 		{"all", `<xs:element name="e"><xs:complexType><xs:all><xs:element name="a" ` + str + `/></xs:all></xs:complexType></xs:element>`,
@@ -134,8 +143,6 @@ func TestGenerateDeclines(t *testing.T) {
 			"with {assertions}", constructAssertions},
 		{"empty type attribute wildcard", `<xs:element name="e"><xs:complexType><xs:anyAttribute/></xs:complexType></xs:element>`,
 			"with an {attribute wildcard}", constructAttributeWildcard},
-		{"empty type extension", `<xs:complexType name="b"/><xs:element name="e"><xs:complexType><xs:complexContent><xs:extension base="b"/></xs:complexContent></xs:complexType></xs:element>`,
-			"derived by extension", constructDerivation},
 		{"mixed empty", `<xs:element name="e"><xs:complexType mixed="true"/></xs:element>`,
 			"with mixed content", constructMixedContent},
 		{"default open content applies to empty", `<xs:defaultOpenContent appliesToEmpty="true"><xs:any/></xs:defaultOpenContent><xs:element name="e"><xs:complexType/></xs:element>`,
@@ -165,8 +172,6 @@ func TestGenerateDeclines(t *testing.T) {
 			"with {open content}", constructOpenContent},
 		{"default open content", `<xs:defaultOpenContent><xs:any/></xs:defaultOpenContent><xs:element name="e"><xs:complexType><xs:sequence><xs:element name="a" ` + str + `/></xs:sequence></xs:complexType></xs:element>`,
 			"with {open content}", constructOpenContent},
-		{"extension", `<xs:complexType name="b"><xs:sequence><xs:element name="a" ` + str + `/></xs:sequence></xs:complexType><xs:element name="e"><xs:complexType><xs:complexContent><xs:extension base="b"/></xs:complexContent></xs:complexType></xs:element>`,
-			"derived by extension", constructDerivation},
 		// The restriction rows pin that a complex-content restriction of a
 		// base other than xs:anyType is checked from its own finalized
 		// component: c writes no <attribute> or <assert>, and declines for
@@ -198,7 +203,7 @@ func TestGenerateDeclines(t *testing.T) {
 		{"copy of anyType's shape without anyAttribute", `<xs:complexType name="c" mixed="true"><xs:sequence><xs:any processContents="lax" minOccurs="0" maxOccurs="unbounded"/></xs:sequence></xs:complexType><xs:element name="e" type="c"/>`,
 			"complex type c of element e with mixed content", constructMixedContent},
 		{"extension of anyType", `<xs:complexType name="c"><xs:complexContent><xs:extension base="xs:anyType"/></xs:complexContent></xs:complexType><xs:element name="e" type="c"/>`,
-			"complex type c of element e, derived by extension", constructDerivation},
+			"complex type c of element e with an {attribute wildcard}", constructAttributeWildcard},
 		{"anySimpleType", `<xs:element name="e" type="xs:anySimpleType"/>`,
 			"{http://www.w3.org/2001/XMLSchema}anySimpleType, a special type", constructSpecialType},
 		{"anyAtomicType", `<xs:element name="e" type="xs:anyAtomicType"/>`,
@@ -256,6 +261,14 @@ func TestGenerateDeclines(t *testing.T) {
 		// particles as particleFields does (spliced).
 		{"ref cycle through nested sequences", `<xs:element name="a"><xs:complexType><xs:sequence><xs:sequence><xs:element ref="b"/></xs:sequence></xs:sequence></xs:complexType></xs:element><xs:element name="b"><xs:complexType><xs:sequence><xs:sequence><xs:element ref="a"/></xs:sequence></xs:sequence></xs:complexType></xs:element>`,
 			"<element ref> particle to element a reaching element a again through elements that each occur exactly once at s.xsd:2:1 ", constructValueCycle},
+		// In the two extension rows each ref is spliced into a's or b's
+		// fields from the base particle, or from the extension's own, of a
+		// clause 4.2.3.3 sequence, so the recursion check finds the cycle
+		// only by walking the particles spliced returns.
+		{"ref cycle through base particles", `<xs:complexType name="ba"><xs:sequence><xs:element ref="b"/></xs:sequence></xs:complexType><xs:complexType name="bb"><xs:sequence><xs:element ref="a"/></xs:sequence></xs:complexType><xs:element name="a"><xs:complexType><xs:complexContent><xs:extension base="ba"><xs:sequence><xs:element name="s" ` + str + `/></xs:sequence></xs:extension></xs:complexContent></xs:complexType></xs:element><xs:element name="b"><xs:complexType><xs:complexContent><xs:extension base="bb"><xs:sequence><xs:element name="s" ` + str + `/></xs:sequence></xs:extension></xs:complexContent></xs:complexType></xs:element>`,
+			"<element ref> particle to element a reaching element a again through elements that each occur exactly once", constructValueCycle},
+		{"ref cycle through extension particles", `<xs:complexType name="be"><xs:sequence><xs:element name="s" ` + str + `/></xs:sequence></xs:complexType><xs:element name="a"><xs:complexType><xs:complexContent><xs:extension base="be"><xs:sequence><xs:element ref="b"/></xs:sequence></xs:extension></xs:complexContent></xs:complexType></xs:element><xs:element name="b"><xs:complexType><xs:complexContent><xs:extension base="be"><xs:sequence><xs:element ref="a"/></xs:sequence></xs:extension></xs:complexContent></xs:complexType></xs:element>`,
+			"<element ref> particle to element a reaching element a again through elements that each occur exactly once", constructValueCycle},
 		{"ref cycle through a local element", `<xs:element name="a"><xs:complexType><xs:sequence><xs:element name="l"><xs:complexType><xs:sequence><xs:element ref="a"/></xs:sequence></xs:complexType></xs:element></xs:sequence></xs:complexType></xs:element>`,
 			"<element ref> particle to element a reaching element a again through elements that each occur exactly once", constructValueCycle},
 		// The ref to a is checked for recursion where it is met, ahead of the

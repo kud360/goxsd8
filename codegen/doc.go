@@ -101,12 +101,9 @@
 //     slice Children, so no element of type xs:anyType closes a struct-value
 //     recursion, and none of the four names math/big.
 //   - An element whose {type definition} is a complex type other than
-//     xs:anyType, named or anonymous, gets a type of its own when the type is
-//     a restriction of xs:anyType, implicit (§3.4.2.3.2 dcl.ctd.ctcc.implicit)
-//     or explicit (<complexContent><restriction base="xs:anyType">, §3.4.2.3.1
-//     dcl.ctd.ctcc.explicit), a <complexContent> restriction of any other
-//     complex type, or a type with simple content (§3.4.1), by <simpleContent>
-//     extension or restriction of any base (§3.4.2.2 dcl.ctd.ctsc). The type
+//     xs:anyType, named or anonymous, gets a type of its own whatever its
+//     derivation, restriction or extension, of complex or simple content
+//     (§3.4.2.2 dcl.ctd.ctsc, §3.4.2.3 dcl.ctd.ctcc). The type
 //     is built from its own {content type} (§3.4.2.3.3 dcl.ctd.ctcc.common,
 //     §3.4.2.2 dcl.ctd.ctsc) and {attribute uses}, which hold the uses it
 //     inherits, all of an extension's base's and those of a restriction's
@@ -156,7 +153,8 @@
 //     slice, pointer or interface, so no struct-value recursion passes
 //     through it.
 //   - Each particle of a sequence gives one field, in particle order, but a sequence particle
-//     occurring exactly once, which gives in its place the fields its own particles give: a local
+//     occurring exactly once, which gives in its place the fields its own particles give, so an
+//     extension (§3.4.2.3.3 clause 4.2.3.3) gives its base particle's fields and then its own: a local
 //     element with an atomic or list simple type gets the atomic Go type, or the slice, an
 //     element's type is declared over, one with an anonymous complex type of the same shape gets a
 //     struct or interface of its own, emitted after its parent. One with a named complex type of
@@ -209,11 +207,11 @@
 // sequence occurring exactly once in a sequence, <group ref> particles, a wildcard
 // alternative of a choice, a particle with {max occurs} 0, attribute wildcards,
 // attribute uses on a type whose content is a choice occurring exactly once, attribute
-// uses with an effective value constraint, mixed content, complex-content extension, a
-// named complex type, or a top-level element through <element ref> particles, reaching
-// itself through struct values, the special simple types, union types, a list whose
-// {item type definition} declines, and every primitive the first bullet does not map,
-// for an element or an attribute alike. #2900 owns lifting them.
+// uses with an effective value constraint, mixed content, a named complex type, or a
+// top-level element through <element ref> particles, reaching itself through struct
+// values, the special simple types, union types, a list whose {item type definition}
+// declines, and every primitive the first bullet does not map, for an element or an
+// attribute alike. #2900 owns lifting them.
 //
 // # Determinism
 //

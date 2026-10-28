@@ -1,0 +1,84 @@
+<?xml version="1.0"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+           xmlns="urn:extension"
+           targetNamespace="urn:extension">
+  <xs:complexType name="person">
+    <xs:sequence>
+      <xs:element name="name" type="xs:string"/>
+      <xs:element name="address">
+        <xs:complexType>
+          <xs:sequence>
+            <xs:element name="city" type="xs:string"/>
+          </xs:sequence>
+        </xs:complexType>
+      </xs:element>
+    </xs:sequence>
+    <xs:attribute name="id" type="xs:string" use="required"/>
+  </xs:complexType>
+  <xs:complexType name="employee">
+    <xs:complexContent>
+      <xs:extension base="person">
+        <xs:sequence>
+          <xs:element name="company" type="xs:string"/>
+          <xs:element name="name" type="xs:string" minOccurs="0"/>
+        </xs:sequence>
+        <xs:attribute name="dept" type="xs:string"/>
+      </xs:extension>
+    </xs:complexContent>
+  </xs:complexType>
+  <xs:complexType name="manager">
+    <xs:complexContent>
+      <xs:extension base="employee">
+        <xs:sequence>
+          <xs:element name="report" type="employee" maxOccurs="unbounded"/>
+        </xs:sequence>
+      </xs:extension>
+    </xs:complexContent>
+  </xs:complexType>
+  <xs:element name="staff" type="employee"/>
+  <xs:element name="boss" type="manager"/>
+  <xs:complexType name="flagged">
+    <xs:complexContent>
+      <xs:extension base="person">
+        <xs:attribute name="flag" type="xs:boolean"/>
+      </xs:extension>
+    </xs:complexContent>
+  </xs:complexType>
+  <xs:element name="marked" type="flagged"/>
+  <xs:complexType name="tagged">
+    <xs:attribute name="tag" type="xs:string"/>
+  </xs:complexType>
+  <xs:element name="item">
+    <xs:complexType>
+      <xs:complexContent>
+        <xs:extension base="tagged">
+          <xs:sequence>
+            <xs:element name="v" type="xs:int"/>
+          </xs:sequence>
+        </xs:extension>
+      </xs:complexContent>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="blank">
+    <xs:complexType>
+      <xs:complexContent>
+        <xs:extension base="tagged">
+          <xs:attribute name="note" type="xs:string"/>
+        </xs:extension>
+      </xs:complexContent>
+    </xs:complexType>
+  </xs:element>
+  <xs:complexType name="pick">
+    <xs:choice>
+      <xs:element name="a" type="xs:string"/>
+      <xs:element name="b" type="xs:int"/>
+    </xs:choice>
+  </xs:complexType>
+  <xs:element name="picked">
+    <xs:complexType>
+      <xs:complexContent>
+        <xs:extension base="pick"/>
+      </xs:complexContent>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>
