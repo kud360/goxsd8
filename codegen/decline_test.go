@@ -112,10 +112,6 @@ func TestGenerateDeclines(t *testing.T) {
 			"complex type (anonymous) of element h with an all compositor", constructAll},
 		{"element ref to simple type outside the slice", `<xs:element name="e"><xs:complexType><xs:sequence><xs:element ref="h"/><xs:element name="z" type="xs:precisionDecimal"/></xs:sequence></xs:complexType></xs:element><xs:element name="h" type="xs:QName"/>`,
 			"element h with {type definition} {http://www.w3.org/2001/XMLSchema}QName, whose {primitive type definition} is", constructUncoveredPrimitive},
-		{"attribute", `<xs:element name="e"><xs:complexType><xs:sequence><xs:element name="a" ` + str + `/></xs:sequence><xs:attribute name="t"/></xs:complexType></xs:element>`,
-			"attribute t of complex type (anonymous) of element e with {type definition} {http://www.w3.org/2001/XMLSchema}anySimpleType, a special type", constructSpecialType},
-		{"attribute anyAtomicType", `<xs:element name="e"><xs:complexType><xs:sequence><xs:element name="a" ` + str + `/></xs:sequence><xs:attribute name="t" type="xs:anyAtomicType"/></xs:complexType></xs:element>`,
-			"attribute t of complex type (anonymous) of element e with {type definition} {http://www.w3.org/2001/XMLSchema}anyAtomicType, a special type", constructSpecialType},
 		{"attribute list of uncovered primitive", `<xs:element name="e"><xs:complexType><xs:sequence><xs:element name="a" ` + str + `/></xs:sequence><xs:attribute name="t"><xs:simpleType><xs:list itemType="xs:QName"/></xs:simpleType></xs:attribute></xs:complexType></xs:element>`,
 			"attribute t of complex type (anonymous) of element e with {type definition} (anonymous), whose {item type definition} is {http://www.w3.org/2001/XMLSchema}QName, whose {primitive type definition} is {http://www.w3.org/2001/XMLSchema}QName", constructUncoveredPrimitive},
 		{"attribute union", `<xs:element name="e"><xs:complexType><xs:sequence><xs:element name="a" ` + str + `/></xs:sequence><xs:attribute name="t"><xs:simpleType><xs:union memberTypes="xs:int xs:precisionDecimal"/></xs:simpleType></xs:attribute></xs:complexType></xs:element>`,
@@ -168,8 +164,6 @@ func TestGenerateDeclines(t *testing.T) {
 		// The simple-content rows pin the value field's declines: its
 		// {simple type definition} (§3.4.2.2 dcl.ctd.ctsc) declines by that
 		// type's construct.
-		{"simple content extension of anySimpleType", `<xs:element name="e"><xs:complexType><xs:simpleContent><xs:extension base="xs:anySimpleType"/></xs:simpleContent></xs:complexType></xs:element>`,
-			"complex type (anonymous) of element e with {simple type definition} {http://www.w3.org/2001/XMLSchema}anySimpleType, a special type", constructSpecialType},
 		{"simple content extension of union", `<xs:simpleType name="u"><xs:union memberTypes="xs:int xs:precisionDecimal"/></xs:simpleType><xs:element name="e"><xs:complexType><xs:simpleContent><xs:extension base="u"/></xs:simpleContent></xs:complexType></xs:element>`,
 			"complex type (anonymous) of element e with {simple type definition} u, whose basic member is {http://www.w3.org/2001/XMLSchema}precisionDecimal, whose {primitive type definition} is {http://www.w3.org/2001/XMLSchema}precisionDecimal", constructUncoveredPrimitive},
 		{"simple content extension of QName", `<xs:element name="e"><xs:complexType><xs:simpleContent><xs:extension base="xs:QName"/></xs:simpleContent></xs:complexType></xs:element>`,
@@ -210,10 +204,6 @@ func TestGenerateDeclines(t *testing.T) {
 			"complex type c of element e with mixed content", constructMixedContent},
 		{"extension of anyType", `<xs:complexType name="c"><xs:complexContent><xs:extension base="xs:anyType"/></xs:complexContent></xs:complexType><xs:element name="e" type="c"/>`,
 			"complex type c of element e with mixed content", constructMixedContent},
-		{"anySimpleType", `<xs:element name="e" type="xs:anySimpleType"/>`,
-			"{http://www.w3.org/2001/XMLSchema}anySimpleType, a special type", constructSpecialType},
-		{"anyAtomicType", `<xs:element name="e" type="xs:anyAtomicType"/>`,
-			"{http://www.w3.org/2001/XMLSchema}anyAtomicType, a special type", constructSpecialType},
 		// The list rows pin "# Coverage"'s list decline, and that its message
 		// names the list and then its {item type definition}.
 		{"list of named union", `<xs:simpleType name="u"><xs:union memberTypes="xs:int xs:precisionDecimal"/></xs:simpleType><xs:simpleType name="l"><xs:list itemType="u"/></xs:simpleType><xs:element name="e" type="l"/>`,

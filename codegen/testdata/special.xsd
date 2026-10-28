@@ -1,0 +1,33 @@
+<?xml version="1.0"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <!-- The special types (Datatypes §2.4.1 dt-special), xs:anySimpleType and
+       xs:anyAtomicType, give string, holding the literal. simple and atomic
+       are elements of each; holder has a local element of each, one
+       optional, an attribute declared with no type, which takes
+       xs:anySimpleType (§3.2.2.2 dcl.att.local), and a required one of
+       xs:anyAtomicType; wrapped extends xs:anySimpleType, its value field
+       a string (§3.4.2.2 dcl.ctd.ctsc). raw, of xs:anyType, keeps AnyType:
+       xs:anyType is a complex type, not special. -->
+  <xs:element name="simple" type="xs:anySimpleType"/>
+  <xs:element name="atomic" type="xs:anyAtomicType"/>
+  <xs:element name="holder">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element name="any" type="xs:anySimpleType"/>
+        <xs:element name="maybe" type="xs:anyAtomicType" minOccurs="0"/>
+      </xs:sequence>
+      <xs:attribute name="untyped"/>
+      <xs:attribute name="atom" type="xs:anyAtomicType" use="required"/>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="wrapped">
+    <xs:complexType>
+      <xs:simpleContent>
+        <xs:extension base="xs:anySimpleType">
+          <xs:attribute name="note"/>
+        </xs:extension>
+      </xs:simpleContent>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="raw" type="xs:anyType"/>
+</xs:schema>
