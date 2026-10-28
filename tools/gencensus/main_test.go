@@ -26,9 +26,8 @@ const (
 	unassembled  = `<xs:element name="a" type="undeclared"/>`
 	mixedContent = `<xs:element name="a"><xs:complexType mixed="true"><xs:sequence>` +
 		`<xs:element name="b" type="xs:string"/></xs:sequence></xs:complexType></xs:element>`
-	unionType = `<xs:element name="a"><xs:simpleType><xs:union memberTypes="xs:string xs:int"/>` +
-		`</xs:simpleType></xs:element>`
-	nillable = `<xs:element name="a" type="xs:string" nillable="true"/>`
+	uncoveredPrimitive = `<xs:element name="a" type="xs:precisionDecimal"/>`
+	nillable           = `<xs:element name="a" type="xs:string" nillable="true"/>`
 )
 
 // writeTree writes files, slash paths relative to a fresh directory, and
@@ -49,18 +48,18 @@ func writeTree(t *testing.T, files map[string]string) string {
 }
 
 // censusTree is the fixture tree. In path order its declines are first seen
-// as mixed content (once), union type, then element {nillable} (twice each),
-// so the first-seen order, the count order with a first-seen tie-break, and
-// the count order with the String tie-break the tool owes are three different
-// orders. The non-.xsd file and the dot directory are not documents.
+// as mixed content (once), uncovered primitive, then element {nillable} (twice
+// each), so the first-seen order, the count order with a first-seen tie-break,
+// and the count order with the String tie-break the tool owes are three
+// different orders. The non-.xsd file and the dot directory are not documents.
 func censusTree(t *testing.T) string {
 	return writeTree(t, map[string]string{
 		"a.xsd":       schemaDoc(generates),
 		"b.xsd":       schemaDoc(mixedContent),
-		"c.xsd":       schemaDoc(unionType),
+		"c.xsd":       schemaDoc(uncoveredPrimitive),
 		"d.xsd":       schemaDoc(unassembled),
 		"e.xsd":       schemaDoc(nillable),
-		"f.xsd":       schemaDoc(unionType),
+		"f.xsd":       schemaDoc(uncoveredPrimitive),
 		"g.xsd":       schemaDoc(nillable),
 		"notes.txt":   "not a schema",
 		".git/x.xsd":  schemaDoc(nillable),
@@ -81,14 +80,15 @@ const wantCounts = `gencensus: 10 schema document(s) under %ROOT%
 
 === First decline, by construct: 3 construct(s) ===
        2  element {nillable}
-       2  union type
+       2  uncovered primitive
        1  mixed content
 `
 
 // TestCensusCountsAndRanksDeclines pins every count the report prints and its
 // construct lines' order. Dropping ranked's sort prints the first-seen order
-// (mixed content, union type, element {nillable}); dropping its String
-// tie-break prints union type ahead of element {nillable}. Each fails here.
+// (mixed content, uncovered primitive, element {nillable}); dropping its
+// String tie-break prints uncovered primitive ahead of element {nillable}.
+// Each fails here.
 func TestCensusCountsAndRanksDeclines(t *testing.T) {
 	root := censusTree(t)
 	var out bytes.Buffer
@@ -122,7 +122,7 @@ func TestCensusPathsListsEachConstructsDocuments(t *testing.T) {
 element {nillable} (2):
   e.xsd
   g.xsd
-union type (2):
+uncovered primitive (2):
   c.xsd
   f.xsd
 mixed content (1):
