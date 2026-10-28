@@ -742,8 +742,9 @@ func TestGenerateWildcardName(t *testing.T) {
 // and the raw-content structs are named ("Naming"): the field is claimed from
 // the local name anyAttribute after every attribute field, so that beside an
 // attribute anyAttribute it takes the suffix 2; and the raw-content structs are
-// claimed at that field, after the struct's own name, so that a top-level
-// element anyType names its type AnyType and the raw-content struct AnyType2.
+// claimed at that field, after the struct's own name and its other fields'
+// types, so that a top-level element anyType, or a complex type anyType a
+// local element reaches, takes AnyType and the raw-content struct AnyType2.
 func TestGenerateAttributeWildcardName(t *testing.T) {
 	tests := []struct {
 		name, body string
@@ -753,6 +754,8 @@ func TestGenerateAttributeWildcardName(t *testing.T) {
 			[]string{"type E struct {\n\tAnyAttribute  *string\n\tAnyAttribute2 []AnyAttribute\n}\n"}},
 		{"element anyType", `<xs:element name="anyType"><xs:complexType><xs:anyAttribute/></xs:complexType></xs:element>`,
 			[]string{"type AnyType struct {\n\tAnyAttribute []AnyAttribute\n}\n", "type AnyType2 struct {\n\tAttributes []AnyAttribute\n"}},
+		{"field type anyType", `<xs:complexType name="anyType"><xs:sequence><xs:element name="s" type="xs:string"/></xs:sequence></xs:complexType><xs:element name="e"><xs:complexType><xs:sequence><xs:element name="x" type="anyType"/></xs:sequence><xs:anyAttribute/></xs:complexType></xs:element>`,
+			[]string{"type E struct {\n\tX            AnyType\n\tAnyAttribute []AnyAttribute\n}\n", "type AnyType2 struct {\n\tAttributes []AnyAttribute\n"}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
