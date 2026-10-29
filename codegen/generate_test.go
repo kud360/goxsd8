@@ -11,7 +11,7 @@ import (
 
 const (
 	acceptedDoc = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"><xs:element name="e" type="xs:string"/></xs:schema>`
-	declinedDoc = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"><xs:element name="e" type="xs:QName"/></xs:schema>`
+	declinedDoc = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"><xs:element name="e" type="xs:precisionDecimal"/></xs:schema>`
 )
 
 // TestGenerateInvalidTargets pins the Target checks: each fails phase 1, so
@@ -411,7 +411,7 @@ func TestCheckTargetsEmptyEarlierDir(t *testing.T) {
 // contributes nothing.
 func TestGenerateCollectsDeclines(t *testing.T) {
 	const tail = " is not supported by codegen, a generator limitation, not a schema fault"
-	const qname = " with {type definition} {http://www.w3.org/2001/XMLSchema}QName, whose {primitive type definition} is {http://www.w3.org/2001/XMLSchema}QName"
+	const pdecimal = " with {type definition} {http://www.w3.org/2001/XMLSchema}precisionDecimal, whose {primitive type definition} is {http://www.w3.org/2001/XMLSchema}precisionDecimal"
 	uncovered := Construct{constructUncoveredPrimitive}
 	nillable := Construct{constructElementNillable}
 	type decline struct {
@@ -426,17 +426,17 @@ func TestGenerateCollectsDeclines(t *testing.T) {
 		{"two targets, one with two", func(dir string) []Target {
 			return []Target{
 				{Schema: parseString(t, `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
-<xs:element name="a" type="xs:QName"/>
+<xs:element name="a" type="xs:precisionDecimal"/>
 <xs:element name="c"><xs:complexType><xs:sequence><xs:element ref="b"/></xs:sequence></xs:complexType></xs:element>
 <xs:element name="b" nillable="true" type="xs:string"/>
 </xs:schema>`), Dir: filepath.Join(dir, "a"), Package: "a", Name: "first"},
 				{Schema: parseString(t, declinedDoc), Dir: filepath.Join(dir, "b"), Package: "b"},
 			}
 		}, []decline{
-			{"first: element a" + qname + " at s.xsd:2:1" + tail, uncovered},
+			{"first: element a" + pdecimal + " at s.xsd:2:1" + tail, uncovered},
 			// Met at c's turn, through its ref; b's own turn is the dropped duplicate.
 			{"first: element b with {nillable} true at s.xsd:4:1" + tail, nillable},
-			{"codegen: target 1: element e" + qname + " at s.xsd:1:56" + tail, uncovered},
+			{"codegen: target 1: element e" + pdecimal + " at s.xsd:1:56" + tail, uncovered},
 		}},
 		{"a named type two top-level elements share", func(dir string) []Target {
 			return []Target{{Schema: parseString(t, `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
@@ -453,7 +453,7 @@ func TestGenerateCollectsDeclines(t *testing.T) {
 			return []Target{{Schema: parseString(t, `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
 <xs:complexType name="T"><xs:sequence><xs:element name="x" nillable="true" type="xs:string"/></xs:sequence></xs:complexType>
 <xs:element name="a"><xs:complexType><xs:sequence><xs:element name="l1" type="T"/></xs:sequence></xs:complexType></xs:element>
-<xs:element name="b"><xs:complexType><xs:sequence><xs:element name="l2" type="T"/><xs:element name="m" type="xs:QName"/></xs:sequence></xs:complexType></xs:element>
+<xs:element name="b"><xs:complexType><xs:sequence><xs:element name="l2" type="T"/><xs:element name="m" type="xs:precisionDecimal"/></xs:sequence></xs:complexType></xs:element>
 </xs:schema>`), Dir: filepath.Join(dir, "a"), Package: "a"}}
 		}, []decline{
 			{"codegen: target 0: element x with {nillable} true at s.xsd:2:39" + tail, nillable},
@@ -498,7 +498,7 @@ func TestGenerateCollectsDeclines(t *testing.T) {
 // not a decline, which follows the declines collected before it: the third
 // target's decline is never collected.
 func TestGenerateStopsAtNonDecline(t *testing.T) {
-	const first = "first: element e with {type definition} {http://www.w3.org/2001/XMLSchema}QName, whose {primitive type definition} is {http://www.w3.org/2001/XMLSchema}QName at s.xsd:1:56 is not supported by codegen, a generator limitation, not a schema fault"
+	const first = "first: element e with {type definition} {http://www.w3.org/2001/XMLSchema}precisionDecimal, whose {primitive type definition} is {http://www.w3.org/2001/XMLSchema}precisionDecimal at s.xsd:1:56 is not supported by codegen, a generator limitation, not a schema fault"
 	declined := parseString(t, declinedDoc)
 	tests := []struct {
 		name   string

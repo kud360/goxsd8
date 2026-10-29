@@ -96,19 +96,19 @@ func (t Target) failed(i int, err error) error {
 // parent, a field of an <element ref> particle holding the type emitted for the top-level
 // element declaration it names, or, when that declaration's substitution group holds
 // another declaration, one sealed interface per such head with one branch struct per
-// declaration of its group, then one struct per date, time or duration datatype a
-// declaration's type or a value field is declared over, the four structs holding raw
-// content once an element's type is xs:anyType, a model group holds a wildcard particle,
-// or a type has an {attribute wildcard}, and one sealed interface per union simple type a
-// declaration's type, a value field, a list's item or a union's member is declared over,
-// each followed by one variant type per basic member (the package doc's "Coverage" and
-// "Naming" say which). A target's Schema is its whole composed set, so its {element
-// declarations} (§3.17.1), and with them its file's top-level types, include those of
-// every imported or included document, the overriding declaration standing in for each
-// one an <xs:override> replaces, and a Schema with none gives a file that declares no
-// type. Targets are generated independently: no emitted package imports another, so two
-// targets whose Schemas share a document each declare types for its top-level element
-// declarations, not necessarily under the same names.
+// declaration of its group, then one struct per date, time or duration datatype, and
+// one for QName and NOTATION together, a declaration's type or a value field is declared
+// over, the four structs holding raw content once an element's type is xs:anyType, a
+// model group holds a wildcard particle, or a type has an {attribute wildcard}, and one
+// sealed interface per union simple type a declaration's type, a value field, a list's
+// item or a union's member is declared over, each followed by one variant type per basic
+// member (the package doc's "Coverage" and "Naming" say which). A target's Schema is its
+// whole composed set, so its {element declarations} (§3.17.1), and with them its file's
+// top-level types, include those of every imported or included document, the overriding
+// declaration standing in for each one an <xs:override> replaces, and a Schema with none
+// gives a file that declares no type. Targets are generated independently: no emitted
+// package imports another, so two targets whose Schemas share a document each declare
+// types for its top-level element declarations, not necessarily under the same names.
 //
 // The file is gofmt-formatted. Generate writes no go.mod and adds no
 // //go:generate line: the module the caller puts Dir in owns both.

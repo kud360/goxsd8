@@ -1,0 +1,40 @@
+<?xml version="1.0"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:notation name="png" public="image/png"/>
+  <xs:notation name="jpeg" public="image/jpeg"/>
+  <xs:element name="name" type="xs:QName"/>
+  <xs:element name="ref">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element name="target" type="xs:QName"/>
+        <xs:element name="alias" type="xs:QName" maxOccurs="unbounded"/>
+        <xs:element name="names" type="names"/>
+      </xs:sequence>
+      <xs:attribute name="kind" type="xs:QName" use="required"/>
+      <xs:attribute name="scope" type="xs:QName"/>
+      <xs:attribute name="format" type="format"/>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="typed">
+    <xs:complexType>
+      <xs:simpleContent>
+        <xs:extension base="xs:QName">
+          <xs:attribute name="format" type="format" use="required"/>
+        </xs:extension>
+      </xs:simpleContent>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="either" type="nameOrCount"/>
+  <xs:simpleType name="format">
+    <xs:restriction base="xs:NOTATION">
+      <xs:enumeration value="png"/>
+      <xs:enumeration value="jpeg"/>
+    </xs:restriction>
+  </xs:simpleType>
+  <xs:simpleType name="names">
+    <xs:list itemType="xs:QName"/>
+  </xs:simpleType>
+  <xs:simpleType name="nameOrCount">
+    <xs:union memberTypes="xs:QName xs:int"/>
+  </xs:simpleType>
+</xs:schema>
