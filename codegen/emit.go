@@ -1568,13 +1568,13 @@ func (e *emitter) substitutionSum(decl xsd.ElementDeclaration) []xsd.ElementDecl
 // the interface's name plus the declaration's local name and holding one field,
 // named from that local name, of the type elementType returns for it. Each
 // declaration is checked by declaredType and its type claimed by elementType
-// at its branch, after the branch's name, so the group declines exactly when
-// one of its declarations does, by that declaration's construct, at the first
-// declining one in group order: the same DeclineError its own topLevel turn
-// returns. Each branch implements the interface's method; the declarations'
-// own types carry no method, since one may be sealed or sit in several heads'
-// groups. It stores the interface's name in e.substitutions only once every
-// branch is emitted.
+// at its branch, after the branch's name, so a declaration's properties, or the
+// shape of its type, decline the interface at the first such declaration in
+// group order, with the same DeclineError its own topLevel turn returns first;
+// a decline in a declaration's body is met only at its own turn. Each branch
+// implements the interface's method; the declarations' own types carry no
+// method, since one may be sealed or sit in several heads' groups. It stores
+// the interface's name in e.substitutions only once every branch is emitted.
 func (e *emitter) substitutionType(head xsd.ElementDeclaration, group []xsd.ElementDeclaration) (emittedType, error) {
 	if name, ok := e.substitutions[head.Name()]; ok {
 		return emittedType{name: name, sealed: true}, nil

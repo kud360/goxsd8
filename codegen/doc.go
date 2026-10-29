@@ -204,10 +204,11 @@
 //     bare interface for {min occurs} 0. A head whose {disallowed
 //     substitutions} contains substitution (cos-equiv-derived-ok-rec clause
 //     2.1), or whose group is otherwise itself alone, gives the field the
-//     head's own type. {abstract} plays no part in the group: the interface
-//     declines exactly when one of its declarations does, by that
-//     declaration's construct, at the first declining one in group order, so
-//     an abstract head or member declines it.
+//     head's own type. {abstract} plays no part in the group: where the
+//     interface is first needed, each declaration of the group is checked in
+//     group order as at an <element ref> particle to it, its properties and
+//     the shape of its type, so an abstract head or member declines it
+//     there.
 //   - A {particle} that occurs other than exactly once gives a struct whose
 //     first field holds what one occurrence of its model group gives — a
 //     struct of the sequence's or all group's particle fields alone, or the
