@@ -1029,20 +1029,12 @@ func (e *emitter) body(typ emittedType, nested scope, chain []valueNode, o origi
 		}
 		fields = append(fields, fieldSpec{local: "value", goType: goType.name})
 	}
-	switch {
-	case content == nil:
-	case content.occurs == exactlyOnce && content.group.Compositor() != xsd.CompositorChoice:
-		particleFields, err := e.particleFields(nested, groupSite{}, chain, o, t, content.group.Particles())
+	if content != nil {
+		contentFields, err := e.contentFields(nested, chain, o, t, *content)
 		if err != nil {
 			return err
 		}
-		fields = particleFields
-	default:
-		field, err := e.groupField(nested, groupSite{}, 0, o, t, *content)
-		if err != nil {
-			return err
-		}
-		fields = append(fields, field)
+		fields = append(fields, contentFields...)
 	}
 	for _, u := range t.AttributeUses() {
 		field, err := e.attributeField(nested, o.subject, t.Loc(), u)
@@ -1059,6 +1051,26 @@ func (e *emitter) body(typ emittedType, nested scope, chain []valueNode, o origi
 	return nil
 }
 
+// contentFields returns the fields the content particle content of the
+// complex type t generated from o gives in the struct body emits for t, whose
+// nested types are named in nested and whose particles chain is valueChain's
+// for: particleFields' for its group's particles when splices answers true,
+// and otherwise the one field groupField returns.
+func (e *emitter) contentFields(nested scope, chain []valueNode, o origin, t xsd.ComplexType, content groupParticle) ([]fieldSpec, error) {
+	splice, err := e.splices(o.subject, t.Loc(), content.group, content.occurs)
+	if err != nil {
+		return nil, err
+	}
+	if splice {
+		return e.particleFields(nested, groupSite{}, chain, o, t, content.group.Particles())
+	}
+	field, err := e.groupField(nested, groupSite{}, 0, o, t, content)
+	if err != nil {
+		return nil, err
+	}
+	return []fieldSpec{field}, nil
+}
+
 // groupField returns the field of the model-group particle c at ordinal under
 // site (groupSite) of the complex type t generated from o, in a struct whose
 // nested types are named in nested: named from c's compositor, "sequence",
@@ -1068,6 +1080,15 @@ func (e *emitter) body(typ emittedType, nested scope, chain []valueNode, o origi
 // one whose occurrence is emptiable (shape), and field, for a model group
 // particle nested in a struct's or a branch's particles.
 func (e *emitter) groupField(nested scope, site groupSite, ordinal int, o origin, t xsd.ComplexType, c groupParticle) (fieldSpec, error) {
+	if upper, bounded := c.occurs.Max(); c.group.Compositor() == xsd.CompositorSequence && (!bounded || upper > 1) {
+		emptiable, err := e.termEmptiable(o.subject, t.Loc(), xsd.ResolvedTerm{Term: c.group})
+		if err != nil {
+			return fieldSpec{}, err
+		}
+		if emptiable {
+			return fieldSpec{}, decline(t.Loc(), constructRepeatedEmptiableSequence, o.subject)
+		}
+	}
 	typ, err := e.occurrenceType(nested, site, ordinal, o, t, c.group)
 	if err != nil {
 		return fieldSpec{}, err
@@ -1191,7 +1212,15 @@ func (e *emitter) spliced(subject string, loc xsderr.Loc, particles []xsd.Partic
 		if err != nil {
 			return nil, err
 		}
-		if !isGroup || group.Compositor() == xsd.CompositorChoice || p.Occurs() != exactlyOnce {
+		if !isGroup {
+			leaves = append(leaves, p)
+			continue
+		}
+		splice, err := e.splices(subject, loc, group, p.Occurs())
+		if err != nil {
+			return nil, err
+		}
+		if !splice {
 			leaves = append(leaves, p)
 			continue
 		}
@@ -1202,6 +1231,28 @@ func (e *emitter) spliced(subject string, loc xsderr.Loc, particles []xsd.Partic
 		leaves = append(leaves, inner...)
 	}
 	return leaves, nil
+}
+
+// splices reports whether a model group particle of group under occurs, inline
+// or a <group ref> to group's definition (§3.7.2), gives in its place the fields
+// group's own particles give (spliced, contentFields): group is a sequence or an
+// all group, and occurs is exactly once, or {min occurs} 0 and {max occurs} 1
+// when one occurrence of group can match nothing (termEmptiable, §3.9.6.3
+// cos-group-emptiable), its absence and its empty match being one instance
+// that its particles' fields, each of which then has a value for matching
+// nothing, hold alike. subject and loc name the complex type holding the
+// particle in the error termEmptiable returns.
+func (e *emitter) splices(subject string, loc xsderr.Loc, group xsd.ModelGroup, occurs xsd.Occurs) (bool, error) {
+	if group.Compositor() == xsd.CompositorChoice {
+		return false, nil
+	}
+	if occurs == exactlyOnce {
+		return true, nil
+	}
+	if occurs != optional {
+		return false, nil
+	}
+	return e.termEmptiable(subject, loc, xsd.ResolvedTerm{Term: group})
 }
 
 // modelGroupTerm returns the model group a particle's term holds and true: an
@@ -1379,6 +1430,10 @@ func branchParticle(subject string, loc xsderr.Loc, p xsd.Particle) (xsd.Particl
 // sequence or as a choice's alternative, and an all particle in an all group,
 // is spliced, and under which an element particle gives a value field.
 var exactlyOnce = mustOccurs(xsd.NewOccurs(xsderr.Loc{}, 1, 1))
+
+// optional is the {min occurs} 0, {max occurs} 1 range under which a sequence
+// or an all particle whose one occurrence is emptiable is spliced (splices).
+var optional = mustOccurs(xsd.NewOccurs(xsderr.Loc{}, 0, 1))
 
 // mustOccurs unwraps a constructor result that cannot fail on constant
 // arguments.

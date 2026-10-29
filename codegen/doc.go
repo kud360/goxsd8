@@ -46,6 +46,7 @@
 //   - no {primitive type definition}
 //   - uncovered primitive
 //   - choice with attributes
+//   - repeated emptiable sequence
 //   - choice with no {particles}
 //   - emptiable group alternative
 //   - complex type {abstract}

@@ -1,0 +1,49 @@
+<?xml version="1.0"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+           xmlns="urn:emptiablesequence"
+           targetNamespace="urn:emptiablesequence">
+  <xs:element name="optSequence">
+    <xs:complexType>
+      <xs:sequence minOccurs="0">
+        <xs:element name="a" type="xs:string" minOccurs="0"/>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="optAll">
+    <xs:complexType>
+      <xs:all minOccurs="0">
+        <xs:element name="a" type="xs:string" minOccurs="0"/>
+        <xs:element name="b" type="xs:int" minOccurs="0"/>
+      </xs:all>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="optEmpty">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element name="h" type="xs:string"/>
+        <xs:sequence minOccurs="0"/>
+      </xs:sequence>
+      <xs:attribute name="tag" type="xs:string"/>
+    </xs:complexType>
+  </xs:element>
+  <xs:group name="g">
+    <xs:sequence>
+      <xs:element name="r" type="xs:string" minOccurs="0" maxOccurs="unbounded"/>
+    </xs:sequence>
+  </xs:group>
+  <xs:element name="nested">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element name="h" type="xs:string"/>
+        <xs:sequence minOccurs="0">
+          <xs:element name="a" type="xs:string" minOccurs="0"/>
+          <xs:choice>
+            <xs:element name="p" type="xs:string"/>
+            <xs:element name="q" type="xs:string" minOccurs="0"/>
+          </xs:choice>
+        </xs:sequence>
+        <xs:group ref="g" minOccurs="0"/>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>
