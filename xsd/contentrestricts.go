@@ -1494,10 +1494,8 @@ func (s *Schema) elementCoveredNames(sub NamespaceConstraint, b contentAutomaton
 		if d.ScopeVariety() != ScopeGlobal {
 			continue // a local declaration heads no substitution group
 		}
-		for _, e := range s.elements {
-			if s.inSubstitutionGroupOf(e.Name(), d.Name()) {
-				add(e.Name())
-			}
+		for _, e := range s.SubstitutionGroup(d.Name()) {
+			add(e.Name())
 		}
 	}
 	return names
