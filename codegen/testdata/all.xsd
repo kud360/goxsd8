@@ -1,0 +1,62 @@
+<?xml version="1.0"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+           xmlns="urn:all"
+           targetNamespace="urn:all">
+  <xs:complexType name="rec">
+    <xs:all>
+      <xs:element name="r" type="xs:string"/>
+      <xs:element name="o" type="xs:int" minOccurs="0"/>
+      <xs:element name="m" type="xs:string" maxOccurs="unbounded"/>
+      <xs:any namespace="urn:x"/>
+    </xs:all>
+    <xs:attribute name="id" type="xs:string"/>
+  </xs:complexType>
+  <xs:element name="pair">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element name="l1" type="rec"/>
+        <xs:element name="l2" type="rec"/>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+  <xs:group name="ga">
+    <xs:all>
+      <xs:element name="a" type="xs:string"/>
+      <xs:element name="b" type="xs:int" minOccurs="0"/>
+      <xs:any namespace="urn:x"/>
+    </xs:all>
+  </xs:group>
+  <xs:group name="gb">
+    <xs:all>
+      <xs:element name="c" type="xs:boolean"/>
+      <xs:group ref="ga"/>
+    </xs:all>
+  </xs:group>
+  <xs:element name="viaRef">
+    <xs:complexType>
+      <xs:group ref="ga"/>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="opt">
+    <xs:complexType>
+      <xs:all minOccurs="0">
+        <xs:element name="a" type="xs:string"/>
+      </xs:all>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="optRef">
+    <xs:complexType>
+      <xs:group ref="ga" minOccurs="0"/>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="nest">
+    <xs:complexType>
+      <xs:all>
+        <xs:element name="first" type="xs:string"/>
+        <xs:group ref="gb"/>
+        <xs:any namespace="urn:y"/>
+        <xs:element name="last" type="xs:string" minOccurs="0"/>
+      </xs:all>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>

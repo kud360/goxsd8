@@ -396,11 +396,11 @@ type genRow struct{ file, out, body string }
 // TestGenDeclines pins exit 4: each construct outside codegen's slice prints
 // one line on stderr naming the pair, the construct and its absolute location,
 // with no helpPointer under it, in argument order and then document order, and
-// nothing is written. The all-compositor body is codegen/decline_test.go's all
+// nothing is written. The mixed-content body is codegen/decline_test.go's mixed
 // row.
 func TestGenDeclines(t *testing.T) {
 	const (
-		all   = `<xs:element name="e"><xs:complexType><xs:all><xs:element name="a" type="xs:string"/></xs:all></xs:complexType></xs:element>`
+		mixed = `<xs:element name="e"><xs:complexType mixed="true"><xs:sequence><xs:element name="a" type="xs:string"/></xs:sequence></xs:complexType></xs:element>`
 		qname = " with {type definition} {http://www.w3.org/2001/XMLSchema}QName, whose {primitive type definition} is {http://www.w3.org/2001/XMLSchema}QName at "
 		tail  = " is not supported by codegen, a generator limitation, not a schema fault\n"
 	)
@@ -412,11 +412,11 @@ func TestGenDeclines(t *testing.T) {
 		// want is stderr for the pairs' schema paths and -out paths.
 		want func(schemas, outs []string) string
 	}{
-		{"one decline", []genRow{{"s.xsd", "e", all}}, func(s, o []string) string {
-			return "goxsd8: gen: -schema " + s[0] + " -out " + o[0] + ": complex type (anonymous) of element e with an all compositor at " + s[0] + ":2:22" + tail
+		{"one decline", []genRow{{"s.xsd", "e", mixed}}, func(s, o []string) string {
+			return "goxsd8: gen: -schema " + s[0] + " -out " + o[0] + ": complex type (anonymous) of element e with mixed content at " + s[0] + ":2:22" + tail
 		}},
-		{"two pairs, three declines", []genRow{{"s.xsd", "e", all + "\n" + `<xs:element name="f" type="xs:QName"/>`}, {"t.xsd", "g", `<xs:element name="g" type="xs:QName"/>`}}, func(s, o []string) string {
-			return "goxsd8: gen: -schema " + s[0] + " -out " + o[0] + ": complex type (anonymous) of element e with an all compositor at " + s[0] + ":2:22" + tail +
+		{"two pairs, three declines", []genRow{{"s.xsd", "e", mixed + "\n" + `<xs:element name="f" type="xs:QName"/>`}, {"t.xsd", "g", `<xs:element name="g" type="xs:QName"/>`}}, func(s, o []string) string {
+			return "goxsd8: gen: -schema " + s[0] + " -out " + o[0] + ": complex type (anonymous) of element e with mixed content at " + s[0] + ":2:22" + tail +
 				"goxsd8: gen: -schema " + s[0] + " -out " + o[0] + ": element f" + qname + s[0] + ":3:1" + tail +
 				"goxsd8: gen: -schema " + s[1] + " -out " + o[1] + ": element g" + qname + s[1] + ":2:1" + tail
 		}},
@@ -509,7 +509,7 @@ func TestGenRefusalsOutrankEveryPair(t *testing.T) {
 			refusal("dec.xsd", "my-pkg", notIdentifier) + refusal(broken, "type", `the package name "type" is a Go keyword`), broken, []string{"my-pkg", "ok", "type"}},
 	}
 	dec := "<xs:schema xmlns:xs=\"http://www.w3.org/2001/XMLSchema\">\n" +
-		`<xs:element name="e"><xs:complexType><xs:all><xs:element name="a" type="xs:string"/></xs:all></xs:complexType></xs:element>` +
+		`<xs:element name="e"><xs:complexType mixed="true"><xs:sequence><xs:element name="a" type="xs:string"/></xs:sequence></xs:complexType></xs:element>` +
 		"\n</xs:schema>\n"
 	kept := []byte("package q\n")
 	for _, r := range rows {

@@ -86,26 +86,26 @@ func (t Target) failed(i int, err error) error {
 // <group ref> particle names, one per named complex type a local element
 // declaration reaches, one per place a struct's or a branch struct's particles hold
 // a choice or a sequence occurring other than exactly once — a sequence occurring
-// exactly once in a sequence or as a choice's alternative giving the places of its
-// own particles, and a complex type's own content particle counting only when it
-// occurs other than exactly once — so a particle that a model group definition or
-// an extension's base holds gets one in each struct that holds it, each shared as
-// an anonymous complex type nested beside it is, and one branch struct per
+// exactly once in a sequence or as a choice's alternative, and an all group
+// occurring exactly once in an all group, giving the places of its own particles,
+// and a complex type's own content particle, a sequence, a choice or an all group,
+// counting only when it occurs other than exactly once — so a particle that a model group
+// definition or an extension's base holds gets one in each struct that holds it, each
+// shared as an anonymous complex type nested beside it is, and one branch struct per
 // alternative of each choice emitted as a sealed interface, each emitted after its
-// parent, a field of an <element ref> particle holding the type emitted for the
-// top-level element declaration it names, then one struct per date, time or
-// duration datatype a declaration's type or a value field is declared over, the
-// four structs holding raw content once an element's type is xs:anyType, a sequence
-// or a choice holds a wildcard particle, or a type has an {attribute wildcard}, and
-// one sealed interface per union simple type a declaration's type, a value field, a
-// list's item or a union's member is declared over, each followed by one variant type per
-// basic member (the package doc's "Coverage" and "Naming" say which). A target's
-// Schema is its whole composed set, so its {element declarations} (§3.17.1), and
-// with them its file's top-level types, include those of every imported or included
-// document, the overriding declaration standing in for each one an <xs:override>
-// replaces, and a Schema with none gives a file that declares no type. Targets are
-// generated independently: no emitted package imports another, so two targets whose
-// Schemas share a document each declare types for its top-level element
+// parent, a field of an <element ref> particle holding the type emitted for the top-level
+// element declaration it names, then one struct per date, time or duration datatype a
+// declaration's type or a value field is declared over, the four structs holding raw
+// content once an element's type is xs:anyType, a model group holds a wildcard particle,
+// or a type has an {attribute wildcard}, and one sealed interface per union simple type a
+// declaration's type, a value field, a list's item or a union's member is declared over,
+// each followed by one variant type per basic member (the package doc's "Coverage" and
+// "Naming" say which). A target's Schema is its whole composed set, so its {element
+// declarations} (§3.17.1), and with them its file's top-level types, include those of
+// every imported or included document, the overriding declaration standing in for each
+// one an <xs:override> replaces, and a Schema with none gives a file that declares no
+// type. Targets are generated independently: no emitted package imports another, so two
+// targets whose Schemas share a document each declare types for its top-level element
 // declarations, not necessarily under the same names.
 //
 // The file is gofmt-formatted. Generate writes no go.mod and adds no

@@ -82,12 +82,11 @@ func TestGenerateDeclines(t *testing.T) {
 			"complex type (anonymous) of element e whose content is a choice, with {attribute uses}", constructChoiceAttributes},
 		{"choice alternative type", `<xs:element name="e"><xs:complexType><xs:choice><xs:element name="a" type="xs:QName"/></xs:choice></xs:complexType></xs:element>`,
 			"element a with {type definition} {http://www.w3.org/2001/XMLSchema}QName, whose {primitive type definition} is", constructUncoveredPrimitive},
-		{"all", `<xs:element name="e"><xs:complexType><xs:all><xs:element name="a" ` + str + `/></xs:all></xs:complexType></xs:element>`,
-			"with an all compositor", constructAll},
 		// A <group ref> content particle is checked as its referenced group
-		// would be inline: an all group declines whatever the ref's occurs.
-		{"all group ref content", `<xs:group name="g"><xs:all><xs:element name="a" ` + str + `/></xs:all></xs:group><xs:element name="e"><xs:complexType><xs:group ref="g" maxOccurs="1"/></xs:complexType></xs:element>`,
-			"complex type (anonymous) of element e with an all compositor", constructAll},
+		// would be inline: an emptiable choice declines whatever the ref's
+		// occurs.
+		{"emptiable choice group ref content", `<xs:group name="g"><xs:choice><xs:element name="a" ` + str + `/><xs:element name="b" minOccurs="0" ` + str + `/></xs:choice></xs:group><xs:element name="e"><xs:complexType><xs:group ref="g" maxOccurs="1"/></xs:complexType></xs:element>`,
+			"complex type (anonymous) of element e whose choice is emptiable: its alternative 2, element b, is emptiable", constructEmptiableChoice},
 		// The group-cycle rows reach e again through a <group ref> to the
 		// group declaring it (legal: mg-props-correct clause 2 bounds group
 		// containment alone), as e's content particle and inside an inline
@@ -110,8 +109,8 @@ func TestGenerateDeclines(t *testing.T) {
 		{"element ref to substitution group head", `<xs:element name="e"><xs:complexType><xs:sequence><xs:element ref="h"/></xs:sequence></xs:complexType></xs:element><xs:element name="h" ` + str + `/><xs:element name="m" substitutionGroup="h" ` + str + `/>`,
 			"element m with {substitution group affiliations}", constructSubstitutionGroup},
 		// h's type is checked where e's ref meets it, ahead of z's decline.
-		{"element ref to complex type outside the slice", `<xs:element name="e"><xs:complexType><xs:sequence><xs:element ref="h"/><xs:element name="z" type="xs:QName"/></xs:sequence></xs:complexType></xs:element><xs:element name="h"><xs:complexType><xs:all><xs:element name="a" ` + str + `/></xs:all></xs:complexType></xs:element>`,
-			"complex type (anonymous) of element h with an all compositor", constructAll},
+		{"element ref to complex type outside the slice", `<xs:element name="e"><xs:complexType><xs:sequence><xs:element ref="h"/><xs:element name="z" type="xs:QName"/></xs:sequence></xs:complexType></xs:element><xs:element name="h"><xs:complexType mixed="true"><xs:sequence><xs:element name="a" ` + str + `/></xs:sequence></xs:complexType></xs:element>`,
+			"complex type (anonymous) of element h with mixed content", constructMixedContent},
 		{"element ref to simple type outside the slice", `<xs:element name="e"><xs:complexType><xs:sequence><xs:element ref="h"/><xs:element name="z" type="xs:precisionDecimal"/></xs:sequence></xs:complexType></xs:element><xs:element name="h" type="xs:QName"/>`,
 			"element h with {type definition} {http://www.w3.org/2001/XMLSchema}QName, whose {primitive type definition} is", constructUncoveredPrimitive},
 		{"attribute list of uncovered primitive", `<xs:element name="e"><xs:complexType><xs:sequence><xs:element name="a" ` + str + `/></xs:sequence><xs:attribute name="t"><xs:simpleType><xs:list itemType="xs:QName"/></xs:simpleType></xs:attribute></xs:complexType></xs:element>`,
@@ -235,6 +234,13 @@ func TestGenerateDeclines(t *testing.T) {
 			"local element y reaching complex type c again through elements that each occur exactly once", constructValueCycle},
 		{"value cycle in choice branch", `<xs:complexType name="t1"><xs:sequence><xs:element name="b" type="t2"/></xs:sequence></xs:complexType><xs:complexType name="t2"><xs:sequence><xs:element name="c" type="t1"/></xs:sequence></xs:complexType><xs:element name="e"><xs:complexType><xs:choice><xs:element name="a" type="t1"/></xs:choice></xs:complexType></xs:element>`,
 			"local element c reaching complex type t1 again through elements that each occur exactly once", constructValueCycle},
+		// An all group's member occurring exactly once is a value edge as a
+		// sequence's is, inline and spliced from an all group nested through a
+		// <group ref> (cos-all-limited clause 1.3).
+		{"value cycle through all", `<xs:complexType name="c"><xs:all><xs:element name="x" type="c"/></xs:all></xs:complexType><xs:element name="e" type="c"/>`,
+			"local element x reaching complex type c again through elements that each occur exactly once at s.xsd:2:34", constructValueCycle},
+		{"value cycle through nested all", `<xs:group name="g"><xs:all><xs:element name="x" type="c"/></xs:all></xs:group><xs:complexType name="c"><xs:all><xs:element name="y" ` + str + `/><xs:group ref="g"/></xs:all></xs:complexType><xs:element name="e" type="c"/>`,
+			"local element x reaching complex type c again through elements that each occur exactly once at s.xsd:2:28", constructValueCycle},
 		// The ref-cycle rows close a cycle through <element ref> particles,
 		// which the emitting walk treats as leaves, so only the recursion check
 		// of each ref finds it; each decline cites the Loc of the top-level
@@ -285,7 +291,7 @@ func TestGenerateDeclines(t *testing.T) {
 			uncoveredR, constructUncoveredPrimitive},
 		{"value cycle check past an element property", fmt.Sprintf(pastDecline, `<xs:element name="g" nillable="true" `+str+`/>`, ""),
 			uncoveredR, constructUncoveredPrimitive},
-		{"value cycle check past a complex type", fmt.Sprintf(pastDecline, `<xs:element name="g" type="a"/>`, `<xs:complexType name="a"><xs:all><xs:element name="h" `+str+`/></xs:all></xs:complexType>`),
+		{"value cycle check past a complex type", fmt.Sprintf(pastDecline, `<xs:element name="g" type="a"/>`, `<xs:complexType name="a" mixed="true"><xs:sequence><xs:element name="h" `+str+`/></xs:sequence></xs:complexType>`),
 			uncoveredR, constructUncoveredPrimitive},
 		// The same walk of t again meets the recursion s closes after f1, and
 		// Generate's doc puts that recursion ahead of r's decline.
@@ -298,12 +304,12 @@ func TestGenerateDeclines(t *testing.T) {
 			"complex type c whose choice is emptiable: its alternative 1, a wildcard particle, is emptiable at s.xsd:2:1 ", constructEmptiableChoice},
 		{"local element property", `<xs:element name="e"><xs:complexType><xs:sequence><xs:element name="l" nillable="true" ` + str + `/></xs:sequence></xs:complexType></xs:element>`,
 			"element l with {nillable} true", constructElementNillable},
-		{"nested struct", `<xs:element name="e"><xs:complexType><xs:sequence><xs:element name="l"><xs:complexType><xs:all><xs:element name="a" ` + str + `/></xs:all></xs:complexType></xs:element></xs:sequence></xs:complexType></xs:element>`,
-			"complex type (anonymous) of element l of element e with an all compositor at ", constructAll},
+		{"nested struct", `<xs:element name="e"><xs:complexType><xs:sequence><xs:element name="l"><xs:complexType mixed="true"><xs:sequence><xs:element name="a" ` + str + `/></xs:sequence></xs:complexType></xs:element></xs:sequence></xs:complexType></xs:element>`,
+			"complex type (anonymous) of element l of element e with mixed content at ", constructMixedContent},
 		{"nested choice", `<xs:element name="e"><xs:complexType><xs:sequence><xs:element name="l"><xs:complexType><xs:choice><xs:element name="a" ` + str + `/><xs:any minOccurs="0"/></xs:choice></xs:complexType></xs:element></xs:sequence></xs:complexType></xs:element>`,
 			"complex type (anonymous) of element l of element e whose choice is emptiable: its alternative 2, a wildcard particle, is emptiable at ", constructEmptiableChoice},
-		{"branch struct", `<xs:element name="e"><xs:complexType><xs:choice><xs:element name="l"><xs:complexType><xs:all><xs:element name="a" ` + str + `/></xs:all></xs:complexType></xs:element></xs:choice></xs:complexType></xs:element>`,
-			"complex type (anonymous) of element l of element e with an all compositor at ", constructAll},
+		{"branch struct", `<xs:element name="e"><xs:complexType><xs:choice><xs:element name="l"><xs:complexType mixed="true"><xs:sequence><xs:element name="a" ` + str + `/></xs:sequence></xs:complexType></xs:element></xs:choice></xs:complexType></xs:element>`,
+			"complex type (anonymous) of element l of element e with mixed content at ", constructMixedContent},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
