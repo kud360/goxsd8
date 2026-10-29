@@ -117,6 +117,13 @@
       </xs:sequence>
     </xs:complexType>
   </xs:element>
+  <!-- loose, of xs:anyType by default, names xs:anyType again in its first
+       alternative: one branch, LooseAnyType, holding the raw-content struct
+       AnyType, then LooseString. -->
+  <xs:element name="loose">
+    <xs:alternative test="@raw" type="xs:anyType"/>
+    <xs:alternative test="@text" type="xs:string"/>
+  </xs:element>
   <!-- memo's last alternative has no {test} and an anonymous type, so it is
        the {default type definition}, which gives the branch MemoDefault; its
        second alternative's anonymous type, identical to it, is another
