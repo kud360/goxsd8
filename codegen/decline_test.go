@@ -41,8 +41,8 @@ func parseString(t *testing.T, doc string) *xsd.Schema {
 func TestGenerateDeclines(t *testing.T) {
 	const (
 		str         = `type="xs:string"`
-		pastDecline = `<xs:complexType name="m"><xs:sequence><xs:element name="q" type="t"/><xs:element name="r" type="xs:QName"/></xs:sequence></xs:complexType><xs:complexType name="t"><xs:sequence><xs:element name="f1" type="m" minOccurs="0"/>%s</xs:sequence></xs:complexType>%s<xs:element name="root"><xs:complexType><xs:sequence><xs:element name="x" type="t"/></xs:sequence></xs:complexType></xs:element>`
-		uncoveredR  = "element r with {type definition} {http://www.w3.org/2001/XMLSchema}QName, whose {primitive type definition} is {http://www.w3.org/2001/XMLSchema}QName at s.xsd:2:70 "
+		pastDecline = `<xs:complexType name="m"><xs:sequence><xs:element name="q" type="t"/><xs:element name="r" type="xs:precisionDecimal"/></xs:sequence></xs:complexType><xs:complexType name="t"><xs:sequence><xs:element name="f1" type="m" minOccurs="0"/>%s</xs:sequence></xs:complexType>%s<xs:element name="root"><xs:complexType><xs:sequence><xs:element name="x" type="t"/></xs:sequence></xs:complexType></xs:element>`
+		uncoveredR  = "element r with {type definition} {http://www.w3.org/2001/XMLSchema}precisionDecimal, whose {primitive type definition} is {http://www.w3.org/2001/XMLSchema}precisionDecimal at s.xsd:2:70 "
 	)
 	tests := []struct {
 		name, body, detail string
@@ -80,8 +80,8 @@ func TestGenerateDeclines(t *testing.T) {
 		// clause 4.2.2), its {attribute uses} declining it.
 		{"extension of a choice by an attribute", `<xs:complexType name="b"><xs:choice><xs:element name="a" ` + str + `/></xs:choice></xs:complexType><xs:element name="e"><xs:complexType><xs:complexContent><xs:extension base="b"><xs:attribute name="t" ` + str + `/></xs:extension></xs:complexContent></xs:complexType></xs:element>`,
 			"complex type (anonymous) of element e whose content is a choice, with {attribute uses}", constructChoiceAttributes},
-		{"choice alternative type", `<xs:element name="e"><xs:complexType><xs:choice><xs:element name="a" type="xs:QName"/></xs:choice></xs:complexType></xs:element>`,
-			"element a with {type definition} {http://www.w3.org/2001/XMLSchema}QName, whose {primitive type definition} is", constructUncoveredPrimitive},
+		{"choice alternative type", `<xs:element name="e"><xs:complexType><xs:choice><xs:element name="a" type="xs:precisionDecimal"/></xs:choice></xs:complexType></xs:element>`,
+			"element a with {type definition} {http://www.w3.org/2001/XMLSchema}precisionDecimal, whose {primitive type definition} is", constructUncoveredPrimitive},
 		// A <group ref> content particle is checked as its referenced group
 		// would be inline: an emptiable choice declines whatever the ref's
 		// occurs.
@@ -100,23 +100,21 @@ func TestGenerateDeclines(t *testing.T) {
 		// In the ref rows below, h is declared after e. Where a row places a
 		// later decline after the ref, the ref's check is shown to come
 		// first.
-		{"element ref to nillable", `<xs:element name="e"><xs:complexType><xs:sequence><xs:element ref="h"/></xs:sequence></xs:complexType></xs:element><xs:element name="z" type="xs:QName"/><xs:element name="h" nillable="true" ` + str + `/>`,
-			"element h with {nillable} true at s.xsd:2:154 ", constructElementNillable},
+		{"element ref to nillable", `<xs:element name="e"><xs:complexType><xs:sequence><xs:element ref="h"/></xs:sequence></xs:complexType></xs:element><xs:element name="z" type="xs:precisionDecimal"/><xs:element name="h" nillable="true" ` + str + `/>`,
+			"element h with {nillable} true at s.xsd:2:165 ", constructElementNillable},
 		{"element ref in choice to nillable", `<xs:element name="e"><xs:complexType><xs:choice><xs:element name="a" ` + str + `/><xs:element ref="h"/></xs:choice></xs:complexType></xs:element><xs:element name="h" nillable="true" ` + str + `/>`,
 			"element h with {nillable} true", constructElementNillable},
 		// h's type is checked where e's ref meets it, ahead of z's decline.
-		{"element ref to complex type outside the slice", `<xs:element name="e"><xs:complexType><xs:sequence><xs:element ref="h"/><xs:element name="z" type="xs:QName"/></xs:sequence></xs:complexType></xs:element><xs:element name="h"><xs:complexType mixed="true"><xs:sequence><xs:element name="a" ` + str + `/></xs:sequence></xs:complexType></xs:element>`,
+		{"element ref to complex type outside the slice", `<xs:element name="e"><xs:complexType><xs:sequence><xs:element ref="h"/><xs:element name="z" type="xs:precisionDecimal"/></xs:sequence></xs:complexType></xs:element><xs:element name="h"><xs:complexType mixed="true"><xs:sequence><xs:element name="a" ` + str + `/></xs:sequence></xs:complexType></xs:element>`,
 			"complex type (anonymous) of element h with mixed content", constructMixedContent},
-		{"element ref to simple type outside the slice", `<xs:element name="e"><xs:complexType><xs:sequence><xs:element ref="h"/><xs:element name="z" type="xs:precisionDecimal"/></xs:sequence></xs:complexType></xs:element><xs:element name="h" type="xs:QName"/>`,
-			"element h with {type definition} {http://www.w3.org/2001/XMLSchema}QName, whose {primitive type definition} is", constructUncoveredPrimitive},
-		{"attribute list of uncovered primitive", `<xs:element name="e"><xs:complexType><xs:sequence><xs:element name="a" ` + str + `/></xs:sequence><xs:attribute name="t"><xs:simpleType><xs:list itemType="xs:QName"/></xs:simpleType></xs:attribute></xs:complexType></xs:element>`,
-			"attribute t of complex type (anonymous) of element e with {type definition} (anonymous), whose {item type definition} is {http://www.w3.org/2001/XMLSchema}QName, whose {primitive type definition} is {http://www.w3.org/2001/XMLSchema}QName", constructUncoveredPrimitive},
+		{"element ref to simple type outside the slice", `<xs:element name="e"><xs:complexType><xs:sequence><xs:element ref="h"/><xs:element name="z" type="xs:precisionDecimal"/></xs:sequence></xs:complexType></xs:element><xs:element name="h" type="xs:precisionDecimal"/>`,
+			"element h with {type definition} {http://www.w3.org/2001/XMLSchema}precisionDecimal, whose {primitive type definition} is", constructUncoveredPrimitive},
+		{"attribute list of uncovered primitive", `<xs:element name="e"><xs:complexType><xs:sequence><xs:element name="a" ` + str + `/></xs:sequence><xs:attribute name="t"><xs:simpleType><xs:list itemType="xs:precisionDecimal"/></xs:simpleType></xs:attribute></xs:complexType></xs:element>`,
+			"attribute t of complex type (anonymous) of element e with {type definition} (anonymous), whose {item type definition} is {http://www.w3.org/2001/XMLSchema}precisionDecimal, whose {primitive type definition} is {http://www.w3.org/2001/XMLSchema}precisionDecimal", constructUncoveredPrimitive},
 		{"attribute union", `<xs:element name="e"><xs:complexType><xs:sequence><xs:element name="a" ` + str + `/></xs:sequence><xs:attribute name="t"><xs:simpleType><xs:union memberTypes="xs:int xs:precisionDecimal"/></xs:simpleType></xs:attribute></xs:complexType></xs:element>`,
 			"attribute t of complex type (anonymous) of element e with {type definition} (anonymous), whose basic member is {http://www.w3.org/2001/XMLSchema}precisionDecimal, whose {primitive type definition} is {http://www.w3.org/2001/XMLSchema}precisionDecimal", constructUncoveredPrimitive},
 		{"attribute uncovered primitive", `<xs:element name="e"><xs:complexType><xs:sequence><xs:element name="a" ` + str + `/></xs:sequence><xs:attribute name="t" type="xs:precisionDecimal"/></xs:complexType></xs:element>`,
 			"attribute t of complex type (anonymous) of element e with {type definition} {http://www.w3.org/2001/XMLSchema}precisionDecimal, whose {primitive type definition} is {http://www.w3.org/2001/XMLSchema}precisionDecimal", constructUncoveredPrimitive},
-		{"attribute QName", `<xs:element name="e"><xs:complexType><xs:sequence><xs:element name="a" ` + str + `/></xs:sequence><xs:attribute name="t" type="xs:QName"/></xs:complexType></xs:element>`,
-			"attribute t of complex type (anonymous) of element e with {type definition} {http://www.w3.org/2001/XMLSchema}QName, whose {primitive type definition} is {http://www.w3.org/2001/XMLSchema}QName", constructUncoveredPrimitive},
 		{"empty type abstract", `<xs:complexType name="c" abstract="true"/><xs:element name="e" type="c"/>`,
 			"complex type c of element e with {abstract} true", constructComplexTypeAbstract},
 		{"empty type assertion", `<xs:element name="e"><xs:complexType><xs:assert test="true()"/></xs:complexType></xs:element>`,
@@ -146,8 +144,8 @@ func TestGenerateDeclines(t *testing.T) {
 		// type's construct.
 		{"simple content extension of union", `<xs:simpleType name="u"><xs:union memberTypes="xs:int xs:precisionDecimal"/></xs:simpleType><xs:element name="e"><xs:complexType><xs:simpleContent><xs:extension base="u"/></xs:simpleContent></xs:complexType></xs:element>`,
 			"complex type (anonymous) of element e with {simple type definition} u, whose basic member is {http://www.w3.org/2001/XMLSchema}precisionDecimal, whose {primitive type definition} is {http://www.w3.org/2001/XMLSchema}precisionDecimal", constructUncoveredPrimitive},
-		{"simple content extension of QName", `<xs:element name="e"><xs:complexType><xs:simpleContent><xs:extension base="xs:QName"/></xs:simpleContent></xs:complexType></xs:element>`,
-			"complex type (anonymous) of element e with {simple type definition} {http://www.w3.org/2001/XMLSchema}QName, whose {primitive type definition} is {http://www.w3.org/2001/XMLSchema}QName at s.xsd:2:22 ", constructUncoveredPrimitive},
+		{"simple content extension of precisionDecimal", `<xs:element name="e"><xs:complexType><xs:simpleContent><xs:extension base="xs:precisionDecimal"/></xs:simpleContent></xs:complexType></xs:element>`,
+			"complex type (anonymous) of element e with {simple type definition} {http://www.w3.org/2001/XMLSchema}precisionDecimal, whose {primitive type definition} is {http://www.w3.org/2001/XMLSchema}precisionDecimal at s.xsd:2:22 ", constructUncoveredPrimitive},
 		{"open content", `<xs:element name="e"><xs:complexType><xs:openContent><xs:any/></xs:openContent><xs:sequence><xs:element name="a" ` + str + `/></xs:sequence></xs:complexType></xs:element>`,
 			"with {open content}", constructOpenContent},
 		{"default open content", `<xs:defaultOpenContent><xs:any/></xs:defaultOpenContent><xs:element name="e"><xs:complexType><xs:sequence><xs:element name="a" ` + str + `/></xs:sequence></xs:complexType></xs:element>`,
@@ -197,8 +195,8 @@ func TestGenerateDeclines(t *testing.T) {
 			"element e with {type definition} (anonymous), whose {item type definition} is (anonymous), whose basic member is {http://www.w3.org/2001/XMLSchema}precisionDecimal, whose {primitive type definition} is {http://www.w3.org/2001/XMLSchema}precisionDecimal", constructUncoveredPrimitive},
 		{"restriction of a list of union", `<xs:simpleType name="u"><xs:union memberTypes="xs:int xs:precisionDecimal"/></xs:simpleType><xs:simpleType name="l"><xs:list itemType="u"/></xs:simpleType><xs:simpleType name="r"><xs:restriction base="l"><xs:maxLength value="2"/></xs:restriction></xs:simpleType><xs:element name="e" type="r"/>`,
 			"element e with {type definition} r, whose {item type definition} is u, whose basic member is {http://www.w3.org/2001/XMLSchema}precisionDecimal, whose {primitive type definition} is {http://www.w3.org/2001/XMLSchema}precisionDecimal", constructUncoveredPrimitive},
-		{"list of uncovered primitive", `<xs:simpleType name="l"><xs:list itemType="xs:QName"/></xs:simpleType><xs:element name="e" type="l"/>`,
-			"element e with {type definition} l, whose {item type definition} is {http://www.w3.org/2001/XMLSchema}QName, whose {primitive type definition} is {http://www.w3.org/2001/XMLSchema}QName", constructUncoveredPrimitive},
+		{"list of uncovered primitive", `<xs:simpleType name="l"><xs:list itemType="xs:precisionDecimal"/></xs:simpleType><xs:element name="e" type="l"/>`,
+			"element e with {type definition} l, whose {item type definition} is {http://www.w3.org/2001/XMLSchema}precisionDecimal, whose {primitive type definition} is {http://www.w3.org/2001/XMLSchema}precisionDecimal", constructUncoveredPrimitive},
 		// The union rows pin that a union declines exactly when a basic member
 		// does, by the member's construct, naming that member after the union:
 		// one listed second, and one reached through a nested union.
@@ -206,8 +204,6 @@ func TestGenerateDeclines(t *testing.T) {
 			"element e with {type definition} (anonymous), whose basic member is {http://www.w3.org/2001/XMLSchema}precisionDecimal, whose {primitive type definition} is {http://www.w3.org/2001/XMLSchema}precisionDecimal", constructUncoveredPrimitive},
 		{"union of a union", `<xs:simpleType name="inner"><xs:union memberTypes="xs:int xs:precisionDecimal"/></xs:simpleType><xs:element name="e"><xs:simpleType><xs:union memberTypes="xs:boolean inner"/></xs:simpleType></xs:element>`,
 			"element e with {type definition} (anonymous), whose basic member is {http://www.w3.org/2001/XMLSchema}precisionDecimal, whose {primitive type definition} is {http://www.w3.org/2001/XMLSchema}precisionDecimal", constructUncoveredPrimitive},
-		{"uncovered primitive", `<xs:element name="e" type="xs:QName"/>`,
-			"whose {primitive type definition} is {http://www.w3.org/2001/XMLSchema}QName", constructUncoveredPrimitive},
 		{"precisionDecimal", `<xs:element name="e" type="xs:precisionDecimal"/>`,
 			"element e with {type definition} {http://www.w3.org/2001/XMLSchema}precisionDecimal, whose {primitive type definition} is {http://www.w3.org/2001/XMLSchema}precisionDecimal", constructUncoveredPrimitive},
 		// The derived rows reach an uncovered primitive along {base type
@@ -220,10 +216,6 @@ func TestGenerateDeclines(t *testing.T) {
 			"element e with {type definition} d2, whose {primitive type definition} is {http://www.w3.org/2001/XMLSchema}precisionDecimal", constructUncoveredPrimitive},
 		{"restriction of a restriction of a restriction of precisionDecimal", `<xs:simpleType name="d"><xs:restriction base="xs:precisionDecimal"/></xs:simpleType><xs:simpleType name="d2"><xs:restriction base="d"/></xs:simpleType><xs:simpleType name="d3"><xs:restriction base="d2"/></xs:simpleType><xs:element name="e" type="d3"/>`,
 			"element e with {type definition} d3, whose {primitive type definition} is {http://www.w3.org/2001/XMLSchema}precisionDecimal", constructUncoveredPrimitive},
-		// Only a type derived from NOTATION by an enumeration validates a
-		// literal (Datatypes §3.3.19 enumeration-required-notation).
-		{"enumerated restriction of NOTATION", `<xs:notation name="n" public="p"/><xs:simpleType name="d"><xs:restriction base="xs:NOTATION"><xs:enumeration value="n"/></xs:restriction></xs:simpleType><xs:element name="e" type="d"/>`,
-			"element e with {type definition} d, whose {primitive type definition} is {http://www.w3.org/2001/XMLSchema}NOTATION", constructUncoveredPrimitive},
 		// The value-cycle rows each give Go types that would hold one another
 		// as struct values.
 		{"value cycle direct", `<xs:complexType name="c"><xs:sequence><xs:element name="x" type="c"/></xs:sequence></xs:complexType><xs:element name="e" type="c"/>`,
@@ -277,7 +269,7 @@ func TestGenerateDeclines(t *testing.T) {
 			"<element ref> particle to element a reaching element a again through elements that each occur exactly once", constructValueCycle},
 		// The ref to a is checked for recursion where it is met, ahead of the
 		// decline of z after it.
-		{"ref cycle ahead of a later decline", `<xs:element name="e"><xs:complexType><xs:sequence><xs:element ref="a"/><xs:element name="z" type="xs:QName"/></xs:sequence></xs:complexType></xs:element><xs:element name="a"><xs:complexType><xs:sequence><xs:element ref="b"/></xs:sequence></xs:complexType></xs:element><xs:element name="b"><xs:complexType><xs:sequence><xs:element ref="a"/></xs:sequence></xs:complexType></xs:element>`,
+		{"ref cycle ahead of a later decline", `<xs:element name="e"><xs:complexType><xs:sequence><xs:element ref="a"/><xs:element name="z" type="xs:precisionDecimal"/></xs:sequence></xs:complexType></xs:element><xs:element name="a"><xs:complexType><xs:sequence><xs:element ref="b"/></xs:sequence></xs:complexType></xs:element><xs:element name="b"><xs:complexType><xs:sequence><xs:element ref="a"/></xs:sequence></xs:complexType></xs:element>`,
 			"<element ref> particle to element a reaching element a again through elements that each occur exactly once", constructValueCycle},
 		// x's walk emits z through the pointer field p before it reaches the
 		// value field v, and z's walk meets x already stored: a check carried
@@ -305,8 +297,8 @@ func TestGenerateDeclines(t *testing.T) {
 		{"value cycle check past a recursion", fmt.Sprintf(pastDecline, `<xs:element name="g" type="cyc"/>`, `<xs:complexType name="cyc"><xs:sequence><xs:element name="s" type="cyc"/></xs:sequence></xs:complexType>`),
 			"local element s reaching complex type cyc again through elements that each occur exactly once", constructValueCycle},
 		// e's walk reaches t, declared after f, before f's walk begins.
-		{"named type body before a later top-level element", `<xs:element name="e"><xs:complexType><xs:sequence><xs:element name="l" type="t"/></xs:sequence></xs:complexType></xs:element><xs:element name="f" type="xs:QName"/><xs:complexType name="t"><xs:choice><xs:any minOccurs="0"/></xs:choice></xs:complexType>`,
-			"complex type t whose choice is emptiable: its alternative 1, a wildcard particle, is emptiable at s.xsd:2:164 ", constructEmptiableChoice},
+		{"named type body before a later top-level element", `<xs:element name="e"><xs:complexType><xs:sequence><xs:element name="l" type="t"/></xs:sequence></xs:complexType></xs:element><xs:element name="f" type="xs:precisionDecimal"/><xs:complexType name="t"><xs:choice><xs:any minOccurs="0"/></xs:choice></xs:complexType>`,
+			"complex type t whose choice is emptiable: its alternative 1, a wildcard particle, is emptiable at s.xsd:2:175 ", constructEmptiableChoice},
 		{"named complex local body", `<xs:complexType name="c"><xs:choice><xs:any minOccurs="0"/></xs:choice></xs:complexType><xs:element name="e"><xs:complexType><xs:sequence><xs:element name="l" type="c"/></xs:sequence></xs:complexType></xs:element>`,
 			"complex type c whose choice is emptiable: its alternative 1, a wildcard particle, is emptiable at s.xsd:2:1 ", constructEmptiableChoice},
 		{"local element property", `<xs:element name="e"><xs:complexType><xs:sequence><xs:element name="l" nillable="true" ` + str + `/></xs:sequence></xs:complexType></xs:element>`,
@@ -362,7 +354,7 @@ func TestGenerateDeclines(t *testing.T) {
 // order, while one site reached by two walks stays one element.
 func TestGenerateDeclinesLocalAnonymousPlace(t *testing.T) {
 	const (
-		g    = `<xs:attribute name="g" type="xs:QName"/>`
+		g    = `<xs:attribute name="g" type="xs:precisionDecimal"/>`
 		anon = `<xs:complexType><xs:attribute ref="g"/></xs:complexType>`
 		x    = `<xs:element name="x">` + anon + `</xs:element>`
 		a    = `<xs:element name="a"><xs:complexType><xs:sequence>` + x + `</xs:sequence></xs:complexType></xs:element>`
@@ -372,7 +364,7 @@ func TestGenerateDeclinesLocalAnonymousPlace(t *testing.T) {
 	}
 	seq := func(particle string) string { return `<xs:sequence>` + particle + `</xs:sequence>` }
 	decline := func(subject string) string {
-		return "codegen: target 0: attribute g of " + subject + " with {type definition} {http://www.w3.org/2001/XMLSchema}QName, whose {primitive type definition} is {http://www.w3.org/2001/XMLSchema}QName at s.xsd:2:1 is not supported by codegen, a generator limitation, not a schema fault"
+		return "codegen: target 0: attribute g of " + subject + " with {type definition} {http://www.w3.org/2001/XMLSchema}precisionDecimal, whose {primitive type definition} is {http://www.w3.org/2001/XMLSchema}precisionDecimal at s.xsd:2:1 is not supported by codegen, a generator limitation, not a schema fault"
 	}
 	tests := []struct {
 		name, body string
@@ -602,7 +594,7 @@ func TestGenerateEmptyUnion(t *testing.T) {
 // and Loc as values, and that the target's name opens the error outside the
 // *DeclineError's own text.
 func TestDeclineErrorAs(t *testing.T) {
-	schema := parseString(t, "<xs:schema xmlns:xs=\"http://www.w3.org/2001/XMLSchema\">\n<xs:element name=\"e\" type=\"xs:QName\"/>\n</xs:schema>\n")
+	schema := parseString(t, "<xs:schema xmlns:xs=\"http://www.w3.org/2001/XMLSchema\">\n<xs:element name=\"e\" type=\"xs:precisionDecimal\"/>\n</xs:schema>\n")
 	tests := []struct {
 		name, targetName, opening string
 	}{
@@ -625,7 +617,7 @@ func TestDeclineErrorAs(t *testing.T) {
 			if want := tt.opening + de.Error(); err.Error() != want {
 				t.Errorf("error %q, want %q", err, want)
 			}
-			const detail = "element e with {type definition} {http://www.w3.org/2001/XMLSchema}QName, whose {primitive type definition} is {http://www.w3.org/2001/XMLSchema}QName at "
+			const detail = "element e with {type definition} {http://www.w3.org/2001/XMLSchema}precisionDecimal, whose {primitive type definition} is {http://www.w3.org/2001/XMLSchema}precisionDecimal at "
 			if !strings.HasPrefix(de.Error(), detail+de.Loc().String()+" is not supported by codegen") {
 				t.Errorf("DeclineError.Error() = %q, want it to open %q followed by its Loc", de.Error(), detail)
 			}
@@ -705,17 +697,14 @@ func TestConstructMapKey(t *testing.T) {
 }
 
 // TestDeclineErrorLoc pins DeclineError.Loc's doc for parsed schemas: a
-// decline charged to a built-in xsi: attribute declaration the parser
-// supplies has the zero Loc, and one charged to a declaration read from the
-// document has that declaration's location.
+// decline charged to a declaration read from the document has that
+// declaration's location.
 func TestDeclineErrorLoc(t *testing.T) {
 	tests := []struct {
 		name, body string
 		kind       construct
 		want       xsderr.Loc
 	}{
-		{"xsi:type attribute", `<xs:element name="e"><xs:complexType><xs:attribute ref="xsi:type"/></xs:complexType></xs:element>`,
-			constructUncoveredPrimitive, xsderr.Loc{}},
 		{"nillable element", `<xs:element name="e" nillable="true" type="xs:string"/>`,
 			constructElementNillable, xsderr.Loc{URI: "s.xsd", Line: 2, Col: 1}},
 	}

@@ -400,9 +400,9 @@ type genRow struct{ file, out, body string }
 // row.
 func TestGenDeclines(t *testing.T) {
 	const (
-		mixed = `<xs:element name="e"><xs:complexType mixed="true"><xs:sequence><xs:element name="a" type="xs:string"/></xs:sequence></xs:complexType></xs:element>`
-		qname = " with {type definition} {http://www.w3.org/2001/XMLSchema}QName, whose {primitive type definition} is {http://www.w3.org/2001/XMLSchema}QName at "
-		tail  = " is not supported by codegen, a generator limitation, not a schema fault\n"
+		mixed    = `<xs:element name="e"><xs:complexType mixed="true"><xs:sequence><xs:element name="a" type="xs:string"/></xs:sequence></xs:complexType></xs:element>`
+		pdecimal = " with {type definition} {http://www.w3.org/2001/XMLSchema}precisionDecimal, whose {primitive type definition} is {http://www.w3.org/2001/XMLSchema}precisionDecimal at "
+		tail     = " is not supported by codegen, a generator limitation, not a schema fault\n"
 	)
 	rows := []struct {
 		name string
@@ -415,10 +415,10 @@ func TestGenDeclines(t *testing.T) {
 		{"one decline", []genRow{{"s.xsd", "e", mixed}}, func(s, o []string) string {
 			return "goxsd8: gen: -schema " + s[0] + " -out " + o[0] + ": complex type (anonymous) of element e with mixed content at " + s[0] + ":2:22" + tail
 		}},
-		{"two pairs, three declines", []genRow{{"s.xsd", "e", mixed + "\n" + `<xs:element name="f" type="xs:QName"/>`}, {"t.xsd", "g", `<xs:element name="g" type="xs:QName"/>`}}, func(s, o []string) string {
+		{"two pairs, three declines", []genRow{{"s.xsd", "e", mixed + "\n" + `<xs:element name="f" type="xs:precisionDecimal"/>`}, {"t.xsd", "g", `<xs:element name="g" type="xs:precisionDecimal"/>`}}, func(s, o []string) string {
 			return "goxsd8: gen: -schema " + s[0] + " -out " + o[0] + ": complex type (anonymous) of element e with mixed content at " + s[0] + ":2:22" + tail +
-				"goxsd8: gen: -schema " + s[0] + " -out " + o[0] + ": element f" + qname + s[0] + ":3:1" + tail +
-				"goxsd8: gen: -schema " + s[1] + " -out " + o[1] + ": element g" + qname + s[1] + ":2:1" + tail
+				"goxsd8: gen: -schema " + s[0] + " -out " + o[0] + ": element f" + pdecimal + s[0] + ":3:1" + tail +
+				"goxsd8: gen: -schema " + s[1] + " -out " + o[1] + ": element g" + pdecimal + s[1] + ":2:1" + tail
 		}},
 	}
 	for _, tt := range rows {

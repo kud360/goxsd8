@@ -26,6 +26,8 @@ var (
 
 	hexBinaryPrimitive    = xsd.QName{Space: xsd.XMLSchemaNS, Local: "hexBinary"}
 	base64BinaryPrimitive = xsd.QName{Space: xsd.XMLSchemaNS, Local: "base64Binary"}
+	qNamePrimitive        = xsd.QName{Space: xsd.XMLSchemaNS, Local: "QName"}
+	notationPrimitive     = xsd.QName{Space: xsd.XMLSchemaNS, Local: "NOTATION"}
 
 	integerBuiltin = xsd.QName{Space: xsd.XMLSchemaNS, Local: "integer"}
 
@@ -47,10 +49,11 @@ const (
 )
 
 // datatypeStruct is the struct "# Coverage" maps one date, time or duration
-// datatype to (Datatypes §3.3.6–§3.3.14, §3.4.26–§3.4.28): one field per
-// property its values carry, in the order of the seven-property model
-// (§D.2.1) or of duration's two properties (§3.3.6.1). doc is the header's
-// line after its first, "" for none.
+// datatype, or QName and NOTATION, to (Datatypes §3.3.6–§3.3.14, §3.3.18,
+// §3.3.19, §3.4.26–§3.4.28): one field per property its values carry, in the
+// order of the seven-property model (§D.2.1), of duration's two properties
+// (§3.3.6.1), or of QName's {namespace name, local part} (§3.3.18). doc is the
+// header's line after its first, "" for none.
 type datatypeStruct struct {
 	datatype xsd.QName
 	doc      string
@@ -86,10 +89,11 @@ var (
 	secondsField        = datatypeField{"Seconds", bigRat}
 )
 
-// The twelve datatype structs: one per date, time or duration primitive, and
-// one per builtin derived from one whose values carry fewer properties or a
+// The thirteen datatype structs: one per date, time or duration primitive, one
+// per builtin derived from one whose values carry fewer properties or a
 // required one (§3.4.26 yearMonthDuration, §3.4.27 dayTimeDuration, §3.4.28
-// dateTimeStamp).
+// dateTimeStamp), and one for QName, which NOTATION shares (§3.3.18,
+// §3.3.19).
 var (
 	dateTimeStruct = datatypeStruct{xsd.QName{Space: xsd.XMLSchemaNS, Local: "dateTime"}, optionalOffsetDoc,
 		[]datatypeField{yearField, monthField, dayField, hourField, minuteField, secondField, optionalOffsetField}}
@@ -115,6 +119,8 @@ var (
 		[]datatypeField{secondsField}}
 	yearMonthDurationStruct = datatypeStruct{xsd.QName{Space: xsd.XMLSchemaNS, Local: "yearMonthDuration"}, "",
 		[]datatypeField{monthsField}}
+	qNameStruct = datatypeStruct{qNamePrimitive, "Space is the namespace name, \"\" for none.",
+		[]datatypeField{{"Space", "string"}, {"Local", "string"}}}
 )
 
 // emitter builds one target's source. decls holds each emitted type
@@ -688,6 +694,8 @@ func (e *emitter) atomicType(subject, typed string, loc xsderr.Loc, t *xsd.Simpl
 		return e.useBig(bigRat), nil
 	case hexBinaryPrimitive, base64BinaryPrimitive: // Datatypes §3.3.15.1, §3.3.16.1, as "# Coverage" states
 		return "[]byte", nil
+	case qNamePrimitive, notationPrimitive: // Datatypes §3.3.18, §3.3.19, as "# Coverage" states
+		return e.datatypeType(qNameStruct), nil
 	case dateTimeStruct.datatype: // Datatypes §3.3.7
 		return e.datatypeType(dateTimeStruct), nil
 	case timeStruct.datatype: // Datatypes §3.3.8

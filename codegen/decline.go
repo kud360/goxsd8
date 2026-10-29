@@ -29,9 +29,7 @@ func (e *DeclineError) Construct() Construct { return Construct{e.construct} }
 // declaration it resolves to, the global one for an <attribute ref>.
 //
 // Loc is the zero xsderr.Loc exactly when that component's Loc is zero: a
-// component built through xsd.SchemaBuilder with a zero Loc, or one of the
-// built-in xsi: attribute declarations parser.Parse supplies itself
-// rather than reading from a schema document. Every other decline from a
+// component built through xsd.SchemaBuilder with a zero Loc. Every other decline from a
 // parsed schema carries the declining component's location in its document.
 func (e *DeclineError) Loc() xsderr.Loc { return e.loc }
 
