@@ -54,4 +54,23 @@
   <xs:element name="m3" substitutionGroup="s:m1"/>
   <xs:element name="b" block="substitution" type="xs:string"/>
   <xs:element name="bm" substitutionGroup="s:b" type="xs:string"/>
+  <!-- n's type nt holds an <element ref> to n itself exactly once. Its field
+       holds NSubstitutionGroup, an interface, so no struct-value recursion
+       passes it: top's exactly-once ref to w, also of type nt, walks nt for
+       one (valueCycle) and passes the ref to n. -->
+  <xs:complexType name="nt">
+    <xs:sequence>
+      <xs:element ref="s:n"/>
+    </xs:sequence>
+  </xs:complexType>
+  <xs:element name="top">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element ref="s:w"/>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="w" type="s:nt"/>
+  <xs:element name="n" type="s:nt"/>
+  <xs:element name="nm" substitutionGroup="s:n"/>
 </xs:schema>

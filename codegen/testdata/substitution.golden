@@ -76,3 +76,42 @@ type B string
 
 // Bm is generated from element {urn:s}bm declared at testdata/substitution.xsd:56:3.
 type Bm string
+
+// Top is generated from element {urn:s}top declared at testdata/substitution.xsd:66:3.
+type Top struct {
+	W W
+}
+
+// W is generated from element {urn:s}w declared at testdata/substitution.xsd:73:3.
+type W struct {
+	N NSubstitutionGroup
+}
+
+// NSubstitutionGroup is generated from the substitution group of element {urn:s}n declared at testdata/substitution.xsd:74:3.
+type NSubstitutionGroup interface {
+	isNSubstitutionGroup()
+}
+
+// NSubstitutionGroupN is generated from element {urn:s}n declared at testdata/substitution.xsd:74:3.
+type NSubstitutionGroupN struct {
+	N N
+}
+
+func (NSubstitutionGroupN) isNSubstitutionGroup() {}
+
+// NSubstitutionGroupNm is generated from element {urn:s}nm declared at testdata/substitution.xsd:75:3.
+type NSubstitutionGroupNm struct {
+	Nm Nm
+}
+
+func (NSubstitutionGroupNm) isNSubstitutionGroup() {}
+
+// N is generated from element {urn:s}n declared at testdata/substitution.xsd:74:3.
+type N struct {
+	N NSubstitutionGroup
+}
+
+// Nm is generated from element {urn:s}nm declared at testdata/substitution.xsd:75:3.
+type Nm struct {
+	N NSubstitutionGroup
+}
