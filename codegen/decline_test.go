@@ -117,8 +117,6 @@ func TestGenerateDeclines(t *testing.T) {
 			"attribute t of complex type (anonymous) of element e with {type definition} {http://www.w3.org/2001/XMLSchema}precisionDecimal, whose {primitive type definition} is {http://www.w3.org/2001/XMLSchema}precisionDecimal", constructUncoveredPrimitive},
 		{"empty type abstract", `<xs:complexType name="c" abstract="true"/><xs:element name="e" type="c"/>`,
 			"complex type c of element e with {abstract} true", constructComplexTypeAbstract},
-		{"empty type assertion", `<xs:element name="e"><xs:complexType><xs:assert test="true()"/></xs:complexType></xs:element>`,
-			"with {assertions}", constructAssertions},
 		{"mixed empty", `<xs:element name="e"><xs:complexType mixed="true"/></xs:element>`,
 			"with mixed content", constructMixedContent},
 		{"default open content applies to empty", `<xs:defaultOpenContent appliesToEmpty="true"><xs:any/></xs:defaultOpenContent><xs:element name="e"><xs:complexType/></xs:element>`,
@@ -127,14 +125,12 @@ func TestGenerateDeclines(t *testing.T) {
 			"complex type (anonymous) of element e whose content is a choice, with {attribute uses}", constructChoiceAttributes},
 		// An {attribute wildcard} gives a field only to a struct: a choice
 		// occurring exactly once declines it as it declines {attribute uses},
-		// and {assertions} and mixed content, both checked first, still
-		// decline a type that has one.
+		// and mixed content, checked first, still declines a type that has
+		// one.
 		{"choice with attribute wildcard", `<xs:element name="e"><xs:complexType><xs:choice><xs:element name="a" ` + str + `/></xs:choice><xs:anyAttribute/></xs:complexType></xs:element>`,
 			"complex type (anonymous) of element e whose content is a choice, with an {attribute wildcard}", constructChoiceAttributes},
 		{"choice with attribute and attribute wildcard", `<xs:element name="e"><xs:complexType><xs:choice><xs:element name="a" ` + str + `/></xs:choice><xs:attribute name="t" ` + str + `/><xs:anyAttribute/></xs:complexType></xs:element>`,
 			"complex type (anonymous) of element e whose content is a choice, with {attribute uses} at ", constructChoiceAttributes},
-		{"attribute wildcard with assertion", `<xs:element name="e"><xs:complexType><xs:sequence><xs:element name="a" ` + str + `/></xs:sequence><xs:anyAttribute/><xs:assert test="true()"/></xs:complexType></xs:element>`,
-			"complex type (anonymous) of element e with {assertions}", constructAssertions},
 		{"attribute wildcard with mixed content", `<xs:element name="e"><xs:complexType mixed="true"><xs:sequence><xs:element name="a" ` + str + `/></xs:sequence><xs:anyAttribute/></xs:complexType></xs:element>`,
 			"complex type (anonymous) of element e with mixed content", constructMixedContent},
 		{"mixed", `<xs:element name="e"><xs:complexType mixed="true"><xs:sequence><xs:element name="a" ` + str + `/></xs:sequence></xs:complexType></xs:element>`,
@@ -152,13 +148,10 @@ func TestGenerateDeclines(t *testing.T) {
 			"with {open content}", constructOpenContent},
 		// The restriction rows pin that a complex-content restriction of a
 		// base other than xs:anyType is checked from its own finalized
-		// component: c writes no <attribute> or <assert>, and declines for
-		// the {attribute uses} or {assertions} it inherits from b (§3.4.2.4
-		// dcl.ctd.attuses, §3.4.2.1 dcl.ctd.common).
+		// component: c writes no <attribute>, and declines for the
+		// {attribute uses} it inherits from b (§3.4.2.4 dcl.ctd.attuses).
 		{"restriction choice with inherited attribute", `<xs:complexType name="b"><xs:choice><xs:element name="a" ` + str + `/><xs:element name="x" ` + str + `/></xs:choice><xs:attribute name="t" ` + str + `/></xs:complexType><xs:complexType name="c"><xs:complexContent><xs:restriction base="b"><xs:choice><xs:element name="a" ` + str + `/></xs:choice></xs:restriction></xs:complexContent></xs:complexType><xs:element name="e" type="c"/>`,
 			"complex type c of element e whose content is a choice, with {attribute uses}", constructChoiceAttributes},
-		{"restriction with inherited assertion", `<xs:complexType name="b"><xs:sequence><xs:element name="a" ` + str + `/></xs:sequence><xs:assert test="true()"/></xs:complexType><xs:complexType name="c"><xs:complexContent><xs:restriction base="b"><xs:sequence><xs:element name="a" ` + str + `/></xs:sequence></xs:restriction></xs:complexContent></xs:complexType><xs:element name="e" type="c"/>`,
-			"complex type c of element e with {assertions}", constructAssertions},
 		// The three rows below carry a {value constraint} beside the declining
 		// property, so they pin that the value constraint, accepted, is not
 		// checked ahead of it.
@@ -174,8 +167,13 @@ func TestGenerateDeclines(t *testing.T) {
 		// key-eq; cvc-elt clause 2 reads the declaration's own {abstract}).
 		{"abstract substitution group head", `<xs:element name="h" abstract="true" ` + str + `/><xs:element name="m" substitutionGroup="h" ` + str + `/>`,
 			"element h with {abstract} true at s.xsd:2:1 ", constructElementAbstract},
-		{"assertion", `<xs:element name="e"><xs:complexType><xs:sequence><xs:element name="a" ` + str + `/></xs:sequence><xs:assert test="true()"/></xs:complexType></xs:element>`,
-			"with {assertions}", constructAssertions},
+		// The two rows below pin that a type with {assertions} still declines
+		// for its other properties: mixed content, tested after {abstract},
+		// and {abstract} true.
+		{"mixed with assertion", `<xs:element name="e"><xs:complexType mixed="true"><xs:sequence><xs:element name="a" ` + str + `/></xs:sequence><xs:assert test="true()"/></xs:complexType></xs:element>`,
+			"complex type (anonymous) of element e with mixed content", constructMixedContent},
+		{"abstract with assertion", `<xs:complexType name="c" abstract="true"><xs:sequence><xs:element name="a" ` + str + `/></xs:sequence><xs:assert test="true()"/></xs:complexType><xs:element name="e" type="c"/>`,
+			"complex type c of element e with {abstract} true", constructComplexTypeAbstract},
 		{"abstract complex type", `<xs:complexType name="c" abstract="true"><xs:sequence><xs:element name="a" ` + str + `/></xs:sequence></xs:complexType><xs:element name="e" type="c"/>`,
 			"complex type c of element e with {abstract} true", constructComplexTypeAbstract},
 		// The three guard rows pin that the xs:anyType arm keys on identity: c
