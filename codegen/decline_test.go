@@ -55,10 +55,8 @@ func TestGenerateDeclines(t *testing.T) {
 			"complex type (anonymous) of element e whose choice has no {particles}", constructEmptyChoice},
 		{"choice of vacuous elements", `<xs:element name="e"><xs:complexType><xs:choice><xs:element name="a" minOccurs="0" maxOccurs="0" ` + str + `/></xs:choice></xs:complexType></xs:element>`,
 			"complex type (anonymous) of element e whose choice has no {particles}", constructEmptyChoice},
-		// A model group alternative whose term is emptiable (cos-group-emptiable
-		// clause 2: its effective total range has minimum 0 at {min occurs} 1,
-		// cos-seq-range, cos-choice-range) declines, inline or through a <group
-		// ref>: a branch over it would hold the empty match.
+		// A model group alternative whose term is emptiable declines, inline
+		// or through a <group ref>.
 		{"emptiable group in choice", `<xs:element name="e"><xs:complexType><xs:choice><xs:element name="a" ` + str + `/><xs:sequence><xs:element name="b" minOccurs="0" ` + str + `/></xs:sequence></xs:choice></xs:complexType></xs:element>`,
 			"complex type (anonymous) of element e whose choice's alternative 2, a sequence model group particle, has an emptiable model group", constructEmptiableGroupAlternative},
 		{"emptiable choice in choice", `<xs:element name="e"><xs:complexType><xs:choice><xs:element name="a" ` + str + `/><xs:choice><xs:element name="b" ` + str + `/><xs:element name="c" minOccurs="0" ` + str + `/></xs:choice></xs:choice></xs:complexType></xs:element>`,

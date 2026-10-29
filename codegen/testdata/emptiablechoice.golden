@@ -130,10 +130,11 @@ type OptGroupsChoiceSequence3 struct {
 	Z string
 }
 
-// Holder is generated from element {urn:emptiablechoice}holder declared at testdata/emptiablechoice.xsd:53:3.
+// Holder is generated from element {urn:emptiablechoice}holder declared at testdata/emptiablechoice.xsd:59:3.
 type Holder struct {
-	Maybe  *Pick
-	Always Pick
+	Maybe     *Pick
+	Always    Pick
+	MaybeBare *Bare
 }
 
 // Pick is generated from complex type {urn:emptiablechoice}pick declared at testdata/emptiablechoice.xsd:46:3.
@@ -161,24 +162,48 @@ type PickChoiceB struct {
 
 func (PickChoiceB) isPickChoice() {}
 
-// Repeated is generated from element {urn:emptiablechoice}repeated declared at testdata/emptiablechoice.xsd:61:3.
+// Bare is generated from complex type {urn:emptiablechoice}bare declared at testdata/emptiablechoice.xsd:53:3.
+type Bare struct {
+	Choice BareChoice
+}
+
+// BareChoice is generated from complex type {urn:emptiablechoice}bare declared at testdata/emptiablechoice.xsd:53:3.
+type BareChoice interface {
+	isBareChoice()
+}
+
+// BareChoiceA is generated from element a declared at testdata/emptiablechoice.xsd:55:7.
+type BareChoiceA struct {
+	A string
+}
+
+func (BareChoiceA) isBareChoice() {}
+
+// BareChoiceAny is generated from complex type {urn:emptiablechoice}bare declared at testdata/emptiablechoice.xsd:53:3.
+type BareChoiceAny struct {
+	Any AnyElement
+}
+
+func (BareChoiceAny) isBareChoice() {}
+
+// Repeated is generated from element {urn:emptiablechoice}repeated declared at testdata/emptiablechoice.xsd:68:3.
 type Repeated struct {
 	Choice []RepeatedChoice
 }
 
-// RepeatedChoice is generated from element {urn:emptiablechoice}repeated declared at testdata/emptiablechoice.xsd:61:3.
+// RepeatedChoice is generated from element {urn:emptiablechoice}repeated declared at testdata/emptiablechoice.xsd:68:3.
 type RepeatedChoice interface {
 	isRepeatedChoice()
 }
 
-// RepeatedChoiceA is generated from element a declared at testdata/emptiablechoice.xsd:64:9.
+// RepeatedChoiceA is generated from element a declared at testdata/emptiablechoice.xsd:71:9.
 type RepeatedChoiceA struct {
 	A string
 }
 
 func (RepeatedChoiceA) isRepeatedChoice() {}
 
-// RepeatedChoiceB is generated from element b declared at testdata/emptiablechoice.xsd:65:9.
+// RepeatedChoiceB is generated from element b declared at testdata/emptiablechoice.xsd:72:9.
 type RepeatedChoiceB struct {
 	B string
 }

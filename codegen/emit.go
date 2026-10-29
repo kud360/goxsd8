@@ -972,12 +972,8 @@ func typeName(t xsd.TypeDefinition) string {
 // which declines {attribute uses} or an {attribute wildcard}, naming the uses
 // when it has both, since an interface has no field to hold either, and a
 // struct otherwise — and its content particle (contentGroup), nil for empty
-// content. A choice content particle occurring exactly once whose one
-// occurrence is emptiable gets the struct, so that a field holding the type
-// with {min occurs} 0 is a pointer and nil means absent only, the interface
-// nil inside it meaning present and matching nothing. It emits nothing: body
-// does, so that a caller can store the type in e.emitted before its body is
-// walked.
+// content. It emits nothing: body does, so that a caller can store the type in
+// e.emitted before its body is walked.
 func (e *emitter) shape(name string, o origin, t xsd.ComplexType) (emittedType, *groupParticle, error) {
 	content, err := e.contentGroup(o.subject, t)
 	if err != nil {
@@ -1261,16 +1257,12 @@ func structDecl(name string, fields []fieldSpec) string {
 // branch is named from the interface's name plus the alternative's word and
 // generated from what its header renders (alternative).
 //
-// Matching nothing is the nil interface only: a choice with an emptiable
-// alternative is itself emptiable (§3.8.6.6 cos-choice-range, §3.9.6.3
-// cos-group-emptiable), and no branch holds that empty match, since
-// branchParticle reads an alternative's {min occurs} 0 as 1. That holds only
-// while no alternative's term is itself emptiable (termEmptiable), so the gate
-// declines the first alternative, in particle order, whose term is: a model
-// group, inline or through a <group ref>, whatever the particle's own {min
-// occurs}, an element or a wildcard term never being emptiable. Each
-// alternative is checked for its kind first (alternative), and then by the
-// gate, all before the interface or any branch is emitted.
+// The gate keeps the empty match the nil interface's alone, as the package
+// doc's "# Coverage" states: it declines the first alternative, in particle
+// order, whose term termEmptiable answers true for, whatever the particle's
+// own {min occurs}, since branchParticle cannot raise a term. Each alternative
+// is checked for its kind first (alternative), and then by the gate, all
+// before the interface or any branch is emitted.
 func (e *emitter) sealedType(name string, nested scope, site groupSite, o origin, t xsd.ComplexType, particles []xsd.Particle) error {
 	if len(particles) == 0 {
 		return decline(t.Loc(), constructEmptyChoice, o.subject)
@@ -1344,8 +1336,7 @@ func (e *emitter) alternative(o origin, t xsd.ComplexType, p xsd.Particle) (word
 // decides. It is false for an element declaration or a wildcard and true for
 // a model group with no {particles}; codegen does no range arithmetic of its
 // own. subject and loc name the complex type holding the term in the error a
-// particle that cannot be built returns, which no term of a finalized
-// particle gives.
+// particle that cannot be built returns.
 func (e *emitter) termEmptiable(subject string, loc xsderr.Loc, term xsd.TermOrRef) (bool, error) {
 	p, err := xsd.NewParticle(xsderr.Loc{}, exactlyOnce, term)
 	if err != nil {
@@ -1356,13 +1347,12 @@ func (e *emitter) termEmptiable(subject string, loc xsderr.Loc, term xsd.TermOrR
 
 // branchParticle returns the particle a choice's branch struct holds for its
 // alternative p: p with {min occurs} 0 read as 1 when {max occurs} is not 0,
-// {max occurs} unchanged, and p itself otherwise, a {max occurs} of 0 left to
-// decline where field meets it. A branch is the alternative chosen, so it
-// never holds the empty match the nil interface stands for: an element or a
-// wildcard {0,1} gives a value field rather than a pointer, a sequence {0,1}
-// is spliced, and a choice {0,1} gives the bare interface. subject and loc
-// name the complex type holding p in the error a particle that cannot be
-// built returns, which no finalized particle gives.
+// {max occurs} unchanged, and p itself otherwise. A branch is the
+// alternative chosen, so it never holds the empty match the nil interface
+// stands for: an element or a wildcard {0,1} gives a value field rather than
+// a pointer, a sequence {0,1} is spliced, and a choice {0,1} gives the bare
+// interface. subject and loc name the complex type holding p in the error a
+// particle that cannot be built returns.
 func branchParticle(subject string, loc xsderr.Loc, p xsd.Particle) (xsd.Particle, error) {
 	occurs := p.Occurs()
 	upper, bounded := occurs.Max()
@@ -1910,15 +1900,15 @@ func valueNodes(decl xsd.ElementDeclaration, t xsd.ComplexType) []valueNode {
 // (valueNodes) a walk has pushed through value fields only since its last
 // other field, in path order: a value field is one "# Coverage" types by the
 // bare struct, which needs a particle that occurs exactly once (value) and a
-// t that is not a choice. A value field appends the step's nodes, and
-// declines on one already in chain, since the emitted Go types would hold one
-// another as struct values, which Go rejects; it keeps chain when the step
-// pushes none. Any other field starts afresh, holding the step's nodes alone.
-// A top-level element's walk starts as a step that is not a value field, and
-// each branch of a sealed interface and the particles of a content model
-// group occurring other than exactly once start empty. The decline names decl and
-// the repeated node, and cites decl's Loc: for an <element ref> particle,
-// which carries none, the Loc of the top-level declaration it names.
+// t emitted as a struct, not a sealed interface (shape). A value field appends
+// the step's nodes, and declines on one already in chain, since the emitted Go
+// types would hold one another as struct values, which Go rejects; it keeps chain
+// when the step pushes none. Any other field starts afresh, holding the step's
+// nodes alone. A top-level element's walk starts as a step that is not a value
+// field, and each branch of a sealed interface and the particles of a content
+// model group occurring other than exactly once start empty. The decline names
+// decl and the repeated node, and cites decl's Loc: for an <element ref>
+// particle, which carries none, the Loc of the top-level declaration it names.
 func valueChain(chain []valueNode, value bool, decl xsd.ElementDeclaration, t xsd.ComplexType) ([]valueNode, error) {
 	nodes := valueNodes(decl, t)
 	if !value {
