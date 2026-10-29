@@ -151,26 +151,38 @@ type PartSubPart struct {
 
 func (PartSubPart) isPartSub() {}
 
-// Memo is generated from the {type table} of element {urn:t}memo declared at testdata/typetable.xsd:122:3.
+// Memo is generated from the {type table} of element {urn:t}memo declared at testdata/typetable.xsd:124:3.
 type Memo interface {
 	isMemo()
 }
 
-// MemoString is generated from {type table} alternative 1 of element {urn:t}memo declared at testdata/typetable.xsd:122:3.
+// MemoString is generated from {type table} alternative 1 of element {urn:t}memo declared at testdata/typetable.xsd:124:3.
 type MemoString struct {
 	String string
 }
 
 func (MemoString) isMemo() {}
 
-// MemoDefault is generated from {default type definition} of element {urn:t}memo declared at testdata/typetable.xsd:122:3.
+// MemoAlternative2 is generated from {type table} alternative 2 of element {urn:t}memo declared at testdata/typetable.xsd:124:3.
+type MemoAlternative2 struct {
+	Alternative2 MemoAlternative22
+}
+
+func (MemoAlternative2) isMemo() {}
+
+// MemoAlternative22 is generated from {type table} alternative 2 of element {urn:t}memo declared at testdata/typetable.xsd:124:3.
+type MemoAlternative22 struct {
+	Body string
+}
+
+// MemoDefault is generated from {default type definition} of element {urn:t}memo declared at testdata/typetable.xsd:124:3.
 type MemoDefault struct {
 	Default MemoDefault2
 }
 
 func (MemoDefault) isMemo() {}
 
-// MemoDefault2 is generated from {default type definition} of element {urn:t}memo declared at testdata/typetable.xsd:122:3.
+// MemoDefault2 is generated from {default type definition} of element {urn:t}memo declared at testdata/typetable.xsd:124:3.
 type MemoDefault2 struct {
 	Body string
 }

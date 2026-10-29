@@ -118,9 +118,18 @@
     </xs:complexType>
   </xs:element>
   <!-- memo's last alternative has no {test} and an anonymous type, so it is
-       the {default type definition}, which gives the branch MemoDefault. -->
+       the {default type definition}, which gives the branch MemoDefault; its
+       second alternative's anonymous type, identical to it, is another
+       branch, since an anonymous slot is never the same type as another. -->
   <xs:element name="memo">
     <xs:alternative test="@plain" type="xs:string"/>
+    <xs:alternative test="@rich">
+      <xs:complexType>
+        <xs:sequence>
+          <xs:element name="body" type="xs:string"/>
+        </xs:sequence>
+      </xs:complexType>
+    </xs:alternative>
     <xs:alternative>
       <xs:complexType>
         <xs:sequence>
