@@ -77,7 +77,7 @@ const (
 	constructUncoveredPrimitive
 	constructChoiceAttributes
 	constructEmptyChoice
-	constructEmptiableChoice
+	constructEmptiableGroupAlternative
 	constructComplexTypeAbstract
 	constructMixedContent
 	constructOpenContent
@@ -89,20 +89,20 @@ const (
 // Construct.String returns, and the format its decline's detail is rendered
 // from. Index 0, the invalid construct, holds neither.
 var constructs = [...]struct{ name, format string }{
-	constructElementNillable:     {"element {nillable}", "%s with {nillable} true"},
-	constructElementAbstract:     {"element {abstract}", "%s with {abstract} true"},
-	constructTypeTable:           {"{type table}", "%s with a {type table}"},
-	constructAbsentVariety:       {"absent {variety}", "%s, of absent {variety}"},
-	constructNoPrimitive:         {"no {primitive type definition}", "%s, with no {primitive type definition}"},
-	constructUncoveredPrimitive:  {"uncovered primitive", "%s, whose {primitive type definition} is %s"},
-	constructChoiceAttributes:    {"choice with attributes", "%s whose content is a choice, with %s"},
-	constructEmptyChoice:         {"choice with no {particles}", "%s whose choice has no {particles}"},
-	constructEmptiableChoice:     {"emptiable choice", "%s whose choice is emptiable: its alternative %d, %s, is emptiable"},
-	constructComplexTypeAbstract: {"complex type {abstract}", "%s with {abstract} true"},
-	constructMixedContent:        {"mixed content", "%s with mixed content"},
-	constructOpenContent:         {"{open content}", "%s with {open content}"},
-	constructVacuousParticle:     {"particle with {max occurs} 0", "a particle of %s with {max occurs} 0 in %s"},
-	constructValueCycle:          {"struct-value recursion", "%s reaching %s again through elements that each occur exactly once"},
+	constructElementNillable:           {"element {nillable}", "%s with {nillable} true"},
+	constructElementAbstract:           {"element {abstract}", "%s with {abstract} true"},
+	constructTypeTable:                 {"{type table}", "%s with a {type table}"},
+	constructAbsentVariety:             {"absent {variety}", "%s, of absent {variety}"},
+	constructNoPrimitive:               {"no {primitive type definition}", "%s, with no {primitive type definition}"},
+	constructUncoveredPrimitive:        {"uncovered primitive", "%s, whose {primitive type definition} is %s"},
+	constructChoiceAttributes:          {"choice with attributes", "%s whose content is a choice, with %s"},
+	constructEmptyChoice:               {"choice with no {particles}", "%s whose choice has no {particles}"},
+	constructEmptiableGroupAlternative: {"emptiable group alternative", "%s whose choice's alternative %d, a %s model group particle, has an emptiable model group"},
+	constructComplexTypeAbstract:       {"complex type {abstract}", "%s with {abstract} true"},
+	constructMixedContent:              {"mixed content", "%s with mixed content"},
+	constructOpenContent:               {"{open content}", "%s with {open content}"},
+	constructVacuousParticle:           {"particle with {max occurs} 0", "a particle of %s with {max occurs} 0 in %s"},
+	constructValueCycle:                {"struct-value recursion", "%s reaching %s again through elements that each occur exactly once"},
 }
 
 // decline returns the *DeclineError for construct c, which the generator does
