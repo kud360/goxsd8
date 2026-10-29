@@ -89,6 +89,34 @@
   </xs:complexType>
   <xs:element name="order" type="t:order"/>
   <xs:element name="reorder" type="t:order"/>
+  <!-- part's element sub, of type part and occurring exactly once, selects
+       part itself by default: the branch PartSubPart holds a Part by value,
+       and Part holds sub's interface, never a Part, so no struct-value
+       recursion passes sub. -->
+  <xs:complexType name="part">
+    <xs:sequence>
+      <xs:element name="sub" type="t:part">
+        <xs:alternative test="@big" type="t:bigpart"/>
+      </xs:element>
+    </xs:sequence>
+  </xs:complexType>
+  <xs:complexType name="bigpart">
+    <xs:complexContent>
+      <xs:extension base="t:part">
+        <xs:sequence>
+          <xs:element name="size" type="xs:int"/>
+        </xs:sequence>
+      </xs:extension>
+    </xs:complexContent>
+  </xs:complexType>
+  <xs:element name="kit">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element name="spare" type="t:part" minOccurs="0"/>
+        <xs:element name="main" type="t:part"/>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
   <!-- memo's last alternative has no {test} and an anonymous type, so it is
        the {default type definition}, which gives the branch MemoDefault. -->
   <xs:element name="memo">
