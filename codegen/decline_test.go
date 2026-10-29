@@ -67,6 +67,23 @@ func TestGenerateDeclines(t *testing.T) {
 		// gate reads the term.
 		{"optional emptiable group in choice", `<xs:element name="e"><xs:complexType><xs:choice><xs:element name="a" ` + str + `/><xs:sequence minOccurs="0"><xs:element name="b" minOccurs="0" ` + str + `/></xs:sequence></xs:choice></xs:complexType></xs:element>`,
 			"complex type (anonymous) of element e whose choice's alternative 2, a sequence model group particle, has an emptiable model group", constructEmptiableGroupAlternative},
+		// A sequence repeating past 1 whose one occurrence is emptiable
+		// declines, as the content particle or nested, inline or through a
+		// <group ref>, whatever its {min occurs}, and nested with no
+		// {particles}, an empty content <sequence> giving empty content
+		// instead (§3.4.2.3.3 clause 2.1.2, key-expcon); it is met
+		// where its field would be, ahead of z after it and of a declining
+		// particle inside it.
+		{"repeated emptiable sequence", `<xs:element name="e"><xs:complexType><xs:sequence minOccurs="0" maxOccurs="unbounded"><xs:element name="a" minOccurs="0" ` + str + `/></xs:sequence></xs:complexType></xs:element>`,
+			"complex type (anonymous) of element e holding a sequence model group particle with {max occurs} above 1 whose sequence is emptiable at s.xsd:2:22 ", constructRepeatedEmptiableSequence},
+		{"nested repeated emptiable sequence", `<xs:element name="e"><xs:complexType><xs:sequence><xs:element name="h" ` + str + `/><xs:sequence maxOccurs="2"><xs:element name="a" minOccurs="0" ` + str + `/></xs:sequence><xs:element name="z" type="xs:precisionDecimal"/></xs:sequence></xs:complexType></xs:element>`,
+			"complex type (anonymous) of element e holding a sequence model group particle with {max occurs} above 1 whose sequence is emptiable at s.xsd:2:22 ", constructRepeatedEmptiableSequence},
+		{"repeated empty sequence", `<xs:element name="e"><xs:complexType><xs:sequence><xs:element name="h" ` + str + `/><xs:sequence maxOccurs="2"/></xs:sequence></xs:complexType></xs:element>`,
+			"complex type (anonymous) of element e holding a sequence model group particle with {max occurs} above 1 whose sequence is emptiable at s.xsd:2:22 ", constructRepeatedEmptiableSequence},
+		{"repeated emptiable sequence before its particles", `<xs:element name="e"><xs:complexType><xs:sequence maxOccurs="unbounded"><xs:element name="a" minOccurs="0" type="xs:precisionDecimal"/></xs:sequence></xs:complexType></xs:element>`,
+			"complex type (anonymous) of element e holding a sequence model group particle with {max occurs} above 1 whose sequence is emptiable at s.xsd:2:22 ", constructRepeatedEmptiableSequence},
+		{"repeated emptiable sequence group ref", `<xs:group name="g"><xs:sequence><xs:element name="b" minOccurs="0" ` + str + `/></xs:sequence></xs:group><xs:element name="e"><xs:complexType><xs:group ref="g" maxOccurs="unbounded"/></xs:complexType></xs:element>`,
+			"complex type (anonymous) of element e holding a sequence model group particle with {max occurs} above 1 whose sequence is emptiable at s.xsd:2:", constructRepeatedEmptiableSequence},
 		{"mixed choice", `<xs:element name="e"><xs:complexType mixed="true"><xs:choice><xs:element name="a" ` + str + `/></xs:choice></xs:complexType></xs:element>`,
 			"with mixed content", constructMixedContent},
 		{"open content choice", `<xs:element name="e"><xs:complexType><xs:openContent><xs:any/></xs:openContent><xs:choice><xs:element name="a" ` + str + `/></xs:choice></xs:complexType></xs:element>`,
