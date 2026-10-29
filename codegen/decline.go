@@ -85,7 +85,6 @@ const (
 	constructAssertions
 	constructMixedContent
 	constructOpenContent
-	constructAll
 	constructVacuousParticle
 	constructValueCycle
 )
@@ -108,7 +107,6 @@ var constructs = [...]struct{ name, format string }{
 	constructAssertions:          {"{assertions}", "%s with {assertions}"},
 	constructMixedContent:        {"mixed content", "%s with mixed content"},
 	constructOpenContent:         {"{open content}", "%s with {open content}"},
-	constructAll:                 {"all compositor", "%s with an all compositor"},
 	constructVacuousParticle:     {"particle with {max occurs} 0", "a particle of %s with {max occurs} 0 in %s"},
 	constructValueCycle:          {"struct-value recursion", "%s reaching %s again through elements that each occur exactly once"},
 }
