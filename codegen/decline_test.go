@@ -63,8 +63,8 @@ func TestGenerateDeclines(t *testing.T) {
 		// 0 (cos-seq-range, cos-choice-range), inline or through a <group ref>.
 		{"emptiable group in choice", `<xs:element name="e"><xs:complexType><xs:choice><xs:element name="a" ` + str + `/><xs:sequence><xs:element name="b" minOccurs="0" ` + str + `/></xs:sequence></xs:choice></xs:complexType></xs:element>`,
 			"complex type (anonymous) of element e whose choice is emptiable: its alternative 2, a sequence model group particle, is emptiable", constructEmptiableChoice},
-		// A wildcard alternative with {min occurs} 0 makes the choice emptiable
-		// as an element alternative does (cos-choice-range).
+		// The emptiable gate reads a wildcard alternative as it reads an
+		// element one, naming it by alternative's noun.
 		{"emptiable wildcard in choice", `<xs:element name="e"><xs:complexType><xs:choice><xs:element name="a" ` + str + `/><xs:any minOccurs="0"/></xs:choice></xs:complexType></xs:element>`,
 			"complex type (anonymous) of element e whose choice is emptiable: its alternative 2, a wildcard particle, is emptiable", constructEmptiableChoice},
 		{"emptiable choice in choice", `<xs:element name="e"><xs:complexType><xs:choice><xs:element name="a" ` + str + `/><xs:choice><xs:element name="b" ` + str + `/><xs:element name="c" minOccurs="0" ` + str + `/></xs:choice></xs:choice></xs:complexType></xs:element>`,

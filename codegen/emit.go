@@ -1237,9 +1237,8 @@ func structDecl(name string, fields []fieldSpec) string {
 // absence is only a nil interface or an empty slice. An alternative that is
 // itself emptiable (xsd.Schema.ParticleEmptiable) makes it 0 whatever the
 // others are. Each alternative in particle order is checked for its kind
-// first (alternative), and then for emptiability, an element or a wildcard
-// alternative being emptiable exactly when its {min occurs} is 0, so when no
-// decline fires no alternative is emptiable.
+// first (alternative), and then for emptiability, so when no decline fires
+// no alternative is emptiable.
 func (e *emitter) sealedType(name string, nested scope, site groupSite, o origin, t xsd.ComplexType, particles []xsd.Particle) error {
 	if len(particles) == 0 {
 		return decline(t.Loc(), constructEmptyChoice, o.subject)
