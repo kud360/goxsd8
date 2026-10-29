@@ -3,15 +3,19 @@ package codegen
 import (
 	"bytes"
 	"flag"
+	"fmt"
 	"go/ast"
 	"go/importer"
 	"go/parser"
 	"go/token"
 	"go/types"
+	"io"
 	"os"
 	"path/filepath"
+	"regexp"
 	"testing"
 
+	"github.com/kud360/goxsd8/loader"
 	xsdparser "github.com/kud360/goxsd8/parser"
 )
 
@@ -20,7 +24,7 @@ var update = flag.Bool("update", false, "rewrite codegen/testdata/*.golden from 
 // TestGenerateGolden pins Generate's output for each fixture. The fixtures are
 // parsed by a relative location, so the Loc in every header is portable.
 func TestGenerateGolden(t *testing.T) {
-	for _, name := range []string{"flat", "nested", "collision", "named", "expanded", "symbolspaces", "choice", "attributes", "integers", "identity", "empty", "lists", "namedlocal", "floats", "decimals", "binary", "temporal", "refs", "anytype", "restriction", "wildcard", "occurs", "simplecontent", "spliced", "extension", "groupref", "unions", "anyattribute", "nestedgroups", "special", "valueconstraint", "choicewildcard", "all", "substitution", "qname"} {
+	for _, name := range []string{"flat", "nested", "collision", "named", "expanded", "symbolspaces", "choice", "attributes", "integers", "identity", "empty", "lists", "namedlocal", "floats", "decimals", "binary", "temporal", "refs", "anytype", "restriction", "wildcard", "occurs", "simplecontent", "spliced", "extension", "groupref", "unions", "anyattribute", "nestedgroups", "special", "valueconstraint", "choicewildcard", "all", "substitution", "qname", "assertions"} {
 		t.Run(name, func(t *testing.T) {
 			schema, err := xsdparser.Parse("testdata/" + name + ".xsd")
 			if err != nil {
@@ -46,6 +50,43 @@ func TestGenerateGolden(t *testing.T) {
 				t.Errorf("output differs from %s (rerun with -update to accept):\n%s", golden, first)
 			}
 		})
+	}
+}
+
+// TestGenerateAssertionsInert pins the package doc's "# Coverage" sentences on
+// {assertions}: the assertions fixture, each <assert> blanked to spaces of
+// equal length so that every header's Loc is unchanged, generates the bytes
+// of assertions.golden, which TestGenerateGolden pins for the fixture as
+// written.
+func TestGenerateAssertionsInert(t *testing.T) {
+	const location = "testdata/assertions.xsd"
+	src, err := os.ReadFile(location)
+	if err != nil {
+		t.Fatal(err)
+	}
+	blanked := regexp.MustCompile(`<xs:assert [^>]*/>`).ReplaceAllFunc(src, func(m []byte) []byte {
+		return bytes.Repeat([]byte(" "), len(m))
+	})
+	if bytes.Equal(blanked, src) || bytes.Contains(blanked, []byte("assert")) {
+		t.Fatalf("blanking left %s with its <assert> elements, or had none to blank", location)
+	}
+	resolve := loader.ResolverFunc(func(_, loc string) (io.ReadCloser, string, error) {
+		if loc != location {
+			return nil, "", fmt.Errorf("no document %q", loc)
+		}
+		return io.NopCloser(bytes.NewReader(blanked)), loc, nil
+	})
+	schema, err := xsdparser.Parse(location, xsdparser.WithResolver(resolve))
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	got := generateOne(t, Target{Schema: schema, Dir: filepath.Join(t.TempDir(), "assertions"), Package: "assertions"})
+	want, err := os.ReadFile(filepath.Join("testdata", "assertions.golden"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(got, want) {
+		t.Errorf("output without the <assert> elements differs from assertions.golden:\n%s", got)
 	}
 }
 

@@ -1362,11 +1362,8 @@ type groupParticle struct {
 // gives, it returns nil and a nil error. Mixed content declines. Particles
 // and model groups carry no Loc, so their declines cite t's.
 func (e *emitter) contentGroup(subject string, t xsd.ComplexType) (*groupParticle, error) {
-	switch {
-	case t.Abstract():
+	if t.Abstract() {
 		return nil, decline(t.Loc(), constructComplexTypeAbstract, subject)
-	case len(t.Assertions()) > 0:
-		return nil, decline(t.Loc(), constructAssertions, subject)
 	}
 	content, isElement := t.ContentType().(xsd.ElementContent)
 	if !isElement {
