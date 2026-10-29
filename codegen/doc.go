@@ -46,6 +46,7 @@
 //   - no {primitive type definition}
 //   - uncovered primitive
 //   - choice with attributes
+//   - repeated emptiable sequence
 //   - choice with no {particles}
 //   - emptiable group alternative
 //   - complex type {abstract}
@@ -64,27 +65,28 @@
 // declaration, one per anonymous complex type nested in its type definition or
 // in a model group definition a <group ref> particle names, one per named
 // complex type a local element declaration reaches, one per place a struct's or
-// a branch struct's particles hold a choice or a sequence occurring other than
-// exactly once — a sequence occurring exactly once in a sequence or as a
-// choice's alternative, and an all group occurring exactly once in an all
-// group, giving the places of its own particles, and a complex type's own
-// content particle, a sequence, a choice or an all group, counting only when it
-// occurs other than exactly once or is a choice one occurrence of which is
-// emptiable — so a particle that a model group definition or an extension's
-// base holds gets one in each struct that holds it, each shared as an anonymous
-// complex type nested beside it is, and one branch struct per alternative of
-// each choice it emits as a sealed interface — an <element ref> particle gets
-// none of its own, its field holding the type emitted for the top-level element
-// declaration it names, or, when that declaration's substitution group holds
-// another declaration, one sealed interface per such head with one branch
-// struct per declaration of its group — then, after every other declaration and
-// in the order the walk first needs each, one datatype struct per date, time or
-// duration datatype, and one for QName and NOTATION together, a declaration's
-// type or a value field is declared over, the four raw-content structs once an
-// element's type is xs:anyType, a model group holds a wildcard particle, or a
-// type has an {attribute wildcard}, and one sealed interface per union simple
-// type a declaration's type, a value field, a list's item or a union's member
-// is declared over, each followed by one variant type per basic member, and
+// a branch struct's particles hold a choice or a sequence that is not spliced —
+// a sequence in a sequence or as a choice's alternative, and an all group in an
+// all group, spliced by the occurrence rules below, giving the places of its
+// own particles, and a complex type's own content particle, a sequence, a
+// choice or an all group, counting only when it is a sequence or an all group
+// that is not spliced, or a choice that occurs other than exactly once or one
+// occurrence of which is emptiable — so a particle that a model group
+// definition or an extension's base holds gets one in each struct that holds
+// it, each shared as an anonymous complex type nested beside it is, and one
+// branch struct per alternative of each choice it emits as a sealed interface —
+// an <element ref> particle gets none of its own, its field holding the type
+// emitted for the top-level element declaration it names, or, when that
+// declaration's substitution group holds another declaration, one sealed
+// interface per such head with one branch struct per declaration of its group —
+// then, after every other declaration and in the order the walk first needs
+// each, one datatype struct per date, time or duration datatype, and one for
+// QName and NOTATION together, a declaration's type or a value field is
+// declared over, the four raw-content structs once an element's type is
+// xs:anyType, a model group holds a wildcard particle, or a type has an
+// {attribute wildcard}, and one sealed interface per union simple type a
+// declaration's type, a value field, a list's item or a union's member is
+// declared over, each followed by one variant type per basic member, and
 // declines everything outside this slice:
 //
 //   - An element whose {type definition} is a simple type gets a named type
@@ -272,7 +274,8 @@
 //     needed, each declaration of the group is checked in group order as at an
 //     <element ref> particle to it, its properties and the shape of its type,
 //     so an abstract head or member declines it there.
-//   - A {particle} that occurs other than exactly once, or a choice {particle}
+//   - A sequence or all group {particle} that is not spliced, a choice
+//     {particle} that occurs other than exactly once, or a choice {particle}
 //     that occurs exactly once and one occurrence of which is emptiable, gives
 //     a struct whose first field holds what one occurrence of its model group
 //     gives — a struct of the sequence's or all group's particle fields alone,
@@ -280,14 +283,14 @@
 //     followed by the attribute fields; the field and that type are named as if
 //     from the local name sequence, choice or all ("Naming"). A model group
 //     particle in a sequence or as a choice's alternative, a choice or a
-//     sequence occurring other than exactly once, gives one such field in the
-//     same way, a choice occurring exactly once giving the bare interface. The
+//     sequence that is not spliced, gives one such field in the same way, a
+//     choice occurring exactly once giving the bare interface. The
 //     occurrence's fields lie behind that slice, pointer or interface, so no
 //     struct-value recursion passes through it.
 //   - Each particle of a sequence gives one field, in particle order, but a
-//     sequence particle occurring exactly once, inline or a <group ref> to a
-//     sequence group, which gives in its place the fields its own particles
-//     give, so an extension (§3.4.2.3.3 clause 4.2.3.3) gives its base
+//     sequence particle spliced by the occurrence rules below, inline or a
+//     <group ref> to a sequence group, which gives in its place the fields its
+//     own particles give, so an extension (§3.4.2.3.3 clause 4.2.3.3) gives its base
 //     particle's fields and then its own: a local element with a simple type
 //     gets a special type's string, the atomic Go type, the slice, or the
 //     interface an element's type is declared over, one with an anonymous
@@ -331,6 +334,17 @@
 //     pointer to a struct, atomic Go type, or list's slice (*[]T), and the bare
 //     interface, a choice's or a union's, never a pointer to one, nil meaning
 //     absent.
+//   - A sequence or all group particle, the content {particle} or nested, is
+//     spliced, giving in its place the fields its own particles give and no
+//     field of its own, when it occurs exactly once, or with {min occurs} 0
+//     and {max occurs} 1 when one occurrence of its model group can match
+//     nothing (§3.9.6.3 cos-group-emptiable, §3.8.6.5 cos-seq-range): each of
+//     its particles then has a value for matching nothing, so its absence and
+//     its empty match are one value, never a nil and a non-nil pointer. A
+//     sequence particle with {max occurs} above 1 or unbounded one occurrence
+//     of which can match nothing declines, whatever its {min occurs}, where
+//     its field would be, before its own particles: its slice would hold an
+//     empty match both as no item and as items that match nothing.
 //   - An all group gives the fields a sequence of the same particles gives, in
 //     particle order, by the same occurrence rules, an all group particle
 //     occurring exactly once in it, a <group ref> to an all group (§3.8.6.2
