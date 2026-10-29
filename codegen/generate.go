@@ -96,9 +96,9 @@ func (t Target) failed(i int, err error) error {
 // top-level element declaration it names, then one struct per date, time or
 // duration datatype a declaration's type or a value field is declared over, the
 // four structs holding raw content once an element's type is xs:anyType, a sequence
-// holds a wildcard particle, or a type has an {attribute wildcard}, and one sealed
-// interface per union simple type a declaration's type, a value field, a list's
-// item or a union's member is declared over, each followed by one variant type per
+// or a choice holds a wildcard particle, or a type has an {attribute wildcard}, and
+// one sealed interface per union simple type a declaration's type, a value field, a
+// list's item or a union's member is declared over, each followed by one variant type per
 // basic member (the package doc's "Coverage" and "Naming" say which). A target's
 // Schema is its whole composed set, so its {element declarations} (§3.17.1), and
 // with them its file's top-level types, include those of every imported or included

@@ -189,7 +189,7 @@ type emitter struct {
 
 // rawNames is the names claimed for the four raw-content structs "# Coverage"
 // gives an element of type xs:anyType (§3.4.7 any-type-itself), a wildcard
-// particle of a sequence, and an {attribute wildcard} (§3.4.2.5
+// particle of a sequence or a choice, and an {attribute wildcard} (§3.4.2.5
 // dcl.ctd.anyatt), in claim order.
 type rawNames struct {
 	anyType, attribute, child, element string
@@ -1222,10 +1222,11 @@ func structDecl(name string, fields []fieldSpec) string {
 // its alternative reaches, the anonymous ones named in nested. A branch
 // struct's fields are particleFields' for its one alternative particle at
 // site.branch(k), k its 1-based position in particles, with an empty chain:
-// an element gives its one field, a sequence occurring exactly once the
-// fields of its spliced particles, and any other model group the one field
-// groupField returns. A branch is named from the interface's name plus the
-// alternative's word and generated from what its header renders (alternative).
+// an element or a wildcard gives its one field, a sequence occurring exactly
+// once the fields of its spliced particles, and any other model group the one
+// field groupField returns. A branch is named from the interface's name plus
+// the alternative's word and generated from what its header renders
+// (alternative).
 //
 // Whatever the particle's own {min occurs}, the gate reads the alternatives
 // alone: a particle of this choice with {min occurs} 1 has as the minimum of
@@ -1236,8 +1237,8 @@ func structDecl(name string, fields []fieldSpec) string {
 // absence is only a nil interface or an empty slice. An alternative that is
 // itself emptiable (xsd.Schema.ParticleEmptiable) makes it 0 whatever the
 // others are. Each alternative in particle order is checked for its kind
-// first, a wildcard declining (alternative), and then for emptiability, so
-// when no decline fires no alternative is emptiable.
+// first (alternative), and then for emptiability, so when no decline fires
+// no alternative is emptiable.
 func (e *emitter) sealedType(name string, nested scope, site groupSite, o origin, t xsd.ComplexType, particles []xsd.Particle) error {
 	if len(particles) == 0 {
 		return decline(t.Loc(), constructEmptyChoice, o.subject)
@@ -1276,10 +1277,14 @@ func (e *emitter) sealedType(name string, nested scope, site groupSite, o origin
 // from, and the noun the emptiable-choice decline names it by: for an element
 // declaration, local or the top-level one an <element ref> particle names
 // (elementTerm), its local name, elementFrom's rendering, and "element" with
-// its expanded name; for a model group, inline or a <group ref>
-// (modelGroupTerm), its compositor, o's from, and the compositor's model
-// group particle. A wildcard alternative declines in elementTerm.
+// its expanded name; for a wildcard (wildcardTerm), which has no {name}
+// (§3.10.1), the word any, o's from, and "a wildcard particle"; for a model
+// group, inline or a <group ref> (modelGroupTerm), its compositor, o's from,
+// and the compositor's model group particle.
 func (e *emitter) alternative(o origin, t xsd.ComplexType, p xsd.Particle) (word, from, noun string, err error) {
+	if wildcardTerm(p.Term()) {
+		return "any", o.from, "a wildcard particle", nil
+	}
 	group, isGroup, err := e.modelGroupTerm(o.subject, t.Loc(), p.Term())
 	if err != nil {
 		return "", "", "", err
@@ -1389,9 +1394,8 @@ type fieldSpec struct {
 // named from the local name any and holds the raw-content struct AnyElement
 // (anyTypeType) by p's occurrence (occursGoType), whatever the wildcard's
 // {namespace constraint} and {process contents}, which it never reads; that
-// path never calls shape, contentGroup, nestedType or valueChain, and is
-// never reached for a choice's alternative, since sealedType's gate declines
-// a wildcard alternative (alternative) before any branch's fields are walked.
+// path never calls shape, contentGroup, nestedType or valueChain, and gives a
+// choice's wildcard alternative its branch struct's one field (sealedType).
 // The field of a model group particle (modelGroupTerm), inline or a <group
 // ref>, a choice or a sequence occurring other than exactly once, which
 // spliced does not splice, is the one groupField returns for p at ordinal
@@ -1870,11 +1874,11 @@ func (e *emitter) valueCycle(chain []valueNode, decl xsd.ElementDeclaration, nes
 // elementTerm returns the element declaration a sequence or choice particle's
 // term holds: a local declaration, or the top-level one an <element ref>
 // particle names (§3.3.2.4 ref.elt.global), followed through
-// [xsd.Schema.Element]. It declines a wildcard. A model group, inline or the
-// {model group} a <group ref> names (modelGroupTerm), is an error, never a
-// decline: every caller routes a model group term elsewhere first (field's
-// group arm, alternative, valueCycle's leaf skip). subject and loc name the
-// complex type holding the particle.
+// [xsd.Schema.Element]. A wildcard (wildcardTerm) or a model group, inline or
+// the {model group} a <group ref> names (modelGroupTerm), is an error, never a
+// decline: every caller routes both elsewhere first (field's wildcard and
+// group arms, alternative's, valueCycle's leaf skips). subject and loc name
+// the complex type holding the particle.
 func (e *emitter) elementTerm(subject string, loc xsderr.Loc, term xsd.TermOrRef) (xsd.ElementDeclaration, error) {
 	group, isGroup, err := e.modelGroupTerm(subject, loc, term)
 	if err != nil {
@@ -1898,7 +1902,7 @@ func (e *emitter) elementTerm(subject string, loc xsderr.Loc, term xsd.TermOrRef
 		case xsd.ElementDeclaration:
 			return inner, nil
 		case xsd.Wildcard:
-			return xsd.ElementDeclaration{}, decline(loc, constructWildcard, subject)
+			return xsd.ElementDeclaration{}, fmt.Errorf("%s at %s: a wildcard particle reached elementTerm", subject, loc)
 		}
 	}
 	return xsd.ElementDeclaration{}, fmt.Errorf("%s at %s: unexpected particle term %T", subject, loc, term)
