@@ -1,0 +1,36 @@
+<?xml version="1.0"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <!-- extendshared.xsd's declarations with the element ct first, so the walk
+       reaches the base particle's x through the element's extension before
+       it reaches it through first. That x still has {scope}.{parent} ct
+       (§3.3.2.3 dcl.elt.local), so first's x shares CtX with it. -->
+  <xs:element name="ct">
+    <xs:complexType>
+      <xs:complexContent>
+        <xs:extension base="ct">
+          <xs:sequence>
+            <xs:element name="y">
+              <xs:complexType>
+                <xs:sequence>
+                  <xs:element name="b" type="xs:boolean"/>
+                </xs:sequence>
+              </xs:complexType>
+            </xs:element>
+          </xs:sequence>
+        </xs:extension>
+      </xs:complexContent>
+    </xs:complexType>
+  </xs:element>
+  <xs:complexType name="ct">
+    <xs:sequence>
+      <xs:element name="x">
+        <xs:complexType>
+          <xs:sequence>
+            <xs:element name="a" type="xs:string"/>
+          </xs:sequence>
+        </xs:complexType>
+      </xs:element>
+    </xs:sequence>
+  </xs:complexType>
+  <xs:element name="first" type="ct"/>
+</xs:schema>

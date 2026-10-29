@@ -1,0 +1,36 @@
+<?xml version="1.0"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <!-- The original of the redefined t has no name (§4.2.4 src-expredef
+       clause 1.1), so the type of its local x is named from the nearest
+       named ancestor: TX for e1 of type t, UX for e2 of type u extending t.
+       The redefinition's own z has {scope}.{parent} t (§3.3.2.3
+       dcl.elt.local), so e1 and e2 share TZ. -->
+  <xs:redefine schemaLocation="redefinebase.xsd">
+    <xs:complexType name="t">
+      <xs:complexContent>
+        <xs:extension base="t">
+          <xs:sequence>
+            <xs:element name="z">
+              <xs:complexType>
+                <xs:sequence>
+                  <xs:element name="b" type="xs:boolean"/>
+                </xs:sequence>
+              </xs:complexType>
+            </xs:element>
+          </xs:sequence>
+        </xs:extension>
+      </xs:complexContent>
+    </xs:complexType>
+  </xs:redefine>
+  <xs:complexType name="u">
+    <xs:complexContent>
+      <xs:extension base="t">
+        <xs:sequence>
+          <xs:element name="w" type="xs:string"/>
+        </xs:sequence>
+      </xs:extension>
+    </xs:complexContent>
+  </xs:complexType>
+  <xs:element name="e1" type="t"/>
+  <xs:element name="e2" type="u"/>
+</xs:schema>
