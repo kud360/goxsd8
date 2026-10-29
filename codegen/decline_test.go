@@ -234,9 +234,9 @@ func TestGenerateDeclines(t *testing.T) {
 			"local element y reaching complex type c again through elements that each occur exactly once", constructValueCycle},
 		{"value cycle in choice branch", `<xs:complexType name="t1"><xs:sequence><xs:element name="b" type="t2"/></xs:sequence></xs:complexType><xs:complexType name="t2"><xs:sequence><xs:element name="c" type="t1"/></xs:sequence></xs:complexType><xs:element name="e"><xs:complexType><xs:choice><xs:element name="a" type="t1"/></xs:choice></xs:complexType></xs:element>`,
 			"local element c reaching complex type t1 again through elements that each occur exactly once", constructValueCycle},
-		// An all group's member occurring exactly once is a value edge as a
-		// sequence's is, inline and spliced from an all group nested through a
-		// <group ref> (cos-all-limited clause 1.3).
+		// An all group's member occurring exactly once is a value edge of the
+		// emitting walk as a sequence's is, inline and spliced from an all
+		// group nested through a <group ref> (cos-all-limited clause 1.3).
 		{"value cycle through all", `<xs:complexType name="c"><xs:all><xs:element name="x" type="c"/></xs:all></xs:complexType><xs:element name="e" type="c"/>`,
 			"local element x reaching complex type c again through elements that each occur exactly once at s.xsd:2:34", constructValueCycle},
 		{"value cycle through nested all", `<xs:group name="g"><xs:all><xs:element name="x" type="c"/></xs:all></xs:group><xs:complexType name="c"><xs:all><xs:element name="y" ` + str + `/><xs:group ref="g"/></xs:all></xs:complexType><xs:element name="e" type="c"/>`,
@@ -246,6 +246,13 @@ func TestGenerateDeclines(t *testing.T) {
 		// of each ref finds it; each decline cites the Loc of the top-level
 		// declaration the closing ref names.
 		{"ref cycle through a named type", `<xs:element name="r" type="c"/><xs:complexType name="c"><xs:sequence><xs:element ref="r"/></xs:sequence></xs:complexType>`,
+			"<element ref> particle to element r reaching element r again through elements that each occur exactly once at s.xsd:2:1 ", constructValueCycle},
+		// The same holds for the recursion check (valueCycle), which alone
+		// finds a cycle closed by an <element ref> particle: these rows fail
+		// when it ends its walk at an all group.
+		{"ref cycle through all", `<xs:element name="r" type="c"/><xs:complexType name="c"><xs:all><xs:element ref="r"/></xs:all></xs:complexType>`,
+			"<element ref> particle to element r reaching element r again through elements that each occur exactly once at s.xsd:2:1 ", constructValueCycle},
+		{"ref cycle through nested all", `<xs:element name="r" type="c"/><xs:group name="g"><xs:all><xs:element ref="r"/></xs:all></xs:group><xs:complexType name="c"><xs:all><xs:element name="y" ` + str + `/><xs:group ref="g"/></xs:all></xs:complexType>`,
 			"<element ref> particle to element r reaching element r again through elements that each occur exactly once at s.xsd:2:1 ", constructValueCycle},
 		{"ref cycle through anonymous types", `<xs:element name="a"><xs:complexType><xs:sequence><xs:element ref="b"/></xs:sequence></xs:complexType></xs:element><xs:element name="b"><xs:complexType><xs:sequence><xs:element ref="a"/></xs:sequence></xs:complexType></xs:element>`,
 			"<element ref> particle to element a reaching element a again through elements that each occur exactly once at s.xsd:2:1 ", constructValueCycle},
