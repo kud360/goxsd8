@@ -650,7 +650,7 @@ func (e *emitter) declaredType(decl xsd.ElementDeclaration) (xsd.TypeDefinition,
 }
 
 // tableBranch is one type an element declaration's {type table} can select
-// (§3.3.4.1 key-selected-type, §3.12.4 key-cta-select): td, resolved, and
+// (§3.3.4.1 key-selected-type, key-cta-select): td, resolved, and
 // index, the 1-based position in {alternatives} of the slot it first occurs
 // in, or 0 for the {default type definition}.
 type tableBranch struct {
@@ -683,14 +683,14 @@ func (b tableBranch) slot() string {
 // selects, in the order and by the identity the package doc's "# Coverage"
 // states, each slot resolved through [xsd.Schema.ResolvedType] and xs:error
 // matched by name (errorTypeName); and sum, true exactly when "# Coverage"
-// gives decl a sealed interface over them. Its identity answers as xsd's
-// typeDefinitionsEquivalent does for any two slots of one table, whose
-// {default type definition} alone can be a substitution-group head's type:
-// xsd offers no identity for an anonymous complex type. sum is false, and
-// branches nil, for a decl with no {type table}; true for zero types or two
-// or more; and false for exactly one, which declaredType returns in place of
-// the {type definition}. A slot that does not resolve is an error, never a
-// decline: finalize resolves every {type definition} slot (src-resolve).
+// gives decl a sealed interface over them. It compares resolved types by name, so a
+// {default type definition} that is a substitution-group head's type and an
+// alternative naming that same type are one type, which xsd's
+// typeDefinitionsEquivalent would call two. sum is false, and branches nil, for a
+// decl with no {type table}; true for zero types or two or more; and false for
+// exactly one, which declaredType returns in place of the {type definition}. A slot
+// that does not resolve is an error, never a decline: finalize resolves every {type
+// definition} slot (src-resolve).
 func (e *emitter) tableSum(decl xsd.ElementDeclaration) (branches []tableBranch, sum bool, err error) {
 	table, ok := decl.TypeTable()
 	if !ok {
