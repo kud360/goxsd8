@@ -1143,11 +1143,15 @@ func (e *emitter) particleFields(nested scope, site groupSite, chain []valueNode
 }
 
 // spliced returns particles in order with each particle whose term is a
-// sequence model group (modelGroupTerm), inline or the {model group} of the
-// definition a <group ref> names (§3.7.2), and which occurs exactly once
-// replaced, recursively, by that group's own particles: one occurrence of such
-// a particle is one pass through its particles in order (§3.8.4.1.1
-// sec-sequences), so its fields are theirs. A complex-content extension's
+// sequence or an all model group (modelGroupTerm), inline or the {model group}
+// of the definition a <group ref> names (§3.7.2), and which occurs exactly once
+// replaced, recursively, by that group's own particles: one occurrence of a
+// sequence particle is one pass through its particles in order (§3.8.4.1.1
+// sec-sequences), and one of an all particle one sequence per particle
+// interleaved (§3.8.4.1.3 all-mg), so its fields are theirs; cos-all-limited
+// (§3.8.6.2 clauses 1.3 and 2), checked at Finalize, admits an all group
+// particle among particles only as an all group's member occurring exactly
+// once, so every one is spliced. A complex-content extension's
 // content particle (§3.4.2.3.3 dcl.ctd.ctcc.common clause 4.2.3.3) is one such
 // sequence, nesting its base's when the base is itself an extension, so the
 // splice recurses; the package doc's "# Coverage" states the fields that
@@ -1162,7 +1166,7 @@ func (e *emitter) spliced(subject string, loc xsderr.Loc, particles []xsd.Partic
 		if err != nil {
 			return nil, err
 		}
-		if !isGroup || group.Compositor() != xsd.CompositorSequence || p.Occurs() != exactlyOnce {
+		if !isGroup || group.Compositor() == xsd.CompositorChoice || p.Occurs() != exactlyOnce {
 			leaves = append(leaves, p)
 			continue
 		}
@@ -1401,18 +1405,19 @@ type fieldSpec struct {
 // spliced does not splice, is the one groupField returns for p at ordinal
 // under site, after a {max occurs} of 0 has declined naming the group, as
 // contentGroup declines one, before any occurrence type is emitted; an all
-// group is an error, never a decline, since cos-all-limited (§3.8.6.2),
-// checked at Finalize, nests one in no other group, and contentGroup declines
-// a content all group before its particles are walked. The field of an
-// <element ref> particle, whose declaration is global, holds the type
-// elementType returns for the referenced declaration, after declaredType has
-// checked that declaration as it checks every one; the walk does not enter
-// that type's body, which topLevel emits, but valueCycle checks it when the
-// particle occurs exactly once and the type is a complex type other than
-// xs:anyType emitted as a struct; valueCycle ends at once for a type whose
-// content particle occurs other than exactly once. A local declaration of type
-// xs:anyType holds the raw-content struct AnyType (anyTypeType). Neither a
-// global declaration nor xs:anyType ever reaches nestedType.
+// group is an error, never a decline: cos-all-limited (§3.8.6.2), checked at
+// Finalize, admits an all group particle only as a content {particle}, which
+// contentGroup and groupField handle, or exactly once among an all group's
+// {particles}, which spliced splices. The field of an <element ref> particle,
+// whose declaration is global, holds the type elementType returns for the
+// referenced declaration, after declaredType has checked that declaration as
+// it checks every one; the walk does not enter that type's body, which
+// topLevel emits, but valueCycle checks it when the particle occurs exactly
+// once and the type is a complex type other than xs:anyType emitted as a
+// struct; valueCycle ends at once for a type whose content particle occurs
+// other than exactly once. A local declaration of type xs:anyType holds the
+// raw-content struct AnyType (anyTypeType). Neither a global declaration nor
+// xs:anyType ever reaches nestedType.
 func (e *emitter) field(nested scope, site groupSite, ordinal int, chain []valueNode, o origin, t xsd.ComplexType, p xsd.Particle) (fieldSpec, error) {
 	subject, loc := o.subject, t.Loc()
 	if wildcardTerm(p.Term()) {
