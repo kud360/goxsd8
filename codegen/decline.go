@@ -22,11 +22,12 @@ type DeclineError struct {
 func (e *DeclineError) Construct() Construct { return Construct{e.construct} }
 
 // Loc returns the Loc of the component the decline is charged to: the element
-// declaration, for a property of that declaration or of its simple type, or
-// for its reaching an element or complex type again through elements that
-// each occur exactly once; the complex type, for a property of that type, its
-// content or its particles; and for an attribute use, the attribute
-// declaration it resolves to, the global one for an <attribute ref>.
+// declaration, for a property of that declaration, of its simple type or of a
+// simple type its {type table} selects, or for its reaching an element or
+// complex type again through elements that each occur exactly once; the
+// complex type, for a property of that type, its content or its particles;
+// and for an attribute use, the attribute declaration it resolves to, the
+// global one for an <attribute ref>.
 //
 // Loc is the zero xsderr.Loc exactly when that component's Loc is zero: a
 // component built through xsd.SchemaBuilder with a zero Loc. Every other decline from a
@@ -71,7 +72,6 @@ type construct uint8
 const (
 	constructElementNillable construct = iota + 1
 	constructElementAbstract
-	constructTypeTable
 	constructAbsentVariety
 	constructNoPrimitive
 	constructUncoveredPrimitive
@@ -91,7 +91,6 @@ const (
 var constructs = [...]struct{ name, format string }{
 	constructElementNillable:           {"element {nillable}", "%s with {nillable} true"},
 	constructElementAbstract:           {"element {abstract}", "%s with {abstract} true"},
-	constructTypeTable:                 {"{type table}", "%s with a {type table}"},
 	constructAbsentVariety:             {"absent {variety}", "%s, of absent {variety}"},
 	constructNoPrimitive:               {"no {primitive type definition}", "%s, with no {primitive type definition}"},
 	constructUncoveredPrimitive:        {"uncovered primitive", "%s, whose {primitive type definition} is %s"},

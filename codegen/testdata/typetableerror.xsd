@@ -1,0 +1,37 @@
+<?xml version="1.0"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+           xmlns:t="urn:t" targetNamespace="urn:t">
+  <!-- An alternative selecting xs:error (§3.16.7.3 key-error), which no
+       instance is valid against, gives no branch. gated selects xs:error,
+       book and, by default, item: the interface Gated over book and item.
+       plain selects xs:error and, by default, its declared xs:string: one
+       type, so plain emits as an element of type xs:string with no {type
+       table} does. never selects xs:error alone, its last alternative having
+       no {test}: the interface Never, which no branch implements. -->
+  <xs:complexType name="item">
+    <xs:sequence>
+      <xs:element name="id" type="xs:string"/>
+    </xs:sequence>
+    <xs:attribute name="kind" type="xs:string"/>
+  </xs:complexType>
+  <xs:complexType name="book">
+    <xs:complexContent>
+      <xs:extension base="t:item">
+        <xs:sequence>
+          <xs:element name="isbn" type="xs:string"/>
+        </xs:sequence>
+      </xs:extension>
+    </xs:complexContent>
+  </xs:complexType>
+  <xs:element name="gated" type="t:item">
+    <xs:alternative test="@kind = 'banned'" type="xs:error"/>
+    <xs:alternative test="@kind = 'book'" type="t:book"/>
+  </xs:element>
+  <xs:element name="plain" type="xs:string">
+    <xs:alternative test="@kind" type="xs:error"/>
+  </xs:element>
+  <xs:element name="never">
+    <xs:alternative test="@kind" type="xs:error"/>
+    <xs:alternative type="xs:error"/>
+  </xs:element>
+</xs:schema>
