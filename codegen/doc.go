@@ -236,8 +236,9 @@
 //     each field holds, in order, the children its particle accepts, and how one particle's
 //     children interleave with another's is lost. Every such interleaving is valid (§3.8.4.1.3
 //     all-mg: an all group's language is the interleave of its particles'). A wildcard particle's
-//     field holds only the children that no element particle of the group accepts (§3.8.6.4
-//     cos-nonambig).
+//     field holds the children attributed to it: a child that an element particle of the group
+//     could take at that point in the sequence is attributed to the element particle instead
+//     (§3.8.4.2 key-vpath).
 //   - Each attribute use of a type emitted as a struct gives one field after the particle
 //     fields or the value field, if any, in the order [xsd.ComplexType.AttributeUses] returns
 //     its {attribute uses} (§3.4.2.4). The field is named from the attribute declaration's

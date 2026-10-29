@@ -1325,7 +1325,8 @@ func mustOccurs(o xsd.Occurs, err error) xsd.Occurs {
 // construction sites, contentGroup for a complex type's content {particle}
 // (§3.4.2.3.3 dcl.ctd.ctcc.common) and field's model group arm for a nested
 // one, each screen a {max occurs} of 0 first, and field an all group, which
-// only contentGroup's particle holds (§3.8.6.2 cos-all-limited).
+// spliced never returns because it splices each exactly-once one (§3.8.6.2
+// cos-all-limited clauses 1 and 1.3).
 type groupParticle struct {
 	group  xsd.ModelGroup
 	occurs xsd.Occurs
