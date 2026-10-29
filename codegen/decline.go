@@ -88,7 +88,6 @@ const (
 	constructAll
 	constructVacuousParticle
 	constructValueCycle
-	constructWildcard
 )
 
 // constructs holds, indexed by construct, each construct's name, which
@@ -112,7 +111,6 @@ var constructs = [...]struct{ name, format string }{
 	constructAll:                 {"all compositor", "%s with an all compositor"},
 	constructVacuousParticle:     {"particle with {max occurs} 0", "a particle of %s with {max occurs} 0 in %s"},
 	constructValueCycle:          {"struct-value recursion", "%s reaching %s again through elements that each occur exactly once"},
-	constructWildcard:            {"wildcard particle", "a wildcard particle in %s"},
 }
 
 // decline returns the *DeclineError for construct c, which the generator does

@@ -63,12 +63,14 @@ func TestGenerateDeclines(t *testing.T) {
 		// 0 (cos-seq-range, cos-choice-range), inline or through a <group ref>.
 		{"emptiable group in choice", `<xs:element name="e"><xs:complexType><xs:choice><xs:element name="a" ` + str + `/><xs:sequence><xs:element name="b" minOccurs="0" ` + str + `/></xs:sequence></xs:choice></xs:complexType></xs:element>`,
 			"complex type (anonymous) of element e whose choice is emptiable: its alternative 2, a sequence model group particle, is emptiable", constructEmptiableChoice},
+		// A wildcard alternative with {min occurs} 0 makes the choice emptiable
+		// as an element alternative does (cos-choice-range).
+		{"emptiable wildcard in choice", `<xs:element name="e"><xs:complexType><xs:choice><xs:element name="a" ` + str + `/><xs:any minOccurs="0"/></xs:choice></xs:complexType></xs:element>`,
+			"complex type (anonymous) of element e whose choice is emptiable: its alternative 2, a wildcard particle, is emptiable", constructEmptiableChoice},
 		{"emptiable choice in choice", `<xs:element name="e"><xs:complexType><xs:choice><xs:element name="a" ` + str + `/><xs:choice><xs:element name="b" ` + str + `/><xs:element name="c" minOccurs="0" ` + str + `/></xs:choice></xs:choice></xs:complexType></xs:element>`,
 			"complex type (anonymous) of element e whose choice is emptiable: its alternative 2, a choice model group particle, is emptiable", constructEmptiableChoice},
 		{"emptiable group ref in choice", `<xs:group name="g"><xs:sequence><xs:element name="b" minOccurs="0" ` + str + `/></xs:sequence></xs:group><xs:element name="e"><xs:complexType><xs:choice><xs:element name="a" ` + str + `/><xs:group ref="g"/></xs:choice></xs:complexType></xs:element>`,
 			"complex type (anonymous) of element e whose choice is emptiable: its alternative 2, a sequence model group particle, is emptiable", constructEmptiableChoice},
-		{"wildcard in choice", `<xs:element name="e"><xs:complexType><xs:choice><xs:element name="a" ` + str + `/><xs:any/></xs:choice></xs:complexType></xs:element>`,
-			"a wildcard particle", constructWildcard},
 		{"mixed choice", `<xs:element name="e"><xs:complexType mixed="true"><xs:choice><xs:element name="a" ` + str + `/></xs:choice></xs:complexType></xs:element>`,
 			"with mixed content", constructMixedContent},
 		{"open content choice", `<xs:element name="e"><xs:complexType><xs:openContent><xs:any/></xs:openContent><xs:choice><xs:element name="a" ` + str + `/></xs:choice></xs:complexType></xs:element>`,
@@ -270,10 +272,10 @@ func TestGenerateDeclines(t *testing.T) {
 		// the cycle v, w through.
 		{"value cycle behind a pointer", `<xs:complexType name="x"><xs:sequence><xs:element name="p" type="z" minOccurs="0"/><xs:element name="v" type="z"/></xs:sequence></xs:complexType><xs:complexType name="z"><xs:sequence><xs:element name="w" type="x"/></xs:sequence></xs:complexType><xs:element name="e"><xs:complexType><xs:sequence><xs:element name="a" type="x"/></xs:sequence></xs:complexType></xs:element>`,
 			"local element v reaching complex type z again through elements that each occur exactly once", constructValueCycle},
-		// The wildcard alternative under p precedes the cycle v closes in
-		// particle order, so it is the decline returned.
-		{"value cycle after an earlier decline", `<xs:complexType name="c"><xs:sequence><xs:element name="p" minOccurs="0"><xs:complexType><xs:choice><xs:any/></xs:choice></xs:complexType></xs:element><xs:element name="v" type="c"/></xs:sequence></xs:complexType><xs:element name="e"><xs:complexType><xs:sequence><xs:element name="l" type="c"/></xs:sequence></xs:complexType></xs:element>`,
-			"a wildcard particle in complex type (anonymous) of element p of complex type c at ", constructWildcard},
+		// The emptiable choice under p precedes the cycle v closes in particle
+		// order, so it is the decline returned.
+		{"value cycle after an earlier decline", `<xs:complexType name="c"><xs:sequence><xs:element name="p" minOccurs="0"><xs:complexType><xs:choice><xs:any minOccurs="0"/></xs:choice></xs:complexType></xs:element><xs:element name="v" type="c"/></xs:sequence></xs:complexType><xs:element name="e"><xs:complexType><xs:sequence><xs:element name="l" type="c"/></xs:sequence></xs:complexType></xs:element>`,
+			"complex type (anonymous) of element p of complex type c whose choice is emptiable: its alternative 1, a wildcard particle, is emptiable at ", constructEmptiableChoice},
 		// In the three rows below, q reaches t while t's body is being
 		// emitted, so the recursion check walks t again past f1: it passes
 		// the wildcard as a leaf, and meets an element declaration property
@@ -290,16 +292,16 @@ func TestGenerateDeclines(t *testing.T) {
 		{"value cycle check past a recursion", fmt.Sprintf(pastDecline, `<xs:element name="g" type="cyc"/>`, `<xs:complexType name="cyc"><xs:sequence><xs:element name="s" type="cyc"/></xs:sequence></xs:complexType>`),
 			"local element s reaching complex type cyc again through elements that each occur exactly once", constructValueCycle},
 		// e's walk reaches t, declared after f, before f's walk begins.
-		{"named type body before a later top-level element", `<xs:element name="e"><xs:complexType><xs:sequence><xs:element name="l" type="t"/></xs:sequence></xs:complexType></xs:element><xs:element name="f" type="xs:QName"/><xs:complexType name="t"><xs:choice><xs:any/></xs:choice></xs:complexType>`,
-			"a wildcard particle in complex type t at s.xsd:2:164 ", constructWildcard},
+		{"named type body before a later top-level element", `<xs:element name="e"><xs:complexType><xs:sequence><xs:element name="l" type="t"/></xs:sequence></xs:complexType></xs:element><xs:element name="f" type="xs:QName"/><xs:complexType name="t"><xs:choice><xs:any minOccurs="0"/></xs:choice></xs:complexType>`,
+			"complex type t whose choice is emptiable: its alternative 1, a wildcard particle, is emptiable at s.xsd:2:164 ", constructEmptiableChoice},
 		{"named complex local body", `<xs:complexType name="c"><xs:choice><xs:any minOccurs="0"/></xs:choice></xs:complexType><xs:element name="e"><xs:complexType><xs:sequence><xs:element name="l" type="c"/></xs:sequence></xs:complexType></xs:element>`,
-			"a wildcard particle in complex type c at s.xsd:2:1 ", constructWildcard},
+			"complex type c whose choice is emptiable: its alternative 1, a wildcard particle, is emptiable at s.xsd:2:1 ", constructEmptiableChoice},
 		{"local element property", `<xs:element name="e"><xs:complexType><xs:sequence><xs:element name="l" nillable="true" ` + str + `/></xs:sequence></xs:complexType></xs:element>`,
 			"element l with {nillable} true", constructElementNillable},
 		{"nested struct", `<xs:element name="e"><xs:complexType><xs:sequence><xs:element name="l"><xs:complexType><xs:all><xs:element name="a" ` + str + `/></xs:all></xs:complexType></xs:element></xs:sequence></xs:complexType></xs:element>`,
 			"complex type (anonymous) of element l of element e with an all compositor at ", constructAll},
-		{"nested choice", `<xs:element name="e"><xs:complexType><xs:sequence><xs:element name="l"><xs:complexType><xs:choice><xs:element name="a" ` + str + `/><xs:any/></xs:choice></xs:complexType></xs:element></xs:sequence></xs:complexType></xs:element>`,
-			"a wildcard particle in complex type (anonymous) of element l of element e at ", constructWildcard},
+		{"nested choice", `<xs:element name="e"><xs:complexType><xs:sequence><xs:element name="l"><xs:complexType><xs:choice><xs:element name="a" ` + str + `/><xs:any minOccurs="0"/></xs:choice></xs:complexType></xs:element></xs:sequence></xs:complexType></xs:element>`,
+			"complex type (anonymous) of element l of element e whose choice is emptiable: its alternative 2, a wildcard particle, is emptiable at ", constructEmptiableChoice},
 		{"branch struct", `<xs:element name="e"><xs:complexType><xs:choice><xs:element name="l"><xs:complexType><xs:all><xs:element name="a" ` + str + `/></xs:all></xs:complexType></xs:element></xs:choice></xs:complexType></xs:element>`,
 			"complex type (anonymous) of element l of element e with an all compositor at ", constructAll},
 	}
@@ -636,8 +638,8 @@ func TestConstructString(t *testing.T) {
 			t.Errorf("construct %d (%s) has no format", c, name)
 		}
 	}
-	if got := len(names); got != int(constructWildcard) {
-		t.Errorf("walked %d constructs, want %d", got, constructWildcard)
+	if got := len(names); got != int(constructValueCycle) {
+		t.Errorf("walked %d constructs, want %d", got, constructValueCycle)
 	}
 	for _, c := range []construct{0, construct(len(constructs))} {
 		if got, want := (Construct{c}).String(), fmt.Sprintf("Construct(%d)", c); got != want {

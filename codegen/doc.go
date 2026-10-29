@@ -35,11 +35,11 @@
 // the order the walk first needs each, one datatype struct per date, time or
 // duration datatype a declaration's type or a value field is declared over,
 // the four raw-content structs once an element's type is xs:anyType, a
-// sequence holds a wildcard particle, or a type has an {attribute wildcard},
-// and one sealed interface per union simple type a declaration's type, a value
-// field, a list's item or a union's member is declared over, each followed by
-// one variant type per basic member, and declines everything outside this
-// slice:
+// sequence or a choice holds a wildcard particle, or a type has an {attribute
+// wildcard}, and one sealed interface per union simple type a declaration's
+// type, a value field, a list's item or a union's member is declared over,
+// each followed by one variant type per basic member, and declines everything
+// outside this slice:
 //
 //   - An element whose {type definition} is a simple type gets a named type
 //     over string for a special type (Datatypes §2.4.2 dt-special),
@@ -155,14 +155,14 @@
 //     dcl.ctd.ctcc.common) that has no {open content} and whose {particle},
 //     which carries the <sequence>'s or <choice>'s own {min occurs} and {max
 //     occurs} (§3.9.1), or a <group ref>'s, whose {term} is the referenced
-//     definition's {model group} (§3.7.2), holds a sequence of element,
-//     wildcard (§3.10.2.1 dcl.wc.p) and model group particles, or a choice of
-//     element and model group particles, each model group particle, inline or
-//     a <group ref>, a sequence or choice that holds the same: element
-//     particles are local element declarations, and <element ref> particles,
-//     whose {term} is the top-level declaration the ref names (§3.3.2.4). A
-//     sequence gives a struct, and so does empty content, with no particle
-//     field; a struct with no field is spelled struct{}.
+//     definition's {model group} (§3.7.2), holds a sequence or a choice of
+//     element, wildcard (§3.10.2.1 dcl.wc.p) and model group particles, each
+//     model group particle, inline or a <group ref>, a sequence or choice that
+//     holds the same: element particles are local element declarations, and
+//     <element ref> particles, whose {term} is the top-level declaration the
+//     ref names (§3.3.2.4). A sequence gives a struct, and so does empty
+//     content, with no particle field; a struct with no field is spelled
+//     struct{}.
 //   - Simple content gives a struct whose first field, the value field, is
 //     named from the local name value and holds a special type's string, the
 //     atomic Go type, the slice, or the union's sealed interface its {simple
@@ -177,11 +177,11 @@
 //     interface whose one method is unexported, "is" plus the interface's
 //     name, and one branch struct per alternative in particle order, emitted
 //     after the interface, each holding the fields the alternative's particle
-//     gives as a particle of a sequence would — an element its one field, a
-//     sequence occurring exactly once the fields of its own particles, any
-//     other model group its one field — and implementing the method;
-//     consumers type-switch over the branches, and "N pointer fields, exactly
-//     one non-nil" never appears. A choice is accepted only when one
+//     gives as a particle of a sequence would — an element or a wildcard its
+//     one field, a sequence occurring exactly once the fields of its own
+//     particles, any other model group its one field — and implementing the
+//     method; consumers type-switch over the branches, and "N pointer fields,
+//     exactly one non-nil" never appears. A choice is accepted only when one
 //     occurrence of it is not emptiable: it has {particles}, and none is
 //     emptiable ([xsd.Schema.ParticleEmptiable]), so that a particle of it
 //     with {min occurs} 1 is not emptiable (§3.8.6.6 cos-choice-range,
@@ -274,13 +274,13 @@
 // this slice.
 //
 // GAP(codegen): every other construct declines: the all compositor, an emptiable choice, a
-// choice with no {particles}, a wildcard alternative of a choice, a particle with {max occurs}
-// 0, attribute uses or an attribute wildcard on a type whose content is a choice occurring
-// exactly once, mixed content, a named complex type, a top-level element through <element ref>
-// particles, or a local element of a model group through <group ref> particles, reaching
-// itself through struct values, a list whose {item type definition} declines, a union one of
-// whose basic members declines, and every primitive the first bullet does not map, for an
-// element or an attribute alike. #2900 owns lifting them.
+// choice with no {particles}, a particle with {max occurs} 0, attribute uses or an attribute
+// wildcard on a type whose content is a choice occurring exactly once, mixed content, a named
+// complex type, a top-level element through <element ref> particles, or a local element of a
+// model group through <group ref> particles, reaching itself through struct values, a list
+// whose {item type definition} declines, a union one of whose basic members declines, and
+// every primitive the first bullet does not map, for an element or an attribute alike. #2900
+// owns lifting them.
 //
 // # Determinism
 //
@@ -324,9 +324,10 @@
 // were absent; it is named and keyed under that complex type whichever <group
 // ref> particle brought its group, so two complex types referencing one group
 // get an occurrence type each. A choice's branch struct is named from its
-// interface's name plus the alternative's local name, or its compositor for a
-// model group alternative (alternative a of interface First → FirstA, a sequence
-// alternative → FirstSequence), so two top-level elements of one named choice
+// interface's name plus the alternative's local name, its compositor for a
+// model group alternative, or any for a wildcard alternative (alternative a of
+// interface First → FirstA, a sequence alternative → FirstSequence, a wildcard
+// alternative → FirstAny), so two top-level elements of one named choice
 // type get distinct interfaces and branches. A residual collision — two names
 // folding to one identifier, among a package's types or one struct's fields — is
 // disambiguated deterministically by document order: the later name takes the
