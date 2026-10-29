@@ -223,7 +223,10 @@
 // walk's Wildcard {term}s, for the namespace jsonsrc names a member only a wildcard
 // admits under. Schema.ElementDefaultValid is cos-valid-default's, for the one
 // cvc-elt clause 5.1.1 charges at assessment time over a type an xsi:type supplied
-// rather than over any declaration's. The rest is in-package machinery finalize
+// rather than over any declaration's. Schema.SubstitutionGroup is
+// substitution-group acceptance's one exported entry point, a head's whole
+// ·substitution group·, for codegen, which types a field over an <element ref>
+// to the head as a sum over it. The rest is in-package machinery finalize
 // drives.
 //
 // One of the two drivers designed on that algebra ships: Matcher,
