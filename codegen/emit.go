@@ -17,6 +17,7 @@ import (
 // The names of the components the slice reads by identity.
 var (
 	anyTypeName      = xsd.QName{Space: xsd.XMLSchemaNS, Local: "anyType"}
+	errorTypeName    = xsd.QName{Space: xsd.XMLSchemaNS, Local: "error"}
 	stringPrimitive  = xsd.QName{Space: xsd.XMLSchemaNS, Local: "string"}
 	anyURIPrimitive  = xsd.QName{Space: xsd.XMLSchemaNS, Local: "anyURI"}
 	booleanPrimitive = xsd.QName{Space: xsd.XMLSchemaNS, Local: "boolean"}
@@ -134,7 +135,10 @@ var (
 // interface's branch structs follow it, each before the types its alternative
 // reaches. The sealed interface over a substitution group (substitutionType)
 // is one such type too, reached at the first <element ref> particle to its
-// head, its branch structs following it.
+// head, its branch structs following it; so is the sealed interface over a
+// local element declaration's {type table} (localTable), each of its branch
+// structs before the types its field reaches, as a top-level declaration's
+// is at its own position (tableType).
 type emitter struct {
 	schema *xsd.Schema
 	types  *namer
@@ -146,11 +150,13 @@ type emitter struct {
 	// element reaches, so that every later local element of that type shares
 	// it, and for each anonymous complex type nested in a named complex type
 	// or in a model group definition, and each type for one occurrence of a
-	// model group particle in either (occurrenceType), so that every element
-	// whose walk reaches that named type, and every <group ref> particle to
-	// that group, shares it; it is a lookup index only and never iterated
-	// (STYLE D2). nestedType and occurrenceType store an entry before walking
-	// its type's particles, so a type that reaches itself reads it, and remove
+	// model group particle in either (occurrenceType), and each sealed
+	// interface over the {type table} of a local element declaration in
+	// either (localTable), so that every element whose walk reaches that named
+	// type, and every <group ref> particle to that group, shares it; it is a
+	// lookup index only and never iterated (STYLE D2). scopedType,
+	// occurrenceType and localTable store an entry before walking its type's
+	// particles or branches, so a type that reaches itself reads it, and remove
 	// it when that walk fails, so that it holds only types emitted whole or
 	// still being walked. A top-level element's type is named from the element
 	// and is never stored, nor is a type nested in an anonymous top-level type
@@ -224,14 +230,33 @@ type emittedType struct {
 }
 
 // scope is where the structs nested in one struct take their names from: the
-// path of expanded names from their nearest named ancestor, or from the named
-// complex type or model group definition that declares their element
-// (nestedType), that ancestor's first, and the kind of component that
-// ancestor is (scopeRoot). A struct is named from the path's local names and
-// keyed by its root and its expanded names (nestedKey).
+// path of steps from their nearest named ancestor, or from the named complex
+// type or model group definition that declares their element (nestedType),
+// that ancestor's first, and the kind of component that ancestor is
+// (scopeRoot). A struct is named from the path's local names and keyed by its
+// root and its steps (nestedKey).
 type scope struct {
 	root scopeRoot
-	path []xsd.QName
+	path []pathStep
+}
+
+// pathStep is one step of a scope's path: the expanded name of the path's
+// root or of an element declaration, slot being "", or a branch of the sealed
+// interface tableType emits over the {type table} of the element declaration
+// the step before names, slot being the branch's (tableBranch.slot, never "")
+// and name its local name (tableBranch.local) in no namespace.
+type pathStep struct {
+	name xsd.QName
+	slot string
+}
+
+// elementPath returns a path of element steps, one per name in order.
+func elementPath(names ...xsd.QName) []pathStep {
+	path := make([]pathStep, len(names))
+	for i, name := range names {
+		path[i] = pathStep{name: name}
+	}
+	return path
 }
 
 // scopeRoot is the kind of component a scope's path starts at: a top-level
@@ -259,53 +284,65 @@ func (s scope) shared() bool { return s.root != elementRoot }
 // locals returns the local names of the path, the names the namer joins.
 func (s scope) locals() []string {
 	locals := make([]string, len(s.path))
-	for i, name := range s.path {
-		locals[i] = name.Local
+	for i, step := range s.path {
+		locals[i] = step.name.Local
 	}
 	return locals
 }
 
 // nestedKey identifies a named complex type by its expanded name, and an
 // anonymous complex type nested in one or in a model group definition by the
-// expanded names along its path: the named type's or group's, then each
-// element's {target namespace} and {name} (§3.3.2.3), each Go-quoted so that
-// the concatenation is unambiguous and a named type's one-name key differs
-// from every nested type's, all after the path's scopeRoot in decimal, so that
-// a type and a group of one expanded name never share a key; and the type for
-// one occurrence of a model group particle in a struct of either by that key
-// and one quoted string more, its groupSite's ordinals (groupKey). The key of
-// an element's type leaves out every group step between the element and its
-// path's last element: two element declarations of one expanded name in one
-// content model's particle tree, nested groups and referenced ones included,
-// have one {type definition} (§3.8.6.3 cos-element-consistent clause 1,
-// checked at Finalize), so two such declarations with anonymous types never
-// share a path, and an occurrence type is keyed by its position alone, never
-// by its structure, so two sibling groups never share one even when they are
-// identical.
+// steps along its path: the named type's or group's expanded name, then each
+// element's {target namespace} and {name} (§3.3.2.3), or each {type table}
+// branch's slot and local name after a "|", which no Go-quoted string starts
+// with, each Go-quoted so that the concatenation is unambiguous and a named
+// type's one-name key differs from every nested type's, all after the path's
+// scopeRoot in decimal, so that a type and a group of one expanded name never
+// share a key; and the type for one occurrence of a model group particle in a
+// struct of either by that key and one quoted string more, its groupSite's
+// ordinals (groupKey). The key of an element's type leaves out every group
+// step between the element and its path's last element: two element
+// declarations of one expanded name in one content model's particle tree,
+// nested groups and referenced ones included, have one {type definition}
+// (§3.8.6.3 cos-element-consistent clause 1, checked at Finalize), so two
+// such declarations with anonymous types never share a path, and an
+// occurrence type is keyed by its position alone, never by its structure, so
+// two sibling groups never share one even when they are identical.
 type nestedKey string
 
 // key returns the nestedKey of the struct whose path is s's.
 func (s scope) key() nestedKey {
 	var b strings.Builder
 	b.WriteString(strconv.Itoa(int(s.root)))
-	for _, name := range s.path {
-		b.WriteString(strconv.Quote(name.Space))
-		b.WriteString(strconv.Quote(name.Local))
+	for _, step := range s.path {
+		if step.slot != "" {
+			b.WriteString("|")
+			b.WriteString(strconv.Quote(step.slot))
+			b.WriteString(strconv.Quote(step.name.Local))
+			continue
+		}
+		b.WriteString(strconv.Quote(step.name.Space))
+		b.WriteString(strconv.Quote(step.name.Local))
 	}
 	return nestedKey(b.String())
 }
 
 // place names, in declines, the declaring place of an anonymous complex type
 // whose struct's path is s's: the path innermost first, each local element
-// declaration as "element N", the path's root by its kind (scopeRoot) as
-// "element N", "complex type N" or "model group N", joined by " of ", so that
-// anonymous types sharing a struct (nestedKey) share a place.
+// declaration as "element N", each {type table} branch by its slot, the path's
+// root by its kind (scopeRoot) as "element N", "complex type N" or "model
+// group N", joined by " of ", so that anonymous types sharing a struct
+// (nestedKey) share a place.
 func (s scope) place() string {
 	parts := make([]string, 0, len(s.path))
 	for i := len(s.path) - 1; i > 0; i-- {
-		parts = append(parts, "element "+s.path[i].String())
+		if s.path[i].slot != "" {
+			parts = append(parts, s.path[i].slot)
+			continue
+		}
+		parts = append(parts, "element "+s.path[i].name.String())
 	}
-	return strings.Join(append(parts, s.root.noun()+" "+s.path[0].String()), " of ")
+	return strings.Join(append(parts, s.root.noun()+" "+s.path[0].name.String()), " of ")
 }
 
 // noun names the kind of component a scope's path starts at in declines
@@ -463,21 +500,30 @@ func headerLoc(base string, loc xsderr.Loc) string {
 // string for a special one, over an atomic Go type for an atomic simple {type
 // definition}, over a slice of one for a list, over a union's sealed interface
 // for a union (unionType), a struct or sealed interface for an accepted
-// complex one, named or anonymous. That type is named from the element
-// (elementType), and a local element of the same named type never shares it
-// (nestedType), while every <element ref> particle to the element does; the
-// types nested in it are named from the type when it is named, and shared with
-// that type's every other use, and from the element when it is anonymous, but
-// for those of the elements a model group definition declares, named from the
-// group and shared with its every <group ref> particle (nestedType).
+// complex one, named or anonymous, or the sealed interface tableType emits
+// over the types its {type table} selects when tableSum answers a sum. That
+// type is named from the element (elementType), and a local element of the
+// same named type never shares it (nestedType), while every <element ref>
+// particle to the element does; the types nested in it are named from the type
+// when it is named, and shared with that type's every other use, and from the
+// element when it is anonymous, but for those of the elements a model group
+// definition declares, named from the group and shared with its every <group
+// ref> particle (nestedType).
 func (e *emitter) topLevel(decl xsd.ElementDeclaration) error {
 	td, err := e.declaredType(decl)
+	if err != nil {
+		return err
+	}
+	branches, sum, err := e.tableSum(decl)
 	if err != nil {
 		return err
 	}
 	typ, err := e.elementType(decl, td)
 	if err != nil {
 		return err
+	}
+	if sum {
+		return e.tableType(typ, scope{root: elementRoot, path: elementPath(decl.Name())}, decl, branches)
 	}
 	if isAnyType(td) {
 		e.decls = append(e.decls, header(typ.name, e.elementFrom(decl))+fmt.Sprintf("type %s %s\n", typ.name, e.raw.anyType))
@@ -516,19 +562,40 @@ func (e *emitter) topLevel(decl xsd.ElementDeclaration) error {
 // simpleGoType's, run before the name is claimed so that a datatype struct or a
 // union's interface and variants claim their names first, and the type it
 // records is sealed exactly when td is a union, whose interface the named type
-// is declared over; for a complex one it is shape's, run after. It emits no
-// declaration of its own, only the datatype or raw-content structs, or the
-// union interfaces and variants, it first needs: topLevel emits the type's
-// declaration at decl's own visit, in document order, whichever reached decl
-// first.
+// is declared over; for a complex one it is shape's, run after. For a decl
+// tableSum answers a sum for, td is not read: the type is the sealed interface
+// tableType emits, its name claimed first, and the check is shape's over each
+// complex type other than xs:anyType among the branches, in branch order, run
+// after; a simple branch type is checked, and its datatype structs and union
+// interfaces claimed, only where tableType reaches its branch, after the
+// branch's own name ("# Naming"). It emits no declaration of its own, only the
+// datatype or raw-content structs, or the union interfaces and variants, it
+// first needs: topLevel emits the type's declaration at decl's own visit, in
+// document order, whichever reached decl first.
 func (e *emitter) elementType(decl xsd.ElementDeclaration, td xsd.TypeDefinition) (emittedType, error) {
 	if typ, ok := e.elements[decl.Name()]; ok {
 		return typ, nil
+	}
+	branches, sum, err := e.tableSum(decl)
+	if err != nil {
+		return emittedType{}, err
 	}
 	var typ emittedType
 	st, isSimple := td.(*xsd.SimpleType)
 	ct, isComplex := td.(xsd.ComplexType)
 	switch {
+	case sum:
+		typ = emittedType{name: e.types.claim(decl.Name().Local), sealed: true}
+		ifc := scope{root: elementRoot, path: elementPath(decl.Name())}
+		for _, b := range branches {
+			bt, isComplex := b.td.(xsd.ComplexType)
+			if !isComplex || isAnyType(b.td) {
+				continue
+			}
+			if _, _, err := e.shape("", e.branchOrigin(branchScope(ifc, b), decl, b, bt), bt); err != nil {
+				return emittedType{}, err
+			}
+		}
 	case isAnyType(td):
 		e.anyTypeType()
 		typ = emittedType{name: e.types.claim(decl.Name().Local)}
@@ -552,8 +619,11 @@ func (e *emitter) elementType(decl xsd.ElementDeclaration, td xsd.TypeDefinition
 }
 
 // declaredType checks the element declaration properties the slice declines
-// on every declaration it emits from, and returns the resolved {type
-// definition}.
+// on every declaration it emits from, {nillable} and then {abstract}, and
+// returns the type definition decl emits as: the one type its {type table}
+// selects when tableSum answers a table that is not a sum, and otherwise the
+// resolved {type definition}, which a caller reads only after tableSum has
+// answered no sum.
 func (e *emitter) declaredType(decl xsd.ElementDeclaration) (xsd.TypeDefinition, error) {
 	subject := "element " + decl.Name().String()
 	switch {
@@ -562,14 +632,91 @@ func (e *emitter) declaredType(decl xsd.ElementDeclaration) (xsd.TypeDefinition,
 	case decl.Abstract():
 		return nil, decline(decl.Loc(), constructElementAbstract, subject)
 	}
-	if _, ok := decl.TypeTable(); ok {
-		return nil, decline(decl.Loc(), constructTypeTable, subject)
+	branches, sum, err := e.tableSum(decl)
+	if err != nil {
+		return nil, err
+	}
+	if !sum && len(branches) == 1 {
+		return branches[0].td, nil
 	}
 	td, ok := e.schema.ResolvedType(decl.TypeDefinition())
 	if !ok {
 		return nil, fmt.Errorf("%s at %s: its {type definition} does not resolve", subject, decl.Loc())
 	}
 	return td, nil
+}
+
+// tableBranch is one type an element declaration's {type table} can select
+// (§3.3.4.1 key-selected-type, §3.12.4 key-cta-select): td, resolved, and
+// index, the 1-based position in {alternatives} of the slot it first occurs
+// in, or 0 for the {default type definition}.
+type tableBranch struct {
+	index int
+	td    xsd.TypeDefinition
+}
+
+// local is the local name a branch is named from ("# Naming"): td's own when
+// td is named, and otherwise alternative followed by index, or default.
+func (b tableBranch) local() string {
+	switch {
+	case b.td.Name() != (xsd.QName{}):
+		return b.td.Name().Local
+	case b.index == 0:
+		return "default"
+	}
+	return "alternative" + strconv.Itoa(b.index)
+}
+
+// slot names, in declines and headers, the slot of the {type table} b first
+// occurs in: "{type table} alternative N" or "{default type definition}".
+func (b tableBranch) slot() string {
+	if b.index == 0 {
+		return "{default type definition}"
+	}
+	return "{type table} alternative " + strconv.Itoa(b.index)
+}
+
+// tableSum returns the types the element declaration decl's {type table}
+// selects, and sum, true exactly when the Go type "# Coverage" gives decl is a
+// sealed interface over them. The selectable types are the {type definition}
+// of each of its {alternatives} and of its {default type definition}
+// (§3.3.4.1 key-selected-type; the default is Required, §3.3.1), each
+// resolved through [xsd.Schema.ResolvedType], in that order, xs:error
+// skipped (§2.2.1.1 key-error, §3.16.7.3: no instance is valid against it), and each
+// kept at its first slot only. Two slots hold one type exactly when both
+// resolve to types with a {name} and the names are equal, as xsd's
+// typeDefinitionsEquivalent reads two {type definition}s: an anonymous slot is
+// never the same as another, since xsd offers no identity for an anonymous
+// complex type. sum is false, and branches nil, for a decl with no {type
+// table}; true for one whose table selects zero types, every slot xs:error, or
+// two or more; and false for exactly one, which declaredType returns in place
+// of the {type definition}. A slot that does not resolve is an error, never a
+// decline: finalize resolves every {type definition} slot (src-resolve).
+func (e *emitter) tableSum(decl xsd.ElementDeclaration) (branches []tableBranch, sum bool, err error) {
+	table, ok := decl.TypeTable()
+	if !ok {
+		return nil, false, nil
+	}
+	slots := append(slices.Clone(table.Alternatives()), table.DefaultTypeDefinition())
+	for i, alt := range slots {
+		b := tableBranch{index: i + 1}
+		if i == len(slots)-1 {
+			b.index = 0
+		}
+		td, ok := e.schema.ResolvedType(alt.TypeDefinition())
+		if !ok {
+			return nil, false, fmt.Errorf("%s of element %s at %s: its {type definition} does not resolve", b.slot(), decl.Name(), decl.Loc())
+		}
+		b.td = td
+		if td.Name() == errorTypeName {
+			continue
+		}
+		if td.Name() != (xsd.QName{}) && slices.ContainsFunc(branches, func(seen tableBranch) bool { return seen.td.Name() == td.Name() }) {
+			continue
+		}
+		branches = append(branches, b)
+	}
+	return branches, len(branches) != 1, nil
 }
 
 // simpleGoType is a special type's string, the atomic Go type, the slice,
@@ -1103,7 +1250,7 @@ func (e *emitter) groupField(nested scope, site groupSite, ordinal int, o origin
 // were absent. Under a named complex type or a model group definition (scope.shared) it
 // is stored in e.emitted under nested.groupKey of its site before its particles are
 // walked, shared by every later walk of nested's path, and removed when that walk fails,
-// as nestedType stores a type.
+// as scopedType stores a type.
 func (e *emitter) occurrenceType(nested scope, parent groupSite, ordinal int, o origin, t xsd.ComplexType, group xsd.ModelGroup) (emittedType, error) {
 	site := parent.group(ordinal, group.Compositor())
 	key := nested.groupKey(site)
@@ -1527,9 +1674,10 @@ type fieldSpec struct {
 // checks it when the particle occurs exactly once and the type is a complex
 // type other than xs:anyType emitted as a struct; valueCycle ends at once for a
 // type whose content particle occurs other than exactly once. A local
-// declaration of type xs:anyType holds the raw-content struct AnyType
-// (anyTypeType). Neither a global declaration nor xs:anyType ever reaches
-// nestedType.
+// declaration tableSum answers a sum for holds the sealed interface localTable
+// returns. A local declaration of type xs:anyType holds the raw-content struct
+// AnyType (anyTypeType). From field, neither a global declaration nor
+// xs:anyType ever reaches nestedType.
 func (e *emitter) field(nested scope, site groupSite, ordinal int, chain []valueNode, o origin, t xsd.ComplexType, p xsd.Particle) (fieldSpec, error) {
 	subject, loc := o.subject, t.Loc()
 	if wildcardTerm(p.Term()) {
@@ -1561,6 +1709,10 @@ func (e *emitter) field(nested scope, site groupSite, ordinal int, chain []value
 	if err != nil {
 		return fieldSpec{}, err
 	}
+	branches, sum, err := e.tableSum(decl)
+	if err != nil {
+		return fieldSpec{}, err
+	}
 	value := p.Occurs() == exactlyOnce
 	st, isSimple := td.(*xsd.SimpleType)
 	ct, isComplex := td.(xsd.ComplexType)
@@ -1568,6 +1720,8 @@ func (e *emitter) field(nested scope, site groupSite, ordinal int, chain []value
 	switch {
 	case decl.ScopeVariety() == xsd.ScopeGlobal:
 		typ, err = e.refType(chain, value, decl, td)
+	case sum:
+		typ, err = e.localTable(nested, decl, branches)
 	case isAnyType(td):
 		typ.name = e.anyTypeType()
 	case isSimple:
@@ -1627,8 +1781,9 @@ func wildcardTerm(term xsd.TermOrRef) bool {
 // emitted for a complex td other than xs:anyType, valueCycle walks td's body
 // from the particles whose chain is chain, as it does whether or not decl's
 // type was emitted earlier. A td of xs:anyType gets no walk: AnyType reaches
-// itself only through slices. Nor does the interface: no field holds it as a
-// struct value.
+// itself only through slices. Nor does the substitution group's interface,
+// nor the {type table}'s interface elementType records as sealed: no field
+// holds either as a struct value.
 func (e *emitter) refType(chain []valueNode, value bool, decl xsd.ElementDeclaration, td xsd.TypeDefinition) (emittedType, error) {
 	if group := e.substitutionSum(decl); group != nil {
 		return e.substitutionType(decl, group)
@@ -1705,6 +1860,112 @@ func (e *emitter) substitutionType(head xsd.ElementDeclaration, group []xsd.Elem
 	return emittedType{name: name, sealed: true}, nil
 }
 
+// localTable returns the sealed interface a field over the local element
+// declaration decl holds when tableSum answers a sum, branches being its
+// answer, its parent's particles taking their names from parent: named and
+// keyed by localScope's path, the one an anonymous complex type of decl would
+// take, and emitted by tableType once per nestedKey under a shared scope
+// (scope.shared), stored before its branches are walked and removed when they
+// fail, as scopedType stores a struct. No struct is ever emitted at that
+// path: decl's own {type definition} is emitted only as a branch, under the
+// path one step longer.
+func (e *emitter) localTable(parent scope, decl xsd.ElementDeclaration, branches []tableBranch) (emittedType, error) {
+	ifc := localScope(parent, decl)
+	key := ifc.key()
+	if typ, ok := e.emitted[key]; ok && ifc.shared() {
+		return typ, nil
+	}
+	typ := emittedType{name: e.types.claim(ifc.locals()...), sealed: true}
+	if ifc.shared() {
+		e.emitted[key] = typ
+	}
+	if err := e.tableType(typ, ifc, decl, branches); err != nil {
+		if ifc.shared() {
+			delete(e.emitted, key)
+		}
+		return emittedType{}, err
+	}
+	return typ, nil
+}
+
+// tableType emits typ, the sealed interface "# Coverage" gives the element
+// declaration decl whose {type table} tableSum answers a sum for with
+// branches, its path ifc: the interface, then one branch struct per branch in
+// branches' order, named from the interface's name plus the branch's local
+// name (tableBranch.local), generated from its slot (tableBranch.slot) and
+// holding one field, named from that local name, of the type branchType
+// returns, each followed by the types that field first needs. The branch's
+// name is claimed before its field's type is computed. The branch types carry
+// no method: a named one may be selected by several tables, or held by fields
+// of its own. With no branch, the interface is emitted alone.
+func (e *emitter) tableType(typ emittedType, ifc scope, decl xsd.ElementDeclaration, branches []tableBranch) error {
+	marker := "is" + typ.name
+	e.decls = append(e.decls, header(typ.name, "the {type table} of "+e.elementFrom(decl))+fmt.Sprintf("type %s interface {\n\t%s()\n}\n", typ.name, marker))
+	for _, b := range branches {
+		branch := e.types.claim(typ.name, b.local())
+		slot := len(e.decls)
+		e.decls = append(e.decls, "")
+		field, err := e.branchType(ifc, decl, b)
+		if err != nil {
+			return err
+		}
+		fields := []fieldSpec{{local: b.local(), goType: field.name}}
+		e.decls[slot] = header(branch, b.slot()+" of "+e.elementFrom(decl)) + structDecl(branch, fields) + fmt.Sprintf("\nfunc (%s) %s() {}\n", branch, marker)
+	}
+	return nil
+}
+
+// branchType returns the type of the one field of the branch struct for b, a
+// branch of the sealed interface whose path is ifc over the {type table} of
+// the element declaration decl: the type a local element declaration of b's
+// type holds when it occurs exactly once. That is AnyType for xs:anyType
+// (anyTypeType); for a simple type, simpleGoType's, named in declines by b's
+// declaring place (scope.place) and charged to decl, an anonymous union named
+// by branchScope's path; for a named complex type, nestedType's, emitted once
+// per expanded name and shared with every local element of that type; and for
+// an anonymous complex type, a struct or interface of its own, named and keyed
+// by branchScope's path, which every type nested in it extends (scopedType). A
+// complex branch type is walked as a value field from an empty chain, as a
+// choice's branch is (valueChain): the interface lies between it and the
+// fields over decl, so the chain starts with the step through decl to that
+// type alone, whose node for decl itself no value field reaches.
+func (e *emitter) branchType(ifc scope, decl xsd.ElementDeclaration, b tableBranch) (emittedType, error) {
+	if isAnyType(b.td) {
+		return emittedType{name: e.anyTypeType()}, nil
+	}
+	child := branchScope(ifc, b)
+	switch t := b.td.(type) {
+	case *xsd.SimpleType:
+		return e.simpleGoType(child.place(), decl.Loc(), t, child.locals())
+	case xsd.ComplexType:
+		if t.Name() != (xsd.QName{}) {
+			return e.nestedType(ifc, nil, true, decl, t)
+		}
+		return e.scopedType(child, e.branchOrigin(child, decl, b, t), nil, true, decl, t)
+	}
+	return emittedType{}, fmt.Errorf("%s of element %s at %s: unexpected type definition %T", b.slot(), decl.Name(), decl.Loc(), b.td)
+}
+
+// branchScope is the scope of the struct emitted for b's anonymous complex
+// type, a branch of the sealed interface whose path is ifc: ifc's path
+// followed by b's branch step.
+func branchScope(ifc scope, b tableBranch) scope {
+	return scope{root: ifc.root, path: append(slices.Clone(ifc.path), pathStep{name: xsd.QName{Local: b.local()}, slot: b.slot()})}
+}
+
+// branchOrigin is the origin of the type emitted for t, b's complex type, a
+// branch of the sealed interface over the {type table} of the element
+// declaration decl, whose struct's scope is child (branchScope) when t is
+// anonymous: typeOrigin's for a named t, and for an anonymous one generated
+// from b's slot of decl and named in declines by its declaring place
+// (scope.place), which names that slot.
+func (e *emitter) branchOrigin(child scope, decl xsd.ElementDeclaration, b tableBranch, t xsd.ComplexType) origin {
+	if t.Name() != (xsd.QName{}) {
+		return e.typeOrigin(t)
+	}
+	return origin{from: b.slot() + " of " + e.elementFrom(decl), subject: "complex type (anonymous) of " + child.place()}
+}
+
 // attributeField returns the field of attribute use u (§3.5.1) of the complex
 // type at loc named in declines by subject, typed and declined by the package
 // doc's "# Coverage" attribute-use rule. An attribute use carries no Loc, so its
@@ -1745,7 +2006,7 @@ func (e *emitter) attributeField(nested scope, subject string, loc xsderr.Loc, u
 // dcl.att.local); and for an anonymous complex type, decl's local name after
 // the path of nested, the scope of the struct holding its field. The {parent}
 // is a closed sum, so the switch is STYLE T2's sealed-sum exception, as
-// nestedType's is.
+// localScope's is.
 func attributePath(nested scope, decl xsd.AttributeDeclaration) []string {
 	local := decl.Name().Local
 	sp, ok := decl.Scope().Parent()
@@ -1770,9 +2031,19 @@ func attributePath(nested scope, decl xsd.AttributeDeclaration) []string {
 // definition that declares decl ({scope}.{parent}, §3.3.2.3 dcl.elt.local)
 // when decl has one, so that every type extending that complex type, and every
 // particle referencing that group, shares it, and otherwise from its nearest
-// named ancestor in parent. The {parent} is a closed sum, so the switch is
-// STYLE T2's sealed-sum exception, as wildcardTerm's assertion is. Each
-// named type, and each anonymous type under one or under a model group
+// named ancestor in parent (structScope). The type is scopedType's in that
+// scope, generated from localOrigin's origin. branchType also calls it for a
+// named t a {type table} selects, decl being the table's declaration, local or
+// top-level, which a named t's scope and origin do not read.
+func (e *emitter) nestedType(parent scope, chain []valueNode, value bool, decl xsd.ElementDeclaration, t xsd.ComplexType) (emittedType, error) {
+	child := structScope(parent, decl, t)
+	return e.scopedType(child, e.localOrigin(decl, child, t), chain, value, decl, t)
+}
+
+// scopedType returns the type emitted for the complex type t, reached through
+// the element declaration decl, whose struct's scope is child and whose
+// declarations are generated from o, its arguments otherwise nestedType's.
+// Each named type, and each anonymous type under one or under a model group
 // definition, is emitted once per nestedKey, by the first element whose walk
 // reaches it, and later ones share it; its entry is stored before its body is
 // walked, and removed when that body fails, so that a later turn's walk, which
@@ -1783,9 +2054,7 @@ func attributePath(nested scope, decl xsd.AttributeDeclaration) []string {
 // emitting walk does not do. The emitted lookup, the store and the removal run
 // only under a shared scope (scope.shared): a key whose path starts at a
 // top-level element is reached from that element alone.
-func (e *emitter) nestedType(parent scope, chain []valueNode, value bool, decl xsd.ElementDeclaration, t xsd.ComplexType) (emittedType, error) {
-	child := structScope(parent, decl, t)
-	o := e.localOrigin(decl, child, t)
+func (e *emitter) scopedType(child scope, o origin, chain []valueNode, value bool, decl xsd.ElementDeclaration, t xsd.ComplexType) (emittedType, error) {
 	key := child.key()
 	if typ, ok := e.emitted[key]; ok && child.shared() {
 		if !value || typ.sealed {
@@ -1824,12 +2093,12 @@ func localScope(parent scope, decl xsd.ElementDeclaration) scope {
 	if sp, ok := decl.Scope().Parent(); ok {
 		switch owner := sp.(type) {
 		case xsd.ComplexTypeScopeParent:
-			return scope{root: typeRoot, path: []xsd.QName{owner.Name, decl.Name()}}
+			return scope{root: typeRoot, path: elementPath(owner.Name, decl.Name())}
 		case xsd.ModelGroupScopeParent:
-			return scope{root: groupRoot, path: []xsd.QName{owner.Name, decl.Name()}}
+			return scope{root: groupRoot, path: elementPath(owner.Name, decl.Name())}
 		}
 	}
-	return scope{root: parent.root, path: append(slices.Clone(parent.path), decl.Name())}
+	return scope{root: parent.root, path: append(slices.Clone(parent.path), pathStep{name: decl.Name()})}
 }
 
 // structScope is the scope of the struct emitted for the element declaration
@@ -1840,9 +2109,9 @@ func localScope(parent scope, decl xsd.ElementDeclaration) scope {
 func structScope(parent scope, decl xsd.ElementDeclaration, t xsd.ComplexType) scope {
 	switch {
 	case t.Name() != (xsd.QName{}):
-		return scope{root: typeRoot, path: []xsd.QName{t.Name()}}
+		return scope{root: typeRoot, path: elementPath(t.Name())}
 	case decl.ScopeVariety() == xsd.ScopeGlobal:
-		return scope{root: elementRoot, path: []xsd.QName{decl.Name()}}
+		return scope{root: elementRoot, path: elementPath(decl.Name())}
 	}
 	return localScope(parent, decl)
 }
@@ -1921,7 +2190,7 @@ func (n valueNode) String() string {
 // not the path from a group through an element's type back to it. It names
 // decl as well as the group, since a step through a sibling of decl in the
 // same group reaches no cycle by that alone. The {parent} is a closed sum, so
-// the assertion is STYLE T2's sealed-sum exception, as nestedType's switch is.
+// the assertion is STYLE T2's sealed-sum exception, as localScope's switch is.
 func valueNodes(decl xsd.ElementDeclaration, t xsd.ComplexType) []valueNode {
 	var nodes []valueNode
 	if decl.ScopeVariety() == xsd.ScopeGlobal {
@@ -1992,12 +2261,14 @@ func reacher(decl xsd.ElementDeclaration) string {
 // reaches itself only through slices. A wildcard particle (wildcardTerm) is a leaf, passed before elementTerm:
 // its field holds AnyElement, which reaches AnyType, which reaches itself only through the slice Children. So is
 // an <element ref> particle to a head substitutionSum returns a group for, passed after elementTerm: its field
-// holds the group's sealed interface (substitutionType). It reads the schema, never e.emitted, e.elements or
-// e.substitutions, so a type the emitting walk shares, and the type of a declaration an <element ref> particle
-// names, is walked again here unless e.acyclic holds its step's first node; that node joins e.acyclic once the
-// walk of t's particles reaches the end, and a step that pushes none, a local decl of an anonymous t that a
-// complex type declares, is never memoized. It returns only a struct-value recursion: every other failure on its
-// path ends that path, since the emitting walk meets it.
+// holds the group's sealed interface (substitutionType). So is an element particle whose declaration tableSum
+// answers a sum for, passed after that: its field holds the {type table}'s sealed interface (tableType); a
+// declaration whose table selects one type steps to that type, which declaredType returns. It reads the schema,
+// never e.emitted, e.elements or e.substitutions, so a type the emitting walk shares, and the type of a
+// declaration an <element ref> particle names, is walked again here unless e.acyclic holds its step's first
+// node; that node joins e.acyclic once the walk of t's particles reaches the end, and a step that pushes none, a
+// local decl of an anonymous t that a complex type declares, is never memoized. It returns only a struct-value
+// recursion: every other failure on its path ends that path, since the emitting walk meets it.
 func (e *emitter) valueCycle(chain []valueNode, decl xsd.ElementDeclaration, nested scope, t xsd.ComplexType) error {
 	subject := e.localOrigin(decl, nested, t).subject
 	if decl.ScopeVariety() == xsd.ScopeGlobal {
@@ -2035,6 +2306,9 @@ func (e *emitter) valueCycle(chain []valueNode, decl xsd.ElementDeclaration, nes
 		}
 		el, err := e.elementTerm(subject, t.Loc(), p.Term())
 		if err != nil || e.substitutionSum(el) != nil {
+			continue
+		}
+		if _, sum, err := e.tableSum(el); err != nil || sum {
 			continue
 		}
 		td, err := e.declaredType(el)

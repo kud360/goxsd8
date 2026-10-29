@@ -1,0 +1,104 @@
+<?xml version="1.0"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+           xmlns:t="urn:t" targetNamespace="urn:t">
+  <!-- product's {type table} (§3.12, key-selected-type) selects book, disc,
+       book again, an anonymous extension of item, and, its last alternative
+       having a {test}, the synthesized {default type definition}: item, the
+       declared {type definition}. Each distinct type is one branch of the
+       sealed interface Product, in document order, book at its first
+       alternative and item last; the anonymous alternative 4 gives the branch
+       ProductAlternative4, whose field's struct takes the path product,
+       alternative4 and so the name after it, ProductAlternative42. shelf
+       reaches product through an <element ref> before product's own
+       position, so Product's name is claimed there and its branches at
+       product's turn. -->
+  <xs:element name="shelf">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element ref="t:product" maxOccurs="unbounded"/>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+  <xs:complexType name="item">
+    <xs:sequence>
+      <xs:element name="id" type="xs:string"/>
+    </xs:sequence>
+    <xs:attribute name="kind" type="xs:string"/>
+  </xs:complexType>
+  <xs:complexType name="book">
+    <xs:complexContent>
+      <xs:extension base="t:item">
+        <xs:sequence>
+          <xs:element name="isbn" type="xs:string"/>
+        </xs:sequence>
+      </xs:extension>
+    </xs:complexContent>
+  </xs:complexType>
+  <xs:complexType name="disc">
+    <xs:complexContent>
+      <xs:extension base="t:item">
+        <xs:sequence>
+          <xs:element name="tracks" type="xs:int"/>
+        </xs:sequence>
+      </xs:extension>
+    </xs:complexContent>
+  </xs:complexType>
+  <xs:element name="product" type="t:item">
+    <xs:alternative test="@kind = 'book'" type="t:book"/>
+    <xs:alternative test="@kind = 'disc'" type="t:disc"/>
+    <xs:alternative test="@kind = 'ebook'" type="t:book"/>
+    <xs:alternative test="@kind = 'map'">
+      <xs:complexType>
+        <xs:complexContent>
+          <xs:extension base="t:item">
+            <xs:sequence>
+              <xs:element name="scale" type="xs:string"/>
+            </xs:sequence>
+          </xs:extension>
+        </xs:complexContent>
+      </xs:complexType>
+    </xs:alternative>
+  </xs:element>
+  <!-- line, a local declaration of the named complex type order with no
+       type, so of xs:anyType, selects a simple type, an anonymous complex
+       type, and, its last alternative having no {test}, item as its {default
+       type definition}: the interface OrderLine, named by the path an
+       anonymous type of line would take, shared by every element of type
+       order, and its branches mix simple and complex types. The anonymous
+       type's nested types extend the path order, line, alternative2. -->
+  <xs:complexType name="order">
+    <xs:sequence>
+      <xs:element name="line" maxOccurs="unbounded">
+        <xs:alternative test="@unit" type="xs:decimal"/>
+        <xs:alternative test="@note">
+          <xs:complexType>
+            <xs:sequence>
+              <xs:element name="note">
+                <xs:complexType>
+                  <xs:sequence>
+                    <xs:element name="text" type="xs:string"/>
+                  </xs:sequence>
+                </xs:complexType>
+              </xs:element>
+            </xs:sequence>
+          </xs:complexType>
+        </xs:alternative>
+        <xs:alternative type="t:item"/>
+      </xs:element>
+    </xs:sequence>
+  </xs:complexType>
+  <xs:element name="order" type="t:order"/>
+  <xs:element name="reorder" type="t:order"/>
+  <!-- memo's last alternative has no {test} and an anonymous type, so it is
+       the {default type definition}, which gives the branch MemoDefault. -->
+  <xs:element name="memo">
+    <xs:alternative test="@plain" type="xs:string"/>
+    <xs:alternative>
+      <xs:complexType>
+        <xs:sequence>
+          <xs:element name="body" type="xs:string"/>
+        </xs:sequence>
+      </xs:complexType>
+    </xs:alternative>
+  </xs:element>
+</xs:schema>
