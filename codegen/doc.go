@@ -24,22 +24,23 @@
 // complex type a local element declaration reaches, one per place a struct's
 // or a branch struct's particles hold a choice or a sequence occurring other
 // than exactly once — a sequence occurring exactly once in a sequence or as a
-// choice's alternative giving the places of its own particles, and a complex
-// type's own content particle counting only when it occurs other than exactly
-// once — so a particle that a model group definition or an extension's base
-// holds gets one in each struct that holds it, each shared as an anonymous
-// complex type nested beside it is, and one branch struct per alternative of
-// each choice it emits as a sealed interface — an <element ref> particle gets
-// none of its own, its field holding the type emitted for the top-level
-// element declaration it names — then, after every other declaration and in
-// the order the walk first needs each, one datatype struct per date, time or
-// duration datatype a declaration's type or a value field is declared over,
-// the four raw-content structs once an element's type is xs:anyType, a
-// sequence or a choice holds a wildcard particle, or a type has an {attribute
-// wildcard}, and one sealed interface per union simple type a declaration's
-// type, a value field, a list's item or a union's member is declared over,
-// each followed by one variant type per basic member, and declines everything
-// outside this slice:
+// choice's alternative, and an all group occurring exactly once in an all
+// group, giving the places of its own particles, and a complex type's own
+// content particle, a sequence, a choice or an all group, counting only when it
+// occurs other than exactly once — so a particle that a model group definition
+// or an extension's base holds gets one in each struct that holds it, each
+// shared as an anonymous complex type nested beside it is, and one branch
+// struct per alternative of each choice it emits as a sealed interface — an
+// <element ref> particle gets none of its own, its field holding the type
+// emitted for the top-level element declaration it names — then, after every
+// other declaration and in the order the walk first needs each, one datatype
+// struct per date, time or duration datatype a declaration's type or a value
+// field is declared over, the four raw-content structs once an element's type
+// is xs:anyType, a model group holds a wildcard particle, or a type has an
+// {attribute wildcard}, and one sealed interface per union simple type a
+// declaration's type, a value field, a list's item or a union's member is
+// declared over, each followed by one variant type per basic member, and
+// declines everything outside this slice:
 //
 //   - An element whose {type definition} is a simple type gets a named type
 //     over string for a special type (Datatypes §2.4.2 dt-special),
@@ -153,16 +154,16 @@
 //     simple), which gives a struct of the value field the next bullet states
 //     and the attribute fields; or element-only content (§3.4.2.3.3
 //     dcl.ctd.ctcc.common) that has no {open content} and whose {particle},
-//     which carries the <sequence>'s or <choice>'s own {min occurs} and {max
-//     occurs} (§3.9.1), or a <group ref>'s, whose {term} is the referenced
-//     definition's {model group} (§3.7.2), holds a sequence or a choice of
-//     element, wildcard (§3.10.2.1 dcl.wc.p) and model group particles, each
-//     model group particle, inline or a <group ref>, a sequence or choice that
-//     holds the same: element particles are local element declarations, and
-//     <element ref> particles, whose {term} is the top-level declaration the
-//     ref names (§3.3.2.4). A sequence gives a struct, and so does empty
-//     content, with no particle field; a struct with no field is spelled
-//     struct{}.
+//     which carries the <sequence>'s, <choice>'s or <all>'s own {min occurs}
+//     and {max occurs} (§3.9.1), or a <group ref>'s, whose {term} is the
+//     referenced definition's {model group} (§3.7.2), holds a sequence, a
+//     choice or an all group of element, wildcard (§3.10.2.1 dcl.wc.p) and
+//     model group particles, each model group particle, inline or a <group
+//     ref>, a sequence, choice or all group that holds the same: element
+//     particles are local element declarations, and <element ref> particles,
+//     whose {term} is the top-level declaration the ref names (§3.3.2.4). A
+//     sequence or an all group gives a struct, and so does empty content, with
+//     no particle field; a struct with no field is spelled struct{}.
 //   - Simple content gives a struct whose first field, the value field, is
 //     named from the local name value and holds a special type's string, the
 //     atomic Go type, the slice, or the union's sealed interface its {simple
@@ -188,15 +189,15 @@
 //     §3.9.6.3 cos-group-emptiable).
 //   - A {particle} that occurs other than exactly once gives a struct whose
 //     first field holds what one occurrence of its model group gives — a
-//     struct of the sequence's particle fields alone, or the choice's sealed
-//     interface — by the occurrence rules below, followed by the attribute
-//     fields; the field and that type are named as if from the local name
-//     sequence or choice ("Naming"). A model group particle in a sequence or
-//     as a choice's alternative, a choice or a sequence occurring other than
-//     exactly once, gives one such field in the same way, a choice occurring
-//     exactly once giving the bare interface. The occurrence's fields lie
-//     behind that slice, pointer or interface, so no struct-value recursion
-//     passes through it.
+//     struct of the sequence's or all group's particle fields alone, or the
+//     choice's sealed interface — by the occurrence rules below, followed by
+//     the attribute fields; the field and that type are named as if from the
+//     local name sequence, choice or all ("Naming"). A model group particle
+//     in a sequence or as a choice's alternative, a choice or a sequence
+//     occurring other than exactly once, gives one such field in the same
+//     way, a choice occurring exactly once giving the bare interface. The
+//     occurrence's fields lie behind that slice, pointer or interface, so no
+//     struct-value recursion passes through it.
 //   - Each particle of a sequence gives one field, in particle order, but a sequence particle
 //     occurring exactly once, inline or a <group ref> to a sequence group, which gives in its
 //     place the fields its own particles give, so an extension (§3.4.2.3.3 clause 4.2.3.3) gives its base
@@ -221,12 +222,23 @@
 //     (cvc-wildcard), and holds every match raw whether a strict or lax wildcard would assess it;
 //     enforcing either is the validator's. A named complex type, a top-level element through <element
 //     ref> particles, or a local element of an anonymous type through <group ref> particles to the group
-//     declaring it, that reaches itself through elements that each occur exactly once in a sequence that
-//     is a {particle} occurring exactly once or in a sequence spliced into one, and whose types are not
-//     choices, declines: its Go type would hold itself as a struct value. {max occurs} above 1 or
-//     unbounded gives a slice whatever {min occurs} is, of a list's slice too ([][]T); {min occurs} 0
-//     with {max occurs} 1 gives a pointer to a struct, atomic Go type, or list's slice (*[]T), and the
-//     bare interface, a choice's or a union's, never a pointer to one, nil meaning absent.
+//     declaring it, that reaches itself through elements that each occur exactly once in a sequence or
+//     all group that is a {particle} occurring exactly once or in a sequence or all group spliced into
+//     one, and whose types are not choices, declines: its Go type would hold itself as a struct value.
+//     {max occurs} above 1 or unbounded gives a slice whatever {min occurs} is, of a list's slice too
+//     ([][]T); {min occurs} 0 with {max occurs} 1 gives a pointer to a struct, atomic Go type, or list's
+//     slice (*[]T), and the bare interface, a choice's or a union's, never a pointer to one, nil
+//     meaning absent.
+//   - An all group gives the fields a sequence of the same particles gives, in particle order, by
+//     the same occurrence rules, an all group particle occurring exactly once in it, a <group ref>
+//     to an all group (§3.8.6.2 cos-all-limited clause 1.3), giving in its place the fields its own
+//     particles give. The order in which its children occur in the instance is not represented:
+//     each field holds, in order, the children its particle accepts, and how one particle's
+//     children interleave with another's is lost. Every such interleaving is valid (§3.8.4.1.3
+//     all-mg: an all group's language is the interleave of its particles'). A wildcard particle's
+//     field holds the children attributed to it: a child that an element particle of the group
+//     could take at that point in the sequence is attributed to the element particle instead
+//     (§3.8.4.2 key-vpath).
 //   - Each attribute use of a type emitted as a struct gives one field after the particle
 //     fields or the value field, if any, in the order [xsd.ComplexType.AttributeUses] returns
 //     its {attribute uses} (§3.4.2.4). The field is named from the attribute declaration's
@@ -273,14 +285,14 @@
 // ExampleGenerate prints the whole file Generate writes for a schema inside
 // this slice.
 //
-// GAP(codegen): every other construct declines: the all compositor, an emptiable choice, a
-// choice with no {particles}, a particle with {max occurs} 0, attribute uses or an attribute
-// wildcard on a type whose content is a choice occurring exactly once, mixed content, a named
-// complex type, a top-level element through <element ref> particles, or a local element of a
-// model group through <group ref> particles, reaching itself through struct values, a list
-// whose {item type definition} declines, a union one of whose basic members declines, and
-// every primitive the first bullet does not map, for an element or an attribute alike. #2900
-// owns lifting them.
+// GAP(codegen): every other construct declines: an emptiable choice, a choice with no
+// {particles}, a particle with {max occurs} 0, attribute uses or an attribute wildcard on a
+// type whose content is a choice occurring exactly once, mixed content, a named complex type,
+// a top-level element through <element ref> particles, or a local element of a model group
+// through <group ref> particles, reaching itself through struct values, a list whose {item
+// type definition} declines, a union one of whose basic members declines, and every primitive
+// the first bullet does not map, for an element or an attribute alike. #2900 owns lifting
+// them.
 //
 // # Determinism
 //
@@ -317,7 +329,7 @@
 // content model holds it — Ct for a named complex type ct, the path an anonymous
 // one is named by above, GE for the anonymous type of element e in group g —
 // never from a name its interface or a branch claimed, followed by the local
-// name sequence or choice of each occurrence type enclosing it and then its own
+// name sequence, choice or all of each occurrence type enclosing it and then its own
 // (CtSequence; a choice in that sequence → CtSequenceChoice; a repeated sequence
 // in a branch of named choice type alt, reached by element fifth → AltSequence,
 // never FifthSequenceSequence), and the types nested in its particles as if it
@@ -369,37 +381,35 @@
 // definition declaring it, or the path of the struct holding it for an anonymous
 // complex type (attribute mode in attribute group shared → SharedModeUnion,
 // attribute kind of element tag → TagKindUnion), and a value field's from its
-// struct's path with value before union (complex type narrow →
-// NarrowValueUnion). A list's item is named from the list whose <list> declares
-// it: from that list's local name when it is named (simple type codes →
-// CodesUnion, for codes and every restriction of it), and from the path the list
-// takes otherwise. A variant is named from its interface's name plus its
-// member's local name: an anonymous list member's is list, and any other
-// anonymous member's is that of the nearest named type on its {base type
-// definition} chain, the member itself first (xs:int in Size → SizeInt, an
-// anonymous restriction of xs:string → SizeString). The variants are claimed
+// struct's path with value before union (complex type narrow → NarrowValueUnion). A
+// list's item is named from the list whose <list> declares it: from that list's
+// local name when it is named (simple type codes → CodesUnion, for codes and every
+// restriction of it), and from the path the list takes otherwise. A variant is named
+// from its interface's name plus its member's local name: an anonymous list member's
+// is list, and any other anonymous member's is that of the nearest named type on its
+// {base type definition} chain, the member itself first (xs:int in Size → SizeInt,
+// an anonymous restriction of xs:string → SizeString). The variants are claimed
 // after their interface in basic-member order, each ahead of its member's own Go
-// type, which takes the variant's name as its path (an anonymous union item of
-// the list variant MixedList → MixedListUnion). Every other generated type's
-// header comment but a union interface's or variant's records the QName and the
-// schema Loc of the declaration it is named from: the element declaration, or
-// the complex type definition for a type named from one. A union interface's
-// header records the simple type it is generated from, by its QName or as
-// (anonymous), and that type's schema Loc, and a variant's header its member the
-// same way, a builtin member, having no schema document, by its QName alone. A
-// datatype struct's header records its datatype's QName alone, a builtin having
-// no schema document, then a second line stating what its fields' names do not,
-// when there is any: TimezoneOffset's unit and whether it may be absent, or that
-// duration's Months and Seconds share one sign. A raw-content struct's header
-// records xs:anyType's QName alone, then, for AnyType and AnyChild, a second
-// line stating what Text or Tail holds. A Loc whose URI filepath.IsAbs accepts
-// renders relative to the target's Dir made absolute against the working
-// directory, slash-separated and climbing with ".." out of Dir. A document
-// outside the tree laid out alike, such as one an absolute schemaLocation names,
-// renders a climbing path that differs with that tree's depth below the
+// type, which takes the variant's name as its path (an anonymous union item of the
+// list variant MixedList → MixedListUnion). Every other generated type's header
+// comment but a union interface's or variant's records the QName and the schema Loc
+// of the declaration it is named from: the element declaration, or the complex type
+// definition for a type named from one. A union interface's header records the
+// simple type it is generated from, by its QName or as (anonymous), and that type's
+// schema Loc, and a variant's header its member the same way, a builtin member,
+// having no schema document, by its QName alone. A datatype struct's header records
+// its datatype's QName alone, a builtin having no schema document, then a second
+// line stating what its fields' names do not, when there is any: TimezoneOffset's
+// unit and whether it may be absent, or that duration's Months and Seconds share one
+// sign. A raw-content struct's header records xs:anyType's QName alone, then, for
+// AnyType and AnyChild, a second line stating what Text or Tail holds. A Loc whose
+// URI filepath.IsAbs accepts renders relative to the target's Dir made absolute
+// against the working directory, slash-separated and climbing with ".." out of Dir.
+// A document outside the tree laid out alike, such as one an absolute schemaLocation
+// names, renders a climbing path that differs with that tree's depth below the
 // filesystem root. Any other URI renders as is, a URL or a relative loader key
-// alike, as does one with no path relative to Dir, such as one on another
-// Windows volume. Symbolic links are not resolved.
+// alike, as does one with no path relative to Dir, such as one on another Windows
+// volume. Symbolic links are not resolved.
 //
 // # Planned (M9 — not yet implemented)
 //
