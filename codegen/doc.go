@@ -32,7 +32,7 @@
 //   - sequences, choices and all groups, inline or through <group ref>
 //   - optional and repeated particles
 //   - wildcard particles
-//   - attribute uses and attribute wildcards
+//   - attribute uses and attribute wildcards, beside any content above
 //   - facets, {assertions}, value constraints and identity constraints
 //
 // Declined today, each construct named as [Construct.String] prints it for a
@@ -45,7 +45,6 @@
 //   - absent {variety}
 //   - no {primitive type definition}
 //   - uncovered primitive
-//   - choice with attributes
 //   - repeated emptiable sequence
 //   - choice with no {particles}
 //   - emptiable group alternative
@@ -70,24 +69,24 @@
 // all group, spliced by the occurrence rules below, giving the places of its
 // own particles, and a complex type's own content particle, a sequence, a
 // choice or an all group, counting only when it is a sequence or an all group
-// that is not spliced, or a choice that occurs other than exactly once or one
-// occurrence of which is emptiable — so a particle that a model group
-// definition or an extension's base holds gets one in each struct that holds
-// it, each shared as an anonymous complex type nested beside it is, and one
-// branch struct per alternative of each choice it emits as a sealed interface —
-// an <element ref> particle gets none of its own, its field holding the type
-// emitted for the top-level element declaration it names, or, when that
-// declaration's substitution group holds another declaration, one sealed
-// interface per such head with one branch struct per declaration of its group —
-// then, after every other declaration and in the order the walk first needs
-// each, one datatype struct per date, time or duration datatype, and one for
-// QName and NOTATION together, a declaration's type or a value field is
-// declared over, the four raw-content structs once an element's type is
-// xs:anyType, a model group holds a wildcard particle, or a type has an
-// {attribute wildcard}, and one sealed interface per union simple type a
-// declaration's type, a value field, a list's item or a union's member is
-// declared over, each followed by one variant type per basic member, and
-// declines everything outside this slice:
+// that is not spliced, or a choice that occurs other than exactly once, one
+// occurrence of which is emptiable, or whose type has {attribute uses} or an
+// {attribute wildcard} — so a particle that a model group definition or an
+// extension's base holds gets one in each struct that holds it, each shared as
+// an anonymous complex type nested beside it is, and one branch struct per
+// alternative of each choice it emits as a sealed interface — an <element ref>
+// particle gets none of its own, its field holding the type emitted for the
+// top-level element declaration it names, or, when that declaration's
+// substitution group holds another declaration, one sealed interface per such
+// head with one branch struct per declaration of its group — then, after every
+// other declaration and in the order the walk first needs each, one datatype
+// struct per date, time or duration datatype, and one for QName and NOTATION
+// together, a declaration's type or a value field is declared over, the four
+// raw-content structs once an element's type is xs:anyType, a model group holds
+// a wildcard particle, or a type has an {attribute wildcard}, and one sealed
+// interface per union simple type a declaration's type, a value field, a list's
+// item or a union's member is declared over, each followed by one variant type
+// per basic member, and declines everything outside this slice:
 //
 //   - An element whose {type definition} is a simple type gets a named type
 //     over string for a special type (Datatypes §2.4.2 dt-special),
@@ -232,16 +231,17 @@
 //     simple type, the base's own for an extension of a complex type, and for a
 //     restriction an anonymous restriction of the base's own or of an inline
 //     <simpleType>, whose facets are not represented (§3.4.2.2 dcl.ctd.ctsc).
-//   - A choice gives a sealed interface, the closed-sum exception: an interface
-//     whose one method is unexported, "is" plus the interface's name, and one
-//     branch struct per alternative in particle order, emitted after the
-//     interface, each holding the fields the alternative's particle gives as a
-//     particle of a sequence would, its {min occurs} 0 read as 1 and its {max
-//     occurs} kept — an element or a wildcard its one field, a sequence
-//     occurring exactly once the fields of its own particles, any other model
-//     group its one field — and implementing the method; consumers type-switch
-//     over the branches, and "N pointer fields, exactly one non-nil" never
-//     appears.
+//   - A choice gives a sealed interface, the closed-sum exception, which a
+//     complex type's content {particle} gives as the type itself unless a rule
+//     below gives a struct holding it: an interface whose one method is
+//     unexported, "is" plus the interface's name, and one branch struct per
+//     alternative in particle order, emitted after the interface, each holding
+//     the fields the alternative's particle gives as a particle of a sequence
+//     would, its {min occurs} 0 read as 1 and its {max occurs} kept — an
+//     element or a wildcard its one field, a sequence occurring exactly once
+//     the fields of its own particles, any other model group its one field —
+//     and implementing the method; consumers type-switch over the branches,
+//     and "N pointer fields, exactly one non-nil" never appears.
 //   - One occurrence of a choice matches nothing exactly when one of its
 //     alternatives is emptiable (§3.8.6.6 cos-choice-range, §3.9.6.3
 //     cos-group-emptiable), and the nil interface is the one value for that
@@ -276,12 +276,14 @@
 //     so an abstract head or member declines it there.
 //   - A sequence or all group {particle} that is not spliced, a choice
 //     {particle} that occurs other than exactly once, or a choice {particle}
-//     that occurs exactly once and one occurrence of which is emptiable, gives
-//     a struct whose first field holds what one occurrence of its model group
-//     gives — a struct of the sequence's or all group's particle fields alone,
-//     or the choice's sealed interface — by the occurrence rules below,
-//     followed by the attribute fields; the field and that type are named as if
-//     from the local name sequence, choice or all ("Naming"). A model group
+//     that occurs exactly once and one occurrence of which is emptiable or
+//     whose type has {attribute uses} or an {attribute wildcard} (§3.4.2.4
+//     dcl.ctd.attuses, §3.4.2.5 dcl.ctd.anyatt), inherited ones included,
+//     gives a struct whose first field holds what one occurrence of its model
+//     group gives — a struct of the sequence's or all group's particle fields
+//     alone, or the choice's sealed interface — by the occurrence rules below,
+//     followed by the attribute fields; the field and that type are named as
+//     if from the local name sequence, choice or all ("Naming"). A model group
 //     particle in a sequence or as a choice's alternative, a choice or a
 //     sequence that is not spliced, gives one such field in the same way, a
 //     choice occurring exactly once giving the bare interface. The
@@ -381,9 +383,6 @@
 //     built-in xsi: one the post-schema-validation infoset supplies the
 //     constraint's value when the attribute is absent (§3.4.5.1 key-dflt-att).
 //     Supplying that value and enforcing a fixed one are the validator's.
-//   - A choice {particle} that occurs exactly once and one occurrence of which
-//     is not emptiable is accepted only when its type has no {attribute uses}
-//     and no {attribute wildcard}.
 //   - An {attribute wildcard} of a type emitted as a struct, its own, one an
 //     extension inherits, or one an attribute group reference or the schema's
 //     defaultAttributes brings (§3.4.2.5 dcl.ctd.anyatt), gives one field after
