@@ -8,7 +8,7 @@
        sealed interface Product, in document order, book at its first
        alternative and item last; the anonymous alternative 4 gives the branch
        ProductAlternative4, whose field's struct takes the path product,
-       alternative4 and so the name after it, ProductAlternative42. shelf
+       alternative4Type, ProductAlternative4Type. shelf
        reaches product through an <element ref> before product's own
        position, so Product's name is claimed there and its branches at
        product's turn. -->

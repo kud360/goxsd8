@@ -244,7 +244,8 @@ type scope struct {
 // root or of an element declaration, slot being "", or a branch of the sealed
 // interface tableType emits over the {type table} of the element declaration
 // the step before names, slot being the branch's (tableBranch.slot, never "")
-// and name its local name (tableBranch.local) in no namespace.
+// and name, in no namespace, the branch's local name (tableBranch.local)
+// followed by Type.
 type pathStep struct {
 	name xsd.QName
 	slot string
@@ -622,8 +623,10 @@ func (e *emitter) elementType(decl xsd.ElementDeclaration, td xsd.TypeDefinition
 // on every declaration it emits from, {nillable} and then {abstract}, and
 // returns the type definition decl emits as: the one type its {type table}
 // selects when tableSum answers a table that is not a sum, and otherwise the
-// resolved {type definition}, which a caller reads only after tableSum has
-// answered no sum.
+// resolved {type definition}, which decides nothing for a decl tableSum
+// answers a sum for: topLevel, elementType and field test sum ahead of td's
+// cases, refType returns once elementType's type is sealed, and valueCycle
+// skips such a decl before calling declaredType.
 func (e *emitter) declaredType(decl xsd.ElementDeclaration) (xsd.TypeDefinition, error) {
 	subject := "element " + decl.Name().String()
 	switch {
@@ -1942,11 +1945,11 @@ func (e *emitter) branchType(ifc scope, decl xsd.ElementDeclaration, b tableBran
 	return emittedType{}, fmt.Errorf("%s of element %s at %s: unexpected type definition %T", b.slot(), decl.Name(), decl.Loc(), b.td)
 }
 
-// branchScope is the scope of the struct emitted for b's anonymous complex
-// type, a branch of the sealed interface whose path is ifc: ifc's path
-// followed by b's branch step.
+// branchScope is the scope of the type emitted for b's anonymous type, a
+// branch of the sealed interface whose path is ifc: ifc's path followed by
+// b's branch step.
 func branchScope(ifc scope, b tableBranch) scope {
-	return scope{root: ifc.root, path: append(slices.Clone(ifc.path), pathStep{name: xsd.QName{Local: b.local()}, slot: b.slot()})}
+	return scope{root: ifc.root, path: append(slices.Clone(ifc.path), pathStep{name: xsd.QName{Local: b.local() + "Type"}, slot: b.slot()})}
 }
 
 // branchOrigin is the origin of the type emitted for t, b's complex type, a

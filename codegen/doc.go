@@ -510,69 +510,69 @@
 // named, and otherwise alternative and the 1-based position of its alternative among the
 // {alternatives}, or default for the {default type definition} (a type book, and an anonymous
 // fourth alternative, of interface Product → ProductBook and ProductAlternative4; an anonymous
-// default of Memo → MemoDefault). An anonymous complex type a branch holds, and every type nested
-// in it, is named by the interface's path followed by the branch's local name, so it follows
-// the branch (ProductAlternative42). The branches' names are claimed after the interface's, at a
-// top-level declaration's own position, in branch order, each followed by the names its field's
-// type first claims. Each choice branch's name is claimed when the walk reaches its alternative,
-// after the types every earlier alternative first needs and ahead of its own, so the raw-content
-// structs a wildcard alternative first needs follow its branch and every earlier one and precede
-// every later one: alternatives type, a wildcard and element of interface Any name the branches
-// AnyType, AnyAny and AnyElement2, and the raw-content structs AnyType2, AnyAttribute, AnyChild
-// and AnyElement. A residual collision — two names folding to one identifier, among a package's
-// types or one struct's fields — is disambiguated deterministically by document order: the later
-// name takes the smallest free numeric suffix from 2, so a top-level element ct and a complex
-// type ct reached locally take Ct in the order they are first reached. A datatype struct is named
-// from its datatype's local name (dateTime → DateTime, gYearMonth → GYearMonth, dayTimeDuration →
-// DayTimeDuration, QName → QName, which an xs:NOTATION type shares), claimed when the walk first
-// needs it: for a top-level element of a simple type, ahead of that element's own type, so that a
-// top-level element date of type xs:date names its type Date2; for a field of a struct, the value
-// field and attribute fields included, after that struct's own name, so that a top-level element
-// date whose complex type extends xs:date names its type Date and the datatype struct Date2. The
-// raw-content structs are named AnyType, AnyAttribute, AnyChild and AnyElement, claimed together
-// in that order when the walk first reaches a declaration of type xs:anyType or a wildcard
-// particle, ahead of that declaration's own type, so that a top-level element anyType with no
-// type names its type AnyType2; or when it first reaches the {attribute wildcard} of a type
+// default of Memo → MemoDefault). An anonymous type a branch holds is named by the interface's path
+// followed by the branch's local name and the local name type, every type nested in it
+// extending that path, and an anonymous union with union last (ProductAlternative4Type,
+// OrderLineAlternative2TypeNote, UAlternative1TypeUnion). The branches' names are claimed after the
+// interface's, at a top-level declaration's own position, in branch order, each followed by the
+// names its field's type first claims. Each choice branch's name is claimed when the walk reaches
+// its alternative, after the types every earlier alternative first needs and ahead of its own, so
+// the raw-content structs a wildcard alternative first needs follow its branch and every earlier
+// one and precede every later one: alternatives type, a wildcard and element of interface Any name
+// the branches AnyType, AnyAny and AnyElement2, and the raw-content structs AnyType2, AnyAttribute,
+// AnyChild and AnyElement. A residual collision — two names folding to one identifier, among a
+// package's types or one struct's fields — is disambiguated deterministically by document order:
+// the later name takes the smallest free numeric suffix from 2, so a top-level element ct and a
+// complex type ct reached locally take Ct in the order they are first reached. A datatype struct is
+// named from its datatype's local name (dateTime → DateTime, gYearMonth → GYearMonth,
+// dayTimeDuration → DayTimeDuration, QName → QName, which an xs:NOTATION type shares), claimed when
+// the walk first needs it: for a top-level element of a simple type, ahead of that element's own
+// type, so that a top-level element date of type xs:date names its type Date2; for a field of a
+// struct, the value field and attribute fields included, after that struct's own name, so that a
+// top-level element date whose complex type extends xs:date names its type Date and the datatype
+// struct Date2. The raw-content structs are named AnyType, AnyAttribute, AnyChild and AnyElement,
+// claimed together in that order when the walk first reaches a declaration of type xs:anyType or a
+// wildcard particle, ahead of that declaration's own type, so that a top-level element anyType with
+// no type names its type AnyType2; or when it first reaches the {attribute wildcard} of a type
 // emitted as a struct, after that struct's own name and the types its other fields first need, so
 // that a top-level element anyType whose anonymous complex type has an <anyAttribute> names its
 // type AnyType and the raw-content structs AnyType2, AnyAttribute, AnyChild and AnyElement. A
-// wildcard particle's field is named as if from local name any, and an {attribute wildcard}'s as
-// if from local name anyAttribute. A union's interface is named from the type when it is named
-// (simple type size → Size), claimed when the walk first needs it as a datatype struct is: for a
-// top-level element of a union type, ahead of that element's own type, so that a top-level
-// element size of type size names its type Size2; for a field of a struct, after that struct's
-// own name. An anonymous union is named by the path of names an anonymous complex type would take
-// in its place, with the local name union last: a top-level element's (element pin → PinUnion), a
-// local element's (element code in complex type box → BoxCodeUnion), an attribute's from the
-// global attribute declaration, the named complex type or attribute group definition declaring
-// it, or the path of the struct holding it for an anonymous complex type (attribute mode in
-// attribute group shared → SharedModeUnion, attribute kind of element tag → TagKindUnion), and a
-// value field's from its struct's path with value before union (complex type narrow →
-// NarrowValueUnion). A list's item is named from the list whose <list> declares it: from that
-// list's local name when it is named (simple type codes → CodesUnion, for codes and every
-// restriction of it), and from the path the list takes otherwise. A variant is named from its
-// interface's name plus its member's local name: an anonymous list member's is list, and any
-// other anonymous member's is that of the nearest named type on its {base type definition} chain,
-// the member itself first (xs:int in Size → SizeInt, an anonymous restriction of xs:string →
-// SizeString). The variants are claimed after their interface in basic-member order, each ahead
-// of its member's own Go type, which takes the variant's name as its path (an anonymous union
-// item of the list variant MixedList → MixedListUnion). Every other generated type's header
-// comment but a union interface's or variant's records the QName and the schema Loc of the
-// declaration it is named from: the element declaration, or the complex type definition for a
-// type named from one. A union interface's header records the simple type it is generated from,
-// by its QName or as (anonymous), and that type's schema Loc, and a variant's header its member
-// the same way, a builtin member, having no schema document, by its QName alone. A datatype
-// struct's header records its datatype's QName alone, a builtin having no schema document, then a
-// second line stating what its fields' names do not, when there is any: TimezoneOffset's unit and
-// whether it may be absent, that duration's Months and Seconds share one sign, or that QName's
-// Space is "" for no namespace. A raw-content struct's header records xs:anyType's QName alone,
-// then, for AnyType and AnyChild, a second line stating what Text or Tail holds. A Loc whose URI
-// filepath.IsAbs accepts renders relative to the target's Dir made absolute against the working
-// directory, slash-separated and climbing with ".." out of Dir. A document outside the tree laid
-// out alike, such as one an absolute schemaLocation names, renders a climbing path that differs
-// with that tree's depth below the filesystem root. Any other URI renders as is, a URL or a
-// relative loader key alike, as does one with no path relative to Dir, such as one on another
-// Windows volume. Symbolic links are not resolved.
+// wildcard particle's field is named as if from local name any, and an {attribute wildcard}'s as if
+// from local name anyAttribute. A union's interface is named from the type when it is named (simple
+// type size → Size), claimed when the walk first needs it as a datatype struct is: for a top-level
+// element of a union type, ahead of that element's own type, so that a top-level element size of
+// type size names its type Size2; for a field of a struct, after that struct's own name. An
+// anonymous union is named by the path of names an anonymous complex type would take in its place,
+// with the local name union last: a top-level element's (element pin → PinUnion), a local element's
+// (element code in complex type box → BoxCodeUnion), an attribute's from the global attribute
+// declaration, the named complex type or attribute group definition declaring it, or the path of
+// the struct holding it for an anonymous complex type (attribute mode in attribute group shared →
+// SharedModeUnion, attribute kind of element tag → TagKindUnion), and a value field's from its
+// struct's path with value before union (complex type narrow → NarrowValueUnion). A list's item is
+// named from the list whose <list> declares it: from that list's local name when it is named
+// (simple type codes → CodesUnion, for codes and every restriction of it), and from the path the
+// list takes otherwise. A variant is named from its interface's name plus its member's local name:
+// an anonymous list member's is list, and any other anonymous member's is that of the nearest named
+// type on its {base type definition} chain, the member itself first (xs:int in Size → SizeInt, an
+// anonymous restriction of xs:string → SizeString). The variants are claimed after their interface
+// in basic-member order, each ahead of its member's own Go type, which takes the variant's name as
+// its path (an anonymous union item of the list variant MixedList → MixedListUnion). Every other
+// generated type's header comment but a union interface's or variant's records the QName and the
+// schema Loc of the declaration it is named from: the element declaration, or the complex type
+// definition for a type named from one. A union interface's header records the simple type it is
+// generated from, by its QName or as (anonymous), and that type's schema Loc, and a variant's
+// header its member the same way, a builtin member, having no schema document, by its QName alone.
+// A datatype struct's header records its datatype's QName alone, a builtin having no schema
+// document, then a second line stating what its fields' names do not, when there is any:
+// TimezoneOffset's unit and whether it may be absent, that duration's Months and Seconds share one
+// sign, or that QName's Space is "" for no namespace. A raw-content struct's header records
+// xs:anyType's QName alone, then, for AnyType and AnyChild, a second line stating what Text or Tail
+// holds. A Loc whose URI filepath.IsAbs accepts renders relative to the target's Dir made absolute
+// against the working directory, slash-separated and climbing with ".." out of Dir. A document
+// outside the tree laid out alike, such as one an absolute schemaLocation names, renders a climbing
+// path that differs with that tree's depth below the filesystem root. Any other URI renders as is,
+// a URL or a relative loader key alike, as does one with no path relative to Dir, such as one on
+// another Windows volume. Symbolic links are not resolved.
 //
 // # Planned (M9 — not yet implemented)
 //

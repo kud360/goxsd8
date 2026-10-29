@@ -44,13 +44,13 @@ type Disc struct {
 
 // ProductAlternative4 is generated from {type table} alternative 4 of element {urn:t}product declared at testdata/typetable.xsd:46:3.
 type ProductAlternative4 struct {
-	Alternative4 ProductAlternative42
+	Alternative4 ProductAlternative4Type
 }
 
 func (ProductAlternative4) isProduct() {}
 
-// ProductAlternative42 is generated from {type table} alternative 4 of element {urn:t}product declared at testdata/typetable.xsd:46:3.
-type ProductAlternative42 struct {
+// ProductAlternative4Type is generated from {type table} alternative 4 of element {urn:t}product declared at testdata/typetable.xsd:46:3.
+type ProductAlternative4Type struct {
 	Id    string
 	Scale string
 	Kind  *string
@@ -88,18 +88,18 @@ func (OrderLineDecimal) isOrderLine() {}
 
 // OrderLineAlternative2 is generated from {type table} alternative 2 of element line declared at testdata/typetable.xsd:71:7.
 type OrderLineAlternative2 struct {
-	Alternative2 OrderLineAlternative22
+	Alternative2 OrderLineAlternative2Type
 }
 
 func (OrderLineAlternative2) isOrderLine() {}
 
-// OrderLineAlternative22 is generated from {type table} alternative 2 of element line declared at testdata/typetable.xsd:71:7.
-type OrderLineAlternative22 struct {
-	Note OrderLineAlternative2Note
+// OrderLineAlternative2Type is generated from {type table} alternative 2 of element line declared at testdata/typetable.xsd:71:7.
+type OrderLineAlternative2Type struct {
+	Note OrderLineAlternative2TypeNote
 }
 
-// OrderLineAlternative2Note is generated from element note declared at testdata/typetable.xsd:76:15.
-type OrderLineAlternative2Note struct {
+// OrderLineAlternative2TypeNote is generated from element note declared at testdata/typetable.xsd:76:15.
+type OrderLineAlternative2TypeNote struct {
 	Text string
 }
 
@@ -184,25 +184,25 @@ func (MemoString) isMemo() {}
 
 // MemoAlternative2 is generated from {type table} alternative 2 of element {urn:t}memo declared at testdata/typetable.xsd:131:3.
 type MemoAlternative2 struct {
-	Alternative2 MemoAlternative22
+	Alternative2 MemoAlternative2Type
 }
 
 func (MemoAlternative2) isMemo() {}
 
-// MemoAlternative22 is generated from {type table} alternative 2 of element {urn:t}memo declared at testdata/typetable.xsd:131:3.
-type MemoAlternative22 struct {
+// MemoAlternative2Type is generated from {type table} alternative 2 of element {urn:t}memo declared at testdata/typetable.xsd:131:3.
+type MemoAlternative2Type struct {
 	Body string
 }
 
 // MemoDefault is generated from {default type definition} of element {urn:t}memo declared at testdata/typetable.xsd:131:3.
 type MemoDefault struct {
-	Default MemoDefault2
+	Default MemoDefaultType
 }
 
 func (MemoDefault) isMemo() {}
 
-// MemoDefault2 is generated from {default type definition} of element {urn:t}memo declared at testdata/typetable.xsd:131:3.
-type MemoDefault2 struct {
+// MemoDefaultType is generated from {default type definition} of element {urn:t}memo declared at testdata/typetable.xsd:131:3.
+type MemoDefaultType struct {
 	Body string
 }
 
