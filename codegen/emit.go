@@ -969,11 +969,12 @@ func typeName(t xsd.TypeDefinition) string {
 // shape, naming it in declines by o's subject, and returns the type it emits
 // as name — a sealed interface for a choice content particle that occurs
 // exactly once and whose one occurrence is not emptiable (termEmptiable),
-// which declines {attribute uses} or an {attribute wildcard}, naming the uses
-// when it has both, since an interface has no field to hold either, and a
-// struct otherwise — and its content particle (contentGroup), nil for empty
-// content. It emits nothing: body does, so that a caller can store the type in
-// e.emitted before its body is walked.
+// when t has no {attribute uses} and no {attribute wildcard} (§3.4.2.4
+// dcl.ctd.attuses, §3.4.2.5 dcl.ctd.anyatt), read from the finalized
+// component, inherited ones included, and a struct otherwise, whose fields
+// then hold the attributes beside the choice's — and its content particle
+// (contentGroup), nil for empty content. It emits nothing: body does, so that
+// a caller can store the type in e.emitted before its body is walked.
 func (e *emitter) shape(name string, o origin, t xsd.ComplexType) (emittedType, *groupParticle, error) {
 	content, err := e.contentGroup(o.subject, t)
 	if err != nil {
@@ -982,22 +983,14 @@ func (e *emitter) shape(name string, o origin, t xsd.ComplexType) (emittedType, 
 	if content == nil || content.group.Compositor() != xsd.CompositorChoice || content.occurs != exactlyOnce {
 		return emittedType{name: name}, content, nil
 	}
+	if _, hasWildcard := t.AttributeWildcard(); hasWildcard || len(t.AttributeUses()) > 0 {
+		return emittedType{name: name}, content, nil
+	}
 	emptiable, err := e.termEmptiable(o.subject, t.Loc(), xsd.ResolvedTerm{Term: content.group})
 	if err != nil {
 		return emittedType{}, nil, err
 	}
-	if emptiable {
-		return emittedType{name: name}, content, nil
-	}
-	_, hasWildcard := t.AttributeWildcard()
-	if len(t.AttributeUses()) == 0 && !hasWildcard {
-		return emittedType{name: name, sealed: true}, content, nil
-	}
-	held := "an {attribute wildcard}"
-	if len(t.AttributeUses()) > 0 {
-		held = "{attribute uses}"
-	}
-	return emittedType{}, nil, decline(t.Loc(), constructChoiceAttributes, o.subject, held)
+	return emittedType{name: name, sealed: !emptiable}, content, nil
 }
 
 // body emits typ, which shape returned for the complex type t with content,

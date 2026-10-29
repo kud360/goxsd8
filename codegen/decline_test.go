@@ -53,6 +53,10 @@ func TestGenerateDeclines(t *testing.T) {
 	}{
 		{"empty choice", `<xs:element name="e"><xs:complexType><xs:choice/></xs:complexType></xs:element>`,
 			"complex type (anonymous) of element e whose choice has no {particles}", constructEmptyChoice},
+		// An attribute makes the type a struct (shape) without lifting the
+		// decline: its choice field's occurrence type still has no {particles}.
+		{"empty choice with attribute", `<xs:element name="e"><xs:complexType><xs:choice/><xs:attribute name="t" ` + str + `/></xs:complexType></xs:element>`,
+			"complex type (anonymous) of element e whose choice has no {particles}", constructEmptyChoice},
 		{"choice of vacuous elements", `<xs:element name="e"><xs:complexType><xs:choice><xs:element name="a" minOccurs="0" maxOccurs="0" ` + str + `/></xs:choice></xs:complexType></xs:element>`,
 			"complex type (anonymous) of element e whose choice has no {particles}", constructEmptyChoice},
 		// A model group alternative whose term is emptiable declines, inline
@@ -88,11 +92,6 @@ func TestGenerateDeclines(t *testing.T) {
 			"with mixed content", constructMixedContent},
 		{"open content choice", `<xs:element name="e"><xs:complexType><xs:openContent><xs:any/></xs:openContent><xs:choice><xs:element name="a" ` + str + `/></xs:choice></xs:complexType></xs:element>`,
 			"with {open content}", constructOpenContent},
-		// An extension of a choice-content base with no ·effective content·
-		// of its own is the base's choice (§3.4.2.3.3 dcl.ctd.ctcc.common
-		// clause 4.2.2), its {attribute uses} declining it.
-		{"extension of a choice by an attribute", `<xs:complexType name="b"><xs:choice><xs:element name="a" ` + str + `/></xs:choice></xs:complexType><xs:element name="e"><xs:complexType><xs:complexContent><xs:extension base="b"><xs:attribute name="t" ` + str + `/></xs:extension></xs:complexContent></xs:complexType></xs:element>`,
-			"complex type (anonymous) of element e whose content is a choice, with {attribute uses}", constructChoiceAttributes},
 		{"choice alternative type", `<xs:element name="e"><xs:complexType><xs:choice><xs:element name="a" type="xs:precisionDecimal"/></xs:choice></xs:complexType></xs:element>`,
 			"element a with {type definition} {http://www.w3.org/2001/XMLSchema}precisionDecimal, whose {primitive type definition} is", constructUncoveredPrimitive},
 		// A <group ref> content particle is checked as its referenced group
@@ -134,16 +133,8 @@ func TestGenerateDeclines(t *testing.T) {
 			"with mixed content", constructMixedContent},
 		{"default open content applies to empty", `<xs:defaultOpenContent appliesToEmpty="true"><xs:any/></xs:defaultOpenContent><xs:element name="e"><xs:complexType/></xs:element>`,
 			"with {open content}", constructOpenContent},
-		{"choice with attribute", `<xs:element name="e"><xs:complexType><xs:choice><xs:element name="a" ` + str + `/></xs:choice><xs:attribute name="t" ` + str + `/></xs:complexType></xs:element>`,
-			"complex type (anonymous) of element e whose content is a choice, with {attribute uses}", constructChoiceAttributes},
-		// An {attribute wildcard} gives a field only to a struct: a choice
-		// occurring exactly once declines it as it declines {attribute uses},
-		// and mixed content, checked first, still declines a type that has
-		// one.
-		{"choice with attribute wildcard", `<xs:element name="e"><xs:complexType><xs:choice><xs:element name="a" ` + str + `/></xs:choice><xs:anyAttribute/></xs:complexType></xs:element>`,
-			"complex type (anonymous) of element e whose content is a choice, with an {attribute wildcard}", constructChoiceAttributes},
-		{"choice with attribute and attribute wildcard", `<xs:element name="e"><xs:complexType><xs:choice><xs:element name="a" ` + str + `/></xs:choice><xs:attribute name="t" ` + str + `/><xs:anyAttribute/></xs:complexType></xs:element>`,
-			"complex type (anonymous) of element e whose content is a choice, with {attribute uses} at ", constructChoiceAttributes},
+		// Mixed content, checked first, still declines a type that has an
+		// {attribute wildcard}.
 		{"attribute wildcard with mixed content", `<xs:element name="e"><xs:complexType mixed="true"><xs:sequence><xs:element name="a" ` + str + `/></xs:sequence><xs:anyAttribute/></xs:complexType></xs:element>`,
 			"complex type (anonymous) of element e with mixed content", constructMixedContent},
 		{"mixed", `<xs:element name="e"><xs:complexType mixed="true"><xs:sequence><xs:element name="a" ` + str + `/></xs:sequence></xs:complexType></xs:element>`,
@@ -159,12 +150,6 @@ func TestGenerateDeclines(t *testing.T) {
 			"with {open content}", constructOpenContent},
 		{"default open content", `<xs:defaultOpenContent><xs:any/></xs:defaultOpenContent><xs:element name="e"><xs:complexType><xs:sequence><xs:element name="a" ` + str + `/></xs:sequence></xs:complexType></xs:element>`,
 			"with {open content}", constructOpenContent},
-		// The restriction rows pin that a complex-content restriction of a
-		// base other than xs:anyType is checked from its own finalized
-		// component: c writes no <attribute>, and declines for the
-		// {attribute uses} it inherits from b (§3.4.2.4 dcl.ctd.attuses).
-		{"restriction choice with inherited attribute", `<xs:complexType name="b"><xs:choice><xs:element name="a" ` + str + `/><xs:element name="x" ` + str + `/></xs:choice><xs:attribute name="t" ` + str + `/></xs:complexType><xs:complexType name="c"><xs:complexContent><xs:restriction base="b"><xs:choice><xs:element name="a" ` + str + `/></xs:choice></xs:restriction></xs:complexContent></xs:complexType><xs:element name="e" type="c"/>`,
-			"complex type c of element e whose content is a choice, with {attribute uses}", constructChoiceAttributes},
 		// The three rows below carry a {value constraint} beside the declining
 		// property, so they pin that the value constraint, accepted, is not
 		// checked ahead of it.
