@@ -677,20 +677,16 @@ func (b tableBranch) slot() string {
 }
 
 // tableSum returns the types the element declaration decl's {type table}
-// selects, and sum, true exactly when the Go type "# Coverage" gives decl is a
-// sealed interface over them. The selectable types are the {type definition}
-// of each of its {alternatives} and of its {default type definition}
-// (§3.3.4.1 key-selected-type; the default is Required, §3.3.1), each
-// resolved through [xsd.Schema.ResolvedType], in that order, xs:error
-// skipped (§2.2.1.1 key-error, §3.16.7.3: no instance is valid against it), and each
-// kept at its first slot only. Two slots hold one type exactly when both
-// resolve to types with a {name} and the names are equal, as xsd's
-// typeDefinitionsEquivalent reads two {type definition}s: an anonymous slot is
-// never the same as another, since xsd offers no identity for an anonymous
-// complex type. sum is false, and branches nil, for a decl with no {type
-// table}; true for one whose table selects zero types, every slot xs:error, or
-// two or more; and false for exactly one, which declaredType returns in place
-// of the {type definition}. A slot that does not resolve is an error, never a
+// selects, in the order and by the identity the package doc's "# Coverage"
+// states, each slot resolved through [xsd.Schema.ResolvedType] and xs:error
+// matched by name (errorTypeName); and sum, true exactly when "# Coverage"
+// gives decl a sealed interface over them. Its identity answers as xsd's
+// typeDefinitionsEquivalent does for any two slots of one table, whose
+// {default type definition} alone can be a substitution-group head's type:
+// xsd offers no identity for an anonymous complex type. sum is false, and
+// branches nil, for a decl with no {type table}; true for zero types or two
+// or more; and false for exactly one, which declaredType returns in place of
+// the {type definition}. A slot that does not resolve is an error, never a
 // decline: finalize resolves every {type definition} slot (src-resolve).
 func (e *emitter) tableSum(decl xsd.ElementDeclaration) (branches []tableBranch, sum bool, err error) {
 	table, ok := decl.TypeTable()
