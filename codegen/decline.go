@@ -79,7 +79,6 @@ const (
 	constructEmptyChoice
 	constructEmptiableChoice
 	constructComplexTypeAbstract
-	constructAssertions
 	constructMixedContent
 	constructOpenContent
 	constructVacuousParticle
@@ -100,7 +99,6 @@ var constructs = [...]struct{ name, format string }{
 	constructEmptyChoice:         {"choice with no {particles}", "%s whose choice has no {particles}"},
 	constructEmptiableChoice:     {"emptiable choice", "%s whose choice is emptiable: its alternative %d, %s, is emptiable"},
 	constructComplexTypeAbstract: {"complex type {abstract}", "%s with {abstract} true"},
-	constructAssertions:          {"{assertions}", "%s with {assertions}"},
 	constructMixedContent:        {"mixed content", "%s with mixed content"},
 	constructOpenContent:         {"{open content}", "%s with {open content}"},
 	constructVacuousParticle:     {"particle with {max occurs} 0", "a particle of %s with {max occurs} 0 in %s"},

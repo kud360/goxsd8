@@ -157,23 +157,27 @@
 //     §3.4.2.2 dcl.ctd.ctsc) and {attribute uses}, which hold the uses it
 //     inherits, all of an extension's base's and those of a restriction's
 //     base it neither overrides nor prohibits (§3.4.2.4 dcl.ctd.attuses), and
-//     has no Go-level relation to its base's: no embedding, no conversion. The
-//     type has no {assertions}, inherited ones included (§3.4.2.1
-//     dcl.ctd.common), and {abstract} false, and has one of three contents:
-//     empty content ({variety} empty, §3.4.1); simple content ({variety}
-//     simple), which gives a struct of the value field the next bullet states
-//     and the attribute fields; or element-only content (§3.4.2.3.3
-//     dcl.ctd.ctcc.common) that has no {open content} and whose {particle},
-//     which carries the <sequence>'s, <choice>'s or <all>'s own {min occurs}
-//     and {max occurs} (§3.9.1), or a <group ref>'s, whose {term} is the
-//     referenced definition's {model group} (§3.7.2), holds a sequence, a
-//     choice or an all group of element, wildcard (§3.10.2.1 dcl.wc.p) and
-//     model group particles, each model group particle, inline or a <group
-//     ref>, a sequence, choice or all group that holds the same: element
-//     particles are local element declarations, and <element ref> particles,
-//     whose {term} is the top-level declaration the ref names (§3.3.2.4). A
-//     sequence or an all group gives a struct, and so does empty content, with
-//     no particle field; a struct with no field is spelled struct{}.
+//     has no Go-level relation to its base's: no embedding, no conversion. Its
+//     {assertions}, inherited ones included (§3.4.2.1 dcl.ctd.common), are
+//     accepted and not represented. An assertion is one more condition an
+//     instance must satisfy and adds no content or attribute (§3.4.4.2
+//     cvc-complex-type clause 6). So the type emits exactly as it would
+//     without them, and enforcing them is the validator's. The type has
+//     {abstract} false and one of three contents: empty content ({variety}
+//     empty, §3.4.1); simple content ({variety} simple), which gives a struct
+//     of the value field the next bullet states and the attribute fields; or
+//     element-only content (§3.4.2.3.3 dcl.ctd.ctcc.common) that has no {open
+//     content} and whose {particle}, which carries the <sequence>'s,
+//     <choice>'s or <all>'s own {min occurs} and {max occurs} (§3.9.1), or a
+//     <group ref>'s, whose {term} is the referenced definition's {model group}
+//     (§3.7.2), holds a sequence, a choice or an all group of element,
+//     wildcard (§3.10.2.1 dcl.wc.p) and model group particles, each model
+//     group particle, inline or a <group ref>, a sequence, choice or all group
+//     that holds the same: element particles are local element declarations,
+//     and <element ref> particles, whose {term} is the top-level declaration
+//     the ref names (§3.3.2.4). A sequence or an all group gives a struct, and
+//     so does empty content, with no particle field; a struct with no field is
+//     spelled struct{}.
 //   - Simple content gives a struct whose first field, the value field, is
 //     named from the local name value and holds a special type's string, the
 //     atomic Go type, the slice, or the union's sealed interface its {simple
