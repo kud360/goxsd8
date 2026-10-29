@@ -3,6 +3,9 @@ package codegen
 import (
 	"errors"
 	"fmt"
+	"go/doc/comment"
+	"go/parser"
+	"go/token"
 	"io"
 	"os"
 	"path/filepath"
@@ -649,6 +652,64 @@ func TestConstructString(t *testing.T) {
 			t.Errorf("Construct{%d}.String() = %q, want %q", c, got, want)
 		}
 	}
+}
+
+// TestCoverageDeclinedList pins the package doc's "Declined today" list to
+// constructs (STYLE D3): its items are the names Construct.String returns for
+// constructs[1:], one item each, in index order.
+func TestCoverageDeclinedList(t *testing.T) {
+	file, err := parser.ParseFile(token.NewFileSet(), "doc.go", nil, parser.ParseComments|parser.PackageClauseOnly)
+	if err != nil {
+		t.Fatalf("parse doc.go: %v", err)
+	}
+	if file.Doc == nil {
+		t.Fatal("doc.go has no package comment")
+	}
+	blocks := new(comment.Parser).Parse(file.Doc.Text()).Content
+	label := slices.IndexFunc(blocks, func(b comment.Block) bool {
+		p, ok := b.(*comment.Paragraph)
+		return ok && strings.HasPrefix(plainText(p.Text), "Declined today")
+	})
+	if label < 0 || label+1 == len(blocks) {
+		t.Fatal(`package doc has no "Declined today" paragraph followed by a block`)
+	}
+	list, ok := blocks[label+1].(*comment.List)
+	if !ok {
+		t.Fatalf(`the block after "Declined today" is a %T, want a *comment.List`, blocks[label+1])
+	}
+	var got []string
+	for i, item := range list.Items {
+		if len(item.Content) != 1 {
+			t.Fatalf("Declined item %d holds %d blocks, want 1", i, len(item.Content))
+		}
+		p, ok := item.Content[0].(*comment.Paragraph)
+		if !ok {
+			t.Fatalf("Declined item %d is a %T, want a *comment.Paragraph", i, item.Content[0])
+		}
+		got = append(got, plainText(p.Text))
+	}
+	var want []string
+	for _, c := range constructs[1:] {
+		want = append(want, c.name)
+	}
+	if !slices.Equal(got, want) {
+		t.Errorf("Declined today list = %q, want the constructs names in index order %q", got, want)
+	}
+}
+
+// plainText is the text of texts' leading plain runs, followed, at the first
+// run that is not plain, by that run's type in angle brackets, so that a link
+// or other markup in a Declined item never compares equal to a name.
+func plainText(texts []comment.Text) string {
+	var b strings.Builder
+	for _, text := range texts {
+		plain, ok := text.(comment.Plain)
+		if !ok {
+			return b.String() + fmt.Sprintf("<%T>", text)
+		}
+		b.WriteString(string(plain))
+	}
+	return b.String()
 }
 
 // parsedDecline parses body as line 2 of the one schema document s.xsd, its
