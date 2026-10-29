@@ -1,0 +1,57 @@
+<?xml version="1.0"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+           xmlns:s="urn:s" targetNamespace="urn:s">
+  <!-- An <element ref> particle to a head whose ·substitution group·
+       (§3.3.6.4 key-eq) holds another declaration gets a field of the sealed
+       interface HSubstitutionGroup, one branch struct per declaration of the
+       group in declaration order: h itself (cos-equiv-derived-ok-rec clause
+       1), m1 of h's type by default (§3.3.2), m2 of a restriction of it, and
+       m3, a member of m1 (clause 2.2). holder reaches h before its own
+       position, so the interface, its branches and the members' types are
+       claimed there. many and opt pin the slice and the bare interface, the
+       interface emitted once. b blocks substitution (clause 2.1), so its group
+       is b alone and holder's B field holds b's own type; bm still gets its
+       own top-level type. -->
+  <xs:element name="holder">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element ref="s:h"/>
+        <xs:element ref="s:b"/>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="many">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element ref="s:h" maxOccurs="unbounded"/>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="opt">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element ref="s:h" minOccurs="0"/>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+  <xs:complexType name="t">
+    <xs:sequence>
+      <xs:element name="a" type="xs:string" minOccurs="0"/>
+    </xs:sequence>
+  </xs:complexType>
+  <xs:complexType name="r">
+    <xs:complexContent>
+      <xs:restriction base="s:t">
+        <xs:sequence>
+          <xs:element name="a" type="xs:string"/>
+        </xs:sequence>
+      </xs:restriction>
+    </xs:complexContent>
+  </xs:complexType>
+  <xs:element name="h" type="s:t"/>
+  <xs:element name="m1" substitutionGroup="s:h"/>
+  <xs:element name="m2" substitutionGroup="s:h" type="s:r"/>
+  <xs:element name="m3" substitutionGroup="s:m1"/>
+  <xs:element name="b" block="substitution" type="xs:string"/>
+  <xs:element name="bm" substitutionGroup="s:b" type="xs:string"/>
+</xs:schema>

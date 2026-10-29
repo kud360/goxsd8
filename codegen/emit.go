@@ -126,7 +126,9 @@ var (
 // group particle (occurrenceType) is one such type, reached at its particle's
 // place and emitted before the types its own particles reach, and a sealed
 // interface's branch structs follow it, each before the types its alternative
-// reaches.
+// reaches. The sealed interface over a substitution group (substitutionType)
+// is one such type too, reached at the first <element ref> particle to its
+// head, its branch structs following it.
 type emitter struct {
 	schema *xsd.Schema
 	types  *namer
@@ -181,6 +183,12 @@ type emitter struct {
 	// every basic member has its variant. It is a lookup index only and never
 	// iterated (STYLE D2).
 	unions map[*xsd.SimpleType]string
+	// substitutions holds the name of the sealed interface emitted for each
+	// substitution-group head an <element ref> particle names, keyed by the
+	// head's expanded name, so that each is emitted once per package;
+	// substitutionType stores an entry only once every branch has its type. It
+	// is a lookup index only and never iterated (STYLE D2).
+	substitutions map[xsd.QName]string
 	// raw holds the names claimed for the four raw-content structs, which
 	// anyTypeType emits once per package; its zero value means they are
 	// unclaimed and unemitted.
@@ -359,7 +367,7 @@ func (s scope) groupKey(site groupSite) nestedKey {
 // returns source only when it collects no decline, and err carries no
 // decline. base is the absolute directory the source is written into.
 func emit(schema *xsd.Schema, pkg, base string) (src []byte, declines []*DeclineError, err error) {
-	e := &emitter{schema: schema, types: newNamer(), base: base, emitted: map[nestedKey]emittedType{}, elements: map[xsd.QName]emittedType{}, acyclic: map[valueNode]struct{}{}, datatypes: map[xsd.QName]string{}, unions: map[*xsd.SimpleType]string{}}
+	e := &emitter{schema: schema, types: newNamer(), base: base, emitted: map[nestedKey]emittedType{}, elements: map[xsd.QName]emittedType{}, acyclic: map[valueNode]struct{}{}, datatypes: map[xsd.QName]string{}, unions: map[*xsd.SimpleType]string{}, substitutions: map[xsd.QName]string{}}
 	for _, decl := range schema.Elements() {
 		err := e.topLevel(decl)
 		if err == nil {
@@ -547,8 +555,6 @@ func (e *emitter) declaredType(decl xsd.ElementDeclaration) (xsd.TypeDefinition,
 		return nil, decline(decl.Loc(), constructElementNillable, subject)
 	case decl.Abstract():
 		return nil, decline(decl.Loc(), constructElementAbstract, subject)
-	case len(decl.SubstitutionGroupAffiliationNames()) > 0:
-		return nil, decline(decl.Loc(), constructSubstitutionGroup, subject)
 	}
 	if _, ok := decl.TypeTable(); ok {
 		return nil, decline(decl.Loc(), constructTypeTable, subject)
@@ -1407,12 +1413,14 @@ type fieldSpec struct {
 // Finalize, admits an all group particle only as a content {particle}, which
 // contentGroup and groupField handle, or exactly once among an all group's
 // {particles}, which spliced splices. The field of an <element ref> particle,
-// whose declaration is global, holds the type elementType returns for the
+// whose declaration is global, holds the type refType returns for the
 // referenced declaration, after declaredType has checked that declaration as
-// it checks every one; the walk does not enter that type's body, which
-// topLevel emits, but valueCycle checks it when the particle occurs exactly
-// once and the type is a complex type other than xs:anyType emitted as a
-// struct; valueCycle ends at once for a type whose content particle occurs
+// it checks every one: the sealed interface over its substitution group when
+// the group holds another declaration (substitutionSum), and the type
+// elementType returns for it otherwise; the walk does not enter that type's
+// body, which topLevel emits, but valueCycle checks it when the particle occurs
+// exactly once and the type is a complex type other than xs:anyType emitted as
+// a struct; valueCycle ends at once for a type whose content particle occurs
 // other than exactly once. A local declaration of type xs:anyType holds the
 // raw-content struct AnyType (anyTypeType). Neither a global declaration nor
 // xs:anyType ever reaches nestedType.
@@ -1507,12 +1515,18 @@ func wildcardTerm(term xsd.TermOrRef) bool {
 
 // refType returns the type of the field of an <element ref> particle to the
 // top-level element declaration decl, whose {type definition} declaredType
-// resolved to td: elementType's. When value is true, the particle occurring
-// exactly once, and that type is a struct emitted for a complex td other than
-// xs:anyType, valueCycle walks td's body from the particles whose chain is
-// chain, as it does whether or not decl's type was emitted earlier. A td of
-// xs:anyType gets no walk: AnyType reaches itself only through slices.
+// resolved to td: the sealed interface substitutionType emits when
+// substitutionSum returns a group for decl, and elementType's otherwise. When
+// value is true, the particle occurring exactly once, and that type is a struct
+// emitted for a complex td other than xs:anyType, valueCycle walks td's body
+// from the particles whose chain is chain, as it does whether or not decl's
+// type was emitted earlier. A td of xs:anyType gets no walk: AnyType reaches
+// itself only through slices. Nor does the interface: no field holds it as a
+// struct value.
 func (e *emitter) refType(chain []valueNode, value bool, decl xsd.ElementDeclaration, td xsd.TypeDefinition) (emittedType, error) {
+	if group := e.substitutionSum(decl); group != nil {
+		return e.substitutionType(decl, group)
+	}
 	typ, err := e.elementType(decl, td)
 	if err != nil {
 		return emittedType{}, err
@@ -1522,6 +1536,67 @@ func (e *emitter) refType(chain []valueNode, value bool, decl xsd.ElementDeclara
 		return typ, nil
 	}
 	return typ, e.valueCycle(chain, decl, structScope(scope{}, decl, ct), ct)
+}
+
+// substitutionSum returns the declarations a field over the element
+// declaration decl holds a sum over: decl's ·substitution group· (§3.3.6.4
+// key-eq, [xsd.Schema.SubstitutionGroup]) when decl is top-level and the group
+// holds a declaration other than decl, and nil otherwise. A local declaration
+// heads no substitution group, so a field over one holds only it (cvc-accept
+// clause 2.3.2), and a head with no affiliate, one whose {disallowed
+// substitutions} contains substitution (cos-equiv-derived-ok-rec clause 2.1),
+// or one blocking each affiliate's ·derivation· (clause 2.3), has itself alone
+// in its group (clause 1). The group is the spec's, {abstract} playing no part:
+// an abstract declaration in it declines at its own branch (declaredType). It
+// is the one test refType and valueCycle both read.
+func (e *emitter) substitutionSum(decl xsd.ElementDeclaration) []xsd.ElementDeclaration {
+	if decl.ScopeVariety() != xsd.ScopeGlobal {
+		return nil
+	}
+	group := e.schema.SubstitutionGroup(decl.Name())
+	if len(group) < 2 {
+		return nil
+	}
+	return group
+}
+
+// substitutionType returns the sealed interface a field over an <element ref>
+// particle to the head declaration head holds, group being substitutionSum's
+// for head, emitting it once per package in the package doc's "# Coverage"
+// shape: the interface, named from head's local name plus SubstitutionGroup,
+// then one branch struct per declaration of group in group order, named from
+// the interface's name plus the declaration's local name and holding one field,
+// named from that local name, of the type elementType returns for it. Each
+// declaration is checked by declaredType and its type claimed by elementType
+// at its branch, after the branch's name, so the group declines exactly when
+// one of its declarations does, by that declaration's construct, at the first
+// declining one in group order: the same DeclineError its own topLevel turn
+// returns. Each branch implements the interface's method; the declarations'
+// own types carry no method, since one may be sealed or sit in several heads'
+// groups. It stores the interface's name in e.substitutions only once every
+// branch is emitted.
+func (e *emitter) substitutionType(head xsd.ElementDeclaration, group []xsd.ElementDeclaration) (emittedType, error) {
+	if name, ok := e.substitutions[head.Name()]; ok {
+		return emittedType{name: name, sealed: true}, nil
+	}
+	name := e.types.claim(head.Name().Local, "SubstitutionGroup")
+	marker := "is" + name
+	e.decls = append(e.decls, header(name, "the substitution group of "+e.elementFrom(head))+fmt.Sprintf("type %s interface {\n\t%s()\n}\n", name, marker))
+	for _, member := range group {
+		branch := e.types.claim(name, member.Name().Local)
+		td, err := e.declaredType(member)
+		if err != nil {
+			return emittedType{}, err
+		}
+		typ, err := e.elementType(member, td)
+		if err != nil {
+			return emittedType{}, err
+		}
+		fields := []fieldSpec{{local: member.Name().Local, goType: typ.name}}
+		e.decls = append(e.decls, header(branch, e.elementFrom(member))+structDecl(branch, fields)+fmt.Sprintf("\nfunc (%s) %s() {}\n", branch, marker))
+	}
+	e.substitutions[head.Name()] = name
+	return emittedType{name: name, sealed: true}, nil
 }
 
 // attributeField returns the field of attribute use u (§3.5.1) of the complex
@@ -1799,22 +1874,23 @@ func reacher(decl xsd.ElementDeclaration) string {
 // valueCycle walks, through value fields only, the particles of the complex type t that the
 // element declaration decl, local or the top-level one an <element ref> particle names, reaches
 // by a value field from particles whose chain is chain, applying valueChain at each field; t's
-// struct's scope is nested (structScope), and t is named to the checks it calls as decl's
-// elementOrigin or localOrigin names it. It walks the particles spliced returns for t's content
-// particle's group, a <group ref> content particle followed by contentGroup, the list particleFields gives
-// fields for, so a sequence or an all group spliced into its parent, inline or through a <group ref>, is a
-// value edge that pushes no node, and every other nested model group particle (modelGroupTerm) is a leaf,
-// passed before elementTerm: its field holds a slice, a pointer to its occurrence struct, or a bare sealed
-// interface (groupField), never a value. A choice t, a t whose content particle occurs other than exactly
-// once, and a step whose first node (valueNodes) is in e.acyclic, end the walk, and it never steps to an
-// element of type xs:anyType, whose AnyType reaches itself only through slices. A wildcard particle
-// (wildcardTerm) is a leaf, passed before elementTerm: its field holds AnyElement, which reaches AnyType,
-// which reaches itself only through the slice Children. It reads the schema, never e.emitted or e.elements,
-// so a type the emitting walk shares, and the type of a declaration an <element ref> particle names, is
-// walked again here unless e.acyclic holds its step's first node; that node joins e.acyclic once the walk of
-// t's particles reaches the end, and a step that pushes none, a local decl of an anonymous t that a complex
-// type declares, is never memoized. It returns only a struct-value recursion: every other failure on its
-// path ends that path, since the emitting walk meets it.
+// struct's scope is nested (structScope), and t is named to the checks it calls as decl's elementOrigin or
+// localOrigin names it. It walks the particles spliced returns for t's content particle's group, a <group
+// ref> content particle followed by contentGroup, the list particleFields gives fields for, so a sequence or
+// an all group spliced into its parent, inline or through a <group ref>, is a value edge that pushes no node,
+// and every other nested model group particle (modelGroupTerm) is a leaf, passed before elementTerm: its
+// field holds a slice, a pointer to its occurrence struct, or a bare sealed interface (groupField), never a
+// value. A choice t, a t whose content particle occurs other than exactly once, and a step whose first node
+// (valueNodes) is in e.acyclic, end the walk, and it never steps to an element of type xs:anyType, whose
+// AnyType reaches itself only through slices. A wildcard particle (wildcardTerm) is a leaf, passed before
+// elementTerm: its field holds AnyElement, which reaches AnyType, which reaches itself only through the slice
+// Children. So is an <element ref> particle to a head substitutionSum returns a group for, passed after
+// elementTerm: its field holds the group's sealed interface (substitutionType). It reads the schema, never
+// e.emitted, e.elements or e.substitutions, so a type the emitting walk shares, and the type of a declaration
+// an <element ref> particle names, is walked again here unless e.acyclic holds its step's first node; that
+// node joins e.acyclic once the walk of t's particles reaches the end, and a step that pushes none, a local
+// decl of an anonymous t that a complex type declares, is never memoized. It returns only a struct-value
+// recursion: every other failure on its path ends that path, since the emitting walk meets it.
 func (e *emitter) valueCycle(chain []valueNode, decl xsd.ElementDeclaration, nested scope, t xsd.ComplexType) error {
 	subject := e.localOrigin(decl, nested, t).subject
 	if decl.ScopeVariety() == xsd.ScopeGlobal {
@@ -1851,7 +1927,7 @@ func (e *emitter) valueCycle(chain []valueNode, decl xsd.ElementDeclaration, nes
 			continue
 		}
 		el, err := e.elementTerm(subject, t.Loc(), p.Term())
-		if err != nil {
+		if err != nil || e.substitutionSum(el) != nil {
 			continue
 		}
 		td, err := e.declaredType(el)
@@ -1890,9 +1966,10 @@ func (e *emitter) elementTerm(subject string, loc xsderr.Loc, term xsd.TermOrRef
 	}
 	switch term := term.(type) {
 	case xsd.ElementDeclarationRef:
-		// No substitution check: every member of the named declaration's
-		// substitution group is top-level, so emit's walk of every top-level
-		// declaration declines it in declaredType.
+		// The named top-level declaration alone: the declarations an instance
+		// may carry in its place are its substitution group (cvc-accept clause
+		// 2.3.2), which field types the particle over through refType's
+		// substitutionSum. A head blocking substitution admits only itself.
 		decl, ok := e.schema.Element(term.Name)
 		if !ok {
 			return xsd.ElementDeclaration{}, fmt.Errorf("%s at %s: its <element ref> particle to %s does not resolve", subject, loc, term.Name)
