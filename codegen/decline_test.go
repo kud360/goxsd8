@@ -150,15 +150,13 @@ func TestGenerateDeclines(t *testing.T) {
 			"with {open content}", constructOpenContent},
 		{"default open content", `<xs:defaultOpenContent><xs:any/></xs:defaultOpenContent><xs:element name="e"><xs:complexType><xs:sequence><xs:element name="a" ` + str + `/></xs:sequence></xs:complexType></xs:element>`,
 			"with {open content}", constructOpenContent},
-		// The three rows below carry a {value constraint} beside the declining
+		// The two rows below carry a {value constraint} beside the declining
 		// property, so they pin that the value constraint, accepted, is not
 		// checked ahead of it.
 		{"nillable", `<xs:element name="e" nillable="true" default="d" ` + str + `/>`,
 			"element e with {nillable} true", constructElementNillable},
 		{"abstract element", `<xs:element name="e" abstract="true" fixed="f" ` + str + `/>`,
 			"element e with {abstract} true", constructElementAbstract},
-		{"type table", `<xs:element name="e" default="d" ` + str + `><xs:alternative test="true()" type="xs:token"/></xs:element>`,
-			"element e with a {type table}", constructTypeTable},
 		// An abstract head declines at its own turn, declared before its
 		// member, and the decline is charged to the head: membership in an
 		// abstract head's substitution group declines nothing (§3.3.6.4
@@ -305,6 +303,22 @@ func TestGenerateDeclines(t *testing.T) {
 			"complex type (anonymous) of element l of element e whose choice's alternative 2, a sequence model group particle, has an emptiable model group at ", constructEmptiableGroupAlternative},
 		{"branch struct", `<xs:element name="e"><xs:complexType><xs:choice><xs:element name="l"><xs:complexType mixed="true"><xs:sequence><xs:element name="a" ` + str + `/></xs:sequence></xs:complexType></xs:element></xs:choice></xs:complexType></xs:element>`,
 			"complex type (anonymous) of element l of element e with mixed content at ", constructMixedContent},
+		// The {type table} rows pin that a decline in a type the table selects
+		// names that type's slot: an anonymous complex type by its slot and
+		// the place of the declaration, a simple type by its slot, charged to
+		// the declaration.
+		{"type table anonymous alternative", `<xs:element name="e"><xs:alternative test="@k"><xs:complexType mixed="true"><xs:sequence><xs:element name="a" ` + str + `/></xs:sequence></xs:complexType></xs:alternative><xs:alternative type="xs:string"/></xs:element>`,
+			"complex type (anonymous) of {type table} alternative 1 of element e with mixed content at ", constructMixedContent},
+		{"type table anonymous default", `<xs:element name="e"><xs:alternative test="@k" type="xs:string"/><xs:alternative><xs:complexType><xs:sequence><xs:element name="l"><xs:complexType mixed="true"><xs:sequence><xs:element name="a" ` + str + `/></xs:sequence></xs:complexType></xs:element></xs:sequence></xs:complexType></xs:alternative></xs:element>`,
+			"complex type (anonymous) of element l of {default type definition} of element e with mixed content at ", constructMixedContent},
+		{"type table simple alternative", `<xs:element name="e"><xs:alternative test="@k" type="xs:precisionDecimal"/><xs:alternative type="xs:string"/></xs:element>`,
+			"{type table} alternative 1 of element e with {type definition} {http://www.w3.org/2001/XMLSchema}precisionDecimal, whose {primitive type definition} is {http://www.w3.org/2001/XMLSchema}precisionDecimal at s.xsd:2:1 ", constructUncoveredPrimitive},
+		{"type table local", `<xs:complexType name="c"><xs:sequence><xs:element name="x"><xs:alternative test="@k"><xs:complexType mixed="true"><xs:sequence><xs:element name="a" ` + str + `/></xs:sequence></xs:complexType></xs:alternative><xs:alternative type="xs:string"/></xs:element></xs:sequence></xs:complexType><xs:element name="e" type="c"/>`,
+			"complex type (anonymous) of {type table} alternative 1 of element x of complex type c with mixed content at ", constructMixedContent},
+		// h's complex alternative is checked where e's ref meets it, ahead of
+		// z's decline.
+		{"element ref to type table outside the slice", `<xs:element name="e"><xs:complexType><xs:sequence><xs:element ref="h"/><xs:element name="z" type="xs:precisionDecimal"/></xs:sequence></xs:complexType></xs:element><xs:element name="h"><xs:alternative test="@k"><xs:complexType mixed="true"><xs:sequence><xs:element name="a" ` + str + `/></xs:sequence></xs:complexType></xs:alternative><xs:alternative type="xs:string"/></xs:element>`,
+			"complex type (anonymous) of {type table} alternative 1 of element h with mixed content at ", constructMixedContent},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -398,6 +412,31 @@ func TestGenerateDeclinesLocalAnonymousPlace(t *testing.T) {
 				t.Errorf("Generate's elements =\n%q\nwant\n%q", got, tt.want)
 			}
 		})
+	}
+}
+
+// TestGenerateDeclinesTypeTableSimpleAtOwnTurn pins Generate's doc on a ref
+// to a declaration given a {type table}'s interface: the simple types the
+// table selects are checked at the declaration's own turn, not where the ref
+// is met, so e's turn returns z's decline, after the ref to h, and h's turn
+// returns its alternative's.
+func TestGenerateDeclinesTypeTableSimpleAtOwnTurn(t *testing.T) {
+	const body = `<xs:element name="e"><xs:complexType><xs:sequence><xs:element ref="h"/><xs:element name="z" type="xs:precisionDecimal"/></xs:sequence></xs:complexType></xs:element>` +
+		`<xs:element name="h"><xs:alternative test="@k" type="xs:precisionDecimal"/><xs:alternative type="xs:string"/></xs:element>`
+	const tail = ", whose {primitive type definition} is {http://www.w3.org/2001/XMLSchema}precisionDecimal at s.xsd:2:"
+	schema := parseString(t, "<xs:schema xmlns:xs=\"http://www.w3.org/2001/XMLSchema\">\n"+body+"\n</xs:schema>\n")
+	errs := elements(t, Generate([]Target{{Schema: schema, Dir: filepath.Join(t.TempDir(), "out"), Package: "p"}}))
+	want := []string{
+		"codegen: target 0: element z with {type definition} {http://www.w3.org/2001/XMLSchema}precisionDecimal" + tail,
+		"codegen: target 0: {type table} alternative 1 of element h with {type definition} {http://www.w3.org/2001/XMLSchema}precisionDecimal" + tail,
+	}
+	if len(errs) != len(want) {
+		t.Fatalf("Generate returned %d elements %q, want %d", len(errs), errs, len(want))
+	}
+	for i, err := range errs {
+		if !strings.HasPrefix(err.Error(), want[i]) {
+			t.Errorf("element %d = %q, want the prefix %q", i, err, want[i])
+		}
 	}
 }
 
