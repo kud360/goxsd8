@@ -99,15 +99,11 @@ func TestGenerateDeclines(t *testing.T) {
 			"local element e reaching complex type t again through elements that each occur exactly once", constructValueCycle},
 		// In the ref rows below, h is declared after e. Where a row places a
 		// later decline after the ref, the ref's check is shown to come
-		// first. The substitution row declines at the member's own turn.
+		// first.
 		{"element ref to nillable", `<xs:element name="e"><xs:complexType><xs:sequence><xs:element ref="h"/></xs:sequence></xs:complexType></xs:element><xs:element name="z" type="xs:QName"/><xs:element name="h" nillable="true" ` + str + `/>`,
 			"element h with {nillable} true at s.xsd:2:154 ", constructElementNillable},
 		{"element ref in choice to nillable", `<xs:element name="e"><xs:complexType><xs:choice><xs:element name="a" ` + str + `/><xs:element ref="h"/></xs:choice></xs:complexType></xs:element><xs:element name="h" nillable="true" ` + str + `/>`,
 			"element h with {nillable} true", constructElementNillable},
-		// A member of h's substitution group is top-level, and its own
-		// declaration declines.
-		{"element ref to substitution group head", `<xs:element name="e"><xs:complexType><xs:sequence><xs:element ref="h"/></xs:sequence></xs:complexType></xs:element><xs:element name="h" ` + str + `/><xs:element name="m" substitutionGroup="h" ` + str + `/>`,
-			"element m with {substitution group affiliations}", constructSubstitutionGroup},
 		// h's type is checked where e's ref meets it, ahead of z's decline.
 		{"element ref to complex type outside the slice", `<xs:element name="e"><xs:complexType><xs:sequence><xs:element ref="h"/><xs:element name="z" type="xs:QName"/></xs:sequence></xs:complexType></xs:element><xs:element name="h"><xs:complexType mixed="true"><xs:sequence><xs:element name="a" ` + str + `/></xs:sequence></xs:complexType></xs:element>`,
 			"complex type (anonymous) of element h with mixed content", constructMixedContent},
@@ -165,7 +161,7 @@ func TestGenerateDeclines(t *testing.T) {
 			"complex type c of element e whose content is a choice, with {attribute uses}", constructChoiceAttributes},
 		{"restriction with inherited assertion", `<xs:complexType name="b"><xs:sequence><xs:element name="a" ` + str + `/></xs:sequence><xs:assert test="true()"/></xs:complexType><xs:complexType name="c"><xs:complexContent><xs:restriction base="b"><xs:sequence><xs:element name="a" ` + str + `/></xs:sequence></xs:restriction></xs:complexContent></xs:complexType><xs:element name="e" type="c"/>`,
 			"complex type c of element e with {assertions}", constructAssertions},
-		// The four rows below carry a {value constraint} beside the declining
+		// The three rows below carry a {value constraint} beside the declining
 		// property, so they pin that the value constraint, accepted, is not
 		// checked ahead of it.
 		{"nillable", `<xs:element name="e" nillable="true" default="d" ` + str + `/>`,
@@ -174,8 +170,12 @@ func TestGenerateDeclines(t *testing.T) {
 			"element e with {abstract} true", constructElementAbstract},
 		{"type table", `<xs:element name="e" default="d" ` + str + `><xs:alternative test="true()" type="xs:token"/></xs:element>`,
 			"element e with a {type table}", constructTypeTable},
-		{"substitution group", `<xs:element name="h" ` + str + `/><xs:element name="e" substitutionGroup="h" fixed="f" ` + str + `/>`,
-			"element e with {substitution group affiliations}", constructSubstitutionGroup},
+		// An abstract head declines at its own turn, declared before its
+		// member, and the decline is charged to the head: membership in an
+		// abstract head's substitution group declines nothing (§3.3.6.4
+		// key-eq; cvc-elt clause 2 reads the declaration's own {abstract}).
+		{"abstract substitution group head", `<xs:element name="h" abstract="true" ` + str + `/><xs:element name="m" substitutionGroup="h" ` + str + `/>`,
+			"element h with {abstract} true at s.xsd:2:1 ", constructElementAbstract},
 		{"assertion", `<xs:element name="e"><xs:complexType><xs:sequence><xs:element name="a" ` + str + `/></xs:sequence><xs:assert test="true()"/></xs:complexType></xs:element>`,
 			"with {assertions}", constructAssertions},
 		{"abstract complex type", `<xs:complexType name="c" abstract="true"><xs:sequence><xs:element name="a" ` + str + `/></xs:sequence></xs:complexType><xs:element name="e" type="c"/>`,

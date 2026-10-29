@@ -9,15 +9,19 @@ package xsd
 // (elementconsistent.go). It was lifted out of wildcardadmit.go, whose subject is
 // wildcards, once the second and third consumers appeared (STYLE T4/T5).
 //
-// It exposes ONE predicate, and that predicate is EXACT: Substitution Group OK
-// (Transitive) (§3.3.6.3, cos-equiv-derived-ok-rec) is decided in full, clause 1
-// (same declaration), clause 2.1 ({disallowed substitutions}), clause 2.2 (the
-// {substitution group affiliations} chain) and clause 2.3 (the ·derivation·
-// blocking test) alike. Consumers therefore need no approximation direction: the
-// answer is the spec's answer whichever polarity the calling constraint reads it
-// in — one that DISALLOWS a name on membership (cvc-wildcard clause 3) and one
-// that FIRES a schema component constraint on it (cos-nonambig,
-// cos-element-consistent) both get the same true relation.
+// It decides membership with ONE predicate, inSubstitutionGroupOf; the exported
+// SubstitutionGroup enumerates a head's group with it, for package codegen and
+// for the two finalize consumers that need the whole group rather than one
+// name's membership (elementconsistent.go, contentrestricts.go). The predicate
+// is EXACT: Substitution Group OK (Transitive) (§3.3.6.3,
+// cos-equiv-derived-ok-rec) is decided in full, clause 1 (same declaration),
+// clause 2.1 ({disallowed substitutions}), clause 2.2 (the {substitution group
+// affiliations} chain) and clause 2.3 (the ·derivation· blocking test) alike.
+// Consumers therefore need no approximation direction: the answer is the spec's
+// answer whichever polarity the calling constraint reads it in — one that
+// DISALLOWS a name on membership (cvc-wildcard clause 3) and one that FIRES a
+// schema component constraint on it (cos-nonambig, cos-element-consistent) both
+// get the same true relation.
 //
 // Two walks run here, over two different edge kinds, and each terminates on its
 // own licence (PRINCIPLES 9, no runtime cycle checks):
@@ -35,6 +39,31 @@ package xsd
 //     component, so a cycle is unconstructible (simpletype.go records
 //     st-props-correct clause 2 as a no-op for that reason) and the chain ends
 //     at xs:anySimpleType, whose base is nil.
+
+// SubstitutionGroup returns the ·substitution group· of the top-level element
+// declaration named head (§3.3.6.4): every declaration in {element declarations}
+// that is ·substitutable· for it by Substitution Group OK (Transitive)
+// (§3.3.6.3), clauses 1 through 2.3 decided in full. head itself is always a
+// member (clause 1), so the result holds no other declaration when none
+// affiliates with head, when head's {disallowed substitutions} contains
+// substitution (clause 2.1), or when the ·derivation· of each affiliate's {type
+// definition} is blocked (clause 2.3). {abstract} plays no part. The
+// declarations are in the order Elements returns them; the slice is fresh and
+// the declarations are shared with s and immutable. It is nil exactly when s
+// declares no top-level element named head: a local declaration heads no
+// substitution group. It is exported for package codegen, which types a field
+// over an <element ref> to head as a sum over this group.
+func (s *Schema) SubstitutionGroup(head QName) []ElementDeclaration {
+	// The scan is over the document-order slice, never elementIndex (STYLE D2);
+	// each candidate's membership is the one exact predicate below (STYLE T4).
+	var group []ElementDeclaration
+	for _, e := range s.elements {
+		if s.inSubstitutionGroupOf(e.Name(), head) {
+			group = append(group, e)
+		}
+	}
+	return group
+}
 
 // inSubstitutionGroupOf reports whether the element declaration named member is
 // in the ·substitution group· of the one named head (§3.3.6.4, key-eq: "An

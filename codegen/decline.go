@@ -73,7 +73,6 @@ type construct uint8
 const (
 	constructElementNillable construct = iota + 1
 	constructElementAbstract
-	constructSubstitutionGroup
 	constructTypeTable
 	constructAbsentVariety
 	constructNoPrimitive
@@ -95,7 +94,6 @@ const (
 var constructs = [...]struct{ name, format string }{
 	constructElementNillable:     {"element {nillable}", "%s with {nillable} true"},
 	constructElementAbstract:     {"element {abstract}", "%s with {abstract} true"},
-	constructSubstitutionGroup:   {"{substitution group affiliations}", "%s with {substitution group affiliations}"},
 	constructTypeTable:           {"{type table}", "%s with a {type table}"},
 	constructAbsentVariety:       {"absent {variety}", "%s, of absent {variety}"},
 	constructNoPrimitive:         {"no {primitive type definition}", "%s, with no {primitive type definition}"},
