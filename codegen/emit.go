@@ -189,7 +189,7 @@ type emitter struct {
 
 // rawNames is the names claimed for the four raw-content structs "# Coverage"
 // gives an element of type xs:anyType (§3.4.7 any-type-itself), a wildcard
-// particle of a sequence, and an {attribute wildcard} (§3.4.2.5
+// particle of a sequence or a choice, and an {attribute wildcard} (§3.4.2.5
 // dcl.ctd.anyatt), in claim order.
 type rawNames struct {
 	anyType, attribute, child, element string
