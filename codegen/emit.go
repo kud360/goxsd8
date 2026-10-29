@@ -967,12 +967,10 @@ func typeName(t xsd.TypeDefinition) string {
 
 // shape checks the complex type t against the package doc's "# Coverage"
 // shape, naming it in declines by o's subject, and returns the type it emits
-// as name — a sealed interface for a choice content particle that occurs
-// exactly once and whose one occurrence is not emptiable (termEmptiable),
-// when t has no {attribute uses} and no {attribute wildcard} (§3.4.2.4
-// dcl.ctd.attuses, §3.4.2.5 dcl.ctd.anyatt), read from the finalized
-// component, inherited ones included, and a struct otherwise, whose fields
-// then hold the attributes beside the choice's — and its content particle
+// as name, sealed exactly when "# Coverage" gives the choice t's content
+// particle holds as t itself — it reads t's {attribute uses} and {attribute
+// wildcard} from the finalized component, so inherited ones count, before
+// asking termEmptiable about the choice — and its content particle
 // (contentGroup), nil for empty content. It emits nothing: body does, so that
 // a caller can store the type in e.emitted before its body is walked.
 func (e *emitter) shape(name string, o origin, t xsd.ComplexType) (emittedType, *groupParticle, error) {
