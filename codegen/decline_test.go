@@ -55,25 +55,20 @@ func TestGenerateDeclines(t *testing.T) {
 			"complex type (anonymous) of element e whose choice has no {particles}", constructEmptyChoice},
 		{"choice of vacuous elements", `<xs:element name="e"><xs:complexType><xs:choice><xs:element name="a" minOccurs="0" maxOccurs="0" ` + str + `/></xs:choice></xs:complexType></xs:element>`,
 			"complex type (anonymous) of element e whose choice has no {particles}", constructEmptyChoice},
-		{"emptiable choice", `<xs:element name="e"><xs:complexType><xs:choice><xs:element name="a" ` + str + `/><xs:element name="b" minOccurs="0" ` + str + `/></xs:choice></xs:complexType></xs:element>`,
-			"complex type (anonymous) of element e whose choice is emptiable: its alternative 2, element b, is emptiable", constructEmptiableChoice},
-		// A repeated choice reads its alternatives alone for the emptiable gate,
-		// its own {min occurs} 0 notwithstanding (cos-group-emptiable).
-		{"repeated emptiable choice", `<xs:element name="e"><xs:complexType><xs:choice minOccurs="0" maxOccurs="unbounded"><xs:element name="a" ` + str + `/><xs:element name="b" minOccurs="0" ` + str + `/></xs:choice></xs:complexType></xs:element>`,
-			"complex type (anonymous) of element e whose choice is emptiable: its alternative 2, element b, is emptiable", constructEmptiableChoice},
-		// A model group alternative occurring exactly once is emptiable by
-		// cos-group-emptiable clause 2: its effective total range has minimum
-		// 0 (cos-seq-range, cos-choice-range), inline or through a <group ref>.
+		// A model group alternative whose term is emptiable (cos-group-emptiable
+		// clause 2: its effective total range has minimum 0 at {min occurs} 1,
+		// cos-seq-range, cos-choice-range) declines, inline or through a <group
+		// ref>: a branch over it would hold the empty match.
 		{"emptiable group in choice", `<xs:element name="e"><xs:complexType><xs:choice><xs:element name="a" ` + str + `/><xs:sequence><xs:element name="b" minOccurs="0" ` + str + `/></xs:sequence></xs:choice></xs:complexType></xs:element>`,
-			"complex type (anonymous) of element e whose choice is emptiable: its alternative 2, a sequence model group particle, is emptiable", constructEmptiableChoice},
-		// The emptiable gate reads a wildcard alternative as it reads an
-		// element one, naming it by alternative's noun.
-		{"emptiable wildcard in choice", `<xs:element name="e"><xs:complexType><xs:choice><xs:element name="a" ` + str + `/><xs:any minOccurs="0"/></xs:choice></xs:complexType></xs:element>`,
-			"complex type (anonymous) of element e whose choice is emptiable: its alternative 2, a wildcard particle, is emptiable", constructEmptiableChoice},
+			"complex type (anonymous) of element e whose choice's alternative 2, a sequence model group particle, has an emptiable model group", constructEmptiableGroupAlternative},
 		{"emptiable choice in choice", `<xs:element name="e"><xs:complexType><xs:choice><xs:element name="a" ` + str + `/><xs:choice><xs:element name="b" ` + str + `/><xs:element name="c" minOccurs="0" ` + str + `/></xs:choice></xs:choice></xs:complexType></xs:element>`,
-			"complex type (anonymous) of element e whose choice is emptiable: its alternative 2, a choice model group particle, is emptiable", constructEmptiableChoice},
+			"complex type (anonymous) of element e whose choice's alternative 2, a choice model group particle, has an emptiable model group", constructEmptiableGroupAlternative},
 		{"emptiable group ref in choice", `<xs:group name="g"><xs:sequence><xs:element name="b" minOccurs="0" ` + str + `/></xs:sequence></xs:group><xs:element name="e"><xs:complexType><xs:choice><xs:element name="a" ` + str + `/><xs:group ref="g"/></xs:choice></xs:complexType></xs:element>`,
-			"complex type (anonymous) of element e whose choice is emptiable: its alternative 2, a sequence model group particle, is emptiable", constructEmptiableChoice},
+			"complex type (anonymous) of element e whose choice's alternative 2, a sequence model group particle, has an emptiable model group", constructEmptiableGroupAlternative},
+		// The alternative's own {min occurs} 0 does not lift the decline: the
+		// gate reads the term.
+		{"optional emptiable group in choice", `<xs:element name="e"><xs:complexType><xs:choice><xs:element name="a" ` + str + `/><xs:sequence minOccurs="0"><xs:element name="b" minOccurs="0" ` + str + `/></xs:sequence></xs:choice></xs:complexType></xs:element>`,
+			"complex type (anonymous) of element e whose choice's alternative 2, a sequence model group particle, has an emptiable model group", constructEmptiableGroupAlternative},
 		{"mixed choice", `<xs:element name="e"><xs:complexType mixed="true"><xs:choice><xs:element name="a" ` + str + `/></xs:choice></xs:complexType></xs:element>`,
 			"with mixed content", constructMixedContent},
 		{"open content choice", `<xs:element name="e"><xs:complexType><xs:openContent><xs:any/></xs:openContent><xs:choice><xs:element name="a" ` + str + `/></xs:choice></xs:complexType></xs:element>`,
@@ -86,10 +81,10 @@ func TestGenerateDeclines(t *testing.T) {
 		{"choice alternative type", `<xs:element name="e"><xs:complexType><xs:choice><xs:element name="a" type="xs:precisionDecimal"/></xs:choice></xs:complexType></xs:element>`,
 			"element a with {type definition} {http://www.w3.org/2001/XMLSchema}precisionDecimal, whose {primitive type definition} is", constructUncoveredPrimitive},
 		// A <group ref> content particle is checked as its referenced group
-		// would be inline: an emptiable choice declines whatever the ref's
-		// occurs.
-		{"emptiable choice group ref content", `<xs:group name="g"><xs:choice><xs:element name="a" ` + str + `/><xs:element name="b" minOccurs="0" ` + str + `/></xs:choice></xs:group><xs:element name="e"><xs:complexType><xs:group ref="g" maxOccurs="1"/></xs:complexType></xs:element>`,
-			"complex type (anonymous) of element e whose choice is emptiable: its alternative 2, element b, is emptiable", constructEmptiableChoice},
+		// would be inline: an emptiable group alternative declines whatever the
+		// ref's occurs.
+		{"emptiable group alternative group ref content", `<xs:group name="g"><xs:choice><xs:element name="a" ` + str + `/><xs:sequence><xs:element name="b" minOccurs="0" ` + str + `/></xs:sequence></xs:choice></xs:group><xs:element name="e"><xs:complexType><xs:group ref="g" maxOccurs="1"/></xs:complexType></xs:element>`,
+			"complex type (anonymous) of element e whose choice's alternative 2, a sequence model group particle, has an emptiable model group", constructEmptiableGroupAlternative},
 		// The group-cycle rows reach e again through a <group ref> to the
 		// group declaring it (legal: mg-props-correct clause 2 bounds group
 		// containment alone), as e's content particle and inside an inline
@@ -278,10 +273,10 @@ func TestGenerateDeclines(t *testing.T) {
 		// the cycle v, w through.
 		{"value cycle behind a pointer", `<xs:complexType name="x"><xs:sequence><xs:element name="p" type="z" minOccurs="0"/><xs:element name="v" type="z"/></xs:sequence></xs:complexType><xs:complexType name="z"><xs:sequence><xs:element name="w" type="x"/></xs:sequence></xs:complexType><xs:element name="e"><xs:complexType><xs:sequence><xs:element name="a" type="x"/></xs:sequence></xs:complexType></xs:element>`,
 			"local element v reaching complex type z again through elements that each occur exactly once", constructValueCycle},
-		// The emptiable choice under p precedes the cycle v closes in particle
-		// order, so it is the decline returned.
-		{"value cycle after an earlier decline", `<xs:complexType name="c"><xs:sequence><xs:element name="p" minOccurs="0"><xs:complexType><xs:choice><xs:any minOccurs="0"/></xs:choice></xs:complexType></xs:element><xs:element name="v" type="c"/></xs:sequence></xs:complexType><xs:element name="e"><xs:complexType><xs:sequence><xs:element name="l" type="c"/></xs:sequence></xs:complexType></xs:element>`,
-			"complex type (anonymous) of element p of complex type c whose choice is emptiable: its alternative 1, a wildcard particle, is emptiable at ", constructEmptiableChoice},
+		// The emptiable group alternative under p precedes the cycle v closes
+		// in particle order, so it is the decline returned.
+		{"value cycle after an earlier decline", `<xs:complexType name="c"><xs:sequence><xs:element name="p" minOccurs="0"><xs:complexType><xs:choice><xs:sequence><xs:any minOccurs="0"/></xs:sequence></xs:choice></xs:complexType></xs:element><xs:element name="v" type="c"/></xs:sequence></xs:complexType><xs:element name="e"><xs:complexType><xs:sequence><xs:element name="l" type="c"/></xs:sequence></xs:complexType></xs:element>`,
+			"complex type (anonymous) of element p of complex type c whose choice's alternative 1, a sequence model group particle, has an emptiable model group at ", constructEmptiableGroupAlternative},
 		// In the three rows below, q reaches t while t's body is being
 		// emitted, so the recursion check walks t again past f1: it passes
 		// the wildcard as a leaf, and meets an element declaration property
@@ -298,16 +293,16 @@ func TestGenerateDeclines(t *testing.T) {
 		{"value cycle check past a recursion", fmt.Sprintf(pastDecline, `<xs:element name="g" type="cyc"/>`, `<xs:complexType name="cyc"><xs:sequence><xs:element name="s" type="cyc"/></xs:sequence></xs:complexType>`),
 			"local element s reaching complex type cyc again through elements that each occur exactly once", constructValueCycle},
 		// e's walk reaches t, declared after f, before f's walk begins.
-		{"named type body before a later top-level element", `<xs:element name="e"><xs:complexType><xs:sequence><xs:element name="l" type="t"/></xs:sequence></xs:complexType></xs:element><xs:element name="f" type="xs:precisionDecimal"/><xs:complexType name="t"><xs:choice><xs:any minOccurs="0"/></xs:choice></xs:complexType>`,
-			"complex type t whose choice is emptiable: its alternative 1, a wildcard particle, is emptiable at s.xsd:2:175 ", constructEmptiableChoice},
-		{"named complex local body", `<xs:complexType name="c"><xs:choice><xs:any minOccurs="0"/></xs:choice></xs:complexType><xs:element name="e"><xs:complexType><xs:sequence><xs:element name="l" type="c"/></xs:sequence></xs:complexType></xs:element>`,
-			"complex type c whose choice is emptiable: its alternative 1, a wildcard particle, is emptiable at s.xsd:2:1 ", constructEmptiableChoice},
+		{"named type body before a later top-level element", `<xs:element name="e"><xs:complexType><xs:sequence><xs:element name="l" type="t"/></xs:sequence></xs:complexType></xs:element><xs:element name="f" type="xs:precisionDecimal"/><xs:complexType name="t"><xs:choice><xs:sequence><xs:any minOccurs="0"/></xs:sequence></xs:choice></xs:complexType>`,
+			"complex type t whose choice's alternative 1, a sequence model group particle, has an emptiable model group at s.xsd:2:175 ", constructEmptiableGroupAlternative},
+		{"named complex local body", `<xs:complexType name="c"><xs:choice><xs:sequence><xs:any minOccurs="0"/></xs:sequence></xs:choice></xs:complexType><xs:element name="e"><xs:complexType><xs:sequence><xs:element name="l" type="c"/></xs:sequence></xs:complexType></xs:element>`,
+			"complex type c whose choice's alternative 1, a sequence model group particle, has an emptiable model group at s.xsd:2:1 ", constructEmptiableGroupAlternative},
 		{"local element property", `<xs:element name="e"><xs:complexType><xs:sequence><xs:element name="l" nillable="true" ` + str + `/></xs:sequence></xs:complexType></xs:element>`,
 			"element l with {nillable} true", constructElementNillable},
 		{"nested struct", `<xs:element name="e"><xs:complexType><xs:sequence><xs:element name="l"><xs:complexType mixed="true"><xs:sequence><xs:element name="a" ` + str + `/></xs:sequence></xs:complexType></xs:element></xs:sequence></xs:complexType></xs:element>`,
 			"complex type (anonymous) of element l of element e with mixed content at ", constructMixedContent},
-		{"nested choice", `<xs:element name="e"><xs:complexType><xs:sequence><xs:element name="l"><xs:complexType><xs:choice><xs:element name="a" ` + str + `/><xs:any minOccurs="0"/></xs:choice></xs:complexType></xs:element></xs:sequence></xs:complexType></xs:element>`,
-			"complex type (anonymous) of element l of element e whose choice is emptiable: its alternative 2, a wildcard particle, is emptiable at ", constructEmptiableChoice},
+		{"nested choice", `<xs:element name="e"><xs:complexType><xs:sequence><xs:element name="l"><xs:complexType><xs:choice><xs:element name="a" ` + str + `/><xs:sequence><xs:any minOccurs="0"/></xs:sequence></xs:choice></xs:complexType></xs:element></xs:sequence></xs:complexType></xs:element>`,
+			"complex type (anonymous) of element l of element e whose choice's alternative 2, a sequence model group particle, has an emptiable model group at ", constructEmptiableGroupAlternative},
 		{"branch struct", `<xs:element name="e"><xs:complexType><xs:choice><xs:element name="l"><xs:complexType mixed="true"><xs:sequence><xs:element name="a" ` + str + `/></xs:sequence></xs:complexType></xs:element></xs:choice></xs:complexType></xs:element>`,
 			"complex type (anonymous) of element l of element e with mixed content at ", constructMixedContent},
 	}

@@ -47,7 +47,7 @@
 //   - uncovered primitive
 //   - choice with attributes
 //   - choice with no {particles}
-//   - emptiable choice
+//   - emptiable group alternative
 //   - complex type {abstract}
 //   - mixed content
 //   - {open content}
@@ -69,22 +69,22 @@
 // choice's alternative, and an all group occurring exactly once in an all
 // group, giving the places of its own particles, and a complex type's own
 // content particle, a sequence, a choice or an all group, counting only when it
-// occurs other than exactly once — so a particle that a model group definition
-// or an extension's base holds gets one in each struct that holds it, each
-// shared as an anonymous complex type nested beside it is, and one branch
-// struct per alternative of each choice it emits as a sealed interface — an
-// <element ref> particle gets none of its own, its field holding the type
-// emitted for the top-level element declaration it names, or, when that
-// declaration's substitution group holds another declaration, one sealed
-// interface per such head with one branch struct per declaration of its group —
-// then, after every other declaration and in the order the walk first needs
-// each, one datatype struct per date, time or duration datatype, and one for
-// QName and NOTATION together, a declaration's type or a value field is
-// declared over, the four raw-content structs once an element's type is
-// xs:anyType, a model group holds a wildcard particle, or a type has an
-// {attribute wildcard}, and one sealed interface per union simple type a
-// declaration's type, a value field, a list's item or a union's member is
-// declared over, each followed by one variant type per basic member, and
+// occurs other than exactly once or is a choice one occurrence of which is
+// emptiable — so a particle that a model group definition or an extension's
+// base holds gets one in each struct that holds it, each shared as an anonymous
+// complex type nested beside it is, and one branch struct per alternative of
+// each choice it emits as a sealed interface — an <element ref> particle gets
+// none of its own, its field holding the type emitted for the top-level element
+// declaration it names, or, when that declaration's substitution group holds
+// another declaration, one sealed interface per such head with one branch
+// struct per declaration of its group — then, after every other declaration and
+// in the order the walk first needs each, one datatype struct per date, time or
+// duration datatype, and one for QName and NOTATION together, a declaration's
+// type or a value field is declared over, the four raw-content structs once an
+// element's type is xs:anyType, a model group holds a wildcard particle, or a
+// type has an {attribute wildcard}, and one sealed interface per union simple
+// type a declaration's type, a value field, a list's item or a union's member
+// is declared over, each followed by one variant type per basic member, and
 // declines everything outside this slice:
 //
 //   - An element whose {type definition} is a simple type gets a named type
@@ -234,15 +234,24 @@
 //     whose one method is unexported, "is" plus the interface's name, and one
 //     branch struct per alternative in particle order, emitted after the
 //     interface, each holding the fields the alternative's particle gives as a
-//     particle of a sequence would — an element or a wildcard its one field, a
-//     sequence occurring exactly once the fields of its own particles, any
-//     other model group its one field — and implementing the method; consumers
-//     type-switch over the branches, and "N pointer fields, exactly one
-//     non-nil" never appears.
-//   - A choice is accepted only when one occurrence of it is not emptiable: it
-//     has {particles}, and none is emptiable ([xsd.Schema.ParticleEmptiable]),
-//     so that a particle of it with {min occurs} 1 is not emptiable (§3.8.6.6
-//     cos-choice-range, §3.9.6.3 cos-group-emptiable).
+//     particle of a sequence would, its {min occurs} 0 read as 1 and its {max
+//     occurs} kept — an element or a wildcard its one field, a sequence
+//     occurring exactly once the fields of its own particles, any other model
+//     group its one field — and implementing the method; consumers type-switch
+//     over the branches, and "N pointer fields, exactly one non-nil" never
+//     appears.
+//   - One occurrence of a choice matches nothing exactly when one of its
+//     alternatives is emptiable (§3.8.6.6 cos-choice-range, §3.9.6.3
+//     cos-group-emptiable), and the nil interface is the one value for that
+//     empty match: no branch holds it, an element or a wildcard alternative
+//     with {min occurs} 0 and {max occurs} 1 giving a value field, never a
+//     pointer. A repeated choice's slice holds one item per occurrence that
+//     matches something, so it does not count occurrences that match nothing.
+//   - A choice is accepted only when it has {particles} and no alternative's
+//     term is a model group, inline or through <group ref>, one occurrence of
+//     which is emptiable ([xsd.Schema.ParticleEmptiable]), whatever the
+//     alternative's own {min occurs}: a branch over it would hold the empty
+//     match.
 //   - An <element ref> particle to a head whose substitution group
 //     ([xsd.Schema.SubstitutionGroup], §3.3.6.4 key-eq) holds a declaration
 //     other than the head gives a field holding a sealed interface over that
@@ -263,17 +272,18 @@
 //     needed, each declaration of the group is checked in group order as at an
 //     <element ref> particle to it, its properties and the shape of its type,
 //     so an abstract head or member declines it there.
-//   - A {particle} that occurs other than exactly once gives a struct whose
-//     first field holds what one occurrence of its model group gives — a struct
-//     of the sequence's or all group's particle fields alone, or the choice's
-//     sealed interface — by the occurrence rules below, followed by the
-//     attribute fields; the field and that type are named as if from the local
-//     name sequence, choice or all ("Naming"). A model group particle in a
-//     sequence or as a choice's alternative, a choice or a sequence occurring
-//     other than exactly once, gives one such field in the same way, a choice
-//     occurring exactly once giving the bare interface. The occurrence's fields
-//     lie behind that slice, pointer or interface, so no struct-value recursion
-//     passes through it.
+//   - A {particle} that occurs other than exactly once, or a choice {particle}
+//     that occurs exactly once and one occurrence of which is emptiable, gives
+//     a struct whose first field holds what one occurrence of its model group
+//     gives — a struct of the sequence's or all group's particle fields alone,
+//     or the choice's sealed interface — by the occurrence rules below,
+//     followed by the attribute fields; the field and that type are named as if
+//     from the local name sequence, choice or all ("Naming"). A model group
+//     particle in a sequence or as a choice's alternative, a choice or a
+//     sequence occurring other than exactly once, gives one such field in the
+//     same way, a choice occurring exactly once giving the bare interface. The
+//     occurrence's fields lie behind that slice, pointer or interface, so no
+//     struct-value recursion passes through it.
 //   - Each particle of a sequence gives one field, in particle order, but a
 //     sequence particle occurring exactly once, inline or a <group ref> to a
 //     sequence group, which gives in its place the fields its own particles
@@ -357,8 +367,9 @@
 //     built-in xsi: one the post-schema-validation infoset supplies the
 //     constraint's value when the attribute is absent (§3.4.5.1 key-dflt-att).
 //     Supplying that value and enforcing a fixed one are the validator's.
-//   - A choice {particle} that occurs exactly once is accepted only when its
-//     type has no {attribute uses} and no {attribute wildcard}.
+//   - A choice {particle} that occurs exactly once and one occurrence of which
+//     is not emptiable is accepted only when its type has no {attribute uses}
+//     and no {attribute wildcard}.
 //   - An {attribute wildcard} of a type emitted as a struct, its own, one an
 //     extension inherits, or one an attribute group reference or the schema's
 //     defaultAttributes brings (§3.4.2.5 dcl.ctd.anyatt), gives one field after
