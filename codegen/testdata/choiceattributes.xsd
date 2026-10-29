@@ -1,0 +1,87 @@
+<?xml version="1.0"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+           xmlns="urn:choiceattributes"
+           targetNamespace="urn:choiceattributes">
+  <xs:element name="uses">
+    <xs:complexType>
+      <xs:choice>
+        <xs:element name="a" type="xs:string"/>
+        <xs:element name="union" type="xs:int"/>
+      </xs:choice>
+      <xs:attribute name="choice">
+        <xs:simpleType>
+          <xs:union memberTypes="xs:int xs:boolean"/>
+        </xs:simpleType>
+      </xs:attribute>
+      <xs:attribute name="tag" type="xs:string" use="required"/>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="wild">
+    <xs:complexType>
+      <xs:choice>
+        <xs:element name="a" type="xs:string"/>
+        <xs:any/>
+      </xs:choice>
+      <xs:anyAttribute/>
+    </xs:complexType>
+  </xs:element>
+  <xs:complexType name="picked">
+    <xs:choice>
+      <xs:element name="a" type="xs:string"/>
+      <xs:element name="b" type="xs:string"/>
+    </xs:choice>
+    <xs:attribute name="tag" type="xs:string"/>
+  </xs:complexType>
+  <xs:complexType name="base">
+    <xs:choice>
+      <xs:element name="a" type="xs:string"/>
+      <xs:element name="b" type="xs:string"/>
+    </xs:choice>
+  </xs:complexType>
+  <xs:complexType name="attributed">
+    <xs:choice>
+      <xs:element name="a" type="xs:string"/>
+      <xs:element name="x" type="xs:string"/>
+    </xs:choice>
+    <xs:attribute name="t" type="xs:string"/>
+  </xs:complexType>
+  <xs:complexType name="inherits">
+    <xs:complexContent>
+      <xs:restriction base="attributed">
+        <xs:choice>
+          <xs:element name="a" type="xs:string"/>
+        </xs:choice>
+      </xs:restriction>
+    </xs:complexContent>
+  </xs:complexType>
+  <xs:complexType name="prohibits">
+    <xs:complexContent>
+      <xs:restriction base="attributed">
+        <xs:choice>
+          <xs:element name="a" type="xs:string"/>
+        </xs:choice>
+        <xs:attribute name="t" use="prohibited"/>
+      </xs:restriction>
+    </xs:complexContent>
+  </xs:complexType>
+  <xs:element name="holder">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element name="maybe" type="picked" minOccurs="0"/>
+        <xs:element name="always" type="picked"/>
+        <xs:element name="plain" type="base"/>
+        <xs:element name="inherited" type="inherits"/>
+        <xs:element name="prohibited" type="prohibits" minOccurs="0"/>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="extended">
+    <xs:complexType>
+      <xs:complexContent>
+        <xs:extension base="base">
+          <xs:attribute name="t" type="xs:string"/>
+        </xs:extension>
+      </xs:complexContent>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>
