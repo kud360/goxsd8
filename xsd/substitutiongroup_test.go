@@ -1,6 +1,7 @@
 package xsd
 
 import (
+	"slices"
 	"testing"
 
 	"github.com/kud360/goxsd8/xsderr"
@@ -387,4 +388,51 @@ func TestSubstitutionGroupHeadNotTopLevel(t *testing.T) {
 		b.AddElement(sgElement(t, sq("member"), sgRef(sq("H")), nil))
 	})
 	expectMembership(t, s, sq("member"), sq("absent"), false)
+}
+
+// groupNames lists the names of SubstitutionGroup(head), in result order.
+func groupNames(s *Schema, head QName) []QName {
+	var names []QName
+	for _, e := range s.SubstitutionGroup(head) {
+		names = append(names, e.Name())
+	}
+	return names
+}
+
+// TestSubstitutionGroupEnumerates pins SubstitutionGroup against §3.3.6.4
+// key-eq, in {element declarations} order (a member declared before its head
+// comes first): head itself (clause 1), a member of a member (clause 2.2), an
+// affiliate whose type extends head's excluded by head's block="extension"
+// (clause 2.3), and an abstract member included ({abstract} plays no part). A
+// head blocking substitution (clause 2.1) yields itself alone, and a name with no
+// top-level declaration yields nil.
+func TestSubstitutionGroupEnumerates(t *testing.T) {
+	s := sgSchema(t, func(b *SchemaBuilder) {
+		b.AddType(sgType(t, sq("H"), QName{}, DerivationRestriction))
+		b.AddType(sgType(t, sq("X"), sq("H"), DerivationExtension))
+		b.AddElement(sgElement(t, sq("early"), sgRef(sq("H")), nil, sq("head")))
+		b.AddElement(sgElement(t, sq("head"), sgRef(sq("H")), []DerivationMethod{DerivationExtension}))
+		b.AddElement(sgElement(t, sq("stranger"), sgRef(sq("H")), nil))
+		b.AddElement(sgElement(t, sq("deep"), sgRef(sq("H")), nil, sq("early")))
+		b.AddElement(sgLink(t, sq("link"), sq("head")))
+		b.AddElement(sgElement(t, sq("extended"), sgRef(sq("X")), nil, sq("link")))
+		abstract, err := NewElementDeclaration(xsderr.Loc{}, sq("abstract"), sgRef(sq("H")), nil, NewGlobalScope(),
+			nil, false, nil, []QName{sq("head")}, nil, true, nil)
+		if err != nil {
+			t.Fatalf("NewElementDeclaration(abstract): %v", err)
+		}
+		b.AddElement(abstract)
+		b.AddElement(sgElement(t, sq("closed"), sgRef(sq("H")), []DerivationMethod{DerivationSubstitution}))
+		b.AddElement(sgElement(t, sq("refused"), sgRef(sq("H")), nil, sq("closed")))
+	})
+	want := []QName{sq("early"), sq("head"), sq("deep"), sq("link"), sq("abstract")}
+	if got := groupNames(s, sq("head")); !slices.Equal(got, want) {
+		t.Errorf("SubstitutionGroup(head) = %v, want %v", got, want)
+	}
+	if got, want := groupNames(s, sq("closed")), []QName{sq("closed")}; !slices.Equal(got, want) {
+		t.Errorf("SubstitutionGroup(closed) = %v, want %v", got, want)
+	}
+	if got := s.SubstitutionGroup(sq("absent")); got != nil {
+		t.Errorf("SubstitutionGroup(absent) = %v, want nil", got)
+	}
 }

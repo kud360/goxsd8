@@ -511,24 +511,20 @@ func (s *Schema) gatherResolvedTermContents(t Term, root QName, path string, c *
 // declaration if and only if a member of the list contains that element
 // declaration in its ·substitution group·").
 //
-// Members are enumerated from the document-order {element declarations} slice,
-// never from elementIndex, and heads in the order they were gathered, so the
-// result is deterministic (STYLE D2). Membership is inSubstitutionGroupOf, which
-// decides cos-equiv-derived-ok-rec exactly (substitutiongroup.go), so the set
-// gathered here is the spec's ·substitution group· — an implicitly contained
-// declaration only ever adds obligations, and none of them is invented. A head is
-// in its own group (clause 1) and so is re-offered here; add drops it as already
-// gathered.
+// Members are enumerated by SubstitutionGroup, in {element declarations} order,
+// and heads in the order they were gathered, so the result is deterministic
+// (STYLE D2). SubstitutionGroup decides cos-equiv-derived-ok-rec exactly
+// (substitutiongroup.go), so the set gathered here is the spec's ·substitution
+// group· — an implicitly contained declaration only ever adds obligations, and
+// none of them is invented. A head is in its own group (clause 1) and so is
+// re-offered here; add drops it as already gathered.
 func (s *Schema) gatherImplicitElements(c *groupContents) {
 	heads := append([]containedElement(nil), c.elements...)
 	for _, head := range heads {
 		if head.decl.ScopeVariety() != ScopeGlobal {
 			continue // a local declaration heads no substitution group
 		}
-		for _, e := range s.elements {
-			if !s.inSubstitutionGroupOf(e.Name(), head.decl.Name()) {
-				continue
-			}
+		for _, e := range s.SubstitutionGroup(head.decl.Name()) {
 			c.add(e, topLevelKey(e.Name()))
 		}
 	}

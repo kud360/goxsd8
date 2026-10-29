@@ -94,7 +94,9 @@ func (t Target) failed(i int, err error) error {
 // shared as an anonymous complex type nested beside it is, and one branch struct per
 // alternative of each choice emitted as a sealed interface, each emitted after its
 // parent, a field of an <element ref> particle holding the type emitted for the top-level
-// element declaration it names, then one struct per date, time or duration datatype a
+// element declaration it names, or, when that declaration's substitution group holds
+// another declaration, one sealed interface per such head with one branch struct per
+// declaration of its group, then one struct per date, time or duration datatype a
 // declaration's type or a value field is declared over, the four structs holding raw
 // content once an element's type is xs:anyType, a model group holds a wildcard particle,
 // or a type has an {attribute wildcard}, and one sealed interface per union simple type a
@@ -131,10 +133,12 @@ func (t Target) failed(i int, err error) error {
 // after that element. The walk does not enter the type of the top-level
 // declaration an <element ref> particle names, which that declaration's own
 // turn emits; a ref to a declaration not yet reached checks that declaration's
-// properties and the shape of its type where the ref is met, and a ref that
-// occurs exactly once to a complex type that is not a choice has that type
-// checked there, in the same way, for an element or type reaching itself, ahead
-// of every decline the depth-first walk meets after the ref.
+// properties and the shape of its type where the ref is met, a ref to a
+// substitution-group head given an interface checks so each declaration of its
+// group, in group order, and any other ref that occurs exactly once to a
+// complex type that is not a choice has that type checked there, in the same
+// way, for an element or type reaching itself, ahead of every decline the
+// depth-first walk meets after the ref.
 //
 // Every non-nil error Generate returns is an errors.Join of one error per
 // failure, in that order, a phase-2 fault alone; each opens with the failing
