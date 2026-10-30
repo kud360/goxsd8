@@ -1,0 +1,161 @@
+<?xml version="1.0"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+           xmlns="urn:opencontent"
+           targetNamespace="urn:opencontent">
+  <xs:element name="anyType">
+    <xs:complexType>
+      <xs:openContent>
+        <xs:any namespace="##other" processContents="lax"/>
+      </xs:openContent>
+      <xs:sequence>
+        <xs:element name="inner">
+          <xs:complexType>
+            <xs:sequence>
+              <xs:element name="v" type="xs:string"/>
+            </xs:sequence>
+          </xs:complexType>
+        </xs:element>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+  <xs:complexType name="suffixed">
+    <xs:openContent mode="suffix">
+      <xs:any namespace="##other"/>
+    </xs:openContent>
+    <xs:sequence>
+      <xs:element name="name" type="xs:string"/>
+      <xs:element name="count" type="xs:int" minOccurs="0"/>
+    </xs:sequence>
+  </xs:complexType>
+  <xs:element name="record" type="suffixed"/>
+  <xs:element name="claimed">
+    <xs:complexType>
+      <xs:openContent>
+        <xs:any namespace="##other" processContents="skip"/>
+      </xs:openContent>
+      <xs:sequence>
+        <xs:any namespace="##other" processContents="lax"/>
+        <xs:element name="openContent" type="xs:string"/>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="picked">
+    <xs:complexType>
+      <xs:openContent>
+        <xs:any namespace="##other"/>
+      </xs:openContent>
+      <xs:choice>
+        <xs:element name="a" type="xs:string"/>
+        <xs:element name="b" type="xs:int"/>
+      </xs:choice>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="unordered">
+    <xs:complexType>
+      <xs:openContent>
+        <xs:any namespace="##other"/>
+      </xs:openContent>
+      <xs:all>
+        <xs:element name="a" type="xs:string"/>
+        <xs:element name="b" type="xs:int" minOccurs="0"/>
+      </xs:all>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="repeated">
+    <xs:complexType>
+      <xs:openContent>
+        <xs:any namespace="##other"/>
+      </xs:openContent>
+      <xs:sequence maxOccurs="unbounded">
+        <xs:element name="item" type="xs:string"/>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="bare">
+    <xs:complexType>
+      <xs:openContent>
+        <xs:any namespace="##other"/>
+      </xs:openContent>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="prose">
+    <xs:complexType mixed="true">
+      <xs:openContent>
+        <xs:any namespace="##other"/>
+      </xs:openContent>
+      <xs:sequence>
+        <xs:element name="b" type="xs:string"/>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="text">
+    <xs:complexType mixed="true">
+      <xs:openContent>
+        <xs:any namespace="##other"/>
+      </xs:openContent>
+    </xs:complexType>
+  </xs:element>
+  <xs:complexType name="openBase">
+    <xs:openContent>
+      <xs:any namespace="##other"/>
+    </xs:openContent>
+    <xs:sequence>
+      <xs:element name="a" type="xs:string"/>
+    </xs:sequence>
+  </xs:complexType>
+  <xs:element name="extended">
+    <xs:complexType>
+      <xs:complexContent>
+        <xs:extension base="openBase">
+          <xs:sequence>
+            <xs:element name="b" type="xs:string"/>
+          </xs:sequence>
+        </xs:extension>
+      </xs:complexContent>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="kept">
+    <xs:complexType>
+      <xs:complexContent>
+        <xs:extension base="openBase">
+          <xs:openContent mode="none"/>
+          <xs:sequence>
+            <xs:element name="b" type="xs:string"/>
+          </xs:sequence>
+        </xs:extension>
+      </xs:complexContent>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="closed">
+    <xs:complexType>
+      <xs:openContent mode="none"/>
+      <xs:sequence>
+        <xs:element name="a" type="xs:string"/>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="plain">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element name="a" type="xs:string"/>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+  <xs:complexType name="flagged">
+    <xs:openContent>
+      <xs:any namespace="##other"/>
+    </xs:openContent>
+    <xs:sequence>
+      <xs:element name="a" type="xs:string"/>
+    </xs:sequence>
+    <xs:attribute name="id" type="xs:string"/>
+    <xs:attribute name="openContent" type="xs:boolean"/>
+  </xs:complexType>
+  <xs:element name="holder">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element name="maybe" type="flagged" nillable="true"/>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>
