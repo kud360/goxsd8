@@ -28,9 +28,9 @@
 //
 // # What you get
 //
-// Generate emits type declarations alone: the structs carry no struct tags and
-// bind no XML name; do not decode them with encoding/xml; decoding is codec's
-// (M10). Each supported construct gets the Go shape below, a summary of the
+// The emitted structs carry no struct tags and bind no XML name; do not decode
+// them with encoding/xml: decoding is codec's, as the opening paragraph states.
+// Each supported construct gets the Go shape below, a summary of the
 // "Coverage" rules whose openings each row quotes, which state its exceptions.
 //
 //   - complex type → a struct ("A sequence or an all group gives"), or its
