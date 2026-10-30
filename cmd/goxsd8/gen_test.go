@@ -397,11 +397,14 @@ type genRow struct{ file, out, body string }
 // one line on stderr naming the pair, the construct and its absolute location,
 // with no helpPointer under it, in argument order and then document order, and
 // nothing is written. The emptyChoice body is codegen/decline_test.go's empty
-// choice row.
+// choice row, and repeatedSequence's its repeated emptiable sequence row.
 func TestGenDeclines(t *testing.T) {
+	repeatedSequence := func(name string) string {
+		return `<xs:element name="` + name + `"><xs:complexType><xs:sequence minOccurs="0" maxOccurs="unbounded"><xs:element name="a" minOccurs="0" type="xs:string"/></xs:sequence></xs:complexType></xs:element>`
+	}
 	const (
 		emptyChoice = `<xs:element name="e"><xs:complexType><xs:choice/></xs:complexType></xs:element>`
-		pdecimal    = " with {type definition} {http://www.w3.org/2001/XMLSchema}precisionDecimal, whose {primitive type definition} is {http://www.w3.org/2001/XMLSchema}precisionDecimal at "
+		repeated    = " holding a sequence model group particle with {max occurs} above 1 whose sequence is emptiable at "
 		tail        = " is not supported by codegen, a generator limitation, not a schema fault\n"
 	)
 	rows := []struct {
@@ -415,10 +418,10 @@ func TestGenDeclines(t *testing.T) {
 		{"one decline", []genRow{{"s.xsd", "e", emptyChoice}}, func(s, o []string) string {
 			return "goxsd8: gen: -schema " + s[0] + " -out " + o[0] + ": complex type (anonymous) of element e whose choice has no {particles} at " + s[0] + ":2:22" + tail
 		}},
-		{"two pairs, three declines", []genRow{{"s.xsd", "e", emptyChoice + "\n" + `<xs:element name="f" type="xs:precisionDecimal"/>`}, {"t.xsd", "g", `<xs:element name="g" type="xs:precisionDecimal"/>`}}, func(s, o []string) string {
+		{"two pairs, three declines", []genRow{{"s.xsd", "e", emptyChoice + "\n" + repeatedSequence("f")}, {"t.xsd", "g", repeatedSequence("g")}}, func(s, o []string) string {
 			return "goxsd8: gen: -schema " + s[0] + " -out " + o[0] + ": complex type (anonymous) of element e whose choice has no {particles} at " + s[0] + ":2:22" + tail +
-				"goxsd8: gen: -schema " + s[0] + " -out " + o[0] + ": element f" + pdecimal + s[0] + ":3:1" + tail +
-				"goxsd8: gen: -schema " + s[1] + " -out " + o[1] + ": element g" + pdecimal + s[1] + ":2:1" + tail
+				"goxsd8: gen: -schema " + s[0] + " -out " + o[0] + ": complex type (anonymous) of element f" + repeated + s[0] + ":3:22" + tail +
+				"goxsd8: gen: -schema " + s[1] + " -out " + o[1] + ": complex type (anonymous) of element g" + repeated + s[1] + ":2:22" + tail
 		}},
 	}
 	for _, tt := range rows {

@@ -1,0 +1,48 @@
+<?xml version="1.0"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <!-- precisionDecimal's own top-level element first claims the datatype
+       struct's names, ahead of its own type, which takes PrecisionDecimal2
+       ("Naming"). -->
+  <xs:element name="precisionDecimal" type="xs:precisionDecimal"/>
+  <xs:element name="measure" type="xs:precisionDecimal"/>
+  <xs:element name="reading">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element name="value" type="xs:precisionDecimal"/>
+        <xs:element name="tolerance" type="xs:precisionDecimal" minOccurs="0"/>
+        <xs:element name="samples" type="samples"/>
+        <xs:element name="bounded" type="bounded"/>
+        <xs:element name="either" type="either"/>
+        <xs:element name="scaled">
+          <xs:simpleType>
+            <xs:restriction base="bounded">
+              <xs:maxScale value="2"/>
+            </xs:restriction>
+          </xs:simpleType>
+        </xs:element>
+      </xs:sequence>
+      <xs:attribute name="offset" type="xs:precisionDecimal"/>
+      <xs:attribute name="limit" type="bounded" use="required"/>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="typed">
+    <xs:complexType>
+      <xs:simpleContent>
+        <xs:extension base="xs:precisionDecimal">
+          <xs:attribute name="unit" type="xs:string"/>
+        </xs:extension>
+      </xs:simpleContent>
+    </xs:complexType>
+  </xs:element>
+  <xs:simpleType name="bounded">
+    <xs:restriction base="xs:precisionDecimal">
+      <xs:totalDigits value="5"/>
+    </xs:restriction>
+  </xs:simpleType>
+  <xs:simpleType name="samples">
+    <xs:list itemType="xs:precisionDecimal"/>
+  </xs:simpleType>
+  <xs:simpleType name="either">
+    <xs:union memberTypes="xs:precisionDecimal xs:boolean"/>
+  </xs:simpleType>
+</xs:schema>

@@ -30,6 +30,8 @@ var (
 	qNamePrimitive        = xsd.QName{Space: xsd.XMLSchemaNS, Local: "QName"}
 	notationPrimitive     = xsd.QName{Space: xsd.XMLSchemaNS, Local: "NOTATION"}
 
+	precisionDecimalPrimitive = xsd.QName{Space: xsd.XMLSchemaNS, Local: "precisionDecimal"}
+
 	integerBuiltin = xsd.QName{Space: xsd.XMLSchemaNS, Local: "integer"}
 
 	longBuiltin          = xsd.QName{Space: xsd.XMLSchemaNS, Local: "long"}
@@ -179,14 +181,16 @@ type emitter struct {
 	// double per level (#3037).
 	acyclic map[valueNode]struct{}
 	// usesBig records that goType produced a math/big type, or emitted a
-	// datatype struct with a math/big field, so that emit imports math/big;
+	// datatype struct with a math/big field or PrecisionDecimal's group
+	// (precisionDecimalType), so that emit imports math/big;
 	// emit builds source only for a target that declines nothing, so there a
 	// set flag means an emitted declaration names the package.
 	usesBig bool
 	// datatypes holds the name claimed for each datatype struct emitted, so
 	// that each is emitted once per package; it is a lookup index only and
 	// never iterated (STYLE D2). tailDecls holds those structs' declarations,
-	// the raw-content structs' (anyTypeType), MixedChild's (mixedChildType),
+	// PrecisionDecimal's group (precisionDecimalType), the raw-content
+	// structs' (anyTypeType), MixedChild's (mixedChildType),
 	// Nillable's and its arms' (nillableTypes), each attributes struct's
 	// (attributesType), and each union's interface and variants (unionType),
 	// in first-use order, emitted after decls.
@@ -212,6 +216,11 @@ type emitter struct {
 	// which mixedChildType emits once per package; "" means it is unclaimed
 	// and unemitted.
 	mixedChild string
+	// precisionDecimal holds the names claimed for the struct PrecisionDecimal,
+	// its sealed interface and that interface's four arms, which
+	// precisionDecimalType emits once per package; its zero value means they
+	// are unclaimed and unemitted.
+	precisionDecimal precisionDecimalNames
 	// nillable holds the names claimed for the generic sealed interface
 	// Nillable and its two arms, which nillableTypes emits once per package;
 	// its zero value means they are unclaimed and unemitted.
@@ -233,6 +242,14 @@ type emitter struct {
 // field over a nillable element declaration, in claim order.
 type nillableNames struct {
 	sum, nilled, content string
+}
+
+// precisionDecimalNames is the names claimed for the struct "# Coverage" gives
+// xs:precisionDecimal (precisionDecimal §3.1 sec-vs-pD), the sealed interface
+// its one field holds, and that interface's four arms, one per case of
+// ·numericalValue· (vp-pd-numVal), in claim order.
+type precisionDecimalNames struct {
+	wrapper, value, numerical, positiveInfinity, negativeInfinity, notANumber string
 }
 
 // structAttributes is what body records for one struct whose type has
@@ -803,18 +820,18 @@ func (e *emitter) simpleGoType(subject string, loc xsderr.Loc, t *xsd.SimpleType
 // t (Datatypes §2.4.2 dt-special), xs:anySimpleType or xs:anyAtomicType known
 // by identity ahead of its {variety}, string, holding the literal; for an atomic
 // t, its atomic Go type, chosen through builtinType and then t's {primitive
-// type definition} (Datatypes §4.1.1), setting e.usesBig for a math/big type
-// or a datatype struct holding one; for a list (Datatypes §2.4.1.2, a finite
-// sequence of its item type's values), a slice of the type its {item type
-// definition} (§3.16.1) maps to, read through [xsd.SimpleType.Item], which
-// takes a restriction's item from its base (§3.16.2.3), never by walking t to
-// a builtin; for a union, the sealed interface unionType emits, the one
-// answer that is sealed. typed names t in a decline, and a list's item, or a
-// union's basic member, is named in it after the list or union, so an
-// anonymous item or member still has a named context. path is the local names
-// an anonymous union reached through t is named from ("# Naming"); a list's
-// item takes the path listItemPath returns. subject and loc are
-// simpleGoType's.
+// type definition} (Datatypes §4.1.1), setting e.usesBig for a math/big type,
+// a datatype struct holding one, or PrecisionDecimal; for a list (Datatypes
+// §2.4.1.2, a finite sequence of its item type's values), a slice of the type
+// its {item type definition} (§3.16.1) maps to, read through
+// [xsd.SimpleType.Item], which takes a restriction's item from its base
+// (§3.16.2.3), never by walking t to a builtin; for a union, the sealed
+// interface unionType emits, the one answer that is sealed. typed names t in a
+// decline, and a list's item, or a union's basic member, is named in it after
+// the list or union, so an anonymous item or member still has a named context.
+// path is the local names an anonymous union reached through t is named
+// from ("# Naming"); a list's item takes the path listItemPath returns.
+// subject and loc are simpleGoType's.
 func (e *emitter) goType(subject, typed string, loc xsderr.Loc, t *xsd.SimpleType, path []string) (emittedType, error) {
 	if t.IsSpecial() {
 		return emittedType{name: "string"}, nil
@@ -931,6 +948,8 @@ func (e *emitter) atomicType(subject, typed string, loc xsderr.Loc, t *xsd.Simpl
 		return e.datatypeType(gMonthStruct), nil
 	case durationStruct.datatype: // Datatypes §3.3.6
 		return e.datatypeType(durationStruct), nil
+	case precisionDecimalPrimitive: // precisionDecimal §3.1 sec-vs-pD, as "# Coverage" states
+		return e.precisionDecimalType(), nil
 	}
 	return "", decline(loc, constructUncoveredPrimitive, typed, primitive.Name())
 }
@@ -1091,6 +1110,40 @@ func (e *emitter) datatypeType(ds datatypeStruct) string {
 	b.WriteString("}\n")
 	e.tailDecls = append(e.tailDecls, b.String())
 	return name
+}
+
+// precisionDecimalType returns the name of the struct PrecisionDecimal, which
+// "# Coverage" gives xs:precisionDecimal (precisionDecimal §3.1 sec-vs-pD).
+// When no earlier declaration needed them, it claims the six names in e.types,
+// in precisionDecimalNames' order, by the package doc's "Naming", appends
+// their declarations to e.tailDecls in that order, and sets e.usesBig.
+func (e *emitter) precisionDecimalType() string {
+	if e.precisionDecimal.wrapper != "" {
+		return e.precisionDecimal.wrapper
+	}
+	local := precisionDecimalPrimitive.Local
+	n := precisionDecimalNames{wrapper: e.types.claim(local)}
+	n.value = e.types.claim(local, "value")
+	n.numerical = e.types.claim(n.value, "numerical")
+	n.positiveInfinity = e.types.claim(n.value, "positiveInfinity")
+	n.negativeInfinity = e.types.claim(n.value, "negativeInfinity")
+	n.notANumber = e.types.claim(n.value, "notANumber")
+	e.precisionDecimal = n
+	e.usesBig = true
+	from := "datatype " + precisionDecimalPrimitive.String()
+	marker := "is" + n.value
+	arm := func(name, doc, fields string) string {
+		return header(name, from) + doc + fmt.Sprintf("type %s struct {%s}\n\nfunc (%s) %s() {}\n", name, fields, name, marker)
+	}
+	e.tailDecls = append(e.tailDecls,
+		header(n.wrapper, from)+fmt.Sprintf("type %s struct {\n\tValue %s\n}\n", n.wrapper, n.value),
+		header(n.value, from)+fmt.Sprintf("type %s interface {\n\t%s()\n}\n", n.value, marker),
+		arm(n.numerical, "// Its value is Coefficient × 10^−Scale, negative when Negative; Coefficient is never negative.\n",
+			fmt.Sprintf("\n\tCoefficient %s\n\tScale %s\n\tNegative bool\n", bigInt, bigInt)),
+		arm(n.positiveInfinity, "", ""),
+		arm(n.negativeInfinity, "", ""),
+		arm(n.notANumber, "", ""))
+	return n.wrapper
 }
 
 // anyTypeType returns the name of the raw-content struct AnyType, which holds
