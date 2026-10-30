@@ -37,15 +37,77 @@ func parseString(t *testing.T, doc string) *xsd.Schema {
 	return schema
 }
 
+// money is the name of the ·implementation-defined· primitive primitiveSchema
+// mints.
+var money = xsd.QName{Local: "money"}
+
+// primitiveSchema parses body as line 2 of the one schema document s.xsd, line
+// 3 declaring a simple type money that body may reference by name, and returns
+// the schema built from the parsed components with money replaced by an
+// ·implementation-defined· primitive of that name (Datatypes dt-primitive)
+// minted through xsd.NewPrimitiveType: the uncovered primitive the package
+// doc's "Coverage" defines, so every element or attribute declaration of type
+// money that Generate reaches declines with that Construct. The rows that pin
+// decline mechanics rather than one construct decline through it.
+func primitiveSchema(t *testing.T, body string) *xsd.Schema {
+	t.Helper()
+	parsed := parseString(t, "<xs:schema xmlns:xs=\"http://www.w3.org/2001/XMLSchema\">\n"+body+"\n"+
+		`<xs:simpleType name="money"><xs:restriction base="xs:string"/></xs:simpleType>`+"\n</xs:schema>\n")
+	primitive, err := xsd.NewPrimitiveType(xsderr.Loc{}, money, nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	b := xsd.NewSchemaBuilder()
+	replaced := false
+	for _, td := range parsed.Types() {
+		if td.Name() != money {
+			b.AddType(td)
+			continue
+		}
+		b.AddType(primitive)
+		replaced = true
+	}
+	if !replaced {
+		t.Fatalf("the parsed schema declares no type %s", money)
+	}
+	for _, d := range parsed.Elements() {
+		b.AddElement(d)
+	}
+	for _, d := range parsed.Attributes() {
+		b.AddAttribute(d)
+	}
+	for _, d := range parsed.AttributeGroups() {
+		b.AddAttributeGroup(d)
+	}
+	for _, d := range parsed.ModelGroups() {
+		b.AddModelGroup(d)
+	}
+	for _, d := range parsed.Notations() {
+		b.AddNotation(d)
+	}
+	for _, d := range parsed.IdentityConstraints() {
+		b.AddIdentityConstraint(d)
+	}
+	schema, err := b.Finalize()
+	if err != nil {
+		t.Fatalf("Finalize: %v", err)
+	}
+	return schema
+}
+
+// pastDecline is the body of the "value cycle check past" rows: the content of
+// r's anonymous complex type, the particles t holds after f1, and the
+// declarations before root, in that order, fill its verbs.
+const pastDecline = `<xs:complexType name="m"><xs:sequence><xs:element name="q" type="t"/><xs:element name="r"><xs:complexType>%s</xs:complexType></xs:element></xs:sequence></xs:complexType><xs:complexType name="t"><xs:sequence><xs:element name="f1" type="m" minOccurs="0"/>%s</xs:sequence></xs:complexType>%s<xs:element name="root"><xs:complexType><xs:sequence><xs:element name="x" type="t"/></xs:sequence></xs:complexType></xs:element>`
+
 // TestGenerateDeclines pins each construct outside the slice: Generate
 // returns a *DeclineError of the row's kind, wrapping errors.ErrUnsupported,
 // whose text names the construct and its Loc, and writes nothing. Each body
 // is one line, so every Loc is on line 2.
 func TestGenerateDeclines(t *testing.T) {
 	const (
-		str         = `type="xs:string"`
-		pastDecline = `<xs:complexType name="m"><xs:sequence><xs:element name="q" type="t"/><xs:element name="r"><xs:complexType><xs:choice/></xs:complexType></xs:element></xs:sequence></xs:complexType><xs:complexType name="t"><xs:sequence><xs:element name="f1" type="m" minOccurs="0"/>%s</xs:sequence></xs:complexType>%s<xs:element name="root"><xs:complexType><xs:sequence><xs:element name="x" type="t"/></xs:sequence></xs:complexType></xs:element>`
-		emptyR      = "complex type (anonymous) of element r of complex type m whose choice has no {particles} at s.xsd:2:91 "
+		str    = `type="xs:string"`
+		emptyR = "complex type (anonymous) of element r of complex type m whose choice has no {particles} at s.xsd:2:91 "
 	)
 	tests := []struct {
 		name, body, detail string
@@ -177,55 +239,18 @@ func TestGenerateDeclines(t *testing.T) {
 			"<element ref> particle to element a reaching element a again through elements that each occur exactly once", constructValueCycle},
 		{"ref cycle through a local element", `<xs:element name="a"><xs:complexType><xs:sequence><xs:element name="l"><xs:complexType><xs:sequence><xs:element ref="a"/></xs:sequence></xs:complexType></xs:element></xs:sequence></xs:complexType></xs:element>`,
 			"<element ref> particle to element a reaching element a again through elements that each occur exactly once", constructValueCycle},
-		// The ref to a is checked for recursion where it is met, ahead of the
-		// decline of z after it.
-		{"ref cycle ahead of a later decline", `<xs:element name="e"><xs:complexType><xs:sequence><xs:element ref="a"/><xs:element name="z"><xs:complexType><xs:choice/></xs:complexType></xs:element></xs:sequence></xs:complexType></xs:element><xs:element name="a"><xs:complexType><xs:sequence><xs:element ref="b"/></xs:sequence></xs:complexType></xs:element><xs:element name="b"><xs:complexType><xs:sequence><xs:element ref="a"/></xs:sequence></xs:complexType></xs:element>`,
-			"<element ref> particle to element a reaching element a again through elements that each occur exactly once", constructValueCycle},
 		// x's walk emits z through the pointer field p before it reaches the
 		// value field v, and z's walk meets x already stored: a check carried
 		// by the emitting walk, which never walks a stored type again, lets
 		// the cycle v, w through.
 		{"value cycle behind a pointer", `<xs:complexType name="x"><xs:sequence><xs:element name="p" type="z" minOccurs="0"/><xs:element name="v" type="z"/></xs:sequence></xs:complexType><xs:complexType name="z"><xs:sequence><xs:element name="w" type="x"/></xs:sequence></xs:complexType><xs:element name="e"><xs:complexType><xs:sequence><xs:element name="a" type="x"/></xs:sequence></xs:complexType></xs:element>`,
 			"local element v reaching complex type z again through elements that each occur exactly once", constructValueCycle},
-		// The emptiable group alternative under p precedes the cycle v closes
-		// in particle order, so it is the decline returned.
-		{"value cycle after an earlier decline", `<xs:complexType name="c"><xs:sequence><xs:element name="p" minOccurs="0"><xs:complexType><xs:choice><xs:sequence><xs:any minOccurs="0"/></xs:sequence></xs:choice></xs:complexType></xs:element><xs:element name="v" type="c"/></xs:sequence></xs:complexType><xs:element name="e"><xs:complexType><xs:sequence><xs:element name="l" type="c"/></xs:sequence></xs:complexType></xs:element>`,
-			"complex type (anonymous) of element p of complex type c whose choice's alternative 1, a sequence model group particle, has an emptiable model group at ", constructEmptiableGroupAlternative},
-		// In the three rows below, q reaches t while t's body is being
-		// emitted, so the recursion check walks t again past f1: it passes
-		// the wildcard, and a nillable element of type t itself, as leaves,
-		// and meets a complex type outside the slice as a decline it leaves
-		// to the emitting walk, which returns r's first.
-		{"value cycle check past a wildcard", fmt.Sprintf(pastDecline, `<xs:any/>`, ""),
+		// q reaches t while t's body is being emitted, so the recursion check
+		// walks t again past f1 and meets a complex type outside the slice
+		// as a decline it leaves to the emitting walk, which returns r's
+		// first.
+		{"value cycle check past a complex type", fmt.Sprintf(pastDecline, `<xs:choice/>`, `<xs:element name="g" type="a"/>`, `<xs:complexType name="a" abstract="true"><xs:sequence><xs:element name="h" `+str+`/></xs:sequence></xs:complexType>`),
 			emptyR, constructEmptyChoice},
-		{"value cycle check past a nillable element", fmt.Sprintf(pastDecline, `<xs:element name="g" nillable="true" type="t"/>`, ""),
-			emptyR, constructEmptyChoice},
-		{"value cycle check past a complex type", fmt.Sprintf(pastDecline, `<xs:element name="g" type="a"/>`, `<xs:complexType name="a" abstract="true"><xs:sequence><xs:element name="h" `+str+`/></xs:sequence></xs:complexType>`),
-			emptyR, constructEmptyChoice},
-		// The same walk of t again meets the recursion s closes after f1, and
-		// Generate's doc puts that recursion ahead of r's decline.
-		{"value cycle check past a recursion", fmt.Sprintf(pastDecline, `<xs:element name="g" type="cyc"/>`, `<xs:complexType name="cyc"><xs:sequence><xs:element name="s" type="cyc"/></xs:sequence></xs:complexType>`),
-			"local element s reaching complex type cyc again through elements that each occur exactly once", constructValueCycle},
-		// e's walk reaches t, declared after f, before f's walk begins.
-		{"named type body before a later top-level element", `<xs:element name="e"><xs:complexType><xs:sequence><xs:element name="l" type="t"/></xs:sequence></xs:complexType></xs:element><xs:element name="f"><xs:complexType><xs:choice/></xs:complexType></xs:element><xs:complexType name="t"><xs:choice><xs:sequence><xs:any minOccurs="0"/></xs:sequence></xs:choice></xs:complexType>`,
-			"complex type t whose choice's alternative 1, a sequence model group particle, has an emptiable model group at s.xsd:2:205 ", constructEmptiableGroupAlternative},
-		{"named complex local body", `<xs:complexType name="c"><xs:choice><xs:sequence><xs:any minOccurs="0"/></xs:sequence></xs:choice></xs:complexType><xs:element name="e"><xs:complexType><xs:sequence><xs:element name="l" type="c"/></xs:sequence></xs:complexType></xs:element>`,
-			"complex type c whose choice's alternative 1, a sequence model group particle, has an emptiable model group at s.xsd:2:1 ", constructEmptiableGroupAlternative},
-		{"nested struct", `<xs:element name="e"><xs:complexType><xs:sequence><xs:element name="l"><xs:complexType><xs:sequence><xs:sequence maxOccurs="2"><xs:element name="a" minOccurs="0" ` + str + `/></xs:sequence></xs:sequence></xs:complexType></xs:element></xs:sequence></xs:complexType></xs:element>`,
-			"complex type (anonymous) of element l of element e holding a sequence model group particle with {max occurs} above 1 whose sequence is emptiable at ", constructRepeatedEmptiableSequence},
-		{"nested choice", `<xs:element name="e"><xs:complexType><xs:sequence><xs:element name="l"><xs:complexType><xs:choice><xs:element name="a" ` + str + `/><xs:sequence><xs:any minOccurs="0"/></xs:sequence></xs:choice></xs:complexType></xs:element></xs:sequence></xs:complexType></xs:element>`,
-			"complex type (anonymous) of element l of element e whose choice's alternative 2, a sequence model group particle, has an emptiable model group at ", constructEmptiableGroupAlternative},
-		{"branch struct", `<xs:element name="e"><xs:complexType><xs:choice><xs:element name="l"><xs:complexType><xs:sequence><xs:sequence maxOccurs="2"><xs:element name="a" minOccurs="0" ` + str + `/></xs:sequence></xs:sequence></xs:complexType></xs:element></xs:choice></xs:complexType></xs:element>`,
-			"complex type (anonymous) of element l of element e holding a sequence model group particle with {max occurs} above 1 whose sequence is emptiable at ", constructRepeatedEmptiableSequence},
-		// The {type table} rows pin that a decline in a type the table selects
-		// names that type's slot: an anonymous complex type by its slot and
-		// the place of the declaration.
-		{"type table anonymous alternative", `<xs:element name="e"><xs:alternative test="@k"><xs:complexType><xs:sequence><xs:sequence maxOccurs="2"><xs:element name="a" minOccurs="0" ` + str + `/></xs:sequence></xs:sequence></xs:complexType></xs:alternative><xs:alternative type="xs:string"/></xs:element>`,
-			"complex type (anonymous) of {type table} alternative 1 of element e holding a sequence model group particle with {max occurs} above 1 whose sequence is emptiable at ", constructRepeatedEmptiableSequence},
-		{"type table anonymous default", `<xs:element name="e"><xs:alternative test="@k" type="xs:string"/><xs:alternative><xs:complexType><xs:sequence><xs:element name="l"><xs:complexType><xs:sequence><xs:sequence maxOccurs="2"><xs:element name="a" minOccurs="0" ` + str + `/></xs:sequence></xs:sequence></xs:complexType></xs:element></xs:sequence></xs:complexType></xs:alternative></xs:element>`,
-			"complex type (anonymous) of element l of {default type definition} of element e holding a sequence model group particle with {max occurs} above 1 whose sequence is emptiable at ", constructRepeatedEmptiableSequence},
-		{"type table local", `<xs:complexType name="c"><xs:sequence><xs:element name="x"><xs:alternative test="@k"><xs:complexType><xs:sequence><xs:sequence maxOccurs="2"><xs:element name="a" minOccurs="0" ` + str + `/></xs:sequence></xs:sequence></xs:complexType></xs:alternative><xs:alternative type="xs:string"/></xs:element></xs:sequence></xs:complexType><xs:element name="e" type="c"/>`,
-			"complex type (anonymous) of {type table} alternative 1 of element x of complex type c holding a sequence model group particle with {max occurs} above 1 whose sequence is emptiable at ", constructRepeatedEmptiableSequence},
 		// h's complex alternative is checked where e's ref meets it, ahead of
 		// z's decline.
 		{"element ref to type table outside the slice", `<xs:element name="e"><xs:complexType><xs:sequence><xs:element ref="h"/><xs:element name="z"><xs:complexType><xs:choice/></xs:complexType></xs:element></xs:sequence></xs:complexType></xs:element><xs:complexType name="c" abstract="true"><xs:sequence><xs:element name="a" ` + str + `/></xs:sequence></xs:complexType><xs:element name="h"><xs:alternative test="@k" type="c"/><xs:alternative type="xs:string"/></xs:element>`,
@@ -233,37 +258,117 @@ func TestGenerateDeclines(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			schema := parseString(t, "<xs:schema xmlns:xs=\"http://www.w3.org/2001/XMLSchema\">\n"+tt.body+"\n</xs:schema>\n")
-			out := filepath.Join(t.TempDir(), "out")
-			err := Generate([]Target{{Schema: schema, Dir: out, Package: "p"}})
-			if err == nil {
-				t.Fatal("Generate succeeded, want a decline")
-			}
-			if !errors.Is(err, errors.ErrUnsupported) {
-				t.Errorf("error %v does not wrap errors.ErrUnsupported", err)
-			}
-			var xe *xsderr.Error
-			if errors.As(err, &xe) {
-				t.Errorf("error %v is an *xsderr.Error, want a plain error", err)
-			}
-			var de *DeclineError
-			if !errors.As(err, &de) {
-				t.Fatalf("error %v is not a *DeclineError", err)
-			}
-			if got, want := de.Construct(), (Construct{tt.kind}); got != want {
-				t.Errorf("Construct() = %v, want %v", got, want)
-			}
-			for _, want := range []string{"codegen: target 0: ", tt.detail, " at s.xsd:2:", "a generator limitation, not a schema fault"} {
-				if !strings.Contains(err.Error(), want) {
-					t.Errorf("error %q does not contain %q", err, want)
-				}
-			}
-			if strings.Contains(err.Error(), "%!") {
-				t.Errorf("error %q holds a misused format verb", err)
-			}
-			if _, err := os.Stat(out); !errors.Is(err, os.ErrNotExist) {
-				t.Errorf("Dir %s exists after a decline (stat: %v)", out, err)
-			}
+			assertFirstDecline(t, parseString(t, "<xs:schema xmlns:xs=\"http://www.w3.org/2001/XMLSchema\">\n"+tt.body+"\n</xs:schema>\n"), tt.kind, tt.detail)
+		})
+	}
+}
+
+// assertFirstDecline pins that Generate, given schema, returns an error
+// wrapping errors.ErrUnsupported, not an *xsderr.Error, whose first
+// *DeclineError has Construct kind and a text holding detail, a Loc on line 2
+// of s.xsd and the limitation's wording, and writes nothing.
+func assertFirstDecline(t *testing.T, schema *xsd.Schema, kind construct, detail string) {
+	t.Helper()
+	out := filepath.Join(t.TempDir(), "out")
+	err := Generate([]Target{{Schema: schema, Dir: out, Package: "p"}})
+	if err == nil {
+		t.Fatal("Generate succeeded, want a decline")
+	}
+	if !errors.Is(err, errors.ErrUnsupported) {
+		t.Errorf("error %v does not wrap errors.ErrUnsupported", err)
+	}
+	var xe *xsderr.Error
+	if errors.As(err, &xe) {
+		t.Errorf("error %v is an *xsderr.Error, want a plain error", err)
+	}
+	var de *DeclineError
+	if !errors.As(err, &de) {
+		t.Fatalf("error %v is not a *DeclineError", err)
+	}
+	if got, want := de.Construct(), (Construct{kind}); got != want {
+		t.Errorf("Construct() = %v, want %v", got, want)
+	}
+	if !strings.HasPrefix(err.Error(), "codegen: target 0: ") {
+		t.Errorf("error %q does not open with %q", err, "codegen: target 0: ")
+	}
+	for _, want := range []string{detail, " at s.xsd:2:", "a generator limitation, not a schema fault"} {
+		if !strings.Contains(de.Error(), want) {
+			t.Errorf("first decline %q does not contain %q", de, want)
+		}
+	}
+	if strings.Contains(err.Error(), "%!") {
+		t.Errorf("error %q holds a misused format verb", err)
+	}
+	if _, err := os.Stat(out); !errors.Is(err, os.ErrNotExist) {
+		t.Errorf("Dir %s exists after a decline (stat: %v)", out, err)
+	}
+}
+
+// TestGenerateDeclineMechanics pins which decline Generate meets first and how
+// its text names the declining place, every decline but a struct-value
+// recursion being primitiveSchema's money: Generate's first *DeclineError is
+// the row's, as assertFirstDecline states. Each body is one line, so every Loc
+// is on line 2.
+func TestGenerateDeclineMechanics(t *testing.T) {
+	const (
+		amount    = `<xs:attribute name="amount" type="money"/>`
+		anon      = `<xs:complexType>` + amount + `</xs:complexType>`
+		str       = `type="xs:string"`
+		primitive = " with {type definition} money, whose {primitive type definition} is money at s.xsd:2:"
+		amountR   = "attribute amount of complex type (anonymous) of element r of complex type m" + primitive + "107 "
+	)
+	tests := []struct {
+		name, body, detail string
+		kind               construct
+	}{
+		// The decline under p precedes the cycle v closes
+		// in particle order, so it is the decline returned.
+		{"value cycle after an earlier decline", `<xs:complexType name="c"><xs:sequence><xs:element name="p" minOccurs="0">` + anon + `</xs:element><xs:element name="v" type="c"/></xs:sequence></xs:complexType><xs:element name="e"><xs:complexType><xs:sequence><xs:element name="l" type="c"/></xs:sequence></xs:complexType></xs:element>`,
+			"attribute amount of complex type (anonymous) of element p of complex type c" + primitive + "90 ", constructUncoveredPrimitive},
+		// In the two rows below, q reaches t while t's body is being emitted,
+		// so the recursion check walks t again past f1: it passes the
+		// wildcard, and a nillable element of type t itself, as leaves, and
+		// the emitting walk returns r's decline first.
+		{"value cycle check past a wildcard", fmt.Sprintf(pastDecline, amount, `<xs:any/>`, ""),
+			amountR, constructUncoveredPrimitive},
+		{"value cycle check past a nillable element", fmt.Sprintf(pastDecline, amount, `<xs:element name="g" nillable="true" type="t"/>`, ""),
+			amountR, constructUncoveredPrimitive},
+		// The same walk of t again meets the recursion s closes after f1, and
+		// Generate's doc puts that recursion ahead of r's decline.
+		{"value cycle check past a recursion", fmt.Sprintf(pastDecline, amount, `<xs:element name="g" type="cyc"/>`, `<xs:complexType name="cyc"><xs:sequence><xs:element name="s" type="cyc"/></xs:sequence></xs:complexType>`),
+			"local element s reaching complex type cyc again through elements that each occur exactly once", constructValueCycle},
+		// The ref to a is checked for recursion where it is met, ahead of the
+		// decline of z after it.
+		{"ref cycle ahead of a later decline", `<xs:element name="e"><xs:complexType><xs:sequence><xs:element ref="a"/><xs:element name="z" type="money"/></xs:sequence></xs:complexType></xs:element><xs:element name="a"><xs:complexType><xs:sequence><xs:element ref="b"/></xs:sequence></xs:complexType></xs:element><xs:element name="b"><xs:complexType><xs:sequence><xs:element ref="a"/></xs:sequence></xs:complexType></xs:element>`,
+			"<element ref> particle to element a reaching element a again through elements that each occur exactly once", constructValueCycle},
+		// e's walk reaches t, declared after f, before f's walk begins.
+		{"named type body before a later top-level element", `<xs:element name="e"><xs:complexType><xs:sequence><xs:element name="l" type="t"/></xs:sequence></xs:complexType></xs:element><xs:element name="f" type="money"/><xs:complexType name="t">` + amount + `</xs:complexType>`,
+			"attribute amount of complex type t" + primitive + "186 ", constructUncoveredPrimitive},
+		// The rows below pin that a decline in a type names the type's
+		// declaring place: a named complex type a local element reaches by
+		// its name alone, an anonymous one nested in a struct, in a struct
+		// holding a choice, or in a choice's branch by the path to it.
+		{"named complex local body", `<xs:complexType name="c">` + amount + `</xs:complexType><xs:element name="e"><xs:complexType><xs:sequence><xs:element name="l" type="c"/></xs:sequence></xs:complexType></xs:element>`,
+			"attribute amount of complex type c" + primitive + "26 ", constructUncoveredPrimitive},
+		{"nested struct", `<xs:element name="e"><xs:complexType><xs:sequence><xs:element name="l"><xs:complexType><xs:sequence><xs:element name="a" ` + str + `/></xs:sequence>` + amount + `</xs:complexType></xs:element></xs:sequence></xs:complexType></xs:element>`,
+			"attribute amount of complex type (anonymous) of element l of element e" + primitive + "154 ", constructUncoveredPrimitive},
+		{"nested choice", `<xs:element name="e"><xs:complexType><xs:sequence><xs:element name="l"><xs:complexType><xs:choice><xs:element name="a" ` + str + `/><xs:element name="b" ` + str + `/></xs:choice>` + amount + `</xs:complexType></xs:element></xs:sequence></xs:complexType></xs:element>`,
+			"attribute amount of complex type (anonymous) of element l of element e" + primitive + "189 ", constructUncoveredPrimitive},
+		{"branch struct", `<xs:element name="e"><xs:complexType><xs:choice><xs:element name="l"><xs:complexType><xs:sequence><xs:element name="a" ` + str + `/></xs:sequence>` + amount + `</xs:complexType></xs:element></xs:choice></xs:complexType></xs:element>`,
+			"attribute amount of complex type (anonymous) of element l of element e" + primitive + "152 ", constructUncoveredPrimitive},
+		// The {type table} rows pin that a decline in a type the table selects
+		// names that type's slot: an anonymous complex type by its slot and
+		// the place of the declaration.
+		{"type table anonymous alternative", `<xs:element name="e"><xs:alternative test="@k">` + anon + `</xs:alternative><xs:alternative type="xs:string"/></xs:element>`,
+			"attribute amount of complex type (anonymous) of {type table} alternative 1 of element e" + primitive + "64 ", constructUncoveredPrimitive},
+		{"type table anonymous default", `<xs:element name="e"><xs:alternative test="@k" type="xs:string"/><xs:alternative><xs:complexType><xs:sequence><xs:element name="l">` + anon + `</xs:element></xs:sequence></xs:complexType></xs:alternative></xs:element>`,
+			"attribute amount of complex type (anonymous) of element l of {default type definition} of element e" + primitive + "148 ", constructUncoveredPrimitive},
+		{"type table local", `<xs:complexType name="c"><xs:sequence><xs:element name="x"><xs:alternative test="@k">` + anon + `</xs:alternative><xs:alternative type="xs:string"/></xs:element></xs:sequence></xs:complexType><xs:element name="e" type="c"/>`,
+			"attribute amount of complex type (anonymous) of {type table} alternative 1 of element x of complex type c" + primitive + "102 ", constructUncoveredPrimitive},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assertFirstDecline(t, primitiveSchema(t, tt.body), tt.kind, tt.detail)
 		})
 	}
 }
@@ -271,54 +376,54 @@ func TestGenerateDeclines(t *testing.T) {
 // TestGenerateDeclinesLocalAnonymousPlace pins that a decline met in a local
 // element's anonymous complex type names the type's declaring place, and that
 // Generate reports each site, in document order, while one site reached by two
-// walks stays one element. Two sites charged at one Loc, here the abstract
-// complex type ab two top-level elements reference, print distinct texts and
-// Generate reports each.
+// walks stays one element. Two sites charged at one Loc, here the attribute of
+// the complex type ab two top-level elements reference, print distinct texts
+// and Generate reports each. Every decline is primitiveSchema's money.
 func TestGenerateDeclinesLocalAnonymousPlace(t *testing.T) {
 	const (
-		anon = `<xs:complexType><xs:choice/></xs:complexType>`
-		x    = `<xs:element name="x">` + anon + `</xs:element>`
-		a    = `<xs:element name="a"><xs:complexType><xs:sequence>` + x + `</xs:sequence></xs:complexType></xs:element>`
+		amount = `<xs:attribute name="amount" type="money"/>`
+		anon   = `<xs:complexType>` + amount + `</xs:complexType>`
+		x      = `<xs:element name="x">` + anon + `</xs:element>`
+		a      = `<xs:element name="a"><xs:complexType><xs:sequence>` + x + `</xs:sequence></xs:complexType></xs:element>`
 	)
 	top := func(name, content string) string {
 		return `<xs:element name="` + name + `"><xs:complexType>` + content + `</xs:complexType></xs:element>`
 	}
 	seq := func(particle string) string { return `<xs:sequence>` + particle + `</xs:sequence>` }
 	decline := func(subject, col string) string {
-		return "codegen: target 0: " + subject + " whose choice has no {particles} at s.xsd:2:" + col + " is not supported by codegen, a generator limitation, not a schema fault"
+		return "codegen: target 0: attribute amount of " + subject + " with {type definition} money, whose {primitive type definition} is money at s.xsd:2:" + col + " is not supported by codegen, a generator limitation, not a schema fault"
 	}
 	tests := []struct {
 		name, body string
 		want       []string
 	}{
 		{"two top-level elements", top("p", seq(x)) + top("q", seq(x)), []string{
-			decline("complex type (anonymous) of element x of element p", "72"),
-			decline("complex type (anonymous) of element x of element q", "245"),
+			decline("complex type (anonymous) of element x of element p", "88"),
+			decline("complex type (anonymous) of element x of element q", "291"),
 		}},
 		{"one model group definition", `<xs:group name="m">` + seq(x) + `</xs:group>` + top("p", `<xs:group ref="m"/>`) + top("q", `<xs:group ref="m"/>`), []string{
-			decline("complex type (anonymous) of element x of model group m", "54"),
+			decline("complex type (anonymous) of element x of model group m", "70"),
 		}},
 		{"named complex type and top-level element", `<xs:complexType name="c">` + seq(x) + `</xs:complexType><xs:element name="r" type="c"/>` + top("p", seq(x)), []string{
-			decline("complex type (anonymous) of element x of complex type c", "60"),
-			decline("complex type (anonymous) of element x of element p", "251"),
+			decline("complex type (anonymous) of element x of complex type c", "76"),
+			decline("complex type (anonymous) of element x of element p", "297"),
 		}},
 		{"top-level and local element", `<xs:element name="x">` + anon + `</xs:element>` + top("p", seq(x)), []string{
-			decline("complex type (anonymous) of element x", "22"),
-			decline("complex type (anonymous) of element x of element p", "151"),
+			decline("complex type (anonymous) of element x", "38"),
+			decline("complex type (anonymous) of element x of element p", "197"),
 		}},
 		{"two levels down", top("p", seq(a)) + top("q", seq(a)), []string{
-			decline("complex type (anonymous) of element x of element a of element p", "122"),
-			decline("complex type (anonymous) of element x of element a of element q", "389"),
+			decline("complex type (anonymous) of element x of element a of element p", "138"),
+			decline("complex type (anonymous) of element x of element a of element q", "435"),
 		}},
-		{"two top-level elements of one abstract type", `<xs:complexType name="ab" abstract="true"/><xs:element name="r" type="ab"/><xs:element name="t" type="ab"/>`, []string{
-			"codegen: target 0: complex type ab of element r with {abstract} true at s.xsd:2:1 is not supported by codegen, a generator limitation, not a schema fault",
-			"codegen: target 0: complex type ab of element t with {abstract} true at s.xsd:2:1 is not supported by codegen, a generator limitation, not a schema fault",
+		{"two top-level elements of one complex type", `<xs:complexType name="ab">` + amount + `</xs:complexType><xs:element name="r" type="ab"/><xs:element name="t" type="ab"/>`, []string{
+			decline("complex type ab of element r", "27"),
+			decline("complex type ab of element t", "27"),
 		}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			schema := parseString(t, "<xs:schema xmlns:xs=\"http://www.w3.org/2001/XMLSchema\">\n"+tt.body+"\n</xs:schema>\n")
-			errs := elements(t, Generate([]Target{{Schema: schema, Dir: filepath.Join(t.TempDir(), "out"), Package: "p"}}))
+			errs := elements(t, Generate([]Target{{Schema: primitiveSchema(t, tt.body), Dir: filepath.Join(t.TempDir(), "out"), Package: "p"}}))
 			got := make([]string, len(errs))
 			for i, err := range errs {
 				got[i] = err.Error()
@@ -341,21 +446,20 @@ func TestGenerateDeclinesLocalAnonymousPlace(t *testing.T) {
 func TestGenerateDeclinesSubstitutionMemberOnce(t *testing.T) {
 	const (
 		holder = `<xs:element name="e"><xs:complexType><xs:sequence><xs:element ref="h"/></xs:sequence></xs:complexType></xs:element>`
-		member = `<xs:element name="m" substitutionGroup="h" type="ac"/><xs:complexType name="ac" abstract="true"/>`
+		member = `<xs:element name="m" substitutionGroup="h" type="money"/>`
 	)
 	decline := func(loc string) []string {
-		return []string{"codegen: target 0: complex type ac of element m with {abstract} true at s.xsd:" + loc + " is not supported by codegen, a generator limitation, not a schema fault"}
+		return []string{"codegen: target 0: element m with {type definition} money, whose {primitive type definition} is money at s.xsd:" + loc + " is not supported by codegen, a generator limitation, not a schema fault"}
 	}
 	for _, tt := range []struct {
 		name, head string
 		want       []string
 	}{
-		{"abstract head", `<xs:element name="h" abstract="true" type="xs:anyType"/>`, decline("2:226")},
-		{"head with {abstract} false", `<xs:element name="h" type="xs:anyType"/>`, decline("2:210")},
+		{"abstract head", `<xs:element name="h" abstract="true" type="xs:anyType"/>`, decline("2:172")},
+		{"head with {abstract} false", `<xs:element name="h" type="xs:anyType"/>`, decline("2:156")},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
-			schema := parseString(t, "<xs:schema xmlns:xs=\"http://www.w3.org/2001/XMLSchema\">\n"+holder+tt.head+member+"\n</xs:schema>\n")
-			errs := elements(t, Generate([]Target{{Schema: schema, Dir: filepath.Join(t.TempDir(), "out"), Package: "p"}}))
+			errs := elements(t, Generate([]Target{{Schema: primitiveSchema(t, holder+tt.head+member), Dir: filepath.Join(t.TempDir(), "out"), Package: "p"}}))
 			got := make([]string, len(errs))
 			for i, err := range errs {
 				got[i] = err.Error()
@@ -633,7 +737,7 @@ func TestGenerateDeclinesUncoveredPrimitive(t *testing.T) {
 // and Loc as values, and that the target's name opens the error outside the
 // *DeclineError's own text.
 func TestDeclineErrorAs(t *testing.T) {
-	schema := parseString(t, "<xs:schema xmlns:xs=\"http://www.w3.org/2001/XMLSchema\">\n<xs:element name=\"e\"><xs:complexType><xs:choice/></xs:complexType></xs:element>\n</xs:schema>\n")
+	schema := primitiveSchema(t, `<xs:element name="e" type="money"/>`)
 	tests := []struct {
 		name, targetName, opening string
 	}{
@@ -647,7 +751,7 @@ func TestDeclineErrorAs(t *testing.T) {
 			if !errors.As(err, &de) {
 				t.Fatalf("Generate = %v, want an error errors.As retrieves a *DeclineError from", err)
 			}
-			if got, want := de.Construct(), (Construct{constructEmptyChoice}); got != want {
+			if got, want := de.Construct(), (Construct{constructUncoveredPrimitive}); got != want {
 				t.Errorf("Construct() = %v, want %v", got, want)
 			}
 			if loc := de.Loc(); loc.URI != "s.xsd" || loc.Line != 2 {
@@ -656,7 +760,7 @@ func TestDeclineErrorAs(t *testing.T) {
 			if want := tt.opening + de.Error(); err.Error() != want {
 				t.Errorf("error %q, want %q", err, want)
 			}
-			const detail = "complex type (anonymous) of element e whose choice has no {particles} at "
+			const detail = "element e with {type definition} money, whose {primitive type definition} is money at "
 			if !strings.HasPrefix(de.Error(), detail+de.Loc().String()+" is not supported by codegen") {
 				t.Errorf("DeclineError.Error() = %q, want it to open %q followed by its Loc", de.Error(), detail)
 			}
@@ -765,13 +869,35 @@ func parsedDecline(t *testing.T, body string) *DeclineError {
 }
 
 // TestConstructMapKey pins Construct's doc: a Construct is comparable and may
-// key a map. Each Construct comes from a decline, never a literal: two empty
-// choices declining at different elements share one key, and an abstract
-// complex type's decline keys another.
+// key a map. Each Construct comes from a decline, never a literal: two
+// declines of primitiveSchema's money at different elements share one key, and
+// the decline of a particle with {max occurs} 0, built as
+// TestGenerateDeclinesVacuousParticle builds its wildcard row's, keys another.
 func TestConstructMapKey(t *testing.T) {
-	first := parsedDecline(t, `<xs:element name="e"><xs:complexType><xs:choice/></xs:complexType></xs:element>`).Construct()
-	second := parsedDecline(t, `<xs:element name="f"><xs:complexType><xs:choice/></xs:complexType></xs:element>`).Construct()
-	third := parsedDecline(t, `<xs:complexType name="c" abstract="true"/><xs:element name="n" type="c"/>`).Construct()
+	construct := func(schema *xsd.Schema) Construct {
+		t.Helper()
+		err := Generate([]Target{{Schema: schema, Dir: filepath.Join(t.TempDir(), "out"), Package: "p"}})
+		var de *DeclineError
+		if !errors.As(err, &de) {
+			t.Fatalf("Generate = %v, want an error errors.As retrieves a *DeclineError from", err)
+		}
+		return de.Construct()
+	}
+	anyNamespace, err := xsd.NewNamespaceConstraint(xsderr.Loc{}, xsd.NamespaceConstraintAny, nil, nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	wildcard, err := xsd.NewWildcard(xsderr.Loc{}, anyNamespace, xsd.ProcessLax)
+	if err != nil {
+		t.Fatal(err)
+	}
+	vacuous, err := xsd.NewOccurs(xsderr.Loc{}, 0, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	first := construct(primitiveSchema(t, `<xs:element name="e" type="money"/>`))
+	second := construct(primitiveSchema(t, `<xs:element name="f" type="money"/>`))
+	third := construct(vacuousSchema(t, xsd.QName{Local: "c"}, wildcard, vacuous, exactlyOnce))
 	counts := make(map[Construct]int)
 	for _, c := range []Construct{first, second, third} {
 		counts[c]++
@@ -786,10 +912,10 @@ func TestConstructMapKey(t *testing.T) {
 		t.Errorf("counts[%v] = %d, want 1", third, got)
 	}
 	if first != second {
-		t.Errorf("two empty-choice declines have Constructs %v and %v, want them ==", first, second)
+		t.Errorf("two uncovered-primitive declines have Constructs %v and %v, want them ==", first, second)
 	}
 	if first == third {
-		t.Errorf("an empty-choice and an abstract complex type decline both have Construct %v, want them !=", first)
+		t.Errorf("an uncovered-primitive and a vacuous-particle decline both have Construct %v, want them !=", first)
 	}
 }
 

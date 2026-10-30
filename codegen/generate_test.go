@@ -7,12 +7,23 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/kud360/goxsd8/xsd"
 )
 
 const (
 	acceptedDoc = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"><xs:element name="e" type="xs:string"/></xs:schema>`
-	declinedDoc = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"><xs:element name="e"><xs:complexType><xs:choice/></xs:complexType></xs:element></xs:schema>`
+	// declinedText is the error text of declinedSchema's one decline, after
+	// its target's opening.
+	declinedText = "element e with {type definition} money, whose {primitive type definition} is money at s.xsd:2:1 is not supported by codegen, a generator limitation, not a schema fault"
 )
+
+// declinedSchema is a schema Generate declines once, through
+// primitiveSchema's money.
+func declinedSchema(t *testing.T) *xsd.Schema {
+	t.Helper()
+	return primitiveSchema(t, `<xs:element name="e" type="money"/>`)
+}
 
 // TestGenerateInvalidTargets pins the Target checks: each fails phase 1, so
 // the valid target before it is not written either.
@@ -88,7 +99,7 @@ func TestGenerateUnresolvableDir(t *testing.T) {
 // the earlier target by its Name, or by "target N" when it has none.
 func TestGenerateNamedTargets(t *testing.T) {
 	accepted := parseString(t, acceptedDoc)
-	declined := parseString(t, declinedDoc)
+	declined := declinedSchema(t)
 	tests := []struct {
 		name    string
 		targets func(dir string) []Target
@@ -106,7 +117,7 @@ func TestGenerateNamedTargets(t *testing.T) {
 				{Schema: accepted, Dir: filepath.Join(dir, "a"), Package: "p", Name: "first"},
 				{Schema: declined, Dir: filepath.Join(dir, "b"), Package: "q", Name: "second"},
 			}
-		}, "second: complex type (anonymous) of element e whose choice", true},
+		}, "second: " + declinedText, true},
 		{"duplicate dir", func(dir string) []Target {
 			return []Target{
 				{Schema: accepted, Dir: filepath.Join(dir, "a"), Package: "p", Name: "first"},
@@ -150,10 +161,10 @@ func TestGenerateAllOrNothing(t *testing.T) {
 	dir := t.TempDir()
 	targets := []Target{
 		{Schema: parseString(t, acceptedDoc), Dir: filepath.Join(dir, "a"), Package: "a"},
-		{Schema: parseString(t, declinedDoc), Dir: filepath.Join(dir, "b"), Package: "b"},
+		{Schema: declinedSchema(t), Dir: filepath.Join(dir, "b"), Package: "b"},
 	}
 	err := Generate(targets)
-	if err == nil || !strings.HasPrefix(err.Error(), "codegen: target 1: complex type (anonymous) of element e whose choice") || !errors.Is(err, errors.ErrUnsupported) {
+	if err == nil || err.Error() != "codegen: target 1: "+declinedText || !errors.Is(err, errors.ErrUnsupported) {
 		t.Fatalf("Generate = %v, want target 1's decline", err)
 	}
 	assertAbsent(t, targets[0].Dir)
@@ -214,7 +225,7 @@ func TestGenerateDestination(t *testing.T) {
 // generator declines: a plain error naming the destination, or the Dir that
 // cannot be checked, not a decline.
 func TestGenerateRefusalPrecedesDecline(t *testing.T) {
-	declined := parseString(t, declinedDoc)
+	declined := declinedSchema(t)
 	tests := []struct {
 		name  string
 		setup func(t *testing.T, dir string) string
@@ -304,7 +315,7 @@ func TestCheckTargets(t *testing.T) {
 // its opening precedes, a decline's *DeclineError reached through it.
 func TestTargetError(t *testing.T) {
 	accepted := parseString(t, acceptedDoc)
-	declined := parseString(t, declinedDoc)
+	declined := declinedSchema(t)
 	tests := []struct {
 		name    string
 		errs    func(dir string) []error
@@ -322,7 +333,7 @@ func TestTargetError(t *testing.T) {
 				{Schema: accepted, Dir: filepath.Join(dir, "a"), Package: "p"},
 				{Schema: declined, Dir: filepath.Join(dir, "b"), Package: "q"},
 			}))
-		}, "complex type (anonymous) of element e whose choice", true},
+		}, declinedText, true},
 		{"phase-2 fault", func(dir string) []error {
 			return elements(t, Generate([]Target{
 				{Schema: accepted, Dir: filepath.Join(dir, "a"), Package: "p"},
@@ -356,8 +367,8 @@ func TestTargetError(t *testing.T) {
 			if errors.As(errs[0], &de) != tt.decline {
 				t.Fatalf("errors.As(%v, *DeclineError) = %t, want %t", errs[0], !tt.decline, tt.decline)
 			}
-			if tt.decline && de.Construct() != (Construct{constructEmptyChoice}) {
-				t.Errorf("Construct() = %v, want %v", de.Construct(), Construct{constructEmptyChoice})
+			if tt.decline && de.Construct() != (Construct{constructUncoveredPrimitive}) {
+				t.Errorf("Construct() = %v, want %v", de.Construct(), Construct{constructUncoveredPrimitive})
 			}
 			if errors.Is(errs[0], errors.ErrUnsupported) != tt.decline {
 				t.Errorf("errors.Is(%v, errors.ErrUnsupported) = %t, want %t", errs[0], !tt.decline, tt.decline)
@@ -410,10 +421,11 @@ func TestCheckTargetsEmptyEarlierDir(t *testing.T) {
 // entered again by a later turn, which here meets the same decline and
 // contributes nothing.
 func TestGenerateCollectsDeclines(t *testing.T) {
-	const tail = " is not supported by codegen, a generator limitation, not a schema fault"
-	const empty = " whose choice has no {particles}"
-	emptyChoice := Construct{constructEmptyChoice}
-	abstract := Construct{constructComplexTypeAbstract}
+	const (
+		tail      = " is not supported by codegen, a generator limitation, not a schema fault"
+		primitive = " with {type definition} money, whose {primitive type definition} is money at s.xsd:"
+	)
+	uncovered := Construct{constructUncoveredPrimitive}
 	type decline struct {
 		text      string
 		construct Construct
@@ -425,41 +437,32 @@ func TestGenerateCollectsDeclines(t *testing.T) {
 	}{
 		{"two targets, one with two", func(dir string) []Target {
 			return []Target{
-				{Schema: parseString(t, `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
-<xs:element name="a"><xs:complexType><xs:choice/></xs:complexType></xs:element>
+				{Schema: primitiveSchema(t, `<xs:element name="a" type="money"/>
 <xs:element name="c"><xs:complexType><xs:sequence><xs:element ref="b"/></xs:sequence></xs:complexType></xs:element>
-<xs:element name="b" type="ab"/>
-<xs:complexType name="ab" abstract="true"/>
-</xs:schema>`), Dir: filepath.Join(dir, "a"), Package: "a", Name: "first"},
-				{Schema: parseString(t, declinedDoc), Dir: filepath.Join(dir, "b"), Package: "b"},
+<xs:element name="b" type="money"/>`), Dir: filepath.Join(dir, "a"), Package: "a", Name: "first"},
+				{Schema: declinedSchema(t), Dir: filepath.Join(dir, "b"), Package: "b"},
 			}
 		}, []decline{
-			{"first: complex type (anonymous) of element a" + empty + " at s.xsd:2:22" + tail, emptyChoice},
+			{"first: element a" + primitive + "2:1" + tail, uncovered},
 			// Met at c's turn, through its ref; b's own turn is the dropped duplicate.
-			{"first: complex type ab of element b with {abstract} true at s.xsd:5:1" + tail, abstract},
-			{"codegen: target 1: complex type (anonymous) of element e" + empty + " at s.xsd:1:77" + tail, emptyChoice},
+			{"first: element b" + primitive + "4:1" + tail, uncovered},
+			{"codegen: target 1: " + declinedText, uncovered},
 		}},
 		{"a named type two top-level elements share", func(dir string) []Target {
-			return []Target{{Schema: parseString(t, `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
-<xs:complexType name="T"><xs:sequence><xs:element name="x" type="ab"/></xs:sequence></xs:complexType>
+			return []Target{{Schema: primitiveSchema(t, `<xs:complexType name="T"><xs:sequence><xs:element name="x" type="money"/></xs:sequence></xs:complexType>
 <xs:element name="e1" type="T"/>
-<xs:element name="e2" type="T"/>
-<xs:complexType name="ab" abstract="true"/>
-</xs:schema>`), Dir: filepath.Join(dir, "a"), Package: "a"}}
+<xs:element name="e2" type="T"/>`), Dir: filepath.Join(dir, "a"), Package: "a"}}
 		}, []decline{
-			{"codegen: target 0: complex type ab with {abstract} true at s.xsd:5:1" + tail, abstract},
+			{"codegen: target 0: element x" + primitive + "2:39" + tail, uncovered},
 		}},
 		// b's walk enters T again, whose body declined at a's turn, so its first
 		// decline is x's duplicate, and m's decline after it is never met.
 		{"a named type whose body declined, reached again locally", func(dir string) []Target {
-			return []Target{{Schema: parseString(t, `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
-<xs:complexType name="T"><xs:sequence><xs:element name="x" type="ab"/></xs:sequence></xs:complexType>
+			return []Target{{Schema: primitiveSchema(t, `<xs:complexType name="T"><xs:sequence><xs:element name="x" type="money"/></xs:sequence></xs:complexType>
 <xs:element name="a"><xs:complexType><xs:sequence><xs:element name="l1" type="T"/></xs:sequence></xs:complexType></xs:element>
-<xs:element name="b"><xs:complexType><xs:sequence><xs:element name="l2" type="T"/><xs:element name="m"><xs:complexType><xs:choice/></xs:complexType></xs:element></xs:sequence></xs:complexType></xs:element>
-<xs:complexType name="ab" abstract="true"/>
-</xs:schema>`), Dir: filepath.Join(dir, "a"), Package: "a"}}
+<xs:element name="b"><xs:complexType><xs:sequence><xs:element name="l2" type="T"/><xs:element name="m" type="money"/></xs:sequence></xs:complexType></xs:element>`), Dir: filepath.Join(dir, "a"), Package: "a"}}
 		}, []decline{
-			{"codegen: target 0: complex type ab with {abstract} true at s.xsd:5:1" + tail, abstract},
+			{"codegen: target 0: element x" + primitive + "2:39" + tail, uncovered},
 		}},
 	}
 	for _, tt := range tests {
@@ -501,8 +504,8 @@ func TestGenerateCollectsDeclines(t *testing.T) {
 // not a decline, which follows the declines collected before it: the third
 // target's decline is never collected.
 func TestGenerateStopsAtNonDecline(t *testing.T) {
-	const first = "first: complex type (anonymous) of element e whose choice has no {particles} at s.xsd:1:77 is not supported by codegen, a generator limitation, not a schema fault"
-	declined := parseString(t, declinedDoc)
+	const first = "first: " + declinedText
+	declined := declinedSchema(t)
 	tests := []struct {
 		name   string
 		second Target
