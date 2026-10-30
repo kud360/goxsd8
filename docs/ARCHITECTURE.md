@@ -688,10 +688,10 @@ nothing.** `codegen` (M9) exports `Generate` and `Target`, which emit Go type
 declarations for the schema shapes `codegen/doc.go`'s "Coverage" states and
 decline every other. **Read which of the bullets below ship in
 `codegen/doc.go`, not here:** its "Coverage", "Determinism" and "Naming"
-sections state what `Generate` does today, and its "Planned" section what it
+sections state what `Generate` does today, and its "Planned" sections what it
 does not. `codec` (M10) is `doc.go`-only — `go doc` renders no exported
-identifier for it — and `value.Emitter` does not exist (its API is frozen
-for M9, not declared). A bullet `codegen/doc.go` does not state as shipped,
+identifier for it — and `value.Emitter` does not exist (its API freezes
+in M10; not declared). A bullet `codegen/doc.go` does not state as shipped,
 and everything about `codec`, is the destination, stated in present tense
 because it is a design contract; read it as "will", not "does".
 
@@ -727,7 +727,7 @@ because it is a design contract; read it as "will", not "does".
   `value.Mapping`, driven by the compiled schema. General, reflective,
   allocation-tolerant.
 - **Generated fast path** (planned): backends will export **code emitters**
-  (`value.Emitter` — API frozen in M9, **not yet declared**; to be
+  (`value.Emitter` — API frozen in M10, **not yet declared**; to be
   implemented by `builtin/strict` and `builtin/native`, and by user
   backends that want it). At codegen time the emitter
   contributes specialized decode/encode code for its types — parsing
