@@ -404,15 +404,17 @@
 //     (§3.8.4.2 key-vpath).
 //   - A complex type's {open content} (§3.4.2.3.3 dcl.ctd.ctcc.common clauses 5
 //     and 6), read from its own {content type}, so one an extension inherits
-//     counts (clause 4.2.3.3) and an <openContent mode="none"> gives none
-//     (clause 6.1), gives one field in the struct the type itself gives, never
-//     in an occurrence type or a branch struct, after the particle fields and
-//     before the attribute fields, named as if from the local name openContent
-//     ("Naming"), so that an element openContent gives the field OpenContent2.
-//     The field is a slice of AnyElement, or of AnyChild in mixed content,
-//     never a pointer, nil and the empty slice being one value. Empty explicit
-//     content that clause 6.2 makes element-only, with a sequence of no
-//     {particles}, gives a struct holding the field alone.
+//     counts (clause 4.2.3.3) and an <openContent mode="none"> adds none of its
+//     own, so an extension keeps the {open content} its base's {content type}
+//     carries (clause 6.1), gives one field in the struct the type itself
+//     gives, never in an occurrence type or a branch struct, after the particle
+//     fields and before the attribute fields, named as if from the local name
+//     openContent ("Naming"), so that beside an element openContent, which
+//     keeps OpenContent, the field is OpenContent2. The field is a slice of
+//     AnyElement, or of AnyChild in mixed content, never a pointer, nil and the
+//     empty slice being one value. Empty explicit content that clause 6.2 makes
+//     element-only, with a sequence of no {particles}, gives a struct holding
+//     the field alone.
 //   - The open-content field holds, in order, the children attributed to the
 //     open content (§3.4.4.4): a child that the {particle} could take at that
 //     point in the sequence is the particle's, which the struct does not
