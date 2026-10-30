@@ -641,20 +641,19 @@
 // XSD local name becomes an exported identifier: '_' and every rune Go does
 // not admit in an identifier break words, every word starts upper-case, and a
 // result with no upper-case first letter is prefixed with X. That upper-case
-// start is also what keeps every identifier clear of the Go keywords. A type
-// is named from the element, named type or datatype it is generated from; a
-// type a package emits once for all its declarations, such as AnyType,
-// MixedChild or Nillable, from a fixed local name; any other type, such as an
-// anonymous type, an occurrence type, a branch, a variant or an arm, by a path:
-// a name it lies under, followed by local names of its own. A field is named
-// from the local name of the element or attribute it holds, or from one the
-// paragraphs below state. A residual collision — two names folding to one
-// identifier, among a package's types or one struct's fields — is disambiguated
+// start is also what keeps every identifier clear of the Go keywords. A
+// top-level element's type is named from the element; a named complex type a
+// local element reaches, and a named union's interface, from the type; a
+// datatype struct, PrecisionDecimal included, from its datatype; the
+// raw-content structs, MixedChild, and Nillable and its arms Nilled and
+// Content, from fixed local names; and every other type, such as an anonymous
+// type, an occurrence type, a branch, a variant, or PrecisionDecimal's
+// interface and arms, by a path: a name it lies under, followed by local names
+// of its own. A residual collision — two names folding to one identifier,
+// among a package's types or one struct's fields — is disambiguated
 // deterministically by document order: the later name takes the smallest free
 // numeric suffix from 2, so a top-level element ct and a complex type ct
-// reached locally take Ct in the order they are first reached. The paragraphs
-// below state each kind of type's name and when the walk claims it, which
-// decides which of two colliding names is the later.
+// reached locally take Ct in the order they are first reached.
 //
 // Generated identifiers are not stable before v1.0: a release may rename any
 // type or field this section names, and the shortening of an anonymous type's
