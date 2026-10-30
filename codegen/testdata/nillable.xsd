@@ -1,5 +1,6 @@
 <?xml version="1.0"?>
-<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+           xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
   <xs:element name="order">
     <xs:complexType>
       <xs:sequence>
@@ -12,6 +13,8 @@
         <xs:element name="tag" type="xs:string" nillable="true" maxOccurs="unbounded"/>
         <xs:element name="raw" nillable="true"/>
         <xs:element name="next" type="link" nillable="true"/>
+        <xs:element name="flagged" type="flag" nillable="true"/>
+        <xs:element name="plain" type="flag"/>
         <xs:element ref="item"/>
         <xs:element ref="head"/>
         <xs:element ref="loose"/>
@@ -36,6 +39,7 @@
       <xs:extension base="xs:decimal">
         <xs:attribute name="value" type="xs:string"/>
         <xs:attribute name="currency" type="xs:string" use="required"/>
+        <xs:attribute ref="xsi:nil"/>
       </xs:extension>
     </xs:simpleContent>
   </xs:complexType>
@@ -44,6 +48,13 @@
       <xs:element name="x" type="xs:string"/>
       <xs:element name="y" type="xs:int"/>
     </xs:choice>
+  </xs:complexType>
+  <xs:complexType name="flag">
+    <xs:choice>
+      <xs:element name="on" type="xs:string"/>
+      <xs:element name="off" type="xs:int"/>
+    </xs:choice>
+    <xs:attribute ref="xsi:nil"/>
   </xs:complexType>
   <xs:complexType name="link">
     <xs:sequence>
