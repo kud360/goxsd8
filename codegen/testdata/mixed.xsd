@@ -1,0 +1,113 @@
+<?xml version="1.0"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="note">
+    <xs:complexType mixed="true">
+      <xs:sequence>
+        <xs:element name="from" type="xs:string"/>
+        <xs:element name="to" type="xs:string"/>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="plain">
+    <xs:complexType mixed="true">
+      <xs:attribute name="lang" type="xs:string"/>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="para" type="para"/>
+  <xs:complexType name="para" mixed="true">
+    <xs:sequence>
+      <xs:element name="text" type="xs:int"/>
+      <xs:element name="em" type="xs:string" minOccurs="0"/>
+      <xs:element name="b" type="xs:string" maxOccurs="unbounded"/>
+      <xs:element ref="mark" minOccurs="0"/>
+      <xs:element ref="head" minOccurs="0"/>
+      <xs:element name="link" type="link"/>
+      <xs:any processContents="lax" minOccurs="0" maxOccurs="unbounded"/>
+      <xs:choice>
+        <xs:element name="x" type="xs:string"/>
+        <xs:sequence>
+          <xs:element name="y" type="xs:string"/>
+          <xs:element name="z" type="xs:string" maxOccurs="2"/>
+        </xs:sequence>
+      </xs:choice>
+      <xs:group ref="shared" maxOccurs="unbounded"/>
+    </xs:sequence>
+  </xs:complexType>
+  <xs:complexType name="link">
+    <xs:group ref="shared" maxOccurs="unbounded"/>
+  </xs:complexType>
+  <xs:group name="shared">
+    <xs:sequence>
+      <xs:element name="href" type="xs:string"/>
+    </xs:sequence>
+  </xs:group>
+  <xs:element name="mark" type="xs:string"/>
+  <xs:element name="head" type="xs:string"/>
+  <xs:element name="member" type="xs:string" substitutionGroup="head"/>
+  <xs:element name="pick">
+    <xs:complexType mixed="true">
+      <xs:choice>
+        <xs:element name="a" type="xs:string"/>
+        <xs:element name="c" type="xs:string" maxOccurs="2"/>
+      </xs:choice>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="tabled">
+    <xs:complexType mixed="true">
+      <xs:sequence>
+        <xs:element name="v" minOccurs="0">
+          <xs:alternative test="@k" type="xs:int"/>
+          <xs:alternative type="xs:string"/>
+        </xs:element>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="loose" type="loose"/>
+  <xs:complexType name="loose" mixed="true">
+    <xs:sequence>
+      <xs:any processContents="lax" minOccurs="0" maxOccurs="unbounded"/>
+    </xs:sequence>
+    <xs:anyAttribute processContents="lax"/>
+  </xs:complexType>
+  <xs:element name="bare" type="bare"/>
+  <xs:complexType name="bare" mixed="true">
+    <xs:sequence>
+      <xs:any processContents="lax" minOccurs="0" maxOccurs="unbounded"/>
+    </xs:sequence>
+  </xs:complexType>
+  <xs:element name="open" type="open"/>
+  <xs:complexType name="open">
+    <xs:complexContent>
+      <xs:extension base="xs:anyType"/>
+    </xs:complexContent>
+  </xs:complexType>
+  <xs:element name="more">
+    <xs:complexType mixed="true">
+      <xs:complexContent>
+        <xs:extension base="para">
+          <xs:sequence>
+            <xs:element name="tail" type="xs:string"/>
+          </xs:sequence>
+        </xs:extension>
+      </xs:complexContent>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="strict">
+    <xs:complexType>
+      <xs:complexContent>
+        <xs:restriction base="pair">
+          <xs:sequence>
+            <xs:element name="from" type="xs:string"/>
+            <xs:element name="to" type="xs:string"/>
+          </xs:sequence>
+        </xs:restriction>
+      </xs:complexContent>
+    </xs:complexType>
+  </xs:element>
+  <xs:complexType name="pair" mixed="true">
+    <xs:sequence>
+      <xs:element name="from" type="xs:string"/>
+      <xs:element name="to" type="xs:string"/>
+    </xs:sequence>
+  </xs:complexType>
+</xs:schema>

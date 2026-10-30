@@ -605,10 +605,11 @@ func TestGenerateEmptyContent(t *testing.T) {
 // TestGenerateRestriction pins complex-content restrictions of a base other
 // than xs:anyType beyond the golden's: each gets a type from its own {content
 // type} (§3.4.2.3.3 dcl.ctd.ctcc.common) and {attribute uses} (§3.4.2.4
-// dcl.ctd.attuses), whatever its base declines for. The base's {abstract}
-// (§3.4.2.1 dcl.ctd.common), mixed content (dcl.ctd.ctcc.common 1.3) and
-// {attribute wildcard} (§3.4.2.5 dcl.ctd.anyatt 2.1) are none of the
-// derived type's, and e inherits b's attribute a.
+// dcl.ctd.attuses), whatever its base declines for or emits. The base's
+// {abstract} (§3.4.2.1 dcl.ctd.common), mixed content (dcl.ctd.ctcc.common
+// 1.3), whose Text field and MixedChild fields e does not get, and {attribute
+// wildcard} (§3.4.2.5 dcl.ctd.anyatt 2.1) are none of the derived type's, and
+// e inherits b's attribute a.
 func TestGenerateRestriction(t *testing.T) {
 	const str = `type="xs:string"`
 	tests := []struct{ name, body, want string }{
@@ -629,6 +630,39 @@ func TestGenerateRestriction(t *testing.T) {
 				t.Errorf("want %q in:\n%s", tt.want, got)
 			}
 			typeCheck(t, src)
+		})
+	}
+}
+
+// TestGenerateMixedChildName pins the claim of MixedChild's name ("Naming"):
+// when the walk first needs it, after the name of the struct holding the
+// element field and ahead of the names that field's type first claims. A
+// top-level element mixedChild declared before e claims MixedChild first; one
+// that e's <element ref> particle reaches first claims MixedChild2 after it.
+func TestGenerateMixedChildName(t *testing.T) {
+	const (
+		mixedRef = `<xs:element name="e"><xs:complexType mixed="true"><xs:sequence><xs:element ref="mixedChild"/></xs:sequence></xs:complexType></xs:element>`
+		child    = `<xs:element name="mixedChild" type="xs:string"/>`
+	)
+	tests := []struct {
+		name, body string
+		want       []string
+	}{
+		{"element declared first", child + mixedRef,
+			[]string{"type MixedChild string\n", "\tText       string\n\tMixedChild MixedChild2[MixedChild]\n", "type MixedChild2[T any] struct {\n"}},
+		{"element reached through the ref", mixedRef + child,
+			[]string{"type MixedChild2 string\n", "\tText       string\n\tMixedChild MixedChild[MixedChild2]\n", "type MixedChild[T any] struct {\n"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			schema := parseString(t, `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">`+tt.body+`</xs:schema>`)
+			src := generateOne(t, Target{Schema: schema, Dir: t.TempDir(), Package: "p"})
+			typeCheck(t, src)
+			for _, want := range tt.want {
+				if !strings.Contains(string(src), want) {
+					t.Errorf("want %q in:\n%s", want, src)
+				}
+			}
 		})
 	}
 }

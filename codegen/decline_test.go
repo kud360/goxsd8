@@ -88,8 +88,6 @@ func TestGenerateDeclines(t *testing.T) {
 			"complex type (anonymous) of element e holding a sequence model group particle with {max occurs} above 1 whose sequence is emptiable at s.xsd:2:22 ", constructRepeatedEmptiableSequence},
 		{"repeated emptiable sequence group ref", `<xs:group name="g"><xs:sequence><xs:element name="b" minOccurs="0" ` + str + `/></xs:sequence></xs:group><xs:element name="e"><xs:complexType><xs:group ref="g" maxOccurs="unbounded"/></xs:complexType></xs:element>`,
 			"complex type (anonymous) of element e holding a sequence model group particle with {max occurs} above 1 whose sequence is emptiable at s.xsd:2:", constructRepeatedEmptiableSequence},
-		{"mixed choice", `<xs:element name="e"><xs:complexType mixed="true"><xs:choice><xs:element name="a" ` + str + `/></xs:choice></xs:complexType></xs:element>`,
-			"with mixed content", constructMixedContent},
 		{"open content choice", `<xs:element name="e"><xs:complexType><xs:openContent><xs:any/></xs:openContent><xs:choice><xs:element name="a" ` + str + `/></xs:choice></xs:complexType></xs:element>`,
 			"with {open content}", constructOpenContent},
 		{"choice alternative type", `<xs:element name="e"><xs:complexType><xs:choice><xs:element name="a" type="xs:precisionDecimal"/></xs:choice></xs:complexType></xs:element>`,
@@ -117,8 +115,8 @@ func TestGenerateDeclines(t *testing.T) {
 		{"element ref in choice to nillable", `<xs:element name="e"><xs:complexType><xs:choice><xs:element name="a" ` + str + `/><xs:element ref="h"/></xs:choice></xs:complexType></xs:element><xs:element name="h" nillable="true" ` + str + `/>`,
 			"element h with {nillable} true", constructElementNillable},
 		// h's type is checked where e's ref meets it, ahead of z's decline.
-		{"element ref to complex type outside the slice", `<xs:element name="e"><xs:complexType><xs:sequence><xs:element ref="h"/><xs:element name="z" type="xs:precisionDecimal"/></xs:sequence></xs:complexType></xs:element><xs:element name="h"><xs:complexType mixed="true"><xs:sequence><xs:element name="a" ` + str + `/></xs:sequence></xs:complexType></xs:element>`,
-			"complex type (anonymous) of element h with mixed content", constructMixedContent},
+		{"element ref to complex type outside the slice", `<xs:element name="e"><xs:complexType><xs:sequence><xs:element ref="h"/><xs:element name="z" type="xs:precisionDecimal"/></xs:sequence></xs:complexType></xs:element><xs:element name="h"><xs:complexType><xs:openContent><xs:any/></xs:openContent><xs:sequence><xs:element name="a" ` + str + `/></xs:sequence></xs:complexType></xs:element>`,
+			"complex type (anonymous) of element h with {open content}", constructOpenContent},
 		{"element ref to simple type outside the slice", `<xs:element name="e"><xs:complexType><xs:sequence><xs:element ref="h"/><xs:element name="z" type="xs:precisionDecimal"/></xs:sequence></xs:complexType></xs:element><xs:element name="h" type="xs:precisionDecimal"/>`,
 			"element h with {type definition} {http://www.w3.org/2001/XMLSchema}precisionDecimal, whose {primitive type definition} is", constructUncoveredPrimitive},
 		{"attribute list of uncovered primitive", `<xs:element name="e"><xs:complexType><xs:sequence><xs:element name="a" ` + str + `/></xs:sequence><xs:attribute name="t"><xs:simpleType><xs:list itemType="xs:precisionDecimal"/></xs:simpleType></xs:attribute></xs:complexType></xs:element>`,
@@ -129,16 +127,12 @@ func TestGenerateDeclines(t *testing.T) {
 			"attribute t of complex type (anonymous) of element e with {type definition} {http://www.w3.org/2001/XMLSchema}precisionDecimal, whose {primitive type definition} is {http://www.w3.org/2001/XMLSchema}precisionDecimal", constructUncoveredPrimitive},
 		{"empty type abstract", `<xs:complexType name="c" abstract="true"/><xs:element name="e" type="c"/>`,
 			"complex type c of element e with {abstract} true", constructComplexTypeAbstract},
-		{"mixed empty", `<xs:element name="e"><xs:complexType mixed="true"/></xs:element>`,
-			"with mixed content", constructMixedContent},
 		{"default open content applies to empty", `<xs:defaultOpenContent appliesToEmpty="true"><xs:any/></xs:defaultOpenContent><xs:element name="e"><xs:complexType/></xs:element>`,
 			"with {open content}", constructOpenContent},
-		// Mixed content, checked first, still declines a type that has an
+		// {open content}, checked first, still declines a type that has an
 		// {attribute wildcard}.
-		{"attribute wildcard with mixed content", `<xs:element name="e"><xs:complexType mixed="true"><xs:sequence><xs:element name="a" ` + str + `/></xs:sequence><xs:anyAttribute/></xs:complexType></xs:element>`,
-			"complex type (anonymous) of element e with mixed content", constructMixedContent},
-		{"mixed", `<xs:element name="e"><xs:complexType mixed="true"><xs:sequence><xs:element name="a" ` + str + `/></xs:sequence></xs:complexType></xs:element>`,
-			"with mixed content", constructMixedContent},
+		{"attribute wildcard with open content", `<xs:element name="e"><xs:complexType><xs:openContent><xs:any/></xs:openContent><xs:sequence><xs:element name="a" ` + str + `/></xs:sequence><xs:anyAttribute/></xs:complexType></xs:element>`,
+			"complex type (anonymous) of element e with {open content}", constructOpenContent},
 		// The simple-content rows pin the value field's declines: its
 		// {simple type definition} (§3.4.2.2 dcl.ctd.ctsc) declines by that
 		// type's construct.
@@ -164,23 +158,14 @@ func TestGenerateDeclines(t *testing.T) {
 		{"abstract substitution group head", `<xs:element name="h" abstract="true" ` + str + `/><xs:element name="m" substitutionGroup="h" ` + str + `/>`,
 			"element h with {abstract} true at s.xsd:2:1 ", constructElementAbstract},
 		// The two rows below pin that a type with {assertions} still declines
-		// for its other properties: mixed content, tested after {abstract},
+		// for its other properties: {open content}, tested after {abstract},
 		// and {abstract} true.
-		{"mixed with assertion", `<xs:element name="e"><xs:complexType mixed="true"><xs:sequence><xs:element name="a" ` + str + `/></xs:sequence><xs:assert test="true()"/></xs:complexType></xs:element>`,
-			"complex type (anonymous) of element e with mixed content", constructMixedContent},
+		{"open content with assertion", `<xs:element name="e"><xs:complexType><xs:openContent><xs:any/></xs:openContent><xs:sequence><xs:element name="a" ` + str + `/></xs:sequence><xs:assert test="true()"/></xs:complexType></xs:element>`,
+			"complex type (anonymous) of element e with {open content}", constructOpenContent},
 		{"abstract with assertion", `<xs:complexType name="c" abstract="true"><xs:sequence><xs:element name="a" ` + str + `/></xs:sequence><xs:assert test="true()"/></xs:complexType><xs:element name="e" type="c"/>`,
 			"complex type c of element e with {abstract} true", constructComplexTypeAbstract},
 		{"abstract complex type", `<xs:complexType name="c" abstract="true"><xs:sequence><xs:element name="a" ` + str + `/></xs:sequence></xs:complexType><xs:element name="e" type="c"/>`,
 			"complex type c of element e with {abstract} true", constructComplexTypeAbstract},
-		// The three guard rows pin that the xs:anyType arm keys on identity: c
-		// copies xs:anyType's §3.4.7 shape, or derives from it by extension,
-		// and still declines as the complex type it is.
-		{"copy of anyType's shape", `<xs:complexType name="c" mixed="true"><xs:sequence><xs:any processContents="lax" minOccurs="0" maxOccurs="unbounded"/></xs:sequence><xs:anyAttribute processContents="lax"/></xs:complexType><xs:element name="e" type="c"/>`,
-			"complex type c of element e with mixed content", constructMixedContent},
-		{"copy of anyType's shape without anyAttribute", `<xs:complexType name="c" mixed="true"><xs:sequence><xs:any processContents="lax" minOccurs="0" maxOccurs="unbounded"/></xs:sequence></xs:complexType><xs:element name="e" type="c"/>`,
-			"complex type c of element e with mixed content", constructMixedContent},
-		{"extension of anyType", `<xs:complexType name="c"><xs:complexContent><xs:extension base="xs:anyType"/></xs:complexContent></xs:complexType><xs:element name="e" type="c"/>`,
-			"complex type c of element e with mixed content", constructMixedContent},
 		// The list rows pin "# Coverage"'s list decline, and that its message
 		// names the list and then its {item type definition}.
 		{"list of named union", `<xs:simpleType name="u"><xs:union memberTypes="xs:int xs:precisionDecimal"/></xs:simpleType><xs:simpleType name="l"><xs:list itemType="u"/></xs:simpleType><xs:element name="e" type="l"/>`,
@@ -284,7 +269,7 @@ func TestGenerateDeclines(t *testing.T) {
 			uncoveredR, constructUncoveredPrimitive},
 		{"value cycle check past an element property", fmt.Sprintf(pastDecline, `<xs:element name="g" nillable="true" `+str+`/>`, ""),
 			uncoveredR, constructUncoveredPrimitive},
-		{"value cycle check past a complex type", fmt.Sprintf(pastDecline, `<xs:element name="g" type="a"/>`, `<xs:complexType name="a" mixed="true"><xs:sequence><xs:element name="h" `+str+`/></xs:sequence></xs:complexType>`),
+		{"value cycle check past a complex type", fmt.Sprintf(pastDecline, `<xs:element name="g" type="a"/>`, `<xs:complexType name="a"><xs:openContent><xs:any/></xs:openContent><xs:sequence><xs:element name="h" `+str+`/></xs:sequence></xs:complexType>`),
 			uncoveredR, constructUncoveredPrimitive},
 		// The same walk of t again meets the recursion s closes after f1, and
 		// Generate's doc puts that recursion ahead of r's decline.
@@ -297,28 +282,28 @@ func TestGenerateDeclines(t *testing.T) {
 			"complex type c whose choice's alternative 1, a sequence model group particle, has an emptiable model group at s.xsd:2:1 ", constructEmptiableGroupAlternative},
 		{"local element property", `<xs:element name="e"><xs:complexType><xs:sequence><xs:element name="l" nillable="true" ` + str + `/></xs:sequence></xs:complexType></xs:element>`,
 			"element l with {nillable} true", constructElementNillable},
-		{"nested struct", `<xs:element name="e"><xs:complexType><xs:sequence><xs:element name="l"><xs:complexType mixed="true"><xs:sequence><xs:element name="a" ` + str + `/></xs:sequence></xs:complexType></xs:element></xs:sequence></xs:complexType></xs:element>`,
-			"complex type (anonymous) of element l of element e with mixed content at ", constructMixedContent},
+		{"nested struct", `<xs:element name="e"><xs:complexType><xs:sequence><xs:element name="l"><xs:complexType><xs:openContent><xs:any/></xs:openContent><xs:sequence><xs:element name="a" ` + str + `/></xs:sequence></xs:complexType></xs:element></xs:sequence></xs:complexType></xs:element>`,
+			"complex type (anonymous) of element l of element e with {open content} at ", constructOpenContent},
 		{"nested choice", `<xs:element name="e"><xs:complexType><xs:sequence><xs:element name="l"><xs:complexType><xs:choice><xs:element name="a" ` + str + `/><xs:sequence><xs:any minOccurs="0"/></xs:sequence></xs:choice></xs:complexType></xs:element></xs:sequence></xs:complexType></xs:element>`,
 			"complex type (anonymous) of element l of element e whose choice's alternative 2, a sequence model group particle, has an emptiable model group at ", constructEmptiableGroupAlternative},
-		{"branch struct", `<xs:element name="e"><xs:complexType><xs:choice><xs:element name="l"><xs:complexType mixed="true"><xs:sequence><xs:element name="a" ` + str + `/></xs:sequence></xs:complexType></xs:element></xs:choice></xs:complexType></xs:element>`,
-			"complex type (anonymous) of element l of element e with mixed content at ", constructMixedContent},
+		{"branch struct", `<xs:element name="e"><xs:complexType><xs:choice><xs:element name="l"><xs:complexType><xs:openContent><xs:any/></xs:openContent><xs:sequence><xs:element name="a" ` + str + `/></xs:sequence></xs:complexType></xs:element></xs:choice></xs:complexType></xs:element>`,
+			"complex type (anonymous) of element l of element e with {open content} at ", constructOpenContent},
 		// The {type table} rows pin that a decline in a type the table selects
 		// names that type's slot: an anonymous complex type by its slot and
 		// the place of the declaration, a simple type by its slot, charged to
 		// the declaration.
-		{"type table anonymous alternative", `<xs:element name="e"><xs:alternative test="@k"><xs:complexType mixed="true"><xs:sequence><xs:element name="a" ` + str + `/></xs:sequence></xs:complexType></xs:alternative><xs:alternative type="xs:string"/></xs:element>`,
-			"complex type (anonymous) of {type table} alternative 1 of element e with mixed content at ", constructMixedContent},
-		{"type table anonymous default", `<xs:element name="e"><xs:alternative test="@k" type="xs:string"/><xs:alternative><xs:complexType><xs:sequence><xs:element name="l"><xs:complexType mixed="true"><xs:sequence><xs:element name="a" ` + str + `/></xs:sequence></xs:complexType></xs:element></xs:sequence></xs:complexType></xs:alternative></xs:element>`,
-			"complex type (anonymous) of element l of {default type definition} of element e with mixed content at ", constructMixedContent},
+		{"type table anonymous alternative", `<xs:element name="e"><xs:alternative test="@k"><xs:complexType><xs:openContent><xs:any/></xs:openContent><xs:sequence><xs:element name="a" ` + str + `/></xs:sequence></xs:complexType></xs:alternative><xs:alternative type="xs:string"/></xs:element>`,
+			"complex type (anonymous) of {type table} alternative 1 of element e with {open content} at ", constructOpenContent},
+		{"type table anonymous default", `<xs:element name="e"><xs:alternative test="@k" type="xs:string"/><xs:alternative><xs:complexType><xs:sequence><xs:element name="l"><xs:complexType><xs:openContent><xs:any/></xs:openContent><xs:sequence><xs:element name="a" ` + str + `/></xs:sequence></xs:complexType></xs:element></xs:sequence></xs:complexType></xs:alternative></xs:element>`,
+			"complex type (anonymous) of element l of {default type definition} of element e with {open content} at ", constructOpenContent},
 		{"type table simple alternative", `<xs:element name="e"><xs:alternative test="@k" type="xs:precisionDecimal"/><xs:alternative type="xs:string"/></xs:element>`,
 			"{type table} alternative 1 of element e with {type definition} {http://www.w3.org/2001/XMLSchema}precisionDecimal, whose {primitive type definition} is {http://www.w3.org/2001/XMLSchema}precisionDecimal at s.xsd:2:1 ", constructUncoveredPrimitive},
-		{"type table local", `<xs:complexType name="c"><xs:sequence><xs:element name="x"><xs:alternative test="@k"><xs:complexType mixed="true"><xs:sequence><xs:element name="a" ` + str + `/></xs:sequence></xs:complexType></xs:alternative><xs:alternative type="xs:string"/></xs:element></xs:sequence></xs:complexType><xs:element name="e" type="c"/>`,
-			"complex type (anonymous) of {type table} alternative 1 of element x of complex type c with mixed content at ", constructMixedContent},
+		{"type table local", `<xs:complexType name="c"><xs:sequence><xs:element name="x"><xs:alternative test="@k"><xs:complexType><xs:openContent><xs:any/></xs:openContent><xs:sequence><xs:element name="a" ` + str + `/></xs:sequence></xs:complexType></xs:alternative><xs:alternative type="xs:string"/></xs:element></xs:sequence></xs:complexType><xs:element name="e" type="c"/>`,
+			"complex type (anonymous) of {type table} alternative 1 of element x of complex type c with {open content} at ", constructOpenContent},
 		// h's complex alternative is checked where e's ref meets it, ahead of
 		// z's decline.
-		{"element ref to type table outside the slice", `<xs:element name="e"><xs:complexType><xs:sequence><xs:element ref="h"/><xs:element name="z" type="xs:precisionDecimal"/></xs:sequence></xs:complexType></xs:element><xs:element name="h"><xs:alternative test="@k"><xs:complexType mixed="true"><xs:sequence><xs:element name="a" ` + str + `/></xs:sequence></xs:complexType></xs:alternative><xs:alternative type="xs:string"/></xs:element>`,
-			"complex type (anonymous) of {type table} alternative 1 of element h with mixed content at ", constructMixedContent},
+		{"element ref to type table outside the slice", `<xs:element name="e"><xs:complexType><xs:sequence><xs:element ref="h"/><xs:element name="z" type="xs:precisionDecimal"/></xs:sequence></xs:complexType></xs:element><xs:element name="h"><xs:alternative test="@k"><xs:complexType><xs:openContent><xs:any/></xs:openContent><xs:sequence><xs:element name="a" ` + str + `/></xs:sequence></xs:complexType></xs:alternative><xs:alternative type="xs:string"/></xs:element>`,
+			"complex type (anonymous) of {type table} alternative 1 of element h with {open content} at ", constructOpenContent},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
