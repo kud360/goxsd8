@@ -10,8 +10,8 @@
        Nillable over M1. one's group holds sole alone besides one, so
        OneSubstitutionGroup keeps its interface over one branch. lone has no
        member and shut blocks substitution (clause 2.1), so each gets the
-       interface alone, whose one value is nil; lone's xs:precisionDecimal,
-       which declines where a type is emitted, is never checked. k has
+       interface alone, whose one value is nil; lone's complex type c, whose
+       {abstract} true declines where a type is emitted, is never checked. k has
        {abstract} false and its one member ka is abstract, so holder's K
        field holds k's own type. -->
   <xs:element name="holder">
@@ -32,9 +32,10 @@
   <xs:element name="m3" substitutionGroup="s:a"/>
   <xs:element name="one" abstract="true" type="xs:string"/>
   <xs:element name="sole" substitutionGroup="s:one"/>
-  <xs:element name="lone" abstract="true" type="xs:precisionDecimal"/>
+  <xs:element name="lone" abstract="true" type="s:c"/>
   <xs:element name="shut" abstract="true" block="substitution" type="xs:string"/>
   <xs:element name="shm" substitutionGroup="s:shut"/>
   <xs:element name="k" type="xs:string"/>
   <xs:element name="ka" abstract="true" substitutionGroup="s:k"/>
+  <xs:complexType name="c" abstract="true"/>
 </xs:schema>
