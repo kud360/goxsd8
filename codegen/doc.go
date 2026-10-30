@@ -40,7 +40,6 @@
 // [DeclineError]'s [DeclineError.Construct], for display only: the names may
 // change in any release, so code compares [Construct] values, never a name.
 //
-//   - element {abstract}
 //   - absent {variety}
 //   - no {primitive type definition}
 //   - uncovered primitive
@@ -59,40 +58,41 @@
 // the GitHub issue tracking these lifts.
 //
 // Generate emits, in document order, one Go type per top-level element
-// declaration, one per anonymous complex type nested in its type definition or
-// in a model group definition a <group ref> particle names, one per named
-// complex type a local element declaration reaches, one per place a struct's or
-// a branch struct's particles hold a choice or a sequence that is not spliced —
-// a sequence in a sequence or as a choice's alternative, and an all group in an
-// all group, spliced by the occurrence rules below, giving the places of its own
-// particles, and a complex type's own content particle, a sequence, a choice or
-// an all group, counting only when it is a sequence or an all group that is not
-// spliced, or a choice that occurs other than exactly once, one occurrence of
-// which is emptiable, or whose type has mixed content, an attribute use other
-// than one of xsi:nil or an {attribute wildcard} — so a particle that a model
-// group definition or an extension's base holds gets one in each struct that
-// holds it, each shared as an anonymous complex type nested beside it is, and
-// one branch struct per alternative of each choice it emits as a sealed
-// interface — an <element ref> particle gets none of its own, its field holding
-// the type emitted for the top-level element declaration it names, or, when that
-// declaration's substitution group holds another declaration, one sealed
-// interface per such head with one branch struct per declaration of its group —
-// and one sealed interface per element declaration whose {type table} selects
-// other than one type, in place of that declaration's type, with one branch
-// struct per type it selects, each followed by the types its field reaches —
-// then, after every other declaration and in the order the walk first needs
-// each, one datatype struct per date, time or duration datatype, and one for
-// QName and NOTATION together, a declaration's type or a value field is declared
-// over, the four raw-content structs once an element's type is xs:anyType, a
-// model group holds a wildcard particle, or a type has an {attribute wildcard},
-// the generic struct MixedChild once a field of mixed content holds an element,
-// the generic sealed interface Nillable and its arms Nilled and Content once a
-// field holds a nillable element or the walk visits a nillable top-level
-// declaration, one attributes struct per complex type with attribute fields a
-// nillable element has, and one sealed interface per union simple type a
-// declaration's type, a value field, a list's item or a union's member is
-// declared over, each followed by one variant type per basic member, and
-// declines everything outside this slice:
+// declaration with {abstract} false, one per anonymous complex type nested in
+// its type definition or in a model group definition a <group ref> particle
+// names, one per named complex type a local element declaration reaches, one per
+// place a struct's or a branch struct's particles hold a choice or a sequence
+// that is not spliced — a sequence in a sequence or as a choice's alternative,
+// and an all group in an all group, spliced by the occurrence rules below,
+// giving the places of its own particles, and a complex type's own content
+// particle, a sequence, a choice or an all group, counting only when it is a
+// sequence or an all group that is not spliced, or a choice that occurs other
+// than exactly once, one occurrence of which is emptiable, or whose type has
+// mixed content, an attribute use other than one of xsi:nil or an {attribute
+// wildcard} — so a particle that a model group definition or an extension's base
+// holds gets one in each struct that holds it, each shared as an anonymous
+// complex type nested beside it is, and one branch struct per alternative of
+// each choice it emits as a sealed interface — an <element ref> particle gets
+// none of its own, its field holding the type emitted for the top-level element
+// declaration it names, or, when that declaration has {abstract} true or its
+// substitution group holds another declaration with {abstract} false, one sealed
+// interface per such head with one branch struct per declaration of its group
+// with {abstract} false — and one sealed interface per element declaration whose
+// {type table} selects other than one type, in place of that declaration's type,
+// with one branch struct per type it selects, each followed by the types its
+// field reaches — then, after every other declaration and in the order the walk
+// first needs each, one datatype struct per date, time or duration datatype, and
+// one for QName and NOTATION together, a declaration's type or a value field is
+// declared over, the four raw-content structs once an element's type is
+// xs:anyType, a model group holds a wildcard particle, or a type has an
+// {attribute wildcard}, the generic struct MixedChild once a field of mixed
+// content holds an element, the generic sealed interface Nillable and its arms
+// Nilled and Content once a field holds a nillable element or the walk visits a
+// nillable top-level declaration, one attributes struct per complex type with
+// attribute fields a nillable element has, and one sealed interface per union
+// simple type a declaration's type, a value field, a list's item or a union's
+// member is declared over, each followed by one variant type per basic member,
+// and declines everything outside this slice:
 //
 //   - An element whose {type definition} is a simple type gets a named type
 //     over string for a special type (Datatypes §2.4.2 dt-special),
@@ -284,26 +284,32 @@
 //     which is emptiable ([xsd.Schema.ParticleEmptiable]), whatever the
 //     alternative's own {min occurs}: a branch over it would hold the empty
 //     match.
-//   - An <element ref> particle to a head whose substitution group
-//     ([xsd.Schema.SubstitutionGroup], §3.3.6.4 key-eq) holds a declaration
-//     other than the head gives a field holding a sealed interface over that
-//     group, the closed-sum exception as a choice's is: one method, unexported,
-//     "is" plus the interface's name, and one branch struct per declaration of
-//     the group, the head included, in the order [xsd.Schema.Elements] returns
-//     them, emitted after the interface, each holding one field, named from the
-//     declaration's local name, of the type emitted for that top-level
-//     declaration, and implementing the method. The field takes the occurrence
-//     rules below.
+//   - An <element ref> particle to a head that has {abstract} true, or whose
+//     substitution group ([xsd.Schema.SubstitutionGroup], §3.3.6.4 key-eq)
+//     holds a declaration with {abstract} false other than the head, gives a
+//     field holding a sealed interface over the group's declarations with
+//     {abstract} false, the closed-sum exception as a choice's is: one method,
+//     unexported, "is" plus the interface's name, and one branch struct per
+//     such declaration, the head included when it has {abstract} false, in the
+//     order [xsd.Schema.Elements] returns them, emitted after the interface,
+//     each holding one field, named from the declaration's local name, of the
+//     type emitted for that top-level declaration, and implementing the method.
+//     The field takes the occurrence rules below.
 //   - A substitution group's declarations' own types are emitted unchanged,
 //     each at its own position, and one interface is emitted per head however
 //     many particles reach it.
-//   - A head whose {disallowed substitutions} contains substitution
-//     (cos-equiv-derived-ok-rec clause 2.1), or whose group is otherwise itself
-//     alone, gives the field of an <element ref> particle to it the head's own
-//     type. {abstract} plays no part in the group: where the interface is first
-//     needed, each declaration of the group is checked in group order as at an
-//     <element ref> particle to it, its properties and the shape of its type,
-//     so an abstract head or member declines it there.
+//   - A head with {abstract} false whose {disallowed substitutions} contains
+//     substitution (cos-equiv-derived-ok-rec clause 2.1), or whose group holds
+//     no other declaration with {abstract} false, gives the field of an
+//     <element ref> particle to it the head's own type. {abstract} is read per
+//     declaration once the group is taken: an abstract declaration gets no
+//     branch, and the members the group holds through it
+//     (cos-equiv-derived-ok-rec clause 2.2) get theirs. An abstract head whose
+//     group holds no other declaration with {abstract} false gets the interface
+//     alone, whose one value is nil. Where the interface is first needed, each
+//     branch's declaration is checked in group order as at an <element ref>
+//     particle to it, its properties and the shape of its type, so a declining
+//     one declines the interface there.
 //   - A sequence or all group {particle} that is not spliced, a choice
 //     {particle} that occurs other than exactly once, or a choice {particle}
 //     that occurs exactly once and one occurrence of which is emptiable or
@@ -466,14 +472,18 @@
 //   - No field holding AnyType is wrapped: xs:anyType's AnyType holds xsi:nil
 //     among its Attributes. Nor is a field holding a substitution group's
 //     interface or a {type table}'s: each branch of the former wraps its field
-//     when its own declaration, the head's included, is nillable, and each
-//     branch of the latter when the table's declaration is. A nillable
-//     top-level declaration's type is emitted unchanged, Nillable over it
-//     being a nilled root's value. A declaration with {nillable} true and a
+//     when its own declaration, the head's when it has a branch, is nillable,
+//     and each branch of the latter when the table's declaration is. A
+//     nillable top-level declaration's type is emitted unchanged, Nillable over
+//     it being a nilled root's value. A declaration with {nillable} true and a
 //     fixed {value constraint} emits as if {nillable} were false: every
 //     nilled instance of it is invalid (cvc-elt clause 3.2.3.2).
-//   - Every element declaration emitted from has {abstract} false. A member of
-//     a substitution group is emitted as every top-level declaration is, and
+//   - A top-level element declaration with {abstract} true (§3.3.1
+//     ed-abstract) gets no type of its own and no branch: no element is
+//     valid against it, as a root or in a content model (§3.3.4.3 cvc-elt
+//     clause 2), and a field over an <element ref> particle to it holds its
+//     substitution group's interface, stated above. Any other member of a
+//     substitution group is emitted as every top-level declaration is, and
 //     enters the interface of each head whose group holds it.
 //   - An element declaration with a {type table} (§3.12) is emitted from the
 //     types the table can select (§3.3.4.1 key-selected-type): the {type

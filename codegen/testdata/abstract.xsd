@@ -1,0 +1,40 @@
+<?xml version="1.0"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+           xmlns:s="urn:a" targetNamespace="urn:a">
+  <!-- An element declaration with {abstract} true (§3.3.1 ed-abstract) gets
+       no type of its own and no branch: no element is valid against it
+       (§3.3.4.3 cvc-elt clause 2). holder's ref to the abstract head h holds
+       HSubstitutionGroup, whose branches are m1, m2 and m3 in declaration
+       order: h and a, both abstract, get none, and m3 enters h's group
+       through a (cos-equiv-derived-ok-rec clause 2.2). m1's branch field is
+       Nillable over M1. one's group holds sole alone besides one, so
+       OneSubstitutionGroup keeps its interface over one branch. lone has no
+       member and shut blocks substitution (clause 2.1), so each gets the
+       interface alone, whose one value is nil; lone's xs:precisionDecimal,
+       which declines where a type is emitted, is never checked. k has
+       {abstract} false and its one member ka is abstract, so holder's K
+       field holds k's own type. -->
+  <xs:element name="holder">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element ref="s:h"/>
+        <xs:element ref="s:one"/>
+        <xs:element ref="s:lone" minOccurs="0"/>
+        <xs:element ref="s:shut" minOccurs="0"/>
+        <xs:element ref="s:k"/>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="h" abstract="true" type="xs:string"/>
+  <xs:element name="m1" substitutionGroup="s:h" nillable="true"/>
+  <xs:element name="a" abstract="true" substitutionGroup="s:h"/>
+  <xs:element name="m2" substitutionGroup="s:h"/>
+  <xs:element name="m3" substitutionGroup="s:a"/>
+  <xs:element name="one" abstract="true" type="xs:string"/>
+  <xs:element name="sole" substitutionGroup="s:one"/>
+  <xs:element name="lone" abstract="true" type="xs:precisionDecimal"/>
+  <xs:element name="shut" abstract="true" block="substitution" type="xs:string"/>
+  <xs:element name="shm" substitutionGroup="s:shut"/>
+  <xs:element name="k" type="xs:string"/>
+  <xs:element name="ka" abstract="true" substitutionGroup="s:k"/>
+</xs:schema>

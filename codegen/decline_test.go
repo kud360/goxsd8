@@ -109,12 +109,8 @@ func TestGenerateDeclines(t *testing.T) {
 			"local element e reaching complex type t again through elements that each occur exactly once", constructValueCycle},
 		// In the ref rows below, h is declared after e. Where a row places a
 		// later decline after the ref, the ref's check is shown to come
-		// first.
-		{"element ref to abstract", `<xs:element name="e"><xs:complexType><xs:sequence><xs:element ref="h"/></xs:sequence></xs:complexType></xs:element><xs:element name="z" type="xs:precisionDecimal"/><xs:element name="h" abstract="true" ` + str + `/>`,
-			"element h with {abstract} true at s.xsd:2:165 ", constructElementAbstract},
-		{"element ref in choice to abstract", `<xs:element name="e"><xs:complexType><xs:choice><xs:element name="a" ` + str + `/><xs:element ref="h"/></xs:choice></xs:complexType></xs:element><xs:element name="h" abstract="true" ` + str + `/>`,
-			"element h with {abstract} true", constructElementAbstract},
-		// h's type is checked where e's ref meets it, ahead of z's decline.
+		// first. h's type is checked where e's ref meets it, ahead of z's
+		// decline.
 		{"element ref to complex type outside the slice", `<xs:element name="e"><xs:complexType><xs:sequence><xs:element ref="h"/><xs:element name="z" type="xs:precisionDecimal"/></xs:sequence></xs:complexType></xs:element><xs:element name="h"><xs:complexType><xs:openContent><xs:any/></xs:openContent><xs:sequence><xs:element name="a" ` + str + `/></xs:sequence></xs:complexType></xs:element>`,
 			"complex type (anonymous) of element h with {open content}", constructOpenContent},
 		{"element ref to simple type outside the slice", `<xs:element name="e"><xs:complexType><xs:sequence><xs:element ref="h"/><xs:element name="z" type="xs:precisionDecimal"/></xs:sequence></xs:complexType></xs:element><xs:element name="h" type="xs:precisionDecimal"/>`,
@@ -144,17 +140,6 @@ func TestGenerateDeclines(t *testing.T) {
 			"with {open content}", constructOpenContent},
 		{"default open content", `<xs:defaultOpenContent><xs:any/></xs:defaultOpenContent><xs:element name="e"><xs:complexType><xs:sequence><xs:element name="a" ` + str + `/></xs:sequence></xs:complexType></xs:element>`,
 			"with {open content}", constructOpenContent},
-		// The row below carries a {value constraint} beside the declining
-		// property, so it pins that the value constraint, accepted, is not
-		// checked ahead of it.
-		{"abstract element", `<xs:element name="e" abstract="true" fixed="f" ` + str + `/>`,
-			"element e with {abstract} true", constructElementAbstract},
-		// An abstract head declines at its own turn, declared before its
-		// member, and the decline is charged to the head: membership in an
-		// abstract head's substitution group declines nothing (§3.3.6.4
-		// key-eq; cvc-elt clause 2 reads the declaration's own {abstract}).
-		{"abstract substitution group head", `<xs:element name="h" abstract="true" ` + str + `/><xs:element name="m" substitutionGroup="h" ` + str + `/>`,
-			"element h with {abstract} true at s.xsd:2:1 ", constructElementAbstract},
 		// The two rows below pin that a type with {assertions} still declines
 		// for its other properties: {open content}, tested after {abstract},
 		// and {abstract} true.
@@ -384,6 +369,42 @@ func TestGenerateDeclinesLocalAnonymousPlace(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			schema := parseString(t, "<xs:schema xmlns:xs=\"http://www.w3.org/2001/XMLSchema\">\n"+tt.body+"\n</xs:schema>\n")
+			errs := elements(t, Generate([]Target{{Schema: schema, Dir: filepath.Join(t.TempDir(), "out"), Package: "p"}}))
+			got := make([]string, len(errs))
+			for i, err := range errs {
+				got[i] = err.Error()
+			}
+			if !slices.Equal(got, tt.want) {
+				t.Errorf("Generate's elements =\n%q\nwant\n%q", got, tt.want)
+			}
+		})
+	}
+}
+
+// TestGenerateDeclinesSubstitutionMemberOnce pins that a member of a
+// substitution group whose type declines is charged once, to the member,
+// though the walk meets it twice: at the branch of the interface e's ref to h
+// emits (substitutionType), and at m's own turn. emit's dedup holds because
+// both visits build the decline's text and Loc from m alone. The head, whose
+// {type definition} is never shaped where it has no branch, is charged
+// nothing, abstract or not.
+func TestGenerateDeclinesSubstitutionMemberOnce(t *testing.T) {
+	const (
+		holder = `<xs:element name="e"><xs:complexType><xs:sequence><xs:element ref="h"/></xs:sequence></xs:complexType></xs:element>`
+		member = `<xs:element name="m" substitutionGroup="h" type="xs:precisionDecimal"/>`
+	)
+	decline := func(loc string) []string {
+		return []string{"codegen: target 0: element m with {type definition} {http://www.w3.org/2001/XMLSchema}precisionDecimal, whose {primitive type definition} is {http://www.w3.org/2001/XMLSchema}precisionDecimal at s.xsd:" + loc + " is not supported by codegen, a generator limitation, not a schema fault"}
+	}
+	for _, tt := range []struct {
+		name, head string
+		want       []string
+	}{
+		{"abstract head", `<xs:element name="h" abstract="true" type="xs:anySimpleType"/>`, decline("2:178")},
+		{"head with {abstract} false", `<xs:element name="h" type="xs:anySimpleType"/>`, decline("2:162")},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			schema := parseString(t, "<xs:schema xmlns:xs=\"http://www.w3.org/2001/XMLSchema\">\n"+holder+tt.head+member+"\n</xs:schema>\n")
 			errs := elements(t, Generate([]Target{{Schema: schema, Dir: filepath.Join(t.TempDir(), "out"), Package: "p"}}))
 			got := make([]string, len(errs))
 			for i, err := range errs {
