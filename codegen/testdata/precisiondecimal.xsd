@@ -1,5 +1,9 @@
 <?xml version="1.0"?>
 <xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <!-- precisionDecimal's own top-level element first claims the datatype
+       struct's names, ahead of its own type, which takes PrecisionDecimal2
+       ("Naming"). -->
+  <xs:element name="precisionDecimal" type="xs:precisionDecimal"/>
   <xs:element name="measure" type="xs:precisionDecimal"/>
   <xs:element name="reading">
     <xs:complexType>

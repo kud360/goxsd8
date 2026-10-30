@@ -4,10 +4,13 @@ package precisiondecimal
 
 import "math/big"
 
-// Measure is generated from element measure declared at testdata/precisiondecimal.xsd:3:3.
+// PrecisionDecimal2 is generated from element precisionDecimal declared at testdata/precisiondecimal.xsd:6:3.
+type PrecisionDecimal2 PrecisionDecimal
+
+// Measure is generated from element measure declared at testdata/precisiondecimal.xsd:7:3.
 type Measure PrecisionDecimal
 
-// Reading is generated from element reading declared at testdata/precisiondecimal.xsd:4:3.
+// Reading is generated from element reading declared at testdata/precisiondecimal.xsd:8:3.
 type Reading struct {
 	Value     PrecisionDecimal
 	Tolerance *PrecisionDecimal
@@ -19,7 +22,7 @@ type Reading struct {
 	Limit     PrecisionDecimal
 }
 
-// Typed is generated from element typed declared at testdata/precisiondecimal.xsd:24:3.
+// Typed is generated from element typed declared at testdata/precisiondecimal.xsd:28:3.
 type Typed struct {
 	Value PrecisionDecimal
 	Unit  *string
@@ -60,7 +63,7 @@ type PrecisionDecimalValueNotANumber struct{}
 
 func (PrecisionDecimalValueNotANumber) isPrecisionDecimalValue() {}
 
-// Either is generated from simple type either declared at testdata/precisiondecimal.xsd:41:3.
+// Either is generated from simple type either declared at testdata/precisiondecimal.xsd:45:3.
 type Either interface {
 	isEither()
 }
