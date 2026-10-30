@@ -1,0 +1,45 @@
+<?xml version="1.0"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+           xmlns="urn:emptychoice"
+           targetNamespace="urn:emptychoice">
+  <xs:group name="nothing">
+    <xs:choice/>
+  </xs:group>
+  <xs:element name="content">
+    <xs:complexType>
+      <xs:choice/>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="contentRef">
+    <xs:complexType>
+      <xs:group ref="nothing"/>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="nested">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element name="a" type="xs:string"/>
+        <xs:choice/>
+        <xs:choice minOccurs="0"/>
+        <xs:choice maxOccurs="unbounded"/>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="nestedRef">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element name="a" type="xs:string"/>
+        <xs:group ref="nothing"/>
+        <xs:group ref="nothing" minOccurs="0"/>
+        <xs:group ref="nothing" maxOccurs="unbounded"/>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="pruned">
+    <xs:complexType>
+      <xs:choice>
+        <xs:element name="a" type="xs:string" minOccurs="0" maxOccurs="0"/>
+      </xs:choice>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>
