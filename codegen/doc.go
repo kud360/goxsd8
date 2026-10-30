@@ -478,13 +478,13 @@
 //     it being a nilled root's value. A declaration with {nillable} true and a
 //     fixed {value constraint} emits as if {nillable} were false: every
 //     nilled instance of it is invalid (cvc-elt clause 3.2.3.2).
-//   - An element declaration with {abstract} true (§3.3.1 ed-abstract) gets no
-//     type of its own and no branch: no element is valid against it, as a root
-//     or in a content model (§3.3.4.3 cvc-elt clause 2), and a field over an
-//     <element ref> particle to it holds its substitution group's interface,
-//     stated above. Any other member of a substitution group is emitted as
-//     every top-level declaration is, and enters the interface of each head
-//     whose group holds it.
+//   - A top-level element declaration with {abstract} true (§3.3.1
+//     ed-abstract) gets no type of its own and no branch: no element is
+//     valid against it, as a root or in a content model (§3.3.4.3 cvc-elt
+//     clause 2), and a field over an <element ref> particle to it holds its
+//     substitution group's interface, stated above. Any other member of a
+//     substitution group is emitted as every top-level declaration is, and
+//     enters the interface of each head whose group holds it.
 //   - An element declaration with a {type table} (§3.12) is emitted from the
 //     types the table can select (§3.3.4.1 key-selected-type): the {type
 //     definition} of each of its {alternatives} in order, then that of its

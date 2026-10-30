@@ -109,8 +109,8 @@ func TestGenerateDeclines(t *testing.T) {
 			"local element e reaching complex type t again through elements that each occur exactly once", constructValueCycle},
 		// In the ref rows below, h is declared after e. Where a row places a
 		// later decline after the ref, the ref's check is shown to come
-		// first.
-		// h's type is checked where e's ref meets it, ahead of z's decline.
+		// first. h's type is checked where e's ref meets it, ahead of z's
+		// decline.
 		{"element ref to complex type outside the slice", `<xs:element name="e"><xs:complexType><xs:sequence><xs:element ref="h"/><xs:element name="z" type="xs:precisionDecimal"/></xs:sequence></xs:complexType></xs:element><xs:element name="h"><xs:complexType><xs:openContent><xs:any/></xs:openContent><xs:sequence><xs:element name="a" ` + str + `/></xs:sequence></xs:complexType></xs:element>`,
 			"complex type (anonymous) of element h with {open content}", constructOpenContent},
 		{"element ref to simple type outside the slice", `<xs:element name="e"><xs:complexType><xs:sequence><xs:element ref="h"/><xs:element name="z" type="xs:precisionDecimal"/></xs:sequence></xs:complexType></xs:element><xs:element name="h" type="xs:precisionDecimal"/>`,
