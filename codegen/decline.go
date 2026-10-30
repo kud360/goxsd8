@@ -79,7 +79,6 @@ const (
 	constructEmptyChoice
 	constructEmptiableGroupAlternative
 	constructComplexTypeAbstract
-	constructMixedContent
 	constructOpenContent
 	constructVacuousParticle
 	constructValueCycle
@@ -98,7 +97,6 @@ var constructs = [...]struct{ name, format string }{
 	constructEmptyChoice:               {"choice with no {particles}", "%s whose choice has no {particles}"},
 	constructEmptiableGroupAlternative: {"emptiable group alternative", "%s whose choice's alternative %d, a %s model group particle, has an emptiable model group"},
 	constructComplexTypeAbstract:       {"complex type {abstract}", "%s with {abstract} true"},
-	constructMixedContent:              {"mixed content", "%s with mixed content"},
 	constructOpenContent:               {"{open content}", "%s with {open content}"},
 	constructVacuousParticle:           {"particle with {max occurs} 0", "a particle of %s with {max occurs} 0 in %s"},
 	constructValueCycle:                {"struct-value recursion", "%s reaching %s again through elements that each occur exactly once"},

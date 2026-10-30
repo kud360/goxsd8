@@ -185,8 +185,9 @@ type emitter struct {
 	// datatypes holds the name claimed for each datatype struct emitted, so
 	// that each is emitted once per package; it is a lookup index only and
 	// never iterated (STYLE D2). tailDecls holds those structs' declarations,
-	// the raw-content structs' (anyTypeType), and each union's interface and
-	// variants (unionType), in first-use order, emitted after decls.
+	// the raw-content structs' (anyTypeType), MixedChild's (mixedChildType),
+	// and each union's interface and variants (unionType), in first-use order,
+	// emitted after decls.
 	datatypes map[xsd.QName]string
 	tailDecls []string
 	// unions holds the name of the sealed interface emitted for each union
@@ -205,6 +206,10 @@ type emitter struct {
 	// anyTypeType emits once per package; its zero value means they are
 	// unclaimed and unemitted.
 	raw rawNames
+	// mixedChild holds the name claimed for the generic struct MixedChild,
+	// which mixedChildType emits once per package; "" means it is unclaimed
+	// and unemitted.
+	mixedChild string
 }
 
 // rawNames is the names claimed for the four raw-content structs "# Coverage"
@@ -213,6 +218,16 @@ type emitter struct {
 // dcl.ctd.anyatt), in claim order.
 type rawNames struct {
 	anyType, attribute, child, element string
+}
+
+// isMixed reports whether the complex type t's {content type} has {variety}
+// mixed (§3.4.1): element content whose effective mixed value (§3.4.2.3.3
+// dcl.ctd.ctcc.common clause 1) is true, read from t's resolved {content type}
+// alone, never its base's, so that an extension's (clause 4.2) and a
+// restriction's are each its own.
+func isMixed(t xsd.ComplexType) bool {
+	content, isElement := t.ContentType().(xsd.ElementContent)
+	return isElement && content.Mixed
 }
 
 // isAnyType reports whether td is xs:anyType itself, by identity: every other
@@ -1056,6 +1071,25 @@ func (e *emitter) anyTypeType() string {
 	return n.anyType
 }
 
+// mixedChildType returns the name of the generic struct MixedChild, which
+// holds one child element of mixed content and the characters after it
+// (§3.4.4.2 cvc-complex-type clause 1.4 validates the element [children]
+// alone, and nothing checks the character data between them). When no
+// earlier field needed it, it claims the name in e.types from the local name
+// mixedChild, by the package doc's "Naming", and appends its declaration to
+// e.tailDecls. No field names math/big.
+func (e *emitter) mixedChildType() string {
+	if e.mixedChild != "" {
+		return e.mixedChild
+	}
+	e.mixedChild = e.types.claim("mixedChild")
+	e.tailDecls = append(e.tailDecls,
+		fmt.Sprintf("// %s is generated for mixed content: one child element and the characters after it.\n", e.mixedChild)+
+			"// Tail is the characters after Element, before the next child or the end.\n"+
+			fmt.Sprintf("type %s[T any] struct {\n\tElement T\n\tTail string\n}\n", e.mixedChild))
+	return e.mixedChild
+}
+
 // builtinType is the Go type "# Coverage" maps t to through the eight bounded
 // builtin integer types (Datatypes §3.4.16–§3.4.19, §3.4.21–§3.4.24),
 // xs:integer (§3.4.13), and the three builtins derived from a date, time or
@@ -1114,17 +1148,18 @@ func typeName(t xsd.TypeDefinition) string {
 // shape checks the complex type t against the package doc's "# Coverage"
 // shape, naming it in declines by o's subject, and returns the type it emits
 // as name, sealed exactly when "# Coverage" gives the choice t's content
-// particle holds as t itself — it reads t's {attribute uses} and {attribute
-// wildcard} from the finalized component, so inherited ones count, before
-// asking termEmptiable about the choice — and its content particle
-// (contentGroup), nil for empty content. It emits nothing: body does, so that
-// a caller can store the type in e.emitted before its body is walked.
+// particle holds as t itself — it reads t's mixedness (isMixed), then its
+// {attribute uses} and {attribute wildcard} from the finalized component, so
+// inherited ones count, before asking termEmptiable about the choice — and
+// its content particle (contentGroup), nil for empty content. It emits
+// nothing: body does, so that a caller can store the type in e.emitted before
+// its body is walked.
 func (e *emitter) shape(name string, o origin, t xsd.ComplexType) (emittedType, *groupParticle, error) {
 	content, err := e.contentGroup(o.subject, t)
 	if err != nil {
 		return emittedType{}, nil, err
 	}
-	if content == nil || content.group.Compositor() != xsd.CompositorChoice || content.occurs != exactlyOnce {
+	if content == nil || content.group.Compositor() != xsd.CompositorChoice || content.occurs != exactlyOnce || isMixed(t) {
 		return emittedType{name: name}, content, nil
 	}
 	if _, hasWildcard := t.AttributeWildcard(); hasWildcard || len(t.AttributeUses()) > 0 {
@@ -1138,18 +1173,19 @@ func (e *emitter) shape(name string, o origin, t xsd.ComplexType) (emittedType, 
 }
 
 // body emits typ, which shape returned for the complex type t with content,
-// generated from o: a struct holding the fields contentFields returns for
-// content, or for simple content (§3.4.2.2 dcl.ctd.ctsc) the value field, named from
-// the local name value and holding, never through a pointer, what goType maps
-// its {simple type definition} to, an anonymous union named by nested's path
-// with value last, then one per attribute use (attributeField), and then, when
-// t has an {attribute wildcard} (§3.4.2.5 dcl.ctd.anyatt), its own, inherited
-// or brought by an attribute group, one named from the local name anyAttribute
-// holding a slice of the raw-content struct AnyAttribute (anyTypeType, which
-// claims the raw-content structs' names there when nothing earlier did); or
-// the sealed interface sealedType emits; then the types its fields reach, the
-// anonymous ones named in nested. chain is valueChain's for a walk of t's
-// particles.
+// generated from o: a struct holding, for mixed content (isMixed), first the
+// field named from the local name text holding a string, then the fields
+// contentFields returns for content, or for simple content (§3.4.2.2
+// dcl.ctd.ctsc) the value field, named from the local name value and holding,
+// never through a pointer, what goType maps its {simple type definition} to,
+// an anonymous union named by nested's path with value last, then one per
+// attribute use (attributeField), and then, when t has an {attribute wildcard}
+// (§3.4.2.5 dcl.ctd.anyatt), its own, inherited or brought by an attribute
+// group, one named from the local name anyAttribute holding a slice of the
+// raw-content struct AnyAttribute (anyTypeType, which claims the raw-content
+// structs' names there when nothing earlier did); or the sealed interface
+// sealedType emits; then the types its fields reach, the anonymous ones named
+// in nested. chain is valueChain's for a walk of t's particles.
 func (e *emitter) body(typ emittedType, nested scope, chain []valueNode, o origin, t xsd.ComplexType, content *groupParticle) error {
 	if typ.sealed {
 		return e.sealedType(typ.name, nested, groupSite{}, o, t, content.group.Particles())
@@ -1163,6 +1199,9 @@ func (e *emitter) body(typ emittedType, nested scope, chain []valueNode, o origi
 			return err
 		}
 		fields = append(fields, fieldSpec{local: "value", goType: goType.name})
+	}
+	if isMixed(t) {
+		fields = append(fields, fieldSpec{local: "text", goType: "string"})
 	}
 	if content != nil {
 		contentFields, err := e.contentFields(nested, chain, o, t, *content)
@@ -1593,21 +1632,21 @@ type groupParticle struct {
 	occurs xsd.Occurs
 }
 
-// contentGroup checks the complex type t, named in declines by subject,
-// against the package doc's "# Coverage" complex-type shape. It reads t's
-// finalized component alone, never its base, so a base that itself declines
-// does not block t, and an extension is checked as a restriction is: its
-// {content type} already holds what it takes from its base (§3.4.2.3.3
-// dcl.ctd.ctcc.common clause 4.2, §3.4.2.2 dcl.ctd.ctsc). For element-only content
-// it returns t's content particle, whatever its {min occurs} and {max occurs}
-// but a {max occurs} of 0, which declines, its group the particle's own model
-// group or, for a <group ref>, the referenced definition's {model group}
-// (modelGroupTerm), read before the {max occurs} test, so that a
-// referenced group is checked and emitted as an inline one with the ref's
-// {min occurs} and {max occurs} (§3.7.2); for {variety} empty (§3.4.1),
-// which has no {particle}, and for {variety} simple, whose value field body
-// gives, it returns nil and a nil error. Mixed content declines. Particles
-// and model groups carry no Loc, so their declines cite t's.
+// contentGroup checks the complex type t, named in declines by subject, against
+// the package doc's "# Coverage" complex-type shape. It reads t's finalized
+// component alone, never its base, so a base that itself declines does not
+// block t, and an extension is checked as a restriction is: its {content type}
+// already holds what it takes from its base (§3.4.2.3.3 dcl.ctd.ctcc.common
+// clause 4.2, §3.4.2.2 dcl.ctd.ctsc). For element-only or mixed content it
+// returns t's content particle, whatever its {min occurs} and {max occurs} but
+// a {max occurs} of 0, which declines, its group the particle's own model group
+// or, for a <group ref>, the referenced definition's {model group}
+// (modelGroupTerm), read before the {max occurs} test, so that a referenced
+// group is checked and emitted as an inline one with the ref's {min occurs} and
+// {max occurs} (§3.7.2); for {variety} empty (§3.4.1), which has no {particle},
+// and for {variety} simple, whose value field body gives, it returns nil and a
+// nil error. body and field read whether the content is mixed (isMixed).
+// Particles and model groups carry no Loc, so their declines cite t's.
 func (e *emitter) contentGroup(subject string, t xsd.ComplexType) (*groupParticle, error) {
 	if t.Abstract() {
 		return nil, decline(t.Loc(), constructComplexTypeAbstract, subject)
@@ -1620,9 +1659,6 @@ func (e *emitter) contentGroup(subject string, t xsd.ComplexType) (*groupParticl
 		default:
 			return nil, fmt.Errorf("%s at %s: unexpected content type %T of {variety} %s", subject, t.Loc(), t.ContentType(), variety)
 		}
-	}
-	if content.Mixed {
-		return nil, decline(t.Loc(), constructMixedContent, subject)
 	}
 	if content.OpenContent != nil {
 		return nil, decline(t.Loc(), constructOpenContent, subject)
@@ -1648,40 +1684,47 @@ type fieldSpec struct {
 }
 
 // field returns the field of particle p in a struct whose nested types are
-// named in nested and whose particles chain is valueChain's for, of the
-// complex type t generated from o, typed by the package doc's
-// "# Coverage" field rules. The field of a wildcard particle (wildcardTerm) is
-// named from the local name any and holds the raw-content struct AnyElement
-// (anyTypeType) by p's occurrence (occursGoType), whatever the wildcard's
-// {namespace constraint} and {process contents}, which it never reads; that
-// path never calls shape, contentGroup, nestedType or valueChain, and gives a
-// choice's wildcard alternative its branch struct's one field (sealedType).
-// The field of a model group particle (modelGroupTerm), inline or a <group
-// ref>, a choice or a sequence which spliced does not splice (splices), is the
-// one groupField returns for p at ordinal under site, after a {max occurs} of 0
-// has declined naming the group, as contentGroup declines one, before any
-// occurrence type is emitted; an all group is an error, never a decline:
-// cos-all-limited (§3.8.6.2), checked at Finalize, admits an all group particle
-// only as a content {particle}, which contentGroup and groupField handle, or
-// exactly once among an all group's {particles}, which spliced splices. The
-// field of an <element ref> particle, whose declaration is global, holds the
-// type refType returns for the referenced declaration, after declaredType has
-// checked that declaration as it checks every one: the sealed interface over
-// its substitution group when the group holds another declaration
-// (substitutionSum), and the type elementType returns for it otherwise; the
-// walk does not enter that type's body, which topLevel emits, but valueCycle
-// checks it when the particle occurs exactly once and the type is a complex
-// type other than xs:anyType emitted as a struct; valueCycle ends at once for a
-// type whose content particle occurs other than exactly once. A local
-// declaration tableSum answers a sum for holds the sealed interface localTable
-// returns. A local declaration of type xs:anyType holds the raw-content struct
-// AnyType (anyTypeType). From field, neither a global declaration nor
-// xs:anyType ever reaches nestedType.
+// named in nested and whose particles chain is valueChain's for, of the complex
+// type t generated from o, typed by the package doc's "# Coverage" field rules.
+// In a t of mixed content (isMixed), an element particle's field holds
+// MixedChild (mixedChildType, claimed before the field's type is computed) over
+// the type the rules below give, and a wildcard particle's AnyChild in place of
+// AnyElement; a model group particle's field is not wrapped. The field of a
+// wildcard particle (wildcardTerm) is named from the local name any and holds
+// the raw-content struct AnyElement (anyTypeType) by p's occurrence
+// (occursGoType), whatever the wildcard's {namespace constraint} and {process
+// contents}, which it never reads; that path never calls shape, contentGroup,
+// nestedType or valueChain, and gives a choice's wildcard alternative its
+// branch struct's one field (sealedType). The field of a model group particle
+// (modelGroupTerm), inline or a <group ref>, a choice or a sequence which
+// spliced does not splice (splices), is the one groupField returns for p at
+// ordinal under site, after a {max occurs} of 0 has declined naming the group,
+// as contentGroup declines one, before any occurrence type is emitted; an all
+// group is an error, never a decline: cos-all-limited (§3.8.6.2), checked at
+// Finalize, admits an all group particle only as a content {particle}, which
+// contentGroup and groupField handle, or exactly once among an all group's
+// {particles}, which spliced splices. The field of an <element ref> particle,
+// whose declaration is global, holds the type refType returns for the
+// referenced declaration, after declaredType has checked that declaration as it
+// checks every one: the sealed interface over its substitution group when the
+// group holds another declaration (substitutionSum), and the type elementType
+// returns for it otherwise; the walk does not enter that type's body, which
+// topLevel emits, but valueCycle checks it when the particle occurs exactly
+// once and the type is a complex type other than xs:anyType emitted as a
+// struct; valueCycle ends at once for a type whose content particle occurs
+// other than exactly once. A local declaration tableSum answers a sum for holds
+// the sealed interface localTable returns. A local declaration of type
+// xs:anyType holds the raw-content struct AnyType (anyTypeType). From field,
+// neither a global declaration nor xs:anyType ever reaches nestedType.
 func (e *emitter) field(nested scope, site groupSite, ordinal int, chain []valueNode, o origin, t xsd.ComplexType, p xsd.Particle) (fieldSpec, error) {
 	subject, loc := o.subject, t.Loc()
 	if wildcardTerm(p.Term()) {
 		e.anyTypeType()
-		goType, ok := occursGoType(emittedType{name: e.raw.element}, p.Occurs())
+		item := e.raw.element
+		if isMixed(t) {
+			item = e.raw.child
+		}
+		goType, ok := occursGoType(emittedType{name: item}, p.Occurs())
 		if !ok {
 			return fieldSpec{}, decline(loc, constructVacuousParticle, "a wildcard", subject)
 		}
@@ -1712,6 +1755,9 @@ func (e *emitter) field(nested scope, site groupSite, ordinal int, chain []value
 	if err != nil {
 		return fieldSpec{}, err
 	}
+	if isMixed(t) {
+		e.mixedChildType()
+	}
 	value := p.Occurs() == exactlyOnce
 	st, isSimple := td.(*xsd.SimpleType)
 	ct, isComplex := td.(xsd.ComplexType)
@@ -1732,6 +1778,9 @@ func (e *emitter) field(nested scope, site groupSite, ordinal int, chain []value
 	}
 	if err != nil {
 		return fieldSpec{}, err
+	}
+	if isMixed(t) {
+		typ = emittedType{name: e.mixedChild + "[" + typ.name + "]"}
 	}
 	goType, ok := occursGoType(typ, p.Occurs())
 	if !ok {
