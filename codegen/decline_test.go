@@ -271,7 +271,9 @@ func TestGenerateDeclines(t *testing.T) {
 // TestGenerateDeclinesLocalAnonymousPlace pins that a decline met in a local
 // element's anonymous complex type names the type's declaring place, and that
 // Generate reports each site, in document order, while one site reached by two
-// walks stays one element.
+// walks stays one element. Two sites charged at one Loc, here the abstract
+// complex type ab two top-level elements reference, print distinct texts and
+// Generate reports each.
 func TestGenerateDeclinesLocalAnonymousPlace(t *testing.T) {
 	const (
 		anon = `<xs:complexType><xs:choice/></xs:complexType>`
@@ -307,6 +309,10 @@ func TestGenerateDeclinesLocalAnonymousPlace(t *testing.T) {
 		{"two levels down", top("p", seq(a)) + top("q", seq(a)), []string{
 			decline("complex type (anonymous) of element x of element a of element p", "122"),
 			decline("complex type (anonymous) of element x of element a of element q", "389"),
+		}},
+		{"two top-level elements of one abstract type", `<xs:complexType name="ab" abstract="true"/><xs:element name="r" type="ab"/><xs:element name="t" type="ab"/>`, []string{
+			"codegen: target 0: complex type ab of element r with {abstract} true at s.xsd:2:1 is not supported by codegen, a generator limitation, not a schema fault",
+			"codegen: target 0: complex type ab of element t with {abstract} true at s.xsd:2:1 is not supported by codegen, a generator limitation, not a schema fault",
 		}},
 	}
 	for _, tt := range tests {
