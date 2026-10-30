@@ -661,7 +661,7 @@
 //
 // Generated identifiers are not stable before v1.0: a release may rename any
 // type or field this section names, and the shortening of an anonymous type's
-// path that "Planned" states will rename the types named by such a path.
+// path that "Planned (M9)" states will rename the types named by such a path.
 //
 // A top-level element's type is named from the element, its name claimed when
 // the walk first reaches the element: at its own position, at the first
@@ -837,17 +837,11 @@
 // packages, in place of each target declaring the types of a document its
 // Schema shares with another.
 //
-// Type narrowing in interfaces, the generated-code idiom:
+// # Planned (M10 — not yet implemented)
 //
-//   - Generated readers/views expose the narrowest interface a consumer
-//     needs; optionality and nillability are modeled in the types, not
-//     in comments.
-//   - Simple-content fields of a type "# Coverage" maps to no Go type are
-//     typed by the chosen backend's representation (strict or native, per
-//     generation option). A field of a type "# Coverage" maps keeps that
-//     mapping whichever backend is chosen.
+// Generated readers/views expose the narrowest interface a consumer needs.
 //
-// # The Emitter seam (value.Emitter; M9 — not yet implemented)
+// # The Emitter seam (value.Emitter; M10 — not yet implemented)
 //
 // Backends contribute specialized decode/encode source for their value
 // representations — parsing straight from the reader's byte window into
