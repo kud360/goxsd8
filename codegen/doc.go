@@ -109,8 +109,9 @@
 //     rules below, give the places of their own particles instead
 //   - one for a complex type's own content particle, a sequence, a choice or an
 //     all group, only when it is a sequence or an all group that is not
-//     spliced, or a choice that occurs other than exactly once, one occurrence
-//     of which is emptiable, or whose type has mixed content, an attribute use
+//     spliced, or a choice that occurs other than exactly once, that has
+//     {particles} one occurrence of which is emptiable, or whose type has mixed
+//     content, an attribute use
 //     other than one of xsi:nil, an {attribute wildcard} or {open content}
 //   - one branch struct per alternative of each choice it emits as a sealed
 //     interface
@@ -358,10 +359,9 @@
 //     and "N pointer fields, exactly one non-nil" never appears. A choice with
 //     no {particles}, which matches no sequence of children, the empty one
 //     included (§3.8.4.3 cvc-model-group), gets the interface alone, which no
-//     branch implements, so its one value is nil. §3.8.6.6 cos-choice-range
-//     still gives such a choice the minimum 0, so it is emptiable (§3.9.6.3
-//     cos-group-emptiable) wherever a rule below reads emptiability: as a
-//     content {particle} occurring exactly once it gets a struct holding it.
+//     branch implements, so its one value is nil: as a content {particle} it is
+//     the type itself unless a rule below gives a struct holding it, and
+//     elsewhere it gives a field by the occurrence rules below.
 //   - One occurrence of a choice with {particles} matches nothing exactly when
 //     one of its alternatives is emptiable (§3.8.6.6 cos-choice-range,
 //     §3.9.6.3 cos-group-emptiable), and the nil interface is the one value for
@@ -402,8 +402,8 @@
 //     one declines the interface there.
 //   - A sequence or all group {particle} that is not spliced, a choice
 //     {particle} that occurs other than exactly once, or a choice {particle}
-//     that occurs exactly once and one occurrence of which is emptiable or
-//     whose type has mixed content, an attribute use other than one of xsi:nil,
+//     that occurs exactly once and either has {particles} one occurrence of
+//     which is emptiable or whose type has mixed content, an attribute use other than one of xsi:nil,
 //     an {attribute wildcard} or {open content} (§3.4.2.4 dcl.ctd.attuses,
 //     §3.4.2.5 dcl.ctd.anyatt, §3.4.2.3.3 dcl.ctd.ctcc.common), inherited ones
 //     included, gives a struct whose first field, after mixed content's Text,

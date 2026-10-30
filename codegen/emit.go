@@ -1335,8 +1335,9 @@ func typeName(t xsd.TypeDefinition) string {
 // as name, sealed exactly when "# Coverage" gives the choice t's content
 // particle holds as t itself — it reads t's mixedness (isMixed), then its
 // attribute fields (hasAttributeFields) and its {open content}
-// (hasOpenContent) from the finalized component, so inherited ones count,
-// before asking termEmptiable about the choice — and its content particle
+// (hasOpenContent) from the finalized component, so inherited ones count, and
+// then answers sealed for a choice with no {particles}, before asking
+// termEmptiable about a choice with {particles} — and its content particle
 // (contentGroup), nil for empty content. It emits nothing: body does, so that
 // a caller can store the type in e.emitted before its body is walked.
 func (e *emitter) shape(name string, o origin, t xsd.ComplexType) (emittedType, *groupParticle, error) {
@@ -1349,6 +1350,9 @@ func (e *emitter) shape(name string, o origin, t xsd.ComplexType) (emittedType, 
 	}
 	if hasAttributeFields(t) || hasOpenContent(t) {
 		return emittedType{name: name}, content, nil
+	}
+	if len(content.group.Particles()) == 0 {
+		return emittedType{name: name, sealed: true}, content, nil
 	}
 	emptiable, err := e.termEmptiable(o.subject, t.Loc(), xsd.ResolvedTerm{Term: content.group})
 	if err != nil {

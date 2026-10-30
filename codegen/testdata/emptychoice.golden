@@ -3,23 +3,13 @@
 package emptychoice
 
 // Content is generated from element {urn:emptychoice}content declared at testdata/emptychoice.xsd:8:3.
-type Content struct {
-	Choice ContentChoice
-}
-
-// ContentChoice is generated from element {urn:emptychoice}content declared at testdata/emptychoice.xsd:8:3.
-type ContentChoice interface {
-	isContentChoice()
+type Content interface {
+	isContent()
 }
 
 // ContentRef is generated from element {urn:emptychoice}contentRef declared at testdata/emptychoice.xsd:13:3.
-type ContentRef struct {
-	Choice ContentRefChoice
-}
-
-// ContentRefChoice is generated from element {urn:emptychoice}contentRef declared at testdata/emptychoice.xsd:13:3.
-type ContentRefChoice interface {
-	isContentRefChoice()
+type ContentRef interface {
+	isContentRef()
 }
 
 // Nested is generated from element {urn:emptychoice}nested declared at testdata/emptychoice.xsd:18:3.
@@ -69,11 +59,6 @@ type NestedRefChoice3 interface {
 }
 
 // Pruned is generated from element {urn:emptychoice}pruned declared at testdata/emptychoice.xsd:38:3.
-type Pruned struct {
-	Choice PrunedChoice
-}
-
-// PrunedChoice is generated from element {urn:emptychoice}pruned declared at testdata/emptychoice.xsd:38:3.
-type PrunedChoice interface {
-	isPrunedChoice()
+type Pruned interface {
+	isPruned()
 }
