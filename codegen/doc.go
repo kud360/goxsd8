@@ -111,8 +111,8 @@
 //     all group, only when it is a sequence or an all group that is not
 //     spliced, or a choice that occurs other than exactly once, that has
 //     {particles} one occurrence of which is emptiable, or whose type has mixed
-//     content, an attribute use
-//     other than one of xsi:nil, an {attribute wildcard} or {open content}
+//     content, an attribute use other than one of xsi:nil, an {attribute
+//     wildcard} or {open content}
 //   - one branch struct per alternative of each choice it emits as a sealed
 //     interface
 //   - one sealed interface per head an <element ref> particle names that has
@@ -359,9 +359,9 @@
 //     and "N pointer fields, exactly one non-nil" never appears. A choice with
 //     no {particles}, which matches no sequence of children, the empty one
 //     included (§3.8.4.3 cvc-model-group), gets the interface alone, which no
-//     branch implements, so its one value is nil: as a content {particle} it is
-//     the type itself unless a rule below gives a struct holding it, and
-//     elsewhere it gives a field by the occurrence rules below.
+//     branch implements, so its one value is nil, and which a content
+//     {particle} gives as the type itself, or a field gives, as it does any
+//     choice.
 //   - One occurrence of a choice with {particles} matches nothing exactly when
 //     one of its alternatives is emptiable (§3.8.6.6 cos-choice-range,
 //     §3.9.6.3 cos-group-emptiable), and the nil interface is the one value for
@@ -403,20 +403,20 @@
 //   - A sequence or all group {particle} that is not spliced, a choice
 //     {particle} that occurs other than exactly once, or a choice {particle}
 //     that occurs exactly once and either has {particles} one occurrence of
-//     which is emptiable or whose type has mixed content, an attribute use other than one of xsi:nil,
-//     an {attribute wildcard} or {open content} (§3.4.2.4 dcl.ctd.attuses,
-//     §3.4.2.5 dcl.ctd.anyatt, §3.4.2.3.3 dcl.ctd.ctcc.common), inherited ones
-//     included, gives a struct whose first field, after mixed content's Text,
-//     holds what one occurrence of its model group gives — a struct of the
-//     sequence's or all group's particle fields alone, or the choice's sealed
-//     interface — by the occurrence rules below, followed by the open-content
-//     field and the attribute fields; the field and that type are named as if
-//     from the local name sequence, choice or all ("Naming"). A model group
-//     particle in a sequence or as a choice's alternative, a choice or a
-//     sequence that is not spliced, gives one such field in the same way, a
-//     choice occurring exactly once giving the bare interface. The occurrence's
-//     fields lie behind that slice, pointer or interface, so no struct-value
-//     recursion passes through it.
+//     which is emptiable or whose type has mixed content, an attribute use
+//     other than one of xsi:nil, an {attribute wildcard} or {open content}
+//     (§3.4.2.4 dcl.ctd.attuses, §3.4.2.5 dcl.ctd.anyatt, §3.4.2.3.3
+//     dcl.ctd.ctcc.common), inherited ones included, gives a struct whose first
+//     field, after mixed content's Text, holds what one occurrence of its model
+//     group gives — a struct of the sequence's or all group's particle fields
+//     alone, or the choice's sealed interface — by the occurrence rules below,
+//     followed by the open-content field and the attribute fields; the field
+//     and that type are named as if from the local name sequence, choice or all
+//     ("Naming"). A model group particle in a sequence or as a choice's
+//     alternative, a choice or a sequence that is not spliced, gives one such
+//     field in the same way, a choice occurring exactly once giving the bare
+//     interface. The occurrence's fields lie behind that slice, pointer or
+//     interface, so no struct-value recursion passes through it.
 //   - Each particle of a sequence gives one field, in particle order, but a
 //     sequence particle spliced by the occurrence rules below, inline or a
 //     <group ref> to a sequence group, which gives in its place the fields its
