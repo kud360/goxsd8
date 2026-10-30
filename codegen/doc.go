@@ -96,44 +96,60 @@
 // GAP(codegen): Generate declines each construct the list above names; #2900 is
 // the GitHub issue tracking these lifts.
 //
-// Generate emits, in document order, one Go type per top-level element
-// declaration with {abstract} false, one per anonymous complex type nested in
-// its type definition or in a model group definition a <group ref> particle
-// names, one per named complex type a local element declaration reaches, one per
-// place a struct's or a branch struct's particles hold a choice or a sequence
-// that is not spliced — a sequence in a sequence or as a choice's alternative,
-// and an all group in an all group, spliced by the occurrence rules below,
-// giving the places of its own particles, and a complex type's own content
-// particle, a sequence, a choice or an all group, counting only when it is a
-// sequence or an all group that is not spliced, or a choice that occurs other
-// than exactly once, one occurrence of which is emptiable, or whose type has
-// mixed content, an attribute use other than one of xsi:nil, an {attribute
-// wildcard} or {open content} — so a particle that a model group definition
-// or an extension's base holds gets one in each struct that holds it, each
-// shared as an anonymous complex type nested beside it is, and one branch struct
-// per alternative of each choice it emits as a sealed interface — an <element
-// ref> particle gets none of its own, its field holding the type emitted for the
-// top-level element declaration it names, or, when that declaration has
-// {abstract} true or its substitution group holds another declaration with
-// {abstract} false, one sealed interface per such head with one branch struct
-// per declaration of its group with {abstract} false — and one sealed interface
-// per element declaration whose {type table} selects other than one type, in
-// place of that declaration's type, with one branch struct per type it selects,
-// each followed by the types its field reaches — then, after every other
-// declaration and in the order the walk first needs each, one datatype struct
-// per date, time or duration datatype, one for QName and NOTATION together, and
-// PrecisionDecimal followed by its sealed interface and that interface's four
-// arms, a declaration's type or a value field is declared over, the four raw-content
-// structs once an element's type is xs:anyType, a model group holds a wildcard
-// particle, or a type has an {attribute wildcard} or {open content}, the generic
-// struct MixedChild once a field of mixed content holds an element, the generic
-// sealed interface Nillable and its arms Nilled and Content once a field holds a
-// nillable element or the walk visits a nillable top-level declaration, one
-// attributes struct per complex type with attribute fields a nillable element
-// has, and one sealed interface per union simple type a declaration's type, a
-// value field, a list's item or a union's member is declared over, each followed
-// by one variant type per basic member, and declines everything outside this
-// slice:
+// Generate emits, in document order:
+//
+//   - one Go type per top-level element declaration with {abstract} false
+//   - one per anonymous complex type nested in such a declaration's type
+//     definition or in a model group definition a <group ref> particle names
+//   - one per named complex type a local element declaration reaches
+//   - one per place a struct's or a branch struct's particles hold a choice or a
+//     sequence that is not spliced; a sequence in a sequence or as a choice's
+//     alternative, and an all group in an all group, spliced by the occurrence
+//     rules below, give the places of their own particles instead
+//   - one for a complex type's own content particle, a sequence, a choice or an
+//     all group, only when it is a sequence or an all group that is not
+//     spliced, or a choice that occurs other than exactly once, one occurrence
+//     of which is emptiable, or whose type has mixed content, an attribute use
+//     other than one of xsi:nil, an {attribute wildcard} or {open content}; so a
+//     particle that a model group definition or an extension's base holds gets
+//     one in each struct that holds it, each shared as an anonymous complex
+//     type nested beside it is
+//   - one branch struct per alternative of each choice it emits as a sealed
+//     interface
+//   - one sealed interface per head an <element ref> particle names that has
+//     {abstract} true or whose substitution group holds another declaration
+//     with {abstract} false, with one branch struct per declaration of its
+//     group with {abstract} false
+//   - one sealed interface per element declaration whose {type table} selects
+//     other than one type, in place of that declaration's type, with one branch
+//     struct per type it selects, each followed by the types its field reaches
+//
+// An <element ref> particle gets no type of its own: its field holds the type
+// emitted for the top-level element declaration it names, or, for a head the
+// list above names, that head's sealed interface.
+//
+// Then, after every other declaration and in the order the walk first needs
+// each, Generate emits:
+//
+//   - one datatype struct per date, time or duration datatype, one for QName
+//     and NOTATION together, and PrecisionDecimal followed by its sealed
+//     interface and that interface's four arms, each that a declaration's type
+//     or a value field is declared over
+//   - the four raw-content structs once an element's type is xs:anyType, a
+//     model group holds a wildcard particle, or a type has an {attribute
+//     wildcard} or {open content}
+//   - the generic struct MixedChild once a field of mixed content holds an
+//     element
+//   - the generic sealed interface Nillable and its arms Nilled and Content
+//     once a field holds a nillable element or the walk visits a nillable
+//     top-level declaration
+//   - one attributes struct per complex type with attribute fields a nillable
+//     element has
+//   - one sealed interface per union simple type a declaration's type, a value
+//     field, a list's item or a union's member is declared over, each followed
+//     by one variant type per basic member
+//
+// Generate declines everything outside this slice, which these rules state:
 //
 //   - An element whose {type definition} is a simple type gets a named type
 //     over string for a special type (Datatypes §2.4.2 dt-special),
