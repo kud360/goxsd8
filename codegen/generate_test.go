@@ -413,7 +413,7 @@ func TestGenerateCollectsDeclines(t *testing.T) {
 	const tail = " is not supported by codegen, a generator limitation, not a schema fault"
 	const pdecimal = " with {type definition} {http://www.w3.org/2001/XMLSchema}precisionDecimal, whose {primitive type definition} is {http://www.w3.org/2001/XMLSchema}precisionDecimal"
 	uncovered := Construct{constructUncoveredPrimitive}
-	nillable := Construct{constructElementNillable}
+	abstract := Construct{constructComplexTypeAbstract}
 	type decline struct {
 		text      string
 		construct Construct
@@ -428,35 +428,38 @@ func TestGenerateCollectsDeclines(t *testing.T) {
 				{Schema: parseString(t, `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
 <xs:element name="a" type="xs:precisionDecimal"/>
 <xs:element name="c"><xs:complexType><xs:sequence><xs:element ref="b"/></xs:sequence></xs:complexType></xs:element>
-<xs:element name="b" nillable="true" type="xs:string"/>
+<xs:element name="b" type="ab"/>
+<xs:complexType name="ab" abstract="true"/>
 </xs:schema>`), Dir: filepath.Join(dir, "a"), Package: "a", Name: "first"},
 				{Schema: parseString(t, declinedDoc), Dir: filepath.Join(dir, "b"), Package: "b"},
 			}
 		}, []decline{
 			{"first: element a" + pdecimal + " at s.xsd:2:1" + tail, uncovered},
 			// Met at c's turn, through its ref; b's own turn is the dropped duplicate.
-			{"first: element b with {nillable} true at s.xsd:4:1" + tail, nillable},
+			{"first: complex type ab of element b with {abstract} true at s.xsd:5:1" + tail, abstract},
 			{"codegen: target 1: element e" + pdecimal + " at s.xsd:1:56" + tail, uncovered},
 		}},
 		{"a named type two top-level elements share", func(dir string) []Target {
 			return []Target{{Schema: parseString(t, `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
-<xs:complexType name="T"><xs:sequence><xs:element name="x" nillable="true" type="xs:string"/></xs:sequence></xs:complexType>
+<xs:complexType name="T"><xs:sequence><xs:element name="x" type="ab"/></xs:sequence></xs:complexType>
 <xs:element name="e1" type="T"/>
 <xs:element name="e2" type="T"/>
+<xs:complexType name="ab" abstract="true"/>
 </xs:schema>`), Dir: filepath.Join(dir, "a"), Package: "a"}}
 		}, []decline{
-			{"codegen: target 0: element x with {nillable} true at s.xsd:2:39" + tail, nillable},
+			{"codegen: target 0: complex type ab with {abstract} true at s.xsd:5:1" + tail, abstract},
 		}},
 		// b's walk enters T again, whose body declined at a's turn, so its first
 		// decline is x's duplicate, and m's decline after it is never met.
 		{"a named type whose body declined, reached again locally", func(dir string) []Target {
 			return []Target{{Schema: parseString(t, `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
-<xs:complexType name="T"><xs:sequence><xs:element name="x" nillable="true" type="xs:string"/></xs:sequence></xs:complexType>
+<xs:complexType name="T"><xs:sequence><xs:element name="x" type="ab"/></xs:sequence></xs:complexType>
 <xs:element name="a"><xs:complexType><xs:sequence><xs:element name="l1" type="T"/></xs:sequence></xs:complexType></xs:element>
 <xs:element name="b"><xs:complexType><xs:sequence><xs:element name="l2" type="T"/><xs:element name="m" type="xs:precisionDecimal"/></xs:sequence></xs:complexType></xs:element>
+<xs:complexType name="ab" abstract="true"/>
 </xs:schema>`), Dir: filepath.Join(dir, "a"), Package: "a"}}
 		}, []decline{
-			{"codegen: target 0: element x with {nillable} true at s.xsd:2:39" + tail, nillable},
+			{"codegen: target 0: complex type ab with {abstract} true at s.xsd:5:1" + tail, abstract},
 		}},
 	}
 	for _, tt := range tests {

@@ -26,7 +26,7 @@ const (
 	unassembled        = `<xs:element name="a" type="undeclared"/>`
 	emptyChoice        = `<xs:element name="a"><xs:complexType><xs:choice/></xs:complexType></xs:element>`
 	uncoveredPrimitive = `<xs:element name="a" type="xs:precisionDecimal"/>`
-	nillable           = `<xs:element name="a" type="xs:string" nillable="true"/>`
+	abstractType       = `<xs:complexType name="c" abstract="true"/><xs:element name="a" type="c"/>`
 )
 
 // writeTree writes files, slash paths relative to a fresh directory, and
@@ -47,8 +47,8 @@ func writeTree(t *testing.T, files map[string]string) string {
 }
 
 // censusTree is the fixture tree. In path order its declines are first seen
-// as choice with no {particles} (once), uncovered primitive, then element
-// {nillable} (twice each), so the first-seen order, the count order with a
+// as choice with no {particles} (once), uncovered primitive, then complex
+// type {abstract} (twice each), so the first-seen order, the count order with a
 // first-seen tie-break, and the count order with the String tie-break the tool
 // owes are three different orders. The non-.xsd file and the dot directory are
 // not documents.
@@ -58,11 +58,11 @@ func censusTree(t *testing.T) string {
 		"b.xsd":       schemaDoc(emptyChoice),
 		"c.xsd":       schemaDoc(uncoveredPrimitive),
 		"d.xsd":       schemaDoc(unassembled),
-		"e.xsd":       schemaDoc(nillable),
+		"e.xsd":       schemaDoc(abstractType),
 		"f.xsd":       schemaDoc(uncoveredPrimitive),
-		"g.xsd":       schemaDoc(nillable),
+		"g.xsd":       schemaDoc(abstractType),
 		"notes.txt":   "not a schema",
-		".git/x.xsd":  schemaDoc(nillable),
+		".git/x.xsd":  schemaDoc(abstractType),
 		"sub/h.xsd":   schemaDoc(generates),
 		"sub/i.xsd":   schemaDoc(`<xs:include schemaLocation="j.xsd"/>`),
 		"sub/j.xsd":   schemaDoc(generates),
@@ -79,16 +79,16 @@ const wantCounts = `gencensus: 10 schema document(s) under %ROOT%
   Generate error other than a decline: 0
 
 === First decline, by construct: 3 construct(s) ===
-       2  element {nillable}
+       2  complex type {abstract}
        2  uncovered primitive
        1  choice with no {particles}
 `
 
 // TestCensusCountsAndRanksDeclines pins every count the report prints and its
 // construct lines' order. Dropping ranked's sort prints the first-seen order
-// (choice with no {particles}, uncovered primitive, element {nillable});
-// dropping its String tie-break prints uncovered primitive ahead of element
-// {nillable}. Each fails here.
+// (choice with no {particles}, uncovered primitive, complex type {abstract});
+// dropping its String tie-break prints uncovered primitive ahead of complex
+// type {abstract}. Each fails here.
 func TestCensusCountsAndRanksDeclines(t *testing.T) {
 	root := censusTree(t)
 	var out bytes.Buffer
@@ -119,7 +119,7 @@ func TestCensusPathsListsEachConstructsDocuments(t *testing.T) {
 	}
 	want := `
 === Documents, by construct ===
-element {nillable} (2):
+complex type {abstract} (2):
   e.xsd
   g.xsd
 uncovered primitive (2):
