@@ -290,7 +290,7 @@
 //     them, emitted after the interface, each holding one field, named from the
 //     declaration's local name, of the type emitted for that top-level
 //     declaration, and implementing the method. The field takes the occurrence
-//     rules below, the bare interface for {min occurs} 0.
+//     rules below.
 //   - A substitution group's declarations' own types are emitted unchanged,
 //     each at its own position, and one interface is emitted per head however
 //     many particles reach it.
@@ -364,8 +364,8 @@
 //   - {max occurs} above 1 or unbounded gives a slice whatever {min occurs} is,
 //     of a list's slice too ([][]T); {min occurs} 0 with {max occurs} 1 gives a
 //     pointer to a struct, atomic Go type, or list's slice (*[]T), and the bare
-//     interface, a choice's or a union's, never a pointer to one, nil meaning
-//     absent.
+//     interface, a choice's, a union's, a substitution group's or a {type
+//     table}'s, never a pointer to one, nil meaning absent.
 //   - A sequence or all group particle, the content {particle} or nested, is
 //     spliced, giving in its place the fields its own particles give and no
 //     field of its own, when it occurs exactly once, or with {min occurs} 0
@@ -452,10 +452,9 @@
 //     of the type a local element of that type occurring exactly once holds,
 //     and implementing the method; with no type remaining, the interface alone,
 //     whose one value is nil. A field over the declaration takes the occurrence
-//     rules below, the bare interface for {min occurs} 0; a top-level declaration's
-//     interface is shared by every <element ref> particle to it, and a local one's as an
-//     anonymous complex type in its place would be. The types the branches hold are
-//     emitted unchanged and carry no method.
+//     rules below; a top-level declaration's interface is shared by every <element ref>
+//     particle to it, and a local one's as an anonymous complex type in its place would
+//     be. The types the branches hold are emitted unchanged and carry no method.
 //   - Neither an alternative's {test} nor an xsi:type naming another type
 //     (cvc-elt clause 4) is represented: a branch holds a value of its type
 //     whatever selected it, and selecting the branch an instance takes is the
