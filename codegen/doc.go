@@ -16,6 +16,41 @@
 // rules, and the file it writes; [CheckTargets] states which targets it
 // refuses whatever their Schemas hold.
 //
+//	s, err := parser.Parse("testdata/example.xsd")
+//	// ...
+//	err = codegen.Generate([]codegen.Target{{Schema: s, Dir: "gen/order", Package: "order"}})
+//
+// ExampleGenerate, in codegen/example_test.go, runs those calls, into a
+// temporary directory, and prints the whole file Generate writes for that
+// schema, which is inside the slice "Coverage" states. Plain go doc does not
+// print Example functions: read it in that file, or on pkg.go.dev beside this
+// documentation.
+//
+// # What you get
+//
+// The emitted structs carry no struct tags and bind no XML name; do not decode
+// them with encoding/xml: decoding is codec's, as the opening paragraph states.
+// Each supported construct gets the Go shape below, a summary of the
+// "Coverage" rules whose openings each row quotes, which state its exceptions.
+//
+//   - complex type → a struct ("A sequence or an all group gives"), or its
+//     content choice's sealed interface ("A choice gives")
+//   - element → the type of its {type definition}, for a simple type a named Go
+//     type over the value type ("An element whose {type definition}")
+//   - choice occurring once → a sealed interface, one branch struct per
+//     alternative ("A choice gives")
+//   - {min occurs} 0 with {max occurs} 1 → a nil-able field, a pointer or a bare
+//     interface; {max occurs} above 1 → a slice ("{max occurs} above 1")
+//   - decimal → big.Rat, xs:integer and the unbounded integer types → big.Int,
+//     the bounded ones → the Go integer of their range ("For an atomic type",
+//     "Failing that")
+//   - union → a sealed interface, one variant per basic member ("A union type")
+//   - precisionDecimal → the struct PrecisionDecimal over a sealed value sum
+//     ("PrecisionDecimal holds one")
+//   - <element ref> to a head that is abstract, or whose group holds another
+//     non-abstract declaration → a sealed interface, one branch per
+//     non-abstract member ("An <element ref> particle to a head")
+//
 // # Coverage
 //
 // Supported, each construct emitted from or accepted as the rules below state:
@@ -61,44 +96,63 @@
 // GAP(codegen): Generate declines each construct the list above names; #2900 is
 // the GitHub issue tracking these lifts.
 //
-// Generate emits, in document order, one Go type per top-level element
-// declaration with {abstract} false, one per anonymous complex type nested in
-// its type definition or in a model group definition a <group ref> particle
-// names, one per named complex type a local element declaration reaches, one per
-// place a struct's or a branch struct's particles hold a choice or a sequence
-// that is not spliced — a sequence in a sequence or as a choice's alternative,
-// and an all group in an all group, spliced by the occurrence rules below,
-// giving the places of its own particles, and a complex type's own content
-// particle, a sequence, a choice or an all group, counting only when it is a
-// sequence or an all group that is not spliced, or a choice that occurs other
-// than exactly once, one occurrence of which is emptiable, or whose type has
-// mixed content, an attribute use other than one of xsi:nil, an {attribute
-// wildcard} or {open content} — so a particle that a model group definition
-// or an extension's base holds gets one in each struct that holds it, each
-// shared as an anonymous complex type nested beside it is, and one branch struct
-// per alternative of each choice it emits as a sealed interface — an <element
-// ref> particle gets none of its own, its field holding the type emitted for the
-// top-level element declaration it names, or, when that declaration has
-// {abstract} true or its substitution group holds another declaration with
-// {abstract} false, one sealed interface per such head with one branch struct
-// per declaration of its group with {abstract} false — and one sealed interface
-// per element declaration whose {type table} selects other than one type, in
-// place of that declaration's type, with one branch struct per type it selects,
-// each followed by the types its field reaches — then, after every other
-// declaration and in the order the walk first needs each, one datatype struct
-// per date, time or duration datatype, one for QName and NOTATION together, and
-// PrecisionDecimal followed by its sealed interface and that interface's four
-// arms, a declaration's type or a value field is declared over, the four raw-content
-// structs once an element's type is xs:anyType, a model group holds a wildcard
-// particle, or a type has an {attribute wildcard} or {open content}, the generic
-// struct MixedChild once a field of mixed content holds an element, the generic
-// sealed interface Nillable and its arms Nilled and Content once a field holds a
-// nillable element or the walk visits a nillable top-level declaration, one
-// attributes struct per complex type with attribute fields a nillable element
-// has, and one sealed interface per union simple type a declaration's type, a
-// value field, a list's item or a union's member is declared over, each followed
-// by one variant type per basic member, and declines everything outside this
-// slice:
+// Generate emits, in document order:
+//
+//   - one Go type per top-level element declaration with {abstract} false
+//   - one per anonymous complex type nested in such a declaration's type
+//     definition or in a model group definition a <group ref> particle names
+//   - one per named complex type a local element declaration reaches
+//   - one per place a struct's or a branch struct's particles hold a choice or a
+//     sequence that is not spliced; a sequence in a sequence or as a choice's
+//     alternative, and an all group in an all group, spliced by the occurrence
+//     rules below, give the places of their own particles instead
+//   - one for a complex type's own content particle, a sequence, a choice or an
+//     all group, only when it is a sequence or an all group that is not
+//     spliced, or a choice that occurs other than exactly once, one occurrence
+//     of which is emptiable, or whose type has mixed content, an attribute use
+//     other than one of xsi:nil, an {attribute wildcard} or {open content}
+//   - one branch struct per alternative of each choice it emits as a sealed
+//     interface
+//   - one sealed interface per head an <element ref> particle names that has
+//     {abstract} true or whose substitution group holds another declaration
+//     with {abstract} false, with one branch struct per declaration of its
+//     group with {abstract} false
+//   - one sealed interface per element declaration whose {type table} selects
+//     other than one type, in place of that declaration's type, with one branch
+//     struct per type it selects, each followed by the types its field reaches
+//
+// By the item for each place a struct's or a branch struct's particles hold a
+// choice or a sequence, and the item for a complex type's own content particle,
+// a particle that a model group definition or an extension's base holds gets
+// one in each struct that holds it, each shared as an anonymous complex type
+// nested beside it is.
+//
+// An <element ref> particle gets no type of its own: its field holds the type
+// emitted for the top-level element declaration it names, or, for a head the
+// list above names, that head's sealed interface.
+//
+// Then, after every other declaration and in the order the walk first needs
+// each, Generate emits:
+//
+//   - one datatype struct per date, time or duration datatype, one for QName
+//     and NOTATION together, and PrecisionDecimal followed by its sealed
+//     interface and that interface's four arms, each that a declaration's type
+//     or a value field is declared over
+//   - the four raw-content structs once an element's type is xs:anyType, a
+//     model group holds a wildcard particle, or a type has an {attribute
+//     wildcard} or {open content}
+//   - the generic struct MixedChild once a field of mixed content holds an
+//     element
+//   - the generic sealed interface Nillable and its arms Nilled and Content
+//     once a field holds a nillable element or the walk visits a nillable
+//     top-level declaration
+//   - one attributes struct per complex type with attribute fields a nillable
+//     element has
+//   - one sealed interface per union simple type a declaration's type, a value
+//     field, a list's item or a union's member is declared over, each followed
+//     by one variant type per basic member
+//
+// Generate declines everything outside this slice, which these rules state:
 //
 //   - An element whose {type definition} is a simple type gets a named type
 //     over string for a special type (Datatypes §2.4.2 dt-special),
@@ -572,9 +626,6 @@
 //     with {nillable} true, stated above, and supplying a default and
 //     enforcing a fixed value or an identity constraint are the validator's.
 //
-// ExampleGenerate prints the whole file Generate writes for a schema inside
-// this slice.
-//
 // # Determinism
 //
 // The output is a function of the schema and of each document's location
@@ -589,142 +640,194 @@
 //
 // # Naming
 //
+// A single namer component owns every XSD-name → Go-identifier decision. Each
+// XSD local name becomes an exported identifier: '_' and every rune Go does
+// not admit in an identifier break words, every word starts upper-case, and a
+// result with no upper-case first letter is prefixed with X. That upper-case
+// start is also what keeps every identifier clear of the Go keywords. A
+// top-level element's type is named from the element; a named complex type a
+// local element reaches, and a named union's interface, from the type; a
+// datatype struct, PrecisionDecimal included, from its datatype; the
+// raw-content structs, MixedChild, and Nillable and its arms Nilled and
+// Content, from fixed local names; and every other type, such as an anonymous
+// type, an occurrence type, a branch, a variant, or PrecisionDecimal's
+// interface and arms, by a path: a name it lies under, followed by local names
+// of its own. A residual collision — two names folding to one identifier,
+// among a package's types or one struct's fields — is disambiguated
+// deterministically by document order: the later name takes the smallest free
+// numeric suffix from 2, so a top-level element ct and a complex type ct
+// reached locally take Ct in the order they are first reached.
+//
 // Generated identifiers are not stable before v1.0: a release may rename any
 // type or field this section names, and the shortening of an anonymous type's
 // path that "Planned" states will rename the types named by such a path.
 //
-// A single namer component owns every XSD-name → Go-identifier decision.
-// Each XSD local name becomes an exported identifier: '_' and every rune Go
-// does not admit in an identifier break words, every word starts upper-case,
-// and a result with no upper-case first letter is prefixed with
-// X. That upper-case start is also what keeps every identifier clear of the Go keywords. A
-// top-level element's type is named from the element, its name claimed when the walk first
-// reaches the element: at its own position, at the first <element ref> particle to it met
-// before that, or at the branch of the first substitution-group interface holding it. A named
-// complex type a local element reaches is named from the type (complex type ct → Ct), whichever
-// local elements have type ct. An anonymous type nested in either is named by the path of names
-// from the named complex type that declares its element, when one does (element x in complex
-// type ct → CtX, whichever elements have type ct or a type extending ct, which reaches it
-// through ct's own particle), and otherwise from its nearest named ancestor: the top-level
-// element when the element's own type is anonymous (element shipTo under element purchaseOrder
-// → PurchaseOrderShipTo). The original of a complex type a <redefine> redefines has no name
-// (§4.2.4 src-expredef clause 1.1), so the types of the local elements it declares are named
-// from the nearest named ancestor: its element x → TX for elements of type t, UX for a type u
-// extending t. An anonymous type of a local element a model group definition declares, and
-// every type nested in it, is named by the path of names from that group (element e in group g
-// → GE), whichever <group ref> particles reach it. The type for one occurrence of a model group
-// particle is named by the path of names of the complex type whose content model holds it — Ct
-// for a named complex type ct, the path an anonymous one is named by above, GE for the
-// anonymous type of element e in group g — never from a name its interface or a branch claimed,
-// followed by the local name sequence, choice or all of each occurrence type enclosing it and
-// then its own (CtSequence; a choice in that sequence → CtSequenceChoice; a repeated sequence
-// in a branch of named choice type alt, reached by element fifth → AltSequence, never
-// FifthSequenceSequence), and the types nested in its particles as if it were absent; it is
-// named and keyed under that complex type whichever <group ref> particle brought its group, so
-// two complex types referencing one group get an occurrence type each. A choice's branch struct
-// is named from its interface's name plus the alternative's local name, its compositor for a
-// model group alternative, or any for a wildcard alternative (alternative a of interface First
-// → FirstA, a sequence alternative → FirstSequence, a wildcard alternative → FirstAny), so two
-// top-level elements of one named choice type get distinct interfaces and branches. A
-// substitution group's interface is named from its head's local name plus SubstitutionGroup
-// (head h → HSubstitutionGroup), and each branch from the interface's name plus its
-// declaration's local name (member m1 → HSubstitutionGroupM1); the interface's name is claimed
-// at the first <element ref> particle to the head, then each branch's in group order, each
-// followed, when the walk has not reached its declaration yet, by the names that declaration's
-// type claims as at an <element ref> particle to it. A {type table}'s interface takes the name
-// the declaration's own type would take, claimed where that name would be: from the element for
-// a top-level declaration, and by the path an anonymous complex type of a local one would take
-// (element line in complex type order → OrderLine). Each of its branches is named from the
-// interface's name plus the branch's local name: the selected type's local name when it is
-// named, and otherwise alternative and the 1-based position of its alternative among the
-// {alternatives}, or default for the {default type definition} (a type book, and an anonymous
-// fourth alternative, of interface Product → ProductBook and ProductAlternative4; an anonymous
-// default of Memo → MemoDefault). An anonymous type a branch holds is named by the interface's path
-// followed by the branch's local name and the local name type, every type nested in it
-// extending that path, and an anonymous union with union last (ProductAlternative4Type,
-// OrderLineAlternative2TypeNote, UAlternative1TypeUnion). The branches' names are claimed after the
-// interface's, at a top-level declaration's own position, in branch order, each followed by the
-// names its field's type first claims. Each choice branch's name is claimed when the walk reaches
-// its alternative, after the types every earlier alternative first needs and ahead of its own, so
-// the raw-content structs a wildcard alternative first needs follow its branch and every earlier
-// one and precede every later one: alternatives type, a wildcard and element of interface Any name
-// the branches AnyType, AnyAny and AnyElement2, and the raw-content structs AnyType2, AnyAttribute,
-// AnyChild and AnyElement. A residual collision — two names folding to one identifier, among a
-// package's types or one struct's fields — is disambiguated deterministically by document order:
-// the later name takes the smallest free numeric suffix from 2, so a top-level element ct and a
-// complex type ct reached locally take Ct in the order they are first reached. A datatype struct is
-// named from its datatype's local name (dateTime → DateTime, gYearMonth → GYearMonth,
-// dayTimeDuration → DayTimeDuration, QName → QName, which an xs:NOTATION type shares), claimed when
-// the walk first needs it: for a top-level element of a simple type, ahead of that element's own
-// type, so that a top-level element date of type xs:date names its type Date2; for a field of a
-// struct, the value field and attribute fields included, after that struct's own name, so that a
-// top-level element date whose complex type extends xs:date names its type Date and the datatype
-// struct Date2. PrecisionDecimal's interface is named from the path precisionDecimal, value, and
-// each arm from the interface's name plus numerical, positiveInfinity, negativeInfinity or
-// notANumber (PrecisionDecimalValueNotANumber), the five claimed in that order right after
-// PrecisionDecimal's own name. The raw-content structs are named AnyType, AnyAttribute, AnyChild and
-// AnyElement, claimed together in that order when the walk first reaches a declaration of type
-// xs:anyType or a wildcard particle, ahead of that declaration's own type, so that a top-level
-// element anyType with no type names its type AnyType2; or when it first reaches the {open content}
-// of a type emitted as a struct, after that struct's own name and the types its particle fields
-// first need, or its {attribute wildcard}, after the types its other fields first need, so that a
-// top-level element anyType whose anonymous complex type has an <openContent> or an <anyAttribute>
-// names its type AnyType and the raw-content structs AnyType2, AnyAttribute, AnyChild and
-// AnyElement. A wildcard particle's field is named as if from local name any, an {open content}'s as
-// if from local name openContent, and an {attribute wildcard}'s as if from local name anyAttribute.
-// Mixed content's Text field is named as if from local name text, ahead of the particle fields, so
-// that an element text in it gives the field Text2. The generic struct MixedChild is named from
-// local name mixedChild, claimed when the walk first needs it as a datatype struct is: for an
-// element field of mixed content, after that struct's own name and ahead of the names the field's
-// type first claims, so that an <element ref> particle there to a top-level element mixedChild that
-// the walk has not reached names the generic struct MixedChild and that element's type MixedChild2.
-// The generic sealed interface Nillable and its arms Nilled and Content are named from the local
-// names nillable, nilled and content, claimed together in that order when the walk first needs them:
-// for a field over a nillable element, after the names the field's type first claims, so after
-// MixedChild's in mixed content; and at a nillable top-level declaration's own position, after the
-// names its type claims. A complex type's attributes struct is named from that type's Go name
-// followed by the local name attributes (Price → PriceAttributes), claimed right after Nillable's
-// names would be at the same point. A union's interface is named from the type when it is named
-// (simple type size → Size), claimed when the walk first needs it as a datatype struct is: for a
-// top-level element of a union type, ahead of that element's own type, so that a top-level element
-// size of type size names its type Size2; for a field of a struct, after that struct's own name. An
-// anonymous union is named by the path of names an anonymous complex type would take in its place,
-// with the local name union last: a top-level element's (element pin → PinUnion), a local element's
-// (element code in complex type box → BoxCodeUnion), an attribute's from the global attribute
-// declaration, the named complex type or attribute group definition declaring it, or the path of the
-// struct holding it for an anonymous complex type (attribute mode in attribute group shared →
-// SharedModeUnion, attribute kind of element tag → TagKindUnion), and a value field's from its
-// struct's path with value before union (complex type narrow → NarrowValueUnion). A list's item is
-// named from the list whose <list> declares it: from that list's local name when it is named (simple
-// type codes → CodesUnion, for codes and every restriction of it), and from the path the list takes
-// otherwise. A variant is named from its interface's name plus its member's local name: an anonymous
-// list member's is list, and any other anonymous member's is that of the nearest named type on its
-// {base type definition} chain, the member itself first (xs:int in Size → SizeInt, an anonymous
-// restriction of xs:string → SizeString). The variants are claimed after their interface in
-// basic-member order, each ahead of its member's own Go type, which takes the variant's name as its
-// path (an anonymous union item of the list variant MixedList → MixedListUnion). Every other
-// generated type's header comment but a union interface's or variant's, or MixedChild's, Nillable's,
-// Nilled's or Content's, records the QName and the schema Loc of the declaration it is named from:
-// the element declaration, or the complex type definition for a type named from one, an attributes
-// struct's being its type's, followed by a second line naming that type. A union interface's header
-// records the simple type it is generated from, by its QName or as (anonymous), and that type's
-// schema Loc, and a variant's header its member the same way, a builtin member, having no schema
-// document, by its QName alone. A datatype struct's header records its datatype's QName alone, a
-// builtin having no schema document, then a second line stating what its fields' names do not, when
-// there is any: TimezoneOffset's unit and whether it may be absent, that duration's Months and
-// Seconds share one sign, or that QName's Space is "" for no namespace; PrecisionDecimal's interface
-// and arms record the same QName, the numerical arm then a second line stating its value's formula
-// and that Coefficient is never negative. A raw-content struct's header records xs:anyType's QName
-// alone, then, for AnyType and AnyChild, a second line stating what Text or Tail holds. MixedChild's
-// header records no declaration, since every mixed content shares it, and states that it holds one
-// child element and the characters after it, then a second line stating what Tail holds. Nillable's,
-// Nilled's and Content's headers record no declaration, since every nillable element shares them,
-// and state what each holds. A Loc whose URI filepath.IsAbs accepts renders relative to the target's
-// Dir made absolute against the working directory, slash-separated and climbing with ".." out of
-// Dir. A document outside the tree laid out alike, such as one an absolute schemaLocation names,
-// renders a climbing path that differs with that tree's depth below the filesystem root. Any other
-// URI renders as is, a URL or a relative loader key alike, as does one with no path relative to Dir,
-// such as one on another Windows volume. Symbolic links are not resolved.
+// A top-level element's type is named from the element, its name claimed when
+// the walk first reaches the element: at its own position, at the first
+// <element ref> particle to it met before that, or at the branch of the first
+// substitution-group interface holding it. A named complex type a local
+// element reaches is named from the type (complex type ct → Ct), whichever
+// local elements have type ct. An anonymous type nested in either is named by
+// the path of names from the named complex type that declares its element,
+// when one does (element x in complex type ct → CtX, whichever elements have
+// type ct or a type extending ct, which reaches it through ct's own particle),
+// and otherwise from its nearest named ancestor: the top-level element when
+// the element's own type is anonymous (element shipTo under element
+// purchaseOrder → PurchaseOrderShipTo). The original of a complex type a
+// <redefine> redefines has no name (§4.2.4 src-expredef clause 1.1), so the
+// types of the local elements it declares are named from the nearest named
+// ancestor: its element x → TX for elements of type t, UX for a type u
+// extending t. An anonymous type of a local element a model group definition
+// declares, and every type nested in it, is named by the path of names from
+// that group (element e in group g → GE), whichever <group ref> particles
+// reach it. The type for one occurrence of a model group particle is named by
+// the path of names of the complex type whose content model holds it — Ct for
+// a named complex type ct, the path an anonymous one is named by above, GE for
+// the anonymous type of element e in group g — never from a name its interface
+// or a branch claimed, followed by the local name sequence, choice or all of
+// each occurrence type enclosing it and then its own (CtSequence; a choice in
+// that sequence → CtSequenceChoice; a repeated sequence in a branch of named
+// choice type alt, reached by element fifth → AltSequence, never
+// FifthSequenceSequence), and the types nested in its particles as if it were
+// absent; it is named and keyed under that complex type whichever <group ref>
+// particle brought its group, so two complex types referencing one group get
+// an occurrence type each. A choice's branch struct is named from its
+// interface's name plus the alternative's local name, its compositor for a
+// model group alternative, or any for a wildcard alternative (alternative a of
+// interface First → FirstA, a sequence alternative → FirstSequence, a wildcard
+// alternative → FirstAny), so two top-level elements of one named choice type
+// get distinct interfaces and branches.
+//
+// A substitution group's interface is named from its head's local name plus
+// SubstitutionGroup (head h → HSubstitutionGroup), and each branch from the
+// interface's name plus its declaration's local name (member m1 →
+// HSubstitutionGroupM1); the interface's name is claimed at the first <element
+// ref> particle to the head, then each branch's in group order, each followed,
+// when the walk has not reached its declaration yet, by the names that
+// declaration's type claims as at an <element ref> particle to it. A {type
+// table}'s interface takes the name the declaration's own type would take,
+// claimed where that name would be: from the element for a top-level
+// declaration, and by the path an anonymous complex type of a local one would
+// take (element line in complex type order → OrderLine). Each of its branches
+// is named from the interface's name plus the branch's local name: the
+// selected type's local name when it is named, and otherwise alternative and
+// the 1-based position of its alternative among the {alternatives}, or default
+// for the {default type definition} (a type book, and an anonymous fourth
+// alternative, of interface Product → ProductBook and ProductAlternative4; an
+// anonymous default of Memo → MemoDefault). An anonymous type a branch holds
+// is named by the interface's path followed by the branch's local name and the
+// local name type, every type nested in it extending that path, and an
+// anonymous union with union last (ProductAlternative4Type,
+// OrderLineAlternative2TypeNote, UAlternative1TypeUnion). The branches' names
+// are claimed after the interface's, at a top-level declaration's own
+// position, in branch order, each followed by the names its field's type first
+// claims. Each choice branch's name is claimed when the walk reaches its
+// alternative, after the types every earlier alternative first needs and ahead
+// of its own, so the raw-content structs a wildcard alternative first needs
+// follow its branch and every earlier one and precede every later one:
+// alternatives type, a wildcard and element of interface Any name the branches
+// AnyType, AnyAny and AnyElement2, and the raw-content structs AnyType2,
+// AnyAttribute, AnyChild and AnyElement.
+//
+// A datatype struct is named from its datatype's local name (dateTime →
+// DateTime, gYearMonth → GYearMonth, dayTimeDuration → DayTimeDuration, QName
+// → QName, which an xs:NOTATION type shares), claimed when the walk first
+// needs it: for a top-level element of a simple type, ahead of that element's
+// own type, so that a top-level element date of type xs:date names its type
+// Date2; for a field of a struct, the value field and attribute fields
+// included, after that struct's own name, so that a top-level element date
+// whose complex type extends xs:date names its type Date and the datatype
+// struct Date2. PrecisionDecimal's interface is named from the path
+// precisionDecimal, value, and each arm from the interface's name plus
+// numerical, positiveInfinity, negativeInfinity or notANumber
+// (PrecisionDecimalValueNotANumber), the five claimed in that order right
+// after PrecisionDecimal's own name. The raw-content structs are named
+// AnyType, AnyAttribute, AnyChild and AnyElement, claimed together in that
+// order when the walk first reaches a declaration of type xs:anyType or a
+// wildcard particle, ahead of that declaration's own type, so that a top-level
+// element anyType with no type names its type AnyType2; or when it first
+// reaches the {open content} of a type emitted as a struct, after that
+// struct's own name and the types its particle fields first need, or its
+// {attribute wildcard}, after the types its other fields first need, so that a
+// top-level element anyType whose anonymous complex type has an <openContent>
+// or an <anyAttribute> names its type AnyType and the raw-content structs
+// AnyType2, AnyAttribute, AnyChild and AnyElement. A wildcard particle's field
+// is named as if from local name any, an {open content}'s as if from local
+// name openContent, and an {attribute wildcard}'s as if from local name
+// anyAttribute. Mixed content's Text field is named as if from local name
+// text, ahead of the particle fields, so that an element text in it gives the
+// field Text2. The generic struct MixedChild is named from local name
+// mixedChild, claimed when the walk first needs it as a datatype struct is:
+// for an element field of mixed content, after that struct's own name and
+// ahead of the names the field's type first claims, so that an <element ref>
+// particle there to a top-level element mixedChild that the walk has not
+// reached names the generic struct MixedChild and that element's type
+// MixedChild2. The generic sealed interface Nillable and its arms Nilled and
+// Content are named from the local names nillable, nilled and content, claimed
+// together in that order when the walk first needs them: for a field over a
+// nillable element, after the names the field's type first claims, so after
+// MixedChild's in mixed content; and at a nillable top-level declaration's own
+// position, after the names its type claims. A complex type's attributes
+// struct is named from that type's Go name followed by the local name
+// attributes (Price → PriceAttributes), claimed right after Nillable's names
+// would be at the same point.
+//
+// A union's interface is named from the type when it is named (simple type
+// size → Size), claimed when the walk first needs it as a datatype struct is:
+// for a top-level element of a union type, ahead of that element's own type,
+// so that a top-level element size of type size names its type Size2; for a
+// field of a struct, after that struct's own name. An anonymous union is named
+// by the path of names an anonymous complex type would take in its place, with
+// the local name union last: a top-level element's (element pin → PinUnion), a
+// local element's (element code in complex type box → BoxCodeUnion), an
+// attribute's from the global attribute declaration, the named complex type or
+// attribute group definition declaring it, or the path of the struct holding
+// it for an anonymous complex type (attribute mode in attribute group shared →
+// SharedModeUnion, attribute kind of element tag → TagKindUnion), and a value
+// field's from its struct's path with value before union (complex type narrow
+// → NarrowValueUnion). A list's item is named from the list whose <list>
+// declares it: from that list's local name when it is named (simple type codes
+// → CodesUnion, for codes and every restriction of it), and from the path the
+// list takes otherwise. A variant is named from its interface's name plus its
+// member's local name: an anonymous list member's is list, and any other
+// anonymous member's is that of the nearest named type on its {base type
+// definition} chain, the member itself first (xs:int in Size → SizeInt, an
+// anonymous restriction of xs:string → SizeString). The variants are claimed
+// after their interface in basic-member order, each ahead of its member's own
+// Go type, which takes the variant's name as its path (an anonymous union item
+// of the list variant MixedList → MixedListUnion).
+//
+// Every other generated type's header comment but a union interface's or
+// variant's, or MixedChild's, Nillable's, Nilled's or Content's, records the
+// QName and the schema Loc of the declaration it is named from: the element
+// declaration, or the complex type definition for a type named from one, an
+// attributes struct's being its type's, followed by a second line naming that
+// type. A union interface's header records the simple type it is generated
+// from, by its QName or as (anonymous), and that type's schema Loc, and a
+// variant's header its member the same way, a builtin member, having no schema
+// document, by its QName alone. A datatype struct's header records its
+// datatype's QName alone, a builtin having no schema document, then a second
+// line stating what its fields' names do not, when there is any:
+// TimezoneOffset's unit and whether it may be absent, that duration's Months
+// and Seconds share one sign, or that QName's Space is "" for no namespace;
+// PrecisionDecimal's interface and arms record the same QName, the numerical
+// arm then a second line stating its value's formula and that Coefficient is
+// never negative. A raw-content struct's header records xs:anyType's QName
+// alone, then, for AnyType and AnyChild, a second line stating what Text or
+// Tail holds. MixedChild's header records no declaration, since every mixed
+// content shares it, and states that it holds one child element and the
+// characters after it, then a second line stating what Tail holds. Nillable's,
+// Nilled's and Content's headers record no declaration, since every nillable
+// element shares them, and state what each holds.
+//
+// A Loc whose URI filepath.IsAbs accepts renders relative to the target's Dir
+// made absolute against the working directory, slash-separated and climbing
+// with ".." out of Dir. A document outside the tree laid out alike, such as
+// one an absolute schemaLocation names, renders a climbing path that differs
+// with that tree's depth below the filesystem root. Any other URI renders as
+// is, a URL or a relative loader key alike, as does one with no path relative
+// to Dir, such as one on another Windows volume. Symbolic links are not
+// resolved.
 //
 // # Planned (M9 — not yet implemented)
 //
