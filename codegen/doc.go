@@ -68,31 +68,31 @@
 // particles, and a complex type's own content particle, a sequence, a choice or
 // an all group, counting only when it is a sequence or an all group that is not
 // spliced, or a choice that occurs other than exactly once, one occurrence of
-// which is emptiable, or whose type has mixed content, {attribute uses} or an
-// {attribute wildcard} — so a particle that a model group definition or an
-// extension's base holds gets one in each struct that holds it, each shared as
-// an anonymous complex type nested beside it is, and one branch struct per
-// alternative of each choice it emits as a sealed interface — an <element ref>
-// particle gets none of its own, its field holding the type emitted for the
-// top-level element declaration it names, or, when that declaration's
-// substitution group holds another declaration, one sealed interface per such
-// head with one branch struct per declaration of its group — and one sealed
-// interface per element declaration whose {type table} selects other than one
-// type, in place of that declaration's type, with one branch struct per type it
-// selects, each followed by the types its field reaches — then, after every
-// other declaration and in the order the walk first needs each, one datatype
-// struct per date, time or duration datatype, and one for QName and NOTATION
-// together, a declaration's type or a value field is declared over, the four
-// raw-content structs once an element's type is xs:anyType, a model group holds
-// a wildcard particle, or a type has an {attribute wildcard}, the generic struct
-// MixedChild once a field of mixed content holds an element, the generic sealed
-// interface Nillable and its arms Nilled and Content once a field holds a
-// nillable element or the walk visits a nillable top-level declaration, one
-// attributes struct per complex type with attribute fields a nillable element
-// has, and one sealed interface per union simple type a declaration's type, a
-// value field, a list's item or a union's member is declared over, each followed
-// by one variant type per basic member, and declines everything outside this
-// slice:
+// which is emptiable, or whose type has mixed content, an attribute use other
+// than one of xsi:nil or an {attribute wildcard} — so a particle that a model
+// group definition or an extension's base holds gets one in each struct that
+// holds it, each shared as an anonymous complex type nested beside it is, and
+// one branch struct per alternative of each choice it emits as a sealed
+// interface — an <element ref> particle gets none of its own, its field holding
+// the type emitted for the top-level element declaration it names, or, when that
+// declaration's substitution group holds another declaration, one sealed
+// interface per such head with one branch struct per declaration of its group —
+// and one sealed interface per element declaration whose {type table} selects
+// other than one type, in place of that declaration's type, with one branch
+// struct per type it selects, each followed by the types its field reaches —
+// then, after every other declaration and in the order the walk first needs
+// each, one datatype struct per date, time or duration datatype, and one for
+// QName and NOTATION together, a declaration's type or a value field is declared
+// over, the four raw-content structs once an element's type is xs:anyType, a
+// model group holds a wildcard particle, or a type has an {attribute wildcard},
+// the generic struct MixedChild once a field of mixed content holds an element,
+// the generic sealed interface Nillable and its arms Nilled and Content once a
+// field holds a nillable element or the walk visits a nillable top-level
+// declaration, one attributes struct per complex type with attribute fields a
+// nillable element has, and one sealed interface per union simple type a
+// declaration's type, a value field, a list's item or a union's member is
+// declared over, each followed by one variant type per basic member, and
+// declines everything outside this slice:
 //
 //   - An element whose {type definition} is a simple type gets a named type
 //     over string for a special type (Datatypes §2.4.2 dt-special),
@@ -307,19 +307,19 @@
 //   - A sequence or all group {particle} that is not spliced, a choice
 //     {particle} that occurs other than exactly once, or a choice {particle}
 //     that occurs exactly once and one occurrence of which is emptiable or
-//     whose type has mixed content, {attribute uses} or an {attribute
-//     wildcard} (§3.4.2.4 dcl.ctd.attuses, §3.4.2.5 dcl.ctd.anyatt), inherited
-//     ones included, gives a struct whose first field, after mixed content's
-//     Text, holds what one occurrence of its model group gives — a struct of
-//     the sequence's or all group's particle fields alone, or the choice's
-//     sealed interface — by the occurrence rules below, followed by the
-//     attribute fields; the field and that type are named as if from the local
-//     name sequence, choice or all ("Naming"). A model group particle in a
-//     sequence or as a choice's alternative, a choice or a sequence that is
-//     not spliced, gives one such field in the same way, a choice occurring
-//     exactly once giving the bare interface. The occurrence's fields lie
-//     behind that slice, pointer or interface, so no struct-value recursion
-//     passes through it.
+//     whose type has mixed content, an attribute use other than one of xsi:nil
+//     or an {attribute wildcard} (§3.4.2.4 dcl.ctd.attuses, §3.4.2.5
+//     dcl.ctd.anyatt), inherited ones included, gives a struct whose first
+//     field, after mixed content's Text, holds what one occurrence of its
+//     model group gives — a struct of the sequence's or all group's particle
+//     fields alone, or the choice's sealed interface — by the occurrence rules
+//     below, followed by the attribute fields; the field and that type are
+//     named as if from the local name sequence, choice or all ("Naming"). A
+//     model group particle in a sequence or as a choice's alternative, a
+//     choice or a sequence that is not spliced, gives one such field in the
+//     same way, a choice occurring exactly once giving the bare interface. The
+//     occurrence's fields lie behind that slice, pointer or interface, so no
+//     struct-value recursion passes through it.
 //   - Each particle of a sequence gives one field, in particle order, but a
 //     sequence particle spliced by the occurrence rules below, inline or a
 //     <group ref> to a sequence group, which gives in its place the fields its
@@ -394,7 +394,8 @@
 //     to it: a child that an element particle of the group could take at that
 //     point in the sequence is attributed to the element particle instead
 //     (§3.8.4.2 key-vpath).
-//   - Each attribute use of a type emitted as a struct gives one field after
+//   - Each attribute use of a type emitted as a struct, but one whose
+//     {attribute declaration} is the built-in xsi:nil, gives one field after
 //     the particle fields or the value field, if any, in the order
 //     [xsd.ComplexType.AttributeUses] returns its {attribute uses} (§3.4.2.4).
 //     The field is named from the attribute declaration's local name, so a

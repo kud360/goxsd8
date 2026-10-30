@@ -236,7 +236,7 @@ type nillableNames struct {
 }
 
 // structAttributes is what body records for one struct whose type has
-// {attribute uses} or an {attribute wildcard}: from, its header's rendering
+// attribute fields (hasAttributeFields): from, its header's rendering
 // of what it is generated from, and fields, its attribute fields and then its
 // wildcard field, named as the struct names them.
 type structAttributes struct {
@@ -1281,7 +1281,7 @@ func typeName(t xsd.TypeDefinition) string {
 // shape, naming it in declines by o's subject, and returns the type it emits
 // as name, sealed exactly when "# Coverage" gives the choice t's content
 // particle holds as t itself — it reads t's mixedness (isMixed), then its
-// {attribute uses} and {attribute wildcard} from the finalized component, so
+// attribute fields (hasAttributeFields) from the finalized component, so
 // inherited ones count, before asking termEmptiable about the choice — and
 // its content particle (contentGroup), nil for empty content. It emits
 // nothing: body does, so that a caller can store the type in e.emitted before
