@@ -1,0 +1,29 @@
+<?xml version="1.0"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+           xmlns="urn:defaultopencontent"
+           targetNamespace="urn:defaultopencontent">
+  <xs:defaultOpenContent appliesToEmpty="true" mode="suffix">
+    <xs:any namespace="##other" processContents="lax"/>
+  </xs:defaultOpenContent>
+  <xs:element name="listed">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element name="a" type="xs:string"/>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="empty">
+    <xs:complexType/>
+  </xs:element>
+  <xs:element name="closed">
+    <xs:complexType>
+      <xs:openContent mode="none"/>
+      <xs:sequence>
+        <xs:element name="a" type="xs:string"/>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="prose">
+    <xs:complexType mixed="true"/>
+  </xs:element>
+</xs:schema>

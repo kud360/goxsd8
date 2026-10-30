@@ -1281,11 +1281,11 @@ func typeName(t xsd.TypeDefinition) string {
 // shape, naming it in declines by o's subject, and returns the type it emits
 // as name, sealed exactly when "# Coverage" gives the choice t's content
 // particle holds as t itself — it reads t's mixedness (isMixed), then its
-// attribute fields (hasAttributeFields) from the finalized component, so
-// inherited ones count, before asking termEmptiable about the choice — and
-// its content particle (contentGroup), nil for empty content. It emits
-// nothing: body does, so that a caller can store the type in e.emitted before
-// its body is walked.
+// attribute fields (hasAttributeFields) and its {open content}
+// (hasOpenContent) from the finalized component, so inherited ones count,
+// before asking termEmptiable about the choice — and its content particle
+// (contentGroup), nil for empty content. It emits nothing: body does, so that
+// a caller can store the type in e.emitted before its body is walked.
 func (e *emitter) shape(name string, o origin, t xsd.ComplexType) (emittedType, *groupParticle, error) {
 	content, err := e.contentGroup(o.subject, t)
 	if err != nil {
@@ -1294,7 +1294,7 @@ func (e *emitter) shape(name string, o origin, t xsd.ComplexType) (emittedType, 
 	if content == nil || content.group.Compositor() != xsd.CompositorChoice || content.occurs != exactlyOnce || isMixed(t) {
 		return emittedType{name: name}, content, nil
 	}
-	if hasAttributeFields(t) {
+	if hasAttributeFields(t) || hasOpenContent(t) {
 		return emittedType{name: name}, content, nil
 	}
 	emptiable, err := e.termEmptiable(o.subject, t.Loc(), xsd.ResolvedTerm{Term: content.group})
@@ -1312,6 +1312,15 @@ func (e *emitter) shape(name string, o origin, t xsd.ComplexType) (emittedType, 
 func hasAttributeFields(t xsd.ComplexType) bool {
 	_, hasWildcard := t.AttributeWildcard()
 	return hasWildcard || len(fieldAttributeUses(t)) > 0
+}
+
+// hasOpenContent reports whether the complex type t has an {open content},
+// read from its finalized {content type} as the package doc's "# Coverage"
+// states: exactly when the struct body emits for t holds the open-content
+// field, and so when shape never answers a sealed interface for t.
+func hasOpenContent(t xsd.ComplexType) bool {
+	content, isElement := t.ContentType().(xsd.ElementContent)
+	return isElement && content.OpenContent != nil
 }
 
 // xsiNil is the expanded name of the built-in attribute declaration xsi:nil
@@ -1340,7 +1349,11 @@ func fieldAttributeUses(t xsd.ComplexType) []xsd.AttributeUse {
 // contentFields returns for content, or for simple content (§3.4.2.2
 // dcl.ctd.ctsc) the value field, named from the local name value and holding,
 // never through a pointer, what goType maps its {simple type definition} to,
-// an anonymous union named by nested's path with value last, then one per
+// an anonymous union named by nested's path with value last, then, when t has
+// an {open content} (hasOpenContent), one named from the local name
+// openContent holding a slice of the raw-content struct AnyElement, or of
+// AnyChild for mixed content (anyTypeType, which claims the raw-content
+// structs' names there when nothing earlier did), then one per
 // attribute use fieldAttributeUses keeps (attributeField), and then, when t
 // has an {attribute wildcard} (§3.4.2.5 dcl.ctd.anyatt), its own, inherited or
 // brought by an attribute group, one named from the local name anyAttribute
@@ -1374,6 +1387,14 @@ func (e *emitter) body(typ emittedType, nested scope, chain []valueNode, o origi
 			return err
 		}
 		fields = append(fields, contentFields...)
+	}
+	if hasOpenContent(t) {
+		e.anyTypeType()
+		item := e.raw.element
+		if isMixed(t) {
+			item = e.raw.child
+		}
+		fields = append(fields, fieldSpec{local: "openContent", goType: "[]" + item})
 	}
 	attributesFrom := len(fields)
 	for _, u := range fieldAttributeUses(t) {
@@ -1828,7 +1849,8 @@ type groupParticle struct {
 // or, for a <group ref>, the referenced definition's {model group}
 // (modelGroupTerm), read before the {max occurs} test, so that a referenced
 // group is checked and emitted as an inline one with the ref's {min occurs} and
-// {max occurs} (§3.7.2); for {variety} empty (§3.4.1), which has no {particle},
+// {max occurs} (§3.7.2), whatever t's {open content}, which body gives its own
+// field (hasOpenContent); for {variety} empty (§3.4.1), which has no {particle},
 // and for {variety} simple, whose value field body gives, it returns nil and a
 // nil error. body and field read whether the content is mixed (isMixed).
 // Particles and model groups carry no Loc, so their declines cite t's.
@@ -1844,9 +1866,6 @@ func (e *emitter) contentGroup(subject string, t xsd.ComplexType) (*groupParticl
 		default:
 			return nil, fmt.Errorf("%s at %s: unexpected content type %T of {variety} %s", subject, t.Loc(), t.ContentType(), variety)
 		}
-	}
-	if content.OpenContent != nil {
-		return nil, decline(t.Loc(), constructOpenContent, subject)
 	}
 	group, isGroup, err := e.modelGroupTerm(subject, t.Loc(), content.Particle.Term())
 	if err != nil {
