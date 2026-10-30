@@ -110,10 +110,7 @@
 //     all group, only when it is a sequence or an all group that is not
 //     spliced, or a choice that occurs other than exactly once, one occurrence
 //     of which is emptiable, or whose type has mixed content, an attribute use
-//     other than one of xsi:nil, an {attribute wildcard} or {open content}; so a
-//     particle that a model group definition or an extension's base holds gets
-//     one in each struct that holds it, each shared as an anonymous complex
-//     type nested beside it is
+//     other than one of xsi:nil, an {attribute wildcard} or {open content}
 //   - one branch struct per alternative of each choice it emits as a sealed
 //     interface
 //   - one sealed interface per head an <element ref> particle names that has
@@ -123,6 +120,12 @@
 //   - one sealed interface per element declaration whose {type table} selects
 //     other than one type, in place of that declaration's type, with one branch
 //     struct per type it selects, each followed by the types its field reaches
+//
+// By the item for each place a struct's or a branch struct's particles hold a
+// choice or a sequence, and the item for a complex type's own content particle,
+// a particle that a model group definition or an extension's base holds gets
+// one in each struct that holds it, each shared as an anonymous complex type
+// nested beside it is.
 //
 // An <element ref> particle gets no type of its own: its field holds the type
 // emitted for the top-level element declaration it names, or, for a head the
