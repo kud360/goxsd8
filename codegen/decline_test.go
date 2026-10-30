@@ -110,10 +110,10 @@ func TestGenerateDeclines(t *testing.T) {
 		// In the ref rows below, h is declared after e. Where a row places a
 		// later decline after the ref, the ref's check is shown to come
 		// first.
-		{"element ref to nillable", `<xs:element name="e"><xs:complexType><xs:sequence><xs:element ref="h"/></xs:sequence></xs:complexType></xs:element><xs:element name="z" type="xs:precisionDecimal"/><xs:element name="h" nillable="true" ` + str + `/>`,
-			"element h with {nillable} true at s.xsd:2:165 ", constructElementNillable},
-		{"element ref in choice to nillable", `<xs:element name="e"><xs:complexType><xs:choice><xs:element name="a" ` + str + `/><xs:element ref="h"/></xs:choice></xs:complexType></xs:element><xs:element name="h" nillable="true" ` + str + `/>`,
-			"element h with {nillable} true", constructElementNillable},
+		{"element ref to abstract", `<xs:element name="e"><xs:complexType><xs:sequence><xs:element ref="h"/></xs:sequence></xs:complexType></xs:element><xs:element name="z" type="xs:precisionDecimal"/><xs:element name="h" abstract="true" ` + str + `/>`,
+			"element h with {abstract} true at s.xsd:2:165 ", constructElementAbstract},
+		{"element ref in choice to abstract", `<xs:element name="e"><xs:complexType><xs:choice><xs:element name="a" ` + str + `/><xs:element ref="h"/></xs:choice></xs:complexType></xs:element><xs:element name="h" abstract="true" ` + str + `/>`,
+			"element h with {abstract} true", constructElementAbstract},
 		// h's type is checked where e's ref meets it, ahead of z's decline.
 		{"element ref to complex type outside the slice", `<xs:element name="e"><xs:complexType><xs:sequence><xs:element ref="h"/><xs:element name="z" type="xs:precisionDecimal"/></xs:sequence></xs:complexType></xs:element><xs:element name="h"><xs:complexType><xs:openContent><xs:any/></xs:openContent><xs:sequence><xs:element name="a" ` + str + `/></xs:sequence></xs:complexType></xs:element>`,
 			"complex type (anonymous) of element h with {open content}", constructOpenContent},
@@ -144,11 +144,9 @@ func TestGenerateDeclines(t *testing.T) {
 			"with {open content}", constructOpenContent},
 		{"default open content", `<xs:defaultOpenContent><xs:any/></xs:defaultOpenContent><xs:element name="e"><xs:complexType><xs:sequence><xs:element name="a" ` + str + `/></xs:sequence></xs:complexType></xs:element>`,
 			"with {open content}", constructOpenContent},
-		// The two rows below carry a {value constraint} beside the declining
-		// property, so they pin that the value constraint, accepted, is not
+		// The row below carries a {value constraint} beside the declining
+		// property, so it pins that the value constraint, accepted, is not
 		// checked ahead of it.
-		{"nillable", `<xs:element name="e" nillable="true" default="d" ` + str + `/>`,
-			"element e with {nillable} true", constructElementNillable},
 		{"abstract element", `<xs:element name="e" abstract="true" fixed="f" ` + str + `/>`,
 			"element e with {abstract} true", constructElementAbstract},
 		// An abstract head declines at its own turn, declared before its
@@ -262,12 +260,12 @@ func TestGenerateDeclines(t *testing.T) {
 			"complex type (anonymous) of element p of complex type c whose choice's alternative 1, a sequence model group particle, has an emptiable model group at ", constructEmptiableGroupAlternative},
 		// In the three rows below, q reaches t while t's body is being
 		// emitted, so the recursion check walks t again past f1: it passes
-		// the wildcard as a leaf, and meets an element declaration property
-		// and a complex type outside the slice as declines it leaves to the
-		// emitting walk, which returns r's first.
+		// the wildcard, and a nillable element of type t itself, as leaves,
+		// and meets a complex type outside the slice as a decline it leaves
+		// to the emitting walk, which returns r's first.
 		{"value cycle check past a wildcard", fmt.Sprintf(pastDecline, `<xs:any/>`, ""),
 			uncoveredR, constructUncoveredPrimitive},
-		{"value cycle check past an element property", fmt.Sprintf(pastDecline, `<xs:element name="g" nillable="true" `+str+`/>`, ""),
+		{"value cycle check past a nillable element", fmt.Sprintf(pastDecline, `<xs:element name="g" nillable="true" type="t"/>`, ""),
 			uncoveredR, constructUncoveredPrimitive},
 		{"value cycle check past a complex type", fmt.Sprintf(pastDecline, `<xs:element name="g" type="a"/>`, `<xs:complexType name="a"><xs:openContent><xs:any/></xs:openContent><xs:sequence><xs:element name="h" `+str+`/></xs:sequence></xs:complexType>`),
 			uncoveredR, constructUncoveredPrimitive},
@@ -280,8 +278,6 @@ func TestGenerateDeclines(t *testing.T) {
 			"complex type t whose choice's alternative 1, a sequence model group particle, has an emptiable model group at s.xsd:2:175 ", constructEmptiableGroupAlternative},
 		{"named complex local body", `<xs:complexType name="c"><xs:choice><xs:sequence><xs:any minOccurs="0"/></xs:sequence></xs:choice></xs:complexType><xs:element name="e"><xs:complexType><xs:sequence><xs:element name="l" type="c"/></xs:sequence></xs:complexType></xs:element>`,
 			"complex type c whose choice's alternative 1, a sequence model group particle, has an emptiable model group at s.xsd:2:1 ", constructEmptiableGroupAlternative},
-		{"local element property", `<xs:element name="e"><xs:complexType><xs:sequence><xs:element name="l" nillable="true" ` + str + `/></xs:sequence></xs:complexType></xs:element>`,
-			"element l with {nillable} true", constructElementNillable},
 		{"nested struct", `<xs:element name="e"><xs:complexType><xs:sequence><xs:element name="l"><xs:complexType><xs:openContent><xs:any/></xs:openContent><xs:sequence><xs:element name="a" ` + str + `/></xs:sequence></xs:complexType></xs:element></xs:sequence></xs:complexType></xs:element>`,
 			"complex type (anonymous) of element l of element e with {open content} at ", constructOpenContent},
 		{"nested choice", `<xs:element name="e"><xs:complexType><xs:sequence><xs:element name="l"><xs:complexType><xs:choice><xs:element name="a" ` + str + `/><xs:sequence><xs:any minOccurs="0"/></xs:sequence></xs:choice></xs:complexType></xs:element></xs:sequence></xs:complexType></xs:element>`,
@@ -747,12 +743,12 @@ func parsedDecline(t *testing.T, body string) *DeclineError {
 
 // TestConstructMapKey pins Construct's doc: a Construct is comparable and may
 // key a map. Each Construct comes from a decline, never a literal: two empty
-// choices declining at different elements share one key, and a nillable
-// element's decline keys another.
+// choices declining at different elements share one key, and an abstract
+// complex type's decline keys another.
 func TestConstructMapKey(t *testing.T) {
 	first := parsedDecline(t, `<xs:element name="e"><xs:complexType><xs:choice/></xs:complexType></xs:element>`).Construct()
 	second := parsedDecline(t, `<xs:element name="f"><xs:complexType><xs:choice/></xs:complexType></xs:element>`).Construct()
-	third := parsedDecline(t, `<xs:element name="n" nillable="true" type="xs:string"/>`).Construct()
+	third := parsedDecline(t, `<xs:complexType name="c" abstract="true"/><xs:element name="n" type="c"/>`).Construct()
 	counts := make(map[Construct]int)
 	for _, c := range []Construct{first, second, third} {
 		counts[c]++
@@ -770,7 +766,7 @@ func TestConstructMapKey(t *testing.T) {
 		t.Errorf("two empty-choice declines have Constructs %v and %v, want them ==", first, second)
 	}
 	if first == third {
-		t.Errorf("an empty-choice and a nillable decline both have Construct %v, want them !=", first)
+		t.Errorf("an empty-choice and an abstract complex type decline both have Construct %v, want them !=", first)
 	}
 }
 
@@ -783,8 +779,8 @@ func TestDeclineErrorLoc(t *testing.T) {
 		kind       construct
 		want       xsderr.Loc
 	}{
-		{"nillable element", `<xs:element name="e" nillable="true" type="xs:string"/>`,
-			constructElementNillable, xsderr.Loc{URI: "s.xsd", Line: 2, Col: 1}},
+		{"element reached again", `<xs:element name="r" type="c"/><xs:complexType name="c"><xs:sequence><xs:element ref="r"/></xs:sequence></xs:complexType>`,
+			constructValueCycle, xsderr.Loc{URI: "s.xsd", Line: 2, Col: 1}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

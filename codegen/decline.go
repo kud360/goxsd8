@@ -70,8 +70,7 @@ type construct uint8
 
 // The construct values, in the order of their declining sites in emit.go.
 const (
-	constructElementNillable construct = iota + 1
-	constructElementAbstract
+	constructElementAbstract construct = iota + 1
 	constructAbsentVariety
 	constructNoPrimitive
 	constructUncoveredPrimitive
@@ -88,7 +87,6 @@ const (
 // Construct.String returns, and the format its decline's detail is rendered
 // from. Index 0, the invalid construct, holds neither.
 var constructs = [...]struct{ name, format string }{
-	constructElementNillable:           {"element {nillable}", "%s with {nillable} true"},
 	constructElementAbstract:           {"element {abstract}", "%s with {abstract} true"},
 	constructAbsentVariety:             {"absent {variety}", "%s, of absent {variety}"},
 	constructNoPrimitive:               {"no {primitive type definition}", "%s, with no {primitive type definition}"},

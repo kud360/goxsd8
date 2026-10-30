@@ -1,0 +1,76 @@
+<?xml version="1.0"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="order">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element name="id" type="xs:int" nillable="true"/>
+        <xs:element name="note" type="xs:string" nillable="true" minOccurs="0"/>
+        <xs:element name="price" type="price" nillable="true"/>
+        <xs:element name="pick" type="pick" nillable="true" minOccurs="0"/>
+        <xs:element name="code" type="xs:string" nillable="true" fixed="A"/>
+        <xs:element name="size" type="xs:int" nillable="true" default="1"/>
+        <xs:element name="tag" type="xs:string" nillable="true" maxOccurs="unbounded"/>
+        <xs:element name="raw" nillable="true"/>
+        <xs:element name="next" type="link" nillable="true"/>
+        <xs:element ref="item"/>
+        <xs:element ref="head"/>
+        <xs:element ref="loose"/>
+        <xs:element name="kind" nillable="true">
+          <xs:alternative test="@k" type="price"/>
+          <xs:alternative test="@j" type="xs:anyType"/>
+          <xs:alternative type="xs:string"/>
+        </xs:element>
+        <xs:element name="word" type="xs:string" nillable="true">
+          <xs:alternative test="@k" type="xs:token"/>
+          <xs:alternative type="xs:string"/>
+        </xs:element>
+        <xs:choice>
+          <xs:element name="a" type="xs:string" nillable="true" minOccurs="0"/>
+          <xs:element name="b" type="xs:int"/>
+        </xs:choice>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+  <xs:complexType name="price">
+    <xs:simpleContent>
+      <xs:extension base="xs:decimal">
+        <xs:attribute name="value" type="xs:string"/>
+        <xs:attribute name="currency" type="xs:string" use="required"/>
+      </xs:extension>
+    </xs:simpleContent>
+  </xs:complexType>
+  <xs:complexType name="pick">
+    <xs:choice>
+      <xs:element name="x" type="xs:string"/>
+      <xs:element name="y" type="xs:int"/>
+    </xs:choice>
+  </xs:complexType>
+  <xs:complexType name="link">
+    <xs:sequence>
+      <xs:element name="next" type="link" nillable="true"/>
+    </xs:sequence>
+  </xs:complexType>
+  <xs:element name="item" nillable="true">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element ref="item"/>
+      </xs:sequence>
+      <xs:anyAttribute processContents="lax"/>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="head" type="xs:string" nillable="true"/>
+  <xs:element name="member" type="xs:string" substitutionGroup="head"/>
+  <xs:element name="para">
+    <xs:complexType mixed="true">
+      <xs:sequence>
+        <xs:element name="em" type="xs:string" nillable="true" minOccurs="0"/>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="root" type="price" nillable="true"/>
+  <xs:element name="loose" nillable="true"/>
+  <xs:element name="tabled" type="xs:string" nillable="true" substitutionGroup="loose">
+    <xs:alternative test="@k" type="xs:token"/>
+    <xs:alternative type="xs:string"/>
+  </xs:element>
+</xs:schema>

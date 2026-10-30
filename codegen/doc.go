@@ -20,8 +20,8 @@
 //
 // Supported, each construct emitted from or accepted as the rules below state:
 //
-//   - element declarations, top-level and local, with or without a {type
-//     table}
+//   - element declarations, top-level and local, nillable or not, with or
+//     without a {type table}
 //   - <element ref> particles and substitution groups
 //   - the special types xs:anySimpleType and xs:anyAtomicType
 //   - atomic simple types
@@ -40,7 +40,6 @@
 // [DeclineError]'s [DeclineError.Construct], for display only: the names may
 // change in any release, so code compares [Construct] values, never a name.
 //
-//   - element {nillable}
 //   - element {abstract}
 //   - absent {variety}
 //   - no {primitive type definition}
@@ -86,10 +85,14 @@
 // together, a declaration's type or a value field is declared over, the four
 // raw-content structs once an element's type is xs:anyType, a model group holds
 // a wildcard particle, or a type has an {attribute wildcard}, the generic struct
-// MixedChild once a field of mixed content holds an element, and one sealed
-// interface per union simple type a declaration's type, a value field, a list's
-// item or a union's member is declared over, each followed by one variant type
-// per basic member, and declines everything outside this slice:
+// MixedChild once a field of mixed content holds an element, the generic sealed
+// interface Nillable and its arms Nilled and Content once a field holds a
+// nillable element or the walk visits a nillable top-level declaration, one
+// attributes struct per complex type with attribute fields a nillable element
+// has, and one sealed interface per union simple type a declaration's type, a
+// value field, a list's item or a union's member is declared over, each followed
+// by one variant type per basic member, and declines everything outside this
+// slice:
 //
 //   - An element whose {type definition} is a simple type gets a named type
 //     over string for a special type (Datatypes §2.4.2 dt-special),
@@ -358,14 +361,15 @@
 //     {particle} occurring exactly once or in a sequence or all group spliced
 //     into one, and whose types are not choices, declines: its Go type would
 //     hold itself as a struct value. A field holding a substitution group's
-//     interface, or a {type table}'s, holds no struct value, so no recursion
-//     passes it; a type a branch of the latter holds is checked for one from
-//     that branch.
+//     interface, a {type table}'s, or a nillable element's Nillable, holds no
+//     struct value, so no recursion passes it; a type a branch of a {type
+//     table}'s interface holds is checked for one from that branch.
 //   - {max occurs} above 1 or unbounded gives a slice whatever {min occurs} is,
 //     of a list's slice too ([][]T); {min occurs} 0 with {max occurs} 1 gives a
 //     pointer to a struct, atomic Go type, or list's slice (*[]T), and the bare
-//     interface, a choice's, a union's, a substitution group's or a {type
-//     table}'s, never a pointer to one, nil meaning absent.
+//     interface, a choice's, a union's, a substitution group's, a {type
+//     table}'s or a nillable element's Nillable, never a pointer to one, nil
+//     meaning absent.
 //   - A sequence or all group particle, the content {particle} or nested, is
 //     spliced, giving in its place the fields its own particles give and no
 //     field of its own, when it occurs exactly once, or with {min occurs} 0
@@ -432,10 +436,43 @@
 //     wildcard would not admit (cvc-wildcard, cvc-complex-type clause 2.2.2),
 //     and holds every match raw whether a strict or lax wildcard would assess
 //     it; enforcing either is the validator's.
-//   - Every element declaration emitted from has {nillable} and {abstract}
-//     false. A member of a substitution group is emitted as every top-level
-//     declaration is, and enters the interface of each head whose group holds
-//     it.
+//   - An element declaration with {nillable} true (§3.3.1 ed-nillable) and no
+//     {value constraint} of {variety} fixed is nillable: a field over it holds,
+//     in place of the T the rules here give it, Nillable[T, A], a generic
+//     sealed interface, the closed-sum exception as a choice's is, whose one
+//     method is unexported and takes T and A, so that an arm implements it for
+//     its own type arguments alone. Its arms are Nilled[T, A], holding as
+//     Attributes the attributes of a nilled element, which has no character or
+//     element children (§3.3.4.3 cvc-elt clause 3.2.3) and keeps its
+//     attributes (§3.4.4.2 cvc-complex-type clauses 2 to 4), and Content[T, A],
+//     holding T as Content for an element that is not nilled. The three are
+//     emitted once per package. The field takes the occurrence rules below as
+//     a sealed interface: the bare interface, nil meaning absent, which a
+//     required element's field admits though no valid instance gives it, as a
+//     required choice's does; a slice of it when repeated; MixedChild over it
+//     in mixed content.
+//   - A is struct{} when T is a simple type's Go type or a complex type's with
+//     no {attribute uses} and no {attribute wildcard}, and otherwise T's
+//     attributes struct, one per T, shared by every nillable element of that
+//     type: T's attribute fields and then its {attribute wildcard} field,
+//     named as T names them, so an attribute value beside the value field
+//     keeps Value2, and no value, Text or particle field. Neither T nor A
+//     holds xsi:nil, which an {attribute wildcard}'s field excludes as stated
+//     below. An interface T keeps its own nil inside Content, so an absent
+//     element, a nilled one and an emptiable choice's empty match are three
+//     values.
+//   - No field holding AnyType is wrapped: xs:anyType's AnyType holds xsi:nil
+//     among its Attributes. Nor is a field holding a substitution group's
+//     interface or a {type table}'s: each branch of the former wraps its field
+//     when its own declaration, the head's included, is nillable, and each
+//     branch of the latter when the table's declaration is. A nillable
+//     top-level declaration's type is emitted unchanged, Nillable over it
+//     being a nilled root's value. A declaration with {nillable} true and a
+//     fixed {value constraint} emits as if {nillable} were false: every
+//     nilled instance of it is invalid (cvc-elt clause 3.2.3.2).
+//   - Every element declaration emitted from has {abstract} false. A member of
+//     a substitution group is emitted as every top-level declaration is, and
+//     enters the interface of each head whose group holds it.
 //   - An element declaration with a {type table} (§3.12) is emitted from the
 //     types the table can select (§3.3.4.1 key-selected-type): the {type
 //     definition} of each of its {alternatives} in order, then that of its
@@ -465,8 +502,9 @@
 //     neither its content nor the type its value is drawn from (§3.3.1). An
 //     identity constraint restricts the values an instance holds and adds no
 //     content or attribute (§3.11.1). So the element emits exactly as it would
-//     without either, and supplying a default and enforcing a fixed value or an
-//     identity constraint are the validator's.
+//     without either, but for the fixed {value constraint} of a declaration
+//     with {nillable} true, stated above, and supplying a default and
+//     enforcing a fixed value or an identity constraint are the validator's.
 //
 // ExampleGenerate prints the whole file Generate writes for a schema inside
 // this slice.
@@ -478,9 +516,10 @@
 // absolute roots produce byte-identical output; "Naming" states where a
 // header's location is not relative. No map iteration anywhere near the
 // emitter; emission order is the walk's, which document order alone fixes, as
-// "Coverage" states (datatype structs, raw-content structs, MixedChild, and
-// union interfaces with their variants last, in the order the walk first needs
-// each). Golden-file tests pin the output.
+// "Coverage" states (datatype structs, raw-content structs, MixedChild,
+// Nillable with its arms, attributes structs, and union interfaces with their
+// variants last, in the order the walk first needs each). Golden-file tests
+// pin the output.
 //
 // # Naming
 //
@@ -568,43 +607,52 @@
 // datatype struct is: for an element field of mixed content, after that struct's own name and ahead
 // of the names the field's type first claims, so that an <element ref> particle there to a
 // top-level element mixedChild that the walk has not reached names the generic struct MixedChild
-// and that element's type MixedChild2. A union's interface is named from the type when it is named
-// (simple type size → Size), claimed when the walk first needs it as a datatype struct is: for a
-// top-level element of a union type, ahead of that element's own type, so that a top-level element
-// size of type size names its type Size2; for a field of a struct, after that struct's own name. An
-// anonymous union is named by the path of names an anonymous complex type would take in its place,
-// with the local name union last: a top-level element's (element pin → PinUnion), a local element's
-// (element code in complex type box → BoxCodeUnion), an attribute's from the global attribute
-// declaration, the named complex type or attribute group definition declaring it, or the path of
-// the struct holding it for an anonymous complex type (attribute mode in attribute group shared →
-// SharedModeUnion, attribute kind of element tag → TagKindUnion), and a value field's from its
-// struct's path with value before union (complex type narrow → NarrowValueUnion). A list's item is
-// named from the list whose <list> declares it: from that list's local name when it is named
-// (simple type codes → CodesUnion, for codes and every restriction of it), and from the path the
-// list takes otherwise. A variant is named from its interface's name plus its member's local name:
-// an anonymous list member's is list, and any other anonymous member's is that of the nearest named
-// type on its {base type definition} chain, the member itself first (xs:int in Size → SizeInt, an
-// anonymous restriction of xs:string → SizeString). The variants are claimed after their interface
-// in basic-member order, each ahead of its member's own Go type, which takes the variant's name as
-// its path (an anonymous union item of the list variant MixedList → MixedListUnion). Every other
-// generated type's header comment but a union interface's or variant's, or MixedChild's, records
-// the QName and the schema Loc of the declaration it is named from: the element declaration, or the
-// complex type definition for a type named from one. A union interface's header records the simple
-// type it is generated from, by its QName or as (anonymous), and that type's schema Loc, and a
-// variant's header its member the same way, a builtin member, having no schema document, by its
-// QName alone. A datatype struct's header records its datatype's QName alone, a builtin having no
-// schema document, then a second line stating what its fields' names do not, when there is any:
-// TimezoneOffset's unit and whether it may be absent, that duration's Months and Seconds share one
-// sign, or that QName's Space is "" for no namespace. A raw-content struct's header records
-// xs:anyType's QName alone, then, for AnyType and AnyChild, a second line stating what Text or Tail
-// holds. MixedChild's header records no declaration, since every mixed content shares it, and
-// states that it holds one child element and the characters after it, then a second line stating
-// what Tail holds. A Loc whose URI filepath.IsAbs accepts renders relative to the target's Dir made
-// absolute against the working directory, slash-separated and climbing with ".." out of Dir. A
-// document outside the tree laid out alike, such as one an absolute schemaLocation names, renders a
-// climbing path that differs with that tree's depth below the filesystem root. Any other URI
-// renders as is, a URL or a relative loader key alike, as does one with no path relative to Dir,
-// such as one on another Windows volume. Symbolic links are not resolved.
+// and that element's type MixedChild2. The generic sealed interface Nillable and its arms Nilled and
+// Content are named from the local names nillable, nilled and content, claimed together in that
+// order when the walk first needs them: for a field over a nillable element, after the names the
+// field's type first claims, so after MixedChild's in mixed content; and at a nillable top-level
+// declaration's own position, after the names its type claims. A complex type's attributes struct is
+// named from that type's Go name followed by the local name attributes (Price → PriceAttributes),
+// claimed right after Nillable's names would be at the same point. A union's interface is named
+// from the type when it is named (simple type size → Size), claimed when the walk first needs it as
+// a datatype struct is: for a top-level element of a union type, ahead of that element's own type,
+// so that a top-level element size of type size names its type Size2; for a field of a struct, after
+// that struct's own name. An anonymous union is named by the path of names an anonymous complex type
+// would take in its place, with the local name union last: a top-level element's (element pin →
+// PinUnion), a local element's (element code in complex type box → BoxCodeUnion), an attribute's
+// from the global attribute declaration, the named complex type or attribute group definition
+// declaring it, or the path of the struct holding it for an anonymous complex type (attribute mode
+// in attribute group shared → SharedModeUnion, attribute kind of element tag → TagKindUnion), and a
+// value field's from its struct's path with value before union (complex type narrow →
+// NarrowValueUnion). A list's item is named from the list whose <list> declares it: from that list's
+// local name when it is named (simple type codes → CodesUnion, for codes and every restriction of
+// it), and from the path the list takes otherwise. A variant is named from its interface's name plus
+// its member's local name: an anonymous list member's is list, and any other anonymous member's is
+// that of the nearest named type on its {base type definition} chain, the member itself first
+// (xs:int in Size → SizeInt, an anonymous restriction of xs:string → SizeString). The variants are
+// claimed after their interface in basic-member order, each ahead of its member's own Go type, which
+// takes the variant's name as its path (an anonymous union item of the list variant MixedList →
+// MixedListUnion). Every other generated type's header comment but a union interface's or variant's,
+// or MixedChild's, Nillable's, Nilled's or Content's, records the QName and the schema Loc of the
+// declaration it is named from: the element declaration, or the complex type definition for a type
+// named from one, an attributes struct's being its type's, followed by a second line naming that
+// type. A union interface's header records the simple type it is generated from, by its QName or as
+// (anonymous), and that type's schema Loc, and a variant's header its member the same way, a builtin
+// member, having no schema document, by its QName alone. A datatype struct's header records its
+// datatype's QName alone, a builtin having no schema document, then a second line stating what its
+// fields' names do not, when there is any: TimezoneOffset's unit and whether it may be absent, that
+// duration's Months and Seconds share one sign, or that QName's Space is "" for no namespace. A
+// raw-content struct's header records xs:anyType's QName alone, then, for AnyType and AnyChild, a
+// second line stating what Text or Tail holds. MixedChild's header records no declaration, since
+// every mixed content shares it, and states that it holds one child element and the characters after
+// it, then a second line stating what Tail holds. Nillable's, Nilled's and Content's headers record
+// no declaration, since every nillable element shares them, and state what each holds. A Loc whose
+// URI filepath.IsAbs accepts renders relative to the target's Dir made absolute against the working
+// directory, slash-separated and climbing with ".." out of Dir. A document outside the tree laid out
+// alike, such as one an absolute schemaLocation names, renders a climbing path that differs with
+// that tree's depth below the filesystem root. Any other URI renders as is, a URL or a relative
+// loader key alike, as does one with no path relative to Dir, such as one on another Windows volume.
+// Symbolic links are not resolved.
 //
 // # Planned (M9 — not yet implemented)
 //

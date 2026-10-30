@@ -58,12 +58,13 @@ const (
 type datatypeStruct struct {
 	datatype xsd.QName
 	doc      string
-	fields   []datatypeField
+	fields   []goField
 }
 
-// datatypeField is one field of a datatypeStruct: its Go name, which is its
-// property's, and its Go type.
-type datatypeField struct {
+// goField is one field of an emitted struct after its name is claimed: its Go
+// name and its Go type. A datatypeStruct's field is named from its property,
+// and claimFields names every other struct's.
+type goField struct {
 	name, goType string
 }
 
@@ -78,16 +79,16 @@ const (
 // holding a timezoneOffset of −840..840 (§D.2.1), and year, second, months and
 // seconds are unbounded (§D.2.1, §3.3.6.1).
 var (
-	yearField           = datatypeField{"Year", bigInt}
-	monthField          = datatypeField{"Month", "uint8"}
-	dayField            = datatypeField{"Day", "uint8"}
-	hourField           = datatypeField{"Hour", "uint8"}
-	minuteField         = datatypeField{"Minute", "uint8"}
-	secondField         = datatypeField{"Second", bigRat}
-	optionalOffsetField = datatypeField{"TimezoneOffset", "*int16"}
-	requiredOffsetField = datatypeField{"TimezoneOffset", "int16"}
-	monthsField         = datatypeField{"Months", bigInt}
-	secondsField        = datatypeField{"Seconds", bigRat}
+	yearField           = goField{"Year", bigInt}
+	monthField          = goField{"Month", "uint8"}
+	dayField            = goField{"Day", "uint8"}
+	hourField           = goField{"Hour", "uint8"}
+	minuteField         = goField{"Minute", "uint8"}
+	secondField         = goField{"Second", bigRat}
+	optionalOffsetField = goField{"TimezoneOffset", "*int16"}
+	requiredOffsetField = goField{"TimezoneOffset", "int16"}
+	monthsField         = goField{"Months", bigInt}
+	secondsField        = goField{"Seconds", bigRat}
 )
 
 // The thirteen datatype structs: one per date, time or duration primitive, one
@@ -97,31 +98,31 @@ var (
 // §3.3.19).
 var (
 	dateTimeStruct = datatypeStruct{xsd.QName{Space: xsd.XMLSchemaNS, Local: "dateTime"}, optionalOffsetDoc,
-		[]datatypeField{yearField, monthField, dayField, hourField, minuteField, secondField, optionalOffsetField}}
+		[]goField{yearField, monthField, dayField, hourField, minuteField, secondField, optionalOffsetField}}
 	dateTimeStampStruct = datatypeStruct{xsd.QName{Space: xsd.XMLSchemaNS, Local: "dateTimeStamp"}, requiredOffsetDoc,
-		[]datatypeField{yearField, monthField, dayField, hourField, minuteField, secondField, requiredOffsetField}}
+		[]goField{yearField, monthField, dayField, hourField, minuteField, secondField, requiredOffsetField}}
 	timeStruct = datatypeStruct{xsd.QName{Space: xsd.XMLSchemaNS, Local: "time"}, optionalOffsetDoc,
-		[]datatypeField{hourField, minuteField, secondField, optionalOffsetField}}
+		[]goField{hourField, minuteField, secondField, optionalOffsetField}}
 	dateStruct = datatypeStruct{xsd.QName{Space: xsd.XMLSchemaNS, Local: "date"}, optionalOffsetDoc,
-		[]datatypeField{yearField, monthField, dayField, optionalOffsetField}}
+		[]goField{yearField, monthField, dayField, optionalOffsetField}}
 	gYearMonthStruct = datatypeStruct{xsd.QName{Space: xsd.XMLSchemaNS, Local: "gYearMonth"}, optionalOffsetDoc,
-		[]datatypeField{yearField, monthField, optionalOffsetField}}
+		[]goField{yearField, monthField, optionalOffsetField}}
 	gYearStruct = datatypeStruct{xsd.QName{Space: xsd.XMLSchemaNS, Local: "gYear"}, optionalOffsetDoc,
-		[]datatypeField{yearField, optionalOffsetField}}
+		[]goField{yearField, optionalOffsetField}}
 	gMonthDayStruct = datatypeStruct{xsd.QName{Space: xsd.XMLSchemaNS, Local: "gMonthDay"}, optionalOffsetDoc,
-		[]datatypeField{monthField, dayField, optionalOffsetField}}
+		[]goField{monthField, dayField, optionalOffsetField}}
 	gDayStruct = datatypeStruct{xsd.QName{Space: xsd.XMLSchemaNS, Local: "gDay"}, optionalOffsetDoc,
-		[]datatypeField{dayField, optionalOffsetField}}
+		[]goField{dayField, optionalOffsetField}}
 	gMonthStruct = datatypeStruct{xsd.QName{Space: xsd.XMLSchemaNS, Local: "gMonth"}, optionalOffsetDoc,
-		[]datatypeField{monthField, optionalOffsetField}}
+		[]goField{monthField, optionalOffsetField}}
 	durationStruct = datatypeStruct{xsd.QName{Space: xsd.XMLSchemaNS, Local: "duration"}, "Months and Seconds share one sign.",
-		[]datatypeField{monthsField, secondsField}}
+		[]goField{monthsField, secondsField}}
 	dayTimeDurationStruct = datatypeStruct{xsd.QName{Space: xsd.XMLSchemaNS, Local: "dayTimeDuration"}, "",
-		[]datatypeField{secondsField}}
+		[]goField{secondsField}}
 	yearMonthDurationStruct = datatypeStruct{xsd.QName{Space: xsd.XMLSchemaNS, Local: "yearMonthDuration"}, "",
-		[]datatypeField{monthsField}}
+		[]goField{monthsField}}
 	qNameStruct = datatypeStruct{qNamePrimitive, "Space is the namespace name, \"\" for none.",
-		[]datatypeField{{"Space", "string"}, {"Local", "string"}}}
+		[]goField{{"Space", "string"}, {"Local", "string"}}}
 )
 
 // emitter builds one target's source. decls holds each emitted type
@@ -186,8 +187,9 @@ type emitter struct {
 	// that each is emitted once per package; it is a lookup index only and
 	// never iterated (STYLE D2). tailDecls holds those structs' declarations,
 	// the raw-content structs' (anyTypeType), MixedChild's (mixedChildType),
-	// and each union's interface and variants (unionType), in first-use order,
-	// emitted after decls.
+	// Nillable's and its arms' (nillableTypes), each attributes struct's
+	// (attributesType), and each union's interface and variants (unionType),
+	// in first-use order, emitted after decls.
 	datatypes map[xsd.QName]string
 	tailDecls []string
 	// unions holds the name of the sealed interface emitted for each union
@@ -210,6 +212,44 @@ type emitter struct {
 	// which mixedChildType emits once per package; "" means it is unclaimed
 	// and unemitted.
 	mixedChild string
+	// nillable holds the names claimed for the generic sealed interface
+	// Nillable and its two arms, which nillableTypes emits once per package;
+	// its zero value means they are unclaimed and unemitted.
+	nillable nillableNames
+	// attributes holds, keyed by the Go name of each struct body emits with an
+	// attribute or {attribute wildcard} field, those fields as that struct
+	// names them, so that the attributes struct of a nilled element of that
+	// type holds the same (attributesType); it is a lookup index only and never
+	// iterated (STYLE D2).
+	attributes map[string]structAttributes
+	// nilled holds each attributes struct attributesType claimed, in claim
+	// order, each with its slot in tailDecls, which emit fills from attributes
+	// once every turn is walked.
+	nilled []nilledAttributes
+}
+
+// nillableNames is the names claimed for the generic sealed interface
+// Nillable and its two arms, Nilled and Content, which "# Coverage" gives a
+// field over a nillable element declaration, in claim order.
+type nillableNames struct {
+	sum, nilled, content string
+}
+
+// structAttributes is what body records for one struct whose type has
+// {attribute uses} or an {attribute wildcard}: from, its header's rendering
+// of what it is generated from, and fields, its attribute fields and then its
+// wildcard field, named as the struct names them.
+type structAttributes struct {
+	from   string
+	fields []goField
+}
+
+// nilledAttributes is one attributes struct attributesType claimed: its name,
+// the Go name of the struct whose attribute fields it holds, and the index in
+// e.tailDecls its declaration fills.
+type nilledAttributes struct {
+	name, of string
+	slot     int
 }
 
 // rawNames is the names claimed for the four raw-content structs "# Coverage"
@@ -426,7 +466,7 @@ func (s scope) groupKey(site groupSite) nestedKey {
 // returns source only when it collects no decline, and err carries no
 // decline. base is the absolute directory the source is written into.
 func emit(schema *xsd.Schema, pkg, base string) (src []byte, declines []*DeclineError, err error) {
-	e := &emitter{schema: schema, types: newNamer(), base: base, emitted: map[nestedKey]emittedType{}, elements: map[xsd.QName]emittedType{}, acyclic: map[valueNode]struct{}{}, datatypes: map[xsd.QName]string{}, unions: map[*xsd.SimpleType]string{}, substitutions: map[xsd.QName]string{}}
+	e := &emitter{schema: schema, types: newNamer(), base: base, emitted: map[nestedKey]emittedType{}, elements: map[xsd.QName]emittedType{}, acyclic: map[valueNode]struct{}{}, datatypes: map[xsd.QName]string{}, unions: map[*xsd.SimpleType]string{}, substitutions: map[xsd.QName]string{}, attributes: map[string]structAttributes{}}
 	for _, decl := range schema.Elements() {
 		err := e.topLevel(decl)
 		if err == nil {
@@ -442,6 +482,15 @@ func emit(schema *xsd.Schema, pkg, base string) (src []byte, declines []*Decline
 	}
 	if len(declines) > 0 {
 		return nil, declines, nil
+	}
+	for _, n := range e.nilled {
+		of, ok := e.attributes[n.of]
+		if !ok {
+			return nil, nil, fmt.Errorf("the attributes struct %s: no struct %s with attribute fields was emitted", n.name, n.of)
+		}
+		e.tailDecls[n.slot] = header(n.name, of.from) +
+			fmt.Sprintf("// It holds the attribute fields of %s, which a nilled element keeps.\n", n.of) +
+			renderStruct(n.name, of.fields)
 	}
 	var b bytes.Buffer
 	fmt.Fprintf(&b, "%s\n\npackage %s\n", generatedHeader, pkg)
@@ -517,14 +566,18 @@ func headerLoc(base string, loc xsderr.Loc) string {
 // definition}, over a slice of one for a list, over a union's sealed interface
 // for a union (unionType), a struct or sealed interface for an accepted
 // complex one, named or anonymous, or the sealed interface tableType emits
-// over the types its {type table} selects when tableSum answers a sum. That
-// type is named from the element (elementType), and a local element of the
-// same named type never shares it (nestedType), while every <element ref>
-// particle to the element does; the types nested in it are named from the type
-// when it is named, and shared with that type's every other use, and from the
-// element when it is anonymous, but for those of the elements a model group
-// definition declares, named from the group and shared with its every <group
-// ref> particle (nestedType).
+// over the types its {type table} selects when tableSum answers a sum. A
+// nillable declaration (nillable) gets that same type: after it, the visit
+// claims, when nothing earlier did, the names nillableType claims for a field
+// over decl, Nillable over that type being a nilled root's value; a sum's
+// branches wrap their own fields instead (tableType). That type is named from
+// the element (elementType), and a local element of the same named type never
+// shares it (nestedType), while every <element ref> particle to the element
+// does; the types nested in it are named from the type when it is named, and
+// shared with that type's every other use, and from the element when it is
+// anonymous, but for those of the elements a model group definition declares,
+// named from the group and shared with its every <group ref> particle
+// (nestedType).
 func (e *emitter) topLevel(decl xsd.ElementDeclaration) error {
 	td, err := e.declaredType(decl)
 	if err != nil {
@@ -552,7 +605,6 @@ func (e *emitter) topLevel(decl xsd.ElementDeclaration) error {
 			return err
 		}
 		e.decls = append(e.decls, header(typ.name, e.elementFrom(decl))+fmt.Sprintf("type %s %s\n", typ.name, underlying.name))
-		return nil
 	case xsd.ComplexType:
 		nested := structScope(scope{}, decl, t)
 		chain, err := valueChain(nil, false, decl, t)
@@ -564,9 +616,16 @@ func (e *emitter) topLevel(decl xsd.ElementDeclaration) error {
 		if err != nil {
 			return err
 		}
-		return e.body(typ, nested, chain, o, t, content)
+		if err := e.body(typ, nested, chain, o, t, content); err != nil {
+			return err
+		}
+	default:
+		return fmt.Errorf("element %s at %s: unexpected type definition %T", decl.Name(), decl.Loc(), td)
 	}
-	return fmt.Errorf("element %s at %s: unexpected type definition %T", decl.Name(), decl.Loc(), td)
+	if nillable(decl) {
+		e.nillableType(typ, td)
+	}
+	return nil
 }
 
 // elementType returns the type emitted for the top-level element declaration
@@ -634,9 +693,9 @@ func (e *emitter) elementType(decl xsd.ElementDeclaration, td xsd.TypeDefinition
 	return typ, nil
 }
 
-// declaredType checks the element declaration properties the slice declines
-// on every declaration it emits from, {nillable} and then {abstract}, and
-// returns the type definition decl emits as: the one type its {type table}
+// declaredType checks the element declaration property the slice declines on
+// every declaration it emits from, {abstract}, and returns the type
+// definition decl emits as: the one type its {type table}
 // selects when tableSum answers a table that is not a sum, and otherwise the
 // resolved {type definition}, which decides nothing for a decl tableSum
 // answers a sum for: topLevel, elementType and field test sum ahead of td's
@@ -644,10 +703,7 @@ func (e *emitter) elementType(decl xsd.ElementDeclaration, td xsd.TypeDefinition
 // skips such a decl before calling declaredType.
 func (e *emitter) declaredType(decl xsd.ElementDeclaration) (xsd.TypeDefinition, error) {
 	subject := "element " + decl.Name().String()
-	switch {
-	case decl.Nillable():
-		return nil, decline(decl.Loc(), constructElementNillable, subject)
-	case decl.Abstract():
+	if decl.Abstract() {
 		return nil, decline(decl.Loc(), constructElementAbstract, subject)
 	}
 	branches, sum, err := e.tableSum(decl)
@@ -1090,6 +1146,82 @@ func (e *emitter) mixedChildType() string {
 	return e.mixedChild
 }
 
+// nillable reports whether a field over the element declaration decl holds
+// the sum "# Coverage" gives a nillable element: decl has {nillable} true
+// (§3.3.1 ed-nillable) and no {value constraint} of {variety} fixed, which
+// makes every nilled instance invalid (§3.3.4.3 cvc-elt clause 3.2.3.2), so
+// that such a decl emits as one with {nillable} false. It is the one test
+// every site that wraps a type in Nillable, or passes a field over decl as no
+// struct value, reads: topLevel, field, substitutionType, tableType and
+// valueCycle, and refType through field's value.
+func nillable(decl xsd.ElementDeclaration) bool {
+	if !decl.Nillable() {
+		return false
+	}
+	vc, ok := decl.ValueConstraint()
+	return !ok || vc.Kind() != xsd.ValueFixed
+}
+
+// nillableType returns the sealed interface Nillable over typ, the Go type a
+// field over a nillable declaration whose type definition is td holds
+// without the wrap, and A: the attributes struct attributesType names for a
+// td that is a complex type with attribute fields (hasAttributeFields), and
+// struct{} otherwise. It claims Nillable's names first (nillableTypes), then
+// A's, each when nothing earlier did.
+func (e *emitter) nillableType(typ emittedType, td xsd.TypeDefinition) emittedType {
+	sum := e.nillableTypes()
+	attributes := "struct{}"
+	if ct, isComplex := td.(xsd.ComplexType); isComplex && hasAttributeFields(ct) {
+		attributes = e.attributesType(typ.name)
+	}
+	return emittedType{name: sum + "[" + typ.name + ", " + attributes + "]", sealed: true}
+}
+
+// nillableTypes returns the name of the generic sealed interface Nillable,
+// whose arms are Nilled, a nilled element holding its attributes (§3.3.4.3
+// cvc-elt clause 3.2.3: no character or element children), and Content, an
+// element that is not nilled holding its content. Its marker method takes
+// both type parameters, so that an arm implements only the instantiation of
+// its own type arguments. When no earlier field needed them, it claims the
+// three names in e.types from the local names nillable, nilled and content,
+// in that order, by the package doc's "Naming", and appends their
+// declarations to e.tailDecls. No field names math/big.
+func (e *emitter) nillableTypes() string {
+	if e.nillable.sum != "" {
+		return e.nillable.sum
+	}
+	n := nillableNames{sum: e.types.claim("nillable"), nilled: e.types.claim("nilled"), content: e.types.claim("content")}
+	e.nillable = n
+	marker := "is" + n.sum
+	e.tailDecls = append(e.tailDecls,
+		fmt.Sprintf("// %s is generated for nillable elements: a nilled element or one with content.\n", n.sum)+
+			fmt.Sprintf("type %s[T, A any] interface {\n\t%s(T, A)\n}\n", n.sum, marker),
+		fmt.Sprintf("// %s is generated for nillable elements: a nilled element, with no character or element children, holding its attributes (cvc-elt 3.2.3).\n", n.nilled)+
+			fmt.Sprintf("type %s[T, A any] struct {\n\tAttributes A\n}\n\nfunc (%s[T, A]) %s(T, A) {}\n", n.nilled, n.nilled, marker),
+		fmt.Sprintf("// %s is generated for nillable elements: an element that is not nilled, holding its content.\n", n.content)+
+			fmt.Sprintf("type %s[T, A any] struct {\n\tContent T\n}\n\nfunc (%s[T, A]) %s(T, A) {}\n", n.content, n.content, marker))
+	return n.sum
+}
+
+// attributesType returns the name of the attributes struct of a nilled
+// element whose content is the struct of, which holds of's attribute fields
+// and then its {attribute wildcard} field, named as of names them, and no
+// other: when no earlier field or top-level visit needed it, it claims the
+// name in e.types from of's name followed by the local name attributes, by the
+// package doc's "Naming", and reserves its slot in e.tailDecls, which emit
+// fills from what body records for of in e.attributes, since of's body may
+// still be walking, or not yet reached, when the name is claimed. One struct
+// is emitted per of, whatever reaches it.
+func (e *emitter) attributesType(of string) string {
+	if i := slices.IndexFunc(e.nilled, func(n nilledAttributes) bool { return n.of == of }); i >= 0 {
+		return e.nilled[i].name
+	}
+	n := nilledAttributes{name: e.types.claim(of, "attributes"), of: of, slot: len(e.tailDecls)}
+	e.tailDecls = append(e.tailDecls, "")
+	e.nilled = append(e.nilled, n)
+	return n.name
+}
+
 // builtinType is the Go type "# Coverage" maps t to through the eight bounded
 // builtin integer types (Datatypes §3.4.16–§3.4.19, §3.4.21–§3.4.24),
 // xs:integer (§3.4.13), and the three builtins derived from a date, time or
@@ -1162,7 +1294,7 @@ func (e *emitter) shape(name string, o origin, t xsd.ComplexType) (emittedType, 
 	if content == nil || content.group.Compositor() != xsd.CompositorChoice || content.occurs != exactlyOnce || isMixed(t) {
 		return emittedType{name: name}, content, nil
 	}
-	if _, hasWildcard := t.AttributeWildcard(); hasWildcard || len(t.AttributeUses()) > 0 {
+	if hasAttributeFields(t) {
 		return emittedType{name: name}, content, nil
 	}
 	emptiable, err := e.termEmptiable(o.subject, t.Loc(), xsd.ResolvedTerm{Term: content.group})
@@ -1170,6 +1302,15 @@ func (e *emitter) shape(name string, o origin, t xsd.ComplexType) (emittedType, 
 		return emittedType{}, nil, err
 	}
 	return emittedType{name: name, sealed: !emptiable}, content, nil
+}
+
+// hasAttributeFields reports whether the complex type t has {attribute uses}
+// or an {attribute wildcard}, read from the finalized component, so inherited
+// ones count: exactly when the struct body emits for t holds attribute fields,
+// and so when shape never answers a sealed interface for t.
+func hasAttributeFields(t xsd.ComplexType) bool {
+	_, hasWildcard := t.AttributeWildcard()
+	return hasWildcard || len(t.AttributeUses()) > 0
 }
 
 // body emits typ, which shape returned for the complex type t with content,
@@ -1185,7 +1326,10 @@ func (e *emitter) shape(name string, o origin, t xsd.ComplexType) (emittedType, 
 // raw-content struct AnyAttribute (anyTypeType, which claims the raw-content
 // structs' names there when nothing earlier did); or the sealed interface
 // sealedType emits; then the types its fields reach, the anonymous ones named
-// in nested. chain is valueChain's for a walk of t's particles.
+// in nested. chain is valueChain's for a walk of t's particles. A struct with
+// attribute or {attribute wildcard} fields records them in e.attributes under
+// typ's name, as claimFields names them, for the attributes struct of a nilled
+// element of typ (attributesType).
 func (e *emitter) body(typ emittedType, nested scope, chain []valueNode, o origin, t xsd.ComplexType, content *groupParticle) error {
 	if typ.sealed {
 		return e.sealedType(typ.name, nested, groupSite{}, o, t, content.group.Particles())
@@ -1210,6 +1354,7 @@ func (e *emitter) body(typ emittedType, nested scope, chain []valueNode, o origi
 		}
 		fields = append(fields, contentFields...)
 	}
+	attributesFrom := len(fields)
 	for _, u := range t.AttributeUses() {
 		field, err := e.attributeField(nested, o.subject, t.Loc(), u)
 		if err != nil {
@@ -1221,7 +1366,11 @@ func (e *emitter) body(typ emittedType, nested scope, chain []valueNode, o origi
 		e.anyTypeType()
 		fields = append(fields, fieldSpec{local: "anyAttribute", goType: "[]" + e.raw.attribute})
 	}
-	e.decls[slot] = header(typ.name, o.from) + structDecl(typ.name, fields)
+	claimed := claimFields(fields)
+	if attributesFrom < len(claimed) {
+		e.attributes[typ.name] = structAttributes{from: o.from, fields: claimed[attributesFrom:]}
+	}
+	e.decls[slot] = header(typ.name, o.from) + renderStruct(typ.name, claimed)
 	return nil
 }
 
@@ -1455,16 +1604,31 @@ func (e *emitter) modelGroupTerm(subject string, loc xsderr.Loc, term xsd.TermOr
 }
 
 // structDecl renders the declaration of the struct name holding fields in
-// order, their names claimed in a namer of its own, and spelled struct{} when
-// there is no field.
+// order, their names claimed by claimFields.
 func structDecl(name string, fields []fieldSpec) string {
+	return renderStruct(name, claimFields(fields))
+}
+
+// claimFields returns fields in order, each named by the identifier a namer of
+// its own claims for its local name: the names one struct's fields take.
+func claimFields(fields []fieldSpec) []goField {
+	names := newNamer()
+	claimed := make([]goField, len(fields))
+	for i, f := range fields {
+		claimed[i] = goField{name: names.claim(f.local), goType: f.goType}
+	}
+	return claimed
+}
+
+// renderStruct renders the declaration of the struct name holding fields in
+// order, spelled struct{} when there is no field.
+func renderStruct(name string, fields []goField) string {
 	if len(fields) == 0 {
 		return fmt.Sprintf("type %s struct{}\n", name)
 	}
-	names := newNamer()
 	var b strings.Builder
 	for _, f := range fields {
-		fmt.Fprintf(&b, "\t%s %s\n", names.claim(f.local), f.goType)
+		fmt.Fprintf(&b, "\t%s %s\n", f.name, f.goType)
 	}
 	return fmt.Sprintf("type %s struct {\n%s}\n", name, b.String())
 }
@@ -1710,12 +1874,19 @@ type fieldSpec struct {
 // group holds another declaration (substitutionSum), and the type elementType
 // returns for it otherwise; the walk does not enter that type's body, which
 // topLevel emits, but valueCycle checks it when the particle occurs exactly
-// once and the type is a complex type other than xs:anyType emitted as a
-// struct; valueCycle ends at once for a type whose content particle occurs
-// other than exactly once. A local declaration tableSum answers a sum for holds
-// the sealed interface localTable returns. A local declaration of type
-// xs:anyType holds the raw-content struct AnyType (anyTypeType). From field,
-// neither a global declaration nor xs:anyType ever reaches nestedType.
+// once, the declaration is not nillable, and the type is a complex type other
+// than xs:anyType emitted as a struct; valueCycle ends at once for a type whose
+// content particle occurs other than exactly once. A local declaration tableSum
+// answers a sum for holds the sealed interface localTable returns. A local
+// declaration of type xs:anyType holds the raw-content struct AnyType
+// (anyTypeType). From field, neither a global declaration nor xs:anyType ever
+// reaches nestedType. A nillable declaration (nillable) holds, inside any
+// MixedChild wrap and by the same occurrence rules, Nillable over the type the
+// rules above give (nillableType), whose names are claimed after that type's,
+// unless that type is AnyType, which holds xsi:nil among its Attributes, or a
+// sum over the declaration's substitution group or {type table}, whose branches
+// wrap their own fields (substitutionType, tableType); its particle is never a
+// value field, whatever its occurrence, since the field holds an interface.
 func (e *emitter) field(nested scope, site groupSite, ordinal int, chain []valueNode, o origin, t xsd.ComplexType, p xsd.Particle) (fieldSpec, error) {
 	subject, loc := o.subject, t.Loc()
 	if wildcardTerm(p.Term()) {
@@ -1758,7 +1929,7 @@ func (e *emitter) field(nested scope, site groupSite, ordinal int, chain []value
 	if isMixed(t) {
 		e.mixedChildType()
 	}
-	value := p.Occurs() == exactlyOnce
+	value := p.Occurs() == exactlyOnce && !nillable(decl)
 	st, isSimple := td.(*xsd.SimpleType)
 	ct, isComplex := td.(xsd.ComplexType)
 	var typ emittedType
@@ -1778,6 +1949,9 @@ func (e *emitter) field(nested scope, site groupSite, ordinal int, chain []value
 	}
 	if err != nil {
 		return fieldSpec{}, err
+	}
+	if nillable(decl) && !sum && !isAnyType(td) && e.substitutionSum(decl) == nil {
+		typ = e.nillableType(typ, td)
 	}
 	if isMixed(t) {
 		typ = emittedType{name: e.mixedChild + "[" + typ.name + "]"}
@@ -1825,7 +1999,8 @@ func wildcardTerm(term xsd.TermOrRef) bool {
 // top-level element declaration decl, whose {type definition} declaredType
 // resolved to td: the sealed interface substitutionType emits when
 // substitutionSum returns a group for decl, and elementType's otherwise. When
-// value is true, the particle occurring exactly once, and that type is a struct
+// value is true, the particle occurring exactly once over a declaration that
+// is not nillable (field's value, which reads nillable), and that type is a struct
 // emitted for a complex td other than xs:anyType, valueCycle walks td's body
 // from the particles whose chain is chain, as it does whether or not decl's
 // type was emitted earlier. A td of xs:anyType gets no walk: AnyType reaches
@@ -1882,7 +2057,12 @@ func (e *emitter) substitutionSum(decl xsd.ElementDeclaration) []xsd.ElementDecl
 // group order, with the same DeclineError its own topLevel turn returns first;
 // a decline in a declaration's body is met only at its own turn. Each branch
 // implements the interface's method; the declarations' own types carry no
-// method, since one may be sealed or sit in several heads' groups. It stores
+// method, since one may be sealed or sit in several heads' groups. The field
+// of a nillable declaration's branch (nillable), the head's included, holds
+// Nillable over that type (nillableType), its names claimed after the type's,
+// unless the type is AnyType or the sum over the declaration's {type table},
+// whose branches wrap their own fields; the interface itself is never
+// wrapped, each declaration's own {nillable} governing its branch. It stores
 // the interface's name in e.substitutions only once every branch is emitted.
 func (e *emitter) substitutionType(head xsd.ElementDeclaration, group []xsd.ElementDeclaration) (emittedType, error) {
 	if name, ok := e.substitutions[head.Name()]; ok {
@@ -1900,6 +2080,13 @@ func (e *emitter) substitutionType(head xsd.ElementDeclaration, group []xsd.Elem
 		typ, err := e.elementType(member, td)
 		if err != nil {
 			return emittedType{}, err
+		}
+		_, sum, err := e.tableSum(member)
+		if err != nil {
+			return emittedType{}, err
+		}
+		if nillable(member) && !sum && !isAnyType(td) {
+			typ = e.nillableType(typ, td)
 		}
 		fields := []fieldSpec{{local: member.Name().Local, goType: typ.name}}
 		e.decls = append(e.decls, header(branch, e.elementFrom(member))+structDecl(branch, fields)+fmt.Sprintf("\nfunc (%s) %s() {}\n", branch, marker))
@@ -1945,7 +2132,11 @@ func (e *emitter) localTable(parent scope, decl xsd.ElementDeclaration, branches
 // returns, each followed by the types that field first needs. The branch's
 // name is claimed before its field's type is computed. The branch types carry
 // no method: a named one may be selected by several tables, or held by fields
-// of its own. With no branch, the interface is emitted alone.
+// of its own. For a nillable decl (nillable), each branch's field holds
+// Nillable over that type (nillableType), its names claimed after the
+// type's, but a branch of xs:anyType, whose AnyType holds xsi:nil among its
+// Attributes; the interface itself is not wrapped. With no branch, the
+// interface is emitted alone.
 func (e *emitter) tableType(typ emittedType, ifc scope, decl xsd.ElementDeclaration, branches []tableBranch) error {
 	marker := "is" + typ.name
 	e.decls = append(e.decls, header(typ.name, "the {type table} of "+e.elementFrom(decl))+fmt.Sprintf("type %s interface {\n\t%s()\n}\n", typ.name, marker))
@@ -1956,6 +2147,9 @@ func (e *emitter) tableType(typ emittedType, ifc scope, decl xsd.ElementDeclarat
 		field, err := e.branchType(ifc, decl, b)
 		if err != nil {
 			return err
+		}
+		if nillable(decl) && !isAnyType(b.td) {
+			field = e.nillableType(field, b.td)
 		}
 		fields := []fieldSpec{{local: b.local(), goType: field.name}}
 		e.decls[slot] = header(branch, b.slot()+" of "+e.elementFrom(decl)) + structDecl(branch, fields) + fmt.Sprintf("\nfunc (%s) %s() {}\n", branch, marker)
@@ -2311,12 +2505,14 @@ func reacher(decl xsd.ElementDeclaration) string {
 // an <element ref> particle to a head substitutionSum returns a group for, passed after elementTerm: its field
 // holds the group's sealed interface (substitutionType). So is an element particle whose declaration tableSum
 // answers a sum for, passed after that: its field holds the {type table}'s sealed interface (tableType); a
-// declaration whose table selects one type steps to that type, which declaredType returns. It reads the schema,
-// never e.emitted, e.elements or e.substitutions, so a type the emitting walk shares, and the type of a
-// declaration an <element ref> particle names, is walked again here unless e.acyclic holds its step's first
-// node; that node joins e.acyclic once the walk of t's particles reaches the end, and a step that pushes none, a
-// local decl of an anonymous t that a complex type declares, is never memoized. It returns only a struct-value
-// recursion: every other failure on its path ends that path, since the emitting walk meets it.
+// declaration whose table selects one type steps to that type, which declaredType returns. So is an element
+// particle whose declaration is nillable (nillable), passed with it: its field holds the sealed interface
+// Nillable (nillableType). It reads the schema, never e.emitted, e.elements or e.substitutions, so a type the
+// emitting walk shares, and the type of a declaration an <element ref> particle names, is walked again here
+// unless e.acyclic holds its step's first node; that node joins e.acyclic once the walk of t's particles reaches
+// the end, and a step that pushes none, a local decl of an anonymous t that a complex type declares, is never
+// memoized. It returns only a struct-value recursion: every other failure on its path ends that path, since the
+// emitting walk meets it.
 func (e *emitter) valueCycle(chain []valueNode, decl xsd.ElementDeclaration, nested scope, t xsd.ComplexType) error {
 	subject := e.localOrigin(decl, nested, t).subject
 	if decl.ScopeVariety() == xsd.ScopeGlobal {
@@ -2356,7 +2552,7 @@ func (e *emitter) valueCycle(chain []valueNode, decl xsd.ElementDeclaration, nes
 		if err != nil || e.substitutionSum(el) != nil {
 			continue
 		}
-		if _, sum, err := e.tableSum(el); err != nil || sum {
+		if _, sum, err := e.tableSum(el); err != nil || sum || nillable(el) {
 			continue
 		}
 		td, err := e.declaredType(el)
