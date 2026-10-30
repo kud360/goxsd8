@@ -747,16 +747,16 @@ Grammar completion toward full XPath 2.0 plus the F&O function library
 
 ### M9 — Codegen
 
-Deterministic emission, namer, sealed choice sums, capability-view
-interfaces, multiple schemas to multiple output dirs, golden-file tests.
-The public `value.Emitter` API freezes here. #3229 rules each item still
-unbuilt an M9 slice or M10's. M9 exits when #2900 closes and so does
-each M9 slice #3229 names.
+Deterministic emission, namer, sealed choice sums, multiple schemas to
+multiple output dirs, golden-file tests. M9 exits when #2900, #3234 and
+#3235 close.
 
 ### M10 — Codec
 
 Runtime path plus generated fast path; differential tests (identical
 values, identical error rule IDs) and `testing.AllocsPerRun` budgets.
+Generated capability-view readers. The public `value.Emitter` API freezes
+here.
 
 ### M11 — BER instance adapter
 
@@ -776,7 +776,7 @@ finds a better placement, and the ratchet and the gate are the only
 compatibility promises. After 1.0, exported-surface changes require a
 deprecation path and a compatibility argument, and the audit's posture
 flips from "move it now" to "guard the surface". Narrower freezes may land
-earlier where a milestone says so — `value.Emitter` at M9.
+earlier where a milestone says so — `value.Emitter` at M10.
 
 ## Non-goals
 
