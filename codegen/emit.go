@@ -1304,13 +1304,34 @@ func (e *emitter) shape(name string, o origin, t xsd.ComplexType) (emittedType, 
 	return emittedType{name: name, sealed: !emptiable}, content, nil
 }
 
-// hasAttributeFields reports whether the complex type t has {attribute uses}
-// or an {attribute wildcard}, read from the finalized component, so inherited
-// ones count: exactly when the struct body emits for t holds attribute fields,
-// and so when shape never answers a sealed interface for t.
+// hasAttributeFields reports whether the complex type t has an attribute use
+// fieldAttributeUses keeps or an {attribute wildcard}, read from the finalized
+// component, so inherited ones count: exactly when the struct body emits for t
+// holds attribute fields, and so when shape never answers a sealed interface
+// for t.
 func hasAttributeFields(t xsd.ComplexType) bool {
 	_, hasWildcard := t.AttributeWildcard()
-	return hasWildcard || len(t.AttributeUses()) > 0
+	return hasWildcard || len(fieldAttributeUses(t)) > 0
+}
+
+// xsiNil is the expanded name of the built-in attribute declaration xsi:nil
+// (§3.2.7.2).
+var xsiNil = xsd.QName{Space: xsd.XMLSchemaInstanceNS, Local: "nil"}
+
+// fieldAttributeUses returns t's {attribute uses} but a use of xsi:nil, the
+// uses body gives a field each: a nillable element's nilled-ness is
+// Nillable's arm (cvc-elt clause 3.2.3), and a declaration that is not
+// nillable admits no xsi:nil (cvc-elt clause 3.1). It matches the use's
+// {attribute declaration} by expanded name, which stands for the built-in's
+// identity because no-xsi (§3.2.6.4) keeps a schema document out of the xsi
+// namespace.
+//
+// GAP(xsd): a programmatically built schema is not kept out (#1462), so a
+// declaration it builds named {xsi}nil matches too: body then emits no field
+// for that use and hasAttributeFields does not count it, so the emitted type
+// omits that attribute and nothing declines.
+func fieldAttributeUses(t xsd.ComplexType) []xsd.AttributeUse {
+	return slices.DeleteFunc(t.AttributeUses(), func(u xsd.AttributeUse) bool { return u.DeclarationName() == xsiNil })
 }
 
 // body emits typ, which shape returned for the complex type t with content,
@@ -1320,16 +1341,16 @@ func hasAttributeFields(t xsd.ComplexType) bool {
 // dcl.ctd.ctsc) the value field, named from the local name value and holding,
 // never through a pointer, what goType maps its {simple type definition} to,
 // an anonymous union named by nested's path with value last, then one per
-// attribute use (attributeField), and then, when t has an {attribute wildcard}
-// (§3.4.2.5 dcl.ctd.anyatt), its own, inherited or brought by an attribute
-// group, one named from the local name anyAttribute holding a slice of the
-// raw-content struct AnyAttribute (anyTypeType, which claims the raw-content
-// structs' names there when nothing earlier did); or the sealed interface
-// sealedType emits; then the types its fields reach, the anonymous ones named
-// in nested. chain is valueChain's for a walk of t's particles. A struct with
-// attribute or {attribute wildcard} fields records them in e.attributes under
-// typ's name, as claimFields names them, for the attributes struct of a nilled
-// element of typ (attributesType).
+// attribute use fieldAttributeUses keeps (attributeField), and then, when t
+// has an {attribute wildcard} (§3.4.2.5 dcl.ctd.anyatt), its own, inherited or
+// brought by an attribute group, one named from the local name anyAttribute
+// holding a slice of the raw-content struct AnyAttribute (anyTypeType, which
+// claims the raw-content structs' names there when nothing earlier did); or
+// the sealed interface sealedType emits; then the types its fields reach, the
+// anonymous ones named in nested. chain is valueChain's for a walk of t's
+// particles. A struct with attribute or {attribute wildcard} fields records
+// them in e.attributes under typ's name, as claimFields names them, for the
+// attributes struct of a nilled element of typ (attributesType).
 func (e *emitter) body(typ emittedType, nested scope, chain []valueNode, o origin, t xsd.ComplexType, content *groupParticle) error {
 	if typ.sealed {
 		return e.sealedType(typ.name, nested, groupSite{}, o, t, content.group.Particles())
@@ -1355,7 +1376,7 @@ func (e *emitter) body(typ emittedType, nested scope, chain []valueNode, o origi
 		fields = append(fields, contentFields...)
 	}
 	attributesFrom := len(fields)
-	for _, u := range t.AttributeUses() {
+	for _, u := range fieldAttributeUses(t) {
 		field, err := e.attributeField(nested, o.subject, t.Loc(), u)
 		if err != nil {
 			return err
@@ -1886,7 +1907,8 @@ type fieldSpec struct {
 // unless that type is AnyType, which holds xsi:nil among its Attributes, or a
 // sum over the declaration's substitution group or {type table}, whose branches
 // wrap their own fields (substitutionType, tableType); its particle is never a
-// value field, whatever its occurrence, since the field holds an interface.
+// value field, whatever its occurrence, since the field holds an interface or
+// AnyType, whose walk ends at once.
 func (e *emitter) field(nested scope, site groupSite, ordinal int, chain []valueNode, o origin, t xsd.ComplexType, p xsd.Particle) (fieldSpec, error) {
 	subject, loc := o.subject, t.Loc()
 	if wildcardTerm(p.Term()) {

@@ -446,21 +446,22 @@
 //     element children (§3.3.4.3 cvc-elt clause 3.2.3) and keeps its
 //     attributes (§3.4.4.2 cvc-complex-type clauses 2 to 4), and Content[T, A],
 //     holding T as Content for an element that is not nilled. The three are
-//     emitted once per package. The field takes the occurrence rules below as
+//     emitted once per package. The field takes the occurrence rules above as
 //     a sealed interface: the bare interface, nil meaning absent, which a
 //     required element's field admits though no valid instance gives it, as a
 //     required choice's does; a slice of it when repeated; MixedChild over it
 //     in mixed content.
 //   - A is struct{} when T is a simple type's Go type or a complex type's with
-//     no {attribute uses} and no {attribute wildcard}, and otherwise T's
-//     attributes struct, one per T, shared by every nillable element of that
-//     type: T's attribute fields and then its {attribute wildcard} field,
-//     named as T names them, so an attribute value beside the value field
-//     keeps Value2, and no value, Text or particle field. Neither T nor A
-//     holds xsi:nil, which an {attribute wildcard}'s field excludes as stated
-//     below. An interface T keeps its own nil inside Content, so an absent
-//     element, a nilled one and an emptiable choice's empty match are three
-//     values.
+//     no attribute field, and otherwise T's attributes struct, one per T,
+//     shared by every nillable element of that type: T's attribute fields and
+//     then its {attribute wildcard} field, named as T names them, so an
+//     attribute value beside the value field keeps Value2, and no value, Text
+//     or particle field. Neither T nor A holds xsi:nil: an {attribute
+//     wildcard}'s field excludes it, as stated above, and an attribute use
+//     whose {attribute declaration} is the built-in xsi:nil (§3.2.7.2) gives no
+//     field, whatever the element's {nillable}. An interface T keeps its own
+//     nil inside Content, so an absent element, a nilled one and an emptiable
+//     choice's empty match are three values.
 //   - No field holding AnyType is wrapped: xs:anyType's AnyType holds xsi:nil
 //     among its Attributes. Nor is a field holding a substitution group's
 //     interface or a {type table}'s: each branch of the former wraps its field
