@@ -16,6 +16,41 @@
 // rules, and the file it writes; [CheckTargets] states which targets it
 // refuses whatever their Schemas hold.
 //
+//	s, err := parser.Parse("testdata/example.xsd")
+//	// ...
+//	err = codegen.Generate([]codegen.Target{{Schema: s, Dir: "gen/order", Package: "order"}})
+//
+// ExampleGenerate, in codegen/example_test.go, runs those calls, into a
+// temporary directory, and prints the whole file Generate writes for that
+// schema, which is inside the slice "Coverage" states. Plain go doc does not
+// print Example functions: read it in that file, or on pkg.go.dev beside this
+// documentation.
+//
+// # What you get
+//
+// Generate emits type declarations alone: the structs carry no struct tags and
+// bind no XML name; do not decode them with encoding/xml; decoding is codec's
+// (M10). Each supported construct gets the Go shape below, a summary of the
+// "Coverage" rules whose openings each row quotes, which state its exceptions.
+//
+//   - complex type → a struct ("A sequence or an all group gives"), or its
+//     content choice's sealed interface ("A choice gives")
+//   - element → the type of its {type definition}, for a simple type a named Go
+//     type over the value type ("An element whose {type definition}")
+//   - choice occurring once → a sealed interface, one branch struct per
+//     alternative ("A choice gives")
+//   - {min occurs} 0 with {max occurs} 1 → a nil-able field, a pointer or a bare
+//     interface; {max occurs} above 1 → a slice ("{max occurs} above 1")
+//   - decimal → big.Rat, xs:integer and the unbounded integer types → big.Int,
+//     the bounded ones → the Go integer of their range ("For an atomic type",
+//     "Failing that")
+//   - union → a sealed interface, one variant per basic member ("A union type")
+//   - precisionDecimal → the struct PrecisionDecimal over a sealed value sum
+//     ("PrecisionDecimal holds one")
+//   - <element ref> to a head that is abstract, or whose group holds another
+//     non-abstract declaration → a sealed interface, one branch per
+//     non-abstract member ("An <element ref> particle to a head")
+//
 // # Coverage
 //
 // Supported, each construct emitted from or accepted as the rules below state:
@@ -571,9 +606,6 @@
 //     without either, but for the fixed {value constraint} of a declaration
 //     with {nillable} true, stated above, and supplying a default and
 //     enforcing a fixed value or an identity constraint are the validator's.
-//
-// ExampleGenerate prints the whole file Generate writes for a schema inside
-// this slice.
 //
 // # Determinism
 //
