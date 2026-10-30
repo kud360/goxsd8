@@ -45,16 +45,18 @@ func (e *DeclineError) Unwrap() error { return errors.ErrUnsupported }
 // A Construct is a construct Generate declines: two declines of the same
 // construct have equal Constructs; the zero Construct names none. A Construct
 // is comparable: == reports whether two name the same construct, and it may be
-// used as a map key. The package doc's "Coverage" section states what
-// declines.
+// used as a map key. The package exports no Construct value, because a
+// release that lifts a construct stops returning its Construct; compare a
+// Construct only with another obtained from [DeclineError.Construct]. The
+// package doc's "Coverage" section states what declines.
 type Construct struct{ c construct }
 
 // String returns the construct's name for display, distinct for each
 // Construct; it is not the decline's message. The names are not stable across
 // releases: a release may rename a construct, split one into several, or stop
 // returning a name once the generator covers its construct, and no name is
-// reserved. To tell constructs apart, compare Construct values or key a map by
-// them; never match a name.
+// reserved. To tell constructs apart, compare the Constructs of two
+// DeclineErrors or key a map by them; never match a name.
 func (c Construct) String() string {
 	if c.c == 0 || int(c.c) >= len(constructs) {
 		return "Construct(" + strconv.Itoa(int(c.c)) + ")"

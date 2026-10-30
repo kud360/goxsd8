@@ -75,7 +75,8 @@
 //
 // Declined today, each construct named as [Construct.String] prints it for a
 // [DeclineError]'s [DeclineError.Construct], for display only: the names may
-// change in any release, so code compares [Construct] values, never a name.
+// change in any release, so code compares the Constructs of two DeclineErrors,
+// never a name.
 //
 //   - absent {variety}
 //   - no {primitive type definition}
