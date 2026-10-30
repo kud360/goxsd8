@@ -24,7 +24,8 @@
 //     without a {type table}
 //   - <element ref> particles and substitution groups
 //   - the special types xs:anySimpleType and xs:anyAtomicType
-//   - atomic simple types
+//   - atomic simple types, of every primitive Datatypes defines and of
+//     precisionDecimal
 //   - list simple types
 //   - union simple types
 //   - xs:anyType
@@ -52,7 +53,10 @@
 //   - struct-value recursion
 //
 // A list or union declines with the Construct its item type or member declines
-// with.
+// with. An uncovered primitive is a primitive other than the nineteen Datatypes
+// defines (Datatypes §3.3) and precisionDecimal: an ·implementation-defined·
+// one (Datatypes dt-primitive), which xsd.NewPrimitiveType mints and no schema
+// document yields.
 //
 // GAP(codegen): Generate declines each construct the list above names; #2900 is
 // the GitHub issue tracking these lifts.
@@ -82,8 +86,9 @@
 // place of that declaration's type, with one branch struct per type it selects,
 // each followed by the types its field reaches — then, after every other
 // declaration and in the order the walk first needs each, one datatype struct
-// per date, time or duration datatype, and one for QName and NOTATION together,
-// a declaration's type or a value field is declared over, the four raw-content
+// per date, time or duration datatype, one for QName and NOTATION together, and
+// PrecisionDecimal followed by its sealed interface and that interface's four
+// arms, a declaration's type or a value field is declared over, the four raw-content
 // structs once an element's type is xs:anyType, a model group holds a wildcard
 // particle, or a type has an {attribute wildcard} or {open content}, the generic
 // struct MixedChild once a field of mixed content holds an element, the generic
@@ -122,9 +127,10 @@
 //     sequence of octets exactly (Datatypes §3.3.15.1, §3.3.16.1), nil and the
 //     empty slice being one value, no octets, and dateTime, time, date,
 //     gYearMonth, gYear, gMonthDay, gDay, gMonth and duration each give their
-//     datatype struct, and QName and NOTATION give QName's (Datatypes §3.3.18,
-//     §3.3.19). That Go integer, string, bool, float32, float64, big.Int,
-//     big.Rat, []byte or datatype struct is the type's atomic Go type.
+//     datatype struct, QName and NOTATION give QName's (Datatypes §3.3.18,
+//     §3.3.19), and precisionDecimal gives its datatype struct PrecisionDecimal
+//     (precisionDecimal §3.1). That Go integer, string, bool, float32, float64,
+//     big.Int, big.Rat, []byte or datatype struct is the type's atomic Go type.
 //   - A date, time or duration datatype struct has one field per property its
 //     datatype's values carry (Datatypes §3.3.6.1, §3.3.7.1–§3.3.14.1,
 //     §3.4.26–§3.4.28), in the order of the seven-property model (§D.2.1) or of
@@ -144,10 +150,32 @@
 //     literal resolves to (Datatypes §3.3.18, §3.3.19): Space is the namespace
 //     name, "" for none, and Local the local part; no prefix is represented. It
 //     also holds struct values no value maps to, such as a Local that is not an
-//     NCName or, for NOTATION, a name no <notation> declares. The generated
-//     file imports math/big exactly when a declaration names it: a big.Int or
-//     big.Rat, or a datatype struct, all but GMonthDay, GDay, GMonth and QName
-//     holding one.
+//     NCName or, for NOTATION, a name no <notation> declares.
+//   - PrecisionDecimal holds one precisionDecimal value (precisionDecimal §3.1
+//     sec-vs-pD) as its one field Value, of the sealed interface
+//     PrecisionDecimalValue, the closed-sum exception as a choice's is: one
+//     method, unexported, "is" plus the interface's name, and one arm per case
+//     of the value's ·numericalValue· (vp-pd-numVal), emitted after the
+//     interface in this order. PrecisionDecimalValueNumerical holds Coefficient,
+//     a big.Int, the value's magnitude, never negative; Scale, a big.Int, its
+//     ·scale· (vp-pd-precision); and Negative, its ·sign· (vp-pd-sign), so that
+//     the value is Coefficient × 10^−Scale, negative when Negative.
+//     PrecisionDecimalValuePositiveInfinity,
+//     PrecisionDecimalValueNegativeInfinity and PrecisionDecimalValueNotANumber,
+//     the special values (dt-specialvalue), have no field: their ·scale· is
+//     absent, and their ·sign· absent for notANumber and given by the
+//     infinities. So 3 and 3.00 are two values, and 0 and −0 two, while the
+//     literals of one value, such as 3.0e2 and 30e1, or INF and +INF, are one:
+//     no lexical form is represented.
+//   - PrecisionDecimal holds every value of its datatype exactly. It also holds
+//     struct values no value maps to, a nil Value or a negative Coefficient,
+//     and it represents neither its datatype's equality nor its order: 0 and −0
+//     are equal, and NaN is incomparable with every value, itself included
+//     (precisionDecimal §3.1).
+//   - The generated file imports math/big exactly when a declaration
+//     names it: a big.Int or big.Rat, a datatype struct, all but
+//     GMonthDay, GDay, GMonth, QName and PrecisionDecimal holding one, or
+//     PrecisionDecimalValueNumerical.
 //   - A list type (Datatypes §2.4.1.2) gives a slice of the Go type its {item
 //     type definition} (§3.16.1) gets, an atomic Go type or a union's sealed
 //     interface, a restriction of a list taking its base's item (§3.16.2.3);
@@ -554,10 +582,10 @@
 // absolute roots produce byte-identical output; "Naming" states where a
 // header's location is not relative. No map iteration anywhere near the
 // emitter; emission order is the walk's, which document order alone fixes, as
-// "Coverage" states (datatype structs, raw-content structs, MixedChild,
-// Nillable with its arms, attributes structs, and union interfaces with their
-// variants last, in the order the walk first needs each). Golden-file tests
-// pin the output.
+// "Coverage" states (datatype structs, PrecisionDecimal's interface and arms
+// with it, raw-content structs, MixedChild, Nillable with its arms,
+// attributes structs, and union interfaces with their variants last, in the
+// order the walk first needs each). Golden-file tests pin the output.
 //
 // # Naming
 //
@@ -631,60 +659,65 @@
 // type, so that a top-level element date of type xs:date names its type Date2; for a field of a
 // struct, the value field and attribute fields included, after that struct's own name, so that a
 // top-level element date whose complex type extends xs:date names its type Date and the datatype
-// struct Date2. The raw-content structs are named AnyType, AnyAttribute, AnyChild and AnyElement,
-// claimed together in that order when the walk first reaches a declaration of type xs:anyType or a
-// wildcard particle, ahead of that declaration's own type, so that a top-level element anyType with
-// no type names its type AnyType2; or when it first reaches the {open content} of a type emitted as
-// a struct, after that struct's own name and the types its particle fields first need, or its
-// {attribute wildcard}, after the types its other fields first need, so that a top-level element
-// anyType whose anonymous complex type has an <openContent> or an <anyAttribute> names its type
-// AnyType and the raw-content structs AnyType2, AnyAttribute, AnyChild and AnyElement. A wildcard
-// particle's field is named as if from local name any, an {open content}'s as if from local name
-// openContent, and an {attribute wildcard}'s as if from local name anyAttribute. Mixed content's
-// Text field is named as if from local name text, ahead of the particle fields, so that an element
-// text in it gives the field Text2. The generic struct MixedChild is named from local name
-// mixedChild, claimed when the walk first needs it as a datatype struct is: for an element field of
-// mixed content, after that struct's own name and ahead of the names the field's type first claims,
-// so that an <element ref> particle there to a top-level element mixedChild that the walk has not
-// reached names the generic struct MixedChild and that element's type MixedChild2. The generic
-// sealed interface Nillable and its arms Nilled and Content are named from the local names nillable,
-// nilled and content, claimed together in that order when the walk first needs them: for a field
-// over a nillable element, after the names the field's type first claims, so after MixedChild's in
-// mixed content; and at a nillable top-level declaration's own position, after the names its type
-// claims. A complex type's attributes struct is named from that type's Go name followed by the local
-// name attributes (Price → PriceAttributes), claimed right after Nillable's names would be at the
-// same point. A union's interface is named from the type when it is named (simple type size → Size),
-// claimed when the walk first needs it as a datatype struct is: for a top-level element of a union
-// type, ahead of that element's own type, so that a top-level element size of type size names its
-// type Size2; for a field of a struct, after that struct's own name. An anonymous union is named by
-// the path of names an anonymous complex type would take in its place, with the local name union
-// last: a top-level element's (element pin → PinUnion), a local element's (element code in complex
-// type box → BoxCodeUnion), an attribute's from the global attribute declaration, the named complex
-// type or attribute group definition declaring it, or the path of the struct holding it for an
-// anonymous complex type (attribute mode in attribute group shared → SharedModeUnion, attribute kind
-// of element tag → TagKindUnion), and a value field's from its struct's path with value before union
-// (complex type narrow → NarrowValueUnion). A list's item is named from the list whose <list>
-// declares it: from that list's local name when it is named (simple type codes → CodesUnion, for
-// codes and every restriction of it), and from the path the list takes otherwise. A variant is named
-// from its interface's name plus its member's local name: an anonymous list member's is list, and
-// any other anonymous member's is that of the nearest named type on its {base type definition}
-// chain, the member itself first (xs:int in Size → SizeInt, an anonymous restriction of xs:string →
-// SizeString). The variants are claimed after their interface in basic-member order, each ahead of
-// its member's own Go type, which takes the variant's name as its path (an anonymous union item of
-// the list variant MixedList → MixedListUnion). Every other generated type's header comment but a
-// union interface's or variant's, or MixedChild's, Nillable's, Nilled's or Content's, records the
-// QName and the schema Loc of the declaration it is named from: the element declaration, or the
-// complex type definition for a type named from one, an attributes struct's being its type's,
-// followed by a second line naming that type. A union interface's header records the simple type it
-// is generated from, by its QName or as (anonymous), and that type's schema Loc, and a variant's
-// header its member the same way, a builtin member, having no schema document, by its QName alone. A
-// datatype struct's header records its datatype's QName alone, a builtin having no schema document,
-// then a second line stating what its fields' names do not, when there is any: TimezoneOffset's unit
-// and whether it may be absent, that duration's Months and Seconds share one sign, or that QName's
-// Space is "" for no namespace. A raw-content struct's header records xs:anyType's QName alone,
-// then, for AnyType and AnyChild, a second line stating what Text or Tail holds. MixedChild's header
-// records no declaration, since every mixed content shares it, and states that it holds one child
-// element and the characters after it, then a second line stating what Tail holds. Nillable's,
+// struct Date2. PrecisionDecimal's interface is named from the path precisionDecimal, value, and
+// each arm from the interface's name plus numerical, positiveInfinity, negativeInfinity or
+// notANumber (PrecisionDecimalValueNotANumber), the five claimed in that order right after
+// PrecisionDecimal's own name. The raw-content structs are named AnyType, AnyAttribute, AnyChild and
+// AnyElement, claimed together in that order when the walk first reaches a declaration of type
+// xs:anyType or a wildcard particle, ahead of that declaration's own type, so that a top-level
+// element anyType with no type names its type AnyType2; or when it first reaches the {open content}
+// of a type emitted as a struct, after that struct's own name and the types its particle fields
+// first need, or its {attribute wildcard}, after the types its other fields first need, so that a
+// top-level element anyType whose anonymous complex type has an <openContent> or an <anyAttribute>
+// names its type AnyType and the raw-content structs AnyType2, AnyAttribute, AnyChild and
+// AnyElement. A wildcard particle's field is named as if from local name any, an {open content}'s as
+// if from local name openContent, and an {attribute wildcard}'s as if from local name anyAttribute.
+// Mixed content's Text field is named as if from local name text, ahead of the particle fields, so
+// that an element text in it gives the field Text2. The generic struct MixedChild is named from
+// local name mixedChild, claimed when the walk first needs it as a datatype struct is: for an
+// element field of mixed content, after that struct's own name and ahead of the names the field's
+// type first claims, so that an <element ref> particle there to a top-level element mixedChild that
+// the walk has not reached names the generic struct MixedChild and that element's type MixedChild2.
+// The generic sealed interface Nillable and its arms Nilled and Content are named from the local
+// names nillable, nilled and content, claimed together in that order when the walk first needs them:
+// for a field over a nillable element, after the names the field's type first claims, so after
+// MixedChild's in mixed content; and at a nillable top-level declaration's own position, after the
+// names its type claims. A complex type's attributes struct is named from that type's Go name
+// followed by the local name attributes (Price → PriceAttributes), claimed right after Nillable's
+// names would be at the same point. A union's interface is named from the type when it is named
+// (simple type size → Size), claimed when the walk first needs it as a datatype struct is: for a
+// top-level element of a union type, ahead of that element's own type, so that a top-level element
+// size of type size names its type Size2; for a field of a struct, after that struct's own name. An
+// anonymous union is named by the path of names an anonymous complex type would take in its place,
+// with the local name union last: a top-level element's (element pin → PinUnion), a local element's
+// (element code in complex type box → BoxCodeUnion), an attribute's from the global attribute
+// declaration, the named complex type or attribute group definition declaring it, or the path of the
+// struct holding it for an anonymous complex type (attribute mode in attribute group shared →
+// SharedModeUnion, attribute kind of element tag → TagKindUnion), and a value field's from its
+// struct's path with value before union (complex type narrow → NarrowValueUnion). A list's item is
+// named from the list whose <list> declares it: from that list's local name when it is named (simple
+// type codes → CodesUnion, for codes and every restriction of it), and from the path the list takes
+// otherwise. A variant is named from its interface's name plus its member's local name: an anonymous
+// list member's is list, and any other anonymous member's is that of the nearest named type on its
+// {base type definition} chain, the member itself first (xs:int in Size → SizeInt, an anonymous
+// restriction of xs:string → SizeString). The variants are claimed after their interface in
+// basic-member order, each ahead of its member's own Go type, which takes the variant's name as its
+// path (an anonymous union item of the list variant MixedList → MixedListUnion). Every other
+// generated type's header comment but a union interface's or variant's, or MixedChild's, Nillable's,
+// Nilled's or Content's, records the QName and the schema Loc of the declaration it is named from:
+// the element declaration, or the complex type definition for a type named from one, an attributes
+// struct's being its type's, followed by a second line naming that type. A union interface's header
+// records the simple type it is generated from, by its QName or as (anonymous), and that type's
+// schema Loc, and a variant's header its member the same way, a builtin member, having no schema
+// document, by its QName alone. A datatype struct's header records its datatype's QName alone, a
+// builtin having no schema document, then a second line stating what its fields' names do not, when
+// there is any: TimezoneOffset's unit and whether it may be absent, that duration's Months and
+// Seconds share one sign, or that QName's Space is "" for no namespace; PrecisionDecimal's interface
+// and arms record the same QName, the numerical arm then a second line stating its value's formula
+// and that Coefficient is never negative. A raw-content struct's header records xs:anyType's QName
+// alone, then, for AnyType and AnyChild, a second line stating what Text or Tail holds. MixedChild's
+// header records no declaration, since every mixed content shares it, and states that it holds one
+// child element and the characters after it, then a second line stating what Tail holds. Nillable's,
 // Nilled's and Content's headers record no declaration, since every nillable element shares them,
 // and state what each holds. A Loc whose URI filepath.IsAbs accepts renders relative to the target's
 // Dir made absolute against the working directory, slash-separated and climbing with ".." out of

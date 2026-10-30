@@ -24,7 +24,7 @@ var update = flag.Bool("update", false, "rewrite codegen/testdata/*.golden from 
 // TestGenerateGolden pins Generate's output for each fixture. The fixtures are
 // parsed by a relative location, so the Loc in every header is portable.
 func TestGenerateGolden(t *testing.T) {
-	for _, name := range []string{"flat", "nested", "collision", "named", "expanded", "symbolspaces", "choice", "attributes", "integers", "identity", "empty", "lists", "namedlocal", "floats", "decimals", "binary", "temporal", "refs", "anytype", "restriction", "wildcard", "occurs", "simplecontent", "spliced", "extension", "groupref", "unions", "anyattribute", "nestedgroups", "special", "valueconstraint", "choicewildcard", "all", "substitution", "qname", "assertions", "extendshared", "extendsharedfirst", "redefine", "emptiablechoice", "emptiablesequence", "choiceattributes", "typetable", "typetableerror", "mixed", "nillable", "abstract", "opencontent", "defaultopencontent"} {
+	for _, name := range []string{"flat", "nested", "collision", "named", "expanded", "symbolspaces", "choice", "attributes", "integers", "identity", "empty", "lists", "namedlocal", "floats", "decimals", "binary", "temporal", "refs", "anytype", "restriction", "wildcard", "occurs", "simplecontent", "spliced", "extension", "groupref", "unions", "anyattribute", "nestedgroups", "special", "valueconstraint", "choicewildcard", "all", "substitution", "qname", "assertions", "extendshared", "extendsharedfirst", "redefine", "emptiablechoice", "emptiablesequence", "choiceattributes", "typetable", "typetableerror", "mixed", "nillable", "abstract", "opencontent", "defaultopencontent", "precisiondecimal"} {
 		t.Run(name, func(t *testing.T) {
 			schema, err := xsdparser.Parse("testdata/" + name + ".xsd")
 			if err != nil {
@@ -138,7 +138,7 @@ func typeCheck(t *testing.T, src []byte) {
 func TestGenerateImportsBig(t *testing.T) {
 	for _, typ := range []string{"xs:integer", "xs:decimal",
 		"xs:dateTime", "xs:dateTimeStamp", "xs:time", "xs:date", "xs:gYearMonth", "xs:gYear",
-		"xs:gMonthDay", "xs:gDay", "xs:gMonth", "xs:duration", "xs:dayTimeDuration", "xs:yearMonthDuration"} {
+		"xs:gMonthDay", "xs:gDay", "xs:gMonth", "xs:duration", "xs:dayTimeDuration", "xs:yearMonthDuration", "xs:precisionDecimal"} {
 		t.Run(typ, func(t *testing.T) {
 			schema := parseString(t, `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"><xs:element name="e" type="`+typ+`"/></xs:schema>`)
 			typeCheck(t, generateOne(t, Target{Schema: schema, Dir: filepath.Join(t.TempDir(), "out"), Package: "p"}))

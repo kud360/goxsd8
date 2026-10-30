@@ -23,10 +23,10 @@ const (
 	generates = `<xs:element name="a" type="xs:string"/>`
 	// unassembled references a type the schema does not declare
 	// (src-resolve), so parser.Parse fails.
-	unassembled        = `<xs:element name="a" type="undeclared"/>`
-	emptyChoice        = `<xs:element name="a"><xs:complexType><xs:choice/></xs:complexType></xs:element>`
-	uncoveredPrimitive = `<xs:element name="a" type="xs:precisionDecimal"/>`
-	abstractType       = `<xs:complexType name="c" abstract="true"/><xs:element name="a" type="c"/>`
+	unassembled      = `<xs:element name="a" type="undeclared"/>`
+	emptyChoice      = `<xs:element name="a"><xs:complexType><xs:choice/></xs:complexType></xs:element>`
+	repeatedSequence = `<xs:element name="a"><xs:complexType><xs:sequence maxOccurs="2"><xs:element name="b" minOccurs="0" type="xs:string"/></xs:sequence></xs:complexType></xs:element>`
+	abstractType     = `<xs:complexType name="c" abstract="true"/><xs:element name="a" type="c"/>`
 )
 
 // writeTree writes files, slash paths relative to a fresh directory, and
@@ -47,8 +47,8 @@ func writeTree(t *testing.T, files map[string]string) string {
 }
 
 // censusTree is the fixture tree. In path order its declines are first seen
-// as choice with no {particles} (once), uncovered primitive, then complex
-// type {abstract} (twice each), so the first-seen order, the count order with a
+// as choice with no {particles} (once), repeated emptiable sequence, then
+// complex type {abstract} (twice each), so the first-seen order, the count order with a
 // first-seen tie-break, and the count order with the String tie-break the tool
 // owes are three different orders. The non-.xsd file and the dot directory are
 // not documents.
@@ -56,10 +56,10 @@ func censusTree(t *testing.T) string {
 	return writeTree(t, map[string]string{
 		"a.xsd":       schemaDoc(generates),
 		"b.xsd":       schemaDoc(emptyChoice),
-		"c.xsd":       schemaDoc(uncoveredPrimitive),
+		"c.xsd":       schemaDoc(repeatedSequence),
 		"d.xsd":       schemaDoc(unassembled),
 		"e.xsd":       schemaDoc(abstractType),
-		"f.xsd":       schemaDoc(uncoveredPrimitive),
+		"f.xsd":       schemaDoc(repeatedSequence),
 		"g.xsd":       schemaDoc(abstractType),
 		"notes.txt":   "not a schema",
 		".git/x.xsd":  schemaDoc(abstractType),
@@ -80,15 +80,15 @@ const wantCounts = `gencensus: 10 schema document(s) under %ROOT%
 
 === First decline, by construct: 3 construct(s) ===
        2  complex type {abstract}
-       2  uncovered primitive
+       2  repeated emptiable sequence
        1  choice with no {particles}
 `
 
 // TestCensusCountsAndRanksDeclines pins every count the report prints and its
 // construct lines' order. Dropping ranked's sort prints the first-seen order
-// (choice with no {particles}, uncovered primitive, complex type {abstract});
-// dropping its String tie-break prints uncovered primitive ahead of complex
-// type {abstract}. Each fails here.
+// (choice with no {particles}, repeated emptiable sequence, complex type
+// {abstract}); dropping its String tie-break prints repeated emptiable
+// sequence ahead of complex type {abstract}. Each fails here.
 func TestCensusCountsAndRanksDeclines(t *testing.T) {
 	root := censusTree(t)
 	var out bytes.Buffer
@@ -122,7 +122,7 @@ func TestCensusPathsListsEachConstructsDocuments(t *testing.T) {
 complex type {abstract} (2):
   e.xsd
   g.xsd
-uncovered primitive (2):
+repeated emptiable sequence (2):
   c.xsd
   f.xsd
 choice with no {particles} (1):
