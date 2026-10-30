@@ -1733,7 +1733,8 @@ func renderStruct(name string, fields []goField) string {
 // one alternative per pass), the term of t's content particle or of a model
 // group particle nested in it, in the package doc's "# Coverage" shape: the
 // interface, then each branch struct in particle order, followed by the types
-// its alternative reaches, the anonymous ones named in nested. A branch
+// its alternative reaches, the anonymous ones named in nested; for no
+// particles, the interface alone, which no branch implements. A branch
 // struct's fields are particleFields' for its one alternative particle, read
 // through branchParticle, at site.branch(k), k its 1-based position in
 // particles, with an empty chain: an element or a wildcard gives its one
@@ -1749,9 +1750,6 @@ func renderStruct(name string, fields []goField) string {
 // is checked for its kind first (alternative), and then by the gate, all
 // before the interface or any branch is emitted.
 func (e *emitter) sealedType(name string, nested scope, site groupSite, o origin, t xsd.ComplexType, particles []xsd.Particle) error {
-	if len(particles) == 0 {
-		return decline(t.Loc(), constructEmptyChoice, o.subject)
-	}
 	for k, p := range particles {
 		word, _, err := e.alternative(o, t, p)
 		if err != nil {

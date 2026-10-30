@@ -67,7 +67,8 @@
 //   - complex types, named or anonymous, derived by restriction or extension
 //   - empty, simple, element-only and mixed content, the last two with or
 //     without {open content}
-//   - sequences, choices and all groups, inline or through <group ref>
+//   - sequences, choices with or without {particles}, and all groups, inline or
+//     through <group ref>
 //   - optional and repeated particles
 //   - wildcard particles
 //   - attribute uses and attribute wildcards, beside any content above
@@ -82,7 +83,6 @@
 //   - no {primitive type definition}
 //   - uncovered primitive
 //   - repeated emptiable sequence
-//   - choice with no {particles}
 //   - emptiable group alternative
 //   - complex type {abstract}
 //   - particle with {max occurs} 0
@@ -355,19 +355,25 @@
 //     element or a wildcard its one field, a sequence occurring exactly once
 //     the fields of its own particles, any other model group its one field —
 //     and implementing the method; consumers type-switch over the branches,
-//     and "N pointer fields, exactly one non-nil" never appears.
-//   - One occurrence of a choice matches nothing exactly when one of its
-//     alternatives is emptiable (§3.8.6.6 cos-choice-range, §3.9.6.3
-//     cos-group-emptiable), and the nil interface is the one value for that
-//     empty match: no branch holds it, an element or a wildcard alternative
-//     with {min occurs} 0 and {max occurs} 1 giving a value field, never a
-//     pointer. A repeated choice's slice holds one item per occurrence that
-//     matches something, so it does not count occurrences that match nothing.
-//   - A choice is accepted only when it has {particles} and no alternative's
-//     term is a model group, inline or through <group ref>, one occurrence of
-//     which is emptiable ([xsd.Schema.ParticleEmptiable]), whatever the
-//     alternative's own {min occurs}: a branch over it would hold the empty
-//     match.
+//     and "N pointer fields, exactly one non-nil" never appears. A choice with
+//     no {particles}, which matches no sequence of children, the empty one
+//     included (§3.8.4.3 cvc-model-group), gets the interface alone, which no
+//     branch implements, so its one value is nil. §3.8.6.6 cos-choice-range
+//     still gives such a choice the minimum 0, so it is emptiable (§3.9.6.3
+//     cos-group-emptiable) wherever a rule below reads emptiability: as a
+//     content {particle} occurring exactly once it gets a struct holding it.
+//   - One occurrence of a choice with {particles} matches nothing exactly when
+//     one of its alternatives is emptiable (§3.8.6.6 cos-choice-range,
+//     §3.9.6.3 cos-group-emptiable), and the nil interface is the one value for
+//     that empty match: no branch holds it, an element or a wildcard
+//     alternative with {min occurs} 0 and {max occurs} 1 giving a value field,
+//     never a pointer. A repeated choice's slice holds one item per occurrence
+//     that matches something, so it does not count occurrences that match
+//     nothing.
+//   - A choice is accepted only when no alternative's term is a model group,
+//     inline or through <group ref>, one occurrence of which is emptiable
+//     ([xsd.Schema.ParticleEmptiable]), whatever the alternative's own {min
+//     occurs}: a branch over it would hold the empty match.
 //   - An <element ref> particle to a head that has {abstract} true, or whose
 //     substitution group ([xsd.Schema.SubstitutionGroup], §3.3.6.4 key-eq)
 //     holds a declaration with {abstract} false other than the head, gives a

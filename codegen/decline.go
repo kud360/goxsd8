@@ -76,7 +76,6 @@ const (
 	constructNoPrimitive
 	constructUncoveredPrimitive
 	constructRepeatedEmptiableSequence
-	constructEmptyChoice
 	constructEmptiableGroupAlternative
 	constructComplexTypeAbstract
 	constructVacuousParticle
@@ -91,7 +90,6 @@ var constructs = [...]struct{ name, format string }{
 	constructNoPrimitive:               {"no {primitive type definition}", "%s, with no {primitive type definition}"},
 	constructUncoveredPrimitive:        {"uncovered primitive", "%s, whose {primitive type definition} is %s"},
 	constructRepeatedEmptiableSequence: {"repeated emptiable sequence", "%s holding a sequence model group particle with {max occurs} above 1 whose sequence is emptiable"},
-	constructEmptyChoice:               {"choice with no {particles}", "%s whose choice has no {particles}"},
 	constructEmptiableGroupAlternative: {"emptiable group alternative", "%s whose choice's alternative %d, a %s model group particle, has an emptiable model group"},
 	constructComplexTypeAbstract:       {"complex type {abstract}", "%s with {abstract} true"},
 	constructVacuousParticle:           {"particle with {max occurs} 0", "a particle of %s with {max occurs} 0 in %s"},

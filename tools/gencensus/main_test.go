@@ -23,10 +23,10 @@ const (
 	generates = `<xs:element name="a" type="xs:string"/>`
 	// unassembled references a type the schema does not declare
 	// (src-resolve), so parser.Parse fails.
-	unassembled      = `<xs:element name="a" type="undeclared"/>`
-	emptyChoice      = `<xs:element name="a"><xs:complexType><xs:choice/></xs:complexType></xs:element>`
-	repeatedSequence = `<xs:element name="a"><xs:complexType><xs:sequence maxOccurs="2"><xs:element name="b" minOccurs="0" type="xs:string"/></xs:sequence></xs:complexType></xs:element>`
-	abstractType     = `<xs:complexType name="c" abstract="true"/><xs:element name="a" type="c"/>`
+	unassembled          = `<xs:element name="a" type="undeclared"/>`
+	emptiableAlternative = `<xs:element name="a"><xs:complexType><xs:choice><xs:element name="b" type="xs:string"/><xs:sequence/></xs:choice></xs:complexType></xs:element>`
+	recursion            = `<xs:element name="a"><xs:complexType><xs:sequence><xs:element ref="a"/></xs:sequence></xs:complexType></xs:element>`
+	repeatedSequence     = `<xs:element name="a"><xs:complexType><xs:sequence maxOccurs="2"><xs:element name="b" minOccurs="0" type="xs:string"/></xs:sequence></xs:complexType></xs:element>`
 )
 
 // writeTree writes files, slash paths relative to a fresh directory, and
@@ -47,22 +47,22 @@ func writeTree(t *testing.T, files map[string]string) string {
 }
 
 // censusTree is the fixture tree. In path order its declines are first seen
-// as choice with no {particles} (once), repeated emptiable sequence, then
-// complex type {abstract} (twice each), so the first-seen order, the count order with a
-// first-seen tie-break, and the count order with the String tie-break the tool
-// owes are three different orders. The non-.xsd file and the dot directory are
-// not documents.
+// as emptiable group alternative (once), struct-value recursion, then repeated
+// emptiable sequence (twice each), so the first-seen order, the count order
+// with a first-seen tie-break, and the count order with the String tie-break
+// the tool owes are three different orders. The non-.xsd file and the dot
+// directory are not documents.
 func censusTree(t *testing.T) string {
 	return writeTree(t, map[string]string{
 		"a.xsd":       schemaDoc(generates),
-		"b.xsd":       schemaDoc(emptyChoice),
-		"c.xsd":       schemaDoc(repeatedSequence),
+		"b.xsd":       schemaDoc(emptiableAlternative),
+		"c.xsd":       schemaDoc(recursion),
 		"d.xsd":       schemaDoc(unassembled),
-		"e.xsd":       schemaDoc(abstractType),
-		"f.xsd":       schemaDoc(repeatedSequence),
-		"g.xsd":       schemaDoc(abstractType),
+		"e.xsd":       schemaDoc(repeatedSequence),
+		"f.xsd":       schemaDoc(recursion),
+		"g.xsd":       schemaDoc(repeatedSequence),
 		"notes.txt":   "not a schema",
-		".git/x.xsd":  schemaDoc(abstractType),
+		".git/x.xsd":  schemaDoc(repeatedSequence),
 		"sub/h.xsd":   schemaDoc(generates),
 		"sub/i.xsd":   schemaDoc(`<xs:include schemaLocation="j.xsd"/>`),
 		"sub/j.xsd":   schemaDoc(generates),
@@ -79,16 +79,16 @@ const wantCounts = `gencensus: 10 schema document(s) under %ROOT%
   Generate error other than a decline: 0
 
 === First decline, by construct: 3 construct(s) ===
-       2  complex type {abstract}
        2  repeated emptiable sequence
-       1  choice with no {particles}
+       2  struct-value recursion
+       1  emptiable group alternative
 `
 
 // TestCensusCountsAndRanksDeclines pins every count the report prints and its
 // construct lines' order. Dropping ranked's sort prints the first-seen order
-// (choice with no {particles}, repeated emptiable sequence, complex type
-// {abstract}); dropping its String tie-break prints repeated emptiable
-// sequence ahead of complex type {abstract}. Each fails here.
+// (emptiable group alternative, struct-value recursion, repeated emptiable
+// sequence); dropping its String tie-break prints struct-value recursion
+// ahead of repeated emptiable sequence. Each fails here.
 func TestCensusCountsAndRanksDeclines(t *testing.T) {
 	root := censusTree(t)
 	var out bytes.Buffer
@@ -119,13 +119,13 @@ func TestCensusPathsListsEachConstructsDocuments(t *testing.T) {
 	}
 	want := `
 === Documents, by construct ===
-complex type {abstract} (2):
+repeated emptiable sequence (2):
   e.xsd
   g.xsd
-repeated emptiable sequence (2):
+struct-value recursion (2):
   c.xsd
   f.xsd
-choice with no {particles} (1):
+emptiable group alternative (1):
   b.xsd
 
 === Generate errors other than a decline: 0 ===

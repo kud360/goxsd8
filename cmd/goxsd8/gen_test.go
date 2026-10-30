@@ -396,17 +396,21 @@ type genRow struct{ file, out, body string }
 // TestGenDeclines pins exit 4: each construct outside codegen's slice prints
 // one line on stderr naming the pair, the construct and its absolute location,
 // with no helpPointer under it, in argument order and then document order, and
-// nothing is written. The emptyChoice body is codegen/decline_test.go's empty
-// choice row, and repeatedSequence's its repeated emptiable sequence row.
+// nothing is written. The emptiableAlternative body is codegen/decline_test.go's
+// emptiable group in choice row, and recursion's an element reaching itself
+// through an <element ref> particle occurring exactly once.
 func TestGenDeclines(t *testing.T) {
-	repeatedSequence := func(name string) string {
-		return `<xs:element name="` + name + `"><xs:complexType><xs:sequence minOccurs="0" maxOccurs="unbounded"><xs:element name="a" minOccurs="0" type="xs:string"/></xs:sequence></xs:complexType></xs:element>`
+	recursion := func(name string) string {
+		return `<xs:element name="` + name + `"><xs:complexType><xs:sequence><xs:element ref="` + name + `"/></xs:sequence></xs:complexType></xs:element>`
 	}
 	const (
-		emptyChoice = `<xs:element name="e"><xs:complexType><xs:choice/></xs:complexType></xs:element>`
-		repeated    = " holding a sequence model group particle with {max occurs} above 1 whose sequence is emptiable at "
-		tail        = " is not supported by codegen, a generator limitation, not a schema fault\n"
+		emptiableAlternative = `<xs:element name="e"><xs:complexType><xs:choice><xs:element name="a" type="xs:string"/><xs:sequence><xs:element name="b" minOccurs="0" type="xs:string"/></xs:sequence></xs:choice></xs:complexType></xs:element>`
+		alternative          = "complex type (anonymous) of element e whose choice's alternative 2, a sequence model group particle, has an emptiable model group at "
+		tail                 = " is not supported by codegen, a generator limitation, not a schema fault\n"
 	)
+	reaching := func(name string) string {
+		return "<element ref> particle to element " + name + " reaching element " + name + " again through elements that each occur exactly once at "
+	}
 	rows := []struct {
 		name string
 		// pairs holds each pair's schema file name, -out name and schema
@@ -415,13 +419,13 @@ func TestGenDeclines(t *testing.T) {
 		// want is stderr for the pairs' schema paths and -out paths.
 		want func(schemas, outs []string) string
 	}{
-		{"one decline", []genRow{{"s.xsd", "e", emptyChoice}}, func(s, o []string) string {
-			return "goxsd8: gen: -schema " + s[0] + " -out " + o[0] + ": complex type (anonymous) of element e whose choice has no {particles} at " + s[0] + ":2:22" + tail
+		{"one decline", []genRow{{"s.xsd", "e", emptiableAlternative}}, func(s, o []string) string {
+			return "goxsd8: gen: -schema " + s[0] + " -out " + o[0] + ": " + alternative + s[0] + ":2:22" + tail
 		}},
-		{"two pairs, three declines", []genRow{{"s.xsd", "e", emptyChoice + "\n" + repeatedSequence("f")}, {"t.xsd", "g", repeatedSequence("g")}}, func(s, o []string) string {
-			return "goxsd8: gen: -schema " + s[0] + " -out " + o[0] + ": complex type (anonymous) of element e whose choice has no {particles} at " + s[0] + ":2:22" + tail +
-				"goxsd8: gen: -schema " + s[0] + " -out " + o[0] + ": complex type (anonymous) of element f" + repeated + s[0] + ":3:22" + tail +
-				"goxsd8: gen: -schema " + s[1] + " -out " + o[1] + ": complex type (anonymous) of element g" + repeated + s[1] + ":2:22" + tail
+		{"two pairs, three declines", []genRow{{"s.xsd", "e", emptiableAlternative + "\n" + recursion("f")}, {"t.xsd", "g", recursion("g")}}, func(s, o []string) string {
+			return "goxsd8: gen: -schema " + s[0] + " -out " + o[0] + ": " + alternative + s[0] + ":2:22" + tail +
+				"goxsd8: gen: -schema " + s[0] + " -out " + o[0] + ": " + reaching("f") + s[0] + ":3:1" + tail +
+				"goxsd8: gen: -schema " + s[1] + " -out " + o[1] + ": " + reaching("g") + s[1] + ":2:1" + tail
 		}},
 	}
 	for _, tt := range rows {
@@ -512,7 +516,7 @@ func TestGenRefusalsOutrankEveryPair(t *testing.T) {
 			refusal("dec.xsd", "my-pkg", notIdentifier) + refusal(broken, "type", `the package name "type" is a Go keyword`), broken, []string{"my-pkg", "ok", "type"}},
 	}
 	dec := "<xs:schema xmlns:xs=\"http://www.w3.org/2001/XMLSchema\">\n" +
-		`<xs:element name="e"><xs:complexType><xs:choice/></xs:complexType></xs:element>` +
+		`<xs:element name="e"><xs:complexType><xs:choice><xs:element name="a" type="xs:string"/><xs:sequence/></xs:choice></xs:complexType></xs:element>` +
 		"\n</xs:schema>\n"
 	kept := []byte("package q\n")
 	for _, r := range rows {
