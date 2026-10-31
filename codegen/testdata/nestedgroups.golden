@@ -433,3 +433,14 @@ type FixedCountSequence struct {
 	B []string
 	C *string
 }
+
+// InnerRepeats is generated from element {urn:nestedgroups}innerRepeats declared at testdata/nestedgroups.xsd:204:3.
+type InnerRepeats struct {
+	Sequence []InnerRepeatsSequence
+}
+
+// InnerRepeatsSequence is generated from element {urn:nestedgroups}innerRepeats declared at testdata/nestedgroups.xsd:204:3.
+type InnerRepeatsSequence struct {
+	C string
+	B []string
+}
