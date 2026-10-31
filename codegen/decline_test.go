@@ -212,6 +212,8 @@ func TestGenerateDeclines(t *testing.T) {
 			edge("choice", "22"), constructRepeatingEdge},
 		{"repeating edge in repeated sequence", `<xs:element name="e"><xs:complexType><xs:sequence maxOccurs="unbounded"><xs:element name="b" maxOccurs="unbounded" ` + str + `/></xs:sequence></xs:complexType></xs:element>`,
 			edge("sequence", "22"), constructRepeatingEdge},
+		{"repeating edge in a fixed-count sequence", `<xs:element name="e"><xs:complexType><xs:sequence minOccurs="2" maxOccurs="2"><xs:element name="b" maxOccurs="unbounded" ` + str + `/></xs:sequence></xs:complexType></xs:element>`,
+			edge("sequence", "22"), constructRepeatingEdge},
 		{"repeating edge beside an emptiable particle", `<xs:element name="e"><xs:complexType><xs:sequence maxOccurs="unbounded"><xs:element name="b" maxOccurs="unbounded" ` + str + `/><xs:element name="c" minOccurs="0" ` + str + `/></xs:sequence></xs:complexType></xs:element>`,
 			edge("sequence", "22"), constructRepeatingEdge},
 		{"repeating edge in a sequence alternative", `<xs:element name="e"><xs:complexType><xs:choice maxOccurs="unbounded"><xs:element name="x" ` + str + `/><xs:sequence><xs:element name="a" maxOccurs="2" ` + str + `/></xs:sequence></xs:choice></xs:complexType></xs:element>`,
