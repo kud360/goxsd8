@@ -1499,8 +1499,10 @@ func (e *emitter) contentFields(nested scope, chain []valueNode, o origin, t xsd
 // "choice" or "all", it holds the type for one occurrence of c's group
 // (occurrenceType) by c's occurrence (occursGoType). A sequence c with {max
 // occurs} above 1 or unbounded whose one occurrence is emptiable
-// (termEmptiable) declines before any occurrence type is emitted, as the
-// package doc's "# Coverage" states. Its two callers are contentFields, for a
+// (termEmptiable) declines before any occurrence type is emitted, and then any
+// c with {max occurs} above 1 or unbounded whose group has a repeating edge
+// (repeatingEdge), as the package doc's "# Coverage" states, so a repeated
+// emptiable sequence is met first. Its two callers are contentFields, for a
 // content particle splices does not splice, and field, for a model group
 // particle nested in a struct's or a branch's particles.
 func (e *emitter) groupField(nested scope, site groupSite, ordinal int, o origin, t xsd.ComplexType, c groupParticle) (fieldSpec, error) {
@@ -1511,6 +1513,16 @@ func (e *emitter) groupField(nested scope, site groupSite, ordinal int, o origin
 		}
 		if emptiable {
 			return fieldSpec{}, decline(t.Loc(), constructRepeatedEmptiableSequence, o.subject)
+		}
+	}
+	if upper, bounded := c.occurs.Max(); !bounded || upper > 1 {
+		edge, err := e.repeatingEdge(o.subject, t.Loc(), c.group)
+		if err != nil {
+			return fieldSpec{}, err
+		}
+		if edge {
+			word := c.group.Compositor().String()
+			return fieldSpec{}, decline(t.Loc(), constructRepeatingEdge, o.subject, word, word)
 		}
 	}
 	typ, err := e.occurrenceType(nested, site, ordinal, o, t, c.group)
@@ -1830,6 +1842,69 @@ func (e *emitter) termEmptiable(subject string, loc xsderr.Loc, term xsd.TermOrR
 		return false, fmt.Errorf("%s at %s: %w", subject, loc, err)
 	}
 	return e.schema.ParticleEmptiable(p), nil
+}
+
+// repeatingEdge reports whether group, the term of a model group particle with
+// {max occurs} above 1 or unbounded, holds a particle that repeats (repeats)
+// at both its edges, so that one child sequence can be partitioned into
+// occurrences of that particle more than one way (§3.9.4.3 cvc-accept clause
+// 3): an edge particle of a choice is any alternative, and of a sequence a
+// particle every other particle of which is emptiable
+// ([xsd.Schema.ParticleEmptiable], §3.9.6.3 cos-group-emptiable). It reads
+// {min occurs} as the schema gives it, never as branchParticle raises it. It
+// descends, inline or through <group ref> (modelGroupTerm), into each edge
+// particle whose term is a model group and that does not repeat, never into an
+// element's type, and stops at the first edge particle that repeats; the
+// <group ref> graph is acyclic after finalize, so the walk ends. No all group
+// is reached: cos-all-limited (§3.8.6.2 clauses 1.2 and 1.3) admits a
+// particle whose term is one only as a content particle with {max occurs} 1
+// or as an all group's member, neither of which is group's particle or inside
+// it. subject and loc name the complex type holding group in the error
+// modelGroupTerm returns.
+func (e *emitter) repeatingEdge(subject string, loc xsderr.Loc, group xsd.ModelGroup) (bool, error) {
+	particles := group.Particles()
+	for i, p := range particles {
+		if group.Compositor() != xsd.CompositorChoice && !e.othersEmptiable(particles, i) {
+			continue
+		}
+		if repeats(p.Occurs()) {
+			return true, nil
+		}
+		inner, isGroup, err := e.modelGroupTerm(subject, loc, p.Term())
+		if err != nil {
+			return false, err
+		}
+		if !isGroup {
+			continue
+		}
+		edge, err := e.repeatingEdge(subject, loc, inner)
+		if err != nil {
+			return false, err
+		}
+		if edge {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
+// othersEmptiable reports whether every particle of particles but the one at
+// index i is emptiable ([xsd.Schema.ParticleEmptiable]).
+func (e *emitter) othersEmptiable(particles []xsd.Particle, i int) bool {
+	for j, p := range particles {
+		if j != i && !e.schema.ParticleEmptiable(p) {
+			return false
+		}
+	}
+	return true
+}
+
+// repeats reports whether occurs lets a particle occur a varying number of
+// times above 1: {max occurs} unbounded, or above 1 and other than {min
+// occurs}.
+func repeats(occurs xsd.Occurs) bool {
+	upper, bounded := occurs.Max()
+	return !bounded || upper > 1 && upper != occurs.Min()
 }
 
 // branchParticle returns the particle a choice's branch struct holds for its
