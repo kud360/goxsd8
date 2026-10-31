@@ -352,8 +352,7 @@ to the imports:
 
 ```go
 // Writes package order into gen/order.
-err = codegen.Generate([]codegen.Target{{Schema: schema, Dir: "gen/order", Package: "order"}})
-if err != nil {
+if err := codegen.Generate([]codegen.Target{{Schema: schema, Dir: "gen/order", Package: "order"}}); err != nil {
 	// Every non-nil error is an errors.Join: print each of its elements, a
 	// decline by its Loc and Construct, any other failure as it reads.
 	for _, e := range err.(interface{ Unwrap() []error }).Unwrap() {

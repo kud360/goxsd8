@@ -66,7 +66,7 @@ func TestReadmeFixtures(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Chdir(t.TempDir())
-	readmeCodegen(schema, nil)
+	readmeCodegen(schema)
 	gen, err := os.ReadFile(filepath.Join("gen", "order", "xsd_gen.go"))
 	if err != nil {
 		t.Fatal(err)
@@ -76,13 +76,12 @@ func TestReadmeFixtures(t *testing.T) {
 	}
 }
 
-// readmeCodegen is README's code-generation snippet, which its body is byte
-// for byte once each line loses one leading tab. schema and err stand for the
-// program's variables of those names.
-func readmeCodegen(schema *xsd.Schema, err error) {
+// readmeCodegen is README's code-generation snippet: README shows its body
+// byte for byte, each line less one leading tab. schema stands for the
+// program's variable of that name.
+func readmeCodegen(schema *xsd.Schema) {
 	// Writes package order into gen/order.
-	err = codegen.Generate([]codegen.Target{{Schema: schema, Dir: "gen/order", Package: "order"}})
-	if err != nil {
+	if err := codegen.Generate([]codegen.Target{{Schema: schema, Dir: "gen/order", Package: "order"}}); err != nil {
 		// Every non-nil error is an errors.Join: print each of its elements, a
 		// decline by its Loc and Construct, any other failure as it reads.
 		for _, e := range err.(interface{ Unwrap() []error }).Unwrap() {
