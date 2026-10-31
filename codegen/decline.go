@@ -79,6 +79,7 @@ const (
 	constructRepeatingEdge
 	constructEmptiableGroupAlternative
 	constructVacuousParticle
+	constructAbstractLocal
 	constructValueCycle
 )
 
@@ -93,6 +94,7 @@ var constructs = [...]struct{ name, format string }{
 	constructRepeatingEdge:             {"repeated group with a repeating edge", "%s holding a %s model group particle with {max occurs} above 1 whose %s can begin and end with one particle that repeats"},
 	constructEmptiableGroupAlternative: {"emptiable group alternative", "%s whose choice's alternative %d, a %s model group particle, has an emptiable model group"},
 	constructVacuousParticle:           {"particle with {max occurs} 0", "a particle of %s with {max occurs} 0 in %s"},
+	constructAbstractLocal:             {"local element declaration with {abstract} true", "%s with {abstract} true in %s"},
 	constructValueCycle:                {"struct-value recursion", "%s reaching %s again through elements that each occur exactly once"},
 }
 
