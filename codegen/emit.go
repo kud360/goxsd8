@@ -2756,17 +2756,16 @@ func reacher(decl xsd.ElementDeclaration) string {
 // reaches itself only through slices. A wildcard particle (wildcardTerm) is a leaf, passed before elementTerm:
 // its field holds AnyElement, which reaches AnyType, which reaches itself only through the slice Children. So is
 // an <element ref> particle to a head substitutionSum answers a sum for, passed after elementTerm: its field
-// holds the group's sealed interface (substitutionType). So is an element particle whose declaration
-// governingTypes answers a sum for, passed after that: its field holds the governing types' sealed interface
-// (tableType); a declaration with one governing type steps to that type, which declaredType returns. So is an element
-// particle whose declaration is nillable (nillable), passed with it: its field holds the sealed interface
-// Nillable (nillableType). So is one whose declaration abstractLocal answers true for, passed with it: field
-// declines it, so no field holds its type. It reads the schema, never e.emitted, e.elements or e.substitutions, so a type the
-// emitting walk shares, and the type of a declaration an <element ref> particle names, is walked again here
-// unless e.acyclic holds its step's first node; that node joins e.acyclic once the walk of t's particles reaches
-// the end, and a step that pushes none, a local decl of an anonymous t that a complex type declares, is never
-// memoized. It returns only a struct-value recursion: every other failure on its path ends that path, since the
-// emitting walk meets it.
+// holds the group's sealed interface (substitutionType). So is an element particle whose declaration governingTypes answers a
+// sum for, passed after that: its field holds the governing types' sealed interface (tableType); a declaration with one
+// governing type steps to that type, which declaredType returns. So is an element particle whose declaration is nillable
+// (nillable), passed with it: its field holds the sealed interface Nillable (nillableType). So is one whose declaration
+// abstractLocal answers true for, passed with it: field declines it, so no field holds its type. It reads the schema, never
+// e.emitted, e.elements or e.substitutions, so a type the emitting walk shares, and the type of a declaration an <element
+// ref> particle names, is walked again here unless e.acyclic holds its step's first node; that node joins e.acyclic once the
+// walk of t's particles reaches the end, and a step that pushes none, a local decl of an anonymous t that a complex type
+// declares, is never memoized. It returns only a struct-value recursion: every other failure on its path ends that path,
+// since the emitting walk meets it.
 func (e *emitter) valueCycle(chain []valueNode, decl xsd.ElementDeclaration, nested scope, t xsd.ComplexType) error {
 	subject := e.localOrigin(decl, nested, t).subject
 	if decl.ScopeVariety() == xsd.ScopeGlobal {

@@ -98,10 +98,10 @@
 // with. An uncovered primitive is a primitive other than the nineteen Datatypes
 // defines (Datatypes §3.3) and precisionDecimal: an ·implementation-defined·
 // one (Datatypes dt-primitive), which xsd.NewPrimitiveType mints and no schema
-// document yields. Nor does any yield a local element declaration with
-// {abstract} true, since xs:localElement prohibits abstract (Structures
-// §3.3.2.3), though xsd.NewElementDeclaration builds one; no element is valid
-// against it (Structures §3.3.4.3 cvc-elt clause 2).
+// document yields. Nor does any schema document yield a local element
+// declaration with {abstract} true, since xs:localElement prohibits abstract
+// (Structures §3.3.2.3), though xsd.NewElementDeclaration builds one; no
+// element is valid against it (Structures §3.3.4.3 cvc-elt clause 2).
 //
 // GAP(codegen): Generate declines each construct the list above names; #2900 is
 // the GitHub issue tracking these lifts.
