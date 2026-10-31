@@ -2,7 +2,12 @@
 
 package flatedge
 
-// Root is generated from element root declared at testdata/flatedge.xsd:39:3.
+import "math/big"
+
+// M1 is generated from element m1 declared at testdata/flatedge.xsd:44:3.
+type M1 string
+
+// Root is generated from element root declared at testdata/flatedge.xsd:45:3.
 type Root struct {
 	B      string
 	Choice []CtChoice
@@ -27,19 +32,64 @@ type CtChoiceC struct {
 
 func (CtChoiceC) isCtChoice() {}
 
-// CtChoiceE is generated from element e declared at testdata/flatedge.xsd:15:11.
+// CtChoiceHead is generated from element head declared at testdata/flatedge.xsd:43:3.
+type CtChoiceHead struct {
+	Head HeadSubstitutionGroup
+}
+
+func (CtChoiceHead) isCtChoice() {}
+
+// HeadSubstitutionGroup is generated from the substitution group of element head declared at testdata/flatedge.xsd:43:3.
+type HeadSubstitutionGroup interface {
+	isHeadSubstitutionGroup()
+}
+
+// HeadSubstitutionGroupM1 is generated from element m1 declared at testdata/flatedge.xsd:44:3.
+type HeadSubstitutionGroupM1 struct {
+	M1 M1
+}
+
+func (HeadSubstitutionGroupM1) isHeadSubstitutionGroup() {}
+
+// CtChoiceT is generated from element t declared at testdata/flatedge.xsd:15:9.
+type CtChoiceT struct {
+	T CtT
+}
+
+func (CtChoiceT) isCtChoice() {}
+
+// CtT is generated from the {type table} of element t declared at testdata/flatedge.xsd:15:9.
+type CtT interface {
+	isCtT()
+}
+
+// CtTInteger is generated from {type table} alternative 1 of element t declared at testdata/flatedge.xsd:15:9.
+type CtTInteger struct {
+	Integer big.Int
+}
+
+func (CtTInteger) isCtT() {}
+
+// CtTDecimal is generated from {default type definition} of element t declared at testdata/flatedge.xsd:15:9.
+type CtTDecimal struct {
+	Decimal big.Rat
+}
+
+func (CtTDecimal) isCtT() {}
+
+// CtChoiceE is generated from element e declared at testdata/flatedge.xsd:19:11.
 type CtChoiceE struct {
 	E CtE
 }
 
 func (CtChoiceE) isCtChoice() {}
 
-// CtE is generated from element e declared at testdata/flatedge.xsd:15:11.
+// CtE is generated from element e declared at testdata/flatedge.xsd:19:11.
 type CtE struct {
 	F string
 }
 
-// CtChoiceD is generated from element d declared at testdata/flatedge.xsd:23:13.
+// CtChoiceD is generated from element d declared at testdata/flatedge.xsd:27:13.
 type CtChoiceD struct {
 	D string
 }
@@ -53,14 +103,14 @@ type CtChoiceAny struct {
 
 func (CtChoiceAny) isCtChoice() {}
 
-// Extended is generated from element extended declared at testdata/flatedge.xsd:40:3.
+// Extended is generated from element extended declared at testdata/flatedge.xsd:46:3.
 type Extended struct {
 	B      string
 	Choice []ExtChoice
 	Z      string
 }
 
-// ExtChoice is generated from complex type ext declared at testdata/flatedge.xsd:30:3.
+// ExtChoice is generated from complex type ext declared at testdata/flatedge.xsd:34:3.
 type ExtChoice interface {
 	isExtChoice()
 }
@@ -79,28 +129,42 @@ type ExtChoiceC struct {
 
 func (ExtChoiceC) isExtChoice() {}
 
-// ExtChoiceE is generated from element e declared at testdata/flatedge.xsd:15:11.
+// ExtChoiceHead is generated from element head declared at testdata/flatedge.xsd:43:3.
+type ExtChoiceHead struct {
+	Head HeadSubstitutionGroup
+}
+
+func (ExtChoiceHead) isExtChoice() {}
+
+// ExtChoiceT is generated from element t declared at testdata/flatedge.xsd:15:9.
+type ExtChoiceT struct {
+	T CtT
+}
+
+func (ExtChoiceT) isExtChoice() {}
+
+// ExtChoiceE is generated from element e declared at testdata/flatedge.xsd:19:11.
 type ExtChoiceE struct {
 	E CtE
 }
 
 func (ExtChoiceE) isExtChoice() {}
 
-// ExtChoiceD is generated from element d declared at testdata/flatedge.xsd:23:13.
+// ExtChoiceD is generated from element d declared at testdata/flatedge.xsd:27:13.
 type ExtChoiceD struct {
 	D string
 }
 
 func (ExtChoiceD) isExtChoice() {}
 
-// ExtChoiceAny is generated from complex type ext declared at testdata/flatedge.xsd:30:3.
+// ExtChoiceAny is generated from complex type ext declared at testdata/flatedge.xsd:34:3.
 type ExtChoiceAny struct {
 	Any AnyElement
 }
 
 func (ExtChoiceAny) isExtChoice() {}
 
-// Holder is generated from element holder declared at testdata/flatedge.xsd:41:3.
+// Holder is generated from element holder declared at testdata/flatedge.xsd:47:3.
 type Holder struct {
 	First  Ct
 	Second *Ct

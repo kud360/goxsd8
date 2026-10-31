@@ -11,6 +11,10 @@
       <xs:choice maxOccurs="unbounded">
         <xs:group ref="g"/>
         <xs:element name="c" type="xs:int" maxOccurs="unbounded"/>
+        <xs:element ref="head"/>
+        <xs:element name="t" type="xs:decimal">
+          <xs:alternative test="@k" type="xs:integer"/>
+        </xs:element>
         <xs:sequence>
           <xs:element name="e">
             <xs:complexType>
@@ -36,6 +40,8 @@
       </xs:extension>
     </xs:complexContent>
   </xs:complexType>
+  <xs:element name="head" abstract="true" type="xs:string"/>
+  <xs:element name="m1" substitutionGroup="head" type="xs:string"/>
   <xs:element name="root" type="ct"/>
   <xs:element name="extended" type="ext"/>
   <xs:element name="holder">
