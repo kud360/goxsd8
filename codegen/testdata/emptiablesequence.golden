@@ -45,3 +45,16 @@ type NestedChoiceQ struct {
 }
 
 func (NestedChoiceQ) isNestedChoice() {}
+
+// OptNested is generated from element {urn:emptiablesequence}optNested declared at testdata/emptiablesequence.xsd:49:3.
+type OptNested struct {
+	H        string
+	Sequence *OptNestedSequence
+	C        *string
+}
+
+// OptNestedSequence is generated from element {urn:emptiablesequence}optNested declared at testdata/emptiablesequence.xsd:49:3.
+type OptNestedSequence struct {
+	A string
+	B string
+}

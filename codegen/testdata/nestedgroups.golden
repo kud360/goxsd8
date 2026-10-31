@@ -411,3 +411,25 @@ type RefBChoiceZ2 struct {
 }
 
 func (RefBChoiceZ2) isRefBChoice() {}
+
+// LeadRepeats is generated from element {urn:nestedgroups}leadRepeats declared at testdata/nestedgroups.xsd:188:3.
+type LeadRepeats struct {
+	Sequence []LeadRepeatsSequence
+}
+
+// LeadRepeatsSequence is generated from element {urn:nestedgroups}leadRepeats declared at testdata/nestedgroups.xsd:188:3.
+type LeadRepeatsSequence struct {
+	A []string
+	B string
+}
+
+// FixedCount is generated from element {urn:nestedgroups}fixedCount declared at testdata/nestedgroups.xsd:196:3.
+type FixedCount struct {
+	Sequence []FixedCountSequence
+}
+
+// FixedCountSequence is generated from element {urn:nestedgroups}fixedCount declared at testdata/nestedgroups.xsd:196:3.
+type FixedCountSequence struct {
+	B []string
+	C *string
+}

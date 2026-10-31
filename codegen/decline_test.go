@@ -162,6 +162,11 @@ func TestGenerateDeclines(t *testing.T) {
 		alt2         = " whose choice's alternative 2, a sequence model group particle, has an emptiable model group"
 		vacuousIn    = "a particle of a sequence model group with {max occurs} 0 in complex type vacuous"
 	)
+	// edge is the detail of a repeating edge's decline in e's anonymous
+	// complex type of compositor word, at column col of line 2.
+	edge := func(word, col string) string {
+		return "complex type (anonymous) of element e holding a " + word + " model group particle with {max occurs} above 1 whose " + word + " can begin and end with one particle that repeats at s.xsd:2:" + col + " "
+	}
 	tests := []struct {
 		name, body, detail string
 		kind               construct
@@ -195,6 +200,36 @@ func TestGenerateDeclines(t *testing.T) {
 			"complex type (anonymous) of element e holding a sequence model group particle with {max occurs} above 1 whose sequence is emptiable at s.xsd:2:22 ", constructRepeatedEmptiableSequence},
 		{"repeated emptiable sequence group ref", `<xs:group name="g"><xs:sequence><xs:element name="b" minOccurs="0" ` + str + `/></xs:sequence></xs:group><xs:element name="e"><xs:complexType><xs:group ref="g" maxOccurs="unbounded"/></xs:complexType></xs:element>`,
 			"complex type (anonymous) of element e holding a sequence model group particle with {max occurs} above 1 whose sequence is emptiable at s.xsd:2:", constructRepeatedEmptiableSequence},
+		// A model group particle repeating past 1 whose group can begin and
+		// end with one repeating particle declines, any compositor, the
+		// particle at any depth through model group particles that do not
+		// repeat, inline or through a <group ref>; an alternative's {min
+		// occurs} 0 is read as given, and the check is met ahead of an
+		// emptiable group alternative.
+		{"repeating edge in repeated choice", `<xs:element name="e"><xs:complexType><xs:choice maxOccurs="unbounded"><xs:element name="a" ` + str + `/><xs:element name="b" maxOccurs="unbounded" ` + str + `/></xs:choice></xs:complexType></xs:element>`,
+			edge("choice", "22"), constructRepeatingEdge},
+		{"repeating edge in repeated sequence", `<xs:element name="e"><xs:complexType><xs:sequence maxOccurs="unbounded"><xs:element name="b" maxOccurs="unbounded" ` + str + `/></xs:sequence></xs:complexType></xs:element>`,
+			edge("sequence", "22"), constructRepeatingEdge},
+		{"repeating edge beside an emptiable particle", `<xs:element name="e"><xs:complexType><xs:sequence maxOccurs="unbounded"><xs:element name="b" maxOccurs="unbounded" ` + str + `/><xs:element name="c" minOccurs="0" ` + str + `/></xs:sequence></xs:complexType></xs:element>`,
+			edge("sequence", "22"), constructRepeatingEdge},
+		{"repeating edge in a sequence alternative", `<xs:element name="e"><xs:complexType><xs:choice maxOccurs="unbounded"><xs:element name="x" ` + str + `/><xs:sequence><xs:element name="a" maxOccurs="2" ` + str + `/></xs:sequence></xs:choice></xs:complexType></xs:element>`,
+			edge("choice", "22"), constructRepeatingEdge},
+		{"repeating edge through group ref", `<xs:group name="g"><xs:sequence><xs:element name="b" maxOccurs="unbounded" ` + str + `/></xs:sequence></xs:group><xs:element name="e"><xs:complexType><xs:sequence><xs:element name="h" ` + str + `/><xs:sequence maxOccurs="unbounded"><xs:group ref="g"/></xs:sequence></xs:sequence></xs:complexType></xs:element>`,
+			edge("sequence", "140"), constructRepeatingEdge},
+		{"repeating sequence edge", `<xs:element name="e"><xs:complexType><xs:sequence maxOccurs="unbounded"><xs:sequence maxOccurs="unbounded"><xs:element name="x" ` + str + `/><xs:element name="y" ` + str + `/></xs:sequence></xs:sequence></xs:complexType></xs:element>`,
+			edge("sequence", "22"), constructRepeatingEdge},
+		{"repeating choice edge", `<xs:element name="e"><xs:complexType><xs:choice maxOccurs="unbounded"><xs:element name="a" ` + str + `/><xs:choice maxOccurs="2"><xs:element name="c" ` + str + `/><xs:element name="d" ` + str + `/></xs:choice></xs:choice></xs:complexType></xs:element>`,
+			edge("choice", "22"), constructRepeatingEdge},
+		{"repeating wildcard edge", `<xs:element name="e"><xs:complexType><xs:choice maxOccurs="unbounded"><xs:element name="b" ` + str + `/><xs:any namespace="##other" maxOccurs="2"/></xs:choice></xs:complexType></xs:element>`,
+			edge("choice", "22"), constructRepeatingEdge},
+		{"repeating optional alternative", `<xs:element name="e"><xs:complexType><xs:choice maxOccurs="unbounded"><xs:element name="a" ` + str + `/><xs:element name="b" minOccurs="0" maxOccurs="unbounded" ` + str + `/></xs:choice></xs:complexType></xs:element>`,
+			edge("choice", "22"), constructRepeatingEdge},
+		{"repeating edge before emptiable group alternative", `<xs:element name="e"><xs:complexType><xs:choice maxOccurs="unbounded"><xs:element name="a" ` + str + `/><xs:sequence><xs:element name="b" minOccurs="0" maxOccurs="unbounded" ` + str + `/></xs:sequence></xs:choice></xs:complexType></xs:element>`,
+			edge("choice", "22"), constructRepeatingEdge},
+		// An edge particle occurring at most once leaves the emptiable
+		// alternative to its own decline.
+		{"emptiable group alternative in repeated choice", `<xs:element name="e"><xs:complexType><xs:choice maxOccurs="unbounded"><xs:element name="a" ` + str + `/><xs:sequence><xs:element name="b" minOccurs="0" ` + str + `/></xs:sequence></xs:choice></xs:complexType></xs:element>`,
+			"complex type (anonymous) of element e whose choice's alternative 2, a sequence model group particle, has an emptiable model group", constructEmptiableGroupAlternative},
 		// A <group ref> content particle is checked as its referenced group
 		// would be inline: an emptiable group alternative declines whatever the
 		// ref's occurs.
