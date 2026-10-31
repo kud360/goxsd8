@@ -58,8 +58,8 @@
 //
 // Supported, each construct emitted from or accepted as the rules below state:
 //
-//   - element declarations, top-level and local, nillable or not, with or
-//     without a {type table}
+//   - element declarations, top-level, and local with {abstract} false,
+//     nillable or not, with or without a {type table}
 //   - <element ref> particles and substitution groups
 //   - the special types xs:anySimpleType and xs:anyAtomicType
 //   - atomic simple types, of every primitive Datatypes defines and of
@@ -91,13 +91,18 @@
 //   - repeated group with a repeating edge
 //   - emptiable group alternative
 //   - particle with {max occurs} 0
+//   - local element declaration with {abstract} true
 //   - struct-value recursion
 //
 // A list or union declines with the Construct its item type or member declines
 // with. An uncovered primitive is a primitive other than the nineteen Datatypes
 // defines (Datatypes §3.3) and precisionDecimal: an ·implementation-defined·
 // one (Datatypes dt-primitive), which xsd.NewPrimitiveType mints and no schema
-// document yields.
+// document yields. Nor does any schema document yield a local element
+// declaration with {abstract} true, since xs:localElement prohibits abstract
+// (Structures Appendix A, the schema for schemas), though
+// xsd.NewElementDeclaration builds one; no element is valid against it
+// (Structures §3.3.4.3 cvc-elt clause 2).
 //
 // GAP(codegen): Generate declines each construct the list above names; #2900 is
 // the GitHub issue tracking these lifts.

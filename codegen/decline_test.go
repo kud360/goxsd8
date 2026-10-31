@@ -679,6 +679,189 @@ func vacuousSchema(t *testing.T, ctName xsd.QName, term xsd.Term, innerOccurs, o
 	return schema
 }
 
+// TestGenerateDeclinesAbstractLocal pins the decline of a local element
+// declaration with {abstract} true, charged to that declaration's Loc, which no
+// schema document yields (xs:localElement prohibits abstract, Structures
+// Appendix A, the schema for schemas), so the schema is built through the
+// constructors: declared by the complex type c holding its particle, and by a
+// model group definition g a <group ref> particle in c names. The "cycle" row
+// is a named complex type t whose sequence holds one such declaration a of type
+// t: an <element ref> particle to r, of type t, in the earlier element x's type
+// has valueCycle walk t before r's own turn, and the decline at a, from that
+// turn, is the only one.
+func TestGenerateDeclinesAbstractLocal(t *testing.T) {
+	aLoc := xsderr.Loc{URI: "s.xsd", Line: 3, Col: 5}
+	tests := []struct {
+		name   string
+		schema *xsd.Schema
+		want   []string
+	}{
+		{"complex type", abstractLocalSchema(t, aLoc, false),
+			[]string{"codegen: target 0: local element a with {abstract} true in complex type c of element e at s.xsd:3:5 is not supported by codegen"}},
+		{"model group", abstractLocalSchema(t, aLoc, true),
+			[]string{"codegen: target 0: local element a with {abstract} true in complex type c of element e at s.xsd:3:5 is not supported by codegen"}},
+		{"cycle", abstractCycleSchema(t, aLoc),
+			[]string{"codegen: target 0: local element a with {abstract} true in complex type t of element r at s.xsd:3:5 is not supported by codegen"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			out := filepath.Join(t.TempDir(), "out")
+			errs := elements(t, Generate([]Target{{Schema: tt.schema, Dir: out, Package: "p"}}))
+			got := make([]string, len(errs))
+			for i, err := range errs {
+				got[i] = err.Error()
+				var de *DeclineError
+				if !errors.As(err, &de) || de.Construct() != (Construct{constructAbstractLocal}) || de.Loc() != aLoc {
+					t.Errorf("element %d = %v, want a *DeclineError of Construct %v at %v", i, err, Construct{constructAbstractLocal}, aLoc)
+				}
+			}
+			if len(got) != len(tt.want) {
+				t.Fatalf("Generate's elements =\n%q\nwant %d opening\n%q", got, len(tt.want), tt.want)
+			}
+			for i, want := range tt.want {
+				if !strings.HasPrefix(got[i], want) {
+					t.Errorf("element %d = %q, want it to open %q", i, got[i], want)
+				}
+			}
+			if _, err := os.Stat(out); !errors.Is(err, os.ErrNotExist) {
+				t.Errorf("Dir %s exists after a decline (stat: %v)", out, err)
+			}
+		})
+	}
+}
+
+// abstractLocalSchema builds a schema TestGenerateDeclinesAbstractLocal
+// generates from: a top-level element e of the complex type c, whose content is
+// a sequence holding a local element a of xs:string with {abstract} true, at
+// loc; when inGroup, the model group definition g declares a and c's sequence
+// holds a <group ref> particle to g.
+func abstractLocalSchema(t *testing.T, loc xsderr.Loc, inGroup bool) *xsd.Schema {
+	t.Helper()
+	ctName, gName := xsd.QName{Local: "c"}, xsd.QName{Local: "g"}
+	var parent xsd.ElementScopeParent = xsd.ComplexTypeScopeParent{Name: ctName}
+	if inGroup {
+		parent = xsd.ModelGroupScopeParent{Name: gName}
+	}
+	a := abstractLocalDecl(t, loc, parent, stringPrimitive)
+	b := seededBuilder(t)
+	var term xsd.TermOrRef = xsd.ResolvedTerm{Term: sequenceOf(t, xsd.ResolvedTerm{Term: a})}
+	if inGroup {
+		g, err := xsd.NewModelGroupDefinition(xsderr.Loc{}, gName, sequenceOf(t, xsd.ResolvedTerm{Term: a}))
+		if err != nil {
+			t.Fatal(err)
+		}
+		b.AddModelGroup(g)
+		term = xsd.ResolvedTerm{Term: sequenceOf(t, xsd.ModelGroupRef{Name: gName})}
+	}
+	b.AddType(complexOf(t, ctName, term))
+	b.AddElement(globalDecl(t, "e", ctName))
+	schema, err := b.Finalize()
+	if err != nil {
+		t.Fatalf("Finalize: %v", err)
+	}
+	return schema
+}
+
+// abstractCycleSchema builds the "cycle" row's schema: the complex type t,
+// whose sequence holds a local element a of type t with {abstract} true, at
+// loc; the complex type u, whose sequence holds an <element ref> particle to
+// r; and the top-level elements x of type u and r of type t, in that order.
+func abstractCycleSchema(t *testing.T, loc xsderr.Loc) *xsd.Schema {
+	t.Helper()
+	tName, uName := xsd.QName{Local: "t"}, xsd.QName{Local: "u"}
+	a := abstractLocalDecl(t, loc, xsd.ComplexTypeScopeParent{Name: tName}, tName)
+	b := seededBuilder(t)
+	b.AddType(complexOf(t, tName, xsd.ResolvedTerm{Term: sequenceOf(t, xsd.ResolvedTerm{Term: a})}))
+	b.AddType(complexOf(t, uName, xsd.ResolvedTerm{Term: sequenceOf(t, xsd.ElementDeclarationRef{Name: xsd.QName{Local: "r"}})}))
+	b.AddElement(globalDecl(t, "x", uName))
+	b.AddElement(globalDecl(t, "r", tName))
+	schema, err := b.Finalize()
+	if err != nil {
+		t.Fatalf("Finalize: %v", err)
+	}
+	return schema
+}
+
+// abstractLocalDecl builds a local element declaration a, at loc, of the type
+// named typ, with {abstract} true and {scope}.{parent} parent.
+func abstractLocalDecl(t *testing.T, loc xsderr.Loc, parent xsd.ElementScopeParent, typ xsd.QName) xsd.ElementDeclaration {
+	t.Helper()
+	scope, err := xsd.NewLocalScope(xsderr.Loc{}, parent)
+	if err != nil {
+		t.Fatal(err)
+	}
+	a, err := xsd.NewElementDeclaration(loc, xsd.QName{Local: "a"},
+		xsd.TypeDefinitionRef{Name: typ}, nil, scope, nil, false, nil, nil, nil, true, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return a
+}
+
+// globalDecl builds a top-level element declaration named local of the type
+// named typ.
+func globalDecl(t *testing.T, local string, typ xsd.QName) xsd.ElementDeclaration {
+	t.Helper()
+	e, err := xsd.NewElementDeclaration(xsderr.Loc{}, xsd.QName{Local: local},
+		xsd.TypeDefinitionRef{Name: typ}, nil, xsd.NewGlobalScope(), nil, false, nil, nil, nil, false, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return e
+}
+
+// sequenceOf builds a sequence model group of one particle of term, occurring
+// exactly once.
+func sequenceOf(t *testing.T, term xsd.TermOrRef) xsd.ModelGroup {
+	t.Helper()
+	p, err := xsd.NewParticle(xsderr.Loc{}, exactlyOnce, term)
+	if err != nil {
+		t.Fatal(err)
+	}
+	g, err := xsd.NewModelGroup(xsderr.Loc{}, xsd.CompositorSequence, []xsd.Particle{p})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return g
+}
+
+// complexOf builds the complex type name, restricting xs:anyType, whose
+// element-only content particle, occurring exactly once, has term.
+func complexOf(t *testing.T, name xsd.QName, term xsd.TermOrRef) xsd.ComplexType {
+	t.Helper()
+	p, err := xsd.NewParticle(xsderr.Loc{}, exactlyOnce, term)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ct, err := xsd.NewComplexType(xsderr.Loc{}, name, anyTypeName, nil, xsd.DerivationRestriction, false,
+		nil, nil, nil, xsd.ElementContent{Particle: p}, nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return ct
+}
+
+// seededBuilder returns a SchemaBuilder holding the builtins and an xs:anyType
+// stand-in, which the types it is given resolve against.
+func seededBuilder(t *testing.T) *xsd.SchemaBuilder {
+	t.Helper()
+	anyType, err := xsd.NewComplexType(xsderr.Loc{}, anyTypeName, anyTypeName, nil, xsd.DerivationRestriction, false,
+		nil, nil, nil, xsd.EmptyContent{}, nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	seeded, err := builtin.Seed(strict.New())
+	if err != nil {
+		t.Fatal(err)
+	}
+	b := xsd.NewSchemaBuilder()
+	for _, st := range seeded {
+		b.AddType(st)
+	}
+	b.AddType(anyType)
+	return b
+}
+
 // TestGenerateEmptyUnion pins that a union with no {member type definitions},
 // which §3.16.1 admits and xsd.NewSimpleType accepts though no schema document
 // yields one (src-union-memberTypes-or-simpleTypes), generates its interface
