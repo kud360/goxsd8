@@ -66,8 +66,8 @@ func (c Construct) String() string {
 
 // construct is the closed set of constructs the generator declines, one per
 // declining site but constructVacuousParticle, which field's wildcard, model
-// group and element paths and contentGroup each decline. The zero value is
-// invalid (STYLE T1).
+// group and element paths, contentGroup, reach and vacuousBasic each
+// decline. The zero value is invalid (STYLE T1).
 type construct uint8
 
 // The construct values, in the order of their declining sites in emit.go.
@@ -75,9 +75,6 @@ const (
 	constructAbsentVariety construct = iota + 1
 	constructNoPrimitive
 	constructUncoveredPrimitive
-	constructRepeatedEmptiableSequence
-	constructRepeatingEdge
-	constructEmptiableGroupAlternative
 	constructVacuousParticle
 	constructAbstractLocal
 	constructValueCycle
@@ -87,15 +84,12 @@ const (
 // Construct.String returns, and the format its decline's detail is rendered
 // from. Index 0, the invalid construct, holds neither.
 var constructs = [...]struct{ name, format string }{
-	constructAbsentVariety:             {"absent {variety}", "%s, of absent {variety}"},
-	constructNoPrimitive:               {"no {primitive type definition}", "%s, with no {primitive type definition}"},
-	constructUncoveredPrimitive:        {"uncovered primitive", "%s, whose {primitive type definition} is %s"},
-	constructRepeatedEmptiableSequence: {"repeated emptiable sequence", "%s holding a sequence model group particle with {max occurs} above 1 whose sequence is emptiable"},
-	constructRepeatingEdge:             {"repeated group with a repeating edge", "%s holding a %s model group particle with {max occurs} above 1 whose %s can begin and end with one particle that repeats"},
-	constructEmptiableGroupAlternative: {"emptiable group alternative", "%s whose choice's alternative %d, a %s model group particle, has an emptiable model group"},
-	constructVacuousParticle:           {"particle with {max occurs} 0", "a particle of %s with {max occurs} 0 in %s"},
-	constructAbstractLocal:             {"local element declaration with {abstract} true", "%s with {abstract} true in %s"},
-	constructValueCycle:                {"struct-value recursion", "%s reaching %s again through elements that each occur exactly once"},
+	constructAbsentVariety:      {"absent {variety}", "%s, of absent {variety}"},
+	constructNoPrimitive:        {"no {primitive type definition}", "%s, with no {primitive type definition}"},
+	constructUncoveredPrimitive: {"uncovered primitive", "%s, whose {primitive type definition} is %s"},
+	constructVacuousParticle:    {"particle with {max occurs} 0", "a particle of %s with {max occurs} 0 in %s"},
+	constructAbstractLocal:      {"local element declaration with {abstract} true", "%s with {abstract} true in %s"},
+	constructValueCycle:         {"struct-value recursion", "%s reaching %s again through elements that each occur exactly once"},
 }
 
 // decline returns the *DeclineError for construct c, which the generator does
@@ -103,9 +97,6 @@ var constructs = [...]struct{ name, format string }{
 // violated, so it carries no xsderr rule (STYLE E2). Its text already says the
 // construct is unsupported, so DeclineError.Error prints none of
 // errors.ErrUnsupported's text.
-//
-// GAP(codegen): the constructs the package doc's "# Coverage" section names
-// under the same marker decline here; #2900 owns lifting them.
 func decline(loc xsderr.Loc, c construct, args ...any) error {
 	return &DeclineError{construct: c, loc: loc, detail: fmt.Sprintf(constructs[c].format, args...)}
 }

@@ -88,33 +88,30 @@
 //   - sequences, choices with or without {particles}, and all groups, inline or
 //     through <group ref>
 //   - optional and repeated particles
+//   - a repeated model group with a repeating edge, a repeated emptiable
+//     sequence, and a choice with an emptiable model group alternative, each
+//     as a flattened field
 //   - wildcard particles
 //   - attribute uses and attribute wildcards, beside any content above
 //   - facets, {assertions}, value constraints and identity constraints
 //
 // Declined today, each construct named as [Construct.String] prints it for a
-// [DeclineError]'s [DeclineError.Construct], for display only: the names may
-// change in any release, so code compares the Constructs of two DeclineErrors,
-// never a name.
+// [DeclineError]'s [DeclineError.Construct], whose doc states how code tells
+// constructs apart, and each a permanent decline: uncovered primitive, local
+// element declaration with {abstract} true and struct-value recursion, for the
+// reasons this section states; particle with {max occurs} 0, since an element,
+// group reference, model group or wildcard with minOccurs=maxOccurs=0 maps to
+// no component at all (Structures §3.3.2, §3.7.2, §3.8.2, §3.10.2); and absent
+// {variety} and no {primitive type definition}, each on a simple type other
+// than the special types, since Datatypes §4.1.1 gives every other simple type
+// a {variety} and every other atomic one a {primitive type definition}.
 //
 //   - absent {variety}
 //   - no {primitive type definition}
 //   - uncovered primitive
-//   - repeated emptiable sequence
-//   - repeated group with a repeating edge
-//   - emptiable group alternative
 //   - particle with {max occurs} 0
 //   - local element declaration with {abstract} true
 //   - struct-value recursion
-//
-// Six of them are permanent declines: uncovered primitive, local element
-// declaration with {abstract} true and struct-value recursion, for the reasons
-// this section states; particle with {max occurs} 0, since an element, group
-// reference, model group or wildcard with minOccurs=maxOccurs=0 maps to no
-// component at all (Structures §3.3.2, §3.7.2, §3.8.2, §3.10.2); and absent
-// {variety} and no {primitive type definition}, each on a simple type other
-// than the special types, since Datatypes §4.1.1 gives every other simple type
-// a {variety} and every other atomic one a {primitive type definition}.
 //
 // A list or union declines with the Construct its item type or member declines
 // with. An uncovered primitive is a primitive other than the nineteen Datatypes
@@ -125,11 +122,6 @@
 // (Structures Appendix A, the schema for schemas), though
 // xsd.NewElementDeclaration builds one; no element is valid against it
 // (Structures §3.3.4.3 cvc-elt clause 2).
-//
-// GAP(codegen): Generate declines repeated emptiable sequence, repeated group
-// with a repeating edge and emptiable group alternative, the listed constructs
-// that are not permanent declines; #2900 is the GitHub issue tracking their
-// lift.
 //
 // Generate emits, in document order:
 //
@@ -149,6 +141,9 @@
 //     wildcard} or {open content}
 //   - one branch struct per alternative of each choice it emits as a sealed
 //     interface
+//   - one branch struct per basic particle a flattened model group particle
+//     reaches, after the sealed interface the two items above give that
+//     particle's place in place of its occurrence type
 //   - one sealed interface per head an <element ref> particle names that has
 //     {abstract} true or whose substitution group holds another declaration
 //     with {abstract} false, with one branch struct per declaration of its
@@ -353,14 +348,15 @@
 //     ahead of every field the rules here give, is Text, a string holding the
 //     characters before the first child element, "" for none. And every field
 //     its particles give for an element particle, in the struct, in an
-//     occurrence type, or in a choice's branch struct, holds MixedChild[T] in
-//     place of the T it would hold, whatever T is, a sealed interface included:
-//     MixedChild holds that child as Element and as Tail the characters after
-//     it, before the next child or the end, and the occurrence rules below
-//     apply to MixedChild[T] as to any struct, so {min occurs} 0 with {max
-//     occurs} 1 gives *MixedChild[T]. A wildcard particle's field holds AnyChild
-//     in place of AnyElement. A field holding a model group's occurrence type
-//     or a choice's interface is not wrapped: it is not a child element.
+//     occurrence type, or in a choice's or a flattened interface's branch
+//     struct, holds MixedChild[T] in place of the T it would hold, whatever T
+//     is, a sealed interface included: MixedChild holds that child as Element
+//     and as Tail the characters after it, before the next child or the end, and
+//     the occurrence rules below apply to MixedChild[T] as to any struct, so
+//     {min occurs} 0 with {max occurs} 1 gives *MixedChild[T]. A wildcard
+//     particle's field holds AnyChild in place of AnyElement. A field holding a
+//     model group's occurrence type, a choice's interface or a flattened field's
+//     slice is not wrapped: it is not a child element.
 //   - So the instance's character data round-trips: Text, then each child in
 //     the order the struct holds it, each followed by its Tail. The characters
 //     are raw and of no simple type (§3.4.4.2 cvc-complex-type clause 1.4
@@ -405,10 +401,12 @@
 //     never a pointer. A repeated choice's slice holds one item per occurrence
 //     that matches something, so it does not count occurrences that match
 //     nothing.
-//   - A choice is accepted only when no alternative's term is a model group,
+//   - A choice particle one of whose alternatives' term is a model group,
 //     inline or through <group ref>, one occurrence of which is emptiable
 //     ([xsd.Schema.ParticleEmptiable]), whatever the alternative's own {min
-//     occurs}: a branch over it would hold the empty match.
+//     occurs} and the choice's own occurrence, the content {particle}
+//     included, is flattened, as stated below: a branch over that alternative
+//     would hold the empty match.
 //   - An <element ref> particle to a head that has {abstract} true, or whose
 //     substitution group ([xsd.Schema.SubstitutionGroup], §3.3.6.4 key-eq)
 //     holds a declaration with {abstract} false other than the head, gives a
@@ -451,7 +449,9 @@
 //     alternative, a choice or a sequence that is not spliced, gives one such
 //     field in the same way, a choice occurring exactly once giving the bare
 //     interface. The occurrence's fields lie behind that slice, pointer or
-//     interface, so no struct-value recursion passes through it.
+//     interface, so no struct-value recursion passes through it. A flattened
+//     particle gives in place of either field the flattened field stated
+//     below.
 //   - Each particle of a sequence gives one field, in particle order, but a
 //     sequence particle spliced by the occurrence rules below, inline or a
 //     <group ref> to a sequence group, which gives in its place the fields its
@@ -515,20 +515,65 @@
 //     its particles then has a value for matching nothing, so its absence and
 //     its empty match are one value, never a nil and a non-nil pointer. A
 //     sequence particle with {max occurs} above 1 or unbounded one occurrence
-//     of which can match nothing declines, whatever its {min occurs}, where
-//     its field would be, before its own particles: its slice would hold an
-//     empty match both as no item and as items that match nothing. Failing
-//     that, a model group particle with {max occurs} above 1 or unbounded
-//     declines there too when its model group has, inline or through <group
-//     ref>, a particle that repeats — its {max occurs} above 1 or unbounded and
-//     other than its {min occurs} — at both its edges. A particle is at both
-//     edges of a model group when it is one of the group's particles and, if
-//     the group is a sequence, each other particle of that sequence is
-//     emptiable (xsd.Schema.ParticleEmptiable); or when it is at both edges of
-//     the model group of such a particle that does not repeat. Every
-//     alternative of a choice is at both edges. Its slice would hold one child
-//     sequence under more than one grouping into occurrences (§3.9.4.3
-//     cvc-accept).
+//     of which can match nothing is flattened, as stated below, whatever its
+//     {min occurs}: a slice of its occurrences would hold an empty match both
+//     as no item and as items that match nothing. So is a model group
+//     particle with {max occurs} above 1 or unbounded whose model group has,
+//     inline or through <group ref>, a particle that repeats — its {max
+//     occurs} above 1 or unbounded and other than its {min occurs} — at both
+//     its edges. A particle is at both edges of a model group when it is one
+//     of the group's particles and, if the group is a sequence, each other
+//     particle of that sequence is emptiable (xsd.Schema.ParticleEmptiable); or
+//     when it is at both edges of the model group of such a particle that does
+//     not repeat. Every alternative of a choice is at both edges. A slice of
+//     its occurrences would hold one child sequence under more than one
+//     grouping into occurrences (§3.9.4.3 cvc-accept).
+//   - A model group particle meeting one of those three gates — a choice
+//     holding an emptiable model group alternative, a repeated emptiable
+//     sequence, a repeated model group with a repeating edge — is flattened
+//     when it is the first such particle on the walk from the content
+//     {particle} inward: the walk tests a particle before the particles of its
+//     model group, and the model groups inside a flattened one are its
+//     reach's, each given no field, no type and no gate test of its own. A
+//     flattened particle, the content {particle} or nested, inline or a
+//     <group ref>, gives one field, named as if from the local name sequence
+//     or choice ("Naming"), holding a slice of a sealed interface whatever the
+//     particle's occurrence, a choice occurring exactly once included, nil and
+//     the empty slice being one value, no child. The interface is the
+//     closed-sum exception as a choice's is: one method, unexported, "is" plus
+//     the interface's name, and one branch struct per basic particle
+//     (Structures §2.2.3.2 key-basic-particle) the particle's model group
+//     reaches, emitted after the interface in reach order, each implementing
+//     the method. The reach is a depth-first walk of the model group's
+//     {particles} in order, an element particle, local or an <element ref>, or
+//     a wildcard particle being one basic particle, and a model group
+//     particle, inline or a <group ref>, giving in its place its own model
+//     group's; it never enters an element's type. Each point of that walk is a
+//     branch of its own, so a <group ref> reaching one group twice, or two
+//     local declarations of one name, give two branches. A model group
+//     reaching no basic particle gives the interface alone, which no branch
+//     implements. Inside it a particle with {max occurs} 0 declines at any
+//     depth, before any branch is emitted, and a local element declaration
+//     with {abstract} true at its branch.
+//   - A flattened interface's branch struct holds one field, the one its basic
+//     particle would give occurring exactly once as a particle of a sequence,
+//     never a pointer or a slice: an element's type, through a substitution
+//     group's or governing types' interface and Nillable as stated below, and
+//     MixedChild in mixed content; or a wildcard's AnyElement, AnyChild in
+//     mixed content. The slice holds one item per child element the particle
+//     matches, in document order, each in a branch whose basic particle
+//     accepts it; a nil item is not a child. The grouping of those children
+//     into occurrences of the model group, and of each group inside it, is not
+//     represented: the spec fixes no partition of them into occurrences
+//     (§3.9.4.3 cvc-accept clause 3 and its Note). The slice also holds child
+//     sequences the particle does not accept, in another order, count or
+//     grouping, which the struct does not enforce. Under Unique Particle
+//     Attribution a child sequence has at most one validation-path (§3.8.4.2
+//     key-vpath), but a slice may hold a child in a branch other than the one
+//     that path takes, as two branches whose particles both accept it can;
+//     attributing each child to its particle is the validator's and the
+//     codec's, as for an all group's wildcard field. The field lies behind its
+//     slice, so no struct-value recursion passes through it.
 //   - An all group gives the fields a sequence of the same particles gives, in
 //     particle order, by the same occurrence rules, an all group particle
 //     occurring exactly once in it, a <group ref> to an all group (§3.8.6.2
@@ -741,31 +786,38 @@
 // when one does (element x in complex type ct → CtX, whichever elements have
 // type ct or a type extending ct, which reaches it through ct's own particle),
 // and otherwise from its nearest named ancestor: the top-level element when
-// the element's own type is anonymous (element shipTo under element
-// purchaseOrder → PurchaseOrderShipTo). The original of a complex type a
-// <redefine> redefines has no name (§4.2.4 src-expredef clause 1.1), so the
-// types of the local elements it declares are named from the nearest named
-// ancestor: its element x → TX for elements of type t, UX for a type u
-// extending t. An anonymous type of a local element a model group definition
-// declares, and every type nested in it, is named by the path of names from
-// that group (element e in group g → GE), whichever <group ref> particles
-// reach it. The type for one occurrence of a model group particle is named by
-// the path of names of the complex type whose content model holds it — Ct for
-// a named complex type ct, the path an anonymous one is named by above, GE for
-// the anonymous type of element e in group g — never from a name its interface
-// or a branch claimed, followed by the local name sequence, choice or all of
-// each occurrence type enclosing it and then its own (CtSequence; a choice in
-// that sequence → CtSequenceChoice; a repeated sequence in a branch of named
-// choice type alt, reached by element fifth → AltSequence, never
-// FifthSequenceSequence), and the types nested in its particles as if it were
-// absent; it is named and keyed under that complex type whichever <group ref>
-// particle brought its group, so two complex types referencing one group get
-// an occurrence type each. A choice's branch struct is named from its
-// interface's name plus the alternative's local name, its compositor for a
-// model group alternative, or any for a wildcard alternative (alternative a of
-// interface First → FirstA, a sequence alternative → FirstSequence, a wildcard
-// alternative → FirstAny), so two top-level elements of one named choice type
-// get distinct interfaces and branches.
+// the element's own type is anonymous (element shipTo under element purchaseOrder →
+// PurchaseOrderShipTo). The original of a complex type a <redefine> redefines has no name
+// (§4.2.4 src-expredef clause 1.1), so the types of the local elements it declares are
+// named from the nearest named ancestor: its element x → TX for elements of type t, UX
+// for a type u extending t. An anonymous type of a local element a model group definition
+// declares, and every type nested in it, is named by the path of names from that group
+// (element e in group g → GE), whichever <group ref> particles reach it. The type for one
+// occurrence of a model group particle is named by the path of names of the complex type
+// whose content model holds it — Ct for a named complex type ct, the path an anonymous
+// one is named by above, GE for the anonymous type of element e in group g — never from a
+// name its interface or a branch claimed, followed by the local name sequence, choice or
+// all of each occurrence type enclosing it and then its own (CtSequence; a choice in that
+// sequence → CtSequenceChoice; a repeated sequence in a branch of named choice type alt,
+// reached by element fifth → AltSequence, never FifthSequenceSequence), and the types
+// nested in its particles as if it were absent; it is named and keyed under that complex
+// type whichever <group ref> particle brought its group, so two complex types referencing
+// one group get an occurrence type each. A flattened model group particle's sealed
+// interface takes the name its occurrence type would take, claimed where that name would
+// be, and is shared as it would be (the repeated sequence content particle of element
+// many's anonymous type → ManySequence); each of its branch structs is named from the
+// interface's name plus the basic particle's word: the element declaration's local name,
+// the referenced declaration's for an <element ref>, or any for a wildcard, the model
+// groups between contributing none, so that two basic particles of one word take the
+// numeric suffix in reach order (an unqualified and a qualified element x of ManySequence
+// → ManySequenceX, ManySequenceX2). The branches' names are claimed right after the
+// interface's, in reach order, each followed by the names its field's type first claims,
+// and the types nested in their elements are named as if the flattened group were absent.
+// A choice's branch struct is named from its interface's name plus the alternative's
+// local name, its compositor for a model group alternative, or any for a wildcard
+// alternative (alternative a of interface First → FirstA, a sequence alternative →
+// FirstSequence, a wildcard alternative → FirstAny), so two top-level elements of one
+// named choice type get distinct interfaces and branches.
 //
 // A substitution group's interface is named from its head's local name plus
 // SubstitutionGroup (head h → HSubstitutionGroup), and each branch from the

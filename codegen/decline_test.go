@@ -156,89 +156,18 @@ const pastDecline = `<xs:complexType name="m"><xs:sequence><xs:element name="q" 
 func TestGenerateDeclines(t *testing.T) {
 	const (
 		str = `type="xs:string"`
-		// emptiableAlt is a choice whose alternative 2, an empty sequence, is
-		// emptiable, and alt2 the detail of its decline.
-		emptiableAlt = `<xs:choice><xs:element name="a" ` + str + `/><xs:sequence/></xs:choice>`
-		alt2         = " whose choice's alternative 2, a sequence model group particle, has an emptiable model group"
-		vacuousIn    = "a particle of a sequence model group with {max occurs} 0 in complex type vacuous"
+		// cyc is a named complex type that reaches itself through s, which
+		// occurs exactly once, and cycS the detail of its struct-value
+		// recursion's decline: the rows that pin a decline's order against a
+		// later one place an element of type cyc after it.
+		cyc       = `<xs:complexType name="cyc"><xs:sequence><xs:element name="s" type="cyc"/></xs:sequence></xs:complexType>`
+		cycS      = "local element s reaching complex type cyc again through elements that each occur exactly once"
+		vacuousIn = "a particle of a sequence model group with {max occurs} 0 in complex type vacuous"
 	)
-	// edge is the detail of a repeating edge's decline in e's anonymous
-	// complex type of compositor word, at column col of line 2.
-	edge := func(word, col string) string {
-		return "complex type (anonymous) of element e holding a " + word + " model group particle with {max occurs} above 1 whose " + word + " can begin and end with one particle that repeats at s.xsd:2:" + col + " "
-	}
 	tests := []struct {
 		name, body, detail string
 		kind               construct
 	}{
-		// A model group alternative whose term is emptiable declines, inline
-		// or through a <group ref>.
-		{"emptiable group in choice", `<xs:element name="e"><xs:complexType><xs:choice><xs:element name="a" ` + str + `/><xs:sequence><xs:element name="b" minOccurs="0" ` + str + `/></xs:sequence></xs:choice></xs:complexType></xs:element>`,
-			"complex type (anonymous) of element e whose choice's alternative 2, a sequence model group particle, has an emptiable model group", constructEmptiableGroupAlternative},
-		{"emptiable choice in choice", `<xs:element name="e"><xs:complexType><xs:choice><xs:element name="a" ` + str + `/><xs:choice><xs:element name="b" ` + str + `/><xs:element name="c" minOccurs="0" ` + str + `/></xs:choice></xs:choice></xs:complexType></xs:element>`,
-			"complex type (anonymous) of element e whose choice's alternative 2, a choice model group particle, has an emptiable model group", constructEmptiableGroupAlternative},
-		{"emptiable group ref in choice", `<xs:group name="g"><xs:sequence><xs:element name="b" minOccurs="0" ` + str + `/></xs:sequence></xs:group><xs:element name="e"><xs:complexType><xs:choice><xs:element name="a" ` + str + `/><xs:group ref="g"/></xs:choice></xs:complexType></xs:element>`,
-			"complex type (anonymous) of element e whose choice's alternative 2, a sequence model group particle, has an emptiable model group", constructEmptiableGroupAlternative},
-		// The alternative's own {min occurs} 0 does not lift the decline: the
-		// gate reads the term.
-		{"optional emptiable group in choice", `<xs:element name="e"><xs:complexType><xs:choice><xs:element name="a" ` + str + `/><xs:sequence minOccurs="0"><xs:element name="b" minOccurs="0" ` + str + `/></xs:sequence></xs:choice></xs:complexType></xs:element>`,
-			"complex type (anonymous) of element e whose choice's alternative 2, a sequence model group particle, has an emptiable model group", constructEmptiableGroupAlternative},
-		// A sequence repeating past 1 whose one occurrence is emptiable
-		// declines, as the content particle or nested, inline or through a
-		// <group ref>, whatever its {min occurs}, and nested with no
-		// {particles}, an empty content <sequence> giving empty content
-		// instead (§3.4.2.3.3 clause 2.1.2, key-expcon); it is met
-		// where its field would be, ahead of z after it and of a declining
-		// particle inside it.
-		{"repeated emptiable sequence", `<xs:element name="e"><xs:complexType><xs:sequence minOccurs="0" maxOccurs="unbounded"><xs:element name="a" minOccurs="0" ` + str + `/></xs:sequence></xs:complexType></xs:element>`,
-			"complex type (anonymous) of element e holding a sequence model group particle with {max occurs} above 1 whose sequence is emptiable at s.xsd:2:22 ", constructRepeatedEmptiableSequence},
-		{"nested repeated emptiable sequence", `<xs:element name="e"><xs:complexType><xs:sequence><xs:element name="h" ` + str + `/><xs:sequence maxOccurs="2"><xs:element name="a" minOccurs="0" ` + str + `/></xs:sequence><xs:element name="z"><xs:complexType>` + emptiableAlt + `</xs:complexType></xs:element></xs:sequence></xs:complexType></xs:element>`,
-			"complex type (anonymous) of element e holding a sequence model group particle with {max occurs} above 1 whose sequence is emptiable at s.xsd:2:22 ", constructRepeatedEmptiableSequence},
-		{"repeated empty sequence", `<xs:element name="e"><xs:complexType><xs:sequence><xs:element name="h" ` + str + `/><xs:sequence maxOccurs="2"/></xs:sequence></xs:complexType></xs:element>`,
-			"complex type (anonymous) of element e holding a sequence model group particle with {max occurs} above 1 whose sequence is emptiable at s.xsd:2:22 ", constructRepeatedEmptiableSequence},
-		{"repeated emptiable sequence before its particles", `<xs:element name="e"><xs:complexType><xs:sequence maxOccurs="unbounded"><xs:element name="a" minOccurs="0"><xs:complexType>` + emptiableAlt + `</xs:complexType></xs:element></xs:sequence></xs:complexType></xs:element>`,
-			"complex type (anonymous) of element e holding a sequence model group particle with {max occurs} above 1 whose sequence is emptiable at s.xsd:2:22 ", constructRepeatedEmptiableSequence},
-		{"repeated emptiable sequence group ref", `<xs:group name="g"><xs:sequence><xs:element name="b" minOccurs="0" ` + str + `/></xs:sequence></xs:group><xs:element name="e"><xs:complexType><xs:group ref="g" maxOccurs="unbounded"/></xs:complexType></xs:element>`,
-			"complex type (anonymous) of element e holding a sequence model group particle with {max occurs} above 1 whose sequence is emptiable at s.xsd:2:", constructRepeatedEmptiableSequence},
-		// It is met ahead of a repeating edge the sequence also has.
-		{"repeated emptiable sequence over a repeating particle", `<xs:element name="e"><xs:complexType><xs:sequence maxOccurs="unbounded"><xs:element name="b" minOccurs="0" maxOccurs="unbounded" ` + str + `/></xs:sequence></xs:complexType></xs:element>`,
-			"complex type (anonymous) of element e holding a sequence model group particle with {max occurs} above 1 whose sequence is emptiable at s.xsd:2:22 ", constructRepeatedEmptiableSequence},
-		// The repeating-edge rows decline by the package doc's "# Coverage"
-		// rule: under a choice and a sequence, through a sequence
-		// alternative and a <group ref>, at an element, a wildcard, a
-		// sequence and a choice edge, and ahead of an emptiable group
-		// alternative.
-		{"repeating edge in repeated choice", `<xs:element name="e"><xs:complexType><xs:choice maxOccurs="unbounded"><xs:element name="a" ` + str + `/><xs:element name="b" maxOccurs="unbounded" ` + str + `/></xs:choice></xs:complexType></xs:element>`,
-			edge("choice", "22"), constructRepeatingEdge},
-		{"repeating edge in repeated sequence", `<xs:element name="e"><xs:complexType><xs:sequence maxOccurs="unbounded"><xs:element name="b" maxOccurs="unbounded" ` + str + `/></xs:sequence></xs:complexType></xs:element>`,
-			edge("sequence", "22"), constructRepeatingEdge},
-		{"repeating edge in a fixed-count sequence", `<xs:element name="e"><xs:complexType><xs:sequence minOccurs="2" maxOccurs="2"><xs:element name="b" maxOccurs="unbounded" ` + str + `/></xs:sequence></xs:complexType></xs:element>`,
-			edge("sequence", "22"), constructRepeatingEdge},
-		{"repeating edge beside an emptiable particle", `<xs:element name="e"><xs:complexType><xs:sequence maxOccurs="unbounded"><xs:element name="b" maxOccurs="unbounded" ` + str + `/><xs:element name="c" minOccurs="0" ` + str + `/></xs:sequence></xs:complexType></xs:element>`,
-			edge("sequence", "22"), constructRepeatingEdge},
-		{"repeating edge in a sequence alternative", `<xs:element name="e"><xs:complexType><xs:choice maxOccurs="unbounded"><xs:element name="x" ` + str + `/><xs:sequence><xs:element name="a" maxOccurs="2" ` + str + `/></xs:sequence></xs:choice></xs:complexType></xs:element>`,
-			edge("choice", "22"), constructRepeatingEdge},
-		{"repeating edge through group ref", `<xs:group name="g"><xs:sequence><xs:element name="b" maxOccurs="unbounded" ` + str + `/></xs:sequence></xs:group><xs:element name="e"><xs:complexType><xs:sequence><xs:element name="h" ` + str + `/><xs:sequence maxOccurs="unbounded"><xs:group ref="g"/></xs:sequence></xs:sequence></xs:complexType></xs:element>`,
-			edge("sequence", "140"), constructRepeatingEdge},
-		{"repeating sequence edge", `<xs:element name="e"><xs:complexType><xs:sequence maxOccurs="unbounded"><xs:sequence maxOccurs="unbounded"><xs:element name="x" ` + str + `/><xs:element name="y" ` + str + `/></xs:sequence></xs:sequence></xs:complexType></xs:element>`,
-			edge("sequence", "22"), constructRepeatingEdge},
-		{"repeating choice edge", `<xs:element name="e"><xs:complexType><xs:choice maxOccurs="unbounded"><xs:element name="a" ` + str + `/><xs:choice maxOccurs="2"><xs:element name="c" ` + str + `/><xs:element name="d" ` + str + `/></xs:choice></xs:choice></xs:complexType></xs:element>`,
-			edge("choice", "22"), constructRepeatingEdge},
-		{"repeating wildcard edge", `<xs:element name="e"><xs:complexType><xs:choice maxOccurs="unbounded"><xs:element name="b" ` + str + `/><xs:any namespace="##other" maxOccurs="2"/></xs:choice></xs:complexType></xs:element>`,
-			edge("choice", "22"), constructRepeatingEdge},
-		{"repeating optional alternative", `<xs:element name="e"><xs:complexType><xs:choice maxOccurs="unbounded"><xs:element name="a" ` + str + `/><xs:element name="b" minOccurs="0" maxOccurs="unbounded" ` + str + `/></xs:choice></xs:complexType></xs:element>`,
-			edge("choice", "22"), constructRepeatingEdge},
-		{"repeating edge before emptiable group alternative", `<xs:element name="e"><xs:complexType><xs:choice maxOccurs="unbounded"><xs:element name="a" ` + str + `/><xs:sequence><xs:element name="b" minOccurs="0" maxOccurs="unbounded" ` + str + `/></xs:sequence></xs:choice></xs:complexType></xs:element>`,
-			edge("choice", "22"), constructRepeatingEdge},
-		// An edge particle occurring at most once leaves the emptiable
-		// alternative to its own decline.
-		{"emptiable group alternative in repeated choice", `<xs:element name="e"><xs:complexType><xs:choice maxOccurs="unbounded"><xs:element name="a" ` + str + `/><xs:sequence><xs:element name="b" minOccurs="0" ` + str + `/></xs:sequence></xs:choice></xs:complexType></xs:element>`,
-			"complex type (anonymous) of element e whose choice's alternative 2, a sequence model group particle, has an emptiable model group", constructEmptiableGroupAlternative},
-		// A <group ref> content particle is checked as its referenced group
-		// would be inline: an emptiable group alternative declines whatever the
-		// ref's occurs.
-		{"emptiable group alternative group ref content", `<xs:group name="g"><xs:choice><xs:element name="a" ` + str + `/><xs:sequence><xs:element name="b" minOccurs="0" ` + str + `/></xs:sequence></xs:choice></xs:group><xs:element name="e"><xs:complexType><xs:group ref="g" maxOccurs="1"/></xs:complexType></xs:element>`,
-			"complex type (anonymous) of element e whose choice's alternative 2, a sequence model group particle, has an emptiable model group", constructEmptiableGroupAlternative},
 		// The group-cycle rows reach e again through a <group ref> to the
 		// group declaring it (legal: mg-props-correct clause 2 bounds group
 		// containment alone), as e's content particle and inside an inline
@@ -253,15 +182,11 @@ func TestGenerateDeclines(t *testing.T) {
 		// later decline after the ref, the ref's check is shown to come
 		// first. h's type is checked where e's ref meets it, ahead of z's
 		// decline.
-		{"element ref to complex type outside the slice", `<xs:element name="e"><xs:complexType><xs:sequence><xs:element ref="h"/><xs:element name="z"><xs:complexType>` + emptiableAlt + `</xs:complexType></xs:element></xs:sequence></xs:complexType></xs:element><xs:element name="h" type="vacuous"/>`,
-			vacuousIn + " of element h at s.xsd:2:296 ", constructVacuousParticle},
+		{"element ref to complex type outside the slice", `<xs:element name="e"><xs:complexType><xs:sequence><xs:element ref="h"/><xs:element name="z" type="cyc"/></xs:sequence></xs:complexType></xs:element><xs:element name="h" type="vacuous"/>` + cyc,
+			vacuousIn + " of element h at s.xsd:2:290 ", constructVacuousParticle},
 		// A type with {assertions} still declines for its other properties.
-		{"emptiable group alternative with assertion", `<xs:element name="e"><xs:complexType>` + emptiableAlt + `<xs:assert test="true()"/></xs:complexType></xs:element>`,
-			"complex type (anonymous) of element e" + alt2, constructEmptiableGroupAlternative},
-		// An element of the abstract type c is emitted from c's members f and
-		// d; d's own shape declines the element, charged to d as its own.
-		{"abstract type member outside the slice", `<xs:complexType name="c" abstract="true"/><xs:complexType name="f"><xs:complexContent><xs:restriction base="c"/></xs:complexContent></xs:complexType><xs:complexType name="d"><xs:complexContent><xs:extension base="c">` + emptiableAlt + `</xs:extension></xs:complexContent></xs:complexType><xs:element name="e" type="c"/>`,
-			"complex type d" + alt2 + " at s.xsd:2:", constructEmptiableGroupAlternative},
+		{"value cycle with assertion", `<xs:complexType name="c"><xs:sequence><xs:element name="x" type="c"/></xs:sequence><xs:assert test="true()"/></xs:complexType><xs:element name="e" type="c"/>`,
+			"local element x reaching complex type c again through elements that each occur exactly once at s.xsd:2:39", constructValueCycle},
 		// d, a member of the abstract type c, holds x of type d once: the
 		// branch for d holds d as a struct value, which holds itself.
 		{"value cycle through an abstract type member", `<xs:complexType name="c" abstract="true"/><xs:complexType name="f"><xs:complexContent><xs:restriction base="c"/></xs:complexContent></xs:complexType><xs:complexType name="d"><xs:complexContent><xs:extension base="c"><xs:sequence><xs:element name="x" type="d"/></xs:sequence></xs:extension></xs:complexContent></xs:complexType><xs:element name="e" type="c"/>`,
@@ -325,14 +250,14 @@ func TestGenerateDeclines(t *testing.T) {
 			"local element v reaching complex type z again through elements that each occur exactly once", constructValueCycle},
 		// q reaches t while t's body is being emitted, so the recursion check
 		// walks t again past f1 and meets a complex type outside the slice
-		// as a decline it leaves to the emitting walk, which returns r's
-		// first.
-		{"value cycle check past a complex type", fmt.Sprintf(pastDecline, emptiableAlt, `<xs:element name="g" type="vacuous"/>`, ""),
-			"complex type (anonymous) of element r of complex type m" + alt2 + " at s.xsd:2:91 ", constructEmptiableGroupAlternative},
+		// as a decline it leaves to the emitting walk, which returns the
+		// recursion r's element s closes first.
+		{"value cycle check past a complex type", fmt.Sprintf(pastDecline, `<xs:sequence><xs:element name="s" type="cyc"/></xs:sequence>`, `<xs:element name="g" type="vacuous"/>`, cyc),
+			cycS, constructValueCycle},
 		// h's complex alternative is checked where e's ref meets it, ahead of
 		// z's decline.
-		{"element ref to type table outside the slice", `<xs:element name="e"><xs:complexType><xs:sequence><xs:element ref="h"/><xs:element name="z"><xs:complexType>` + emptiableAlt + `</xs:complexType></xs:element></xs:sequence></xs:complexType></xs:element><xs:element name="h"><xs:alternative test="@k" type="vacuous"/><xs:alternative type="xs:string"/></xs:element>`,
-			vacuousIn + " at s.xsd:2:369 ", constructVacuousParticle},
+		{"element ref to type table outside the slice", `<xs:element name="e"><xs:complexType><xs:sequence><xs:element ref="h"/><xs:element name="z" type="cyc"/></xs:sequence></xs:complexType></xs:element><xs:element name="h"><xs:alternative test="@k" type="vacuous"/><xs:alternative type="xs:string"/></xs:element>` + cyc,
+			vacuousIn + " at s.xsd:2:363 ", constructVacuousParticle},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -422,6 +347,10 @@ func TestGenerateDeclineMechanics(t *testing.T) {
 		// e's walk reaches t, declared after f, before f's walk begins.
 		{"named type body before a later top-level element", `<xs:element name="e"><xs:complexType><xs:sequence><xs:element name="l" type="t"/></xs:sequence></xs:complexType></xs:element><xs:element name="f" type="money"/><xs:complexType name="t">` + amount + `</xs:complexType>`,
 			"attribute amount of complex type t" + primitive + "186 ", constructUncoveredPrimitive},
+		// An element of the abstract type c is emitted from c's members f and
+		// d; d's own attribute declines the element, charged to d as its own.
+		{"abstract type member outside the slice", `<xs:complexType name="c" abstract="true"/><xs:complexType name="f"><xs:complexContent><xs:restriction base="c"/></xs:complexContent></xs:complexType><xs:complexType name="d"><xs:complexContent><xs:extension base="c">` + amount + `</xs:extension></xs:complexContent></xs:complexType><xs:element name="e" type="c"/>`,
+			"attribute amount of complex type d" + primitive, constructUncoveredPrimitive},
 		// The rows below pin that a decline in a type names the type's
 		// declaring place: a named complex type a local element reaches by
 		// its name alone, an anonymous one nested in a struct, in a struct
@@ -588,6 +517,10 @@ func TestGenerateDeclinesVacuousParticle(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	unbounded, err := xsd.NewUnboundedOccurs(xsderr.Loc{}, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
 	tests := []struct {
 		name         string
 		term         xsd.Term
@@ -598,6 +531,11 @@ func TestGenerateDeclinesVacuousParticle(t *testing.T) {
 		{"wildcard", wildcard, vacuous, exactlyOnce, "codegen: target 0: a particle of a wildcard with {max occurs} 0 in complex type c of element e at "},
 		{"content particle", local, exactlyOnce, vacuous, "codegen: target 0: a particle of a sequence model group with {max occurs} 0 in complex type c of element e at "},
 		{"nested group", nested, vacuous, exactlyOnce, "codegen: target 0: a particle of a choice model group with {max occurs} 0 in complex type c of element e at "},
+		// Repeated without bound, the content sequence is emptiable and is
+		// flattened: reach declines each vacuous particle in its place.
+		{"element in a flattened group", local, vacuous, unbounded, "codegen: target 0: a particle of element a with {max occurs} 0 in complex type c of element e at "},
+		{"wildcard in a flattened group", wildcard, vacuous, unbounded, "codegen: target 0: a particle of a wildcard with {max occurs} 0 in complex type c of element e at "},
+		{"nested group in a flattened group", nested, vacuous, unbounded, "codegen: target 0: a particle of a choice model group with {max occurs} 0 in complex type c of element e at "},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -688,7 +626,8 @@ func vacuousSchema(t *testing.T, ctName xsd.QName, term xsd.Term, innerOccurs, o
 // is a named complex type t whose sequence holds one such declaration a of type
 // t: an <element ref> particle to r, of type t, in the earlier element x's type
 // has valueCycle walk t before r's own turn, and the decline at a, from that
-// turn, is the only one.
+// turn, is the only one. The "flattened" row reaches a as a basic particle of
+// a flattened choice (reach), at its branch.
 func TestGenerateDeclinesAbstractLocal(t *testing.T) {
 	aLoc := xsderr.Loc{URI: "s.xsd", Line: 3, Col: 5}
 	tests := []struct {
@@ -702,6 +641,8 @@ func TestGenerateDeclinesAbstractLocal(t *testing.T) {
 			[]string{"codegen: target 0: local element a with {abstract} true in complex type c of element e at s.xsd:3:5 is not supported by codegen"}},
 		{"cycle", abstractCycleSchema(t, aLoc),
 			[]string{"codegen: target 0: local element a with {abstract} true in complex type t of element r at s.xsd:3:5 is not supported by codegen"}},
+		{"flattened", abstractFlatSchema(t, aLoc),
+			[]string{"codegen: target 0: local element a with {abstract} true in complex type c of element e at s.xsd:3:5 is not supported by codegen"}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -775,6 +716,41 @@ func abstractCycleSchema(t *testing.T, loc xsderr.Loc) *xsd.Schema {
 	b.AddType(complexOf(t, uName, xsd.ResolvedTerm{Term: sequenceOf(t, xsd.ElementDeclarationRef{Name: xsd.QName{Local: "r"}})}))
 	b.AddElement(globalDecl(t, "x", uName))
 	b.AddElement(globalDecl(t, "r", tName))
+	schema, err := b.Finalize()
+	if err != nil {
+		t.Fatalf("Finalize: %v", err)
+	}
+	return schema
+}
+
+// abstractFlatSchema builds the "flattened" row's schema: a top-level element e
+// of the complex type c, whose content is a choice of a local element a of
+// xs:string with {abstract} true, at loc, and an empty sequence, an emptiable
+// model group alternative, so that the choice is flattened and a is reached as
+// a basic particle of its reach.
+func abstractFlatSchema(t *testing.T, loc xsderr.Loc) *xsd.Schema {
+	t.Helper()
+	ctName := xsd.QName{Local: "c"}
+	a := abstractLocalDecl(t, loc, xsd.ComplexTypeScopeParent{Name: ctName}, stringPrimitive)
+	empty, err := xsd.NewModelGroup(xsderr.Loc{}, xsd.CompositorSequence, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var particles []xsd.Particle
+	for _, term := range []xsd.Term{a, empty} {
+		p, err := xsd.NewParticle(xsderr.Loc{}, exactlyOnce, xsd.ResolvedTerm{Term: term})
+		if err != nil {
+			t.Fatal(err)
+		}
+		particles = append(particles, p)
+	}
+	choice, err := xsd.NewModelGroup(xsderr.Loc{}, xsd.CompositorChoice, particles)
+	if err != nil {
+		t.Fatal(err)
+	}
+	b := seededBuilder(t)
+	b.AddType(complexOf(t, ctName, xsd.ResolvedTerm{Term: choice}))
+	b.AddElement(globalDecl(t, "e", ctName))
 	schema, err := b.Finalize()
 	if err != nil {
 		t.Fatalf("Finalize: %v", err)
