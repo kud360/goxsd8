@@ -19,7 +19,7 @@ one — appending is what this replaces.
 
 ## Status — 2026-10-31 (`/backlog`, on `main` at `5364e7b9`)
 
-**North star: M9, codegen. `go tool gencensus` reads 11822 of 11868 assembled suite documents generated and 46 declined (11841 and 27 at the last stamp), in four constructs. #3256 rules each one an M9 slice or a permanent decline, and that ruling is what stands between M9 and its exit.** The rise is #3195's: it added the decline `repeated group with a repeating edge` (+37), ruled a decline because the spec fixes no partition, while #3226 (−10) and #3227 (−8) lifted the last two sliced rows. Since the last stamp there were 9 develop landings, all M9: five slices (#3226, #3195, #3227, #3211 and #3203), the stand-in move #3217, the ruling #3229 and the persona doc issues #3228 and #3112. Six were accepted in round 1, and #3226, #3195 and #3211 each took a second round. No lane moved. **Lean: product, M9 first.** Tier C is led by the three process issues behind this window's lost rounds (#3248, #3239 and #3240).
+**North star: M9, codegen. `go tool gencensus` reads 11822 of 11868 assembled suite documents generated and 46 declined (11841 and 27 at the last stamp), in four constructs. #3256 ruled three of them (44 documents) one M9 slice, #3260, and struct-value recursion a permanent decline.** The rise is #3195's: it added the decline `repeated group with a repeating edge` (+37), ruled a decline because the spec fixes no partition, while #3226 (−10) and #3227 (−8) lifted the last two sliced rows. Since the last stamp there were 9 develop landings, all M9: five slices (#3226, #3195, #3227, #3211 and #3203), the stand-in move #3217, the ruling #3229 and the persona doc issues #3228 and #3112. Six were accepted in round 1, and #3226, #3195 and #3211 each took a second round. No lane moved. **Lean: product, M9 first.** Tier C is led by the three process issues behind this window's lost rounds (#3248, #3239 and #3240).
 
 ### Conformance lanes
 
@@ -44,10 +44,10 @@ one — appending is what this replaces.
 
 | first decline | documents | held by |
 |---|---:|---|
-| repeated group with a repeating edge | 37 | #3256 (#3195 ruled it a decline; a flattened shape is the candidate lift) |
-| repeated emptiable sequence | 6 | #3256, as above |
-| struct-value recursion | 2 | #3256; no finite instance exists |
-| emptiable group alternative | 1 | #3256, as above |
+| repeated group with a repeating edge | 37 | #3260 (#3256 ruled one slice lifts it and the next two) |
+| repeated emptiable sequence | 6 | #3260, as above |
+| struct-value recursion | 2 | permanent (#3256); no finite instance exists |
+| emptiable group alternative | 1 | #3260, as above |
 
 ### Branch namespace, `origin` (report-only; this pass deletes no ref)
 
@@ -66,7 +66,7 @@ one — appending is what this replaces.
 
 - **Group 1 has 10 rows**, unchanged. Eight are #2719's. The other two have an owner written into the body: `value/valuespace.go:152` (#462) and `tools/landcheck/keywords.go:48` (#2541).
 - **Group 2 has 27 rows**, unchanged. #3019 (three unmarked `xsd` disclosures) stays there until it lands its markers.
-- **`codegen`'s 2 markers cite #2900.** #3256 rules whether they go.
+- **`codegen`'s 2 markers cite #2900.** #3256 narrowed them to the three constructs #3260 lifts.
 
 ### Milestones and queue
 
@@ -123,8 +123,8 @@ This is ordered for a `/develop` session: take the highest row you can start. **
 
 | # | issue | why here |
 |---|---|---|
-| 1 | #3256 | **Rule each residual decline an M9 slice or permanent** (46 documents). It is a warden ruling, and its landing either files the slices or removes #2900's markers. |
-| 2 | #3243 | **An element particle competing with a wildcard gives one instance two values.** This is a correctness defect. Under arm (a) it adds a construct for #3256 to rule. It touches the same files as #3256. |
+| 1 | #3260 | **Lift the three residual declines #3256 ruled one slice** (44 documents). |
+| 2 | #3243 | **An element particle competing with a wildcard gives one instance two values.** This is a correctness defect. Under arm (a) it adds a construct to rule a slice or a permanent decline. It touches the same files as #3260. |
 | 3 | #3159 | **Probe two declines' reachability (6), and state that `{max occurs}` 0 is builder-only.** This round's finding 8. Same section as #3256. |
 | 4 | #3234 | **Shortest unique suffix for anonymous type names.** On M9's exit list. Warden pre-flight first. |
 | 5 | #3235 | **Cross-target imports for a shared document.** On M9's exit list. It changes `Target`, so it opens with a warden pre-flight. |
@@ -133,7 +133,7 @@ This is ordered for a `/develop` session: take the highest row you can start. **
 
 | # | issue | why here |
 |---|---|---|
-| 6 | #3192 | **A way past a decline: a ruling.** It weighs more if #3256 keeps the 37-document decline permanent. |
+| 6 | #3192 | **A way past a decline: a ruling.** #3256 ruled the 37-document decline a lift (#3260). |
 | 7 | #3224 | **"Declined today" restates `Construct.String`'s comparison rule.** Same section as #3256. |
 | 8 | #3220 | **"# Naming"'s occurrence-field name and claim timing.** Same section as #3234. |
 | 9 | #3113 | **`Generate`'s phase-1 paragraph.** |
@@ -166,7 +166,7 @@ This is ordered for a `/develop` session: take the highest row you can start. **
 | 31 | #3137 | **A brief part too long to paste: a file channel, or a refusal.** No sighting has cost a round. |
 
 **Named below the band, on purpose.**
-- **M9:** #2900 (the decline epic; #3256 rules what it still owes). #3178 (a `<redefine>`d original's shared locals; low, since `<redefine>` is deprecated; it shares "# Naming" with #3220 and #3234). #2977 waits on a consumer.
+- **M9:** #2900 (the decline epic; #3256 ruled #3260 the slice it still owes). #3178 (a `<redefine>`d original's shared locals; low, since `<redefine>` is deprecated; it shares "# Naming" with #3220 and #3234). #2977 waits on a consumer.
 - **M10:** #3202 waits on its trigger.
 - **Docs that lag codegen:** #3179 (`docs/ARCHITECTURE.md` and `value/doc.go`'s "API frozen").
 - **M8:** #2670 (waits on #1601's ruling reopening).
@@ -191,8 +191,8 @@ This is ordered for a `/develop` session: take the highest row you can start. **
 
 ### Next planning action
 
-1. **Each M9 post-land re-runs `gencensus`** and restates the bounds its landing moved on #2900 and on #3256's body.
-2. **When #3256's ruling lands**, file each construct it rules an M9 slice, with #2900's prose bar, and name each slice in PLAN's M9 exit sentence. If it rules none, #2900 closes in that landing and M9 exits on #3234, #3235 and #3243. A pass that finds the W3C lanes' rulings (#2081, #1809) still standing says whether M4 and M5 stay active or are recorded at their ruled floors.
+1. **Each M9 post-land re-runs `gencensus`** and restates the bounds its landing moved on #2900 and on #3260's body.
+2. **#3256's ruling filed one M9 slice, #3260**, which PLAN's M9 exit sentence names. A pass that finds the W3C lanes' rulings (#2081, #1809) still standing says whether M4 and M5 stay active or are recorded at their ruled floors.
 3. **The weekly `/retro` is due** (the last was 2026-10-25). Three of this window's nine develop landings took a second round. Their filed causes are Tier C rows 21–23.
 4. **Owed to a human:**
    - #1885 (arbiter.md's Ratchet integrity), #2081, #1790, #2022, #2749 and #3031 (CLAUDE.md's gate part 1 spelling).
@@ -752,8 +752,8 @@ Grammar completion toward full XPath 2.0 plus the F&O function library
 ### M9 — Codegen
 
 Deterministic emission, namer, sealed choice sums, multiple schemas to
-multiple output dirs, golden-file tests. M9 exits when #2900, #3234,
-#3235 and #3243 close; #3256 rules what #2900 still owes.
+multiple output dirs, golden-file tests. M9 exits when #2900, #3260,
+#3234, #3235 and #3243 close.
 
 ### M10 — Codec
 

@@ -107,6 +107,15 @@
 //   - local element declaration with {abstract} true
 //   - struct-value recursion
 //
+// Six of them are permanent declines: uncovered primitive, local element
+// declaration with {abstract} true and struct-value recursion, for the reasons
+// this section states; particle with {max occurs} 0, since an element, group
+// reference, model group or wildcard with minOccurs=maxOccurs=0 maps to no
+// component at all (Structures §3.3.2, §3.7.2, §3.8.2, §3.10.2); and absent
+// {variety} and no {primitive type definition}, each on a simple type other
+// than the special types, since Datatypes §4.1.1 gives every other simple type
+// a {variety} and every other atomic one a {primitive type definition}.
+//
 // A list or union declines with the Construct its item type or member declines
 // with. An uncovered primitive is a primitive other than the nineteen Datatypes
 // defines (Datatypes §3.3) and precisionDecimal: an ·implementation-defined·
@@ -117,8 +126,10 @@
 // xsd.NewElementDeclaration builds one; no element is valid against it
 // (Structures §3.3.4.3 cvc-elt clause 2).
 //
-// GAP(codegen): Generate declines each construct the list above names; #2900 is
-// the GitHub issue tracking these lifts.
+// GAP(codegen): Generate declines repeated emptiable sequence, repeated group
+// with a repeating edge and emptiable group alternative, the listed constructs
+// that are not permanent declines; #2900 is the GitHub issue tracking their
+// lift.
 //
 // Generate emits, in document order:
 //
