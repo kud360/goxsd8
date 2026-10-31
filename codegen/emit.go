@@ -1846,21 +1846,15 @@ func (e *emitter) termEmptiable(subject string, loc xsderr.Loc, term xsd.TermOrR
 
 // repeatingEdge reports whether group, the term of a model group particle with
 // {max occurs} above 1 or unbounded, holds a particle that repeats (repeats)
-// at both its edges, so that one child sequence can be partitioned into
-// occurrences of that particle more than one way (§3.9.4.3 cvc-accept clause
-// 3): an edge particle of a choice is any alternative, and of a sequence a
-// particle every other particle of which is emptiable
-// ([xsd.Schema.ParticleEmptiable], §3.9.6.3 cos-group-emptiable). It reads
-// {min occurs} as the schema gives it, never as branchParticle raises it. It
-// descends, inline or through <group ref> (modelGroupTerm), into each edge
-// particle whose term is a model group and that does not repeat, never into an
-// element's type, and stops at the first edge particle that repeats; the
-// <group ref> graph is acyclic after finalize, so the walk ends. No all group
-// is reached: cos-all-limited (§3.8.6.2 clauses 1.2 and 1.3) admits a
-// particle whose term is one only as a content particle with {max occurs} 1
-// or as an all group's member, neither of which is group's particle or inside
-// it. subject and loc name the complex type holding group in the error
-// modelGroupTerm returns.
+// at both its edges, as the package doc's "# Coverage" states (othersEmptiable
+// reads a sequence's edges). It reads model group terms through
+// modelGroupTerm, never enters an element's type, and stops at the first
+// repeating edge particle; the <group ref> graph is acyclic after finalize, so
+// the walk ends. No all group is reached: cos-all-limited (§3.8.6.2 clauses
+// 1.2 and 1.3) admits a particle whose term is one only as a content particle
+// with {max occurs} 1 or as an all group's member, neither of which is group's
+// particle or inside it. subject and loc name the complex type holding group
+// in the error modelGroupTerm returns.
 func (e *emitter) repeatingEdge(subject string, loc xsderr.Loc, group xsd.ModelGroup) (bool, error) {
 	particles := group.Particles()
 	for i, p := range particles {
@@ -1899,9 +1893,8 @@ func (e *emitter) othersEmptiable(particles []xsd.Particle, i int) bool {
 	return true
 }
 
-// repeats reports whether occurs lets a particle occur a varying number of
-// times above 1: {max occurs} unbounded, or above 1 and other than {min
-// occurs}.
+// repeats reports whether a particle of occurs repeats, as the package doc's
+// "# Coverage" defines the word.
 func repeats(occurs xsd.Occurs) bool {
 	upper, bounded := occurs.Max()
 	return !bounded || upper > 1 && upper != occurs.Min()

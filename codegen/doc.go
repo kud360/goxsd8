@@ -483,9 +483,9 @@
 //     declines there too when its model group holds, inline or through <group
 //     ref>, at any depth through model group particles that do not repeat, a
 //     particle that repeats — its {max occurs} above 1 or unbounded and other
-//     than its {min occurs}, as the schema gives them — at both its edges:
-//     every alternative of a choice is at both edges, and a particle of a
-//     sequence is when each other particle of that sequence is emptiable
+//     than its {min occurs} — at both its edges: every alternative of a
+//     choice is at both edges, and a particle of a sequence is when each
+//     other particle of that sequence is emptiable
 //     (xsd.Schema.ParticleEmptiable). Its slice would hold one child sequence
 //     under more than one grouping into occurrences (§3.9.4.3 cvc-accept).
 //   - An all group gives the fields a sequence of the same particles gives, in

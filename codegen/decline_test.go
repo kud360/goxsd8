@@ -200,12 +200,14 @@ func TestGenerateDeclines(t *testing.T) {
 			"complex type (anonymous) of element e holding a sequence model group particle with {max occurs} above 1 whose sequence is emptiable at s.xsd:2:22 ", constructRepeatedEmptiableSequence},
 		{"repeated emptiable sequence group ref", `<xs:group name="g"><xs:sequence><xs:element name="b" minOccurs="0" ` + str + `/></xs:sequence></xs:group><xs:element name="e"><xs:complexType><xs:group ref="g" maxOccurs="unbounded"/></xs:complexType></xs:element>`,
 			"complex type (anonymous) of element e holding a sequence model group particle with {max occurs} above 1 whose sequence is emptiable at s.xsd:2:", constructRepeatedEmptiableSequence},
-		// A model group particle repeating past 1 whose group can begin and
-		// end with one repeating particle declines, any compositor, the
-		// particle at any depth through model group particles that do not
-		// repeat, inline or through a <group ref>; an alternative's {min
-		// occurs} 0 is read as given, and the check is met ahead of an
-		// emptiable group alternative.
+		// It is met ahead of a repeating edge the sequence also has.
+		{"repeated emptiable sequence over a repeating particle", `<xs:element name="e"><xs:complexType><xs:sequence maxOccurs="unbounded"><xs:element name="b" minOccurs="0" maxOccurs="unbounded" ` + str + `/></xs:sequence></xs:complexType></xs:element>`,
+			"complex type (anonymous) of element e holding a sequence model group particle with {max occurs} above 1 whose sequence is emptiable at s.xsd:2:22 ", constructRepeatedEmptiableSequence},
+		// The repeating-edge rows decline by the package doc's "# Coverage"
+		// rule: under a choice and a sequence, through a sequence
+		// alternative, a <group ref> and a nested choice, at an element, a
+		// wildcard and a model group edge, and ahead of an emptiable group
+		// alternative.
 		{"repeating edge in repeated choice", `<xs:element name="e"><xs:complexType><xs:choice maxOccurs="unbounded"><xs:element name="a" ` + str + `/><xs:element name="b" maxOccurs="unbounded" ` + str + `/></xs:choice></xs:complexType></xs:element>`,
 			edge("choice", "22"), constructRepeatingEdge},
 		{"repeating edge in repeated sequence", `<xs:element name="e"><xs:complexType><xs:sequence maxOccurs="unbounded"><xs:element name="b" maxOccurs="unbounded" ` + str + `/></xs:sequence></xs:complexType></xs:element>`,
