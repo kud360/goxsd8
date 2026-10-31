@@ -115,8 +115,8 @@ func (t Target) failed(i int, err error) error {
 // declaration an <element ref> particle names, which that declaration's own
 // turn emits; a ref to a declaration not yet reached checks that declaration's
 // properties and the shape of its type where the ref is met — for a
-// declaration given a {type table}'s sealed interface, the shape of each
-// complex type the table selects, its simple ones checked at its own turn — a
+// declaration given a sealed interface over its governing types, the shape of
+// each complex type among them, its simple ones checked at its own turn — a
 // ref to a substitution-group head given an interface checks so each
 // declaration of its group with {abstract} false, in group order, and any other
 // ref that occurs exactly once to a complex type that is not a choice has that

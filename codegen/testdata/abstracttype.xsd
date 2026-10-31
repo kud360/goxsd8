@@ -1,0 +1,118 @@
+<?xml version="1.0"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+           xmlns:a="urn:abs" targetNamespace="urn:abs">
+  <!-- shape has {abstract} true, so no instance is valid against it (§3.4.1
+       ctd-abstract) and an element of type shape is valid only through an
+       xsi:type naming a type that overrides it (key-overrides clause 2). Its
+       members are the named complex types with {abstract} false validly
+       substitutable for it, in {type definitions} order: plain, an empty
+       restriction; circle, an extension adding radius; square, an extension
+       of the abstract intermediate polygon, which is no member itself; and
+       frame, an extension holding inner, of type shape, once. No element has
+       any of those types. -->
+  <xs:complexType name="shape" abstract="true">
+    <xs:sequence>
+      <xs:element name="id" type="xs:string" minOccurs="0"/>
+    </xs:sequence>
+    <xs:attribute name="name" type="xs:string"/>
+  </xs:complexType>
+  <xs:complexType name="plain">
+    <xs:complexContent>
+      <xs:restriction base="a:shape">
+        <xs:attribute name="name" type="xs:string"/>
+      </xs:restriction>
+    </xs:complexContent>
+  </xs:complexType>
+  <xs:complexType name="circle">
+    <xs:complexContent>
+      <xs:extension base="a:shape">
+        <xs:sequence>
+          <xs:element name="radius" type="xs:decimal"/>
+        </xs:sequence>
+      </xs:extension>
+    </xs:complexContent>
+  </xs:complexType>
+  <xs:complexType name="polygon" abstract="true">
+    <xs:complexContent>
+      <xs:extension base="a:shape">
+        <xs:sequence>
+          <xs:element name="sides" type="xs:int"/>
+        </xs:sequence>
+      </xs:extension>
+    </xs:complexContent>
+  </xs:complexType>
+  <xs:complexType name="square">
+    <xs:complexContent>
+      <xs:extension base="a:polygon">
+        <xs:sequence>
+          <xs:element name="side" type="xs:decimal"/>
+        </xs:sequence>
+      </xs:extension>
+    </xs:complexContent>
+  </xs:complexType>
+  <!-- frame's inner, of the abstract type shape and occurring once, holds the
+       interface FrameInner, whose branch FrameInnerFrame holds a Frame: the
+       interface holds no struct value, so no struct-value recursion passes
+       inner. -->
+  <xs:complexType name="frame">
+    <xs:complexContent>
+      <xs:extension base="a:shape">
+        <xs:sequence>
+          <xs:element name="inner" type="a:shape"/>
+        </xs:sequence>
+      </xs:extension>
+    </xs:complexContent>
+  </xs:complexType>
+  <!-- The top-level element shape gets the sealed interface Shape, one branch
+       per member. -->
+  <xs:element name="shape" type="a:shape"/>
+  <!-- drawing's local item gets the interface DrawingItem, and fill, nillable,
+       DrawingFill, each branch's field wrapped in Nillable. ring blocks
+       extension, which leaves plain alone: it emits as if of type plain. fig
+       is a member of the abstract head figure, of type shape, so the branch
+       FigureSubstitutionGroupFig holds fig's interface Fig. -->
+  <xs:element name="drawing">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element name="item" type="a:shape" maxOccurs="unbounded"/>
+        <xs:element name="fill" type="a:shape" nillable="true"/>
+        <xs:element name="ring" type="a:shape" block="extension"/>
+        <xs:element ref="a:figure"/>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="figure" type="a:shape" abstract="true"/>
+  <xs:element name="fig" substitutionGroup="a:figure"/>
+  <!-- token blocks restriction, so its restriction narrow is no member of it
+       for any element, and token, of type token, emits as if of type wide,
+       its one member. -->
+  <xs:complexType name="token" abstract="true" block="restriction">
+    <xs:sequence>
+      <xs:element name="v" type="xs:string" minOccurs="0"/>
+    </xs:sequence>
+  </xs:complexType>
+  <xs:complexType name="narrow">
+    <xs:complexContent>
+      <xs:restriction base="a:token"/>
+    </xs:complexContent>
+  </xs:complexType>
+  <xs:complexType name="wide">
+    <xs:complexContent>
+      <xs:extension base="a:token">
+        <xs:attribute name="w" type="xs:string"/>
+      </xs:extension>
+    </xs:complexContent>
+  </xs:complexType>
+  <xs:element name="token" type="a:token"/>
+  <!-- ghost is abstract and nothing derives from it: the element ghost gets
+       the interface Ghost alone, whose one value is nil. -->
+  <xs:complexType name="ghost" abstract="true"/>
+  <xs:element name="ghost" type="a:ghost"/>
+  <!-- pick's first alternative selects shape, which gives its members in its
+       place, all four at that slot; circle, its {default type definition},
+       is kept at its first slot only. -->
+  <xs:element name="pick" type="a:shape">
+    <xs:alternative test="@any" type="a:shape"/>
+    <xs:alternative type="a:circle"/>
+  </xs:element>
+</xs:schema>

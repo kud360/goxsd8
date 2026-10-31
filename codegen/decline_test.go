@@ -216,21 +216,9 @@ func TestGenerateDeclines(t *testing.T) {
 		// decline.
 		{"element ref to complex type outside the slice", `<xs:element name="e"><xs:complexType><xs:sequence><xs:element ref="h"/><xs:element name="z"><xs:complexType>` + emptiableAlt + `</xs:complexType></xs:element></xs:sequence></xs:complexType></xs:element><xs:element name="h" type="vacuous"/>`,
 			vacuousIn + " of element h at s.xsd:2:296 ", constructVacuousParticle},
-		{"empty type abstract", `<xs:complexType name="c" abstract="true"/><xs:element name="e" type="c"/>`,
-			"complex type c of element e with {abstract} true", constructComplexTypeAbstract},
-		// {abstract}, checked first, still declines a type that has an
-		// {attribute wildcard}.
-		{"attribute wildcard with abstract", `<xs:complexType name="c" abstract="true"><xs:sequence><xs:element name="a" ` + str + `/></xs:sequence><xs:anyAttribute/></xs:complexType><xs:element name="e" type="c"/>`,
-			"complex type c of element e with {abstract} true", constructComplexTypeAbstract},
-		// The two rows below pin that a type with {assertions} still declines
-		// for its other properties: an emptiable group alternative, met after
-		// {abstract} is tested, and {abstract} true.
+		// A type with {assertions} still declines for its other properties.
 		{"emptiable group alternative with assertion", `<xs:element name="e"><xs:complexType>` + emptiableAlt + `<xs:assert test="true()"/></xs:complexType></xs:element>`,
 			"complex type (anonymous) of element e" + alt2, constructEmptiableGroupAlternative},
-		{"abstract with assertion", `<xs:complexType name="c" abstract="true"><xs:sequence><xs:element name="a" ` + str + `/></xs:sequence><xs:assert test="true()"/></xs:complexType><xs:element name="e" type="c"/>`,
-			"complex type c of element e with {abstract} true", constructComplexTypeAbstract},
-		{"abstract complex type", `<xs:complexType name="c" abstract="true"><xs:sequence><xs:element name="a" ` + str + `/></xs:sequence></xs:complexType><xs:element name="e" type="c"/>`,
-			"complex type c of element e with {abstract} true", constructComplexTypeAbstract},
 		// The value-cycle rows each give Go types that would hold one another
 		// as struct values.
 		{"value cycle direct", `<xs:complexType name="c"><xs:sequence><xs:element name="x" type="c"/></xs:sequence></xs:complexType><xs:element name="e" type="c"/>`,
