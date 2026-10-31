@@ -1,0 +1,29 @@
+<?xml version="1.0"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+           xmlns:t="urn:t" targetNamespace="urn:t">
+  <!-- Members of a head whose type is anonymous. A member with no type and
+       no inline type takes the head's {type definition} (§3.3.2.1
+       dcl.elt.common {type definition} case 3), and e-props-correct clause 7
+       admits in its {type table} a type validly substitutable for it or
+       xs:error. kept selects xs:error and, by default, its declared type:
+       one governing type, so kept emits as plain, which has no {type
+       table}, does. dropped selects xs:error alone, its last
+       alternative having no {test}: the interface Dropped, which no branch
+       implements. -->
+  <xs:element name="head">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element name="v" type="xs:string"/>
+      </xs:sequence>
+      <xs:attribute name="kind" type="xs:string"/>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="plain" substitutionGroup="t:head"/>
+  <xs:element name="kept" substitutionGroup="t:head">
+    <xs:alternative test="@kind" type="xs:error"/>
+  </xs:element>
+  <xs:element name="dropped" substitutionGroup="t:head">
+    <xs:alternative test="@kind" type="xs:error"/>
+    <xs:alternative type="xs:error"/>
+  </xs:element>
+</xs:schema>
