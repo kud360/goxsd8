@@ -50,6 +50,9 @@
 //   - <element ref> to a head that is abstract, or whose group holds another
 //     non-abstract declaration → a sealed interface, one branch per
 //     non-abstract member ("An <element ref> particle to a head")
+//   - element of an abstract complex type, or with a {type table} selecting
+//     two or more types → a sealed interface, one branch per non-abstract
+//     type it can be governed by ("An element declaration's governing types")
 //
 // # Coverage
 //
@@ -65,6 +68,8 @@
 //   - union simple types
 //   - xs:anyType
 //   - complex types, named or anonymous, derived by restriction or extension
+//   - complex types with {abstract} true, as an element declaration's {type
+//     definition} or a type its {type table} selects
 //   - empty, simple, element-only and mixed content, the last two with or
 //     without {open content}
 //   - sequences, choices with or without {particles}, and all groups, inline or
@@ -84,7 +89,6 @@
 //   - uncovered primitive
 //   - repeated emptiable sequence
 //   - emptiable group alternative
-//   - complex type {abstract}
 //   - particle with {max occurs} 0
 //   - struct-value recursion
 //
@@ -119,9 +123,10 @@
 //     {abstract} true or whose substitution group holds another declaration
 //     with {abstract} false, with one branch struct per declaration of its
 //     group with {abstract} false
-//   - one sealed interface per element declaration whose {type table} selects
-//     other than one type, in place of that declaration's type, with one branch
-//     struct per type it selects, each followed by the types its field reaches
+//   - one sealed interface per element declaration with other than one
+//     governing type, in place of that declaration's type, with one branch
+//     struct per governing type, each followed by the types its field reaches,
+//     the struct of a member of an abstract complex type among them
 //
 // By the item for each place a struct's or a branch struct's particles hold a
 // choice or a sequence, and the item for a complex type's own content particle,
@@ -285,32 +290,32 @@
 //     slice Children, so no element of type xs:anyType closes a struct-value
 //     recursion, and none of the four names math/big.
 //   - An element whose {type definition} is a complex type other than
-//     xs:anyType, named or anonymous, gets a type of its own whatever its
-//     derivation, restriction or extension, of complex or simple content
-//     (§3.4.2.2 dcl.ctd.ctsc, §3.4.2.3 dcl.ctd.ctcc). The type is built from
-//     its own {content type} (§3.4.2.3.3 dcl.ctd.ctcc.common, §3.4.2.2
-//     dcl.ctd.ctsc) and {attribute uses}, which hold the uses it inherits, all
-//     of an extension's base's and those of a restriction's base it neither
-//     overrides nor prohibits (§3.4.2.4 dcl.ctd.attuses), and has no Go-level
-//     relation to its base's: no embedding, no conversion.
+//     xs:anyType with {abstract} false, named or anonymous, gets a type of
+//     its own whatever its derivation, restriction or extension, of complex or
+//     simple content (§3.4.2.2 dcl.ctd.ctsc, §3.4.2.3 dcl.ctd.ctcc). The type
+//     is built from its own {content type} (§3.4.2.3.3 dcl.ctd.ctcc.common,
+//     §3.4.2.2 dcl.ctd.ctsc) and {attribute uses}, which hold the uses it
+//     inherits, all of an extension's base's and those of a restriction's base
+//     it neither overrides nor prohibits (§3.4.2.4 dcl.ctd.attuses), and has
+//     no Go-level relation to its base's: no embedding, no conversion.
 //   - A complex type's {assertions}, inherited ones included (§3.4.2.1
 //     dcl.ctd.common), are accepted and not represented. An assertion is one
 //     more condition an instance must satisfy and adds no content or attribute
 //     (§3.4.4.2 cvc-complex-type clause 6). So the type emits exactly as it
 //     would without them, and enforcing them is the validator's.
-//   - The complex type has {abstract} false and one of four contents: empty
-//     content ({variety} empty, §3.4.1); simple content ({variety} simple),
-//     which gives a struct of the value field stated below and the attribute
-//     fields; or element-only or mixed content (§3.4.2.3.3 dcl.ctd.ctcc.common),
-//     with or without {open content}, whose {particle}, which carries the
-//     <sequence>'s, <choice>'s or <all>'s own {min occurs} and {max occurs}
-//     (§3.9.1), or a <group ref>'s, whose {term} is the referenced definition's
-//     {model group} (§3.7.2), holds a sequence, a choice or an all group of
-//     element, wildcard (§3.10.2.1 dcl.wc.p) and model group particles, each
-//     model group particle, inline or a <group ref>, a sequence, choice or all
-//     group that holds the same: element particles are local element
-//     declarations, and <element ref> particles, whose {term} is the top-level
-//     declaration the ref names (§3.3.2.4).
+//   - The complex type has one of four contents: empty content ({variety} empty,
+//     §3.4.1); simple content ({variety} simple), which gives a struct of the
+//     value field stated below and the attribute fields; or element-only or
+//     mixed content (§3.4.2.3.3 dcl.ctd.ctcc.common), with or without {open
+//     content}, whose {particle}, which carries the <sequence>'s, <choice>'s or
+//     <all>'s own {min occurs} and {max occurs} (§3.9.1), or a <group ref>'s,
+//     whose {term} is the referenced definition's {model group} (§3.7.2), holds
+//     a sequence, a choice or an all group of element, wildcard (§3.10.2.1
+//     dcl.wc.p) and model group particles, each model group particle, inline or
+//     a <group ref>, a sequence, choice or all group that holds the same:
+//     element particles are local element declarations, and <element ref>
+//     particles, whose {term} is the top-level declaration the ref names
+//     (§3.3.2.4).
 //   - A sequence or an all group gives a struct, and so does empty content,
 //     with no particle field; a struct with no field is spelled struct{}.
 //   - Mixed content ({variety} mixed, §3.4.1) gives the struct element-only
@@ -458,14 +463,15 @@
 //     {particle} occurring exactly once or in a sequence or all group spliced
 //     into one, and whose types are not choices, declines: its Go type would
 //     hold itself as a struct value. A field holding a substitution group's
-//     interface, a {type table}'s, or a nillable element's Nillable, holds no
-//     struct value, so no recursion passes it; a type a branch of a {type
-//     table}'s interface holds is checked for one from that branch.
+//     interface, a governing types' interface, or a nillable element's
+//     Nillable, holds no struct value, so no recursion passes it; a type a
+//     branch of a governing types' interface holds is checked for one from
+//     that branch.
 //   - {max occurs} above 1 or unbounded gives a slice whatever {min occurs} is,
 //     of a list's slice too ([][]T); {min occurs} 0 with {max occurs} 1 gives a
 //     pointer to a struct, atomic Go type, or list's slice (*[]T), and the bare
-//     interface, a choice's, a union's, a substitution group's, a {type
-//     table}'s or a nillable element's Nillable, never a pointer to one, nil
+//     interface, a choice's, a union's, a substitution group's, a governing
+//     types' or a nillable element's Nillable, never a pointer to one, nil
 //     meaning absent.
 //   - A sequence or all group particle, the content {particle} or nested, is
 //     spliced, giving in its place the fields its own particles give and no
@@ -586,13 +592,14 @@
 //     choice's empty match are three values.
 //   - No field holding AnyType is wrapped: xs:anyType's AnyType holds xsi:nil
 //     among its Attributes. Nor is a field holding a substitution group's
-//     interface or a {type table}'s: each branch of the former wraps its field
-//     when its own declaration, the head's when it has a branch, is nillable,
-//     and each branch of the latter when the table's declaration is. A
-//     nillable top-level declaration's type is emitted unchanged, Nillable over
-//     it being a nilled root's value. A declaration with {nillable} true and a
-//     fixed {value constraint} emits as if {nillable} were false: every
-//     nilled instance of it is invalid (cvc-elt clause 3.2.3.2).
+//     interface or a governing types' interface: each branch of the former
+//     wraps its field when its own declaration, the head's when it has a
+//     branch, is nillable, and each branch of the latter when the declaration
+//     whose governing types it holds is. A nillable top-level declaration's
+//     type is emitted unchanged, Nillable over it being a nilled root's value.
+//     A declaration with {nillable} true and a fixed {value constraint} emits
+//     as if {nillable} were false: every nilled instance of it is invalid
+//     (cvc-elt clause 3.2.3.2).
 //   - A top-level element declaration with {abstract} true (§3.3.1
 //     ed-abstract) gets no type of its own and no branch: no element is
 //     valid against it, as a root or in a content model (§3.3.4.3 cvc-elt
@@ -600,29 +607,40 @@
 //     substitution group's interface, stated above. Any other member of a
 //     substitution group is emitted as every top-level declaration is, and
 //     enters the interface of each head whose group holds it.
-//   - An element declaration with a {type table} (§3.12) is emitted from the
-//     types the table can select (§3.3.4.1 key-selected-type): the {type
-//     definition} of each of its {alternatives} in order, then that of its
-//     {default type definition}, which is the declared {type definition} when
-//     the last <alternative> has a test (§3.3.2.1). xs:error, which no instance
-//     is valid against (§2.2.1.1 key-error, §3.16.7.3), is omitted, and each type is kept
-//     at its first slot only: two slots hold one type exactly when both name a
-//     type and the names are equal, so two anonymous types are never one. When
-//     one type remains, the declaration emits as if that type were its {type
-//     definition}. Otherwise it gets, in place of the type it would get, a
-//     sealed interface, the closed-sum exception as a choice's is: one method,
-//     unexported, "is" plus the interface's name, and one branch struct per
-//     type in that order, emitted after the interface, each holding one field
-//     of the type a local element of that type occurring exactly once holds,
-//     and implementing the method; with no type remaining, the interface alone,
-//     whose one value is nil. A field over the declaration takes the occurrence
-//     rules below; a top-level declaration's interface is shared by every <element ref>
-//     particle to it, and a local one's as an anonymous complex type in its place would
-//     be. The types the branches hold are emitted unchanged and carry no method.
-//   - Neither an alternative's {test} nor an xsi:type naming another type
-//     (cvc-elt clause 4) is represented: a branch holds a value of its type
-//     whatever selected it, and selecting the branch an instance takes is the
-//     codec's.
+//   - An element declaration's governing types, which it is emitted from, are
+//     the types that can govern a valid instance of it. Their slots are, with
+//     a {type table} (§3.12), the types the table can select (§3.3.4.1 key-selected-type): the
+//     {type definition} of each of its {alternatives} in order, then that of its {default type
+//     definition}, which is the declared {type definition} when the last <alternative> has a
+//     test (§3.3.2.1), xs:error, which no instance is valid against (§2.2.1.1 key-error,
+//     §3.16.7.3), omitted; and without one, its {type definition}. A complex type with
+//     {abstract} true, which no instance is valid against (§3.4.1 ctd-abstract, §3.3.4.4
+//     cvc-type clause 2), gives in its place its members: the named complex types with
+//     {abstract} false of the Schema's {type definitions}, in [xsd.Schema.Types] order,
+//     ·validly substitutable· for it ([xsd.Schema.ValidlySubstitutable]) subject to the
+//     declaration's {disallowed substitutions} and its own {prohibited substitutions}, the
+//     types an xsi:type that ·overrides· it may name (§3.3.4.2 key-overrides clause 2,
+//     §3.3.4.3 cvc-elt clause 4). So a derived type that is itself abstract gives only its own
+//     members, an anonymous one none, and a member need not be any element's type. Each type
+//     is kept at its first slot only: two slots hold one type exactly when both name a type
+//     and the names are equal, so two anonymous types are never one. When one type remains,
+//     the declaration emits as if that type were its {type definition}. Otherwise it gets, in
+//     place of the type it would get, a sealed interface, the closed-sum exception as a
+//     choice's is: one method, unexported, "is" plus the interface's name, and one branch
+//     struct per type in that order, emitted after the interface, each holding one field of
+//     the type a local element of that type occurring exactly once holds, and implementing the
+//     method; with no type remaining, the interface alone, whose one value is nil. A field
+//     over the declaration takes the occurrence rules below; a top-level declaration's
+//     interface is shared by every <element ref> particle to it, and a local one's as an
+//     anonymous complex type in its place would be. The types the branches hold are emitted
+//     unchanged and carry no method.
+//   - Neither an alternative's {test} nor an xsi:type naming a type that is
+//     not a governing type (cvc-elt clause 4) is represented: a branch holds a
+//     value of its type whatever selected it, and selecting the branch an
+//     instance takes is the codec's. Where a slot's type is abstract, its
+//     members are the types an xsi:type may name in its place; an xsi:type
+//     naming a type derived from a governing type with {abstract} false is
+//     not represented.
 //   - An element declaration's {value constraint}, default or fixed, and its
 //     {identity-constraint definitions} are accepted and not represented. A
 //     value constraint supplies a value only for an empty element and changes
@@ -711,30 +729,31 @@
 // HSubstitutionGroupM1); the interface's name is claimed at the first <element
 // ref> particle to the head, then each branch's in group order, each followed,
 // when the walk has not reached its declaration yet, by the names that
-// declaration's type claims as at an <element ref> particle to it. A {type
-// table}'s interface takes the name the declaration's own type would take,
-// claimed where that name would be: from the element for a top-level
-// declaration, and by the path an anonymous complex type of a local one would
-// take (element line in complex type order → OrderLine). Each of its branches
-// is named from the interface's name plus the branch's local name: the
-// selected type's local name when it is named, and otherwise alternative and
-// the 1-based position of its alternative among the {alternatives}, or default
-// for the {default type definition} (a type book, and an anonymous fourth
-// alternative, of interface Product → ProductBook and ProductAlternative4; an
-// anonymous default of Memo → MemoDefault). An anonymous type a branch holds
-// is named by the interface's path followed by the branch's local name and the
-// local name type, every type nested in it extending that path, and an
-// anonymous union with union last (ProductAlternative4Type,
-// OrderLineAlternative2TypeNote, UAlternative1TypeUnion). The branches' names
-// are claimed after the interface's, at a top-level declaration's own
-// position, in branch order, each followed by the names its field's type first
-// claims. Each choice branch's name is claimed when the walk reaches its
-// alternative, after the types every earlier alternative first needs and ahead
-// of its own, so the raw-content structs a wildcard alternative first needs
-// follow its branch and every earlier one and precede every later one:
-// alternatives type, a wildcard and element of interface Any name the branches
-// AnyType, AnyAny and AnyElement2, and the raw-content structs AnyType2,
-// AnyAttribute, AnyChild and AnyElement.
+// declaration's type claims as at an <element ref> particle to it. A governing
+// types' interface, a {type table}'s or an abstract complex type's alike, takes
+// the name the declaration's own type would take, claimed where that name
+// would be: from the element for a top-level declaration, and by the path an
+// anonymous complex type of a local one would take (element line in complex
+// type order → OrderLine). Each of its branches is named from the interface's
+// name plus the branch's local name: the governing type's local name when it
+// is named, a member of an abstract type included (member circle of element
+// shape → ShapeCircle), and otherwise alternative and the 1-based position of
+// its alternative among the {alternatives}, or default for the {default type
+// definition} (a type book, and an anonymous fourth alternative, of interface
+// Product → ProductBook and ProductAlternative4; an anonymous default of Memo →
+// MemoDefault). An anonymous type a branch holds is named by the interface's
+// path followed by the branch's local name and the local name type, every type
+// nested in it extending that path, and an anonymous union with union last
+// (ProductAlternative4Type, OrderLineAlternative2TypeNote,
+// UAlternative1TypeUnion). The branches' names are claimed after the
+// interface's, at a top-level declaration's own position, in branch order, each
+// followed by the names its field's type first claims. Each choice branch's
+// name is claimed when the walk reaches its alternative, after the types every
+// earlier alternative first needs and ahead of its own, so the raw-content
+// structs a wildcard alternative first needs follow its branch and every
+// earlier one and precede every later one: alternatives type, a wildcard and
+// element of interface Any name the branches AnyType, AnyAny and AnyElement2,
+// and the raw-content structs AnyType2, AnyAttribute, AnyChild and AnyElement.
 //
 // A datatype struct is named from its datatype's local name (dateTime →
 // DateTime, gYearMonth → GYearMonth, dayTimeDuration → DayTimeDuration, QName

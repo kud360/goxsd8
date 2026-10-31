@@ -219,6 +219,14 @@ func TestGenerateDeclines(t *testing.T) {
 		// A type with {assertions} still declines for its other properties.
 		{"emptiable group alternative with assertion", `<xs:element name="e"><xs:complexType>` + emptiableAlt + `<xs:assert test="true()"/></xs:complexType></xs:element>`,
 			"complex type (anonymous) of element e" + alt2, constructEmptiableGroupAlternative},
+		// An element of the abstract type c is emitted from c's members f and
+		// d; d's own shape declines the element, charged to d as its own.
+		{"abstract type member outside the slice", `<xs:complexType name="c" abstract="true"/><xs:complexType name="f"><xs:complexContent><xs:restriction base="c"/></xs:complexContent></xs:complexType><xs:complexType name="d"><xs:complexContent><xs:extension base="c">` + emptiableAlt + `</xs:extension></xs:complexContent></xs:complexType><xs:element name="e" type="c"/>`,
+			"complex type d" + alt2 + " at s.xsd:2:", constructEmptiableGroupAlternative},
+		// d, a member of the abstract type c, holds x of type d once: the
+		// branch for d holds d as a struct value, which holds itself.
+		{"value cycle through an abstract type member", `<xs:complexType name="c" abstract="true"/><xs:complexType name="f"><xs:complexContent><xs:restriction base="c"/></xs:complexContent></xs:complexType><xs:complexType name="d"><xs:complexContent><xs:extension base="c"><xs:sequence><xs:element name="x" type="d"/></xs:sequence></xs:extension></xs:complexContent></xs:complexType><xs:element name="e" type="c"/>`,
+			"local element x reaching complex type d again through elements that each occur exactly once", constructValueCycle},
 		// The value-cycle rows each give Go types that would hold one another
 		// as struct values.
 		{"value cycle direct", `<xs:complexType name="c"><xs:sequence><xs:element name="x" type="c"/></xs:sequence></xs:complexType><xs:element name="e" type="c"/>`,

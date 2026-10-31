@@ -2040,14 +2040,13 @@ type fieldSpec struct {
 // than xs:anyType emitted as a struct; valueCycle ends at once for a type whose
 // content particle occurs other than exactly once. A local declaration
 // governingTypes answers a sum for holds the sealed interface localTable
-// returns. A local
-// declaration of type xs:anyType holds the raw-content struct AnyType
-// (anyTypeType). From field, neither a global declaration nor xs:anyType ever
-// reaches nestedType. A nillable declaration (nillable) holds, inside any
+// returns. A local declaration of type xs:anyType holds the raw-content struct
+// AnyType (anyTypeType). From field, neither a global declaration nor xs:anyType
+// ever reaches nestedType. A nillable declaration (nillable) holds, inside any
 // MixedChild wrap and by the same occurrence rules, Nillable over the type the
 // rules above give (nillableType), whose names are claimed after that type's,
-// unless that type is AnyType, which holds xsi:nil among its Attributes, or a
-// sum over the declaration's substitution group or governing types, whose branches
+// unless that type is AnyType, which holds xsi:nil among its Attributes, or a sum
+// over the declaration's substitution group or governing types, whose branches
 // wrap their own fields (substitutionType, tableType); its particle is never a
 // value field, whatever its occurrence, since the field holds an interface or
 // AnyType, whose walk ends at once.
