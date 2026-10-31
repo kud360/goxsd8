@@ -104,9 +104,8 @@ var constructs = [...]struct{ name, format string }{
 // construct is unsupported, so DeclineError.Error prints none of
 // errors.ErrUnsupported's text.
 //
-// GAP(codegen): every construct outside the package doc's "# Coverage" slice
-// declines here; that section lists them under the same marker. #2900 owns
-// lifting them.
+// GAP(codegen): the constructs the package doc's "# Coverage" section names
+// under the same marker decline here; #2900 owns lifting them.
 func decline(loc xsderr.Loc, c construct, args ...any) error {
 	return &DeclineError{construct: c, loc: loc, detail: fmt.Sprintf(constructs[c].format, args...)}
 }
