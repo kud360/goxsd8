@@ -139,7 +139,7 @@ var (
 // reaches. The sealed interface over a substitution group (substitutionType)
 // is one such type too, reached at the first <element ref> particle to its
 // head, its branch structs following it; so is the sealed interface over a
-// local element declaration's {type table} (localTable), each of its branch
+// local element declaration's governing types (localTable), each of its branch
 // structs before the types its field reaches, as a top-level declaration's
 // is at its own position (tableType).
 type emitter struct {
@@ -154,7 +154,7 @@ type emitter struct {
 	// it, and for each anonymous complex type nested in a named complex type
 	// or in a model group definition, and each type for one occurrence of a
 	// model group particle in either (occurrenceType), and each sealed
-	// interface over the {type table} of a local element declaration in
+	// interface over the governing types of a local element declaration in
 	// either (localTable), so that every element whose walk reaches that named
 	// type, and every <group ref> particle to that group, shares it; it is a
 	// lookup index only and never iterated (STYLE D2). scopedType,
@@ -314,8 +314,8 @@ type scope struct {
 
 // pathStep is one step of a scope's path: the expanded name of the path's
 // root or of an element declaration, slot being "", or a branch of the sealed
-// interface tableType emits over the {type table} of the element declaration
-// the step before names, slot being the branch's (tableBranch.slot, never "")
+// interface tableType emits over the governing types of the element
+// declaration the step before names, slot being the branch's (tableBranch.slot)
 // and name, in no namespace, the branch's local name (tableBranch.local)
 // followed by Type.
 type pathStep struct {
@@ -583,7 +583,7 @@ func headerLoc(base string, loc xsderr.Loc) string {
 // definition}, over a slice of one for a list, over a union's sealed interface
 // for a union (unionType), a struct or sealed interface for an accepted
 // complex one, named or anonymous, or the sealed interface tableType emits
-// over the types its {type table} selects when tableSum answers a sum. A
+// over its governing types when governingTypes answers a sum. A
 // nillable declaration (nillable) gets that same type: after it, the visit
 // claims, when nothing earlier did, the names nillableType claims for a field
 // over decl, Nillable over that type being a nilled root's value; a sum's
@@ -604,7 +604,7 @@ func (e *emitter) topLevel(decl xsd.ElementDeclaration) error {
 	if err != nil {
 		return err
 	}
-	branches, sum, err := e.tableSum(decl)
+	branches, sum, err := e.governingTypes(decl)
 	if err != nil {
 		return err
 	}
@@ -659,7 +659,7 @@ func (e *emitter) topLevel(decl xsd.ElementDeclaration) error {
 // union's interface and variants claim their names first, and the type it
 // records is sealed exactly when td is a union, whose interface the named type
 // is declared over; for a complex one it is shape's, run after. For a decl
-// tableSum answers a sum for, td is not read: the type is the sealed interface
+// governingTypes answers a sum for, td is not read: the type is the sealed interface
 // tableType emits, its name claimed first, and the check is shape's over each
 // complex type other than xs:anyType among the branches, in branch order, run
 // after; a simple branch type is checked, and its datatype structs and union
@@ -672,7 +672,7 @@ func (e *emitter) elementType(decl xsd.ElementDeclaration, td xsd.TypeDefinition
 	if typ, ok := e.elements[decl.Name()]; ok {
 		return typ, nil
 	}
-	branches, sum, err := e.tableSum(decl)
+	branches, sum, err := e.governingTypes(decl)
 	if err != nil {
 		return emittedType{}, err
 	}
@@ -715,19 +715,18 @@ func (e *emitter) elementType(decl xsd.ElementDeclaration, td xsd.TypeDefinition
 }
 
 // declaredType returns the type definition the element declaration decl emits
-// as: the one type its {type table} selects when tableSum answers a table
-// that is not a sum, and otherwise the resolved {type definition}, which
-// decides nothing for a decl tableSum answers a sum for: topLevel,
-// elementType and field test sum ahead of td's cases, refType returns once
-// elementType's type is sealed, and valueCycle skips such a decl before
-// calling declaredType.
+// as: its one governing type when governingTypes answers no sum, and otherwise
+// the resolved {type definition}, which decides nothing for a decl
+// governingTypes answers a sum for: topLevel, elementType and field test sum
+// ahead of td's cases, refType returns once elementType's type is sealed, and
+// valueCycle skips such a decl before calling declaredType.
 func (e *emitter) declaredType(decl xsd.ElementDeclaration) (xsd.TypeDefinition, error) {
 	subject := "element " + decl.Name().String()
-	branches, sum, err := e.tableSum(decl)
+	branches, sum, err := e.governingTypes(decl)
 	if err != nil {
 		return nil, err
 	}
-	if !sum && len(branches) == 1 {
+	if !sum {
 		return branches[0].td, nil
 	}
 	td, ok := e.schema.ResolvedType(decl.TypeDefinition())
@@ -737,73 +736,139 @@ func (e *emitter) declaredType(decl xsd.ElementDeclaration) (xsd.TypeDefinition,
 	return td, nil
 }
 
-// tableBranch is one type an element declaration's {type table} can select
-// (§3.3.4.1 key-selected-type, key-cta-select): td, resolved, and
-// index, the 1-based position in {alternatives} of the slot it first occurs
-// in, or 0 for the {default type definition}.
+// tableBranch is one governing type of an element declaration
+// (governingTypes): td, resolved, and slot, the slot of the declaration it
+// first occurs in, which holds td itself or, when td is a member of an abstract
+// complex type (abstractMembers), that abstract type.
 type tableBranch struct {
-	index int
-	td    xsd.TypeDefinition
+	slot branchSlot
+	td   xsd.TypeDefinition
 }
 
 // local is the local name a branch is named from ("# Naming"): td's own when
-// td is named, and otherwise alternative followed by index, or default.
+// td is named, and otherwise its slot's (branchSlot.anonymous).
 func (b tableBranch) local() string {
-	switch {
-	case b.td.Name() != (xsd.QName{}):
+	if b.td.Name() != (xsd.QName{}) {
 		return b.td.Name().Local
-	case b.index == 0:
-		return "default"
 	}
-	return "alternative" + strconv.Itoa(b.index)
+	return b.slot.anonymous()
 }
 
-// slot names, in declines and headers, the slot of the {type table} b first
-// occurs in: "{type table} alternative N" or "{default type definition}".
-func (b tableBranch) slot() string {
-	if b.index == 0 {
-		return "{default type definition}"
-	}
-	return "{type table} alternative " + strconv.Itoa(b.index)
+// branchSlot is the slot of an element declaration a governing type comes from
+// (governingTypes): a {type table} alternative (alternativeSlot), its {default
+// type definition} (defaultSlot), or, for a declaration with no {type table},
+// its {type definition} (declaredSlot). §3.3.1 closes the set, so it is a
+// sealed sum (STYLE T2's exception).
+type branchSlot interface {
+	// anonymous is the local name a branch of an anonymous type from the slot
+	// is named from ("# Naming").
+	anonymous() string
+	// name is how declines and headers name the slot.
+	name() string
 }
 
-// tableSum returns the types the element declaration decl's {type table}
-// selects, in the order and by the identity the package doc's "# Coverage"
-// states, each slot resolved through [xsd.Schema.ResolvedType] and xs:error
-// matched by name (errorTypeName); and sum, true exactly when "# Coverage"
-// gives decl a sealed interface over them. It compares resolved types by name, so a
+// alternativeSlot is the {type table} alternative at this 1-based position in
+// {alternatives}.
+type alternativeSlot int
+
+func (s alternativeSlot) anonymous() string { return "alternative" + strconv.Itoa(int(s)) }
+func (s alternativeSlot) name() string      { return "{type table} alternative " + strconv.Itoa(int(s)) }
+
+// defaultSlot is a {type table}'s {default type definition}.
+type defaultSlot struct{}
+
+func (defaultSlot) anonymous() string { return "default" }
+func (defaultSlot) name() string      { return "{default type definition}" }
+
+// declaredSlot is the {type definition} of a declaration with no {type table}.
+// No branch is named from its anonymous name: an anonymous {type definition} is
+// a local <complexType> or <simpleType>, never abstract (the schema for
+// schemas' localComplexType prohibits the abstract attribute), so it is its
+// declaration's one governing type, which is no sum.
+type declaredSlot struct{}
+
+func (declaredSlot) anonymous() string { return "typeDefinition" }
+func (declaredSlot) name() string      { return "{type definition}" }
+
+// governingTypes returns the types the package doc's "# Coverage" lets govern
+// an instance of the element declaration decl, in its order and by its
+// identity, and sum, true exactly when "# Coverage" gives decl a sealed
+// interface over them. The slots are decl's {type table} alternatives in order
+// then its {default type definition} (§3.3.4.1 key-selected-type,
+// key-cta-select), or, with no {type table}, its {type definition} alone, each
+// resolved through [xsd.Schema.ResolvedType]. A {type table} slot holding
+// xs:error, matched by name (errorTypeName), gives nothing. A slot holding a
+// complex type with {abstract} true gives its members (abstractMembers) in its
+// place. Each type is kept at its first slot only, compared by name, so a
 // {default type definition} that is a substitution-group head's type and an
 // alternative naming that same type are one type, which xsd's
-// typeDefinitionsEquivalent would call two. sum is false, and branches nil, for a
-// decl with no {type table}; true for zero types or two or more; and false for
-// exactly one, which declaredType returns in place of the {type definition}. A slot
-// that does not resolve is an error, never a decline: finalize resolves every {type
-// definition} slot (src-resolve).
-func (e *emitter) tableSum(decl xsd.ElementDeclaration) (branches []tableBranch, sum bool, err error) {
-	table, ok := decl.TypeTable()
-	if !ok {
-		return nil, false, nil
+// typeDefinitionsEquivalent would call two, and two anonymous types are never
+// one. sum is false for exactly one type, which declaredType returns in place
+// of the {type definition}, and true for zero or two or more. A slot that does
+// not resolve is an error, never a decline: finalize resolves every {type
+// definition} slot (src-resolve); so is abstractMembers' error.
+func (e *emitter) governingTypes(decl xsd.ElementDeclaration) (branches []tableBranch, sum bool, err error) {
+	type slotRef struct {
+		slot branchSlot
+		ref  xsd.TypeDefinitionOrRef
 	}
-	slots := append(slices.Clone(table.Alternatives()), table.DefaultTypeDefinition())
-	for i, alt := range slots {
-		b := tableBranch{index: i + 1}
-		if i == len(slots)-1 {
-			b.index = 0
+	slots := []slotRef{{declaredSlot{}, decl.TypeDefinition()}}
+	table, hasTable := decl.TypeTable()
+	if hasTable {
+		slots = nil
+		for i, alt := range table.Alternatives() {
+			slots = append(slots, slotRef{alternativeSlot(i + 1), alt.TypeDefinition()})
 		}
-		td, ok := e.schema.ResolvedType(alt.TypeDefinition())
+		slots = append(slots, slotRef{defaultSlot{}, table.DefaultTypeDefinition().TypeDefinition()})
+	}
+	for _, s := range slots {
+		td, ok := e.schema.ResolvedType(s.ref)
 		if !ok {
-			return nil, false, fmt.Errorf("%s of element %s at %s: its {type definition} does not resolve", b.slot(), decl.Name(), decl.Loc())
+			return nil, false, fmt.Errorf("%s of element %s at %s: its {type definition} does not resolve", s.slot.name(), decl.Name(), decl.Loc())
 		}
-		b.td = td
-		if td.Name() == errorTypeName {
+		if hasTable && td.Name() == errorTypeName {
 			continue
 		}
-		if td.Name() != (xsd.QName{}) && slices.ContainsFunc(branches, func(seen tableBranch) bool { return seen.td.Name() == td.Name() }) {
-			continue
+		types := []xsd.TypeDefinition{td}
+		if ct, isComplex := td.(xsd.ComplexType); isComplex && ct.Abstract() {
+			types, err = e.abstractMembers(decl, ct)
+			if err != nil {
+				return nil, false, err
+			}
 		}
-		branches = append(branches, b)
+		for _, td := range types {
+			if td.Name() != (xsd.QName{}) && slices.ContainsFunc(branches, func(seen tableBranch) bool { return seen.td.Name() == td.Name() }) {
+				continue
+			}
+			branches = append(branches, tableBranch{slot: s.slot, td: td})
+		}
 	}
 	return branches, len(branches) != 1, nil
+}
+
+// abstractMembers returns the members "# Coverage" gives the complex type t,
+// which has {abstract} true, in a slot of the element declaration decl: each
+// named complex type with {abstract} false among [xsd.Schema.Types], in its
+// order, for which [xsd.Schema.ValidlySubstitutable] answers true against t
+// under decl's {disallowed substitutions}, t's {prohibited substitutions} being
+// the one it adds (§3.3.4.2 key-overrides clause 2). An error from
+// ValidlySubstitutable is returned, never a decline.
+func (e *emitter) abstractMembers(decl xsd.ElementDeclaration, t xsd.ComplexType) ([]xsd.TypeDefinition, error) {
+	var members []xsd.TypeDefinition
+	for _, td := range e.schema.Types() {
+		s, isComplex := td.(xsd.ComplexType)
+		if !isComplex || s.Name() == (xsd.QName{}) || s.Abstract() {
+			continue
+		}
+		ok, err := e.schema.ValidlySubstitutable(s, t, decl.DisallowedSubstitutions())
+		if err != nil {
+			return nil, fmt.Errorf("element %s at %s: complex type %s as a member of abstract complex type %s: %w", decl.Name(), decl.Loc(), s.Name(), t.Name(), err)
+		}
+		if ok {
+			members = append(members, s)
+		}
+	}
+	return members, nil
 }
 
 // simpleGoType is a special type's string, the atomic Go type, the slice,
@@ -1910,9 +1975,6 @@ type groupParticle struct {
 // nil error. body and field read whether the content is mixed (isMixed).
 // Particles and model groups carry no Loc, so their declines cite t's.
 func (e *emitter) contentGroup(subject string, t xsd.ComplexType) (*groupParticle, error) {
-	if t.Abstract() {
-		return nil, decline(t.Loc(), constructComplexTypeAbstract, subject)
-	}
 	content, isElement := t.ContentType().(xsd.ElementContent)
 	if !isElement {
 		switch variety := t.ContentType().Variety(); variety {
@@ -1971,15 +2033,15 @@ type fieldSpec struct {
 // topLevel emits, but valueCycle checks it when the particle occurs exactly
 // once, the declaration is not nillable, and the type is a complex type other
 // than xs:anyType emitted as a struct; valueCycle ends at once for a type whose
-// content particle occurs other than exactly once. A local declaration tableSum
-// answers a sum for holds the sealed interface localTable returns. A local
-// declaration of type xs:anyType holds the raw-content struct AnyType
-// (anyTypeType). From field, neither a global declaration nor xs:anyType ever
-// reaches nestedType. A nillable declaration (nillable) holds, inside any
+// content particle occurs other than exactly once. A local declaration
+// governingTypes answers a sum for holds the sealed interface localTable
+// returns. A local declaration of type xs:anyType holds the raw-content struct
+// AnyType (anyTypeType). From field, neither a global declaration nor xs:anyType
+// ever reaches nestedType. A nillable declaration (nillable) holds, inside any
 // MixedChild wrap and by the same occurrence rules, Nillable over the type the
 // rules above give (nillableType), whose names are claimed after that type's,
-// unless that type is AnyType, which holds xsi:nil among its Attributes, or a
-// sum over the declaration's substitution group or {type table}, whose branches
+// unless that type is AnyType, which holds xsi:nil among its Attributes, or a sum
+// over the declaration's substitution group or governing types, whose branches
 // wrap their own fields (substitutionType, tableType); its particle is never a
 // value field, whatever its occurrence, since the field holds an interface or
 // AnyType, whose walk ends at once.
@@ -2018,7 +2080,7 @@ func (e *emitter) field(nested scope, site groupSite, ordinal int, chain []value
 	if err != nil {
 		return fieldSpec{}, err
 	}
-	branches, sum, err := e.tableSum(decl)
+	branches, sum, err := e.governingTypes(decl)
 	if err != nil {
 		return fieldSpec{}, err
 	}
@@ -2102,7 +2164,7 @@ func wildcardTerm(term xsd.TermOrRef) bool {
 // from the particles whose chain is chain, as it does whether or not decl's
 // type was emitted earlier. A td of xs:anyType gets no walk: AnyType reaches
 // itself only through slices. Nor does the substitution group's interface,
-// nor the {type table}'s interface elementType records as sealed: no field
+// nor the governing types' interface elementType records as sealed: no field
 // holds either as a struct value.
 func (e *emitter) refType(chain []valueNode, value bool, decl xsd.ElementDeclaration, td xsd.TypeDefinition) (emittedType, error) {
 	if members, sum := e.substitutionSum(decl); sum {
@@ -2156,7 +2218,7 @@ func (e *emitter) substitutionSum(decl xsd.ElementDeclaration) (members []xsd.El
 // local name and holding one field, named from that local name, of the type
 // elementType returns for it. Each declaration's type is resolved by
 // declaredType and claimed by elementType at its branch, after the branch's
-// name, so the shape of its type, or of a type its {type table} selects,
+// name, so the shape of its type, or of each of its governing types,
 // declines the interface at the first such declaration in group order, with the
 // same DeclineError its own topLevel turn returns first; a decline in a
 // declaration's body is met only at its own turn. Each branch implements the
@@ -2164,7 +2226,7 @@ func (e *emitter) substitutionSum(decl xsd.ElementDeclaration) (members []xsd.El
 // may be sealed or sit in several heads' groups. The field of a nillable
 // declaration's branch (nillable), the head's when it has a branch, holds
 // Nillable over that type (nillableType), its names claimed after the type's,
-// unless the type is AnyType or the sum over the declaration's {type table},
+// unless the type is AnyType or the sum over the declaration's governing types,
 // whose branches wrap their own fields; the interface itself is never wrapped,
 // each declaration's own {nillable} governing its branch. It stores the
 // interface's name in e.substitutions only once every branch is emitted.
@@ -2185,7 +2247,7 @@ func (e *emitter) substitutionType(head xsd.ElementDeclaration, members []xsd.El
 		if err != nil {
 			return emittedType{}, err
 		}
-		_, sum, err := e.tableSum(member)
+		_, sum, err := e.governingTypes(member)
 		if err != nil {
 			return emittedType{}, err
 		}
@@ -2200,7 +2262,7 @@ func (e *emitter) substitutionType(head xsd.ElementDeclaration, members []xsd.El
 }
 
 // localTable returns the sealed interface a field over the local element
-// declaration decl holds when tableSum answers a sum, branches being its
+// declaration decl holds when governingTypes answers a sum, branches being its
 // answer, its parent's particles taking their names from parent: named and
 // keyed by localScope's path, the one an anonymous complex type of decl would
 // take, and emitted by tableType once per nestedKey under a shared scope
@@ -2228,8 +2290,9 @@ func (e *emitter) localTable(parent scope, decl xsd.ElementDeclaration, branches
 }
 
 // tableType emits typ, the sealed interface "# Coverage" gives the element
-// declaration decl whose {type table} tableSum answers a sum for with
-// branches, its path ifc: the interface, then one branch struct per branch in
+// declaration decl that governingTypes answers a sum for with branches, its
+// path ifc: the interface, generated from decl's {type table}, or from its
+// {type definition} when it has none, then one branch struct per branch in
 // branches' order, named from the interface's name plus the branch's local
 // name (tableBranch.local), generated from its slot (tableBranch.slot) and
 // holding one field, named from that local name, of the type branchType
@@ -2243,7 +2306,11 @@ func (e *emitter) localTable(parent scope, decl xsd.ElementDeclaration, branches
 // interface is emitted alone.
 func (e *emitter) tableType(typ emittedType, ifc scope, decl xsd.ElementDeclaration, branches []tableBranch) error {
 	marker := "is" + typ.name
-	e.decls = append(e.decls, header(typ.name, "the {type table} of "+e.elementFrom(decl))+fmt.Sprintf("type %s interface {\n\t%s()\n}\n", typ.name, marker))
+	slots := "the {type table} of "
+	if _, hasTable := decl.TypeTable(); !hasTable {
+		slots = "the " + declaredSlot{}.name() + " of "
+	}
+	e.decls = append(e.decls, header(typ.name, slots+e.elementFrom(decl))+fmt.Sprintf("type %s interface {\n\t%s()\n}\n", typ.name, marker))
 	for _, b := range branches {
 		branch := e.types.claim(typ.name, b.local())
 		slot := len(e.decls)
@@ -2256,14 +2323,14 @@ func (e *emitter) tableType(typ emittedType, ifc scope, decl xsd.ElementDeclarat
 			field = e.nillableType(field, b.td)
 		}
 		fields := []fieldSpec{{local: b.local(), goType: field.name}}
-		e.decls[slot] = header(branch, b.slot()+" of "+e.elementFrom(decl)) + structDecl(branch, fields) + fmt.Sprintf("\nfunc (%s) %s() {}\n", branch, marker)
+		e.decls[slot] = header(branch, b.slot.name()+" of "+e.elementFrom(decl)) + structDecl(branch, fields) + fmt.Sprintf("\nfunc (%s) %s() {}\n", branch, marker)
 	}
 	return nil
 }
 
 // branchType returns the type of the one field of the branch struct for b, a
-// branch of the sealed interface whose path is ifc over the {type table} of
-// the element declaration decl: the type a local element declaration of b's
+// branch of the sealed interface whose path is ifc over the governing types
+// of the element declaration decl: the type a local element declaration of b's
 // type holds when it occurs exactly once. That is AnyType for xs:anyType
 // (anyTypeType); for a simple type, simpleGoType's, named in declines by b's
 // declaring place (scope.place) and charged to decl, an anonymous union named
@@ -2289,18 +2356,18 @@ func (e *emitter) branchType(ifc scope, decl xsd.ElementDeclaration, b tableBran
 		}
 		return e.scopedType(child, e.branchOrigin(child, decl, b, t), nil, true, decl, t)
 	}
-	return emittedType{}, fmt.Errorf("%s of element %s at %s: unexpected type definition %T", b.slot(), decl.Name(), decl.Loc(), b.td)
+	return emittedType{}, fmt.Errorf("%s of element %s at %s: unexpected type definition %T", b.slot.name(), decl.Name(), decl.Loc(), b.td)
 }
 
 // branchScope is the scope of the type emitted for b's anonymous type, a
 // branch of the sealed interface whose path is ifc: ifc's path followed by
 // b's branch step.
 func branchScope(ifc scope, b tableBranch) scope {
-	return scope{root: ifc.root, path: append(slices.Clone(ifc.path), pathStep{name: xsd.QName{Local: b.local() + "Type"}, slot: b.slot()})}
+	return scope{root: ifc.root, path: append(slices.Clone(ifc.path), pathStep{name: xsd.QName{Local: b.local() + "Type"}, slot: b.slot.name()})}
 }
 
 // branchOrigin is the origin of the type emitted for t, b's complex type, a
-// branch of the sealed interface over the {type table} of the element
+// branch of the sealed interface over the governing types of the element
 // declaration decl, whose struct's scope is child (branchScope) when t is
 // anonymous: typeOrigin's for a named t, and for an anonymous one generated
 // from b's slot of decl and named in declines by its declaring place
@@ -2309,7 +2376,7 @@ func (e *emitter) branchOrigin(child scope, decl xsd.ElementDeclaration, b table
 	if t.Name() != (xsd.QName{}) {
 		return e.typeOrigin(t)
 	}
-	return origin{from: b.slot() + " of " + e.elementFrom(decl), subject: "complex type (anonymous) of " + child.place()}
+	return origin{from: b.slot.name() + " of " + e.elementFrom(decl), subject: "complex type (anonymous) of " + child.place()}
 }
 
 // attributeField returns the field of attribute use u (§3.5.1) of the complex
@@ -2379,8 +2446,9 @@ func attributePath(nested scope, decl xsd.AttributeDeclaration) []string {
 // particle referencing that group, shares it, and otherwise from its nearest
 // named ancestor in parent (structScope). The type is scopedType's in that
 // scope, generated from localOrigin's origin. branchType also calls it for a
-// named t a {type table} selects, decl being the table's declaration, local or
-// top-level, which a named t's scope and origin do not read.
+// named t among an element declaration's governing types, decl being that
+// declaration, local or top-level, which a named t's scope and origin do not
+// read.
 func (e *emitter) nestedType(parent scope, chain []valueNode, value bool, decl xsd.ElementDeclaration, t xsd.ComplexType) (emittedType, error) {
 	child := structScope(parent, decl, t)
 	return e.scopedType(child, e.localOrigin(decl, child, t), chain, value, decl, t)
@@ -2607,9 +2675,9 @@ func reacher(decl xsd.ElementDeclaration) string {
 // reaches itself only through slices. A wildcard particle (wildcardTerm) is a leaf, passed before elementTerm:
 // its field holds AnyElement, which reaches AnyType, which reaches itself only through the slice Children. So is
 // an <element ref> particle to a head substitutionSum answers a sum for, passed after elementTerm: its field
-// holds the group's sealed interface (substitutionType). So is an element particle whose declaration tableSum
-// answers a sum for, passed after that: its field holds the {type table}'s sealed interface (tableType); a
-// declaration whose table selects one type steps to that type, which declaredType returns. So is an element
+// holds the group's sealed interface (substitutionType). So is an element particle whose declaration
+// governingTypes answers a sum for, passed after that: its field holds the governing types' sealed interface
+// (tableType); a declaration with one governing type steps to that type, which declaredType returns. So is an element
 // particle whose declaration is nillable (nillable), passed with it: its field holds the sealed interface
 // Nillable (nillableType). It reads the schema, never e.emitted, e.elements or e.substitutions, so a type the
 // emitting walk shares, and the type of a declaration an <element ref> particle names, is walked again here
@@ -2659,7 +2727,7 @@ func (e *emitter) valueCycle(chain []valueNode, decl xsd.ElementDeclaration, nes
 		if _, sum := e.substitutionSum(el); sum {
 			continue
 		}
-		if _, sum, err := e.tableSum(el); err != nil || sum || nillable(el) {
+		if _, sum, err := e.governingTypes(el); err != nil || sum || nillable(el) {
 			continue
 		}
 		td, err := e.declaredType(el)

@@ -77,7 +77,6 @@ const (
 	constructUncoveredPrimitive
 	constructRepeatedEmptiableSequence
 	constructEmptiableGroupAlternative
-	constructComplexTypeAbstract
 	constructVacuousParticle
 	constructValueCycle
 )
@@ -91,7 +90,6 @@ var constructs = [...]struct{ name, format string }{
 	constructUncoveredPrimitive:        {"uncovered primitive", "%s, whose {primitive type definition} is %s"},
 	constructRepeatedEmptiableSequence: {"repeated emptiable sequence", "%s holding a sequence model group particle with {max occurs} above 1 whose sequence is emptiable"},
 	constructEmptiableGroupAlternative: {"emptiable group alternative", "%s whose choice's alternative %d, a %s model group particle, has an emptiable model group"},
-	constructComplexTypeAbstract:       {"complex type {abstract}", "%s with {abstract} true"},
 	constructVacuousParticle:           {"particle with {max occurs} 0", "a particle of %s with {max occurs} 0 in %s"},
 	constructValueCycle:                {"struct-value recursion", "%s reaching %s again through elements that each occur exactly once"},
 }
