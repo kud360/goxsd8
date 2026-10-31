@@ -135,13 +135,14 @@ var (
 // depth first in particle order; the type for one occurrence of a model
 // group particle (occurrenceType) is one such type, reached at its particle's
 // place and emitted before the types its own particles reach, and a sealed
-// interface's branch structs follow it, each before the types its alternative
-// reaches. The sealed interface over a substitution group (substitutionType)
-// is one such type too, reached at the first <element ref> particle to its
-// head, its branch structs following it; so is the sealed interface over a
-// local element declaration's governing types (localTable), each of its branch
-// structs before the types its field reaches, as a top-level declaration's
-// is at its own position (tableType).
+// interface's branch structs, a choice's or a flattened group's (flattened),
+// follow it, each before the types its alternative or basic particle reaches.
+// The sealed interface over a substitution group (substitutionType) is one
+// such type too, reached at the first <element ref> particle to its head, its
+// branch structs following it; so is the sealed interface over a local element
+// declaration's governing types (localTable), each of its branch structs
+// before the types its field reaches, as a top-level declaration's is at its
+// own position (tableType).
 type emitter struct {
 	schema *xsd.Schema
 	types  *namer
@@ -1561,38 +1562,27 @@ func (e *emitter) contentFields(nested scope, chain []valueNode, o origin, t xsd
 // groupField returns the field of the model-group particle c at ordinal under
 // site (groupSite) of the complex type t generated from o, in a struct whose
 // nested types are named in nested: named from c's compositor, "sequence",
-// "choice" or "all", it holds the type for one occurrence of c's group
-// (occurrenceType) by c's occurrence (occursGoType). A sequence c with {max
-// occurs} above 1 or unbounded whose one occurrence is emptiable
-// (termEmptiable) declines before any occurrence type is emitted, and then any
-// c with {max occurs} above 1 or unbounded whose group has a repeating edge
-// (repeatingEdge), as the package doc's "# Coverage" states, so a repeated
-// emptiable sequence is met first. Its two callers are contentFields, for a
-// content particle splices does not splice, and field, for a model group
-// particle nested in a struct's or a branch's particles.
+// "choice" or "all". When flattens answers true for c, decided before any type
+// of c's is built, the field holds a slice of the sealed interface
+// occurrenceType emits flattened, whatever c's occurrence, a choice occurring
+// exactly once included; otherwise it holds the type for one occurrence of c's
+// group (occurrenceType) by c's occurrence (occursGoType). Its two callers are
+// contentFields, for a content particle splices does not splice, and field,
+// for a model group particle nested in a struct's or a branch's particles, so
+// the walk tests a particle before any particle in its term, and a particle
+// flattens answers true for is the outermost one: its term is the reach walk's
+// (reach), and no particle inside it reaches groupField.
 func (e *emitter) groupField(nested scope, site groupSite, ordinal int, o origin, t xsd.ComplexType, c groupParticle) (fieldSpec, error) {
-	if upper, bounded := c.occurs.Max(); c.group.Compositor() == xsd.CompositorSequence && (!bounded || upper > 1) {
-		emptiable, err := e.termEmptiable(o.subject, t.Loc(), xsd.ResolvedTerm{Term: c.group})
-		if err != nil {
-			return fieldSpec{}, err
-		}
-		if emptiable {
-			return fieldSpec{}, decline(t.Loc(), constructRepeatedEmptiableSequence, o.subject)
-		}
-	}
-	if upper, bounded := c.occurs.Max(); !bounded || upper > 1 {
-		edge, err := e.repeatingEdge(o.subject, t.Loc(), c.group)
-		if err != nil {
-			return fieldSpec{}, err
-		}
-		if edge {
-			word := c.group.Compositor().String()
-			return fieldSpec{}, decline(t.Loc(), constructRepeatingEdge, o.subject, word, word)
-		}
-	}
-	typ, err := e.occurrenceType(nested, site, ordinal, o, t, c.group)
+	flat, err := e.flattens(o.subject, t.Loc(), c)
 	if err != nil {
 		return fieldSpec{}, err
+	}
+	typ, err := e.occurrenceType(nested, site, ordinal, o, t, c.group, flat)
+	if err != nil {
+		return fieldSpec{}, err
+	}
+	if flat {
+		return fieldSpec{local: c.group.Compositor().String(), goType: "[]" + typ.name}, nil
 	}
 	goType, ok := occursGoType(typ, c.occurs)
 	if !ok {
@@ -1604,17 +1594,19 @@ func (e *emitter) groupField(nested scope, site groupSite, ordinal int, o origin
 // occurrenceType returns the type for one occurrence of the model group group,
 // the term of the particle at ordinal under parent (groupSite), of the complex
 // type t generated from o, in a struct whose nested types are named in nested:
-// a struct of a field per particle, with no attribute field, for a sequence
-// or an all group, and the sealed interface sealedType emits for a choice. It is named by
-// nested's path followed by its site's words, the compositor of each enclosing occurrence
-// type and then its own, generated from the declaration that path is named from — t when
-// t is named (typeOrigin), and o's element otherwise — and emitted after the struct
-// holding its field; its particles take their nested types' names from nested as if it
-// were absent. Under a named complex type or a model group definition (scope.shared) it
-// is stored in e.emitted under nested.groupKey of its site before its particles are
-// walked, shared by every later walk of nested's path, and removed when that walk fails,
-// as scopedType stores a type.
-func (e *emitter) occurrenceType(nested scope, parent groupSite, ordinal int, o origin, t xsd.ComplexType, group xsd.ModelGroup) (emittedType, error) {
+// when flat is true, the sealed interface flattened emits; otherwise a struct
+// of a field per particle, with no attribute field, for a sequence or an all group, and
+// the sealed interface sealedType emits for a choice. It is named by nested's path
+// followed by its site's words, the compositor of each enclosing occurrence type and then
+// its own, generated from the declaration that path is named from — t when t is named
+// (typeOrigin), and o's element otherwise — and emitted after the struct holding its
+// field; its particles take their nested types' names from nested as if it were absent.
+// Under a named complex type or a model group definition (scope.shared) it is stored in
+// e.emitted under nested.groupKey of its site before its particles are walked, shared by
+// every later walk of nested's path, and removed when that walk fails, as scopedType
+// stores a type; flat is a function of the particle at that site (flattens), so every
+// walk sharing the key reads one kind of type.
+func (e *emitter) occurrenceType(nested scope, parent groupSite, ordinal int, o origin, t xsd.ComplexType, group xsd.ModelGroup, flat bool) (emittedType, error) {
 	site := parent.group(ordinal, group.Compositor())
 	key := nested.groupKey(site)
 	if typ, ok := e.emitted[key]; ok && nested.shared() {
@@ -1622,7 +1614,7 @@ func (e *emitter) occurrenceType(nested scope, parent groupSite, ordinal int, o 
 	}
 	typ := emittedType{
 		name:   e.types.claim(append(nested.locals(), site.words...)...),
-		sealed: group.Compositor() == xsd.CompositorChoice,
+		sealed: flat || group.Compositor() == xsd.CompositorChoice,
 	}
 	if nested.shared() {
 		e.emitted[key] = typ
@@ -1630,7 +1622,11 @@ func (e *emitter) occurrenceType(nested scope, parent groupSite, ordinal int, o 
 	if t.Name() != (xsd.QName{}) {
 		o.from = e.typeOrigin(t).from
 	}
-	if err := e.occurrence(typ, nested, site, o, t, group.Particles()); err != nil {
+	emitType := e.occurrence
+	if flat {
+		emitType = e.flattened
+	}
+	if err := emitType(typ, nested, site, o, t, group.Particles()); err != nil {
 		if nested.shared() {
 			delete(e.emitted, key)
 		}
@@ -1657,6 +1653,146 @@ func (e *emitter) occurrence(typ emittedType, nested scope, site groupSite, o or
 	}
 	e.decls[slot] = header(typ.name, o.from) + structDecl(typ.name, fields)
 	return nil
+}
+
+// flattens reports whether groupField gives the model group particle c a
+// flattened field (flattened), by the three gates the package doc's
+// "# Coverage" states: c's group is a choice one of whose alternatives' term
+// is an emptiable model group (termEmptiable, which answers false for an
+// element declaration or a wildcard), whatever c's occurrence; or c's {max
+// occurs} is above 1 or unbounded and either its group is a sequence one
+// occurrence of which is emptiable, or its group has a repeating edge
+// (repeatingEdge). subject and loc name the complex type holding c in the
+// error termEmptiable or repeatingEdge returns.
+func (e *emitter) flattens(subject string, loc xsderr.Loc, c groupParticle) (bool, error) {
+	if c.group.Compositor() == xsd.CompositorChoice {
+		for _, p := range c.group.Particles() {
+			emptiable, err := e.termEmptiable(subject, loc, p.Term())
+			if err != nil {
+				return false, err
+			}
+			if emptiable {
+				return true, nil
+			}
+		}
+	}
+	if upper, bounded := c.occurs.Max(); bounded && upper <= 1 {
+		return false, nil
+	}
+	if c.group.Compositor() == xsd.CompositorSequence {
+		emptiable, err := e.termEmptiable(subject, loc, xsd.ResolvedTerm{Term: c.group})
+		if err != nil {
+			return false, err
+		}
+		if emptiable {
+			return true, nil
+		}
+	}
+	return e.repeatingEdge(subject, loc, c.group)
+}
+
+// flattened emits typ, the sealed interface occurrenceType names for a model
+// group particle at site whose term holds particles and which flattens answers
+// true for, of the complex type t generated from o, in the package doc's
+// "# Coverage" shape: the interface, then one branch struct per particle reach
+// returns for particles, in that order, each followed by the types its field
+// reaches, the anonymous ones named in nested as if the flattened group were
+// absent; for none, the interface alone, which no branch implements. reach
+// runs whole, and so declines a particle with {max occurs} 0 or errors on an
+// all group, before the interface is emitted. A branch is named from the
+// interface's name plus the basic particle's word and generated from what its
+// header renders (alternative), its name claimed after the interface's and
+// every earlier branch's and the names their fields' types first claim. Its one
+// field is the one field gives the basic particle's term occurring exactly
+// once, with an empty chain (valueChain): an element's, through any
+// substitution group or governing types' interface and any Nillable or
+// MixedChild wrap, or a wildcard's AnyElement or AnyChild, never a pointer or
+// a slice.
+func (e *emitter) flattened(typ emittedType, nested scope, site groupSite, o origin, t xsd.ComplexType, particles []xsd.Particle) error {
+	basic, err := e.reach(o.subject, t.Loc(), particles)
+	if err != nil {
+		return err
+	}
+	marker := "is" + typ.name
+	e.decls = append(e.decls, header(typ.name, o.from)+fmt.Sprintf("type %s interface {\n\t%s()\n}\n", typ.name, marker))
+	for _, p := range basic {
+		word, from, err := e.alternative(o, t, p)
+		if err != nil {
+			return err
+		}
+		once, err := xsd.NewParticle(xsderr.Loc{}, exactlyOnce, p.Term())
+		if err != nil {
+			return fmt.Errorf("%s at %s: %w", o.subject, t.Loc(), err)
+		}
+		branch := e.types.claim(typ.name, word)
+		slot := len(e.decls)
+		e.decls = append(e.decls, "")
+		field, err := e.field(nested, site, 0, nil, o, t, once)
+		if err != nil {
+			return err
+		}
+		e.decls[slot] = header(branch, from) + structDecl(branch, []fieldSpec{field}) + fmt.Sprintf("\nfunc (%s) %s() {}\n", branch, marker)
+	}
+	return nil
+}
+
+// reach returns the basic particles (Structures key-basic-particle) a
+// flattened field's interface gets one branch each for, in a depth-first walk
+// of particles in order: an element particle, local or an <element ref>, or a
+// wildcard particle, is one, and a model group particle, inline or a <group
+// ref> (modelGroupTerm), is replaced in place by its own group's. It never
+// enters an element's type, keys each branch by the particle at its point, so
+// a particle a <group ref> brings twice gives two, and dedups nothing. A
+// particle with {max occurs} 0 declines, naming its term as field does, and a
+// model group one before any of its own particles is reached; an all group is
+// an error, never a decline: cos-all-limited (§3.8.6.2), checked at Finalize,
+// admits an all group particle only as a content {particle} with {max occurs}
+// 1 or among an all group's {particles}, and a flattened group is neither an
+// all group nor inside one. subject and loc name the complex type holding
+// particles.
+func (e *emitter) reach(subject string, loc xsderr.Loc, particles []xsd.Particle) ([]xsd.Particle, error) {
+	var basic []xsd.Particle
+	for _, p := range particles {
+		group, isGroup, err := e.modelGroupTerm(subject, loc, p.Term())
+		if err != nil {
+			return nil, err
+		}
+		upper, bounded := p.Occurs().Max()
+		vacuous := bounded && upper == 0
+		if !isGroup {
+			if vacuous {
+				return nil, e.vacuousBasic(subject, loc, p)
+			}
+			basic = append(basic, p)
+			continue
+		}
+		if group.Compositor() == xsd.CompositorAll {
+			return nil, fmt.Errorf("%s at %s: an all model group particle inside a flattened model group reached reach", subject, loc)
+		}
+		if vacuous {
+			return nil, decline(loc, constructVacuousParticle, fmt.Sprintf("a %s model group", group.Compositor()), subject)
+		}
+		inner, err := e.reach(subject, loc, group.Particles())
+		if err != nil {
+			return nil, err
+		}
+		basic = append(basic, inner...)
+	}
+	return basic, nil
+}
+
+// vacuousBasic returns the decline of the element or wildcard particle p with
+// {max occurs} 0 of the complex type subject names at loc, its term named as
+// field names it: "a wildcard", or the element declaration's expanded name.
+func (e *emitter) vacuousBasic(subject string, loc xsderr.Loc, p xsd.Particle) error {
+	if wildcardTerm(p.Term()) {
+		return decline(loc, constructVacuousParticle, "a wildcard", subject)
+	}
+	decl, err := e.elementTerm(subject, loc, p.Term())
+	if err != nil {
+		return err
+	}
+	return decline(loc, constructVacuousParticle, "element "+decl.Name().String(), subject)
 }
 
 // particleFields returns the fields of particles, one per particle spliced
@@ -1824,26 +1960,12 @@ func renderStruct(name string, fields []goField) string {
 // branch is named from the interface's name plus the alternative's word and
 // generated from what its header renders (alternative).
 //
-// The gate keeps the empty match the nil interface's alone, as the package
-// doc's "# Coverage" states: it declines the first alternative, in particle
-// order, whose term termEmptiable answers true for, whatever the particle's
-// own {min occurs}, since branchParticle cannot raise a term. Each alternative
-// is checked for its kind first (alternative), and then by the gate, all
-// before the interface or any branch is emitted.
+// No alternative's term is an emptiable model group, so no branch holds the
+// empty match, which the nil interface stands for: shape answers no sealed
+// interface for an emptiable content choice, and groupField flattens a nested
+// choice holding one (flattens) rather than reaching occurrenceType's
+// sealedType.
 func (e *emitter) sealedType(name string, nested scope, site groupSite, o origin, t xsd.ComplexType, particles []xsd.Particle) error {
-	for k, p := range particles {
-		word, _, err := e.alternative(o, t, p)
-		if err != nil {
-			return err
-		}
-		emptiable, err := e.termEmptiable(o.subject, t.Loc(), p.Term())
-		if err != nil {
-			return err
-		}
-		if emptiable {
-			return decline(t.Loc(), constructEmptiableGroupAlternative, o.subject, k+1, word)
-		}
-	}
 	marker := "is" + name
 	e.decls = append(e.decls, header(name, o.from)+fmt.Sprintf("type %s interface {\n\t%s()\n}\n", name, marker))
 	for k, p := range particles {
@@ -1868,14 +1990,14 @@ func (e *emitter) sealedType(name string, nested scope, site groupSite, o origin
 }
 
 // alternative returns, for the alternative p of a sealed interface emitted
-// for the complex type t generated from o, the word its branch is named from
-// after the interface's name and what its branch header renders as generated
-// from: for an element declaration, local or the top-level one an <element
-// ref> particle names (elementTerm), its local name and elementFrom's
-// rendering; for a wildcard (wildcardTerm), which has no {name} (§3.10.1), the
-// word any and o's from; for a model group, inline or a <group ref>
-// (modelGroupTerm), its compositor, which sealedType's gate also names it by,
-// and o's from.
+// for the complex type t generated from o by sealedType, or the basic particle
+// p of one flattened emits, the word its branch is named from after the
+// interface's name and what its branch header renders as generated from: for
+// an element declaration, local or the top-level one an <element ref>
+// particle names (elementTerm), its local name and elementFrom's rendering;
+// for a wildcard (wildcardTerm), which has no {name} (§3.10.1), the word any
+// and o's from; for a model group, inline or a <group ref> (modelGroupTerm),
+// which only sealedType passes, its compositor and o's from.
 func (e *emitter) alternative(o origin, t xsd.ComplexType, p xsd.Particle) (word, from string, err error) {
 	if wildcardTerm(p.Term()) {
 		return "any", o.from, nil
