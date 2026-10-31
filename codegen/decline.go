@@ -55,8 +55,8 @@ type Construct struct{ c construct }
 // Construct; it is not the decline's message. The names are not stable across
 // releases: a release may rename a construct, split one into several, or stop
 // returning a name once the generator covers its construct, and no name is
-// reserved. To tell constructs apart, compare the Constructs of two
-// DeclineErrors or key a map by them; never match a name.
+// reserved. To tell constructs apart, use the Constructs themselves, as
+// [Construct] states, never a name.
 func (c Construct) String() string {
 	if c.c == 0 || int(c.c) >= len(constructs) {
 		return "Construct(" + strconv.Itoa(int(c.c)) + ")"

@@ -66,6 +66,10 @@
 //   - element with other than one governing type (an abstract complex type's
 //     members, or the types its {type table} selects) → a sealed interface,
 //     one branch per governing type ("An element declaration's governing types")
+//   - repeated model group with a repeating edge, repeated emptiable sequence,
+//     or choice with an emptiable model group alternative → a slice of a
+//     sealed interface, one branch per basic particle ("A model group particle
+//     meeting")
 //
 // # Coverage
 //
@@ -96,8 +100,8 @@
 //   - facets, {assertions}, value constraints and identity constraints
 //
 // Declined today, each construct named as [Construct.String] prints it for a
-// [DeclineError]'s [DeclineError.Construct], whose doc states how code tells
-// constructs apart, and each a permanent decline: uncovered primitive, local
+// [DeclineError]'s [DeclineError.Construct] (see [Construct] for comparing
+// them), and each a permanent decline: uncovered primitive, local
 // element declaration with {abstract} true and struct-value recursion, for the
 // reasons this section states; particle with {max occurs} 0, since an element,
 // group reference, model group or wildcard with minOccurs=maxOccurs=0 maps to
