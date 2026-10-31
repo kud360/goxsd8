@@ -30,8 +30,16 @@
 //
 // The emitted structs carry no struct tags and bind no XML name; do not decode
 // them with encoding/xml: decoding is codec's, as the opening paragraph states.
+// The types are declarations only: validate an instance against the Schema
+// with package validate, never through the structs, and fill the structs
+// yourself until codec (M10). That package is today what enforces the
+// constraints the types do not: facets, {assertions}, identity constraints,
+// value constraints and wildcard constraints, the last four as their
+// "Coverage" rules state.
+//
 // Each supported construct gets the Go shape below, a summary of the
-// "Coverage" rules whose openings each row quotes, which state its exceptions.
+// "Coverage" rules each row quotes, by a rule's opening or by a sentence of
+// one, which state its exceptions.
 //
 //   - complex type → a struct ("A sequence or an all group gives"), or its
 //     content choice's sealed interface ("A choice gives")
@@ -45,6 +53,11 @@
 //     the bounded ones → the Go integer of their range ("For an atomic type",
 //     "Failing that")
 //   - union → a sealed interface, one variant per basic member ("A union type")
+//   - facet, an enumeration included → no change of Go type: a user restriction
+//     of an atomic or list type gets the Go type its base gets, a restriction
+//     of string giving string, and a user restriction of a union gets its own
+//     interface over its base's basic members ("Facets are not represented",
+//     "Each union")
 //   - precisionDecimal → the struct PrecisionDecimal over a sealed value sum
 //     ("PrecisionDecimal holds one")
 //   - <element ref> to a head that is abstract, or whose group holds another
@@ -468,7 +481,11 @@
 //     that each occur exactly once in a sequence or all group that is a
 //     {particle} occurring exactly once or in a sequence or all group spliced
 //     into one, and whose types are not choices, declines: its Go type would
-//     hold itself as a struct value. A field holding a substitution group's
+//     hold itself as a struct value. Such a type has no finite valid instance:
+//     an instance valid against it holds another (§3.8.4.3 cvc-model-group,
+//     cvc-complex-type, cvc-elt). Every recursion a finite valid instance can
+//     close already passes a pointer, a slice or an interface, so the decline
+//     needs no pointer break. A field holding a substitution group's
 //     interface, a governing types' interface, or a nillable element's
 //     Nillable, holds no struct value, so no recursion passes it; a type a
 //     branch of a governing types' interface holds is checked for one from
