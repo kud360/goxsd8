@@ -2,7 +2,7 @@
 
 package flatedge
 
-// Root is generated from element root declared at testdata/flatedge.xsd:30:3.
+// Root is generated from element root declared at testdata/flatedge.xsd:39:3.
 type Root struct {
 	B      string
 	Choice []CtChoice
@@ -53,7 +53,54 @@ type CtChoiceAny struct {
 
 func (CtChoiceAny) isCtChoice() {}
 
-// Holder is generated from element holder declared at testdata/flatedge.xsd:31:3.
+// Extended is generated from element extended declared at testdata/flatedge.xsd:40:3.
+type Extended struct {
+	B      string
+	Choice []ExtChoice
+	Z      string
+}
+
+// ExtChoice is generated from complex type ext declared at testdata/flatedge.xsd:30:3.
+type ExtChoice interface {
+	isExtChoice()
+}
+
+// ExtChoiceB is generated from element b declared at testdata/flatedge.xsd:5:7.
+type ExtChoiceB struct {
+	B string
+}
+
+func (ExtChoiceB) isExtChoice() {}
+
+// ExtChoiceC is generated from element c declared at testdata/flatedge.xsd:13:9.
+type ExtChoiceC struct {
+	C int32
+}
+
+func (ExtChoiceC) isExtChoice() {}
+
+// ExtChoiceE is generated from element e declared at testdata/flatedge.xsd:15:11.
+type ExtChoiceE struct {
+	E CtE
+}
+
+func (ExtChoiceE) isExtChoice() {}
+
+// ExtChoiceD is generated from element d declared at testdata/flatedge.xsd:23:13.
+type ExtChoiceD struct {
+	D string
+}
+
+func (ExtChoiceD) isExtChoice() {}
+
+// ExtChoiceAny is generated from complex type ext declared at testdata/flatedge.xsd:30:3.
+type ExtChoiceAny struct {
+	Any AnyElement
+}
+
+func (ExtChoiceAny) isExtChoice() {}
+
+// Holder is generated from element holder declared at testdata/flatedge.xsd:41:3.
 type Holder struct {
 	First  Ct
 	Second *Ct

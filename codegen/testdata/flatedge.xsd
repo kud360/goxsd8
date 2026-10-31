@@ -27,7 +27,17 @@
       </xs:choice>
     </xs:sequence>
   </xs:complexType>
+  <xs:complexType name="ext">
+    <xs:complexContent>
+      <xs:extension base="ct">
+        <xs:sequence>
+          <xs:element name="z" type="xs:string"/>
+        </xs:sequence>
+      </xs:extension>
+    </xs:complexContent>
+  </xs:complexType>
   <xs:element name="root" type="ct"/>
+  <xs:element name="extended" type="ext"/>
   <xs:element name="holder">
     <xs:complexType>
       <xs:sequence>
