@@ -969,6 +969,82 @@ func TestGenerateDeclinesUncoveredPrimitive(t *testing.T) {
 	}
 }
 
+// TestGenerateDeclinesTypeTableOwned pins the declines of absent {variety} and
+// no {primitive type definition}: an element e whose first {type table}
+// alternative owns an anonymous restriction of xs:anySimpleType, or of
+// xs:anyAtomicType, declines with that Construct, from a parsed schema and
+// from one built through xsd.SchemaBuilder. Each schema breaks st-props-correct
+// clause 1 (Structures §3.16.6.1), and the parser and Finalize accept it only
+// through the type-table false accept: a simple type a {type table} owns is
+// never checked against that clause.
+//
+// GAP(xsd): simple types a {type table} owns skip st-props-correct clause 1
+// (#3267). Its fix rejects these schemas at Parse and Finalize, leaving the two
+// constructs no route.
+func TestGenerateDeclinesTypeTableOwned(t *testing.T) {
+	const (
+		alt     = `<xs:element name="e" type="xs:anySimpleType"><xs:alternative test="@k"><xs:simpleType><xs:restriction base="%s"/></xs:simpleType></xs:alternative><xs:alternative type="xs:string"/></xs:element>`
+		subject = "{type table} alternative 1 of element e with {type definition} (anonymous), "
+	)
+	parsed := func(base string) *xsd.Schema {
+		return parseString(t, "<xs:schema xmlns:xs=\"http://www.w3.org/2001/XMLSchema\">\n"+fmt.Sprintf(alt, base)+"\n</xs:schema>\n")
+	}
+	tests := []struct {
+		name   string
+		schema *xsd.Schema
+		detail string
+		kind   construct
+	}{
+		{"parsed absent variety", parsed("xs:anySimpleType"), subject + "of absent {variety} at s.xsd:2:1 ", constructAbsentVariety},
+		{"parsed no primitive", parsed("xs:anyAtomicType"), subject + "with no {primitive type definition} at s.xsd:2:1 ", constructNoPrimitive},
+		{"built absent variety", typeTableSchema(t, xsd.AnySimpleType()), subject + "of absent {variety} at s.xsd:2:1 ", constructAbsentVariety},
+		{"built no primitive", typeTableSchema(t, xsd.AnyAtomicType()), subject + "with no {primitive type definition} at s.xsd:2:1 ", constructNoPrimitive},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assertFirstDecline(t, tt.schema, tt.kind, tt.detail)
+		})
+	}
+}
+
+// typeTableSchema builds TestGenerateDeclinesTypeTableOwned's schema through
+// xsd.SchemaBuilder: a top-level element e of xs:anySimpleType at s.xsd:2:1,
+// whose {type table} holds one alternative, testing @k, owning an anonymous
+// restriction of base, and a {default type definition} of xs:string.
+func typeTableSchema(t *testing.T, base *xsd.SimpleType) *xsd.Schema {
+	t.Helper()
+	owned, err := xsd.NewSimpleType(xsderr.Loc{}, xsd.QName{}, xsd.RestrictionDerivation{},
+		xsd.OwnedSimpleType{Definition: base}, nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	test := xsd.NewXPathExpression("@k", nil, nil, nil)
+	alternative, err := xsd.NewTypeAlternative(xsderr.Loc{}, &test, xsd.InlineTypeDefinition{Definition: owned})
+	if err != nil {
+		t.Fatal(err)
+	}
+	dflt, err := xsd.NewTypeAlternative(xsderr.Loc{}, nil, xsd.TypeDefinitionRef{Name: stringPrimitive})
+	if err != nil {
+		t.Fatal(err)
+	}
+	table, err := xsd.NewTypeTable(xsderr.Loc{}, []xsd.TypeAlternative{alternative}, dflt)
+	if err != nil {
+		t.Fatal(err)
+	}
+	e, err := xsd.NewElementDeclaration(xsderr.Loc{URI: "s.xsd", Line: 2, Col: 1}, xsd.QName{Local: "e"},
+		xsd.TypeDefinitionRef{Name: xsd.AnySimpleType().Name()}, &table, xsd.NewGlobalScope(), nil, false, nil, nil, nil, false, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	b := seededBuilder(t)
+	b.AddElement(e)
+	schema, err := b.Finalize()
+	if err != nil {
+		t.Fatalf("Finalize: %v", err)
+	}
+	return schema
+}
+
 // TestDeclineErrorAs pins that errors.As retrieves the *DeclineError from the
 // error Generate returns for a named and an unnamed target, with its Construct
 // and Loc as values, and that the target's name opens the error outside the
@@ -1092,11 +1168,11 @@ func plainText(texts []comment.Text) string {
 }
 
 // parsedDecline parses body as line 2 of the one schema document s.xsd, its
-// <xs:schema> start tag declaring the xs and xsi prefixes, and returns the
-// *DeclineError Generate returns for it.
+// <xs:schema> start tag declaring the xs prefix, and returns the *DeclineError
+// Generate returns for it.
 func parsedDecline(t *testing.T, body string) *DeclineError {
 	t.Helper()
-	schema := parseString(t, "<xs:schema xmlns:xs=\"http://www.w3.org/2001/XMLSchema\" xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\">\n"+body+"\n</xs:schema>\n")
+	schema := parseString(t, "<xs:schema xmlns:xs=\"http://www.w3.org/2001/XMLSchema\">\n"+body+"\n</xs:schema>\n")
 	err := Generate([]Target{{Schema: schema, Dir: filepath.Join(t.TempDir(), "out"), Package: "p"}})
 	var de *DeclineError
 	if !errors.As(err, &de) {
