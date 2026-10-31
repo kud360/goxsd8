@@ -17,16 +17,17 @@ func schemaDoc(body string) string {
 `
 }
 
-// Each fixture body is one top-level element. The declining ones each name
-// the construct their first decline is.
+// Each fixture body is one top-level element. recursion declines, as a
+// struct-value recursion; flatChoice and flatSequence generate, each a model
+// group particle codegen flattens.
 const (
 	generates = `<xs:element name="a" type="xs:string"/>`
 	// unassembled references a type the schema does not declare
 	// (src-resolve), so parser.Parse fails.
-	unassembled          = `<xs:element name="a" type="undeclared"/>`
-	emptiableAlternative = `<xs:element name="a"><xs:complexType><xs:choice><xs:element name="b" type="xs:string"/><xs:sequence/></xs:choice></xs:complexType></xs:element>`
-	recursion            = `<xs:element name="a"><xs:complexType><xs:sequence><xs:element ref="a"/></xs:sequence></xs:complexType></xs:element>`
-	repeatedSequence     = `<xs:element name="a"><xs:complexType><xs:sequence maxOccurs="2"><xs:element name="b" minOccurs="0" type="xs:string"/></xs:sequence></xs:complexType></xs:element>`
+	unassembled  = `<xs:element name="a" type="undeclared"/>`
+	flatChoice   = `<xs:element name="a"><xs:complexType><xs:choice><xs:element name="b" type="xs:string"/><xs:sequence/></xs:choice></xs:complexType></xs:element>`
+	recursion    = `<xs:element name="a"><xs:complexType><xs:sequence><xs:element ref="a"/></xs:sequence></xs:complexType></xs:element>`
+	flatSequence = `<xs:element name="a"><xs:complexType><xs:sequence maxOccurs="2"><xs:element name="b" minOccurs="0" type="xs:string"/></xs:sequence></xs:complexType></xs:element>`
 )
 
 // writeTree writes files, slash paths relative to a fresh directory, and
@@ -46,23 +47,21 @@ func writeTree(t *testing.T, files map[string]string) string {
 	return root
 }
 
-// censusTree is the fixture tree. In path order its declines are first seen
-// as emptiable group alternative (once), struct-value recursion, then repeated
-// emptiable sequence (twice each), so the first-seen order, the count order
-// with a first-seen tie-break, and the count order with the String tie-break
-// the tool owes are three different orders. The non-.xsd file and the dot
-// directory are not documents.
+// censusTree is the fixture tree. Its one declining construct is
+// struct-value recursion, twice; TestRankedOrdersByCountThenString pins the
+// order of several. The non-.xsd file and the dot directory are not
+// documents.
 func censusTree(t *testing.T) string {
 	return writeTree(t, map[string]string{
 		"a.xsd":       schemaDoc(generates),
-		"b.xsd":       schemaDoc(emptiableAlternative),
+		"b.xsd":       schemaDoc(flatChoice),
 		"c.xsd":       schemaDoc(recursion),
 		"d.xsd":       schemaDoc(unassembled),
-		"e.xsd":       schemaDoc(repeatedSequence),
+		"e.xsd":       schemaDoc(flatSequence),
 		"f.xsd":       schemaDoc(recursion),
-		"g.xsd":       schemaDoc(repeatedSequence),
+		"g.xsd":       schemaDoc(flatSequence),
 		"notes.txt":   "not a schema",
-		".git/x.xsd":  schemaDoc(repeatedSequence),
+		".git/x.xsd":  schemaDoc(recursion),
 		"sub/h.xsd":   schemaDoc(generates),
 		"sub/i.xsd":   schemaDoc(`<xs:include schemaLocation="j.xsd"/>`),
 		"sub/j.xsd":   schemaDoc(generates),
@@ -70,26 +69,21 @@ func censusTree(t *testing.T) string {
 	})
 }
 
-// wantCounts is the report's head over censusTree: every count, and each
-// construct line, largest first and then by String.
+// wantCounts is the report's head over censusTree: every count, and its one
+// construct line.
 const wantCounts = `gencensus: 10 schema document(s) under %ROOT%
   assembled: 9
-  generated: 4
-  declined:  5
+  generated: 7
+  declined:  2
   Generate error other than a decline: 0
 
-=== First decline, by construct: 3 construct(s) ===
-       2  repeated emptiable sequence
+=== First decline, by construct: 1 construct(s) ===
        2  struct-value recursion
-       1  emptiable group alternative
 `
 
-// TestCensusCountsAndRanksDeclines pins every count the report prints and its
-// construct lines' order. Dropping ranked's sort prints the first-seen order
-// (emptiable group alternative, struct-value recursion, repeated emptiable
-// sequence); dropping its String tie-break prints struct-value recursion
-// ahead of repeated emptiable sequence. Each fails here.
-func TestCensusCountsAndRanksDeclines(t *testing.T) {
+// TestCensusCounts pins every count the report prints over censusTree, and
+// that a report without -paths lists no document and carries every caveat.
+func TestCensusCounts(t *testing.T) {
 	root := censusTree(t)
 	var out bytes.Buffer
 	if err := run(&out, []string{root}); err != nil {
@@ -109,8 +103,8 @@ func TestCensusCountsAndRanksDeclines(t *testing.T) {
 	}
 }
 
-// TestCensusPathsListsEachConstructsDocuments pins -paths: each construct's
-// documents in path order, under the constructs in rank order.
+// TestCensusPathsListsEachConstructsDocuments pins -paths: a construct's
+// documents in path order under its line.
 func TestCensusPathsListsEachConstructsDocuments(t *testing.T) {
 	root := censusTree(t)
 	var out bytes.Buffer
@@ -119,14 +113,9 @@ func TestCensusPathsListsEachConstructsDocuments(t *testing.T) {
 	}
 	want := `
 === Documents, by construct ===
-repeated emptiable sequence (2):
-  e.xsd
-  g.xsd
 struct-value recursion (2):
   c.xsd
   f.xsd
-emptiable group alternative (1):
-  b.xsd
 
 === Generate errors other than a decline: 0 ===
 `

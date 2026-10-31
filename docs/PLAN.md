@@ -752,8 +752,8 @@ Grammar completion toward full XPath 2.0 plus the F&O function library
 ### M9 — Codegen
 
 Deterministic emission, namer, sealed choice sums, multiple schemas to
-multiple output dirs, golden-file tests. M9 exits when #2900, #3260,
-#3234, #3235 and #3243 close.
+multiple output dirs, golden-file tests. M9 exits when #3234, #3235 and
+#3243 close.
 
 ### M10 — Codec
 
