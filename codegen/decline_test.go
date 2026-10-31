@@ -681,13 +681,14 @@ func vacuousSchema(t *testing.T, ctName xsd.QName, term xsd.Term, innerOccurs, o
 
 // TestGenerateDeclinesAbstractLocal pins the decline of a local element
 // declaration with {abstract} true, charged to that declaration's Loc, which no
-// schema document yields (xs:localElement prohibits abstract, §3.3.2.3
-// dcl.elt.local), so the schema is built through the constructors: declared by
-// the complex type c holding its particle, and by a model group definition g a
-// <group ref> particle in c names. The "cycle" row is a named complex type t
-// whose sequence holds one such declaration a of type t: an <element ref>
-// particle to r, of type t, in the earlier element x's type has valueCycle walk
-// t before r's own turn, and the decline at a, from that turn, is the only one.
+// schema document yields (xs:localElement prohibits abstract, Structures
+// Appendix A, the schema for schemas), so the schema is built through the
+// constructors: declared by the complex type c holding its particle, and by a
+// model group definition g a <group ref> particle in c names. The "cycle" row
+// is a named complex type t whose sequence holds one such declaration a of type
+// t: an <element ref> particle to r, of type t, in the earlier element x's type
+// has valueCycle walk t before r's own turn, and the decline at a, from that
+// turn, is the only one.
 func TestGenerateDeclinesAbstractLocal(t *testing.T) {
 	aLoc := xsderr.Loc{URI: "s.xsd", Line: 3, Col: 5}
 	tests := []struct {
