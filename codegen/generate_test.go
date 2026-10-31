@@ -889,3 +889,16 @@ func read(t *testing.T, path string) string {
 	}
 	return string(b)
 }
+
+// TestGenerateDeclaredErrorType pins that governingTypes omits xs:error from a
+// {type table}'s slots alone: a declaration with no {type table} whose {type
+// definition} is xs:error keeps the type its union gives, top-level and local.
+func TestGenerateDeclaredErrorType(t *testing.T) {
+	schema := parseString(t, `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"><xs:element name="e" type="xs:error"/><xs:complexType name="c"><xs:sequence><xs:element name="x" type="xs:error"/></xs:sequence></xs:complexType><xs:element name="f" type="c"/></xs:schema>`)
+	src := string(generateOne(t, Target{Schema: schema, Dir: t.TempDir(), Package: "p"}))
+	for _, want := range []string{"type E Error\n", "type F struct {\n\tX Error\n}\n"} {
+		if !strings.Contains(src, want) {
+			t.Errorf("want %q in:\n%s", want, src)
+		}
+	}
+}
