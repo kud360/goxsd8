@@ -205,8 +205,8 @@ func TestGenerateDeclines(t *testing.T) {
 			"complex type (anonymous) of element e holding a sequence model group particle with {max occurs} above 1 whose sequence is emptiable at s.xsd:2:22 ", constructRepeatedEmptiableSequence},
 		// The repeating-edge rows decline by the package doc's "# Coverage"
 		// rule: under a choice and a sequence, through a sequence
-		// alternative, a <group ref> and a nested choice, at an element, a
-		// wildcard and a model group edge, and ahead of an emptiable group
+		// alternative and a <group ref>, at an element, a wildcard, a
+		// sequence and a choice edge, and ahead of an emptiable group
 		// alternative.
 		{"repeating edge in repeated choice", `<xs:element name="e"><xs:complexType><xs:choice maxOccurs="unbounded"><xs:element name="a" ` + str + `/><xs:element name="b" maxOccurs="unbounded" ` + str + `/></xs:choice></xs:complexType></xs:element>`,
 			edge("choice", "22"), constructRepeatingEdge},
