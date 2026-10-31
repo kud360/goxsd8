@@ -50,9 +50,9 @@
 //   - <element ref> to a head that is abstract, or whose group holds another
 //     non-abstract declaration → a sealed interface, one branch per
 //     non-abstract member ("An <element ref> particle to a head")
-//   - element of an abstract complex type, or with a {type table} selecting
-//     two or more types → a sealed interface, one branch per non-abstract
-//     type it can be governed by ("An element declaration's governing types")
+//   - element with other than one governing type (an abstract complex type's
+//     members, or the types its {type table} selects) → a sealed interface,
+//     one branch per governing type ("An element declaration's governing types")
 //
 // # Coverage
 //
@@ -619,33 +619,32 @@
 //     substitution group's interface, stated above. Any other member of a
 //     substitution group is emitted as every top-level declaration is, and
 //     enters the interface of each head whose group holds it.
-//   - An element declaration's governing types, which it is emitted from, are
-//     the types that can govern a valid instance of it. Their slots are, with
-//     a {type table} (§3.12), the types the table can select (§3.3.4.1 key-selected-type): the
-//     {type definition} of each of its {alternatives} in order, then that of its {default type
-//     definition}, which is the declared {type definition} when the last <alternative> has a
-//     test (§3.3.2.1), xs:error, which no instance is valid against (§2.2.1.1 key-error,
-//     §3.16.7.3), omitted; and without one, its {type definition}. A complex type with
-//     {abstract} true, which no instance is valid against (§3.4.1 ctd-abstract, §3.3.4.4
-//     cvc-type clause 2), gives in its place its members: the named complex types with
-//     {abstract} false of the Schema's {type definitions}, in [xsd.Schema.Types] order,
-//     ·validly substitutable· for it ([xsd.Schema.ValidlySubstitutable]) subject to the
-//     declaration's {disallowed substitutions} and its own {prohibited substitutions}, the
-//     types an xsi:type that ·overrides· it may name (§3.3.4.2 key-overrides clause 2,
-//     §3.3.4.3 cvc-elt clause 4). So a derived type that is itself abstract gives only its own
-//     members, an anonymous one none, and a member need not be any element's type. Each type
-//     is kept at its first slot only: two slots hold one type exactly when both name a type
-//     and the names are equal, so two anonymous types are never one. When one type remains,
-//     the declaration emits as if that type were its {type definition}. Otherwise it gets, in
-//     place of the type it would get, a sealed interface, the closed-sum exception as a
-//     choice's is: one method, unexported, "is" plus the interface's name, and one branch
-//     struct per type in that order, emitted after the interface, each holding one field of
+//   - An element declaration's governing types, which it is emitted from, are the types that can
+//     govern a valid instance of it. Their slots are, with a {type table} (§3.12), the types the
+//     table can select (§3.3.4.1 key-selected-type): the {type definition} of each of its
+//     {alternatives} in order, then that of its {default type definition}, which is the declared
+//     {type definition} when the last <alternative> has a test (§3.3.2.1), xs:error, which no
+//     instance is valid against (§2.2.1.1 key-error, §3.16.7.3), omitted; and without one, its
+//     {type definition}. A complex type with {abstract} true, which no instance is valid against
+//     (§3.4.1 ctd-abstract, §3.3.4.4 cvc-type clause 2), gives in its place its members: the named
+//     complex types with {abstract} false of the Schema's {type definitions}, in
+//     [xsd.Schema.Types] order, ·validly substitutable· for it ([xsd.Schema.ValidlySubstitutable])
+//     subject to the declaration's {disallowed substitutions} and its own {prohibited
+//     substitutions}, the types an xsi:type that ·overrides· it may name (§3.3.4.2 key-overrides
+//     clause 2, §3.3.4.3 cvc-elt clause 4). So a derived type that is itself abstract is no
+//     member, though a type derived from it can be; an anonymous one is none; and a member need
+//     not be any element's type. Each type is kept at its first slot only: two slots hold one type
+//     exactly when both name a type and the names are equal, so two anonymous types are never one.
+//     When one type remains, the declaration emits as if that type were its {type definition}.
+//     Otherwise it gets, in place of the type it would get, a sealed interface, the closed-sum
+//     exception as a choice's is: one method, unexported, "is" plus the interface's name, and one
+//     branch struct per type in that order, emitted after the interface, each holding one field of
 //     the type a local element of that type occurring exactly once holds, and implementing the
-//     method; with no type remaining, the interface alone, whose one value is nil. A field
-//     over the declaration takes the occurrence rules below; a top-level declaration's
-//     interface is shared by every <element ref> particle to it, and a local one's as an
-//     anonymous complex type in its place would be. The types the branches hold are emitted
-//     unchanged and carry no method.
+//     method; with no type remaining, the interface alone, whose one value is nil. A field over
+//     the declaration takes the occurrence rules below; a top-level declaration's interface is
+//     shared by every <element ref> particle to it, and a local one's as an anonymous complex type
+//     in its place would be. The types the branches hold are emitted unchanged and carry no
+//     method.
 //   - Neither an alternative's {test} nor an xsi:type naming a type that is
 //     not a governing type (cvc-elt clause 4) is represented: a branch holds a
 //     value of its type whatever selected it, and selecting the branch an
