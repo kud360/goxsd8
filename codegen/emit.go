@@ -2229,9 +2229,8 @@ func wildcardTerm(term xsd.TermOrRef) bool {
 
 // abstractLocal reports whether the element declaration decl is local with
 // {abstract} true, the declaration field declines and valueCycle passes as a
-// leaf. No element is valid against it (§3.3.4.3 cvc-elt clause 2), and
-// xs:localElement prohibits abstract (§3.3.2.3 dcl.elt.local), so no schema
-// document yields one, though §3.3.6.1 e-props-correct admits it.
+// leaf; the package doc's "# Coverage" states why no schema document yields
+// one.
 func abstractLocal(decl xsd.ElementDeclaration) bool {
 	return decl.ScopeVariety() == xsd.ScopeLocal && decl.Abstract()
 }
