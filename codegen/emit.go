@@ -763,8 +763,8 @@ type branchSlot interface {
 	// anonymous is the local name a branch of an anonymous type from the slot
 	// is named from ("# Naming").
 	anonymous() string
-	// String names the slot in declines and headers.
-	String() string
+	// name is how declines and headers name the slot.
+	name() string
 }
 
 // alternativeSlot is the {type table} alternative at this 1-based position in
@@ -772,13 +772,13 @@ type branchSlot interface {
 type alternativeSlot int
 
 func (s alternativeSlot) anonymous() string { return "alternative" + strconv.Itoa(int(s)) }
-func (s alternativeSlot) String() string    { return "{type table} alternative " + strconv.Itoa(int(s)) }
+func (s alternativeSlot) name() string      { return "{type table} alternative " + strconv.Itoa(int(s)) }
 
 // defaultSlot is a {type table}'s {default type definition}.
 type defaultSlot struct{}
 
 func (defaultSlot) anonymous() string { return "default" }
-func (defaultSlot) String() string    { return "{default type definition}" }
+func (defaultSlot) name() string      { return "{default type definition}" }
 
 // declaredSlot is the {type definition} of a declaration with no {type table}.
 // No branch is named from its anonymous name: an anonymous {type definition} is
@@ -788,7 +788,7 @@ func (defaultSlot) String() string    { return "{default type definition}" }
 type declaredSlot struct{}
 
 func (declaredSlot) anonymous() string { return "typeDefinition" }
-func (declaredSlot) String() string    { return "{type definition}" }
+func (declaredSlot) name() string      { return "{type definition}" }
 
 // governingTypes returns the types the package doc's "# Coverage" lets govern
 // an instance of the element declaration decl, in its order and by its
@@ -824,7 +824,7 @@ func (e *emitter) governingTypes(decl xsd.ElementDeclaration) (branches []tableB
 	for _, s := range slots {
 		td, ok := e.schema.ResolvedType(s.ref)
 		if !ok {
-			return nil, false, fmt.Errorf("%s of element %s at %s: its {type definition} does not resolve", s.slot, decl.Name(), decl.Loc())
+			return nil, false, fmt.Errorf("%s of element %s at %s: its {type definition} does not resolve", s.slot.name(), decl.Name(), decl.Loc())
 		}
 		if hasTable && td.Name() == errorTypeName {
 			continue
@@ -846,18 +846,13 @@ func (e *emitter) governingTypes(decl xsd.ElementDeclaration) (branches []tableB
 	return branches, len(branches) != 1, nil
 }
 
-// abstractMembers returns the members of the complex type t, which has
-// {abstract} true, for the element declaration decl: each type of the Schema's
-// {type definitions}, in [xsd.Schema.Types] order, that is a named complex type
-// with {abstract} false ·validly substitutable· for t subject to decl's
-// {disallowed substitutions} ([xsd.Schema.ValidlySubstitutable], which adds t's
-// {prohibited substitutions}). t governs no valid instance (§3.4.1
-// ctd-abstract, §3.3.4.4 cvc-type clause 2), so the members are the types an
-// xsi:type that ·overrides· t (§3.3.4.2 key-overrides clause 2, §3.3.4.3
-// cvc-elt clause 4) can name and a valid instance of decl can be governed by:
-// an anonymous type is never named, and an abstract one governs no instance
-// either, so a derived type that is itself abstract gives only its own members.
-// An error from ValidlySubstitutable is returned, never a decline.
+// abstractMembers returns the members "# Coverage" gives the complex type t,
+// which has {abstract} true, in a slot of the element declaration decl: each
+// named complex type with {abstract} false among [xsd.Schema.Types], in its
+// order, for which [xsd.Schema.ValidlySubstitutable] answers true against t
+// under decl's {disallowed substitutions}, t's {prohibited substitutions} being
+// the one it adds (§3.3.4.2 key-overrides clause 2). An error from
+// ValidlySubstitutable is returned, never a decline.
 func (e *emitter) abstractMembers(decl xsd.ElementDeclaration, t xsd.ComplexType) ([]xsd.TypeDefinition, error) {
 	var members []xsd.TypeDefinition
 	for _, td := range e.schema.Types() {
@@ -2313,7 +2308,7 @@ func (e *emitter) tableType(typ emittedType, ifc scope, decl xsd.ElementDeclarat
 	marker := "is" + typ.name
 	slots := "the {type table} of "
 	if _, hasTable := decl.TypeTable(); !hasTable {
-		slots = "the " + declaredSlot{}.String() + " of "
+		slots = "the " + declaredSlot{}.name() + " of "
 	}
 	e.decls = append(e.decls, header(typ.name, slots+e.elementFrom(decl))+fmt.Sprintf("type %s interface {\n\t%s()\n}\n", typ.name, marker))
 	for _, b := range branches {
@@ -2328,7 +2323,7 @@ func (e *emitter) tableType(typ emittedType, ifc scope, decl xsd.ElementDeclarat
 			field = e.nillableType(field, b.td)
 		}
 		fields := []fieldSpec{{local: b.local(), goType: field.name}}
-		e.decls[slot] = header(branch, b.slot.String()+" of "+e.elementFrom(decl)) + structDecl(branch, fields) + fmt.Sprintf("\nfunc (%s) %s() {}\n", branch, marker)
+		e.decls[slot] = header(branch, b.slot.name()+" of "+e.elementFrom(decl)) + structDecl(branch, fields) + fmt.Sprintf("\nfunc (%s) %s() {}\n", branch, marker)
 	}
 	return nil
 }
@@ -2361,14 +2356,14 @@ func (e *emitter) branchType(ifc scope, decl xsd.ElementDeclaration, b tableBran
 		}
 		return e.scopedType(child, e.branchOrigin(child, decl, b, t), nil, true, decl, t)
 	}
-	return emittedType{}, fmt.Errorf("%s of element %s at %s: unexpected type definition %T", b.slot.String(), decl.Name(), decl.Loc(), b.td)
+	return emittedType{}, fmt.Errorf("%s of element %s at %s: unexpected type definition %T", b.slot.name(), decl.Name(), decl.Loc(), b.td)
 }
 
 // branchScope is the scope of the type emitted for b's anonymous type, a
 // branch of the sealed interface whose path is ifc: ifc's path followed by
 // b's branch step.
 func branchScope(ifc scope, b tableBranch) scope {
-	return scope{root: ifc.root, path: append(slices.Clone(ifc.path), pathStep{name: xsd.QName{Local: b.local() + "Type"}, slot: b.slot.String()})}
+	return scope{root: ifc.root, path: append(slices.Clone(ifc.path), pathStep{name: xsd.QName{Local: b.local() + "Type"}, slot: b.slot.name()})}
 }
 
 // branchOrigin is the origin of the type emitted for t, b's complex type, a
@@ -2381,7 +2376,7 @@ func (e *emitter) branchOrigin(child scope, decl xsd.ElementDeclaration, b table
 	if t.Name() != (xsd.QName{}) {
 		return e.typeOrigin(t)
 	}
-	return origin{from: b.slot.String() + " of " + e.elementFrom(decl), subject: "complex type (anonymous) of " + child.place()}
+	return origin{from: b.slot.name() + " of " + e.elementFrom(decl), subject: "complex type (anonymous) of " + child.place()}
 }
 
 // attributeField returns the field of attribute use u (§3.5.1) of the complex
