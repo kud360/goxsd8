@@ -41,28 +41,23 @@ type EitherAny2 struct {
 func (EitherAny2) isEither() {}
 
 // Many is generated from element many declared at testdata/choicewildcard.xsd:19:3.
-type Many struct {
-	Choice []ManyChoice
+type Many interface {
+	isMany()
 }
 
-// ManyChoice is generated from element many declared at testdata/choicewildcard.xsd:19:3.
-type ManyChoice interface {
-	isManyChoice()
-}
-
-// ManyChoiceB is generated from element b declared at testdata/choicewildcard.xsd:22:9.
-type ManyChoiceB struct {
+// ManyB is generated from element b declared at testdata/choicewildcard.xsd:22:9.
+type ManyB struct {
 	B string
 }
 
-func (ManyChoiceB) isManyChoice() {}
+func (ManyB) isMany() {}
 
-// ManyChoiceAny is generated from element many declared at testdata/choicewildcard.xsd:19:3.
-type ManyChoiceAny struct {
+// ManyAny is generated from element many declared at testdata/choicewildcard.xsd:19:3.
+type ManyAny struct {
 	Any []AnyElement
 }
 
-func (ManyChoiceAny) isManyChoice() {}
+func (ManyAny) isMany() {}
 
 // AnyType is generated from complex type {http://www.w3.org/2001/XMLSchema}anyType.
 // Text is the characters before the first of Children, "" for none.

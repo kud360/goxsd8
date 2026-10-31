@@ -18,7 +18,7 @@
   </xs:element>
   <xs:element name="many">
     <xs:complexType>
-      <xs:choice maxOccurs="unbounded">
+      <xs:choice>
         <xs:element name="b" type="xs:string"/>
         <xs:any namespace="##other" maxOccurs="2"/>
       </xs:choice>

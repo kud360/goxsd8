@@ -88,6 +88,7 @@
 //   - no {primitive type definition}
 //   - uncovered primitive
 //   - repeated emptiable sequence
+//   - repeated group with a repeating edge
 //   - emptiable group alternative
 //   - particle with {max occurs} 0
 //   - struct-value recursion
@@ -483,7 +484,18 @@
 //     sequence particle with {max occurs} above 1 or unbounded one occurrence
 //     of which can match nothing declines, whatever its {min occurs}, where
 //     its field would be, before its own particles: its slice would hold an
-//     empty match both as no item and as items that match nothing.
+//     empty match both as no item and as items that match nothing. Failing
+//     that, a model group particle with {max occurs} above 1 or unbounded
+//     declines there too when its model group has, inline or through <group
+//     ref>, a particle that repeats — its {max occurs} above 1 or unbounded and
+//     other than its {min occurs} — at both its edges. A particle is at both
+//     edges of a model group when it is one of the group's particles and, if
+//     the group is a sequence, each other particle of that sequence is
+//     emptiable (xsd.Schema.ParticleEmptiable); or when it is at both edges of
+//     the model group of such a particle that does not repeat. Every
+//     alternative of a choice is at both edges. Its slice would hold one child
+//     sequence under more than one grouping into occurrences (§3.9.4.3
+//     cvc-accept).
 //   - An all group gives the fields a sequence of the same particles gives, in
 //     particle order, by the same occurrence rules, an all group particle
 //     occurring exactly once in it, a <group ref> to an all group (§3.8.6.2
