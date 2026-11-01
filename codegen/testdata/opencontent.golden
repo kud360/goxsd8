@@ -4,12 +4,12 @@ package opencontent
 
 // AnyType is generated from element {urn:opencontent}anyType declared at testdata/opencontent.xsd:5:3.
 type AnyType struct {
-	Inner       AnyTypeInner
+	Inner       Inner
 	OpenContent []AnyElement
 }
 
-// AnyTypeInner is generated from element inner declared at testdata/opencontent.xsd:11:9.
-type AnyTypeInner struct {
+// Inner is generated from element inner declared at testdata/opencontent.xsd:11:9.
+type Inner struct {
 	V string
 }
 

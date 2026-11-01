@@ -5,22 +5,22 @@ package extension
 // Staff is generated from element {urn:extension}staff declared at testdata/extension.xsd:38:3.
 type Staff struct {
 	Name    string
-	Address PersonAddress
+	Address Address
 	Company string
 	Name2   *string
 	Dept    *string
 	Id      string
 }
 
-// PersonAddress is generated from element address declared at testdata/extension.xsd:8:7.
-type PersonAddress struct {
+// Address is generated from element address declared at testdata/extension.xsd:8:7.
+type Address struct {
 	City string
 }
 
 // Boss is generated from element {urn:extension}boss declared at testdata/extension.xsd:39:3.
 type Boss struct {
 	Name    string
-	Address PersonAddress
+	Address Address
 	Company string
 	Name2   *string
 	Report  []Employee
@@ -31,7 +31,7 @@ type Boss struct {
 // Employee is generated from complex type {urn:extension}employee declared at testdata/extension.xsd:18:3.
 type Employee struct {
 	Name    string
-	Address PersonAddress
+	Address Address
 	Company string
 	Name2   *string
 	Dept    *string
@@ -41,7 +41,7 @@ type Employee struct {
 // Marked is generated from element {urn:extension}marked declared at testdata/extension.xsd:47:3.
 type Marked struct {
 	Name    string
-	Address PersonAddress
+	Address Address
 	Flag    *bool
 	Id      string
 }
@@ -80,7 +80,7 @@ func (PickedB) isPicked() {}
 // Visitor is generated from element {urn:extension}visitor declared at testdata/extension.xsd:84:3.
 type Visitor struct {
 	Name    string
-	Address PersonAddress
+	Address Address
 	Badge   string
 	Id      string
 }

@@ -10,11 +10,11 @@ type Crate struct {
 	Flags []Flag
 	All   []Size
 	Mix   Mixed
-	Code  BoxCodeUnion
+	Code  CodeUnion
 	Pin   Pin
 	Width Size
-	Unit  BoxUnitUnion
-	Mode  SharedModeUnion
+	Unit  UnitUnion
+	Mode  ModeUnion
 }
 
 // Box is generated from element {urn:t}box declared at testdata/unions.xsd:106:3.
@@ -23,11 +23,11 @@ type Box struct {
 	Flags []Flag
 	All   []Size
 	Mix   Mixed
-	Code  BoxCodeUnion
+	Code  CodeUnion
 	Pin   Pin
 	Width Size
-	Unit  BoxUnitUnion
-	Mode  SharedModeUnion
+	Unit  UnitUnion
+	Mode  ModeUnion
 }
 
 // Size2 is generated from element {urn:t}size declared at testdata/unions.xsd:107:3.
@@ -62,9 +62,9 @@ type Third []CodesUnion
 
 // Tag is generated from element {urn:t}tag declared at testdata/unions.xsd:133:3.
 type Tag struct {
-	Kind TagKindUnion
+	Kind KindUnion
 	Lang LangUnion
-	Mode SharedModeUnion
+	Mode ModeUnion
 }
 
 // Size is generated from simple type {urn:t}size declared at testdata/unions.xsd:19:3.
@@ -141,20 +141,20 @@ type MixedListUnionBoolean bool
 
 func (MixedListUnionBoolean) isMixedListUnion() {}
 
-// BoxCodeUnion is generated from simple type (anonymous) declared at testdata/unions.xsd:72:9.
-type BoxCodeUnion interface {
-	isBoxCodeUnion()
+// CodeUnion is generated from simple type (anonymous) declared at testdata/unions.xsd:72:9.
+type CodeUnion interface {
+	isCodeUnion()
 }
 
-// BoxCodeUnionInt is generated from simple type {http://www.w3.org/2001/XMLSchema}int.
-type BoxCodeUnionInt int32
+// CodeUnionInt is generated from simple type {http://www.w3.org/2001/XMLSchema}int.
+type CodeUnionInt int32
 
-func (BoxCodeUnionInt) isBoxCodeUnion() {}
+func (CodeUnionInt) isCodeUnion() {}
 
-// BoxCodeUnionAnyURI is generated from simple type {http://www.w3.org/2001/XMLSchema}anyURI.
-type BoxCodeUnionAnyURI string
+// CodeUnionAnyURI is generated from simple type {http://www.w3.org/2001/XMLSchema}anyURI.
+type CodeUnionAnyURI string
 
-func (BoxCodeUnionAnyURI) isBoxCodeUnion() {}
+func (CodeUnionAnyURI) isCodeUnion() {}
 
 // PinUnion is generated from simple type (anonymous) declared at testdata/unions.xsd:111:5.
 type PinUnion interface {
@@ -171,35 +171,35 @@ type PinUnionInt int32
 
 func (PinUnionInt) isPinUnion() {}
 
-// BoxUnitUnion is generated from simple type (anonymous) declared at testdata/unions.xsd:80:7.
-type BoxUnitUnion interface {
-	isBoxUnitUnion()
+// UnitUnion is generated from simple type (anonymous) declared at testdata/unions.xsd:80:7.
+type UnitUnion interface {
+	isUnitUnion()
 }
 
-// BoxUnitUnionString is generated from simple type {http://www.w3.org/2001/XMLSchema}string.
-type BoxUnitUnionString string
+// UnitUnionString is generated from simple type {http://www.w3.org/2001/XMLSchema}string.
+type UnitUnionString string
 
-func (BoxUnitUnionString) isBoxUnitUnion() {}
+func (UnitUnionString) isUnitUnion() {}
 
-// BoxUnitUnionInt is generated from simple type {http://www.w3.org/2001/XMLSchema}int.
-type BoxUnitUnionInt int32
+// UnitUnionInt is generated from simple type {http://www.w3.org/2001/XMLSchema}int.
+type UnitUnionInt int32
 
-func (BoxUnitUnionInt) isBoxUnitUnion() {}
+func (UnitUnionInt) isUnitUnion() {}
 
-// SharedModeUnion is generated from simple type (anonymous) declared at testdata/unions.xsd:60:7.
-type SharedModeUnion interface {
-	isSharedModeUnion()
+// ModeUnion is generated from simple type (anonymous) declared at testdata/unions.xsd:60:7.
+type ModeUnion interface {
+	isModeUnion()
 }
 
-// SharedModeUnionBoolean is generated from simple type {http://www.w3.org/2001/XMLSchema}boolean.
-type SharedModeUnionBoolean bool
+// ModeUnionBoolean is generated from simple type {http://www.w3.org/2001/XMLSchema}boolean.
+type ModeUnionBoolean bool
 
-func (SharedModeUnionBoolean) isSharedModeUnion() {}
+func (ModeUnionBoolean) isModeUnion() {}
 
-// SharedModeUnionString is generated from simple type {http://www.w3.org/2001/XMLSchema}string.
-type SharedModeUnionString string
+// ModeUnionString is generated from simple type {http://www.w3.org/2001/XMLSchema}string.
+type ModeUnionString string
 
-func (SharedModeUnionString) isSharedModeUnion() {}
+func (ModeUnionString) isModeUnion() {}
 
 // NarrowValueUnion is generated from simple type (anonymous) declared at testdata/unions.xsd:100:7.
 type NarrowValueUnion interface {
@@ -246,20 +246,20 @@ type CodesUnionNMTOKEN string
 
 func (CodesUnionNMTOKEN) isCodesUnion() {}
 
-// TagKindUnion is generated from simple type (anonymous) declared at testdata/unions.xsd:136:9.
-type TagKindUnion interface {
-	isTagKindUnion()
+// KindUnion is generated from simple type (anonymous) declared at testdata/unions.xsd:136:9.
+type KindUnion interface {
+	isKindUnion()
 }
 
-// TagKindUnionInt is generated from simple type {http://www.w3.org/2001/XMLSchema}int.
-type TagKindUnionInt int32
+// KindUnionInt is generated from simple type {http://www.w3.org/2001/XMLSchema}int.
+type KindUnionInt int32
 
-func (TagKindUnionInt) isTagKindUnion() {}
+func (KindUnionInt) isKindUnion() {}
 
-// TagKindUnionString is generated from simple type {http://www.w3.org/2001/XMLSchema}string.
-type TagKindUnionString string
+// KindUnionString is generated from simple type {http://www.w3.org/2001/XMLSchema}string.
+type KindUnionString string
 
-func (TagKindUnionString) isTagKindUnion() {}
+func (KindUnionString) isKindUnion() {}
 
 // LangUnion is generated from simple type (anonymous) declared at testdata/unions.xsd:54:5.
 type LangUnion interface {

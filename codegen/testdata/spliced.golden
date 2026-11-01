@@ -30,10 +30,10 @@ type Row struct {
 // RowSequence is generated from complex type {urn:spliced}row declared at testdata/spliced.xsd:31:3.
 type RowSequence struct {
 	K string
-	V RowV
+	V V
 }
 
-// RowV is generated from element v declared at testdata/spliced.xsd:35:9.
-type RowV struct {
+// V is generated from element v declared at testdata/spliced.xsd:35:9.
+type V struct {
 	W string
 }

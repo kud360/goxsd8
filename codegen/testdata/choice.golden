@@ -78,75 +78,75 @@ func (SecondCorner) isSecond() {}
 
 // Left is generated from element {urn:choice}left declared at testdata/choice.xsd:46:3.
 type Left struct {
-	Slot HolderSlot
+	Slot Slot
 }
 
-// HolderSlot is generated from element slot declared at testdata/choice.xsd:36:7.
-type HolderSlot interface {
-	isHolderSlot()
+// Slot is generated from element slot declared at testdata/choice.xsd:36:7.
+type Slot interface {
+	isSlot()
 }
 
-// HolderSlotName is generated from element name declared at testdata/choice.xsd:39:13.
-type HolderSlotName struct {
+// SlotName is generated from element name declared at testdata/choice.xsd:39:13.
+type SlotName struct {
 	Name string
 }
 
-func (HolderSlotName) isHolderSlot() {}
+func (SlotName) isSlot() {}
 
-// HolderSlotEmpty is generated from element empty declared at testdata/choice.xsd:40:13.
-type HolderSlotEmpty struct {
+// SlotEmpty is generated from element empty declared at testdata/choice.xsd:40:13.
+type SlotEmpty struct {
 	Empty bool
 }
 
-func (HolderSlotEmpty) isHolderSlot() {}
+func (SlotEmpty) isSlot() {}
 
 // Right is generated from element {urn:choice}right declared at testdata/choice.xsd:47:3.
 type Right struct {
-	Slot HolderSlot
+	Slot Slot
 }
 
 // Record is generated from element {urn:choice}record declared at testdata/choice.xsd:48:3.
 type Record struct {
-	Many []RecordMany
-	Opt  RecordOpt
-	One  RecordOne
+	Many []Many
+	Opt  Opt
+	One  One
 }
 
-// RecordMany is generated from element many declared at testdata/choice.xsd:51:9.
-type RecordMany interface {
-	isRecordMany()
+// Many is generated from element many declared at testdata/choice.xsd:51:9.
+type Many interface {
+	isMany()
 }
 
-// RecordManyA is generated from element a declared at testdata/choice.xsd:54:15.
-type RecordManyA struct {
+// ManyA is generated from element a declared at testdata/choice.xsd:54:15.
+type ManyA struct {
 	A string
 }
 
-func (RecordManyA) isRecordMany() {}
+func (ManyA) isMany() {}
 
-// RecordOpt is generated from element opt declared at testdata/choice.xsd:58:9.
-type RecordOpt interface {
-	isRecordOpt()
+// Opt is generated from element opt declared at testdata/choice.xsd:58:9.
+type Opt interface {
+	isOpt()
 }
 
-// RecordOptB is generated from element b declared at testdata/choice.xsd:61:15.
-type RecordOptB struct {
+// OptB is generated from element b declared at testdata/choice.xsd:61:15.
+type OptB struct {
 	B string
 }
 
-func (RecordOptB) isRecordOpt() {}
+func (OptB) isOpt() {}
 
-// RecordOne is generated from element one declared at testdata/choice.xsd:65:9.
-type RecordOne interface {
-	isRecordOne()
+// One is generated from element one declared at testdata/choice.xsd:65:9.
+type One interface {
+	isOne()
 }
 
-// RecordOneC is generated from element c declared at testdata/choice.xsd:68:15.
-type RecordOneC struct {
+// OneC is generated from element c declared at testdata/choice.xsd:68:15.
+type OneC struct {
 	C string
 }
 
-func (RecordOneC) isRecordOne() {}
+func (OneC) isOne() {}
 
 // Dual is generated from element {urn:choice}dual declared at testdata/choice.xsd:75:3.
 type Dual interface {

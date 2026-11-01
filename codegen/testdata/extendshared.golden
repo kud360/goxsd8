@@ -4,21 +4,21 @@ package extendshared
 
 // First is generated from element first declared at testdata/extendshared.xsd:20:3.
 type First struct {
-	X CtX
+	X X
 }
 
-// CtX is generated from element x declared at testdata/extendshared.xsd:11:7.
-type CtX struct {
+// X is generated from element x declared at testdata/extendshared.xsd:11:7.
+type X struct {
 	A string
 }
 
 // Ct is generated from element ct declared at testdata/extendshared.xsd:21:3.
 type Ct struct {
-	X CtX
-	Y CtY
+	X X
+	Y Y
 }
 
-// CtY is generated from element y declared at testdata/extendshared.xsd:26:13.
-type CtY struct {
+// Y is generated from element y declared at testdata/extendshared.xsd:26:13.
+type Y struct {
 	B bool
 }

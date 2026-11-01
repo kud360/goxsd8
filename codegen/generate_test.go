@@ -592,7 +592,7 @@ func TestGenerateEmptyContent(t *testing.T) {
 		{"choice alternative", `<xs:element name="e"><xs:complexType><xs:choice><xs:element name="a"><xs:complexType/></xs:element><xs:element name="b" type="xs:string"/></xs:choice></xs:complexType></xs:element>`,
 			"type EA struct {\n\tA EA2\n}\n\nfunc (EA) isE() {}\n\n// EA2 is generated from element a declared at s.xsd:1:"},
 		{"repeated local element", `<xs:element name="e"><xs:complexType><xs:sequence><xs:element name="a" maxOccurs="unbounded"><xs:complexType/></xs:element></xs:sequence></xs:complexType></xs:element>`,
-			"type E struct {\n\tA []EA\n}\n"},
+			"type E struct {\n\tA []A\n}\n"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -717,11 +717,11 @@ func TestGenerateElementRefs(t *testing.T) {
 func TestGenerateGroupRefs(t *testing.T) {
 	tests := []struct{ name, body, want string }{
 		{"recursion through content particle", `<xs:group name="g"><xs:sequence><xs:element name="e" minOccurs="0"><xs:complexType><xs:group ref="g"/></xs:complexType></xs:element></xs:sequence></xs:group><xs:element name="r"><xs:complexType><xs:group ref="g"/></xs:complexType></xs:element>`,
-			"type R struct {\n\tE *GE\n}\n\n// GE is generated from element e declared at s.xsd:1:88.\ntype GE struct {\n\tE *GE\n}\n"},
+			"type R struct {\n\tE *E\n}\n\n// E is generated from element e declared at s.xsd:1:88.\ntype E struct {\n\tE *E\n}\n"},
 		{"recursion through inline sequence", `<xs:group name="g"><xs:sequence><xs:element name="e" minOccurs="0"><xs:complexType><xs:sequence><xs:group ref="g"/></xs:sequence></xs:complexType></xs:element></xs:sequence></xs:group><xs:element name="r"><xs:complexType><xs:sequence><xs:group ref="g"/></xs:sequence></xs:complexType></xs:element>`,
-			"type R struct {\n\tE *GE\n}\n\n// GE is generated from element e declared at s.xsd:1:88.\ntype GE struct {\n\tE *GE\n}\n"},
+			"type R struct {\n\tE *E\n}\n\n// E is generated from element e declared at s.xsd:1:88.\ntype E struct {\n\tE *E\n}\n"},
 		{"value field to a sibling", `<xs:group name="g"><xs:sequence><xs:element name="a" minOccurs="0"><xs:complexType><xs:group ref="g"/></xs:complexType></xs:element><xs:element name="b"><xs:complexType><xs:sequence><xs:element name="s" type="xs:string"/></xs:sequence></xs:complexType></xs:element></xs:sequence></xs:group><xs:element name="r"><xs:complexType><xs:group ref="g"/></xs:complexType></xs:element>`,
-			"type GA struct {\n\tA *GA\n\tB GB\n}\n"},
+			"type A struct {\n\tA *A\n\tB B\n}\n"},
 		{"complex type and group of one name", `<xs:complexType name="g"><xs:sequence><xs:element name="e"><xs:complexType><xs:sequence><xs:element name="i" type="xs:string"/></xs:sequence></xs:complexType></xs:element></xs:sequence></xs:complexType><xs:group name="g"><xs:sequence><xs:element name="e"><xs:complexType><xs:sequence><xs:element name="j" type="xs:int"/></xs:sequence></xs:complexType></xs:element></xs:sequence></xs:group><xs:element name="r"><xs:complexType><xs:sequence><xs:element name="x" type="g"/><xs:group ref="g"/></xs:sequence></xs:complexType></xs:element>`,
 			"type GE struct {\n\tI string\n}\n\n// GE2 is generated from element e declared at s.xsd:1:"},
 	}

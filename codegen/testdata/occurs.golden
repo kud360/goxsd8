@@ -22,11 +22,11 @@ type Maybe struct {
 
 // MaybeSequence is generated from element {urn:occurs}maybe declared at testdata/occurs.xsd:14:3.
 type MaybeSequence struct {
-	Inner MaybeInner
+	Inner Inner
 }
 
-// MaybeInner is generated from element inner declared at testdata/occurs.xsd:17:9.
-type MaybeInner struct {
+// Inner is generated from element inner declared at testdata/occurs.xsd:17:9.
+type Inner struct {
 	X string
 }
 

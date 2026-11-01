@@ -4,22 +4,22 @@ package nested
 
 // PurchaseOrder is generated from element {urn:po}purchaseOrder declared at testdata/nested.xsd:4:3.
 type PurchaseOrder struct {
-	ShipTo PurchaseOrderShipTo
-	Item   []PurchaseOrderItem
+	ShipTo ShipTo
+	Item   []Item
 }
 
-// PurchaseOrderShipTo is generated from element shipTo declared at testdata/nested.xsd:7:9.
-type PurchaseOrderShipTo struct {
+// ShipTo is generated from element shipTo declared at testdata/nested.xsd:7:9.
+type ShipTo struct {
 	Name    string
-	Address *PurchaseOrderShipToAddress
+	Address *Address
 }
 
-// PurchaseOrderShipToAddress is generated from element address declared at testdata/nested.xsd:11:15.
-type PurchaseOrderShipToAddress struct {
+// Address is generated from element address declared at testdata/nested.xsd:11:15.
+type Address struct {
 	Street []string
 }
 
-// PurchaseOrderItem is generated from element {urn:po}item declared at testdata/nested.xsd:21:9.
-type PurchaseOrderItem struct {
+// Item is generated from element {urn:po}item declared at testdata/nested.xsd:21:9.
+type Item struct {
 	Sku string
 }

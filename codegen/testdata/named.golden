@@ -4,25 +4,25 @@ package named
 
 // First is generated from element first declared at testdata/named.xsd:20:3.
 type First struct {
-	X CtX
+	X X
 }
 
-// CtX is generated from element x declared at testdata/named.xsd:5:7.
-type CtX struct {
-	Y *CtXY
+// X is generated from element x declared at testdata/named.xsd:5:7.
+type X struct {
+	Y *Y
 }
 
-// CtXY is generated from element y declared at testdata/named.xsd:8:13.
-type CtXY struct {
+// Y is generated from element y declared at testdata/named.xsd:8:13.
+type Y struct {
 	Z string
 }
 
 // Second is generated from element second declared at testdata/named.xsd:21:3.
 type Second struct {
-	X CtX
+	X X
 }
 
-// CtX2 is generated from element ctX declared at testdata/named.xsd:22:3.
-type CtX2 struct {
+// CtX is generated from element ctX declared at testdata/named.xsd:22:3.
+type CtX struct {
 	W bool
 }

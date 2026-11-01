@@ -51,7 +51,7 @@
     </xs:complexContent>
   </xs:complexType>
   <!-- frame's inner, of the abstract type shape and occurring once, holds the
-       interface FrameInner, whose branch FrameInnerFrame holds a Frame: the
+       interface Inner, whose branch InnerFrame holds a Frame: the
        interface holds no struct value, so no struct-value recursion passes
        inner. -->
   <xs:complexType name="frame">
@@ -66,8 +66,8 @@
   <!-- The top-level element shape gets the sealed interface Shape, one branch
        per member. -->
   <xs:element name="shape" type="a:shape"/>
-  <!-- drawing's local item gets the interface DrawingItem, and fill, nillable,
-       DrawingFill, each branch's field wrapped in Nillable. ring blocks
+  <!-- drawing's local item gets the interface Item, and fill, nillable,
+       Fill, each branch's field wrapped in Nillable. ring blocks
        extension, which leaves plain alone: it emits as if of type plain. fig
        is a member of the abstract head figure, of type shape, so the branch
        FigureSubstitutionGroupFig holds fig's interface Fig. -->

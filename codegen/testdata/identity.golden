@@ -4,17 +4,17 @@ package identity
 
 // Catalog is generated from element catalog declared at testdata/identity.xsd:3:3.
 type Catalog struct {
-	Item []CatalogItem
-	Tags CatalogTags
+	Item []Item
+	Tags Tags
 }
 
-// CatalogItem is generated from element item declared at testdata/identity.xsd:6:9.
-type CatalogItem struct {
+// Item is generated from element item declared at testdata/identity.xsd:6:9.
+type Item struct {
 	Id  string
 	Ref string
 }
 
-// CatalogTags is generated from element tags declared at testdata/identity.xsd:14:9.
-type CatalogTags struct {
+// Tags is generated from element tags declared at testdata/identity.xsd:14:9.
+type Tags struct {
 	Tag []string
 }
