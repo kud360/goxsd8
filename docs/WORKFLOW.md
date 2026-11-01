@@ -555,16 +555,15 @@ applied before filing and again before grounding something already filed:
 
 - **Correct a stale or wrong premise in the body**, not only in a comment;
   the next reader starts from the body. The comment stays as provenance.
-- **Write back only a body read byte-faithfully and whole** — through
-  repository-scoped REST (docs/ROUTINES.md). The MCP `issue_read` path
-  strips angle-bracketed tokens, escapes punctuation, and truncates a long
-  body without a marker, headings included (#764, #1014). The escaping is
-  reversible; the stripping and the truncation are not. Where only that
-  path is available, a write is blocked unless the copy is provably
-  complete and every stripped token re-derives: otherwise comment on the
-  thread and name the section the body still gets wrong. **A body known to
-  be wrong is never landed silently.** `WebFetch` on the issue URL returns
-  a small model's summary of the rendered page, never the stored body.
+- **Read a body byte-faithfully and whole before writing it back, and
+  write it through repository-scoped REST** — docs/ROUTINES.md's "The MCP
+  channel is lossy both ways" says what each other path loses (#764,
+  #3264). Where only a lossy read is available, a write is blocked unless
+  the copy is provably complete and every stripped token re-derives:
+  otherwise comment on the thread and name the section the body still
+  gets wrong. **A body known to be wrong is never landed silently.**
+  `WebFetch` on the issue URL returns a small model's summary of the
+  rendered page, never the stored body.
 - **Search the open queue** for the primary file path and identifier, the
   way docs/ROUTINES.md says makes an empty answer mean something (#893). A
   hit is either a duplicate (close one, say which) or an adjacent issue

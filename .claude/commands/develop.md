@@ -24,10 +24,16 @@ push the heartbeat WORKFLOW's lease invariant requires before a round.
   a mason or judge round, the `GROUNDING:` comment, the latest `MASON:`
   account and the verdict a repair or round-2 judge follows, so the
   delegate states its outcome with no GitHub read of the thread (#2449).
-- **Each pasted part is headed by its source** — the body section, or the
-  comment's `issuecomment-<id>`. The mason's and the arbiter's own files
-  have them refuse a round brief with a part missing or a placeholder in
-  it, `BRIEF INCOMPLETE: <part>`, whatever the brief says (#2683, #2868).
+  **A part too long to paste goes as a file** in the session scratchpad,
+  written from a byte-faithful REST read of that comment or body
+  (docs/ROUTINES.md) and named in the brief under the part's heading; the
+  delegate reads it whole before anything else. A condensed part is a
+  placeholder, in a file or inline (#3137).
+- **Each part is headed by its source** — the body section, or the
+  comment's `issuecomment-<id>`. The mason's, the arbiter's and the
+  warden's own files have them refuse a brief with a part missing,
+  unheaded, condensed or a placeholder, or named by a file they cannot
+  read, `BRIEF INCOMPLETE: <part>`, whatever the brief says (#2683, #2868).
   Answer that return by sending the brief again, whole; it is not a
   round, and no cap counts it.
 - **It never reshapes a duty.** It names the gate only as CLAUDE.md's
@@ -130,13 +136,17 @@ counts.
    ONE `GROUNDING:` comment — the only durable copy — with each block
    headed by the agent that wrote it:
    - the **oracle** answers the spec — the clauses and rule IDs in scope —
-     and rules each `## Acceptance` bullet whose truth turns on spec text.
-     An issue whose `## Spec` is n/a has no oracle block, and says so.
+     rules each `## Acceptance` bullet whose truth turns on spec text, and
+     rules each locator the body's `## Spec` carries — section number,
+     anchor, line — `states it | elsewhere: <locator> | absent`, because
+     the mason copies those into code comments (#3248). An issue whose
+     `## Spec` is n/a has no oracle block, and says so.
    - the **arbiter** rules every other `## Acceptance` bullet, rules
-     `## Surface`, and makes the PREDICTION: each of those is a fact about
-     the tree or the corpus, answered by running an instrument the oracle
-     has no tools for (#1588). The bars it rules are the ones its own
-     verdict will apply.
+     `## Surface`, rules each claim the `## Goal` makes about what the code
+     does today by probing it at the base, and makes the PREDICTION: each
+     of those is a fact about the tree or the corpus, answered by running
+     an instrument the oracle has no tools for (#1588, #3276). The bars it
+     rules are the ones its own verdict will apply.
 
    Grounding rules bars, not designs: where the code goes is mason's.
 
@@ -180,10 +190,15 @@ counts.
    - "<the bullet>" — satisfiable | vacuous | false | unsatisfiable | n/a, and why
    ```
 
-   A bullet ruled vacuous, false or unsatisfiable is re-stated in the body
-   before step 4 starts, and so is any premise a later step falsifies — by
-   the orchestrator where a ruling states the replacement text (WORKFLOW's
-   pen), by the **cartographer** otherwise (#1380). A re-statement carries
+   A bullet, locator or premise ruled vacuous, false, unsatisfiable,
+   `elsewhere` or `absent` is re-stated in the body before step 4 starts, and so is any
+   premise a later step falsifies. **The ruling writes the replacement
+   text**, so the orchestrator transcribes it (WORKFLOW's pen): a locator
+   as the spec reads, a premise as the probe showed it, a list of tests or
+   sites re-derived by the command that lists them at the base and quoting
+   that command (#3265, #3276). The **cartographer** re-states only a
+   change to what the issue delivers — a Goal the probe overturns, a scope
+   that splits (#1380). A re-statement carries
    every standing ruling on the bullets it keeps: a bar ruled unreachable
    does not survive a re-scope unchanged (#1102). Its writer checks it
    before posting, because a grounding's error copied into the body is
@@ -256,6 +271,12 @@ counts.
    altered public API in that same sense, warden reviews the diff too
    (#1168), with worktree isolation, since it runs the gate. Post both
    verdicts on the issue.
+
+   A mason return of `RULING AMBIGUOUS: <item>` goes to that ruling's
+   author — the warden, the grounding arbiter or the `RULING:` writer —
+   for a one-item ruling posted on the thread; send it to the mason with
+   `SendMessage`, or in a fresh brief beside the original. Like `BRIEF
+   INCOMPLETE`, it is not a round.
 
    Mason may absorb adjacent work under docs/WORKFLOW.md's scope rule.
    Absorbed items belong in the commit body, not in a new issue.

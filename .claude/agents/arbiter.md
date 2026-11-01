@@ -23,8 +23,8 @@ on accept only (#1812, #1880).
 
 **A judge round's brief whose `GROUNDING:` part or latest `MASON:`
 account — or, re-judging, the verdict it follows — is missing, is not
-headed by its `issuecomment-<id>`, or holds a placeholder is not
-delivered:** return `BRIEF INCOMPLETE: <part>` before doing anything
+headed by its `issuecomment-<id>`, is condensed, holds a placeholder or
+names a file you cannot read whole is not delivered:** return `BRIEF INCOMPLETE: <part>` before doing anything
 else, whether or not the brief asks you to (#2868).
 
 Read the ENTIRE diff. No skimming.
@@ -109,7 +109,8 @@ FINDINGS:
 
 A finding against one arm or site of a mechanism states the condition that
 makes it wrong, and the verdict rules every other arm or site where that
-condition can hold: each unsound one is a FINDINGS line of its own, and the
+condition can hold — for a repeated string, every site the repo-wide
+`git grep` for it lists, test data included (#3158): each unsound one is a FINDINGS line of its own, and the
 sound ones are named on the line of the finding whose condition they clear
 (#2449).
 
