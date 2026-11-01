@@ -4,21 +4,21 @@ package extendsharedfirst
 
 // Ct is generated from element ct declared at testdata/extendsharedfirst.xsd:7:3.
 type Ct struct {
-	X CtX
-	Y CtY
+	X X
+	Y Y
 }
 
-// CtX is generated from element x declared at testdata/extendsharedfirst.xsd:26:7.
-type CtX struct {
+// X is generated from element x declared at testdata/extendsharedfirst.xsd:26:7.
+type X struct {
 	A string
 }
 
-// CtY is generated from element y declared at testdata/extendsharedfirst.xsd:12:13.
-type CtY struct {
+// Y is generated from element y declared at testdata/extendsharedfirst.xsd:12:13.
+type Y struct {
 	B bool
 }
 
 // First is generated from element first declared at testdata/extendsharedfirst.xsd:35:3.
 type First struct {
-	X CtX
+	X X
 }

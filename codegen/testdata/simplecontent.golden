@@ -58,7 +58,7 @@ type Valued struct {
 type Holder struct {
 	First  Labelled
 	Rest   []Labelled
-	Inline HolderInline
+	Inline Inline
 }
 
 // Labelled is generated from complex type {urn:t}labelled declared at testdata/simplecontent.xsd:25:3.
@@ -68,8 +68,8 @@ type Labelled struct {
 	Note  *string
 }
 
-// HolderInline is generated from element inline declared at testdata/simplecontent.xsd:95:9.
-type HolderInline struct {
+// Inline is generated from element inline declared at testdata/simplecontent.xsd:95:9.
+type Inline struct {
 	Value float64
 	Scale *int32
 }

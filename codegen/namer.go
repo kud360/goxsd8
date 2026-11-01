@@ -228,18 +228,62 @@ func renderSteps(steps []nameStep) string {
 
 // resolve returns the name of each of claims, in order, by the package doc's
 // "# Naming": each claim's candidate — a fixed claim's rendering, an extending
-// claim's extended name followed by its words' rendering, a path claim's
-// rendering — then the numeric suffix a namer gives a candidate already
-// taken, in claim order.
+// claim's extended name, as resolve names it, followed by its words'
+// rendering, a path claim's shortest unique suffix (shortest) — then the
+// numeric suffix a namer gives a candidate already taken, in claim order.
 func resolve(claims []typeClaim) []string {
+	full := make([][]string, len(claims))
+	fixed := map[string]bool{} // fixed claims' renderings; a lookup index only, never iterated (STYLE D2)
+	for i, c := range claims {
+		for _, s := range c.steps {
+			full[i] = append(full[i], identifier(s.word))
+		}
+		switch c.kind {
+		case fixedClaim:
+			fixed[strings.Join(full[i], "")] = true
+		case pathClaim:
+		case extendClaim:
+			full[i] = slices.Concat(full[c.of], full[i])
+		}
+	}
 	names := make([]string, len(claims))
 	n := newNamer()
 	for i, c := range claims {
-		candidate := renderSteps(c.steps)
-		if c.kind == extendClaim {
-			candidate = identifier(names[c.of]) + candidate
+		var candidate string
+		switch c.kind {
+		case fixedClaim:
+			candidate = strings.Join(full[i], "")
+		case pathClaim:
+			candidate = shortest(i, c.steps, full, fixed)
+		case extendClaim:
+			candidate = identifier(names[c.of]) + renderSteps(c.steps)
 		}
 		names[i] = n.claimCandidate(candidate)
 	}
 	return names
+}
+
+// shortest returns the candidate of the path claim i, whose path is steps:
+// the rendering of its shortest suffix that starts at a declared step and is
+// unique, or of the whole path when no shorter suffix is. A suffix is unique
+// when no other claim's full path, each step rendered (full), ends with it,
+// and its rendering is no fixed claim's (fixed).
+func shortest(i int, steps []nameStep, full [][]string, fixed map[string]bool) string {
+	for k := len(steps) - 1; k > 0; k-- {
+		suffix := full[i][k:]
+		if !steps[k].declared || fixed[strings.Join(suffix, "")] {
+			continue
+		}
+		unique := true
+		for j, other := range full {
+			if j != i && len(other) >= len(suffix) && slices.Equal(other[len(other)-len(suffix):], suffix) {
+				unique = false
+				break
+			}
+		}
+		if unique {
+			return strings.Join(suffix, "")
+		}
+	}
+	return strings.Join(full[i], "")
 }

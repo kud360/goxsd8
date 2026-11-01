@@ -1,0 +1,58 @@
+<?xml version="1.0"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <!-- An anonymous type is named by the shortest suffix of its path that
+       starts at a declared step and is unique ("# Naming"). Three paths end
+       in address, so each address type keeps the step before it
+       (OrderAddress, ShipToAddress, BillToAddress) and no type takes
+       Address; shipTo and billTo end no other path (ShipTo, BillTo); geo's
+       type takes Geo whatever its parent is named; the choice's occurrence
+       type keeps shipTo, since a compositor word starts no suffix
+       (ShipToChoice), and its branches extend that name. -->
+  <xs:element name="order">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element name="address">
+          <xs:complexType>
+            <xs:sequence>
+              <xs:element name="line" type="xs:string"/>
+            </xs:sequence>
+          </xs:complexType>
+        </xs:element>
+        <xs:element name="shipTo">
+          <xs:complexType>
+            <xs:sequence>
+              <xs:element name="address">
+                <xs:complexType>
+                  <xs:sequence>
+                    <xs:element name="geo">
+                      <xs:complexType>
+                        <xs:attribute name="lat" type="xs:decimal"/>
+                      </xs:complexType>
+                    </xs:element>
+                  </xs:sequence>
+                </xs:complexType>
+              </xs:element>
+              <xs:choice maxOccurs="unbounded">
+                <xs:element name="a" type="xs:string"/>
+                <xs:element name="b" type="xs:int"/>
+              </xs:choice>
+            </xs:sequence>
+          </xs:complexType>
+        </xs:element>
+        <xs:element name="billTo">
+          <xs:complexType>
+            <xs:sequence>
+              <xs:element name="address">
+                <xs:complexType>
+                  <xs:sequence>
+                    <xs:element name="line" type="xs:string"/>
+                  </xs:sequence>
+                </xs:complexType>
+              </xs:element>
+            </xs:sequence>
+          </xs:complexType>
+        </xs:element>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>

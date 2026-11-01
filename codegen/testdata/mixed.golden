@@ -120,27 +120,27 @@ func (PickChoiceC) isPickChoice() {}
 // Tabled is generated from element tabled declared at testdata/mixed.xsd:55:3.
 type Tabled struct {
 	Text string
-	V    *MixedChild[TabledV]
+	V    *MixedChild[V]
 }
 
-// TabledV is generated from the {type table} of element v declared at testdata/mixed.xsd:58:9.
-type TabledV interface {
-	isTabledV()
+// V is generated from the {type table} of element v declared at testdata/mixed.xsd:58:9.
+type V interface {
+	isV()
 }
 
-// TabledVInt is generated from {type table} alternative 1 of element v declared at testdata/mixed.xsd:58:9.
-type TabledVInt struct {
+// VInt is generated from {type table} alternative 1 of element v declared at testdata/mixed.xsd:58:9.
+type VInt struct {
 	Int int32
 }
 
-func (TabledVInt) isTabledV() {}
+func (VInt) isV() {}
 
-// TabledVString is generated from {default type definition} of element v declared at testdata/mixed.xsd:58:9.
-type TabledVString struct {
+// VString is generated from {default type definition} of element v declared at testdata/mixed.xsd:58:9.
+type VString struct {
 	String string
 }
 
-func (TabledVString) isTabledV() {}
+func (VString) isV() {}
 
 // Loose is generated from element loose declared at testdata/mixed.xsd:65:3.
 type Loose struct {

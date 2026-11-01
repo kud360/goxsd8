@@ -57,17 +57,17 @@ type Extended struct {
 // Tree is generated from element {urn:groupref}tree declared at testdata/groupref.xsd:66:3.
 type Tree struct {
 	Label string
-	Child *NodeChild
+	Child *Child
 }
 
-// NodeChild is generated from element child declared at testdata/groupref.xsd:59:7.
-type NodeChild struct {
+// Child is generated from element child declared at testdata/groupref.xsd:59:7.
+type Child struct {
 	Label string
-	Child *NodeChild
+	Child *Child
 }
 
 // Wood is generated from element {urn:groupref}wood declared at testdata/groupref.xsd:76:3.
 type Wood struct {
 	Label string
-	Child *NodeChild
+	Child *Child
 }

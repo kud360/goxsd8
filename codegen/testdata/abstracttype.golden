@@ -60,116 +60,116 @@ func (ShapeFrame) isShape() {}
 // Frame is generated from complex type {urn:abs}frame declared at testdata/abstracttype.xsd:57:3.
 type Frame struct {
 	Id    *string
-	Inner FrameInner
+	Inner Inner
 	Name  *string
 }
 
-// FrameInner is generated from the {type definition} of element inner declared at testdata/abstracttype.xsd:61:11.
-type FrameInner interface {
-	isFrameInner()
+// Inner is generated from the {type definition} of element inner declared at testdata/abstracttype.xsd:61:11.
+type Inner interface {
+	isInner()
 }
 
-// FrameInnerPlain is generated from {type definition} of element inner declared at testdata/abstracttype.xsd:61:11.
-type FrameInnerPlain struct {
+// InnerPlain is generated from {type definition} of element inner declared at testdata/abstracttype.xsd:61:11.
+type InnerPlain struct {
 	Plain Plain
 }
 
-func (FrameInnerPlain) isFrameInner() {}
+func (InnerPlain) isInner() {}
 
-// FrameInnerCircle is generated from {type definition} of element inner declared at testdata/abstracttype.xsd:61:11.
-type FrameInnerCircle struct {
+// InnerCircle is generated from {type definition} of element inner declared at testdata/abstracttype.xsd:61:11.
+type InnerCircle struct {
 	Circle Circle
 }
 
-func (FrameInnerCircle) isFrameInner() {}
+func (InnerCircle) isInner() {}
 
-// FrameInnerSquare is generated from {type definition} of element inner declared at testdata/abstracttype.xsd:61:11.
-type FrameInnerSquare struct {
+// InnerSquare is generated from {type definition} of element inner declared at testdata/abstracttype.xsd:61:11.
+type InnerSquare struct {
 	Square Square
 }
 
-func (FrameInnerSquare) isFrameInner() {}
+func (InnerSquare) isInner() {}
 
-// FrameInnerFrame is generated from {type definition} of element inner declared at testdata/abstracttype.xsd:61:11.
-type FrameInnerFrame struct {
+// InnerFrame is generated from {type definition} of element inner declared at testdata/abstracttype.xsd:61:11.
+type InnerFrame struct {
 	Frame Frame
 }
 
-func (FrameInnerFrame) isFrameInner() {}
+func (InnerFrame) isInner() {}
 
 // Drawing is generated from element {urn:abs}drawing declared at testdata/abstracttype.xsd:74:3.
 type Drawing struct {
-	Item   []DrawingItem
-	Fill   DrawingFill
+	Item   []Item
+	Fill   Fill
 	Ring   Plain
 	Figure FigureSubstitutionGroup
 }
 
-// DrawingItem is generated from the {type definition} of element item declared at testdata/abstracttype.xsd:77:9.
-type DrawingItem interface {
-	isDrawingItem()
+// Item is generated from the {type definition} of element item declared at testdata/abstracttype.xsd:77:9.
+type Item interface {
+	isItem()
 }
 
-// DrawingItemPlain is generated from {type definition} of element item declared at testdata/abstracttype.xsd:77:9.
-type DrawingItemPlain struct {
+// ItemPlain is generated from {type definition} of element item declared at testdata/abstracttype.xsd:77:9.
+type ItemPlain struct {
 	Plain Plain
 }
 
-func (DrawingItemPlain) isDrawingItem() {}
+func (ItemPlain) isItem() {}
 
-// DrawingItemCircle is generated from {type definition} of element item declared at testdata/abstracttype.xsd:77:9.
-type DrawingItemCircle struct {
+// ItemCircle is generated from {type definition} of element item declared at testdata/abstracttype.xsd:77:9.
+type ItemCircle struct {
 	Circle Circle
 }
 
-func (DrawingItemCircle) isDrawingItem() {}
+func (ItemCircle) isItem() {}
 
-// DrawingItemSquare is generated from {type definition} of element item declared at testdata/abstracttype.xsd:77:9.
-type DrawingItemSquare struct {
+// ItemSquare is generated from {type definition} of element item declared at testdata/abstracttype.xsd:77:9.
+type ItemSquare struct {
 	Square Square
 }
 
-func (DrawingItemSquare) isDrawingItem() {}
+func (ItemSquare) isItem() {}
 
-// DrawingItemFrame is generated from {type definition} of element item declared at testdata/abstracttype.xsd:77:9.
-type DrawingItemFrame struct {
+// ItemFrame is generated from {type definition} of element item declared at testdata/abstracttype.xsd:77:9.
+type ItemFrame struct {
 	Frame Frame
 }
 
-func (DrawingItemFrame) isDrawingItem() {}
+func (ItemFrame) isItem() {}
 
-// DrawingFill is generated from the {type definition} of element fill declared at testdata/abstracttype.xsd:78:9.
-type DrawingFill interface {
-	isDrawingFill()
+// Fill is generated from the {type definition} of element fill declared at testdata/abstracttype.xsd:78:9.
+type Fill interface {
+	isFill()
 }
 
-// DrawingFillPlain is generated from {type definition} of element fill declared at testdata/abstracttype.xsd:78:9.
-type DrawingFillPlain struct {
+// FillPlain is generated from {type definition} of element fill declared at testdata/abstracttype.xsd:78:9.
+type FillPlain struct {
 	Plain Nillable[Plain, PlainAttributes]
 }
 
-func (DrawingFillPlain) isDrawingFill() {}
+func (FillPlain) isFill() {}
 
-// DrawingFillCircle is generated from {type definition} of element fill declared at testdata/abstracttype.xsd:78:9.
-type DrawingFillCircle struct {
+// FillCircle is generated from {type definition} of element fill declared at testdata/abstracttype.xsd:78:9.
+type FillCircle struct {
 	Circle Nillable[Circle, CircleAttributes]
 }
 
-func (DrawingFillCircle) isDrawingFill() {}
+func (FillCircle) isFill() {}
 
-// DrawingFillSquare is generated from {type definition} of element fill declared at testdata/abstracttype.xsd:78:9.
-type DrawingFillSquare struct {
+// FillSquare is generated from {type definition} of element fill declared at testdata/abstracttype.xsd:78:9.
+type FillSquare struct {
 	Square Nillable[Square, SquareAttributes]
 }
 
-func (DrawingFillSquare) isDrawingFill() {}
+func (FillSquare) isFill() {}
 
-// DrawingFillFrame is generated from {type definition} of element fill declared at testdata/abstracttype.xsd:78:9.
-type DrawingFillFrame struct {
+// FillFrame is generated from {type definition} of element fill declared at testdata/abstracttype.xsd:78:9.
+type FillFrame struct {
 	Frame Nillable[Frame, FrameAttributes]
 }
 
-func (DrawingFillFrame) isDrawingFill() {}
+func (FillFrame) isFill() {}
 
 // FigureSubstitutionGroup is generated from the substitution group of element {urn:abs}figure declared at testdata/abstracttype.xsd:84:3.
 type FigureSubstitutionGroup interface {

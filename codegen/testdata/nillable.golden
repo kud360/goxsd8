@@ -20,8 +20,8 @@ type Order struct {
 	Item    Nillable[Item, ItemAttributes]
 	Head    HeadSubstitutionGroup
 	Loose   LooseSubstitutionGroup
-	Kind    OrderKind
-	Word    OrderWord
+	Kind    Kind
+	Word    Word
 	Choice  OrderChoice
 }
 
@@ -113,50 +113,50 @@ type LooseSubstitutionGroupTabled struct {
 
 func (LooseSubstitutionGroupTabled) isLooseSubstitutionGroup() {}
 
-// OrderKind is generated from the {type table} of element kind declared at testdata/nillable.xsd:21:9.
-type OrderKind interface {
-	isOrderKind()
+// Kind is generated from the {type table} of element kind declared at testdata/nillable.xsd:21:9.
+type Kind interface {
+	isKind()
 }
 
-// OrderKindPrice is generated from {type table} alternative 1 of element kind declared at testdata/nillable.xsd:21:9.
-type OrderKindPrice struct {
+// KindPrice is generated from {type table} alternative 1 of element kind declared at testdata/nillable.xsd:21:9.
+type KindPrice struct {
 	Price Nillable[Price, PriceAttributes]
 }
 
-func (OrderKindPrice) isOrderKind() {}
+func (KindPrice) isKind() {}
 
-// OrderKindAnyType is generated from {type table} alternative 2 of element kind declared at testdata/nillable.xsd:21:9.
-type OrderKindAnyType struct {
+// KindAnyType is generated from {type table} alternative 2 of element kind declared at testdata/nillable.xsd:21:9.
+type KindAnyType struct {
 	AnyType AnyType
 }
 
-func (OrderKindAnyType) isOrderKind() {}
+func (KindAnyType) isKind() {}
 
-// OrderKindString is generated from {default type definition} of element kind declared at testdata/nillable.xsd:21:9.
-type OrderKindString struct {
+// KindString is generated from {default type definition} of element kind declared at testdata/nillable.xsd:21:9.
+type KindString struct {
 	String Nillable[string, struct{}]
 }
 
-func (OrderKindString) isOrderKind() {}
+func (KindString) isKind() {}
 
-// OrderWord is generated from the {type table} of element word declared at testdata/nillable.xsd:26:9.
-type OrderWord interface {
-	isOrderWord()
+// Word is generated from the {type table} of element word declared at testdata/nillable.xsd:26:9.
+type Word interface {
+	isWord()
 }
 
-// OrderWordToken is generated from {type table} alternative 1 of element word declared at testdata/nillable.xsd:26:9.
-type OrderWordToken struct {
+// WordToken is generated from {type table} alternative 1 of element word declared at testdata/nillable.xsd:26:9.
+type WordToken struct {
 	Token Nillable[string, struct{}]
 }
 
-func (OrderWordToken) isOrderWord() {}
+func (WordToken) isWord() {}
 
-// OrderWordString is generated from {default type definition} of element word declared at testdata/nillable.xsd:26:9.
-type OrderWordString struct {
+// WordString is generated from {default type definition} of element word declared at testdata/nillable.xsd:26:9.
+type WordString struct {
 	String Nillable[string, struct{}]
 }
 
-func (OrderWordString) isOrderWord() {}
+func (WordString) isWord() {}
 
 // OrderChoice is generated from element order declared at testdata/nillable.xsd:4:3.
 type OrderChoice interface {

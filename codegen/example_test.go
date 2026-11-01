@@ -46,19 +46,19 @@ func ExampleGenerate() {
 	// type Order struct {
 	// 	Item    []string
 	// 	Note    *string
-	// 	Payment OrderPayment
+	// 	Payment Payment
 	// 	Id      string
 	// }
 	//
-	// // OrderPayment is generated from element payment declared at testdata/example.xsd:9:9.
-	// type OrderPayment interface {
-	// 	isOrderPayment()
+	// // Payment is generated from element payment declared at testdata/example.xsd:9:9.
+	// type Payment interface {
+	// 	isPayment()
 	// }
 	//
-	// // OrderPaymentCard is generated from element card declared at testdata/example.xsd:12:15.
-	// type OrderPaymentCard struct {
+	// // PaymentCard is generated from element card declared at testdata/example.xsd:12:15.
+	// type PaymentCard struct {
 	// 	Card string
 	// }
 	//
-	// func (OrderPaymentCard) isOrderPayment() {}
+	// func (PaymentCard) isPayment() {}
 }

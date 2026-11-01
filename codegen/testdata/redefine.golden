@@ -5,7 +5,7 @@ package redefine
 // E1 is generated from element e1 declared at testdata/redefine.xsd:34:3.
 type E1 struct {
 	X TX
-	Z TZ
+	Z Z
 }
 
 // TX is generated from element x declared at testdata/redefinebase.xsd:5:7.
@@ -13,15 +13,15 @@ type TX struct {
 	A string
 }
 
-// TZ is generated from element z declared at testdata/redefine.xsd:13:13.
-type TZ struct {
+// Z is generated from element z declared at testdata/redefine.xsd:13:13.
+type Z struct {
 	B bool
 }
 
 // E2 is generated from element e2 declared at testdata/redefine.xsd:35:3.
 type E2 struct {
 	X UX
-	Z TZ
+	Z Z
 	W string
 }
 

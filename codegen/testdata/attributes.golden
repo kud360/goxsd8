@@ -5,7 +5,7 @@ package attributes
 // Order is generated from element {urn:t}order declared at testdata/attributes.xsd:14:3.
 type Order struct {
 	Kind   string
-	Line   OrderLine
+	Line   Line
 	Kind2  string
 	Urgent *bool
 	Id     string
@@ -14,8 +14,8 @@ type Order struct {
 	Note   *string
 }
 
-// OrderLine is generated from element line declared at testdata/attributes.xsd:18:9.
-type OrderLine struct {
+// Line is generated from element line declared at testdata/attributes.xsd:18:9.
+type Line struct {
 	Sku  string
 	Gift *bool
 }

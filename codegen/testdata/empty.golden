@@ -13,12 +13,12 @@ type Ref struct {
 
 // Flags is generated from element flags declared at testdata/empty.xsd:18:3.
 type Flags struct {
-	On  FlagsOn
-	Off *FlagsOff
+	On  On
+	Off *Off
 }
 
-// FlagsOn is generated from element on declared at testdata/empty.xsd:21:9.
-type FlagsOn struct{}
+// On is generated from element on declared at testdata/empty.xsd:21:9.
+type On struct{}
 
-// FlagsOff is generated from element off declared at testdata/empty.xsd:24:9.
-type FlagsOff struct{}
+// Off is generated from element off declared at testdata/empty.xsd:24:9.
+type Off struct{}

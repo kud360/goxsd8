@@ -71,48 +71,48 @@ type Item struct {
 
 // Order is generated from element {urn:t}order declared at testdata/typetable.xsd:90:3.
 type Order struct {
-	Line []OrderLine
+	Line []Line
 }
 
-// OrderLine is generated from the {type table} of element line declared at testdata/typetable.xsd:71:7.
-type OrderLine interface {
-	isOrderLine()
+// Line is generated from the {type table} of element line declared at testdata/typetable.xsd:71:7.
+type Line interface {
+	isLine()
 }
 
-// OrderLineDecimal is generated from {type table} alternative 1 of element line declared at testdata/typetable.xsd:71:7.
-type OrderLineDecimal struct {
+// LineDecimal is generated from {type table} alternative 1 of element line declared at testdata/typetable.xsd:71:7.
+type LineDecimal struct {
 	Decimal big.Rat
 }
 
-func (OrderLineDecimal) isOrderLine() {}
+func (LineDecimal) isLine() {}
 
-// OrderLineAlternative2 is generated from {type table} alternative 2 of element line declared at testdata/typetable.xsd:71:7.
-type OrderLineAlternative2 struct {
-	Alternative2 OrderLineAlternative2Type
+// LineAlternative2 is generated from {type table} alternative 2 of element line declared at testdata/typetable.xsd:71:7.
+type LineAlternative2 struct {
+	Alternative2 LineAlternative2Type
 }
 
-func (OrderLineAlternative2) isOrderLine() {}
+func (LineAlternative2) isLine() {}
 
-// OrderLineAlternative2Type is generated from {type table} alternative 2 of element line declared at testdata/typetable.xsd:71:7.
-type OrderLineAlternative2Type struct {
-	Note OrderLineAlternative2TypeNote
+// LineAlternative2Type is generated from {type table} alternative 2 of element line declared at testdata/typetable.xsd:71:7.
+type LineAlternative2Type struct {
+	Note Note
 }
 
-// OrderLineAlternative2TypeNote is generated from element note declared at testdata/typetable.xsd:76:15.
-type OrderLineAlternative2TypeNote struct {
+// Note is generated from element note declared at testdata/typetable.xsd:76:15.
+type Note struct {
 	Text string
 }
 
-// OrderLineItem is generated from {default type definition} of element line declared at testdata/typetable.xsd:71:7.
-type OrderLineItem struct {
+// LineItem is generated from {default type definition} of element line declared at testdata/typetable.xsd:71:7.
+type LineItem struct {
 	Item Item
 }
 
-func (OrderLineItem) isOrderLine() {}
+func (LineItem) isLine() {}
 
 // Reorder is generated from element {urn:t}reorder declared at testdata/typetable.xsd:91:3.
 type Reorder struct {
-	Line []OrderLine
+	Line []Line
 }
 
 // Kit is generated from element {urn:t}kit declared at testdata/typetable.xsd:112:3.
@@ -123,33 +123,33 @@ type Kit struct {
 
 // Part is generated from complex type {urn:t}part declared at testdata/typetable.xsd:96:3.
 type Part struct {
-	Sub PartSub
+	Sub Sub
 }
 
-// PartSub is generated from the {type table} of element sub declared at testdata/typetable.xsd:98:7.
-type PartSub interface {
-	isPartSub()
+// Sub is generated from the {type table} of element sub declared at testdata/typetable.xsd:98:7.
+type Sub interface {
+	isSub()
 }
 
-// PartSubBigpart is generated from {type table} alternative 1 of element sub declared at testdata/typetable.xsd:98:7.
-type PartSubBigpart struct {
+// SubBigpart is generated from {type table} alternative 1 of element sub declared at testdata/typetable.xsd:98:7.
+type SubBigpart struct {
 	Bigpart Bigpart
 }
 
-func (PartSubBigpart) isPartSub() {}
+func (SubBigpart) isSub() {}
 
 // Bigpart is generated from complex type {urn:t}bigpart declared at testdata/typetable.xsd:103:3.
 type Bigpart struct {
-	Sub  PartSub
+	Sub  Sub
 	Size int32
 }
 
-// PartSubPart is generated from {default type definition} of element sub declared at testdata/typetable.xsd:98:7.
-type PartSubPart struct {
+// SubPart is generated from {default type definition} of element sub declared at testdata/typetable.xsd:98:7.
+type SubPart struct {
 	Part Part
 }
 
-func (PartSubPart) isPartSub() {}
+func (SubPart) isSub() {}
 
 // Loose is generated from the {type table} of element {urn:t}loose declared at testdata/typetable.xsd:123:3.
 type Loose interface {
