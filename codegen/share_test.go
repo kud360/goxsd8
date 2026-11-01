@@ -369,3 +369,70 @@ func TestGenerateImportNames(t *testing.T) {
 		})
 	}
 }
+
+// moduleDocs are the sharing fixtures of TestGenerateSharesWithinModule: a.xsd
+// declares A, and b.xsd and c.xsd each import common.xsd, which declares
+// Common.
+var moduleDocs = []schemaDoc{
+	{location: "a.xsd", body: `<xs:element name="a" type="xs:string"/>`},
+	{location: "common.xsd", targetNamespace: "urn:c", body: `<xs:element name="common" type="xs:string"/>`},
+	{location: "b.xsd", body: `<xs:import namespace="urn:c" schemaLocation="common.xsd"/><xs:element name="b" type="xs:string"/>`},
+	{location: "c.xsd", body: `<xs:import namespace="urn:c" schemaLocation="common.xsd"/><xs:element name="c" type="xs:string"/>`},
+}
+
+// subModule makes root's directory sub hold a go.mod of its own declaring
+// module example.com/sub.
+func subModule(t *testing.T, root string) {
+	t.Helper()
+	if err := os.Mkdir(filepath.Join(root, "sub"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	write(t, filepath.Join(root, "sub", "go.mod"), "module example.com/sub\n")
+}
+
+// TestGenerateSharesWithinModule pins Generate's module condition on sharing,
+// in a module example.com/m whose directory sub holds a go.mod of its own
+// declaring example.com/sub. A later target whose nearest go.mod is not its
+// agreeing earlier target's defines the shared document itself and imports
+// nothing, with the earlier target outside sub or inside it, for one schema
+// generated twice (A) and for two schemas importing one document (Common).
+// Among three targets of one schema, o1 outside sub and o2 and t inside it, t
+// imports A from o2, the earliest agreeing target under its own go.mod, and
+// not from o1.
+func TestGenerateSharesWithinModule(t *testing.T) {
+	for _, tt := range []struct {
+		name, first, second, decl string
+		ownerInSub                bool
+	}{
+		{"one schema, owner outside sub", "a.xsd", "a.xsd", "type A string", false},
+		{"one schema, owner in sub", "a.xsd", "a.xsd", "type A string", true},
+		{"shared import, owner outside sub", "b.xsd", "c.xsd", "type Common string", false},
+		{"shared import, owner in sub", "b.xsd", "c.xsd", "type Common string", true},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			root := moduleTempDir(t)
+			subModule(t, root)
+			ownerDir, laterDir, ownerPath := filepath.Join(root, "o", "x"), filepath.Join(root, "sub", "y"), "example.com/m/o/x"
+			if tt.ownerInSub {
+				ownerDir, laterDir, ownerPath = filepath.Join(root, "sub", "o", "x"), filepath.Join(root, "y"), "example.com/sub/o/x"
+			}
+			srcs := generateAll(t, []Target{
+				{Schema: parseDocs(t, tt.first, moduleDocs), Dir: ownerDir, Package: "x"},
+				{Schema: parseDocs(t, tt.second, moduleDocs), Dir: laterDir, Package: "y"},
+			})
+			assertLines(t, "the later target's file", srcs[1], []string{tt.decl}, []string{ownerPath, "import", " = "})
+		})
+	}
+	t.Run("owner chosen under the target's go.mod", func(t *testing.T) {
+		root := moduleTempDir(t)
+		subModule(t, root)
+		srcs := generateAll(t, []Target{
+			{Schema: parseDocs(t, "a.xsd", moduleDocs), Dir: filepath.Join(root, "o1"), Package: "o1"},
+			{Schema: parseDocs(t, "a.xsd", moduleDocs), Dir: filepath.Join(root, "sub", "o2"), Package: "o2"},
+			{Schema: parseDocs(t, "a.xsd", moduleDocs), Dir: filepath.Join(root, "sub", "t"), Package: "t"},
+		})
+		assertLines(t, "o2's file", srcs[1], []string{"type A string"}, []string{"import"})
+		assertLines(t, "t's file", srcs[2], []string{`import o2 "example.com/sub/o2"`, "type A = o2.A"}, []string{"example.com/m/o1", "type A string"})
+		checkTogether(t, []string{"example.com/m/o1", "example.com/sub/o2", "example.com/sub/t"}, srcs)
+	})
+}

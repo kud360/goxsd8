@@ -16,15 +16,16 @@ import (
 )
 
 // unit is one target's package as phase 1 builds it: its name, its Dir made
-// absolute, its import path (Target.Dir), its declarations in emission order
+// absolute, the directory of the nearest go.mod at or above that Dir
+// (importPath), its import path (Target.Dir), its declarations in emission order
 // with what each one's code names (refs, parallel to decls), the documents it
 // imports from earlier targets (Generate's doc), and its source.
 type unit struct {
-	pkg, base, path string
-	decls           []declaration
-	refs            []analysis
-	imports         []imported
-	src             []byte
+	pkg, base, mod, path string
+	decls                []declaration
+	refs                 []analysis
+	imports              []imported
+	src                  []byte
 }
 
 // analysis is what one declaration's code names: refs, the indices, ascending,
@@ -45,14 +46,15 @@ type imported struct {
 }
 
 // newUnit returns the unit of the package pkg whose Dir made absolute is base,
-// whose import path is path and whose declarations are decls, its source the
-// file Generate writes for it when it imports nothing.
-func newUnit(pkg, base, path string, decls []declaration) (*unit, error) {
+// whose nearest go.mod lies in mod, whose import path is path and whose
+// declarations are decls, its source the file Generate writes for it when it
+// imports nothing.
+func newUnit(pkg, base, mod, path string, decls []declaration) (*unit, error) {
 	refs, err := analyze(decls)
 	if err != nil {
 		return nil, err
 	}
-	u := &unit{pkg: pkg, base: base, path: path, decls: decls, refs: refs}
+	u := &unit{pkg: pkg, base: base, mod: mod, path: path, decls: decls, refs: refs}
 	u.src, err = u.render(nil)
 	if err != nil {
 		return nil, err
@@ -291,15 +293,16 @@ func link(units []*unit, i int) error {
 	return nil
 }
 
-// agreeingOwner returns the index in earlier of the first unit that defines
-// the document uri itself and agrees with u on it (Generate's doc), false when
-// none does. u's own keys are computed only once an earlier unit defines uri.
+// agreeingOwner returns the index in earlier of the first unit whose nearest
+// go.mod lies in the same directory as u's, that defines the document uri
+// itself and that agrees with u on it (Generate's doc), false when none does.
+// u's own keys are computed only once such an earlier unit defines uri.
 func (u *unit) agreeingOwner(earlier []*unit, uri string) (int, bool) {
 	var setKey, closureKey string
 	keyed := false
 	for o, owner := range earlier {
 		ownerSet := owner.set(uri)
-		if len(ownerSet) == 0 || definer(o, owner.imports, uri) != o {
+		if owner.mod != u.mod || len(ownerSet) == 0 || definer(o, owner.imports, uri) != o {
 			continue
 		}
 		if !keyed {

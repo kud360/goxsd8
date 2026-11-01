@@ -98,36 +98,40 @@ func (t Target) failed(i int, err error) error {
 // declares no type.
 //
 // A target imports the declarations of a document it shares with an earlier
-// target whose emitted declarations of it agree, and defines every other
-// document's itself. A declaration belongs to the document whose Loc its
-// header renders ("Naming"); a datatype struct, PrecisionDecimal with its
-// interface and arms, a raw-content struct, MixedChild, Nillable with its arms,
-// and a variant of a builtin member render none and belong to no document. A
-// target T imports a document D from the earliest target O before it that
-// defines D itself and agrees with T on D: the declarations T and O emit for D
-// are the same text, and so are the declarations each set reaches,
-// transitively: through the type names its text names, a sealed interface
-// reaching each declaration carrying its marker method and an arm its
-// interface, and the type of a nillable top-level declaration whose nilled
-// value is Nillable over it reaching Nillable; every text is compared with its
-// header's Loc as the Loc carries it, so independent of Dir. Each document
-// that closure reaches must then be taken by T from the package O takes it
-// from, and Generate withdraws the imports that break this until none does.
-// T's package imports O's by the import path Target.Dir's doc derives, and
-// writes, in place of each declaration of D, the alias type N = imp.N under
-// the header that declaration carries; imp is O's Package unless that name is
-// taken, and otherwise that name followed by the smallest numeric suffix from
-// 2 that is not. A name is taken when it is a Go predeclared identifier, big,
-// the name of one of T's own top-level types, aliases included, or the import
-// name of an earlier owner in slice order. A target that imports a document
-// writes a declaration belonging to no document only when one of its own
-// definitions reaches it, reaching read as agreement reads it above. A
-// document that agrees with no earlier target defining it, or breaks the
-// closure condition, the target defines itself exactly as it would alone: two
-// targets whose emitted declarations of a shared document differ, in a name or
-// in a shape, each declare its types, and one URI composed into different
-// components, as a chameleon include is, renders different declarations and
-// is never shared. A target that imports nothing writes the file it would write
+// target under the same nearest go.mod whose emitted declarations of it agree,
+// and defines every other document's itself. A declaration belongs to the
+// document whose Loc its header renders ("Naming"); a datatype struct,
+// PrecisionDecimal with its interface and arms, a raw-content struct,
+// MixedChild, Nillable with its arms, and a variant of a builtin member render
+// none and belong to no document. A target T imports a document D from the
+// earliest target O before it whose nearest go.mod (Target.Dir) lies in the
+// same directory as T's, that defines D itself and agrees with T on D: the
+// declarations T and O emit for D are the same text, and so are the
+// declarations each set reaches, transitively: through the type names its text
+// names, a sealed interface reaching each declaration carrying its marker
+// method and an arm its interface, and the type of a nillable top-level
+// declaration whose nilled value is Nillable over it reaching Nillable; every
+// text is compared with its header's Loc as the Loc carries it, so independent
+// of Dir. Each document that closure reaches must then be taken by T from the
+// package O takes it from, and Generate withdraws the imports that break this
+// until none does. T's package imports O's by the import path Target.Dir's doc
+// derives, and writes, in place of each declaration of D, the alias type N =
+// imp.N under the header that declaration carries; imp is O's Package unless
+// that name is taken, and otherwise that name followed by the smallest numeric
+// suffix from 2 that is not. A name is taken when it is a Go predeclared
+// identifier, big, the name of one of T's own top-level types, aliases
+// included, or the import name of an earlier owner in slice order. A target
+// that imports a document writes a declaration belonging to no document only
+// when one of its own definitions reaches it, reaching read as agreement reads
+// it above. A document that agrees with no earlier target defining it under the
+// same nearest go.mod, or breaks the closure condition, the target defines
+// itself exactly as it would alone: a target in another module than every
+// earlier target that defines D and agrees with it on D, its nearest go.mod
+// lying in another directory than each of theirs, defines D itself; two targets
+// whose emitted declarations of a shared document differ, in a name or in a
+// shape, each declare its types, and one URI composed into different
+// components, as a chameleon include is, renders different declarations and is
+// never shared. A target that imports nothing writes the file it would write
 // alone.
 //
 // The file is gofmt-formatted. Generate writes no go.mod and adds no
@@ -229,7 +233,7 @@ func prepare(t Target, earlier []Target) (u *unit, declines []*DeclineError, err
 	if t.Schema == nil {
 		return nil, nil, errors.New("the Schema field is nil")
 	}
-	base, path, err := checkTarget(t, earlier)
+	base, mod, path, err := checkTarget(t, earlier)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -237,7 +241,7 @@ func prepare(t Target, earlier []Target) (u *unit, declines []*DeclineError, err
 	if err != nil || len(declines) > 0 {
 		return nil, declines, err
 	}
-	u, err = newUnit(t.Package, base, path, decls)
+	u, err = newUnit(t.Package, base, mod, path, decls)
 	return u, nil, err
 }
 
@@ -260,7 +264,7 @@ func prepare(t Target, earlier []Target) (u *unit, declines []*DeclineError, err
 func CheckTargets(targets []Target) []error {
 	var errs []error
 	for i, t := range targets {
-		if _, _, err := checkTarget(t, targets[:i]); err != nil {
+		if _, _, _, err := checkTarget(t, targets[:i]); err != nil {
 			errs = append(errs, t.failed(i, err))
 		}
 	}
@@ -269,45 +273,46 @@ func CheckTargets(targets []Target) []error {
 
 // checkTarget is the one encoding of the refusals CheckTargets' doc lists, in
 // that order, for t against the targets before it. It reads no Schema and
-// returns Dir made absolute and the import path Dir's doc derives.
-func checkTarget(t Target, earlier []Target) (base, path string, err error) {
+// returns Dir made absolute, the directory of the nearest go.mod at or above
+// it, and the import path Dir's doc derives.
+func checkTarget(t Target, earlier []Target) (base, mod, path string, err error) {
 	if t.Dir == "" {
-		return "", "", errors.New("no output directory given")
+		return "", "", "", errors.New("no output directory given")
 	}
 	if token.IsKeyword(t.Package) {
-		return "", "", fmt.Errorf("the package name %q is a Go keyword", t.Package)
+		return "", "", "", fmt.Errorf("the package name %q is a Go keyword", t.Package)
 	}
 	if t.Package == "_" {
-		return "", "", errors.New(`the package name "_" is the blank identifier`)
+		return "", "", "", errors.New(`the package name "_" is the blank identifier`)
 	}
 	if !token.IsIdentifier(t.Package) {
-		return "", "", fmt.Errorf("the package name %q is not a Go identifier", t.Package)
+		return "", "", "", fmt.Errorf("the package name %q is not a Go identifier", t.Package)
 	}
 	if t.Package == "main" {
-		return "", "", errors.New(`the package name is "main", but the emitted package declares no func main and would not build`)
+		return "", "", "", errors.New(`the package name is "main", but the emitted package declares no func main and would not build`)
 	}
 	for j, e := range earlier {
 		if e.Dir != "" && filepath.Clean(e.Dir) == filepath.Clean(t.Dir) {
-			return "", "", fmt.Errorf("the output directory %s is also the output directory of %s", t.Dir, targetName(e.Name, j))
+			return "", "", "", fmt.Errorf("the output directory %s is also the output directory of %s", t.Dir, targetName(e.Name, j))
 		}
 	}
 	base, err = filepath.Abs(t.Dir)
 	if err != nil {
-		return "", "", fmt.Errorf("resolving the output directory %s: %w", t.Dir, err)
+		return "", "", "", fmt.Errorf("resolving the output directory %s: %w", t.Dir, err)
 	}
 	if err := checkDestination(t.Dir); err != nil {
-		return "", "", err
+		return "", "", "", err
 	}
-	path, err = importPath(t.Dir, base)
+	mod, path, err = importPath(t.Dir, base)
 	if err != nil {
-		return "", "", err
+		return "", "", "", err
 	}
 	for j, e := range earlier {
 		if earlierPath, ok := derivedPath(e.Dir); ok && earlierPath == path {
-			return "", "", fmt.Errorf("the output directory %s has the import path %s, which is also the import path of %s", t.Dir, path, targetName(e.Name, j))
+			return "", "", "", fmt.Errorf("the output directory %s has the import path %s, which is also the import path of %s", t.Dir, path, targetName(e.Name, j))
 		}
 	}
-	return base, path, nil
+	return base, mod, path, nil
 }
 
 // derivedPath is the import path Target.Dir's doc derives for dir, false when
@@ -320,27 +325,30 @@ func derivedPath(dir string) (string, bool) {
 	if err != nil {
 		return "", false
 	}
-	path, err := importPath(dir, base)
+	_, path, err := importPath(dir, base)
 	return path, err == nil
 }
 
 // importPath derives the import path Target.Dir's doc states for the output
 // directory dir, base being dir made absolute: it walks from base up to the
 // filesystem root, passing through each directory holding no go.mod, and
-// reads the first go.mod it meets (modulePackage).
-func importPath(dir, base string) (string, error) {
+// reads the first go.mod it meets (modulePackage). It returns the directory
+// holding that go.mod, absolute and cleaned, no symbolic link resolved, then
+// the path.
+func importPath(dir, base string) (string, string, error) {
 	for mod := base; ; {
 		gomod := filepath.Join(mod, "go.mod")
 		_, err := os.Stat(gomod)
 		if err == nil {
-			return modulePackage(gomod, mod, base)
+			path, err := modulePackage(gomod, mod, base)
+			return mod, path, err
 		}
 		if !errors.Is(err, fs.ErrNotExist) {
-			return "", fmt.Errorf("checking %s: %w", gomod, err)
+			return "", "", fmt.Errorf("checking %s: %w", gomod, err)
 		}
 		parent := filepath.Dir(mod)
 		if parent == mod {
-			return "", fmt.Errorf("no go.mod lies in the output directory %s or any directory above it, so it has no import path", dir)
+			return "", "", fmt.Errorf("no go.mod lies in the output directory %s or any directory above it, so it has no import path", dir)
 		}
 		mod = parent
 	}

@@ -786,13 +786,13 @@
 // absolute roots produce byte-identical output; "Naming" states where a
 // header's location is not relative. Under Generate's import rule it is also
 // a function of the earlier targets of the same call: their slice order, their
-// Schemas, and each owner's Package and import path. No map
-// iteration anywhere near the emitter; emission order is the walk's, which
-// document order alone fixes, as "Coverage" states (datatype structs,
-// PrecisionDecimal's interface and arms with it, raw-content structs,
-// MixedChild, Nillable with its arms, attributes structs, and union
-// interfaces with their variants last, in the order the walk first needs
-// each). Golden-file tests pin the output.
+// Schemas, each owner's Package and import path, and which of them lie under
+// the target's nearest go.mod. No map iteration anywhere near the emitter;
+// emission order is the walk's, which document order alone fixes, as
+// "Coverage" states (datatype structs, PrecisionDecimal's interface and arms
+// with it, raw-content structs, MixedChild, Nillable with its arms, attributes
+// structs, and union interfaces with their variants last, in the order the
+// walk first needs each). Golden-file tests pin the output.
 //
 // # Naming
 //
