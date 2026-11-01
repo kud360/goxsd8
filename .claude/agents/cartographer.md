@@ -38,10 +38,8 @@ Cheap and targeted, not a full backlog run. Three duties:
 3. **Leave the pass's own signal on `main`** — a dated `post-land` entry
    in `docs/LOG/<year>-<month>.md` naming what was unblocked and how each
    follow-up was disposed of, including the zero case, in the chronicler's
-   entry shape (`.claude/agents/chronicler.md` Duty 1): a heading whose
-   outcome is one clause, and a Friction bullet only for what the
-   documents did not predict — a documented refusal is a clause naming
-   its rule, not a paragraph. Land that entry through its own PR — commit
+   entry shape (`.claude/agents/chronicler.md` Duty 1), whose rule for
+   what earns a Friction line binds this entry too. Land that entry through its own PR — commit
    locally, open a PR, and squash-merge it in this same pass; never commit
    it directly to `main`. A merge refused because a later landing grew
    the `docs/LOG` tail is merged forward with WORKFLOW's positional
@@ -83,6 +81,11 @@ already done, and the commit body says so.
    each with the open issues naming it (#1740). The largest cluster, and
    the one decision that holds it, is the milestone's north star; say
    whether an open issue targets it and file one if none does (#1738).
+   A milestone with no lane is read by the measure its PLAN.md paragraph
+   or epic names, as M9 is by `go tool gencensus`. When its exit sentence
+   has fired, or its measure has nothing left to lift, it is done: say so
+   in Status, name the next milestone as the north star, and file that
+   milestone's first slice if none is `ready`.
 2. **Reconcile the branch namespace** — report-only; sessions never delete
    or rename refs. A `wip/issue-<N>` whose issue is CLOSED should have
    vanished at merge: verify its content is in main and supersede the

@@ -37,8 +37,9 @@ comments by the fact's words and by its identifiers.
 
 Before writing: read the issue, its whole thread and its `GROUNDING:`
 comment. **A brief whose `GROUNDING:` part is missing, is not headed by
-its `issuecomment-<id>`, or holds a placeholder — and on a repair round,
-the same of the verdict it follows — is not delivered:** return
+its `issuecomment-<id>`, is condensed, holds a placeholder or names a file
+you cannot read whole — and on a repair round, the same of the verdict it
+follows — is not delivered:** return
 `BRIEF INCOMPLETE: <part>` before doing anything else, whether or not the
 brief asks you to (#2868). If the grounding lacks the rule IDs your change
 must implement, STOP and ask for the oracle — never implement validation
@@ -48,7 +49,10 @@ a `RULING:` the arm. Every claim a ruling makes about the tree — a site, a
 count, a destination, which check answers first, the premise of a doc
 sentence it dictates — is a hypothesis: check it against the text that
 owns it before you build on it, and report a mismatch in your account
-rather than working around it (#863, #1480). A grounding's ruling on how
+rather than working around it (#863, #1480). **A ruling that admits two
+readings for your tree is its author's to settle, not the arbiter's:**
+return `RULING AMBIGUOUS: <item> — <the two readings>` before implementing
+either (#3239). A grounding's ruling on how
 the change reads an input is a requirement: the doc comment of the
 function it governs states it, and your account names that site (#2096).
 Grep for existing structures before adding a parallel one (STYLE T4), and
@@ -173,15 +177,22 @@ you can observe — plus the destination `wip/issue-<N>` branch by name and
 no SHA of its own, the shape you chose and the alternative it beats, the
 spec rules implemented, the cases that moved, what you absorbed beyond the
 issue body, the gate result, expected ratchet movement, and what you want
-scrutinized hardest. That last is a question no document decides: what
-your account would name there that PRINCIPLES 20 or a cited rule already
-decides, however mildly it words it, is a defect repaired before handoff
-whatever the brief pressed for — a risk that "can charge where the spec
-may say otherwise" withheld under a `GAP(` marker, anything else made
-true, its message, its location and its prose included, with a repair
-that changes behaviour pinned by a test that fails without it, never
-merely disclosed beside a marker — and the account names the repair
-(#2247, #2664).
+scrutinized hardest. **That last is a question no document and no check
+you can run decides.** Anything else you would name there is settled
+before handoff, whatever the brief pressed for, and the account says how:
+
+- what PRINCIPLES 20 or a cited rule decides, however mildly it words it,
+  is a defect repaired — a risk that "can charge where the spec may say
+  otherwise" withheld under a `GAP(` marker, anything else made true, its
+  message, its location and its prose included, with a repair that
+  changes behaviour pinned by a test that fails without it, never merely
+  disclosed beside a marker (#2247, #2664);
+- a shape you suspect the tests miss gets the row that fails if you are
+  wrong, or the account says why no row can (#3239);
+- a sentence you wrote that generalises over a doc section — "every other
+  type", "the paragraphs below state each kind" — is checked against every
+  kind that section names and narrowed until it is true of each (#3221);
+- a ruling you could read two ways went back as `RULING AMBIGUOUS` (above).
 
 You never push and never switch branches, whatever a brief asks, so how
 your commits arrive on the destination — fast-forward or merge — and

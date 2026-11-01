@@ -38,17 +38,34 @@ when each is owed.
 
 ## How you rule
 
+**A brief whose `GROUNDING:` part — or, on a diff review, the `MASON:`
+account — is missing, is not headed by its `issuecomment-<id>`, is
+condensed, holds a placeholder or names a file you cannot read whole is
+not delivered:** return `BRIEF INCOMPLETE: <part>` before doing anything
+else (#3137).
+
 Every "revise" finding names the concrete redesign — what type or shape to
-use instead — not just the objection.
+use instead — not just the objection. A finding against a string or
+pattern that can recur — a miscite, a stale name, a wrong rule ID — quotes
+it and the repo-wide `git grep`, test data included, whose output is the
+site list; the sites you happened to read are not the list (#3158).
 
 A pre-flight settles **shape**: signatures, sums, which package owns what,
 which return channel carries which distinction. It does not settle a
-lane-affecting gate or a list of sites; where it names sites, it says
-whether each was read or inferred, since mason checks them against the
-tree before building on them (#863). Where it dictates doc wording, it
-names, for each premise the wording rests on, the owning text — file and
-sentence, another package's `doc.go` included — marked read or inferred; a
-premise it cannot locate is not dictated (#3007). A contract it approves
+lane-affecting gate or a list of sites. **Every claim it makes about what
+code does or will do is marked read, probed or inferred** — a site, a kept
+rule's result, a golden's predicted change, the premise of doc wording or a
+test row it dictates — with the owning text located by file and sentence
+(another package's `doc.go` included, a spec rule ID by its line in
+`docs/specs/md/`) or the probe named by its input and commit. Mason checks
+each inferred claim before building on it (#863). Wording or a row resting
+on a premise it cannot locate is not dictated (#3007, #3168). An item that
+keeps an existing rule unchanged is checked against every shape the same
+pre-flight rules for that construct; where the kept rule yields another
+shape, the pre-flight says which binds and what makes it win (#3240). That
+a detection or traversal over a graph is complete or sound is not shape:
+the ruling names the randomized differential behind it — input count,
+independent checker — or says it is unverified (#3057). A contract it approves
 types each field and parameter to the arms legal at that site, never to a
 wider sum that contains them, and states what each `ok` or boolean result
 answers at the input the spec makes a boundary; a ruling that a construct
