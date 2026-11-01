@@ -12,7 +12,7 @@ import (
 type DeclineError struct {
 	construct construct
 	loc       xsderr.Loc
-	// detail names the declining component and its schema Loc.
+	// detail names the declining component and its schema Loc or, for xsi:type, the element and the type it names.
 	detail string
 }
 
@@ -21,8 +21,8 @@ type DeclineError struct {
 // element carrying it for xsi:type.
 func (e *DeclineError) Loc() xsderr.Loc { return e.loc }
 
-// Error names the instance Loc, the construct, and the declining component
-// with its schema Loc.
+// Error names the instance Loc and the construct, then the declining component
+// with its schema Loc or, for xsi:type, the element and the type it names.
 func (e *DeclineError) Error() string {
 	return e.loc.String() + ": codec does not decode " + e.construct.name() + ": " + e.detail +
 		"; a decoder limitation, not a schema or instance fault"
@@ -110,8 +110,9 @@ func (c construct) name() string {
 }
 
 // decline returns the *DeclineError for construct c at the instance Loc loc,
-// detail naming the declining component and its schema Loc. No schema or
-// instance rule is violated, so it carries no xsderr rule (STYLE E2).
+// detail naming the declining component and its schema Loc or, for xsi:type,
+// the element and the type it names. No schema or instance rule is violated,
+// so it carries no xsderr rule (STYLE E2).
 func decline(loc xsderr.Loc, c construct, detail string) *DeclineError {
 	return &DeclineError{construct: c, loc: loc, detail: detail}
 }

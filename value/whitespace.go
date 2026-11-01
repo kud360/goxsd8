@@ -25,17 +25,18 @@ const (
 // ApplyWhiteSpace runs the whiteSpace stage of [ValidateLexical]'s pipeline
 // (Datatypes §4.3.6 rf-whiteSpace) on lexical for st: it normalizes lexical
 // under the whiteSpace facet in force on st, its own or inherited, and returns
-// lexical unchanged where no whiteSpace facet applies (§4.1.5
-// cos-applicable-facets): xs:anySimpleType, xs:anyAtomicType and a union. It is
-// the stage alone, so for a union it is not the union's ·normalized value·,
-// which its ·active basic member·'s whiteSpace decides.
+// lexical unchanged where §4.1.5 cos-applicable-facets applies no
+// whiteSpace facet: a type of absent {variety} (xs:anySimpleType, or a
+// restriction of it), an atomic type of absent {primitive type definition}
+// (xs:anyAtomicType), and a union. It is the stage alone, so for a union it is
+// not the union's ·normalized value·, which its ·active basic member·'s
+// whiteSpace decides.
 //
 // r resolves st's {base type definition} chain. An error is a fault of st,
 // never a verdict about lexical, so [IsDatatypeVerdict] reports false for it:
 // the [xsderr.RuleComponentInvariant] fault [IsFacetPrecondition] reports, for
-// a type that is not one of those three and has no whiteSpace {value} in force
-// that is exactly one of preserve, replace and collapse, or the error resolving
-// st's chain.
+// any other type that has no whiteSpace {value} in force that is exactly one of
+// preserve, replace and collapse, or the error resolving st's chain.
 func ApplyWhiteSpace(r xsd.TypeResolver, st *xsd.SimpleType, lexical string) (string, error) {
 	ws, err := effectiveWhiteSpace(r, st)
 	if err != nil {

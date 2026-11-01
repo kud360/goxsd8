@@ -59,8 +59,8 @@
 // absent attribute a nil field.
 //
 // Every error about the instance carries its instance Loc: a violation's,
-// an undecided check's, and a decline's, which also names its construct and
-// the declining component's schema Loc.
+// an undecided check's, and a decline's, which also names its construct and,
+// for a construct of the schema, the declining component's schema Loc.
 //
 // # Planned decode paths, one semantics (M10 — not yet implemented)
 //

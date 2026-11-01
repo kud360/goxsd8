@@ -293,8 +293,10 @@ func (emptyBackend) Mapping(xsd.QName) (Mapping, bool) { return Mapping{}, false
 
 // TestApplyWhiteSpace pins the exported whiteSpace stage (§4.3.6): a preserve
 // type returns the lexical as written, a type inheriting collapse collapses it,
-// each of §4.1.5's three no-facets-applicable types returns it unchanged, and an
-// atomic type with no whiteSpace facet is a fault of the type, never a verdict.
+// each type §4.1.5 applies no whiteSpace facet to (absent {variety}, including
+// a restriction of xs:anySimpleType; xs:anyAtomicType; a union) returns it
+// unchanged, and an atomic type with no whiteSpace facet is a fault of the
+// type, never a verdict.
 func TestApplyWhiteSpace(t *testing.T) {
 	const raw = "  a\tb\r\nc  "
 	collapsePrim := primType(t, "decimal", "collapse")
@@ -303,11 +305,19 @@ func TestApplyWhiteSpace(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewSimpleType: %v", err)
 	}
+	// NewSimpleType alone: CheckDerivation refuses this type (st-props-correct
+	// clause 1), but a parsed schema can still reach it (codegen/doc.go GAP(xsd)).
+	anyRestr, err := xsd.NewSimpleType(xsderr.Loc{}, xsd.QName{Space: "urn:test", Local: "r"},
+		xsd.RestrictionDerivation{}, xsd.OwnedSimpleType{Definition: xsd.AnySimpleType()}, nil, nil)
+	if err != nil {
+		t.Fatalf("NewSimpleType (anySimpleType restriction): %v", err)
+	}
 	rows := []struct {
 		name string
 		st   *xsd.SimpleType
 		want string
 	}{
+		{"restriction of anySimpleType", anyRestr, raw},
 		{"preserve", primType(t, "string", "preserve"), raw},
 		{"replace", primType(t, "string", "replace"), "  a b  c  "},
 		{"inherited collapse", derived, "a b c"},
