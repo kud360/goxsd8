@@ -1,0 +1,94 @@
+<?xml version="1.0"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <!-- Name collisions decided by the package doc's "# Naming" claim timing,
+       each surviving shortening: the top-level element x makes X a fixed
+       name, so no path ending in x shortens to it. Inside each type the walk
+       claims at a field, an <element ref> claims a later top-level element's
+       name: complex type marker, which a local element reaches, against
+       element marker; the anonymous types of element x in complex type ct,
+       in group g and in element holder against elements ctX, gX and holderX;
+       complex type rows's occurrence type against element rowsSequence.
+       Element root's attributes kind and Kind give anonymous unions of one
+       path, and the anonymous union item of list codes, declared first, is
+       claimed at element list, after element codesUnion. -->
+  <xs:element name="x" type="xs:string"/>
+  <xs:complexType name="marker">
+    <xs:sequence>
+      <xs:element ref="marker" minOccurs="0"/>
+    </xs:sequence>
+  </xs:complexType>
+  <xs:complexType name="ct">
+    <xs:sequence>
+      <xs:element name="x">
+        <xs:complexType>
+          <xs:sequence>
+            <xs:element ref="ctX"/>
+          </xs:sequence>
+        </xs:complexType>
+      </xs:element>
+    </xs:sequence>
+  </xs:complexType>
+  <xs:group name="g">
+    <xs:sequence>
+      <xs:element name="x">
+        <xs:complexType>
+          <xs:sequence>
+            <xs:element ref="gX"/>
+          </xs:sequence>
+        </xs:complexType>
+      </xs:element>
+    </xs:sequence>
+  </xs:group>
+  <xs:complexType name="rows">
+    <xs:sequence maxOccurs="2">
+      <xs:element ref="rowsSequence"/>
+    </xs:sequence>
+  </xs:complexType>
+  <xs:simpleType name="codes">
+    <xs:list>
+      <xs:simpleType>
+        <xs:union memberTypes="xs:int xs:boolean"/>
+      </xs:simpleType>
+    </xs:list>
+  </xs:simpleType>
+  <xs:element name="root">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element name="m" type="marker"/>
+        <xs:element name="c" type="ct"/>
+        <xs:group ref="g"/>
+        <xs:element name="r" type="rows"/>
+      </xs:sequence>
+      <xs:attribute name="kind">
+        <xs:simpleType>
+          <xs:union memberTypes="xs:int xs:boolean"/>
+        </xs:simpleType>
+      </xs:attribute>
+      <xs:attribute name="Kind">
+        <xs:simpleType>
+          <xs:union memberTypes="xs:int xs:string"/>
+        </xs:simpleType>
+      </xs:attribute>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="holder">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element name="x">
+          <xs:complexType>
+            <xs:sequence>
+              <xs:element ref="holderX"/>
+            </xs:sequence>
+          </xs:complexType>
+        </xs:element>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="codesUnion" type="xs:string"/>
+  <xs:element name="list" type="codes"/>
+  <xs:element name="marker" type="xs:string"/>
+  <xs:element name="ctX" type="xs:string"/>
+  <xs:element name="gX" type="xs:string"/>
+  <xs:element name="rowsSequence" type="xs:string"/>
+  <xs:element name="holderX" type="xs:string"/>
+</xs:schema>
