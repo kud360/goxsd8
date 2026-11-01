@@ -94,8 +94,9 @@ Value implementations, parsing, validation, and generation live above them.
 identifier for any of them and they import nothing from this module, so the
 edges drawn above do not exist yet in `go list -deps`. Read every
 present-tense sentence in their sections below as "will", not "does".
-`codegen` has left this note: it exports `Generate` and `Target` and imports
-`xsd` and `xsderr` (its section says which slice is shipped).
+`codegen` has left this note: it exports `Generate`, `CheckTargets` and
+`Target`, with the error types they return, and imports `xsd` and `xsderr`
+(its section says what ships).
 `xpath` has left this note: it exports the CTA compile, evaluate and
 statically-check entry points, and the assertion compile and evaluate ones,
 and imports `xsd`, `value`, `regex` and
@@ -440,10 +441,14 @@ Two access styles over the compiled model, one shared core:
     of a repeating ancestor's iteration boundary.
   - a **push** driver — `Walker`, the exhaustive, schema-only visitor of
     every particle reachable through sequences/choices/all-groups and
-    named-group references (the codegen consumer) — **M9**, not yet.
-  Substitution groups are not expanded at walk time (instance-time
-  concern), and the Walker will reuse the same algebra rather than
-  reimplement it. `go doc ./xsd` is the contract.
+    named-group references — **does not exist, and no milestone schedules
+    it.** `codegen`, the consumer it was planned for, shipped M9 walking
+    the content model itself over the algebra's exported entry points
+    (`Schema.ParticleEmptiable`, `Schema.SubstitutionGroup`,
+    `Schema.ValidlySubstitutable`, `Schema.ModelGroup`). `xsd/doc.go`'s
+    "Planned contract" section still declares it; do not build one
+    without a consumer issue.
+  `go doc ./xsd` is the contract.
 
 ## Parsing & loading
 
@@ -683,10 +688,12 @@ design contract.
 
 ## Codegen & codec
 
-**Status: `codegen` ships the slice its `doc.go` states; `codec` ships
-nothing.** `codegen` (M9) exports `Generate` and `Target`, which emit Go type
+**Status: `codegen` ships what its `doc.go` states; `codec` ships
+nothing.** `codegen` (M9) exports `Generate`, which emits Go type
 declarations for the schema shapes `codegen/doc.go`'s "Coverage" states and
-decline every other. **Read which of the bullets below ship in
+declines every other, `CheckTargets`, which reports the `Target`s `Generate`
+refuses without reading a schema, and the error types both return
+(`TargetError`, `DeclineError` and its `Construct`). **Read which of the bullets below ship in
 `codegen/doc.go`, not here:** its "Coverage", "Determinism" and "Naming"
 sections state what `Generate` does today, and its "Planned" sections what it
 does not. `codec` (M10) is `doc.go`-only — `go doc` renders no exported
@@ -825,6 +832,11 @@ compiles, is documented, and has **zero** callers module-wide.
   too and are NOT filed: the first two are §3.14.1 component properties the
   model contracts to expose, and the third is the byte offset `codec`'s M10
   debuggability requirement names.
+- **`codegen.TargetError.Index`** — no caller outside `codegen`'s tests:
+  `cmd/goxsd8` prints each failure's text and `tools/gencensus` reads only
+  the `*DeclineError`. **Justified and not to be filed**: it is the slice
+  index #3048 exported for an external caller of a multi-target `Generate`,
+  on the same footing as `loader`'s helpers. Re-check, do not re-file.
 - **`xsderr.IsValidRule`** — **resolved (#273); re-check, do not re-file.**
   It still has zero non-test consumers, but the module-wide test
   `xsderr/doc.go` claims now exists and passes:
