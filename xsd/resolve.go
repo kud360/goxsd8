@@ -825,8 +825,7 @@ func (s *Schema) resolveElementDecl(e ElementDeclaration) error {
 // <attributeGroup> redefinitions, which are in no property and no index (§4.2.4
 // clause 4.1.2), though Phase A roots both. An original the redefinition does not
 // reference is reached by no slot below, so a simple type owned only from inside
-// one gets neither of the two charges above. No issue owns the gap, so this
-// marker names none.
+// one gets neither of the two charges above (#3306).
 //
 // The slots:
 //
