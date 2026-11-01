@@ -1,6 +1,7 @@
 // Package goname turns XSD local names into exported Go identifiers, once
 // for every library package that must name a generated declaration alike:
-// today codegen alone, which emits the declarations.
+// codegen, which emits the declarations, and codec, which finds the field of
+// a generated struct an instance item fills by the name codegen gave it.
 //
 // # Contract
 //

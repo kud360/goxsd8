@@ -7,8 +7,8 @@ marshalling code.
 
 > **Status: early.** XML and JSON instances validate today; BER is
 > planned (M11). The code generator ships Go type declarations for a slice
-> of schema shapes, with no decoder or encoder to fill them yet (package
-> `codec`, M10). The XPath engine evaluates a conditional type assignment's
+> of schema shapes, and package `codec` decodes a valid XML instance into
+> them for a narrower slice still, with no encoder yet (M10). The XPath engine evaluates a conditional type assignment's
 > `{test}` over Structures §3.12.6's restricted subset, less some forms it
 > declines (M6), and an assertion's `{test}` in first slices (M6), reporting
 > one it declines as unevaluated, never as satisfied; the full XPath 2.0
@@ -345,9 +345,10 @@ section states the slice, and the program's `order.xsd` is inside it, as is
 `codegen/testdata/example.xsd`, which `ExampleGenerate` runs. The emitted
 structs carry no struct tags and bind no element or attribute QName, so
 `encoding/xml` does not round-trip them: do not decode them with
-`encoding/xml`, because filling them is package `codec`'s (M10); `codegen`'s
-package doc, section "What you get", states this and the Go shape each
-construct gets. Run the program from its module's root: `Generate` refuses a
+`encoding/xml`, because filling them is package `codec`'s (M10), whose
+`codec.Decode` fills the shapes its package doc's "What decodes" states,
+README's `Order` among them; `codegen`'s package doc, section "What you get",
+states this and the Go shape each construct gets. Run the program from its module's root: `Generate` refuses a
 `Dir` with no go.mod at or above it, since it derives each package's import
 path from that go.mod. Continuing the program, add
 `github.com/kud360/goxsd8/codegen` to the imports:

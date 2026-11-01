@@ -102,7 +102,7 @@ The open issues are **323 `ready`, 17 `blocked` and 2 `epic`**, which sums to 34
   - Cliuser finding 4. Wildcards are inside "Coverage" (`codegen/doc.go`:98, `AnyChild`), so exit 0 with `Any*` types is intended. Exit 4 is a decline only.
   - Cliuser finding 6. `gen: open nope.xsd` names the argument as typed, which is what `-help`'s Paths paragraph promises for "the I/O fault opening an argument". Pair naming is the refusals' form.
 - **Passed:** cliuser finding 1 (the alias works). **Not tested:** cliuser finding 8.
-- **Consumed:** every finding is disposed of above. The last round's #3257, #3258 and #1406 stay filed and banded. The next round is due when #3287, #3289 or #3290 lands, or when #3291 gives `codec` its first exported identifier. That is a surface change, and `go doc ./codec` then has something to read.
+- **Consumed:** every finding is disposed of above. The last round's #3257, #3258 and #1406 stay filed and banded. The next round is due with #3291's landing, which gives `codec` its first exported identifiers. That is a surface change, and `go doc ./codec` now has something to read.
 
 M10 faces the API through `codec`. M9 faces the API through `codegen` and the CLI through `goxsd8 gen`. M4, M5, M6 and M8 face the API through `parser`, `xsd`, `validate`, `xpath` and `validate/jsonsrc`, and the CLI through `goxsd8 parse` and `validate`.
 
@@ -176,7 +176,7 @@ This is ordered for a `/develop` session: take the highest row you can start. **
 ### Next planning action
 
 1. **#3291's grounding and warden pre-flight are M10's first decision.** They settle the binding between a generated type and its particles, and whether decode reads `validate`'s assessment. The post-land of #3291 un-`blocks` #3292 and files the slices its declines name, largest first, once #3292 can count them.
-2. **The next persona round is due** when #3287, #3289 or #3290 lands, or when #3291 gives `codec` an export.
+2. **The next persona round is due** with #3291's landing, which gives `codec` its first exports, `Decode` and `DeclineError`.
 3. **A pass that finds the W3C lanes' rulings (#2081, #1809) still standing** says whether M4 and M5 stay active or are recorded at their ruled floors.
 4. **Owed to a human:**
    - #1885 (arbiter.md's Ratchet integrity), #2081, #1790, #2022, #2749 and #3031 (CLAUDE.md's gate part 1 spelling).

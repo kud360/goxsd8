@@ -1,6 +1,6 @@
 // Package codegen emits Go type declarations from a compiled schema set. It
-// emits no decode or encode code: that arrives with package codec (M10), whose
-// package doc states that contract.
+// emits no decode or encode code: decoding into the declarations is package
+// codec's, whose package doc states which of them it decodes today.
 //
 // # Entry point
 //
@@ -31,11 +31,11 @@
 // The emitted structs carry no struct tags and bind no XML name; do not decode
 // them with encoding/xml: decoding is codec's, as the opening paragraph states.
 // The types are declarations only: validate an instance against the Schema
-// with package validate, never through the structs, and fill the structs
-// yourself until codec (M10). That package is today what enforces the
-// constraints the types do not: facets, {assertions}, identity constraints,
-// value constraints and wildcard constraints, the last four as their
-// "Coverage" rules state.
+// with package validate, never through the structs. codec.Decode fills the
+// structs of the slice codec's package doc states, and you fill every other.
+// Package validate is today what enforces the constraints the types do not:
+// facets, {assertions}, identity constraints, value constraints and wildcard
+// constraints, the last four as their "Coverage" rules state.
 //
 // Each supported construct gets the Go shape below, a summary of the
 // "Coverage" rules each row quotes, by a rule's opening or by a sentence of
