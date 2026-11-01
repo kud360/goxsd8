@@ -117,9 +117,12 @@ func TestResolve(t *testing.T) {
 }
 
 // TestReplayNamer pins that the second walk's namer errs on a claim that
-// differs from the first walk's record, in kind, steps or extended name, or
-// that the record does not hold, and that the first walk's errs on extending
-// a name it never returned.
+// differs from the first walk's record, in kind, words, steps or extended
+// name, or that the record does not hold, that it keeps the first such error
+// and names no later claim, and that the first walk's errs on extending a
+// name it never returned. Each "kind" row but the first replays a claim
+// whose words or steps equal the zero value of the recorded claim's arm, so
+// only the arm tells them apart.
 func TestReplayNamer(t *testing.T) {
 	t.Run("unclaimed extension", func(t *testing.T) {
 		s := newSurveyNamer()
@@ -148,6 +151,9 @@ func TestReplayNamer(t *testing.T) {
 		replay func(r *replayNamer)
 	}{
 		{"kind", func(r *replayNamer) { r.path([]nameStep{declaredStep("order")}) }},
+		{"kind fixed", func(r *replayNamer) { r.fixed("order"); r.fixed() }},
+		{"kind path", func(r *replayNamer) { r.path(nil) }},
+		{"kind extend", func(r *replayNamer) { r.extend("Order") }},
 		{"steps", func(r *replayNamer) { r.fixed("other") }},
 		{"declared", func(r *replayNamer) {
 			r.fixed("order")
@@ -157,6 +163,11 @@ func TestReplayNamer(t *testing.T) {
 			r.fixed("order")
 			r.path([]nameStep{declaredStep("order"), declaredStep("line")})
 			r.extend("Order", "a")
+		}},
+		{"extending words", func(r *replayNamer) {
+			r.fixed("order")
+			r.path([]nameStep{declaredStep("order"), declaredStep("line")})
+			r.extend("Line", "b")
 		}},
 		{"extra", func(r *replayNamer) { r.fixed("order"); r.fixed("order"); r.fixed("order"); r.fixed("order") }},
 	} {
@@ -168,4 +179,14 @@ func TestReplayNamer(t *testing.T) {
 			}
 		})
 	}
+	t.Run("first error kept", func(t *testing.T) {
+		r := record()
+		r.fixed("other")
+		if got := r.path([]nameStep{declaredStep("order"), declaredStep("line")}); got != "" {
+			t.Errorf("claim after an error = %q, want \"\"", got)
+		}
+		if r.err == nil || r.err.Error() != "type claim 0 differs from the first walk's" {
+			t.Errorf("err = %v, want type claim 0's", r.err)
+		}
+	})
 }
