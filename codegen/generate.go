@@ -125,14 +125,11 @@ func (t Target) failed(i int, err error) error {
 // when one of its own definitions reaches it, reaching read as agreement reads
 // it above. A document that agrees with no earlier target defining it under the
 // same nearest go.mod, or breaks the closure condition, the target defines
-// itself exactly as it would alone: a target in another module than every
-// earlier target that defines D and agrees with it on D, its nearest go.mod
-// lying in another directory than each of theirs, defines D itself; two targets
-// whose emitted declarations of a shared document differ, in a name or in a
-// shape, each declare its types, and one URI composed into different
-// components, as a chameleon include is, renders different declarations and is
-// never shared. A target that imports nothing writes the file it would write
-// alone.
+// itself exactly as it would alone; two targets whose emitted declarations of a
+// shared document differ, in a name or in a shape, each declare its types, and
+// one URI composed into different components, as a chameleon include is,
+// renders different declarations and is never shared. A target that imports
+// nothing writes the file it would write alone.
 //
 // The file is gofmt-formatted. Generate writes no go.mod and adds no
 // //go:generate line: the module the caller puts Dir in owns both.
