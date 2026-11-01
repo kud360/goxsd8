@@ -347,8 +347,10 @@ structs carry no struct tags and bind no element or attribute QName, so
 `encoding/xml` does not round-trip them: do not decode them with
 `encoding/xml`, because filling them is package `codec`'s (M10); `codegen`'s
 package doc, section "What you get", states this and the Go shape each
-construct gets. Continuing the program, add `github.com/kud360/goxsd8/codegen`
-to the imports:
+construct gets. Run the program from its module's root: `Generate` refuses a
+`Dir` with no go.mod at or above it, since it derives each package's import
+path from that go.mod. Continuing the program, add
+`github.com/kud360/goxsd8/codegen` to the imports:
 
 ```go
 // Writes package order into gen/order.

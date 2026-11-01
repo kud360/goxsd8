@@ -30,8 +30,8 @@ func TestGenerateGolden(t *testing.T) {
 			if err != nil {
 				t.Fatalf("Parse: %v", err)
 			}
-			first := generateOne(t, Target{Schema: schema, Dir: filepath.Join(t.TempDir(), "a"), Package: name})
-			second := generateOne(t, Target{Schema: schema, Dir: filepath.Join(t.TempDir(), "b"), Package: name})
+			first := generateOne(t, Target{Schema: schema, Dir: filepath.Join(moduleTempDir(t), "a"), Package: name})
+			second := generateOne(t, Target{Schema: schema, Dir: filepath.Join(moduleTempDir(t), "b"), Package: name})
 			if !bytes.Equal(first, second) {
 				t.Fatalf("two runs differ:\n%s\n---\n%s", first, second)
 			}
@@ -80,7 +80,7 @@ func TestGenerateAssertionsInert(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Parse: %v", err)
 	}
-	got := generateOne(t, Target{Schema: schema, Dir: filepath.Join(t.TempDir(), "assertions"), Package: "assertions"})
+	got := generateOne(t, Target{Schema: schema, Dir: filepath.Join(moduleTempDir(t), "assertions"), Package: "assertions"})
 	want, err := os.ReadFile(filepath.Join("testdata", "assertions.golden"))
 	if err != nil {
 		t.Fatal(err)
@@ -98,7 +98,7 @@ func TestGenerateExampleTypeChecks(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Parse: %v", err)
 	}
-	typeCheck(t, generateOne(t, Target{Schema: schema, Dir: filepath.Join(t.TempDir(), "order"), Package: "order"}))
+	typeCheck(t, generateOne(t, Target{Schema: schema, Dir: filepath.Join(moduleTempDir(t), "order"), Package: "order"}))
 }
 
 // generateOne runs Generate on the one target and returns the file it wrote.
@@ -112,6 +112,16 @@ func generateOne(t *testing.T, target Target) []byte {
 		t.Fatal(err)
 	}
 	return src
+}
+
+// moduleTempDir returns a new temporary directory holding a go.mod declaring
+// module example.com/m, so that a Target's Dir in it or under it has an import
+// path, which Generate requires (Target.Dir).
+func moduleTempDir(t *testing.T) string {
+	t.Helper()
+	dir := t.TempDir()
+	write(t, filepath.Join(dir, "go.mod"), "module example.com/m\n")
+	return dir
 }
 
 // typeCheck fails unless src is a package that compiles, resolving its imports
@@ -141,7 +151,7 @@ func TestGenerateImportsBig(t *testing.T) {
 		"xs:gMonthDay", "xs:gDay", "xs:gMonth", "xs:duration", "xs:dayTimeDuration", "xs:yearMonthDuration", "xs:precisionDecimal"} {
 		t.Run(typ, func(t *testing.T) {
 			schema := parseString(t, `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"><xs:element name="e" type="`+typ+`"/></xs:schema>`)
-			typeCheck(t, generateOne(t, Target{Schema: schema, Dir: filepath.Join(t.TempDir(), "out"), Package: "p"}))
+			typeCheck(t, generateOne(t, Target{Schema: schema, Dir: filepath.Join(moduleTempDir(t), "out"), Package: "p"}))
 		})
 	}
 }

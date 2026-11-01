@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"errors"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -72,7 +73,12 @@ func TestRankedOrdersByCountThenString(t *testing.T) {
 // for schema.
 func declined(t *testing.T, schema *xsd.Schema) codegen.Construct {
 	t.Helper()
-	err := codegen.Generate([]codegen.Target{{Schema: schema, Dir: filepath.Join(t.TempDir(), "out"), Package: "p"}})
+	// Generate refuses a Dir with no go.mod at or above it.
+	root := t.TempDir()
+	if err := os.WriteFile(filepath.Join(root, "go.mod"), []byte("module example.com/m\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	err := codegen.Generate([]codegen.Target{{Schema: schema, Dir: filepath.Join(root, "out"), Package: "p"}})
 	var de *codegen.DeclineError
 	if !errors.As(err, &de) {
 		t.Fatalf("Generate = %v, want a decline", err)

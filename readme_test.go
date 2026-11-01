@@ -65,7 +65,12 @@ func TestReadmeFixtures(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Chdir(t.TempDir())
+	// The program runs in its module's root, as README states.
+	root := t.TempDir()
+	if err := os.WriteFile(filepath.Join(root, "go.mod"), []byte("module example.com/app\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	t.Chdir(root)
 	readmeCodegen(schema)
 	gen, err := os.ReadFile(filepath.Join("gen", "order", "xsd_gen.go"))
 	if err != nil {
