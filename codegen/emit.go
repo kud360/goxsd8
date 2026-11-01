@@ -543,12 +543,15 @@ func walk(schema *xsd.Schema, types typeNamer) (*emitter, []*DeclineError, error
 // comment, and code, the declaration and any method on its type. The comment
 // is before, then, when loc is non-nil, the one schema Loc its header renders
 // and after; the Loc is rendered only when the source is (text), so that one
-// declaration renders against any target's Dir.
+// declaration renders against any target's Dir. reaches is the type names its
+// package must declare with it that its code does not name: Nillable for the
+// type of a nillable top-level declaration, whose nilled value it is (topLevel).
 type declaration struct {
 	name          string
 	before, after string
 	loc           *xsderr.Loc
 	code          string
+	reaches       []string
 }
 
 // comment returns d's doc comment, rendering its Loc, when it has one, with
@@ -652,7 +655,8 @@ func headerLoc(base string, loc xsderr.Loc) string {
 // over its governing types when governingTypes answers a sum. A
 // nillable declaration (nillable) gets that same type: after it, the visit
 // claims, when nothing earlier did, the names nillableType claims for a field
-// over decl, Nillable over that type being a nilled root's value; a sum's
+// over decl, Nillable over that type being a nilled root's value, and records
+// Nillable in the reaches of that type's declaration; a sum's
 // branches wrap their own fields instead (tableType). That type is named from
 // the element (elementType), and a local element of the same named type never
 // shares it (nestedType), while every <element ref> particle to the element
@@ -711,6 +715,11 @@ func (e *emitter) topLevel(decl xsd.ElementDeclaration) error {
 	}
 	if nillable(decl) {
 		e.nillableType(typ, td)
+		i := slices.IndexFunc(e.decls, func(d declaration) bool { return d.name == typ.name })
+		if i < 0 {
+			return fmt.Errorf("element %s at %s: no declaration of its type %s", decl.Name(), decl.Loc(), typ.name)
+		}
+		e.decls[i].reaches = append(e.decls[i].reaches, e.nillable.sum)
 	}
 	return nil
 }
