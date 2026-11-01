@@ -106,27 +106,29 @@ func (t Target) failed(i int, err error) error {
 // target T imports a document D from the earliest target O before it that
 // defines D itself and agrees with T on D: the declarations T and O emit for D
 // are the same text, and so are the declarations each set reaches,
-// transitively, through the type names its text names, a sealed interface
+// transitively: through the type names its text names, a sealed interface
 // reaching each declaration carrying its marker method and an arm its
-// interface, every text compared with its header's Loc as the Loc carries it,
-// so independent of Dir. Each document that closure reaches must then be
-// taken by T from the package O takes it from, and Generate withdraws the
-// imports that break this until none does. T's package imports O's by the
-// import path Target.Dir's doc derives, and writes, in place of each
-// declaration of D, the alias type N = imp.N under the header that
-// declaration carries; imp is O's Package unless that name is taken, and
-// otherwise that name followed by the smallest numeric suffix from 2 that is
-// not. A name is taken when it is a Go predeclared identifier, big, the name
-// of one of T's own top-level types, aliases included, or the import name of
-// an earlier owner in slice order. A target that imports a document writes a
-// declaration belonging to no document only when one of its own definitions
-// reaches it. A document that agrees with no earlier target defining it, or
-// breaks the closure condition, the target defines itself exactly as it would
-// alone: two targets whose emitted declarations of a shared document differ, in
-// a name or in a shape, each declare its types, and one URI composed into
-// different components, as a chameleon include is, renders different
-// declarations and is never shared. A target that imports nothing writes the
-// file it would write alone.
+// interface, and the type of a nillable top-level declaration whose nilled
+// value is Nillable over it reaching Nillable; every text is compared with its
+// header's Loc as the Loc carries it, so independent of Dir. Each document
+// that closure reaches must then be taken by T from the package O takes it
+// from, and Generate withdraws the imports that break this until none does.
+// T's package imports O's by the import path Target.Dir's doc derives, and
+// writes, in place of each declaration of D, the alias type N = imp.N under
+// the header that declaration carries; imp is O's Package unless that name is
+// taken, and otherwise that name followed by the smallest numeric suffix from
+// 2 that is not. A name is taken when it is a Go predeclared identifier, big,
+// the name of one of T's own top-level types, aliases included, or the import
+// name of an earlier owner in slice order. A target that imports a document
+// writes a declaration belonging to no document only when one of its own
+// definitions reaches it, reaching read as agreement reads it above. A
+// document that agrees with no earlier target defining it, or breaks the
+// closure condition, the target defines itself exactly as it would alone: two
+// targets whose emitted declarations of a shared document differ, in a name or
+// in a shape, each declare its types, and one URI composed into different
+// components, as a chameleon include is, renders different declarations and
+// is never shared. A target that imports nothing writes the file it would write
+// alone.
 //
 // The file is gofmt-formatted. Generate writes no go.mod and adds no
 // //go:generate line: the module the caller puts Dir in owns both.

@@ -190,8 +190,10 @@
 //   - the generic struct MixedChild once a field of mixed content holds an
 //     element
 //   - the generic sealed interface Nillable and its arms Nilled and Content
-//     once a field holds a nillable element or the walk visits a nillable
-//     top-level declaration
+//     once a field holds a nillable element or the package defines the type
+//     of a nillable top-level declaration other than one over AnyType or a
+//     governing types' interface; an aliased one's nilled value is its
+//     owner's Nillable (Generate)
 //   - one attributes struct per complex type with attribute fields a nillable
 //     element has
 //   - one sealed interface per union simple type a declaration's type, a value
@@ -776,8 +778,9 @@
 // The output is a function of the schema and of each document's location
 // relative to the target's Dir, so two trees laid out alike under different
 // absolute roots produce byte-identical output; "Naming" states where a
-// header's location is not relative. Under Generate's import rule it also
-// depends on the targets' slice order and on each owner's import path. No map
+// header's location is not relative. Under Generate's import rule it is also
+// a function of the earlier targets of the same call: their slice order, their
+// Schemas, and each owner's Package and import path. No map
 // iteration anywhere near the emitter; emission order is the walk's, which
 // document order alone fixes, as "Coverage" states (datatype structs,
 // PrecisionDecimal's interface and arms with it, raw-content structs,
@@ -839,10 +842,9 @@
 // A package that imports a document's types from an earlier target (Generate)
 // claims their names as if it defined them, so its uniqueness is measured over
 // the same names, imported ones included. Each alias carries its owner's name,
-// and Generate imports a document only when the importer's composition names
-// its types as the owner's does, byte for byte, so the owner's composition
-// names an imported document's types. The fields of an imported type name its
-// owner's types, never the importer's.
+// which agreement (Generate) makes the name the importer's own composition
+// gives it. The fields of an imported type name its owner's types, never the
+// importer's.
 //
 // Generated identifiers are not stable before v1.0: a release may rename any
 // type or field this section names.
