@@ -500,6 +500,23 @@
 //     (§3.10.1) is represented: the field holds elements the wildcard would
 //     not admit (cvc-wildcard), and holds every match raw whether a strict or
 //     lax wildcard would assess it; enforcing either is the validator's.
+//   - A wildcard particle's field, in a struct, an occurrence type or a
+//     choice's branch, holds the children attributed to the wildcard: a child
+//     that an element particle could take in its place, every child before it
+//     attributed as it is, is the element particle's (§3.8.4.2
+//     key-competing-paths, key-vpath; §3.8.6.4 cos-nonambig), which the
+//     struct does not enforce. In a sequence or a choice, whose fields hold
+//     their children in the order the instance does, a value holding such a
+//     child in the wildcard's field is one no validation-path yields: it
+//     writes either the children of another value, the validation-path's, or
+//     children no validation-path accepts, as of sequence(any?, a) an Any
+//     holding <a/> and A write <a/><a/>. A child no element particle can take
+//     at its point is the wildcard's whatever its name: of sequence(a, b?,
+//     any?), the children <a/><b/> give A and B, never A and an Any holding
+//     <b/>, and <a/><b/><b/> give A, B and an Any holding the second <b/>. In
+//     an all group, whose fields hold no order, the attribution is of the
+//     instance alone: of all(a, any), the children <a/><a/> give A and an Any
+//     holding the second <a/>.
 //   - A named complex type, a top-level element through <element ref>
 //     particles, or a local element of an anonymous type through <group ref>
 //     particles to the group declaring it, that reaches itself through elements
@@ -586,7 +603,7 @@
 //     key-vpath), but a slice may hold a child in a branch other than the one
 //     that path takes, as two branches whose particles both accept it can;
 //     attributing each child to its particle is the validator's and the
-//     codec's, as for an all group's wildcard field. The field lies behind its
+//     codec's, as for a wildcard particle's field. The field lies behind its
 //     slice, so no struct-value recursion passes through it.
 //   - An all group gives the fields a sequence of the same particles gives, in
 //     particle order, by the same occurrence rules, an all group particle
@@ -597,10 +614,6 @@
 //     accepts, and how one particle's children interleave with another's is
 //     lost. Every such interleaving is valid (§3.8.4.1.3 all-mg: an all group's
 //     language is the interleave of its particles').
-//   - A wildcard particle's field in an all group holds the children attributed
-//     to it: a child that an element particle of the group could take at that
-//     point in the sequence is attributed to the element particle instead
-//     (§3.8.4.2 key-vpath).
 //   - A complex type's {open content} (§3.4.2.3.3 dcl.ctd.ctcc.common clauses 5
 //     and 6), read from its own {content type}, so one an extension inherits
 //     counts (clause 4.2.3.3) and an <openContent mode="none"> adds none of its
