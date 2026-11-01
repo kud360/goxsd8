@@ -145,7 +145,9 @@ var (
 // own position (tableType).
 type emitter struct {
 	schema *xsd.Schema
-	types  typeNamer
+	// types claims every type name of the package, by the walk emit runs it
+	// for (surveyNamer or replayNamer).
+	types typeNamer
 	// base is the target's Dir made absolute, the directory each header
 	// renders its declaration's location against (headerLoc).
 	base  string

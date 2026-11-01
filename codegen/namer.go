@@ -133,8 +133,8 @@ type typeClaim struct {
 }
 
 // surveyNamer is the typeNamer of emit's first walk: it records each claim in
-// order and returns the provisional name a namer claims for it, today's
-// rendering of its whole path, which the first walk's output never shows.
+// order and returns the provisional name a namer claims for it from its whole
+// path, unshortened, which no output shows.
 type surveyNamer struct {
 	provisional *namer
 	claims      []typeClaim
@@ -175,9 +175,13 @@ func (s *surveyNamer) extend(of string, words ...string) string {
 
 // replayNamer is the typeNamer of emit's second walk: it returns names[i] for
 // the i-th claim, names being resolve's for claims, the first walk's record.
-// The second walk walks the same Schema as the first and no control flow
-// depends on a name's text, so it makes the same claims; a claim that differs
-// from its record is an internal error, kept in err, and its name is "".
+// The second walk walks the same Schema as the first, and its control flow
+// reads a name only for equality: with "", for a once-per-package type not
+// yet claimed, and with another name, in the attributes structs' lookups by
+// the name of the struct they hold the fields of. Each walk's names, all
+// distinct and none "", answer both alike, so it makes the same claims; a
+// claim that differs from its record is an internal error, kept in err, and
+// its name is "".
 type replayNamer struct {
 	claims []typeClaim
 	names  []string
