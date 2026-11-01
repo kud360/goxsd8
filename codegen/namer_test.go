@@ -169,6 +169,12 @@ func TestReplayNamer(t *testing.T) {
 			r.path([]nameStep{declaredStep("order"), declaredStep("line")})
 			r.extend("Line", "b")
 		}},
+		{"exhausted", func(r *replayNamer) {
+			r.fixed("order")
+			r.path([]nameStep{declaredStep("order"), declaredStep("line")})
+			r.extend("Line", "a")
+			r.fixed("order")
+		}},
 		{"extra", func(r *replayNamer) { r.fixed("order"); r.fixed("order"); r.fixed("order"); r.fixed("order") }},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
