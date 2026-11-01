@@ -3,7 +3,7 @@
   <!-- extendshared.xsd's declarations with the element ct first, so the walk
        reaches the base particle's x through the element's extension before
        it reaches it through first. That x still has {scope}.{parent} ct
-       (§3.3.2.3 dcl.elt.local), so first's x shares CtX with it. -->
+       (§3.3.2.3 dcl.elt.local), so first's x shares X with it. -->
   <xs:element name="ct">
     <xs:complexType>
       <xs:complexContent>

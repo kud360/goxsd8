@@ -4,7 +4,7 @@
        type ct, in a separate symbol space (§3.3.2), and its anonymous type
        extends ct. The base particle's x has {scope}.{parent} ct
        (§3.3.2.3 dcl.elt.local), and the extension reuses that particle
-       (§3.4.2.3.3 clause 4.2.3.3), so the element's x shares CtX with
+       (§3.4.2.3.3 clause 4.2.3.3), so the element's x shares X with
        first's. -->
   <xs:complexType name="ct">
     <xs:sequence>

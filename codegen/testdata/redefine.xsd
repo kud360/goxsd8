@@ -4,7 +4,7 @@
        clause 1.1), so the type of its local x is named from the nearest
        named ancestor: TX for e1 of type t, UX for e2 of type u extending t.
        The redefinition's own z has {scope}.{parent} t (§3.3.2.3
-       dcl.elt.local), so e1 and e2 share TZ. -->
+       dcl.elt.local), so e1 and e2 share Z. -->
   <xs:redefine schemaLocation="redefinebase.xsd">
     <xs:complexType name="t">
       <xs:complexContent>

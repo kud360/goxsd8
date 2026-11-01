@@ -30,9 +30,9 @@ func (n *namer) claim(path ...string) string {
 	return n.claimCandidate(render(path))
 }
 
-// claimCandidate returns candidate, an identifier already rendered, or,
-// when this scope holds it, candidate followed by the smallest free numeric
-// suffix from 2.
+// claimCandidate returns a fresh identifier in this scope for candidate, an
+// identifier already rendered, by the package doc's "# Naming" rule for
+// collisions.
 func (n *namer) claimCandidate(candidate string) string {
 	name := candidate
 	for i := 2; n.claimed[name]; i++ {
@@ -76,11 +76,9 @@ func identifier(local string) string {
 }
 
 // nameStep is one step of the path a type is named by: an XSD local name
-// and whether a declaration supplies it — a scope's root, an element, an
-// attribute or its owner, or a named list — rather than the generator, as it
-// does a compositor word, a {type table} slot step, value or union. Only a
-// declared step can start the suffix a path is shortened to ("# Naming").
-// Build one with declaredStep or generatedSteps.
+// and whether it is a declared step or a generated word, as the package doc's
+// "# Naming" tells them apart for shortening. Build one with declaredStep or
+// generatedSteps.
 type nameStep struct {
 	word     string
 	declared bool
@@ -263,11 +261,10 @@ func resolve(claims []typeClaim) []string {
 	return names
 }
 
-// shortest returns the candidate of the path claim i, whose path is steps:
-// the rendering of its shortest suffix that starts at a declared step and is
-// unique, or of the whole path when no shorter suffix is. A suffix is unique
-// when no other claim's full path, each step rendered (full), ends with it,
-// and its rendering is no fixed claim's (fixed).
+// shortest returns the candidate of the path claim i, whose path is steps, by
+// the package doc's "# Naming" rule for shortening a path: full holds every
+// claim's whole path, each step rendered, and fixed every fixed claim's
+// rendering.
 func shortest(i int, steps []nameStep, full [][]string, fixed map[string]bool) string {
 	for k := len(steps) - 1; k > 0; k-- {
 		suffix := full[i][k:]

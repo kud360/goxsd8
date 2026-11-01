@@ -803,52 +803,78 @@
 // numeric suffix from 2, so a top-level element ct and a complex type ct
 // reached locally take Ct in the order they are first reached.
 //
-// Generated identifiers are not stable before v1.0: a release may rename any
-// type or field this section names, and the shortening of an anonymous type's
-// path that "Planned (M9)" states will rename the types named by such a path.
+// A type named by a path from a declaration — an anonymous complex type, an
+// occurrence type and a flattened group's interface, a local declaration's
+// governing types' interface, and an anonymous union but one under a variant —
+// takes the shortest suffix of that path that starts at a declared step and is
+// unique, and the whole path when no shorter suffix is. A suffix is a run of
+// whole steps, each one local name compared as its identifier, so shipTo,
+// ShipTo and ship_to are one step. A declared step is the path's root, an
+// element, an attribute or its owner, or a named list; a generated word —
+// sequence, choice or all, a {type table} branch's step such as alternative2Type
+// or defaultType, value, union — starts no suffix. A suffix is unique when no
+// other type's whole path ends with it and its identifier is no fixed name's:
+// the whole path of a branch, a variant, an attributes struct or an arm is the
+// whole path of the name it extends followed by its own local names, and a fixed
+// name is one named from an element, a named type or a datatype,
+// PrecisionDecimal's interface, a substitution group's interface, or the fixed
+// local names above. Uniqueness is measured over every type name the package
+// claims, the whole composed Schema's, so a declaration in one document can
+// lengthen the name of a type declared in another. Each such type takes the
+// suffix of its own whole path, whatever the type it lies under is named
+// (element address under element shipTo under element purchaseOrder → Address,
+// when no other path ends in address). A branch, a variant, an attributes
+// struct, an arm, and an anonymous union under a variant are never shortened:
+// each extends the final name of what it extends (OrderLine shortened to Line
+// gives the branch LineAlternative2; PriceAttributes follows Price). Shortening
+// runs first, and the numeric suffix then runs over the shortened names in
+// claim order. Under element order, local elements address, shipTo and billTo,
+// and an element address in each of the last two, all of anonymous types, give
+// OrderAddress, ShipTo, ShipToAddress, BillTo and BillToAddress, three paths
+// ending in address, and a choice in shipTo's type gives ShipToChoice. Each
+// arrow below to a path-named type, written → path, gives its whole path.
 //
-// A top-level element's type is named from the element, its name claimed when
-// the walk first reaches the element: at its own position, at the first
-// <element ref> particle to it met before that, or at the branch of the first
-// substitution-group interface holding it. A named complex type a local
-// element reaches is named from the type (complex type ct → Ct), whichever
-// local elements have type ct. An anonymous type nested in either is named by
-// the path of names from the named complex type that declares its element,
-// when one does (element x in complex type ct → CtX, whichever elements have
-// type ct or a type extending ct, which reaches it through ct's own particle),
-// and otherwise from its nearest named ancestor: the top-level element when
-// the element's own type is anonymous (element shipTo under element purchaseOrder →
-// PurchaseOrderShipTo). The original of a complex type a <redefine> redefines has no name
-// (§4.2.4 src-expredef clause 1.1), so the types of the local elements it declares are
-// named from the nearest named ancestor: its element x → TX for elements of type t, UX
-// for a type u extending t. An anonymous type of a local element a model group definition
-// declares, and every type nested in it, is named by the path of names from that group
-// (element e in group g → GE), whichever <group ref> particles reach it. The type for one
-// occurrence of a model group particle is named by the path of names of the complex type
-// whose content model holds it — Ct for a named complex type ct, the path an anonymous
-// one is named by above, GE for the anonymous type of element e in group g — never from a
-// name its interface or a branch claimed, followed by the local name sequence, choice or
-// all of each occurrence type enclosing it and then its own (CtSequence; a choice in that
-// sequence → CtSequenceChoice; a repeated sequence in a branch of named choice type alt,
-// reached by element fifth → AltSequence, never FifthSequenceSequence), and the types
-// nested in its particles as if it were absent; it is named and keyed under that complex
-// type whichever <group ref> particle brought its group, so two complex types referencing
-// one group get an occurrence type each. A flattened model group particle's sealed
-// interface takes the name its occurrence type would take, claimed where that name would
-// be, and is shared as it would be (the repeated sequence content particle of element
-// many's anonymous type → ManySequence); each of its branch structs is named from the
-// interface's name plus the basic particle's word: the element declaration's local name,
-// the referenced declaration's for an <element ref>, or any for a wildcard, the model
-// groups between contributing none, so that two basic particles of one word take the
-// numeric suffix in reach order (an unqualified and a qualified element x of ManySequence
-// → ManySequenceX, ManySequenceX2). The branches' names are claimed right after the
-// interface's, in reach order, each followed by the names its field's type first claims,
-// and the types nested in their elements are named as if the flattened group were absent.
-// A choice's branch struct is named from its interface's name plus the alternative's
-// local name, its compositor for a model group alternative, or any for a wildcard
-// alternative (alternative a of interface First → FirstA, a sequence alternative →
-// FirstSequence, a wildcard alternative → FirstAny), so two top-level elements of one
-// named choice type get distinct interfaces and branches.
+// Generated identifiers are not stable before v1.0: a release may rename any
+// type or field this section names.
+//
+// A top-level element's type is named from the element, its name claimed when the walk first
+// reaches the element: at its own position, at the first <element ref> particle to it met before
+// that, or at the branch of the first substitution-group interface holding it. A named complex
+// type a local element reaches is named from the type (complex type ct → Ct), whichever local
+// elements have type ct. An anonymous type nested in either is named by the path of names from
+// the named complex type that declares its element, when one does (element x in complex type ct →
+// path CtX, whichever elements have type ct or a type extending ct, which reaches it through ct's
+// own particle), and otherwise from its nearest named ancestor: the top-level element when the
+// element's own type is anonymous (element shipTo under element purchaseOrder → path
+// PurchaseOrderShipTo). The original of a complex type a <redefine> redefines has no name (§4.2.4
+// src-expredef clause 1.1), so the types of the local elements it declares are named from the
+// nearest named ancestor: its element x → path TX for elements of type t, path UX for a type u
+// extending t. An anonymous type of a local element a model group definition declares, and every
+// type nested in it, is named by the path of names from that group (element e in group g → path
+// GE), whichever <group ref> particles reach it. The type for one occurrence of a model group
+// particle is named by the path of names of the complex type whose content model holds it — Ct
+// for a named complex type ct, the path an anonymous one is named by above, GE for the anonymous
+// type of element e in group g — never from a name its interface or a branch claimed, followed by
+// the local name sequence, choice or all of each occurrence type enclosing it and then its own
+// (path CtSequence; a choice in that sequence → path CtSequenceChoice; a repeated sequence in a
+// branch of named choice type alt, reached by element fifth → path AltSequence, never
+// FifthSequenceSequence), and the types nested in its particles as if it were absent; it is named
+// and keyed under that complex type whichever <group ref> particle brought its group, so two
+// complex types referencing one group get an occurrence type each. A flattened model group
+// particle's sealed interface takes the name its occurrence type would take, claimed where that
+// name would be, and is shared as it would be (the repeated sequence content particle of element
+// many's anonymous type → path ManySequence); each of its branch structs is named from the
+// interface's name plus the basic particle's word: the element declaration's local name, the
+// referenced declaration's for an <element ref>, or any for a wildcard, the model groups between
+// contributing none, so that two basic particles of one word take the numeric suffix in reach
+// order (an unqualified and a qualified element x of ManySequence → ManySequenceX,
+// ManySequenceX2). The branches' names are claimed right after the interface's, in reach order,
+// each followed by the names its field's type first claims, and the types nested in their
+// elements are named as if the flattened group were absent. A choice's branch struct is named
+// from its interface's name plus the alternative's local name, its compositor for a model group
+// alternative, or any for a wildcard alternative (alternative a of interface First → FirstA, a
+// sequence alternative → FirstSequence, a wildcard alternative → FirstAny), so two top-level
+// elements of one named choice type get distinct interfaces and branches.
 //
 // A substitution group's interface is named from its head's local name plus
 // SubstitutionGroup (head h → HSubstitutionGroup), and each branch from the
@@ -861,7 +887,7 @@
 // the name the declaration's own type would take, claimed where that name
 // would be: from the element for a top-level declaration, and by the path an
 // anonymous complex type of a local one would take (element line in complex
-// type order → OrderLine). Each of its branches is named from the interface's
+// type order → path OrderLine). Each of its branches is named from the interface's
 // name plus the branch's local name: the governing type's local name when it
 // is named, a member of an abstract type included (member circle of element
 // shape → ShapeCircle), and otherwise alternative and the 1-based position of
@@ -871,7 +897,7 @@
 // MemoDefault). An anonymous type a branch holds is named by the interface's
 // path followed by the branch's local name and the local name type, every type
 // nested in it extending that path, and an anonymous union with union last
-// (ProductAlternative4Type, OrderLineAlternative2TypeNote,
+// (paths ProductAlternative4Type, OrderLineAlternative2TypeNote,
 // UAlternative1TypeUnion). The branches' names are claimed after the
 // interface's, at a top-level declaration's own position, in branch order, each
 // followed by the names its field's type first claims. Each choice branch's
@@ -931,16 +957,16 @@
 // so that a top-level element size of type size names its type Size2; for a
 // field of a struct, after that struct's own name. An anonymous union is named
 // by the path of names an anonymous complex type would take in its place, with
-// the local name union last: a top-level element's (element pin → PinUnion), a
-// local element's (element code in complex type box → BoxCodeUnion), an
+// the local name union last: a top-level element's (element pin → path PinUnion), a
+// local element's (element code in complex type box → path BoxCodeUnion), an
 // attribute's from the global attribute declaration, the named complex type or
 // attribute group definition declaring it, or the path of the struct holding
 // it for an anonymous complex type (attribute mode in attribute group shared →
-// SharedModeUnion, attribute kind of element tag → TagKindUnion), and a value
+// path SharedModeUnion, attribute kind of element tag → path TagKindUnion), and a value
 // field's from its struct's path with value before union (complex type narrow
-// → NarrowValueUnion). A list's item is named from the list whose <list>
+// → path NarrowValueUnion). A list's item is named from the list whose <list>
 // declares it: from that list's local name when it is named (simple type codes
-// → CodesUnion, for codes and every restriction of it), and from the path the
+// → path CodesUnion, for codes and every restriction of it), and from the path the
 // list takes otherwise. A variant is named from its interface's name plus its
 // member's local name: an anonymous list member's is list, and any other
 // anonymous member's is that of the nearest named type on its {base type
@@ -984,10 +1010,9 @@
 //
 // # Planned (M9 — not yet implemented)
 //
-// Shortening an anonymous type's path to only as much of it as uniqueness
-// requires. Cross-target type references import across the generated
-// packages, in place of each target declaring the types of a document its
-// Schema shares with another.
+// Cross-target type references import across the generated packages, in
+// place of each target declaring the types of a document its Schema shares
+// with another.
 //
 // # Planned (M10 — not yet implemented)
 //

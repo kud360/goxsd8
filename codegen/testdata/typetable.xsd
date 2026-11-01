@@ -62,8 +62,8 @@
   <!-- line, a local declaration of the named complex type order with no
        type, so of xs:anyType, selects a simple type, an anonymous complex
        type, and, its last alternative having no {test}, item as its {default
-       type definition}: the interface OrderLine, named by the path an
-       anonymous type of line would take, shared by every element of type
+       type definition}: the interface Line, named as an anonymous type of
+       line would be, shared by every element of type
        order, and its branches mix simple and complex types. The anonymous
        type's nested types extend the path order, line, alternative2. -->
   <xs:complexType name="order">
@@ -90,7 +90,7 @@
   <xs:element name="order" type="t:order"/>
   <xs:element name="reorder" type="t:order"/>
   <!-- part's element sub, of type part and occurring exactly once, selects
-       part itself by default: the branch PartSubPart holds a Part by value,
+       part itself by default: the branch SubPart holds a Part by value,
        and Part holds sub's interface, never a Part, so no struct-value
        recursion passes sub. -->
   <xs:complexType name="part">
