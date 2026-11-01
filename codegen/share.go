@@ -207,10 +207,15 @@ func (u *unit) set(uri string) []int {
 // closure returns the indices, ascending, of the declarations from reaches
 // through refs, from's own included.
 func (u *unit) closure(from []int) []int {
+	in := make([]bool, len(u.decls))
 	reached := slices.Clone(from)
+	for _, i := range from {
+		in[i] = true
+	}
 	for next := 0; next < len(reached); next++ {
 		for _, j := range u.refs[reached[next]].refs {
-			if !slices.Contains(reached, j) {
+			if !in[j] {
+				in[j] = true
 				reached = append(reached, j)
 			}
 		}
@@ -257,18 +262,8 @@ func link(units []*unit, i int) error {
 	u := units[i]
 	var imports []imported
 	for _, uri := range u.docs() {
-		set := u.set(uri)
-		setKey, closureKey := u.key(set), u.key(u.closure(set))
-		for o, owner := range units[:i] {
-			if definer(o, owner.imports, uri) != o {
-				continue
-			}
-			ownerSet := owner.set(uri)
-			if len(ownerSet) == 0 || owner.key(ownerSet) != setKey || owner.key(owner.closure(ownerSet)) != closureKey {
-				continue
-			}
+		if o, ok := u.agreeingOwner(units[:i], uri); ok {
 			imports = append(imports, imported{uri: uri, owner: o})
-			break
 		}
 	}
 	for {
@@ -295,6 +290,28 @@ func link(units []*unit, i int) error {
 	return nil
 }
 
+// agreeingOwner returns the index in earlier of the first unit that defines
+// the document uri itself and agrees with u on it (Generate's doc), false when
+// none does. u's own keys are computed only once an earlier unit defines uri.
+func (u *unit) agreeingOwner(earlier []*unit, uri string) (int, bool) {
+	var setKey, closureKey string
+	keyed := false
+	for o, owner := range earlier {
+		ownerSet := owner.set(uri)
+		if len(ownerSet) == 0 || definer(o, owner.imports, uri) != o {
+			continue
+		}
+		if !keyed {
+			set := u.set(uri)
+			setKey, closureKey, keyed = u.key(set), u.key(u.closure(set)), true
+		}
+		if owner.key(ownerSet) == setKey && owner.key(owner.closure(ownerSet)) == closureKey {
+			return o, true
+		}
+	}
+	return 0, false
+}
+
 // closureHolds reports whether the unit u at index self, importing imports,
 // takes every document its closure of im's document reaches from the package
 // that im's owner takes it from (Generate's doc).
@@ -314,11 +331,9 @@ func (u *unit) closureHolds(units []*unit, self int, imports []imported, im impo
 	return true
 }
 
-// render returns u's gofmt-formatted source: every declaration as emitted
-// when u imports nothing, and otherwise, units being every target's unit,
-// each declaration of an imported document an alias of its owner's type, and
-// a declaration attributed to no document only when one of u's own
-// definitions reaches it.
+// render returns u's gofmt-formatted source, units being every target's unit:
+// every declaration as emitted when u imports nothing, and otherwise the file
+// Generate's import rule states.
 func (u *unit) render(units []*unit) ([]byte, error) {
 	aliased := make([]bool, len(u.decls))
 	for i, d := range u.decls {
@@ -402,11 +417,8 @@ func (u *unit) owners() []int {
 }
 
 // importNames returns the name u's file imports each of its owners under, in
-// owners' order: the owner's package name unless it is taken, and otherwise
-// that name followed by the smallest numeric suffix from 2 that is not. A
-// name is taken when it is a Go predeclared identifier, big, the name of one
-// of u's declarations kept marks, an alias's included, or the name given to an
-// earlier owner.
+// owners' order, by the rule Generate's doc states, kept marking the
+// declarations u's file writes, its own top-level types.
 func (u *unit) importNames(units []*unit, kept []bool) []string {
 	owners := u.owners()
 	if len(owners) == 0 {

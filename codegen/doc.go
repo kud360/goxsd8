@@ -822,24 +822,27 @@
 // PrecisionDecimal's interface, a substitution group's interface, or the fixed
 // local names above. Uniqueness is measured over every type name the package
 // claims, the whole composed Schema's, so a declaration in one document can
-// lengthen the name of a type declared in another; a document whose types the
-// package imports from an earlier target counts the same, its names claimed
-// as if the package defined them. An alias carries its owner's name, so the
-// owner's composition names an imported document's types, and Generate
-// imports a document only when the importer's own composition names them the
-// same, byte for byte. Each such type takes the suffix of its own whole path,
-// whatever the type it lies under is named (element address under element shipTo
-// under element purchaseOrder → Address, when no other path ends in address). A
-// branch, a variant, an attributes struct, an arm, and an anonymous union under
-// a variant are never shortened: each extends the final name of what it extends
-// (OrderLine shortened to Line gives the branch LineAlternative2;
-// PriceAttributes follows Price). Shortening runs first, and the numeric suffix
-// then runs over the shortened names in claim order. Under element order, local
-// elements address, shipTo and billTo, and an element address in each of the
-// last two, all of anonymous types, give OrderAddress, ShipTo, ShipToAddress,
-// BillTo and BillToAddress, three paths ending in address, and a choice in
-// shipTo's type gives ShipToChoice. Each arrow below to a path-named type,
-// written → path, gives its whole path.
+// lengthen the name of a type declared in another. Each such type takes the
+// suffix of its own whole path, whatever the type it lies under is named
+// (element address under element shipTo under element purchaseOrder → Address,
+// when no other path ends in address). A branch, a variant, an attributes
+// struct, an arm, and an anonymous union under a variant are never shortened:
+// each extends the final name of what it extends (OrderLine shortened to Line
+// gives the branch LineAlternative2; PriceAttributes follows Price). Shortening
+// runs first, and the numeric suffix then runs over the shortened names in
+// claim order. Under element order, local elements address, shipTo and billTo,
+// and an element address in each of the last two, all of anonymous types, give
+// OrderAddress, ShipTo, ShipToAddress, BillTo and BillToAddress, three paths
+// ending in address, and a choice in shipTo's type gives ShipToChoice. Each
+// arrow below to a path-named type, written → path, gives its whole path.
+//
+// A package that imports a document's types from an earlier target (Generate)
+// claims their names as if it defined them, so its uniqueness is measured over
+// the same names, imported ones included. Each alias carries its owner's name,
+// and Generate imports a document only when the importer's composition names
+// its types as the owner's does, byte for byte, so the owner's composition
+// names an imported document's types. The fields of an imported type name its
+// owner's types, never the importer's.
 //
 // Generated identifiers are not stable before v1.0: a release may rename any
 // type or field this section names.

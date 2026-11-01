@@ -125,7 +125,7 @@ var (
 		[]goField{{"Space", "string"}, {"Local", "string"}}}
 )
 
-// emitter builds one target's source. decls holds each emitted type
+// emitter builds one target's declarations. decls holds each emitted type
 // declaration in emission order: a top-level element's type, then the types
 // its particles reach that no earlier element emitted — anonymous complex
 // types nested in its type definition or in a model group definition a
@@ -473,7 +473,8 @@ func (s scope) groupKey(site groupSite) nestedKey {
 	return s.key() + nestedKey(strconv.Quote(strings.Join(steps, ".")))
 }
 
-// emit returns the gofmt-formatted source of package pkg for schema, or the
+// emit returns the declarations of schema's package in emission order, decls
+// and then tailDecls (emitter), which a unit renders (newUnit), or the
 // declines and the failure that is not a decline that Generate's doc states
 // for one target's walk, one turn per top-level element declaration. It
 // returns declarations only when it collects no decline, and err carries no
@@ -2668,7 +2669,7 @@ func (e *emitter) branchOrigin(child scope, decl xsd.ElementDeclaration, b table
 	if t.Name() != (xsd.QName{}) {
 		return e.typeOrigin(t)
 	}
-	return origin{from: e.elementFrom(decl).prefixed(b.slot.name()+" of "), subject: "complex type (anonymous) of " + child.place()}
+	return origin{from: e.elementFrom(decl).prefixed(b.slot.name() + " of "), subject: "complex type (anonymous) of " + child.place()}
 }
 
 // attributeField returns the field of attribute use u (§3.5.1) of the complex

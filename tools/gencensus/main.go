@@ -101,8 +101,7 @@ func run(stdout io.Writer, args []string) (err error) {
 			err = errors.Join(err, fmt.Errorf("removing the output directory %s: %w", out, rerr))
 		}
 	}()
-	// codegen derives each target's import path from the go.mod at or above
-	// its Dir, and refuses a Dir with none.
+	// Generate refuses a Dir outside a Go module (codegen.Target.Dir).
 	if err := os.WriteFile(filepath.Join(out, "go.mod"), []byte("module gencensus\n"), 0o644); err != nil {
 		return fmt.Errorf("writing the output directory's go.mod: %w", err)
 	}

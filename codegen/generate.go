@@ -120,13 +120,13 @@ func (t Target) failed(i int, err error) error {
 // of one of T's own top-level types, aliases included, or the import name of
 // an earlier owner in slice order. A target that imports a document writes a
 // declaration belonging to no document only when one of its own definitions
-// reaches it, so an imported type's fields name its owner's. A document that
-// agrees with no earlier target defining it, or breaks the closure condition,
-// the target defines itself exactly as it would alone: two targets whose
-// emitted declarations of a shared document differ, in a name or in a shape,
-// each declare its types, and one URI composed into different components, as
-// a chameleon include is, renders different declarations and is never shared.
-// A target that imports nothing writes the file it would write alone.
+// reaches it. A document that agrees with no earlier target defining it, or
+// breaks the closure condition, the target defines itself exactly as it would
+// alone: two targets whose emitted declarations of a shared document differ, in
+// a name or in a shape, each declare its types, and one URI composed into
+// different components, as a chameleon include is, renders different
+// declarations and is never shared. A target that imports nothing writes the
+// file it would write alone.
 //
 // The file is gofmt-formatted. Generate writes no go.mod and adds no
 // //go:generate line: the module the caller puts Dir in owns both.
