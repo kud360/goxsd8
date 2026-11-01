@@ -251,6 +251,53 @@ func TestGenerateClosureCondition(t *testing.T) {
 	checkTogether(t, []string{"example.com/m/a", "example.com/m/b"}, srcs)
 }
 
+// TestGenerateSealedClosure pins that a sealed interface's closure holds every
+// declaration carrying its marker method: shared.xsd's declarations are the
+// same text in both targets, but a.xsd and b.xsd each add a member m1 to the
+// substitution group of shared.xsd's h, so the interface HSubstitutionGroup
+// reaches a branch HSubstitutionGroupM1 attributed to a.xsd in one target and
+// b.xsd in the other, and b defines the interface itself, as its own branch,
+// whose marker method is unexported, could implement no other package's.
+// Without the marker relation in the closure b aliases the interface and the
+// assertions on b fail.
+func TestGenerateSealedClosure(t *testing.T) {
+	member := `<xs:include schemaLocation="shared.xsd"/><xs:element name="m1" substitutionGroup="h" type="xs:string"/>`
+	docs := []schemaDoc{
+		{location: "shared.xsd", body: `<xs:element name="h" type="xs:string"/>` +
+			`<xs:element name="po"><xs:complexType><xs:sequence><xs:element ref="h"/></xs:sequence></xs:complexType></xs:element>`},
+		{location: "a.xsd", body: member},
+		{location: "b.xsd", body: member},
+	}
+	root := moduleTempDir(t)
+	srcs := generateAll(t, []Target{
+		{Schema: parseDocs(t, "a.xsd", docs), Dir: filepath.Join(root, "a"), Package: "a"},
+		{Schema: parseDocs(t, "b.xsd", docs), Dir: filepath.Join(root, "b"), Package: "b"},
+	})
+	assertLines(t, "b's file", srcs[1], []string{"type HSubstitutionGroup interface {", "func (HSubstitutionGroupM1) isHSubstitutionGroup() {}"}, []string{"import", " = "})
+}
+
+// TestGenerateUnattributedClosure pins that the closure compared holds the
+// declarations that belong to no document: shared.xsd's V and U are the same
+// text in both targets, but b's own element uString claims UString first, so
+// the variant of U's builtin member xs:string, which renders no Loc, is
+// UString in a and UString2 in b, and b defines U itself. Comparing D's own
+// declarations alone makes b alias U, whose variants b's file still declares
+// as arms of no interface of its own, and fails the test.
+func TestGenerateUnattributedClosure(t *testing.T) {
+	docs := []schemaDoc{
+		{location: "shared.xsd", body: `<xs:simpleType name="u"><xs:union memberTypes="xs:string xs:int"/></xs:simpleType><xs:element name="v" type="u"/>`},
+		{location: "a.xsd", body: `<xs:include schemaLocation="shared.xsd"/>`},
+		{location: "b.xsd", body: `<xs:include schemaLocation="shared.xsd"/><xs:element name="uString" type="xs:boolean"/>`},
+	}
+	root := moduleTempDir(t)
+	srcs := generateAll(t, []Target{
+		{Schema: parseDocs(t, "a.xsd", docs), Dir: filepath.Join(root, "a"), Package: "a"},
+		{Schema: parseDocs(t, "b.xsd", docs), Dir: filepath.Join(root, "b"), Package: "b"},
+	})
+	assertLines(t, "a's file", srcs[0], []string{"type UString string"}, nil)
+	assertLines(t, "b's file", srcs[1], []string{"type U interface {", "type UString2 string", "type V U"}, []string{"import", " = "})
+}
+
 // TestGenerateImportNames pins the import name rule: the third target imports
 // p.xsd from the first and q.xsd from the second, both of Package Item, and
 // declares its own type Item, so the first owner takes Item2 and the second,
