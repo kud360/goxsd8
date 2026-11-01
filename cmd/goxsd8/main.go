@@ -287,6 +287,9 @@ Usage (contract; subcommands land with their milestones):
       xsd_gen.go in the -out directory, which is created with its
       parents when absent, declaring a package named by the
       directory's last path element (./gen/order/ is package order).
+      Every -out lies in a Go module, which gives its package an
+      import path: the module path of the nearest go.mod at or above
+      the -out, then the -out's path below that go.mod's directory.
       Each -schema needs the -out after it and each -out the -schema
       before it; gen takes no positional argument. Each -schema is
       compiled alone, as a parse argument is: its path is resolved
@@ -307,9 +310,12 @@ Usage (contract; subcommands land with their milestones):
       as -schema <s> -out <d>, in argument order: among them a last
       path element that is not a Go package name, as with -out
       my-pkg or -out ., an -out repeating an earlier pair's, an -out
-      that exists and is not a directory, and an existing xsd_gen.go
+      that exists and is not a directory, an existing xsd_gen.go
       whose first line does not mark it generated, which gen never
-      overwrites. Then every pair is compiled, and every failure to
+      overwrites, an -out with no go.mod in it or any directory above
+      it, one whose nearest go.mod cannot be read or declares no
+      module, and an -out whose import path repeats an earlier
+      pair's. Then every pair is compiled, and every failure to
       compile reported after those lines, before anything is
       written; then either every pair is generated or none is,
       except that a fault while writing can leave some pairs written

@@ -9,6 +9,8 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"strconv"
+	"strings"
 
 	"github.com/kud360/goxsd8/xsd"
 )
@@ -31,7 +33,14 @@ type Target struct {
 	// non-nil; CheckTargets does not read it.
 	Schema *xsd.Schema
 	// Dir is the output directory, non-empty, resolved relative to the
-	// process working directory when it is not absolute.
+	// process working directory when it is not absolute. It lies in a Go
+	// module, and its import path is derived from that module: the module
+	// path that the module directive of the nearest go.mod at or above Dir
+	// made absolute declares, joined by "/" with Dir's slash-separated path
+	// relative to that go.mod's directory, or the module path alone when Dir
+	// is that directory. The walk up from Dir passes through every part of it
+	// that does not exist yet. The path is not checked against the go
+	// command's rules for import paths.
 	Dir string
 	// Package is the emitted package's name: a Go identifier that is neither a
 	// keyword, the blank identifier, nor main.
@@ -127,10 +136,10 @@ func (t Target) failed(i int, err error) error {
 // failure, in that order, a phase-2 fault alone; each opens with the failing
 // target's name: its Name, or "target N" for the target at slice index N when
 // Name is empty. An unnamed target's error opens "codegen: target N: ", a
-// named one's "<Name>: " with no "codegen: " before it. The refusal of a Dir
-// equal to an earlier target's names that earlier target the same way. Each
-// element is a *TargetError, which errors.As retrieves: its Index method
-// returns N, and it unwraps to the failure the opening precedes.
+// named one's "<Name>: " with no "codegen: " before it. The refusals of a Dir,
+// or of its import path, equal to an earlier target's name that earlier target
+// the same way. Each element is a *TargetError, which errors.As retrieves: its
+// Index method returns N, and it unwraps to the failure the opening precedes.
 //
 // A decline is a generator limitation, not a schema fault: it is a
 // *DeclineError, never an *xsderr.Error, and it wraps errors.ErrUnsupported,
@@ -183,7 +192,7 @@ func prepare(t Target, earlier []Target) (src []byte, declines []*DeclineError, 
 	if t.Schema == nil {
 		return nil, nil, errors.New("the Schema field is nil")
 	}
-	base, err := checkTarget(t, earlier)
+	base, _, err := checkTarget(t, earlier)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -199,13 +208,17 @@ func prepare(t Target, earlier []Target) (src []byte, declines []*DeclineError, 
 // non-empty Dir after filepath.Clean, the earlier target refused or not; when
 // filepath.Abs cannot make its Dir absolute; and when its Dir exists and is not a
 // directory, or holds an xsd_gen.go that is not a regular file or that Generate's
-// overwrite rule does not let it replace, or either cannot be checked or read.
-// Generate states how the duplicate-Dir refusal names the earlier target and the
-// overwrite rule.
+// overwrite rule does not let it replace, or either cannot be checked or read;
+// when no go.mod lies in its Dir or any directory above it; when the nearest
+// one cannot be checked or read, or holds no module directive; and when the
+// import path Dir's doc derives for it equals the one derived for an earlier
+// target, the earlier target refused or not. Generate states how the
+// duplicate-Dir and duplicate-import-path refusals name the earlier target,
+// and the overwrite rule.
 func CheckTargets(targets []Target) []error {
 	var errs []error
 	for i, t := range targets {
-		if _, err := checkTarget(t, targets[:i]); err != nil {
+		if _, _, err := checkTarget(t, targets[:i]); err != nil {
 			errs = append(errs, t.failed(i, err))
 		}
 	}
@@ -214,36 +227,132 @@ func CheckTargets(targets []Target) []error {
 
 // checkTarget is the one encoding of the refusals CheckTargets' doc lists, in
 // that order, for t against the targets before it. It reads no Schema and
-// returns Dir made absolute.
-func checkTarget(t Target, earlier []Target) (base string, err error) {
+// returns Dir made absolute and the import path Dir's doc derives.
+func checkTarget(t Target, earlier []Target) (base, path string, err error) {
 	if t.Dir == "" {
-		return "", errors.New("no output directory given")
+		return "", "", errors.New("no output directory given")
 	}
 	if token.IsKeyword(t.Package) {
-		return "", fmt.Errorf("the package name %q is a Go keyword", t.Package)
+		return "", "", fmt.Errorf("the package name %q is a Go keyword", t.Package)
 	}
 	if t.Package == "_" {
-		return "", errors.New(`the package name "_" is the blank identifier`)
+		return "", "", errors.New(`the package name "_" is the blank identifier`)
 	}
 	if !token.IsIdentifier(t.Package) {
-		return "", fmt.Errorf("the package name %q is not a Go identifier", t.Package)
+		return "", "", fmt.Errorf("the package name %q is not a Go identifier", t.Package)
 	}
 	if t.Package == "main" {
-		return "", errors.New(`the package name is "main", but the emitted package declares no func main and would not build`)
+		return "", "", errors.New(`the package name is "main", but the emitted package declares no func main and would not build`)
 	}
 	for j, e := range earlier {
 		if e.Dir != "" && filepath.Clean(e.Dir) == filepath.Clean(t.Dir) {
-			return "", fmt.Errorf("the output directory %s is also the output directory of %s", t.Dir, targetName(e.Name, j))
+			return "", "", fmt.Errorf("the output directory %s is also the output directory of %s", t.Dir, targetName(e.Name, j))
 		}
 	}
 	base, err = filepath.Abs(t.Dir)
 	if err != nil {
-		return "", fmt.Errorf("resolving the output directory %s: %w", t.Dir, err)
+		return "", "", fmt.Errorf("resolving the output directory %s: %w", t.Dir, err)
 	}
 	if err := checkDestination(t.Dir); err != nil {
-		return "", err
+		return "", "", err
 	}
-	return base, nil
+	path, err = importPath(t.Dir, base)
+	if err != nil {
+		return "", "", err
+	}
+	for j, e := range earlier {
+		if earlierPath, ok := derivedPath(e.Dir); ok && earlierPath == path {
+			return "", "", fmt.Errorf("the output directory %s has the import path %s, which is also the import path of %s", t.Dir, path, targetName(e.Name, j))
+		}
+	}
+	return base, path, nil
+}
+
+// derivedPath is the import path Target.Dir's doc derives for dir, false when
+// dir is empty or the derivation fails.
+func derivedPath(dir string) (string, bool) {
+	if dir == "" {
+		return "", false
+	}
+	base, err := filepath.Abs(dir)
+	if err != nil {
+		return "", false
+	}
+	path, err := importPath(dir, base)
+	return path, err == nil
+}
+
+// importPath derives the import path Target.Dir's doc states for the output
+// directory dir, base being dir made absolute: it walks from base up to the
+// filesystem root, passing through each directory holding no go.mod, and
+// reads the first go.mod it meets (modulePackage).
+func importPath(dir, base string) (string, error) {
+	for mod := base; ; {
+		gomod := filepath.Join(mod, "go.mod")
+		_, err := os.Stat(gomod)
+		if err == nil {
+			return modulePackage(gomod, mod, base)
+		}
+		if !errors.Is(err, fs.ErrNotExist) {
+			return "", fmt.Errorf("checking %s: %w", gomod, err)
+		}
+		parent := filepath.Dir(mod)
+		if parent == mod {
+			return "", fmt.Errorf("no go.mod lies in the output directory %s or any directory above it, so it has no import path", dir)
+		}
+		mod = parent
+	}
+}
+
+// modulePackage returns the import path of the absolute directory base in
+// the module whose go.mod, at gomod, lies in mod, base itself or one of its
+// ancestors.
+func modulePackage(gomod, mod, base string) (string, error) {
+	data, err := os.ReadFile(gomod)
+	if err != nil {
+		return "", fmt.Errorf("reading %s: %w", gomod, err)
+	}
+	module, ok := moduleDirective(string(data))
+	if !ok {
+		return "", fmt.Errorf("%s holds no module directive", gomod)
+	}
+	rel, err := filepath.Rel(mod, base)
+	if err != nil {
+		return "", fmt.Errorf("resolving %s against %s: %w", base, mod, err)
+	}
+	if rel == "." {
+		return module, nil
+	}
+	return module + "/" + filepath.ToSlash(rel), nil
+}
+
+// moduleDirective returns the module path that the first line of the go.mod
+// content data whose first word is module declares, false when there is no
+// such line or it declares none. It declares one when it holds the word
+// module, then the path, bare or as a Go string literal, holding no white
+// space and no //, then at most a // comment; the block form module ( ... )
+// declares none.
+func moduleDirective(data string) (string, bool) {
+	for _, line := range strings.Split(data, "\n") {
+		line, _, _ = strings.Cut(line, "//")
+		fields := strings.Fields(line)
+		if len(fields) == 0 || fields[0] != "module" {
+			continue
+		}
+		if len(fields) != 2 || fields[1] == "(" {
+			return "", false
+		}
+		path := fields[1]
+		if path[0] != '"' && path[0] != '`' {
+			return path, true
+		}
+		unquoted, err := strconv.Unquote(path)
+		if err != nil || unquoted == "" {
+			return "", false
+		}
+		return unquoted, true
+	}
+	return "", false
 }
 
 // checkDestination fails unless phase 2 may write xsd_gen.go into dir: dir is
