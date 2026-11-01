@@ -515,8 +515,12 @@
 //     any?), the children <a/><b/> give A and B, never A and an Any holding
 //     <b/>, and <a/><b/><b/> give A, B and an Any holding the second <b/>. In
 //     an all group, whose fields hold no order, the attribution is of the
-//     instance alone: of all(a, any), the children <a/><a/> give A and an Any
-//     holding the second <a/>.
+//     children the value writes: of all(a, any), the children <a/><a/> give A
+//     and an Any holding the second <a/>, but a value holding in the
+//     wildcard's field a child that an element particle whose field is below
+//     its {max occurs} would take is one no validation-path yields, as of
+//     all(a?, any) an Any holding <a/> beside no A writes <a/>, which no
+//     validation-path accepts.
 //   - A named complex type, a top-level element through <element ref>
 //     particles, or a local element of an anonymous type through <group ref>
 //     particles to the group declaring it, that reaches itself through elements
