@@ -385,8 +385,8 @@ func (s *Schema) resolveReferences() error {
 // referenceWalk is Phase A's set of charges for the shared component descent
 // (componentwalk.go): a src-resolve verdict at every BY-NAME arm the descent
 // reaches, and the two slots the descent does not itself enter — an element
-// declaration's {type table} and its keyrefs (resolveElementDecl), and a simple
-// type's own graph (resolveSimpleType).
+// declaration's keyrefs (resolveElementDecl), and a simple type's own graph
+// (resolveSimpleType).
 //
 // It is the only one of the four phases that charges anything at a by-name arm.
 // The other three read a name as a leaf owned by the component it names; this
@@ -735,12 +735,12 @@ func (s *Schema) resolveAttributeDecl(a AttributeDeclaration) error {
 		"%s references simple type %s, but that expanded name is a complex type definition, and src-resolve requires an attribute's type= to resolve to a simple type definition", ctx, r.Name)
 }
 
-// resolveElementDecl resolves the two reference-bearing slots of an element
-// declaration that the shared descent does not itself enter: each type-table
-// alternative's {type definition} (clause 1.1) and each nested
-// {identity-constraint definitions} keyref (clause 1.7). Its own {type
-// definition} is charged by the descent, before this runs
-// (resolveTypeDefinitionSlot).
+// resolveElementDecl resolves the one reference-bearing slot of an element
+// declaration that the shared descent does not itself enter: each nested
+// {identity-constraint definitions} keyref (clause 1.7). Its {type definition}
+// and every {type table} Type Alternative's {type definition} (§3.12.2
+// declare-ta maps an <alternative>'s type= via [·resolved·]) are charged by the
+// descent, before this runs (resolveTypeDefinitionSlot).
 //
 // {substitution group affiliations} is the ONE reference slot this pass does NOT
 // hard-fail, and the exemption is §5.3's (Missing Sub-components), not a
@@ -780,52 +780,12 @@ func (s *Schema) resolveAttributeDecl(a AttributeDeclaration) error {
 // with the suite's own annotation on it recording that "one could argue for
 // 'valid' under section 5.3, missing components".
 func (s *Schema) resolveElementDecl(e ElementDeclaration) error {
-	if tt, ok := e.TypeTable(); ok {
-		if err := s.resolveTypeTable(tt, e.Loc()); err != nil {
-			return err
-		}
-	}
 	for _, ic := range e.IdentityConstraints() {
 		if err := s.resolveKeyref(ic); err != nil {
 			return err
 		}
 	}
 	return nil
-}
-
-// resolveTypeTable resolves each Type Alternative's {type definition} slot
-// (src-resolve clause 1.1; §3.12.2 declare-ta maps the type/@type of an
-// <alternative> via [·resolved·]). Both the {alternatives} members and the
-// {default type definition} carry the same TypeDefinitionOrRef slot, so both go
-// through the shared descent's walkTypeDefinition — the one implementation that
-// is total over the sum. It charges src-resolve clause 1.1 for a by-name arm
-// only: declare-ta's INLINE arm is "the type definition corresponding to the
-// complexType or simpleType among the children", a direct structural mapping
-// with no QName to resolve, and the same call enters that anonymous type's OWN
-// references instead. A {default type definition} §3.3.2.1 case 2 synthesized carries the
-// declaring element's own slot, so resolveElementDecl reaches that component
-// twice; the descent writes nothing and answers the same either way.
-//
-// loc is the owning element declaration's position: neither TypeTable nor
-// TypeAlternative retains one, and both live inside the <element> the position
-// names.
-//
-// EXISTENCE ONLY. e-props-correct clause 7 (§3.3.6.1) predicates over the very
-// alternatives this resolves — each must be ·validly substitutable· for the
-// declaration's own {type definition}, or be ·xs:error· — and is charged in
-// Phase D instead (checkTypeTableSubstitutability, typetablesubstitutable.go).
-// It cannot be charged here: ValidlySubstitutable walks {base type definition}
-// chains and union membership with no visited set, which is licensed only after
-// Phase B's acyclicity checks, and a circular chain is still representable while
-// this phase runs.
-func (s *Schema) resolveTypeTable(tt TypeTable, loc xsderr.Loc) error {
-	w := s.referenceWalk()
-	for _, alt := range tt.Alternatives() {
-		if err := w.walkTypeDefinition(alt.TypeDefinition(), loc, "type alternative {type definition}"); err != nil {
-			return err
-		}
-	}
-	return w.walkTypeDefinition(tt.DefaultTypeDefinition().TypeDefinition(), loc, "type table {default type definition}")
 }
 
 // checkSimpleTypeDerivations is Phase D's simple-type step: it puts every Simple
@@ -854,11 +814,21 @@ func (s *Schema) resolveTypeTable(tt TypeTable, loc xsderr.Loc) error {
 // that sees the whole assembled graph beats a charge scattered over whichever
 // producer happened to build a component.
 //
-// THE DESCENT INVENTORY IS SIX SLOTS, and it is exhaustive over the places a
-// *SimpleType can live. It is written out here, with one reason per slot, so that
-// the next slot added to this package is forced to be considered against it — a
-// walk that reaches only the indexed types is a FALSE ACCEPT, since an anonymous
-// simple type is in no index at all:
+// THE DESCENT INVENTORY IS SEVEN SLOTS. It is written out here, with one reason
+// per slot, so that the next slot added to this package is forced to be
+// considered against it — a walk that reaches only the indexed types is a FALSE
+// ACCEPT, since an anonymous simple type is in no index at all. The roots the
+// slots hang off are listed after them, and they are not exhaustive either:
+//
+// GAP(xsd): this pass roots neither s.modelGroupRedefinitions nor
+// s.attributeGroupRedefinitions, the S2 originals of the <group> and
+// <attributeGroup> redefinitions, which are in no property and no index (§4.2.4
+// clause 4.1.2), though Phase A roots both. An original the redefinition does not
+// reference is reached by no slot below, so a simple type owned only from inside
+// one gets neither of the two charges above. No issue owns the gap, so this
+// marker names none.
+//
+// The slots:
 //
 //  1. s.types roots — the named types. The only slot an index-only walk reaches,
 //     and the only one from which every other is entered.
@@ -895,8 +865,18 @@ func (s *Schema) resolveTypeTable(tt TypeTable, loc xsderr.Loc) error {
 //     the same arm for Phase A, and slot 3's split applies here unchanged: that
 //     arm resolves the inline type's own by-name base, this pass charges its
 //     derivation.
+//  7. the InlineTypeDefinition/*SimpleType arm of an element declaration's {type
+//     table}: each {alternatives} member's {type definition} and the {default
+//     type definition}'s (§3.12.2 declare-ta maps an <alternative>'s
+//     <simpleType> child to one, and §3.3.2.1 makes a trailing untested
+//     <alternative> the default). No index holds such a type and no declaration
+//     names it, so dropping this hop is a false accept of st-props-correct
+//     clause 1 for every restriction of xs:anySimpleType or xs:anyAtomicType an
+//     <alternative> owns. The shared descent enters it together with slot 6,
+//     through ownedTypeSlots (elementdeclaration.go), and walks the anonymous
+//     complex types an alternative owns like any other.
 //
-// Reaching slots 3 and 6 means walking the same tree Phase A and Phase E walk,
+// Reaching slots 3, 6 and 7 means walking the same tree Phase A and Phase E walk,
 // and this pass walks it by the same code (componentwalk.go), filling in only the
 // simpleType charge. Its ROOTS are its own: types, then element declarations,
 // then attribute declarations, then model group definitions, then attribute group

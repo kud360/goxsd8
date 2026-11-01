@@ -105,19 +105,12 @@
 //
 // Declined today, each construct named as [Construct.String] prints it for a
 // [DeclineError]'s [DeclineError.Construct] (see [Construct] for comparing
-// them), each but absent {variety} and no {primitive type definition} a
-// permanent decline: uncovered primitive, local element declaration with
-// {abstract} true and struct-value recursion, for the reasons this section
-// states; and particle with {max occurs} 0, since an element, group reference,
-// model group or wildcard with minOccurs=maxOccurs=0 maps to no component at
-// all (Structures §3.3.2, §3.7.2, §3.8.2, §3.10.2). Absent {variety} and no
-// {primitive type definition} are each on a simple type other than the
-// special types, which Datatypes §4.1.1 gives a {variety} and, when atomic, a
-// {primitive type definition}; the GAP paragraph below states how such a type
-// reaches Generate.
+// them), each a permanent decline: uncovered primitive, local element
+// declaration with {abstract} true and struct-value recursion, for the reasons
+// this section states; and particle with {max occurs} 0, since an element,
+// group reference, model group or wildcard with minOccurs=maxOccurs=0 maps to
+// no component at all (Structures §3.3.2, §3.7.2, §3.8.2, §3.10.2).
 //
-//   - absent {variety}
-//   - no {primitive type definition}
 //   - uncovered primitive
 //   - particle with {max occurs} 0
 //   - local element declaration with {abstract} true
@@ -132,14 +125,6 @@
 // (Structures Appendix A, the schema for schemas), though
 // xsd.NewElementDeclaration builds one; no element is valid against it
 // (Structures §3.3.4.3 cvc-elt clause 2).
-//
-// GAP(xsd): absent {variety} and no {primitive type definition} are reachable
-// only through a false accept of st-props-correct clause 1 (Structures
-// §3.16.6.1) (#3267): a simple type that a {type table} alternative or
-// {default type definition} owns, or that is nested under one, is never checked
-// against that clause, so a parsed schema document, or a schema
-// xsd.SchemaBuilder finalizes, in which such a type restricts xs:anySimpleType
-// or xs:anyAtomicType reaches Generate, which declines it with one of the two.
 //
 // Generate emits, in document order:
 //
