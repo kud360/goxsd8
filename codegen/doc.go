@@ -776,12 +776,14 @@
 // The output is a function of the schema and of each document's location
 // relative to the target's Dir, so two trees laid out alike under different
 // absolute roots produce byte-identical output; "Naming" states where a
-// header's location is not relative. No map iteration anywhere near the
-// emitter; emission order is the walk's, which document order alone fixes, as
-// "Coverage" states (datatype structs, PrecisionDecimal's interface and arms
-// with it, raw-content structs, MixedChild, Nillable with its arms,
-// attributes structs, and union interfaces with their variants last, in the
-// order the walk first needs each). Golden-file tests pin the output.
+// header's location is not relative. Under Generate's import rule it also
+// depends on the targets' slice order and on each owner's import path. No map
+// iteration anywhere near the emitter; emission order is the walk's, which
+// document order alone fixes, as "Coverage" states (datatype structs,
+// PrecisionDecimal's interface and arms with it, raw-content structs,
+// MixedChild, Nillable with its arms, attributes structs, and union
+// interfaces with their variants last, in the order the walk first needs
+// each). Golden-file tests pin the output.
 //
 // # Naming
 //
@@ -833,6 +835,14 @@
 // OrderAddress, ShipTo, ShipToAddress, BillTo and BillToAddress, three paths
 // ending in address, and a choice in shipTo's type gives ShipToChoice. Each
 // arrow below to a path-named type, written → path, gives its whole path.
+//
+// A package that imports a document's types from an earlier target (Generate)
+// claims their names as if it defined them, so its uniqueness is measured over
+// the same names, imported ones included. Each alias carries its owner's name,
+// and Generate imports a document only when the importer's composition names
+// its types as the owner's does, byte for byte, so the owner's composition
+// names an imported document's types. The fields of an imported type name its
+// owner's types, never the importer's.
 //
 // Generated identifiers are not stable before v1.0: a release may rename any
 // type or field this section names.
@@ -1007,12 +1017,6 @@
 // is, a URL or a relative loader key alike, as does one with no path relative
 // to Dir, such as one on another Windows volume. Symbolic links are not
 // resolved.
-//
-// # Planned (M9 — not yet implemented)
-//
-// Cross-target type references import across the generated packages, in
-// place of each target declaring the types of a document its Schema shares
-// with another.
 //
 // # Planned (M10 — not yet implemented)
 //

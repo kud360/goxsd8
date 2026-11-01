@@ -11,7 +11,8 @@ import (
 )
 
 // ExampleGenerate parses a schema, generates package order from it into a
-// temporary directory, and prints the file Generate writes there.
+// temporary directory, a Go module's root, and prints the file Generate
+// writes there.
 func ExampleGenerate() {
 	s, err := parser.Parse("testdata/example.xsd")
 	if err != nil {
@@ -26,6 +27,10 @@ func ExampleGenerate() {
 			log.Fatal(err)
 		}
 	}()
+	// Each Dir lies in a Go module, which gives the package its import path.
+	if err := os.WriteFile(filepath.Join(root, "go.mod"), []byte("module example.com/app\n"), 0o644); err != nil {
+		log.Fatal(err)
+	}
 	dir := filepath.Join(root, "gen", "order")
 
 	if err := codegen.Generate([]codegen.Target{{Schema: s, Dir: dir, Package: "order"}}); err != nil {

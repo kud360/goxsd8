@@ -43,6 +43,18 @@ func generatedFile(t *testing.T, dir string) []byte {
 	return body
 }
 
+// moduleTempDir returns a new temporary directory holding a go.mod declaring
+// module example.com/m, so that an -out in it or under it has the import path
+// gen requires.
+func moduleTempDir(t *testing.T) string {
+	t.Helper()
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "go.mod"), []byte("module example.com/m\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	return dir
+}
+
 // assertAbsent fails unless nothing exists at path.
 func assertAbsent(t *testing.T, path string) {
 	t.Helper()
@@ -55,11 +67,21 @@ func assertAbsent(t *testing.T, path string) {
 // file codegen.Generate writes for a Target built from parser.Parse of the
 // absolute location gen hands the parser, in the package the -out's last path
 // element after filepath.Clean names: a trailing slash and a trailing ..
-// included. -q changes nothing. Before #2964 this run exited 2, reporting gen
-// as not yet implemented.
+// included. -q changes nothing. The three pairs share flat.xsd, so the second
+// and third files alias the first's types; the CLI and library trees are each
+// the root of a module of one path, so the import paths agree. Before #2964
+// this run exited 2, reporting gen as not yet implemented.
 func TestGenWritesWhatGenerateWrites(t *testing.T) {
 	flat := absFixture(t, flatFixture)
 	tmp := t.TempDir()
+	for _, root := range []string{"cli", "lib"} {
+		if err := os.Mkdir(filepath.Join(tmp, root), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(tmp, root, "go.mod"), []byte("module example.com/w\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
 	out := filepath.Join(tmp, "cli", "flat")
 	order := filepath.Join(tmp, "cli", "order") + string(filepath.Separator)
 	up := filepath.Join(tmp, "cli", "up", "sub") + string(filepath.Separator) + ".."
@@ -93,6 +115,9 @@ func TestGenWritesWhatGenerateWrites(t *testing.T) {
 		if !bytes.Contains(got, []byte("\npackage "+dir+"\n")) {
 			t.Errorf("gen wrote for -out %s no package %s clause:\n%s", dir, dir, got)
 		}
+		if alias := []byte("\ntype Note = flat.Note\n"); bytes.Contains(got, alias) != (dir != "flat") {
+			t.Errorf("gen wrote for -out %s, want the alias %q exactly when the pair is not the first:\n%s", dir, alias, got)
+		}
 		// The usage block's claim that the comments name each document
 		// relative to -out.
 		rel, err := filepath.Rel(filepath.Join(tmp, "cli", dir), flat)
@@ -119,7 +144,7 @@ func TestGenIsCheckoutIndependent(t *testing.T) {
 	const inc = "<xs:schema xmlns:xs=\"http://www.w3.org/2001/XMLSchema\">\n" +
 		"  <xs:element name=\"b\" type=\"xs:boolean\"/>\n" +
 		"</xs:schema>\n"
-	tmp := t.TempDir()
+	tmp := moduleTempDir(t)
 	roots := []string{filepath.Join(tmp, "one"), filepath.Join(tmp, "two", "deeper")}
 	for _, root := range roots {
 		if err := os.MkdirAll(filepath.Join(root, "s"), 0o755); err != nil {
@@ -164,12 +189,14 @@ var typeDecl = regexp.MustCompile(`(?m)^type `)
 
 // TestGenDeclaresTheComposedSet pins the usage block's sentence on what a
 // pair's package declares, each run exiting 0 with empty stdout and stderr: a
-// document two pairs' schemas share has its element's type declared in both
-// packages, imports.xsd's by import and imported.xsd's as its own root, and a
-// schema declaring no top-level element, only a named simple type, gives a
-// file with a package clause and no type declaration.
+// document two pairs' schemas share, whose generated types agree, has its
+// element's type declared by the first pair's package, which composes it by
+// import, and aliased by the second's, which composes it as its own root,
+// importing the first; and a schema declaring no top-level element, only a
+// named simple type, gives a file with a package clause and no type
+// declaration.
 func TestGenDeclaresTheComposedSet(t *testing.T) {
-	tmp := t.TempDir()
+	tmp := moduleTempDir(t)
 	simple := filepath.Join(tmp, "types.xsd")
 	const body = "<xs:schema xmlns:xs=\"http://www.w3.org/2001/XMLSchema\">\n" +
 		"  <xs:simpleType name=\"code\"><xs:restriction base=\"xs:string\"/></xs:simpleType>\n" +
@@ -191,12 +218,19 @@ func TestGenDeclaresTheComposedSet(t *testing.T) {
 			t.Errorf("%v stdout = %q, stderr = %q, want both empty", args, stdout.String(), stderr.String())
 		}
 	}
-	for _, dir := range []string{importer, imported} {
-		if got := generatedFile(t, dir); !bytes.Contains(got, []byte("\ntype Carried string\n")) {
-			t.Errorf("gen wrote for -out %s no declaration of imported.xsd's element carried:\n%s", dir, got)
+	if got := generatedFile(t, importer); !bytes.Contains(got, []byte("\ntype Carried string\n")) {
+		t.Errorf("gen wrote for -out %s no declaration of imported.xsd's element carried:\n%s", importer, got)
+	}
+	got := generatedFile(t, imported)
+	for _, want := range []string{"\nimport a \"example.com/m/gen/a\"\n", "\ntype Carried = a.Carried\n"} {
+		if !bytes.Contains(got, []byte(want)) {
+			t.Errorf("gen wrote for -out %s no line %q:\n%s", imported, want, got)
 		}
 	}
-	got := generatedFile(t, types)
+	if bytes.Contains(got, []byte("\ntype Carried string\n")) {
+		t.Errorf("gen wrote for -out %s a definition of carried, want only its alias:\n%s", imported, got)
+	}
+	got = generatedFile(t, types)
 	if !bytes.Contains(got, []byte("\npackage types\n")) || typeDecl.Match(got) {
 		t.Errorf("gen wrote for a schema with no top-level element:\n%s\nwant a package types clause and no type declaration", got)
 	}
@@ -207,7 +241,7 @@ func TestGenDeclaresTheComposedSet(t *testing.T) {
 // before it included.
 func TestGenRejectedSchemaWritesNothing(t *testing.T) {
 	broken := absFixture(t, "testdata/broken.xsd")
-	tmp := t.TempDir()
+	tmp := moduleTempDir(t)
 	first, second := filepath.Join(tmp, "first"), filepath.Join(tmp, "second")
 	var stdout, stderr bytes.Buffer
 	code := run([]string{"gen", "-schema", flatFixture, "-out", first, "-schema", "testdata/broken.xsd", "-out", second}, &stdout, &stderr)
@@ -230,7 +264,7 @@ func TestGenRejectedSchemaWritesNothing(t *testing.T) {
 // rejection, and the run answers with the higher-ranked of the two, which is
 // the first.
 func TestGenReportsEveryPair(t *testing.T) {
-	tmp := t.TempDir()
+	tmp := moduleTempDir(t)
 	var stdout, stderr bytes.Buffer
 	code := run([]string{"gen", "-schema", "testdata/nosuch.xsd", "-out", filepath.Join(tmp, "a"), "-schema", "testdata/broken.xsd", "-out", filepath.Join(tmp, "b")}, &stdout, &stderr)
 	if code != exitUsage {
@@ -250,7 +284,7 @@ func TestGenNamesAnUnresolvedDirective(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	out := filepath.Join(t.TempDir(), "short")
+	out := filepath.Join(moduleTempDir(t), "short")
 	var stdout, stderr bytes.Buffer
 	code := run([]string{"gen", "-schema", shortSchema, "-out", out}, &stdout, &stderr)
 	if code != exitOK {
@@ -266,7 +300,7 @@ func TestGenNamesAnUnresolvedDirective(t *testing.T) {
 // TestGenVerboseLogs pins -v: the parser's assembly is logged at debug level
 // on stderr, and the run still generates.
 func TestGenVerboseLogs(t *testing.T) {
-	out := filepath.Join(t.TempDir(), "flat")
+	out := filepath.Join(moduleTempDir(t), "flat")
 	var stdout, stderr bytes.Buffer
 	if code := run([]string{"gen", "-v", "-schema", flatFixture, "-out", out}, &stdout, &stderr); code != exitOK {
 		t.Fatalf("gen -v = %d, want %d (stderr %q)", code, exitOK, stderr.String())
@@ -349,7 +383,7 @@ func TestGenUsageAndIOFaults(t *testing.T) {
 	probe := rows("")
 	for i := range probe {
 		t.Run(probe[i].name, func(t *testing.T) {
-			tmp := t.TempDir()
+			tmp := moduleTempDir(t)
 			t.Chdir(tmp)
 			if err := os.WriteFile(filepath.Join(tmp, "file"), []byte("not a directory\n"), 0o644); err != nil {
 				t.Fatal(err)
@@ -384,6 +418,58 @@ func TestGenUsageAndIOFaults(t *testing.T) {
 			}
 			if r.name == "write fault" {
 				generatedFile(t, filepath.Join(tmp, "written"))
+			}
+		})
+	}
+}
+
+// TestGenModuleRefusals pins exit 2 for the three refusals of an -out's Go
+// module: an -out with no go.mod at or above it, one whose nearest go.mod
+// declares no module, and an -out whose import path repeats an earlier
+// pair's, from a second module of the same path. Each prints one stderr line
+// naming the pair, and nothing is written.
+func TestGenModuleRefusals(t *testing.T) {
+	flat := absFixture(t, flatFixture)
+	tmp := t.TempDir()
+	for _, sub := range []string{"free", "nomodule", "one", "two"} {
+		if err := os.Mkdir(filepath.Join(tmp, sub), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, f := range []struct{ path, content string }{
+		{"nomodule/go.mod", "go 1.22\n"},
+		{"one/go.mod", "module example.com/m\n"},
+		{"two/go.mod", "module example.com/m\n"},
+	} {
+		if err := os.WriteFile(filepath.Join(tmp, f.path), []byte(f.content), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	at := func(p string) string { return filepath.Join(tmp, p) }
+	tests := []struct {
+		name string
+		args []string
+		want string
+	}{
+		{"no go.mod", []string{"-schema", flat, "-out", at("free/gen")},
+			"goxsd8: gen: -schema " + flat + " -out " + at("free/gen") + ": no go.mod lies in the output directory " + at("free/gen") + " or any directory above it, so it has no import path"},
+		{"no module directive", []string{"-schema", flat, "-out", at("nomodule/gen")},
+			"goxsd8: gen: -schema " + flat + " -out " + at("nomodule/gen") + ": " + at("nomodule/go.mod") + " holds no module directive"},
+		{"repeated import path", []string{"-schema", flat, "-out", at("one/gen"), "-schema", flat, "-out", at("two/gen")},
+			"goxsd8: gen: -schema " + flat + " -out " + at("two/gen") + ": the output directory " + at("two/gen") +
+				" has the import path example.com/m/gen, which is also the import path of -schema " + flat + " -out " + at("one/gen")},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var stdout, stderr bytes.Buffer
+			if code := run(append([]string{"gen"}, tt.args...), &stdout, &stderr); code != exitUsage {
+				t.Errorf("gen %q = %d, want %d", tt.args, code, exitUsage)
+			}
+			if want := tt.want + "\n" + helpPointer + "\n"; stderr.String() != want {
+				t.Errorf("gen %q stderr = %q, want %q", tt.args, stderr.String(), want)
+			}
+			for _, out := range []string{"free/gen", "nomodule/gen", "one/gen", "two/gen"} {
+				assertAbsent(t, at(out))
 			}
 		})
 	}
@@ -431,7 +517,7 @@ func TestGenDeclines(t *testing.T) {
 	}
 	for _, tt := range rows {
 		t.Run(tt.name, func(t *testing.T) {
-			tmp := t.TempDir()
+			tmp := moduleTempDir(t)
 			var args, schemas, outs []string
 			for _, p := range tt.pairs {
 				schema := filepath.Join(tmp, p.file)
@@ -522,7 +608,7 @@ func TestGenRefusalsOutrankEveryPair(t *testing.T) {
 	kept := []byte("package q\n")
 	for _, r := range rows {
 		t.Run(r.name, func(t *testing.T) {
-			tmp := t.TempDir()
+			tmp := moduleTempDir(t)
 			t.Chdir(tmp)
 			if err := os.WriteFile("dec.xsd", []byte(dec), 0o644); err != nil {
 				t.Fatal(err)

@@ -559,8 +559,8 @@ func TestBuiltBinaryMatrix(t *testing.T) {
 		{args: []string{"validate", "-format", "json", "-schema", orderSchema, "-"},
 			stdin: readFixture(t, invalidJSON), code: 1, stdoutMatch: "-:1:19: [cvc-attribute]"},
 		// gen's outcomes through the shipped binary; gen_test.go is the matrix.
-		{args: []string{"gen", "-schema", flatFixture, "-out", filepath.Join(t.TempDir(), "flat")}, code: 0},
-		{args: []string{"gen", "-schema", "testdata/broken.xsd", "-out", filepath.Join(t.TempDir(), "broken")}, code: 1,
+		{args: []string{"gen", "-schema", flatFixture, "-out", filepath.Join(moduleTempDir(t), "flat")}, code: 0},
+		{args: []string{"gen", "-schema", "testdata/broken.xsd", "-out", filepath.Join(moduleTempDir(t), "broken")}, code: 1,
 			stderrMatch: "[src-resolve]"},
 		{args: []string{"gen", "-schema", flatFixture}, code: 2,
 			stderrMatch: "goxsd8: gen: -schema " + flatFixture + " stands without its -out"},

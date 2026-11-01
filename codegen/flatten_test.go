@@ -94,7 +94,7 @@ func TestGenerateFlattenGates(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			schema := parseString(t, "<xs:schema xmlns:xs=\"http://www.w3.org/2001/XMLSchema\">\n"+tt.body+"\n</xs:schema>\n")
-			src := generateOne(t, Target{Schema: schema, Dir: filepath.Join(t.TempDir(), "out"), Package: "p"})
+			src := generateOne(t, Target{Schema: schema, Dir: filepath.Join(moduleTempDir(t), "out"), Package: "p"})
 			typeCheck(t, src)
 			for _, w := range tt.want {
 				if !regexp.MustCompile(w).Match(src) {
