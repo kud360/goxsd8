@@ -111,26 +111,26 @@ type typeNamer interface {
 	extend(of string, words ...string) string
 }
 
-// claimKind is the typeNamer method one typeClaim was made through. The zero
-// value is invalid (STYLE T1).
-type claimKind uint8
+// typeClaim is one claim surveyNamer records, as the typeNamer method it was
+// made through: a fixedClaim, a pathClaim or an extendClaim.
+type typeClaim interface{ isTypeClaim() }
 
-// The claimKind values.
-const (
-	fixedClaim claimKind = iota + 1
-	pathClaim
-	extendClaim
-)
+// fixedClaim is a fixed claim: its words.
+type fixedClaim []string
 
-// typeClaim is one claim surveyNamer records: its kind and its steps — a
-// path claim's path, or a fixed or extending claim's words, as generated
-// steps, since neither shortens — and, for an extending claim, of, the index
-// of the claim it extends, which is always an earlier one.
-type typeClaim struct {
-	kind  claimKind
-	steps []nameStep
+// pathClaim is a path claim: its path.
+type pathClaim []nameStep
+
+// extendClaim is an extending claim: of, the index of the claim it extends,
+// which is always an earlier one, and its words.
+type extendClaim struct {
 	of    int
+	words []string
 }
+
+func (fixedClaim) isTypeClaim()  {}
+func (pathClaim) isTypeClaim()   {}
+func (extendClaim) isTypeClaim() {}
 
 // surveyNamer is the typeNamer of emit's first walk: it records each claim in
 // order and returns the provisional name a namer claims for it from its whole
@@ -158,11 +158,11 @@ func (s *surveyNamer) record(c typeClaim, candidate string) string {
 }
 
 func (s *surveyNamer) fixed(words ...string) string {
-	return s.record(typeClaim{kind: fixedClaim, steps: generatedSteps(words...)}, render(words))
+	return s.record(fixedClaim(slices.Clone(words)), render(words))
 }
 
 func (s *surveyNamer) path(steps []nameStep) string {
-	return s.record(typeClaim{kind: pathClaim, steps: slices.Clone(steps)}, renderSteps(steps))
+	return s.record(pathClaim(slices.Clone(steps)), renderSteps(steps))
 }
 
 func (s *surveyNamer) extend(of string, words ...string) string {
@@ -170,7 +170,7 @@ func (s *surveyNamer) extend(of string, words ...string) string {
 	if !ok && s.err == nil {
 		s.err = fmt.Errorf("the type name %s extended by %q was never claimed", of, words)
 	}
-	return s.record(typeClaim{kind: extendClaim, steps: generatedSteps(words...), of: i}, identifier(of)+render(words))
+	return s.record(extendClaim{of: i, words: slices.Clone(words)}, identifier(of)+render(words))
 }
 
 // replayNamer is the typeNamer of emit's second walk: it returns names[i] for
@@ -189,18 +189,30 @@ type replayNamer struct {
 	err    error
 }
 
-func (r *replayNamer) replay(c typeClaim, extended string) string {
+// take advances to the next claim and returns its index and record, or -1
+// and nil when err already holds an error or the record holds no more
+// claims, the latter kept in err.
+func (r *replayNamer) take() (int, typeClaim) {
 	i := r.next
 	r.next++
 	if r.err != nil {
-		return ""
+		return -1, nil
 	}
 	if i >= len(r.claims) {
 		r.err = fmt.Errorf("type claim %d: the first walk made %d", i, len(r.claims))
+		return -1, nil
+	}
+	return i, r.claims[i]
+}
+
+// answer returns names[i] for claim i when same reports it equal to its
+// record, and otherwise "", the difference kept in err; i is take's, and
+// for -1 answer returns "" and keeps take's error.
+func (r *replayNamer) answer(i int, same bool) string {
+	if i < 0 {
 		return ""
 	}
-	want := r.claims[i]
-	if c.kind != want.kind || !slices.Equal(c.steps, want.steps) || c.kind == extendClaim && extended != r.names[want.of] {
+	if !same {
 		r.err = fmt.Errorf("type claim %d differs from the first walk's", i)
 		return ""
 	}
@@ -208,15 +220,21 @@ func (r *replayNamer) replay(c typeClaim, extended string) string {
 }
 
 func (r *replayNamer) fixed(words ...string) string {
-	return r.replay(typeClaim{kind: fixedClaim, steps: generatedSteps(words...)}, "")
+	i, c := r.take()
+	want, ok := c.(fixedClaim)
+	return r.answer(i, ok && slices.Equal(words, []string(want)))
 }
 
 func (r *replayNamer) path(steps []nameStep) string {
-	return r.replay(typeClaim{kind: pathClaim, steps: steps}, "")
+	i, c := r.take()
+	want, ok := c.(pathClaim)
+	return r.answer(i, ok && slices.Equal(steps, []nameStep(want)))
 }
 
 func (r *replayNamer) extend(of string, words ...string) string {
-	return r.replay(typeClaim{kind: extendClaim, steps: generatedSteps(words...)}, of)
+	i, c := r.take()
+	want, ok := c.(extendClaim)
+	return r.answer(i, ok && slices.Equal(words, want.words) && of == r.names[want.of])
 }
 
 // renderSteps joins the identifier of each step's word.
@@ -237,39 +255,49 @@ func resolve(claims []typeClaim) []string {
 	full := make([][]string, len(claims))
 	fixed := map[string]bool{} // fixed claims' renderings; a lookup index only, never iterated (STYLE D2)
 	for i, c := range claims {
-		for _, s := range c.steps {
-			full[i] = append(full[i], identifier(s.word))
-		}
-		switch c.kind {
+		switch c := c.(type) {
 		case fixedClaim:
+			full[i] = identifiers(c)
 			fixed[strings.Join(full[i], "")] = true
 		case pathClaim:
+			for _, s := range c {
+				full[i] = append(full[i], identifier(s.word))
+			}
 		case extendClaim:
-			full[i] = slices.Concat(full[c.of], full[i])
+			full[i] = slices.Concat(full[c.of], identifiers(c.words))
 		}
 	}
 	names := make([]string, len(claims))
 	n := newNamer()
 	for i, c := range claims {
 		var candidate string
-		switch c.kind {
+		switch c := c.(type) {
 		case fixedClaim:
-			candidate = strings.Join(full[i], "")
+			candidate = render(c)
 		case pathClaim:
-			candidate = shortest(i, c.steps, full, fixed)
+			candidate = shortest(i, c, full, fixed)
 		case extendClaim:
-			candidate = identifier(names[c.of]) + renderSteps(c.steps)
+			candidate = identifier(names[c.of]) + render(c.words)
 		}
 		names[i] = n.claimCandidate(candidate)
 	}
 	return names
 }
 
+// identifiers returns the identifier of each XSD local name in words.
+func identifiers(words []string) []string {
+	ids := make([]string, len(words))
+	for i, w := range words {
+		ids[i] = identifier(w)
+	}
+	return ids
+}
+
 // shortest returns the candidate of the path claim i, whose path is steps, by
 // the package doc's "# Naming" rule for shortening a path: full holds every
 // claim's whole path, each step rendered, and fixed every fixed claim's
 // rendering.
-func shortest(i int, steps []nameStep, full [][]string, fixed map[string]bool) string {
+func shortest(i int, steps pathClaim, full [][]string, fixed map[string]bool) string {
 	for k := len(steps) - 1; k > 0; k-- {
 		suffix := full[i][k:]
 		if !steps[k].declared || fixed[strings.Join(suffix, "")] {

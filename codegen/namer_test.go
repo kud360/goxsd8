@@ -62,11 +62,9 @@ func TestNamer(t *testing.T) {
 // claims, in order, are one package's.
 func TestResolve(t *testing.T) {
 	d, g := declaredStep, generatedSteps
-	fixed := func(words ...string) typeClaim { return typeClaim{kind: fixedClaim, steps: g(words...)} }
-	path := func(steps ...nameStep) typeClaim { return typeClaim{kind: pathClaim, steps: steps} }
-	extend := func(of int, words ...string) typeClaim {
-		return typeClaim{kind: extendClaim, steps: g(words...), of: of}
-	}
+	fixed := func(words ...string) typeClaim { return fixedClaim(words) }
+	path := func(steps ...nameStep) typeClaim { return pathClaim(steps) }
+	extend := func(of int, words ...string) typeClaim { return extendClaim{of: of, words: words} }
 	tests := []struct {
 		name   string
 		claims []typeClaim
