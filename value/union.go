@@ -75,26 +75,22 @@ func validateUnion(b Backend, r xsd.TypeResolver, st *xsd.SimpleType, rawLexical
 	if err != nil {
 		return nil, nil, err
 	}
-	ws, err := effectiveWhiteSpace(r, member)
-	if err != nil {
-		return nil, nil, typeFault(err)
-	}
 
 	// clause 1 (cvc-pattern-valid, §4.3.4.4) on the literal as the active basic
 	// member normalized it, NOT on the raw one and not on a union-level
-	// normalization (a union has no whiteSpace facet to normalize with). A zero mode
-	// means the ·active basic member· is itself a type §4.1.5 makes facet-less: a
-	// member whose {variety} is ·absent·, §4.1.5's FIRST no-applicable-facets case
-	// (noFacetsApplicable's `case nil`). cos-st-restricts clause 3.1 admits such a
-	// member because it rejects only the two ·special· ANCHOR nodes by identity: a
-	// ·restriction· of xs:anySimpleType inherits its ·absent· {variety}, and
-	// st-props-correct clause 1 is charged by that member's own CheckDerivation,
-	// which a union's does not re-run over its members. Nothing normalizes there, so
-	// the raw literal is what clause 1 tests — the same `if ws != 0` guard
-	// validateLexical and facetValue apply.
-	lexical := rawLexical
-	if ws != 0 {
-		lexical = normalizeWhiteSpace(rawLexical, ws)
+	// normalization (a union has no whiteSpace facet to normalize with). No mode in
+	// force means the ·active basic member· is itself a type §4.1.5 makes
+	// facet-less: a member whose {variety} is ·absent·, §4.1.5's FIRST
+	// no-applicable-facets case (noFacetsApplicable's `case nil`). cos-st-restricts
+	// clause 3.1 admits such a member because it rejects only the two ·special·
+	// ANCHOR nodes by identity: a ·restriction· of xs:anySimpleType inherits its
+	// ·absent· {variety}, and st-props-correct clause 1 is charged by that member's
+	// own CheckDerivation, which a union's does not re-run over its members.
+	// Nothing normalizes there, so the raw literal is what clause 1 tests, as
+	// ApplyWhiteSpace returns it.
+	lexical, err := ApplyWhiteSpace(r, member, rawLexical)
+	if err != nil {
+		return nil, nil, err
 	}
 	for _, lf := range lexFacets {
 		if err := lf.CheckLexical(lexical); err != nil {

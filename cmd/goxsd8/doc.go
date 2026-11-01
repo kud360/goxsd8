@@ -479,10 +479,11 @@
 // codegen.Generate, which gen calls once with one Target per -schema/-out pair;
 // it emits Go types for M9's first slice of schema shapes, and the constructs
 // outside that slice reach gen's exit-4 decline line. The capabilities this
-// page reserves are not whole library routes either: codec (M10) and
-// validate/bersrc (M11) export nothing yet, so for decode/encode and BER
-// instances there is no second route to document until those milestones land.
-// Error output is stable and line-oriented for scripting.
+// page reserves are not whole library routes either: codec (M10) decodes a
+// narrow slice through codec.Decode and encodes nothing, and validate/bersrc
+// (M11) exports nothing yet, so no subcommand decodes, encodes or reads a BER
+// instance until those milestones land. Error output is stable and
+// line-oriented for scripting.
 //
 // # Diagnostic lines
 //

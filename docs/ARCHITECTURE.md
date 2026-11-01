@@ -52,7 +52,12 @@ Value implementations, parsing, validation, and generation live above them.
                                     5e tables, which parser/xmltree's reader and
                                     entity replacement-text reader and the
                                     conformance harness's raw re-reads, its
-                                    instance hint reader among them, decode with.)
+                                    instance hint reader among them, decode with.
+                                  - internal/goname, the XSD-name → Go-identifier
+                                    namer codegen's "# Naming" states, which
+                                    codegen names its declarations with and
+                                    codec finds a generated struct's fields
+                                    by.)
                  value           (value-space contracts, facet pipeline; imports xsd, xsderr, regex)
                  value/backendtest (conformance kit for any backend)
                  builtin         (the generated TypeSpec table and Seed; imports value, xsd, xsderr)
@@ -89,14 +94,17 @@ Value implementations, parsing, validation, and generation live above them.
 ```
 
 **[1] These boxes are DESTINATIONS, not shipped layers.**
-`validate/bersrc`, `codec` and
+`validate/bersrc` and
 `builtin/native` are `doc.go`-only today: `go doc` renders no exported
-identifier for any of them and they import nothing from this module, so the
+identifier for either of them and they import nothing from this module, so the
 edges drawn above do not exist yet in `go list -deps`. Read every
 present-tense sentence in their sections below as "will", not "does".
+`codec` has left this note: it exports `Decode` and `DeclineError`, and
+imports `parser/xmltree`, `validate`, `validate/xmlsrc`, `value`, `xsd`,
+`xsderr` and `internal/goname` (its section says what ships).
 `codegen` has left this note: it exports `Generate`, `CheckTargets` and
-`Target`, with the error types they return, and imports `xsd` and `xsderr`
-(its section says what ships).
+`Target`, with the error types they return, and imports `xsd`, `xsderr`
+and `internal/goname` (its section says what ships).
 `xpath` has left this note: it exports the CTA compile, evaluate and
 statically-check entry points, and the assertion compile and evaluate ones,
 and imports `xsd`, `value`, `regex` and
@@ -128,9 +136,9 @@ them;
 
 Only `xsderr`, `xsd`, `internal/schemaloc`, `internal/xmldecl`,
 `internal/xmlenc`, `internal/xmlname`, `internal/xmlchar`,
-`internal/xmlqname`, `internal/xmltok`, `value`, `value/backendtest`, `regex`, `builtin`, `builtin/strict`, `loader`,
+`internal/xmlqname`, `internal/xmltok`, `internal/goname`, `value`, `value/backendtest`, `regex`, `builtin`, `builtin/strict`, `loader`,
 `parser`, `parser/xmltree`, `xpath`, `icpath`, `validate`,
-`validate/xmlsrc`, `validate/jsonsrc`, `codegen`, `conformance` and `cmd/goxsd8` carry
+`validate/xmlsrc`, `validate/jsonsrc`, `codegen`, `codec`, `conformance` and `cmd/goxsd8` carry
 code today.
 
 **The module has two tiers, and the dependency rules govern the first.**
@@ -688,19 +696,24 @@ design contract.
 
 ## Codegen & codec
 
-**Status: `codegen` ships what its `doc.go` states; `codec` ships
-nothing.** `codegen` (M9) exports `Generate`, which emits Go type
+**Status: `codegen` and `codec` each ship what their `doc.go` states.**
+`codegen` (M9) exports `Generate`, which emits Go type
 declarations for the schema shapes `codegen/doc.go`'s "Coverage" states and
 declines every other, `CheckTargets`, which reports the `Target`s `Generate`
 refuses without reading a schema, and the error types both return
 (`TargetError`, `DeclineError` and its `Construct`). **Read which of the bullets below ship in
 `codegen/doc.go`, not here:** its "Coverage", "Determinism" and "Naming"
 sections state what `Generate` does today, and its "Planned" sections what it
-does not. `codec` (M10) is `doc.go`-only — `go doc` renders no exported
-identifier for it — and `value.Emitter` does not exist (its API freezes
-in M10; not declared). A bullet `codegen/doc.go` does not state as shipped,
-and everything about `codec`, is the destination, stated in present tense
-because it is a design contract; read it as "will", not "does".
+does not. `codec` (M10) exports `Decode`, which decodes a valid XML
+instance into the struct `codegen` emits for its document element, for the
+slice `codec/doc.go`'s "What decodes" states, declining every other
+construct, and `DeclineError`. Its runtime path today reads no value space:
+each value is the string the whiteSpace stage leaves
+(`value.ApplyWhiteSpace`), and no `value.Mapping` runs. `value.Emitter` does
+not exist (its API freezes in M10; not declared). A bullet `codegen/doc.go`
+or `codec/doc.go` does not state as shipped is the destination, stated in
+present tense because it is a design contract; read it as "will", not
+"does".
 
 - `codegen` emits Go types from a compiled schema, deterministically
   (D1/D2). Multiple schemas map to multiple output directories — one
@@ -761,7 +774,8 @@ fast path that disagrees with the runtime path is wrong by definition.
 When a value fails to parse, the error must localize the failure without
 a debugger (extending E1–E3). These are **M10 requirements on `codec`**,
 not descriptions of shipped behaviour — `GOXSD_DEBUG=codec` traces nothing
-today because `codec` is empty:
+today, and `codec/doc.go` states which part of them `codec.Decode`
+meets:
 
 - every decode error carries the **pipeline stage** that rejected
   (whitespace / pattern / lexical-map / facet / assertion), the type

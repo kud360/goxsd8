@@ -59,7 +59,8 @@
 // [LexicalFacet] is a stage that checks the normalized lexical form;
 // [ValueFacet] is a stage that checks the parsed value. Every stage failure is
 // an *xsderr.Error carrying the facet's rule ID and the pipeline stage that
-// rejected.
+// rejected. [ApplyWhiteSpace] is the whiteSpace stage alone, for a caller that
+// needs the normalized lexical and no value.
 //
 // Not every error the pipeline returns is a VERDICT, though, and the difference is
 // load-bearing. [IsDatatypeVerdict] is the test, and every caller deciding validity

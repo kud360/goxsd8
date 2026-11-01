@@ -2,10 +2,71 @@
 // decode of instance data into Go values and canonical encode back out —
 // built for minimal allocation.
 //
-// The package declares no exported surface today; both sections below
-// state the M10 contract.
+// # Decode (M10's first slice)
+//
+//	func Decode[T any](schema *xsd.Schema, backend value.Backend, data []byte) (*T, error)
+//	type DeclineError struct{ ... }
+//	func (e *DeclineError) Loc() xsderr.Loc
+//	func (e *DeclineError) Error() string
+//	func (e *DeclineError) Unwrap() error
+//
+// [Decode] decodes a valid XML instance into the struct package codegen
+// emits for its document element's declaration, and [Decode]'s doc states
+// what it returns in every other case. It reads the schema, not the struct:
+// codegen's structs carry no tags, so Decode derives each field's name, order
+// and Go type from the declaration by codegen's own rules and refuses a T
+// that differs. Package codec does not import codegen. Nothing encodes yet.
+//
+// # What decodes
+//
+// A document element decodes when its declaration, a top-level one, has no
+// {type table}, {nillable} false and no {value constraint}, and its {type
+// definition} is a complex type with element-only content and no {open
+// content} or {attribute wildcard}, whose {particle} is an inline sequence
+// occurring exactly once. Each particle of that sequence is a local element
+// declaration with no {type table}, {nillable} false and no {value
+// constraint}, of a simple type that is atomic with {primitive type
+// definition} xs:string, no two particles sharing an expanded name; each
+// attribute use is outside the xsi namespace, has no effective value
+// constraint, and is typed the same way. So xs:normalizedString, xs:token,
+// xs:language, xs:Name, xs:NCName, xs:NMTOKEN, xs:ID, xs:IDREF, xs:ENTITY and
+// a user restriction of any of them decode, each field a string, a *string
+// or a []string by its occurrence. No element in the instance carries
+// xsi:type.
+//
+// Every other construct is a [*DeclineError], never a zero value: a choice,
+// an all group, a nested model group or <group ref>, a wildcard, an <element
+// ref> or substitution group, mixed, simple or empty content, a local
+// element of complex type, xs:anyType included, a nillable element, a list,
+// a union, a special type, xs:anyURI, any other primitive, and an xsi:type.
+// Two of those are rulings rather than coverage still to come:
+//
+//   - A declaration with a {type table} declines. The slice that decodes it
+//     takes the branch from the type the validator selected
+//     (validate.Validator.ConditionallySelected) and never evaluates a {test}
+//     itself.
+//   - An element carrying xsi:type declines, whatever type it names. Where
+//     the ·selected type definition· is not abstract, codegen emits no
+//     branch for a type derived from it (Structures §3.3.4.3 cvc-elt clause
+//     4), and decoding the instance into the selected type's field would
+//     lose what the derived type governs: under xsi:type="xs:token" an
+//     xs:string element's value collapses. That refusal is permanent.
+//
+// A {value constraint}, an element's or an attribute use's, default or
+// fixed, declines whether or not the item is present, because its decoded
+// value is not settled: the PSVI supplies the default (Structures §3.4.5.1
+// sic-attrDefault, §3.3.4.3 cvc-elt clause 5.1), while codegen's doc gives an
+// absent attribute a nil field.
+//
+// Every error about the instance carries its instance Loc: a violation's,
+// an undecided check's, and a decline's, which also names its construct and,
+// for a construct of the schema, the declining component's schema Loc.
 //
 // # Planned decode paths, one semantics (M10 — not yet implemented)
+//
+// Decode reads no value space: every value in the slice is the string its
+// whiteSpace stage leaves (value.ApplyWhiteSpace). Each path below is
+// planned.
 //
 //   - Runtime path (always available): the facet pipeline +
 //     value.Mapping, driven by the compiled schema. General, reflective,
@@ -25,11 +86,12 @@
 //
 // # Planned debuggability (M10 — not yet implemented)
 //
-// Every decode error carries the pipeline stage that rejected
-// (whitespace / pattern / lexical-map / facet / assertion), the type
-// QName, the offending input fragment, and the instance Loc + byte
-// offset. GOXSD_DEBUG=codec traces stage transitions per value through
-// the injected slog logger. Generated fast paths preserve all of it and
-// map back to their emitting backend and schema construct via header
-// comments.
+// Every decode error a pipeline stage raises carries the stage that
+// rejected (whitespace / pattern / lexical-map / facet / assertion), the
+// type QName, the offending input fragment, and the instance Loc + byte
+// offset. GOXSD_DEBUG=codec traces stage transitions per value through the
+// injected slog logger. Generated fast paths preserve all of it and map
+// back to their emitting backend and schema construct via header comments.
+// No stage of Decode rejects a value today: the validator has accepted
+// every value it reads.
 package codec

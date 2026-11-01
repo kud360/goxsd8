@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/kud360/goxsd8/internal/goname"
 	"github.com/kud360/goxsd8/xsd"
 	"github.com/kud360/goxsd8/xsderr"
 )
@@ -2020,13 +2021,14 @@ func structDecl(name string, fields []fieldSpec) string {
 	return renderStruct(name, claimFields(fields))
 }
 
-// claimFields returns fields in order, each named by the identifier a namer of
-// its own claims for its local name: the names one struct's fields take.
+// claimFields returns fields in order, each named by the identifier one
+// goname.Namer of their own claims for its local name: the names one struct's
+// fields take.
 func claimFields(fields []fieldSpec) []goField {
-	names := newNamer()
+	names := goname.NewNamer()
 	claimed := make([]goField, len(fields))
 	for i, f := range fields {
-		claimed[i] = goField{name: names.claim(f.local), goType: f.goType}
+		claimed[i] = goField{name: names.Claim(f.local), goType: f.goType}
 	}
 	return claimed
 }

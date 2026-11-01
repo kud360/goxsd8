@@ -3,77 +3,10 @@ package codegen
 import (
 	"fmt"
 	"slices"
-	"strconv"
 	"strings"
-	"unicode"
-	"unicode/utf8"
+
+	"github.com/kud360/goxsd8/internal/goname"
 )
-
-// namer is the one component that turns XSD names into Go identifiers
-// (package doc, "# Naming"). One namer scopes one set of identifiers that
-// must not collide: a package's type names, or one struct's field names.
-// Claims are made in document order, and that order settles every collision
-// among the candidates it is handed; a package's type candidates are resolve's.
-type namer struct {
-	// claimed indexes the identifiers handed out so far; it is a lookup
-	// index only and never iterated (STYLE D2).
-	claimed map[string]bool
-}
-
-func newNamer() *namer {
-	return &namer{claimed: map[string]bool{}}
-}
-
-// claim returns a fresh identifier in this scope for the path of XSD local
-// names, by the package doc's "# Naming" rules for paths and collisions.
-func (n *namer) claim(path ...string) string {
-	return n.claimCandidate(render(path))
-}
-
-// claimCandidate returns a fresh identifier in this scope for candidate, an
-// identifier already rendered, by the package doc's "# Naming" rule for
-// collisions.
-func (n *namer) claimCandidate(candidate string) string {
-	name := candidate
-	for i := 2; n.claimed[name]; i++ {
-		name = candidate + strconv.Itoa(i)
-	}
-	n.claimed[name] = true
-	return name
-}
-
-// render joins the identifier of each XSD local name in path.
-func render(path []string) string {
-	var b strings.Builder
-	for _, local := range path {
-		b.WriteString(identifier(local))
-	}
-	return b.String()
-}
-
-// identifier maps one XSD local name (an NCName) to an exported Go
-// identifier by the package doc's "# Naming" rules for one name.
-func identifier(local string) string {
-	var b strings.Builder
-	breakWord := true
-	for _, r := range local {
-		if r == '_' || !unicode.IsLetter(r) && !unicode.IsDigit(r) {
-			breakWord = true
-			continue
-		}
-		if breakWord {
-			r = unicode.ToUpper(r)
-			breakWord = false
-		}
-		b.WriteRune(r)
-	}
-	s := b.String()
-	first, _ := utf8.DecodeRuneInString(s)
-	if !unicode.IsUpper(first) {
-		return "X" + s
-	}
-	return s
-}
 
 // nameStep is one step of the path a type is named by: an XSD local name
 // and whether it is a declared step or a generated word, as the package doc's
@@ -136,7 +69,7 @@ func (extendClaim) isTypeClaim() {}
 // order and returns the provisional name a namer claims for it from its whole
 // path, unshortened, which no output shows.
 type surveyNamer struct {
-	provisional *namer
+	provisional *goname.Namer
 	claims      []typeClaim
 	// index maps each provisional name to its claim's index, so that an
 	// extending claim finds the claim it extends; it is a lookup index only
@@ -147,18 +80,18 @@ type surveyNamer struct {
 }
 
 func newSurveyNamer() *surveyNamer {
-	return &surveyNamer{provisional: newNamer(), index: map[string]int{}}
+	return &surveyNamer{provisional: goname.NewNamer(), index: map[string]int{}}
 }
 
 func (s *surveyNamer) record(c typeClaim, candidate string) string {
-	name := s.provisional.claimCandidate(candidate)
+	name := s.provisional.ClaimCandidate(candidate)
 	s.index[name] = len(s.claims)
 	s.claims = append(s.claims, c)
 	return name
 }
 
 func (s *surveyNamer) fixed(words ...string) string {
-	return s.record(fixedClaim(slices.Clone(words)), render(words))
+	return s.record(fixedClaim(slices.Clone(words)), goname.Render(words))
 }
 
 func (s *surveyNamer) path(steps []nameStep) string {
@@ -170,7 +103,7 @@ func (s *surveyNamer) extend(of string, words ...string) string {
 	if !ok && s.err == nil {
 		s.err = fmt.Errorf("the type name %s extended by %q was never claimed", of, words)
 	}
-	return s.record(extendClaim{of: i, words: slices.Clone(words)}, identifier(of)+render(words))
+	return s.record(extendClaim{of: i, words: slices.Clone(words)}, goname.Identifier(of)+goname.Render(words))
 }
 
 // replayNamer is the typeNamer of emit's second walk: it returns names[i] for
@@ -241,7 +174,7 @@ func (r *replayNamer) extend(of string, words ...string) string {
 func renderSteps(steps []nameStep) string {
 	var b strings.Builder
 	for _, s := range steps {
-		b.WriteString(identifier(s.word))
+		b.WriteString(goname.Identifier(s.word))
 	}
 	return b.String()
 }
@@ -261,25 +194,25 @@ func resolve(claims []typeClaim) []string {
 			fixed[strings.Join(full[i], "")] = true
 		case pathClaim:
 			for _, s := range c {
-				full[i] = append(full[i], identifier(s.word))
+				full[i] = append(full[i], goname.Identifier(s.word))
 			}
 		case extendClaim:
 			full[i] = slices.Concat(full[c.of], identifiers(c.words))
 		}
 	}
 	names := make([]string, len(claims))
-	n := newNamer()
+	n := goname.NewNamer()
 	for i, c := range claims {
 		var candidate string
 		switch c := c.(type) {
 		case fixedClaim:
-			candidate = render(c)
+			candidate = goname.Render(c)
 		case pathClaim:
 			candidate = shortest(i, c, full, fixed)
 		case extendClaim:
-			candidate = identifier(names[c.of]) + render(c.words)
+			candidate = goname.Identifier(names[c.of]) + goname.Render(c.words)
 		}
-		names[i] = n.claimCandidate(candidate)
+		names[i] = n.ClaimCandidate(candidate)
 	}
 	return names
 }
@@ -288,7 +221,7 @@ func resolve(claims []typeClaim) []string {
 func identifiers(words []string) []string {
 	ids := make([]string, len(words))
 	for i, w := range words {
-		ids[i] = identifier(w)
+		ids[i] = goname.Identifier(w)
 	}
 	return ids
 }

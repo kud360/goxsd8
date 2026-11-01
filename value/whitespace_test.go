@@ -290,3 +290,57 @@ func unionType(t *testing.T) *xsd.SimpleType {
 type emptyBackend struct{}
 
 func (emptyBackend) Mapping(xsd.QName) (Mapping, bool) { return Mapping{}, false }
+
+// TestApplyWhiteSpace pins the exported whiteSpace stage (§4.3.6): a preserve
+// type returns the lexical as written, a type inheriting collapse collapses it,
+// each type §4.1.5 applies no whiteSpace facet to (absent {variety}, including
+// a restriction of xs:anySimpleType; xs:anyAtomicType; a union) returns it
+// unchanged, and an atomic type with no whiteSpace facet is a fault of the
+// type, never a verdict.
+func TestApplyWhiteSpace(t *testing.T) {
+	const raw = "  a\tb\r\nc  "
+	collapsePrim := primType(t, "decimal", "collapse")
+	derived, err := newCheckedSimpleType(xsderr.Loc{}, xsd.QName{Space: "urn:test", Local: "d"},
+		xsd.RestrictionDerivation{}, collapsePrim, nil, nil)
+	if err != nil {
+		t.Fatalf("NewSimpleType: %v", err)
+	}
+	// NewSimpleType alone: CheckDerivation refuses this type (st-props-correct
+	// clause 1), but a parsed schema can still reach it (codegen/doc.go GAP(xsd)).
+	anyRestr, err := xsd.NewSimpleType(xsderr.Loc{}, xsd.QName{Space: "urn:test", Local: "r"},
+		xsd.RestrictionDerivation{}, xsd.OwnedSimpleType{Definition: xsd.AnySimpleType()}, nil, nil)
+	if err != nil {
+		t.Fatalf("NewSimpleType (anySimpleType restriction): %v", err)
+	}
+	rows := []struct {
+		name string
+		st   *xsd.SimpleType
+		want string
+	}{
+		{"restriction of anySimpleType", anyRestr, raw},
+		{"preserve", primType(t, "string", "preserve"), raw},
+		{"replace", primType(t, "string", "replace"), "  a b  c  "},
+		{"inherited collapse", derived, "a b c"},
+		{"anySimpleType", xsd.AnySimpleType(), raw},
+		{"anyAtomicType", xsd.AnyAtomicType(), raw},
+		{"union", unionType(t), raw},
+	}
+	for _, row := range rows {
+		got, err := ApplyWhiteSpace(noSchema{}, row.st, raw)
+		if err != nil || got != row.want {
+			t.Errorf("ApplyWhiteSpace(%s, %q) = (%q, %v), want (%q, nil)", row.name, raw, got, err, row.want)
+		}
+	}
+
+	bare, err := xsd.NewPrimitiveType(xsderr.Loc{}, xsd.QName{Space: xsd.XMLSchemaNS, Local: "bare"}, nil, nil)
+	if err != nil {
+		t.Fatalf("NewPrimitiveType: %v", err)
+	}
+	_, err = ApplyWhiteSpace(noSchema{}, bare, raw)
+	if !IsFacetPrecondition(err) || IsDatatypeVerdict(err) {
+		t.Errorf("ApplyWhiteSpace(atomic, no whiteSpace facet) = %v, want a facet-precondition fault that is no verdict", err)
+	}
+	if r, _ := xsderr.RuleOf(err); r != xsderr.RuleComponentInvariant {
+		t.Errorf("ApplyWhiteSpace(atomic, no whiteSpace facet) charged %s, want %s", r, xsderr.RuleComponentInvariant)
+	}
+}

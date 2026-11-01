@@ -469,13 +469,9 @@ func validateLexical(b Backend, r xsd.TypeResolver, st *xsd.SimpleType, rawLexic
 	// whose {variety} or {primitive type definition} is absent. Those normalize
 	// nothing and the literal is parsed as written — the same `if ws != 0` guard
 	// facetValue applies to a facet's own {value}.
-	ws, err := effectiveWhiteSpace(r, st)
+	lexical, err := ApplyWhiteSpace(r, st, rawLexical)
 	if err != nil {
-		return nil, nil, typeFault(err)
-	}
-	lexical := rawLexical
-	if ws != 0 {
-		lexical = normalizeWhiteSpace(rawLexical, ws)
+		return nil, nil, err
 	}
 
 	// pattern (lexical) stage (cvc-pattern-valid, §4.3.4.4): checked on the
