@@ -52,7 +52,10 @@ Value implementations, parsing, validation, and generation live above them.
                                     5e tables, which parser/xmltree's reader and
                                     entity replacement-text reader and the
                                     conformance harness's raw re-reads, its
-                                    instance hint reader among them, decode with.)
+                                    instance hint reader among them, decode with.
+                                  - internal/goname, the XSD-name → Go-identifier
+                                    namer codegen's "# Naming" states, which
+                                    codegen names its declarations with.)
                  value           (value-space contracts, facet pipeline; imports xsd, xsderr, regex)
                  value/backendtest (conformance kit for any backend)
                  builtin         (the generated TypeSpec table and Seed; imports value, xsd, xsderr)
@@ -95,8 +98,8 @@ identifier for any of them and they import nothing from this module, so the
 edges drawn above do not exist yet in `go list -deps`. Read every
 present-tense sentence in their sections below as "will", not "does".
 `codegen` has left this note: it exports `Generate`, `CheckTargets` and
-`Target`, with the error types they return, and imports `xsd` and `xsderr`
-(its section says what ships).
+`Target`, with the error types they return, and imports `xsd`, `xsderr`
+and `internal/goname` (its section says what ships).
 `xpath` has left this note: it exports the CTA compile, evaluate and
 statically-check entry points, and the assertion compile and evaluate ones,
 and imports `xsd`, `value`, `regex` and
@@ -128,7 +131,7 @@ them;
 
 Only `xsderr`, `xsd`, `internal/schemaloc`, `internal/xmldecl`,
 `internal/xmlenc`, `internal/xmlname`, `internal/xmlchar`,
-`internal/xmlqname`, `internal/xmltok`, `value`, `value/backendtest`, `regex`, `builtin`, `builtin/strict`, `loader`,
+`internal/xmlqname`, `internal/xmltok`, `internal/goname`, `value`, `value/backendtest`, `regex`, `builtin`, `builtin/strict`, `loader`,
 `parser`, `parser/xmltree`, `xpath`, `icpath`, `validate`,
 `validate/xmlsrc`, `validate/jsonsrc`, `codegen`, `conformance` and `cmd/goxsd8` carry
 code today.
