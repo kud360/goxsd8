@@ -120,8 +120,17 @@ func TestResolve(t *testing.T) {
 
 // TestReplayNamer pins that the second walk's namer errs on a claim that
 // differs from the first walk's record, in kind, steps or extended name, or
-// that the record does not hold.
+// that the record does not hold, and that the first walk's errs on extending
+// a name it never returned.
 func TestReplayNamer(t *testing.T) {
+	t.Run("unclaimed extension", func(t *testing.T) {
+		s := newSurveyNamer()
+		s.fixed("order")
+		s.extend("Line", "a")
+		if s.err == nil {
+			t.Error("no error")
+		}
+	})
 	record := func() *replayNamer {
 		s := newSurveyNamer()
 		s.fixed("order")
