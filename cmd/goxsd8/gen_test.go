@@ -67,11 +67,21 @@ func assertAbsent(t *testing.T, path string) {
 // file codegen.Generate writes for a Target built from parser.Parse of the
 // absolute location gen hands the parser, in the package the -out's last path
 // element after filepath.Clean names: a trailing slash and a trailing ..
-// included. -q changes nothing. Before #2964 this run exited 2, reporting gen
-// as not yet implemented.
+// included. -q changes nothing. The three pairs share flat.xsd, so the second
+// and third files alias the first's types; the CLI and library trees are each
+// the root of a module of one path, so the import paths agree. Before #2964
+// this run exited 2, reporting gen as not yet implemented.
 func TestGenWritesWhatGenerateWrites(t *testing.T) {
 	flat := absFixture(t, flatFixture)
-	tmp := moduleTempDir(t)
+	tmp := t.TempDir()
+	for _, root := range []string{"cli", "lib"} {
+		if err := os.Mkdir(filepath.Join(tmp, root), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(tmp, root, "go.mod"), []byte("module example.com/w\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
 	out := filepath.Join(tmp, "cli", "flat")
 	order := filepath.Join(tmp, "cli", "order") + string(filepath.Separator)
 	up := filepath.Join(tmp, "cli", "up", "sub") + string(filepath.Separator) + ".."
@@ -104,6 +114,9 @@ func TestGenWritesWhatGenerateWrites(t *testing.T) {
 		}
 		if !bytes.Contains(got, []byte("\npackage "+dir+"\n")) {
 			t.Errorf("gen wrote for -out %s no package %s clause:\n%s", dir, dir, got)
+		}
+		if alias := []byte("\ntype Note = flat.Note\n"); bytes.Contains(got, alias) != (dir != "flat") {
+			t.Errorf("gen wrote for -out %s, want the alias %q exactly when the pair is not the first:\n%s", dir, alias, got)
 		}
 		// The usage block's claim that the comments name each document
 		// relative to -out.
@@ -176,10 +189,12 @@ var typeDecl = regexp.MustCompile(`(?m)^type `)
 
 // TestGenDeclaresTheComposedSet pins the usage block's sentence on what a
 // pair's package declares, each run exiting 0 with empty stdout and stderr: a
-// document two pairs' schemas share has its element's type declared in both
-// packages, imports.xsd's by import and imported.xsd's as its own root, and a
-// schema declaring no top-level element, only a named simple type, gives a
-// file with a package clause and no type declaration.
+// document two pairs' schemas share, whose generated types agree, has its
+// element's type declared by the first pair's package, which composes it by
+// import, and aliased by the second's, which composes it as its own root,
+// importing the first; and a schema declaring no top-level element, only a
+// named simple type, gives a file with a package clause and no type
+// declaration.
 func TestGenDeclaresTheComposedSet(t *testing.T) {
 	tmp := moduleTempDir(t)
 	simple := filepath.Join(tmp, "types.xsd")
@@ -203,12 +218,19 @@ func TestGenDeclaresTheComposedSet(t *testing.T) {
 			t.Errorf("%v stdout = %q, stderr = %q, want both empty", args, stdout.String(), stderr.String())
 		}
 	}
-	for _, dir := range []string{importer, imported} {
-		if got := generatedFile(t, dir); !bytes.Contains(got, []byte("\ntype Carried string\n")) {
-			t.Errorf("gen wrote for -out %s no declaration of imported.xsd's element carried:\n%s", dir, got)
+	if got := generatedFile(t, importer); !bytes.Contains(got, []byte("\ntype Carried string\n")) {
+		t.Errorf("gen wrote for -out %s no declaration of imported.xsd's element carried:\n%s", importer, got)
+	}
+	got := generatedFile(t, imported)
+	for _, want := range []string{"\nimport a \"example.com/m/gen/a\"\n", "\ntype Carried = a.Carried\n"} {
+		if !bytes.Contains(got, []byte(want)) {
+			t.Errorf("gen wrote for -out %s no line %q:\n%s", imported, want, got)
 		}
 	}
-	got := generatedFile(t, types)
+	if bytes.Contains(got, []byte("\ntype Carried string\n")) {
+		t.Errorf("gen wrote for -out %s a definition of carried, want only its alias:\n%s", imported, got)
+	}
+	got = generatedFile(t, types)
 	if !bytes.Contains(got, []byte("\npackage types\n")) || typeDecl.Match(got) {
 		t.Errorf("gen wrote for a schema with no top-level element:\n%s\nwant a package types clause and no type declaration", got)
 	}

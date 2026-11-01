@@ -1,10 +1,8 @@
 package codegen
 
 import (
-	"bytes"
 	"errors"
 	"fmt"
-	"go/format"
 	"path/filepath"
 	"slices"
 	"strconv"
@@ -45,7 +43,7 @@ var (
 )
 
 // The math/big types "# Coverage" maps to; a field or named type of either
-// makes the generated file import math/big (emitter.usesBig).
+// makes the generated file import math/big (analysis.usesBig).
 const (
 	bigInt = "big.Int"
 	bigRat = "big.Rat"
@@ -148,10 +146,7 @@ type emitter struct {
 	// types claims every type name of the package, by the walk emit runs it
 	// for (surveyNamer or replayNamer).
 	types typeNamer
-	// base is the target's Dir made absolute, the directory each header
-	// renders its declaration's location against (headerLoc).
-	base  string
-	decls []string
+	decls []declaration
 	// emitted holds the type emitted for each named complex type a local
 	// element reaches, so that every later local element of that type shares
 	// it, and for each anonymous complex type nested in a named complex type
@@ -183,12 +178,6 @@ type emitter struct {
 	// without it a schema whose named types each reach the next twice costs
 	// double per level (#3037).
 	acyclic map[valueNode]struct{}
-	// usesBig records that goType produced a math/big type, or emitted a
-	// datatype struct with a math/big field or PrecisionDecimal's group
-	// (precisionDecimalType), so that emit imports math/big;
-	// emit builds source only for a target that declines nothing, so there a
-	// set flag means an emitted declaration names the package.
-	usesBig bool
 	// datatypes holds the name claimed for each datatype struct emitted, so
 	// that each is emitted once per package; it is a lookup index only and
 	// never iterated (STYLE D2). tailDecls holds those structs' declarations,
@@ -198,7 +187,7 @@ type emitter struct {
 	// (attributesType), and each union's interface and variants (unionType),
 	// in first-use order, emitted after decls.
 	datatypes map[xsd.QName]string
-	tailDecls []string
+	tailDecls []declaration
 	// unions holds the name of the sealed interface emitted for each union
 	// simple type, keyed by component identity, so that each is emitted once
 	// per package whatever reaches it; unionType stores an entry only once
@@ -260,7 +249,7 @@ type precisionDecimalNames struct {
 // of what it is generated from, and fields, its attribute fields and then its
 // wildcard field, named as the struct names them.
 type structAttributes struct {
-	from   string
+	from   provenance
 	fields []goField
 }
 
@@ -487,24 +476,24 @@ func (s scope) groupKey(site groupSite) nestedKey {
 // emit returns the gofmt-formatted source of package pkg for schema, or the
 // declines and the failure that is not a decline that Generate's doc states
 // for one target's walk, one turn per top-level element declaration. It
-// returns source only when it collects no decline, and err carries no
-// decline. base is the absolute directory the source is written into.
+// returns declarations only when it collects no decline, and err carries no
+// decline.
 //
 // It walks schema twice, since a type's name is a function of every name the
 // package claims ("# Naming"): the first walk records each type claim
 // (surveyNamer) and its declines or failure are emit's, and only when it
 // collects none does resolve name every claim and a second walk build the
-// source with those names (replayNamer).
-func emit(schema *xsd.Schema, pkg, base string) (src []byte, declines []*DeclineError, err error) {
+// declarations with those names (replayNamer).
+func emit(schema *xsd.Schema) (decls []declaration, declines []*DeclineError, err error) {
 	survey := newSurveyNamer()
-	if _, declines, err := walk(schema, base, survey); err != nil || len(declines) > 0 {
+	if _, declines, err := walk(schema, survey); err != nil || len(declines) > 0 {
 		return nil, declines, err
 	}
 	if survey.err != nil {
 		return nil, nil, survey.err
 	}
 	replay := &replayNamer{claims: survey.claims, names: resolve(survey.claims)}
-	e, declines, err := walk(schema, base, replay)
+	e, declines, err := walk(schema, replay)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -519,32 +508,19 @@ func emit(schema *xsd.Schema, pkg, base string) (src []byte, declines []*Decline
 		if !ok {
 			return nil, nil, fmt.Errorf("the attributes struct %s: no struct %s with attribute fields was emitted", n.name, n.of)
 		}
-		e.tailDecls[n.slot] = header(n.name, of.from) +
-			fmt.Sprintf("// It holds the attribute fields of %s, which a nilled element keeps.\n", n.of) +
-			renderStruct(n.name, of.fields)
+		e.tailDecls[n.slot] = declare(n.name, of.from,
+			fmt.Sprintf("// It holds the attribute fields of %s, which a nilled element keeps.\n", n.of),
+			renderStruct(n.name, of.fields))
 	}
-	var b bytes.Buffer
-	fmt.Fprintf(&b, "%s\n\npackage %s\n", generatedHeader, pkg)
-	if e.usesBig {
-		b.WriteString("\nimport \"math/big\"\n")
-	}
-	for _, d := range slices.Concat(e.decls, e.tailDecls) {
-		b.WriteString("\n")
-		b.WriteString(d)
-	}
-	src, err = format.Source(b.Bytes())
-	if err != nil {
-		return nil, nil, fmt.Errorf("formatting the emitted source: %w", err)
-	}
-	return src, nil, nil
+	return slices.Concat(e.decls, e.tailDecls), nil, nil
 }
 
 // walk runs one turn per top-level element declaration of schema, claiming
 // type names in types, and returns the emitter it built, the declines it
 // collected in turn order, each once, and the first failure that is not a
 // decline, which ends the walk.
-func walk(schema *xsd.Schema, base string, types typeNamer) (*emitter, []*DeclineError, error) {
-	e := &emitter{schema: schema, types: types, base: base, emitted: map[nestedKey]emittedType{}, elements: map[xsd.QName]emittedType{}, acyclic: map[valueNode]struct{}{}, datatypes: map[xsd.QName]string{}, unions: map[*xsd.SimpleType]string{}, substitutions: map[xsd.QName]string{}, attributes: map[string]structAttributes{}}
+func walk(schema *xsd.Schema, types typeNamer) (*emitter, []*DeclineError, error) {
+	e := &emitter{schema: schema, types: types, emitted: map[nestedKey]emittedType{}, elements: map[xsd.QName]emittedType{}, acyclic: map[valueNode]struct{}{}, datatypes: map[xsd.QName]string{}, unions: map[*xsd.SimpleType]string{}, substitutions: map[xsd.QName]string{}, attributes: map[string]structAttributes{}}
 	var declines []*DeclineError
 	for _, decl := range schema.Elements() {
 		err := e.topLevel(decl)
@@ -562,26 +538,78 @@ func walk(schema *xsd.Schema, base string, types typeNamer) (*emitter, []*Declin
 	return e, declines, nil
 }
 
-// header is the doc comment of the emitted type name, generated from the
-// declaration from renders (elementFrom, typeOrigin).
-func header(name, from string) string {
-	return fmt.Sprintf("// %s is generated from %s.\n", name, from)
+// declaration is one emitted type declaration: the name it declares, its doc
+// comment, and code, the declaration and any method on its type. The comment
+// is before, then, when loc is non-nil, the one schema Loc its header renders
+// and after; the Loc is rendered only when the source is (text), so that one
+// declaration renders against any target's Dir.
+type declaration struct {
+	name          string
+	before, after string
+	loc           *xsderr.Loc
+	code          string
+}
+
+// comment returns d's doc comment, rendering its Loc, when it has one, with
+// renderLoc.
+func (d declaration) comment(renderLoc func(xsderr.Loc) string) string {
+	if d.loc == nil {
+		return d.before
+	}
+	return d.before + renderLoc(*d.loc) + d.after
+}
+
+// text returns d's source, its Loc rendered with renderLoc.
+func (d declaration) text(renderLoc func(xsderr.Loc) string) string {
+	return d.comment(renderLoc) + d.code
+}
+
+// provenance is what a header renders a declaration as generated from: text,
+// then, when loc is non-nil, " declared at " and that Loc.
+type provenance struct {
+	text string
+	loc  *xsderr.Loc
+}
+
+// prefixed returns p with prefix before its text.
+func (p provenance) prefixed(prefix string) provenance {
+	return provenance{text: prefix + p.text, loc: p.loc}
+}
+
+// declare returns the declaration of the type name, generated from p, whose
+// header is followed by the comment lines doc, each ending in a newline, and
+// then by code.
+func declare(name string, p provenance, doc, code string) declaration {
+	d := declaration{name: name, after: ".\n" + doc, loc: p.loc, code: code}
+	if p.loc == nil {
+		d.before = fmt.Sprintf("// %s is generated from %s.\n%s", name, p.text, doc)
+		d.after = ""
+		return d
+	}
+	d.before = fmt.Sprintf("// %s is generated from %s declared at ", name, p.text)
+	return d
+}
+
+// located returns a provenance of text declared at loc.
+func located(text string, loc xsderr.Loc) provenance {
+	return provenance{text: text, loc: &loc}
 }
 
 // elementFrom renders an element declaration for a header: its expanded name,
 // whose namespace is its {target namespace} (for a local declaration, as form
-// and elementFormDefault set it, §3.3.2.3), and its Loc as headerLoc renders
-// it against e.base. Only a header renders a Loc so: every decline and error
-// names the Loc as the declaration carries it.
-func (e *emitter) elementFrom(decl xsd.ElementDeclaration) string {
-	return fmt.Sprintf("element %s declared at %s", decl.Name(), headerLoc(e.base, decl.Loc()))
+// and elementFormDefault set it, §3.3.2.3), and its Loc, which headerLoc
+// renders against the target's Dir. Only a header renders a Loc so: every
+// decline and error names the Loc as the declaration carries it.
+func (e *emitter) elementFrom(decl xsd.ElementDeclaration) provenance {
+	return located("element "+decl.Name().String(), decl.Loc())
 }
 
 // origin is what one complex type's emitted declarations are generated from:
 // from renders it for their headers, and subject names the complex type in
 // declines.
 type origin struct {
-	from, subject string
+	from    provenance
+	subject string
 }
 
 // elementOrigin is the origin of the type emitted for the top-level element
@@ -595,7 +623,7 @@ func (e *emitter) elementOrigin(decl xsd.ElementDeclaration, t xsd.ComplexType) 
 // Loc, rendered as elementFrom renders an element's.
 func (e *emitter) typeOrigin(t xsd.ComplexType) origin {
 	return origin{
-		from:    fmt.Sprintf("complex type %s declared at %s", t.Name(), headerLoc(e.base, t.Loc())),
+		from:    located("complex type "+t.Name().String(), t.Loc()),
 		subject: "complex type " + typeName(t),
 	}
 }
@@ -653,7 +681,7 @@ func (e *emitter) topLevel(decl xsd.ElementDeclaration) error {
 		return e.tableType(typ, scope{root: elementRoot, path: elementPath(decl.Name())}, decl, branches)
 	}
 	if isAnyType(td) {
-		e.decls = append(e.decls, header(typ.name, e.elementFrom(decl))+fmt.Sprintf("type %s %s\n", typ.name, e.raw.anyType))
+		e.decls = append(e.decls, declare(typ.name, e.elementFrom(decl), "", fmt.Sprintf("type %s %s\n", typ.name, e.raw.anyType)))
 		return nil
 	}
 	switch t := td.(type) {
@@ -662,7 +690,7 @@ func (e *emitter) topLevel(decl xsd.ElementDeclaration) error {
 		if err != nil {
 			return err
 		}
-		e.decls = append(e.decls, header(typ.name, e.elementFrom(decl))+fmt.Sprintf("type %s %s\n", typ.name, underlying.name))
+		e.decls = append(e.decls, declare(typ.name, e.elementFrom(decl), "", fmt.Sprintf("type %s %s\n", typ.name, underlying.name)))
 	case xsd.ComplexType:
 		nested := structScope(scope{}, decl, t)
 		chain, err := valueChain(nil, false, decl, t)
@@ -922,8 +950,8 @@ func (e *emitter) simpleGoType(subject string, loc xsderr.Loc, t *xsd.SimpleType
 // t (Datatypes §2.4.2 dt-special), xs:anySimpleType or xs:anyAtomicType known
 // by identity ahead of its {variety}, string, holding the literal; for an atomic
 // t, its atomic Go type, chosen through builtinType and then t's {primitive
-// type definition} (Datatypes §4.1.1), setting e.usesBig for a math/big type,
-// a datatype struct holding one, or PrecisionDecimal; for a list (Datatypes
+// type definition} (Datatypes §4.1.1), a math/big type, a datatype struct
+// holding one, or PrecisionDecimal among them; for a list (Datatypes
 // §2.4.1.2, a finite sequence of its item type's values), a slice of the type
 // its {item type definition} (§3.16.1) maps to, read through
 // [xsd.SimpleType.Item], which takes a restriction's item from its base
@@ -1027,7 +1055,7 @@ func (e *emitter) atomicType(subject, typed string, loc xsderr.Loc, t *xsd.Simpl
 	case doublePrimitive: // Datatypes §3.3.5.1, as "# Coverage" states
 		return "float64", nil
 	case decimalPrimitive: // Datatypes §3.3.3, as "# Coverage" states
-		return e.useBig(bigRat), nil
+		return bigRat, nil
 	case hexBinaryPrimitive, base64BinaryPrimitive: // Datatypes §3.3.15.1, §3.3.16.1, as "# Coverage" states
 		return "[]byte", nil
 	case qNamePrimitive, notationPrimitive: // Datatypes §3.3.18, §3.3.19, as "# Coverage" states
@@ -1080,8 +1108,8 @@ func (e *emitter) unionType(subject, typed string, loc xsderr.Loc, t *xsd.Simple
 	name := e.unionName(t, under)
 	marker := "is" + name
 	slot := len(e.tailDecls)
-	e.tailDecls = append(e.tailDecls, make([]string, 1+len(members))...)
-	e.tailDecls[slot] = header(name, e.simpleFrom(t)) + fmt.Sprintf("type %s interface {\n\t%s()\n}\n", name, marker)
+	e.tailDecls = append(e.tailDecls, make([]declaration, 1+len(members))...)
+	e.tailDecls[slot] = declare(name, e.simpleFrom(t), "", fmt.Sprintf("type %s interface {\n\t%s()\n}\n", name, marker))
 	for i, m := range members {
 		word, err := e.variantWord(m)
 		if err != nil {
@@ -1092,7 +1120,7 @@ func (e *emitter) unionType(subject, typed string, loc xsderr.Loc, t *xsd.Simple
 		if err != nil {
 			return emittedType{}, err
 		}
-		e.tailDecls[slot+1+i] = header(variant, e.simpleFrom(m)) + fmt.Sprintf("type %s %s\n\nfunc (%s) %s() {}\n", variant, under.name, variant, marker)
+		e.tailDecls[slot+1+i] = declare(variant, e.simpleFrom(m), "", fmt.Sprintf("type %s %s\n\nfunc (%s) %s() {}\n", variant, under.name, variant, marker))
 	}
 	e.unions[t] = name
 	return emittedType{name: name, sealed: true}, nil
@@ -1197,46 +1225,36 @@ func (e *emitter) variantWord(m *xsd.SimpleType) (string, error) {
 }
 
 // simpleFrom renders the simple type t for a header: "simple type", its
-// expanded name or (anonymous), and its Loc as headerLoc renders it against
-// e.base, which is omitted when t's Loc is zero, as a builtin's is.
-func (e *emitter) simpleFrom(t *xsd.SimpleType) string {
+// expanded name or (anonymous), and its Loc, as elementFrom renders an
+// element's, which is omitted when t's Loc is zero, as a builtin's is.
+func (e *emitter) simpleFrom(t *xsd.SimpleType) provenance {
 	from := "simple type " + typeName(t)
 	if t.Loc() == (xsderr.Loc{}) {
-		return from
+		return provenance{text: from}
 	}
-	return from + " declared at " + headerLoc(e.base, t.Loc())
-}
-
-// useBig returns the math/big type typ, setting e.usesBig.
-func (e *emitter) useBig(typ string) string {
-	e.usesBig = true
-	return typ
+	return located(from, t.Loc())
 }
 
 // datatypeType returns the name of the struct ds, emitting it when no earlier
 // declaration did: its name is claimed in e.types at that first use, by the
-// package doc's "Naming", and its declaration joins e.tailDecls. Emitting a
-// struct with a math/big field sets e.usesBig.
+// package doc's "Naming", and its declaration joins e.tailDecls.
 func (e *emitter) datatypeType(ds datatypeStruct) string {
 	if name, ok := e.datatypes[ds.datatype]; ok {
 		return name
 	}
 	name := e.types.fixed(ds.datatype.Local)
 	e.datatypes[ds.datatype] = name
-	var b strings.Builder
-	fmt.Fprintf(&b, "// %s is generated from datatype %s.\n", name, ds.datatype)
+	doc := ""
 	if ds.doc != "" {
-		fmt.Fprintf(&b, "// %s\n", ds.doc)
+		doc = "// " + ds.doc + "\n"
 	}
+	var b strings.Builder
 	fmt.Fprintf(&b, "type %s struct {\n", name)
 	for _, f := range ds.fields {
-		if f.goType == bigInt || f.goType == bigRat {
-			e.usesBig = true
-		}
 		fmt.Fprintf(&b, "\t%s %s\n", f.name, f.goType)
 	}
 	b.WriteString("}\n")
-	e.tailDecls = append(e.tailDecls, b.String())
+	e.tailDecls = append(e.tailDecls, declare(name, provenance{text: "datatype " + ds.datatype.String()}, doc, b.String()))
 	return name
 }
 
@@ -1244,7 +1262,7 @@ func (e *emitter) datatypeType(ds datatypeStruct) string {
 // "# Coverage" gives xs:precisionDecimal (precisionDecimal §3.1 sec-vs-pD).
 // When no earlier declaration needed them, it claims the six names in e.types,
 // in precisionDecimalNames' order, by the package doc's "Naming", appends
-// their declarations to e.tailDecls in that order, and sets e.usesBig.
+// their declarations to e.tailDecls in that order.
 func (e *emitter) precisionDecimalType() string {
 	if e.precisionDecimal.wrapper != "" {
 		return e.precisionDecimal.wrapper
@@ -1257,15 +1275,14 @@ func (e *emitter) precisionDecimalType() string {
 	n.negativeInfinity = e.types.extend(n.value, "negativeInfinity")
 	n.notANumber = e.types.extend(n.value, "notANumber")
 	e.precisionDecimal = n
-	e.usesBig = true
-	from := "datatype " + precisionDecimalPrimitive.String()
+	from := provenance{text: "datatype " + precisionDecimalPrimitive.String()}
 	marker := "is" + n.value
-	arm := func(name, doc, fields string) string {
-		return header(name, from) + doc + fmt.Sprintf("type %s struct {%s}\n\nfunc (%s) %s() {}\n", name, fields, name, marker)
+	arm := func(name, doc, fields string) declaration {
+		return declare(name, from, doc, fmt.Sprintf("type %s struct {%s}\n\nfunc (%s) %s() {}\n", name, fields, name, marker))
 	}
 	e.tailDecls = append(e.tailDecls,
-		header(n.wrapper, from)+fmt.Sprintf("type %s struct {\n\tValue %s\n}\n", n.wrapper, n.value),
-		header(n.value, from)+fmt.Sprintf("type %s interface {\n\t%s()\n}\n", n.value, marker),
+		declare(n.wrapper, from, "", fmt.Sprintf("type %s struct {\n\tValue %s\n}\n", n.wrapper, n.value)),
+		declare(n.value, from, "", fmt.Sprintf("type %s interface {\n\t%s()\n}\n", n.value, marker)),
 		arm(n.numerical, "// Its value is Coefficient × 10^−Scale, negative when Negative; Coefficient is never negative.\n",
 			fmt.Sprintf("\n\tCoefficient %s\n\tScale %s\n\tNegative bool\n", bigInt, bigInt)),
 		arm(n.positiveInfinity, "", ""),
@@ -1293,18 +1310,18 @@ func (e *emitter) anyTypeType() string {
 		element:   e.types.fixed("anyElement"),
 	}
 	e.raw = n
-	from := "complex type " + anyTypeName.String()
+	from := provenance{text: "complex type " + anyTypeName.String()}
 	e.tailDecls = append(e.tailDecls,
-		header(n.anyType, from)+
-			"// Text is the characters before the first of Children, \"\" for none.\n"+
-			fmt.Sprintf("type %s struct {\n\tAttributes []%s\n\tText string\n\tChildren []%s\n}\n", n.anyType, n.attribute, n.child),
-		header(n.attribute, from)+
-			fmt.Sprintf("type %s struct {\n\tSpace, Local, Value string\n}\n", n.attribute),
-		header(n.child, from)+
-			"// Tail is the characters after Element, before the next child or the end.\n"+
-			fmt.Sprintf("type %s struct {\n\tElement %s\n\tTail string\n}\n", n.child, n.element),
-		header(n.element, from)+
-			fmt.Sprintf("type %s struct {\n\tSpace, Local string\n\tContent %s\n}\n", n.element, n.anyType))
+		declare(n.anyType, from,
+			"// Text is the characters before the first of Children, \"\" for none.\n",
+			fmt.Sprintf("type %s struct {\n\tAttributes []%s\n\tText string\n\tChildren []%s\n}\n", n.anyType, n.attribute, n.child)),
+		declare(n.attribute, from, "",
+			fmt.Sprintf("type %s struct {\n\tSpace, Local, Value string\n}\n", n.attribute)),
+		declare(n.child, from,
+			"// Tail is the characters after Element, before the next child or the end.\n",
+			fmt.Sprintf("type %s struct {\n\tElement %s\n\tTail string\n}\n", n.child, n.element)),
+		declare(n.element, from, "",
+			fmt.Sprintf("type %s struct {\n\tSpace, Local string\n\tContent %s\n}\n", n.element, n.anyType)))
 	return n.anyType
 }
 
@@ -1320,10 +1337,12 @@ func (e *emitter) mixedChildType() string {
 		return e.mixedChild
 	}
 	e.mixedChild = e.types.fixed("mixedChild")
-	e.tailDecls = append(e.tailDecls,
-		fmt.Sprintf("// %s is generated for mixed content: one child element and the characters after it.\n", e.mixedChild)+
-			"// Tail is the characters after Element, before the next child or the end.\n"+
-			fmt.Sprintf("type %s[T any] struct {\n\tElement T\n\tTail string\n}\n", e.mixedChild))
+	e.tailDecls = append(e.tailDecls, declaration{
+		name: e.mixedChild,
+		before: fmt.Sprintf("// %s is generated for mixed content: one child element and the characters after it.\n", e.mixedChild) +
+			"// Tail is the characters after Element, before the next child or the end.\n",
+		code: fmt.Sprintf("type %s[T any] struct {\n\tElement T\n\tTail string\n}\n", e.mixedChild),
+	})
 	return e.mixedChild
 }
 
@@ -1375,12 +1394,21 @@ func (e *emitter) nillableTypes() string {
 	e.nillable = n
 	marker := "is" + n.sum
 	e.tailDecls = append(e.tailDecls,
-		fmt.Sprintf("// %s is generated for nillable elements: a nilled element or one with content.\n", n.sum)+
-			fmt.Sprintf("type %s[T, A any] interface {\n\t%s(T, A)\n}\n", n.sum, marker),
-		fmt.Sprintf("// %s is generated for nillable elements: a nilled element, with no character or element children, holding its attributes (cvc-elt 3.2.3).\n", n.nilled)+
-			fmt.Sprintf("type %s[T, A any] struct {\n\tAttributes A\n}\n\nfunc (%s[T, A]) %s(T, A) {}\n", n.nilled, n.nilled, marker),
-		fmt.Sprintf("// %s is generated for nillable elements: an element that is not nilled, holding its content.\n", n.content)+
-			fmt.Sprintf("type %s[T, A any] struct {\n\tContent T\n}\n\nfunc (%s[T, A]) %s(T, A) {}\n", n.content, n.content, marker))
+		declaration{
+			name:   n.sum,
+			before: fmt.Sprintf("// %s is generated for nillable elements: a nilled element or one with content.\n", n.sum),
+			code:   fmt.Sprintf("type %s[T, A any] interface {\n\t%s(T, A)\n}\n", n.sum, marker),
+		},
+		declaration{
+			name:   n.nilled,
+			before: fmt.Sprintf("// %s is generated for nillable elements: a nilled element, with no character or element children, holding its attributes (cvc-elt 3.2.3).\n", n.nilled),
+			code:   fmt.Sprintf("type %s[T, A any] struct {\n\tAttributes A\n}\n\nfunc (%s[T, A]) %s(T, A) {}\n", n.nilled, n.nilled, marker),
+		},
+		declaration{
+			name:   n.content,
+			before: fmt.Sprintf("// %s is generated for nillable elements: an element that is not nilled, holding its content.\n", n.content),
+			code:   fmt.Sprintf("type %s[T, A any] struct {\n\tContent T\n}\n\nfunc (%s[T, A]) %s(T, A) {}\n", n.content, n.content, marker),
+		})
 	return n.sum
 }
 
@@ -1398,7 +1426,7 @@ func (e *emitter) attributesType(of string) string {
 		return e.nilled[i].name
 	}
 	n := nilledAttributes{name: e.types.extend(of, "attributes"), of: of, slot: len(e.tailDecls)}
-	e.tailDecls = append(e.tailDecls, "")
+	e.tailDecls = append(e.tailDecls, declaration{})
 	e.nilled = append(e.nilled, n)
 	return n.name
 }
@@ -1411,13 +1439,12 @@ func (e *emitter) attributesType(of string) string {
 // and stopping at the first of the twelve it meets, or "" when the walk ends
 // at xs:anySimpleType's absent base without meeting one. Every bounded type
 // lies below xs:integer on its chain, so the nearest bounded type wins over
-// it; no chain meets both an integer builtin and a temporal one. Returning
-// big.Int, or a datatype struct with a math/big field, sets e.usesBig.
+// it; no chain meets both an integer builtin and a temporal one.
 func (e *emitter) builtinType(t *xsd.SimpleType) (string, error) {
 	for step := t; step != nil; {
 		switch step.Name() {
 		case integerBuiltin:
-			return e.useBig(bigInt), nil
+			return bigInt, nil
 		case dateTimeStampStruct.datatype: // Datatypes §3.4.28
 			return e.datatypeType(dateTimeStampStruct), nil
 		case dayTimeDurationStruct.datatype: // Datatypes §3.4.27
@@ -1554,7 +1581,7 @@ func (e *emitter) body(typ emittedType, nested scope, chain []valueNode, o origi
 		return e.sealedType(typ.name, nested, groupSite{}, o, t, content.group.Particles())
 	}
 	slot := len(e.decls)
-	e.decls = append(e.decls, "")
+	e.decls = append(e.decls, declaration{})
 	var fields []fieldSpec
 	if simple, ok := t.ContentType().(xsd.SimpleContent); ok {
 		goType, err := e.goType(o.subject, fmt.Sprintf("%s with {simple type definition} %s", o.subject, typeName(simple.SimpleType)), t.Loc(), simple.SimpleType, declaredUnion(append(nested.steps(), generatedSteps("value")...)))
@@ -1597,7 +1624,7 @@ func (e *emitter) body(typ emittedType, nested scope, chain []valueNode, o origi
 	if attributesFrom < len(claimed) {
 		e.attributes[typ.name] = structAttributes{from: o.from, fields: claimed[attributesFrom:]}
 	}
-	e.decls[slot] = header(typ.name, o.from) + renderStruct(typ.name, claimed)
+	e.decls[slot] = declare(typ.name, o.from, "", renderStruct(typ.name, claimed))
 	return nil
 }
 
@@ -1708,12 +1735,12 @@ func (e *emitter) occurrence(typ emittedType, nested scope, site groupSite, o or
 		return e.sealedType(typ.name, nested, site, o, t, particles)
 	}
 	slot := len(e.decls)
-	e.decls = append(e.decls, "")
+	e.decls = append(e.decls, declaration{})
 	fields, err := e.particleFields(nested, site, nil, o, t, particles)
 	if err != nil {
 		return err
 	}
-	e.decls[slot] = header(typ.name, o.from) + structDecl(typ.name, fields)
+	e.decls[slot] = declare(typ.name, o.from, "", structDecl(typ.name, fields))
 	return nil
 }
 
@@ -1776,7 +1803,7 @@ func (e *emitter) flattened(typ emittedType, nested scope, site groupSite, o ori
 		return err
 	}
 	marker := "is" + typ.name
-	e.decls = append(e.decls, header(typ.name, o.from)+fmt.Sprintf("type %s interface {\n\t%s()\n}\n", typ.name, marker))
+	e.decls = append(e.decls, declare(typ.name, o.from, "", fmt.Sprintf("type %s interface {\n\t%s()\n}\n", typ.name, marker)))
 	for _, p := range basic {
 		word, from, err := e.alternative(o, t, p)
 		if err != nil {
@@ -1788,12 +1815,12 @@ func (e *emitter) flattened(typ emittedType, nested scope, site groupSite, o ori
 		}
 		branch := e.types.extend(typ.name, word)
 		slot := len(e.decls)
-		e.decls = append(e.decls, "")
+		e.decls = append(e.decls, declaration{})
 		field, err := e.field(nested, site, 0, nil, o, t, once)
 		if err != nil {
 			return err
 		}
-		e.decls[slot] = header(branch, from) + structDecl(branch, []fieldSpec{field}) + fmt.Sprintf("\nfunc (%s) %s() {}\n", branch, marker)
+		e.decls[slot] = declare(branch, from, "", structDecl(branch, []fieldSpec{field})+fmt.Sprintf("\nfunc (%s) %s() {}\n", branch, marker))
 	}
 	return nil
 }
@@ -2029,7 +2056,7 @@ func renderStruct(name string, fields []goField) string {
 // sealedType.
 func (e *emitter) sealedType(name string, nested scope, site groupSite, o origin, t xsd.ComplexType, particles []xsd.Particle) error {
 	marker := "is" + name
-	e.decls = append(e.decls, header(name, o.from)+fmt.Sprintf("type %s interface {\n\t%s()\n}\n", name, marker))
+	e.decls = append(e.decls, declare(name, o.from, "", fmt.Sprintf("type %s interface {\n\t%s()\n}\n", name, marker)))
 	for k, p := range particles {
 		word, from, err := e.alternative(o, t, p)
 		if err != nil {
@@ -2041,12 +2068,12 @@ func (e *emitter) sealedType(name string, nested scope, site groupSite, o origin
 		}
 		branch := e.types.extend(name, word)
 		slot := len(e.decls)
-		e.decls = append(e.decls, "")
+		e.decls = append(e.decls, declaration{})
 		fields, err := e.particleFields(nested, site.branch(k+1), nil, o, t, []xsd.Particle{raised})
 		if err != nil {
 			return err
 		}
-		e.decls[slot] = header(branch, from) + structDecl(branch, fields) + fmt.Sprintf("\nfunc (%s) %s() {}\n", branch, marker)
+		e.decls[slot] = declare(branch, from, "", structDecl(branch, fields)+fmt.Sprintf("\nfunc (%s) %s() {}\n", branch, marker))
 	}
 	return nil
 }
@@ -2060,20 +2087,20 @@ func (e *emitter) sealedType(name string, nested scope, site groupSite, o origin
 // for a wildcard (wildcardTerm), which has no {name} (§3.10.1), the word any
 // and o's from; for a model group, inline or a <group ref> (modelGroupTerm),
 // which only sealedType passes, its compositor and o's from.
-func (e *emitter) alternative(o origin, t xsd.ComplexType, p xsd.Particle) (word, from string, err error) {
+func (e *emitter) alternative(o origin, t xsd.ComplexType, p xsd.Particle) (word string, from provenance, err error) {
 	if wildcardTerm(p.Term()) {
 		return "any", o.from, nil
 	}
 	group, isGroup, err := e.modelGroupTerm(o.subject, t.Loc(), p.Term())
 	if err != nil {
-		return "", "", err
+		return "", provenance{}, err
 	}
 	if isGroup {
 		return group.Compositor().String(), o.from, nil
 	}
 	decl, err := e.elementTerm(o.subject, t.Loc(), p.Term())
 	if err != nil {
-		return "", "", err
+		return "", provenance{}, err
 	}
 	return decl.Name().Local, e.elementFrom(decl), nil
 }
@@ -2501,7 +2528,7 @@ func (e *emitter) substitutionType(head xsd.ElementDeclaration, members []xsd.El
 	}
 	name := e.types.fixed(head.Name().Local, "SubstitutionGroup")
 	marker := "is" + name
-	e.decls = append(e.decls, header(name, "the substitution group of "+e.elementFrom(head))+fmt.Sprintf("type %s interface {\n\t%s()\n}\n", name, marker))
+	e.decls = append(e.decls, declare(name, e.elementFrom(head).prefixed("the substitution group of "), "", fmt.Sprintf("type %s interface {\n\t%s()\n}\n", name, marker)))
 	for _, member := range members {
 		branch := e.types.extend(name, member.Name().Local)
 		td, err := e.declaredType(member)
@@ -2520,7 +2547,7 @@ func (e *emitter) substitutionType(head xsd.ElementDeclaration, members []xsd.El
 			typ = e.nillableType(typ, td)
 		}
 		fields := []fieldSpec{{local: member.Name().Local, goType: typ.name}}
-		e.decls = append(e.decls, header(branch, e.elementFrom(member))+structDecl(branch, fields)+fmt.Sprintf("\nfunc (%s) %s() {}\n", branch, marker))
+		e.decls = append(e.decls, declare(branch, e.elementFrom(member), "", structDecl(branch, fields)+fmt.Sprintf("\nfunc (%s) %s() {}\n", branch, marker)))
 	}
 	e.substitutions[head.Name()] = name
 	return emittedType{name: name, sealed: true}, nil
@@ -2575,11 +2602,11 @@ func (e *emitter) tableType(typ emittedType, ifc scope, decl xsd.ElementDeclarat
 	if _, hasTable := decl.TypeTable(); !hasTable {
 		slots = "the " + declaredSlot{}.name() + " of "
 	}
-	e.decls = append(e.decls, header(typ.name, slots+e.elementFrom(decl))+fmt.Sprintf("type %s interface {\n\t%s()\n}\n", typ.name, marker))
+	e.decls = append(e.decls, declare(typ.name, e.elementFrom(decl).prefixed(slots), "", fmt.Sprintf("type %s interface {\n\t%s()\n}\n", typ.name, marker)))
 	for _, b := range branches {
 		branch := e.types.extend(typ.name, b.local())
 		slot := len(e.decls)
-		e.decls = append(e.decls, "")
+		e.decls = append(e.decls, declaration{})
 		field, err := e.branchType(ifc, decl, b)
 		if err != nil {
 			return err
@@ -2588,7 +2615,7 @@ func (e *emitter) tableType(typ emittedType, ifc scope, decl xsd.ElementDeclarat
 			field = e.nillableType(field, b.td)
 		}
 		fields := []fieldSpec{{local: b.local(), goType: field.name}}
-		e.decls[slot] = header(branch, b.slot.name()+" of "+e.elementFrom(decl)) + structDecl(branch, fields) + fmt.Sprintf("\nfunc (%s) %s() {}\n", branch, marker)
+		e.decls[slot] = declare(branch, e.elementFrom(decl).prefixed(b.slot.name()+" of "), "", structDecl(branch, fields)+fmt.Sprintf("\nfunc (%s) %s() {}\n", branch, marker))
 	}
 	return nil
 }
@@ -2641,7 +2668,7 @@ func (e *emitter) branchOrigin(child scope, decl xsd.ElementDeclaration, b table
 	if t.Name() != (xsd.QName{}) {
 		return e.typeOrigin(t)
 	}
-	return origin{from: b.slot.name() + " of " + e.elementFrom(decl), subject: "complex type (anonymous) of " + child.place()}
+	return origin{from: e.elementFrom(decl).prefixed(b.slot.name()+" of "), subject: "complex type (anonymous) of " + child.place()}
 }
 
 // attributeField returns the field of attribute use u (§3.5.1) of the complex

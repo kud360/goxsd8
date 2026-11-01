@@ -776,12 +776,14 @@
 // The output is a function of the schema and of each document's location
 // relative to the target's Dir, so two trees laid out alike under different
 // absolute roots produce byte-identical output; "Naming" states where a
-// header's location is not relative. No map iteration anywhere near the
-// emitter; emission order is the walk's, which document order alone fixes, as
-// "Coverage" states (datatype structs, PrecisionDecimal's interface and arms
-// with it, raw-content structs, MixedChild, Nillable with its arms,
-// attributes structs, and union interfaces with their variants last, in the
-// order the walk first needs each). Golden-file tests pin the output.
+// header's location is not relative. Under Generate's import rule it also
+// depends on the targets' slice order and on each owner's import path. No map
+// iteration anywhere near the emitter; emission order is the walk's, which
+// document order alone fixes, as "Coverage" states (datatype structs,
+// PrecisionDecimal's interface and arms with it, raw-content structs,
+// MixedChild, Nillable with its arms, attributes structs, and union
+// interfaces with their variants last, in the order the walk first needs
+// each). Golden-file tests pin the output.
 //
 // # Naming
 //
@@ -820,19 +822,24 @@
 // PrecisionDecimal's interface, a substitution group's interface, or the fixed
 // local names above. Uniqueness is measured over every type name the package
 // claims, the whole composed Schema's, so a declaration in one document can
-// lengthen the name of a type declared in another. Each such type takes the
-// suffix of its own whole path, whatever the type it lies under is named
-// (element address under element shipTo under element purchaseOrder → Address,
-// when no other path ends in address). A branch, a variant, an attributes
-// struct, an arm, and an anonymous union under a variant are never shortened:
-// each extends the final name of what it extends (OrderLine shortened to Line
-// gives the branch LineAlternative2; PriceAttributes follows Price). Shortening
-// runs first, and the numeric suffix then runs over the shortened names in
-// claim order. Under element order, local elements address, shipTo and billTo,
-// and an element address in each of the last two, all of anonymous types, give
-// OrderAddress, ShipTo, ShipToAddress, BillTo and BillToAddress, three paths
-// ending in address, and a choice in shipTo's type gives ShipToChoice. Each
-// arrow below to a path-named type, written → path, gives its whole path.
+// lengthen the name of a type declared in another; a document whose types the
+// package imports from an earlier target counts the same, its names claimed
+// as if the package defined them. An alias carries its owner's name, so the
+// owner's composition names an imported document's types, and Generate
+// imports a document only when the importer's own composition names them the
+// same, byte for byte. Each such type takes the suffix of its own whole path,
+// whatever the type it lies under is named (element address under element shipTo
+// under element purchaseOrder → Address, when no other path ends in address). A
+// branch, a variant, an attributes struct, an arm, and an anonymous union under
+// a variant are never shortened: each extends the final name of what it extends
+// (OrderLine shortened to Line gives the branch LineAlternative2;
+// PriceAttributes follows Price). Shortening runs first, and the numeric suffix
+// then runs over the shortened names in claim order. Under element order, local
+// elements address, shipTo and billTo, and an element address in each of the
+// last two, all of anonymous types, give OrderAddress, ShipTo, ShipToAddress,
+// BillTo and BillToAddress, three paths ending in address, and a choice in
+// shipTo's type gives ShipToChoice. Each arrow below to a path-named type,
+// written → path, gives its whole path.
 //
 // Generated identifiers are not stable before v1.0: a release may rename any
 // type or field this section names.
@@ -1007,12 +1014,6 @@
 // is, a URL or a relative loader key alike, as does one with no path relative
 // to Dir, such as one on another Windows volume. Symbolic links are not
 // resolved.
-//
-// # Planned (M9 — not yet implemented)
-//
-// Cross-target type references import across the generated packages, in
-// place of each target declaring the types of a document its Schema shares
-// with another.
 //
 // # Planned (M10 — not yet implemented)
 //
