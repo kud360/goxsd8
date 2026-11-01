@@ -8,6 +8,7 @@ import (
 	"go/token"
 	"go/types"
 	"io"
+	"os"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -149,6 +150,38 @@ func TestGenerateImportsAgreeingDocument(t *testing.T) {
 	if owned == nil || aliased == nil || !types.Identical(owned.Type(), aliased.Type()) {
 		t.Errorf("b.Item = %v, a.Item = %v, want one type", aliased, owned)
 	}
+}
+
+// TestGenerateSharesAcrossDirDepths pins that agreement is measured with each
+// header's Loc as the Loc carries it, independent of Dir: shared.xsd is read
+// by an absolute location, so a's and b's headers, rendered against Dirs of
+// different depths, climb differently, and b still imports Item, under the
+// header rendered against its own Dir. Comparing the rendered headers instead
+// makes b define Item and fails the test.
+func TestGenerateSharesAcrossDirDepths(t *testing.T) {
+	root := moduleTempDir(t)
+	schemas := filepath.Join(root, "schemas")
+	if err := os.Mkdir(schemas, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	write(t, filepath.Join(schemas, "shared.xsd"), `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">`+sharedItem.body+"</xs:schema>\n")
+	write(t, filepath.Join(schemas, "a.xsd"), `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"><xs:include schemaLocation="shared.xsd"/></xs:schema>`+"\n")
+	parse := func(name string) *xsd.Schema {
+		schema, err := xsdparser.Parse(filepath.Join(schemas, name), xsdparser.WithResolver(loader.Dir(string(filepath.Separator))))
+		if err != nil {
+			t.Fatalf("Parse(%s): %v", name, err)
+		}
+		return schema
+	}
+	srcs := generateAll(t, []Target{
+		{Schema: parse("a.xsd"), Dir: filepath.Join(root, "a"), Package: "a"},
+		{Schema: parse("shared.xsd"), Dir: filepath.Join(root, "deep", "er", "b"), Package: "b"},
+	})
+	assertLines(t, "a's file", srcs[0], []string{"// Item is generated from element item declared at ../schemas/shared.xsd:1:56."}, nil)
+	assertLines(t, "b's file", srcs[1], []string{
+		"// Item is generated from element item declared at ../../../schemas/shared.xsd:1:56.",
+		"type Item = a.Item",
+	}, nil)
 }
 
 // TestGenerateDefinesDifferingDocument pins Generate's rule for a shared
