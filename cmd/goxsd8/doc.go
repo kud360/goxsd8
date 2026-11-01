@@ -270,19 +270,23 @@
 //	    compiled alone, as a parse argument is: its path is resolved
 //	    absolute before it is read. The package declares a type for
 //	    every top-level element declaration of the -schema's composed
-//	    set, an imported or included document's among them. Pairs
-//	    whose -out lies under the same nearest go.mod share a
+//	    set, an imported or included document's among them. A set
+//	    declaring no top-level element gives a package with no type.
+//	    The comments of the generated file name each document by its
+//	    path relative to the -out directory, climbing with ../ out of
+//	    it. A rejected -schema prints its first error on stderr as
+//	    parse's does, the no-rule-to-cite lines and the
+//	    unresolved-directive lines included.
+//	    Pairs whose -out lies under the same nearest go.mod share a
 //	    document whose generated types agree, the declarations each
 //	    would emit for it being the same text: the earliest such
 //	    pair's package declares them, and each later pair's package
 //	    imports it and aliases those types. Any other pair declares
-//	    them itself. A set declaring no top-level element gives a
-//	    package with no type. The
-//	    comments of the generated file name each document by its path
-//	    relative to the -out directory, climbing with ../ out of it. A
-//	    rejected -schema prints its first error on stderr as parse's
-//	    does, the no-rule-to-cite lines and the unresolved-directive
-//	    lines included.
+//	    them itself. The later package imports the earlier by its
+//	    import path, so deleting or moving the earlier pair's -out
+//	    breaks the later one's build. Sharing is among the pairs of
+//	    one invocation: running gen once per pair declares every type
+//	    in its own package.
 //	    Every -out is checked before any -schema is compiled. The
 //	    generator's refusals of a pair exit 2 whatever any pair
 //	    compiles or declines, each on one stderr line naming the pair

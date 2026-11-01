@@ -463,6 +463,17 @@ func TestUsageCoversContract(t *testing.T) {
 			t.Errorf("usage does not state how a jsonsrc error routes (%q)", want)
 		}
 	}
+	// gen's sharing between pairs couples a later pair's package to an
+	// earlier one's, and nothing carries between invocations (gen.go calls
+	// codegen.Generate once per run), so the help names both (#3289).
+	for _, want := range []string{
+		"The later package imports the earlier by its import path, so deleting or moving the earlier pair's -out breaks the later one's build.",
+		"Sharing is among the pairs of one invocation: running gen once per pair declares every type in its own package.",
+	} {
+		if !strings.Contains(folded, want) {
+			t.Errorf("usage does not state gen's sharing coupling or its one-run-per-pair route (%q)", want)
+		}
+	}
 	// The one statement that the undecided: literal marks both withholds,
 	// which doc.go's hand-written Diagnostic lines section carries (#2893).
 	src, err := os.ReadFile("doc.go")
