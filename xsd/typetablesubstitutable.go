@@ -20,14 +20,14 @@ import (
 // quantifier — Type Alternatives rather than substitution group affiliations or
 // complex types.
 //
-// IT CANNOT RUN IN PHASE A, where resolveTypeTable resolves the same
-// alternatives' QNames (src-resolve clause 1.1). ValidlySubstitutable walks
-// {base type definition} chains and a union's transitive membership with NO
-// visited set, which resolve.go's invariant licenses only for a phase running
-// after Phase B's checkComplexBaseAcyclic, checkSimpleBaseAcyclic and
-// checkUnionMembershipAcyclic. A circular base chain is fully representable
-// while Phase A runs, so charging clause 7 there would not walk a cycle once and
-// answer wrongly — it would not terminate.
+// IT CANNOT RUN IN PHASE A, where the shared descent's walkElementDeclaration
+// resolves the same alternatives' QNames (src-resolve clause 1.1).
+// ValidlySubstitutable walks {base type definition} chains and a union's
+// transitive membership with NO visited set, which resolve.go's invariant
+// licenses only for a phase running after Phase B's checkComplexBaseAcyclic,
+// checkSimpleBaseAcyclic and checkUnionMembershipAcyclic. A circular base chain
+// is fully representable while Phase A runs, so charging clause 7 there would
+// not walk a cycle once and answer wrongly — it would not terminate.
 //
 // THE UNION-BASE READING OF cos-st-derived-ok IS SETTLED, and it is the shape
 // conditional type assignment normally takes: an alternative naming a MEMBER of
@@ -73,7 +73,7 @@ var errorTypeName = QName{Space: XMLSchemaNS, Local: "error"}
 // cosmetic: §3.3.2.1's {type table} row is a COMMON mapping rule that
 // parser/produce_typetable.go serves from the global <element> path and both
 // local ones, so a local declaration carries a table exactly as a top-level one
-// does, and Phase A's resolveTypeTable already reaches both. This is the same
+// does, and Phase A's descent already reaches both. This is the same
 // conclusion checkComponentValueConstraints reaches for clause 2 and the
 // opposite of checkSubstitutionGroupTypes' for clause 4, whose s.elements-only
 // quantifier rests on clause 3 confining a {substitution group affiliations} to
@@ -81,11 +81,12 @@ var errorTypeName = QName{Space: XMLSchemaNS, Local: "error"}
 //
 // The descent is componentwalk.go's, shared with every other phase that has one,
 // so this step supplies only the clause-7 charge and inherits which components
-// exist — including a redefine original reached through {base type definition},
-// which the hand-written copy this replaces missed (#843). Its roots are its own:
-// top-level types, then top-level element declarations (whose inline anonymous
-// complex types hold particles of their own), then top-level model group
-// definitions.
+// exist — including the anonymous complex types a {type table} owns, whose
+// local declarations can carry tables of their own, and a redefine original
+// reached through {base type definition}, which the hand-written copy this
+// replaces missed (#843). Its roots are its own: top-level types, then top-level
+// element declarations (whose inline anonymous complex types hold particles of
+// their own), then top-level model group definitions.
 //
 // Components are walked in document order (STYLE D1/D2 — no index map is
 // ranged), so the first reported failure is deterministic.
@@ -225,7 +226,7 @@ func isDeclaredTypeItself(declared, dflt TypeDefinitionOrRef) bool {
 //
 // An alternative whose {type definition} reaches no component is SKIPPED. A
 // present name that resolves to nothing was already charged src-resolve by Phase
-// A's resolveTypeTable; an ABSENT slot — nil, which a SchemaBuilder caller may
+// A's resolveTypeDefinitionSlot; an ABSENT slot — nil, which a SchemaBuilder caller may
 // leave — has no T for the clause to quantify over. Both are fail-open.
 func (s *Schema) checkTypeAlternativeSubstitutable(e ElementDeclaration, declared TypeDefinition, alt TypeAlternative, slot string) error {
 	t, ok := s.ResolvedType(alt.TypeDefinition())

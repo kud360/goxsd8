@@ -112,9 +112,12 @@ import "github.com/kud360/goxsd8/xsderr"
 // their own), then top-level model group definitions (whose particles can carry
 // element declarations with inline complex types), and finally top-level
 // attribute group definitions. Between those roots and that descent, every
-// element declaration in the schema is charged exactly once, at its own Loc,
-// which is what makes clause 2's quantifier ("all element declarations",
-// §3.3.6) complete; see this file's head for the measurement behind that shape.
+// element declaration in the schema is charged at least once, and every repeat
+// answers the same verdict at the declaration's own Loc, which is what makes
+// clause 2's quantifier ("all element declarations", §3.3.6) complete; see this
+// file's head for the measurement behind that shape. The descent enters a
+// declaration's {type table} too, so an element or attribute declaration nested
+// in a type an <alternative> owns is charged like any other.
 //
 // Since #401 materialised §3.4.2.4 clause 3, an INHERITED attribute use is a
 // member of the deriving type's {attribute uses} too, so it is re-checked at
@@ -123,11 +126,13 @@ import "github.com/kud360/goxsd8/xsderr"
 // property of the derived type and that is the position a reader is looking at.
 // The extra passes cannot change the verdict: the walk is over a set, and a use
 // that passed once passes again. The same repetition reaches the element side by
-// a different route, an extension's {content type} particle containing the
-// base's, and is harmless for the same reason and one more — e-props-correct
-// clause 2 is charged at the DECLARATION's own Loc (checkElementDefaultValid),
-// which no enclosing type can move, so neither the verdict nor the reported
-// position depends on which route reached it.
+// two different routes, an extension's {content type} particle containing the
+// base's and a {default type definition} §3.3.2.1 case 2 copied from the
+// declaration's own {type definition} (walkElementDeclaration), and is harmless
+// for the same reason and one more — e-props-correct clause 2 is charged at the
+// DECLARATION's own Loc (checkElementDefaultValid), which no enclosing type can
+// move, so neither the verdict nor the reported position depends on which route
+// reached it.
 //
 // {attribute group definitions} are rooted although walking types alone would
 // reach every REFERENCED group's uses — this phase runs after the attribute

@@ -1000,7 +1000,7 @@ func (e *emitter) goType(subject, typed string, loc xsderr.Loc, t *xsd.SimpleTyp
 	case xsd.Union:
 		return e.unionType(subject, typed, loc, t, under)
 	default:
-		return emittedType{}, decline(loc, constructAbsentVariety, typed)
+		return emittedType{}, fmt.Errorf("%s at %s: absent {variety}, which st-props-correct clause 1 (Structures §3.16.6.1) and the Datatypes §4.1.1 tableau give no simple type but xs:anySimpleType, a special type", typed, loc)
 	}
 	atomic, err := e.atomicType(subject, typed, loc, t)
 	if err != nil {
@@ -1054,7 +1054,7 @@ func (e *emitter) atomicType(subject, typed string, loc xsderr.Loc, t *xsd.Simpl
 		return "", fmt.Errorf("%s at %s: %w", subject, loc, err)
 	}
 	if primitive == nil {
-		return "", decline(loc, constructNoPrimitive, typed)
+		return "", fmt.Errorf("%s at %s: atomic with no {primitive type definition}, which st-props-correct clause 1 (Structures §3.16.6.1) and the Datatypes §4.1.1 tableau give no atomic type but xs:anyAtomicType, a special type", typed, loc)
 	}
 	switch primitive.Name() {
 	case stringPrimitive, anyURIPrimitive:

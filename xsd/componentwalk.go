@@ -32,9 +32,10 @@ import "github.com/kud360/goxsd8/xsderr"
 // s.attributes, because a global attribute declaration nests only a simple {type
 // definition} and neither phase charges a simple type — a-props-correct clause 2
 // against the declaration itself is checkAttributeDeclarationDefaults'. What the
-// descent follows is OWNERSHIP — an inline type definition, an attribute use's
-// local declaration, a particle's inline term, the redefined original a
-// ResolvedAttributeGroup holds — and an owned component must pre-exist the slot
+// descent follows is OWNERSHIP — an inline type definition, an inline Type
+// Alternative {type definition} in an element declaration's {type table}, an
+// attribute use's local declaration, a particle's inline term, the redefined
+// original a ResolvedAttributeGroup holds — and an owned component must pre-exist the slot
 // holding it, which is what makes the walked structure a finite tree.
 //
 // NO VISITED SET AND NO CYCLE GUARD (STYLE D4, PRINCIPLES 9). The edges that
@@ -234,16 +235,33 @@ func (w componentWalk) walkAttributeDeclaration(a AttributeDeclaration) error {
 	return w.enterTypeDefinition(ref)
 }
 
-// walkElementDeclaration charges one Element Declaration and then enters its
-// inline {type definition}. The slot's own verdict comes FIRST, before the
-// declaration's, because a declaration whose type= names nothing has no type for
-// any later clause to predicate over.
+// walkElementDeclaration charges every type slot an Element Declaration owns,
+// then the declaration itself, then enters each slot's inline arm. The slots are
+// ownedTypeSlots' (elementdeclaration.go): its {type definition}, each {type
+// table}.{alternatives} member's, then the {type table}.{default type
+// definition}'s, in that order for both the charges and the descent. Every slot's
+// verdict comes FIRST, before the declaration's, because a declaration whose
+// type= names nothing has no type for any later clause to predicate over; every
+// charge is positioned at the declaration's own Loc, since neither a TypeTable
+// nor a TypeAlternative retains one.
+//
+// Where §3.3.2.1's case 2 synthesized the {default type definition} from the
+// declaration's own {type definition}, that component is charged and entered
+// twice. ownedTypeSlots states why it enumerates the slot unconditionally; every
+// phase driving this walk only reads the tree and answers the second visit as it
+// did the first, at the same Loc.
 func (w componentWalk) walkElementDeclaration(e ElementDeclaration) error {
-	ref := e.TypeDefinition()
+	var table *TypeTable
+	if t, hasTable := e.TypeTable(); hasTable {
+		table = &t
+	}
+	slots := ownedTypeSlots(e.TypeDefinition(), table)
 	if w.typeDefinitionSlot != nil {
-		if err := w.typeDefinitionSlot(ref, e.Loc(),
-			"element declaration "+e.Name().String()+" {type definition}"); err != nil {
-			return err
+		for _, slot := range slots {
+			if err := w.typeDefinitionSlot(slot.ref, e.Loc(),
+				"element declaration "+e.Name().String()+" "+slot.property); err != nil {
+				return err
+			}
 		}
 	}
 	if w.elementDeclaration != nil {
@@ -251,7 +269,12 @@ func (w componentWalk) walkElementDeclaration(e ElementDeclaration) error {
 			return err
 		}
 	}
-	return w.enterTypeDefinition(ref)
+	for _, slot := range slots {
+		if err := w.enterTypeDefinition(slot.ref); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // walkParticle descends one particle's {term}, carrying loc — the enclosing

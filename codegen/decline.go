@@ -72,9 +72,7 @@ type construct uint8
 
 // The construct values, in the order of their declining sites in emit.go.
 const (
-	constructAbsentVariety construct = iota + 1
-	constructNoPrimitive
-	constructUncoveredPrimitive
+	constructUncoveredPrimitive construct = iota + 1
 	constructVacuousParticle
 	constructAbstractLocal
 	constructValueCycle
@@ -84,8 +82,6 @@ const (
 // Construct.String returns, and the format its decline's detail is rendered
 // from. Index 0, the invalid construct, holds neither.
 var constructs = [...]struct{ name, format string }{
-	constructAbsentVariety:      {"absent {variety}", "%s, of absent {variety}"},
-	constructNoPrimitive:        {"no {primitive type definition}", "%s, with no {primitive type definition}"},
 	constructUncoveredPrimitive: {"uncovered primitive", "%s, whose {primitive type definition} is %s"},
 	constructVacuousParticle:    {"particle with {max occurs} 0", "a particle of %s with {max occurs} 0 in %s"},
 	constructAbstractLocal:      {"local element declaration with {abstract} true", "%s with {abstract} true in %s"},

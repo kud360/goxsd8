@@ -173,10 +173,8 @@ func TestWalkChargesElementOwnedType(t *testing.T) {
 }
 
 // TestWalkChargesAlternativeOwnedType pins the second owning slot, the inline
-// <complexType> of an <alternative> (§3.12.2 declare-ta's inline arm). It is a
-// slot componentwalk.go's shared descent does not reach at all —
-// walkElementDeclaration enters only e.TypeDefinition() — so routing these three
-// passes through that walk would have left this shape uncharged.
+// <complexType> of an <alternative> (§3.12.2 declare-ta's inline arm), which
+// complexTypeWalk reaches through ownedTypeSlots.
 func TestWalkChargesAlternativeOwnedType(t *testing.T) {
 	t.Run("ct-props-correct clause 4", func(t *testing.T) {
 		expectRule(t, cwFinalize(t, func(b *SchemaBuilder) {
