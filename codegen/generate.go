@@ -9,6 +9,8 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"strconv"
+	"strings"
 
 	"github.com/kud360/goxsd8/xsd"
 )
@@ -31,7 +33,14 @@ type Target struct {
 	// non-nil; CheckTargets does not read it.
 	Schema *xsd.Schema
 	// Dir is the output directory, non-empty, resolved relative to the
-	// process working directory when it is not absolute.
+	// process working directory when it is not absolute. It lies in a Go
+	// module, and its import path is derived from that module: the module
+	// path that the module directive of the nearest go.mod at or above Dir
+	// made absolute declares, joined by "/" with Dir's slash-separated path
+	// relative to that go.mod's directory, or the module path alone when Dir
+	// is that directory. The walk up from Dir passes through every part of it
+	// that does not exist yet. The path is not checked against the go
+	// command's rules for import paths.
 	Dir string
 	// Package is the emitted package's name: a Go identifier that is neither a
 	// keyword, the blank identifier, nor main.
@@ -86,10 +95,40 @@ func (t Target) failed(i int, err error) error {
 // (§3.17.1), and with them its file's top-level types, include those of every
 // imported or included document, the overriding declaration standing in for
 // each one an <xs:override> replaces, and a Schema with none gives a file that
-// declares no type. Targets are generated independently: no emitted package
-// imports another, so two targets whose Schemas share a document each declare
-// types for its top-level element declarations, not necessarily under the same
-// names.
+// declares no type.
+//
+// A target imports the declarations of a document it shares with an earlier
+// target whose emitted declarations of it agree, and defines every other
+// document's itself. A declaration belongs to the document whose Loc its
+// header renders ("Naming"); a datatype struct, PrecisionDecimal with its
+// interface and arms, a raw-content struct, MixedChild, Nillable with its arms,
+// and a variant of a builtin member render none and belong to no document. A
+// target T imports a document D from the earliest target O before it that
+// defines D itself and agrees with T on D: the declarations T and O emit for D
+// are the same text, and so are the declarations each set reaches,
+// transitively: through the type names its text names, a sealed interface
+// reaching each declaration carrying its marker method and an arm its
+// interface, and the type of a nillable top-level declaration whose nilled
+// value is Nillable over it reaching Nillable; every text is compared with its
+// header's Loc as the Loc carries it, so independent of Dir. Each document
+// that closure reaches must then be taken by T from the package O takes it
+// from, and Generate withdraws the imports that break this until none does.
+// T's package imports O's by the import path Target.Dir's doc derives, and
+// writes, in place of each declaration of D, the alias type N = imp.N under
+// the header that declaration carries; imp is O's Package unless that name is
+// taken, and otherwise that name followed by the smallest numeric suffix from
+// 2 that is not. A name is taken when it is a Go predeclared identifier, big,
+// the name of one of T's own top-level types, aliases included, or the import
+// name of an earlier owner in slice order. A target that imports a document
+// writes a declaration belonging to no document only when one of its own
+// definitions reaches it, reaching read as agreement reads it above. A
+// document that agrees with no earlier target defining it, or breaks the
+// closure condition, the target defines itself exactly as it would alone: two
+// targets whose emitted declarations of a shared document differ, in a name or
+// in a shape, each declare its types, and one URI composed into different
+// components, as a chameleon include is, renders different declarations and
+// is never shared. A target that imports nothing writes the file it would write
+// alone.
 //
 // The file is gofmt-formatted. Generate writes no go.mod and adds no
 // //go:generate line: the module the caller puts Dir in owns both.
@@ -127,10 +166,10 @@ func (t Target) failed(i int, err error) error {
 // failure, in that order, a phase-2 fault alone; each opens with the failing
 // target's name: its Name, or "target N" for the target at slice index N when
 // Name is empty. An unnamed target's error opens "codegen: target N: ", a
-// named one's "<Name>: " with no "codegen: " before it. The refusal of a Dir
-// equal to an earlier target's names that earlier target the same way. Each
-// element is a *TargetError, which errors.As retrieves: its Index method
-// returns N, and it unwraps to the failure the opening precedes.
+// named one's "<Name>: " with no "codegen: " before it. The refusals of a Dir,
+// or of its import path, equal to an earlier target's name that earlier target
+// the same way. Each element is a *TargetError, which errors.As retrieves: its
+// Index method returns N, and it unwraps to the failure the opening precedes.
 //
 // A decline is a generator limitation, not a schema fault: it is a
 // *DeclineError, never an *xsderr.Error, and it wraps errors.ErrUnsupported,
@@ -149,45 +188,55 @@ func (t Target) failed(i int, err error) error {
 // failure that can leave some targets written and others not.
 func Generate(targets []Target) error {
 	var errs []error
-	sources := make([][]byte, len(targets))
+	units := make([]*unit, len(targets))
 	for i, t := range targets {
-		src, declines, err := prepare(t, targets[:i])
+		u, declines, err := prepare(t, targets[:i])
 		for _, d := range declines {
 			errs = append(errs, t.failed(i, d))
 		}
 		if err != nil {
 			return errors.Join(append(errs, t.failed(i, err))...)
 		}
-		sources[i] = src
+		units[i] = u
 	}
 	if len(errs) > 0 {
 		return errors.Join(errs...)
+	}
+	for i, t := range targets {
+		if err := link(units, i); err != nil {
+			return errors.Join(t.failed(i, err))
+		}
 	}
 	for i, t := range targets {
 		if err := os.MkdirAll(t.Dir, 0o755); err != nil {
 			return errors.Join(t.failed(i, fmt.Errorf("creating %s: %w", t.Dir, err)))
 		}
 		path := filepath.Join(t.Dir, fileName)
-		if err := os.WriteFile(path, sources[i], 0o644); err != nil {
+		if err := os.WriteFile(path, units[i].src, 0o644); err != nil {
 			return errors.Join(t.failed(i, fmt.Errorf("writing %s: %w", path, err)))
 		}
 	}
 	return nil
 }
 
-// prepare is phase 1 for one target: it checks t's Schema, then checkTarget
-// against the targets before it, then returns emit's triple, so a nil Schema
-// or a refusal, returned as err, precedes and suppresses the target's
-// declines.
-func prepare(t Target, earlier []Target) (src []byte, declines []*DeclineError, err error) {
+// prepare is phase 1 for one target before link: it checks t's Schema, then
+// checkTarget against the targets before it, then returns emit's declines
+// and failure, or the unit of its declarations, so a nil Schema or a refusal,
+// returned as err, precedes and suppresses the target's declines.
+func prepare(t Target, earlier []Target) (u *unit, declines []*DeclineError, err error) {
 	if t.Schema == nil {
 		return nil, nil, errors.New("the Schema field is nil")
 	}
-	base, err := checkTarget(t, earlier)
+	base, path, err := checkTarget(t, earlier)
 	if err != nil {
 		return nil, nil, err
 	}
-	return emit(t.Schema, t.Package, base)
+	decls, declines, err := emit(t.Schema)
+	if err != nil || len(declines) > 0 {
+		return nil, declines, err
+	}
+	u, err = newUnit(t.Package, base, path, decls)
+	return u, nil, err
 }
 
 // CheckTargets reports, without reading any Schema and without writing, the
@@ -199,13 +248,17 @@ func prepare(t Target, earlier []Target) (src []byte, declines []*DeclineError, 
 // non-empty Dir after filepath.Clean, the earlier target refused or not; when
 // filepath.Abs cannot make its Dir absolute; and when its Dir exists and is not a
 // directory, or holds an xsd_gen.go that is not a regular file or that Generate's
-// overwrite rule does not let it replace, or either cannot be checked or read.
-// Generate states how the duplicate-Dir refusal names the earlier target and the
-// overwrite rule.
+// overwrite rule does not let it replace, or either cannot be checked or read;
+// when no go.mod lies in its Dir or any directory above it; when the nearest
+// one cannot be checked or read, or holds no module directive; and when the
+// import path Dir's doc derives for it equals the one derived for an earlier
+// target, the earlier target refused or not. Generate states how the
+// duplicate-Dir and duplicate-import-path refusals name the earlier target,
+// and the overwrite rule.
 func CheckTargets(targets []Target) []error {
 	var errs []error
 	for i, t := range targets {
-		if _, err := checkTarget(t, targets[:i]); err != nil {
+		if _, _, err := checkTarget(t, targets[:i]); err != nil {
 			errs = append(errs, t.failed(i, err))
 		}
 	}
@@ -214,36 +267,132 @@ func CheckTargets(targets []Target) []error {
 
 // checkTarget is the one encoding of the refusals CheckTargets' doc lists, in
 // that order, for t against the targets before it. It reads no Schema and
-// returns Dir made absolute.
-func checkTarget(t Target, earlier []Target) (base string, err error) {
+// returns Dir made absolute and the import path Dir's doc derives.
+func checkTarget(t Target, earlier []Target) (base, path string, err error) {
 	if t.Dir == "" {
-		return "", errors.New("no output directory given")
+		return "", "", errors.New("no output directory given")
 	}
 	if token.IsKeyword(t.Package) {
-		return "", fmt.Errorf("the package name %q is a Go keyword", t.Package)
+		return "", "", fmt.Errorf("the package name %q is a Go keyword", t.Package)
 	}
 	if t.Package == "_" {
-		return "", errors.New(`the package name "_" is the blank identifier`)
+		return "", "", errors.New(`the package name "_" is the blank identifier`)
 	}
 	if !token.IsIdentifier(t.Package) {
-		return "", fmt.Errorf("the package name %q is not a Go identifier", t.Package)
+		return "", "", fmt.Errorf("the package name %q is not a Go identifier", t.Package)
 	}
 	if t.Package == "main" {
-		return "", errors.New(`the package name is "main", but the emitted package declares no func main and would not build`)
+		return "", "", errors.New(`the package name is "main", but the emitted package declares no func main and would not build`)
 	}
 	for j, e := range earlier {
 		if e.Dir != "" && filepath.Clean(e.Dir) == filepath.Clean(t.Dir) {
-			return "", fmt.Errorf("the output directory %s is also the output directory of %s", t.Dir, targetName(e.Name, j))
+			return "", "", fmt.Errorf("the output directory %s is also the output directory of %s", t.Dir, targetName(e.Name, j))
 		}
 	}
 	base, err = filepath.Abs(t.Dir)
 	if err != nil {
-		return "", fmt.Errorf("resolving the output directory %s: %w", t.Dir, err)
+		return "", "", fmt.Errorf("resolving the output directory %s: %w", t.Dir, err)
 	}
 	if err := checkDestination(t.Dir); err != nil {
-		return "", err
+		return "", "", err
 	}
-	return base, nil
+	path, err = importPath(t.Dir, base)
+	if err != nil {
+		return "", "", err
+	}
+	for j, e := range earlier {
+		if earlierPath, ok := derivedPath(e.Dir); ok && earlierPath == path {
+			return "", "", fmt.Errorf("the output directory %s has the import path %s, which is also the import path of %s", t.Dir, path, targetName(e.Name, j))
+		}
+	}
+	return base, path, nil
+}
+
+// derivedPath is the import path Target.Dir's doc derives for dir, false when
+// dir is empty or the derivation fails.
+func derivedPath(dir string) (string, bool) {
+	if dir == "" {
+		return "", false
+	}
+	base, err := filepath.Abs(dir)
+	if err != nil {
+		return "", false
+	}
+	path, err := importPath(dir, base)
+	return path, err == nil
+}
+
+// importPath derives the import path Target.Dir's doc states for the output
+// directory dir, base being dir made absolute: it walks from base up to the
+// filesystem root, passing through each directory holding no go.mod, and
+// reads the first go.mod it meets (modulePackage).
+func importPath(dir, base string) (string, error) {
+	for mod := base; ; {
+		gomod := filepath.Join(mod, "go.mod")
+		_, err := os.Stat(gomod)
+		if err == nil {
+			return modulePackage(gomod, mod, base)
+		}
+		if !errors.Is(err, fs.ErrNotExist) {
+			return "", fmt.Errorf("checking %s: %w", gomod, err)
+		}
+		parent := filepath.Dir(mod)
+		if parent == mod {
+			return "", fmt.Errorf("no go.mod lies in the output directory %s or any directory above it, so it has no import path", dir)
+		}
+		mod = parent
+	}
+}
+
+// modulePackage returns the import path of the absolute directory base in
+// the module whose go.mod, at gomod, lies in mod, base itself or one of its
+// ancestors.
+func modulePackage(gomod, mod, base string) (string, error) {
+	data, err := os.ReadFile(gomod)
+	if err != nil {
+		return "", fmt.Errorf("reading %s: %w", gomod, err)
+	}
+	module, ok := moduleDirective(string(data))
+	if !ok {
+		return "", fmt.Errorf("%s holds no module directive", gomod)
+	}
+	rel, err := filepath.Rel(mod, base)
+	if err != nil {
+		return "", fmt.Errorf("resolving %s against %s: %w", base, mod, err)
+	}
+	if rel == "." {
+		return module, nil
+	}
+	return module + "/" + filepath.ToSlash(rel), nil
+}
+
+// moduleDirective returns the module path that the first line of the go.mod
+// content data whose first word is module declares, false when there is no
+// such line or it declares none. It declares one when it holds the word
+// module, then the path, bare or as a Go string literal, holding no white
+// space and no //, then at most a // comment; the block form module ( ... )
+// declares none.
+func moduleDirective(data string) (string, bool) {
+	for _, line := range strings.Split(data, "\n") {
+		line, _, _ = strings.Cut(line, "//")
+		fields := strings.Fields(line)
+		if len(fields) == 0 || fields[0] != "module" {
+			continue
+		}
+		if len(fields) != 2 || fields[1] == "(" {
+			return "", false
+		}
+		path := fields[1]
+		if path[0] != '"' && path[0] != '`' {
+			return path, true
+		}
+		unquoted, err := strconv.Unquote(path)
+		if err != nil || unquoted == "" {
+			return "", false
+		}
+		return unquoted, true
+	}
+	return "", false
 }
 
 // checkDestination fails unless phase 2 may write xsd_gen.go into dir: dir is

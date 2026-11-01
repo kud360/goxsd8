@@ -101,6 +101,10 @@ func run(stdout io.Writer, args []string) (err error) {
 			err = errors.Join(err, fmt.Errorf("removing the output directory %s: %w", out, rerr))
 		}
 	}()
+	// Generate refuses a Dir outside a Go module (codegen.Target.Dir).
+	if err := os.WriteFile(filepath.Join(out, "go.mod"), []byte("module gencensus\n"), 0o644); err != nil {
+		return fmt.Errorf("writing the output directory's go.mod: %w", err)
+	}
 	rep := census(root, docs, out)
 	return printReport(stdout, rep, *withPaths)
 }
@@ -143,8 +147,8 @@ func (r report) declined() int {
 func (r report) assembled() int { return r.generated + r.declined() + len(r.other) }
 
 // census assembles and generates each of docs, slash paths relative to root,
-// writing into out. A document's outcome is the census's data, never an
-// operational error, so census returns none.
+// writing into out, a directory in a Go module. A document's outcome is the
+// census's data, never an operational error, so census returns none.
 func census(root string, docs []string, out string) report {
 	rep := report{root: root, found: len(docs)}
 	// index maps a construct to its position in rep.tallies, for lookup only;
