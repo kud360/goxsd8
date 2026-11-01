@@ -99,6 +99,10 @@
 //   - attribute uses and attribute wildcards, beside any content above
 //   - facets, {assertions}, value constraints and identity constraints
 //
+// No mode generates the part of a schema that avoids a declined construct;
+// [Generate] states what a decline does, and "Declined today" below states
+// each construct's reason.
+//
 // Declined today, each construct named as [Construct.String] prints it for a
 // [DeclineError]'s [DeclineError.Construct] (see [Construct] for comparing
 // them), each but absent {variety} and no {primitive type definition} a
