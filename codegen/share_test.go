@@ -298,6 +298,42 @@ func TestGenerateUnattributedClosure(t *testing.T) {
 	assertLines(t, "b's file", srcs[1], []string{"type U interface {", "type UString2 string", "type V U"}, []string{"import", " = "})
 }
 
+// TestGenerateNillableRoot pins that the type of a nillable top-level
+// declaration reaches Nillable and its arms though its code names none of
+// them: a and b share shared.xsd, b also declares the nillable note, and c
+// compiles b's schema. b defines Note, NoteAttributes and the Nillable family
+// that Note's nilled value needs; c aliases Note and NoteAttributes from b and
+// declares no family, Note's nilled value being b's Nillable; all three
+// packages type-check together.
+func TestGenerateNillableRoot(t *testing.T) {
+	docs := []schemaDoc{
+		sharedItem,
+		{location: "a.xsd", body: `<xs:include schemaLocation="shared.xsd"/>`},
+		{location: "b.xsd", body: `<xs:include schemaLocation="shared.xsd"/>` +
+			`<xs:element name="note" nillable="true"><xs:complexType><xs:attribute name="lang" type="xs:string"/></xs:complexType></xs:element>`},
+	}
+	root := moduleTempDir(t)
+	srcs := generateAll(t, []Target{
+		{Schema: parseDocs(t, "a.xsd", docs), Dir: filepath.Join(root, "a"), Package: "a"},
+		{Schema: parseDocs(t, "b.xsd", docs), Dir: filepath.Join(root, "b"), Package: "b"},
+		{Schema: parseDocs(t, "b.xsd", docs), Dir: filepath.Join(root, "c"), Package: "c"},
+	})
+	assertLines(t, "a's file", srcs[0], nil, []string{"Nillable", "Nilled", "Content"})
+	assertLines(t, "b's file", srcs[1], []string{
+		"type Item = a.Item",
+		"type Note struct {",
+		"type Nillable[T, A any] interface {",
+		"type Nilled[T, A any] struct {",
+		"type Content[T, A any] struct {",
+	}, nil)
+	assertLines(t, "c's file", srcs[2], []string{
+		"type Item = a.Item",
+		"type Note = b.Note",
+		"type NoteAttributes = b.NoteAttributes",
+	}, []string{"Nillable", "Nilled", "Content"})
+	checkTogether(t, []string{"example.com/m/a", "example.com/m/b", "example.com/m/c"}, srcs)
+}
+
 // TestGenerateImportNames pins the import name rule: the third target imports
 // p.xsd from the first and q.xsd from the second, both of Package Item, and
 // declares its own type Item, so the first owner takes Item2 and the second,

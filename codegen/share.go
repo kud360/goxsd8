@@ -28,9 +28,9 @@ type unit struct {
 }
 
 // analysis is what one declaration's code names: refs, the indices, ascending,
-// of the package's other declarations whose type names its code names or
-// whose marker method relates to it — an arm's interface, or an interface's
-// arms — and usesBig, whether it names a math/big type.
+// of the package's other declarations whose type names its code or its
+// reaches name, or whose marker method relates to it — an arm's interface, or
+// an interface's arms — and usesBig, whether it names a math/big type.
 type analysis struct {
 	refs    []int
 	usesBig bool
@@ -64,7 +64,8 @@ func newUnit(pkg, base, path string, decls []declaration) (*unit, error) {
 // its code: the identifiers in type positions, never a field's or a method's
 // name, that name another declaration, the selectors qualified by big, and the
 // marker methods relating an arm to its interface — an interface's method
-// names and the name of the method a declaration's code declares.
+// names and the name of the method a declaration's code declares. A
+// declaration's reaches count as identifiers its code names.
 func analyze(decls []declaration) ([]analysis, error) {
 	shapes := make([]codeShape, len(decls))
 	// index, interfaces and arms are lookup tables only and never iterated
@@ -90,7 +91,7 @@ func analyze(decls []declaration) ([]analysis, error) {
 	out := make([]analysis, len(decls))
 	for i, s := range shapes {
 		var refs []int
-		for _, name := range s.idents {
+		for _, name := range slices.Concat(s.idents, decls[i].reaches) {
 			if j, ok := index[name]; ok && j != i {
 				refs = append(refs, j)
 			}
