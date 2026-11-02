@@ -1,0 +1,4 @@
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" targetNamespace="urn:b">
+  <xs:import namespace="urn:n" schemaLocation="note.xsd"/>
+  <xs:element name="bill" type="xs:string"/>
+</xs:schema>
