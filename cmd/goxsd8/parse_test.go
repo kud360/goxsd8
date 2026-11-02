@@ -832,9 +832,9 @@ func TestParseFlagAfterPositional(t *testing.T) {
 	if stdout.Len() != 0 {
 		t.Errorf("stdout = %q, want empty: nothing is compiled once an argument is diagnosed", stdout.String())
 	}
-	want := fmt.Sprintf(flagAfterPositionalFmt, "parse", "-q")
-	if !strings.Contains(stderr.String(), want) {
-		t.Errorf("stderr = %q, want it to contain %q", stderr.String(), want)
+	want := fmt.Sprintf(flagAfterPositionalFmt, "parse", "-q") + "\n" + parseUsageLine + "\n" + helpPointer + "\n"
+	if stderr.String() != want {
+		t.Errorf("stderr = %q, want %q", stderr.String(), want)
 	}
 }
 

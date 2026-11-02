@@ -168,6 +168,27 @@ func TestSubcommandDiagnosisPrintsSynopsis(t *testing.T) {
 	}
 }
 
+// TestStdoutFaultPrintsSynopsis pins the I/O-fault arm of #3110: a failed
+// write of parse's summary or of validate's report is charged exit 2 inside
+// the subcommand, so its line carries the synopsis too.
+func TestStdoutFaultPrintsSynopsis(t *testing.T) {
+	for _, c := range []struct {
+		args []string
+		want string
+	}{
+		{[]string{"parse", "testdata/order.xsd"}, "goxsd8: parse: writing the summary for testdata/order.xsd: closed pipe\n" + parseUsageLine + "\n" + helpPointer + "\n"},
+		{[]string{"validate", "-schema", "testdata/order.xsd", "testdata/order-invalid.xml"}, "goxsd8: validate: writing the report of testdata/order-invalid.xml: closed pipe\n" + validateUsageLine + "\n" + helpPointer + "\n"},
+	} {
+		var stderr bytes.Buffer
+		if code := run(c.args, errWriter{}, &stderr); code != exitUsage {
+			t.Errorf("run(%q) = %d, want %d", c.args, code, exitUsage)
+		}
+		if stderr.String() != c.want {
+			t.Errorf("run(%q) stderr = %q, want %q", c.args, stderr.String(), c.want)
+		}
+	}
+}
+
 // TestHelpPointerResolvesOutsideTheModule pins #870's second half: the remedy
 // a usage error names must work where an installed binary runs. A `go doc`
 // invocation does not — it needs the module tree — so no message may name one.

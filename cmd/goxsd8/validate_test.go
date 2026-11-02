@@ -1095,6 +1095,9 @@ func TestValidateFormatVocabulary(t *testing.T) {
 			if !strings.Contains(stderr.String(), c.want) {
 				t.Errorf("stderr = %q, want it to contain %q", stderr.String(), c.want)
 			}
+			if !strings.HasSuffix(stderr.String(), "\n"+validateUsageLine+"\n"+helpPointer+"\n") {
+				t.Errorf("stderr = %q, want it to end with validateUsageLine and helpPointer", stderr.String())
+			}
 		})
 	}
 }
