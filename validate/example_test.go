@@ -103,10 +103,9 @@ func ExampleValidator_ConditionallySelected() {
 }
 
 // ExampleResult assesses one XML document end to end and folds both of its
-// lists into one report, as an HTTP 422 body or a CI report would: the qty
-// child is not an xs:int, which the assessment charges, and the order's
-// assertion reads a variable this engine does not bind there, which it
-// declines.
+// lists into one report: the qty child is not an xs:int, which the assessment
+// charges, and the order's assertion reads a variable this engine does not bind
+// there, which it declines.
 func ExampleResult() {
 	const orderXSD = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
   <xs:element name="order">
