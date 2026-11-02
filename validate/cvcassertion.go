@@ -132,14 +132,14 @@ func (w *walk) elementAssertions(e Element, asserts *assertionCheck, content *co
 			i+1, len(asserts.tests), typeName(asserts.ct), c.a.Test().Expression())
 		if lack != nil {
 			w.decline("assessing element", e.Name(), e.Loc(), ruleCvcAssertion, "",
-				"%s was not evaluated: %s, so whether the element is ·valid· with respect to it, as cvc-complex-type clause 6 requires, is undecided",
-				site, lack.declined(e.Name()))
+				"element %s was not assessed against %s which was not evaluated: %s, so cvc-complex-type clause 6 is undecided for that assertion",
+				e.Name(), site, lack.declined(e.Name()))
 			continue
 		}
 		if c.declined != nil {
 			w.decline("assessing element", e.Name(), e.Loc(), ruleCvcAssertion, "",
-				"%s was not evaluated: this engine's XPath evaluator declined it because %s, so whether the element %s is ·valid· with respect to it, as cvc-complex-type clause 6 requires, is undecided",
-				site, c.declined, e.Name())
+				"element %s was not assessed against %s which was not evaluated: this engine's XPath evaluator declined it because %s, so cvc-complex-type clause 6 is undecided for that assertion",
+				e.Name(), site, c.declined)
 			continue
 		}
 		if c.test.Evaluate(w.backend, w.schema, e, in.yield, asserts.yieldChildren, c.tally, in.value, w.now) {
@@ -147,7 +147,7 @@ func (w *walk) elementAssertions(e Element, asserts *assertionCheck, content *co
 			continue
 		}
 		w.res.violations = append(w.res.violations, xsderr.New(ruleCvcAssertion, e.Loc(),
-			"the element %s is not ·valid· with respect to %s which did not evaluate to true without raising a dynamic or type error, as Assertion Satisfied (§3.13.4.1) requires of each assertion cvc-complex-type clause 6 quantifies over",
+			"the element %s is not ·valid· with respect to %s which did not evaluate to true without raising a dynamic or type error, as cvc-assertion requires of each assertion cvc-complex-type clause 6 quantifies over",
 			e.Name(), site))
 		w.logDecision("assessing element", e.Name(), e.Loc(), ruleCvcAssertion, "", "charged")
 	}

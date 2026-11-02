@@ -726,7 +726,7 @@ func TestOutOfFamilyAssertionIsDeclined(t *testing.T) {
 	} {
 		schema := aTyped(t, []string{"x", "integer"}, tc.expr)
 		res := aAssess(t, schema, aRoot("x", "500"))
-		wantRecords(t, res, "cvc-assertion", loc(1, 1), "whose {test} is "+strconv.Quote(tc.expr)+", was not evaluated: this engine's XPath evaluator declined it because "+tc.why+", so whether the element root is ·valid·")
+		wantRecords(t, res, "cvc-assertion", loc(1, 1), "whose {test} is "+strconv.Quote(tc.expr)+", which was not evaluated: this engine's XPath evaluator declined it because "+tc.why+", so cvc-complex-type clause 6 is undecided")
 	}
 }
 
@@ -801,7 +801,7 @@ func TestAssertionOverAnUndecidedDefaultedAttributeIsDeclined(t *testing.T) {
 	}
 	last := len(undecided) - 1
 	if last < 0 || undecided[last].Rule() != "cvc-assertion" ||
-		!strings.HasPrefix(undecided[last].Msg(), "assertion 1 of 1 in the {assertions} of the ·governing type definition· RootType, whose {test} is \"not(@x)\", was not evaluated: the ·defaulted attribute· x of the element root has no ·actual value·") {
+		!strings.HasPrefix(undecided[last].Msg(), "element root was not assessed against assertion 1 of 1 in the {assertions} of the ·governing type definition· RootType, whose {test} is \"not(@x)\", which was not evaluated: the ·defaulted attribute· x of the element root has no ·actual value·") {
 		t.Fatalf("Unevaluated() = %v, want the assertion declined last for the defaulted x's missing ·actual value·", messages(undecided))
 	}
 }
