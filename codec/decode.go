@@ -39,9 +39,13 @@ var (
 // character children. Where the post-schema-validation infoset supplies a
 // value it is that value, the {lexical form} of a value constraint under the
 // same normalization: for an absent attribute whose use has an effective value
-// constraint (§3.4.4.2 key-dflt-att, §3.4.5.1 sic-attrDefault), and for an
-// element with neither element nor character children whose declaration has a
-// {value constraint} (§3.3.4.3 cvc-elt clause 5.1, §3.3.5.4 sic-eltType).
+// constraint (§3.5.4 key-evc; §3.4.4.2 key-dflt-att, §3.4.5.1
+// sic-attrDefault), and for an element with neither element nor character
+// children whose declaration has a {value constraint} (§3.3.4.3 cvc-elt clause
+// 5.1, §3.3.5.4 sic-eltType). So an optional attribute use with an effective
+// value constraint never decodes to a nil *string; a whitespace-only element
+// has a character child and holds its own value; and an element absent from
+// the instance supplies nothing, its field nil or not appended to.
 //
 // The first of these that applies is returned:
 //
@@ -524,9 +528,7 @@ func (b *binding) fill(r *xmltree.Reader, root *xmltree.StartElement, out reflec
 
 // child sets the field of the child element start, reading its character
 // children from r up to its end tag: their ·normalized value·, or the
-// field's supplied value when there are none, as Decode's doc states. A
-// whitespace-only run is a character child, so it never takes the supplied
-// value.
+// field's supplied value when there are none, as Decode's doc states.
 func (b *binding) child(r *xmltree.Reader, start *xmltree.StartElement, out reflect.Value) error {
 	if err := checkXsiType(start); err != nil {
 		return err

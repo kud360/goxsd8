@@ -54,16 +54,8 @@
 //     lose what the derived type governs: under xsi:type="xs:token" an
 //     xs:string element's value collapses. That refusal is permanent.
 //
-// A value constraint, default or fixed, decodes under the
-// post-schema-validation infoset. An absent attribute whose use has an
-// effective value constraint (Structures §3.5.4 key-evc) holds the
-// constraint's {lexical form} normalized by its type's whiteSpace (§3.4.4.2
-// key-dflt-att, §3.4.5.1 sic-attrDefault), so an optional use's *string field
-// is never nil. An element with neither element nor character children holds
-// its declaration's {value constraint}'s {lexical form} normalized the same
-// way (§3.3.4.3 cvc-elt clause 5.1, §3.3.5.4 sic-eltType); a whitespace-only
-// element has a character child and holds its own value. An absent element
-// has no value. Decode never checks a fixed value: the validator has.
+// A value constraint of an element or attribute use, default or fixed,
+// decodes; [Decode]'s doc states the value its field holds.
 //
 // Every error about the instance carries its instance Loc: a violation's,
 // an undecided check's, and a decline's, which also names its construct and,
