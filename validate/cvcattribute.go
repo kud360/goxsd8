@@ -1,6 +1,8 @@
 package validate
 
 import (
+	"fmt"
+
 	"github.com/kud360/goxsd8/value"
 	"github.com/kud360/goxsd8/xpath"
 	"github.com/kud360/goxsd8/xsd"
@@ -191,7 +193,7 @@ func (w *walk) declaredAttribute(a Attribute, e Element, d xsd.AttributeDeclarat
 	}
 	decided, verdict := w.stringValid(st, a.Value(), elementContext{owner: e}, a.Loc())
 	if !decided {
-		if w.declineAssertions(verdict, "assessing attribute", a.Name(), a.Loc(), "cvc-attribute clause 3") {
+		if w.declineAssertions(verdict, "assessing attribute", a.Name(), a.Loc(), fmt.Sprintf("attribute %s's value %q", a.Name(), a.Value()), "cvc-attribute clause 3") {
 			return nil, attributeNotKnown
 		}
 		w.declineAttribute(a, ruleCvcAttribute, "3",
@@ -600,7 +602,7 @@ func (w *walk) defaultedAttribute(e Element, u xsd.AttributeUse, vc xsd.ValueCon
 	}
 	decided, verdict := w.stringValid(st, vc.LexicalForm(), value.ConstraintContext(vc), e.Loc())
 	if !decided {
-		if w.declineAssertions(verdict, "assessing attribute use", u.DeclarationName(), e.Loc(), "cvc-complex-type clause 4") {
+		if w.declineAssertions(verdict, "assessing attribute use", u.DeclarationName(), e.Loc(), fmt.Sprintf("element %s lacks attribute %s, whose default %q", e.Name(), u.DeclarationName(), vc.LexicalForm()), "cvc-complex-type clause 4") {
 			return
 		}
 		w.declineDefaulted(e, u,

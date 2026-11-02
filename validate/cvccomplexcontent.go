@@ -2,6 +2,7 @@ package validate
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"slices"
 	"strconv"
@@ -714,7 +715,7 @@ func (c *contentCheck) simpleTypeValue(w *walk) {
 	decided, verdict := c.stringValid(w, st)
 	lexical, _ := c.assessed()
 	if !decided {
-		if w.declineAssertions(verdict, "assessing content", c.e.Name(), c.e.Loc(), "cvc-type clause 3.1.3") {
+		if w.declineAssertions(verdict, "assessing content", c.e.Name(), c.e.Loc(), fmt.Sprintf("element %s's value %q", c.e.Name(), lexical), "cvc-type clause 3.1.3") {
 			return
 		}
 		c.decline(w, c.e.Name(), c.e.Loc(), ruleCvcType, "3.1.3",
@@ -739,7 +740,7 @@ func (c *contentCheck) initialValue(w *walk, st *xsd.SimpleType) {
 	decided, verdict := c.stringValid(w, st)
 	lexical, _ := c.assessed()
 	if !decided {
-		if w.declineAssertions(verdict, "assessing content", c.e.Name(), c.e.Loc(), "cvc-complex-type clause 1.2") {
+		if w.declineAssertions(verdict, "assessing content", c.e.Name(), c.e.Loc(), fmt.Sprintf("element %s's value %q", c.e.Name(), lexical), "cvc-complex-type clause 1.2") {
 			return
 		}
 		c.decline(w, c.e.Name(), c.e.Loc(), ruleCvcComplexType, "1.2",

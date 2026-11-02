@@ -1859,11 +1859,12 @@ func (w *walk) assertionValue(e Element, asserts *assertionCheck, content *conte
 // declineAssertions records err, the non-verdict [walk.stringValid] withheld a
 // verdict on, as a decline under cvc-assertions-valid at the item named name at
 // loc, under event, where it is an assertions-facet decline
-// ([value.IsAssertionDeclined]), and reports whether it was one. withheld names
-// the caller's clause the decline leaves undecided. The message is the one
-// value's decline carries, naming the assertion, the simple type its facet is
-// effective on and its {test}: an assertion component carries no Loc of its
-// own (#35).
+// ([value.IsAssertionDeclined]), and reports whether it was one. item names the
+// element or attribute and its value, which the message opens with (STYLE E5),
+// and withheld the caller's clause the decline leaves undecided. Between them
+// the message carries the one value's decline carries, naming the assertion,
+// the simple type its facet is effective on and its {test}: an assertion
+// component carries no Loc of its own (#35).
 //
 // cvc-assertions-valid (§4.3.13.3) is evaluated inside String Valid: the value
 // pipeline runs each assertions facet it reaches through
@@ -1884,12 +1885,12 @@ func (w *walk) assertionValue(e Element, asserts *assertionCheck, content *conte
 // is w.res.violations and its one reader [Result.Violations], which charge on a
 // violation PRESENT, so a decline can only cost a rejection and can manufacture
 // none. (#1042)
-func (w *walk) declineAssertions(err error, event string, name xsd.QName, loc xsderr.Loc, withheld string) bool {
+func (w *walk) declineAssertions(err error, event string, name xsd.QName, loc xsderr.Loc, item, withheld string) bool {
 	if !value.IsAssertionDeclined(err) {
 		return false
 	}
 	w.decline(event, name, loc, ruleCvcAssertionsValid, "",
-		"%s; that facet is reached from cvc-datatype-valid clause 3, so %s is undecided", declinedAssertion(err), withheld)
+		"%s was not decided: %s; that facet is reached from cvc-datatype-valid clause 3, so %s is undecided", item, declinedAssertion(err), withheld)
 	return true
 }
 

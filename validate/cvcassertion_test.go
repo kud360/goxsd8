@@ -1114,6 +1114,30 @@ func TestDefaultedAttributeAssertionsFacetIsEvaluated(t *testing.T) {
 	wantRecords(t, assess("InRange", "42"), "cvc-assertions-valid", loc(1, 1), "InRange")
 }
 
+// A cvc-assertions-valid decline opens with the item whose value the declined
+// {test} left undecided and that value, before the assertion value's decline
+// names (STYLE E5): an attribute's own value, a ·defaulted attribute·'s
+// default at the element lacking it, and an element's ·initial value·.
+func TestDeclinedFacetAssertionOpensWithTheItem(t *testing.T) {
+	dflt := xsd.NewValueConstraint(xsd.ValueDefault, "42", nil, nil)
+	defaulted := aAssess(t, aSchema(t, aComplexType(t, []xsd.AttributeUse{typedUse(t, "n", local("InRange"), false, nil, &dflt)}, xsd.EmptyContent{}, nil), aFacetTypes(t)...),
+		&testElement{name: local("root"), loc: loc(1, 1)})
+	for _, c := range []struct {
+		name    string
+		res     *Result
+		opening string
+	}{
+		{"attribute", aAttributeAssessed(t, "InRange", "4"), `attribute n's value "4" was not decided: assertion 1 of 1 in the {value} of the assertions facet of `},
+		{"defaulted attribute", defaulted, `element root lacks attribute n, whose default "42" was not decided: assertion 1 of 1 in the {value} of the assertions facet of `},
+		{"element", aFixedElementAssessed(t, "InRange", "7", "4"), `element root's value "4" was not decided: assertion 1 of 1 in the {value} of the assertions facet of `},
+	} {
+		got := c.res.Unevaluated()
+		if len(got) == 0 || got[0].Rule() != ruleCvcAssertionsValid || !strings.HasPrefix(got[0].Msg(), c.opening) {
+			t.Errorf("%s: Unevaluated() = %v, want a cvc-assertions-valid record first, opening %q", c.name, messages(got), c.opening)
+		}
+	}
+}
+
 func TestResultUnevaluatedIsCopied(t *testing.T) {
 	// Unevaluated is a window, not a handle, on Violations' terms.
 	res := &Result{unevaluated: []Unevaluated{
