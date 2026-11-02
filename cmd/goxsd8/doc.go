@@ -355,9 +355,9 @@
 //
 // The usage above owns where a help flag is read and why help is unscoped.
 // No argument beside a help flag is examined, so goxsd8 -xyz -help prints
-// the usage and exits 0 as well. That scan is positional-blind, which is
-// also why -- carries no end-of-options meaning: goxsd8 -- -help is a help
-// request.
+// the usage and exits 0 as well. That scan is positional-blind, so before a
+// subcommand name -- ends no options and goxsd8 -- -help is a help request.
+// After one, a `--` ends that subcommand's flags, as set out below.
 //
 // Everything else is positional. The subcommand name comes first and the
 // common flags are its own, following it: goxsd8 parse -q a.xsd, never
@@ -370,7 +370,9 @@
 // location nor is the summary it asked to suppress printed. The exact
 // spelling - is never a misplaced flag — it is validate's standard-input
 // instance argument — and a positional genuinely named -q is spelled ./-q, as
-// a file named - is.
+// a file named - is. A `--` ending a subcommand's flags is consumed by the flag
+// package, so the operands after it are paths: in goxsd8 validate -schema
+// s.xsd -- -q.xml, -q.xml is the instance.
 //
 // A schema argument is a filesystem path, resolved to an absolute one before
 // the document is read, so an argument spelled absolutely or through "../"
