@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -835,6 +836,34 @@ func TestParseFlagAfterPositional(t *testing.T) {
 	want := fmt.Sprintf(flagAfterPositionalFmt, "parse", "-q") + "\n" + parseUsageLine + "\n" + helpPointer + "\n"
 	if stderr.String() != want {
 		t.Errorf("stderr = %q, want %q", stderr.String(), want)
+	}
+}
+
+// TestParseEndOfOptionsOperand pins that a `--` ending the flags makes the
+// operand behind it a path even when it is spelled like a flag: the flag
+// package consumes the `--`, so -weird.xsd is read as ./-weird.xsd is (#3332).
+func TestParseEndOfOptionsOperand(t *testing.T) {
+	t.Chdir("testdata")
+	var stdout, stderr bytes.Buffer
+	code := run([]string{"parse", "--", "-weird.xsd"}, &stdout, &stderr)
+	if code == exitUsage || strings.Contains(stderr.String(), "stands after a positional argument") {
+		t.Fatalf("run = %d, stderr %q — the operand behind -- is a path, not a misplaced flag", code, stderr.String())
+	}
+	if code != exitOK {
+		// The schema is loaded from the absolute path the CLI resolves it to,
+		// which the Windows loader joins under the volume root, so the load
+		// fails there. The failure must still name the operand as the document.
+		if !strings.Contains(stderr.String(), filepath.Join("testdata", "-weird.xsd")) {
+			t.Errorf("run = %d, stderr %q — the load failure does not name -weird.xsd", code, stderr.String())
+		}
+		return
+	}
+	var want bytes.Buffer
+	if run([]string{"parse", "./-weird.xsd"}, &want, io.Discard) != exitOK {
+		t.Fatal("parse ./-weird.xsd did not compile, so the comparison cannot stand")
+	}
+	if stdout.String() != want.String() {
+		t.Errorf("stdout = %q, want the summary of ./-weird.xsd %q", stdout.String(), want.String())
 	}
 }
 

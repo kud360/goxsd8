@@ -120,7 +120,7 @@ func runValidate(args []string, stdout, stderr io.Writer) int {
 	// line that carries the argument in the wrong place: in `validate a.xml
 	// -schema a.xsd` the -schema the flag set never saw is the fault to report,
 	// not the schema the user did name (#1290).
-	if arg, ok := flagShapedIn(instances); ok {
+	if arg, ok := flagShapedIn(flags, args, instances); ok {
 		return subcommandUsageError(stderr, "validate", fmt.Sprintf(flagAfterPositionalFmt, "validate", arg))
 	}
 	if len(schemas) == 0 {

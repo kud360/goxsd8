@@ -1,6 +1,7 @@
 package main
 
 import (
+	"flag"
 	"fmt"
 	"io"
 	"os"
@@ -589,12 +590,44 @@ func valuedHelpFlag(arg string) bool {
 //
 // The exact spelling - is standard input, an instance argument in its own
 // right; a file genuinely named -q is reached as ./-q, the escape hatch the
-// -schema - refusal already publishes for a file named -.
-func flagShapedIn(args []string) (string, bool) {
-	for _, a := range args {
+// -schema - refusal already publishes for a file named -. Operands behind the
+// `--` that ends the flags are paths whatever their spelling (endsOptions).
+func flagShapedIn(flags *flag.FlagSet, args, operands []string) (string, bool) {
+	if endsOptions(flags, args) {
+		return "", false
+	}
+	for _, a := range operands {
 		if strings.HasPrefix(a, "-") && a != stdinArg {
 			return a, true
 		}
 	}
 	return "", false
+}
+
+// endsOptions reports whether the flag package stopped at a `--` in args. It
+// replays the scan Parse made: a flag's value is the token after it, so a `--`
+// given as -schema's value is an operand, not the terminator.
+func endsOptions(flags *flag.FlagSet, args []string) bool {
+	for i := 0; i < len(args); i++ {
+		a := args[i]
+		if a == "--" {
+			return true
+		}
+		if len(a) < 2 || a[0] != '-' {
+			return false
+		}
+		name, _, hasValue := strings.Cut(strings.TrimPrefix(a[1:], "-"), "=")
+		f := flags.Lookup(name)
+		if hasValue || f == nil || isBoolFlag(f) {
+			continue
+		}
+		i++
+	}
+	return false
+}
+
+// isBoolFlag reports whether f takes no value, as the flag package decides it.
+func isBoolFlag(f *flag.Flag) bool {
+	bf, ok := f.Value.(interface{ IsBoolFlag() bool })
+	return ok && bf.IsBoolFlag()
 }
