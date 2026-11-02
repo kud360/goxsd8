@@ -109,7 +109,7 @@ var constructNames = [...]string{
 	constructList:              "a list simple type",
 	constructUnion:             "a union simple type",
 	constructSpecial:           "a special simple type",
-	constructOtherPrimitive:    "an atomic simple type whose primitive is not xs:string",
+	constructOtherPrimitive:    "an atomic simple type whose primitive is neither xs:string nor xs:anyURI",
 	constructXsiAttribute:      "an attribute use in the xsi namespace",
 	constructAttributeWildcard: "an {attribute wildcard}",
 	constructXsiType:           "an element carrying xsi:type",

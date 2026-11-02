@@ -260,3 +260,15 @@ func assertDecline(t *testing.T, err error, c construct, line, col int) {
 		t.Errorf("error %q does not open with %q", err, want)
 	}
 }
+
+// TestDeclineErrorTextOtherPrimitive pins the message of a decline of a
+// local element whose type's primitive is neither xs:string nor xs:anyURI,
+// the two primitives simpleDecline admits.
+func TestDeclineErrorTextOtherPrimitive(t *testing.T) {
+	schema := schemaOf(t, sequenceOf(`<xs:element name="a" type="xs:int"/>`))
+	_, err := Decode[struct{}](schema, strict.New(), instanceOf("", `<s:a>1</s:a>`))
+	const want = "?:1:1: codec does not decode an atomic simple type whose primitive is neither xs:string nor xs:anyURI: element {urn:s}a declared at s.xsd:1:231; a decoder refusal, not a schema or instance fault"
+	if err == nil || err.Error() != want {
+		t.Errorf("error = %v, want %q", err, want)
+	}
+}
