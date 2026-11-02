@@ -1171,7 +1171,7 @@ func (w *walk) unmatchedAttribute(a Attribute, e Element, governing xsd.ComplexT
 	wild, has := governing.AttributeWildcard()
 	if !has {
 		w.res.violations = append(w.res.violations, xsderr.New(ruleCvcComplexType, a.Loc(),
-			"the attribute %s matches no attribute use among the {attribute uses} of its element's ·governing type definition·, and that type has no {attribute wildcard} for it to be ·valid· with respect to either, so neither arm of cvc-complex-type clause 2 holds — 2.1, a matching use, and 2.2.1, a wildcard — and the clause has no third",
+			"the attribute %s matches no attribute use among the {attribute uses} of its element's ·governing type definition·, so case 2.2 of clause 2 applies and not case 2.1, and that type has no {attribute wildcard}, which cvc-complex-type clause 2.2.1 requires",
 			a.Name()))
 		w.logAttribute(a, ruleCvcComplexType, "2", "charged")
 		return
