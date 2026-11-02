@@ -1230,7 +1230,7 @@ func TestFixedAttributeComparesThroughItsAssertionsFacet(t *testing.T) {
 func TestFixedElementComparesThroughItsAssertionsFacet(t *testing.T) {
 	wantSatisfied(t, aFixedElementAssessed(t, "NonNegative", "7", "+7"), "+7 against a fixed 7")
 	wantFixedCharge(t, aFixedElementAssessed(t, "NonNegative", "7", "5"), "cvc-elt",
-		`the ·actual value· of the element root is neither equal nor identical to the {value} of the fixed {value constraint} "7"`,
+		`element root's value "5" is neither equal nor identical to "7", the {value} of its declaration's fixed {value constraint}`,
 		"cvc-elt clause 5.2.2.2.2", "5 against a fixed 7")
 }
 

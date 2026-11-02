@@ -243,12 +243,13 @@ func TestLocalGovernanceChargesAnOpenContentChild(t *testing.T) {
 		why       string
 		schema    *xsd.Schema
 		doc       *testElement
+		value     string
 		governing string
 	}{
 		{"a value xs:string accepts, against the ·locally declared type· xs:date",
-			ldtOpenSchema(t, "xs:date", "xs:string"), ldtDoc("2008-11-03", "", "e", "hello"), "date"},
+			ldtOpenSchema(t, "xs:date", "xs:string"), ldtDoc("2008-11-03", "", "e", "hello"), "hello", "date"},
 		{"a value xs:integer accepts, against an xsi:type of xs:positiveInteger ·overriding· it",
-			ldtOpenSchema(t, "xs:integer", "xs:integer"), ldtDoc("1", "", "e", "-5", xsiTypeAttr("xs:positiveInteger")), "positiveInteger"},
+			ldtOpenSchema(t, "xs:integer", "xs:integer"), ldtDoc("1", "", "e", "-5", xsiTypeAttr("xs:positiveInteger")), "-5", "positiveInteger"},
 	} {
 		t.Run(tc.why, func(t *testing.T) {
 			got, unevaluated := assessRecorded(t, tc.schema, tc.doc)
@@ -256,7 +257,7 @@ func TestLocalGovernanceChargesAnOpenContentChild(t *testing.T) {
 			if viol.Loc != loc(4, 3) {
 				t.Errorf("Loc = %s, want the {open content} child's %s", viol.Loc, loc(4, 3))
 			}
-			want := "the ·initial value· of the element e is not ·valid· with respect to its ·governing type definition· {" + xsd.XMLSchemaNS + "}" + tc.governing + ","
+			want := `element e's value "` + tc.value + `" is not a valid {` + xsd.XMLSchemaNS + "}" + tc.governing + ","
 			if !strings.HasPrefix(viol.Msg, want) {
 				t.Errorf("Msg = %q, want the prefix %q", viol.Msg, want)
 			}
