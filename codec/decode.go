@@ -206,11 +206,11 @@ func bind(schema *xsd.Schema, root *xmltree.StartElement) (*binding, error) {
 	if !ok {
 		return nil, fmt.Errorf("codec: %s: the {type definition} of %s does not resolve", loc, declSubject(decl))
 	}
+	typeSubject := fmt.Sprintf("the {type definition} of %s, a type defined at %s", declSubject(decl), td.Loc())
 	ct, ok := td.(xsd.ComplexType)
 	if !ok {
-		return nil, decline(loc, constructSimpleRoot, declSubject(decl))
+		return nil, decline(loc, constructSimpleRoot, typeSubject)
 	}
-	typeSubject := fmt.Sprintf("the {type definition} of %s, a type defined at %s", declSubject(decl), ct.Loc())
 	particles, d := contentParticles(ct)
 	if d != 0 {
 		return nil, decline(loc, d, typeSubject)

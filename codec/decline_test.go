@@ -217,6 +217,17 @@ func TestDeclineErrorText(t *testing.T) {
 	}
 }
 
+// TestDeclineErrorTextSimpleRoot pins the message of a decline of the
+// document element's type when that type is simple and built in.
+func TestDeclineErrorTextSimpleRoot(t *testing.T) {
+	schema := schemaOf(t, `<xs:element name="r" type="xs:string"/>`)
+	_, err := Decode[string](schema, strict.New(), instanceOf("", `x`))
+	const want = "?:1:1: codec does not decode a document element of simple type: the {type definition} of element {urn:s}r declared at s.xsd:1:181, a type defined at ?; a decoder refusal, not a schema or instance fault"
+	if err == nil || err.Error() != want {
+		t.Errorf("error = %v, want %q", err, want)
+	}
+}
+
 // mustAccept fails the test unless validate accepts data against schema.
 func mustAccept(t *testing.T, schema *xsd.Schema, data []byte) {
 	t.Helper()
