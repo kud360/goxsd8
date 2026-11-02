@@ -138,7 +138,8 @@ func TestRunDispatch(t *testing.T) {
 // the synopsis line: an expectation read through synopsis would follow usage
 // wherever it went (#3110).
 const (
-	validateUsageLine = "usage: goxsd8 validate [-q] [-v] [-format xml|json|ber] [-no-hints] -schema <schema.xsd> [-schema <s2>]... <instance>..."
+	parseUsageLine    = "usage: goxsd8 parse [-q] [-v] <schema.xsd>..."
+	validateUsageLine ="usage: goxsd8 validate [-q] [-v] [-format xml|json|ber] [-no-hints] -schema <schema.xsd> [-schema <s2>]... <instance>..."
 	genUsageLine      = "usage: goxsd8 gen [-q] [-v] -schema <schema.xsd> -out <dir> [-schema <s2> -out <d2>]..."
 )
 

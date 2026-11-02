@@ -597,8 +597,8 @@ func TestParseMultipleSchemas(t *testing.T) {
 
 // TestParseUsageErrors pins the exit-2 half of the split this issue owns: a
 // fault in the command line or in reading a file is never a verdict about a
-// schema. Each answer is distinct, lands on stderr with helpPointer under it,
-// and leaves stdout empty.
+// schema. Each answer is distinct, lands on stderr with parseUsageLine and
+// helpPointer under it, and leaves stdout empty.
 func TestParseUsageErrors(t *testing.T) {
 	dir := t.TempDir()
 	cases := []struct {
@@ -627,8 +627,8 @@ func TestParseUsageErrors(t *testing.T) {
 		if !strings.Contains(stderr.String(), c.want) {
 			t.Errorf("%s: stderr = %q, want it to contain %q", c.name, stderr.String(), c.want)
 		}
-		if !strings.HasSuffix(stderr.String(), helpPointer+"\n") {
-			t.Errorf("%s: stderr = %q, want helpPointer under it", c.name, stderr.String())
+		if !strings.HasSuffix(stderr.String(), "\n"+parseUsageLine+"\n"+helpPointer+"\n") {
+			t.Errorf("%s: stderr = %q, want parseUsageLine and helpPointer under it", c.name, stderr.String())
 		}
 		if prior, dup := seen[stderr.String()]; dup {
 			t.Errorf("%s answers exactly what %s answers: %q", c.name, prior, stderr.String())

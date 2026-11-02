@@ -1663,8 +1663,8 @@ func TestValidateUsageErrors(t *testing.T) {
 		if !strings.Contains(stderr.String(), c.want) {
 			t.Errorf("%s: stderr = %q, want it to contain %q", c.name, stderr.String(), c.want)
 		}
-		if !strings.HasSuffix(stderr.String(), helpPointer+"\n") {
-			t.Errorf("%s: stderr = %q, want it to end with the remedy line", c.name, stderr.String())
+		if !strings.HasSuffix(stderr.String(), "\n"+validateUsageLine+"\n"+helpPointer+"\n") {
+			t.Errorf("%s: stderr = %q, want it to end with validateUsageLine and the remedy line", c.name, stderr.String())
 		}
 		if other, ok := seen[stderr.String()]; ok {
 			t.Errorf("%s and %s produce the same diagnosis %q", c.name, other, stderr.String())
