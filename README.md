@@ -406,8 +406,14 @@ Two targets can compose one document. `ship.xsd` and `bill.xsd` each import
 </xs:schema>
 ```
 
-`bill.xsd` is this schema, and `ship.xsd` the same with `ship` for `bill` and
-`urn:s` for `urn:b`:
+`ship.xsd` and `bill.xsd` are these schemas:
+
+```xml
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" targetNamespace="urn:s">
+  <xs:import namespace="urn:n" schemaLocation="note.xsd"/>
+  <xs:element name="ship" type="xs:string"/>
+</xs:schema>
+```
 
 ```xml
 <xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" targetNamespace="urn:b">

@@ -83,15 +83,14 @@ func TestReadmeFixtures(t *testing.T) {
 	}
 }
 
-// TestReadmeSharedDocument holds README's two-target gen example: note.xsd and
-// bill.xsd byte for byte as a fence's body, ship.xsd as bill.xsd with the
-// substitutions README names, and the gen/bill/xsd_gen.go README shows to the
-// file Generate writes for the run README shows, byte for byte as a fence's
-// body. It takes gen's route: each document is parsed by its absolute path
-// under a resolver rooted at the filesystem root, and Generate runs in
-// testdata/readme beside the checkout's go.mod, each in a copy under a temp
-// directory, so the headers and the import path read as gen writes them in the
-// checkout.
+// TestReadmeSharedDocument holds README's two-target gen example: note.xsd,
+// ship.xsd and bill.xsd byte for byte as fences' bodies, and the
+// gen/bill/xsd_gen.go README shows to the file Generate writes for the run
+// README shows, byte for byte as a fence's body. It takes gen's route: each
+// document is parsed by its absolute path under a resolver rooted at the
+// filesystem root, and Generate runs in testdata/readme beside the checkout's
+// go.mod, each in a copy under a temp directory, so the headers and the import
+// path read as gen writes them in the checkout.
 func TestReadmeSharedDocument(t *testing.T) {
 	readme, err := os.ReadFile("README.md")
 	if err != nil {
@@ -120,13 +119,10 @@ func TestReadmeSharedDocument(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	for _, file := range []string{"note.xsd", "bill.xsd"} {
+	for _, file := range []string{"note.xsd", "ship.xsd", "bill.xsd"} {
 		if want := "```xml\n" + docs[file] + "```\n"; !strings.Contains(string(readme), want) {
 			t.Errorf("README.md does not show testdata/readme/%s as\n%s", file, want)
 		}
-	}
-	if want := strings.NewReplacer("bill", "ship", "urn:b", "urn:s").Replace(docs["bill.xsd"]); docs["ship.xsd"] != want {
-		t.Errorf("testdata/readme/ship.xsd is not bill.xsd with ship for bill and urn:s for urn:b, as README states:\n%s", want)
 	}
 
 	var targets []codegen.Target
