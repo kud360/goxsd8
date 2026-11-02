@@ -764,7 +764,7 @@ func affiliationSchema(t *testing.T, heads ...xsd.QName) *xsd.Schema {
 // absentAffiliationOpening is the opening of the cvc-elt clause 1 charge for
 // root's ·absent· {substitution group affiliations} member nosuchhead, which
 // pins the subject and the head it names in that order (#1048).
-const absentAffiliationOpening = "the ·governing element declaration· of the element root has an ·absent· member in its {substitution group affiliations}: the substitution group head nosuchhead names no element declaration"
+const absentAffiliationOpening = "element root is governed by a declaration with an ·absent· member in its {substitution group affiliations}: the substitution group head nosuchhead names no element declaration"
 
 // A {substitution group affiliations} member naming no declaration is an
 // ·absent· value of root's declaration (§5.3 Missing Sub-components): cvc-elt

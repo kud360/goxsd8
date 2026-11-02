@@ -520,7 +520,7 @@ func TestValueAssertionIgnoresAChargeAgainstTheParent(t *testing.T) {
 		t.Errorf("Unevaluated() = %v, want none", messages(got))
 	}
 	if vs := res.Violations(); len(vs) != 1 || vs[0].Rule != ruleCvcComplexType || vs[0].Loc != loc(3, 3) ||
-		!strings.HasPrefix(vs[0].Msg, "the element s is a child of odd, and its ·governing type definition· S is neither the same as nor ·validly substitutable·") {
+		!strings.HasPrefix(vs[0].Msg, "element s, a child of odd, has the ·governing type definition· S, which is neither the same as nor ·validly substitutable·") {
 		t.Errorf("Violations() = %v, want the one cvc-complex-type clause 5 charge at %s", vs, loc(3, 3))
 	}
 }
