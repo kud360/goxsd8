@@ -71,11 +71,12 @@
 //
 // An absent suite submodule is a supported mode, not a failure (#659): the
 // tool says the corpus is not there, names the command that initializes it,
-// and exits 0. It exits 0 for a completed report whatever it finds, and 2 for
-// an operational error: an unusable mode, an unreadable catalog, a lane name
-// no expectation file carries, or a -log that cannot be read, is given to
-// `ids`, lists the lane's census other than exactly once, or lists a case the
-// catalog declares valid as indeterminate.
+// and exits 0, or 2 when that notice cannot be written. It exits 0 for a
+// completed report whatever it finds, even when the report cannot be written,
+// and 2 for an operational error: an unusable mode, an unreadable catalog, a
+// lane name no expectation file carries, or a -log that cannot be read, is
+// given to `ids`, lists the lane's census other than exactly once, or lists a
+// case the catalog declares valid as indeterminate.
 package main
 
 import (
