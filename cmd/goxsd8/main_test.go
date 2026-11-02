@@ -139,7 +139,7 @@ func TestRunDispatch(t *testing.T) {
 // wherever it went (#3110).
 const (
 	parseUsageLine    = "usage: goxsd8 parse [-q] [-v] <schema.xsd>..."
-	validateUsageLine ="usage: goxsd8 validate [-q] [-v] [-format xml|json|ber] [-no-hints] -schema <schema.xsd> [-schema <s2>]... <instance>..."
+	validateUsageLine = "usage: goxsd8 validate [-q] [-v] [-format xml|json|ber] [-no-hints] -schema <schema.xsd> [-schema <s2>]... <instance>..."
 	genUsageLine      = "usage: goxsd8 gen [-q] [-v] -schema <schema.xsd> -out <dir> [-schema <s2> -out <d2>]..."
 )
 

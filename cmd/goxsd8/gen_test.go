@@ -548,10 +548,9 @@ func TestGenDeclines(t *testing.T) {
 }
 
 // TestReportGenerateOSFaultNotDecline pins exit 2 with genUsageLine and
-// helpPointer for an
-// element of Generate's error that answers errors.Is(_, errors.ErrUnsupported)
-// but holds no *codegen.DeclineError: a phase-2 OS fault whose errno is
-// ENOTSUP, wrapped with %w as Generate wraps it (#3090).
+// helpPointer for an element of Generate's error that answers errors.Is(_,
+// errors.ErrUnsupported) but holds no *codegen.DeclineError: a phase-2 OS
+// fault whose errno is ENOTSUP, wrapped with %w as Generate wraps it (#3090).
 func TestReportGenerateOSFaultNotDecline(t *testing.T) {
 	fault := fmt.Errorf("target 0: writing x/xsd_gen.go: %w", syscall.ENOTSUP)
 	if !errors.Is(fault, errors.ErrUnsupported) {

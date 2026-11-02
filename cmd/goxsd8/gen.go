@@ -114,10 +114,10 @@ func runGen(args []string, stderr io.Writer) int {
 // own line on stderr and returns the exit code they charge, exitOK for a nil
 // err. An element holding a *codegen.DeclineError, which errors.As retrieves,
 // charges exit 4 with no synopsis or helpPointer under it; every other element
-// charges exit 2 as subcommandUsageError prints it. errors.Is(e, errors.ErrUnsupported) does not
-// route: it also answers true for an OS fault whose syscall.Errno is ENOSYS,
-// ENOTSUP or EOPNOTSUPP, which Generate wraps with %w and which is no decline
-// (#3090).
+// charges exit 2 as subcommandUsageError prints it. errors.Is(e,
+// errors.ErrUnsupported) does not route: it also answers true for an OS fault
+// whose syscall.Errno is ENOSYS, ENOTSUP or EOPNOTSUPP, which Generate wraps
+// with %w and which is no decline (#3090).
 func reportGenerate(err error, stderr io.Writer) int {
 	if err == nil {
 		return exitOK
