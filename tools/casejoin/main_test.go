@@ -484,9 +484,8 @@ var errRefused = errors.New("refused")
 
 func (refusingWriter) Write([]byte) (int, error) { return 0, errRefused }
 
-// TestCorpusAbsentWriteErrorIsReturned holds the corpus-absent notice to
-// suiteroot's write-error policy: a notice that did not reach stdout is an
-// error, not a clean exit.
+// TestCorpusAbsentWriteErrorIsReturned holds casejoin's corpus-absent mode to
+// the write-error policy the suiteroot package doc states.
 func TestCorpusAbsentWriteErrorIsReturned(t *testing.T) {
 	args := []string{"-suite", filepath.Join(t.TempDir(), "absent"), "ids", "docs/a1.xml"}
 	if err := run(refusingWriter{}, strings.NewReader(""), args); !errors.Is(err, errRefused) {

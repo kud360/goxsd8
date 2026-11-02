@@ -24,10 +24,7 @@ const Default = "testdata/xsdtests"
 // tool, the subject that is absent (`<root> <reason>`, or `no suite index at
 // <path>`) and the activity there is nothing to do (`census`, `join`), then
 // the command that initializes the suite at [Default], whatever root the
-// caller was given. The
-// mode is not a failure: a fresh container has no suite submodule (#659), so
-// a tool that prints the notice exits 0 unless the write fails. It returns
-// the write's error.
+// caller was given.
 func PrintAbsent(w io.Writer, tool, subject, activity string) error {
 	_, err := fmt.Fprintf(w, "%s: %s — corpus-absent mode, nothing to %s.\n"+
 		"Initialize the suite with `git submodule update --init %s` (#659).\n", tool, subject, activity, Default)
