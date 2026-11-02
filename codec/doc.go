@@ -24,25 +24,23 @@
 // # What decodes
 //
 // A document element decodes when its declaration, a top-level one, has no
-// {type table}, {nillable} false and no {value constraint}, and its {type
-// definition} is a complex type with element-only content and no {open
-// content} or {attribute wildcard}, whose {particle} is an inline sequence
-// occurring exactly once. Each particle of that sequence is a local element
-// declaration with no {type table}, {nillable} false and no {value
-// constraint}, of a simple type that is atomic with {primitive type
-// definition} xs:string, no two particles sharing an expanded name; each
-// attribute use is outside the xsi namespace, has no effective value
-// constraint, and is typed the same way. So xs:normalizedString, xs:token,
-// xs:language, xs:Name, xs:NCName, xs:NMTOKEN, xs:ID, xs:IDREF, xs:ENTITY and
-// a user restriction of any of them decode, each field a string, a *string
-// or a []string by its occurrence. No element in the instance carries
-// xsi:type.
+// {type table} and {nillable} false, and its {type definition} is a complex
+// type with element-only content and no {open content} or {attribute
+// wildcard}, whose {particle} is an inline sequence occurring exactly once.
+// Each particle of that sequence is a local element declaration with no
+// {type table} and {nillable} false, of a simple type that is atomic with
+// {primitive type definition} xs:string or xs:anyURI, no two particles
+// sharing an expanded name; each attribute use is outside the xsi namespace
+// and is typed the same way. So xs:normalizedString, xs:token, xs:language,
+// xs:Name, xs:NCName, xs:NMTOKEN, xs:ID, xs:IDREF, xs:ENTITY, xs:anyURI and a
+// user restriction of any of them decode, each field a string, a *string or a
+// []string by its occurrence. No element in the instance carries xsi:type.
 //
 // Every other construct is a [*DeclineError], never a zero value: a choice,
 // an all group, a nested model group or <group ref>, a wildcard, an <element
 // ref> or substitution group, mixed, simple or empty content, a local
 // element of complex type, xs:anyType included, a nillable element, a list,
-// a union, a special type, xs:anyURI, any other primitive, and an xsi:type.
+// a union, a special type, any other primitive, and an xsi:type.
 // Two of those are rulings rather than coverage still to come:
 //
 //   - A declaration with a {type table} declines. The slice that decodes it
@@ -56,11 +54,16 @@
 //     lose what the derived type governs: under xsi:type="xs:token" an
 //     xs:string element's value collapses. That refusal is permanent.
 //
-// A {value constraint}, an element's or an attribute use's, default or
-// fixed, declines whether or not the item is present, because its decoded
-// value is not settled: the PSVI supplies the default (Structures §3.4.5.1
-// sic-attrDefault, §3.3.4.3 cvc-elt clause 5.1), while codegen's doc gives an
-// absent attribute a nil field.
+// A value constraint, default or fixed, decodes under the
+// post-schema-validation infoset. An absent attribute whose use has an
+// effective value constraint (Structures §3.5.4 key-evc) holds the
+// constraint's {lexical form} normalized by its type's whiteSpace (§3.4.4.2
+// key-dflt-att, §3.4.5.1 sic-attrDefault), so an optional use's *string field
+// is never nil. An element with neither element nor character children holds
+// its declaration's {value constraint}'s {lexical form} normalized the same
+// way (§3.3.4.3 cvc-elt clause 5.1, §3.3.5.4 sic-eltType); a whitespace-only
+// element has a character child and holds its own value. An absent element
+// has no value. Decode never checks a fixed value: the validator has.
 //
 // Every error about the instance carries its instance Loc: a violation's,
 // an undecided check's, and a decline's, which also names its construct and,
