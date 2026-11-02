@@ -202,7 +202,7 @@ func TestValidateRendersDelegatedVerdictWithoutPlaceholder(t *testing.T) {
 	if code := run([]string{"validate", "-schema", orderSchema, invalidInstance}, &stdout, &stderr); code != exitInvalid {
 		t.Fatalf("code = %d, want %d (stderr %q)", code, exitInvalid, stderr.String())
 	}
-	const want = invalidInstance + `:5:3: [cvc-attribute] the ·initial value· of the attribute sku is not ·valid· with respect to its declaration's {type definition} {http://example.com/order}Sku, which cvc-attribute clause 3 requires as per String Valid (§3.16.4): [cvc-pattern-valid] "nope" matches no member of the pattern facet of the simple type {http://example.com/order}Sku, whose {value} holds "[A-Z]{3}-[0-9]{4}", but cvc-pattern-valid requires one to match`
+	const want = invalidInstance + `:5:3: [cvc-attribute] attribute sku's value "nope" is not a valid {http://example.com/order}Sku, which cvc-attribute clause 3 requires: [cvc-pattern-valid] "nope" matches no member of the pattern facet of the simple type {http://example.com/order}Sku, whose {value} holds "[A-Z]{3}-[0-9]{4}", but cvc-pattern-valid requires one to match`
 	if line, _, _ := strings.Cut(stdout.String(), "\n"); line != want {
 		t.Errorf("first line =\n%s\nwant\n%s", line, want)
 	}

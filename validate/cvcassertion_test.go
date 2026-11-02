@@ -1217,7 +1217,7 @@ func wantFixedCharge(t *testing.T, res *Result, rule xsderr.Rule, prefix, clause
 func TestFixedAttributeComparesThroughItsAssertionsFacet(t *testing.T) {
 	wantSatisfied(t, aFixedAttributeAssessed(t, "NonNegative", "7", "+7"), "+7 against a fixed 7")
 	wantFixedCharge(t, aFixedAttributeAssessed(t, "NonNegative", "7", "5"), "cvc-attribute",
-		`the ·actual value· of the attribute n is neither equal nor identical to the {value} of the fixed {value constraint} "7" on its attribute declaration`,
+		`attribute n's value "5" is neither equal nor identical to "7", the {value} of the fixed {value constraint} on its attribute declaration`,
 		"cvc-attribute clause 4", "5 against a fixed 7")
 }
 
