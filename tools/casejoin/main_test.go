@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"slices"
@@ -474,6 +475,23 @@ func TestCorpusAbsentModeReportsAndExitsCleanly(t *testing.T) {
 		t.Fatalf("run over an absent corpus: %v, want a clean exit", err)
 	}
 	wantLines(t, out.String(), "corpus-absent mode", "git submodule update --init")
+}
+
+// refusingWriter fails every write, standing in for a closed stdout.
+type refusingWriter struct{}
+
+var errRefused = errors.New("refused")
+
+func (refusingWriter) Write([]byte) (int, error) { return 0, errRefused }
+
+// TestCorpusAbsentWriteErrorIsReturned holds the corpus-absent notice to
+// suiteroot's write-error policy: a notice that did not reach stdout is an
+// error, not a clean exit.
+func TestCorpusAbsentWriteErrorIsReturned(t *testing.T) {
+	args := []string{"-suite", filepath.Join(t.TempDir(), "absent"), "ids", "docs/a1.xml"}
+	if err := run(refusingWriter{}, strings.NewReader(""), args); !errors.Is(err, errRefused) {
+		t.Errorf("run over an absent corpus into a failing stdout = %v, want %v", err, errRefused)
+	}
 }
 
 // TestJoinRowsPartitionTheEntries holds the table to its own arithmetic: the
