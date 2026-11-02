@@ -605,12 +605,13 @@ func wantAbsentSelection(t *testing.T, schema *xsd.Schema, kind, slot string) {
 // wantMissingCharged fails unless assessing selectionRoot(kind) against schema
 // charges exactly two violations and records no [Unevaluated]. The first is
 // cvc-elt at root's own location, its message opening with opening and naming
-// clause 1 and the missing sub-component: the charge §5.3 makes "as if clause 1 of Element Locally
-// Valid (Element) had failed". The second is cvc-complex-type at the child's
-// kind attribute, which only the ·lax assessment· §5.3 falls back to reaches:
-// root assessed against nothing attributes its child to nothing, and the child
-// is then assessed against nothing too. No cvc-id record follows, because a
-// ·laxly assessed· element is no withheld type ([walk.idElement]).
+// clause 1 and the missing sub-component: the charge §5.3 makes "as if clause
+// 1 of Element Locally Valid (Element) had failed". The second is
+// cvc-complex-type at the child's kind attribute, which only the ·lax
+// assessment· §5.3 falls back to reaches: root assessed against nothing
+// attributes its child to nothing, and the child is then assessed against
+// nothing too. No cvc-id record follows, because a ·laxly assessed· element is
+// no withheld type ([walk.idElement]).
 func wantMissingCharged(t *testing.T, schema *xsd.Schema, kind, opening string) {
 	t.Helper()
 	res := selectionResult(t, schema, kind)

@@ -273,10 +273,11 @@ func TestValidateNamesTheBuiltinPatternAndItsDeclaringType(t *testing.T) {
 // outside xs:int's inherited pattern is charged under: exit 1, cvc-type
 // clause 3.1.3 wrapping cvc-pattern-valid, the outer sentence pinned whole up
 // to the ": " before its cause, in STYLE E5's order: the element and its value,
-// the type it is not a valid one of, then the citation (#2370). The lexical also fails xs:int's
-// lexical mapping (cvc-datatype-valid clause 2.1) and the spec orders neither
-// clause first, so this pins the repository's choice — the pattern stage
-// runs before the mapping — against a re-charge under another rule (#2310).
+// the type it is not a valid one of, then the citation (#2370). The lexical
+// also fails xs:int's lexical mapping (cvc-datatype-valid clause 2.1) and the
+// spec orders neither clause first, so this pins the repository's choice — the
+// pattern stage runs before the mapping — against a re-charge under another
+// rule (#2310).
 func TestValidateIntPatternRuleAndExitCode(t *testing.T) {
 	instance, code, stdout, stderr := runIntPattern(t)
 	if code != exitInvalid {
