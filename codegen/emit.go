@@ -263,10 +263,11 @@ type nilledAttributes struct {
 	slot     int
 }
 
-// rawNames is the names claimed for the four raw-content structs
-// "# xs:anyType" gives an element of type xs:anyType (§3.4.7
-// any-type-itself), a wildcard particle of a model group, and an {attribute
-// wildcard} (§3.4.2.5 dcl.ctd.anyatt), in claim order.
+// rawNames is the names claimed for the four raw-content structs the package
+// doc's "# xs:anyType", "# Particles" and "# Attributes" give, in that order,
+// an element of type xs:anyType (§3.4.7 any-type-itself), a wildcard particle
+// of a model group, and an {attribute wildcard} (§3.4.2.5 dcl.ctd.anyatt), in
+// claim order.
 type rawNames struct {
 	anyType, attribute, child, element string
 }
