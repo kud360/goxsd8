@@ -17,12 +17,13 @@ import (
 	"github.com/kud360/goxsd8/xsd"
 )
 
-// TestReadmeFixtures holds each file of testdata/readme that README.md shows
-// to the text README shows for it: order.xsd and order.json byte for byte as
-// a fence's body, and the one-line twice.json, its newline dropped, as an
-// inline code span. README's examples run against the committed files, so a
-// fence edited without its file, or a file without its fence, would show the
-// reader one document and run another.
+// TestReadmeFixtures holds each file of testdata/readme that README.md's CLI
+// section shows to the text README shows for it (TestReadmeSharedDocument
+// holds the files of the two-target gen example): order.xsd and order.json
+// byte for byte as a fence's body, and the one-line twice.json, its newline
+// dropped, as an inline code span. README's examples run against the
+// committed files, so a fence edited without its file, or a file without its
+// fence, would show the reader one document and run another.
 //
 // It holds README's code-generation snippet to readmeCodegen's body, which
 // compiles with this file, and the xsd_gen.go README shows to the file that
@@ -65,7 +66,8 @@ func TestReadmeFixtures(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// The program runs in its module's root, as README states.
+	// The program runs in its module's root, one of the directories README
+	// states it may run in.
 	root := t.TempDir()
 	if err := os.WriteFile(filepath.Join(root, "go.mod"), []byte("module example.com/app\n"), 0o644); err != nil {
 		t.Fatal(err)
@@ -78,6 +80,78 @@ func TestReadmeFixtures(t *testing.T) {
 	}
 	if want := "```go\n" + string(gen) + "```\n"; !strings.Contains(string(readme), want) {
 		t.Errorf("README.md does not show the xsd_gen.go Generate writes for testdata/readme/order.xsd as\n%s", want)
+	}
+}
+
+// TestReadmeSharedDocument holds README's two-target gen example: note.xsd,
+// ship.xsd and bill.xsd byte for byte as fences' bodies, and the
+// gen/bill/xsd_gen.go README shows to the file Generate writes for the run
+// README shows, byte for byte as a fence's body. It takes gen's route: each
+// document is parsed by its absolute path under a resolver rooted at the
+// filesystem root, and Generate runs in testdata/readme beside the checkout's
+// go.mod, each in a copy under a temp directory, so the headers and the import
+// path read as gen writes them in the checkout.
+func TestReadmeSharedDocument(t *testing.T) {
+	readme, err := os.ReadFile("README.md")
+	if err != nil {
+		t.Fatal(err)
+	}
+	gomod, err := os.ReadFile("go.mod")
+	if err != nil {
+		t.Fatal(err)
+	}
+	root := t.TempDir()
+	if err := os.WriteFile(filepath.Join(root, "go.mod"), gomod, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	dir := filepath.Join(root, "testdata", "readme")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	docs := map[string]string{}
+	for _, file := range []string{"note.xsd", "ship.xsd", "bill.xsd"} {
+		body, err := os.ReadFile(filepath.Join("testdata", "readme", file))
+		if err != nil {
+			t.Fatal(err)
+		}
+		docs[file] = string(body)
+		if err := os.WriteFile(filepath.Join(dir, file), body, 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, file := range []string{"note.xsd", "ship.xsd", "bill.xsd"} {
+		if want := "```xml\n" + docs[file] + "```\n"; !strings.Contains(string(readme), want) {
+			t.Errorf("README.md does not show testdata/readme/%s as\n%s", file, want)
+		}
+	}
+
+	var targets []codegen.Target
+	for _, file := range []string{"ship.xsd", "bill.xsd"} {
+		abs := filepath.Join(dir, file)
+		schema, err := parser.Parse(abs, parser.WithResolver(loader.Dir(filepath.VolumeName(abs)+string(filepath.Separator))))
+		if err != nil {
+			t.Fatal(err)
+		}
+		pkg := strings.TrimSuffix(file, ".xsd")
+		targets = append(targets, codegen.Target{Schema: schema, Dir: "./gen/" + pkg, Package: pkg})
+	}
+	t.Chdir(dir)
+	if err := codegen.Generate(targets); err != nil {
+		t.Fatal(err)
+	}
+	ship, err := os.ReadFile(filepath.Join("gen", "ship", "xsd_gen.go"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(ship), "\ntype Note string\n") {
+		t.Errorf("gen/ship/xsd_gen.go does not declare type Note string, as README states:\n%s", ship)
+	}
+	bill, err := os.ReadFile(filepath.Join("gen", "bill", "xsd_gen.go"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := "```go\n" + string(bill) + "```\n"; !strings.Contains(string(readme), want) {
+		t.Errorf("README.md does not show the gen/bill/xsd_gen.go Generate writes for testdata/readme's ship.xsd and bill.xsd as\n%s", want)
 	}
 }
 
