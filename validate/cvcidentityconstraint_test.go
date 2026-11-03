@@ -786,9 +786,10 @@ func TestUnionKeyMemberComparesByItsValidatingType(t *testing.T) {
 func icWantClause41(t *testing.T, got []*xsderr.Error, later, earlier int) {
 	t.Helper()
 	icWantCharges(t, got, icCharge(ruleCvcIdentityConstraint, later))
-	prefix := loc(later, 1).String() + ": [cvc-identity-constraint] element item, a ·target node· of the unique U declared on root, has a ·key-sequence· equal or identical to the one at " + loc(earlier, 1).String() + ","
-	if !strings.HasPrefix(got[0].Error(), prefix) || !strings.Contains(got[0].Error(), "clause 4.1 ") {
-		t.Errorf("Violations() = %v, want a clause 4.1 charge opening %q", got, prefix)
+	prefix := loc(later, 1).String() + ": [cvc-identity-constraint] element item, a ·target node· of the unique U declared on root, has the ·key-sequence· "
+	tail := " of the one at " + loc(earlier, 1).String() + ", but cvc-identity-constraint clause 4.1 "
+	if !strings.HasPrefix(got[0].Error(), prefix) || !strings.Contains(got[0].Error(), tail) {
+		t.Errorf("Violations() = %v, want a clause 4.1 charge opening %q and holding %q", got, prefix, tail)
 	}
 }
 
