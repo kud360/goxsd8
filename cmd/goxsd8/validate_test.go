@@ -1801,6 +1801,8 @@ func TestValidateEndOfOptions(t *testing.T) {
 	}{
 		{"operand after --", []string{"-schema", "order.xsd", "--", "-weird.xml"}, exitOK, ""},
 		{"two flag-shaped operands after --", []string{"-schema", "order.xsd", "--", "-weird.xml", "-q.xml"}, exitOK, ""},
+		{"-- after a boolean flag", []string{"-schema", "order.xsd", "-no-hints", "--", "-weird.xml"}, exitOK, ""},
+		{"-- after a flag spelled with =", []string{"-schema=order.xsd", "--", "-weird.xml"}, exitOK, ""},
 		{"-- as -schema's value", []string{"-schema", "--", "a.xml", "-weird.xml"}, exitUsage, misplaced("-weird.xml")},
 		{"-- after a positional", []string{"-schema", "order.xsd", "a.xml", "--", "-weird.xml"}, exitUsage, misplaced("--")},
 	}
