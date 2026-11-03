@@ -2691,14 +2691,9 @@ func (e *emitter) branchOrigin(child scope, decl xsd.ElementDeclaration, b table
 // doc's "# Attributes" attribute-use rule. An attribute use carries no Loc, so
 // its declines cite the declaration it resolves to, the global one for an
 // <attribute ref>. An anonymous union type is named by attributePath, nested
-// being the scope of the struct holding the field. The field holds its type
-// for a use with {required} true, and for one with an effective value
-// constraint (§3.5.4 key-evc) whose declaration is not in the xsi namespace,
-// every declaration of which is a built-in one (§3.2.6.4 no-xsi): the
-// post-schema-validation infoset supplies that attribute when it is absent
-// (§3.4.4.2 key-dflt-att clauses 2 to 4, §3.4.5.1 sic-attrDefault). Any other
-// use's field holds a pointer to its type unless that type is a union's sealed
-// interface, held bare.
+// being the scope of the struct holding the field. A declaration is a built-in
+// xsi: one, which that rule excludes from the effective value constraint's
+// arm, exactly when it is in the xsi namespace (§3.2.6.4 no-xsi).
 func (e *emitter) attributeField(nested scope, subject string, loc xsderr.Loc, u xsd.AttributeUse) (fieldSpec, error) {
 	name := u.DeclarationName()
 	attr := "attribute " + name.String() + " of " + subject

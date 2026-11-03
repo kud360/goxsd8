@@ -402,11 +402,9 @@ func (b *binding) localElement(el xsd.ElementDeclaration, occurs xsd.Occurs) (fi
 }
 
 // attributeUse returns the field, its name unset, of attribute use u, or the
-// construct Decode declines it for and the subject naming it. The field is a
-// string when u is {required} or has an effective value constraint (§3.5.4
-// key-evc), whose value it is supplied (§3.4.5.1 sic-attrDefault), and a
-// *string otherwise: the shape codegen emits for every use not in the xsi
-// namespace, whose uses decline before a shape is picked.
+// construct Decode declines it for and the subject naming it. The field's
+// shape is codegen's, as the package doc's "# What decodes" states, and needs
+// no xsi: test here: an xsi: use declines before its shape is picked.
 func (b *binding) attributeUse(u xsd.AttributeUse) (field, construct, string, error) {
 	decl, ok := b.schema.ResolvedAttributeDeclaration(u)
 	if !ok {
