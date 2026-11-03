@@ -356,8 +356,9 @@
 // flag as one to move, since no argument position accepts a valued help
 // spelling. After a subcommand's first positional it is a misplaced
 // flag-shaped token, the exit-2 diagnosis stated below, which names none of
-// the spellings. After a -- that ended a subcommand's options it is a path
-// like any other argument there.
+// the spellings. After a -- that ended a subcommand's options it is a
+// positional like any other there: a path to parse and validate, and to gen
+// the positional it takes none of.
 //
 // The usage above owns where a help flag is read and why help is unscoped.
 // No argument beside a help flag is examined, so goxsd8 -xyz -help prints
