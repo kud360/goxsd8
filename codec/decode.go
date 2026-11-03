@@ -14,8 +14,9 @@ import (
 	"github.com/kud360/goxsd8/xsd"
 )
 
-// ErrTypeMismatch is the error [Decode] wraps when T is not the struct codegen
-// emits for the document element's declaration; Decode's doc states when.
+// ErrTypeMismatch is the error [Decode] wraps when T's fields are not those
+// codegen emits for the document element's declaration; Decode's doc, item 6,
+// states when.
 var ErrTypeMismatch = errors.New("codec: T is not the struct codegen emits for the document element")
 
 // The names of the primitives the slice decodes, read by identity.
@@ -29,10 +30,15 @@ var (
 // returns it. A value is returned exactly when the error is nil.
 //
 // T is the caller's choice: nothing dispatches a document element to its
-// generated type, and a T that is not the struct for data's document element
-// returns [ErrTypeMismatch] where item 6 below is the first that applies. A
-// caller decoding documents of several roots reads the document element's
-// name itself, through parser/xmltree or encoding/xml, before choosing T.
+// generated type. Item 6 below compares T's fields with those codegen emits
+// for the declaration in name, order and Go type alone, so a T whose fields
+// differ returns [ErrTypeMismatch] where item 6 is the first that applies,
+// but a T of the same shape, such as the struct codegen emits for another
+// top-level element of the same type, passes item 6 and decodes as the
+// declaration's own struct does, an error only where that one's is. A
+// caller decoding documents of several roots therefore reads the document
+// element's name itself, through parser/xmltree or encoding/xml, before
+// choosing T.
 //
 // The slice Decode covers is the package doc's "# What decodes". Decode
 // first assesses data against schema with package validate and decodes only
