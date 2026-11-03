@@ -21,10 +21,10 @@
 // # Decoding
 //
 // codec.Decode fills a compiled T, so the census compiles what it generated:
-// the temporary module, whose path is that of this command's driver, requires
-// this module by a replace directive on the module root `go env GOMOD` names
-// from the working directory, so that its generated main packages may import
-// package assess. Each batch of up to batchSize packages builds one driver
+// the temporary module, at the path driverModule names, requires this module
+// by a replace directive on the module root `go env GOMOD` names from the
+// working directory, so that its generated main packages may import package
+// assess. Each batch of up to batchSize packages builds one driver
 // with `go build`, which calls assess.Drive with one assess.DecoderFor
 // instantiation per type the batch's cases decode into. The command therefore
 // runs inside this module's tree, with the go command on PATH and the module
@@ -455,10 +455,8 @@ func namedFrom(name, base string) bool {
 	return err == nil && n >= 2 && strconv.Itoa(n) == suffix
 }
 
-// headerLoc renders loc as a header does for a target whose Dir is dir, by
-// the rule codegen's package doc "Naming" states: a URI filepath.IsAbs
-// accepts relative to dir made absolute, slash-separated, and any other as
-// is.
+// headerLoc renders loc as codegen's package doc "Naming" states a header
+// renders it for a target whose Dir is dir.
 func headerLoc(dir string, loc xsderr.Loc) string {
 	if !filepath.IsAbs(loc.URI) {
 		return loc.String()
@@ -543,8 +541,8 @@ type report struct {
 }
 
 // merge adds one driver's summary to r. A construct's tallies from two
-// drivers merge by its String, which codec makes distinct for each Construct,
-// every driver linking the one codec.
+// drivers merge by its String, the key assess.Drive's doc states across
+// processes, every driver linking the one codec.
 func (r *report) merge(s assess.Summary) {
 	r.sum.Decoded += s.Decoded
 	r.sum.Undecided += s.Undecided

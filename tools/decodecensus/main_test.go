@@ -270,9 +270,9 @@ func TestOwnTypeFindsEachTopLevelElementsType(t *testing.T) {
 }
 
 // TestOwnTypeRendersAnAbsoluteLoc parses the schema under its absolute path,
-// so that its declarations' Loc URIs are absolute and a header renders them
-// relative to the target's Dir: resolveCase finds a's type only by rendering
-// them so too.
+// so that its declarations' Loc URIs are absolute: resolveCase finds a's type
+// only through headerLoc's branch for one, and fails with that branch
+// removed.
 func TestOwnTypeRendersAnAbsoluteLoc(t *testing.T) {
 	root := writeTree(t, map[string]string{"s.xsd": ownTypeSchema, "out/go.mod": "module census\n"})
 	schema, err := parser.Parse(filepath.Join(root, "s.xsd"), parser.WithResolver(loader.Dir(string(filepath.Separator))))

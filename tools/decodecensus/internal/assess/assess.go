@@ -162,8 +162,7 @@ func classify(err error, own bool) (bucket, codec.Construct) {
 
 // accepts reports whether validation accepts data against schema: it is
 // accepted when validate.New and xmlsrc.Validate succeed and the Result has
-// no source fault and stands validate.NotProvenInvalid, the one Result
-// codec.Decode decodes.
+// no source fault and stands validate.NotProvenInvalid.
 func accepts(schema *xsd.Schema, backend value.Backend, data []byte, uri string) bool {
 	v, err := validate.New(schema, backend)
 	if err != nil {
