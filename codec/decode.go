@@ -28,6 +28,12 @@ var (
 // package codegen emits for the declaration of data's document element, and
 // returns it. A value is returned exactly when the error is nil.
 //
+// T is the caller's choice: nothing dispatches a document element to its
+// generated type, and a T that is not the struct for data's document element
+// returns [ErrTypeMismatch] where item 6 below is the first that applies. A
+// caller decoding documents of several roots reads the document element's
+// name itself, through parser/xmltree or encoding/xml, before choosing T.
+//
 // The slice Decode covers is the package doc's "# What decodes". Decode
 // first assesses data against schema with package validate and decodes only
 // an instance whose Result has no source fault and stands
@@ -59,9 +65,13 @@ var (
 //  2. A source fault, in either channel validate/xmlsrc.Validate carries one
 //     in, whatever the Result's Standing: that error as it is, an
 //     *xsderr.Error with rule xml-wf that xsderr.RuleOf reaches.
-//  3. A validate.Charged Result: an error wrapping every violation, so that
-//     errors.As and xsderr.RuleOf reach the first violation's rule and
-//     instance Loc. Decode never succeeds where validate does not accept.
+//  3. A validate.Charged Result: an error wrapping every violation, each an
+//     *xsderr.Error, in the order Result.Violations lists them. errors.As to
+//     an *xsderr.Error, and xsderr.RuleOf, reach the first violation alone.
+//     To reach every one, call errors.Unwrap on the error once and assert the
+//     result to interface{ Unwrap() []error }: each element of its Unwrap is
+//     a violation's *xsderr.Error. Decode never succeeds where validate does
+//     not accept.
 //  4. A validate.Undecided Result: an error naming the rule and instance Loc
 //     of the first validate.Unevaluated and wrapping errors.ErrUnsupported.
 //     It is no *DeclineError: errors.As tells the two apart.
