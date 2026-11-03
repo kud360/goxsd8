@@ -15,8 +15,8 @@
 // instance lane assembles more widely than that, as a caveat the report prints
 // states. A group's schema generates when it assembles and codegen.Generate
 // emits it, as one target, a package of its own in a temporary module, with no
-// error; a case of a group declaring no schemaTest has no schema and does not
-// generate.
+// error; a case of a group declaring other than one schemaTest has no schema
+// and does not generate.
 //
 // # Decoding
 //
@@ -273,6 +273,9 @@ func plan(abs, root string, cases []conformance.CatalogEntry, dir string) (repor
 		groups[i].instances = append(groups[i].instances, c.Docs[0])
 	}
 	for n, g := range groups {
+		// A schema that does not assemble or generate is the census's data,
+		// its cases counted as not generating, never an operational error:
+		// the suite is full of schemas that are invalid on purpose.
 		schema, err := assess.Assemble(abs, g.schema, backend)
 		if err != nil {
 			continue
@@ -584,10 +587,10 @@ func ranked(tallies []assess.Tally) []assess.Tally {
 // report adds the placeholder's, which carries its counts.
 var caveats = []string{
 	"Defects: \"rejected codegen's own struct\" and \"decoded where validate rejects\" are defects in codec, and any count other than 0 is one to file.",
-	"\"failed other\" is no defect count: it holds Decode's errors before it binds a type, a source fault or a charged instance among them, so it holds every instance the suite makes invalid on purpose, and the errors of its second read after validation.",
+	"\"failed other\" is no defect count: it holds every Decode error that is no decline, no undecided validation and no type mismatch on codegen's struct: a source fault, every instance validate charges, as the suite's invalid instances are meant to be, and an error of Decode's second read after validation.",
 	"One decline per case: Decode returns its first decline, so a case counts once, under that construct.",
 	"Cases, not documents: each instance case counts once, however many cases name its instance document or share its schema.",
-	"Assembly: the instance lane's schema is wider. It also serves the suite's own XLink schema, declines an assembly outside the parser's decidable subset, widens the group's schema by the instance's xsi:schemaLocation hints for namespaces it leaves uncovered, and builds a schema from a hint or the built-ins for a group with no schemaTest, which the census counts as not generating.",
+	"Assembly: the instance lane's schema is wider. It also serves the suite's own XLink schema, declines an assembly outside the parser's decidable subset, widens the group's schema by the hints on the instance's document element for namespaces it leaves uncovered, and builds a schema from the instance's hints or the built-ins for a group declaring other than one schemaTest, whose cases the census counts as not generating.",
 	"The decline table keys a construct on its codec.Construct inside each driver, and across drivers on the Construct's String, which codec makes distinct for each Construct.",
 	"No count is a yield: lifting a construct exposes each of its cases' next decline, so its count bounds from above the cases lifting it alone makes decode.",
 }
