@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"errors"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -191,6 +192,19 @@ func TestCensusAbsentSuiteIsAMode(t *testing.T) {
 				t.Errorf("report = %q, want it to open %q", out.String(), want)
 			}
 		})
+	}
+}
+
+// failWriter refuses every write.
+type failWriter struct{}
+
+func (failWriter) Write([]byte) (int, error) { return 0, errors.New("refused") }
+
+// TestCensusAbsentNoticeUnwrittenIsAnError holds a corpus-absent notice that
+// cannot be written to run's error, which main exits non-zero on.
+func TestCensusAbsentNoticeUnwrittenIsAnError(t *testing.T) {
+	if err := run(failWriter{}, []string{filepath.Join(t.TempDir(), "absent")}); err == nil {
+		t.Error("run wrote its notice to a refusing writer and returned no error")
 	}
 }
 
