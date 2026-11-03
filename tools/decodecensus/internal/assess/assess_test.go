@@ -84,9 +84,11 @@ func accepting(*xsd.Schema, value.Backend, []byte, ...codec.Option) error { retu
 
 // TestDriveCountsEachBucket holds Drive, the loop the census's driver runs,
 // to one count per bucket of the classifier, each row a case that lands in
-// one bucket alone. Each row fails with its bucket's arm of classify or
-// tallyOutcome removed, the differential rows with assess's comparison
-// removed: the account of #3292 names each mutation run.
+// one bucket alone. The rows decoded, declined, undecided, rejected and
+// placeholder mismatch each fail with their bucket's arm of classify removed,
+// and failed other, classify's last return, with its arm of tallyOutcome
+// removed; the row differential fails with assess's differential always false,
+// and the row after it with the differential set on every decoded case.
 func TestDriveCountsEachBucket(t *testing.T) {
 	own := []Decoder{DecoderFor[a]}
 	cases := []struct {
