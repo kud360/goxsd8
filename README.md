@@ -400,8 +400,9 @@ the generated type, here `order.Order`; `go doc
 github.com/kud360/goxsd8/codec Decode` states every error it returns. Once
 `Generate` has written `gen/order`, a program in the same module with
 `schema` and `backend` as above decodes `order.xml` into it, importing
-`github.com/kud360/goxsd8/codec` and the generated package, whose import path is the one `Target.Dir`'s doc derives
-for the `Dir` that `Generate` was given:
+`github.com/kud360/goxsd8/codec` and the generated package, whose import
+path is the one `Target.Dir`'s doc derives for the `Dir` that `Generate` was
+given:
 
 ```go
 data, err := os.ReadFile("order.xml")
