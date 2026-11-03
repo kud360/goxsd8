@@ -36,7 +36,10 @@
 // and is typed the same way. So xs:normalizedString, xs:token, xs:language,
 // xs:Name, xs:NCName, xs:NMTOKEN, xs:ID, xs:IDREF, xs:ENTITY, xs:anyURI and a
 // user restriction of any of them decode, each field a string, a *string or a
-// []string by its occurrence. No element in the instance carries xsi:type.
+// []string by its occurrence, an optional attribute use's a string where it
+// has an effective value constraint (§3.5.4 key-evc), whose value the
+// post-schema-validation infoset supplies for the absent attribute. No element
+// in the instance carries xsi:type.
 //
 // Every other construct is a [*DeclineError], never a zero value: a choice,
 // an all group, a nested model group or <group ref>, a wildcard, an <element
