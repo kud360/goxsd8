@@ -101,11 +101,11 @@ const wantCounts = `decodecensus: 10 instance case(s) under %ROOT%
 
 // TestCensusCounts runs the whole command over censusSuite, a driver built
 // and run included, and pins every count the report prints, the decline
-// table, every caveat and the placeholder's. Each of the counts considered,
-// schema generates, decoded, declined and failed other fails with its arm of
-// plan or Drive removed; undecided, rejected and the differential, which no
-// schema document makes codec return, are TestReportPrintsEachMergedCount's
-// and package assess's.
+// table, every caveat and the placeholder's. It fails with instanceCases'
+// withheld test removed, with plan's generates count removed, and with the
+// decoded, declined or failed other arm of the driver's tallyOutcome removed;
+// undecided, rejected and the differential, which no schema document makes
+// codec return, are TestReportPrintsEachMergedCount's and package assess's.
 func TestCensusCounts(t *testing.T) {
 	root := writeTree(t, censusSuite)
 	var out bytes.Buffer
@@ -218,7 +218,7 @@ const ownTypeSchema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
 // TestOwnTypeFindsEachTopLevelElementsType generates ownTypeSchema and pins
 // the type resolveCase finds for each top-level element. Without namedFrom's
 // test, a, h and m each match a branch beside their own type and resolve to
-// none.
+// none; with ownProvenances' plain entry alone, tt and s resolve to none.
 func TestOwnTypeFindsEachTopLevelElementsType(t *testing.T) {
 	root := writeTree(t, map[string]string{"s.xsd": ownTypeSchema, "out/go.mod": "module census\n"})
 	schema, err := parser.Parse("s.xsd", parser.WithResolver(loader.Dir(root)))
@@ -252,5 +252,32 @@ func TestOwnTypeFindsEachTopLevelElementsType(t *testing.T) {
 		if typ != tc.typ || decl != tc.decl || ok != tc.ok {
 			t.Errorf("resolveCase(%s) = %q, %v, %v, want %q, %v, %v; types %v", tc.local, typ, decl, ok, tc.typ, tc.decl, tc.ok, types)
 		}
+	}
+}
+
+// TestOwnTypeRendersAnAbsoluteLoc parses the schema under its absolute path,
+// so that its declarations' Loc URIs are absolute and a header renders them
+// relative to the target's Dir: resolveCase finds a's type only by rendering
+// them so too.
+func TestOwnTypeRendersAnAbsoluteLoc(t *testing.T) {
+	root := writeTree(t, map[string]string{"s.xsd": ownTypeSchema, "out/go.mod": "module census\n"})
+	schema, err := parser.Parse(filepath.Join(root, "s.xsd"), parser.WithResolver(loader.Dir(string(filepath.Separator))))
+	if err != nil {
+		t.Fatalf("parsing: %v", err)
+	}
+	decl, ok := schema.Element(xsd.QName{Local: "a"})
+	if !ok || !filepath.IsAbs(decl.Loc().URI) {
+		t.Fatalf("element a's Loc %v is not absolute", decl.Loc())
+	}
+	dir := filepath.Join(root, "out", "p")
+	if errs := codegen.Generate([]codegen.Target{{Schema: schema, Dir: dir, Package: "p"}}); errs != nil {
+		t.Fatalf("Generate: %v", errs)
+	}
+	types, err := generatedTypes(filepath.Join(dir, "xsd_gen.go"))
+	if err != nil {
+		t.Fatalf("generatedTypes: %v", err)
+	}
+	if typ, _, ok := resolveCase(schema, types, xsd.QName{Local: "a"}, dir); typ != "A" || !ok {
+		t.Errorf("resolveCase(a) = %q, %v, want \"A\", true; types %v", typ, ok, types)
 	}
 }
