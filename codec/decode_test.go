@@ -845,7 +845,7 @@ func TestWithBranches(t *testing.T) {
 // clause 2.1); derivationBlockedSchema's h, whose member m's type derives by
 // the restriction h blocks (clause 2.3); abstractMemberSchema's h, whose one
 // member is abstract (cvc-elt clause 2); and refChoiceSchema's choice, a local
-// a beside refs to A, repeated, and to k.
+// a beside refs to A, of a's Go field name and shape, and to k, repeated.
 const (
 	refSchema = `<xs:element name="a" type="xs:string"/><xs:element name="b" type="xs:token"/><xs:element name="c" type="xs:string"/>
 		<xs:element name="r"><xs:complexType><xs:sequence><xs:element ref="s:a"/><xs:element ref="s:b" minOccurs="0"/><xs:element ref="s:c" minOccurs="0" maxOccurs="unbounded"/></xs:sequence></xs:complexType></xs:element>`
@@ -856,7 +856,7 @@ const (
 	abstractMemberSchema = `<xs:element name="h" type="xs:string"/><xs:element name="m" type="xs:string" abstract="true" substitutionGroup="s:h"/>
 		<xs:element name="r"><xs:complexType><xs:sequence><xs:element ref="s:h"/></xs:sequence></xs:complexType></xs:element>`
 	refChoiceSchema = `<xs:element name="A" type="xs:string"/><xs:element name="k" type="xs:token"/>
-		<xs:element name="r"><xs:complexType><xs:choice><xs:element name="a" type="xs:string"/><xs:element ref="s:A" maxOccurs="2"/><xs:element ref="s:k"/></xs:choice></xs:complexType></xs:element>`
+		<xs:element name="r"><xs:complexType><xs:choice><xs:element name="a" type="xs:string"/><xs:element ref="s:A"/><xs:element ref="s:k" maxOccurs="2"/></xs:choice></xs:complexType></xs:element>`
 )
 
 // refA to refs are refSchema's A, B, C and R; refH and refHolder are R and H
@@ -876,8 +876,8 @@ type (
 	refHolder   struct{ H refH }
 	refChoice   interface{ isRefChoice() }
 	refChoiceA  struct{ A string }
-	refChoiceA2 struct{ A []refA }
-	refChoiceK  struct{ K refK }
+	refChoiceA2 struct{ A refA }
+	refChoiceK  struct{ K []refK }
 	refK        string
 )
 
@@ -905,8 +905,8 @@ func TestRefTypesAreCodegens(t *testing.T) {
 			"type K string\n",
 			"type R interface {\n\tisR()\n}\n",
 			"type RA struct {\n\tA string\n}\n\nfunc (RA) isR() {}\n",
-			"type RA2 struct {\n\tA []A\n}\n\nfunc (RA2) isR() {}\n",
-			"type RK struct {\n\tK K\n}\n\nfunc (RK) isR() {}\n",
+			"type RA2 struct {\n\tA A\n}\n\nfunc (RA2) isR() {}\n",
+			"type RK struct {\n\tK []K\n}\n\nfunc (RK) isR() {}\n",
 		}},
 	}
 	for _, row := range rows {
@@ -942,9 +942,9 @@ func TestDecodeElementRef(t *testing.T) {
 		{"a head blocking substitution", blockedSchema, "<s:h>x</s:h>", decodeInto[refHolder](), refHolder{H: "x"}},
 		{"a head blocking its member's derivation", derivationBlockedSchema, "<s:h> x </s:h>", decodeInto[refHolder](), refHolder{H: " x "}},
 		{"a head whose one member is abstract", abstractMemberSchema, "<s:h>x</s:h>", decodeInto[refHolder](), refHolder{H: "x"}},
-		{"a choice's local alternative beside a ref of its Go name", refChoiceSchema, "<s:a>v</s:a>", decodeInto[refChoice](refChoiceBranches), refChoice(refChoiceA{A: "v"})},
-		{"a choice's repeated ref alternative", refChoiceSchema, "<s:A>v</s:A><s:A>w</s:A>", decodeInto[refChoice](refChoiceBranches), refChoice(refChoiceA2{A: []refA{"v", "w"}})},
-		{"a choice's ref alternative", refChoiceSchema, "<s:k> u  v </s:k>", decodeInto[refChoice](refChoiceBranches), refChoice(refChoiceK{K: "u v"})},
+		{"a choice's local alternative beside a ref of its Go name and shape", refChoiceSchema, "<s:a>v</s:a>", decodeInto[refChoice](refChoiceBranches), refChoice(refChoiceA{A: "v"})},
+		{"a choice's ref alternative", refChoiceSchema, "<s:A>v</s:A>", decodeInto[refChoice](refChoiceBranches), refChoice(refChoiceA2{A: "v"})},
+		{"a choice's repeated ref alternative", refChoiceSchema, "<s:k> u  v </s:k><s:k>w</s:k>", decodeInto[refChoice](refChoiceBranches), refChoice(refChoiceK{K: []refK{"u v", "w"}})},
 	}
 	for _, row := range rows {
 		t.Run(row.name, func(t *testing.T) {
