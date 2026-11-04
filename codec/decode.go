@@ -118,9 +118,10 @@ var (
 //     type is not string. A field's Go type is string, *string or []string
 //     for a local element declaration's particle and an attribute use; for an
 //     <element ref> particle it is N, *N or []N, N the named type codegen
-//     emits for the referenced declaration, matched by its underlying type,
-//     string, alone and never by name: any named type over string but string
-//     itself passes. A sealed interface, T or the struct's first field,
+//     emits for the referenced declaration, matched as any named type whose
+//     underlying type is string, never by name; string itself, a local
+//     particle's type, does not pass, so a ref's field and a local one's never
+//     accept one Go type. A sealed interface, T or the struct's first field,
 //     does not match when it is not an interface whose one method is
 //     unexported, or when its branch set, as [WithBranches] supplied it, is
 //     not one struct of one field per alternative, that field the name and Go
