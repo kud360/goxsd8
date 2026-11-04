@@ -219,12 +219,12 @@ const (
 // which rules make it legal and for which directives the spec states nothing —
 // so rendering it through violationLine's "<loc>: [<rule>] <message>" would
 // publish a spec charge no rule makes (STYLE E2). The line says the directive
-// was skipped and never that the skip was legal, which holds of an <import>, and
-// of an <include> only outside every <override>'s target set: §F.2 rewrites
-// an <include> inside one into an <override>, yet the line still names it
-// <include>, the element the operator edits. What it buys is that a summary, or
-// an assessment, answered off a SHORT assembly is distinguishable from one
-// answered off a complete one — the fact nothing but -v carried before (#1260).
+// was skipped and never that the skip was legal, which that paragraph grants
+// only some of the directives the line names — not every <include> among them:
+// the line names each directive as written, the element the operator edits,
+// not as §F.2 rewrites it. What it buys is that a summary, or an assessment,
+// answered off a SHORT assembly is distinguishable from one answered off a
+// complete one — the fact nothing but -v carried before (#1260).
 //
 // Only parser.UnfollowedLocationUnresolved is named. A bare <import>
 // (parser.UnfollowedNoLocation) names no document to have failed to reach:
