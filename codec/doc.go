@@ -45,10 +45,9 @@
 // particle of that sequence or choice is an element declaration with no {type
 // table} and {nillable} false, of a simple type that decodes, no two
 // particles sharing an expanded name: a local one, or the top-level one an
-// <element ref> names, with {abstract} false, whose substitution group
-// (§3.3.6.4 key-eq) holds no other declaration with {abstract} false, as when
-// no other declaration affiliates with it or its {disallowed substitutions}
-// contains substitution (cos-equiv-derived-ok-rec clause 2.1). Each attribute
+// <element ref> names where codegen gives the particle's field that
+// declaration's own type, not a sealed interface over its substitution group
+// (codegen's package doc, "# Substitution groups"). Each attribute
 // use is outside the xsi namespace and is typed the same way. Each field
 // is a string, a *string or a []string by its occurrence, an <element ref>'s
 // the same over the named type over string codegen emits for the referenced
