@@ -16,9 +16,9 @@ import (
 	"github.com/kud360/goxsd8/xsderr"
 )
 
-// ErrTypeMismatch is the error [Decode] wraps when T is not the type codegen
-// emits for the document element's declaration; Decode's doc, item 6, states
-// when.
+// ErrTypeMismatch is the error [Decode] wraps when T does not match the type
+// codegen emits for the document element's declaration; Decode's doc, item 6,
+// states when.
 var ErrTypeMismatch = errors.New("codec: T is not the type codegen emits for the document element")
 
 // The names of the primitives the slice decodes, read by identity.
@@ -32,15 +32,18 @@ var (
 // returns it. A value is returned exactly when the error is nil.
 //
 // T is the caller's choice: nothing dispatches a document element to its
-// generated type. Item 6 below compares T's fields with those codegen emits
-// for the declaration in name, order and Go type alone, so a T whose fields
+// generated type, and item 6 below never compares T's own name. For a complex
+// {type definition} item 6 compares T's fields with those codegen emits for
+// the declaration in name, order and Go type alone, so a T whose fields
 // differ returns [ErrTypeMismatch] where item 6 is the first that applies,
 // but a T of the same shape, such as the struct codegen emits for another
 // top-level element of the same type, passes item 6 and decodes as the
 // declaration's own struct does, an error only where that one's is. For a
-// simple {type definition} item 6 compares no name at all. A caller
-// decoding documents of several roots therefore reads the document element's
-// name itself, through parser/xmltree or encoding/xml, before choosing T.
+// simple one item 6 reads T's underlying type alone, so any T over string
+// passes it, such as the type codegen emits for another document element of
+// the same simple type. A caller decoding documents of several roots
+// therefore reads the document element's name itself, through parser/xmltree
+// or encoding/xml, before choosing T.
 //
 // The slice Decode covers is the package doc's "# What decodes". Decode
 // first assesses data against schema with package validate and decodes only
@@ -359,7 +362,7 @@ func bind(schema *xsd.Schema, root *xmltree.StartElement) (binder, error) {
 // bindSimpleRoot returns the simpleRoot of decl, a top-level element
 // declaration whose {type definition} is st, or the decline Decode's doc
 // states for st, item 5, at the instance Loc loc, subject naming st.
-func bindSimpleRoot(schema *xsd.Schema, decl xsd.ElementDeclaration, st *xsd.SimpleType, loc xsderr.Loc, subject string) (*simpleRoot, error) {
+func bindSimpleRoot(schema *xsd.Schema, decl xsd.ElementDeclaration, st *xsd.SimpleType, loc xsderr.Loc, subject string) (binder, error) {
 	d, err := simpleDecline(schema, st)
 	if err != nil {
 		return nil, err
@@ -371,7 +374,10 @@ func bindSimpleRoot(schema *xsd.Schema, decl xsd.ElementDeclaration, st *xsd.Sim
 	if vc, has := decl.ValueConstraint(); has {
 		s.supplied, err = supply(schema, st, vc, declSubject(decl))
 	}
-	return s, err
+	if err != nil {
+		return nil, err
+	}
+	return s, nil
 }
 
 // declarationDecline returns the construct of an element declaration's own

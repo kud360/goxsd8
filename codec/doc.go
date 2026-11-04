@@ -66,8 +66,8 @@
 //     lose what the derived type governs: under xsi:type="xs:token" an
 //     xs:string element's value collapses. That refusal is permanent.
 //
-// A value constraint of an element or attribute use, default or fixed,
-// decodes; [Decode]'s doc states the value its field holds.
+// A value constraint of an element declaration or attribute use, default or
+// fixed, decodes; [Decode]'s doc states the value it supplies.
 //
 // Every error about the instance carries its instance Loc, under the URI
 // [WithURI] names: a violation's, an undecided check's, and a decline's,
