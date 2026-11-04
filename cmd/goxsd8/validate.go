@@ -84,7 +84,10 @@ func formatVocabulary() string {
 // subcommand name itself.
 //
 // Every instance is assessed, in argument order: a violation in one never
-// stops the next, so a script gets the whole report from one run. The exit
+// stops the next, so a script gets the whole report from one run. The one
+// exception is the command line's shape: an instance argument whose name gives
+// no source format (formatlessInstances) refuses the whole invocation before
+// any -schema is compiled, and no instance is assessed. The exit
 // code is the worst outcome over the instances (main.go's exit codes), the way
 // runParse's is over its schemas.
 //
@@ -129,6 +132,12 @@ func runValidate(args []string, stdout, stderr io.Writer) int {
 	}
 	if len(instances) == 0 {
 		return subcommandUsageError(stderr, "validate", "goxsd8: validate: no instance given")
+	}
+	// Before any -schema is read or compiled: an instance whose name gives no
+	// format is the command line's shape, so it refuses the whole invocation
+	// rather than landing between two instances' reports (#3358).
+	if lines := formatlessInstances(instances, forced); len(lines) > 0 {
+		return subcommandUsageError(stderr, "validate", strings.Join(lines, "\n"))
 	}
 
 	// A nil logger selects the parser's and the engine's silent defaults, so -v
@@ -231,11 +240,37 @@ type validation struct {
 	log *slog.Logger
 }
 
+// formatlessInstances renders formatOf's diagnosis of every instance argument
+// whose name gives no source format under forced, one "goxsd8: validate: "
+// line each in argument order, for runValidate to print above one synopsis.
+// It is empty where every argument names one, which a non-empty forced always
+// does.
+//
+// An argument refuseDirectory answers for is skipped, left to one's
+// per-instance "is a directory" diagnosis: a directory is diagnosed as a
+// directory whatever its name, and "pass -format xml" would only lead it to
+// that refusal (#3358).
+func formatlessInstances(instances []string, forced sourceFormat) []string {
+	var lines []string
+	for _, instance := range instances {
+		if refuseDirectory(instance) != nil {
+			continue
+		}
+		if _, err := formatOf(instance, forced); err != nil {
+			lines = append(lines, fmt.Sprintf("goxsd8: validate: %v", err))
+		}
+	}
+	return lines
+}
+
 // one assesses a single instance argument and reports its exit code.
 func (vn *validation) one(instance string, stdout, stderr io.Writer) int {
 	if err := refuseDirectory(instance); err != nil {
 		return subcommandFault(stderr, fmt.Sprintf("goxsd8: validate: %v", err))
 	}
+	// formatlessInstances has already refused the invocation over every
+	// argument this formatOf call fails on, unless the argument was a
+	// directory there and is none here; that argument keeps the usage line.
 	format, err := formatOf(instance, vn.forced)
 	if err != nil {
 		return subcommandUsageError(stderr, "validate", fmt.Sprintf("goxsd8: validate: %v", err))
