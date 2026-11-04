@@ -5,9 +5,14 @@
 //
 // A caller holding an error from this module reaches its structured part
 // with errors.As to an *xsderr.Error, which yields the Rule, the Loc and the
-// Msg together; RuleOf and LocOf read the Rule or the Loc alone. Error's doc
-// says how a caller tells an *Error that is a validity verdict from one that
-// is a fault.
+// Msg together; RuleOf and LocOf read the Rule or the Loc alone. An *Error
+// holds no clause apart from Msg. Rule is always a base rule ID — never the
+// rule-plus-part-number name Appendix B recommends for reports, even where
+// the catalog lists that name — because one charge may cite several clauses,
+// or a clause of another rule; Msg names each clause it cites inline, beside
+// the ID of the rule that clause belongs to. Switch on Rule, and read a
+// clause as prose. Error's doc says how a caller tells an *Error that is a
+// validity verdict from one that is a fault.
 //
 // # Design
 //
