@@ -84,10 +84,8 @@ func formatVocabulary() string {
 // subcommand name itself.
 //
 // Every instance is assessed, in argument order: a violation in one never
-// stops the next, so a script gets the whole report from one run. The one
-// exception is the command line's shape: an instance argument whose name gives
-// no source format (formatlessInstances) refuses the whole invocation before
-// any -schema is compiled, and no instance is assessed. The exit
+// stops the next, so a script gets the whole report from one run, unless
+// formatlessInstances refuses the invocation first. The exit
 // code is the worst outcome over the instances (main.go's exit codes), the way
 // runParse's is over its schemas.
 //
@@ -133,9 +131,8 @@ func runValidate(args []string, stdout, stderr io.Writer) int {
 	if len(instances) == 0 {
 		return subcommandUsageError(stderr, "validate", "goxsd8: validate: no instance given")
 	}
-	// Before any -schema is read or compiled: an instance whose name gives no
-	// format is the command line's shape, so it refuses the whole invocation
-	// rather than landing between two instances' reports (#3358).
+	// Shape, so before any -schema is read: usage's source-format paragraph
+	// owns the refusal (#3358).
 	if lines := formatlessInstances(instances, forced); len(lines) > 0 {
 		return subcommandUsageError(stderr, "validate", strings.Join(lines, "\n"))
 	}
