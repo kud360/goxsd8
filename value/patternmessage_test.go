@@ -101,6 +101,10 @@ func TestPatternRejectionNamesFailedStep(t *testing.T) {
 			`"abc" matches no member of the pattern facet of the simple type {urn:t}Code, whose {value} holds "[A-Z]{3}", but cvc-pattern-valid requires one to match`},
 		{"the derived step fails where its base's passes", narrower, "XYZ", "cvc-pattern-valid",
 			`"XYZ" matches no member of the pattern facet of the simple type {urn:t}Narrower, whose {value} holds "AB.", but cvc-pattern-valid requires one to match`},
+		// Narrower declares a pattern of its own, yet Code's earlier entry is
+		// inherited.
+		{"the base step fails under a type with its own pattern", narrower, "abc", "cvc-pattern-valid",
+			`"abc" matches no member of the pattern facet that the simple type {urn:t}Narrower inherits from the simple type {urn:t}Code, whose {value} holds "[A-Z]{3}", but cvc-pattern-valid requires one to match`},
 		{"an anonymous type's whole OR-set", anon, "A1", "cvc-pattern-valid",
 			`"A1" matches no member of the pattern facet of an anonymous simple type, whose {value} holds "[0-9]+", "[a-z]+", but cvc-pattern-valid requires one to match`},
 		{"an anonymous type inherits its anonymous base's pattern", anonHeir, "A1", "cvc-pattern-valid",
