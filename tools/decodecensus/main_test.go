@@ -47,7 +47,7 @@ func schemaTest(doc string) string {
 
 // censusSuite is the fixture suite. Group g's schema generates, and its
 // cases decode (a.xml, twice, and f.xml, of simple type), decline with
-// another primitive (e.xml, twice) and choice content (c.xml), and fail
+// another primitive (e.xml, twice) and all content (c.xml), and fail
 // otherwise, charged (invalid.xml) and with no declaration for the document
 // element (u.xml), which decodes into the placeholder; its case old is
 // withheld. Group rec's schema assembles and does not generate, group bad's
@@ -66,7 +66,7 @@ var censusSuite = map[string]string{
 </testSet>`,
 	"d/s.xsd": `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
   <xs:element name="a"><xs:complexType><xs:sequence><xs:element name="b" type="xs:string"/></xs:sequence></xs:complexType></xs:element>
-  <xs:element name="c"><xs:complexType><xs:choice><xs:element name="d" type="xs:string"/></xs:choice></xs:complexType></xs:element>
+  <xs:element name="c"><xs:complexType><xs:all><xs:element name="d" type="xs:string"/></xs:all></xs:complexType></xs:element>
   <xs:element name="e" type="xs:int"/>
   <xs:element name="f" type="xs:string"/>
 </xs:schema>`,
@@ -97,7 +97,7 @@ const wantCounts = `decodecensus: 11 instance case(s) under %ROOT%
 
 === First decline, by construct: 2 construct(s) ===
        2  an atomic simple type whose primitive is neither xs:string nor xs:anyURI
-       1  choice content
+       1  all content
 
 === Caveats ===
 `

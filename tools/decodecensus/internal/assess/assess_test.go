@@ -14,27 +14,27 @@ import (
 	"github.com/kud360/goxsd8/xsd"
 )
 
-// fixtureSchema declares a, in the slice codec decodes, c, whose choice
+// fixtureSchema declares a, in the slice codec decodes, c, whose all
 // content codec declines, and u, a's shape with an assertion whose for
 // expression the XPath subset declines, so validate leaves it undecided
 // (cvc-assertion).
 const fixtureSchema = `<?xml version="1.0"?>
 <xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
   <xs:element name="a"><xs:complexType><xs:sequence><xs:element name="b" type="xs:string"/></xs:sequence></xs:complexType></xs:element>
-  <xs:element name="c"><xs:complexType><xs:choice><xs:element name="d" type="xs:string"/></xs:choice></xs:complexType></xs:element>
+  <xs:element name="c"><xs:complexType><xs:all><xs:element name="d" type="xs:string"/></xs:all></xs:complexType></xs:element>
   <xs:element name="u"><xs:complexType><xs:sequence><xs:element name="b" type="xs:string"/></xs:sequence>
     <xs:assert test="(for $x in b return string-length($x)) = 1"/></xs:complexType></xs:element>
 </xs:schema>
 `
 
-// The fixture's instances: valid.xml and choice.xml are valid, invalid.xml
+// The fixture's instances: valid.xml and all.xml are valid, invalid.xml
 // lacks a's required child b, so validate charges it, and undecided.xml is
 // Undecided.
 var fixtureFiles = map[string]string{
 	"s.xsd":         fixtureSchema,
 	"valid.xml":     `<a><b>x</b></a>`,
 	"invalid.xml":   `<a/>`,
-	"choice.xml":    `<c><d>x</d></c>`,
+	"all.xml":       `<c><d>x</d></c>`,
 	"undecided.xml": `<u><b>x</b></u>`,
 }
 
@@ -96,8 +96,8 @@ func TestDriveCountsEachBucket(t *testing.T) {
 		want     Summary
 	}{
 		{"decoded", own, Case{"valid.xml", 0}, Summary{Decoded: 1}},
-		{"declined", []Decoder{DecoderFor[a]}, Case{"choice.xml", 0},
-			Summary{Declines: []Tally{{Construct: "choice content", Count: 1}}}},
+		{"declined", []Decoder{DecoderFor[a]}, Case{"all.xml", 0},
+			Summary{Declines: []Tally{{Construct: "all content", Count: 1}}}},
 		{"undecided", own, Case{"undecided.xml", 0}, Summary{Undecided: 1}},
 		{"rejected", []Decoder{DecoderFor[mismatched]}, Case{"valid.xml", 0}, Summary{Rejected: 1}},
 		{"failed other", own, Case{"invalid.xml", 0}, Summary{FailedOther: 1}},
@@ -117,8 +117,8 @@ func TestDriveCountsEachBucket(t *testing.T) {
 // TestDriveTalliesDeclinesByConstruct pins the decline table's key: two
 // cases declining one construct are one Tally of 2.
 func TestDriveTalliesDeclinesByConstruct(t *testing.T) {
-	got := drive(t, []Decoder{DecoderFor[a]}, Case{"choice.xml", 0}, Case{"valid.xml", 0}, Case{"choice.xml", 0})
-	want := Summary{Decoded: 1, Declines: []Tally{{Construct: "choice content", Count: 2}}}
+	got := drive(t, []Decoder{DecoderFor[a]}, Case{"all.xml", 0}, Case{"valid.xml", 0}, Case{"all.xml", 0})
+	want := Summary{Decoded: 1, Declines: []Tally{{Construct: "all content", Count: 2}}}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("Summary = %+v, want %+v", got, want)
 	}
