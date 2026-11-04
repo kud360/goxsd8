@@ -159,13 +159,12 @@ func LocOf(err error) (Loc, bool) {
 	return Loc{}, false
 }
 
-// IsValidRule reports whether r is a Rule the module is allowed to construct:
-// any rule ID present in the generated spec catalog (ruleCatalog, emitted by
-// tools/rulecat into catalog.go), plus the two hand-added non-spec sentinels,
-// RuleXMLWellFormed and RuleComponentInvariant, which are deliberately outside
-// the catalog because the faults they name have no spec-defined rule ID. It
-// lives here rather than in the generated catalog.go so the sentinel exemptions
-// survive `go generate`.
+// IsValidRule reports whether r is in the generated spec catalog (ruleCatalog,
+// emitted by tools/rulecat into catalog.go) or is one of the two hand-added
+// non-spec sentinels, RuleXMLWellFormed and RuleComponentInvariant, which are
+// deliberately outside the catalog because the faults they name have no
+// spec-defined rule ID. It lives here rather than in the generated catalog.go
+// so the sentinel exemptions survive `go generate`.
 //
 // Membership is exact: no prefix-trimming, no clause-suffix (dotted) leniency.
 // The generated catalog holds the rule IDs tools/rulecat extracts from the
