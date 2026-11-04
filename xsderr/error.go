@@ -168,14 +168,15 @@ func LocOf(err error) (Loc, bool) {
 // survive `go generate`.
 //
 // Membership is exact: no prefix-trimming, no clause-suffix (dotted) leniency.
-// The generated catalog is keyed on the base rule IDs tools/rulecat extracts
-// from the specs ("cvc-complex-type", "cvc-elt"), plus the two hand-listed
-// sentinels above — not on clause-level spellings. So both
-// IsValidRule("cvc-complex-type.2.1") and IsValidRule("cvc-elt.1") are false,
-// and stay false. That costs nothing: no non-test construction site in the
-// module cites a dotted rule ID; Rule is always a base ID, as the package doc's
-// "Using xsderr" says. Should a call site ever genuinely need to cite a
-// clause-level rule, extend tools/rulecat to emit it rather than weakening this
+// The generated catalog holds the rule IDs tools/rulecat extracts from the
+// specs ("cvc-complex-type", "cvc-elt"); they carry no part number, save two
+// dotted names that spec prose spells, cos-ct-extends.1.2 and
+// src-simple-type.1. So both IsValidRule("cvc-complex-type.2.1") and
+// IsValidRule("cvc-elt.1") are false, and stay false. Those two dotted names
+// pass, though no non-test construction site cites them: this check is a floor
+// under the no-part-number convention the package doc's "Using xsderr" states,
+// not the convention itself. Citing a clause-level rule means changing that
+// convention and extending tools/rulecat to emit the name, never weakening this
 // check.
 //
 // The sentinel set stays closed at two; the package doc's "The s4s-grammar
