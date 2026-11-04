@@ -27,9 +27,8 @@
 // returns in every other case. It reads the schema, not T:
 // codegen's structs carry no tags, so Decode derives each field's name, order
 // and Go type from the declaration by codegen's own rules and refuses a T
-// that differs. A sealed interface's branch types, which no Go type names,
-// reach it through [WithBranches]. Package codec does not import codegen.
-// Nothing encodes yet.
+// that differs, and reads a sealed interface's branch types from
+// [WithBranches]. Package codec does not import codegen. Nothing encodes yet.
 //
 // # What decodes
 //
@@ -53,12 +52,12 @@
 //
 // A choice decodes into codegen's sealed interface, the branch of the one
 // alternative the instance matches (§3.8.4.3 cvc-model-group) holding its one
-// field: a string, or a []string for an alternative with {max occurs} above
-// 1, its {min occurs} 0 read as 1. The interface is T itself, or, where the
-// type has an attribute use or one occurrence of the choice is emptiable
-// (§3.9.6.3 cos-group-emptiable), the first field of T, a struct whose
-// further fields are the attribute uses'. An empty match is the nil
-// interface. No two alternatives' branch fields share a name and Go type.
+// field: a string, or a []string for an alternative whose {max occurs} is
+// above 1 or unbounded, its {min occurs} 0 read as 1. The interface is T
+// itself, or, where the type has an attribute use or one occurrence of the
+// choice is emptiable (§3.9.6.3 cos-group-emptiable), the first field of T, a
+// struct whose further fields are the attribute uses'. An empty match is the
+// nil interface.
 //
 // Every other construct is a [*DeclineError], never a zero value: a content
 // choice occurring other than exactly once, two choice alternatives whose

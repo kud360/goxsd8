@@ -307,9 +307,11 @@ func TestOwnTypeRendersAnAbsoluteLoc(t *testing.T) {
 
 // TestDriverSourceBindsBranches pins the census's branch-set supply: a
 // generated file declaring two interfaces, one with two marker types and one
-// with a union's non-struct variant, beside a method that is no marker, yields
+// with a union's non-struct variant, beside a method that is no marker, a
+// pointer-receiver method of a marker's name and a generic interface, yields
 // sealedInterfaces' list, and a driver source declaring one WithBranches per
-// interface, in file order, bound to each decoder of that package alone.
+// non-generic interface, in file order, bound to each decoder of that package
+// alone.
 func TestDriverSourceBindsBranches(t *testing.T) {
 	const src = `package p0
 
@@ -336,6 +338,10 @@ type UInt int32
 func (UInt) isU() {}
 
 func (*RA) isU() {}
+
+type Nillable[T, A any] interface {
+	isNillable(T, A)
+}
 `
 	dir := t.TempDir()
 	path := filepath.Join(dir, "xsd_gen.go")

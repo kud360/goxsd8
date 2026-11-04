@@ -26,11 +26,9 @@
 // working directory, so that its generated main packages may import package
 // assess. Each batch of up to batchSize packages builds one driver
 // with `go build`, which calls assess.Drive with one assess.DecoderFor
-// Decoder per type the batch's cases decode into. A Go interface names none of
-// its implementers, so the census supplies every package's branch sets: it
-// reads each interface the generated file declares and the types carrying its
-// marker method, and binds one codec.WithBranches per interface to every
-// decoder of that package (sealedInterfaces). The command therefore
+// Decoder per type the batch's cases decode into, bound to one
+// codec.WithBranches per interface of that type's package, so that the census
+// supplies every package's branch sets (sealedInterfaces). The command therefore
 // runs inside this module's tree, with the go command on PATH and the module
 // cache holding this module's requirements, as GOFLAGS=-mod=mod builds offline
 // from it.
@@ -429,8 +427,11 @@ func generatedTypes(file *ast.File) []typeDecl {
 	return types
 }
 
-// sealedInterfaces returns each interface type the generated file declares,
-// in file order, with its branches: each type B the file gives a method of a
+// sealedInterfaces returns each interface type the generated file declares
+// with no type parameters, in file order, with its branches. A generic
+// interface, such as codegen's Nillable, is no type a WithBranches can name
+// uninstantiated, and Decode declines the nillable element Nillable is
+// emitted for before item 6. The branches are each type B the file gives a method of a
 // single value receiver of type B, named "is" plus the interface's name, with
 // no parameters or results, the marker codegen's package doc "# Complex
 // types" states, in file order.
@@ -443,7 +444,7 @@ func sealedInterfaces(file *ast.File) []sealedDecl {
 		}
 		for _, spec := range gen.Specs {
 			ts := spec.(*ast.TypeSpec)
-			if _, isInterface := ts.Type.(*ast.InterfaceType); isInterface {
+			if _, isInterface := ts.Type.(*ast.InterfaceType); isInterface && ts.TypeParams == nil {
 				sealed = append(sealed, sealedDecl{name: ts.Name.Name})
 			}
 		}

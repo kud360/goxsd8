@@ -45,12 +45,11 @@ var (
 // therefore reads the document element's name itself, through parser/xmltree
 // or encoding/xml, before choosing T.
 //
-// T may be codegen's sealed interface for a choice, and Decode then returns a
-// *T pointing at the branch it fills, or at the nil interface for an empty
-// match; a struct of T may hold that interface as its first field. A Go
-// interface names none of its implementers, so the branch types reach Decode
-// only through [WithBranches], and item 6 holds them to the alternatives by
-// shape: neither T's, the interface's nor a branch's name is compared.
+// T may be codegen's sealed interface for a choice, as the package doc's
+// "# What decodes" states, and Decode then returns a *T pointing at it. The
+// branch types reach Decode only through [WithBranches], and item 6 holds them
+// to the alternatives by shape: neither T's, the interface's nor a branch's
+// name is compared.
 //
 // The slice Decode covers is the package doc's "# What decodes". Decode
 // first assesses data against schema with package validate and decodes only
