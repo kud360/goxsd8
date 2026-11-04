@@ -364,6 +364,7 @@ func (f field) accepts(t reflect.Type) bool {
 func (f field) describe() string {
 	var prefix string
 	switch f.shape {
+	case shapeOne:
 	case shapeOptional:
 		prefix = "*"
 	case shapeRepeated:
