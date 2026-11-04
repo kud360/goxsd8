@@ -113,10 +113,13 @@
 //	    and its schemaLocation value and an <xs:import> by its
 //	    namespace too, with no rule ID and, without -strict, no change
 //	    of exit code: no rule charges the skip — src-include and
-//	    src-import make it legal for an <xs:include> and an
-//	    <xs:import>, and the spec states nothing either way for the
-//	    other two — so the summary above is printed off a schema short
-//	    of whatever that document declares. -q does not silence it.
+//	    src-import make it legal for an <xs:import> and for an
+//	    <xs:include> outside every <xs:override>'s target set, and the
+//	    spec states nothing either way for an <xs:override>, an empty
+//	    <xs:redefine>, or an <xs:include> inside such a target set,
+//	    which §F.2 rewrites into an <xs:override> — so the summary
+//	    above is printed off a schema short of whatever that document
+//	    declares. -q does not silence it.
 //	    Under -strict the summary is printed all the same and the
 //	    argument is charged 4. Such a directive of a REJECTED schema
 //	    is named the same way, for the directives assembly reached

@@ -178,9 +178,9 @@ func rootLocation(location string) (string, error) {
 // resolver error other than loader.ErrNotFound in plain assembly context and
 // each hop back returns it unwrapped, so it lands here with nothing charged
 // (parser/parse.go). A schemaLocation that merely resolves to no document is
-// the ErrNotFound arm instead — a skip, legal for an <xs:include> under
-// src-include clause 2.4, reported by reportUnfollowed and never reaching this
-// function.
+// the ErrNotFound arm instead — a skip, whichever directive it is, reported by
+// reportUnfollowed and never reaching this function; usage's parse paragraph
+// says for which directives a rule makes that skip legal.
 func violationLine(err error) string {
 	var e *xsderr.Error
 	if errors.As(err, &e) {
@@ -219,10 +219,12 @@ const (
 // which rules make it legal and for which directives the spec states nothing —
 // so rendering it through violationLine's "<loc>: [<rule>] <message>" would
 // publish a spec charge no rule makes (STYLE E2). The line says the directive
-// was skipped and never that the skip was legal, which holds of an <include> or
-// an <import> only. What it buys is that a summary, or an assessment, answered
-// off a SHORT assembly is distinguishable from one answered off a complete one
-// — the fact nothing but -v carried before (#1260).
+// was skipped and never that the skip was legal, which holds of an <import>, and
+// of an <include> only outside every <override>'s target set: §F.2 rewrites
+// an <include> inside one into an <override>, yet the line still names it
+// <include>, the element the operator edits. What it buys is that a summary, or
+// an assessment, answered off a SHORT assembly is distinguishable from one
+// answered off a complete one — the fact nothing but -v carried before (#1260).
 //
 // Only parser.UnfollowedLocationUnresolved is named. A bare <import>
 // (parser.UnfollowedNoLocation) names no document to have failed to reach:
