@@ -488,7 +488,7 @@ func TestGenModuleRefusals(t *testing.T) {
 		want string
 	}{
 		{"no go.mod", []string{"-schema", flat, "-out", at("free/gen")},
-			"goxsd8: gen: -schema " + flat + " -out " + at("free/gen") + ": no go.mod lies in the output directory " + at("free/gen") + " or any directory above it, so it has no import path"},
+			"goxsd8: gen: -schema " + flat + " -out " + at("free/gen") + ": no go.mod lies in the output directory " + at("free/gen") + " or any directory above it, so it has no import path: create a go.mod at or above the output directory, as go mod init <module path> does"},
 		{"no module directive", []string{"-schema", flat, "-out", at("nomodule/gen")},
 			"goxsd8: gen: -schema " + flat + " -out " + at("nomodule/gen") + ": " + at("nomodule/go.mod") + " holds no module directive"},
 		{"repeated import path", []string{"-schema", flat, "-out", at("one/gen"), "-schema", flat, "-out", at("two/gen")},
