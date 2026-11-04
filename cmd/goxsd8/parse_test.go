@@ -449,6 +449,34 @@ func TestParseNamesAnUnresolvedDirective(t *testing.T) {
 	}
 }
 
+// TestParseNamesADirectiveOfAnIncludedDocument pins describeDirective's read
+// beyond the root: a directive in a document the root <xs:include>s is found
+// in that document, the second of report.Documents(), and named by its own
+// kind and attributes.
+func TestParseNamesADirectiveOfAnIncludedDocument(t *testing.T) {
+	dir := t.TempDir()
+	root, inner := filepath.Join(dir, "root.xsd"), filepath.Join(dir, "inner.xsd")
+	files := []struct{ path, body string }{
+		{root, `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" targetNamespace="http://example.com/short">` + "\n" +
+			`<xs:include schemaLocation="inner.xsd"/><xs:element name="present" type="xs:int"/></xs:schema>`},
+		{inner, `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">` + "\n" +
+			`<xs:import namespace="urn:x" schemaLocation="typo.xsd"/></xs:schema>`},
+	}
+	for _, f := range files {
+		if err := os.WriteFile(f.path, []byte(f.body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	var stdout, stderr bytes.Buffer
+	if code := run([]string{"parse", "-q", root}, &stdout, &stderr); code != exitOK {
+		t.Fatalf("parse = %d, want %d (stderr %q)", code, exitOK, stderr.String())
+	}
+	want := "goxsd8: parse: " + inner + `:2:1: this <import>'s schemaLocation "typo.xsd", for namespace "urn:x", resolved to no document and was skipped; the compiled schema is short of whatever that document declares` + "\n"
+	if stderr.String() != want {
+		t.Errorf("stderr = %q, want %q", stderr.String(), want)
+	}
+}
+
 // shortBrokenSchema carries #1312's shape: the same unresolved <xs:include>
 // the fixtures above carry, in a document that also earns brokenRule.
 const shortBrokenSchema = "testdata/unresolved-include-broken.xsd"

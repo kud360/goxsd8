@@ -257,8 +257,9 @@ func reportUnfollowed(stderr io.Writer, verb string, compiled bool, report *pars
 // children the element whose Loc() is at, which is how parser records an
 // UnfollowedDirective (parser/parse.go, unfollowedAt). It matches on Doc.URI()
 // and never on AssembledDocument.Location, the resolved location, which a
-// canonicalizing resolver makes differ from the URI an element's Loc carries
-// (#1314). A document read twice — a chameleon <include> beside an <import>,
+// canonicalizing resolver can make differ from the URI an element's Loc
+// carries — loader.Dir respells a location's case on a case-insensitive
+// filesystem (#1314). A document read twice — a chameleon <include> beside an <import>,
 // or one discovery overridden — is two discoveries of one file; both hold the
 // same element at at, and the first is read.
 //
