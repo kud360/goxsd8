@@ -213,7 +213,7 @@ func Decode[T any](schema *xsd.Schema, backend value.Backend, data []byte, opts 
 	if err != nil {
 		return nil, err
 	}
-	f, err := b.check(reflect.TypeFor[T](), cfg.branches)
+	f, err := b.check(reflect.TypeFor[T](), &checkContext{sets: cfg.branches})
 	if err != nil {
 		return nil, err
 	}
@@ -262,7 +262,7 @@ func CheckDecode[T any](schema *xsd.Schema, name xsd.QName, opts ...Option) erro
 	if err != nil {
 		return err
 	}
-	_, err = b.check(reflect.TypeFor[T](), newConfig(opts).branches)
+	_, err = b.check(reflect.TypeFor[T](), &checkContext{sets: newConfig(opts).branches})
 	return err
 }
 
@@ -362,11 +362,59 @@ const (
 	shapeRepeated                  // []V
 )
 
-// store stores v, a decoded value of the Go type codegen gives a simple type
-// (scalar.goType), in dst, a value of a Go type of shape s over a type v
-// converts to: a repeated one appends it, an optional one points at a copy of
-// it, each converted to dst's own element type, and shapeOne sets dst to it
-// converted to dst's type.
+// elem returns the Go type V that t holds by s, t itself for shapeOne and the
+// element type of a pointer for shapeOptional and of a slice for
+// shapeRepeated, and false when t is no type of shape s.
+func (s shape) elem(t reflect.Type) (reflect.Type, bool) {
+	switch s {
+	case shapeOne:
+		return t, true
+	case shapeOptional:
+		if t.Kind() != reflect.Pointer {
+			return nil, false
+		}
+		return t.Elem(), true
+	case shapeRepeated:
+		if t.Kind() != reflect.Slice {
+			return nil, false
+		}
+		return t.Elem(), true
+	}
+	// The zero shape is an internal bug, never input.
+	panic(fmt.Sprintf("codec: invalid shape %d", s))
+}
+
+// over returns the Go type of shape s over v: V, *V or []V.
+func (s shape) over(v reflect.Type) reflect.Type {
+	switch s {
+	case shapeOne:
+		return v
+	case shapeOptional:
+		return reflect.PointerTo(v)
+	case shapeRepeated:
+		return reflect.SliceOf(v)
+	}
+	// The zero shape is an internal bug, never input.
+	panic(fmt.Sprintf("codec: invalid shape %d", s))
+}
+
+// prefix spells what s puts before V in an ErrTypeMismatch message: nothing,
+// "*" or "[]".
+func (s shape) prefix() string {
+	switch s {
+	case shapeOne:
+	case shapeOptional:
+		return "*"
+	case shapeRepeated:
+		return "[]"
+	}
+	return ""
+}
+
+// store stores v, a decoded value of a type that converts to the V a field of
+// shape s holds, in dst, a value of a Go type of shape s: a repeated one
+// appends it, an optional one points at a copy of it, each converted to dst's
+// own element type, and shapeOne sets dst to it converted to dst's type.
 func (s shape) store(dst, v reflect.Value) {
 	switch s {
 	case shapeOptional:
@@ -393,115 +441,177 @@ const (
 	valueNamed                      // a named type over the simple type's Go type
 )
 
-// field is one field of a struct codegen emits: of the document element's
-// declaration's struct, or of a choice's branch struct. It holds its Go name,
-// its shape, its value type, and the scalar its value decodes as.
+// field is one field a particle gives a struct codegen emits: a complex
+// type's struct's, or a choice's branch struct's. It holds its Go name, its
+// shape, and arm, the V its shape holds.
 type field struct {
 	name  string
 	shape shape
+	arm   fieldArm
+}
+
+// fieldArm is the V a field's shape holds, as Decode reads it, a closed sum:
+// a scalarArm, the Go type codegen gives a simple type or a named type over
+// it.
+type fieldArm interface {
+	// bind holds v, the V the field's shape holds at at, to the arm, item 6 of
+	// Decode's doc, and returns the elementReader that reads the field's
+	// element into a V, or at's mismatch.
+	bind(v reflect.Type, at fieldAt, cx *checkContext) (elementReader, error)
+	// describe spells V for an ErrTypeMismatch message.
+	describe() string
+}
+
+// scalarArm is a field's V where the field's element or attribute is of a
+// simple type: value, how V relates to the Go type codegen gives that type,
+// and the scalar the value decodes as.
+type scalarArm struct {
 	value valueType
 	scalar
 }
 
-// matches reports whether got, a struct field of T, is f as codegen emits it:
-// the same name, a Go type f accepts, and not embedded.
-func (f field) matches(got reflect.StructField) bool {
-	return got.Name == f.name && f.accepts(got.Type) && !got.Anonymous
-}
-
-// accepts reports whether t is the Go type codegen gives f, as Decode's doc,
-// item 6, reads it: f's shape over a value type that is the Go type codegen
-// gives f's simple type (scalar.goType) itself for valueBare, and for
-// valueNamed a type other than it whose underlying type it is, its name never
-// compared. Equal Kinds of two scalar types mean one underlying type; for
-// big.Rat and big.Int, ConvertibleTo means an identical underlying type, which
-// math/big's unexported fields keep any other struct from having; and for two
-// slice types, Kind Slice and ConvertibleTo mean an identical underlying type,
-// since Go converts between slice types only then.
-func (f field) accepts(t reflect.Type) bool {
-	switch f.shape {
-	case shapeOne:
-	case shapeOptional:
-		if t.Kind() != reflect.Pointer {
-			return false
-		}
-		t = t.Elem()
-	case shapeRepeated:
-		if t.Kind() != reflect.Slice {
-			return false
-		}
-		t = t.Elem()
-	default:
-		// The zero shape is an internal bug, never input.
-		panic(fmt.Sprintf("codec: invalid shape %d", f.shape))
-	}
-	want := f.goType()
-	switch f.value {
+// accepts reports whether v is the V codegen gives a, as Decode's doc, item 6,
+// reads it: the Go type codegen gives a's simple type (scalar.goType) itself
+// for valueBare, and for valueNamed a type other than it whose underlying type
+// it is, its name never compared. Equal Kinds of two scalar types mean one
+// underlying type; for big.Rat and big.Int, ConvertibleTo means an identical
+// underlying type, which math/big's unexported fields keep any other struct
+// from having; and for two slice types, Kind Slice and ConvertibleTo mean an
+// identical underlying type, since Go converts between slice types only then.
+func (a scalarArm) accepts(v reflect.Type) bool {
+	want := a.goType()
+	switch a.value {
 	case valueBare:
-		return t == want
+		return v == want
 	case valueNamed:
-		return t != want && t.Kind() == want.Kind() && t.ConvertibleTo(want)
+		return v != want && v.Kind() == want.Kind() && v.ConvertibleTo(want)
 	}
 	// The zero valueType is an internal bug, never input.
-	panic(fmt.Sprintf("codec: invalid value type %d", f.value))
+	panic(fmt.Sprintf("codec: invalid value type %d", a.value))
+}
+
+// bind returns a, which reads the field's element, when a accepts v, and
+// otherwise at's mismatch.
+func (a scalarArm) bind(v reflect.Type, at fieldAt, _ *checkContext) (elementReader, error) {
+	if !a.accepts(v) {
+		return nil, at.mismatch()
+	}
+	return a, nil
+}
+
+// read reads the character children of the element start from r up to its
+// end tag and returns their value, or the supplied one's, as elementValue
+// does.
+func (a scalarArm) read(p *pipeline, r *xmltree.Reader, start *xmltree.StartElement) (reflect.Value, error) {
+	return elementValue(r, start, p, a.scalar)
+}
+
+// describe spells V: the Go type codegen gives a's simple type, A or for a
+// list []A, or N for a named type N over it.
+func (a scalarArm) describe() string {
+	if a.value == valueNamed {
+		return "N for a named type N over " + a.goType().String()
+	}
+	return a.goType().String()
+}
+
+// An elementReader reads the element start, whose start tag r has just
+// returned, from r up to its end tag, and returns its value, of the V a field
+// holds, under p.
+type elementReader interface {
+	read(p *pipeline, r *xmltree.Reader, start *xmltree.StartElement) (reflect.Value, error)
+}
+
+// fieldAt is field index of the struct owner, the site item 6 holds want to.
+type fieldAt struct {
+	owner reflect.Type
+	index int
+	want  field
+}
+
+// mismatch is the ErrTypeMismatch error for the field at a, which is not
+// a.want as codegen emits it.
+func (a fieldAt) mismatch() error {
+	got := a.owner.Field(a.index)
+	return fmt.Errorf("%w: field %d of %s is %s %s where codegen emits %s %s", ErrTypeMismatch, a.index, a.owner, got.Name, got.Type, a.want.name, a.want.describe())
+}
+
+// check holds field index of owner to f, item 6 of Decode's doc: the same
+// name, not embedded, a Go type of f's shape, and a V f's arm binds. It
+// returns the elementReader that reads f's element.
+func (f field) check(owner reflect.Type, index int, cx *checkContext) (elementReader, error) {
+	at := fieldAt{owner: owner, index: index, want: f}
+	got := owner.Field(index)
+	v, shaped := f.shape.elem(got.Type)
+	if !shaped || got.Name != f.name || got.Anonymous {
+		return nil, at.mismatch()
+	}
+	return f.arm.bind(v, at, cx)
+}
+
+// matches reports whether got, a branch struct's one field, is f as codegen
+// emits it where f's arm is a scalarArm, as check reads it.
+func (f field) matches(got reflect.StructField) bool {
+	a, scalar := f.arm.(scalarArm)
+	if !scalar || got.Name != f.name || got.Anonymous {
+		return false
+	}
+	v, shaped := f.shape.elem(got.Type)
+	return shaped && a.accepts(v)
 }
 
 // sharesBranch reports whether f and g, two choice alternatives' branch
-// fields, accept a common Go type, as accepts reads one: the same name and
+// fields, accept a common Go type, as check reads one: the same name and
 // value type, and then, for valueBare, the same Go type of shape over
 // scalar.goType, a repeated xs:int and a list of xs:int each []int32; for
 // valueNamed, the same shape and the same goType separately, since the named
 // type sits between them and []N over int32 is no N over []int32.
 func (f field) sharesBranch(g field) bool {
-	if f.name != g.name || f.value != g.value {
+	fa, _ := f.arm.(scalarArm)
+	ga, _ := g.arm.(scalarArm)
+	if f.name != g.name || fa.value != ga.value {
 		return false
 	}
-	if f.value == valueNamed {
-		return f.shape == g.shape && f.goType() == g.goType()
+	if fa.value == valueNamed {
+		return f.shape == g.shape && fa.goType() == ga.goType()
 	}
-	return f.shaped() == g.shaped()
-}
-
-// shaped returns the Go type of f's shape over scalar.goType: V, *V or []V.
-func (f field) shaped() reflect.Type {
-	switch f.shape {
-	case shapeOne:
-		return f.goType()
-	case shapeOptional:
-		return reflect.PointerTo(f.goType())
-	case shapeRepeated:
-		return reflect.SliceOf(f.goType())
-	}
-	// The zero shape is an internal bug, never input.
-	panic(fmt.Sprintf("codec: invalid shape %d", f.shape))
+	return f.shape.over(fa.goType()) == g.shape.over(ga.goType())
 }
 
 // describe spells the Go type codegen gives f for an ErrTypeMismatch message:
-// V, *V or []V, V the Go type codegen gives f's simple type, A or for a list
-// []A, or the same over N for a named type N over V.
+// V, *V or []V, V as f's arm spells it.
 func (f field) describe() string {
-	var prefix string
-	switch f.shape {
-	case shapeOne:
-	case shapeOptional:
-		prefix = "*"
-	case shapeRepeated:
-		prefix = "[]"
-	}
-	if f.value == valueNamed {
-		return prefix + "N for a named type N over " + f.goType().String()
-	}
-	return prefix + f.goType().String()
+	return f.shape.prefix() + f.arm.describe()
+}
+
+// attribute is the field an attribute use gives a complex type's struct: its
+// Go name, its shape, and the scalar its value decodes as; its V is the Go
+// type codegen gives the attribute's simple type itself.
+type attribute struct {
+	name  string
+	shape shape
+	scalar
+}
+
+// field returns a as item 6 of Decode's doc reads a field.
+func (a attribute) field() field {
+	return field{name: a.name, shape: a.shape, arm: scalarArm{value: valueBare, scalar: a.scalar}}
 }
 
 // A binder is the type codegen emits for one document element declaration,
 // as Decode reads it: check holds T to it, item 6 of Decode's doc, reading
-// each sealed interface's branch types from sets, and returns the filler that
+// each sealed interface's branch types from cx, and returns the filler that
 // sets a value of T from the document element. A *binding binds a complex
 // {type definition} codegen gives a struct, a *choiceRoot one it gives a bare
 // sealed interface, and a *simpleRoot a simple one.
 type binder interface {
-	check(t reflect.Type, sets branchSets) (filler, error)
+	check(t reflect.Type, cx *checkContext) (filler, error)
+}
+
+// checkContext is what one item-6 check of T reads beside the binder: sets,
+// the branch types [WithBranches] supplied.
+type checkContext struct {
+	sets branchSets
 }
 
 // A filler sets out, a value of the T a binder's check held, from the
@@ -518,7 +628,7 @@ type filler interface {
 type binding struct {
 	p       *pipeline
 	content elementContent
-	attrs   []field
+	attrs   []attribute
 	// attributes maps an attribute's expanded name to its field's index in
 	// attrs; it is a lookup index only and never iterated (STYLE D2).
 	attributes map[xsd.QName]int
@@ -533,7 +643,7 @@ type elementContent interface {
 	width() int
 	// check holds t's first width fields to the content's, item 6 of Decode's
 	// doc, and returns the contentFiller that sets them.
-	check(t reflect.Type, sets branchSets) (contentFiller, error)
+	check(t reflect.Type, cx *checkContext) (contentFiller, error)
 }
 
 // A contentFiller sets the content's fields of out, the struct an
@@ -683,25 +793,35 @@ func bindSequence(pl *pipeline, particles []xsd.Particle, names *goname.Namer, t
 func (s *sequence) width() int { return len(s.fields) }
 
 // check holds t's first fields to s's, in name, order and Go type, and
-// returns s, which sets them.
-func (s *sequence) check(t reflect.Type, _ branchSets) (contentFiller, error) {
+// returns the boundSequence that sets them.
+func (s *sequence) check(t reflect.Type, cx *checkContext) (contentFiller, error) {
+	readers := make([]elementReader, len(s.fields))
 	for i, want := range s.fields {
-		if got := t.Field(i); !want.matches(got) {
-			return nil, fmt.Errorf("%w: field %d of %s is %s %s where codegen emits %s %s", ErrTypeMismatch, i, t, got.Name, got.Type, want.name, want.describe())
+		r, err := want.check(t, i, cx)
+		if err != nil {
+			return nil, err
 		}
+		readers[i] = r
 	}
-	return s, nil
+	return &boundSequence{sequence: s, readers: readers}, nil
 }
 
-// child sets the field of the child element start, reading its character
-// children from r up to its end tag: the value of their characters, or of
-// the field's supplied value when there are none, as Decode's doc states.
-func (s *sequence) child(r *xmltree.Reader, start *xmltree.StartElement, out reflect.Value) error {
+// boundSequence is a sequence whose fields check held: readers[i] reads the
+// element of sequence.fields[i].
+type boundSequence struct {
+	sequence *sequence
+	readers  []elementReader
+}
+
+// child sets the field of the child element start from its value, which its
+// field's elementReader reads from r up to its end tag.
+func (b *boundSequence) child(r *xmltree.Reader, start *xmltree.StartElement, out reflect.Value) error {
+	s := b.sequence
 	i, ok := s.children[expanded(start.Name())]
 	if !ok {
 		return unparticled(start)
 	}
-	v, err := elementValue(r, start, s.p, s.fields[i].scalar)
+	v, err := b.readers[i].read(s.p, r, start)
 	if err != nil {
 		return err
 	}
@@ -768,12 +888,12 @@ func (c *choice) width() int { return 1 }
 
 // check holds t's first field to the one holding c's interface, and returns
 // the boundChoice that sets it.
-func (c *choice) check(t reflect.Type, sets branchSets) (contentFiller, error) {
+func (c *choice) check(t reflect.Type, cx *checkContext) (contentFiller, error) {
 	got := t.Field(0)
 	if got.Name != c.name || got.Anonymous {
 		return nil, fmt.Errorf("%w: field 0 of %s is %s %s where codegen emits %s, a sealed interface", ErrTypeMismatch, t, got.Name, got.Type, c.name)
 	}
-	bc, err := c.checkSite(got.Type, fmt.Sprintf("field %s of %s", got.Name, t), sets)
+	bc, err := c.checkSite(got.Type, fmt.Sprintf("field %s of %s", got.Name, t), cx)
 	if err != nil {
 		return nil, err
 	}
@@ -782,17 +902,17 @@ func (c *choice) check(t reflect.Type, sets branchSets) (contentFiller, error) {
 
 // checkSite holds it, the Go type at the site site names, to c's sealed
 // interface, item 6 of Decode's doc: an interface whose one method is
-// unexported, whose branch types sets holds as one struct per alternative of
-// the alternative's branch shape. It returns c bound to those branch types.
-// Neither the interface's nor a branch's name is compared.
-func (c *choice) checkSite(it reflect.Type, site string, sets branchSets) (*boundChoice, error) {
+// unexported, whose branch types cx's sets hold as one struct per alternative
+// of the alternative's branch shape. It returns c bound to those branch
+// types. Neither the interface's nor a branch's name is compared.
+func (c *choice) checkSite(it reflect.Type, site string, cx *checkContext) (*boundChoice, error) {
 	if it.Kind() != reflect.Interface {
 		return nil, fmt.Errorf("%w: %s is %s, no interface, where codegen emits a sealed interface", ErrTypeMismatch, site, it)
 	}
 	if it.NumMethod() != 1 || it.Method(0).IsExported() {
 		return nil, fmt.Errorf("%w: %s is %s, which is not an interface of one unexported method, codegen's sealed interface", ErrTypeMismatch, site, it)
 	}
-	branches, supplied := sets.of(it)
+	branches, supplied := cx.sets.of(it)
 	if !supplied && len(c.alts) > 0 {
 		return nil, fmt.Errorf("%w: no WithBranches supplies the branches of %s, the interface of %s, where codegen emits %d", ErrTypeMismatch, it, site, len(c.alts))
 	}
@@ -800,8 +920,8 @@ func (c *choice) checkSite(it reflect.Type, site string, sets branchSets) (*boun
 		return nil, fmt.Errorf("%w: WithBranches supplies %d branches of %s where codegen emits %d", ErrTypeMismatch, len(branches), it, len(c.alts))
 	}
 	// As many branches as alternatives, each matching one no earlier branch
-	// matched, leave no entry of matched nil.
-	matched := make([]reflect.Type, len(c.alts))
+	// matched, leave no entry of matched without its branch type.
+	matched := make([]boundBranch, len(c.alts))
 	for i, bt := range branches {
 		if bt == nil {
 			return nil, fmt.Errorf("%w: WithBranches supplies a nil branch of %s", ErrTypeMismatch, it)
@@ -812,22 +932,46 @@ func (c *choice) checkSite(it reflect.Type, site string, sets branchSets) (*boun
 		if slices.Contains(branches[:i], bt) {
 			return nil, fmt.Errorf("%w: WithBranches supplies %s twice as a branch of %s", ErrTypeMismatch, bt, it)
 		}
-		j := slices.IndexFunc(c.alts, func(a field) bool {
-			return bt.NumField() == 1 && a.matches(bt.Field(0))
-		})
-		if j < 0 || matched[j] != nil {
+		j, read, err := c.alternative(bt, cx)
+		if err != nil {
+			return nil, err
+		}
+		if j < 0 || matched[j].t != nil {
 			return nil, fmt.Errorf("%w: branch %s of %s has the shape of no branch struct codegen emits that an earlier branch did not match", ErrTypeMismatch, bt, it)
 		}
-		matched[j] = bt
+		matched[j] = boundBranch{t: bt, read: read}
 	}
 	return &boundChoice{choice: c, branches: matched}, nil
 }
 
+// alternative returns the index in c.alts of the alternative whose branch
+// struct bt is, with the elementReader of its one field, or -1 for none: the
+// first alternative whose branch field bt's one field matches.
+func (c *choice) alternative(bt reflect.Type, cx *checkContext) (int, elementReader, error) {
+	if bt.NumField() != 1 {
+		return -1, nil, nil
+	}
+	got := bt.Field(0)
+	j := slices.IndexFunc(c.alts, func(a field) bool { return a.matches(got) })
+	if j < 0 {
+		return -1, nil, nil
+	}
+	read, err := c.alts[j].check(bt, 0, cx)
+	return j, read, err
+}
+
 // boundChoice is a choice whose sealed interface checkSite held: branches[i]
-// is the branch struct of choice.alts[i], none nil.
+// is the branch of choice.alts[i], none without its type.
 type boundChoice struct {
 	choice   *choice
-	branches []reflect.Type
+	branches []boundBranch
+}
+
+// boundBranch is one branch struct t of a choice's interface, read its one
+// field's elementReader.
+type boundBranch struct {
+	t    reflect.Type
+	read elementReader
 }
 
 // child sets the choice's field of out, the struct, from the child element
@@ -837,26 +981,25 @@ func (bc *boundChoice) child(r *xmltree.Reader, start *xmltree.StartElement, out
 }
 
 // set sets dst, a value of the choice's interface, from the child element
-// start, reading its character children from r up to its end tag: the branch
-// of start's alternative holds the value of their characters, or of the
-// field's supplied value when there are none, as Decode's doc states, a
-// repeated alternative's appended to the branch dst already holds.
+// start, read from r up to its end tag: the branch of start's alternative
+// holds the value its field's elementReader reads, a repeated alternative's
+// appended to the branch dst already holds.
 func (bc *boundChoice) set(r *xmltree.Reader, start *xmltree.StartElement, dst reflect.Value) error {
 	i, ok := bc.choice.children[expanded(start.Name())]
 	if !ok {
 		return unparticled(start)
 	}
-	alt, bt := bc.choice.alts[i], bc.branches[i]
-	branch := reflect.New(bt).Elem()
+	alt, bb := bc.choice.alts[i], bc.branches[i]
+	branch := reflect.New(bb.t).Elem()
 	if !dst.IsNil() {
 		// Validation charges a child of a second alternative first
 		// (cvc-model-group); this is the defensive check.
-		if dst.Elem().Type() != bt {
+		if dst.Elem().Type() != bb.t {
 			return fmt.Errorf("codec: %s: element %s matches a second alternative of the choice", start.Loc(), expanded(start.Name()))
 		}
 		branch.Set(dst.Elem())
 	}
-	v, err := elementValue(r, start, bc.choice.p, alt.scalar)
+	v, err := bb.read.read(bc.choice.p, r, start)
 	if err != nil {
 		return err
 	}
@@ -874,8 +1017,8 @@ type choiceRoot struct {
 
 // check holds t, T itself, to the choice's sealed interface, and returns the
 // boundChoiceRoot that fills it.
-func (c *choiceRoot) check(t reflect.Type, sets branchSets) (filler, error) {
-	bc, err := c.choice.checkSite(t, "T", sets)
+func (c *choiceRoot) check(t reflect.Type, cx *checkContext) (filler, error) {
+	bc, err := c.choice.checkSite(t, "T", cx)
 	if err != nil {
 		return nil, err
 	}
@@ -1038,7 +1181,7 @@ func elementField(schema *xsd.Schema, children map[xsd.QName]int, el xsd.Element
 		return field{}, err
 	}
 	vc, has := el.ValueConstraint()
-	return field{shape: s, value: value, scalar: newScalar(g, st, subject, vc, has)}, nil
+	return field{shape: s, arm: scalarArm{value: value, scalar: newScalar(g, st, subject, vc, has)}}, nil
 }
 
 // substitutable reports whether an element other than one of head, a
@@ -1055,35 +1198,35 @@ func substitutable(schema *xsd.Schema, head xsd.ElementDeclaration) bool {
 	return len(members) != 1 || members[0].Name() != head.Name()
 }
 
-// attributeUse returns the field, but for its name, which its caller claims,
-// of attribute use u, or as the error the *DeclineError Decode's doc states
-// for it, item 5, naming its attribute declaration, or a plain error. The
-// field's shape is codegen's, as the package doc's "# What decodes" states,
-// and needs no xsi: test here: an xsi: use declines before its shape is
-// picked.
-func attributeUse(schema *xsd.Schema, u xsd.AttributeUse) (field, error) {
+// attributeUse returns the attribute field, but for its name, which its
+// caller claims, of attribute use u, or as the error the *DeclineError
+// Decode's doc states for it, item 5, naming its attribute declaration, or a
+// plain error. The field's shape is codegen's, as the package doc's "# What
+// decodes" states, and needs no xsi: test here: an xsi: use declines before
+// its shape is picked.
+func attributeUse(schema *xsd.Schema, u xsd.AttributeUse) (attribute, error) {
 	decl, ok := schema.ResolvedAttributeDeclaration(u)
 	if !ok {
-		return field{}, fmt.Errorf("codec: the {attribute declaration} of attribute use %s does not resolve", u.DeclarationName())
+		return attribute{}, fmt.Errorf("codec: the {attribute declaration} of attribute use %s does not resolve", u.DeclarationName())
 	}
 	subject := fmt.Sprintf("attribute %s declared at %s", decl.Name(), decl.Loc())
 	if decl.Name().Space == xsd.XMLSchemaInstanceNS {
-		return field{}, decline(constructXsiAttribute, subject)
+		return attribute{}, decline(constructXsiAttribute, subject)
 	}
 	st, ok := schema.ResolvedSimpleType(decl.TypeDefinition())
 	if !ok {
-		return field{}, fmt.Errorf("codec: the {type definition} of %s does not resolve", subject)
+		return attribute{}, fmt.Errorf("codec: the {type definition} of %s does not resolve", subject)
 	}
 	g, err := simpleDecline(schema, st, subject)
 	if err != nil {
-		return field{}, err
+		return attribute{}, err
 	}
 	shape := shapeOptional
 	vc, has := schema.EffectiveValueConstraint(u)
 	if u.Required() || has {
 		shape = shapeOne
 	}
-	return field{shape: shape, value: valueBare, scalar: newScalar(g, st, subject, vc, has)}, nil
+	return attribute{shape: shape, scalar: newScalar(g, st, subject, vc, has)}, nil
 }
 
 // simpleDecline returns the Go type codegen gives the simple type st of the
@@ -1196,7 +1339,7 @@ func occursShape(occurs xsd.Occurs, el xsd.ElementDeclaration) (shape, error) {
 // check returns the boundBinding that fills t when t is the struct codegen
 // emits for b, and otherwise the ErrTypeMismatch error Decode's doc states,
 // item 6.
-func (b *binding) check(t reflect.Type, sets branchSets) (filler, error) {
+func (b *binding) check(t reflect.Type, cx *checkContext) (filler, error) {
 	if t.Kind() != reflect.Struct {
 		return nil, fmt.Errorf("%w: %s is no struct", ErrTypeMismatch, t)
 	}
@@ -1204,13 +1347,13 @@ func (b *binding) check(t reflect.Type, sets branchSets) (filler, error) {
 	if t.NumField() != width+len(b.attrs) {
 		return nil, fmt.Errorf("%w: %s has %d fields where codegen emits %d", ErrTypeMismatch, t, t.NumField(), width+len(b.attrs))
 	}
-	cf, err := b.content.check(t, sets)
+	cf, err := b.content.check(t, cx)
 	if err != nil {
 		return nil, err
 	}
 	for i, want := range b.attrs {
-		if got := t.Field(width + i); !want.matches(got) {
-			return nil, fmt.Errorf("%w: field %d of %s is %s %s where codegen emits %s %s", ErrTypeMismatch, width+i, t, got.Name, got.Type, want.name, want.describe())
+		if _, err := want.field().check(t, width+i, cx); err != nil {
+			return nil, err
 		}
 	}
 	return &boundBinding{binding: b, content: cf}, nil
@@ -1335,7 +1478,7 @@ type simpleRoot struct {
 // codegen gives s's simple type, and otherwise the ErrTypeMismatch error
 // Decode's doc states, item 6. t's name is never compared; equal Kinds and
 // ConvertibleTo mean one underlying type, as field.accepts states.
-func (s *simpleRoot) check(t reflect.Type, _ branchSets) (filler, error) {
+func (s *simpleRoot) check(t reflect.Type, _ *checkContext) (filler, error) {
 	want := s.goType()
 	if t.Kind() != want.Kind() || !t.ConvertibleTo(want) {
 		return nil, fmt.Errorf("%w: the underlying type of %s is not %s", ErrTypeMismatch, t, want)
