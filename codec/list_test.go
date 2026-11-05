@@ -39,19 +39,24 @@ const listSchema = `<xs:simpleType name="ints"><xs:list itemType="xs:int"/></xs:
 // root of a list of xs:string, listRestrictionRootSchema's one of a
 // restriction of a named list of xs:int, listRefSchema's s:r holds a repeated
 // <element ref> to h, of that list, and listChoiceSchema's choice holds x, of
-// xs:int, and X, a list of xs:int, one Go field name over two Go types.
+// xs:int, and X, a list of xs:int, one Go field name over two Go types;
+// listRefChoiceSchema's choice holds a repeated ref to a, of xs:int, and a ref
+// to A, of a list of xs:int: []N over int32 beside N over []int32.
 const (
 	listRootSchema            = `<xs:element name="r"><xs:simpleType><xs:list itemType="xs:string"/></xs:simpleType></xs:element>`
 	listRestrictionRootSchema = `<xs:simpleType name="ints"><xs:list itemType="xs:int"/></xs:simpleType><xs:element name="r"><xs:simpleType><xs:restriction base="s:ints"><xs:minLength value="1"/></xs:restriction></xs:simpleType></xs:element>`
 	listRefSchema             = `<xs:simpleType name="ints"><xs:list itemType="xs:int"/></xs:simpleType><xs:element name="h" type="s:ints"/>
 <xs:element name="r"><xs:complexType><xs:sequence><xs:element ref="s:h" maxOccurs="2"/></xs:sequence></xs:complexType></xs:element>`
-	listChoiceSchema = `<xs:element name="r"><xs:complexType><xs:choice><xs:element name="x" type="xs:int"/><xs:element name="X"><xs:simpleType><xs:list itemType="xs:int"/></xs:simpleType></xs:element></xs:choice></xs:complexType></xs:element>`
+	listChoiceSchema    = `<xs:element name="r"><xs:complexType><xs:choice><xs:element name="x" type="xs:int"/><xs:element name="X"><xs:simpleType><xs:list itemType="xs:int"/></xs:simpleType></xs:element></xs:choice></xs:complexType></xs:element>`
+	listRefChoiceSchema = `<xs:simpleType name="ints"><xs:list itemType="xs:int"/></xs:simpleType><xs:element name="a" type="xs:int"/><xs:element name="A" type="s:ints"/>
+<xs:element name="r"><xs:complexType><xs:choice><xs:element ref="s:a" maxOccurs="2"/><xs:element ref="s:A"/></xs:choice></xs:complexType></xs:element>`
 )
 
 // lists to listChoiceX2 are the types codegen emits for the list schemas:
 // listSchema's R, listRootSchema's R, listRestrictionRootSchema's R,
-// listRefSchema's H and R, and listChoiceSchema's R, RX and RX2, which
-// TestListTypesAreCodegens pins.
+// listRefSchema's H and R, listChoiceSchema's R, RX and RX2, and
+// listRefChoiceSchema's R, RA, RA2, A and A2, which TestListTypesAreCodegens
+// pins.
 type (
 	lists struct {
 		Strs  []string
@@ -62,19 +67,29 @@ type (
 		At    *[]string
 		Dflt  []int32
 	}
-	listRoot     []string
-	listInts     []int32
-	listHead     []int32
-	listHolder   struct{ H []listHead }
-	listChoice   interface{ isListChoice() }
-	listChoiceX  struct{ X int32 }
-	listChoiceX2 struct{ X []int32 }
+	listRoot       []string
+	listInts       []int32
+	listHead       []int32
+	listHolder     struct{ H []listHead }
+	listChoice     interface{ isListChoice() }
+	listChoiceX    struct{ X int32 }
+	listChoiceX2   struct{ X []int32 }
+	listRefChoice  interface{ isListRefChoice() }
+	listRefChoiceA struct{ A []listRefA }
+	listRefChoiceB struct{ A listRefB }
+	listRefA       int32
+	listRefB       []int32
 )
 
-func (listChoiceX) isListChoice()  {}
-func (listChoiceX2) isListChoice() {}
+func (listChoiceX) isListChoice()       {}
+func (listChoiceX2) isListChoice()      {}
+func (listRefChoiceA) isListRefChoice() {}
+func (listRefChoiceB) isListRefChoice() {}
 
-var listChoiceBranches = WithBranches[listChoice](listChoiceX{}, listChoiceX2{})
+var (
+	listChoiceBranches    = WithBranches[listChoice](listChoiceX{}, listChoiceX2{})
+	listRefChoiceBranches = WithBranches[listRefChoice](listRefChoiceA{}, listRefChoiceB{})
+)
 
 // TestListTypesAreCodegens pins the types above to those codegen emits for
 // each list schema, in shape: a list's Go type is a slice of its item's
@@ -92,6 +107,12 @@ func TestListTypesAreCodegens(t *testing.T) {
 			"type R interface {\n\tisR()\n}\n",
 			"type RX struct {\n\tX int32\n}\n\nfunc (RX) isR() {}\n",
 			"type RX2 struct {\n\tX []int32\n}\n\nfunc (RX2) isR() {}\n",
+		}},
+		{listRefChoiceSchema, []string{
+			"type A int32\n",
+			"type A2 []int32\n",
+			"type RA struct {\n\tA []A\n}\n\nfunc (RA) isR() {}\n",
+			"type RA2 struct {\n\tA A2\n}\n\nfunc (RA2) isR() {}\n",
 		}},
 	}
 	for _, row := range rows {
@@ -112,8 +133,10 @@ func TestListTypesAreCodegens(t *testing.T) {
 // and xs:boolean item, a restriction of a list taking its base's item
 // (Structures §3.16.2.3), in each field shape, an attribute's, a supplied
 // default's, a simple root's into a named slice and an unnamed one, an
-// <element ref>'s into the head's named slice, and a choice branch's beside an
-// xs:int alternative of its Go field name. CheckDecode returns nil for each.
+// <element ref>'s into the head's named slice, a choice branch's beside an
+// xs:int alternative of its Go field name, and a ref branch's beside a
+// repeated ref branch over xs:int of its Go field name. CheckDecode returns
+// nil for each.
 func TestDecodeLists(t *testing.T) {
 	strs := func(s ...string) *[]string { return &s }
 	rows := []struct {
@@ -136,6 +159,8 @@ func TestDecodeLists(t *testing.T) {
 		{"a repeated <element ref> to a head of a list type", listRefSchema, "", "<s:h>1 2</s:h><s:h> 3 </s:h>", into[listHolder](), listHolder{H: []listHead{{1, 2}, {3}}}},
 		{"a choice's list alternative", listChoiceSchema, "", "<s:X> 1  2 </s:X>", into[listChoice](listChoiceBranches), listChoice(listChoiceX2{X: []int32{1, 2}})},
 		{"a choice's xs:int alternative beside it", listChoiceSchema, "", "<s:x> 3 </s:x>", into[listChoice](listChoiceBranches), listChoice(listChoiceX{X: 3})},
+		{"a choice's repeated ref over xs:int", listRefChoiceSchema, "", "<s:a>1</s:a><s:a>2</s:a>", into[listRefChoice](listRefChoiceBranches), listRefChoice(listRefChoiceA{A: []listRefA{1, 2}})},
+		{"a choice's ref over a list of xs:int beside it", listRefChoiceSchema, "", "<s:A>1 2</s:A>", into[listRefChoice](listRefChoiceBranches), listRefChoice(listRefChoiceB{A: listRefB{1, 2}})},
 	}
 	for _, row := range rows {
 		t.Run(row.name, func(t *testing.T) {
