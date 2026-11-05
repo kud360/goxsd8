@@ -465,12 +465,15 @@ func (f field) sharesBranch(g field) bool {
 // shaped returns the Go type of f's shape over scalar.goType: V, *V or []V.
 func (f field) shaped() reflect.Type {
 	switch f.shape {
+	case shapeOne:
+		return f.goType()
 	case shapeOptional:
 		return reflect.PointerTo(f.goType())
 	case shapeRepeated:
 		return reflect.SliceOf(f.goType())
 	}
-	return f.goType()
+	// The zero shape is an internal bug, never input.
+	panic(fmt.Sprintf("codec: invalid shape %d", f.shape))
 }
 
 // describe spells the Go type codegen gives f for an ErrTypeMismatch message:
