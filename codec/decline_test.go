@@ -194,9 +194,9 @@ func TestCheckDecodePlainErrors(t *testing.T) {
 // {max occurs} 0: CheckDecode returns the text Decode returns for a valid
 // instance, and neither is a decline, ErrTypeMismatch, errors.ErrUnsupported
 // or a rule. No schema document yields such a particle (§3.3.2: an <element>
-// with minOccurs=maxOccurs=0 maps to no component), so the schema is built from a parsed
-// one with type v's one inner particle rebuilt through xsd.NewParticle with
-// the vacuous Occurs{0,0}.
+// with minOccurs=maxOccurs=0 maps to no component), so the schema is built
+// from a parsed one with type v's one inner particle rebuilt through
+// xsd.NewParticle with the vacuous Occurs{0,0}.
 func TestCheckDecodeMaxOccursZero(t *testing.T) {
 	parsed := schemaOf(t, `<xs:complexType name="v"><xs:sequence><xs:element name="a" type="xs:string"/></xs:sequence></xs:complexType><xs:element name="r" type="s:v"/>`)
 	v := xsd.QName{Space: "urn:s", Local: "v"}
