@@ -102,6 +102,8 @@ func TestDecodeStageErrors(t *testing.T) {
 			fmt.Sprintf(`codec: ?:1:%d: the lexical mapping failed on "01", a value of the anonymous simple type of element {urn:s}a declared at s.xsd:1:231 in the character content of element {urn:s}a at byte offset %d: ?: [cvc-datatype-valid] no Context`, offset+1, offset)},
 		{"lexical mapping, a simple root", `<xs:element name="r" type="xs:int"/>`, instanceOf("", "5"), noContext, decodeErr[int32], stageLexicalMapping,
 			fmt.Sprintf(`codec: ?:1:%d: the lexical mapping failed on "5", a value of %s in the character content of element {urn:s}r at byte offset %d: ?: [cvc-datatype-valid] no Context`, len(instanceOf("", ""))-len("</s:r>")+1, intQName, len(instanceOf("", ""))-len("</s:r>"))},
+		{"lexical mapping, an anonymous simple root", `<xs:element name="r"><xs:simpleType><xs:restriction base="xs:int"/></xs:simpleType></xs:element>`, instanceOf("", "5"), noContext, decodeErr[int32], stageLexicalMapping,
+			fmt.Sprintf(`codec: ?:1:%d: the lexical mapping failed on "5", a value of the anonymous simple type of element {urn:s}r declared at s.xsd:1:181 in the character content of element {urn:s}r at byte offset %d: ?: [cvc-datatype-valid] no Context`, len(instanceOf("", ""))-len("</s:r>")+1, len(instanceOf("", ""))-len("</s:r>"))},
 		{"conversion, no Canonical", element, elementData, nilCanonical, decodeErr[struct{ A int32 }], stageConversion,
 			fmt.Sprintf(`codec: ?:1:%d: the conversion to the Go type failed on "01", a value of %s in the character content of element {urn:s}a at byte offset %d: the governing mapping has no canonical mapping`, offset+1, intQName, offset)},
 		{"conversion, Canonical fails", element, elementData, failingCanonical, decodeErr[struct{ A int32 }], stageConversion,

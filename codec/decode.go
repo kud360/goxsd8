@@ -810,7 +810,7 @@ func bindSimpleRoot(p *pipeline, decl xsd.ElementDeclaration, st *xsd.SimpleType
 		return nil, decline(loc, d, subject)
 	}
 	vc, has := decl.ValueConstraint()
-	return &simpleRoot{p: p, scalar: scalar{atom: atom, st: st, label: typeLabel(st, subject), supplied: supply(vc, has, declSubject(decl))}}, nil
+	return &simpleRoot{p: p, scalar: newScalar(atom, st, declSubject(decl), vc, has)}, nil
 }
 
 // declarationDecline returns the construct of an element declaration's own
@@ -1074,7 +1074,7 @@ type boundBinding struct {
 // for items 7 and 8: root's xsi:type, its present attributes in start-tag
 // order, the supplied values of the absent ones in attribute-use order, then
 // its children. An attribute field with a supplied value holds it unless its
-// attribute is present, whose value is then never decoded.
+// attribute is present, and its supplied value is then never decoded.
 func (b *boundBinding) fill(r *xmltree.Reader, root *xmltree.StartElement, out reflect.Value) error {
 	if err := checkXsiType(root); err != nil {
 		return err
