@@ -320,3 +320,19 @@ func TestDecodeNestedXsiType(t *testing.T) {
 	}
 	assertDecline(t, err, constructXsiType, 1, bytes.Index(data, []byte(`<s:x xsi`))+1)
 }
+
+// TestDeclineErrorTextNested pins a decline's whole message for a construct
+// of a particle's complex type: charged to the document element, it names the
+// particle's declaration and the type's schema Loc, labelled as that
+// declaration's {type definition}, as a construct of the document element's
+// type is, and no path from the document element.
+func TestDeclineErrorTextNested(t *testing.T) {
+	schema := schemaOf(t, sequenceOf(`<xs:element name="a"><xs:complexType><xs:choice maxOccurs="2"><xs:element name="b" type="xs:string"/></xs:choice></xs:complexType></xs:element>`))
+	data := instanceOf("", `<s:a><s:b>x</s:b></s:a>`)
+	mustAccept(t, schema, data)
+	_, err := Decode[struct{}](schema, strict.New(), data)
+	const want = "?:1:1: codec does not decode a content choice occurring other than exactly once: the {type definition} of element {urn:s}a declared at s.xsd:1:231, a type defined at s.xsd:1:252; a decoder refusal, not a schema or instance fault"
+	if err == nil || err.Error() != want {
+		t.Errorf("error = %v, want %q", err, want)
+	}
+}

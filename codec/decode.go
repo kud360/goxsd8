@@ -108,8 +108,9 @@ var ErrTypeMismatch = errors.New("codec: T is not the type codegen emits for the
 //     the first validate.Unevaluated. It wraps errors.ErrUnsupported, as a
 //     *DeclineError does, so errors.Is does not tell the two apart; errors.As
 //     does.
-//  5. A construct of the document element's declaration or type outside the
-//     slice: a *DeclineError at the document element's instance Loc, whose
+//  5. A construct outside the slice of the document element's declaration or
+//     type, or of a declaration or type its particles reach at any depth: a
+//     *DeclineError at the document element's instance Loc, whose
 //     [DeclineError.Construct] is that construct's. Each is found in this
 //     order: the declaration's {type table} and {nillable}, then its {type
 //     definition}: a simple type's {variety} and {primitive type definition},
@@ -119,16 +120,24 @@ var ErrTypeMismatch = errors.New("codec: T is not the type codegen emits for the
 //     particle of its content in order — a nested model group or wildcard,
 //     then, of an <element ref>, the referenced declaration's substitution
 //     group, then the particle's element declaration's {type table} and
-//     {nillable}, its {type definition}, any complex one declining and a
-//     simple one as the document element's does, and an expanded name an
-//     earlier particle shares; of a choice, each alternative's own
-//     constructs, then a branch field of the name and Go type, as item 6
-//     reads it, an earlier alternative's has, which declines as two choice
+//     {nillable}, its {type definition}, a simple one examined as the
+//     document element's is and a complex one declining when it is
+//     xs:anyType, then when it has {abstract} true, and otherwise examined as
+//     the document element's complex type is, from its content to its
+//     {attribute wildcard}, before anything after it, and then an expanded
+//     name an earlier particle shares; of a choice, each alternative's own
+//     constructs, then a branch field of the name an earlier alternative's
+//     has where either alternative is of complex type, and otherwise of the
+//     name and Go type, as item 6 reads it, which declines as two choice
 //     alternatives whose branch structs have one shape — each of its
-//     attribute uses in order, and its {attribute wildcard}. A component of
-//     the declaration or its type that does not resolve, or a particle with
-//     {max occurs} 0, is a plain error in place of a decline, at its point in
-//     this order.
+//     attribute uses in order, and its {attribute wildcard}. The complex type
+//     of a top-level declaration, the document element's or one an <element
+//     ref> names, and a local declaration's named complex {type definition},
+//     are each examined at the first reach of that declaration or that name
+//     only, and contribute nothing when reached again, so a type that reaches
+//     itself is examined once. A component of a declaration or type this
+//     item examines that does not resolve, or a particle with {max occurs} 0,
+//     is a plain error in place of a decline, at its point in this order.
 //  6. T does not match the type codegen emits for the declaration, as Decode
 //     derives it from the schema: for a complex {type definition}, T is not a
 //     struct whose fields are exactly those codegen emits, in name, order and
@@ -137,27 +146,35 @@ var ErrTypeMismatch = errors.New("codec: T is not the type codegen emits for the
 //     type is not the Go type codegen gives it (the Simple types section of
 //     codegen's package doc): its atomic Go type A, string, bool, float32,
 //     float64, big.Rat, big.Int or a bounded Go integer, or for a list []A,
-//     A its {item type definition}'s. A field's Go type is V, *V or []V, V the
-//     Go type codegen gives its simple type, A or []A, for a local element
-//     declaration's particle and an attribute use; for an <element ref>
-//     particle it is N, *N or []N, N the named type codegen emits for the
-//     referenced declaration, matched as any type other than V whose
-//     underlying type is V, never by name; V itself, a local particle's type,
-//     does not pass, so a ref's field and a local one's never accept one Go
-//     type. A sealed interface, T or the struct's first field, does not match
-//     when it is not an interface whose one method is unexported, or when its
-//     branch set, as [WithBranches] supplied it, is not one struct of one
-//     field per alternative, that field the name and Go type of the
-//     alternative's branch field: when no WithBranches supplies it for a
-//     choice with {particles}, or its count differs, or it holds a nil value,
-//     a type that is no struct, a type twice, or a branch matching no
-//     alternative an earlier branch did not match. It is an error errors.Is
-//     reports as [ErrTypeMismatch], no *DeclineError, so that a T that does
-//     not match the schema is never filled. Decode never reads the fields
-//     from T, so for a type codegen emitted from this schema the error is a
-//     defect of Decode's, or a branch set WithBranches did not supply as
+//     A its {item type definition}'s. The Go type of the field of a particle
+//     or attribute use of simple type is V, *V or []V, V the Go type codegen
+//     gives that simple type, A or []A, for a local element declaration's
+//     particle and an attribute use; for an <element ref> particle it is N, *N
+//     or []N, N the named type codegen emits for the referenced declaration,
+//     matched as any type other than V whose underlying type is V, never by
+//     name; V itself, a local particle's type, does not pass, so a ref's field
+//     of simple type and a local one's never accept one Go type. The field of
+//     a particle whose element declaration, local or referenced, has a complex
+//     {type definition} is S, *S or []S, S a struct held to that type as T is
+//     to the document element's, its fields exactly codegen's and its name
+//     never compared, or, where codegen emits the type's choice's sealed
+//     interface as the type itself, I or []I, I that interface, held as T is
+//     and never a pointer, nil meaning absent. A sealed interface, T, a
+//     struct's first field or a nested element's, does not match when it is
+//     not an interface whose one method is unexported, or when its branch
+//     set, as [WithBranches] supplied it, is not one struct of one field per
+//     alternative, that field the name and Go type of the alternative's
+//     branch field, a branch whose field is named like an alternative of
+//     complex type held to that alternative alone: when no WithBranches
+//     supplies it for a choice with {particles}, or its count differs, or it
+//     holds a nil value, a type that is no struct, a type twice, or a branch
+//     matching no alternative an earlier branch did not match. It is an error
+//     errors.Is reports as [ErrTypeMismatch], no *DeclineError, so that a T
+//     that does not match the schema is never filled. Decode never reads the
+//     fields from T, so for a type codegen emitted from this schema the error
+//     is a defect of Decode's, or a branch set WithBranches did not supply as
 //     codegen emitted it, and for any other T it is a T that does not match.
-//  7. An element carrying xsi:type, the document element or a child: a
+//  7. An element carrying xsi:type, the document element or any descendant: a
 //     *DeclineError at that element's instance Loc, the first in document
 //     order, whose [DeclineError.Construct] is xsi:type's. A document element
 //     no top-level declaration declares, which validation accepts only
@@ -189,8 +206,9 @@ var ErrTypeMismatch = errors.New("codec: T is not the type codegen emits for the
 // Items 7 and 8 are both found while filling T, and the first in document
 // order is returned: an element's xsi:type, then its attributes' values,
 // present attributes in start-tag order and then the supplied values of
-// absent ones in attribute-use order, then its children. A supplied value
-// whose attribute is present is never mapped.
+// absent ones in attribute-use order, then its children in document order,
+// each child of complex type filled in this same order before the next
+// child. A supplied value whose attribute is present is never mapped.
 func Decode[T any](schema *xsd.Schema, backend value.Backend, data []byte, opts ...Option) (*T, error) {
 	cfg := newConfig(opts)
 	v, err := validate.New(schema, backend, validate.WithLogger(cfg.log))
@@ -566,8 +584,7 @@ type nestedReader struct {
 	fill filler
 }
 
-// read fills a new value of n.t from the element start, as fill does for the
-// document element.
+// read returns a new value of n.t that fill sets from the element start.
 func (n nestedReader) read(_ *pipeline, r *xmltree.Reader, start *xmltree.StartElement) (reflect.Value, error) {
 	v := reflect.New(n.t).Elem()
 	if err := n.fill.fill(r, start, v); err != nil {
@@ -1755,8 +1772,8 @@ func (s *simpleRoot) fill(r *xmltree.Reader, root *xmltree.StartElement, out ref
 	return nil
 }
 
-// noAttributes returns the error for the first attribute of the document
-// element root outside the xsi namespace, for a type with no attribute use.
+// noAttributes returns the error for the first attribute of the element root
+// outside the xsi namespace, for a type with no attribute use.
 func noAttributes(root *xmltree.StartElement) error {
 	for _, a := range root.Attributes() {
 		if a.Name().Space() != xsd.XMLSchemaInstanceNS {
@@ -1766,8 +1783,8 @@ func noAttributes(root *xmltree.StartElement) error {
 	return nil
 }
 
-// unattributed is the error for the attribute a of the document element when
-// no attribute use of its declaration's type attributes it.
+// unattributed is the error for the attribute a of an element when no
+// attribute use of its declaration's type attributes it.
 func unattributed(a xmltree.Attribute) error {
 	return fmt.Errorf("codec: %s: attribute %s is attributed to no attribute use", a.Loc(), expanded(a.Name()))
 }
