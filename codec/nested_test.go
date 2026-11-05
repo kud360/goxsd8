@@ -10,18 +10,18 @@ import (
 	"github.com/kud360/goxsd8/xsd"
 )
 
-// The nested schemas, each declaring s:r whose particles' element
-// declarations have complex types codegen gives a type of its own:
-// nestedSchema's one, opt and rep anonymous, once, optionally and repeated;
-// named, of the named type ct, which has a defaulted and an optional
-// attribute; deep, two levels of anonymous nesting; and pick, of the named
-// type pick, whose content is a choice. nestedRefSchema's r holds an
-// <element ref> to h, a lone non-abstract head of anonymous complex type.
-// selfSchema is MS-ComplexType2006-07-15/ctZ003's shape: r's type C1 reaches
-// itself through an emptiable choice's repeated alternative. sameShapeSchema's
-// e has type c, which holds an optional <element ref> to e, and r has type c
-// too. selfOnceSchema's r holds a required <element ref> to itself, which no
-// finite instance validates and codegen declines.
+// The nested schemas, each declaring s:r whose particles' element declarations have
+// complex types codegen gives a type of its own: nestedSchema's one, opt and rep
+// anonymous, once, optionally and repeated; named, of the named type ct, which has a
+// defaulted and an optional attribute; deep, two levels of anonymous nesting; and pick,
+// of the named type pick, whose content is a choice. nestedRefSchema's r holds an
+// <element ref> to h, a lone non-abstract head of anonymous complex type. selfSchema is
+// MS-ComplexType2006-07-15/ctZ003's shape: r's type C1 reaches itself through an
+// emptiable choice's repeated alternative. sameShapeSchema's e has type c, which holds an
+// optional <element ref> to e, and r has type c too. ifaceSelfSchema's type c is a choice
+// codegen gives the bare interface, whose alternative e is of type c, so it reaches
+// itself through interfaces alone. selfOnceSchema's r holds a required <element ref> to
+// itself, which no finite instance validates and codegen declines.
 const (
 	nestedSchema = `
   <xs:complexType name="ct"><xs:sequence><xs:element name="x" type="xs:string"/></xs:sequence>
@@ -43,14 +43,17 @@ const (
   <xs:element name="r" type="s:C1"/>`
 	sameShapeSchema = `<xs:complexType name="c"><xs:sequence><xs:element ref="s:e" minOccurs="0"/><xs:element name="v" type="xs:string"/></xs:sequence></xs:complexType>
   <xs:element name="e" type="s:c"/><xs:element name="r" type="s:c"/>`
+	ifaceSelfSchema = `<xs:complexType name="c"><xs:choice><xs:element name="e" type="s:c"/><xs:element name="v" type="xs:string"/></xs:choice></xs:complexType>
+  <xs:element name="r" type="s:c"/>`
 	selfOnceSchema = `<xs:element name="r"><xs:complexType><xs:sequence><xs:element ref="s:r"/></xs:sequence></xs:complexType></xs:element>`
 )
 
 // nestedR to nestedPickQ are nestedSchema's R, One, Opt, Rep, Ct, Deep, Mid,
 // Pick, PickP and PickQ; nestedRefR and nestedH are nestedRefSchema's R and
 // H; selfR, selfChoice, selfE1 and selfC1 are selfSchema's R, C1Choice,
-// C1ChoiceE1 and C1; and sameR and sameE are sameShapeSchema's R and E. Each
-// pin is TestNestedTypesAreCodegens'.
+// C1ChoiceE1 and C1; sameR and sameE are sameShapeSchema's R and E; and ifR
+// to ifCV are ifaceSelfSchema's R, RE, RV, C, CE and CV. Each pin is
+// TestNestedTypesAreCodegens'.
 type (
 	nestedR struct {
 		One   nestedOne
@@ -93,7 +96,18 @@ type (
 		E *sameE
 		V string
 	}
+	ifR  interface{ isIfR() }
+	ifRE struct{ E ifC }
+	ifRV struct{ V string }
+	ifC  interface{ isIfC() }
+	ifCE struct{ E ifC }
+	ifCV struct{ V string }
 )
+
+func (ifRE) isIfR() {}
+func (ifRV) isIfR() {}
+func (ifCE) isIfC() {}
+func (ifCV) isIfC() {}
 
 func (nestedPickP) isNestedPick() {}
 func (nestedPickQ) isNestedPick() {}
@@ -108,6 +122,7 @@ type selfBad struct{ E1 []string }
 var (
 	nestedPickBranches = WithBranches[nestedPick](nestedPickP{}, nestedPickQ{})
 	selfBranches       = WithBranches[selfChoice](selfE1{})
+	ifBranches         = []Option{WithBranches[ifR](ifRE{}, ifRV{}), WithBranches[ifC](ifCE{}, ifCV{})}
 )
 
 // TestNestedTypesAreCodegens pins the types above to those codegen emits for
@@ -140,6 +155,14 @@ func TestNestedTypesAreCodegens(t *testing.T) {
 			"type C1 struct {\n\tChoice C1Choice\n}\n",
 		}},
 		{sameShapeSchema, []string{"type E struct {\n\tE *E\n\tV string\n}\n", "type R struct {\n\tE *E\n\tV string\n}\n"}},
+		{ifaceSelfSchema, []string{
+			"type R interface {\n\tisR()\n}\n",
+			"type RE struct {\n\tE C\n}\n\nfunc (RE) isR() {}\n",
+			"type C interface {\n\tisC()\n}\n",
+			"type CE struct {\n\tE C\n}\n\nfunc (CE) isC() {}\n",
+			"type CV struct {\n\tV string\n}\n\nfunc (CV) isC() {}\n",
+			"type RV struct {\n\tV string\n}\n\nfunc (RV) isR() {}\n",
+		}},
 	}
 	for _, row := range rows {
 		gen := generated(t, schemaOf(t, row.decls))
@@ -188,6 +211,8 @@ func TestDecodeNested(t *testing.T) {
 			into[nestedRefR](), nil, nestedRefR{H: nestedH{X: "x", Y: 3}}},
 		{"a type reaching itself, four levels deep", selfSchema, instanceOf("", `<s:e1/><s:e1><s:e1><s:e1/></s:e1></s:e1>`),
 			into[selfR](selfBranches), nil, selfR{Choice: selfE1{E1: []selfC1{{}, self(self(selfC1{}))}}}},
+		{"a type reaching itself through interfaces alone", ifaceSelfSchema, instanceOf("", `<s:e><s:e><s:v>x</s:v></s:e></s:e>`),
+			into[ifR](ifBranches...), nil, ifR(ifRE{E: ifCE{E: ifCV{V: "x"}}})},
 		{"a type reaching itself, its empty match", selfSchema, instanceOf("", ``), into[selfR](selfBranches), nil, selfR{}},
 		{"codegen's own struct of a type reaching itself", sameShapeSchema, instanceOf("", `<s:e><s:e><s:v>i</s:v></s:e><s:v>m</s:v></s:e><s:v>o</s:v>`),
 			into[sameR](), nil, sameR{E: &sameE{E: &sameE{V: "i"}, V: "m"}, V: "o"}},
