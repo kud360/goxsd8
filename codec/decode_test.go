@@ -1106,7 +1106,9 @@ func TestChoiceSharedBranchIsCodegens(t *testing.T) {
 // abstractTwoSchema's abstract h with the members m, of xs:string, and n, of
 // xs:token; intGroupSchema's h, of xs:decimal, with the member m of xs:int;
 // occursGroupSchema's a, b and c, each with one member, x, y and z, in each
-// occurrence shape; and complexGroupSchema's h and m of one complex type.
+// occurrence shape; complexGroupSchema's h and m of one complex type; and
+// nestedHeadSchema's abstract h, whose member m heads a group holding n, which
+// h's group holds through m (cos-equiv-derived-ok-rec clause 2.2).
 // aloneChoiceSchema's choice has a local a beside a ref to an abstract head
 // whose group holds no other declaration.
 const (
@@ -1124,6 +1126,8 @@ const (
 		<xs:element name="r"><xs:complexType><xs:sequence><xs:element ref="s:a"/><xs:element ref="s:b" minOccurs="0"/><xs:element ref="s:c" minOccurs="0" maxOccurs="unbounded"/></xs:sequence></xs:complexType></xs:element>`
 	complexGroupSchema = `<xs:complexType name="ct"><xs:sequence><xs:element name="v" type="xs:string"/></xs:sequence></xs:complexType>
 		<xs:element name="h" type="s:ct"/><xs:element name="m" type="s:ct" substitutionGroup="s:h"/>
+		<xs:element name="r"><xs:complexType><xs:sequence><xs:element ref="s:h"/></xs:sequence></xs:complexType></xs:element>`
+	nestedHeadSchema = `<xs:element name="h" type="xs:string" abstract="true"/><xs:element name="m" type="xs:string" substitutionGroup="s:h"/><xs:element name="n" type="xs:string" substitutionGroup="s:m"/>
 		<xs:element name="r"><xs:complexType><xs:sequence><xs:element ref="s:h"/></xs:sequence></xs:complexType></xs:element>`
 	aloneChoiceSchema = `<xs:element name="b" type="xs:string" abstract="true"/>
 		<xs:element name="r"><xs:complexType><xs:choice><xs:element name="a" type="xs:string"/><xs:element ref="s:b"/></xs:choice></xs:complexType></xs:element>`
@@ -1149,9 +1153,11 @@ var aloneSchemas = []struct{ name, decls string }{
 // and its branches, M as grpM; int* are intGroupSchema's H, M, R,
 // HSubstitutionGroup and its branches; occ* are occursGroupSchema's R, its
 // interfaces and their branches, each member's named type as grpA; cx* are
-// complexGroupSchema's H, M, R, HSubstitutionGroup and its branches; alone*
-// is each of aloneSchemas' R and HSubstitutionGroup; and aloneChoice* are
-// aloneChoiceSchema's R, RA and RB, its BSubstitutionGroup as aloneGroup.
+// complexGroupSchema's H, M, R, HSubstitutionGroup and its branches; nh* are
+// nestedHeadSchema's R, HSubstitutionGroup and its branches, M as grpM and N
+// as abs2N; alone* is each of aloneSchemas' R and HSubstitutionGroup; and
+// aloneChoice* are aloneChoiceSchema's R, RA and RB, its BSubstitutionGroup
+// as aloneGroup.
 type (
 	grpA       string
 	grpM       string
@@ -1193,6 +1199,10 @@ type (
 	cxGroup     interface{ isCxGroup() }
 	cxGroupH    struct{ H cxH }
 	cxGroupM    struct{ M cxM }
+	nhHolder    struct{ H nhGroup }
+	nhGroup     interface{ isNhGroup() }
+	nhGroupM    struct{ M grpM }
+	nhGroupN    struct{ N abs2N }
 	aloneHolder struct {
 		A string
 		H aloneGroup
@@ -1218,6 +1228,8 @@ func (occCGroupC) isOccCGroup()     {}
 func (occCGroupZ) isOccCGroup()     {}
 func (cxGroupH) isCxGroup()         {}
 func (cxGroupM) isCxGroup()         {}
+func (nhGroupM) isNhGroup()         {}
+func (nhGroupN) isNhGroup()         {}
 func (aloneChoiceA) isAloneChoice() {}
 func (aloneChoiceB) isAloneChoice() {}
 
@@ -1233,6 +1245,7 @@ var (
 		WithBranches[occCGroup](occCGroupC{}, occCGroupZ{}),
 	}
 	cxBranches = WithBranches[cxGroup](cxGroupH{}, cxGroupM{})
+	nhBranches = WithBranches[nhGroup](nhGroupM{}, nhGroupN{})
 )
 
 // TestGroupTypesAreCodegens pins the types above to those codegen emits for
@@ -1264,6 +1277,8 @@ func TestGroupTypesAreCodegens(t *testing.T) {
 			iface("CSubstitutionGroup"), branch("CSubstitutionGroup", "C", "C C"), branch("CSubstitutionGroup", "Z", "Z Z")}, ""},
 		{complexGroupSchema, []string{"type H struct {\n\tV string\n}\n", "type M struct {\n\tV string\n}\n", "type R struct {\n\tH HSubstitutionGroup\n}\n",
 			iface("HSubstitutionGroup"), branch("HSubstitutionGroup", "H", "H H"), branch("HSubstitutionGroup", "M", "M M")}, ""},
+		{nestedHeadSchema, []string{"type M string\n", "type N string\n", "type R struct {\n\tH HSubstitutionGroup\n}\n", iface("HSubstitutionGroup"),
+			branch("HSubstitutionGroup", "M", "M M"), branch("HSubstitutionGroup", "N", "N N")}, "type MSubstitutionGroup "},
 		{aloneSchemas[0].decls, alone, "type HSubstitutionGroupM "},
 		{aloneSchemas[1].decls, alone, "type HSubstitutionGroupH "},
 		{aloneSchemas[2].decls, alone, "type HSubstitutionGroupH "},
@@ -1289,7 +1304,9 @@ func TestGroupTypesAreCodegens(t *testing.T) {
 // resolves to (§3.9.4.3 cvc-accept clause 2.3.2), the head's own among them
 // when it has {abstract} false and an abstract head's never (cvc-elt clause
 // 2); the branch holds the member's own named type, a member of xs:int under
-// a head of xs:decimal its int32, a complex member its struct; the field is I
+// a head of xs:decimal its int32, a complex member its struct, a member
+// heading a group of its own its own named type, never that group's
+// interface, with its group's members branches of the outer one; the field is I
 // exactly once, the bare I, nil when absent, for {min occurs} 0, and []I, one
 // interface value per child, for {max occurs} above 1; and an abstract head
 // whose group holds no other declaration with {abstract} false gives the
@@ -1317,6 +1334,8 @@ func TestDecodeSubstitutionGroup(t *testing.T) {
 		{"the optional and the repeated absent", occursGroupSchema, "<s:a>1</s:a>", into[occHolder](occBranches...), occHolder{A: occAGroupA{A: "1"}}},
 		{"a member of complex type", complexGroupSchema, "<s:m><s:v>q</s:v></s:m>", into[cxHolder](cxBranches), cxHolder{H: cxGroupM{M: cxM{V: "q"}}}},
 		{"a head of complex type", complexGroupSchema, "<s:h><s:v>p</s:v></s:h>", into[cxHolder](cxBranches), cxHolder{H: cxGroupH{H: cxH{V: "p"}}}},
+		{"a member heading a group of its own, its own branch", nestedHeadSchema, "<s:m>x</s:m>", into[nhHolder](nhBranches), nhHolder{H: nhGroupM{M: "x"}}},
+		{"a member heading a group of its own, its member's branch", nestedHeadSchema, "<s:n>y</s:n>", into[nhHolder](nhBranches), nhHolder{H: nhGroupN{N: "y"}}},
 		{"the interface alone as a choice's alternative", aloneChoiceSchema, "<s:a>x</s:a>",
 			into[aloneChoice](WithBranches[aloneChoice](aloneChoiceA{}, aloneChoiceB{})), aloneChoice(aloneChoiceA{A: "x"})},
 	}
