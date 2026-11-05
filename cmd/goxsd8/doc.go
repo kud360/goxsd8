@@ -120,9 +120,8 @@
 //	    schemaLocation to resolve only when it has children other than
 //	    <xs:annotation>, so an empty one's skip breaks no rule though
 //	    none calls it legal, and no normative clause states it either
-//	    way for an <xs:override> or an <xs:include> inside such a
-//	    target set,
-//	    which §F.2 rewrites into an <xs:override> — so the summary
+//	    way for an <xs:override> or an <xs:include> inside such a target
+//	    set, which §F.2 rewrites into an <xs:override> — so the summary
 //	    above is printed off a schema short of whatever that document
 //	    declares. -q does not silence it.
 //	    Under -strict the summary is printed all the same and the
