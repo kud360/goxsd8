@@ -210,7 +210,6 @@ func readmeDecode(schema *xsd.Schema, backend value.Backend) {
 	// order.Order is the generated type for order.xml's document element.
 	o, err := codec.Decode[order.Order](schema, backend, data, codec.WithURI("order.xml"))
 	if err != nil {
-		// Each arm is one of Decode's numbered items, in the order its doc lists them.
 		var ue *codec.UndecidedError
 		var de *codec.DeclineError
 		switch vs := codec.ViolationsOf(err); {
@@ -220,7 +219,7 @@ func readmeDecode(schema *xsd.Schema, backend value.Backend) {
 				fmt.Println(v.Loc, v.Rule)
 			}
 		case errors.As(err, &ue):
-			// Item 4: the first check the validator left undecided.
+			// Item 4: the check the validator left undecided.
 			fmt.Println(ue.Unevaluated().Loc(), ue.Unevaluated().Rule())
 		case errors.As(err, &de):
 			// Items 5 and 7: the construct codec declined.
