@@ -11,7 +11,8 @@ import (
 // errors.ErrUnsupported, and Decode's doc states when it is returned.
 type DeclineError struct {
 	construct construct
-	loc       xsderr.Loc
+	// loc is the instance Loc the decline is charged to, nil for none.
+	loc *xsderr.Loc
 	// detail is the text Error's doc states after the construct.
 	detail string
 }
@@ -22,7 +23,12 @@ func (e *DeclineError) Construct() Construct { return Construct{e.construct} }
 // Loc returns the instance Loc of the element the decline is charged to: the
 // document element for a construct of its declaration or its type, and the
 // element carrying it for xsi:type.
-func (e *DeclineError) Loc() xsderr.Loc { return e.loc }
+func (e *DeclineError) Loc() xsderr.Loc {
+	if e.loc == nil {
+		return xsderr.Loc{}
+	}
+	return *e.loc
+}
 
 // Error names the instance Loc and the construct, then the declining
 // declaration, the document element's, a particle's element declaration's,
@@ -32,8 +38,12 @@ func (e *DeclineError) Loc() xsderr.Loc { return e.loc }
 // built-in component; for xsi:type, it names the element and the type the
 // xsi:type names.
 func (e *DeclineError) Error() string {
-	return e.loc.String() + ": codec does not decode " + e.construct.name() + ": " + e.detail +
+	text := "codec does not decode " + e.construct.name() + ": " + e.detail +
 		"; a decoder refusal, not a schema or instance fault"
+	if e.loc == nil {
+		return text
+	}
+	return e.loc.String() + ": " + text
 }
 
 // Unwrap returns errors.ErrUnsupported.
@@ -127,9 +137,16 @@ func (c construct) name() string {
 	return constructNames[c]
 }
 
-// decline returns the *DeclineError for construct c at the instance Loc loc,
-// detail the text Error's doc states after the construct. No schema or
+// decline returns the *DeclineError for construct c, charged to no instance
+// Loc, detail the text Error's doc states after the construct. No schema or
 // instance rule is violated, so it carries no xsderr rule (STYLE E2).
-func decline(loc xsderr.Loc, c construct, detail string) *DeclineError {
-	return &DeclineError{construct: c, loc: loc, detail: detail}
+func decline(c construct, detail string) *DeclineError {
+	return &DeclineError{construct: c, detail: detail}
+}
+
+// at returns a copy of e charged to the instance Loc loc.
+func (e *DeclineError) at(loc xsderr.Loc) *DeclineError {
+	charged := *e
+	charged.loc = &loc
+	return &charged
 }

@@ -452,37 +452,52 @@ type contentFiller interface {
 }
 
 // bind returns the binder of root's declaration in p's schema, or the first
-// decline Decode's doc states for it, item 5, at root's instance Loc.
+// decline Decode's doc states for it, item 5, charged to root's instance Loc.
+// Item 5 is bindDecl's, which CheckDecode calls too.
 func bind(p *pipeline, root *xmltree.StartElement) (binder, error) {
-	schema := p.schema
-	loc := root.Loc()
 	name := expanded(root.Name())
-	decl, ok := schema.Element(name)
+	decl, ok := p.schema.Element(name)
 	if !ok {
 		// Only an xsi:type lets such a document element be assessed
 		// (cvc-assess-elt), so it declines as one, in place of item 5.
 		if err := checkXsiType(root); err != nil {
 			return nil, err
 		}
-		return nil, fmt.Errorf("codec: %s: the document element %s has no top-level declaration", loc, name)
+		return nil, fmt.Errorf("codec: %s: the document element %s has no top-level declaration", root.Loc(), name)
 	}
+	b, err := bindDecl(p, decl)
+	// bindDecl returns its declines unwrapped and uncharged, and no other
+	// error of its wraps one, so the charged copy replaces err whole.
+	var de *DeclineError
+	if errors.As(err, &de) {
+		return nil, de.at(root.Loc())
+	}
+	return b, err
+}
+
+// bindDecl returns the binder of decl, a top-level element declaration in p's
+// schema, or the first decline Decode's doc states for it, item 5, charged to
+// no instance Loc, or the plain error item 5 states in a decline's place. It
+// reads only p's schema.
+func bindDecl(p *pipeline, decl xsd.ElementDeclaration) (binder, error) {
+	schema := p.schema
 	if d := declarationDecline(decl); d != 0 {
-		return nil, decline(loc, d, declSubject(decl))
+		return nil, decline(d, declSubject(decl))
 	}
 	td, ok := schema.ResolvedType(decl.TypeDefinition())
 	if !ok {
-		return nil, fmt.Errorf("codec: %s: the {type definition} of %s does not resolve", loc, declSubject(decl))
+		return nil, fmt.Errorf("codec: the {type definition} of %s does not resolve", declSubject(decl))
 	}
 	typeSubject := fmt.Sprintf("the {type definition} of %s, a type defined at %s", declSubject(decl), td.Loc())
 	// TypeDefinition is a closed sum of the two, so the assertions are STYLE
 	// T2's sealed-sum exception.
 	if st, ok := td.(*xsd.SimpleType); ok {
-		return bindSimpleRoot(p, decl, st, loc, typeSubject)
+		return bindSimpleRoot(p, decl, st, typeSubject)
 	}
 	ct, _ := td.(xsd.ComplexType)
 	content, group, d := contentGroup(ct)
 	if d != 0 {
-		return nil, decline(loc, d, typeSubject)
+		return nil, decline(d, typeSubject)
 	}
 	b := &binding{p: p, attributes: map[xsd.QName]int{}}
 	// names is the struct's Namer: the content's fields claim from it in
@@ -493,7 +508,7 @@ func bind(p *pipeline, root *xmltree.StartElement) (binder, error) {
 	// sealed interface can bind.
 	var ch *choice
 	var err error
-	b.content, ch, err = bindContent(p, group, names, loc, typeSubject)
+	b.content, ch, err = bindContent(p, group, names, typeSubject)
 	if err != nil {
 		return nil, err
 	}
@@ -503,14 +518,14 @@ func bind(p *pipeline, root *xmltree.StartElement) (binder, error) {
 			return nil, err
 		}
 		if d != 0 {
-			return nil, decline(loc, d, subject)
+			return nil, decline(d, subject)
 		}
 		f.name = names.Claim(u.DeclarationName().Local)
 		b.attributes[u.DeclarationName()] = len(b.attrs)
 		b.attrs = append(b.attrs, f)
 	}
 	if _, has := ct.AttributeWildcard(); has {
-		return nil, decline(loc, constructAttributeWildcard, typeSubject)
+		return nil, decline(constructAttributeWildcard, typeSubject)
 	}
 	// codegen/emit.go's shape: a choice occurring once, in a type with no
 	// attribute field, is the type itself unless it has {particles} and one
@@ -523,17 +538,17 @@ func bind(p *pipeline, root *xmltree.StartElement) (binder, error) {
 
 // bindContent returns the elementContent of group, a content sequence or
 // choice, its fields named from names, and for a choice that choice, or the
-// first decline Decode's doc states for its particles, item 5, at the instance
-// Loc loc, typeSubject naming the type.
-func bindContent(p *pipeline, group xsd.ModelGroup, names *goname.Namer, loc xsderr.Loc, typeSubject string) (elementContent, *choice, error) {
+// first decline Decode's doc states for its particles, item 5, typeSubject
+// naming the type.
+func bindContent(p *pipeline, group xsd.ModelGroup, names *goname.Namer, typeSubject string) (elementContent, *choice, error) {
 	if group.Compositor() == xsd.CompositorChoice {
-		ch, err := bindChoice(p, group.Particles(), names, loc, typeSubject)
+		ch, err := bindChoice(p, group.Particles(), names, typeSubject)
 		if err != nil {
 			return nil, nil, err
 		}
 		return ch, ch, nil
 	}
-	s, err := bindSequence(p, group.Particles(), names, loc, typeSubject)
+	s, err := bindSequence(p, group.Particles(), names, typeSubject)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -552,9 +567,9 @@ type sequence struct {
 
 // bindSequence returns the sequence of particles, a content sequence's, each
 // field named from names by its element's local name in particle order, or the
-// first decline Decode's doc states for them, item 5, at the instance Loc loc,
-// typeSubject naming the type.
-func bindSequence(pl *pipeline, particles []xsd.Particle, names *goname.Namer, loc xsderr.Loc, typeSubject string) (*sequence, error) {
+// first decline Decode's doc states for them, item 5, typeSubject naming the
+// type.
+func bindSequence(pl *pipeline, particles []xsd.Particle, names *goname.Namer, typeSubject string) (*sequence, error) {
 	s := &sequence{p: pl, children: map[xsd.QName]int{}}
 	for _, p := range particles {
 		el, d, err := particleElement(pl.schema, p)
@@ -562,14 +577,14 @@ func bindSequence(pl *pipeline, particles []xsd.Particle, names *goname.Namer, l
 			return nil, err
 		}
 		if d != 0 {
-			return nil, decline(loc, d, "a particle of "+typeSubject)
+			return nil, decline(d, "a particle of "+typeSubject)
 		}
 		f, d, err := elementField(pl.schema, s.children, el, p.Occurs())
 		if err != nil {
 			return nil, err
 		}
 		if d != 0 {
-			return nil, decline(loc, d, declSubject(el))
+			return nil, decline(d, declSubject(el))
 		}
 		f.name = names.Claim(el.Name().Local)
 		s.children[el.Name()] = len(s.fields)
@@ -627,11 +642,11 @@ type choice struct {
 // bindChoice returns the choice of particles, a content choice's, its field
 // named from names by the local name choice before any alternative is read
 // (codegen/doc.go "# Particles"), or the first decline Decode's doc states for
-// them, item 5, at the instance Loc loc, typeSubject naming the type: each
-// alternative's as a sequence's particle declines, then an alternative whose
-// branch struct has an earlier one's shape, which no branch type could tell
-// apart: one of the same name, shape, value type and atomic Go type.
-func bindChoice(pl *pipeline, particles []xsd.Particle, names *goname.Namer, loc xsderr.Loc, typeSubject string) (*choice, error) {
+// them, item 5, typeSubject naming the type: each alternative's as a
+// sequence's particle declines, then an alternative whose branch struct has an
+// earlier one's shape, which no branch type could tell apart: one of the same
+// name, shape, value type and atomic Go type.
+func bindChoice(pl *pipeline, particles []xsd.Particle, names *goname.Namer, typeSubject string) (*choice, error) {
 	c := &choice{p: pl, name: names.Claim("choice"), children: map[xsd.QName]int{}}
 	for _, p := range particles {
 		el, d, err := particleElement(pl.schema, p)
@@ -639,14 +654,14 @@ func bindChoice(pl *pipeline, particles []xsd.Particle, names *goname.Namer, loc
 			return nil, err
 		}
 		if d != 0 {
-			return nil, decline(loc, d, "a particle of "+typeSubject)
+			return nil, decline(d, "a particle of "+typeSubject)
 		}
 		f, d, err := elementField(pl.schema, c.children, el, p.Occurs())
 		if err != nil {
 			return nil, err
 		}
 		if d != 0 {
-			return nil, decline(loc, d, declSubject(el))
+			return nil, decline(d, declSubject(el))
 		}
 		// A branch's {min occurs} 0 reads as 1: the empty match is the nil
 		// interface, so no branch holds an absent value (cos-group-emptiable).
@@ -656,7 +671,7 @@ func bindChoice(pl *pipeline, particles []xsd.Particle, names *goname.Namer, loc
 		f.name = goname.NewNamer().Claim(el.Name().Local)
 		for _, earlier := range c.alts {
 			if earlier.name == f.name && earlier.shape == f.shape && earlier.value == f.value && earlier.atom == f.atom {
-				return nil, decline(loc, constructSharedBranch, declSubject(el))
+				return nil, decline(constructSharedBranch, declSubject(el))
 			}
 		}
 		c.children[el.Name()] = len(c.alts)
@@ -803,14 +818,14 @@ func (c boundChoiceRoot) fill(r *xmltree.Reader, root *xmltree.StartElement, out
 
 // bindSimpleRoot returns the simpleRoot of decl, a top-level element
 // declaration whose {type definition} is st, or the decline Decode's doc
-// states for st, item 5, at the instance Loc loc, subject naming st.
-func bindSimpleRoot(p *pipeline, decl xsd.ElementDeclaration, st *xsd.SimpleType, loc xsderr.Loc, subject string) (binder, error) {
+// states for st, item 5, subject naming st.
+func bindSimpleRoot(p *pipeline, decl xsd.ElementDeclaration, st *xsd.SimpleType, subject string) (binder, error) {
 	atom, d, err := simpleDecline(p.schema, st)
 	if err != nil {
 		return nil, err
 	}
 	if d != 0 {
-		return nil, decline(loc, d, subject)
+		return nil, decline(d, subject)
 	}
 	vc, has := decl.ValueConstraint()
 	return &simpleRoot{p: p, scalar: newScalar(atom, st, declSubject(decl), vc, has)}, nil
@@ -1231,7 +1246,7 @@ func unattributed(a xmltree.Attribute) error {
 func checkXsiType(start *xmltree.StartElement) error {
 	for _, a := range start.Attributes() {
 		if a.Name().Space() == xsd.XMLSchemaInstanceNS && a.Name().Local() == "type" {
-			return decline(start.Loc(), constructXsiType, fmt.Sprintf("element %s with xsi:type %q", expanded(start.Name()), a.Value()))
+			return decline(constructXsiType, fmt.Sprintf("element %s with xsi:type %q", expanded(start.Name()), a.Value())).at(start.Loc())
 		}
 	}
 	return nil
