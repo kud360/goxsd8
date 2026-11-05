@@ -54,11 +54,10 @@
 // struct, decoded where validate rejects, and the placeholder's
 // ErrTypeMismatch. A case is named by its conformance.CatalogEntry ID, and
 // each list is in byte order of those IDs, whichever driver assessed each
-// case. An absent suite is a
-// supported mode, not a failure: the submodule is absent in a fresh container
-// (#659), so the tool says so, names the command that initializes it, and
-// exits 0. It exits 0 for a completed census whatever it finds, and 2 for an
-// operational error.
+// case. An absent suite is a supported mode, not a failure: the submodule is
+// absent in a fresh container (#659), so the tool says so, names the command
+// that initializes it, and exits 0. It exits 0 for a completed census
+// whatever it finds, and 2 for an operational error.
 package main
 
 import (

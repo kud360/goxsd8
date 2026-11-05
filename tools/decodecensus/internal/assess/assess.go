@@ -251,7 +251,7 @@ type Tally struct {
 
 // Drive reads one JSON [Request] from r, assesses each of its cases with the
 // Decoder decoders holds at the case's index, or the placeholder's, and
-// writes one JSON [Summary] to w, each case listed there by its ID. Within the one process it keys each decline
+// writes one JSON [Summary] to w. Within the one process it keys each decline
 // on its codec.Construct, and writes the Construct's String, which codec
 // makes distinct for each Construct, only into the Summary. A group that does
 // not assemble, or an instance that does not read, is an error: the census
