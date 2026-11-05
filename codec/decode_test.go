@@ -1109,7 +1109,8 @@ func TestChoiceSharedBranchIsCodegens(t *testing.T) {
 // occurrence shape; complexGroupSchema's h and m of one complex type; and
 // nestedHeadSchema's abstract h, whose member m heads a group holding n, which
 // h's group holds through m (cos-equiv-derived-ok-rec clause 2.2).
-// aloneChoiceSchema's choice has a local a beside a ref to an abstract head
+// groupChoiceSchema's choice has a local a beside a ref to an abstract head
+// with the member m, and aloneChoiceSchema's beside a ref to an abstract head
 // whose group holds no other declaration.
 const (
 	groupSchema = `<xs:element name="a" type="xs:string"/><xs:element name="m" type="xs:string" substitutionGroup="s:a"/>
@@ -1129,6 +1130,8 @@ const (
 		<xs:element name="r"><xs:complexType><xs:sequence><xs:element ref="s:h"/></xs:sequence></xs:complexType></xs:element>`
 	nestedHeadSchema = `<xs:element name="h" type="xs:string" abstract="true"/><xs:element name="m" type="xs:string" substitutionGroup="s:h"/><xs:element name="n" type="xs:string" substitutionGroup="s:m"/>
 		<xs:element name="r"><xs:complexType><xs:sequence><xs:element ref="s:h"/></xs:sequence></xs:complexType></xs:element>`
+	groupChoiceSchema = `<xs:element name="b" type="xs:string" abstract="true"/><xs:element name="m" type="xs:string" substitutionGroup="s:b"/>
+		<xs:element name="r"><xs:complexType><xs:choice><xs:element name="a" type="xs:string"/><xs:element ref="s:b"/></xs:choice></xs:complexType></xs:element>`
 	aloneChoiceSchema = `<xs:element name="b" type="xs:string" abstract="true"/>
 		<xs:element name="r"><xs:complexType><xs:choice><xs:element name="a" type="xs:string"/><xs:element ref="s:b"/></xs:choice></xs:complexType></xs:element>`
 )
@@ -1155,9 +1158,10 @@ var aloneSchemas = []struct{ name, decls string }{
 // interfaces and their branches, each member's named type as grpA; cx* are
 // complexGroupSchema's H, M, R, HSubstitutionGroup and its branches; nh* are
 // nestedHeadSchema's R, HSubstitutionGroup and its branches, M as grpM and N
-// as abs2N; alone* is each of aloneSchemas' R and HSubstitutionGroup; and
-// aloneChoice* are aloneChoiceSchema's R, RA and RB, its BSubstitutionGroup
-// as aloneGroup.
+// as abs2N; gc* are groupChoiceSchema's R, RA and RB, its BSubstitutionGroup
+// and BSubstitutionGroupM as abs1Group and abs1GroupM; alone* is each of
+// aloneSchemas' R and HSubstitutionGroup; and aloneChoice* are
+// aloneChoiceSchema's R, RA and RB, its BSubstitutionGroup as aloneGroup.
 type (
 	grpA       string
 	grpM       string
@@ -1207,6 +1211,9 @@ type (
 		A string
 		H aloneGroup
 	}
+	gcChoice     interface{ isGcChoice() }
+	gcChoiceA    struct{ A string }
+	gcChoiceB    struct{ B abs1Group }
 	aloneGroup   interface{ isAloneGroup() }
 	aloneChoice  interface{ isAloneChoice() }
 	aloneChoiceA struct{ A string }
@@ -1230,6 +1237,8 @@ func (cxGroupH) isCxGroup()         {}
 func (cxGroupM) isCxGroup()         {}
 func (nhGroupM) isNhGroup()         {}
 func (nhGroupN) isNhGroup()         {}
+func (gcChoiceA) isGcChoice()       {}
+func (gcChoiceB) isGcChoice()       {}
 func (aloneChoiceA) isAloneChoice() {}
 func (aloneChoiceB) isAloneChoice() {}
 
@@ -1282,6 +1291,8 @@ func TestGroupTypesAreCodegens(t *testing.T) {
 		{aloneSchemas[0].decls, alone, "type HSubstitutionGroupM "},
 		{aloneSchemas[1].decls, alone, "type HSubstitutionGroupH "},
 		{aloneSchemas[2].decls, alone, "type HSubstitutionGroupH "},
+		{groupChoiceSchema, []string{"type M string\n", "type R interface {\n\tisR()\n}\n", "type RA struct {\n\tA string\n}\n\nfunc (RA) isR() {}\n",
+			"type RB struct {\n\tB BSubstitutionGroup\n}\n\nfunc (RB) isR() {}\n", iface("BSubstitutionGroup"), branch("BSubstitutionGroup", "M", "M M")}, "type BSubstitutionGroupB "},
 		{aloneChoiceSchema, []string{"type R interface {\n\tisR()\n}\n", "type RA struct {\n\tA string\n}\n\nfunc (RA) isR() {}\n",
 			"type RB struct {\n\tB BSubstitutionGroup\n}\n\nfunc (RB) isR() {}\n", iface("BSubstitutionGroup")}, "type BSubstitutionGroupB "},
 	}
@@ -1308,10 +1319,11 @@ func TestGroupTypesAreCodegens(t *testing.T) {
 // heading a group of its own its own named type, never that group's
 // interface, with its group's members branches of the outer one; the field is I
 // exactly once, the bare I, nil when absent, for {min occurs} 0, and []I, one
-// interface value per child, for {max occurs} above 1; and an abstract head
-// whose group holds no other declaration with {abstract} false gives the
-// interface alone, nil, with no WithBranches, as a struct's field or a
-// choice's alternative.
+// interface value per child, for {max occurs} above 1, a choice's ref
+// alternative's branch holding it, each member's child selecting that
+// alternative; and an abstract head whose group holds no other declaration with
+// {abstract} false gives the interface alone, nil, with no WithBranches, as a
+// struct's field or a choice's alternative.
 func TestDecodeSubstitutionGroup(t *testing.T) {
 	type row struct {
 		name  string
@@ -1336,6 +1348,10 @@ func TestDecodeSubstitutionGroup(t *testing.T) {
 		{"a head of complex type", complexGroupSchema, "<s:h><s:v>p</s:v></s:h>", into[cxHolder](cxBranches), cxHolder{H: cxGroupH{H: cxH{V: "p"}}}},
 		{"a member heading a group of its own, its own branch", nestedHeadSchema, "<s:m>x</s:m>", into[nhHolder](nhBranches), nhHolder{H: nhGroupM{M: "x"}}},
 		{"a member heading a group of its own, its member's branch", nestedHeadSchema, "<s:n>y</s:n>", into[nhHolder](nhBranches), nhHolder{H: nhGroupN{N: "y"}}},
+		{"a choice's ref alternative to a group, by its member", groupChoiceSchema, "<s:m>x</s:m>",
+			into[gcChoice](WithBranches[gcChoice](gcChoiceA{}, gcChoiceB{}), abs1Branches), gcChoice(gcChoiceB{B: abs1GroupM{M: "x"}})},
+		{"a choice's local alternative beside a ref to a group", groupChoiceSchema, "<s:a>x</s:a>",
+			into[gcChoice](WithBranches[gcChoice](gcChoiceA{}, gcChoiceB{}), abs1Branches), gcChoice(gcChoiceA{A: "x"})},
 		{"the interface alone as a choice's alternative", aloneChoiceSchema, "<s:a>x</s:a>",
 			into[aloneChoice](WithBranches[aloneChoice](aloneChoiceA{}, aloneChoiceB{})), aloneChoice(aloneChoiceA{A: "x"})},
 	}
