@@ -190,6 +190,77 @@ func TestCheckDecodePlainErrors(t *testing.T) {
 	}
 }
 
+// TestCheckDecodeMaxOccursZero pins item 5's plain error for a particle with
+// {max occurs} 0: CheckDecode returns the text Decode returns for a valid
+// instance, and neither is a decline, ErrTypeMismatch, errors.ErrUnsupported
+// or a rule. No schema document yields such a particle (§3.3.2: an <element>
+// with minOccurs=maxOccurs=0 maps to no component), so the schema is built from a parsed
+// one with type v's one inner particle rebuilt through xsd.NewParticle with
+// the vacuous Occurs{0,0}.
+func TestCheckDecodeMaxOccursZero(t *testing.T) {
+	parsed := schemaOf(t, `<xs:complexType name="v"><xs:sequence><xs:element name="a" type="xs:string"/></xs:sequence></xs:complexType><xs:element name="r" type="s:v"/>`)
+	v := xsd.QName{Space: "urn:s", Local: "v"}
+	declared, ok := parsed.Type(v)
+	if !ok {
+		t.Fatalf("the parsed schema declares no type %s", v)
+	}
+	content := declared.(xsd.ComplexType).ContentType().(xsd.ElementContent)
+	inner := content.Particle.Term().(xsd.ResolvedTerm).Term.(xsd.ModelGroup).Particles()[0]
+	none, err := xsd.NewOccurs(xsderr.Loc{}, 0, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	vacuous, err := xsd.NewParticle(xsderr.Loc{}, none, inner.Term())
+	if err != nil {
+		t.Fatal(err)
+	}
+	group, err := xsd.NewModelGroup(xsderr.Loc{}, xsd.CompositorSequence, []xsd.Particle{vacuous})
+	if err != nil {
+		t.Fatal(err)
+	}
+	particle, err := xsd.NewParticle(xsderr.Loc{}, content.Particle.Occurs(), xsd.ResolvedTerm{Term: group})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ct, err := xsd.NewComplexType(declared.Loc(), v, xsd.QName{Space: xsd.XMLSchemaNS, Local: "anyType"}, nil, xsd.DerivationRestriction, false,
+		nil, nil, nil, xsd.ElementContent{Particle: particle}, nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	b := xsd.NewSchemaBuilder()
+	for _, td := range parsed.Types() {
+		if td.Name() == v {
+			b.AddType(ct)
+			continue
+		}
+		b.AddType(td)
+	}
+	for _, d := range parsed.Elements() {
+		b.AddElement(d)
+	}
+	schema, err := b.Finalize()
+	if err != nil {
+		t.Fatalf("Finalize: %v", err)
+	}
+	data := instanceOf("", "")
+	mustAccept(t, schema, data)
+	const want = "codec: the particle of element {urn:s}a declared at s.xsd:1:219 has {max occurs} 0, for which codegen emits no type"
+	_, decoded := Decode[struct{}](schema, strict.New(), data)
+	probe := CheckDecode[struct{}](schema, rootName)
+	for _, got := range []struct {
+		name string
+		err  error
+	}{{"Decode", decoded}, {"CheckDecode", probe}} {
+		if got.err == nil || got.err.Error() != want {
+			t.Fatalf("%s = %v, want %q", got.name, got.err, want)
+		}
+		var de *DeclineError
+		if _, isRule := xsderr.RuleOf(got.err); isRule || errors.As(got.err, &de) || errors.Is(got.err, ErrTypeMismatch) || errors.Is(got.err, errors.ErrUnsupported) {
+			t.Errorf("%s = %v, want a plain error", got.name, got.err)
+		}
+	}
+}
+
 // TestCheckDecodeDeclineBeforeMismatch pins item 4 of CheckDecode's doc
 // before item 5: a declaration outside the slice probed with a T that
 // mismatches what codegen emits returns the decline, as Decode does.
