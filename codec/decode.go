@@ -231,8 +231,8 @@ func Decode[T any](schema *xsd.Schema, backend value.Backend, data []byte, opts 
 //
 // A plain error is no *DeclineError, wraps neither [ErrTypeMismatch] nor
 // errors.ErrUnsupported, and carries no xsderr rule. nil means Decode returns
-// neither item 5 nor item 6 for a document element of name; items 2 to 4, 7
-// and 8 depend on the instance.
+// neither its item 5 nor its item 6 for a document element of name; Decode's
+// items 2 to 4, 7 and 8 depend on the instance.
 func CheckDecode[T any](schema *xsd.Schema, name xsd.QName, opts ...Option) error {
 	if schema == nil {
 		return errors.New("codec: CheckDecode: nil *xsd.Schema")
