@@ -605,12 +605,9 @@ func bindDecl(p *pipeline, decl xsd.ElementDeclaration) (binder, error) {
 		return nil, err
 	}
 	for _, u := range ct.AttributeUses() {
-		f, de, err := attributeUse(schema, u)
+		f, err := attributeUse(schema, u)
 		if err != nil {
 			return nil, err
-		}
-		if de != nil {
-			return nil, de
 		}
 		f.name = names.Claim(u.DeclarationName().Local)
 		b.attributes[u.DeclarationName()] = len(b.attrs)
@@ -671,12 +668,9 @@ func bindSequence(pl *pipeline, particles []xsd.Particle, names *goname.Namer, t
 		if d != 0 {
 			return nil, decline(d, "a particle of "+typeSubject)
 		}
-		f, de, err := elementField(pl.schema, s.children, el, p.Occurs())
+		f, err := elementField(pl.schema, s.children, el, p.Occurs())
 		if err != nil {
 			return nil, err
-		}
-		if de != nil {
-			return nil, de
 		}
 		f.name = names.Claim(el.Name().Local)
 		s.children[el.Name()] = len(s.fields)
@@ -748,12 +742,9 @@ func bindChoice(pl *pipeline, particles []xsd.Particle, names *goname.Namer, typ
 		if d != 0 {
 			return nil, decline(d, "a particle of "+typeSubject)
 		}
-		f, de, err := elementField(pl.schema, c.children, el, p.Occurs())
+		f, err := elementField(pl.schema, c.children, el, p.Occurs())
 		if err != nil {
 			return nil, err
-		}
-		if de != nil {
-			return nil, de
 		}
 		// A branch's {min occurs} 0 reads as 1: the empty match is the nil
 		// interface, so no branch holds an absent value (cos-group-emptiable).
@@ -912,12 +903,9 @@ func (c boundChoiceRoot) fill(r *xmltree.Reader, root *xmltree.StartElement, out
 // declaration whose {type definition} is st, or the decline Decode's doc
 // states for st, item 5, subject naming st.
 func bindSimpleRoot(p *pipeline, decl xsd.ElementDeclaration, st *xsd.SimpleType, subject string) (binder, error) {
-	g, de, err := simpleDecline(p.schema, st, subject)
+	g, err := simpleDecline(p.schema, st, subject)
 	if err != nil {
 		return nil, err
-	}
-	if de != nil {
-		return nil, de
 	}
 	vc, has := decl.ValueConstraint()
 	return &simpleRoot{p: p, scalar: newScalar(g, st, declSubject(decl), vc, has)}, nil
@@ -1009,47 +997,48 @@ func particleElement(schema *xsd.Schema, p xsd.Particle) (xsd.ElementDeclaration
 }
 
 // elementField returns the field, but for its name, which its caller claims,
-// of the element declaration el in a particle occurring as occurs, or the
-// decline Decode's doc states for it, item 5, naming el, in the order that
+// of the element declaration el in a particle occurring as occurs, or as the
+// error the *DeclineError Decode's doc states for it, item 5, naming el, or
+// the plain error that item states in a decline's place, in the order that
 // doc states: for a top-level el, which an <element ref> named, its
 // substitution group, then its own properties, its type, and an expanded name
 // an earlier particle of its model group shares, children indexing the
 // earlier particles' names. A local el's field holds the Go type codegen
 // gives its type, and a top-level one's the named type codegen emits for el
 // over it (valueNamed).
-func elementField(schema *xsd.Schema, children map[xsd.QName]int, el xsd.ElementDeclaration, occurs xsd.Occurs) (field, *DeclineError, error) {
+func elementField(schema *xsd.Schema, children map[xsd.QName]int, el xsd.ElementDeclaration, occurs xsd.Occurs) (field, error) {
 	subject := declSubject(el)
 	value := valueBare
 	if el.ScopeVariety() == xsd.ScopeGlobal {
 		if substitutable(schema, el) {
-			return field{}, decline(constructSubstitutionRef, subject), nil
+			return field{}, decline(constructSubstitutionRef, subject)
 		}
 		value = valueNamed
 	}
 	if d := declarationDecline(el); d != 0 {
-		return field{}, decline(d, subject), nil
+		return field{}, decline(d, subject)
 	}
 	td, ok := schema.ResolvedType(el.TypeDefinition())
 	if !ok {
-		return field{}, nil, fmt.Errorf("codec: the {type definition} of %s does not resolve", subject)
+		return field{}, fmt.Errorf("codec: the {type definition} of %s does not resolve", subject)
 	}
 	st, ok := td.(*xsd.SimpleType)
 	if !ok {
-		return field{}, decline(constructComplexElement, subject), nil
+		return field{}, decline(constructComplexElement, subject)
 	}
-	g, de, err := simpleDecline(schema, st, subject)
-	if err != nil || de != nil {
-		return field{}, de, err
+	g, err := simpleDecline(schema, st, subject)
+	if err != nil {
+		return field{}, err
 	}
 	if _, shared := children[el.Name()]; shared {
-		return field{}, decline(constructSharedName, subject), nil
+		return field{}, decline(constructSharedName, subject)
 	}
 	s, err := occursShape(occurs, el)
 	if err != nil {
-		return field{}, nil, err
+		return field{}, err
 	}
 	vc, has := el.ValueConstraint()
-	return field{shape: s, value: value, scalar: newScalar(g, st, subject, vc, has)}, nil, nil
+	return field{shape: s, value: value, scalar: newScalar(g, st, subject, vc, has)}, nil
 }
 
 // substitutable reports whether an element other than one of head, a
@@ -1067,80 +1056,74 @@ func substitutable(schema *xsd.Schema, head xsd.ElementDeclaration) bool {
 }
 
 // attributeUse returns the field, but for its name, which its caller claims,
-// of attribute use u, or the decline Decode's doc states for it, item 5,
-// naming its attribute declaration. The field's shape is codegen's, as the
-// package doc's "# What decodes" states, and needs no xsi: test here: an xsi:
-// use declines before its shape is picked.
-func attributeUse(schema *xsd.Schema, u xsd.AttributeUse) (field, *DeclineError, error) {
+// of attribute use u, or as the error the *DeclineError Decode's doc states
+// for it, item 5, naming its attribute declaration, or a plain error. The
+// field's shape is codegen's, as the package doc's "# What decodes" states,
+// and needs no xsi: test here: an xsi: use declines before its shape is
+// picked.
+func attributeUse(schema *xsd.Schema, u xsd.AttributeUse) (field, error) {
 	decl, ok := schema.ResolvedAttributeDeclaration(u)
 	if !ok {
-		return field{}, nil, fmt.Errorf("codec: the {attribute declaration} of attribute use %s does not resolve", u.DeclarationName())
+		return field{}, fmt.Errorf("codec: the {attribute declaration} of attribute use %s does not resolve", u.DeclarationName())
 	}
 	subject := fmt.Sprintf("attribute %s declared at %s", decl.Name(), decl.Loc())
 	if decl.Name().Space == xsd.XMLSchemaInstanceNS {
-		return field{}, decline(constructXsiAttribute, subject), nil
+		return field{}, decline(constructXsiAttribute, subject)
 	}
 	st, ok := schema.ResolvedSimpleType(decl.TypeDefinition())
 	if !ok {
-		return field{}, nil, fmt.Errorf("codec: the {type definition} of %s does not resolve", subject)
+		return field{}, fmt.Errorf("codec: the {type definition} of %s does not resolve", subject)
 	}
-	g, de, err := simpleDecline(schema, st, subject)
-	if err != nil || de != nil {
-		return field{}, de, err
+	g, err := simpleDecline(schema, st, subject)
+	if err != nil {
+		return field{}, err
 	}
 	shape := shapeOptional
 	vc, has := schema.EffectiveValueConstraint(u)
 	if u.Required() || has {
 		shape = shapeOne
 	}
-	return field{shape: shape, value: valueBare, scalar: newScalar(g, st, subject, vc, has)}, nil, nil
+	return field{shape: shape, value: valueBare, scalar: newScalar(g, st, subject, vc, has)}, nil
 }
 
 // simpleDecline returns the Go type codegen gives the simple type st of the
-// item subject names (codegen/doc.go "# Simple types"), or else the decline
-// Decode's doc states for st, item 5, subject naming it: for an atomic st,
-// atomicDecline's; for a list, that of its {item type definition}
-// (Structures §3.16.2.3, a restriction of a list taking its base's), which
-// cos-st-restricts clause 2.1 (checkListGraph) holds to an atomic or union
-// type, so its construct always answers, the detail naming the item after
-// subject. A list item that is itself a list is a plain error.
-func simpleDecline(r xsd.TypeResolver, st *xsd.SimpleType, subject string) (simpleGo, *DeclineError, error) {
+// item subject names (codegen/doc.go "# Simple types"), or else an error:
+// the *DeclineError Decode's doc states for st, item 5, subject naming it,
+// or a plain error. For an atomic st the decline is atomicDecline's; for a
+// list, that of its {item type definition} (Structures §3.16.2.3, a
+// restriction of a list taking its base's), which cos-st-restricts clause 2.1
+// (checkListGraph) holds to an atomic or union type, so its construct always
+// answers, the detail naming the item after subject.
+func simpleDecline(r xsd.TypeResolver, st *xsd.SimpleType, subject string) (simpleGo, error) {
 	variety, err := st.Variety(r)
 	if err != nil {
-		return simpleGo{}, nil, err
+		return simpleGo{}, err
 	}
 	if _, isList := variety.(xsd.List); !isList {
-		atom, d, err := atomicDecline(r, st, variety)
+		atom, d, err := atomicDecline(r, st)
 		if err != nil {
-			return simpleGo{}, nil, err
+			return simpleGo{}, err
 		}
 		if d != 0 {
-			return simpleGo{}, decline(d, subject), nil
+			return simpleGo{}, decline(d, subject)
 		}
-		return simpleGo{atom: atom}, nil, nil
+		return simpleGo{atom: atom}, nil
 	}
 	item, err := st.Item(r)
 	if err != nil {
-		return simpleGo{}, nil, err
+		return simpleGo{}, err
 	}
 	if item == nil {
-		return simpleGo{}, nil, fmt.Errorf("codec: the list type of %s has no {item type definition}", subject)
+		return simpleGo{}, fmt.Errorf("codec: the list type of %s has no {item type definition}", subject)
 	}
-	itemVariety, err := item.Variety(r)
+	atom, d, err := atomicDecline(r, item)
 	if err != nil {
-		return simpleGo{}, nil, err
-	}
-	if _, isList := itemVariety.(xsd.List); isList {
-		return simpleGo{}, nil, fmt.Errorf("codec: the {item type definition} of the list type of %s is a list (cos-st-restricts clause 2.1)", subject)
-	}
-	atom, d, err := atomicDecline(r, item, itemVariety)
-	if err != nil {
-		return simpleGo{}, nil, err
+		return simpleGo{}, err
 	}
 	if d != 0 {
-		return simpleGo{}, decline(d, itemSubject(subject, item)), nil
+		return simpleGo{}, decline(d, itemSubject(subject, item))
 	}
-	return simpleGo{atom: atom, item: item}, nil, nil
+	return simpleGo{atom: atom, item: item}, nil
 }
 
 // itemSubject names, after subject, item, the {item type definition} of the
@@ -1152,15 +1135,23 @@ func itemSubject(subject string, item *xsd.SimpleType) string {
 	return fmt.Sprintf("%s, through the list type's {item type definition} %s, a type defined at %s", subject, item.Name(), item.Loc())
 }
 
-// atomicDecline returns the atomic Go type codegen gives the simple type st
-// of {variety} variety, no list, an atomic type whose {primitive type
-// definition} is xs:string, xs:anyURI, xs:boolean, xs:float, xs:double or
-// xs:decimal (codegen/doc.go "# Simple types"), or else the construct Decode
-// declines st for. {variety} is a closed sum, so the type assertion is STYLE
-// T2's sealed-sum exception.
-func atomicDecline(r xsd.TypeResolver, st *xsd.SimpleType, variety xsd.Variety) (atomic, construct, error) {
-	if _, isUnion := variety.(xsd.Union); isUnion {
+// atomicDecline returns the atomic Go type codegen gives the simple type st,
+// an atomic type whose {primitive type definition} is xs:string, xs:anyURI,
+// xs:boolean, xs:float, xs:double or xs:decimal (codegen/doc.go "# Simple
+// types"), or else the construct Decode declines st for: a union's, or that of
+// its primitive. A list st is a plain error: simpleDecline routes a list to its
+// {item type definition}, which cos-st-restricts clause 2.1 holds to no list.
+// {variety} is a closed sum, so the switch is STYLE T2's sealed-sum exception.
+func atomicDecline(r xsd.TypeResolver, st *xsd.SimpleType) (atomic, construct, error) {
+	variety, err := st.Variety(r)
+	if err != nil {
+		return 0, 0, err
+	}
+	switch variety.(type) {
+	case xsd.Union:
 		return 0, constructUnion, nil
+	case xsd.List:
+		return 0, 0, fmt.Errorf("codec: the simple type defined at %s is a list where an atomic or union type is required, as a list's {item type definition} (cos-st-restricts clause 2.1)", st.Loc())
 	}
 	primitive, err := st.Primitive(r)
 	if err != nil {
