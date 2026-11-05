@@ -6,11 +6,10 @@ import (
 	"github.com/kud360/goxsd8/parser/xmltree"
 )
 
-// TestAttributeIsLocatedAtItsName pins Attribute.Loc: the first byte of the
-// attribute's name, prefix included, on whatever line of the start tag it
-// stands, past white space around '=' and values holding '>', '=' or the other
-// quote; and, for a start tag in an entity's replacement text, the reference
-// that includes it, as the tag's own StartElement is.
+// TestAttributeIsLocatedAtItsName pins Attribute.Loc's contract on a start
+// tag's first and later lines, past a namespace declaration, white space
+// around '=' and values holding '>', '=' or the other quote, and on a start tag
+// in an entity's replacement text.
 func TestAttributeIsLocatedAtItsName(t *testing.T) {
 	type at struct{ name, line, col int }
 	for _, c := range []struct {

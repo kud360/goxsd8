@@ -400,21 +400,19 @@ func (r *Reader) withinPE(open []string) bool {
 }
 
 // expandAttrs returns the attributes of t, the start tag whose source is raw,
-// each located at the first byte of its name, prefix included, through at (the
-// offset of raw's i-th byte), and with each value normalized per XML 1.0
-// §3.3.3: steps 1–3 (attrValue), then, for an attribute the internal subset
-// defines on t's element type with an AttType other than CDATA
-// (Reader.tokenized), the paragraph after step 3 (collapseSpace). An attribute
-// it defines as CDATA, or not at all, is read as CDATA (§3.3.3's last
-// paragraph). The decoder's value is already steps 1–3's for a value whose
-// source holds neither a reference to a general entity nor a literal #x9, #xA
-// or #xD (attrSpace): the decoder resolves character references and
-// predefined entities and applies §2.11, but not step 3. Every other value is
-// re-read from its source. src reports that raw is document source rather
-// than replacement text; open names the inclusions raw is part of. Every
-// attribute of a start tag in replacement text is located where that tag's
-// StartElement is, at the outermost reference that includes it, since at
-// answers that reference's offset for every i (see content.include).
+// each located where Attribute.Loc says through at (the offset of raw's i-th
+// byte, which in replacement text is the reference's for every i), and with
+// each value normalized per XML 1.0 §3.3.3: steps 1–3 (attrValue), then, for
+// an attribute the internal subset defines on t's element type with an AttType
+// other than CDATA (Reader.tokenized), the paragraph after step 3
+// (collapseSpace). An attribute it defines as CDATA, or not at all, is read as
+// CDATA (§3.3.3's last paragraph). The decoder's value is already steps 1–3's
+// for a value whose source holds neither a reference to a general entity nor a
+// literal #x9, #xA or #xD (attrSpace): the decoder resolves character
+// references and predefined entities and applies §2.11, but not step 3. Every
+// other value is re-read from its source. src reports that raw is document
+// source rather than replacement text; open names the inclusions raw is part
+// of.
 //
 // The re-read of raw (attrSpans) must find the decoder's attributes, in its
 // order and under its names; a tag it reads otherwise is refused at loc,
@@ -446,7 +444,7 @@ func (r *Reader) expandAttrs(t xml.StartElement, raw string, src bool, at func(i
 }
 
 // rawAttr is one attribute as the decoder read it, its value normalized
-// (expandAttrs), with the position of the first byte of its name.
+// (expandAttrs), with the Loc its Attribute reports.
 type rawAttr struct {
 	attr xml.Attr
 	loc  xsderr.Loc
