@@ -567,7 +567,7 @@ func (a ifaceArm) bind(v reflect.Type, at fieldAt, cx *checkContext) (elementRea
 	if v.Kind() != reflect.Interface {
 		return nil, at.mismatch()
 	}
-	f, err := a.unit.checkAt(v, at.String(), cx)
+	f, err := a.unit.checkAt(v, at.site(), cx)
 	if err != nil {
 		return nil, err
 	}
@@ -614,9 +614,9 @@ func (a fieldAt) mismatch() error {
 	return fmt.Errorf("%w: field %d of %s is %s %s where codegen emits %s %s", ErrTypeMismatch, a.index, a.owner, got.Name, got.Type, a.want.name, a.want.describe())
 }
 
-// String names the field at a by its Go name and owner, as a sealed
+// site names the field at a by its Go name and owner, as a sealed
 // interface's ErrTypeMismatch message names its site.
-func (a fieldAt) String() string {
+func (a fieldAt) site() string {
 	return fmt.Sprintf("field %s of %s", a.owner.Field(a.index).Name, a.owner)
 }
 
@@ -1099,7 +1099,7 @@ func (c *choice) check(t reflect.Type, cx *checkContext) (contentFiller, error) 
 	if got.Name != c.name || got.Anonymous {
 		return nil, fmt.Errorf("%w: field 0 of %s is %s %s where codegen emits %s, a sealed interface", ErrTypeMismatch, t, got.Name, got.Type, c.name)
 	}
-	bc, err := c.checkSite(got.Type, fmt.Sprintf("field %s of %s", got.Name, t), cx)
+	bc, err := c.checkSite(got.Type, fieldAt{owner: t, index: 0}.site(), cx)
 	if err != nil {
 		return nil, err
 	}
