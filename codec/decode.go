@@ -648,7 +648,7 @@ func (f field) matches(got reflect.StructField) bool {
 // fields, may accept a common Go type, as check reads one: the same name, and
 // then either arm nested, a structArm's or an ifaceArm's, which is
 // conservative, since a nested alternative's branch is selected by its
-// field's name alone (choice.alternative); or the same value type and, for
+// field's name alone (sealed.alternative); or the same value type and, for
 // valueBare, the same Go type of shape over scalar.goType, a repeated xs:int
 // and a list of xs:int each []int32; for valueNamed, the same shape and the
 // same goType separately, since the named type sits between them and []N over
@@ -888,7 +888,7 @@ func (run *bindRun) complex(ct xsd.ComplexType, typeSubject string, index unitIn
 		if _, has := ct.AttributeWildcard(); has {
 			return nil, decline(constructAttributeWildcard, typeSubject)
 		}
-		c.choice = ch
+		c.sealed = ch.sealed
 		return c, nil
 	}
 	b := &binding{p: run.p, attributes: map[xsd.QName]int{}}
@@ -1035,20 +1035,26 @@ func (b *boundSequence) child(r *xmltree.Reader, start *xmltree.StartElement, ou
 	return nil
 }
 
-// choice is a choice occurring once as codegen emits it: a sealed interface,
-// whose one method is unexported, and one branch struct per alternative, in
-// particle order, each holding the one field its alternative's particle
-// gives, its {min occurs} 0 read as 1 and its {max occurs} kept
-// (codegen/doc.go "# Complex types"). The interface is the type itself
-// (*choiceRoot) or the first field of the type's struct (*binding), named
-// name. alts holds each alternative's branch field, in particle order.
-type choice struct {
+// sealed is a sealed interface as codegen emits it, whose one method is
+// unexported, and one branch struct per alternative, in order, each holding
+// the one field alts holds for it, as Decode reads them.
+type sealed struct {
 	p    *pipeline
-	name string
 	alts []field
 	// children maps a child's expanded name to its alternative's index in
 	// alts; it is a lookup index only and never iterated (STYLE D2).
 	children map[xsd.QName]int
+}
+
+// choice is a choice occurring once as codegen emits it: a sealed interface
+// with one branch struct per alternative, in particle order, each holding the
+// one field its alternative's particle gives, its {min occurs} 0 read as 1
+// and its {max occurs} kept (codegen/doc.go "# Complex types"). The interface
+// is the type itself (*choiceRoot) or the first field of the type's struct
+// (*binding), named name.
+type choice struct {
+	name   string
+	sealed *sealed
 }
 
 // bindChoice returns the choice of particles, a content choice's, its field
@@ -1059,7 +1065,8 @@ type choice struct {
 // earlier one's shape, which no branch type could tell apart: one whose branch
 // field accepts a Go type the earlier one's does (field.sharesBranch).
 func bindChoice(run *bindRun, particles []xsd.Particle, names *goname.Namer, typeSubject string) (*choice, error) {
-	c := &choice{p: run.p, name: names.Claim("choice"), children: map[xsd.QName]int{}}
+	c := &choice{name: names.Claim("choice"), sealed: &sealed{p: run.p, children: map[xsd.QName]int{}}}
+	alts := c.sealed
 	for _, p := range particles {
 		el, d, err := particleElement(run.p.schema, p)
 		if err != nil {
@@ -1068,7 +1075,7 @@ func bindChoice(run *bindRun, particles []xsd.Particle, names *goname.Namer, typ
 		if d != 0 {
 			return nil, decline(d, "a particle of "+typeSubject)
 		}
-		f, err := elementField(run, c.children, el, p.Occurs())
+		f, err := elementField(run, alts.children, el, p.Occurs())
 		if err != nil {
 			return nil, err
 		}
@@ -1078,13 +1085,13 @@ func bindChoice(run *bindRun, particles []xsd.Particle, names *goname.Namer, typ
 			f.shape = shapeOne
 		}
 		f.name = goname.NewNamer().Claim(el.Name().Local)
-		for _, earlier := range c.alts {
+		for _, earlier := range alts.alts {
 			if earlier.sharesBranch(f) {
 				return nil, decline(constructSharedBranch, declSubject(el))
 			}
 		}
-		c.children[el.Name()] = len(c.alts)
-		c.alts = append(c.alts, f)
+		alts.children[el.Name()] = len(alts.alts)
+		alts.alts = append(alts.alts, f)
 	}
 	return c, nil
 }
@@ -1093,17 +1100,27 @@ func bindChoice(run *bindRun, particles []xsd.Particle, names *goname.Namer, typ
 func (c *choice) width() int { return 1 }
 
 // check holds t's first field to the one holding c's interface, and returns
-// the boundChoice that sets it.
+// the boundContentChoice that sets it.
 func (c *choice) check(t reflect.Type, cx *checkContext) (contentFiller, error) {
 	got := t.Field(0)
 	if got.Name != c.name || got.Anonymous {
 		return nil, fmt.Errorf("%w: field 0 of %s is %s %s where codegen emits %s, a sealed interface", ErrTypeMismatch, t, got.Name, got.Type, c.name)
 	}
-	bc, err := c.checkSite(got.Type, fieldAt{owner: t, index: 0}.site(), cx)
+	bc, err := c.sealed.checkSite(got.Type, fieldAt{owner: t, index: 0}.site(), cx)
 	if err != nil {
 		return nil, err
 	}
-	return bc, nil
+	return boundContentChoice{bound: bc}, nil
+}
+
+// boundContentChoice is a content choice whose check held, the contentFiller
+// of the struct's first field.
+type boundContentChoice struct{ bound *boundChoice }
+
+// child sets the choice's field of out, the struct, from the child element
+// start.
+func (b boundContentChoice) child(r *xmltree.Reader, start *xmltree.StartElement, out reflect.Value) error {
+	return b.bound.set(r, start, out.Field(0))
 }
 
 // checkSite holds it, the Go type at the site site names, to c's sealed
@@ -1111,7 +1128,7 @@ func (c *choice) check(t reflect.Type, cx *checkContext) (contentFiller, error) 
 // unexported, whose branch types cx's sets hold as one struct per alternative
 // of the alternative's branch shape. It returns c bound to those branch
 // types. Neither the interface's nor a branch's name is compared.
-func (c *choice) checkSite(it reflect.Type, site string, cx *checkContext) (*boundChoice, error) {
+func (c *sealed) checkSite(it reflect.Type, site string, cx *checkContext) (*boundChoice, error) {
 	if it.Kind() != reflect.Interface {
 		return nil, fmt.Errorf("%w: %s is %s, no interface, where codegen emits a sealed interface", ErrTypeMismatch, site, it)
 	}
@@ -1147,7 +1164,7 @@ func (c *choice) checkSite(it reflect.Type, site string, cx *checkContext) (*bou
 		}
 		matched[j] = boundBranch{t: bt, read: read}
 	}
-	return &boundChoice{choice: c, branches: matched}, nil
+	return &boundChoice{sealed: c, branches: matched}, nil
 }
 
 // alternative returns the index in c.alts of the alternative whose branch
@@ -1157,7 +1174,7 @@ func (c *choice) checkSite(it reflect.Type, site string, cx *checkContext) (*bou
 // which sharesBranch keeps alone of its name, its check's error the check's;
 // or else the first alternative whose branch field bt's one field matches.
 // So no nested check is tried and discarded.
-func (c *choice) alternative(bt reflect.Type, cx *checkContext) (int, elementReader, error) {
+func (c *sealed) alternative(bt reflect.Type, cx *checkContext) (int, elementReader, error) {
 	if bt.NumField() != 1 {
 		return -1, nil, nil
 	}
@@ -1176,10 +1193,10 @@ func (c *choice) alternative(bt reflect.Type, cx *checkContext) (int, elementRea
 	return j, read, err
 }
 
-// boundChoice is a choice whose sealed interface checkSite held: branches[i]
-// is the branch of choice.alts[i], none without its type.
+// boundChoice is a sealed interface checkSite held: branches[i] is the
+// branch of sealed.alts[i], none without its type.
 type boundChoice struct {
-	choice   *choice
+	sealed   *sealed
 	branches []boundBranch
 }
 
@@ -1190,22 +1207,16 @@ type boundBranch struct {
 	read elementReader
 }
 
-// child sets the choice's field of out, the struct, from the child element
-// start.
-func (bc *boundChoice) child(r *xmltree.Reader, start *xmltree.StartElement, out reflect.Value) error {
-	return bc.set(r, start, out.Field(0))
-}
-
-// set sets dst, a value of the choice's interface, from the child element
+// set sets dst, a value of the sealed interface, from the child element
 // start, read from r up to its end tag: the branch of start's alternative
 // holds the value its field's elementReader reads, a repeated alternative's
 // appended to the branch dst already holds.
 func (bc *boundChoice) set(r *xmltree.Reader, start *xmltree.StartElement, dst reflect.Value) error {
-	i, ok := bc.choice.children[expanded(start.Name())]
+	i, ok := bc.sealed.children[expanded(start.Name())]
 	if !ok {
 		return unparticled(start)
 	}
-	alt, bb := bc.choice.alts[i], bc.branches[i]
+	alt, bb := bc.sealed.alts[i], bc.branches[i]
 	branch := reflect.New(bb.t).Elem()
 	if !dst.IsNil() {
 		// Validation charges a child of a second alternative first
@@ -1215,7 +1226,7 @@ func (bc *boundChoice) set(r *xmltree.Reader, start *xmltree.StartElement, dst r
 		}
 		branch.Set(dst.Elem())
 	}
-	v, err := bb.read.read(bc.choice.p, r, start)
+	v, err := bb.read.read(bc.sealed.p, r, start)
 	if err != nil {
 		return err
 	}
@@ -1228,7 +1239,7 @@ func (bc *boundChoice) set(r *xmltree.Reader, start *xmltree.StartElement, dst r
 // a document element's or a particle's element declaration's, whose content
 // is a choice and which has no attribute field, as Decode reads it.
 type choiceRoot struct {
-	choice *choice
+	sealed *sealed
 }
 
 // field returns the field of shape s whose V is c's interface: an optional
@@ -1257,7 +1268,7 @@ func (c *choiceRoot) checkAt(t reflect.Type, site string, cx *checkContext) (fil
 	}
 	bc := &boundChoiceRoot{}
 	cx.bound[key] = bc
-	choice, err := c.choice.checkSite(t, site, cx)
+	choice, err := c.sealed.checkSite(t, site, cx)
 	if err != nil {
 		return nil, err
 	}
