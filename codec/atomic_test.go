@@ -96,8 +96,8 @@ func TestAtomicTypesAreCodegens(t *testing.T) {
 // atomicBody is an s:r instance body of atomicSchema whose every value's
 // lexical form differs from the string of its value.
 const atomicBody = "<s:b>1</s:b><s:f> 1e0 </s:f><s:g>1E-1</s:g><s:dec>010.50</s:dec><s:big>+0012345678901234567890123</s:big><s:nn>007</s:nn>" +
-	"<s:i8>-0128</s:i8><s:i16>+32767</s:i16><s:i32> 01 </s:i32><s:i64>-9223372036854775808</s:i64>" +
-	"<s:u8>0255</s:u8><s:u16>+65535</s:u16><s:u32>04294967295</s:u32><s:u64>18446744073709551615</s:u64>" +
+	"<s:i8>-0128</s:i8><s:i16>+32767</s:i16><s:i32> 01 </s:i32><s:i64>-09223372036854775808</s:i64>" +
+	"<s:u8>0255</s:u8><s:u16>+65535</s:u16><s:u32>04294967295</s:u32><s:u64>018446744073709551615</s:u64>" +
 	"<s:lo>07</s:lo><s:opt>02</s:opt><s:rep>1e0</s:rep><s:rep> 2.5E0 </s:rep><s:h>-03</s:h><s:d>1.50</s:d>"
 
 // TestDecodeAtomics pins the lift of xs:boolean, xs:float, xs:double and
