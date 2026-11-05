@@ -428,7 +428,7 @@ func (r *Reader) expandAttrs(t xml.StartElement, raw string, src bool, at func(i
 	for i, a := range t.Attr {
 		span := spans[i]
 		if !strings.HasPrefix(raw[span.name:], rawName(a.Name)) {
-			return nil, xsderr.Wrap(xsderr.RuleXMLWellFormed, loc, fmt.Errorf("%w: attribute %d is %s to the decoder but begins %q in the source", errAttrScan, i+1, rawName(a.Name), excerpt(raw[span.name:])))
+			return nil, xsderr.Wrap(xsderr.RuleXMLWellFormed, loc, fmt.Errorf("%w: the decoder read attribute %d as %s, where the source spells %q", errAttrScan, i+1, rawName(a.Name), excerpt(raw[span.name:])))
 		}
 		if refersToEntity(span.value) || strings.ContainsAny(span.value, attrSpace) {
 			var b strings.Builder

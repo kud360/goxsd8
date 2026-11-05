@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/kud360/goxsd8/internal/xmltok"
+	"github.com/kud360/goxsd8/xsderr"
 )
 
 // attrTag is one generated start tag: its source and, for each attribute the
@@ -134,6 +135,29 @@ func TestAttrSpansAgreeWithTheDecoder(t *testing.T) {
 		}
 		if _, err := r.Token(); !errors.Is(err, io.EOF) {
 			t.Fatalf("Reader after %q: %v, want io.EOF", tag.src, err)
+		}
+	}
+}
+
+// TestAttrScanDisagreementIsRefused pins expandAttrs' invariant on a start tag
+// the decoder never hands it, since the differential above finds none: a
+// source whose attributes attrSpans counts otherwise than the decoder's, or
+// spells under another name, is refused at the tag as RuleXMLWellFormed
+// wrapping errAttrScan, a limit of the reader and no verdict.
+func TestAttrScanDisagreementIsRefused(t *testing.T) {
+	loc := xsderr.Loc{URI: "t.xml", Line: 1, Col: 1}
+	decoded := xml.StartElement{Name: xml.Name{Local: "e"}, Attr: []xml.Attr{{Name: xml.Name{Local: "a"}, Value: "1"}}}
+	for _, c := range []struct{ raw, want string }{
+		{`<e/>`, `t.xml:1:1: [xml-wf] start tag re-read disagrees with the decoder: found 0 attribute values where the decoder read 1`},
+		{`<e b="1"/>`, `t.xml:1:1: [xml-wf] start tag re-read disagrees with the decoder: the decoder read attribute 1 as a, where the source spells "b=\"1\"/>"`},
+	} {
+		r := NewReader("t.xml", strings.NewReader(""))
+		_, err := r.expandAttrs(decoded, c.raw, true, func(i int) int64 { return int64(i) }, loc, nil)
+		if !errors.Is(err, errAttrScan) {
+			t.Errorf("%s: error = %v, want one wrapping errAttrScan", c.raw, err)
+		}
+		if err == nil || err.Error() != c.want {
+			t.Errorf("%s: error = %v, want %s", c.raw, err, c.want)
 		}
 	}
 }
