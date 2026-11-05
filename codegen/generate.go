@@ -260,14 +260,14 @@ func prepare(t Target, earlier []Target) (u *unit, declines []*DeclineError, err
 // Package breaks its field's rule; when its Dir equals an earlier target's
 // non-empty Dir after filepath.Clean, the earlier target refused or not; when
 // filepath.Abs cannot make its Dir absolute; and when its Dir exists and is not a
-// directory, or runs through a path that exists and is not one, or holds an xsd_gen.go that is not a regular file or that Generate's
-// overwrite rule does not let it replace, or either cannot be checked or read;
-// when no go.mod lies in its Dir or any directory above it; when the nearest
-// one cannot be checked or read, or holds no module directive; and when the
-// import path Dir's doc derives for it equals the one derived for an earlier
-// target, the earlier target refused or not. Generate states how the
-// duplicate-Dir and duplicate-import-path refusals name the earlier target,
-// and the overwrite rule.
+// directory, or runs through a path that exists and is not one, or holds an
+// xsd_gen.go that is not a regular file or that Generate's overwrite rule does
+// not let it replace, or either cannot be checked or read; when no go.mod lies in
+// its Dir or any directory above it; when the nearest one cannot be checked or
+// read, or holds no module directive; and when the import path Dir's doc derives
+// for it equals the one derived for an earlier target, the earlier target refused
+// or not. Generate states how the duplicate-Dir and duplicate-import-path
+// refusals name the earlier target, and the overwrite rule.
 func CheckTargets(targets []Target) []*TargetError {
 	var errs []*TargetError
 	for i, t := range targets {
