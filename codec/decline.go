@@ -93,7 +93,8 @@ const (
 	constructNestedGroup
 	constructWildcardParticle
 	constructSubstitutionRef
-	constructComplexElement
+	constructAnyTypeElement
+	constructAbstractTypeElement
 	constructSharedName
 	constructSharedBranch
 	constructUnion
@@ -106,28 +107,29 @@ const (
 
 // constructNames holds, indexed by construct, each construct's name.
 var constructNames = [...]string{
-	constructTypeTable:         "an element declaration with a {type table}",
-	constructNillable:          "an element declaration with {nillable} true",
-	constructEmptyContent:      "empty content",
-	constructSimpleContent:     "simple content",
-	constructMixedContent:      "mixed content",
-	constructOpenContent:       "{open content}",
-	constructGroupRefContent:   "a <group ref> content particle",
-	constructChoiceOccurs:      "a content choice occurring other than exactly once",
-	constructAllContent:        "all content",
-	constructSequenceOccurs:    "a content sequence occurring other than exactly once",
-	constructNestedGroup:       "a nested model group particle",
-	constructWildcardParticle:  "a wildcard particle",
-	constructSubstitutionRef:   "an <element ref> particle to a head with {abstract} true or a substitution group of another non-abstract declaration",
-	constructComplexElement:    "a particle's element declaration of complex type",
-	constructSharedName:        "two particles sharing an expanded name",
-	constructSharedBranch:      "two choice alternatives whose branch structs have one shape",
-	constructUnion:             "a union simple type",
-	constructSpecial:           "a special simple type",
-	constructOtherPrimitive:    "an atomic simple type whose primitive is none of xs:string, xs:anyURI, xs:boolean, xs:float, xs:double and xs:decimal",
-	constructXsiAttribute:      "an attribute use in the xsi namespace",
-	constructAttributeWildcard: "an {attribute wildcard}",
-	constructXsiType:           "an element carrying xsi:type",
+	constructTypeTable:           "an element declaration with a {type table}",
+	constructNillable:            "an element declaration with {nillable} true",
+	constructEmptyContent:        "empty content",
+	constructSimpleContent:       "simple content",
+	constructMixedContent:        "mixed content",
+	constructOpenContent:         "{open content}",
+	constructGroupRefContent:     "a <group ref> content particle",
+	constructChoiceOccurs:        "a content choice occurring other than exactly once",
+	constructAllContent:          "all content",
+	constructSequenceOccurs:      "a content sequence occurring other than exactly once",
+	constructNestedGroup:         "a nested model group particle",
+	constructWildcardParticle:    "a wildcard particle",
+	constructSubstitutionRef:     "an <element ref> particle to a head with {abstract} true or a substitution group of another non-abstract declaration",
+	constructAnyTypeElement:      "a particle's element declaration of type xs:anyType",
+	constructAbstractTypeElement: "a particle's element declaration whose complex {type definition} has {abstract} true",
+	constructSharedName:          "two particles sharing an expanded name",
+	constructSharedBranch:        "two choice alternatives whose branch structs have one shape",
+	constructUnion:               "a union simple type",
+	constructSpecial:             "a special simple type",
+	constructOtherPrimitive:      "an atomic simple type whose primitive is none of xs:string, xs:anyURI, xs:boolean, xs:float, xs:double and xs:decimal",
+	constructXsiAttribute:        "an attribute use in the xsi namespace",
+	constructAttributeWildcard:   "an {attribute wildcard}",
+	constructXsiType:             "an element carrying xsi:type",
 }
 
 // name returns the construct's name.
