@@ -93,8 +93,7 @@ func (c *CharData) Loc() xsderr.Loc { return c.loc }
 
 func (c *CharData) node() {}
 
-// Attribute is one resolved attribute of a start tag, located at its own name
-// (see Loc).
+// Attribute is one resolved attribute of a start tag.
 type Attribute struct {
 	name  Name
 	value string
