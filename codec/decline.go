@@ -8,7 +8,8 @@ import (
 )
 
 // A DeclineError is a construct [Decode] does not decode; it wraps
-// errors.ErrUnsupported, and Decode's doc states when it is returned.
+// errors.ErrUnsupported, and Decode's and [CheckDecode]'s docs state when
+// each returns one.
 type DeclineError struct {
 	construct construct
 	// loc is the instance Loc the decline is charged to, nil for none.
@@ -22,21 +23,22 @@ func (e *DeclineError) Construct() Construct { return Construct{e.construct} }
 
 // Loc returns the instance Loc of the element the decline is charged to: the
 // document element for a construct of its declaration or its type, and the
-// element carrying it for xsi:type.
-func (e *DeclineError) Loc() xsderr.Loc {
+// element carrying it for xsi:type, and true. For a decline [CheckDecode]
+// returns, which reads no instance, it returns the zero Loc and false.
+func (e *DeclineError) Loc() (xsderr.Loc, bool) {
 	if e.loc == nil {
-		return xsderr.Loc{}
+		return xsderr.Loc{}, false
 	}
-	return *e.loc
+	return *e.loc, true
 }
 
-// Error names the instance Loc and the construct, then the declining
-// declaration, the document element's, a particle's element declaration's,
-// local or the top-level one an <element ref> names, or an attribute's, and,
-// for a construct of the document element's type, that type
-// labelled as one, each with its schema Loc, which is the zero Loc for a
-// built-in component; for xsi:type, it names the element and the type the
-// xsi:type names.
+// Error names the instance Loc, where Loc reports one, and the construct,
+// then the declining declaration, the document element's, a particle's
+// element declaration's, local or the top-level one an <element ref> names,
+// or an attribute's, and, for a construct of the document element's type,
+// that type labelled as one, each with its schema Loc, which is the zero Loc
+// for a built-in component; for xsi:type, it names the element and the type
+// the xsi:type names.
 func (e *DeclineError) Error() string {
 	text := "codec does not decode " + e.construct.name() + ": " + e.detail +
 		"; a decoder refusal, not a schema or instance fault"

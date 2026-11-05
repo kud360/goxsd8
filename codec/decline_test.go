@@ -10,6 +10,7 @@ import (
 	"github.com/kud360/goxsd8/validate"
 	"github.com/kud360/goxsd8/validate/xmlsrc"
 	"github.com/kud360/goxsd8/xsd"
+	"github.com/kud360/goxsd8/xsderr"
 )
 
 // root declares s:r of an anonymous complex type whose content is body.
@@ -121,7 +122,82 @@ func TestDecodeDeclines(t *testing.T) {
 				t.Fatalf("Decode = %v, want no value", got)
 			}
 			assertDecline(t, err, row.construct, row.line, row.col)
+			assertProbeDecline(t, CheckDecode[struct{}](schema, rootName), err)
 		})
+	}
+}
+
+// assertProbeDecline fails the test unless probe, CheckDecode's error for a
+// row, is decoded, Decode's item-5 decline for it, charged to no instance
+// Loc: a *DeclineError of the same Construct whose Loc reports none, and
+// whose text is decoded's less its opening instance Loc and ": ".
+func assertProbeDecline(t *testing.T, probe, decoded error) {
+	t.Helper()
+	var pd, dd *DeclineError
+	if !errors.As(probe, &pd) || !errors.As(decoded, &dd) {
+		t.Fatalf("CheckDecode = %v, Decode = %v, want a *DeclineError from each", probe, decoded)
+	}
+	if pd.Construct() != dd.Construct() {
+		t.Errorf("CheckDecode's Construct() = %s, want Decode's %s", pd.Construct(), dd.Construct())
+	}
+	if loc, charged := pd.Loc(); charged || loc != (xsderr.Loc{}) {
+		t.Errorf("CheckDecode's Loc() = %s, %t, want the zero Loc and false", loc, charged)
+	}
+	loc, _ := dd.Loc()
+	if want := loc.String() + ": " + probe.Error(); decoded.Error() != want {
+		t.Errorf("Decode's error = %q, want its Loc, then CheckDecode's %q", decoded, probe)
+	}
+}
+
+// TestCheckDecodePlainErrors pins items 1 to 3 of CheckDecode's doc: a nil
+// schema, a name no top-level declaration has, the zero QName included, and
+// an abstract declaration, a nillable one too, each a plain error, which is
+// no decline, no ErrTypeMismatch, no errors.ErrUnsupported and no rule. T is
+// codegen's struct for each declaration, so only the condition the row names
+// answers.
+func TestCheckDecodePlainErrors(t *testing.T) {
+	const body = `<xs:complexType><xs:sequence><xs:element name="a" type="xs:string"/></xs:sequence></xs:complexType>`
+	inSlice := schemaOf(t, `<xs:element name="r">`+body+`</xs:element>`)
+	rows := []struct {
+		name   string
+		schema *xsd.Schema
+		qname  xsd.QName
+		want   string
+	}{
+		{"nil schema", nil, rootName, "codec: CheckDecode: nil *xsd.Schema"},
+		{"an undeclared name", inSlice, xsd.QName{Space: "urn:s", Local: "x"},
+			`codec: no top-level element declaration has the expanded name "{urn:s}x"`},
+		{"the zero QName", inSlice, xsd.QName{}, `codec: no top-level element declaration has the expanded name ""`},
+		{"an abstract declaration", schemaOf(t, `<xs:element name="r" abstract="true">`+body+`</xs:element>`), rootName,
+			"codec: element {urn:s}r declared at s.xsd:1:181 has {abstract} true, so no document element validates against it (cvc-elt clause 2)"},
+		{"an abstract nillable declaration", schemaOf(t, `<xs:element name="r" abstract="true" nillable="true">`+body+`</xs:element>`), rootName,
+			"codec: element {urn:s}r declared at s.xsd:1:181 has {abstract} true, so no document element validates against it (cvc-elt clause 2)"},
+	}
+	for _, row := range rows {
+		t.Run(row.name, func(t *testing.T) {
+			err := CheckDecode[struct{ A string }](row.schema, row.qname)
+			if err == nil || err.Error() != row.want {
+				t.Fatalf("CheckDecode = %v, want %q", err, row.want)
+			}
+			var de *DeclineError
+			if _, isRule := xsderr.RuleOf(err); isRule || errors.As(err, &de) || errors.Is(err, ErrTypeMismatch) || errors.Is(err, errors.ErrUnsupported) {
+				t.Errorf("CheckDecode = %v, want a plain error", err)
+			}
+		})
+	}
+	if err := CheckDecode[struct{ A string }](inSlice, rootName); err != nil {
+		t.Errorf("CheckDecode(the in-slice declaration) = %v, want nil", err)
+	}
+}
+
+// TestCheckDecodeDeclineBeforeMismatch pins item 4 of CheckDecode's doc
+// before item 5: a declaration outside the slice probed with a T that
+// mismatches what codegen emits returns the decline, as Decode does.
+func TestCheckDecodeDeclineBeforeMismatch(t *testing.T) {
+	schema := schemaOf(t, `<xs:element name="r" type="xs:hexBinary"/>`)
+	var de *DeclineError
+	if err := CheckDecode[struct{ A int }](schema, rootName); !errors.As(err, &de) || de.Construct() != (Construct{constructOtherPrimitive}) {
+		t.Errorf("CheckDecode = %v, want the decline of %s", err, constructOtherPrimitive.name())
 	}
 }
 
@@ -297,13 +373,14 @@ func assertDecline(t *testing.T, err error, c construct, line, col int) {
 	if got := de.Construct(); got != (Construct{c}) || got.String() != c.name() {
 		t.Errorf("Construct() = %s, want %s", got, c.name())
 	}
-	if de.Loc().Line != line || de.Loc().Col != col {
-		t.Errorf("Loc = %s, want %d:%d", de.Loc(), line, col)
+	loc, charged := de.Loc()
+	if !charged || loc.Line != line || loc.Col != col {
+		t.Errorf("Loc = %s, %t, want %d:%d, true", loc, charged, line, col)
 	}
 	if !errors.Is(err, errors.ErrUnsupported) {
 		t.Errorf("error %v does not wrap errors.ErrUnsupported", err)
 	}
-	if want := de.Loc().String() + ": codec does not decode " + c.name() + ": "; !strings.HasPrefix(err.Error(), want) {
+	if want := loc.String() + ": codec does not decode " + c.name() + ": "; !strings.HasPrefix(err.Error(), want) {
 		t.Errorf("error %q does not open with %q", err, want)
 	}
 }

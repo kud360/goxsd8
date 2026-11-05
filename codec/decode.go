@@ -119,7 +119,9 @@ var ErrTypeMismatch = errors.New("codec: T is not the type codegen emits for the
 //     field of the name and Go type, as item 6 reads it, an earlier
 //     alternative's has, which declines as two choice alternatives whose
 //     branch structs have one shape — each of its attribute uses in order,
-//     and its {attribute wildcard}.
+//     and its {attribute wildcard}. A component of the declaration or its
+//     type that does not resolve, or a particle with {max occurs} 0, is a
+//     plain error in place of a decline, at its point in this order.
 //  6. T does not match the type codegen emits for the declaration, as Decode
 //     derives it from the schema: for a complex {type definition}, T is not a
 //     struct whose fields are exactly those codegen emits, in name, order and
@@ -169,6 +171,9 @@ var ErrTypeMismatch = errors.New("codec: T is not the type codegen emits for the
 //     errors.Is neither errors.ErrUnsupported nor [ErrTypeMismatch]; and
 //     [ViolationsOf] returns nil for it.
 //
+// Items 5 and 6 read no instance; [CheckDecode] returns them for a
+// declaration before an instance arrives.
+//
 // Items 7 and 8 are both found while filling T, and the first in document
 // order is returned: an element's xsi:type, then its attributes' values,
 // present attributes in start-tag order and then the supplied values of
@@ -205,6 +210,48 @@ func Decode[T any](schema *xsd.Schema, backend value.Backend, data []byte, opts 
 		return nil, err
 	}
 	return out, nil
+}
+
+// CheckDecode returns, reading no instance, the error items 5 and 6 of
+// [Decode]'s doc state for a document element of the top-level element
+// declaration name in schema decoded into T under opts, or nil when neither
+// applies. Of opts it reads only the sets [WithBranches] supplies. The first
+// of these that applies is returned:
+//
+//  1. A nil schema: a plain error.
+//  2. No top-level element declaration of schema has the expanded name name:
+//     a plain error naming name.
+//  3. The declaration has {abstract} true: a plain error, since no document
+//     element validates against it (Structures §3.3.4.3 cvc-elt clause 2).
+//  4. Item 5 of Decode's doc: its *DeclineError, charged to no instance Loc
+//     ([DeclineError.Loc]), or the plain error it states in a decline's
+//     place.
+//  5. Item 6 of Decode's doc: its error, which errors.Is reports as
+//     [ErrTypeMismatch].
+//
+// A plain error is no *DeclineError, wraps neither [ErrTypeMismatch] nor
+// errors.ErrUnsupported, and carries no xsderr rule. nil means Decode returns
+// neither item 5 nor item 6 for a document element of name; items 2 to 4, 7
+// and 8 depend on the instance.
+func CheckDecode[T any](schema *xsd.Schema, name xsd.QName, opts ...Option) error {
+	if schema == nil {
+		return errors.New("codec: CheckDecode: nil *xsd.Schema")
+	}
+	decl, ok := schema.Element(name)
+	if !ok {
+		return fmt.Errorf("codec: no top-level element declaration has the expanded name %q", name.String())
+	}
+	// An answer about the schema, no violation of an instance, so it carries
+	// no xsderr rule (STYLE E2).
+	if decl.Abstract() {
+		return fmt.Errorf("codec: %s has {abstract} true, so no document element validates against it (cvc-elt clause 2)", declSubject(decl))
+	}
+	b, err := bindDecl(&pipeline{schema: schema}, decl)
+	if err != nil {
+		return err
+	}
+	_, err = b.check(reflect.TypeFor[T](), newConfig(opts).branches)
+	return err
 }
 
 // verdict returns nil for a Result Decode decodes, and otherwise the error
