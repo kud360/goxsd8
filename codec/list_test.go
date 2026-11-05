@@ -132,11 +132,11 @@ func TestListTypesAreCodegens(t *testing.T) {
 // item type (cvc-datatype-valid clause 2.2): an xs:string, xs:anyURI, xs:int
 // and xs:boolean item, a restriction of a list taking its base's item
 // (Structures §3.16.2.3), in each field shape, an attribute's, a supplied
-// default's, a simple root's into a named slice and an unnamed one, an
-// <element ref>'s into the head's named slice, a choice branch's beside an
-// xs:int alternative of its Go field name, and a ref branch's beside a
-// repeated ref branch over xs:int of its Go field name. CheckDecode returns
-// nil for each.
+// default's, a simple root's into a named slice and an unnamed one, the
+// builtin xs:NMTOKENS's, an <element ref>'s into the head's named slice, a
+// choice branch's beside an xs:int alternative of its Go field name, and a
+// ref branch's beside a repeated ref branch over xs:int of its Go field
+// name. CheckDecode returns nil for each.
 func TestDecodeLists(t *testing.T) {
 	strs := func(s ...string) *[]string { return &s }
 	rows := []struct {
@@ -155,6 +155,7 @@ func TestDecodeLists(t *testing.T) {
 			lists{Strs: []string{"a b", "c"}, Bools: []bool{true}, Res: []int32{-1}, Dflt: []int32{4, 5}}},
 		{"a simple root, into a named slice", listRootSchema, "", "  x \n y  ", into[listRoot](), listRoot{"x", "y"}},
 		{"a simple root, into an unnamed slice", listRootSchema, "", "x", into[[]string](), []string{"x"}},
+		{"a simple root of xs:NMTOKENS", `<xs:element name="r" type="xs:NMTOKENS"/>`, "", " a:1  b ", into[[]string](), []string{"a:1", "b"}},
 		{"a simple root of a restriction of a list", listRestrictionRootSchema, "", "1 2 3", into[listInts](), listInts{1, 2, 3}},
 		{"a repeated <element ref> to a head of a list type", listRefSchema, "", "<s:h>1 2</s:h><s:h> 3 </s:h>", into[listHolder](), listHolder{H: []listHead{{1, 2}, {3}}}},
 		{"a choice's list alternative", listChoiceSchema, "", "<s:X> 1  2 </s:X>", into[listChoice](listChoiceBranches), listChoice(listChoiceX2{X: []int32{1, 2}})},
