@@ -42,9 +42,9 @@ var ErrTypeMismatch = errors.New("codec: T is not the type codegen emits for the
 //
 // T may be codegen's sealed interface for a choice, as the package doc's
 // "# What decodes" states, and Decode then returns a *T pointing at it. The
-// branch types reach Decode only through [WithBranches], and item 6 holds them
-// to the alternatives by shape: neither T's, the interface's nor a branch's
-// name is compared.
+// branch types of every sealed interface, T's or a field's, reach Decode only
+// through [WithBranches], and item 6 holds them to the alternatives by shape:
+// neither T's, the interface's nor a branch's name is compared.
 //
 // The slice Decode covers is the package doc's "# What decodes". Decode
 // first assesses data against schema with package validate and decodes only
@@ -118,26 +118,35 @@ var ErrTypeMismatch = errors.New("codec: T is not the type codegen emits for the
 //     declines by, after which nothing further is examined, or a complex
 //     type's content, then the occurrence of its sequence or choice, each
 //     particle of its content in order — a nested model group or wildcard,
-//     then, of an <element ref>, the referenced declaration's substitution
-//     group, then the particle's element declaration's {type table} and
-//     {nillable}, its {type definition}, a simple one examined as the
-//     document element's is and a complex one declining when it is
-//     xs:anyType, then when it has {abstract} true, and otherwise examined as
-//     the document element's complex type is, from its content to its
-//     {attribute wildcard}, before anything after it, and then an expanded
-//     name an earlier particle shares; of a choice, each alternative's own
-//     constructs, then a branch field of the name an earlier alternative's
-//     has where either alternative is of complex type, and otherwise of the
-//     name and Go type, as item 6 reads it, which declines as two choice
-//     alternatives whose branch structs have one shape — each of its
-//     attribute uses in order, and its {attribute wildcard}. The complex type
-//     of a top-level declaration, the document element's or one an <element
-//     ref> names, and a local declaration's named complex {type definition},
-//     are each examined at the first reach of that declaration or that name
-//     only, and contribute nothing when reached again, so a type that reaches
-//     itself is examined once. A component of a declaration or type this
-//     item examines that does not resolve, or a particle with {max occurs} 0,
-//     is a plain error in place of a decline, at its point in this order.
+//     then the particle's element declaration's {type table} and {nillable},
+//     its {type definition}, a simple one examined as the document element's
+//     is and a complex one declining when it is xs:anyType, then when it has
+//     {abstract} true, and otherwise examined as the document element's
+//     complex type is, from its content to its {attribute wildcard}, before
+//     anything after it, and then an expanded name an earlier particle's
+//     field takes; of an <element ref> whose field holds a substitution
+//     group's sealed interface (item 6), in place of the referenced
+//     declaration's own properties and type, each declaration of the group
+//     with {abstract} false in group order, the head among them only where it
+//     has {abstract} false, examined so, each then declining by a branch field
+//     of an earlier one's shape as a choice's alternatives do, and then the
+//     first of their expanded names in group order an earlier particle's field
+//     takes, a particle's field taking its element's expanded name, or each of
+//     those declarations' for such an interface; of a choice, each
+//     alternative's own constructs, then a branch field of the name an earlier
+//     alternative's has where either alternative is of complex type or holds
+//     a substitution group's interface, and otherwise of the name and Go type,
+//     as item 6 reads it, which declines as two branches of a sealed interface
+//     whose structs have one shape — each of its attribute uses in order, and
+//     its {attribute wildcard}. The complex type of a top-level declaration,
+//     the document element's, one an <element ref> names, or a member of that
+//     one's substitution group, and a local declaration's named complex {type
+//     definition}, are each examined at the first reach of that declaration or
+//     that name only, and contribute nothing when reached again, so a type
+//     that reaches itself is examined once. A component of a declaration or
+//     type this item examines that does not resolve, or a particle with {max
+//     occurs} 0, is a plain error in place of a decline, at its point in this
+//     order.
 //  6. T does not match the type codegen emits for the declaration, as Decode
 //     derives it from the schema: for a complex {type definition}, T is not a
 //     struct whose fields are exactly those codegen emits, in name, order and
@@ -159,21 +168,33 @@ var ErrTypeMismatch = errors.New("codec: T is not the type codegen emits for the
 //     to the document element's, its fields exactly codegen's and its name
 //     never compared, or, where codegen emits the type's choice's sealed
 //     interface as the type itself, I or []I, I that interface, held as T is
-//     and never a pointer, nil meaning absent. A sealed interface, T, a
-//     struct's first field or a nested element's, does not match when it is
-//     not an interface whose one method is unexported, or when its branch
-//     set, as [WithBranches] supplied it, is not one struct of one field per
-//     alternative, that field the name and Go type of the alternative's
-//     branch field, a branch whose field is named like an alternative of
-//     complex type held to that alternative alone: when no WithBranches
-//     supplies it for a choice with {particles}, or its count differs, or it
-//     holds a nil value, a type that is no struct, a type twice, or a branch
-//     matching no alternative an earlier branch did not match. It is an error
-//     errors.Is reports as [ErrTypeMismatch], no *DeclineError, so that a T
-//     that does not match the schema is never filled. Decode never reads the
-//     fields from T, so for a type codegen emitted from this schema the error
-//     is a defect of Decode's, or a branch set WithBranches did not supply as
-//     codegen emitted it, and for any other T it is a T that does not match.
+//     and never a pointer, nil meaning absent. The field of an <element ref>
+//     particle that codegen gives a sealed interface over the referenced
+//     declaration's substitution group (§3.3.6.4 key-eq; codegen's package
+//     doc, "# Substitution groups" states which) is in place of all these I
+//     or []I, I that interface, never a pointer, nil meaning absent, one
+//     interface value per child for []I; its alternatives are the group's
+//     declarations with {abstract} false, in group order, each one's branch
+//     field named from its local name and holding what the field of an
+//     <element ref> particle occurring once to that declaration would hold
+//     were its own substitution group that declaration alone: N, S or I, so a
+//     group with no such declaration has no alternative. A sealed interface,
+//     T, a struct's first field or a nested element's, a choice's or a
+//     substitution group's, does not match when it is not an interface whose
+//     one method is unexported, or when its branch set, as [WithBranches]
+//     supplied it, is not one struct of one field per alternative, that field
+//     the name and Go type of the alternative's branch field, a branch whose
+//     field is named like an alternative of complex type, or of a substitution
+//     group's interface, held to that alternative alone: when no WithBranches
+//     supplies it for an interface with alternatives, or its count differs, or
+//     it holds a nil value, a type that is no struct, a type twice, or a
+//     branch matching no alternative an earlier branch did not match. It is an
+//     error errors.Is reports as [ErrTypeMismatch], no *DeclineError, so that
+//     a T that does not match the schema is never filled. Decode never reads
+//     the fields from T, so for a type codegen emitted from this schema the
+//     error is a defect of Decode's, or a branch set WithBranches did not
+//     supply as codegen emitted it, and for any other T it is a T that does
+//     not match.
 //  7. An element carrying xsi:type, the document element or any descendant: a
 //     *DeclineError at that element's instance Loc, the first in document
 //     order, whose [DeclineError.Construct] is xsi:type's. A document element
@@ -470,8 +491,9 @@ type field struct {
 
 // fieldArm is the V a field's shape holds, as Decode reads it, a closed sum:
 // a scalarArm, the Go type codegen gives a simple type or a named type over
-// it; a structArm, a nested complex type's struct; or an ifaceArm, a nested
-// complex type's bare sealed interface.
+// it; a structArm, a nested complex type's struct; an ifaceArm, a nested
+// complex type's bare sealed interface; or a groupArm, the sealed interface
+// over a substitution group.
 type fieldArm interface {
 	// bind holds v, the V the field's shape holds at at, to the arm, item 6 of
 	// Decode's doc, and returns the elementReader that reads the field's
@@ -577,6 +599,45 @@ func (a ifaceArm) bind(v reflect.Type, at fieldAt, cx *checkContext) (elementRea
 // describe spells V.
 func (ifaceArm) describe() string { return "I for a sealed interface I" }
 
+// groupArm is a field's V where the field is an <element ref> particle's to a
+// head whose substitution group codegen gives a sealed interface (groupField):
+// I, held to sealed's branches as a choice's interface is, its name never
+// compared. Its field's shape is never shapeOptional.
+type groupArm struct{ sealed *sealed }
+
+// bind holds v to a's interface, and returns the reader that reads one
+// member's element into a fresh V.
+func (a groupArm) bind(v reflect.Type, at fieldAt, cx *checkContext) (elementReader, error) {
+	if v.Kind() != reflect.Interface {
+		return nil, at.mismatch()
+	}
+	bc, err := a.sealed.checkSite(v, at.site(), cx)
+	if err != nil {
+		return nil, err
+	}
+	return groupReader{t: v, bound: bc}, nil
+}
+
+// describe spells V.
+func (groupArm) describe() string { return "I for a substitution group's sealed interface I" }
+
+// groupReader reads a member's element into a new value of t, the interface
+// a groupArm bound, through bound, so a repeated field holds one interface
+// value per child.
+type groupReader struct {
+	t     reflect.Type
+	bound *boundChoice
+}
+
+// read returns a new value of g.t holding the branch of start's member.
+func (g groupReader) read(_ *pipeline, r *xmltree.Reader, start *xmltree.StartElement) (reflect.Value, error) {
+	v := reflect.New(g.t).Elem()
+	if err := g.bound.set(r, start, v); err != nil {
+		return reflect.Value{}, err
+	}
+	return v, nil
+}
+
 // nestedReader reads an element of complex type into a new value of t, the
 // V a structArm or ifaceArm bound, through fill.
 type nestedReader struct {
@@ -644,15 +705,16 @@ func (f field) matches(got reflect.StructField) bool {
 	return shaped && a.accepts(v)
 }
 
-// sharesBranch reports whether f and g, two choice alternatives' branch
-// fields, may accept a common Go type, as check reads one: the same name, and
-// then either arm nested, a structArm's or an ifaceArm's, which is
-// conservative, since a nested alternative's branch is selected by its
-// field's name alone (sealed.alternative); or the same value type and, for
-// valueBare, the same Go type of shape over scalar.goType, a repeated xs:int
-// and a list of xs:int each []int32; for valueNamed, the same shape and the
-// same goType separately, since the named type sits between them and []N over
-// int32 is no N over []int32.
+// sharesBranch reports whether f and g, two branch fields of one sealed
+// interface, a choice's alternatives' or a substitution group's members', may
+// accept a common Go type, as check reads one: the same name, and then either
+// arm other than a scalarArm, which is conservative, since such an
+// alternative's branch is selected by its field's name alone
+// (sealed.alternative); or the same value type and, for valueBare, the same
+// Go type of shape over scalar.goType, a repeated xs:int and a list of xs:int
+// each []int32; for valueNamed, the same shape and the same goType
+// separately, since the named type sits between them and []N over int32 is no
+// N over []int32.
 func (f field) sharesBranch(g field) bool {
 	fa, fScalar := f.arm.(scalarArm)
 	ga, gScalar := g.arm.(scalarArm)
@@ -832,13 +894,15 @@ func typeSubject(decl xsd.ElementDeclaration, td xsd.TypeDefinition) string {
 
 // bindRun is one item-5 bind of a document element declaration: p, and the
 // complex units it has reached by name. Codec descends into two kinds of
-// term, an inline local element declaration and an <element ref>, and a
-// local declaration's type is either inline, a tree it owns, or named, so
-// every recursion through types passes one of the two names that key codegen's
-// emitted types: a top-level element declaration, the document element's or
-// one an <element ref> names, keyed by its expanded name in elements, and the
-// named {type definition} of a local element declaration, keyed by its QName
-// in types. An inline anonymous type is bound in place, under no key.
+// term, an inline local element declaration and an <element ref>, the
+// latter to the referenced declaration or to each member of its
+// substitution group, and a local declaration's type is either inline, a tree
+// it owns, or named, so every recursion through types passes one of the two
+// names that key codegen's emitted types: a top-level element declaration,
+// the document element's or one an <element ref> reaches, keyed by its
+// expanded name in elements, and the named {type definition} of a local
+// element declaration, keyed by its QName in types. An inline anonymous type
+// is bound in place, under no key.
 type bindRun struct {
 	p        *pipeline
 	elements unitIndex
@@ -984,12 +1048,14 @@ func bindSequence(run *bindRun, particles []xsd.Particle, names *goname.Namer, t
 		if d != 0 {
 			return nil, decline(d, "a particle of "+typeSubject)
 		}
-		f, err := elementField(run, s.children, el, p.Occurs())
+		f, takes, err := elementField(run, s.children, el, p.Occurs())
 		if err != nil {
 			return nil, err
 		}
 		f.name = names.Claim(el.Name().Local)
-		s.children[el.Name()] = len(s.fields)
+		for _, n := range takes {
+			s.children[n] = len(s.fields)
+		}
 		s.fields = append(s.fields, f)
 	}
 	return s, nil
@@ -1075,7 +1141,7 @@ func bindChoice(run *bindRun, particles []xsd.Particle, names *goname.Namer, typ
 		if d != 0 {
 			return nil, decline(d, "a particle of "+typeSubject)
 		}
-		f, err := elementField(run, alts.children, el, p.Occurs())
+		f, takes, err := elementField(run, alts.children, el, p.Occurs())
 		if err != nil {
 			return nil, err
 		}
@@ -1090,7 +1156,9 @@ func bindChoice(run *bindRun, particles []xsd.Particle, names *goname.Namer, typ
 				return nil, decline(constructSharedBranch, declSubject(el))
 			}
 		}
-		alts.children[el.Name()] = len(alts.alts)
+		for _, n := range takes {
+			alts.children[n] = len(alts.alts)
+		}
 		alts.alts = append(alts.alts, f)
 	}
 	return c, nil
@@ -1169,11 +1237,11 @@ func (c *sealed) checkSite(it reflect.Type, site string, cx *checkContext) (*bou
 
 // alternative returns the index in c.alts of the alternative whose branch
 // struct bt is, with the elementReader of its one field, or -1 for none, or
-// that alternative's ErrTypeMismatch error: the nested alternative, a
-// structArm's or an ifaceArm's, whose field bt's one field is named like,
-// which sharesBranch keeps alone of its name, its check's error the check's;
-// or else the first alternative whose branch field bt's one field matches.
-// So no nested check is tried and discarded.
+// that alternative's ErrTypeMismatch error: the alternative whose arm is no
+// scalarArm whose field bt's one field is named like, which sharesBranch
+// keeps alone of its name, its check's error the check's; or else the first
+// alternative whose branch field bt's one field matches. So no nested check
+// is tried and discarded.
 func (c *sealed) alternative(bt reflect.Type, cx *checkContext) (int, elementReader, error) {
 	if bt.NumField() != 1 {
 		return -1, nil, nil
@@ -1391,26 +1459,91 @@ func particleElement(schema *xsd.Schema, p xsd.Particle) (xsd.ElementDeclaration
 }
 
 // elementField returns the field, but for its name, which its caller claims,
-// of the element declaration el in a particle occurring as occurs, or as the
-// error the *DeclineError Decode's doc states for it, item 5, naming el, or
-// the plain error that item states in a decline's place, in the order that
-// doc states: for a top-level el, which an <element ref> named, its
-// substitution group, then its own properties, its type, and an expanded name
-// an earlier particle of its model group shares, children indexing the
-// earlier particles' names. A local el of simple type's field holds the Go
-// type codegen gives its type, and a top-level one's the named type codegen
-// emits for el over it (valueNamed); an el of complex type's holds the type
-// codegen emits for that type, the unit run.nested binds.
-func elementField(run *bindRun, children map[xsd.QName]int, el xsd.ElementDeclaration, occurs xsd.Occurs) (field, error) {
-	schema := run.p.schema
-	subject := declSubject(el)
+// of the element declaration el in a particle occurring as occurs, and the
+// expanded names of the instance children that field takes, or as the error
+// the *DeclineError Decode's doc states for it, item 5, or the plain error
+// that item states in a decline's place, in the order that doc states. For a
+// top-level el, which an <element ref> named, whose substitution group
+// codegen gives a sealed interface (substitutionMembers), it is groupField's.
+// Otherwise it is declField's for el, the field taking el's name alone, and
+// then an expanded name an earlier particle of its model group shares,
+// children indexing the earlier particles' names, declines; a local el of
+// simple type's field holds the Go type codegen gives its type, and a
+// top-level one's the named type codegen emits for el over it (valueNamed).
+func elementField(run *bindRun, children map[xsd.QName]int, el xsd.ElementDeclaration, occurs xsd.Occurs) (field, []xsd.QName, error) {
+	if members, sum := substitutionMembers(run.p.schema, el); sum {
+		return groupField(run, children, el, members, occurs)
+	}
 	value := valueBare
 	if el.ScopeVariety() == xsd.ScopeGlobal {
-		if substitutable(schema, el) {
-			return field{}, decline(constructSubstitutionRef, subject)
-		}
 		value = valueNamed
 	}
+	f, err := declField(run, el, value, func() (shape, error) {
+		return particleShape(children, []xsd.ElementDeclaration{el}, el, occurs)
+	})
+	if err != nil {
+		return field{}, nil, err
+	}
+	return f, []xsd.QName{el.Name()}, nil
+}
+
+// groupField returns the field, but for its name, of an <element ref>
+// particle to head occurring as occurs, where codegen gives it the sealed
+// interface over head's substitution group, members being
+// substitutionMembers' for head, and the expanded names of members, the
+// instance children that field takes, in group order (codegen/doc.go "#
+// Substitution groups"). The interface has one branch per member, in group
+// order, holding the one field declField gives the member, of the member's
+// own type even where the member heads a group of its own, and occurring
+// once. A head with {abstract} true is no member, so its own properties and
+// type are not examined, and with no member the interface has no branch. The
+// first of these in this order declines: each member in group order, by
+// declField's constructs and then by a branch field the shape of an earlier
+// member's (field.sharesBranch); then a member's expanded name an earlier
+// particle of the model group shares, children indexing the earlier
+// particles' names, the first in group order; then occursShape's plain error.
+// The field's shape is occursShape's, an optional one the bare interface, nil
+// meaning absent, as choiceRoot.field's is.
+func groupField(run *bindRun, children map[xsd.QName]int, head xsd.ElementDeclaration, members []xsd.ElementDeclaration, occurs xsd.Occurs) (field, []xsd.QName, error) {
+	group := &sealed{p: run.p, children: map[xsd.QName]int{}}
+	names := make([]xsd.QName, 0, len(members))
+	for _, m := range members {
+		f, err := declField(run, m, valueNamed, func() (shape, error) { return shapeOne, nil })
+		if err != nil {
+			return field{}, nil, err
+		}
+		f.name = goname.NewNamer().Claim(m.Name().Local)
+		for _, earlier := range group.alts {
+			if earlier.sharesBranch(f) {
+				return field{}, nil, decline(constructSharedBranch, declSubject(m))
+			}
+		}
+		group.children[m.Name()] = len(group.alts)
+		group.alts = append(group.alts, f)
+		names = append(names, m.Name())
+	}
+	s, err := particleShape(children, members, head, occurs)
+	if err != nil {
+		return field{}, nil, err
+	}
+	if s == shapeOptional {
+		s = shapeOne
+	}
+	return field{shape: s, arm: groupArm{sealed: group}}, names, nil
+}
+
+// declField returns the field, but for its name, of the element declaration
+// el, its V by el's own type, or as the error the *DeclineError Decode's doc
+// states for it, item 5, naming el, or the plain error that item states in a
+// decline's place, in the order that doc states: el's own properties, then
+// its type, then shapeOf's error, shapeOf returning the field's shape. It
+// never examines el's substitution group. A field of simple type holds the Go
+// type codegen gives el's type, or the named type over it (value); one of
+// complex type holds the type codegen emits for that type, the unit
+// run.nested binds.
+func declField(run *bindRun, el xsd.ElementDeclaration, value valueType, shapeOf func() (shape, error)) (field, error) {
+	schema := run.p.schema
+	subject := declSubject(el)
 	if d := declarationDecline(el); d != 0 {
 		return field{}, decline(d, subject)
 	}
@@ -1427,7 +1560,7 @@ func elementField(run *bindRun, children map[xsd.QName]int, el xsd.ElementDeclar
 		if err != nil {
 			return field{}, err
 		}
-		s, err := particleShape(children, el, occurs)
+		s, err := shapeOf()
 		if err != nil {
 			return field{}, err
 		}
@@ -1437,7 +1570,7 @@ func elementField(run *bindRun, children map[xsd.QName]int, el xsd.ElementDeclar
 	if err != nil {
 		return field{}, err
 	}
-	s, err := particleShape(children, el, occurs)
+	s, err := shapeOf()
 	if err != nil {
 		return field{}, err
 	}
@@ -1446,28 +1579,39 @@ func elementField(run *bindRun, children map[xsd.QName]int, el xsd.ElementDeclar
 }
 
 // particleShape returns the shape of the field of el's particle occurring as
-// occurs, or the decline of an expanded name an earlier particle shares,
-// children indexing the earlier particles' names, or occursShape's plain
-// error, in that order.
-func particleShape(children map[xsd.QName]int, el xsd.ElementDeclaration, occurs xsd.Occurs) (shape, error) {
-	if _, shared := children[el.Name()]; shared {
-		return 0, decline(constructSharedName, declSubject(el))
+// occurs, which takes the instance children named by decls, or the decline of
+// the first of decls whose expanded name an earlier particle shares, children
+// indexing the earlier particles' names, or occursShape's plain error, in
+// that order.
+func particleShape(children map[xsd.QName]int, decls []xsd.ElementDeclaration, el xsd.ElementDeclaration, occurs xsd.Occurs) (shape, error) {
+	for _, d := range decls {
+		if _, shared := children[d.Name()]; shared {
+			return 0, decline(constructSharedName, declSubject(d))
+		}
 	}
 	return occursShape(occurs, el)
 }
 
-// substitutable reports whether an element other than one of head, a
-// top-level element declaration, may stand where an <element ref> to head
-// does: whether head's ·substitution group· (§3.3.6.4 key-eq,
-// [xsd.Schema.SubstitutionGroup], which decides cos-equiv-derived-ok-rec
-// clauses 1 to 2.3, a head blocking substitution by clause 2.1 holding itself
-// alone) has members with {abstract} false (cvc-elt clause 2 admits no other
-// in an instance) that are not head alone. That is codegen's test for a field
-// holding the group's sealed interface rather than head's own type, so an
-// abstract head, whatever its other properties, answers true.
-func substitutable(schema *xsd.Schema, head xsd.ElementDeclaration) bool {
-	members := slices.DeleteFunc(schema.SubstitutionGroup(head.Name()), xsd.ElementDeclaration.Abstract)
-	return len(members) != 1 || members[0].Name() != head.Name()
+// substitutionMembers reports whether codegen gives the field of an <element
+// ref> particle to head, an element declaration, the sealed interface over
+// head's ·substitution group· (§3.3.6.4 key-eq, [xsd.Schema.SubstitutionGroup],
+// which decides cos-equiv-derived-ok-rec clauses 1 to 2.3, a head blocking
+// substitution by clause 2.1 holding itself alone) rather than head's own
+// type, and returns the group's declarations with {abstract} false, in group
+// order, since cvc-elt clause 2 validates no element against an abstract one.
+// sum is true exactly when head is top-level, a local declaration heading no
+// group (cvc-accept clause 2.3.2), and members are not head alone, so an
+// abstract head whose group holds no other declaration with {abstract} false
+// answers a sum with no members. It mirrors codegen's substitutionSum.
+func substitutionMembers(schema *xsd.Schema, head xsd.ElementDeclaration) (members []xsd.ElementDeclaration, sum bool) {
+	if head.ScopeVariety() != xsd.ScopeGlobal {
+		return nil, false
+	}
+	members = slices.DeleteFunc(schema.SubstitutionGroup(head.Name()), xsd.ElementDeclaration.Abstract)
+	if len(members) == 1 && members[0].Name() == head.Name() {
+		return nil, false
+	}
+	return members, true
 }
 
 // attributeUse returns the attribute field, but for its name, which its
