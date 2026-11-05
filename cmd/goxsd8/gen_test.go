@@ -611,9 +611,9 @@ func TestReportGenerateOSFaultNotDecline(t *testing.T) {
 // any pair compiles or declines, its own pair's decline included: each refusal
 // prints its one line, with no synopsis or helpPointer under it, in argument
 // order, before any line a -schema's compilation prints, and nothing is
-// written. A refusal stops no compilation: a refused pair's own -schema is
-// still compiled, its unresolved-directive line printing after the refusals
-// with or without -strict. Every row runs in a fresh working directory holding dec.xsd, a
+// written. The noted rows pin usage's gen block on what a refusal does not
+// stop: the refused pair's own unresolved-directive line, with and without
+// -strict. Every row runs in a fresh working directory holding dec.xsd, a
 // schema the generator declines, and its -out paths are relative to it.
 func TestGenRefusalsOutrankEveryPair(t *testing.T) {
 	flat := absFixture(t, flatFixture)
