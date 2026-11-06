@@ -432,6 +432,7 @@ func TestDecodeTemporalTypeMismatch(t *testing.T) {
 	type dateTimeForStamp struct{ A tDateTime }
 	type namedList struct{ A tWl }
 	type unnamedRef struct{ Wl []tDate }
+	type refOther struct{ W tGYear }
 	const date = "D for the datatype struct D of xs:date (Year big.Int, Month uint8, Day uint8, TimezoneOffset *int16)"
 	dateElem := sequenceOf(`<xs:element name="a" type="xs:date"/>`)
 	dateData := instanceOf("", "<s:a>2000-01-01</s:a>")
@@ -454,6 +455,8 @@ func TestDecodeTemporalTypeMismatch(t *testing.T) {
 			into[namedList](), "field 0 of codec.namedList is A codec.tWl where codegen emits A []" + date},
 		{"a ref's list field of []Date", listOfDate + sequenceOf(`<xs:element ref="s:wl"/>`), instanceOf("", "<s:wl>2000-01-01</s:wl>"),
 			into[unnamedRef](), "field 0 of codec.unnamedRef is Wl []codec.tDate where codegen emits Wl N for a named type N over []" + date},
+		{"a ref's field of another struct", `<xs:element name="w" type="xs:date"/>` + sequenceOf(`<xs:element ref="s:w"/>`), instanceOf("", "<s:w>2000-01-01</s:w>"),
+			into[refOther](), "field 0 of codec.refOther is W codec.tGYear where codegen emits W " + date},
 		{"a simple root of another struct", `<xs:element name="r" type="xs:date"/>`, instanceOf("", "2000-01-01"),
 			into[tGYearMonth](), "the underlying type of codec.tGYearMonth is not " + date},
 		{"a list root of another struct", `<xs:element name="r"><xs:simpleType><xs:list itemType="xs:date"/></xs:simpleType></xs:element>`, instanceOf("", "2000-01-01"),

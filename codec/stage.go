@@ -67,9 +67,10 @@ func (s scalar) goType() reflect.Type {
 // other struct from having; and for two slice types, Kind Slice and
 // ConvertibleTo mean an identical underlying type, since Go converts between
 // slice types only then. For a datatype struct, which codegen declares in the
-// caller's package, v is a struct ConvertibleTo codec's mirror, so of its
-// exported fields exactly in name, order and Go type, struct tags aside, or
-// for a list a slice of such a struct: []D converts to no []mirror.
+// caller's package, v is ConvertibleTo codec's mirror, which only a struct of
+// its exported fields exactly, in name, order and Go type, struct tags aside,
+// is, or for a list v is a slice of such a struct: []D converts to no
+// []mirror.
 func (s scalar) underlies(v reflect.Type) bool {
 	if !s.atom.mirrored() {
 		want := s.goType()
@@ -81,7 +82,7 @@ func (s scalar) underlies(v reflect.Type) bool {
 		}
 		v = v.Elem()
 	}
-	return v.Kind() == reflect.Struct && v.ConvertibleTo(s.atom.bare())
+	return v.ConvertibleTo(s.atom.bare())
 }
 
 // spell spells the Go type codegen gives s's simple type for an error
