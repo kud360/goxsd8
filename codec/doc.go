@@ -137,18 +137,15 @@
 // Decode runs three stages on a value: whiteSpace, then, for an atomic Go
 // type other than string, the lexical mapping and the conversion to the Go
 // type. On a list value whiteSpace runs once, under the list type, and the
-// other two on each list item, under its {item type definition}. Pattern, facet and
-// assertion stages are validate's, decided on the same backend first, and a whiteSpace
-// failure is a fault of the simple type, a plain error. A lexical mapping or conversion
-// that fails is the error [Decode]'s doc states in item 8, naming the stage, the type,
-// the normalized value or the list item and its position, the instance Loc and, for an
-// element's character content, its byte offset. [WithLogger] traces each stage per value,
-// and the lexical mapping and the conversion per list item, under the "codec" group:
-// whiteSpace under rf-whiteSpace (Datatypes §4.3.6) with the raw text, the lexical
-// mapping under cvc-datatype-valid clause 2.1 with the normalized value or the list item,
-// and the conversion under dt-canonical-mapping (§2.3.1) with the canonical form, each
-// record naming the type and the instance Loc. No package reads GOXSD_DEBUG; its scoping
-// is #1185's.
+// other two on each list item, under its {item type definition}. Pattern,
+// facet and assertion stages are validate's, decided on the same backend
+// first, and a whiteSpace failure is a fault of the simple type, a plain
+// error. A lexical mapping or conversion that fails is the error [Decode]'s
+// doc states in item 8, naming the stage, the type, the normalized value or
+// the list item and its position, the instance Loc and, for an element's
+// character content, its byte offset. Decode traces each stage it runs on the
+// logger [WithLogger] sets, whose doc states each record. No package reads
+// GOXSD_DEBUG.
 //
 // # Planned decode paths, one semantics (M10 — not yet implemented)
 //
