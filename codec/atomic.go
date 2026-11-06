@@ -326,11 +326,11 @@ var datatypeAtomics = func() map[xsd.QName]atomic {
 // builtin chainAtomic meets decides (codegen/doc.go "# Simple types"); it is
 // a lookup index only and never iterated (STYLE D2).
 var primitiveAtomics = map[xsd.QName]atomic{
-	{Space: xsd.XMLSchemaNS, Local: "string"}:  atomicString,
-	{Space: xsd.XMLSchemaNS, Local: "anyURI"}:  atomicString,
-	{Space: xsd.XMLSchemaNS, Local: "boolean"}: atomicBool,
-	{Space: xsd.XMLSchemaNS, Local: "float"}:   atomicFloat32,
-	{Space: xsd.XMLSchemaNS, Local: "double"}:  atomicFloat64,
+	{Space: xsd.XMLSchemaNS, Local: "string"}:       atomicString,
+	{Space: xsd.XMLSchemaNS, Local: "anyURI"}:       atomicString,
+	{Space: xsd.XMLSchemaNS, Local: "boolean"}:      atomicBool,
+	{Space: xsd.XMLSchemaNS, Local: "float"}:        atomicFloat32,
+	{Space: xsd.XMLSchemaNS, Local: "double"}:       atomicFloat64,
 	{Space: xsd.XMLSchemaNS, Local: "decimal"}:      atomicBigRat,
 	{Space: xsd.XMLSchemaNS, Local: "hexBinary"}:    atomicHexBinary,
 	{Space: xsd.XMLSchemaNS, Local: "base64Binary"}: atomicBase64Binary,
