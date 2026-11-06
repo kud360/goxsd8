@@ -14,7 +14,8 @@ import (
 // hexBinary, l a list of hexBinary, a ref to h, of hexBinary, a nested type's
 // particle v of base64Binary, and the attribute at, of base64Binary;
 // binaryChoiceSchema's choice holds x, of hexBinary, and y, of base64Binary;
-// binaryRefSchema's sequence holds a ref to h alone.
+// binaryRefSchema's sequence holds a ref to h alone, of the primitive it
+// names.
 const (
 	binarySchema = `<xs:element name="h" type="xs:hexBinary"/>
 <xs:element name="r"><xs:complexType><xs:sequence>
@@ -23,8 +24,11 @@ const (
 <xs:element name="n"><xs:complexType><xs:sequence><xs:element name="v" type="xs:base64Binary"/></xs:sequence></xs:complexType></xs:element>
 </xs:sequence><xs:attribute name="at" type="xs:base64Binary"/></xs:complexType></xs:element>`
 	binaryChoiceSchema = `<xs:element name="r"><xs:complexType><xs:choice><xs:element name="x" type="xs:hexBinary"/><xs:element name="y" type="xs:base64Binary"/></xs:choice></xs:complexType></xs:element>`
-	binaryRefSchema    = `<xs:element name="h" type="xs:hexBinary"/>` + `<xs:element name="r"><xs:complexType><xs:sequence><xs:element ref="s:h"/></xs:sequence></xs:complexType></xs:element>`
 )
+
+func binaryRefSchema(primitive string) string {
+	return `<xs:element name="h" type="xs:` + primitive + `"/><xs:element name="r"><xs:complexType><xs:sequence><xs:element ref="s:h"/></xs:sequence></xs:complexType></xs:element>`
+}
 
 // binaries to binaryRef are the types codegen emits for the binary schemas:
 // binarySchema's R, H and N, binaryChoiceSchema's R, RX and RY, and
@@ -69,7 +73,7 @@ func TestBinaryTypesAreCodegens(t *testing.T) {
 			"type RX struct {\n\tX []byte\n}\n\nfunc (RX) isR() {}\n",
 			"type RY struct {\n\tY []byte\n}\n\nfunc (RY) isR() {}\n",
 		}},
-		{binaryRefSchema, []string{"type H []byte\n", "type R struct {\n\tH H\n}\n"}},
+		{binaryRefSchema("hexBinary"), []string{"type H []byte\n", "type R struct {\n\tH H\n}\n"}},
 	}
 	for _, row := range rows {
 		gen := generated(t, schemaOf(t, row.decls))
@@ -220,18 +224,34 @@ func choiceBytesEqual(a, b binaryChoice) bool {
 }
 
 // TestDecodeBinaryRefTypeMismatch pins item 6 of Decode's doc for an
-// <element ref> to a hexBinary declaration: its field is N, a defined type
-// over []byte, which binaryRef's passes; the bare []byte, a local particle's
-// V, and string are each ErrTypeMismatch, whose message spells codegen's type
-// as []byte, never reflect's []uint8 (atomic.spell); T's own field type is
-// reflect's spelling.
+// <element ref> to a hexBinary or base64Binary declaration: its field is N, a
+// defined type over []byte, which binaryRef's passes; the bare []byte, a local
+// particle's V, and string are each ErrTypeMismatch, whose message spells
+// codegen's type as []byte, never reflect's []uint8 (atomic.spell); T's own
+// field type is reflect's spelling.
 func TestDecodeBinaryRefTypeMismatch(t *testing.T) {
-	schema := schemaOf(t, binaryRefSchema)
-	data := instanceOf("", "<s:h>0A</s:h>")
+	for _, p := range []struct {
+		primitive string
+		want      []byte
+	}{
+		{"hexBinary", []byte("AB")},
+		{"base64Binary", []byte{0xe3, 0x5e, 0x36}},
+	} {
+		t.Run(p.primitive, func(t *testing.T) { assertBinaryRef(t, binaryRefSchema(p.primitive), p.want) })
+	}
+}
+
+// assertBinaryRef fails the test unless the ref schema decls decodes its
+// instance into binaryRef, H holding want, and mismatches a bare []byte H
+// and a string one as TestDecodeBinaryRefTypeMismatch states.
+func assertBinaryRef(t *testing.T, decls string, want []byte) {
+	t.Helper()
+	schema := schemaOf(t, decls)
+	data := instanceOf("", "<s:h>4142</s:h>")
 	mustAccept(t, schema, data)
 	got, err := Decode[binaryRef](schema, strict.New(), data)
-	if err != nil || !bytes.Equal(got.H, []byte{0x0a}) {
-		t.Errorf("Decode[binaryRef] = %v, %v, want H 0a", got, err)
+	if err != nil || !bytes.Equal(got.H, want) {
+		t.Errorf("Decode[binaryRef] = %v, %v, want H %#v", got, err, want)
 	}
 	for _, row := range []struct {
 		name   string
