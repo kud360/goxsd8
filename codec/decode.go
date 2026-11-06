@@ -146,7 +146,9 @@ var ErrTypeMismatch = errors.New("codec: T is not the type codegen emits for the
 // Items 5 and 6 read no instance; [CheckDecode] returns them for a
 // declaration before an instance arrives.
 //
-// Item 5 examines the document element's declaration in this order:
+// Item 5 examines the document element's declaration in this order; the
+// fourth and fifth bullets say how the particle step reads a substitution
+// group's <element ref> and a choice's alternatives:
 //
 //   - The declaration's {type table} and {nillable}.
 //   - Its {type definition}: a simple type's {variety} and {primitive type

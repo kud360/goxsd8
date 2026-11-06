@@ -45,7 +45,8 @@ func newConfig(opts []Option) config {
 //     characters Decode reads the value from, before whiteSpace.
 //   - "lexical mapping": rule "cvc-datatype-valid" and clause "2.1" (§4.1.4),
 //     input the normalized value, or for a list the list item, as handed to
-//     the governing mapping's Parse.
+//     the governing mapping's Parse, logged before Parse runs, so none where
+//     no mapping of the backend governs the type.
 //   - "conversion": rule "dt-canonical-mapping" (§2.3.1), input the canonical
 //     form the governing mapping's Canonical rendered, logged once it has.
 //
