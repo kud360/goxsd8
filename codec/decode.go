@@ -1763,8 +1763,9 @@ func itemSubject(subject string, item *xsd.SimpleType) string {
 
 // atomicDecline returns the atomic Go type codegen gives the simple type st,
 // an atomic type whose {primitive type definition} is one of
-// primitiveAtomics', as codegen/doc.go "# Simple types" picks it: from st's
-// {base type definition} chain (chainAtomic), failing that from its
+// primitiveAtomics' or datatypeAtomics', as codegen/doc.go "# Simple types"
+// picks it: from st's {base type definition} chain (chainAtomic), which meets
+// a date, time or duration primitive at its top, failing that from its
 // primitive. Or else it returns the construct Decode declines st for: a
 // union's, a special type's, or that of its primitive. A list st is a plain
 // error: simpleDecline routes a list to its {item type definition}, which

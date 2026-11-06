@@ -148,8 +148,9 @@ var atomicTypes = [...]reflect.Type{
 }
 
 // datatypeNames holds, indexed by a mirrored atomic, the local name of the
-// XSD datatype codegen names its datatype struct from (codegen/doc.go, the
-// datatype struct names): dateTime's is DateTime.
+// XSD datatype whose datatype struct it is, the one encoding of that pairing
+// (datatypeAtomics indexes it by name); codegen names the struct from it
+// (codegen/doc.go, the datatype struct names): dateTime's is DateTime.
 var datatypeNames = [...]string{
 	atomicDateTime:          "dateTime",
 	atomicDateTimeStamp:     "dateTimeStamp",
@@ -262,59 +263,64 @@ func (a atomic) convert(form string) (reflect.Value, error) {
 	return v, nil
 }
 
-// chainAtomics maps each builtin that decides an atomic type's atomic from
-// anywhere on its {base type definition} chain to that atomic: the eight
-// bounded integer builtins (Datatypes §3.4.16–§3.4.19, §3.4.21–§3.4.24) to
-// the Go integer whose range is their value space, xs:integer (§3.4.13) to
-// big.Int, and dateTimeStamp, dayTimeDuration and yearMonthDuration
-// (§3.4.26–§3.4.28) to their datatype structs, the twelve codegen's
-// builtinType walks for. It is a lookup index only and never iterated (STYLE
-// D2).
+// chainAtomics maps each integer builtin that decides an atomic type's
+// atomic from anywhere on its {base type definition} chain to that atomic:
+// the eight bounded integer builtins (Datatypes §3.4.16–§3.4.19,
+// §3.4.21–§3.4.24) to the Go integer whose range is their value space, and
+// xs:integer (§3.4.13) to big.Int. It is a lookup index only and never
+// iterated (STYLE D2).
 var chainAtomics = map[xsd.QName]atomic{
-	{Space: xsd.XMLSchemaNS, Local: "long"}:              atomicInt64,
-	{Space: xsd.XMLSchemaNS, Local: "int"}:               atomicInt32,
-	{Space: xsd.XMLSchemaNS, Local: "short"}:             atomicInt16,
-	{Space: xsd.XMLSchemaNS, Local: "byte"}:              atomicInt8,
-	{Space: xsd.XMLSchemaNS, Local: "unsignedLong"}:      atomicUint64,
-	{Space: xsd.XMLSchemaNS, Local: "unsignedInt"}:       atomicUint32,
-	{Space: xsd.XMLSchemaNS, Local: "unsignedShort"}:     atomicUint16,
-	{Space: xsd.XMLSchemaNS, Local: "unsignedByte"}:      atomicUint8,
-	{Space: xsd.XMLSchemaNS, Local: "integer"}:           atomicBigInt,
-	{Space: xsd.XMLSchemaNS, Local: "dateTimeStamp"}:     atomicDateTimeStamp,
-	{Space: xsd.XMLSchemaNS, Local: "dayTimeDuration"}:   atomicDayTimeDuration,
-	{Space: xsd.XMLSchemaNS, Local: "yearMonthDuration"}: atomicYearMonthDuration,
+	{Space: xsd.XMLSchemaNS, Local: "long"}:          atomicInt64,
+	{Space: xsd.XMLSchemaNS, Local: "int"}:           atomicInt32,
+	{Space: xsd.XMLSchemaNS, Local: "short"}:         atomicInt16,
+	{Space: xsd.XMLSchemaNS, Local: "byte"}:          atomicInt8,
+	{Space: xsd.XMLSchemaNS, Local: "unsignedLong"}:  atomicUint64,
+	{Space: xsd.XMLSchemaNS, Local: "unsignedInt"}:   atomicUint32,
+	{Space: xsd.XMLSchemaNS, Local: "unsignedShort"}: atomicUint16,
+	{Space: xsd.XMLSchemaNS, Local: "unsignedByte"}:  atomicUint8,
+	{Space: xsd.XMLSchemaNS, Local: "integer"}:       atomicBigInt,
 }
 
-// primitiveAtomics maps each {primitive type definition} Decode decodes to
-// the atomic it gives a type no builtin of chainAtomics decides
-// (codegen/doc.go "# Simple types"); it is a lookup index only and never
-// iterated (STYLE D2).
+// datatypeAtomics maps the QName of each datatype of datatypeNames to its
+// datatype struct's atomic, built from datatypeNames once; it is a lookup
+// index only and never iterated (STYLE D2).
+var datatypeAtomics = func() map[xsd.QName]atomic {
+	m := map[xsd.QName]atomic{}
+	for a, local := range datatypeNames {
+		if local != "" {
+			m[xsd.QName{Space: xsd.XMLSchemaNS, Local: local}] = atomic(a)
+		}
+	}
+	return m
+}()
+
+// primitiveAtomics maps each {primitive type definition} other than a date,
+// time or duration one that Decode decodes to the atomic it gives a type no
+// builtin chainAtomic meets decides (codegen/doc.go "# Simple types"); it is
+// a lookup index only and never iterated (STYLE D2).
 var primitiveAtomics = map[xsd.QName]atomic{
-	{Space: xsd.XMLSchemaNS, Local: "string"}:     atomicString,
-	{Space: xsd.XMLSchemaNS, Local: "anyURI"}:     atomicString,
-	{Space: xsd.XMLSchemaNS, Local: "boolean"}:    atomicBool,
-	{Space: xsd.XMLSchemaNS, Local: "float"}:      atomicFloat32,
-	{Space: xsd.XMLSchemaNS, Local: "double"}:     atomicFloat64,
-	{Space: xsd.XMLSchemaNS, Local: "decimal"}:    atomicBigRat,
-	{Space: xsd.XMLSchemaNS, Local: "dateTime"}:   atomicDateTime,
-	{Space: xsd.XMLSchemaNS, Local: "time"}:       atomicTime,
-	{Space: xsd.XMLSchemaNS, Local: "date"}:       atomicDate,
-	{Space: xsd.XMLSchemaNS, Local: "gYearMonth"}: atomicGYearMonth,
-	{Space: xsd.XMLSchemaNS, Local: "gYear"}:      atomicGYear,
-	{Space: xsd.XMLSchemaNS, Local: "gMonthDay"}:  atomicGMonthDay,
-	{Space: xsd.XMLSchemaNS, Local: "gDay"}:       atomicGDay,
-	{Space: xsd.XMLSchemaNS, Local: "gMonth"}:     atomicGMonth,
-	{Space: xsd.XMLSchemaNS, Local: "duration"}:   atomicDuration,
+	{Space: xsd.XMLSchemaNS, Local: "string"}:  atomicString,
+	{Space: xsd.XMLSchemaNS, Local: "anyURI"}:  atomicString,
+	{Space: xsd.XMLSchemaNS, Local: "boolean"}: atomicBool,
+	{Space: xsd.XMLSchemaNS, Local: "float"}:   atomicFloat32,
+	{Space: xsd.XMLSchemaNS, Local: "double"}:  atomicFloat64,
+	{Space: xsd.XMLSchemaNS, Local: "decimal"}: atomicBigRat,
 }
 
 // chainAtomic returns the atomic of st as codegen/doc.go "# Simple types"
 // picks it from st's {base type definition} chain: walking it from st itself,
-// the first builtin of chainAtomics met gives its atomic, and false where the
-// walk meets none. Every bounded builtin lies below xs:integer, so the nearest
-// wins over it, and no chain meets both an integer builtin and a temporal one.
+// the first builtin met that chainAtomics or datatypeAtomics holds gives its
+// atomic, and false where the walk meets none. Every bounded builtin lies
+// below xs:integer, and dateTimeStamp, dayTimeDuration and yearMonthDuration
+// below the primitive they restrict, so the nearest wins over it; a primitive
+// of datatypeAtomics is met only at the top of its chain, and no chain meets
+// both an integer builtin and a temporal one.
 func chainAtomic(r xsd.TypeResolver, st *xsd.SimpleType) (atomic, bool, error) {
 	for step := st; step != nil; {
 		if a, ok := chainAtomics[step.Name()]; ok {
+			return a, true, nil
+		}
+		if a, ok := datatypeAtomics[step.Name()]; ok {
 			return a, true, nil
 		}
 		base, err := step.Base(r)
