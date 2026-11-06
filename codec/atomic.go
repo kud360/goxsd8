@@ -277,8 +277,7 @@ func (a atomic) convert(form string) (reflect.Value, error) {
 		}
 		v.SetBytes(b)
 	case atomicBase64Binary:
-		// form is Canonical-base64Binary's, padded and unspaced (Datatypes
-		// §3.3.16.2).
+		// form is Canonical-base64Binary's (Datatypes §3.3.16.2).
 		b, err := base64.StdEncoding.DecodeString(form)
 		if err != nil {
 			return reflect.Value{}, err

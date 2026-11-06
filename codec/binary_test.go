@@ -209,6 +209,39 @@ func TestDecodeBinarySites(t *testing.T) {
 	}
 }
 
+// TestConvertBinaries pins the conversion of a canonical form to []byte
+// under each binary arm, whatever backend rendered it: hexBinary's in either
+// letter case, its case never compared with f-hexBinaryCanonical's upper
+// case (Datatypes §E.4.1), and base64Binary's padded form; a form neither
+// reads is an error, item 8's.
+func TestConvertBinaries(t *testing.T) {
+	for _, row := range []struct {
+		atom atomic
+		form string
+		want []byte
+	}{
+		{atomicHexBinary, "0aff", []byte{0x0a, 0xff}},
+		{atomicHexBinary, "0AFF", []byte{0x0a, 0xff}},
+		{atomicBase64Binary, "QUI=", []byte("AB")},
+	} {
+		v, err := row.atom.convert(row.form)
+		if err != nil || !bytes.Equal(v.Bytes(), row.want) {
+			t.Errorf("%s.convert(%q) = %v, %v, want %#v", row.atom.spell(), row.form, v, err, row.want)
+		}
+	}
+	for _, row := range []struct {
+		atom atomic
+		form string
+	}{
+		{atomicHexBinary, "0"},
+		{atomicBase64Binary, "QUI"},
+	} {
+		if _, err := row.atom.convert(row.form); err == nil {
+			t.Errorf("convert(%q) = nil error, want one", row.form)
+		}
+	}
+}
+
 // choiceBytesEqual reports whether a and b are the same branch holding the
 // same octets.
 func choiceBytesEqual(a, b binaryChoice) bool {
