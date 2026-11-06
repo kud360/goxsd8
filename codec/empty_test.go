@@ -4,6 +4,9 @@ import (
 	"bytes"
 	"reflect"
 	"testing"
+
+	"github.com/kud360/goxsd8/builtin/strict"
+	"github.com/kud360/goxsd8/xsderr"
 )
 
 // The empty-content schemas, each declaring s:r: emptyAttrsSchema's r has
@@ -126,5 +129,23 @@ func TestDecodeEmptyContent(t *testing.T) {
 				t.Errorf("CheckDecode = %v, want nil for a row Decode decodes", err)
 			}
 		})
+	}
+}
+
+// TestDecodeEmptyContentRefusesCharacters pins that Decode never decodes a
+// document element of empty content that holds a character child, white space
+// included, or an element child: validate charges each (cvc-complex-type
+// clause 1.1), and Decode returns that charge and no value, though the struct's
+// fill would skip the characters.
+func TestDecodeEmptyContentRefusesCharacters(t *testing.T) {
+	schema := schemaOf(t, emptyBareSchema)
+	for _, content := range []string{" ", "x", `<s:r/>`} {
+		got, err := Decode[struct{}](schema, strict.New(), instanceOf("", content))
+		if got != nil || err == nil {
+			t.Fatalf("Decode(%q) = (%v, %v), want no value and an error", content, got, err)
+		}
+		if rule, _ := xsderr.RuleOf(err); rule != "cvc-complex-type" {
+			t.Errorf("Decode(%q): rule = %q, want cvc-complex-type: %v", content, rule, err)
+		}
 	}
 }

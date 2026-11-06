@@ -165,7 +165,8 @@ var ErrTypeMismatch = errors.New("codec: T is not the type codegen emits for the
 //   - Its {type definition}: a simple type's {variety} and {primitive type
 //     definition}, for a list its {item type definition}'s, whose construct
 //     the list declines by, after which nothing further is examined; or a
-//     complex type's content, then the occurrence of its sequence or choice.
+//     complex type's content, then, for element-only content, the occurrence
+//     of its sequence or choice.
 //   - Each particle of the complex type's content in order, the whole of one
 //     before the next. A nested model group or wildcard declines first. Then
 //     the particle's element declaration's {type table} and {nillable}, and
@@ -888,10 +889,10 @@ type binding struct {
 // field returns the field of shape s whose V is b's struct.
 func (b *binding) field(s shape) field { return field{shape: s, arm: structArm{unit: b}} }
 
-// elementContent is the element content of the struct a *binding binds, the
-// fields that precede its attribute fields, a closed sum: a *sequence, the
-// fields of a sequence's particles, or a *choice, the one field holding a
-// choice's sealed interface.
+// elementContent is the content of the struct a *binding binds, the fields
+// that precede its attribute fields, a closed sum: a *sequence, the fields of
+// a sequence's particles, or of none for empty content, or a *choice, the one
+// field holding a choice's sealed interface.
 type elementContent interface {
 	// width is how many of the struct's fields the content's are.
 	width() int
