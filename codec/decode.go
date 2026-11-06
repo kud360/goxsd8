@@ -219,7 +219,7 @@ var ErrTypeMismatch = errors.New("codec: T is not the type codegen emits for the
 //     type codegen gives it (the Simple types section of codegen's package
 //     doc): its atomic Go type A, one of string, bool, float32, float64,
 //     big.Rat, big.Int, int64, int32, int16, int8, uint64, uint32, uint16,
-//     uint8 and a date, time or duration datatype struct D, or for a list
+//     uint8, []byte and a date, time or duration datatype struct D, or for a list
 //     []A, A its {item type definition}'s. So any T over that Go type passes,
 //     such as the type codegen emits for another document element of the same
 //     simple type. Codegen declares D in the caller's package, so D is matched
