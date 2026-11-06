@@ -158,7 +158,7 @@ func Parse(location string, opts ...Option) (*xsd.Schema, error) {
 //     under [xsderr.RuleComponentInvariant] is no verdict either, and one
 //     reaching a ParseReport caller is a parser defect.
 //   - a plain error, which errors.As does not reach as an *[xsderr.Error], so
-//     RuleOf reports false: a document not valid against the schema for schema
+//     RuleOf reports false: a grammar fault against the schema for schema
 //     documents (the s4s-grammar class [xsderr]'s package doc names); a root
 //     whose document element is not <schema>; a derivation this parser cannot
 //     yet map, one that reads the {content type} of a base still being built; a

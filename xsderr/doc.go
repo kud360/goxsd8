@@ -14,7 +14,7 @@
 // Error's doc says how a caller tells an *Error that is a validity verdict
 // from one that is a fault.
 //
-// One validity rejection is no *Error at all: the s4s-grammar class below,
+// One validity class is no *Error at all: the s4s-grammar class below,
 // which the spec catalogs nowhere, is a plain error that errors.As does not
 // reach and RuleOf reports false for.
 //

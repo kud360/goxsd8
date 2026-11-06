@@ -39,9 +39,10 @@ func faultingResolver(docs map[string]string, resolveErr, readErr map[string]err
 // TestParseReportErrorShapes pins the shapes ParseReport's doc assigns to each
 // error class, by the tests a caller runs: the Rule xsderr.RuleOf reports (or
 // that it reports none), the cause errors.Is reaches, and whether errors.As
-// reaches a *builtin.MissingPrimitivesError. Each row fails if its class moves
-// to another shape: a plain error wrapped in an *xsderr.Error, an *Error
-// charged under a different Rule, or a cause dropped from the chain.
+// reaches a *builtin.MissingPrimitivesError. Each row fails when its producing
+// site hands its class back in another shape: an *xsderr.Error where the doc
+// says plain, a plain error or another Rule where it says *Error, or a chain
+// that drops the cause.
 func TestParseReportErrorShapes(t *testing.T) {
 	cause := errors.New("boom: the resolver's own cause")
 	include := map[string]string{
