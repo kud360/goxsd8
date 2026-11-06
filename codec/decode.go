@@ -165,19 +165,18 @@ var ErrTypeMismatch = errors.New("codec: T is not the type codegen emits for the
 //   - Its {type definition}: a simple type's {variety} and {primitive type
 //     definition}, for a list its {item type definition}'s, whose construct
 //     the list declines by, after which nothing further is examined; or a
-//     complex type's content, then, for element-only content, the occurrence
-//     of its sequence or choice.
+//     complex type's {abstract}, then its content, then, for element-only
+//     content, the occurrence of its sequence or choice.
 //   - Each particle of the complex type's content in order, the whole of one
 //     before the next. A nested model group or wildcard declines first. Then
 //     the particle's element declaration's {type table} and {nillable}, and
 //     its {type definition}: a simple one is examined as the document
-//     element's is; a complex one declines when it is xs:anyType, then when it
-//     has {abstract} true, and is otherwise examined as the document element's
-//     complex type is, from its content to its {attribute wildcard}. Then the
-//     particle declines by an expanded name an earlier particle's field takes,
-//     a particle's field taking its element's expanded name, or, for a
-//     substitution group's interface, each declaration the next bullet
-//     examines.
+//     element's is; a complex one declines when it is xs:anyType, and is
+//     otherwise examined as the document element's complex type is, from its
+//     {abstract} to its {attribute wildcard}. Then the particle declines by an
+//     expanded name an earlier particle's field takes, a particle's field
+//     taking its element's expanded name, or, for a substitution group's
+//     interface, each declaration the next bullet examines.
 //   - Of an <element ref> particle whose field holds a substitution group's
 //     sealed interface (item 6), in place of the referenced declaration's own
 //     properties and type: each declaration of the group with {abstract}
@@ -1075,10 +1074,10 @@ func (index unitIndex) store(key xsd.QName, u complexUnit) {
 
 // nested returns the complex unit of ct, the {type definition} of el, a
 // particle's element declaration, or the first decline Decode's doc states
-// for it, item 5: xs:anyType, then {abstract} true, then the constructs of ct
-// in the order complex states, keyed by el's expanded name for a top-level
-// el, by ct's QName for a local el whose {type definition} names it, and
-// under no key for an inline one.
+// for it, item 5: xs:anyType, then the constructs of ct in the order complex
+// states, keyed by el's expanded name for a top-level el, by ct's QName for
+// a local el whose {type definition} names it, and under no key for an
+// inline one.
 func (run *bindRun) nested(el xsd.ElementDeclaration, ct xsd.ComplexType) (complexUnit, error) {
 	subject := typeSubject(el, ct)
 	// xs:anyType is known by name, as codegen's isAnyType knows it: its

@@ -82,10 +82,12 @@ type construct uint8
 // element's declaration, its type, its content, each particle in order, its
 // attribute uses in order, its attribute wildcard, and the instance. A
 // particle's complex type, examined at the particle, declines by the same
-// constructs from constructSimpleContent on. The three of a simple type,
-// constructUnion to constructOtherPrimitive, sit with the particle's, though
-// a document element of simple type, an attribute use, and a list type, by
-// its {item type definition}, decline by them too.
+// constructs from constructSimpleContent on, and by
+// constructAbstractTypeElement, which sits with the particle's though the
+// document element's type declines by it too, ahead of its content. The three
+// of a simple type, constructUnion to constructOtherPrimitive, sit with the
+// particle's, though a document element of simple type, an attribute use, and
+// a list type, by its {item type definition}, decline by them too.
 const (
 	constructTypeTable construct = iota + 1
 	constructNillable
