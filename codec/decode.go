@@ -988,15 +988,21 @@ type unitIndex map[xsd.QName]complexUnit
 
 // complex returns the complex unit of ct, labelled by typeSubject, the one
 // index already holds for key where it holds one, or else the first decline
-// Decode's doc states for ct, item 5, in its order: ct's content, for
-// element-only content the occurrence of its sequence or choice and each
-// particle in order, then each attribute use in order, and its {attribute
-// wildcard}. Empty content binds the struct codegen emits for it, with no
+// Decode's doc states for ct, item 5, in its order: {abstract} true, ct's
+// content, for element-only content the occurrence of its sequence or choice
+// and each particle in order, then each attribute use in order, and its
+// {attribute wildcard}. Empty content binds the struct codegen emits for it, with no
 // field ahead of the attribute fields (codegen/doc.go "# Complex types"). A
 // nil index binds an inline anonymous ct under no key.
 func (run *bindRun) complex(ct xsd.ComplexType, typeSubject string, index unitIndex, key xsd.QName) (complexUnit, error) {
 	if u, ok := index[key]; ok {
 		return u, nil
+	}
+	// Codegen emits no struct for an abstract type: an element of one holds
+	// its governing types' interface, or the struct of its one member type
+	// (codegen/doc.go "# Element declarations").
+	if ct.Abstract() {
+		return nil, decline(constructAbstractTypeElement, typeSubject)
 	}
 	// names is the struct's Namer: the content's fields claim from it in
 	// particle order, then the attribute fields (codegen/doc.go "# Particles").
@@ -1079,12 +1085,6 @@ func (run *bindRun) nested(el xsd.ElementDeclaration, ct xsd.ComplexType) (compl
 	// AnyType holds raw content, no struct the slice fills.
 	if ct.Name() == (xsd.QName{Space: xsd.XMLSchemaNS, Local: "anyType"}) {
 		return nil, decline(constructAnyTypeElement, subject)
-	}
-	// Codegen emits no struct for an abstract type: an element of one holds
-	// its governing types' interface, or the struct of its one member type
-	// (codegen/doc.go "# Element declarations").
-	if ct.Abstract() {
-		return nil, decline(constructAbstractTypeElement, subject)
 	}
 	if el.ScopeVariety() == xsd.ScopeGlobal {
 		return run.complex(ct, subject, run.elements, el.Name())

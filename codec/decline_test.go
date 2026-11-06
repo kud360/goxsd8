@@ -48,6 +48,12 @@ func TestDecodeDeclines(t *testing.T) {
 			"", "", constructMixedContent, 1, 1},
 		{"simple root of another primitive", `<xs:element name="r" type="xs:hexBinary"/>`, "", "0A", constructOtherPrimitive, 1, 1},
 		{"simple root of a list of another primitive", `<xs:element name="r"><xs:simpleType><xs:list itemType="xs:hexBinary"/></xs:simpleType></xs:element>`, "", "0A 0B", constructOtherPrimitive, 1, 1},
+		{"document element of an abstract complex type of empty content, under xsi:type", `<xs:complexType name="ab" abstract="true"/>
+			<xs:complexType name="cc"><xs:complexContent><xs:extension base="s:ab"><xs:attribute name="k" type="xs:string"/></xs:extension></xs:complexContent></xs:complexType>
+			<xs:element name="r" type="s:ab"/>`, ` xsi:type="s:cc"`, "", constructAbstractTypeElement, 1, 1},
+		{"document element of an abstract complex type of element-only content, under xsi:type", `<xs:complexType name="ab" abstract="true"><xs:sequence><xs:element name="a" type="xs:string"/></xs:sequence></xs:complexType>
+			<xs:complexType name="cc"><xs:complexContent><xs:extension base="s:ab"/></xs:complexContent></xs:complexType>
+			<xs:element name="r" type="s:ab"/>`, ` xsi:type="s:cc"`, `<s:a>x</s:a>`, constructAbstractTypeElement, 1, 1},
 		{"simple content", root(`<xs:simpleContent><xs:extension base="xs:string"/></xs:simpleContent>`), "", "x", constructSimpleContent, 1, 1},
 		{"mixed content", `<xs:element name="r"><xs:complexType mixed="true"><xs:sequence><xs:element name="a" type="xs:string"/></xs:sequence></xs:complexType></xs:element>`,
 			"", a, constructMixedContent, 1, 1},
