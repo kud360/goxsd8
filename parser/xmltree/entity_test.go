@@ -324,16 +324,15 @@ func TestEntityDeclaredOnlyInParameterEntity(t *testing.T) {
 // replacement text included in content opens, located at that reference. A
 // reference to an unparsed entity there is WFC Parsed Entity, checked first as
 // entityGraph's walk of a default value checks it, and charged so in a
-// standalone="yes" document whose declaration of it follows a
-// parameter-entity reference the reader did not read, which §5.1 has the
-// reader process (#2459); one in content is TestContentUnparsedEntity's
-// fault. Each guard is refused, wrapping a cause and naming neither
-// constraint: the same external entity referenced in content, where §4.4.3
-// lets the reader decline to include it, and, outside a standalone document,
-// an external one declared after a parameter-entity reference the reader did
-// not read (§5.2), referenced in an attribute value directly and through an
-// entity declared before that reference, which reaches the charge with no
-// declaration recorded.
+// standalone="yes" document whose declaration of it follows a parameter-entity
+// reference the reader did not read, which §5.1 has the reader process (#2459);
+// one in content is TestContentUnparsedEntity's fault. Each guard is refused,
+// wrapping a cause and naming neither constraint: the same external entity
+// referenced in content, where §4.4.3 lets the reader decline to include it, and,
+// outside a standalone document, an external one declared after a parameter-entity
+// reference the reader did not read (§5.2), referenced in an attribute value
+// directly and through an entity declared before that reference, which reaches the
+// charge with no declaration recorded.
 func TestAttributeValueExternalEntity(t *testing.T) {
 	const alone = `<?xml version="1.0" standalone="yes"?>`
 	const plain = `<?xml version="1.0"?>`
@@ -465,17 +464,16 @@ func TestContentUnparsedEntity(t *testing.T) {
 // text that begins no Reference (XML 1.0 §4.4.2, §4.4.5, [67] Reference) as a
 // fault the reader charges itself, wrapping no cause, at the attribute's name
 // in an attribute value and at the outermost reference in content, and naming
-// the entity whose replacement text holds it: a literal
-// spelling it `&#38;` or `&#x26;`, in an attribute value and in content; a
-// ';' after it that closes no Name; one an included entity's replacement text
-// holds; and one in an attribute value of a start tag replacement text holds.
-// Each control reads: a '&' its literal spelled `&#38;` that begins a CharRef,
-// to '<' or to '&', or an EntityRef to a declared entity, and one inside a
-// comment or a CDATA section. An EntityRef so spelled to an undeclared entity
-// is the reader's refusal, wrapping a cause, as TestEntityReferenceRefusedUnread
-// refuses one. A '&' in a comment, a processing instruction or an end tag the
-// decoder fails to read is no such charge: the decoder's own syntax error is
-// wrapped as the cause.
+// the entity whose replacement text holds it: a literal spelling it `&#38;` or
+// `&#x26;`, in an attribute value and in content; a ';' after it that closes no
+// Name; one an included entity's replacement text holds; and one in an attribute
+// value of a start tag replacement text holds. Each control reads: a '&' its
+// literal spelled `&#38;` that begins a CharRef, to '<' or to '&', or an
+// EntityRef to a declared entity, and one inside a comment or a CDATA section.
+// An EntityRef so spelled to an undeclared entity is the reader's refusal,
+// wrapping a cause, as TestEntityReferenceRefusedUnread refuses one. A '&' in a
+// comment, a processing instruction or an end tag the decoder fails to read is
+// no such charge: the decoder's own syntax error is wrapped as the cause.
 func TestEntityAmpersandBeginsNoReference(t *testing.T) {
 	const msg = "[xml-wf] the replacement text of entity %s holds a '&' that begins no Reference, '&' Name ';' or a character reference (XML 1.0 §4.4.2, [67] Reference, [68] EntityRef, [66] CharRef)"
 	for _, tc := range []struct {
