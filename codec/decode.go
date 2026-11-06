@@ -987,47 +987,62 @@ type unitIndex map[xsd.QName]complexUnit
 
 // complex returns the complex unit of ct, labelled by typeSubject, the one
 // index already holds for key where it holds one, or else the first decline
-// Decode's doc states for ct, item 5, in its order: ct's content, the
-// occurrence of its sequence or choice, each particle in order, each
-// attribute use in order, and its {attribute wildcard}. A nil index binds an
-// inline anonymous ct under no key.
+// Decode's doc states for ct, item 5, in its order: ct's content, for
+// element-only content the occurrence of its sequence or choice and each
+// particle in order, then each attribute use in order, and its {attribute
+// wildcard}. Empty content binds the struct codegen emits for it, with no
+// field ahead of the attribute fields (codegen/doc.go "# Complex types"). A
+// nil index binds an inline anonymous ct under no key.
 func (run *bindRun) complex(ct xsd.ComplexType, typeSubject string, index unitIndex, key xsd.QName) (complexUnit, error) {
 	if u, ok := index[key]; ok {
 		return u, nil
-	}
-	content, group, d := contentGroup(ct)
-	if d != 0 {
-		return nil, decline(d, typeSubject)
 	}
 	// names is the struct's Namer: the content's fields claim from it in
 	// particle order, then the attribute fields (codegen/doc.go "# Particles").
 	// A bare sealed interface has no struct and discards it.
 	names := goname.NewNamer()
-	// codegen/emit.go's shape: a choice occurring once, in a type with no
-	// attribute field, is the type itself unless it has {particles} and one
-	// occurrence of it is emptiable (cos-group-emptiable). Every attribute use
-	// gives a field or declines, and so does every particle an alternative, so
-	// the counts decide before either is bound.
-	if group.Compositor() == xsd.CompositorChoice && len(ct.AttributeUses()) == 0 &&
-		(len(group.Particles()) == 0 || !run.p.schema.ParticleEmptiable(content)) {
-		c := &choiceRoot{}
-		index.store(key, c)
-		ch, err := bindChoice(run, group.Particles(), names, typeSubject)
+	b := &binding{p: run.p, attributes: map[xsd.QName]int{}}
+	// ContentType is a closed sum, so the switch is STYLE T2's sealed-sum
+	// exception.
+	switch c := ct.ContentType().(type) {
+	case xsd.SimpleContent:
+		return nil, decline(constructSimpleContent, typeSubject)
+	case xsd.EmptyContent:
+		// A valid instance has no character or element child here
+		// (cvc-complex-type clause 1.1), so the sequence of no particle reads
+		// none.
+		index.store(key, b)
+		b.content = &sequence{p: run.p, children: map[xsd.QName]int{}}
+	case xsd.ElementContent:
+		content, group, d := contentGroup(c)
+		if d != 0 {
+			return nil, decline(d, typeSubject)
+		}
+		// codegen/emit.go's shape: a choice occurring once, in a type with no
+		// attribute field, is the type itself unless it has {particles} and one
+		// occurrence of it is emptiable (cos-group-emptiable). Every attribute
+		// use gives a field or declines, and so does every particle an
+		// alternative, so the counts decide before either is bound.
+		if group.Compositor() == xsd.CompositorChoice && len(ct.AttributeUses()) == 0 &&
+			(len(group.Particles()) == 0 || !run.p.schema.ParticleEmptiable(content)) {
+			root := &choiceRoot{}
+			index.store(key, root)
+			ch, err := bindChoice(run, group.Particles(), names, typeSubject)
+			if err != nil {
+				return nil, err
+			}
+			if _, has := ct.AttributeWildcard(); has {
+				return nil, decline(constructAttributeWildcard, typeSubject)
+			}
+			root.sealed = ch.sealed
+			return root, nil
+		}
+		index.store(key, b)
+		var err error
+		b.content, err = bindContent(run, group, names, typeSubject)
 		if err != nil {
 			return nil, err
 		}
-		if _, has := ct.AttributeWildcard(); has {
-			return nil, decline(constructAttributeWildcard, typeSubject)
-		}
-		c.sealed = ch.sealed
-		return c, nil
-	}
-	b := &binding{p: run.p, attributes: map[xsd.QName]int{}}
-	index.store(key, b)
-	var err error
-	b.content, err = bindContent(run, group, names, typeSubject)
-	if err != nil {
-		return nil, err
 	}
 	for _, u := range ct.AttributeUses() {
 		a, err := attributeUse(run.p.schema, u)
@@ -1452,20 +1467,12 @@ func declarationDecline(decl xsd.ElementDeclaration) construct {
 	return 0
 }
 
-// contentGroup returns the {particle} of ct's content and its model group, an
-// inline sequence or choice occurring exactly once, or the construct Decode
-// declines in its place. ContentType and the particle term are closed sums, so
-// the switches are STYLE T2's sealed-sum exception.
-func contentGroup(ct xsd.ComplexType) (xsd.Particle, xsd.ModelGroup, construct) {
-	var content xsd.ElementContent
-	switch c := ct.ContentType().(type) {
-	case xsd.EmptyContent:
-		return xsd.Particle{}, xsd.ModelGroup{}, constructEmptyContent
-	case xsd.SimpleContent:
-		return xsd.Particle{}, xsd.ModelGroup{}, constructSimpleContent
-	case xsd.ElementContent:
-		content = c
-	}
+// contentGroup returns the {particle} of content, a complex type's
+// element-only or mixed content, and its model group, an inline sequence or
+// choice occurring exactly once, or the construct Decode declines in its
+// place. The particle term is a closed sum, so the assertions are STYLE T2's
+// sealed-sum exception.
+func contentGroup(content xsd.ElementContent) (xsd.Particle, xsd.ModelGroup, construct) {
 	if content.Mixed {
 		return xsd.Particle{}, xsd.ModelGroup{}, constructMixedContent
 	}
