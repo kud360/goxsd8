@@ -1836,7 +1836,7 @@ func declarationName(el *Element, ns string) (xsd.QName, error) {
 // encode, as there is for no-xsi's {target namespace} below.
 //
 // name is the {name} declarationName has already mapped, never the name
-// attribute re-read here (STYLE T4), and that ordering is what keeps the
+// attribute's value re-read here (STYLE T4), and that ordering is what keeps the
 // COLONIZED forms on their existing charge: declarationName rejects a name
 // outside NCName's ·lexical space· first, so xmlns: and xmlns:a never reach this
 // function at all and stay charged cvc-datatype-valid, one fault to one rule
