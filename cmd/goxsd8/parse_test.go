@@ -650,6 +650,21 @@ func TestARejectedSchemaNamesItsBareImports(t *testing.T) {
 			t.Errorf("%s: stderr = %q, want %q", c.name, stderr.String(), want)
 		}
 	}
+
+	// Only the bare <import> is named after the violation: an <xs:include> with
+	// no schemaLocation (parser.UnfollowedNoSchemaLocation) is in the report too,
+	// and is charged by the error line alone.
+	noLocation := filepath.Join(dir, "n.xsd")
+	if err := os.WriteFile(noLocation, []byte(`<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">`+"\n"+`<xs:include/></xs:schema>`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	var stdout, stderr bytes.Buffer
+	if code := run([]string{"parse", noLocation}, &stdout, &stderr); code != exitInvalid {
+		t.Errorf("<xs:include/>: code = %d, want %d (stderr %q)", code, exitInvalid, stderr.String())
+	}
+	if lines := strings.Split(strings.TrimSuffix(stderr.String(), "\n"), "\n"); len(lines) != 1 {
+		t.Errorf("<xs:include/>: stderr = %q, want the error line alone", stderr.String())
+	}
 }
 
 // TestParseQuiet pins -q's scope, which binds validate too: it suppresses the
