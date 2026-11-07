@@ -98,11 +98,9 @@
 // [Decode]'s doc states.
 //
 // A wildcard particle decodes into codegen's AnyElement field, or a choice's
-// branch holding one, by its occurrence, each child attributed to the
-// wildcard (§3.10.4.1 cvc-wildcard) held raw, its expanded name and its
-// content, an element particle taking a child before the wildcard does
-// (§3.8.6.4 cos-nonambig); [Decode]'s doc states the field, the attribution
-// and the raw content.
+// branch holding one, each child attributed to the wildcard held raw;
+// [Decode]'s doc states the field, which children are attributed to it, and
+// the raw content.
 //
 // Every other construct is a [*DeclineError], never a zero value:
 //

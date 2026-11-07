@@ -262,8 +262,9 @@ func TestDecodeWildcard(t *testing.T) {
 // particle's field: E is matched by AnyElement's shape, so a struct missing
 // a field, a field of another Go type, and an AnyChild whose Element is a
 // struct of E's shape but not E each mismatch, Decode and CheckDecode alike,
-// each naming the field; and a branch struct holding such an E matches no
-// alternative.
+// each naming the field; a choice's branch struct holding such an E is the
+// wildcard alternative's mismatch, and one holding anyElement2, of E's shape
+// over structs of its own, matches.
 func TestDecodeWildcardTypeMismatch(t *testing.T) {
 	type (
 		noTail struct {
