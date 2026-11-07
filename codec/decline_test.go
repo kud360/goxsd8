@@ -168,8 +168,6 @@ func TestDecodeDeclines(t *testing.T) {
 			"", `<s:any><s:v>v</s:v></s:any>`, constructSharedBranch, 1, 1},
 		{"choice alternatives sharing a name, a wildcard and an xs:date", root(`<xs:choice><xs:any namespace="##other" processContents="lax"/><xs:element name="any" type="xs:date"/></xs:choice>`),
 			"", `<s:any>2000-01-01</s:any>`, constructSharedBranch, 1, 1},
-		{"choice alternatives sharing a name, a wildcard and an xs:decimal", root(`<xs:choice><xs:any namespace="##other" processContents="lax"/><xs:element name="any" type="xs:decimal"/></xs:choice>`),
-			"", `<s:any>1</s:any>`, constructSharedBranch, 1, 1},
 		{"particles sharing an expanded name", sequenceOf(`<xs:element name="a" type="xs:string"/><xs:element name="b" type="xs:string"/><xs:element name="a" type="xs:string"/>`),
 			"", a + `<s:b>y</s:b>` + a, constructSharedName, 1, 1},
 		{"list of a union", sequenceOf(`<xs:element name="a"><xs:simpleType><xs:list><xs:simpleType><xs:union memberTypes="xs:string xs:int"/></xs:simpleType></xs:list></xs:simpleType></xs:element>`), "", a, constructUnion, 1, 1},

@@ -202,13 +202,13 @@ var ErrTypeMismatch = errors.New("codec: T is not the type codegen emits for the
 //   - Of a choice, each alternative's own constructs, then a branch field of
 //     the name an earlier alternative's has where either alternative is of a
 //     simple type whose Go type is a datatype struct or a list of one, where
-//     one alternative is codegen's struct or a wildcard and the other of a
-//     simple type whose atomic Go type is big.Rat or big.Int, where one is a
-//     wildcard and the other codegen's struct, or where both alternatives
-//     are of complex type or hold a substitution group's interface, occur
-//     alike, and are both a struct or both a sealed interface, and otherwise
-//     of the name and Go type, as item 6 reads it, which declines as two
-//     branches of a sealed interface whose structs have one shape.
+//     one alternative is codegen's struct and the other a wildcard or of a
+//     simple type whose atomic Go type is big.Rat or big.Int, or where both
+//     alternatives are of complex type or hold a substitution group's
+//     interface, occur alike, and are both a struct or both a sealed
+//     interface, and otherwise of the name and Go type, as item 6 reads it,
+//     which declines as two branches of a sealed interface whose structs
+//     have one shape.
 //   - Each of the complex type's attribute uses in order, and its {attribute
 //     wildcard}.
 //
@@ -999,11 +999,12 @@ func (f field) admits(got reflect.StructField) bool {
 //     (scalarArm.admits), which another datatype struct's or codegen's
 //     struct S may share.
 //   - Either arm a rawArm: for two rawArms, true exactly when they have one
-//     shape; beside a structArm, true, and beside a scalarArm, true exactly
-//     when the scalar's atomic Go type is a struct, big.Rat or big.Int, each
-//     conservative as the bullets below are, since a structArm admits any
-//     struct and a rawArm's V is one; and beside an ifaceArm or a groupArm,
-//     false, since its V is no interface.
+//     shape; beside a structArm, true, which is conservative, since a
+//     structArm admits any struct and a rawArm's V is one; and beside a
+//     scalarArm, an ifaceArm or a groupArm, false, since rawShapeOf admits
+//     only a struct of three exported fields, which no scalar's V of no
+//     datatype struct is (big.Rat's and big.Int's fields are unexported), and
+//     no interface.
 //   - Both arms scalarArms: for two valueBare arms, true exactly when they
 //     have the same Go type of shape over scalar.goType, a repeated xs:int
 //     and a list of xs:int each []int32; for two valueNamed arms, true
@@ -1040,17 +1041,10 @@ func (f field) sharesBranch(g field) bool {
 	_, fRaw := f.arm.(rawArm)
 	_, gRaw := g.arm.(rawArm)
 	if fRaw || gRaw {
-		switch {
-		case fRaw && gRaw:
+		if fRaw && gRaw {
 			return f.shape == g.shape
-		case fStruct || gStruct:
-			return true
-		case fScalar:
-			return fa.atom.bare().Kind() == reflect.Struct
-		case gScalar:
-			return ga.atom.bare().Kind() == reflect.Struct
 		}
-		return false
+		return fStruct || gStruct
 	}
 	if fScalar != gScalar {
 		a := fa

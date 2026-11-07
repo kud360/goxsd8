@@ -3,6 +3,7 @@ package codec
 import (
 	"bytes"
 	"errors"
+	"math/big"
 	"reflect"
 	"testing"
 
@@ -39,7 +40,8 @@ type (
 // optional wildcard precedes a; nestedWildSchema's wildcard is n's particle;
 // pickWildSchema and manyWildSchema are codegen's choicewildcard pick and
 // many, lax; nameAnySchema's choice has an element named any beside the
-// wildcard; openWildSchema is codegen's wildcard fixture, whose top-level
+// wildcard, and wildDecimalSchema's a wildcard beside an element named any
+// of xs:decimal; openWildSchema is codegen's wildcard fixture, whose top-level
 // element anyElement makes codegen name the raw-content element AnyElement2.
 const (
 	seqStrictSchema   = `<xs:element name="w" type="xs:string"/>` + `<xs:element name="r"><xs:complexType><xs:sequence><xs:element name="a" type="xs:string"/><xs:any namespace="##targetNamespace"/></xs:sequence></xs:complexType></xs:element>`
@@ -52,6 +54,7 @@ const (
 	pickWildSchema    = `<xs:element name="r"><xs:complexType><xs:choice><xs:element name="a" type="xs:string"/><xs:any processContents="lax"/></xs:choice></xs:complexType></xs:element>`
 	manyWildSchema    = `<xs:element name="r"><xs:complexType><xs:choice><xs:element name="b" type="xs:string"/><xs:any namespace="##other" processContents="lax" maxOccurs="2"/></xs:choice></xs:complexType></xs:element>`
 	nameAnySchema     = `<xs:element name="r"><xs:complexType><xs:choice><xs:element name="any" type="xs:string"/><xs:any namespace="##other" processContents="lax"/></xs:choice></xs:complexType></xs:element>`
+	wildDecimalSchema = `<xs:element name="r"><xs:complexType><xs:choice><xs:any namespace="##other" processContents="lax"/><xs:element name="any" type="xs:decimal"/></xs:choice></xs:complexType></xs:element>`
 	openWildSchema    = `<xs:element name="anyElement" type="xs:string"/><xs:element name="r"><xs:complexType><xs:sequence><xs:element name="id" type="xs:string"/><xs:any minOccurs="0" maxOccurs="unbounded" namespace="##other" processContents="lax"/></xs:sequence></xs:complexType></xs:element>`
 )
 
@@ -91,6 +94,10 @@ type (
 	nameAnyAny   struct{ Any string }
 	nameAnyAny2  struct{ Any anyElement }
 	pickWildAny2 struct{ Any anyElement2 }
+
+	wildDecimal     interface{ isWildDecimal() }
+	wildDecimalAny  struct{ Any anyElement }
+	wildDecimalAny2 struct{ Any big.Rat }
 )
 
 func (pickWildA) isPickWild()    {}
@@ -100,6 +107,9 @@ func (manyWildAny) isManyWild()  {}
 func (nameAnyAny) isNameAny()    {}
 func (nameAnyAny2) isNameAny()   {}
 func (pickWildAny2) isPickWild() {}
+
+func (wildDecimalAny) isWildDecimal()  {}
+func (wildDecimalAny2) isWildDecimal() {}
 
 // anyElement2 is anyElement's shape over a second set of structs, so that
 // its Children's Element is anyElement2 itself.
@@ -124,6 +134,8 @@ var (
 	pickWildBranches = WithBranches[pickWild](pickWildA{}, pickWildAny{})
 	manyWildBranches = WithBranches[manyWild](manyWildB{}, manyWildAny{})
 	nameAnyBranches  = WithBranches[nameAny](nameAnyAny{}, nameAnyAny2{})
+
+	wildDecimalBranches = WithBranches[wildDecimal](wildDecimalAny{}, wildDecimalAny2{})
 )
 
 // TestWildcardTypesAreCodegens pins the types above to those codegen emits
@@ -161,6 +173,10 @@ func TestWildcardTypesAreCodegens(t *testing.T) {
 		{nameAnySchema, []string{
 			"type RAny struct {\n\tAny string\n}\n\nfunc (RAny) isR() {}\n",
 			"type RAny2 struct {\n\tAny AnyElement\n}\n\nfunc (RAny2) isR() {}\n",
+		}},
+		{wildDecimalSchema, []string{
+			"type RAny struct {\n\tAny AnyElement\n}\n\nfunc (RAny) isR() {}\n",
+			"type RAny2 struct {\n\tAny big.Rat\n}\n\nfunc (RAny2) isR() {}\n",
 		}},
 		{openWildSchema, append(raw("AnyElement2"), "type R struct {\n\tId  string\n\tAny []AnyElement2\n}\n")},
 	}
@@ -235,6 +251,8 @@ func TestDecodeWildcard(t *testing.T) {
 			manyWild(manyWildAny{Any: []anyElement{el("urn:o", "w", ""), el("urn:o", "v", "")}})},
 		{"choice, an element any beside the wildcard", nameAnySchema, `<s:any>v</s:any>`, into[nameAny](nameAnyBranches), nameAny(nameAnyAny{Any: "v"})},
 		{"choice, the wildcard beside an element any", nameAnySchema, `<o:any` + other + `/>`, into[nameAny](nameAnyBranches), nameAny(nameAnyAny2{Any: el("urn:o", "any", "")})},
+		{"choice, an element any of xs:decimal beside the wildcard", wildDecimalSchema, `<s:any>1</s:any>`, into[wildDecimal](wildDecimalBranches),
+			wildDecimal(wildDecimalAny2{Any: *big.NewRat(1, 1)})},
 		{"codegen's wildcard fixture, no match", openWildSchema, `<s:id>i</s:id>`, into[open](), open{Id: "i"}},
 		{"codegen's wildcard fixture, two matches", openWildSchema, `<s:id>i</s:id><o:x` + other + `/><o:y` + other + `/>`, into[open](),
 			open{Id: "i", Any: []anyElement{el("urn:o", "x", ""), el("urn:o", "y", "")}}},
