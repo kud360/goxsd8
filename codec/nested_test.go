@@ -56,9 +56,12 @@ const (
 // xs:string; shareRefSchema's r is a choice of an <element ref> to g, whose
 // group codegen gives a sealed interface, and a local G of complex type;
 // shareOccursSchema's r is a choice of x of complex type and X of the same
-// shape repeated; and shareSelfSchema is ifaceSelfSchema's C1 with a local
-// E1 of xs:string beside e1, of type C1, so e1 reaches C1's interface while
-// it is unbound.
+// shape repeated; shareSelfSchema is ifaceSelfSchema's C1 with a local E1 of
+// xs:string beside e1, of type C1, so e1 reaches C1's interface while it is
+// unbound; shareListSchema's r is a choice of x of xs:int occurring once and
+// an <element ref> to X, a list of xs:int, occurring once; shareListsSchema's
+// r is the same choice with both repeated; and shareStringsSchema's r is the
+// same choice with x of xs:string repeated.
 var (
 	shareSchema      = root(`<xs:choice>` + vStruct("x", "") + `<xs:element name="x" form="unqualified" type="xs:string"/></xs:choice>`)
 	shareGroupSchema = `<xs:element name="h" abstract="true"/>` + vStruct("x", ` substitutionGroup="s:h"`) +
@@ -68,6 +71,12 @@ var (
 	shareOccursSchema = root(`<xs:choice>` + vStruct("x", "") + vStruct("X", ` maxOccurs="unbounded"`) + `</xs:choice>`)
 	shareSelfSchema   = `<xs:complexType name="C1"><xs:choice><xs:element name="e1" type="s:C1"/><xs:element name="E1" type="xs:string"/></xs:choice></xs:complexType>
   <xs:element name="r" type="s:C1"/>`
+	shareListSchema = `<xs:element name="X"><xs:simpleType><xs:list itemType="xs:int"/></xs:simpleType></xs:element>` +
+		root(`<xs:choice><xs:element name="x" type="xs:int"/><xs:element ref="s:X"/></xs:choice>`)
+	shareListsSchema = `<xs:element name="X"><xs:simpleType><xs:list itemType="xs:int"/></xs:simpleType></xs:element>` +
+		root(`<xs:choice><xs:element name="x" type="xs:int" maxOccurs="unbounded"/><xs:element ref="s:X" maxOccurs="unbounded"/></xs:choice>`)
+	shareStringsSchema = `<xs:element name="X"><xs:simpleType><xs:list itemType="xs:int"/></xs:simpleType></xs:element>` +
+		root(`<xs:choice><xs:element name="x" type="xs:string" maxOccurs="unbounded"/><xs:element ref="s:X"/></xs:choice>`)
 )
 
 // nestedR to nestedPickQ are nestedSchema's R, One, Opt, Rep, Ct, Deep, Mid,
@@ -132,8 +141,11 @@ type (
 // are shareRefSchema's R, RG, RG2, GSubstitutionGroup, GSubstitutionGroupG,
 // GSubstitutionGroupM, G and M, shareXV standing for RG3; shareOR to shareOXs
 // are shareOccursSchema's R, RX and RX3, shareXV standing for RX2 and RX4;
-// and shareSR to shareC1S are shareSelfSchema's R, RE1, RE12, C1, C1E1 and
-// C1E12. Each pin is TestNestedTypesAreCodegens'.
+// shareSR to shareC1S are shareSelfSchema's R, RE1, RE12, C1, C1E1 and
+// C1E12; shareLR to shareLX are shareListSchema's R, RX, RX2 and X; and
+// shareLsR to shareLsRX2 and shareSsR to shareSsRX2 are shareListsSchema's
+// and shareStringsSchema's R, RX and RX2, shareLX standing for X in each.
+// Each pin is TestNestedTypesAreCodegens'.
 type (
 	shareR  interface{ isShareR() }
 	shareX  struct{ X shareXV }
@@ -165,6 +177,19 @@ type (
 	shareC1  interface{ isShareC1() }
 	shareC1E struct{ E1 shareC1 }
 	shareC1S struct{ E1 string }
+
+	shareLR   interface{ isShareLR() }
+	shareLRX  struct{ X int32 }
+	shareLRX2 struct{ X shareLX }
+	shareLX   []int32
+
+	shareLsR   interface{ isShareLsR() }
+	shareLsRX  struct{ X []int32 }
+	shareLsRX2 struct{ X []shareLX }
+
+	shareSsR   interface{ isShareSsR() }
+	shareSsRX  struct{ X []string }
+	shareSsRX2 struct{ X shareLX }
 )
 
 func (shareX) isShareR()    {}
@@ -182,6 +207,13 @@ func (shareSRS) isShareSR() {}
 func (shareC1E) isShareC1() {}
 func (shareC1S) isShareC1() {}
 
+func (shareLRX) isShareLR()    {}
+func (shareLRX2) isShareLR()   {}
+func (shareLsRX) isShareLsR()  {}
+func (shareLsRX2) isShareLsR() {}
+func (shareSsRX) isShareSsR()  {}
+func (shareSsRX2) isShareSsR() {}
+
 // The branch sets of the shared-name schemas' interfaces, shareSchema's in
 // both orders.
 var (
@@ -191,6 +223,10 @@ var (
 	shareRefBranches    = []Option{WithBranches[shareRR](shareRG{}, shareRG2{}), WithBranches[shareGG](shareGGG{}, shareGGM{})}
 	shareOccursBranches = WithBranches[shareOR](shareOX{}, shareOXs{})
 	shareSelfBranches   = []Option{WithBranches[shareSR](shareSRE{}, shareSRS{}), WithBranches[shareC1](shareC1E{}, shareC1S{})}
+
+	shareListBranches    = WithBranches[shareLR](shareLRX{}, shareLRX2{})
+	shareListsBranches   = WithBranches[shareLsR](shareLsRX{}, shareLsRX2{})
+	shareStringsBranches = WithBranches[shareSsR](shareSsRX{}, shareSsRX2{})
 )
 
 func (ifRE) isIfR() {}
@@ -284,6 +320,24 @@ func TestNestedTypesAreCodegens(t *testing.T) {
 			"type C1E12 struct {\n\tE1 string\n}\n\nfunc (C1E12) isC1() {}\n",
 			"type RE12 struct {\n\tE1 string\n}\n\nfunc (RE12) isR() {}\n",
 		}},
+		{shareListSchema, []string{
+			"type X []int32\n",
+			"type R interface {\n\tisR()\n}\n",
+			"type RX struct {\n\tX int32\n}\n\nfunc (RX) isR() {}\n",
+			"type RX2 struct {\n\tX X\n}\n\nfunc (RX2) isR() {}\n",
+		}},
+		{shareListsSchema, []string{
+			"type X []int32\n",
+			"type R interface {\n\tisR()\n}\n",
+			"type RX struct {\n\tX []int32\n}\n\nfunc (RX) isR() {}\n",
+			"type RX2 struct {\n\tX []X\n}\n\nfunc (RX2) isR() {}\n",
+		}},
+		{shareStringsSchema, []string{
+			"type X []int32\n",
+			"type R interface {\n\tisR()\n}\n",
+			"type RX struct {\n\tX []string\n}\n\nfunc (RX) isR() {}\n",
+			"type RX2 struct {\n\tX X\n}\n\nfunc (RX2) isR() {}\n",
+		}},
 		{ifaceSelfSchema, []string{
 			"type R interface {\n\tisR()\n}\n",
 			"type RE struct {\n\tE C\n}\n\nfunc (RE) isR() {}\n",
@@ -368,6 +422,18 @@ func TestDecodeNested(t *testing.T) {
 			into[shareOR](shareOccursBranches), nil, shareOR(shareOXs{X: []shareXV{{V: "a"}, {V: "b"}}})},
 		{"a choice's alternatives of its own interface and a string named alike", shareSelfSchema, instanceOf("", `<s:e1><s:E1>s</s:E1></s:e1>`),
 			into[shareSR](shareSelfBranches...), nil, shareSR(shareSRE{E1: shareC1S{E1: "s"}})},
+		{"a choice's alternatives of an xs:int once and a ref to a list of xs:int named alike, the xs:int's branch", shareListSchema, instanceOf("", `<s:x>1</s:x>`),
+			into[shareLR](shareListBranches), nil, shareLR(shareLRX{X: 1})},
+		{"a choice's alternatives of an xs:int once and a ref to a list of xs:int named alike, the list's branch", shareListSchema, instanceOf("", `<s:X>1 2</s:X>`),
+			into[shareLR](shareListBranches), nil, shareLR(shareLRX2{X: shareLX{1, 2}})},
+		{"a choice's alternatives of an xs:int and a ref to a list of xs:int, both repeated, named alike, the xs:int's branch", shareListsSchema, instanceOf("", `<s:x>1</s:x><s:x>2</s:x>`),
+			into[shareLsR](shareListsBranches), nil, shareLsR(shareLsRX{X: []int32{1, 2}})},
+		{"a choice's alternatives of an xs:int and a ref to a list of xs:int, both repeated, named alike, the list's branch", shareListsSchema, instanceOf("", `<s:X>1 2</s:X><s:X>3</s:X>`),
+			into[shareLsR](shareListsBranches), nil, shareLsR(shareLsRX2{X: []shareLX{{1, 2}, {3}}})},
+		{"a choice's alternatives of a repeated xs:string and a ref to a list of xs:int named alike, the xs:string's branch", shareStringsSchema, instanceOf("", `<s:x>a</s:x><s:x>b</s:x>`),
+			into[shareSsR](shareStringsBranches), nil, shareSsR(shareSsRX{X: []string{"a", "b"}})},
+		{"a choice's alternatives of a repeated xs:string and a ref to a list of xs:int named alike, the list's branch", shareStringsSchema, instanceOf("", `<s:X>1 2</s:X>`),
+			into[shareSsR](shareStringsBranches), nil, shareSsR(shareSsRX2{X: shareLX{1, 2}})},
 		{"a type reaching itself, its empty match", selfSchema, instanceOf("", ``), into[selfR](selfBranches), nil, selfR{}},
 		{"codegen's own struct of a type reaching itself", sameShapeSchema, instanceOf("", `<s:e><s:e><s:v>i</s:v></s:e><s:v>m</s:v></s:e><s:v>o</s:v>`),
 			into[sameR](), nil, sameR{E: &sameE{E: &sameE{V: "i"}, V: "m"}, V: "o"}},

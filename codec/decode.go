@@ -812,7 +812,10 @@ func (f field) admits(got reflect.StructField) bool {
 //     Go type of shape over scalar.goType, a repeated xs:int and a list of
 //     xs:int each []int32; for valueNamed, the same shape and the same goType
 //     separately, since the named type sits between them and []N over int32
-//     is no N over []int32.
+//     is no N over []int32; and for one of each, true exactly when the
+//     valueBare field is repeated and the valueNamed one occurs once over a
+//     list of the first's Go type, since a defined slice type over []A is
+//     both a []A's element-wise slice and an N over []A.
 //   - One arm a scalarArm, the other nested: true exactly when the nested arm
 //     is a structArm and the scalar's atomic Go type is a struct, big.Rat or
 //     big.Int, which is conservative, since a structArm admits any struct. No
@@ -848,7 +851,11 @@ func (f field) sharesBranch(g field) bool {
 		return fStruct == gStruct && f.shape == g.shape
 	}
 	if fa.value != ga.value {
-		return false
+		bare, named, bareShape, namedShape := fa, ga, f.shape, g.shape
+		if fa.value == valueNamed {
+			bare, named, bareShape, namedShape = ga, fa, g.shape, f.shape
+		}
+		return bareShape == shapeRepeated && namedShape == shapeOne && shapeRepeated.over(bare.goType()) == named.goType()
 	}
 	if fa.value == valueNamed {
 		return f.shape == g.shape && fa.goType() == ga.goType()
