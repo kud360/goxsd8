@@ -187,9 +187,12 @@ var ErrTypeMismatch = errors.New("codec: T is not the type codegen emits for the
 //     alternatives do, and then the first of their expanded names in group
 //     order an earlier particle's field takes.
 //   - Of a choice, each alternative's own constructs, then a branch field of
-//     the name an earlier alternative's has where either alternative is of
-//     complex type, holds a substitution group's interface or is of a simple
-//     type whose Go type is a datatype struct or a list of one, and otherwise
+//     the name an earlier alternative's has where either alternative is of a
+//     simple type whose Go type is a datatype struct or a list of one, where
+//     one alternative is codegen's struct and the other of a simple type
+//     whose atomic Go type is big.Rat or big.Int, or where both alternatives
+//     are of complex type or hold a substitution group's interface, occur
+//     alike, and are both a struct or both a sealed interface, and otherwise
 //     of the name and Go type, as item 6 reads it, which declines as two
 //     branches of a sealed interface whose structs have one shape.
 //   - Each of the complex type's attribute uses in order, and its {attribute
@@ -264,14 +267,16 @@ var ErrTypeMismatch = errors.New("codec: T is not the type codegen emits for the
 //     choice's or a substitution group's, whose branch types reach Decode
 //     only through [WithBranches]: it does not match when it is not an
 //     interface whose one method is unexported, or when its branch set, as
-//     WithBranches supplied it, is not one struct of one field per
-//     alternative, that field the name and Go type of the alternative's
-//     branch field, a branch whose field is named like an alternative of
-//     complex type, or of a substitution group's interface, held to that
-//     alternative alone: when no WithBranches supplies it for an interface
-//     with alternatives, or its count differs, or it holds a nil value, a
-//     type that is no struct, a type twice, or a branch matching no
-//     alternative an earlier branch did not match.
+//     WithBranches supplied it, is not one struct of one field per alternative, that
+//     field the name and Go type of the alternative's branch field, a branch held to the
+//     one alternative its field could be, by that alternative's name and, by its
+//     occurrence, the alternative's Go type for a simple type, a struct for codegen's
+//     struct and an interface for a sealed interface, and a branch whose field could be
+//     none held to the first alternative of complex type or of a substitution group's
+//     interface with its field's name: when no WithBranches supplies it for an interface
+//     with alternatives, or its count differs, or it holds a nil value, a type that is
+//     no struct, a type twice, or a branch matching no alternative an earlier branch did
+//     not match.
 func Decode[T any](schema *xsd.Schema, backend value.Backend, data []byte, opts ...Option) (*T, error) {
 	cfg := newConfig(opts)
 	v, err := validate.New(schema, backend, validate.WithLogger(cfg.log))
@@ -791,23 +796,55 @@ func (f field) admits(got reflect.StructField) bool {
 
 // sharesBranch reports whether f and g, two branch fields of one sealed
 // interface, a choice's alternatives' or a substitution group's members', may
-// accept a common Go type, as check reads one: the same name, and then either
-// arm other than a scalarArm, or either scalarArm's of a datatype struct,
-// which is conservative, since such an alternative's branch is selected by its
-// field's name alone (sealed.alternative), and a datatype struct's V is no Go
-// type codec holds (scalarArm.admits); or the same value type and, for
-// valueBare, the same Go type of shape over scalar.goType, a repeated xs:int
-// and a list of xs:int each []int32; for valueNamed, the same shape and the
-// same goType separately, since the named type sits between them and []N over
-// int32 is no N over []int32.
+// admit a common Go type, as field.admits reads one, so that no branch type
+// could tell them apart (sealed.alternative). It reads their names, shapes,
+// arm classes and scalar atoms only, never a nested unit's content, which may
+// be unbound or reach itself here, and the first of these that applies
+// answers:
+//
+//   - Different names: false.
+//   - Either arm a scalarArm of a datatype struct, or a list of one: true,
+//     which is conservative, since its V is a struct matched by shape
+//     (scalarArm.admits), which another datatype struct's or codegen's
+//     struct S may share.
+//   - Both arms scalarArms: the same value type and, for valueBare, the same
+//     Go type of shape over scalar.goType, a repeated xs:int and a list of
+//     xs:int each []int32; for valueNamed, the same shape and the same goType
+//     separately, since the named type sits between them and []N over int32
+//     is no N over []int32.
+//   - One arm a scalarArm, the other nested: true exactly when the nested arm
+//     is a structArm and the scalar's atomic Go type is a struct, big.Rat or
+//     big.Int, which is conservative, since a structArm admits any struct. No
+//     scalar's V is an interface, or holds one, so an ifaceArm or a groupArm
+//     gives false.
+//   - Both nested: true exactly when both are structArms, or neither is,
+//     each then an ifaceArm or a groupArm, and they have one shape, which is
+//     conservative, since their units' contents are not compared. A branch
+//     field occurs once or repeated, its shapeOptional read as shapeOne, and
+//     a nested arm's V is a struct or an interface, never a slice, so any
+//     other pair admits no common Go type.
 func (f field) sharesBranch(g field) bool {
-	fa, fScalar := f.arm.(scalarArm)
-	ga, gScalar := g.arm.(scalarArm)
 	if f.name != g.name {
 		return false
 	}
-	if !fScalar || !gScalar || fa.atom.mirrored() || ga.atom.mirrored() {
+	// fieldArm is a closed sum, so the assertions are STYLE T2's sealed-sum
+	// exception.
+	fa, fScalar := f.arm.(scalarArm)
+	ga, gScalar := g.arm.(scalarArm)
+	if (fScalar && fa.atom.mirrored()) || (gScalar && ga.atom.mirrored()) {
 		return true
+	}
+	_, fStruct := f.arm.(structArm)
+	_, gStruct := g.arm.(structArm)
+	if fScalar != gScalar {
+		a := fa
+		if gScalar {
+			a = ga
+		}
+		return (fStruct || gStruct) && a.atom.bare().Kind() == reflect.Struct
+	}
+	if !fScalar {
+		return fStruct == gStruct && f.shape == g.shape
 	}
 	if fa.value != ga.value {
 		return false
@@ -1229,7 +1266,7 @@ type choice struct {
 // them, item 5, typeSubject naming the type: each alternative's as a
 // sequence's particle declines, then an alternative whose branch struct has an
 // earlier one's shape, which no branch type could tell apart: one whose branch
-// field accepts a Go type the earlier one's does (field.sharesBranch).
+// field may admit a Go type the earlier one's does (field.sharesBranch).
 func bindChoice(run *bindRun, particles []xsd.Particle, names *goname.Namer, typeSubject string) (*choice, error) {
 	c := &choice{name: names.Claim("choice"), sealed: &sealed{p: run.p, children: map[xsd.QName]int{}}}
 	alts := c.sealed
@@ -1583,23 +1620,21 @@ func elementField(run *bindRun, children map[xsd.QName]int, el xsd.ElementDeclar
 	return f, []xsd.QName{el.Name()}, nil
 }
 
-// groupField returns the field, but for its name, of an <element ref>
-// particle to head occurring as occurs, where codegen gives it the sealed
-// interface over head's substitution group, members being
-// substitutionMembers' for head, and the expanded names of members, the
-// instance children that field takes, in group order (codegen/doc.go "#
-// Substitution groups"). The interface has one branch per member, in group
-// order, holding the one field declField gives the member, of the member's
-// own type even where the member heads a group of its own, and occurring
-// once. A head with {abstract} true is no member, so its own properties and
-// type are not examined, and with no member the interface has no branch. The
-// first of these in this order declines: each member in group order, by
-// declField's constructs and then by a branch field the shape of an earlier
-// member's (field.sharesBranch); then a member's expanded name an earlier
-// particle of the model group shares, children indexing the earlier
-// particles' names, the first in group order; then occursShape's plain error.
-// The field's shape is occursShape's, an optional one the bare interface, nil
-// meaning absent, as choiceRoot.field's is.
+// groupField returns the field, but for its name, of an <element ref> particle to head
+// occurring as occurs, where codegen gives it the sealed interface over head's
+// substitution group, members being substitutionMembers' for head, and the expanded names
+// of members, the instance children that field takes, in group order (codegen/doc.go "#
+// Substitution groups"). The interface has one branch per member, in group order, holding
+// the one field declField gives the member, of the member's own type even where the
+// member heads a group of its own, and occurring once. A head with {abstract} true is no
+// member, so its own properties and type are not examined, and with no member the
+// interface has no branch. The first of these in this order declines: each member in
+// group order, by declField's constructs and then by a branch field that may admit a Go
+// type an earlier member's does (field.sharesBranch); then a member's expanded name an
+// earlier particle of the model group shares, children indexing the earlier particles'
+// names, the first in group order; then occursShape's plain error. The field's shape is
+// occursShape's, an optional one the bare interface, nil meaning absent, as
+// choiceRoot.field's is.
 func groupField(run *bindRun, children map[xsd.QName]int, head xsd.ElementDeclaration, members []xsd.ElementDeclaration, occurs xsd.Occurs) (field, []xsd.QName, error) {
 	group := &sealed{p: run.p, children: map[xsd.QName]int{}}
 	names := make([]xsd.QName, 0, len(members))
