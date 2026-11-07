@@ -79,7 +79,10 @@ var ErrTypeMismatch = errors.New("codec: T is not the type codegen emits for the
 // with an effective value constraint is the Go type codegen gives its simple type itself, as
 // codegen emits it, holding the supplied value when the attribute is absent; a whitespace-only
 // element has a character child and holds its own value; and an element absent from the
-// instance supplies nothing, its field nil or not appended to.
+// instance supplies nothing, its field nil or not appended to. An element of type xs:anyType
+// holds no such value: its field holds its content raw (item 6), and its {value constraint}
+// supplies none, since its {content type} is mixed and it has no [schema normalized value]
+// (§3.3.5.4 sic-eltType), so an empty one's Text is "" whatever its default or fixed value.
 //
 // Every instance Loc an error of Decode carries — a source fault's, a
 // violation's, an undecided check's, a decline's and item 8's — names the
@@ -117,13 +120,15 @@ var ErrTypeMismatch = errors.New("codec: T is not the type codegen emits for the
 //     [ErrTypeMismatch], no *DeclineError, so that a T that does not match
 //     the schema is never filled.
 //  7. An element carrying xsi:type, the document element or any descendant
-//     outside a wildcard's match, a child attributed to a wildcard particle
-//     and every element inside it, whose xsi:type is one of its raw
-//     attributes (item 6): a *DeclineError at that element's instance Loc,
-//     the first in document order, whose [DeclineError.Construct] is
-//     xsi:type's. A document element no top-level declaration declares, which
-//     validation accepts only through its xsi:type (§3.3.4.6 cvc-assess-elt),
-//     declines so in place of item 5.
+//     outside a wildcard's match and an element of type xs:anyType's
+//     content, the element of type xs:anyType itself included (a child
+//     attributed to a wildcard particle and every element inside it, and
+//     every element inside an element of type xs:anyType, hold xsi:type as
+//     one of their raw attributes, item 6): a *DeclineError at that element's
+//     instance Loc, the first in document order, whose
+//     [DeclineError.Construct] is xsi:type's. A document element no top-level
+//     declaration declares, which validation accepts only through its
+//     xsi:type (§3.3.4.6 cvc-assess-elt), declines so in place of item 5.
 //  8. The lexical mapping or the conversion to the Go type failing on a value
 //     validate accepted on the same backend: no mapping of backend governs
 //     the type, its Parse rejects the normalized value, or its Canonical is
@@ -155,8 +160,9 @@ var ErrTypeMismatch = errors.New("codec: T is not the type codegen emits for the
 // present attributes in start-tag order and then the supplied values of
 // absent ones in attribute-use order, then its children in document order,
 // each child of complex type filled in this same order before the next
-// child, and a child attributed to a wildcard particle read raw, which finds
-// neither. A supplied value whose attribute is present is never mapped.
+// child, and a child attributed to a wildcard particle, and an element of
+// type xs:anyType past its own xsi:type, read raw, which finds neither. A
+// supplied value whose attribute is present is never mapped.
 //
 // Each child element fills the field of the particle validation attributes
 // it to (§3.4.4.4 key-att-to): of a content model with no wildcard particle,
@@ -184,13 +190,15 @@ var ErrTypeMismatch = errors.New("codec: T is not the type codegen emits for the
 //     wildcard particle after the content model's first, which gives the
 //     field item 6 states and is examined no further. Then the particle's
 //     element declaration's {type table} and {nillable}, and its {type
-//     definition}: a simple one is examined as the document element's is; a
-//     complex one declines when it is xs:anyType, and is otherwise examined as
-//     the document element's complex type is, from its {abstract} to its
-//     {attribute wildcard}. Then the particle declines by an expanded name an
-//     earlier particle's field takes, a particle's field taking its element's
-//     expanded name, or, for a substitution group's interface, each
-//     declaration the next bullet examines.
+//     definition}: a simple one is examined as the document element's is;
+//     xs:anyType itself, known by its QName, gives the field item 6 states and
+//     is examined no further; and any other complex one, a type derived from
+//     xs:anyType included, is examined as the document element's complex type
+//     is, from its {abstract} to its {attribute wildcard}. Then the particle
+//     declines by an expanded name an earlier particle's field takes, a
+//     particle's field taking its element's expanded name, or, for a
+//     substitution group's interface, each declaration the next bullet
+//     examines.
 //   - Of an <element ref> particle whose field holds a substitution group's
 //     sealed interface (item 6), in place of the referenced declaration's own
 //     properties and type: each declaration of the group with {abstract}
@@ -202,9 +210,11 @@ var ErrTypeMismatch = errors.New("codec: T is not the type codegen emits for the
 //   - Of a choice, each alternative's own constructs, then a branch field of
 //     the name an earlier alternative's has where either alternative is of a
 //     simple type whose Go type is a datatype struct or a list of one, where
-//     one alternative is codegen's struct and the other a wildcard or of a
-//     simple type whose atomic Go type is big.Rat or big.Int, or where both
-//     alternatives are of complex type or hold a substitution group's
+//     one alternative is codegen's struct and the other a wildcard, of type
+//     xs:anyType, or of a simple type whose atomic Go type is big.Rat or
+//     big.Int, where both alternatives are of type xs:anyType, occur alike,
+//     and are both local declarations or both <element ref>s, or where both
+//     alternatives are of another complex type or hold a substitution group's
 //     interface, occur alike, and are both a struct or both a sealed
 //     interface, and otherwise of the name and Go type, as item 6 reads it,
 //     which declines as two branches of a sealed interface whose structs
@@ -259,12 +269,13 @@ var ErrTypeMismatch = errors.New("codec: T is not the type codegen emits for the
 //     local field's V is an unnamed slice of such a struct and a ref's N a
 //     defined slice type over one.
 //   - The field of a particle whose element declaration, local or
-//     referenced, has a complex {type definition}: S, *S or []S by its
-//     occurrence, S a struct held to that type as T is to the document
-//     element's, its fields exactly codegen's and its name never compared,
-//     or, where codegen emits the type's choice's sealed interface as the
-//     type itself, I or []I, I that interface, held as T is, the bare
-//     interface for an optional one and never a pointer, nil meaning absent.
+//     referenced, has a complex {type definition} other than xs:anyType
+//     itself: S, *S or []S by its occurrence, S a struct held to that type
+//     as T is to the document element's, its fields exactly codegen's and
+//     its name never compared, or, where codegen emits the type's choice's
+//     sealed interface as the type itself, I or []I, I that interface, held
+//     as T is, the bare interface for an optional one and never a pointer,
+//     nil meaning absent.
 //   - The field of a wildcard particle, named as if from local name any
 //     (codegen's package doc, "# Naming"), and a choice's wildcard
 //     alternative's branch field: E, *E or []E by its occurrence, a choice's
@@ -288,6 +299,19 @@ var ErrTypeMismatch = errors.New("codec: T is not the type codegen emits for the
 //     next child or the end, each run of character data concatenated across
 //     the comments and processing instructions that break it. Mixed content
 //     declines (item 5), so no field holds AnyChild itself.
+//   - The field of a particle whose element declaration has {type definition}
+//     xs:anyType itself (Structures §3.4.7 any-type-itself), a type derived
+//     from it not among them, and a choice's such alternative's branch field:
+//     for a local element declaration's particle, X, *X or []X by its
+//     occurrence, a choice's {min occurs} 0 read as 1, X a struct of the
+//     shape the bullet above states for AnyType, matched through E, the Go
+//     type of its Children's Element; for an <element ref> particle, N, *N
+//     or []N, N the named type codegen emits for the referenced declaration
+//     over X, matched as the simple-type bullet above matches a ref's N over
+//     V, X itself not passing. The field holds the element's
+//     content raw, as the bullet above states an E's Content, so an xsi:type
+//     inside it is one of its raw attributes, the element's own declining
+//     (item 7).
 //   - The field of an <element ref> particle that codegen gives a sealed
 //     interface over the referenced declaration's substitution group
 //     (§3.3.6.4 key-eq; codegen's package doc, "# Substitution groups"
@@ -297,9 +321,9 @@ var ErrTypeMismatch = errors.New("codec: T is not the type codegen emits for the
 //     group's declarations with {abstract} false, in group order, each one's
 //     branch field named from its local name and holding what the field of an
 //     <element ref> particle occurring once to that declaration would hold
-//     were its own substitution group that declaration alone: N, S or I, so a
-//     group with no such declaration has no alternative and its field is
-//     nil.
+//     were its own substitution group that declaration alone: N, S or I, N
+//     over X for a declaration of type xs:anyType, so a group with no such
+//     declaration has no alternative and its field is nil.
 //   - A sealed interface, T, a struct's first field or a nested element's, a
 //     choice's or a substitution group's, whose branch types reach Decode
 //     only through [WithBranches]: it does not match when it is not an
@@ -312,11 +336,12 @@ var ErrTypeMismatch = errors.New("codec: T is not the type codegen emits for the
 //     an earlier branch did not match. A branch is held to the one
 //     alternative its field could be: of that alternative's name, its Go
 //     type V or []V by the alternative's occurrence, V the alternative's Go
-//     type for a simple type, any struct for codegen's struct and any
-//     interface for a sealed interface. A branch whose field could be no
-//     alternative is held to the first alternative of its field's name of
-//     complex type or of a substitution group's interface, and the error is
-//     that alternative's mismatch.
+//     type for a simple type, any struct for codegen's struct, any interface
+//     for a sealed interface, and the E, X or N its bullet above matches for
+//     a wildcard or an element of type xs:anyType. A branch whose field could
+//     be no alternative is held to the first alternative of its field's name
+//     of complex type, a wildcard or a substitution group's interface, and
+//     the error is that alternative's mismatch.
 func Decode[T any](schema *xsd.Schema, backend value.Backend, data []byte, opts ...Option) (*T, error) {
 	cfg := newConfig(opts)
 	v, err := validate.New(schema, backend, validate.WithLogger(cfg.log))
@@ -607,10 +632,10 @@ type fieldArm interface {
 	// element into a V, or at's mismatch.
 	bind(v reflect.Type, at fieldAt, cx *checkContext) (elementReader, error)
 	// admits reports whether v could be the V the arm binds: for a scalarArm,
-	// a rawArm and an anyTypeArm, exactly the V bind accepts; for a structArm, a struct; for
-	// an ifaceArm and a groupArm, an interface. bind rejects every v the arm
-	// does not admit before it checks anything further, so such a v stores no
-	// checkContext.bound entry.
+	// a rawArm and an anyTypeArm, exactly the V bind accepts; for a
+	// structArm, a struct; for an ifaceArm and a groupArm, an interface. bind
+	// rejects every v the arm does not admit before it checks anything
+	// further, so such a v stores no checkContext.bound entry.
 	admits(v reflect.Type) bool
 	// describe spells V for an ErrTypeMismatch message.
 	describe() string
@@ -2074,10 +2099,8 @@ func groupField(run *bindRun, children map[xsd.QName]int, head xsd.ElementDeclar
 // type codegen gives el's type, or the named type over it (value); one of
 // type xs:anyType itself holds codegen's AnyType, or the named type over it
 // (value), the element's content raw (anyTypeArm), its {value constraint}
-// never read, since the post-schema-validation infoset supplies no value to
-// an element whose {content type} is mixed (§3.3.5.4 sic-eltType); and one
-// of any other complex type holds the type codegen emits for that type, the
-// unit run.nested binds.
+// never read, as Decode's doc states; and one of any other complex type
+// holds the type codegen emits for that type, the unit run.nested binds.
 func declField(run *bindRun, el xsd.ElementDeclaration, value valueType, shapeOf func() (shape, error)) (field, error) {
 	schema := run.p.schema
 	subject := declSubject(el)
