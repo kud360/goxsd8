@@ -571,16 +571,18 @@ func convertTo(v reflect.Value, t reflect.Type) reflect.Value {
 }
 
 // valueType is how the Go type V a field's shape holds its value in relates
-// to the Go type codegen gives the field's simple type (scalar.goType), by
+// to the Go type codegen gives the field's simple type (scalar.goType), or
+// to codegen's AnyType for an element of type xs:anyType (anyTypeArm), by
 // codegen's field rules: that type itself for a local element declaration's
-// particle and an attribute use, and, for an <element ref> particle, the
-// named type codegen emits for the referenced top-level declaration, whose
-// underlying type it is. The zero value is invalid (STYLE T1).
+// particle and an attribute use, and, for an <element ref> particle and a
+// substitution group's member's branch field, the named type codegen emits
+// for the referenced top-level declaration, whose underlying type it is. The
+// zero value is invalid (STYLE T1).
 type valueType uint8
 
 const (
-	valueBare  valueType = iota + 1 // the simple type's Go type itself
-	valueNamed                      // a named type over the simple type's Go type
+	valueBare  valueType = iota + 1 // the simple type's Go type, or AnyType, itself
+	valueNamed                      // a named type over the simple type's Go type, or over AnyType
 )
 
 // field is one field a particle gives a struct codegen emits: a complex
@@ -596,14 +598,16 @@ type field struct {
 // a scalarArm, the Go type codegen gives a simple type or a named type over
 // it; a structArm, a nested complex type's struct; an ifaceArm, a nested
 // complex type's bare sealed interface; a groupArm, the sealed interface
-// over a substitution group; or a rawArm, a wildcard particle's AnyElement.
+// over a substitution group; a rawArm, a wildcard particle's AnyElement; or
+// an anyTypeArm, an element of type xs:anyType's AnyType or a named type
+// over it.
 type fieldArm interface {
 	// bind holds v, the V the field's shape holds at at, to the arm, item 6 of
 	// Decode's doc, and returns the elementReader that reads the field's
 	// element into a V, or at's mismatch.
 	bind(v reflect.Type, at fieldAt, cx *checkContext) (elementReader, error)
-	// admits reports whether v could be the V the arm binds: for a scalarArm
-	// and a rawArm, exactly the V bind accepts; for a structArm, a struct; for
+	// admits reports whether v could be the V the arm binds: for a scalarArm,
+	// a rawArm and an anyTypeArm, exactly the V bind accepts; for a structArm, a struct; for
 	// an ifaceArm and a groupArm, an interface. bind rejects every v the arm
 	// does not admit before it checks anything further, so such a v stores no
 	// checkContext.bound entry.
@@ -795,6 +799,84 @@ func (rawArm) admits(v reflect.Type) bool {
 
 // describe spells V.
 func (rawArm) describe() string { return "E for a struct E of codegen's AnyElement shape" }
+
+// anyTypeArm is a field's V where the field's element is of type xs:anyType
+// itself (§3.4.7 any-type-itself): for valueBare, X, a struct of the shape of
+// codegen's AnyType, and for valueNamed, N, a type other than X whose
+// underlying type is X's, the named type codegen emits for a top-level
+// declaration of type xs:anyType (codegen/doc.go "# xs:anyType"); X is
+// matched through contentShapeOf, and no struct's or N's name is compared.
+type anyTypeArm struct{ value valueType }
+
+// bind returns the reader of v's raw content, when a admits v, and otherwise
+// at's mismatch.
+func (a anyTypeArm) bind(v reflect.Type, at fieldAt, _ *checkContext) (elementReader, error) {
+	s, ok := a.shapeOf(v)
+	if !ok {
+		return nil, at.mismatch()
+	}
+	return rawContent{shape: s}, nil
+}
+
+// admits reports whether v is X for valueBare or N for valueNamed, exactly
+// the V bind accepts.
+func (a anyTypeArm) admits(v reflect.Type) bool {
+	_, ok := a.shapeOf(v)
+	return ok
+}
+
+// shapeOf returns the rawShape contentShapeOf reaches from v, when v is the V
+// a holds: that shape's content itself for valueBare, and for valueNamed a
+// type other than it that converts to it, so of its underlying type.
+func (a anyTypeArm) shapeOf(v reflect.Type) (rawShape, bool) {
+	s, ok := contentShapeOf(v)
+	if !ok {
+		return rawShape{}, false
+	}
+	switch a.value {
+	case valueBare:
+		return s, v == s.content
+	case valueNamed:
+		return s, v != s.content && v.ConvertibleTo(s.content)
+	}
+	// The zero valueType is an internal bug, never input.
+	panic(fmt.Sprintf("codec: invalid value type %d", a.value))
+}
+
+// describe spells V.
+func (a anyTypeArm) describe() string {
+	if a.value == valueNamed {
+		return "N for a named type N over a struct of AnyType's shape"
+	}
+	return "X for a struct X of codegen's AnyType shape"
+}
+
+// contentShapeOf returns the rawShape reached from x through its Children's
+// element type C and C's Element, E, as rawShapeOf matches E, when x is a
+// struct of exactly the fields Attributes, Text and Children, Children a
+// slice, and C a struct of exactly Element and Tail. Its caller holds x to
+// the shape's content; these guards only keep the walk from panicking.
+func contentShapeOf(x reflect.Type) (rawShape, bool) {
+	if !fieldsNamed(x, "Attributes", "Text", "Children") || x.Field(2).Type.Kind() != reflect.Slice {
+		return rawShape{}, false
+	}
+	c := x.Field(2).Type.Elem()
+	if !fieldsNamed(c, "Element", "Tail") {
+		return rawShape{}, false
+	}
+	return rawShapeOf(c.Field(0).Type)
+}
+
+// rawContent reads an element of type xs:anyType into a new value of
+// shape.content, raw, as readContent reads it; a valueNamed field's
+// shape.store converts it to N.
+type rawContent struct{ shape rawShape }
+
+// read returns the content of the element start, read from r up to its end
+// tag.
+func (c rawContent) read(_ *pipeline, r *xmltree.Reader, start *xmltree.StartElement) (reflect.Value, error) {
+	return c.shape.readContent(r, start)
+}
 
 // rawShape is the four raw-content structs codegen emits (codegen/doc.go "#
 // Element declarations"), as a T holds them: element, E, AnyElement's;
@@ -989,7 +1071,7 @@ func (f field) admits(got reflect.StructField) bool {
 // interface, a choice's alternatives' or a substitution group's members', may
 // admit a common Go type, as field.admits reads one, so that no branch type
 // could tell them apart (sealed.alternative). It reads their names, shapes,
-// arm classes and scalar atoms only, never a nested unit's content, which may
+// arm classes, scalar atoms and valueTypes only, never a nested unit's content, which may
 // be unbound or reach itself here, and the first of these that applies
 // answers:
 //
@@ -998,6 +1080,15 @@ func (f field) admits(got reflect.StructField) bool {
 //     which is conservative, since its V is a struct matched by shape
 //     (scalarArm.admits), which another datatype struct's or codegen's
 //     struct S may share.
+//   - Either arm an anyTypeArm: for two anyTypeArms, true exactly when they
+//     have the same valueType and one shape, a valueBare arm's X and a
+//     valueNamed arm's N never one Go type (anyTypeArm.admits); beside a
+//     structArm, true, which is conservative, since a structArm admits any
+//     struct and X and N are structs; and beside a rawArm, a scalarArm, an
+//     ifaceArm or a groupArm, false, since contentShapeOf admits only a
+//     struct of the three exported fields Attributes, Text and Children,
+//     which no rawArm's E is, no scalar's V is but a datatype struct's, which
+//     the bullet above answers, and no interface is.
 //   - Either arm a rawArm: for two rawArms, true exactly when they have one
 //     shape; beside a structArm, true, which is conservative, since a
 //     structArm admits any struct and a rawArm's V is one; and beside a
@@ -1038,6 +1129,14 @@ func (f field) sharesBranch(g field) bool {
 	}
 	_, fStruct := f.arm.(structArm)
 	_, gStruct := g.arm.(structArm)
+	fx, fAny := f.arm.(anyTypeArm)
+	gx, gAny := g.arm.(anyTypeArm)
+	if fAny || gAny {
+		if fAny && gAny {
+			return fx.value == gx.value && f.shape == g.shape
+		}
+		return fStruct || gStruct
+	}
 	_, fRaw := f.arm.(rawArm)
 	_, gRaw := g.arm.(rawArm)
 	if fRaw || gRaw {
@@ -1343,18 +1442,13 @@ func (index unitIndex) store(key xsd.QName, u complexUnit) {
 }
 
 // nested returns the complex unit of ct, the {type definition} of el, a
-// particle's element declaration, or the first decline Decode's doc states
-// for it, item 5: xs:anyType, then the constructs of ct in the order complex
-// states, keyed by el's expanded name for a top-level el, by ct's QName for
-// a local el whose {type definition} names it, and under no key for an
-// inline one.
+// particle's element declaration, other than xs:anyType, which declField
+// binds in its place, or the first decline Decode's doc states for it, item
+// 5: the constructs of ct in the order complex states, keyed by el's
+// expanded name for a top-level el, by ct's QName for a local el whose {type
+// definition} names it, and under no key for an inline one.
 func (run *bindRun) nested(el xsd.ElementDeclaration, ct xsd.ComplexType) (complexUnit, error) {
 	subject := typeSubject(el, ct)
-	// xs:anyType is known by name, as codegen's isAnyType knows it: its
-	// AnyType holds raw content, no struct the slice fills.
-	if ct.Name() == (xsd.QName{Space: xsd.XMLSchemaNS, Local: "anyType"}) {
-		return nil, decline(constructAnyTypeElement, subject)
-	}
 	if el.ScopeVariety() == xsd.ScopeGlobal {
 		return run.complex(ct, subject, run.elements, el.Name())
 	}
@@ -1978,8 +2072,12 @@ func groupField(run *bindRun, children map[xsd.QName]int, head xsd.ElementDeclar
 // its type, then shapeOf's error, shapeOf returning the field's shape. It
 // never examines el's substitution group. A field of simple type holds the Go
 // type codegen gives el's type, or the named type over it (value); one of
-// complex type holds the type codegen emits for that type, the unit
-// run.nested binds.
+// type xs:anyType itself holds codegen's AnyType, or the named type over it
+// (value), the element's content raw (anyTypeArm), its {value constraint}
+// never read, since the post-schema-validation infoset supplies no value to
+// an element whose {content type} is mixed (§3.3.5.4 sic-eltType); and one
+// of any other complex type holds the type codegen emits for that type, the
+// unit run.nested binds.
 func declField(run *bindRun, el xsd.ElementDeclaration, value valueType, shapeOf func() (shape, error)) (field, error) {
 	schema := run.p.schema
 	subject := declSubject(el)
@@ -1995,6 +2093,15 @@ func declField(run *bindRun, el xsd.ElementDeclaration, value valueType, shapeOf
 	st, simple := td.(*xsd.SimpleType)
 	if !simple {
 		ct, _ := td.(xsd.ComplexType)
+		// xs:anyType is known by name, as codegen's isAnyType knows it, so a
+		// type derived from it binds as its own complex type.
+		if ct.Name() == (xsd.QName{Space: xsd.XMLSchemaNS, Local: "anyType"}) {
+			s, err := shapeOf()
+			if err != nil {
+				return field{}, err
+			}
+			return field{shape: s, arm: anyTypeArm{value: value}}, nil
+		}
 		u, err := run.nested(el, ct)
 		if err != nil {
 			return field{}, err
