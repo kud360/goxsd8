@@ -373,12 +373,8 @@ type source interface {
 	// where names the value's item, and the byte offset where it has one.
 	where() string
 	// bindings returns the namespace bindings the value's lexical is mapped
-	// under, those a QName or NOTATION lexical resolves its prefix against
-	// (Datatypes §3.3.18, §3.3.19): those in scope at the element itself for
-	// its character content, at the attribute's owner element for an
-	// attribute (cvc-attribute clause 3), and the schema document's for a
-	// value constraint's {lexical form} (value.ConstraintContext), never the
-	// instance's.
+	// under and a QName or NOTATION lexical resolves its prefix against, the
+	// ones Decode's doc names for each source.
 	bindings() value.Context
 }
 
