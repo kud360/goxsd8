@@ -269,15 +269,17 @@ var ErrTypeMismatch = errors.New("codec: T is not the type codegen emits for the
 //     interface whose one method is unexported, or when its branch set, as
 //     WithBranches supplied it, is not one struct of one field per
 //     alternative, that field the name and Go type of the alternative's
-//     branch field, a branch held to the one alternative its field could be,
-//     by that alternative's name and, by its occurrence, the alternative's Go
-//     type for a simple type, a struct for codegen's struct and an interface
-//     for a sealed interface, and a branch whose field could be none held to
-//     the first alternative of complex type or of a substitution group's
-//     interface with its field's name: when no WithBranches supplies it for
-//     an interface with alternatives, or its count differs, or it holds a nil
-//     value, a type that is no struct, a type twice, or a branch matching no
-//     alternative an earlier branch did not match.
+//     branch field: when no WithBranches supplies it for an interface with
+//     alternatives, or its count differs, or it holds a nil value, a type
+//     that is no struct, a type twice, or a branch matching no alternative
+//     an earlier branch did not match. A branch is held to the one
+//     alternative its field could be: of that alternative's name, its Go
+//     type V or []V by the alternative's occurrence, V the alternative's Go
+//     type for a simple type, any struct for codegen's struct and any
+//     interface for a sealed interface. A branch whose field could be no
+//     alternative is held to the first alternative of its field's name of
+//     complex type or of a substitution group's interface, and the error is
+//     that alternative's mismatch.
 func Decode[T any](schema *xsd.Schema, backend value.Backend, data []byte, opts ...Option) (*T, error) {
 	cfg := newConfig(opts)
 	v, err := validate.New(schema, backend, validate.WithLogger(cfg.log))
@@ -565,9 +567,9 @@ type fieldArm interface {
 	bind(v reflect.Type, at fieldAt, cx *checkContext) (elementReader, error)
 	// admits reports whether v could be the V the arm binds: for a scalarArm,
 	// exactly the V bind accepts; for a structArm, a struct; for an ifaceArm
-	// and a groupArm, an interface. bind rejects every v admits does not
-	// admit, before it checks anything further, so a v the arm does not admit
-	// stores no checkContext.bound entry.
+	// and a groupArm, an interface. bind rejects every v the arm does not
+	// admit before it checks anything further, so such a v stores no
+	// checkContext.bound entry.
 	admits(v reflect.Type) bool
 	// describe spells V for an ErrTypeMismatch message.
 	describe() string
@@ -785,8 +787,9 @@ func (f field) check(owner reflect.Type, index int, cx *checkContext) (elementRe
 
 // admits reports whether got, a branch struct's one field, could be f as
 // check reads it: f's name, not embedded, a Go type of f's shape, and a V f's
-// arm admits. Every got check holds to f, f admits, and a got f does not
-// admit check rejects before any arm binds it.
+// arm admits. Every got that check holds to f, f admits; a got f does not
+// admit, check rejects before its arm checks anything further, so it stores
+// no checkContext.bound entry.
 func (f field) admits(got reflect.StructField) bool {
 	if got.Name != f.name || got.Anonymous {
 		return false
