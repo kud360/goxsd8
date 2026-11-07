@@ -310,8 +310,12 @@ func TestNestedTypesAreCodegens(t *testing.T) {
 // levels deep, with its attribute fields, a defaulted one holding its
 // supplied value (key-dflt-att) under its own whiteSpace, with a choice's
 // branch, through an <element ref> to a lone head, and through a type that
-// reaches itself, four levels deep; and a struct of the same shape as an
-// element's own, codegen's R for e's document element, decodes as E does.
+// reaches itself, four levels deep; a struct of the same shape as an
+// element's own, codegen's R for e's document element, decodes as E does;
+// and two alternatives of one sealed interface whose branch fields codegen
+// names alike, which no Go type both admit (key-e-d-match: the child's
+// expanded name selects its alternative), each decode into their own
+// branch, shareSchema's whichever of the two WithBranches supplies first.
 func TestDecodeNested(t *testing.T) {
 	str := func(s string) *string { return &s }
 	// self returns a C1 holding the given e1 children.
