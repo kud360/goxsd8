@@ -593,7 +593,7 @@ func assertDecline(t *testing.T, err error, c construct, line, col int) {
 func TestDeclineErrorTextOtherPrimitive(t *testing.T) {
 	schema := mintedSchema(t, sequenceOf(`<xs:element name="a" type="s:money"/>`))
 	err := CheckDecode[struct{}](schema, rootName)
-	const want = "codec does not decode an atomic simple type whose primitive is ·implementation-defined·, other than the nineteen Datatypes defines and xs:precisionDecimal: element {urn:s}a declared at s.xsd:1:231; a decoder refusal, not a schema or instance fault"
+	const want = "codec does not decode an atomic simple type whose primitive is ·implementation-defined·, other than xs:precisionDecimal: element {urn:s}a declared at s.xsd:1:231; a decoder refusal, not a schema or instance fault"
 	if err == nil || err.Error() != want {
 		t.Errorf("error = %v, want %q", err, want)
 	}
