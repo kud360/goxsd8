@@ -119,14 +119,13 @@ var ErrTypeMismatch = errors.New("codec: T is not the type codegen emits for the
 //     compares" below states: an error errors.Is reports as
 //     [ErrTypeMismatch], no *DeclineError, so that a T that does not match
 //     the schema is never filled.
-//  7. An element carrying xsi:type, the document element or any descendant
-//     outside a wildcard's match and an element of type xs:anyType's
-//     content, the element of type xs:anyType itself included (a child
-//     attributed to a wildcard particle and every element inside it, and
-//     every element inside an element of type xs:anyType, hold xsi:type as
-//     one of their raw attributes, item 6): a *DeclineError at that element's
-//     instance Loc, the first in document order, whose
-//     [DeclineError.Construct] is xsi:type's. A document element no top-level
+//  7. An element carrying xsi:type, the document element, any descendant
+//     outside a wildcard's match, and any element outside an element of type
+//     xs:anyType's content, the element of type xs:anyType itself among
+//     them: a *DeclineError at that element's instance Loc, the first in
+//     document order, whose [DeclineError.Construct] is xsi:type's. Inside
+//     a wildcard's match and inside an element of type xs:anyType, xsi:type
+//     is one of an element's raw attributes (item 6). A document element no top-level
 //     declaration declares, which validation accepts only through its
 //     xsi:type (§3.3.4.6 cvc-assess-elt), declines so in place of item 5.
 //  8. The lexical mapping or the conversion to the Go type failing on a value
@@ -213,7 +212,7 @@ var ErrTypeMismatch = errors.New("codec: T is not the type codegen emits for the
 //     one alternative is codegen's struct and the other a wildcard, of type
 //     xs:anyType, or of a simple type whose atomic Go type is big.Rat or
 //     big.Int, where both alternatives are of type xs:anyType, occur alike,
-//     and are both local declarations or both <element ref>s, or where both
+//     and both hold X or both an N over X (item 6), or where both
 //     alternatives are of another complex type or hold a substitution group's
 //     interface, occur alike, and are both a struct or both a sealed
 //     interface, and otherwise of the name and Go type, as item 6 reads it,
@@ -300,18 +299,18 @@ var ErrTypeMismatch = errors.New("codec: T is not the type codegen emits for the
 //     the comments and processing instructions that break it. Mixed content
 //     declines (item 5), so no field holds AnyChild itself.
 //   - The field of a particle whose element declaration has {type definition}
-//     xs:anyType itself (Structures §3.4.7 any-type-itself), a type derived
-//     from it not among them, and a choice's such alternative's branch field:
-//     for a local element declaration's particle, X, *X or []X by its
-//     occurrence, a choice's {min occurs} 0 read as 1, X a struct of the
-//     shape the bullet above states for AnyType, matched through E, the Go
-//     type of its Children's Element; for an <element ref> particle, N, *N
-//     or []N, N the named type codegen emits for the referenced declaration
-//     over X, matched as the simple-type bullet above matches a ref's N over
-//     V, X itself not passing. The field holds the element's
-//     content raw, as the bullet above states an E's Content, so an xsi:type
-//     inside it is one of its raw attributes, the element's own declining
-//     (item 7).
+//     xs:anyType itself (Structures §3.4.7 any-type-itself), and a choice's
+//     such alternative's branch field, a type derived from xs:anyType being
+//     examined by the complex-particle bullet above: for a local element
+//     declaration's particle, X, *X or []X by its occurrence, a choice's {min
+//     occurs} 0 read as 1, X a struct of the shape the bullet above states
+//     for AnyType, matched through E, the Go type of its Children's Element;
+//     for an <element ref> particle, N, *N or []N, N the named type codegen
+//     emits for the referenced declaration over X, matched as the simple-type
+//     bullet above matches a ref's N over V, X itself not passing. The field
+//     holds the element's content raw, as the bullet above states an E's
+//     Content, so an xsi:type inside it is one of its raw attributes, the
+//     element's own declining (item 7).
 //   - The field of an <element ref> particle that codegen gives a sealed
 //     interface over the referenced declaration's substitution group
 //     (§3.3.6.4 key-eq; codegen's package doc, "# Substitution groups"
