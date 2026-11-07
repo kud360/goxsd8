@@ -267,16 +267,17 @@ var ErrTypeMismatch = errors.New("codec: T is not the type codegen emits for the
 //     choice's or a substitution group's, whose branch types reach Decode
 //     only through [WithBranches]: it does not match when it is not an
 //     interface whose one method is unexported, or when its branch set, as
-//     WithBranches supplied it, is not one struct of one field per alternative, that
-//     field the name and Go type of the alternative's branch field, a branch held to the
-//     one alternative its field could be, by that alternative's name and, by its
-//     occurrence, the alternative's Go type for a simple type, a struct for codegen's
-//     struct and an interface for a sealed interface, and a branch whose field could be
-//     none held to the first alternative of complex type or of a substitution group's
-//     interface with its field's name: when no WithBranches supplies it for an interface
-//     with alternatives, or its count differs, or it holds a nil value, a type that is
-//     no struct, a type twice, or a branch matching no alternative an earlier branch did
-//     not match.
+//     WithBranches supplied it, is not one struct of one field per
+//     alternative, that field the name and Go type of the alternative's
+//     branch field, a branch held to the one alternative its field could be,
+//     by that alternative's name and, by its occurrence, the alternative's Go
+//     type for a simple type, a struct for codegen's struct and an interface
+//     for a sealed interface, and a branch whose field could be none held to
+//     the first alternative of complex type or of a substitution group's
+//     interface with its field's name: when no WithBranches supplies it for
+//     an interface with alternatives, or its count differs, or it holds a nil
+//     value, a type that is no struct, a type twice, or a branch matching no
+//     alternative an earlier branch did not match.
 func Decode[T any](schema *xsd.Schema, backend value.Backend, data []byte, opts ...Option) (*T, error) {
 	cfg := newConfig(opts)
 	v, err := validate.New(schema, backend, validate.WithLogger(cfg.log))
@@ -1620,21 +1621,23 @@ func elementField(run *bindRun, children map[xsd.QName]int, el xsd.ElementDeclar
 	return f, []xsd.QName{el.Name()}, nil
 }
 
-// groupField returns the field, but for its name, of an <element ref> particle to head
-// occurring as occurs, where codegen gives it the sealed interface over head's
-// substitution group, members being substitutionMembers' for head, and the expanded names
-// of members, the instance children that field takes, in group order (codegen/doc.go "#
-// Substitution groups"). The interface has one branch per member, in group order, holding
-// the one field declField gives the member, of the member's own type even where the
-// member heads a group of its own, and occurring once. A head with {abstract} true is no
-// member, so its own properties and type are not examined, and with no member the
-// interface has no branch. The first of these in this order declines: each member in
-// group order, by declField's constructs and then by a branch field that may admit a Go
-// type an earlier member's does (field.sharesBranch); then a member's expanded name an
-// earlier particle of the model group shares, children indexing the earlier particles'
-// names, the first in group order; then occursShape's plain error. The field's shape is
-// occursShape's, an optional one the bare interface, nil meaning absent, as
-// choiceRoot.field's is.
+// groupField returns the field, but for its name, of an <element ref>
+// particle to head occurring as occurs, where codegen gives it the sealed
+// interface over head's substitution group, members being
+// substitutionMembers' for head, and the expanded names of members, the
+// instance children that field takes, in group order (codegen/doc.go "#
+// Substitution groups"). The interface has one branch per member, in group
+// order, holding the one field declField gives the member, of the member's
+// own type even where the member heads a group of its own, and occurring
+// once. A head with {abstract} true is no member, so its own properties and
+// type are not examined, and with no member the interface has no branch. The
+// first of these in this order declines: each member in group order, by
+// declField's constructs and then by a branch field that may admit a Go type
+// an earlier member's does (field.sharesBranch); then a member's expanded
+// name an earlier particle of the model group shares, children indexing the
+// earlier particles' names, the first in group order; then occursShape's
+// plain error. The field's shape is occursShape's, an optional one the bare
+// interface, nil meaning absent, as choiceRoot.field's is.
 func groupField(run *bindRun, children map[xsd.QName]int, head xsd.ElementDeclaration, members []xsd.ElementDeclaration, occurs xsd.Occurs) (field, []xsd.QName, error) {
 	group := &sealed{p: run.p, children: map[xsd.QName]int{}}
 	names := make([]xsd.QName, 0, len(members))
