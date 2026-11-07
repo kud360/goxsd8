@@ -166,14 +166,15 @@ func (v *Validator) Assess(root Element) *Result {
 }
 
 // declaredClause is the parenthesis [Validator.Assess]'s cvc-assess-elt charge
-// names, after "has no top-level element declaration", the declarations a
-// reader of an undeclared root named root could have meant: decls, the
-// schema's top-level element declarations in [xsd.Schema.Elements] order,
-// abstract ones included, every one whose local name is root's ahead of the
-// rest in that order among themselves — each such one is in another namespace,
-// since one in root's own would have ·resolved· — at most three of them by
-// [xsd.QName.String], then how many more there are. An empty decls reads "and
-// the schema declares none".
+// carries after "has no top-level element declaration", naming the
+// declarations a reader of an undeclared root named root could have meant.
+// decls is the schema's top-level element declarations in
+// [xsd.Schema.Elements] order, abstract ones included. Every one whose local
+// name is root's comes first, in that order among themselves, then the rest
+// in that order; each such one is in another namespace, since one in root's
+// own would have ·resolved·. At most three are named, by [xsd.QName.String],
+// then how many more there are. An empty decls reads "and the schema declares
+// none".
 func declaredClause(root xsd.QName, decls []xsd.ElementDeclaration) string {
 	if len(decls) == 0 {
 		return "(and the schema declares none)"
