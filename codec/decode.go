@@ -1002,9 +1002,9 @@ func (f field) admits(got reflect.StructField) bool {
 //     shape; beside a structArm, true, which is conservative, since a
 //     structArm admits any struct and a rawArm's V is one; and beside a
 //     scalarArm, an ifaceArm or a groupArm, false, since rawShapeOf admits
-//     only a struct of three exported fields, which no scalar's V of no
-//     datatype struct is (big.Rat's and big.Int's fields are unexported), and
-//     no interface.
+//     only a struct of three exported fields, which no scalar's V is but a
+//     datatype struct's, which the bullet above answers (big.Rat's and
+//     big.Int's fields are unexported), and no interface.
 //   - Both arms scalarArms: for two valueBare arms, true exactly when they
 //     have the same Go type of shape over scalar.goType, a repeated xs:int
 //     and a list of xs:int each []int32; for two valueNamed arms, true
