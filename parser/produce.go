@@ -70,11 +70,12 @@ const (
 	// outside the xs:nonNegativeInteger/xs:positiveInteger its facet element declares
 	// (facetCountValue), which facet compilation reaches only when an instance does
 	// (#1774), a whiteSpace or explicitTimezone value token outside its s4s
-	// enumeration (facetTokenValue), and a processContents lexical outside the skip/lax/strict enumeration
-	// Appendix A's wildcard attribute group declares (processContentsOf), which
-	// w-props-correct cannot reach because no wildcard exists yet (#950), an id
-	// value outside xs:ID (rejectInvalidID), and a block=/final= family value
-	// outside its s4s derivation-set type (rejectInvalidDerivationSet).
+	// enumeration (facetTokenValue), and a processContents lexical outside the
+	// skip/lax/strict enumeration Appendix A's wildcard attribute group declares
+	// (processContentsOf), which w-props-correct cannot reach because no wildcard
+	// exists yet (#950), an id value outside xs:ID (rejectInvalidID), and a
+	// block=/final= family value outside its s4s derivation-set type
+	// (rejectInvalidDerivationSet).
 	ruleDatatypeValid xsderr.Rule = "cvc-datatype-valid"
 	// ruleValidationRootValid is Validation Root Valid (ID/IDREF) (§3.3.4.5,
 	// cvc-id). The producer charges only clause 2 — no two elements of the
