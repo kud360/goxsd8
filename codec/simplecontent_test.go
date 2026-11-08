@@ -200,9 +200,19 @@ func TestDecodeSimpleContentWhitespaceDefault(t *testing.T) {
 }
 
 // TestDeclineErrorTextSimpleContent pins the message of a decline of simple
-// content's {simple type definition}: xs:anySimpleType's, named after the
-// complex type it is the {content type} of, charged at the document element.
+// content's {simple type definition}, named after the complex type it is the
+// {content type} of: xs:anySimpleType's, charged at the document element, and
+// CheckDecode's for the anonymous one a restriction with a facet gives, of a
+// union two of whose basic members get one Go type.
 func TestDeclineErrorTextSimpleContent(t *testing.T) {
+	anon := schemaOf(t, `<xs:simpleType name="st"><xs:union memberTypes="xs:string xs:token"/></xs:simpleType>
+<xs:complexType name="b"><xs:simpleContent><xs:extension base="s:st"/></xs:simpleContent></xs:complexType>`+
+		root(`<xs:simpleContent><xs:restriction base="s:b"><xs:pattern value="a+"/></xs:restriction></xs:simpleContent>`))
+	const wantAnon = "codec does not decode a union simple type two of whose basic members get one Go type: the {type definition} of element {urn:s}r declared at s.xsd:2:107, a type defined at s.xsd:2:128, through its {content type}'s anonymous {simple type definition}, a type defined at s.xsd:2:162, through the union's basic member {http://www.w3.org/2001/XMLSchema}token, a type defined at ?; a decoder refusal, not a schema or instance fault"
+	if err := CheckDecode[struct{}](anon, rootName); err == nil || err.Error() != wantAnon {
+		t.Errorf("CheckDecode = %v, want %q", err, wantAnon)
+	}
+
 	schema := schemaOf(t, root(`<xs:simpleContent><xs:extension base="xs:anySimpleType"><xs:attribute name="k" type="xs:string"/></xs:extension></xs:simpleContent>`))
 	_, err := Decode[struct{}](schema, strict.New(), instanceOf("", "x"))
 	const want = "?:1:1: codec does not decode a special simple type: the {type definition} of element {urn:s}r declared at s.xsd:1:181, a type defined at s.xsd:1:202, through its {content type}'s {simple type definition} {http://www.w3.org/2001/XMLSchema}anySimpleType, a type defined at ?; a decoder refusal, not a schema or instance fault"
