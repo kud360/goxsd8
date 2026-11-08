@@ -295,7 +295,7 @@ func TestListMappingReadOnlyForItems(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	s := newScalar(simpleGo{atom: atomicInt32, item: item}, st, "the item", xsd.ValueConstraint{}, false)
+	s := newScalar(simpleGo{elem: atomicInt32, item: item}, st, "the item", xsd.ValueConstraint{}, false)
 	start, err := documentElement(xmltree.NewReader("", bytes.NewReader(instanceOf("", ""))))
 	if err != nil {
 		t.Fatal(err)

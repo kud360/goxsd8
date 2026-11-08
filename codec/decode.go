@@ -769,7 +769,7 @@ type scalarArm struct {
 // list of a union, []I, an unnamed slice of one for valueBare, and a defined
 // slice type over one for valueNamed.
 func (a scalarArm) admits(v reflect.Type) bool {
-	if a.atom.datatypeStruct() || a.union != nil {
+	if a.callerDeclared() {
 		if !a.underlies(v) {
 			return false
 		}
@@ -814,7 +814,7 @@ func (a scalarArm) read(p *pipeline, r *xmltree.Reader, start *xmltree.StartElem
 // a datatype struct D and a union's interface I, of no list, are not told
 // apart from (admits).
 func (a scalarArm) describe() string {
-	if a.value == valueNamed && ((!a.atom.datatypeStruct() && a.union == nil) || a.item != nil) {
+	if a.value == valueNamed && (!a.callerDeclared() || a.item != nil) {
 		return "N for a named type N over " + a.spell()
 	}
 	return a.spell()
@@ -1212,9 +1212,9 @@ func (f field) admits(got reflect.StructField) bool {
 // interface, a choice's alternatives' or a substitution group's members', may
 // admit a common Go type, as field.admits reads one, so that no branch type
 // could tell them apart (sealed.alternative). It reads their names, shapes,
-// arm classes, scalar atoms and valueTypes only, never a nested unit's content, which may
-// be unbound or reach itself here, and the first of these that applies
-// answers:
+// arm classes, scalar elements and valueTypes only, never a nested unit's
+// content, which may be unbound or reach itself here, and the first of these
+// that applies answers:
 //
 //   - Different names: false.
 //   - Either arm a scalarArm of a datatype struct, or a list of one: true,
@@ -1271,10 +1271,12 @@ func (f field) sharesBranch(g field) bool {
 	// exception.
 	fa, fScalar := f.arm.(scalarArm)
 	ga, gScalar := g.arm.(scalarArm)
-	if (fScalar && fa.atom.datatypeStruct()) || (gScalar && ga.atom.datatypeStruct()) {
+	if (fScalar && fa.elem.datatypeStruct()) || (gScalar && ga.elem.datatypeStruct()) {
 		return true
 	}
-	if (fScalar && fa.union != nil) || (gScalar && ga.union != nil) {
+	_, fUnion := fa.elem.(*unionScalar)
+	_, gUnion := ga.elem.(*unionScalar)
+	if fUnion || gUnion {
 		return holdsInterface(f.arm) && holdsInterface(g.arm)
 	}
 	_, fStruct := f.arm.(structArm)
@@ -1300,7 +1302,7 @@ func (f field) sharesBranch(g field) bool {
 		if gScalar {
 			a = ga
 		}
-		return (fStruct || gStruct) && a.atom.bare().Kind() == reflect.Struct
+		return (fStruct || gStruct) && a.elem.bare().Kind() == reflect.Struct
 	}
 	if !fScalar {
 		return fStruct == gStruct && f.shape == g.shape
@@ -1326,7 +1328,8 @@ func holdsInterface(a fieldArm) bool {
 	case ifaceArm, groupArm:
 		return true
 	case scalarArm:
-		return a.union != nil
+		_, isUnion := a.elem.(*unionScalar)
+		return isUnion
 	}
 	return false
 }
@@ -2383,7 +2386,7 @@ func simpleDecline(r xsd.TypeResolver, st *xsd.SimpleType, subject string) (simp
 		if err != nil {
 			return simpleGo{}, err
 		}
-		return simpleGo{union: u}, nil
+		return simpleGo{elem: u}, nil
 	}
 	if _, isList := variety.(xsd.List); !isList {
 		atom, d, err := atomicDecline(r, st)
@@ -2393,7 +2396,7 @@ func simpleDecline(r xsd.TypeResolver, st *xsd.SimpleType, subject string) (simp
 		if d != 0 {
 			return simpleGo{}, decline(d, subject)
 		}
-		return simpleGo{atom: atom}, nil
+		return simpleGo{elem: atom}, nil
 	}
 	item, err := st.Item(r)
 	if err != nil {
@@ -2411,7 +2414,7 @@ func simpleDecline(r xsd.TypeResolver, st *xsd.SimpleType, subject string) (simp
 		if err != nil {
 			return simpleGo{}, err
 		}
-		return simpleGo{item: item, union: u}, nil
+		return simpleGo{elem: u, item: item}, nil
 	}
 	atom, d, err := atomicDecline(r, item)
 	if err != nil {
@@ -2420,7 +2423,7 @@ func simpleDecline(r xsd.TypeResolver, st *xsd.SimpleType, subject string) (simp
 	if d != 0 {
 		return simpleGo{}, decline(d, itemSubject(subject, item))
 	}
-	return simpleGo{atom: atom, item: item}, nil
+	return simpleGo{elem: atom, item: item}, nil
 }
 
 // itemSubject names, after subject, item, the {item type definition} of the

@@ -25,6 +25,19 @@ type unionMember struct {
 	g  simpleGo
 }
 
+// bare returns unionValueType, as unionScalar.bare does.
+func (*unionGo) bare() reflect.Type { return unionValueType }
+
+// forScalar returns the unionScalar of u, a union labelled union: each basic
+// member's scalar, labelled by memberLabel after union.
+func (u *unionGo) forScalar(union string) scalarElem {
+	s := &unionScalar{members: make([]scalar, len(u.members))}
+	for i, m := range u.members {
+		s.members[i] = scalarOf(m.g, m.st, memberLabel(m.st, union))
+	}
+	return s
+}
+
 // unionDecline returns the unionGo of st, a union simple type of the item
 // subject names, or else the *DeclineError Decode's doc states for st, item 5,
 // or a plain error, in this order: each basic member in basic-member order
@@ -181,6 +194,15 @@ type unionValue struct {
 // scalar.
 var unionValueType = reflect.TypeFor[unionValue]()
 
+// bare returns unionValueType: codec holds none of the union's interface.
+func (*unionScalar) bare() reflect.Type { return unionValueType }
+
+// spell spells a union's interface for an error message.
+func (*unionScalar) spell() string { return "I for a union's sealed interface I" }
+
+// datatypeStruct reports false: a union's interface is no datatype struct.
+func (*unionScalar) datatypeStruct() bool { return false }
+
 // sealedShape reports whether t is an interface of one unexported method, the
 // shape of every sealed interface codegen emits.
 func sealedShape(t reflect.Type) bool {
@@ -246,16 +268,23 @@ func (u *unionScalar) identify(p *pipeline, st *xsd.SimpleType, label, lexical s
 // whose {item type definition}, item, is the union u's members are of, from
 // src: the unionValue of its ·active basic member· (identify), tok read by
 // that member's lexical stages, as a list item of an atomic item type is.
-// cos-st-restricts clause 2.1 (checkListGraph) holds every basic member of
-// such a union to {variety} atomic. tok holds no whitespace character once
-// the list's collapse has split it out, so the member's whiteSpace would
-// leave it unchanged, and runs no stage here, as an atomic item's does not.
+// cos-st-restricts clause 2.1 (checkListGraph, which Finalize runs) holds
+// every basic member of such a union to {variety} atomic; a member of any
+// other is an error. tok holds no whitespace character once the list's
+// collapse has split it out, so the member's whiteSpace would leave it
+// unchanged, and runs no stage here, as an atomic item's does not.
 func (u *unionScalar) item(p *pipeline, item *listItem, tok string, src source, token int) (reflect.Value, error) {
 	member, err := u.identify(p, item.st, item.label, tok, src, token)
 	if err != nil {
 		return reflect.Value{}, err
 	}
-	ls, err := newLexicalStages(p, member.atom, member.st, member.label, src, tok, token)
+	// scalarElem is a closed sum, so the assertion is STYLE T2's sealed-sum
+	// exception.
+	atom, isAtomic := member.elem.(atomic)
+	if !isAtomic || member.item != nil {
+		return reflect.Value{}, fmt.Errorf("codec: %s: %s is no atomic type, which a basic member of a list's {item type definition} is (cos-st-restricts clause 2.1)", src.loc(), member.label)
+	}
+	ls, err := newLexicalStages(p, atom, member.st, member.label, src, tok, token)
 	if err != nil {
 		return reflect.Value{}, err
 	}
