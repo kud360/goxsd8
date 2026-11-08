@@ -1487,8 +1487,8 @@ func bindDecl(p *pipeline, decl xsd.ElementDeclaration) (binder, error) {
 		return bindSimpleRoot(p, decl, st, typeSubject(decl, td))
 	}
 	ct, _ := td.(xsd.ComplexType)
-	run := &bindRun{p: p, elements: unitIndex{}, types: unitIndex{}}
-	return run.complex(ct, typeSubject(decl, td), run.elements, decl.Name())
+	run := &bindRun{p: p, elements: unitIndex[xsd.QName]{}, types: unitIndex[xsd.QName]{}, groups: unitIndex[groupPath]{}}
+	return bindComplex(run, ct, typeSubject(decl, td), run.elements, decl.Name())
 }
 
 // typeSubject names td, the {type definition} of decl, as a decline of one
@@ -1501,37 +1501,55 @@ func typeSubject(decl xsd.ElementDeclaration, td xsd.TypeDefinition) string {
 // complex units it has reached by name. Codec descends into two kinds of
 // term, an inline local element declaration and an <element ref>, the
 // latter to the referenced declaration or to each member of its
-// substitution group, and a local declaration's type is either inline, a tree
-// it owns, or named, so every recursion through types passes one of the two
-// names that key codegen's emitted types: a top-level element declaration,
-// the document element's or one an <element ref> reaches, keyed by its
-// expanded name in elements, and the named {type definition} of a local
-// element declaration, keyed by its QName in types. An inline anonymous type
-// is bound in place, under no key.
+// substitution group, and into one kind of model group, a content
+// particle's, inline or through a <group ref>; a local declaration's type is
+// either inline, a tree it owns, or named. So every recursion through types
+// passes one of the three keys of codegen's emitted types: a top-level
+// element declaration, the document element's or one an <element ref>
+// reaches, keyed by its expanded name in elements; the named {type
+// definition} of a local element declaration, keyed by its QName in types;
+// and the anonymous type of a local element declaration whose {scope}'s
+// {parent} is a model group definition, which only a <group ref> reaches,
+// keyed by its groupPath in groups. Every other inline anonymous type is
+// bound in place, under no key, inside the unit of the type or group that
+// declares it, which is bound once.
 type bindRun struct {
 	p        *pipeline
-	elements unitIndex
-	types    unitIndex
+	elements unitIndex[xsd.QName]
+	types    unitIndex[xsd.QName]
+	groups   unitIndex[groupPath]
 }
 
-// unitIndex maps a name to the complex unit bound for it. Each unit's entry
+// groupPath keys the anonymous complex type of element, a local element
+// declaration whose {scope}'s {parent} is the model group definition group
+// (§3.3.2.3 dcl.elt.local): the path of expanded names from group, which a
+// <group ref> re-roots at its group, one step long, since an anonymous type
+// nested deeper is bound in place in its ancestor's unit. It mirrors codegen's
+// nestedKey, whose key for such a type is group's expanded name and then
+// element's, whatever model groups lie between them (§3.8.6.3
+// cos-element-consistent clause 1).
+type groupPath struct {
+	group, element xsd.QName
+}
+
+// unitIndex maps a key to the complex unit bound for it. Each unit's entry
 // is stored when the unit is allocated, before its content is bound, so a
-// later reach of the name, a recursive one included, links to the unit and
+// later reach of the key, a recursive one included, links to the unit and
 // examines nothing again: this is STYLE D4's named placeholder, no visited
 // set. It lives for one bindRun only and is a lookup index never iterated
 // (STYLE D2). No entry is removed when a bind fails: any item-5 error ends
 // the whole bind.
-type unitIndex map[xsd.QName]complexUnit
+type unitIndex[K comparable] map[K]complexUnit
 
-// complex returns the complex unit of ct, labelled by typeSubject, the one
-// index already holds for key where it holds one, or else the first decline
+// bindComplex returns the complex unit of ct, labelled by typeSubject, the
+// one index already holds for key where it holds one, or else the first decline
 // Decode's doc states for ct, item 5, in its order: {abstract} true, ct's
 // content, for element-only content the occurrence of its sequence or choice
 // and each particle in order, then each attribute use in order, and its
 // {attribute wildcard}. Empty content binds the struct codegen emits for it, with no
 // field ahead of the attribute fields (codegen/doc.go "# Complex types"). A
 // nil index binds an inline anonymous ct under no key.
-func (run *bindRun) complex(ct xsd.ComplexType, typeSubject string, index unitIndex, key xsd.QName) (complexUnit, error) {
+func bindComplex[K comparable](run *bindRun, ct xsd.ComplexType, typeSubject string, index unitIndex[K], key K) (complexUnit, error) {
 	if u, ok := index[key]; ok {
 		return u, nil
 	}
@@ -1558,7 +1576,10 @@ func (run *bindRun) complex(ct xsd.ComplexType, typeSubject string, index unitIn
 		index.store(key, b)
 		b.content = &sequence{p: run.p, children: map[xsd.QName]int{}}
 	case xsd.ElementContent:
-		content, group, d := contentGroup(c)
+		content, group, d, err := contentGroup(run.p.schema, c)
+		if err != nil {
+			return nil, err
+		}
 		if d != 0 {
 			return nil, decline(d, typeSubject)
 		}
@@ -1582,7 +1603,6 @@ func (run *bindRun) complex(ct xsd.ComplexType, typeSubject string, index unitIn
 			return root, nil
 		}
 		index.store(key, b)
-		var err error
 		b.content, err = bindContent(run, ct, group, names, typeSubject)
 		if err != nil {
 			return nil, err
@@ -1604,7 +1624,7 @@ func (run *bindRun) complex(ct xsd.ComplexType, typeSubject string, index unitIn
 }
 
 // store stores u as key's unit, unless index is nil, an inline type's.
-func (index unitIndex) store(key xsd.QName, u complexUnit) {
+func (index unitIndex[K]) store(key K, u complexUnit) {
 	if index != nil {
 		index[key] = u
 	}
@@ -1613,20 +1633,27 @@ func (index unitIndex) store(key xsd.QName, u complexUnit) {
 // nested returns the complex unit of ct, the {type definition} of el, a
 // particle's element declaration, other than xs:anyType, which declField
 // binds in its place, or the first decline Decode's doc states for it, item
-// 5: the constructs of ct in the order complex states, keyed by el's
+// 5: the constructs of ct in the order bindComplex states, keyed by el's
 // expanded name for a top-level el, by ct's QName for a local el whose {type
-// definition} names it, and under no key for an inline one.
+// definition} names it, by its groupPath for an inline one declared in a
+// model group definition, and under no key for any other inline one.
 func (run *bindRun) nested(el xsd.ElementDeclaration, ct xsd.ComplexType) (complexUnit, error) {
 	subject := typeSubject(el, ct)
 	if el.ScopeVariety() == xsd.ScopeGlobal {
-		return run.complex(ct, subject, run.elements, el.Name())
+		return bindComplex(run, ct, subject, run.elements, el.Name())
 	}
-	// TypeDefinition is a closed sum, so the assertion is STYLE T2's sealed-sum
-	// exception; a local declaration's is never a SubstitutionGroupHeadTypeRef.
+	// TypeDefinition and the {scope}'s {parent} are closed sums, so the
+	// assertions are STYLE T2's sealed-sum exception; a local declaration's
+	// {type definition} is never a SubstitutionGroupHeadTypeRef.
 	if ref, named := el.TypeDefinition().(xsd.TypeDefinitionRef); named {
-		return run.complex(ct, subject, run.types, ref.Name)
+		return bindComplex(run, ct, subject, run.types, ref.Name)
 	}
-	return run.complex(ct, subject, nil, xsd.QName{})
+	if parent, has := el.Scope().Parent(); has {
+		if group, inGroup := parent.(xsd.ModelGroupScopeParent); inGroup {
+			return bindComplex(run, ct, subject, run.groups, groupPath{group: group.Name, element: el.Name()})
+		}
+	}
+	return bindComplex(run, ct, subject, unitIndex[xsd.QName](nil), xsd.QName{})
 }
 
 // bindContent returns the elementContent of group, the content sequence or
@@ -2094,43 +2121,69 @@ func declarationDecline(decl xsd.ElementDeclaration) construct {
 }
 
 // contentGroup returns the {particle} of content, a complex type's
-// element-only or mixed content, and its model group, an inline sequence or
-// choice occurring exactly once, or the construct Decode declines in its
-// place. The particle term is a closed sum, so the assertions are STYLE T2's
-// sealed-sum exception.
-func contentGroup(content xsd.ElementContent) (xsd.Particle, xsd.ModelGroup, construct) {
+// element-only or mixed content, its {term} an inline sequence or choice or
+// a <group ref>, and its model group, the inline one or the {model group} of
+// the definition the ref names (§3.7.2 declare-namedModelGroup), or the
+// construct Decode declines in their place: mixed content, then {open
+// content}, then an all group, whatever the particle's occurrence, and a
+// sequence or choice whose particle, the referring one for a ref, occurs
+// other than exactly once. A <group ref> naming no definition is
+// modelGroupTerm's plain error.
+func contentGroup(schema *xsd.Schema, content xsd.ElementContent) (xsd.Particle, xsd.ModelGroup, construct, error) {
 	if content.Mixed {
-		return xsd.Particle{}, xsd.ModelGroup{}, constructMixedContent
+		return xsd.Particle{}, xsd.ModelGroup{}, constructMixedContent, nil
 	}
 	if content.OpenContent != nil {
-		return xsd.Particle{}, xsd.ModelGroup{}, constructOpenContent
+		return xsd.Particle{}, xsd.ModelGroup{}, constructOpenContent, nil
 	}
-	if _, isRef := content.Particle.Term().(xsd.ModelGroupRef); isRef {
-		return xsd.Particle{}, xsd.ModelGroup{}, constructGroupRefContent
+	group, _, err := modelGroupTerm(schema, content.Particle.Term())
+	if err != nil {
+		return xsd.Particle{}, xsd.ModelGroup{}, 0, err
 	}
-	resolved, _ := content.Particle.Term().(xsd.ResolvedTerm)
-	group, _ := resolved.Term.(xsd.ModelGroup)
 	occurs := content.Particle.Occurs()
 	upper, bounded := occurs.Max()
 	once := occurs.Min() == 1 && bounded && upper == 1
 	switch group.Compositor() {
 	case xsd.CompositorChoice:
 		if !once {
-			return xsd.Particle{}, xsd.ModelGroup{}, constructChoiceOccurs
+			return xsd.Particle{}, xsd.ModelGroup{}, constructChoiceOccurs, nil
 		}
-		return content.Particle, group, 0
+		return content.Particle, group, 0, nil
 	case xsd.CompositorAll:
-		return xsd.Particle{}, xsd.ModelGroup{}, constructAllContent
+		return xsd.Particle{}, xsd.ModelGroup{}, constructAllContent, nil
 	case xsd.CompositorSequence:
 		if !once {
-			return xsd.Particle{}, xsd.ModelGroup{}, constructSequenceOccurs
+			return xsd.Particle{}, xsd.ModelGroup{}, constructSequenceOccurs, nil
 		}
-		return content.Particle, group, 0
+		return content.Particle, group, 0, nil
 	}
 	// The {particle} of element-only content is a model group (§3.4.2.3.3), so
 	// the zero ModelGroup, no compositor, is a component no schema document
 	// yields; decline it with the nearest construct rather than read it.
-	return xsd.Particle{}, xsd.ModelGroup{}, constructNestedGroup
+	return xsd.Particle{}, xsd.ModelGroup{}, constructNestedGroup, nil
+}
+
+// modelGroupTerm returns the model group term holds and true: an inline
+// sequence, choice or all group, or the {model group} of the top-level model
+// group definition a <group ref> names (§3.7.2 declare-namedModelGroup),
+// followed through [xsd.Schema.ModelGroup]. It returns false for an element
+// declaration, an <element ref> or a wildcard. A <group ref> naming no
+// definition is a plain error, never a decline: Finalize resolves every one
+// (src-resolve clause 1.5). The term is a closed sum, so the switch is STYLE
+// T2's sealed-sum exception.
+func modelGroupTerm(schema *xsd.Schema, term xsd.TermOrRef) (xsd.ModelGroup, bool, error) {
+	switch term := term.(type) {
+	case xsd.ModelGroupRef:
+		def, ok := schema.ModelGroup(term.Name)
+		if !ok {
+			return xsd.ModelGroup{}, false, fmt.Errorf("codec: the <group ref> particle to %s does not resolve", term.Name)
+		}
+		return def.ModelGroup(), true, nil
+	case xsd.ResolvedTerm:
+		group, isGroup := term.Term.(xsd.ModelGroup)
+		return group, isGroup, nil
+	}
+	return xsd.ModelGroup{}, false, nil
 }
 
 // particleElement returns the element declaration p's term holds, a local
