@@ -85,21 +85,21 @@ type (
 		Day            uint8
 		TimezoneOffset *int16
 	}
-	unionNest             interface{ isNest() }
-	unionNestInt          int32
-	unionNestDate         unionDate
-	unionNestBoolean      bool
-	unionNum              interface{ isNum() }
-	unionNumInt           int32
-	unionNumDecimal       big.Rat
-	unionWithList         interface{ isWithList() }
-	unionWithListBoolean  bool
-	unionWithListList     []int32
-	unionRoot             unionU
-	unionListRoot         []unionU
-	unionChoice           interface{ isUnionChoice() }
-	unionChoiceA          struct{ A unionU }
-	unionChoiceB          struct{ B string }
+	unionNest            interface{ isNest() }
+	unionNestInt         int32
+	unionNestDate        unionDate
+	unionNestBoolean     bool
+	unionNum             interface{ isNum() }
+	unionNumInt          int32
+	unionNumDecimal      big.Rat
+	unionWithList        interface{ isWithList() }
+	unionWithListBoolean bool
+	unionWithListList    []int32
+	unionRoot            unionU
+	unionListRoot        []unionU
+	unionChoice          interface{ isUnionChoice() }
+	unionChoiceA         struct{ A unionU }
+	unionChoiceB         struct{ B string }
 )
 
 func (unionPinUnionBoolean) isPinUnion() {}
@@ -262,8 +262,9 @@ func spellUnion(v reflect.Value) string {
 			parts[i] = spellUnion(v.Index(i))
 		}
 		return fmt.Sprintf("%s[%s]", v.Type().Name(), strings.Join(parts, " "))
+	default:
+		return fmt.Sprint(v.Interface())
 	}
-	return fmt.Sprint(v.Interface())
 }
 
 // TestDecodeUnionMismatches pins item 6 for a union's interface: its variants
@@ -495,4 +496,3 @@ func decodeInto[T any](schema *xsd.Schema, data []byte, opts ...Option) error {
 	_, err := Decode[T](schema, strict.New(), data, opts...)
 	return err
 }
-

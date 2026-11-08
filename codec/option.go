@@ -39,7 +39,10 @@ func newConfig(opts []Option) config {
 // Decode logs one Debug record per stage it runs on a value: whiteSpace, then,
 // for an atomic Go type other than string, the lexical mapping and the
 // conversion, which on a list value run on each list item. A value of a
-// string Go type therefore logs its whiteSpace record alone. Each record's
+// string Go type therefore logs its whiteSpace record alone. A union value
+// logs its ·active basic member·'s records, as a value of that member logs
+// them, and a list item of a union its member's lexical mapping and
+// conversion; identifying the member logs no record of its own. Each record's
 // attributes sit in the "codec" group, its message outside it:
 //
 //   - "whiteSpace": rule "rf-whiteSpace" (Datatypes §4.3.6), input the

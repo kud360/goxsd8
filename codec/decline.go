@@ -41,10 +41,10 @@ func (e *DeclineError) Loc() (xsderr.Loc, bool) {
 // particle's element declaration has at any depth, or of the document
 // element's simple type, that type labelled as its declaration's {type
 // definition}, with no path from the document element, and, for a construct of
-// a list type's {item type definition}, that item, by its QName where it has
-// one, each with its schema Loc, which is the zero Loc for a built-in
-// component; for xsi:type, it names the element and the type the xsi:type
-// names.
+// a list type's {item type definition} or a union's basic member, that item
+// or member, by its QName where it has one, each with its schema Loc, which is
+// the zero Loc for a built-in component; for xsi:type, it names the element
+// and the type the xsi:type names.
 func (e *DeclineError) Error() string {
 	text := "codec does not decode " + e.construct.name() + ": " + e.detail +
 		"; a decoder refusal, not a schema or instance fault"

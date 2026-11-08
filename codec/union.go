@@ -33,8 +33,7 @@ type unionMember struct {
 // subject; then a basic member whose Go type an earlier one's is
 // (simpleGo.oneGoType), constructSharedVariant, naming the later member; then
 // an assertions facet anywhere value.ValidatingType's identification of the
-// ·active basic member· reaches (reachesAssertions),
-// constructUnionAssertions.
+// ·active basic member· reaches (reachesAssertions), constructUnionAssertions.
 func unionDecline(r xsd.TypeResolver, st *xsd.SimpleType, subject string) (*unionGo, error) {
 	basic, err := basicMembers(r, st)
 	if err != nil {
