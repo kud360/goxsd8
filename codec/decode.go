@@ -399,7 +399,7 @@ func Decode[T any](schema *xsd.Schema, backend value.Backend, data []byte, opts 
 	if err != nil {
 		return nil, err
 	}
-	b, err := bind(&pipeline{schema: schema, backend: backend, log: cfg.log.WithGroup("codec"), decimals: cfg.decimals}, root)
+	b, err := bind(&pipeline{schema: schema, backend: backend, log: cfg.log.WithGroup("codec"), decimals: cfg.decimals, branches: cfg.branches}, root)
 	if err != nil {
 		return nil, err
 	}
@@ -622,21 +622,26 @@ func (s shape) store(p *pipeline, dst, v reflect.Value) {
 }
 
 // convertTo returns v converted to t: a decimalValue, or a list of them, as
-// p.decimal builds the caller's PrecisionDecimal from it, since it converts
-// to no caller type; a slice whose element type is not t's, a list of codec's
-// mirror of a datatype struct, which converts to no slice of the caller's
-// struct, element by element into a new slice of t of v's length; and any
-// other value by Convert.
+// p.decimal builds the caller's PrecisionDecimal from it, and a unionValue, as
+// p.union builds the caller's variant from it, since neither converts to a
+// caller type; a slice whose element type is not t's, a list of codec's
+// mirror of a datatype struct or of unionValues, which converts to no slice
+// of the caller's type, element by element into a new slice of t of v's
+// length, each element as convertTo converts it; and any other value by
+// Convert.
 func convertTo(p *pipeline, v reflect.Value, t reflect.Type) reflect.Value {
 	if v.Type() == decimalValueType || (v.Kind() == reflect.Slice && v.Type().Elem() == decimalValueType) {
 		return p.decimal(v, t)
+	}
+	if v.Type() == unionValueType {
+		return p.union(v, t)
 	}
 	if v.Kind() != reflect.Slice || v.Type().Elem() == t.Elem() {
 		return v.Convert(t)
 	}
 	out := reflect.MakeSlice(t, v.Len(), v.Len())
 	for i := range v.Len() {
-		out.Index(i).Set(v.Index(i).Convert(t.Elem()))
+		out.Index(i).Set(convertTo(p, v.Index(i), t.Elem()))
 	}
 	return out
 }
@@ -705,9 +710,13 @@ type scalarArm struct {
 // holds no D to compare v with: for valueBare and valueNamed alike v is a
 // struct of D's shape, and for a list []D, an unnamed slice of such a struct,
 // for valueBare, and a defined slice type over one, N for type N []D, for
-// valueNamed.
+// valueNamed. A union's interface I is declared in the caller's package too,
+// and N over I is an interface of I's method set, so for valueBare and
+// valueNamed alike v is any interface of one unexported method, and for a
+// list of a union, []I, an unnamed slice of one for valueBare, and a defined
+// slice type over one for valueNamed.
 func (a scalarArm) admits(v reflect.Type) bool {
-	if a.atom.datatypeStruct() {
+	if a.atom.datatypeStruct() || a.union != nil {
 		if !a.underlies(v) {
 			return false
 		}
@@ -728,13 +737,13 @@ func (a scalarArm) admits(v reflect.Type) bool {
 }
 
 // bind returns a, which reads the field's element, when a admits v and, for
-// a PrecisionDecimal, cx holds its Value interface's arms (scalar.decimalSite),
-// and otherwise at's mismatch, or the arms' mismatch.
+// a PrecisionDecimal or a union, cx holds the sets of the interfaces it holds
+// (scalar.holdSets), and otherwise at's mismatch, or the sets' mismatch.
 func (a scalarArm) bind(v reflect.Type, at fieldAt, cx *checkContext) (elementReader, error) {
 	if !a.admits(v) {
 		return nil, at.mismatch()
 	}
-	if err := a.decimalSite(v, at.site(), cx); err != nil {
+	if err := a.holdSets(v, at.site(), cx); err != nil {
 		return nil, err
 	}
 	return a, nil
@@ -749,9 +758,10 @@ func (a scalarArm) read(p *pipeline, r *xmltree.Reader, start *xmltree.StartElem
 
 // describe spells V: the Go type codegen gives a's simple type, A or for a
 // list []A, as scalar.spell spells it, or N for a named type N over it, which
-// a datatype struct D, of no list, is not told apart from (admits).
+// a datatype struct D and a union's interface I, of no list, are not told
+// apart from (admits).
 func (a scalarArm) describe() string {
-	if a.value == valueNamed && (!a.atom.datatypeStruct() || a.item != nil) {
+	if a.value == valueNamed && ((!a.atom.datatypeStruct() && a.union == nil) || a.item != nil) {
 		return "N for a named type N over " + a.spell()
 	}
 	return a.spell()
@@ -1158,6 +1168,11 @@ func (f field) admits(got reflect.StructField) bool {
 //     which is conservative, since its V is a struct matched by shape
 //     (scalarArm.admits), which another datatype struct's or codegen's
 //     struct S may share.
+//   - Either arm a scalarArm of a union, or of a list of one: true exactly
+//     when both arms hold an interface (holdsInterface), which is
+//     conservative, since their shapes and units are not compared; beside any
+//     other arm, false, since a structArm's, a rawArm's and an anyTypeArm's V
+//     is a struct and another scalar's A or []A holds no interface.
 //   - Either arm an anyTypeArm: for two anyTypeArms, true exactly when they
 //     have the same valueType and one shape, a valueBare arm's X and a
 //     valueNamed arm's N never one Go type (anyTypeArm.admits); beside a
@@ -1186,9 +1201,9 @@ func (f field) admits(got reflect.StructField) bool {
 //   - One arm a scalarArm, the other nested: true exactly when the nested arm
 //     is a structArm and the scalar's atomic Go type is a struct, big.Rat or
 //     big.Int, which is conservative, since a structArm admits any struct. No
-//     scalar's V is an interface, and none holds one but a PrecisionDecimal's,
-//     which the datatype-struct bullet answers, so an ifaceArm or a groupArm
-//     gives false.
+//     scalar's V the bullets above leave is an interface, and none holds one
+//     but a PrecisionDecimal's, which the datatype-struct bullet answers, so
+//     an ifaceArm or a groupArm gives false.
 //   - Both nested: true exactly when both are structArms, or neither is,
 //     each then an ifaceArm or a groupArm, and they have one shape, which is
 //     conservative, since their units' contents are not compared. A branch
@@ -1205,6 +1220,9 @@ func (f field) sharesBranch(g field) bool {
 	ga, gScalar := g.arm.(scalarArm)
 	if (fScalar && fa.atom.datatypeStruct()) || (gScalar && ga.atom.datatypeStruct()) {
 		return true
+	}
+	if (fScalar && fa.union != nil) || (gScalar && ga.union != nil) {
+		return holdsInterface(f.arm) && holdsInterface(g.arm)
 	}
 	_, fStruct := f.arm.(structArm)
 	_, gStruct := g.arm.(structArm)
@@ -1245,6 +1263,19 @@ func (f field) sharesBranch(g field) bool {
 		return f.shape == g.shape && fa.goType() == ga.goType()
 	}
 	return f.shape.over(fa.goType()) == g.shape.over(ga.goType())
+}
+
+// holdsInterface reports whether a's V is an interface or a slice of one: an
+// ifaceArm's, a groupArm's, or a scalarArm's of a union or a list of one.
+// fieldArm is a closed sum, so the switch is STYLE T2's sealed-sum exception.
+func holdsInterface(a fieldArm) bool {
+	switch a := a.(type) {
+	case ifaceArm, groupArm:
+		return true
+	case scalarArm:
+		return a.union != nil
+	}
+	return false
 }
 
 // describe spells the Go type codegen gives f for an ErrTypeMismatch message:
@@ -2157,7 +2188,10 @@ func groupField(run *bindRun, children map[xsd.QName]int, head xsd.ElementDeclar
 // type xs:anyType itself holds codegen's AnyType, or the named type over it
 // (value), the element's content raw (anyTypeArm), its {value constraint}
 // never read, as Decode's doc states; and one of any other complex type
-// holds the type codegen emits for that type, the unit run.nested binds.
+// holds the type codegen emits for that type, the unit run.nested binds. An
+// optional field of a union, whose Go type is a sealed interface
+// (simpleGo.sealed), is the bare interface, nil meaning absent, never a
+// pointer to it (codegen/doc.go "# Particles").
 func declField(run *bindRun, el xsd.ElementDeclaration, value valueType, shapeOf func() (shape, error)) (field, error) {
 	schema := run.p.schema
 	subject := declSubject(el)
@@ -2199,6 +2233,9 @@ func declField(run *bindRun, el xsd.ElementDeclaration, value valueType, shapeOf
 	s, err := shapeOf()
 	if err != nil {
 		return field{}, err
+	}
+	if s == shapeOptional && g.sealed() {
+		s = shapeOne
 	}
 	vc, has := el.ValueConstraint()
 	return field{shape: s, arm: scalarArm{value: value, scalar: newScalar(g, st, subject, vc, has)}}, nil
@@ -2244,7 +2281,9 @@ func substitutionMembers(schema *xsd.Schema, head xsd.ElementDeclaration) (membe
 // caller claims, of attribute use u, or as the error the *DeclineError
 // Decode's doc states for it, item 5, naming its attribute declaration, or a
 // plain error. The field's shape is codegen's, as the package doc's "# What
-// decodes" states, and needs no xsi: test here: an xsi: use declines before
+// decodes" states, a pointer exactly for a use neither required nor with an
+// effective value constraint whose Go type is no sealed interface
+// (simpleGo.sealed), and needs no xsi: test here: an xsi: use declines before
 // its shape is picked.
 func attributeUse(schema *xsd.Schema, u xsd.AttributeUse) (attribute, error) {
 	decl, ok := schema.ResolvedAttributeDeclaration(u)
@@ -2265,7 +2304,7 @@ func attributeUse(schema *xsd.Schema, u xsd.AttributeUse) (attribute, error) {
 	}
 	shape := shapeOptional
 	vc, has := schema.EffectiveValueConstraint(u)
-	if u.Required() || has {
+	if u.Required() || has || g.sealed() {
 		shape = shapeOne
 	}
 	return attribute{shape: shape, scalar: newScalar(g, st, subject, vc, has)}, nil
@@ -2275,14 +2314,23 @@ func attributeUse(schema *xsd.Schema, u xsd.AttributeUse) (attribute, error) {
 // item subject names (codegen/doc.go "# Simple types"), or else an error:
 // the *DeclineError Decode's doc states for st, item 5, subject naming it,
 // or a plain error. For an atomic st the decline is atomicDecline's; for a
-// list, that of its {item type definition} (Structures §3.16.2.3, a
-// restriction of a list taking its base's), which cos-st-restricts clause 2.1
-// (checkListGraph) holds to an atomic or union type, so its construct always
-// answers, the detail naming the item after subject.
+// union, unionDecline's; for a list, that of its {item type definition}
+// (Structures §3.16.2.3, a restriction of a list taking its base's), which
+// cos-st-restricts clause 2.1 (checkListGraph) holds to an atomic or union
+// type, so its construct always answers, the detail naming the item after
+// subject. {variety} is a closed sum, so the assertions are STYLE T2's
+// sealed-sum exception.
 func simpleDecline(r xsd.TypeResolver, st *xsd.SimpleType, subject string) (simpleGo, error) {
 	variety, err := st.Variety(r)
 	if err != nil {
 		return simpleGo{}, err
+	}
+	if _, isUnion := variety.(xsd.Union); isUnion {
+		u, err := unionDecline(r, st, subject)
+		if err != nil {
+			return simpleGo{}, err
+		}
+		return simpleGo{union: u}, nil
 	}
 	if _, isList := variety.(xsd.List); !isList {
 		atom, d, err := atomicDecline(r, st)
@@ -2300,6 +2348,17 @@ func simpleDecline(r xsd.TypeResolver, st *xsd.SimpleType, subject string) (simp
 	}
 	if item == nil {
 		return simpleGo{}, fmt.Errorf("codec: the list type of %s has no {item type definition}", subject)
+	}
+	itemVariety, err := item.Variety(r)
+	if err != nil {
+		return simpleGo{}, err
+	}
+	if _, isUnion := itemVariety.(xsd.Union); isUnion {
+		u, err := unionDecline(r, item, itemSubject(subject, item))
+		if err != nil {
+			return simpleGo{}, err
+		}
+		return simpleGo{item: item, union: u}, nil
 	}
 	atom, d, err := atomicDecline(r, item)
 	if err != nil {
@@ -2325,11 +2384,12 @@ func itemSubject(subject string, item *xsd.SimpleType) string {
 // datatypeAtomics', as codegen/doc.go "# Simple types" picks it: from st's {base
 // type definition} chain (chainAtomic), which meets a date, time or duration
 // primitive, xs:QName or xs:precisionDecimal at its top, failing that from its
-// primitive. Or else it returns the construct Decode declines st for: a union's,
-// a special type's, or that of its primitive. A list st is a plain error:
-// simpleDecline routes a list to its {item type definition}, which
-// cos-st-restricts clause 2.1 holds to no list. {variety} is a closed sum, so the
-// switch is STYLE T2's sealed-sum exception.
+// primitive. Or else it returns the construct Decode declines st for: a special
+// type's, or that of its primitive. A union or list st is a plain error:
+// simpleDecline routes a union to unionDecline and a list to its {item type
+// definition}, which cos-st-restricts clause 2.1 holds to no list, routing a
+// union item to unionDecline too, whose basic members are no unions. {variety}
+// is a closed sum, so the switch is STYLE T2's sealed-sum exception.
 func atomicDecline(r xsd.TypeResolver, st *xsd.SimpleType) (atomic, construct, error) {
 	variety, err := st.Variety(r)
 	if err != nil {
@@ -2337,7 +2397,7 @@ func atomicDecline(r xsd.TypeResolver, st *xsd.SimpleType) (atomic, construct, e
 	}
 	switch variety.(type) {
 	case xsd.Union:
-		return 0, constructUnion, nil
+		return 0, 0, fmt.Errorf("codec: the simple type defined at %s is a union where an atomic type is required", st.Loc())
 	case xsd.List:
 		return 0, 0, fmt.Errorf("codec: the simple type defined at %s is a list where an atomic or union type is required, as a list's {item type definition} (cos-st-restricts clause 2.1)", st.Loc())
 	}
@@ -2569,15 +2629,15 @@ type simpleRoot struct {
 }
 
 // check returns s, which fills t, when t is a type over the Go type codegen
-// gives s's simple type (scalar.underlies) and, for a PrecisionDecimal, cx
-// holds its Value interface's arms (scalar.decimalSite), and otherwise the
-// ErrTypeMismatch error Decode's doc states, item 6. t's name is never
-// compared.
+// gives s's simple type (scalar.underlies) and, for a PrecisionDecimal or a
+// union, cx holds the sets of the interfaces it holds (scalar.holdSets), and
+// otherwise the ErrTypeMismatch error Decode's doc states, item 6. t's name is
+// never compared.
 func (s *simpleRoot) check(t reflect.Type, cx *checkContext) (filler, error) {
 	if !s.underlies(t) {
 		return nil, fmt.Errorf("%w: the underlying type of %s is not %s", ErrTypeMismatch, t, s.spell())
 	}
-	if err := s.decimalSite(t, "T", cx); err != nil {
+	if err := s.holdSets(t, "T", cx); err != nil {
 		return nil, err
 	}
 	return s, nil

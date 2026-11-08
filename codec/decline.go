@@ -84,10 +84,11 @@ type construct uint8
 // particle's complex type, examined at the particle, declines by the same
 // constructs from constructSimpleContent on, and by
 // constructAbstractTypeElement, which sits with the particle's though the
-// document element's type declines by it too, ahead of its content. The three
-// of a simple type, constructUnion to constructOtherPrimitive, sit with the
-// particle's, though a document element of simple type, an attribute use, and
-// a list type, by its {item type definition}, decline by them too.
+// document element's type declines by it too, ahead of its content. The four
+// of a simple type, constructSpecial to constructUnionAssertions, sit with the
+// particle's, though a document element of simple type, an attribute use, a
+// list type, by its {item type definition}, and a union, by a basic member,
+// decline by them too.
 const (
 	constructTypeTable construct = iota + 1
 	constructNillable
@@ -103,9 +104,10 @@ const (
 	constructAbstractTypeElement
 	constructSharedName
 	constructSharedBranch
-	constructUnion
 	constructSpecial
 	constructOtherPrimitive
+	constructSharedVariant
+	constructUnionAssertions
 	constructXsiAttribute
 	constructAttributeWildcard
 	constructXsiType
@@ -127,9 +129,10 @@ var constructNames = [...]string{
 	constructAbstractTypeElement: "an element declaration whose complex {type definition} has {abstract} true",
 	constructSharedName:          "two particles taking one expanded name, each by its own element declaration or a member of its substitution group",
 	constructSharedBranch:        "two branches of a sealed interface whose structs have one shape",
-	constructUnion:               "a union simple type",
 	constructSpecial:             "a special simple type",
 	constructOtherPrimitive:      "an atomic simple type whose primitive is ·implementation-defined·, other than xs:precisionDecimal",
+	constructSharedVariant:       "a union simple type two of whose basic members get one Go type",
+	constructUnionAssertions:     "a union simple type with an assertions facet on itself, a member or a list member's item type",
 	constructXsiAttribute:        "an attribute use in the xsi namespace",
 	constructAttributeWildcard:   "an {attribute wildcard}",
 	constructXsiType:             "an element carrying xsi:type",
