@@ -416,14 +416,37 @@ func TestDecodeUnionMembersOfDistinctGoTypes(t *testing.T) {
 	}
 }
 
-// TestDecodeUnionChoiceSharedBranch pins sharesBranch's union bullet: two
-// alternatives of one Go field name, each of a union, so each holds an
-// interface, decline as two branches of one shape.
+// TestDecodeUnionChoiceSharedBranch pins sharesBranch's union bullet over two
+// alternatives of one Go field name, x and X: beside another union, a
+// complex type codegen gives a bare sealed interface, or a ref to a head of a
+// substitution group, each holding an interface, they decline as two branches
+// of one shape; beside codegen's struct, or an xs:int, they decline nothing,
+// so CheckDecode of struct{} reaches item 6's ErrTypeMismatch.
 func TestDecodeUnionChoiceSharedBranch(t *testing.T) {
-	schema := schemaOf(t, unionTypes+root(`<xs:choice><xs:element name="x" type="s:u"/><xs:element name="X" type="s:num"/></xs:choice>`))
-	var de *DeclineError
-	if err := CheckDecode[struct{}](schema, rootName); !errors.As(err, &de) || de.Construct() != (Construct{constructSharedBranch}) {
-		t.Errorf("CheckDecode = %v, want the %s decline", err, constructSharedBranch.name())
+	const decls = `<xs:complexType name="ci"><xs:choice><xs:element name="p" type="xs:string"/><xs:element name="q" type="xs:int"/></xs:choice></xs:complexType>
+<xs:element name="X" type="xs:string"/><xs:element name="m" type="xs:string" substitutionGroup="s:X"/>`
+	rows := []struct {
+		name, other string
+		declines    bool
+	}{
+		{"another union", `<xs:element name="X" form="unqualified" type="s:num"/>`, true},
+		{"a bare sealed interface", `<xs:element name="X" form="unqualified" type="s:ci"/>`, true},
+		{"a substitution group's interface", `<xs:element ref="s:X"/>`, true},
+		{"codegen's struct", vStruct("X", ` form="unqualified"`), false},
+		{"an xs:int", `<xs:element name="X" form="unqualified" type="xs:int"/>`, false},
+	}
+	for _, row := range rows {
+		t.Run(row.name, func(t *testing.T) {
+			schema := schemaOf(t, unionTypes+decls+root(`<xs:choice><xs:element name="x" type="s:u"/>`+row.other+`</xs:choice>`))
+			err := CheckDecode[struct{}](schema, rootName)
+			var de *DeclineError
+			if declined := errors.As(err, &de) && de.Construct() == (Construct{constructSharedBranch}); declined != row.declines {
+				t.Errorf("CheckDecode = %v, want the %s decline %t", err, constructSharedBranch.name(), row.declines)
+			}
+			if !row.declines && !errors.Is(err, ErrTypeMismatch) {
+				t.Errorf("CheckDecode = %v, want ErrTypeMismatch", err)
+			}
+		})
 	}
 }
 
