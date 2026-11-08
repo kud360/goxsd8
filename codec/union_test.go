@@ -52,13 +52,16 @@ const (
 	unionRootSchema     = unionTypes + `<xs:element name="r" type="s:u"/>`
 	unionListRootSchema = unionTypes + `<xs:element name="r"><xs:simpleType><xs:list itemType="s:u"/></xs:simpleType></xs:element>`
 	unionChoiceSchema   = unionTypes + `<xs:element name="r"><xs:complexType><xs:choice><xs:element name="a" type="s:u"/><xs:element name="b" type="xs:string"/></xs:choice></xs:complexType></xs:element>`
+	unionListMemberRoot = unionTypes + `<xs:element name="r"><xs:simpleType><xs:union memberTypes="xs:date"><xs:simpleType><xs:list itemType="s:u"/></xs:simpleType></xs:union></xs:simpleType></xs:element>`
 )
 
 // unions to unionChoiceB are the types codegen emits for the union schemas,
 // which TestUnionTypesAreCodegens pins: unionSchema's R, Pin, PinUnion, U,
 // Nest, Num and WithList with their variants and Date; unionRootSchema's R,
 // a named type over U, as Size2 is over Size in codegen's unions golden;
-// unionListRootSchema's R; and unionChoiceSchema's R and its branches.
+// unionListRootSchema's R; unionChoiceSchema's R and its branches; and
+// unionListMemberRoot's R, over RUnion, a union of xs:date and a list of u,
+// whose variant RUnionList is []U.
 type (
 	unions struct {
 		A      unionU
@@ -100,7 +103,14 @@ type (
 	unionChoice          interface{ isUnionChoice() }
 	unionChoiceA         struct{ A unionU }
 	unionChoiceB         struct{ B string }
+	unionLM              unionLMUnion
+	unionLMUnion         interface{ isRUnion() }
+	unionLMUnionDate     unionDate
+	unionLMUnionList     []unionU
 )
+
+func (unionLMUnionDate) isRUnion() {}
+func (unionLMUnionList) isRUnion() {}
 
 func (unionPinUnionBoolean) isPinUnion() {}
 func (unionPinUnionInt) isPinUnion()     {}
@@ -135,6 +145,7 @@ var unionVariants = []Option{
 	WithBranches[unionWithList](unionWithListBoolean(false), unionWithListList(nil)),
 	WithBranches[unionPinUnion](unionPinUnionBoolean(false), unionPinUnionInt(0)),
 	WithBranches[unionChoice](unionChoiceA{}, unionChoiceB{}),
+	WithBranches[unionLMUnion](unionLMUnionList(nil), unionLMUnionDate{}),
 }
 
 // TestUnionTypesAreCodegens pins the types above to those codegen emits for
@@ -156,6 +167,7 @@ func TestUnionTypesAreCodegens(t *testing.T) {
 		{unionRootSchema, []string{"type R U\n"}},
 		{unionListRootSchema, []string{"type R []U\n"}},
 		{unionChoiceSchema, []string{"type RA struct {\n\tA U\n}\n\nfunc (RA) isR() {}\n", "type RB struct {\n\tB string\n}\n\nfunc (RB) isR() {}\n"}},
+		{unionListMemberRoot, []string{"type R RUnion\n", "type RUnionDate Date\n", "type RUnionList []U\n"}},
 	}
 	for _, row := range rows {
 		gen := generated(t, schemaOf(t, row.decls))
@@ -175,7 +187,9 @@ func TestUnionTypesAreCodegens(t *testing.T) {
 // union reaches, each of u's members, a list's items of both members in one
 // list, the nested union into its inner basic member's variant, "5" into
 // num's xs:int variant though xs:decimal accepts it too, withList's list
-// member into the variant over []int32, an <element ref> to pin into Pin over
+// member into the variant over []int32, a list member of a union into the
+// variant over []U, a date its xs:date member takes first, a choice's union
+// alternative into its branch, an <element ref> to pin into Pin over
 // PinUnion, an absent optional element and attribute as the nil interface,
 // and the default's {lexical form} into its active member's variant, a
 // present attribute's own value in its place. CheckDecode returns nil for
@@ -206,6 +220,10 @@ func TestDecodeUnions(t *testing.T) {
 			unionListRoot{unionUInt(5), unionUDate(date(2000, 1, 1))}},
 		{"a choice's union alternative", unionChoiceSchema, "", "<s:a>8</s:a>", into[unionChoice](unionVariants...), unionChoice(unionChoiceA{A: unionUInt(8)})},
 		{"a choice's xs:string alternative beside it", unionChoiceSchema, "", "<s:b>8</s:b>", into[unionChoice](unionVariants...), unionChoice(unionChoiceB{B: "8"})},
+		{"a list member of a union of a list of a union, its items of both inner members", unionListMemberRoot, "", " 5  2000-01-01 ", into[unionLM](unionVariants...),
+			unionLM(unionLMUnionList{unionUInt(5), unionUDate(date(2000, 1, 1))})},
+		{"a list member of a union beside xs:date, which takes a date first", unionListMemberRoot, "", "2000-01-01", into[unionLM](unionVariants...),
+			unionLM(unionLMUnionDate(date(2000, 1, 1)))},
 	}
 	for _, row := range rows {
 		t.Run(row.name, func(t *testing.T) {
