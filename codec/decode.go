@@ -36,7 +36,9 @@ var ErrTypeMismatch = errors.New("codec: T is not the type codegen emits for the
 // validate.NotProvenInvalid; it then reads data a second time with
 // parser/xmltree. Each decoded value, a field's or, for a document element of
 // simple type, T's own, is read from the item's ·normalized value·
-// (Structures §3.1.4 key-nv) under its declaration's simple type: the string
+// (Structures §3.1.4 key-nv) under its declaration's simple type, for the
+// value field of a complex type with simple content the {content type}'s
+// {simple type definition} (§3.4.4.2 cvc-complex-type clause 1.2): the string
 // [value.ApplyWhiteSpace] returns for the item's characters, an attribute's
 // as XML 1.0 §3.3.3 normalized them, an element's the concatenation of its
 // character children. Where the post-schema-validation infoset supplies a
@@ -45,7 +47,8 @@ var ErrTypeMismatch = errors.New("codec: T is not the type codegen emits for the
 // effective value constraint (§3.5.4 key-evc; §3.4.4.2 key-dflt-att, §3.4.5.1
 // sic-attrDefault), and for an element with neither element nor character
 // children whose declaration has a {value constraint} (§3.3.4.3 cvc-elt
-// clause 5.1, §3.3.5.4 sic-eltType). For a simple type whose atomic Go type
+// clause 5.1, §3.3.5.4 sic-eltType), of simple type or with simple content,
+// whose value field holds it. For a simple type whose atomic Go type
 // is string the value is that string. For every other it is the value
 // backend's governing mapping of the type ([value.GoverningMapping]) maps
 // that string to, through Parse with the item's namespace bindings in scope
@@ -204,7 +207,8 @@ var ErrTypeMismatch = errors.New("codec: T is not the type codegen emits for the
 // Items 7 and 8 are both found while filling T, and the first in document
 // order is returned: an element's xsi:type, then its attributes' values,
 // present attributes in start-tag order and then the supplied values of
-// absent ones in attribute-use order, then its children in document order,
+// absent ones in attribute-use order, then, for simple content, its value
+// field's value, or else its children in document order,
 // each child of complex type filled in this same order before the next
 // child, and a child attributed to a wildcard particle, and an element of
 // type xs:anyType past its own xsi:type, read raw, which finds neither. A
@@ -240,8 +244,10 @@ var ErrTypeMismatch = errors.New("codec: T is not the type codegen emits for the
 //     list member's {item type definition} or what that reaches, which
 //     declines as a union with an assertions facet, since Decode identifies
 //     the ·active basic member· deciding no {test}; or a complex type's
-//     {abstract}, then its content, then, for element-only content, its
-//     {particle}'s model group, an all group declining whatever it occurs,
+//     {abstract}, then its content, then, for simple content, its {simple
+//     type definition}, examined as the document element's simple type is,
+//     whose construct the content declines by, or, for element-only content,
+//     its {particle}'s model group, an all group declining whatever it occurs,
 //     and then the occurrence of its sequence or choice: of a <group ref>,
 //     the compositor is the referenced definition's {model group}'s and the
 //     occurrence the referring particle's (§3.7.2 declare-namedModelGroup).
@@ -288,7 +294,10 @@ var ErrTypeMismatch = errors.New("codec: T is not the type codegen emits for the
 // complex type of a local declaration in a model group definition, which a
 // <group ref> reaches, are each examined at the first reach of that
 // declaration or that name only, and contribute nothing when reached again,
-// so a type that reaches itself is examined once.
+// so a type that reaches itself is examined once. A complex type with simple
+// content, which reaches no particle, is examined at each reach, its value
+// field holding the reaching declaration's {value constraint}; no decline
+// differs, since one examination's answer is every other's.
 //
 // Item 6 compares T with the type codegen emits by shape alone: neither T's,
 // a sealed interface's, a branch's nor a variant's name is compared. Decode
@@ -300,12 +309,16 @@ var ErrTypeMismatch = errors.New("codec: T is not the type codegen emits for the
 //
 //   - T of a complex {type definition}: T is a struct whose fields are
 //     exactly those codegen emits, in name, order and Go type, each field's
-//     Go type as the bullets below read it, or, where codegen emits the
-//     choice's sealed interface as the type itself, T is an interface, and
-//     Decode then returns a *T pointing at it. So a T of the same shape, such
-//     as the struct codegen emits for another top-level element of the same
-//     type, passes and decodes as the declaration's own struct does, an error
-//     only where that one's is.
+//     Go type as the bullets below read it, for simple content the value
+//     field first, named from the local name value, holding V, the Go type
+//     codegen gives the {content type}'s {simple type definition}, matched as
+//     a local particle's V of simple type is, never a pointer, and then the
+//     attribute fields, or, where codegen emits the choice's sealed interface
+//     as the type itself, T is an interface, and Decode then returns a *T
+//     pointing at it. So a T of the same shape, such as the struct codegen
+//     emits for another top-level element of the same type, passes and
+//     decodes as the declaration's own struct does, an error only where that
+//     one's is.
 //   - T of a simple {type definition}: T's underlying type alone is the Go
 //     type codegen gives it (the Simple types section of codegen's package
 //     doc): its atomic Go type A, one of string, bool, float32, float64,
@@ -1432,8 +1445,9 @@ func (b *binding) field(s shape) field { return field{shape: s, arm: structArm{u
 
 // elementContent is the content of the struct a *binding binds, the fields
 // that precede its attribute fields, a closed sum: a *sequence, the fields of
-// a sequence's particles, or of none for empty content, or a *choice, the one
-// field holding a choice's sealed interface.
+// a sequence's particles, or of none for empty content, a *choice, the one
+// field holding a choice's sealed interface, or a *simpleValue, simple
+// content's value field.
 type elementContent interface {
 	// width is how many of the struct's fields the content's are.
 	width() int
@@ -1652,7 +1666,8 @@ func (index unitIndex[K]) store(key K, u complexUnit) {
 // 5: the constructs of ct in the order bindComplex states, keyed by el's
 // expanded name for a top-level el, by ct's QName for a local el whose {type
 // definition} names it, by its groupPath for an inline one declared in a
-// model group definition, and under no key for any other inline one.
+// model group definition, and under no key for any other inline one, a ct of
+// simple content stored under none of these (bindComplex).
 func (run *bindRun) nested(el xsd.ElementDeclaration, ct xsd.ComplexType) (complexUnit, error) {
 	if el.ScopeVariety() == xsd.ScopeGlobal {
 		return bindComplex(run, el, ct, run.elements, el.Name())
@@ -2671,8 +2686,9 @@ type boundBinding struct {
 // fill sets out's fields as a filler does, in the order Decode's doc states
 // for items 7 and 8: root's xsi:type, its present attributes in start-tag
 // order, the supplied values of the absent ones in attribute-use order, then
-// its children. An attribute field with a supplied value holds it unless its
-// attribute is present, and its supplied value is then never decoded.
+// its content, its value field's value or its children. An attribute field
+// with a supplied value holds it unless its attribute is present, and its
+// supplied value is then never decoded.
 func (b *boundBinding) fill(r *xmltree.Reader, root *xmltree.StartElement, out reflect.Value) error {
 	if err := checkXsiType(root); err != nil {
 		return err
@@ -2801,7 +2817,7 @@ func elementValue(r *xmltree.Reader, start *xmltree.StartElement, p *pipeline, s
 			}
 			text.WriteString(tok.Data())
 		case *xmltree.StartElement:
-			return reflect.Value{}, fmt.Errorf("codec: %s: element %s of simple type holds element %s", tok.Loc(), expanded(start.Name()), expanded(tok.Name()))
+			return reflect.Value{}, fmt.Errorf("codec: %s: element %s of simple type or simple content holds element %s", tok.Loc(), expanded(start.Name()), expanded(tok.Name()))
 		case *xmltree.EndElement:
 			if s.supplied != nil && text.Len() == 0 {
 				return s.decode(p, s.supplied.vc.LexicalForm(), suppliedSource{start: start, supplied: s.supplied})
