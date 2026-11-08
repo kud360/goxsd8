@@ -1443,11 +1443,12 @@ type elementContent interface {
 }
 
 // A contentFiller sets the content's fields of out, the struct an
-// elementContent's check held, from the children of the element whose start
-// tag r has just returned, reading r up to its end tag, each child to the
-// field eachChild attributes it to.
+// elementContent's check held, from the content of the element root, whose
+// start tag r has just returned, reading r up to its end tag: each child to
+// the field eachChild attributes it to, or, for simple content, the character
+// children to the value field.
 type contentFiller interface {
-	fill(r *xmltree.Reader, out reflect.Value) error
+	fill(r *xmltree.Reader, root *xmltree.StartElement, out reflect.Value) error
 }
 
 // bind returns the binder of root's declaration in p's schema, or the first
@@ -1493,7 +1494,7 @@ func bindDecl(p *pipeline, decl xsd.ElementDeclaration) (binder, error) {
 	}
 	ct, _ := td.(xsd.ComplexType)
 	run := &bindRun{p: p, elements: unitIndex[xsd.QName]{}, types: unitIndex[xsd.QName]{}, groups: unitIndex[groupPath]{}}
-	return bindComplex(run, ct, typeSubject(decl, td), run.elements, decl.Name())
+	return bindComplex(run, decl, ct, run.elements, decl.Name())
 }
 
 // typeSubject names td, the {type definition} of decl, as a decline of one
@@ -1544,18 +1545,25 @@ type groupPath struct {
 // the whole bind.
 type unitIndex[K comparable] map[K]complexUnit
 
-// bindComplex returns the complex unit of ct, labelled by typeSubject, the
-// one index already holds for key where it holds one, or else the first decline
-// Decode's doc states for ct, item 5, in its order: {abstract} true, ct's
-// content, for element-only content the occurrence of its sequence or choice
-// and each particle in order, then each attribute use in order, and its
-// {attribute wildcard}. Empty content binds the struct codegen emits for it, with no
-// field ahead of the attribute fields (codegen/doc.go "# Complex types"). A
-// nil index binds an inline anonymous ct under no key.
-func bindComplex[K comparable](run *bindRun, ct xsd.ComplexType, typeSubject string, index unitIndex[K], key K) (complexUnit, error) {
+// bindComplex returns the complex unit of ct, the {type definition} of decl,
+// labelled by typeSubject, the one index already holds for key where it holds
+// one, or else the first decline Decode's doc states for ct, item 5, in its
+// order: {abstract} true, ct's content, for simple content its {simple type
+// definition} (simpleValueOf), for element-only content the occurrence of its
+// sequence or choice and each particle in order, then each attribute use in
+// order, and its {attribute wildcard}. Empty content binds the struct codegen
+// emits for it, with no field ahead of the attribute fields, and simple
+// content the struct whose one field ahead of them is the value field
+// (codegen/doc.go "# Complex types"). A nil index binds an inline anonymous ct
+// under no key. A ct of simple content is stored under no key either: it
+// reaches no particle, so nothing inside it reaches it again, and its value
+// field holds decl's own {value constraint} (cvc-elt clause 5.1), which
+// another declaration of a named ct does not share.
+func bindComplex[K comparable](run *bindRun, decl xsd.ElementDeclaration, ct xsd.ComplexType, index unitIndex[K], key K) (complexUnit, error) {
 	if u, ok := index[key]; ok {
 		return u, nil
 	}
+	typeSubject := typeSubject(decl, ct)
 	// Codegen emits no struct for an abstract type: an element of one holds
 	// its governing types' interface, or the struct of its one member type
 	// (codegen/doc.go "# Element declarations").
@@ -1571,7 +1579,11 @@ func bindComplex[K comparable](run *bindRun, ct xsd.ComplexType, typeSubject str
 	// exception.
 	switch c := ct.ContentType().(type) {
 	case xsd.SimpleContent:
-		return nil, decline(constructSimpleContent, typeSubject)
+		value, err := simpleValueOf(run.p, decl, c.SimpleType, typeSubject, names)
+		if err != nil {
+			return nil, err
+		}
+		b.content = value
 	case xsd.EmptyContent:
 		// A valid instance has no character or element child here
 		// (cvc-complex-type clause 1.1), so the sequence of no particle reads
@@ -1642,22 +1654,21 @@ func (index unitIndex[K]) store(key K, u complexUnit) {
 // definition} names it, by its groupPath for an inline one declared in a
 // model group definition, and under no key for any other inline one.
 func (run *bindRun) nested(el xsd.ElementDeclaration, ct xsd.ComplexType) (complexUnit, error) {
-	subject := typeSubject(el, ct)
 	if el.ScopeVariety() == xsd.ScopeGlobal {
-		return bindComplex(run, ct, subject, run.elements, el.Name())
+		return bindComplex(run, el, ct, run.elements, el.Name())
 	}
 	// TypeDefinition and the {scope}'s {parent} are closed sums, so the
 	// assertions are STYLE T2's sealed-sum exception; a local declaration's
 	// {type definition} is never a SubstitutionGroupHeadTypeRef.
 	if ref, named := el.TypeDefinition().(xsd.TypeDefinitionRef); named {
-		return bindComplex(run, ct, subject, run.types, ref.Name)
+		return bindComplex(run, el, ct, run.types, ref.Name)
 	}
 	if parent, has := el.Scope().Parent(); has {
 		if group, inGroup := parent.(xsd.ModelGroupScopeParent); inGroup {
-			return bindComplex(run, ct, subject, run.groups, groupPath{group: group.Name, element: el.Name()})
+			return bindComplex(run, el, ct, run.groups, groupPath{group: group.Name, element: el.Name()})
 		}
 	}
-	return bindComplex(run, ct, subject, unitIndex[xsd.QName](nil), xsd.QName{})
+	return bindComplex(run, el, ct, unitIndex[xsd.QName](nil), xsd.QName{})
 }
 
 // bindContent returns the elementContent of group, the content sequence or
@@ -1668,6 +1679,76 @@ func bindContent(run *bindRun, ct xsd.ComplexType, group xsd.ModelGroup, names *
 		return bindChoice(run, ct, group.Particles(), names, typeSubject)
 	}
 	return bindSequence(run, ct, group.Particles(), names, typeSubject)
+}
+
+// simpleValue is simple content as the struct codegen emits holds it: the
+// value field, the one field ahead of the attribute fields, named from the
+// local name value, which holds V, the Go type codegen gives the {content
+// type}'s {simple type definition}, never a pointer to it (codegen/doc.go "#
+// Complex types").
+type simpleValue struct {
+	p     *pipeline
+	value field
+}
+
+// simpleValueOf returns the simpleValue of st, the {simple type definition}
+// of the simple content of decl's {type definition}, which typeSubject names,
+// its field named from names, or the decline simpleDecline returns for st,
+// item 5, naming st after typeSubject (contentSubject). Its value is read as
+// a simple-typed element's is, from the element's ·normalized value· under st
+// (§3.4.4.2 cvc-complex-type clause 1.2, §3.1.4 key-nv), or, for an element
+// with no character or element child, decl's {value constraint}'s {lexical
+// form} (§3.3.4.3 cvc-elt clause 5.1.2), the supplied value naming decl.
+func simpleValueOf(p *pipeline, decl xsd.ElementDeclaration, st *xsd.SimpleType, typeSubject string, names *goname.Namer) (*simpleValue, error) {
+	subject := contentSubject(typeSubject, st)
+	g, err := simpleDecline(p.schema, st, subject)
+	if err != nil {
+		return nil, err
+	}
+	s := newScalar(g, st, subject, xsd.ValueConstraint{}, false)
+	vc, has := decl.ValueConstraint()
+	s.supplied = supply(vc, has, declSubject(decl))
+	return &simpleValue{p: p, value: field{name: names.Claim("value"), shape: shapeOne, arm: scalarArm{value: valueBare, scalar: s}}}, nil
+}
+
+// contentSubject names, after typeSubject, st, the {simple type definition}
+// of that type's simple content, and st's schema Loc.
+func contentSubject(typeSubject string, st *xsd.SimpleType) string {
+	if st.Name() == (xsd.QName{}) {
+		return fmt.Sprintf("%s, through its {content type}'s anonymous {simple type definition}, a type defined at %s", typeSubject, st.Loc())
+	}
+	return fmt.Sprintf("%s, through its {content type}'s {simple type definition} %s, a type defined at %s", typeSubject, st.Name(), st.Loc())
+}
+
+// width is the value field.
+func (s *simpleValue) width() int { return 1 }
+
+// check holds t's first field to the value field, and returns the
+// boundValue that sets it.
+func (s *simpleValue) check(t reflect.Type, cx *checkContext) (contentFiller, error) {
+	read, err := s.value.check(t, 0, cx)
+	if err != nil {
+		return nil, err
+	}
+	return boundValue{value: s, read: read}, nil
+}
+
+// boundValue is simple content whose check held, read the value field's
+// elementReader.
+type boundValue struct {
+	value *simpleValue
+	read  elementReader
+}
+
+// fill sets the value field of out, the struct, from root's character
+// children, or its supplied value, as elementValue reads them.
+func (b boundValue) fill(r *xmltree.Reader, root *xmltree.StartElement, out reflect.Value) error {
+	v, err := b.read.read(b.value.p, r, root)
+	if err != nil {
+		return err
+	}
+	b.value.value.shape.store(b.value.p, out.Field(0), v)
+	return nil
 }
 
 // sequence is a sequence's particles as the struct codegen emits holds them:
@@ -1792,7 +1873,7 @@ type boundSequence struct {
 // fill sets, from each child element, the field eachChild attributes it to,
 // from the value that field's elementReader reads from r up to the child's
 // end tag.
-func (b *boundSequence) fill(r *xmltree.Reader, out reflect.Value) error {
+func (b *boundSequence) fill(r *xmltree.Reader, _ *xmltree.StartElement, out reflect.Value) error {
 	s := b.sequence
 	return eachChild(r, s.p.schema, s.children, s.wild, func(start *xmltree.StartElement, i int) error {
 		v, err := b.readers[i].read(s.p, r, start)
@@ -1915,7 +1996,7 @@ type boundContentChoice struct {
 
 // fill sets the choice's field of out, the struct, from each child element,
 // to the alternative eachChild attributes it to.
-func (b boundContentChoice) fill(r *xmltree.Reader, out reflect.Value) error {
+func (b boundContentChoice) fill(r *xmltree.Reader, _ *xmltree.StartElement, out reflect.Value) error {
 	alts := b.choice.sealed
 	return eachChild(r, alts.p.schema, alts.children, b.choice.wild, func(start *xmltree.StartElement, i int) error {
 		return b.bound.set(r, start, i, out.Field(0))
@@ -2624,7 +2705,7 @@ func (b *boundBinding) fill(r *xmltree.Reader, root *xmltree.StartElement, out r
 		}
 		f.shape.store(bd.p, out.Field(width+i), v)
 	}
-	return b.content.fill(r, out)
+	return b.content.fill(r, root, out)
 }
 
 // eachChild reads r's tokens up to the end tag of the element whose start tag

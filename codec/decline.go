@@ -82,17 +82,17 @@ type construct uint8
 // element's declaration, its type, its content, each particle in order, its
 // attribute uses in order, its attribute wildcard, and the instance. A
 // particle's complex type, examined at the particle, declines by the same
-// constructs from constructSimpleContent on, and by
+// constructs from constructMixedContent on, and by
 // constructAbstractTypeElement, which sits with the particle's though the
 // document element's type declines by it too, ahead of its content. The four
 // of a simple type, constructSpecial to constructUnionAssertions, sit with the
-// particle's, though a document element of simple type, an attribute use, a
-// list type, by its {item type definition}, and a union, by a basic member,
+// particle's, though a document element of simple type, a complex type's
+// simple content, by its {simple type definition}, an attribute use, a list
+// type, by its {item type definition}, and a union, by a basic member,
 // decline by them too.
 const (
 	constructTypeTable construct = iota + 1
 	constructNillable
-	constructSimpleContent
 	constructMixedContent
 	constructOpenContent
 	constructChoiceOccurs
@@ -116,7 +116,6 @@ const (
 var constructNames = [...]string{
 	constructTypeTable:           "an element declaration with a {type table}",
 	constructNillable:            "an element declaration with {nillable} true",
-	constructSimpleContent:       "simple content",
 	constructMixedContent:        "mixed content",
 	constructOpenContent:         "{open content}",
 	constructChoiceOccurs:        "a content choice occurring other than exactly once",
