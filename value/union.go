@@ -157,8 +157,7 @@ func validateUnion(b Backend, r xsd.TypeResolver, st *xsd.SimpleType, rawLexical
 // decided by nobody. A member whose assertions facet FAILS is an ordinary
 // rejection and the scan goes on, which is how a later member becomes active.
 //
-// Each member's reason renders through memberRejection, so a member error that
-// is a zero-Loc *xsderr.Error reads "[rule] msg" rather than "?: [rule] msg".
+// Each member's reason renders as memberRejection states.
 //
 // A union whose {member type definitions} is EMPTY — xs:error (Structures
 // §3.16.7.3), whose value and lexical spaces are both empty — falls out of the

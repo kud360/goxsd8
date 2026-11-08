@@ -537,11 +537,11 @@ func patternedPrim(t *testing.T, local, pattern string) *xsd.SimpleType {
 }
 
 // TestDispatchUnionFoldRendersEachMemberReason pins the WHOLE cvc-datatype-valid
-// rejection dispatchUnion folds when no member accepts (§4.1.4 cl.2.3): a member
-// error that is a zero-Loc *xsderr.Error renders as "[rule] msg", with no "?: "
-// for the unknown position (#3457), and any other member error keeps its %v
-// rendering — the "wrapped fault" row's member 0 is the typeFault wrapper
-// facets.go builds around a zero-Loc *xsderr.Error, so its inner "?: " stays.
+// rejection dispatchUnion folds when no member accepts (§4.1.4 cl.2.3), each
+// member's reason rendered as memberRejection states (#3457). The "wrapped
+// fault" row's member 0 is the typeFault wrapper facets.go builds around a
+// zero-Loc *xsderr.Error, so its inner "?: " stays: that row fails if the fold
+// strips every "?: " textually or unwraps through the wrapper.
 func TestDispatchUnionFoldRendersEachMemberReason(t *testing.T) {
 	num := primType(t, "numeric", "collapse")
 	flag := primType(t, "flag", "collapse")
