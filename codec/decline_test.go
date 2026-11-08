@@ -70,6 +70,8 @@ func TestDecodeDeclines(t *testing.T) {
 			"", a, constructAllContent, 1, 1},
 		{"a <group ref> content particle to a sequence group, occurring twice", `<xs:group name="g"><xs:sequence><xs:element name="a" type="xs:string"/></xs:sequence></xs:group>` + root(`<xs:group ref="s:g" maxOccurs="2"/>`),
 			"", a, constructSequenceOccurs, 1, 1},
+		{"an optional <group ref> content particle to a sequence group", `<xs:group name="g"><xs:sequence><xs:element name="a" type="xs:string"/></xs:sequence></xs:group>` + root(`<xs:group ref="s:g" minOccurs="0"/>`),
+			"", a, constructSequenceOccurs, 1, 1},
 		{"a <group ref> content particle to a choice group, occurring twice", `<xs:group name="g"><xs:choice><xs:element name="a" type="xs:string"/></xs:choice></xs:group>` + root(`<xs:group ref="s:g" maxOccurs="2"/>`),
 			"", a, constructChoiceOccurs, 1, 1},
 		{"content choice occurring twice", root(`<xs:choice maxOccurs="2"><xs:element name="a" type="xs:string"/></xs:choice>`), "", a, constructChoiceOccurs, 1, 1},

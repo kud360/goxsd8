@@ -240,8 +240,11 @@ var ErrTypeMismatch = errors.New("codec: T is not the type codegen emits for the
 //     list member's {item type definition} or what that reaches, which
 //     declines as a union with an assertions facet, since Decode identifies
 //     the ·active basic member· deciding no {test}; or a complex type's
-//     {abstract}, then its content, then, for element-only content, the
-//     occurrence of its sequence or choice.
+//     {abstract}, then its content, then, for element-only content, its
+//     {particle}'s model group, an all group declining whatever it occurs,
+//     and then the occurrence of its sequence or choice: of a <group ref>,
+//     the compositor is the referenced definition's {model group}'s and the
+//     occurrence the referring particle's (§3.7.2 declare-namedModelGroup).
 //   - Each particle of the complex type's content in order, the whole of one
 //     before the next. A nested model group declines first, and so does a
 //     wildcard particle after the content model's first, which gives the
@@ -280,10 +283,12 @@ var ErrTypeMismatch = errors.New("codec: T is not the type codegen emits for the
 //     wildcard}.
 //
 // The complex type of a top-level declaration, the document element's, one
-// an <element ref> names, or a member of that one's substitution group, and
-// a local declaration's named complex {type definition}, are each examined at
-// the first reach of that declaration or that name only, and contribute
-// nothing when reached again, so a type that reaches itself is examined once.
+// an <element ref> names, or a member of that one's substitution group, a
+// local declaration's named complex {type definition}, and the anonymous
+// complex type of a local declaration in a model group definition, which a
+// <group ref> reaches, are each examined at the first reach of that
+// declaration or that name only, and contribute nothing when reached again,
+// so a type that reaches itself is examined once.
 //
 // Item 6 compares T with the type codegen emits by shape alone: neither T's,
 // a sealed interface's, a branch's nor a variant's name is compared. Decode
@@ -1623,7 +1628,8 @@ func bindComplex[K comparable](run *bindRun, ct xsd.ComplexType, typeSubject str
 	return b, nil
 }
 
-// store stores u as key's unit, unless index is nil, an inline type's.
+// store stores u as key's unit, unless index is nil, that of an anonymous
+// type bound under no key.
 func (index unitIndex[K]) store(key K, u complexUnit) {
 	if index != nil {
 		index[key] = u
