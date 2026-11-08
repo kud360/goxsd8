@@ -330,8 +330,8 @@
 //	    it. A rejected -schema prints its first error on stderr as
 //	    parse's does, the no-rule-to-cite lines, the
 //	    unresolved-directive lines and the bare <xs:import> lines
-//	    included, the last saying each -schema, not each argument, is
-//	    compiled alone. Under -strict an
+//	    included, the last naming the -schema where parse's names the
+//	    argument. Under -strict an
 //	    unresolved-directive line of a compiled -schema is a failure
 //	    to compile charged 4, so nothing is written.
 //	    Pairs whose -out lies under the same nearest go.mod share a

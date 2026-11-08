@@ -93,13 +93,13 @@ func parseOne(location string, quiet, strict bool, log *slog.Logger, stdout, std
 // its failure is charged: 2 for an argument that cannot be read, 1 for a
 // rejection, whose first error it prints on stderr. verb is the subcommand the
 // diagnoses are charged to, and bareRemedy closes its reportBareImports lines.
-// Every directive the assembly reached whose
-// schemaLocation resolved to no document is named on stderr either way, ahead
-// of the error on the rejected path, and on that path every bare <xs:import>
-// it reached is named after the error (reportBareImports). A schema that
-// compiled comes back with skipCode's answer over those lines: exitOK, or
-// exitUndecided where strict is set and a line was named. On the rejected path
-// strict changes nothing, exitInvalid outranking exitUndecided.
+// Every directive the assembly reached whose schemaLocation resolved to no
+// document is named on stderr either way, ahead of the error on the rejected
+// path, and on that path every bare <xs:import> it reached is named after the
+// error (reportBareImports). A schema that compiled comes back with skipCode's
+// answer over those lines: exitOK, or exitUndecided where strict is set and a
+// line was named. On the rejected path strict changes nothing, exitInvalid
+// outranking exitUndecided.
 func compileArgument(verb, bareRemedy, location string, strict bool, log *slog.Logger, stderr io.Writer) (*xsd.Schema, int) {
 	root, err := rootLocation(location)
 	if err != nil {
@@ -264,11 +264,10 @@ func reportUnfollowed(stderr io.Writer, verb string, compiled bool, report *pars
 	return named
 }
 
-// The remedies a reportBareImports line closes with, one per subcommand. Only
-// validate composes its -schema documents into one set, so only its remedy
-// offers another -schema; parse and gen compile each argument or -schema
-// alone. Neither promises the schemaLocation is followed: §4.2.6.2 makes it a
-// hint.
+// The remedies a reportBareImports line closes with, one per subcommand, each
+// passed by that subcommand's call site; the usage text in main.go says why
+// only validate's offers another -schema. None promises the schemaLocation is
+// followed: §4.2.6.2 makes it a hint.
 const (
 	validateBareImportRemedy = "pass the document it imports as another -schema, or add a schemaLocation to it"
 	parseBareImportRemedy    = "add a schemaLocation to it, since each argument is compiled alone"

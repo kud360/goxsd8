@@ -632,9 +632,7 @@ func TestARejectedSchemaNamesItsBareImports(t *testing.T) {
 		t.Fatal(err)
 	}
 	violation := schema + `:4:1: [src-resolve] element declaration {urn:a}e {type definition} references type {urn:b}T, but no type definition with that expanded name is present in the schema (src-resolve clause 1.1)` + "\n"
-	// The remedy is the verb's own (#3505): validate composes its -schema
-	// documents into one set, parse and gen compile each argument or -schema
-	// alone.
+	// The remedy is the verb's own (#3505).
 	bare := func(verb, remedy string) string {
 		return "goxsd8: " + verb + ": " + schema + `:2:1: this <import>, for namespace "urn:b", names no schemaLocation, so no document was read for it; ` + remedy + "\n" +
 			"goxsd8: " + verb + ": " + schema + `:3:1: this <import>, for no namespace, names no schemaLocation, so no document was read for it; ` + remedy + "\n"
