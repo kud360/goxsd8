@@ -124,7 +124,7 @@ func (s branchSets) with(set branchSet) branchSets {
 }
 
 // of returns the branch types s holds for the interface it, those of the
-// entry whose interface has it's method set, and whether any WithBranches
+// entry whose interface has its method set, and whether any WithBranches
 // supplied them.
 func (s branchSets) of(it reflect.Type) ([]reflect.Type, bool) {
 	i := slices.IndexFunc(s, func(e branchSet) bool { return sameMethods(e.iface, it) })
