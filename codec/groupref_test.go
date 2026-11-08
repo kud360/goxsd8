@@ -128,7 +128,11 @@ func TestGroupRefTypesAreCodegens(t *testing.T) {
 // its own, two types referring to one group share the struct of the group's
 // nested anonymous type, and a type that reaches itself through a ref alone
 // decodes to the instance's depth. CheckDecode returns nil for each row's T.
-// Each row declines as a <group ref> content particle with the lift removed.
+// Each row fails, Decode declining it, with contentGroup returning a decline
+// for a <group ref> term; the last row overflows the stack with nested
+// binding e's anonymous type under no key, and the sharing row, which item
+// 6's shape compare cannot tell from two bindings, is pinned by
+// TestGroupRefTypesAreCodegens instead.
 func TestDecodeGroupRefs(t *testing.T) {
 	i := func(n int32) *int32 { return &n }
 	rows := []struct {

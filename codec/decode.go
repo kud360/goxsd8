@@ -1530,9 +1530,7 @@ type bindRun struct {
 // (§3.3.2.3 dcl.elt.local): the path of expanded names from group, which a
 // <group ref> re-roots at its group, one step long, since an anonymous type
 // nested deeper is bound in place in its ancestor's unit. It mirrors codegen's
-// nestedKey, whose key for such a type is group's expanded name and then
-// element's, whatever model groups lie between them (§3.8.6.3
-// cos-element-consistent clause 1).
+// nestedKey.
 type groupPath struct {
 	group, element xsd.QName
 }
@@ -2130,11 +2128,8 @@ func declarationDecline(decl xsd.ElementDeclaration) construct {
 // element-only or mixed content, its {term} an inline sequence or choice or
 // a <group ref>, and its model group, the inline one or the {model group} of
 // the definition the ref names (§3.7.2 declare-namedModelGroup), or the
-// construct Decode declines in their place: mixed content, then {open
-// content}, then an all group, whatever the particle's occurrence, and a
-// sequence or choice whose particle, the referring one for a ref, occurs
-// other than exactly once. A <group ref> naming no definition is
-// modelGroupTerm's plain error.
+// construct Decode declines in their place, in its doc's item 5 order. A
+// <group ref> naming no definition is modelGroupTerm's plain error.
 func contentGroup(schema *xsd.Schema, content xsd.ElementContent) (xsd.Particle, xsd.ModelGroup, construct, error) {
 	if content.Mixed {
 		return xsd.Particle{}, xsd.ModelGroup{}, constructMixedContent, nil
@@ -2175,7 +2170,7 @@ func contentGroup(schema *xsd.Schema, content xsd.ElementContent) (xsd.Particle,
 // followed through [xsd.Schema.ModelGroup]. It returns false for an element
 // declaration, an <element ref> or a wildcard. A <group ref> naming no
 // definition is a plain error, never a decline: Finalize resolves every one
-// (src-resolve clause 1.5). The term is a closed sum, so the switch is STYLE
+// ([xsd.ModelGroupRef]). The term is a closed sum, so the switch is STYLE
 // T2's sealed-sum exception.
 func modelGroupTerm(schema *xsd.Schema, term xsd.TermOrRef) (xsd.ModelGroup, bool, error) {
 	switch term := term.(type) {
