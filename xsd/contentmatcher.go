@@ -836,11 +836,11 @@ func (m *Matcher) Next(name QName) (Attribution, bool) {
 // (§3.8.6.4 cos-nonambig), and the position tells apart the items an equal
 // [Wildcard] answer cannot.
 //
-// The position is non-empty for an [ElementDeclaration] or [Wildcard] answer
-// but where the {content type}'s {particle} is itself that element or
-// wildcard particle, which no group holds, empty and non-nil for an
-// [*OpenContent] answer, which is no particle (§3.4.4.4), and nil with a
-// rejected name. Each call returns a fresh slice the caller may keep.
+// The position is nil with a rejected name. It is empty and non-nil for an
+// [*OpenContent] answer, which is no particle (§3.4.4.4), and for an element
+// or wildcard particle that is the {content type}'s {particle} itself, which
+// no group holds. It is non-empty for every other [ElementDeclaration] or
+// [Wildcard] answer. Each call returns a fresh slice the caller may keep.
 //
 // One position answers for every live ·partition· of the items so far:
 // cos-nonambig leaves no two of them attributing one name to different
@@ -877,7 +877,7 @@ func (m *Matcher) openNextParticle(name QName) (Attribution, []int, bool) {
 func (m *Matcher) position() []int {
 	pos := make([]int, 0, len(m.path))
 	for d := 1; d < len(m.path); d++ {
-		pos = append(pos, slices.Index(m.nodes[m.path[d-1]].children, m.path[d]))
+		pos = append(pos, m.slotOf(m.path[d-1], m.path[d]))
 	}
 	return pos
 }

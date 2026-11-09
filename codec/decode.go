@@ -2839,7 +2839,7 @@ func eachChild(r *xmltree.Reader, schema *xsd.Schema, children map[xsd.QName]int
 		case *xmltree.EndElement:
 			return nil
 		case *xmltree.StartElement:
-			at, err := attributeChild(m, children, tok)
+			at, ok, err := attributeChild(m, children, tok)
 			if err != nil {
 				return err
 			}
@@ -2848,7 +2848,7 @@ func eachChild(r *xmltree.Reader, schema *xsd.Schema, children map[xsd.QName]int
 					return err
 				}
 			}
-			if !at.ok {
+			if !ok {
 				return unparticled(tok)
 			}
 			if err := child(tok, at.index); err != nil {
@@ -2858,42 +2858,40 @@ func eachChild(r *xmltree.Reader, schema *xsd.Schema, children map[xsd.QName]int
 	}
 }
 
-// attribution is where attributeChild puts one child: index, the field or
-// alternative, wild whether that is a wildcard particle's, and ok false
-// where the child is attributed to none, or to no particle, an {open
-// content}, index and wild then zero.
+// attribution is where attributeChild puts one attributed child: index, the
+// field or alternative, and wild whether that is a wildcard particle's.
 type attribution struct {
 	index int
 	wild  bool
-	ok    bool
 }
 
 // attributeChild returns where the child element start is attributed, as
-// eachChild states, m being the Matcher over the children before start, nil
-// where the content model holds no wildcard particle. A wildcard particle's
-// index is the first of the position (xsd.Matcher.NextParticle), the
-// particle's index among the content model's {particles}, which is its
+// eachChild states, and false where it is attributed to none, or to no
+// particle, an {open content}; m is the Matcher over the children before
+// start, nil where the content model holds no wildcard particle. A wildcard
+// particle's index is the first of the position (xsd.Matcher.NextParticle),
+// the particle's index among the content model's {particles}, which is its
 // field's or alternative's; a position of any other length than one is a
 // defect of the premise the binds rest on, one sequence or choice of element
 // and wildcard particles (wildcardSlot.matcher), and a plain error.
 // Attribution is a closed sum, so the switch is STYLE T2's sealed-sum
 // exception.
-func attributeChild(m *xsd.Matcher, children map[xsd.QName]int, start *xmltree.StartElement) (attribution, error) {
+func attributeChild(m *xsd.Matcher, children map[xsd.QName]int, start *xmltree.StartElement) (attribution, bool, error) {
 	name := expanded(start.Name())
 	if m != nil {
 		a, pos, _ := m.NextParticle(name)
 		if _, wild := a.(xsd.Wildcard); wild {
 			if len(pos) != 1 {
-				return attribution{}, fmt.Errorf("codec: %s: element %s is attributed to the wildcard particle at position %v, where Decode binds no nested model group", start.Loc(), name, pos)
+				return attribution{}, false, fmt.Errorf("codec: %s: element %s is attributed to the wildcard particle at position %v, where Decode binds no nested model group", start.Loc(), name, pos)
 			}
-			return attribution{index: pos[0], wild: true, ok: true}, nil
+			return attribution{index: pos[0], wild: true}, true, nil
 		}
 		if _, element := a.(xsd.ElementDeclaration); !element {
-			return attribution{}, nil
+			return attribution{}, false, nil
 		}
 	}
 	i, ok := children[name]
-	return attribution{index: i, ok: ok}, nil
+	return attribution{index: i}, ok, nil
 }
 
 // unparticled is the error for the child element start when no particle of
