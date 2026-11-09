@@ -138,10 +138,10 @@ var ErrTypeMismatch = errors.New("codec: T is not the type codegen emits for the
 // a whitespace-only element has a character child and holds its own value;
 // and an element absent from the instance supplies nothing, its field nil or
 // not appended to. An element of type xs:anyType holds no such value: its
-// field holds its content raw (item 6), and its {value constraint} supplies
-// none, since its {content type} is mixed and it has no [schema normalized
-// value] (§3.3.5.4 sic-eltType), so an empty one's Text is "" whatever its
-// default or fixed value.
+// field, or T for the document element, holds its content raw (item 6), and
+// its {value constraint} supplies none, since its {content type} is mixed
+// and it has no [schema normalized value] (§3.3.5.4 sic-eltType), so an
+// empty one's Text is "" whatever its default or fixed value.
 //
 // Every instance Loc an error of Decode carries — a source fault's, a
 // violation's, an undecided check's, a decline's and item 8's — names the
@@ -245,42 +245,48 @@ var ErrTypeMismatch = errors.New("codec: T is not the type codegen emits for the
 // fourth and fifth bullets say how the particle step reads a substitution
 // group's <element ref> and a choice's alternatives:
 //
-//   - The declaration's {type table} and {nillable}.
-//   - Its {type definition}: a simple type's {variety} and {primitive type
-//     definition}, for a list its {item type definition}'s, whose construct
-//     the list declines by, after which nothing further is examined; for a
-//     union, or a list's union item, each basic member in codegen's
-//     basic-member order examined as an atomic or list type is, the first
-//     declining member's construct the union's, then a basic member whose Go
-//     type an earlier one's is, as item 6 compares a variant's, two lists of
-//     a union or the same A or []A, such as xs:string's and xs:token's, which
-//     declines as a union two of whose basic members get one Go type, then an
-//     assertions facet effective on the union, on any of its {member type
-//     definitions} at any depth, an intervening union's included, or on a
-//     list member's {item type definition} or what that reaches, which
-//     declines as a union with an assertions facet, since Decode identifies
-//     the ·active basic member· deciding no {test}; or a complex type's
-//     {abstract}, then its content, then, for simple content, its {simple
-//     type definition}, examined as the document element's simple type is,
-//     whose construct the content declines by, or, for element-only content,
-//     its {particle}'s model group, an all group declining whatever it occurs,
-//     and then the occurrence of its sequence or choice: of a <group ref>,
-//     the compositor is the referenced definition's {model group}'s and the
-//     occurrence the referring particle's (§3.7.2 declare-namedModelGroup).
+//   - The declaration's {type table}, whatever its type, then its
+//     {nillable}, which declines unless its {type definition} resolves to
+//     xs:anyType itself (§3.4.7 any-type-itself), whose raw content holds
+//     xsi:nil among its attributes, so that one whose {type definition} does
+//     not resolve declines as nillable.
+//   - Its {type definition}: xs:anyType itself, known by its QName, gives the
+//     T item 6 states and is examined no further; a simple type's {variety}
+//     and {primitive type definition}, for a list its {item type
+//     definition}'s, whose construct the list declines by, after which nothing
+//     further is examined; for a union, or a list's union item, each basic
+//     member in codegen's basic-member order examined as an atomic or list
+//     type is, the first declining member's construct the union's, then a
+//     basic member whose Go type an earlier one's is, as item 6 compares a
+//     variant's, two lists of a union or the same A or []A, such as
+//     xs:string's and xs:token's, which declines as a union two of whose basic
+//     members get one Go type, then an assertions facet effective on the
+//     union, on any of its {member type definitions} at any depth, an
+//     intervening union's included, or on a list member's {item type
+//     definition} or what that reaches, which declines as a union with an
+//     assertions facet, since Decode identifies the ·active basic member·
+//     deciding no {test}; or a complex type's {abstract}, then its content,
+//     then, for simple content, its {simple type definition}, examined as the
+//     document element's simple type is, whose construct the content declines
+//     by, or, for element-only content, its {particle}'s model group, an all
+//     group declining whatever it occurs, and then the occurrence of its
+//     sequence or choice: of a <group ref>, the compositor is the referenced
+//     definition's {model group}'s and the occurrence the referring particle's
+//     (§3.7.2 declare-namedModelGroup).
 //   - Each particle of the complex type's content in order, the whole of one
 //     before the next. A nested model group declines first, and so does a
 //     wildcard particle after the content model's first, which gives the
 //     field item 6 states and is examined no further. Then the particle's
-//     element declaration's {type table} and {nillable}, and its {type
-//     definition}: a simple one is examined as the document element's is;
-//     xs:anyType itself, known by its QName, gives the field item 6 states and
-//     is examined no further; and any other complex one, a type derived from
-//     xs:anyType included, is examined as the document element's complex type
-//     is, from its {abstract} to its {attribute wildcard}. Then the particle
-//     declines by an expanded name an earlier particle's field takes, a
-//     particle's field taking its element's expanded name, or, for a
-//     substitution group's interface, each declaration the next bullet
-//     examines.
+//     element declaration's {type table} and {nillable}, as the first bullet
+//     examines the document element's, and its {type definition}: a simple one
+//     is examined as the document element's is; xs:anyType itself, known by
+//     its QName, gives the field item 6 states and is examined no further; and
+//     any other complex one, a type derived from xs:anyType included, is
+//     examined as the document element's complex type is, from its {abstract}
+//     to its {attribute wildcard}. Then the particle declines by an expanded
+//     name an earlier particle's field takes, a particle's field taking its
+//     element's expanded name, or, for a substitution group's interface, each
+//     declaration the next bullet examines.
 //   - Of an <element ref> particle whose field holds a substitution group's
 //     sealed interface (item 6), in place of the referenced declaration's own
 //     properties and type: each declaration of the group with {abstract}
@@ -354,6 +360,16 @@ var ErrTypeMismatch = errors.New("codec: T is not the type codegen emits for the
 //     emits over I for a document element passes, held to I's variants as the
 //     union bullet below states, and for a list a slice, named or not, of
 //     such an interface.
+//   - T of {type definition} xs:anyType itself (Structures §3.4.7
+//     any-type-itself), nillable or not: X, a struct of the shape the
+//     wildcard bullet below states for AnyType, matched through E, the Go
+//     type of its Children's Element, or N, any type that converts to that X,
+//     such as the named type codegen emits over AnyType for the declaration;
+//     no name is compared. T holds the document element's content raw, as
+//     that bullet states an E's Content: every attribute of the document
+//     element, xsi:nil included, is one of its Attributes, none held to an
+//     attribute use, and the document element's own xsi:type declines (item
+//     7).
 //   - The field of a particle or attribute use of simple type: for a local
 //     element declaration's particle and an attribute use it is V, *V or []V
 //     by its occurrence, an attribute's by its use's {required} and its
@@ -400,7 +416,8 @@ var ErrTypeMismatch = errors.New("codec: T is not the type codegen emits for the
 //     way, as Element, and as Tail the character data after it, before the
 //     next child or the end, each run of character data concatenated across
 //     the comments and processing instructions that break it. Mixed content
-//     declines (item 5), so no field holds AnyChild itself.
+//     other than xs:anyType's own declines (item 5), so no field holds
+//     AnyChild itself.
 //   - The field of a particle whose element declaration has {type definition}
 //     xs:anyType itself (Structures §3.4.7 any-type-itself), and a choice's
 //     such alternative's branch field, a type derived from xs:anyType being
@@ -410,10 +427,11 @@ var ErrTypeMismatch = errors.New("codec: T is not the type codegen emits for the
 //     for AnyType, matched through E, the Go type of its Children's Element;
 //     for an <element ref> particle, N, *N or []N, N the named type codegen
 //     emits for the referenced declaration over X, matched as the simple-type
-//     bullet above matches a ref's N over V, X itself not passing. The field
-//     holds the element's content raw, as the bullet above states an E's
-//     Content, so an xsi:type inside it is one of its raw attributes, the
-//     element's own declining (item 7).
+//     bullet above matches a ref's N over V, X itself not passing. A nillable
+//     declaration's field is the same, never wrapped. The field holds the
+//     element's content raw, as the bullet above states an E's Content, so an
+//     xsi:type inside it is one of its raw attributes, the element's own
+//     declining (item 7).
 //   - The field of an <element ref> particle that codegen gives a sealed
 //     interface over the referenced declaration's substitution group
 //     (§3.3.6.4 key-eq; codegen's package doc, "# Substitution groups"
@@ -1056,9 +1074,8 @@ func (c rawContent) read(_ *pipeline, r *xmltree.Reader, start *xmltree.StartEle
 // fill sets out, T for a document element of type xs:anyType itself
 // (anyTypeRoot), as a filler does: root's xsi:type declines, item 7 of
 // Decode's doc, and otherwise root's content is read raw, as read reads it,
-// and converted to T. No attribute of root is held to an attribute use: its
-// type's lax attribute wildcard (§3.4.7) makes every one, xsi:nil included,
-// one of the raw Attributes.
+// and converted to T, every attribute of root among its raw Attributes, as
+// item 6 states.
 func (c rawContent) fill(r *xmltree.Reader, root *xmltree.StartElement, out reflect.Value) error {
 	if err := checkXsiType(root); err != nil {
 		return err
@@ -1073,9 +1090,7 @@ func (c rawContent) fill(r *xmltree.Reader, root *xmltree.StartElement, out refl
 
 // anyTypeRoot is the type codegen emits for a top-level element declaration
 // whose {type definition} is xs:anyType itself, as Decode reads it: the named
-// type over AnyType (codegen/doc.go "# xs:anyType"). Its check admits X, a
-// struct of AnyType's shape, as well as N over it, since T is matched by
-// shape alone, no name compared.
+// type over AnyType (codegen/doc.go "# xs:anyType").
 type anyTypeRoot struct{}
 
 // check returns the rawContent that fills t when t is X or N, a type that
@@ -2266,12 +2281,9 @@ func bindSimpleRoot(p *pipeline, decl xsd.ElementDeclaration, st *xsd.SimpleType
 }
 
 // declarationDecline returns the construct of an element declaration's own
-// properties Decode declines, in the order its doc states, or 0: a {type
-// table}, whatever decl's type, then {nillable} true, unless decl's {type
-// definition} resolves in schema to xs:anyType itself, whose raw content
-// holds xsi:nil among its attributes. An unresolved {type definition} never
-// exempts, so a nillable decl of one still declines here, ahead of its
-// caller's plain error.
+// properties Decode declines, its {type table} and then its {nillable}, read
+// against decl's {type definition} as resolved in schema, in the order item 5
+// of its doc states, or 0.
 func declarationDecline(schema *xsd.Schema, decl xsd.ElementDeclaration) construct {
 	if _, has := decl.TypeTable(); has {
 		return constructTypeTable
