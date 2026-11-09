@@ -15,6 +15,7 @@ import (
 
 	"github.com/kud360/goxsd8/builtin"
 	"github.com/kud360/goxsd8/builtin/strict"
+	"github.com/kud360/goxsd8/internal/goshape"
 	"github.com/kud360/goxsd8/loader"
 	xsdparser "github.com/kud360/goxsd8/parser"
 	"github.com/kud360/goxsd8/xsd"
@@ -510,7 +511,7 @@ func TestGenerateDeclinesVacuousParticle(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	localParticle, err := xsd.NewParticle(xsderr.Loc{}, exactlyOnce, xsd.ResolvedTerm{Term: local})
+	localParticle, err := xsd.NewParticle(xsderr.Loc{}, goshape.ExactlyOnce(), xsd.ResolvedTerm{Term: local})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -528,10 +529,10 @@ func TestGenerateDeclinesVacuousParticle(t *testing.T) {
 		inner, outer xsd.Occurs
 		want         string
 	}{
-		{"element", local, vacuous, exactlyOnce, "codegen: target 0: a particle of element a with {max occurs} 0 in complex type c of element e at "},
-		{"wildcard", wildcard, vacuous, exactlyOnce, "codegen: target 0: a particle of a wildcard with {max occurs} 0 in complex type c of element e at "},
-		{"content particle", local, exactlyOnce, vacuous, "codegen: target 0: a particle of a sequence model group with {max occurs} 0 in complex type c of element e at "},
-		{"nested group", nested, vacuous, exactlyOnce, "codegen: target 0: a particle of a choice model group with {max occurs} 0 in complex type c of element e at "},
+		{"element", local, vacuous, goshape.ExactlyOnce(), "codegen: target 0: a particle of element a with {max occurs} 0 in complex type c of element e at "},
+		{"wildcard", wildcard, vacuous, goshape.ExactlyOnce(), "codegen: target 0: a particle of a wildcard with {max occurs} 0 in complex type c of element e at "},
+		{"content particle", local, goshape.ExactlyOnce(), vacuous, "codegen: target 0: a particle of a sequence model group with {max occurs} 0 in complex type c of element e at "},
+		{"nested group", nested, vacuous, goshape.ExactlyOnce(), "codegen: target 0: a particle of a choice model group with {max occurs} 0 in complex type c of element e at "},
 		// Repeated without bound, the content sequence is emptiable and is
 		// flattened: reach declines each vacuous particle in its place.
 		{"element in a flattened group", local, vacuous, unbounded, "codegen: target 0: a particle of element a with {max occurs} 0 in complex type c of element e at "},
@@ -739,7 +740,7 @@ func abstractFlatSchema(t *testing.T, loc xsderr.Loc) *xsd.Schema {
 	}
 	var particles []xsd.Particle
 	for _, term := range []xsd.Term{a, empty} {
-		p, err := xsd.NewParticle(xsderr.Loc{}, exactlyOnce, xsd.ResolvedTerm{Term: term})
+		p, err := xsd.NewParticle(xsderr.Loc{}, goshape.ExactlyOnce(), xsd.ResolvedTerm{Term: term})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -791,7 +792,7 @@ func globalDecl(t *testing.T, local string, typ xsd.QName) xsd.ElementDeclaratio
 // exactly once.
 func sequenceOf(t *testing.T, term xsd.TermOrRef) xsd.ModelGroup {
 	t.Helper()
-	p, err := xsd.NewParticle(xsderr.Loc{}, exactlyOnce, term)
+	p, err := xsd.NewParticle(xsderr.Loc{}, goshape.ExactlyOnce(), term)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -806,7 +807,7 @@ func sequenceOf(t *testing.T, term xsd.TermOrRef) xsd.ModelGroup {
 // element-only content particle, occurring exactly once, has term.
 func complexOf(t *testing.T, name xsd.QName, term xsd.TermOrRef) xsd.ComplexType {
 	t.Helper()
-	p, err := xsd.NewParticle(xsderr.Loc{}, exactlyOnce, term)
+	p, err := xsd.NewParticle(xsderr.Loc{}, goshape.ExactlyOnce(), term)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1135,7 +1136,7 @@ func TestConstructMapKey(t *testing.T) {
 	}
 	first := construct(primitiveSchema(t, `<xs:element name="e" type="money"/>`))
 	second := construct(primitiveSchema(t, `<xs:element name="f" type="money"/>`))
-	third := construct(vacuousSchema(t, xsd.QName{Local: "c"}, wildcard, vacuous, exactlyOnce))
+	third := construct(vacuousSchema(t, xsd.QName{Local: "c"}, wildcard, vacuous, goshape.ExactlyOnce()))
 	counts := make(map[Construct]int)
 	for _, c := range []Construct{first, second, third} {
 		counts[c]++

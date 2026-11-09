@@ -76,11 +76,8 @@ func BasicMembers(r xsd.TypeResolver, st *xsd.SimpleType) ([]*xsd.SimpleType, er
 // giving in its place the fields group's own particles give, as
 // codegen/doc.go "# Particles" states. Each caller follows a <group ref> to
 // group itself. Whether one occurrence of group can match nothing is
-// [xsd.Schema.ParticleEmptiable] over a particle of group occurring exactly
-// once, so that cos-group-emptiable's clause 2 alone decides (§3.9.6.3,
-// §3.8.6.5 cos-seq-range), never read off the particle's own 0..1 range. The
-// error is xsd.NewOccurs' or xsd.NewParticle's, unwrapped; neither rejects
-// the constant range or a resolved model group term.
+// TermEmptiable's answer (§3.8.6.5 cos-seq-range). The error is
+// TermEmptiable's.
 func Splices(schema *xsd.Schema, group xsd.ModelGroup, occurs xsd.Occurs) (bool, error) {
 	if group.Compositor() == xsd.CompositorChoice {
 		return false, nil
@@ -92,7 +89,7 @@ func Splices(schema *xsd.Schema, group xsd.ModelGroup, occurs xsd.Occurs) (bool,
 	if occurs.Min() == 1 {
 		return true, nil
 	}
-	return termEmptiable(schema, xsd.ResolvedTerm{Term: group})
+	return TermEmptiable(schema, xsd.ResolvedTerm{Term: group})
 }
 
 // Flattens reports whether a model group particle of group occurring as
@@ -103,12 +100,11 @@ func Splices(schema *xsd.Schema, group xsd.ModelGroup, occurs xsd.Occurs) (bool,
 // as for Splices; Flattens follows the <group ref>s inside group itself. It
 // does not decide which particle on the walk inward is flattened: a caller
 // asks it of a particle only outside a flattened particle's reach. The error
-// is xsd.NewOccurs' or xsd.NewParticle's, or one naming a <group ref> that
-// does not resolve, unwrapped.
+// is TermEmptiable's or ModelGroupTerm's, unwrapped.
 func Flattens(schema *xsd.Schema, group xsd.ModelGroup, occurs xsd.Occurs) (bool, error) {
 	if group.Compositor() == xsd.CompositorChoice {
 		for _, p := range group.Particles() {
-			emptiable, err := termEmptiable(schema, p.Term())
+			emptiable, err := TermEmptiable(schema, p.Term())
 			if err != nil {
 				return false, err
 			}
@@ -121,7 +117,7 @@ func Flattens(schema *xsd.Schema, group xsd.ModelGroup, occurs xsd.Occurs) (bool
 		return false, nil
 	}
 	if group.Compositor() == xsd.CompositorSequence {
-		emptiable, err := termEmptiable(schema, xsd.ResolvedTerm{Term: group})
+		emptiable, err := TermEmptiable(schema, xsd.ResolvedTerm{Term: group})
 		if err != nil {
 			return false, err
 		}
@@ -159,7 +155,7 @@ func Reach(schema *xsd.Schema, group xsd.ModelGroup, visit func(p xsd.Particle, 
 // walk's root.
 func reach(schema *xsd.Schema, group xsd.ModelGroup, at []int, visit func(p xsd.Particle, position []int) error) error {
 	for i, p := range group.Particles() {
-		inner, isGroup, err := modelGroupTerm(schema, p.Term())
+		inner, isGroup, err := ModelGroupTerm(schema, p.Term())
 		if err != nil {
 			return err
 		}
@@ -184,7 +180,7 @@ func reach(schema *xsd.Schema, group xsd.ModelGroup, at []int, visit func(p xsd.
 // with {max occurs} above 1 or unbounded, holds a particle that repeats
 // (repeats) at both its edges, as codegen/doc.go "# Particles" states
 // (othersEmptiable reads a sequence's edges). It reads model group terms
-// through modelGroupTerm, never enters an element's type, and stops at the
+// through ModelGroupTerm, never enters an element's type, and stops at the
 // first repeating edge particle; the <group ref> graph is acyclic after
 // Finalize, so the walk ends. No all group is reached: cos-all-limited
 // (§3.8.6.2 clauses 1.2 and 1.3) admits a particle whose term is one only as
@@ -199,7 +195,7 @@ func repeatingEdge(schema *xsd.Schema, group xsd.ModelGroup) (bool, error) {
 		if repeats(p.Occurs()) {
 			return true, nil
 		}
-		inner, isGroup, err := modelGroupTerm(schema, p.Term())
+		inner, isGroup, err := ModelGroupTerm(schema, p.Term())
 		if err != nil {
 			return false, err
 		}
@@ -235,34 +231,42 @@ func repeats(occurs xsd.Occurs) bool {
 	return !bounded || upper > 1 && upper != occurs.Min()
 }
 
-// termEmptiable reports whether one occurrence of a particle's {term} can
+// TermEmptiable reports whether one occurrence of a particle's {term} can
 // match nothing: [xsd.Schema.ParticleEmptiable] (§3.9.6.3
-// cos-group-emptiable) over a particle of term occurring exactly once, so
-// that its clause 2 alone decides, never read off a particle's own range. It
-// is false for an element declaration or a wildcard and true for a model
-// group with no {particles}. The error is xsd.NewOccurs' or
-// xsd.NewParticle's, unwrapped; neither rejects the constant range or a
-// resolved term.
-func termEmptiable(schema *xsd.Schema, term xsd.TermOrRef) (bool, error) {
-	once, err := xsd.NewOccurs(xsderr.Loc{}, 1, 1)
-	if err != nil {
-		return false, err
-	}
-	p, err := xsd.NewParticle(xsderr.Loc{}, once, term)
+// cos-group-emptiable) over a particle of term occurring exactly once
+// (ExactlyOnce), so that its clause 2 alone decides, never read off a
+// particle's own range. It is false for an element declaration or a wildcard
+// and true for a model group with no {particles}. The error is
+// xsd.NewParticle's, unwrapped; it does not reject a resolved term.
+func TermEmptiable(schema *xsd.Schema, term xsd.TermOrRef) (bool, error) {
+	p, err := xsd.NewParticle(xsderr.Loc{}, ExactlyOnce(), term)
 	if err != nil {
 		return false, err
 	}
 	return schema.ParticleEmptiable(p), nil
 }
 
-// modelGroupTerm returns the model group term holds and true: an inline
+// ExactlyOnce returns the {min occurs} = {max occurs} = 1 range, under which,
+// among others, an element particle gives a value field and a flattened
+// field's branch holds its particle's term (codegen/doc.go "# Particles").
+// xsd.NewOccurs cannot reject the constant range, so ExactlyOnce panics if it
+// does.
+func ExactlyOnce() xsd.Occurs {
+	once, err := xsd.NewOccurs(xsderr.Loc{}, 1, 1)
+	if err != nil {
+		panic(err)
+	}
+	return once
+}
+
+// ModelGroupTerm returns the model group term holds and true: an inline
 // sequence, choice or all group, or the {model group} of the top-level model
 // group definition a <group ref> names (§3.7.2 declare-namedModelGroup),
 // followed through [xsd.Schema.ModelGroup]. It returns false for an element
 // declaration, an <element ref> or a wildcard. A <group ref> naming no
 // definition is an error, unwrapped. The term is a closed sum, so the switch
 // is STYLE T2's sealed-sum exception.
-func modelGroupTerm(schema *xsd.Schema, term xsd.TermOrRef) (xsd.ModelGroup, bool, error) {
+func ModelGroupTerm(schema *xsd.Schema, term xsd.TermOrRef) (xsd.ModelGroup, bool, error) {
 	switch term := term.(type) {
 	case xsd.ModelGroupRef:
 		def, ok := schema.ModelGroup(term.Name)
