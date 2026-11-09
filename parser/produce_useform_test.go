@@ -354,10 +354,10 @@ func TestProduceUseAndFormOutOfEnumeration(t *testing.T) {
 			mustRule(t, err, "cvc-datatype-valid", tc.wantMsg, "the schema for schema documents restricts")
 			loc, ok := xsderr.LocOf(err)
 			if !ok {
-				t.Fatalf("error %v carries no position, want the offending element's (STYLE E3)", err)
+				t.Fatalf("error %v carries no position, want the offending attribute's (STYLE E3)", err)
 			}
 			if loc.URI != produceURI || loc.Line != tc.wantLine || loc.Col == 0 {
-				t.Fatalf("position = %s:%d:%d, want the element that wrote the value at %s:%d with a column",
+				t.Fatalf("position = %s:%d:%d, want the attribute that wrote the value at %s:%d with a column",
 					loc.URI, loc.Line, loc.Col, produceURI, tc.wantLine)
 			}
 		})
@@ -380,7 +380,7 @@ func TestProduceFormDefaultChargedWithNoLocalDeclaration(t *testing.T) {
 	mustRule(t, err, "cvc-datatype-valid", `elementFormDefault value "Qualified"`)
 	loc, ok := xsderr.LocOf(err)
 	if !ok || loc.Line != 1 || loc.Col == 0 {
-		t.Fatalf("position = %+v (ok=%v), want the <schema> element that wrote the attribute", loc, ok)
+		t.Fatalf("position = %+v (ok=%v), want the elementFormDefault the <schema> element wrote", loc, ok)
 	}
 }
 
