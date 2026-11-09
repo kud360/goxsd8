@@ -114,10 +114,10 @@
 // never read; or the particle is a wildcard, whatever its {namespace constraint} and
 // {process contents}. No two element particles share an expanded name, such
 // an interface's particle taking each of those declarations'. Each attribute
-// use is outside the xsi namespace, but xsi:nil's in a type whose choice is T
-// itself, and is typed the same way. No element in the instance carries
-// xsi:type, except inside a wildcard's match or an element of type
-// xs:anyType's raw content.
+// use is outside the xsi namespace, but xsi:nil's in a type codegen emits as its
+// choice's sealed interface, which gives that use no field, and is typed the
+// same way. No element in the instance carries xsi:type, except inside a wildcard's
+// match or an element of type xs:anyType's raw content.
 //
 // Item 6 of [Decode]'s doc states the Go type of each field, naming it V, S
 // or I as the next paragraph does. The field of a particle of complex type
@@ -181,8 +181,8 @@
 //   - Mixed content.
 //   - Element-only content with {open content}.
 //   - A complex type with {abstract} true.
-//   - An attribute use in the xsi namespace, but xsi:nil's in a type whose
-//     choice is T itself, which has no field.
+//   - An attribute use in the xsi namespace, but xsi:nil's in a type codegen
+//     emits as its choice's sealed interface, which gives it no field.
 //   - An element declaration with a {type table}.
 //   - A nillable element, but for one of type xs:anyType itself; item 5 of
 //     [Decode]'s doc states when.

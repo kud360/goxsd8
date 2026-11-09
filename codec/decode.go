@@ -1573,7 +1573,7 @@ type anyAttributeField struct {
 func (w *anyAttributeField) check(owner reflect.Type, index int) error {
 	got := owner.Field(index)
 	if got.Name != w.name || got.Anonymous || got.Type.Kind() != reflect.Slice || !rawAttributeShaped(got.Type.Elem()) {
-		return fmt.Errorf("%w: field %d of %s is %s %s where codegen emits %s []AnyAttribute", ErrTypeMismatch, index, owner, got.Name, got.Type, w.name)
+		return fmt.Errorf("%w: field %d of %s is %s %s where codegen emits %s, a slice of a struct of codegen's AnyAttribute shape", ErrTypeMismatch, index, owner, got.Name, got.Type, w.name)
 	}
 	return nil
 }
