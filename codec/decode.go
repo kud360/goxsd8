@@ -2259,7 +2259,7 @@ func bindFlattened(run *bindRun, ct xsd.ComplexType, group xsd.ModelGroup, names
 	f := &flattened{name: names.Claim(group.Compositor().String()), sealed: &sealed{p: run.p}, ct: ct}
 	alts := f.sealed
 	wildcards := 0
-	err := goshape.Reach(run.p.schema, group, func(p xsd.Particle, position []int) error {
+	visit := func(p xsd.Particle, position []int) error {
 		term, err := particleTerm(run.p.schema, p)
 		if err != nil {
 			return err
@@ -2302,9 +2302,20 @@ func bindFlattened(run *bindRun, ct xsd.ComplexType, group xsd.ModelGroup, names
 		f.places = append(f.places, place{position: position, index: len(alts.alts)})
 		alts.alts = append(alts.alts, alt)
 		return nil
+	}
+	// visitErr is visit's own error, which already carries its context and,
+	// set, ended the walk as goshape.Reach's error, so that only
+	// goshape.Reach's own is wrapped.
+	var visitErr error
+	err := goshape.Reach(run.p.schema, group, func(p xsd.Particle, position []int) error {
+		visitErr = visit(p, position)
+		return visitErr
 	})
+	if visitErr != nil {
+		return nil, visitErr
+	}
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("codec: %s: %w", typeSubject, err)
 	}
 	if _, err := f.matcher(); err != nil {
 		return nil, err
@@ -2650,8 +2661,6 @@ func contentGroup(schema *xsd.Schema, content xsd.ElementContent) (particle xsd.
 	upper, bounded := occurs.Max()
 	once := occurs.Min() == 1 && bounded && upper == 1
 	occursOther := constructChoiceOccurs
-	// Compositor is a closed sum, so the switch is STYLE T2's sealed-sum
-	// exception.
 	switch group.Compositor() {
 	case xsd.CompositorAll:
 		return xsd.Particle{}, xsd.ModelGroup{}, false, constructAllContent, nil
@@ -2670,7 +2679,7 @@ func contentGroup(schema *xsd.Schema, content xsd.ElementContent) (particle xsd.
 	}
 	flat, err = goshape.Flattens(schema, group, occurs)
 	if err != nil {
-		return xsd.Particle{}, xsd.ModelGroup{}, false, 0, fmt.Errorf("codec: %w", err)
+		return xsd.Particle{}, xsd.ModelGroup{}, false, 0, fmt.Errorf("codec: the content {particle}'s model group: %w", err)
 	}
 	if !flat {
 		return xsd.Particle{}, xsd.ModelGroup{}, false, occursOther, nil
