@@ -1101,7 +1101,7 @@ func (e *emitter) atomicType(subject, typed string, loc xsderr.Loc, t *xsd.Simpl
 // unionType returns the sealed interface "# Simple types" gives the union simple
 // type t (Datatypes §2.4.1.3), emitting it and its variants when no earlier
 // declaration did: the interface's name is claimed first (unionName), then
-// each variant's, the interface's name plus variantWord's, in basicMembers' order,
+// each variant's, the interface's name plus variantWord's, in goshape.BasicMembers' order,
 // each before its member's Go type is computed with the variant's own name as what
 // an anonymous union there is named by (variantUnion). The interface and its
 // variants join e.tailDecls together at that first use, ahead of whatever their
@@ -1115,7 +1115,7 @@ func (e *emitter) unionType(subject, typed string, loc xsderr.Loc, t *xsd.Simple
 	if name, ok := e.unions[t]; ok {
 		return emittedType{name: name, sealed: true}, nil
 	}
-	members, err := e.basicMembers(t)
+	members, err := goshape.BasicMembers(e.schema, t)
 	if err != nil {
 		return emittedType{}, fmt.Errorf("%s at %s: %w", subject, loc, err)
 	}
@@ -1173,42 +1173,6 @@ type variantUnion string
 
 func (v variantUnion) claimUnion(types typeNamer) string {
 	return types.extend(string(v), "union")
-}
-
-// basicMembers returns the basic members of the union simple type t
-// (Datatypes §2.4.1.3 dt-basicmember): its {member type definitions}
-// (§3.16.1), read through [xsd.SimpleType.Members], which takes a
-// restriction's from its base (§3.16.2.1), depth first in member order, each
-// union member replaced by its own basic members, and each component kept at
-// its first position only, by identity. A list member is basic. No union
-// reaches itself through its members (cos-st-restricts clause 3.3
-// no-self-membership, which finalize checks), so the walk carries no visited
-// set.
-func (e *emitter) basicMembers(t *xsd.SimpleType) ([]*xsd.SimpleType, error) {
-	members, err := t.Members(e.schema)
-	if err != nil {
-		return nil, err
-	}
-	var basic []*xsd.SimpleType
-	for _, m := range members {
-		variety, err := m.Variety(e.schema)
-		if err != nil {
-			return nil, err
-		}
-		reached := []*xsd.SimpleType{m}
-		if _, isUnion := variety.(xsd.Union); isUnion {
-			reached, err = e.basicMembers(m)
-			if err != nil {
-				return nil, err
-			}
-		}
-		for _, b := range reached {
-			if !slices.Contains(basic, b) {
-				basic = append(basic, b)
-			}
-		}
-	}
-	return basic, nil
 }
 
 // variantWord is the local name a union's variant for its basic member m is

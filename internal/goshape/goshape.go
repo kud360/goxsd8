@@ -29,3 +29,40 @@ func SubstitutionSum(schema *xsd.Schema, decl xsd.ElementDeclaration) (members [
 	}
 	return members, true
 }
+
+// BasicMembers returns the basic members of the union simple type st
+// (Datatypes §2.4.1.3 dt-basicmember) in codegen's basic-member order
+// (codegen/doc.go "# Simple types"), reading each union's {member type
+// definitions} (§3.16.1) through [xsd.SimpleType.Members], which takes a
+// restriction's from its base (§3.16.2.1), and keeping each member at its
+// first position by identity. No union reaches itself through its members
+// (cos-st-restricts clause 3.3 no-self-membership, which finalize checks), so
+// the walk carries no visited set.
+func BasicMembers(r xsd.TypeResolver, st *xsd.SimpleType) ([]*xsd.SimpleType, error) {
+	members, err := st.Members(r)
+	if err != nil {
+		return nil, err
+	}
+	var basic []*xsd.SimpleType
+	for _, m := range members {
+		variety, err := m.Variety(r)
+		if err != nil {
+			return nil, err
+		}
+		reached := []*xsd.SimpleType{m}
+		// {variety} is a closed sum, so the assertion is STYLE T2's sealed-sum
+		// exception.
+		if _, isUnion := variety.(xsd.Union); isUnion {
+			reached, err = BasicMembers(r, m)
+			if err != nil {
+				return nil, err
+			}
+		}
+		for _, b := range reached {
+			if !slices.Contains(basic, b) {
+				basic = append(basic, b)
+			}
+		}
+	}
+	return basic, nil
+}

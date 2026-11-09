@@ -7,10 +7,11 @@
 // # Contract
 //
 //	func SubstitutionSum(schema *xsd.Schema, decl xsd.ElementDeclaration) (members []xsd.ElementDeclaration, sum bool)
+//	func BasicMembers(r xsd.TypeResolver, st *xsd.SimpleType) ([]*xsd.SimpleType, error)
 //
-// The rules are codegen's package doc's sections ("# Substitution groups"
-// among them): those sections own them, and this package is their one
-// implementation.
+// The rules are those codegen's package doc states, each in its own section
+// ("# Simple types", "# Substitution groups"): those sections own them, and
+// this package is their one implementation.
 //
 // It imports xsd and the standard library.
 package goshape
