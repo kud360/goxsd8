@@ -100,3 +100,34 @@ func Splices(schema *xsd.Schema, group xsd.ModelGroup, occurs xsd.Occurs) (bool,
 	}
 	return schema.ParticleEmptiable(p), nil
 }
+
+// xsiNil is the expanded name of the built-in attribute declaration xsi:nil
+// (§3.2.7.2).
+var xsiNil = xsd.QName{Space: xsd.XMLSchemaInstanceNS, Local: "nil"}
+
+// FieldAttributeUses returns t's {attribute uses} but a use of xsi:nil, the
+// uses codegen gives a field each (codegen/doc.go "# Attributes"): a nillable
+// element's nilled-ness is Nillable's arm (cvc-elt clause 3.2.3), and a
+// declaration that is not nillable admits no xsi:nil (cvc-elt clause 3.1). It
+// matches the use's {attribute declaration} by expanded name, which stands
+// for the built-in's identity because no-xsi (§3.2.6.4) keeps a schema
+// document out of the xsi namespace.
+//
+// GAP(xsd): a programmatically built schema is not kept out (#1462), so a
+// declaration it builds named {xsi}nil matches too: codegen then emits no
+// field for that use and HasAttributeFields does not count it, so the emitted
+// type omits that attribute and nothing declines.
+func FieldAttributeUses(t xsd.ComplexType) []xsd.AttributeUse {
+	return slices.DeleteFunc(t.AttributeUses(), func(u xsd.AttributeUse) bool { return u.DeclarationName() == xsiNil })
+}
+
+// HasAttributeFields reports whether the complex type t has an attribute use
+// FieldAttributeUses keeps or an {attribute wildcard}, read from the
+// finalized component, so inherited ones count: exactly when the struct
+// codegen emits for t holds attribute fields (codegen/doc.go "# Attributes"),
+// and so when codegen never emits the choice t's content holds as t itself
+// (codegen/doc.go "# Complex types").
+func HasAttributeFields(t xsd.ComplexType) bool {
+	_, hasWildcard := t.AttributeWildcard()
+	return hasWildcard || len(FieldAttributeUses(t)) > 0
+}

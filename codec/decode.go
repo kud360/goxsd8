@@ -316,7 +316,8 @@ var ErrTypeMismatch = errors.New("codec: T is not the type codegen emits for the
 //     which declines as two branches of a sealed interface whose structs
 //     have one shape.
 //   - Each of the complex type's attribute uses in order, and its {attribute
-//     wildcard}.
+//     wildcard}; none of either where codegen emits its choice's sealed
+//     interface as the type itself, whose one use can be xsi:nil's.
 //
 // The complex type of a top-level declaration, the document element's, one
 // an <element ref> names, or a member of that one's substitution group, a
@@ -1694,20 +1695,17 @@ func bindComplex[K comparable](run *bindRun, decl xsd.ElementDeclaration, ct xsd
 			return nil, decline(d, typeSubject)
 		}
 		// codegen/emit.go's shape: a choice occurring once, in a type with no
-		// attribute field, is the type itself unless it has {particles} and one
-		// occurrence of it is emptiable (cos-group-emptiable). Every attribute
-		// use gives a field or declines, and so does every particle an
-		// alternative, so the counts decide before either is bound.
-		if group.Compositor() == xsd.CompositorChoice && len(ct.AttributeUses()) == 0 &&
+		// attribute field (goshape.HasAttributeFields), is the type itself
+		// unless it has {particles} and one occurrence of it is emptiable
+		// (cos-group-emptiable). Every particle gives an alternative or
+		// declines, so the counts decide before any is bound.
+		if group.Compositor() == xsd.CompositorChoice && !goshape.HasAttributeFields(ct) &&
 			(len(group.Particles()) == 0 || !run.p.schema.ParticleEmptiable(content)) {
 			root := &choiceRoot{}
 			index.store(key, root)
 			ch, err := bindChoice(run, ct, group.Particles(), names, typeSubject)
 			if err != nil {
 				return nil, err
-			}
-			if _, has := ct.AttributeWildcard(); has {
-				return nil, decline(constructAttributeWildcard, typeSubject)
 			}
 			root.sealed, root.wild = ch.sealed, ch.wild
 			return root, nil
@@ -3039,7 +3037,7 @@ func (s *simpleRoot) fill(r *xmltree.Reader, root *xmltree.StartElement, out ref
 }
 
 // noAttributes returns the error for the first attribute of the element root
-// outside the xsi namespace, for a type with no attribute use.
+// outside the xsi namespace, for a type with no attribute field.
 func noAttributes(root *xmltree.StartElement) error {
 	for _, a := range root.Attributes() {
 		if a.Name().Space() != xsd.XMLSchemaInstanceNS {

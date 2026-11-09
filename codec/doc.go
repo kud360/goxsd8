@@ -114,9 +114,9 @@
 // wildcard, whatever its {namespace constraint} and {process contents}. No
 // two element particles share an expanded name, such an interface's particle
 // taking each of those declarations'. Each attribute use is outside the xsi
-// namespace and is typed the same way. No element in the instance carries
-// xsi:type, except inside a wildcard's match or an element of type
-// xs:anyType's raw content.
+// namespace, but xsi:nil's in a type whose choice is T itself, and is typed
+// the same way. No element in the instance carries xsi:type, except inside a
+// wildcard's match or an element of type xs:anyType's raw content.
 //
 // Item 6 of [Decode]'s doc states the Go type of each field, naming it V, S
 // or I as the next paragraph does. The field of a particle of complex type
@@ -131,10 +131,12 @@
 // alternative, the same over the referenced declaration's named type, or, for
 // an alternative of complex type, the same over its S or I, or its AnyType for
 // one of type xs:anyType. The interface is T itself, or, where the type has an
-// attribute use or one occurrence of the choice is emptiable (§3.9.6.3
-// cos-group-emptiable), the first field of T, a struct whose further fields
-// are the attribute uses'. An empty match is the nil interface. A particle's
-// complex type gets its interface or struct by the same rule.
+// attribute field (codegen's package doc, "# Attributes": an attribute use
+// other than xsi:nil's) or one occurrence of the choice is emptiable
+// (§3.9.6.3 cos-group-emptiable), the first field of T, a struct whose
+// further fields are the attribute fields. An empty match is the nil
+// interface. A particle's complex type gets its interface or struct by the
+// same rule.
 //
 // A substitution group's interface holds, for each child, the branch of the
 // group's declaration the child's expanded name resolves to (§3.9.4.3
@@ -171,7 +173,8 @@
 //   - Element-only content with {open content}.
 //   - A complex type with {abstract} true.
 //   - A complex type with an {attribute wildcard}.
-//   - An attribute use in the xsi namespace.
+//   - An attribute use in the xsi namespace, but xsi:nil's in a type whose
+//     choice is T itself, which has no field.
 //   - An element declaration with a {type table}.
 //   - A nillable element, but for one of type xs:anyType itself; item 5 of
 //     [Decode]'s doc states when.

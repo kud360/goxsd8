@@ -580,9 +580,12 @@ func generated(t *testing.T, schema *xsd.Schema) []byte {
 // {min occurs} 0, so the choice is emptiable and codegen gives the struct
 // opt; attributedSchema adds an attribute named choice and a required one,
 // so codegen gives the struct attributed, whose field Choice2 pins that the
-// choice's field claims its name first.
+// choice's field claims its name first; nilPickSchema is pickSchema's choice
+// beside a use of xsi:nil, which gives no field (codegen/doc.go
+// "# Attributes"), so codegen gives pick's interface.
 const (
 	pickSchema       = `<xs:element name="r"><xs:complexType><xs:choice><xs:element name="a" type="xs:string"/><xs:element name="b" type="xs:token" maxOccurs="3"/></xs:choice></xs:complexType></xs:element>`
+	nilPickSchema    = `<xs:import namespace="http://www.w3.org/2001/XMLSchema-instance"/><xs:element name="r"><xs:complexType><xs:choice><xs:element name="a" type="xs:string"/><xs:element name="b" type="xs:token" maxOccurs="3"/></xs:choice><xs:attribute ref="xsi:nil"/></xs:complexType></xs:element>`
 	optSchema        = `<xs:element name="r"><xs:complexType><xs:choice><xs:element name="a" type="xs:string"/><xs:element name="b" type="xs:string" minOccurs="0"/></xs:choice></xs:complexType></xs:element>`
 	attributedSchema = `<xs:element name="r"><xs:complexType><xs:choice><xs:element name="a" type="xs:string"/><xs:element name="b" type="xs:string"/></xs:choice>
 		<xs:attribute name="choice" type="xs:string"/><xs:attribute name="tag" type="xs:string" use="required"/></xs:complexType></xs:element>`
@@ -653,6 +656,11 @@ func TestChoiceTypesAreCodegens(t *testing.T) {
 			"type RA struct {\n\tA string\n}\n\nfunc (RA) isR() {}\n",
 			"type RB struct {\n\tB []string\n}\n\nfunc (RB) isR() {}\n",
 		}},
+		{nilPickSchema, []string{
+			"type R interface {\n\tisR()\n}\n",
+			"type RA struct {\n\tA string\n}\n\nfunc (RA) isR() {}\n",
+			"type RB struct {\n\tB []string\n}\n\nfunc (RB) isR() {}\n",
+		}},
 		{optSchema, []string{
 			"type R struct {\n\tChoice RChoice\n}\n",
 			"type RChoice interface {\n\tisRChoice()\n}\n",
@@ -678,11 +686,12 @@ func TestChoiceTypesAreCodegens(t *testing.T) {
 
 // TestDecodeChoice pins the choice lift (cvc-model-group: one alternative
 // matches): each branch of the bare interface, a repeated alternative
-// appending into its one branch, the emptiable choice's empty match as the
-// nil interface (cos-group-emptiable) and its {min occurs} 0 alternative's
-// branch holding a string, and the struct holding the choice beside its
-// attribute fields. Each value is its element's ·normalized value·: b's
-// xs:token collapses.
+// appending into its one branch, the bare interface of a type whose one
+// attribute use is xsi:nil's, which gives no field, the emptiable choice's
+// empty match as the nil interface (cos-group-emptiable) and its {min
+// occurs} 0 alternative's branch holding a string, and the struct holding
+// the choice beside its attribute fields. Each value is its element's
+// ·normalized value·: b's xs:token collapses.
 func TestDecodeChoice(t *testing.T) {
 	str := func(s string) *string { return &s }
 	rows := []struct {
@@ -695,6 +704,7 @@ func TestDecodeChoice(t *testing.T) {
 	}{
 		{"bare interface, first branch", pickSchema, "", "<s:a> x </s:a>", into[pick](pickBranches), pick(pickA{A: " x "})},
 		{"bare interface, repeated branch", pickSchema, "", "<s:b> 1  2 </s:b><s:b>3</s:b><s:b/>", into[pick](pickBranches), pick(pickB{B: []string{"1 2", "3", ""}})},
+		{"bare interface beside an xsi:nil use", nilPickSchema, "", "<s:a>n</s:a>", into[pick](pickBranches), pick(pickA{A: "n"})},
 		{"emptiable choice, empty match", optSchema, "", "", into[opt](optBranches), opt{}},
 		{"emptiable choice, its optional alternative present", optSchema, "", "<s:b>v</s:b>", into[opt](optBranches), opt{Choice: optB{B: "v"}}},
 		{"emptiable choice, its required alternative", optSchema, "", "<s:a>w</s:a>", into[opt](optBranches), opt{Choice: optA{A: "w"}}},
