@@ -342,8 +342,9 @@ func canonicalPrecisionDecimal(v value.Value) (string, error) {
 // the range — renders in scientific notation (step 5; a zero by zeroCanonical).
 // Every finite form re-parses (f-precDecLexmap) to an Identical value, as
 // dt-canonical-mapping requires, where step 5 as written does not: see
-// zeroCanonical and scientificCanonical. Trailing zeros are canonical, never stripped: that is how the canonical form is
-// quantum-preserving even though Eq is quantum-blind.
+// zeroCanonical and scientificCanonical. Trailing zeros are canonical, never
+// stripped: that is how the canonical form is quantum-preserving even though Eq is
+// quantum-blind.
 //
 // The one error is zeroCanonical's beyond-capacity one. It is why
 // precisionDecimalVal does not implement [value.Canonical]: that string-only
