@@ -248,8 +248,8 @@ var ErrTypeMismatch = errors.New("codec: T is not the type codegen emits for the
 //   - The declaration's {type table}, whatever its type, then its
 //     {nillable}, which declines unless its {type definition} resolves to
 //     xs:anyType itself (§3.4.7 any-type-itself), whose raw content holds
-//     xsi:nil among its attributes, so that one whose {type definition} does
-//     not resolve declines as nillable.
+//     xsi:nil among its attributes (item 6); one whose {type definition}
+//     does not resolve declines as nillable.
 //   - Its {type definition}: xs:anyType itself, known by its QName, gives the
 //     T item 6 states and is examined no further; a simple type's {variety}
 //     and {primitive type definition}, for a list its {item type
