@@ -108,10 +108,10 @@
 // one, or the top-level one an <element ref> names where codegen gives the
 // particle's field that declaration's own type; or the particle is an
 // <element ref> where codegen gives its field a sealed interface over the
-// referenced declaration's substitution group (codegen's package doc, "#
-// Substitution groups"), and each declaration of the group with {abstract}
-// false is such a declaration, an abstract head's own properties never read;
-// or the particle is a wildcard, whatever its {namespace constraint} and
+// referenced declaration's substitution group (codegen's package doc,
+// "# Substitution groups"), and each declaration of the group with
+// {abstract} false is such a declaration, an abstract head's own properties
+// never read; or the particle is a wildcard, whatever its {namespace constraint} and
 // {process contents}. No two element particles share an expanded name, such
 // an interface's particle taking each of those declarations'. Each attribute
 // use is outside the xsi namespace, but xsi:nil's in a type whose choice is T
