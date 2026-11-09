@@ -59,10 +59,9 @@ var ErrTypeMismatch = errors.New("codec: T is not the type codegen emits for the
 // constraint ([value.ConstraintContext]), never the instance's; read back
 // through that mapping's Canonical and converted to the Go type. backend's
 // governing mapping of each such type but one whose datatype struct is
-// yearMonthDuration's, QName's or PrecisionDecimal's, which the list converts
-// from the string Parse accepted, must therefore have a non-nil Canonical, as
-// builtin/strict's do; item 8 states the error where one fails. The value
-// converts so:
+// yearMonthDuration's, QName's or PrecisionDecimal's must therefore have a
+// non-nil Canonical, as builtin/strict's do; item 8 states the error where
+// one fails. The value converts so:
 //
 //   - A boolean's: its canonical form exactly "true" or "false" (§E.4
 //     f-booleanCanmap).
@@ -104,10 +103,11 @@ var ErrTypeMismatch = errors.New("codec: T is not the type codegen emits for the
 //     each a struct of no field; and a numeral the numerical arm, its
 //     Coefficient the numeral's digits read as one decimal integer and its
 //     Scale the numeral's ·scale· (vp-pd-precision), its digits after the '.'
-//     less its exponent, so that the value is Coefficient × 10^−Scale, and its
-//     Negative true exactly when the numeral opens with '-' (vp-pd-sign). So 3
-//     and 3.00 decode to Scale 0 and 2, 0 and -0 to Negative false and true,
-//     and 3E2 to Coefficient 3 and Scale -2.
+//     less its exponent, which give the value codegen's package doc states in
+//     "# Simple types", and its Negative true exactly when the
+//     numeral opens with '-' (vp-pd-sign). So 3 and 3.00 decode to Scale 0
+//     and 2, 0 and -0 to Negative false and true, and 3E2 to Coefficient 3
+//     and Scale -2.
 //   - A list type's, whose whiteSpace is collapse (Datatypes §4.3.6,
 //     §2.4.1.2): the normalized string is split at each U+0020 into its list
 //     items before any is mapped, an empty one into none (§4.1.1 dt-list), and

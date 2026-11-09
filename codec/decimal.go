@@ -65,9 +65,9 @@ var decimalValueType = reflect.TypeFor[decimalValue]()
 // and NaN notANumber, those spellings only; any other is a numeral of
 // digits D with n of them after an optional '.', and an optional exponent E,
 // whose ·scale· is n − E (·decimalPtPrecision·, ·scientificPrecision·),
-// whose Coefficient is D read as a decimal integer, so that the value is
-// Coefficient × 10^−scale, and whose ·sign· is negative exactly when lexical
-// opens with '-', zero included. Scale is unbounded, as ·scale· is.
+// whose Coefficient is D read as a decimal integer, which give the value
+// decimalNumerical's doc points to, and whose ·sign· is negative exactly when
+// lexical opens with '-', zero included. Scale is unbounded, as ·scale· is.
 func convertDecimal(lexical string) (reflect.Value, error) {
 	v := reflect.New(decimalValueType).Elem()
 	switch lexical {

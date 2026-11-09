@@ -223,7 +223,6 @@ func ExampleWithPrecisionDecimalArms() {
 	for _, v := range r.V {
 		switch a := v.Value.(type) {
 		case precisionDecimalValueNumerical:
-			// The value is Coefficient × 10^−Scale, negative when Negative.
 			fmt.Println("numerical", a.Coefficient.String(), a.Scale.String(), a.Negative)
 		case precisionDecimalValuePositiveInfinity:
 			fmt.Println("positive infinity")
