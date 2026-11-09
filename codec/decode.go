@@ -1869,7 +1869,7 @@ func bindSequence(run *bindRun, ct xsd.ComplexType, particles []xsd.Particle, na
 	if err := s.bind(run, ct, particles, nil, names, typeSubject); err != nil {
 		return nil, err
 	}
-	if _, err := s.wild.matcher(run.p.schema); err != nil {
+	if _, err := s.wild.attributor(run.p.schema); err != nil {
 		return nil, err
 	}
 	return s, nil
@@ -1972,10 +1972,18 @@ type wildPlace struct {
 	index    int
 }
 
+// wildAttributor attributes one element's children to a content model's
+// wildcard particles (attributeChild): m, a fresh Matcher over the
+// {content type} of the wildcardSlot that built it, and places, that slot's.
+type wildAttributor struct {
+	m      *xsd.Matcher
+	places []wildPlace
+}
+
 // index returns the field or alternative of the wildcard particle at the
 // Matcher position pos, and false where no place holds pos.
-func (w *wildcardSlot) index(pos []int) (int, bool) {
-	for _, p := range w.places {
+func (a *wildAttributor) index(pos []int) (int, bool) {
+	for _, p := range a.places {
 		if slices.Equal(p.position, pos) {
 			return p.index, true
 		}
@@ -1983,19 +1991,19 @@ func (w *wildcardSlot) index(pos []int) (int, bool) {
 	return 0, false
 }
 
-// matcher returns a fresh Matcher over w.ct's {content type}, which
-// attributes one element's children (eachChild), or nil for a nil w, no
-// wildcard particle. The binds call it once all of a content model's
-// particles are bound, so that CheckDecode returns what Decode does, and on
-// a premise: ContentMatcher's answer depends on ct alone, and declines only
-// a {content type} that is not element-only, which contentGroup has declined,
-// or one too wide to track, which needs a repeating model group, and the
-// particle Decode binds is one sequence or choice occurring once of element
-// and wildcard particles, every nested group spliced, so occurring exactly
-// once or with {min occurs} 0 and {max occurs} 1 (goshape.Splices), or
-// declined. A decline here is a defect of that premise, a plain error and no
-// decline.
-func (w *wildcardSlot) matcher(schema *xsd.Schema) (*xsd.Matcher, error) {
+// attributor returns a wildAttributor over a fresh Matcher of w.ct's
+// {content type} and w's places, which attributes one element's children
+// (eachChild), or nil for a nil w, no wildcard particle. The binds call it
+// once all of a content model's particles are bound, so that CheckDecode
+// returns what Decode does, and on a premise: ContentMatcher's answer depends
+// on ct alone, and declines only a {content type} that is not element-only,
+// which contentGroup has declined, or one too wide to track, which needs a
+// repeating model group, and the particle Decode binds is one sequence or
+// choice occurring once of element and wildcard particles, every nested group
+// spliced, so occurring exactly once or with {min occurs} 0 and {max occurs}
+// 1 (goshape.Splices), or declined. A decline here is a defect of that
+// premise, a plain error and no decline.
+func (w *wildcardSlot) attributor(schema *xsd.Schema) (*wildAttributor, error) {
 	if w == nil {
 		return nil, nil
 	}
@@ -2003,7 +2011,7 @@ func (w *wildcardSlot) matcher(schema *xsd.Schema) (*xsd.Matcher, error) {
 	if !ok {
 		return nil, fmt.Errorf("codec: xsd.Schema.ContentMatcher declines the complex type defined at %s, whose children Decode attributes through one", w.ct.Loc())
 	}
-	return m, nil
+	return &wildAttributor{m: m, places: w.places}, nil
 }
 
 // width is the field count, a spliced sequence's fields counted in its place.
@@ -2128,7 +2136,7 @@ func bindChoice(run *bindRun, ct xsd.ComplexType, particles []xsd.Particle, name
 		}
 		alts.alts = append(alts.alts, f)
 	}
-	if _, err := c.wild.matcher(run.p.schema); err != nil {
+	if _, err := c.wild.attributor(run.p.schema); err != nil {
 		return nil, err
 	}
 	return c, nil
@@ -2873,18 +2881,20 @@ func (b *boundBinding) fill(r *xmltree.Reader, root *xmltree.StartElement, out r
 // returns the xsi:type decline Decode's doc states, item 7, unless it is
 // attributed to a wildcard particle, whose match is read raw. With no
 // wildcard particle, a nil w, the child is attributed by its expanded name to
-// children's index; with one or more, by one fresh Matcher of w's, fed every
-// child in document order (§3.4.4.4 key-att-to), which puts each name to the
+// children's index; with one or more, by one wildAttributor w builds
+// (wildcardSlot.attributor), its fresh Matcher fed every child in document
+// order (§3.4.4.4 key-att-to), which puts each name to the
 // element particles before the wildcards (cvc-accept; §3.8.6.4
 // cos-nonambig): a child attributed to an element declaration to its
 // expanded name's index in children, the declaration being a substitution
 // group's head where the child is a member, and one attributed to a wildcard
 // particle to that particle's field or alternative, which attributeChild
-// looks up in w by the Matcher's position. Decode validated the instance
-// first, so every child is attributed, and to a particle; the plain error
-// unparticled returns where one is not is a defect of Decode's.
+// looks up in the attributor's places by the Matcher's position. Decode
+// validated the instance first, so every child is attributed, and to a
+// particle; the plain error unparticled returns where one is not is a defect
+// of Decode's.
 func eachChild(r *xmltree.Reader, schema *xsd.Schema, children map[xsd.QName]int, w *wildcardSlot, child func(start *xmltree.StartElement, i int) error) error {
-	m, err := w.matcher(schema)
+	a, err := w.attributor(schema)
 	if err != nil {
 		return err
 	}
@@ -2897,7 +2907,7 @@ func eachChild(r *xmltree.Reader, schema *xsd.Schema, children map[xsd.QName]int
 		case *xmltree.EndElement:
 			return nil
 		case *xmltree.StartElement:
-			at, ok, err := attributeChild(m, w, children, tok)
+			at, ok, err := attributeChild(a, children, tok)
 			if err != nil {
 				return err
 			}
@@ -2925,26 +2935,26 @@ type attribution struct {
 
 // attributeChild returns where the child element start is attributed, as
 // eachChild states, and false where it is attributed to none, or to no
-// particle, an {open content}; m is w's Matcher over the children before
-// start, both nil where the content model holds no wildcard particle. A
-// wildcard particle's index is the one w holds for its position
-// (xsd.Matcher.NextParticle), its field's or alternative's; a position w
+// particle, an {open content}; a has attributed the children before start,
+// nil where the content model holds no wildcard particle. A wildcard
+// particle's index is the one a holds for its position
+// (xsd.Matcher.NextParticle), its field's or alternative's; a position a
 // holds none for is a defect of the premise the binds rest on, one sequence
 // or choice of element and wildcard particles, nested sequences spliced
-// (wildcardSlot.matcher), and a plain error. Attribution is a closed sum, so
-// the switch is STYLE T2's sealed-sum exception.
-func attributeChild(m *xsd.Matcher, w *wildcardSlot, children map[xsd.QName]int, start *xmltree.StartElement) (attribution, bool, error) {
+// (wildcardSlot.attributor), and a plain error. Attribution is a closed sum,
+// so the switch is STYLE T2's sealed-sum exception.
+func attributeChild(a *wildAttributor, children map[xsd.QName]int, start *xmltree.StartElement) (attribution, bool, error) {
 	name := expanded(start.Name())
-	if m != nil {
-		a, pos, _ := m.NextParticle(name)
-		if _, wild := a.(xsd.Wildcard); wild {
-			i, placed := w.index(pos)
+	if a != nil {
+		t, pos, _ := a.m.NextParticle(name)
+		if _, wild := t.(xsd.Wildcard); wild {
+			i, placed := a.index(pos)
 			if !placed {
 				return attribution{}, false, fmt.Errorf("codec: %s: element %s is attributed to the wildcard particle at position %v, for which Decode bound no field or alternative", start.Loc(), name, pos)
 			}
 			return attribution{index: i, wild: true}, true, nil
 		}
-		if _, element := a.(xsd.ElementDeclaration); !element {
+		if _, element := t.(xsd.ElementDeclaration); !element {
 			return attribution{}, false, nil
 		}
 	}
