@@ -72,6 +72,31 @@ func TestWrapNil(t *testing.T) {
 	}
 }
 
+// TestCauseText pins one row per arm of CauseText's rendering. The "wrapper"
+// row fails if the assertion becomes errors.As, which reaches the zero-Loc
+// *Error inside the fmt wrapper and drops the wrapper's own text.
+func TestCauseText(t *testing.T) {
+	unplaced := New("cvc-datatype-valid", Loc{}, "inner")
+	var typedNil *Error
+	for _, tc := range []struct {
+		name string
+		err  error
+		want string
+	}{
+		{"bare zero-Loc", unplaced, "[cvc-datatype-valid] inner"},
+		{"placed", New("cvc-datatype-valid", Loc{URI: "a.xsd", Line: 2, Col: 3}, "inner"), "a.xsd:2:3: [cvc-datatype-valid] inner"},
+		{"partial Loc", New("cvc-datatype-valid", Loc{Line: 3}, "inner"), "?:3: [cvc-datatype-valid] inner"},
+		{"plain", errors.New("plain cause"), "plain cause"},
+		{"wrapper", fmt.Errorf("context: %w", unplaced), "context: ?: [cvc-datatype-valid] inner"},
+		{"nil", nil, "<nil>"},
+		{"typed-nil", typedNil, "<nil>"},
+	} {
+		if got := CauseText(tc.err); got != tc.want {
+			t.Errorf("%s: CauseText = %q, want %q", tc.name, got, tc.want)
+		}
+	}
+}
+
 func TestRuleOfAndLocOf(t *testing.T) {
 	loc := Loc{URI: "b.xsd", Line: 7, Col: 2}
 	err := New("cos-st-restricts", loc, "bad restriction")
