@@ -148,14 +148,14 @@ func New(rule Rule, loc Loc, format string, args ...any) *Error {
 	return &Error{Rule: rule, Loc: loc, Msg: fmt.Sprintf(format, args...)}
 }
 
-// Wrap attaches rule and loc to a deeper plain error, preserving its message
-// verbatim (Msg is err.Error()) and its identity (Unwrap returns err so
-// errors.Is/As reach the wrapped cause). Wrap returns nil when err is nil.
+// Wrap attaches rule and loc to a deeper error, keeping its identity (Unwrap
+// returns err so errors.Is/As reach the wrapped cause) and taking Msg from
+// CauseText(err). Wrap returns nil when err is nil.
 func Wrap(rule Rule, loc Loc, err error) *Error {
 	if err == nil {
 		return nil
 	}
-	return &Error{Rule: rule, Loc: loc, Msg: err.Error(), Err: err}
+	return &Error{Rule: rule, Loc: loc, Msg: CauseText(err), Err: err}
 }
 
 // RuleOf reports the Rule of the first *Error in err's chain. The second result
