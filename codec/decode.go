@@ -1053,6 +1053,43 @@ func (c rawContent) read(_ *pipeline, r *xmltree.Reader, start *xmltree.StartEle
 	return c.shape.readContent(r, start)
 }
 
+// fill sets out, T for a document element of type xs:anyType itself
+// (anyTypeRoot), as a filler does: root's xsi:type declines, item 7 of
+// Decode's doc, and otherwise root's content is read raw, as read reads it,
+// and converted to T. No attribute of root is held to an attribute use: its
+// type's lax attribute wildcard (§3.4.7) makes every one, xsi:nil included,
+// one of the raw Attributes.
+func (c rawContent) fill(r *xmltree.Reader, root *xmltree.StartElement, out reflect.Value) error {
+	if err := checkXsiType(root); err != nil {
+		return err
+	}
+	x, err := c.shape.readContent(r, root)
+	if err != nil {
+		return err
+	}
+	out.Set(x.Convert(out.Type()))
+	return nil
+}
+
+// anyTypeRoot is the type codegen emits for a top-level element declaration
+// whose {type definition} is xs:anyType itself, as Decode reads it: the named
+// type over AnyType (codegen/doc.go "# xs:anyType"). Its check admits X, a
+// struct of AnyType's shape, as well as N over it, since T is matched by
+// shape alone, no name compared.
+type anyTypeRoot struct{}
+
+// check returns the rawContent that fills t when t is X or N, a type that
+// converts to the X contentShapeOf reaches from it, the union of what an
+// anyTypeArm admits for valueBare and for valueNamed, and otherwise the
+// ErrTypeMismatch error Decode's doc states, item 6.
+func (anyTypeRoot) check(t reflect.Type, _ *checkContext) (filler, error) {
+	s, ok := contentShapeOf(t)
+	if !ok || !t.ConvertibleTo(s.content) {
+		return nil, fmt.Errorf("%w: %s is neither a struct X of codegen's AnyType shape nor a named type over one", ErrTypeMismatch, t)
+	}
+	return rawContent{shape: s}, nil
+}
+
 // rawShape is the four raw-content structs codegen emits (codegen/doc.go "#
 // Element declarations"), as a T holds them: element, E, AnyElement's;
 // content, X, AnyType's; attribute, A, AnyAttribute's; and child, C,
@@ -1393,7 +1430,8 @@ func (a attribute) field() field {
 // each sealed interface's branch types from cx, and returns the filler that
 // sets a value of T from the document element. A *binding binds a complex
 // {type definition} codegen gives a struct, a *choiceRoot one it gives a bare
-// sealed interface, and a *simpleRoot a simple one.
+// sealed interface, an anyTypeRoot xs:anyType itself, and a *simpleRoot a
+// simple one.
 type binder interface {
 	check(t reflect.Type, cx *checkContext) (filler, error)
 }
@@ -1510,12 +1548,15 @@ func bind(p *pipeline, root *xmltree.StartElement) (binder, error) {
 // no instance Loc, or the plain error item 5 states in a decline's place. It
 // reads only p's schema.
 func bindDecl(p *pipeline, decl xsd.ElementDeclaration) (binder, error) {
-	if d := declarationDecline(decl); d != 0 {
+	if d := declarationDecline(p.schema, decl); d != 0 {
 		return nil, decline(d, declSubject(decl))
 	}
 	td, ok := p.schema.ResolvedType(decl.TypeDefinition())
 	if !ok {
 		return nil, fmt.Errorf("codec: the {type definition} of %s does not resolve", declSubject(decl))
+	}
+	if anyTypeItself(td) {
+		return anyTypeRoot{}, nil
 	}
 	// TypeDefinition is a closed sum of the two, so the assertions are STYLE
 	// T2's sealed-sum exception.
@@ -2225,16 +2266,32 @@ func bindSimpleRoot(p *pipeline, decl xsd.ElementDeclaration, st *xsd.SimpleType
 }
 
 // declarationDecline returns the construct of an element declaration's own
-// properties Decode declines, in the order its doc states, or 0.
-func declarationDecline(decl xsd.ElementDeclaration) construct {
+// properties Decode declines, in the order its doc states, or 0: a {type
+// table}, whatever decl's type, then {nillable} true, unless decl's {type
+// definition} resolves in schema to xs:anyType itself, whose raw content
+// holds xsi:nil among its attributes. An unresolved {type definition} never
+// exempts, so a nillable decl of one still declines here, ahead of its
+// caller's plain error.
+func declarationDecline(schema *xsd.Schema, decl xsd.ElementDeclaration) construct {
 	if _, has := decl.TypeTable(); has {
 		return constructTypeTable
 	}
-	if decl.Nillable() {
-		return constructNillable
+	if !decl.Nillable() {
+		return 0
 	}
-	return 0
+	if td, ok := schema.ResolvedType(decl.TypeDefinition()); ok && anyTypeItself(td) {
+		return 0
+	}
+	return constructNillable
 }
+
+// anyTypeName is the expanded name of xs:anyType.
+var anyTypeName = xsd.QName{Space: xsd.XMLSchemaNS, Local: "anyType"}
+
+// anyTypeItself reports whether td is xs:anyType itself (§3.4.7
+// any-type-itself), known by its expanded name, as codegen's isAnyType knows
+// it, so a type derived from xs:anyType is not.
+func anyTypeItself(td xsd.TypeDefinition) bool { return td.Name() == anyTypeName }
 
 // contentGroup returns the {particle} of content, a complex type's
 // element-only or mixed content, its {term} an inline sequence or choice or
@@ -2417,27 +2474,25 @@ func groupField(run *bindRun, children map[xsd.QName]int, head xsd.ElementDeclar
 func declField(run *bindRun, el xsd.ElementDeclaration, value valueType, shapeOf func() (shape, error)) (field, error) {
 	schema := run.p.schema
 	subject := declSubject(el)
-	if d := declarationDecline(el); d != 0 {
+	if d := declarationDecline(schema, el); d != 0 {
 		return field{}, decline(d, subject)
 	}
 	td, ok := schema.ResolvedType(el.TypeDefinition())
 	if !ok {
 		return field{}, fmt.Errorf("codec: the {type definition} of %s does not resolve", subject)
 	}
+	if anyTypeItself(td) {
+		s, err := shapeOf()
+		if err != nil {
+			return field{}, err
+		}
+		return field{shape: s, arm: anyTypeArm{value: value}}, nil
+	}
 	// TypeDefinition is a closed sum of the two, so the assertion is STYLE T2's
 	// sealed-sum exception.
 	st, simple := td.(*xsd.SimpleType)
 	if !simple {
 		ct, _ := td.(xsd.ComplexType)
-		// xs:anyType is known by name, as codegen's isAnyType knows it, so a
-		// type derived from it binds as its own complex type.
-		if ct.Name() == (xsd.QName{Space: xsd.XMLSchemaNS, Local: "anyType"}) {
-			s, err := shapeOf()
-			if err != nil {
-				return field{}, err
-			}
-			return field{shape: s, arm: anyTypeArm{value: value}}, nil
-		}
 		u, err := run.nested(el, ct)
 		if err != nil {
 			return field{}, err
