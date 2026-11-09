@@ -90,7 +90,8 @@ type construct uint8
 // particle's, though a document element of simple type, a complex type's
 // simple content, by its {simple type definition}, an attribute use, a list
 // type, by its {item type definition}, and a union, by a basic member,
-// decline by them too.
+// decline by them too. constructUntrackedFlattened follows every particle of
+// a flattened content model, ahead of the type's attribute uses.
 const (
 	constructTypeTable construct = iota + 1
 	constructNillable
@@ -107,6 +108,7 @@ const (
 	constructOtherPrimitive
 	constructSharedVariant
 	constructUnionAssertions
+	constructUntrackedFlattened
 	constructXsiAttribute
 	constructAttributeWildcard
 	constructXsiType
@@ -129,6 +131,7 @@ var constructNames = [...]string{
 	constructOtherPrimitive:      "an atomic simple type whose primitive is ·implementation-defined·, other than xs:precisionDecimal",
 	constructSharedVariant:       "a union simple type two of whose basic members get one Go type",
 	constructUnionAssertions:     "a union simple type with an assertions facet on itself, a member or a list member's item type",
+	constructUntrackedFlattened:  "a flattened content model the content matcher does not track",
 	constructXsiAttribute:        "an attribute use in the xsi namespace",
 	constructAttributeWildcard:   "an {attribute wildcard}",
 	constructXsiType:             "an element carrying xsi:type",
