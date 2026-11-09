@@ -277,12 +277,11 @@ func ignoredElement(el *Element) (bool, error) {
 	return false, nil
 }
 
-// versioningAttr returns el's {versioningNS}local attribute, reporting whether
-// it is present, so a charge against its value can be located at the
-// attribute's own name (its Loc) rather than at el's start tag; ok is false,
-// and the Attribute the zero value, when it is absent. The namespace test is
-// what distinguishes a §4.2.2 attribute from an identically-named one in no
-// namespace, which the schema for schema documents would govern instead.
+// versioningAttr is [Element.attr] for el's {versioningNS}local attribute: it
+// returns that attribute, for the reason and with the absent-case answer attr
+// states. The namespace test is what distinguishes a §4.2.2 attribute from an
+// identically-named one in no namespace, which the schema for schema documents
+// would govern instead.
 func versioningAttr(el *Element, local string) (xmltree.Attribute, bool) {
 	for _, a := range el.attrs {
 		if a.Name().Space() == versioningNS && a.Name().Local() == local {
@@ -452,8 +451,8 @@ func conditionalQNames(el *Element, attr, lexical string) ([]xsd.QName, error) {
 // here; any whitespace INSIDE the value survives collapse as a space and is
 // outside the lexical space either way.
 //
-// loc is the attribute's own position, from versioningAttr, which the charge
-// is located at.
+// loc is the attribute's own Loc, from versioningAttr, and the charge is
+// located there.
 func conditionalDecimal(el *Element, attr, lexical string, loc xsderr.Loc) (decimal, error) {
 	d, ok := parseDecimal(collapseTrim(lexical))
 	if !ok {

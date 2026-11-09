@@ -197,9 +197,10 @@ func TestProduceProhibitedUsePaddedExcludesInheritedAttributeUse(t *testing.T) {
 // mints the default component — use="foo" an optional use, form="Qualified" a
 // name in no namespace.
 //
-// wantLine pins the charge to the element that WROTE the value (STYLE E3):
-// use= and form= at the declaration, the two *FormDefault attributes at
-// <schema>, which is where checkFormDefaults reads them.
+// wantLine pins the charge to the line of the attribute that WROTE the value
+// (STYLE E3): use= and form= on the declaration, the two *FormDefault
+// attributes on <schema>, which is where checkFormDefaults reads them;
+// TestProduceAttributeValueChargeLocated pins the column.
 func TestProduceUseAndFormOutOfEnumeration(t *testing.T) {
 	// A slice, not a map: subtest order is output (STYLE D2).
 	cases := []struct {
