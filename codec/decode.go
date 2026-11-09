@@ -2840,7 +2840,7 @@ func atomicDecline(r xsd.TypeResolver, st *xsd.SimpleType) (atomic, construct, e
 		return 0, 0, err
 	}
 	if primitive == nil {
-		return 0, 0, fmt.Errorf("codec: the simple type defined at %s is atomic with no {primitive type definition}, which st-props-correct clause 1 (Structures §3.16.6.1) and the Datatypes §4.1.1 tableau give no atomic type but xs:anyAtomicType, a special type", st.Loc())
+		return 0, 0, fmt.Errorf("codec: the simple type defined at %s is of absent or atomic {variety} with no {primitive type definition}, which st-props-correct clause 1 (Structures §3.16.6.1) and the Datatypes §4.1.1 tableau give no simple type but the special types xs:anySimpleType and xs:anyAtomicType", st.Loc())
 	}
 	atom, ok, err := chainAtomic(r, st)
 	if err != nil {
