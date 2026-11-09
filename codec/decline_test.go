@@ -131,8 +131,6 @@ func TestDecodeDeclines(t *testing.T) {
 			"", `<o:w xmlns:o="urn:o"/>`, constructSharedBranch, 1, 1},
 		{"a wildcard particle in mixed content", `<xs:element name="r"><xs:complexType mixed="true"><xs:sequence><xs:any processContents="lax"/></xs:sequence></xs:complexType></xs:element>`,
 			"", "t" + a, constructMixedContent, 1, 1},
-		{"a wildcard particle beside an attribute wildcard", root(`<xs:sequence><xs:any processContents="lax"/></xs:sequence><xs:anyAttribute processContents="lax"/>`),
-			"", a, constructAttributeWildcard, 1, 1},
 		{"element ref to a head whose group holds a nillable member", `<xs:element name="a" type="xs:string"/><xs:element name="m" type="xs:string" nillable="true" substitutionGroup="s:a"/>` + sequenceOf(`<xs:element ref="s:a"/>`),
 			"", a, constructNillable, 1, 1},
 		{"element ref to a group of two declining members, the nillable one first", `<xs:complexType name="ct" mixed="true"><xs:sequence/></xs:complexType><xs:element name="h" type="s:ct" abstract="true"/>
@@ -165,8 +163,6 @@ func TestDecodeDeclines(t *testing.T) {
 			"", a, constructSpecial, 1, 1},
 		{"local element of simple content, its attribute use of a special type", sequenceOf(`<xs:element name="a"><xs:complexType><xs:simpleContent><xs:extension base="xs:string"><xs:attribute name="k" type="xs:anySimpleType"/></xs:extension></xs:simpleContent></xs:complexType></xs:element>`),
 			"", a, constructSpecial, 1, 1},
-		{"local element of simple content with an attribute wildcard", sequenceOf(`<xs:element name="a"><xs:complexType><xs:simpleContent><xs:extension base="xs:string"><xs:anyAttribute processContents="lax"/></xs:extension></xs:simpleContent></xs:complexType></xs:element>`),
-			"", a, constructAttributeWildcard, 1, 1},
 		{"local element of an abstract complex type", `<xs:complexType name="ab" abstract="true"><xs:sequence><xs:element name="x" type="xs:string"/></xs:sequence></xs:complexType>
 			<xs:complexType name="cc"><xs:complexContent><xs:extension base="s:ab"/></xs:complexContent></xs:complexType>` + sequenceOf(`<xs:element name="a" type="s:ab" minOccurs="0"/>`),
 			"", "", constructAbstractTypeElement, 1, 1},
@@ -174,8 +170,6 @@ func TestDecodeDeclines(t *testing.T) {
 			"", `<s:a><s:b>x</s:b></s:a>`, constructNillable, 1, 1},
 		{"a nested type's particle of a union of xs:string and xs:token", sequenceOf(`<xs:element name="a"><xs:complexType><xs:sequence><xs:element name="b"><xs:simpleType><xs:union memberTypes="xs:string xs:token"/></xs:simpleType></xs:element></xs:sequence></xs:complexType></xs:element>`),
 			"", `<s:a><s:b>1.0</s:b></s:a>`, constructSharedVariant, 1, 1},
-		{"a nested type's attribute wildcard", sequenceOf(`<xs:element name="a"><xs:complexType><xs:sequence><xs:element name="b" type="xs:string"/></xs:sequence><xs:anyAttribute processContents="lax"/></xs:complexType></xs:element>`),
-			"", `<s:a><s:b>x</s:b></s:a>`, constructAttributeWildcard, 1, 1},
 		{"choice alternatives sharing a branch shape, two structs of one shape", root(`<xs:choice>` + vStruct("x", "") + vStruct("X", "") + `</xs:choice>`),
 			"", `<s:x><s:v>v</s:v></s:x>`, constructSharedBranch, 1, 1},
 		{"choice alternatives sharing a name, two structs of differing fields", root(`<xs:choice>` + vStruct("x", "") +
@@ -211,8 +205,6 @@ func TestDecodeDeclines(t *testing.T) {
 			` b="1.0"`, a, constructSpecial, 1, 1},
 		{"attribute use in the xsi namespace", `<xs:import namespace="http://www.w3.org/2001/XMLSchema-instance"/>` +
 			root(`<xs:sequence><xs:element name="a" type="xs:string"/></xs:sequence><xs:attribute ref="xsi:nil"/>`), "", a, constructXsiAttribute, 1, 1},
-		{"attribute wildcard", root(`<xs:sequence><xs:element name="a" type="xs:string"/></xs:sequence><xs:anyAttribute processContents="lax"/>`),
-			"", a, constructAttributeWildcard, 1, 1},
 	}
 	for _, row := range rows {
 		t.Run(row.name, func(t *testing.T) {

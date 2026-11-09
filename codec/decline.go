@@ -81,16 +81,15 @@ type construct uint8
 
 // The construct values, in the order Decode finds them: the document
 // element's declaration, its type, its content, each particle in order, its
-// attribute uses in order, its attribute wildcard, and the instance. A
-// particle's complex type, examined at the particle, declines by the same
-// constructs from constructMixedContent on, and by
-// constructAbstractTypeElement, which sits with the particle's though the
-// document element's type declines by it too, ahead of its content. The four
-// of a simple type, constructSpecial to constructUnionAssertions, sit with the
-// particle's, though a document element of simple type, a complex type's
-// simple content, by its {simple type definition}, an attribute use, a list
-// type, by its {item type definition}, and a union, by a basic member,
-// decline by them too.
+// attribute uses in order, and the instance. A particle's complex type,
+// examined at the particle, declines by the same constructs from
+// constructMixedContent on, and by constructAbstractTypeElement, which sits
+// with the particle's though the document element's type declines by it too,
+// ahead of its content. The four of a simple type, constructSpecial to
+// constructUnionAssertions, sit with the particle's, though a document element
+// of simple type, a complex type's simple content, by its {simple type
+// definition}, an attribute use, a list type, by its {item type definition},
+// and a union, by a basic member, decline by them too.
 const (
 	constructTypeTable construct = iota + 1
 	constructNillable
@@ -108,7 +107,6 @@ const (
 	constructSharedVariant
 	constructUnionAssertions
 	constructXsiAttribute
-	constructAttributeWildcard
 	constructXsiType
 )
 
@@ -130,7 +128,6 @@ var constructNames = [...]string{
 	constructSharedVariant:       "a union simple type two of whose basic members get one Go type",
 	constructUnionAssertions:     "a union simple type with an assertions facet on itself, a member or a list member's item type",
 	constructXsiAttribute:        "an attribute use in the xsi namespace",
-	constructAttributeWildcard:   "an {attribute wildcard}",
 	constructXsiType:             "an element carrying xsi:type",
 }
 

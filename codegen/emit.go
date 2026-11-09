@@ -248,7 +248,7 @@ type precisionDecimalNames struct {
 }
 
 // structAttributes is what body records for one struct whose type has
-// attribute fields (hasAttributeFields): from, its header's rendering
+// attribute fields (goshape.HasAttributeFields): from, its header's rendering
 // of what it is generated from, and fields, its attribute fields and then its
 // wildcard field, named as the struct names them.
 type structAttributes struct {
@@ -1343,13 +1343,13 @@ func nillable(decl xsd.ElementDeclaration) bool {
 // nillableType returns the sealed interface Nillable over typ, the Go type a
 // field over a nillable declaration whose type definition is td holds
 // without the wrap, and A: the attributes struct attributesType names for a
-// td that is a complex type with attribute fields (hasAttributeFields), and
-// struct{} otherwise. It claims Nillable's names first (nillableTypes), then
-// A's, each when nothing earlier did.
+// td that is a complex type with attribute fields
+// (goshape.HasAttributeFields), and struct{} otherwise. It claims Nillable's
+// names first (nillableTypes), then A's, each when nothing earlier did.
 func (e *emitter) nillableType(typ emittedType, td xsd.TypeDefinition) emittedType {
 	sum := e.nillableTypes()
 	attributes := "struct{}"
-	if ct, isComplex := td.(xsd.ComplexType); isComplex && hasAttributeFields(ct) {
+	if ct, isComplex := td.(xsd.ComplexType); isComplex && goshape.HasAttributeFields(ct) {
 		attributes = e.attributesType(typ.name)
 	}
 	return emittedType{name: sum + "[" + typ.name + ", " + attributes + "]", sealed: true}
@@ -1467,7 +1467,7 @@ func typeName(t xsd.TypeDefinition) string {
 // shape, naming it in declines by o's subject, and returns the type it emits
 // as name, sealed exactly when "# Complex types" gives the choice t's content
 // particle holds as t itself — it reads t's mixedness (isMixed), then its
-// attribute fields (hasAttributeFields) and its {open content}
+// attribute fields (goshape.HasAttributeFields) and its {open content}
 // (hasOpenContent) from the finalized component, so inherited ones count, and
 // then answers sealed for a choice with no {particles}, before asking
 // termEmptiable about a choice with {particles} — and its content particle
@@ -1481,7 +1481,7 @@ func (e *emitter) shape(name string, o origin, t xsd.ComplexType) (emittedType, 
 	if content == nil || content.group.Compositor() != xsd.CompositorChoice || content.occurs != exactlyOnce || isMixed(t) {
 		return emittedType{name: name}, content, nil
 	}
-	if hasAttributeFields(t) || hasOpenContent(t) {
+	if goshape.HasAttributeFields(t) || hasOpenContent(t) {
 		return emittedType{name: name}, content, nil
 	}
 	if len(content.group.Particles()) == 0 {
@@ -1494,16 +1494,6 @@ func (e *emitter) shape(name string, o origin, t xsd.ComplexType) (emittedType, 
 	return emittedType{name: name, sealed: !emptiable}, content, nil
 }
 
-// hasAttributeFields reports whether the complex type t has an attribute use
-// fieldAttributeUses keeps or an {attribute wildcard}, read from the finalized
-// component, so inherited ones count: exactly when the struct body emits for t
-// holds attribute fields, and so when shape never answers a sealed interface
-// for t.
-func hasAttributeFields(t xsd.ComplexType) bool {
-	_, hasWildcard := t.AttributeWildcard()
-	return hasWildcard || len(fieldAttributeUses(t)) > 0
-}
-
 // hasOpenContent reports whether the complex type t has an {open content},
 // read from its finalized {content type} as the package doc's
 // "# Open content" states: exactly when the struct body emits for t holds
@@ -1512,26 +1502,6 @@ func hasAttributeFields(t xsd.ComplexType) bool {
 func hasOpenContent(t xsd.ComplexType) bool {
 	content, isElement := t.ContentType().(xsd.ElementContent)
 	return isElement && content.OpenContent != nil
-}
-
-// xsiNil is the expanded name of the built-in attribute declaration xsi:nil
-// (§3.2.7.2).
-var xsiNil = xsd.QName{Space: xsd.XMLSchemaInstanceNS, Local: "nil"}
-
-// fieldAttributeUses returns t's {attribute uses} but a use of xsi:nil, the
-// uses body gives a field each: a nillable element's nilled-ness is
-// Nillable's arm (cvc-elt clause 3.2.3), and a declaration that is not
-// nillable admits no xsi:nil (cvc-elt clause 3.1). It matches the use's
-// {attribute declaration} by expanded name, which stands for the built-in's
-// identity because no-xsi (§3.2.6.4) keeps a schema document out of the xsi
-// namespace.
-//
-// GAP(xsd): a programmatically built schema is not kept out (#1462), so a
-// declaration it builds named {xsi}nil matches too: body then emits no field
-// for that use and hasAttributeFields does not count it, so the emitted type
-// omits that attribute and nothing declines.
-func fieldAttributeUses(t xsd.ComplexType) []xsd.AttributeUse {
-	return slices.DeleteFunc(t.AttributeUses(), func(u xsd.AttributeUse) bool { return u.DeclarationName() == xsiNil })
 }
 
 // body emits typ, which shape returned for the complex type t with content,
@@ -1544,9 +1514,9 @@ func fieldAttributeUses(t xsd.ComplexType) []xsd.AttributeUse {
 // an {open content} (hasOpenContent), one named from the local name
 // openContent holding a slice of the raw-content struct AnyElement, or of
 // AnyChild for mixed content (anyTypeType, which claims the raw-content
-// structs' names there when nothing earlier did), then one per
-// attribute use fieldAttributeUses keeps (attributeField), and then, when t
-// has an {attribute wildcard} (§3.4.2.5 dcl.ctd.anyatt), its own, inherited or
+// structs' names there when nothing earlier did), then one per attribute use
+// goshape.FieldAttributeUses keeps (attributeField), and then, when t has an
+// {attribute wildcard} (§3.4.2.5 dcl.ctd.anyatt), its own, inherited or
 // brought by an attribute group, one named from the local name anyAttribute
 // holding a slice of the raw-content struct AnyAttribute (anyTypeType, which
 // claims the raw-content structs' names there when nothing earlier did); or
@@ -1588,7 +1558,7 @@ func (e *emitter) body(typ emittedType, nested scope, chain []valueNode, o origi
 		fields = append(fields, fieldSpec{local: "openContent", goType: "[]" + item})
 	}
 	attributesFrom := len(fields)
-	for _, u := range fieldAttributeUses(t) {
+	for _, u := range goshape.FieldAttributeUses(t) {
 		field, err := e.attributeField(nested, o.subject, t.Loc(), u)
 		if err != nil {
 			return err
