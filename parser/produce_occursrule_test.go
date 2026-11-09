@@ -36,7 +36,7 @@ func TestProduceOccursAttributeFaultsCharged(t *testing.T) {
 	// A slice, not a map: subtest order is output (STYLE D2). Every body starts
 	// on line 2 of the wrapped document and puts the offending element, and so
 	// the faulted attribute a lexical charge is located at, on the line named by
-	// wantLine; TestProduceComplexAttributeValueChargeLocated pins the column.
+	// wantLine; TestProduceAttributeValueChargeLocated pins the column.
 	cases := []struct {
 		name     string
 		body     string

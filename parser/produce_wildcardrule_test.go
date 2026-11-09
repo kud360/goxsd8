@@ -33,7 +33,7 @@ func TestProduceProcessContentsFaultCharged(t *testing.T) {
 	// A slice, not a map: subtest order is output (STYLE D2). Every body starts
 	// on line 2 of the wrapped document and puts the offending element, and so
 	// its processContents the charge is located at, on line 3;
-	// TestProduceComplexAttributeValueChargeLocated pins the column.
+	// TestProduceAttributeValueChargeLocated pins the column.
 	cases := []struct {
 		name string
 		body string
