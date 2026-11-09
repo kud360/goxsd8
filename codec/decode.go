@@ -290,7 +290,7 @@ var ErrTypeMismatch = errors.New("codec: T is not the type codegen emits for the
 //     itself, known by its QName, gives the field item 6 states and is
 //     examined no further; and any other complex one, a type derived from
 //     xs:anyType included, is examined as the document element's complex type
-//     is, from its {abstract} to its {attribute wildcard}. Then the particle
+//     is, from its {abstract} to its attribute uses. Then the particle
 //     declines by an expanded name an earlier particle's field takes, a
 //     particle's field taking its element's expanded name, or, for a
 //     substitution group's interface, each declaration the next bullet
@@ -315,9 +315,10 @@ var ErrTypeMismatch = errors.New("codec: T is not the type codegen emits for the
 //     interface, and otherwise of the name and Go type, as item 6 reads it,
 //     which declines as two branches of a sealed interface whose structs
 //     have one shape.
-//   - Each of the complex type's attribute uses in order, and its {attribute
-//     wildcard}; none of either where codegen emits its choice's sealed
-//     interface as the type itself, whose one use can be xsi:nil's.
+//   - Each of the complex type's attribute uses in order, none where codegen
+//     emits its choice's sealed interface as the type itself, whose one use
+//     can be xsi:nil's. Its {attribute wildcard} gives the field item 6
+//     states and is examined no further.
 //
 // The complex type of a top-level declaration, the document element's, one
 // an <element ref> names, or a member of that one's substitution group, a
@@ -344,7 +345,8 @@ var ErrTypeMismatch = errors.New("codec: T is not the type codegen emits for the
 //     field first, named from the local name value, holding V, the Go type
 //     codegen gives the {content type}'s {simple type definition}, matched as
 //     a local particle's V of simple type is, never a pointer, and then the
-//     attribute fields, or, where codegen emits the choice's sealed interface
+//     attribute fields, and last, for a type with an {attribute wildcard},
+//     its field, or, where codegen emits the choice's sealed interface
 //     as the type itself, T is an interface, and Decode then returns a *T
 //     pointing at it. So a T of the same shape, such as the struct codegen
 //     emits for another top-level element of the same type, passes and
@@ -441,6 +443,20 @@ var ErrTypeMismatch = errors.New("codec: T is not the type codegen emits for the
 //     element's content raw, as the bullet above states an E's Content, so an
 //     xsi:type inside it is one of its raw attributes, the element's own
 //     declining (item 7).
+//   - The field of a complex type's {attribute wildcard}, its struct's last,
+//     named as if from local name anyAttribute after the attribute fields
+//     (codegen's package doc, "# Naming"), so AnyAttribute2 where an
+//     attribute or element field took AnyAttribute: []A, never a pointer, A
+//     a struct of AnyAttribute's shape as the wildcard bullet above states
+//     it, matched by shape, and the slice named or not. It holds, in
+//     start-tag order, each attribute of the element that no attribute use's
+//     declaration names but xsi:type, xsi:nil, xsi:schemaLocation and
+//     xsi:noNamespaceSchemaLocation (Structures §3.4.4.2 cvc-complex-type
+//     clause 2, a use taking precedence by clause 2.1), another xsi: one
+//     included, each raw as that bullet states an E's Attributes, nil for
+//     none. Neither the wildcard's {namespace constraint} nor its {process
+//     contents} is read: validation held each such attribute to the wildcard
+//     first (clause 2.2.2).
 //   - The field of an <element ref> particle that codegen gives a sealed
 //     interface over the referenced declaration's substitution group
 //     (§3.3.6.4 key-eq; codegen's package doc, "# Substitution groups"
@@ -1114,19 +1130,20 @@ func (anyTypeRoot) check(t reflect.Type, _ *checkContext) (filler, error) {
 	return rawContent{shape: s}, nil
 }
 
-// rawShape is the four raw-content structs codegen emits (codegen/doc.go "#
-// Element declarations"), as a T holds them: element, E, AnyElement's;
-// content, X, AnyType's; attribute, A, AnyAttribute's; and child, C,
-// AnyChild's. rawShapeOf states their fields.
+// rawShape is three of the four raw-content structs codegen emits
+// (codegen/doc.go "# Element declarations"), as a T holds them: element, E,
+// AnyElement's; content, X, AnyType's; and child, C, AnyChild's. The fourth,
+// A, AnyAttribute's, is the element of X's Attributes. rawShapeOf states
+// their fields.
 type rawShape struct {
-	element, content, attribute, child reflect.Type
+	element, content, child reflect.Type
 }
 
 // rawShapeOf returns the rawShape whose element is e, when e is a struct of
 // AnyElement's shape: e's fields exactly Space and Local, each a string, and
 // Content, X, in that order; X's exactly Attributes, a slice of A, Text, a
-// string, and Children, a slice of C; A's exactly Space, Local and Value,
-// each a string; and C's exactly Element, of e itself, and Tail, a string.
+// string, and Children, a slice of C; A of AnyAttribute's shape
+// (rawAttributeShaped); and C's exactly Element, of e itself, and Tail, a string.
 // Each field is matched by name, order and Go type, none embedded, struct
 // tags aside, and no struct by its name, so codegen's AnyElement2 and
 // AnyType2 match; a slice may be named or not. C's Element is the one field
@@ -1141,14 +1158,35 @@ func rawShapeOf(e reflect.Type) (rawShape, bool) {
 		x.Field(0).Type.Kind() != reflect.Slice || x.Field(2).Type.Kind() != reflect.Slice {
 		return rawShape{}, false
 	}
-	a, c := x.Field(0).Type.Elem(), x.Field(2).Type.Elem()
-	if !fieldsNamed(a, "Space", "Local", "Value") || a.Field(0).Type != str || a.Field(1).Type != str || a.Field(2).Type != str {
+	c := x.Field(2).Type.Elem()
+	if !rawAttributeShaped(x.Field(0).Type.Elem()) {
 		return rawShape{}, false
 	}
 	if !fieldsNamed(c, "Element", "Tail") || c.Field(0).Type != e || c.Field(1).Type != str {
 		return rawShape{}, false
 	}
-	return rawShape{element: e, content: x, attribute: a, child: c}, true
+	return rawShape{element: e, content: x, child: c}, true
+}
+
+// rawAttributeShaped reports whether a is a struct of AnyAttribute's shape:
+// its fields exactly Space, Local and Value, each a string, none embedded,
+// struct tags aside, whatever its name. It is A of rawShapeOf and the element
+// of an {attribute wildcard}'s field (anyAttributeField).
+func rawAttributeShaped(a reflect.Type) bool {
+	str := reflect.TypeFor[string]()
+	return fieldsNamed(a, "Space", "Local", "Value") && a.Field(0).Type == str && a.Field(1).Type == str && a.Field(2).Type == str
+}
+
+// appendRawAttribute appends to attrs, a slice whose element rawAttributeShaped
+// admits, one element holding the attribute a raw: Space and Local its
+// expanded name, and Value its value as the reader normalized it, a prefix
+// inside it unresolved.
+func appendRawAttribute(attrs reflect.Value, a xmltree.Attribute) {
+	v := reflect.New(attrs.Type().Elem()).Elem()
+	v.Field(0).SetString(a.Name().Space())
+	v.Field(1).SetString(a.Name().Local())
+	v.Field(2).SetString(a.Value())
+	attrs.Set(reflect.Append(attrs, v))
 }
 
 // fieldsNamed reports whether t is a struct whose fields are exactly names,
@@ -1197,11 +1235,7 @@ func (s rawShape) readContent(r *xmltree.Reader, start *xmltree.StartElement) (r
 	x := reflect.New(s.content).Elem()
 	attrs := x.Field(0)
 	for _, a := range start.Attributes() {
-		v := reflect.New(s.attribute).Elem()
-		v.Field(0).SetString(a.Name().Space())
-		v.Field(1).SetString(a.Name().Local())
-		v.Field(2).SetString(a.Value())
-		attrs.Set(reflect.Append(attrs, v))
+		appendRawAttribute(attrs, a)
 	}
 	children := x.Field(2)
 	// text gathers the character data due at tail: X's Text, then the last
@@ -1508,7 +1542,9 @@ type filler interface {
 
 // binding is the struct codegen emits for a complex type, a document
 // element's or a particle's element declaration's, as Decode reads it: its
-// fields in codegen's order, its content's first, then each attribute use's.
+// fields in codegen's order, its content's first, then each attribute use's,
+// then its {attribute wildcard}'s, the struct's last (codegen/doc.go
+// "# Attributes").
 type binding struct {
 	p       *pipeline
 	content elementContent
@@ -1516,6 +1552,39 @@ type binding struct {
 	// attributes maps an attribute's expanded name to its field's index in
 	// attrs; it is a lookup index only and never iterated (STYLE D2).
 	attributes map[xsd.QName]int
+	// anyAttribute is the {attribute wildcard}'s field, nil for a type with
+	// no {attribute wildcard}.
+	anyAttribute *anyAttributeField
+}
+
+// anyAttributeField is the field an {attribute wildcard} gives a complex
+// type's struct, after every attribute field: name, its Go name, claimed
+// from the local name anyAttribute after the attribute fields', so
+// AnyAttribute2 where an earlier field took AnyAttribute (codegen/doc.go
+// "# Attributes"). It holds a slice of a struct of AnyAttribute's shape
+// (rawAttributeShaped).
+type anyAttributeField struct {
+	name string
+}
+
+// check holds field index of owner to w, item 6 of Decode's doc: w's name,
+// not embedded, and a slice, named or not, whose element is of AnyAttribute's
+// shape.
+func (w *anyAttributeField) check(owner reflect.Type, index int) error {
+	got := owner.Field(index)
+	if got.Name != w.name || got.Anonymous || got.Type.Kind() != reflect.Slice || !rawAttributeShaped(got.Type.Elem()) {
+		return fmt.Errorf("%w: field %d of %s is %s %s where codegen emits %s []AnyAttribute", ErrTypeMismatch, index, owner, got.Name, got.Type, w.name)
+	}
+	return nil
+}
+
+// width returns the number of fields w gives a struct: 1, or 0 for a nil w,
+// a type with no {attribute wildcard}.
+func (w *anyAttributeField) width() int {
+	if w == nil {
+		return 0
+	}
+	return 1
 }
 
 // field returns the field of shape s whose V is b's struct.
@@ -1647,14 +1716,17 @@ type unitIndex[K comparable] map[K]complexUnit
 // order: {abstract} true, ct's content, for simple content its {simple type
 // definition} (simpleValueOf), for element-only content the occurrence of its
 // sequence or choice and each particle in order, then each attribute use in
-// order, and its {attribute wildcard}. Empty content binds the struct codegen
-// emits for it, with no field ahead of the attribute fields, and simple
-// content the struct whose one field ahead of them is the value field
-// (codegen/doc.go "# Complex types"). A nil index binds an inline anonymous ct
-// under no key. A ct of simple content is stored under no key either: it
-// reaches no particle, so nothing inside it reaches it again, and its value
-// field holds decl's own {value constraint} (cvc-elt clause 5.1), which
-// another declaration of a named ct does not share.
+// order, none for a ct goshape.HasAttributeFields answers false for whose
+// content is the choice it binds as ct itself. Empty content binds the struct
+// codegen emits for it, with no field ahead of the attribute fields, and
+// simple content the struct whose one field ahead of them is the value field
+// (codegen/doc.go "# Complex types"); ct's {attribute wildcard}, read from
+// the finalized component (§3.4.2.5 dcl.ctd.anyatt), gives the struct's last
+// field, its name claimed after the attribute fields'. A nil index binds an
+// inline anonymous ct under no key. A ct of simple content is stored under no
+// key either: it reaches no particle, so nothing inside it reaches it again,
+// and its value field holds decl's own {value constraint} (cvc-elt clause
+// 5.1), which another declaration of a named ct does not share.
 func bindComplex[K comparable](run *bindRun, decl xsd.ElementDeclaration, ct xsd.ComplexType, index unitIndex[K], key K) (complexUnit, error) {
 	if u, ok := index[key]; ok {
 		return u, nil
@@ -1726,7 +1798,7 @@ func bindComplex[K comparable](run *bindRun, decl xsd.ElementDeclaration, ct xsd
 		b.attrs = append(b.attrs, a)
 	}
 	if _, has := ct.AttributeWildcard(); has {
-		return nil, decline(constructAttributeWildcard, typeSubject)
+		b.anyAttribute = &anyAttributeField{name: names.Claim("anyAttribute")}
 	}
 	return b, nil
 }
@@ -2806,8 +2878,8 @@ func (b *binding) check(t reflect.Type, cx *checkContext) (filler, error) {
 		return nil, fmt.Errorf("%w: %s is no struct", ErrTypeMismatch, t)
 	}
 	width := b.content.width()
-	if t.NumField() != width+len(b.attrs) {
-		return nil, fmt.Errorf("%w: %s has %d fields where codegen emits %d", ErrTypeMismatch, t, t.NumField(), width+len(b.attrs))
+	if want := width + len(b.attrs) + b.anyAttribute.width(); t.NumField() != want {
+		return nil, fmt.Errorf("%w: %s has %d fields where codegen emits %d", ErrTypeMismatch, t, t.NumField(), want)
 	}
 	bb := &boundBinding{binding: b}
 	cx.bound[key] = bb
@@ -2817,6 +2889,11 @@ func (b *binding) check(t reflect.Type, cx *checkContext) (filler, error) {
 	}
 	for i, want := range b.attrs {
 		if _, err := want.field().check(t, width+i, cx); err != nil {
+			return nil, err
+		}
+	}
+	if b.anyAttribute != nil {
+		if err := b.anyAttribute.check(t, width+len(b.attrs)); err != nil {
 			return nil, err
 		}
 	}
@@ -2836,7 +2913,13 @@ type boundBinding struct {
 // order, the supplied values of the absent ones in attribute-use order, then
 // its content, its value field's value or its children. An attribute field
 // with a supplied value holds it unless its attribute is present, and its
-// supplied value is then never decoded.
+// supplied value is then never decoded. Where the type has an {attribute
+// wildcard}, each present attribute no attribute use's declaration names,
+// but the four instanceAttribute names, is appended raw to its field in
+// start-tag order (cvc-complex-type clause 2, a use taking precedence by
+// clause 2.1), whatever the wildcard's {process contents}: Decode validated
+// the instance first, so each such attribute is the wildcard's to take
+// (clause 2.2).
 func (b *boundBinding) fill(r *xmltree.Reader, root *xmltree.StartElement, out reflect.Value) error {
 	if err := checkXsiType(root); err != nil {
 		return err
@@ -2847,6 +2930,10 @@ func (b *boundBinding) fill(r *xmltree.Reader, root *xmltree.StartElement, out r
 	for _, a := range root.Attributes() {
 		i, ok := bd.attributes[expanded(a.Name())]
 		if !ok {
+			if bd.anyAttribute != nil && !instanceAttribute(a.Name()) {
+				appendRawAttribute(out.Field(width+len(bd.attrs)), a)
+				continue
+			}
 			if a.Name().Space() != xsd.XMLSchemaInstanceNS {
 				return unattributed(a)
 			}
@@ -3051,6 +3138,21 @@ func noAttributes(root *xmltree.StartElement) error {
 // attribute use of its declaration's type attributes it.
 func unattributed(a xmltree.Attribute) error {
 	return fmt.Errorf("codec: %s: attribute %s is attributed to no attribute use", a.Loc(), expanded(a.Name()))
+}
+
+// instanceAttribute reports whether n is the expanded name of xsi:type,
+// xsi:nil, xsi:schemaLocation or xsi:noNamespaceSchemaLocation, the four
+// attributes cvc-complex-type clause 2 attributes to no attribute use and no
+// wildcard; any other name in the xsi namespace is not excepted.
+func instanceAttribute(n xmltree.Name) bool {
+	if n.Space() != xsd.XMLSchemaInstanceNS {
+		return false
+	}
+	switch n.Local() {
+	case "type", "nil", "schemaLocation", "noNamespaceSchemaLocation":
+		return true
+	}
+	return false
 }
 
 // checkXsiType returns the xsi:type decline for start when it carries one.

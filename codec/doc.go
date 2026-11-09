@@ -60,6 +60,7 @@
 //   - An element declaration of type xs:anyType, the document element's or a
 //     particle's.
 //   - An attribute use.
+//   - An {attribute wildcard}, into its field after the attribute fields.
 //   - A value constraint, default or fixed.
 //
 // A simple type decodes when it is atomic with {primitive type definition}
@@ -94,29 +95,29 @@
 // A document element decodes when its declaration, a top-level one, has no
 // {type table} and its {type definition} is either xs:anyType itself, or,
 // with {nillable} false, a simple type that decodes, its value T's own, or a
-// complex type that decodes: one with {abstract} false and no {attribute
-// wildcard}, and either empty content, simple content whose {simple type
-// definition} is a simple type that decodes (Structures §3.4.2.2
-// dcl.ctd.ctsc), its value field's, or element-only content with no {open
-// content} whose {particle} is a sequence or choice, inline or the {model
-// group} of the definition a <group ref> names, occurring exactly once. Each
-// particle of that sequence or choice, a sequence's nested sequence particle
-// codegen splices replaced by its own particles at any depth, is an element
-// declaration with no {type table}, of xs:anyType itself, or, with {nillable}
-// false, of a simple type that decodes or of a complex type that decodes by
-// these same rules at any depth: a local one, or the top-level one an
-// <element ref> names where codegen gives the particle's field that
-// declaration's own type; or the particle is an <element ref> where codegen
-// gives its field a sealed interface over the referenced declaration's
-// substitution group (codegen's package doc, "# Substitution groups"), and
-// each declaration of the group with {abstract} false is such a declaration,
-// an abstract head's own properties never read; or the particle is a
-// wildcard, whatever its {namespace constraint} and {process contents}. No
-// two element particles share an expanded name, such an interface's particle
-// taking each of those declarations'. Each attribute use is outside the xsi
-// namespace, but xsi:nil's in a type whose choice is T itself, and is typed
-// the same way. No element in the instance carries xsi:type, except inside a
-// wildcard's match or an element of type xs:anyType's raw content.
+// complex type that decodes: one with {abstract} false, and either empty
+// content, simple content whose {simple type definition} is a simple type
+// that decodes (Structures §3.4.2.2 dcl.ctd.ctsc), its value field's, or
+// element-only content with no {open content} whose {particle} is a sequence
+// or choice, inline or the {model group} of the definition a <group ref>
+// names, occurring exactly once. Each particle of that sequence or choice, a
+// sequence's nested sequence particle codegen splices replaced by its own
+// particles at any depth, is an element declaration with no {type table}, of
+// xs:anyType itself, or, with {nillable} false, of a simple type that decodes
+// or of a complex type that decodes by these same rules at any depth: a local
+// one, or the top-level one an <element ref> names where codegen gives the
+// particle's field that declaration's own type; or the particle is an
+// <element ref> where codegen gives its field a sealed interface over the
+// referenced declaration's substitution group (codegen's package doc, "#
+// Substitution groups"), and each declaration of the group with {abstract}
+// false is such a declaration, an abstract head's own properties never read;
+// or the particle is a wildcard, whatever its {namespace constraint} and
+// {process contents}. No two element particles share an expanded name, such
+// an interface's particle taking each of those declarations'. Each attribute
+// use is outside the xsi namespace, but xsi:nil's in a type whose choice is T
+// itself, and is typed the same way. No element in the instance carries
+// xsi:type, except inside a wildcard's match or an element of type
+// xs:anyType's raw content.
 //
 // Item 6 of [Decode]'s doc states the Go type of each field, naming it V, S
 // or I as the next paragraph does. The field of a particle of complex type
@@ -132,10 +133,10 @@
 // an alternative of complex type, the same over its S or I, or its AnyType for
 // one of type xs:anyType. The interface is T itself, or, where the type has an
 // attribute field (codegen's package doc, "# Attributes": an attribute use
-// other than xsi:nil's) or one occurrence of the choice is emptiable
-// (§3.9.6.3 cos-group-emptiable), the first field of T, a struct whose
-// further fields are the attribute fields. An empty match is the nil
-// interface. A particle's complex type gets its interface or struct by the
+// other than xsi:nil's, or an {attribute wildcard}) or one occurrence of the
+// choice is emptiable (§3.9.6.3 cos-group-emptiable), the first field of T, a
+// struct whose further fields are the attribute fields. An empty match is the
+// nil interface. A particle's complex type gets its interface or struct by the
 // same rule.
 //
 // A substitution group's interface holds, for each child, the branch of the
@@ -147,6 +148,14 @@
 // or a choice's branch holding one, each child attributed to that particle
 // held raw; [Decode]'s doc states the field, which children are attributed to
 // it, and the raw content.
+//
+// A complex type's {attribute wildcard} (Structures §3.4.2.5
+// dcl.ctd.anyatt), its own, one an extension inherits, or one an attribute
+// group or the schema's defaultAttributes brings, read from the finalized
+// type, decodes into the slice of AnyAttribute codegen emits as the struct's
+// last field, each attribute no attribute use's declaration names held raw,
+// whatever the wildcard's {process contents}; [Decode]'s doc states the field
+// and which attributes it holds.
 //
 // An element declaration of type xs:anyType itself (Structures §3.4.7),
 // nillable or not, decodes: the document element's into the named type
@@ -172,7 +181,6 @@
 //   - Mixed content.
 //   - Element-only content with {open content}.
 //   - A complex type with {abstract} true.
-//   - A complex type with an {attribute wildcard}.
 //   - An attribute use in the xsi namespace, but xsi:nil's in a type whose
 //     choice is T itself, which has no field.
 //   - An element declaration with a {type table}.
