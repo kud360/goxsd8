@@ -77,12 +77,14 @@
 // QName's, the expanded name its lexical resolves to as [Decode]'s doc
 // states, and an xs:precisionDecimal type into PrecisionDecimal's, its Value
 // the arm [WithPrecisionDecimalArms] supplies for its lexical's value, with
-// that lexical's ·scale· and ·sign·, as [Decode]'s doc states. A list type
-// decodes when its {item type definition} is such an atomic type or a union
-// that decodes, a restriction of a list taking its base's (Structures
-// §3.16.2.3), xs:NMTOKENS among them, into []A, A its item's atomic Go type,
-// or []I, I its item's sealed interface, one element per list item; the
-// empty list is a slice of length 0.
+// that lexical's ·scale· and ·sign·, as [Decode]'s doc states. A special
+// type, xs:anySimpleType or xs:anyAtomicType, decodes into the string
+// codegen gives it (codegen's package doc, "# Simple types"), its value as
+// [Decode]'s doc states. A list type decodes when its {item type definition}
+// is such an atomic type or a union that decodes, a restriction of a list
+// taking its base's (Structures §3.16.2.3), xs:NMTOKENS among them, into
+// []A, A its item's atomic Go type, or []I, I its item's sealed interface,
+// one element per list item; the empty list is a slice of length 0.
 //
 // A union type (Datatypes §2.4.1.3) decodes when each of its basic members,
 // in codegen's basic-member order (codegen's package doc, "# Simple types"),
@@ -186,7 +188,6 @@
 //   - An element declaration with a {type table}.
 //   - A nillable element, but for one of type xs:anyType itself; item 5 of
 //     [Decode]'s doc states when.
-//   - A special type.
 //   - A primitive other than those twenty: an ·implementation-defined· one
 //     (Datatypes dt-primitive), which xsd.NewPrimitiveType mints and no
 //     schema document yields.

@@ -50,19 +50,20 @@ var ErrTypeMismatch = errors.New("codec: T is not the type codegen emits for the
 // sic-attrDefault), and for an element with neither element nor character
 // children whose declaration has a {value constraint} (§3.3.4.3 cvc-elt
 // clause 5.1, §3.3.5.4 sic-eltType), of simple type or with simple content,
-// whose value field holds it. For a simple type whose atomic Go type
-// is string the value is that string. For every other it is the value
-// backend's governing mapping of the type ([value.GoverningMapping]) maps
-// that string to, through Parse with the item's namespace bindings in scope
-// (Datatypes §4.1.4 cvc-datatype-valid clause 2.1): an element's own for its
-// content, its owner element's for an attribute, and for a supplied value
-// those in scope at the schema document element that wrote the value
-// constraint ([value.ConstraintContext]), never the instance's; read back
-// through that mapping's Canonical and converted to the Go type. backend's
-// governing mapping of each such type but one whose datatype struct is
-// yearMonthDuration's, QName's or PrecisionDecimal's must therefore have a
-// non-nil Canonical, as builtin/strict's do; item 8 states the error where
-// one fails. The value converts so:
+// whose value field holds it. For a special type, whose Go type is string
+// (codegen's package doc, "# Simple types"), and for a simple type whose
+// atomic Go type is string, the value is that string. For every other it is
+// the value backend's governing mapping of the type
+// ([value.GoverningMapping]) maps that string to, through Parse with the
+// item's namespace bindings in scope (Datatypes §4.1.4 cvc-datatype-valid
+// clause 2.1): an element's own for its content, its owner element's for an
+// attribute, and for a supplied value those in scope at the schema document
+// element that wrote the value constraint ([value.ConstraintContext]), never
+// the instance's; read back through that mapping's Canonical and converted to
+// the Go type. backend's governing mapping of each such type but one whose
+// datatype struct is yearMonthDuration's, QName's or PrecisionDecimal's must
+// therefore have a non-nil Canonical, as builtin/strict's do; item 8 states
+// the error where one fails. The value converts so:
 //
 //   - A boolean's: its canonical form exactly "true" or "false" (§E.4
 //     f-booleanCanmap).
@@ -253,28 +254,29 @@ var ErrTypeMismatch = errors.New("codec: T is not the type codegen emits for the
 //     xsi:nil among its attributes (item 6); one whose {type definition}
 //     does not resolve declines as nillable.
 //   - Its {type definition}: xs:anyType itself, known by its QName, gives the
-//     T item 6 states and is examined no further; a simple type's {variety}
-//     and {primitive type definition}, for a list its {item type
-//     definition}'s, whose construct the list declines by, after which nothing
-//     further is examined; for a union, or a list's union item, each basic
-//     member in codegen's basic-member order examined as an atomic or list
-//     type is, the first declining member's construct the union's, then a
-//     basic member whose Go type an earlier one's is, as item 6 compares a
-//     variant's, two lists of a union or the same A or []A, such as
-//     xs:string's and xs:token's, which declines as a union two of whose basic
-//     members get one Go type, then an assertions facet effective on the
-//     union, on any of its {member type definitions} at any depth, an
-//     intervening union's included, or on a list member's {item type
-//     definition} or what that reaches, which declines as a union with an
-//     assertions facet, since Decode identifies the ·active basic member·
-//     deciding no {test}; or a complex type's {abstract}, then its content,
-//     then, for simple content, its {simple type definition}, examined as the
-//     document element's simple type is, whose construct the content declines
-//     by, or, for element-only content, its {particle}'s model group, an all
-//     group declining whatever it occurs, and then the occurrence of its
-//     sequence or choice: of a <group ref>, the compositor is the referenced
-//     definition's {model group}'s and the occurrence the referring particle's
-//     (§3.7.2 declare-namedModelGroup).
+//     T item 6 states and is examined no further; a simple type's identity
+//     as a special type (xsd.SimpleType.IsSpecial), which gives string and
+//     is examined no further, then its {variety} and {primitive type
+//     definition}, for a list its {item type definition}'s, whose construct
+//     the list declines by, after which nothing further is examined; for a
+//     union, or a list's union item, each basic member in codegen's
+//     basic-member order examined as an atomic or list type is, the first
+//     declining member's construct the union's, then a basic member whose Go
+//     type an earlier one's is, as item 6 compares a variant's, two lists of a
+//     union or the same A or []A, such as xs:string's and xs:token's, which
+//     declines as a union two of whose basic members get one Go type, then an
+//     assertions facet effective on the union, on any of its {member type
+//     definitions} at any depth, an intervening union's included, or on a list
+//     member's {item type definition} or what that reaches, which declines as
+//     a union with an assertions facet, since Decode identifies the ·active
+//     basic member· deciding no {test}; or a complex type's {abstract}, then
+//     its content, then, for simple content, its {simple type definition},
+//     examined as the document element's simple type is, whose construct the
+//     content declines by, or, for element-only content, its {particle}'s
+//     model group, an all group declining whatever it occurs, and then the
+//     occurrence of its sequence or choice: of a <group ref>, the compositor
+//     is the referenced definition's {model group}'s and the occurrence the
+//     referring particle's (§3.7.2 declare-namedModelGroup).
 //   - Each particle of the complex type's content in order, the whole of one
 //     before the next. A sequence's nested sequence particle, inline or
 //     through <group ref>, that codegen splices (codegen's package doc,
@@ -354,13 +356,13 @@ var ErrTypeMismatch = errors.New("codec: T is not the type codegen emits for the
 //     one's is.
 //   - T of a simple {type definition}: T's underlying type alone is the Go
 //     type codegen gives it (the Simple types section of codegen's package
-//     doc): its atomic Go type A, one of string, bool, float32, float64,
-//     big.Rat, big.Int, int64, int32, int16, int8, uint64, uint32, uint16,
-//     uint8, []byte and a datatype struct D, a date, time or duration
-//     datatype's, QName's, which an xs:NOTATION type shares, or
-//     PrecisionDecimal's, or for a union its sealed interface I, or for a
-//     list []A or []I, A or I its {item type definition}'s. So any T over
-//     that Go type passes, such as the type codegen emits for another
+//     doc): string for a special type, or its atomic Go type A, one of
+//     string, bool, float32, float64, big.Rat, big.Int, int64, int32, int16,
+//     int8, uint64, uint32, uint16, uint8, []byte and a datatype struct D, a
+//     date, time or duration datatype's, QName's, which an xs:NOTATION type
+//     shares, or PrecisionDecimal's, or for a union its sealed interface I,
+//     or for a list []A or []I, A or I its {item type definition}'s. So any T
+//     over that Go type passes, such as the type codegen emits for another
 //     document element of the same simple type. Codegen declares D and I in
 //     the caller's package, so each is matched by shape: D a struct of
 //     exactly D's exported fields, in name, order and Go type, struct tags
@@ -2739,13 +2741,13 @@ func attributeUse(schema *xsd.Schema, u xsd.AttributeUse) (attribute, error) {
 // simpleDecline returns the Go type codegen gives the simple type st of the
 // item subject names (codegen/doc.go "# Simple types"), or else an error:
 // the *DeclineError Decode's doc states for st, item 5, subject naming it,
-// or a plain error. For an atomic st the decline is atomicDecline's; for a
-// union, unionDecline's; for a list, that of its {item type definition}
-// (Structures §3.16.2.3, a restriction of a list taking its base's), which
-// cos-st-restricts clause 2.1 (checkListGraph) holds to an atomic or union
-// type, so its construct always answers, the detail naming the item after
-// subject. {variety} is a closed sum, so the assertions are STYLE T2's
-// sealed-sum exception.
+// or a plain error. For an atomic st, and for xs:anySimpleType, of absent
+// {variety}, the decline is atomicDecline's; for a union, unionDecline's;
+// for a list, that of its {item type definition} (Structures §3.16.2.3, a
+// restriction of a list taking its base's), which cos-st-restricts clause
+// 2.1 (checkListGraph) holds to an atomic or union type, so its construct
+// always answers, the detail naming the item after subject. {variety} is a
+// closed sum, so the assertions are STYLE T2's sealed-sum exception.
 func simpleDecline(r xsd.TypeResolver, st *xsd.SimpleType, subject string) (simpleGo, error) {
 	variety, err := st.Variety(r)
 	if err != nil {
@@ -2806,17 +2808,23 @@ func itemSubject(subject string, item *xsd.SimpleType) string {
 }
 
 // atomicDecline returns the atomic Go type codegen gives the simple type st,
-// an atomic type whose {primitive type definition} is one of primitiveAtomics' or
-// datatypeAtomics', as codegen/doc.go "# Simple types" picks it: from st's {base
-// type definition} chain (chainAtomic), which meets a date, time or duration
-// primitive, xs:QName or xs:precisionDecimal at its top, failing that from its
-// primitive. Or else it returns the construct Decode declines st for: a special
-// type's, or that of its primitive. A union or list st is a plain error:
-// simpleDecline routes a union to unionDecline and a list to its {item type
+// as codegen/doc.go "# Simple types" picks it: atomicString for a special
+// type, known by identity (xsd.SimpleType.IsSpecial) ahead of its {variety};
+// for an atomic type whose {primitive type definition} is one of
+// primitiveAtomics' or datatypeAtomics', from st's {base type definition}
+// chain (chainAtomic), which meets a date, time or duration primitive,
+// xs:QName or xs:precisionDecimal at its top, failing that from its
+// primitive. Or else it returns the construct Decode declines st for, that of
+// its primitive. Any other st with no {primitive type definition} is a plain
+// error (st-props-correct clause 1), as is a union or list st: simpleDecline
+// routes a union to unionDecline and a list to its {item type
 // definition}, which cos-st-restricts clause 2.1 holds to no list, routing a
 // union item to unionDecline too, whose basic members are no unions. {variety}
 // is a closed sum, so the switch is STYLE T2's sealed-sum exception.
 func atomicDecline(r xsd.TypeResolver, st *xsd.SimpleType) (atomic, construct, error) {
+	if st.IsSpecial() {
+		return atomicString, 0, nil
+	}
 	variety, err := st.Variety(r)
 	if err != nil {
 		return 0, 0, err
@@ -2832,8 +2840,7 @@ func atomicDecline(r xsd.TypeResolver, st *xsd.SimpleType) (atomic, construct, e
 		return 0, 0, err
 	}
 	if primitive == nil {
-		// xs:anySimpleType, of absent {variety}, and xs:anyAtomicType.
-		return 0, constructSpecial, nil
+		return 0, 0, fmt.Errorf("codec: the simple type defined at %s is atomic with no {primitive type definition}, which st-props-correct clause 1 (Structures §3.16.6.1) and the Datatypes §4.1.1 tableau give no atomic type but xs:anyAtomicType, a special type", st.Loc())
 	}
 	atom, ok, err := chainAtomic(r, st)
 	if err != nil {
