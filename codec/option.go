@@ -150,21 +150,24 @@ func sameMethods(a, b reflect.Type) bool {
 // codegen emits as the type of the one field Value of its PrecisionDecimal
 // datatype struct (codegen's package doc, "# Simple types"), which [Decode]
 // cannot find from T: a Go interface names none of its implementers. codegen
-// emits I and its arms in the generated package, m below, after PrecisionDecimal (codegen's
-// package doc, "# Coverage"). Pass one value of each arm in its role, numerical the arm
-// holding a finite value, positiveInfinity, negativeInfinity and notANumber the arms of the
-// special values (precisionDecimal §3.1 vp-pd-numVal), such as
+// emits I and its arms in the generated package, m below, after
+// PrecisionDecimal (codegen's package doc, "# Coverage"). Pass one value of
+// each arm in its role, numerical the arm holding a finite value,
+// positiveInfinity, negativeInfinity and notANumber the arms of the special
+// values (precisionDecimal §3.1 vp-pd-numVal), such as
 // codec.WithPrecisionDecimalArms[m.PrecisionDecimalValue](m.PrecisionDecimalValueNumerical{},
-// m.PrecisionDecimalValuePositiveInfinity{}, m.PrecisionDecimalValueNegativeInfinity{},
-// m.PrecisionDecimalValueNotANumber{}); only each value's dynamic type is read. A later
-// WithPrecisionDecimalArms for the same I replaces an earlier one's arms. Decode reads them
-// only where T holds a PrecisionDecimal whose Value is of type I, at any depth, and ignores
-// them elsewhere, a choice's or a substitution group's interface included; Decode's doc, item
-// 6, states when they are [ErrTypeMismatch]. Decode matches each arm by its shape alone, so
-// it cannot tell the three field-less arms apart: passed in one another's roles, they decode
-// the special values into the wrong arm, the one misuse Decode cannot report.
-// ExampleWithPrecisionDecimalArms decodes 3E2, -0 and INF through hand-written copies of
-// codegen's four arms.
+// m.PrecisionDecimalValuePositiveInfinity{},
+// m.PrecisionDecimalValueNegativeInfinity{},
+// m.PrecisionDecimalValueNotANumber{}); only each value's dynamic type is
+// read. A later WithPrecisionDecimalArms for the same I replaces an earlier
+// one's arms. Decode reads them only where T holds a PrecisionDecimal whose
+// Value is of type I, at any depth, and ignores them elsewhere, a choice's or
+// a substitution group's interface included; Decode's doc, item 6, states
+// when they are [ErrTypeMismatch]. Decode matches each arm by its shape
+// alone, so it cannot tell the three field-less arms apart: passed in one
+// another's roles, they decode the special values into the wrong arm, the
+// one misuse Decode cannot report. ExampleWithPrecisionDecimalArms decodes
+// 3E2, -0 and INF through hand-written copies of codegen's four arms.
 func WithPrecisionDecimalArms[I any](numerical, positiveInfinity, negativeInfinity, notANumber I) Option {
 	set := decimalArms{
 		iface:            reflect.TypeFor[I](),
