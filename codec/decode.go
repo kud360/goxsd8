@@ -102,9 +102,9 @@ var ErrTypeMismatch = errors.New("codec: T is not the type codegen emits for the
 //     ·numericalValue· (§3.1 vp-pd-numVal): INF and +INF the positive
 //     infinity's, -INF the negative infinity's and NaN the not-a-number's,
 //     each a struct of no field; and a numeral the numerical arm, its
-//     Coefficient the numeral's digits read as one decimal integer, the value's
-//     magnitude times 10^Scale, its Scale the numeral's ·scale·
-//     (vp-pd-precision), its digits after the '.' less its exponent, and its
+//     Coefficient the numeral's digits read as one decimal integer and its
+//     Scale the numeral's ·scale· (vp-pd-precision), its digits after the '.'
+//     less its exponent, so that the value is Coefficient × 10^−Scale, and its
 //     Negative true exactly when the numeral opens with '-' (vp-pd-sign). So 3
 //     and 3.00 decode to Scale 0 and 2, 0 and -0 to Negative false and true,
 //     and 3E2 to Coefficient 3 and Scale -2.
