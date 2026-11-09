@@ -3,7 +3,12 @@ package codec
 import (
 	"bytes"
 	"reflect"
+	"strings"
 	"testing"
+
+	"github.com/kud360/goxsd8/builtin/strict"
+	"github.com/kud360/goxsd8/xsd"
+	"github.com/kud360/goxsd8/xsderr"
 )
 
 // The splice schemas, each declaring s:r, whose content sequence holds a
@@ -147,5 +152,64 @@ func TestDecodeSplices(t *testing.T) {
 				t.Errorf("CheckDecode = %v, want nil for a row Decode decodes", err)
 			}
 		})
+	}
+}
+
+// TestDecodeSplicedWildcardOrdinal pins item 5's ordinal of a wildcard
+// particle inside a spliced sequence, counted from 1 across the splice in
+// particle order: type v's content is sequence(any, sequence(any)), the
+// second wildcard rebuilt through xsd.NewParticle with the vacuous
+// Occurs{0,0} (no schema document yields one, §3.10.2), so its plain error
+// names it wildcard particle 2, Decode's and CheckDecode's alike.
+func TestDecodeSplicedWildcardOrdinal(t *testing.T) {
+	parsed := schemaOf(t, `<xs:complexType name="v"><xs:sequence><xs:any namespace="##other" processContents="lax"/></xs:sequence></xs:complexType><xs:element name="r" type="s:v"/>`)
+	v := xsd.QName{Space: "urn:s", Local: "v"}
+	declared, ok := parsed.Type(v)
+	if !ok {
+		t.Fatalf("the parsed schema declares no type %s", v)
+	}
+	content := declared.(xsd.ComplexType).ContentType().(xsd.ElementContent)
+	wild := content.Particle.Term().(xsd.ResolvedTerm).Term.(xsd.ModelGroup).Particles()[0]
+	none, err := xsd.NewOccurs(xsderr.Loc{}, 0, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	vacuous, err := xsd.NewParticle(xsderr.Loc{}, none, wild.Term())
+	if err != nil {
+		t.Fatal(err)
+	}
+	inner, err := xsd.NewModelGroup(xsderr.Loc{}, xsd.CompositorSequence, []xsd.Particle{vacuous})
+	if err != nil {
+		t.Fatal(err)
+	}
+	spliced, err := xsd.NewParticle(xsderr.Loc{}, content.Particle.Occurs(), xsd.ResolvedTerm{Term: inner})
+	if err != nil {
+		t.Fatal(err)
+	}
+	outer, err := xsd.NewModelGroup(xsderr.Loc{}, xsd.CompositorSequence, []xsd.Particle{wild, spliced})
+	if err != nil {
+		t.Fatal(err)
+	}
+	particle, err := xsd.NewParticle(xsderr.Loc{}, content.Particle.Occurs(), xsd.ResolvedTerm{Term: outer})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ct, err := xsd.NewComplexType(declared.Loc(), v, xsd.QName{Space: xsd.XMLSchemaNS, Local: "anyType"}, nil, xsd.DerivationRestriction, false,
+		nil, nil, nil, xsd.ElementContent{Particle: particle}, nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	schema := replacedSchema(t, parsed, ct)
+	data := instanceOf("", `<o:w xmlns:o="urn:o"/>`)
+	mustAccept(t, schema, data)
+	_, decoded := Decode[struct{}](schema, strict.New(), data)
+	const prefix, suffix = "codec: wildcard particle 2 of the {type definition} of element {urn:s}r", " has {max occurs} 0, for which codegen emits no type"
+	for _, got := range []struct {
+		name string
+		err  error
+	}{{"Decode", decoded}, {"CheckDecode", CheckDecode[struct{}](schema, rootName)}} {
+		if got.err == nil || !strings.HasPrefix(got.err.Error(), prefix) || !strings.HasSuffix(got.err.Error(), suffix) {
+			t.Errorf("%s = %v, want %q ... %q", got.name, got.err, prefix, suffix)
+		}
 	}
 }
