@@ -14,14 +14,15 @@ import (
 	"github.com/kud360/goxsd8/xsd"
 )
 
-// fixtureSchema declares a, in the slice codec decodes, c, whose all
-// content codec declines, p, a choice codec decodes into a sealed interface,
-// and u, a's shape with an assertion whose for expression the XPath subset
-// declines, so validate leaves it undecided (cvc-assertion).
+// fixtureSchema declares a, in the slice codec decodes, c, whose optional
+// content all over a required element codec declines, p, a choice codec
+// decodes into a sealed interface, and u, a's shape with an assertion
+// whose for expression the XPath subset declines, so validate leaves it
+// undecided (cvc-assertion).
 const fixtureSchema = `<?xml version="1.0"?>
 <xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
   <xs:element name="a"><xs:complexType><xs:sequence><xs:element name="b" type="xs:string"/></xs:sequence></xs:complexType></xs:element>
-  <xs:element name="c"><xs:complexType><xs:all><xs:element name="d" type="xs:string"/></xs:all></xs:complexType></xs:element>
+  <xs:element name="c"><xs:complexType><xs:all minOccurs="0"><xs:element name="d" type="xs:string"/></xs:all></xs:complexType></xs:element>
   <xs:element name="p"><xs:complexType><xs:choice><xs:element name="q" type="xs:string"/><xs:element name="r" type="xs:string"/></xs:choice></xs:complexType></xs:element>
   <xs:element name="u"><xs:complexType><xs:sequence><xs:element name="b" type="xs:string"/></xs:sequence>
     <xs:assert test="(for $x in b return string-length($x)) = 1"/></xs:complexType></xs:element>
@@ -111,7 +112,7 @@ func TestDriveCountsEachBucket(t *testing.T) {
 	}{
 		{"decoded", own, Case{"S/g/instance/d", "valid.xml", 0}, Summary{Decoded: 1}},
 		{"declined", []Decoder{DecoderFor[a]()}, Case{"S/g/instance/c", "all.xml", 0},
-			Summary{Declines: []Tally{{Construct: "all content", Cases: []string{"S/g/instance/c"}}}}},
+			Summary{Declines: []Tally{{Construct: "a content all group with {min occurs} 0 whose model group is not emptiable", Cases: []string{"S/g/instance/c"}}}}},
 		{"undecided", own, Case{"S/g/instance/u", "undecided.xml", 0}, Summary{Undecided: 1}},
 		{"rejected", []Decoder{DecoderFor[mismatched]()}, Case{"S/g/instance/r", "valid.xml", 0}, Summary{Rejected: []string{"S/g/instance/r"}}},
 		{"failed other", own, Case{"S/g/instance/f", "invalid.xml", 0}, Summary{FailedOther: 1}},
@@ -139,7 +140,7 @@ func TestDriveCountsEachBucket(t *testing.T) {
 func TestDriveTalliesDeclinesByConstruct(t *testing.T) {
 	got := drive(t, []Decoder{DecoderFor[a]()}, Case{"S/g/instance/z", "all.xml", 0}, Case{"S/g/instance/v", "valid.xml", 0},
 		Case{"S/g/instance/a", "all.xml", 0})
-	want := Summary{Decoded: 1, Declines: []Tally{{Construct: "all content", Cases: []string{"S/g/instance/z", "S/g/instance/a"}}}}
+	want := Summary{Decoded: 1, Declines: []Tally{{Construct: "a content all group with {min occurs} 0 whose model group is not emptiable", Cases: []string{"S/g/instance/z", "S/g/instance/a"}}}}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("Summary = %+v, want %+v", got, want)
 	}
