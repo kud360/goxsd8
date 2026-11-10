@@ -674,9 +674,7 @@ func documentElement(r *xmltree.Reader) (*xmltree.StartElement, error) {
 	}
 }
 
-// shape is the occurrence a field holds its value in, goshape.Shape's: one
-// value, an optional one, or a repeated one. The zero value is invalid (STYLE
-// T1).
+// shape is goshape.Shape, carrying codec's reflection over each Shape.
 type shape goshape.Shape
 
 const (
@@ -1855,10 +1853,9 @@ func bindContent(run *bindRun, ct xsd.ComplexType, group xsd.ModelGroup, names *
 	return bindSequence(run, ct, group.Particles(), names, typeSubject)
 }
 
-// simpleValue is simple content as the struct codegen emits holds it: the
-// value field, the one field ahead of the attribute fields, named from
-// goshape.ValueLocal in goshape.ValueShape, which holds V, the Go type
-// codegen gives the {content type}'s {simple type definition}.
+// simpleValue is simple content as the struct codegen emits holds it, the
+// value field item 6 of Decode's doc states: named from goshape.ValueLocal in
+// goshape.ValueShape.
 type simpleValue struct {
 	p     *pipeline
 	value field
@@ -2379,8 +2376,7 @@ func (c *choiceRoot) field(s shape) field {
 	return field{shape: s, arm: ifaceArm{unit: c}}
 }
 
-// sealedInterface is true: an optional field of c's interface is the bare
-// interface, nil meaning absent (goshape.ParticleShape).
+// sealedInterface is true: c's type is a sealed interface.
 func (c *choiceRoot) sealedInterface() bool { return true }
 
 // check holds t, T itself, to the choice's sealed interface, and returns the
@@ -2604,8 +2600,7 @@ func elementField(run *bindRun, children map[xsd.QName]int, el xsd.ElementDeclar
 // an earlier member's does (field.sharesBranch); then a member's expanded
 // name an earlier particle of the model group shares, children indexing the
 // earlier particles' names, the first in group order; then occursShape's
-// plain error. The field's shape is occursShape's over a sealed interface, an
-// optional one the bare interface, nil meaning absent.
+// plain error. The field's shape is occursShape's over a sealed interface.
 func groupField(run *bindRun, children map[xsd.QName]int, head xsd.ElementDeclaration, members []xsd.ElementDeclaration, occurs xsd.Occurs) (field, []xsd.QName, error) {
 	group := &sealed{p: run.p, children: map[xsd.QName]int{}}
 	names := make([]xsd.QName, 0, len(members))
