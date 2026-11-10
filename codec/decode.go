@@ -2714,9 +2714,10 @@ func anyTypeItself(td xsd.TypeDefinition) bool { return td.Name() == anyTypeName
 // fields or choice, flat false; one occurring otherwise is flat where
 // goshape.Flattens answers true for it, a decision made here once and read by
 // bindContent alone, and declines otherwise. A <group ref> naming no
-// definition is goshape.ModelGroupTerm's plain error, prefixed by typeSubject,
-// which names the complex type holding the particle, and goshape.Flattens'
-// error is a plain one.
+// definition, the content {particle}'s or one goshape.Flattens follows inside
+// it, is goshape.ModelGroupTerm's plain error, and goshape.Flattens' other
+// error a plain one too, each prefixed by typeSubject, which names the complex
+// type holding the particle.
 func contentGroup(schema *xsd.Schema, content xsd.ElementContent, typeSubject string) (particle xsd.Particle, group xsd.ModelGroup, flat bool, d construct, err error) {
 	if content.Mixed {
 		return xsd.Particle{}, xsd.ModelGroup{}, false, constructMixedContent, nil
@@ -2750,7 +2751,7 @@ func contentGroup(schema *xsd.Schema, content xsd.ElementContent, typeSubject st
 	}
 	flat, err = goshape.Flattens(schema, group, occurs)
 	if err != nil {
-		return xsd.Particle{}, xsd.ModelGroup{}, false, 0, fmt.Errorf("codec: the content {particle}'s model group: %w", err)
+		return xsd.Particle{}, xsd.ModelGroup{}, false, 0, fmt.Errorf("codec: %s: %w", typeSubject, err)
 	}
 	if !flat {
 		return xsd.Particle{}, xsd.ModelGroup{}, false, occursOther, nil
