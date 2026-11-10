@@ -9,6 +9,11 @@
 //	func SubstitutionSum(schema *xsd.Schema, decl xsd.ElementDeclaration) (members []xsd.ElementDeclaration, sum bool)
 //	func BasicMembers(r xsd.TypeResolver, st *xsd.SimpleType) ([]*xsd.SimpleType, error)
 //	func Splices(schema *xsd.Schema, group xsd.ModelGroup, occurs xsd.Occurs) (bool, error)
+//	func Flattens(schema *xsd.Schema, group xsd.ModelGroup, occurs xsd.Occurs) (bool, error)
+//	func Reach(schema *xsd.Schema, group xsd.ModelGroup, visit func(p xsd.Particle, position []int) error) error
+//	func TermEmptiable(schema *xsd.Schema, term xsd.TermOrRef) (bool, error)
+//	func ExactlyOnce() xsd.Occurs
+//	func ModelGroupTerm(schema *xsd.Schema, term xsd.TermOrRef) (xsd.ModelGroup, bool, error)
 //	func FieldAttributeUses(t xsd.ComplexType) []xsd.AttributeUse
 //	func HasAttributeFields(t xsd.ComplexType) bool
 //	type Shape uint8
@@ -21,7 +26,9 @@
 // The rules are those codegen's package doc states, each in its own section
 // ("# Simple types", "# Complex types", "# Substitution groups",
 // "# Particles", "# Attributes"): those sections own them, and this package is
-// their one implementation.
+// their one implementation. TermEmptiable, ExactlyOnce and ModelGroupTerm are
+// the reads those rules are made from, exported for codegen and codec, which
+// make the same reads around them.
 //
 // It imports xsd, xsderr and the standard library.
 package goshape
