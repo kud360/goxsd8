@@ -87,6 +87,28 @@ func TestDefaultAttributesApplyOptOut(t *testing.T) {
 	}
 }
 
+// TestDefaultAttributesApplyWithoutDefaultAttributes pins that reading
+// defaultAttributesApply under a <schema> with no defaultAttributes folds
+// nothing, whatever xs:boolean literal it carries (#3574): the value is
+// validated there, but §3.4.2.4's precondition does not hold, so no default
+// group is in force to fold. The schema still defines a group named DA, so a
+// fold of it would surface as a "da" use.
+func TestDefaultAttributesApplyWithoutDefaultAttributes(t *testing.T) {
+	// A slice, not a map: subtest order is output (STYLE D2).
+	for _, lexical := range []string{"true", "false", "1", "0"} {
+		s, err := produce(t, wrap("urn:x",
+			`<xs:attributeGroup name="DA"><xs:attribute name="da" type="xs:string"/></xs:attributeGroup>`+
+				`<xs:complexType name="T" defaultAttributesApply="`+lexical+`"><xs:sequence/></xs:complexType>`))
+		if err != nil {
+			t.Errorf("defaultAttributesApply=%q: Produce: %v", lexical, err)
+			continue
+		}
+		if uses := topComplexTypeIn(t, s, xq("T")).AttributeUses(); len(uses) != 0 {
+			t.Errorf("defaultAttributesApply=%q: {attribute uses} has %d uses, want none — no <schema defaultAttributes> is in force", lexical, len(uses))
+		}
+	}
+}
+
 // TestDefaultAttributesFoldsTheGroupWildcard pins §3.4.2.5: the synthesized
 // reference feeds {attribute wildcard} on exactly the same footing as a written
 // <attributeGroup ref>, so the default group's <anyAttribute> is INTERSECTED

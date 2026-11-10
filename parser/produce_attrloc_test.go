@@ -126,12 +126,19 @@ func TestProduceAttributeValueChargeLocated(t *testing.T) {
 			rule: "cvc-datatype-valid", line: 3, col: 3,
 		},
 		{
-			// defaultAttributesRef reads defaultAttributesApply only under a
-			// <schema defaultAttributes>, so the row writes one.
+			// defaultAttributesRef reads defaultAttributesApply whether or not
+			// <schema> carries defaultAttributes; this row writes one, the next
+			// does not.
 			name: "boolAttr defaultAttributesApply",
 			doc: schemaOpen + ` defaultAttributes="ag"><xs:attributeGroup name="ag"/>` + "\n" +
 				`<xs:complexType name="T"` + "\n" + `   defaultAttributesApply="yes"/></xs:schema>`,
 			rule: "cvc-datatype-valid", line: 3, col: 4,
+		},
+		{
+			name: "boolAttr defaultAttributesApply without schema defaultAttributes",
+			doc: schemaOpen + ">\n" +
+				`<xs:complexType name="C"` + "\n" + `  defaultAttributesApply="yes"/></xs:schema>`,
+			rule: "cvc-datatype-valid", line: 3, col: 3,
 		},
 		{
 			name: "boolAttr inheritable",
