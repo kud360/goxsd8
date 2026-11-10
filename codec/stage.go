@@ -571,14 +571,15 @@ type stageError struct {
 }
 
 // Error names src's Loc, the stage, the fragment, for a list item its
-// position, the type and src, then the cause, and states whose fault it is.
+// position, the type and src, then the cause as xsderr.CauseText renders it,
+// and states whose fault it is.
 func (e *stageError) Error() string {
 	fragment := strconv.Quote(e.fragment)
 	if e.token > 0 {
 		fragment = fmt.Sprintf("list item %d, %s", e.token, fragment)
 	}
-	return fmt.Sprintf("codec: %s: %s failed on %s, a value of %s in %s: %v; validate accepted the value on the same backend, so this is a fault of the backend, not of the instance",
-		e.src.loc(), e.stage.name(), fragment, e.label, e.src.where(), e.cause)
+	return fmt.Sprintf("codec: %s: %s failed on %s, a value of %s in %s: %s; validate accepted the value on the same backend, so this is a fault of the backend, not of the instance",
+		e.src.loc(), e.stage.name(), fragment, e.label, e.src.where(), xsderr.CauseText(e.cause))
 }
 
 // A source is where a value Decode decodes comes from, as a stage error and
