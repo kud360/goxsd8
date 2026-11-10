@@ -49,7 +49,8 @@ func schemaTest(doc string) string {
 // cases decode (a.xml, twice, f.xml, of simple type, g.xml, a choice, through
 // the branch set the census binds, and p.xml, of xs:precisionDecimal, through
 // the arm set it binds), decline with a union of two basic members of one Go
-// type (e.xml, twice) and all content (c.xml), and fail otherwise, charged
+// type (e.xml, twice) and an optional content all over a required element
+// (c.xml), and fail otherwise, charged
 // (invalid.xml) and with no declaration for the document element (u.xml), which
 // decodes into the placeholder; its case old is withheld. Group rec's schema
 // assembles and does not generate, group bad's does not assemble, and group none
@@ -68,7 +69,7 @@ var censusSuite = map[string]string{
 </testSet>`,
 	"d/s.xsd": `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
   <xs:element name="a"><xs:complexType><xs:sequence><xs:element name="b" type="xs:string"/></xs:sequence></xs:complexType></xs:element>
-  <xs:element name="c"><xs:complexType><xs:all><xs:element name="d" type="xs:string"/></xs:all></xs:complexType></xs:element>
+  <xs:element name="c"><xs:complexType><xs:all minOccurs="0"><xs:element name="d" type="xs:string"/></xs:all></xs:complexType></xs:element>
   <xs:element name="e"><xs:simpleType><xs:union memberTypes="xs:string xs:token"/></xs:simpleType></xs:element>
   <xs:element name="f" type="xs:string"/>
   <xs:element name="g"><xs:complexType><xs:choice><xs:element name="h" type="xs:string"/><xs:element name="i" type="xs:string"/></xs:choice></xs:complexType></xs:element>
@@ -103,7 +104,7 @@ const wantCounts = `decodecensus: 13 instance case(s) under %ROOT%
 
 === First decline, by construct: 2 construct(s) ===
        2  a union simple type two of whose basic members get one Go type
-       1  all content
+       1  a content all group with {min occurs} 0 whose model group is not emptiable
 
 === Caveats ===
 `
@@ -114,7 +115,7 @@ const wantPaths = `
 a union simple type two of whose basic members get one Go type (2):
   S/g/instance/simple
   S/g/instance/simple2
-all content (1):
+a content all group with {min occurs} 0 whose model group is not emptiable (1):
   S/g/instance/all
 
 === Cases, by listed count ===

@@ -73,8 +73,8 @@ func TestDecodeDeclines(t *testing.T) {
 			"", a, constructMixedContent, 1, 1},
 		{"open content", root(`<xs:openContent><xs:any namespace="##other" processContents="lax"/></xs:openContent><xs:sequence><xs:element name="a" type="xs:string"/></xs:sequence>`),
 			"", a, constructOpenContent, 1, 1},
-		{"a <group ref> content particle to an all group", `<xs:group name="g"><xs:all><xs:element name="a" type="xs:string"/></xs:all></xs:group>` + root(`<xs:group ref="s:g"/>`),
-			"", a, constructAllContent, 1, 1},
+		{"an optional <group ref> content particle to a non-emptiable all group", `<xs:group name="g"><xs:all><xs:element name="a" type="xs:string"/></xs:all></xs:group>` + root(`<xs:group ref="s:g" minOccurs="0"/>`),
+			"", a, constructAllOccurs, 1, 1},
 		{"a <group ref> content particle to a sequence group, occurring twice", `<xs:group name="g"><xs:sequence><xs:element name="a" type="xs:string"/></xs:sequence></xs:group>` + root(`<xs:group ref="s:g" maxOccurs="2"/>`),
 			"", a, constructSequenceOccurs, 1, 1},
 		{"an optional <group ref> content particle to a sequence group", `<xs:group name="g"><xs:sequence><xs:element name="a" type="xs:string"/></xs:sequence></xs:group>` + root(`<xs:group ref="s:g" minOccurs="0"/>`),
@@ -111,7 +111,10 @@ func TestDecodeDeclines(t *testing.T) {
 			"", `<s:d>2000-01-01</s:d>`, constructSharedBranch, 1, 1},
 		{"choice alternatives sharing a branch shape, a and A", root(`<xs:choice><xs:element name="a" type="xs:string"/><xs:element name="A" type="xs:token"/></xs:choice>`),
 			"", a, constructSharedBranch, 1, 1},
-		{"all content", root(`<xs:all><xs:element name="a" type="xs:string"/></xs:all>`), "", a, constructAllContent, 1, 1},
+		{"optional content all over a required element", root(`<xs:all minOccurs="0"><xs:element name="a" type="xs:string"/></xs:all>`), "", a, constructAllOccurs, 1, 1},
+		{"an extension merging two optional alls of required elements", `<xs:complexType name="t"><xs:all minOccurs="0"><xs:element name="a" type="xs:string"/></xs:all></xs:complexType>
+			<xs:complexType name="t2"><xs:complexContent><xs:extension base="s:t"><xs:all minOccurs="0"><xs:element name="b" type="xs:int"/></xs:all></xs:extension></xs:complexContent></xs:complexType>
+			<xs:element name="r" type="s:t2"/>`, "", a + `<s:b>1</s:b>`, constructAllOccurs, 1, 1},
 		{"content sequence occurring twice", root(`<xs:sequence maxOccurs="2"><xs:element name="a" type="xs:string"/></xs:sequence>`), "", a, constructSequenceOccurs, 1, 1},
 		{"repeated content sequence codegen does not flatten", root(`<xs:sequence maxOccurs="unbounded"><xs:element name="a" type="xs:string"/><xs:element name="b" type="xs:string"/></xs:sequence>`),
 			"", a + `<s:b>y</s:b>`, constructSequenceOccurs, 1, 1},

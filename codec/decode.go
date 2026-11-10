@@ -2883,7 +2883,14 @@ func contentGroup(schema *xsd.Schema, content xsd.ElementContent, typeSubject st
 	occursOther := constructChoiceOccurs
 	switch group.Compositor() {
 	case xsd.CompositorAll:
-		return xsd.Particle{}, xsd.ModelGroup{}, false, constructAllContent, nil
+		splice, err := goshape.Splices(schema, group, occurs)
+		if err != nil {
+			return xsd.Particle{}, xsd.ModelGroup{}, false, 0, fmt.Errorf("codec: %s: %w", typeSubject, err)
+		}
+		if !splice {
+			return xsd.Particle{}, xsd.ModelGroup{}, false, constructAllOccurs, nil
+		}
+		return content.Particle, group, false, 0, nil
 	case xsd.CompositorSequence:
 		occursOther = constructSequenceOccurs
 	case xsd.CompositorChoice:

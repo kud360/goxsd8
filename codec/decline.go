@@ -99,7 +99,7 @@ const (
 	constructMixedContent
 	constructOpenContent
 	constructChoiceOccurs
-	constructAllContent
+	constructAllOccurs
 	constructSequenceOccurs
 	constructNestedGroup
 	constructAbstractTypeElement
@@ -119,7 +119,7 @@ var constructNames = [...]string{
 	constructMixedContent:        "mixed content",
 	constructOpenContent:         "{open content}",
 	constructChoiceOccurs:        "a content choice occurring other than exactly once",
-	constructAllContent:          "all content",
+	constructAllOccurs:           "a content all group with {min occurs} 0 whose model group is not emptiable",
 	constructSequenceOccurs:      "a content sequence occurring other than exactly once",
 	constructNestedGroup:         "a nested model group particle",
 	constructAbstractTypeElement: "an element declaration whose complex {type definition} has {abstract} true",
