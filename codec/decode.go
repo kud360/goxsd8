@@ -2096,11 +2096,7 @@ func bindSequence(run *bindRun, ct xsd.ComplexType, particles []xsd.Particle, na
 // particle's as if from local name any (codegen/doc.go "# Naming"), or
 // returns the first decline Decode's doc states for them, item 5,
 // typeSubject naming the type. A model group particle, inline or a <group
-// ref> (particleTerm), that goshape.Splices answers true for gives in its
-// place the members its own particles give, bound by the same walk into the
-// same names and s.index, as codegen claims the fields of every particle its
-// spliced returns from one Namer; any other declines as a nested model
-// group.
+// ref> (particleTerm), is bound by nested.
 func (s *sequence) bind(run *bindRun, ct xsd.ComplexType, particles []xsd.Particle, at []int, names *goname.Namer, typeSubject string) error {
 	for i, p := range particles {
 		term, err := particleTerm(run.p.schema, p, typeSubject)
@@ -2118,14 +2114,7 @@ func (s *sequence) bind(run *bindRun, ct xsd.ComplexType, particles []xsd.Partic
 			f.name = names.Claim("any")
 			s.members = append(s.members, f)
 		case xsd.ModelGroup:
-			splice, err := goshape.Splices(run.p.schema, term, p.Occurs())
-			if err != nil {
-				return fmt.Errorf("codec: %s: %w", typeSubject, err)
-			}
-			if !splice {
-				return decline(constructNestedGroup, "a particle of "+typeSubject)
-			}
-			if err := s.bind(run, ct, term.Particles(), append(slices.Clone(at), i), names, typeSubject); err != nil {
+			if err := s.nested(run, ct, term, p.Occurs(), append(slices.Clone(at), i), names, typeSubject); err != nil {
 				return err
 			}
 		case xsd.ElementDeclaration:
@@ -2141,6 +2130,54 @@ func (s *sequence) bind(run *bindRun, ct xsd.ComplexType, particles []xsd.Partic
 		}
 	}
 	return nil
+}
+
+// nested appends to s the members of a model group particle of group
+// occurring as occurs, at Matcher position at, inline or a <group ref>,
+// group then the {model group} of the definition it names and occurs the
+// referring particle's own (§3.7.2 declare-namedModelGroup), in codegen's
+// order of decision (codegen/doc.go "# Particles"), or returns the first
+// decline Decode's doc states for it, item 5, typeSubject naming the type.
+// One goshape.Splices answers true for gives the members its own particles
+// give, bound by the same walk into the same names and s.index, as codegen
+// claims the fields of every particle its spliced returns from one Namer. A
+// choice goshape.Flattens answers false for that occurs exactly once
+// (exactlyOnce) gives one *choice member, bound by bindChoice into s.index,
+// its alternatives below at, taking the targets after every earlier
+// member's, its field named from names. Any other declines as a nested model
+// group. Splices' and Flattens' errors are plain, prefixed by typeSubject.
+func (s *sequence) nested(run *bindRun, ct xsd.ComplexType, group xsd.ModelGroup, occurs xsd.Occurs, at []int, names *goname.Namer, typeSubject string) error {
+	splice, err := goshape.Splices(run.p.schema, group, occurs)
+	if err != nil {
+		return fmt.Errorf("codec: %s: %w", typeSubject, err)
+	}
+	if splice {
+		return s.bind(run, ct, group.Particles(), at, names, typeSubject)
+	}
+	if group.Compositor() != xsd.CompositorChoice {
+		return decline(constructNestedGroup, "a particle of "+typeSubject)
+	}
+	flat, err := goshape.Flattens(run.p.schema, group, occurs)
+	if err != nil {
+		return fmt.Errorf("codec: %s: %w", typeSubject, err)
+	}
+	if flat || !exactlyOnce(occurs) {
+		return decline(constructNestedGroup, "a particle of "+typeSubject)
+	}
+	c, err := bindChoice(run, ct, group.Particles(), &s.index, at, s.targets(), names, typeSubject)
+	if err != nil {
+		return err
+	}
+	s.members = append(s.members, c)
+	return nil
+}
+
+// exactlyOnce reports whether occurs is {min occurs} 1 and {max occurs} 1,
+// each the attribute's value or its default 1 (§3.8.2
+// declare-contentModel): a particle occurring exactly once.
+func exactlyOnce(occurs xsd.Occurs) bool {
+	upper, bounded := occurs.Max()
+	return occurs.Min() == 1 && bounded && upper == 1
 }
 
 // wildcardSubject is the subject of the n-th wildcard particle of the
@@ -2833,8 +2870,6 @@ func contentGroup(schema *xsd.Schema, content xsd.ElementContent, typeSubject st
 		return xsd.Particle{}, xsd.ModelGroup{}, false, 0, fmt.Errorf("codec: %s: %w", typeSubject, err)
 	}
 	occurs := content.Particle.Occurs()
-	upper, bounded := occurs.Max()
-	once := occurs.Min() == 1 && bounded && upper == 1
 	occursOther := constructChoiceOccurs
 	switch group.Compositor() {
 	case xsd.CompositorAll:
@@ -2849,7 +2884,7 @@ func contentGroup(schema *xsd.Schema, content xsd.ElementContent, typeSubject st
 		// read it.
 		return xsd.Particle{}, xsd.ModelGroup{}, false, constructNestedGroup, nil
 	}
-	if once {
+	if exactlyOnce(occurs) {
 		return content.Particle, group, false, 0, nil
 	}
 	flat, err = goshape.Flattens(schema, group, occurs)
