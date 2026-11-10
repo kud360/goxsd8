@@ -131,10 +131,9 @@ func spellDecimals(v reflect.Value) string {
 // TestDecodePrecisionDecimalValues pins the lexical reading of
 // xs:precisionDecimal (precisionDecimal §6 f-precDecLexmap) on a simple root:
 // Coefficient the digits, Scale the ·scale·, which may be negative, Negative
-// the ·sign·, so 3 and 3.00 differ in Scale and 0 and -0 in Negative, and a
-// zero of scale 0 and 3E2 of scale -2, which strict's Canonical form gets
-// wrong; INF and +INF are one arm, -INF and NaN their own. CheckDecode
-// returns nil for the root's T.
+// the ·sign·, so 3 and 3.00 differ in Scale and 0 and -0 in Negative, and 0
+// has scale 0 and 3E2 scale -2; INF and +INF are one arm, -INF and NaN their
+// own. CheckDecode returns nil for the root's T.
 func TestDecodePrecisionDecimalValues(t *testing.T) {
 	schema := schemaOf(t, `<xs:element name="r" type="xs:precisionDecimal"/>`)
 	rows := []struct{ lexical, want string }{
