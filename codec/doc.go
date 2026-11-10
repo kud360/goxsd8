@@ -53,6 +53,9 @@
 //   - A nested sequence, inline or through <group ref>, that codegen splices
 //     (codegen's package doc, "# Particles"), into the fields its own
 //     particles give.
+//   - A nested choice, inline or through <group ref>, occurring exactly once,
+//     that codegen does not flatten (codegen's package doc, "# Particles"),
+//     into its field of a sealed interface.
 //   - A sequence or choice, inline or through <group ref>, occurring other
 //     than exactly once, as a complex type's content {particle}, that codegen
 //     flattens (codegen's package doc, "# Particles"), into its slice of a
@@ -60,7 +63,8 @@
 //   - An element particle, local or <element ref>.
 //   - A substitution group, into a sealed interface.
 //   - A choice, into a sealed interface.
-//   - A wildcard particle, any number of them in one sequence or choice.
+//   - A wildcard particle, any number of them in one content model, a nested
+//     choice's alternatives among its particles.
 //   - An element declaration of type xs:anyType, the document element's or a
 //     particle's.
 //   - An attribute use.
@@ -108,23 +112,23 @@
 // names, occurring exactly once, or occurring otherwise where codegen
 // flattens it. Each particle of a sequence or choice occurring exactly once,
 // a sequence's nested sequence particle codegen splices replaced by its own
-// particles at any depth, and, of a flattened one, in place of its particles,
-// each basic particle its model group reaches through its model group
-// particles at any depth, is an element declaration with no {type table}, of
-// xs:anyType itself, or, with {nillable} false, of a simple type that decodes
-// or of a complex type that decodes by these same rules at any depth: a local
-// one, or the top-level one an <element ref> names where codegen gives the
-// particle's field that declaration's own type; or the particle is an
-// <element ref> where codegen gives its field a sealed interface over the
-// referenced declaration's substitution group (codegen's package doc,
-// "# Substitution groups"), and each declaration of the group with
-// {abstract} false is such a declaration, an abstract head's own properties
-// never read; or the particle is a wildcard, whatever its {namespace constraint} and
-// {process contents}. No two element particles share an expanded name, such
-// an interface's particle taking each of those declarations', but in a
-// flattened reach, whose children are attributed by position. Each attribute
-// use is outside the xsi namespace, but xsi:nil's in a type codegen emits as its
-// choice's sealed interface, which gives that use no field, and is typed the
+// particles at any depth and its nested choice particle occurring exactly
+// once that codegen does not flatten by its alternatives, and, of a
+// flattened one, in place of its particles, each basic particle its model group
+// reaches through its model group particles at any depth, is an element declaration
+// with no {type table}, of xs:anyType itself, or, with {nillable} false, of a simple
+// type that decodes or of a complex type that decodes by these same rules at any
+// depth: a local one, or the top-level one an <element ref> names where codegen
+// gives the particle's field that declaration's own type; or the particle is an
+// <element ref> where codegen gives its field a sealed interface over the referenced
+// declaration's substitution group (codegen's package doc, "# Substitution groups"),
+// and each declaration of the group with {abstract} false is such a declaration, an
+// abstract head's own properties never read; or the particle is a wildcard, whatever
+// its {namespace constraint} and {process contents}. No two element particles share
+// an expanded name, such an interface's particle taking each of those declarations',
+// but in a flattened reach, whose children are attributed by position. Each
+// attribute use is outside the xsi namespace, but xsi:nil's in a type codegen emits
+// as its choice's sealed interface, which gives that use no field, and is typed the
 // same way. No element in the instance carries xsi:type, except inside a wildcard's
 // match or an element of type xs:anyType's raw content.
 //
@@ -140,13 +144,14 @@
 // unbounded, its {min occurs} 0 read as 1, or, for an <element ref>
 // alternative, the same over the referenced declaration's named type, or, for
 // an alternative of complex type, the same over its S or I, or its AnyType for
-// one of type xs:anyType. The interface is T itself, or, where the type has an
-// attribute field (codegen's package doc, "# Attributes": an attribute use
-// other than xsi:nil's, or an {attribute wildcard}) or one occurrence of the
-// choice is emptiable (§3.9.6.3 cos-group-emptiable), the first field of T, a
-// struct whose further fields are the attribute fields. An empty match is the
-// nil interface. A particle's complex type gets its interface or struct by the
-// same rule.
+// one of type xs:anyType. A content choice's interface is T itself, or, where
+// the type has an attribute field (codegen's package doc, "# Attributes": an
+// attribute use other than xsi:nil's, or an {attribute wildcard}) or one
+// occurrence of the choice is emptiable (§3.9.6.3 cos-group-emptiable), the
+// first field of T, a struct whose further fields are the attribute fields;
+// item 6 of [Decode]'s doc places a nested choice's field. An empty match is
+// the nil interface. A particle's complex type gets its interface or struct
+// by the same rule.
 //
 // A flattened content {particle} decodes into the slice field codegen emits
 // for it (codegen's package doc, "# Particles"): one item per child element,
@@ -194,8 +199,9 @@
 //   - Two element particles taking one expanded name; item 5 of [Decode]'s
 //     doc states when.
 //   - An all group.
-//   - A nested choice, and a nested sequence codegen does not splice, inline
-//     or through <group ref>, a choice's model-group alternative included.
+//   - A nested choice occurring other than exactly once or one codegen
+//     flattens, and a nested sequence codegen does not splice, inline or
+//     through <group ref>, a choice's model-group alternative included.
 //   - Mixed content.
 //   - Element-only content with {open content}.
 //   - A complex type with {abstract} true.

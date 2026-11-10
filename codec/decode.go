@@ -286,21 +286,25 @@ var ErrTypeMismatch = errors.New("codec: T is not the type codegen emits for the
 //     in this bullet's place. A sequence's nested sequence particle, inline or
 //     through <group ref>, that codegen splices (codegen's package doc,
 //     "# Particles") is examined as its own particles in its place, in order,
-//     at any depth; any other nested model group declines first, and a wildcard
-//     particle gives the field item 6 states and is examined no further, an
-//     error's subject, a decline's or a plain one's, naming it by its ordinal
-//     among the content model's wildcard particles, counted from 1 in that
-//     order, such as "wildcard particle 2 of" the type. Then the particle's
-//     element declaration's {type table} and {nillable}, as the first bullet
-//     examines the document element's, and its {type definition}: a simple one
-//     is examined as the document element's is; xs:anyType itself, known by
-//     its QName, gives the field item 6 states and is examined no further; and
-//     any other complex one, a type derived from xs:anyType included, is
-//     examined as the document element's complex type is, from its {abstract}
-//     to its attribute uses. Then the particle declines by an expanded name an
-//     earlier particle's field takes, a particle's field taking its element's
-//     expanded name, or, for a substitution group's interface, each
-//     declaration the next bullet examines.
+//     at any depth; a nested choice particle, inline or through <group ref>,
+//     occurring exactly once, that codegen does not flatten is examined in its
+//     place as the choice bullet below examines a choice's alternatives; any
+//     other nested model group declines first; and a wildcard particle gives
+//     the field item 6 states and is examined no further, an error's subject,
+//     a decline's or a plain one's, naming it by its ordinal among the content
+//     model's wildcard particles, a nested choice's alternatives included,
+//     counted from 1 in that order, such as "wildcard particle 2 of" the type.
+//     Then the particle's element declaration's {type table} and {nillable},
+//     as the first bullet examines the document element's, and its {type
+//     definition}: a simple one is examined as the document element's is;
+//     xs:anyType itself, known by its QName, gives the field item 6 states and
+//     is examined no further; and any other complex one, a type derived from
+//     xs:anyType included, is examined as the document element's complex type
+//     is, from its {abstract} to its attribute uses. Then the particle
+//     declines by an expanded name an earlier particle's field takes, a
+//     particle's field taking its element's expanded name, or, for a
+//     substitution group's interface, each declaration the next bullet
+//     examines.
 //   - Of an <element ref> particle whose field holds a substitution group's
 //     sealed interface (item 6), in place of the referenced declaration's own
 //     properties and type: each declaration of the group with {abstract}
@@ -494,9 +498,12 @@ var ErrTypeMismatch = errors.New("codec: T is not the type codegen emits for the
 //     holds, whose alternatives are the basic particles its model group
 //     reaches, each branch field the field its particle would give occurring
 //     exactly once.
-//   - A sealed interface, T, a struct's first field or a nested element's, a
-//     choice's, a substitution group's or a flattened slice's element,
-//     whose branch types reach Decode only through [WithBranches]: it does
+//   - A sealed interface, T, a struct's field holding a choice's, the first
+//     for a content choice and the one at its particle's place for a nested
+//     choice, named as if from the local name choice (codegen's package doc,
+//     "# Naming") and holding the bare interface, never a pointer, or a nested
+//     element's, a choice's, a substitution group's or a flattened slice's
+//     element, whose branch types reach Decode only through [WithBranches]: it does
 //     not match when it is not an interface whose one method is unexported,
 //     or when its branch set, as WithBranches supplied it, is not one struct
 //     of one field per alternative, that field the name and Go type of the
@@ -1710,18 +1717,18 @@ func typeSubject(decl xsd.ElementDeclaration, td xsd.TypeDefinition) string {
 // latter to the referenced declaration or to each member of its
 // substitution group, and into one kind of model group, a content
 // particle's, inline or through a <group ref>, with the nested sequences
-// spliced into it (sequence.bind), or the model groups a flattened one
-// reaches (bindFlattened); a local declaration's type is
-// either inline, a tree it owns, or named. So every recursion through types
-// passes one of the three keys of codegen's emitted types: a top-level
-// element declaration, the document element's or one an <element ref>
-// reaches, keyed by its expanded name in elements; the named {type
-// definition} of a local element declaration, keyed by its QName in types;
-// and the anonymous type of a local element declaration whose {scope}'s
-// {parent} is a model group definition, which only a <group ref> reaches,
-// keyed by its groupPath in groups. Every other inline anonymous type is
-// bound in place, under no key, inside the unit of the type or group that
-// declares it, which is bound once.
+// spliced into it and the nested choices bound in place (sequence.nested),
+// or the model groups a flattened one reaches (bindFlattened); a local
+// declaration's type is either inline, a tree it owns, or named. So every
+// recursion through types passes one of the three keys of codegen's emitted
+// types: a top-level element declaration, the document element's or one an
+// <element ref> reaches, keyed by its expanded name in elements; the named
+// {type definition} of a local element declaration, keyed by its QName in
+// types; and the anonymous type of a local element declaration whose
+// {scope}'s {parent} is a model group definition, which only a <group ref>
+// reaches, keyed by its groupPath in groups. Every other inline anonymous
+// type is bound in place, under no key, inside the unit of the type or
+// group that declares it, which is bound once.
 type bindRun struct {
 	p        *pipeline
 	elements unitIndex[xsd.QName]
@@ -2252,7 +2259,8 @@ type wildAttributor struct {
 // repeating model group, and the particle Decode binds is one sequence or
 // choice occurring once of element and wildcard particles, every nested group
 // spliced, so occurring exactly once or with {min occurs} 0 and {max occurs}
-// 1 (goshape.Splices), or declined. A decline here is a defect of that
+// 1 (goshape.Splices), a choice of element and wildcard particles occurring
+// exactly once (sequence.nested), or declined. A decline here is a defect of that
 // premise, a plain error and no decline. A flattened content model repeats,
 // so the premise does not hold for it: it holds no wildcardSlot, and its own
 // Matcher's decline is a *DeclineError (flattened.matcher).
@@ -2304,9 +2312,10 @@ func (b *boundSequence) fill(r *xmltree.Reader, _ *xmltree.StartElement, out ref
 // sealed is a sealed interface as codegen emits it, whose one method is
 // unexported, and one branch struct per alternative, in order, each holding
 // the one field alts holds for it, as Decode reads them. A child is put to an
-// alternative by the bind holding the sealed: by expanded name, through its
-// own children index, for a choice and a substitution group, and by Matcher
-// position for a flattened content model.
+// alternative by the bind holding the sealed: for a choice, through its
+// content model's childIndex; for a substitution group, by expanded name,
+// through its own children index; and by Matcher position for a flattened
+// content model.
 type sealed struct {
 	p    *pipeline
 	alts []field
@@ -3388,12 +3397,12 @@ type attribution struct {
 // eachChild states, and false where it is attributed to none, or to no
 // particle, an {open content}; a has attributed the children before start,
 // nil where the content model holds no wildcard particle. A wildcard
-// particle's index is the one a holds for its position
-// (xsd.Matcher.NextParticle), its target; a position a holds none for is a
-// defect of the premise the binds rest on, one sequence or choice of element
-// and wildcard particles, nested sequences spliced
-// (wildcardSlot.attributor), and a plain error. Attribution is a closed sum,
-// so the switch is STYLE T2's sealed-sum exception.
+// particle's index is the one a holds for its position (xsd.Matcher.NextParticle),
+// its target; a position a holds none for is a defect of the premise the binds rest
+// on, one sequence or choice of element and wildcard particles, nested sequences
+// spliced and nested choices bound in place (wildcardSlot.attributor), and a plain
+// error. Attribution is a closed sum, so the switch is STYLE T2's sealed-sum
+// exception.
 func attributeChild(a *wildAttributor, children map[xsd.QName]int, start *xmltree.StartElement) (attribution, bool, error) {
 	name := expanded(start.Name())
 	if a != nil {
