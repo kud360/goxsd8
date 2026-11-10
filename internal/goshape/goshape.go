@@ -165,6 +165,11 @@ func ParticleShape(occurs xsd.Occurs, sealed bool) (s Shape, ok bool) {
 // reading u's effective value constraint (§3.5.4 key-evc) from
 // [xsd.Schema.EffectiveValueConstraint] and its declaration as a built-in
 // xsi: one exactly when it is in the xsi namespace (§3.2.6.4 no-xsi).
+//
+// GAP(xsd): a programmatically built schema is not kept out of the xsi
+// namespace (#1462), so a built {xsi}-named declaration with an effective
+// value constraint gets Pointer here, where "# Attributes" gives Bare. Codec
+// agrees only because it declines every xsi: use before it reaches this.
 func AttributeShape(schema *xsd.Schema, u xsd.AttributeUse, sealed bool) Shape {
 	_, constrained := schema.EffectiveValueConstraint(u)
 	supplied := constrained && u.DeclarationName().Space != xsd.XMLSchemaInstanceNS
