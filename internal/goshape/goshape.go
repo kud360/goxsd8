@@ -131,3 +131,53 @@ func HasAttributeFields(t xsd.ComplexType) bool {
 	_, hasWildcard := t.AttributeWildcard()
 	return hasWildcard || len(FieldAttributeUses(t)) > 0
 }
+
+// Shape is the occurrence in which a field holds its value V: V itself, *V or
+// []V. The zero value is invalid (STYLE T1).
+type Shape uint8
+
+// The Shapes.
+const (
+	Bare    Shape = iota + 1 // V
+	Pointer                  // *V
+	Slice                    // []V
+)
+
+// ParticleShape returns the Shape codegen/doc.go "# Particles" gives the
+// field of a particle occurring as occurs, its V a sealed interface exactly
+// when sealed. ok is false exactly when {max occurs} is 0, for which codegen
+// emits no field.
+func ParticleShape(occurs xsd.Occurs, sealed bool) (s Shape, ok bool) {
+	upper, bounded := occurs.Max()
+	switch {
+	case !bounded || upper > 1:
+		return Slice, true
+	case upper == 0:
+		return 0, false
+	case occurs.Min() == 0 && !sealed:
+		return Pointer, true
+	}
+	return Bare, true
+}
+
+// AttributeShape returns the Shape codegen/doc.go "# Attributes" gives the
+// field of the attribute use u, its V a sealed interface exactly when sealed,
+// reading u's effective value constraint (§3.5.4 key-evc) from
+// [xsd.Schema.EffectiveValueConstraint] and its declaration as a built-in
+// xsi: one exactly when it is in the xsi namespace (§3.2.6.4 no-xsi).
+func AttributeShape(schema *xsd.Schema, u xsd.AttributeUse, sealed bool) Shape {
+	_, constrained := schema.EffectiveValueConstraint(u)
+	supplied := constrained && u.DeclarationName().Space != xsd.XMLSchemaInstanceNS
+	if u.Required() || supplied || sealed {
+		return Bare
+	}
+	return Pointer
+}
+
+// ValueLocal and ValueShape are the local name the value field of a complex
+// type with simple content is named from and its Shape (codegen/doc.go
+// "# Complex types").
+const (
+	ValueLocal = "value"
+	ValueShape = Bare
+)
