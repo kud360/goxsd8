@@ -980,8 +980,8 @@ func (e *emitter) goType(subject, typed string, loc xsderr.Loc, t *xsd.SimpleTyp
 		return emittedType{}, fmt.Errorf("%s at %s: %w", subject, loc, err)
 	}
 	if !ok {
-		// goshape.AtomicType gives no Atomic only to an atomic t it found a
-		// {primitive type definition} for.
+		// t has a {primitive type definition}: goshape.AtomicType's doc states
+		// its error for one that has none.
 		primitive, err := t.Primitive(e.schema)
 		if err != nil {
 			return emittedType{}, fmt.Errorf("%s at %s: %w", subject, loc, err)
@@ -1021,13 +1021,9 @@ func (e *emitter) listItemPath(t *xsd.SimpleType, under unionNaming) (unionNamin
 	return declaredUnion{declaredStep(declaring.Name().Local)}, nil
 }
 
-// atomicType is the Go type "# Simple types" gives a: string, holding the
-// literal, for a special type; the Go integer whose range is a bounded integer
-// builtin's value space (Datatypes §3.4.16–§3.4.19, §3.4.21–§3.4.24); big.Int
-// for xs:integer (§3.4.13); float32 and float64 (§3.3.4.1, §3.3.5.1); big.Rat
-// for decimal (§3.3.3); []byte for hexBinary and base64Binary (§3.3.15.1,
-// §3.3.16.1); a datatype struct (datatypeType); or PrecisionDecimal
-// (precisionDecimal §3.1 sec-vs-pD).
+// atomicType spells the Go type a is, the one "# Simple types" names it by,
+// emitting a datatype struct (datatypeType) or PrecisionDecimal's group
+// (precisionDecimalType) at its first use.
 func (e *emitter) atomicType(a goshape.Atomic) string {
 	switch a {
 	case goshape.AtomicString:

@@ -6,12 +6,11 @@ import (
 	"github.com/kud360/goxsd8/xsd"
 )
 
-// Atomic is the atomic Go type codegen/doc.go "# Simple types" gives an
-// atomic simple type, or the string a special type gets: string, bool,
-// float32, float64, big.Rat, big.Int, a bounded Go integer, []byte for
-// xs:hexBinary and, apart from it, for xs:base64Binary, the datatype struct of
-// a date, time or duration datatype, QName's datatype struct, which NOTATION
-// shares, or PrecisionDecimal. The zero value is invalid (STYLE T1).
+// Atomic is one of the atomic Go types codegen/doc.go "# Simple types" names,
+// which owns the list, a special type's string among them: one constant per
+// Go type, but two for []byte, xs:hexBinary's and xs:base64Binary's, whose
+// values are read apart, and none of NOTATION's own, which shares QName's
+// datatype struct. The zero value is invalid (STYLE T1).
 type Atomic uint8
 
 // The Atomics.
@@ -131,18 +130,18 @@ var primitiveAtomics = map[xsd.QName]Atomic{
 
 // AtomicType returns the Atomic codegen/doc.go "# Simple types" gives the
 // simple type st, which owns the rule, and true; or false where it gives
-// none, st's {primitive type definition} being an ·implementation-defined·
-// one other than xs:precisionDecimal (an xsd.NewPrimitiveType one, or a
-// restriction of it), which each caller declines in its own terms. A special
-// type, known by identity ([xsd.SimpleType.IsSpecial]) ahead of its
-// {variety}, gives AtomicString. An atomic st's Atomic is that of the first
-// builtin of chainAtomics or datatypeAtomics met walking its {base type
-// definition} chain from st itself, an anonymous step's zero name meeting
-// none, and failing one, its primitive's in primitiveAtomics: every bounded
-// builtin lies below xs:integer, and dateTimeStamp, dayTimeDuration and
-// yearMonthDuration below the primitive they restrict, so the nearest wins;
-// a primitive of datatypeAtomics is met only at the top of its chain, and no
-// chain meets both an integer builtin and a temporal one.
+// none, st's {primitive type definition} being none of the twenty the rule
+// names, an ·implementation-defined· one other than xs:precisionDecimal such
+// as one xsd.NewPrimitiveType mints, which each caller declines in its own
+// terms. A special type, known by identity ([xsd.SimpleType.IsSpecial])
+// ahead of its {variety}, gives AtomicString. An atomic st's Atomic is that
+// of the first builtin of chainAtomics or datatypeAtomics met walking its
+// {base type definition} chain from st itself, an anonymous step's zero name
+// meeting none, and failing one, its primitive's in primitiveAtomics: every
+// bounded builtin lies below xs:integer, and dateTimeStamp, dayTimeDuration
+// and yearMonthDuration below the primitive they restrict, so the nearest
+// wins; a primitive of datatypeAtomics is met only at the top of its chain,
+// and no chain meets both an integer builtin and a temporal one.
 //
 // The error is xsd's, returned bare, or a plain one, prefixed "goshape:",
 // for a list or union st, whose Go type is no Atomic, and for any other st

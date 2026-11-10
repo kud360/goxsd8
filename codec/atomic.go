@@ -15,14 +15,8 @@ import (
 	"github.com/kud360/goxsd8/value"
 )
 
-// atomic is goshape.Atomic, the atomic Go type codegen gives an atomic simple
-// type Decode decodes (codegen/doc.go "# Simple types"), carrying how codec
-// reads its value: string, bool, float32, float64, big.Rat, big.Int, a
-// bounded Go integer, []byte read from xs:hexBinary's canonical form or from
-// xs:base64Binary's, the datatype struct of a date, time or duration
-// datatype, QName's datatype struct, which NOTATION shares, or
-// PrecisionDecimal's, read from the lexical into codec's decimalValue. The
-// zero value is invalid (STYLE T1).
+// atomic is goshape.Atomic, with how codec holds each one's value (bare) and
+// reads it (reading, convert). The zero value is invalid (STYLE T1).
 type atomic goshape.Atomic
 
 // The atomics, each goshape's of its name.
