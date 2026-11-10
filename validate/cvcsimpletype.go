@@ -2,7 +2,6 @@ package validate
 
 import (
 	"github.com/kud360/goxsd8/value"
-	"github.com/kud360/goxsd8/xpath"
 	"github.com/kud360/goxsd8/xsd"
 	"github.com/kud360/goxsd8/xsderr"
 )
@@ -41,7 +40,7 @@ func (w *walk) stringValid(st *xsd.SimpleType, lexical string, ctx value.Context
 	if st.IsSpecial() {
 		return w.entitiesDeclared(st, lexical, ctx, loc)
 	}
-	_, err = value.ValidateLexical(w.backend, w.schema, st, lexical, ctx, xpath.FacetAssertions(w.now))
+	_, err = value.ValidateLexical(w.backend, w.schema, st, lexical, ctx, w.res.FacetAssertions())
 	if err != nil && !value.IsDatatypeVerdict(err) {
 		return false, err
 	}
