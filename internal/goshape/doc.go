@@ -22,6 +22,10 @@
 //	func AttributeShape(schema *xsd.Schema, u xsd.AttributeUse, sealed bool) Shape
 //	const ValueLocal = "value"
 //	const ValueShape = Bare
+//	type Atomic uint8
+//	const AtomicString, AtomicBool, …, AtomicPrecisionDecimal Atomic
+//	func (a Atomic) Datatype() (xsd.QName, bool)
+//	func AtomicType(r xsd.TypeResolver, st *xsd.SimpleType) (a Atomic, ok bool, err error)
 //
 // The rules are those codegen's package doc states, each in its own section
 // ("# Simple types", "# Complex types", "# Substitution groups",

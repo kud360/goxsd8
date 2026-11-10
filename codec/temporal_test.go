@@ -14,6 +14,7 @@ import (
 	"unicode"
 
 	"github.com/kud360/goxsd8/builtin/strict"
+	"github.com/kud360/goxsd8/internal/goshape"
 	"github.com/kud360/goxsd8/value"
 	"github.com/kud360/goxsd8/xsd"
 	"github.com/kud360/goxsd8/xsderr"
@@ -173,7 +174,7 @@ func TestDatatypeMirrorsAreCodegens(t *testing.T) {
 			continue
 		}
 		mirrored++
-		local := datatypeNames[a]
+		local := datatypeLocal(a)
 		name := string(unicode.ToUpper(rune(local[0]))) + local[1:]
 		if want := structBody(t, name, a.bare()); !strings.Contains(gen, want) {
 			t.Errorf("codegen emits\n%s\nwhich does not declare the mirror of xs:%s,\n%s", gen, local, want)
@@ -586,7 +587,7 @@ func TestConvertTemporalRejects(t *testing.T) {
 		{atomicDayTimeDuration, "P1M"}, {atomicYearMonthDuration, "PT1S"}, {atomicYearMonthDuration, "P1D"},
 	} {
 		if v, err := convertTemporal(row.a, row.form); err == nil {
-			t.Errorf("convertTemporal(xs:%s, %q) = %s, want an error", datatypeNames[row.a], row.form, spellValue(v))
+			t.Errorf("convertTemporal(xs:%s, %q) = %s, want an error", datatypeLocal(row.a), row.form, spellValue(v))
 		}
 	}
 }
@@ -621,4 +622,11 @@ func TestWithLoggerYearMonthDuration(t *testing.T) {
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("codec records = %+v\nwant %+v", got, want)
 	}
+}
+
+// datatypeLocal returns the local name of the datatype whose datatype struct
+// is a's Go type (goshape.Atomic.Datatype), "" for none.
+func datatypeLocal(a atomic) string {
+	name, _ := goshape.Atomic(a).Datatype()
+	return name.Local
 }

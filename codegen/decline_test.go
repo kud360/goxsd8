@@ -22,6 +22,12 @@ import (
 	"github.com/kud360/goxsd8/xsderr"
 )
 
+// The builtins the tests below build xsd constructor schemas over.
+var (
+	stringPrimitive = xsd.QName{Space: xsd.XMLSchemaNS, Local: "string"}
+	intBuiltin      = xsd.QName{Space: xsd.XMLSchemaNS, Local: "int"}
+)
+
 // parseString parses doc as the one schema document at location s.xsd.
 func parseString(t *testing.T, doc string) *xsd.Schema {
 	t.Helper()
