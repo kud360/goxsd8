@@ -146,10 +146,13 @@ func (v *Validator) Assess(root Element) *Result {
 }
 
 // assess is [Validator.Assess] at now, the episode's current dateTime, which
-// Assess reads off the clock and a test fixes. now is never the zero time:
-// [Result.FacetAssertions] reads the zero time as a Result no Assess call
+// Assess reads off the clock and a test fixes. It panics if now is the zero
+// time, which [Result.FacetAssertions] reserves for a Result no Assess call
 // returned.
 func (v *Validator) assess(root Element, now time.Time) *Result {
+	if now.IsZero() {
+		panic("validate: assess: zero current dateTime")
+	}
 	// Where Assess's doc is carried out: [walk.abstractDeclaration],
 	// [walk.absentAffiliation], [walk.absentSelection], [walk.abstractType],
 	// [walk.attributes] (with cvcattribute.go), cvccomplexcontent.go,

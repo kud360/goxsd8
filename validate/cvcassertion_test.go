@@ -1002,6 +1002,17 @@ func TestResultFacetAssertionsIsTheEpisodeInstant(t *testing.T) {
 	if a := (&Result{}).FacetAssertions(); a != nil {
 		t.Errorf("(&Result{}).FacetAssertions() = %v, want nil", a)
 	}
+	// The message, not the bare panic, is what fails without assess's guard:
+	// unguarded, OnDate's facet panics inside value on the nil evaluator.
+	const zeroPanic = "validate: assess: zero current dateTime"
+	func() {
+		defer func() {
+			if got := recover(); got != zeroPanic {
+				t.Errorf("assess at the zero time: recovered %v, want %q", got, zeroPanic)
+			}
+		}()
+		v.assess(valuedRoot("n", "2000-01-01"), time.Time{})
+	}()
 }
 
 // cvc-complex-type clause 1.2 reaches the same facet over an element's
