@@ -2712,12 +2712,13 @@ func anyTypeItself(td xsd.TypeDefinition) bool { return td.Name() == anyTypeName
 // codegen flattens it, or the construct Decode declines in their place, in its
 // doc's item 5 order. The particle occurring exactly once is bound as its own
 // fields or choice, flat false; one occurring otherwise is flat where
-// goshape.Flattens answers true for it, a decision made here once and read by
-// bindContent alone, and declines otherwise. A <group ref> naming no
-// definition, the content {particle}'s or one goshape.Flattens follows inside
-// it, is goshape.ModelGroupTerm's plain error, and goshape.Flattens' other
-// error a plain one too, each prefixed by typeSubject, which names the complex
-// type holding the particle.
+// goshape.Flattens answers true for it, and declines otherwise. Nothing
+// recomputes flat: bindComplex reads it to keep a flattened choice out of
+// choiceRoot, and bindContent to bind the flattened field. A <group ref>
+// naming no definition, the content {particle}'s or one goshape.Flattens
+// follows inside it, is goshape.ModelGroupTerm's plain error, and
+// goshape.Flattens' other error a plain one too, each prefixed by typeSubject,
+// which names the complex type holding the particle.
 func contentGroup(schema *xsd.Schema, content xsd.ElementContent, typeSubject string) (particle xsd.Particle, group xsd.ModelGroup, flat bool, d construct, err error) {
 	if content.Mixed {
 		return xsd.Particle{}, xsd.ModelGroup{}, false, constructMixedContent, nil
