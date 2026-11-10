@@ -117,16 +117,15 @@ func TestDecodeDeclines(t *testing.T) {
 			"", a + `<s:b>y</s:b>`, constructSequenceOccurs, 1, 1},
 		{"repeated content choice codegen does not flatten", root(`<xs:choice maxOccurs="unbounded"><xs:element name="a" type="xs:string"/><xs:any namespace="##other" processContents="lax"/></xs:choice>`),
 			"", a, constructChoiceOccurs, 1, 1},
-		{"nested model group", sequenceOf(`<xs:choice><xs:element name="a" type="xs:string"/></xs:choice>`), "", a, constructNestedGroup, 1, 1},
-		{"nested <group ref> to a choice group", `<xs:group name="g"><xs:choice><xs:element name="a" type="xs:string"/></xs:choice></xs:group>` + sequenceOf(`<xs:group ref="s:g"/>`),
+		{"nested choice occurring twice", sequenceOf(`<xs:choice maxOccurs="2"><xs:element name="a" type="xs:string"/></xs:choice>`), "", a, constructNestedGroup, 1, 1},
+		{"optional nested choice", sequenceOf(`<xs:element name="a" type="xs:string"/><xs:choice minOccurs="0"><xs:element name="b" type="xs:string"/><xs:element name="c" type="xs:string"/></xs:choice>`),
+			"", a, constructNestedGroup, 1, 1},
+		{"nested <group ref> to a choice group, occurring twice", `<xs:group name="g"><xs:choice><xs:element name="a" type="xs:string"/></xs:choice></xs:group>` + sequenceOf(`<xs:group ref="s:g" maxOccurs="2"/>`),
 			"", a, constructNestedGroup, 1, 1},
 		{"nested sequence codegen flattens, repeated and emptiable", sequenceOf(`<xs:element name="a" type="xs:string"/><xs:sequence maxOccurs="unbounded"><xs:element name="b" type="xs:string" minOccurs="0"/></xs:sequence>`),
 			"", a, constructNestedGroup, 1, 1},
 		{"optional nested sequence over a group that cannot match nothing", sequenceOf(`<xs:element name="a" type="xs:string"/><xs:sequence minOccurs="0"><xs:element name="b" type="xs:string"/></xs:sequence>`),
 			"", a, constructNestedGroup, 1, 1},
-		{"extension of a choice adding a sequence", `<xs:complexType name="t"><xs:choice><xs:element name="a" type="xs:string"/></xs:choice></xs:complexType>
-			<xs:complexType name="t2"><xs:complexContent><xs:extension base="s:t"><xs:sequence><xs:element name="b" type="xs:string"/></xs:sequence></xs:extension></xs:complexContent></xs:complexType><xs:element name="r" type="s:t2"/>`,
-			"", a + `<s:b>y</s:b>`, constructNestedGroup, 1, 1},
 		{"extension of a repeated sequence adding a sequence", `<xs:complexType name="t"><xs:sequence maxOccurs="2"><xs:element name="a" type="xs:string"/></xs:sequence></xs:complexType>
 			<xs:complexType name="t2"><xs:complexContent><xs:extension base="s:t"><xs:sequence><xs:element name="b" type="xs:string"/></xs:sequence></xs:extension></xs:complexContent></xs:complexType><xs:element name="r" type="s:t2"/>`,
 			"", a + `<s:b>y</s:b>`, constructNestedGroup, 1, 1},
@@ -508,7 +507,7 @@ func TestDeclineConstruct(t *testing.T) {
 			{`<xs:complexType name="ct"><xs:choice minOccurs="0"><xs:element name="b" type="xs:string"/><xs:element name="a" type="xs:string"/></xs:choice></xs:complexType><xs:element name="r" type="s:ct"/>`, "", a},
 		}},
 		{"particle", [2]decl{
-			{sequenceOf(`<xs:choice><xs:element name="a" type="xs:string"/></xs:choice>`), "", a},
+			{sequenceOf(`<xs:choice maxOccurs="2"><xs:element name="a" type="xs:string"/></xs:choice>`), "", a},
 			{root(`<xs:choice><xs:sequence><xs:element name="a" type="xs:string"/></xs:sequence><xs:element name="b" type="xs:string"/></xs:choice>`), "", a},
 		}},
 		{"attribute use", [2]decl{
