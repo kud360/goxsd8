@@ -256,7 +256,7 @@
 //     method, unexported, "is" plus the interface's name, and one arm per case
 //     of the value's ·numericalValue· (vp-pd-numVal), emitted after the
 //     interface in this order. PrecisionDecimalValueNumerical holds Coefficient,
-//     a big.Int, the value's magnitude, never negative; Scale, a big.Int, its
+//     a big.Int, the value's significand, never negative; Scale, a big.Int, its
 //     ·scale· (vp-pd-precision); and Negative, its ·sign· (vp-pd-sign), so that
 //     the value is Coefficient × 10^−Scale, negative when Negative.
 //     PrecisionDecimalValuePositiveInfinity,
