@@ -279,11 +279,12 @@ func (r *Result) Unevaluated() []Unevaluated {
 // non-nil Err is [Undecided].
 func (r *Result) Err() error { return r.err }
 
-// FacetAssertions returns the [value.AssertionEvaluator] that decided every
-// assertions-facet {test} of r's assessment episode: [xpath.FacetAssertions],
-// on whose terms each {test} is evaluated, at the one current dateTime the
-// package doc's "Assessment semantics" section says [Validator.Assess] reads
-// for the episode. Its consumer is codec.Decode, whose second read of the
+// FacetAssertions returns the [value.AssertionEvaluator] r's assessment
+// episode handed every [value.ValidateLexical], [value.ValidatingType] and
+// [value.ConstraintMatches] call it made: [xpath.FacetAssertions], on whose
+// terms each {test} is evaluated, at the one current dateTime the package
+// doc's "Assessment semantics" section says [Validator.Assess] reads for the
+// episode. Its consumer is codec.Decode, whose second read of the
 // document identifies a union's ·active basic member· under it
 // ([value.ValidatingType]), so the member it decodes into is the one this
 // assessment's identification selected.
