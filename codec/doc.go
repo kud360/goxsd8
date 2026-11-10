@@ -88,8 +88,7 @@
 //
 // A union type (Datatypes §2.4.1.3) decodes when each of its basic members,
 // in codegen's basic-member order (codegen's package doc, "# Simple types"),
-// is such an atomic or list type, no two of them get one Go type, and no
-// assertions facet lies where its value's identification reads one, item 5
+// is such an atomic or list type and no two of them get one Go type, item 5
 // of [Decode]'s doc stating each. It decodes into codegen's sealed
 // interface, the variant of the value's ·active basic member·, as
 // [Decode]'s doc states.
@@ -196,8 +195,6 @@
 //     construct.
 //   - A union two of whose basic members get one Go type; item 5 of
 //     [Decode]'s doc states when.
-//   - A union whose value's identification reads an assertions facet; item
-//     5 of [Decode]'s doc states where.
 //   - An xsi:type.
 //
 // Two of those are rulings rather than coverage still to come:

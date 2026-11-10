@@ -5,8 +5,10 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/kud360/goxsd8/builtin"
+	"github.com/kud360/goxsd8/value"
 	"github.com/kud360/goxsd8/xsd"
 	"github.com/kud360/goxsd8/xsderr"
 )
@@ -938,6 +940,79 @@ func TestCurrentDateAssertionsAreEvaluated(t *testing.T) {
 
 	wantSatisfied(t, aAttributeAssessed(t, "PastDate", "2000-01-01"), "PastDate over 2000-01-01")
 	wantFacetCharge(t, aAttributeAssessed(t, "PastDate", "9999-12-31"), "cvc-attribute", "PastDate over 9999-12-31")
+}
+
+// [Result.FacetAssertions] is the evaluator at the instant the walk decided
+// every assertions facet at (cvc-xpath clause 6): assessed at
+// 1999-06-01T12:00:00Z through the assess seam, the facet `current-date() eq
+// xs:date('1999-06-01')` holds in the walk and under the Result's evaluator,
+// and assessed at 2000-01-01T00:00:00Z it is charged in the walk and fails
+// under the evaluator. With FacetAssertions building its evaluator at
+// time.Now().UTC(), or at the zero time, the 1999-06-01 row fails twice: the
+// walk charges the attribute and the evaluator answers AssertionFails. The zero
+// Result returns nil, which fails with FacetAssertions' IsZero arm removed.
+func TestResultFacetAssertionsIsTheEpisodeInstant(t *testing.T) {
+	const test = "current-date() eq xs:date('1999-06-01')"
+	bound := xsd.NewXPathExpression(test, []xsd.NamespaceBinding{xsd.NewNamespaceBinding("xs", xsd.XMLSchemaNS)}, nil, nil)
+	onDate, err := xsd.NewSimpleType(xsderr.Loc{}, local("OnDate"), xsd.RestrictionDerivation{},
+		xsd.SimpleTypeRef{Name: icBuiltin("date")},
+		[]xsd.Facet{xsd.NewAssertionsFacet([]xsd.Assertion{xsd.NewAssertion(bound)})}, nil)
+	if err != nil {
+		t.Fatalf("building OnDate: %v", err)
+	}
+	uses := []xsd.AttributeUse{typedUse(t, "n", local("OnDate"), false, nil, nil)}
+	schema := aSchema(t, aComplexType(t, uses, xsd.EmptyContent{}, nil), onDate)
+	v, err := New(schema, testBackend())
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	asserts, _ := onDate.OwnFacets()[0].Assertions()
+	td, _ := schema.Type(icBuiltin("date"))
+	date, ok := td.(*xsd.SimpleType)
+	if !ok {
+		t.Fatal("xs:date does not resolve")
+	}
+	for _, c := range []struct {
+		now     time.Time
+		charged bool
+		want    value.AssertionOutcome
+	}{
+		{time.Date(1999, 6, 1, 12, 0, 0, 0, time.UTC), false, value.AssertionHolds},
+		{time.Date(2000, 1, 1, 0, 0, 0, 0, time.UTC), true, value.AssertionFails},
+	} {
+		res := v.assess(valuedRoot("n", "2000-01-01"), c.now)
+		if c.charged {
+			wantFacetCharge(t, res, "cvc-attribute", "OnDate at "+c.now.String())
+		}
+		if !c.charged {
+			wantSatisfied(t, res, "OnDate at "+c.now.String())
+		}
+		a := res.FacetAssertions()
+		if a == nil {
+			t.Fatalf("at %s: FacetAssertions() = nil for a Result assess returned", c.now)
+		}
+		val, err := value.ValidateLexical(testBackend(), schema, date, "2000-01-01", nil, a)
+		if err != nil {
+			t.Fatalf("mapping 2000-01-01 under xs:date: %v", err)
+		}
+		if got := a.Evaluate(testBackend(), schema, onDate, asserts[0].Test(), val); got != c.want {
+			t.Errorf("at %s: FacetAssertions().Evaluate(%q) = %v, want %v", c.now, test, got, c.want)
+		}
+	}
+	if a := (&Result{}).FacetAssertions(); a != nil {
+		t.Errorf("(&Result{}).FacetAssertions() = %v, want nil", a)
+	}
+	// The message, not the bare panic, is what fails without assess's guard:
+	// unguarded, OnDate's facet panics inside value on the nil evaluator.
+	const zeroPanic = "validate: assess: zero current dateTime"
+	func() {
+		defer func() {
+			if got := recover(); got != zeroPanic {
+				t.Errorf("assess at the zero time: recovered %v, want %q", got, zeroPanic)
+			}
+		}()
+		v.assess(valuedRoot("n", "2000-01-01"), time.Time{})
+	}()
 }
 
 // cvc-complex-type clause 1.2 reaches the same facet over an element's

@@ -4,7 +4,6 @@ import (
 	"fmt"
 
 	"github.com/kud360/goxsd8/value"
-	"github.com/kud360/goxsd8/xpath"
 	"github.com/kud360/goxsd8/xsd"
 	"github.com/kud360/goxsd8/xsderr"
 )
@@ -360,7 +359,7 @@ func (w *walk) instanceTypeLexical(a Attribute, e Element) bool {
 			e.Name())
 		return true
 	}
-	_, err := value.ValidateLexical(w.backend, w.schema, st, a.Value(), elementContext{owner: e}, xpath.FacetAssertions(w.now))
+	_, err := value.ValidateLexical(w.backend, w.schema, st, a.Value(), elementContext{owner: e}, w.res.FacetAssertions())
 	if err == nil {
 		w.logAttribute(a, ruleCvcAttribute, "3", "satisfied")
 		return true
@@ -448,7 +447,7 @@ type fixedConstraint struct {
 // FinalizeWith, so cos-valid-simple-default never charges it. The comparison
 // declines here until #667 routes those defaults through ValidDefault.
 func (w *walk) fixedAgreement(a Attribute, e Element, st *xsd.SimpleType, f fixedConstraint) attributeValidity {
-	same, decided := value.ConstraintMatches(w.backend, w.schema, st, a.Value(), elementContext{owner: e}, f.vc, xpath.FacetAssertions(w.now))
+	same, decided := value.ConstraintMatches(w.backend, w.schema, st, a.Value(), elementContext{owner: e}, f.vc, w.res.FacetAssertions())
 	if !decided {
 		w.declineAttribute(a, f.rule, f.clause,
 			"attribute %s's value %q was not compared with %q, the {value} of the fixed {value constraint} on its %s: value.ConstraintMatches could not decide the comparison, a fault of the type or of the value backend, two literals of a ·special· type that some member of its lexical mapping cannot compare, an assertions-facet {test} not evaluated on either side or failed by the {value}, or a NOTATION {value} naming no declared notation, which no assembly judges yet (#667), rather than a verdict about the value, so %s is undecided",

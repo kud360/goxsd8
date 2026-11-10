@@ -139,18 +139,29 @@ const ruleCvcType xsderr.Rule = "cvc-type"
 //
 // It panics if root is nil, on the same grounds as [ElementChild].
 func (v *Validator) Assess(root Element) *Result {
-	// Where the doc above is carried out: [walk.abstractDeclaration],
+	if root == nil {
+		panic("validate: Assess: nil root Element")
+	}
+	return v.assess(root, time.Now().UTC())
+}
+
+// assess is [Validator.Assess] at now, the episode's current dateTime, which
+// Assess reads off the clock and a test fixes. It panics if now is the zero
+// time, which [Result.FacetAssertions] reserves for a Result no Assess call
+// returned.
+func (v *Validator) assess(root Element, now time.Time) *Result {
+	if now.IsZero() {
+		panic("validate: assess: zero current dateTime")
+	}
+	// Where Assess's doc is carried out: [walk.abstractDeclaration],
 	// [walk.absentAffiliation], [walk.absentSelection], [walk.abstractType],
 	// [walk.attributes] (with cvcattribute.go), cvccomplexcontent.go,
 	// [walk.locallyDeclaredType], [walk.childGoverning], an undecided child's
 	// [governance] in [walk.child], and the assertions in cvcassertion.go.
-	if root == nil {
-		panic("validate: Assess: nil root Element")
-	}
 	entities, _ := root.(UnparsedEntities) // nil: the source supports no [unparsedEntities]
 	processed, told := root.(DeclarationsProcessed)
 	w := walk{log: v.log, schema: v.schema, backend: v.backend, values: value.NewValueSpace(v.backend), entities: entities,
-		declsUnread: told && !processed.AllDeclarationsProcessed(), now: time.Now().UTC()}
+		declsUnread: told && !processed.AllDeclarationsProcessed(), res: Result{now: now}}
 	mark := w.res.mark()
 	decided, slot := w.decide(root, nil, nil, nil)
 	if _, unresolved := decided.(unresolvedGovernance); unresolved {
@@ -818,12 +829,11 @@ func (w *walk) localGovernance(e Element, instance, ldt xsd.TypeDefinition, err 
 // encoding, and String Valid clause 3 reads it (cvcsimpletype.go). declsUnread
 // is the root's [DeclarationsProcessed] answer, read once at the same point and
 // inverted: true only where the source implements the capability and reports
-// false, which is all clause 3's diagnostic needs. now is the current dateTime
-// of the XPath dynamic context (xpath20.md §2.1.2), read off the clock once, at
-// the top of the call, which cvc-xpath clause 6 (§3.13.4.2) makes constant
-// during an assessment episode: every assertion and every assertions facet the
-// walk evaluates is handed this one instant, so fn:current-date answers one
-// date across the whole episode.
+// false, which is all clause 3's diagnostic needs. res is the [Result] the walk
+// builds, and its now the one current dateTime every assertion and every
+// assertions facet the walk evaluates is handed: an assertion reads res.now and
+// an assertions facet [Result.FacetAssertions], so the walk and the Result it
+// returns hold one instant.
 type walk struct {
 	log         *slog.Logger
 	schema      *xsd.Schema
@@ -834,7 +844,6 @@ type walk struct {
 	nodes       int
 	ids         idTable
 	res         Result
-	now         time.Time
 }
 
 // elementContext is the [value.Context] an instance lexical is mapped under:

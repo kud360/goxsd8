@@ -9,7 +9,6 @@ import (
 	"strings"
 
 	"github.com/kud360/goxsd8/value"
-	"github.com/kud360/goxsd8/xpath"
 	"github.com/kud360/goxsd8/xsd"
 	"github.com/kud360/goxsd8/xsderr"
 )
@@ -627,7 +626,7 @@ func (c *contentCheck) fixedActualValue(w *walk, f xsd.ValueConstraint) {
 	if st == nil {
 		return
 	}
-	same, decided := value.ConstraintMatches(w.backend, w.schema, st, c.initial.String(), elementContext{owner: c.e}, f, xpath.FacetAssertions(w.now))
+	same, decided := value.ConstraintMatches(w.backend, w.schema, st, c.initial.String(), elementContext{owner: c.e}, f, w.res.FacetAssertions())
 	if !decided {
 		c.decline(w, c.e.Name(), c.e.Loc(), ruleCvcElt, "5.2.2.2.2",
 			"element %s's value %q was not compared with %q, the {value} of its declaration's fixed {value constraint}: value.ConstraintMatches could not decide the comparison, a fault of the type or of the value backend, two literals of a ·special· type that some member of its lexical mapping cannot compare, an assertions-facet {test} not evaluated on either side or failed by the {value}, or a NOTATION {value} naming no declared notation, which no assembly judges yet (#667), rather than a verdict about the value, so cvc-elt clause 5.2.2.2.2 is undecided",
