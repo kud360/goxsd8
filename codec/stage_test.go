@@ -44,13 +44,13 @@ func (o oneMapping) Mapping(typ xsd.QName) (value.Mapping, bool) {
 // validate hands Parse its own Context for one, so validate accepts what
 // Decode's lexical mapping rejects. placedContext's Parse rejects the same
 // literals with an *xsderr.Error placed at backend.xsd:7:3, which the stage
-// error quotes with that Loc. rowCanonical's
-// Canonical fails on a value whose canonical form rowLiterals holds, which
-// validate never renders: a supplied value is mapped under the schema
-// document's Context by validate and Decode alike, so only its conversion
-// tells them apart. The others break the governing mapping's Canonical: nil,
-// failing, rendering a form int32 does not read, or, xs:float's in
-// beyondFloat32, rendering a finite form beyond float32's range.
+// error quotes with that Loc. rowCanonical's Canonical fails on a value
+// whose canonical form rowLiterals holds, which validate never renders: a
+// supplied value is mapped under the schema document's Context by validate
+// and Decode alike, so only its conversion tells them apart. The others
+// break the governing mapping's Canonical: nil, failing, rendering a form
+// int32 does not read, or, xs:float's in beyondFloat32, rendering a finite
+// form beyond float32's range.
 var (
 	rowLiterals   = []string{"01", "1", "2", "3", "5"}
 	codecContext  = rejectingCodecContext(xsderr.Loc{})
