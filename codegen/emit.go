@@ -1470,15 +1470,15 @@ func typeName(t xsd.TypeDefinition) string {
 // attribute fields (goshape.HasAttributeFields) and its {open content}
 // (hasOpenContent) from the finalized component, so inherited ones count, and
 // then answers sealed for a choice with no {particles}, before asking
-// termEmptiable about a choice with {particles} — and its content particle
-// (contentGroup), nil for empty content. It emits nothing: body does, so that
-// a caller can store the type in e.emitted before its body is walked.
+// goshape.TermEmptiable about a choice with {particles} — and its content
+// particle (contentGroup), nil for empty content. It emits nothing: body does,
+// so that a caller can store the type in e.emitted before its body is walked.
 func (e *emitter) shape(name string, o origin, t xsd.ComplexType) (emittedType, *groupParticle, error) {
 	content, err := e.contentGroup(o.subject, t)
 	if err != nil {
 		return emittedType{}, nil, err
 	}
-	if content == nil || content.group.Compositor() != xsd.CompositorChoice || content.occurs != exactlyOnce || isMixed(t) {
+	if content == nil || content.group.Compositor() != xsd.CompositorChoice || content.occurs != goshape.ExactlyOnce() || isMixed(t) {
 		return emittedType{name: name}, content, nil
 	}
 	if goshape.HasAttributeFields(t) || hasOpenContent(t) {
@@ -1487,9 +1487,9 @@ func (e *emitter) shape(name string, o origin, t xsd.ComplexType) (emittedType, 
 	if len(content.group.Particles()) == 0 {
 		return emittedType{name: name, sealed: true}, content, nil
 	}
-	emptiable, err := e.termEmptiable(o.subject, t.Loc(), xsd.ResolvedTerm{Term: content.group})
+	emptiable, err := goshape.TermEmptiable(e.schema, xsd.ResolvedTerm{Term: content.group})
 	if err != nil {
-		return emittedType{}, nil, err
+		return emittedType{}, nil, fmt.Errorf("%s at %s: %w", o.subject, t.Loc(), err)
 	}
 	return emittedType{name: name, sealed: !emptiable}, content, nil
 }
@@ -1600,20 +1600,20 @@ func (e *emitter) contentFields(nested scope, chain []valueNode, o origin, t xsd
 // groupField returns the field of the model-group particle c at ordinal under
 // site (groupSite) of the complex type t generated from o, in a struct whose
 // nested types are named in nested: named from c's compositor, "sequence",
-// "choice" or "all". When flattens answers true for c, decided before any type
-// of c's is built, the field holds a slice of the sealed interface
+// "choice" or "all". When goshape.Flattens answers true for c, decided before
+// any type of c's is built, the field holds a slice of the sealed interface
 // occurrenceType emits flattened, whatever c's occurrence, a choice occurring
 // exactly once included; otherwise it holds the type for one occurrence of c's
 // group (occurrenceType) by c's occurrence (occursGoType). Its two callers are
 // contentFields, for a content particle goshape.Splices does not splice, and field,
 // for a model group particle nested in a struct's or a branch's particles, so
 // the walk tests a particle before any particle in its term, and a particle
-// flattens answers true for is the outermost one: its term is the reach walk's
-// (reach), and no particle inside it reaches groupField.
+// goshape.Flattens answers true for is the outermost one: its term is
+// goshape.Reach's walk, and no particle inside it reaches groupField.
 func (e *emitter) groupField(nested scope, site groupSite, ordinal int, o origin, t xsd.ComplexType, c groupParticle) (fieldSpec, error) {
-	flat, err := e.flattens(o.subject, t.Loc(), c)
+	flat, err := goshape.Flattens(e.schema, c.group, c.occurs)
 	if err != nil {
-		return fieldSpec{}, err
+		return fieldSpec{}, fmt.Errorf("%s at %s: %w", o.subject, t.Loc(), err)
 	}
 	typ, err := e.occurrenceType(nested, site, ordinal, o, t, c.group, flat)
 	if err != nil {
@@ -1642,8 +1642,8 @@ func (e *emitter) groupField(nested scope, site groupSite, ordinal int, o origin
 // Under a named complex type or a model group definition (scope.shared) it is stored in
 // e.emitted under nested.groupKey of its site before its particles are walked, shared by
 // every later walk of nested's path, and removed when that walk fails, as scopedType
-// stores a type; flat is a function of the particle at that site (flattens), so every
-// walk sharing the key reads one kind of type.
+// stores a type; flat is a function of the particle at that site (goshape.Flattens), so
+// every walk sharing the key reads one kind of type.
 func (e *emitter) occurrenceType(nested scope, parent groupSite, ordinal int, o origin, t xsd.ComplexType, group xsd.ModelGroup, flat bool) (emittedType, error) {
 	site := parent.group(ordinal, group.Compositor())
 	key := nested.groupKey(site)
@@ -1664,7 +1664,7 @@ func (e *emitter) occurrenceType(nested scope, parent groupSite, ordinal int, o 
 	if flat {
 		emitType = e.flattened
 	}
-	if err := emitType(typ, nested, site, o, t, group.Particles()); err != nil {
+	if err := emitType(typ, nested, site, o, t, group); err != nil {
 		if nested.shared() {
 			delete(e.emitted, key)
 		}
@@ -1674,18 +1674,18 @@ func (e *emitter) occurrenceType(nested scope, parent groupSite, ordinal int, o 
 }
 
 // occurrence emits typ, the type occurrenceType names for one occurrence of
-// the model group of particles at site in the complex type t generated from
-// o: the sealed interface sealedType emits, or a struct of particleFields'
-// fields. The particles' walk starts with an empty chain (valueChain): the
-// occurrence lies behind a slice, a pointer or an interface, so no value field
-// passes through it.
-func (e *emitter) occurrence(typ emittedType, nested scope, site groupSite, o origin, t xsd.ComplexType, particles []xsd.Particle) error {
+// the model group group at site in the complex type t generated from o: the
+// sealed interface sealedType emits, or a struct of particleFields' fields.
+// The particles' walk starts with an empty chain (valueChain): the occurrence
+// lies behind a slice, a pointer or an interface, so no value field passes
+// through it.
+func (e *emitter) occurrence(typ emittedType, nested scope, site groupSite, o origin, t xsd.ComplexType, group xsd.ModelGroup) error {
 	if typ.sealed {
-		return e.sealedType(typ.name, nested, site, o, t, particles)
+		return e.sealedType(typ.name, nested, site, o, t, group.Particles())
 	}
 	slot := len(e.decls)
 	e.decls = append(e.decls, declaration{})
-	fields, err := e.particleFields(nested, site, nil, o, t, particles)
+	fields, err := e.particleFields(nested, site, nil, o, t, group.Particles())
 	if err != nil {
 		return err
 	}
@@ -1693,61 +1693,25 @@ func (e *emitter) occurrence(typ emittedType, nested scope, site groupSite, o or
 	return nil
 }
 
-// flattens reports whether groupField gives the model group particle c a
-// flattened field (flattened), by the three gates the package doc's
-// "# Particles" states: c's group is a choice one of whose alternatives'
-// term is an emptiable model group (termEmptiable, which answers false for
-// an element declaration or a wildcard), whatever c's occurrence; or c's
-// {max occurs} is above 1 or unbounded and either its group is a sequence
-// one occurrence of which is emptiable, or its group has a repeating edge
-// (repeatingEdge). subject and loc name the complex type holding c in the
-// error termEmptiable or repeatingEdge returns.
-func (e *emitter) flattens(subject string, loc xsderr.Loc, c groupParticle) (bool, error) {
-	if c.group.Compositor() == xsd.CompositorChoice {
-		for _, p := range c.group.Particles() {
-			emptiable, err := e.termEmptiable(subject, loc, p.Term())
-			if err != nil {
-				return false, err
-			}
-			if emptiable {
-				return true, nil
-			}
-		}
-	}
-	if upper, bounded := c.occurs.Max(); bounded && upper <= 1 {
-		return false, nil
-	}
-	if c.group.Compositor() == xsd.CompositorSequence {
-		emptiable, err := e.termEmptiable(subject, loc, xsd.ResolvedTerm{Term: c.group})
-		if err != nil {
-			return false, err
-		}
-		if emptiable {
-			return true, nil
-		}
-	}
-	return e.repeatingEdge(subject, loc, c.group)
-}
-
 // flattened emits typ, the sealed interface occurrenceType names for a model
-// group particle at site whose term holds particles and which flattens answers
-// true for, of the complex type t generated from o, in the package doc's
-// "# Particles" shape: the interface, then one branch struct per particle reach
-// returns for particles, in that order, each followed by the types its field
-// reaches, the anonymous ones named in nested as if the flattened group were
-// absent; for none, the interface alone, which no branch implements. reach
-// runs whole, and so declines a particle with {max occurs} 0 or errors on an
-// all group, before the interface is emitted. A branch is named from the
-// interface's name plus the basic particle's word and generated from what its
-// header renders (alternative), its name claimed after the interface's and
-// every earlier branch's and the names their fields' types first claim. Its one
-// field is the one field gives the basic particle's term occurring exactly
-// once, with an empty chain (valueChain): an element's, through any
-// substitution group or governing types' interface and any Nillable or
-// MixedChild wrap, or a wildcard's AnyElement or AnyChild, never a pointer or
-// a slice.
-func (e *emitter) flattened(typ emittedType, nested scope, site groupSite, o origin, t xsd.ComplexType, particles []xsd.Particle) error {
-	basic, err := e.reach(o.subject, t.Loc(), particles)
+// group particle at site whose term is group and which goshape.Flattens
+// answers true for, of the complex type t generated from o, in the package
+// doc's "# Particles" shape: the interface, then one branch struct per basic
+// particle reach returns for group, in that order, each followed by the types
+// its field reaches, the anonymous ones named in nested as if the flattened
+// group were absent; for none, the interface alone, which no branch
+// implements. reach runs whole, and so declines a particle with {max occurs}
+// 0 or errors on an all group, before the interface is emitted. A branch is
+// named from the interface's name plus the basic particle's word and
+// generated from what its header renders (alternative), its name claimed
+// after the interface's and every earlier branch's and the names their
+// fields' types first claim. Its one field is the one field gives the basic
+// particle's term occurring exactly once, with an empty chain (valueChain):
+// an element's, through any substitution group or governing types' interface
+// and any Nillable or MixedChild wrap, or a wildcard's AnyElement or
+// AnyChild, never a pointer or a slice.
+func (e *emitter) flattened(typ emittedType, nested scope, site groupSite, o origin, t xsd.ComplexType, group xsd.ModelGroup) error {
+	basic, err := e.reach(o.subject, t.Loc(), group)
 	if err != nil {
 		return err
 	}
@@ -1758,7 +1722,7 @@ func (e *emitter) flattened(typ emittedType, nested scope, site groupSite, o ori
 		if err != nil {
 			return err
 		}
-		once, err := xsd.NewParticle(xsderr.Loc{}, exactlyOnce, p.Term())
+		once, err := xsd.NewParticle(xsderr.Loc{}, goshape.ExactlyOnce(), p.Term())
 		if err != nil {
 			return fmt.Errorf("%s at %s: %w", o.subject, t.Loc(), err)
 		}
@@ -1775,48 +1739,50 @@ func (e *emitter) flattened(typ emittedType, nested scope, site groupSite, o ori
 }
 
 // reach returns the basic particles (Structures key-basic-particle) a
-// flattened field's interface gets one branch each for, in a depth-first walk
-// of particles in order: an element particle, local or an <element ref>, or a
-// wildcard particle, is one, and a model group particle, inline or a <group
-// ref> (modelGroupTerm), is replaced in place by its own group's. It never
-// enters an element's type, keys each branch by the particle at its point, so
-// a particle a <group ref> brings twice gives two, and dedups nothing. A
-// particle with {max occurs} 0 declines, naming its term as field does, and a
-// model group one before any of its own particles is reached; an all group is
-// an error, never a decline: cos-all-limited (§3.8.6.2), checked at Finalize,
-// admits an all group particle only as a content {particle} with {max occurs}
-// 1 or among an all group's {particles}, and a flattened group is neither an
-// all group nor inside one. subject and loc name the complex type holding
-// particles.
-func (e *emitter) reach(subject string, loc xsderr.Loc, particles []xsd.Particle) ([]xsd.Particle, error) {
+// flattened field's interface gets one branch each for, those goshape.Reach
+// visits for group in its order, keyed by the particle at its point, so a
+// particle a <group ref> brings twice gives two, and it dedups nothing. A
+// particle goshape.Reach visits with {max occurs} 0 declines, naming its term
+// as field does, a model group one before any of its own particles is
+// reached; goshape.Reach's error, an all group's or a <group ref>'s that does
+// not resolve, is a plain error, never a decline. subject and loc name the
+// complex type holding group.
+func (e *emitter) reach(subject string, loc xsderr.Loc, group xsd.ModelGroup) ([]xsd.Particle, error) {
 	var basic []xsd.Particle
-	for _, p := range particles {
-		group, isGroup, err := e.modelGroupTerm(subject, loc, p.Term())
-		if err != nil {
-			return nil, err
-		}
-		upper, bounded := p.Occurs().Max()
-		vacuous := bounded && upper == 0
-		if !isGroup {
-			if vacuous {
-				return nil, e.vacuousBasic(subject, loc, p)
-			}
+	// vacuous is the visitor's own error, which already names subject and, set,
+	// ended the walk as goshape.Reach's error, so that only goshape.Reach's own
+	// is wrapped.
+	var vacuous error
+	err := goshape.Reach(e.schema, group, func(p xsd.Particle, _ []int) error {
+		if upper, bounded := p.Occurs().Max(); !bounded || upper != 0 {
 			basic = append(basic, p)
-			continue
+			return nil
 		}
-		if group.Compositor() == xsd.CompositorAll {
-			return nil, fmt.Errorf("%s at %s: an all model group particle inside a flattened model group reached reach", subject, loc)
-		}
-		if vacuous {
-			return nil, decline(loc, constructVacuousParticle, fmt.Sprintf("a %s model group", group.Compositor()), subject)
-		}
-		inner, err := e.reach(subject, loc, group.Particles())
-		if err != nil {
-			return nil, err
-		}
-		basic = append(basic, inner...)
+		vacuous = e.vacuousParticle(subject, loc, p)
+		return vacuous
+	})
+	if vacuous != nil {
+		return nil, vacuous
+	}
+	if err != nil {
+		return nil, fmt.Errorf("%s at %s: %w", subject, loc, err)
 	}
 	return basic, nil
+}
+
+// vacuousParticle returns the decline of the particle p with {max occurs} 0
+// of the complex type subject names at loc: a model group one's naming its
+// compositor, and vacuousBasic's for an element or wildcard one, or the
+// error modelGroupTerm returns for p's term.
+func (e *emitter) vacuousParticle(subject string, loc xsderr.Loc, p xsd.Particle) error {
+	group, isGroup, err := e.modelGroupTerm(subject, loc, p.Term())
+	if err != nil {
+		return err
+	}
+	if isGroup {
+		return decline(loc, constructVacuousParticle, fmt.Sprintf("a %s model group", group.Compositor()), subject)
+	}
+	return e.vacuousBasic(subject, loc, p)
 }
 
 // vacuousBasic returns the decline of the element or wildcard particle p with
@@ -1908,28 +1874,16 @@ func (e *emitter) spliced(subject string, loc xsderr.Loc, particles []xsd.Partic
 	return leaves, nil
 }
 
-// modelGroupTerm returns the model group a particle's term holds and true: an
-// inline <sequence>, <choice> or <all>, or the {model group} of the top-level
-// model group definition a <group ref> names (§3.7.2 declare-namedModelGroup),
-// followed through [xsd.Schema.ModelGroup], so that every site reads the two
-// alike. It returns false for an element declaration, an <element ref> or a
-// wildcard. A <group ref> that does not resolve is an error naming subject and
-// loc, the complex type holding the particle, and never a decline: finalize
-// guarantees it resolves (src-resolve clause 1.5). The term is a closed sum,
-// so the switch is STYLE T2's sealed-sum exception, as elementTerm's is.
+// modelGroupTerm is goshape.ModelGroupTerm, so that every site reads a
+// model group term alike, with its error naming subject and loc, the complex
+// type holding the particle, and never a decline: finalize guarantees a
+// <group ref> resolves (src-resolve clause 1.5).
 func (e *emitter) modelGroupTerm(subject string, loc xsderr.Loc, term xsd.TermOrRef) (xsd.ModelGroup, bool, error) {
-	switch term := term.(type) {
-	case xsd.ModelGroupRef:
-		def, ok := e.schema.ModelGroup(term.Name)
-		if !ok {
-			return xsd.ModelGroup{}, false, fmt.Errorf("%s at %s: its <group ref> particle to %s does not resolve", subject, loc, term.Name)
-		}
-		return def.ModelGroup(), true, nil
-	case xsd.ResolvedTerm:
-		group, isGroup := term.Term.(xsd.ModelGroup)
-		return group, isGroup, nil
+	group, isGroup, err := goshape.ModelGroupTerm(e.schema, term)
+	if err != nil {
+		return xsd.ModelGroup{}, false, fmt.Errorf("%s at %s: %w", subject, loc, err)
 	}
-	return xsd.ModelGroup{}, false, nil
+	return group, isGroup, nil
 }
 
 // structDecl renders the declaration of the struct name holding fields in
@@ -1981,7 +1935,7 @@ func renderStruct(name string, fields []goField) string {
 // No alternative's term is an emptiable model group, so no branch holds the
 // empty match, which the nil interface stands for: shape answers no sealed
 // interface for an emptiable content choice, and groupField flattens a nested
-// choice holding one (flattens) rather than reaching occurrenceType's
+// choice holding one (goshape.Flattens) rather than reaching occurrenceType's
 // sealedType.
 func (e *emitter) sealedType(name string, nested scope, site groupSite, o origin, t xsd.ComplexType, particles []xsd.Particle) error {
 	marker := "is" + name
@@ -2034,77 +1988,6 @@ func (e *emitter) alternative(o origin, t xsd.ComplexType, p xsd.Particle) (word
 	return decl.Name().Local, e.elementFrom(decl), nil
 }
 
-// termEmptiable reports whether one occurrence of a particle's {term} can
-// match nothing: [xsd.Schema.ParticleEmptiable] (§3.9.6.3 cos-group-emptiable)
-// over a particle of term occurring exactly once, so that its clause 2 alone
-// decides. It is false for an element declaration or a wildcard and true for
-// a model group with no {particles}; codegen does no range arithmetic of its
-// own. subject and loc name the complex type holding the term in the error a
-// particle that cannot be built returns.
-func (e *emitter) termEmptiable(subject string, loc xsderr.Loc, term xsd.TermOrRef) (bool, error) {
-	p, err := xsd.NewParticle(xsderr.Loc{}, exactlyOnce, term)
-	if err != nil {
-		return false, fmt.Errorf("%s at %s: %w", subject, loc, err)
-	}
-	return e.schema.ParticleEmptiable(p), nil
-}
-
-// repeatingEdge reports whether group, the term of a model group particle with
-// {max occurs} above 1 or unbounded, holds a particle that repeats (repeats)
-// at both its edges, as the package doc's "# Particles" states
-// (othersEmptiable reads a sequence's edges). It reads model group terms
-// through modelGroupTerm, never enters an element's type, and stops at the
-// first repeating edge particle; the <group ref> graph is acyclic after
-// finalize, so the walk ends. No all group is reached: cos-all-limited
-// (§3.8.6.2 clauses 1.2 and 1.3) admits a particle whose term is one only as a
-// content particle with {max occurs} 1 or as an all group's member, neither of
-// which is group's particle or inside it. subject and loc name the complex
-// type holding group in the error modelGroupTerm returns.
-func (e *emitter) repeatingEdge(subject string, loc xsderr.Loc, group xsd.ModelGroup) (bool, error) {
-	particles := group.Particles()
-	for i, p := range particles {
-		if group.Compositor() != xsd.CompositorChoice && !e.othersEmptiable(particles, i) {
-			continue
-		}
-		if repeats(p.Occurs()) {
-			return true, nil
-		}
-		inner, isGroup, err := e.modelGroupTerm(subject, loc, p.Term())
-		if err != nil {
-			return false, err
-		}
-		if !isGroup {
-			continue
-		}
-		edge, err := e.repeatingEdge(subject, loc, inner)
-		if err != nil {
-			return false, err
-		}
-		if edge {
-			return true, nil
-		}
-	}
-	return false, nil
-}
-
-// othersEmptiable reports whether every particle of particles but the one at
-// index i is emptiable ([xsd.Schema.ParticleEmptiable]).
-func (e *emitter) othersEmptiable(particles []xsd.Particle, i int) bool {
-	for j, p := range particles {
-		if j != i && !e.schema.ParticleEmptiable(p) {
-			return false
-		}
-	}
-	return true
-}
-
-// repeats reports whether a particle of occurs repeats, as the package doc's
-// "# Particles" defines the word.
-func repeats(occurs xsd.Occurs) bool {
-	upper, bounded := occurs.Max()
-	return !bounded || upper > 1 && upper != occurs.Min()
-}
-
 // branchParticle returns the particle a choice's branch struct holds for its
 // alternative p: p with {min occurs} 0 read as 1 when {max occurs} is not 0,
 // {max occurs} unchanged, and p itself otherwise. A branch is the
@@ -2131,19 +2014,6 @@ func branchParticle(subject string, loc xsderr.Loc, p xsd.Particle) (xsd.Particl
 		return xsd.Particle{}, fmt.Errorf("%s at %s: %w", subject, loc, err)
 	}
 	return branch, nil
-}
-
-// exactlyOnce is the {min occurs} = {max occurs} = 1 range, under which,
-// among others, an element particle gives a value field.
-var exactlyOnce = mustOccurs(xsd.NewOccurs(xsderr.Loc{}, 1, 1))
-
-// mustOccurs unwraps a constructor result that cannot fail on constant
-// arguments.
-func mustOccurs(o xsd.Occurs, err error) xsd.Occurs {
-	if err != nil {
-		panic(err)
-	}
-	return o
 }
 
 // groupParticle is a model group particle as groupField reads it: group, the
@@ -2292,7 +2162,7 @@ func (e *emitter) field(nested scope, site groupSite, ordinal int, chain []value
 	if isMixed(t) {
 		e.mixedChildType()
 	}
-	value := p.Occurs() == exactlyOnce && !nillable(decl)
+	value := p.Occurs() == goshape.ExactlyOnce() && !nillable(decl)
 	st, isSimple := td.(*xsd.SimpleType)
 	ct, isComplex := td.(xsd.ComplexType)
 	var typ emittedType
@@ -2893,7 +2763,7 @@ func (e *emitter) valueCycle(chain []valueNode, decl xsd.ElementDeclaration, nes
 		}
 	}
 	content, err := e.contentGroup(subject, t)
-	if err != nil || content != nil && (content.group.Compositor() == xsd.CompositorChoice || content.occurs != exactlyOnce) {
+	if err != nil || content != nil && (content.group.Compositor() == xsd.CompositorChoice || content.occurs != goshape.ExactlyOnce()) {
 		//nolint:nilerr // a decline of t ends this path: the emitting walk meets it and returns it in walk order.
 		return nil
 	}
@@ -2910,7 +2780,7 @@ func (e *emitter) valueCycle(chain []valueNode, decl xsd.ElementDeclaration, nes
 		return nil
 	}
 	for _, p := range particles {
-		if p.Occurs() != exactlyOnce || wildcardTerm(p.Term()) {
+		if p.Occurs() != goshape.ExactlyOnce() || wildcardTerm(p.Term()) {
 			continue
 		}
 		if _, isGroup, err := e.modelGroupTerm(subject, t.Loc(), p.Term()); err != nil || isGroup {

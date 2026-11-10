@@ -66,7 +66,7 @@ func (c Construct) String() string {
 
 // construct is the closed set of constructs the generator declines, one per
 // declining site but constructVacuousParticle, which field's wildcard, model
-// group and element paths, contentGroup, reach and vacuousBasic each
+// group and element paths, contentGroup, vacuousParticle and vacuousBasic each
 // decline. The zero value is invalid (STYLE T1).
 type construct uint8
 

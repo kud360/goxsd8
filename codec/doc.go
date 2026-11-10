@@ -53,6 +53,10 @@
 //   - A nested sequence, inline or through <group ref>, that codegen splices
 //     (codegen's package doc, "# Particles"), into the fields its own
 //     particles give.
+//   - A sequence or choice, inline or through <group ref>, occurring other
+//     than exactly once, as a complex type's content {particle}, that codegen
+//     flattens (codegen's package doc, "# Particles"), into its slice of a
+//     sealed interface.
 //   - An element particle, local or <element ref>.
 //   - A substitution group, into a sealed interface.
 //   - A choice, into a sealed interface.
@@ -101,8 +105,11 @@
 // that decodes (Structures §3.4.2.2 dcl.ctd.ctsc), its value field's, or
 // element-only content with no {open content} whose {particle} is a sequence
 // or choice, inline or the {model group} of the definition a <group ref>
-// names, occurring exactly once. Each particle of that sequence or choice, a
-// sequence's nested sequence particle codegen splices replaced by its own
+// names, occurring exactly once, or occurring otherwise where codegen
+// flattens it. Each particle of a sequence or choice occurring exactly once,
+// a sequence's nested sequence particle codegen splices replaced by its own
+// particles at any depth, and, of a flattened one, in place of its particles,
+// each basic particle its model group reaches through its model group
 // particles at any depth, is an element declaration with no {type table}, of
 // xs:anyType itself, or, with {nillable} false, of a simple type that decodes
 // or of a complex type that decodes by these same rules at any depth: a local
@@ -114,7 +121,8 @@
 // {abstract} false is such a declaration, an abstract head's own properties
 // never read; or the particle is a wildcard, whatever its {namespace constraint} and
 // {process contents}. No two element particles share an expanded name, such
-// an interface's particle taking each of those declarations'. Each attribute
+// an interface's particle taking each of those declarations', but in a
+// flattened reach, whose children are attributed by position. Each attribute
 // use is outside the xsi namespace, but xsi:nil's in a type codegen emits as its
 // choice's sealed interface, which gives that use no field, and is typed the
 // same way. No element in the instance carries xsi:type, except inside a wildcard's
@@ -139,6 +147,12 @@
 // struct whose further fields are the attribute fields. An empty match is the
 // nil interface. A particle's complex type gets its interface or struct by the
 // same rule.
+//
+// A flattened content {particle} decodes into the slice field codegen emits
+// for it (codegen's package doc, "# Particles"): one item per child element,
+// in document order, the branch of the basic particle (Structures §2.2.3.2
+// key-basic-particle) the child's validation-path attributes it to (§3.8.4.2
+// key-vpath), as [Decode]'s doc states; an empty match is the nil slice.
 //
 // A substitution group's interface holds, for each child, the branch of the
 // group's declaration the child's expanded name resolves to (§3.9.4.3
@@ -169,8 +183,11 @@
 //
 // Every other construct is a [*DeclineError], never a zero value:
 //
-//   - A content choice occurring other than exactly once.
-//   - A content sequence occurring other than exactly once.
+//   - A content choice occurring other than exactly once that codegen does
+//     not flatten.
+//   - A content sequence occurring other than exactly once that codegen does
+//     not flatten.
+//   - A flattened content model xsd.Schema.ContentMatcher does not track.
 //   - Two alternatives of a choice, or two declarations of a substitution
 //     group, whose branch structs could share a Go type; item 5 of
 //     [Decode]'s doc states when.
