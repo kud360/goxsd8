@@ -142,7 +142,7 @@ func (w *walk) elementAssertions(e Element, asserts *assertionCheck, content *co
 				e.Name(), site, c.declined)
 			continue
 		}
-		if c.test.Evaluate(w.backend, w.schema, e, in.yield, asserts.yieldChildren, c.tally, in.value, w.now) {
+		if c.test.Evaluate(w.backend, w.schema, e, in.yield, asserts.yieldChildren, c.tally, in.value, w.res.now) {
 			w.logDecision("assessing element", e.Name(), e.Loc(), ruleCvcAssertion, "", "satisfied")
 			continue
 		}
@@ -918,7 +918,7 @@ func (w *walk) attributeBelow(ct xsd.ComplexType, path []xsd.QName, u xsd.Attrib
 	if !ok {
 		return nil, fmt.Sprintf("%q has no [schema normalized value] under its type %s", lexical, typeName(own))
 	}
-	v, err := value.ValidateLexical(w.backend, w.schema, compiled, normalized, ctx, xpath.FacetAssertions(w.now))
+	v, err := value.ValidateLexical(w.backend, w.schema, compiled, normalized, ctx, w.res.FacetAssertions())
 	if err != nil {
 		return nil, fmt.Sprintf("its [schema normalized value] %q has no ·actual value· under %s", normalized, typeName(compiled))
 	}
@@ -1008,7 +1008,7 @@ func (w *walk) elementBelow(ct xsd.ComplexType, path []xsd.QName, e Element, g g
 	if !ok {
 		return nil, "its ·initial value· has no [schema normalized value] under its own type"
 	}
-	v, err := value.ValidateLexical(w.backend, w.schema, answered, normalized, ctx, xpath.FacetAssertions(w.now))
+	v, err := value.ValidateLexical(w.backend, w.schema, answered, normalized, ctx, w.res.FacetAssertions())
 	if err != nil {
 		return nil, fmt.Sprintf("its [schema normalized value] has no ·actual value· under %s", typeName(answered))
 	}
@@ -1411,7 +1411,7 @@ func (w *walk) childValue(ct xsd.ComplexType, e Element, g governance, content *
 	if !ok {
 		return lacking("its ·initial value· has no [schema normalized value] under its own type")
 	}
-	v, err := value.ValidateLexical(w.backend, w.schema, answered, normalized, ctx, xpath.FacetAssertions(w.now))
+	v, err := value.ValidateLexical(w.backend, w.schema, answered, normalized, ctx, w.res.FacetAssertions())
 	if err != nil {
 		return lacking(fmt.Sprintf("its [schema normalized value] has no ·actual value· under %s", typeName(answered)))
 	}
@@ -1724,7 +1724,7 @@ func (w *walk) assertionTyped(u xsd.AttributeUse, annotations xpath.AttributeTyp
 		}
 		return xpath.Untyped(normalized), nil
 	}
-	v, err := value.ValidateLexical(w.backend, w.schema, st, lexical, ctx, xpath.FacetAssertions(w.now))
+	v, err := value.ValidateLexical(w.backend, w.schema, st, lexical, ctx, w.res.FacetAssertions())
 	if err != nil {
 		return nil, absent
 	}
@@ -1849,7 +1849,7 @@ func (w *walk) assertionValue(e Element, asserts *assertionCheck, content *conte
 	if verdict != nil {
 		return xpath.BindValue(lexical, nil), nil
 	}
-	v, err := value.ValidateLexical(w.backend, w.schema, simple.SimpleType, lexical, ctx, xpath.FacetAssertions(w.now))
+	v, err := value.ValidateLexical(w.backend, w.schema, simple.SimpleType, lexical, ctx, w.res.FacetAssertions())
 	if err != nil {
 		return xpath.ValueBinding{}, lackingValue{}
 	}

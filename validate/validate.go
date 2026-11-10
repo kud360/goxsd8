@@ -4,8 +4,10 @@ import (
 	"fmt"
 	"log/slog"
 	"slices"
+	"time"
 
 	"github.com/kud360/goxsd8/value"
+	"github.com/kud360/goxsd8/xpath"
 	"github.com/kud360/goxsd8/xsd"
 	"github.com/kud360/goxsd8/xsderr"
 )
@@ -150,6 +152,12 @@ type Result struct {
 	violations  []*xsderr.Error
 	unevaluated []Unevaluated
 	err         error
+	// now is the current dateTime of the assessment episode's XPath
+	// dynamic context (xpath20.md §2.1.2), at which every {test} the walk
+	// evaluates, of either kind, is decided; the package doc's "Assessment
+	// semantics" section states when it is read. It is the zero time
+	// exactly on a Result no [Validator.Assess] call returned.
+	now time.Time
 }
 
 // Violations returns the violations the assessment charged, in document
@@ -270,6 +278,25 @@ func (r *Result) Unevaluated() []Unevaluated {
 // document is reported through [Result.Violations]. Beside no violation, a
 // non-nil Err is [Undecided].
 func (r *Result) Err() error { return r.err }
+
+// FacetAssertions returns the [value.AssertionEvaluator] that decided every
+// assertions-facet {test} of r's assessment episode: [xpath.FacetAssertions],
+// on whose terms each {test} is evaluated, at the one current dateTime the
+// package doc's "Assessment semantics" section says [Validator.Assess] reads
+// for the episode. Its consumer is codec.Decode, whose second read of the
+// document identifies a union's ·active basic member· under it
+// ([value.ValidatingType]), so the member it decodes into is the one this
+// assessment's identification selected.
+//
+// It returns a non-nil evaluator for a Result Assess returned, whatever its
+// [Result.Standing], and nil for one Assess did not return, the zero Result
+// among them.
+func (r *Result) FacetAssertions() value.AssertionEvaluator {
+	if r.now.IsZero() {
+		return nil
+	}
+	return xpath.FacetAssertions(r.now)
+}
 
 // Standing is where one returned [Result] leaves its document: [Charged],
 // [Undecided] or [NotProvenInvalid], each constant's doc stating its
