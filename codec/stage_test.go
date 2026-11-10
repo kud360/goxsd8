@@ -40,8 +40,11 @@ func (o oneMapping) Mapping(typ xsd.QName) (value.Mapping, bool) {
 
 // The backends of TestDecodeStageErrors. codecContext's Parse rejects, when
 // handed codec's own Context for an instance value (elementBindings), each
-// literal rowLiterals holds: validate hands Parse its own Context for one, so
-// validate accepts what Decode's lexical mapping rejects. rowCanonical's
+// literal rowLiterals holds, with an *xsderr.Error at the zero Loc:
+// validate hands Parse its own Context for one, so validate accepts what
+// Decode's lexical mapping rejects. placedContext's Parse rejects the same
+// literals with an *xsderr.Error placed at backend.xsd:7:3, which the stage
+// error quotes with that Loc. rowCanonical's
 // Canonical fails on a value whose canonical form rowLiterals holds, which
 // validate never renders: a supplied value is mapped under the schema
 // document's Context by validate and Decode alike, so only its conversion
@@ -49,16 +52,10 @@ func (o oneMapping) Mapping(typ xsd.QName) (value.Mapping, bool) {
 // failing, rendering a form int32 does not read, or, xs:float's in
 // beyondFloat32, rendering a finite form beyond float32's range.
 var (
-	rowLiterals  = []string{"01", "1", "2", "3", "5"}
-	codecContext = decimalOver(func(base value.Mapping) value.Mapping {
-		return value.Mapping{Parse: func(lexical string, ctx value.Context) (value.Value, error) {
-			if _, ours := ctx.(elementBindings); ours && slices.Contains(rowLiterals, lexical) {
-				return nil, xsderr.New("cvc-datatype-valid", xsderr.Loc{}, "codec's Context")
-			}
-			return base.Parse(lexical, ctx)
-		}, Canonical: base.Canonical}
-	})
-	rowCanonical = decimalOver(func(base value.Mapping) value.Mapping {
+	rowLiterals   = []string{"01", "1", "2", "3", "5"}
+	codecContext  = rejectingCodecContext(xsderr.Loc{})
+	placedContext = rejectingCodecContext(xsderr.Loc{URI: "backend.xsd", Line: 7, Col: 3})
+	rowCanonical  = decimalOver(func(base value.Mapping) value.Mapping {
 		return value.Mapping{Parse: base.Parse, Canonical: func(v value.Value) (string, error) {
 			form, err := base.Canonical(v)
 			if err == nil && slices.Contains(rowLiterals, form) {
@@ -82,6 +79,20 @@ var (
 		return value.Override(strict.New(), oneMapping{name: float, m: value.Mapping{Parse: base.Parse, Canonical: func(value.Value) (string, error) { return "1e39", nil }}})
 	}()
 )
+
+// rejectingCodecContext is decimalOver with a Parse that rejects, under
+// codec's own Context, each literal rowLiterals holds with an *xsderr.Error
+// of cvc-datatype-valid at loc.
+func rejectingCodecContext(loc xsderr.Loc) value.Backend {
+	return decimalOver(func(base value.Mapping) value.Mapping {
+		return value.Mapping{Parse: func(lexical string, ctx value.Context) (value.Value, error) {
+			if _, ours := ctx.(elementBindings); ours && slices.Contains(rowLiterals, lexical) {
+				return nil, xsderr.New("cvc-datatype-valid", loc, "codec's Context")
+			}
+			return base.Parse(lexical, ctx)
+		}, Canonical: base.Canonical}
+	})
+}
 
 // TestDecodeStageErrors pins item 8 of Decode's doc: a lexical mapping or a
 // conversion to the Go type that fails on a value validate accepted on the
@@ -108,18 +119,20 @@ func TestDecodeStageErrors(t *testing.T) {
 		want        string
 	}{
 		{"lexical mapping, character content", element, elementData, codecContext, decodeErr[struct{ A int32 }], stageLexicalMapping,
-			fmt.Sprintf(`codec: ?:1:%d: the lexical mapping failed on "01", a value of %s in the character content of element {urn:s}a at byte offset %d: ?: [cvc-datatype-valid] codec's Context`, offset+1, intQName, offset)},
+			fmt.Sprintf(`codec: ?:1:%d: the lexical mapping failed on "01", a value of %s in the character content of element {urn:s}a at byte offset %d: [cvc-datatype-valid] codec's Context`, offset+1, intQName, offset)},
+		{"lexical mapping, a placed cause", element, elementData, placedContext, decodeErr[struct{ A int32 }], stageLexicalMapping,
+			fmt.Sprintf(`codec: ?:1:%d: the lexical mapping failed on "01", a value of %s in the character content of element {urn:s}a at byte offset %d: backend.xsd:7:3: [cvc-datatype-valid] codec's Context`, offset+1, intQName, offset)},
 		{"lexical mapping, a present attribute", attributes, instanceOf(` b=" 2 " c="4"`, ""), codecContext, decodeErr[attributed3], stageLexicalMapping,
-			fmt.Sprintf(`codec: ?:1:%d: the lexical mapping failed on "2", a value of %s in attribute b: ?: [cvc-datatype-valid] codec's Context`, bytes.Index(instanceOf(` b=" 2 " c="4"`, ""), []byte(" b="))+2, intQName)},
+			fmt.Sprintf(`codec: ?:1:%d: the lexical mapping failed on "2", a value of %s in attribute b: [cvc-datatype-valid] codec's Context`, bytes.Index(instanceOf(` b=" 2 " c="4"`, ""), []byte(" b="))+2, intQName)},
 		{"conversion, a supplied value", attributes, instanceOf("", ""), rowCanonical, decodeErr[attributed3], stageConversion,
 			`codec: ?:1:1: the conversion to the Go type failed on "3", a value of ` + intQName + ` in the value the value constraint of attribute c declared at s.xsd:1:336 supplies on element {urn:s}r: no canonical form for 3`},
 		{"lexical mapping, an anonymous type", sequenceOf(`<xs:element name="a"><xs:simpleType><xs:restriction base="xs:int"/></xs:simpleType></xs:element>`), elementData, codecContext,
 			decodeErr[struct{ A int32 }], stageLexicalMapping,
-			fmt.Sprintf(`codec: ?:1:%d: the lexical mapping failed on "01", a value of the anonymous simple type of element {urn:s}a declared at s.xsd:1:231 in the character content of element {urn:s}a at byte offset %d: ?: [cvc-datatype-valid] codec's Context`, offset+1, offset)},
+			fmt.Sprintf(`codec: ?:1:%d: the lexical mapping failed on "01", a value of the anonymous simple type of element {urn:s}a declared at s.xsd:1:231 in the character content of element {urn:s}a at byte offset %d: [cvc-datatype-valid] codec's Context`, offset+1, offset)},
 		{"lexical mapping, a simple root", `<xs:element name="r" type="xs:int"/>`, instanceOf("", "5"), codecContext, decodeErr[int32], stageLexicalMapping,
-			fmt.Sprintf(`codec: ?:1:%d: the lexical mapping failed on "5", a value of %s in the character content of element {urn:s}r at byte offset %d: ?: [cvc-datatype-valid] codec's Context`, len(instanceOf("", ""))-len("</s:r>")+1, intQName, len(instanceOf("", ""))-len("</s:r>"))},
+			fmt.Sprintf(`codec: ?:1:%d: the lexical mapping failed on "5", a value of %s in the character content of element {urn:s}r at byte offset %d: [cvc-datatype-valid] codec's Context`, len(instanceOf("", ""))-len("</s:r>")+1, intQName, len(instanceOf("", ""))-len("</s:r>"))},
 		{"lexical mapping, an anonymous simple root", `<xs:element name="r"><xs:simpleType><xs:restriction base="xs:int"/></xs:simpleType></xs:element>`, instanceOf("", "5"), codecContext, decodeErr[int32], stageLexicalMapping,
-			fmt.Sprintf(`codec: ?:1:%d: the lexical mapping failed on "5", a value of the anonymous simple type of element {urn:s}r declared at s.xsd:1:181 in the character content of element {urn:s}r at byte offset %d: ?: [cvc-datatype-valid] codec's Context`, len(instanceOf("", ""))-len("</s:r>")+1, len(instanceOf("", ""))-len("</s:r>"))},
+			fmt.Sprintf(`codec: ?:1:%d: the lexical mapping failed on "5", a value of the anonymous simple type of element {urn:s}r declared at s.xsd:1:181 in the character content of element {urn:s}r at byte offset %d: [cvc-datatype-valid] codec's Context`, len(instanceOf("", ""))-len("</s:r>")+1, len(instanceOf("", ""))-len("</s:r>"))},
 		{"conversion, no Canonical", element, elementData, nilCanonical, decodeErr[struct{ A int32 }], stageConversion,
 			fmt.Sprintf(`codec: ?:1:%d: the conversion to the Go type failed on "01", a value of %s in the character content of element {urn:s}a at byte offset %d: the governing mapping has no canonical mapping`, offset+1, intQName, offset)},
 		{"conversion, Canonical fails", element, elementData, failingCanonical, decodeErr[struct{ A int32 }], stageConversion,
