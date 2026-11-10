@@ -1508,12 +1508,12 @@ func hasOpenContent(t xsd.ComplexType) bool {
 // generated from o: a struct holding, for mixed content (isMixed), first the
 // field named from the local name text holding a string, then the fields
 // contentFields returns for content, or for simple content (§3.4.2.2
-// dcl.ctd.ctsc) the value field, named from the local name value and holding,
-// never through a pointer, what goType maps its {simple type definition} to,
-// an anonymous union named by nested's path with value last, then, when t has
-// an {open content} (hasOpenContent), one named from the local name
-// openContent holding a slice of the raw-content struct AnyElement, or of
-// AnyChild for mixed content (anyTypeType, which claims the raw-content
+// dcl.ctd.ctsc) the value field, named from goshape.ValueLocal and holding in
+// goshape.ValueShape what goType maps its {simple type definition} to, an
+// anonymous union named by nested's path with that local name last, then,
+// when t has an {open content} (hasOpenContent), one named from the local
+// name openContent holding a slice of the raw-content struct AnyElement, or
+// of AnyChild for mixed content (anyTypeType, which claims the raw-content
 // structs' names there when nothing earlier did), then one per attribute use
 // goshape.FieldAttributeUses keeps (attributeField), and then, when t has an
 // {attribute wildcard} (§3.4.2.5 dcl.ctd.anyatt), its own, inherited or
@@ -1533,11 +1533,11 @@ func (e *emitter) body(typ emittedType, nested scope, chain []valueNode, o origi
 	e.decls = append(e.decls, declaration{})
 	var fields []fieldSpec
 	if simple, ok := t.ContentType().(xsd.SimpleContent); ok {
-		goType, err := e.goType(o.subject, fmt.Sprintf("%s with {simple type definition} %s", o.subject, typeName(simple.SimpleType)), t.Loc(), simple.SimpleType, declaredUnion(append(nested.steps(), generatedSteps("value")...)))
+		goType, err := e.goType(o.subject, fmt.Sprintf("%s with {simple type definition} %s", o.subject, typeName(simple.SimpleType)), t.Loc(), simple.SimpleType, declaredUnion(append(nested.steps(), generatedSteps(goshape.ValueLocal)...)))
 		if err != nil {
 			return err
 		}
-		fields = append(fields, fieldSpec{local: "value", goType: goType.name})
+		fields = append(fields, fieldSpec{local: goshape.ValueLocal, goType: shapedGoType(goshape.ValueShape, goType.name)})
 	}
 	if isMixed(t) {
 		fields = append(fields, fieldSpec{local: "text", goType: "string"})
@@ -2327,23 +2327,29 @@ func (e *emitter) field(nested scope, site groupSite, ordinal int, chain []value
 	return fieldSpec{local: decl.Name().Local, goType: goType}, nil
 }
 
-// occursGoType is the Go type of a field holding typ under occurs, by the
-// package doc's "# Particles" pointer and slice rules: a slice for {max
-// occurs} above 1 or unbounded, a pointer for {min occurs} 0 with {max occurs}
-// 1 unless typ is a sealed interface, a choice's or a union's, and typ itself
-// otherwise. ok is false, and goType "", exactly when {max occurs} is 0; the
-// caller declines that particle naming its own term.
+// occursGoType is the Go type of a field holding typ under occurs, in the
+// shape goshape.ParticleShape gives it. ok is false, and goType "", exactly
+// when {max occurs} is 0; the caller declines that particle naming its own
+// term.
 func occursGoType(typ emittedType, occurs xsd.Occurs) (goType string, ok bool) {
-	upper, bounded := occurs.Max()
-	switch {
-	case !bounded || upper > 1:
-		return "[]" + typ.name, true
-	case upper == 0:
+	s, ok := goshape.ParticleShape(occurs, typ.sealed)
+	if !ok {
 		return "", false
-	case upper == 1 && occurs.Min() == 0 && !typ.sealed:
-		return "*" + typ.name, true
 	}
-	return typ.name, true
+	return shapedGoType(s, typ.name), true
+}
+
+// shapedGoType spells the Go type of shape s over the Go type v: v, *v or
+// []v.
+func shapedGoType(s goshape.Shape, v string) string {
+	switch s {
+	case goshape.Pointer:
+		return "*" + v
+	case goshape.Slice:
+		return "[]" + v
+	default:
+		return v
+	}
 }
 
 // wildcardTerm reports whether a particle's term is a wildcard (§3.10.1): an
@@ -2568,9 +2574,8 @@ func (e *emitter) branchOrigin(child scope, decl xsd.ElementDeclaration, b table
 // doc's "# Attributes" attribute-use rule. An attribute use carries no Loc, so
 // its declines cite the declaration it resolves to, the global one for an
 // <attribute ref>. An anonymous union type is named by attributePath, nested
-// being the scope of the struct holding the field. A declaration is a built-in
-// xsi: one, which that rule excludes from the effective value constraint's
-// arm, exactly when it is in the xsi namespace (§3.2.6.4 no-xsi).
+// being the scope of the struct holding the field. Its shape is
+// goshape.AttributeShape's.
 func (e *emitter) attributeField(nested scope, subject string, loc xsderr.Loc, u xsd.AttributeUse) (fieldSpec, error) {
 	name := u.DeclarationName()
 	attr := "attribute " + name.String() + " of " + subject
@@ -2590,12 +2595,7 @@ func (e *emitter) attributeField(nested scope, subject string, loc xsderr.Loc, u
 	if err != nil {
 		return fieldSpec{}, err
 	}
-	_, constrained := e.schema.EffectiveValueConstraint(u)
-	supplied := constrained && name.Space != xsd.XMLSchemaInstanceNS
-	if !u.Required() && !supplied && !typ.sealed {
-		return fieldSpec{local: name.Local, goType: "*" + typ.name}, nil
-	}
-	return fieldSpec{local: name.Local, goType: typ.name}, nil
+	return fieldSpec{local: name.Local, goType: shapedGoType(goshape.AttributeShape(e.schema, u, typ.sealed), typ.name)}, nil
 }
 
 // attributePath is the path of local names an anonymous union type of the
