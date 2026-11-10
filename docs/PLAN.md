@@ -17,13 +17,13 @@ read them. One stamp for the whole section, so a reader can tell staleness
 from wrongness at a glance. Never add a dated paragraph beside the old
 one — appending is what this replaces.
 
-## Status — 2026-11-09 (`/backlog`, on `main` at `ea869445`)
+## Status — 2026-11-10 (`/backlog`, on `main` at `557f7482`)
 
-**M10, the codec, is the north star. Its largest decision is a nested model group particle (249 first declines), which #3538 holds.** The first seven rows of the 2026-11-08 band all landed, each on its first verdict except #3537, which took one repair round: #3537, #3536, #3539, #3530, #3543, #3512 and #3509. So did Tier B's #3542 (absorbing #3527), #3515 and #3462. No lane moved. M10's measure went from 12857 decoded to **13399**. The post-land passes unblocked #3538, #3540 and #3541, and filed #3546, #3547, #3550, #3551, #3556, #3557, #3560, #3565, #3568, #3571 and #3574. This pass files the next four M10 decisions as slices: #3576 (special simple type, 164), #3577 (content sequence or choice occurring other than once, 137 + 131), #3578 ({attribute wildcard}, 137) and #3579 (nested choice, `blocked` on #3538). It also files five persona findings, #3580–#3584. **Lean: product, M10 first.** Nine of the window's ten landings were product, and the tenth, #3530, was a banded refactor. #3550 is the one process cost re-sighted in consecutive sessions (four sightings), and none of those sightings cost a round.
+**M10, the codec, is the north star.** The largest decision in its census is a content sequence or choice occurring other than once, given codegen's occurrence field: 249 of the 268 first declines in those two rows. #3593 holds it, `blocked` on #3587, which is that walk's flattened 19 and is `ready`. The nested row (183) is split: #3579 (a nested choice occurring once, 82) is `ready`, and #3588 (48), #3589 (49) and #3594 (4) are `blocked` behind it and #3593. Since the 2026-11-09 stamp, ten landings closed band rows 1 and 3-11: #3538, #3578, #3576, #3540, #3546, #3568, #3565, #3560, #3571 and #3574. #3577 was parked on its second reject and closed `not_planned` for #3587 and #3593. No lane moved. M10's measure went from 13399 decoded to **13750**. This pass files M10's largest unfiled row as #3623 (all content, 96) and five findings from the persona round (#3618–#3622; see below). **Lean: product, M10 first.** Nine of the window's ten landings were product or product docs, and the tenth, #3540, was a banded refactor. Two process costs each lost a round: #3596 (the cap round on #3577) and #3606 (a mason repair round on #3546). They lead Tier C.
 
 ### Conformance lanes
 
-**This table is `go tool lanestatus`, pasted verbatim, on `main` at `ea869445`.** It is the committed expectations census, which `docs/WORKFLOW.md` names as the lane score (#1120).
+**This table is `go tool lanestatus`, pasted verbatim, on `main` at `557f7482`.** It is the committed expectations census, which `docs/WORKFLOW.md` names as the lane score (#1120).
 
 | Lane | Pass | Fail | Total |
 |---|---:|---:|---:|
@@ -34,42 +34,48 @@ one — appending is what this replaces.
 | `schema` | 15303 | 95 | 15398 |
 | `xpath` | — | — | 0 |
 
-**No lane moved since `9caabc00`.** **`datatypes ⊆ instance` is intended** (#1507). **An em dash means a lane with no cases yet, not a lane scoring zero.** `datatypes` is M3 and is complete. `schema` is M4, `instance` is M5 and `json` is M8, and all three are active. `json` moves only by the curated cases a landing adds. `xpath` waits on M7 and `ber` on M11. M9 and M10 have no lane: M9 is read by `go tool gencensus` and M10 by `go tool decodecensus`.
+**No lane moved since `9caabc00`.** `git diff ea869445 557f7482 -- conformance/testdata/expectations/` is empty. **`datatypes ⊆ instance` is intended** (#1507). **An em dash means a lane with no cases yet, not a lane scoring zero.** `datatypes` is M3 and is complete. `schema` is M4, `instance` is M5 and `json` is M8, and all three are active. `json` moves only by the curated cases a landing adds. `xpath` waits on M7 and `ber` on M11. M9 and M10 have no lane: M9 is read by `go tool gencensus` and M10 by `go tool decodecensus`.
 
 ### What holds each lane's failures
 
-**The W3C lanes: a fresh `GOXSD_DECLINES=1` partition at `ea869445`** (gate part 4 under the variable, PASS 638.14s). It matches the last stamp's partition at `9caabc00` exactly. `instance` has 71 banked fails (39 declined, 5 indeterminate, 27 decided against the suite) and `schema` has 95 (1, 11 and 83). The clusters of five or more: `schema` `MS-Wildcards` 49 (#1809's recorded divergence), `MS-Schema` 6 indeterminate, `Open` 5 (#1374, `blocked`) and `Simple` 5; `instance` `MS-Regex` 18 (#1899's ruling), `MS-Attribute` 11 (#2151's ruling) and `MS-Additional` 5 (decided against the suite; `lanepartition` names no open issue). **No session lever is left on a W3C lane.** What remains are rulings: #2081 (the owner's, which #3477 also waits on) and #1809's divergence. M4 and M5 stay active at their ruled floors.
+**The W3C lanes: no fresh partition in this pass.** It is a doc-only pass, briefed to run no part 4. Every landing since `ea869445` banked `Ratchet: unchanged` under the arbiter's ratchet run, and no expectations file changed, so the partition at `ea869445` stands. #3546 (`validate/`) and #3574 (`parser/`) touched lane code, and the next pass that runs part 4 re-partitions. `instance` has 71 banked fails (39 declined, 5 indeterminate, 27 decided against the suite) and `schema` has 95 (1, 11 and 83). The clusters of five or more are:
 
-**M9: `go tool gencensus` at `ea869445`.** It found 15470 documents and assembled 11867. Of those, 11865 generate, 2 decline and 0 fail any other way, unchanged since `9caabc00`. #3286 makes "generated" mean the output type-checks.
+- `schema`: `MS-Wildcards` 49 (#1809's recorded divergence), `MS-Schema` 6 indeterminate, `Open` 5 (#1374, `blocked`) and `Simple` 5.
+- `instance`: `MS-Regex` 18 (#1899's ruling), `MS-Attribute` 11 (#2151's ruling) and `MS-Additional` 5 (decided against the suite; `lanepartition` names no open issue).
+
+**No session lever is left on a W3C lane.** What remains are rulings: #2081 (the owner's, which #3477 also waits on) and #1809's divergence. M4 and M5 stay active at their ruled floors.
+
+**M9: `go tool gencensus` at `557f7482`.** It found 15470 documents and assembled 11867. Of those, 11865 generate, 2 decline and 0 fail any other way, unchanged since `9caabc00`. #3286 makes "generated" mean the output type-checks.
 
 | first decline | documents | held by |
 |---|---:|---|
 | struct-value recursion | 2 | permanent (#3256); no finite instance exists |
 
-**M10: `go tool decodecensus` at `ea869445`:** 26361 cases, 26209 generate, **13399 decoded** (12857 at the last stamp), 1200 declined, 4 undecided, 0 rejected codegen's own type, 11606 failed other (validate's charged instances), and 0 decoded where validate rejects. Each count bounds from above what lifting that construct alone decodes.
+**M10: `go tool decodecensus` at `557f7482`:** 26361 cases, 26209 generate, **13750 decoded** (13399 at the last stamp), 849 declined, 4 undecided, 0 rejected codegen's own type, 11606 failed other (validate's charged instances), and 0 decoded where validate rejects. Each count bounds from above what lifting that construct alone decodes. The splits below were measured by #3538's post-land pass with throwaway patches at `b92222b3`, and no committed tool reproduces them.
 
 | first decline | cases | held by |
 |---|---:|---|
-| a nested model group particle | 249 | #3538 (nested sequence); #3579 (nested choice, `blocked` on #3538) |
-| a special simple type | 164 | #3576 |
-| a content sequence occurring other than exactly once | 137 | #3577 |
-| an {attribute wildcard} | 137 | #3578 |
-| a content choice occurring other than exactly once | 131 | #3577 |
-| all content | 96 | none filed |
-| an element carrying xsi:type | 71 | none filed |
+| a nested model group particle | 183 | #3579 (nested choice once, 82); #3589 (choice's model-group alternative, 49), #3588 (occurrence field, 48) and #3594 (flattened, 4), all `blocked` |
+| a content sequence occurring other than exactly once | 137 | #3587 (flattened, 8); #3593 (occurrence field, 129, `blocked` on #3587) |
+| a content choice occurring other than exactly once | 131 | #3587 (flattened, 11); #3593 (occurrence field, 120) |
+| all content | 96 | #3623 (this pass) |
+| an element carrying xsi:type | 85 | none filed |
 | {open content} | 55 | none filed |
 | an element declaration with a {type table} | 42 | none filed |
-| mixed content | 37 | none filed |
+| mixed content | 41 | none filed |
+| an element declaration with {nillable} true | 35 | none filed |
+| a union simple type two of whose basic members get one Go type | 19 | none filed |
 
-The other 7 constructs hold 81 cases between them, none above 35. Of those, #3546 owns the union-assertions row (4).
+The other 4 constructs hold 25 cases between them, none above 10. "An attribute use in the xsi namespace" (7) has #3599, whose shape no suite case reaches. The special simple type, {attribute wildcard} and union-assertions rows are gone, lifted by #3576, #3578 and #3546.
 
 ### Branch namespace, `origin` (report-only; this pass deletes no ref)
 
-**`go tool wipsurvey`, fed by `go tool issuefeed`** (`rows 3575 distinct 3575 min 1 max 3575 no gaps`), on a shallow clone. No `wip/issue-<N>` is LIVE. Every wip branch of this window's ten landings was auto-deleted at merge.
+**`go tool wipsurvey`, fed by `go tool issuefeed`** (`rows 3617 distinct 3617 min 1 max 3617 no gaps`), on a shallow clone. No `wip/issue-<N>` is LIVE. Every wip branch of this window's ten landings was auto-deleted at merge.
 
 - **RETIRED, deletable now:** `wip/issue-2013`, `wip/issue-2332`, `wip/issue-2696`, `wip/issue-2699`, `wip/issue-2722`, `wip/issue-2896` and `wip/issue-2899`. `wipsurvey` reads each issue as closed, and an earlier stamp verified their content.
+- **RETIRED, keep until #3587 lands:** `wip/issue-3577` (tip `349569e4`). #3577 closed `not_planned` and its content is not in `main`. #3587's body uses its diff as prior art to port by hand.
 - **BLOCKED:** `wip/issue-2081`, a parked grounding with no code, and `wip/issue-3477` (tip `9d9540e2`, the claim commit alone). Both wait on the owner's PRINCIPLES 25 ruling.
-- **Deletable now, superseded passes:** `meta/backlog-2026-10-01-b` (tip `a9e2b09b`) and `meta/backlog-20261013-0808` (tip `71738b02`). `backlog.md`'s test prints `e7d4800a` and `90c0d73a` for each. `meta/backlog-20261109-1408` is this pass's claim.
+- **Deletable now, superseded passes:** `meta/backlog-2026-10-01-b` (tip `a9e2b09b`) and `meta/backlog-20261013-0808` (tip `71738b02`). `backlog.md`'s test prints the landed `meta: backlog` commits `e7d4800a` through `596ed053` for each. `meta/backlog-20261110-1408` is this pass's claim.
 - **Parked, deletable:** `parked/untriaged-20261026-084521` (tip `0d07455d`), `parked/untriaged-20261103-194004` (`1f7552f2`), `parked/untriaged-20261106-124613` (`cdeff01f`) and `parked/untriaged-20261107-124629` (`14f3030b`). Each one's single commit removes a landed `docs/LOG` entry, which is #3398. No new park since the last stamp.
 - **Certified for deletion and still standing:** `chronicler-345`, `meta/post-land-1816`, `meta/post-land-1908`, `postland-2099` and `postland/issue-2284` (the 2026-10-19 triage).
 - **For human triage:** `parked/untriaged-20260930-110432` and `parked/untriaged-20260930-215455`. The survey skips eight subagent branches: `wip/issue-1861-{mason,chronicler}`, `wip/issue-1926-{mason,chronicler}`, `wip/issue-2008-{mason,chronicler}`, `wip/issue-1988-mason-repair` and `wip/issue-1988-chron2`. Each one's issue is closed and landed.
@@ -77,14 +83,14 @@ The other 7 constructs hold 81 cases between them, none above 35. Of those, #354
 
 ### Marker census
 
-**`go tool gapaudit` on `ea869445`, fed the same walk:** 199 markers across 11 areas (xpath 66, jsonsrc 41, xsd 36, validate 23, value 11, conformance 7, parser 7, xml 3, landcheck 2, regex 2, cmd 1), unchanged since `9caabc00`.
+**`go tool gapaudit` on `557f7482`, fed the same walk:** 200 markers across 11 areas (xpath 66, jsonsrc 41, xsd 37, validate 23, value 11, conformance 7, parser 7, xml 3, landcheck 2, regex 2, cmd 1). The one new marker is #3540's `GAP(xsd)` for #1462 at `goshape.AttributeShape`. It cites an open owner.
 
 - **Group 1 has 10 rows**, unchanged. Eight are #2719's. The other two have an owner written into the body: `value/valuespace.go:152` (#462) and `tools/landcheck/keywords.go:48` (#2541).
 - **Group 2 has 26 rows**, unchanged. #3019 (three unmarked `xsd` disclosures) stays there until it lands its markers.
 
 ### Milestones and queue
 
-**Read from GitHub after this pass: 358 open issues** (`issuefeed`: `rows 3584 distinct 3584 min 1 max 3584 no gaps`, after this pass filed #3576–#3584).
+**Read from GitHub after this pass: 363 open issues** (`issuefeed`: `rows 3623 distinct 3623 min 1 max 3623 no gaps`, after this pass filed #3618–#3623).
 
 | milestone | open | closed | state |
 |---|---:|---:|---|
@@ -97,40 +103,43 @@ The other 7 constructs hold 81 cases between them, none above 35. Of those, #354
 | M7 — XPath 2.0 growth | 1 | 1 | #2619 open |
 | **M8 — JSON instance adapter** | **2** | **55** | active; #2670 `blocked`, #3044 `ready` |
 | M9 — Codegen | 3 | 87 | **done**. Residue: #3286 (tooling), #3178 (low), #2977 (`blocked`) |
-| **M10 — Codec** | **13** | **43** | **north star**: #3538, #3577, #3576, #3578, #3540, #3546, #3541, #3557, #3556, #3560, #3565 and #3584 `ready`; #3579 `blocked` |
+| **M10 — Codec** | **12** | **51** | **north star**: #3587, #3579, #3623, #3599, #3584, #3557, #3556 and #3541 `ready`; #3588, #3589, #3593 and #3594 `blocked` |
 | M11–M12 | 0 | 0 | not started |
 
-The open issues are **339 `ready`, 17 `blocked` and 2 `epic`**, which sums to 358. No issue is `needs-replan` or unlabelled. Open `kind/process` is 3: #3550, #3547 and #1885 (`blocked`).
+The open issues are **341 `ready`, 20 `blocked` and 2 `epic`**, which sums to 363. No issue is `needs-replan` or unlabelled. Open `kind/process` is 6: #3606, #3596, #3590, #3550, #3547 and #1885 (`blocked`).
 
-- **`blocked` is 17:** #16, #555, #1042, #1051, #1374, #1609, #1790, #1885, #2022, #2081, #2533, #2670, #2749, #2977, #3031 and #3477, plus this pass's #3579 (on #3538). No trigger fired since the last stamp, and every named dependency is still open or its trigger unfired. `go tool issuefeed -owner-comments` prints no owner comment since the label on any of the 16 earlier ones. #1609's arms read `schema` Fail 95 (arm 1 fires at 0) and Total 15398, and no landing since `9caabc00` touched `xsd/contentrestricts.go`. #2977's consumer trigger has not fired.
-- **Measured refactors, all re-run at `ea869445`:** #3540's shared figure, `git grep codegen -- 'codec/*.go' …`, **grew from 181 to 190** over #3543's, #3512's and #3509's landings. #3540 enters the band; #3556 and #3557 quote the same figure. None of the others grew: #3557 13, #3556 1, #3551 2, #3541 13, #3533 5, #3532 2, #3531 6, #3301 2, #3294 5, #3033 14/3, #2793 3, #2663 4, #2601 0, #2600 2, #2375 1, #2374 22, #2373 16, #2372 27, #2359 14, #2329 1, #2239 2, #2205 2, #1958 2, #1865 2, #1080 8 and #363 2. #3392, #3307 and #3324 are unmeasured.
+- **`blocked` is 20:** #16, #555, #1042, #1051, #1374, #1609, #1790, #1885, #2022, #2081, #2533, #2670, #2749, #2977, #3031, #3477, #3588, #3589, #3593 and #3594. No trigger fired since the last stamp, and every named dependency is still open or its trigger unfired. `go tool issuefeed -owner-comments` prints "No owner comment since the blocked label on any of the 20 open blocked issues". #1609's arms read `schema` Fail 95 (arm 1 fires at 0) and Total 15398, and no landing since `ea869445` touched `xsd/`. #2977's consumer trigger has not fired.
+- **Measured refactors, all re-run at `557f7482`:** the shared codec→codegen figure, `git grep codegen -- 'codec/*.go' ':!*_test.go' ':!codec/testdata/**' | wc -l`, reads **203**. It was 190 at the last stamp, rose to 209 after #3576, and fell to 203 with #3540. #3557 and #3556 quote it, and #3557 stays in the band. None of the others grew: #3557's `simpleDecline` 13, #3556 1, #3551 2, #3541 13, #3533 5, #3532 2, #3531 6, #3301 2, #3294 5, #3033 14/3, #2793 3, #2663 4, #2601 0, #2600 2, #2375 1, #2374 22, #2373 16, #2372 27, #2359 14, #2329 1, #2239 2, #2237 24, #2205 2, #1958 2, #1865 2, #1080 8 and #363 2. #3392, #3307 and #3324 are unmeasured.
 
 ### Persona consultations
 
-**This round: 2026-11-09 at `ea869445`, run by the orchestrating session.** The libuser read the README and `go doc` for `codec` and `xsderr`; the cliuser read the README, `-help` and the binary. The trigger fired when #3542 and #3543 landed. `go tool surface -base 9caabc00` prints +3: `codec` `undecidedAssertions.Evaluate`, `xsd` `(*Matcher).NextParticle` and `xsderr.CauseText`. Each claim was checked against `ea869445` before it entered a body, the cliuser's on a binary built from that commit. The last round's findings are consumed: #3542 and #3543 landed.
+**This round: 2026-11-10 at `557f7482`, run by the orchestrating session.** The libuser read the README and `go doc` for `validate`, `codec` and `xsderr`; the cliuser read the README, `-help` and the binary. The trigger was the surface delta since `ea869445`: `+ validate (*Result).FacetAssertions` and `- codec undecidedAssertions.Evaluate` (#3546). Each claim was checked against `557f7482` before it entered a body, and the cliuser's claims on a binary built from that commit. The last round's findings stand unconsumed: #3580–#3584 are open. This round consulted anyway because a new exported method arrived, and none of its findings duplicates them.
 
 - **Filed:**
-  - #3580: cliuser 2. `au-props-correct` is located at the enclosing complex type or attribute group, never at the `<attribute>`. It is not stale against #3462, which located `parser`'s charges; this one is `xsd`'s.
-  - #3581: cliuser 3, 4 and 5. A facet's {value} rejection has no fact of its own, and the count-facet charges cite no rule (STYLE E5). #3542 ruled the facet-naming sentence "not owed".
-  - #3582: cliuser 6, first half. `cvc-enumeration-valid` never names the members.
-  - #3583: cliuser 9. README never says the generated types enforce no facet.
-  - #3584 (M10): libuser 5, first half. A warden ruling on a codegen-emitted `WithBranches` option list.
+  - #3618 (`kind/bug`): cliuser 1. The `cvc-assertions-valid` verdict's format string ends at "requires every {test} to" (`value/assertions.go`:152).
+  - #3619 (`kind/bug`): cliuser 4. `Result.Violations`, `validate/doc.go` and README promise document order, but a root's `cvc-assertion` charge prints after its children's charges.
+  - #3622: cliuser 2, first half. A facet {test}'s decline names no reason, where an `<xs:assert>` decline does. It needs a warden ruling on `value.AssertionEvaluator`.
+  - #3620: libuser 1. `FacetAssertions` cites a heading that does not exist, names no consumer outside the module, and has a tangled nil sentence.
+  - #3621: libuser 4, third clause. `codec`'s synopsis promises encode.
 - **Folded:**
-  - Cliuser 1 (a facet charge at the simple type) onto #1453 (issuecomment-6742751012).
-  - Libuser 1 (the "# What decodes" sequence bullet hides "content {particle}") into #3538's body (issuecomment-6742751854). The decline itself is #3538.
-  - Libuser 8 (`xsderr`'s go doc names `validate/cta.go`, `catalog.go` and `tools/rulecat`) onto #2955 (issuecomment-6742751439).
+  - Libuser 2 (no runnable `go doc` program) onto #1088 (issuecomment-6769902109).
+  - Libuser 7 (rule constants, clause not in `Rule`) onto #1454 (…903323).
+  - Libuser 8 (the s4s-grammar route) onto #1371 (…903774).
+  - Libuser 9's `*Validator` concurrency clause onto #1594 (…902553), its stability clause onto #1685 (…902942), and its `fmt.Println(fmt.Sprintf(…))` nit onto #3258 (…904194).
+  - Cliuser 3 (a root assertion names "an anonymous type definition" with no Loc) onto #3533's wording ruling (…904544).
+  - The cliuser's wish list (`-q`, JSON violations) onto #1409 (…904954).
 - **Dismissed:**
-  - Cliuser 6, second half: `-help` says "each violation prints one line on stdout".
-  - Cliuser 7 (gen with no go.mod also prints the schema error): `-help` says "A refusal stops no compilation".
-  - Cliuser 8: `-help`'s length is #1570's ruling, ninth sighting. `-help` opens with its exit-code table, and README:97 points to it.
-  - Cliuser 10: positives, no finding.
-  - Libuser 2: false. `ExampleCheckDecode` builds `xsd.QName{Space:, Local:}`, README:426 names it, and `go doc xsd.QName` shows the two fields.
-  - Libuser 3 (classification takes a long switch): #3367's ruling made the categories switchable. Decode's doc says `RuleOf` reaches the first violation alone and that `ViolationsOf` is nil for any other error.
-  - Libuser 4 (Decode's doc is a wall): #3431 restructured it into the item list.
-  - Libuser 5, second half (T and multi-root dispatch): Decode's doc opens with "T is the caller's choice".
-  - Libuser 6: particles retain no Loc (`xsd/doc.go`:97-99). The decline names the type at its Loc. `Construct.String`'s instability is documented, and #3538 lifts the construct.
-  - Libuser 7: `Wrap`'s doc names `CauseText`, whose doc says what it renders. A doubled tag comes from wrapping a cause under its own rule.
-- **Next round:** due when a Tier A slice changes `codec`'s exported surface (#3584's ruling (a) adds emitted surface), or when #3580, #3581 or #3582 lands.
+  - Cliuser 2, second half. The `-help` kinds list names "an assertions facet's" {test} (`cmd/goxsd8/doc.go`:271-272).
+  - Cliuser 5-7 and 9: positives, no finding.
+  - Cliuser 8. "Only the first schema error" is documented, and so is the absolute schema Loc (`cmd/goxsd8/doc.go`:70).
+  - Cliuser 10. `-help`'s length is #1570's ruling, tenth sighting.
+  - Libuser 3. `validate/doc.go`:146-148 says a consumer that may accept only what was shown valid cannot accept NotProvenInvalid.
+  - Libuser 4, first two clauses. The signature block is the doc's own index, and `Option func(*config)` is the functional-options idiom.
+  - Libuser 5. Decode's doc names CheckDecode in its first paragraph, README says to run it at start-up, and `codegen/doc.go` owns the construct→Go type mapping.
+  - Libuser 6. Decode's doc says "The first of these that applies is returned", item 3 says RuleOf reaches the first violation alone, and item 8 says what no classification finds.
+  - Libuser 9's other clauses. The HTTP 422 recipe is `Result`'s doc ("an HTTP 422 body … is two loops"), and `Unevaluated`'s missing `String` is stated at README:320.
+  - Libuser 10 (spec notation `·term·` and `[[child]]` in go doc). It is the spec's own searchable notation, first sighting.
+- **Next round:** due when a Tier A slice changes `codec`'s exported surface, or when #3618, #3619 or #3622 lands.
 
 M10 faces the API through `codec`. M9 faces the API through `codegen` and the CLI through `goxsd8 gen`. M4, M5, M6 and M8 face the API through `parser`, `xsd`, `validate`, `xpath` and `validate/jsonsrc`, and the CLI through `goxsd8 parse` and `validate`.
 
@@ -142,92 +151,94 @@ This is ordered for a `/develop` session: take the highest row you can start. **
 
 | # | issue | why here |
 |---|---|---|
-| 1 | #3538 | **A nested sequence spliced into its parent's fields** (249, the largest decision). It unblocks #3579. |
-| 2 | #3577 | **A content sequence or choice occurring other than once, into codegen's flattened slice** (137 + 131). Same walk as row 1, so take it after row 1. |
-| 3 | #3576 | **A special simple type into codegen's string** (164). Most of it is typeless attributes (hypothesis). |
-| 4 | #3578 | **An {attribute wildcard} into codegen's AnyAttribute field** (137). |
-| 5 | #3540 | **`occursShape` and `attributeUse`'s shape onto `internal/goshape`** (190 codec lines cite codegen, 181 at `0d28b436`). Every row above adds to the figure. |
-| 6 | #3546 | **A union's active member under validate's assertion evaluation** (4). |
-| 7 | #3568 | **A codec stage error quotes a zero-Loc cause with `?: `.** It is #3542's twin in `codec`. |
-| 8 | #3565 | **`(*DeclineError).Error`'s doc on a wildcard particle subject.** |
-| 9 | #3560 | **codegen's "magnitude" gloss for PrecisionDecimal's Coefficient is false.** |
-| 10 | #3571 | **A stale `codec` test doc** since #3515. |
+| 1 | #3587 | **A content sequence or choice codegen flattens, decoded into its slice** (19). It unblocks #3593, the 249-case occurrence field, and #3594. Port #3577's parked diff by hand. |
+| 2 | #3579 | **A nested choice occurring once, decoded into its sealed-interface field** (82). It and #3593 unblock #3588 and #3589. |
+| 3 | #3623 | **All content, decoded into codegen's struct of particle fields** (96, the largest unfiled row). Its grounding probes whether the sequence walk assumes particle order. Rebase on row 1 if it lands first. |
+| 4 | #3557 | **One home for a simple type's Go type** (shared figure 203, 190 at the last stamp; `simpleDecline` 13). |
+| 5 | #3599 | **A struct type with an xsi:nil use**, through `goshape.FieldAttributeUses`. No suite case reaches it, so the census is a no-regression check. |
+| 6 | #3584 | **The warden rules on a generated `WithBranches` list.** Libuser 5, 2026-11-09. |
 
 **Tier B: persona-facing defects and documentation.** No W3C lane has a session lever left (see above).
 
 | # | issue | why here |
 |---|---|---|
-| 11 | #3574 | **An invalid `defaultAttributesApply` is accepted when `<schema>` has no `defaultAttributes`.** An under-reject, filed at #3462's post-land. |
-| 12 | #3580 | **`au-props-correct` located at the `<attribute>`.** Cliuser 2, 2026-11-09. |
-| 13 | #3581 | **A facet {value} rejection states its own fact** (STYLE E5). Cliuser 3–5. |
-| 14 | #3582 | **`cvc-enumeration-valid` names the members.** Cliuser 6. |
-| 15 | #3463 | **QName-valued attribute charges at the attribute.** Restated at #3462's post-land. |
-| 16 | #3583 | **README says the generated types enforce no facet.** Cliuser 9. |
-| 17 | #3584 | **The warden rules on a generated `WithBranches` list.** Libuser 5. |
-| 18 | #3258 | **README's program as one runnable file.** Fourth sighting. |
+| 7 | #3618 | **A `cvc-assertions-valid` verdict ends mid-sentence.** Cliuser 1. The fix is one format string. |
+| 8 | #3619 | **`Violations`' "document order" is false for `cvc-assertion`.** Cliuser 4. A contract statement. |
+| 9 | #3580 | **`au-props-correct` located at the `<attribute>`.** Cliuser 2, 2026-11-09. |
+| 10 | #3581 | **A facet {value} rejection states its own fact** (STYLE E5). |
+| 11 | #3582 | **`cvc-enumeration-valid` names the members.** |
+| 12 | #3622 | **A facet {test}'s decline names its reason.** Cliuser 2. Same function as row 7; it needs a warden ruling first. |
+| 13 | #3463 | **QName-valued attribute charges at the attribute.** |
+| 14 | #3620 | **`FacetAssertions`' doc.** Libuser 1. |
+| 15 | #3621 | **`codec`'s synopsis promises encode.** Libuser 4. |
+| 16 | #3595 | **`ParticleEmptiable`'s "exported for package codegen" doc** is false. It is an `xsd` edit. |
+| 17 | #3583 | **README says the generated types enforce no facet.** |
+| 18 | #3258 | **README's program as one runnable file.** It takes libuser 9's `Sprintf` nit. |
 | 19 | #3074 | **README restates `-help`'s JSON mapping.** |
 | 20 | #3331 | **`ApplyWhiteSpace`'s resolver sentence and an Example.** Low. |
 | 21 | #3044 | **jsonsrc's trailing-content label.** Low severity: the exit code and class are right. |
 
-**Tier C: tooling, refactors and process.** No process cost lost a round since the retro, so the tier holds its order behind product. #3550 leads it on four sightings in consecutive sessions, and this pass's own bodies follow its rule by hand.
+**Tier C: tooling, refactors and process.** The two process issues that each cost a round lead the tier. The rest keep their order behind product.
 
 | # | issue | why here |
 |---|---|---|
-| 22 | #3550 | **A body's guard-row premise is taken at base, or marked a hypothesis.** Four sightings (#3371, #3537, #3536 and #3539). None cost a round. |
-| 23 | #3547 | **mason.md carries the every-commit-green rule.** Two red intermediate commits, plus two unverified. |
-| 24 | #3398 | **A landed `docs/LOG` entry left as a removal and parked.** Four sightings, each an undeletable ref. It needs a `/develop` reproduction. |
-| 25 | #3314 | **Assemble brief parts by command.** The retro reads it by the `BRIEF INCOMPLETE` count. |
-| 26 | #3557 | **One home for a simple type's Go type** (13 `simpleDecline` sites; the shared figure 190). Pairs with row 3. |
-| 27 | #3556 | **One home for the anonymous-type unit key** (1). Re-read with row 1. |
-| 28 | #3541 | **Retire the 13 datatype mirror structs onto `internal/goshape`** (13). |
-| 29 | #3551 | **One exported `<group ref>` resolver** (2). |
-| 30 | #3533 | **One home for the anonymous-type label** (5). |
-| 31 | #3531 | **`UnfollowedDirective` carries its kind, schemaLocation and namespace** (6). |
-| 32 | #3532 | **`LookupNamespace` renamed `LookupPrefix`** (2). |
-| 33 | #3446 | **A phrase census that sees a phrase wrapped across comment lines.** |
-| 34 | #3393 | **`rulecat` emits no dotted rule IDs.** |
-| 35 | #3363 | **Pin doc.go's `"12,50"` exemplar.** |
-| 36 | #3286 | **`gencensus` type-checks what it counts.** M9's measure. |
-| 37 | #3324 | **Pin the text of `validate`'s remaining unpinned messages.** |
-| 38 | #3204 | **A § number cited beside an anchor ID is unchecked.** |
-| 39 | #2203 | **`surface` is blind to signature changes.** It decides when a persona round is due. |
-| 40 | #3294 | **Retire `xsd`'s planned Walker** (5). |
-| 41 | #3214 | **`commentwrap -fix` reflows at the edited line's width.** |
-| 42 | #2748 | **`issuefeed -comments`.** It closes #1153 and #1217. |
-| 43 | #3273 | **STYLE's `exhaustive` overstatement.** |
-| 44 | #3301 | **The third whitespace copy moves onto `value.ApplyWhiteSpace`** (2). |
+| 22 | #3596 | **A repair round re-creates its predecessor's defect class at sites its own mechanism adds.** It cost #3577's cap round, past the #2784 and #2896 rulings. |
+| 23 | #3606 | **A "scrutinize hardest" question a STYLE letter decides reaches handoff.** It cost #3546 a mason repair round, and it is the second sighting after #3239. |
+| 24 | #3550 | **A body's guard-row premise is taken at base, or marked a hypothesis.** Four sightings, none of which cost a round. This pass's bodies follow it by hand. |
+| 25 | #3590 | **A warden pre-flight's unmarked inference.** Two sightings, neither of which cost a round. |
+| 26 | #3547 | **mason.md carries the every-commit-green rule.** It shares mason.md's paragraph with row 22. |
+| 27 | #3398 | **A landed `docs/LOG` entry left as a removal and parked.** Four sightings, each an undeletable ref. |
+| 28 | #3314 | **Assemble brief parts by command.** Eighteenth `BRIEF INCOMPLETE` sighting (#3546), none of which cost a round. |
+| 29 | #3556 | **One home for the anonymous-type unit key** (1; shared figure 203). |
+| 30 | #3541 | **Retire the 13 datatype mirror structs onto `internal/goshape`** (13). |
+| 31 | #3551 | **One exported `<group ref>` resolver** (2). |
+| 32 | #3533 | **One home for the anonymous-type label** (5). Cliuser 3 asks for the located wording. |
+| 33 | #3531 | **`UnfollowedDirective` carries its kind, schemaLocation and namespace** (6). |
+| 34 | #3532 | **`LookupNamespace` renamed `LookupPrefix`** (2). |
+| 35 | #3446 | **A phrase census that sees a phrase wrapped across comment lines.** |
+| 36 | #3393 | **`rulecat` emits no dotted rule IDs.** |
+| 37 | #3363 | **Pin doc.go's `"12,50"` exemplar.** |
+| 38 | #3286 | **`gencensus` type-checks what it counts.** M9's measure. |
+| 39 | #3324 | **Pin the text of `validate`'s remaining unpinned messages.** |
+| 40 | #3204 | **A § number cited beside an anchor ID is unchecked.** |
+| 41 | #2203 | **`surface` is blind to signature changes.** It decides when a persona round is due. |
+| 42 | #3294 | **Retire `xsd`'s planned Walker** (5). |
+| 43 | #3214 | **`commentwrap -fix` reflows at the edited line's width.** |
+| 44 | #2748 | **`issuefeed -comments`.** It closes #1153 and #1217. |
+| 45 | #3273 | **STYLE's `exhaustive` overstatement.** |
+| 46 | #3301 | **The third whitespace copy moves onto `value.ApplyWhiteSpace`** (2). |
 
 **Named below the band, on purpose.**
-- **M10, `blocked` in this pass:** #3579 (nested choice, on #3538).
-- **M10, unfiled:** all content (96), an element carrying xsi:type (71), {open content} (55), a {type table} (42), mixed content (37), nillable (35) and a union two of whose basic members get one Go type (19). The next `/backlog` files the largest of them.
+- **M10, `blocked`:** #3593 (the occurrence field, 249, on #3587), #3594 (on #3587), and #3588 and #3589 (on #3579 and #3593).
+- **M10, unfiled:** an element carrying xsi:type (85), {open content} (55), a {type table} (42), mixed content (41), nillable (35) and a union two of whose basic members get one Go type (19). The next `/backlog` files the largest of them.
 - **M9 residue:** #3178 (a `<redefine>`d original's shared locals; low). #2977 waits on a consumer. #3179 (`value/doc.go`'s "API frozen").
 - **M4:** #3306 (a `<redefine>` original's inline simple type escapes `st-props-correct`; an oracle question first) and #3307 (a doubled walk of a case-2 default type).
 - **M8:** #2670 (waits on #1601's ruling reopening).
-- **`cmd/goxsd8`'s `usage` constant:** #1433, #1421, #1089, #1626, #1409 (`-q` and a summary), #1432 (no invocation compiles a set) and #1549 (README's `cvc-…` bullet).
-- **T5a sweeps:** #2948, #2949, #2950, #2953 (it takes `UnmappedConstruct`'s names), #2954 (it takes #1496's paragraph) and #2955 (it took libuser 8's `xsderr` sites this round). #2985 goes with #2955 or alone. #1408's README tokens go with it.
+- **`cmd/goxsd8`'s `usage` constant:** #1433, #1421, #1089, #1626, #1409 (`-q` and a summary; re-sighted this round), #1432 (no invocation compiles a set) and #1549 (README's `cvc-…` bullet).
+- **T5a sweeps:** #2948, #2949, #2950, #2953 (it takes `UnmappedConstruct`'s names), #2954 (it takes #1496's paragraph) and #2955. #2985 goes with #2955 or alone. #1408's README tokens go with it.
 - **Marker bookkeeping:** #3019 and #2719 (gapaudit's 8 Group 1 rows). A session in `value/valuespace.go`, `xsd/defaultbinding.go` or `xsd/contentrestricts.go` absorbs its #2719 row.
-- **Library contract:** #1382 (the backend-must-match invariant), #1371 (the s4s-grammar classification route), #1005 (multi-error collection), #1291 (a violation's instance path), #1430, #1094, #1234, #1088 and #486, which shares `xsderr/error.go` with `CauseText`.
-- **Locators and messages:** #1453 (a facet charge at its simple type; re-sighted this round) and #1851 (a count facet's rule; it pairs with row 13).
+- **Library contract:** #1382 (the backend-must-match invariant), #1371 (the s4s-grammar classification route; re-sighted), #1454 (rule constants; re-sighted), #1594 (goroutine safety; re-sighted), #1685 (pre-1.0 mobility; re-sighted), #1088 (`ExampleResult` pointer; re-sighted), #1005 (multi-error collection), #1291 (a violation's instance path), #1430, #1094 (a declined {test}'s schema Loc; pairs with row 12), #1234 and #486.
+- **Locators and messages:** #1453 (a facet charge at its simple type) and #1851 (a count facet's rule; it pairs with row 10).
 - **M5, `conformance/subtreeroot.go`:** #2237 (24) and #755.
 - **Persona documentation, re-sighted:**
   - `validate`: #1595 and #1408.
   - `cmd/goxsd8`: #2419, #1434, #1144, #1185 and #398.
-  - Library: #1593 and #1685.
+  - Library: #1593.
 - **M7:** #2619 (it needs a warden ruling on its `xpath` export).
 - **`xpath/cta.go` and `xpath/ctaparser.go`:** #2595, #2675, #2416 and #2533.
-- **M6:** #2663 (4) and #2662 share `validate/cvcassertion.go`. #2455, #2437 and #2394 are in `xpath/assertion.go`; take them one at a time, together with #889.
-- **STYLE E4 and E5 sweeps:** #2372 (27), #2373 (16), #2374 (22), #2375 (1) and #3392 (unmeasured), which shares lines with #2372 and #2373. Rows 12, 13 and 15 edit lines these sweeps count.
+- **M6:** #2663 (4) and #2662 share `validate/cvcassertion.go`, as row 8 may. #2455, #2437 and #2394 are in `xpath/assertion.go`; take them one at a time, together with #889.
+- **STYLE E4 and E5 sweeps:** #2372 (27), #2373 (16), #2374 (22), #2375 (1) and #3392 (unmeasured), which shares lines with #2372 and #2373. Rows 9, 10 and 13 edit lines these sweeps count.
 - **M5 residue:** #2764, #2494, #1825, #1250 and #920.
 - **M4, where `Ratchet: unchanged` is expected or the bound is small:** #2087, #2052, #1873, #1877, #1883, #1887, #1801 and #1777. #1998 and #1953 are in `xsd/contentrestricts.go`, so either one fires #1609's arm 3.
 - **Docs and bookkeeping:** #2679, #2624 with #793, #1803, #1881, #785, #1343, #1502 and #656. **`value`:** #721, #2045 and #462. **`regex`:** #2148 and #2147.
-- **Tooling, after row 42:** #1897, #2542, #2539, #2605, #2541, #1935, #2070, #2066, #678, #1464, #1838, #1794, #1735 and #839 (`tools/logstats`).
+- **Tooling, after row 44:** #1897, #2542, #2539, #2605, #2541, #1935, #2070, #2066, #678, #1464, #1838, #1794, #1735 and #839 (`tools/logstats`).
 - **Refactors:** #3033 (14/3), #2601 (0), #2600 (2), #2793 (3), #2239 (2), #2359 (14), #2329 (1), #2205 (2), and the E5 list above. #3034, #989, #1736, #1701, #845, #1757, #1825, #2416, #2419, #2437 and #3307 are unmeasured.
 
 ### Next planning action
 
-1. **#3538's post-land pass writes the nested row's figure into #3579 and unblocks it.** It also measures and files the nested flattened particle. Each M10 slice's post-land pass re-runs `decodecensus` and restates the moved rows in the open M10 bodies.
-2. **The next `/backlog` files the largest unfiled M10 row**, today all content (96), unless a post-land pass has already filed it.
-3. **The next persona round is due** when a Tier A slice changes `codec`'s exported surface, or when #3580, #3581 or #3582 lands.
+1. **#3587's post-land pass unblocks #3593 and #3594** and writes their figures at its landing commit. #3579's post-land pass re-reads #3588 and #3589, which stay `blocked` until #3593 also lands. Each M10 slice's post-land pass re-runs `decodecensus` and restates the moved rows in the open M10 bodies.
+2. **The next `/backlog` files the largest unfiled M10 row**, which today is an element carrying xsi:type (85), unless a post-land pass has filed it already. It also runs a fresh `GOXSD_DECLINES=1` partition, since #3546 and #3574 touched `validate/` and `parser/` after the last one.
+3. **The next persona round is due** when a Tier A slice changes `codec`'s exported surface, or when #3618, #3619 or #3622 lands.
 
 ## Milestones
 
@@ -801,8 +812,9 @@ constraints and `xs:anyURI`. Its measure is `go tool decodecensus`
 read the way `gencensus` reads M9. Further slices are filed from that
 census's first-decline table, largest first.
 codec and codegen each encode the XSD→Go mapping today. #3530 gave it one
-home, `internal/goshape`, and #3540, #3541, #3556 and #3557 move the
-remaining twins there before the generated fast path adds a third encoding.
+home, `internal/goshape`; #3538, #3578 and #3540 moved the splice,
+attribute-field and shape rules there, and #3541, #3556 and #3557 move the
+remaining twins before the generated fast path adds a third encoding.
 
 ### M11 — BER instance adapter
 
