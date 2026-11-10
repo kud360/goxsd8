@@ -674,15 +674,15 @@ func documentElement(r *xmltree.Reader) (*xmltree.StartElement, error) {
 	}
 }
 
-// shape is the occurrence a field holds its value in, by codegen's
-// occurrence rules: one value, an optional one, or a repeated one. The zero
-// value is invalid (STYLE T1).
-type shape uint8
+// shape is the occurrence a field holds its value in, goshape.Shape's: one
+// value, an optional one, or a repeated one. The zero value is invalid (STYLE
+// T1).
+type shape goshape.Shape
 
 const (
-	shapeOne      shape = iota + 1 // V
-	shapeOptional                  // *V
-	shapeRepeated                  // []V
+	shapeOne      = shape(goshape.Bare)    // V
+	shapeOptional = shape(goshape.Pointer) // *V
+	shapeRepeated = shape(goshape.Slice)   // []V
 )
 
 // elem returns the Go type V that t holds by s, t itself for shapeOne and the
@@ -926,7 +926,7 @@ func (structArm) describe() string { return "S for a struct S" }
 // ifaceArm is a field's V where the field's element is of a complex type
 // codegen gives a bare sealed interface, unit's: I, held to unit's choice as
 // T is, its name never compared. Its field's shape is never shapeOptional
-// (choiceRoot.field).
+// (choiceRoot.sealedInterface).
 type ifaceArm struct{ unit *choiceRoot }
 
 // bind holds v to a's interface, and returns the reader that fills a V from
@@ -1506,6 +1506,9 @@ type complexUnit interface {
 	// of the unit's type occurring in shape s: its V the unit's type, codegen's
 	// shape for it.
 	field(s shape) field
+	// sealedInterface reports whether the unit's type is a sealed interface,
+	// the sealed input of goshape.ParticleShape.
+	sealedInterface() bool
 }
 
 // checkContext is what one item-6 check of T reads beside the binder: sets,
@@ -1591,6 +1594,9 @@ func (w *anyAttributeField) width() int {
 
 // field returns the field of shape s whose V is b's struct.
 func (b *binding) field(s shape) field { return field{shape: s, arm: structArm{unit: b}} }
+
+// sealedInterface is false: a binding is a struct.
+func (b *binding) sealedInterface() bool { return false }
 
 // elementContent is the content of the struct a *binding binds, the fields
 // that precede its attribute fields, a closed sum: a *sequence, the fields of
@@ -1850,10 +1856,9 @@ func bindContent(run *bindRun, ct xsd.ComplexType, group xsd.ModelGroup, names *
 }
 
 // simpleValue is simple content as the struct codegen emits holds it: the
-// value field, the one field ahead of the attribute fields, named from the
-// local name value, which holds V, the Go type codegen gives the {content
-// type}'s {simple type definition}, never a pointer to it (codegen/doc.go "#
-// Complex types").
+// value field, the one field ahead of the attribute fields, named from
+// goshape.ValueLocal in goshape.ValueShape, which holds V, the Go type
+// codegen gives the {content type}'s {simple type definition}.
 type simpleValue struct {
 	p     *pipeline
 	value field
@@ -1876,7 +1881,7 @@ func simpleValueOf(p *pipeline, decl xsd.ElementDeclaration, st *xsd.SimpleType,
 	s := newScalar(g, st, subject, xsd.ValueConstraint{}, false)
 	vc, has := decl.ValueConstraint()
 	s.supplied = supply(vc, has, declSubject(decl))
-	return &simpleValue{p: p, value: field{name: names.Claim("value"), shape: shapeOne, arm: scalarArm{value: valueBare, scalar: s}}}, nil
+	return &simpleValue{p: p, value: field{name: names.Claim(goshape.ValueLocal), shape: shape(goshape.ValueShape), arm: scalarArm{value: valueBare, scalar: s}}}, nil
 }
 
 // contentSubject names, after typeSubject, st, the {simple type definition}
@@ -2014,9 +2019,9 @@ func wildcardSubject(n int, typeSubject string) string {
 
 // wildcardField returns the field, but for its name, which its caller
 // claims, of p, the wildcard particle subject names: codegen's AnyElement
-// (rawArm) in occursShape's shape, or occursShape's plain error.
+// (rawArm), a struct, in occursShape's shape, or occursShape's plain error.
 func wildcardField(p xsd.Particle, subject string) (field, error) {
-	s, err := occursShape(p.Occurs(), subject)
+	s, err := occursShape(p.Occurs(), false, subject)
 	if err != nil {
 		return field{}, err
 	}
@@ -2369,15 +2374,14 @@ type choiceRoot struct {
 	wild *wildcardSlot
 }
 
-// field returns the field of shape s whose V is c's interface: an optional
-// one is the bare interface, nil meaning absent, never a pointer to it
-// (codegen/doc.go "# Particles").
+// field returns the field of shape s whose V is c's interface.
 func (c *choiceRoot) field(s shape) field {
-	if s == shapeOptional {
-		s = shapeOne
-	}
 	return field{shape: s, arm: ifaceArm{unit: c}}
 }
+
+// sealedInterface is true: an optional field of c's interface is the bare
+// interface, nil meaning absent (goshape.ParticleShape).
+func (c *choiceRoot) sealedInterface() bool { return true }
 
 // check holds t, T itself, to the choice's sealed interface, and returns the
 // boundChoiceRoot that fills it.
@@ -2576,8 +2580,8 @@ func elementField(run *bindRun, children map[xsd.QName]int, el xsd.ElementDeclar
 	if el.ScopeVariety() == xsd.ScopeGlobal {
 		value = valueNamed
 	}
-	f, err := declField(run, el, value, func() (shape, error) {
-		return particleShape(children, []xsd.ElementDeclaration{el}, el, occurs)
+	f, err := declField(run, el, value, func(sealed bool) (shape, error) {
+		return particleShape(children, []xsd.ElementDeclaration{el}, el, occurs, sealed)
 	})
 	if err != nil {
 		return field{}, nil, err
@@ -2600,13 +2604,13 @@ func elementField(run *bindRun, children map[xsd.QName]int, el xsd.ElementDeclar
 // an earlier member's does (field.sharesBranch); then a member's expanded
 // name an earlier particle of the model group shares, children indexing the
 // earlier particles' names, the first in group order; then occursShape's
-// plain error. The field's shape is occursShape's, an optional one the bare
-// interface, nil meaning absent, as choiceRoot.field's is.
+// plain error. The field's shape is occursShape's over a sealed interface, an
+// optional one the bare interface, nil meaning absent.
 func groupField(run *bindRun, children map[xsd.QName]int, head xsd.ElementDeclaration, members []xsd.ElementDeclaration, occurs xsd.Occurs) (field, []xsd.QName, error) {
 	group := &sealed{p: run.p, children: map[xsd.QName]int{}}
 	names := make([]xsd.QName, 0, len(members))
 	for _, m := range members {
-		f, err := declField(run, m, valueNamed, func() (shape, error) { return shapeOne, nil })
+		f, err := declField(run, m, valueNamed, func(bool) (shape, error) { return shapeOne, nil })
 		if err != nil {
 			return field{}, nil, err
 		}
@@ -2620,12 +2624,9 @@ func groupField(run *bindRun, children map[xsd.QName]int, head xsd.ElementDeclar
 		group.alts = append(group.alts, f)
 		names = append(names, m.Name())
 	}
-	s, err := particleShape(children, members, head, occurs)
+	s, err := particleShape(children, members, head, occurs, true)
 	if err != nil {
 		return field{}, nil, err
-	}
-	if s == shapeOptional {
-		s = shapeOne
 	}
 	return field{shape: s, arm: groupArm{sealed: group}}, names, nil
 }
@@ -2634,17 +2635,16 @@ func groupField(run *bindRun, children map[xsd.QName]int, head xsd.ElementDeclar
 // el, its V by el's own type, or as the error the *DeclineError Decode's doc
 // states for it, item 5, naming el, or the plain error that item states in a
 // decline's place, in the order that doc states: el's own properties, then
-// its type, then shapeOf's error, shapeOf returning the field's shape. It
-// never examines el's substitution group. A field of simple type holds the Go
-// type codegen gives el's type, or the named type over it (value); one of
-// type xs:anyType itself holds codegen's AnyType, or the named type over it
-// (value), the element's content raw (anyTypeArm), its {value constraint}
-// never read, as Decode's doc states; and one of any other complex type
-// holds the type codegen emits for that type, the unit run.nested binds. An
-// optional field of a union, whose Go type is a sealed interface
-// (simpleGo.sealed), is the bare interface, nil meaning absent, never a
-// pointer to it (codegen/doc.go "# Particles").
-func declField(run *bindRun, el xsd.ElementDeclaration, value valueType, shapeOf func() (shape, error)) (field, error) {
+// its type, then shapeOf's error, shapeOf returning the field's shape given
+// whether its V is a sealed interface: a union's (simpleGo.sealed) or a
+// choice's (complexUnit.sealedInterface), never AnyType. It never examines
+// el's substitution group. A field of simple type holds the Go type codegen
+// gives el's type, or the named type over it (value); one of type xs:anyType
+// itself holds codegen's AnyType, or the named type over it (value), the
+// element's content raw (anyTypeArm), its {value constraint} never read, as
+// Decode's doc states; and one of any other complex type holds the type
+// codegen emits for that type, the unit run.nested binds.
+func declField(run *bindRun, el xsd.ElementDeclaration, value valueType, shapeOf func(sealed bool) (shape, error)) (field, error) {
 	schema := run.p.schema
 	subject := declSubject(el)
 	if d := declarationDecline(schema, el); d != 0 {
@@ -2655,7 +2655,7 @@ func declField(run *bindRun, el xsd.ElementDeclaration, value valueType, shapeOf
 		return field{}, fmt.Errorf("codec: the {type definition} of %s does not resolve", subject)
 	}
 	if anyTypeItself(td) {
-		s, err := shapeOf()
+		s, err := shapeOf(false)
 		if err != nil {
 			return field{}, err
 		}
@@ -2670,7 +2670,7 @@ func declField(run *bindRun, el xsd.ElementDeclaration, value valueType, shapeOf
 		if err != nil {
 			return field{}, err
 		}
-		s, err := shapeOf()
+		s, err := shapeOf(u.sealedInterface())
 		if err != nil {
 			return field{}, err
 		}
@@ -2680,12 +2680,9 @@ func declField(run *bindRun, el xsd.ElementDeclaration, value valueType, shapeOf
 	if err != nil {
 		return field{}, err
 	}
-	s, err := shapeOf()
+	s, err := shapeOf(g.sealed())
 	if err != nil {
 		return field{}, err
-	}
-	if s == shapeOptional && g.sealed() {
-		s = shapeOne
 	}
 	vc, has := el.ValueConstraint()
 	return field{shape: s, arm: scalarArm{value: value, scalar: newScalar(g, st, subject, vc, has)}}, nil
@@ -2695,24 +2692,22 @@ func declField(run *bindRun, el xsd.ElementDeclaration, value valueType, shapeOf
 // occurs, which takes the instance children named by decls, or the decline of
 // the first of decls whose expanded name an earlier particle shares, children
 // indexing the earlier particles' names, or occursShape's plain error, in
-// that order.
-func particleShape(children map[xsd.QName]int, decls []xsd.ElementDeclaration, el xsd.ElementDeclaration, occurs xsd.Occurs) (shape, error) {
+// that order, sealed reporting whether its V is a sealed interface.
+func particleShape(children map[xsd.QName]int, decls []xsd.ElementDeclaration, el xsd.ElementDeclaration, occurs xsd.Occurs, sealed bool) (shape, error) {
 	for _, d := range decls {
 		if _, shared := children[d.Name()]; shared {
 			return 0, decline(constructSharedName, declSubject(d))
 		}
 	}
-	return occursShape(occurs, "the particle of "+declSubject(el))
+	return occursShape(occurs, sealed, "the particle of "+declSubject(el))
 }
 
 // attributeUse returns the attribute field, but for its name, which its
 // caller claims, of attribute use u, or as the error the *DeclineError
 // Decode's doc states for it, item 5, naming its attribute declaration, or a
 // plain error. The field's shape is codegen's, as the package doc's "# What
-// decodes" states, a pointer exactly for a use neither required nor with an
-// effective value constraint whose Go type is no sealed interface
-// (simpleGo.sealed), and needs no xsi: test here: an xsi: use declines before
-// its shape is picked.
+// decodes" states, goshape.AttributeShape's, its V a sealed interface exactly
+// when simpleGo.sealed.
 func attributeUse(schema *xsd.Schema, u xsd.AttributeUse) (attribute, error) {
 	decl, ok := schema.ResolvedAttributeDeclaration(u)
 	if !ok {
@@ -2730,12 +2725,8 @@ func attributeUse(schema *xsd.Schema, u xsd.AttributeUse) (attribute, error) {
 	if err != nil {
 		return attribute{}, err
 	}
-	shape := shapeOptional
 	vc, has := schema.EffectiveValueConstraint(u)
-	if u.Required() || has || g.sealed() {
-		shape = shapeOne
-	}
-	return attribute{shape: shape, scalar: newScalar(g, st, subject, vc, has)}, nil
+	return attribute{shape: shape(goshape.AttributeShape(schema, u, g.sealed())), scalar: newScalar(g, st, subject, vc, has)}, nil
 }
 
 // simpleDecline returns the Go type codegen gives the simple type st of the
@@ -2856,20 +2847,14 @@ func atomicDecline(r xsd.TypeResolver, st *xsd.SimpleType) (atomic, construct, e
 }
 
 // occursShape returns the shape codegen gives the field of the particle
-// subject names, occurring as occurs, by codegen's package doc "# Particles"
-// pointer and slice rules. Decode's check of T is what holds the two to one
-// answer.
-func occursShape(occurs xsd.Occurs, subject string) (shape, error) {
-	upper, bounded := occurs.Max()
-	switch {
-	case !bounded || upper > 1:
-		return shapeRepeated, nil
-	case upper == 0:
+// subject names, occurring as occurs, its V a sealed interface exactly when
+// sealed: goshape.ParticleShape's, or a plain error for {max occurs} 0.
+func occursShape(occurs xsd.Occurs, sealed bool, subject string) (shape, error) {
+	s, ok := goshape.ParticleShape(occurs, sealed)
+	if !ok {
 		return 0, fmt.Errorf("codec: %s has {max occurs} 0, for which codegen emits no type", subject)
-	case occurs.Min() == 0:
-		return shapeOptional, nil
 	}
-	return shapeOne, nil
+	return shape(s), nil
 }
 
 // check returns the boundBinding that fills t when t is the struct codegen

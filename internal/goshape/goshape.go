@@ -131,3 +131,59 @@ func HasAttributeFields(t xsd.ComplexType) bool {
 	_, hasWildcard := t.AttributeWildcard()
 	return hasWildcard || len(FieldAttributeUses(t)) > 0
 }
+
+// Shape is the occurrence in which a field holds its value V, by the rules
+// codegen/doc.go "# Particles", "# Attributes" and "# Complex types" state:
+// V itself, a pointer *V or a slice []V. The zero value is invalid (STYLE
+// T1).
+type Shape uint8
+
+// The Shapes.
+const (
+	Bare    Shape = iota + 1 // V
+	Pointer                  // *V
+	Slice                    // []V
+)
+
+// ParticleShape returns the Shape of the field of a particle occurring as
+// occurs whose V is a sealed interface exactly when sealed, a choice's, a
+// substitution group's or a union's, by codegen/doc.go "# Particles": Slice
+// for {max occurs} above 1 or unbounded, Pointer for {min occurs} 0 with {max
+// occurs} 1 unless sealed, the bare interface then being nil for absent, and
+// Bare otherwise. ok is false exactly when {max occurs} is 0, for which
+// codegen emits no field.
+func ParticleShape(occurs xsd.Occurs, sealed bool) (s Shape, ok bool) {
+	upper, bounded := occurs.Max()
+	switch {
+	case !bounded || upper > 1:
+		return Slice, true
+	case upper == 0:
+		return 0, false
+	case occurs.Min() == 0 && !sealed:
+		return Pointer, true
+	}
+	return Bare, true
+}
+
+// AttributeShape returns the Shape of the field of the attribute use u whose
+// V is a sealed interface exactly when sealed, a union's, by codegen/doc.go
+// "# Attributes": Bare when u is {required}, when it has an effective value
+// constraint (§3.5.4 key-evc, [xsd.Schema.EffectiveValueConstraint]) and its
+// declaration is not a built-in xsi: one, which it is exactly when it is in
+// the xsi namespace (§3.2.6.4 no-xsi), or when sealed; Pointer otherwise.
+func AttributeShape(schema *xsd.Schema, u xsd.AttributeUse, sealed bool) Shape {
+	_, constrained := schema.EffectiveValueConstraint(u)
+	supplied := constrained && u.DeclarationName().Space != xsd.XMLSchemaInstanceNS
+	if u.Required() || supplied || sealed {
+		return Bare
+	}
+	return Pointer
+}
+
+// The value field of a complex type with simple content, by codegen/doc.go
+// "# Complex types": named from the local name ValueLocal, ahead of the
+// attribute fields, in Shape ValueShape, never a pointer.
+const (
+	ValueLocal = "value"
+	ValueShape = Bare
+)
