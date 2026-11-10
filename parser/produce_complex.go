@@ -2955,6 +2955,13 @@ func (p *producer) produceAttributeUses(ctElem, parent *Element, scopeParent xsd
 // false, and the attribute's declared default is true (XML Representation
 // Summary, <complexType>).
 //
+// A PRESENT defaultAttributesApply is read through boolAttr before the
+// precondition is tested, so a value outside xs:boolean's lexical space
+// (Datatypes §3.3.2.2) is charged cvc-datatype-valid whether or not the
+// <schema> carries defaultAttributes: the schema for schema documents types the
+// attribute xs:boolean unconditionally, and only the fold is conditional
+// (#3574).
+//
 // There is NO eager document-level check that defaultAttributes resolves. A
 // document that declares one and defines no <complexType> synthesizes no
 // reference, so an unresolvable QName there is charged nothing — the reference
@@ -2985,15 +2992,12 @@ func (p *producer) produceAttributeUses(ctElem, parent *Element, scopeParent xsd
 // overriding one, which is the reading §4.2.5 gives and defaultOpenContentElem
 // already takes for <defaultOpenContent>.
 func (p *producer) defaultAttributesRef(ctElem *Element) (*xsd.AttributeGroupRef, error) {
-	lexical, ok := p.schemaElem.Attr("defaultAttributes")
-	if !ok {
-		return nil, nil
-	}
 	apply, present, err := boolAttr(ctElem, "defaultAttributesApply")
 	if err != nil {
 		return nil, err
 	}
-	if present && !apply {
+	lexical, ok := p.schemaElem.Attr("defaultAttributes")
+	if !ok || (present && !apply) {
 		return nil, nil
 	}
 	qn, err := p.resolveQName(p.schemaElem, lexical, "defaultAttributes")
