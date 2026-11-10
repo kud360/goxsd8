@@ -85,9 +85,9 @@ type construct uint8
 // examined at the particle, declines by the same constructs from
 // constructMixedContent on, and by constructAbstractTypeElement, which sits
 // with the particle's though the document element's type declines by it too,
-// ahead of its content. The three of a simple type, constructOtherPrimitive
-// to constructUnionAssertions, sit with the particle's, though a document element
-// of simple type, a complex type's simple content, by its {simple type
+// ahead of its content. The two of a simple type, constructOtherPrimitive
+// and constructSharedVariant, sit with the particle's, though a document
+// element of simple type, a complex type's simple content, by its {simple type
 // definition}, an attribute use, a list type, by its {item type definition},
 // and a union, by a basic member, decline by them too.
 const (
@@ -104,7 +104,6 @@ const (
 	constructSharedBranch
 	constructOtherPrimitive
 	constructSharedVariant
-	constructUnionAssertions
 	constructXsiAttribute
 	constructXsiType
 )
@@ -124,7 +123,6 @@ var constructNames = [...]string{
 	constructSharedBranch:        "two branches of a sealed interface whose structs have one shape",
 	constructOtherPrimitive:      "an atomic simple type whose primitive is ·implementation-defined·, other than xs:precisionDecimal",
 	constructSharedVariant:       "a union simple type two of whose basic members get one Go type",
-	constructUnionAssertions:     "a union simple type with an assertions facet on itself, a member or a list member's item type",
 	constructXsiAttribute:        "an attribute use in the xsi namespace",
 	constructXsiType:             "an element carrying xsi:type",
 }

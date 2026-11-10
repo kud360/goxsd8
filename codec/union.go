@@ -42,12 +42,10 @@ func (u *unionGo) forScalar(union string) scalarElem {
 // unionDecline returns the unionGo of st, a union simple type of the item
 // subject names, or else the *DeclineError Decode's doc states for st, item 5,
 // or a plain error, in this order: each basic member in basic-member order
-// (goshape.BasicMembers), examined as simpleDecline examines an atomic or list type,
-// the first declining member's construct, its detail naming the member after
-// subject; then a basic member whose Go type an earlier one's is
-// (simpleGo.oneGoType), constructSharedVariant, naming the later member; then
-// an assertions facet anywhere value.ValidatingType's identification of the
-// ·active basic member· reaches (reachesAssertions), constructUnionAssertions.
+// (goshape.BasicMembers), examined as simpleDecline examines an atomic or list
+// type, the first declining member's construct, its detail naming the member
+// after subject; then a basic member whose Go type an earlier one's is
+// (simpleGo.oneGoType), constructSharedVariant, naming the later member.
 func unionDecline(r xsd.TypeResolver, st *xsd.SimpleType, subject string) (*unionGo, error) {
 	basic, err := goshape.BasicMembers(r, st)
 	if err != nil {
@@ -68,55 +66,7 @@ func unionDecline(r xsd.TypeResolver, st *xsd.SimpleType, subject string) (*unio
 			}
 		}
 	}
-	reaches, err := reachesAssertions(r, st)
-	if err != nil {
-		return nil, err
-	}
-	if reaches {
-		return nil, decline(constructUnionAssertions, subject)
-	}
 	return u, nil
-}
-
-// reachesAssertions reports whether an assertions facet is effective on st
-// or on any type st's validation reaches: for a union each of its {member
-// type definitions}, an intervening union's own included, and for a list its
-// {item type definition}, at any depth. value.ValidatingType evaluates every
-// such facet's {test} through the AssertionEvaluator Decode hands it.
-func reachesAssertions(r xsd.TypeResolver, st *xsd.SimpleType) (bool, error) {
-	facets, err := st.EffectiveFacets(r)
-	if err != nil {
-		return false, err
-	}
-	if slices.ContainsFunc(facets, func(f xsd.EffectiveFacet) bool { return f.Facet().Kind() == xsd.FacetAssertions }) {
-		return true, nil
-	}
-	variety, err := st.Variety(r)
-	if err != nil {
-		return false, err
-	}
-	var reached []*xsd.SimpleType
-	// {variety} is a closed sum, so the switch is STYLE T2's sealed-sum
-	// exception.
-	switch variety.(type) {
-	case xsd.Union:
-		reached, err = st.Members(r)
-	case xsd.List:
-		var item *xsd.SimpleType
-		item, err = st.Item(r)
-		if item != nil {
-			reached = []*xsd.SimpleType{item}
-		}
-	}
-	if err != nil {
-		return false, err
-	}
-	for _, m := range reached {
-		if reaches, err := reachesAssertions(r, m); err != nil || reaches {
-			return reaches, err
-		}
-	}
-	return false, nil
 }
 
 // memberSubject names, after subject, m, the basic member of the union whose
@@ -209,13 +159,13 @@ func (u *unionScalar) check(it reflect.Type, site string, cx *checkContext) erro
 // identify returns the scalar of the ·active basic member· of st, the union
 // u's members are of, for lexical (Datatypes dt-active-basic-member,
 // cvc-datatype-valid clause 2.3), as value.ValidatingType identifies it on
-// p's backend under src's bindings, or the *stageError of item 8, label
-// naming st, at position token as stageError states it: an identification
-// that fails never selects a later member. Its evaluator declines every
-// {test}, and unionDecline has declined every union whose identification
-// reaches an assertions facet, so it decides none.
+// p's backend under src's bindings and p.assertions, the evaluator
+// validate.Result.FacetAssertions returns, whose doc states why the member is
+// the one validate selected, or the *stageError of item 8, label naming st, at
+// position token as stageError states it: an identification that fails never
+// selects a later member.
 func (u *unionScalar) identify(p *pipeline, st *xsd.SimpleType, label, lexical string, src source, token int) (*scalar, error) {
-	m, _, err := value.ValidatingType(p.backend, p.schema, st, lexical, src.bindings(), undecidedAssertions{})
+	m, _, err := value.ValidatingType(p.backend, p.schema, st, lexical, src.bindings(), p.assertions)
 	if err != nil {
 		return nil, &stageError{stage: stageIdentification, label: label, fragment: lexical, token: token, src: src, cause: err}
 	}
@@ -256,17 +206,6 @@ func (u *unionScalar) item(p *pipeline, item *listItem, tok string, src source, 
 		return reflect.Value{}, err
 	}
 	return reflect.ValueOf(unionValue{member: member, v: v}), nil
-}
-
-// undecidedAssertions is the value.AssertionEvaluator identify hands
-// value.ValidatingType, which requires a non-nil one: it declines every
-// {test}, so an identification reaching an assertions facet is an error,
-// never a member chosen on a {test} nobody decided.
-type undecidedAssertions struct{}
-
-// Evaluate declines every {test}.
-func (undecidedAssertions) Evaluate(value.Backend, xsd.TypeResolver, *xsd.SimpleType, xsd.XPathExpression, value.Value) value.AssertionOutcome {
-	return value.AssertionDeclined
 }
 
 // union returns the value of t, a sealed interface of a union, that v, a

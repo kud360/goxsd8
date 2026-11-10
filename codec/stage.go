@@ -21,13 +21,18 @@ import (
 // [WithPrecisionDecimalArms] supplied, and branches, the sets [WithBranches]
 // supplied, each from the config field the item-6 check reads
 // (checkContext), from which the fill builds a PrecisionDecimal's Value
-// (pipeline.decimal) and a union's variant (pipeline.union).
+// (pipeline.decimal) and a union's variant (pipeline.union), and assertions,
+// the evaluator of validate's assessment of the instance
+// (validate.Result.FacetAssertions), under which a union's ·active basic
+// member· is identified (unionScalar.identify). CheckDecode's pipeline reads
+// no instance and holds none.
 type pipeline struct {
-	schema   *xsd.Schema
-	backend  value.Backend
-	log      *slog.Logger
-	decimals decimalArmSets
-	branches branchSets
+	schema     *xsd.Schema
+	backend    value.Backend
+	log        *slog.Logger
+	decimals   decimalArmSets
+	branches   branchSets
+	assertions value.AssertionEvaluator
 }
 
 // scalar is one item Decode decodes a value for: elem, the element of the Go

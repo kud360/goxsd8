@@ -326,9 +326,8 @@ func TestDecodeUnionMismatches(t *testing.T) {
 // construct in basic-member order, xs:int before and after the minted
 // primitive (codegen/doc.go "# Simple types"), the member examined before any
 // two members' Go types are compared; then by two basic members of one Go
-// type, constructSharedVariant; then by an assertions facet on the union,
-// on a member at any depth, an intervening union's included, or on a list
-// member's item type, constructUnionAssertions. Each decline names the union
+// type, constructSharedVariant, an assertions facet beside them declining
+// nothing of its own (TestDecodeUnionAssertions). Each decline names the union
 // as its declaration's {type definition} and, for a member's, that member.
 func TestDecodeUnionDeclines(t *testing.T) {
 	union := func(members string) string {
@@ -359,16 +358,6 @@ func TestDecodeUnionDeclines(t *testing.T) {
 		{"two lists of a union", unionOf("", `<xs:simpleType><xs:list><xs:simpleType><xs:union memberTypes="xs:int"/></xs:simpleType></xs:list></xs:simpleType><xs:simpleType><xs:list><xs:simpleType><xs:union memberTypes="xs:date"/></xs:simpleType></xs:list></xs:simpleType>`),
 			false, constructSharedVariant, "through the union's anonymous basic member"},
 		{"members of one Go type before an assertions facet", unionOf("xs:string xs:token", assertion), false, constructSharedVariant, "through the union's basic member {http://www.w3.org/2001/XMLSchema}token"},
-		{"an assertions facet on a member", unionOf("xs:int", assertion), false, constructUnionAssertions, ""},
-		{"an assertions facet on the union itself", `<xs:simpleType name="v"><xs:union memberTypes="xs:int xs:date"/></xs:simpleType>` +
-			sequenceOf(`<xs:element name="a"><xs:simpleType><xs:restriction base="s:v"><xs:assertion test="true()"/></xs:restriction></xs:simpleType></xs:element>`), false, constructUnionAssertions, ""},
-		{"an assertions facet on an intervening union", `<xs:simpleType name="v"><xs:restriction><xs:simpleType><xs:union memberTypes="xs:int"/></xs:simpleType><xs:assertion test="true()"/></xs:restriction></xs:simpleType>` +
-			union("s:v xs:date"), false, constructUnionAssertions, ""},
-		{"an assertions facet on a list member's item type", unionOf("xs:date", `<xs:simpleType><xs:list>`+assertion+`</xs:list></xs:simpleType>`), false, constructUnionAssertions, ""},
-		{"an assertions facet on a list member's union item's member", unionOf("xs:date", `<xs:simpleType><xs:list><xs:simpleType><xs:union memberTypes="xs:int">`+assertion+`</xs:union></xs:simpleType></xs:list></xs:simpleType>`),
-			false, constructUnionAssertions, "through the union's anonymous basic member"},
-		{"an assertions facet on a list's union item", sequenceOf(`<xs:element name="a"><xs:simpleType><xs:list><xs:simpleType><xs:union memberTypes="xs:int">` + assertion + `</xs:union></xs:simpleType></xs:list></xs:simpleType></xs:element>`),
-			false, constructUnionAssertions, "through the list type's anonymous {item type definition}"},
 	}
 	for _, row := range rows {
 		t.Run(row.name, func(t *testing.T) {
@@ -385,6 +374,151 @@ func TestDecodeUnionDeclines(t *testing.T) {
 				t.Errorf("CheckDecode = %q, want one opening with %q and holding %q", err, want, row.detail)
 			}
 		})
+	}
+}
+
+// The types codegen emits for TestDecodeUnionAssertions' schemas, by shape:
+// each s:r is R struct{ A ... } over its element a. uaIS is a union of an
+// xs:int and an xs:string member in either order, uaID of xs:int and xs:date,
+// uaDL of xs:date and a list of xs:string, uaDU of xs:date and a list of uaIS,
+// and uaDS of xs:date and xs:string.
+type (
+	uaIntString     struct{ A uaIS }
+	uaIS            interface{ isUAIS() }
+	uaISInt         int32
+	uaISString      string
+	uaIntDate       struct{ A uaID }
+	uaID            interface{ isUAID() }
+	uaIDInt         int32
+	uaIDDate        unionDate
+	uaDateList      struct{ A uaDL }
+	uaDL            interface{ isUADL() }
+	uaDLDate        unionDate
+	uaDLList        []string
+	uaDateUnionList struct{ A uaDU }
+	uaDU            interface{ isUADU() }
+	uaDUDate        unionDate
+	uaDUList        []uaIS
+	uaListOfUnion   struct{ A []uaIS }
+	uaDateString    struct{ A uaDS }
+	uaDS            interface{ isUADS() }
+	uaDSDate        unionDate
+	uaDSString      string
+)
+
+func (uaISInt) isUAIS()    {}
+func (uaISString) isUAIS() {}
+func (uaIDInt) isUAID()    {}
+func (uaIDDate) isUAID()   {}
+func (uaDLDate) isUADL()   {}
+func (uaDLList) isUADL()   {}
+func (uaDUDate) isUADU()   {}
+func (uaDUList) isUADU()   {}
+func (uaDSDate) isUADS()   {}
+func (uaDSString) isUADS() {}
+
+// uaVariants supplies the variants of every interface above.
+var uaVariants = []Option{
+	WithBranches[uaIS](uaISInt(0), uaISString("")),
+	WithBranches[uaID](uaIDInt(0), uaIDDate{}),
+	WithBranches[uaDL](uaDLDate{}, uaDLList(nil)),
+	WithBranches[uaDU](uaDUDate{}, uaDUList(nil)),
+	WithBranches[uaDS](uaDSDate{}, uaDSString("")),
+}
+
+// TestDecodeUnionAssertions pins the identification of a union's ·active basic
+// member· under the assertions-facet evaluator of validate's assessment
+// (validate.Result.FacetAssertions; Datatypes dt-active-basic-member,
+// cvc-datatype-valid clause 2.3, cvc-assertions-valid): a union whose
+// identification reaches an assertions facet decodes into the variant of the
+// member validate selected, wherever the facet lies — on a member, on the
+// union itself, on an intervening union, on a list member's item type, on a
+// list member's union item's member, and on a list's union item's member. A
+// member that accepts the value lexically but whose {test} is false on it is
+// not selected: `$value lt 10` passes 50 to the xs:string member after it, and
+// `$value lt current-date()` passes 9999-12-31 to it, read at the instant
+// validate's assessment read (cvc-xpath clause 6). With codec's evaluator
+// declining every {test} and unionDecline's assertions step restored, every
+// row fails; with the evaluator answering AssertionHolds for every {test}, the
+// "50" and "9999-12-31" rows fail.
+func TestDecodeUnionAssertions(t *testing.T) {
+	member := func(base, test string) string {
+		return `<xs:simpleType><xs:restriction base="` + base + `"><xs:assertion test="` + test + `"/></xs:restriction></xs:simpleType>`
+	}
+	// first is a union of m, a named restriction of base by test, then
+	// xs:string: {member type definitions} lists memberTypes before inline
+	// members, so m is named to come first.
+	first := func(base, test string) string {
+		return `<xs:simpleType name="m"><xs:restriction base="` + base + `"><xs:assertion test="` + test + `"/></xs:restriction></xs:simpleType>` +
+			sequenceOf(`<xs:element name="a"><xs:simpleType><xs:union memberTypes="s:m xs:string"/></xs:simpleType></xs:element>`)
+	}
+	unionOf := func(memberTypes, inline string) string {
+		return sequenceOf(`<xs:element name="a"><xs:simpleType><xs:union memberTypes="` + memberTypes + `">` + inline + `</xs:union></xs:simpleType></xs:element>`)
+	}
+	assertion := member("xs:string", "true()")
+	date := func(y int64, m, d uint8) unionDate { return unionDate{Year: *big.NewInt(y), Month: m, Day: d} }
+	rows := []struct {
+		name, decls, body string
+		into              target
+		want              any
+	}{
+		{"an assertions facet on a member", unionOf("xs:int", assertion), "x", into[uaIntString](uaVariants...), uaIntString{A: uaISString("x")}},
+		{"an assertions facet on the union itself", `<xs:simpleType name="v"><xs:union memberTypes="xs:int xs:date"/></xs:simpleType>` +
+			sequenceOf(`<xs:element name="a"><xs:simpleType><xs:restriction base="s:v"><xs:assertion test="true()"/></xs:restriction></xs:simpleType></xs:element>`),
+			"2000-01-01", into[uaIntDate](uaVariants...), uaIntDate{A: uaIDDate(date(2000, 1, 1))}},
+		{"an assertions facet on an intervening union", `<xs:simpleType name="v"><xs:restriction><xs:simpleType><xs:union memberTypes="xs:int"/></xs:simpleType><xs:assertion test="true()"/></xs:restriction></xs:simpleType>` +
+			sequenceOf(`<xs:element name="a"><xs:simpleType><xs:union memberTypes="s:v xs:date"/></xs:simpleType></xs:element>`),
+			"5", into[uaIntDate](uaVariants...), uaIntDate{A: uaIDInt(5)}},
+		{"an assertions facet on a list member's item type", unionOf("xs:date", `<xs:simpleType><xs:list>`+assertion+`</xs:list></xs:simpleType>`),
+			"p q", into[uaDateList](uaVariants...), uaDateList{A: uaDLList{"p", "q"}}},
+		{"an assertions facet on a list member's union item's member", unionOf("xs:date", `<xs:simpleType><xs:list><xs:simpleType><xs:union memberTypes="xs:int">`+assertion+`</xs:union></xs:simpleType></xs:list></xs:simpleType>`),
+			"5 x", into[uaDateUnionList](uaVariants...), uaDateUnionList{A: uaDUList{uaISInt(5), uaISString("x")}}},
+		{"an assertions facet on a list's union item's member", sequenceOf(`<xs:element name="a"><xs:simpleType><xs:list><xs:simpleType><xs:union memberTypes="xs:int">` + assertion + `</xs:union></xs:simpleType></xs:list></xs:simpleType></xs:element>`),
+			"5 x", into[uaListOfUnion](uaVariants...), uaListOfUnion{A: []uaIS{uaISInt(5), uaISString("x")}}},
+		{"a member whose {test} holds", first("xs:int", "$value lt 10"), "5", into[uaIntString](uaVariants...), uaIntString{A: uaISInt(5)}},
+		{"a member whose {test} is false, the next member taking the value", first("xs:int", "$value lt 10"), "50", into[uaIntString](uaVariants...), uaIntString{A: uaISString("50")}},
+		{"a past date, under the episode's current-date()", first("xs:date", "$value lt current-date()"), "2000-01-01", into[uaDateString](uaVariants...), uaDateString{A: uaDSDate(date(2000, 1, 1))}},
+		{"a future date, under the episode's current-date()", first("xs:date", "$value lt current-date()"), "9999-12-31", into[uaDateString](uaVariants...), uaDateString{A: uaDSString("9999-12-31")}},
+	}
+	for _, row := range rows {
+		t.Run(row.name, func(t *testing.T) {
+			schema := schemaOf(t, row.decls)
+			data := instanceOf("", "<s:a>"+row.body+"</s:a>")
+			mustAccept(t, schema, data)
+			got, err := row.into.decode(schema, data)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if g, w := spellUnion(reflect.ValueOf(&got).Elem()), spellUnion(reflect.ValueOf(&row.want).Elem()); g != w {
+				t.Errorf("Decode = %s\nwant     %s", g, w)
+			}
+			if err := row.into.check(schema); err != nil {
+				t.Errorf("CheckDecode = %v, want nil for a row Decode decodes", err)
+			}
+		})
+	}
+}
+
+// TestDecodeUnionDeclinedAssertion pins a member's assertions facet whose
+// {test} validate's evaluator declines, `count(@a) eq 0` (xpath.FacetAssertions
+// declines an fn:count call over a path): validate's identification stops at
+// that member and records an Unevaluated, so Decode returns the
+// *UndecidedError of item 4 before its second read, never the variant of the
+// xs:int member after it and never a stage error.
+func TestDecodeUnionDeclinedAssertion(t *testing.T) {
+	decls := `<xs:simpleType name="m"><xs:restriction base="xs:string"><xs:assertion test="count(@a) eq 0"/></xs:restriction></xs:simpleType>` +
+		sequenceOf(`<xs:element name="a"><xs:simpleType><xs:union memberTypes="s:m xs:int"/></xs:simpleType></xs:element>`)
+	got, err := Decode[uaIntString](schemaOf(t, decls), strict.New(), instanceOf("", "<s:a>5</s:a>"), uaVariants...)
+	if got != nil {
+		t.Fatalf("Decode = %v, want no value", *got)
+	}
+	var ue *UndecidedError
+	if !errors.As(err, &ue) || ue.Unevaluated().Rule() != "cvc-assertions-valid" {
+		t.Fatalf("Decode error = %v, want an *UndecidedError of cvc-assertions-valid", err)
+	}
+	var se *stageError
+	if errors.As(err, &se) {
+		t.Errorf("Decode error %v is a stage error", err)
 	}
 }
 

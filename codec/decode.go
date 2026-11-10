@@ -120,8 +120,10 @@ var ErrTypeMismatch = errors.New("codec: T is not the type codegen emits for the
 //     normalized string is the characters themselves (Datatypes §4.3.6): the
 //     variant of its ·active basic member· (dt-active-member,
 //     dt-active-basic-member), the member [value.ValidatingType] identifies on
-//     that string, under the same bindings as Parse, the first member in order
-//     that accepts it, descended through a member that is itself a union, a
+//     that string, under the same bindings as Parse and the evaluator
+//     [validate.Result.FacetAssertions] returns for validate's assessment of
+//     the instance, the first member in order that accepts it, its assertions
+//     facets included, descended through a member that is itself a union, a
 //     {lexical form} included for a supplied value. The variant is the type
 //     [WithBranches] supplies for the union's interface whose Go type is that
 //     member's (item 6), and it holds the member's value read as above, from
@@ -193,28 +195,28 @@ var ErrTypeMismatch = errors.New("codec: T is not the type codegen emits for the
 //     mapping or the conversion to the Go type failing on a value validate
 //     accepted on the same backend: value.ValidatingType returns an error for
 //     the union and the value, or a type that is no basic member of the
-//     union, under codec's bindings; or no mapping of backend governs
-//     the type, its Parse rejects the normalized value, or its Canonical is
-//     nil, fails, or renders a form the Go type does not read or a finite
-//     form beyond the Go type's range, or, for yearMonthDuration's datatype
-//     struct and PrecisionDecimal's, which read no Canonical, Parse accepts
-//     a form that struct does not read, PrecisionDecimal's reading the
+//     union, under codec's bindings and validate's evaluator; or no mapping
+//     of backend governs the type, its Parse rejects the normalized value, or
+//     its Canonical is nil, fails, or renders a form the Go type does not read
+//     or a finite form beyond the Go type's range, or, for yearMonthDuration's
+//     datatype struct and PrecisionDecimal's, which read no Canonical, Parse
+//     accepts a form that struct does not read, PrecisionDecimal's reading the
 //     pDecimalRep production alone (precisionDecimal §3.2), or, for QName's,
 //     which reads none either, Parse accepts a lexical that resolves to no
-//     expanded name against the bindings it was given; a datatype struct
-//     reads no form denoting no value of its datatype, such as a month of 13,
-//     an hour of 24 or a dateTimeStamp without a timezone. For a list, the
-//     type is its {item type definition} and the value one list item; for a
-//     union's other stages, the type is its ·active basic member·. It is a
-//     fault of the backend, not of the instance. The error names the stage,
-//     the type — its QName, or for an anonymous type the declaration it is
-//     local to and that declaration's schema Loc, and for a list's item type
-//     the list's too, and for a union's basic member the union's too — the
-//     normalized value, for an identification the characters it was made on,
-//     or the list item and its 1-based position among the value's items, and
-//     the value's source at its instance Loc, for a list the whole value's and
-//     never an item's: an element's character content, at its first character
-//     data, with that data's byte offset; a present attribute, at its Loc
+//     expanded name against the bindings it was given; a datatype struct reads
+//     no form denoting no value of its datatype, such as a month of 13, an
+//     hour of 24 or a dateTimeStamp without a timezone. For a list, the type
+//     is its {item type definition} and the value one list item; for a union's
+//     other stages, the type is its ·active basic member·. It is a fault of
+//     the backend, not of the instance. The error names the stage, the type —
+//     its QName, or for an anonymous type the declaration it is local to and
+//     that declaration's schema Loc, and for a list's item type the list's
+//     too, and for a union's basic member the union's too — the normalized
+//     value, for an identification the characters it was made on, or the list
+//     item and its 1-based position among the value's items, and the value's
+//     source at its instance Loc, for a list the whole value's and never an
+//     item's: an element's character content, at its first character data,
+//     with that data's byte offset; a present attribute, at its Loc
 //     (xmltree.Attribute.Loc), with no offset; or a supplied value, at its
 //     element's start, with the declaration whose value constraint supplied
 //     it. It wraps nothing: errors.As finds no *xsderr.Error, *DeclineError or
@@ -264,19 +266,15 @@ var ErrTypeMismatch = errors.New("codec: T is not the type codegen emits for the
 //     declining member's construct the union's, then a basic member whose Go
 //     type an earlier one's is, as item 6 compares a variant's, two lists of a
 //     union or the same A or []A, such as xs:string's and xs:token's, which
-//     declines as a union two of whose basic members get one Go type, then an
-//     assertions facet effective on the union, on any of its {member type
-//     definitions} at any depth, an intervening union's included, or on a list
-//     member's {item type definition} or what that reaches, which declines as
-//     a union with an assertions facet, since Decode identifies the ·active
-//     basic member· deciding no {test}; or a complex type's {abstract}, then
-//     its content, then, for simple content, its {simple type definition},
-//     examined as the document element's simple type is, whose construct the
-//     content declines by, or, for element-only content, its {particle}'s
-//     model group, an all group declining whatever it occurs, and then the
-//     occurrence of its sequence or choice: of a <group ref>, the compositor
-//     is the referenced definition's {model group}'s and the occurrence the
-//     referring particle's (§3.7.2 declare-namedModelGroup).
+//     declines as a union two of whose basic members get one Go type; or a
+//     complex type's {abstract}, then its content, then, for simple content,
+//     its {simple type definition}, examined as the document element's simple
+//     type is, whose construct the content declines by, or, for element-only
+//     content, its {particle}'s model group, an all group declining whatever
+//     it occurs, and then the occurrence of its sequence or choice: of a
+//     <group ref>, the compositor is the referenced definition's {model
+//     group}'s and the occurrence the referring particle's (§3.7.2
+//     declare-namedModelGroup).
 //   - Each particle of the complex type's content in order, the whole of one
 //     before the next. A sequence's nested sequence particle, inline or
 //     through <group ref>, that codegen splices (codegen's package doc,
@@ -531,7 +529,8 @@ func Decode[T any](schema *xsd.Schema, backend value.Backend, data []byte, opts 
 	if err != nil {
 		return nil, err
 	}
-	b, err := bind(&pipeline{schema: schema, backend: backend, log: cfg.log.WithGroup("codec"), decimals: cfg.decimals, branches: cfg.branches}, root)
+	b, err := bind(&pipeline{schema: schema, backend: backend, log: cfg.log.WithGroup("codec"), decimals: cfg.decimals, branches: cfg.branches,
+		assertions: res.FacetAssertions()}, root)
 	if err != nil {
 		return nil, err
 	}
