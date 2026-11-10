@@ -498,27 +498,28 @@ var ErrTypeMismatch = errors.New("codec: T is not the type codegen emits for the
 //     holds, whose alternatives are the basic particles its model group
 //     reaches, each branch field the field its particle would give occurring
 //     exactly once.
-//   - A sealed interface, T, a struct's field holding a choice's, the first
-//     for a content choice and the one at its particle's place for a nested
-//     choice, named as if from the local name choice (codegen's package doc,
-//     "# Naming") and holding the bare interface, never a pointer, or a nested
-//     element's, a choice's, a substitution group's or a flattened slice's
-//     element, whose branch types reach Decode only through [WithBranches]: it does
-//     not match when it is not an interface whose one method is unexported,
-//     or when its branch set, as WithBranches supplied it, is not one struct
-//     of one field per alternative, that field the name and Go type of the
-//     alternative's branch field: when no WithBranches supplies it for an
-//     interface with alternatives, or its count differs, or it holds a nil
-//     value, a type that is no struct, a type twice, or a branch matching no
-//     alternative an earlier branch did not match. A branch is held to the
-//     one alternative its field could be: of that alternative's name, its Go
-//     type V or []V by the alternative's occurrence, V the alternative's Go
-//     type for a simple type, any struct for codegen's struct, any interface
-//     for a sealed interface, and the E, X or N its bullet above matches for
-//     a wildcard or an element of type xs:anyType. A branch whose field could
-//     be no alternative is held to the first alternative of its field's name
-//     of complex type, a wildcard or a substitution group's interface, and
-//     the error is that alternative's mismatch.
+//   - A sealed interface, T, a nested element's or a struct's field, of a
+//     choice, a substitution group or a flattened slice's element: a
+//     choice's field is the struct's first for a content choice and the one
+//     at its particle's place for a nested choice, named as if from the local
+//     name choice (codegen's package doc, "# Naming") and holding the bare
+//     interface, never a pointer. Its branch types reach Decode only through
+//     [WithBranches]: it does not match when it is not an interface whose one
+//     method is unexported, or when its branch set, as WithBranches supplied
+//     it, is not one struct of one field per alternative, that field the name
+//     and Go type of the alternative's branch field: when no WithBranches
+//     supplies it for an interface with alternatives, or its count differs,
+//     or it holds a nil value, a type that is no struct, a type twice, or a
+//     branch matching no alternative an earlier branch did not match. A
+//     branch is held to the one alternative its field could be: of that
+//     alternative's name, its Go type V or []V by the alternative's
+//     occurrence, V the alternative's Go type for a simple type, any struct
+//     for codegen's struct, any interface for a sealed interface, and the E,
+//     X or N its bullet above matches for a wildcard or an element of type
+//     xs:anyType. A branch whose field could be no alternative is held to the
+//     first alternative of its field's name of complex type, a wildcard or a
+//     substitution group's interface, and the error is that alternative's
+//     mismatch.
 //   - A union's sealed interface I, T's own or a field's, at any depth, a
 //     list's element and a variant's element included, whose variants reach
 //     Decode only through [WithBranches], whose doc states which set serves
