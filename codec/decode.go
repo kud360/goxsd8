@@ -1797,7 +1797,7 @@ func bindComplex[K comparable](run *bindRun, decl xsd.ElementDeclaration, ct xsd
 		index.store(key, b)
 		b.content = &sequence{p: run.p, children: map[xsd.QName]int{}}
 	case xsd.ElementContent:
-		content, group, flat, d, err := contentGroup(run.p.schema, c)
+		content, group, flat, d, err := contentGroup(run.p.schema, c, typeSubject)
 		if err != nil {
 			return nil, err
 		}
@@ -2000,7 +2000,7 @@ func bindSequence(run *bindRun, ct xsd.ComplexType, particles []xsd.Particle, na
 // nested model group.
 func (s *sequence) bind(run *bindRun, ct xsd.ComplexType, particles []xsd.Particle, at []int, names *goname.Namer, typeSubject string) error {
 	for i, p := range particles {
-		term, err := particleTerm(run.p.schema, p)
+		term, err := particleTerm(run.p.schema, p, typeSubject)
 		if err != nil {
 			return err
 		}
@@ -2021,7 +2021,7 @@ func (s *sequence) bind(run *bindRun, ct xsd.ComplexType, particles []xsd.Partic
 		case xsd.ModelGroup:
 			splice, err := goshape.Splices(run.p.schema, term, p.Occurs())
 			if err != nil {
-				return err
+				return fmt.Errorf("codec: %s: %w", typeSubject, err)
 			}
 			if !splice {
 				return decline(constructNestedGroup, "a particle of "+typeSubject)
@@ -2210,7 +2210,7 @@ func bindChoice(run *bindRun, ct xsd.ComplexType, particles []xsd.Particle, name
 	c := &choice{name: names.Claim("choice"), sealed: &sealed{p: run.p}, children: map[xsd.QName]int{}}
 	alts := c.sealed
 	for i, p := range particles {
-		term, err := particleTerm(run.p.schema, p)
+		term, err := particleTerm(run.p.schema, p, typeSubject)
 		if err != nil {
 			return nil, err
 		}
@@ -2332,7 +2332,7 @@ func bindFlattened(run *bindRun, ct xsd.ComplexType, group xsd.ModelGroup, names
 	alts := f.sealed
 	wildcards := 0
 	visit := func(p xsd.Particle, position []int) error {
-		term, err := particleTerm(run.p.schema, p)
+		term, err := particleTerm(run.p.schema, p, typeSubject)
 		if err != nil {
 			return err
 		}
@@ -2706,17 +2706,18 @@ var anyTypeName = xsd.QName{Space: xsd.XMLSchemaNS, Local: "anyType"}
 func anyTypeItself(td xsd.TypeDefinition) bool { return td.Name() == anyTypeName }
 
 // contentGroup returns the {particle} of content, a complex type's
-// element-only or mixed content, its {term} an inline sequence or choice or
-// a <group ref>, and its model group, the inline one or the {model group} of
-// the definition the ref names (§3.7.2 declare-namedModelGroup), and flat,
-// whether codegen flattens it, or the construct Decode declines in their
-// place, in its doc's item 5 order. The particle occurring exactly once is
-// bound as its own fields or choice, flat false; one occurring otherwise is
-// flat where goshape.Flattens answers true for it, a decision made here once
-// and read by bindContent alone, and declines otherwise. A <group ref> naming
-// no definition is goshape.ModelGroupTerm's plain error, and goshape.Flattens' error
-// is a plain one.
-func contentGroup(schema *xsd.Schema, content xsd.ElementContent) (particle xsd.Particle, group xsd.ModelGroup, flat bool, d construct, err error) {
+// element-only or mixed content, its {term} an inline sequence or choice or a
+// <group ref>, and its model group, the inline one or the {model group} of the
+// definition the ref names (§3.7.2 declare-namedModelGroup), and flat, whether
+// codegen flattens it, or the construct Decode declines in their place, in its
+// doc's item 5 order. The particle occurring exactly once is bound as its own
+// fields or choice, flat false; one occurring otherwise is flat where
+// goshape.Flattens answers true for it, a decision made here once and read by
+// bindContent alone, and declines otherwise. A <group ref> naming no
+// definition is goshape.ModelGroupTerm's plain error, prefixed by typeSubject,
+// which names the complex type holding the particle, and goshape.Flattens'
+// error is a plain one.
+func contentGroup(schema *xsd.Schema, content xsd.ElementContent, typeSubject string) (particle xsd.Particle, group xsd.ModelGroup, flat bool, d construct, err error) {
 	if content.Mixed {
 		return xsd.Particle{}, xsd.ModelGroup{}, false, constructMixedContent, nil
 	}
@@ -2725,7 +2726,7 @@ func contentGroup(schema *xsd.Schema, content xsd.ElementContent) (particle xsd.
 	}
 	group, _, err = goshape.ModelGroupTerm(schema, content.Particle.Term())
 	if err != nil {
-		return xsd.Particle{}, xsd.ModelGroup{}, false, 0, fmt.Errorf("codec: %w", err)
+		return xsd.Particle{}, xsd.ModelGroup{}, false, 0, fmt.Errorf("codec: %s: %w", typeSubject, err)
 	}
 	occurs := content.Particle.Occurs()
 	upper, bounded := occurs.Max()
@@ -2759,13 +2760,15 @@ func contentGroup(schema *xsd.Schema, content xsd.ElementContent) (particle xsd.
 
 // particleTerm returns p's {term}, never nil: an element declaration, a local
 // one or the top-level one an <element ref> names (§3.3.2.4 ref.elt.global),
-// followed through [xsd.Schema.Element], a wildcard, or a model group, inline or the
-// {model group} of the definition a <group ref> names (goshape.ModelGroupTerm). A
-// reference naming no definition is a plain error, and so is a particle without its
-// {term}, the zero Particle's: Finalize resolves every reference, and
-// xsd.NewParticle rejects an absent {term}. The TermOrRef is a closed sum, so the
-// switch is STYLE T2's sealed-sum exception.
-func particleTerm(schema *xsd.Schema, p xsd.Particle) (xsd.Term, error) {
+// followed through [xsd.Schema.Element], a wildcard, or a model group, inline
+// or the {model group} of the definition a <group ref> names
+// (goshape.ModelGroupTerm). A reference naming no definition is a plain error,
+// a <group ref>'s prefixed by typeSubject, which names the complex type
+// holding p, and so is a particle without its {term}, the zero Particle's:
+// Finalize resolves every reference, and xsd.NewParticle rejects an absent
+// {term}. The TermOrRef is a closed sum, so the switch is STYLE T2's
+// sealed-sum exception.
+func particleTerm(schema *xsd.Schema, p xsd.Particle, typeSubject string) (xsd.Term, error) {
 	switch term := p.Term().(type) {
 	case xsd.ElementDeclarationRef:
 		decl, ok := schema.Element(term.Name)
@@ -2776,7 +2779,7 @@ func particleTerm(schema *xsd.Schema, p xsd.Particle) (xsd.Term, error) {
 	case xsd.ModelGroupRef:
 		group, _, err := goshape.ModelGroupTerm(schema, term)
 		if err != nil {
-			return nil, fmt.Errorf("codec: %w", err)
+			return nil, fmt.Errorf("codec: %s: %w", typeSubject, err)
 		}
 		return group, nil
 	case xsd.ResolvedTerm:
