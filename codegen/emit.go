@@ -2347,8 +2347,9 @@ func shapedGoType(s goshape.Shape, v string) string {
 		return "*" + v
 	case goshape.Slice:
 		return "[]" + v
+	default:
+		return v
 	}
-	return v
 }
 
 // wildcardTerm reports whether a particle's term is a wildcard (§3.10.1): an
