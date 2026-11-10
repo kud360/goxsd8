@@ -44,7 +44,8 @@ func (e *DeclineError) Loc() (xsderr.Loc, bool) {
 // a complex type's simple content, its {content type}'s {simple type
 // definition}, and of a list type's {item type definition} or a union's basic
 // member, that item or member, by its QName where it has one, each with its
-// schema Loc, which is the zero Loc for a built-in component; for xsi:type, it
+// schema Loc, which is the zero Loc for a built-in component; for a wildcard
+// particle, it names the particle as [Decode]'s item 5 states; for xsi:type, it
 // names the element and the type the xsi:type names.
 func (e *DeclineError) Error() string {
 	text := "codec does not decode " + e.construct.name() + ": " + e.detail +
