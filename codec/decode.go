@@ -3134,17 +3134,18 @@ func attributeUse(schema *xsd.Schema, u xsd.AttributeUse) (attribute, error) {
 // simpleDecline returns the Go type codegen gives the simple type st of the
 // item subject names (codegen/doc.go "# Simple types"), or else an error:
 // the *DeclineError Decode's doc states for st, item 5, subject naming it,
-// or a plain error. For an atomic st, and for xs:anySimpleType, of absent
-// {variety}, the decline is atomicDecline's; for a union, unionDecline's;
-// for a list, that of its {item type definition} (Structures §3.16.2.3, a
-// restriction of a list taking its base's), which cos-st-restricts clause
-// 2.1 (checkListGraph) holds to an atomic or union type, so its construct
-// always answers, the detail naming the item after subject. {variety} is a
-// closed sum, so the assertions are STYLE T2's sealed-sum exception.
+// or a plain error naming subject. For an atomic st, and for xs:anySimpleType,
+// of absent {variety}, the Go type and the decline are atomicGo's; for a
+// union, unionDecline's; for a list, those of its {item type definition}
+// (Structures §3.16.2.3, a restriction of a list taking its base's), which
+// cos-st-restricts clause 2.1 (checkListGraph) holds to an atomic or union
+// type, so its construct always answers, the detail naming the item after
+// subject. {variety} is a closed sum, so the assertions are STYLE T2's
+// sealed-sum exception.
 func simpleDecline(r xsd.TypeResolver, st *xsd.SimpleType, subject string) (simpleGo, error) {
 	variety, err := st.Variety(r)
 	if err != nil {
-		return simpleGo{}, err
+		return simpleGo{}, fmt.Errorf("codec: the {variety} of the simple type of %s: %w", subject, err)
 	}
 	if _, isUnion := variety.(xsd.Union); isUnion {
 		u, err := unionDecline(r, st, subject)
@@ -3154,25 +3155,22 @@ func simpleDecline(r xsd.TypeResolver, st *xsd.SimpleType, subject string) (simp
 		return simpleGo{elem: u}, nil
 	}
 	if _, isList := variety.(xsd.List); !isList {
-		atom, d, err := atomicDecline(r, st)
+		atom, err := atomicGo(r, st, subject)
 		if err != nil {
 			return simpleGo{}, err
-		}
-		if d != 0 {
-			return simpleGo{}, decline(d, subject)
 		}
 		return simpleGo{elem: atom}, nil
 	}
 	item, err := st.Item(r)
 	if err != nil {
-		return simpleGo{}, err
+		return simpleGo{}, fmt.Errorf("codec: the {item type definition} of the list type of %s: %w", subject, err)
 	}
 	if item == nil {
 		return simpleGo{}, fmt.Errorf("codec: the list type of %s has no {item type definition}", subject)
 	}
 	itemVariety, err := item.Variety(r)
 	if err != nil {
-		return simpleGo{}, err
+		return simpleGo{}, fmt.Errorf("codec: the {variety} of the simple type of %s: %w", itemSubject(subject, item), err)
 	}
 	if _, isUnion := itemVariety.(xsd.Union); isUnion {
 		u, err := unionDecline(r, item, itemSubject(subject, item))
@@ -3181,12 +3179,9 @@ func simpleDecline(r xsd.TypeResolver, st *xsd.SimpleType, subject string) (simp
 		}
 		return simpleGo{elem: u, item: item}, nil
 	}
-	atom, d, err := atomicDecline(r, item)
+	atom, err := atomicGo(r, item, itemSubject(subject, item))
 	if err != nil {
 		return simpleGo{}, err
-	}
-	if d != 0 {
-		return simpleGo{}, decline(d, itemSubject(subject, item))
 	}
 	return simpleGo{elem: atom, item: item}, nil
 }
@@ -3200,52 +3195,23 @@ func itemSubject(subject string, item *xsd.SimpleType) string {
 	return fmt.Sprintf("%s, through the list type's {item type definition} %s, a type defined at %s", subject, item.Name(), item.Loc())
 }
 
-// atomicDecline returns the atomic Go type codegen gives the simple type st,
-// as codegen/doc.go "# Simple types" picks it: atomicString for a special
-// type, known by identity (xsd.SimpleType.IsSpecial) ahead of its {variety};
-// for an atomic type whose {primitive type definition} is one of
-// primitiveAtomics' or datatypeAtomics', from st's {base type definition}
-// chain (chainAtomic), which meets a date, time or duration primitive,
-// xs:QName or xs:precisionDecimal at its top, failing that from its
-// primitive. Or else it returns the construct Decode declines st for, that of
-// its primitive. Any other st with no {primitive type definition} is a plain
-// error (st-props-correct clause 1), as is a union or list st: simpleDecline
-// routes a union to unionDecline and a list to its {item type
-// definition}, which cos-st-restricts clause 2.1 holds to no list, routing a
-// union item to unionDecline too, whose basic members are no unions. {variety}
-// is a closed sum, so the switch is STYLE T2's sealed-sum exception.
-func atomicDecline(r xsd.TypeResolver, st *xsd.SimpleType) (atomic, construct, error) {
-	if st.IsSpecial() {
-		return atomicString, 0, nil
-	}
-	variety, err := st.Variety(r)
+// atomicGo returns the atomic Go type codegen gives the atomic or special
+// simple type st of the item subject names, goshape.AtomicType's, or else
+// the *DeclineError for constructOtherPrimitive where goshape.AtomicType
+// gives none, or goshape.AtomicType's error wrapped naming subject: a union
+// or list st is one, simpleDecline routing a union to unionDecline and a
+// list to its {item type definition}, which cos-st-restricts clause 2.1
+// holds to no list, routing a union item to unionDecline too, whose basic
+// members are no unions.
+func atomicGo(r xsd.TypeResolver, st *xsd.SimpleType, subject string) (atomic, error) {
+	a, ok, err := goshape.AtomicType(r, st)
 	if err != nil {
-		return 0, 0, err
+		return 0, fmt.Errorf("codec: the atomic Go type of the simple type of %s: %w", subject, err)
 	}
-	switch variety.(type) {
-	case xsd.Union:
-		return 0, 0, fmt.Errorf("codec: the simple type defined at %s is a union where an atomic type is required", st.Loc())
-	case xsd.List:
-		return 0, 0, fmt.Errorf("codec: the simple type defined at %s is a list where an atomic or union type is required, as a list's {item type definition} (cos-st-restricts clause 2.1)", st.Loc())
+	if !ok {
+		return 0, decline(constructOtherPrimitive, subject)
 	}
-	primitive, err := st.Primitive(r)
-	if err != nil {
-		return 0, 0, err
-	}
-	if primitive == nil {
-		return 0, 0, fmt.Errorf("codec: the simple type defined at %s is of absent or atomic {variety} with no {primitive type definition}, which st-props-correct clause 1 (Structures §3.16.6.1) and the Datatypes §4.1.1 tableau give no simple type but the special types xs:anySimpleType and xs:anyAtomicType", st.Loc())
-	}
-	atom, ok, err := chainAtomic(r, st)
-	if err != nil {
-		return 0, 0, err
-	}
-	if ok {
-		return atom, 0, nil
-	}
-	if atom, ok := primitiveAtomics[primitive.Name()]; ok {
-		return atom, 0, nil
-	}
-	return 0, constructOtherPrimitive, nil
+	return atomic(a), nil
 }
 
 // occursShape returns the shape codegen gives the field of the particle

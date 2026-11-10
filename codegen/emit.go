@@ -16,32 +16,8 @@ import (
 
 // The names of the components the slice reads by identity.
 var (
-	anyTypeName      = xsd.QName{Space: xsd.XMLSchemaNS, Local: "anyType"}
-	errorTypeName    = xsd.QName{Space: xsd.XMLSchemaNS, Local: "error"}
-	stringPrimitive  = xsd.QName{Space: xsd.XMLSchemaNS, Local: "string"}
-	anyURIPrimitive  = xsd.QName{Space: xsd.XMLSchemaNS, Local: "anyURI"}
-	booleanPrimitive = xsd.QName{Space: xsd.XMLSchemaNS, Local: "boolean"}
-	floatPrimitive   = xsd.QName{Space: xsd.XMLSchemaNS, Local: "float"}
-	doublePrimitive  = xsd.QName{Space: xsd.XMLSchemaNS, Local: "double"}
-	decimalPrimitive = xsd.QName{Space: xsd.XMLSchemaNS, Local: "decimal"}
-
-	hexBinaryPrimitive    = xsd.QName{Space: xsd.XMLSchemaNS, Local: "hexBinary"}
-	base64BinaryPrimitive = xsd.QName{Space: xsd.XMLSchemaNS, Local: "base64Binary"}
-	qNamePrimitive        = xsd.QName{Space: xsd.XMLSchemaNS, Local: "QName"}
-	notationPrimitive     = xsd.QName{Space: xsd.XMLSchemaNS, Local: "NOTATION"}
-
-	precisionDecimalPrimitive = xsd.QName{Space: xsd.XMLSchemaNS, Local: "precisionDecimal"}
-
-	integerBuiltin = xsd.QName{Space: xsd.XMLSchemaNS, Local: "integer"}
-
-	longBuiltin          = xsd.QName{Space: xsd.XMLSchemaNS, Local: "long"}
-	intBuiltin           = xsd.QName{Space: xsd.XMLSchemaNS, Local: "int"}
-	shortBuiltin         = xsd.QName{Space: xsd.XMLSchemaNS, Local: "short"}
-	byteBuiltin          = xsd.QName{Space: xsd.XMLSchemaNS, Local: "byte"}
-	unsignedLongBuiltin  = xsd.QName{Space: xsd.XMLSchemaNS, Local: "unsignedLong"}
-	unsignedIntBuiltin   = xsd.QName{Space: xsd.XMLSchemaNS, Local: "unsignedInt"}
-	unsignedShortBuiltin = xsd.QName{Space: xsd.XMLSchemaNS, Local: "unsignedShort"}
-	unsignedByteBuiltin  = xsd.QName{Space: xsd.XMLSchemaNS, Local: "unsignedByte"}
+	anyTypeName   = xsd.QName{Space: xsd.XMLSchemaNS, Local: "anyType"}
+	errorTypeName = xsd.QName{Space: xsd.XMLSchemaNS, Local: "error"}
 )
 
 // The math/big types "# Simple types" maps to; a field or named type of
@@ -56,11 +32,11 @@ const (
 // §3.3.18, §3.3.19, §3.4.26–§3.4.28): one field per property its values carry,
 // in the order of the seven-property model (§D.2.1), of duration's two
 // properties (§3.3.6.1), or of QName's {namespace name, local part} (§3.3.18).
-// doc is the header's line after its first, "" for none.
+// doc is the header's line after its first, "" for none. Its datatype is its
+// Atomic's (goshape.Atomic.Datatype), the index datatypeStructs holds it at.
 type datatypeStruct struct {
-	datatype xsd.QName
-	doc      string
-	fields   []goField
+	doc    string
+	fields []goField
 }
 
 // goField is one field of an emitted struct after its name is claimed: its Go
@@ -93,39 +69,40 @@ var (
 	secondsField        = goField{"Seconds", bigRat}
 )
 
-// The thirteen datatype structs: one per date, time or duration primitive, one
-// per builtin derived from one whose values carry fewer properties or a
-// required one (§3.4.26 yearMonthDuration, §3.4.27 dayTimeDuration, §3.4.28
-// dateTimeStamp), and one for QName, which NOTATION shares (§3.3.18,
-// §3.3.19).
-var (
-	dateTimeStruct = datatypeStruct{xsd.QName{Space: xsd.XMLSchemaNS, Local: "dateTime"}, optionalOffsetDoc,
-		[]goField{yearField, monthField, dayField, hourField, minuteField, secondField, optionalOffsetField}}
-	dateTimeStampStruct = datatypeStruct{xsd.QName{Space: xsd.XMLSchemaNS, Local: "dateTimeStamp"}, requiredOffsetDoc,
-		[]goField{yearField, monthField, dayField, hourField, minuteField, secondField, requiredOffsetField}}
-	timeStruct = datatypeStruct{xsd.QName{Space: xsd.XMLSchemaNS, Local: "time"}, optionalOffsetDoc,
-		[]goField{hourField, minuteField, secondField, optionalOffsetField}}
-	dateStruct = datatypeStruct{xsd.QName{Space: xsd.XMLSchemaNS, Local: "date"}, optionalOffsetDoc,
-		[]goField{yearField, monthField, dayField, optionalOffsetField}}
-	gYearMonthStruct = datatypeStruct{xsd.QName{Space: xsd.XMLSchemaNS, Local: "gYearMonth"}, optionalOffsetDoc,
-		[]goField{yearField, monthField, optionalOffsetField}}
-	gYearStruct = datatypeStruct{xsd.QName{Space: xsd.XMLSchemaNS, Local: "gYear"}, optionalOffsetDoc,
-		[]goField{yearField, optionalOffsetField}}
-	gMonthDayStruct = datatypeStruct{xsd.QName{Space: xsd.XMLSchemaNS, Local: "gMonthDay"}, optionalOffsetDoc,
-		[]goField{monthField, dayField, optionalOffsetField}}
-	gDayStruct = datatypeStruct{xsd.QName{Space: xsd.XMLSchemaNS, Local: "gDay"}, optionalOffsetDoc,
-		[]goField{dayField, optionalOffsetField}}
-	gMonthStruct = datatypeStruct{xsd.QName{Space: xsd.XMLSchemaNS, Local: "gMonth"}, optionalOffsetDoc,
-		[]goField{monthField, optionalOffsetField}}
-	durationStruct = datatypeStruct{xsd.QName{Space: xsd.XMLSchemaNS, Local: "duration"}, "Months and Seconds share one sign.",
-		[]goField{monthsField, secondsField}}
-	dayTimeDurationStruct = datatypeStruct{xsd.QName{Space: xsd.XMLSchemaNS, Local: "dayTimeDuration"}, "",
-		[]goField{secondsField}}
-	yearMonthDurationStruct = datatypeStruct{xsd.QName{Space: xsd.XMLSchemaNS, Local: "yearMonthDuration"}, "",
-		[]goField{monthsField}}
-	qNameStruct = datatypeStruct{qNamePrimitive, "Space is the namespace name, \"\" for none.",
-		[]goField{{"Space", "string"}, {"Local", "string"}}}
-)
+// datatypeStructs holds, indexed by goshape.Atomic, the thirteen datatype
+// structs other than PrecisionDecimal: one per date, time or duration
+// primitive, one per builtin derived from one whose values carry fewer
+// properties or a required one (§3.4.26 yearMonthDuration, §3.4.27
+// dayTimeDuration, §3.4.28 dateTimeStamp), and one for QName, which NOTATION
+// shares (§3.3.18, §3.3.19).
+var datatypeStructs = [...]datatypeStruct{
+	goshape.AtomicDateTime: {optionalOffsetDoc, // Datatypes §3.3.7
+		[]goField{yearField, monthField, dayField, hourField, minuteField, secondField, optionalOffsetField}},
+	goshape.AtomicDateTimeStamp: {requiredOffsetDoc, // Datatypes §3.4.28
+		[]goField{yearField, monthField, dayField, hourField, minuteField, secondField, requiredOffsetField}},
+	goshape.AtomicTime: {optionalOffsetDoc, // Datatypes §3.3.8
+		[]goField{hourField, minuteField, secondField, optionalOffsetField}},
+	goshape.AtomicDate: {optionalOffsetDoc, // Datatypes §3.3.9
+		[]goField{yearField, monthField, dayField, optionalOffsetField}},
+	goshape.AtomicGYearMonth: {optionalOffsetDoc, // Datatypes §3.3.10
+		[]goField{yearField, monthField, optionalOffsetField}},
+	goshape.AtomicGYear: {optionalOffsetDoc, // Datatypes §3.3.11
+		[]goField{yearField, optionalOffsetField}},
+	goshape.AtomicGMonthDay: {optionalOffsetDoc, // Datatypes §3.3.12
+		[]goField{monthField, dayField, optionalOffsetField}},
+	goshape.AtomicGDay: {optionalOffsetDoc, // Datatypes §3.3.13
+		[]goField{dayField, optionalOffsetField}},
+	goshape.AtomicGMonth: {optionalOffsetDoc, // Datatypes §3.3.14
+		[]goField{monthField, optionalOffsetField}},
+	goshape.AtomicDuration: {"Months and Seconds share one sign.", // Datatypes §3.3.6
+		[]goField{monthsField, secondsField}},
+	goshape.AtomicDayTimeDuration: {"", // Datatypes §3.4.27
+		[]goField{secondsField}},
+	goshape.AtomicYearMonthDuration: {"", // Datatypes §3.4.26
+		[]goField{monthsField}},
+	goshape.AtomicQName: {"Space is the namespace name, \"\" for none.", // Datatypes §3.3.18, §3.3.19
+		[]goField{{"Space", "string"}, {"Local", "string"}}},
+}
 
 // emitter builds one target's declarations. decls holds each emitted type
 // declaration in emission order: a top-level element's type, then the types
@@ -961,31 +938,26 @@ func (e *emitter) simpleGoType(subject string, loc xsderr.Loc, t *xsd.SimpleType
 }
 
 // goType is the Go type "# Simple types" maps the simple type t to: for a
-// special t (Datatypes §2.4.2 dt-special), xs:anySimpleType or xs:anyAtomicType
-// known by identity ahead of its {variety}, string, holding the literal; for an
-// atomic t, its atomic Go type, chosen through builtinType and then t's
-// {primitive type definition} (Datatypes §4.1.1), a math/big type, a datatype
-// struct holding one, or PrecisionDecimal among them; for a list (Datatypes
-// §2.4.1.2, a finite sequence of its item type's values), a slice of the type
-// its {item type definition} (§3.16.1) maps to, read through
+// list (Datatypes §2.4.1.2, a finite sequence of its item type's values), a
+// slice of the type its {item type definition} (§3.16.1) maps to, read through
 // [xsd.SimpleType.Item], which takes a restriction's item from its base
 // (§3.16.2.3), never by walking t to a builtin; for a union, the sealed
-// interface unionType emits, the one answer that is sealed. typed names t in a
-// decline, and a list's item, or a union's basic member, is named in it after
-// the list or union, so an anonymous item or member still has a named context.
-// under is what an anonymous union reached through t is named by ("# Naming");
-// a list's item takes what listItemPath returns. subject and loc are
-// simpleGoType's.
+// interface unionType emits, the one answer that is sealed; and for any other
+// t, a special one included, whatever its {variety}, the Go type of the Atomic
+// goshape.AtomicType gives it (atomicType), or the decline by
+// constructUncoveredPrimitive, naming t's {primitive type definition}, where
+// it gives none. typed names t in a decline, and a list's item, or a union's
+// basic member, is named in it after the list or union, so an anonymous item
+// or member still has a named context. under is what an anonymous union
+// reached through t is named by ("# Naming"); a list's item takes what
+// listItemPath returns. subject and loc are simpleGoType's. {variety} is a
+// closed sum, so the switch is STYLE T2's sealed-sum exception.
 func (e *emitter) goType(subject, typed string, loc xsderr.Loc, t *xsd.SimpleType, under unionNaming) (emittedType, error) {
-	if t.IsSpecial() {
-		return emittedType{name: "string"}, nil
-	}
 	variety, err := t.Variety(e.schema)
 	if err != nil {
 		return emittedType{}, fmt.Errorf("%s at %s: %w", subject, loc, err)
 	}
 	switch variety.(type) {
-	case xsd.Atomic:
 	case xsd.List:
 		item, err := t.Item(e.schema)
 		if err != nil {
@@ -1002,14 +974,21 @@ func (e *emitter) goType(subject, typed string, loc xsderr.Loc, t *xsd.SimpleTyp
 		return emittedType{name: "[]" + elem.name}, nil
 	case xsd.Union:
 		return e.unionType(subject, typed, loc, t, under)
-	default:
-		return emittedType{}, fmt.Errorf("%s at %s: absent {variety}, which st-props-correct clause 1 (Structures §3.16.6.1) and the Datatypes §4.1.1 tableau give no simple type but xs:anySimpleType, a special type", typed, loc)
 	}
-	atomic, err := e.atomicType(subject, typed, loc, t)
+	a, ok, err := goshape.AtomicType(e.schema, t)
 	if err != nil {
-		return emittedType{}, err
+		return emittedType{}, fmt.Errorf("%s at %s: %w", subject, loc, err)
 	}
-	return emittedType{name: atomic}, nil
+	if !ok {
+		// t has a {primitive type definition}: goshape.AtomicType's doc states
+		// its error for one that has none.
+		primitive, err := t.Primitive(e.schema)
+		if err != nil {
+			return emittedType{}, fmt.Errorf("%s at %s: %w", subject, loc, err)
+		}
+		return emittedType{}, decline(loc, constructUncoveredPrimitive, typed, primitive.Name())
+	}
+	return emittedType{name: e.atomicType(a)}, nil
 }
 
 // listItemPath is what an anonymous union that is the {item type definition}
@@ -1042,60 +1021,52 @@ func (e *emitter) listItemPath(t *xsd.SimpleType, under unionNaming) (unionNamin
 	return declaredUnion{declaredStep(declaring.Name().Local)}, nil
 }
 
-// atomicType is the atomic Go type goType maps the atomic simple type t to;
-// its arguments are goType's.
-func (e *emitter) atomicType(subject, typed string, loc xsderr.Loc, t *xsd.SimpleType) (string, error) {
-	mapped, err := e.builtinType(t)
-	if err != nil {
-		return "", fmt.Errorf("%s at %s: %w", subject, loc, err)
+// atomicType spells the Go type a is, the one "# Simple types" names it by,
+// emitting a datatype struct (datatypeType) or PrecisionDecimal's group
+// (precisionDecimalType) at its first use.
+func (e *emitter) atomicType(a goshape.Atomic) string {
+	switch a {
+	case goshape.AtomicString:
+		return "string"
+	case goshape.AtomicBool:
+		return "bool"
+	case goshape.AtomicFloat32:
+		return "float32"
+	case goshape.AtomicFloat64:
+		return "float64"
+	case goshape.AtomicBigRat:
+		return bigRat
+	case goshape.AtomicBigInt:
+		return bigInt
+	case goshape.AtomicInt8:
+		return "int8"
+	case goshape.AtomicInt16:
+		return "int16"
+	case goshape.AtomicInt32:
+		return "int32"
+	case goshape.AtomicInt64:
+		return "int64"
+	case goshape.AtomicUint8:
+		return "uint8"
+	case goshape.AtomicUint16:
+		return "uint16"
+	case goshape.AtomicUint32:
+		return "uint32"
+	case goshape.AtomicUint64:
+		return "uint64"
+	case goshape.AtomicHexBinary, goshape.AtomicBase64Binary:
+		return "[]byte"
+	case goshape.AtomicPrecisionDecimal:
+		return e.precisionDecimalType()
+	case goshape.AtomicDateTime, goshape.AtomicDateTimeStamp, goshape.AtomicTime, goshape.AtomicDate,
+		goshape.AtomicGYearMonth, goshape.AtomicGYear, goshape.AtomicGMonthDay, goshape.AtomicGDay,
+		goshape.AtomicGMonth, goshape.AtomicDuration, goshape.AtomicDayTimeDuration,
+		goshape.AtomicYearMonthDuration, goshape.AtomicQName:
+		return e.datatypeType(a)
 	}
-	if mapped != "" {
-		return mapped, nil
-	}
-	primitive, err := t.Primitive(e.schema)
-	if err != nil {
-		return "", fmt.Errorf("%s at %s: %w", subject, loc, err)
-	}
-	if primitive == nil {
-		return "", fmt.Errorf("%s at %s: atomic with no {primitive type definition}, which st-props-correct clause 1 (Structures §3.16.6.1) and the Datatypes §4.1.1 tableau give no atomic type but xs:anyAtomicType, a special type", typed, loc)
-	}
-	switch primitive.Name() {
-	case stringPrimitive, anyURIPrimitive:
-		return "string", nil
-	case booleanPrimitive:
-		return "bool", nil
-	case floatPrimitive: // Datatypes §3.3.4.1, as "# Simple types" states
-		return "float32", nil
-	case doublePrimitive: // Datatypes §3.3.5.1, as "# Simple types" states
-		return "float64", nil
-	case decimalPrimitive: // Datatypes §3.3.3, as "# Simple types" states
-		return bigRat, nil
-	case hexBinaryPrimitive, base64BinaryPrimitive: // Datatypes §3.3.15.1, §3.3.16.1, as "# Simple types" states
-		return "[]byte", nil
-	case qNamePrimitive, notationPrimitive: // Datatypes §3.3.18, §3.3.19, as "# Simple types" states
-		return e.datatypeType(qNameStruct), nil
-	case dateTimeStruct.datatype: // Datatypes §3.3.7
-		return e.datatypeType(dateTimeStruct), nil
-	case timeStruct.datatype: // Datatypes §3.3.8
-		return e.datatypeType(timeStruct), nil
-	case dateStruct.datatype: // Datatypes §3.3.9
-		return e.datatypeType(dateStruct), nil
-	case gYearMonthStruct.datatype: // Datatypes §3.3.10
-		return e.datatypeType(gYearMonthStruct), nil
-	case gYearStruct.datatype: // Datatypes §3.3.11
-		return e.datatypeType(gYearStruct), nil
-	case gMonthDayStruct.datatype: // Datatypes §3.3.12
-		return e.datatypeType(gMonthDayStruct), nil
-	case gDayStruct.datatype: // Datatypes §3.3.13
-		return e.datatypeType(gDayStruct), nil
-	case gMonthStruct.datatype: // Datatypes §3.3.14
-		return e.datatypeType(gMonthStruct), nil
-	case durationStruct.datatype: // Datatypes §3.3.6
-		return e.datatypeType(durationStruct), nil
-	case precisionDecimalPrimitive: // precisionDecimal §3.1 sec-vs-pD, as "# Simple types" states
-		return e.precisionDecimalType(), nil
-	}
-	return "", decline(loc, constructUncoveredPrimitive, typed, primitive.Name())
+	// The zero Atomic, and any beyond goshape's, is an internal bug, never
+	// input.
+	panic(fmt.Sprintf("codegen: invalid goshape.Atomic %d", a))
 }
 
 // unionType returns the sealed interface "# Simple types" gives the union simple
@@ -1213,15 +1184,18 @@ func (e *emitter) simpleFrom(t *xsd.SimpleType) provenance {
 	return located(from, t.Loc())
 }
 
-// datatypeType returns the name of the struct ds, emitting it when no earlier
-// declaration did: its name is claimed in e.types at that first use, by the
+// datatypeType returns the name of a's datatype struct, datatypeStructs',
+// emitting it when no earlier declaration did: its name is claimed in e.types
+// at that first use, from a's datatype (goshape.Atomic.Datatype), by the
 // package doc's "Naming", and its declaration joins e.tailDecls.
-func (e *emitter) datatypeType(ds datatypeStruct) string {
-	if name, ok := e.datatypes[ds.datatype]; ok {
+func (e *emitter) datatypeType(a goshape.Atomic) string {
+	datatype, _ := a.Datatype()
+	if name, ok := e.datatypes[datatype]; ok {
 		return name
 	}
-	name := e.types.fixed(ds.datatype.Local)
-	e.datatypes[ds.datatype] = name
+	ds := datatypeStructs[a]
+	name := e.types.fixed(datatype.Local)
+	e.datatypes[datatype] = name
 	doc := ""
 	if ds.doc != "" {
 		doc = "// " + ds.doc + "\n"
@@ -1232,7 +1206,7 @@ func (e *emitter) datatypeType(ds datatypeStruct) string {
 		fmt.Fprintf(&b, "\t%s %s\n", f.name, f.goType)
 	}
 	b.WriteString("}\n")
-	e.tailDecls = append(e.tailDecls, declare(name, provenance{text: "datatype " + ds.datatype.String()}, doc, b.String()))
+	e.tailDecls = append(e.tailDecls, declare(name, provenance{text: "datatype " + datatype.String()}, doc, b.String()))
 	return name
 }
 
@@ -1245,7 +1219,8 @@ func (e *emitter) precisionDecimalType() string {
 	if e.precisionDecimal.wrapper != "" {
 		return e.precisionDecimal.wrapper
 	}
-	local := precisionDecimalPrimitive.Local
+	datatype, _ := goshape.AtomicPrecisionDecimal.Datatype()
+	local := datatype.Local
 	n := precisionDecimalNames{wrapper: e.types.fixed(local)}
 	n.value = e.types.fixed(local, "value")
 	n.numerical = e.types.extend(n.value, "numerical")
@@ -1253,7 +1228,7 @@ func (e *emitter) precisionDecimalType() string {
 	n.negativeInfinity = e.types.extend(n.value, "negativeInfinity")
 	n.notANumber = e.types.extend(n.value, "notANumber")
 	e.precisionDecimal = n
-	from := provenance{text: "datatype " + precisionDecimalPrimitive.String()}
+	from := provenance{text: "datatype " + datatype.String()}
 	marker := "is" + n.value
 	arm := func(name, doc, fields string) declaration {
 		return declare(name, from, doc, fmt.Sprintf("type %s struct {%s}\n\nfunc (%s) %s() {}\n", name, fields, name, marker))
@@ -1407,52 +1382,6 @@ func (e *emitter) attributesType(of string) string {
 	e.tailDecls = append(e.tailDecls, declaration{})
 	e.nilled = append(e.nilled, n)
 	return n.name
-}
-
-// builtinType is the Go type "# Simple types" maps t to through the eight
-// bounded builtin integer types (Datatypes §3.4.16–§3.4.19, §3.4.21–§3.4.24),
-// xs:integer (§3.4.13), and the three builtins derived from a date, time or
-// duration primitive that get a datatype struct of their own (§3.4.26–§3.4.28),
-// walking t's {base type definition} chain (Structures §3.16.1) from t itself
-// and stopping at the first of the twelve it meets, or "" when the walk ends
-// at xs:anySimpleType's absent base without meeting one. Every bounded type
-// lies below xs:integer on its chain, so the nearest bounded type wins over
-// it; no chain meets both an integer builtin and a temporal one.
-func (e *emitter) builtinType(t *xsd.SimpleType) (string, error) {
-	for step := t; step != nil; {
-		switch step.Name() {
-		case integerBuiltin:
-			return bigInt, nil
-		case dateTimeStampStruct.datatype: // Datatypes §3.4.28
-			return e.datatypeType(dateTimeStampStruct), nil
-		case dayTimeDurationStruct.datatype: // Datatypes §3.4.27
-			return e.datatypeType(dayTimeDurationStruct), nil
-		case yearMonthDurationStruct.datatype: // Datatypes §3.4.26
-			return e.datatypeType(yearMonthDurationStruct), nil
-		case longBuiltin:
-			return "int64", nil
-		case intBuiltin:
-			return "int32", nil
-		case shortBuiltin:
-			return "int16", nil
-		case byteBuiltin:
-			return "int8", nil
-		case unsignedLongBuiltin:
-			return "uint64", nil
-		case unsignedIntBuiltin:
-			return "uint32", nil
-		case unsignedShortBuiltin:
-			return "uint16", nil
-		case unsignedByteBuiltin:
-			return "uint8", nil
-		}
-		base, err := step.Base(e.schema)
-		if err != nil {
-			return "", err
-		}
-		step = base
-	}
-	return "", nil
 }
 
 // typeName names a type definition in a decline message.
