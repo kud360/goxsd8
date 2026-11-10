@@ -41,15 +41,16 @@ func (u *unionGo) forScalar(union string) scalarElem {
 
 // unionDecline returns the unionGo of st, a union simple type of the item
 // subject names, or else the *DeclineError Decode's doc states for st, item 5,
-// or a plain error, in this order: each basic member in basic-member order
-// (goshape.BasicMembers), examined as simpleDecline examines an atomic or list
-// type, the first declining member's construct, its detail naming the member
-// after subject; then a basic member whose Go type an earlier one's is
-// (simpleGo.oneGoType), constructSharedVariant, naming the later member.
+// or a plain error, goshape.BasicMembers' naming subject, in this order: each
+// basic member in basic-member order (goshape.BasicMembers), examined as
+// simpleDecline examines an atomic or list type, the first declining member's
+// construct, its detail naming the member after subject; then a basic member
+// whose Go type an earlier one's is (simpleGo.oneGoType),
+// constructSharedVariant, naming the later member.
 func unionDecline(r xsd.TypeResolver, st *xsd.SimpleType, subject string) (*unionGo, error) {
 	basic, err := goshape.BasicMembers(r, st)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("codec: the basic members of the union simple type of %s: %w", subject, err)
 	}
 	u := &unionGo{members: make([]unionMember, 0, len(basic))}
 	for _, m := range basic {
