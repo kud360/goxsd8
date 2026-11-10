@@ -100,7 +100,8 @@ func TestDefaultAttributesApplyWithoutDefaultAttributes(t *testing.T) {
 			`<xs:attributeGroup name="DA"><xs:attribute name="da" type="xs:string"/></xs:attributeGroup>`+
 				`<xs:complexType name="T" defaultAttributesApply="`+lexical+`"><xs:sequence/></xs:complexType>`))
 		if err != nil {
-			t.Fatalf("defaultAttributesApply=%q: Produce: %v", lexical, err)
+			t.Errorf("defaultAttributesApply=%q: Produce: %v", lexical, err)
+			continue
 		}
 		if uses := topComplexTypeIn(t, s, xq("T")).AttributeUses(); len(uses) != 0 {
 			t.Errorf("defaultAttributesApply=%q: {attribute uses} has %d uses, want none — no <schema defaultAttributes> is in force", lexical, len(uses))
