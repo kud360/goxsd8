@@ -274,8 +274,9 @@ var ErrTypeMismatch = errors.New("codec: T is not the type codegen emits for the
 //     complex type's {abstract}, then its content, then, for simple content,
 //     its {simple type definition}, examined as the document element's simple
 //     type is, whose construct the content declines by, or, for element-only
-//     content, its {particle}'s model group, an all group declining whatever
-//     it occurs, and then the occurrence of its sequence or choice, which
+//     content, its {particle}'s model group, an all group declining where
+//     codegen does not splice it (codegen's package doc, "# Particles"), and
+//     otherwise the occurrence of its sequence or choice, which
 //     declines when it is other than exactly once and codegen does not
 //     flatten the particle (codegen's package doc, "# Particles"): of a
 //     <group ref>, the compositor is the referenced definition's {model
@@ -284,6 +285,7 @@ var ErrTypeMismatch = errors.New("codec: T is not the type codegen emits for the
 //   - Each particle of the complex type's content in order, the whole of one
 //     before the next, but of a flattened one, which the sixth bullet examines
 //     in this bullet's place. A sequence's nested sequence particle, inline or
+//     through <group ref>, and an all group's nested all group particle,
 //     through <group ref>, that codegen splices (codegen's package doc,
 //     "# Particles") is examined as its own particles in its place, in order,
 //     at any depth; a nested choice particle, inline or through <group ref>,
@@ -1761,18 +1763,19 @@ type unitIndex[K comparable] map[K]complexUnit
 // one, or else the first decline Decode's doc states for ct, item 5, in its
 // order: {abstract} true, ct's content, for simple content its {simple type
 // definition} (simpleValueOf), for element-only content the occurrence of its
-// sequence or choice and each particle in order, then each attribute use in
-// order, none for a ct goshape.HasAttributeFields answers false for whose
-// content is the choice it binds as ct itself. Empty content binds the struct
-// codegen emits for it, with no field ahead of the attribute fields, and
-// simple content the struct whose one field ahead of them is the value field
-// (codegen/doc.go "# Complex types"); ct's {attribute wildcard}, read from
-// the finalized component (§3.4.2.5 dcl.ctd.anyatt), gives the struct's last
-// field, its name claimed after the attribute fields'. A nil index binds an
-// inline anonymous ct under no key. A ct of simple content is stored under no
-// key either: it reaches no particle, so nothing inside it reaches it again,
-// and its value field holds decl's own {value constraint} (cvc-elt clause
-// 5.1), which another declaration of a named ct does not share.
+// sequence, choice or all group (contentGroup) and each particle in order,
+// then each attribute use in order, none for a ct goshape.HasAttributeFields
+// answers false for whose content is the choice it binds as ct itself. Empty
+// content binds the struct codegen emits for it, with no field ahead of the
+// attribute fields, and simple content the struct whose one field ahead of
+// them is the value field (codegen/doc.go "# Complex types"); ct's {attribute
+// wildcard}, read from the finalized component (§3.4.2.5 dcl.ctd.anyatt),
+// gives the struct's last field, its name claimed after the attribute
+// fields'. A nil index binds an inline anonymous ct under no key. A ct of
+// simple content is stored under no key either: it reaches no particle, so
+// nothing inside it reaches it again, and its value field holds decl's own
+// {value constraint} (cvc-elt clause 5.1), which another declaration of a
+// named ct does not share.
 func bindComplex[K comparable](run *bindRun, decl xsd.ElementDeclaration, ct xsd.ComplexType, index unitIndex[K], key K) (complexUnit, error) {
 	if u, ok := index[key]; ok {
 		return u, nil
@@ -1884,11 +1887,12 @@ func (run *bindRun) nested(el xsd.ElementDeclaration, ct xsd.ComplexType) (compl
 	return bindComplex(run, el, ct, unitIndex[xsd.QName](nil), xsd.QName{})
 }
 
-// bindContent returns the elementContent of group, the content sequence or
-// choice of ct, flattened where contentGroup answered flat, its fields named
-// from names, or the first decline Decode's doc states for its particles,
-// item 5, typeSubject naming the type. A choice not flattened is the
-// sequence whose one member is its *choice.
+// bindContent returns the elementContent of group, the content sequence,
+// choice or spliced all group of ct, flattened where contentGroup answered
+// flat, its fields named from names, or the first decline Decode's doc states
+// for its particles, item 5, typeSubject naming the type. A choice not
+// flattened is the sequence whose one member is its *choice; an all group is
+// bound as the sequence of its particles (bindSequence).
 func bindContent(run *bindRun, ct xsd.ComplexType, group xsd.ModelGroup, flat bool, names *goname.Namer, typeSubject string) (elementContent, error) {
 	if flat {
 		return bindFlattened(run, ct, group, names, typeSubject)
@@ -1973,13 +1977,14 @@ func (b boundValue) fill(r *xmltree.Reader, root *xmltree.StartElement, out refl
 
 // sequence is a content model's particles as the struct codegen emits holds
 // them, one member per struct field, in particle order: a content
-// sequence's, an element or wildcard particle giving a field and a nested
-// sequence particle goshape.Splices answers true for giving in its place the
-// members its own particles give (codegen/doc.go "# Particles"), or a
-// content choice's, its one *choice. Its members' attribution targets are
-// numbered in bind order, a field taking one and a *choice one per
-// alternative, and check returns one sink per target in that order, so the
-// target index holds for a child is the index of the sink that sets it.
+// sequence's or spliced all group's, an element or wildcard particle giving a
+// field and a nested sequence or all group particle goshape.Splices answers
+// true for giving in its place the members its own particles give
+// (codegen/doc.go "# Particles"), or a content choice's, its one *choice. Its
+// members' attribution targets are numbered in bind order, a field taking one
+// and a *choice one per alternative, and check returns one sink per target in
+// that order, so the target index holds for a child is the index of the sink
+// that sets it.
 type sequence struct {
 	p       *pipeline
 	members []contentMember
@@ -2083,8 +2088,10 @@ func (s fieldSink) put(p *pipeline, r *xmltree.Reader, start *xmltree.StartEleme
 	return nil
 }
 
-// bindSequence returns the sequence of particles, the content sequence of
-// ct, its members bound by bind, or the first decline Decode's doc states
+// bindSequence returns the sequence of particles, the {particles} of the
+// content sequence or spliced all group of ct, its members bound by bind,
+// each filled from the children attributed to it (eachChild), whatever their
+// instance order (§3.8.4.1.3 all-mg), or the first decline Decode's doc states
 // for them, item 5, typeSubject naming the type.
 func bindSequence(run *bindRun, ct xsd.ComplexType, particles []xsd.Particle, names *goname.Namer, typeSubject string) (*sequence, error) {
 	s := &sequence{p: run.p, index: newChildIndex()}
@@ -2207,7 +2214,7 @@ func wildcardField(occurs xsd.Occurs, subject string) (field, error) {
 	return field{shape: s, arm: rawArm{}}, nil
 }
 
-// wildcardSlot marks a content sequence or choice holding a wildcard
+// wildcardSlot marks a content sequence, choice or all group holding a wildcard
 // particle, whose children a Matcher attributes: ct, the complex type whose
 // {content type} it is, and places, one per wildcard particle in particle
 // order, which give the attribution target (childIndex) of a child the
@@ -2258,7 +2265,8 @@ type wildAttributor struct {
 // on ct alone, and declines only a {content type} that is not element-only,
 // which contentGroup has declined, or one too wide to track, which needs a
 // repeating model group, and the particle Decode binds is one sequence or
-// choice occurring once of element and wildcard particles, every nested group
+// choice occurring once, or one all group goshape.Splices answers true for,
+// so with {max occurs} 1, of element and wildcard particles, every nested group
 // spliced, so occurring exactly once or with {min occurs} 0 and {max occurs}
 // 1 (goshape.Splices), a choice of element and wildcard particles occurring
 // exactly once (sequence.nested), or declined. A decline here is a defect of that
@@ -2855,19 +2863,22 @@ var anyTypeName = xsd.QName{Space: xsd.XMLSchemaNS, Local: "anyType"}
 func anyTypeItself(td xsd.TypeDefinition) bool { return td.Name() == anyTypeName }
 
 // contentGroup returns the {particle} of content, a complex type's
-// element-only or mixed content, its {term} an inline sequence or choice or a
-// <group ref>, and its model group, the inline one or the {model group} of the
-// definition the ref names (§3.7.2 declare-namedModelGroup), and flat, whether
-// codegen flattens it, or the construct Decode declines in their place, in its
-// doc's item 5 order. The particle occurring exactly once is bound as its own
+// element-only or mixed content, its {term} an inline sequence, choice or all
+// group or a <group ref>, and its model group, the inline one or the {model
+// group} of the definition the ref names (§3.7.2 declare-namedModelGroup), and
+// flat, whether codegen flattens it, or the construct Decode declines in their
+// place, in its doc's item 5 order. An all group is bound as its own fields,
+// flat false, its {min occurs} 0 or 1 alike, where goshape.Splices answers
+// true for it, the question codegen's contentFields asks of it, and declines
+// otherwise. A sequence or choice occurring exactly once is bound as its own
 // fields or choice, flat false; one occurring otherwise is flat where
 // goshape.Flattens answers true for it, and declines otherwise. Nothing
 // recomputes flat: bindComplex reads it to keep a flattened choice out of
 // choiceRoot, and bindContent to bind the flattened field. A <group ref>
 // naming no definition, the content {particle}'s or one goshape.Flattens
 // follows inside it, is goshape.ModelGroupTerm's plain error, and
-// goshape.Flattens' other error a plain one too, each prefixed by typeSubject,
-// which names the complex type holding the particle.
+// goshape.Splices' and goshape.Flattens' other errors plain ones too, each
+// prefixed by typeSubject, which names the complex type holding the particle.
 func contentGroup(schema *xsd.Schema, content xsd.ElementContent, typeSubject string) (particle xsd.Particle, group xsd.ModelGroup, flat bool, d construct, err error) {
 	if content.Mixed {
 		return xsd.Particle{}, xsd.ModelGroup{}, false, constructMixedContent, nil
@@ -3407,10 +3418,10 @@ type attribution struct {
 // nil where the content model holds no wildcard particle. A wildcard
 // particle's index is the one a holds for its position (xsd.Matcher.NextParticle),
 // its target; a position a holds none for is a defect of the premise the binds rest
-// on, one sequence or choice of element and wildcard particles, nested sequences
-// spliced and nested choices bound in place (wildcardSlot.attributor), and a plain
-// error. Attribution is a closed sum, so the switch is STYLE T2's sealed-sum
-// exception.
+// on, one sequence or choice, or one spliced all group, of element and wildcard
+// particles, nested sequences and all groups spliced and nested choices bound in
+// place (wildcardSlot.attributor), and a plain error. Attribution is a closed sum,
+// so the switch is STYLE T2's sealed-sum exception.
 func attributeChild(a *wildAttributor, children map[xsd.QName]int, start *xmltree.StartElement) (attribution, bool, error) {
 	name := expanded(start.Name())
 	if a != nil {

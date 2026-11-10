@@ -50,11 +50,10 @@ func schemaTest(doc string) string {
 // the branch set the census binds, and p.xml, of xs:precisionDecimal, through
 // the arm set it binds), decline with a union of two basic members of one Go
 // type (e.xml, twice) and an optional content all over a required element
-// (c.xml), and fail otherwise, charged
-// (invalid.xml) and with no declaration for the document element (u.xml), which
-// decodes into the placeholder; its case old is withheld. Group rec's schema
-// assembles and does not generate, group bad's does not assemble, and group none
-// declares no schemaTest.
+// (c.xml), and fail otherwise, charged (invalid.xml) and with no declaration for
+// the document element (u.xml), which decodes into the placeholder; its case old
+// is withheld. Group rec's schema assembles and does not generate, group bad's
+// does not assemble, and group none declares no schemaTest.
 var censusSuite = map[string]string{
 	"suite.xml": `<testSuite xmlns:xlink="http://www.w3.org/1999/xlink"><testSetRef xlink:href="sets/s.testSet"/></testSuite>`,
 	"sets/s.testSet": `<testSet name="S" xmlns:xlink="http://www.w3.org/1999/xlink">

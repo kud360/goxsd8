@@ -15,9 +15,10 @@ import (
 )
 
 // fixtureSchema declares a, in the slice codec decodes, c, whose optional
-// content all over a required element codec declines, p, a choice codec decodes into a sealed interface,
-// and u, a's shape with an assertion whose for expression the XPath subset
-// declines, so validate leaves it undecided (cvc-assertion).
+// content all over a required element codec declines, p, a choice codec
+// decodes into a sealed interface, and u, a's shape with an assertion
+// whose for expression the XPath subset declines, so validate leaves it
+// undecided (cvc-assertion).
 const fixtureSchema = `<?xml version="1.0"?>
 <xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
   <xs:element name="a"><xs:complexType><xs:sequence><xs:element name="b" type="xs:string"/></xs:sequence></xs:complexType></xs:element>
