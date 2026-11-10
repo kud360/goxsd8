@@ -435,7 +435,7 @@ type lexicalStages struct {
 // hop of st, Finalize refuses every such hop that does not resolve
 // (Structures §3.17.6.2 src-resolve clause 1.1) or is absent
 // (xsderr.RuleComponentInvariant), and value.ApplyWhiteSpace (an atomic st)
-// or atomicDecline (a list's item type) has read the same hops on the same
+// or goshape.AtomicType (a list's item type) has read the same hops on the same
 // schema first.
 func newLexicalStages(p *pipeline, atom atomic, st *xsd.SimpleType, label string, src source, first string, token int) (lexicalStages, error) {
 	ls := lexicalStages{atom: atom, label: label, src: src}

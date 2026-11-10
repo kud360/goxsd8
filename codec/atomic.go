@@ -10,52 +10,53 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/kud360/goxsd8/internal/goshape"
 	"github.com/kud360/goxsd8/internal/xmlqname"
 	"github.com/kud360/goxsd8/value"
-	"github.com/kud360/goxsd8/xsd"
 )
 
-// atomic is the atomic Go type codegen gives an atomic simple type Decode
-// decodes (codegen/doc.go "# Simple types"), and how its value is read:
-// string, bool, float32, float64, big.Rat, big.Int, a bounded Go integer,
-// []byte read from xs:hexBinary's canonical form or from xs:base64Binary's,
-// the datatype struct of a date, time or duration datatype, QName's
-// datatype struct, which NOTATION shares, or PrecisionDecimal's, read from
-// the lexical into codec's decimalValue. The zero value is invalid (STYLE
-// T1).
-type atomic uint8
+// atomic is goshape.Atomic, the atomic Go type codegen gives an atomic simple
+// type Decode decodes (codegen/doc.go "# Simple types"), carrying how codec
+// reads its value: string, bool, float32, float64, big.Rat, big.Int, a
+// bounded Go integer, []byte read from xs:hexBinary's canonical form or from
+// xs:base64Binary's, the datatype struct of a date, time or duration
+// datatype, QName's datatype struct, which NOTATION shares, or
+// PrecisionDecimal's, read from the lexical into codec's decimalValue. The
+// zero value is invalid (STYLE T1).
+type atomic goshape.Atomic
 
+// The atomics, each goshape's of its name.
 const (
-	atomicString atomic = iota + 1
-	atomicBool
-	atomicFloat32
-	atomicFloat64
-	atomicBigRat
-	atomicBigInt
-	atomicInt8
-	atomicInt16
-	atomicInt32
-	atomicInt64
-	atomicUint8
-	atomicUint16
-	atomicUint32
-	atomicUint64
-	atomicDateTime
-	atomicDateTimeStamp
-	atomicTime
-	atomicDate
-	atomicGYearMonth
-	atomicGYear
-	atomicGMonthDay
-	atomicGDay
-	atomicGMonth
-	atomicDuration
-	atomicDayTimeDuration
-	atomicYearMonthDuration
-	atomicHexBinary
-	atomicBase64Binary
-	atomicQName
-	atomicPrecisionDecimal
+	atomicString            = atomic(goshape.AtomicString)
+	atomicBool              = atomic(goshape.AtomicBool)
+	atomicFloat32           = atomic(goshape.AtomicFloat32)
+	atomicFloat64           = atomic(goshape.AtomicFloat64)
+	atomicBigRat            = atomic(goshape.AtomicBigRat)
+	atomicBigInt            = atomic(goshape.AtomicBigInt)
+	atomicInt8              = atomic(goshape.AtomicInt8)
+	atomicInt16             = atomic(goshape.AtomicInt16)
+	atomicInt32             = atomic(goshape.AtomicInt32)
+	atomicInt64             = atomic(goshape.AtomicInt64)
+	atomicUint8             = atomic(goshape.AtomicUint8)
+	atomicUint16            = atomic(goshape.AtomicUint16)
+	atomicUint32            = atomic(goshape.AtomicUint32)
+	atomicUint64            = atomic(goshape.AtomicUint64)
+	atomicDateTime          = atomic(goshape.AtomicDateTime)
+	atomicDateTimeStamp     = atomic(goshape.AtomicDateTimeStamp)
+	atomicTime              = atomic(goshape.AtomicTime)
+	atomicDate              = atomic(goshape.AtomicDate)
+	atomicGYearMonth        = atomic(goshape.AtomicGYearMonth)
+	atomicGYear             = atomic(goshape.AtomicGYear)
+	atomicGMonthDay         = atomic(goshape.AtomicGMonthDay)
+	atomicGDay              = atomic(goshape.AtomicGDay)
+	atomicGMonth            = atomic(goshape.AtomicGMonth)
+	atomicDuration          = atomic(goshape.AtomicDuration)
+	atomicDayTimeDuration   = atomic(goshape.AtomicDayTimeDuration)
+	atomicYearMonthDuration = atomic(goshape.AtomicYearMonthDuration)
+	atomicHexBinary         = atomic(goshape.AtomicHexBinary)
+	atomicBase64Binary      = atomic(goshape.AtomicBase64Binary)
+	atomicQName             = atomic(goshape.AtomicQName)
+	atomicPrecisionDecimal  = atomic(goshape.AtomicPrecisionDecimal)
 )
 
 // The mirrors of the thirteen datatype structs codegen emits other than
@@ -172,30 +173,6 @@ var atomicTypes = [...]reflect.Type{
 	atomicPrecisionDecimal:  decimalValueType,
 }
 
-// datatypeNames holds, indexed by an atomic whose Go type is a datatype
-// struct (datatypeStruct), the local name of the XSD datatype whose datatype
-// struct it is, the one encoding of that pairing (datatypeAtomics indexes it
-// by name); codegen names the struct from it (codegen/doc.go, the datatype
-// struct names): dateTime's is DateTime and QName's QName. xs:NOTATION,
-// which shares QName's struct, is no entry: primitiveAtomics keys it to
-// atomicQName.
-var datatypeNames = [...]string{
-	atomicDateTime:          "dateTime",
-	atomicDateTimeStamp:     "dateTimeStamp",
-	atomicTime:              "time",
-	atomicDate:              "date",
-	atomicGYearMonth:        "gYearMonth",
-	atomicGYear:             "gYear",
-	atomicGMonthDay:         "gMonthDay",
-	atomicGDay:              "gDay",
-	atomicGMonth:            "gMonth",
-	atomicDuration:          "duration",
-	atomicDayTimeDuration:   "dayTimeDuration",
-	atomicYearMonthDuration: "yearMonthDuration",
-	atomicQName:             "QName",
-	atomicPrecisionDecimal:  "precisionDecimal",
-}
-
 // bare returns a's Go type itself, unnamed, or for a datatype struct codec's
 // mirror of it, or decimalValue for PrecisionDecimal's, which converts to no
 // caller type.
@@ -218,10 +195,11 @@ func (a atomic) mirrored() bool {
 }
 
 // datatypeStruct reports whether the Go type codegen gives a is a datatype
-// struct, mirrored or PrecisionDecimal's: whether datatypeNames names its
-// datatype.
+// struct, mirrored or PrecisionDecimal's: whether goshape.Atomic.Datatype
+// names its datatype.
 func (a atomic) datatypeStruct() bool {
-	return int(a) < len(datatypeNames) && datatypeNames[a] != ""
+	_, ok := goshape.Atomic(a).Datatype()
+	return ok
 }
 
 // shapes reports whether v is a struct of the shape of the datatype struct
@@ -290,7 +268,8 @@ func (a atomic) spell() string {
 	for i := range fields {
 		fields[i] = t.Field(i).Name + " " + t.Field(i).Type.String()
 	}
-	return fmt.Sprintf("D for the datatype struct D of xs:%s (%s)", datatypeNames[a], strings.Join(fields, ", "))
+	datatype, _ := goshape.Atomic(a).Datatype()
+	return fmt.Sprintf("D for the datatype struct D of xs:%s (%s)", datatype.Local, strings.Join(fields, ", "))
 }
 
 // convert returns the value of a's bare type that form denotes, read as
@@ -375,77 +354,4 @@ func expandedName(lexical string, ctx value.Context) (reflect.Value, error) {
 		return reflect.Value{}, errors.New("it resolves to no expanded name against the bindings in scope")
 	}
 	return reflect.ValueOf(qNameMirror{Space: space, Local: local}), nil
-}
-
-// chainAtomics maps each integer builtin that decides an atomic type's
-// atomic from anywhere on its {base type definition} chain to that atomic:
-// the eight bounded integer builtins (Datatypes §3.4.16–§3.4.19,
-// §3.4.21–§3.4.24) to the Go integer whose range is their value space, and
-// xs:integer (§3.4.13) to big.Int. It is a lookup index only and never
-// iterated (STYLE D2).
-var chainAtomics = map[xsd.QName]atomic{
-	{Space: xsd.XMLSchemaNS, Local: "long"}:          atomicInt64,
-	{Space: xsd.XMLSchemaNS, Local: "int"}:           atomicInt32,
-	{Space: xsd.XMLSchemaNS, Local: "short"}:         atomicInt16,
-	{Space: xsd.XMLSchemaNS, Local: "byte"}:          atomicInt8,
-	{Space: xsd.XMLSchemaNS, Local: "unsignedLong"}:  atomicUint64,
-	{Space: xsd.XMLSchemaNS, Local: "unsignedInt"}:   atomicUint32,
-	{Space: xsd.XMLSchemaNS, Local: "unsignedShort"}: atomicUint16,
-	{Space: xsd.XMLSchemaNS, Local: "unsignedByte"}:  atomicUint8,
-	{Space: xsd.XMLSchemaNS, Local: "integer"}:       atomicBigInt,
-}
-
-// datatypeAtomics maps the QName of each datatype of datatypeNames to its
-// datatype struct's atomic, built from datatypeNames once; it is a lookup
-// index only and never iterated (STYLE D2).
-var datatypeAtomics = func() map[xsd.QName]atomic {
-	m := map[xsd.QName]atomic{}
-	for a, local := range datatypeNames {
-		if local != "" {
-			m[xsd.QName{Space: xsd.XMLSchemaNS, Local: local}] = atomic(a)
-		}
-	}
-	return m
-}()
-
-// primitiveAtomics maps each {primitive type definition} Decode decodes that
-// datatypeAtomics does not hold to the atomic it gives a type no builtin
-// chainAtomic meets decides (codegen/doc.go "# Simple types"): xs:NOTATION
-// among them, to QName's datatype struct, which it shares. It is a lookup
-// index only and never iterated (STYLE D2).
-var primitiveAtomics = map[xsd.QName]atomic{
-	{Space: xsd.XMLSchemaNS, Local: "string"}:       atomicString,
-	{Space: xsd.XMLSchemaNS, Local: "anyURI"}:       atomicString,
-	{Space: xsd.XMLSchemaNS, Local: "boolean"}:      atomicBool,
-	{Space: xsd.XMLSchemaNS, Local: "float"}:        atomicFloat32,
-	{Space: xsd.XMLSchemaNS, Local: "double"}:       atomicFloat64,
-	{Space: xsd.XMLSchemaNS, Local: "decimal"}:      atomicBigRat,
-	{Space: xsd.XMLSchemaNS, Local: "hexBinary"}:    atomicHexBinary,
-	{Space: xsd.XMLSchemaNS, Local: "base64Binary"}: atomicBase64Binary,
-	{Space: xsd.XMLSchemaNS, Local: "NOTATION"}:     atomicQName,
-}
-
-// chainAtomic returns the atomic of st as codegen/doc.go "# Simple types"
-// picks it from st's {base type definition} chain: walking it from st itself,
-// the first builtin met that chainAtomics or datatypeAtomics holds gives its
-// atomic, and false where the walk meets none. Every bounded builtin lies
-// below xs:integer, and dateTimeStamp, dayTimeDuration and yearMonthDuration
-// below the primitive they restrict, so the nearest wins over it; a primitive
-// of datatypeAtomics is met only at the top of its chain, and no chain meets
-// both an integer builtin and a temporal one.
-func chainAtomic(r xsd.TypeResolver, st *xsd.SimpleType) (atomic, bool, error) {
-	for step := st; step != nil; {
-		if a, ok := chainAtomics[step.Name()]; ok {
-			return a, true, nil
-		}
-		if a, ok := datatypeAtomics[step.Name()]; ok {
-			return a, true, nil
-		}
-		base, err := step.Base(r)
-		if err != nil {
-			return 0, false, err
-		}
-		step = base
-	}
-	return 0, false, nil
 }

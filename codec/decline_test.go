@@ -613,7 +613,7 @@ func assertDecline(t *testing.T, err error, c construct, line, col int) {
 
 // TestDeclineErrorTextOtherPrimitive pins CheckDecode's message for a decline
 // of a local element whose type's primitive, the minted s:money, is
-// ·implementation-defined·, so none of those atomicDecline admits.
+// ·implementation-defined·, so goshape.AtomicType gives it no atomic Go type.
 func TestDeclineErrorTextOtherPrimitive(t *testing.T) {
 	schema := mintedSchema(t, sequenceOf(`<xs:element name="a" type="s:money"/>`))
 	err := CheckDecode[struct{}](schema, rootName)
