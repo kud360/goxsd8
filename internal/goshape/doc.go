@@ -27,8 +27,9 @@
 // ("# Simple types", "# Complex types", "# Substitution groups",
 // "# Particles", "# Attributes"): those sections own them, and this package is
 // their one implementation. TermEmptiable, ExactlyOnce and ModelGroupTerm are
-// the reads those rules are made from, exported for codegen and codec, which
-// make the same reads around them.
+// the reads those rules are made from, exported for the packages that make
+// the same reads around them: all three for codegen, and ExactlyOnce and
+// ModelGroupTerm for codec.
 //
 // It imports xsd, xsderr and the standard library.
 package goshape
