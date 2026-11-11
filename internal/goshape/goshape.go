@@ -305,20 +305,20 @@ func ParticleShape(occurs xsd.Occurs, sealed bool) (s Shape, ok bool) {
 	return Bare, true
 }
 
-// SuppliedValueConstraint returns the value constraint whose value the field
-// of the attribute use u holds when its attribute is absent, as
-// codegen/doc.go "# Attributes" states: ok is false exactly when u has no
-// effective value constraint (§3.5.4 key-evc, from
-// [xsd.Schema.EffectiveValueConstraint]) or its {attribute declaration} is a
-// built-in xsi: one, which it reads as one exactly when it is in the xsi
-// namespace (§3.2.6.4 no-xsi). It does not read u's {required}.
+// SuppliedValueConstraint returns the effective value constraint of the
+// attribute use u (§3.5.4 key-evc, [xsd.Schema.EffectiveValueConstraint])
+// where it supplies the value the field of an absent attribute holds, as
+// codegen/doc.go "# Attributes" states, and ok false elsewhere. It reads u's
+// {attribute declaration} as a built-in xsi: one, whose constraint supplies
+// none, exactly when it is in the xsi namespace (§3.2.6.4 no-xsi), and does
+// not read u's {required}.
 //
 // GAP(xsd): a programmatically built schema is not kept out of the xsi
-// namespace (#1462), so a built {xsi}-named declaration with an effective
-// value constraint gets ok false, where "# Attributes" supplies its value:
-// codegen gives its field the Pointer shape (AttributeShape), and codec
-// decodes an absent attribute's field nil, where the field is bare and holds
-// that value.
+// namespace (#1462), so for an optional use of a built {xsi}-named
+// declaration with an effective value constraint ok is false, where
+// "# Attributes" gives a bare field holding that value: codegen gives the
+// field the Pointer shape, a union's interface aside (AttributeShape), and
+// codec supplies the field no value when the attribute is absent.
 func SuppliedValueConstraint(schema *xsd.Schema, u xsd.AttributeUse) (vc xsd.ValueConstraint, ok bool) {
 	vc, ok = schema.EffectiveValueConstraint(u)
 	if !ok || u.DeclarationName().Space == xsd.XMLSchemaInstanceNS {
