@@ -149,7 +149,7 @@ func checkAssertions(b Backend, r xsd.TypeResolver, st, basic *xsd.SimpleType, v
 			outcome := a.Evaluate(b, r, basic, as.Test(), v)
 			if outcome == AssertionFails {
 				return xsderr.New(ruleCvcAssertionsValid, xsderr.Loc{},
-					"the value is not facet-valid with respect to assertion %d of %d in the {value} of the assertions facet of %s, whose {test} %q did not evaluate to true without raising a dynamic or type error, but cvc-assertions-valid requires every {test} to",
+					"the value is not facet-valid with respect to assertion %d of %d in the {value} of the assertions facet of %s, whose {test} %q did not evaluate to true without raising a dynamic or type error, but cvc-assertions-valid requires every {test} to evaluate to true",
 					i+1, len(assertions), simpleTypeLabel(st.Name()), as.Test().Expression())
 			}
 			if outcome == AssertionDeclined && declined == nil {
