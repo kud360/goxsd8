@@ -160,9 +160,29 @@ type Result struct {
 	now time.Time
 }
 
-// Violations returns the violations the assessment charged, in document
-// order. The slice is copied; each *xsderr.Error is r's own, so writing
-// through one writes r's. No violation yields nil.
+// Violations returns the violations the assessment charged, in the order the
+// walk charged them, which is not document order: each check is charged when
+// the walk settles it. The walk reaches elements in document order and, at
+// each, charges the element's own checks first, then its attributes', then its
+// [[children]]'s. A check that reads the element's [[attributes]] as a set, its
+// [[children]] or its value is settled only once those are exhausted, so it
+// follows every charge on them and sits at the element's own location. Among
+// such checks are a required attribute's absence (cvc-complex-type clause 3), a
+// ·defaulted attribute·'s {lexical form} (cvc-complex-type clause 4), the
+// {content type} ending short (cvc-complex-content), the element's value
+// (cvc-complex-type clause 1.2, cvc-type clause 3.1.3), a fixed {value
+// constraint} (cvc-elt clause 5.2.2) and the {assertions} (cvc-assertion). A
+// cvc-identity-constraint charge sits at a target or field node and follows the
+// whole subtree of the element whose declaration carries the constraint.
+// cvc-id charges follow the whole walk, in the order each id first appeared. At
+// one location, the parent's charges there come before the element's own. The
+// order is deterministic for a given schema, backend and instance.
+//
+// The first violation is therefore not necessarily the earliest in the
+// document: a consumer wanting document order sorts the list itself.
+//
+// The slice is copied; each *xsderr.Error is r's own, so writing through one
+// writes r's. No violation yields nil.
 //
 // An empty slice is not acceptance: [Result.Standing] is the acceptance test.
 // [Result] says how a report reads these beside [Result.Unevaluated].
@@ -261,8 +281,9 @@ func (u Unevaluated) Loc() xsderr.Loc { return u.loc }
 // which component.
 func (u Unevaluated) Msg() string { return u.msg }
 
-// Unevaluated returns r's [Unevaluated] checks, in document order. The slice
-// is copied: mutating the result does not affect r. No such check yields nil.
+// Unevaluated returns r's [Unevaluated] checks, in the order
+// [Result.Violations] states for violations. The slice is copied: mutating
+// the result does not affect r. No such check yields nil.
 // [Result.Standing] says where they leave the document, and [Result] how a
 // report reads them beside [Result.Violations].
 func (r *Result) Unevaluated() []Unevaluated {

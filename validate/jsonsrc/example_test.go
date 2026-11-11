@@ -64,7 +64,7 @@ func ExampleValidate() {
 		if len(res.Violations()) == 0 && len(res.Unevaluated()) == 0 {
 			fmt.Println("no violations, nothing undecided")
 		}
-		for _, e := range res.Violations() { // []*xsderr.Error, in document order
+		for _, e := range res.Violations() { // []*xsderr.Error, in the order Result.Violations states
 			fmt.Printf("violation: %s [%s]\n", e.Loc, e.Rule)
 		}
 		for _, u := range res.Unevaluated() { // []validate.Unevaluated

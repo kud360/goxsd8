@@ -311,7 +311,7 @@ case validate.Undecided:
 case validate.NotProvenInvalid:
 	fmt.Println("not proven invalid")
 }
-for _, e := range res.Violations() { // []*xsderr.Error, in document order
+for _, e := range res.Violations() { // []*xsderr.Error, in the order Result.Violations states
 	fmt.Println(e)
 }
 if err := res.Err(); err != nil { // the assessment is INCOMPLETE, not invalid
