@@ -84,11 +84,11 @@ func TestProduceCollapseTrimRejectsNonXMLWhitespacePadding(t *testing.T) {
 			// allOccursGrammar: <all>'s own "unbounded" arm. Both readings reject,
 			// so the rule ID alone cannot see the difference — the message is what
 			// separates them. Padded, the lexical never reaches the {0,1}
-			// enumeration verdict; it fails xs:nonNegativeInteger first.
+			// enumeration verdict; it fails xs:allNNI first.
 			name:     "allOccursGrammar <all> maxOccurs unbounded padded with U+00A0",
 			body:     `<xs:complexType name="T"><xs:all maxOccurs="&#xA0;unbounded"><xs:element name="a" type="xs:string"/></xs:all></xs:complexType>`,
 			wantRule: "cvc-datatype-valid",
-			wantMsg:  "is not a nonNegativeInteger",
+			wantMsg:  "is not a valid xs:allNNI",
 		},
 		{
 			// processContentsOf: the skip/lax/strict enumeration of Appendix A's
@@ -171,5 +171,5 @@ func TestParseRedefineSelfReferenceOccursPaddedUnbounded(t *testing.T) {
 		"lib.xsd": wrap("urn:a", `<xs:group name="g"><xs:sequence>`+
 			`<xs:element name="a" type="xs:string"/></xs:sequence></xs:group>`),
 	})
-	mustRule(t, err, "cvc-datatype-valid", "maxOccurs value", "is not a nonNegativeInteger")
+	mustRule(t, err, "cvc-datatype-valid", "maxOccurs value", "is not a valid xs:allNNI, which cvc-datatype-valid clause 2.3 requires")
 }

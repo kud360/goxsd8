@@ -3948,6 +3948,12 @@ func (n occursNumeral) compare(m occursNumeral) int {
 // (nonNegativeIntegerLexical): xs:nonNegativeInteger is unbounded (§3.4.20), so a
 // literal past math.MaxInt is datatype-valid and is never charged here (#1780).
 //
+// The message names the type attr declares. For minOccurs it is
+// xs:nonNegativeInteger, failed at the clause integerFaultClause names. For
+// maxOccurs it is xs:allNNI, the union of xs:nonNegativeInteger and the
+// enumeration {unbounded}: every caller takes "unbounded" before calling here,
+// so a lexical charged here fails both members, clause 2.3.
+//
 // NOT p-props-correct (§3.9.6.1). That constraint quantifies over an existing
 // particle's PROPERTIES, and occursOf returns this error before reaching
 // xsd.NewOccurs/xsd.NewUnboundedOccurs, so no Occurs and no Particle is ever
@@ -3957,8 +3963,13 @@ func (n occursNumeral) compare(m occursNumeral) int {
 func nonNegativeNumeral(lexical string, loc xsderr.Loc, attr string) (occursNumeral, error) {
 	s := collapseTrim(lexical)
 	if _, ok := nonNegativeIntegerLexical(s); !ok {
+		if attr == "maxOccurs" {
+			return "", xsderr.New(ruleDatatypeValid, loc,
+				"%s value %q is not a valid xs:allNNI, which %s clause 2.3 requires", attr, lexical, ruleDatatypeValid)
+		}
 		return "", xsderr.New(ruleDatatypeValid, loc,
-			"%s value %q is not a nonNegativeInteger", attr, lexical)
+			"%s value %q is not a valid xs:nonNegativeInteger, which %s clause %d requires",
+			attr, lexical, ruleDatatypeValid, integerFaultClause(s))
 	}
 	digits := strings.TrimLeft(strings.TrimLeft(s, "+-"), "0")
 	if digits == "" {
