@@ -107,7 +107,6 @@ const (
 	constructOtherPrimitive
 	constructSharedVariant
 	constructUntrackedModel
-	constructXsiAttribute
 	constructXsiType
 )
 
@@ -126,7 +125,6 @@ var constructNames = [...]string{
 	constructOtherPrimitive:      "an atomic simple type whose primitive is ·implementation-defined·, other than xs:precisionDecimal",
 	constructSharedVariant:       "a union simple type two of whose basic members get one Go type",
 	constructUntrackedModel:      "a content model the content matcher does not track",
-	constructXsiAttribute:        "an attribute use in the xsi namespace",
 	constructXsiType:             "an element carrying xsi:type",
 }
 

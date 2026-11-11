@@ -20,6 +20,7 @@
 //	const Bare, Pointer, Slice Shape
 //	func ParticleShape(occurs xsd.Occurs, sealed bool) (s Shape, ok bool)
 //	func AttributeShape(schema *xsd.Schema, u xsd.AttributeUse, sealed bool) Shape
+//	func SuppliedValueConstraint(schema *xsd.Schema, u xsd.AttributeUse) (vc xsd.ValueConstraint, ok bool)
 //	const ValueLocal = "value"
 //	const ValueShape = Bare
 //	type Atomic uint8

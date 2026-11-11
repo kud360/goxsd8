@@ -196,8 +196,6 @@ func TestDecodeDeclines(t *testing.T) {
 		{"attribute of a list of a union of xs:string and xs:token", root(`<xs:sequence><xs:element name="a" type="xs:string"/></xs:sequence><xs:attribute name="b"><xs:simpleType><xs:list><xs:simpleType><xs:union memberTypes="xs:string xs:token"/></xs:simpleType></xs:list></xs:simpleType></xs:attribute>`),
 			` b="1.0"`, a, constructSharedVariant, 1, 1},
 		{"union of xs:string and xs:token", sequenceOf(`<xs:element name="a"><xs:simpleType><xs:union memberTypes="xs:string xs:token"/></xs:simpleType></xs:element>`), "", a, constructSharedVariant, 1, 1},
-		{"attribute use in the xsi namespace", `<xs:import namespace="http://www.w3.org/2001/XMLSchema-instance"/>` +
-			root(`<xs:sequence><xs:element name="a" type="xs:string"/></xs:sequence><xs:attribute ref="xsi:type"/>`), "", a, constructXsiAttribute, 1, 1},
 		{"nillable declaration of a type with an xsi:nil use", `<xs:import namespace="http://www.w3.org/2001/XMLSchema-instance"/>` +
 			`<xs:element name="r" nillable="true"><xs:complexType><xs:sequence><xs:element name="a" type="xs:string"/></xs:sequence><xs:attribute ref="xsi:nil"/></xs:complexType></xs:element>`,
 			` xsi:nil="true"`, "", constructNillable, 1, 1},
@@ -484,10 +482,9 @@ func TestDecodeUndeclaredRootXsiType(t *testing.T) {
 // of one construct, from two schemas and declining sites, have equal
 // Constructs, and declines of two different constructs have different ones.
 // One row per construct group: the declaration, the content, by mixed content
-// and by {open content}, a particle, an attribute use and xsi:type.
+// and by {open content}, a particle, a simple type and xsi:type.
 func TestDeclineConstruct(t *testing.T) {
 	const a = `<s:a>x</s:a>`
-	xsiImport := `<xs:import namespace="http://www.w3.org/2001/XMLSchema-instance"/>`
 	type decl struct{ decls, attrs, content string }
 	rows := []struct {
 		group string
@@ -509,9 +506,9 @@ func TestDeclineConstruct(t *testing.T) {
 			{sequenceOf(`<xs:choice maxOccurs="2"><xs:element name="a" type="xs:string"/></xs:choice>`), "", a},
 			{root(`<xs:choice><xs:sequence><xs:element name="a" type="xs:string"/></xs:sequence><xs:element name="b" type="xs:string"/></xs:choice>`), "", a},
 		}},
-		{"attribute use", [2]decl{
-			{xsiImport + root(`<xs:sequence><xs:element name="a" type="xs:string"/></xs:sequence><xs:attribute ref="xsi:type"/>`), "", a},
-			{xsiImport + root(`<xs:sequence><xs:element name="b" type="xs:string"/></xs:sequence><xs:attribute name="c" type="xs:string"/><xs:attribute ref="xsi:schemaLocation"/>`), "", `<s:b>y</s:b>`},
+		{"simple type", [2]decl{
+			{root(`<xs:sequence><xs:element name="a" type="xs:string"/></xs:sequence><xs:attribute name="k"><xs:simpleType><xs:union memberTypes="xs:string xs:token"/></xs:simpleType></xs:attribute>`), "", a},
+			{sequenceOf(`<xs:element name="a"><xs:simpleType><xs:union memberTypes="xs:string xs:token"/></xs:simpleType></xs:element>`), "", a},
 		}},
 		{"xsi:type", [2]decl{
 			{`<xs:complexType name="rt"><xs:sequence><xs:element name="a" type="xs:string"/></xs:sequence></xs:complexType><xs:element name="r" type="s:rt"/>`, ` xsi:type="s:rt"`, a},

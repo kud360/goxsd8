@@ -45,17 +45,17 @@ var ErrTypeMismatch = errors.New("codec: T is not the type codegen emits for the
 // as XML 1.0 §3.3.3 normalized them, an element's the concatenation of its
 // character children. Where the post-schema-validation infoset supplies a
 // value it is read from that value, the {lexical form} of a value constraint
-// under the same normalization: for an absent attribute whose use has an
-// effective value constraint (§3.5.4 key-evc; §3.4.4.2 key-dflt-att, §3.4.5.1
-// sic-attrDefault), and for an element with neither element nor character
-// children whose declaration has a {value constraint} (§3.3.4.3 cvc-elt
-// clause 5.1, §3.3.5.4 sic-eltType), of simple type or with simple content,
-// whose value field holds it. For a special type, whose Go type is string
-// (codegen's package doc, "# Simple types"), and for a simple type whose
-// atomic Go type is string, the value is that string. For every other it is
-// the value backend's governing mapping of the type
-// ([value.GoverningMapping]) maps that string to, through Parse with the
-// item's namespace bindings in scope (Datatypes §4.1.4 cvc-datatype-valid
+// under the same normalization: for an absent attribute whose use's effective
+// value constraint supplies one (codegen's package doc, "# Attributes";
+// §3.4.4.2 key-dflt-att clause 4, §3.4.5.1 sic-attrDefault), and for an
+// element with neither element nor character children whose declaration has a
+// {value constraint} (§3.3.4.3 cvc-elt clause 5.1, §3.3.5.4 sic-eltType), of
+// simple type or with simple content, whose value field holds it. For a
+// special type, whose Go type is string (codegen's package doc, "# Simple
+// types"), and for a simple type whose atomic Go type is string, the value is
+// that string. For every other it is the value backend's governing mapping of
+// the type ([value.GoverningMapping]) maps that string to, through Parse with
+// the item's namespace bindings in scope (Datatypes §4.1.4 cvc-datatype-valid
 // clause 2.1): an element's own for its content, its owner element's for an
 // attribute, and for a supplied value those in scope at the schema document
 // element that wrote the value constraint ([value.ConstraintContext]), never
@@ -136,16 +136,17 @@ var ErrTypeMismatch = errors.New("codec: T is not the type codegen emits for the
 // where the item has none, it is the instance's own even where a fixed value
 // constraint holds it to an equal one that is not identical (§3.5.4 cvc-au,
 // cvc-elt clause 5.2.2.2.2): -0 against fixed 0 on xs:double decodes to
-// negative zero. The field of an optional attribute use with an effective
-// value constraint is the Go type codegen gives its simple type itself, as
-// codegen emits it, holding the supplied value when the attribute is absent;
-// a whitespace-only element has a character child and holds its own value;
-// and an element absent from the instance supplies nothing, its field nil or
-// not appended to. An element of type xs:anyType holds no such value: its
-// field, or T for the document element, holds its content raw (item 6), and
-// its {value constraint} supplies none, since its {content type} is mixed
-// and it has no [schema normalized value] (§3.3.5.4 sic-eltType), so an
-// empty one's Text is "" whatever its default or fixed value.
+// negative zero. The field of an optional attribute use whose effective value
+// constraint supplies a value is the Go type codegen gives its simple type
+// itself, as codegen emits it, holding the supplied value when the attribute
+// is absent; a whitespace-only element has a character child and holds its
+// own value; and an element absent from the instance supplies nothing, its
+// field nil or not appended to. An element of type xs:anyType holds no such
+// value: its field, or T for the document element, holds its content raw
+// (item 6), and its {value constraint} supplies none, since its {content
+// type} is mixed and it has no [schema normalized value] (§3.3.5.4
+// sic-eltType), so an empty one's Text is "" whatever its default or fixed
+// value.
 //
 // Every instance Loc an error of Decode carries — a source fault's, a
 // violation's, an undecided check's, a decline's and item 8's — names the
@@ -423,20 +424,20 @@ var ErrTypeMismatch = errors.New("codec: T is not the type codegen emits for the
 //     7).
 //   - The field of a particle or attribute use of simple type: for a local
 //     element declaration's particle and an attribute use it is V, *V or []V
-//     by its occurrence, an attribute's by its use's {required} and its
-//     effective value constraint (§3.5.4 key-evc), V the Go type codegen
-//     gives that simple type, A or []A; for an <element ref> particle it is
-//     N, *N or []N, N the named type codegen emits for the referenced
-//     declaration, matched as any type other than V whose underlying type is
-//     V, never by name; V itself, a local particle's type, does not pass, so
-//     a ref's field of simple type and a local one's never accept one Go type,
-//     except where V is a datatype struct D or a union's interface I: V and N
-//     are then each a struct of D's shape, or each any interface of one
-//     unexported method, as T is, so either field accepts both. For a list of
-//     D or of a union a local field's V is an unnamed slice of such a struct
-//     or interface and a ref's N a defined slice type over one. A union's
-//     optional field, a particle's or an attribute use's, is the bare
-//     interface, never a pointer, nil meaning absent.
+//     by its occurrence, an attribute's as codegen's package doc
+//     "# Attributes" gives it, V the Go type codegen gives that simple type, A
+//     or []A; for an <element ref> particle it is N, *N or []N, N the named
+//     type codegen emits for the referenced declaration, matched as any type
+//     other than V whose underlying type is V, never by name; V itself, a
+//     local particle's type, does not pass, so a ref's field of simple type
+//     and a local one's never accept one Go type, except where V is a datatype
+//     struct D or a union's interface I: V and N are then each a struct of D's
+//     shape, or each any interface of one unexported method, as T is, so
+//     either field accepts both. For a list of D or of a union a local field's
+//     V is an unnamed slice of such a struct or interface and a ref's N a
+//     defined slice type over one. A union's optional field, a particle's or
+//     an attribute use's, is the bare interface, never a pointer, nil meaning
+//     absent.
 //   - The field of a particle whose element declaration, local or
 //     referenced, has a complex {type definition} other than xs:anyType
 //     itself: S, *S or []S by its occurrence, S a struct held to that type
@@ -3497,9 +3498,6 @@ func attributeUse(schema *xsd.Schema, u xsd.AttributeUse) (attribute, error) {
 		return attribute{}, fmt.Errorf("codec: the {attribute declaration} of attribute use %s does not resolve", u.DeclarationName())
 	}
 	subject := fmt.Sprintf("attribute %s declared at %s", decl.Name(), decl.Loc())
-	if decl.Name().Space == xsd.XMLSchemaInstanceNS {
-		return attribute{}, decline(constructXsiAttribute, subject)
-	}
 	st, ok := schema.ResolvedSimpleType(decl.TypeDefinition())
 	if !ok {
 		return attribute{}, fmt.Errorf("codec: the {type definition} of %s does not resolve", subject)
@@ -3508,7 +3506,7 @@ func attributeUse(schema *xsd.Schema, u xsd.AttributeUse) (attribute, error) {
 	if err != nil {
 		return attribute{}, err
 	}
-	vc, has := schema.EffectiveValueConstraint(u)
+	vc, has := goshape.SuppliedValueConstraint(schema, u)
 	return attribute{shape: shape(goshape.AttributeShape(schema, u, g.sealed())), scalar: newScalar(g, st, subject, vc, has)}, nil
 }
 
