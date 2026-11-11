@@ -97,7 +97,6 @@ const (
 	constructTypeTable construct = iota + 1
 	constructNillable
 	constructMixedContent
-	constructOpenContent
 	constructAllOccurs
 	constructSplicedSequence
 	constructNestedGroup
@@ -115,7 +114,6 @@ var constructNames = [...]string{
 	constructTypeTable:           "an element declaration with a {type table}",
 	constructNillable:            "an element declaration with {nillable} true",
 	constructMixedContent:        "mixed content",
-	constructOpenContent:         "{open content}",
 	constructAllOccurs:           "a content all group with {min occurs} 0 whose model group is not emptiable",
 	constructSplicedSequence:     "a content sequence with {min occurs} 0 and {max occurs} 1 whose model group is emptiable",
 	constructNestedGroup:         "a nested model group particle",

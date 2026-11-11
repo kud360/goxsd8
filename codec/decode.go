@@ -1850,12 +1850,12 @@ func bindComplex[K comparable](run *bindRun, decl xsd.ElementDeclaration, ct xsd
 			return nil, decline(d, typeSubject)
 		}
 		// codegen/emit.go's shape: a choice occurring once, in a type with no
-		// attribute field (goshape.HasAttributeFields), is the type itself
-		// unless it has {particles} and one occurrence of it is emptiable
-		// (cos-group-emptiable). Every particle gives an alternative or
+		// attribute field (goshape.HasAttributeFields) and no {open content}, is
+		// the type itself unless it has {particles} and one occurrence of it is
+		// emptiable (cos-group-emptiable). Every particle gives an alternative or
 		// declines, so the counts decide before any is bound. Only armOnce
 		// occurs exactly once, so no other arm is ever the type itself.
-		if arm == armOnce && group.Compositor() == xsd.CompositorChoice && !goshape.HasAttributeFields(ct) &&
+		if arm == armOnce && group.Compositor() == xsd.CompositorChoice && !goshape.HasAttributeFields(ct) && c.OpenContent == nil &&
 			(len(group.Particles()) == 0 || !run.p.schema.ParticleEmptiable(content)) {
 			root := &choiceRoot{}
 			index.store(key, root)
@@ -1926,9 +1926,11 @@ func (run *bindRun) nested(el xsd.ElementDeclaration, ct xsd.ComplexType) (compl
 // its fields named from names, or the first decline Decode's doc states for
 // its particles, item 5, typeSubject naming the type. armFlat is
 // bindFlattened's and armOccurrence bindOccurrence's, over the particle's
-// occurs; of armOnce, a choice is the sequence whose one member is its
-// *choice, and a sequence or all group the sequence of its particles
-// (bindSequence).
+// occurs; of armOnce, a choice is the sequence whose members are its *choice
+// and the field ct's {open content} gives, if any (sequence.openContent), and
+// a sequence or all group the sequence of its particles (bindSequence); then,
+// for a choice that took an open-content field, the plain error
+// wildcardSlot.attributor states.
 func bindContent(run *bindRun, ct xsd.ComplexType, group xsd.ModelGroup, occurs xsd.Occurs, arm contentArm, names *goname.Namer, typeSubject string) (elementContent, error) {
 	switch arm {
 	case armFlat:
@@ -1941,7 +1943,14 @@ func bindContent(run *bindRun, ct xsd.ComplexType, group xsd.ModelGroup, occurs 
 			if err != nil {
 				return nil, err
 			}
-			return &sequence{p: run.p, members: []contentMember{c}, index: x}, nil
+			s := &sequence{p: run.p, members: []contentMember{c}, index: x}
+			if !s.openContent(ct, names) {
+				return s, nil
+			}
+			if _, err := s.index.wild.attributor(run.p.schema); err != nil {
+				return nil, err
+			}
+			return s, nil
 		}
 		return bindSequence(run, ct, group.Particles(), names, typeSubject)
 	}
@@ -2131,15 +2140,18 @@ func (s fieldSink) put(p *pipeline, r *xmltree.Reader, start *xmltree.StartEleme
 }
 
 // bindSequence returns the sequence of particles, the {particles} of the
-// content sequence or spliced all group of ct, its members bound by bind,
+// content sequence or spliced all group of ct, its members bound by bind and
+// then the field ct's {open content} gives, if any (sequence.openContent),
 // each filled from the children attributed to it (eachChild), whatever their
 // instance order (§3.8.4.1.3 all-mg), or the first decline Decode's doc states
-// for them, item 5, typeSubject naming the type.
+// for them, item 5, typeSubject naming the type, or, once every member is
+// bound, the plain error wildcardSlot.attributor states.
 func bindSequence(run *bindRun, ct xsd.ComplexType, particles []xsd.Particle, names *goname.Namer, typeSubject string) (*sequence, error) {
 	s := &sequence{p: run.p, index: newChildIndex()}
 	if err := s.bind(run, ct, particles, nil, names, typeSubject); err != nil {
 		return nil, err
 	}
+	s.openContent(ct, names)
 	if _, err := s.index.wild.attributor(run.p.schema); err != nil {
 		return nil, err
 	}
@@ -2237,6 +2249,45 @@ func exactlyOnce(occurs xsd.Occurs) bool {
 	return occurs.Min() == 1 && bounded && upper == 1
 }
 
+// openContentField returns the field the {open content} of ct gives the
+// struct codegen emits for ct, and true, or false for a ct with none
+// (codegen/doc.go "# Open content"): read from ct's own {content type}, as
+// codegen reads it, so that no clause of §3.4.2.3.3 dcl.ctd.ctcc.common is
+// recomputed here, its name claimed from names, the struct's Namer, after the
+// particle fields', as if from the local name openContent, and its Go type []E,
+// E of AnyElement's shape (rawArm), never a pointer. Mixed content declines
+// first (contentGroup), so no such field holds AnyChild.
+func openContentField(ct xsd.ComplexType, names *goname.Namer) (field, bool) {
+	content, isElement := ct.ContentType().(xsd.ElementContent)
+	if !isElement || content.OpenContent == nil {
+		return field{}, false
+	}
+	return field{name: names.Claim("openContent"), shape: shapeRepeated, arm: rawArm{}}, true
+}
+
+// openContent appends to s, after every particle's member, the field ct's
+// {open content} gives (openContentField), its name claimed from names, and
+// reports whether it did. The field takes the next attribution target, which
+// s.index's wildcardSlot, created for it where no wildcard particle did,
+// places at the empty position xsd.Matcher.NextParticle reports for an
+// [*xsd.OpenContent] answer, so that a Matcher attributes every child of a
+// type with {open content}, never its expanded name alone (eachChild): a
+// child a particle's name takes is the {open content}'s where the {particle}
+// could not take it at that point (§3.4.4.4; §3.4.4.3 cvc-complex-content
+// clauses 2.3 and 3.3).
+func (s *sequence) openContent(ct xsd.ComplexType, names *goname.Namer) bool {
+	f, ok := openContentField(ct, names)
+	if !ok {
+		return false
+	}
+	if s.index.wild == nil {
+		s.index.wild = &wildcardSlot{ct: ct}
+	}
+	s.index.wild.places = append(s.index.wild.places, place{position: []int{}, index: s.targets()})
+	s.members = append(s.members, f)
+	return true
+}
+
 // wildcardSubject is the subject of the n-th wildcard particle of the
 // content model of the type typeSubject names, as item 5 of Decode's doc
 // states it.
@@ -2257,11 +2308,13 @@ func wildcardField(occurs xsd.Occurs, subject string) (field, error) {
 }
 
 // wildcardSlot marks a content sequence, choice or all group holding a wildcard
-// particle, whose children a Matcher attributes: ct, the complex type whose
-// {content type} it is, and places, one per wildcard particle in particle
-// order, which give the attribution target (childIndex) of a child the
-// Matcher attributes to that particle (attributeChild). It is a slice scanned
-// in order, never a map (STYLE D2).
+// particle, or of a complex type with {open content}, whose children a Matcher
+// attributes: ct, the complex type whose {content type} it is, and places, one
+// per wildcard particle in particle order, then one for the open-content
+// field, at the empty position (sequence.openContent), which give the
+// attribution target (childIndex) of a child the Matcher attributes to that
+// particle or to the {open content} (attributeChild). It is a slice scanned in
+// order, never a map (STYLE D2).
 type wildcardSlot struct {
 	ct     xsd.ComplexType
 	places []place
@@ -2273,7 +2326,8 @@ type wildcardSlot struct {
 // group flattened on the way, and index, the attribution target of the
 // sequence that holds it (childIndex), or the alternative of the flattened
 // content model that holds it. A wildcardSlot holds one per wildcard
-// particle, a flattened one per basic particle.
+// particle and one for an open-content field, a flattened one per basic
+// particle.
 type place struct {
 	position []int
 	index    int
@@ -2292,7 +2346,7 @@ func placeAt(places []place, pos []int) (int, bool) {
 }
 
 // wildAttributor attributes one element's children to a content model's
-// wildcard particles (attributeChild): m, a fresh Matcher over the
+// wildcard particles and {open content} (attributeChild): m, a fresh Matcher over the
 // {content type} of the wildcardSlot that built it, and places, that slot's.
 type wildAttributor struct {
 	m      *xsd.Matcher
@@ -2301,7 +2355,8 @@ type wildAttributor struct {
 
 // attributor returns a wildAttributor over a fresh Matcher of w.ct's
 // {content type} and w's places, which attributes one element's children
-// (eachChild), or nil for a nil w, no wildcard particle. The binds call it
+// (eachChild), or nil for a nil w, no wildcard particle and no {open
+// content}. The binds call it
 // once all of a content model's particles are bound, so that CheckDecode
 // returns what Decode does, and on a premise: ContentMatcher's answer depends
 // on ct alone, and declines only a {content type} that is not element-only,
@@ -2504,12 +2559,14 @@ func (s branchSink) put(_ *pipeline, r *xmltree.Reader, start *xmltree.StartElem
 // field its particle gives occurring exactly once, so never a pointer or a
 // slice. places holds each alternative's Matcher position with its index in
 // sealed.alts, and ct is the complex type whose {content type} it is, whose
-// Matcher attributes every child (§3.8.4.2 key-vpath).
+// Matcher attributes every child (§3.8.4.2 key-vpath). open is the field ct's
+// {open content} gives (openContentField), the struct's second, nil for none.
 type flattened struct {
 	name   string
 	sealed *sealed
 	places []place
 	ct     xsd.ComplexType
+	open   *field
 }
 
 // bindFlattened returns the flattened content of group, the model group of
@@ -2525,7 +2582,8 @@ type flattened struct {
 // an earlier particle takes declines, since a child is attributed by its
 // particle's position and not by its name. A particle with {max occurs} 0 is
 // item 5's plain error, an element particle's after its declaration's own
-// constructs, as a sequence's is. Last, a content model
+// constructs, as a sequence's is. Then the field ct's {open content} gives, if
+// any, claims its name from names (openContentField). Last, a content model
 // xsd.Schema.ContentMatcher does not track declines (trackedMatcher).
 func bindFlattened(run *bindRun, ct xsd.ComplexType, group xsd.ModelGroup, names *goname.Namer, typeSubject string) (*flattened, error) {
 	f := &flattened{name: names.Claim(group.Compositor().String()), sealed: &sealed{p: run.p}, ct: ct}
@@ -2589,18 +2647,46 @@ func bindFlattened(run *bindRun, ct xsd.ComplexType, group xsd.ModelGroup, names
 	if err != nil {
 		return nil, fmt.Errorf("codec: %s: %w", typeSubject, err)
 	}
+	if open, ok := openContentField(ct, names); ok {
+		f.open = &open
+	}
 	if _, err := trackedMatcher(run.p.schema, ct); err != nil {
 		return nil, err
 	}
 	return f, nil
 }
 
-// width is the one field holding the slice.
-func (f *flattened) width() int { return 1 }
+// width is the one field holding the slice, and the open-content field, if
+// any.
+func (f *flattened) width() int { return 1 + openWidth(f.open) }
+
+// openWidth is the number of fields open gives a struct: 1, or 0 for a nil
+// open, a type with no {open content}.
+func openWidth(open *field) int {
+	if open == nil {
+		return 0
+	}
+	return 1
+}
+
+// checkOpen holds field 1 of t, the struct's field after its one content
+// field, to open, the open-content field of a flattened or occurrence
+// content, and returns its sink, nil for a nil open.
+func checkOpen(open *field, t reflect.Type, cx *checkContext) (sink, error) {
+	if open == nil {
+		return nil, nil
+	}
+	sinks, err := open.sinks(t, 1, cx)
+	if err != nil {
+		return nil, err
+	}
+	return sinks[0], nil
+}
 
 // check holds t's first field to the one holding f's slice: f's name, not
 // embedded, a slice whose element type is held to f's sealed interface as a
-// choice's is (sealed.checkSite). It returns the boundFlattened that sets it.
+// choice's is (sealed.checkSite), and its second to the open-content field,
+// if any (checkOpen). It returns the boundFlattened that sets them.
 func (f *flattened) check(t reflect.Type, cx *checkContext) (contentFiller, error) {
 	got := t.Field(0)
 	if got.Name != f.name || got.Anonymous || got.Type.Kind() != reflect.Slice {
@@ -2610,14 +2696,19 @@ func (f *flattened) check(t reflect.Type, cx *checkContext) (contentFiller, erro
 	if err != nil {
 		return nil, err
 	}
-	return boundFlattened{flattened: f, bound: bc}, nil
+	open, err := checkOpen(f.open, t, cx)
+	if err != nil {
+		return nil, err
+	}
+	return boundFlattened{flattened: f, bound: bc, open: open}, nil
 }
 
 // boundFlattened is a flattened content model whose check held, bound its
-// interface's branches.
+// interface's branches, and open the open-content field's sink, nil for none.
 type boundFlattened struct {
 	flattened *flattened
 	bound     *boundChoice
+	open      sink
 }
 
 // fill appends to the slice field of out, the struct, one new item per child
@@ -2629,8 +2720,10 @@ type boundFlattened struct {
 // elementReader reads from r up to the child's end tag. A child the Matcher
 // rejects is unparticled's plain error, and one at a position no alternative
 // holds a defect of Decode's, a plain error too: Decode validated the
-// instance first. A child attributed to a wildcard particle is read raw;
-// every other carries no xsi:type, or fill returns the xsi:type decline
+// instance first. A child the Matcher attributes to the {open content} is
+// appended raw to the open-content field instead, in document order, and
+// gives the slice no item. A child attributed to a wildcard particle is read
+// raw; every other carries no xsi:type, or fill returns the xsi:type decline
 // Decode's doc states, item 7. A substitution group's member is attributed to
 // its head's particle (cvc-accept clause 2.3.2), whose branch field's
 // groupReader reads it.
@@ -2652,6 +2745,12 @@ func (b boundFlattened) fill(r *xmltree.Reader, _ *xmltree.StartElement, out ref
 		case *xmltree.StartElement:
 			name := expanded(tok.Name())
 			t, pos, ok := m.NextParticle(name)
+			if _, open := t.(*xsd.OpenContent); open && b.open != nil {
+				if err := b.open.put(f.sealed.p, r, tok, out); err != nil {
+					return err
+				}
+				continue
+			}
 			if _, wild := t.(xsd.Wildcard); !wild {
 				if err := checkXsiType(tok); err != nil {
 					return err
@@ -2700,7 +2799,9 @@ func trackedMatcher(schema *xsd.Schema, ct xsd.ComplexType) (*xsd.Matcher, error
 // for one occurrence of group, its item, in shape, goshape.ParticleShape's for
 // the particle's occurrence over a struct for a sequence and a sealed
 // interface for a choice. ct is the complex type whose {content type} it is,
-// whose Matcher attributes every child (§3.8.4.2 key-vpath).
+// whose Matcher attributes every child (§3.8.4.2 key-vpath). open is the
+// field ct's {open content} gives (openContentField), the struct's second,
+// never the item's, nil for none.
 type occurrence struct {
 	name  string
 	shape shape
@@ -2708,6 +2809,7 @@ type occurrence struct {
 	item  occurrenceItem
 	ct    xsd.ComplexType
 	p     *pipeline
+	open  *field
 }
 
 // An occurrenceItem is the type for one occurrence of an occurrence's model
@@ -2733,8 +2835,10 @@ type occurrenceItem interface {
 // Namer, as codegen names one occurrence's struct; a choice's is the choice
 // bindChoice binds, alternative j taking target j. The item's particles are
 // bound at the positions below the content {particle} that ct's Matcher
-// reports, so its places are the Matcher's. Last, a content model
-// xsd.Schema.ContentMatcher does not track declines (trackedMatcher).
+// reports, so its places are the Matcher's. Then the field ct's {open
+// content} gives, if any, claims its name from names (openContentField).
+// Last, a content model xsd.Schema.ContentMatcher does not track declines
+// (trackedMatcher).
 func bindOccurrence(run *bindRun, ct xsd.ComplexType, group xsd.ModelGroup, occurs xsd.Occurs, names *goname.Namer, typeSubject string) (*occurrence, error) {
 	o := &occurrence{name: names.Claim(group.Compositor().String()), group: group, ct: ct, p: run.p}
 	choice := group.Compositor() == xsd.CompositorChoice
@@ -2759,6 +2863,9 @@ func bindOccurrence(run *bindRun, ct xsd.ComplexType, group xsd.ModelGroup, occu
 			return nil, err
 		}
 		o.item = seq
+	}
+	if open, ok := openContentField(ct, names); ok {
+		o.open = &open
 	}
 	if _, err := trackedMatcher(run.p.schema, ct); err != nil {
 		return nil, err
@@ -2828,12 +2935,13 @@ func (s itemBranchSink) put(_ *pipeline, r *xmltree.Reader, start *xmltree.Start
 	return s.bound.set(r, start, s.alt, out)
 }
 
-// width is the one occurrence field.
-func (o *occurrence) width() int { return 1 }
+// width is the one occurrence field, and the open-content field, if any.
+func (o *occurrence) width() int { return 1 + openWidth(o.open) }
 
 // check holds t's first field to the occurrence field: o's name, not
 // embedded, of o's shape over the item's Go type, which the item holds
-// (occurrenceItem.itemSinks). It returns the boundOccurrence that sets it.
+// (occurrenceItem.itemSinks), and its second to the open-content field, if
+// any (checkOpen). It returns the boundOccurrence that sets them.
 func (o *occurrence) check(t reflect.Type, cx *checkContext) (contentFiller, error) {
 	got := t.Field(0)
 	it, ok := o.shape.elem(got.Type)
@@ -2844,15 +2952,21 @@ func (o *occurrence) check(t reflect.Type, cx *checkContext) (contentFiller, err
 	if err != nil {
 		return nil, err
 	}
-	return boundOccurrence{occurrence: o, item: it, sinks: sinks}, nil
+	open, err := checkOpen(o.open, t, cx)
+	if err != nil {
+		return nil, err
+	}
+	return boundOccurrence{occurrence: o, item: it, sinks: sinks, open: open}, nil
 }
 
 // boundOccurrence is an occurrence whose check held: item, the Go type of
-// one occurrence, and sinks[i], setting the item's target i.
+// one occurrence, sinks[i], setting the item's target i, and open, the
+// open-content field's sink, nil for none.
 type boundOccurrence struct {
 	occurrence *occurrence
 	item       reflect.Type
 	sinks      []sink
+	open       sink
 }
 
 // fill sets the occurrence field of out, the struct, from the children of
@@ -2869,9 +2983,11 @@ type boundOccurrence struct {
 // item. No child leaves the field nil or empty. A child the Matcher rejects
 // is unparticled's plain error, and a second item of a field that holds one,
 // or a position the item holds no target for, a defect of Decode's, a plain
-// error too: Decode validated the instance first. A child attributed to a
-// wildcard particle is read raw; every other carries no xsi:type, or fill
-// returns the xsi:type decline Decode's doc states, item 7.
+// error too: Decode validated the instance first. A child the Matcher
+// attributes to the {open content} is appended raw to the open-content field
+// instead, in document order, and neither opens nor continues an item. A
+// child attributed to a wildcard particle is read raw; every other carries no
+// xsi:type, or fill returns the xsi:type decline Decode's doc states, item 7.
 func (b boundOccurrence) fill(r *xmltree.Reader, _ *xmltree.StartElement, out reflect.Value) error {
 	o := b.occurrence
 	m, err := trackedMatcher(o.p.schema, o.ct)
@@ -2899,11 +3015,17 @@ func (b boundOccurrence) fill(r *xmltree.Reader, _ *xmltree.StartElement, out re
 			return nil
 		case *xmltree.StartElement:
 			t, pos, ok := m.NextParticle(expanded(tok.Name()))
+			if _, open := t.(*xsd.OpenContent); open && b.open != nil {
+				if err := b.open.put(o.p, r, tok, out); err != nil {
+					return err
+				}
+				continue
+			}
 			at, attributed, err := attributeAt(t, pos, places, x.children, tok)
 			if err != nil {
 				return err
 			}
-			if !at.wild {
+			if !at.raw {
 				if err := checkXsiType(tok); err != nil {
 					return err
 				}
@@ -3256,9 +3378,6 @@ const (
 func contentGroup(schema *xsd.Schema, content xsd.ElementContent, typeSubject string) (particle xsd.Particle, group xsd.ModelGroup, arm contentArm, d construct, err error) {
 	if content.Mixed {
 		return xsd.Particle{}, xsd.ModelGroup{}, 0, constructMixedContent, nil
-	}
-	if content.OpenContent != nil {
-		return xsd.Particle{}, xsd.ModelGroup{}, 0, constructOpenContent, nil
 	}
 	group, _, err = goshape.ModelGroupTerm(schema, content.Particle.Term())
 	if err != nil {
@@ -3703,19 +3822,21 @@ func (b *boundBinding) fill(r *xmltree.Reader, root *xmltree.StartElement, out r
 // with the attribution target it is attributed to in x, which reads r up to
 // that child's end tag. The child carries no xsi:type, or eachChild returns
 // the xsi:type decline Decode's doc states, item 7, unless it is attributed
-// to a wildcard particle, whose match is read raw. With no wildcard
-// particle, a nil x.wild, the child is attributed by its expanded name to
-// x.children's target; with one or more, by one wildAttributor x.wild builds
-// (wildcardSlot.attributor), its fresh Matcher fed every child in document
-// order (§3.4.4.4 key-att-to), which puts each name to the element particles
-// before the wildcards (cvc-accept; §3.8.6.4 cos-nonambig): a child
-// attributed to an element declaration to its expanded name's target in
-// x.children, the declaration being a substitution group's head where the
-// child is a member, and one attributed to a wildcard particle to that
-// particle's target, which attributeChild looks up in the attributor's
-// places by the Matcher's position. Decode validated the instance first, so
-// every child is attributed, and to a particle; the plain error unparticled
-// returns where one is not is a defect of Decode's.
+// to a wildcard particle or to the {open content}, whose match is read raw.
+// With no wildcard particle and no {open content}, a nil x.wild, the child is
+// attributed by its expanded name to x.children's target; otherwise by one
+// wildAttributor x.wild builds (wildcardSlot.attributor), its fresh Matcher
+// fed every child in document order (§3.4.4.4 key-att-to), which puts each
+// name to the element particles before the wildcards (cvc-accept; §3.8.6.4
+// cos-nonambig), and to the {open content} only where neither takes it
+// (§3.4.4.3 cvc-complex-content clauses 2.3 and 3.3): a child attributed to
+// an element declaration to its expanded name's target in x.children, the
+// declaration being a substitution group's head where the child is a member,
+// and one attributed to a wildcard particle or to the {open content} to that
+// particle's or the open-content field's target, which attributeChild looks
+// up in the attributor's places by the Matcher's position. Decode validated
+// the instance first, so every child is attributed; the plain error
+// unparticled returns where one is not is a defect of Decode's.
 func eachChild(r *xmltree.Reader, schema *xsd.Schema, x childIndex, child func(start *xmltree.StartElement, i int) error) error {
 	a, err := x.wild.attributor(schema)
 	if err != nil {
@@ -3734,7 +3855,7 @@ func eachChild(r *xmltree.Reader, schema *xsd.Schema, x childIndex, child func(s
 			if err != nil {
 				return err
 			}
-			if !at.wild {
+			if !at.raw {
 				if err := checkXsiType(tok); err != nil {
 					return err
 				}
@@ -3750,19 +3871,19 @@ func eachChild(r *xmltree.Reader, schema *xsd.Schema, x childIndex, child func(s
 }
 
 // attribution is where attributeChild puts one attributed child: index, the
-// attribution target (childIndex), and wild whether that is a wildcard
-// particle's.
+// attribution target (childIndex), and raw whether that is a wildcard
+// particle's or the open-content field's, whose child is read raw.
 type attribution struct {
 	index int
-	wild  bool
+	raw   bool
 }
 
 // attributeChild returns where the child element start is attributed, as
-// eachChild states, and false where it is attributed to none, or to no
-// particle, an {open content}; a has attributed the children before start,
-// nil where the content model holds no wildcard particle, so that children
-// alone attributes start by its expanded name. Otherwise a's Matcher's answer
-// is attributeAt's, over a's places.
+// eachChild states, and false where it is attributed to none; a has
+// attributed the children before start, nil where the content model holds no
+// wildcard particle and its type no {open content}, so that children alone
+// attributes start by its expanded name. Otherwise a's Matcher's answer is
+// attributeAt's, over a's places.
 func attributeChild(a *wildAttributor, children map[xsd.QName]int, start *xmltree.StartElement) (attribution, bool, error) {
 	if a == nil {
 		i, ok := children[expanded(start.Name())]
@@ -3774,16 +3895,19 @@ func attributeChild(a *wildAttributor, children map[xsd.QName]int, start *xmltre
 
 // attributeAt returns where the child element start is attributed, given t
 // and pos, a Matcher's answer for it (xsd.Matcher.NextParticle), and false
-// where t is neither a wildcard particle nor an element declaration, a
-// rejected name's or an {open content}'s. A wildcard particle's index is the
-// one places holds for its position, its target; a position places holds none
+// where t is none of a wildcard particle, an element declaration and an
+// {open content}, a rejected name's. A wildcard particle's index is the one
+// places holds for its position, its target; a position places holds none
 // for is a defect of the premise the binds rest on, one sequence or choice, or
 // one spliced all group, of element and wildcard particles, nested sequences
 // and all groups spliced and nested choices bound in place
-// (wildcardSlot.attributor), and a plain error. An element declaration's is
-// the target children holds for start's expanded name, the declaration being
-// a substitution group's head where start is a member. Attribution is a
-// closed sum, so the switch is STYLE T2's sealed-sum exception.
+// (wildcardSlot.attributor), and a plain error. An {open content}'s is the
+// one places holds for its empty position, the open-content field's
+// (sequence.openContent), and with none a plain error, a defect of Decode's
+// too. An element declaration's is the target children holds for start's
+// expanded name, the declaration being a substitution group's head where
+// start is a member. Attribution is a closed sum, so the switch is STYLE T2's
+// sealed-sum exception.
 func attributeAt(t xsd.Attribution, pos []int, places []place, children map[xsd.QName]int, start *xmltree.StartElement) (attribution, bool, error) {
 	name := expanded(start.Name())
 	switch t.(type) {
@@ -3792,7 +3916,13 @@ func attributeAt(t xsd.Attribution, pos []int, places []place, children map[xsd.
 		if !placed {
 			return attribution{}, false, fmt.Errorf("codec: %s: element %s is attributed to the wildcard particle at position %v, for which Decode bound no field or alternative", start.Loc(), name, pos)
 		}
-		return attribution{index: i, wild: true}, true, nil
+		return attribution{index: i, raw: true}, true, nil
+	case *xsd.OpenContent:
+		i, placed := placeAt(places, pos)
+		if !placed {
+			return attribution{}, false, fmt.Errorf("codec: %s: element %s is attributed to the {open content}, for which Decode bound no field", start.Loc(), name)
+		}
+		return attribution{index: i, raw: true}, true, nil
 	case xsd.ElementDeclaration:
 		i, ok := children[name]
 		return attribution{index: i}, ok, nil
