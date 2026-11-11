@@ -121,18 +121,17 @@ import "github.com/kud360/goxsd8/xsderr"
 //
 // Since #401 materialised §3.4.2.4 clause 3, an INHERITED attribute use is a
 // member of the deriving type's {attribute uses} too, so it is re-checked at
-// every type that inherits it. The inherited use is a copy that keeps its own
-// Loc, so the charge lands at the ancestor's <attribute> element whichever type
-// reaches it first; only the owner phrase the message names is the type the walk
-// was in. The extra passes cannot change the verdict: the walk is over a set,
-// and a use that passed once passes again. The same repetition reaches the element side by
-// two different routes, an extension's {content type} particle containing the
-// base's and a {default type definition} §3.3.2.1 case 2 copied from the
-// declaration's own {type definition} (walkElementDeclaration), and is harmless
-// for the same reason and one more — e-props-correct clause 2 is charged at the
-// DECLARATION's own Loc (checkElementDefaultValid), which no enclosing type can
-// move, so neither the verdict nor the reported position depends on which route
-// reached it.
+// every type that inherits it. The inherited use is a copy, so the charge is
+// at u.chargedLoc(loc) whichever type reaches it first (NewAttributeUse's loc
+// paragraph); only the owner phrase names the type the walk was in. The extra passes
+// cannot change the verdict: the walk is over a set, and a use that passed once passes
+// again. The same repetition reaches the element side by two different routes, an
+// extension's {content type} particle containing the base's and a {default type
+// definition} §3.3.2.1 case 2 copied from the declaration's own {type definition}
+// (walkElementDeclaration), and is harmless for the same reason and one more —
+// e-props-correct clause 2 is charged at the DECLARATION's own Loc
+// (checkElementDefaultValid), which no enclosing type can move, so neither the verdict nor
+// the reported position depends on which route reached it.
 //
 // {attribute group definitions} are rooted although walking types alone would
 // reach every REFERENCED group's uses — this phase runs after the attribute
