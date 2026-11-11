@@ -121,11 +121,11 @@ import "github.com/kud360/goxsd8/xsderr"
 //
 // Since #401 materialised §3.4.2.4 clause 3, an INHERITED attribute use is a
 // member of the deriving type's {attribute uses} too, so it is re-checked at
-// every type that inherits it and charged against THAT type's Loc rather than
-// the ancestor's — deliberate, because clause 3 makes the use genuinely a
-// property of the derived type and that is the position a reader is looking at.
-// The extra passes cannot change the verdict: the walk is over a set, and a use
-// that passed once passes again. The same repetition reaches the element side by
+// every type that inherits it. The inherited use is a copy that keeps its own
+// Loc, so the charge lands at the ancestor's <attribute> element whichever type
+// reaches it first; only the owner phrase the message names is the type the walk
+// was in. The extra passes cannot change the verdict: the walk is over a set,
+// and a use that passed once passes again. The same repetition reaches the element side by
 // two different routes, an extension's {content type} particle containing the
 // base's and a {default type definition} §3.3.2.1 case 2 copied from the
 // declaration's own {type definition} (walkElementDeclaration), and is harmless
@@ -174,11 +174,10 @@ func (s *Schema) checkComponentValueConstraints() error {
 // checkAttributeUseValueConstraint charges au-props-correct (§3.5.6) clauses 2 and
 // 3 against one Attribute Use, plus a-props-correct clause 2 against the LOCAL
 // declaration a use owns. owner names the enclosing component and loc is its
-// position: an Attribute Use is not one of the eight kinds that retain a Loc
-// (doc.go), so the rejection is charged where a reader must edit — the complex
-// type or attribute group that holds the use — and names the attribute in the
-// message. The owned local declaration is charged at its OWN Loc, which it does
-// retain.
+// position. Both clauses are charged at the use's own <attribute> element
+// (chargedLoc), where a reader must edit, falling back to loc for a use built
+// with the zero Loc; the message names the owner and the attribute. The owned
+// local declaration is charged at its OWN Loc.
 //
 // Clause 2 is decided first, in spec order, so a use violating both clauses
 // reports the more basic failure: its {value constraint} is not a valid default
@@ -226,10 +225,10 @@ func (s *Schema) checkAttributeUseValueConstraint(u AttributeUse, loc xsderr.Loc
 		// itself has a {value constraint}" — so neither is reached.
 		return nil
 	}
-	n := u.DeclarationName()
+	n, at := u.DeclarationName(), u.chargedLoc(loc)
 	t, hasType := s.ResolvedSimpleType(d.TypeDefinition())
 	if hasType {
-		if err := s.checkSimpleDefault(s.valueSpace, ruleAuPropsCorrect, "2", loc, owner+" attribute "+n.String(), t, uvc); err != nil {
+		if err := s.checkSimpleDefault(s.valueSpace, ruleAuPropsCorrect, "2", at, owner+" attribute "+n.String(), t, uvc); err != nil {
 			return err
 		}
 	}
@@ -238,7 +237,7 @@ func (s *Schema) checkAttributeUseValueConstraint(u AttributeUse, loc xsderr.Loc
 		return nil // the declaration is not fixed: clause 3 is discharged
 	}
 	if uvc.Kind() != ValueFixed {
-		return xsderr.New(ruleAuPropsCorrect, loc,
+		return xsderr.New(ruleAuPropsCorrect, at,
 			"%s gives attribute %s a %s value constraint, but the attribute declaration fixes it to %q, and au-props-correct clause 3 requires the use's {value constraint}.{variety} to be fixed too", owner, n, uvc.Kind(), dvc.LexicalForm())
 	}
 	if !hasType {
@@ -246,7 +245,7 @@ func (s *Schema) checkAttributeUseValueConstraint(u AttributeUse, loc xsderr.Loc
 	}
 	identical, decided := s.valueSpace.Identical(s, t, uvc, t, dvc)
 	if decided && !identical {
-		return xsderr.New(ruleAuPropsCorrect, loc,
+		return xsderr.New(ruleAuPropsCorrect, at,
 			"%s fixes attribute %s to %q, but the attribute declaration fixes it to %q, and au-props-correct clause 3 requires the two {value}s to be identical", owner, n, uvc.LexicalForm(), dvc.LexicalForm())
 	}
 	return nil

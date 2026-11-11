@@ -67,7 +67,8 @@ type componentWalk struct {
 	typeDefinitionSlot func(ref TypeDefinitionOrRef, loc xsderr.Loc, ctx string) error
 	// attributeUse is charged on an Attribute Use in both arms. loc is the
 	// enclosing complex type's or attribute group definition's position and owner
-	// names it, because an Attribute Use retains no position of its own.
+	// names it: the charge site's fallback for a use whose own Loc is unknown
+	// (AttributeUse.chargedLoc), and its message's subject.
 	attributeUse func(u AttributeUse, loc xsderr.Loc, owner string) error
 	// attributeGroupRef is charged on an <attributeGroup ref> member of a
 	// container's attribute content, a by-name arm. loc and owner are the

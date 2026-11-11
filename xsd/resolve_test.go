@@ -160,12 +160,18 @@ func keyOrRef(t *testing.T, name xsd.QName, category xsd.IdentityConstraintCateg
 }
 
 // agRefUse builds an attribute use whose {attribute declaration} is an
-// <attribute ref> to name. The use carries the ZERO Loc on purpose: an
-// AttributeUse retains no position, so a rejection must take the enclosing
-// component's (the referrer-Loc convention, resolveReferences).
+// <attribute ref> to name. The use carries the ZERO Loc on purpose: a rejection
+// of a use whose own position is unknown takes the enclosing component's, so
+// every row built from it pins that fallback.
 func agRefUse(t *testing.T, name xsd.QName) xsd.AttributeUse {
 	t.Helper()
-	u, err := xsd.NewAttributeUse(xsderr.Loc{}, false, xsd.AttributeDeclarationRef{Name: name}, nil, nil)
+	return agRefUseAt(t, xsderr.Loc{}, name)
+}
+
+// agRefUseAt is agRefUse positioned at loc, the use's own <attribute> element.
+func agRefUseAt(t *testing.T, loc xsderr.Loc, name xsd.QName) xsd.AttributeUse {
+	t.Helper()
+	u, err := xsd.NewAttributeUse(loc, false, xsd.AttributeDeclarationRef{Name: name}, nil, nil)
 	if err != nil {
 		t.Fatalf("NewAttributeUse(ref %v): %v", name, err)
 	}
@@ -173,8 +179,9 @@ func agRefUse(t *testing.T, name xsd.QName) xsd.AttributeUse {
 }
 
 // agLocalUse builds an attribute use over a sibling LOCAL declaration at loc,
-// named name and typed by typeName. Unlike a ref use, the declaration retains
-// its own position, which is where its {type definition} slot is charged.
+// named name and typed by typeName. Unlike a ref use, it owns a declaration,
+// which retains its own position: that is where its {type definition} slot is
+// charged.
 func agLocalUse(t *testing.T, loc xsderr.Loc, name, typeName xsd.QName) xsd.AttributeUse {
 	t.Helper()
 	scope, err := xsd.NewAttributeLocalScope(xsderr.Loc{}, xsd.AttributeComplexTypeScopeParent{Name: qn("container")})
@@ -308,6 +315,34 @@ func TestResolveDanglingReferenceInAttributeGroup(t *testing.T) {
 			if !strings.Contains(err.Error(), tc.msg) {
 				t.Fatalf("message %q does not contain %q", err, tc.msg)
 			}
+		})
+	}
+}
+
+// TestResolveDanglingAttributeRefChargedAtUse pins where src-resolve charges an
+// <attribute ref> naming no declaration when the use carries its own position:
+// at the use's <attribute> element, not at the complex type or attribute group
+// that holds it. The rows above build zero-Loc uses and pin the fallback to the
+// owner instead.
+func TestResolveDanglingAttributeRefChargedAtUse(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		build func(t *testing.T, b *xsd.SchemaBuilder)
+	}{
+		{"in a complex type", func(t *testing.T, b *xsd.SchemaBuilder) {
+			b.AddType(attributeCTAt(t, resolveLoc(110), qn("ct"),
+				xsd.ResolvedAttributeUse{Use: agRefUseAt(t, resolveLoc(111), qn("nope"))}))
+		}},
+		{"in an attribute group", func(t *testing.T, b *xsd.SchemaBuilder) {
+			b.AddAttributeGroup(attributeGroupAt(t, resolveLoc(110), qn("ag"), agRefUseAt(t, resolveLoc(111), qn("nope"))))
+		}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			b := xsd.NewSchemaBuilder()
+			tc.build(t, b)
+			_, err := b.Finalize()
+			assertRule(t, err, "src-resolve")
+			assertLoc(t, err, resolveLoc(111))
 		})
 	}
 }
