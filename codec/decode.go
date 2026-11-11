@@ -341,8 +341,7 @@ var ErrTypeMismatch = errors.New("codec: T is not the type codegen emits for the
 //     xsd.Schema.ContentMatcher does not track declines, since its children
 //     cannot be attributed.
 //   - Each of the complex type's attribute uses in order but xsi:nil's
-//     (codegen's package doc, "# Attributes"), none where codegen emits its
-//     choice's sealed interface as the type itself. Its {attribute wildcard}
+//     (codegen's package doc, "# Attributes"). Its {attribute wildcard}
 //     gives the field item 6 states and is examined no further.
 //
 // The complex type of a top-level declaration, the document element's, one
