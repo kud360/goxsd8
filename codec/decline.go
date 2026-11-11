@@ -92,7 +92,8 @@ type construct uint8
 // definition}, an attribute use, a list type, by its {item type definition},
 // and a union, by a basic member, decline by them too. constructUntrackedModel
 // follows every particle of a flattened content model or an occurrence
-// field's, ahead of the type's attribute uses.
+// field's, ahead of the type's attribute uses, and every basic particle a
+// nested flattened particle reaches, ahead of the particles after it.
 const (
 	constructTypeTable construct = iota + 1
 	constructNillable
