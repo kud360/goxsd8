@@ -7,8 +7,7 @@ import (
 )
 
 // The xsi:nil-use schemas, each declaring s:r, not nillable, of a struct type
-// one of whose attribute uses is xsi:nil's, to which codegen gives no field
-// (codegen/doc.go "# Attributes"): nilUseSchema's r holds the element a;
+// one of whose attribute uses is xsi:nil's: nilUseSchema's r holds the element a;
 // nilNestedSchema's r holds n, whose own anonymous type holds b beside the
 // use; nilWildcardSchema's r adds a lax {attribute wildcard} to
 // nilUseSchema's.

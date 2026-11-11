@@ -213,8 +213,7 @@
 //   - Mixed content.
 //   - Element-only content with {open content}.
 //   - A complex type with {abstract} true.
-//   - An attribute use in the xsi namespace, but xsi:nil's, to which codegen
-//     gives no field.
+//   - An attribute use in the xsi namespace, but xsi:nil's.
 //   - An element declaration with a {type table}.
 //   - A nillable element, but for one of type xs:anyType itself; item 5 of
 //     [Decode]'s doc states when.
