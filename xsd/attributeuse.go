@@ -117,6 +117,19 @@ type AttributeUse struct {
 	valueConstraint      ValueConstraint
 	hasValueConstraint   bool
 	inheritable          inheritableSpec
+	// loc is NewAttributeUse's loc, retained as provenance; chargedLoc reads it.
+	loc xsderr.Loc
+}
+
+// chargedLoc is the position NewAttributeUse's loc paragraph promises Finalize
+// charges: the use's own, or owner, the enclosing component's, when the use's is
+// the zero xsderr.Loc{}. Only exact equality with the zero value falls back; a
+// partially filled Loc is charged as it is.
+func (u AttributeUse) chargedLoc(owner xsderr.Loc) xsderr.Loc {
+	if u.loc == (xsderr.Loc{}) {
+		return owner
+	}
+	return u.loc
 }
 
 // inheritableSpec is what an Attribute Use's own XML said about {inheritable}.
@@ -163,9 +176,14 @@ const (
 // an AttributeDeclarationRef use defers to the declaration's {inheritable}
 // (§3.2.2.3 ref.att.local), which (*Schema).ResolvedInheritable reads.
 //
-// loc is the source position charged to any rejection. A caller with no real
-// parser position — a synthesized or programmatically built use — may
-// legitimately pass the zero xsderr.Loc{}.
+// loc is the position of the use's <attribute> element. It is charged to any
+// rejection here, and retained: Finalize charges au-props-correct clauses 2 and
+// 3 and the src-resolve of an unresolvable <attribute ref> against it, or
+// against the enclosing complex type's or attribute group definition's Loc when
+// loc is the zero xsderr.Loc{}. Like every component's Loc it is provenance, not
+// a property (doc.go), and no accessor reports it. A caller with no real parser
+// position — a synthesized or programmatically built use — may legitimately pass
+// the zero xsderr.Loc{}.
 func NewAttributeUse(loc xsderr.Loc, required bool, attributeDeclaration AttributeDeclarationOrRef, valueConstraint *ValueConstraint, inheritable *bool) (AttributeUse, error) {
 	if attributeDeclaration == nil {
 		return AttributeUse{}, xsderr.New(ruleAuPropsCorrect, loc,
@@ -190,6 +208,7 @@ func NewAttributeUse(loc xsderr.Loc, required bool, attributeDeclaration Attribu
 		required:             required,
 		attributeDeclaration: attributeDeclaration,
 		inheritable:          ownInheritable(attributeDeclaration, inheritable),
+		loc:                  loc,
 	}
 	if valueConstraint != nil {
 		u.valueConstraint, u.hasValueConstraint = *valueConstraint, true

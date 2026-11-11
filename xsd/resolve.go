@@ -690,7 +690,7 @@ func (s *Schema) resolveTermRef(t TermOrRef, loc xsderr.Loc) error {
 // is charged there, at the declaration's own Loc.
 //
 // loc is the enclosing complex type's or attribute group definition's position,
-// because an AttributeUse retains none of its own. The owner phrase the descent
+// and the rejection is charged at u.chargedLoc(loc). The owner phrase the descent
 // also supplies names that component for a rejection this arm does not make, and
 // is ignored.
 func (s *Schema) resolveAttributeUse(u AttributeUse, loc xsderr.Loc, _ string) error {
@@ -698,7 +698,7 @@ func (s *Schema) resolveAttributeUse(u AttributeUse, loc xsderr.Loc, _ string) e
 	case LocalAttributeDeclaration:
 		return nil
 	case AttributeDeclarationRef:
-		return resolveAttributeName(s, d.Name, loc, "attribute use <attribute ref>")
+		return resolveAttributeName(s, d.Name, u.chargedLoc(loc), "attribute use <attribute ref>")
 	default:
 		panic("xsd: resolveAttributeUse: non-exhaustive AttributeDeclarationOrRef switch")
 	}

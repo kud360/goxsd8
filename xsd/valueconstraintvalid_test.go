@@ -468,8 +468,7 @@ func TestPhaseEAPropsCorrectClause2LocalDeclaration(t *testing.T) {
 // TestPhaseEAuPropsCorrectClause2 pins au-props-correct (§3.5.6) clause 2: an
 // Attribute Use whose OWN {value constraint} is not a valid default with respect
 // to the RESOLVED {attribute declaration}.{type definition} is rejected, charged
-// to au-props-correct at the ENCLOSING component's Loc (an Attribute Use retains
-// none of its own).
+// to au-props-correct. TestPhaseEAuPropsCorrectChargedAtUse pins where.
 //
 // The declaration carries NO {value constraint} in the first row, so clause 3's
 // antecedent fails outright: clause 2 must fire on its own, not as a side effect
@@ -500,6 +499,163 @@ func TestPhaseEAuPropsCorrectClause2(t *testing.T) {
 				t.Errorf("message %q does not name the owner and the attribute", err.Error())
 			}
 		})
+	}
+}
+
+// The positions TestPhaseEAuPropsCorrectChargedAtUse gives each component, all
+// distinct and non-zero, so a charge at any of the others shows as a mismatch.
+var (
+	auUseLoc   = xsderr.Loc{URI: "use.xsd", Line: 20, Col: 4}
+	auOwnerLoc = xsderr.Loc{URI: "owner.xsd", Line: 7, Col: 2}
+	auOtherLoc = xsderr.Loc{URI: "other.xsd", Line: 3, Col: 2}
+)
+
+// vcRefUseAt is vcRefUse positioned at loc, the use's own <attribute> element.
+func vcRefUseAt(t *testing.T, loc xsderr.Loc, kind ValueConstraintKind, lexical string) AttributeUse {
+	t.Helper()
+	vc := NewValueConstraint(kind, lexical, nil, nil)
+	u, err := NewAttributeUse(loc, false, AttributeDeclarationRef{Name: uq("g")}, &vc, nil)
+	if err != nil {
+		t.Fatalf("NewAttributeUse: %v", err)
+	}
+	return u
+}
+
+// TestPhaseEAuPropsCorrectChargedAtUse pins where au-props-correct (§3.5.6)
+// clauses 2 and 3 are charged: at the offending use's own <attribute> element
+// (auUseLoc), never at the complex type or attribute group definition holding it
+// (auOwnerLoc). The rows cover each owner kind and each clause arm — clause 2,
+// clause 3's {variety} consequent, clause 3's {value} consequent.
+//
+// The inherited row adds the deriving type D before its base B, so Phase E
+// reaches the inherited copy at D first; the folded row's referring type C is
+// rooted before the group. Each pins the owner phrase naming the type the walk
+// was in, so the row proves the charge followed the use rather than its owner.
+func TestPhaseEAuPropsCorrectChargedAtUse(t *testing.T) {
+	clause2 := func() AttributeUse { return vcRefUseAt(t, auUseLoc, ValueFixed, "not a value of str") }
+	clause3Variety := func() AttributeUse { return vcRefUseAt(t, auUseLoc, ValueDefault, "7") }
+	clause3Value := func() AttributeUse { return vcRefUseAt(t, auUseLoc, ValueFixed, "07") }
+	for _, tc := range []struct {
+		name  string
+		build func(*SchemaBuilder)
+		want  string // the clause and the owner phrase the message carries
+	}{
+		{"anonymous complex type, clause 2", func(b *SchemaBuilder) {
+			ct := dTypeAt(t, auOwnerLoc, QName{}, anyTypeName, EmptyContent{}, []AttributeUse{clause2()}, nil)
+			b.AddElement(dOwnInline(t, uq("e"), ct, NewGlobalScope()))
+		}, "anonymous complex type attribute {urn:upa}g has a {value constraint}"},
+		{"named complex type, clause 3 variety", func(b *SchemaBuilder) {
+			b.AddType(dTypeAt(t, auOwnerLoc, uq("t"), anyTypeName, EmptyContent{}, []AttributeUse{clause3Variety()}, nil))
+		}, "complex type {urn:upa}t gives attribute {urn:upa}g a default value constraint"},
+		{"unreferenced attribute group, clause 3 value", func(b *SchemaBuilder) {
+			g, err := NewAttributeGroupDefinition(auOwnerLoc, uq("ag"), attributeUseMembers([]AttributeUse{clause3Value()}), nil)
+			if err != nil {
+				t.Fatalf("NewAttributeGroupDefinition: %v", err)
+			}
+			b.AddAttributeGroup(g)
+		}, "attribute group definition {urn:upa}ag fixes attribute {urn:upa}g"},
+		{"use inherited by an extension, clause 2", func(b *SchemaBuilder) {
+			d, err := NewComplexType(auOwnerLoc, uq("D"), uq("B"), nil, DerivationExtension, false,
+				nil, nil, nil, EmptyContent{}, nil, nil)
+			if err != nil {
+				t.Fatalf("NewComplexType(D): %v", err)
+			}
+			b.AddType(d)
+			b.AddType(dTypeAt(t, auOtherLoc, uq("B"), anyTypeName, EmptyContent{}, []AttributeUse{clause2()}, nil))
+		}, "complex type {urn:upa}D attribute {urn:upa}g has a {value constraint}"},
+		{"group use folded into a referring complex type, clause 3 variety", func(b *SchemaBuilder) {
+			c, err := NewComplexType(auOwnerLoc, uq("C"), anyTypeName, nil, DerivationRestriction, false,
+				[]AttributeUseOrGroupRef{AttributeGroupRef{Name: uq("ag")}}, nil, nil, EmptyContent{}, nil, nil)
+			if err != nil {
+				t.Fatalf("NewComplexType(C): %v", err)
+			}
+			b.AddType(c)
+			g, err := NewAttributeGroupDefinition(auOtherLoc, uq("ag"), attributeUseMembers([]AttributeUse{clause3Variety()}), nil)
+			if err != nil {
+				t.Fatalf("NewAttributeGroupDefinition: %v", err)
+			}
+			b.AddAttributeGroup(g)
+		}, "complex type {urn:upa}C gives attribute {urn:upa}g a default value constraint"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			// "7" and "07" are valid defaults, distinct {value}s.
+			vs := vcOnly("7")
+			vs.validLexicals["07"] = true
+			vs.same, vs.decided = false, true
+			_, err := vcSchema(t, vs, func(b *SchemaBuilder) {
+				vcGlobalFixed(t, "7")(b)
+				tc.build(b)
+			})
+			expectRule(t, err, ruleAuPropsCorrect)
+			var xe *xsderr.Error
+			if !errors.As(err, &xe) || xe.Loc != auUseLoc {
+				t.Errorf("charged %v, want the use's own %s", err, auUseLoc)
+			}
+			if !strings.Contains(err.Error(), tc.want) {
+				t.Errorf("message %q does not contain %q", err.Error(), tc.want)
+			}
+		})
+	}
+}
+
+// TestPhaseEAuPropsCorrectGuards pins the two charges the use's own position
+// must NOT take over.
+//
+//   - A global declaration's own invalid default, reached through a use that
+//     has no {value constraint} of its own, is a-props-correct clause 2 at the
+//     DECLARATION's Loc (vcLoc), never at the referring use.
+//   - A use built with the zero xsderr.Loc{} — position unknown — is charged at
+//     its owner's Loc, never at the zero one.
+func TestPhaseEAuPropsCorrectGuards(t *testing.T) {
+	t.Run("referenced global declaration", func(t *testing.T) {
+		u, err := NewAttributeUse(auUseLoc, false, AttributeDeclarationRef{Name: uq("g")}, nil, nil)
+		if err != nil {
+			t.Fatalf("NewAttributeUse: %v", err)
+		}
+		_, err = vcSchema(t, vcOnly("7"), func(b *SchemaBuilder) {
+			vc := NewValueConstraint(ValueDefault, "x", nil, nil)
+			vcGlobalDecl(t, &vc)(b)
+			b.AddType(dTypeAt(t, auOwnerLoc, uq("t"), anyTypeName, EmptyContent{}, []AttributeUse{u}, nil))
+		})
+		expectRule(t, err, ruleAPropsCorrect)
+		var xe *xsderr.Error
+		if !errors.As(err, &xe) || xe.Loc != vcLoc {
+			t.Errorf("charged %v, want the declaration's own %s", err, vcLoc)
+		}
+	})
+	t.Run("zero-Loc use", func(t *testing.T) {
+		_, err := vcSchema(t, vcOnly("7"), func(b *SchemaBuilder) {
+			vcGlobalDecl(t, nil)(b)
+			b.AddType(dTypeAt(t, auOwnerLoc, uq("t"), anyTypeName, EmptyContent{},
+				[]AttributeUse{vcRefUseAt(t, xsderr.Loc{}, ValueDefault, "not a value of str")}, nil))
+		})
+		expectRule(t, err, ruleAuPropsCorrect)
+		var xe *xsderr.Error
+		if !errors.As(err, &xe) || xe.Loc != auOwnerLoc {
+			t.Errorf("charged %v, want the owner's %s", err, auOwnerLoc)
+		}
+	})
+}
+
+// TestExtensionDedupeIgnoresUseLoc pins that a use's retained position is
+// provenance, not a property: an extension re-declaring a use identical to the
+// one it inherits, at a different <attribute> element, still collapses into one
+// member under §3.4.2.4 clause 3.1, so ct-props-correct clause 4 sees no
+// duplicate.
+func TestExtensionDedupeIgnoresUseLoc(t *testing.T) {
+	_, err := vcSchema(t, vcOnly("7"), func(b *SchemaBuilder) {
+		vcGlobalDecl(t, nil)(b)
+		b.AddType(dTypeAt(t, auOtherLoc, uq("B"), anyTypeName, EmptyContent{},
+			[]AttributeUse{vcRefUseAt(t, auOtherLoc, ValueDefault, "7")}, nil))
+		d, err := NewComplexType(auOwnerLoc, uq("D"), uq("B"), nil, DerivationExtension, false,
+			attributeUseMembers([]AttributeUse{vcRefUseAt(t, auUseLoc, ValueDefault, "7")}), nil, nil, EmptyContent{}, nil, nil)
+		if err != nil {
+			t.Fatalf("NewComplexType(D): %v", err)
+		}
+		b.AddType(d)
+	})
+	if err != nil {
+		t.Fatalf("an extension re-declaring an identical use at another position was rejected: %v", err)
 	}
 }
 
