@@ -175,8 +175,10 @@ type Result struct {
 // cvc-identity-constraint charge sits at a target or field node and follows the
 // whole subtree of the element whose declaration carries the constraint.
 // cvc-id charges follow the whole walk, in the order each id first appeared. At
-// one location, the parent's charges there come before the element's own. The
-// order is deterministic for a given schema, backend and instance.
+// one location, a charge the parent makes while matching its [[children]] comes
+// before the child's own charges there; cvc-identity-constraint and cvc-id
+// charges at that location follow them, as stated above. The order is
+// deterministic for a given schema, backend and instance.
 //
 // The first violation is therefore not necessarily the earliest in the
 // document: a consumer wanting document order sorts the list itself.

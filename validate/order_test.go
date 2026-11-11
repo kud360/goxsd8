@@ -103,6 +103,24 @@ const orderIDs = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:t
   </xs:element>
 </xs:schema>`
 
+// orderScoped declares k in urn:t over e children, each with an optional int v
+// and a required int w, and k's xs:unique over the e children's v.
+const orderScoped = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:t="urn:t" targetNamespace="urn:t" elementFormDefault="qualified">
+  <xs:element name="k">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element name="e" maxOccurs="unbounded">
+          <xs:complexType>
+            <xs:attribute name="v" type="xs:int"/>
+            <xs:attribute name="w" type="xs:int" use="required"/>
+          </xs:complexType>
+        </xs:element>
+      </xs:sequence>
+    </xs:complexType>
+    <xs:unique name="u"><xs:selector xpath="t:e"/><xs:field xpath="@v"/></xs:unique>
+  </xs:element>
+</xs:schema>`
+
 // orderDeclined declares r over c children, each type carrying an assertion
 // whose {test} calls fn:unparsed-text, which the engine declines.
 const orderDeclined = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
@@ -125,8 +143,9 @@ const orderDeclined = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
 // which check of its rule it is. Rows 1, 3 to 9 and 11 to 13 each carry a check settled
 // once an element's attributes, [[children]] or whole walk are exhausted, after
 // a charge at a later location; row 2 is the guard that siblings stay in
-// document order, and row 10 that the parent's charge at a child's location
-// precedes the child's own.
+// document order, row 10 that the parent's charge at a child's location
+// precedes the child's own, and row 14 that a cvc-identity-constraint charge at
+// an element's location follows that element's own charge there.
 func TestViolationsAreListedInWalkOrder(t *testing.T) {
 	for _, tc := range []struct {
 		name, schema, doc string
@@ -170,6 +189,9 @@ func TestViolationsAreListedInWalkOrder(t *testing.T) {
 		{"R11 defaulted attribute after an attribute's charge", orderAttributes,
 			"<d a=\"x\"/>", false,
 			[]string{"1:4 cvc-attribute", "1:1 cvc-complex-type"}, "clause 4"},
+		{"R14 element's own charge before its scoping element's identity constraint there", orderScoped,
+			"<k xmlns=\"urn:t\">\n  <e v=\"1\" w=\"1\"/>\n  <e v=\"1\"/>\n</k>", false,
+			[]string{"3:3 cvc-complex-type", "3:3 cvc-identity-constraint"}, ""},
 		{"R12 declined assertion after its element's children", orderDeclined,
 			"<r>\n  <c/>\n</r>", true,
 			[]string{"2:3 cvc-assertion", "1:1 cvc-assertion"}, ""},
