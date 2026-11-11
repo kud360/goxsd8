@@ -17,7 +17,8 @@ const ocAB = `<xs:sequence><xs:element name="a" type="xs:string"/><xs:element na
 // The {open content} schemas, each declaring s:r: ocInterleaveSchema's type is
 // sequence(a, b) under an interleave ##other {open content},
 // ocSuffixSchema's the same under suffix, and ocAnySchema's under an
-// interleave ##any one; ocDefaultDoc is a whole schema document whose
+// interleave ##any one; ocSuffixAnySchema's is sequence(a, b?) under a suffix
+// ##any one; ocDefaultDoc is a whole schema document whose
 // <defaultOpenContent> reaches r's type, which has no <openContent> of its
 // own (dcl.ctd.ctcc.common clause 5.2.1); ocExtSchema's r is of ext, an
 // extension of base, sequence(a) under {open content}, adding sequence(b) with
@@ -38,6 +39,7 @@ const ocAB = `<xs:sequence><xs:element name="a" type="xs:string"/><xs:element na
 const (
 	ocInterleaveSchema = `<xs:element name="r"><xs:complexType>` + `<xs:openContent mode="interleave"><xs:any namespace="##other" processContents="lax"/></xs:openContent>` + ocAB + `</xs:complexType></xs:element>`
 	ocSuffixSchema     = `<xs:element name="r"><xs:complexType>` + `<xs:openContent mode="suffix"><xs:any namespace="##other" processContents="lax"/></xs:openContent>` + ocAB + `</xs:complexType></xs:element>`
+	ocSuffixAnySchema  = `<xs:element name="r"><xs:complexType><xs:openContent mode="suffix"><xs:any processContents="lax"/></xs:openContent><xs:sequence><xs:element name="a" type="xs:string"/><xs:element name="b" type="xs:string" minOccurs="0"/></xs:sequence></xs:complexType></xs:element>`
 	ocAnySchema        = `<xs:element name="r"><xs:complexType><xs:openContent><xs:any processContents="lax"/></xs:openContent>` + ocAB + `</xs:complexType></xs:element>`
 	ocDefaultDoc       = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:s="urn:s" targetNamespace="urn:s" elementFormDefault="qualified">
 		<xs:defaultOpenContent><xs:any namespace="##other" processContents="lax"/></xs:defaultOpenContent>
@@ -64,14 +66,20 @@ const (
 // TestOpenContentTypesAreCodegens pins, each open-content field a slice of
 // anyElement, of AnyElement's shape: ocABType for ocInterleaveSchema's,
 // ocSuffixSchema's, ocAnySchema's, ocDefaultDoc's and ocExtSchema's R;
-// ocNone ocNoneSchema's, with no such field; ocEmpty ocEmptySchema's, the
-// field alone; ocNested and its occurrence's ocNestedC ocNestedSchema's;
-// ocChoice and its branches ocChoiceSchema's; ocWild ocWildSchema's; ocName
-// ocNameSchema's; ocFlat ocFlatSchema's, over flatSeqSchema's interface; and
-// ocOcc ocOccSchema's, over occSeqSchema's item.
+// ocSuffixAny ocSuffixAnySchema's; ocNone ocNoneSchema's, with no such
+// field; ocEmpty ocEmptySchema's, the field alone; ocNested and its
+// occurrence's ocNestedC ocNestedSchema's; ocChoice and its branches
+// ocChoiceSchema's; ocWild ocWildSchema's; ocName ocNameSchema's; ocFlat
+// ocFlatSchema's, over flatSeqSchema's interface; and ocOcc ocOccSchema's,
+// over occSeqSchema's item.
 type (
 	ocABType struct {
 		A, B        string
+		OpenContent []anyElement
+	}
+	ocSuffixAny struct {
+		A           string
+		B           *string
 		OpenContent []anyElement
 	}
 	ocNone   struct{ A, B string }
@@ -131,6 +139,7 @@ func TestOpenContentTypesAreCodegens(t *testing.T) {
 		{ocAnySchema, []string{ab}},
 		{ocDefaultDoc, []string{ab}},
 		{ocExtSchema, []string{ab}},
+		{ocSuffixAnySchema, []string{"type R struct {\n\tA           string\n\tB           *string\n\tOpenContent []AnyElement\n}\n"}},
 		{ocNoneSchema, []string{"type R struct {\n\tA string\n\tB string\n}\n"}},
 		{ocEmptySchema, []string{"type R struct {\n\tOpenContent []AnyElement\n}\n"}},
 		{ocNestedSchema, []string{"type R struct {\n\tC           []C\n\tOpenContent []AnyElement\n}\n", "type C struct {\n\tA           string\n\tOpenContent []AnyElement\n}\n"}},
@@ -164,7 +173,8 @@ func ocX(local, text string) anyElement {
 // take at that point (§3.4.4.3 cvc-complex-content clauses 2.3 and 3.3), is
 // appended raw, in document order, to the open-content field codegen emits
 // after the particle fields, and every other child fills its particle's
-// field as without it: under {mode} interleave and suffix; an {open content}
+// field as without it: under {mode} interleave and suffix, where every child
+// after the first it takes is its own (clause 2.1); an {open content}
 // a <defaultOpenContent> brings, or an extension inherits; empty explicit
 // content clause 6.2 makes element-only, the field alone; a nested type's own,
 // in its occurrence's struct and never the parent's; a child bearing a
@@ -189,6 +199,10 @@ func TestDecodeOpenContent(t *testing.T) {
 			ocABType{A: "1", B: "2", OpenContent: []anyElement{ocX("x", "x"), ocX("y", "y")}}},
 		{"suffix", ocSuffixSchema, o, a + b + `<o:x>x</o:x>`, into[ocABType](),
 			ocABType{A: "1", B: "2", OpenContent: []anyElement{ocX("x", "x")}}},
+		{"suffix, a child after the first it takes, though the particle could take it", ocSuffixAnySchema, o, a + `<o:x>x</o:x>` + b, into[ocSuffixAny](),
+			ocSuffixAny{A: "1", OpenContent: []anyElement{ocX("x", "x"), {Space: "urn:s", Local: "b", Content: anyType{Text: "2"}}}}},
+		{"suffix, a child the particle takes before it", ocSuffixAnySchema, o, a + b + `<o:x>x</o:x>`, into[ocSuffixAny](),
+			ocSuffixAny{A: "1", B: str("2"), OpenContent: []anyElement{ocX("x", "x")}}},
 		{"no child the open content takes", ocInterleaveSchema, "", a + b, into[ocABType](), ocABType{A: "1", B: "2"}},
 		{"a <defaultOpenContent>'s", ocDefaultDoc, o, `<o:x>x</o:x>` + a + b, into[ocABType](),
 			ocABType{A: "1", B: "2", OpenContent: []anyElement{ocX("x", "x")}}},

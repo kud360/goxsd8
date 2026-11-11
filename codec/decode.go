@@ -231,35 +231,42 @@ var ErrTypeMismatch = errors.New("codec: T is not the type codegen emits for the
 // absent ones in attribute-use order, then, for simple content, its value
 // field's value, or else its children in document order,
 // each child of complex type filled in this same order before the next
-// child, and a child attributed to a wildcard particle, and an element of
-// type xs:anyType past its own xsi:type, read raw, which finds neither. A
-// supplied value whose attribute is present is never mapped.
+// child, and a child attributed to a wildcard particle or to the {open
+// content}, and an element of type xs:anyType past its own xsi:type, read
+// raw, which finds neither. A supplied value whose attribute is present
+// is never mapped.
 //
 // Each child element fills the field of the particle validation attributes
-// it to (§3.4.4.4 key-att-to): of a content model with no wildcard particle,
-// the particle of its expanded name; of one with wildcard particles, the one
-// cvc-accept attributes it to, an element particle taking a child before a
-// wildcard does (§3.8.6.4 cos-nonambig), each wildcard particle its own
-// field's even where two have equal {term}s, a substitution group's member
-// filling its head's particle, so of sequence(a, b?, any?) the children
-// <a/><b/><b/> give A, B and an E holding the second <b/>. Of a flattened
-// content model, every child is attributed so, by the Matcher's position of
-// its particle (xsd.Matcher.NextParticle, §3.8.4.2 key-vpath), never by its
-// name, and appends one new item to the slice, the branch of that particle.
-// Of a content model held in an occurrence field (item 6), every child is
-// attributed by the Matcher too, to the field or branch of its particle in
-// one item, and the items are the sub-sequences of a ·partition· cvc-accept
-// clause 3 admits, in document order, chosen by one positional rule: the first child
-// opens an item, and each later child continues the current item where, at
-// the first index its particle's position and that of the current item's
-// last child differ, the model group holding both is a sequence and the
-// later child's index is the greater, or where the two positions are equal
-// and that particle has {max occurs} unbounded or above the count of the
-// current item's children it has taken; every other child opens the next
-// item. So no item is empty, a choice counting only the occurrences that
-// match something, of sequence(a, b?) repeated the children <a/><a/><b/>
-// give the items {A} and {A, B}, and of choice(a{2,2}, b) repeated the
-// children <a/><a/><a/><a/> two items of two each.
+// it to (§3.4.4.4 key-att-to): of a content model with no wildcard particle
+// whose type has no {open content}, the particle of its expanded name; of
+// any other, the one cvc-accept attributes it to, an element particle taking
+// a child before a wildcard does (§3.8.6.4 cos-nonambig), each wildcard
+// particle its own field's even where two have equal {term}s, a substitution
+// group's member filling its head's particle, so of sequence(a, b?, any?) the
+// children <a/><b/><b/> give A, B and an E holding the second <b/>. A child
+// the {particle} could not take at that point is attributed to the {open
+// content} instead (§3.4.4.3 cvc-complex-content clauses 2.3 and 3.3), and so,
+// under {mode} suffix, is every child after the first such (clause 2.1), and
+// each is appended to the open-content field (item 6), whatever holds the particles'
+// fields, an item of a flattened or occurrence field taking none of them:
+// of sequence(a, b) under an {open content} over ##any, the children
+// <a/><a/><b/><b/> give A, B and the field holding the second <a/> and the
+// second <b/>. Of a flattened content model, every child is attributed so, by the
+// Matcher's position of its particle (xsd.Matcher.NextParticle, §3.8.4.2 key-vpath),
+// never by its name, and appends one new item to the slice, the branch of that
+// particle. Of a content model held in an occurrence field (item 6), every child is
+// attributed by the Matcher too, to the field or branch of its particle in one item,
+// and the items are the sub-sequences of a ·partition· cvc-accept clause 3 admits,
+// in document order, chosen by one positional rule: the first child opens an item,
+// and each later child continues the current item where, at the first index its
+// particle's position and that of the current item's last child differ, the model
+// group holding both is a sequence and the later child's index is the greater, or
+// where the two positions are equal and that particle has {max occurs} unbounded or
+// above the count of the current item's children it has taken; every other child
+// opens the next item. So no item is empty, a choice counting only the occurrences
+// that match something, of sequence(a, b?) repeated the children <a/><a/><b/> give
+// the items {A} and {A, B}, and of choice(a{2,2}, b) repeated the children
+// <a/><a/><a/><a/> two items of two each.
 //
 // Items 5 and 6 read no instance; [CheckDecode] returns them for a
 // declaration before an instance arrives.
@@ -385,14 +392,14 @@ var ErrTypeMismatch = errors.New("codec: T is not the type codegen emits for the
 //     Go type as the bullets below read it, for simple content the value
 //     field first, named from the local name value, holding V, the Go type
 //     codegen gives the {content type}'s {simple type definition}, matched as
-//     a local particle's V of simple type is, never a pointer, and then the
-//     attribute fields, and last, for a type with an {attribute wildcard},
-//     its field, or, where codegen emits the choice's sealed interface
-//     as the type itself, T is an interface, and Decode then returns a *T
-//     pointing at it. So a T of the same shape, such as the struct codegen
-//     emits for another top-level element of the same type, passes and
-//     decodes as the declaration's own struct does, an error only where that
-//     one's is.
+//     a local particle's V of simple type is, never a pointer, then, for a
+//     type with an {open content}, its field, then the attribute fields, and
+//     last, for a type with an {attribute wildcard}, its field, or, where
+//     codegen emits the choice's sealed interface as the type itself, T is an
+//     interface, and Decode then returns a *T pointing at it. So a T of the
+//     same shape, such as the struct codegen emits for another top-level
+//     element of the same type, passes and decodes as the declaration's own
+//     struct does, an error only where that one's is.
 //   - T of a simple {type definition}: T's underlying type alone is the Go
 //     type codegen gives it (the Simple types section of codegen's package
 //     doc): string for a special type, or its atomic Go type A, one of
@@ -484,6 +491,19 @@ var ErrTypeMismatch = errors.New("codec: T is not the type codegen emits for the
 //     element's content raw, as the bullet above states an E's Content, so an
 //     xsi:type inside it is one of its raw attributes, the element's own
 //     declining (item 7).
+//   - The field of a complex type's {open content}, read from its {content
+//     type} as codegen reads it (codegen's package doc, "# Open content"),
+//     after the particle fields, a flattened or occurrence field included,
+//     and before the attribute fields, named as if from local name
+//     openContent (codegen's package doc, "# Naming"), so OpenContent2 beside
+//     an element openContent: []E, never a pointer, E a struct of
+//     AnyElement's shape as the wildcard bullet above states it, matched by
+//     shape, and the slice named or not. It holds, in document order, one E
+//     per child attributed to the {open content} (the paragraph after item
+//     8), nil for none; no occurrence's or branch's struct holds one. Neither
+//     its {mode} nor its wildcard's {namespace constraint} or {process
+//     contents} is read: validation held each such child to them first
+//     (§3.4.4.3 cvc-complex-content clauses 2.4 and 3.4).
 //   - The field of a complex type's {attribute wildcard}, its struct's last,
 //     named as if from local name anyAttribute after the attribute fields
 //     (codegen's package doc, "# Naming"), so AnyAttribute2 where an
@@ -2274,7 +2294,8 @@ func openContentField(ct xsd.ComplexType, names *goname.Namer) (field, bool) {
 // type with {open content}, never its expanded name alone (eachChild): a
 // child a particle's name takes is the {open content}'s where the {particle}
 // could not take it at that point (§3.4.4.4; §3.4.4.3 cvc-complex-content
-// clauses 2.3 and 3.3).
+// clauses 2.3 and 3.3), or, under {mode} suffix, where it follows a child the
+// {open content} took (clause 2.1).
 func (s *sequence) openContent(ct xsd.ComplexType, names *goname.Namer) bool {
 	f, ok := openContentField(ct, names)
 	if !ok {
@@ -2356,22 +2377,21 @@ type wildAttributor struct {
 // attributor returns a wildAttributor over a fresh Matcher of w.ct's
 // {content type} and w's places, which attributes one element's children
 // (eachChild), or nil for a nil w, no wildcard particle and no {open
-// content}. The binds call it
-// once all of a content model's particles are bound, so that CheckDecode
-// returns what Decode does, and on a premise: ContentMatcher's answer depends
-// on ct alone, and declines only a {content type} that is not element-only,
-// which contentGroup has declined, or one too wide to track, which needs a
-// repeating model group, and the particle Decode binds is one sequence or
-// choice occurring once, or one all group goshape.Splices answers true for,
-// so with {max occurs} 1, of element and wildcard particles, every nested group
-// spliced, so occurring exactly once or with {min occurs} 0 and {max occurs}
-// 1 (goshape.Splices), a choice of element and wildcard particles occurring
-// exactly once (sequence.nested), or declined. A decline here is a defect of that
-// premise, a plain error and no decline. A flattened content model and an
-// occurrence field's repeat or are optional, so the premise does not hold for
-// them: a flattened one holds no wildcardSlot, an occurrence's item builds no
-// attributor from the one it holds, reading its places alone, and the
-// Matcher each of them builds declines by a *DeclineError (trackedMatcher).
+// content}. The binds call it once all of a content model's particles are bound,
+// so that CheckDecode returns what Decode does, and on a premise:
+// ContentMatcher's answer depends on ct alone, and declines only a {content type}
+// that is not element-only, which contentGroup has declined, or one too wide to
+// track, which needs a repeating model group, and the particle Decode binds is
+// one sequence or choice occurring once, or one all group goshape.Splices answers
+// true for, so with {max occurs} 1, of element and wildcard particles, every
+// nested group spliced, so occurring exactly once or with {min occurs} 0 and {max
+// occurs} 1 (goshape.Splices), a choice of element and wildcard particles
+// occurring exactly once (sequence.nested), or declined. A decline here is a
+// defect of that premise, a plain error and no decline. A flattened content model
+// and an occurrence field's repeat or are optional, so the premise does not hold
+// for them: a flattened one holds no wildcardSlot, an occurrence's item builds no
+// attributor from the one it holds, reading its places alone, and the Matcher
+// each of them builds declines by a *DeclineError (trackedMatcher).
 func (w *wildcardSlot) attributor(schema *xsd.Schema) (*wildAttributor, error) {
 	if w == nil {
 		return nil, nil
@@ -3829,7 +3849,8 @@ func (b *boundBinding) fill(r *xmltree.Reader, root *xmltree.StartElement, out r
 // fed every child in document order (§3.4.4.4 key-att-to), which puts each
 // name to the element particles before the wildcards (cvc-accept; §3.8.6.4
 // cos-nonambig), and to the {open content} only where neither takes it
-// (§3.4.4.3 cvc-complex-content clauses 2.3 and 3.3): a child attributed to
+// (§3.4.4.3 cvc-complex-content clauses 2.3 and 3.3) or, under {mode} suffix,
+// once one child has gone to it (clause 2.1): a child attributed to
 // an element declaration to its expanded name's target in x.children, the
 // declaration being a substitution group's head where the child is a member,
 // and one attributed to a wildcard particle or to the {open content} to that
