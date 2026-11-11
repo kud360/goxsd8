@@ -592,11 +592,8 @@ func (rc restrictionCheck) checkEnumerationRestriction(b Backend, r xsd.TypeReso
 	return nil
 }
 
-// causedBy builds the charge of a construction-time rule that DELEGATES to a
-// deeper verdict: its own sentence formatted from format and args, which leads
-// with its own fact and closes on its own citation, then ": " and cause as
-// [xsderr.CauseText] renders it, with cause set as the wrapped error so
-// errors.Is and errors.As reach it (STYLE E5).
+// causedBy is validate.causedBy (validate/validate.go) for construction-time
+// charges, without its nil-cause arm: both callers guard err != nil.
 func causedBy(rule xsderr.Rule, loc xsderr.Loc, cause error, format string, args ...any) *xsderr.Error {
 	e := xsderr.New(rule, loc, format+": %s", append(slices.Clone(args), xsderr.CauseText(cause))...)
 	e.Err = cause
