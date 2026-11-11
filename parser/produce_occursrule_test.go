@@ -141,21 +141,68 @@ func TestProduceOccursAttributeFaultsCharged(t *testing.T) {
 	}
 }
 
-// TestProduceOccursFaultMessageNamesTheRuleOnce pins that nonNegativeNumeral's
-// diagnostic does not repeat the rule ID in its own prose: xsderr already emits
-// the bracketed tag, and the format string used to append a second, now-wrong
-// copy of it (#932).
-func TestProduceOccursFaultMessageNamesTheRuleOnce(t *testing.T) {
-	body := `<xs:complexType name="CT"><xs:sequence minOccurs="x">` +
-		`<xs:element name="a" type="xs:string"/></xs:sequence></xs:complexType>`
-	_, err := produce(t, wrap("", body))
-	assertRule(t, err, "cvc-datatype-valid")
-	msg := err.Error()
-	if strings.Count(msg, "cvc-datatype-valid") != 1 {
-		t.Fatalf("diagnostic %q names cvc-datatype-valid %d times, want exactly the one bracketed tag",
-			msg, strings.Count(msg, "cvc-datatype-valid"))
+// TestProduceOccursFaultMessageCitesItsDeclaredType pins nonNegativeNumeral's
+// whole message at each of its three callers — occursOf, allOccursEnum and the
+// redefine self-reference check: the attribute, its lexical and the type the
+// schema for schema documents declares for it, then the cvc-datatype-valid
+// clause it fails (STYLE E4/E5, #3581). minOccurs is xs:nonNegativeInteger,
+// clause 1 outside xs:integer's pattern and clause 3 below minInclusive 0;
+// maxOccurs is the union xs:allNNI, clause 2.3. It names no p-props-correct,
+// which has no particle to constrain here (#932).
+func TestProduceOccursFaultMessageCitesItsDeclaredType(t *testing.T) {
+	seq := func(attrs string) string {
+		return `<xs:complexType name="CT"><xs:sequence ` + attrs + `>` +
+			`<xs:element name="a" type="xs:string"/></xs:sequence></xs:complexType>`
 	}
-	if strings.Contains(msg, "p-props-correct") {
-		t.Fatalf("diagnostic %q still names p-props-correct, which has no particle to constrain here", msg)
+	all := func(attrs string) string {
+		return `<xs:complexType name="CT"><xs:all ` + attrs + `>` +
+			`<xs:element name="a" type="xs:string"/></xs:all></xs:complexType>`
+	}
+	redefine := func(attrs string) map[string]string {
+		return map[string]string{
+			"main.xsd": wrap("urn:a", `<xs:redefine schemaLocation="lib.xsd">`+
+				`<xs:group name="g"><xs:sequence><xs:group ref="tns:g" `+attrs+`/></xs:sequence></xs:group>`+
+				`</xs:redefine>`),
+			"lib.xsd": wrap("urn:a", `<xs:group name="g"><xs:sequence>`+
+				`<xs:element name="a" type="xs:string"/></xs:sequence></xs:group>`),
+		}
+	}
+	cases := []struct {
+		name    string
+		body    string
+		docs    map[string]string
+		wantMsg string
+	}{
+		{"occursOf minOccurs non-numeric", seq(`minOccurs="x"`), nil,
+			`minOccurs value "x" is not a valid xs:nonNegativeInteger, which cvc-datatype-valid clause 1 requires`},
+		{"occursOf minOccurs negative", seq(`minOccurs="-1"`), nil,
+			`minOccurs value "-1" is not a valid xs:nonNegativeInteger, which cvc-datatype-valid clause 3 requires`},
+		{"occursOf maxOccurs non-numeric", seq(`maxOccurs="x"`), nil,
+			`maxOccurs value "x" is not a valid xs:allNNI, which cvc-datatype-valid clause 2.3 requires`},
+		{"occursOf maxOccurs negative", seq(`maxOccurs="-1"`), nil,
+			`maxOccurs value "-1" is not a valid xs:allNNI, which cvc-datatype-valid clause 2.3 requires`},
+		{"allOccursEnum minOccurs negative", all(`minOccurs="-1"`), nil,
+			`minOccurs value "-1" is not a valid xs:nonNegativeInteger, which cvc-datatype-valid clause 3 requires`},
+		{"allOccursEnum maxOccurs non-numeric", all(`maxOccurs="x"`), nil,
+			`maxOccurs value "x" is not a valid xs:allNNI, which cvc-datatype-valid clause 2.3 requires`},
+		{"redefine self-reference minOccurs negative", "", redefine(`minOccurs="-1"`),
+			`minOccurs value "-1" is not a valid xs:nonNegativeInteger, which cvc-datatype-valid clause 3 requires`},
+		{"redefine self-reference maxOccurs non-numeric", "", redefine(`maxOccurs="x"`),
+			`maxOccurs value "x" is not a valid xs:allNNI, which cvc-datatype-valid clause 2.3 requires`},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			var err error
+			if tc.docs != nil {
+				_, err = parseMap(t, "main.xsd", tc.docs)
+			} else {
+				_, err = produce(t, wrap("", tc.body))
+			}
+			assertRule(t, err, "cvc-datatype-valid")
+			msg := err.Error()
+			if !strings.HasSuffix(msg, ": [cvc-datatype-valid] "+tc.wantMsg) {
+				t.Fatalf("diagnostic %q, want its whole message to be %q", msg, tc.wantMsg)
+			}
+		})
 	}
 }

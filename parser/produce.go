@@ -4120,7 +4120,8 @@ func xmlSpaceFields(lexical string) []string {
 // validation against the schema for schema documents (Structures §5.1), the
 // attribute failing its declared type under cvc-attribute clause 3, charged
 // cvc-datatype-valid (§4.1.4) at assembly time whether or not any instance
-// reaches the facet. It is located at the value attribute's name.
+// reaches the facet. It is located at the value attribute's name, and its
+// message cites the clause integerFaultClause names.
 //
 // The positiveInteger fault stays cvc-datatype-valid rather than
 // totalDigits-valid-restriction: "0" is outside the attribute's own declared
@@ -4141,20 +4142,23 @@ func facetCountValue(el *Element, kind xsd.FacetKind) error {
 	}
 	lexical := attr.Value()
 	name := "<" + el.Name().Local() + ">"
-	positive, inLexical := nonNegativeIntegerLexical(collapseTrim(lexical))
+	s := collapseTrim(lexical)
+	positive, inLexical := nonNegativeIntegerLexical(s)
 	switch kind {
 	case xsd.FacetLength, xsd.FacetMinLength, xsd.FacetMaxLength, xsd.FacetFractionDigits:
 		if inLexical {
 			return nil
 		}
 		return xsderr.New(ruleDatatypeValid, attr.Loc(),
-			"%s value %q is not a nonNegativeInteger", name, lexical)
+			"%s value %q is not a valid xs:nonNegativeInteger, which %s clause %d requires",
+			name, lexical, ruleDatatypeValid, integerFaultClause(s))
 	case xsd.FacetTotalDigits:
 		if positive {
 			return nil
 		}
 		return xsderr.New(ruleDatatypeValid, attr.Loc(),
-			"%s value %q is not a positiveInteger", name, lexical)
+			"%s value %q is not a valid xs:positiveInteger, which %s clause %d requires",
+			name, lexical, ruleDatatypeValid, integerFaultClause(s))
 	default:
 		return nil
 	}
@@ -4217,6 +4221,23 @@ func nonNegativeIntegerLexical(s string) (positive, ok bool) {
 		return false, false
 	}
 	return nonzero, true
+}
+
+// integerFaultClause names the cvc-datatype-valid clause (Datatypes §4.1.4) that
+// a collapsed literal s outside xs:nonNegativeInteger or xs:positiveInteger
+// fails. Both types inherit xs:integer's pattern facet [\-+]?[0-9]+
+// (xmlschema11-2.md:5202), so a literal outside it fails clause 1; a literal
+// inside it maps to an integer below the type's minInclusive, 0 or 1 (:5267,
+// :5311), and fails clause 3.
+func integerFaultClause(s string) int {
+	digits := s
+	if strings.HasPrefix(s, "-") || strings.HasPrefix(s, "+") {
+		digits = s[1:]
+	}
+	if digits != "" && allDigits(digits) {
+		return 3
+	}
+	return 1
 }
 
 // facetFixed maps a facet element's fixed attribute to that facet's {fixed}
