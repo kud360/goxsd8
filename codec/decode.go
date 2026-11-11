@@ -1639,9 +1639,9 @@ type filler interface {
 
 // binding is the struct codegen emits for a complex type, a document
 // element's or a particle's element declaration's, as Decode reads it: its
-// fields in codegen's order, its content's first, then each attribute use's,
-// then its {attribute wildcard}'s, the struct's last (codegen/doc.go
-// "# Attributes").
+// fields in codegen's order, its content's first, the open-content field
+// among them, then each attribute use's, then its {attribute wildcard}'s, the
+// struct's last (codegen/doc.go "# Attributes").
 type binding struct {
 	p       *pipeline
 	content elementContent
@@ -1693,9 +1693,10 @@ func (b *binding) sealedInterface() bool { return false }
 // elementContent is the content of the struct a *binding binds, the fields
 // that precede its attribute fields, a closed sum: a *sequence, the fields of
 // a sequence's particles, the one field holding a choice's sealed interface,
-// or no field for empty content, a *flattened, the one field
-// holding a flattened content model's slice, or a *simpleValue, simple
-// content's value field.
+// or no field for empty content, a *flattened, the one field holding a
+// flattened content model's slice, or an *occurrence, the occurrence field,
+// each of the three then holding the open-content field, if any; or a
+// *simpleValue, simple content's value field.
 type elementContent interface {
 	// width is how many of the struct's fields the content's are.
 	width() int
@@ -2051,11 +2052,12 @@ func (b boundValue) fill(r *xmltree.Reader, root *xmltree.StartElement, out refl
 // sequence's or spliced all group's, an element or wildcard particle giving a
 // field and a nested sequence or all group particle goshape.Splices answers
 // true for giving in its place the members its own particles give
-// (codegen/doc.go "# Particles"), or a content choice's, its one *choice. Its
-// members' attribution targets are numbered in bind order, a field taking one
-// and a *choice one per alternative, and check returns one sink per target in
-// that order, so the target index holds for a child is the index of the sink
-// that sets it.
+// (codegen/doc.go "# Particles"), or a content choice's, its one *choice,
+// either then holding the open-content field, if any, as its last member
+// (sequence.openContent). Its members' attribution targets are numbered in
+// bind order, a field taking one and a *choice one per alternative, and check
+// returns one sink per target in that order, so the target index holds for a
+// child is the index of the sink that sets it.
 type sequence struct {
 	p       *pipeline
 	members []contentMember
@@ -2110,8 +2112,8 @@ func (s *sequence) targets() int {
 }
 
 // A contentMember is one field of the struct a sequence binds, a closed sum: a
-// field, an element or wildcard particle's, or a *choice, a choice's sealed
-// interface.
+// field, an element or wildcard particle's or the open-content field, or a
+// *choice, a choice's sealed interface.
 type contentMember interface {
 	// targets is how many attribution targets the member takes: a field one,
 	// a *choice one per alternative.
@@ -2291,11 +2293,8 @@ func openContentField(ct xsd.ComplexType, names *goname.Namer) (field, bool) {
 // s.index's wildcardSlot, created for it where no wildcard particle did,
 // places at the empty position xsd.Matcher.NextParticle reports for an
 // [*xsd.OpenContent] answer, so that a Matcher attributes every child of a
-// type with {open content}, never its expanded name alone (eachChild): a
-// child a particle's name takes is the {open content}'s where the {particle}
-// could not take it at that point (§3.4.4.4; §3.4.4.3 cvc-complex-content
-// clauses 2.3 and 3.3), or, under {mode} suffix, where it follows a child the
-// {open content} took (clause 2.1).
+// type with {open content}, never its expanded name alone, since a child of a
+// particle's name can be the {open content}'s (eachChild states which).
 func (s *sequence) openContent(ct xsd.ComplexType, names *goname.Namer) bool {
 	f, ok := openContentField(ct, names)
 	if !ok {
