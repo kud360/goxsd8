@@ -247,8 +247,8 @@ var ErrTypeMismatch = errors.New("codec: T is not the type codegen emits for the
 // name, and appends one new item to the slice, the branch of that particle.
 // Of a content model held in an occurrence field (item 6), every child is
 // attributed by the Matcher too, to the field or branch of its particle in
-// one item, and the items are the sub-sequences of cvc-accept clause 3's
-// ·partition·, in document order, by one positional rule: the first child
+// one item, and the items are the sub-sequences of a ·partition· cvc-accept
+// clause 3 admits, in document order, chosen by one positional rule: the first child
 // opens an item, and each later child continues the current item where, at
 // the first index its particle's position and that of the current item's
 // last child differ, the model group holding both is a sequence and the
@@ -2680,10 +2680,11 @@ func (b boundFlattened) fill(r *xmltree.Reader, _ *xmltree.StartElement, out ref
 // trackedMatcher returns a fresh Matcher of ct's {content type}, which
 // attributes one element's children, or the decline of constructUntrackedModel
 // where xsd.Schema.ContentMatcher declines ct: its children cannot be
-// attributed, and the content particle repeats, so the model is a legitimate
-// one Decode does not cover, not a defect. ContentMatcher's answer depends on
-// ct alone, so a bind that calls it once all of a content model's particles
-// are bound makes CheckDecode return what Decode does.
+// attributed, and the content particle occurs other than exactly once, so the
+// model is a legitimate one Decode does not cover, not a defect.
+// ContentMatcher's answer depends on ct alone, so a bind that calls it once
+// all of a content model's particles are bound makes CheckDecode return what
+// Decode does.
 func trackedMatcher(schema *xsd.Schema, ct xsd.ComplexType) (*xsd.Matcher, error) {
 	m, ok := schema.ContentMatcher(ct)
 	if !ok {
@@ -2860,7 +2861,7 @@ type boundOccurrence struct {
 // a child before a wildcard does), attributes each child to a particle, and
 // the child's position opens a new item or continues the current one
 // (partition.next); each item is the type for one occurrence holding
-// the children of one sub-sequence of cvc-accept clause 3.3's ·partition·,
+// the children of one sub-sequence of cvc-accept clause 3's ·partition·,
 // each in the field or branch of its particle, as the item's index
 // attributes it (attributeAt), and the items are stored in document order:
 // appended for the slice, and for the pointer and the bare interface the one
@@ -2884,7 +2885,6 @@ func (b boundOccurrence) fill(r *xmltree.Reader, _ *xmltree.StartElement, out re
 	field := out.Field(0)
 	part := partition{schema: o.p.schema, group: o.group}
 	var item reflect.Value
-	items := 0
 	for {
 		tok, err := r.Token()
 		if err != nil {
@@ -2922,7 +2922,6 @@ func (b boundOccurrence) fill(r *xmltree.Reader, _ *xmltree.StartElement, out re
 			}
 			if opens {
 				item = reflect.New(b.item).Elem()
-				items++
 			}
 			if err := b.sinks[at.index].put(o.p, r, tok, item); err != nil {
 				return err
@@ -2931,7 +2930,7 @@ func (b boundOccurrence) fill(r *xmltree.Reader, _ *xmltree.StartElement, out re
 	}
 }
 
-// partition finds where each sub-sequence of cvc-accept clause 3.1's
+// partition finds where each sub-sequence of cvc-accept clause 3's
 // ·partition· of an element's children into occurrences of group begins, the
 // model group of a content particle occurring other than exactly once that
 // codegen neither splices nor flattens, from the Matcher position of each

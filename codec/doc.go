@@ -173,7 +173,7 @@
 //
 // A content {particle} occurring other than exactly once that codegen
 // neither splices nor flattens decodes into its occurrence field, one item
-// per occurrence of the children's ·partition· (§3.9.4.3 cvc-accept clause
+// per sub-sequence of a ·partition· of the children (§3.9.4.3 cvc-accept clause
 // 3), in document order; [Decode]'s doc states the field, its items and the
 // rule that partitions the children.
 //
