@@ -77,21 +77,23 @@ func WithURI(uri string) Option {
 
 // WithBranches supplies the branch types of I, a sealed interface codegen
 // emitted, which [Decode] cannot find from T: a Go interface names none of its
-// implementers. Pass one value of each branch or variant, in any order, such
-// as codec.WithBranches[order.Pay](order.PayCard{}, order.PayCash{}); only
-// each value's dynamic type is read. Decode uses the set wherever T holds I as
-// a choice's, a substitution group's or a union's interface, at any depth: T
-// itself, a field, a list's element, a nested element's struct or interface,
-// a branch, or a variant, and ignores a set for any type T does not hold so,
-// so one option list may serve every document element of a package; a set for
-// a type that is no interface is never used. A set for I serves every
-// interface type of I's method set, such as the named type codegen emits over
-// I for a top-level element of I's union type, and a later WithBranches for
-// an interface of I's method set replaces an earlier one's set. The Value
-// interface of codegen's PrecisionDecimal takes its arms from
-// [WithPrecisionDecimalArms] alone. With no WithBranches for I, I's set is
-// empty. Decode's doc, item 6, states how a set is matched and when it is
-// [ErrTypeMismatch].
+// implementers. Pass one value of each branch or variant, in any order, such as
+// codec.WithBranches[order.Pay](order.PayCard{}, order.PayCash{}); only each
+// value's dynamic type is read. Decode uses the set wherever T holds I as a
+// choice's, a substitution group's, a flattened slice element's or a union's
+// interface, at any depth: T itself, a field, a list's element, a nested
+// element's struct or interface, a branch, or a variant, and ignores a set for
+// any type T does not hold so, so one option list may serve every document
+// element of a package; a set for a type that is no interface is never used.
+// Codegen emits no such option list: the caller writes one WithBranches for
+// each such interface T holds, and [CheckDecode] reports a set that does not
+// match before any instance arrives. A set for I serves every interface type of
+// I's method set, such as the named type codegen emits over I for a top-level
+// element of I's union type, and a later WithBranches for an interface of I's
+// method set replaces an earlier one's set. The Value interface of codegen's
+// PrecisionDecimal takes its arms from [WithPrecisionDecimalArms] alone. With
+// no WithBranches for I, I's set is empty. Decode's doc, item 6, states how a
+// set is matched and when it is [ErrTypeMismatch].
 func WithBranches[I any](branches ...I) Option {
 	set := branchSet{iface: reflect.TypeFor[I](), branches: make([]reflect.Type, len(branches))}
 	for i, b := range branches {
