@@ -275,11 +275,12 @@ var ErrTypeMismatch = errors.New("codec: T is not the type codegen emits for the
 //     its {simple type definition}, examined as the document element's simple
 //     type is, whose construct the content declines by, or, for element-only
 //     content, its {particle}'s model group, an all group declining where
-//     codegen does not splice it (codegen's package doc, "# Particles"), and
-//     otherwise the occurrence of its sequence or choice, which
-//     declines when it is other than exactly once and codegen does not
-//     flatten the particle (codegen's package doc, "# Particles"): of a
-//     <group ref>, the compositor is the referenced definition's {model
+//     codegen does not splice it (codegen's package doc, "# Particles"), a
+//     sequence declining where codegen splices it though it occurs other
+//     than exactly once, and otherwise the occurrence of its sequence or
+//     choice, which declines when it is other than exactly once and codegen
+//     does not flatten the particle (codegen's package doc, "# Particles"):
+//     of a <group ref>, the compositor is the referenced definition's {model
 //     group}'s and the occurrence the referring particle's (§3.7.2
 //     declare-namedModelGroup).
 //   - Each particle of the complex type's content in order, the whole of one
@@ -1807,7 +1808,7 @@ func bindComplex[K comparable](run *bindRun, decl xsd.ElementDeclaration, ct xsd
 		index.store(key, b)
 		b.content = &sequence{p: run.p, index: newChildIndex()}
 	case xsd.ElementContent:
-		content, group, flat, d, err := contentGroup(run.p.schema, c, typeSubject)
+		content, group, arm, d, err := contentGroup(run.p.schema, c, typeSubject)
 		if err != nil {
 			return nil, err
 		}
@@ -1818,9 +1819,9 @@ func bindComplex[K comparable](run *bindRun, decl xsd.ElementDeclaration, ct xsd
 		// attribute field (goshape.HasAttributeFields), is the type itself
 		// unless it has {particles} and one occurrence of it is emptiable
 		// (cos-group-emptiable). Every particle gives an alternative or
-		// declines, so the counts decide before any is bound. A flattened
-		// content model occurs other than once, so it is never the type itself.
-		if !flat && group.Compositor() == xsd.CompositorChoice && !goshape.HasAttributeFields(ct) &&
+		// declines, so the counts decide before any is bound. Only armOnce
+		// occurs exactly once, so no other arm is ever the type itself.
+		if arm == armOnce && group.Compositor() == xsd.CompositorChoice && !goshape.HasAttributeFields(ct) &&
 			(len(group.Particles()) == 0 || !run.p.schema.ParticleEmptiable(content)) {
 			root := &choiceRoot{}
 			index.store(key, root)
@@ -1832,7 +1833,7 @@ func bindComplex[K comparable](run *bindRun, decl xsd.ElementDeclaration, ct xsd
 			return root, nil
 		}
 		index.store(key, b)
-		b.content, err = bindContent(run, ct, group, flat, names, typeSubject)
+		b.content, err = bindContent(run, ct, group, arm, names, typeSubject)
 		if err != nil {
 			return nil, err
 		}
@@ -1887,13 +1888,14 @@ func (run *bindRun) nested(el xsd.ElementDeclaration, ct xsd.ComplexType) (compl
 }
 
 // bindContent returns the elementContent of group, the content sequence,
-// choice or spliced all group of ct, flattened where contentGroup answered
-// flat, its fields named from names, or the first decline Decode's doc states
-// for its particles, item 5, typeSubject naming the type. A choice not
-// flattened is the sequence whose one member is its *choice; an all group is
-// bound as the sequence of its particles (bindSequence).
-func bindContent(run *bindRun, ct xsd.ComplexType, group xsd.ModelGroup, flat bool, names *goname.Namer, typeSubject string) (elementContent, error) {
-	if flat {
+// choice or spliced all group of ct, bound in the arm contentGroup answered,
+// its fields named from names, or the first decline Decode's doc states for
+// its particles, item 5, typeSubject naming the type. armFlat is
+// bindFlattened's; of armOnce, a choice is the sequence whose one member is
+// its *choice, and a sequence or all group the sequence of its particles
+// (bindSequence).
+func bindContent(run *bindRun, ct xsd.ComplexType, group xsd.ModelGroup, arm contentArm, names *goname.Namer, typeSubject string) (elementContent, error) {
+	if arm == armFlat {
 		return bindFlattened(run, ct, group, names, typeSubject)
 	}
 	if group.Compositor() == xsd.CompositorChoice {
@@ -2560,7 +2562,7 @@ func bindFlattened(run *bindRun, ct xsd.ComplexType, group xsd.ModelGroup, names
 func (f *flattened) matcher() (*xsd.Matcher, error) {
 	m, ok := f.sealed.p.schema.ContentMatcher(f.ct)
 	if !ok {
-		return nil, decline(constructUntrackedFlattened, fmt.Sprintf("the complex type defined at %s, whose children Decode attributes through xsd.Schema.ContentMatcher", f.ct.Loc()))
+		return nil, decline(constructUntrackedModel, fmt.Sprintf("the complex type defined at %s, whose children Decode attributes through xsd.Schema.ContentMatcher", f.ct.Loc()))
 	}
 	return m, nil
 }
@@ -2861,33 +2863,48 @@ var anyTypeName = xsd.QName{Space: xsd.XMLSchemaNS, Local: "anyType"}
 // it, so a type derived from xs:anyType is not.
 func anyTypeItself(td xsd.TypeDefinition) bool { return td.Name() == anyTypeName }
 
+// contentArm is how codegen holds a complex type's content sequence, choice
+// or all group, as contentGroup answers it, a closed set whose zero value is
+// invalid (STYLE T1): armOnce, as its own fields, or as the choice's sealed
+// interface, the type itself where bindComplex's choiceRoot test holds; and
+// armFlat, as the one field holding a flattened content model's slice
+// (codegen/doc.go "# Particles").
+type contentArm uint8
+
+const (
+	armOnce contentArm = iota + 1
+	armFlat
+)
+
 // contentGroup returns the {particle} of content, a complex type's
 // element-only or mixed content, its {term} an inline sequence, choice or all
 // group or a <group ref>, and its model group, the inline one or the {model
 // group} of the definition the ref names (§3.7.2 declare-namedModelGroup), and
-// flat, whether codegen flattens it, or the construct Decode declines in their
-// place, in its doc's item 5 order. An all group is bound as its own fields,
-// flat false, its {min occurs} 0 or 1 alike, where goshape.Splices answers
-// true for it, the question codegen's contentFields asks of it, and declines
-// otherwise. A sequence or choice occurring exactly once is bound as its own
-// fields or choice, flat false; one occurring otherwise is flat where
-// goshape.Flattens answers true for it, and declines otherwise. Nothing
-// recomputes flat: bindComplex reads it to keep a flattened choice out of
-// choiceRoot, and bindContent to bind the flattened field. A <group ref>
-// naming no definition, the content {particle}'s or one goshape.Flattens
-// follows inside it, is goshape.ModelGroupTerm's plain error, and
-// goshape.Splices' and goshape.Flattens' other errors plain ones too, each
+// arm, how codegen holds it, or the construct Decode declines in their place,
+// in its doc's item 5 order. Each compositor asks codegen's questions in
+// codegen's order (codegen/emit.go contentFields, then groupField). An all
+// group is armOnce, its {min occurs} 0 or 1 alike, where goshape.Splices
+// answers true for it, and declines otherwise. A sequence goshape.Splices
+// answers true for is armOnce where it occurs exactly once (exactlyOnce) and
+// otherwise, {min occurs} 0 over an emptiable group, declines as
+// constructSplicedSequence. A choice occurring exactly once is armOnce. Any
+// other sequence or choice is armFlat where goshape.Flattens answers true for
+// it, and declines otherwise. Nothing recomputes arm: bindComplex reads it to
+// keep all but armOnce out of choiceRoot, and bindContent to bind the field.
+// A <group ref> naming no definition, the content {particle}'s or one
+// goshape.Flattens follows inside it, is goshape.ModelGroupTerm's plain error,
+// and goshape.Splices' and goshape.Flattens' other errors plain ones too, each
 // prefixed by typeSubject, which names the complex type holding the particle.
-func contentGroup(schema *xsd.Schema, content xsd.ElementContent, typeSubject string) (particle xsd.Particle, group xsd.ModelGroup, flat bool, d construct, err error) {
+func contentGroup(schema *xsd.Schema, content xsd.ElementContent, typeSubject string) (particle xsd.Particle, group xsd.ModelGroup, arm contentArm, d construct, err error) {
 	if content.Mixed {
-		return xsd.Particle{}, xsd.ModelGroup{}, false, constructMixedContent, nil
+		return xsd.Particle{}, xsd.ModelGroup{}, 0, constructMixedContent, nil
 	}
 	if content.OpenContent != nil {
-		return xsd.Particle{}, xsd.ModelGroup{}, false, constructOpenContent, nil
+		return xsd.Particle{}, xsd.ModelGroup{}, 0, constructOpenContent, nil
 	}
 	group, _, err = goshape.ModelGroupTerm(schema, content.Particle.Term())
 	if err != nil {
-		return xsd.Particle{}, xsd.ModelGroup{}, false, 0, fmt.Errorf("codec: %s: %w", typeSubject, err)
+		return xsd.Particle{}, xsd.ModelGroup{}, 0, 0, fmt.Errorf("codec: %s: %w", typeSubject, err)
 	}
 	occurs := content.Particle.Occurs()
 	occursOther := constructChoiceOccurs
@@ -2895,33 +2912,43 @@ func contentGroup(schema *xsd.Schema, content xsd.ElementContent, typeSubject st
 	case xsd.CompositorAll:
 		splice, err := goshape.Splices(schema, group, occurs)
 		if err != nil {
-			return xsd.Particle{}, xsd.ModelGroup{}, false, 0, fmt.Errorf("codec: %s: %w", typeSubject, err)
+			return xsd.Particle{}, xsd.ModelGroup{}, 0, 0, fmt.Errorf("codec: %s: %w", typeSubject, err)
 		}
 		if !splice {
-			return xsd.Particle{}, xsd.ModelGroup{}, false, constructAllOccurs, nil
+			return xsd.Particle{}, xsd.ModelGroup{}, 0, constructAllOccurs, nil
 		}
-		return content.Particle, group, false, 0, nil
+		return content.Particle, group, armOnce, 0, nil
 	case xsd.CompositorSequence:
+		splice, err := goshape.Splices(schema, group, occurs)
+		if err != nil {
+			return xsd.Particle{}, xsd.ModelGroup{}, 0, 0, fmt.Errorf("codec: %s: %w", typeSubject, err)
+		}
+		if splice && !exactlyOnce(occurs) {
+			return xsd.Particle{}, xsd.ModelGroup{}, 0, constructSplicedSequence, nil
+		}
+		if splice {
+			return content.Particle, group, armOnce, 0, nil
+		}
 		occursOther = constructSequenceOccurs
 	case xsd.CompositorChoice:
+		if exactlyOnce(occurs) {
+			return content.Particle, group, armOnce, 0, nil
+		}
 	default:
 		// The {particle} of element-only content is a model group (§3.4.2.3.3),
 		// so the zero ModelGroup, no compositor, is a component no schema
 		// document yields; decline it with the nearest construct rather than
 		// read it.
-		return xsd.Particle{}, xsd.ModelGroup{}, false, constructNestedGroup, nil
+		return xsd.Particle{}, xsd.ModelGroup{}, 0, constructNestedGroup, nil
 	}
-	if exactlyOnce(occurs) {
-		return content.Particle, group, false, 0, nil
-	}
-	flat, err = goshape.Flattens(schema, group, occurs)
+	flat, err := goshape.Flattens(schema, group, occurs)
 	if err != nil {
-		return xsd.Particle{}, xsd.ModelGroup{}, false, 0, fmt.Errorf("codec: %s: %w", typeSubject, err)
+		return xsd.Particle{}, xsd.ModelGroup{}, 0, 0, fmt.Errorf("codec: %s: %w", typeSubject, err)
 	}
 	if !flat {
-		return xsd.Particle{}, xsd.ModelGroup{}, false, occursOther, nil
+		return xsd.Particle{}, xsd.ModelGroup{}, 0, occursOther, nil
 	}
-	return content.Particle, group, true, 0, nil
+	return content.Particle, group, armFlat, 0, nil
 }
 
 // particleTerm returns p's {term}, never nil: an element declaration, a local

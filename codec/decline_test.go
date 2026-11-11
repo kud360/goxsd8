@@ -115,6 +115,8 @@ func TestDecodeDeclines(t *testing.T) {
 		{"an extension merging two optional alls of required elements", `<xs:complexType name="t"><xs:all minOccurs="0"><xs:element name="a" type="xs:string"/></xs:all></xs:complexType>
 			<xs:complexType name="t2"><xs:complexContent><xs:extension base="s:t"><xs:all minOccurs="0"><xs:element name="b" type="xs:int"/></xs:all></xs:extension></xs:complexContent></xs:complexType>
 			<xs:element name="r" type="s:t2"/>`, "", a + `<s:b>1</s:b>`, constructAllOccurs, 1, 1},
+		{"optional content sequence over an emptiable group, which codegen splices", root(`<xs:sequence minOccurs="0"><xs:element name="a" type="xs:string" minOccurs="0"/><xs:element name="b" type="xs:string" minOccurs="0"/></xs:sequence>`),
+			"", a, constructSplicedSequence, 1, 1},
 		{"content sequence occurring twice", root(`<xs:sequence maxOccurs="2"><xs:element name="a" type="xs:string"/></xs:sequence>`), "", a, constructSequenceOccurs, 1, 1},
 		{"repeated content sequence codegen does not flatten", root(`<xs:sequence maxOccurs="unbounded"><xs:element name="a" type="xs:string"/><xs:element name="b" type="xs:string"/></xs:sequence>`),
 			"", a + `<s:b>y</s:b>`, constructSequenceOccurs, 1, 1},

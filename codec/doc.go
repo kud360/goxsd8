@@ -197,8 +197,11 @@
 //
 //   - A content choice occurring other than exactly once that codegen does
 //     not flatten.
-//   - A content sequence occurring other than exactly once that codegen does
-//     not flatten.
+//   - A content sequence occurring other than exactly once that codegen
+//     neither splices nor flattens.
+//   - A content sequence occurring other than exactly once that codegen
+//     splices (codegen's package doc, "# Particles"): {min occurs} 0 and
+//     {max occurs} 1 over an emptiable model group.
 //   - A flattened content model xsd.Schema.ContentMatcher does not track.
 //   - Two alternatives of a choice, or two declarations of a substitution
 //     group, whose branch structs could share a Go type; item 5 of

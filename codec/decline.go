@@ -90,9 +90,9 @@ type construct uint8
 // and constructSharedVariant, sit with the particle's, though a document
 // element of simple type, a complex type's simple content, by its {simple type
 // definition}, an attribute use, a list type, by its {item type definition},
-// and a union, by a basic member, decline by them too.
-// constructUntrackedFlattened follows every particle of a flattened content
-// model, ahead of the type's attribute uses.
+// and a union, by a basic member, decline by them too. constructUntrackedModel
+// follows every particle of a flattened content model, ahead of the type's
+// attribute uses.
 const (
 	constructTypeTable construct = iota + 1
 	constructNillable
@@ -100,6 +100,7 @@ const (
 	constructOpenContent
 	constructChoiceOccurs
 	constructAllOccurs
+	constructSplicedSequence
 	constructSequenceOccurs
 	constructNestedGroup
 	constructAbstractTypeElement
@@ -107,7 +108,7 @@ const (
 	constructSharedBranch
 	constructOtherPrimitive
 	constructSharedVariant
-	constructUntrackedFlattened
+	constructUntrackedModel
 	constructXsiAttribute
 	constructXsiType
 )
@@ -120,6 +121,7 @@ var constructNames = [...]string{
 	constructOpenContent:         "{open content}",
 	constructChoiceOccurs:        "a content choice occurring other than exactly once",
 	constructAllOccurs:           "a content all group with {min occurs} 0 whose model group is not emptiable",
+	constructSplicedSequence:     "a content sequence with {min occurs} 0 and {max occurs} 1 whose model group is emptiable",
 	constructSequenceOccurs:      "a content sequence occurring other than exactly once",
 	constructNestedGroup:         "a nested model group particle",
 	constructAbstractTypeElement: "an element declaration whose complex {type definition} has {abstract} true",
@@ -127,7 +129,7 @@ var constructNames = [...]string{
 	constructSharedBranch:        "two branches of a sealed interface whose structs have one shape",
 	constructOtherPrimitive:      "an atomic simple type whose primitive is ·implementation-defined·, other than xs:precisionDecimal",
 	constructSharedVariant:       "a union simple type two of whose basic members get one Go type",
-	constructUntrackedFlattened:  "a flattened content model the content matcher does not track",
+	constructUntrackedModel:      "a content model the content matcher does not track",
 	constructXsiAttribute:        "an attribute use in the xsi namespace",
 	constructXsiType:             "an element carrying xsi:type",
 }
