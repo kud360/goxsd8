@@ -64,6 +64,10 @@
 //     than exactly once, as a complex type's content {particle}, that codegen
 //     flattens (codegen's package doc, "# Particles"), into its slice of a
 //     sealed interface.
+//   - A sequence or choice, inline or through <group ref>, occurring other
+//     than exactly once, as a complex type's content {particle}, that codegen
+//     neither splices nor flattens (codegen's package doc, "# Particles"),
+//     into its field of the type for one occurrence.
 //   - An element particle, local or <element ref>.
 //   - A substitution group, into a sealed interface.
 //   - A choice, into a sealed interface.
@@ -113,10 +117,10 @@
 // that decodes (Structures §3.4.2.2 dcl.ctd.ctsc), its value field's, or
 // element-only content with no {open content} whose {particle} is a sequence
 // or choice, inline or the {model group} of the definition a <group ref>
-// names, occurring exactly once, or occurring otherwise where codegen
-// flattens it, or is an all group, inline or through <group ref>, where
-// codegen splices it. Each particle of a sequence or choice occurring exactly
-// once or of a spliced all group, a sequence's nested sequence particle and
+// names, occurring exactly once, or occurring otherwise where codegen does
+// not splice it, or is an all group, inline or through <group ref>, where
+// codegen splices it. Each particle of a sequence or choice not flattened or
+// of a spliced all group, a sequence's nested sequence particle and
 // an all group's nested all group particle, through <group ref>, that codegen
 // splices replaced by its own particles at any depth, a sequence's nested
 // choice particle occurring exactly once that codegen does not flatten by its
@@ -150,12 +154,13 @@
 // unbounded, its {min occurs} 0 read as 1, or, for an <element ref>
 // alternative, the same over the referenced declaration's named type, or, for
 // an alternative of complex type, the same over its S or I, or its AnyType for
-// one of type xs:anyType. A content choice's interface is T itself, or, where
-// the type has an attribute field (codegen's package doc, "# Attributes": an
-// attribute use other than xsi:nil's, or an {attribute wildcard}) or one
-// occurrence of the choice is emptiable (§3.9.6.3 cos-group-emptiable), the
-// first field of T, a struct whose further fields are the attribute fields;
-// item 6 of [Decode]'s doc places a nested choice's field. An empty match is
+// one of type xs:anyType. A content choice occurring exactly once has its
+// interface T itself, or, where the type has an attribute field (codegen's
+// package doc, "# Attributes": an attribute use other than xsi:nil's, or an
+// {attribute wildcard}) or one occurrence of the choice is emptiable (§3.9.6.3
+// cos-group-emptiable), the first field of T, a struct whose further fields
+// are the attribute fields; item 6 of [Decode]'s doc places a nested choice's
+// field and the occurrence field's interface. An empty match is
 // the nil interface. A particle's complex type gets its interface or struct
 // by the same rule.
 //
@@ -164,6 +169,12 @@
 // in document order, the branch of the basic particle (Structures §2.2.3.2
 // key-basic-particle) the child's validation-path attributes it to (§3.8.4.2
 // key-vpath), as [Decode]'s doc states; an empty match is the nil slice.
+//
+// A content {particle} occurring other than exactly once that codegen
+// neither splices nor flattens decodes into its occurrence field, one item
+// per sub-sequence of a ·partition· of the children (§3.9.4.3 cvc-accept clause
+// 3), in document order; [Decode]'s doc states the field, its items and the
+// rule that partitions the children.
 //
 // A substitution group's interface holds, for each child, the branch of the
 // group's declaration the child's expanded name resolves to (§3.9.4.3
@@ -194,11 +205,11 @@
 //
 // Every other construct is a [*DeclineError], never a zero value:
 //
-//   - A content choice occurring other than exactly once that codegen does
-//     not flatten.
-//   - A content sequence occurring other than exactly once that codegen does
-//     not flatten.
-//   - A flattened content model xsd.Schema.ContentMatcher does not track.
+//   - A content sequence occurring other than exactly once that codegen
+//     splices (codegen's package doc, "# Particles"): {min occurs} 0 and
+//     {max occurs} 1 over an emptiable model group.
+//   - A content model xsd.Schema.ContentMatcher does not track, flattened
+//     or held in an occurrence field.
 //   - Two alternatives of a choice, or two declarations of a substitution
 //     group, whose branch structs could share a Go type; item 5 of
 //     [Decode]'s doc states when.

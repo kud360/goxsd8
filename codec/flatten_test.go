@@ -258,17 +258,17 @@ func TestDecodeFlattenSharedBranch(t *testing.T) {
 // TestCheckDecodeUntrackedFlattened pins the flattened arm's ContentMatcher
 // decline: (a{1,2}){1,21845}, flattened by its repeating edge, is a content
 // model xsd.Schema.ContentMatcher declines as too wide to track, so
-// CheckDecode returns constructUntrackedFlattened, a *DeclineError and no
+// CheckDecode returns constructUntrackedModel, a *DeclineError and no
 // plain error. Validation leaves such an instance undecided (item 4), so no
 // Decode row reaches it.
 func TestCheckDecodeUntrackedFlattened(t *testing.T) {
 	schema := schemaOf(t, `<xs:element name="r"><xs:complexType><xs:sequence maxOccurs="21845"><xs:element name="a" type="xs:string" maxOccurs="2"/></xs:sequence></xs:complexType></xs:element>`)
 	err := CheckDecode[struct{}](schema, rootName)
 	var de *DeclineError
-	if !errors.As(err, &de) || de.Construct() != (Construct{constructUntrackedFlattened}) {
-		t.Fatalf("CheckDecode = %v, want a *DeclineError of %v", err, Construct{constructUntrackedFlattened})
+	if !errors.As(err, &de) || de.Construct() != (Construct{constructUntrackedModel}) {
+		t.Fatalf("CheckDecode = %v, want a *DeclineError of %v", err, Construct{constructUntrackedModel})
 	}
-	const prefix = "codec does not decode a flattened content model the content matcher does not track: the complex type defined at "
+	const prefix = "codec does not decode a content model the content matcher does not track: the complex type defined at "
 	if !strings.HasPrefix(err.Error(), prefix) {
 		t.Errorf("CheckDecode = %q, want the prefix %q", err, prefix)
 	}

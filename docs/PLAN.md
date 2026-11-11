@@ -55,8 +55,7 @@ one — appending is what this replaces.
 
 | first decline | cases | held by |
 |---|---:|---|
-| a content sequence occurring other than exactly once | 129 | #3593 (occurrence field); #3630 (shape K, spliced 0..1, its count unmeasured) |
-| a content choice occurring other than exactly once | 120 | #3593 |
+| a content sequence with {min occurs} 0 and {max occurs} 1 whose model group is emptiable | 1 | #3630 (shape K, spliced 0..1: `isDefault072`); measured at #3593's landing, which lifted the 129 and 120 of the two rows this one replaces |
 | a nested model group particle | 120 | #3589 (49) and #3588 (48), both `blocked` on #3593; #3594 (4) |
 | an element carrying xsi:type | 86 | **ruling**: refused permanently on a concrete selected type (#3291 RULING R5, issuecomment-6560566007; `codec/doc.go`). Both sampled cases, `elemT002` and `ctI028`, name a derived type. |
 | {open content} | 55 | #3651 (this pass) |
