@@ -2641,7 +2641,7 @@ type flattened struct {
 // xsd.Schema.ContentMatcher does not track declines (trackedMatcher).
 func bindFlattened(run *bindRun, ct xsd.ComplexType, group xsd.ModelGroup, names *goname.Namer, typeSubject string) (*flattened, error) {
 	f := &flattened{slice: &flatSlice{name: names.Claim(group.Compositor().String()), sealed: &sealed{p: run.p}}, ct: ct}
-	if err := bindReach(run, group, f.slice.sealed, &contentReach{flattened: f, typeSubject: typeSubject}, typeSubject); err != nil {
+	if err := bindReach(run, group, f.slice.sealed, &contentReach{flattened: f}, typeSubject); err != nil {
 		return nil, err
 	}
 	if open, ok := openContentField(ct, names); ok {
@@ -2672,7 +2672,7 @@ func bindFlattened(run *bindRun, ct xsd.ComplexType, group xsd.ModelGroup, names
 // of such a model undecided (item 4).
 func (s *sequence) flatten(run *bindRun, ct xsd.ComplexType, group xsd.ModelGroup, at []int, names *goname.Namer, typeSubject string) error {
 	f := &flatSlice{name: names.Claim(group.Compositor().String()), sealed: &sealed{p: run.p}}
-	site := &nestedReach{s: s, ct: ct, at: at, base: s.targets(), typeSubject: typeSubject}
+	site := &nestedReach{s: s, ct: ct, at: at}
 	if err := bindReach(run, group, f.sealed, site, typeSubject); err != nil {
 		return err
 	}
@@ -2691,9 +2691,9 @@ func (s *sequence) flatten(run *bindRun, ct xsd.ComplexType, group xsd.ModelGrou
 // its reach position (goshape.Reach).
 type reachSite interface {
 	// wildcard returns the field, but for its name, of the wildcard
-	// particle at position occurring as occurs, and its subject, or
-	// wildcardField's error.
-	wildcard(occurs xsd.Occurs, position []int, alt int) (field, string, error)
+	// particle at position occurring as occurs, and its subject, typeSubject
+	// naming the type, or wildcardField's error.
+	wildcard(occurs xsd.Occurs, position []int, alt int, typeSubject string) (field, string, error)
 	// element returns elementField's answer for el occurring as occurs.
 	element(run *bindRun, el xsd.ElementDeclaration, occurs xsd.Occurs) (field, []xsd.QName, error)
 	// bound records alternative alt, at position and taking the expanded
@@ -2729,7 +2729,7 @@ func bindReach(run *bindRun, group xsd.ModelGroup, alts *sealed, site reachSite,
 		// exception; particleTerm returns no nil Term.
 		switch term := term.(type) {
 		case xsd.Wildcard:
-			alt, subject, err = site.wildcard(occurs, position, len(alts.alts))
+			alt, subject, err = site.wildcard(occurs, position, len(alts.alts), typeSubject)
 			if err != nil {
 				return err
 			}
@@ -2777,15 +2777,14 @@ func bindReach(run *bindRun, group xsd.ModelGroup, alts *sealed, site reachSite,
 // wildcards counts the wildcard particles bound so far, in reach order, which
 // are the content model's every wildcard particle.
 type contentReach struct {
-	flattened   *flattened
-	typeSubject string
-	wildcards   int
+	flattened *flattened
+	wildcards int
 }
 
 // wildcard is wildcardField's, its subject's ordinal the reach's count.
-func (c *contentReach) wildcard(occurs xsd.Occurs, _ []int, _ int) (field, string, error) {
+func (c *contentReach) wildcard(occurs xsd.Occurs, _ []int, _ int, typeSubject string) (field, string, error) {
 	c.wildcards++
-	subject := wildcardSubject(c.wildcards, c.typeSubject)
+	subject := wildcardSubject(c.wildcards, typeSubject)
 	f, err := wildcardField(occurs, subject)
 	return f, subject, err
 }
@@ -2802,19 +2801,19 @@ func (c *contentReach) bound(alt int, position []int, _ []xsd.QName) {
 }
 
 // nestedReach is the reachSite of a nested particle at Matcher position at,
-// whose member s binds, its alternatives taking the targets from base.
+// whose member s binds, its alternatives taking the targets from
+// s.targets(), which holds through the reach since flatten appends the member
+// only once bindReach returns.
 type nestedReach struct {
-	s           *sequence
-	ct          xsd.ComplexType
-	at          []int
-	base        int
-	typeSubject string
+	s  *sequence
+	ct xsd.ComplexType
+	at []int
 }
 
 // wildcard is s.index's (childIndex.wildcard), at position below at, taking
-// target base+alt.
-func (n *nestedReach) wildcard(occurs xsd.Occurs, position []int, alt int) (field, string, error) {
-	return n.s.index.wildcard(n.ct, occurs, append(slices.Clone(n.at), position...), n.base+alt, n.typeSubject)
+// target s.targets()+alt.
+func (n *nestedReach) wildcard(occurs xsd.Occurs, position []int, alt int, typeSubject string) (field, string, error) {
+	return n.s.index.wildcard(n.ct, occurs, append(slices.Clone(n.at), position...), n.s.targets()+alt, typeSubject)
 }
 
 // element is elementField's over s.index's children.
@@ -2822,10 +2821,10 @@ func (n *nestedReach) element(run *bindRun, el xsd.ElementDeclaration, occurs xs
 	return elementField(run, n.s.index.children, el, occurs)
 }
 
-// bound indexes each of takes to target base+alt.
+// bound indexes each of takes to target s.targets()+alt.
 func (n *nestedReach) bound(alt int, _ []int, takes []xsd.QName) {
 	for _, name := range takes {
-		n.s.index.children[name] = n.base + alt
+		n.s.index.children[name] = n.s.targets() + alt
 	}
 }
 
