@@ -573,11 +573,11 @@ func TestDecodeNestedXsiType(t *testing.T) {
 // declaration's {type definition}, as a construct of the document element's
 // type is, and no path from the document element.
 func TestDeclineErrorTextNested(t *testing.T) {
-	schema := schemaOf(t, sequenceOf(`<xs:element name="a"><xs:complexType><xs:choice maxOccurs="2"><xs:element name="b" type="xs:string"/></xs:choice></xs:complexType></xs:element>`))
+	schema := schemaOf(t, sequenceOf(`<xs:element name="a"><xs:complexType><xs:openContent><xs:any namespace="##other" processContents="lax"/></xs:openContent><xs:sequence><xs:element name="b" type="xs:string"/></xs:sequence></xs:complexType></xs:element>`))
 	data := instanceOf("", `<s:a><s:b>x</s:b></s:a>`)
 	mustAccept(t, schema, data)
 	_, err := Decode[struct{}](schema, strict.New(), data)
-	const want = "?:1:1: codec does not decode a content choice occurring other than exactly once: the {type definition} of element {urn:s}a declared at s.xsd:1:231, a type defined at s.xsd:1:252; a decoder refusal, not a schema or instance fault"
+	const want = "?:1:1: codec does not decode {open content}: the {type definition} of element {urn:s}a declared at s.xsd:1:231, a type defined at s.xsd:1:252; a decoder refusal, not a schema or instance fault"
 	if err == nil || err.Error() != want {
 		t.Errorf("error = %v, want %q", err, want)
 	}

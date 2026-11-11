@@ -91,17 +91,15 @@ type construct uint8
 // element of simple type, a complex type's simple content, by its {simple type
 // definition}, an attribute use, a list type, by its {item type definition},
 // and a union, by a basic member, decline by them too. constructUntrackedModel
-// follows every particle of a flattened content model, ahead of the type's
-// attribute uses.
+// follows every particle of a flattened content model or an occurrence
+// field's, ahead of the type's attribute uses.
 const (
 	constructTypeTable construct = iota + 1
 	constructNillable
 	constructMixedContent
 	constructOpenContent
-	constructChoiceOccurs
 	constructAllOccurs
 	constructSplicedSequence
-	constructSequenceOccurs
 	constructNestedGroup
 	constructAbstractTypeElement
 	constructSharedName
@@ -119,10 +117,8 @@ var constructNames = [...]string{
 	constructNillable:            "an element declaration with {nillable} true",
 	constructMixedContent:        "mixed content",
 	constructOpenContent:         "{open content}",
-	constructChoiceOccurs:        "a content choice occurring other than exactly once",
 	constructAllOccurs:           "a content all group with {min occurs} 0 whose model group is not emptiable",
 	constructSplicedSequence:     "a content sequence with {min occurs} 0 and {max occurs} 1 whose model group is emptiable",
-	constructSequenceOccurs:      "a content sequence occurring other than exactly once",
 	constructNestedGroup:         "a nested model group particle",
 	constructAbstractTypeElement: "an element declaration whose complex {type definition} has {abstract} true",
 	constructSharedName:          "two particles taking one expanded name, each by its own element declaration or a member of its substitution group",
