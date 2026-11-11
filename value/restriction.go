@@ -220,7 +220,7 @@ func (rc restrictionCheck) checkBoundConsistency() error {
 		if !isLowerBoundKind(low.Kind()) {
 			continue
 		}
-		lowV, ordered, err := rc.boundLimit(low, boundRestrictionRule(low.Kind()))
+		lowV, ordered, err := rc.boundLimit(low, boundRestrictionRule(low.Kind()), simpleTypeLabel(rc.base.Name()))
 		if err != nil {
 			return err
 		}
@@ -231,7 +231,7 @@ func (rc restrictionCheck) checkBoundConsistency() error {
 			if !isUpperBoundKind(up.Kind()) {
 				continue
 			}
-			upV, ordered, err := rc.boundLimit(up, boundRestrictionRule(up.Kind()))
+			upV, ordered, err := rc.boundLimit(up, boundRestrictionRule(up.Kind()), simpleTypeLabel(rc.base.Name()))
 			if err != nil {
 				return err
 			}
@@ -312,7 +312,7 @@ func (rc restrictionCheck) checkBoundRestrictions(r xsd.TypeResolver) error {
 			continue
 		}
 		rule := boundRestrictionRule(kind)
-		ownV, ordered, err := rc.boundLimit(own, rule)
+		ownV, ordered, err := rc.boundLimit(own, rule, simpleTypeLabel(rc.base.Name()))
 		if err != nil {
 			return err
 		}
@@ -346,7 +346,8 @@ func (rc restrictionCheck) checkBoundAgainstBase(r xsd.TypeResolver, own xsd.Fac
 		if !isBoundKind(baseF.Kind()) {
 			continue
 		}
-		baseV, ordered, err := rc.boundLimit(baseF, boundRestrictionRule(baseF.Kind()))
+		baseV, ordered, err := rc.boundLimit(baseF, boundRestrictionRule(baseF.Kind()),
+			"the {base type definition} of "+simpleTypeLabel(ef.Declaring())+", the type that declares it")
 		if err != nil {
 			return err
 		}
@@ -375,8 +376,13 @@ func (rc restrictionCheck) checkBoundAgainstBase(r xsd.TypeResolver, own xsd.Fac
 // A wrong {value} count, or a lexical the base type's mapping cannot parse, IS
 // rejected under rule: every numbered condition of the SCC presupposes that the
 // facet's {value} is a member of the base type definition's value space, so a
-// {value} that is not one cannot satisfy the constraint.
-func (rc restrictionCheck) boundLimit(f xsd.Facet, rule xsderr.Rule) (limit Ordered, ordered bool, err error) {
+// {value} that is not one cannot satisfy the constraint. The rejection leads with
+// that fact — the facet, its {value}, and space, the type whose value space the
+// {value} is not in — and the mapping's verdict follows as its wrapped cause
+// (STYLE E5). space is the pass's base for one of owner's own facets; for one of
+// the base's {facets} it is the {base type definition} of the type that declares
+// the facet, the space that facet's own valid-restriction rule holds it to.
+func (rc restrictionCheck) boundLimit(f xsd.Facet, rule xsderr.Rule, space string) (limit Ordered, ordered bool, err error) {
 	values := f.Values()
 	if len(values) != 1 {
 		return nil, false, xsderr.New(rule, rc.owner.Loc(),
@@ -384,7 +390,9 @@ func (rc restrictionCheck) boundLimit(f xsd.Facet, rule xsderr.Rule) (limit Orde
 	}
 	v, err := facetValue(rc.mapping, rc.whiteSpace, values[0], nil)
 	if err != nil {
-		return nil, false, xsderr.Wrap(rule, rc.owner.Loc(), err)
+		return nil, false, causedBy(rule, rc.owner.Loc(), err,
+			"the %s facet's {value} %q is not in the value space of %s, which %s requires",
+			f.Kind(), values[0], space, rule)
 	}
 	ord, ok := v.(Ordered)
 	if !ok {
@@ -575,11 +583,21 @@ func (rc restrictionCheck) checkEnumerationRestriction(b Backend, r xsd.TypeReso
 				continue
 			}
 			if err != nil {
-				return xsderr.Wrap(ruleEnumerationValidRestriction, rc.owner.Loc(), err)
+				return causedBy(ruleEnumerationValidRestriction, rc.owner.Loc(), err,
+					"the enumeration facet's {value} member %q is not in the value space of %s, which %s requires",
+					em.Lexical(), simpleTypeLabel(rc.base.Name()), ruleEnumerationValidRestriction)
 			}
 		}
 	}
 	return nil
+}
+
+// causedBy is validate.causedBy (validate/validate.go) for construction-time
+// charges, without its nil-cause arm: both callers guard err != nil.
+func causedBy(rule xsderr.Rule, loc xsderr.Loc, cause error, format string, args ...any) *xsderr.Error {
+	e := xsderr.New(rule, loc, format+": %s", append(slices.Clone(args), xsderr.CauseText(cause))...)
+	e.Err = cause
+	return e
 }
 
 // notationDeclarer is the capability of a resolver that holds the current

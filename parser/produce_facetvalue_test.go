@@ -18,8 +18,8 @@ func facetValueSchema(base, facet string) string {
 // literal outside the type the schema for schema documents declares for it —
 // xs:nonNegativeInteger on xs:numFacet, xs:positiveInteger on <totalDigits> — is
 // charged cvc-datatype-valid at the facet's value attribute, from Produce alone with no
-// instance in play (#1774). The message is pinned from its opening subject, so a
-// swapped argument cannot pass.
+// instance in play (#1774). The whole message is pinned, from its opening
+// subject to the clause it cites (#3581), so a swapped argument cannot pass.
 func TestProduceFacetCountValueRejected(t *testing.T) {
 	cases := []struct {
 		name    string
@@ -27,34 +27,39 @@ func TestProduceFacetCountValueRejected(t *testing.T) {
 		facet   string
 		wantMsg string
 	}{
-		{"maxLength empty", "string", `<xs:maxLength value=""/>`, `<maxLength> value "" is not a nonNegativeInteger`},
-		{"maxLength negative", "string", `<xs:maxLength value="-1"/>`, `<maxLength> value "-1" is not a nonNegativeInteger`},
-		{"maxLength non-numeric", "string", `<xs:maxLength value="a"/>`, `<maxLength> value "a" is not a nonNegativeInteger`},
-		{"maxLength exponent", "string", `<xs:maxLength value="1e2"/>`, `<maxLength> value "1e2" is not a nonNegativeInteger`},
-		{"length negative", "string", `<xs:length value="-1"/>`, `<length> value "-1" is not a nonNegativeInteger`},
+		// Clause 1: outside xs:integer's pattern [\-+]?[0-9]+, which both types
+		// inherit. Clause 3: inside it, so the value is below the type's
+		// minInclusive.
+		{"maxLength empty", "string", `<xs:maxLength value=""/>`, `<maxLength> value "" is not a valid xs:nonNegativeInteger, which cvc-datatype-valid clause 1 requires`},
+		{"maxLength negative", "string", `<xs:maxLength value="-1"/>`, `<maxLength> value "-1" is not a valid xs:nonNegativeInteger, which cvc-datatype-valid clause 3 requires`},
+		{"maxLength non-numeric", "string", `<xs:maxLength value="a"/>`, `<maxLength> value "a" is not a valid xs:nonNegativeInteger, which cvc-datatype-valid clause 1 requires`},
+		{"maxLength x", "string", `<xs:maxLength value="x"/>`, `<maxLength> value "x" is not a valid xs:nonNegativeInteger, which cvc-datatype-valid clause 1 requires`},
+		{"maxLength exponent", "string", `<xs:maxLength value="1e2"/>`, `<maxLength> value "1e2" is not a valid xs:nonNegativeInteger, which cvc-datatype-valid clause 1 requires`},
+		{"length negative", "string", `<xs:length value="-1"/>`, `<length> value "-1" is not a valid xs:nonNegativeInteger, which cvc-datatype-valid clause 3 requires`},
 		// Collapsing the padding (#2481) brings neither literal into its space.
-		{"length padded negative", "string", `<xs:length value=" -1 "/>`, `<length> value " -1 " is not a nonNegativeInteger`},
-		{"totalDigits padded zero", "decimal", `<xs:totalDigits value=" 0 "/>`, `<totalDigits> value " 0 " is not a positiveInteger`},
-		{"minLength non-numeric", "string", `<xs:minLength value="a"/>`, `<minLength> value "a" is not a nonNegativeInteger`},
-		{"fractionDigits exponent", "decimal", `<xs:fractionDigits value="1e2"/>`, `<fractionDigits> value "1e2" is not a nonNegativeInteger`},
-		{"fractionDigits non-XML-whitespace padding", "decimal", "<xs:fractionDigits value=\"\u00a05\"/>", `<fractionDigits> value "\u00a05" is not a nonNegativeInteger`},
+		{"length padded negative", "string", `<xs:length value=" -1 "/>`, `<length> value " -1 " is not a valid xs:nonNegativeInteger, which cvc-datatype-valid clause 3 requires`},
+		{"totalDigits padded zero", "decimal", `<xs:totalDigits value=" 0 "/>`, `<totalDigits> value " 0 " is not a valid xs:positiveInteger, which cvc-datatype-valid clause 3 requires`},
+		{"minLength non-numeric", "string", `<xs:minLength value="a"/>`, `<minLength> value "a" is not a valid xs:nonNegativeInteger, which cvc-datatype-valid clause 1 requires`},
+		{"fractionDigits exponent", "decimal", `<xs:fractionDigits value="1e2"/>`, `<fractionDigits> value "1e2" is not a valid xs:nonNegativeInteger, which cvc-datatype-valid clause 1 requires`},
+		{"fractionDigits non-XML-whitespace padding", "decimal", "<xs:fractionDigits value=\"\u00a05\"/>", `<fractionDigits> value "\u00a05" is not a valid xs:nonNegativeInteger, which cvc-datatype-valid clause 1 requires`},
 		// "0" is a nonNegativeInteger, so only the positiveInteger arm rejects it.
-		{"totalDigits zero", "decimal", `<xs:totalDigits value="0"/>`, `<totalDigits> value "0" is not a positiveInteger`},
-		{"totalDigits negative", "decimal", `<xs:totalDigits value="-3"/>`, `<totalDigits> value "-3" is not a positiveInteger`},
-		{"totalDigits empty", "decimal", `<xs:totalDigits value=""/>`, `<totalDigits> value "" is not a positiveInteger`},
+		{"totalDigits zero", "decimal", `<xs:totalDigits value="0"/>`, `<totalDigits> value "0" is not a valid xs:positiveInteger, which cvc-datatype-valid clause 3 requires`},
+		{"totalDigits negative", "decimal", `<xs:totalDigits value="-3"/>`, `<totalDigits> value "-3" is not a valid xs:positiveInteger, which cvc-datatype-valid clause 3 requires`},
+		{"totalDigits empty", "decimal", `<xs:totalDigits value=""/>`, `<totalDigits> value "" is not a valid xs:positiveInteger, which cvc-datatype-valid clause 1 requires`},
 		// §3.4.25.1 admits only "+" as a sign, so "-0" — a nonNegativeInteger — is not
 		// a positiveInteger.
-		{"totalDigits negative zero", "decimal", `<xs:totalDigits value="-0"/>`, `<totalDigits> value "-0" is not a positiveInteger`},
-		{"maxLength sign alone", "string", `<xs:maxLength value="+"/>`, `<maxLength> value "+" is not a nonNegativeInteger`},
-		{"maxLength two signs", "string", `<xs:maxLength value="+-0"/>`, `<maxLength> value "+-0" is not a nonNegativeInteger`},
-		{"maxLength negative above MaxInt", "string", `<xs:maxLength value="-99999999999999999999"/>`, `<maxLength> value "-99999999999999999999" is not a nonNegativeInteger`},
+		{"totalDigits negative zero", "decimal", `<xs:totalDigits value="-0"/>`, `<totalDigits> value "-0" is not a valid xs:positiveInteger, which cvc-datatype-valid clause 3 requires`},
+		{"totalDigits sign alone", "decimal", `<xs:totalDigits value="-"/>`, `<totalDigits> value "-" is not a valid xs:positiveInteger, which cvc-datatype-valid clause 1 requires`},
+		{"maxLength sign alone", "string", `<xs:maxLength value="+"/>`, `<maxLength> value "+" is not a valid xs:nonNegativeInteger, which cvc-datatype-valid clause 1 requires`},
+		{"maxLength two signs", "string", `<xs:maxLength value="+-0"/>`, `<maxLength> value "+-0" is not a valid xs:nonNegativeInteger, which cvc-datatype-valid clause 1 requires`},
+		{"maxLength negative above MaxInt", "string", `<xs:maxLength value="-99999999999999999999"/>`, `<maxLength> value "-99999999999999999999" is not a valid xs:nonNegativeInteger, which cvc-datatype-valid clause 3 requires`},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			_, err := produce(t, facetValueSchema(tc.base, tc.facet))
 			assertRule(t, err, "cvc-datatype-valid")
-			if !strings.Contains(err.Error(), "] "+tc.wantMsg) {
-				t.Fatalf("diagnostic %q, want it to open with %q", err, tc.wantMsg)
+			if !strings.HasSuffix(err.Error(), ": [cvc-datatype-valid] "+tc.wantMsg) {
+				t.Fatalf("diagnostic %q, want its whole message to be %q", err, tc.wantMsg)
 			}
 			loc, ok := xsderr.LocOf(err)
 			if !ok {
