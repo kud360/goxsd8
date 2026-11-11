@@ -98,8 +98,8 @@ func TestFacetStageMessagesWhole(t *testing.T) {
 
 		// The cvc-assertions-valid verdict opens with the value and closes with
 		// the whole requirement, for a named and for an anonymous type.
-		{"failed assertion", validate(memberBackend{num.Name(): allDigits}, asserting(t, "asserted", num, "hold", "fail"), scripted(nil)), ruleCvcAssertionsValid, false, true, false,
-			`the value is not facet-valid with respect to assertion 2 of 2 in the {value} of the assertions facet of the simple type {urn:test}asserted, whose {test} "fail" did not evaluate to true without raising a dynamic or type error, but cvc-assertions-valid requires every {test} to evaluate to true`},
+		{"failed assertion", validate(memberBackend{num.Name(): allDigits}, asserting(t, "asserted", num, "fail", "hold"), scripted(nil)), ruleCvcAssertionsValid, false, true, false,
+			`the value is not facet-valid with respect to assertion 1 of 2 in the {value} of the assertions facet of the simple type {urn:test}asserted, whose {test} "fail" did not evaluate to true without raising a dynamic or type error, but cvc-assertions-valid requires every {test} to evaluate to true`},
 		{"failed assertion, anonymous type", validate(memberBackend{num.Name(): allDigits}, assertingNamed(t, xsd.QName{}, num, "fail"), scripted(nil)), ruleCvcAssertionsValid, false, true, false,
 			`the value is not facet-valid with respect to assertion 1 of 1 in the {value} of the assertions facet of an anonymous simple type, whose {test} "fail" did not evaluate to true without raising a dynamic or type error, but cvc-assertions-valid requires every {test} to evaluate to true`},
 
