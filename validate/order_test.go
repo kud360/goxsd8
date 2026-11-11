@@ -136,16 +136,48 @@ const orderDeclined = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
   </xs:element>
 </xs:schema>`
 
+// orderDeclinedValues declares r over an e whose attribute id is of aid, and k
+// over e children whose attribute v is of ai and k's xs:unique over that v,
+// each followed by c, whose type carries a declined assertion. aid and ai are
+// restrictions of xs:ID and xs:int carrying an assertions facet whose {test}
+// the engine declines.
+const orderDeclinedValues = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:simpleType name="aid"><xs:restriction base="xs:ID"><xs:assertion test="unparsed-text('x') eq ''"/></xs:restriction></xs:simpleType>
+  <xs:simpleType name="ai"><xs:restriction base="xs:int"><xs:assertion test="unparsed-text('x') eq ''"/></xs:restriction></xs:simpleType>
+  <xs:complexType name="ct"><xs:assert test="unparsed-text('x') eq ''"/></xs:complexType>
+  <xs:element name="r">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element name="e"><xs:complexType><xs:attribute name="id" type="aid"/></xs:complexType></xs:element>
+        <xs:element name="c" type="ct"/>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="k">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element name="e" maxOccurs="unbounded"><xs:complexType><xs:attribute name="v" type="ai"/></xs:complexType></xs:element>
+        <xs:element name="c" type="ct"/>
+      </xs:sequence>
+    </xs:complexType>
+    <xs:unique name="u"><xs:selector xpath="e"/><xs:field xpath="@v"/></xs:unique>
+  </xs:element>
+</xs:schema>`
+
 // The lists [validate.Result.Violations] and [validate.Result.Unevaluated]
-// return are in the order the walk charges, which that method's doc states and
-// which is not document order: each row pins one whole list as "line:col rule"
-// entries, and clause, where set, is a substring of the last entry's Msg naming
-// which check of its rule it is. Rows 1, 3 to 9 and 11 to 13 each carry a check settled
+// return are in the order each method's doc states, which is not document
+// order: each row pins one whole list as "line:col rule" entries, and clause,
+// where set, is a substring of the last entry's Msg naming which check of its
+// rule it is. Rows 1, 3 to 9 and 11 to 13 each carry a check settled
 // once an element's attributes, [[children]] or whole walk are exhausted, after
 // a charge at a later location; row 2 is the guard that siblings stay in
 // document order, row 10 that the parent's charge at a child's location
 // precedes the child's own, and row 14 that a cvc-identity-constraint charge at
-// an element's location follows that element's own charge there.
+// an element's location follows that element's own charge there. Rows 15 and
+// 16 are the records Unevaluated does not order as Violations does: a cvc-id
+// record at an attribute, and a cvc-identity-constraint record at an attribute
+// field node, each ahead of that attribute's own record and of a later
+// sibling's.
 func TestViolationsAreListedInWalkOrder(t *testing.T) {
 	for _, tc := range []struct {
 		name, schema, doc string
@@ -195,6 +227,12 @@ func TestViolationsAreListedInWalkOrder(t *testing.T) {
 		{"R12 declined assertion after its element's children", orderDeclined,
 			"<r>\n  <c/>\n</r>", true,
 			[]string{"2:3 cvc-assertion", "1:1 cvc-assertion"}, ""},
+		{"R15 cvc-id record at the attribute it could not read", orderDeclinedValues,
+			"<r>\n  <e id=\"a\"/>\n  <c/>\n</r>", true,
+			[]string{"2:6 cvc-id", "2:6 cvc-assertions-valid", "3:3 cvc-assertion"}, ""},
+		{"R16 cvc-identity-constraint record at the field node it could not read", orderDeclinedValues,
+			"<k>\n  <e v=\"1\"/>\n  <c/>\n</k>", true,
+			[]string{"2:6 cvc-identity-constraint", "2:6 cvc-assertions-valid", "3:3 cvc-assertion"}, ""},
 	} {
 		res := orderAssess(t, tc.schema, tc.doc)
 		var got, msgs []string

@@ -283,11 +283,25 @@ func (u Unevaluated) Loc() xsderr.Loc { return u.loc }
 // which component.
 func (u Unevaluated) Msg() string { return u.msg }
 
-// Unevaluated returns r's [Unevaluated] checks, in the order
-// [Result.Violations] states for violations. The slice is copied: mutating
-// the result does not affect r. No such check yields nil.
-// [Result.Standing] says where they leave the document, and [Result] how a
-// report reads them beside [Result.Violations].
+// Unevaluated returns r's [Unevaluated] checks in the order the walk records
+// them. That is the order [Result.Violations] states for violations, except for
+// cvc-id and cvc-identity-constraint records, which fall where the walk reaches
+// the check they withhold. A cvc-id record falls at the item the walk could not
+// read into the ID/IDREF table, when the walk reads that item: an attribute's,
+// a ·defaulted attribute·'s included, on its element's entry, before the
+// records on that element's attributes, and an element's own after the records
+// on its value and {assertions}. A cvc-identity-constraint record falls on
+// entry to the element whose declaration carries the constraint for a
+// {selector} or {fields} outside the path subset, where the walk reads a field
+// node whose value could not be read, and, for a ·key-sequence· comparison or
+// keyref resolution left undecided, once that element's subtree is exhausted.
+// So a cvc-id record can precede a record at a later location, and an
+// attribute's can precede another record at its own; a cvc-identity-constraint
+// record of either of the first two kinds can precede both.
+//
+// The slice is copied: mutating the result does not affect r. No such check
+// yields nil. [Result.Standing] says where they leave the document, and
+// [Result] how a report reads them beside [Result.Violations].
 func (r *Result) Unevaluated() []Unevaluated {
 	if len(r.unevaluated) == 0 {
 		return nil
