@@ -62,7 +62,8 @@ const orderAsserting = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" x
 </xs:schema>`
 
 // orderAttributes declares q with an optional int a, a required int b, and a
-// QName d whose default "p:x" binds no prefix p.
+// QName d whose default "p:x" binds no prefix p, i of the simple type xs:int,
+// and s, an xs:int simple-content extension carrying an int a.
 const orderAttributes = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
   <xs:element name="q">
     <xs:complexType>
@@ -76,6 +77,7 @@ const orderAttributes = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
       <xs:attribute name="d" type="xs:QName" default="p:x"/>
     </xs:complexType>
   </xs:element>
+  <xs:element name="i" type="xs:int"/>
   <xs:element name="s">
     <xs:complexType><xs:simpleContent><xs:extension base="xs:int">
       <xs:attribute name="a" type="xs:int"/>
@@ -120,7 +122,7 @@ const orderDeclined = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
 // return are in the order the walk charges, which that method's doc states and
 // which is not document order: each row pins one whole list as "line:col rule"
 // entries, and clause, where set, is a substring of the last entry's Msg naming
-// which check of its rule it is. Rows 1 and 3 to 12 each carry a check settled
+// which check of its rule it is. Rows 1, 3 to 9 and 11 to 13 each carry a check settled
 // once an element's attributes, [[children]] or whole walk are exhausted, after
 // a charge at a later location; row 2 is the guard that siblings stay in
 // document order, and row 10 that the parent's charge at a child's location
@@ -150,6 +152,9 @@ func TestViolationsAreListedInWalkOrder(t *testing.T) {
 		{"R6 simple-content value after an attribute's charge", orderAttributes,
 			"<s a=\"x\">notint</s>", false,
 			[]string{"1:4 cvc-attribute", "1:1 cvc-complex-type"}, "clause 1.2"},
+		{"R13 simple-typed value after an attribute's charge", orderAttributes,
+			"<i a=\"x\">notint</i>", false,
+			[]string{"1:4 cvc-type", "1:1 cvc-type"}, "clause 3.1.3"},
 		{"R7 fixed value after a child's charge", orderSmall,
 			"<x xmlns=\"urn:t\">\n  <e>9</e>\n</x>", false,
 			[]string{"2:3 cvc-type", "1:1 cvc-elt"}, ""},
