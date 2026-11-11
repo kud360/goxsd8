@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"errors"
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/kud360/goxsd8/builtin/strict"
@@ -217,6 +218,22 @@ func TestDecodeNestedFlattenedDeclines(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+// TestCheckDecodeNestedFlattenedWildcardOrdinal pins item 5's wildcard
+// ordinal inside a nested reach: of sequence(any over urn:o, sequence(any over
+// urn:p?, any over urn:q?) repeated), the reach's two wildcard alternatives
+// share a branch shape, and the second's subject is wildcard particle 3, the
+// sibling counted first.
+func TestCheckDecodeNestedFlattenedWildcardOrdinal(t *testing.T) {
+	schema := schemaOf(t, sequenceOf(`<xs:any namespace="urn:o" processContents="lax"/><xs:sequence maxOccurs="unbounded">`+
+		`<xs:any namespace="urn:p" processContents="lax" minOccurs="0"/><xs:any namespace="urn:q" processContents="lax" minOccurs="0"/></xs:sequence>`))
+	err := CheckDecode[struct{}](schema, rootName)
+	const want = "codec does not decode two branches of a sealed interface whose structs have one shape: wildcard particle 3 of the {type definition} of element {urn:s}r"
+	var de *DeclineError
+	if !errors.As(err, &de) || de.Construct() != (Construct{constructSharedBranch}) || !strings.HasPrefix(err.Error(), want) {
+		t.Errorf("CheckDecode = %v, want a *DeclineError of %v with the prefix %q", err, Construct{constructSharedBranch}, want)
 	}
 }
 
