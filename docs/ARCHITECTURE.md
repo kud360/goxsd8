@@ -701,7 +701,7 @@ design contract.
   (ID/IDREF harvesting, EDC's post-`xsi:type` governing type, namespace
   context for identity constraints).
 - Every violation is an `xsderr.Error` with a cvc rule ID + instance
-  and/or schema location, reported in document order.
+  and/or schema location.
 
 ## Codegen & codec
 
