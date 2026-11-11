@@ -167,7 +167,7 @@ func TestDecodeDeclines(t *testing.T) {
 		{"local element of emptiable mixed content with a default", sequenceOf(`<xs:element name="a" default="d"><xs:complexType mixed="true"><xs:sequence><xs:element name="b" type="xs:string" minOccurs="0"/></xs:sequence></xs:complexType></xs:element>`),
 			"", `<s:a/>`, constructMixedContent, 1, 1},
 		{"local element of simple content of a union of xs:string and xs:token, ahead of its attribute uses", `<xs:import namespace="http://www.w3.org/2001/XMLSchema-instance"/><xs:simpleType name="st"><xs:union memberTypes="xs:string xs:token"/></xs:simpleType>` +
-			sequenceOf(`<xs:element name="a"><xs:complexType><xs:simpleContent><xs:extension base="s:st"><xs:attribute ref="xsi:nil"/><xs:anyAttribute processContents="lax"/></xs:extension></xs:simpleContent></xs:complexType></xs:element>`),
+			sequenceOf(`<xs:element name="a"><xs:complexType><xs:simpleContent><xs:extension base="s:st"><xs:attribute ref="xsi:type"/><xs:anyAttribute processContents="lax"/></xs:extension></xs:simpleContent></xs:complexType></xs:element>`),
 			"", a, constructSharedVariant, 1, 1},
 		{"local element of simple content, its attribute use of a union of xs:string and xs:token", sequenceOf(`<xs:element name="a"><xs:complexType><xs:simpleContent><xs:extension base="xs:string"><xs:attribute name="k"><xs:simpleType><xs:union memberTypes="xs:string xs:token"/></xs:simpleType></xs:attribute></xs:extension></xs:simpleContent></xs:complexType></xs:element>`),
 			"", a, constructSharedVariant, 1, 1},
@@ -208,7 +208,10 @@ func TestDecodeDeclines(t *testing.T) {
 			` b="1.0"`, a, constructSharedVariant, 1, 1},
 		{"union of xs:string and xs:token", sequenceOf(`<xs:element name="a"><xs:simpleType><xs:union memberTypes="xs:string xs:token"/></xs:simpleType></xs:element>`), "", a, constructSharedVariant, 1, 1},
 		{"attribute use in the xsi namespace", `<xs:import namespace="http://www.w3.org/2001/XMLSchema-instance"/>` +
-			root(`<xs:sequence><xs:element name="a" type="xs:string"/></xs:sequence><xs:attribute ref="xsi:nil"/>`), "", a, constructXsiAttribute, 1, 1},
+			root(`<xs:sequence><xs:element name="a" type="xs:string"/></xs:sequence><xs:attribute ref="xsi:type"/>`), "", a, constructXsiAttribute, 1, 1},
+		{"nillable declaration of a type with an xsi:nil use", `<xs:import namespace="http://www.w3.org/2001/XMLSchema-instance"/>` +
+			`<xs:element name="r" nillable="true"><xs:complexType><xs:sequence><xs:element name="a" type="xs:string"/></xs:sequence><xs:attribute ref="xsi:nil"/></xs:complexType></xs:element>`,
+			` xsi:nil="true"`, "", constructNillable, 1, 1},
 	}
 	for _, row := range rows {
 		t.Run(row.name, func(t *testing.T) {
@@ -514,7 +517,7 @@ func TestDeclineConstruct(t *testing.T) {
 			{root(`<xs:choice><xs:sequence><xs:element name="a" type="xs:string"/></xs:sequence><xs:element name="b" type="xs:string"/></xs:choice>`), "", a},
 		}},
 		{"attribute use", [2]decl{
-			{xsiImport + root(`<xs:sequence><xs:element name="a" type="xs:string"/></xs:sequence><xs:attribute ref="xsi:nil"/>`), "", a},
+			{xsiImport + root(`<xs:sequence><xs:element name="a" type="xs:string"/></xs:sequence><xs:attribute ref="xsi:type"/>`), "", a},
 			{xsiImport + root(`<xs:sequence><xs:element name="b" type="xs:string"/></xs:sequence><xs:attribute name="c" type="xs:string"/><xs:attribute ref="xsi:schemaLocation"/>`), "", `<s:b>y</s:b>`},
 		}},
 		{"xsi:type", [2]decl{

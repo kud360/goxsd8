@@ -134,8 +134,8 @@
 // contents}. No two element particles share an expanded name, such an interface's
 // particle taking each of those declarations', but in a flattened reach, whose
 // children are attributed by position. Each attribute use is outside the xsi
-// namespace, but xsi:nil's in a type codegen emits as its choice's sealed interface,
-// which gives that use no field, and is typed the same way. No element in the
+// namespace, but xsi:nil's, to which codegen gives no field (codegen's package
+// doc, "# Attributes"), and is typed the same way. No element in the
 // instance carries xsi:type, except inside a wildcard's match or an element of type
 // xs:anyType's raw content.
 //
@@ -213,8 +213,7 @@
 //   - Mixed content.
 //   - Element-only content with {open content}.
 //   - A complex type with {abstract} true.
-//   - An attribute use in the xsi namespace, but xsi:nil's in a type codegen
-//     emits as its choice's sealed interface, which gives it no field.
+//   - An attribute use in the xsi namespace, but xsi:nil's.
 //   - An element declaration with a {type table}.
 //   - A nillable element, but for one of type xs:anyType itself; item 5 of
 //     [Decode]'s doc states when.
