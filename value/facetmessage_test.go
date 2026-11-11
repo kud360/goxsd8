@@ -9,11 +9,11 @@ import (
 )
 
 // TestFacetStageMessagesWhole pins, by equality, the whole Msg of one error from
-// every facet-stage site #2412 rewrote to STYLE E5: the offending item first,
-// then the rule its site charges as a clause of the same sentence. A
-// facetPrecondition or assertionDeclined Msg carries none of its sentinel's
-// text, though the sentinel still rides the chain: each row also pins the three
-// classification predicates, which read the chain alone.
+// every facet-stage site #2412 rewrote to STYLE E5, and of checkAssertions's
+// verdict: the offending item first, then the rule its site charges as a clause
+// of the same sentence. A facetPrecondition or assertionDeclined Msg carries
+// none of its sentinel's text, though the sentinel still rides the chain: each
+// row also pins the three classification predicates, which read the chain alone.
 func TestFacetStageMessagesWhole(t *testing.T) {
 	q := func(local string) xsd.QName { return xsd.QName{Space: "urn:t", Local: local} }
 	collapse := xsd.NewFacet(xsd.FacetWhiteSpace, []string{"collapse"}, true)
@@ -95,6 +95,13 @@ func TestFacetStageMessagesWhole(t *testing.T) {
 			`the maxInclusive facet of the simple type {urn:t}unordered, whose {value} "5" parses to a string that is not Ordered, is not applicable to that type, but cos-applicable-facets allows in {facets} only the facets applicable to the type`},
 		{"no whiteSpace mode in force", second(effectiveWhiteSpace(noSchema{}, bare)), xsderr.RuleComponentInvariant, true, false, false,
 			`the simple type {urn:t}bare has no whiteSpace {value} in force that is exactly one of preserve/replace/collapse`},
+
+		// The cvc-assertions-valid verdict opens with the value and closes with
+		// the whole requirement, for a named and for an anonymous type.
+		{"failed assertion", validate(memberBackend{num.Name(): allDigits}, asserting(t, "asserted", num, "hold", "fail"), scripted(nil)), ruleCvcAssertionsValid, false, true, false,
+			`the value is not facet-valid with respect to assertion 2 of 2 in the {value} of the assertions facet of the simple type {urn:test}asserted, whose {test} "fail" did not evaluate to true without raising a dynamic or type error, but cvc-assertions-valid requires every {test} to evaluate to true`},
+		{"failed assertion, anonymous type", validate(memberBackend{num.Name(): allDigits}, assertingNamed(t, xsd.QName{}, num, "fail"), scripted(nil)), ruleCvcAssertionsValid, false, true, false,
+			`the value is not facet-valid with respect to assertion 1 of 1 in the {value} of the assertions facet of an anonymous simple type, whose {test} "fail" did not evaluate to true without raising a dynamic or type error, but cvc-assertions-valid requires every {test} to evaluate to true`},
 
 		// assertionDeclined opens with the assertion.
 		{"declined assertion", validate(memberBackend{num.Name(): allDigits}, asserting(t, "asserted", num, "hold", "decline"), scripted(nil)), ruleCvcAssertionsValid, false, false, true,
