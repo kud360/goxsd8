@@ -220,6 +220,21 @@ func TestDecodeNestedFlattenedDeclines(t *testing.T) {
 	}
 }
 
+// TestCheckDecodeNestedFlattenedMismatch pins item 6 at a nested flattened
+// field: a T whose second field is not named Sequence is no type codegen
+// emits for nfSeqSchema's s:r, and the error names that field by its index.
+func TestCheckDecodeNestedFlattenedMismatch(t *testing.T) {
+	type nfMisnamed struct {
+		A   string
+		Seq []nfSeqItem
+	}
+	err := CheckDecode[nfMisnamed](schemaOf(t, nfSeqSchema), rootName, nfSeqBranches)
+	const want = "codec: T is not the type codegen emits for the document element: field 1 of codec.nfMisnamed is Seq []codec.nfSeqItem where codegen emits Sequence, a slice of a sealed interface"
+	if !errors.Is(err, ErrTypeMismatch) || err.Error() != want {
+		t.Errorf("CheckDecode = %v, want %q", err, want)
+	}
+}
+
 // TestCheckDecodeUntrackedNestedFlattened pins the nested flattened arm's
 // ContentMatcher decline: sequence(any?, (a{1,2}){1,21845}), the nested
 // particle flattened by its repeating edge, is a content model
