@@ -340,10 +340,11 @@ var ErrTypeMismatch = errors.New("codec: T is not the type codegen emits for the
 //     after its declaration's own constructs. Then a content model
 //     xsd.Schema.ContentMatcher does not track declines, since its children
 //     cannot be attributed.
-//   - Each of the complex type's attribute uses in order, none where codegen
-//     emits its choice's sealed interface as the type itself, whose one use
-//     can be xsi:nil's. Its {attribute wildcard} gives the field item 6
-//     states and is examined no further.
+//   - Each of the complex type's attribute uses in order but xsi:nil's, to
+//     which codegen gives no field (codegen's package doc, "# Attributes"),
+//     none where codegen emits its choice's sealed interface as the type
+//     itself, which has no other. Its {attribute wildcard} gives the field
+//     item 6 states and is examined no further.
 //
 // The complex type of a top-level declaration, the document element's, one
 // an <element ref> names, or a member of that one's substitution group, a
@@ -1838,7 +1839,7 @@ func bindComplex[K comparable](run *bindRun, decl xsd.ElementDeclaration, ct xsd
 			return nil, err
 		}
 	}
-	for _, u := range ct.AttributeUses() {
+	for _, u := range goshape.FieldAttributeUses(ct) {
 		a, err := attributeUse(run.p.schema, u)
 		if err != nil {
 			return nil, err
