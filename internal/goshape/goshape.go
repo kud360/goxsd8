@@ -305,19 +305,34 @@ func ParticleShape(occurs xsd.Occurs, sealed bool) (s Shape, ok bool) {
 	return Bare, true
 }
 
-// AttributeShape returns the Shape codegen/doc.go "# Attributes" gives the
-// field of the attribute use u, its V a sealed interface exactly when sealed,
-// reading u's effective value constraint (§3.5.4 key-evc) from
-// [xsd.Schema.EffectiveValueConstraint] and its declaration as a built-in
-// xsi: one exactly when it is in the xsi namespace (§3.2.6.4 no-xsi).
+// SuppliedValueConstraint returns the value constraint whose value the field
+// of the attribute use u holds when its attribute is absent, as
+// codegen/doc.go "# Attributes" states: ok is false exactly when u has no
+// effective value constraint (§3.5.4 key-evc, from
+// [xsd.Schema.EffectiveValueConstraint]) or its {attribute declaration} is a
+// built-in xsi: one, which it reads as one exactly when it is in the xsi
+// namespace (§3.2.6.4 no-xsi). It does not read u's {required}.
 //
 // GAP(xsd): a programmatically built schema is not kept out of the xsi
 // namespace (#1462), so a built {xsi}-named declaration with an effective
-// value constraint gets Pointer here, where "# Attributes" gives Bare. Codec
-// agrees only because it declines every xsi: use before it reaches this.
+// value constraint gets ok false, where "# Attributes" supplies its value:
+// codegen gives its field the Pointer shape (AttributeShape), and codec
+// decodes an absent attribute's field nil, where the field is bare and holds
+// that value.
+func SuppliedValueConstraint(schema *xsd.Schema, u xsd.AttributeUse) (vc xsd.ValueConstraint, ok bool) {
+	vc, ok = schema.EffectiveValueConstraint(u)
+	if !ok || u.DeclarationName().Space == xsd.XMLSchemaInstanceNS {
+		return xsd.ValueConstraint{}, false
+	}
+	return vc, true
+}
+
+// AttributeShape returns the Shape codegen/doc.go "# Attributes" gives the
+// field of the attribute use u, its V a sealed interface exactly when sealed,
+// reading whether an absent attribute's field holds a value from
+// SuppliedValueConstraint.
 func AttributeShape(schema *xsd.Schema, u xsd.AttributeUse, sealed bool) Shape {
-	_, constrained := schema.EffectiveValueConstraint(u)
-	supplied := constrained && u.DeclarationName().Space != xsd.XMLSchemaInstanceNS
+	_, supplied := SuppliedValueConstraint(schema, u)
 	if u.Required() || supplied || sealed {
 		return Bare
 	}
