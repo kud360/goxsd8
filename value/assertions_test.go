@@ -39,18 +39,25 @@ func scripted(calls *[]assertionCall) scriptedAssertions {
 	}
 }
 
-// asserting builds a restriction of base named local whose own assertions
-// facet carries one assertion per test, in order.
+// asserting builds a restriction of base named {urn:test}local whose own
+// assertions facet carries one assertion per test, in order.
 func asserting(t *testing.T, local string, base *xsd.SimpleType, tests ...string) *xsd.SimpleType {
+	t.Helper()
+	return assertingNamed(t, xsd.QName{Space: "urn:test", Local: local}, base, tests...)
+}
+
+// assertingNamed is asserting with name as the {name}; the zero QName builds an
+// anonymous simple type.
+func assertingNamed(t *testing.T, name xsd.QName, base *xsd.SimpleType, tests ...string) *xsd.SimpleType {
 	t.Helper()
 	assertions := make([]xsd.Assertion, 0, len(tests))
 	for _, test := range tests {
 		assertions = append(assertions, xsd.NewAssertion(xsd.NewXPathExpression(test, nil, nil, nil)))
 	}
-	st, err := newCheckedSimpleType(xsderr.Loc{}, xsd.QName{Space: "urn:test", Local: local},
+	st, err := newCheckedSimpleType(xsderr.Loc{}, name,
 		xsd.RestrictionDerivation{}, base, []xsd.Facet{xsd.NewAssertionsFacet(assertions)}, nil)
 	if err != nil {
-		t.Fatalf("NewSimpleType(%q): %v", local, err)
+		t.Fatalf("NewSimpleType(%s): %v", name, err)
 	}
 	return st
 }
