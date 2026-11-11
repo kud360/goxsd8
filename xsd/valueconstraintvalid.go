@@ -174,10 +174,9 @@ func (s *Schema) checkComponentValueConstraints() error {
 // checkAttributeUseValueConstraint charges au-props-correct (§3.5.6) clauses 2 and
 // 3 against one Attribute Use, plus a-props-correct clause 2 against the LOCAL
 // declaration a use owns. owner names the enclosing component and loc is its
-// position. Both clauses are charged at the use's own <attribute> element
-// (chargedLoc), where a reader must edit, falling back to loc for a use built
-// with the zero Loc; the message names the owner and the attribute. The owned
-// local declaration is charged at its OWN Loc.
+// position. Both clauses are charged at u.chargedLoc(loc), and the message names
+// the owner and the attribute. The owned local declaration is charged at its OWN
+// Loc.
 //
 // Clause 2 is decided first, in spec order, so a use violating both clauses
 // reports the more basic failure: its {value constraint} is not a valid default

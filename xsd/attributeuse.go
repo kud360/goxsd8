@@ -121,11 +121,10 @@ type AttributeUse struct {
 	loc xsderr.Loc
 }
 
-// chargedLoc is where finalize charges a rejection of this use: its own
-// <attribute> element's position, or owner — the enclosing complex type's or
-// attribute group definition's — when the use's is the zero xsderr.Loc{}, which
-// means "unknown" (doc.go). Only exact equality with the zero value falls back;
-// a partially filled Loc is charged as it is.
+// chargedLoc is the position NewAttributeUse's loc paragraph promises Finalize
+// charges: the use's own, or owner, the enclosing component's, when the use's is
+// the zero xsderr.Loc{}. Only exact equality with the zero value falls back; a
+// partially filled Loc is charged as it is.
 func (u AttributeUse) chargedLoc(owner xsderr.Loc) xsderr.Loc {
 	if u.loc == (xsderr.Loc{}) {
 		return owner

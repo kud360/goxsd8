@@ -2370,7 +2370,7 @@ func (e *emitter) branchOrigin(child scope, decl xsd.ElementDeclaration, b table
 
 // attributeField returns the field of attribute use u (§3.5.1) of the complex
 // type at loc named in declines by subject, typed and declined by the package
-// doc's "# Attributes" attribute-use rule. An attribute use carries no Loc, so
+// doc's "# Attributes" attribute-use rule. An attribute use reports no Loc, so
 // its declines cite the declaration it resolves to, the global one for an
 // <attribute ref>. An anonymous union type is named by attributePath, nested
 // being the scope of the struct holding the field. Its shape is

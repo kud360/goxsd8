@@ -241,9 +241,9 @@ func attributeCTAt(t *testing.T, loc xsderr.Loc, name xsd.QName, content ...xsd.
 // only through {attribute group definitions}, since a referencing type holds an
 // <attributeGroup ref> the descent charges and never follows; and a <redefine>
 // original is in no property and no index at all (§4.2.4 clause 4.1.2), so only
-// the recorded pairing reaches it. Each case also pins the position, which is the
-// definition the reader must edit — the group's own, or, for a local
-// declaration's type=, that declaration's.
+// the recorded pairing reaches it. Each case also pins the position: the group's
+// own for an <attribute ref>, whose use is built at the zero Loc (agRefUse), or,
+// for a local declaration's type=, that declaration's.
 func TestResolveDanglingReferenceInAttributeGroup(t *testing.T) {
 	legal := func(t *testing.T, name xsd.QName) xsd.AttributeGroupDefinition {
 		return attributeGroupAt(t, xsderr.Loc{}, name, agRefUse(t, qn("declared")))
@@ -734,12 +734,14 @@ func assertLoc(t *testing.T, err error, want xsderr.Loc) {
 // src-resolve accordingly gets five cases, because its reference sites do not all
 // take their position the same way. Three of them — a particle {term} <element
 // ref>, a particle {term} <group ref>, and an attribute use <attribute ref> — sit
-// on a Particle and an AttributeUse, neither of which RETAINS a position (xsd
-// doc.go, STYLE T5), so all three are charged the enclosing complex type's
-// instead. Those three cases build the Particle and the AttributeUse at the ZERO
-// Loc on purpose: if the substitution were ever dropped in favour of the
-// ref-bearing component's own position, the rejection would go back to citing
-// nothing and the case would fail.
+// on a Particle, which RETAINS no position (xsd doc.go, STYLE T5), or on an
+// AttributeUse, which falls back to its owner's when its own is the zero Loc, so
+// all three are charged the enclosing complex type's here. Those three cases
+// build the Particle and the AttributeUse at the ZERO Loc on purpose: if the
+// substitution were ever dropped in favour of the ref-bearing component's own
+// position, the rejection would go back to citing nothing and the case would
+// fail. TestResolveDanglingAttributeRefChargedAtUse pins a use that carries its
+// own position.
 //
 // c-props-correct gets two cases for the same per-site reason: resolveKeyref's
 // category check (clause 1) returns before its cardinality check (clause 2) can
