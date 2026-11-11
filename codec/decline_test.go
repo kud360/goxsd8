@@ -71,8 +71,8 @@ func TestDecodeDeclines(t *testing.T) {
 			`<xs:simpleType name="st"><xs:union memberTypes="xs:string xs:token"/></xs:simpleType>`, "", "x", constructSharedVariant, 1, 1},
 		{"mixed content", `<xs:element name="r"><xs:complexType mixed="true"><xs:sequence><xs:element name="a" type="xs:string"/></xs:sequence></xs:complexType></xs:element>`,
 			"", a, constructMixedContent, 1, 1},
-		{"open content", root(`<xs:openContent><xs:any namespace="##other" processContents="lax"/></xs:openContent><xs:sequence><xs:element name="a" type="xs:string"/></xs:sequence>`),
-			"", a, constructOpenContent, 1, 1},
+		{"mixed content with {open content}, which declines as mixed", `<xs:element name="r"><xs:complexType mixed="true"><xs:openContent><xs:any namespace="##other" processContents="lax"/></xs:openContent><xs:sequence><xs:element name="a" type="xs:string"/></xs:sequence></xs:complexType></xs:element>`,
+			"", a, constructMixedContent, 1, 1},
 		{"an optional <group ref> content particle to a non-emptiable all group", `<xs:group name="g"><xs:all><xs:element name="a" type="xs:string"/></xs:all></xs:group>` + root(`<xs:group ref="s:g" minOccurs="0"/>`),
 			"", a, constructAllOccurs, 1, 1},
 		{"choice alternative of a sequence", root(`<xs:choice><xs:sequence><xs:element name="a" type="xs:string"/></xs:sequence><xs:element name="b" type="xs:string"/></xs:choice>`),
@@ -482,7 +482,8 @@ func TestDecodeUndeclaredRootXsiType(t *testing.T) {
 // of one construct, from two schemas and declining sites, have equal
 // Constructs, and declines of two different constructs have different ones.
 // One row per construct group: the declaration, the content, by mixed content
-// and by {open content}, a particle, a simple type and xsi:type.
+// and by a content all group codegen does not splice, a particle, a simple
+// type and xsi:type.
 func TestDeclineConstruct(t *testing.T) {
 	const a = `<s:a>x</s:a>`
 	type decl struct{ decls, attrs, content string }
@@ -498,9 +499,9 @@ func TestDeclineConstruct(t *testing.T) {
 			{`<xs:element name="r"><xs:complexType mixed="true"><xs:sequence><xs:element name="a" type="xs:string"/></xs:sequence></xs:complexType></xs:element>`, "", a},
 			{`<xs:complexType name="ct" mixed="true"><xs:choice><xs:element name="b" type="xs:string"/><xs:element name="a" type="xs:string"/></xs:choice></xs:complexType><xs:element name="r" type="s:ct"/>`, "", a},
 		}},
-		{"open content", [2]decl{
-			{root(`<xs:openContent><xs:any namespace="##other" processContents="lax"/></xs:openContent><xs:sequence><xs:element name="a" type="xs:string"/></xs:sequence>`), "", a},
-			{`<xs:complexType name="ct"><xs:openContent mode="suffix"><xs:any namespace="##other" processContents="lax"/></xs:openContent><xs:choice><xs:element name="b" type="xs:string"/><xs:element name="a" type="xs:string"/></xs:choice></xs:complexType><xs:element name="r" type="s:ct"/>`, "", a},
+		{"content all group", [2]decl{
+			{root(`<xs:all minOccurs="0"><xs:element name="a" type="xs:string"/></xs:all>`), "", a},
+			{`<xs:group name="g"><xs:all><xs:element name="b" type="xs:string" minOccurs="0"/><xs:element name="a" type="xs:string"/></xs:all></xs:group><xs:complexType name="ct"><xs:group ref="s:g" minOccurs="0"/></xs:complexType><xs:element name="r" type="s:ct"/>`, "", a},
 		}},
 		{"particle", [2]decl{
 			{sequenceOf(`<xs:choice maxOccurs="2"><xs:element name="a" type="xs:string"/></xs:choice>`), "", a},
@@ -547,9 +548,9 @@ func TestDeclineConstruct(t *testing.T) {
 // document element's type: the declaration's schema Loc, then the type's,
 // labelled as the type's, then the refusal tail.
 func TestDeclineErrorText(t *testing.T) {
-	schema := schemaOf(t, root(`<xs:openContent><xs:any namespace="##other" processContents="lax"/></xs:openContent><xs:sequence><xs:element name="a" type="xs:string"/></xs:sequence>`))
+	schema := schemaOf(t, root(`<xs:all minOccurs="0"><xs:element name="a" type="xs:string"/></xs:all>`))
 	_, err := Decode[struct{}](schema, strict.New(), instanceOf("", `<s:a>x</s:a>`))
-	const want = "?:1:1: codec does not decode {open content}: the {type definition} of element {urn:s}r declared at s.xsd:1:181, a type defined at s.xsd:1:202; a decoder refusal, not a schema or instance fault"
+	const want = "?:1:1: codec does not decode a content all group with {min occurs} 0 whose model group is not emptiable: the {type definition} of element {urn:s}r declared at s.xsd:1:181, a type defined at s.xsd:1:202; a decoder refusal, not a schema or instance fault"
 	if err == nil || err.Error() != want {
 		t.Errorf("error = %v, want %q", err, want)
 	}

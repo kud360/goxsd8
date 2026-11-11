@@ -76,6 +76,7 @@
 //   - An element declaration of type xs:anyType, the document element's or a
 //     particle's.
 //   - An attribute use.
+//   - An {open content}, into its field after the particle fields.
 //   - An {attribute wildcard}, into its field after the attribute fields.
 //   - A value constraint, default or fixed.
 //
@@ -115,14 +116,13 @@
 // complex type that decodes: one with {abstract} false, and either empty
 // content, simple content whose {simple type definition} is a simple type
 // that decodes (Structures §3.4.2.2 dcl.ctd.ctsc), its value field's, or
-// element-only content with no {open content} whose {particle} is a sequence
-// or choice, inline or the {model group} of the definition a <group ref>
-// names, occurring exactly once, or occurring otherwise where codegen does
-// not splice it, or is an all group, inline or through <group ref>, where
-// codegen splices it. Each particle of a sequence or choice not flattened or
-// of a spliced all group, a sequence's nested sequence particle and
-// an all group's nested all group particle, through <group ref>, that codegen
-// splices replaced by its own particles at any depth, a sequence's nested
+// element-only content whose {particle} is a sequence or choice, inline or the
+// {model group} of the definition a <group ref> names, occurring exactly once, or
+// occurring otherwise where codegen does not splice it, or is an all group, inline
+// or through <group ref>, where codegen splices it. Each particle of a sequence or
+// choice not flattened or of a spliced all group, a sequence's nested sequence
+// particle and an all group's nested all group particle, through <group ref>, that
+// codegen splices replaced by its own particles at any depth, a sequence's nested
 // choice particle occurring exactly once that codegen does not flatten by its
 // alternatives, and, of a flattened one, in place of its particles, each basic
 // particle its model group reaches through its model group particles at any depth,
@@ -137,10 +137,10 @@
 // particle is a wildcard, whatever its {namespace constraint} and {process
 // contents}. No two element particles share an expanded name, such an interface's
 // particle taking each of those declarations', but in a flattened reach, whose
-// children are attributed by position. Each attribute use but xsi:nil's, to
-// which codegen gives no field (codegen's package doc, "# Attributes"), is
-// typed the same way. No element in the instance carries xsi:type, except inside a
-// wildcard's match or an element of type xs:anyType's raw content.
+// children are attributed by position. Each attribute use but xsi:nil's, to which
+// codegen gives no field (codegen's package doc, "# Attributes"), is typed the same
+// way. No element in the instance carries xsi:type, except inside a wildcard's
+// match or an element of type xs:anyType's raw content.
 //
 // Item 6 of [Decode]'s doc states the Go type of each field, naming it V, S
 // or I as the next paragraph does. The field of a particle of complex type
@@ -157,11 +157,12 @@
 // one of type xs:anyType. A content choice occurring exactly once has its
 // interface T itself, or, where the type has an attribute field (codegen's
 // package doc, "# Attributes": an attribute use other than xsi:nil's, or an
-// {attribute wildcard}) or one occurrence of the choice is emptiable (§3.9.6.3
+// {attribute wildcard}), an {open content} (codegen's package doc, "# Open
+// content") or one occurrence of the choice is emptiable (§3.9.6.3
 // cos-group-emptiable), the first field of T, a struct whose further fields
-// are the attribute fields; item 6 of [Decode]'s doc places a nested choice's
-// field and the occurrence field's interface. An empty match is
-// the nil interface. A particle's complex type gets its interface or struct
+// are the open-content and attribute fields; item 6 of [Decode]'s doc places a
+// nested choice's field and the occurrence field's interface. An empty match
+// is the nil interface. A particle's complex type gets its interface or struct
 // by the same rule.
 //
 // A flattened content {particle} decodes into the slice field codegen emits
@@ -185,6 +186,14 @@
 // or a choice's branch holding one, each child attributed to that particle
 // held raw; [Decode]'s doc states the field, which children are attributed to
 // it, and the raw content.
+//
+// A complex type's {open content} (Structures §3.4.2.3.3 dcl.ctd.ctcc.common
+// clauses 5 and 6), its own, one an extension inherits or one a
+// <defaultOpenContent> brings, read from the finalized {content type},
+// decodes into the slice of AnyElement codegen emits after the particle
+// fields, each child validation attributes to it (§3.4.4.4) held raw,
+// whatever its {mode} and its wildcard's constraints; [Decode]'s doc states
+// the field and which children it holds.
 //
 // A complex type's {attribute wildcard} (Structures §3.4.2.5
 // dcl.ctd.anyatt), its own, one an extension inherits, or one an attribute
@@ -221,7 +230,6 @@
 //     flattens, and a nested sequence codegen does not splice, inline or
 //     through <group ref>, a choice's model-group alternative included.
 //   - Mixed content.
-//   - Element-only content with {open content}.
 //   - A complex type with {abstract} true.
 //   - An element declaration with a {type table}.
 //   - A nillable element, but for one of type xs:anyType itself; item 5 of
