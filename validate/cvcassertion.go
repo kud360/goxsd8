@@ -1862,10 +1862,9 @@ func (w *walk) assertionValue(e Element, asserts *assertionCheck, content *conte
 // ([value.IsAssertionDeclined]), and reports whether it was one. item names the
 // element or attribute and its value, which the message opens with (STYLE E5),
 // and withheld the caller's clause the decline leaves undecided. Between them
-// the message carries the one value's decline carries, naming the assertion,
-// the simple type its facet is effective on, its {test} and, where the
-// evaluator stated one, why it declined it: an assertion component carries no
-// Loc of its own (#35).
+// the message carries the one value's decline carries, which names the
+// assertion on [value.IsAssertionDeclined]'s terms: an assertion component
+// carries no Loc of its own (#35).
 //
 // cvc-assertions-valid (§4.3.13.3) is evaluated inside String Valid: the value
 // pipeline runs each assertions facet it reaches through

@@ -64,7 +64,6 @@ func AssertionDecided(holds bool) AssertionAnswer {
 // fact, with no leading capital, no terminal punctuation, no location and no
 // rule prefix: the pipeline embeds it after "because" in the decline's message
 // ([IsAssertionDeclined]). It is for people, and a caller must not parse it.
-// An empty reason is the zero AssertionAnswer, a decline that states no reason.
 func AssertionDeclinedBecause(reason string) AssertionAnswer {
 	return AssertionAnswer{outcome: AssertionDeclined, reason: reason}
 }
