@@ -12,8 +12,8 @@ import (
 
 // resolverFor builds a producer over doc (whose targetNamespace is its own, the
 // lone-document case Produce uses) and returns its resolveQName bound to the
-// first top-level <element>, the element every case below writes its reference
-// on.
+// first top-level <element> and its type attribute, the attribute every case
+// below writes its reference as.
 func resolverFor(t *testing.T, doc string) func(string) (xsd.QName, error) {
 	t.Helper()
 	d, err := ReadDocument("mem://licensed.xsd", strings.NewReader(doc))
@@ -30,7 +30,11 @@ func resolverFor(t *testing.T, doc string) func(string) (xsd.QName, error) {
 	if elem == nil {
 		t.Fatal("the test document has no top-level <element>")
 	}
-	return func(lexical string) (xsd.QName, error) { return p.resolveQName(elem, lexical, "type") }
+	typeAttr, ok := elem.attr("type")
+	if !ok {
+		t.Fatal("the test document's <element> has no type attribute")
+	}
+	return func(lexical string) (xsd.QName, error) { return p.resolveQName(elem, lexical, typeAttr) }
 }
 
 // TestResolveQNameLicensedNamespaces is package-internal because it pins

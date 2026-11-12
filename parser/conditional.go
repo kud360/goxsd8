@@ -234,7 +234,7 @@ func ignoredElement(el *Element) (bool, error) {
 		}
 	}
 	if a, ok := versioningAttr(el, "typeAvailable"); ok {
-		names, err := conditionalQNames(el, "typeAvailable", a.Value())
+		names, err := conditionalQNames(el, "typeAvailable", a.Value(), a.Loc())
 		if err != nil {
 			return false, err
 		}
@@ -245,7 +245,7 @@ func ignoredElement(el *Element) (bool, error) {
 		}
 	}
 	if a, ok := versioningAttr(el, "typeUnavailable"); ok {
-		names, err := conditionalQNames(el, "typeUnavailable", a.Value())
+		names, err := conditionalQNames(el, "typeUnavailable", a.Value(), a.Loc())
 		if err != nil {
 			return false, err
 		}
@@ -255,7 +255,7 @@ func ignoredElement(el *Element) (bool, error) {
 		}
 	}
 	if a, ok := versioningAttr(el, "facetAvailable"); ok {
-		names, err := conditionalQNames(el, "facetAvailable", a.Value())
+		names, err := conditionalQNames(el, "facetAvailable", a.Value(), a.Loc())
 		if err != nil {
 			return false, err
 		}
@@ -265,7 +265,7 @@ func ignoredElement(el *Element) (bool, error) {
 		}
 	}
 	if a, ok := versioningAttr(el, "facetUnavailable"); ok {
-		names, err := conditionalQNames(el, "facetUnavailable", a.Value())
+		names, err := conditionalQNames(el, "facetUnavailable", a.Value(), a.Loc())
 		if err != nil {
 			return false, err
 		}
@@ -415,7 +415,10 @@ func supportedFacet(qn xsd.QName) bool {
 // namespace where none is declared. It is deliberately NOT defaulted to the
 // document's targetNamespace, and no chameleon coercion is applied: §4.2.2 runs
 // before §F.1's transformation has been applied to anything.
-func conditionalQNames(el *Element, attr, lexical string) ([]xsd.QName, error) {
+//
+// loc is the attribute's own Loc, from versioningAttr, and both charges are
+// located there, not at the item (#3463).
+func conditionalQNames(el *Element, attr, lexical string, loc xsderr.Loc) ([]xsd.QName, error) {
 	items := xmlSpaceFields(lexical)
 	names := make([]xsd.QName, 0, len(items))
 	for _, item := range items {
@@ -427,13 +430,13 @@ func conditionalQNames(el *Element, attr, lexical string) ([]xsd.QName, error) {
 			fault = "a QName's prefix is an NCName, and " + prefix + " is not one"
 		}
 		if fault != "" {
-			return nil, xsderr.New(ruleSrcCIP, el.Loc(),
+			return nil, xsderr.New(ruleSrcCIP, loc,
 				"vc:%s item %q on <%s> is not in the ·lexical space· of xs:QName, but src-cip requires this attribute's value to be a list of xs:QName: %s (Datatypes §3.3.18, §3.4.7.1)",
 				attr, item, el.Name().Local(), fault)
 		}
 		uri, bound := el.lookupPrefix(prefix)
 		if prefix != "" && !bound {
-			return nil, xsderr.New(ruleSrcCIP, el.Loc(),
+			return nil, xsderr.New(ruleSrcCIP, loc,
 				"the QName prefix %q of vc:%s item %q on <%s> does not resolve to an in-scope namespace, so the item is not ·valid· with respect to xs:QName as src-cip requires",
 				prefix, attr, item, el.Name().Local())
 		}

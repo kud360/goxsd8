@@ -959,11 +959,11 @@ func (p *producer) checkRedefinedComplexType(decl *Element, qn xsd.QName) error 
 // name. An absent base is not a match: src-redefine clause 5 reads the ·actual
 // value· of an attribute that has to be there.
 func (p *producer) namesSelf(derivation *Element, qn xsd.QName) (bool, error) {
-	lexical, ok := derivation.Attr("base")
+	baseAttr, ok := derivation.attr("base")
 	if !ok {
 		return false, nil
 	}
-	base, err := p.resolveQName(derivation, lexical, "base")
+	base, err := p.resolveQName(derivation, baseAttr.Value(), baseAttr)
 	if err != nil {
 		return false, err
 	}
@@ -1197,11 +1197,11 @@ func (p *producer) selfReferences(decl *Element, qn xsd.QName, kind string, excl
 // with no ref (a nested definition form, which the grammar does not admit here
 // anyway) matches nothing.
 func (p *producer) namesSelfRef(el *Element, qn xsd.QName) (bool, error) {
-	lexical, ok := el.Attr("ref")
+	refAttr, ok := el.attr("ref")
 	if !ok {
 		return false, nil
 	}
-	ref, err := p.resolveQName(el, lexical, "ref")
+	ref, err := p.resolveQName(el, refAttr.Value(), refAttr)
 	if err != nil {
 		return false, err
 	}

@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/kud360/goxsd8/builtin"
+	"github.com/kud360/goxsd8/parser/xmltree"
 	"github.com/kud360/goxsd8/regex"
 	"github.com/kud360/goxsd8/value"
 	"github.com/kud360/goxsd8/xsd"
@@ -2124,9 +2125,9 @@ func (p *producer) namedComplexTypeIdentity(name xsd.QName, elem *Element) compl
 // does not name it (STYLE D3). A named complex base whose content model holds
 // this derivation is not finished yet, so it resolves to the pendingBase arm,
 // which carries only the {assertions} its complexContentPending entry holds. at is the
-// <restriction>/<extension> carrying the base=, charged for a failure; id is
-// the identity of the type being built, which is what makes the redefine branch
-// below reachable.
+// <restriction>/<extension> carrying base, the base= attribute name was resolved
+// from; id is the identity of the type being built, which is what makes the
+// redefine branch below reachable.
 //
 // A base of either variety is built through its OWN document's producer
 // (typeSource's owner), never through p: see symbols.simpleTypes and
@@ -2143,7 +2144,7 @@ func (p *producer) namedComplexTypeIdentity(name xsd.QName, elem *Element) compl
 // a simple type's base and that finalize charges for an unresolvable
 // {base type definition} reference (xsd/resolve.go's resolveTypeName). One rule,
 // three entry points, identical verdict.
-func (p *producer) resolveBaseType(id complexTypeIdentity, at *Element, name xsd.QName) (resolvedBase, xsd.TypeDefinitionOrRef, error) {
+func (p *producer) resolveBaseType(id complexTypeIdentity, at *Element, base xmltree.Attribute, name xsd.QName) (resolvedBase, xsd.TypeDefinitionOrRef, error) {
 	if orig, owned, err := p.redefinedComplexBase(id, at, name); owned || err != nil {
 		if err != nil {
 			return nil, nil, err
@@ -2181,7 +2182,7 @@ func (p *producer) resolveBaseType(id complexTypeIdentity, at *Element, name xsd
 		}
 		return finishedBase{def: st}, xsd.TypeDefinitionRef{Name: name}, nil
 	}
-	return nil, nil, xsderr.New(ruleSrcResolve, at.Loc(),
+	return nil, nil, xsderr.New(ruleSrcResolve, base.Loc(),
 		"base type %s does not resolve to any type definition in scope (src-resolve clause 1.1)", name)
 }
 
@@ -2547,7 +2548,7 @@ func (p *producer) constructListType(name xsd.QName, elem, list *Element) (*xsd.
 // costs no resolution ladder here and its src-resolve clause 1.1 rejection is
 // charged once, at finalize.
 func (p *producer) listItem(list *Element) (xsd.SimpleTypeOrRef, error) {
-	itemLex, hasItem := list.Attr("itemType")
+	itemAttr, hasItem := list.attr("itemType")
 	inline := childElement(list, xsd.XMLSchemaNS, "simpleType")
 
 	if hasItem && inline != nil {
@@ -2568,7 +2569,7 @@ func (p *producer) listItem(list *Element) (xsd.SimpleTypeOrRef, error) {
 		return xsd.OwnedSimpleType{Definition: st}, nil
 	}
 
-	qn, err := p.resolveQName(list, itemLex, "itemType")
+	qn, err := p.resolveQName(list, itemAttr.Value(), itemAttr)
 	if err != nil {
 		return nil, err
 	}
@@ -2628,8 +2629,8 @@ func (p *producer) constructUnionType(name xsd.QName, elem, union *Element) (*xs
 // costs no resolution ladder here and its src-resolve clause 1.1 rejection is
 // charged once, at finalize.
 func (p *producer) unionMembers(union *Element) ([]xsd.SimpleTypeOrRef, error) {
-	memberLex, _ := union.Attr("memberTypes")
-	items := xmlSpaceFields(memberLex)
+	memberAttr, _ := union.attr("memberTypes") // absent: no items, so no read of memberAttr
+	items := xmlSpaceFields(memberAttr.Value())
 	inlines := childElements(union, xsd.XMLSchemaNS, "simpleType")
 	if len(items) == 0 && len(inlines) == 0 {
 		return nil, xsderr.New(ruleSrcSimpleType, union.Loc(),
@@ -2638,7 +2639,7 @@ func (p *producer) unionMembers(union *Element) ([]xsd.SimpleTypeOrRef, error) {
 
 	members := make([]xsd.SimpleTypeOrRef, 0, len(items)+len(inlines))
 	for _, item := range items {
-		qn, err := p.resolveQName(union, item, "memberTypes")
+		qn, err := p.resolveQName(union, item, memberAttr)
 		if err != nil {
 			return nil, err
 		}
@@ -2722,7 +2723,7 @@ func simpleTypeBody(elem *Element) (*Element, error) {
 //     src-resolve clause 1.1 rejection a name with no target used to get here
 //     is charged once, at finalize.
 func (p *producer) resolveBase(restriction *Element) (xsd.SimpleTypeOrRef, error) {
-	baseLex, hasBase := restriction.Attr("base")
+	baseAttr, hasBase := restriction.attr("base")
 	inline := childElement(restriction, xsd.XMLSchemaNS, "simpleType")
 
 	if hasBase && inline != nil {
@@ -2743,7 +2744,7 @@ func (p *producer) resolveBase(restriction *Element) (xsd.SimpleTypeOrRef, error
 		return xsd.OwnedSimpleType{Definition: st}, nil
 	}
 
-	qn, err := p.resolveQName(restriction, baseLex, "base")
+	qn, err := p.resolveQName(restriction, baseAttr.Value(), baseAttr)
 	if err != nil {
 		return nil, err
 	}
@@ -3195,13 +3196,13 @@ func (p *producer) produceElement(qname xsd.QName, elem *Element) (xsd.ElementDe
 // leaving it universally empty would silently un-block every head that spells
 // final= on itself.
 func (p *producer) substitutionGroupAffiliations(elem *Element) ([]xsd.QName, error) {
-	lexical, ok := elem.Attr("substitutionGroup")
+	sg, ok := elem.attr("substitutionGroup")
 	if !ok {
 		return nil, nil
 	}
 	var heads []xsd.QName
-	for _, item := range xmlSpaceFields(lexical) {
-		head, err := p.resolveQName(elem, item, "substitutionGroup")
+	for _, item := range xmlSpaceFields(sg.Value()) {
+		head, err := p.resolveQName(elem, item, sg)
 		if err != nil {
 			return nil, err
 		}
@@ -3285,22 +3286,22 @@ func (p *producer) substitutionGroupHeadType(head xsd.QName) (xsd.TypeDefinition
 			childElement(src.elem, xsd.XMLSchemaNS, "simpleType") != nil { // clause 1
 			return xsd.SubstitutionGroupHeadTypeRef{Head: head}, nil
 		}
-		if lex, has := src.elem.Attr("type"); has { // clause 2
-			name, err := src.owner.resolveQName(src.elem, lex, "type")
+		if typeAttr, has := src.elem.attr("type"); has { // clause 2
+			name, err := src.owner.resolveQName(src.elem, typeAttr.Value(), typeAttr)
 			if err != nil {
 				return nil, err
 			}
 			return xsd.TypeDefinitionRef{Name: name}, nil
 		}
-		lexHeads, has := src.elem.Attr("substitutionGroup")
+		sgAttr, has := src.elem.attr("substitutionGroup")
 		if !has {
 			return xsd.TypeDefinitionRef{Name: anyTypeName}, nil // the head's own {type definition} is case 4
 		}
-		items := xmlSpaceFields(lexHeads)
+		items := xmlSpaceFields(sgAttr.Value())
 		if len(items) == 0 {
 			return xsd.TypeDefinitionRef{Name: anyTypeName}, nil
 		}
-		next, err := src.owner.resolveQName(src.elem, items[0], "substitutionGroup")
+		next, err := src.owner.resolveQName(src.elem, items[0], sgAttr)
 		if err != nil {
 			return nil, err
 		}
@@ -3731,16 +3732,17 @@ func inScopeBindings(elem *Element) []xsd.NamespaceBinding {
 // values — takes bindQName directly: src-resolve governs ·resolution·, so
 // charging clause 4 there would reject a name the spec never asks to resolve.
 //
-// attr is the local name of the schema-document attribute lexical was read from
-// (or whose whitespace-separated list lexical is an item of); it is diagnostic
-// only, naming the construct the author wrote in the lexical rejection bindQName
-// charges (STYLE E1).
-func (p *producer) resolveQName(elem *Element, lexical, attr string) (xsd.QName, error) {
+// attr is the schema-document attribute of elem that lexical was read from, or
+// whose whitespace-separated list lexical is one item of. Every rejection here
+// and in bindQName is located at attr's name, not at elem's start tag nor at the
+// list item, and the lexical rejection names attr's local name as the construct
+// the author wrote (STYLE E1, #3463).
+func (p *producer) resolveQName(elem *Element, lexical string, attr xmltree.Attribute) (xsd.QName, error) {
 	qn, err := p.bindQName(elem, lexical, attr)
 	if err != nil {
 		return xsd.QName{}, err
 	}
-	if err := p.licensedNamespace(elem, lexical, qn.Space); err != nil {
+	if err := p.licensedNamespace(elem, attr.Loc(), lexical, qn.Space); err != nil {
 		return xsd.QName{}, err
 	}
 	return qn, nil
@@ -3794,12 +3796,12 @@ func (p *producer) resolveQName(elem *Element, lexical, attr string) (xsd.QName,
 // non-NCName half ("xs: string", "xs:1a") passes the lexical test. A reference
 // that must resolve is then charged src-resolve instead of cvc-datatype-valid,
 // and a notQName item binds to a name no NCName can match (#1801).
-func (p *producer) bindQName(elem *Element, lexical, attr string) (xsd.QName, error) {
+func (p *producer) bindQName(elem *Element, lexical string, attr xmltree.Attribute) (xsd.QName, error) {
 	prefix, local, fault := qnameLexical(collapseTrim(lexical))
 	if fault != "" {
-		return xsd.QName{}, xsderr.New(ruleDatatypeValid, elem.Loc(),
+		return xsd.QName{}, xsderr.New(ruleDatatypeValid, attr.Loc(),
 			"<%s> %s value %q is not in the ·lexical space· of xs:QName, the type the schema for schema documents declares for it: %s (Datatypes §3.3.18, §3.4.7.1)",
-			elem.Name().Local(), attr, lexical, fault)
+			elem.Name().Local(), attr.Name().Local(), lexical, fault)
 	}
 
 	if prefix == "" {
@@ -3814,7 +3816,7 @@ func (p *producer) bindQName(elem *Element, lexical, attr string) (xsd.QName, er
 
 	uri, ok := elem.lookupPrefix(prefix)
 	if !ok {
-		return xsd.QName{}, xsderr.New(ruleSrcResolve, elem.Loc(),
+		return xsd.QName{}, xsderr.New(ruleSrcResolve, attr.Loc(),
 			"the QName prefix %q of %q does not resolve to an in-scope namespace (src-resolve)", prefix, lexical)
 	}
 	return xsd.QName{Space: uri, Local: local}, nil
@@ -3861,6 +3863,8 @@ func qnameLexical(lexical string) (prefix, local, fault string) {
 // §4.2.6.1 is explicit that this is NOT a §5.3 missing sub-component: such
 // references "are not handled as if they referred to missing components", so the
 // verdict is charged here, at the reference, rather than deferred to finalize.
+// at is the position of the attribute of elem the reference was read from, and
+// the charge is located there (#3463).
 //
 // The two namespace facts it tests are the containing document's, read as the
 // spec words them. Clause 4.1.1 asks whether that document's <schema> carries a
@@ -3870,7 +3874,7 @@ func qnameLexical(lexical string) (prefix, local, fault string) {
 // own by the time clause 4 is evaluated, and that coercion is constant across an
 // <include>/<override> cascade, so p.target is the containing document's coerced
 // targetNamespace either way.
-func (p *producer) licensedNamespace(elem *Element, lexical, ns string) error {
+func (p *producer) licensedNamespace(elem *Element, at xsderr.Loc, lexical, ns string) error {
 	schemaElem := containingSchema(elem)
 	if ns == "" {
 		// Clause 4.1: an ·absent· namespace name is licensed by a document that
@@ -3881,7 +3885,7 @@ func (p *producer) licensedNamespace(elem *Element, lexical, ns string) error {
 		if own == "" || importsNamespace(schemaElem, "") {
 			return nil
 		}
-		return xsderr.New(ruleSrcResolve, elem.Loc(),
+		return xsderr.New(ruleSrcResolve, at,
 			"the unqualified reference %q resolves into the ·absent· namespace, which this schema document does not license: src-resolve clause 4.1 needs it to declare no targetNamespace (it declares %q) or to carry an <import> with no namespace attribute",
 			lexical, own)
 	}
@@ -3893,7 +3897,7 @@ func (p *producer) licensedNamespace(elem *Element, lexical, ns string) error {
 	if importsNamespace(schemaElem, ns) { // clause 4.2.2
 		return nil
 	}
-	return xsderr.New(ruleSrcResolve, elem.Loc(),
+	return xsderr.New(ruleSrcResolve, at,
 		"the reference %q resolves into namespace %q, which this schema document does not license: src-resolve clause 4.2 needs it to be the document's own target namespace %q, the namespace of one of the document's own <import> elements, or the XSD or XSI namespace",
 		lexical, ns, p.target)
 }
