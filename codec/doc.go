@@ -67,9 +67,11 @@
 //     sequence's nested particle outside a content particle held in an
 //     occurrence field, into its slice of a sealed interface.
 //   - A sequence or choice, inline or through <group ref>, occurring other
-//     than exactly once, as a complex type's content {particle}, that codegen
-//     neither splices nor flattens (codegen's package doc, "# Particles"),
-//     into its field of the type for one occurrence.
+//     than exactly once, that codegen neither splices nor flattens (codegen's
+//     package doc, "# Particles"), as a complex type's content {particle}, a
+//     sequence's nested particle or a choice's model-group alternative,
+//     outside a content particle held in an occurrence field, into its field
+//     of the type for one occurrence.
 //   - An element particle, local or <element ref>.
 //   - A substitution group, into a sealed interface.
 //   - A choice, into a sealed interface.
@@ -125,7 +127,8 @@
 // particle and an all group's nested all group particle, through <group ref>, that
 // codegen splices replaced by its own particles at any depth, a sequence's nested
 // choice particle occurring exactly once that codegen does not flatten by its
-// alternatives, and, of a flattened one, the content {particle} or a sequence's
+// alternatives, a nested particle held in an occurrence field by its own
+// particles, and, of a flattened one, the content {particle} or a sequence's
 // nested particle, in place of its particles, each basic particle its model
 // group reaches through its model group particles at any depth, is an element
 // declaration with no {type table}, of xs:anyType itself, or, with {nillable}
@@ -162,17 +165,17 @@
 // holds the fields codegen gives it (codegen's package doc, "# Complex
 // types"), each filled as a sequence's particle's field is: for a sequence
 // alternative codegen splices, the fields of its own particles, and for any
-// other the one field of a nested choice or of a flattened particle. A
-// content choice occurring exactly once that codegen does not flatten has its
-// interface T itself, or, where the type has an attribute field (codegen's
-// package doc, "# Attributes": an attribute use other than xsi:nil's, or an
-// {attribute wildcard}), an {open content} (codegen's package doc, "# Open
-// content") or one occurrence of the choice is emptiable (§3.9.6.3
-// cos-group-emptiable), the first field of T, a struct whose further fields
-// are the open-content and attribute fields; item 6 of [Decode]'s doc places a
-// nested choice's field and the occurrence field's interface. An empty match
-// is the nil interface. A particle's complex type gets its interface or struct
-// by the same rule.
+// other the one field of a nested choice, of a flattened particle or of an
+// occurrence field. A content choice occurring exactly once that codegen does
+// not flatten has its interface T itself, or, where the type has an attribute
+// field (codegen's package doc, "# Attributes": an attribute use other than
+// xsi:nil's, or an {attribute wildcard}), an {open content} (codegen's package
+// doc, "# Open content") or one occurrence of the choice is emptiable
+// (§3.9.6.3 cos-group-emptiable), the first field of T, a struct whose further
+// fields are the open-content and attribute fields; item 6 of [Decode]'s doc
+// places a nested choice's field and the occurrence field's interface. An
+// empty match is the nil interface. A particle's complex type gets its
+// interface or struct by the same rule.
 //
 // A flattened particle, the content {particle} or nested, decodes into the
 // slice field codegen emits for it (codegen's package doc, "# Particles"): one
@@ -181,11 +184,11 @@
 // child's validation-path attributes it to (§3.8.4.2 key-vpath), as [Decode]'s
 // doc states; an empty match is the nil slice.
 //
-// A content {particle} occurring other than exactly once that codegen
-// neither splices nor flattens decodes into its occurrence field, one item
-// per sub-sequence of a ·partition· of the children (§3.9.4.3 cvc-accept clause
-// 3), in document order; [Decode]'s doc states the field, its items and the
-// rule that partitions the children.
+// A content {particle} or a nested particle, occurring other than exactly
+// once, that codegen neither splices nor flattens decodes into its occurrence
+// field, one item per sub-sequence of a ·partition· of the children (§3.9.4.3
+// cvc-accept clause 3), in document order; [Decode]'s doc states the field, its
+// items and the rule that partitions the children.
 //
 // A substitution group's interface holds, for each child, the branch of the
 // group's declaration the child's expanded name resolves to (§3.9.4.3
@@ -225,7 +228,8 @@
 // Every other construct is a [*DeclineError], never a zero value:
 //
 //   - A content model xsd.Schema.ContentMatcher does not track, flattened,
-//     holding a nested flattened particle, or held in an occurrence field.
+//     holding a nested flattened particle, held in an occurrence field, or
+//     holding a nested occurrence field.
 //   - Two alternatives of a choice, or two declarations of a substitution
 //     group, whose branch structs could share a Go type; item 5 of
 //     [Decode]'s doc states when.
@@ -233,12 +237,12 @@
 //     doc states when.
 //   - A content all group codegen does not splice (codegen's package doc,
 //     "# Particles").
-//   - A nested sequence, or a nested choice occurring other than exactly
-//     once, that codegen neither splices nor flattens, inline or through
-//     <group ref>, a sequence's particle or a choice's model-group
-//     alternative, an alternative's {min occurs} 0 read as 1; and a nested
-//     one codegen flattens inside a content particle held in an occurrence
-//     field.
+//   - Inside a content particle held in an occurrence field, a nested
+//     sequence or choice, inline or through <group ref>, a sequence's
+//     particle or a choice's model-group alternative, an alternative's {min
+//     occurs} 0 read as 1, that codegen flattens, or that it neither splices
+//     nor flattens and that is no choice occurring exactly once, whatever its
+//     occurrence.
 //   - Mixed content.
 //   - A complex type with {abstract} true.
 //   - An element declaration with a {type table}.

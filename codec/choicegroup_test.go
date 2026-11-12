@@ -375,9 +375,11 @@ func TestDecodeChoiceGroup(t *testing.T) {
 // shape, two nested choices' {Choice I}, two spliced sequences' fields of one
 // name and Go type, and a spliced sequence of one field beside an element
 // alternative of its name and Go type; an expanded name an earlier
-// alternative's spliced sequence takes; a repeated sequence alternative,
-// which codegen neither splices nor flattens; and, in an occurrence field's
-// item, a sequence alternative holding a particle codegen flattens.
+// alternative's spliced sequence takes; and, in an occurrence field's item, a
+// sequence alternative holding a particle codegen flattens, whose prefix is
+// the decline's subject. A repeated sequence alternative, which codegen
+// neither splices nor flattens, decodes into its occurrence field
+// (TestDecodeNestedOccurrence).
 func TestDecodeChoiceGroupDeclines(t *testing.T) {
 	unq := func(name string) string {
 		return `<xs:element name="` + name + `" form="unqualified" type="xs:string"/>`
@@ -399,11 +401,9 @@ func TestDecodeChoiceGroupDeclines(t *testing.T) {
 			"<s:x>1</s:x>", constructSharedBranch, "?:1:1: codec does not decode two branches of a sealed interface whose structs have one shape: element {urn:s}x declared at"},
 		{"a name an earlier alternative's spliced sequence takes", root(`<xs:choice><xs:sequence>` + cgEl("a") + cgEl("b") + `</xs:sequence><xs:sequence>` + cgEl("c") + cgEl("a") + `</xs:sequence></xs:choice>`),
 			"<s:a>1</s:a><s:b>2</s:b>", constructSharedName, ""},
-		{"a repeated sequence alternative", root(`<xs:choice>` + cgEl("a") + `<xs:sequence maxOccurs="2">` + cgEl("b") + cgEl("c") + `</xs:sequence></xs:choice>`),
-			"<s:b>1</s:b><s:c>2</s:c><s:b>3</s:b><s:c>4</s:c>", constructNestedGroup,
-			"?:1:1: codec does not decode a nested model group particle: a particle of the {type definition} of element {urn:s}r declared at"},
 		{"a flattened particle in an occurrence item's spliced alternative", root(`<xs:choice maxOccurs="unbounded"><xs:sequence>` + cgEl("a") + `<xs:sequence maxOccurs="unbounded"><xs:element name="b" type="xs:string" maxOccurs="unbounded"/></xs:sequence></xs:sequence>` + cgEl("c") + `</xs:choice>`),
-			"<s:a>1</s:a><s:b>2</s:b><s:c>3</s:c>", constructNestedGroup, ""},
+			"<s:a>1</s:a><s:b>2</s:b><s:c>3</s:c>", constructNestedGroup,
+			"?:1:1: codec does not decode a nested model group particle: a particle of the {type definition} of element {urn:s}r declared at"},
 	}
 	for _, row := range rows {
 		t.Run(row.name, func(t *testing.T) {

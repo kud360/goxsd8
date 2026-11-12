@@ -75,8 +75,6 @@ func TestDecodeDeclines(t *testing.T) {
 			"", a, constructMixedContent, 1, 1},
 		{"an optional <group ref> content particle to a non-emptiable all group", `<xs:group name="g"><xs:all><xs:element name="a" type="xs:string"/></xs:all></xs:group>` + root(`<xs:group ref="s:g" minOccurs="0"/>`),
 			"", a, constructAllOccurs, 1, 1},
-		{"choice alternative of a repeated sequence", root(`<xs:choice><xs:sequence maxOccurs="2"><xs:element name="a" type="xs:string"/></xs:sequence><xs:element name="b" type="xs:string"/></xs:choice>`),
-			"", a, constructNestedGroup, 1, 1},
 		{"choice alternatives sharing a branch shape, refs to a and A", `<xs:element name="a" type="xs:string"/><xs:element name="A" type="xs:string"/>` + root(`<xs:choice><xs:element ref="s:a"/><xs:element ref="s:A"/></xs:choice>`),
 			"", a, constructSharedBranch, 1, 1},
 		{"choice alternative of a union of xs:string and xs:token", root(`<xs:choice><xs:element name="a" type="xs:string"/><xs:element name="b"><xs:simpleType><xs:union memberTypes="xs:string xs:token"/></xs:simpleType></xs:element></xs:choice>`),
@@ -105,15 +103,7 @@ func TestDecodeDeclines(t *testing.T) {
 		{"an extension merging two optional alls of required elements", `<xs:complexType name="t"><xs:all minOccurs="0"><xs:element name="a" type="xs:string"/></xs:all></xs:complexType>
 			<xs:complexType name="t2"><xs:complexContent><xs:extension base="s:t"><xs:all minOccurs="0"><xs:element name="b" type="xs:int"/></xs:all></xs:extension></xs:complexContent></xs:complexType>
 			<xs:element name="r" type="s:t2"/>`, "", a + `<s:b>1</s:b>`, constructAllOccurs, 1, 1},
-		{"nested choice occurring twice", sequenceOf(`<xs:choice maxOccurs="2"><xs:element name="a" type="xs:string"/></xs:choice>`), "", a, constructNestedGroup, 1, 1},
-		{"optional nested choice", sequenceOf(`<xs:element name="a" type="xs:string"/><xs:choice minOccurs="0"><xs:element name="b" type="xs:string"/><xs:element name="c" type="xs:string"/></xs:choice>`),
-			"", a, constructNestedGroup, 1, 1},
-		{"nested <group ref> to a choice group, occurring twice", `<xs:group name="g"><xs:choice><xs:element name="a" type="xs:string"/></xs:choice></xs:group>` + sequenceOf(`<xs:group ref="s:g" maxOccurs="2"/>`),
-			"", a, constructNestedGroup, 1, 1},
-		{"optional nested sequence over a group that cannot match nothing", sequenceOf(`<xs:element name="a" type="xs:string"/><xs:sequence minOccurs="0"><xs:element name="b" type="xs:string"/></xs:sequence>`),
-			"", a, constructNestedGroup, 1, 1},
-		{"extension of a repeated sequence adding a sequence", `<xs:complexType name="t"><xs:sequence maxOccurs="2"><xs:element name="a" type="xs:string"/></xs:sequence></xs:complexType>
-			<xs:complexType name="t2"><xs:complexContent><xs:extension base="s:t"><xs:sequence><xs:element name="b" type="xs:string"/></xs:sequence></xs:extension></xs:complexContent></xs:complexType><xs:element name="r" type="s:t2"/>`,
+		{"nested choice occurring twice in an occurrence field's item", root(`<xs:sequence maxOccurs="2"><xs:element name="a" type="xs:string"/><xs:choice maxOccurs="2"><xs:element name="b" type="xs:string"/></xs:choice></xs:sequence>`),
 			"", a + `<s:b>y</s:b>`, constructNestedGroup, 1, 1},
 		{"spliced sequence sharing an earlier particle's expanded name", sequenceOf(`<xs:element name="a" type="xs:string"/><xs:sequence><xs:element name="b" type="xs:string"/><xs:element name="a" type="xs:string"/></xs:sequence>`),
 			"", a + `<s:b>y</s:b>` + a, constructSharedName, 1, 1},
@@ -498,8 +488,8 @@ func TestDeclineConstruct(t *testing.T) {
 			{`<xs:group name="g"><xs:all><xs:element name="b" type="xs:string" minOccurs="0"/><xs:element name="a" type="xs:string"/></xs:all></xs:group><xs:complexType name="ct"><xs:group ref="s:g" minOccurs="0"/></xs:complexType><xs:element name="r" type="s:ct"/>`, "", a},
 		}},
 		{"particle", [2]decl{
-			{sequenceOf(`<xs:choice maxOccurs="2"><xs:element name="a" type="xs:string"/></xs:choice>`), "", a},
-			{root(`<xs:choice><xs:sequence maxOccurs="2"><xs:element name="a" type="xs:string"/></xs:sequence><xs:element name="b" type="xs:string"/></xs:choice>`), "", a},
+			{root(`<xs:sequence maxOccurs="2"><xs:element name="a" type="xs:string"/><xs:choice maxOccurs="2"><xs:element name="b" type="xs:string"/></xs:choice></xs:sequence>`), "", a + `<s:b>y</s:b>`},
+			{root(`<xs:choice maxOccurs="unbounded"><xs:sequence><xs:element name="a" type="xs:string"/><xs:sequence maxOccurs="unbounded"><xs:element name="b" type="xs:string" minOccurs="0"/></xs:sequence></xs:sequence></xs:choice>`), "", a},
 		}},
 		{"simple type", [2]decl{
 			{root(`<xs:sequence><xs:element name="a" type="xs:string"/></xs:sequence><xs:attribute name="k"><xs:simpleType><xs:union memberTypes="xs:string xs:token"/></xs:simpleType></xs:attribute>`), "", a},

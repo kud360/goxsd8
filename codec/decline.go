@@ -93,7 +93,8 @@ type construct uint8
 // and a union, by a basic member, decline by them too. constructUntrackedModel
 // follows every particle of a flattened content model or an occurrence
 // field's, ahead of the type's attribute uses, and every basic particle a
-// nested flattened particle reaches, ahead of the particles after it.
+// nested flattened particle reaches and every particle of a nested
+// occurrence field's item, ahead of the particles after it.
 const (
 	constructTypeTable construct = iota + 1
 	constructNillable
