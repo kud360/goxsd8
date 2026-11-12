@@ -212,11 +212,13 @@ func TestDecodeOccurrence(t *testing.T) {
 
 // TestDecodeOccurrenceItemDeclines pins item 5 inside an occurrence: a
 // construct of one occurrence's type declines by its own construct, here a
-// choice's model-group alternative, constructNestedGroup, never by a construct
-// of the occurrence itself, at Decode and CheckDecode alike.
+// choice's sequence alternative occurring exactly twice, which codegen
+// neither splices nor flattens and which leaves the choice unflattened, since
+// it does not repeat, constructNestedGroup, never by a construct of the
+// occurrence itself, at Decode and CheckDecode alike.
 func TestDecodeOccurrenceItemDeclines(t *testing.T) {
-	schema := schemaOf(t, root(`<xs:choice maxOccurs="unbounded"><xs:sequence><xs:element name="a" type="xs:string"/><xs:element name="b" type="xs:string" minOccurs="0"/></xs:sequence><xs:element name="c" type="xs:string"/></xs:choice>`))
-	data := instanceOf("", "<s:a>1</s:a><s:c>2</s:c>")
+	schema := schemaOf(t, root(`<xs:choice maxOccurs="unbounded"><xs:sequence minOccurs="2" maxOccurs="2"><xs:element name="a" type="xs:string"/><xs:element name="b" type="xs:string" minOccurs="0"/></xs:sequence><xs:element name="c" type="xs:string"/></xs:choice>`))
+	data := instanceOf("", "<s:a>1</s:a><s:a>2</s:a><s:c>3</s:c>")
 	mustAccept(t, schema, data)
 	_, err := Decode[struct{}](schema, strict.New(), data)
 	assertDecline(t, err, constructNestedGroup, 1, 1)
