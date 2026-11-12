@@ -378,3 +378,42 @@ func TestProduceQNameAttributeChargeLocated(t *testing.T) {
 		})
 	}
 }
+
+// TestParseRedefineQNameChargeLocated pins the #3463 charges a <redefine>
+// reaches first: namesSelf reads a redefining type's base and namesSelfRef a
+// redefining group's self-reference before either is produced, and each
+// unbound prefix is charged at that base or ref attribute, written on a later
+// line than its element's "<" and after its id.
+func TestParseRedefineQNameChargeLocated(t *testing.T) {
+	lib := wrap("urn:a", `<xs:simpleType name="s"><xs:restriction base="xs:string"/></xs:simpleType>`+
+		`<xs:complexType name="c"><xs:sequence/></xs:complexType>`+
+		`<xs:group name="g"><xs:sequence><xs:element name="a" type="xs:string"/></xs:sequence></xs:group>`+
+		`<xs:attributeGroup name="ag"/>`)
+	// A slice, not a map: subtest order is output (STYLE D2).
+	cases := []struct{ name, body string }{
+		{"namesSelf simple base", `<xs:simpleType name="s"><xs:restriction id="r"` + "\n" +
+			`  base="nope:s"/></xs:simpleType>`},
+		{"namesSelf complex base", `<xs:complexType name="c"><xs:complexContent><xs:extension id="x"` + "\n" +
+			`  base="nope:c"/></xs:complexContent></xs:complexType>`},
+		{"namesSelfRef group ref", `<xs:group name="g"><xs:sequence><xs:group id="q"` + "\n" +
+			`  ref="nope:g"/></xs:sequence></xs:group>`},
+		{"namesSelfRef attributeGroup ref", `<xs:attributeGroup name="ag"><xs:attributeGroup id="q"` + "\n" +
+			`  ref="nope:ag"/></xs:attributeGroup>`},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := parseMap(t, "main.xsd", map[string]string{
+				"main.xsd": wrap("urn:a", "\n"+`<xs:redefine schemaLocation="lib.xsd">`+tc.body+`</xs:redefine>`),
+				"lib.xsd":  lib,
+			})
+			assertRule(t, err, "src-resolve")
+			loc, ok := xsderr.LocOf(err)
+			if !ok {
+				t.Fatalf("error %v carries no position (STYLE E3)", err)
+			}
+			if loc.URI != "main.xsd" || loc.Line != 3 || loc.Col != 3 {
+				t.Fatalf("position = %s:%d:%d, want main.xsd:3:3 (%v)", loc.URI, loc.Line, loc.Col, err)
+			}
+		})
+	}
+}
