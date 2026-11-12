@@ -13,6 +13,7 @@
 //	func Reach(schema *xsd.Schema, group xsd.ModelGroup, visit func(p xsd.Particle, position []int) error) error
 //	func TermEmptiable(schema *xsd.Schema, term xsd.TermOrRef) (bool, error)
 //	func ExactlyOnce() xsd.Occurs
+//	func BranchOccurs(occurs xsd.Occurs) xsd.Occurs
 //	func ModelGroupTerm(schema *xsd.Schema, term xsd.TermOrRef) (xsd.ModelGroup, bool, error)
 //	func FieldAttributeUses(t xsd.ComplexType) []xsd.AttributeUse
 //	func HasAttributeFields(t xsd.ComplexType) bool

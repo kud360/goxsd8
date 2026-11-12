@@ -1882,25 +1882,16 @@ func (e *emitter) alternative(o origin, t xsd.ComplexType, p xsd.Particle) (word
 }
 
 // branchParticle returns the particle a choice's branch struct holds for its
-// alternative p: p with {min occurs} 0 read as 1 when {max occurs} is not 0,
-// {max occurs} unchanged, and p itself otherwise. A branch is the
-// alternative chosen, so it never holds the empty match the nil interface
-// stands for: an element or a wildcard {0,1} gives a value field rather than
-// a pointer, a sequence {0,1} is spliced, and a choice {0,1} gives the bare
-// interface. subject and loc name the complex type holding p in the error a
-// particle that cannot be built returns.
+// alternative p: p at goshape.BranchOccurs' occurrence, which reads a {min
+// occurs} 0 as 1, and p itself where that is p's own. So an element or a
+// wildcard {0,1} gives a value field rather than a pointer, a sequence {0,1}
+// is spliced, and a choice {0,1} gives the bare interface. subject and loc
+// name the complex type holding p in the error a particle that cannot be
+// built returns.
 func branchParticle(subject string, loc xsderr.Loc, p xsd.Particle) (xsd.Particle, error) {
-	occurs := p.Occurs()
-	upper, bounded := occurs.Max()
-	if occurs.Min() > 0 || bounded && upper == 0 {
+	raised := goshape.BranchOccurs(p.Occurs())
+	if raised == p.Occurs() {
 		return p, nil
-	}
-	raised, err := xsd.NewUnboundedOccurs(xsderr.Loc{}, 1)
-	if bounded {
-		raised, err = xsd.NewOccurs(xsderr.Loc{}, 1, upper)
-	}
-	if err != nil {
-		return xsd.Particle{}, fmt.Errorf("%s at %s: %w", subject, loc, err)
 	}
 	branch, err := xsd.NewParticle(xsderr.Loc{}, raised, p.Term())
 	if err != nil {

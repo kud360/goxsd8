@@ -75,7 +75,7 @@ func TestDecodeDeclines(t *testing.T) {
 			"", a, constructMixedContent, 1, 1},
 		{"an optional <group ref> content particle to a non-emptiable all group", `<xs:group name="g"><xs:all><xs:element name="a" type="xs:string"/></xs:all></xs:group>` + root(`<xs:group ref="s:g" minOccurs="0"/>`),
 			"", a, constructAllOccurs, 1, 1},
-		{"choice alternative of a sequence", root(`<xs:choice><xs:sequence><xs:element name="a" type="xs:string"/></xs:sequence><xs:element name="b" type="xs:string"/></xs:choice>`),
+		{"choice alternative of a repeated sequence", root(`<xs:choice><xs:sequence maxOccurs="2"><xs:element name="a" type="xs:string"/></xs:sequence><xs:element name="b" type="xs:string"/></xs:choice>`),
 			"", a, constructNestedGroup, 1, 1},
 		{"choice alternatives sharing a branch shape, refs to a and A", `<xs:element name="a" type="xs:string"/><xs:element name="A" type="xs:string"/>` + root(`<xs:choice><xs:element ref="s:a"/><xs:element ref="s:A"/></xs:choice>`),
 			"", a, constructSharedBranch, 1, 1},
@@ -499,7 +499,7 @@ func TestDeclineConstruct(t *testing.T) {
 		}},
 		{"particle", [2]decl{
 			{sequenceOf(`<xs:choice maxOccurs="2"><xs:element name="a" type="xs:string"/></xs:choice>`), "", a},
-			{root(`<xs:choice><xs:sequence><xs:element name="a" type="xs:string"/></xs:sequence><xs:element name="b" type="xs:string"/></xs:choice>`), "", a},
+			{root(`<xs:choice><xs:sequence maxOccurs="2"><xs:element name="a" type="xs:string"/></xs:sequence><xs:element name="b" type="xs:string"/></xs:choice>`), "", a},
 		}},
 		{"simple type", [2]decl{
 			{root(`<xs:sequence><xs:element name="a" type="xs:string"/></xs:sequence><xs:attribute name="k"><xs:simpleType><xs:union memberTypes="xs:string xs:token"/></xs:simpleType></xs:attribute>`), "", a},

@@ -360,6 +360,29 @@ func ExactlyOnce() xsd.Occurs {
 	return once
 }
 
+// BranchOccurs returns the occurrence a choice's branch struct holds its
+// alternative particle at, the alternative occurring as occurs: occurs with
+// {min occurs} 0 read as 1 where {max occurs} is not 0, {max occurs} kept,
+// and occurs itself otherwise (codegen/doc.go "# Complex types"). A branch is
+// the alternative chosen, so it never holds the empty match the nil
+// interface stands for (§3.9.6.3 cos-group-emptiable). xsd.NewOccurs and
+// xsd.NewUnboundedOccurs cannot reject a {min occurs} of 1 under a {max
+// occurs} of at least 1, so BranchOccurs panics if they do.
+func BranchOccurs(occurs xsd.Occurs) xsd.Occurs {
+	upper, bounded := occurs.Max()
+	if occurs.Min() > 0 || bounded && upper == 0 {
+		return occurs
+	}
+	raised, err := xsd.NewUnboundedOccurs(xsderr.Loc{}, 1)
+	if bounded {
+		raised, err = xsd.NewOccurs(xsderr.Loc{}, 1, upper)
+	}
+	if err != nil {
+		panic(err)
+	}
+	return raised
+}
+
 // ModelGroupTerm returns the model group term holds and true: an inline
 // sequence, choice or all group, or the {model group} of the top-level model
 // group definition a <group ref> names (§3.7.2 declare-namedModelGroup),
