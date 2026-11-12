@@ -566,3 +566,135 @@ func TestDecodeElementOnlyCharacters(t *testing.T) {
 		t.Errorf("Decode = %v, %v, want no value and validate's violation", got, err)
 	}
 }
+
+// The mixed {type table} schemas, each declaring s:r. mxTableSchema's r, of
+// base, a mixed sequence(a?) carrying an optional kind, selects num, a mixed
+// extension adding n, an xs:int, where kind is "num", and plain, an
+// element-only restriction of base, where it is "p": each governing type is
+// mixed by its own {content type} (dcl.ctd.ctcc.common clause 4.2).
+// mxLocalTableSchema's r, mixed, holds e, a repeated element of ttTypes'
+// element-only base selecting num where kind is "num", and v, an optional
+// xs:long selecting xs:int where it carries xsi:type.
+const (
+	mxTableSchema = `<xs:complexType name="base" mixed="true"><xs:sequence><xs:element name="a" type="xs:string" minOccurs="0"/></xs:sequence><xs:attribute name="kind" type="xs:string"/></xs:complexType>
+<xs:complexType name="num" mixed="true"><xs:complexContent><xs:extension base="s:base"><xs:sequence><xs:element name="n" type="xs:int"/></xs:sequence></xs:extension></xs:complexContent></xs:complexType>
+<xs:complexType name="plain"><xs:complexContent><xs:restriction base="s:base"><xs:sequence><xs:element name="a" type="xs:string" minOccurs="0"/></xs:sequence></xs:restriction></xs:complexContent></xs:complexType>
+<xs:element name="r" type="s:base"><xs:alternative test="@kind = 'num'" type="s:num"/><xs:alternative test="@kind = 'p'" type="s:plain"/></xs:element>`
+	mxLocalTableSchema = ttTypes + `<xs:element name="r"><xs:complexType mixed="true"><xs:sequence><xs:element name="e" type="s:base" maxOccurs="unbounded"><xs:alternative test="@kind = 'num'" type="s:num"/></xs:element>
+<xs:element name="v" type="xs:long" minOccurs="0"><xs:alternative test="@xsi:type" type="xs:int"/></xs:element></xs:sequence></xs:complexType></xs:element>`
+)
+
+// The types codegen emits for those schemas, which TestDecodeMixedTypeTable
+// pins: mxTableSchema's R, RNum, Num, RPlain, Plain, RBase and Base are mxtR
+// to mxtBase; mxLocalTableSchema's R, E, ENum, EBase, V, VInt and VLong are
+// mxtLocal to mxtVLong, its Num and Base ttTypes' ttNum and ttBase.
+type (
+	mxtR    interface{ isMxtR() }
+	mxtRNum struct{ Num mxtNum }
+	mxtNum  struct {
+		Text string
+		A    *mixedChild[string]
+		N    mixedChild[int32]
+		Kind *string
+	}
+	mxtRPlain struct{ Plain mxtPlain }
+	mxtPlain  struct {
+		A    *string
+		Kind *string
+	}
+	mxtRBase struct{ Base mxtBase }
+	mxtBase  struct {
+		Text string
+		A    *mixedChild[string]
+		Kind *string
+	}
+
+	mxtLocal struct {
+		Text string
+		E    []mixedChild[mxtE]
+		V    *mixedChild[mxtV]
+	}
+	mxtE     interface{ isMxtE() }
+	mxtENum  struct{ Num ttNum }
+	mxtEBase struct{ Base ttBase }
+	mxtV     interface{ isMxtV() }
+	mxtVInt  struct{ Int int32 }
+	mxtVLong struct{ Long int64 }
+)
+
+func (mxtRNum) isMxtR()   {}
+func (mxtRPlain) isMxtR() {}
+func (mxtRBase) isMxtR()  {}
+func (mxtENum) isMxtE()   {}
+func (mxtEBase) isMxtE()  {}
+func (mxtVInt) isMxtV()   {}
+func (mxtVLong) isMxtV()  {}
+
+// TestDecodeMixedTypeTable pins mixed content under a {type table} (§3.3.4.1
+// key-cta-select), each row decoding into the types codegen emits, which the
+// test first checks against its output: at the document element, the
+// selected governing type's branch holds that type's own struct, with Text
+// and MixedChild where its own {content type} is mixed and neither where it
+// is element-only, the branch's one field never wrapped; and in mixed
+// content, a particle whose declaration has two governing types holds
+// MixedChild over their interface, its Tail the characters after it.
+func TestDecodeMixedTypeTable(t *testing.T) {
+	str := func(s string) *string { return &s }
+	gens := []struct {
+		decls string
+		want  []string
+	}{
+		{mxTableSchema, []string{"type RNum struct {\n\tNum Num\n}\n",
+			"type Num struct {\n\tText string\n\tA    *MixedChild[string]\n\tN    MixedChild[int32]\n\tKind *string\n}\n",
+			"type RPlain struct {\n\tPlain Plain\n}\n", "type Plain struct {\n\tA    *string\n\tKind *string\n}\n",
+			"type RBase struct {\n\tBase Base\n}\n", "type Base struct {\n\tText string\n\tA    *MixedChild[string]\n\tKind *string\n}\n"}},
+		{mxLocalTableSchema, []string{"type R struct {\n\tText string\n\tE    []MixedChild[E]\n\tV    *MixedChild[V]\n}\n",
+			"type ENum struct {\n\tNum Num\n}\n", "type EBase struct {\n\tBase Base\n}\n",
+			"type VInt struct {\n\tInt int32\n}\n", "type VLong struct {\n\tLong int64\n}\n"}},
+	}
+	for _, g := range gens {
+		gen := generated(t, schemaOf(t, g.decls))
+		for _, decl := range g.want {
+			if !bytes.Contains(gen, []byte(decl)) {
+				t.Errorf("codegen emits\n%s\nwhich does not declare\n%s", gen, decl)
+			}
+		}
+	}
+	rootInto := into[mxtR](WithBranches[mxtR](mxtRNum{}, mxtRPlain{}, mxtRBase{}))
+	localInto := into[mxtLocal](WithBranches[mxtE](mxtENum{}, mxtEBase{}), WithBranches[mxtV](mxtVInt{}, mxtVLong{}))
+	rows := []struct {
+		name  string
+		decls string
+		attrs string
+		body  string
+		into  target
+		want  any
+	}{
+		{"a mixed extension selected", mxTableSchema, ` kind="num"`, "x<s:a>v</s:a>y<s:n>1</s:n>z", rootInto,
+			mxtR(mxtRNum{Num: mxtNum{Text: "x", A: &mixedChild[string]{Element: "v", Tail: "y"}, N: mixedChild[int32]{Element: 1, Tail: "z"}, Kind: str("num")}})},
+		{"the mixed declared type by default", mxTableSchema, "", "x<s:a>v</s:a>y", rootInto,
+			mxtR(mxtRBase{Base: mxtBase{Text: "x", A: &mixedChild[string]{Element: "v", Tail: "y"}}})},
+		{"guard: an element-only restriction selected", mxTableSchema, ` kind="p"`, "\n<s:a>v</s:a>\n", rootInto,
+			mxtR(mxtRPlain{Plain: mxtPlain{A: str("v"), Kind: str("p")}})},
+		{"a particle of two governing types in mixed content", mxLocalTableSchema, "", `t<s:e kind="num"><s:a>1</s:a><s:n>2</s:n></s:e>u<s:e><s:a>3</s:a></s:e>w<s:v>4</s:v>z`, localInto,
+			mxtLocal{Text: "t", E: []mixedChild[mxtE]{{Element: mxtENum{Num: ttNum{A: "1", N: 2, Kind: str("num")}}, Tail: "u"}, {Element: mxtEBase{Base: ttBase{A: "3"}}, Tail: "w"}},
+				V: &mixedChild[mxtV]{Element: mxtVLong{Long: 4}, Tail: "z"}}},
+	}
+	for _, row := range rows {
+		t.Run(row.name, func(t *testing.T) {
+			schema := schemaOf(t, row.decls)
+			data := instanceOf(row.attrs, row.body)
+			mustAccept(t, schema, data)
+			got, err := row.into.decode(schema, data)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !reflect.DeepEqual(got, row.want) {
+				t.Errorf("Decode = %#v, want %#v", got, row.want)
+			}
+			if err := row.into.check(schema); err != nil {
+				t.Errorf("CheckDecode = %v, want nil for a row Decode decodes", err)
+			}
+		})
+	}
+}
