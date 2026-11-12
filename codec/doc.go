@@ -48,11 +48,11 @@
 //   - A union simple type, into a sealed interface.
 //   - A top-level element declaration, as the document element's.
 //   - A complex type with empty, simple or element-only content.
-//   - A sequence or choice, inline or through <group ref>, occurring exactly
-//     once, as a complex type's content {particle}.
-//   - A content all group, inline or through <group ref>, that codegen
-//     splices (codegen's package doc, "# Particles"), into the fields its own
-//     particles give.
+//   - A choice, inline or through <group ref>, occurring exactly once, as a
+//     complex type's content {particle}.
+//   - A content sequence or all group, inline or through <group ref>, that
+//     codegen splices (codegen's package doc, "# Particles"), into the fields
+//     its own particles give.
 //   - A nested sequence, inline or through <group ref>, and an all group's
 //     nested all group particle, through <group ref>, that codegen splices
 //     (codegen's package doc, "# Particles"), into the fields its own
@@ -118,8 +118,7 @@
 // content, simple content whose {simple type definition} is a simple type
 // that decodes (Structures §3.4.2.2 dcl.ctd.ctsc), its value field's, or
 // element-only content whose {particle} is a sequence or choice, inline or the
-// {model group} of the definition a <group ref> names, occurring exactly once, or
-// occurring otherwise where codegen does not splice it, or is an all group, inline
+// {model group} of the definition a <group ref> names, or is an all group, inline
 // or through <group ref>, where codegen splices it. Each particle of a sequence or
 // choice not flattened or of a spliced all group, a sequence's nested sequence
 // particle and an all group's nested all group particle, through <group ref>, that
@@ -218,9 +217,6 @@
 //
 // Every other construct is a [*DeclineError], never a zero value:
 //
-//   - A content sequence occurring other than exactly once that codegen
-//     splices (codegen's package doc, "# Particles"): {min occurs} 0 and
-//     {max occurs} 1 over an emptiable model group.
 //   - A content model xsd.Schema.ContentMatcher does not track, flattened,
 //     holding a nested flattened particle, or held in an occurrence field.
 //   - Two alternatives of a choice, or two declarations of a substitution

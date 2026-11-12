@@ -43,6 +43,25 @@ const (
 	spliceAnyNamesSchema = `<xs:element name="r"><xs:complexType><xs:sequence><xs:element name="a" type="xs:string"/><xs:sequence><xs:any namespace="urn:a" processContents="lax"/></xs:sequence><xs:any namespace="urn:b" processContents="lax"/></xs:sequence></xs:complexType></xs:element>`
 )
 
+// The content splice schemas, each declaring s:r, whose content {particle}
+// is itself a sequence codegen splices with {min occurs} 0 over an emptiable
+// group (codegen/doc.go "# Particles"): spliceContentSchema's sequence(a?,
+// b?); spliceContentRefSchema's a <group ref> to the sequence group g of a?
+// and b?; spliceContentExtSchema's r of t2, an empty <xs:extension> of t,
+// whose content is spliceContentSchema's sequence; spliceContentChoiceSchema's
+// sequence(choice(a, b?)); and spliceContentWildSchema's sequence(a?, any?),
+// its wildcard ##other.
+const (
+	spliceContentSchema    = `<xs:element name="r"><xs:complexType>` + spliceContentSeq + `</xs:complexType></xs:element>`
+	spliceContentRefSchema = `<xs:group name="g"><xs:sequence><xs:element name="a" type="xs:string" minOccurs="0"/><xs:element name="b" type="xs:string" minOccurs="0"/></xs:sequence></xs:group>
+  <xs:element name="r"><xs:complexType><xs:group ref="s:g" minOccurs="0"/></xs:complexType></xs:element>`
+	spliceContentExtSchema = `<xs:complexType name="t">` + spliceContentSeq + `</xs:complexType>
+  <xs:complexType name="t2"><xs:complexContent><xs:extension base="s:t"/></xs:complexContent></xs:complexType><xs:element name="r" type="s:t2"/>`
+	spliceContentChoiceSchema = `<xs:element name="r"><xs:complexType><xs:sequence minOccurs="0"><xs:choice><xs:element name="a" type="xs:string"/><xs:element name="b" type="xs:string" minOccurs="0"/></xs:choice></xs:sequence></xs:complexType></xs:element>`
+	spliceContentWildSchema   = `<xs:element name="r"><xs:complexType><xs:sequence minOccurs="0"><xs:element name="a" type="xs:string" minOccurs="0"/><xs:any namespace="##other" processContents="lax" minOccurs="0"/></xs:sequence></xs:complexType></xs:element>`
+	spliceContentSeq          = `<xs:sequence minOccurs="0"><xs:element name="a" type="xs:string" minOccurs="0"/><xs:element name="b" type="xs:string" minOccurs="0"/></xs:sequence>`
+)
+
 // The types codegen emits for the splice schemas' s:r, in shape, which
 // TestSpliceTypesAreCodegens pins.
 type (
@@ -75,12 +94,31 @@ type (
 		Any  anyElement
 		Any2 anyElement
 	}
+	spliceContent       struct{ A, B *string }
+	spliceContentChoice struct{ Choice spliceContentItem }
+	spliceContentItem   interface{ isSpliceContentItem() }
+	spliceContentA      struct{ A string }
+	spliceContentB      struct{ B string }
+	spliceContentWild   struct {
+		A   *string
+		Any *anyElement
+	}
 )
+
+func (spliceContentA) isSpliceContentItem() {}
+func (spliceContentB) isSpliceContentItem() {}
+
+// spliceContentBranches is the branch set of spliceContentItem.
+var spliceContentBranches = WithBranches[spliceContentItem](spliceContentA{}, spliceContentB{})
 
 // TestSpliceTypesAreCodegens pins the types above to the struct codegen
 // emits for each splice schema's s:r (codegen/doc.go "# Particles"): the
 // nested sequence's fields in its place, in particle order, named by the one
 // Namer of r's struct.
+//
+// For each content splice schema it pins r's struct to the fields the
+// content sequence's own particles give, a choice's sealed interface and
+// branches included.
 func TestSpliceTypesAreCodegens(t *testing.T) {
 	rows := []struct {
 		decls, want string
@@ -94,6 +132,13 @@ func TestSpliceTypesAreCodegens(t *testing.T) {
 		{spliceWildAfterSchema, "type R struct {\n\tA   string\n\tB   int32\n\tAny AnyElement\n}\n"},
 		{spliceWildRefSchema, "type R struct {\n\tA   string\n\tAny AnyElement\n\tB   int32\n}\n"},
 		{spliceAnyNamesSchema, "type R struct {\n\tA    string\n\tAny  AnyElement\n\tAny2 AnyElement\n}\n"},
+		{spliceContentSchema, "type R struct {\n\tA *string\n\tB *string\n}\n"},
+		{spliceContentRefSchema, "type R struct {\n\tA *string\n\tB *string\n}\n"},
+		{spliceContentExtSchema, "type R struct {\n\tA *string\n\tB *string\n}\n"},
+		{spliceContentChoiceSchema, "type R struct {\n\tChoice RChoice\n}\n"},
+		{spliceContentChoiceSchema, "type RChoiceA struct {\n\tA string\n}\n\nfunc (RChoiceA) isRChoice() {}\n"},
+		{spliceContentChoiceSchema, "type RChoiceB struct {\n\tB string\n}\n\nfunc (RChoiceB) isRChoice() {}\n"},
+		{spliceContentWildSchema, "type R struct {\n\tA   *string\n\tAny *AnyElement\n}\n"},
 	}
 	for _, row := range rows {
 		gen := generated(t, schemaOf(t, row.decls))
@@ -112,9 +157,16 @@ func TestSpliceTypesAreCodegens(t *testing.T) {
 // or after one decodes into its own field at its place, the field index
 // wildcardSlot.places holds for its Matcher position. CheckDecode returns
 // nil for each row's T.
+//
+// The content splice schemas' rows pin the same for a content {particle}
+// that is itself such a sequence, with {min occurs} 0 over an emptiable
+// group: it decodes into the type's own fields, present and, inline,
+// absent; each of those rows fails if contentGroup declines that sequence.
 func TestDecodeSplices(t *testing.T) {
 	i := func(n int32) *int32 { return &n }
+	str := func(s string) *string { return &s }
 	w := func(space string) anyElement { return anyElement{Space: space, Local: "w"} }
+	wp := func(space string) *anyElement { e := w(space); return &e }
 	rows := []struct {
 		name, decls, body string
 		into              target
@@ -135,6 +187,14 @@ func TestDecodeSplices(t *testing.T) {
 			spliceWildIn{A: "x", Any: w("urn:o"), B: 8}},
 		{"two wildcards claiming one Namer across a splice", spliceAnyNamesSchema, `<s:a>x</s:a><a:w xmlns:a="urn:a"/><b:w xmlns:b="urn:b"/>`, into[spliceAnyNames](),
 			spliceAnyNames{A: "x", Any: w("urn:a"), Any2: w("urn:b")}},
+		{"an optional emptiable content sequence holding only a", spliceContentSchema, "<s:a>x</s:a>", into[spliceContent](), spliceContent{A: str("x")}},
+		{"an optional emptiable content sequence, absent", spliceContentSchema, "", into[spliceContent](), spliceContent{}},
+		{"an optional <group ref> content particle to an emptiable sequence group", spliceContentRefSchema, "<s:a>x</s:a>", into[spliceContent](), spliceContent{A: str("x")}},
+		{"an empty extension of a type whose content is an optional emptiable sequence", spliceContentExtSchema, "<s:b>y</s:b>", into[spliceContent](), spliceContent{B: str("y")}},
+		{"an optional emptiable content sequence over a choice", spliceContentChoiceSchema, "<s:a>x</s:a>", into[spliceContentChoice](spliceContentBranches),
+			spliceContentChoice{Choice: spliceContentA{A: "x"}}},
+		{"an optional emptiable content sequence holding a wildcard", spliceContentWildSchema, `<s:a>x</s:a><o:w xmlns:o="urn:o"/>`, into[spliceContentWild](),
+			spliceContentWild{A: str("x"), Any: wp("urn:o")}},
 	}
 	for _, row := range rows {
 		t.Run(row.name, func(t *testing.T) {
