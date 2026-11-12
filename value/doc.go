@@ -75,7 +75,7 @@
 // The last stage is the one this package cannot run itself: an assertions
 // facet's {test}s are XPath 2.0 (cvc-assertions-valid, §4.3.13.3), and package
 // xpath imports this one. [ValidateLexical] and [ValidatingType] therefore take
-// an [AssertionEvaluator], which answers each {test} with an [AssertionOutcome]:
+// an [AssertionEvaluator], which answers each {test} with an [AssertionAnswer]:
 // a failed one is an ordinary verdict under cvc-assertions-valid, and a declined
 // one is the third non-verdict, which [IsAssertionDeclined] reports and
 // [IsDatatypeVerdict] excludes. GAP(value): this package's own callers of the

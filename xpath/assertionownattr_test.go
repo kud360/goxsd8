@@ -56,7 +56,7 @@ func TestOwnAttributeStepOutsideTheAssertionFacade(t *testing.T) {
 	}
 	str := asBuiltin(t, "string")
 	for _, test := range []string{"./@a = 'x'", "not(./@a = 'x')"} {
-		got := FacetAssertions(time.Time{}).Evaluate(backend(), seededTypes, str, ctaExprRecord(test, ""), fcValue(t, str, "x"))
+		got := FacetAssertions(time.Time{}).Evaluate(backend(), seededTypes, str, ctaExprRecord(test, ""), fcValue(t, str, "x")).Outcome()
 		if got != value.AssertionFails {
 			t.Errorf("FacetAssertions.Evaluate(%q) = %d, want %d", test, got, value.AssertionFails)
 		}

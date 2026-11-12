@@ -388,7 +388,7 @@ func TestCountDeclinesOutsideTheAssertionFacade(t *testing.T) {
 		{"count(//e1) = 0", value.AssertionDeclined},
 		{"//@a = 'x'", value.AssertionFails},
 	} {
-		if got := FacetAssertions(time.Time{}).Evaluate(backend(), seededTypes, str, ctaExprRecord(tc.test, ""), fcValue(t, str, "x")); got != tc.want {
+		if got := FacetAssertions(time.Time{}).Evaluate(backend(), seededTypes, str, ctaExprRecord(tc.test, ""), fcValue(t, str, "x")).Outcome(); got != tc.want {
 			t.Errorf("FacetAssertions().Evaluate(%q) = %d, want %d", tc.test, got, tc.want)
 		}
 	}
@@ -762,7 +762,7 @@ func TestPredicatesDeclineOutsideTheAssertionFacade(t *testing.T) {
 		if _, declined := CompileCTATest(ctaExprRecord(expr, ""), seededTypes); declined == nil {
 			t.Errorf("CompileCTATest(%q): compiled, want declined", expr)
 		}
-		if got := FacetAssertions(time.Time{}).Evaluate(backend(), seededTypes, str, ctaExprRecord(expr, ""), fcValue(t, str, "x")); got != value.AssertionDeclined {
+		if got := FacetAssertions(time.Time{}).Evaluate(backend(), seededTypes, str, ctaExprRecord(expr, ""), fcValue(t, str, "x")).Outcome(); got != value.AssertionDeclined {
 			t.Errorf("FacetAssertions().Evaluate(%q) = %d, want %d", expr, got, value.AssertionDeclined)
 		}
 	}

@@ -36,8 +36,8 @@ func (s stringAs) Mapping(typ xsd.QName) (value.Mapping, bool) {
 // facets, never hands it any.
 type declineEvery struct{}
 
-func (declineEvery) Evaluate(value.Backend, xsd.TypeResolver, *xsd.SimpleType, xsd.XPathExpression, value.Value) value.AssertionOutcome {
-	return value.AssertionDeclined
+func (declineEvery) Evaluate(value.Backend, xsd.TypeResolver, *xsd.SimpleType, xsd.XPathExpression, value.Value) value.AssertionAnswer {
+	return value.AssertionAnswer{}
 }
 
 // TestConstraintMatchesSpecialTypesUnderStrict pins the ·special· branch

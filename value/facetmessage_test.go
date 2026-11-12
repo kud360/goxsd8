@@ -102,10 +102,25 @@ func TestFacetStageMessagesWhole(t *testing.T) {
 			`the value is not facet-valid with respect to assertion 1 of 2 in the {value} of the assertions facet of the simple type {urn:test}asserted, whose {test} "fail" did not evaluate to true without raising a dynamic or type error, but cvc-assertions-valid requires every {test} to evaluate to true`},
 		{"failed assertion, anonymous type", validate(memberBackend{num.Name(): allDigits}, assertingNamed(t, xsd.QName{}, num, "fail"), scripted(nil)), ruleCvcAssertionsValid, false, true, false,
 			`the value is not facet-valid with respect to assertion 1 of 1 in the {value} of the assertions facet of an anonymous simple type, whose {test} "fail" did not evaluate to true without raising a dynamic or type error, but cvc-assertions-valid requires every {test} to evaluate to true`},
+		// A failure after a decline that states a reason is the verdict, and the
+		// verdict carries no reason: checkAssertions reads none on AssertionFails.
+		{"failed assertion after a declined one with a reason", validate(memberBackend{num.Name(): allDigits}, asserting(t, "asserted", num, "decline with reason", "fail"), scripted(nil)), ruleCvcAssertionsValid, false, true, false,
+			`the value is not facet-valid with respect to assertion 2 of 2 in the {value} of the assertions facet of the simple type {urn:test}asserted, whose {test} "fail" did not evaluate to true without raising a dynamic or type error, but cvc-assertions-valid requires every {test} to evaluate to true`},
 
 		// assertionDeclined opens with the assertion.
 		{"declined assertion", validate(memberBackend{num.Name(): allDigits}, asserting(t, "asserted", num, "hold", "decline"), scripted(nil)), ruleCvcAssertionsValid, false, false, true,
 			`assertion 2 of 2 in the {value} of the assertions facet of the simple type {urn:test}asserted, whose {test} is "decline", was not evaluated, so it is undecided whether the value is facet-valid with respect to it, which cvc-assertions-valid requires`},
+		// A decline that states a reason carries it after "because", before the
+		// citation, for a named and for an anonymous type; the first decline is
+		// the one returned, reason and all.
+		{"declined assertion with a reason", validate(memberBackend{num.Name(): allDigits}, asserting(t, "asserted", num, "hold", "decline with reason", "decline"), scripted(nil)), ruleCvcAssertionsValid, false, false, true,
+			`assertion 2 of 3 in the {value} of the assertions facet of the simple type {urn:test}asserted, whose {test} is "decline with reason", was not evaluated because function fn:nosuch is not supported, so it is undecided whether the value is facet-valid with respect to it, which cvc-assertions-valid requires`},
+		{"declined assertion with a reason, anonymous type", validate(memberBackend{num.Name(): allDigits}, assertingNamed(t, xsd.QName{}, num, "decline with reason"), scripted(nil)), ruleCvcAssertionsValid, false, false, true,
+			`assertion 1 of 1 in the {value} of the assertions facet of an anonymous simple type, whose {test} is "decline with reason", was not evaluated because function fn:nosuch is not supported, so it is undecided whether the value is facet-valid with respect to it, which cvc-assertions-valid requires`},
+		{"decline with a reason before a decline with another", validate(memberBackend{num.Name(): allDigits}, asserting(t, "asserted", num, "decline with reason", "decline with another reason"), scripted(nil)), ruleCvcAssertionsValid, false, false, true,
+			`assertion 1 of 2 in the {value} of the assertions facet of the simple type {urn:test}asserted, whose {test} is "decline with reason", was not evaluated because function fn:nosuch is not supported, so it is undecided whether the value is facet-valid with respect to it, which cvc-assertions-valid requires`},
+		{"reason-less decline before a decline with a reason", validate(memberBackend{num.Name(): allDigits}, asserting(t, "asserted", num, "decline", "decline with reason"), scripted(nil)), ruleCvcAssertionsValid, false, false, true,
+			`assertion 1 of 2 in the {value} of the assertions facet of the simple type {urn:test}asserted, whose {test} is "decline", was not evaluated, so it is undecided whether the value is facet-valid with respect to it, which cvc-assertions-valid requires`},
 
 		// The census sites: an unmapped type, a {value} of the wrong count, a
 		// {value} outside its space, and the active-basic-member scan.

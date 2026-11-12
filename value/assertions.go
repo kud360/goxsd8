@@ -14,7 +14,7 @@ import (
 // folds into Datatype Valid with the other ·value-based· facets. Its {test}s
 // are XPath 2.0, which this package cannot evaluate — package xpath imports
 // this one — so the stage asks an [AssertionEvaluator] the caller injects, and
-// that capability's three answers are the stage's three outcomes.
+// that capability's three outcomes are the stage's three outcomes.
 
 // ruleCvcAssertionsValid is Assertions Valid (Datatypes §4.3.13.3,
 // id="cvc-assertions-valid"): a value is facet-valid with respect to an
@@ -41,6 +41,36 @@ const (
 	AssertionFails
 )
 
+// AssertionAnswer is what an [AssertionEvaluator] answered for one {test}: its
+// [AssertionOutcome] and, for a decline only, why. [AssertionDecided] and
+// [AssertionDeclinedBecause] build it, so no decided answer carries a reason
+// (STYLE T1). The zero AssertionAnswer declines without stating why.
+type AssertionAnswer struct {
+	outcome AssertionOutcome
+	reason  string
+}
+
+// AssertionDecided is the answer of an evaluator that decided its {test}:
+// [AssertionHolds] where holds, [AssertionFails] otherwise.
+func AssertionDecided(holds bool) AssertionAnswer {
+	if holds {
+		return AssertionAnswer{outcome: AssertionHolds}
+	}
+	return AssertionAnswer{outcome: AssertionFails}
+}
+
+// AssertionDeclinedBecause is the [AssertionDeclined] answer of an evaluator
+// that did not decide its {test}, for reason. reason is a clause that states a
+// fact, with no leading capital, no terminal punctuation, no location and no
+// rule prefix: the pipeline embeds it after "because" in the decline's message
+// ([IsAssertionDeclined]). It is for people, and a caller must not parse it.
+func AssertionDeclinedBecause(reason string) AssertionAnswer {
+	return AssertionAnswer{outcome: AssertionDeclined, reason: reason}
+}
+
+// Outcome is what the evaluator decided of the {test}.
+func (a AssertionAnswer) Outcome() AssertionOutcome { return a.outcome }
+
 // AssertionEvaluator decides one {test} of an assertions facet against a value,
 // on the terms of Assertions Valid (Datatypes §4.3.13.3, cvc-assertions-valid):
 // no context item (clause 1.2), and `$value` bound to the XDM representation of
@@ -56,33 +86,39 @@ const (
 // Its one consumer is the pipeline's assertions stage, which runs after every
 // other value facet has accepted v; validate injects package xpath's
 // implementation (xpath.FacetAssertions) at every [ValidateLexical],
-// [ValidatingType] and [ConstraintMatches] call. An implementation answers
-// [AssertionDeclined] for a {test} it cannot evaluate, never a guess.
+// [ValidatingType] and [ConstraintMatches] call. An implementation answers a
+// decline, [AssertionDeclinedBecause] where it can say why, for a {test} it
+// cannot evaluate, never a guess.
 type AssertionEvaluator interface {
-	Evaluate(b Backend, r xsd.TypeResolver, st *xsd.SimpleType, test xsd.XPathExpression, v Value) AssertionOutcome
+	Evaluate(b Backend, r xsd.TypeResolver, st *xsd.SimpleType, test xsd.XPathExpression, v Value) AssertionAnswer
 }
 
 // errAssertionDeclined is the sentinel every assertions-stage DECLINE wraps: an
-// [AssertionEvaluator] answered [AssertionDeclined], so the value's Datatype
-// Valid verdict is undecided. It is the third non-verdict class beside
-// errTypeFault and errFacetPrecondition, and it wraps NEITHER: a decline is not a
-// fault of the type or of the backend, it is a {test} this caller's evaluator
-// could not decide. assertionDeclined is its one construction site and
-// [IsAssertionDeclined] its one test.
+// [AssertionEvaluator] answered a decline (an [AssertionAnswer] whose Outcome is
+// [AssertionDeclined]), so the value's Datatype Valid verdict is undecided. It is
+// the third non-verdict class beside errTypeFault and errFacetPrecondition, and
+// it wraps NEITHER: a decline is not a fault of the type or of the backend, it is
+// a {test} this caller's evaluator could not decide. assertionDeclined is its one
+// construction site and [IsAssertionDeclined] its one test.
 var errAssertionDeclined = errors.New("value: an assertions-facet {test} was not evaluated")
 
 // assertionDeclined builds the error for the i-th (0-based) of the n assertions
 // in the {value} of the assertions facet effective on st, whose {test} is test,
-// that the evaluator declined. It is the ONE construction site of the class
+// that the evaluator declined for reason, on [AssertionDeclinedBecause]'s
+// terms; an empty reason states none. It is the ONE construction site of the class
 // (STYLE T4): `grep assertionDeclined(` enumerates every decline.
 // errAssertionDeclined is set as the error's Err, so it rides the chain for
 // IsAssertionDeclined while Msg opens with the assertion, never with the
 // sentinel's text (STYLE E5).
-func assertionDeclined(st *xsd.SimpleType, i, n int, test xsd.XPathExpression) error {
+func assertionDeclined(st *xsd.SimpleType, i, n int, test xsd.XPathExpression, reason string) error {
+	because := ""
+	if reason != "" {
+		because = " because " + reason
+	}
 	return &xsderr.Error{
 		Rule: ruleCvcAssertionsValid,
-		Msg: fmt.Sprintf("assertion %d of %d in the {value} of the assertions facet of %s, whose {test} is %q, was not evaluated, so it is undecided whether the value is facet-valid with respect to it, which cvc-assertions-valid requires",
-			i+1, n, simpleTypeLabel(st.Name()), test.Expression()),
+		Msg: fmt.Sprintf("assertion %d of %d in the {value} of the assertions facet of %s, whose {test} is %q, was not evaluated%s, so it is undecided whether the value is facet-valid with respect to it, which cvc-assertions-valid requires",
+			i+1, n, simpleTypeLabel(st.Name()), test.Expression(), because),
 		Err: errAssertionDeclined,
 	}
 }
@@ -100,11 +136,12 @@ func simpleTypeLabel(name xsd.QName) string {
 
 // IsAssertionDeclined reports whether err — an error [ValidateLexical] or
 // [ValidatingType] returned — is an assertions-facet DECLINE: the
-// [AssertionEvaluator] answered [AssertionDeclined] for a {test} of an
-// assertions facet the pipeline reached, so whether the literal is Datatype
-// Valid is undecided. [IsDatatypeVerdict] is false for it. The message names
-// the assertion, its type and its {test}, and [xsderr.RuleOf] reads
-// cvc-assertions-valid off it.
+// [AssertionEvaluator] answered a decline (an [AssertionAnswer] whose Outcome
+// is [AssertionDeclined]) for a {test} of an assertions facet the pipeline
+// reached, so whether the literal is Datatype Valid is undecided.
+// [IsDatatypeVerdict] is false for it. The message names the assertion, its
+// type, its {test} and, where the evaluator stated one, why it declined it,
+// and [xsderr.RuleOf] reads cvc-assertions-valid off it.
 //
 // A caller deciding validity declines on it under cvc-assertions-valid, where
 // the other non-verdicts decline under the caller's own rule.
@@ -122,9 +159,9 @@ func IsAssertionDeclined(err error) bool {
 // consumers and direction at its marker. (#1042)
 type assertionsUndecided struct{}
 
-// Evaluate declines every {test}.
-func (assertionsUndecided) Evaluate(Backend, xsd.TypeResolver, *xsd.SimpleType, xsd.XPathExpression, Value) AssertionOutcome {
-	return AssertionDeclined
+// Evaluate declines every {test}, stating no reason.
+func (assertionsUndecided) Evaluate(Backend, xsd.TypeResolver, *xsd.SimpleType, xsd.XPathExpression, Value) AssertionAnswer {
+	return AssertionAnswer{}
 }
 
 // checkAssertions is the assertions stage over v, already accepted by every
@@ -140,20 +177,20 @@ func (assertionsUndecided) Evaluate(Backend, xsd.TypeResolver, *xsd.SimpleType, 
 // conjunct of one facet-valid condition, so a later failure decides the value
 // invalid whatever an earlier declined {test} would have said. Only where no
 // {test} fails is the first decline returned, as assertionDeclined's
-// non-verdict.
+// non-verdict with that decline's reason; a failure's verdict never reads one.
 func checkAssertions(b Backend, r xsd.TypeResolver, st, basic *xsd.SimpleType, v Value, facets []xsd.Facet, a AssertionEvaluator) error {
 	var declined error
 	for _, f := range facets {
 		assertions, _ := f.Assertions()
 		for i, as := range assertions {
-			outcome := a.Evaluate(b, r, basic, as.Test(), v)
-			if outcome == AssertionFails {
+			ans := a.Evaluate(b, r, basic, as.Test(), v)
+			if ans.outcome == AssertionFails {
 				return xsderr.New(ruleCvcAssertionsValid, xsderr.Loc{},
 					"the value is not facet-valid with respect to assertion %d of %d in the {value} of the assertions facet of %s, whose {test} %q did not evaluate to true without raising a dynamic or type error, but cvc-assertions-valid requires every {test} to evaluate to true",
 					i+1, len(assertions), simpleTypeLabel(st.Name()), as.Test().Expression())
 			}
-			if outcome == AssertionDeclined && declined == nil {
-				declined = assertionDeclined(st, i, len(assertions), as.Test())
+			if ans.outcome == AssertionDeclined && declined == nil {
+				declined = assertionDeclined(st, i, len(assertions), as.Test(), ans.reason)
 			}
 		}
 	}

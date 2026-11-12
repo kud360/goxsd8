@@ -204,7 +204,7 @@ func TestFacetAssertionsCastTheValue(t *testing.T) {
 		{"2010-01-02", value.AssertionHolds},
 		{"2009-12-31", value.AssertionFails},
 	} {
-		got := FacetAssertions(time.Time{}).Evaluate(backend(), seededTypes, date, asRecord("xs:date($value) gt xs:date('2010-01-01')"), fcValue(t, date, tc.lexical))
+		got := FacetAssertions(time.Time{}).Evaluate(backend(), seededTypes, date, asRecord("xs:date($value) gt xs:date('2010-01-01')"), fcValue(t, date, tc.lexical)).Outcome()
 		if got != tc.want {
 			t.Errorf("Evaluate(xs:date($value) gt xs:date('2010-01-01'), %q) = %d, want %d", tc.lexical, got, tc.want)
 		}
@@ -282,7 +282,7 @@ func cfFacades() []cfFacade {
 		}},
 		{"FacetAssertions", func(t *testing.T, expr string) (bool, bool) {
 			str := asBuiltin(t, "string")
-			switch FacetAssertions(time.Time{}).Evaluate(backend(), seededTypes, str, asRecord(expr), fcValue(t, str, "x")) {
+			switch FacetAssertions(time.Time{}).Evaluate(backend(), seededTypes, str, asRecord(expr), fcValue(t, str, "x")).Outcome() {
 			case value.AssertionHolds:
 				return true, true
 			case value.AssertionFails:

@@ -81,7 +81,7 @@ func TestCurrentDateZeroInstant(t *testing.T) {
 	}
 	date := asBuiltin(t, "date")
 	const test = "$value eq current-date()"
-	got := FacetAssertions(time.Time{}).Evaluate(backend(), seededTypes, date, ctaExprRecord(test, ""), fcValue(t, date, "0001-01-01Z"))
+	got := FacetAssertions(time.Time{}).Evaluate(backend(), seededTypes, date, ctaExprRecord(test, ""), fcValue(t, date, "0001-01-01Z")).Outcome()
 	if got != value.AssertionHolds {
 		t.Errorf("FacetAssertions(zero instant).Evaluate(%q over 0001-01-01Z) = %d, want %d", test, got, value.AssertionHolds)
 	}
@@ -129,7 +129,7 @@ func TestFacetCurrentDate(t *testing.T) {
 		{"$value gt current-date()", "2080-01-01", value.AssertionHolds},
 		{"$value gt current-date()", "2000-01-01", value.AssertionFails},
 	} {
-		got := FacetAssertions(cdNow).Evaluate(backend(), seededTypes, date, ctaExprRecord(tc.test, ""), fcValue(t, date, tc.lexical))
+		got := FacetAssertions(cdNow).Evaluate(backend(), seededTypes, date, ctaExprRecord(tc.test, ""), fcValue(t, date, tc.lexical)).Outcome()
 		if got != tc.want {
 			t.Errorf("Evaluate(%q over %s) = %d, want %d", tc.test, tc.lexical, got, tc.want)
 		}
@@ -183,7 +183,7 @@ func TestTypeAlternativeCastDeclinesAssertions(t *testing.T) {
 		t.Errorf("ctaValidate(2000-01-01 against FutureDate) on a Type Alternative's input validated, want raised")
 	}
 	date := asBuiltin(t, "date")
-	if got := (ctaAssertionsDeclined{}).Evaluate(backend(), types, date, test, fcValue(t, date, "2000-01-01")); got != value.AssertionDeclined {
+	if got := (ctaAssertionsDeclined{}).Evaluate(backend(), types, date, test, fcValue(t, date, "2000-01-01")).Outcome(); got != value.AssertionDeclined {
 		t.Errorf("ctaAssertionsDeclined.Evaluate = %d, want AssertionDeclined", got)
 	}
 }

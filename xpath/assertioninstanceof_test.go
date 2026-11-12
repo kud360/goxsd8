@@ -225,7 +225,7 @@ func TestFacetAssertionsInstanceOf(t *testing.T) {
 		{"@d instance of attribute()", value.AssertionDeclined},
 		{"not(./@d instance of attribute(*, xs:string))", value.AssertionDeclined},
 	} {
-		got := FacetAssertions(time.Time{}).Evaluate(backend(), seededTypes, str, ctaExprRecord(tc.test, "", "xs", xsd.XMLSchemaNS), fcValue(t, str, "abc"))
+		got := FacetAssertions(time.Time{}).Evaluate(backend(), seededTypes, str, ctaExprRecord(tc.test, "", "xs", xsd.XMLSchemaNS), fcValue(t, str, "abc")).Outcome()
 		if got != tc.want {
 			t.Errorf("Evaluate(%q) = %d, want %d", tc.test, got, tc.want)
 		}

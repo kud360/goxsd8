@@ -36,7 +36,7 @@ func TestFacetYearFromDate(t *testing.T) {
 		{"year-from-date() eq 2008", "2008-07-28", value.AssertionDeclined},
 		{"year-from-date($value, $value) eq 2008", "2008-07-28", value.AssertionDeclined},
 	} {
-		got := FacetAssertions(time.Time{}).Evaluate(backend(), seededTypes, date, ctaExprRecord(tc.test, "", "xs", xsd.XMLSchemaNS), fcValue(t, date, tc.lexical))
+		got := FacetAssertions(time.Time{}).Evaluate(backend(), seededTypes, date, ctaExprRecord(tc.test, "", "xs", xsd.XMLSchemaNS), fcValue(t, date, tc.lexical)).Outcome()
 		if got != tc.want {
 			t.Errorf("Evaluate(%q, %q) = %d, want %d", tc.test, tc.lexical, got, tc.want)
 		}

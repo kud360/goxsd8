@@ -134,7 +134,7 @@ func TestFacetAssertionsCastable(t *testing.T) {
 		{"not(. castable as xs:date)", "2008-01-01", value.AssertionFails},
 		{"@a castable as xs:date?", "2008-01-01", value.AssertionFails},
 	} {
-		got := FacetAssertions(time.Time{}).Evaluate(backend(), seededTypes, str, ctaExprRecord(tc.test, "", "xs", xsd.XMLSchemaNS), fcValue(t, str, tc.lexical))
+		got := FacetAssertions(time.Time{}).Evaluate(backend(), seededTypes, str, ctaExprRecord(tc.test, "", "xs", xsd.XMLSchemaNS), fcValue(t, str, tc.lexical)).Outcome()
 		if got != tc.want {
 			t.Errorf("Evaluate(%q, %q) = %d, want %d", tc.test, tc.lexical, got, tc.want)
 		}

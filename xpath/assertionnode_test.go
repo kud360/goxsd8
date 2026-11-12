@@ -261,7 +261,7 @@ func TestFacetNodeFunctionsRaise(t *testing.T) {
 		"in-scope-prefixes(.) = 'xml'",
 		"not(in-scope-prefixes(.) = 'a')",
 	} {
-		if got := FacetAssertions(time.Time{}).Evaluate(backend(), seededTypes, str, ctaExprRecord(expr, ""), fcValue(t, str, "x")); got != value.AssertionFails {
+		if got := FacetAssertions(time.Time{}).Evaluate(backend(), seededTypes, str, ctaExprRecord(expr, ""), fcValue(t, str, "x")).Outcome(); got != value.AssertionFails {
 			t.Errorf("FacetAssertions().Evaluate(%q) = %d, want Fails (%d)", expr, got, value.AssertionFails)
 		}
 	}

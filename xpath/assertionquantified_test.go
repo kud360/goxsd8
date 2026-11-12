@@ -311,7 +311,7 @@ func TestAssertionQuantifiedOutsideTheAssertionFacade(t *testing.T) {
 		if _, declined := CompileCTATest(ctaExprRecord(expr, ""), seededTypes); declined == nil {
 			t.Errorf("CompileCTATest(%q): compiled, want declined", expr)
 		}
-		if got := FacetAssertions(time.Time{}).Evaluate(backend(), seededTypes, str, ctaExprRecord(expr, ""), fcValue(t, str, "x")); got != value.AssertionDeclined {
+		if got := FacetAssertions(time.Time{}).Evaluate(backend(), seededTypes, str, ctaExprRecord(expr, ""), fcValue(t, str, "x")).Outcome(); got != value.AssertionDeclined {
 			t.Errorf("FacetAssertions().Evaluate(%q) = %d, want Declined (%d)", expr, got, value.AssertionDeclined)
 		}
 	}

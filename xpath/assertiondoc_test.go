@@ -104,7 +104,7 @@ func TestDocOutsideTheAssertionFacade(t *testing.T) {
 		{"empty(doc(()))", value.AssertionHolds},
 		{"exists(doc(()))", value.AssertionFails},
 	} {
-		got := FacetAssertions(time.Time{}).Evaluate(backend(), seededTypes, str, ctaExprRecord(tc.test, ""), fcValue(t, str, "x"))
+		got := FacetAssertions(time.Time{}).Evaluate(backend(), seededTypes, str, ctaExprRecord(tc.test, ""), fcValue(t, str, "x")).Outcome()
 		if got != tc.want {
 			t.Errorf("FacetAssertions.Evaluate(%q) = %d, want %d", tc.test, got, tc.want)
 		}
