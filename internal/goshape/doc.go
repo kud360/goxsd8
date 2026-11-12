@@ -26,6 +26,9 @@
 //	type Atomic uint8
 //	const AtomicString, AtomicBool, …, AtomicPrecisionDecimal Atomic
 //	func (a Atomic) Datatype() (xsd.QName, bool)
+//	type DatatypeField struct{ Name string; Type reflect.Type }
+//	func (a Atomic) Fields() []DatatypeField
+//	func NumericalFields() []DatatypeField
 //	func AtomicType(r xsd.TypeResolver, st *xsd.SimpleType) (a Atomic, ok bool, err error)
 //
 // The rules are those codegen's package doc states, each in its own section

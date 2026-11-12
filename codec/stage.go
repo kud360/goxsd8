@@ -85,10 +85,10 @@ type listItem struct {
 }
 
 // goType returns the Go type codegen gives s's simple type: s's atomic Go type
-// A, or []A for a list (codegen/doc.go "# Simple types"), A codec's mirror
-// for a datatype struct (atomic.bare), and for a union, whose interface codec
-// holds none of, unionValue, which pipeline.union builds the caller's variant
-// from.
+// A, or []A for a list (codegen/doc.go "# Simple types"), A the unnamed struct
+// of its fields for a datatype struct (atomic.bare), and for a union, whose
+// interface codec holds none of, unionValue, which pipeline.union builds the
+// caller's variant from.
 func (s scalar) goType() reflect.Type {
 	if s.item == nil {
 		return s.elem.bare()
@@ -111,11 +111,11 @@ func (s scalar) underlies(v reflect.Type) bool { return s.elem.underlies(v, s.it
 // types, a list's or []byte's, Kind Slice and ConvertibleTo mean an identical
 // underlying type, since Go converts between slice types only then. For a
 // datatype struct, which codegen declares in the caller's package, v is a
-// struct of its shape (atomic.shapes), ConvertibleTo codec's mirror, which
-// only a struct of its exported fields exactly, in name, order and Go type,
-// struct tags aside, is, or for PrecisionDecimal's, which has no mirror, a
-// struct decimalShape holds, or for a list v is a slice of such a struct: []D
-// converts to no []mirror.
+// struct of its shape (atomic.shapes), ConvertibleTo a's bare type, the unnamed
+// struct of its fields, which only a struct of its exported fields exactly, in
+// name, order and Go type, struct tags aside, is, or for PrecisionDecimal's,
+// which has no such struct, a struct decimalShape holds, or for a list v is a
+// slice of such a struct: []D converts to no slice of the bare type.
 func (a atomic) underlies(v reflect.Type, list bool) bool {
 	if !a.datatypeStruct() {
 		want := a.bare()
@@ -454,9 +454,10 @@ func newLexicalStages(p *pipeline, atom atomic, st *xsd.SimpleType, label string
 }
 
 // run returns the value of lexical, at position token as stageError states
-// it, as a value of ls.atom's bare type, codec's mirror for a datatype
-// struct, which shape.store converts to the caller's type, or decimalValue,
-// which shape.store builds the caller's PrecisionDecimal from.
+// it, as a value of ls.atom's bare type, the unnamed struct of its fields
+// for a datatype struct, which shape.store converts to the caller's type,
+// or decimalValue, which shape.store builds the caller's PrecisionDecimal
+// from.
 func (ls lexicalStages) run(p *pipeline, lexical string, token int) (reflect.Value, error) {
 	if ls.atom == atomicString {
 		return reflect.ValueOf(lexical), nil

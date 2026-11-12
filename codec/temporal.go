@@ -9,7 +9,7 @@ import (
 	"strconv"
 )
 
-// convertTemporal returns the value of a's mirror, a date, time or duration
+// convertTemporal returns the value of a's bare type, a date, time or duration
 // datatype struct, that form denotes, or the error for a form that is not of
 // a's lexical grammar (Datatypes §3.3.6.2, §3.3.7.2–§3.3.14.2, §3.4.26.2–
 // §3.4.28.2, the fragments of §D.2.2) or that denotes no value of a's value
@@ -24,7 +24,7 @@ import (
 // it every atomic convert does not name.
 func convertTemporal(a atomic, form string) (reflect.Value, error) {
 	c := &scanner{s: form}
-	var v any
+	var v reflect.Value
 	var err error
 	switch a {
 	case atomicDateTime, atomicDateTimeStamp:
@@ -57,7 +57,7 @@ func convertTemporal(a atomic, form string) (reflect.Value, error) {
 	if !c.done() {
 		return reflect.Value{}, fmt.Errorf("%q follows the value at byte %d", c.s[c.i:], c.i)
 	}
-	return reflect.ValueOf(v), nil
+	return v, nil
 }
 
 // scanner reads a date, time or duration form s from byte offset i.
@@ -237,123 +237,123 @@ func (c *scanner) clock() (uint8, uint8, big.Rat, error) {
 	return h, m, s, err
 }
 
-// dateTime consumes a dateTime form (§3.3.7.2) and returns its mirror, or
-// where stamp is true a dateTimeStamp's, whose timezoneOffset is required
-// (§3.4.28).
-func (c *scanner) dateTime(stamp bool) (any, error) {
+// dateTime consumes a dateTime form (§3.3.7.2) and returns its value, of
+// the atomic's bare type, or where stamp is true a dateTimeStamp's, whose
+// timezoneOffset is required (§3.4.28).
+func (c *scanner) dateTime(stamp bool) (reflect.Value, error) {
 	y, mo, d, err := c.yearMonthDay()
 	if err != nil {
-		return nil, err
+		return reflect.Value{}, err
 	}
 	if err := c.expect('T'); err != nil {
-		return nil, err
+		return reflect.Value{}, err
 	}
 	h, mi, s, err := c.clock()
 	if err != nil {
-		return nil, err
+		return reflect.Value{}, err
 	}
 	tz, err := c.timezone()
 	if err != nil {
-		return nil, err
+		return reflect.Value{}, err
 	}
 	if !stamp {
-		return dateTimeMirror{Year: y, Month: mo, Day: d, Hour: h, Minute: mi, Second: s, TimezoneOffset: tz}, nil
+		return atomicDateTime.build(prop{"Year", y}, prop{"Month", mo}, prop{"Day", d}, prop{"Hour", h}, prop{"Minute", mi}, prop{"Second", s}, prop{"TimezoneOffset", tz}), nil
 	}
 	if tz == nil {
-		return nil, errors.New("a dateTimeStamp's timezoneOffset is absent (§3.4.28)")
+		return reflect.Value{}, errors.New("a dateTimeStamp's timezoneOffset is absent (§3.4.28)")
 	}
-	return dateTimeStampMirror{Year: y, Month: mo, Day: d, Hour: h, Minute: mi, Second: s, TimezoneOffset: *tz}, nil
+	return atomicDateTimeStamp.build(prop{"Year", y}, prop{"Month", mo}, prop{"Day", d}, prop{"Hour", h}, prop{"Minute", mi}, prop{"Second", s}, prop{"TimezoneOffset", *tz}), nil
 }
 
-// time consumes a time form (§3.3.8.2) and returns its mirror.
-func (c *scanner) time() (any, error) {
+// time consumes a time form (§3.3.8.2) and returns its value, of the atomic's bare type.
+func (c *scanner) time() (reflect.Value, error) {
 	h, mi, s, err := c.clock()
 	if err != nil {
-		return nil, err
+		return reflect.Value{}, err
 	}
 	tz, err := c.timezone()
-	return timeMirror{Hour: h, Minute: mi, Second: s, TimezoneOffset: tz}, err
+	return atomicTime.build(prop{"Hour", h}, prop{"Minute", mi}, prop{"Second", s}, prop{"TimezoneOffset", tz}), err
 }
 
-// date consumes a date form (§3.3.9.2) and returns its mirror.
-func (c *scanner) date() (any, error) {
+// date consumes a date form (§3.3.9.2) and returns its value, of the atomic's bare type.
+func (c *scanner) date() (reflect.Value, error) {
 	y, mo, d, err := c.yearMonthDay()
 	if err != nil {
-		return nil, err
+		return reflect.Value{}, err
 	}
 	tz, err := c.timezone()
-	return dateMirror{Year: y, Month: mo, Day: d, TimezoneOffset: tz}, err
+	return atomicDate.build(prop{"Year", y}, prop{"Month", mo}, prop{"Day", d}, prop{"TimezoneOffset", tz}), err
 }
 
-// gYearMonth consumes a gYearMonth form (§3.3.10.2) and returns its mirror.
-func (c *scanner) gYearMonth() (any, error) {
+// gYearMonth consumes a gYearMonth form (§3.3.10.2) and returns its value, of the atomic's bare type.
+func (c *scanner) gYearMonth() (reflect.Value, error) {
 	y, err := c.year()
 	if err != nil {
-		return nil, err
+		return reflect.Value{}, err
 	}
 	if err := c.expect('-'); err != nil {
-		return nil, err
+		return reflect.Value{}, err
 	}
 	mo, err := c.two("month", 1, 12)
 	if err != nil {
-		return nil, err
+		return reflect.Value{}, err
 	}
 	tz, err := c.timezone()
-	return gYearMonthMirror{Year: y, Month: mo, TimezoneOffset: tz}, err
+	return atomicGYearMonth.build(prop{"Year", y}, prop{"Month", mo}, prop{"TimezoneOffset", tz}), err
 }
 
-// gYear consumes a gYear form (§3.3.11.2) and returns its mirror.
-func (c *scanner) gYear() (any, error) {
+// gYear consumes a gYear form (§3.3.11.2) and returns its value, of the atomic's bare type.
+func (c *scanner) gYear() (reflect.Value, error) {
 	y, err := c.year()
 	if err != nil {
-		return nil, err
+		return reflect.Value{}, err
 	}
 	tz, err := c.timezone()
-	return gYearMirror{Year: y, TimezoneOffset: tz}, err
+	return atomicGYear.build(prop{"Year", y}, prop{"TimezoneOffset", tz}), err
 }
 
 // gMonthDay consumes a gMonthDay form (§3.3.12.2), whose day is at most
-// ·daysInMonth· of an absent year, and returns its mirror.
-func (c *scanner) gMonthDay() (any, error) {
+// ·daysInMonth· of an absent year, and returns its value, of the atomic's bare type.
+func (c *scanner) gMonthDay() (reflect.Value, error) {
 	if err := c.expect('-'); err != nil {
-		return nil, err
+		return reflect.Value{}, err
 	}
 	mo, d, err := c.monthDay(nil)
 	if err != nil {
-		return nil, err
+		return reflect.Value{}, err
 	}
 	tz, err := c.timezone()
-	return gMonthDayMirror{Month: mo, Day: d, TimezoneOffset: tz}, err
+	return atomicGMonthDay.build(prop{"Month", mo}, prop{"Day", d}, prop{"TimezoneOffset", tz}), err
 }
 
-// gDay consumes a gDay form (§3.3.13.2) and returns its mirror.
-func (c *scanner) gDay() (any, error) {
+// gDay consumes a gDay form (§3.3.13.2) and returns its value, of the atomic's bare type.
+func (c *scanner) gDay() (reflect.Value, error) {
 	for range 3 {
 		if err := c.expect('-'); err != nil {
-			return nil, err
+			return reflect.Value{}, err
 		}
 	}
 	d, err := c.two("day", 1, 31)
 	if err != nil {
-		return nil, err
+		return reflect.Value{}, err
 	}
 	tz, err := c.timezone()
-	return gDayMirror{Day: d, TimezoneOffset: tz}, err
+	return atomicGDay.build(prop{"Day", d}, prop{"TimezoneOffset", tz}), err
 }
 
-// gMonth consumes a gMonth form (§3.3.14.2) and returns its mirror.
-func (c *scanner) gMonth() (any, error) {
+// gMonth consumes a gMonth form (§3.3.14.2) and returns its value, of the atomic's bare type.
+func (c *scanner) gMonth() (reflect.Value, error) {
 	for range 2 {
 		if err := c.expect('-'); err != nil {
-			return nil, err
+			return reflect.Value{}, err
 		}
 	}
 	mo, err := c.two("month", 1, 12)
 	if err != nil {
-		return nil, err
+		return reflect.Value{}, err
 	}
 	tz, err := c.timezone()
-	return gMonthMirror{Month: mo, TimezoneOffset: tz}, err
+	return atomicGMonth.build(prop{"Month", mo}, prop{"TimezoneOffset", tz}), err
 }
 
 // durationPart is one designator of a durationLexicalRep (§3.3.6.2) and what
@@ -371,32 +371,33 @@ var (
 	timeParts = []durationPart{{'H', 0, 3600}, {'M', 0, 60}, {'S', 0, 1}}
 )
 
-// duration consumes a durationLexicalRep (§3.3.6.2) and returns the mirror of
-// a, duration, dayTimeDuration or yearMonthDuration: ·months· and ·seconds·
-// as ·durationMap· sums them (§E.2), both negated by a leading '-'.
-func (c *scanner) duration(a atomic) (any, error) {
+// duration consumes a durationLexicalRep (§3.3.6.2) and returns the value
+// of the bare type of a, duration, dayTimeDuration or yearMonthDuration:
+// ·months· and ·seconds· as ·durationMap· sums them (§E.2), both negated by
+// a leading '-'.
+func (c *scanner) duration(a atomic) (reflect.Value, error) {
 	negative := c.lit('-')
 	if err := c.expect('P'); err != nil {
-		return nil, err
+		return reflect.Value{}, err
 	}
 	var months big.Int
 	var seconds big.Rat
 	n, err := c.durationHalf(dateParts, &months, &seconds)
 	if err != nil {
-		return nil, err
+		return reflect.Value{}, err
 	}
 	if c.lit('T') {
 		t, err := c.durationHalf(timeParts, &months, &seconds)
 		if err != nil {
-			return nil, err
+			return reflect.Value{}, err
 		}
 		if t == 0 {
-			return nil, errors.New("a duration's 'T' is followed by no hour, minute or second")
+			return reflect.Value{}, errors.New("a duration's 'T' is followed by no hour, minute or second")
 		}
 		n += t
 	}
 	if n == 0 {
-		return nil, errors.New("a duration has no year, month, day, hour, minute or second")
+		return reflect.Value{}, errors.New("a duration has no year, month, day, hour, minute or second")
 	}
 	if negative {
 		months.Neg(&months)
@@ -405,16 +406,16 @@ func (c *scanner) duration(a atomic) (any, error) {
 	switch a {
 	case atomicDayTimeDuration:
 		if months.Sign() != 0 {
-			return nil, errors.New("a dayTimeDuration's months are not 0 (§3.4.27)")
+			return reflect.Value{}, errors.New("a dayTimeDuration's months are not 0 (§3.4.27)")
 		}
-		return dayTimeDurationMirror{Seconds: seconds}, nil
+		return atomicDayTimeDuration.build(prop{"Seconds", seconds}), nil
 	case atomicYearMonthDuration:
 		if seconds.Sign() != 0 {
-			return nil, errors.New("a yearMonthDuration's seconds are not 0 (§3.4.26)")
+			return reflect.Value{}, errors.New("a yearMonthDuration's seconds are not 0 (§3.4.26)")
 		}
-		return yearMonthDurationMirror{Months: months}, nil
+		return atomicYearMonthDuration.build(prop{"Months", months}), nil
 	default:
-		return durationMirror{Months: months, Seconds: seconds}, nil
+		return atomicDuration.build(prop{"Months", months}, prop{"Seconds", seconds}), nil
 	}
 }
 

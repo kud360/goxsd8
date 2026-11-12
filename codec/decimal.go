@@ -20,12 +20,11 @@ type decimalValue interface {
 	armOf(arms decimalArms) reflect.Type
 }
 
-// decimalNumerical is the arm of a finite value, the mirror of codegen's
-// PrecisionDecimalValueNumerical, holding its fields exactly, in name, order
-// and Go type, so that the caller's arm converts to it and back:
-// Coefficient, Scale, its ·scale· (vp-pd-precision), and Negative, its ·sign·
-// (vp-pd-sign) negative, each as codegen's package doc, "# Simple types",
-// states it. TestDatatypeMirrorsAreCodegens pins it to codegen's.
+// decimalNumerical is the arm of a finite value, of the fields of codegen's
+// PrecisionDecimalValueNumerical exactly, in name, order and Go type, so that
+// the caller's arm converts to it and back: goshape.NumericalFields owns them
+// and states each, and TestDecimalNumericalFields holds this struct to it, a
+// named struct of codec's own being needed for its armOf method.
 type decimalNumerical struct {
 	Coefficient big.Int
 	Scale       big.Int
@@ -132,10 +131,9 @@ func decimalShape(v reflect.Type) bool {
 // a PrecisionDecimal at the site site names, the arms codegen emits for it,
 // and otherwise the ErrTypeMismatch error Decode's doc states, item 6: no
 // WithPrecisionDecimalArms for it, a nil arm, a numerical arm that does not
-// convert to decimalNumerical, so not exactly the fields Coefficient and
-// Scale, each a big.Int, and Negative, a bool, in that order, none embedded,
-// struct tags aside, a special arm that is no struct of no field, or two
-// arms of one type.
+// convert to decimalNumerical, so not exactly goshape.NumericalFields'
+// fields, in that order, none embedded, struct tags aside, a special arm
+// that is no struct of no field, or two arms of one type.
 func checkDecimalArms(it reflect.Type, site string, cx *checkContext) error {
 	arms, ok := cx.decimals.of(it)
 	if !ok {

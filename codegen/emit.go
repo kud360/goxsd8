@@ -27,21 +27,8 @@ const (
 	bigRat = "big.Rat"
 )
 
-// datatypeStruct is the struct "# Simple types" maps one date, time or
-// duration datatype, or QName and NOTATION, to (Datatypes §3.3.6–§3.3.14,
-// §3.3.18, §3.3.19, §3.4.26–§3.4.28): one field per property its values carry,
-// in the order of the seven-property model (§D.2.1), of duration's two
-// properties (§3.3.6.1), or of QName's {namespace name, local part} (§3.3.18).
-// doc is the header's line after its first, "" for none. Its datatype is its
-// Atomic's (goshape.Atomic.Datatype), the index datatypeStructs holds it at.
-type datatypeStruct struct {
-	doc    string
-	fields []goField
-}
-
-// goField is one field of an emitted struct after its name is claimed: its Go
-// name and its Go type. A datatypeStruct's field is named from its property,
-// and claimFields names every other struct's.
+// goField is one field of an emitted struct after its name is claimed
+// (claimFields): its Go name and its Go type.
 type goField struct {
 	name, goType string
 }
@@ -52,56 +39,22 @@ const (
 	requiredOffsetDoc = "TimezoneOffset is in minutes from UTC."
 )
 
-// The fields the datatype structs share: uint8 is the narrowest Go integer
-// holding month 1–12, day 1–31, hour 0–23 and minute 0–59, int16 the narrowest
-// holding a timezoneOffset of −840..840 (§D.2.1), and year, second, months and
-// seconds are unbounded (§D.2.1, §3.3.6.1).
-var (
-	yearField           = goField{"Year", bigInt}
-	monthField          = goField{"Month", "uint8"}
-	dayField            = goField{"Day", "uint8"}
-	hourField           = goField{"Hour", "uint8"}
-	minuteField         = goField{"Minute", "uint8"}
-	secondField         = goField{"Second", bigRat}
-	optionalOffsetField = goField{"TimezoneOffset", "*int16"}
-	requiredOffsetField = goField{"TimezoneOffset", "int16"}
-	monthsField         = goField{"Months", bigInt}
-	secondsField        = goField{"Seconds", bigRat}
-)
-
-// datatypeStructs holds, indexed by goshape.Atomic, the thirteen datatype
-// structs other than PrecisionDecimal: one per date, time or duration
-// primitive, one per builtin derived from one whose values carry fewer
-// properties or a required one (§3.4.26 yearMonthDuration, §3.4.27
-// dayTimeDuration, §3.4.28 dateTimeStamp), and one for QName, which NOTATION
-// shares (§3.3.18, §3.3.19).
-var datatypeStructs = [...]datatypeStruct{
-	goshape.AtomicDateTime: {optionalOffsetDoc, // Datatypes §3.3.7
-		[]goField{yearField, monthField, dayField, hourField, minuteField, secondField, optionalOffsetField}},
-	goshape.AtomicDateTimeStamp: {requiredOffsetDoc, // Datatypes §3.4.28
-		[]goField{yearField, monthField, dayField, hourField, minuteField, secondField, requiredOffsetField}},
-	goshape.AtomicTime: {optionalOffsetDoc, // Datatypes §3.3.8
-		[]goField{hourField, minuteField, secondField, optionalOffsetField}},
-	goshape.AtomicDate: {optionalOffsetDoc, // Datatypes §3.3.9
-		[]goField{yearField, monthField, dayField, optionalOffsetField}},
-	goshape.AtomicGYearMonth: {optionalOffsetDoc, // Datatypes §3.3.10
-		[]goField{yearField, monthField, optionalOffsetField}},
-	goshape.AtomicGYear: {optionalOffsetDoc, // Datatypes §3.3.11
-		[]goField{yearField, optionalOffsetField}},
-	goshape.AtomicGMonthDay: {optionalOffsetDoc, // Datatypes §3.3.12
-		[]goField{monthField, dayField, optionalOffsetField}},
-	goshape.AtomicGDay: {optionalOffsetDoc, // Datatypes §3.3.13
-		[]goField{dayField, optionalOffsetField}},
-	goshape.AtomicGMonth: {optionalOffsetDoc, // Datatypes §3.3.14
-		[]goField{monthField, optionalOffsetField}},
-	goshape.AtomicDuration: {"Months and Seconds share one sign.", // Datatypes §3.3.6
-		[]goField{monthsField, secondsField}},
-	goshape.AtomicDayTimeDuration: {"", // Datatypes §3.4.27
-		[]goField{secondsField}},
-	goshape.AtomicYearMonthDuration: {"", // Datatypes §3.4.26
-		[]goField{monthsField}},
-	goshape.AtomicQName: {"Space is the namespace name, \"\" for none.", // Datatypes §3.3.18, §3.3.19
-		[]goField{{"Space", "string"}, {"Local", "string"}}},
+// datatypeDocs holds, indexed by goshape.Atomic, the header line after its
+// first of each datatype struct other than PrecisionDecimal, "" for none: the
+// struct's fields are goshape.Atomic.Fields', and its datatype, which names
+// it, goshape.Atomic.Datatype's.
+var datatypeDocs = [...]string{
+	goshape.AtomicDateTime:      optionalOffsetDoc,
+	goshape.AtomicDateTimeStamp: requiredOffsetDoc,
+	goshape.AtomicTime:          optionalOffsetDoc,
+	goshape.AtomicDate:          optionalOffsetDoc,
+	goshape.AtomicGYearMonth:    optionalOffsetDoc,
+	goshape.AtomicGYear:         optionalOffsetDoc,
+	goshape.AtomicGMonthDay:     optionalOffsetDoc,
+	goshape.AtomicGDay:          optionalOffsetDoc,
+	goshape.AtomicGMonth:        optionalOffsetDoc,
+	goshape.AtomicDuration:      "Months and Seconds share one sign.",
+	goshape.AtomicQName:         "Space is the namespace name, \"\" for none.",
 }
 
 // emitter builds one target's declarations. decls holds each emitted type
@@ -1184,30 +1137,38 @@ func (e *emitter) simpleFrom(t *xsd.SimpleType) provenance {
 	return located(from, t.Loc())
 }
 
-// datatypeType returns the name of a's datatype struct, datatypeStructs',
-// emitting it when no earlier declaration did: its name is claimed in e.types
-// at that first use, from a's datatype (goshape.Atomic.Datatype), by the
-// package doc's "Naming", and its declaration joins e.tailDecls.
+// datatypeType returns the name of a's datatype struct, emitting it when no
+// earlier declaration did: its name is claimed in e.types at that first use,
+// from a's datatype (goshape.Atomic.Datatype), by the package doc's "Naming",
+// and its declaration, of goshape.Atomic.Fields' fields, each Go type spelled
+// by its reflect.Type's String, and of datatypeDocs' header line, joins
+// e.tailDecls.
 func (e *emitter) datatypeType(a goshape.Atomic) string {
 	datatype, _ := a.Datatype()
 	if name, ok := e.datatypes[datatype]; ok {
 		return name
 	}
-	ds := datatypeStructs[a]
 	name := e.types.fixed(datatype.Local)
 	e.datatypes[datatype] = name
 	doc := ""
-	if ds.doc != "" {
-		doc = "// " + ds.doc + "\n"
+	if int(a) < len(datatypeDocs) && datatypeDocs[a] != "" {
+		doc = "// " + datatypeDocs[a] + "\n"
 	}
 	var b strings.Builder
 	fmt.Fprintf(&b, "type %s struct {\n", name)
-	for _, f := range ds.fields {
-		fmt.Fprintf(&b, "\t%s %s\n", f.name, f.goType)
-	}
+	writeFields(&b, a.Fields())
 	b.WriteString("}\n")
 	e.tailDecls = append(e.tailDecls, declare(name, provenance{text: "datatype " + datatype.String()}, doc, b.String()))
 	return name
+}
+
+// writeFields writes fields to b, one "\tName Type\n" line each in order, each
+// Go type spelled by its reflect.Type's String, which spells math/big's types
+// big.Int and big.Rat as "# Simple types" names them.
+func writeFields(b *strings.Builder, fields []goshape.DatatypeField) {
+	for _, f := range fields {
+		fmt.Fprintf(b, "\t%s %s\n", f.Name, f.Type)
+	}
 }
 
 // precisionDecimalType returns the name of the struct PrecisionDecimal, which
@@ -1233,11 +1194,14 @@ func (e *emitter) precisionDecimalType() string {
 	arm := func(name, doc, fields string) declaration {
 		return declare(name, from, doc, fmt.Sprintf("type %s struct {%s}\n\nfunc (%s) %s() {}\n", name, fields, name, marker))
 	}
+	var numerical strings.Builder
+	numerical.WriteString("\n")
+	writeFields(&numerical, goshape.NumericalFields())
 	e.tailDecls = append(e.tailDecls,
 		declare(n.wrapper, from, "", fmt.Sprintf("type %s struct {\n\tValue %s\n}\n", n.wrapper, n.value)),
 		declare(n.value, from, "", fmt.Sprintf("type %s interface {\n\t%s()\n}\n", n.value, marker)),
 		arm(n.numerical, "// Its value is Coefficient × 10^−Scale, negative when Negative; Coefficient is never negative.\n",
-			fmt.Sprintf("\n\tCoefficient %s\n\tScale %s\n\tNegative bool\n", bigInt, bigInt)),
+			numerical.String()),
 		arm(n.positiveInfinity, "", ""),
 		arm(n.negativeInfinity, "", ""),
 		arm(n.notANumber, "", ""))

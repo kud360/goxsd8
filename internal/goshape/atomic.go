@@ -2,6 +2,9 @@ package goshape
 
 import (
 	"fmt"
+	"math/big"
+	"reflect"
+	"slices"
 
 	"github.com/kud360/goxsd8/xsd"
 )
@@ -77,6 +80,73 @@ func (a Atomic) Datatype() (xsd.QName, bool) {
 		return xsd.QName{}, false
 	}
 	return xsd.QName{Space: xsd.XMLSchemaNS, Local: datatypeNames[a]}, true
+}
+
+// DatatypeField is one field of a datatype struct, or of PrecisionDecimal's
+// numerical arm: its Go name and its Go type.
+type DatatypeField struct {
+	Name string
+	Type reflect.Type
+}
+
+// The fields the datatype structs share: uint8 is the narrowest Go integer
+// holding month 1–12, day 1–31, hour 0–23 and minute 0–59, int16 the narrowest
+// holding a timezoneOffset of −840..840 (§D.2.1), and year, second, months and
+// seconds are unbounded (§D.2.1, §3.3.6.1).
+var (
+	yearField           = DatatypeField{"Year", reflect.TypeFor[big.Int]()}
+	monthField          = DatatypeField{"Month", reflect.TypeFor[uint8]()}
+	dayField            = DatatypeField{"Day", reflect.TypeFor[uint8]()}
+	hourField           = DatatypeField{"Hour", reflect.TypeFor[uint8]()}
+	minuteField         = DatatypeField{"Minute", reflect.TypeFor[uint8]()}
+	secondField         = DatatypeField{"Second", reflect.TypeFor[big.Rat]()}
+	optionalOffsetField = DatatypeField{"TimezoneOffset", reflect.TypeFor[*int16]()}
+	requiredOffsetField = DatatypeField{"TimezoneOffset", reflect.TypeFor[int16]()}
+	monthsField         = DatatypeField{"Months", reflect.TypeFor[big.Int]()}
+	secondsField        = DatatypeField{"Seconds", reflect.TypeFor[big.Rat]()}
+)
+
+// datatypeFields holds, indexed by Atomic, the fields codegen/doc.go "# Simple
+// types", which owns the rule, gives each datatype struct other than
+// PrecisionDecimal: the twelve date, time and duration ones and QName's,
+// which NOTATION shares. Every Atomic Datatype answers for but
+// AtomicPrecisionDecimal has an entry, which TestDatatypeFields holds.
+var datatypeFields = [...][]DatatypeField{
+	AtomicDateTime:          {yearField, monthField, dayField, hourField, minuteField, secondField, optionalOffsetField}, // Datatypes §3.3.7
+	AtomicDateTimeStamp:     {yearField, monthField, dayField, hourField, minuteField, secondField, requiredOffsetField}, // Datatypes §3.4.28
+	AtomicTime:              {hourField, minuteField, secondField, optionalOffsetField},                                  // Datatypes §3.3.8
+	AtomicDate:              {yearField, monthField, dayField, optionalOffsetField},                                      // Datatypes §3.3.9
+	AtomicGYearMonth:        {yearField, monthField, optionalOffsetField},                                                // Datatypes §3.3.10
+	AtomicGYear:             {yearField, optionalOffsetField},                                                            // Datatypes §3.3.11
+	AtomicGMonthDay:         {monthField, dayField, optionalOffsetField},                                                 // Datatypes §3.3.12
+	AtomicGDay:              {dayField, optionalOffsetField},                                                             // Datatypes §3.3.13
+	AtomicGMonth:            {monthField, optionalOffsetField},                                                           // Datatypes §3.3.14
+	AtomicDuration:          {monthsField, secondsField},                                                                 // Datatypes §3.3.6
+	AtomicDayTimeDuration:   {secondsField},                                                                              // Datatypes §3.4.27
+	AtomicYearMonthDuration: {monthsField},                                                                               // Datatypes §3.4.26
+	AtomicQName:             {{"Space", reflect.TypeFor[string]()}, {"Local", reflect.TypeFor[string]()}},                // Datatypes §3.3.18, §3.3.19
+}
+
+// Fields returns the fields of a's datatype struct in declaration order, a
+// copy the caller may keep; or nil where a's Go type is no datatype struct,
+// and for AtomicPrecisionDecimal, whose numerical arm's fields are
+// NumericalFields'.
+func (a Atomic) Fields() []DatatypeField {
+	if int(a) >= len(datatypeFields) {
+		return nil
+	}
+	return slices.Clone(datatypeFields[a])
+}
+
+// NumericalFields returns the fields codegen/doc.go "# Simple types", which
+// owns the rule, gives PrecisionDecimalValueNumerical, PrecisionDecimal's
+// numerical arm, in declaration order, a copy the caller may keep.
+func NumericalFields() []DatatypeField {
+	return []DatatypeField{
+		{"Coefficient", reflect.TypeFor[big.Int]()},
+		{"Scale", reflect.TypeFor[big.Int]()},
+		{"Negative", reflect.TypeFor[bool]()},
+	}
 }
 
 // chainAtomics maps each integer builtin that decides an atomic type's
