@@ -745,7 +745,7 @@ this paragraph does not repeat them.
 `Ratchet: unchanged` as its body predicted. It records the CTA compile-time
 withhold into `Result.Unevaluated` under `key-cta-ta-select` (§3.12.4), with no
 second type and no `Evaluated bool` — the encoding #719 shipped
-(`Rule()`/`Loc()`/`Msg()`, `Result.Unevaluated()` in document order), reused
+(`Rule()`/`Loc()`/`Msg()`, `Result.Unevaluated()`), reused
 rather than paralleled (STYLE D3), exactly as #842's warden pre-flight had ruled
 on D3. **Surface: none new.** STYLE P3's fail-open discipline is only honest if a
 fail-open answer is distinguishable from a real pass, and both of this
