@@ -1121,14 +1121,15 @@ type groupReader struct {
 }
 
 // read returns a new value of g.t holding the branch of start's member, the
-// one whose expanded name is start's.
+// one whose expanded name is start's, its sink given a fillState of this
+// read's own, start being the one child of that fill.
 func (g groupReader) read(_ *pipeline, r *xmltree.Reader, start *xmltree.StartElement) (reflect.Value, error) {
 	i, ok := g.children[expanded(start.Name())]
 	if !ok {
 		return reflect.Value{}, unparticled(start)
 	}
 	v := reflect.New(g.t).Elem()
-	if err := g.bound.set(r, start, i, 0, v, nil); err != nil {
+	if err := g.bound.set(r, start, i, 0, v, &fillState{}); err != nil {
 		return reflect.Value{}, err
 	}
 	return v, nil
@@ -2222,8 +2223,7 @@ type contentMember interface {
 
 // A sink sets the struct field of out its member's check held from the child
 // element start, whose start tag r has just returned, reading r up to its
-// end tag. st is the state of the content fill putting start (fillState),
-// nil where that fill holds no nested occurrence field.
+// end tag. st is the state of the content fill putting start (fillState).
 type sink interface {
 	put(p *pipeline, r *xmltree.Reader, start *xmltree.StartElement, out reflect.Value, st *fillState) error
 }
@@ -2371,8 +2371,11 @@ func (s *sequence) bind(run *bindRun, ct xsd.ComplexType, particles []xsd.Partic
 // every earlier member's, its field named from names, item passed through.
 // Any other gives one *nestedOccurrence member (sequence.occurrence), but in
 // an occurrence field's item, where it declines as a nested model group,
-// whatever its occurrence, for the same reason. Splices' and Flattens' errors
-// are plain, prefixed by typeSubject.
+// whatever its occurrence: one with {max occurs} above 1 for the same reason,
+// and a 0..1 one because the item's fill (boundOccurrence.fill) keeps one
+// fillState across its items, so a nested field's partition would continue
+// into the next item. Splices' and Flattens' errors are plain, prefixed by
+// typeSubject.
 func (s *sequence) nested(run *bindRun, ct xsd.ComplexType, group xsd.ModelGroup, occurs xsd.Occurs, at []int, item bool, names *goname.Namer, typeSubject string) error {
 	splice, err := goshape.Splices(run.p.schema, group, occurs)
 	if err != nil {
@@ -2422,7 +2425,7 @@ func (s *sequence) nested(run *bindRun, ct xsd.ComplexType, group xsd.ModelGroup
 // or not a wildcard needs the Matcher, since validation leaves every instance
 // of such a model undecided (item 4).
 func (s *sequence) occurrence(run *bindRun, ct xsd.ComplexType, group xsd.ModelGroup, occurs xsd.Occurs, at []int, names *goname.Namer, typeSubject string) error {
-	o := &nestedOccurrence{name: names.Claim(group.Compositor().String()), group: group, first: s.targets(), p: run.p}
+	o := &nestedOccurrence{name: names.Claim(group.Compositor().String()), group: group, first: s.targets()}
 	shape, err := occursShape(occurs, group.Compositor() == xsd.CompositorChoice, fmt.Sprintf("a %s model group particle of %s", group.Compositor(), typeSubject))
 	if err != nil {
 		return err
@@ -3248,20 +3251,19 @@ type flatSink struct {
 }
 
 // put appends to field s.index of out an item of alternative s.alt's branch
-// (boundChoice.appendItem).
-func (s flatSink) put(_ *pipeline, r *xmltree.Reader, start *xmltree.StartElement, out reflect.Value, _ *fillState) error {
-	return s.bound.appendItem(r, start, s.alt, out.Field(s.index))
+// (boundChoice.appendItem), st passed through.
+func (s flatSink) put(_ *pipeline, r *xmltree.Reader, start *xmltree.StartElement, out reflect.Value, st *fillState) error {
+	return s.bound.appendItem(r, start, s.alt, out.Field(s.index), st)
 }
 
 // appendItem appends to slice, a slice of the sealed interface, one new item
 // from the child element start, read from r up to its end tag, which its
 // caller attributes to alternative i: the branch of that alternative holding
 // the value its field's elementReader reads, never merged into an earlier
-// item. The branch's one field is a basic particle's, so its sink is given no
-// fillState.
-func (bc *boundChoice) appendItem(r *xmltree.Reader, start *xmltree.StartElement, i int, slice reflect.Value) error {
+// item, its sink given st, the state of the fill putting start.
+func (bc *boundChoice) appendItem(r *xmltree.Reader, start *xmltree.StartElement, i int, slice reflect.Value, st *fillState) error {
 	branch := reflect.New(bc.branches[i].t).Elem()
-	if err := bc.branches[i].sinks[0].put(bc.p, r, start, branch, nil); err != nil {
+	if err := bc.branches[i].sinks[0].put(bc.p, r, start, branch, st); err != nil {
 		return err
 	}
 	item := reflect.New(slice.Type().Elem()).Elem()
@@ -3335,7 +3337,7 @@ type boundFlattened struct {
 // raw; every other carries no xsi:type, or fill returns the xsi:type decline
 // Decode's doc states, item 7. A substitution group's member is attributed to
 // its head's particle (cvc-accept clause 2.3.2), whose branch field's
-// groupReader reads it.
+// groupReader reads it. Every sink shares one fillState of this fill's own.
 func (b boundFlattened) fill(r *xmltree.Reader, _ *xmltree.StartElement, out reflect.Value) error {
 	f := b.flattened
 	p := f.slice.sealed.p
@@ -3343,6 +3345,7 @@ func (b boundFlattened) fill(r *xmltree.Reader, _ *xmltree.StartElement, out ref
 	if err != nil {
 		return err
 	}
+	st := &fillState{}
 	for {
 		tok, err := r.Token()
 		if err != nil {
@@ -3355,7 +3358,7 @@ func (b boundFlattened) fill(r *xmltree.Reader, _ *xmltree.StartElement, out ref
 			name := expanded(tok.Name())
 			t, pos, ok := m.NextParticle(name)
 			if _, open := t.(*xsd.OpenContent); open && b.open != nil {
-				if err := b.open.put(p, r, tok, out, nil); err != nil {
+				if err := b.open.put(p, r, tok, out, st); err != nil {
 					return err
 				}
 				continue
@@ -3372,7 +3375,7 @@ func (b boundFlattened) fill(r *xmltree.Reader, _ *xmltree.StartElement, out ref
 			if !placed {
 				return fmt.Errorf("codec: %s: element %s is attributed to the particle at position %v, for which Decode bound no alternative", tok.Loc(), name, pos)
 			}
-			if err := b.bound.appendItem(r, tok, i, out.Field(0)); err != nil {
+			if err := b.bound.appendItem(r, tok, i, out.Field(0), st); err != nil {
 				return err
 			}
 		}
@@ -3545,7 +3548,6 @@ type nestedOccurrence struct {
 	item      occurrenceItem
 	first     int
 	positions [][]int
-	p         *pipeline
 }
 
 // targets is the item's: one per target of the item's members.
@@ -3607,15 +3609,11 @@ type occurrenceSink struct {
 // content model, and item s.item sets the target in it, st passed through.
 // An item opened is appended for the slice, allocated for the pointer, and
 // for the bare interface the field itself, set by its alternative's branch
-// (boundChoice.set). A second item of a field that holds one, a child with no
-// fillState, and a position that is no basic particle of the model group are
-// defects of Decode's, each a plain error: Decode validated the instance
-// first.
+// (boundChoice.set). A second item of a field that holds one and a position
+// that is no basic particle of the model group are defects of Decode's, each a
+// plain error: Decode validated the instance first.
 func (s occurrenceSink) put(p *pipeline, r *xmltree.Reader, start *xmltree.StartElement, out reflect.Value, st *fillState) error {
 	o := s.occurrence
-	if st == nil {
-		return fmt.Errorf("codec: %s: element %s is attributed to a nested occurrence field outside a content model's fill", start.Loc(), expanded(start.Name()))
-	}
 	opens, err := st.partition(p.schema, o.group, o.first).next(o.positions[s.target])
 	if err != nil {
 		return fmt.Errorf("codec: %s: element %s: %w", start.Loc(), expanded(start.Name()), err)
@@ -3738,6 +3736,7 @@ type boundOccurrence struct {
 // instead, in document order, and neither opens nor continues an item. A
 // child attributed to a wildcard particle is read raw; every other carries no
 // xsi:type, or fill returns the xsi:type decline Decode's doc states, item 7.
+// Every sink shares one fillState of this fill's own, across all its items.
 func (b boundOccurrence) fill(r *xmltree.Reader, _ *xmltree.StartElement, out reflect.Value) error {
 	o := b.occurrence
 	m, err := trackedMatcher(o.p.schema, o.ct)
@@ -3751,6 +3750,7 @@ func (b boundOccurrence) fill(r *xmltree.Reader, _ *xmltree.StartElement, out re
 	}
 	field := out.Field(0)
 	part := partition{schema: o.p.schema, group: o.group}
+	st := &fillState{}
 	var item reflect.Value
 	for {
 		tok, err := r.Token()
@@ -3766,7 +3766,7 @@ func (b boundOccurrence) fill(r *xmltree.Reader, _ *xmltree.StartElement, out re
 		case *xmltree.StartElement:
 			t, pos, ok := m.NextParticle(expanded(tok.Name()))
 			if _, open := t.(*xsd.OpenContent); open && b.open != nil {
-				if err := b.open.put(o.p, r, tok, out, nil); err != nil {
+				if err := b.open.put(o.p, r, tok, out, st); err != nil {
 					return err
 				}
 				continue
@@ -3796,7 +3796,7 @@ func (b boundOccurrence) fill(r *xmltree.Reader, _ *xmltree.StartElement, out re
 			if opens {
 				item = reflect.New(b.item).Elem()
 			}
-			if err := b.sinks[at.index].put(o.p, r, tok, item, nil); err != nil {
+			if err := b.sinks[at.index].put(o.p, r, tok, item, st); err != nil {
 				return err
 			}
 		}

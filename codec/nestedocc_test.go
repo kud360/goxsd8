@@ -362,10 +362,10 @@ func TestDecodeNestedOccurrenceGroupPath(t *testing.T) {
 // leaves declining, Decode and CheckDecode alike, each row's prefix the
 // decline's subject: a nested particle that would take an occurrence field
 // inside an occurrence field's item, with {max occurs} above 1 and 0..1 alike,
-// since the item's partition reads no repetition of a model group inside the
-// item, as constructNestedGroup; and an element particle of a nested
-// occurrence's item sharing an expanded name with a sibling particle, which
-// the content model attributes by name, as constructSharedName.
+// for the reasons sequence.nested states, as constructNestedGroup; and an
+// element particle of a nested occurrence's item sharing an expanded name with
+// a sibling particle, which the content model attributes by name, as
+// constructSharedName.
 func TestDecodeNestedOccurrenceDeclines(t *testing.T) {
 	rows := []struct {
 		name, decls, body string
