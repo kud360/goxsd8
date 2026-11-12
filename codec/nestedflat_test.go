@@ -179,9 +179,8 @@ func TestDecodeNestedFlattened(t *testing.T) {
 }
 
 // TestDecodeNestedFlattenedDeclines pins what the nested flatten lift leaves
-// declining, Decode and CheckDecode alike: a repeated nested sequence codegen
-// does not flatten, which takes an occurrence field (#3588); a nested particle
-// codegen flattens inside a content particle held in an occurrence field,
+// declining, Decode and CheckDecode alike: a nested particle codegen
+// flattens inside a content particle held in an occurrence field,
 // whose items' partition reads no repetition inside an item; and a nested
 // reach's element particle sharing an expanded name with a sibling particle
 // or with an earlier particle of the same reach, which the nested reach
@@ -192,8 +191,6 @@ func TestDecodeNestedFlattenedDeclines(t *testing.T) {
 		name, decls, body string
 		construct         construct
 	}{
-		{"a repeated nested sequence codegen does not flatten", sequenceOf(`<xs:element name="a" type="xs:string"/><xs:sequence maxOccurs="2"><xs:element name="b" type="xs:string"/></xs:sequence>`),
-			"<s:a>1</s:a><s:b>2</s:b>", constructNestedGroup},
 		{"a nested flattened sequence in an occurrence field's item", root(`<xs:sequence maxOccurs="2"><xs:element name="a" type="xs:string"/><xs:sequence maxOccurs="unbounded"><xs:element name="b" type="xs:string" minOccurs="0"/></xs:sequence></xs:sequence>`),
 			"<s:a>1</s:a><s:b>2</s:b><s:b>3</s:b>", constructNestedGroup},
 		{"a nested reach's particle sharing a sibling's expanded name", sequenceOf(`<xs:element name="b" type="xs:string"/><xs:sequence maxOccurs="unbounded"><xs:element name="b" type="xs:string" minOccurs="0"/></xs:sequence>`),

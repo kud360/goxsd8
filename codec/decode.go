@@ -257,18 +257,21 @@ var ErrTypeMismatch = errors.New("codec: T is not the type codegen emits for the
 // particle. A child attributed, as a sequence's particle's child is, to a basic
 // particle a nested flattened particle reaches appends one new item to that
 // particle's slice, the branch of the basic particle. Of a content model held in an
-// occurrence field (item 6), every child is attributed by the Matcher too, to the
-// field or branch of its particle in one item, and the items are the sub-sequences
-// of a ·partition· cvc-accept clause 3 admits, in document order, chosen by one
-// positional rule: the first child opens an item, and each later child continues the
-// current item where, at the first index its particle's position and that of the
-// current item's last child differ, the model group holding both is a sequence and
-// the later child's index is the greater, or where the two positions are equal and
-// that particle has {max occurs} unbounded or above the count of the current item's
-// children it has taken; every other child opens the next item. So no item is empty,
-// a choice counting only the occurrences that match something, of sequence(a, b?)
-// repeated the children <a/><a/><b/> give the items {A} and {A, B}, and of
-// choice(a{2,2}, b) repeated the children <a/><a/><a/><a/> two items of two each.
+// occurrence field (item 6), every child is attributed by the Matcher too, and of a
+// nested particle held in one, every child is attributed as a sequence's particle's
+// child is, each to the field or branch of its particle in one item, and the items
+// are the sub-sequences of a ·partition· cvc-accept clause 3 admits, in document
+// order, chosen by one positional rule, a particle's position for a nested particle
+// read below the nested particle's own: the first child opens an item, and each
+// later child continues the current item where, at the first index its particle's
+// position and that of the current item's last child differ, the model group holding
+// both is a sequence and the later child's index is the greater, or where the two
+// positions are equal and that particle has {max occurs} unbounded or above the
+// count of the current item's children it has taken; every other child opens the
+// next item. So no item is empty, a choice counting only the occurrences that match
+// something, of sequence(a, b?) repeated the children <a/><a/><b/> give the items
+// {A} and {A, B}, and of choice(a{2,2}, b) repeated the children <a/><a/><a/><a/>
+// two items of two each.
 //
 // Items 5 and 6 read no instance; [CheckDecode] returns them for a
 // declaration before an instance arrives.
@@ -319,22 +322,29 @@ var ErrTypeMismatch = errors.New("codec: T is not the type codegen emits for the
 //     particle held in an occurrence field, where it declines first; a nested
 //     choice particle, inline or through <group ref>, occurring exactly once,
 //     that codegen does not flatten is examined in its place as the choice
-//     bullet below examines a choice's alternatives; any other nested model
-//     group declines first; and a wildcard particle gives the field item 6
-//     states and is examined no further, an error's subject, a decline's or a
-//     plain one's, naming it by its ordinal among the content model's wildcard
-//     particles, a nested choice's alternatives and a nested flattened
-//     particle's basic particles included, counted from 1 in that order, such
-//     as "wildcard particle 2 of" the type. Then the particle's element declaration's
-//     {type table} and {nillable}, as the first bullet examines the document
-//     element's, and its {type definition}: a simple one is examined as the document
-//     element's is; xs:anyType itself, known by its QName, gives the field item 6
-//     states and is examined no further; and any other complex one, a type derived
-//     from xs:anyType included, is examined as the document element's complex type
-//     is, from its {abstract} to its attribute uses. Then the particle declines by an
-//     expanded name an earlier particle's field takes, a particle's field taking its
-//     element's expanded name, or, for a substitution group's interface, each
-//     declaration the next bullet examines.
+//     bullet below examines a choice's alternatives; any other nested
+//     sequence or choice particle, inline or through <group ref>, which item 6
+//     holds in an occurrence field, a {max occurs} 0 being its plain error
+//     first, is examined in its place as its own particles, a choice's as the
+//     choice bullet below examines its alternatives, and then a content model
+//     xsd.Schema.ContentMatcher does not track declines, after its own last
+//     particle, before the particles after it, but inside a content particle
+//     held in an occurrence field, where it declines first, whatever its
+//     occurrence; and a wildcard particle gives the field item 6 states and is
+//     examined no further, an error's subject, a decline's or a plain one's, naming
+//     it by its ordinal among the content model's wildcard particles, a nested
+//     choice's alternatives, a nested flattened particle's basic particles and a
+//     nested occurrence field's particles included, counted from 1 in that order,
+//     such as "wildcard particle 2 of" the type. Then the particle's element
+//     declaration's {type table} and {nillable}, as the first bullet examines the
+//     document element's, and its {type definition}: a simple one is examined as the
+//     document element's is; xs:anyType itself, known by its QName, gives the field
+//     item 6 states and is examined no further; and any other complex one, a type
+//     derived from xs:anyType included, is examined as the document element's complex
+//     type is, from its {abstract} to its attribute uses. Then the particle declines
+//     by an expanded name an earlier particle's field takes, a particle's field
+//     taking its element's expanded name, or, for a substitution group's interface,
+//     each declaration the next bullet examines.
 //   - Of an <element ref> particle whose field holds a substitution group's
 //     sealed interface (item 6), in place of the referenced declaration's own
 //     properties and type: each declaration of the group with {abstract}
@@ -351,16 +361,17 @@ var ErrTypeMismatch = errors.New("codec: T is not the type codegen emits for the
 //     as two branches of a sealed interface whose structs have one shape: one
 //     of as many fields as the earlier one's, each sharing its shape with the
 //     earlier one's field at its position. A field holding a nested choice's
-//     interface or a flattened particle's slice shares its shape with any
-//     field of its name. Two other fields of one name share it where either
-//     is of a simple type whose Go type is a datatype struct or a list of
-//     one, where one is codegen's struct and the other a wildcard's, of type
-//     xs:anyType, or of a simple type whose atomic Go type is big.Rat or
-//     big.Int, where both are of type xs:anyType, occur alike, and both hold
-//     X or both an N over X (item 6), or where both are of another complex
-//     type or hold a substitution group's interface, occur alike, and are
-//     both a struct or both a sealed interface, and otherwise where they have
-//     one Go type, as item 6 reads it.
+//     interface, a flattened particle's slice or an occurrence field's type
+//     for one occurrence shares its shape with any field of its name. Two
+//     other fields of one name share it where either is of a simple type whose
+//     Go type is a datatype struct or a list of one, where one is codegen's
+//     struct and the other a wildcard's, of type xs:anyType, or of a simple
+//     type whose atomic Go type is big.Rat or big.Int, where both are of type
+//     xs:anyType, occur alike, and both hold X or both an N over X (item 6),
+//     or where both are of another complex type or hold a substitution group's
+//     interface, occur alike, and are both a struct or both a sealed
+//     interface, and otherwise where they have one Go type, as item 6 reads
+//     it.
 //   - Of a sequence or choice codegen flattens, the content {particle} or
 //     nested, in place of its particles: each basic particle its model group
 //     reaches, in codegen's reach order (Structures §2.2.3.2
@@ -553,16 +564,19 @@ var ErrTypeMismatch = errors.New("codec: T is not the type codegen emits for the
 //     the bullet below holds, whose alternatives are the basic particles its
 //     model group reaches, each branch field the field its particle would
 //     give occurring exactly once.
-//   - The field of a content sequence or choice that occurs other than
-//     exactly once and that codegen neither splices nor flattens, its
-//     occurrence field, the struct's first: named as if from the local name
-//     sequence or choice, holding the type for one occurrence by the
-//     particle's occurrence, as a particle's field holds its V, over a struct
-//     for a sequence and a sealed interface for a choice: S, *S or []S for a
-//     sequence, S a struct, named or not, of exactly the fields its particles
-//     give as the complex type's own particles give them, with no attribute
-//     field; and I or []I for a choice, the bare interface for an optional
-//     one and never a pointer, I the sealed interface the bullet below holds.
+//   - The field of a sequence or choice, the content {particle} or nested,
+//     that occurs other than exactly once and that codegen neither splices
+//     nor flattens, its occurrence field, a content one's the struct's first
+//     and a nested one's the one at its particle's place, a choice's
+//     model-group alternative's its branch struct's one field: named as if
+//     from the local name sequence or choice, holding the type for one
+//     occurrence by the particle's occurrence, as a particle's field holds
+//     its V, over a struct for a sequence and a sealed interface for a
+//     choice: S, *S or []S for a sequence, S a struct, named or not, of
+//     exactly the fields its particles give as the complex type's own
+//     particles give them, with no attribute field; and I or []I for a
+//     choice, the bare interface for an optional one and never a pointer, I
+//     the sealed interface the bullet below holds.
 //   - A sealed interface, T, a nested element's or a struct's field, of a
 //     choice, a substitution group, a flattened slice's element or an
 //     occurrence field's choice: a choice's field is the struct's first for a
@@ -579,25 +593,28 @@ var ErrTypeMismatch = errors.New("codec: T is not the type codegen emits for the
 //     or through <group ref>, for a sequence alternative codegen splices
 //     (codegen's package doc, "# Complex types") the fields its own particles
 //     give, as a struct's particles give them, and for any other the one
-//     field holding a nested choice's interface or a flattened particle's
-//     slice: when no WithBranches supplies it for an interface with
-//     alternatives, or its count differs, or it holds a nil value, a type
-//     that is no struct, a type twice, or a branch matching no alternative an
-//     earlier branch did not match. A branch is held to the one alternative
-//     its fields could be: as many fields as that alternative's branch holds,
-//     each of its field's name, not embedded, and of a Go type it could be,
-//     position by position: V, *V or []V by its particle's occurrence, an
-//     element or wildcard alternative's {min occurs} 0 read as 1, V its Go
-//     type for a simple type, any struct for codegen's struct, any interface
-//     for a sealed interface, and the E, X or N its bullet above matches for
-//     a wildcard or an element of type xs:anyType, any interface of one
-//     unexported method for a nested choice's field and a slice of one for a
-//     flattened particle's. A branch whose fields could be no alternative is
-//     held to the first alternative, in alternative order, that names it: a
-//     one-field alternative of complex type, a wildcard or a substitution
-//     group's interface whose field's name its one field has, or a
-//     model-group alternative whose fields' names its fields have, position
-//     by position; the error is that alternative's mismatch.
+//     field holding a nested choice's interface, a flattened particle's
+//     slice or an occurrence field's type for one occurrence: when no
+//     WithBranches supplies it for an interface with alternatives, or its
+//     count differs, or it holds a nil value, a type that is no struct, a
+//     type twice, or a branch matching no alternative an earlier branch did
+//     not match. A branch is held to the one alternative its fields could be:
+//     as many fields as that alternative's branch holds, each of its field's
+//     name, not embedded, and of a Go type it could be, position by position:
+//     V, *V or []V by its particle's occurrence, an element or wildcard
+//     alternative's {min occurs} 0 read as 1, V its Go type for a simple
+//     type, any struct for codegen's struct, any interface for a sealed
+//     interface, and the E, X or N its bullet above matches for a wildcard or
+//     an element of type xs:anyType, any interface of one unexported method
+//     for a nested choice's field and a slice of one for a flattened
+//     particle's, and, for an occurrence field's, its shape over any struct
+//     for a sequence and over such an interface for a choice. A branch whose
+//     fields could be no alternative is held to the first alternative, in
+//     alternative order, that names it: a one-field alternative of complex
+//     type, a wildcard or a substitution group's interface whose field's name
+//     its one field has, or a model-group alternative whose fields' names its
+//     fields have, position by position; the error is that alternative's
+//     mismatch.
 //   - A union's sealed interface I, T's own or a field's, at any depth, a
 //     list's element and a variant's element included, whose variants reach
 //     Decode only through [WithBranches], whose doc states which set serves
@@ -1104,14 +1121,15 @@ type groupReader struct {
 }
 
 // read returns a new value of g.t holding the branch of start's member, the
-// one whose expanded name is start's.
+// one whose expanded name is start's, its sink given a fillState of this
+// read's own, start being the one child of that fill.
 func (g groupReader) read(_ *pipeline, r *xmltree.Reader, start *xmltree.StartElement) (reflect.Value, error) {
 	i, ok := g.children[expanded(start.Name())]
 	if !ok {
 		return reflect.Value{}, unparticled(start)
 	}
 	v := reflect.New(g.t).Elem()
-	if err := g.bound.set(r, start, i, 0, v); err != nil {
+	if err := g.bound.set(r, start, i, 0, v, &fillState{}); err != nil {
 		return reflect.Value{}, err
 	}
 	return v, nil
@@ -1805,8 +1823,9 @@ func typeSubject(decl xsd.ElementDeclaration, td xsd.TypeDefinition) string {
 // latter to the referenced declaration or to each member of its
 // substitution group, and into one kind of model group, a content
 // particle's, inline or through a <group ref>, with the nested sequences
-// spliced into it and the nested choices bound in place (sequence.nested),
-// and the model groups a flattened one reaches, the content particle's or a
+// spliced into it, the nested choices bound in place and the nested
+// sequences and choices held in an occurrence field (sequence.nested), and
+// the model groups a flattened one reaches, the content particle's or a
 // nested one's (bindReach); a local declaration's type is either inline, a
 // tree it owns, or named. So every recursion through types passes one of
 // the three keys of codegen's emitted types: a top-level element
@@ -2087,15 +2106,16 @@ func (b boundValue) fill(r *xmltree.Reader, root *xmltree.StartElement, out refl
 // sequence's or spliced all group's, an element or wildcard particle giving a
 // field, a nested sequence or all group particle goshape.Splices answers
 // true for giving in its place the members its own particles give, a nested
-// choice bound in place its *choice and a nested particle goshape.Flattens
-// answers true for its flatSlice (codegen/doc.go "# Particles"), or a content
-// choice's, its one *choice, either then holding the open-content field, if
-// any, as its last member (sequence.openContent). Its members' attribution
-// targets are numbered in bind order from base, a field taking one, a
-// *choice those of each alternative's branch members in turn
-// (branchTargets) and a flatSlice one per alternative, and check returns one
-// sink per target in that order, so the target index holds for a child is
-// the index of the sink that sets it.
+// choice bound in place its *choice, a nested particle goshape.Flattens
+// answers true for its flatSlice and any other nested model group particle
+// its *nestedOccurrence (codegen/doc.go "# Particles"), or a content choice's,
+// its one *choice, either then holding the open-content field, if any, as its
+// last member (sequence.openContent). Its members' attribution targets are
+// numbered in bind order from base, a field taking one, a *choice those of
+// each alternative's branch members in turn (branchTargets), a flatSlice one
+// per alternative and a *nestedOccurrence those of its item, and check
+// returns one sink per target in that order, so the target index holds for a
+// child is the index of the sink that sets it.
 type sequence struct {
 	p       *pipeline
 	members []contentMember
@@ -2103,7 +2123,9 @@ type sequence struct {
 	// base is the attribution target of s's first member: 0 but for the
 	// sequence a choice's model-group alternative is bound through, whose
 	// targets follow every earlier alternative's in the choice's childIndex
-	// (groupAlternative).
+	// (groupAlternative), and a nested occurrence field's sequence item, whose
+	// targets follow every earlier member's in its content model's
+	// (bindItem).
 	base int
 }
 
@@ -2116,6 +2138,28 @@ type childIndex struct {
 	// wild is set where the content model holds a wildcard particle, nil for
 	// none.
 	wild *wildcardSlot
+	// elements holds, for each element particle sequence.bind and bindChoice
+	// bind into the index, its Matcher position (xsd.Matcher.NextParticle)
+	// and its target, in bind order; a nested occurrence field reads its
+	// item's (childIndex.position). It is a slice scanned in order, never a
+	// map (STYLE D2).
+	elements []place
+}
+
+// position returns the Matcher position of the particle whose attribution
+// target is target, an element particle's that x.elements holds or a
+// wildcard particle's that x.wild places, and false where x holds neither.
+func (x childIndex) position(target int) ([]int, bool) {
+	places := x.elements
+	if x.wild != nil {
+		places = append(slices.Clone(places), x.wild.places...)
+	}
+	for _, p := range places {
+		if p.index == target {
+			return p.position, true
+		}
+	}
+	return nil, false
 }
 
 // newChildIndex returns the childIndex of a content model none of whose
@@ -2156,12 +2200,14 @@ func (s *sequence) targets() int {
 
 // A contentMember is one field of the struct a sequence binds, a closed sum: a
 // field, an element or wildcard particle's or the open-content field, a
-// *choice, a choice's sealed interface, or a *flatSlice, a nested flattened
-// particle's slice of a sealed interface.
+// *choice, a choice's sealed interface, a *flatSlice, a nested flattened
+// particle's slice of a sealed interface, or a *nestedOccurrence, a nested
+// particle's occurrence field.
 type contentMember interface {
 	// targets is how many attribution targets the member takes: a field one,
 	// a *choice those of each alternative's branch members in turn
-	// (branchTargets), and a *flatSlice one per alternative.
+	// (branchTargets), a *flatSlice one per alternative, and a
+	// *nestedOccurrence those of its item.
 	targets() int
 	// sinks holds field index of t to the member, item 6 of Decode's doc, and
 	// returns one sink per target, in target order.
@@ -2177,9 +2223,35 @@ type contentMember interface {
 
 // A sink sets the struct field of out its member's check held from the child
 // element start, whose start tag r has just returned, reading r up to its
-// end tag.
+// end tag. st is the state of the content fill putting start (fillState).
 type sink interface {
-	put(p *pipeline, r *xmltree.Reader, start *xmltree.StartElement, out reflect.Value) error
+	put(p *pipeline, r *xmltree.Reader, start *xmltree.StartElement, out reflect.Value, st *fillState) error
+}
+
+// fillState is the state one fill of a content model's fields keeps across
+// the children of one element, on that fill's own stack, never on a bound
+// value, which cx.bound shares between the re-entrant fills of a recursive
+// type (checkContext.bound): parts, the partition so far of the children of
+// each nested occurrence field (nestedOccurrence), keyed by the field's first
+// attribution target in that content model's childIndex, which no other
+// member takes. It is a lookup index only, never iterated (STYLE D2).
+type fillState struct {
+	parts map[int]*partition
+}
+
+// partition returns the partition st keeps for the nested occurrence field
+// of group whose first attribution target is first, a fresh one before that
+// field's first child.
+func (st *fillState) partition(schema *xsd.Schema, group xsd.ModelGroup, first int) *partition {
+	if st.parts == nil {
+		st.parts = map[int]*partition{}
+	}
+	part, ok := st.parts[first]
+	if !ok {
+		part = &partition{schema: schema, group: group}
+		st.parts[first] = part
+	}
+	return part
 }
 
 // targets is 1: a field takes its particle's children.
@@ -2207,7 +2279,7 @@ type fieldSink struct {
 }
 
 // put stores in field s.index of out the value s.read reads from start.
-func (s fieldSink) put(p *pipeline, r *xmltree.Reader, start *xmltree.StartElement, out reflect.Value) error {
+func (s fieldSink) put(p *pipeline, r *xmltree.Reader, start *xmltree.StartElement, out reflect.Value, _ *fillState) error {
 	v, err := s.read.read(p, r, start)
 	if err != nil {
 		return err
@@ -2243,7 +2315,8 @@ func bindSequence(run *bindRun, ct xsd.ComplexType, particles []xsd.Particle, na
 // returns the first decline Decode's doc states for them, item 5,
 // typeSubject naming the type. A model group particle, inline or a <group
 // ref> (particleTerm), is bound by nested, item reporting whether s is an
-// occurrence field's item (bindOccurrence).
+// occurrence field's item (bindItem). An element particle's position and
+// target are recorded in s.index.elements.
 func (s *sequence) bind(run *bindRun, ct xsd.ComplexType, particles []xsd.Particle, at []int, item bool, names *goname.Namer, typeSubject string) error {
 	for i, p := range particles {
 		term, err := particleTerm(run.p.schema, p, typeSubject)
@@ -2273,6 +2346,7 @@ func (s *sequence) bind(run *bindRun, ct xsd.ComplexType, particles []xsd.Partic
 			for _, n := range takes {
 				s.index.children[n] = s.targets()
 			}
+			s.index.elements = append(s.index.elements, place{position: append(slices.Clone(at), i), index: s.targets()})
 			s.members = append(s.members, f)
 		}
 	}
@@ -2295,8 +2369,13 @@ func (s *sequence) bind(run *bindRun, ct xsd.ComplexType, particles []xsd.Partic
 // that occurs exactly once (exactlyOnce) gives one *choice member, bound by
 // bindChoice into s.index, its alternatives below at, taking the targets after
 // every earlier member's, its field named from names, item passed through.
-// Any other declines as a nested model group. Splices' and Flattens' errors
-// are plain, prefixed by typeSubject.
+// Any other gives one *nestedOccurrence member (sequence.occurrence), but in
+// an occurrence field's item, where it declines as a nested model group,
+// whatever its occurrence: one with {max occurs} above 1 for the same reason,
+// and a 0..1 one because the item's fill (boundOccurrence.fill) keeps one
+// fillState across its items, so a nested field's partition would continue
+// into the next item. Splices' and Flattens' errors are plain, prefixed by
+// typeSubject.
 func (s *sequence) nested(run *bindRun, ct xsd.ComplexType, group xsd.ModelGroup, occurs xsd.Occurs, at []int, item bool, names *goname.Namer, typeSubject string) error {
 	splice, err := goshape.Splices(run.p.schema, group, occurs)
 	if err != nil {
@@ -2315,14 +2394,57 @@ func (s *sequence) nested(run *bindRun, ct xsd.ComplexType, group xsd.ModelGroup
 	if flat {
 		return s.flatten(run, ct, group, at, names, typeSubject)
 	}
-	if group.Compositor() != xsd.CompositorChoice || !exactlyOnce(occurs) {
+	if group.Compositor() == xsd.CompositorChoice && exactlyOnce(occurs) {
+		c, err := bindChoice(run, ct, group.Particles(), &s.index, at, s.targets(), item, names, typeSubject)
+		if err != nil {
+			return err
+		}
+		s.members = append(s.members, c)
+		return nil
+	}
+	if item {
 		return decline(constructNestedGroup, "a particle of "+typeSubject)
 	}
-	c, err := bindChoice(run, ct, group.Particles(), &s.index, at, s.targets(), item, names, typeSubject)
+	return s.occurrence(run, ct, group, occurs, at, names, typeSubject)
+}
+
+// occurrence appends to s the nestedOccurrence member of a model group
+// particle of group occurring as occurs, at Matcher position at, inline or a
+// <group ref>, that codegen neither splices nor flattens and that is no
+// choice occurring exactly once, its field named from names by group's
+// compositor's local name, sequence or choice, before its item is read, or
+// returns the first decline Decode's doc states for it, item 5, typeSubject
+// naming the type, or the plain error that item states in a decline's place:
+// a {max occurs} 0 is occursShape's plain error, since codegen emits no field
+// for it; then its item is bindItem's into s.index, below at, taking the
+// targets from s.targets(), which holds through the bind since occurrence
+// appends the member only once its item is bound, so an expanded name an
+// earlier particle of the content model takes declines among them as a
+// sequence's particle's does (elementField). Last, a content model
+// xsd.Schema.ContentMatcher does not track declines (trackedMatcher), whether
+// or not a wildcard needs the Matcher, since validation leaves every instance
+// of such a model undecided (item 4).
+func (s *sequence) occurrence(run *bindRun, ct xsd.ComplexType, group xsd.ModelGroup, occurs xsd.Occurs, at []int, names *goname.Namer, typeSubject string) error {
+	o := &nestedOccurrence{name: names.Claim(group.Compositor().String()), group: group, first: s.targets()}
+	shape, err := occursShape(occurs, group.Compositor() == xsd.CompositorChoice, fmt.Sprintf("a %s model group particle of %s", group.Compositor(), typeSubject))
 	if err != nil {
 		return err
 	}
-	s.members = append(s.members, c)
+	o.shape = shape
+	if o.item, err = bindItem(run, ct, group, &s.index, at, o.first, typeSubject); err != nil {
+		return err
+	}
+	for k := range o.item.itemTargets() {
+		pos, ok := s.index.position(o.first + k)
+		if !ok || len(pos) <= len(at) || !slices.Equal(pos[:len(at)], at) {
+			return fmt.Errorf("codec: %s: attribution target %d of a nested %s model group particle has no Matcher position below the particle's %v", typeSubject, o.first+k, group.Compositor(), at)
+		}
+		o.positions = append(o.positions, pos[len(at):])
+	}
+	if _, err := trackedMatcher(run.p.schema, ct); err != nil {
+		return err
+	}
+	s.members = append(s.members, o)
 	return nil
 }
 
@@ -2410,7 +2532,8 @@ type wildcardSlot struct {
 // sequence that holds it (childIndex), or the alternative of the flattened
 // content model that holds it. A wildcardSlot holds one per wildcard
 // particle and one for an open-content field, a flattened one per basic
-// particle.
+// particle, and a childIndex's elements one per element particle a sequence
+// or choice binds.
 type place struct {
 	position []int
 	index    int
@@ -2449,16 +2572,17 @@ type wildAttributor struct {
 // nested group spliced, so occurring exactly once or with {min occurs} 0 and {max
 // occurs} 1 (goshape.Splices), a choice occurring exactly once
 // (sequence.nested) whose every alternative is an element or wildcard particle
-// or a model group bound by these same rules at its {min occurs} 0 read as 1,
-// so with {max occurs} 1 too (groupAlternative), flattened (sequence.flatten), or
-// declined. A decline here is a defect of that premise, a plain error and no
-// decline. A flattened model group, the content particle's or a nested one's, and
-// an occurrence field's repeat or are optional, so the premise does not hold for
-// them: a flattened content model holds no wildcardSlot, a nested flattened
-// particle's bind builds a Matcher of ct first, an occurrence's item builds no
-// attributor from the one it holds, reading its places alone, and the Matcher
-// each of them builds declines by a *DeclineError (trackedMatcher), so no content
-// model whose Matcher declines reaches here.
+// or a model group bound by these same rules (groupAlternative), flattened
+// (sequence.flatten), held in a nested occurrence field (sequence.occurrence),
+// or declined. A decline here is a defect of that premise, a plain error and no
+// decline. A flattened model group and a model group held in an occurrence
+// field, each the content particle's or a nested one's, repeat or are
+// optional, so the premise does not hold for them: a flattened content model
+// holds no wildcardSlot, a nested flattened particle's bind and a nested
+// occurrence field's each build a Matcher of ct first, a content occurrence's
+// item builds no attributor from the one it holds, reading its places alone,
+// and the Matcher each of them builds declines by a *DeclineError
+// (trackedMatcher), so no content model whose Matcher declines reaches here.
 func (w *wildcardSlot) attributor(schema *xsd.Schema) (*wildAttributor, error) {
 	if w == nil {
 		return nil, nil
@@ -2496,11 +2620,13 @@ type boundSequence struct {
 }
 
 // fill sets, from each child element, through the sink of the target
-// eachChild attributes it to, the field of that target's member.
+// eachChild attributes it to, the field of that target's member, every sink
+// sharing one fillState of this fill's own.
 func (b *boundSequence) fill(r *xmltree.Reader, _ *xmltree.StartElement, out reflect.Value) error {
 	s := b.sequence
+	st := &fillState{}
 	return eachChild(r, s.p.schema, s.index, func(start *xmltree.StartElement, i int) error {
-		return b.sinks[i].put(s.p, r, start, out)
+		return b.sinks[i].put(s.p, r, start, out, st)
 	})
 }
 
@@ -2554,8 +2680,8 @@ func (f field) namesBranch(bt reflect.Type) bool {
 // sequence's nested particle gives them (sequence.nested), the fields of its
 // own particles for a sequence codegen splices, nested splices included, and
 // otherwise the one member codegen gives the group, a nested choice's
-// *choice or a flattened particle's *flatSlice (codegen/doc.go "# Complex
-// types").
+// *choice, a flattened particle's *flatSlice or any other's
+// *nestedOccurrence (codegen/doc.go "# Complex types").
 type groupBranch struct {
 	members []contentMember
 }
@@ -2623,10 +2749,11 @@ func branchesShare(a, b branchArm) bool {
 
 // membersShare reports whether two members at one position of two branch
 // structs may admit a common struct field: field.sharesBranch's answer for
-// two fields, and otherwise, where either is a *choice or a *flatSlice,
-// whether they have one name, which is conservative, since their Go types,
-// an interface or a slice of one beside whatever the other admits, are not
-// compared. contentMember is a closed sum, so the assertions are STYLE T2's
+// two fields, and otherwise, where either is a *choice, a *flatSlice or a
+// *nestedOccurrence, whether they have one name, which is conservative,
+// since their Go types, an interface, a slice of one, or an occurrence's
+// shape over its item beside whatever the other admits, are not compared.
+// contentMember is a closed sum, so the assertions are STYLE T2's
 // sealed-sum exception.
 func membersShare(a, b contentMember) bool {
 	fa, aField := a.(field)
@@ -2694,8 +2821,9 @@ func bindContentChoice(run *bindRun, ct xsd.ComplexType, particles []xsd.Particl
 // alternative whose branch struct has an earlier one's shape, which no branch
 // type could tell apart: one whose branch may admit a struct the earlier one's
 // does (branchesShare). item reports whether the choice is in an occurrence
-// field's item (bindOccurrence), which a model-group alternative's members are
-// bound as. Its caller builds x's attributor once the content model's every
+// field's item (bindItem), which a model-group alternative's members are
+// bound as. An element alternative's position and target are recorded in
+// x.elements. Its caller builds x's attributor once the content model's every
 // particle is bound.
 func bindChoice(run *bindRun, ct xsd.ComplexType, particles []xsd.Particle, x *childIndex, at []int, base int, item bool, names *goname.Namer, typeSubject string) (*choice, error) {
 	c := &choice{name: names.Claim("choice"), sealed: &sealed[branchArm]{p: run.p}}
@@ -2736,6 +2864,7 @@ func bindChoice(run *bindRun, ct xsd.ComplexType, particles []xsd.Particle, x *c
 			f.name = goname.NewNamer().Claim(term.Name().Local)
 			subject = declSubject(term)
 			alt = f
+			x.elements = append(x.elements, place{position: position, index: target})
 		}
 		for _, earlier := range alts.alts {
 			if branchesShare(earlier, alt) {
@@ -2829,9 +2958,10 @@ type branchSink struct {
 	item  itemBranchSink
 }
 
-// put sets field s.index of out as s.item does the interface.
-func (s branchSink) put(p *pipeline, r *xmltree.Reader, start *xmltree.StartElement, out reflect.Value) error {
-	return s.item.put(p, r, start, out.Field(s.index))
+// put sets field s.index of out as s.item does the interface, st passed
+// through.
+func (s branchSink) put(p *pipeline, r *xmltree.Reader, start *xmltree.StartElement, out reflect.Value, st *fillState) error {
+	return s.item.put(p, r, start, out.Field(s.index), st)
 }
 
 // branchSinks returns one itemBranchSink per target of each of alts, a
@@ -3121,19 +3251,19 @@ type flatSink struct {
 }
 
 // put appends to field s.index of out an item of alternative s.alt's branch
-// (boundChoice.appendItem).
-func (s flatSink) put(_ *pipeline, r *xmltree.Reader, start *xmltree.StartElement, out reflect.Value) error {
-	return s.bound.appendItem(r, start, s.alt, out.Field(s.index))
+// (boundChoice.appendItem), st passed through.
+func (s flatSink) put(_ *pipeline, r *xmltree.Reader, start *xmltree.StartElement, out reflect.Value, st *fillState) error {
+	return s.bound.appendItem(r, start, s.alt, out.Field(s.index), st)
 }
 
 // appendItem appends to slice, a slice of the sealed interface, one new item
 // from the child element start, read from r up to its end tag, which its
 // caller attributes to alternative i: the branch of that alternative holding
 // the value its field's elementReader reads, never merged into an earlier
-// item.
-func (bc *boundChoice) appendItem(r *xmltree.Reader, start *xmltree.StartElement, i int, slice reflect.Value) error {
+// item, its sink given st, the state of the fill putting start.
+func (bc *boundChoice) appendItem(r *xmltree.Reader, start *xmltree.StartElement, i int, slice reflect.Value, st *fillState) error {
 	branch := reflect.New(bc.branches[i].t).Elem()
-	if err := bc.branches[i].sinks[0].put(bc.p, r, start, branch); err != nil {
+	if err := bc.branches[i].sinks[0].put(bc.p, r, start, branch, st); err != nil {
 		return err
 	}
 	item := reflect.New(slice.Type().Elem()).Elem()
@@ -3207,7 +3337,7 @@ type boundFlattened struct {
 // raw; every other carries no xsi:type, or fill returns the xsi:type decline
 // Decode's doc states, item 7. A substitution group's member is attributed to
 // its head's particle (cvc-accept clause 2.3.2), whose branch field's
-// groupReader reads it.
+// groupReader reads it. Every sink shares one fillState of this fill's own.
 func (b boundFlattened) fill(r *xmltree.Reader, _ *xmltree.StartElement, out reflect.Value) error {
 	f := b.flattened
 	p := f.slice.sealed.p
@@ -3215,6 +3345,7 @@ func (b boundFlattened) fill(r *xmltree.Reader, _ *xmltree.StartElement, out ref
 	if err != nil {
 		return err
 	}
+	st := &fillState{}
 	for {
 		tok, err := r.Token()
 		if err != nil {
@@ -3227,7 +3358,7 @@ func (b boundFlattened) fill(r *xmltree.Reader, _ *xmltree.StartElement, out ref
 			name := expanded(tok.Name())
 			t, pos, ok := m.NextParticle(name)
 			if _, open := t.(*xsd.OpenContent); open && b.open != nil {
-				if err := b.open.put(p, r, tok, out); err != nil {
+				if err := b.open.put(p, r, tok, out, st); err != nil {
 					return err
 				}
 				continue
@@ -3244,7 +3375,7 @@ func (b boundFlattened) fill(r *xmltree.Reader, _ *xmltree.StartElement, out ref
 			if !placed {
 				return fmt.Errorf("codec: %s: element %s is attributed to the particle at position %v, for which Decode bound no alternative", tok.Loc(), name, pos)
 			}
-			if err := b.bound.appendItem(r, tok, i, out.Field(0)); err != nil {
+			if err := b.bound.appendItem(r, tok, i, out.Field(0), st); err != nil {
 				return err
 			}
 		}
@@ -3254,9 +3385,9 @@ func (b boundFlattened) fill(r *xmltree.Reader, _ *xmltree.StartElement, out ref
 // trackedMatcher returns a fresh Matcher of ct's {content type}, which
 // attributes one element's children, or the decline of constructUntrackedModel
 // where xsd.Schema.ContentMatcher declines ct: its children cannot be
-// attributed, and its callers bind a flattened model group, the content
-// particle's or a nested one's, or a content particle held in an occurrence
-// field, which repeat or are optional, so the model is a legitimate one Decode
+// attributed, and its callers bind a flattened model group or a model group
+// held in an occurrence field, each the content particle's or a nested one's,
+// which repeat or are optional, so the model is a legitimate one Decode
 // does not cover, not a defect. ContentMatcher's answer depends on ct alone,
 // so a bind that calls it once all of a content model's particles are bound
 // makes CheckDecode return what Decode does.
@@ -3274,26 +3405,29 @@ func trackedMatcher(schema *xsd.Schema, ct xsd.ComplexType) (*xsd.Matcher, error
 // for one occurrence of group, its item, in shape, goshape.ParticleShape's for
 // the particle's occurrence over a struct for a sequence and a sealed
 // interface for a choice. ct is the complex type whose {content type} it is,
-// whose Matcher attributes every child (§3.8.4.2 key-vpath). open is the
-// field ct's {open content} gives (openContentField), the struct's second,
-// never the item's, nil for none.
+// whose Matcher attributes every child (§3.8.4.2 key-vpath), and index the
+// item's childIndex, which attributes a child to its target in the item.
+// open is the field ct's {open content} gives (openContentField), the
+// struct's second, never the item's, nil for none. A nested particle's
+// occurrence field is a nestedOccurrence.
 type occurrence struct {
 	name  string
 	shape shape
 	group xsd.ModelGroup
 	item  occurrenceItem
+	index childIndex
 	ct    xsd.ComplexType
 	p     *pipeline
 	open  *field
 }
 
-// An occurrenceItem is the type for one occurrence of an occurrence's model
-// group, as Decode reads it, a closed sum: a *sequence, the struct of a
+// An occurrenceItem is the type for one occurrence of an occurrence field's
+// model group, as Decode reads it, a closed sum: a *sequence, the struct of a
 // field per particle of a sequence, bound as a content sequence's fields are;
 // or a choiceItem, a choice's sealed interface, bound as a nested choice's is.
 type occurrenceItem interface {
-	// itemIndex attributes a child to its target in the item.
-	itemIndex() childIndex
+	// itemTargets is how many attribution targets the item's members take.
+	itemTargets() int
 	// itemSinks holds it, the item's Go type at the site site names, to the
 	// item, item 6 of Decode's doc, and returns one sink per target, in target
 	// order, each setting a value of it.
@@ -3305,16 +3439,12 @@ type occurrenceItem interface {
 // armOccurrence, its field named from names by group's compositor's local
 // name, sequence or choice, before its item is read, or the first decline
 // Decode's doc states for it, item 5, typeSubject naming the type, or the
-// plain error that item states in a decline's place. A sequence's item is the
-// sequence its particles bind (sequence.bind), its fields named from a fresh
-// Namer, as codegen names one occurrence's struct; a choice's is the choice
-// bindChoice binds, its targets from 0, as an item, so that a flattened
-// particle a model-group alternative holds declines as a sequence item's
-// does. The item's particles are bound at the positions below the content
-// {particle} that ct's Matcher reports, so its places are the Matcher's. Then
-// the field ct's {open content} gives, if any, claims its name from names
-// (openContentField). Last, a content model xsd.Schema.ContentMatcher does
-// not track declines (trackedMatcher).
+// plain error that item states in a decline's place. Its item is bindItem's
+// into a fresh childIndex, its targets from 0, its particles bound at the
+// positions below the content {particle} that ct's Matcher reports, so its
+// places are the Matcher's. Then the field ct's {open content} gives, if
+// any, claims its name from names (openContentField). Last, a content model
+// xsd.Schema.ContentMatcher does not track declines (trackedMatcher).
 func bindOccurrence(run *bindRun, ct xsd.ComplexType, group xsd.ModelGroup, occurs xsd.Occurs, names *goname.Namer, typeSubject string) (*occurrence, error) {
 	o := &occurrence{name: names.Claim(group.Compositor().String()), group: group, ct: ct, p: run.p}
 	choice := group.Compositor() == xsd.CompositorChoice
@@ -3323,22 +3453,9 @@ func bindOccurrence(run *bindRun, ct xsd.ComplexType, group xsd.ModelGroup, occu
 		return nil, err
 	}
 	o.shape = s
-	if choice {
-		x := newChildIndex()
-		// The choice's own field name is never read: the item is the
-		// occurrence field's element, not a field of a struct.
-		c, err := bindChoice(run, ct, group.Particles(), &x, nil, 0, true, goname.NewNamer(), typeSubject)
-		if err != nil {
-			return nil, err
-		}
-		o.item = choiceItem{choice: c, index: x}
-	}
-	if !choice {
-		seq := &sequence{p: run.p, index: newChildIndex()}
-		if err := seq.bind(run, ct, group.Particles(), nil, true, goname.NewNamer(), typeSubject); err != nil {
-			return nil, err
-		}
-		o.item = seq
+	o.index = newChildIndex()
+	if o.item, err = bindItem(run, ct, group, &o.index, nil, 0, typeSubject); err != nil {
+		return nil, err
 	}
 	if open, ok := openContentField(ct, names); ok {
 		o.open = &open
@@ -3349,8 +3466,35 @@ func bindOccurrence(run *bindRun, ct xsd.ComplexType, group xsd.ModelGroup, occu
 	return o, nil
 }
 
-// itemIndex is s's own childIndex.
-func (s *sequence) itemIndex() childIndex { return s.index }
+// bindItem returns the item of an occurrence field of group, the type for one
+// occurrence of it, its particles at Matcher position at below ct's content
+// {particle}, nil for that particle's own, bound into x, the childIndex of the
+// content model holding them, their attribution targets from target on, or
+// the first decline Decode's doc states for them, item 5, typeSubject naming
+// the type: a sequence's item is the sequence its particles bind
+// (sequence.bind), its fields named from a fresh Namer, as codegen names one
+// occurrence's struct; a choice's is the choice bindChoice binds, as an item,
+// so that a flattened particle a model-group alternative holds declines as a
+// sequence item's does. Each is bound as an item, item true.
+func bindItem(run *bindRun, ct xsd.ComplexType, group xsd.ModelGroup, x *childIndex, at []int, target int, typeSubject string) (occurrenceItem, error) {
+	if group.Compositor() == xsd.CompositorChoice {
+		// The choice's own field name is never read: the item is the
+		// occurrence field's element, not a field of a struct.
+		c, err := bindChoice(run, ct, group.Particles(), x, at, target, true, goname.NewNamer(), typeSubject)
+		if err != nil {
+			return nil, err
+		}
+		return choiceItem{choice: c}, nil
+	}
+	// seq binds into a copy of *x, whose children map is x's own; the
+	// wildcardSlot a wildcard particle may create is copied back.
+	seq := &sequence{p: run.p, index: *x, base: target}
+	if err := seq.bind(run, ct, group.Particles(), at, true, goname.NewNamer(), typeSubject); err != nil {
+		return nil, err
+	}
+	*x = seq.index
+	return seq, nil
+}
 
 // itemSinks holds it to the struct s's members give, as a binding holds its
 // content fields, with no attribute field: a struct of exactly s's width
@@ -3373,16 +3517,141 @@ func (s *sequence) itemSinks(it reflect.Type, site string, cx *checkContext) ([]
 	return sinks, nil
 }
 
+// itemTargets is the targets s's members take after s.base.
+func (s *sequence) itemTargets() int { return s.targets() - s.base }
+
 // choiceItem is the item of a choice occurrence: choice, its sealed
-// interface, and index, attributing a child to its target among the
-// alternatives' (branchSinks).
+// interface.
 type choiceItem struct {
 	choice *choice
-	index  childIndex
 }
 
-// itemIndex is c's index.
-func (c choiceItem) itemIndex() childIndex { return c.index }
+// itemTargets is the choice's targets (choice.targets).
+func (c choiceItem) itemTargets() int { return c.choice.targets() }
+
+// nestedOccurrence is a model group particle nested in a sequence or as a
+// choice's model-group alternative, inline or a <group ref>, that codegen
+// neither splices nor flattens and that is no choice occurring exactly once,
+// as Decode reads it (codegen/doc.go "# Particles"): its occurrence field, at
+// its particle's place, named name, holding item, the type for one
+// occurrence of group, in shape, goshape.ParticleShape's for the particle's
+// occurrence over a struct for a sequence and a sealed interface for a
+// choice. Its item's targets are first on in its content model's childIndex,
+// and positions[k] is the Matcher position of the particle of the item's
+// target k below the nested particle's own, a position of a basic particle
+// of group as continues reads one: an element particle's, whose child the
+// index attributes by its expanded name, or a wildcard particle's.
+type nestedOccurrence struct {
+	name      string
+	shape     shape
+	group     xsd.ModelGroup
+	item      occurrenceItem
+	first     int
+	positions [][]int
+}
+
+// targets is the item's: one per target of the item's members.
+func (o *nestedOccurrence) targets() int { return len(o.positions) }
+
+// goName is o's field's Go name.
+func (o *nestedOccurrence) goName() string { return o.name }
+
+// admits reports whether got could be o's field: o's name, not embedded, of
+// o's shape over a struct for a sequence and over an interface of one
+// unexported method (sealedShaped) for a choice, so that every got sinks holds
+// o, o admits.
+func (o *nestedOccurrence) admits(got reflect.StructField) bool {
+	it, ok := o.shape.elem(got.Type)
+	if got.Name != o.name || got.Anonymous || !ok {
+		return false
+	}
+	if o.group.Compositor() == xsd.CompositorChoice {
+		return sealedShaped(it)
+	}
+	return it.Kind() == reflect.Struct
+}
+
+// sinks holds field index of t to o's field: o's name, not embedded, of o's
+// shape over the item's Go type, which the item holds
+// (occurrenceItem.itemSinks), and returns one occurrenceSink per target of
+// the item, in target order.
+func (o *nestedOccurrence) sinks(t reflect.Type, index int, cx *checkContext) ([]sink, error) {
+	got := t.Field(index)
+	it, ok := o.shape.elem(got.Type)
+	if got.Name != o.name || got.Anonymous || !ok {
+		return nil, fmt.Errorf("%w: field %d of %s is %s %s where codegen emits %s, %sI for the type I of one occurrence of the %s", ErrTypeMismatch, index, t, got.Name, got.Type, o.name, o.shape.prefix(), o.group.Compositor())
+	}
+	items, err := o.item.itemSinks(it, fieldAt{owner: t, index: index}.site(), cx)
+	if err != nil {
+		return nil, err
+	}
+	sinks := make([]sink, len(items))
+	for k, item := range items {
+		sinks[k] = occurrenceSink{index: index, target: k, occurrence: o, item: item}
+	}
+	return sinks, nil
+}
+
+// occurrenceSink is target target of the item of a nestedOccurrence whose
+// check held, item setting it in one item, the field in field index of the
+// struct.
+type occurrenceSink struct {
+	index, target int
+	occurrence    *nestedOccurrence
+	item          sink
+}
+
+// put sets, from the child element start, the item of field s.index of out
+// that start falls in: the child at the position of target s.target opens a
+// new item or continues the current one by the positional rule Decode's doc
+// states in the paragraph after item 8 (partition.next), over the children
+// of the field st has partitioned so far, st being the fill of out's own
+// content model, and item s.item sets the target in it, st passed through.
+// An item opened is appended for the slice, allocated for the pointer, and
+// for the bare interface the field itself, set by its alternative's branch
+// (boundChoice.set). A second item of a field that holds one and a position
+// that is no basic particle of the model group are defects of Decode's, each a
+// plain error: Decode validated the instance first.
+func (s occurrenceSink) put(p *pipeline, r *xmltree.Reader, start *xmltree.StartElement, out reflect.Value, st *fillState) error {
+	o := s.occurrence
+	opens, err := st.partition(p.schema, o.group, o.first).next(o.positions[s.target])
+	if err != nil {
+		return fmt.Errorf("codec: %s: element %s: %w", start.Loc(), expanded(start.Name()), err)
+	}
+	field := out.Field(s.index)
+	item, err := o.itemOf(field, opens, start)
+	if err != nil {
+		return err
+	}
+	return s.item.put(p, r, start, item, st)
+}
+
+// itemOf returns the item of field, o's occurrence field, that the child
+// element start falls in, the current one, or a new one where opens: for the
+// slice its last element, appended where opens; for the pointer its pointee,
+// allocated where opens; and for the bare interface the field itself. The
+// first child a fill puts to field opens, its partition being fresh
+// (fillState.partition, partition.next), so a current item exists. A
+// second item of the pointer or the bare interface is a defect of Decode's,
+// a plain error: validation charged it first (cvc-accept clause 3).
+func (o *nestedOccurrence) itemOf(field reflect.Value, opens bool, start *xmltree.StartElement) (reflect.Value, error) {
+	if o.shape == shapeRepeated {
+		if opens {
+			field.Set(reflect.Append(field, reflect.Zero(field.Type().Elem())))
+		}
+		return field.Index(field.Len() - 1), nil
+	}
+	if opens && !field.IsNil() {
+		return reflect.Value{}, fmt.Errorf("codec: %s: element %s opens a second occurrence of a %s model group particle with {max occurs} 1", start.Loc(), expanded(start.Name()), o.group.Compositor())
+	}
+	if o.shape == shapeOne {
+		return field, nil
+	}
+	if opens {
+		field.Set(reflect.New(field.Type().Elem()))
+	}
+	return field.Elem(), nil
+}
 
 // itemSinks holds it to c's sealed interface (sealed.checkSite) and returns
 // one itemBranchSink per target of each alternative, in target order.
@@ -3408,9 +3677,10 @@ type itemBranchSink struct {
 }
 
 // put sets out, the item, a value of the interface, to the branch of
-// alternative s.alt, its target s.target set from start (boundChoice.set).
-func (s itemBranchSink) put(_ *pipeline, r *xmltree.Reader, start *xmltree.StartElement, out reflect.Value) error {
-	return s.bound.set(r, start, s.alt, s.target, out)
+// alternative s.alt, its target s.target set from start (boundChoice.set),
+// st passed through.
+func (s itemBranchSink) put(_ *pipeline, r *xmltree.Reader, start *xmltree.StartElement, out reflect.Value, st *fillState) error {
+	return s.bound.set(r, start, s.alt, s.target, out, st)
 }
 
 // width is the one occurrence field, and the open-content field, if any.
@@ -3466,19 +3736,21 @@ type boundOccurrence struct {
 // instead, in document order, and neither opens nor continues an item. A
 // child attributed to a wildcard particle is read raw; every other carries no
 // xsi:type, or fill returns the xsi:type decline Decode's doc states, item 7.
+// Every sink shares one fillState of this fill's own, across all its items.
 func (b boundOccurrence) fill(r *xmltree.Reader, _ *xmltree.StartElement, out reflect.Value) error {
 	o := b.occurrence
 	m, err := trackedMatcher(o.p.schema, o.ct)
 	if err != nil {
 		return err
 	}
-	x := o.item.itemIndex()
+	x := o.index
 	var places []place
 	if x.wild != nil {
 		places = x.wild.places
 	}
 	field := out.Field(0)
 	part := partition{schema: o.p.schema, group: o.group}
+	st := &fillState{}
 	var item reflect.Value
 	for {
 		tok, err := r.Token()
@@ -3494,7 +3766,7 @@ func (b boundOccurrence) fill(r *xmltree.Reader, _ *xmltree.StartElement, out re
 		case *xmltree.StartElement:
 			t, pos, ok := m.NextParticle(expanded(tok.Name()))
 			if _, open := t.(*xsd.OpenContent); open && b.open != nil {
-				if err := b.open.put(o.p, r, tok, out); err != nil {
+				if err := b.open.put(o.p, r, tok, out, st); err != nil {
 					return err
 				}
 				continue
@@ -3524,7 +3796,7 @@ func (b boundOccurrence) fill(r *xmltree.Reader, _ *xmltree.StartElement, out re
 			if opens {
 				item = reflect.New(b.item).Elem()
 			}
-			if err := b.sinks[at.index].put(o.p, r, tok, item); err != nil {
+			if err := b.sinks[at.index].put(o.p, r, tok, item, st); err != nil {
 				return err
 			}
 		}
@@ -3533,12 +3805,14 @@ func (b boundOccurrence) fill(r *xmltree.Reader, _ *xmltree.StartElement, out re
 
 // partition finds where each sub-sequence of cvc-accept clause 3's
 // ·partition· of an element's children into occurrences of group begins, the
-// model group of a content particle occurring other than exactly once that
-// codegen neither splices nor flattens, from the Matcher position of each
-// child in document order (xsd.Matcher.NextParticle), which reports no
-// iteration of group: last is the position of the current occurrence's last
-// child, nil before the first child, and count how many children of the
-// current occurrence that position has taken.
+// model group of a particle held in an occurrence field, the content
+// {particle}'s (occurrence) or a nested one's (nestedOccurrence), from the
+// position of each child of that field in document order, the Matcher's
+// (xsd.Matcher.NextParticle) or, for a nested one, its particle's below the
+// nested particle's own, which reports no iteration of group: last is the
+// position of the current occurrence's last child, nil before the first
+// child, and count how many children of the current occurrence that position
+// has taken.
 type partition struct {
 	schema *xsd.Schema
 	group  xsd.ModelGroup
@@ -3691,8 +3965,8 @@ type boundBranch struct {
 // k of alternative i: the branch of that alternative, the one dst already
 // holds or else a new one, has the field of that target set by its sink, so a
 // repeated field's value is appended, and the fields of a model-group
-// alternative's branch are filled one child at a time.
-func (bc *boundChoice) set(r *xmltree.Reader, start *xmltree.StartElement, i, k int, dst reflect.Value) error {
+// alternative's branch are filled one child at a time, its sinks given st.
+func (bc *boundChoice) set(r *xmltree.Reader, start *xmltree.StartElement, i, k int, dst reflect.Value, st *fillState) error {
 	bb := bc.branches[i]
 	branch := reflect.New(bb.t).Elem()
 	if !dst.IsNil() {
@@ -3703,7 +3977,7 @@ func (bc *boundChoice) set(r *xmltree.Reader, start *xmltree.StartElement, i, k 
 		}
 		branch.Set(dst.Elem())
 	}
-	if err := bb.sinks[k].put(bc.p, r, start, branch); err != nil {
+	if err := bb.sinks[k].put(bc.p, r, start, branch, st); err != nil {
 		return err
 	}
 	dst.Set(branch)
@@ -3761,7 +4035,8 @@ type boundChoiceRoot struct {
 
 // fill sets out, a value of the interface, as a filler does, from each child
 // element, through the sink of the target eachChild attributes it to, in the
-// branch of that target's alternative. An empty match leaves out nil.
+// branch of that target's alternative, every sink sharing one fillState of
+// this fill's own. An empty match leaves out nil.
 func (c *boundChoiceRoot) fill(r *xmltree.Reader, root *xmltree.StartElement, out reflect.Value) error {
 	if err := checkXsiType(root); err != nil {
 		return err
@@ -3770,8 +4045,9 @@ func (c *boundChoiceRoot) fill(r *xmltree.Reader, root *xmltree.StartElement, ou
 		return err
 	}
 	p := c.root.sealed.p
+	st := &fillState{}
 	return eachChild(r, p.schema, c.root.index, func(start *xmltree.StartElement, i int) error {
-		return c.sinks[i].put(p, r, start, out)
+		return c.sinks[i].put(p, r, start, out, st)
 	})
 }
 
@@ -4370,13 +4646,14 @@ func attributeChild(a *wildAttributor, children map[xsd.QName]int, start *xmltre
 // one spliced all group, of element and wildcard particles, nested sequences
 // and all groups spliced, nested choices bound in place, a choice's
 // model-group alternatives bound as nested particles are, and nested
-// particles flattened (wildcardSlot.attributor), and a plain error. An {open
-// content}'s is the one places holds for its empty position, the open-content
-// field's (sequence.openContent), and with none a plain error, a defect of
-// Decode's too. An element declaration's is the target children holds for
-// start's expanded name, the declaration being a substitution group's head
-// where start is a member. Attribution is a closed sum, so the switch is STYLE
-// T2's sealed-sum exception.
+// particles flattened or held in an occurrence field
+// (wildcardSlot.attributor), and a plain error. An {open content}'s is the one
+// places holds for its empty position, the open-content field's
+// (sequence.openContent), and with none a plain error, a defect of Decode's
+// too. An element declaration's is the target children holds for start's
+// expanded name, the declaration being a substitution group's head where start
+// is a member. Attribution is a closed sum, so the switch is STYLE T2's
+// sealed-sum exception.
 func attributeAt(t xsd.Attribution, pos []int, places []place, children map[xsd.QName]int, start *xmltree.StartElement) (attribution, bool, error) {
 	name := expanded(start.Name())
 	switch t.(type) {
