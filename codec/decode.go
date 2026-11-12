@@ -854,7 +854,7 @@ func (s shape) store(p *pipeline, dst, v reflect.Value) {
 // p.decimal builds the caller's PrecisionDecimal from it, and a unionValue, as
 // p.union builds the caller's variant from it, since neither converts to a
 // caller type; a slice whose element type is not t's, a list of codec's
-// mirror of a datatype struct or of unionValues, which converts to no slice
+// bare type of a datatype struct or of unionValues, which converts to no slice
 // of the caller's type, element by element into a new slice of t of v's
 // length, each element as convertTo converts it; and any other value by
 // Convert.

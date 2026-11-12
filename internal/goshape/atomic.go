@@ -108,14 +108,10 @@ var (
 	secondsField        = DatatypeField{"Seconds", reflect.TypeFor[big.Rat]()}
 )
 
-// datatypeFields holds, indexed by Atomic, the fields of each datatype struct
-// other than PrecisionDecimal, one per property its values carry, in the order
-// of the seven-property model (§D.2.1), of duration's two properties
-// (§3.3.6.1), or of QName's {namespace name, local part} (§3.3.18): one struct
-// per date, time or duration primitive, one per builtin derived from one whose
-// values carry fewer properties or a required one (§3.4.26 yearMonthDuration,
-// §3.4.27 dayTimeDuration, §3.4.28 dateTimeStamp), and one for QName, which
-// NOTATION shares (§3.3.18, §3.3.19). Every Atomic Datatype answers for but
+// datatypeFields holds, indexed by Atomic, the fields codegen/doc.go "# Simple
+// types", which owns the rule, gives each datatype struct other than
+// PrecisionDecimal: the twelve date, time and duration ones and QName's,
+// which NOTATION shares. Every Atomic Datatype answers for but
 // AtomicPrecisionDecimal has an entry, which TestDatatypeFields holds.
 var datatypeFields = [...][]DatatypeField{
 	AtomicDateTime:          {yearField, monthField, dayField, hourField, minuteField, secondField, optionalOffsetField}, // Datatypes §3.3.7
@@ -145,10 +141,9 @@ func (a Atomic) Fields() []DatatypeField {
 	return slices.Clone(datatypeFields[a])
 }
 
-// NumericalFields returns the fields of PrecisionDecimal's numerical arm in
-// declaration order, a copy the caller may keep: Coefficient, Scale, its
-// ·scale· (precisionDecimal vp-pd-precision), each a big.Int, and Negative,
-// its ·sign· (vp-pd-sign) negative.
+// NumericalFields returns the fields codegen/doc.go "# Simple types", which
+// owns the rule, gives PrecisionDecimalValueNumerical, PrecisionDecimal's
+// numerical arm, in declaration order, a copy the caller may keep.
 func NumericalFields() []DatatypeField {
 	return []DatatypeField{
 		{"Coefficient", reflect.TypeFor[big.Int]()},

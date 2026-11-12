@@ -30,11 +30,12 @@
 // returns in every other case; [CheckDecode]'s states what it returns for a
 // declaration before an instance arrives. It reads the schema, not T:
 // codegen's structs carry no tags, so Decode derives each field's name, order
-// and Go type from the declaration by codegen's own rules and refuses a T
-// that differs, and reads a sealed interface's branch or variant types from
-// [WithBranches], and a PrecisionDecimal's arms from
-// [WithPrecisionDecimalArms]. Package codec does not import codegen. Nothing
-// encodes yet.
+// and Go type from the declaration by codegen's own rules, those whose answer
+// both packages reach, the datatype structs' fields among them, held once in
+// internal/goshape and internal/goname, and refuses a T that differs, and
+// reads a sealed interface's branch or variant types from [WithBranches], and
+// a PrecisionDecimal's arms from [WithPrecisionDecimalArms]. Package codec
+// does not import codegen. Nothing encodes yet.
 //
 // # What decodes
 //

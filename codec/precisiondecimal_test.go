@@ -12,6 +12,7 @@ import (
 	"testing"
 
 	"github.com/kud360/goxsd8/builtin/strict"
+	"github.com/kud360/goxsd8/internal/goshape"
 	"github.com/kud360/goxsd8/value"
 	"github.com/kud360/goxsd8/xsderr"
 )
@@ -92,6 +93,21 @@ func TestDecimalTypesAreCodegens(t *testing.T) {
 		if !bytes.Contains(gen, []byte(decl)) {
 			t.Errorf("codegen emits\n%s\nwhich does not declare\n%s", gen, decl)
 		}
+	}
+}
+
+// TestDecimalNumericalFields holds decimalNumerical to goshape.NumericalFields,
+// from which codegen emits PrecisionDecimalValueNumerical, in field names,
+// order and Go types: a change to either alone fails here.
+func TestDecimalNumericalFields(t *testing.T) {
+	got := reflect.TypeFor[decimalNumerical]()
+	want := structOf(goshape.NumericalFields())
+	if !got.ConvertibleTo(want) {
+		fields := make([]reflect.StructField, got.NumField())
+		for i := range fields {
+			fields[i] = reflect.StructField{Name: got.Field(i).Name, Type: got.Field(i).Type}
+		}
+		t.Errorf("decimalNumerical is %s, where goshape.NumericalFields gives %s", reflect.StructOf(fields), want)
 	}
 }
 

@@ -53,143 +53,94 @@ const (
 	atomicPrecisionDecimal  = atomic(goshape.AtomicPrecisionDecimal)
 )
 
-// The mirrors of the thirteen datatype structs codegen emits other than
-// PrecisionDecimal (codegen/doc.go "# Simple types"), the twelve date, time
-// and duration ones and QName's: each holds codegen's exported fields
-// exactly, in name, order and Go type, so that the struct codegen emits in
-// the caller's package, which codec cannot name, converts to it and back
-// (mirrored). TestDatatypeMirrorsAreCodegens pins each to codegen's.
-// PrecisionDecimal has none: its one field is of the caller's own sealed
-// interface, so no struct of codec's converts to it, and codec mirrors its
-// numerical arm alone (decimalNumerical).
-type (
-	dateTimeMirror struct {
-		Year           big.Int
-		Month          uint8
-		Day            uint8
-		Hour           uint8
-		Minute         uint8
-		Second         big.Rat
-		TimezoneOffset *int16
+// atomicTypes holds, indexed by atomic, each one's bare Go type: for a
+// datatype struct other than PrecisionDecimal (codegen/doc.go "# Simple
+// types"), the unnamed struct reflect.StructOf builds of goshape.Atomic.Fields'
+// fields, to which the struct codegen emits in the caller's package, which
+// codec cannot name, converts and back, its underlying type being identical;
+// and for PrecisionDecimal's, whose one field is of the caller's own sealed
+// interface, so that no struct of codec's converts to it, codec's
+// decimalValue.
+var atomicTypes = func() []reflect.Type {
+	types := []reflect.Type{
+		atomicString:           reflect.TypeFor[string](),
+		atomicBool:             reflect.TypeFor[bool](),
+		atomicFloat32:          reflect.TypeFor[float32](),
+		atomicFloat64:          reflect.TypeFor[float64](),
+		atomicBigRat:           reflect.TypeFor[big.Rat](),
+		atomicBigInt:           reflect.TypeFor[big.Int](),
+		atomicInt8:             reflect.TypeFor[int8](),
+		atomicInt16:            reflect.TypeFor[int16](),
+		atomicInt32:            reflect.TypeFor[int32](),
+		atomicInt64:            reflect.TypeFor[int64](),
+		atomicUint8:            reflect.TypeFor[uint8](),
+		atomicUint16:           reflect.TypeFor[uint16](),
+		atomicUint32:           reflect.TypeFor[uint32](),
+		atomicUint64:           reflect.TypeFor[uint64](),
+		atomicHexBinary:        reflect.TypeFor[[]byte](),
+		atomicBase64Binary:     reflect.TypeFor[[]byte](),
+		atomicPrecisionDecimal: decimalValueType,
 	}
-	dateTimeStampMirror struct {
-		Year           big.Int
-		Month          uint8
-		Day            uint8
-		Hour           uint8
-		Minute         uint8
-		Second         big.Rat
-		TimezoneOffset int16
+	for a := range types {
+		if fields := goshape.Atomic(a).Fields(); fields != nil {
+			types[a] = structOf(fields)
+		}
 	}
-	timeMirror struct {
-		Hour           uint8
-		Minute         uint8
-		Second         big.Rat
-		TimezoneOffset *int16
-	}
-	dateMirror struct {
-		Year           big.Int
-		Month          uint8
-		Day            uint8
-		TimezoneOffset *int16
-	}
-	gYearMonthMirror struct {
-		Year           big.Int
-		Month          uint8
-		TimezoneOffset *int16
-	}
-	gYearMirror struct {
-		Year           big.Int
-		TimezoneOffset *int16
-	}
-	gMonthDayMirror struct {
-		Month          uint8
-		Day            uint8
-		TimezoneOffset *int16
-	}
-	gDayMirror struct {
-		Day            uint8
-		TimezoneOffset *int16
-	}
-	gMonthMirror struct {
-		Month          uint8
-		TimezoneOffset *int16
-	}
-	durationMirror struct {
-		Months  big.Int
-		Seconds big.Rat
-	}
-	dayTimeDurationMirror struct {
-		Seconds big.Rat
-	}
-	yearMonthDurationMirror struct {
-		Months big.Int
-	}
-	qNameMirror struct {
-		Space string
-		Local string
-	}
-)
+	return types
+}()
 
-// atomicTypes holds, indexed by atomic, each one's Go type: for a datatype
-// struct, codec's mirror of it, and for PrecisionDecimal's, which has none,
-// codec's decimalValue.
-var atomicTypes = [...]reflect.Type{
-	atomicString:            reflect.TypeFor[string](),
-	atomicBool:              reflect.TypeFor[bool](),
-	atomicFloat32:           reflect.TypeFor[float32](),
-	atomicFloat64:           reflect.TypeFor[float64](),
-	atomicBigRat:            reflect.TypeFor[big.Rat](),
-	atomicBigInt:            reflect.TypeFor[big.Int](),
-	atomicInt8:              reflect.TypeFor[int8](),
-	atomicInt16:             reflect.TypeFor[int16](),
-	atomicInt32:             reflect.TypeFor[int32](),
-	atomicInt64:             reflect.TypeFor[int64](),
-	atomicUint8:             reflect.TypeFor[uint8](),
-	atomicUint16:            reflect.TypeFor[uint16](),
-	atomicUint32:            reflect.TypeFor[uint32](),
-	atomicUint64:            reflect.TypeFor[uint64](),
-	atomicDateTime:          reflect.TypeFor[dateTimeMirror](),
-	atomicDateTimeStamp:     reflect.TypeFor[dateTimeStampMirror](),
-	atomicTime:              reflect.TypeFor[timeMirror](),
-	atomicDate:              reflect.TypeFor[dateMirror](),
-	atomicGYearMonth:        reflect.TypeFor[gYearMonthMirror](),
-	atomicGYear:             reflect.TypeFor[gYearMirror](),
-	atomicGMonthDay:         reflect.TypeFor[gMonthDayMirror](),
-	atomicGDay:              reflect.TypeFor[gDayMirror](),
-	atomicGMonth:            reflect.TypeFor[gMonthMirror](),
-	atomicDuration:          reflect.TypeFor[durationMirror](),
-	atomicDayTimeDuration:   reflect.TypeFor[dayTimeDurationMirror](),
-	atomicYearMonthDuration: reflect.TypeFor[yearMonthDurationMirror](),
-	atomicHexBinary:         reflect.TypeFor[[]byte](),
-	atomicBase64Binary:      reflect.TypeFor[[]byte](),
-	atomicQName:             reflect.TypeFor[qNameMirror](),
-	atomicPrecisionDecimal:  decimalValueType,
+// structOf returns the unnamed struct of fields, in order, none embedded.
+func structOf(fields []goshape.DatatypeField) reflect.Type {
+	sf := make([]reflect.StructField, len(fields))
+	for i, f := range fields {
+		sf[i] = reflect.StructField{Name: f.Name, Type: f.Type}
+	}
+	return reflect.StructOf(sf)
 }
 
-// bare returns a's Go type itself, unnamed, or for a datatype struct codec's
-// mirror of it, or decimalValue for PrecisionDecimal's, which converts to no
-// caller type.
+// bare returns a's Go type itself, unnamed, or for a datatype struct the
+// unnamed struct of its fields (atomicTypes), or decimalValue for
+// PrecisionDecimal's, which converts to no caller type.
 func (a atomic) bare() reflect.Type {
-	if a == 0 || int(a) >= len(atomicTypes) {
-		// The zero atomic is an internal bug, never input.
+	if a == 0 || int(a) >= len(atomicTypes) || atomicTypes[a] == nil {
+		// The zero atomic is an internal bug, never input, and so is a
+		// datatype struct goshape gives no fields.
 		panic(fmt.Sprintf("codec: invalid atomic %d", a))
 	}
 	return atomicTypes[a]
 }
 
-// mirrored reports whether the Go type codegen gives a is a datatype struct
-// that codec holds a mirror of (bare), a struct of the identical underlying
-// type, since codegen declares the datatype struct in the caller's package.
-// It is read from the mirror's package and kind: big.Rat and big.Int are
-// structs too, of math/big, and decimalValue, PrecisionDecimal's bare type,
-// is codec's but no struct.
-func (a atomic) mirrored() bool {
-	return a.bare().PkgPath() == reflect.TypeFor[atomic]().PkgPath() && a.bare().Kind() == reflect.Struct
+// build returns the value of a's bare type, a datatype struct's other than
+// PrecisionDecimal's, whose fields hold props, each set by its field's name:
+// props names every field of it once, in any order. A field props does not
+// name, a name it holds twice or that no field has, and a value of another
+// type than its field's are internal bugs, which panic.
+func (a atomic) build(props ...prop) reflect.Value {
+	v := reflect.New(a.bare()).Elem()
+	if len(props) != v.NumField() {
+		panic(fmt.Sprintf("codec: %d properties for the %d fields of %s", len(props), v.NumField(), a.bare()))
+	}
+	set := make([]bool, v.NumField())
+	for _, p := range props {
+		f, ok := v.Type().FieldByName(p.name)
+		if !ok || set[f.Index[0]] {
+			panic(fmt.Sprintf("codec: %s has no field %s, or it is set twice", a.bare(), p.name))
+		}
+		set[f.Index[0]] = true
+		v.Field(f.Index[0]).Set(reflect.ValueOf(p.value))
+	}
+	return v
+}
+
+// prop is one property of a datatype struct's value for build: the name of
+// its field and the value it holds.
+type prop struct {
+	name  string
+	value any
 }
 
 // datatypeStruct reports whether the Go type codegen gives a is a datatype
-// struct, mirrored or PrecisionDecimal's: whether goshape.Atomic.Datatype
+// struct, PrecisionDecimal's included: whether goshape.Atomic.Datatype
 // names its datatype.
 func (a atomic) datatypeStruct() bool {
 	_, ok := goshape.Atomic(a).Datatype()
@@ -197,9 +148,9 @@ func (a atomic) datatypeStruct() bool {
 }
 
 // shapes reports whether v is a struct of the shape of the datatype struct
-// codegen gives a, a datatypeStruct atomic, its name never compared: for a
-// mirrored a, one that converts to the mirror, so of its exported fields
-// exactly, in name, order and Go type, struct tags aside; for
+// codegen gives a, a datatypeStruct atomic, its name never compared: for any
+// but PrecisionDecimal's, one that converts to a's bare type, so of its
+// exported fields exactly, in name, order and Go type, struct tags aside; for
 // PrecisionDecimal's, one decimalShape holds.
 func (a atomic) shapes(v reflect.Type) bool {
 	if a == atomicPrecisionDecimal {
@@ -245,8 +196,8 @@ func (a atomic) reading() reading {
 // spell spells a's Go type for an error message: its own name, []byte for
 // either binary arm (reflect spells it []uint8), or for a datatype struct "D
 // for the datatype struct D of" the datatype's QName and the struct's fields,
-// never the mirror's name, PrecisionDecimal's Value field by its role, its
-// type being the caller's interface.
+// never the bare type's spelling, PrecisionDecimal's Value field by its role,
+// its type being the caller's interface.
 func (a atomic) spell() string {
 	if a == atomicHexBinary || a == atomicBase64Binary {
 		return "[]byte"
@@ -254,7 +205,7 @@ func (a atomic) spell() string {
 	if a == atomicPrecisionDecimal {
 		return "D for the datatype struct D of xs:precisionDecimal (Value I, I a sealed interface whose arms WithPrecisionDecimalArms supplies)"
 	}
-	if !a.mirrored() {
+	if !a.datatypeStruct() {
 		return a.bare().String()
 	}
 	t := a.bare()
@@ -337,15 +288,16 @@ func (a atomic) convert(form string) (reflect.Value, error) {
 	}
 }
 
-// expandedName returns the value of QName's datatype struct, codec's mirror
-// of it, that lexical denotes: the expanded name it resolves to against ctx,
-// the bindings the governing mapping's Parse accepted it under (Datatypes
-// §3.3.18, §3.3.19), Space its namespace name, "" for none, and Local its
-// local part, or the error where it resolves to none.
+// expandedName returns the value of QName's datatype struct, as a value of
+// atomicQName's bare type, that lexical denotes: the expanded name it
+// resolves to against ctx, the bindings the governing mapping's Parse
+// accepted it under (Datatypes §3.3.18, §3.3.19), Space its namespace
+// name, "" for none, and Local its local part, or the error where it
+// resolves to none.
 func expandedName(lexical string, ctx value.Context) (reflect.Value, error) {
 	space, local, ok := xmlqname.Resolve(lexical, ctx.LookupNamespace)
 	if !ok {
 		return reflect.Value{}, errors.New("it resolves to no expanded name against the bindings in scope")
 	}
-	return reflect.ValueOf(qNameMirror{Space: space, Local: local}), nil
+	return atomicQName.build(prop{"Space", space}, prop{"Local", local}), nil
 }

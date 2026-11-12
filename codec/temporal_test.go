@@ -5,13 +5,11 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"go/format"
 	"log/slog"
 	"math/big"
 	"reflect"
 	"strings"
 	"testing"
-	"unicode"
 
 	"github.com/kud360/goxsd8/builtin/strict"
 	"github.com/kud360/goxsd8/internal/goshape"
@@ -116,77 +114,6 @@ type (
 	tW  tDate
 	tWl []tDate
 )
-
-// datatypeTypes are the test's datatype structs, indexed by the atomic each
-// is codegen's struct for.
-var datatypeTypes = map[atomic]reflect.Type{
-	atomicDateTime:          reflect.TypeFor[tDateTime](),
-	atomicDateTimeStamp:     reflect.TypeFor[tDateTimeStamp](),
-	atomicTime:              reflect.TypeFor[tTime](),
-	atomicDate:              reflect.TypeFor[tDate](),
-	atomicGYearMonth:        reflect.TypeFor[tGYearMonth](),
-	atomicGYear:             reflect.TypeFor[tGYear](),
-	atomicGMonthDay:         reflect.TypeFor[tGMonthDay](),
-	atomicGDay:              reflect.TypeFor[tGDay](),
-	atomicGMonth:            reflect.TypeFor[tGMonth](),
-	atomicDuration:          reflect.TypeFor[tDuration](),
-	atomicDayTimeDuration:   reflect.TypeFor[tDayTimeDuration](),
-	atomicYearMonthDuration: reflect.TypeFor[tYearMonthDuration](),
-	atomicQName:             reflect.TypeFor[tQName](),
-}
-
-// structBody renders t, a struct type, as codegen declares it under name:
-// gofmt's "type name struct" with one line per field.
-func structBody(t *testing.T, name string, st reflect.Type) string {
-	t.Helper()
-	var b strings.Builder
-	fmt.Fprintf(&b, "type %s struct {\n", name)
-	for i := range st.NumField() {
-		fmt.Fprintf(&b, "\t%s %s\n", st.Field(i).Name, st.Field(i).Type)
-	}
-	b.WriteString("}\n")
-	out, err := format.Source([]byte(b.String()))
-	if err != nil {
-		t.Fatal(err)
-	}
-	return string(out)
-}
-
-// TestDatatypeMirrorsAreCodegens pins each of codec's thirteen datatype struct
-// mirrors (atomicTypes) to the struct codegen emits for its datatype, in
-// field names, order and Go types, and each of this test's datatype structs
-// to its mirror, so that a mirror drifting from codegen fails here; that
-// PrecisionDecimal's atomic is no mirrored one; and decimalNumerical, the
-// mirror of PrecisionDecimal's numerical arm, to codegen's
-// PrecisionDecimalValueNumerical and to the test's arm.
-func TestDatatypeMirrorsAreCodegens(t *testing.T) {
-	gen := string(generated(t, schemaOf(t, temporalSchema))) + string(generated(t, schemaOf(t, qnameSchema)))
-	numerical := reflect.TypeFor[decimalNumerical]()
-	if want := structBody(t, "PrecisionDecimalValueNumerical", numerical); !strings.Contains(string(generated(t, schemaOf(t, decimalSchema))), want) {
-		t.Errorf("codegen does not declare the mirror of PrecisionDecimal's numerical arm,\n%s", want)
-	}
-	if got, want := structBody(t, "N", reflect.TypeFor[tPDNumerical]()), structBody(t, "N", numerical); got != want {
-		t.Errorf("the test's numerical arm is\n%s\nwhere the mirror is\n%s", got, want)
-	}
-	mirrored := 0
-	for a := atomic(1); int(a) < len(atomicTypes); a++ {
-		if !a.mirrored() {
-			continue
-		}
-		mirrored++
-		local := datatypeLocal(a)
-		name := string(unicode.ToUpper(rune(local[0]))) + local[1:]
-		if want := structBody(t, name, a.bare()); !strings.Contains(gen, want) {
-			t.Errorf("codegen emits\n%s\nwhich does not declare the mirror of xs:%s,\n%s", gen, local, want)
-		}
-		if got, want := structBody(t, name, datatypeTypes[a]), structBody(t, name, a.bare()); got != want {
-			t.Errorf("the test's struct for xs:%s is\n%s\nwhere the mirror is\n%s", local, got, want)
-		}
-	}
-	if mirrored != len(datatypeTypes) {
-		t.Errorf("%d mirrored atomics, want %d", mirrored, len(datatypeTypes))
-	}
-}
 
 // TestTemporalTypesAreCodegens pins temporals, tW and tWl to codegen's R, W
 // and Wl for temporalSchema.
@@ -411,7 +338,7 @@ func TestDecodeTemporalNames(t *testing.T) {
 // dateTime's struct for a dateTimeStamp and the reverse, a list's local field
 // of a named slice type and a ref's of []Date, and a simple root of another
 // struct are each ErrTypeMismatch, no decline; the message spells codegen's
-// struct by its datatype's QName and fields, never by codec's mirror.
+// struct by its datatype's QName and fields, never by codec's bare type.
 func TestDecodeTemporalTypeMismatch(t *testing.T) {
 	type wideMonth struct {
 		Year           big.Int
@@ -485,8 +412,8 @@ func TestDecodeTemporalTypeMismatch(t *testing.T) {
 			if want := ErrTypeMismatch.Error() + ": " + row.want; err == nil || err.Error() != want {
 				t.Errorf("error = %v\nwant    %q", err, want)
 			}
-			if err != nil && strings.Contains(err.Error(), "Mirror") {
-				t.Errorf("error %v names codec's mirror", err)
+			if err != nil && strings.Contains(err.Error(), "struct {") {
+				t.Errorf("error %v spells codec's bare type", err)
 			}
 			var de *DeclineError
 			if !errors.Is(err, ErrTypeMismatch) || errors.As(err, &de) {
@@ -508,7 +435,7 @@ func overDatatype(local string, m func(base value.Mapping) value.Mapping) value.
 // TestDecodeTemporalStageErrors pins item 8 over the datatype structs: a
 // canonical form a datatype struct does not read, or one denoting no value
 // of its datatype, is a conversion error spelling codegen's struct, never
-// codec's mirror; and a yearMonthDuration is converted from the normalized
+// codec's bare type; and a yearMonthDuration is converted from the normalized
 // lexical Parse accepted, never from Canonical, so a backend whose Parse
 // accepts a form no duration grammar reads fails there, though its Canonical
 // renders a readable form.
