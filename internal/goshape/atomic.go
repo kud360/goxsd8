@@ -83,9 +83,7 @@ func (a Atomic) Datatype() (xsd.QName, bool) {
 }
 
 // DatatypeField is one field of a datatype struct, or of PrecisionDecimal's
-// numerical arm, as codegen/doc.go "# Simple types" states it: its Go name and
-// its Go type, which codegen spells by Type.String and codec builds a struct
-// of by reflect.StructOf.
+// numerical arm: its Go name and its Go type.
 type DatatypeField struct {
 	Name string
 	Type reflect.Type
@@ -131,8 +129,7 @@ var datatypeFields = [...][]DatatypeField{
 
 // Fields returns the fields of a's datatype struct in declaration order, a
 // copy the caller may keep; or nil where a's Go type is no datatype struct,
-// and for AtomicPrecisionDecimal, whose struct's one field Value is of the
-// caller's own sealed interface, its numerical arm's fields being
+// and for AtomicPrecisionDecimal, whose numerical arm's fields are
 // NumericalFields'.
 func (a Atomic) Fields() []DatatypeField {
 	if int(a) >= len(datatypeFields) {
