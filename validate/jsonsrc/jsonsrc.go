@@ -155,7 +155,7 @@ func Validate(v *validate.Validator, r io.Reader, opts ...Option) (*validate.Res
 		return nil, fmt.Errorf("jsonsrc: Validate: nil io.Reader")
 	}
 	cfg := newConfig(opts)
-	w := newWalker(cfg.uri, r, v.Schema(), v.ConditionallySelected, v.Governing)
+	w := newWalker(cfg.uri, r, v.Schema(), v.ConditionallySelected, v.Governing, v.HandedDown)
 	root, err := w.root()
 	if err != nil {
 		return nil, err
@@ -258,6 +258,10 @@ type walker struct {
 	// definition·, which every type the mapping finds may govern an element
 	// is read off (walker.governedTypes, walker.governedAt).
 	governance governingFunc
+	// handed is validate.Validator.HandedDown, the engine's own composition of
+	// the [inherited attributes] an element hands its children, which
+	// walker.handDown composes under each type that may govern the element.
+	handed handedFunc
 	// err is the walk's single latched fault, a malformed document, a fault
 	// reading the input or a decline. Every cursor reports this one field
 	// and none keeps a copy of it (STYLE D3).
@@ -271,13 +275,16 @@ type walker struct {
 // governingFunc is the shape of validate.Validator.Governing.
 type governingFunc func(parent *xsd.ComplexType, a xsd.Attribution, name xsd.QName, instance xsd.TypeDefinition, selected func(xsd.TypeTable) (xsd.TypeDefinitionOrRef, bool)) (xsd.ElementDeclaration, bool, xsd.TypeDefinition, bool, error)
 
-func newWalker(uri string, r io.Reader, schema validate.SchemaView, selected func(xsd.TypeTable, []validate.Attribute, []validate.Attribute) (xsd.TypeDefinitionOrRef, bool), governance governingFunc) *walker {
+// handedFunc is the shape of validate.Validator.HandedDown.
+type handedFunc func(governing xsd.TypeDefinition, at xsderr.Loc, attributes, inherited []validate.Attribute) []validate.Attribute
+
+func newWalker(uri string, r io.Reader, schema validate.SchemaView, selected func(xsd.TypeTable, []validate.Attribute, []validate.Attribute) (xsd.TypeDefinitionOrRef, bool), governance governingFunc, handed handedFunc) *walker {
 	pos := newPositions(r)
 	dec := json.NewDecoder(pos)
 	// A number's lexical form is its source text, never a float64 round trip:
 	// 12345678901234567890 under xs:integer is that integer.
 	dec.UseNumber()
-	return &walker{dec: dec, pos: pos, uri: uri, schema: schema, selected: selected, governance: governance, notes: map[noteAt]note{}}
+	return &walker{dec: dec, pos: pos, uri: uri, schema: schema, selected: selected, governance: governance, handed: handed, notes: map[noteAt]note{}}
 }
 
 // token pulls the next token and the location it starts at.
@@ -1635,7 +1642,7 @@ func (w *walker) objectElement(m elementMember, loc xsderr.Loc, key string, v va
 			return nil, err
 		}
 	}
-	o.handed, o.handedKnown = w.handDown(attrs, o, inherited, known)
+	o.handed, o.handedKnown = w.handDown(attrs, e.loc, o, inherited, known)
 	e.kids = &members{w: w, owner: e, object: o, ahead: ahead}
 	return e, nil
 }

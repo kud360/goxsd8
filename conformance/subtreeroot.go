@@ -549,13 +549,13 @@ func (g *subtreeGate) complex(start xml.StartElement, t xsd.ComplexType, nilled 
 
 // handedDown is the [inherited attributes] of every element [[child]] of the
 // element whose start tag is start, whose ·governing type definition· is t and
-// whose own [inherited attributes] are inherited (§3.3.5.6,
-// e-inherited_attributes) — validate's walk.handedDown, composed in its order
-// and with its shadowing: first the element's own attributes that are
-// ·potentially inherited· (key-p-inherited, inheritable), then each ·defaulted
-// attribute· (key-dflt-att) whose use's {inheritable} is true, then each member
-// of inherited whose ·expanded name· none of those has. An attribute that is not
-// ·potentially inherited· shadows nothing.
+// whose own [inherited attributes] are inherited (§3.3.5.6, e-inherited_attributes) —
+// validate.Validator.HandedDown's composition, in its order and with its shadowing:
+// first the element's own attributes that are ·potentially inherited·
+// (key-p-inherited, inheritable), then each ·defaulted attribute· (key-dflt-att)
+// whose use's {inheritable} is true, then each member of inherited whose ·expanded
+// name· none of those has. An attribute that is not ·potentially inherited· shadows
+// nothing.
 //
 // A ·laxly assessed· element reaches here with t ·xs:anyType·, whose empty
 // {attribute uses} and lax {attribute wildcard} (§3.4.7) leave inheritable the

@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"slices"
+	"strconv"
 
 	"github.com/kud360/goxsd8/xsd"
 	"github.com/kud360/goxsd8/xsderr"
@@ -31,6 +32,86 @@ func SubstitutionSum(schema *xsd.Schema, decl xsd.ElementDeclaration) (members [
 		return nil, false
 	}
 	return members, true
+}
+
+// GoverningType is one of an element declaration's governing types
+// (GoverningTypes): Type, resolved, and Slot, the slot it is first held at:
+// the 1-based position of a {type table} alternative in {alternatives}, 0 for
+// the table's {default type definition}, and -1 for the {type definition} of
+// a declaration with no {type table}.
+type GoverningType struct {
+	Type xsd.TypeDefinition
+	Slot int
+}
+
+// errorTypeName is the expanded name of xs:error (§3.16.7.3).
+var errorTypeName = xsd.QName{Space: xsd.XMLSchemaNS, Local: "error"}
+
+// GoverningTypes returns the governing types codegen/doc.go "# Element
+// declarations" gives the element declaration decl, in its order and by its
+// identity: the {type definition} of each of its {type table}'s alternatives
+// in order, then that of its {default type definition} (§3.3.4.1
+// key-selected-type, key-cta-select), or, with no {type table}, its {type
+// definition} alone, each resolved through [xsd.Schema.ResolvedType]. A {type
+// table} slot holding xs:error, matched by name, gives nothing. A slot holding
+// a complex type with {abstract} true gives the types members returns for it
+// in its place, its error returned as is. Each type is kept at its first slot
+// only, two types being one exactly when both are named and the names are
+// equal, so two anonymous types are never one. errorSlot reports whether a
+// slot held xs:error. A slot that does not resolve is a plain error naming
+// the slot, decl and decl's Loc, never a decline: Finalize resolves every
+// {type definition} slot (src-resolve).
+func GoverningTypes(schema *xsd.Schema, decl xsd.ElementDeclaration, members func(xsd.ComplexType) ([]xsd.TypeDefinition, error)) (types []GoverningType, errorSlot bool, err error) {
+	type slotRef struct {
+		slot int
+		ref  xsd.TypeDefinitionOrRef
+	}
+	slots := []slotRef{{-1, decl.TypeDefinition()}}
+	table, hasTable := decl.TypeTable()
+	if hasTable {
+		slots = nil
+		for i, alt := range table.Alternatives() {
+			slots = append(slots, slotRef{i + 1, alt.TypeDefinition()})
+		}
+		slots = append(slots, slotRef{0, table.DefaultTypeDefinition().TypeDefinition()})
+	}
+	for _, s := range slots {
+		td, ok := schema.ResolvedType(s.ref)
+		if !ok {
+			return nil, false, fmt.Errorf("%s of element %s at %s: its {type definition} does not resolve", SlotName(s.slot), decl.Name(), decl.Loc())
+		}
+		if hasTable && td.Name() == errorTypeName {
+			errorSlot = true
+			continue
+		}
+		given := []xsd.TypeDefinition{td}
+		if ct, isComplex := td.(xsd.ComplexType); isComplex && ct.Abstract() {
+			given, err = members(ct)
+			if err != nil {
+				return nil, false, err
+			}
+		}
+		for _, td := range given {
+			if td.Name() != (xsd.QName{}) && slices.ContainsFunc(types, func(seen GoverningType) bool { return seen.Type.Name() == td.Name() }) {
+				continue
+			}
+			types = append(types, GoverningType{Type: td, Slot: s.slot})
+		}
+	}
+	return types, errorSlot, nil
+}
+
+// SlotName is how a decline or a header names the slot GoverningType.Slot
+// encodes: "{type table} alternative N", "{default type definition}" or
+// "{type definition}".
+func SlotName(slot int) string {
+	switch {
+	case slot > 0:
+		return "{type table} alternative " + strconv.Itoa(slot)
+	case slot == 0:
+		return "{default type definition}"
+	}
+	return "{type definition}"
 }
 
 // BasicMembers returns the basic members of the union simple type st
