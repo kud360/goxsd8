@@ -3732,11 +3732,8 @@ func inScopeBindings(elem *Element) []xsd.NamespaceBinding {
 // values — takes bindQName directly: src-resolve governs ·resolution·, so
 // charging clause 4 there would reject a name the spec never asks to resolve.
 //
-// attr is the schema-document attribute of elem that lexical was read from, or
-// whose whitespace-separated list lexical is one item of. Every rejection here
-// and in bindQName is located at attr's name, not at elem's start tag nor at the
-// list item, and the lexical rejection names attr's local name as the construct
-// the author wrote (STYLE E1, #3463).
+// attr is as bindQName takes it, and licensedNamespace's rejection is located at
+// attr's name too.
 func (p *producer) resolveQName(elem *Element, lexical string, attr xmltree.Attribute) (xsd.QName, error) {
 	qn, err := p.bindQName(elem, lexical, attr)
 	if err != nil {
@@ -3755,6 +3752,12 @@ func (p *producer) resolveQName(elem *Element, lexical string, attr xmltree.Attr
 // unqualifiedRefNS: the no-namespace name (src-resolve clause 4.1.1) normally,
 // the assembly's namespace under chameleon coercion, deliberately never the
 // schema's own targetNamespace otherwise.
+//
+// attr is the schema-document attribute of elem that lexical was read from, or
+// whose whitespace-separated list lexical is one item of. Both rejections are
+// located at attr's name, not at elem's start tag nor at the list item, and the
+// lexical one names attr's local name as the construct the author wrote
+// (STYLE E1, #3463).
 //
 // Three lexical shapes are rejected before any of that — split out into
 // qnameLexical, which conditional inclusion shares — charged cvc-datatype-valid

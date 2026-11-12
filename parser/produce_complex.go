@@ -2566,9 +2566,8 @@ func (p *producer) rejectLocalElementTargetNamespace(el *Element) error {
 // no name at all and so answers false. That is the reading src-element clause
 // 4.3.2 and src-attribute clause 6.3.2 ask for, not a swallowed fault: the
 // binding error belongs to el, whose own producer charges it at el's base
-// attribute,
-// and produceComplexContent resolves base= BEFORE descending into the content
-// model and the attribute uses that reach both callers here.
+// attribute, and produceComplexContent resolves base= BEFORE descending into
+// the content model and the attribute uses that reach both callers here.
 func (p *producer) baseMatchesAnyType(el *Element) bool {
 	baseAttr, hasBase := el.attr("base")
 	if !hasBase {
