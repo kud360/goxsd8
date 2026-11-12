@@ -299,11 +299,10 @@ var ErrTypeMismatch = errors.New("codec: T is not the type codegen emits for the
 //     its {simple type definition}, examined as the document element's simple
 //     type is, whose construct the content declines by, or, for element-only
 //     content, its {particle}'s model group, an all group declining where
-//     codegen does not splice it, and a sequence declining where codegen
-//     splices it though it occurs other than exactly once (codegen's package
-//     doc, "# Particles"): of a <group ref>, the compositor is the referenced
-//     definition's {model group}'s and the occurrence the referring
-//     particle's (§3.7.2 declare-namedModelGroup).
+//     codegen does not splice it (codegen's package doc, "# Particles"): of a
+//     <group ref>, the compositor is the referenced definition's {model
+//     group}'s and the occurrence the referring particle's (§3.7.2
+//     declare-namedModelGroup).
 //   - Each particle of the complex type's content in order, the whole of one
 //     before the next, but of a flattened one, which the sixth bullet examines
 //     in this bullet's place, and of a choice held in an occurrence field
@@ -3584,11 +3583,9 @@ const (
 // arm, how codegen holds it, or the construct Decode declines in their place,
 // in its doc's item 5 order. Each compositor asks codegen's questions in
 // codegen's order (codegen/emit.go contentFields, then groupField). An all
-// group is armOnce, its {min occurs} 0 or 1 alike, where goshape.Splices
-// answers true for it, and declines otherwise. A sequence goshape.Splices
-// answers true for is armOnce where it occurs exactly once (exactlyOnce) and
-// otherwise, {min occurs} 0 over an emptiable group, declines as
-// constructSplicedSequence. Any other sequence or choice is armFlat where
+// group or a sequence goshape.Splices answers true for is armOnce, its
+// occurrence 0..1 or 1 alike; an all group it answers false for declines as
+// constructAllOccurs. Any other sequence or choice is armFlat where
 // goshape.Flattens answers true for it, a choice occurring exactly once
 // included, and otherwise armOnce for a choice occurring exactly once and
 // armOccurrence for the rest. Nothing recomputes arm: bindComplex reads
@@ -3620,9 +3617,6 @@ func contentGroup(schema *xsd.Schema, content xsd.ElementContent, typeSubject st
 		splice, err := goshape.Splices(schema, group, occurs)
 		if err != nil {
 			return xsd.Particle{}, xsd.ModelGroup{}, 0, 0, fmt.Errorf("codec: %s: %w", typeSubject, err)
-		}
-		if splice && !exactlyOnce(occurs) {
-			return xsd.Particle{}, xsd.ModelGroup{}, 0, constructSplicedSequence, nil
 		}
 		if splice {
 			return content.Particle, group, armOnce, 0, nil
