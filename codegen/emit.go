@@ -14,11 +14,8 @@ import (
 	"github.com/kud360/goxsd8/xsderr"
 )
 
-// The names of the components the slice reads by identity.
-var (
-	anyTypeName   = xsd.QName{Space: xsd.XMLSchemaNS, Local: "anyType"}
-	errorTypeName = xsd.QName{Space: xsd.XMLSchemaNS, Local: "error"}
-)
+// anyTypeName is the name of xs:anyType, which the slice reads by identity.
+var anyTypeName = xsd.QName{Space: xsd.XMLSchemaNS, Local: "anyType"}
 
 // The math/big types "# Simple types" maps to; a field or named type of
 // either makes the generated file import math/big (analysis.usesBig).
@@ -781,13 +778,13 @@ type branchSlot interface {
 type alternativeSlot int
 
 func (s alternativeSlot) anonymous() string { return "alternative" + strconv.Itoa(int(s)) }
-func (s alternativeSlot) name() string      { return "{type table} alternative " + strconv.Itoa(int(s)) }
+func (s alternativeSlot) name() string      { return goshape.SlotName(int(s)) }
 
 // defaultSlot is a {type table}'s {default type definition}.
 type defaultSlot struct{}
 
 func (defaultSlot) anonymous() string { return "default" }
-func (defaultSlot) name() string      { return "{default type definition}" }
+func (defaultSlot) name() string      { return goshape.SlotName(0) }
 
 // declaredSlot is the {type definition} of a declaration with no {type table}.
 // No branch is named from its anonymous name: an anonymous {type definition} is
@@ -797,62 +794,39 @@ func (defaultSlot) name() string      { return "{default type definition}" }
 type declaredSlot struct{}
 
 func (declaredSlot) anonymous() string { return "typeDefinition" }
-func (declaredSlot) name() string      { return "{type definition}" }
+func (declaredSlot) name() string      { return goshape.SlotName(-1) }
 
 // governingTypes returns the types the package doc's "# Element declarations"
-// lets govern an instance of the element declaration decl, in its order and by
-// its identity, and sum, true exactly when "# Element declarations" gives decl
-// a sealed interface over them. The slots are decl's {type table} alternatives
-// in order then its {default type definition} (§3.3.4.1 key-selected-type,
-// key-cta-select), or, with no {type table}, its {type definition} alone, each
-// resolved through [xsd.Schema.ResolvedType]. A {type table} slot holding
-// xs:error, matched by name (errorTypeName), gives nothing. A slot holding a
-// complex type with {abstract} true gives its members (abstractMembers) in its
-// place. Each type is kept at its first slot only, compared by name, so a
-// {default type definition} that is a substitution-group head's type and an
-// alternative naming that same type are one type, which xsd's
-// typeDefinitionsEquivalent would call two, and two anonymous types are never
-// one. sum is false for exactly one type, which declaredType returns in place
-// of the {type definition}, and true for zero or two or more. A slot that does
-// not resolve is an error, never a decline: finalize resolves every {type
-// definition} slot (src-resolve); so is abstractMembers' error.
+// lets govern an instance of the element declaration decl, goshape.GoverningTypes'
+// answer with a slot holding a complex type with {abstract} true giving its
+// members (abstractMembers) in its place, each with the branchSlot it is first
+// held at, and sum, true exactly when "# Element declarations" gives decl a
+// sealed interface over them: false for exactly one type, which declaredType
+// returns in place of the {type definition}, and true for zero or two or more.
+// goshape.GoverningTypes' error and abstractMembers' are returned, never a
+// decline.
 func (e *emitter) governingTypes(decl xsd.ElementDeclaration) (branches []tableBranch, sum bool, err error) {
-	type slotRef struct {
-		slot branchSlot
-		ref  xsd.TypeDefinitionOrRef
+	types, _, err := goshape.GoverningTypes(e.schema, decl, func(ct xsd.ComplexType) ([]xsd.TypeDefinition, error) {
+		return e.abstractMembers(decl, ct)
+	})
+	if err != nil {
+		return nil, false, err
 	}
-	slots := []slotRef{{declaredSlot{}, decl.TypeDefinition()}}
-	table, hasTable := decl.TypeTable()
-	if hasTable {
-		slots = nil
-		for i, alt := range table.Alternatives() {
-			slots = append(slots, slotRef{alternativeSlot(i + 1), alt.TypeDefinition()})
-		}
-		slots = append(slots, slotRef{defaultSlot{}, table.DefaultTypeDefinition().TypeDefinition()})
-	}
-	for _, s := range slots {
-		td, ok := e.schema.ResolvedType(s.ref)
-		if !ok {
-			return nil, false, fmt.Errorf("%s of element %s at %s: its {type definition} does not resolve", s.slot.name(), decl.Name(), decl.Loc())
-		}
-		if hasTable && td.Name() == errorTypeName {
-			continue
-		}
-		types := []xsd.TypeDefinition{td}
-		if ct, isComplex := td.(xsd.ComplexType); isComplex && ct.Abstract() {
-			types, err = e.abstractMembers(decl, ct)
-			if err != nil {
-				return nil, false, err
-			}
-		}
-		for _, td := range types {
-			if td.Name() != (xsd.QName{}) && slices.ContainsFunc(branches, func(seen tableBranch) bool { return seen.td.Name() == td.Name() }) {
-				continue
-			}
-			branches = append(branches, tableBranch{slot: s.slot, td: td})
-		}
+	for _, g := range types {
+		branches = append(branches, tableBranch{slot: slotOf(g.Slot), td: g.Type})
 	}
 	return branches, len(branches) != 1, nil
+}
+
+// slotOf is the branchSlot goshape.GoverningType.Slot encodes.
+func slotOf(slot int) branchSlot {
+	switch {
+	case slot > 0:
+		return alternativeSlot(slot)
+	case slot == 0:
+		return defaultSlot{}
+	}
+	return declaredSlot{}
 }
 
 // abstractMembers returns the members "# Element declarations" gives the

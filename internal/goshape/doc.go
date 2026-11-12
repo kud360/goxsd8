@@ -7,6 +7,9 @@
 // # Contract
 //
 //	func SubstitutionSum(schema *xsd.Schema, decl xsd.ElementDeclaration) (members []xsd.ElementDeclaration, sum bool)
+//	type GoverningType struct{ Type xsd.TypeDefinition; Slot int }
+//	func GoverningTypes(schema *xsd.Schema, decl xsd.ElementDeclaration, members func(xsd.ComplexType) ([]xsd.TypeDefinition, error)) (types []GoverningType, errorSlot bool, err error)
+//	func SlotName(slot int) string
 //	func BasicMembers(r xsd.TypeResolver, st *xsd.SimpleType) ([]*xsd.SimpleType, error)
 //	func Splices(schema *xsd.Schema, group xsd.ModelGroup, occurs xsd.Occurs) (bool, error)
 //	func Flattens(schema *xsd.Schema, group xsd.ModelGroup, occurs xsd.Occurs) (bool, error)
@@ -34,11 +37,11 @@
 //
 // The rules are those codegen's package doc states, each in its own section
 // ("# Simple types", "# Complex types", "# Substitution groups",
-// "# Particles", "# Attributes"): those sections own them, and this package is
-// their one implementation. TermEmptiable, ExactlyOnce and ModelGroupTerm are
-// the reads those rules are made from, exported for the packages that make
-// the same reads around them: all three for codegen, and ExactlyOnce and
-// ModelGroupTerm for codec.
+// "# Particles", "# Attributes", "# Element declarations"): those sections
+// own them, and this package is their one implementation. TermEmptiable,
+// ExactlyOnce and ModelGroupTerm are the reads those rules are made from,
+// exported for the packages that make the same reads around them: all three
+// for codegen, and ExactlyOnce and ModelGroupTerm for codec.
 //
 // It imports xsd, xsderr and the standard library.
 package goshape
