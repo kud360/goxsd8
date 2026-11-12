@@ -2629,7 +2629,7 @@ func (p *producer) constructUnionType(name xsd.QName, elem, union *Element) (*xs
 // costs no resolution ladder here and its src-resolve clause 1.1 rejection is
 // charged once, at finalize.
 func (p *producer) unionMembers(union *Element) ([]xsd.SimpleTypeOrRef, error) {
-	memberAttr, _ := union.attr("memberTypes") // absent: no items, so no read of memberAttr
+	memberAttr, _ := union.attr("memberTypes") // absent: the zero Attribute holds no items
 	items := xmlSpaceFields(memberAttr.Value())
 	inlines := childElements(union, xsd.XMLSchemaNS, "simpleType")
 	if len(items) == 0 && len(inlines) == 0 {
