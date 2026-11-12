@@ -105,8 +105,6 @@ func TestDecodeDeclines(t *testing.T) {
 		{"an extension merging two optional alls of required elements", `<xs:complexType name="t"><xs:all minOccurs="0"><xs:element name="a" type="xs:string"/></xs:all></xs:complexType>
 			<xs:complexType name="t2"><xs:complexContent><xs:extension base="s:t"><xs:all minOccurs="0"><xs:element name="b" type="xs:int"/></xs:all></xs:extension></xs:complexContent></xs:complexType>
 			<xs:element name="r" type="s:t2"/>`, "", a + `<s:b>1</s:b>`, constructAllOccurs, 1, 1},
-		{"optional content sequence over an emptiable group, which codegen splices", root(`<xs:sequence minOccurs="0"><xs:element name="a" type="xs:string" minOccurs="0"/><xs:element name="b" type="xs:string" minOccurs="0"/></xs:sequence>`),
-			"", a, constructSplicedSequence, 1, 1},
 		{"nested choice occurring twice", sequenceOf(`<xs:choice maxOccurs="2"><xs:element name="a" type="xs:string"/></xs:choice>`), "", a, constructNestedGroup, 1, 1},
 		{"optional nested choice", sequenceOf(`<xs:element name="a" type="xs:string"/><xs:choice minOccurs="0"><xs:element name="b" type="xs:string"/><xs:element name="c" type="xs:string"/></xs:choice>`),
 			"", a, constructNestedGroup, 1, 1},

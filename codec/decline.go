@@ -99,7 +99,6 @@ const (
 	constructNillable
 	constructMixedContent
 	constructAllOccurs
-	constructSplicedSequence
 	constructNestedGroup
 	constructAbstractTypeElement
 	constructSharedName
@@ -116,7 +115,6 @@ var constructNames = [...]string{
 	constructNillable:            "an element declaration with {nillable} true",
 	constructMixedContent:        "mixed content",
 	constructAllOccurs:           "a content all group with {min occurs} 0 whose model group is not emptiable",
-	constructSplicedSequence:     "a content sequence with {min occurs} 0 and {max occurs} 1 whose model group is emptiable",
 	constructNestedGroup:         "a nested model group particle",
 	constructAbstractTypeElement: "an element declaration whose complex {type definition} has {abstract} true",
 	constructSharedName:          "two particles taking one expanded name, each by its own element declaration or a member of its substitution group",
