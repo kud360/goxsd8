@@ -84,7 +84,7 @@ type construct uint8
 // element's declaration, its type, its content, each particle in order, its
 // attribute uses in order, and the instance. A particle's complex type,
 // examined at the particle, declines by the same constructs from
-// constructMixedContent on, and by constructAbstractTypeElement, which sits
+// constructAllOccurs on, and by constructAbstractTypeElement, which sits
 // with the particle's though the document element's type declines by it too,
 // ahead of its content. The two of a simple type, constructOtherPrimitive
 // and constructSharedVariant, sit with the particle's, though a document
@@ -98,7 +98,6 @@ type construct uint8
 const (
 	constructTypeTable construct = iota + 1
 	constructNillable
-	constructMixedContent
 	constructAllOccurs
 	constructNestedGroup
 	constructAbstractTypeElement
@@ -114,7 +113,6 @@ const (
 var constructNames = [...]string{
 	constructTypeTable:           "an element declaration with a {type table}",
 	constructNillable:            "an element declaration with {nillable} true",
-	constructMixedContent:        "mixed content",
 	constructAllOccurs:           "a content all group with {min occurs} 0 whose model group is not emptiable",
 	constructNestedGroup:         "a nested model group particle",
 	constructAbstractTypeElement: "an element declaration whose complex {type definition} has {abstract} true",

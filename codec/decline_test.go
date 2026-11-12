@@ -52,13 +52,9 @@ func TestDecodeDeclines(t *testing.T) {
 		{"type table on a nillable document element of type xs:anyType", `<xs:element name="r" nillable="true"><xs:alternative test="@k" type="xs:anyType"/></xs:element>`, "", a, constructTypeTable, 1, 1},
 		{"type table on a local element of type xs:anyType", sequenceOf(`<xs:element name="a"><xs:alternative test="@k" type="xs:anyType"/></xs:element>`), "", a, constructTypeTable, 1, 1},
 		{"type table on a nillable local element of type xs:anyType", sequenceOf(`<xs:element name="a" type="xs:anyType" nillable="true"><xs:alternative test="@k" type="xs:anyType"/></xs:element>`), "", a, constructTypeTable, 1, 1},
-		{"document element of a mixed restriction of xs:anyType, which declines by its own content", `<xs:complexType name="dt" mixed="true"><xs:complexContent><xs:restriction base="xs:anyType"><xs:sequence><xs:element name="b" type="xs:string" minOccurs="0"/></xs:sequence></xs:restriction></xs:complexContent></xs:complexType>` +
-			`<xs:element name="r" type="s:dt"/>`, "", "t", constructMixedContent, 1, 1},
 		{"nillable", `<xs:element name="r" nillable="true"><xs:complexType><xs:sequence><xs:element name="a" type="xs:string"/></xs:sequence></xs:complexType></xs:element>`,
 			"", a, constructNillable, 1, 1},
 		{"nillable local element with a fixed value", sequenceOf(`<xs:element name="a" type="xs:string" nillable="true" fixed="x"/>`), "", `<s:a>x</s:a>`, constructNillable, 1, 1},
-		{"document element of mixed content with a default", `<xs:element name="r" default="d"><xs:complexType mixed="true"><xs:sequence><xs:element name="a" type="xs:string" minOccurs="0"/></xs:sequence></xs:complexType></xs:element>`,
-			"", "", constructMixedContent, 1, 1},
 		{"simple root of a union of xs:string and xs:token", `<xs:element name="r"><xs:simpleType><xs:union memberTypes="xs:string xs:token"/></xs:simpleType></xs:element>`, "", "1.0", constructSharedVariant, 1, 1},
 		{"simple root of a list of a union of xs:string and xs:token", `<xs:element name="r"><xs:simpleType><xs:list><xs:simpleType><xs:union memberTypes="xs:string xs:token"/></xs:simpleType></xs:list></xs:simpleType></xs:element>`, "", "1.0 2.0", constructSharedVariant, 1, 1},
 		{"document element of an abstract complex type of empty content, under xsi:type", `<xs:complexType name="ab" abstract="true"/>
@@ -69,10 +65,6 @@ func TestDecodeDeclines(t *testing.T) {
 			<xs:element name="r" type="s:ab"/>`, ` xsi:type="s:cc"`, `<s:a>x</s:a>`, constructAbstractTypeElement, 1, 1},
 		{"simple content of a union of xs:string and xs:token", root(`<xs:simpleContent><xs:extension base="s:st"/></xs:simpleContent>`) +
 			`<xs:simpleType name="st"><xs:union memberTypes="xs:string xs:token"/></xs:simpleType>`, "", "x", constructSharedVariant, 1, 1},
-		{"mixed content", `<xs:element name="r"><xs:complexType mixed="true"><xs:sequence><xs:element name="a" type="xs:string"/></xs:sequence></xs:complexType></xs:element>`,
-			"", a, constructMixedContent, 1, 1},
-		{"mixed content with {open content}, which declines as mixed", `<xs:element name="r"><xs:complexType mixed="true"><xs:openContent><xs:any namespace="##other" processContents="lax"/></xs:openContent><xs:sequence><xs:element name="a" type="xs:string"/></xs:sequence></xs:complexType></xs:element>`,
-			"", a, constructMixedContent, 1, 1},
 		{"an optional <group ref> content particle to a non-emptiable all group", `<xs:group name="g"><xs:all><xs:element name="a" type="xs:string"/></xs:all></xs:group>` + root(`<xs:group ref="s:g" minOccurs="0"/>`),
 			"", a, constructAllOccurs, 1, 1},
 		{"choice alternatives sharing a branch shape, refs to a and A", `<xs:element name="a" type="xs:string"/><xs:element name="A" type="xs:string"/>` + root(`<xs:choice><xs:element ref="s:a"/><xs:element ref="s:A"/></xs:choice>`),
@@ -109,16 +101,14 @@ func TestDecodeDeclines(t *testing.T) {
 			"", a + `<s:b>y</s:b>` + a, constructSharedName, 1, 1},
 		{"choice alternatives sharing a branch shape, two wildcards occurring once", root(`<xs:choice><xs:any namespace="##local"/><xs:any namespace="##other" processContents="lax"/></xs:choice>`),
 			"", `<o:w xmlns:o="urn:o"/>`, constructSharedBranch, 1, 1},
-		{"a wildcard particle in mixed content", `<xs:element name="r"><xs:complexType mixed="true"><xs:sequence><xs:any processContents="lax"/></xs:sequence></xs:complexType></xs:element>`,
-			"", "t" + a, constructMixedContent, 1, 1},
 		{"element ref to a head whose group holds a nillable member", `<xs:element name="a" type="xs:string"/><xs:element name="m" type="xs:string" nillable="true" substitutionGroup="s:a"/>` + sequenceOf(`<xs:element ref="s:a"/>`),
 			"", a, constructNillable, 1, 1},
 		{"element ref to a group of two declining members, the nillable one first", `<xs:complexType name="ct" mixed="true"><xs:sequence/></xs:complexType><xs:element name="h" type="s:ct" abstract="true"/>
 			<xs:element name="m" type="s:ct" nillable="true" substitutionGroup="s:h"/><xs:element name="n" type="s:ct" substitutionGroup="s:h"/>` + sequenceOf(`<xs:element ref="s:h"/>`),
 			"", `<s:n/>`, constructNillable, 1, 1},
-		{"element ref to a group of two declining members, the one of mixed content first", `<xs:complexType name="ct" mixed="true"><xs:sequence/></xs:complexType><xs:element name="h" type="s:ct" abstract="true"/>
+		{"element ref to a group whose member of mixed content decodes, its later nillable member declining", `<xs:complexType name="ct" mixed="true"><xs:sequence/></xs:complexType><xs:element name="h" type="s:ct" abstract="true"/>
 			<xs:element name="n" type="s:ct" substitutionGroup="s:h"/><xs:element name="m" type="s:ct" nillable="true" substitutionGroup="s:h"/>` + sequenceOf(`<xs:element ref="s:h"/>`),
-			"", `<s:n/>`, constructMixedContent, 1, 1},
+			"", `<s:n/>`, constructNillable, 1, 1},
 		{"element ref to a group whose members share a branch shape, a and A", `<xs:element name="h" type="xs:string" abstract="true"/>
 			<xs:element name="a" type="xs:string" substitutionGroup="s:h"/><xs:element name="A" type="xs:string" substitutionGroup="s:h"/>` + sequenceOf(`<xs:element ref="s:h"/>`),
 			"", a, constructSharedBranch, 1, 1},
@@ -135,10 +125,6 @@ func TestDecodeDeclines(t *testing.T) {
 		{"element ref to a head of a union of xs:string and xs:token", `<xs:element name="h"><xs:simpleType><xs:union memberTypes="xs:string xs:token"/></xs:simpleType></xs:element>` + sequenceOf(`<xs:element ref="s:h"/>`), "", `<s:h>1.0</s:h>`, constructSharedVariant, 1, 1},
 		{"element ref sharing a local particle's expanded name", `<xs:element name="a" type="xs:string"/>` + sequenceOf(`<xs:element name="a" type="xs:string"/><xs:element ref="s:a"/>`),
 			"", a + a, constructSharedName, 1, 1},
-		{"local element of a mixed restriction of xs:anyType, which declines by its own content", `<xs:complexType name="dt" mixed="true"><xs:complexContent><xs:restriction base="xs:anyType"><xs:sequence><xs:element name="b" type="xs:string" minOccurs="0"/></xs:sequence></xs:restriction></xs:complexContent></xs:complexType>` +
-			sequenceOf(`<xs:element name="a" type="s:dt"/>`), "", `<s:a>t</s:a>`, constructMixedContent, 1, 1},
-		{"local element of emptiable mixed content with a default", sequenceOf(`<xs:element name="a" default="d"><xs:complexType mixed="true"><xs:sequence><xs:element name="b" type="xs:string" minOccurs="0"/></xs:sequence></xs:complexType></xs:element>`),
-			"", `<s:a/>`, constructMixedContent, 1, 1},
 		{"local element of simple content of a union of xs:string and xs:token, ahead of its attribute uses", `<xs:import namespace="http://www.w3.org/2001/XMLSchema-instance"/><xs:simpleType name="st"><xs:union memberTypes="xs:string xs:token"/></xs:simpleType>` +
 			sequenceOf(`<xs:element name="a"><xs:complexType><xs:simpleContent><xs:extension base="s:st"><xs:attribute ref="xsi:type"/><xs:anyAttribute processContents="lax"/></xs:extension></xs:simpleContent></xs:complexType></xs:element>`),
 			"", a, constructSharedVariant, 1, 1},
@@ -465,9 +451,8 @@ func TestDecodeUndeclaredRootXsiType(t *testing.T) {
 // TestDeclineConstruct pins DeclineError.Construct's contract: two declines
 // of one construct, from two schemas and declining sites, have equal
 // Constructs, and declines of two different constructs have different ones.
-// One row per construct group: the declaration, the content, by mixed content
-// and by a content all group codegen does not splice, a particle, a simple
-// type and xsi:type.
+// One row per construct group: the declaration, the content, by a content all
+// group codegen does not splice, a particle, a simple type and xsi:type.
 func TestDeclineConstruct(t *testing.T) {
 	const a = `<s:a>x</s:a>`
 	type decl struct{ decls, attrs, content string }
@@ -478,10 +463,6 @@ func TestDeclineConstruct(t *testing.T) {
 		{"declaration", [2]decl{
 			{`<xs:element name="r" nillable="true"><xs:complexType><xs:sequence><xs:element name="a" type="xs:string"/></xs:sequence></xs:complexType></xs:element>`, "", a},
 			{sequenceOf(`<xs:element name="a" type="xs:string" nillable="true"/>`), "", a},
-		}},
-		{"mixed content", [2]decl{
-			{`<xs:element name="r"><xs:complexType mixed="true"><xs:sequence><xs:element name="a" type="xs:string"/></xs:sequence></xs:complexType></xs:element>`, "", a},
-			{`<xs:complexType name="ct" mixed="true"><xs:choice><xs:element name="b" type="xs:string"/><xs:element name="a" type="xs:string"/></xs:choice></xs:complexType><xs:element name="r" type="s:ct"/>`, "", a},
 		}},
 		{"content all group", [2]decl{
 			{root(`<xs:all minOccurs="0"><xs:element name="a" type="xs:string"/></xs:all>`), "", a},
