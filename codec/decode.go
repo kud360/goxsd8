@@ -3631,7 +3631,9 @@ func (s occurrenceSink) put(p *pipeline, r *xmltree.Reader, start *xmltree.Start
 // itemOf returns the item of field, o's occurrence field, that the child
 // element start falls in, the current one, or a new one where opens: for the
 // slice its last element, appended where opens; for the pointer its pointee,
-// allocated where opens; and for the bare interface the field itself. A
+// allocated where opens; and for the bare interface the field itself. The
+// first child a fill puts to field opens, its partition being fresh
+// (fillState.partition, partition.next), so a current item exists. A
 // second item of the pointer or the bare interface is a defect of Decode's,
 // a plain error: validation charged it first (cvc-accept clause 3).
 func (o *nestedOccurrence) itemOf(field reflect.Value, opens bool, start *xmltree.StartElement) (reflect.Value, error) {

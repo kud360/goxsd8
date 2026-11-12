@@ -29,7 +29,9 @@ import (
 // type t; noOnlySchema's sequence(choice(a){1,2}); noExtSchema's an extension
 // of sequence(a){1,2} adding sequence(b); noAltFirstSchema's the content
 // choice(sequence(a){1,2}, b); noRefChoiceSchema's sequence(<group ref>{1,2}),
-// the group choice(a); and noSeqOneSchema's sequence(a, sequence(b){1,2}).
+// the group choice(a); noSeqOneSchema's sequence(a, sequence(b){1,2}); and
+// noOpenSchema's noRepSeqSchema's content under an interleaved {open content}
+// over ##other.
 const (
 	noRepChoiceSchema = `<xs:element name="r"><xs:complexType><xs:sequence>` + cgElA + `<xs:choice maxOccurs="unbounded">` + cgElB + cgElC + `</xs:choice></xs:sequence></xs:complexType></xs:element>`
 	noOptChoiceSchema = `<xs:element name="r"><xs:complexType><xs:sequence>` + cgElA + `<xs:choice minOccurs="0">` + cgElB + cgElC + `</xs:choice></xs:sequence></xs:complexType></xs:element>`
@@ -55,6 +57,8 @@ const (
 	noRefChoiceSchema = `<xs:group name="g"><xs:choice>` + cgElA + `</xs:choice></xs:group>` +
 		`<xs:element name="r"><xs:complexType><xs:sequence><xs:group ref="s:g" maxOccurs="2"/></xs:sequence></xs:complexType></xs:element>`
 	noSeqOneSchema = `<xs:element name="r"><xs:complexType><xs:sequence>` + cgElA + `<xs:sequence maxOccurs="2">` + cgElB + `</xs:sequence></xs:sequence></xs:complexType></xs:element>`
+	noOpenSchema   = `<xs:element name="r"><xs:complexType><xs:openContent mode="interleave"><xs:any namespace="##other" processContents="lax"/></xs:openContent><xs:sequence>` + cgElA +
+		`<xs:sequence maxOccurs="2">` + cgElB + cgElC + `</xs:sequence></xs:sequence></xs:complexType></xs:element>`
 )
 
 // cgElA, cgElB and cgElC are cgEl's local elements a, b and c, as constants.
@@ -67,8 +71,8 @@ const (
 // The types codegen emits for the nested-occurrence schemas' s:r, in shape,
 // which TestNestedOccurrenceTypesAreCodegens pins: noRepChoice, noOptChoice,
 // noOptSeq, noRepSeq (noRefSchema's too), noAlt, noWild, noInner, noOnceAlt,
-// noTwo, noRec, noOnly (noRefChoiceSchema's too), noExt, noAltFirst and
-// noSeqOne for the schemas so named.
+// noTwo, noRec, noOnly (noRefChoiceSchema's too), noExt, noAltFirst,
+// noSeqOne and noOpen for the schemas so named.
 type (
 	noBC interface{ isNoBC() }
 	noB  struct{ B string }
@@ -152,6 +156,12 @@ type (
 	noAltFirstSeq struct{ Sequence []noSeqA }
 	noAltFirstB   struct{ B string }
 
+	noOpen struct {
+		A           string
+		Sequence    []noSeqBC
+		OpenContent []anyElement
+	}
+
 	noSeqOne struct {
 		A        string
 		Sequence []noSeqB
@@ -208,6 +218,7 @@ func TestNestedOccurrenceTypesAreCodegens(t *testing.T) {
 		{noRefChoiceSchema, only},
 		{noExtSchema, []string{"type R struct {\n\tSequence []T2Sequence\n\tB        string\n}\n", "type T2Sequence struct {\n\tA string\n}\n"}},
 		{noAltFirstSchema, []string{"type R interface {\n\tisR()\n}\n", branch("R", "RSequence", "Sequence []RSequence2"), "type RSequence2 struct {\n\tA string\n}\n", branch("R", "RB", "B string")}},
+		{noOpenSchema, []string{"type R struct {\n\tA           string\n\tSequence    []RSequence\n\tOpenContent []AnyElement\n}\n", "type RSequence struct {\n\tB string\n\tC string\n}\n"}},
 		{noSeqOneSchema, []string{"type R struct {\n\tA        string\n\tSequence []RSequence\n}\n", "type RSequence struct {\n\tB string\n}\n"}},
 	}
 	for _, row := range rows {
@@ -228,10 +239,12 @@ func TestNestedOccurrenceTypesAreCodegens(t *testing.T) {
 // interface for a choice occurring 0..1, its items opened by the positional
 // rule Decode's doc states, each child an element particle's by its expanded
 // name or a wildcard's by its Matcher position, the partition read below the
-// nested particle's position. The recursive row's inner s:b fills its own
-// occurrence field between two children of the outer one's first item, so it
-// fails where the partition is kept anywhere but on the fill's own stack.
-// CheckDecode returns nil for each row's T.
+// nested particle's position. In the recursive row the inner s:b, of type t
+// as the outer s:b is, fills its own occurrence field between two children of
+// the outer one's first item, through the one boundSequence cx.bound shares
+// between the two, so the row fails where the fill's partition is kept on that
+// boundSequence rather than on the fill's own stack. CheckDecode returns nil
+// for each row's T.
 func TestDecodeNestedOccurrence(t *testing.T) {
 	w := anyElement{Space: "urn:o", Local: "w", Content: anyType{Text: "w"}}
 	const ow = `<o:w xmlns:o="urn:o">w</o:w>`
@@ -262,14 +275,16 @@ func TestDecodeNestedOccurrence(t *testing.T) {
 			noOnceAlt{A: "1", Choice: noOnceAltSq{Sequence: []noSeqCD{{C: "2", D: "3"}, {C: "4", D: "5"}}}}},
 		{"two sibling nested occurrences", noTwoSchema, "<s:a>1</s:a><s:b>2</s:b><s:a>3</s:a><s:b>4</s:b><s:c>5</s:c><s:d>6</s:d>", into[noTwo](),
 			noTwo{Sequence: []noSeqAB{{A: "1", B: "2"}, {A: "3", B: "4"}}, Sequence2: []noSeqCD{{C: "5", D: "6"}}}},
-		{"a recursive type filling its own nested occurrence inside an item", noRecSchema, "<s:b><s:c>1</s:c></s:b><s:c>2</s:c><s:c>3</s:c>", into[noRec](),
-			noRec{Sequence: []noRecItem{{B: &noRec{Sequence: []noRecItem{{C: "1"}}}, C: "2"}, {C: "3"}}}},
+		{"a recursive type filling its own nested occurrence inside an item", noRecSchema, "<s:b><s:b><s:c>0</s:c></s:b><s:c>1</s:c></s:b><s:c>2</s:c><s:c>3</s:c>", into[noRec](),
+			noRec{Sequence: []noRecItem{{B: &noRec{Sequence: []noRecItem{{B: &noRec{Sequence: []noRecItem{{C: "0"}}}, C: "1"}}}, C: "2"}, {C: "3"}}}},
 		{"a nested choice occurring twice", noOnlySchema, "<s:a>1</s:a><s:a>2</s:a>", into[noOnly](noABranches), noOnly{Choice: []noAI{noA{A: "1"}, noA{A: "2"}}}},
 		{"a nested <group ref> to a choice group, occurring twice", noRefChoiceSchema, "<s:a>1</s:a><s:a>2</s:a>", into[noOnly](noABranches), noOnly{Choice: []noAI{noA{A: "1"}, noA{A: "2"}}}},
 		{"an extension of a repeated sequence adding a sequence", noExtSchema, "<s:a>1</s:a><s:a>2</s:a><s:b>3</s:b>", into[noExt](),
 			noExt{Sequence: []noSeqA{{A: "1"}, {A: "2"}}, B: "3"}},
 		{"a choice's first alternative a repeated sequence", noAltFirstSchema, "<s:a>1</s:a><s:a>2</s:a>", into[noAltFirst](noAltFirstBranches),
 			noAltFirstSeq{Sequence: []noSeqA{{A: "1"}, {A: "2"}}}},
+		{"a nested occurrence under an interleaved {open content}", noOpenSchema, "<s:a>1</s:a><s:b>2</s:b>" + ow + "<s:c>3</s:c><s:b>4</s:b><s:c>5</s:c>", into[noOpen](),
+			noOpen{A: "1", Sequence: []noSeqBC{{B: "2", C: "3"}, {B: "4", C: "5"}}, OpenContent: []anyElement{w}}},
 		{"a repeated nested sequence codegen does not flatten", noSeqOneSchema, "<s:a>1</s:a><s:b>2</s:b><s:b>3</s:b>", into[noSeqOne](),
 			noSeqOne{A: "1", Sequence: []noSeqB{{B: "2"}, {B: "3"}}}},
 		{"guard: a nested repeated emptiable sequence codegen flattens", nfSeqSchema, "<s:a>1</s:a><s:b>2</s:b><s:b>3</s:b>", into[nfSeq](nfSeqBranches),
