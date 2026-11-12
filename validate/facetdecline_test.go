@@ -37,10 +37,10 @@ func TestDeclinedFacetAssertionNamesWhy(t *testing.T) {
 	}
 	var assertMsg, facetMsg string
 	for _, u := range res.Unevaluated() {
-		switch u.Rule() {
-		case "cvc-assertion":
+		if u.Rule() == "cvc-assertion" {
 			assertMsg = u.Msg()
-		case "cvc-assertions-valid":
+		}
+		if u.Rule() == "cvc-assertions-valid" {
 			facetMsg = u.Msg()
 		}
 	}

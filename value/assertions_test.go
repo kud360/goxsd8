@@ -39,7 +39,7 @@ func scripted(calls *[]assertionCall) scriptedAssertions {
 		answers: map[string]AssertionAnswer{
 			"hold":                        AssertionDecided(true),
 			"fail":                        AssertionDecided(false),
-			"decline":                     AssertionAnswer{},
+			"decline":                     {},
 			"decline with reason":         AssertionDeclinedBecause(scriptedReason),
 			"decline with another reason": AssertionDeclinedBecause(scriptedOtherReason),
 		},
