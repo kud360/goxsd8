@@ -1812,7 +1812,7 @@ type bindRun struct {
 // <group ref> re-roots at its group, one step long, since an anonymous type
 // nested deeper is bound in place in its ancestor's unit. It is codec's key
 // for that one population, the only anonymous type bindRun indexes, and
-// agrees with the emit-once rule codegen's doc.go "Particles" states for a
+// agrees with the emit-once rule codegen/doc.go "# Particles" states for a
 // type nested in a model group definition.
 type groupPath struct {
 	group, element xsd.QName
