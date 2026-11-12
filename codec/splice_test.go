@@ -11,25 +11,20 @@ import (
 	"github.com/kud360/goxsd8/xsderr"
 )
 
-// The splice schemas, each declaring s:r. The nested ones' content sequence
-// holds a nested sequence particle codegen splices (codegen/doc.go "#
-// Particles"): spliceInlineSchema's, sequence(a, sequence(b)); spliceRefSchema's, a
+// The splice schemas, each declaring s:r, whose content sequence holds a
+// nested sequence particle codegen splices (codegen/doc.go "# Particles"):
+// spliceInlineSchema's, sequence(a, sequence(b)); spliceRefSchema's, a
 // <group ref> to the sequence group g of b after a; spliceOptSchema's, a
 // sequence with {min occurs} 0 of an optional b and a repeated c, after a,
 // emptiable; spliceExtSchema's r is of t2, an extension of t, sequence(a),
 // adding sequence(b), so t2's {particle} is sequence(t's particle, the added
-// one) (§3.4.2.3.3 dcl.ctd.ctcc.common clause 4.2.3.3), and spliceExt2Schema's of
-// t3, extending t2 by sequence(c); spliceWildInSchema's is sequence(sequence(a,
-// any), b), spliceWildAfterSchema's sequence(sequence(a, b), any), and
-// spliceWildRefSchema's sequence(g, b), g the group of sequence(a, any), each
-// wildcard ##other; and spliceAnyNamesSchema's is sequence(a, sequence(any over
-// urn:a), any over urn:b), whose two wildcard fields claim one Namer across the
-// splice. The content-level ones splice r's content {particle} itself, with {min
-// occurs} 0 over an emptiable group: spliceContentSchema's sequence(a?, b?),
-// spliceContentRefSchema's a <group ref> to the sequence group g of a? and b?,
-// spliceContentExtSchema's r of t2, an empty <xs:extension> of t, whose content is
-// that sequence, spliceContentChoiceSchema's sequence(choice(a, b?)), and
-// spliceContentWildSchema's sequence(a?, any?), its wildcard ##other.
+// one) (§3.4.2.3.3 dcl.ctd.ctcc.common clause 4.2.3.3), and
+// spliceExt2Schema's of t3, extending t2 by sequence(c); spliceWildInSchema's
+// is sequence(sequence(a, any), b), spliceWildAfterSchema's
+// sequence(sequence(a, b), any), and spliceWildRefSchema's
+// sequence(g, b), g the group of sequence(a, any), each wildcard ##other;
+// and spliceAnyNamesSchema's is sequence(a, sequence(any over urn:a), any
+// over urn:b), whose two wildcard fields claim one Namer across the splice.
 const (
 	spliceInlineSchema = `<xs:element name="r"><xs:complexType><xs:sequence><xs:element name="a" type="xs:string"/><xs:sequence><xs:element name="b" type="xs:int"/></xs:sequence></xs:sequence></xs:complexType></xs:element>`
 	spliceRefSchema    = `<xs:group name="g"><xs:sequence><xs:element name="b" type="xs:int"/></xs:sequence></xs:group>
@@ -45,7 +40,18 @@ const (
 	spliceWildAfterSchema = `<xs:element name="r"><xs:complexType><xs:sequence><xs:sequence><xs:element name="a" type="xs:string"/><xs:element name="b" type="xs:int"/></xs:sequence><xs:any namespace="##other" processContents="lax"/></xs:sequence></xs:complexType></xs:element>`
 	spliceWildRefSchema   = `<xs:group name="g"><xs:sequence><xs:element name="a" type="xs:string"/><xs:any namespace="##other" processContents="lax"/></xs:sequence></xs:group>
   <xs:element name="r"><xs:complexType><xs:sequence><xs:group ref="s:g"/><xs:element name="b" type="xs:int"/></xs:sequence></xs:complexType></xs:element>`
-	spliceAnyNamesSchema   = `<xs:element name="r"><xs:complexType><xs:sequence><xs:element name="a" type="xs:string"/><xs:sequence><xs:any namespace="urn:a" processContents="lax"/></xs:sequence><xs:any namespace="urn:b" processContents="lax"/></xs:sequence></xs:complexType></xs:element>`
+	spliceAnyNamesSchema = `<xs:element name="r"><xs:complexType><xs:sequence><xs:element name="a" type="xs:string"/><xs:sequence><xs:any namespace="urn:a" processContents="lax"/></xs:sequence><xs:any namespace="urn:b" processContents="lax"/></xs:sequence></xs:complexType></xs:element>`
+)
+
+// The content splice schemas, each declaring s:r, whose content {particle}
+// is itself a sequence codegen splices with {min occurs} 0 over an emptiable
+// group (codegen/doc.go "# Particles"): spliceContentSchema's sequence(a?,
+// b?); spliceContentRefSchema's a <group ref> to the sequence group g of a?
+// and b?; spliceContentExtSchema's r of t2, an empty <xs:extension> of t,
+// whose content is spliceContentSchema's sequence; spliceContentChoiceSchema's
+// sequence(choice(a, b?)); and spliceContentWildSchema's sequence(a?, any?),
+// its wildcard ##other.
+const (
 	spliceContentSchema    = `<xs:element name="r"><xs:complexType>` + spliceContentSeq + `</xs:complexType></xs:element>`
 	spliceContentRefSchema = `<xs:group name="g"><xs:sequence><xs:element name="a" type="xs:string" minOccurs="0"/><xs:element name="b" type="xs:string" minOccurs="0"/></xs:sequence></xs:group>
   <xs:element name="r"><xs:complexType><xs:group ref="s:g" minOccurs="0"/></xs:complexType></xs:element>`
@@ -109,6 +115,10 @@ var spliceContentBranches = WithBranches[spliceContentItem](spliceContentA{}, sp
 // emits for each splice schema's s:r (codegen/doc.go "# Particles"): the
 // nested sequence's fields in its place, in particle order, named by the one
 // Namer of r's struct.
+//
+// For each content splice schema it pins r's struct to the fields the
+// content sequence's own particles give, a choice's sealed interface and
+// branches included.
 func TestSpliceTypesAreCodegens(t *testing.T) {
 	rows := []struct {
 		decls, want string
@@ -145,12 +155,13 @@ func TestSpliceTypesAreCodegens(t *testing.T) {
 // two, decodes into the fields its own particles give, in particle order,
 // and a wildcard particle inside a spliced sequence, inline or referenced,
 // or after one decodes into its own field at its place, the field index
-// wildcardSlot.places holds for its Matcher position. So does a content
-// sequence codegen splices with {min occurs} 0 over an emptiable group,
-// inline, through a <group ref>, through an empty <xs:extension>, over a
-// choice, or holding a wildcard, present and, inline, absent; each of those
-// rows fails if contentGroup declines that sequence. CheckDecode returns nil
-// for each row's T.
+// wildcardSlot.places holds for its Matcher position. CheckDecode returns
+// nil for each row's T.
+//
+// The content splice schemas' rows pin the same for a content {particle}
+// that is itself such a sequence, with {min occurs} 0 over an emptiable
+// group: it decodes into the type's own fields, present and, inline,
+// absent; each of those rows fails if contentGroup declines that sequence.
 func TestDecodeSplices(t *testing.T) {
 	i := func(n int32) *int32 { return &n }
 	str := func(s string) *string { return &s }
