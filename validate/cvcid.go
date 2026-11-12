@@ -200,7 +200,7 @@ func (w *walk) idAttributes(c *icCheck) {
 // [schema actual value] ... means that default or fixed value constraints may
 // play a part", and Attribute Default Value (§3.4.5.1, sic-attrDefault) is what
 // puts the item in the PSVI with the ·effective value constraint·'s value.
-// Which uses are ·defaulted attributes· is [walk.defaultedConstraint]'s to say
+// Which uses are ·defaulted attributes· is [defaultedConstraint]'s to say
 // (key-dflt-att), and the item's ids bind to the OWNER element, as a present
 // attribute's do. The item is synthesized and has no source position, so it
 // cites the owner's, as [walk.defaultedAttribute]'s clause 4 charge does. A
@@ -217,7 +217,7 @@ func (w *walk) idAttributes(c *icCheck) {
 // on cvcattribute.go's terms.
 func (w *walk) idDefaultedAttributes(c *icCheck, attrs []Attribute, ct xsd.ComplexType) {
 	for _, u := range ct.AttributeUses() {
-		vc, defaulted := w.defaultedConstraint(u, attrs)
+		vc, defaulted := defaultedConstraint(w.schema, u, attrs)
 		if !defaulted {
 			continue
 		}
@@ -710,7 +710,7 @@ func (w *walk) attributeType(g governance, a Attribute) (*xsd.SimpleType, bool) 
 			}
 			return w.schema.ResolvedSimpleType(d.TypeDefinition())
 		}
-		if w.skippedAttribute(g, a) {
+		if skippedAttribute(w.schema, ct, a) {
 			return nil, false
 		}
 	}
@@ -728,18 +728,19 @@ func (w *walk) attributeType(g governance, a Attribute) (*xsd.SimpleType, bool) 
 // ·attributed to· nothing and so is not ·skipped· — and cvc-wildcard
 // (§3.10.4.1) decides the second ([xsd.Schema.AllowsAttributeWildcardName]).
 //
-// It is the ONE encoding of ·skipped· on the attribute side (STYLE T4). Its two
-// readers ask it for different reasons and must not drift: [walk.attributeType]
-// withholds a ·governing type definition· for such an item, and
-// [icCheck.fieldAttributes] leaves a field slot UNFILLED rather than declined
-// for it, which is §3.11.4 clause 3's Note — a field evaluating to a ·skipped·
-// node leaves the ·key-sequence· short.
+// It is the ONE encoding of ·skipped· on the attribute side (STYLE T4). Its
+// three readers ask it for different reasons and must not drift:
+// [walk.attributeType] withholds a ·governing type definition· for such an
+// item, [icCheck.fieldAttributes] leaves a field slot UNFILLED rather than
+// declined for it, which is §3.11.4 clause 3's Note — a field evaluating to a
+// ·skipped· node leaves the ·key-sequence· short — and [inheritable] reports
+// it not ·potentially inherited·.
 //
-// An element whose ·governing type definition· is not complex — or is not
-// determinable at all — skips nothing: there is no {attribute wildcard} to be
+// ct is the element's ·governing type definition· where that is complex, and
+// nil for an element whose type is not complex — or is not determinable at
+// all — which skips nothing: there is no {attribute wildcard} to be
 // ·attributed to·, and §3.4.7 makes the one on xs:anyType ***lax***.
-func (w *walk) skippedAttribute(g governance, a Attribute) bool {
-	ct := g.complexType()
+func skippedAttribute(schema *xsd.Schema, ct *xsd.ComplexType, a Attribute) bool {
 	if ct == nil {
 		return false
 	}
@@ -750,7 +751,7 @@ func (w *walk) skippedAttribute(g governance, a Attribute) bool {
 	if !has || wild.ProcessContents() != xsd.ProcessSkip {
 		return false
 	}
-	return w.schema.AllowsAttributeWildcardName(wild, a.Name())
+	return schema.AllowsAttributeWildcardName(wild, a.Name())
 }
 
 // topLevelAttribute is the wildcard arm of [walk.attributeType] on its own: the

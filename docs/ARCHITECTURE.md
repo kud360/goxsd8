@@ -120,8 +120,9 @@ and imports `xsd`, `value`, `regex` and
 **[2] The infoset seam, the assessment skeleton, the XML adapter and the
 JSON adapter ship; the BER adapter does not.** `validate` exports the infoset views,
 `New`/`Validator`/`Result`, `Validator.ConditionallySelected`, the
-key-cta-select scan its walk makes, and `Validator.Governing`, the governance
-decision its walk makes, and imports `xsd`, `xsderr`, `value`, `xpath`,
+key-cta-select scan its walk makes, `Validator.Governing`, the governance
+decision its walk makes, and `Validator.HandedDown`, the [inherited
+attributes] composition its walk makes, and imports `xsd`, `xsderr`, `value`, `xpath`,
 `icpath` and `internal/xmlqname` — no longer `regex` directly, whose NCName class left with the
 identity-constraint path lexer for `icpath`, though it stays in the closure
 behind `value` for the pattern facets validate compiles — but never a
@@ -134,8 +135,8 @@ backend: `New` takes the `value.Backend` as a required parameter, so
 `Validate`/`Option`/`WithURI` and `Error`/`Class` with its constants, imports `validate`, `xsd`, `xsderr`,
 `internal/xmlname`, `internal/xmlqname` and `encoding/json`, and reads the schema through `validate.SchemaView`, the
 view `Validator.Schema` returns, alone and with no capability assertion, to
-name the root, classify members, attribute children and hand down
-inherited attributes, reads each
+name the root, classify members and attribute children, hands down
+inherited attributes through `Validator.HandedDown`, reads each
 element's governance off `Validator.Governing`, and settles a root's
 attribute members by the type `Validator.ConditionallySelected` selects for
 them;
@@ -665,7 +666,9 @@ three constants (what `Result.Standing` returns: the acceptance test over a
 `Validator.ConditionallySelected` (the key-cta-select scan `Assess` makes, for
 an adapter that classifies members by the type a {type table} selects),
 `Validator.Governing` (the governance `Assess` decides for an element, for an
-adapter that must know it before the engine sees the element) and `Unevaluated`
+adapter that must know it before the engine sees the element),
+`Validator.HandedDown` (the [inherited attributes] composition `Assess` makes,
+for a reader that selects below the root) and `Unevaluated`
 (`Rule`/`Loc`/`Msg`, read off `Result.Unevaluated`), and `Assess` walks a
 source once. **Read which rules it charges, which clauses of each, and which
 are declined in `validate/doc.go`; do not enumerate them here.** A union-governed

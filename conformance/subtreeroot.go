@@ -549,13 +549,13 @@ func (g *subtreeGate) complex(start xml.StartElement, t xsd.ComplexType, nilled 
 
 // handedDown is the [inherited attributes] of every element [[child]] of the
 // element whose start tag is start, whose ·governing type definition· is t and
-// whose own [inherited attributes] are inherited (§3.3.5.6,
-// e-inherited_attributes) — validate's walk.handedDown, composed in its order
-// and with its shadowing: first the element's own attributes that are
-// ·potentially inherited· (key-p-inherited, inheritable), then each ·defaulted
-// attribute· (key-dflt-att) whose use's {inheritable} is true, then each member
-// of inherited whose ·expanded name· none of those has. An attribute that is not
-// ·potentially inherited· shadows nothing.
+// whose own [inherited attributes] are inherited (§3.3.5.6, e-inherited_attributes) —
+// validate.Validator.HandedDown's composition, in its order and with its shadowing:
+// first the element's own attributes that are ·potentially inherited·
+// (key-p-inherited, inheritable), then each ·defaulted attribute· (key-dflt-att)
+// whose use's {inheritable} is true, then each member of inherited whose ·expanded
+// name· none of those has. An attribute that is not ·potentially inherited· shadows
+// nothing.
 //
 // A ·laxly assessed· element reaches here with t ·xs:anyType·, whose empty
 // {attribute uses} and lax {attribute wildcard} (§3.4.7) leave inheritable the
@@ -589,11 +589,12 @@ func (g *subtreeGate) handedDown(start xml.StartElement, t xsd.ComplexType, inhe
 }
 
 // inheritable is key-p-inherited clause 3 for an attribute named n on an
-// element governed by t — validate's walk.inheritable: the {inheritable} of
-// the t.{attribute uses} member n matches (clause 3.1), false where t's skip
-// {attribute wildcard} admits it unmatched (·skipped·, key-skipped, assessed
-// against no declaration), and otherwise the {inheritable} of the top-level
-// declaration n ·resolves· to, false where it resolves to none (clause 3.2).
+// element governed by t — validate's inheritable (validate/inherited.go):
+// the {inheritable} of the t.{attribute uses} member n matches (clause 3.1),
+// false where t's skip {attribute wildcard} admits it unmatched (·skipped·,
+// key-skipped, assessed against no declaration), and otherwise the
+// {inheritable} of the top-level declaration n ·resolves· to, false where it
+// resolves to none (clause 3.2).
 func (g *subtreeGate) inheritable(t xsd.ComplexType, name xml.Name) bool {
 	n := expandedName(name)
 	uses := t.AttributeUses()
@@ -610,7 +611,8 @@ func (g *subtreeGate) inheritable(t xsd.ComplexType, name xml.Name) bool {
 // defaulted reports whether u, a member of the {attribute uses} of the type
 // governing the element whose start tag is start, supplies that element a
 // ·defaulted attribute· (key-dflt-att clauses 2 to 5), and if so its
-// ·effective value constraint· — validate's walk.defaultedConstraint.
+// ·effective value constraint· — validate's defaultedConstraint
+// (validate/cvcattribute.go).
 func (g *subtreeGate) defaulted(start xml.StartElement, u xsd.AttributeUse) (xsd.ValueConstraint, bool) {
 	if u.Required() {
 		return xsd.ValueConstraint{}, false

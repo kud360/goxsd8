@@ -271,8 +271,8 @@ func TestAttributeUseInheritableWinsOverItsDeclarations(t *testing.T) {
 // A use referring to the top-level declaration with no inheritable attribute
 // of its own has the declaration's {inheritable} (§3.2.2.3 ref.att.local), and
 // clause 3.1 reads that: <root>'s lang reaches <leaf> exactly where the
-// declaration is inheritable, for a specified lang (walk.inheritable) and for
-// one the use supplies as a ·defaulted attribute· (walk.handedDown) (#1682).
+// declaration is inheritable, for a specified lang (inheritable) and for
+// one the use supplies as a ·defaulted attribute· (handDown) (#1682).
 func TestRefUseWithoutInheritableTakesItsDeclarations(t *testing.T) {
 	de := xsd.NewValueConstraint(xsd.ValueDefault, "de", nil, nil)
 	for _, tc := range []struct {

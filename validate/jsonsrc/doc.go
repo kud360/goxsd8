@@ -295,11 +295,9 @@
 //     table} of the element's ·governing element declaration·, its {test}s
 //     reading the element's attributes and then its [inherited attributes]
 //     (key-cta-ta-select clause 1.1.3): none at the validation root
-//     (key-p-inherited clause 1), and below it each attribute, specified or
-//     ·defaulted·, of an ancestor whose attribute use, or for one attributed
-//     to none its top-level declaration, is {inheritable}, the nearest
-//     ancestor's of each ·expanded name· (e-inherited_attributes), as the
-//     mapping computes them under the type that governs each ancestor. A
+//     (key-p-inherited clause 1), and below it those the engine's own
+//     composition, validate.Validator.HandedDown, hands down under the type
+//     that governs each ancestor (e-inherited_attributes). A
 //     member is an attribute only where the type the element is assessed under
 //     takes it as one, and the attributes decide that type, so the leading
 //     run of attribute members ends at the first member that the type the

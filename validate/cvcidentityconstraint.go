@@ -443,7 +443,7 @@ func (c *icCheck) pendElement(t *icTarget, i int) {
 // short, and a short one keeps its ·target node· out of the ·qualified node
 // set·, which for a key is [icFrame.keyOnly]'s clause 4.2.1 charge. The charge
 // is made and not withheld because the absence is the SPEC's and not this
-// processor's: [walk.skippedAttribute] decides the ·attribution· through
+// processor's: [skippedAttribute] decides the ·attribution· through
 // cvc-wildcard rather than inferring it from the wildcard's presence, so an
 // attribute that wildcard does not admit is typed by key-governing-ad clause 3
 // instead and never arrives here as ·skipped·.
@@ -458,7 +458,7 @@ func (c *icCheck) fieldAttributes(w *walk, t *icTarget, i int, sel icpath.Select
 		}
 		st, typed := w.attributeType(c.g, a)
 		if !typed {
-			if w.skippedAttribute(c.g, a) {
+			if skippedAttribute(w.schema, c.g.complexType(), a) {
 				continue
 			}
 			t.decline(w, i, a.Name(), a.Loc(), "its ·governing type definition· could not be determined")
@@ -479,7 +479,7 @@ func (c *icCheck) fieldAttributes(w *walk, t *icTarget, i int, sel icpath.Select
 // constraints may play a part in ·key-sequence·s", and Attribute Default Value
 // (§3.4.5.1, sic-attrDefault) puts the item in the PSVI with the ·effective
 // value constraint·'s {value}. Which uses are defaulted is
-// [walk.defaultedConstraint]'s to say (key-dflt-att), read here as
+// [defaultedConstraint]'s to say (key-dflt-att), read here as
 // [walk.idDefaultedAttributes] reads it for cvc-id. The member is typed by the
 // use's declaration's {type definition} and compared by value, like any other.
 // The item is synthesized and has no source position, so it cites the owner's.
@@ -499,7 +499,7 @@ func (c *icCheck) fieldDefaultedAttributes(w *walk, t *icTarget, i int, sel icpa
 		if !sel.SelectsAttribute(u.DeclarationName()) {
 			continue
 		}
-		vc, defaulted := w.defaultedConstraint(u, attrs)
+		vc, defaulted := defaultedConstraint(w.schema, u, attrs)
 		if !defaulted {
 			continue
 		}

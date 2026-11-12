@@ -293,7 +293,14 @@ func (g governance) typeUndetermined() bool {
 // anything else — including a SIMPLE governing type, which clause 3.1 decides
 // instead (simpleType).
 func (g governance) complexType() *xsd.ComplexType {
-	ct, isComplex := g.typ.(xsd.ComplexType)
+	return complexTypeOf(g.typ)
+}
+
+// complexTypeOf is [governance.complexType] for a bare type definition typ:
+// the Complex Type Definition typ is, or nil for a simple type and for a nil
+// typ.
+func complexTypeOf(typ xsd.TypeDefinition) *xsd.ComplexType {
+	ct, isComplex := typ.(xsd.ComplexType)
 	if !isComplex {
 		return nil
 	}
@@ -353,7 +360,7 @@ func valueTypeOf(td xsd.TypeDefinition) *xsd.SimpleType {
 // The second result names the {type definition} slot the ·selected type
 // definition· was read off, for the message of an ·absent· or nil one
 // ([walk.charged]).
-func (w *walk) decide(e Element, parent *xsd.ComplexType, a xsd.Attribution, inherited []inheritedAttribute) (governed, string) {
+func (w *walk) decide(e Element, parent *xsd.ComplexType, a xsd.Attribution, inherited []Attribute) (governed, string) {
 	instance, _ := w.instanceTypeDefinition(e)
 	slot := "the {type definition} of its ·governing element declaration·"
 	selected := func(table xsd.TypeTable) (xsd.TypeDefinitionOrRef, bool) {
@@ -552,7 +559,7 @@ func aValid(t xsd.TypeDefinition) string {
 // parent and a nil attribution ([walk.child]): its true attribution is
 // xs:anyType's lax wildcard, whose key-governing-ed clause 3 resolution is
 // the one clause 4 makes with no ·locally declared type· to offer.
-func (w *walk) childGoverning(e Element, a xsd.Attribution, parent *xsd.ComplexType, inherited []inheritedAttribute) (governance, bool) {
+func (w *walk) childGoverning(e Element, a xsd.Attribution, parent *xsd.ComplexType, inherited []Attribute) (governance, bool) {
 	decided, slot := w.decide(e, parent, a, inherited)
 	return w.charged(e, decided, slot)
 }
@@ -948,7 +955,7 @@ func (c elementContext) LookupNamespace(prefix string) (string, bool) {
 // e contributes to every open frame beyond its text runs is settled once its
 // [[children]] are exhausted, before its own {test}s are evaluated
 // ([collectEnd]).
-func (w *walk) element(e Element, g governance, mark resultMark, parent *icCheck, up assertionAncestry, inherited []inheritedAttribute) {
+func (w *walk) element(e Element, g governance, mark resultMark, parent *icCheck, up assertionAncestry, inherited []Attribute) {
 	if w.log.Enabled(context.Background(), slog.LevelDebug) {
 		w.log.Debug("assessing element", slog.Any("name", e.Name()), slog.Any("loc", e.Loc()))
 	}
@@ -1422,7 +1429,7 @@ func (w *walk) text(t Text) {
 // same for all of them ([walk.handedDown]), and below is their
 // [assertionAncestry], whose parent is e's clause 6 state, which each of them
 // hands its typed value and its read attributes to ([walk.keepChild]).
-func (w *walk) children(e Element, content *contentCheck, id *icCheck, below assertionAncestry, inherited []inheritedAttribute) {
+func (w *walk) children(e Element, content *contentCheck, id *icCheck, below assertionAncestry, inherited []Attribute) {
 	kids := e.Children()
 	for {
 		c, ok := kids.Next()
@@ -1467,7 +1474,7 @@ func (w *walk) children(e Element, content *contentCheck, id *icCheck, below ass
 // [walk.childGoverning]: it takes [governance]'s undecided shape here, and
 // clause 5 ([walk.locallyDeclaredType]), which an undecided child's absent
 // ·governing type definition· makes vacuous, is not consulted for it.
-func (w *walk) child(c Child, content *contentCheck, id *icCheck, up assertionAncestry, inherited []inheritedAttribute) {
+func (w *walk) child(c Child, content *contentCheck, id *icCheck, up assertionAncestry, inherited []Attribute) {
 	if e, ok := c.Element(); ok {
 		a, undecided := content.element(w, e)
 		if a == nil && content.g.laxlyAssessed() {
