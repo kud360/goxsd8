@@ -112,7 +112,7 @@ func TestCommentStepOutsideTheAssertionFacade(t *testing.T) {
 	}
 	str := asBuiltin(t, "string")
 	for _, test := range []string{"comment()", "./comment()", ".//comment()", "not(.//comment())", "empty(.//comment())", "exists(.//comment())", "empty(comment())"} {
-		if got := FacetAssertions(time.Time{}).Evaluate(backend(), seededTypes, str, ctaExprRecord(test, ""), fcValue(t, str, "x")); got != value.AssertionFails {
+		if got := FacetAssertions(time.Time{}).Evaluate(backend(), seededTypes, str, ctaExprRecord(test, ""), fcValue(t, str, "x")).Outcome(); got != value.AssertionFails {
 			t.Errorf("FacetAssertions().Evaluate(%q) = %d, want Fails (%d): never Holds", test, got, value.AssertionFails)
 		}
 	}

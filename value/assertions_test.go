@@ -8,11 +8,11 @@ import (
 )
 
 // scriptedAssertions is an [AssertionEvaluator] answering each {test} by its
-// {expression} text, and recording every call, so a test pins both the outcome
+// {expression} text, and recording every call, so a test pins both the answer
 // the pipeline returns and what the evaluator was handed. A text it holds no
 // answer for is declined, the safe default.
 type scriptedAssertions struct {
-	answers map[string]AssertionOutcome
+	answers map[string]AssertionAnswer
 	calls   *[]assertionCall
 }
 
@@ -24,20 +24,35 @@ type assertionCall struct {
 	v    Value
 }
 
-func (s scriptedAssertions) Evaluate(_ Backend, _ xsd.TypeResolver, st *xsd.SimpleType, test xsd.XPathExpression, v Value) AssertionOutcome {
+func (s scriptedAssertions) Evaluate(_ Backend, _ xsd.TypeResolver, st *xsd.SimpleType, test xsd.XPathExpression, v Value) AssertionAnswer {
 	if s.calls != nil {
 		*s.calls = append(*s.calls, assertionCall{st: st, test: test.Expression(), v: v})
 	}
 	return s.answers[test.Expression()]
 }
 
-// scripted is the evaluator answering hold, fail and decline as named.
+// scripted is the evaluator answering hold, fail and decline as named, and
+// "decline with reason" and "decline with another reason" as declines stating
+// scriptedReason and scriptedOtherReason.
 func scripted(calls *[]assertionCall) scriptedAssertions {
 	return scriptedAssertions{
-		answers: map[string]AssertionOutcome{"hold": AssertionHolds, "fail": AssertionFails, "decline": AssertionDeclined},
-		calls:   calls,
+		answers: map[string]AssertionAnswer{
+			"hold":                        AssertionDecided(true),
+			"fail":                        AssertionDecided(false),
+			"decline":                     {},
+			"decline with reason":         AssertionDeclinedBecause(scriptedReason),
+			"decline with another reason": AssertionDeclinedBecause(scriptedOtherReason),
+		},
+		calls: calls,
 	}
 }
+
+// scriptedReason and scriptedOtherReason are the reasons scripted's "decline
+// with reason" and "decline with another reason" state.
+const (
+	scriptedReason      = "function fn:nosuch is not supported"
+	scriptedOtherReason = "function fn:other is not supported"
+)
 
 // asserting builds a restriction of base named {urn:test}local whose own
 // assertions facet carries one assertion per test, in order.
@@ -84,6 +99,10 @@ func TestAssertionsStageOutcomes(t *testing.T) {
 		{name: "declined", tests: []string{"decline"}, declined: true, wantCalls: 1, wantRuleOnFailures: ruleCvcAssertionsValid},
 		{name: "a failure after a decline", tests: []string{"decline", "fail"}, verdict: true, wantCalls: 2, wantRuleOnFailures: ruleCvcAssertionsValid},
 		{name: "a decline after a hold", tests: []string{"hold", "decline"}, declined: true, wantCalls: 2, wantRuleOnFailures: ruleCvcAssertionsValid},
+		{name: "a failure after a decline with a reason", tests: []string{"decline with reason", "fail"}, verdict: true, wantCalls: 2, wantRuleOnFailures: ruleCvcAssertionsValid},
+		{name: "a decline with a reason after a failure", tests: []string{"fail", "decline with reason"}, verdict: true, wantCalls: 1, wantRuleOnFailures: ruleCvcAssertionsValid},
+		{name: "a decline with a reason after a hold", tests: []string{"hold", "decline with reason"}, declined: true, wantCalls: 2, wantRuleOnFailures: ruleCvcAssertionsValid},
+		{name: "two holds", tests: []string{"hold", "hold"}, accept: true, wantCalls: 2},
 	} {
 		var calls []assertionCall
 		st := asserting(t, "asserted", num, tc.tests...)

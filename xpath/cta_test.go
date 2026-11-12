@@ -432,7 +432,7 @@ func TestCTATestStaticErrorBeforeADeclineIsCharged(t *testing.T) {
 		if _, ok := compiledAssertionTest(CompileAssertionTest(record, seededTypes, xsd.EmptyContent{}, asUses(t, nil), asNoElems)); ok {
 			t.Errorf("CompileAssertionTest(%q) compiled, want declined", tc.expr)
 		}
-		if got := FacetAssertions(time.Time{}).Evaluate(backend(), seededTypes, str, record, fcValue(t, str, "x")); got != value.AssertionDeclined {
+		if got := FacetAssertions(time.Time{}).Evaluate(backend(), seededTypes, str, record, fcValue(t, str, "x")).Outcome(); got != value.AssertionDeclined {
 			t.Errorf("FacetAssertions.Evaluate(%q) = %d, want AssertionDeclined", tc.expr, got)
 		}
 	}
@@ -657,7 +657,7 @@ func TestCTATestStaticErrorReportsSyntaxError(t *testing.T) {
 		if _, ok := compiledAssertionTest(CompileAssertionTest(record, seededTypes, xsd.EmptyContent{}, asUses(t, nil), asNoElems)); ok {
 			t.Errorf("CompileAssertionTest(%q) compiled, want declined", tc.expr)
 		}
-		if got := FacetAssertions(time.Time{}).Evaluate(backend(), seededTypes, str, record, fcValue(t, str, "x")); got != value.AssertionDeclined {
+		if got := FacetAssertions(time.Time{}).Evaluate(backend(), seededTypes, str, record, fcValue(t, str, "x")).Outcome(); got != value.AssertionDeclined {
 			t.Errorf("FacetAssertions.Evaluate(%q) = %d, want AssertionDeclined: a facet {test} outside the grammar is declined, never failed", tc.expr, got)
 		}
 	}

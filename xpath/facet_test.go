@@ -80,7 +80,7 @@ func TestFacetAssertionsDecideTheValue(t *testing.T) {
 		{"xs:integer(position())", str, "x", value.AssertionFails},
 		{"xs:string(position()) = '1'", str, "x", value.AssertionFails},
 	} {
-		got := FacetAssertions(time.Time{}).Evaluate(backend(), seededTypes, tc.st, ctaExprRecord(tc.test, "", "xs", xsd.XMLSchemaNS), fcValue(t, tc.st, tc.lexical))
+		got := FacetAssertions(time.Time{}).Evaluate(backend(), seededTypes, tc.st, ctaExprRecord(tc.test, "", "xs", xsd.XMLSchemaNS), fcValue(t, tc.st, tc.lexical)).Outcome()
 		if got != tc.want {
 			t.Errorf("Evaluate(%q, %q) = %d, want %d", tc.test, tc.lexical, got, tc.want)
 		}
@@ -104,7 +104,7 @@ func TestFacetAssertionsStaticTypeOfAResult(t *testing.T) {
 		{"(1 to 3) = '2'", value.AssertionFails},
 		{"string($value castable as xs:double) = 'false'", value.AssertionDeclined},
 	} {
-		got := FacetAssertions(time.Time{}).Evaluate(backend(), seededTypes, str, ctaExprRecord(tc.test, "", "xs", xsd.XMLSchemaNS), fcValue(t, str, "x"))
+		got := FacetAssertions(time.Time{}).Evaluate(backend(), seededTypes, str, ctaExprRecord(tc.test, "", "xs", xsd.XMLSchemaNS), fcValue(t, str, "x")).Outcome()
 		if got != tc.want {
 			t.Errorf("Evaluate(%q, %q) = %d, want %d", tc.test, "x", got, tc.want)
 		}
@@ -119,7 +119,7 @@ func TestFacetAssertionsDecline(t *testing.T) {
 	str := asBuiltin(t, "string")
 	for _, test := range []string{"$value mod 2 = 0", "upper-case($value) = 'X'", "$other = 'x'", ".. = 'x'"} {
 		v := fcValue(t, str, "x")
-		if got := FacetAssertions(time.Time{}).Evaluate(backend(), seededTypes, str, ctaExprRecord(test, ""), v); got != value.AssertionDeclined {
+		if got := FacetAssertions(time.Time{}).Evaluate(backend(), seededTypes, str, ctaExprRecord(test, ""), v).Outcome(); got != value.AssertionDeclined {
 			t.Errorf("Evaluate(%q over %s) = %d, want declined", test, str.Name(), got)
 		}
 	}
@@ -296,7 +296,7 @@ func TestFacetAssertionsCastAFunctionResult(t *testing.T) {
 		{"xs:date(concat(string($value), '')) gt xs:date('1900-01-01')", "1066-03-03", value.AssertionFails},
 		{"xs:date(concat('2008-01-0', '1')) eq xs:date('2008-01-01')", "2001-01-01", value.AssertionHolds},
 	} {
-		got := FacetAssertions(time.Time{}).Evaluate(backend(), seededTypes, date, asRecord(tc.test), fcValue(t, date, tc.lexical))
+		got := FacetAssertions(time.Time{}).Evaluate(backend(), seededTypes, date, asRecord(tc.test), fcValue(t, date, tc.lexical)).Outcome()
 		if got != tc.want {
 			t.Errorf("Evaluate(%q, %q) = %d, want %d", tc.test, tc.lexical, got, tc.want)
 		}

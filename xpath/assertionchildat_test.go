@@ -145,7 +145,7 @@ func TestFacetAssertionsDataChildAt(t *testing.T) {
 		"data(d[1]) instance of xs:date?",
 		"not(data(child::d[1]) instance of xs:date)",
 	} {
-		got := FacetAssertions(time.Time{}).Evaluate(backend(), seededTypes, str, ctaExprRecord(test, "", "xs", xsd.XMLSchemaNS), fcValue(t, str, "x"))
+		got := FacetAssertions(time.Time{}).Evaluate(backend(), seededTypes, str, ctaExprRecord(test, "", "xs", xsd.XMLSchemaNS), fcValue(t, str, "x")).Outcome()
 		if got != value.AssertionFails {
 			t.Errorf("Evaluate(%q) = %d, want Fails (%d)", test, got, value.AssertionFails)
 		}

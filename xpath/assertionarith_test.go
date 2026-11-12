@@ -43,7 +43,7 @@ func TestArithmeticModOverValue(t *testing.T) {
 		{"5", value.AssertionFails, false},
 		{"-6", value.AssertionHolds, true},
 	} {
-		if got := FacetAssertions(time.Time{}).Evaluate(backend(), seededTypes, intType, ctaExprRecord("$value mod 2 = 0", ""), fcValue(t, intType, tc.lexical)); got != tc.facet {
+		if got := FacetAssertions(time.Time{}).Evaluate(backend(), seededTypes, intType, ctaExprRecord("$value mod 2 = 0", ""), fcValue(t, intType, tc.lexical)).Outcome(); got != tc.facet {
 			t.Errorf("FacetAssertions over %s = %d, want %d", tc.lexical, got, tc.facet)
 		}
 		test := asCompileFor(t, "$value mod 2 = 0", xsd.SimpleContent{SimpleType: intType}, asUses(t, nil))
@@ -259,7 +259,7 @@ func TestFacetArithmeticRaises(t *testing.T) {
 		{"$value + 1 = 2", list, listValue("1 2"), value.AssertionFails},
 		{"not($value + 1 = 2)", list, listValue("1 2"), value.AssertionFails},
 	} {
-		if got := FacetAssertions(time.Time{}).Evaluate(backend(), types, tc.st, ctaExprRecord(tc.test, ""), tc.v); got != tc.want {
+		if got := FacetAssertions(time.Time{}).Evaluate(backend(), types, tc.st, ctaExprRecord(tc.test, ""), tc.v).Outcome(); got != tc.want {
 			t.Errorf("Evaluate(%q over %s) = %d, want %d", tc.test, tc.st.Name(), got, tc.want)
 		}
 	}
