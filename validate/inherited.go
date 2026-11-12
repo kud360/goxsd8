@@ -1,49 +1,77 @@
 package validate
 
-import "github.com/kud360/goxsd8/xsd"
+import (
+	"github.com/kud360/goxsd8/xsd"
+	"github.com/kud360/goxsd8/xsderr"
+)
 
 // This file is §3.3.5.6's [inherited attributes] (e-inherited_attributes) and
 // nothing else. Its one reader is the XDM instance a Type Alternative's {test}
 // evaluates against, §3.12.4 key-cta-ta-select clause 1.1.3 (ctaAttributes,
 // cta.go).
 
-// inheritedAttribute is one member of an element's [inherited attributes]: the
-// ·expanded name· and [[normalized value]] of an attribute information item some
-// ancestor carries, which is all clause 1.1.3's copy reads. The item's [[owner
-// element]] is not kept: e-inherited_attributes clause 2 is the only rule that
-// reads it, and [walk.handedDown] settles that clause by the order it composes
-// in, while clause 1.1.3 gives the copy E as its owner.
-type inheritedAttribute struct {
+// suppliedAttribute is a member of an element's [inherited attributes] that no
+// source presents: a ·defaulted attribute· (§3.4.5.1) of an ancestor, its
+// ·expanded name· and [[normalized value]], which is all clause 1.1.3's copy
+// reads, located at its [[owner element]], which carries no attribute item for
+// it. The owner itself is not kept: e-inherited_attributes clause 2 is the only
+// rule that reads it, and [walk.handDown] settles that clause by the order it
+// composes in, while clause 1.1.3 gives the copy E as its owner.
+type suppliedAttribute struct {
 	name  xsd.QName
 	value string
+	loc   xsderr.Loc
 }
 
-// handedDown is the [inherited attributes] of every element [[child]] of e
-// (§3.3.5.6, e-inherited_attributes), where g is e's governance and inherited is
-// e's OWN [inherited attributes]: first e's own attributes that are ·potentially
-// inherited· (key-p-inherited), then each member of inherited whose ·expanded
-// name· none of those has.
+func (a suppliedAttribute) Name() xsd.QName { return a.name }
+func (a suppliedAttribute) Value() string   { return a.value }
+func (a suppliedAttribute) Loc() xsderr.Loc { return a.loc }
+
+// HandedDown is the [inherited attributes] (§3.3.5.6, e-inherited_attributes)
+// of every element child of an element E whose ·governing type definition· is
+// governing, whose [attributes] are attributes, in source order, and whose own
+// [inherited attributes] are inherited, nil where E is a validation root: the
+// inherited argument [Validator.ConditionallySelected] takes for each child.
+// It is the composition [Validator.Assess] makes for E, in this order:
 //
-// key-p-inherited quantifies over "one of E's ancestors" at any depth, and
-// e-inherited_attributes clause 2 keeps, of two same-named candidates, the one
-// whose [[owner element]] is the descendant of the other's. Computed top-down,
-// that reduces to this one-level composition: e's own candidates are the
-// nearest any child has, so nothing shadows them, and every candidate from
-// further up already had its shadowing by e's ancestors settled when inherited
-// was computed for e. The one new edge is e's own candidates over inherited — and
-// it is drawn by e's POTENTIALLY INHERITED attributes alone, so an attribute of
-// e that is not inheritable shadows nothing above it.
+//  1. Each of attributes that is ·potentially inherited· (key-p-inherited):
+//     the {inheritable} of the attribute use of governing whose ·expanded
+//     name· it has (clause 3.1, as [xsd.Schema.ResolvedInheritable] answers
+//     it); not inheritable where it matches no use and a skip {attribute
+//     wildcard} of governing ·skips· it (key-governing-ad clause 3); otherwise
+//     the {inheritable} of the top-level attribute declaration its name
+//     ·resolves· to (clause 3.2), not inheritable where it resolves to none.
+//  2. Each ·defaulted attribute· of E (key-dflt-att) whose use's {inheritable}
+//     is true, in governing's {attribute uses} order, valued by the {lexical
+//     form} of the use's ·effective value constraint· and located at at.
+//  3. Each member of inherited whose ·expanded name· no member of 1 or 2 has.
 //
-// key-p-inherited clause 2, the same [validation context], holds for every pair
-// this is asked of: one [Validator.Assess] call has one ·validation root·, which
-// is the [validation context] of every item below it, and the root is handed
-// nil. Validating two subtrees of one infoset as separate roots in one call
-// would make the clause load-bearing, and nothing here could tell them apart.
+// Computed top-down from the root, e-inherited_attributes clause 2 — of two
+// same-named candidates, the one whose [[owner element]] is the other's
+// descendant — is this one-level composition: E's own candidates are the
+// nearest any child has, and every candidate from further up had its
+// shadowing settled when inherited was composed for E. An attribute of E that
+// is not ·potentially inherited· shadows nothing above it. key-p-inherited
+// clause 2, the same [validation context], is the caller's to keep: every
+// inherited handed here descends from one validation root's nil.
+//
+// governing nil is xs:anyType's answer, which has no {attribute uses} and a
+// lax {attribute wildcard} (§3.4.7): every attribute is read by its top-level
+// declaration, as for a ·laxly assessed· E. The members of 1 and 3 are the
+// caller's own values, and at, E's own location, is the Loc of each member of
+// 2. HandedDown neither modifies nor retains its arguments, and returns
+// inherited itself where E hands down nothing of its own.
 //
 // The property exists only for a child that is not attributed to a skip
-// Wildcard, of a parent that is not ·skipped·. Nothing here tests either,
-// because neither can arise: [walk.child] stops before [walk.element] for such a
-// child, and a ·skipped· parent is never walked at all.
+// Wildcard, of a parent that is not ·skipped·: a caller asks this for no
+// other.
+func (v *Validator) HandedDown(governing xsd.TypeDefinition, at xsderr.Loc, attributes, inherited []Attribute) []Attribute {
+	w := walk{schema: v.schema}
+	return w.handDown(governing, at, attributes, inherited)
+}
+
+// handedDown is [Validator.HandedDown] for e, walked under g, whose own
+// [inherited attributes] are inherited; it reads only g's type.
 //
 // An e whose ·governing type definition· this package could not determine
 // hands down a set read off the top-level declarations alone, which a use of
@@ -52,15 +80,24 @@ type inheritedAttribute struct {
 // ([contentCheck.element]), which consults no {type table} and hands its own
 // [[children]] the same undecided shape, so no element below e is typed (#2211).
 // A ·laxly assessed· e hands down the same top-level reading, and there it is
-// the spec's: xs:anyType has no {attribute uses} and a lax {attribute wildcard}
-// (§3.4.7), so key-governing-ad clause 3 resolves each attribute by name, and
-// the {type table} of a child that ·resolves· reads it ([walk.child]).
-func (w *walk) handedDown(e Element, g governance, inherited []inheritedAttribute) []inheritedAttribute {
-	attrs := e.Attributes()
-	var own []inheritedAttribute
+// the spec's: xs:anyType's (HandedDown's nil governing), and the {type table}
+// of a child that ·resolves· reads it ([walk.child]). Nothing here tests for a
+// child attributed to a skip Wildcard or a ·skipped· parent, because neither
+// can arise: [walk.child] stops before [walk.element] for such a child, and a
+// ·skipped· parent is never walked at all.
+func (w *walk) handedDown(e Element, g governance, inherited []Attribute) []Attribute {
+	return w.handDown(g.typ, e.Loc(), e.Attributes(), inherited)
+}
+
+// handDown is the one body of [Validator.HandedDown] and [walk.handedDown],
+// for an element governed by typ. It reads nothing off w but w.schema, which
+// is what lets HandedDown run it on a walk holding the schema alone.
+func (w *walk) handDown(typ xsd.TypeDefinition, at xsderr.Loc, attrs, inherited []Attribute) []Attribute {
+	g := governance{typ: typ}
+	var own []Attribute
 	for _, a := range attrs {
 		if w.inheritable(g, a) {
-			own = append(own, inheritedAttribute{name: a.Name(), value: a.Value()})
+			own = append(own, a)
 		}
 	}
 	// key-p-inherited counts an attribute "defaulted as described in Attribute
@@ -76,7 +113,7 @@ func (w *walk) handedDown(e Element, g governance, inherited []inheritedAttribut
 			if !defaulted {
 				continue
 			}
-			own = append(own, inheritedAttribute{name: u.DeclarationName(), value: vc.LexicalForm()})
+			own = append(own, suppliedAttribute{name: u.DeclarationName(), value: vc.LexicalForm(), loc: at})
 		}
 	}
 	if len(own) == 0 {
@@ -84,7 +121,7 @@ func (w *walk) handedDown(e Element, g governance, inherited []inheritedAttribut
 	}
 	nearest := len(own)
 	for _, a := range inherited {
-		if inheritedNamed(own[:nearest], a.name) {
+		if hasAttributeNamed(own[:nearest], a.Name()) {
 			continue
 		}
 		own = append(own, a)
@@ -112,9 +149,10 @@ func (w *walk) handedDown(e Element, g governance, inherited []inheritedAttribut
 // ([governance.typeUndetermined]): this reads such an element's attributes by
 // ·expanded name·, although key-governing-ad clause 2's ·context-determined
 // declaration·, from a use of the undetermined type, may come first. It needs
-// no decline, because its one reader is [walk.handedDown], whose result for
-// such an element no {type table} reads: every child of it, a ·nilled· one's
-// included, is walked undecided ([contentCheck.element], #2211).
+// no decline in the walk, whose result for such an element no {type table}
+// reads: every child of it, a ·nilled· one's included, is walked undecided
+// ([contentCheck.element], #2211). HandedDown is handed a type, never an
+// undetermined one.
 func (w *walk) inheritable(g governance, a Attribute) bool {
 	if ct := g.complexType(); ct != nil {
 		if u, matched := attributeUseNamed(ct.AttributeUses(), a.Name()); matched {
@@ -126,14 +164,4 @@ func (w *walk) inheritable(g governance, a Attribute) bool {
 	}
 	d, resolved := w.schema.Attribute(a.Name())
 	return resolved && d.Inheritable()
-}
-
-// inheritedNamed reports whether as holds a member whose ·expanded name· is n.
-func inheritedNamed(as []inheritedAttribute, n xsd.QName) bool {
-	for _, a := range as {
-		if a.name == n {
-			return true
-		}
-	}
-	return false
 }

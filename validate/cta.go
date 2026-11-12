@@ -130,7 +130,7 @@ func (w *walk) resolvedSelection(e Element, slot string) {
 // carries nothing here; a table that reached this package without it declines
 // anyway, because a zero XPath Expression record has an empty {expression} and
 // no {expression} is a Test production.
-func (w *walk) conditionallySelected(e Element, table xsd.TypeTable, inherited []inheritedAttribute) (xsd.TypeDefinitionOrRef, string, bool) {
+func (w *walk) conditionallySelected(e Element, table xsd.TypeTable, inherited []Attribute) (xsd.TypeDefinitionOrRef, string, bool) {
 	alts := table.Alternatives()
 	i, declined := selectAlternative(table, w.backend, w.schema, ctaAttributes(e.Attributes(), inherited))
 	if declined != nil {
@@ -174,12 +174,11 @@ func (w *walk) conditionallySelected(e Element, table xsd.TypeTable, inherited [
 // validation root has none — an inference from §3.3.5.6 sic-inheritedAttrs,
 // which gives the property to each child of a non-·skipped· element that is not
 // ·attributed to· a skip wildcard, and a validation root is assessed as no such
-// child. inherited holds only attributes whose {inheritable} is true
-// (key-p-inherited clause 3; [xsd.Schema.ResolvedInheritable] answers it for a
-// use), and at most one per ·expanded name·, its nearest ancestor's
-// (e-inherited_attributes clause 2): this method filters neither, and a {test}
-// reads every duplicate it is handed, so raw ancestor attributes can select
-// differently from Assess. It is the selection [Validator.Assess] makes for E,
+// child. inherited holds only attributes whose {inheritable} is true, and at
+// most one per ·expanded name·, its nearest ancestor's: this method filters
+// neither, and a {test} reads every duplicate it is handed, so raw ancestor
+// attributes can select differently from Assess. [Validator.HandedDown]
+// composes it from the parent's. It is the selection [Validator.Assess] makes for E,
 // by the same scan: a dynamic or type error inside a {test} counts as false
 // (key-cta-ta-select clause 2), and ok is false exactly where the scan reaches
 // an alternative whose {test} the engine cannot evaluate before any succeeds —
@@ -206,11 +205,7 @@ func (w *walk) conditionallySelected(e Element, table xsd.TypeTable, inherited [
 // [Validator.Governing]'s to decide, handed this method partly applied as
 // its selection, and not the adapter's.
 func (v *Validator) ConditionallySelected(table xsd.TypeTable, attributes, inherited []Attribute) (xsd.TypeDefinitionOrRef, bool) {
-	copied := make([]inheritedAttribute, 0, len(inherited))
-	for _, a := range inherited {
-		copied = append(copied, inheritedAttribute{name: a.Name(), value: a.Value()})
-	}
-	i, declined := selectAlternative(table, v.backend, v.schema, ctaAttributes(attributes, copied))
+	i, declined := selectAlternative(table, v.backend, v.schema, ctaAttributes(attributes, inherited))
 	if declined != nil {
 		return nil, false
 	}
@@ -255,9 +250,9 @@ func selectAlternative(table xsd.TypeTable, backend value.Backend, types xsd.Typ
 // [walk.handedDown]), whose ·expanded name· no attribute of E has — so E's own
 // attribute wins outright over a same-named inherited one. That filter is E's
 // alone and is a second one: the shadowing among E's ancestors is already
-// settled in inherited. The walk hands inherited as the []inheritedAttribute
-// it computes, and [Validator.ConditionallySelected] copies its caller's
-// []Attribute into one, so both meet this one filter.
+// settled in inherited. The walk and [Validator.ConditionallySelected] both
+// hand inherited as the []Attribute [Validator.HandedDown]'s composition
+// returns, so both meet this one filter.
 //
 // The xsi: attributes are among the first half, because clause 1.1.2 copies E's
 // [[attributes]] whole and names no exception; the namespace declarations are
@@ -267,7 +262,7 @@ func selectAlternative(table xsd.TypeTable, backend value.Backend, types xsd.Typ
 //
 // attrs is read once, not per {test}: [Element]'s Attributes may build it, and
 // a {test} naming three attributes would otherwise build it three times.
-func ctaAttributes(attrs []Attribute, inherited []inheritedAttribute) xpath.Attributes {
+func ctaAttributes(attrs, inherited []Attribute) xpath.Attributes {
 	return func(yield func(xsd.QName, string) bool) {
 		for _, a := range attrs {
 			if !yield(a.Name(), a.Value()) {
@@ -275,10 +270,10 @@ func ctaAttributes(attrs []Attribute, inherited []inheritedAttribute) xpath.Attr
 			}
 		}
 		for _, a := range inherited {
-			if hasAttributeNamed(attrs, a.name) {
+			if hasAttributeNamed(attrs, a.Name()) {
 				continue
 			}
-			if !yield(a.name, a.value) {
+			if !yield(a.Name(), a.Value()) {
 				return
 			}
 		}

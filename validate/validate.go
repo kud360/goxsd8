@@ -104,12 +104,12 @@ func New(schema *xsd.Schema, backend value.Backend, opts ...Option) (*Validator,
 // which an adapter whose source need spell no namespace classifies a child by
 // local name, or names one only a wildcard admits. It carries too the content
 // model of a complex type as the cvc-accept walk that ·attributes· a child
-// (ContentMatcher), and what an adapter that hands down [inherited
-// attributes] before the engine sees the element reads (key-p-inherited): a
-// top-level attribute declaration resolved by expanded name (Attribute), an
-// attribute use's {inheritable} (ResolvedInheritable), whether an attribute
-// wildcard admits a name (AllowsAttributeWildcardName), and the
-// ·effective value constraint· of an attribute use (EffectiveValueConstraint).
+// (ContentMatcher), and what key-p-inherited reads, from which
+// [Validator.HandedDown] composes the [inherited attributes]: a top-level
+// attribute declaration resolved by expanded name (Attribute), an attribute
+// use's {inheritable} (ResolvedInheritable), whether an attribute wildcard
+// admits a name (AllowsAttributeWildcardName), and the ·effective value
+// constraint· of an attribute use (EffectiveValueConstraint).
 //
 // Each method is the [xsd.Schema] method of the same name and answers on its
 // terms.
