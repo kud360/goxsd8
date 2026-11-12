@@ -21,7 +21,7 @@ func (ownedChain) Type(xsd.QName) (xsd.TypeDefinition, bool) { return nil, false
 
 // TestPatternRejectionNamesFailedStep pins what a cvc-pattern-valid rejection
 // (§4.3.4.4) says: the whole OR-set of the derivation step the literal failed,
-// each member as written save the XML references patternMemberEscaper puts for
+// each member as written save the XML references facetMemberEscaper puts for
 // `&`, `"`, LF and CR, the type on the base chain that declares it, and the
 // checked type when that type inherits it — so xs:int's "x3" fails a pattern
 // facet xs:int inherits from xs:integer (Datatypes integer.pattern), not a
