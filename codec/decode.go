@@ -1810,8 +1810,10 @@ type bindRun struct {
 // declaration whose {scope}'s {parent} is the model group definition group
 // (§3.3.2.3 dcl.elt.local): the path of expanded names from group, which a
 // <group ref> re-roots at its group, one step long, since an anonymous type
-// nested deeper is bound in place in its ancestor's unit. It mirrors codegen's
-// nestedKey.
+// nested deeper is bound in place in its ancestor's unit. It is codec's key
+// for that one population, the only anonymous type bindRun indexes, and
+// agrees with the emit-once rule codegen/doc.go "# Particles" states for a
+// type nested in a model group definition.
 type groupPath struct {
 	group, element xsd.QName
 }
