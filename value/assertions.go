@@ -43,8 +43,8 @@ const (
 
 // AssertionAnswer is what an [AssertionEvaluator] answered for one {test}: its
 // [AssertionOutcome] and, for a decline only, why. [AssertionDecided] and
-// [AssertionDeclinedBecause] build it, so no decided answer carries a reason
-// (STYLE T1). The zero AssertionAnswer declines without stating why.
+// [AssertionDeclinedBecause] build it, so no decided answer carries a reason.
+// The zero AssertionAnswer declines without stating why.
 type AssertionAnswer struct {
 	outcome AssertionOutcome
 	reason  string
