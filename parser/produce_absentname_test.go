@@ -856,7 +856,9 @@ func TestProduceProhibitedAttrsLegalElsewhere(t *testing.T) {
 //
 // Behavior is pinned, never message text: each case asserts the document is
 // rejected, that xsderr.RuleOf reports the expected rule, and that the error is
-// positioned at URI:line:col on the offending element's own line (STYLE E3).
+// positioned at URI:line:col on the offending element's own line, which also
+// holds the ref attribute a cvc-datatype-valid row is charged at (STYLE E3).
+// TestProduceQNameAttributeChargeLocated pins bindQName's column.
 func TestProduceAbsentNameAndEmptyRefRejected(t *testing.T) {
 	// A slice, not a map: subtest order is output (STYLE D2). Every body starts
 	// on line 2 of the wrapped document and puts the offending element on the
@@ -1026,7 +1028,7 @@ func TestProduceQNameOutsideLexicalSpaceRejected(t *testing.T) {
 				t.Fatalf("error %v carries no position, want %s:line:col (E3)", err, produceURI)
 			}
 			if loc.URI != produceURI || loc.Line == 0 || loc.Col == 0 {
-				t.Fatalf("position = %s:%d:%d, want the offending element in %s with a line and column",
+				t.Fatalf("position = %s:%d:%d, want the offending attribute in %s with a line and column",
 					loc.URI, loc.Line, loc.Col, produceURI)
 			}
 		})

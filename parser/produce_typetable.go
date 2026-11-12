@@ -218,9 +218,9 @@ func (p *producer) typeTableOf(el *Element, edID xsd.ComponentID, declaredType x
 func (p *producer) alternativeTypes(alternatives []*Element, edID xsd.ComponentID) ([]xsd.TypeDefinitionOrRef, error) {
 	types := make([]xsd.TypeDefinitionOrRef, len(alternatives))
 	for i, alt := range alternatives {
-		typeLex, hasType := alt.Attr("type")
+		typeAttr, hasType := alt.attr("type")
 		if hasType {
-			qn, err := p.resolveQName(alt, typeLex, "type")
+			qn, err := p.resolveQName(alt, typeAttr.Value(), typeAttr)
 			if err != nil {
 				return nil, err
 			}

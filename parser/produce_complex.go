@@ -741,7 +741,7 @@ func (p *producer) produceSimpleContent(id complexTypeIdentity, ctElem, sc *Elem
 		return xsd.ComplexType{}, xsderr.New(ruleSrcCT, dup.Loc(),
 			"<%s> is a second %s facet among the [children] of a <restriction> under <simpleContent>, but src-ct clause 2 admits a repeated facet-specifying element only for xs:enumeration, xs:pattern and xs:assertion", dup.Name().Local(), dup.Name().Local())
 	}
-	baseLex, hasBase := derivation.Attr("base")
+	baseAttr, hasBase := derivation.attr("base")
 	if !hasBase {
 		// Appendix A declares base use="required" on both xs:extensionType and
 		// xs:simpleRestrictionType (which takes it from xs:restrictionType), and
@@ -752,11 +752,11 @@ func (p *producer) produceSimpleContent(id complexTypeIdentity, ctElem, sc *Elem
 		// an absent attribute as a base="" the author never wrote.
 		return xsd.ComplexType{}, fmt.Errorf("parser: the <%s> of a <simpleContent> at %s must carry a base attribute, but none is present", derivation.Name().Local(), derivation.Loc())
 	}
-	baseName, err := p.resolveQName(derivation, baseLex, "base")
+	baseName, err := p.resolveQName(derivation, baseAttr.Value(), baseAttr)
 	if err != nil {
 		return xsd.ComplexType{}, err
 	}
-	base, baseRef, err := p.resolveBaseType(id, derivation, baseName)
+	base, baseRef, err := p.resolveBaseType(id, derivation, baseAttr, baseName)
 	if err != nil {
 		return xsd.ComplexType{}, err
 	}
@@ -1047,7 +1047,7 @@ func (p *producer) produceComplexContent(id complexTypeIdentity, ctElem, cc *Ele
 	if err != nil {
 		return xsd.ComplexType{}, err
 	}
-	baseLex, hasBase := derivation.Attr("base")
+	baseAttr, hasBase := derivation.attr("base")
 	if !hasBase {
 		// base is use="required" on both xs:extensionType and xs:complexRestrictionType
 		// (Appendix A) and §3.4.3 states no clause for its absence, so this is a plain
@@ -1056,7 +1056,7 @@ func (p *producer) produceComplexContent(id complexTypeIdentity, ctElem, cc *Ele
 		// author never wrote.
 		return xsd.ComplexType{}, fmt.Errorf("parser: the <%s> of a <complexContent> at %s must carry a base attribute, but none is present", derivation.Name().Local(), derivation.Loc())
 	}
-	baseName, err := p.resolveQName(derivation, baseLex, "base")
+	baseName, err := p.resolveQName(derivation, baseAttr.Value(), baseAttr)
 	if err != nil {
 		return xsd.ComplexType{}, err
 	}
@@ -1069,7 +1069,7 @@ func (p *producer) produceComplexContent(id complexTypeIdentity, ctElem, cc *Ele
 	// ct-props-correct clause 3 / src-resolve clause 1.1 verdict resolveBaseType
 	// always charges. A base whose content model holds this derivation yields
 	// only its {assertions}, which is all the restriction alternant reads.
-	base, baseRef, err := p.resolveBaseType(id, derivation, baseName)
+	base, baseRef, err := p.resolveBaseType(id, derivation, baseAttr, baseName)
 	if err != nil {
 		return xsd.ComplexType{}, err
 	}
@@ -1863,7 +1863,7 @@ func (p *producer) produceGroupRefParticle(el *Element) (*xsd.Particle, error) {
 	if err := rejectProhibitedRefAttrs(el); err != nil {
 		return nil, err
 	}
-	ref, ok := el.Attr("ref")
+	ref, ok := el.attr("ref")
 	if !ok {
 		// A <group> in a content model is always a reference (§3.8.2: the named
 		// definition form appears only as a top-level <schema> child). The absence
@@ -1879,7 +1879,7 @@ func (p *producer) produceGroupRefParticle(el *Element) (*xsd.Particle, error) {
 	if elided {
 		return nil, nil
 	}
-	qn, err := p.resolveQName(el, ref, "ref")
+	qn, err := p.resolveQName(el, ref.Value(), ref)
 	if err != nil {
 		return nil, err
 	}
@@ -2278,7 +2278,7 @@ func (p *producer) produceElementParticle(el *Element, scopeParent xsd.ElementSc
 // deferred ElementDeclarationRef of §3.3.2.4 ref.elt.global for the ref= form,
 // the inline local Element Declaration of §3.3.2.3 dcl.elt.local otherwise.
 func (p *producer) elementParticleTerm(el *Element, scopeParent xsd.ElementScopeParent) (xsd.TermOrRef, error) {
-	if ref, hasRef := el.Attr("ref"); hasRef {
+	if ref, hasRef := el.attr("ref"); hasRef {
 		// The ref= form reads no child of its own, so this is where its children are
 		// ordered against xs:element's content model — the one model Appendix A gives
 		// all three forms (s4sElement, #1076). It is NOT src-element clause 2.2
@@ -2300,7 +2300,7 @@ func (p *producer) elementParticleTerm(el *Element, scopeParent xsd.ElementScope
 		if err := rejectRefElementChildren(el); err != nil {
 			return nil, err
 		}
-		qn, err := p.resolveQName(el, ref, "ref")
+		qn, err := p.resolveQName(el, ref.Value(), ref)
 		if err != nil {
 			return nil, err
 		}
@@ -2565,15 +2565,15 @@ func (p *producer) rejectLocalElementTargetNamespace(el *Element) error {
 // A base= that is absent, or whose prefix this producer cannot bind, ·matches·
 // no name at all and so answers false. That is the reading src-element clause
 // 4.3.2 and src-attribute clause 6.3.2 ask for, not a swallowed fault: the
-// binding error belongs to el, whose own producer charges it at el's position,
-// and produceComplexContent resolves base= BEFORE descending into the content
-// model and the attribute uses that reach both callers here.
+// binding error belongs to el, whose own producer charges it at el's base
+// attribute, and produceComplexContent resolves base= BEFORE descending into
+// the content model and the attribute uses that reach both callers here.
 func (p *producer) baseMatchesAnyType(el *Element) bool {
-	baseLex, hasBase := el.Attr("base")
+	baseAttr, hasBase := el.attr("base")
 	if !hasBase {
 		return false
 	}
-	base, err := p.bindQName(el, baseLex, "base")
+	base, err := p.bindQName(el, baseAttr.Value(), baseAttr)
 	return err == nil && base == anyTypeName
 }
 
@@ -2836,11 +2836,11 @@ func (p *producer) declaredType(el *Element, dflt xsd.QName) (xsd.TypeDefinition
 		}
 		return xsd.InlineTypeDefinition{Definition: st}, nil
 	}
-	typeLex, hasType := el.Attr("type")
+	typeAttr, hasType := el.attr("type")
 	if !hasType {
 		return xsd.TypeDefinitionRef{Name: dflt}, nil
 	}
-	qn, err := p.resolveQName(el, typeLex, "type") // tier 2
+	qn, err := p.resolveQName(el, typeAttr.Value(), typeAttr) // tier 2
 	if err != nil {
 		return nil, err
 	}
@@ -2996,11 +2996,11 @@ func (p *producer) defaultAttributesRef(ctElem *Element) (*xsd.AttributeGroupRef
 	if err != nil {
 		return nil, err
 	}
-	lexical, ok := p.schemaElem.Attr("defaultAttributes")
+	da, ok := p.schemaElem.attr("defaultAttributes")
 	if !ok || (present && !apply) {
 		return nil, nil
 	}
-	qn, err := p.resolveQName(p.schemaElem, lexical, "defaultAttributes")
+	qn, err := p.resolveQName(p.schemaElem, da.Value(), da)
 	if err != nil {
 		return nil, err
 	}
@@ -3068,8 +3068,8 @@ func (p *producer) prohibitedAttributeNames(parent *Element) ([]xsd.QName, error
 		if use != "prohibited" {
 			continue
 		}
-		if ref, hasRef := el.Attr("ref"); hasRef {
-			qn, err := p.resolveQName(el, ref, "ref")
+		if ref, hasRef := el.attr("ref"); hasRef {
+			qn, err := p.resolveQName(el, ref.Value(), ref)
 			if err != nil {
 				return nil, err
 			}
@@ -3211,11 +3211,11 @@ func (p *producer) attributeGroupMember(el *Element) (xsd.AttributeUseOrGroupRef
 	if err := rejectProhibitedRefAttrs(el); err != nil {
 		return nil, err
 	}
-	ref, ok := el.Attr("ref")
+	ref, ok := el.attr("ref")
 	if !ok {
 		return nil, fmt.Errorf("parser: a nested <attributeGroup> must be a reference (carry a ref attribute), but none is present")
 	}
-	qn, err := p.resolveQName(el, ref, "ref")
+	qn, err := p.resolveQName(el, ref.Value(), ref)
 	if err != nil {
 		return nil, err
 	}
@@ -3306,7 +3306,7 @@ func (p *producer) produceAttributeUse(el *Element, scopeParent xsd.AttributeSco
 	if err := useValueConstraintOK(el); err != nil {
 		return nil, err
 	}
-	ref, hasRef := el.Attr("ref")
+	ref, hasRef := el.attr("ref")
 	_, hasName := el.Attr("name")
 	if hasRef && hasName {
 		return nil, xsderr.New(ruleSrcAttribute, el.Loc(),
@@ -3381,7 +3381,7 @@ func (p *producer) produceAttributeUse(el *Element, scopeParent xsd.AttributeSco
 	}
 
 	if hasRef {
-		qn, err := p.resolveQName(el, ref, "ref")
+		qn, err := p.resolveQName(el, ref.Value(), ref)
 		if err != nil {
 			return nil, err
 		}
@@ -3779,7 +3779,7 @@ func (p *producer) disallowedNames(el *Element) ([]xsd.QName, []xsd.DisallowedNa
 			keywords = append(keywords, kw)
 			continue
 		}
-		qn, err := p.bindQName(el, tok, "notQName")
+		qn, err := p.bindQName(el, tok, notQName)
 		if err != nil {
 			return nil, nil, err
 		}

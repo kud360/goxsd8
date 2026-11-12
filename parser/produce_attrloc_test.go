@@ -1,6 +1,7 @@
 package parser_test
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/kud360/goxsd8/xsderr"
@@ -244,5 +245,181 @@ func TestParseRedefineSelfReferenceOccursChargeLocated(t *testing.T) {
 	}
 	if loc.URI != "main.xsd" || loc.Line != 3 || loc.Col != 3 {
 		t.Fatalf("position = %s:%d:%d, want main.xsd:3:3 (%v)", loc.URI, loc.Line, loc.Col, err)
+	}
+}
+
+// TestProduceQNameAttributeChargeLocated pins that a charge against a
+// QName-valued attribute is located at that attribute's name, not at its
+// element's start tag (#3463): one row per charging site, each faulted
+// attribute written after another attribute and on a later line than the
+// element's "<". A list-valued attribute (memberTypes, notQName,
+// substitutionGroup, vc:typeAvailable) is located at the attribute, not at the
+// faulted item, which each such row writes second. The guard row charges an
+// element as a whole and stays at its "<" though the attribute it reads sits on
+// the next line: src-identity-constraint clause 5 against a <unique ref> naming
+// a <key>.
+func TestProduceQNameAttributeChargeLocated(t *testing.T) {
+	const vcOpen = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:vc="http://www.w3.org/2007/XMLSchema-versioning">`
+	// A slice, not a map: subtest order is output (STYLE D2).
+	cases := []struct {
+		name   string
+		target string
+		body   string
+		doc    string
+		rule   xsderr.Rule
+		line   int
+		col    int
+		// msg, when set, is the opening of the message after its rule, pinning
+		// the attribute name the charge reports.
+		msg string
+	}{
+		{
+			name: "bindQName lexical type",
+			body: "\n" + `<xs:element name="e"` + "\n" + `  type="xs:"/>`,
+			rule: "cvc-datatype-valid", line: 3, col: 3,
+			msg: `<element> type value "xs:" `,
+		},
+		{
+			name: "bindQName unbound prefix type",
+			body: "\n" + `<xs:element name="e"` + "\n" + `   type="nope:T"/>`,
+			rule: "src-resolve", line: 3, col: 4,
+		},
+		{
+			name: "bindQName lexical memberTypes item",
+			body: "\n" + `<xs:simpleType name="T"><xs:union id="u"` + "\n" +
+				`  memberTypes="xs:string xs:"/></xs:simpleType>`,
+			rule: "cvc-datatype-valid", line: 3, col: 3,
+			msg: `<union> memberTypes value "xs:" `,
+		},
+		{
+			name: "bindQName unbound prefix notQName item",
+			body: "\n" + `<xs:complexType name="T"><xs:sequence><xs:any processContents="lax"` + "\n" +
+				`    notQName="xs:string nope:a"/></xs:sequence></xs:complexType>`,
+			rule: "src-resolve", line: 3, col: 5,
+		},
+		{
+			name: "bindQName unbound prefix substitutionGroup item",
+			body: "\n" + `<xs:element name="h" type="xs:string"/><xs:element name="e"` + "\n" +
+				`  substitutionGroup="h nope:h"/>`,
+			rule: "src-resolve", line: 3, col: 3,
+		},
+		{
+			name: "bindQName unbound prefix itemType",
+			body: "\n" + `<xs:simpleType name="T"><xs:list id="l"` + "\n" + ` itemType="nope:T"/></xs:simpleType>`,
+			rule: "src-resolve", line: 3, col: 2,
+		},
+		{
+			name: "bindQName unbound prefix keyref refer",
+			body: "\n" + `<xs:element name="e" type="xs:string"><xs:keyref name="r"` + "\n" +
+				`  refer="nope:k"><xs:selector xpath="."/><xs:field xpath="."/></xs:keyref></xs:element>`,
+			rule: "src-resolve", line: 3, col: 3,
+		},
+		{
+			name:   "licensedNamespace clause 4.1",
+			target: "urn:a",
+			body:   "\n" + `<xs:element name="e"` + "\n" + `  type="T"/>`,
+			rule:   "src-resolve", line: 3, col: 3,
+		},
+		{
+			name: "licensedNamespace clause 4.2",
+			body: "\n" + `<xs:element name="e" xmlns:u="urn:u"` + "\n" + `   type="u:T"/>`,
+			rule: "src-resolve", line: 3, col: 4,
+		},
+		{
+			name: "resolveBaseType clause 1.1 simpleContent",
+			body: "\n" + `<xs:complexType name="T"><xs:simpleContent><xs:extension id="x"` + "\n" +
+				` base="Missing"/></xs:simpleContent></xs:complexType>`,
+			rule: "src-resolve", line: 3, col: 2,
+		},
+		{
+			name: "resolveBaseType clause 1.1 complexContent",
+			body: "\n" + `<xs:complexType name="T"><xs:complexContent><xs:extension id="x"` + "\n" +
+				`  base="Missing"/></xs:complexContent></xs:complexType>`,
+			rule: "src-resolve", line: 3, col: 3,
+		},
+		{
+			name: "referencedIdentityConstraint clause 1.7",
+			body: "\n" + `<xs:element name="e" type="xs:string"><xs:key id="k"` + "\n" +
+				`   ref="nokey"/></xs:element>`,
+			rule: "src-resolve", line: 3, col: 4,
+		},
+		{
+			name: "conditionalQNames lexical vc:typeAvailable item",
+			doc: vcOpen + "\n" + `<xs:element name="e"` + "\n" +
+				`  vc:typeAvailable="xs:string 23"/></xs:schema>`,
+			rule: "src-cip", line: 3, col: 3,
+		},
+		{
+			name: "conditionalQNames unbound prefix vc:facetAvailable item",
+			doc: vcOpen + "\n" + `<xs:element name="e"` + "\n" +
+				`    vc:facetAvailable="xs:length nope:length"/></xs:schema>`,
+			rule: "src-cip", line: 3, col: 5,
+		},
+		{
+			name: "guard: src-identity-constraint clause 5 at the element",
+			body: "\n" + `<xs:element name="e" type="xs:string"><xs:key name="k"><xs:selector xpath="."/><xs:field xpath="."/></xs:key>` +
+				`<xs:unique` + "\n" + `  ref="k"/></xs:element>`,
+			rule: "src-identity-constraint", line: 2, col: 110,
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			doc := tc.doc
+			if doc == "" {
+				doc = wrap(tc.target, tc.body)
+			}
+			_, err := produce(t, doc)
+			assertRule(t, err, tc.rule)
+			loc, ok := xsderr.LocOf(err)
+			if !ok {
+				t.Fatalf("error %v carries no position (STYLE E3)", err)
+			}
+			if loc.URI != produceURI || loc.Line != tc.line || loc.Col != tc.col {
+				t.Fatalf("position = %s:%d:%d, want %s:%d:%d (%v)",
+					loc.URI, loc.Line, loc.Col, produceURI, tc.line, tc.col, err)
+			}
+			if want := "[" + string(tc.rule) + "] " + tc.msg; tc.msg != "" && !strings.Contains(err.Error(), want) {
+				t.Fatalf("error %v does not open with %q", err, want)
+			}
+		})
+	}
+}
+
+// TestParseRedefineQNameChargeLocated pins the #3463 charges a <redefine>
+// reaches first: namesSelf reads a redefining type's base and namesSelfRef a
+// redefining group's self-reference before either is produced, and each
+// unbound prefix is charged at that base or ref attribute, written on a later
+// line than its element's "<" and after its id.
+func TestParseRedefineQNameChargeLocated(t *testing.T) {
+	lib := wrap("urn:a", `<xs:simpleType name="s"><xs:restriction base="xs:string"/></xs:simpleType>`+
+		`<xs:complexType name="c"><xs:sequence/></xs:complexType>`+
+		`<xs:group name="g"><xs:sequence><xs:element name="a" type="xs:string"/></xs:sequence></xs:group>`+
+		`<xs:attributeGroup name="ag"/>`)
+	// A slice, not a map: subtest order is output (STYLE D2).
+	cases := []struct{ name, body string }{
+		{"namesSelf simple base", `<xs:simpleType name="s"><xs:restriction id="r"` + "\n" +
+			`  base="nope:s"/></xs:simpleType>`},
+		{"namesSelf complex base", `<xs:complexType name="c"><xs:complexContent><xs:extension id="x"` + "\n" +
+			`  base="nope:c"/></xs:complexContent></xs:complexType>`},
+		{"namesSelfRef group ref", `<xs:group name="g"><xs:sequence><xs:group id="q"` + "\n" +
+			`  ref="nope:g"/></xs:sequence></xs:group>`},
+		{"namesSelfRef attributeGroup ref", `<xs:attributeGroup name="ag"><xs:attributeGroup id="q"` + "\n" +
+			`  ref="nope:ag"/></xs:attributeGroup>`},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := parseMap(t, "main.xsd", map[string]string{
+				"main.xsd": wrap("urn:a", "\n"+`<xs:redefine schemaLocation="lib.xsd">`+tc.body+`</xs:redefine>`),
+				"lib.xsd":  lib,
+			})
+			assertRule(t, err, "src-resolve")
+			loc, ok := xsderr.LocOf(err)
+			if !ok {
+				t.Fatalf("error %v carries no position (STYLE E3)", err)
+			}
+			if loc.URI != "main.xsd" || loc.Line != 3 || loc.Col != 3 {
+				t.Fatalf("position = %s:%d:%d, want main.xsd:3:3 (%v)", loc.URI, loc.Line, loc.Col, err)
+			}
+		})
 	}
 }

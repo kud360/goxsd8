@@ -194,7 +194,7 @@ func (p *producer) produceIdentityConstraint(el *Element, category xsd.IdentityC
 //     key or unique) — a <keyref ref="…"> demands a keyref.
 //
 // A ref that names no definition of the assembly is charged src-resolve clause
-// 1.7 (§3.17.6.2), positioned at the referring element. Clause 5 is decided
+// 1.7 (§3.17.6.2), positioned at the referring element's ref attribute. Clause 5 is decided
 // against the pre-scan index BEFORE the target is built, so a reference that is
 // both miscategorized and names a malformed definition reports its own local
 // violation rather than the target's (one deterministic first failure, STYLE D1).
@@ -203,14 +203,14 @@ func (p *producer) referencedIdentityConstraint(el *Element, category xsd.Identi
 	if err := checkIdentityConstraintRefBare(el, local); err != nil {
 		return xsd.IdentityConstraint{}, err
 	}
-	refLex, _ := el.Attr("ref") // present: the caller took this arm on !hasName
-	qn, err := p.resolveQName(el, refLex, "ref")
+	ref, _ := el.attr("ref") // present: the caller took this arm on !hasName
+	qn, err := p.resolveQName(el, ref.Value(), ref)
 	if err != nil {
 		return xsd.IdentityConstraint{}, err
 	}
 	src, ok := p.symbols.identityConstraints[qn]
 	if !ok {
-		return xsd.IdentityConstraint{}, xsderr.New(ruleSrcResolve, el.Loc(),
+		return xsd.IdentityConstraint{}, xsderr.New(ruleSrcResolve, ref.Loc(),
 			"<%s ref=%q> resolves to no identity-constraint definition in the schema (src-resolve clause 1.7)", local, qn)
 	}
 	if src.category != category {
@@ -383,14 +383,14 @@ func (p *producer) constructIdentityConstraint(name xsd.QName, el *Element, cate
 
 	var referencedKey *xsd.QName
 	if category == xsd.IdentityConstraintKeyref {
-		referLex, ok := el.Attr("refer")
+		refer, ok := el.attr("refer")
 		if !ok {
 			return xsd.IdentityConstraint{}, xsderr.New(ruleSrcIdentityConstraint, el.Loc(),
 				"<keyref> has no refer attribute, but src-identity-constraint clause 3 requires one when name is present")
 		}
 		// Only the QName is retained: the link to the referenced definition is a
 		// finalize-phase resolution (src-resolve clause 1.7), never made here.
-		qn, err := p.resolveQName(el, referLex, "refer")
+		qn, err := p.resolveQName(el, refer.Value(), refer)
 		if err != nil {
 			return xsd.IdentityConstraint{}, err
 		}
