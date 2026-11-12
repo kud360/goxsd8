@@ -346,8 +346,9 @@ func TestResolveInlineComplexTypeReferences(t *testing.T) {
 // clause 1.1 verdict on a base= that names nothing, on BOTH <complexContent>
 // alternants and for a named type as well as an inline anonymous one. The
 // restriction alternant reaches it because #346's {assertions} fold resolves the
-// base component there too; the message is POSITIONED at the derivation element,
-// which finalize's counterpart (xsderr.Loc{}) cannot be.
+// base component there too; the message is POSITIONED, at the derivation's base
+// attribute, where finalize's counterpart is positioned at the referring
+// component (xsd/resolve.go's resolveTypeName).
 func TestProduceComplexContentDanglingBase(t *testing.T) {
 	for _, tc := range []struct{ name, body string }{
 		{"named restriction", `<xs:complexType name="ct"><xs:complexContent>

@@ -326,7 +326,13 @@ func TestProduceQNameAttributeChargeLocated(t *testing.T) {
 			rule: "src-resolve", line: 3, col: 4,
 		},
 		{
-			name: "resolveBaseType clause 1.1",
+			name: "resolveBaseType clause 1.1 simpleContent",
+			body: "\n" + `<xs:complexType name="T"><xs:simpleContent><xs:extension id="x"` + "\n" +
+				` base="Missing"/></xs:simpleContent></xs:complexType>`,
+			rule: "src-resolve", line: 3, col: 2,
+		},
+		{
+			name: "resolveBaseType clause 1.1 complexContent",
 			body: "\n" + `<xs:complexType name="T"><xs:complexContent><xs:extension id="x"` + "\n" +
 				`  base="Missing"/></xs:complexContent></xs:complexType>`,
 			rule: "src-resolve", line: 3, col: 3,

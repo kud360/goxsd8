@@ -2140,10 +2140,10 @@ func (p *producer) namedComplexTypeIdentity(name xsd.QName, elem *Element) compl
 // assembly shares it.
 //
 // A name that resolves to no type at all is charged src-resolve clause 1.1
-// (§3.17.6.2) — the same rule, at the same clause, that resolveBase charges for
-// a simple type's base and that finalize charges for an unresolvable
-// {base type definition} reference (xsd/resolve.go's resolveTypeName). One rule,
-// three entry points, identical verdict.
+// (§3.17.6.2) at base (#3463) — the rule and clause finalize charges, at the
+// referring component, for an unresolvable {base type definition} reference
+// (xsd/resolve.go's resolveTypeName), which is the only charge a simple type's
+// base= gets (resolveBase).
 func (p *producer) resolveBaseType(id complexTypeIdentity, at *Element, base xmltree.Attribute, name xsd.QName) (resolvedBase, xsd.TypeDefinitionOrRef, error) {
 	if orig, owned, err := p.redefinedComplexBase(id, at, name); owned || err != nil {
 		if err != nil {
