@@ -73,6 +73,8 @@ func TestDecodeDeclines(t *testing.T) {
 			"", a, constructSharedVariant, 1, 1},
 		{"choice alternatives sharing a branch shape, qualified and not", root(`<xs:choice><xs:element name="x" type="xs:string"/><xs:element name="x" form="unqualified" type="xs:string"/></xs:choice>`),
 			"", `<s:x>v</s:x>`, constructSharedBranch, 1, 1},
+		{"mixed choice alternatives sharing a branch shape, qualified and not", `<xs:element name="r"><xs:complexType mixed="true"><xs:choice><xs:element name="x" type="xs:string"/><xs:element name="x" form="unqualified" type="xs:string"/></xs:choice></xs:complexType></xs:element>`,
+			"", `<s:x>v</s:x>`, constructSharedBranch, 1, 1},
 		{"choice alternatives sharing a branch shape, a repeated xs:int and a list of xs:int", root(`<xs:choice><xs:element name="x" type="xs:int" maxOccurs="unbounded"/><xs:element name="X"><xs:simpleType><xs:list itemType="xs:int"/></xs:simpleType></xs:element></xs:choice>`),
 			"", `<s:x>1</s:x>`, constructSharedBranch, 1, 1},
 		{"choice alternatives sharing a branch shape, a repeated xs:hexBinary and a list of xs:hexBinary", root(`<xs:choice><xs:element name="x" type="xs:hexBinary" maxOccurs="unbounded"/><xs:element name="X"><xs:simpleType><xs:list itemType="xs:hexBinary"/></xs:simpleType></xs:element></xs:choice>`),

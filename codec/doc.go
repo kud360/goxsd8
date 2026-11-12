@@ -48,7 +48,7 @@
 //   - A list simple type.
 //   - A union simple type, into a sealed interface.
 //   - A top-level element declaration, as the document element's.
-//   - A complex type with empty, simple or element-only content.
+//   - A complex type with empty, simple, element-only or mixed content.
 //   - A choice, inline or through <group ref>, occurring exactly once, as a
 //     complex type's content {particle}.
 //   - A content sequence or all group, inline or through <group ref>, that
@@ -120,7 +120,7 @@
 // complex type that decodes: one with {abstract} false, and either empty
 // content, simple content whose {simple type definition} is a simple type
 // that decodes (Structures §3.4.2.2 dcl.ctd.ctsc), its value field's, or
-// element-only content whose {particle} is a sequence or choice, inline or the
+// element-only or mixed content whose {particle} is a sequence or choice, inline or the
 // {model group} of the definition a <group ref> names, or is an all group, inline
 // or through <group ref>, where codegen splices it. Each particle of a sequence or
 // choice not flattened or of a spliced all group, a sequence's nested sequence
@@ -170,12 +170,13 @@
 // not flatten has its interface T itself, or, where the type has an attribute
 // field (codegen's package doc, "# Attributes": an attribute use other than
 // xsi:nil's, or an {attribute wildcard}), an {open content} (codegen's package
-// doc, "# Open content") or one occurrence of the choice is emptiable
-// (§3.9.6.3 cos-group-emptiable), the first field of T, a struct whose further
-// fields are the open-content and attribute fields; item 6 of [Decode]'s doc
-// places a nested choice's field and the occurrence field's interface. An
-// empty match is the nil interface. A particle's complex type gets its
-// interface or struct by the same rule.
+// doc, "# Open content"), mixed content (§3.4.1) or one occurrence of the
+// choice is emptiable (§3.9.6.3 cos-group-emptiable), the first field of T
+// but for mixed content's Text, a struct whose further fields are the
+// open-content and attribute fields; item 6 of [Decode]'s doc places a nested
+// choice's field and the occurrence field's interface. An empty match is the
+// nil interface. A particle's complex type gets its interface or struct by the
+// same rule.
 //
 // A flattened particle, the content {particle} or nested, decodes into the
 // slice field codegen emits for it (codegen's package doc, "# Particles"): one
@@ -195,18 +196,24 @@
 // cvc-accept clause 2.3.2), whose field and alternatives item 6 of
 // [Decode]'s doc states.
 //
+// Mixed content (Structures §3.4.1), read from the type's own {content type}
+// as codegen reads it, decodes into the struct codegen emits for it
+// (codegen's package doc, "# Particles"), its Text and each child's Tail
+// holding the instance's character data raw; [Decode]'s doc states the
+// fields.
+//
 // Each wildcard particle decodes into its own AnyElement field codegen emits,
-// or a choice's branch holding one, each child attributed to that particle
-// held raw; [Decode]'s doc states the field, which children are attributed to
-// it, and the raw content.
+// AnyChild in mixed content, or a choice's branch holding one, each child
+// attributed to that particle held raw; [Decode]'s doc states the field,
+// which children are attributed to it, and the raw content.
 //
 // A complex type's {open content} (Structures §3.4.2.3.3 dcl.ctd.ctcc.common
 // clauses 5 and 6), its own, one an extension inherits or one a
 // <defaultOpenContent> brings, read from the finalized {content type},
-// decodes into the slice of AnyElement codegen emits after the particle
-// fields, each child validation attributes to it (§3.4.4.4) held raw,
-// whatever its {mode} and its wildcard's constraints; [Decode]'s doc states
-// the field and which children it holds.
+// decodes into the slice of AnyElement, or of AnyChild in mixed content,
+// codegen emits after the particle fields, each child validation attributes
+// to it (§3.4.4.4) held raw, whatever its {mode} and its wildcard's
+// constraints; [Decode]'s doc states the field and which children it holds.
 //
 // A complex type's {attribute wildcard} (Structures §3.4.2.5
 // dcl.ctd.anyatt), its own, one an extension inherits, or one an attribute
@@ -243,7 +250,6 @@
 //     occurs} 0 read as 1, that codegen flattens, or that it neither splices
 //     nor flattens and that is no choice occurring exactly once, whatever its
 //     occurrence.
-//   - Mixed content.
 //   - A complex type with {abstract} true.
 //   - An element declaration with a {type table}.
 //   - A nillable element, but for one of type xs:anyType itself; item 5 of

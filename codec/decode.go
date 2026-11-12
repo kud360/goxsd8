@@ -146,7 +146,9 @@ var ErrTypeMismatch = errors.New("codec: T is not the type codegen emits for the
 // (item 6), and its {value constraint} supplies none, since its {content
 // type} is mixed and it has no [schema normalized value] (§3.3.5.4
 // sic-eltType), so an empty one's Text is "" whatever its default or fixed
-// value.
+// value. Mixed content holds none either, on the same ground: its Text and
+// each child's Tail hold the instance's characters raw (item 6), and its
+// {value constraint} supplies no Text, so an empty element's is "".
 //
 // Every instance Loc an error of Decode carries — a source fault's, a
 // violation's, an undecided check's, a decline's and item 8's — names the
@@ -301,7 +303,7 @@ var ErrTypeMismatch = errors.New("codec: T is not the type codegen emits for the
 //     complex type's {abstract}, then its content, then, for simple content,
 //     its {simple type definition}, examined as the document element's simple
 //     type is, whose construct the content declines by, or, for element-only
-//     content, its {particle}'s model group, an all group declining where
+//     or mixed content, its {particle}'s model group, an all group declining where
 //     codegen does not splice it (codegen's package doc, "# Particles"): of a
 //     <group ref>, the compositor is the referenced definition's {model
 //     group}'s and the occurrence the referring particle's (§3.7.2
@@ -416,7 +418,8 @@ var ErrTypeMismatch = errors.New("codec: T is not the type codegen emits for the
 //
 //   - T of a complex {type definition}: T is a struct whose fields are
 //     exactly those codegen emits, in name, order and Go type, each field's
-//     Go type as the bullets below read it, for simple content the value
+//     Go type as the bullets below read it, for mixed content Text first, as
+//     the mixed-content bullet below states, for simple content the value
 //     field first, named from the local name value, holding V, the Go type
 //     codegen gives the {content type}'s {simple type definition}, matched as
 //     a local particle's V of simple type is, never a pointer, then, for a
@@ -501,9 +504,9 @@ var ErrTypeMismatch = errors.New("codec: T is not the type codegen emits for the
 //     first child element; and Children each child element, read the same
 //     way, as Element, and as Tail the character data after it, before the
 //     next child or the end, each run of character data concatenated across
-//     the comments and processing instructions that break it. Mixed content
-//     other than xs:anyType's own declines (item 5), so no field holds
-//     AnyChild itself.
+//     the comments and processing instructions that break it. In mixed
+//     content the wildcard's field holds C, *C or []C in place of E, as the
+//     mixed-content bullet below states.
 //   - The field of a particle whose element declaration has {type definition}
 //     xs:anyType itself (Structures §3.4.7 any-type-itself), and a choice's
 //     such alternative's branch field, a type derived from xs:anyType being
@@ -525,12 +528,30 @@ var ErrTypeMismatch = errors.New("codec: T is not the type codegen emits for the
 //     openContent (codegen's package doc, "# Naming"), so OpenContent2 beside
 //     an element openContent: []E, never a pointer, E a struct of
 //     AnyElement's shape as the wildcard bullet above states it, matched by
-//     shape, and the slice named or not. It holds, in document order, one E
+//     shape, or []C in mixed content, as the mixed-content bullet below
+//     states, and the slice named or not. It holds, in document order, one E
 //     per child attributed to the {open content} (the paragraph after item
 //     8), nil for none; no occurrence's or branch's struct holds one. Neither
 //     its {mode} nor its wildcard's {namespace constraint} or {process
 //     contents} is read: validation held each such child to them first
 //     (§3.4.4.3 cvc-complex-content clauses 2.4 and 3.4).
+//   - The fields of mixed content ({variety} mixed, Structures §3.4.1), read
+//     from the type's own {content type} as codegen reads it, never by
+//     finding a struct of MixedChild's shape in T (codegen's package doc,
+//     "# Particles", states which fields it wraps): T's first field, named as
+//     if from local name text ahead of every other (codegen's package doc,
+//     "# Naming"), so Text, an element text then taking Text2, a string
+//     holding the character data before the first child element; the field
+//     of each element particle codegen wraps holds M in place of its V, by the same
+//     occurrence, M a struct of exactly Element, holding that V as the
+//     bullets above match it, and Tail, a string, in that order, none
+//     embedded, struct tags aside, its name never compared, such as
+//     MixedChild2; and a wildcard particle's and the {open content}'s hold C,
+//     AnyChild's shape as the wildcard bullet above states it, E's own C and
+//     no other struct of its shape. Each Tail is the character data after its
+//     child, before the next child or the end, and Text and Tail are raw as
+//     that bullet states an E's Text and Tail (§3.4.4.2 cvc-complex-type
+//     clause 1.4 validates the element children alone), white space included.
 //   - The field of a complex type's {attribute wildcard}, its struct's last,
 //     named as if from local name anyAttribute after the attribute fields
 //     (codegen's package doc, "# Naming"), so AnyAttribute2 where an
@@ -939,21 +960,24 @@ type field struct {
 // a scalarArm, the Go type codegen gives a simple type or a named type over
 // it; a structArm, a nested complex type's struct; an ifaceArm, a nested
 // complex type's bare sealed interface; a groupArm, the sealed interface
-// over a substitution group; a rawArm, a wildcard particle's AnyElement; or
-// an anyTypeArm, an element of type xs:anyType's AnyType or a named type
-// over it.
+// over a substitution group; a rawArm, a wildcard particle's or the {open
+// content}'s AnyElement; an anyTypeArm, an element of type xs:anyType's
+// AnyType or a named type over it; and, in mixed content, a mixedArm, an
+// element particle's MixedChild over the V one of the other arms holds, or a
+// childArm, a wildcard particle's or the {open content}'s AnyChild.
 type fieldArm interface {
 	// bind holds v, the V the field's shape holds at at, to the arm, item 6 of
 	// Decode's doc, and returns the elementReader that reads the field's
 	// element into a V, or at's mismatch.
 	bind(v reflect.Type, at fieldAt, cx *checkContext) (elementReader, error)
 	// admits reports whether v could be the V the arm binds: for a scalarArm,
-	// a rawArm and an anyTypeArm, exactly the V bind accepts, but that bind
-	// also holds a PrecisionDecimal scalarArm's V to the arms checkContext
-	// supplies for its Value interface; for a structArm, a struct; for an
-	// ifaceArm and a groupArm, an interface. bind rejects every v the arm does
-	// not admit before it checks anything further, so such a v stores no
-	// checkContext.bound entry.
+	// a rawArm, an anyTypeArm and a childArm, exactly the V bind accepts, but
+	// that bind also holds a PrecisionDecimal scalarArm's V to the arms
+	// checkContext supplies for its Value interface; for a structArm, a
+	// struct; for an ifaceArm and a groupArm, an interface; for a mixedArm, a
+	// struct of MixedChild's shape whose Element its element arm admits. bind
+	// rejects every v the arm does not admit before it checks anything
+	// further, so such a v stores no checkContext.bound entry.
 	admits(v reflect.Type) bool
 	// describe spells V for an ErrTypeMismatch message.
 	describe() string
@@ -2043,20 +2067,22 @@ type unitIndex[K comparable] map[K]complexUnit
 // labelled by typeSubject, the one index already holds for key where it holds
 // one, or else the first decline Decode's doc states for ct, item 5, in its
 // order: {abstract} true, ct's content, for simple content its {simple type
-// definition} (simpleValueOf), for element-only content the occurrence of its
+// definition} (simpleValueOf), for element-only or mixed content the occurrence of its
 // sequence, choice or all group (contentGroup) and each particle in order,
 // then each attribute use in order, none for a ct goshape.HasAttributeFields
 // answers false for whose content is the choice it binds as ct itself. Empty
 // content binds the struct codegen emits for it, with no field ahead of the
 // attribute fields, and simple content the struct whose one field ahead of
-// them is the value field (codegen/doc.go "# Complex types"); ct's {attribute
-// wildcard}, read from the finalized component (§3.4.2.5 dcl.ctd.anyatt),
-// gives the struct's last field, its name claimed after the attribute
-// fields'. A nil index binds an inline anonymous ct under no key. A ct of
-// simple content is stored under no key either: it reaches no particle, so
-// nothing inside it reaches it again, and its value field holds decl's own
-// {value constraint} (cvc-elt clause 5.1), which another declaration of a
-// named ct does not share.
+// them is the value field (codegen/doc.go "# Complex types"), and mixed
+// content the struct its {particle} binds as element-only content, Text
+// ahead of its fields and each child's field wrapped (codegen/doc.go
+// "# Particles"; elementField, rawChild); ct's {attribute wildcard}, read from the
+// finalized component (§3.4.2.5 dcl.ctd.anyatt), gives the struct's last field, its
+// name claimed after the attribute fields'. A nil index binds an inline anonymous ct
+// under no key. A ct of simple content is stored under no key either: it reaches no
+// particle, so nothing inside it reaches it again, and its value field holds decl's
+// own {value constraint} (cvc-elt clause 5.1), which another declaration of a named ct
+// does not share.
 func bindComplex[K comparable](run *bindRun, decl xsd.ElementDeclaration, ct xsd.ComplexType, index unitIndex[K], key K) (complexUnit, error) {
 	if u, ok := index[key]; ok {
 		return u, nil
@@ -2068,9 +2094,10 @@ func bindComplex[K comparable](run *bindRun, decl xsd.ElementDeclaration, ct xsd
 	if ct.Abstract() {
 		return nil, decline(constructAbstractTypeElement, typeSubject)
 	}
-	// names is the struct's Namer: the content's fields claim from it in
-	// particle order, then the attribute fields (codegen/doc.go "# Particles").
-	// A bare sealed interface has no struct and discards it.
+	// names is the struct's Namer: mixed content's Text field claims from it
+	// first, then the content's fields in particle order, then the attribute
+	// fields (codegen/doc.go "# Particles"). A bare sealed interface has no
+	// struct and discards it.
 	names := goname.NewNamer()
 	b := &binding{p: run.p, attributes: map[xsd.QName]int{}}
 	// ContentType is a closed sum, so the switch is STYLE T2's sealed-sum
@@ -2785,7 +2812,7 @@ type wildAttributor struct {
 // content}. The binds call it once all of a content model's particles are bound,
 // so that CheckDecode returns what Decode does, and on a premise:
 // ContentMatcher's answer depends on ct alone, and declines only a {content type}
-// that is not element-only, which contentGroup has declined, or one too wide to
+// of {variety} empty or simple, which binds no wildcardSlot, or one too wide to
 // track, which needs a repeating model group, and the particle Decode binds is
 // one sequence or choice occurring once, or one all group goshape.Splices answers
 // true for, so with {max occurs} 1, of element and wildcard particles, every

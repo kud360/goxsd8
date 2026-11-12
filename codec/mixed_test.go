@@ -37,9 +37,11 @@ type mixedChild[T any] struct {
 // flattens; mxOccSchema's is sequence(a, b) repeated, held in an occurrence
 // field; mxDefaultSchema's is sequence(a?) under a default on r; and
 // mxAnyRestrictSchema's r is of a mixed restriction of xs:anyType,
-// sequence(b?). Of the guards, mxStrictSchema's r is of an element-only
-// restriction of a mixed base, and elementOnlyPairSchema's is
-// mxPairSchema's sequence with element-only content.
+// sequence(b?); and mxNameAnySchema's is a choice of a wildcard and an
+// element any of xs:string, whose branches hold AnyChild and
+// MixedChild[string], two Go types. Of the guards, mxStrictSchema's r is of
+// an element-only restriction of a mixed base, and elementOnlyPairSchema's
+// is mxPairSchema's sequence with element-only content.
 const (
 	mxSeqSchema           = `<xs:element name="r"><xs:complexType mixed="true"><xs:sequence><xs:element name="a" type="xs:string"/></xs:sequence></xs:complexType></xs:element>`
 	mxEmptySchema         = `<xs:element name="r"><xs:complexType mixed="true"><xs:attribute name="k" type="xs:string"/></xs:complexType></xs:element>`
@@ -57,6 +59,7 @@ const (
 	mxDefaultSchema       = `<xs:element name="r" default="d"><xs:complexType mixed="true"><xs:sequence><xs:element name="a" type="xs:string" minOccurs="0"/></xs:sequence></xs:complexType></xs:element>`
 	mxAnyRestrict         = `<xs:complexType name="dt" mixed="true"><xs:complexContent><xs:restriction base="xs:anyType"><xs:sequence><xs:element name="b" type="xs:string" minOccurs="0"/></xs:sequence></xs:restriction></xs:complexContent></xs:complexType>`
 	mxAnyRestrictSchema   = mxAnyRestrict + `<xs:element name="r" type="s:dt"/>`
+	mxNameAnySchema       = `<xs:element name="r"><xs:complexType mixed="true"><xs:choice><xs:any namespace="##other" processContents="lax"/><xs:element name="any" type="xs:string"/></xs:choice></xs:complexType></xs:element>`
 	mxStrictSchema        = mxMixedBase + `<xs:complexType name="strict"><xs:complexContent><xs:restriction base="s:base"><xs:sequence><xs:element name="a" type="xs:string"/></xs:sequence></xs:restriction></xs:complexContent></xs:complexType><xs:element name="r" type="s:strict"/>`
 	elementOnlyPairSchema = `<xs:element name="r"><xs:complexType><xs:sequence><xs:element name="a" type="xs:string"/><xs:element name="b" type="xs:int"/></xs:sequence></xs:complexType></xs:element>`
 )
@@ -68,8 +71,9 @@ const (
 // mxExtAttrSchema's; mxOpen mxOpenSchema's; mxPick, mxPickA and mxPickB
 // mxPickSchema's, and mxFlat mxFlatSchema's over the same interface; mxAny
 // mxAnyTypeSchema's; mxOcc and its item mxOccItem mxOccSchema's; mxB
-// mxAnyRestrictSchema's; and of the guards, mxStrict mxStrictSchema's and
-// elementOnlyPair elementOnlyPairSchema's.
+// mxAnyRestrictSchema's; mxNameAny and its branches mxNameAnyAny and
+// mxNameAnyAny2 mxNameAnySchema's; and of the guards, mxStrict
+// mxStrictSchema's and elementOnlyPair elementOnlyPairSchema's.
 type (
 	mxSeq struct {
 		Text string
@@ -129,6 +133,13 @@ type (
 		Text string
 		B    *mixedChild[string]
 	}
+	mxNameAnyI    interface{ isMxNameAny() }
+	mxNameAnyAny  struct{ Any anyChild }
+	mxNameAnyAny2 struct{ Any mixedChild[string] }
+	mxNameAny     struct {
+		Text   string
+		Choice mxNameAnyI
+	}
 	mxStrict        struct{ A string }
 	elementOnlyPair struct {
 		A string
@@ -138,6 +149,9 @@ type (
 
 func (mxPickA) isMxPick() {}
 func (mxPickB) isMxPick() {}
+
+func (mxNameAnyAny) isMxNameAny()  {}
+func (mxNameAnyAny2) isMxNameAny() {}
 
 // mxPickBranches supplies mxPickI's branches.
 var mxPickBranches = WithBranches[mxPickI](mxPickA{}, mxPickB{})
@@ -167,6 +181,7 @@ func TestMixedTypesAreCodegens(t *testing.T) {
 		{mxAnyTypeSchema, []string{"type R struct {\n\tText string\n\tA    MixedChild[AnyType]\n}\n"}},
 		{mxOccSchema, []string{"type R struct {\n\tText     string\n\tSequence []RSequence\n}\n", "type RSequence struct {\n\tA MixedChild[string]\n\tB MixedChild[int32]\n}\n"}},
 		{mxAnyRestrictSchema, []string{"type R struct {\n\tText string\n\tB    *MixedChild[string]\n}\n"}},
+		{mxNameAnySchema, []string{"type R struct {\n\tText   string\n\tChoice RChoice\n}\n", "type RChoiceAny struct {\n\tAny AnyChild\n}\n", "type RChoiceAny2 struct {\n\tAny MixedChild[string]\n}\n"}},
 		{mxStrictSchema, []string{"type R struct {\n\tA string\n}\n"}},
 		{elementOnlyPairSchema, []string{"type R struct {\n\tA string\n\tB int32\n}\n"}},
 	}
@@ -193,9 +208,10 @@ func TestMixedTypesAreCodegens(t *testing.T) {
 // and around children kept verbatim, a run broken by a comment or CDATA
 // concatenated; a choice occurring once, which stays a struct field; an
 // element of type xs:anyType; a flattened and an occurrence content model;
-// a {value constraint}, which supplies no Text (§3.3.5.4 sic-eltType); and a
+// a {value constraint}, which supplies no Text (§3.3.5.4 sic-eltType); a
 // mixed restriction of xs:anyType, the document element's and a local
-// element's.
+// element's; and a choice of a wildcard and an element any of xs:string,
+// whose branch fields, AnyChild and MixedChild[string], share no Go type.
 func TestDecodeMixed(t *testing.T) {
 	str := func(s string) *string { return &s }
 	rows := []struct {
@@ -232,14 +248,16 @@ func TestDecodeMixed(t *testing.T) {
 			mxAny{Text: "x", A: mixedChild[anyType]{Element: anyType{Attributes: []anyAttribute{{Local: "k", Value: "v"}}, Text: "in", Children: []anyChild{{Element: anyElement{Space: "urn:s", Local: "c"}, Tail: "out"}}}, Tail: "y"}}},
 		{"a flattened content model", mxFlatSchema, "", "a<s:a>1</s:a>b<s:b>2</s:b>c<s:a>3</s:a>d", into[mxFlat](mxPickBranches),
 			mxFlat{Text: "a", Choice: []mxPickI{mxPickA{A: mixedChild[string]{Element: "1", Tail: "b"}}, mxPickB{B: mixedChild[int32]{Element: 2, Tail: "c"}}, mxPickA{A: mixedChild[string]{Element: "3", Tail: "d"}}}}},
-		{"an occurrence content model", mxOccSchema, "", "<s:a>1</s:a>x<s:b>2</s:b>y<s:a>3</s:a><s:b>4</s:b>z", into[mxOcc](),
-			mxOcc{Sequence: []mxOccItem{{A: mixedChild[string]{Element: "1", Tail: "x"}, B: mixedChild[int32]{Element: 2, Tail: "y"}}, {A: mixedChild[string]{Element: "3"}, B: mixedChild[int32]{Element: 4, Tail: "z"}}}}},
+		{"an occurrence content model", mxOccSchema, "", "w<s:a>1</s:a>x<s:b>2</s:b>y<s:a>3</s:a><s:b>4</s:b>z", into[mxOcc](),
+			mxOcc{Text: "w", Sequence: []mxOccItem{{A: mixedChild[string]{Element: "1", Tail: "x"}, B: mixedChild[int32]{Element: 2, Tail: "y"}}, {A: mixedChild[string]{Element: "3"}, B: mixedChild[int32]{Element: 4, Tail: "z"}}}}},
 		{"an empty element under a default, no Text supplied", mxDefaultSchema, "", "", into[mxOpt](), mxOpt{}},
 		{"a local empty element under a default, no Text supplied", sequenceOf(`<xs:element name="a" default="d"><xs:complexType mixed="true"><xs:sequence><xs:element name="b" type="xs:string" minOccurs="0"/></xs:sequence></xs:complexType></xs:element>`),
 			"", "<s:a/>", into[struct{ A mxB }](), struct{ A mxB }{}},
 		{"a mixed restriction of xs:anyType", mxAnyRestrictSchema, "", "t", into[mxB](), mxB{Text: "t"}},
 		{"a local element of a mixed restriction of xs:anyType", mxAnyRestrict + sequenceOf(`<xs:element name="a" type="s:dt"/>`), "", "<s:a>t<s:b>v</s:b></s:a>", into[struct{ A mxB }](),
 			struct{ A mxB }{A: mxB{Text: "t", B: &mixedChild[string]{Element: "v"}}}},
+		{"a choice of a wildcard and an element any of xs:string", mxNameAnySchema, ` xmlns:o="urn:o"`, "x<s:any>v</s:any>y", into[mxNameAny](WithBranches[mxNameAnyI](mxNameAnyAny{}, mxNameAnyAny2{})),
+			mxNameAny{Text: "x", Choice: mxNameAnyAny2{Any: mixedChild[string]{Element: "v", Tail: "y"}}}},
 		{"guard: an element-only restriction of a mixed base", mxStrictSchema, "", "\n<s:a>v</s:a>\n", into[mxStrict](), mxStrict{A: "v"}},
 		{"guard: white space around element-only children", elementOnlyPairSchema, "", "\n  <s:a>1</s:a>\n  <s:b>2</s:b>\n", into[elementOnlyPair](), elementOnlyPair{A: "1", B: 2}},
 	}
@@ -474,7 +492,29 @@ func TestDecodeMixedTypeMismatch(t *testing.T) {
 	if err := CheckDecode[txt](schemaOf(t, mxSeqSchema), rootName); err == nil || err.Error() != want {
 		t.Errorf("CheckDecode = %v, want %q", err, want)
 	}
+	const wantWrap = "codec: T is not the type codegen emits for the document element: field 1 of codec.unwrapped is A string where codegen emits A M for a struct M of codegen's MixedChild shape whose Element is string"
+	if err := CheckDecode[unwrapped](schemaOf(t, mxSeqSchema), rootName); err == nil || err.Error() != wantWrap {
+		t.Errorf("CheckDecode = %v, want %q", err, wantWrap)
+	}
+	// A branch of an unwrapped field is held to no alternative, as a scalar
+	// one-field branch matching none is, rather than to the alternative it
+	// names (field.namesBranch reads the wrapped arm's Element).
+	const wantBranch = "codec: T is not the type codegen emits for the document element: branch codec.mxBareA of codec.mxPickI has the shape of no branch struct codegen emits that an earlier branch did not match"
+	err := CheckDecode[mxPick](schemaOf(t, mxPickSchema), rootName, WithBranches[mxPickI](mxBareA{}, mxBareB{}))
+	if err == nil || err.Error() != wantBranch {
+		t.Errorf("CheckDecode = %v, want %q", err, wantBranch)
+	}
 }
+
+// mxBareA and mxBareB are mxPickI's branches with their fields unwrapped,
+// which mixed content's choice does not emit.
+type (
+	mxBareA struct{ A string }
+	mxBareB struct{ B int32 }
+)
+
+func (mxBareA) isMxPick() {}
+func (mxBareB) isMxPick() {}
 
 // TestDecodeElementOnlyCharacters pins that a non-white-space character
 // child of element-only content stays validate's violation (§3.4.4.2
