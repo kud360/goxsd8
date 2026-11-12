@@ -1052,7 +1052,7 @@ func (ifaceArm) describe() string { return "I for a sealed interface I" }
 // member's expanded name to its alternative's index in sealed.alts; it is a
 // lookup index only and never iterated (STYLE D2).
 type groupArm struct {
-	sealed   *sealed
+	sealed   *sealed[field]
 	children map[xsd.QName]int
 }
 
@@ -1092,7 +1092,7 @@ func (g groupReader) read(_ *pipeline, r *xmltree.Reader, start *xmltree.StartEl
 		return reflect.Value{}, unparticled(start)
 	}
 	v := reflect.New(g.t).Elem()
-	if err := g.bound.set(r, start, i, v); err != nil {
+	if err := g.bound.set(r, start, i, 0, v); err != nil {
 		return reflect.Value{}, err
 	}
 	return v, nil
@@ -2080,6 +2080,11 @@ type sequence struct {
 	p       *pipeline
 	members []contentMember
 	index   childIndex
+	// base is the attribution target of s's first member: 0 but for the
+	// sequence a choice's model-group alternative is bound through, whose
+	// targets follow every earlier alternative's in the choice's childIndex
+	// (groupAlternative).
+	base int
 }
 
 // childIndex attributes one content model's children to the attribution
@@ -2119,10 +2124,10 @@ func (x *childIndex) wildcard(ct xsd.ComplexType, occurs xsd.Occurs, position []
 	return f, subject, nil
 }
 
-// targets is how many attribution targets s's members take so far, the
-// target of the next one bound.
+// targets is s.base plus how many attribution targets s's members take so
+// far, the target of the next one bound.
 func (s *sequence) targets() int {
-	n := 0
+	n := s.base
 	for _, m := range s.members {
 		n += m.targets()
 	}
@@ -2140,6 +2145,13 @@ type contentMember interface {
 	// sinks holds field index of t to the member, item 6 of Decode's doc, and
 	// returns one sink per target, in target order.
 	sinks(t reflect.Type, index int, cx *checkContext) ([]sink, error)
+	// admits reports whether got, a branch struct's field, could be the
+	// member: every got sinks holds to the member it admits, and a got it
+	// does not admit sinks rejects before checking anything further, so it
+	// stores no checkContext.bound entry.
+	admits(got reflect.StructField) bool
+	// goName is the member's field's Go name.
+	goName() string
 }
 
 // A sink sets the struct field of out its member's check held from the child
@@ -2151,6 +2163,9 @@ type sink interface {
 
 // targets is 1: a field takes its particle's children.
 func (field) targets() int { return 1 }
+
+// goName is f's Go name.
+func (f field) goName() string { return f.name }
 
 // sinks holds field index of t to f (field.check) and returns its one
 // fieldSink.
@@ -2282,7 +2297,7 @@ func (s *sequence) nested(run *bindRun, ct xsd.ComplexType, group xsd.ModelGroup
 	if group.Compositor() != xsd.CompositorChoice || !exactlyOnce(occurs) {
 		return decline(constructNestedGroup, "a particle of "+typeSubject)
 	}
-	c, err := bindChoice(run, ct, group.Particles(), &s.index, at, s.targets(), names, typeSubject)
+	c, err := bindChoice(run, ct, group.Particles(), &s.index, at, s.targets(), item, names, typeSubject)
 	if err != nil {
 		return err
 	}
@@ -2468,25 +2483,161 @@ func (b *boundSequence) fill(r *xmltree.Reader, _ *xmltree.StartElement, out ref
 
 // sealed is a sealed interface as codegen emits it, whose one method is
 // unexported, and one branch struct per alternative, in order, each holding
-// the one field alts holds for it, as Decode reads them. A child is put to an
-// alternative by the bind holding the sealed: for a choice and a nested
-// flattened particle, through its content model's childIndex; for a
-// substitution group, by expanded name, through its own children index; and
-// by Matcher position for a flattened content model.
-type sealed struct {
+// the fields alts holds for it, as Decode reads them: A is field for a
+// substitution group's and a flattened particle's, whose every branch holds
+// one field, and branchArm for a choice's, whose model-group alternative's
+// branch may hold several. A child is put to an alternative by the bind
+// holding the sealed: for a choice and a nested flattened particle, through
+// its content model's childIndex; for a substitution group, by expanded name,
+// through its own children index; and by Matcher position for a flattened
+// content model.
+type sealed[A branchArm] struct {
 	p    *pipeline
-	alts []field
+	alts []A
+}
+
+// A branchArm is one alternative of a sealed interface as Decode reads it, a
+// closed sum: a field, the branch struct's one field, an element or wildcard
+// alternative's, a substitution group member's or a flattened particle's
+// basic particle's; or a groupBranch, a choice's model-group alternative's.
+type branchArm interface {
+	// branchMembers returns the members the branch struct's fields hold, one
+	// per field, in field order.
+	branchMembers() []contentMember
+	// namesBranch reports whether bt, a branch struct no alternative admits
+	// (branchAdmits), is held to this alternative all the same, so that the
+	// error is this alternative's mismatch (sealed.alternative).
+	namesBranch(bt reflect.Type) bool
+}
+
+// branchMembers is f alone: an element, wildcard, member or basic particle's
+// branch struct holds one field.
+func (f field) branchMembers() []contentMember { return []contentMember{f} }
+
+// namesBranch reports whether bt is a struct of one field named as f and f's
+// arm is no scalarArm: f is of complex type, a wildcard or a substitution
+// group's interface, whose check then fails storing no checkContext.bound
+// entry (fieldArm.admits).
+func (f field) namesBranch(bt reflect.Type) bool {
+	// fieldArm is a closed sum, so the assertion is STYLE T2's sealed-sum
+	// exception.
+	_, scalar := f.arm.(scalarArm)
+	return !scalar && bt.NumField() == 1 && bt.Field(0).Name == f.name
+}
+
+// groupBranch is the branch struct of a choice's model-group alternative,
+// inline or a <group ref>, as codegen emits it: members, the members the
+// alternative's particle gives at goshape.BranchOccurs' occurrence as a
+// sequence's nested particle gives them (sequence.nested), the fields of its
+// own particles for a sequence codegen splices, nested splices included, and
+// otherwise the one member codegen gives the group, a nested choice's
+// *choice or a flattened particle's *flatSlice (codegen/doc.go "# Complex
+// types").
+type groupBranch struct {
+	members []contentMember
+}
+
+// branchMembers is g's members.
+func (g groupBranch) branchMembers() []contentMember { return g.members }
+
+// namesBranch reports whether bt's fields are as many as g's members and
+// each is named as its member is, position by position.
+func (g groupBranch) namesBranch(bt reflect.Type) bool {
+	if bt.NumField() != len(g.members) {
+		return false
+	}
+	for i, m := range g.members {
+		if bt.Field(i).Name != m.goName() {
+			return false
+		}
+	}
+	return true
+}
+
+// branchTargets is how many attribution targets a's members take, in member
+// order (contentMember.targets).
+func branchTargets(a branchArm) int {
+	n := 0
+	for _, m := range a.branchMembers() {
+		n += m.targets()
+	}
+	return n
+}
+
+// branchAdmits reports whether bt, a struct, could be a's branch struct: as
+// many fields as a's members, each admitted by its member, position by
+// position (contentMember.admits).
+func branchAdmits(a branchArm, bt reflect.Type) bool {
+	members := a.branchMembers()
+	if bt.NumField() != len(members) {
+		return false
+	}
+	for i, m := range members {
+		if !m.admits(bt.Field(i)) {
+			return false
+		}
+	}
+	return true
+}
+
+// branchesShare reports whether a and b, two alternatives of one sealed
+// interface, may admit a common branch struct (branchAdmits), so that no
+// branch type could tell them apart (sealed.alternative): exactly when they
+// hold as many members and each positional pair shares (membersShare).
+// Different counts never share, since no struct has two field counts.
+func branchesShare(a, b branchArm) bool {
+	am, bm := a.branchMembers(), b.branchMembers()
+	if len(am) != len(bm) {
+		return false
+	}
+	for i := range am {
+		if !membersShare(am[i], bm[i]) {
+			return false
+		}
+	}
+	return true
+}
+
+// membersShare reports whether two members at one position of two branch
+// structs may admit a common struct field: field.sharesBranch's answer for
+// two fields, and otherwise, where either is a *choice or a *flatSlice,
+// whether they have one name, which is conservative, since their Go types,
+// an interface or a slice of one beside whatever the other admits, are not
+// compared. contentMember is a closed sum, so the assertions are STYLE T2's
+// sealed-sum exception.
+func membersShare(a, b contentMember) bool {
+	fa, aField := a.(field)
+	fb, bField := b.(field)
+	if aField && bField {
+		return fa.sharesBranch(fb)
+	}
+	return a.goName() == b.goName()
+}
+
+// bindBranch holds bt to a's branch struct, each field to its member
+// (contentMember.sinks), and returns one sink per target of a, in target
+// order, each setting a value of bt.
+func bindBranch(a branchArm, bt reflect.Type, cx *checkContext) ([]sink, error) {
+	var sinks []sink
+	for i, m := range a.branchMembers() {
+		got, err := m.sinks(bt, i, cx)
+		if err != nil {
+			return nil, err
+		}
+		sinks = append(sinks, got...)
+	}
+	return sinks, nil
 }
 
 // choice is a choice occurring once as codegen emits it: a sealed interface
 // with one branch struct per alternative, in particle order, each holding the
-// one field its alternative's particle gives, its {min occurs} 0 read as 1
-// and its {max occurs} kept (codegen/doc.go "# Complex types"). The interface
-// is the type itself (*choiceRoot) or, as a member of a *sequence, a field of
+// fields its alternative's particle gives, its {min occurs} 0 read as 1 and
+// its {max occurs} kept (codegen/doc.go "# Complex types"). The interface is
+// the type itself (*choiceRoot) or, as a member of a *sequence, a field of
 // the type's struct, named name.
 type choice struct {
 	name   string
-	sealed *sealed
+	sealed *sealed[branchArm]
 }
 
 // bindContentChoice returns the choice of particles, the content choice of
@@ -2495,7 +2646,7 @@ type choice struct {
 // alternative is bound, the plain error wildcardSlot.attributor states.
 func bindContentChoice(run *bindRun, ct xsd.ComplexType, particles []xsd.Particle, names *goname.Namer, typeSubject string) (*choice, childIndex, error) {
 	x := newChildIndex()
-	c, err := bindChoice(run, ct, particles, &x, nil, 0, names, typeSubject)
+	c, err := bindChoice(run, ct, particles, &x, nil, 0, false, names, typeSubject)
 	if err != nil {
 		return nil, childIndex{}, err
 	}
@@ -2509,69 +2660,138 @@ func bindContentChoice(run *bindRun, ct xsd.ComplexType, particles []xsd.Particl
 // at Matcher position at (xsd.Matcher.NextParticle) below ct's content
 // {particle}, nil for that particle's own, its field named from names by the
 // local name choice before any alternative is read (codegen/doc.go
-// "# Particles"), each branch field named as a sequence's field is from a
-// fresh Namer, alternative j at position at+[j] taking attribution target
-// base+j in x, or the first decline Decode's doc states for them, item 5,
-// typeSubject naming the type: each alternative's as a sequence's particle
-// declines, an expanded name an earlier particle x indexes takes among them,
-// then an alternative whose branch struct has an earlier one's shape, which
-// no branch type could tell apart: one whose branch field may admit a Go
-// type the earlier one's does (field.sharesBranch). Its caller builds x's
+// "# Particles"), each branch's fields named as a sequence's fields are from
+// a fresh Namer per alternative, alternative j at position at+[j], its
+// attribution targets in x following every earlier alternative's from base,
+// or the first decline Decode's doc states for them, item 5, typeSubject
+// naming the type: each alternative's as a sequence's particle declines, an
+// element or wildcard alternative's own, a model-group alternative's as
+// groupAlternative states, an expanded name an earlier particle x indexes
+// takes among them, then an alternative whose branch struct has an earlier
+// one's shape, which no branch type could tell apart: one whose branch may
+// admit a struct the earlier one's does (branchesShare). item reports whether
+// the choice is in an occurrence field's item (bindOccurrence), which a
+// model-group alternative's members are bound as. Its caller builds x's
 // attributor once the content model's every particle is bound.
-func bindChoice(run *bindRun, ct xsd.ComplexType, particles []xsd.Particle, x *childIndex, at []int, base int, names *goname.Namer, typeSubject string) (*choice, error) {
-	c := &choice{name: names.Claim("choice"), sealed: &sealed{p: run.p}}
+func bindChoice(run *bindRun, ct xsd.ComplexType, particles []xsd.Particle, x *childIndex, at []int, base int, item bool, names *goname.Namer, typeSubject string) (*choice, error) {
+	c := &choice{name: names.Claim("choice"), sealed: &sealed[branchArm]{p: run.p}}
 	alts := c.sealed
 	for i, p := range particles {
 		term, err := particleTerm(run.p.schema, p, typeSubject)
 		if err != nil {
 			return nil, err
 		}
-		var f field
+		target := base + c.targets()
+		position := append(slices.Clone(at), i)
+		var alt branchArm
 		var takes []xsd.QName
 		var subject string
 		// Term is a closed sum, so the switch is STYLE T2's sealed-sum
 		// exception; particleTerm returns no nil Term.
 		switch term := term.(type) {
 		case xsd.Wildcard:
-			f, subject, err = x.wildcard(ct, p.Occurs(), append(slices.Clone(at), i), base+len(alts.alts), typeSubject)
+			var f field
+			f, subject, err = x.wildcard(ct, p.Occurs(), position, target, typeSubject)
 			if err != nil {
 				return nil, err
 			}
 			f.name = goname.NewNamer().Claim("any")
+			alt = branchField(f)
 		case xsd.ModelGroup:
-			return nil, decline(constructNestedGroup, "a particle of "+typeSubject)
+			alt, subject, err = groupAlternative(run, ct, term, p.Occurs(), x, position, target, item, typeSubject)
+			if err != nil {
+				return nil, err
+			}
 		case xsd.ElementDeclaration:
+			var f field
 			f, takes, err = elementField(run, x.children, term, p.Occurs())
 			if err != nil {
 				return nil, err
 			}
 			f.name = goname.NewNamer().Claim(term.Name().Local)
 			subject = declSubject(term)
-		}
-		// A branch's {min occurs} 0 reads as 1: the empty match is the nil
-		// interface, so no branch holds an absent value (cos-group-emptiable).
-		if f.shape == shapeOptional {
-			f.shape = shapeOne
+			alt = branchField(f)
 		}
 		for _, earlier := range alts.alts {
-			if earlier.sharesBranch(f) {
+			if branchesShare(earlier, alt) {
 				return nil, decline(constructSharedBranch, subject)
 			}
 		}
 		for _, n := range takes {
-			x.children[n] = base + len(alts.alts)
+			x.children[n] = target
 		}
-		alts.alts = append(alts.alts, f)
+		alts.alts = append(alts.alts, alt)
 	}
 	return c, nil
 }
 
-// targets is one per alternative.
-func (c *choice) targets() int { return len(c.sealed.alts) }
+// branchField is f as an element or wildcard alternative's branch holds it:
+// its {min occurs} 0 read as 1, since the empty match is the nil interface,
+// so no branch holds an absent value (goshape.BranchOccurs).
+func branchField(f field) field {
+	if f.shape == shapeOptional {
+		f.shape = shapeOne
+	}
+	return f
+}
+
+// groupAlternative returns the groupBranch of a choice's model-group
+// alternative of group, inline or a <group ref>, occurring as occurs, at
+// Matcher position at, and its subject, or the first decline Decode's doc
+// states for it, item 5, typeSubject naming the type: a {max occurs} 0 is
+// occursShape's plain error, since codegen emits no branch for it; otherwise
+// its members are those sequence.nested gives the particle at
+// goshape.BranchOccurs' occurrence, named from a fresh Namer, bound into x,
+// the choice's childIndex, their attribution targets from target on, item
+// passed through, so that the particle declines, where it does, as a
+// sequence's nested particle declines, an expanded name an earlier particle
+// x indexes takes among them.
+func groupAlternative(run *bindRun, ct xsd.ComplexType, group xsd.ModelGroup, occurs xsd.Occurs, x *childIndex, at []int, target int, item bool, typeSubject string) (groupBranch, string, error) {
+	subject := fmt.Sprintf("a %s model group particle of %s", group.Compositor(), typeSubject)
+	if upper, bounded := occurs.Max(); bounded && upper == 0 {
+		_, err := occursShape(occurs, false, subject)
+		return groupBranch{}, "", err
+	}
+	// seq binds into a copy of *x, whose children map is x's own; the
+	// wildcardSlot a wildcard particle may create is copied back.
+	seq := &sequence{p: run.p, index: *x, base: target}
+	if err := seq.nested(run, ct, group, goshape.BranchOccurs(occurs), at, item, goname.NewNamer(), typeSubject); err != nil {
+		return groupBranch{}, "", err
+	}
+	*x = seq.index
+	return groupBranch{members: seq.members}, subject, nil
+}
+
+// targets is one per target of each alternative, in alternative order
+// (branchTargets).
+func (c *choice) targets() int {
+	n := 0
+	for _, a := range c.sealed.alts {
+		n += branchTargets(a)
+	}
+	return n
+}
+
+// admits reports whether got could be c's field: c's name, not embedded, an
+// interface of one unexported method (sealedShaped), so that every got sinks
+// holds c, c admits.
+func (c *choice) admits(got reflect.StructField) bool {
+	return got.Name == c.name && !got.Anonymous && sealedShaped(got.Type)
+}
+
+// goName is c's field's Go name.
+func (c *choice) goName() string { return c.name }
+
+// sealedShaped reports whether it is an interface whose one method is
+// unexported, as sealed.checkSite holds a sealed interface's Go type before
+// reading its branches.
+func sealedShaped(it reflect.Type) bool {
+	return it.Kind() == reflect.Interface && it.NumMethod() == 1 && !it.Method(0).IsExported()
+}
 
 // sinks holds field index of t to the one holding c's interface, c's name,
 // not embedded, of c's sealed interface (sealed.checkSite), and returns one
-// branchSink per alternative, in order.
+// branchSink per target of each alternative, in target order.
 func (c *choice) sinks(t reflect.Type, index int, cx *checkContext) ([]sink, error) {
 	got := t.Field(index)
 	if got.Name != c.name || got.Anonymous {
@@ -2581,24 +2801,36 @@ func (c *choice) sinks(t reflect.Type, index int, cx *checkContext) ([]sink, err
 	if err != nil {
 		return nil, err
 	}
-	sinks := make([]sink, len(c.sealed.alts))
-	for j := range sinks {
-		sinks[j] = branchSink{index: index, alt: j, bound: bc}
+	var sinks []sink
+	for _, s := range branchSinks(c.sealed.alts, bc) {
+		sinks = append(sinks, branchSink{index: index, item: s})
 	}
 	return sinks, nil
 }
 
-// branchSink is alternative alt of a choice whose check held, bound, held in
-// field index of the struct.
+// branchSink is a target of a choice whose check held, item setting it in
+// the interface held in field index of the struct.
 type branchSink struct {
-	index, alt int
-	bound      *boundChoice
+	index int
+	item  itemBranchSink
 }
 
-// put sets field s.index of out to the branch of alternative s.alt
-// (boundChoice.set).
-func (s branchSink) put(_ *pipeline, r *xmltree.Reader, start *xmltree.StartElement, out reflect.Value) error {
-	return s.bound.set(r, start, s.alt, out.Field(s.index))
+// put sets field s.index of out as s.item does the interface.
+func (s branchSink) put(p *pipeline, r *xmltree.Reader, start *xmltree.StartElement, out reflect.Value) error {
+	return s.item.put(p, r, start, out.Field(s.index))
+}
+
+// branchSinks returns one itemBranchSink per target of each of alts, a
+// choice's alternatives, in target order (branchTargets), each setting a
+// value of the interface bc holds.
+func branchSinks(alts []branchArm, bc *boundChoice) []itemBranchSink {
+	var sinks []itemBranchSink
+	for j, a := range alts {
+		for k := range branchTargets(a) {
+			sinks = append(sinks, itemBranchSink{alt: j, target: k, bound: bc})
+		}
+	}
+	return sinks
 }
 
 // flatSlice is a model group particle codegen flattens, the content
@@ -2611,7 +2843,7 @@ func (s branchSink) put(_ *pipeline, r *xmltree.Reader, start *xmltree.StartElem
 // each child attributed to one appends an item of that alternative's branch.
 type flatSlice struct {
 	name   string
-	sealed *sealed
+	sealed *sealed[field]
 }
 
 // flattened is a content sequence or choice codegen flattens, as Decode
@@ -2641,7 +2873,7 @@ type flattened struct {
 // any, claims its name from names (openContentField). Last, a content model
 // xsd.Schema.ContentMatcher does not track declines (trackedMatcher).
 func bindFlattened(run *bindRun, ct xsd.ComplexType, group xsd.ModelGroup, names *goname.Namer, typeSubject string) (*flattened, error) {
-	f := &flattened{slice: &flatSlice{name: names.Claim(group.Compositor().String()), sealed: &sealed{p: run.p}}, ct: ct}
+	f := &flattened{slice: &flatSlice{name: names.Claim(group.Compositor().String()), sealed: &sealed[field]{p: run.p}}, ct: ct}
 	if err := bindReach(run, group, f.slice.sealed, &contentReach{flattened: f}, typeSubject); err != nil {
 		return nil, err
 	}
@@ -2672,7 +2904,7 @@ func bindFlattened(run *bindRun, ct xsd.ComplexType, group xsd.ModelGroup, names
 // or not a wildcard needs the Matcher, since validation leaves every instance
 // of such a model undecided (item 4).
 func (s *sequence) flatten(run *bindRun, ct xsd.ComplexType, group xsd.ModelGroup, at []int, names *goname.Namer, typeSubject string) error {
-	f := &flatSlice{name: names.Claim(group.Compositor().String()), sealed: &sealed{p: run.p}}
+	f := &flatSlice{name: names.Claim(group.Compositor().String()), sealed: &sealed[field]{p: run.p}}
 	site := &nestedReach{s: s, ct: ct, at: at}
 	if err := bindReach(run, group, f.sealed, site, typeSubject); err != nil {
 		return err
@@ -2713,7 +2945,7 @@ type reachSite interface {
 // plain error, an element particle's after its declaration's own constructs,
 // as a sequence's is. goshape.Reach's own error is plain, prefixed by
 // typeSubject.
-func bindReach(run *bindRun, group xsd.ModelGroup, alts *sealed, site reachSite, typeSubject string) error {
+func bindReach(run *bindRun, group xsd.ModelGroup, alts *sealed[field], site reachSite, typeSubject string) error {
 	visit := func(p xsd.Particle, position []int) error {
 		term, err := particleTerm(run.p.schema, p, typeSubject)
 		if err != nil {
@@ -2832,6 +3064,16 @@ func (n *nestedReach) bound(alt int, _ []int, takes []xsd.QName) {
 // targets is one per alternative.
 func (f *flatSlice) targets() int { return len(f.sealed.alts) }
 
+// admits reports whether got could be f's field: f's name, not embedded, a
+// slice whose element is an interface of one unexported method
+// (sealedShaped), so that every got checkField holds f, f admits.
+func (f *flatSlice) admits(got reflect.StructField) bool {
+	return got.Name == f.name && !got.Anonymous && got.Type.Kind() == reflect.Slice && sealedShaped(got.Type.Elem())
+}
+
+// goName is f's field's Go name.
+func (f *flatSlice) goName() string { return f.name }
+
 // checkField holds field index of t to the one holding f's slice: f's name,
 // not embedded, a slice whose element type is held to f's sealed interface as
 // a choice's is (sealed.checkSite), and returns the interface bound.
@@ -2876,13 +3118,10 @@ func (s flatSink) put(_ *pipeline, r *xmltree.Reader, start *xmltree.StartElemen
 // the value its field's elementReader reads, never merged into an earlier
 // item.
 func (bc *boundChoice) appendItem(r *xmltree.Reader, start *xmltree.StartElement, i int, slice reflect.Value) error {
-	alt, bb := bc.sealed.alts[i], bc.branches[i]
-	v, err := bb.read.read(bc.sealed.p, r, start)
-	if err != nil {
+	branch := reflect.New(bc.branches[i].t).Elem()
+	if err := bc.branches[i].sinks[0].put(bc.p, r, start, branch); err != nil {
 		return err
 	}
-	branch := reflect.New(bb.t).Elem()
-	alt.shape.store(bc.sealed.p, branch.Field(0), v)
 	item := reflect.New(slice.Type().Elem()).Elem()
 	item.Set(branch)
 	slice.Set(reflect.Append(slice, item))
@@ -3073,7 +3312,7 @@ func bindOccurrence(run *bindRun, ct xsd.ComplexType, group xsd.ModelGroup, occu
 		x := newChildIndex()
 		// The choice's own field name is never read: the item is the
 		// occurrence field's element, not a field of a struct.
-		c, err := bindChoice(run, ct, group.Particles(), &x, nil, 0, goname.NewNamer(), typeSubject)
+		c, err := bindChoice(run, ct, group.Particles(), &x, nil, 0, true, goname.NewNamer(), typeSubject)
 		if err != nil {
 			return nil, err
 		}
@@ -3131,30 +3370,32 @@ type choiceItem struct {
 func (c choiceItem) itemIndex() childIndex { return c.index }
 
 // itemSinks holds it to c's sealed interface (sealed.checkSite) and returns
-// one itemBranchSink per alternative, in order.
+// one itemBranchSink per target of each alternative, in target order.
 func (c choiceItem) itemSinks(it reflect.Type, site string, cx *checkContext) ([]sink, error) {
 	bc, err := c.choice.sealed.checkSite(it, site, cx)
 	if err != nil {
 		return nil, err
 	}
-	sinks := make([]sink, len(c.choice.sealed.alts))
-	for j := range sinks {
-		sinks[j] = itemBranchSink{alt: j, bound: bc}
+	var sinks []sink
+	for _, s := range branchSinks(c.choice.sealed.alts, bc) {
+		sinks = append(sinks, s)
 	}
 	return sinks, nil
 }
 
-// itemBranchSink is alternative alt of a choice occurrence's interface whose
-// check held, bound.
+// itemBranchSink is target target of alternative alt of a choice's
+// interface whose check held, bound, set in a value of the interface: a
+// choice occurrence's item, a choice root's T, or a nested choice's field
+// (branchSink).
 type itemBranchSink struct {
-	alt   int
-	bound *boundChoice
+	alt, target int
+	bound       *boundChoice
 }
 
 // put sets out, the item, a value of the interface, to the branch of
-// alternative s.alt (boundChoice.set).
+// alternative s.alt, its target s.target set from start (boundChoice.set).
 func (s itemBranchSink) put(_ *pipeline, r *xmltree.Reader, start *xmltree.StartElement, out reflect.Value) error {
-	return s.bound.set(r, start, s.alt, out)
+	return s.bound.set(r, start, s.alt, s.target, out)
 }
 
 // width is the one occurrence field, and the open-content field, if any.
@@ -3355,7 +3596,7 @@ func continues(schema *xsd.Schema, group xsd.ModelGroup, last, next []int, count
 // unexported, whose branch types cx's sets hold as one struct per alternative
 // of the alternative's branch shape. It returns c bound to those branch
 // types. Neither the interface's nor a branch's name is compared.
-func (c *sealed) checkSite(it reflect.Type, site string, cx *checkContext) (*boundChoice, error) {
+func (c *sealed[A]) checkSite(it reflect.Type, site string, cx *checkContext) (*boundChoice, error) {
 	if it.Kind() != reflect.Interface {
 		return nil, fmt.Errorf("%w: %s is %s, no interface, where codegen emits a sealed interface", ErrTypeMismatch, site, it)
 	}
@@ -3382,69 +3623,62 @@ func (c *sealed) checkSite(it reflect.Type, site string, cx *checkContext) (*bou
 		if slices.Contains(branches[:i], bt) {
 			return nil, fmt.Errorf("%w: WithBranches supplies %s twice as a branch of %s", ErrTypeMismatch, bt, it)
 		}
-		j, read, err := c.alternative(bt, cx)
+		j, sinks, err := c.alternative(bt, cx)
 		if err != nil {
 			return nil, err
 		}
 		if j < 0 || matched[j].t != nil {
 			return nil, fmt.Errorf("%w: branch %s of %s has the shape of no branch struct codegen emits that an earlier branch did not match", ErrTypeMismatch, bt, it)
 		}
-		matched[j] = boundBranch{t: bt, read: read}
+		matched[j] = boundBranch{t: bt, sinks: sinks}
 	}
-	return &boundChoice{sealed: c, branches: matched}, nil
+	return &boundChoice{p: c.p, branches: matched}, nil
 }
 
 // alternative returns the index in c.alts of the alternative whose branch
-// struct bt is, with the elementReader of its one field, or -1 for none, or
-// that alternative's ErrTypeMismatch error: the first alternative whose
-// branch field admits bt's one field (field.admits), which sharesBranch keeps
-// alone of those admitting any one Go type; or else, where none admits it,
-// the first alternative whose arm is no scalarArm and whose field bt's one
-// field is named like, whose check then fails storing no checkContext.bound
-// entry (fieldArm.admits). The one alternative selected is the only one
-// checked, its check's error the check's. So no check is tried and discarded.
-func (c *sealed) alternative(bt reflect.Type, cx *checkContext) (int, elementReader, error) {
-	if bt.NumField() != 1 {
-		return -1, nil, nil
-	}
-	got := bt.Field(0)
-	j := slices.IndexFunc(c.alts, func(a field) bool { return a.admits(got) })
+// struct bt is, with the sinks of its targets (bindBranch), or -1 for none,
+// or that alternative's ErrTypeMismatch error: the first alternative that
+// admits bt (branchAdmits), every field held position by position, which
+// branchesShare keeps alone of those admitting any one struct; or else,
+// where none admits it, the first alternative that names bt
+// (branchArm.namesBranch), whose check then fails. The one alternative
+// selected is the only one checked, its check's error the check's. So no
+// check is tried and discarded.
+func (c *sealed[A]) alternative(bt reflect.Type, cx *checkContext) (int, []sink, error) {
+	j := slices.IndexFunc(c.alts, func(a A) bool { return branchAdmits(a, bt) })
 	if j < 0 {
-		// fieldArm is a closed sum, so the assertion is STYLE T2's sealed-sum
-		// exception.
-		j = slices.IndexFunc(c.alts, func(a field) bool {
-			_, scalar := a.arm.(scalarArm)
-			return !scalar && a.name == got.Name
-		})
+		j = slices.IndexFunc(c.alts, func(a A) bool { return a.namesBranch(bt) })
 	}
 	if j < 0 {
 		return -1, nil, nil
 	}
-	read, err := c.alts[j].check(bt, 0, cx)
-	return j, read, err
+	sinks, err := bindBranch(c.alts[j], bt, cx)
+	return j, sinks, err
 }
 
-// boundChoice is a sealed interface checkSite held: branches[i] is the
-// branch of sealed.alts[i], none without its type.
+// boundChoice is a sealed interface checkSite held, its branches read
+// through p: branches[i] is the branch of the sealed's alts[i], none without
+// its type.
 type boundChoice struct {
-	sealed   *sealed
+	p        *pipeline
 	branches []boundBranch
 }
 
-// boundBranch is one branch struct t of a choice's interface, read its one
-// field's elementReader.
+// boundBranch is one branch struct t of a sealed interface, sinks[k] setting
+// its alternative's target k in a value of t (bindBranch).
 type boundBranch struct {
-	t    reflect.Type
-	read elementReader
+	t     reflect.Type
+	sinks []sink
 }
 
 // set sets dst, a value of the sealed interface, from the child element
-// start, read from r up to its end tag, which its caller attributes to
-// alternative i: the branch of that alternative holds the value its field's
-// elementReader reads, a repeated alternative's appended to the branch dst
-// already holds.
-func (bc *boundChoice) set(r *xmltree.Reader, start *xmltree.StartElement, i int, dst reflect.Value) error {
-	alt, bb := bc.sealed.alts[i], bc.branches[i]
+// start, read from r up to its end tag, which its caller attributes to target
+// k of alternative i: the branch of that alternative, the one dst already
+// holds or else a new one, has the field of that target set by its sink, so a
+// repeated field's value is appended, and the fields of a model-group
+// alternative's branch are filled one child at a time.
+func (bc *boundChoice) set(r *xmltree.Reader, start *xmltree.StartElement, i, k int, dst reflect.Value) error {
+	bb := bc.branches[i]
 	branch := reflect.New(bb.t).Elem()
 	if !dst.IsNil() {
 		// Validation charges a child of a second alternative first
@@ -3454,11 +3688,9 @@ func (bc *boundChoice) set(r *xmltree.Reader, start *xmltree.StartElement, i int
 		}
 		branch.Set(dst.Elem())
 	}
-	v, err := bb.read.read(bc.sealed.p, r, start)
-	if err != nil {
+	if err := bb.sinks[k].put(bc.p, r, start, branch); err != nil {
 		return err
 	}
-	alt.shape.store(bc.sealed.p, branch.Field(0), v)
 	dst.Set(branch)
 	return nil
 }
@@ -3467,7 +3699,7 @@ func (bc *boundChoice) set(r *xmltree.Reader, start *xmltree.StartElement, i int
 // a document element's or a particle's element declaration's, whose content
 // is a choice and which has no attribute field, as Decode reads it.
 type choiceRoot struct {
-	sealed *sealed
+	sealed *sealed[branchArm]
 	// index attributes a child to its alternative, target j being
 	// alternative j (bindContentChoice).
 	index childIndex
@@ -3501,19 +3733,20 @@ func (c *choiceRoot) checkAt(t reflect.Type, site string, cx *checkContext) (fil
 	if err != nil {
 		return nil, err
 	}
-	bc.choice = choice
+	bc.sinks = branchSinks(c.sealed.alts, choice)
 	return bc, nil
 }
 
-// boundChoiceRoot is root whose check held, choice its bound interface.
+// boundChoiceRoot is root whose check held, sinks[i] setting its interface's
+// target i (branchSinks).
 type boundChoiceRoot struct {
-	root   *choiceRoot
-	choice *boundChoice
+	root  *choiceRoot
+	sinks []itemBranchSink
 }
 
 // fill sets out, a value of the interface, as a filler does, from each child
-// element, to the alternative eachChild attributes it to. An empty match
-// leaves out nil.
+// element, through the sink of the target eachChild attributes it to, in the
+// branch of that target's alternative. An empty match leaves out nil.
 func (c *boundChoiceRoot) fill(r *xmltree.Reader, root *xmltree.StartElement, out reflect.Value) error {
 	if err := checkXsiType(root); err != nil {
 		return err
@@ -3521,8 +3754,9 @@ func (c *boundChoiceRoot) fill(r *xmltree.Reader, root *xmltree.StartElement, ou
 	if err := noAttributes(root); err != nil {
 		return err
 	}
-	return eachChild(r, c.root.sealed.p.schema, c.root.index, func(start *xmltree.StartElement, i int) error {
-		return c.choice.set(r, start, i, out)
+	p := c.root.sealed.p
+	return eachChild(r, p.schema, c.root.index, func(start *xmltree.StartElement, i int) error {
+		return c.sinks[i].put(p, r, start, out)
 	})
 }
 
@@ -3724,7 +3958,7 @@ func elementField(run *bindRun, children map[xsd.QName]int, el xsd.ElementDeclar
 // earlier particles' names, the first in group order; then occursShape's
 // plain error. The field's shape is occursShape's over a sealed interface.
 func groupField(run *bindRun, children map[xsd.QName]int, head xsd.ElementDeclaration, members []xsd.ElementDeclaration, occurs xsd.Occurs) (field, []xsd.QName, error) {
-	group := &sealed{p: run.p}
+	group := &sealed[field]{p: run.p}
 	byName := map[xsd.QName]int{}
 	names := make([]xsd.QName, 0, len(members))
 	for _, m := range members {
