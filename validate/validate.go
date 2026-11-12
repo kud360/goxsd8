@@ -164,21 +164,19 @@ type Result struct {
 // walk charged them, which is not document order: each check is charged when
 // the walk settles it. The walk reaches elements in document order and, at
 // each, charges the element's own checks first, then its attributes', then its
-// [[children]]'s. A check that reads the element's [[attributes]] as a set, its
-// [[children]] or its value is settled only once those are exhausted, so it
-// follows every charge on them and sits at the element's own location. Among
-// such checks are a required attribute's absence (cvc-complex-type clause 3), a
-// ·defaulted attribute·'s {lexical form} (cvc-complex-type clause 4), the
-// {content type} ending short (cvc-complex-content), the element's value
-// (cvc-complex-type clause 1.2, cvc-type clause 3.1.3), a fixed {value
-// constraint} (cvc-elt clause 5.2.2) and the {assertions} (cvc-assertion). A
-// cvc-identity-constraint charge sits at a target or field node and follows the
-// whole subtree of the element whose declaration carries the constraint.
-// cvc-id charges follow the whole walk, in the order each id first appeared. At
-// one location, a charge the parent makes while matching its [[children]] comes
-// before the child's own charges there; cvc-identity-constraint and cvc-id
-// charges at that location follow them, as stated above. The order is
-// deterministic for a given schema, backend and instance.
+// [[children]]'s. A check that reads the element's [[attributes]] or its
+// [[children]] as a whole, or its value, is settled only once those are
+// exhausted, so it follows every charge on them and sits at the element's own
+// location. Among such checks are a required attribute's absence
+// (cvc-complex-type clause 3), a ·defaulted attribute·'s {lexical form}
+// (cvc-complex-type clause 4), the {content type} ending short
+// (cvc-complex-content), the element's value (cvc-complex-type clause 1.2,
+// cvc-type clause 3.1.3), a fixed {value constraint} (cvc-elt clause 5.2.2) and
+// the {assertions} (cvc-assertion). A cvc-identity-constraint charge sits at a
+// target or field node and follows the whole subtree of the element whose
+// declaration carries the constraint. cvc-id charges follow the whole walk, in
+// the order each id first appeared. The order is deterministic for a given
+// schema, backend and instance.
 //
 // The first violation is therefore not necessarily the earliest in the
 // document: a consumer wanting document order sorts the list itself.

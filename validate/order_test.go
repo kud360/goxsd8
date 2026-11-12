@@ -164,20 +164,40 @@ const orderDeclinedValues = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSche
   </xs:element>
 </xs:schema>`
 
+// orderGoverned declares r over one strictly assessed wildcard child and a
+// top-level kid whose {substitution group affiliations} name an absent nosuch,
+// and g over e, an xs:int whose one type alternative selects xs:error.
+const orderGoverned = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="r">
+    <xs:complexType><xs:sequence><xs:any processContents="strict"/></xs:sequence></xs:complexType>
+  </xs:element>
+  <xs:element name="kid" substitutionGroup="nosuch"/>
+  <xs:element name="g">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element name="e" type="xs:int"><xs:alternative type="xs:error"/></xs:element>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>`
+
 // The lists [validate.Result.Violations] and [validate.Result.Unevaluated]
 // return are in the order each method's doc states, which is not document
 // order: each row pins one whole list as "line:col rule" entries, and clause,
 // where set, is a substring of the last entry's Msg naming which check of its
-// rule it is. Rows 1, 3 to 9 and 11 to 13 each carry a check settled
-// once an element's attributes, [[children]] or whole walk are exhausted, after
-// a charge at a later location; row 2 is the guard that siblings stay in
-// document order, row 10 that the parent's charge at a child's location
-// precedes the child's own, and row 14 that a cvc-identity-constraint charge at
-// an element's location follows that element's own charge there. Rows 15 and
-// 16 are the records Unevaluated does not order as Violations does: a cvc-id
-// record at an attribute, and a cvc-identity-constraint record at an attribute
-// field node, each ahead of that attribute's own record and of a later
-// sibling's.
+// rule it is. Rows 1, 3 to 9 and 11 to 13 each carry a check settled once an
+// element's attributes, [[children]] or whole walk are exhausted, after a
+// charge at a later location; row 2 is the guard that siblings stay in document
+// order, row 10 that the parent's cvc-complex-content charge at a child its
+// {content type} does not admit precedes that child's own cvc-type charge
+// there, row 14 that a cvc-identity-constraint charge at an element's location
+// follows that element's own charge there, and rows 17 and 18 pin that the
+// parent's cvc-assess-elt and cvc-complex-type clause 5 charges at a child's
+// location follow that child's cvc-elt charge there, an order the Violations
+// doc does not promise. Rows 15 and 16 are the records Unevaluated does not
+// order as Violations does: a cvc-id record at an attribute, and a
+// cvc-identity-constraint record at an attribute field node, each ahead of that
+// attribute's own record and of a later sibling's.
 func TestViolationsAreListedInWalkOrder(t *testing.T) {
 	for _, tc := range []struct {
 		name, schema, doc string
@@ -215,7 +235,7 @@ func TestViolationsAreListedInWalkOrder(t *testing.T) {
 		{"R9 cvc-id after the whole walk", orderIDs,
 			"<r xmlns=\"urn:t\">\n  <e id=\"a\"/>\n  <e id=\"a\" ref=\"zz\"/>\n  <e n=\"9\"/>\n</r>", false,
 			[]string{"4:6 cvc-attribute", "3:6 cvc-id", "3:13 cvc-id"}, ""},
-		{"R10 parent's charge at a child before the child's own", orderSmall,
+		{"R10 parent's content-model charge at a child before the child's value charge", orderSmall,
 			"<r xmlns=\"urn:t\">\n  <f>9</f>\n  <e>1</e>\n</r>", false,
 			[]string{"2:3 cvc-complex-content", "2:3 cvc-type"}, ""},
 		{"R11 defaulted attribute after an attribute's charge", orderAttributes,
@@ -233,6 +253,12 @@ func TestViolationsAreListedInWalkOrder(t *testing.T) {
 		{"R16 cvc-identity-constraint record at the field node it could not read", orderDeclinedValues,
 			"<k>\n  <e v=\"1\"/>\n  <c/>\n</k>", true,
 			[]string{"2:6 cvc-identity-constraint", "2:6 cvc-assertions-valid", "3:3 cvc-assertion"}, ""},
+		{"R17 strict wildcard's charge at a child after the child's cvc-elt charge", orderGoverned,
+			"<r>\n  <kid/>\n</r>", false,
+			[]string{"2:3 cvc-elt", "2:3 cvc-assess-elt"}, ""},
+		{"R18 local declaration's charge at a child between the child's cvc-elt and value charges", orderGoverned,
+			"<g xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\" xmlns:xs=\"http://www.w3.org/2001/XMLSchema\">\n  <e xsi:type=\"xs:string\">1</e>\n</g>", false,
+			[]string{"2:3 cvc-elt", "2:3 cvc-complex-type", "2:3 cvc-type"}, ""},
 	} {
 		res := orderAssess(t, tc.schema, tc.doc)
 		var got, msgs []string
