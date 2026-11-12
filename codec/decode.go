@@ -1111,7 +1111,7 @@ func (g groupReader) read(_ *pipeline, r *xmltree.Reader, start *xmltree.StartEl
 		return reflect.Value{}, unparticled(start)
 	}
 	v := reflect.New(g.t).Elem()
-	if err := g.bound.set(r, start, i, 0, v); err != nil {
+	if err := g.bound.set(r, start, i, 0, v, nil); err != nil {
 		return reflect.Value{}, err
 	}
 	return v, nil
@@ -2177,10 +2177,17 @@ type contentMember interface {
 
 // A sink sets the struct field of out its member's check held from the child
 // element start, whose start tag r has just returned, reading r up to its
-// end tag.
+// end tag. st is the state of the content fill putting start (fillState),
+// nil where that fill holds no nested occurrence field.
 type sink interface {
-	put(p *pipeline, r *xmltree.Reader, start *xmltree.StartElement, out reflect.Value) error
+	put(p *pipeline, r *xmltree.Reader, start *xmltree.StartElement, out reflect.Value, st *fillState) error
 }
+
+// fillState is the state one fill of a content model's fields keeps across
+// the children of one element, on that fill's own stack, never on a bound
+// value, which cx.bound shares between the re-entrant fills of a recursive
+// type (checkContext.bound). It holds nothing yet.
+type fillState struct{}
 
 // targets is 1: a field takes its particle's children.
 func (field) targets() int { return 1 }
@@ -2207,7 +2214,7 @@ type fieldSink struct {
 }
 
 // put stores in field s.index of out the value s.read reads from start.
-func (s fieldSink) put(p *pipeline, r *xmltree.Reader, start *xmltree.StartElement, out reflect.Value) error {
+func (s fieldSink) put(p *pipeline, r *xmltree.Reader, start *xmltree.StartElement, out reflect.Value, _ *fillState) error {
 	v, err := s.read.read(p, r, start)
 	if err != nil {
 		return err
@@ -2496,11 +2503,13 @@ type boundSequence struct {
 }
 
 // fill sets, from each child element, through the sink of the target
-// eachChild attributes it to, the field of that target's member.
+// eachChild attributes it to, the field of that target's member, every sink
+// sharing one fillState of this fill's own.
 func (b *boundSequence) fill(r *xmltree.Reader, _ *xmltree.StartElement, out reflect.Value) error {
 	s := b.sequence
+	st := &fillState{}
 	return eachChild(r, s.p.schema, s.index, func(start *xmltree.StartElement, i int) error {
-		return b.sinks[i].put(s.p, r, start, out)
+		return b.sinks[i].put(s.p, r, start, out, st)
 	})
 }
 
@@ -2829,9 +2838,10 @@ type branchSink struct {
 	item  itemBranchSink
 }
 
-// put sets field s.index of out as s.item does the interface.
-func (s branchSink) put(p *pipeline, r *xmltree.Reader, start *xmltree.StartElement, out reflect.Value) error {
-	return s.item.put(p, r, start, out.Field(s.index))
+// put sets field s.index of out as s.item does the interface, st passed
+// through.
+func (s branchSink) put(p *pipeline, r *xmltree.Reader, start *xmltree.StartElement, out reflect.Value, st *fillState) error {
+	return s.item.put(p, r, start, out.Field(s.index), st)
 }
 
 // branchSinks returns one itemBranchSink per target of each of alts, a
@@ -3122,7 +3132,7 @@ type flatSink struct {
 
 // put appends to field s.index of out an item of alternative s.alt's branch
 // (boundChoice.appendItem).
-func (s flatSink) put(_ *pipeline, r *xmltree.Reader, start *xmltree.StartElement, out reflect.Value) error {
+func (s flatSink) put(_ *pipeline, r *xmltree.Reader, start *xmltree.StartElement, out reflect.Value, _ *fillState) error {
 	return s.bound.appendItem(r, start, s.alt, out.Field(s.index))
 }
 
@@ -3130,10 +3140,11 @@ func (s flatSink) put(_ *pipeline, r *xmltree.Reader, start *xmltree.StartElemen
 // from the child element start, read from r up to its end tag, which its
 // caller attributes to alternative i: the branch of that alternative holding
 // the value its field's elementReader reads, never merged into an earlier
-// item.
+// item. The branch's one field is a basic particle's, so its sink is given no
+// fillState.
 func (bc *boundChoice) appendItem(r *xmltree.Reader, start *xmltree.StartElement, i int, slice reflect.Value) error {
 	branch := reflect.New(bc.branches[i].t).Elem()
-	if err := bc.branches[i].sinks[0].put(bc.p, r, start, branch); err != nil {
+	if err := bc.branches[i].sinks[0].put(bc.p, r, start, branch, nil); err != nil {
 		return err
 	}
 	item := reflect.New(slice.Type().Elem()).Elem()
@@ -3227,7 +3238,7 @@ func (b boundFlattened) fill(r *xmltree.Reader, _ *xmltree.StartElement, out ref
 			name := expanded(tok.Name())
 			t, pos, ok := m.NextParticle(name)
 			if _, open := t.(*xsd.OpenContent); open && b.open != nil {
-				if err := b.open.put(p, r, tok, out); err != nil {
+				if err := b.open.put(p, r, tok, out, nil); err != nil {
 					return err
 				}
 				continue
@@ -3274,26 +3285,26 @@ func trackedMatcher(schema *xsd.Schema, ct xsd.ComplexType) (*xsd.Matcher, error
 // for one occurrence of group, its item, in shape, goshape.ParticleShape's for
 // the particle's occurrence over a struct for a sequence and a sealed
 // interface for a choice. ct is the complex type whose {content type} it is,
-// whose Matcher attributes every child (§3.8.4.2 key-vpath). open is the
-// field ct's {open content} gives (openContentField), the struct's second,
-// never the item's, nil for none.
+// whose Matcher attributes every child (§3.8.4.2 key-vpath), and index the
+// item's childIndex, which attributes a child to its target in the item.
+// open is the field ct's {open content} gives (openContentField), the
+// struct's second, never the item's, nil for none.
 type occurrence struct {
 	name  string
 	shape shape
 	group xsd.ModelGroup
 	item  occurrenceItem
+	index childIndex
 	ct    xsd.ComplexType
 	p     *pipeline
 	open  *field
 }
 
-// An occurrenceItem is the type for one occurrence of an occurrence's model
-// group, as Decode reads it, a closed sum: a *sequence, the struct of a
+// An occurrenceItem is the type for one occurrence of an occurrence field's
+// model group, as Decode reads it, a closed sum: a *sequence, the struct of a
 // field per particle of a sequence, bound as a content sequence's fields are;
 // or a choiceItem, a choice's sealed interface, bound as a nested choice's is.
 type occurrenceItem interface {
-	// itemIndex attributes a child to its target in the item.
-	itemIndex() childIndex
 	// itemSinks holds it, the item's Go type at the site site names, to the
 	// item, item 6 of Decode's doc, and returns one sink per target, in target
 	// order, each setting a value of it.
@@ -3305,16 +3316,12 @@ type occurrenceItem interface {
 // armOccurrence, its field named from names by group's compositor's local
 // name, sequence or choice, before its item is read, or the first decline
 // Decode's doc states for it, item 5, typeSubject naming the type, or the
-// plain error that item states in a decline's place. A sequence's item is the
-// sequence its particles bind (sequence.bind), its fields named from a fresh
-// Namer, as codegen names one occurrence's struct; a choice's is the choice
-// bindChoice binds, its targets from 0, as an item, so that a flattened
-// particle a model-group alternative holds declines as a sequence item's
-// does. The item's particles are bound at the positions below the content
-// {particle} that ct's Matcher reports, so its places are the Matcher's. Then
-// the field ct's {open content} gives, if any, claims its name from names
-// (openContentField). Last, a content model xsd.Schema.ContentMatcher does
-// not track declines (trackedMatcher).
+// plain error that item states in a decline's place. Its item is bindItem's
+// into a fresh childIndex, its targets from 0, its particles bound at the
+// positions below the content {particle} that ct's Matcher reports, so its
+// places are the Matcher's. Then the field ct's {open content} gives, if
+// any, claims its name from names (openContentField). Last, a content model
+// xsd.Schema.ContentMatcher does not track declines (trackedMatcher).
 func bindOccurrence(run *bindRun, ct xsd.ComplexType, group xsd.ModelGroup, occurs xsd.Occurs, names *goname.Namer, typeSubject string) (*occurrence, error) {
 	o := &occurrence{name: names.Claim(group.Compositor().String()), group: group, ct: ct, p: run.p}
 	choice := group.Compositor() == xsd.CompositorChoice
@@ -3323,22 +3330,9 @@ func bindOccurrence(run *bindRun, ct xsd.ComplexType, group xsd.ModelGroup, occu
 		return nil, err
 	}
 	o.shape = s
-	if choice {
-		x := newChildIndex()
-		// The choice's own field name is never read: the item is the
-		// occurrence field's element, not a field of a struct.
-		c, err := bindChoice(run, ct, group.Particles(), &x, nil, 0, true, goname.NewNamer(), typeSubject)
-		if err != nil {
-			return nil, err
-		}
-		o.item = choiceItem{choice: c, index: x}
-	}
-	if !choice {
-		seq := &sequence{p: run.p, index: newChildIndex()}
-		if err := seq.bind(run, ct, group.Particles(), nil, true, goname.NewNamer(), typeSubject); err != nil {
-			return nil, err
-		}
-		o.item = seq
+	o.index = newChildIndex()
+	if o.item, err = bindItem(run, ct, group, &o.index, nil, 0, typeSubject); err != nil {
+		return nil, err
 	}
 	if open, ok := openContentField(ct, names); ok {
 		o.open = &open
@@ -3349,8 +3343,35 @@ func bindOccurrence(run *bindRun, ct xsd.ComplexType, group xsd.ModelGroup, occu
 	return o, nil
 }
 
-// itemIndex is s's own childIndex.
-func (s *sequence) itemIndex() childIndex { return s.index }
+// bindItem returns the item of an occurrence field of group, the type for one
+// occurrence of it, its particles at Matcher position at below ct's content
+// {particle}, nil for that particle's own, bound into x, the childIndex of the
+// content model holding them, their attribution targets from target on, or
+// the first decline Decode's doc states for them, item 5, typeSubject naming
+// the type: a sequence's item is the sequence its particles bind
+// (sequence.bind), its fields named from a fresh Namer, as codegen names one
+// occurrence's struct; a choice's is the choice bindChoice binds, as an item,
+// so that a flattened particle a model-group alternative holds declines as a
+// sequence item's does. Each is bound as an item, item true.
+func bindItem(run *bindRun, ct xsd.ComplexType, group xsd.ModelGroup, x *childIndex, at []int, target int, typeSubject string) (occurrenceItem, error) {
+	if group.Compositor() == xsd.CompositorChoice {
+		// The choice's own field name is never read: the item is the
+		// occurrence field's element, not a field of a struct.
+		c, err := bindChoice(run, ct, group.Particles(), x, at, target, true, goname.NewNamer(), typeSubject)
+		if err != nil {
+			return nil, err
+		}
+		return choiceItem{choice: c}, nil
+	}
+	// seq binds into a copy of *x, whose children map is x's own; the
+	// wildcardSlot a wildcard particle may create is copied back.
+	seq := &sequence{p: run.p, index: *x, base: target}
+	if err := seq.bind(run, ct, group.Particles(), at, true, goname.NewNamer(), typeSubject); err != nil {
+		return nil, err
+	}
+	*x = seq.index
+	return seq, nil
+}
 
 // itemSinks holds it to the struct s's members give, as a binding holds its
 // content fields, with no attribute field: a struct of exactly s's width
@@ -3374,15 +3395,10 @@ func (s *sequence) itemSinks(it reflect.Type, site string, cx *checkContext) ([]
 }
 
 // choiceItem is the item of a choice occurrence: choice, its sealed
-// interface, and index, attributing a child to its target among the
-// alternatives' (branchSinks).
+// interface.
 type choiceItem struct {
 	choice *choice
-	index  childIndex
 }
-
-// itemIndex is c's index.
-func (c choiceItem) itemIndex() childIndex { return c.index }
 
 // itemSinks holds it to c's sealed interface (sealed.checkSite) and returns
 // one itemBranchSink per target of each alternative, in target order.
@@ -3408,9 +3424,10 @@ type itemBranchSink struct {
 }
 
 // put sets out, the item, a value of the interface, to the branch of
-// alternative s.alt, its target s.target set from start (boundChoice.set).
-func (s itemBranchSink) put(_ *pipeline, r *xmltree.Reader, start *xmltree.StartElement, out reflect.Value) error {
-	return s.bound.set(r, start, s.alt, s.target, out)
+// alternative s.alt, its target s.target set from start (boundChoice.set),
+// st passed through.
+func (s itemBranchSink) put(_ *pipeline, r *xmltree.Reader, start *xmltree.StartElement, out reflect.Value, st *fillState) error {
+	return s.bound.set(r, start, s.alt, s.target, out, st)
 }
 
 // width is the one occurrence field, and the open-content field, if any.
@@ -3472,7 +3489,7 @@ func (b boundOccurrence) fill(r *xmltree.Reader, _ *xmltree.StartElement, out re
 	if err != nil {
 		return err
 	}
-	x := o.item.itemIndex()
+	x := o.index
 	var places []place
 	if x.wild != nil {
 		places = x.wild.places
@@ -3494,7 +3511,7 @@ func (b boundOccurrence) fill(r *xmltree.Reader, _ *xmltree.StartElement, out re
 		case *xmltree.StartElement:
 			t, pos, ok := m.NextParticle(expanded(tok.Name()))
 			if _, open := t.(*xsd.OpenContent); open && b.open != nil {
-				if err := b.open.put(o.p, r, tok, out); err != nil {
+				if err := b.open.put(o.p, r, tok, out, nil); err != nil {
 					return err
 				}
 				continue
@@ -3524,7 +3541,7 @@ func (b boundOccurrence) fill(r *xmltree.Reader, _ *xmltree.StartElement, out re
 			if opens {
 				item = reflect.New(b.item).Elem()
 			}
-			if err := b.sinks[at.index].put(o.p, r, tok, item); err != nil {
+			if err := b.sinks[at.index].put(o.p, r, tok, item, nil); err != nil {
 				return err
 			}
 		}
@@ -3691,8 +3708,8 @@ type boundBranch struct {
 // k of alternative i: the branch of that alternative, the one dst already
 // holds or else a new one, has the field of that target set by its sink, so a
 // repeated field's value is appended, and the fields of a model-group
-// alternative's branch are filled one child at a time.
-func (bc *boundChoice) set(r *xmltree.Reader, start *xmltree.StartElement, i, k int, dst reflect.Value) error {
+// alternative's branch are filled one child at a time, its sinks given st.
+func (bc *boundChoice) set(r *xmltree.Reader, start *xmltree.StartElement, i, k int, dst reflect.Value, st *fillState) error {
 	bb := bc.branches[i]
 	branch := reflect.New(bb.t).Elem()
 	if !dst.IsNil() {
@@ -3703,7 +3720,7 @@ func (bc *boundChoice) set(r *xmltree.Reader, start *xmltree.StartElement, i, k 
 		}
 		branch.Set(dst.Elem())
 	}
-	if err := bb.sinks[k].put(bc.p, r, start, branch); err != nil {
+	if err := bb.sinks[k].put(bc.p, r, start, branch, st); err != nil {
 		return err
 	}
 	dst.Set(branch)
@@ -3761,7 +3778,8 @@ type boundChoiceRoot struct {
 
 // fill sets out, a value of the interface, as a filler does, from each child
 // element, through the sink of the target eachChild attributes it to, in the
-// branch of that target's alternative. An empty match leaves out nil.
+// branch of that target's alternative, every sink sharing one fillState of
+// this fill's own. An empty match leaves out nil.
 func (c *boundChoiceRoot) fill(r *xmltree.Reader, root *xmltree.StartElement, out reflect.Value) error {
 	if err := checkXsiType(root); err != nil {
 		return err
@@ -3770,8 +3788,9 @@ func (c *boundChoiceRoot) fill(r *xmltree.Reader, root *xmltree.StartElement, ou
 		return err
 	}
 	p := c.root.sealed.p
+	st := &fillState{}
 	return eachChild(r, p.schema, c.root.index, func(start *xmltree.StartElement, i int) error {
-		return c.sinks[i].put(p, r, start, out)
+		return c.sinks[i].put(p, r, start, out, st)
 	})
 }
 
