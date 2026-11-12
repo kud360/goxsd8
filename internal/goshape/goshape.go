@@ -277,6 +277,16 @@ func HasAttributeFields(t xsd.ComplexType) bool {
 	return hasWildcard || len(FieldAttributeUses(t)) > 0
 }
 
+// Mixed reports whether the complex type t's {content type} has {variety}
+// mixed (§3.4.1): element content whose effective mixed value (§3.4.2.3.3
+// dcl.ctd.ctcc.common clause 1) is true, read from t's resolved {content type}
+// alone, never its base's, so that an extension's (clause 4.2) and a
+// restriction's are each its own.
+func Mixed(t xsd.ComplexType) bool {
+	content, isElement := t.ContentType().(xsd.ElementContent)
+	return isElement && content.Mixed
+}
+
 // Shape is the occurrence in which a field holds its value V: V itself, *V or
 // []V. The zero value is invalid (STYLE T1).
 type Shape uint8
