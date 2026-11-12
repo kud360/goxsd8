@@ -1072,9 +1072,8 @@ func (c nsContext) LookupNamespace(prefix string) (namespace string, ok bool) {
 // CheckValue accepts v iff it is equal or identical to a parsed member
 // (cvc-enumeration-valid, §4.3.5.4) — values are compared, never spellings, so
 // "7" is accepted against a member written "+007". A rejection names the facet
-// by its facetOrigin relation and every member as its <enumeration> wrote it,
-// in document order, rendered by quoteMembers; a QName or NOTATION member is
-// quoted as written, its prefix unresolved.
+// by its facetOrigin relation and quotes its lexicals through quoteMembers; a
+// QName or NOTATION member is quoted with its prefix unresolved.
 func (e enumFacet) CheckValue(v Value) error {
 	for _, member := range e.members {
 		if enumMatch(v, member) {
