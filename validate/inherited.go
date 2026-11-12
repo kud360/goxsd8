@@ -15,7 +15,7 @@ import (
 // ·expanded name· and [[normalized value]], which is all clause 1.1.3's copy
 // reads, located at its [[owner element]], which carries no attribute item for
 // it. The owner itself is not kept: e-inherited_attributes clause 2 is the only
-// rule that reads it, and [walk.handDown] settles that clause by the order it
+// rule that reads it, and [handDown] settles that clause by the order it
 // composes in, while clause 1.1.3 gives the copy E as its owner.
 type suppliedAttribute struct {
 	name  xsd.QName
@@ -66,8 +66,7 @@ func (a suppliedAttribute) Loc() xsderr.Loc { return a.loc }
 // Wildcard, of a parent that is not ·skipped·: a caller asks this for no
 // other.
 func (v *Validator) HandedDown(governing xsd.TypeDefinition, at xsderr.Loc, attributes, inherited []Attribute) []Attribute {
-	w := walk{schema: v.schema}
-	return w.handDown(governing, at, attributes, inherited)
+	return handDown(v.schema, complexTypeOf(governing), at, attributes, inherited)
 }
 
 // handedDown is [Validator.HandedDown] for e, walked under g, whose own
@@ -86,17 +85,18 @@ func (v *Validator) HandedDown(governing xsd.TypeDefinition, at xsderr.Loc, attr
 // can arise: [walk.child] stops before [walk.element] for such a child, and a
 // ·skipped· parent is never walked at all.
 func (w *walk) handedDown(e Element, g governance, inherited []Attribute) []Attribute {
-	return w.handDown(g.typ, e.Loc(), e.Attributes(), inherited)
+	return handDown(w.schema, g.complexType(), e.Loc(), e.Attributes(), inherited)
 }
 
 // handDown is the one body of [Validator.HandedDown] and [walk.handedDown],
-// for an element governed by typ. It reads nothing off w but w.schema, which
-// is what lets HandedDown run it on a walk holding the schema alone.
-func (w *walk) handDown(typ xsd.TypeDefinition, at xsderr.Loc, attrs, inherited []Attribute) []Attribute {
-	g := governance{typ: typ}
+// for an element at at whose ·governing type definition· is the complex type
+// ct, nil for a simple type and for HandedDown's nil governing, whose
+// [attributes] are attrs and whose own [inherited attributes] are inherited.
+// It reads the schema and its arguments and nothing else.
+func handDown(schema *xsd.Schema, ct *xsd.ComplexType, at xsderr.Loc, attrs, inherited []Attribute) []Attribute {
 	var own []Attribute
 	for _, a := range attrs {
-		if w.inheritable(g, a) {
+		if inheritable(schema, ct, a) {
 			own = append(own, a)
 		}
 	}
@@ -104,12 +104,12 @@ func (w *walk) handDown(typ xsd.TypeDefinition, at xsderr.Loc, attrs, inherited 
 	// Default Value (§3.4.5.1)" alongside a specified one, and a ·defaulted
 	// attribute· is attributed to the use that supplies it, so clause 3.1 reads
 	// that use's {inheritable}.
-	if ct := g.complexType(); ct != nil {
+	if ct != nil {
 		for _, u := range ct.AttributeUses() {
-			if !w.schema.ResolvedInheritable(u) {
+			if !schema.ResolvedInheritable(u) {
 				continue
 			}
-			vc, defaulted := w.defaultedConstraint(u, attrs)
+			vc, defaulted := defaultedConstraint(schema, u, attrs)
 			if !defaulted {
 				continue
 			}
@@ -130,7 +130,8 @@ func (w *walk) handDown(typ xsd.TypeDefinition, at xsderr.Loc, attrs, inherited 
 }
 
 // inheritable is key-p-inherited clause 3 for one attribute information item a
-// of an element whose governance is g: the {inheritable} of the Attribute Use a
+// of an element whose ·governing type definition· is the complex type ct, nil
+// for any other (handDown's ct): the {inheritable} of the Attribute Use a
 // is ·attributed to· (clause 3.1), or where it is attributed to none, the
 // {inheritable} of its ·governing attribute declaration· (clause 3.2).
 //
@@ -153,15 +154,15 @@ func (w *walk) handDown(typ xsd.TypeDefinition, at xsderr.Loc, attrs, inherited 
 // reads: every child of it, a ·nilled· one's included, is walked undecided
 // ([contentCheck.element], #2211). HandedDown is handed a type, never an
 // undetermined one.
-func (w *walk) inheritable(g governance, a Attribute) bool {
-	if ct := g.complexType(); ct != nil {
+func inheritable(schema *xsd.Schema, ct *xsd.ComplexType, a Attribute) bool {
+	if ct != nil {
 		if u, matched := attributeUseNamed(ct.AttributeUses(), a.Name()); matched {
-			return w.schema.ResolvedInheritable(u)
+			return schema.ResolvedInheritable(u)
 		}
 	}
-	if w.skippedAttribute(g, a) {
+	if skippedAttribute(schema, ct, a) {
 		return false
 	}
-	d, resolved := w.schema.Attribute(a.Name())
+	d, resolved := schema.Attribute(a.Name())
 	return resolved && d.Inheritable()
 }

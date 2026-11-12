@@ -495,7 +495,7 @@ package validate
 // the strict-wildcard [validity] charge at the enclosing element in assess.go;
 // the nil {type definition} decline in cta.go; assertion evaluation and its
 // declines in cvcassertion.go. The skip {attribute wildcard} reading is
-// [walk.skippedAttribute]; a resolving-to-nothing child's ·lax assessment· is
+// [skippedAttribute]; a resolving-to-nothing child's ·lax assessment· is
 // [walk.child]'s; a ·nilled· element is read for cvc-id by [walk.idElement]
 // and for cvc-identity-constraint by [icCheck.fill].
 //

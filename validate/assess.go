@@ -293,7 +293,14 @@ func (g governance) typeUndetermined() bool {
 // anything else — including a SIMPLE governing type, which clause 3.1 decides
 // instead (simpleType).
 func (g governance) complexType() *xsd.ComplexType {
-	ct, isComplex := g.typ.(xsd.ComplexType)
+	return complexTypeOf(g.typ)
+}
+
+// complexTypeOf is [governance.complexType] for a bare type definition typ:
+// the Complex Type Definition typ is, or nil for a simple type and for a nil
+// typ.
+func complexTypeOf(typ xsd.TypeDefinition) *xsd.ComplexType {
+	ct, isComplex := typ.(xsd.ComplexType)
 	if !isComplex {
 		return nil
 	}
