@@ -152,21 +152,27 @@
 // repeated particle decodes to the instance's depth.
 //
 // A choice decodes into codegen's sealed interface, the branch of the one
-// alternative the instance matches (§3.8.4.3 cvc-model-group) holding its one
-// field: V, or a []V for an alternative whose {max occurs} is above 1 or
-// unbounded, its {min occurs} 0 read as 1, or, for an <element ref>
-// alternative, the same over the referenced declaration's named type, or, for
-// an alternative of complex type, the same over its S or I, or its AnyType for
-// one of type xs:anyType. A content choice occurring exactly once that codegen
-// does not flatten has its interface T itself, or, where the type has an
-// attribute field (codegen's package doc, "# Attributes": an attribute use
-// other than xsi:nil's, or an {attribute wildcard}), an {open content}
-// (codegen's package doc, "# Open content") or one occurrence of the choice is
-// emptiable (§3.9.6.3 cos-group-emptiable), the first field of T, a struct
-// whose further fields are the open-content and attribute fields; item 6 of
-// [Decode]'s doc places a nested choice's field and the occurrence field's
-// interface. An empty match is the nil interface. A particle's complex type
-// gets its interface or struct by the same rule.
+// alternative the instance matches (§3.8.4.3 cvc-model-group) holding its
+// fields. An element or wildcard alternative's branch holds its one field: V,
+// or a []V for an alternative whose {max occurs} is above 1 or unbounded, its
+// {min occurs} 0 read as 1, or, for an <element ref> alternative, the same
+// over the referenced declaration's named type, or, for an alternative of
+// complex type, the same over its S or I, or its AnyType for one of type
+// xs:anyType. A model-group alternative's, inline or through <group ref>,
+// holds the fields codegen gives it (codegen's package doc, "# Complex
+// types"), each filled as a sequence's particle's field is: for a sequence
+// alternative codegen splices, the fields of its own particles, and for any
+// other the one field of a nested choice or of a flattened particle. A
+// content choice occurring exactly once that codegen does not flatten has its
+// interface T itself, or, where the type has an attribute field (codegen's
+// package doc, "# Attributes": an attribute use other than xsi:nil's, or an
+// {attribute wildcard}), an {open content} (codegen's package doc, "# Open
+// content") or one occurrence of the choice is emptiable (§3.9.6.3
+// cos-group-emptiable), the first field of T, a struct whose further fields
+// are the open-content and attribute fields; item 6 of [Decode]'s doc places a
+// nested choice's field and the occurrence field's interface. An empty match
+// is the nil interface. A particle's complex type gets its interface or struct
+// by the same rule.
 //
 // A flattened particle, the content {particle} or nested, decodes into the
 // slice field codegen emits for it (codegen's package doc, "# Particles"): one
@@ -229,9 +235,10 @@
 //     "# Particles").
 //   - A nested sequence, or a nested choice occurring other than exactly
 //     once, that codegen neither splices nor flattens, inline or through
-//     <group ref>; a nested one codegen flattens inside a content particle
-//     held in an occurrence field; and a model-group alternative of a choice
-//     codegen does not flatten.
+//     <group ref>, a sequence's particle or a choice's model-group
+//     alternative, an alternative's {min occurs} 0 read as 1; and a nested
+//     one codegen flattens inside a content particle held in an occurrence
+//     field.
 //   - Mixed content.
 //   - A complex type with {abstract} true.
 //   - An element declaration with a {type table}.
