@@ -14,11 +14,8 @@ import (
 	"github.com/kud360/goxsd8/xsderr"
 )
 
-// The names of the components the slice reads by identity.
-var (
-	anyTypeName   = xsd.QName{Space: xsd.XMLSchemaNS, Local: "anyType"}
-	errorTypeName = xsd.QName{Space: xsd.XMLSchemaNS, Local: "error"}
-)
+// anyTypeName is the name of xs:anyType, which the slice reads by identity.
+var anyTypeName = xsd.QName{Space: xsd.XMLSchemaNS, Local: "anyType"}
 
 // The math/big types "# Simple types" maps to; a field or named type of
 // either makes the generated file import math/big (analysis.usesBig).
@@ -231,9 +228,9 @@ type scope struct {
 // pathStep is one step of a scope's path: the expanded name of the path's
 // root or of an element declaration, slot being "", or a branch of the sealed
 // interface tableType emits over the governing types of the element
-// declaration the step before names, slot being the branch's (tableBranch.slot)
-// and name, in no namespace, the branch's local name (tableBranch.local)
-// followed by Type.
+// declaration the step before names, slot being the name of the branch's slot
+// (goshape.GoverningType.Slot) and name, in no namespace, the branch's local
+// name (goshape.GoverningType.Local) followed by Type.
 type pathStep struct {
 	name xsd.QName
 	slot string
@@ -683,8 +680,8 @@ func (e *emitter) elementType(decl xsd.ElementDeclaration, td xsd.TypeDefinition
 		typ = emittedType{name: e.types.fixed(decl.Name().Local), sealed: true}
 		ifc := scope{root: elementRoot, path: elementPath(decl.Name())}
 		for _, b := range branches {
-			bt, isComplex := b.td.(xsd.ComplexType)
-			if !isComplex || isAnyType(b.td) {
+			bt, isComplex := b.Type().(xsd.ComplexType)
+			if !isComplex || isAnyType(b.Type()) {
 				continue
 			}
 			if _, _, err := e.shape("", e.branchOrigin(branchScope(ifc, b), decl, b, bt), bt); err != nil {
@@ -726,7 +723,7 @@ func (e *emitter) declaredType(decl xsd.ElementDeclaration) (xsd.TypeDefinition,
 		return nil, err
 	}
 	if !sum {
-		return branches[0].td, nil
+		return branches[0].Type(), nil
 	}
 	td, ok := e.schema.ResolvedType(decl.TypeDefinition())
 	if !ok {
@@ -735,112 +732,21 @@ func (e *emitter) declaredType(decl xsd.ElementDeclaration) (xsd.TypeDefinition,
 	return td, nil
 }
 
-// tableBranch is one governing type of an element declaration
-// (governingTypes): td, resolved, and slot, the slot of the declaration it
-// first occurs in, which holds td itself or, when td is a member of an abstract
-// complex type (abstractMembers), that abstract type.
-type tableBranch struct {
-	slot branchSlot
-	td   xsd.TypeDefinition
-}
-
-// local is the local name a branch is named from ("# Naming"): td's own when
-// td is named, and otherwise its slot's (branchSlot.anonymous).
-func (b tableBranch) local() string {
-	if b.td.Name() != (xsd.QName{}) {
-		return b.td.Name().Local
-	}
-	return b.slot.anonymous()
-}
-
-// branchSlot is the slot of an element declaration a governing type comes from
-// (governingTypes): a {type table} alternative (alternativeSlot), its {default
-// type definition} (defaultSlot), or, for a declaration with no {type table},
-// its {type definition} (declaredSlot). §3.3.1 closes the set, so it is a
-// sealed sum (STYLE T2's exception).
-type branchSlot interface {
-	// anonymous is the local name a branch of an anonymous type from the slot
-	// is named from ("# Naming").
-	anonymous() string
-	// name is how declines and headers name the slot.
-	name() string
-}
-
-// alternativeSlot is the {type table} alternative at this 1-based position in
-// {alternatives}.
-type alternativeSlot int
-
-func (s alternativeSlot) anonymous() string { return "alternative" + strconv.Itoa(int(s)) }
-func (s alternativeSlot) name() string      { return "{type table} alternative " + strconv.Itoa(int(s)) }
-
-// defaultSlot is a {type table}'s {default type definition}.
-type defaultSlot struct{}
-
-func (defaultSlot) anonymous() string { return "default" }
-func (defaultSlot) name() string      { return "{default type definition}" }
-
-// declaredSlot is the {type definition} of a declaration with no {type table}.
-// No branch is named from its anonymous name: an anonymous {type definition} is
-// a local <complexType> or <simpleType>, never abstract (the schema for
-// schemas' localComplexType prohibits the abstract attribute), so it is its
-// declaration's one governing type, which is no sum.
-type declaredSlot struct{}
-
-func (declaredSlot) anonymous() string { return "typeDefinition" }
-func (declaredSlot) name() string      { return "{type definition}" }
-
 // governingTypes returns the types the package doc's "# Element declarations"
-// lets govern an instance of the element declaration decl, in its order and by
-// its identity, and sum, true exactly when "# Element declarations" gives decl
-// a sealed interface over them. The slots are decl's {type table} alternatives
-// in order then its {default type definition} (§3.3.4.1 key-selected-type,
-// key-cta-select), or, with no {type table}, its {type definition} alone, each
-// resolved through [xsd.Schema.ResolvedType]. A {type table} slot holding
-// xs:error, matched by name (errorTypeName), gives nothing. A slot holding a
-// complex type with {abstract} true gives its members (abstractMembers) in its
-// place. Each type is kept at its first slot only, compared by name, so a
-// {default type definition} that is a substitution-group head's type and an
-// alternative naming that same type are one type, which xsd's
-// typeDefinitionsEquivalent would call two, and two anonymous types are never
-// one. sum is false for exactly one type, which declaredType returns in place
-// of the {type definition}, and true for zero or two or more. A slot that does
-// not resolve is an error, never a decline: finalize resolves every {type
-// definition} slot (src-resolve); so is abstractMembers' error.
-func (e *emitter) governingTypes(decl xsd.ElementDeclaration) (branches []tableBranch, sum bool, err error) {
-	type slotRef struct {
-		slot branchSlot
-		ref  xsd.TypeDefinitionOrRef
-	}
-	slots := []slotRef{{declaredSlot{}, decl.TypeDefinition()}}
-	table, hasTable := decl.TypeTable()
-	if hasTable {
-		slots = nil
-		for i, alt := range table.Alternatives() {
-			slots = append(slots, slotRef{alternativeSlot(i + 1), alt.TypeDefinition()})
-		}
-		slots = append(slots, slotRef{defaultSlot{}, table.DefaultTypeDefinition().TypeDefinition()})
-	}
-	for _, s := range slots {
-		td, ok := e.schema.ResolvedType(s.ref)
-		if !ok {
-			return nil, false, fmt.Errorf("%s of element %s at %s: its {type definition} does not resolve", s.slot.name(), decl.Name(), decl.Loc())
-		}
-		if hasTable && td.Name() == errorTypeName {
-			continue
-		}
-		types := []xsd.TypeDefinition{td}
-		if ct, isComplex := td.(xsd.ComplexType); isComplex && ct.Abstract() {
-			types, err = e.abstractMembers(decl, ct)
-			if err != nil {
-				return nil, false, err
-			}
-		}
-		for _, td := range types {
-			if td.Name() != (xsd.QName{}) && slices.ContainsFunc(branches, func(seen tableBranch) bool { return seen.td.Name() == td.Name() }) {
-				continue
-			}
-			branches = append(branches, tableBranch{slot: s.slot, td: td})
-		}
+// lets govern an instance of the element declaration decl, goshape.GoverningTypes'
+// answer with a slot holding a complex type with {abstract} true giving its
+// members (abstractMembers) in its place, each with the slot it is first
+// held at (goshape.GoverningType.Slot), and sum, true exactly when "# Element
+// declarations" gives decl a sealed interface over them: false for exactly one
+// type, which declaredType returns in place of the {type definition}, and true for
+// zero or two or more. goshape.GoverningTypes' error and abstractMembers' are
+// returned, never a decline.
+func (e *emitter) governingTypes(decl xsd.ElementDeclaration) (branches []goshape.GoverningType, sum bool, err error) {
+	branches, _, err = goshape.GoverningTypes(e.schema, decl, func(ct xsd.ComplexType) ([]xsd.TypeDefinition, error) {
+		return e.abstractMembers(decl, ct)
+	})
+	if err != nil {
+		return nil, false, err
 	}
 	return branches, len(branches) != 1, nil
 }
@@ -2204,7 +2110,7 @@ func (e *emitter) substitutionType(head xsd.ElementDeclaration, members []xsd.El
 // fail, as scopedType stores a struct. No struct is ever emitted at that
 // path: decl's own {type definition} is emitted only as a branch, under the
 // path one step longer.
-func (e *emitter) localTable(parent scope, decl xsd.ElementDeclaration, branches []tableBranch) (emittedType, error) {
+func (e *emitter) localTable(parent scope, decl xsd.ElementDeclaration, branches []goshape.GoverningType) (emittedType, error) {
 	ifc := localScope(parent, decl)
 	key := ifc.key()
 	if typ, ok := e.emitted[key]; ok && ifc.shared() {
@@ -2228,8 +2134,8 @@ func (e *emitter) localTable(parent scope, decl xsd.ElementDeclaration, branches
 // branches, its path ifc: the interface, generated from decl's {type table},
 // or from its {type definition} when it has none, then one branch struct per
 // branch in branches' order, named from the interface's name plus the
-// branch's local name (tableBranch.local), generated from its slot
-// (tableBranch.slot) and holding one field, named from that local name, of
+// branch's local name (goshape.GoverningType.Local), generated from its slot
+// (goshape.GoverningType.Slot) and holding one field, named from that local name, of
 // the type branchType returns, each followed by the types that field first
 // needs. The branch's name is claimed before its field's type is computed.
 // The branch types carry no method: a named one may be selected by several
@@ -2238,26 +2144,26 @@ func (e *emitter) localTable(parent scope, decl xsd.ElementDeclaration, branches
 // claimed after the type's, but a branch of xs:anyType, whose AnyType holds
 // xsi:nil among its Attributes; the interface itself is not wrapped. With no
 // branch, the interface is emitted alone.
-func (e *emitter) tableType(typ emittedType, ifc scope, decl xsd.ElementDeclaration, branches []tableBranch) error {
+func (e *emitter) tableType(typ emittedType, ifc scope, decl xsd.ElementDeclaration, branches []goshape.GoverningType) error {
 	marker := "is" + typ.name
 	slots := "the {type table} of "
 	if _, hasTable := decl.TypeTable(); !hasTable {
-		slots = "the " + declaredSlot{}.name() + " of "
+		slots = "the " + goshape.DeclaredSlot{}.Name() + " of "
 	}
 	e.decls = append(e.decls, declare(typ.name, e.elementFrom(decl).prefixed(slots), "", fmt.Sprintf("type %s interface {\n\t%s()\n}\n", typ.name, marker)))
 	for _, b := range branches {
-		branch := e.types.extend(typ.name, b.local())
+		branch := e.types.extend(typ.name, b.Local())
 		slot := len(e.decls)
 		e.decls = append(e.decls, declaration{})
 		field, err := e.branchType(ifc, decl, b)
 		if err != nil {
 			return err
 		}
-		if nillable(decl) && !isAnyType(b.td) {
-			field = e.nillableType(field, b.td)
+		if nillable(decl) && !isAnyType(b.Type()) {
+			field = e.nillableType(field, b.Type())
 		}
-		fields := []fieldSpec{{local: b.local(), goType: field.name}}
-		e.decls[slot] = declare(branch, e.elementFrom(decl).prefixed(b.slot.name()+" of "), "", structDecl(branch, fields)+fmt.Sprintf("\nfunc (%s) %s() {}\n", branch, marker))
+		fields := []fieldSpec{{local: b.Local(), goType: field.name}}
+		e.decls[slot] = declare(branch, e.elementFrom(decl).prefixed(b.Slot().Name()+" of "), "", structDecl(branch, fields)+fmt.Sprintf("\nfunc (%s) %s() {}\n", branch, marker))
 	}
 	return nil
 }
@@ -2276,12 +2182,12 @@ func (e *emitter) tableType(typ emittedType, ifc scope, decl xsd.ElementDeclarat
 // choice's branch is (valueChain): the interface lies between it and the
 // fields over decl, so the chain starts with the step through decl to that
 // type alone, whose node for decl itself no value field reaches.
-func (e *emitter) branchType(ifc scope, decl xsd.ElementDeclaration, b tableBranch) (emittedType, error) {
-	if isAnyType(b.td) {
+func (e *emitter) branchType(ifc scope, decl xsd.ElementDeclaration, b goshape.GoverningType) (emittedType, error) {
+	if isAnyType(b.Type()) {
 		return emittedType{name: e.anyTypeType()}, nil
 	}
 	child := branchScope(ifc, b)
-	switch t := b.td.(type) {
+	switch t := b.Type().(type) {
 	case *xsd.SimpleType:
 		return e.simpleGoType(child.place(), decl.Loc(), t, declaredUnion(child.steps()))
 	case xsd.ComplexType:
@@ -2290,14 +2196,14 @@ func (e *emitter) branchType(ifc scope, decl xsd.ElementDeclaration, b tableBran
 		}
 		return e.scopedType(child, e.branchOrigin(child, decl, b, t), nil, true, decl, t)
 	}
-	return emittedType{}, fmt.Errorf("%s of element %s at %s: unexpected type definition %T", b.slot.name(), decl.Name(), decl.Loc(), b.td)
+	return emittedType{}, fmt.Errorf("%s of element %s at %s: unexpected type definition %T", b.Slot().Name(), decl.Name(), decl.Loc(), b.Type())
 }
 
 // branchScope is the scope of the type emitted for b's anonymous type, a
 // branch of the sealed interface whose path is ifc: ifc's path followed by
 // b's branch step.
-func branchScope(ifc scope, b tableBranch) scope {
-	return scope{root: ifc.root, path: append(slices.Clone(ifc.path), pathStep{name: xsd.QName{Local: b.local() + "Type"}, slot: b.slot.name()})}
+func branchScope(ifc scope, b goshape.GoverningType) scope {
+	return scope{root: ifc.root, path: append(slices.Clone(ifc.path), pathStep{name: xsd.QName{Local: b.Local() + "Type"}, slot: b.Slot().Name()})}
 }
 
 // branchOrigin is the origin of the type emitted for t, b's complex type, a
@@ -2306,11 +2212,11 @@ func branchScope(ifc scope, b tableBranch) scope {
 // anonymous: typeOrigin's for a named t, and for an anonymous one generated
 // from b's slot of decl and named in declines by its declaring place
 // (scope.place), which names that slot.
-func (e *emitter) branchOrigin(child scope, decl xsd.ElementDeclaration, b tableBranch, t xsd.ComplexType) origin {
+func (e *emitter) branchOrigin(child scope, decl xsd.ElementDeclaration, b goshape.GoverningType, t xsd.ComplexType) origin {
 	if t.Name() != (xsd.QName{}) {
 		return e.typeOrigin(t)
 	}
-	return origin{from: e.elementFrom(decl).prefixed(b.slot.name() + " of "), subject: "complex type (anonymous) of " + child.place()}
+	return origin{from: e.elementFrom(decl).prefixed(b.Slot().Name() + " of "), subject: "complex type (anonymous) of " + child.place()}
 }
 
 // attributeField returns the field of attribute use u (§3.5.1) of the complex

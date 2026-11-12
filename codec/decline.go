@@ -96,8 +96,8 @@ type construct uint8
 // nested flattened particle reaches and every particle of a nested
 // occurrence field's item, ahead of the particles after it.
 const (
-	constructTypeTable construct = iota + 1
-	constructNillable
+	constructNillable construct = iota + 1
+	constructAnonymousTypes
 	constructAllOccurs
 	constructNestedGroup
 	constructAbstractTypeElement
@@ -111,8 +111,8 @@ const (
 
 // constructNames holds, indexed by construct, each construct's name.
 var constructNames = [...]string{
-	constructTypeTable:           "an element declaration with a {type table}",
 	constructNillable:            "an element declaration with {nillable} true",
+	constructAnonymousTypes:      "an element declaration two of whose governing types are anonymous",
 	constructAllOccurs:           "a content all group with {min occurs} 0 whose model group is not emptiable",
 	constructNestedGroup:         "a nested model group particle",
 	constructAbstractTypeElement: "an element declaration whose complex {type definition} has {abstract} true",

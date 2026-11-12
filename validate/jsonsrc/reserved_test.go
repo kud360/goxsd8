@@ -126,7 +126,7 @@ func TestXmlnsMember(t *testing.T) {
 // unchanged, located at the "$type" key, before the attribute members.
 func TestTypeAttribute(t *testing.T) {
 	v := validatorOver(t, typeSchema)
-	w := newWalker(jsonURI, strings.NewReader(`{"item":{"$type":" derived ","d":"1","a":"x","b":"y"}}`), v.Schema(), v.ConditionallySelected, v.Governing)
+	w := newWalker(jsonURI, strings.NewReader(`{"item":{"$type":" derived ","d":"1","a":"x","b":"y"}}`), v.Schema(), v.ConditionallySelected, v.Governing, v.HandedDown)
 	root, err := w.root()
 	if err != nil {
 		t.Fatalf("root: %v", err)

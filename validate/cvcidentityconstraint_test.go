@@ -298,7 +298,7 @@ func TestFieldOverAnAnonymousTypeReadsItsOwnTypeAndNotTheTopLevelOne(t *testing.
 // clause 3's Note names ·skipped· nodes as the case). The charge was withheld
 // while ·skipped· was inferred from the wildcard's PRESENCE, since an attribute
 // the wildcard did not admit arrived indistinguishably; cvc-wildcard now
-// decides the ·attribution· ([walk.skippedAttribute]), so the absence read here
+// decides the ·attribution· ([skippedAttribute]), so the absence read here
 // is the spec's and the charge is made.
 func TestSkipWildcardAttributeLengthensNoKeySequence(t *testing.T) {
 	key := icDef(t, "K", xsd.IdentityConstraintKey, "item", nil, "", "@wid")

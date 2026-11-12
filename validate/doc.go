@@ -10,7 +10,8 @@
 // for JSON each read the document from an io.Reader, build the infoset below
 // and call [Validator.Assess] on its root, returning the [Result]. An adapter
 // of your own implements [Element] and calls Assess itself; [Validator.Schema],
-// [Validator.Governing] and [Validator.ConditionallySelected] are for it.
+// [Validator.Governing], [Validator.ConditionallySelected] and
+// [Validator.HandedDown] are for it.
 //
 // Read the verdict off [Result.Standing], not off an empty [Result.Violations].
 // A Result keeps two lists apart: its violations, the charges the assessment
@@ -86,7 +87,8 @@
 //     then ·overrides· or does not, through xpath's §3.12.6 required-subset
 //     evaluator. A {test} reads the element's own [[attributes]] and,
 //     behind them, its [inherited attributes] (§3.3.5.6), which the descent
-//     computes top-down and threads to every child it does not skip. The scan is
+//     computes top-down and threads to every child it does not skip, by the
+//     composition exported as [Validator.HandedDown]. The scan is
 //     exported as [Validator.ConditionallySelected], whose doc says which
 //     {test}s withhold the selection, which count as false, and what Assess
 //     records for a withheld one; nothing else in the [Result] reports a
@@ -493,7 +495,7 @@ package validate
 // the strict-wildcard [validity] charge at the enclosing element in assess.go;
 // the nil {type definition} decline in cta.go; assertion evaluation and its
 // declines in cvcassertion.go. The skip {attribute wildcard} reading is
-// [walk.skippedAttribute]; a resolving-to-nothing child's ·lax assessment· is
+// [skippedAttribute]; a resolving-to-nothing child's ·lax assessment· is
 // [walk.child]'s; a ·nilled· element is read for cvc-id by [walk.idElement]
 // and for cvc-identity-constraint by [icCheck.fill].
 //

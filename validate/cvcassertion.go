@@ -847,7 +847,7 @@ func (w *walk) attributesRead(ct xsd.ComplexType, path []xsd.QName, e Element, g
 		sink(a.Name(), v)
 	}
 	for _, u := range uses {
-		vc, defaulted := w.defaultedConstraint(u, attrs)
+		vc, defaulted := defaultedConstraint(w.schema, u, attrs)
 		if !defaulted || !reads(u.DeclarationName()) {
 			continue
 		}
@@ -1018,7 +1018,7 @@ func (w *walk) elementBelow(ct xsd.ComplexType, path []xsd.QName, e Element, g g
 // attributeNodes is the names of e's attribute nodes in the data model instance
 // cvc-assertion clause 1 builds: each attribute e carries — xsi ones included,
 // namespace declarations being none ([Element.Attributes]) — then each of its
-// ·defaulted attributes· (key-dflt-att, [walk.defaultedConstraint]) under g's
+// ·defaulted attributes· (key-dflt-att, [defaultedConstraint]) under g's
 // complex ·governing type definition·. decided is false where this package
 // could not determine that type ([governance.typeUndetermined]), so which
 // uses default is unknown. An element whose type is simple, or which is ·laxly
@@ -1036,7 +1036,7 @@ func (w *walk) attributeNodes(e Element, g governance) (names []xsd.QName, decid
 		return names, true
 	}
 	for _, u := range ct.AttributeUses() {
-		if _, defaulted := w.defaultedConstraint(u, attrs); defaulted {
+		if _, defaulted := defaultedConstraint(w.schema, u, attrs); defaulted {
 			names = append(names, u.DeclarationName())
 		}
 	}
@@ -1595,7 +1595,7 @@ func (lackingValue) declined(e xsd.QName) string {
 // assertionValues is the input of e's assertions: the typed value
 // ([walk.assertionTyped]) of each attribute of attrs that matches an {attribute
 // use} of ct, in document order, then of each ·defaulted attribute· of e
-// ([walk.defaultedConstraint], key-dflt-att) in the order of ct.{attribute
+// ([defaultedConstraint], key-dflt-att) in the order of ct.{attribute
 // uses}, each as [walk.annotations] annotates it, which is the type
 // [walk.assertionType] resolves for its use or, for an attribute cvc-attribute
 // made invalid, xs:anySimpleType; and the binding of `.` and `$value`
@@ -1654,7 +1654,7 @@ func (w *walk) assertionValues(e Element, attrs []Attribute, asserts *assertionC
 		in.attrs = append(in.attrs, assertionValue{name: a.Name(), v: v})
 	}
 	for _, u := range ct.AttributeUses() {
-		vc, defaulted := w.defaultedConstraint(u, attrs)
+		vc, defaulted := defaultedConstraint(w.schema, u, attrs)
 		if !defaulted {
 			continue
 		}

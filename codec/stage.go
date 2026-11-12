@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/kud360/goxsd8/parser/xmltree"
+	"github.com/kud360/goxsd8/validate"
 	"github.com/kud360/goxsd8/value"
 	"github.com/kud360/goxsd8/xsd"
 	"github.com/kud360/goxsd8/xsderr"
@@ -33,6 +34,16 @@ type pipeline struct {
 	decimals   decimalArmSets
 	branches   branchSets
 	assertions value.AssertionEvaluator
+	// validator is the Validator Decode assessed the instance with, whose
+	// selection fills a governing types' interface (tableRoot.selected) and
+	// whose composition hands each element's [inherited attributes] down
+	// (pipeline.handDown).
+	validator *validate.Validator
+	// inherited is the [inherited attributes] (e-inherited_attributes) of
+	// each element the fill reads: nil at the document element, and, while an
+	// element's content is read, what pipeline.handDown composed for its
+	// children, the element's own being restored once its content is read.
+	inherited []validate.Attribute
 }
 
 // scalar is one item Decode decodes a value for: elem, the element of the Go
