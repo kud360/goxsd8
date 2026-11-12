@@ -384,7 +384,7 @@ func TestTallyAttributeBreaches(t *testing.T) {
 func TestFacetSumOverAPathFails(t *testing.T) {
 	intType := asBuiltin(t, "int")
 	for _, expr := range []string{"sum(a/b/@p) = 0", "not(sum(a/b/@p) = 0)"} {
-		if got := FacetAssertions(time.Time{}).Evaluate(backend(), seededTypes, intType, ctaExprRecord(expr, ""), fcValue(t, intType, "1")); got != value.AssertionFails {
+		if got := FacetAssertions(time.Time{}).Evaluate(backend(), seededTypes, intType, ctaExprRecord(expr, ""), fcValue(t, intType, "1")).Outcome(); got != value.AssertionFails {
 			t.Errorf("FacetAssertions(%q) = %d, want AssertionFails (%d)", expr, got, value.AssertionFails)
 		}
 	}

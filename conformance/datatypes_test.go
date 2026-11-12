@@ -1772,8 +1772,8 @@ func TestDatatypesD34Cohort(t *testing.T) {
 // with a value.IsAssertionDeclined error.
 type declineEvery struct{}
 
-func (declineEvery) Evaluate(value.Backend, xsd.TypeResolver, *xsd.SimpleType, xsd.XPathExpression, value.Value) value.AssertionOutcome {
-	return value.AssertionDeclined
+func (declineEvery) Evaluate(value.Backend, xsd.TypeResolver, *xsd.SimpleType, xsd.XPathExpression, value.Value) value.AssertionAnswer {
+	return value.AssertionAnswer{}
 }
 
 // TestMustNotBePreconditionOrDeclinePanicsOnADecline pins the guard's assertions

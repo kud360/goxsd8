@@ -223,7 +223,7 @@ func TestAssertionElementPathOtherFacades(t *testing.T) {
 		t.Error("CompileCTATest(data(a/b) instance of xs:int*): compiled, want declined")
 	}
 	str := asBuiltin(t, "string")
-	if got := FacetAssertions(time.Time{}).Evaluate(backend(), seededTypes, str, asRecord("data(a/b) instance of xs:date*"), fcValue(t, str, "x")); got != value.AssertionFails {
+	if got := FacetAssertions(time.Time{}).Evaluate(backend(), seededTypes, str, asRecord("data(a/b) instance of xs:date*"), fcValue(t, str, "x")).Outcome(); got != value.AssertionFails {
 		t.Errorf("facet data(a/b) instance of xs:date*: Evaluate = %d, want AssertionFails", got)
 	}
 }

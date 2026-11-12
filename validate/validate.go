@@ -237,10 +237,12 @@ func (r *Result) Violations() []*xsderr.Error {
 // {test} — the cvc-assertion entry for an {assertions} member, the
 // key-cta-ta-select entry for a Type Alternative — Msg carries the
 // [xpath.Decline]'s reason after "declined it because". A cvc-assertions-valid
-// entry names the assertions-facet {test} that was declined and no reason. No
-// exported field or method carries that cause, and [Unevaluated.Rule] does not
-// tell a declined cvc-assertion {test} from one whose data model input was
-// missing. Msg is for people, and a caller must not parse it.
+// entry names the assertions-facet {test} that was declined and, where the
+// evaluator stated one, its reason after "was not evaluated because"
+// ([value.AssertionDeclinedBecause]). No exported field or method carries that
+// cause, and [Unevaluated.Rule] does not tell a declined cvc-assertion {test}
+// from one whose data model input was missing. Msg is for people, and a caller
+// must not parse it.
 //
 // An empty Unevaluated claims that the walk performed every check it reached.
 // The walk records nothing for an attribute use whose {attribute declaration}

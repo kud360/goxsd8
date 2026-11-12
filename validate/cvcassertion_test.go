@@ -995,7 +995,7 @@ func TestResultFacetAssertionsIsTheEpisodeInstant(t *testing.T) {
 		if err != nil {
 			t.Fatalf("mapping 2000-01-01 under xs:date: %v", err)
 		}
-		if got := a.Evaluate(testBackend(), schema, onDate, asserts[0].Test(), val); got != c.want {
+		if got := a.Evaluate(testBackend(), schema, onDate, asserts[0].Test(), val).Outcome(); got != c.want {
 			t.Errorf("at %s: FacetAssertions().Evaluate(%q) = %v, want %v", c.now, test, got, c.want)
 		}
 	}

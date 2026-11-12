@@ -50,7 +50,7 @@ func vcFacet(t *testing.T, types xsd.TypeResolver, tc vcCase) bool {
 	if err != nil {
 		t.Fatalf("mapping %q against %s: %v", tc.lexical, tc.st.Name().Local, err)
 	}
-	got := FacetAssertions(time.Time{}).Evaluate(backend(), types, tc.st, asRecord(tc.expr), v)
+	got := FacetAssertions(time.Time{}).Evaluate(backend(), types, tc.st, asRecord(tc.expr), v).Outcome()
 	if got == value.AssertionDeclined {
 		t.Errorf("FacetAssertions().Evaluate(%q) over %s: declined, want decided", tc.expr, tc.st.Name().Local)
 		return tc.want
@@ -240,7 +240,7 @@ func TestCountAndDistinctValuesDecline(t *testing.T) {
 			t.Errorf("CompileAssertionTest(%q): compiled, want declined", expr)
 		}
 		v := fcValue(t, list, "1 2")
-		if got := FacetAssertions(time.Time{}).Evaluate(backend(), types, list, asRecord(expr), v); got != value.AssertionDeclined {
+		if got := FacetAssertions(time.Time{}).Evaluate(backend(), types, list, asRecord(expr), v).Outcome(); got != value.AssertionDeclined {
 			t.Errorf("FacetAssertions().Evaluate(%q) = %d, want declined", expr, got)
 		}
 	}
@@ -256,7 +256,7 @@ func TestCountAndDistinctValuesDecline(t *testing.T) {
 			t.Errorf("CompileAssertionTest(%q) over a double list: compiled, want declined", expr)
 		}
 		v := fcValue(t, doubles, "1")
-		if got := FacetAssertions(time.Time{}).Evaluate(backend(), dtypes, doubles, asRecord(expr), v); got != value.AssertionDeclined {
+		if got := FacetAssertions(time.Time{}).Evaluate(backend(), dtypes, doubles, asRecord(expr), v).Outcome(); got != value.AssertionDeclined {
 			t.Errorf("FacetAssertions().Evaluate(%q) over a double list = %d, want declined", expr, got)
 		}
 	}

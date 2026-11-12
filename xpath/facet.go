@@ -41,7 +41,7 @@ import (
 // so a value's Datatype Valid verdict — and a union's ·validating type· and a
 // fixed-value comparison with it — includes its assertions facets.
 //
-// Each {test} answers one of three outcomes:
+// Each {test}'s [value.AssertionAnswer] carries one of three outcomes:
 //
 //   - [value.AssertionHolds], where it evaluates to true;
 //   - [value.AssertionFails], where it evaluates to false or raises a dynamic or
@@ -59,7 +59,8 @@ import (
 //     quantified expression, over a child step, `every $c in c satisfies
 //     $c/@a`, or over `$value`, `every $x in data($value) satisfies $x gt 0`,
 //     and one calling fn:doc over a StringLiteral, `exists(doc('x.xml'))`,
-//     which `empty(doc(()))` is not.
+//     which `empty(doc(()))` is not. The answer states why, a reason on
+//     [Decline]'s terms ([value.AssertionDeclinedBecause]).
 //
 // A union's own assertions facet is evaluated like any other: the pipeline
 // hands this evaluator the union's ·active basic member· as st, the type under
@@ -95,19 +96,16 @@ func FacetAssertions(now time.Time) value.AssertionEvaluator { return facetAsser
 type facetAssertions struct{ now time.Time }
 
 // Evaluate decides test against v, a value of st, on [FacetAssertions]' terms.
-func (f facetAssertions) Evaluate(b value.Backend, r xsd.TypeResolver, st *xsd.SimpleType, test xsd.XPathExpression, v value.Value) value.AssertionOutcome {
+func (f facetAssertions) Evaluate(b value.Backend, r xsd.TypeResolver, st *xsd.SimpleType, test xsd.XPathExpression, v value.Value) value.AssertionAnswer {
 	root, defect := compileCTATest(test, r, ctaFacetFacade{st: st})
 	if defect.kind != ctaNoDefect {
-		return value.AssertionDeclined
+		return value.AssertionDeclinedBecause(declineOf(defect).String())
 	}
 	// The string value bound is "" and unread, and no element is bound: the
 	// facet tree compiles `.` to ctaNoContextItem, and to ctaAbsentNode as a
 	// node (cvc-assertions-valid clause 1.2).
 	in := ctaTypedInput{attrs: noTypedAttributes, children: noChildElements, value: BindValue("", Typed(v)), now: f.now}
-	if ctaEval(root, ctaEnv{backend: b, types: r, input: in}) != ctaTrue {
-		return value.AssertionFails
-	}
-	return value.AssertionHolds
+	return value.AssertionDecided(ctaEval(root, ctaEnv{backend: b, types: r, input: in}) == ctaTrue)
 }
 
 // ctaAssertionsDeclined is the [value.AssertionEvaluator] a Type
@@ -119,9 +117,9 @@ func (f facetAssertions) Evaluate(b value.Backend, r xsd.TypeResolver, st *xsd.S
 // decline costs.
 type ctaAssertionsDeclined struct{}
 
-// Evaluate declines every {test}.
-func (ctaAssertionsDeclined) Evaluate(value.Backend, xsd.TypeResolver, *xsd.SimpleType, xsd.XPathExpression, value.Value) value.AssertionOutcome {
-	return value.AssertionDeclined
+// Evaluate declines every {test}, stating no reason.
+func (ctaAssertionsDeclined) Evaluate(value.Backend, xsd.TypeResolver, *xsd.SimpleType, xsd.XPathExpression, value.Value) value.AssertionAnswer {
+	return value.AssertionAnswer{}
 }
 
 // noTypedAttributes and noChildElements are the empty inputs a facet

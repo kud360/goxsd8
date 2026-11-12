@@ -150,7 +150,7 @@ func TestStringSequencesDecline(t *testing.T) {
 		{"a", value.AssertionHolds},
 		{"z", value.AssertionFails},
 	} {
-		if got := FacetAssertions(time.Time{}).Evaluate(backend(), seededTypes, str, ctaExprRecord("$value = ('a', 'b')", ""), fcValue(t, str, tc.lexical)); got != tc.want {
+		if got := FacetAssertions(time.Time{}).Evaluate(backend(), seededTypes, str, ctaExprRecord("$value = ('a', 'b')", ""), fcValue(t, str, tc.lexical)).Outcome(); got != tc.want {
 			t.Errorf("FacetAssertions().Evaluate($value = ('a', 'b')) over %s = %d, want %d", tc.lexical, got, tc.want)
 		}
 	}

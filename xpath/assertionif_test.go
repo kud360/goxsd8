@@ -224,7 +224,7 @@ func TestFacetIfExpr(t *testing.T) {
 		{test, "-3", value.AssertionHolds},
 		{"if ($value > 0) then true() else nosuch()", "4", value.AssertionDeclined},
 	} {
-		if got := FacetAssertions(time.Time{}).Evaluate(backend(), seededTypes, intType, ctaExprRecord(tc.test, ""), fcValue(t, intType, tc.lexical)); got != tc.want {
+		if got := FacetAssertions(time.Time{}).Evaluate(backend(), seededTypes, intType, ctaExprRecord(tc.test, ""), fcValue(t, intType, tc.lexical)).Outcome(); got != tc.want {
 			t.Errorf("FacetAssertions(%q) over %s = %d, want %d", tc.test, tc.lexical, got, tc.want)
 		}
 	}

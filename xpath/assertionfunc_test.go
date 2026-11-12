@@ -585,7 +585,7 @@ func TestFacetStringFunctions(t *testing.T) {
 		{"exists(@a)", str, fcValue(t, str, "x"), value.AssertionFails},
 		{"not(empty(.))", str, fcValue(t, str, "x"), value.AssertionFails},
 	} {
-		if got := FacetAssertions(time.Time{}).Evaluate(backend(), types, tc.st, ctaExprRecord(tc.test, ""), tc.v); got != tc.want {
+		if got := FacetAssertions(time.Time{}).Evaluate(backend(), types, tc.st, ctaExprRecord(tc.test, ""), tc.v).Outcome(); got != tc.want {
 			t.Errorf("Evaluate(%q over %s) = %d, want %d", tc.test, tc.st.Name(), got, tc.want)
 		}
 	}

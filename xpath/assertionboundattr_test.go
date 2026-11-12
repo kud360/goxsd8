@@ -321,7 +321,7 @@ func TestAssertionBoundAttributesOutsideTheAssertion(t *testing.T) {
 		"number($value/@a) lt 3",
 		"number($value/@a/substring-after(., 'val')) lt 3",
 	} {
-		got := FacetAssertions(time.Time{}).Evaluate(backend(), seededTypes, str, ctaExprRecord(test, ""), fcValue(t, str, "val1"))
+		got := FacetAssertions(time.Time{}).Evaluate(backend(), seededTypes, str, ctaExprRecord(test, ""), fcValue(t, str, "val1")).Outcome()
 		if got != value.AssertionDeclined {
 			t.Errorf("FacetAssertions.Evaluate(%q) = %d, want declined", test, got)
 		}

@@ -355,7 +355,7 @@ func TestIntegerSequencesDecline(t *testing.T) {
 		{"20", value.AssertionHolds},
 		{"15", value.AssertionFails},
 	} {
-		if got := FacetAssertions(time.Time{}).Evaluate(backend(), seededTypes, intType, ctaExprRecord("$value = (1 to 10, 20)", ""), fcValue(t, intType, tc.lexical)); got != tc.want {
+		if got := FacetAssertions(time.Time{}).Evaluate(backend(), seededTypes, intType, ctaExprRecord("$value = (1 to 10, 20)", ""), fcValue(t, intType, tc.lexical)).Outcome(); got != tc.want {
 			t.Errorf("FacetAssertions().Evaluate($value = (1 to 10, 20)) over %s = %d, want %d", tc.lexical, got, tc.want)
 		}
 	}
