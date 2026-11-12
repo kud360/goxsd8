@@ -28,8 +28,13 @@ func cgEl(name string) string { return `<xs:element name="` + name + `" type="xs
 // choice(a, sequence(b, choice(c, d))), a spliced alternative holding a
 // nested choice; cgInnerSeqSchema's choice(a, sequence(b, sequence(c, d))),
 // one holding a nested spliced sequence; cgInnerRefSchema's choice(a, <group
-// ref>), the group sequence(b, choice(c, d)); and cgWildSchema's choice(a,
-// sequence(b, any over ##other)), a spliced alternative holding a wildcard.
+// ref>), the group sequence(b, choice(c, d)); cgWildSchema's choice(a,
+// sequence(b, any over ##other)), a spliced alternative holding a wildcard;
+// and cgTwoChoiceSchema's choice(sequence(b, choice(c, d)), sequence(b
+// unqualified of xs:int, choice(e, f))) and cgTwoFlatSchema's the same with
+// sequence(c repeated) repeated and sequence(d repeated) repeated in place of
+// the choices, flattened, two spliced alternatives whose fields are named
+// alike, so that a branch is told from the other by its fields' Go types.
 const (
 	cgSeqSchema         = `<xs:element name="r"><xs:complexType><xs:choice><xs:element name="a" type="xs:string"/><xs:sequence><xs:element name="b" type="xs:string"/><xs:element name="c" type="xs:string"/></xs:sequence></xs:choice></xs:complexType></xs:element>`
 	cgRefSchema         = `<xs:group name="g"><xs:sequence><xs:element name="b" type="xs:string"/><xs:element name="c" type="xs:string"/></xs:sequence></xs:group><xs:element name="r"><xs:complexType><xs:choice><xs:element name="a" type="xs:string"/><xs:group ref="s:g"/></xs:choice></xs:complexType></xs:element>`
@@ -47,6 +52,10 @@ const (
 		`<xs:element name="r"><xs:complexType><xs:choice><xs:element name="a" type="xs:string"/><xs:group ref="s:g"/></xs:choice></xs:complexType></xs:element>`
 	cgWildSchema = `<xs:element name="r"><xs:complexType><xs:choice><xs:element name="a" type="xs:string"/><xs:sequence><xs:element name="b" type="xs:string"/>` +
 		`<xs:any namespace="##other" processContents="lax"/></xs:sequence></xs:choice></xs:complexType></xs:element>`
+	cgTwoChoiceSchema = `<xs:element name="r"><xs:complexType><xs:choice><xs:sequence><xs:element name="b" type="xs:string"/><xs:choice><xs:element name="c" type="xs:string"/><xs:element name="d" type="xs:string"/></xs:choice></xs:sequence>` +
+		`<xs:sequence><xs:element name="b" form="unqualified" type="xs:int"/><xs:choice><xs:element name="e" type="xs:string"/><xs:element name="f" type="xs:string"/></xs:choice></xs:sequence></xs:choice></xs:complexType></xs:element>`
+	cgTwoFlatSchema = `<xs:element name="r"><xs:complexType><xs:choice><xs:sequence><xs:element name="b" type="xs:string"/><xs:sequence maxOccurs="unbounded"><xs:element name="c" type="xs:string" maxOccurs="unbounded"/></xs:sequence></xs:sequence>` +
+		`<xs:sequence><xs:element name="b" form="unqualified" type="xs:int"/><xs:sequence maxOccurs="unbounded"><xs:element name="d" type="xs:string" maxOccurs="unbounded"/></xs:sequence></xs:sequence></xs:choice></xs:complexType></xs:element>`
 )
 
 // The types codegen emits for the choice-group schemas' s:r, in shape, which
@@ -54,7 +63,8 @@ const (
 // cgSeqSchema and cgRefSchema; cgCh for cgChoiceSchema; cgFl for
 // cgFlatSchema; cgO for cgOptSchema; cgN for cgNestedSchema; cgRep for
 // cgRepeatSchema; cgOne for cgOneSchema; cgIC for cgInnerChoiceSchema and
-// cgInnerRefSchema; cgIS for cgInnerSeqSchema; and cgW for cgWildSchema.
+// cgInnerRefSchema; cgIS for cgInnerSeqSchema; cgW for cgWildSchema; cgTC for
+// cgTwoChoiceSchema; and cgTF for cgTwoFlatSchema.
 type (
 	cgR   interface{ isCgR() }
 	cgA   struct{ A string }
@@ -103,6 +113,33 @@ type (
 	cgISA   struct{ A string }
 	cgISSeq struct{ B, C, D string }
 
+	cgTC  interface{ isCgTC() }
+	cgTC1 struct {
+		B      string
+		Choice cgICInner
+	}
+	cgTC2 struct {
+		B      int32
+		Choice cgTCInner
+	}
+	cgTCInner interface{ isCgTCInner() }
+	cgTCE     struct{ E string }
+	cgTCF     struct{ F string }
+
+	cgTF  interface{ isCgTF() }
+	cgTF1 struct {
+		B        string
+		Sequence []cgTFItem
+	}
+	cgTF2 struct {
+		B        int32
+		Sequence []cgTFItem2
+	}
+	cgTFItem  interface{ isCgTFItem() }
+	cgTFC     struct{ C string }
+	cgTFItem2 interface{ isCgTFItem2() }
+	cgTFD     struct{ D string }
+
 	// cgSwapped and cgRetyped are cgSeq's fields in another order and of
 	// another Go type, branches of cgR codegen does not emit.
 	cgSwapped struct{ C, B string }
@@ -139,6 +176,14 @@ func (cgICD) isCgICInner()  {}
 func (cgISA) isCgIS()       {}
 func (cgISSeq) isCgIS()     {}
 func (cgWA) isCgW()         {}
+func (cgTC1) isCgTC()       {}
+func (cgTC2) isCgTC()       {}
+func (cgTCE) isCgTCInner()  {}
+func (cgTCF) isCgTCInner()  {}
+func (cgTF1) isCgTF()       {}
+func (cgTF2) isCgTF()       {}
+func (cgTFC) isCgTFItem()   {}
+func (cgTFD) isCgTFItem2()  {}
 func (cgSwapped) isCgR()    {}
 func (cgRetyped) isCgR()    {}
 func (cgWSeq) isCgW()       {}
@@ -153,6 +198,8 @@ var (
 	cgICBranches = []Option{WithBranches[cgIC](cgICA{}, cgICSeq{}), WithBranches[cgICInner](cgICC{}, cgICD{})}
 	cgISBranches = WithBranches[cgIS](cgISA{}, cgISSeq{})
 	cgWBranches  = WithBranches[cgW](cgWA{}, cgWSeq{})
+	cgTCBranches = []Option{WithBranches[cgTC](cgTC1{}, cgTC2{}), WithBranches[cgICInner](cgICC{}, cgICD{}), WithBranches[cgTCInner](cgTCE{}, cgTCF{})}
+	cgTFBranches = []Option{WithBranches[cgTF](cgTF1{}, cgTF2{}), WithBranches[cgTFItem](cgTFC{}), WithBranches[cgTFItem2](cgTFD{})}
 )
 
 // TestChoiceGroupTypesAreCodegens pins the types above to those codegen
@@ -207,6 +254,16 @@ func TestChoiceGroupTypesAreCodegens(t *testing.T) {
 		{cgWildSchema, []string{
 			"type RSequence struct {\n\tB   string\n\tAny AnyElement\n}\n\nfunc (RSequence) isR() {}\n",
 		}},
+		{cgTwoChoiceSchema, []string{
+			"type RSequence struct {\n\tB      string\n\tChoice RChoice\n}\n\nfunc (RSequence) isR() {}\n",
+			"type RSequence2 struct {\n\tB      int32\n\tChoice RChoice2\n}\n\nfunc (RSequence2) isR() {}\n",
+			"type RChoice2E struct {\n\tE string\n}\n\nfunc (RChoice2E) isRChoice2() {}\n",
+		}},
+		{cgTwoFlatSchema, []string{
+			"type RSequence struct {\n\tB        string\n\tSequence []RSequence2\n}\n\nfunc (RSequence) isR() {}\n",
+			"type RSequence3 struct {\n\tB        int32\n\tSequence []RSequence4\n}\n\nfunc (RSequence3) isR() {}\n",
+			"type RSequence4D struct {\n\tD string\n}\n\nfunc (RSequence4D) isRSequence4() {}\n",
+		}},
 	}
 	for _, row := range rows {
 		gen := generated(t, schemaOf(t, row.decls))
@@ -252,6 +309,10 @@ func TestDecodeChoiceGroup(t *testing.T) {
 		{"a spliced alternative holding a nested spliced sequence", cgInnerSeqSchema, "<s:b>1</s:b><s:c>2</s:c><s:d>3</s:d>", into[cgIS](cgISBranches), cgIS(cgISSeq{B: "1", C: "2", D: "3"})},
 		{"a spliced alternative holding a wildcard", cgWildSchema, `<s:b>1</s:b><o:w xmlns:o="urn:o">2</o:w>`, into[cgW](cgWBranches),
 			cgW(cgWSeq{B: "1", Any: anyElement{Space: "urn:o", Local: "w", Content: anyType{Text: "2"}}})},
+		{"the second of two spliced alternatives holding a nested choice, told apart by Go type", cgTwoChoiceSchema, "<b>1</b><s:e>2</s:e>", into[cgTC](cgTCBranches...),
+			cgTC(cgTC2{B: 1, Choice: cgTCE{E: "2"}})},
+		{"the second of two spliced alternatives holding a flattened particle, told apart by Go type", cgTwoFlatSchema, "<b>1</b><s:d>2</s:d><s:d>3</s:d>", into[cgTF](cgTFBranches...),
+			cgTF(cgTF2{B: 1, Sequence: []cgTFItem2{cgTFD{D: "2"}, cgTFD{D: "3"}}})},
 	}
 	for _, row := range rows {
 		t.Run(row.name, func(t *testing.T) {
