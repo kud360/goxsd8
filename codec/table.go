@@ -3,7 +3,6 @@ package codec
 import (
 	"fmt"
 	"reflect"
-	"strconv"
 
 	"github.com/kud360/goxsd8/internal/goname"
 	"github.com/kud360/goxsd8/internal/goshape"
@@ -72,17 +71,16 @@ func bindTable[K comparable](run *bindRun, decl xsd.ElementDeclaration, types []
 }
 
 // branchField returns the one field of the branch struct of g, a governing
-// type of decl: named from g's type's local name where it is named, and
-// otherwise from its slot's, alternative followed by its position or default
-// (codegen/doc.go "# Naming"), holding what typedField gives an element of g's
-// type occurring once, the Go type codegen gives a simple type itself and, of
-// a complex type, a named one's unit keyed by its QName and an anonymous one's
-// bound in place under no key.
+// type of decl: named from g's local name (goshape.GoverningType.Local),
+// holding what typedField gives an element of g's type occurring once, the Go
+// type codegen gives a simple type itself and, of a complex type, a named
+// one's unit keyed by its QName and an anonymous one's bound in place under no
+// key.
 func branchField(run *bindRun, decl xsd.ElementDeclaration, g goshape.GoverningType) (field, error) {
 	once := func(sealed bool) (shape, error) {
-		return occursShape(goshape.ExactlyOnce(), sealed, goshape.SlotName(g.Slot)+" of "+declSubject(decl))
+		return occursShape(goshape.ExactlyOnce(), sealed, g.Slot().Name()+" of "+declSubject(decl))
 	}
-	f, err := typedField(run, decl, g.Type, valueBare, once, func(ct xsd.ComplexType) (complexUnit, error) {
+	f, err := typedField(run, decl, g.Type(), valueBare, once, func(ct xsd.ComplexType) (complexUnit, error) {
 		if ct.Name() != (xsd.QName{}) {
 			return bindComplex(run, decl, ct, run.types, ct.Name())
 		}
@@ -91,21 +89,8 @@ func branchField(run *bindRun, decl xsd.ElementDeclaration, g goshape.GoverningT
 	if err != nil {
 		return field{}, err
 	}
-	f.name = goname.NewNamer().Claim(branchLocal(g))
+	f.name = goname.NewNamer().Claim(g.Local())
 	return f, nil
-}
-
-// branchLocal is the local name the branch of g is named from (codegen/doc.go
-// "# Naming"): its type's own where the type is named, and otherwise its
-// slot's.
-func branchLocal(g goshape.GoverningType) string {
-	if g.Type.Name() != (xsd.QName{}) {
-		return g.Type.Name().Local
-	}
-	if g.Slot > 0 {
-		return "alternative" + strconv.Itoa(g.Slot)
-	}
-	return "default"
 }
 
 // field returns the field of shape s whose V is t's interface.
@@ -198,7 +183,7 @@ func (t *tableRoot) selected(p *pipeline, start *xmltree.StartElement) (int, err
 func (t *tableRoot) branchOf(td xsd.TypeDefinition) (int, bool) {
 	name := td.Name()
 	for i, g := range t.types {
-		if g.Type.Name() == name {
+		if g.Type().Name() == name {
 			return i, true
 		}
 	}

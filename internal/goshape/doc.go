@@ -7,9 +7,15 @@
 // # Contract
 //
 //	func SubstitutionSum(schema *xsd.Schema, decl xsd.ElementDeclaration) (members []xsd.ElementDeclaration, sum bool)
-//	type GoverningType struct{ Type xsd.TypeDefinition; Slot int }
+//	type GoverningType struct{ … }
+//	func (g GoverningType) Type() xsd.TypeDefinition
+//	func (g GoverningType) Slot() Slot
+//	func (g GoverningType) Local() string
+//	type Slot interface{ Name() string; Anonymous() string; … }
+//	type AlternativeSlot int
+//	type DefaultSlot struct{}
+//	type DeclaredSlot struct{}
 //	func GoverningTypes(schema *xsd.Schema, decl xsd.ElementDeclaration, members func(xsd.ComplexType) ([]xsd.TypeDefinition, error)) (types []GoverningType, errorSlot bool, err error)
-//	func SlotName(slot int) string
 //	func BasicMembers(r xsd.TypeResolver, st *xsd.SimpleType) ([]*xsd.SimpleType, error)
 //	func Splices(schema *xsd.Schema, group xsd.ModelGroup, occurs xsd.Occurs) (bool, error)
 //	func Flattens(schema *xsd.Schema, group xsd.ModelGroup, occurs xsd.Occurs) (bool, error)

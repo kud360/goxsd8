@@ -1840,7 +1840,7 @@ func bindDecl(p *pipeline, decl xsd.ElementDeclaration) (binder, error) {
 	if len(types) != 1 {
 		return bindTable(run, decl, types, run.elements, decl.Name())
 	}
-	td := types[0].Type
+	td := types[0].Type()
 	if anyTypeItself(td) {
 		return anyTypeRoot{}, nil
 	}
@@ -4136,7 +4136,7 @@ func governingTypes(schema *xsd.Schema, decl xsd.ElementDeclaration) ([]goshape.
 	types, errorSlot, err := goshape.GoverningTypes(schema, decl, func(ct xsd.ComplexType) ([]xsd.TypeDefinition, error) {
 		return []xsd.TypeDefinition{ct}, nil
 	})
-	if decl.Nillable() && (err != nil || len(types) != 1 || !anyTypeItself(types[0].Type) || errorSlot) {
+	if decl.Nillable() && (err != nil || len(types) != 1 || !anyTypeItself(types[0].Type()) || errorSlot) {
 		return nil, decline(constructNillable, declSubject(decl))
 	}
 	if err != nil {
@@ -4152,7 +4152,7 @@ func governingTypes(schema *xsd.Schema, decl xsd.ElementDeclaration) ([]goshape.
 func anonymousTypes(types []goshape.GoverningType) int {
 	n := 0
 	for _, g := range types {
-		if g.Type.Name() == (xsd.QName{}) {
+		if g.Type().Name() == (xsd.QName{}) {
 			n++
 		}
 	}
@@ -4380,7 +4380,7 @@ func declField(run *bindRun, el xsd.ElementDeclaration, value valueType, shapeOf
 		}
 		return u.field(s), nil
 	}
-	return typedField(run, el, types[0].Type, value, shapeOf, func(ct xsd.ComplexType) (complexUnit, error) { return run.nested(el, ct) })
+	return typedField(run, el, types[0].Type(), value, shapeOf, func(ct xsd.ComplexType) (complexUnit, error) { return run.nested(el, ct) })
 }
 
 // typedField returns the field, but for its name, of an element of the
