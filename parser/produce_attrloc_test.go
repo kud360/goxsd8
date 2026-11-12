@@ -1,6 +1,7 @@
 package parser_test
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/kud360/goxsd8/xsderr"
@@ -268,11 +269,15 @@ func TestProduceQNameAttributeChargeLocated(t *testing.T) {
 		rule   xsderr.Rule
 		line   int
 		col    int
+		// msg, when set, is the opening of the message after its rule, pinning
+		// the attribute name the charge reports.
+		msg string
 	}{
 		{
 			name: "bindQName lexical type",
 			body: "\n" + `<xs:element name="e"` + "\n" + `  type="xs:"/>`,
 			rule: "cvc-datatype-valid", line: 3, col: 3,
+			msg: `<element> type value "xs:" `,
 		},
 		{
 			name: "bindQName unbound prefix type",
@@ -284,6 +289,7 @@ func TestProduceQNameAttributeChargeLocated(t *testing.T) {
 			body: "\n" + `<xs:simpleType name="T"><xs:union id="u"` + "\n" +
 				`  memberTypes="xs:string xs:"/></xs:simpleType>`,
 			rule: "cvc-datatype-valid", line: 3, col: 3,
+			msg: `<union> memberTypes value "xs:" `,
 		},
 		{
 			name: "bindQName unbound prefix notQName item",
@@ -365,6 +371,9 @@ func TestProduceQNameAttributeChargeLocated(t *testing.T) {
 			if loc.URI != produceURI || loc.Line != tc.line || loc.Col != tc.col {
 				t.Fatalf("position = %s:%d:%d, want %s:%d:%d (%v)",
 					loc.URI, loc.Line, loc.Col, produceURI, tc.line, tc.col, err)
+			}
+			if want := "[" + string(tc.rule) + "] " + tc.msg; tc.msg != "" && !strings.Contains(err.Error(), want) {
+				t.Fatalf("error %v does not open with %q", err, want)
 			}
 		})
 	}
