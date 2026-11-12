@@ -899,20 +899,30 @@ func newPatternFacet(f xsd.Facet, o facetOrigin) (patternFacet, error) {
 	return patternFacet{facet: f, origin: o, res: res}, nil
 }
 
-// patternMemberEscaper renders one pattern {value} member for a
-// cvc-pattern-valid message, between the double quotes CheckLexical adds:
-// `&`, `"`, LF and CR become the XML character references `&amp;`, `&quot;`,
-// `&#10;` and `&#13;`, so a quote inside a member never reads as the end of
-// one, the `", "` joining members never appears inside one, and a line break
-// never splits the message (#2350). Every other character stays as written —
-// a backslash in particular is never doubled, so `[\-+]?[0-9]+` prints as the
-// Datatypes spec spells it.
-var patternMemberEscaper = strings.NewReplacer(`&`, "&amp;", `"`, "&quot;", "\n", "&#10;", "\r", "&#13;")
+// facetMemberEscaper renders one pattern or enumeration {value} member as
+// written, for a cvc-pattern-valid or cvc-enumeration-valid message, between the
+// double quotes quoteMembers adds: `&`, `"`, LF and CR become the XML character
+// references `&amp;`, `&quot;`, `&#10;` and `&#13;`, so a quote inside a member
+// never reads as the end of one, the `", "` joining members never appears inside
+// one, and a line break never splits the message (#2350). Every other character
+// stays as written — a backslash in particular is never doubled, so
+// `[\-+]?[0-9]+` prints as the Datatypes spec spells it.
+var facetMemberEscaper = strings.NewReplacer(`&`, "&amp;", `"`, "&quot;", "\n", "&#10;", "\r", "&#13;")
+
+// quoteMembers renders facet {value} members in the order given, each
+// double-quoted and escaped by facetMemberEscaper, joined by `", "`.
+func quoteMembers(members []string) string {
+	quoted := make([]string, len(members))
+	for i, m := range members {
+		quoted[i] = `"` + facetMemberEscaper.Replace(m) + `"`
+	}
+	return strings.Join(quoted, ", ")
+}
 
 // CheckLexical accepts the normalized literal iff it matches at least one
 // pattern in the OR-set (cvc-pattern-valid, §4.3.4.4). A rejection names the
 // whole OR-set of the failed step — every member, never a single `|` branch,
-// rendered by patternMemberEscaper — and its facetOrigin relation: the type on
+// rendered by quoteMembers — and its facetOrigin relation: the type on
 // the base chain that declares it, and the checked type when that type inherits
 // it, which is derived provenance, not a spec property (simpleTypeLabel renders
 // the zero QName of an anonymous one).
@@ -922,14 +932,9 @@ func (p patternFacet) CheckLexical(normalized string) error {
 			return nil
 		}
 	}
-	values := p.facet.Values()
-	quoted := make([]string, len(values))
-	for i, v := range values {
-		quoted[i] = `"` + patternMemberEscaper.Replace(v) + `"`
-	}
 	return xsderr.New(ruleCvcPatternValid, xsderr.Loc{},
 		"%q matches no member of the pattern facet %s, whose {value} holds %s, but cvc-pattern-valid requires one to match",
-		normalized, p.origin.relation(), strings.Join(quoted, ", "))
+		normalized, p.origin.relation(), quoteMembers(p.facet.Values()))
 }
 
 // enumFacet is the enumeration value-facet stage (cvc-enumeration-valid,
@@ -939,7 +944,12 @@ func (p patternFacet) CheckLexical(normalized string) error {
 // that type in a rejection.
 type enumFacet struct {
 	members []Value
-	origin  facetOrigin
+	// lexicals are the members as their <enumeration> elements wrote them, in
+	// document order, which a rejection names; members are their parsed forms
+	// and cannot render them, since parsing drops the spelling ("+007" and "7"
+	// are one member). Matching reads members only.
+	lexicals []string
+	origin   facetOrigin
 }
 
 // newEnumFacet parses each enumeration {value} member via the declaring type's
@@ -971,14 +981,16 @@ func newEnumFacet(b Backend, r xsd.TypeResolver, st *xsd.SimpleType, f xsd.Facet
 	// always reports ok=true; the second result is discarded deliberately.
 	enumMembers, _ := f.EnumerationMembers()
 	members := make([]Value, 0, len(enumMembers))
+	lexicals := make([]string, 0, len(enumMembers))
 	for _, em := range enumMembers {
 		v, err := facetValue(m, ws, em.Lexical(), newMemberContext(em))
 		if err != nil {
 			return enumFacet{}, xsderr.Wrap(ruleSrcEnumerationValue, xsderr.Loc{}, err)
 		}
 		members = append(members, v)
+		lexicals = append(lexicals, em.Lexical())
 	}
-	return enumFacet{members: members, origin: o}, nil
+	return enumFacet{members: members, lexicals: lexicals, origin: o}, nil
 }
 
 // xmlNamespaceURI is the single reserved, implicitly-bound XML namespace prefix
@@ -1057,9 +1069,12 @@ func (c nsContext) LookupNamespace(prefix string) (namespace string, ok bool) {
 	return "", false
 }
 
-// CheckValue accepts v iff it is equal or identical to a member
-// (cvc-enumeration-valid, §4.3.5.4). A rejection names the facet by its
-// facetOrigin relation.
+// CheckValue accepts v iff it is equal or identical to a parsed member
+// (cvc-enumeration-valid, §4.3.5.4) — values are compared, never spellings, so
+// "7" is accepted against a member written "+007". A rejection names the facet
+// by its facetOrigin relation and every member as its <enumeration> wrote it,
+// in document order, rendered by quoteMembers; a QName or NOTATION member is
+// quoted as written, its prefix unresolved.
 func (e enumFacet) CheckValue(v Value) error {
 	for _, member := range e.members {
 		if enumMatch(v, member) {
@@ -1067,8 +1082,8 @@ func (e enumFacet) CheckValue(v Value) error {
 		}
 	}
 	return xsderr.New(ruleCvcEnumerationValid, xsderr.Loc{},
-		"value is not equal or identical to any member of the enumeration facet %s, but cvc-enumeration-valid requires it to be equal or identical to one",
-		e.origin.relation())
+		"value is not equal or identical to any member of the enumeration facet %s, whose {value} holds the values written %s, but cvc-enumeration-valid requires it to be equal or identical to one",
+		e.origin.relation(), quoteMembers(e.lexicals))
 }
 
 // enumMatch reports the "equal or identical" relation cvc-enumeration-valid
