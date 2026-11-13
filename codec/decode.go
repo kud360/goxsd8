@@ -395,8 +395,8 @@ var ErrTypeMismatch = errors.New("codec: T is not the type codegen emits for the
 //     earlier one's field at its position. Two fields holding nested choices'
 //     interfaces share it where one branch set could be held to both, as item 6
 //     holds a nested choice's field: they have one name and as many
-//     alternatives, and each alternative's branch of the earlier one shares its
-//     shape with some alternative's branch of the later. Otherwise a field
+//     alternatives, and each alternative's branch of either shares its
+//     shape with some alternative's branch of the other. Otherwise a field
 //     holding a nested choice's interface, a flattened particle's slice or an
 //     occurrence field's type for one occurrence shares its shape with any
 //     field of its name. Two other fields of one name share it where either is
@@ -1732,13 +1732,15 @@ func (f field) admits(got reflect.StructField, _ branchSets) bool {
 	return shaped && f.arm.admits(v)
 }
 
-// sharesBranch reports whether f and g, two branch fields of one sealed
-// interface, a choice's alternatives', a substitution group's members' or a
-// declaration's governing types', may admit a common Go type, as
-// field.admits reads one, so that no branch type could tell them apart
-// (sealed.alternative). It reads their names, shapes, arm classes, scalar
-// elements and valueTypes only, never a nested unit's content, which may be
-// unbound or reach itself here, and the first of these that applies answers:
+// sharesBranch reports whether f and g, two branch fields at one position, of
+// alternatives of one sealed interface, a choice's alternatives', a
+// substitution group's members' or a declaration's governing types', or of
+// alternatives of two nested choices whose fields could be one (choicesShare),
+// may admit a common Go type, as field.admits reads one, so that no branch
+// type could tell them apart (sealed.alternative). It reads their names,
+// shapes, arm classes, scalar elements and valueTypes only, never a nested
+// unit's content, which may be unbound or reach itself here, and the first of
+// these that applies answers:
 //
 //   - Different names: false.
 //   - Both arms a mixed-content child's, a mixedArm or a childArm (wrapped):
@@ -3174,18 +3176,22 @@ func membersShare(a, b contentMember) bool {
 	return a.goName() == b.goName()
 }
 
-// choicesShare reports whether a and b, two nested choices' fields, a the
-// earlier alternative's, may admit a common struct field, an interface one
-// branch set could hold to both (sealed.holds): exactly when they have one
-// name, as many alternatives, and each alternative of a shares a branch
-// struct with some alternative of b (branchesShare). That is conservative,
-// since a set held to both pairs each alternative of a with one of b, its
-// branch struct admitted by both, one to one, which the last test does not
-// require; two choices of no alternatives share.
+// choicesShare reports whether a and b, two nested choices' fields, may admit
+// a common struct field, an interface one branch set could hold to both
+// (sealed.holds): exactly when they have one name, as many alternatives, and
+// each alternative of either shares a branch struct with some alternative of
+// the other (branchesShare). That is conservative, since a set held to both
+// pairs the alternatives of a and b one to one, each pair's branch struct
+// admitted by both, which the last test does not require; two choices of no
+// alternatives share.
 func choicesShare(a, b *choice) bool {
-	if a.name != b.name || len(a.sealed.alts) != len(b.sealed.alts) {
-		return false
-	}
+	return a.name == b.name && len(a.sealed.alts) == len(b.sealed.alts) &&
+		coversAlts(a, b) && coversAlts(b, a)
+}
+
+// coversAlts reports whether each alternative of a shares a branch struct
+// with some alternative of b (branchesShare).
+func coversAlts(a, b *choice) bool {
 	for _, x := range a.sealed.alts {
 		if !slices.ContainsFunc(b.sealed.alts, func(y branchArm) bool { return branchesShare(x, y) }) {
 			return false
@@ -4397,8 +4403,9 @@ func (c *sealed[A]) admitting(bt reflect.Type, sets branchSets) int {
 // method (sealedShaped) whose branch set, as WithBranches supplied it, or no
 // set where c has no alternatives, holds as many types as c has
 // alternatives, each a struct, none nil, and each admitted by an alternative
-// (admitting) that admits no other of them, so none twice. It answers true
-// for every it checkSite holds to c under sets, and reads no checkContext.
+// (admitting), no alternative the first to admit two of them, so none twice.
+// It answers true for every it checkSite holds to c under sets, and reads no
+// checkContext.
 func (c *sealed[A]) holds(it reflect.Type, sets branchSets) bool {
 	if !sealedShaped(it) {
 		return false
