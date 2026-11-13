@@ -42,7 +42,7 @@ type ResolvedAttributeUse struct{ Use AttributeUse }
 // possibly-forward-referenced top-level Attribute Group Definition. Finalize
 // resolves it against {attribute group definitions} (src-resolve clause 1.4)
 // and folds that definition's own attribute content into the container's. The
-// field is read-only by convention; do not mutate it after construction.
+// fields are read-only by convention; do not mutate them after construction.
 //
 // Name is a PRESENT reference, never the absent (zero) QName: an
 // <attributeGroup> inside a container is always the reference form, and
@@ -53,7 +53,14 @@ type ResolvedAttributeUse struct{ Use AttributeUse }
 // TypeDefinitionRef because each targets a different symbol space (§3.17.6.2
 // clauses 1.4, 1.5, 1.2 and 1.1); one shared ref type would make the target kind
 // a runtime property (STYLE T1).
-type AttributeGroupRef struct{ Name QName }
+//
+// Loc is provenance, not a property: the package doc's provenance paragraph
+// says what it holds, where Finalize charges it, and why references compare by
+// Name.
+type AttributeGroupRef struct {
+	Name QName
+	Loc  xsderr.Loc
+}
 
 // ResolvedAttributeGroup is the AttributeUseOrGroupRef arm for the one
 // <attributeGroup ref> a name lookup would answer WRONGLY: a redefining

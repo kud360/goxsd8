@@ -298,9 +298,11 @@ func (s *Schema) resolve() error {
 // model-group and keyref resolvers read the internal indexes directly, since no
 // external consumer justifies minting a capability interface for them (STYLE T5).
 //
-// REFERRER-LOC CONVENTION. Every src-resolve rejection here is charged to the
-// REFERRING component's position, never to the target's — the target is exactly
-// what does not exist, so it has none. Each helper therefore takes a loc
+// REFERRER-LOC CONVENTION. Every src-resolve rejection here is charged first to
+// the REFERENCE's own Loc — the attribute that wrote the name — and, when that is
+// zero, to the REFERRING component's position (chargedAt); never to the
+// target's — the target is exactly what does not exist, so it has none. The rest
+// of this paragraph is that fallback. Each helper therefore takes a loc
 // alongside its ctx phrase, and the descent threads down the position of the
 // nearest ENCLOSING component that retains one: a ComplexType, ElementDeclaration,
 // AttributeDeclaration or ModelGroupDefinition re-roots it at its own Loc() as the
@@ -382,6 +384,17 @@ func (s *Schema) resolveReferences() error {
 	return nil
 }
 
+// chargedAt is the one fallback from a position a value retains to the one its
+// owner supplies: own, or owner when own is the zero xsderr.Loc{}. Only exact
+// equality with the zero value falls back; a partially filled Loc is charged as
+// it is. Both zero answers zero.
+func chargedAt(own, owner xsderr.Loc) xsderr.Loc {
+	if own == (xsderr.Loc{}) {
+		return owner
+	}
+	return own
+}
+
 // referenceWalk is Phase A's set of charges for the shared component descent
 // (componentwalk.go): a src-resolve verdict at every BY-NAME arm the descent
 // reaches, and the two slots the descent does not itself enter — an element
@@ -407,7 +420,8 @@ func (s *Schema) referenceWalk() componentWalk {
 // resolveTypeName resolves a {type definition}/{base type definition} reference
 // (src-resolve clause 1.1). A zero ref is absent and resolves to (nil, nil); a
 // present-but-missing ref is rejected. ctx names the referring site for the
-// message and loc positions it at the referring component (resolveReferences).
+// message and loc positions it: the caller passes the reference's own Loc, or the
+// referring component's when that is zero (chargedAt, resolveReferences).
 func resolveTypeName(r TypeResolver, ref QName, loc xsderr.Loc, ctx string) (TypeDefinition, error) {
 	if ref == (QName{}) {
 		return nil, nil
@@ -424,7 +438,8 @@ func resolveTypeName(r TypeResolver, ref QName, loc xsderr.Loc, ctx string) (Typ
 // slot of a type, element declaration or attribute declaration (§3.3.2.1
 // dcl.elt.common, §3.2.2.2 dcl.att.local), exhaustively over
 // TypeDefinitionOrRef's three arms. ctx names the referring site for the message
-// and loc positions it at the component holding the slot.
+// and loc is the component holding the slot, where a rejection is charged when
+// the reference carries no Loc of its own (chargedAt).
 //
 //   - nil is an absent {type definition}: src-resolve has nothing to resolve.
 //   - TypeDefinitionRef is the by-name arm: the src-resolve clause 1.1 lookup.
@@ -466,7 +481,7 @@ func (s *Schema) resolveTypeDefinitionSlot(ref TypeDefinitionOrRef, loc xsderr.L
 	case nil:
 		return nil
 	case TypeDefinitionRef:
-		_, err := resolveTypeName(s, r.Name, loc, ctx)
+		_, err := resolveTypeName(s, r.Name, chargedAt(r.Loc, loc), ctx)
 		return err
 	case InlineTypeDefinition:
 		return nil // the descent enters it; the slot itself resolves nothing
@@ -487,9 +502,9 @@ func (s *Schema) resolveTypeDefinitionSlot(ref TypeDefinitionOrRef, loc xsderr.L
 
 // resolveElementName resolves an element-declaration reference (src-resolve
 // clause 1.3): an <element ref> {term}. A zero ref is absent and skipped; loc
-// positions a rejection at the component enclosing the particle. The other
-// clause-1.3 site, a {substitution group affiliations} member, is deliberately
-// NOT routed here — see resolveElementDecl for the §5.3 reason.
+// positions a rejection (resolveTermRef). The other clause-1.3 site, a
+// {substitution group affiliations} member, is deliberately NOT routed here —
+// see resolveElementDecl for the §5.3 reason.
 func resolveElementName(r ElementResolver, ref QName, loc xsderr.Loc, ctx string) error {
 	if ref == (QName{}) {
 		return nil
@@ -503,7 +518,7 @@ func resolveElementName(r ElementResolver, ref QName, loc xsderr.Loc, ctx string
 
 // resolveAttributeName resolves an <attribute ref> {attribute declaration}
 // reference (src-resolve clause 1.2). A zero ref is absent and skipped; loc
-// positions a rejection at the component enclosing the attribute use.
+// positions a rejection (resolveAttributeUse).
 func resolveAttributeName(r AttributeResolver, ref QName, loc xsderr.Loc, ctx string) error {
 	if ref == (QName{}) {
 		return nil
@@ -517,7 +532,7 @@ func resolveAttributeName(r AttributeResolver, ref QName, loc xsderr.Loc, ctx st
 
 // resolveModelGroupName resolves a <group ref> {term} reference (src-resolve
 // clause 1.5) against modelGroupIndex directly. A zero ref is absent and
-// skipped; loc positions a rejection at the component enclosing the particle.
+// skipped; loc positions a rejection (resolveTermRef).
 func (s *Schema) resolveModelGroupName(ref QName, loc xsderr.Loc, ctx string) error {
 	if ref == (QName{}) {
 		return nil
@@ -534,18 +549,19 @@ func (s *Schema) resolveModelGroupName(ref QName, loc xsderr.Loc, ctx string) er
 // attributeGroupIndex directly. It never descends the definition it finds: that
 // definition is a root of this phase in its own right (resolveReferences), and
 // the §3.6.2.1 closure that does follow the edge is the attribute group fold's
-// (attributegroupfold.go), which relies on this check having passed. loc is the
-// container's position, since a member retains none of its own; owner names the
-// container. The member may be a reference the author never wrote as a child —
-// the one §3.4.2.4 synthesizes on a complex type from <schema defaultAttributes>
-// — so the message names both sources rather than asserting an <attributeGroup
-// ref> child exists.
+// (attributegroupfold.go), which relies on this check having passed. A
+// rejection is charged at r.Loc, the ref= attribute, or at loc, the container's
+// position, when r carries none (chargedAt); owner names the container. The
+// member may be a reference the author never wrote as a child — the one §3.4.2.4
+// synthesizes on a complex type from <schema defaultAttributes>, which carries no
+// Loc — so the message names both sources rather than asserting an
+// <attributeGroup ref> child exists.
 //
 // An AttributeGroupRef cannot carry the absent QName (checkAttributeContent), so
 // unlike the other by-name helpers this one has no absent case to skip.
 func (s *Schema) resolveAttributeGroupRef(r AttributeGroupRef, loc xsderr.Loc, owner string) error {
 	if _, ok := s.attributeGroupIndex[r.Name]; !ok {
-		return xsderr.New(ruleSrcResolve, loc,
+		return xsderr.New(ruleSrcResolve, chargedAt(r.Loc, loc),
 			"%s references attribute group definition %s — through an <attributeGroup ref> child, or, on a complex type, the reference §3.4.2.4 synthesizes from <schema defaultAttributes> — but no attribute group definition with that expanded name is present in the schema (src-resolve clause 1.4)", owner, r.Name)
 	}
 	return nil
@@ -565,11 +581,14 @@ func (s *Schema) resolveAttributeGroupRef(r AttributeGroupRef, loc xsderr.Loc, o
 //   - clause 2 (cardinality): the keyref's {fields} count must equal the
 //     {referenced key}'s.
 //
-// All three rejections are positioned at the KEYREF (ic.Loc()), never at the
-// target: the keyref is the component whose {referenced key} is wrong, it is the
-// one the schema author must edit, and for clause 1.7 the target does not exist
-// to have a position. resolveKeyref therefore needs no threaded loc — an
-// IdentityConstraint retains its own, top-level or nested alike.
+// No rejection is positioned at the target: the keyref is the component whose
+// {referenced key} is wrong, it is the one the schema author must edit, and for
+// clause 1.7 the target does not exist to have a position. The clause 1.7
+// rejection is charged at the reference's own Loc, the refer= attribute, or at
+// the keyref's (ic.Loc()) when the reference carries none (chargedAt); the two
+// c-props-correct rejections are charged at the keyref, since neither faults the
+// name. resolveKeyref therefore needs no threaded loc — an IdentityConstraint
+// retains its own, top-level or nested alike.
 //
 // The category check runs first, so a target that is both the wrong category and
 // the wrong cardinality reports the category failure — one deterministic first
@@ -583,7 +602,7 @@ func (s *Schema) resolveKeyref(ic IdentityConstraint) error {
 	}
 	target, ok := s.idcIndex[ref]
 	if !ok {
-		return xsderr.New(ruleSrcResolve, ic.Loc(),
+		return xsderr.New(ruleSrcResolve, chargedAt(ic.referencedKey.Loc, ic.Loc()),
 			"keyref %s references identity constraint %s, but no identity-constraint definition with that expanded name is present in the schema (src-resolve clause 1.7)", ic.Name(), ref)
 	}
 	if target.Category() == IdentityConstraintKeyref {
@@ -618,9 +637,10 @@ func (s *Schema) resolveKeyref(ic IdentityConstraint) error {
 // this pass reaches in its own right, and Phase B's checkSimpleBaseAcyclic
 // rejects a cycle among the base ones.
 //
-// A rejection is positioned at the referring type's own Loc, which simpleTypeOfRef
-// takes from t — the referrer-Loc convention, with the simple type as its own
-// nearest position-bearing component.
+// A rejection is positioned at the reference's own Loc — the base=, itemType= or
+// memberTypes= attribute — or, when it carries none, at the referring type's own
+// Loc, which simpleTypeOfRef takes from t: the referrer-Loc convention, with the
+// simple type as its own nearest position-bearing component.
 //
 // The xs:anySimpleType anchor holds no slot to resolve — its base is xs:anyType,
 // outside this package, and it has no derivation — so it returns nil by identity,
@@ -671,14 +691,15 @@ func (s *Schema) resolveSimpleTypeSlot(t *SimpleType, ref SimpleTypeOrRef, slot 
 // the default arm asserts the sealed-sum invariant over the two ref variants and
 // an absent slot.
 //
-// loc is the enclosing component's position, since a Particle retains none of
-// its own.
+// A rejection is charged at the reference's own Loc, the ref= attribute, or at
+// loc, the enclosing component's position, when the reference carries none
+// (chargedAt): a Particle retains no position of its own.
 func (s *Schema) resolveTermRef(t TermOrRef, loc xsderr.Loc) error {
 	switch t := t.(type) {
 	case ElementDeclarationRef:
-		return resolveElementName(s, t.Name, loc, "particle {term} <element ref>")
+		return resolveElementName(s, t.Name, chargedAt(t.Loc, loc), "particle {term} <element ref>")
 	case ModelGroupRef:
-		return s.resolveModelGroupName(t.Name, loc, "particle {term} <group ref>")
+		return s.resolveModelGroupName(t.Name, chargedAt(t.Loc, loc), "particle {term} <group ref>")
 	default:
 		panic("xsd: resolveTermRef: non-exhaustive TermOrRef switch")
 	}
@@ -690,15 +711,16 @@ func (s *Schema) resolveTermRef(t TermOrRef, loc xsderr.Loc) error {
 // is charged there, at the declaration's own Loc.
 //
 // loc is the enclosing complex type's or attribute group definition's position,
-// and the rejection is charged at u.chargedLoc(loc). The owner phrase the descent
-// also supplies names that component for a rejection this arm does not make, and
-// is ignored.
+// and the rejection is charged at the reference's own Loc, the ref= attribute, or
+// at u.chargedLoc(loc) when the reference carries none (chargedAt). The owner
+// phrase the descent also supplies names that component for a rejection this arm
+// does not make, and is ignored.
 func (s *Schema) resolveAttributeUse(u AttributeUse, loc xsderr.Loc, _ string) error {
 	switch d := u.AttributeDeclaration().(type) {
 	case LocalAttributeDeclaration:
 		return nil
 	case AttributeDeclarationRef:
-		return resolveAttributeName(s, d.Name, u.chargedLoc(loc), "attribute use <attribute ref>")
+		return resolveAttributeName(s, d.Name, chargedAt(d.Loc, u.chargedLoc(loc)), "attribute use <attribute ref>")
 	default:
 		panic("xsd: resolveAttributeUse: non-exhaustive AttributeDeclarationOrRef switch")
 	}
@@ -716,7 +738,9 @@ func (s *Schema) resolveAttributeUse(u AttributeUse, loc xsderr.Loc, _ string) e
 //
 // It resolves through resolveTypeName rather than leaning on the slot charge
 // that runs just before it, so a dangling name is rejected here too, under the
-// same message. The inline arm needs no check (NewAttributeDeclaration rejects a
+// same message. Both rejections are charged at the reference's own Loc, the
+// type= attribute, or at the declaration's when it carries none (chargedAt). The
+// inline arm needs no check (NewAttributeDeclaration rejects a
 // complex one under a-props-correct clause 1), and an absent slot names nothing.
 func (s *Schema) resolveAttributeDecl(a AttributeDeclaration) error {
 	r, ok := a.TypeDefinition().(TypeDefinitionRef)
@@ -724,14 +748,15 @@ func (s *Schema) resolveAttributeDecl(a AttributeDeclaration) error {
 		return nil
 	}
 	ctx := "attribute declaration " + a.Name().String() + " {type definition}"
-	t, err := resolveTypeName(s, r.Name, a.Loc(), ctx)
+	loc := chargedAt(r.Loc, a.Loc())
+	t, err := resolveTypeName(s, r.Name, loc, ctx)
 	if err != nil {
 		return err
 	}
 	if _, isComplex := t.(ComplexType); !isComplex {
 		return nil
 	}
-	return xsderr.New(ruleSrcResolve, a.Loc(),
+	return xsderr.New(ruleSrcResolve, loc,
 		"%s references simple type %s, but that expanded name is a complex type definition, and src-resolve requires an attribute's type= to resolve to a simple type definition", ctx, r.Name)
 }
 

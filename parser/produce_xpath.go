@@ -381,7 +381,7 @@ func (p *producer) constructIdentityConstraint(name xsd.QName, el *Element, cate
 		fields = append(fields, field)
 	}
 
-	var referencedKey *xsd.QName
+	var referencedKey *xsd.IdentityConstraintRef
 	if category == xsd.IdentityConstraintKeyref {
 		refer, ok := el.attr("refer")
 		if !ok {
@@ -394,7 +394,7 @@ func (p *producer) constructIdentityConstraint(name xsd.QName, el *Element, cate
 		if err != nil {
 			return xsd.IdentityConstraint{}, err
 		}
-		referencedKey = &qn
+		referencedKey = &xsd.IdentityConstraintRef{Name: qn}
 	}
 	return xsd.NewIdentityConstraint(el.Loc(), name, category, selector, fields, referencedKey)
 }
