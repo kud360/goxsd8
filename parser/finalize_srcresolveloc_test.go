@@ -17,8 +17,10 @@ import (
 // to an enclosing component. msg pins which charge answered. memberTypes= is
 // charged at the attribute's start: the reference carries no per-item position.
 //
-// The c-props-correct row is the guard: resolveKeyref's clause 2 charge faults
-// the keyref, not its refer= name, and stays at the <keyref> start tag.
+// The two guard rows pin charges that stay at a start tag: resolveKeyref's
+// c-props-correct clause 2 charge faults the keyref, not its refer= name, and
+// the <attributeGroup> reference §3.4.2.4 synthesizes from <schema
+// defaultAttributes> is no attribute of the complex type it is charged against.
 //
 // The redefine row's dangling <element ref> sits in the <group> b.xsd declares
 // and main.xsd redefines; the reference travels with the original into the
@@ -128,6 +130,11 @@ func TestFinalizeSrcResolveChargedAtNamingAttribute(t *testing.T) {
 			`</xs:element>`),
 			"c-props-correct", xsderr.Loc{URI: "main.xsd", Line: 5, Col: 3},
 			"c-props-correct clause 2 requires equal cardinality"},
+		{"guard: the defaultAttributes reference stays at the complex type", map[string]string{"main.xsd": `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"` + "\n" +
+			`  defaultAttributes="nope">` + "\n" +
+			`  <xs:complexType name="c"/>` + tail},
+			"src-resolve", xsderr.Loc{URI: "main.xsd", Line: 3, Col: 3},
+			"complex type c references attribute group definition nope "},
 		{"redefine: element ref= in a redefined group's original", map[string]string{
 			"main.xsd": head +
 				`<xs:redefine schemaLocation="b.xsd">` + "\n" +
