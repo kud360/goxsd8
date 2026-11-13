@@ -63,36 +63,39 @@
 // lexical and no value.
 //
 // Not every error the pipeline returns is a VERDICT, though, and the difference is
-// load-bearing. [IsDatatypeVerdict] is the test, and every caller deciding validity
-// — inside this package and out — applies it before charging: an error it reports
-// false for is a fault of the TYPE or of the BACKEND, and charging one as "this
-// literal is invalid" turns a backend gap or a construction bug into a false
-// reject. The rule ID does not tell them apart; an ungoverned type is reported
-// under cvc-datatype-valid exactly as a genuine rejection is, which is how a
-// typeless attribute (xs:anySimpleType, Structures §3.2.2.2) would otherwise be
-// rejected by every processor that trusted the ID.
+// load-bearing. Three predicates say what an error means for the caller:
+//
+//   - [IsDatatypeVerdict]: a rejection of the literal.
+//   - [IsFacetPrecondition]: a fault of the type, one kind of the faults of the
+//     type or of the backend that [IsDatatypeVerdict] lists.
+//   - [IsAssertionDeclined]: an undecided {test}.
+//
+// Every caller deciding validity — inside this package and out — applies
+// [IsDatatypeVerdict] before charging; its doc says why the rule ID cannot
+// stand in for it.
+//
+// One member of the fault class has a predicate of its own, because two sites
+// need to know WHICH fault: a type may reach [ValidateLexical] carrying a facet
+// that is not applicable to it at all (cos-applicable-facets §4.1.5) — a bound
+// facet on an unordered value space, a length facet on an unmeasurable one — or
+// with no usable whiteSpace mode where §3.16.7.4 guarantees one. Those are
+// distinguished by [IsFacetPrecondition] and charged to cos-applicable-facets or
+// [xsderr.RuleComponentInvariant] rather than to any cvc-* rule. Applicability
+// itself is the xsd.SimpleTypeRestrictionChecker capability's to enforce —
+// builtin.NewRestrictionChecker is the implementation, and a Schema finalized
+// with it installed has the whole class discharged for every simple type it
+// reaches.
 //
 // The last stage is the one this package cannot run itself: an assertions
 // facet's {test}s are XPath 2.0 (cvc-assertions-valid, §4.3.13.3), and package
 // xpath imports this one. [ValidateLexical] and [ValidatingType] therefore take
 // an [AssertionEvaluator], which answers each {test} with an [AssertionAnswer]:
 // a failed one is an ordinary verdict under cvc-assertions-valid, and a declined
-// one is the third non-verdict, which [IsAssertionDeclined] reports and
+// one is not a verdict, which [IsAssertionDeclined] reports and
 // [IsDatatypeVerdict] excludes. GAP(value): this package's own callers of the
 // pipeline that are handed no evaluator — [CheckFacetRestriction] and the
 // [xsd.ValueSpace] [NewValueSpace] returns — decline every {test}, each
 // fail-open on the terms its own marker states. (#1042)
-//
-// One member of that class has a predicate of its own, because two sites need to
-// know WHICH fault: a type may reach [ValidateLexical] carrying a facet that is not
-// applicable to it at all (cos-applicable-facets §4.1.5) — a bound facet on an
-// unordered value space, a length facet on an unmeasurable one — or with no usable
-// whiteSpace mode where §3.16.7.4 guarantees one. Those are distinguished by
-// [IsFacetPrecondition] and charged to cos-applicable-facets or
-// [xsderr.RuleComponentInvariant] rather than to any cvc-* rule. Applicability
-// itself is the xsd.SimpleTypeRestrictionChecker capability's to enforce —
-// builtin.NewRestrictionChecker is the implementation, and a Schema finalized with
-// it installed has the whole class discharged for every simple type it reaches.
 //
 // The list and union varieties recurse rather than adding stages. A list runs
 // this whole pipeline against the ITEM TYPE per whitespace-delimited item — the
@@ -102,19 +105,21 @@
 // whiteSpace facet at all: it hands the RAW literal to its member types in
 // order, and the first one that is itself datatype-valid supplies the value, the
 // whiteSpace normalization its own pattern facet then matches against, and the
-// type its own assertions facet binds `$value` under (dt-xdmrep clause 4): that
-// ·active basic member·, never the union, is the st the evaluator is handed —
-// so a union's value is always some member's value, never a wrapper of its own.
-// [ValidatingType] names that member (key-vtype §3.16.4 cl.1, the ·validating
-// type·): st itself, or the ·active basic member· a union dispatched to. Its
-// own member-identification scan applies a WIDER fault test than the dispatch
-// above does — it declines on any member error that is not [IsDatatypeVerdict],
-// where the dispatch folds anything short of [IsFacetPrecondition] or
-// [IsAssertionDeclined] into "rejected" and keeps scanning (dv_union's own #462
-// gap) — so the two can disagree on which members fault; ValidatingType's doc
-// comment is the authority on why. Both run each member's assertions facets, so
-// a member one of whose {test}s fails is passed over for a later one
-// (dt-active-member).
+// type its own assertions facet binds `$value` under. That member, followed
+// down through any nested union until a non-union member is reached, is the
+// union's ·active basic member· for the literal, and the spec's rule for how a
+// union's value reaches XPath (dt-xdmrep clause 4) types it as that member's,
+// as [AssertionEvaluator] states for its st. So a union's value is always some
+// member's value, never a wrapper of its own. [ValidatingType] names that member
+// (key-vtype §3.16.4 cl.1, the ·validating type·): st itself, or the ·active
+// basic member· a union dispatched to. Its own member-identification scan
+// applies a WIDER fault test than the dispatch above does — it declines on any
+// member error that is not [IsDatatypeVerdict], where the dispatch folds
+// anything short of [IsFacetPrecondition] or [IsAssertionDeclined] into
+// "rejected" and keeps scanning (dv_union's own #462 gap) — so the two can
+// disagree on which members fault; ValidatingType's doc comment is the authority
+// on why. Both run each member's assertions facets, so a member one of whose
+// {test}s fails is passed over for a later one (dt-active-member).
 //
 // A facet's OWN {value} goes through the same whiteSpace normalization before it
 // is parsed, once at construction: a facet's {value} property is "a value from
