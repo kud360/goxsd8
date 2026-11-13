@@ -95,13 +95,14 @@ type unionScalar struct {
 	members []scalar
 }
 
-// unionValue is codec's value of a union: member, the scalar of its ·active
-// basic member·, and v, that member's value as member.decode returns it. It
-// converts to no caller type: pipeline.union builds the caller's variant from
-// it.
+// unionValue is codec's value of a union: u, the union's basic members, i, the
+// position in u.members of its ·active basic member·, and v, that member's
+// value as its scalar's decode returns it. It converts to no caller type:
+// pipeline.union builds the caller's variant from it.
 type unionValue struct {
-	member *scalar
-	v      reflect.Value
+	u *unionScalar
+	i int
+	v reflect.Value
 }
 
 // unionValueType is unionValue's reflect.Type, the bare Go type of a union
@@ -125,10 +126,9 @@ func sealedShape(t reflect.Type) bool {
 
 // check holds it, a sealed interface at the site site names, to u's variants,
 // item 6 of Decode's doc: cx's sets hold, for it, one variant per basic
-// member, each the first member whose Go type it is over (scalar.underlies)
-// and that no earlier variant matched, and held to the sets that member's
-// own Go type reads (scalar.holdSets). Neither the interface's nor a
-// variant's name is compared.
+// member, as bind matches each, and each is held to the sets its member's own
+// Go type reads (scalar.holdSets). Neither the interface's nor a variant's
+// name is compared.
 func (u *unionScalar) check(it reflect.Type, site string, cx *checkContext) error {
 	variants, supplied := cx.sets.of(it)
 	if !supplied && len(u.members) > 0 {
@@ -137,45 +137,75 @@ func (u *unionScalar) check(it reflect.Type, site string, cx *checkContext) erro
 	if len(variants) != len(u.members) {
 		return fmt.Errorf("%w: WithBranches supplies %d variants of %s where codegen emits %d", ErrTypeMismatch, len(variants), it, len(u.members))
 	}
-	matched := make([]bool, len(u.members))
-	for i, vt := range variants {
-		if vt == nil {
-			return fmt.Errorf("%w: WithBranches supplies a nil variant of %s", ErrTypeMismatch, it)
-		}
-		if slices.Contains(variants[:i], vt) {
-			return fmt.Errorf("%w: WithBranches supplies %s twice as a variant of %s", ErrTypeMismatch, vt, it)
-		}
-		j := slices.IndexFunc(u.members, func(m scalar) bool { return m.underlies(vt) })
-		if j < 0 || matched[j] {
-			return fmt.Errorf("%w: variant %s of %s is over the Go type of no basic member that an earlier variant did not match", ErrTypeMismatch, vt, it)
-		}
+	bound, err := u.bind(it, variants)
+	if err != nil {
+		return err
+	}
+	for j, vt := range bound {
 		if err := u.members[j].holdSets(vt, fmt.Sprintf("variant %s of %s", vt, site), cx); err != nil {
 			return err
 		}
-		matched[j] = true
 	}
 	return nil
 }
 
-// identify returns the scalar of the ·active basic member· of st, the union
-// u's members are of, for lexical (Datatypes dt-active-basic-member,
+// bind returns the variant of it, a union's sealed interface, that variants,
+// the set WithBranches supplies for it, holds for each of u's basic members,
+// in basic-member order: each variant, in the order supplied, matches the
+// first member whose Go type it is over (scalar.underlies) and that no
+// earlier variant matched, as Decode's doc, item 6, states. A nil variant,
+// one supplied twice, and one matching no member are the ErrTypeMismatch
+// errors item 6 states; a member no variant matches is left nil, which check's
+// count of variants rules out. No name is compared.
+func (u *unionScalar) bind(it reflect.Type, variants []reflect.Type) ([]reflect.Type, error) {
+	bound := make([]reflect.Type, len(u.members))
+	for i, vt := range variants {
+		if vt == nil {
+			return nil, fmt.Errorf("%w: WithBranches supplies a nil variant of %s", ErrTypeMismatch, it)
+		}
+		if slices.Contains(variants[:i], vt) {
+			return nil, fmt.Errorf("%w: WithBranches supplies %s twice as a variant of %s", ErrTypeMismatch, vt, it)
+		}
+		j := u.firstUnbound(bound, vt)
+		if j < 0 {
+			return nil, fmt.Errorf("%w: variant %s of %s is over the Go type of no basic member that an earlier variant did not match", ErrTypeMismatch, vt, it)
+		}
+		bound[j] = vt
+	}
+	return bound, nil
+}
+
+// firstUnbound returns the position of the first of u's members whose Go type
+// vt is over (scalar.underlies) and that bound, bind's variants so far, holds
+// none for, or -1 when there is none.
+func (u *unionScalar) firstUnbound(bound []reflect.Type, vt reflect.Type) int {
+	for j, m := range u.members {
+		if bound[j] == nil && m.underlies(vt) {
+			return j
+		}
+	}
+	return -1
+}
+
+// identify returns the position in u.members of the ·active basic member· of
+// st, the union u's members are of, for lexical (Datatypes dt-active-basic-member,
 // cvc-datatype-valid clause 2.3), as value.ValidatingType identifies it on
 // p's backend under src's bindings and p.assertions, the evaluator
 // validate.Result.FacetAssertions returns, whose doc states why the member is
 // the one validate selected, or the *stageError of item 8, label naming st, at
 // position token as stageError states it: an identification that fails never
 // selects a later member.
-func (u *unionScalar) identify(p *pipeline, st *xsd.SimpleType, label, lexical string, src source, token int) (*scalar, error) {
+func (u *unionScalar) identify(p *pipeline, st *xsd.SimpleType, label, lexical string, src source, token int) (int, error) {
 	m, _, err := value.ValidatingType(p.backend, p.schema, st, lexical, src.bindings(), p.assertions)
 	if err != nil {
-		return nil, &stageError{stage: stageIdentification, label: label, fragment: lexical, token: token, src: src, cause: err}
+		return 0, &stageError{stage: stageIdentification, label: label, fragment: lexical, token: token, src: src, cause: err}
 	}
 	i := slices.IndexFunc(u.members, func(s scalar) bool { return s.st == m })
 	if i < 0 {
-		return nil, &stageError{stage: stageIdentification, label: label, fragment: lexical, token: token, src: src,
+		return 0, &stageError{stage: stageIdentification, label: label, fragment: lexical, token: token, src: src,
 			cause: errors.New("value.ValidatingType identifies a type that is no basic member of the union")}
 	}
-	return &u.members[i], nil
+	return i, nil
 }
 
 // item returns the value of tok, the list item at position token of a list
@@ -188,10 +218,11 @@ func (u *unionScalar) identify(p *pipeline, st *xsd.SimpleType, label, lexical s
 // collapse has split it out, so the member's whiteSpace would leave it
 // unchanged, and runs no stage here, as an atomic item's does not.
 func (u *unionScalar) item(p *pipeline, item *listItem, tok string, src source, token int) (reflect.Value, error) {
-	member, err := u.identify(p, item.st, item.label, tok, src, token)
+	i, err := u.identify(p, item.st, item.label, tok, src, token)
 	if err != nil {
 		return reflect.Value{}, err
 	}
+	member := u.members[i]
 	// scalarElem is a closed sum, so the assertion is STYLE T2's sealed-sum
 	// exception.
 	atom, isAtomic := member.elem.(atomic)
@@ -206,26 +237,26 @@ func (u *unionScalar) item(p *pipeline, item *listItem, tok string, src source, 
 	if err != nil {
 		return reflect.Value{}, err
 	}
-	return reflect.ValueOf(unionValue{member: member, v: v}), nil
+	return reflect.ValueOf(unionValue{u: u, i: i, v: v}), nil
 }
 
 // union returns the value of t, a sealed interface of a union, that v, a
-// unionValue, holds: t's variant whose Go type is that of v's member
-// (scalar.underlies), of the set p.branches supplies for t, holding v's
-// member value converted to it as convertTo converts. Item 6 held the
-// variants first (unionScalar.check), so an interface with none, or no
-// variant for the member, is an internal bug.
+// unionValue, holds: t's variant that unionScalar.bind matches to v's member,
+// of the set p.branches supplies for t, holding v's member value converted to
+// it as convertTo converts. Item 6 held the variants first
+// (unionScalar.check), so an interface with none, or a set bind refuses or
+// matches no variant to the member, is an internal bug.
 func (p *pipeline) union(v reflect.Value, t reflect.Type) reflect.Value {
 	uv := v.Interface().(unionValue)
 	variants, ok := p.branches.of(t)
 	if !ok {
 		panic(fmt.Sprintf("codec: no variants of %s reached the fill", t))
 	}
-	i := slices.IndexFunc(variants, uv.member.underlies)
-	if i < 0 {
-		panic(fmt.Sprintf("codec: no variant of %s is over the Go type of %s", t, uv.member.label))
+	bound, err := uv.u.bind(t, variants)
+	if err != nil || bound[uv.i] == nil {
+		panic(fmt.Sprintf("codec: no variant of %s is bound to %s: %v", t, uv.u.members[uv.i].label, err))
 	}
 	out := reflect.New(t).Elem()
-	out.Set(convertTo(p, uv.v, variants[i]))
+	out.Set(convertTo(p, uv.v, bound[uv.i]))
 	return out
 }

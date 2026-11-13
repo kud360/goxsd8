@@ -366,15 +366,15 @@ func (s scalar) decode(p *pipeline, raw string, src source) (reflect.Value, erro
 	// exception.
 	u, isUnion := s.elem.(*unionScalar)
 	if isUnion && s.item == nil {
-		member, err := u.identify(p, s.st, s.label, raw, src, 0)
+		i, err := u.identify(p, s.st, s.label, raw, src, 0)
 		if err != nil {
 			return reflect.Value{}, err
 		}
-		v, err := member.decode(p, raw, src)
+		v, err := u.members[i].decode(p, raw, src)
 		if err != nil {
 			return reflect.Value{}, err
 		}
-		return reflect.ValueOf(unionValue{member: member, v: v}), nil
+		return reflect.ValueOf(unionValue{u: u, i: i, v: v}), nil
 	}
 	p.trace("whiteSpace", ruleWhiteSpace, s.label, raw, src)
 	normalized, err := value.ApplyWhiteSpace(p.schema, s.st, raw)
