@@ -144,12 +144,12 @@
 // declaration, an abstract head's own properties never read; or the particle is a
 // wildcard, whatever its {namespace constraint} and {process contents}. No two element
 // particles share an expanded name, such an interface's particle taking each of those
-// declarations', but in a flattened content {particle}'s reach, whose children are
-// attributed by position; a nested flattened particle's reach is held to it, its basic
-// particles among the content model's. Each attribute use but xsi:nil's, to which codegen
-// gives no field (codegen's package doc, "# Attributes"), is typed the same way. No
-// element in the instance carries xsi:type, except inside a wildcard's match or an
-// element of type xs:anyType's raw content.
+// declarations', but where either is a basic particle of a flattened particle's reach,
+// content or nested, as item 5 of [Decode]'s doc states with the declines those keep.
+// Each attribute use but xsi:nil's, to which codegen gives no field (codegen's package
+// doc, "# Attributes"), is typed the same way. No element in the instance carries
+// xsi:type, except inside a wildcard's match or an element of type xs:anyType's raw
+// content.
 //
 // Item 6 of [Decode]'s doc states the Go type of each field, naming it V, S
 // or I as the next paragraph does. The field of a particle of complex type
