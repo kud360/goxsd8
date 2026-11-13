@@ -306,10 +306,7 @@ func TestDecodeNestedFlattened(t *testing.T) {
 // whose items' partition reads no repetition inside an item; a nested reach's
 // two particles of one expanded name whose branch structs have one shape, as
 // constructSharedBranch, as a content reach's do
-// (TestDecodeFlattenSharedBranch); and two particles outside every flattened
-// reach taking one expanded name, a sibling's and a spliced sequence's
-// particle's, and two siblings of a content model whose children a Matcher
-// attributes by position for its nested reach, as constructSharedName.
+// (TestDecodeFlattenSharedBranch).
 func TestDecodeNestedFlattenedDeclines(t *testing.T) {
 	rows := []struct {
 		name, decls, body string
@@ -320,10 +317,6 @@ func TestDecodeNestedFlattenedDeclines(t *testing.T) {
 		{"a nested reach's two particles of one expanded name", sequenceOf(`<xs:element name="a" type="xs:string"/><xs:sequence maxOccurs="unbounded"><xs:sequence minOccurs="0"><xs:element name="c" type="xs:string"/><xs:element name="b" type="xs:string"/></xs:sequence>` +
 			`<xs:sequence minOccurs="0"><xs:element name="d" type="xs:string"/><xs:element name="b" type="xs:string"/></xs:sequence></xs:sequence>`),
 			"<s:a>1</s:a><s:c>2</s:c><s:b>3</s:b>", constructSharedBranch},
-		{"a spliced sequence's particle sharing a sibling's expanded name", sequenceOf(`<xs:element name="b" type="xs:string"/><xs:sequence><xs:element name="b" type="xs:string"/><xs:element name="c" type="xs:string"/></xs:sequence>`),
-			"<s:b>1</s:b><s:b>2</s:b><s:c>3</s:c>", constructSharedName},
-		{"two siblings of one expanded name around a nested reach", sequenceOf(`<xs:element name="b" type="xs:string"/><xs:sequence maxOccurs="unbounded"><xs:element name="c" type="xs:string" minOccurs="0"/></xs:sequence><xs:element name="b" type="xs:string"/>`),
-			"<s:b>1</s:b><s:c>2</s:c><s:b>3</s:b>", constructSharedName},
 	}
 	for _, row := range rows {
 		t.Run(row.name, func(t *testing.T) {

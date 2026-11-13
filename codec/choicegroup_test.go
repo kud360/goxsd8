@@ -439,8 +439,7 @@ func TestDecodeChoiceGroup(t *testing.T) {
 // hold, as many alternatives each of one shape as one of the other's, two
 // wildcard alternatives' {Any E}, two spliced sequences' fields of one name
 // and Go type, and a spliced sequence of one field beside an element
-// alternative of its name and Go type; an expanded name an earlier
-// alternative's spliced sequence takes; and, in an occurrence field's item, a
+// alternative of its name and Go type; and, in an occurrence field's item, a
 // sequence alternative holding a particle codegen flattens, whose prefix is
 // the decline's subject. A repeated sequence alternative, which codegen
 // neither splices nor flattens, decodes into its occurrence field
@@ -470,8 +469,6 @@ func TestDecodeChoiceGroupDeclines(t *testing.T) {
 			"<s:x>1</s:x>", constructSharedBranch, ""},
 		{"an element alternative after a spliced sequence of its shape", root(`<xs:choice><xs:sequence>` + unq("x") + `</xs:sequence>` + cgEl("x") + `</xs:choice>`),
 			"<s:x>1</s:x>", constructSharedBranch, "?:1:1: codec does not decode two branches of a sealed interface whose structs have one shape: element {urn:s}x declared at"},
-		{"a name an earlier alternative's spliced sequence takes", root(`<xs:choice><xs:sequence>` + cgEl("a") + cgEl("b") + `</xs:sequence><xs:sequence>` + cgEl("c") + cgEl("a") + `</xs:sequence></xs:choice>`),
-			"<s:a>1</s:a><s:b>2</s:b>", constructSharedName, ""},
 		{"a flattened particle in an occurrence item's spliced alternative", root(`<xs:choice maxOccurs="unbounded"><xs:sequence>` + cgEl("a") + `<xs:sequence maxOccurs="unbounded"><xs:element name="b" type="xs:string" maxOccurs="unbounded"/></xs:sequence></xs:sequence>` + cgEl("c") + `</xs:choice>`),
 			"<s:a>1</s:a><s:b>2</s:b><s:c>3</s:c>", constructNestedGroup,
 			"?:1:1: codec does not decode a nested model group particle: a particle of the {type definition} of element {urn:s}r declared at"},

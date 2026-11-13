@@ -222,11 +222,8 @@ func TestDecodeNestedChoice(t *testing.T) {
 	}
 }
 
-// TestDecodeNestedChoiceDeclines pins the nested choice's declines, each
-// charged to the document element at 1:1: an alternative's expanded name an
-// earlier particle of the content sequence takes, and a later particle's an
-// alternative takes, which decline as shared names, the sequence and the
-// choice indexing one children map; and two wildcard alternatives sharing a
+// TestDecodeNestedChoiceDeclines pins the nested choice's decline, charged
+// to the document element at 1:1: two wildcard alternatives sharing a
 // branch shape after a sequence wildcard, which declines naming the second
 // alternative wildcard particle 3 of the type, its ordinal counted across
 // the sequence's wildcard and the choice's in one wildcard slot.
@@ -237,10 +234,6 @@ func TestDecodeNestedChoiceDeclines(t *testing.T) {
 		construct         construct
 		prefix            string
 	}{
-		{"an alternative sharing an earlier particle's name", sequenceOf(`<xs:element name="a" type="xs:string"/><xs:choice><xs:element name="a" type="xs:string"/><xs:element name="b" type="xs:string"/></xs:choice>`),
-			"<s:a>x</s:a><s:b>y</s:b>", constructSharedName, ""},
-		{"a later particle sharing an alternative's name", sequenceOf(`<xs:choice><xs:element name="a" type="xs:string"/><xs:element name="b" type="xs:string"/></xs:choice><xs:element name="a" type="xs:string"/>`),
-			"<s:b>y</s:b><s:a>x</s:a>", constructSharedName, ""},
 		{"two wildcard alternatives sharing a branch shape after a sequence wildcard", sequenceOf(`<xs:any namespace="urn:o" processContents="lax"/><xs:choice><xs:any namespace="urn:p" processContents="lax"/><xs:any namespace="urn:q" processContents="lax"/></xs:choice>`),
 			`<o:w xmlns:o="urn:o"/><p:w xmlns:p="urn:p"/>`, constructSharedBranch, wildPrefix},
 	}

@@ -144,10 +144,8 @@
 // substitution group (codegen's package doc, "# Substitution groups"), and each declaration of
 // the group with {abstract} false is such a declaration, an abstract head's own properties
 // never read; or the particle is a wildcard, whatever its {namespace constraint} and {process
-// contents}. No two element particles share an expanded name, such an interface's particle
-// taking each of those declarations', but where either is a basic particle of a flattened
-// particle's reach, content or nested, as item 5 of [Decode]'s doc states with the declines
-// those keep. Each attribute use but xsi:nil's, to which codegen gives no field (codegen's
+// contents}. Two element particles taking one expanded name decode or decline as item 5 of
+// [Decode]'s doc states. Each attribute use but xsi:nil's, to which codegen gives no field (codegen's
 // package doc, "# Attributes"), is typed the same way. No element in the instance carries
 // xsi:type, except inside a wildcard's match or an element of type xs:anyType's raw content.
 //
