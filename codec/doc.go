@@ -260,9 +260,9 @@
 //     item 5 of [Decode]'s doc states when.
 //   - A nillable element (codegen's package doc, "# Element declarations")
 //     of two or more governing types, or of a {type table} slot holding
-//     xs:error, and a substitution group's nillable declaration of a type
-//     other than xs:anyType itself, each of which codegen wraps branch by
-//     branch; item 5 of [Decode]'s doc states when.
+//     xs:error, whose interface codegen wraps branch by branch, and one of a
+//     type other than xs:anyType itself examined as a branch of a substitution
+//     group's interface; item 5 of [Decode]'s doc states when.
 //   - A primitive other than those twenty: an ·implementation-defined· one
 //     (Datatypes dt-primitive), which xsd.NewPrimitiveType mints and no
 //     schema document yields.

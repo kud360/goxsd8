@@ -18,16 +18,17 @@ import (
 	"github.com/kud360/goxsd8/xsderr"
 )
 
-// ErrTypeMismatch is the error [Decode] wraps when T does not match the type
-// codegen emits for the document element's declaration; Decode's doc, item 6,
-// states when.
+// ErrTypeMismatch is the error [Decode] wraps when T does not match the T item
+// 6 of Decode's doc states for the document element's declaration: the type
+// codegen emits for it, or Nillable over that type where codegen wraps the
+// declaration.
 var ErrTypeMismatch = errors.New("codec: T is not the type codegen emits for the document element")
 
 // Decode decodes the XML instance data into a new value of T, the type
-// package codegen emits for the declaration of data's document element, or,
-// for a nillable one, the type codegen's package doc ("# Element
-// declarations") gives a nilled root's value over it, and returns it. A value
-// is returned exactly when the error is nil.
+// package codegen emits for the declaration of data's document element, or
+// Nillable over that type where codegen wraps the declaration (codegen's
+// package doc, "# Element declarations"; item 6), and returns it. A value is
+// returned exactly when the error is nil.
 //
 // T is the caller's choice: nothing dispatches a document element to its
 // generated type, and item 6 below states which T match. A caller decoding
@@ -298,13 +299,15 @@ var ErrTypeMismatch = errors.New("codec: T is not the type codegen emits for the
 //     with {abstract} true stays at its slot, declining by its {abstract}
 //     where it is examined: first, for a nillable declaration (codegen's
 //     package doc, "# Element declarations"), its {nillable}, which declines
-//     unless exactly one governing type remains and no {type table} slot holds
-//     xs:error, which a nilled instance is valid against (§3.3.4.3 cvc-type
-//     clause 3.1.3) and whose sealed interface codegen wraps branch by branch,
-//     and, for a substitution group's declaration (the fourth bullet), whose
-//     branch field codegen wraps too, unless that type is xs:anyType itself
-//     (§3.4.7 any-type-itself), whose raw content holds xsi:nil among its
-//     attributes (item 6), a slot that does not resolve declining as nillable;
+//     when other than exactly one governing type remains, or a {type table}
+//     slot holds xs:error, which a nilled instance is valid against (§3.3.4.3
+//     cvc-type clause 3.1.3), a slot that does not resolve declining so too,
+//     codegen wrapping the governing types' interface branch by branch; and,
+//     where the declaration is examined as a branch of a substitution group's
+//     sealed interface (the fourth bullet), whose branch field codegen wraps,
+//     when that one type is other than xs:anyType itself (§3.4.7
+//     any-type-itself), whose raw content holds xsi:nil among its attributes
+//     (item 6);
 //     then, of two or more governing types, two anonymous ones, since the type
 //     the validator selects could then be matched to no one branch. Of exactly
 //     one governing type, the declaration is examined as if that type were its
@@ -1892,7 +1895,9 @@ func (a attribute) field() field {
 // sets a value of T from the document element. A *binding binds a complex
 // {type definition} codegen gives a struct, a *choiceRoot one it gives a bare
 // sealed interface, an anyTypeRoot xs:anyType itself, a *simpleRoot a simple
-// one, and a *tableRoot a declaration's two or more governing types.
+// one, and a *tableRoot a declaration's two or more governing types, and a
+// *nillableRoot a declaration codegen wraps in Nillable, over the binder of its
+// one governing type.
 type binder interface {
 	check(t reflect.Type, cx *checkContext) (filler, error)
 }
@@ -2103,7 +2108,9 @@ func bindDecl(p *pipeline, decl xsd.ElementDeclaration) (binder, error) {
 		return b, err
 	}
 	// The *binding of a struct R holds A's fields; a simple R and a sealed
-	// interface R have none, A being struct{}.
+	// interface R have none, A being struct{}. binder's implementers are the
+	// closed set its doc lists, so the assertion is STYLE T2's sealed-sum
+	// exception.
 	attrs, _ := b.(*binding)
 	sum, err := newNillableSum(p, attrs)
 	if err != nil {

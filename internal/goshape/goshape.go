@@ -389,7 +389,8 @@ func TermEmptiable(schema *xsd.Schema, term xsd.TermOrRef) (bool, error) {
 // decl with one emits as one with {nillable} false. That section states which
 // fields over a nillable decl hold Nillable. It is the one test of it: every
 // codegen site that wraps a type in Nillable, or passes a field over decl as
-// no struct value, reads it, and so does codec where it binds such a field.
+// no struct value, reads it, and so do codec, for a field and a document
+// element alike, and tools/decodecensus.
 func Nillable(decl xsd.ElementDeclaration) bool {
 	if !decl.Nillable() {
 		return false
