@@ -752,7 +752,7 @@ present tense because it is a design contract; read it as "will", not
   not restate them here.
 - `codec` is the dataset serializer/deserializer: schema-directed decode of
   instance documents into generated (or reflective) Go values and canonical
-  encode back out.
+  encode back out (planned).
 
 ### Two decode paths, one semantics
 
