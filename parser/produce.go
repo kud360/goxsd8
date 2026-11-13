@@ -2141,9 +2141,12 @@ func (p *producer) namedComplexTypeIdentity(name xsd.QName, elem *Element) compl
 //
 // A name that resolves to no type at all is charged src-resolve clause 1.1
 // (§3.17.6.2) at base (#3463) — the rule and clause finalize charges, at the
-// referring component, for an unresolvable {base type definition} reference
+// reference's Loc, for an unresolvable {base type definition} reference
 // (xsd/resolve.go's resolveTypeName), which is the only charge a simple type's
-// base= gets (resolveBase).
+// base= gets (resolveBase). Every TypeDefinitionRef returned here carries base's
+// position, but no component retains it: newComplexType hands the by-name xsd
+// constructors the bare QName (baseTypeName), and a name this function resolves
+// never reaches finalize's charge.
 func (p *producer) resolveBaseType(id complexTypeIdentity, at *Element, base xmltree.Attribute, name xsd.QName) (resolvedBase, xsd.TypeDefinitionOrRef, error) {
 	if orig, owned, err := p.redefinedComplexBase(id, at, name); owned || err != nil {
 		if err != nil {
@@ -2155,14 +2158,14 @@ func (p *producer) resolveBaseType(id complexTypeIdentity, at *Element, base xml
 		// The ur-type is declared by no document, so it is in no symbol table and
 		// in no build memo: symbols.anyType holds the very component the builder
 		// was seeded with (§3.4.7).
-		return finishedBase{def: p.symbols.anyType}, xsd.TypeDefinitionRef{Name: name}, nil
+		return finishedBase{def: p.symbols.anyType}, xsd.TypeDefinitionRef{Name: name, Loc: base.Loc()}, nil
 	}
 	if src, ok := p.symbols.complexTypes[name]; ok {
 		// A base whose content model is being built is reached from inside that
 		// content model, which is not a cycle (buildComplexType); only its
 		// {assertions} can be read.
 		if pending, ok := p.symbols.builtComplex[src.elem].(complexContentPending); ok {
-			return pendingBase{name: name, assertions: pending.assertions}, xsd.TypeDefinitionRef{Name: name}, nil
+			return pendingBase{name: name, assertions: pending.assertions}, xsd.TypeDefinitionRef{Name: name, Loc: base.Loc()}, nil
 		}
 		// Unbuilt, built or on the base chain: buildComplexType handles the memo
 		// hit and the ct-props-correct clause 3 cycle rejection alike.
@@ -2170,17 +2173,17 @@ func (p *producer) resolveBaseType(id complexTypeIdentity, at *Element, base xml
 		if err != nil {
 			return nil, nil, err
 		}
-		return finishedBase{def: ct}, xsd.TypeDefinitionRef{Name: name}, nil
+		return finishedBase{def: ct}, xsd.TypeDefinitionRef{Name: name, Loc: base.Loc()}, nil
 	}
 	if st, ok := p.symbols.builtins[name]; ok {
-		return finishedBase{def: st}, xsd.TypeDefinitionRef{Name: name}, nil
+		return finishedBase{def: st}, xsd.TypeDefinitionRef{Name: name, Loc: base.Loc()}, nil
 	}
 	if src, ok := p.symbols.simpleTypes[name]; ok {
 		st, err := src.owner.buildSimpleType(name, src.elem)
 		if err != nil {
 			return nil, nil, err
 		}
-		return finishedBase{def: st}, xsd.TypeDefinitionRef{Name: name}, nil
+		return finishedBase{def: st}, xsd.TypeDefinitionRef{Name: name, Loc: base.Loc()}, nil
 	}
 	return nil, nil, xsderr.New(ruleSrcResolve, base.Loc(),
 		"base type %s does not resolve to any type definition in scope (src-resolve clause 1.1)", name)
@@ -2573,7 +2576,7 @@ func (p *producer) listItem(list *Element) (xsd.SimpleTypeOrRef, error) {
 	if err != nil {
 		return nil, err
 	}
-	return xsd.SimpleTypeRef{Name: qn}, nil
+	return xsd.SimpleTypeRef{Name: qn, Loc: itemAttr.Loc()}, nil
 }
 
 // constructUnionType maps a <simpleType> whose body is <union> (§3.16.2.1
@@ -2643,7 +2646,10 @@ func (p *producer) unionMembers(union *Element) ([]xsd.SimpleTypeOrRef, error) {
 		if err != nil {
 			return nil, err
 		}
-		members = append(members, xsd.SimpleTypeRef{Name: qn})
+		// Every member carries the memberTypes= attribute's position: an
+		// xmltree.Attribute retains one position for the attribute and none per
+		// item.
+		members = append(members, xsd.SimpleTypeRef{Name: qn, Loc: memberAttr.Loc()})
 	}
 	for _, inline := range inlines {
 		// Anonymous member: built inline, once, with an absent {name} (zero QName).
@@ -2778,7 +2784,7 @@ func (p *producer) resolveBase(restriction *Element) (xsd.SimpleTypeOrRef, error
 		}
 		return xsd.OwnedSimpleType{Definition: orig}, nil
 	}
-	return xsd.SimpleTypeRef{Name: qn}, nil
+	return xsd.SimpleTypeRef{Name: qn, Loc: baseAttr.Loc()}, nil
 }
 
 // rejectOutOfModelFacetChildren rejects an XSD-namespace child of a

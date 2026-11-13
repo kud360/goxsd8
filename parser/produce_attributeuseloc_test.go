@@ -8,13 +8,14 @@ import (
 )
 
 // TestAttributeUseRejectionsCiteTheAttribute pins, end to end through Parse,
-// that a finalize-time rejection of an attribute use — au-props-correct
-// (§3.5.6) clauses 2 and 3, and src-resolve (§3.17.6.2) for a dangling
-// <attribute ref> — is charged at the use's own <xs:attribute> start tag, which
-// the producer threads into xsd.NewAttributeUse, and not at the enclosing
-// <xs:complexType> or <xs:attributeGroup>. The inherited row's base lives in an
-// included document, so the charge must name that document, not the deriving
-// type's.
+// that a finalize-time rejection of an attribute use is charged at the
+// attribute and not at the enclosing <xs:complexType> or <xs:attributeGroup>:
+// au-props-correct (§3.5.6) clauses 2 and 3 at the use's own <xs:attribute>
+// start tag, which the producer threads into xsd.NewAttributeUse, and
+// src-resolve (§3.17.6.2) for a dangling <attribute ref> at its ref= attribute,
+// which the producer threads into the xsd.AttributeDeclarationRef. The
+// inherited row's base lives in an included document, so the charge must name
+// that document, not the deriving type's.
 func TestAttributeUseRejectionsCiteTheAttribute(t *testing.T) {
 	const head = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">` + "\n"
 	const tail = "\n</xs:schema>"
@@ -49,7 +50,7 @@ func TestAttributeUseRejectionsCiteTheAttribute(t *testing.T) {
 			`<xs:complexType name="C">` + "\n" +
 			`  <xs:attribute ref="nosuch"/>` + "\n" +
 			`</xs:complexType>` + tail},
-			"src-resolve", xsderr.Loc{URI: "main.xsd", Line: 3, Col: 3}},
+			"src-resolve", xsderr.Loc{URI: "main.xsd", Line: 3, Col: 17}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			_, err := parseMap(t, "main.xsd", tc.docs)
@@ -61,7 +62,7 @@ func TestAttributeUseRejectionsCiteTheAttribute(t *testing.T) {
 				t.Fatalf("rule = %q, want %q (%v)", xe.Rule, tc.rule, err)
 			}
 			if xe.Loc != tc.want {
-				t.Fatalf("loc = %s, want %s, the <xs:attribute> start tag (%v)", xe.Loc, tc.want, err)
+				t.Fatalf("loc = %s, want %s (%v)", xe.Loc, tc.want, err)
 			}
 		})
 	}

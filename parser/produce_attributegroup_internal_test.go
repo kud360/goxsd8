@@ -71,7 +71,7 @@ func TestAttributeGroupReferenceIsNotRemapped(t *testing.T) {
 		t.Fatalf("produceAttributeUses: %v", err)
 	}
 
-	if len(content) != 1 || content[0] != xsd.AttributeUseOrGroupRef(xsd.AttributeGroupRef{Name: gName}) {
+	if ref, ok := soleAttributeGroupRef(content); !ok || ref.Name != gName {
 		t.Fatalf("complex type T's attribute content = %#v, want the one reference to {urn:x}G and nothing mapped from G's body", content)
 	}
 	if wildcard != nil {
@@ -170,4 +170,15 @@ func attributeUseNames(t *testing.T, uses []xsd.AttributeUse) []string {
 		names = append(names, local.Declaration.Name().String()+":"+ref.Name.String())
 	}
 	return names
+}
+
+// soleAttributeGroupRef returns content's one member when it is an
+// AttributeGroupRef. A reference is compared by its Name, never by value, since
+// the producer gives it the ref= attribute's Loc (xsd doc.go).
+func soleAttributeGroupRef(content []xsd.AttributeUseOrGroupRef) (xsd.AttributeGroupRef, bool) {
+	if len(content) != 1 {
+		return xsd.AttributeGroupRef{}, false
+	}
+	ref, ok := content[0].(xsd.AttributeGroupRef)
+	return ref, ok
 }

@@ -388,13 +388,14 @@ func (p *producer) constructIdentityConstraint(name xsd.QName, el *Element, cate
 			return xsd.IdentityConstraint{}, xsderr.New(ruleSrcIdentityConstraint, el.Loc(),
 				"<keyref> has no refer attribute, but src-identity-constraint clause 3 requires one when name is present")
 		}
-		// Only the QName is retained: the link to the referenced definition is a
-		// finalize-phase resolution (src-resolve clause 1.7), never made here.
+		// Only the QName and refer='s position are retained: the link to the
+		// referenced definition is a finalize-phase resolution (src-resolve clause
+		// 1.7), never made here, and that charge lands at refer=.
 		qn, err := p.resolveQName(el, refer.Value(), refer)
 		if err != nil {
 			return xsd.IdentityConstraint{}, err
 		}
-		referencedKey = &xsd.IdentityConstraintRef{Name: qn}
+		referencedKey = &xsd.IdentityConstraintRef{Name: qn, Loc: refer.Loc()}
 	}
 	return xsd.NewIdentityConstraint(el.Loc(), name, category, selector, fields, referencedKey)
 }

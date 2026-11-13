@@ -1905,7 +1905,7 @@ func (p *producer) produceGroupRefParticle(el *Element) (*xsd.Particle, error) {
 		}
 		return &part, nil
 	}
-	part, err := xsd.NewParticle(el.Loc(), occ, xsd.ModelGroupRef{Name: qn})
+	part, err := xsd.NewParticle(el.Loc(), occ, xsd.ModelGroupRef{Name: qn, Loc: ref.Loc()})
 	if err != nil {
 		return nil, err
 	}
@@ -2304,7 +2304,7 @@ func (p *producer) elementParticleTerm(el *Element, scopeParent xsd.ElementScope
 		if err != nil {
 			return nil, err
 		}
-		return xsd.ElementDeclarationRef{Name: qn}, nil
+		return xsd.ElementDeclarationRef{Name: qn, Loc: ref.Loc()}, nil
 	}
 	decl, err := p.produceLocalElement(el, scopeParent)
 	if err != nil {
@@ -2844,7 +2844,7 @@ func (p *producer) declaredType(el *Element, dflt xsd.QName) (xsd.TypeDefinition
 	if err != nil {
 		return nil, err
 	}
-	return xsd.TypeDefinitionRef{Name: qn}, nil
+	return xsd.TypeDefinitionRef{Name: qn, Loc: typeAttr.Loc()}, nil
 }
 
 // produceAnyParticle maps an <any> to a Particle whose {term} is a Wildcard
@@ -3004,6 +3004,9 @@ func (p *producer) defaultAttributesRef(ctElem *Element) (*xsd.AttributeGroupRef
 	if err != nil {
 		return nil, err
 	}
+	// No Loc: this reference is §3.4.2.4's synthesis on the complex type, not
+	// an attribute of it, so Finalize charges it at the complex type; the
+	// <schema defaultAttributes> it reads from belongs to another element.
 	return &xsd.AttributeGroupRef{Name: qn}, nil
 }
 
@@ -3221,7 +3224,7 @@ func (p *producer) attributeGroupMember(el *Element) (xsd.AttributeUseOrGroupRef
 	}
 	src, redefining := p.redefinedAttributeGroupOriginal(el, qn)
 	if !redefining {
-		return xsd.AttributeGroupRef{Name: qn}, nil
+		return xsd.AttributeGroupRef{Name: qn, Loc: ref.Loc()}, nil
 	}
 	original, err := src.owner.buildAttributeGroup(qn, src.elem)
 	if err != nil {
@@ -3385,7 +3388,7 @@ func (p *producer) produceAttributeUse(el *Element, scopeParent xsd.AttributeSco
 		if err != nil {
 			return nil, err
 		}
-		au, err := xsd.NewAttributeUse(el.Loc(), required, xsd.AttributeDeclarationRef{Name: qn}, vc, inheritable)
+		au, err := xsd.NewAttributeUse(el.Loc(), required, xsd.AttributeDeclarationRef{Name: qn, Loc: ref.Loc()}, vc, inheritable)
 		if err != nil {
 			return nil, err
 		}
