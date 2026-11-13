@@ -12,6 +12,7 @@ import (
 )
 
 // TestBoundRejectionNamesTheLimit pins what a bound-facet rejection says: the
+// rejected candidate, quoted as whiteSpace normalized it (STYLE E5), the
 // facet and the type that declares it — with the checked type's inheritance
 // when that type inherits it, and none when the facet is its own (#3335) — its
 // {value} as the schema wrote it — "+007", not the parsed 7 — and the order
@@ -64,17 +65,25 @@ func TestBoundRejectionNamesTheLimit(t *testing.T) {
 		want    string
 	}{
 		{"maxInclusive", restrict("int", xsd.FacetMaxInclusive, "+007"), "8", "cvc-maxInclusive-valid",
-			`value violates the maxInclusive facet of the simple type {urn:t}Bounded, whose {value} is "+007", but cvc-maxInclusive-valid requires a value less than or equal to it`},
+			`"8" violates the maxInclusive facet of the simple type {urn:t}Bounded, whose {value} is "+007", but cvc-maxInclusive-valid requires a value less than or equal to it`},
 		{"maxExclusive", restrict("int", xsd.FacetMaxExclusive, "+007"), "7", "cvc-maxExclusive-valid",
-			`value violates the maxExclusive facet of the simple type {urn:t}Bounded, whose {value} is "+007", but cvc-maxExclusive-valid requires a value less than it`},
+			`"7" violates the maxExclusive facet of the simple type {urn:t}Bounded, whose {value} is "+007", but cvc-maxExclusive-valid requires a value less than it`},
 		{"minInclusive", restrict("int", xsd.FacetMinInclusive, "+007"), "6", "cvc-minInclusive-valid",
-			`value violates the minInclusive facet of the simple type {urn:t}Bounded, whose {value} is "+007", but cvc-minInclusive-valid requires a value greater than or equal to it`},
+			`"6" violates the minInclusive facet of the simple type {urn:t}Bounded, whose {value} is "+007", but cvc-minInclusive-valid requires a value greater than or equal to it`},
 		{"minExclusive", restrict("int", xsd.FacetMinExclusive, "+007"), "7", "cvc-minExclusive-valid",
-			`value violates the minExclusive facet of the simple type {urn:t}Bounded, whose {value} is "+007", but cvc-minExclusive-valid requires a value greater than it`},
+			`"7" violates the minExclusive facet of the simple type {urn:t}Bounded, whose {value} is "+007", but cvc-minExclusive-valid requires a value greater than it`},
 		{"incomparable", restrict("float", xsd.FacetMaxInclusive, "+7.0"), "NaN", "cvc-maxInclusive-valid",
-			`value is incomparable with the {value} "+7.0" of the maxInclusive facet of the simple type {urn:t}Bounded, so it is excluded from the restricted value space, but cvc-maxInclusive-valid requires a value less than or equal to it`},
+			`"NaN" is incomparable with the {value} "+7.0" of the maxInclusive facet of the simple type {urn:t}Bounded, so it is excluded from the restricted value space, but cvc-maxInclusive-valid requires a value less than or equal to it`},
 		{"inherited maxInclusive", m, "9", "cvc-maxInclusive-valid",
-			`value violates the maxInclusive facet that the simple type {urn:t}m inherits from the simple type {urn:t}n, whose {value} is "5", but cvc-maxInclusive-valid requires a value less than or equal to it`},
+			`"9" violates the maxInclusive facet that the simple type {urn:t}m inherits from the simple type {urn:t}n, whose {value} is "5", but cvc-maxInclusive-valid requires a value less than or equal to it`},
+		// The candidate is quoted as written, not as its parsed value renders:
+		// "+007", not "7".
+		{"candidate spelling kept", restrict("int", xsd.FacetMaxInclusive, "5"), "+007", "cvc-maxInclusive-valid",
+			`"+007" violates the maxInclusive facet of the simple type {urn:t}Bounded, whose {value} is "5", but cvc-maxInclusive-valid requires a value less than or equal to it`},
+		// The candidate is quoted after xs:int's whiteSpace collapse, as the
+		// facet checked it: "+007", not " +007 ".
+		{"candidate normalized", restrict("int", xsd.FacetMaxInclusive, "5"), " +007 ", "cvc-maxInclusive-valid",
+			`"+007" violates the maxInclusive facet of the simple type {urn:t}Bounded, whose {value} is "5", but cvc-maxInclusive-valid requires a value less than or equal to it`},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			_, err := value.ValidateLexical(b, ownedChain{}, tc.st, tc.lexical, nil, declineEvery{})

@@ -93,7 +93,7 @@ func validateUnion(b Backend, r xsd.TypeResolver, st *xsd.SimpleType, rawLexical
 		return nil, nil, err
 	}
 	for _, lf := range lexFacets {
-		if err := lf.CheckLexical(lexical); err != nil {
+		if err := lf.checkLexical(lexical); err != nil {
 			return nil, nil, err
 		}
 	}
@@ -103,7 +103,7 @@ func validateUnion(b Backend, r xsd.TypeResolver, st *xsd.SimpleType, rawLexical
 	// (§2.2.1/§2.2.2), which is what "equal or identical" means once the active
 	// member has fixed the value space.
 	for _, vf := range valFacets {
-		if err := vf.CheckValue(v); err != nil {
+		if err := vf.checkValue(v, lexical); err != nil {
 			return nil, nil, err
 		}
 	}

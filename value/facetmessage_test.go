@@ -8,6 +8,12 @@ import (
 	"github.com/kud360/goxsd8/xsderr"
 )
 
+// timezoneStub is a test-only value.TimezoneAware whose timezone presence is
+// fixed.
+type timezoneStub bool
+
+func (tz timezoneStub) HasTimezone() bool { return bool(tz) }
+
 // TestFacetStageMessagesWhole pins, by equality, the whole Msg of one error from
 // every facet-stage site #2412 rewrote to STYLE E5, and of checkAssertions's
 // verdict: the offending item first, then the rule its site charges as a clause
@@ -66,6 +72,7 @@ func TestFacetStageMessagesWhole(t *testing.T) {
 	digits := digitsFacet{limit: "3", kind: xsd.FacetTotalDigits}
 	scale := scaleFacet{limit: "-2", kind: xsd.FacetMaxScale}
 	timezone := explicitTimezoneFacet{requirement: tzProhibited}
+	tzRequiredFacet := explicitTimezoneFacet{requirement: tzRequired}
 	twoValues := func(kind xsd.FacetKind) xsd.Facet { return xsd.NewFacet(kind, []string{"1", "2"}, false) }
 	oneValue := func(kind xsd.FacetKind, v string) xsd.Facet { return xsd.NewFacet(kind, []string{v}, false) }
 	intBase, intB := restrictionBase(t, twoValues(xsd.FacetMaxInclusive))
@@ -78,19 +85,31 @@ func TestFacetStageMessagesWhole(t *testing.T) {
 		precondition, verdict, decline bool
 		msg                            string
 	}{
-		// facetPrecondition: the five CheckValue sites open with the facet and the
+		// facetPrecondition: the five checkValue sites open with the facet and the
 		// {value} the checker holds, newBoundFacet with the facet, its {value} and
 		// the type, effectiveWhiteSpace with the type.
-		{"bound facet, incapable candidate", bound.CheckValue(bareCandidate), ruleCosApplicableFacets, true, false, false,
+		{"bound facet, incapable candidate", bound.checkValue(bareCandidate, bareCandidate), ruleCosApplicableFacets, true, false, false,
 			`the maxInclusive facet, whose {value} is "+1", is not applicable to the type of a candidate that is not Ordered (string), but cos-applicable-facets allows in {facets} only the facets applicable to the type`},
-		{"length facet, incapable candidate", length.CheckValue(bareCandidate), ruleCosApplicableFacets, true, false, false,
+		{"length facet, incapable candidate", length.checkValue(bareCandidate, bareCandidate), ruleCosApplicableFacets, true, false, false,
 			`the length facet, whose {value} is "2", is not applicable to the type of a candidate that is not Lengthed (string), but cos-applicable-facets allows in {facets} only the facets applicable to the type`},
-		{"digits facet, incapable candidate", digits.CheckValue(bareCandidate), ruleCosApplicableFacets, true, false, false,
+		{"digits facet, incapable candidate", digits.checkValue(bareCandidate, bareCandidate), ruleCosApplicableFacets, true, false, false,
 			`the totalDigits facet, whose {value} is "3", is not applicable to the type of a candidate that is not DigitCounted (string), but cos-applicable-facets allows in {facets} only the facets applicable to the type`},
-		{"scale facet, incapable candidate", scale.CheckValue(bareCandidate), ruleCosApplicableFacets, true, false, false,
+		{"scale facet, incapable candidate", scale.checkValue(bareCandidate, bareCandidate), ruleCosApplicableFacets, true, false, false,
 			`the maxScale facet, whose {value} is "-2", is not applicable to the type of a candidate that is not Scaled (string), but cos-applicable-facets allows in {facets} only the facets applicable to the type`},
-		{"explicitTimezone facet, incapable candidate", timezone.CheckValue(bareCandidate), ruleCosApplicableFacets, true, false, false,
+		{"explicitTimezone facet, incapable candidate", timezone.checkValue(bareCandidate, bareCandidate), ruleCosApplicableFacets, true, false, false,
 			`the explicitTimezone facet, whose {value} is "prohibited", is not applicable to the type of a candidate that is not TimezoneAware (string), but cos-applicable-facets allows in {facets} only the facets applicable to the type`},
+		// The value-facet verdicts open with the candidate, quoted as the
+		// whiteSpace-normalized lexical the caller passes (STYLE E5).
+		{"length facet, rejected candidate", length.checkValue(lengthStub(3), "abc"), ruleCvcLengthValid, false, true, false,
+			`"abc" has length 3, violating the length facet limit 2, which cvc-length-valid forbids`},
+		{"digits facet, rejected candidate", digits.checkValue(digitsStub{total: 4}, "1234"), ruleCvcTotalDigitsValid, false, true, false,
+			`"1234" has 4 totalDigits, exceeding facet limit 3, which cvc-totalDigits-valid forbids`},
+		{"scale facet, rejected candidate", scale.checkValue(scaled(0), "100"), ruleCvcMaxScaleValid, false, true, false,
+			`"100" has scale 0, violating the maxScale facet limit -2, which cvc-maxScale-valid forbids`},
+		{"explicitTimezone required, candidate with none", tzRequiredFacet.checkValue(timezoneStub(false), "2001-01-01"), ruleCvcExplicitTimezoneValid, false, true, false,
+			`"2001-01-01" has no explicit timezone, but cvc-explicitTimezone-valid clause 1 requires one where the explicitTimezone facet is required`},
+		{"explicitTimezone prohibited, candidate with one", timezone.checkValue(timezoneStub(true), "2001-01-01Z"), ruleCvcExplicitTimezoneValid, false, true, false,
+			`"2001-01-01Z" has an explicit timezone, but cvc-explicitTimezone-valid clause 2 forbids one where the explicitTimezone facet is prohibited`},
 		{"bound facet, unordered {value}", validate(plainBackend{unordered.Name(): true}, unordered, assertionsUndecided{}), ruleCosApplicableFacets, true, false, false,
 			`the maxInclusive facet of the simple type {urn:t}unordered, whose {value} "5" parses to a string that is not Ordered, is not applicable to that type, but cos-applicable-facets allows in {facets} only the facets applicable to the type`},
 		{"no whiteSpace mode in force", second(effectiveWhiteSpace(noSchema{}, bare)), xsderr.RuleComponentInvariant, true, false, false,
