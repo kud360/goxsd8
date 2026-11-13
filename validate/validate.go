@@ -155,8 +155,9 @@ type Result struct {
 	// now is the current dateTime of the assessment episode's XPath
 	// dynamic context (xpath20.md §2.1.2), at which every {test} the walk
 	// evaluates, of either kind, is decided; the package doc's "Assessment
-	// semantics" section states when it is read. It is the zero time
-	// exactly on a Result no [Validator.Assess] call returned.
+	// semantics designed in from the start" section states when it is
+	// read. It is the zero time exactly on a Result no [Validator.Assess]
+	// call returned.
 	now time.Time
 }
 
@@ -318,15 +319,18 @@ func (r *Result) Err() error { return r.err }
 // episode handed every [value.ValidateLexical], [value.ValidatingType] and
 // [value.ConstraintMatches] call it made: [xpath.FacetAssertions], on whose
 // terms each {test} is evaluated, at the one current dateTime the package
-// doc's "Assessment semantics" section says [Validator.Assess] reads for the
-// episode. Its consumer is codec.Decode, whose second read of the
-// document identifies a union's ·active basic member· under it
-// ([value.ValidatingType]), so the member it decodes into is the one this
-// assessment's identification selected.
+// doc's "Assessment semantics designed in from the start" section says
+// [Validator.Assess] reads for the episode. Its consumer is codec.Decode,
+// whose second read of the document identifies a union's ·active basic
+// member· under it ([value.ValidatingType]), so the member it decodes into
+// is the one this assessment's identification selected. Call it when your
+// code re-reads a validated value through [value.ValidatingType],
+// [value.ValidateLexical] or [value.ConstraintMatches] and must decide each
+// {test} as this assessment did.
 //
 // It returns a non-nil evaluator for a Result Assess returned, whatever its
-// [Result.Standing], and nil for one Assess did not return, the zero Result
-// among them.
+// [Result.Standing]. A Result that no Assess call returned, such as the zero
+// Result, gives nil.
 func (r *Result) FacetAssertions() value.AssertionEvaluator {
 	if r.now.IsZero() {
 		return nil
