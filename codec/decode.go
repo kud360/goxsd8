@@ -2189,9 +2189,11 @@ type childIndex struct {
 	// wild is set where the content model holds a wildcard particle, nil for
 	// none.
 	wild *wildcardSlot
-	// elements holds, for each element particle sequence.bind and bindChoice
-	// bind into the index, its Matcher position (xsd.Matcher.NextParticle)
-	// and its target, in bind order; a nested occurrence field reads its
+	// elements holds, for each element particle sequence.bind, bindChoice
+	// and a nested flattened particle's reach (nestedReach) bind into the
+	// index, its Matcher position (xsd.Matcher.NextParticle) and its target,
+	// in bind order, which attribute a child a Matcher answers an element
+	// declaration for (attributeAt); a nested occurrence field reads its
 	// item's (childIndex.position). It is a slice scanned in order, never a
 	// map (STYLE D2).
 	elements []place
@@ -3251,10 +3253,15 @@ func (n *nestedReach) element(run *bindRun, el xsd.ElementDeclaration, occurs xs
 	return elementField(run, n.s.index.children, el, occurs)
 }
 
-// bound indexes each of takes to target s.targets()+alt.
-func (n *nestedReach) bound(alt int, _ []int, takes []xsd.QName) {
+// bound indexes each of takes to target s.targets()+alt and, for an element
+// alternative, takes non-empty, places it in s.index.elements at position
+// below at, its Matcher position.
+func (n *nestedReach) bound(alt int, position []int, takes []xsd.QName) {
 	for _, name := range takes {
 		n.s.index.children[name] = n.s.targets() + alt
+	}
+	if len(takes) > 0 {
+		n.s.index.elements = append(n.s.index.elements, place{position: append(slices.Clone(n.at), position...), index: n.s.targets() + alt})
 	}
 }
 
@@ -3593,7 +3600,7 @@ func (c choiceItem) itemTargets() int { return c.choice.targets() }
 // and positions[k] is the Matcher position of the particle of the item's
 // target k below the nested particle's own, a position of a basic particle
 // of group as continues reads one: an element particle's, whose child the
-// index attributes by its expanded name, or a wildcard particle's.
+// index attributes as eachChild states, or a wildcard particle's.
 type nestedOccurrence struct {
 	name      string
 	shape     shape
@@ -3824,7 +3831,7 @@ func (b boundOccurrence) fill(r *xmltree.Reader, _ *xmltree.StartElement, out re
 				}
 				continue
 			}
-			at, attributed, err := attributeAt(t, pos, places, x.children, tok)
+			at, attributed, err := attributeAt(t, pos, places, x.elements, tok)
 			if err != nil {
 				return err
 			}
@@ -4676,7 +4683,8 @@ func (b *boundBinding) fill(r *xmltree.Reader, root *xmltree.StartElement, out r
 // cos-nonambig), and to the {open content} only where neither takes it
 // (§3.4.4.3 cvc-complex-content clauses 2.3 and 3.3) or, under {mode} suffix,
 // once one child has gone to it (clause 2.1): a child attributed to
-// an element declaration to its expanded name's target in x.children, the
+// an element declaration to that element particle's target, which
+// attributeChild looks up in x.elements by the Matcher's position, the
 // declaration being a substitution group's head where the child is a member,
 // and one attributed to a wildcard particle or to the {open content} to that
 // particle's or the open-content field's target, which attributeChild looks
@@ -4697,7 +4705,7 @@ func eachChild(r *xmltree.Reader, schema *xsd.Schema, x childIndex, child func(s
 		case *xmltree.EndElement:
 			return nil
 		case *xmltree.StartElement:
-			at, ok, err := attributeChild(a, x.children, tok)
+			at, ok, err := attributeChild(a, x, tok)
 			if err != nil {
 				return err
 			}
@@ -4727,16 +4735,16 @@ type attribution struct {
 // attributeChild returns where the child element start is attributed, as
 // eachChild states, and false where it is attributed to none; a has
 // attributed the children before start, nil where the content model holds no
-// wildcard particle and its type no {open content}, so that children alone
+// wildcard particle and its type no {open content}, so that x.children alone
 // attributes start by its expanded name. Otherwise a's Matcher's answer is
-// attributeAt's, over a's places.
-func attributeChild(a *wildAttributor, children map[xsd.QName]int, start *xmltree.StartElement) (attribution, bool, error) {
+// attributeAt's, over a's places and x.elements.
+func attributeChild(a *wildAttributor, x childIndex, start *xmltree.StartElement) (attribution, bool, error) {
 	if a == nil {
-		i, ok := children[expanded(start.Name())]
+		i, ok := x.children[expanded(start.Name())]
 		return attribution{index: i}, ok, nil
 	}
 	t, pos, _ := a.m.NextParticle(expanded(start.Name()))
-	return attributeAt(t, pos, a.places, children, start)
+	return attributeAt(t, pos, a.places, x.elements, start)
 }
 
 // attributeAt returns where the child element start is attributed, given t
@@ -4752,11 +4760,14 @@ func attributeChild(a *wildAttributor, children map[xsd.QName]int, start *xmltre
 // (wildcardSlot.attributor), and a plain error. An {open content}'s is the one
 // places holds for its empty position, the open-content field's
 // (sequence.openContent), and with none a plain error, a defect of Decode's
-// too. An element declaration's is the target children holds for start's
-// expanded name, the declaration being a substitution group's head where start
-// is a member. Attribution is a closed sum, so the switch is STYLE T2's
-// sealed-sum exception.
-func attributeAt(t xsd.Attribution, pos []int, places []place, children map[xsd.QName]int, start *xmltree.StartElement) (attribution, bool, error) {
+// too. An element declaration's is the target elements holds for its
+// position, the element particle's, never its expanded name's: the
+// declaration is a substitution group's head where start is a member, at the
+// head's particle's position (cvc-accept clause 2.3.2), and a position
+// elements holds none for is a defect of Decode's, a plain error, as a
+// wildcard particle's is. Attribution is a closed sum, so the switch is STYLE
+// T2's sealed-sum exception.
+func attributeAt(t xsd.Attribution, pos []int, places, elements []place, start *xmltree.StartElement) (attribution, bool, error) {
 	name := expanded(start.Name())
 	switch t.(type) {
 	case xsd.Wildcard:
@@ -4772,8 +4783,11 @@ func attributeAt(t xsd.Attribution, pos []int, places []place, children map[xsd.
 		}
 		return attribution{index: i, raw: true}, true, nil
 	case xsd.ElementDeclaration:
-		i, ok := children[name]
-		return attribution{index: i}, ok, nil
+		i, placed := placeAt(elements, pos)
+		if !placed {
+			return attribution{}, false, fmt.Errorf("codec: %s: element %s is attributed to the element particle at position %v, for which Decode bound no field or alternative", start.Loc(), name, pos)
+		}
+		return attribution{index: i}, true, nil
 	}
 	return attribution{}, false, nil
 }
