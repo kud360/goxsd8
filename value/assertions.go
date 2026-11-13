@@ -23,14 +23,17 @@ import (
 const ruleCvcAssertionsValid xsderr.Rule = "cvc-assertions-valid"
 
 // AssertionOutcome is what an [AssertionEvaluator] decided of one {test} of an
-// assertions facet: a sum of three states, not a (holds, decided) pair, so no
-// answer can be "decided" without saying which way (STYLE T1).
+// assertions facet: [AssertionDeclined], [AssertionHolds] or [AssertionFails].
+// It is a sum of three states, not a (holds, decided) pair, so no answer can be
+// "decided" without saying which way. The zero value is AssertionDeclined, so an
+// outcome never set — the zero AssertionOutcome, or the Outcome of the zero
+// [AssertionAnswer] — reads as a decline.
 type AssertionOutcome byte
 
 const (
-	// AssertionDeclined is the zero value: the evaluator did not decide the
-	// {test}, which the pipeline returns as a non-verdict [IsAssertionDeclined]
-	// reports true for — never as a rejection and never as a pass.
+	// AssertionDeclined is a {test} the evaluator did not decide, which the
+	// pipeline returns as a non-verdict [IsAssertionDeclined] reports true for —
+	// never as a rejection and never as a pass.
 	AssertionDeclined AssertionOutcome = iota
 	// AssertionHolds is a {test} that evaluated to true without raising a
 	// dynamic or type error (cvc-assertions-valid).
@@ -141,7 +144,14 @@ func simpleTypeLabel(name xsd.QName) string {
 // reached, so whether the literal is Datatype Valid is undecided.
 // [IsDatatypeVerdict] is false for it. The message names the assertion, its
 // type, its {test} and, where the evaluator stated one, why it declined it,
-// and [xsderr.RuleOf] reads cvc-assertions-valid off it.
+// and [xsderr.RuleOf] reads cvc-assertions-valid off it. For the simple type
+// {urn:ex}small, whose one {test} `$value lt 100` an evaluator declined with
+// the reason "this evaluator knows only one test", the error's Error() text is
+// the line below; a decline carries no location, so the text opens with "?: ".
+//
+//	?: [cvc-assertions-valid] assertion 1 of 1 in the {value} of the assertions facet of the simple type {urn:ex}small, whose {test} is "$value lt 100", was not evaluated because this evaluator knows only one test, so it is undecided whether the value is facet-valid with respect to it, which cvc-assertions-valid requires
+//
+// The text is for people, and a caller must not parse it.
 //
 // A caller deciding validity declines on it under cvc-assertions-valid, where
 // the other non-verdicts decline under the caller's own rule.
