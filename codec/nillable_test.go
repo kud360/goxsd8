@@ -34,9 +34,11 @@ func nilArms[T, A any]() Option {
 // <element ref> to a nillable top-level xs:string; next, of link, which
 // reaches itself through an optional nillable next; size, with a default; o,
 // optional, of opt, whose choice is emptiable; and c, nillable with a fixed
-// value, which codegen emits unwrapped. nilMixedSchema's em is an optional
-// nillable child of mixed content, nilAltSchema's a a nillable choice
-// alternative.
+// value, which codegen emits unwrapped. nilFlatSchema's a is a nillable
+// basic particle of a flattened choice, nilOccurSchema's a nillable particle
+// of a repeated sequence held in an occurrence field, nilMixedSchema's em an
+// optional nillable child of mixed content, and nilAltSchema's a a nillable
+// choice alternative.
 const (
 	nilTypes = `<xs:complexType name="price"><xs:simpleContent><xs:extension base="xs:string">` +
 		`<xs:attribute name="cur" type="xs:string" default="EUR"/><xs:attribute name="k" type="xs:string" use="required"/></xs:extension></xs:simpleContent></xs:complexType>` +
@@ -54,8 +56,10 @@ const (
 		`<xs:element name="o" type="s:opt" nillable="true" minOccurs="0"/>` +
 		`<xs:element name="c" type="xs:string" nillable="true" fixed="A"/>` +
 		`</xs:sequence></xs:complexType></xs:element>`
+	nilFlatSchema  = `<xs:element name="r"><xs:complexType><xs:choice maxOccurs="unbounded"><xs:element name="a" type="xs:string" nillable="true"/><xs:element name="b" type="xs:int"/></xs:choice></xs:complexType></xs:element>`
+	nilOccurSchema = `<xs:element name="r"><xs:complexType><xs:sequence maxOccurs="2"><xs:element name="a" type="xs:string" nillable="true"/><xs:element name="b" type="xs:int"/></xs:sequence></xs:complexType></xs:element>`
 	nilMixedSchema = `<xs:element name="r"><xs:complexType mixed="true"><xs:sequence><xs:element name="em" type="xs:string" nillable="true" minOccurs="0"/></xs:sequence></xs:complexType></xs:element>`
-	nilAltSchema  = `<xs:element name="r"><xs:complexType><xs:choice><xs:element name="a" type="xs:string" nillable="true" minOccurs="0"/><xs:element name="b" type="xs:int"/></xs:choice></xs:complexType></xs:element>`
+	nilAltSchema   = `<xs:element name="r"><xs:complexType><xs:choice><xs:element name="a" type="xs:string" nillable="true" minOccurs="0"/><xs:element name="b" type="xs:int"/></xs:choice></xs:complexType></xs:element>`
 )
 
 // The types codegen emits for those schemas' s:r, each named here by its
@@ -93,15 +97,26 @@ type (
 		Text string
 		Em   *mixedChild[nillable[string, struct{}]]
 	}
+	nilFlat       struct{ Choice []nilFlatChoice }
+	nilFlatChoice interface{ isNilFlatChoice() }
+	nilFlatA      struct{ A nillable[string, struct{}] }
+	nilFlatB      struct{ B int32 }
+	nilOccur      struct{ Sequence []nilOccurItem }
+	nilOccurItem  struct {
+		A nillable[string, struct{}]
+		B int32
+	}
 	nilPick  interface{ isNilPick() }
 	nilPickA struct{ A nillable[string, struct{}] }
 	nilPickB struct{ B int32 }
 )
 
-func (nilOptX) isNilOptChoice() {}
-func (nilOptY) isNilOptChoice() {}
-func (nilPickA) isNilPick()     {}
-func (nilPickB) isNilPick()     {}
+func (nilOptX) isNilOptChoice()   {}
+func (nilOptY) isNilOptChoice()   {}
+func (nilFlatA) isNilFlatChoice() {}
+func (nilFlatB) isNilFlatChoice() {}
+func (nilPickA) isNilPick()       {}
+func (nilPickB) isNilPick()       {}
 
 // nilFieldsOptions is the option list of nilFields: one set per Nillable
 // instantiation and opt's choice's.
@@ -131,6 +146,8 @@ func TestNillableTypesAreCodegens(t *testing.T) {
 			"type Nilled[T, A any] struct {\n\tAttributes A\n}\n",
 			"type Content[T, A any] struct {\n\tContent T\n}\n",
 		}},
+		{nilFlatSchema, []string{"type R struct {\n\tChoice []RChoice\n}\n", "type RChoiceA struct {\n\tA Nillable[string, struct{}]\n}\n"}},
+		{nilOccurSchema, []string{"type R struct {\n\tSequence []RSequence\n}\n", "type RSequence struct {\n\tA Nillable[string, struct{}]\n\tB int32\n}\n"}},
 		{nilMixedSchema, []string{"type R struct {\n\tText string\n\tEm   *MixedChild[Nillable[string, struct{}]]\n}\n"}},
 		{nilAltSchema, []string{"type R struct {\n\tChoice RChoice\n}\n", "type RChoiceA struct {\n\tA Nillable[string, struct{}]\n}\n"}},
 		{nilRootSimpleSchema, []string{"type R int32\n"}},
@@ -217,6 +234,12 @@ func TestDecodeNillable(t *testing.T) {
 		{"mixed content, not nilled", nilMixedSchema, `a<s:em>e</s:em>b`, into[nilMixed](nilArms[string, struct{}]()),
 			nilMixed{Text: "a", Em: &mixedChild[nillable[string, struct{}]]{Element: content[string, struct{}]{Content: "e"}, Tail: "b"}}},
 		{"mixed content, absent", nilMixedSchema, `a`, into[nilMixed](nilArms[string, struct{}]()), nilMixed{Text: "a"}},
+		{"a flattened slice's branch, nilled and not", nilFlatSchema, `<s:a xsi:nil="true"/><s:b>1</s:b><s:a>x</s:a>`,
+			into[nilFlat](nilArms[string, struct{}](), WithBranches[nilFlatChoice](nilFlatA{}, nilFlatB{})),
+			nilFlat{Choice: []nilFlatChoice{nilFlatA{A: nilled[string, struct{}]{}}, nilFlatB{B: 1}, nilFlatA{A: content[string, struct{}]{Content: "x"}}}}},
+		{"an occurrence struct's field, nilled and not", nilOccurSchema, `<s:a xsi:nil="true"/><s:b>1</s:b><s:a>x</s:a><s:b>2</s:b>`,
+			into[nilOccur](nilArms[string, struct{}]()),
+			nilOccur{Sequence: []nilOccurItem{{A: nilled[string, struct{}]{}, B: 1}, {A: content[string, struct{}]{Content: "x"}, B: 2}}}},
 		{"a choice's alternative, nilled", nilAltSchema, `<s:a xsi:nil="true"/>`,
 			into[struct{ Choice nilPick }](nilArms[string, struct{}](), WithBranches[nilPick](nilPickA{}, nilPickB{})),
 			struct{ Choice nilPick }{Choice: nilPickA{A: nilled[string, struct{}]{}}}},

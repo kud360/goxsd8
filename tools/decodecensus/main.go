@@ -28,7 +28,10 @@
 // with `go build`, which calls assess.Drive with one assess.DecoderFor
 // Decoder per type the batch's cases decode into, bound to one
 // codec.WithBranches per interface of that type's package, or for a
-// PrecisionDecimal's Value interface one codec.WithPrecisionDecimalArms, so
+// PrecisionDecimal's Value interface one codec.WithPrecisionDecimalArms, and
+// one codec.WithBranches per instantiation of codegen's generic Nillable the
+// package's fields or decoded document elements use, which the census declares
+// in a file of its own beside the generated one (writeNillableOptions), so
 // that the census supplies every package's branch and arm sets
 // (sealedInterfaces). The command therefore runs inside this module's tree,
 // with the go command on PATH and the module cache holding this module's
@@ -36,10 +39,12 @@
 //
 // A case's T is the type the generated file declares, by its header comment
 // and its name, for the top-level element declaration with {abstract} false
-// that the instance's document element names: ownType states the match. A
-// case whose document element is not well-formed, names no such declaration,
-// or names one ownType matches no single type for, decodes into a placeholder
-// struct instead, and the report counts those cases in a caveat.
+// that the instance's document element names: ownType states the match; for
+// a declaration codegen gives a nilled root's value Nillable over that type,
+// T is that Nillable (nillableFamily.root). A case whose document element is
+// not well-formed, names no such declaration, or names one ownType, or
+// nillableFamily.root, matches no single type for, decodes into a
+// placeholder struct instead, and the report counts those cases in a caveat.
 //
 // The driver classifies each result as package assess states, and validates
 // the instance itself, so that "decoded where validate rejects" reads its own
@@ -257,12 +262,18 @@ type batch struct {
 	decoders []string
 }
 
-// genPackage is one generated package a driver imports: its name, p<N>, and
-// its generated file's sealed interfaces, in file order.
+// genPackage is one generated package a driver imports: its name, p<N>, its
+// generated file's sealed interfaces, in file order, and nillable, whether
+// the census wrote its nillableOptions (writeNillableOptions).
 type genPackage struct {
-	name   string
-	sealed []sealedDecl
+	name     string
+	sealed   []sealedDecl
+	nillable bool
 }
+
+// bound reports whether p's decoders take an option list: p declares a
+// sealed interface or the census bound a Nillable instantiation of it.
+func (p genPackage) bound() bool { return len(p.sealed) > 0 || p.nillable }
 
 // sealedDecl is one interface type a generated file declares, by name, and
 // its branches, the names of the types the file gives its marker method, in
@@ -317,11 +328,13 @@ func plan(abs, root string, cases []conformance.CatalogEntry, dir string) (repor
 		if errs := codegen.Generate([]codegen.Target{{Schema: schema, Dir: pkgDir, Package: pkg, Name: pkg}}); errs != nil {
 			continue
 		}
-		file, err := parseGenerated(filepath.Join(pkgDir, "xsd_gen.go"))
+		gen, err := parseGenerated(filepath.Join(pkgDir, "xsd_gen.go"))
 		if err != nil {
 			return report{}, nil, err
 		}
+		file := gen.file
 		types := generatedTypes(file)
+		family := nillableFamilyOf(gen)
 		if cur == nil || len(cur.packages) == batchSize {
 			batches = append(batches, batch{req: assess.Request{Root: abs}})
 			cur = &batches[len(batches)-1]
@@ -336,6 +349,10 @@ func plan(abs, root string, cases []conformance.CatalogEntry, dir string) (repor
 				return report{}, nil, err
 			}
 			typ, decl, ok := resolveCase(schema, types, name, pkgDir)
+			qualified := pkg + "." + typ
+			if ok {
+				qualified, ok = family.root(schema, types, name, typ, pkg)
+			}
 			if !ok {
 				rep.placeholder++
 				if decl {
@@ -345,12 +362,19 @@ func plan(abs, root string, cases []conformance.CatalogEntry, dir string) (repor
 				continue
 			}
 			used = true
-			ag.Cases = append(ag.Cases, assess.Case{ID: c.ID, Instance: inst, Decoder: cur.decoder(pkg + "." + typ)})
+			ag.Cases = append(ag.Cases, assess.Case{ID: c.ID, Instance: inst, Decoder: cur.decoder(qualified)})
 		}
 		cur.req.Groups = append(cur.req.Groups, ag)
-		if used {
-			cur.packages = append(cur.packages, genPackage{name: pkg, sealed: sealedInterfaces(file)})
+		if !used {
+			continue
 		}
+		nillable := len(family.args) > 0
+		if nillable {
+			if err := writeNillableOptions(pkgDir, pkg, *family, file.Imports); err != nil {
+				return report{}, nil, err
+			}
+		}
+		cur.packages = append(cur.packages, genPackage{name: pkg, sealed: sealedInterfaces(file), nillable: nillable})
 	}
 	return rep, batches, nil
 }
@@ -410,20 +434,42 @@ func documentElement(path string) (xsd.QName, error) {
 	}
 }
 
-// typeDecl is one type declaration of a generated file: its name and the
-// first line of its doc comment, the header codegen's package doc "Naming"
-// states.
+// typeDecl is one type declaration of a generated file: its name, the first
+// line of its doc comment, the header codegen's package doc "Naming" states,
+// and holds, the type whose attribute fields it holds where its second line
+// is the one that section states for a nilled element's attributes struct, ""
+// otherwise.
 type typeDecl struct {
-	name, header string
+	name, header, holds string
+}
+
+// The text around the type's name on the second header line of a nilled
+// element's attributes struct (codegen's package doc, "Naming").
+const (
+	holdsPrefix = "// It holds the attribute fields of "
+	holdsSuffix = ", which a nilled element keeps."
+)
+
+// generatedFile is a generated file as parseGenerated read it: its syntax
+// tree, the file set positioning it, and its source.
+type generatedFile struct {
+	file *ast.File
+	fset *token.FileSet
+	src  []byte
 }
 
 // parseGenerated parses the generated file at path, its comments included.
-func parseGenerated(path string) (*ast.File, error) {
-	file, err := parser.ParseFile(token.NewFileSet(), path, nil, parser.ParseComments)
+func parseGenerated(path string) (generatedFile, error) {
+	src, err := os.ReadFile(path)
 	if err != nil {
-		return nil, fmt.Errorf("parsing generated file %s: %w", path, err)
+		return generatedFile{}, fmt.Errorf("reading generated file %s: %w", path, err)
 	}
-	return file, nil
+	fset := token.NewFileSet()
+	file, err := parser.ParseFile(fset, path, src, parser.ParseComments)
+	if err != nil {
+		return generatedFile{}, fmt.Errorf("parsing generated file %s: %w", path, err)
+	}
+	return generatedFile{file: file, fset: fset, src: src}, nil
 }
 
 // generatedTypes returns the type declarations of the generated file, in
@@ -435,8 +481,14 @@ func generatedTypes(file *ast.File) []typeDecl {
 		if !ok || gen.Tok != token.TYPE || gen.Doc == nil {
 			continue
 		}
+		var holds string
+		if len(gen.Doc.List) > 1 {
+			if of, ok := strings.CutPrefix(gen.Doc.List[1].Text, holdsPrefix); ok {
+				holds, _ = strings.CutSuffix(of, holdsSuffix)
+			}
+		}
 		for _, spec := range gen.Specs {
-			types = append(types, typeDecl{name: spec.(*ast.TypeSpec).Name.Name, header: gen.Doc.List[0].Text})
+			types = append(types, typeDecl{name: spec.(*ast.TypeSpec).Name.Name, header: gen.Doc.List[0].Text, holds: holds})
 		}
 	}
 	return types
@@ -445,10 +497,10 @@ func generatedTypes(file *ast.File) []typeDecl {
 // sealedInterfaces returns each interface type the generated file declares
 // with no type parameters, in file order, with its branches. A generic
 // interface, such as codegen's Nillable, is no type a WithBranches can name
-// uninstantiated, and Decode declines the nillable element Nillable is
-// emitted for before item 6. The branches are each type B the file gives a method of a
-// single value receiver of type B, named "is" plus the interface's name, with
-// no parameters or results, the marker codegen's package doc "# Complex
+// uninstantiated: nillableFamilyOf finds it, and writeNillableOptions binds
+// each instantiation the census decodes through. The branches are each type B the file
+// gives a method of a single value receiver of type B, named "is" plus the interface's
+// name, with no parameters or results, the marker codegen's package doc "# Complex
 // types" states, in file order. An interface whose header records decimalProvenance is
 // PrecisionDecimal's Value interface, and its branches, in file order, are its arms in
 // the order codegen's package doc "# Simple types" states they are emitted: numerical,
@@ -602,7 +654,7 @@ func drive(dir string, n int, b batch) (assess.Summary, error) {
 func driverSource(b batch) []byte {
 	var s strings.Builder
 	s.WriteString("// Code generated by decodecensus; DO NOT EDIT.\n\npackage main\n\nimport (\n\t\"fmt\"\n\t\"os\"\n\n")
-	if slices.ContainsFunc(b.packages, func(p genPackage) bool { return len(p.sealed) > 0 }) {
+	if slices.ContainsFunc(b.packages, genPackage.bound) {
 		s.WriteString("\t\"github.com/kud360/goxsd8/codec\"\n")
 	}
 	s.WriteString("\t\"github.com/kud360/goxsd8/tools/decodecensus/internal/assess\"\n")
@@ -611,10 +663,14 @@ func driverSource(b batch) []byte {
 	}
 	s.WriteString(")\n")
 	for _, p := range b.packages {
-		if len(p.sealed) == 0 {
+		if !p.bound() {
 			continue
 		}
-		fmt.Fprintf(&s, "\nvar %sBranches = []codec.Option{\n", p.name)
+		head, tail := "[]codec.Option{\n", "}\n"
+		if p.nillable {
+			head, tail = "append([]codec.Option{\n", "}, "+p.name+"."+nillableOptions+"...)\n"
+		}
+		fmt.Fprintf(&s, "\nvar %sBranches = %s", p.name, head)
 		for _, sd := range p.sealed {
 			option := "WithBranches"
 			if sd.decimal {
@@ -629,13 +685,13 @@ func driverSource(b batch) []byte {
 			}
 			s.WriteString("),\n")
 		}
-		s.WriteString("}\n")
+		s.WriteString(tail)
 	}
 	s.WriteString("\nvar decoders = []assess.Decoder{\n")
 	for _, d := range b.decoders {
 		pkg, _, _ := strings.Cut(d, ".")
 		bound := ""
-		if i := slices.IndexFunc(b.packages, func(p genPackage) bool { return p.name == pkg }); i >= 0 && len(b.packages[i].sealed) > 0 {
+		if i := slices.IndexFunc(b.packages, func(p genPackage) bool { return p.name == pkg }); i >= 0 && b.packages[i].bound() {
 			bound = pkg + "Branches..."
 		}
 		fmt.Fprintf(&s, "\tassess.DecoderFor[%s](%s),\n", d, bound)

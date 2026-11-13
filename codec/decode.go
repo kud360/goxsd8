@@ -24,8 +24,10 @@ import (
 var ErrTypeMismatch = errors.New("codec: T is not the type codegen emits for the document element")
 
 // Decode decodes the XML instance data into a new value of T, the type
-// package codegen emits for the declaration of data's document element, and
-// returns it. A value is returned exactly when the error is nil.
+// package codegen emits for the declaration of data's document element, or,
+// for a nillable one, the type codegen's package doc ("# Element
+// declarations") gives a nilled root's value over it, and returns it. A value
+// is returned exactly when the error is nil.
 //
 // T is the caller's choice: nothing dispatches a document element to its
 // generated type, and item 6 below states which T match. A caller decoding
@@ -48,22 +50,23 @@ var ErrTypeMismatch = errors.New("codec: T is not the type codegen emits for the
 // under the same normalization: for an absent attribute whose use's effective
 // value constraint supplies one (codegen's package doc, "# Attributes";
 // §3.4.4.2 key-dflt-att clause 4, §3.4.5.1 sic-attrDefault), and for an
-// element with neither element nor character children whose declaration has a
-// {value constraint} (§3.3.4.3 cvc-elt clause 5.1, §3.3.5.4 sic-eltType), of
-// simple type or with simple content, whose value field holds it. For a
-// special type, whose Go type is string (codegen's package doc, "# Simple
-// types"), and for a simple type whose atomic Go type is string, the value is
-// that string. For every other it is the value backend's governing mapping of
-// the type ([value.GoverningMapping]) maps that string to, through Parse with
-// the item's namespace bindings in scope (Datatypes §4.1.4 cvc-datatype-valid
-// clause 2.1): an element's own for its content, its owner element's for an
-// attribute, and for a supplied value those in scope at the schema document
-// element that wrote the value constraint ([value.ConstraintContext]), never
-// the instance's; read back through that mapping's Canonical and converted to
-// the Go type. backend's governing mapping of each such type but one whose
-// datatype struct is yearMonthDuration's, QName's or PrecisionDecimal's must
-// therefore have a non-nil Canonical, as builtin/strict's do; item 8 states
-// the error where one fails. The value converts so:
+// element with neither element nor character children, not ·nilled·, whose
+// declaration has a {value constraint} (§3.3.4.3 cvc-elt clause 5.1, §3.3.5.4
+// sic-eltType), of simple type or with simple content, whose value field
+// holds it. For a special type, whose Go type is string (codegen's package
+// doc, "# Simple types"), and for a simple type whose atomic Go type is
+// string, the value is that string. For every other it is the value backend's
+// governing mapping of the type ([value.GoverningMapping]) maps that string
+// to, through Parse with the item's namespace bindings in scope (Datatypes
+// §4.1.4 cvc-datatype-valid clause 2.1): an element's own for its content,
+// its owner element's for an attribute, and for a supplied value those in
+// scope at the schema document element that wrote the value constraint
+// ([value.ConstraintContext]), never the instance's; read back through that
+// mapping's Canonical and converted to the Go type. backend's governing
+// mapping of each such type but one whose datatype struct is
+// yearMonthDuration's, QName's or PrecisionDecimal's must therefore have a
+// non-nil Canonical, as builtin/strict's do; item 8 states the error where
+// one fails. The value converts so:
 //
 //   - A boolean's: its canonical form exactly "true" or "false" (§E.4
 //     f-booleanCanmap).
@@ -227,7 +230,9 @@ var ErrTypeMismatch = errors.New("codec: T is not the type codegen emits for the
 //     nil for it.
 //
 // Items 7 and 8 are both found while filling T, and the first in document
-// order is returned: an element's xsi:type, then its attributes' values,
+// order is returned: an element's xsi:type, then, for an element whose
+// declaration codegen wraps in Nillable (item 6), its xsi:nil's value, read as
+// an xs:boolean value is read, then its attributes' values,
 // present attributes in start-tag order and then the supplied values of
 // absent ones in attribute-use order, then, for simple content, its value
 // field's value, or else its children in document order, each child of
@@ -291,22 +296,25 @@ var ErrTypeMismatch = errors.New("codec: T is not the type codegen emits for the
 //   - The declaration's governing types, codegen's (codegen's package doc,
 //     "An element declaration's governing types"), but that a complex type
 //     with {abstract} true stays at its slot, declining by its {abstract}
-//     where it is examined: first its {nillable}, which declines unless
-//     exactly one governing type remains, it is xs:anyType itself (§3.4.7
-//     any-type-itself), whose raw content holds xsi:nil among its attributes
-//     (item 6), and no {type table} slot holds xs:error, which a nilled
-//     instance is valid against (§3.3.4.3 cvc-type clause 3.1.3), a slot that
-//     does not resolve declining as nillable; then, of two or more governing
-//     types, two anonymous ones, since the type the validator selects could
-//     then be matched to no one branch. Of exactly one governing type, the
-//     declaration is examined as if that type were its {type definition}, by
-//     the bullet below. Of two or more, each is examined in slot order as the
-//     {type definition} of a local element declaration occurring exactly once
-//     is, the first declining one's construct the declaration's, and then a
-//     branch field that may admit a Go type an earlier one's does declines,
-//     as two branches of a sealed interface whose structs have one shape (the
-//     choice bullet below). Of none, every slot xs:error's, nothing further is
-//     examined.
+//     where it is examined: first, for a nillable declaration (codegen's
+//     package doc, "# Element declarations"), its {nillable}, which declines
+//     unless exactly one governing type remains and no {type table} slot holds
+//     xs:error, which a nilled instance is valid against (§3.3.4.3 cvc-type
+//     clause 3.1.3) and whose sealed interface codegen wraps branch by branch,
+//     and, for a substitution group's declaration (the fourth bullet), whose
+//     branch field codegen wraps too, unless that type is xs:anyType itself
+//     (§3.4.7 any-type-itself), whose raw content holds xsi:nil among its
+//     attributes (item 6), a slot that does not resolve declining as nillable;
+//     then, of two or more governing types, two anonymous ones, since the type
+//     the validator selects could then be matched to no one branch. Of exactly
+//     one governing type, the declaration is examined as if that type were its
+//     {type definition}, by the bullet below. Of two or more, each is examined
+//     in slot order as the {type definition} of a local element declaration
+//     occurring exactly once is, the first declining one's construct the
+//     declaration's, and then a branch field that may admit a Go type an
+//     earlier one's does declines, as two branches of a sealed interface whose
+//     structs have one shape (the choice bullet below). Of none, every slot
+//     xs:error's, nothing further is examined.
 //   - Its {type definition}: xs:anyType itself, known by its QName, gives the
 //     T item 6 states and is examined no further; a simple type's identity
 //     as a special type (xsd.SimpleType.IsSpecial), which gives string and
@@ -433,7 +441,8 @@ var ErrTypeMismatch = errors.New("codec: T is not the type codegen emits for the
 // schema an item 6 error is a defect of Decode's, or a branch or variant set
 // [WithBranches] or an arm set [WithPrecisionDecimalArms] did not supply as
 // codegen emitted it, and for any other T it is a T that does not match.
-// Item 6 compares:
+// Item 6 compares, each bullet but the nillable one stating the T or field of
+// a declaration codegen does not wrap in Nillable, which that bullet wraps:
 //
 //   - T of a complex {type definition}: T is a struct whose fields are
 //     exactly those codegen emits, in name, order and Go type, each field's
@@ -540,6 +549,36 @@ var ErrTypeMismatch = errors.New("codec: T is not the type codegen emits for the
 //     element's content raw, as the bullet above states an E's Content, so an
 //     xsi:type inside it is one of its raw attributes, the element's own
 //     declining (item 7).
+//   - A nillable declaration's, whose T or field codegen wraps in Nillable
+//     (codegen's package doc, "# Element declarations", states which and the
+//     Go shape): T, for the document element's, and the field of a particle
+//     whose element declaration, local or referenced, is one, a choice's
+//     alternative's and a flattened slice's branch field and an occurrence
+//     struct's field included, hold I in place of the V, or the T, the bullets
+//     above give it: the bare interface for an optional one and never a
+//     pointer, []I for a repeated one, and in mixed content M over I by the
+//     same occurrence. I is an interface whose one method is unexported, found
+//     from the declaration, never by its shape in T, whose arms reach Decode
+//     only through [WithBranches], one set per instantiation; it does not
+//     match when no WithBranches supplies them or the set is not exactly two
+//     structs, told apart by field name alone: one of exactly the field
+//     Content, holding what the unwrapped field of the element occurring
+//     exactly once holds, held as the bullets above hold it, never a pointer,
+//     or, for the document element's, the T the declaration would give were
+//     it not nillable, held as that T is; and one of exactly the field
+//     Attributes, of A, a struct of exactly the attribute fields and then the
+//     {attribute wildcard} field of the struct of the element's complex type,
+//     matched as that struct's are, and a struct of no field for a simple
+//     type or a complex type codegen emits as a sealed interface. So the bare
+//     T of a nillable document element does not match, nilled or not. The
+//     Content arm holds an element that is not ·nilled·, with no xsi:nil or
+//     xsi:nil false, as the unwrapped field would; the Nilled arm holds a
+//     ·nilled· one, xsi:nil true (§3.3.1 key-nilled), its Attributes filled as
+//     the struct's attribute fields are, supplied values included (§3.4.4.2
+//     cvc-complex-type clauses 2 to 4), and no value constraint supplied to
+//     the element (cvc-elt clause 5.1). An absent element's field is nil, so
+//     an absent element, a nilled one and an emptiable choice's empty match,
+//     which the Content arm holds, are three values.
 //   - The field of a complex type's {open content}, read from its {content
 //     type} as codegen reads it (codegen's package doc, "# Open content"),
 //     after the particle fields, a flattened or occurrence field included,
@@ -5008,7 +5047,7 @@ func (b *boundBinding) fill(r *xmltree.Reader, root *xmltree.StartElement, out r
 // the four instanceAttribute names, appended raw to the wildcard's field. An
 // attribute outside the xsi namespace that neither takes is the plain error
 // unattributed returns. It is the attribute fill of a struct and of a nilled
-// element's Attributes alike (nillableSum.nilledValue).
+// element's Attributes alike (nillableSum.fillAttributes).
 func (bd *binding) fillAttributes(root *xmltree.StartElement, out reflect.Value, first int) error {
 	present := make([]bool, len(bd.attrs))
 	for _, a := range root.Attributes() {

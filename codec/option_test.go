@@ -15,7 +15,7 @@ import (
 // the two declines from codec's own parser/xmltree read, so each row fails
 // when the URI is dropped at the read it names.
 func TestDecodeURI(t *testing.T) {
-		const xsiType = `<xs:complexType name="rt"><xs:sequence><xs:element name="a" type="xs:string"/></xs:sequence></xs:complexType>
+	const xsiType = `<xs:complexType name="rt"><xs:sequence><xs:element name="a" type="xs:string"/></xs:sequence></xs:complexType>
 		<xs:element name="r" type="s:rt"/>`
 	// viaLocOf reads the Loc xsderr.LocOf reaches.
 	viaLocOf := func(err error) (string, bool) {
