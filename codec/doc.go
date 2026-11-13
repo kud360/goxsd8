@@ -1,6 +1,6 @@
-// Package codec is the dataset serializer/deserializer: schema-directed
-// decode of instance data into Go values and canonical encode back out —
-// built for minimal allocation.
+// Package codec is the dataset deserializer: schema-directed decode of
+// instance data into Go values; canonical encode back out is not yet built,
+// nor are the allocation-frugal decode paths "# Planned decode paths" names.
 //
 // # Decode
 //
@@ -35,7 +35,7 @@
 // internal/goshape and internal/goname, and refuses a T that differs, and
 // reads a sealed interface's branch or variant types from [WithBranches], and
 // a PrecisionDecimal's arms from [WithPrecisionDecimalArms]. Package codec
-// does not import codegen. Nothing encodes yet.
+// does not import codegen.
 //
 // # What decodes
 //
