@@ -109,7 +109,7 @@ type TypeDefinitionOrRef interface{ typeDefinitionOrRef() }
 // substitution-group head whose own type is NAMED (§3.3.2.1 clause 3), the
 // xs:anyType / xs:anySimpleType default (§3.3.2.1 clause 4, §3.2.2.2), and the
 // base= of a §3.4.2 derivation. All are reachable by name, so all are this arm.
-// The field is read-only by convention; do not mutate it after construction.
+// The fields are read-only by convention; do not mutate them after construction.
 //
 // Clause 3's other half is NOT this arm: a head whose own {type definition} is
 // the ANONYMOUS type of its own inline <complexType> has no name for this arm to
@@ -121,7 +121,14 @@ type TypeDefinitionOrRef interface{ typeDefinitionOrRef() }
 // defer to finalize but an illegal representation. NewElementDeclaration,
 // NewAttributeDeclaration and the ComplexType constructors reject one, exactly
 // as NewAttributeUse rejects a zero-named AttributeDeclarationRef.
-type TypeDefinitionRef struct{ Name QName }
+//
+// Loc is provenance, not a property: the package doc's provenance paragraph
+// says what it holds, where Finalize charges it, and why references compare by
+// Name.
+type TypeDefinitionRef struct {
+	Name QName
+	Loc  xsderr.Loc
+}
 
 // InlineTypeDefinition is the variant that OWNS the anonymous type definition it
 // wraps, carried by value because the slot holding it is its sole owner.

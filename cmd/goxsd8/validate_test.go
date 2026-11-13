@@ -186,7 +186,7 @@ func TestValidatePathRendering(t *testing.T) {
 			if code := run(args, &stdout, &stderr); code != exitSchema {
 				t.Fatalf("run(%q) = %d, want %d (stderr %q)", args, code, exitSchema, stderr.String())
 			}
-			if want := absBroken + ":9:3: [src-resolve] "; !strings.HasPrefix(stderr.String(), want) {
+			if want := absBroken + ":9:28: [src-resolve] "; !strings.HasPrefix(stderr.String(), want) {
 				t.Errorf("run(%q) stderr = %q, want it to open %q", args, stderr.String(), want)
 			}
 		}

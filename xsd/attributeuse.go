@@ -68,14 +68,21 @@ type LocalAttributeDeclaration struct{ Declaration AttributeDeclaration }
 // AttributeDeclarationRef is the {attribute declaration} variant for the
 // ref.att.local mapping (§3.2.2.3): a pre-resolution QName reference — the
 // attribute/@ref name — to a possibly-forward-referenced top-level Attribute
-// Declaration, resolved to the live component at finalize (#173). The field is
-// read-only by convention; do not mutate it after construction.
+// Declaration, resolved to the live component at finalize (#173). The fields
+// are read-only by convention; do not mutate them after construction.
 //
 // Name is a PRESENT reference, never the absent (zero) QName: this variant
 // exists only for the mapping branch whose precondition is "the ref attribute is
 // present". NewAttributeUse rejects a zero Name rather than deferring it (see
 // there for why).
-type AttributeDeclarationRef struct{ Name QName }
+//
+// Loc is provenance, not a property: the package doc's provenance paragraph
+// says what it holds, where Finalize charges it, and why references compare by
+// Name.
+type AttributeDeclarationRef struct {
+	Name QName
+	Loc  xsderr.Loc
+}
 
 func (LocalAttributeDeclaration) attributeDeclarationRef() {}
 func (AttributeDeclarationRef) attributeDeclarationRef()   {}
@@ -123,13 +130,9 @@ type AttributeUse struct {
 
 // chargedLoc is the position NewAttributeUse's loc paragraph promises Finalize
 // charges: the use's own, or owner, the enclosing component's, when the use's is
-// the zero xsderr.Loc{}. Only exact equality with the zero value falls back; a
-// partially filled Loc is charged as it is.
+// the zero xsderr.Loc{} (chargedAt).
 func (u AttributeUse) chargedLoc(owner xsderr.Loc) xsderr.Loc {
-	if u.loc == (xsderr.Loc{}) {
-		return owner
-	}
-	return u.loc
+	return chargedAt(u.loc, owner)
 }
 
 // inheritableSpec is what an Attribute Use's own XML said about {inheritable}.
@@ -178,9 +181,10 @@ const (
 //
 // loc is the position of the use's <attribute> element. It is charged to any
 // rejection here, and retained: Finalize charges au-props-correct clauses 2 and
-// 3 and the src-resolve of an unresolvable <attribute ref> against it, or
-// against the enclosing complex type's or attribute group definition's Loc when
-// loc is the zero xsderr.Loc{}. Like every component's Loc it is provenance, not
+// 3 against it — and the src-resolve of an unresolvable <attribute ref> when
+// that AttributeDeclarationRef carries no Loc of its own — or against the
+// enclosing complex type's or attribute group definition's Loc when loc is the
+// zero xsderr.Loc{}. Like every component's Loc it is provenance, not
 // a property (doc.go), and no accessor reports it. A caller with no real parser
 // position — a synthesized or programmatically built use — may legitimately pass
 // the zero xsderr.Loc{}.

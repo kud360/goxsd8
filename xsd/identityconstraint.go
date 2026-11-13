@@ -54,7 +54,20 @@ type IdentityConstraint struct {
 	category      IdentityConstraintCategory
 	selector      XPathExpression
 	fields        []XPathExpression
-	referencedKey QName // zero value when category != IdentityConstraintKeyref
+	referencedKey IdentityConstraintRef // zero value when category != IdentityConstraintKeyref
+}
+
+// IdentityConstraintRef is a keyref's {referenced key} as NewIdentityConstraint
+// takes it: the pre-resolution refer= QName (§3.11.2) naming an
+// identity-constraint definition, resolved at finalize (src-resolve clause 1.7).
+// The fields are read-only by convention; do not mutate them after construction.
+//
+// Loc is provenance, not a property: the package doc's provenance paragraph
+// says what it holds, where Finalize charges it, and why references compare by
+// Name.
+type IdentityConstraintRef struct {
+	Name QName
+	Loc  xsderr.Loc
 }
 
 // NewIdentityConstraint builds an IdentityConstraint, rejecting the states
@@ -80,8 +93,8 @@ type IdentityConstraint struct {
 // NewElementDeclaration's e-props-correct clause 1 check.
 //
 // referencedKey is a pointer so that its absence (nil) is distinct from a
-// present zero/absent QName. fields is copied; the caller's backing array is
-// not aliased.
+// present reference carrying a zero/absent QName. fields is copied; the caller's
+// backing array is not aliased.
 //
 // loc is the source position charged to any rejection AND retained: Loc reports
 // it back as the definition's provenance. Pass the position of this
@@ -89,7 +102,7 @@ type IdentityConstraint struct {
 // element's, say) — it is observable, not merely an error-charging convenience.
 // A caller with no real parser position — a synthesized or programmatically
 // built definition — passes the zero xsderr.Loc{}, which reads as "unknown".
-func NewIdentityConstraint(loc xsderr.Loc, name QName, category IdentityConstraintCategory, selector XPathExpression, fields []XPathExpression, referencedKey *QName) (IdentityConstraint, error) {
+func NewIdentityConstraint(loc xsderr.Loc, name QName, category IdentityConstraintCategory, selector XPathExpression, fields []XPathExpression, referencedKey *IdentityConstraintRef) (IdentityConstraint, error) {
 	if name.Local == "" {
 		return IdentityConstraint{}, xsderr.New(ruleICProps, loc,
 			"identity-constraint definition has an absent {name}, but the §3.11.1 tableau types it as a Required xs:NCName, whose value space excludes the empty string (c-props-correct clause 1)")
@@ -165,5 +178,5 @@ func (c IdentityConstraint) Fields() []XPathExpression {
 // resolved-component accessor: the QName is retained, and a consumer follows it
 // by a read-time lookup.
 func (c IdentityConstraint) ReferencedKeyName() (QName, bool) {
-	return c.referencedKey, c.category == IdentityConstraintKeyref
+	return c.referencedKey.Name, c.category == IdentityConstraintKeyref
 }

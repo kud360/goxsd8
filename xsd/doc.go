@@ -87,17 +87,28 @@
 // clause that is the RESTRICTING complex type, the spec's T, which the
 // constraint is stated against and every one of its messages already
 // names; for ct-props-correct the complex type whose properties it checks;
-// and for cos-ct-extends clause 1.6 (c-vs-ctd-e) the EXTENDING type. The
-// zero xsderr.Loc means the position is unknown, and is the correct value for
-// a component with no schema document behind it — parser.Produce's
-// synthesized xs:anyType and §3.2.7 xsi: attribute declarations, the four
-// xml: attribute declarations and the xml:specialAttrs attribute group
-// definition the parser supplies for an <import> of the §1.3.2 XML namespace
-// it cannot fetch, and package builtin's seeded built-in datatypes, are the
-// legitimate zero-Loc producers. Other constructors take a loc to charge
-// their own rejections and, except NewAttributeUse, do not retain it;
-// NewAttributeUse states what Finalize charges against the loc it retains, and
-// no accessor is exported for it.
+// and for cos-ct-extends clause 1.6 (c-vs-ctd-e) the EXTENDING type. A
+// src-resolve rejection lands on the referring component only when the
+// reference carries no position of its own: each by-name reference type —
+// TypeDefinitionRef, SimpleTypeRef, ElementDeclarationRef, ModelGroupRef,
+// AttributeDeclarationRef, AttributeGroupRef and IdentityConstraintRef — has a
+// Loc field for the position of the QName-valued attribute that wrote its
+// Name, and Finalize charges that reference's src-resolve rejection there. A
+// complex type's by-name {base type definition} is the exception: the
+// ComplexType constructors take it as a bare QName, so it carries the zero Loc.
+// Two references name the same component exactly when their Names are equal,
+// so compare Name, never reference values with ==: two writings of one name
+// can differ in Loc. The zero xsderr.Loc means the position is unknown, and is the
+// correct value for a reference no attribute wrote — the xs:anyType default,
+// the §3.4.2.4 defaultAttributes reference — and for a component with no
+// schema document behind it — parser.Produce's synthesized xs:anyType and
+// §3.2.7 xsi: attribute declarations, the four xml: attribute declarations and
+// the xml:specialAttrs attribute group definition the parser supplies for an
+// <import> of the §1.3.2 XML namespace it cannot fetch, and package builtin's
+// seeded built-in datatypes, are the legitimate zero-Loc producers. Other
+// constructors take a loc to charge their own rejections and, except
+// NewAttributeUse, do not retain it; NewAttributeUse states what Finalize
+// charges against the loc it retains, and no accessor is exported for it.
 //
 // # Query API
 //

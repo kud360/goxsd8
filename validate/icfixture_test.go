@@ -253,9 +253,9 @@ func icDef(t *testing.T, name string, cat xsd.IdentityConstraintCategory, select
 	for _, f := range fields {
 		exprs = append(exprs, xsd.NewXPathExpression(f, bindings, def, nil))
 	}
-	var key *xsd.QName
+	var key *xsd.IdentityConstraintRef
 	if cat == xsd.IdentityConstraintKeyref {
-		key = &xsd.QName{Local: refer}
+		key = &xsd.IdentityConstraintRef{Name: xsd.QName{Local: refer}}
 	}
 	ic, err := xsd.NewIdentityConstraint(xsderr.Loc{}, xsd.QName{Local: name}, cat,
 		xsd.NewXPathExpression(selector, bindings, def, nil), exprs, key)

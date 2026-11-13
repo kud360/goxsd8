@@ -631,7 +631,7 @@ func TestARejectedSchemaNamesItsBareImports(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(dir, "go.mod"), []byte("module example.com/m\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	violation := schema + `:4:1: [src-resolve] element declaration {urn:a}e {type definition} references type {urn:b}T, but no type definition with that expanded name is present in the schema (src-resolve clause 1.1)` + "\n"
+	violation := schema + `:4:22: [src-resolve] element declaration {urn:a}e {type definition} references type {urn:b}T, but no type definition with that expanded name is present in the schema (src-resolve clause 1.1)` + "\n"
 	// The remedy is the verb's own (#3505).
 	bare := func(verb, remedy string) string {
 		return "goxsd8: " + verb + ": " + schema + `:2:1: this <import>, for namespace "urn:b", names no schemaLocation, so no document was read for it; ` + remedy + "\n" +

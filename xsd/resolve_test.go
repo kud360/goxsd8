@@ -142,9 +142,9 @@ func keyOrRefFieldsAt(t *testing.T, loc xsderr.Loc, name xsd.QName, category xsd
 	for i := range fieldCount {
 		fields = append(fields, xsd.NewXPathExpression(fmt.Sprintf("@x%d", i), nil, nil, nil))
 	}
-	var referPtr *xsd.QName
+	var referPtr *xsd.IdentityConstraintRef
 	if category == xsd.IdentityConstraintKeyref {
-		referPtr = &refer
+		referPtr = &xsd.IdentityConstraintRef{Name: refer}
 	}
 	c, err := xsd.NewIdentityConstraint(loc, name, category, sel, fields, referPtr)
 	if err != nil {
@@ -732,16 +732,19 @@ func assertLoc(t *testing.T, err error, want xsderr.Loc) {
 // which needs their fixtures for its own reason.
 //
 // src-resolve accordingly gets five cases, because its reference sites do not all
-// take their position the same way. Three of them — a particle {term} <element
-// ref>, a particle {term} <group ref>, and an attribute use <attribute ref> — sit
-// on a Particle, which RETAINS no position (xsd doc.go, STYLE T5), or on an
-// AttributeUse, which falls back to its owner's when its own is the zero Loc, so
-// all three are charged the enclosing complex type's here. Those three cases
-// build the Particle and the AttributeUse at the ZERO Loc on purpose: if the
-// substitution were ever dropped in favour of the ref-bearing component's own
-// position, the rejection would go back to citing nothing and the case would
-// fail. TestResolveDanglingAttributeRefChargedAtUse pins a use that carries its
-// own position.
+// take their position the same way. Every reference here is built with no Loc of
+// its own, so each case pins the fallback to the referring component (chargedAt);
+// a reference carrying its own position is pinned by the parser-driven rows of
+// parser's TestFinalizeSrcResolveChargedAtNamingAttribute. Three of them — a
+// particle {term} <element ref>, a particle {term} <group ref>, and an attribute
+// use <attribute ref> — sit on a Particle, which RETAINS no position (xsd doc.go,
+// STYLE T5), or on an AttributeUse, which falls back to its owner's when its own
+// is the zero Loc, so all three are charged the enclosing complex type's here.
+// Those three cases build the Particle and the AttributeUse at the ZERO Loc on
+// purpose: if the substitution were ever dropped in favour of the ref-bearing
+// component's own position, the rejection would go back to citing nothing and
+// the case would fail. TestResolveDanglingAttributeRefChargedAtUse pins a use
+// that carries its own position.
 //
 // c-props-correct gets two cases for the same per-site reason: resolveKeyref's
 // category check (clause 1) returns before its cardinality check (clause 2) can
