@@ -390,7 +390,7 @@ func (p *producer) constructIdentityConstraint(name xsd.QName, el *Element, cate
 		}
 		// Only the QName and refer='s position are retained: the link to the
 		// referenced definition is a finalize-phase resolution (src-resolve clause
-		// 1.7), never made here, and that charge lands at refer=.
+		// 1.7), never made here.
 		qn, err := p.resolveQName(el, refer.Value(), refer)
 		if err != nil {
 			return xsd.IdentityConstraint{}, err
