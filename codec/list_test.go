@@ -385,20 +385,20 @@ func TestWithLoggerList(t *testing.T) {
 // is a union, and a special type is no list's item (cos-st-restricts clause
 // 2.1).
 func TestDeclineErrorTextListItem(t *testing.T) {
-	const construct = "a union simple type two of whose basic members get one Go type"
-	const union = `<xs:union memberTypes="xs:string xs:token"/>`
+	const construct = "an atomic simple type whose primitive is ·implementation-defined·, other than xs:precisionDecimal"
+	const union = `<xs:union memberTypes="xs:int s:money"/>`
 	rows := []struct {
 		name, decls, want string
 	}{
 		{"a named item", `<xs:simpleType name="u">` + union + `</xs:simpleType>` + sequenceOf(`<xs:element name="a"><xs:simpleType><xs:list itemType="s:u"/></xs:simpleType></xs:element>`),
-			"element {urn:s}a declared at s.xsd:1:315, through the list type's {item type definition} {urn:s}u, a type defined at s.xsd:1:181, through the union's basic member {http://www.w3.org/2001/XMLSchema}token, a type defined at ?"},
+			"element {urn:s}a declared at s.xsd:1:311, through the list type's {item type definition} {urn:s}u, a type defined at s.xsd:1:181, through the union's basic member {urn:s}money, a type defined at ?"},
 		{"an anonymous item", sequenceOf(`<xs:element name="a"><xs:simpleType><xs:list><xs:simpleType>` + union + `</xs:simpleType></xs:list></xs:simpleType></xs:element>`),
-			"element {urn:s}a declared at s.xsd:1:231, through the list type's anonymous {item type definition}, a type defined at s.xsd:1:276, through the union's basic member {http://www.w3.org/2001/XMLSchema}token, a type defined at ?"},
+			"element {urn:s}a declared at s.xsd:1:231, through the list type's anonymous {item type definition}, a type defined at s.xsd:1:276, through the union's basic member {urn:s}money, a type defined at ?"},
 	}
 	for _, row := range rows {
 		t.Run(row.name, func(t *testing.T) {
-			_, err := Decode[struct{}](schemaOf(t, row.decls), strict.New(), instanceOf("", `<s:a>1.0</s:a>`))
-			if want := "?:1:1: codec does not decode " + construct + ": " + row.want + "; a decoder refusal, not a schema or instance fault"; err == nil || err.Error() != want {
+			err := CheckDecode[struct{}](mintedSchema(t, row.decls), rootName)
+			if want := "codec does not decode " + construct + ": " + row.want + "; a decoder refusal, not a schema or instance fault"; err == nil || err.Error() != want {
 				t.Errorf("error = %v\nwant    %q", err, want)
 			}
 		})

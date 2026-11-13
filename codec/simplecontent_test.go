@@ -201,27 +201,28 @@ func TestDecodeSimpleContentWhitespaceDefault(t *testing.T) {
 
 // TestDeclineErrorTextSimpleContent pins the message of a decline of simple
 // content's {simple type definition}, named after the complex type it is the
-// {content type} of, each a union two of whose basic members get one Go type:
-// CheckDecode's for the anonymous one a restriction with a facet gives, and
-// the named base's of an extension, charged at the document element.
+// {content type} of, each a union of xs:int and the minted primitive money
+// (mintedSchema), as CheckDecode, which alone reaches it, returns it: for
+// the anonymous one a restriction with a facet gives, and the named base's
+// of an extension.
 func TestDeclineErrorTextSimpleContent(t *testing.T) {
-	anon := schemaOf(t, `<xs:simpleType name="st"><xs:union memberTypes="xs:string xs:token"/></xs:simpleType>
+	anon := mintedSchema(t, `<xs:simpleType name="st"><xs:union memberTypes="xs:int s:money"/></xs:simpleType>
 <xs:complexType name="b"><xs:simpleContent><xs:extension base="s:st"/></xs:simpleContent></xs:complexType>`+
 		root(`<xs:simpleContent><xs:restriction base="s:b"><xs:pattern value="a+"/></xs:restriction></xs:simpleContent>`))
-	const wantAnon = "codec does not decode a union simple type two of whose basic members get one Go type: the {type definition} of element {urn:s}r declared at s.xsd:2:107, a type defined at s.xsd:2:128, through its {content type}'s anonymous {simple type definition}, a type defined at s.xsd:2:162, through the union's basic member {http://www.w3.org/2001/XMLSchema}token, a type defined at ?; a decoder refusal, not a schema or instance fault"
+	const wantAnon = "codec does not decode an atomic simple type whose primitive is ·implementation-defined·, other than xs:precisionDecimal: the {type definition} of element {urn:s}r declared at s.xsd:2:107, a type defined at s.xsd:2:128, through its {content type}'s anonymous {simple type definition}, a type defined at s.xsd:2:162, through the union's basic member {urn:s}money, a type defined at ?; a decoder refusal, not a schema or instance fault"
 	if err := CheckDecode[struct{}](anon, rootName); err == nil || err.Error() != wantAnon {
 		t.Errorf("CheckDecode = %v, want %q", err, wantAnon)
 	}
 
-	schema := schemaOf(t, `<xs:simpleType name="st"><xs:union memberTypes="xs:string xs:token"/></xs:simpleType>`+
+	schema := mintedSchema(t, `<xs:simpleType name="st"><xs:union memberTypes="xs:int s:money"/></xs:simpleType>`+
 		root(`<xs:simpleContent><xs:extension base="s:st"><xs:attribute name="k" type="xs:string"/></xs:extension></xs:simpleContent>`))
-	_, err := Decode[struct{}](schema, strict.New(), instanceOf("", "x"))
-	const want = "?:1:1: codec does not decode a union simple type two of whose basic members get one Go type: the {type definition} of element {urn:s}r declared at s.xsd:1:266, a type defined at s.xsd:1:287, through its {content type}'s {simple type definition} {urn:s}st, a type defined at s.xsd:1:181, through the union's basic member {http://www.w3.org/2001/XMLSchema}token, a type defined at ?; a decoder refusal, not a schema or instance fault"
+	err := CheckDecode[struct{}](schema, rootName)
+	const want = "codec does not decode an atomic simple type whose primitive is ·implementation-defined·, other than xs:precisionDecimal: the {type definition} of element {urn:s}r declared at s.xsd:1:262, a type defined at s.xsd:1:283, through its {content type}'s {simple type definition} {urn:s}st, a type defined at s.xsd:1:181, through the union's basic member {urn:s}money, a type defined at ?; a decoder refusal, not a schema or instance fault"
 	if err == nil || err.Error() != want {
-		t.Errorf("error = %v, want %q", err, want)
+		t.Errorf("CheckDecode = %v, want %q", err, want)
 	}
 	var de *DeclineError
-	if !errors.As(err, &de) || de.Construct() != (Construct{constructSharedVariant}) {
-		t.Errorf("Construct = %v, want %s", err, constructSharedVariant.name())
+	if !errors.As(err, &de) || de.Construct() != (Construct{constructOtherPrimitive}) {
+		t.Errorf("Construct = %v, want %s", err, constructOtherPrimitive.name())
 	}
 }

@@ -114,10 +114,9 @@
 //
 // A union type (Datatypes §2.4.1.3) decodes when each of its basic members,
 // in codegen's basic-member order (codegen's package doc, "# Simple types"),
-// is such an atomic or list type and no two of them get one Go type, item 5
-// of [Decode]'s doc stating each. It decodes into codegen's sealed
-// interface, the variant of the value's ·active basic member·, as
-// [Decode]'s doc states.
+// is such an atomic or list type, item 5 of [Decode]'s doc stating each. It
+// decodes into codegen's sealed interface, the variant of the value's
+// ·active basic member·, as [Decode]'s doc states.
 //
 // A document element decodes when its declaration, a top-level one, has governing types that
 // decode (codegen's package doc, "An element declaration's governing types"; item 5 of
@@ -269,8 +268,6 @@
 //   - A list whose {item type definition} declines, by its item's construct.
 //   - A union one of whose basic members declines, by that member's
 //     construct.
-//   - A union two of whose basic members get one Go type; item 5 of
-//     [Decode]'s doc states when.
 //   - An xsi:type.
 //
 // One of those is a ruling rather than coverage still to come: an element

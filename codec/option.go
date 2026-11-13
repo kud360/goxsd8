@@ -77,8 +77,10 @@ func WithURI(uri string) Option {
 
 // WithBranches supplies the branch types of I, a sealed interface codegen
 // emitted, which [Decode] cannot find from T: a Go interface names none of its
-// implementers. Pass one value of each branch or variant, in any order, such as
-// codec.WithBranches[order.Pay](order.PayCard{}, order.PayCash{}); only each
+// implementers. Pass one value of each branch or variant, in any order but
+// that a union's variants over one Go type go in their basic members' order,
+// codegen's emission order, which Decode cannot check (Decode's doc, item 6),
+// such as codec.WithBranches[order.Pay](order.PayCard{}, order.PayCash{}); only each
 // value's dynamic type is read. Decode uses the set wherever T holds I as a
 // choice's, a substitution group's, a flattened slice element's, an element
 // declaration's governing types' or a union's interface, or as codegen's
@@ -172,8 +174,8 @@ func sameMethods(a, b reflect.Type) bool {
 // a substitution group's interface included; Decode's doc, item 6, states
 // when they are [ErrTypeMismatch]. Decode matches each arm by its shape
 // alone, so it cannot tell the three field-less arms apart: passed in one
-// another's roles, they decode the special values into the wrong arm, the
-// one misuse Decode cannot report. ExampleWithPrecisionDecimalArms decodes
+// another's roles, they decode the special values into the wrong arm, a
+// misuse Decode cannot report. ExampleWithPrecisionDecimalArms decodes
 // 3E2, -0 and INF through hand-written copies of codegen's four arms.
 func WithPrecisionDecimalArms[I any](numerical, positiveInfinity, negativeInfinity, notANumber I) Option {
 	set := decimalArms{
