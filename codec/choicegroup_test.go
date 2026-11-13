@@ -374,11 +374,11 @@ func TestChoiceGroupTypesAreCodegens(t *testing.T) {
 // included, a wildcard child the branch's raw field; a choice alternative
 // into its branch's one field holding the nested interface, its branch told
 // from a second choice alternative's by the branch set WithBranches supplies
-// for that interface; and one codegen
-// flattens into its branch's one slice, one item per child. The choice is
-// the type itself, a struct's field, a nested choice's field or an
-// occurrence field's item, where each occurrence of the choice holds one
-// branch (cvc-accept clause 3). CheckDecode returns nil for each row's T.
+// for that interface; and one codegen flattens into its branch's one slice,
+// one item per child. The choice is the type itself, a struct's field, a
+// nested choice's field or an occurrence field's item, where each occurrence
+// of the choice holds one branch (cvc-accept clause 3). CheckDecode returns
+// nil for each row's T.
 func TestDecodeChoiceGroup(t *testing.T) {
 	two := "2"
 	rows := []struct {

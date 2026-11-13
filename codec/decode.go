@@ -399,16 +399,15 @@ var ErrTypeMismatch = errors.New("codec: T is not the type codegen emits for the
 //     with some alternative's branch of the other. Otherwise a field holding
 //     a nested choice's interface, a flattened particle's slice or an
 //     occurrence field's type for one occurrence shares its shape with any
-//     field of its name. Two
-//     other fields of one name share it where either is of a simple type whose
-//     Go type is a datatype struct or a list of one, where one is codegen's
-//     struct and the other a wildcard's, of type xs:anyType, or of a simple
-//     type whose atomic Go type is big.Rat or big.Int, where both are of type
-//     xs:anyType, occur alike, and both hold X or both an N over X (item 6),
-//     or where both are of another complex type or hold a substitution group's
-//     interface, occur alike, and are both a struct or both a sealed
-//     interface, and otherwise where they have one Go type, as item 6 reads
-//     it.
+//     field of its name. Two other fields of one name share it where either is
+//     of a simple type whose Go type is a datatype struct or a list of one,
+//     where one is codegen's struct and the other a wildcard's, of type
+//     xs:anyType, or of a simple type whose atomic Go type is big.Rat or
+//     big.Int, where both are of type xs:anyType, occur alike, and both hold X
+//     or both an N over X (item 6), or where both are of another complex type
+//     or hold a substitution group's interface, occur alike, and are both a
+//     struct or both a sealed interface, and otherwise where they have one Go
+//     type, as item 6 reads it.
 //   - Of a sequence or choice codegen flattens, the content {particle} or
 //     nested, in place of its particles: each basic particle its model group
 //     reaches, in codegen's reach order (Structures §2.2.3.2
@@ -703,13 +702,12 @@ var ErrTypeMismatch = errors.New("codec: T is not the type codegen emits for the
 //     alternatives; for a flattened particle's, a slice of any interface of
 //     one unexported method; and, for an occurrence field's, its shape over
 //     any struct for a sequence and over any interface of one unexported
-//     method for a choice. A branch whose
-//     fields could be no alternative is held to the first alternative, in
-//     alternative order, that names it: a one-field alternative of complex
-//     type, a wildcard or a substitution group's interface whose field's name
-//     its one field has, or a model-group alternative whose fields' names its
-//     fields have, position by position; the error is that alternative's
-//     mismatch.
+//     method for a choice. A branch whose fields could be no alternative is
+//     held to the first alternative, in alternative order, that names it: a
+//     one-field alternative of complex type, a wildcard or a substitution
+//     group's interface whose field's name its one field has, or a
+//     model-group alternative whose fields' names its fields have, position
+//     by position; the error is that alternative's mismatch.
 //   - A union's sealed interface I, T's own or a field's, at any depth, a
 //     list's element and a variant's element included, whose variants reach
 //     Decode only through [WithBranches], whose doc states which set serves
@@ -3252,11 +3250,11 @@ func bindContentChoice(run *bindRun, ct xsd.ComplexType, particles []xsd.Particl
 // an expanded name an earlier particle x indexes takes among them, then an
 // alternative whose branch struct has an earlier one's shape, which no branch
 // type could tell apart: one whose branch may admit a struct the earlier one's
-// does (branchesShare). item reports whether the choice is in an occurrence
-// field's item (bindItem), which a model-group alternative's members are
-// bound as. An element alternative's position and target are recorded in
-// x.elements. Its caller builds x's attributor once the content model's every
-// particle is bound.
+// does under some branch sets (branchesShare), read from the schema, never T.
+// item reports whether the choice is in an occurrence field's item (bindItem),
+// which a model-group alternative's members are bound as. An element
+// alternative's position and target are recorded in x.elements. Its caller
+// builds x's attributor once the content model's every particle is bound.
 func bindChoice(run *bindRun, ct xsd.ComplexType, particles []xsd.Particle, x *childIndex, at []int, base int, item bool, names *goname.Namer, typeSubject string) (*choice, error) {
 	c := &choice{name: names.Claim("choice"), sealed: &sealed[branchArm]{p: run.p}}
 	alts := c.sealed
