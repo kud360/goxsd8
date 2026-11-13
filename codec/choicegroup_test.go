@@ -38,8 +38,17 @@ func cgEl(name string) string { return `<xs:element name="` + name + `" type="xs
 // unqualified of xs:int, choice(e, f))) and cgTwoFlatSchema's the same with
 // sequence(c repeated) repeated and sequence(d repeated) repeated in place of
 // the choices, flattened, two spliced alternatives whose fields are named
-// alike, so that a branch is told from the other by its fields' Go types.
+// alike, so that a branch is told from the other by its fields' Go types; and
+// cgTwoNestedSchema's choice(choice(a, b), choice(c, d)), two nested-choice
+// alternatives whose branch structs are each {Choice I}, so that a branch is
+// told from the other by its interface's branch set; and cgTwoOneSchema's
+// choice(choice(a, b), choice(a unqualified)), whose second interface's one
+// branch the first choice's alternative a admits.
 const (
+	cgTwoOneSchema = `<xs:element name="r"><xs:complexType><xs:choice><xs:choice><xs:element name="a" type="xs:string"/><xs:element name="b" type="xs:string"/></xs:choice>` +
+		`<xs:choice><xs:element name="a" form="unqualified" type="xs:string"/></xs:choice></xs:choice></xs:complexType></xs:element>`
+	cgTwoNestedSchema = `<xs:element name="r"><xs:complexType><xs:choice><xs:choice><xs:element name="a" type="xs:string"/><xs:element name="b" type="xs:string"/></xs:choice>` +
+		`<xs:choice><xs:element name="c" type="xs:string"/><xs:element name="d" type="xs:string"/></xs:choice></xs:choice></xs:complexType></xs:element>`
 	cgSeqSchema         = `<xs:element name="r"><xs:complexType><xs:choice><xs:element name="a" type="xs:string"/><xs:sequence><xs:element name="b" type="xs:string"/><xs:element name="c" type="xs:string"/></xs:sequence></xs:choice></xs:complexType></xs:element>`
 	cgRefSchema         = `<xs:group name="g"><xs:sequence><xs:element name="b" type="xs:string"/><xs:element name="c" type="xs:string"/></xs:sequence></xs:group><xs:element name="r"><xs:complexType><xs:choice><xs:element name="a" type="xs:string"/><xs:group ref="s:g"/></xs:choice></xs:complexType></xs:element>`
 	cgChoiceSchema      = `<xs:element name="r"><xs:complexType><xs:choice><xs:element name="a" type="xs:string"/><xs:choice><xs:element name="b" type="xs:string"/><xs:element name="c" type="xs:string"/></xs:choice></xs:choice></xs:complexType></xs:element>`
@@ -71,8 +80,25 @@ const (
 // cgRepeatSchema; cgOne for cgOneSchema; cgOF for cgOptFieldSchema; cgIC for
 // cgInnerChoiceSchema and cgInnerRefSchema; cgIS for cgInnerSeqSchema; cgW
 // for cgWildSchema; cgTC for cgTwoChoiceSchema; cgTF for cgTwoFlatSchema;
-// and cgOW for cgOptWildSchema.
+// cgOW for cgOptWildSchema; cgTN for cgTwoNestedSchema; and cgTO, its first
+// branch's interface cgTNIn1's, for cgTwoOneSchema.
 type (
+	cgTO    interface{ isCgTO() }
+	cgTO1   struct{ Choice cgTNIn1 }
+	cgTO2   struct{ Choice cgTOIn2 }
+	cgTOIn2 interface{ isCgTOIn2() }
+	cgTOA   struct{ A string }
+
+	cgTN    interface{ isCgTN() }
+	cgTN1   struct{ Choice cgTNIn1 }
+	cgTNIn1 interface{ isCgTNIn1() }
+	cgTNA   struct{ A string }
+	cgTNB   struct{ B string }
+	cgTN2   struct{ Choice cgTNIn2 }
+	cgTNIn2 interface{ isCgTNIn2() }
+	cgTNC   struct{ C string }
+	cgTND   struct{ D string }
+
 	cgR   interface{ isCgR() }
 	cgA   struct{ A string }
 	cgSeq struct{ B, C string }
@@ -210,6 +236,15 @@ func (cgOWAny) isCgOWChoice() {}
 func (cgSwapped) isCgR()      {}
 func (cgRetyped) isCgR()      {}
 func (cgWSeq) isCgW()         {}
+func (cgTN1) isCgTN()         {}
+func (cgTN2) isCgTN()         {}
+func (cgTNA) isCgTNIn1()      {}
+func (cgTNB) isCgTNIn1()      {}
+func (cgTNC) isCgTNIn2()      {}
+func (cgTND) isCgTNIn2()      {}
+func (cgTO1) isCgTO()         {}
+func (cgTO2) isCgTO()         {}
+func (cgTOA) isCgTOIn2()      {}
 
 // The branch sets of the choice-group interfaces.
 var (
@@ -225,6 +260,10 @@ var (
 	cgTCBranches = []Option{WithBranches[cgTC](cgTC1{}, cgTC2{}), WithBranches[cgICInner](cgICC{}, cgICD{}), WithBranches[cgTCInner](cgTCE{}, cgTCF{})}
 	cgOWBranches = WithBranches[cgOWChoice](cgOWA{}, cgOWAny{})
 	cgTFBranches = []Option{WithBranches[cgTF](cgTF1{}, cgTF2{}), WithBranches[cgTFItem](cgTFC{}), WithBranches[cgTFItem2](cgTFD{})}
+	// cgTNBranches supplies cgTN's branches out of alternative order, so that
+	// cgTN2 is matched while the first alternative is still unmatched.
+	cgTNBranches = []Option{WithBranches[cgTN](cgTN2{}, cgTN1{}), WithBranches[cgTNIn1](cgTNA{}, cgTNB{}), WithBranches[cgTNIn2](cgTNC{}, cgTND{})}
+	cgTOBranches = []Option{WithBranches[cgTO](cgTO1{}, cgTO2{}), WithBranches[cgTNIn1](cgTNA{}, cgTNB{}), WithBranches[cgTOIn2](cgTOA{})}
 )
 
 // TestChoiceGroupTypesAreCodegens pins the types above to those codegen
@@ -296,6 +335,26 @@ func TestChoiceGroupTypesAreCodegens(t *testing.T) {
 			"type RSequence3 struct {\n\tB        int32\n\tSequence []RSequence4\n}\n\nfunc (RSequence3) isR() {}\n",
 			"type RSequence4D struct {\n\tD string\n}\n\nfunc (RSequence4D) isRSequence4() {}\n",
 		}},
+		{cgTwoNestedSchema, []string{
+			"type R interface {\n\tisR()\n}\n",
+			"type RChoice struct {\n\tChoice RChoice2\n}\n\nfunc (RChoice) isR() {}\n",
+			"type RChoice2 interface {\n\tisRChoice2()\n}\n",
+			"type RChoice2A struct {\n\tA string\n}\n\nfunc (RChoice2A) isRChoice2() {}\n",
+			"type RChoice2B struct {\n\tB string\n}\n\nfunc (RChoice2B) isRChoice2() {}\n",
+			"type RChoice3 struct {\n\tChoice RChoice4\n}\n\nfunc (RChoice3) isR() {}\n",
+			"type RChoice4 interface {\n\tisRChoice4()\n}\n",
+			"type RChoice4C struct {\n\tC string\n}\n\nfunc (RChoice4C) isRChoice4() {}\n",
+			"type RChoice4D struct {\n\tD string\n}\n\nfunc (RChoice4D) isRChoice4() {}\n",
+		}},
+		{cgTwoOneSchema, []string{
+			"type R interface {\n\tisR()\n}\n",
+			"type RChoice struct {\n\tChoice RChoice2\n}\n\nfunc (RChoice) isR() {}\n",
+			"type RChoice2A struct {\n\tA string\n}\n\nfunc (RChoice2A) isRChoice2() {}\n",
+			"type RChoice2B struct {\n\tB string\n}\n\nfunc (RChoice2B) isRChoice2() {}\n",
+			"type RChoice3 struct {\n\tChoice RChoice4\n}\n\nfunc (RChoice3) isR() {}\n",
+			"type RChoice4 interface {\n\tisRChoice4()\n}\n",
+			"type RChoice4A struct {\n\tA string\n}\n\nfunc (RChoice4A) isRChoice4() {}\n",
+		}},
 	}
 	for _, row := range rows {
 		gen := generated(t, schemaOf(t, row.decls))
@@ -313,11 +372,13 @@ func TestChoiceGroupTypesAreCodegens(t *testing.T) {
 // optional or not, decodes into its branch's fields, each child filling its
 // particle's, a nested choice and a nested spliced sequence of the branch
 // included, a wildcard child the branch's raw field; a choice alternative
-// into its branch's one field holding the nested interface; and one codegen
-// flattens into its branch's one slice, one item per child. The choice is
-// the type itself, a struct's field, a nested choice's field or an
-// occurrence field's item, where each occurrence of the choice holds one
-// branch (cvc-accept clause 3). CheckDecode returns nil for each row's T.
+// into its branch's one field holding the nested interface, its branch told
+// from a second choice alternative's by the branch set WithBranches supplies
+// for that interface; and one codegen flattens into its branch's one slice,
+// one item per child. The choice is the type itself, a struct's field, a
+// nested choice's field or an occurrence field's item, where each occurrence
+// of the choice holds one branch (cvc-accept clause 3). CheckDecode returns
+// nil for each row's T.
 func TestDecodeChoiceGroup(t *testing.T) {
 	two := "2"
 	rows := []struct {
@@ -350,6 +411,8 @@ func TestDecodeChoiceGroup(t *testing.T) {
 			cgTC(cgTC2{B: 1, Choice: cgTCE{E: "2"}})},
 		{"the second of two spliced alternatives holding a flattened particle, told apart by Go type", cgTwoFlatSchema, "<b>1</b><s:d>2</s:d><s:d>3</s:d>", into[cgTF](cgTFBranches...),
 			cgTF(cgTF2{B: 1, Sequence: []cgTFItem2{cgTFD{D: "2"}, cgTFD{D: "3"}}})},
+		{"the second of two nested choice alternatives, told apart by branch set", cgTwoNestedSchema, "<s:c>1</s:c>", into[cgTN](cgTNBranches...), cgTN(cgTN2{Choice: cgTNC{C: "1"}})},
+		{"the second of two nested choice alternatives, its one branch one the first's alternatives admit", cgTwoOneSchema, "<a>1</a>", into[cgTO](cgTOBranches...), cgTO(cgTO2{Choice: cgTOA{A: "1"}})},
 	}
 	for _, row := range rows {
 		t.Run(row.name, func(t *testing.T) {
@@ -372,8 +435,10 @@ func TestDecodeChoiceGroup(t *testing.T) {
 
 // TestDecodeChoiceGroupDeclines pins the model-group alternative's declines,
 // each charged to the document element at 1:1: two branch structs of one
-// shape, two nested choices' {Choice I}, two spliced sequences' fields of one
-// name and Go type, and a spliced sequence of one field beside an element
+// shape, two nested choices' {Choice I} whose choices one branch set could
+// hold, as many alternatives each of one shape as one of the other's, two
+// wildcard alternatives' {Any E}, two spliced sequences' fields of one name
+// and Go type, and a spliced sequence of one field beside an element
 // alternative of its name and Go type; an expanded name an earlier
 // alternative's spliced sequence takes; and, in an occurrence field's item, a
 // sequence alternative holding a particle codegen flattens, whose prefix is
@@ -389,9 +454,15 @@ func TestDecodeChoiceGroupDeclines(t *testing.T) {
 		construct         construct
 		prefix            string
 	}{
-		{"two nested choice alternatives", root(`<xs:choice><xs:choice>` + cgEl("a") + cgEl("b") + `</xs:choice><xs:choice>` + cgEl("c") + cgEl("d") + `</xs:choice></xs:choice>`),
-			"<s:c>1</s:c>", constructSharedBranch,
+		{"two nested choice alternatives one branch set could hold", root(`<xs:choice><xs:choice>` + cgEl("x") + `</xs:choice><xs:choice>` + unq("x") + `</xs:choice></xs:choice>`),
+			"<s:x>1</s:x>", constructSharedBranch,
 			"?:1:1: codec does not decode two branches of a sealed interface whose structs have one shape: a choice model group particle of the {type definition} of element {urn:s}r declared at"},
+		{"two nested choice alternatives of one shape in another order", root(`<xs:choice><xs:choice>` + cgEl("a") + cgEl("b") + `</xs:choice><xs:choice>` + unq("b") + unq("a") + `</xs:choice></xs:choice>`),
+			"<s:a>1</s:a>", constructSharedBranch,
+			"?:1:1: codec does not decode two branches of a sealed interface whose structs have one shape: a choice model group particle of the {type definition} of element {urn:s}r declared at"},
+		{"two wildcard alternatives", root(`<xs:choice><xs:any namespace="urn:n1" processContents="skip"/><xs:any namespace="urn:n2" processContents="skip"/></xs:choice>`),
+			`<n:w xmlns:n="urn:n2"/>`, constructSharedBranch,
+			"?:1:1: codec does not decode two branches of a sealed interface whose structs have one shape: wildcard particle 2 of the {type definition} of element {urn:s}r declared at"},
 		{"two spliced sequences of one shape", root(`<xs:choice><xs:sequence>` + cgEl("x") + cgEl("y") + `</xs:sequence><xs:sequence>` + unq("x") + unq("y") + `</xs:sequence></xs:choice>`),
 			"<s:x>1</s:x><s:y>2</s:y>", constructSharedBranch,
 			"?:1:1: codec does not decode two branches of a sealed interface whose structs have one shape: a sequence model group particle of the {type definition} of element {urn:s}r declared at"},
@@ -422,6 +493,71 @@ func TestDecodeChoiceGroupDeclines(t *testing.T) {
 			if err := CheckDecode[struct{}](schema, rootName); !errors.As(err, &de) || de.Construct() != (Construct{row.construct}) {
 				t.Errorf("CheckDecode = %v, want a *DeclineError of %v", err, Construct{row.construct})
 			}
+		})
+	}
+}
+
+// TestDecodeNestedChoiceAlternativesBind pins that two nested-choice
+// alternatives no one branch set could hold, as many alternatives each of
+// one shape as one of the other's, bind with no decline, beside
+// TestDecodeChoiceGroup's choice(choice(a, b), choice(c, d)): where the
+// counts differ, the earlier choice's one alternative sharing a shape with
+// one of the later's two, and where they agree but one alternative shares no
+// shape with the other's. CheckDecode of struct{}, no interface, is then the
+// mismatch of T.
+func TestDecodeNestedChoiceAlternativesBind(t *testing.T) {
+	unqA := `<xs:element name="a" form="unqualified" type="xs:string"/>`
+	rows := []struct{ name, decls string }{
+		{"one alternative before two", root(`<xs:choice><xs:choice>` + unqA + `</xs:choice><xs:choice>` + cgEl("a") + cgEl("b") + `</xs:choice></xs:choice>`)},
+		{"one shape shared, one not", root(`<xs:choice><xs:choice>` + cgEl("a") + cgEl("b") + `</xs:choice><xs:choice>` + unqA + cgEl("c") + `</xs:choice></xs:choice>`)},
+	}
+	for _, row := range rows {
+		t.Run(row.name, func(t *testing.T) {
+			err := CheckDecode[struct{}](schemaOf(t, row.decls), rootName)
+			const want = "codec: T is not the type codegen emits for the document element: T is struct {}, no interface, where codegen emits a sealed interface"
+			if err == nil || !errors.Is(err, ErrTypeMismatch) || err.Error() != want {
+				t.Errorf("CheckDecode = %v, want %q", err, want)
+			}
+		})
+	}
+}
+
+// cgTNStr is a branch of cgTNIn2 that is no struct.
+type cgTNStr string
+
+func (cgTNStr) isCgTNIn2() {}
+
+// TestDecodeNestedChoiceAlternativesTypeMismatch pins item 6 for a branch
+// set of a nested choice whose branch struct is one of two {Choice I}: a set
+// holding a nil value, a type that is no struct, or a type twice is held to
+// neither alternative, so the outer branch is held to the first alternative
+// that names it, the error that alternative's mismatch; CheckDecode's error
+// is Decode's.
+func TestDecodeNestedChoiceAlternativesTypeMismatch(t *testing.T) {
+	const prefix = "codec: T is not the type codegen emits for the document element: "
+	rows := []struct {
+		name  string
+		inner Option
+		want  string
+	}{
+		{"a nil branch", WithBranches[cgTNIn2](nil, cgTND{}), prefix + "WithBranches supplies a nil branch of codec.cgTNIn2"},
+		{"a branch that is no struct", WithBranches[cgTNIn2](cgTNStr(""), cgTND{}), prefix + "WithBranches supplies codec.cgTNStr, no struct, as a branch of codec.cgTNIn2"},
+		{"a branch twice", WithBranches[cgTNIn2](cgTNC{}, cgTNC{}), prefix + "branch codec.cgTNC of codec.cgTNIn2 has the shape of no branch struct codegen emits that an earlier branch did not match"},
+	}
+	schema := schemaOf(t, cgTwoNestedSchema)
+	data := instanceOf("", "<s:c>1</s:c>")
+	mustAccept(t, schema, data)
+	for _, row := range rows {
+		t.Run(row.name, func(t *testing.T) {
+			opts := []Option{WithBranches[cgTN](cgTN2{}, cgTN1{}), WithBranches[cgTNIn1](cgTNA{}, cgTNB{}), row.inner}
+			got, err := Decode[cgTN](schema, strict.New(), data, opts...)
+			if got != nil {
+				t.Fatalf("Decode = %v, want no value", *got)
+			}
+			if err == nil || !errors.Is(err, ErrTypeMismatch) || err.Error() != row.want {
+				t.Errorf("Decode error = %v, want %q", err, row.want)
+			}
+			assertProbeMismatch(t, CheckDecode[cgTN](schema, rootName, opts...), err)
 		})
 	}
 }
