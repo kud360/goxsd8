@@ -393,11 +393,11 @@ var ErrTypeMismatch = errors.New("codec: T is not the type codegen emits for the
 //     as two branches of a sealed interface whose structs have one shape: one
 //     of as many fields as the earlier one's, each sharing its shape with the
 //     earlier one's field at its position. Two fields holding nested choices'
-//     interfaces share it where one branch set could be held to both, as item
-//     6 holds a nested choice's field: they have one name and as many
-//     alternatives, and each alternative's branch of one shares its shape
-//     with some alternative's branch of the other. Otherwise a field holding
-//     a nested choice's interface, a flattened particle's slice or an
+//     interfaces share it where one branch set could be held to both, as item 6
+//     holds a nested choice's field: they have one name and as many
+//     alternatives, and each alternative's branch of the earlier one shares its
+//     shape with some alternative's branch of the later. Otherwise a field
+//     holding a nested choice's interface, a flattened particle's slice or an
 //     occurrence field's type for one occurrence shares its shape with any
 //     field of its name. Two other fields of one name share it where either is
 //     of a simple type whose Go type is a datatype struct or a list of one,
@@ -3174,14 +3174,14 @@ func membersShare(a, b contentMember) bool {
 	return a.goName() == b.goName()
 }
 
-// choicesShare reports whether a and b, two nested choices' fields, may
-// admit a common struct field, an interface one branch set could hold to
-// both (sealed.holds): exactly when they have one name, as many
-// alternatives, and each alternative of a shares a branch struct with some
-// alternative of b (branchesShare). That is conservative, since a set held
-// to both pairs each alternative of a with one of b, its branch struct
-// admitted by both, one to one, which the last test does not require; two
-// choices of no alternatives share.
+// choicesShare reports whether a and b, two nested choices' fields, a the
+// earlier alternative's, may admit a common struct field, an interface one
+// branch set could hold to both (sealed.holds): exactly when they have one
+// name, as many alternatives, and each alternative of a shares a branch
+// struct with some alternative of b (branchesShare). That is conservative,
+// since a set held to both pairs each alternative of a with one of b, its
+// branch struct admitted by both, one to one, which the last test does not
+// require; two choices of no alternatives share.
 func choicesShare(a, b *choice) bool {
 	if a.name != b.name || len(a.sealed.alts) != len(b.sealed.alts) {
 		return false
