@@ -53,7 +53,7 @@ type SimpleTypeOrRef interface{ simpleTypeOrRef() }
 // entry of a map.std.union memberTypes=, each naming a top-level simple type
 // definition which may be forward-referenced, so only a QName is available at
 // mapping time. It is resolved once, at finalize, through simpleTypeOfRef. The
-// field is read-only by convention; do not mutate it after construction.
+// fields are read-only by convention; do not mutate them after construction.
 //
 // EVERY by-name base, item and member is this arm — see OwnedSimpleType for the
 // prohibition that makes that binding rather than customary.
@@ -63,7 +63,14 @@ type SimpleTypeOrRef interface{ simpleTypeOrRef() }
 // than a resolution failure to defer to finalize. NewSimpleType rejects one,
 // exactly as the TypeDefinitionRef precedent (typedefinition.go) is rejected by
 // NewElementDeclaration and its siblings.
-type SimpleTypeRef struct{ Name QName }
+//
+// Loc is provenance, not a property: the package doc's provenance paragraph
+// says what it holds, where Finalize charges it, and why references compare by
+// Name.
+type SimpleTypeRef struct {
+	Name QName
+	Loc  xsderr.Loc
+}
 
 // OwnedSimpleType is the arm carrying a *SimpleType the slot already holds,
 // reached through no symbol table and so needing no resolution.
@@ -175,10 +182,13 @@ func checkSimpleTypeOrRefPresent(loc xsderr.Loc, ref SimpleTypeOrRef, slot strin
 // argument that does not transfer here because these readers are also called
 // from outside finalize, where no phase has run.
 //
-// loc positions a rejection at the REFERRING component — the type whose base=
-// names nothing — following resolveReferences' referrer-Loc convention; the
-// target is exactly what does not exist, so it has no position. ctx names that
-// referring site for the message.
+// A src-resolve rejection is charged at the SimpleTypeRef's own Loc — the
+// base=, itemType= or memberTypes= attribute that wrote the name — or, when it
+// carries none, at loc, the REFERRING component: the type whose base= names
+// nothing (chargedAt, following resolveReferences' referrer-Loc convention); the
+// target is exactly what does not exist, so it has no position. The nil arm's
+// invariant error is charged at loc. ctx names that referring site for the
+// message.
 func simpleTypeOfRef(r TypeResolver, ref SimpleTypeOrRef, loc xsderr.Loc, ctx string) (*SimpleType, error) {
 	switch b := ref.(type) {
 	case nil:
@@ -189,12 +199,12 @@ func simpleTypeOfRef(r TypeResolver, ref SimpleTypeOrRef, loc xsderr.Loc, ctx st
 	case SimpleTypeRef:
 		t, ok := r.Type(b.Name)
 		if !ok {
-			return nil, xsderr.New(ruleSrcResolve, loc,
+			return nil, xsderr.New(ruleSrcResolve, chargedAt(b.Loc, loc),
 				"%s references simple type %s, but no type definition with that expanded name is present in the schema (src-resolve clause 1.1)", ctx, b.Name)
 		}
 		st, ok := t.(*SimpleType)
 		if !ok {
-			return nil, xsderr.New(ruleSrcResolve, loc,
+			return nil, xsderr.New(ruleSrcResolve, chargedAt(b.Loc, loc),
 				"%s references simple type %s, but that expanded name is a complex type definition, and src-resolve requires it to resolve to a simple type definition", ctx, b.Name)
 		}
 		return st, nil

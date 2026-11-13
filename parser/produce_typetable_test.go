@@ -332,8 +332,10 @@ func TestProduceTypeTableForXSError(t *testing.T) {
 		t.Fatal("{type table} is ·absent·, want present where an <alternative> names xs:error")
 	}
 	dflt := tt.DefaultTypeDefinition().TypeDefinition()
-	if want := (xsd.TypeDefinitionRef{Name: xsd.QName{Space: xsd.XMLSchemaNS, Local: "error"}}); dflt != want {
-		t.Errorf("{default type definition}.{type definition} = %v, want %v", dflt, want)
+	// Compared by Name: the reference also carries the type= attribute's Loc.
+	want := xsd.QName{Space: xsd.XMLSchemaNS, Local: "error"}
+	if ref, ok := dflt.(xsd.TypeDefinitionRef); !ok || ref.Name != want {
+		t.Errorf("{default type definition}.{type definition} = %v, want a TypeDefinitionRef naming %v", dflt, want)
 	}
 }
 

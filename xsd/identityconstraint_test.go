@@ -14,16 +14,17 @@ func xp(expr string) xsd.XPathExpression {
 func TestNewIdentityConstraintValid(t *testing.T) {
 	name := xsd.QName{Space: "urn:ns", Local: "k"}
 	refer := xsd.QName{Space: "urn:ns", Local: "target"}
+	referRef := xsd.IdentityConstraintRef{Name: refer}
 	cases := []struct {
 		name        string
 		category    xsd.IdentityConstraintCategory
-		refer       *xsd.QName
+		refer       *xsd.IdentityConstraintRef
 		wantRefer   xsd.QName
 		wantReferOK bool
 	}{
 		{"key", xsd.IdentityConstraintKey, nil, xsd.QName{}, false},
 		{"unique", xsd.IdentityConstraintUnique, nil, xsd.QName{}, false},
-		{"keyref", xsd.IdentityConstraintKeyref, &refer, refer, true},
+		{"keyref", xsd.IdentityConstraintKeyref, &referRef, refer, true},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -106,7 +107,7 @@ func TestNewIdentityConstraintRejectsEmptyFields(t *testing.T) {
 }
 
 func TestNewIdentityConstraintRejectsReferKeyMismatch(t *testing.T) {
-	refer := xsd.QName{Local: "target"}
+	refer := xsd.IdentityConstraintRef{Name: xsd.QName{Local: "target"}}
 	fields := []xsd.XPathExpression{xp("@a")}
 
 	// keyref WITHOUT a {referenced key}.

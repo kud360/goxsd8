@@ -224,7 +224,7 @@ func (p *producer) alternativeTypes(alternatives []*Element, edID xsd.ComponentI
 			if err != nil {
 				return nil, err
 			}
-			types[i] = xsd.TypeDefinitionRef{Name: qn}
+			types[i] = xsd.TypeDefinitionRef{Name: qn, Loc: typeAttr.Loc()}
 			continue
 		}
 		if inlineComplex := childElement(alt, xsd.XMLSchemaNS, "complexType"); inlineComplex != nil {

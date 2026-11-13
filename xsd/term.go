@@ -1,5 +1,7 @@
 package xsd
 
+import "github.com/kud360/goxsd8/xsderr"
+
 // Term is the sealed sum of the three kinds of component that can appear as a
 // particle's {term} (Structures §3.9 "Term" definition): an Element Declaration
 // (§3.3.1), a Wildcard (§3.10.1), or a Model Group (§3.8.1). The spec's
@@ -45,13 +47,20 @@ type ResolvedTerm struct{ Term Term }
 // mapping (§3.3.2.4, ref.elt.global): a pre-resolution QName reference to a
 // possibly-forward-referenced top-level Element Declaration. Finalize (#173)
 // validates it resolves (src-resolve clause 1.3) but retains it; a consumer
-// follows it by a read-time schema.Element(Name) lookup. The field is read-only
-// by convention; do not mutate it after construction.
+// follows it by a read-time schema.Element(Name) lookup. The fields are
+// read-only by convention; do not mutate them after construction.
 //
 // Name is a PRESENT reference, never the absent (zero) QName: this variant
 // exists only for the mapping branch whose precondition is "the ref attribute is
 // present". NewParticle rejects a zero Name (see there for why).
-type ElementDeclarationRef struct{ Name QName }
+//
+// Loc is provenance, not a property: the package doc's provenance paragraph
+// says what it holds, where Finalize charges it, and why references compare by
+// Name.
+type ElementDeclarationRef struct {
+	Name QName
+	Loc  xsderr.Loc
+}
 
 // ModelGroupRef is the TermOrRef variant for the <group ref="..."> mapping
 // (§3.7.2, declare-namedModelGroup): a pre-resolution QName reference to a
@@ -59,14 +68,21 @@ type ElementDeclarationRef struct{ Name QName }
 // validates it resolves (src-resolve clause 1.5) and that the group-reference
 // graph is acyclic (mg-props-correct clause 2), but retains it; a consumer
 // follows it by a read-time lookup, reading the referenced definition's {model
-// group} (§3.7.2). The field is read-only by convention; do not mutate it after
-// construction.
+// group} (§3.7.2). The fields are read-only by convention; do not mutate them
+// after construction.
 //
 // Name is a PRESENT reference, never the absent (zero) QName: a <group> inside a
 // content model is always the reference form (§3.7.2, whose named branch xr.mgd1
 // requires a <schema>/<redefine>/<override> parent), and group/@ref is typed
 // xs:QName there. NewParticle rejects a zero Name (see there for why).
-type ModelGroupRef struct{ Name QName }
+//
+// Loc is provenance, not a property: the package doc's provenance paragraph
+// says what it holds, where Finalize charges it, and why references compare by
+// Name.
+type ModelGroupRef struct {
+	Name QName
+	Loc  xsderr.Loc
+}
 
 func (ResolvedTerm) termOrRef()          {}
 func (ElementDeclarationRef) termOrRef() {}
