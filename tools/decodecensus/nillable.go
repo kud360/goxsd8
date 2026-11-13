@@ -1,0 +1,164 @@
+package main
+
+import (
+	"fmt"
+	"go/ast"
+	"go/token"
+	"os"
+	"path"
+	"path/filepath"
+	"regexp"
+	"slices"
+	"strconv"
+	"strings"
+
+	"github.com/kud360/goxsd8/internal/goshape"
+	"github.com/kud360/goxsd8/xsd"
+)
+
+// nillableOptions is the option list writeNillableOptions declares in a
+// generated package: an identifier no generated declaration takes, since
+// codegen's names hold no underscore (codegen's package doc, "Naming").
+const nillableOptions = "Census_Nillable"
+
+// nillableFamily is codegen's generic Nillable and its two arms as one
+// generated file names them (codegen's package doc, "# Element declarations"),
+// sum "" where the file declares none, and args, the type argument list of each
+// instantiation of sum the census binds, as the file spells it, in first-use
+// order: each the file's fields name, then each a nillable document element's
+// T adds (root).
+type nillableFamily struct {
+	sum  string
+	arms []string
+	args []string
+}
+
+// nillableFamilyOf returns gen's nillableFamily: sum is the generic interface
+// of two type parameters, and its arms the generic types given its marker
+// method, named "is" plus sum, in file order; args holds the type argument
+// list of every instantiation of sum the file's code spells, deduplicated.
+func nillableFamilyOf(gen generatedFile) *nillableFamily {
+	f := &nillableFamily{}
+	for _, d := range gen.file.Decls {
+		decl, ok := d.(*ast.GenDecl)
+		if !ok || decl.Tok != token.TYPE {
+			continue
+		}
+		for _, spec := range decl.Specs {
+			ts := spec.(*ast.TypeSpec)
+			if _, isInterface := ts.Type.(*ast.InterfaceType); isInterface && ts.TypeParams.NumFields() == 2 {
+				f.sum = ts.Name.Name
+			}
+		}
+	}
+	if f.sum == "" {
+		return f
+	}
+	for _, d := range gen.file.Decls {
+		fn, ok := d.(*ast.FuncDecl)
+		if !ok || fn.Recv == nil || len(fn.Recv.List) != 1 || fn.Name.Name != "is"+f.sum {
+			continue
+		}
+		if recv, ok := fn.Recv.List[0].Type.(*ast.IndexListExpr); ok {
+			if arm, ok := recv.X.(*ast.Ident); ok {
+				f.arms = append(f.arms, arm.Name)
+			}
+		}
+	}
+	ast.Inspect(gen.file, func(n ast.Node) bool {
+		inst, ok := n.(*ast.IndexListExpr)
+		if !ok {
+			return true
+		}
+		if x, ok := inst.X.(*ast.Ident); ok && x.Name == f.sum {
+			from := gen.fset.Position(inst.Indices[0].Pos()).Offset
+			to := gen.fset.Position(inst.Indices[len(inst.Indices)-1].End()).Offset
+			f.add(string(gen.src[from:to]))
+		}
+		return true
+	})
+	return f
+}
+
+// add appends args to f.args unless it holds them.
+func (f *nillableFamily) add(args string) {
+	if !slices.Contains(f.args, args) {
+		f.args = append(f.args, args)
+	}
+}
+
+// root returns the qualified type a case decodes into, in package pkg, whose
+// document element name names a top-level declaration ownType found typ for
+// among types: typ itself, or, where codegen gives a nilled root's value
+// Nillable over typ (codegen's package doc, "# Element declarations"), sum
+// over typ and A, which it then binds (add). That holds exactly when the
+// declaration is nillable (goshape.Nillable) and has one governing type
+// (goshape.GoverningTypes, an abstract slot's type kept as codec keeps it)
+// that is not xs:anyType itself. A is struct{} unless that type is a complex
+// type with attribute fields (goshape.HasAttributeFields), when it is the type
+// whose header states it holds typ's attribute fields; ok is false where none
+// does, or where f has no sum.
+func (f *nillableFamily) root(schema *xsd.Schema, types []typeDecl, name xsd.QName, typ, pkg string) (qualified string, ok bool) {
+	d, _ := schema.Element(name)
+	if !goshape.Nillable(d) {
+		return pkg + "." + typ, true
+	}
+	governing, _, err := goshape.GoverningTypes(schema, d, func(ct xsd.ComplexType) ([]xsd.TypeDefinition, error) {
+		return []xsd.TypeDefinition{ct}, nil
+	})
+	if err != nil || len(governing) != 1 || governing[0].Type().Name() == (xsd.QName{Space: xsd.XMLSchemaNS, Local: "anyType"}) {
+		return pkg + "." + typ, true
+	}
+	if f.sum == "" {
+		return "", false
+	}
+	attrs, qualifiedAttrs := "struct{}", "struct{}"
+	if ct, isComplex := governing[0].Type().(xsd.ComplexType); isComplex && goshape.HasAttributeFields(ct) {
+		i := slices.IndexFunc(types, func(t typeDecl) bool { return t.holds == typ })
+		if i < 0 {
+			return "", false
+		}
+		attrs, qualifiedAttrs = types[i].name, pkg+"."+types[i].name
+	}
+	f.add(typ + ", " + attrs)
+	return pkg + "." + f.sum + "[" + pkg + "." + typ + ", " + qualifiedAttrs + "]", true
+}
+
+// writeNillableOptions writes, beside package pkg's generated file in dir, a
+// file declaring nillableOptions: one codec.WithBranches per instantiation of
+// f, its arms each instantiation's zero value, importing each of imports, the
+// generated file's, whose name some instantiation's arguments use.
+func writeNillableOptions(dir, pkg string, f nillableFamily, imports []*ast.ImportSpec) error {
+	var s strings.Builder
+	fmt.Fprintf(&s, "// Code generated by decodecensus; DO NOT EDIT.\n\npackage %s\n\nimport (\n\t\"github.com/kud360/goxsd8/codec\"\n", pkg)
+	for _, imp := range imports {
+		p, err := strconv.Unquote(imp.Path.Value)
+		if err != nil {
+			return fmt.Errorf("reading an import of %s's generated file: %w", pkg, err)
+		}
+		local := path.Base(p)
+		if imp.Name != nil {
+			local = imp.Name.Name
+		}
+		used := regexp.MustCompile(`(^|[^\pL\pN_])` + regexp.QuoteMeta(local) + `\.`)
+		if slices.ContainsFunc(f.args, used.MatchString) {
+			fmt.Fprintf(&s, "\t%s %q\n", local, p)
+		}
+	}
+	fmt.Fprintf(&s, ")\n\nvar %s = []codec.Option{\n", nillableOptions)
+	for _, a := range f.args {
+		fmt.Fprintf(&s, "\tcodec.WithBranches[%s[%s]](", f.sum, a)
+		for i, arm := range f.arms {
+			if i > 0 {
+				s.WriteString(", ")
+			}
+			fmt.Fprintf(&s, "*new(%s[%s])", arm, a)
+		}
+		s.WriteString("),\n")
+	}
+	s.WriteString("}\n")
+	if err := os.WriteFile(filepath.Join(dir, "census_gen.go"), []byte(s.String()), 0o644); err != nil {
+		return fmt.Errorf("writing %s's nillable options: %w", pkg, err)
+	}
+	return nil
+}

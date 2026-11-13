@@ -47,8 +47,11 @@ func schemaTest(doc string) string {
 
 // censusSuite is the fixture suite. Group g's schema generates, and its
 // cases decode (a.xml, twice, f.xml, of simple type, g.xml, a choice, through
-// the branch set the census binds, and p.xml, of xs:precisionDecimal, through
-// the arm set it binds), decline with a union of two basic members of one Go
+// the branch set the census binds, p.xml, of xs:precisionDecimal, through
+// the arm set it binds, n.xml, a nilled simple root, and m.xml and m2.xml, a
+// nillable root holding an attribute and a nillable xs:decimal field, not
+// nilled and nilled, each through the Nillable instantiations the census
+// binds), decline with a union of two basic members of one Go
 // type (e.xml, twice) and an optional content all over a required element
 // (c.xml), and fail otherwise, charged (invalid.xml) and with no declaration for
 // the document element (u.xml), which decodes into the placeholder; its case old
@@ -61,6 +64,7 @@ var censusSuite = map[string]string{
 		instanceTest("decoded", "a.xml", "") + instanceTest("decoded2", "a.xml", "") +
 		instanceTest("simple", "e.xml", "") + instanceTest("simple2", "e.xml", "") + instanceTest("simpledecoded", "f.xml", "") +
 		instanceTest("all", "c.xml", "") + instanceTest("choice", "g.xml", "") + instanceTest("precision", "p.xml", "") + instanceTest("invalid", "invalid.xml", "") +
+		instanceTest("nilledsimple", "n.xml", "") + instanceTest("nillable", "m.xml", "") + instanceTest("nilled", "m2.xml", "") +
 		instanceTest("undeclared", "u.xml", "") + instanceTest("old", "a.xml", ` version="1.0"`) + `</testGroup>
   <testGroup name="rec">` + schemaTest("rec.xsd") + instanceTest("i", "a.xml", "") + `</testGroup>
   <testGroup name="bad">` + schemaTest("bad.xsd") + instanceTest("i", "a.xml", "") + `</testGroup>
@@ -73,6 +77,8 @@ var censusSuite = map[string]string{
   <xs:element name="f" type="xs:string"/>
   <xs:element name="g"><xs:complexType><xs:choice><xs:element name="h" type="xs:string"/><xs:element name="i" type="xs:string"/></xs:choice></xs:complexType></xs:element>
   <xs:element name="p" type="xs:precisionDecimal"/>
+  <xs:element name="n" type="xs:string" nillable="true"/>
+  <xs:element name="m" nillable="true"><xs:complexType><xs:sequence><xs:element name="v" type="xs:decimal" nillable="true"/></xs:sequence><xs:attribute name="k" type="xs:string"/></xs:complexType></xs:element>
 </xs:schema>`,
 	"d/rec.xsd": `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
   <xs:element name="a"><xs:complexType><xs:sequence><xs:element ref="a"/></xs:sequence></xs:complexType></xs:element>
@@ -84,6 +90,9 @@ var censusSuite = map[string]string{
 	"d/f.xml":         `<f>x</f>`,
 	"d/g.xml":         `<g><i>x</i></g>`,
 	"d/p.xml":         `<p>3.00</p>`,
+	"d/n.xml":         `<n xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:nil="true"/>`,
+	"d/m.xml":         `<m k="1"><v>1.5</v></m>`,
+	"d/m2.xml":        `<m xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:nil="true" k="2"/>`,
 	"d/invalid.xml":   `<a/>`,
 	"d/u.xml":         `<u/>`,
 	"d/notes.txt":     "not a document",
@@ -92,9 +101,9 @@ var censusSuite = map[string]string{
 
 // wantCounts is the report's head over censusSuite: every count, and its
 // construct lines.
-const wantCounts = `decodecensus: 13 instance case(s) under %ROOT%
-  schema generates: 10
-  decoded: 5
+const wantCounts = `decodecensus: 16 instance case(s) under %ROOT%
+  schema generates: 13
+  decoded: 8
   declined: 3
   undecided: 0
   rejected codegen's own type: 0
@@ -146,9 +155,13 @@ func withCaveats(head string, rep report) string {
 // arm of the driver's tallyOutcome removed, and with driverSource's bound
 // branch list dropped, which moves g.xml from decoded to rejected, and with
 // driverSource emitting codec.WithBranches in place of
-// codec.WithPrecisionDecimalArms, which moves p.xml from decoded to rejected;
-// undecided, rejected and the differential, which no schema document makes
-// codec return, are TestReportPrintsEachMergedCount's and package assess's.
+// codec.WithPrecisionDecimalArms, which moves p.xml from decoded to rejected,
+// and with driverSource's list dropping the Nillable options
+// writeNillableOptions declares, or with nillableFamily.root decoding a
+// nillable root into its bare type, either of which moves n.xml, m.xml and
+// m2.xml from decoded to rejected; undecided, rejected and the differential,
+// which no schema document makes codec return, are
+// TestReportPrintsEachMergedCount's and package assess's.
 func TestCensusCounts(t *testing.T) {
 	root := writeTree(t, censusSuite)
 	plain := withCaveats(strings.ReplaceAll(wantCounts, "%ROOT%", root), report{placeholder: 1})
@@ -324,10 +337,11 @@ func TestOwnTypeFindsEachTopLevelElementsType(t *testing.T) {
 	if errs := codegen.Generate([]codegen.Target{{Schema: schema, Dir: dir, Package: "p"}}); errs != nil {
 		t.Fatalf("Generate: %v", errs)
 	}
-	file, err := parseGenerated(filepath.Join(dir, "xsd_gen.go"))
+	gen, err := parseGenerated(filepath.Join(dir, "xsd_gen.go"))
 	if err != nil {
 		t.Fatalf("parseGenerated: %v", err)
 	}
+	file := gen.file
 	types := generatedTypes(file)
 	cases := []struct {
 		local, typ string
@@ -369,10 +383,11 @@ func TestOwnTypeRendersAnAbsoluteLoc(t *testing.T) {
 	if errs := codegen.Generate([]codegen.Target{{Schema: schema, Dir: dir, Package: "p"}}); errs != nil {
 		t.Fatalf("Generate: %v", errs)
 	}
-	file, err := parseGenerated(filepath.Join(dir, "xsd_gen.go"))
+	gen, err := parseGenerated(filepath.Join(dir, "xsd_gen.go"))
 	if err != nil {
 		t.Fatalf("parseGenerated: %v", err)
 	}
+	file := gen.file
 	types := generatedTypes(file)
 	if typ, _, ok := resolveCase(schema, types, xsd.QName{Local: "a"}, dir); typ != "A" || !ok {
 		t.Errorf("resolveCase(a) = %q, %v, want \"A\", true; types %v", typ, ok, types)
@@ -446,11 +461,11 @@ func (DQ) isD() {}
 	if err := os.WriteFile(path, []byte(src), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	file, err := parseGenerated(path)
+	gen, err := parseGenerated(path)
 	if err != nil {
 		t.Fatal(err)
 	}
-	sealed := sealedInterfaces(file)
+	sealed := sealedInterfaces(gen.file)
 	want := []sealedDecl{{name: "R", branches: []string{"RA", "RB"}}, {name: "U", branches: []string{"UInt"}}, {name: "D", branches: []string{"DN", "DP", "DM", "DQ"}, decimal: true}}
 	if !reflect.DeepEqual(sealed, want) {
 		t.Errorf("sealedInterfaces = %+v, want %+v", sealed, want)

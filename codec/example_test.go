@@ -53,13 +53,14 @@ func ExampleDecode() {
 
 // ExampleCheckDecode runs CheckDecode once at start-up, before any instance
 // arrives, on an inline schema's two top-level element declarations: s:r,
-// which decodes into r, and s:n, whose {nillable} true is a construct outside
-// the decoded slice. It then checks s:r against a T that is not the type
+// which decodes into r, and s:n, whose {nillable} true beside two governing
+// types, xs:string and the xs:token its {type table} selects, is a construct
+// outside the decoded slice. It then checks s:r against a T that is not the type
 // codegen emits for it.
 func ExampleCheckDecode() {
 	const doc = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" targetNamespace="urn:s" elementFormDefault="qualified">
   <xs:element name="r"><xs:complexType><xs:sequence><xs:element name="a" type="xs:string"/></xs:sequence></xs:complexType></xs:element>
-  <xs:element name="n" type="xs:string" nillable="true"/>
+  <xs:element name="n" type="xs:string" nillable="true"><xs:alternative test="@k" type="xs:token"/></xs:element>
 </xs:schema>`
 	resolve := loader.ResolverFunc(func(_, location string) (io.ReadCloser, string, error) {
 		if location != "s.xsd" {
