@@ -146,8 +146,7 @@ var ErrTypeMismatch = errors.New("codec: T is not the type codegen emits for the
 // (item 6), and its {value constraint} supplies none, since its {content
 // type} is mixed and it has no [schema normalized value] (§3.3.5.4
 // sic-eltType), so an empty one's Text is "" whatever its default or fixed
-// value. Mixed content holds none either, on the same ground: its Text and
-// each child's Tail hold the instance's characters raw (item 6), and its
+// value. Mixed content holds none either, on the same ground (item 6): its
 // {value constraint} supplies no Text, so an empty element's is "".
 //
 // Every instance Loc an error of Decode carries — a source fault's, a
@@ -568,10 +567,9 @@ var ErrTypeMismatch = errors.New("codec: T is not the type codegen emits for the
 //     embedded, struct tags aside, its name never compared, such as
 //     MixedChild2; and a wildcard particle's and the {open content}'s hold C,
 //     AnyChild's shape as the wildcard bullet above states it, E's own C and
-//     no other struct of its shape. Each Tail is the character data after its
-//     child, before the next child or the end, and Text and Tail are raw as
-//     that bullet states an E's Text and Tail (§3.4.4.2 cvc-complex-type
-//     clause 1.4 validates the element children alone), white space included.
+//     no other struct of its shape. Text and each Tail hold the characters
+//     codegen's package doc ("# Particles") assigns them, raw as that bullet
+//     states an E's Text and Tail, white space included.
 //   - The field of a complex type's {attribute wildcard}, its struct's last,
 //     named as if from local name anyAttribute after the attribute fields
 //     (codegen's package doc, "# Naming"), so AnyAttribute2 where an
@@ -1311,11 +1309,9 @@ func wrapped(a fieldArm) (fieldArm, bool) {
 // tailReader reads a child element of mixed content into a new value of t, a
 // struct of exactly Element and Tail (mixedArm, childArm): Element as element
 // reads the child, then Tail, the character data after the child's end tag up
-// to the next child's start tag or the parent's end tag, every run
-// concatenated, "" for none, raw and of no simple type (§3.4.4.2
-// cvc-complex-type clause 1.4 validates the element children alone). The tag
-// it stops at is the next token of the parent's content, which it leaves to
-// that content's fill as st.pending (fillState.token).
+// to the next child's start tag or the parent's end tag (charRun). The tag it
+// stops at is the next token of the parent's content, which it leaves to that
+// content's fill as st.pending (fillState.token).
 type tailReader struct {
 	t       reflect.Type
 	element elementReader
@@ -1332,19 +1328,34 @@ func (t tailReader) read(p *pipeline, r *xmltree.Reader, start *xmltree.StartEle
 		return reflect.Value{}, err
 	}
 	shapeOne.store(p, v.Field(0), element)
-	var tail bytes.Buffer
+	tail, next, err := charRun(r)
+	if err != nil {
+		return reflect.Value{}, err
+	}
+	v.Field(1).SetString(tail)
+	st.pending = next
+	return v, nil
+}
+
+// charRun reads r up to its next start or end tag and returns the character
+// data before it, every run concatenated across the comments and processing
+// instructions between them, "" for none, and that tag: a run of mixed
+// content, raw and of no simple type (§3.4.4.2 cvc-complex-type clause 1.4
+// validates the element children alone), white space included. It is the
+// one reading of codegen's Text and of each Tail (codegen/doc.go
+// "# Particles"): boundBinding.fill reads Text with it, tailReader each Tail.
+func charRun(r *xmltree.Reader) (string, xmltree.Node, error) {
+	var run bytes.Buffer
 	for {
 		tok, err := r.Token()
 		if err != nil {
-			return reflect.Value{}, err
+			return "", nil, err
 		}
 		switch tok := tok.(type) {
 		case *xmltree.CharData:
-			tail.WriteString(tok.Data())
+			run.WriteString(tok.Data())
 		case *xmltree.StartElement, *xmltree.EndElement:
-			v.Field(1).SetString(tail.String())
-			st.pending = tok
-			return v, nil
+			return run.String(), tok, nil
 		}
 	}
 }
@@ -1997,9 +2008,9 @@ type elementContent interface {
 // A contentFiller sets the content's fields of out, the struct an
 // elementContent's check held, from the content of the element root, whose
 // start tag r has just returned, reading r up to its end tag: each child to
-// the field eachChild attributes it to, through st, the fill's state, which
-// holds mixed content's Text field (fillState.text), or, for simple content,
-// the character children to the value field.
+// the field eachChild attributes it to, through st, the fill's state
+// (fillState), or, for simple content, the character children to the value
+// field.
 type contentFiller interface {
 	fill(r *xmltree.Reader, root *xmltree.StartElement, out reflect.Value, st *fillState) error
 }
@@ -2498,11 +2509,10 @@ type fillState struct {
 	// in that content model's childIndex, which no other member takes. It is a
 	// lookup index only, never iterated (STYLE D2).
 	parts map[int]*partition
-	// text is the Text field of the struct whose content the fill reads, for
-	// mixed content (binding.text), and the zero Value for element-only
-	// content, whose character data is white space alone (§3.4.4.2
-	// cvc-complex-type clause 1.3) and fills nothing.
-	text reflect.Value
+	// mixed is whether the content the fill reads is mixed, binding.text
+	// being set: the fill's one copy of it, which boundBinding.fill takes
+	// after reading Text (charRun).
+	mixed bool
 	// pending is the start or end tag a tailReader stopped at, the content's
 	// next token, nil for none.
 	pending xmltree.Node
@@ -2518,15 +2528,18 @@ func (st *fillState) token(r *xmltree.Reader) (xmltree.Node, error) {
 	return r.Token()
 }
 
-// char appends c's characters to st.text for mixed content and drops them for
-// element-only content. Of mixed content, the character data the fill reads
-// itself is that before the first child, codegen's Text (codegen/doc.go
-// "# Particles"): every child is read by a tailReader, which reads the
-// character data after it.
-func (st *fillState) char(c *xmltree.CharData) {
-	if st.text.IsValid() {
-		st.text.SetString(st.text.String() + c.Data())
+// char takes c, character data a content loop reads itself. For element-only
+// content it drops c and returns nil: its character data is white space alone
+// (§3.4.4.2 cvc-complex-type clause 1.3) and fills nothing. For mixed content
+// it returns a plain error, a defect of Decode's: boundBinding.fill reads the
+// characters before the first child as Text, and every child is read by a
+// tailReader, which reads the characters after it as its Tail, so no loop
+// reaches character data there.
+func (st *fillState) char(c *xmltree.CharData) error {
+	if !st.mixed {
+		return nil
 	}
+	return fmt.Errorf("codec: %s: character data after a child of mixed content no tailReader read", c.Loc())
 }
 
 // partition returns the partition st keeps for the nested occurrence field
@@ -3658,7 +3671,9 @@ func (b boundFlattened) fill(r *xmltree.Reader, _ *xmltree.StartElement, out ref
 		}
 		switch tok := tok.(type) {
 		case *xmltree.CharData:
-			st.char(tok)
+			if err := st.char(tok); err != nil {
+				return err
+			}
 		case *xmltree.EndElement:
 			return nil
 		case *xmltree.StartElement:
@@ -4068,7 +4083,9 @@ func (b boundOccurrence) fill(r *xmltree.Reader, _ *xmltree.StartElement, out re
 		}
 		switch tok := tok.(type) {
 		case *xmltree.CharData:
-			st.char(tok)
+			if err := st.char(tok); err != nil {
+				return err
+			}
 		case *xmltree.EndElement:
 			if item.IsValid() {
 				o.shape.store(o.p, field, item)
@@ -4887,15 +4904,15 @@ type boundBinding struct {
 // fill sets out's fields as a filler does, in the order Decode's doc states
 // for items 7 and 8: root's xsi:type, its present attributes in start-tag
 // order, the supplied values of the absent ones in attribute-use order, then
-// its content, its value field's value or its children. An attribute field
-// with a supplied value holds it unless its attribute is present, and its
-// supplied value is then never decoded. Where the type has an {attribute
-// wildcard}, each present attribute no attribute use's declaration names,
-// but the four instanceAttribute names, is appended raw to its field in
-// start-tag order (cvc-complex-type clause 2, a use taking precedence by
-// clause 2.1), whatever the wildcard's {process contents}: Decode validated
-// the instance first, so each such attribute is the wildcard's to take
-// (clause 2.2).
+// its content, its value field's value or its children, mixed content's Text
+// read first (charRun). An attribute field with a supplied value holds it
+// unless its attribute is present, and its supplied value is then never
+// decoded. Where the type has an {attribute wildcard}, each present
+// attribute no attribute use's declaration names, but the four
+// instanceAttribute names, is appended raw to its field in start-tag order
+// (cvc-complex-type clause 2, a use taking precedence by clause 2.1),
+// whatever the wildcard's {process contents}: Decode validated the instance
+// first, so each such attribute is the wildcard's to take (clause 2.2).
 func (b *boundBinding) fill(r *xmltree.Reader, root *xmltree.StartElement, out reflect.Value) error {
 	if err := checkXsiType(root); err != nil {
 		return err
@@ -4932,9 +4949,14 @@ func (b *boundBinding) fill(r *xmltree.Reader, root *xmltree.StartElement, out r
 		}
 		f.shape.store(bd.p, out.Field(width+i), v)
 	}
-	st := &fillState{}
-	if bd.text != "" {
-		st.text = out.Field(0)
+	st := &fillState{mixed: bd.text != ""}
+	if st.mixed {
+		text, next, err := charRun(r)
+		if err != nil {
+			return err
+		}
+		out.Field(0).SetString(text)
+		st.pending = next
 	}
 	outer := bd.p.handDown(bd.typ, root)
 	err := b.content.fill(r, root, out, st)
@@ -4977,7 +4999,9 @@ func eachChild(r *xmltree.Reader, schema *xsd.Schema, x childIndex, st *fillStat
 		}
 		switch tok := tok.(type) {
 		case *xmltree.CharData:
-			st.char(tok)
+			if err := st.char(tok); err != nil {
+				return err
+			}
 		case *xmltree.EndElement:
 			return nil
 		case *xmltree.StartElement:
