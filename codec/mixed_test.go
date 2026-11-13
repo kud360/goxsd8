@@ -698,3 +698,70 @@ func TestDecodeMixedTypeTable(t *testing.T) {
 		})
 	}
 }
+
+// TestMixedCharAfterChildIsDefect pins fillState.char: a content loop that
+// reads character data after a child no tailReader read returns, for mixed
+// content, the plain defect error at that data's Loc, and drops it for
+// element-only content. The child is read to its end tag alone, as an
+// unwrapped field's reader reads it; for mixed content the Text phase
+// boundBinding.fill runs (charRun) comes first.
+func TestMixedCharAfterChildIsDefect(t *testing.T) {
+	const doc = "<r>\n<a>v</a>y</r>"
+	x := childIndex{children: map[xsd.QName]int{{Local: "a"}: 0}}
+	for _, mixed := range []bool{false, true} {
+		r := xmltree.NewReader("", bytes.NewReader([]byte(doc)))
+		if _, err := documentElement(r); err != nil {
+			t.Fatal(err)
+		}
+		st := &fillState{mixed: mixed}
+		if mixed {
+			_, next, err := charRun(r)
+			if err != nil {
+				t.Fatal(err)
+			}
+			st.pending = next
+		}
+		err := eachChild(r, nil, x, st, func(*xmltree.StartElement, int) error {
+			return skipToEnd(r)
+		})
+		if !mixed {
+			if err != nil {
+				t.Errorf("element-only: eachChild = %v, want nil", err)
+			}
+			continue
+		}
+		const want = "codec: ?:2:9: character data after a child of mixed content no tailReader read"
+		if err == nil || err.Error() != want {
+			t.Errorf("mixed: eachChild = %v, want %q", err, want)
+		}
+	}
+}
+
+// skipToEnd reads r up to the end tag of an element whose start tag r has
+// just returned and whose content holds no element.
+func skipToEnd(r *xmltree.Reader) error {
+	for {
+		tok, err := r.Token()
+		if err != nil {
+			return err
+		}
+		if _, end := tok.(*xmltree.EndElement); end {
+			return nil
+		}
+	}
+}
+
+// TestDecodeMixedUnwrapped pins that Decode answers a T whose child field
+// holds V unwrapped in mixed content ErrTypeMismatch, as CheckDecode does
+// (TestDecodeMixedTypeMismatch), and decodes no value into it.
+func TestDecodeMixedUnwrapped(t *testing.T) {
+	type unwrapped struct {
+		Text string
+		A    string
+	}
+	schema := schemaOf(t, mxSeqSchema)
+	got, err := Decode[unwrapped](schema, strict.New(), instanceOf("", "x<s:a>v</s:a>y"))
+	if !errors.Is(err, ErrTypeMismatch) {
+		t.Errorf("Decode = %#v, %v; want ErrTypeMismatch", got, err)
+	}
+}
