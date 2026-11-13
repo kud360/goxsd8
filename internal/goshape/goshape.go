@@ -382,6 +382,22 @@ func TermEmptiable(schema *xsd.Schema, term xsd.TermOrRef) (bool, error) {
 	return schema.ParticleEmptiable(p), nil
 }
 
+// Nillable reports whether the element declaration decl is nillable as
+// codegen/doc.go "# Element declarations" states it: {nillable} true (§3.3.1
+// ed-nillable) and no {value constraint} of {variety} fixed, which makes
+// every nilled instance invalid (§3.3.4.3 cvc-elt clause 3.2.3.2), so that a
+// decl with one emits as one with {nillable} false. That section states which
+// fields over a nillable decl hold Nillable. It is the one test of it: every
+// codegen site that wraps a type in Nillable, or passes a field over decl as
+// no struct value, reads it, and so does codec where it binds such a field.
+func Nillable(decl xsd.ElementDeclaration) bool {
+	if !decl.Nillable() {
+		return false
+	}
+	vc, ok := decl.ValueConstraint()
+	return !ok || vc.Kind() != xsd.ValueFixed
+}
+
 // xsiNil is the expanded name of the built-in attribute declaration xsi:nil
 // (§3.2.7.2).
 var xsiNil = xsd.QName{Space: xsd.XMLSchemaInstanceNS, Local: "nil"}
