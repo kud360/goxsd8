@@ -16,7 +16,8 @@ import (
 // it, with no inheritance when the facet is the checked type's own (Color) and
 // the checked type's inheritance when it is not (Shade, which declares only a
 // maxLength) (#3335), and the declaring type's members as written, in document
-// order, escaped as a cvc-pattern-valid message escapes its members (#3582).
+// order, escaped as a cvc-pattern-valid message escapes its members (#3582),
+// after the rejected candidate itself, quoted (STYLE E5).
 func TestEnumerationRejectionNamesItsType(t *testing.T) {
 	b := strict.New()
 	seeded, err := builtin.Seed(b)
@@ -61,16 +62,16 @@ func TestEnumerationRejectionNamesItsType(t *testing.T) {
 		want string
 	}{
 		{"own", color, "blue",
-			`value is not equal or identical to any member of the enumeration facet of the simple type {urn:t}Color, whose {value} holds the values written "red", "green", but cvc-enumeration-valid requires it to be equal or identical to one`},
+			`"blue" is not equal or identical to any member of the enumeration facet of the simple type {urn:t}Color, whose {value} holds the values written "red", "green", but cvc-enumeration-valid requires it to be equal or identical to one of them`},
 		{"inherited", shade, "blue",
-			`value is not equal or identical to any member of the enumeration facet that the simple type {urn:t}Shade inherits from the simple type {urn:t}Color, whose {value} holds the values written "red", "green", but cvc-enumeration-valid requires it to be equal or identical to one`},
+			`"blue" is not equal or identical to any member of the enumeration facet that the simple type {urn:t}Shade inherits from the simple type {urn:t}Color, whose {value} holds the values written "red", "green", but cvc-enumeration-valid requires it to be equal or identical to one of them`},
 		// The member is quoted as written, not as its parsed value renders.
 		{"spelling kept", small, "8",
-			`value is not equal or identical to any member of the enumeration facet of the simple type {urn:t}Small, whose {value} holds the values written "+007", "5", but cvc-enumeration-valid requires it to be equal or identical to one`},
+			`"8" is not equal or identical to any member of the enumeration facet of the simple type {urn:t}Small, whose {value} holds the values written "+007", "5", but cvc-enumeration-valid requires it to be equal or identical to one of them`},
 		// A quote inside a member is escaped and a `", "` inside one stays
 		// inside its quotes, as in a cvc-pattern-valid message.
 		{"escaped", punct, "z",
-			`value is not equal or identical to any member of the enumeration facet of the simple type {urn:t}Punct, whose {value} holds the values written "a&quot;b", "x, y", but cvc-enumeration-valid requires it to be equal or identical to one`},
+			`"z" is not equal or identical to any member of the enumeration facet of the simple type {urn:t}Punct, whose {value} holds the values written "a&quot;b", "x, y", but cvc-enumeration-valid requires it to be equal or identical to one of them`},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			_, err := value.ValidateLexical(b, ownedChain{}, tc.st, tc.lit, nil, declineEvery{})

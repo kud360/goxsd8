@@ -128,24 +128,23 @@ func (o overrideBackend) Mapping(typ xsd.QName) (Mapping, bool) {
 	return o.base.Mapping(typ)
 }
 
-// LexicalFacet is a facet checked on the normalized lexical form, before the
+// lexicalFacet is a facet checked on the normalized lexical form, before the
 // lexical mapping runs (the whiteSpace and pattern stages of the pipeline;
 // ARCHITECTURE.md). A failure is an *xsderr.Error carrying the facet's rule ID.
-type LexicalFacet interface {
-	// CheckLexical validates the normalized lexical form, returning an
+type lexicalFacet interface {
+	// checkLexical validates the normalized lexical form, returning an
 	// *xsderr.Error on rejection.
-	CheckLexical(normalized string) error
+	checkLexical(normalized string) error
 }
 
-// ValueFacet is a facet checked on the parsed value, after the lexical mapping
+// valueFacet is a facet checked on the parsed value, after the lexical mapping
 // runs (the value-facet stage of the pipeline; ARCHITECTURE.md). A failure is
-// an *xsderr.Error carrying the facet's rule ID. Its name pairs with
-// [LexicalFacet] to name the two pipeline stages; the "Facet" suffix is
-// load-bearing, so the pairing is kept despite the value.ValueFacet stutter.
-//
-//nolint:revive // ValueFacet/LexicalFacet name the pipeline stages; suffix is load-bearing.
-type ValueFacet interface {
-	// CheckValue validates the parsed value, returning an *xsderr.Error on
-	// rejection.
-	CheckValue(v Value) error
+// an *xsderr.Error carrying the facet's rule ID.
+type valueFacet interface {
+	// checkValue validates the parsed value, returning an *xsderr.Error on
+	// rejection. normalized is the whiteSpace-normalized literal v was parsed
+	// from, used only to quote the candidate in a rejection (STYLE E5): the
+	// verdict is a function of v alone, and no implementation branches on
+	// normalized. The cos-applicable-facets precondition faults ignore it.
+	checkValue(v Value, normalized string) error
 }

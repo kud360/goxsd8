@@ -216,14 +216,10 @@ The load-bearing separation of the whole design (Datatypes §2.1–2.3):
 
 ### The facet pipeline
 
-Validation of a literal against a simple type is a fixed pipeline. The two
-stage kinds are named as interfaces (`value.LexicalFacet`,
-`value.ValueFacet`), but there is **no composition seam yet**: every
-implementation is unexported inside `value`, the function that assembles a
-type's stages is unexported, and no exported API accepts or returns a stage.
-User-composed stages are a destination, not a shipped capability (steward
-audit 2026-08-02) — see the note under "Exported surface without a
-consumer" below.
+Validation of a literal against a simple type is a fixed pipeline. There is
+**no composition seam**: the stages and the function that assembles a type's
+stages are unexported inside `value`, and no exported API accepts or returns
+a stage. User-composed stages are a destination, not a shipped capability.
 
 ```
 raw literal
@@ -817,11 +813,6 @@ compiles, is documented, and has **zero** callers module-wide.
 - **The annotation subsystem** — **deleted (#407); do not re-file.**
   `xsd/doc.go` states that §3.15 `{annotation}` is not modelled, because no
   rule consumes it.
-- **`value.LexicalFacet` / `value.ValueFacet`** — the two pipeline-stage
-  interfaces. Every implementation is unexported inside `value`, the
-  assembling function (`compile`) is unexported, and no exported API takes
-  or returns a stage, so no consumer can exist. Either grow the composition
-  seam the docs promise, or unexport the interfaces.
 - **`loader.FS`/`HTTP`/`ResolverFunc`** — no non-test consumer, but
   **justified and not to be filed**: the resolver helpers are declared
   library surface in `loader/doc.go` for external users, which is the

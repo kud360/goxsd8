@@ -95,19 +95,19 @@ func TestScaleFacetCheckValue(t *testing.T) {
 		if err != nil {
 			t.Fatalf("%s: newScaleFacet: %v", c.name, err)
 		}
-		got := sf.CheckValue(c.v)
+		got := sf.checkValue(c.v, "1.000")
 		if c.wantRule == "" {
 			if got != nil {
-				t.Errorf("%s: CheckValue = %v, want accept", c.name, got)
+				t.Errorf("%s: checkValue = %v, want accept", c.name, got)
 			}
 			continue
 		}
 		if got == nil {
-			t.Errorf("%s: CheckValue = nil, want reject with %s", c.name, c.wantRule)
+			t.Errorf("%s: checkValue = nil, want reject with %s", c.name, c.wantRule)
 			continue
 		}
 		if r, _ := xsderr.RuleOf(got); r != c.wantRule {
-			t.Errorf("%s: CheckValue charged %s, want %s", c.name, r, c.wantRule)
+			t.Errorf("%s: checkValue charged %s, want %s", c.name, r, c.wantRule)
 		}
 	}
 }
@@ -130,7 +130,7 @@ func (b plainBackend) Mapping(typ xsd.QName) (Mapping, bool) {
 }
 
 // preconditionType builds a primitive carrying a length facet (§4.3.1) beside its
-// whiteSpace entry, so a plainBackend-governed literal reaches lengthFacet.CheckValue
+// whiteSpace entry, so a plainBackend-governed literal reaches lengthFacet.checkValue
 // without the Lengthed capability and ValidateLexical reports a facet-precondition
 // fault for EVERY literal.
 //
@@ -184,7 +184,7 @@ func TestValueFacetCapabilityFaultsAreErrors(t *testing.T) {
 
 	cases := []struct {
 		name    string
-		facet   ValueFacet
+		facet   valueFacet
 		missing string
 	}{
 		{"bound facet on a candidate that is not Ordered", boundFacet{limit: intValue(1), kind: xsd.FacetMaxInclusive}, "Ordered"},
@@ -196,16 +196,16 @@ func TestValueFacetCapabilityFaultsAreErrors(t *testing.T) {
 	// A bare Go string carries no capability at all, so every facet above faults on it.
 	const bare = "no capabilities"
 	for _, c := range cases {
-		got := c.facet.CheckValue(bare)
+		got := c.facet.checkValue(bare, bare)
 		if got == nil {
-			t.Errorf("%s: CheckValue = nil, want a %s precondition fault", c.name, c.missing)
+			t.Errorf("%s: checkValue = nil, want a %s precondition fault", c.name, c.missing)
 			continue
 		}
 		if !IsFacetPrecondition(got) {
 			t.Errorf("%s: IsFacetPrecondition = false, want true — a caller cannot tell this fault from a rejection: %v", c.name, got)
 		}
 		if r, _ := xsderr.RuleOf(got); r != "cos-applicable-facets" {
-			t.Errorf("%s: CheckValue charged %s, want cos-applicable-facets (§4.1.5)", c.name, r)
+			t.Errorf("%s: checkValue charged %s, want cos-applicable-facets (§4.1.5)", c.name, r)
 		}
 	}
 }
@@ -248,9 +248,9 @@ func TestFacetRejectionIsNotAPrecondition(t *testing.T) {
 	if err != nil {
 		t.Fatalf("newScaleFacet: %v", err)
 	}
-	rejection := sf.CheckValue(scaled(3))
+	rejection := sf.checkValue(scaled(3), "1.000")
 	if rejection == nil {
-		t.Fatal("CheckValue(scale 3 under maxScale 2) = nil, want a cvc-maxScale-valid rejection")
+		t.Fatal("checkValue(scale 3 under maxScale 2) = nil, want a cvc-maxScale-valid rejection")
 	}
 	if IsFacetPrecondition(rejection) {
 		t.Errorf("IsFacetPrecondition(cvc-maxScale-valid rejection) = true, want false: %v", rejection)
