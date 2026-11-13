@@ -307,17 +307,16 @@ var ErrTypeMismatch = errors.New("codec: T is not the type codegen emits for the
 //     sealed interface (the fourth bullet), whose branch field codegen wraps,
 //     when that one type is other than xs:anyType itself (§3.4.7
 //     any-type-itself), whose raw content holds xsi:nil among its attributes
-//     (item 6);
-//     then, of two or more governing types, two anonymous ones, since the type
-//     the validator selects could then be matched to no one branch. Of exactly
-//     one governing type, the declaration is examined as if that type were its
-//     {type definition}, by the bullet below. Of two or more, each is examined
-//     in slot order as the {type definition} of a local element declaration
-//     occurring exactly once is, the first declining one's construct the
-//     declaration's, and then a branch field that may admit a Go type an
-//     earlier one's does declines, as two branches of a sealed interface whose
-//     structs have one shape (the choice bullet below). Of none, every slot
-//     xs:error's, nothing further is examined.
+//     (item 6); then, of two or more governing types, two anonymous ones,
+//     since the type the validator selects could then be matched to no one
+//     branch. Of exactly one governing type, the declaration is examined as if
+//     that type were its {type definition}, by the bullet below. Of two or
+//     more, each is examined in slot order as the {type definition} of a local
+//     element declaration occurring exactly once is, the first declining one's
+//     construct the declaration's, and then a branch field that may admit a Go
+//     type an earlier one's does declines, as two branches of a sealed
+//     interface whose structs have one shape (the choice bullet below). Of
+//     none, every slot xs:error's, nothing further is examined.
 //   - Its {type definition}: xs:anyType itself, known by its QName, gives the
 //     T item 6 states and is examined no further; a simple type's identity
 //     as a special type (xsd.SimpleType.IsSpecial), which gives string and
