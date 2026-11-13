@@ -574,19 +574,19 @@ func headerLoc(base string, loc xsderr.Loc) string {
 // for a union (unionType), a struct or sealed interface for an accepted
 // complex one, named or anonymous, or the sealed interface tableType emits
 // over its governing types when governingTypes answers a sum. A
-// nillable declaration (nillable) gets that same type: after it, the visit
+// nillable declaration (goshape.Nillable) gets that same type: after it, the visit
 // claims, when nothing earlier did, the names nillableType claims for a field
 // over decl, Nillable over that type being a nilled root's value, and records
-// Nillable in the reaches of that type's declaration; a sum's
-// branches wrap their own fields instead (tableType). That type is named from
-// the element (elementType), and a local element of the same named type never
-// shares it (nestedType), while every <element ref> particle to the element
-// does; the types nested in it are named from the type when it is named, and
-// shared with that type's every other use, and from the element when it is
-// anonymous, but for those of the elements a model group definition declares,
-// named from the group and shared with its every <group ref> particle
-// (nestedType). A declaration with {abstract} true emits nothing: no element is
-// valid against it (cvc-elt clause 2).
+// Nillable in the reaches of that type's declaration; a sum's branches wrap their
+// own fields instead (tableType). That type is named from the element
+// (elementType), and a local element of the same named type never shares it
+// (nestedType), while every <element ref> particle to the element does; the types
+// nested in it are named from the type when it is named, and shared with that
+// type's every other use, and from the element when it is anonymous, but for those
+// of the elements a model group definition declares, named from the group and
+// shared with its every <group ref> particle (nestedType). A declaration with
+// {abstract} true emits nothing: no element is valid against it (cvc-elt clause
+// 2).
 func (e *emitter) topLevel(decl xsd.ElementDeclaration) error {
 	if decl.Abstract() {
 		return nil
@@ -634,7 +634,7 @@ func (e *emitter) topLevel(decl xsd.ElementDeclaration) error {
 	default:
 		return fmt.Errorf("element %s at %s: unexpected type definition %T", decl.Name(), decl.Loc(), td)
 	}
-	if nillable(decl) {
+	if goshape.Nillable(decl) {
 		e.nillableType(typ, td)
 		i := slices.IndexFunc(e.decls, func(d declaration) bool { return d.name == typ.name })
 		if i < 0 {
@@ -1157,22 +1157,6 @@ func (e *emitter) mixedChildType() string {
 		code: fmt.Sprintf("type %s[T any] struct {\n\tElement T\n\tTail string\n}\n", e.mixedChild),
 	})
 	return e.mixedChild
-}
-
-// nillable reports whether a field over the element declaration decl holds
-// the sum "# Element declarations" gives a nillable element: decl has
-// {nillable} true (§3.3.1 ed-nillable) and no {value constraint} of {variety}
-// fixed, which makes every nilled instance invalid (§3.3.4.3 cvc-elt clause
-// 3.2.3.2), so that such a decl emits as one with {nillable} false. It is the
-// one test every site that wraps a type in Nillable, or passes a field over
-// decl as no struct value, reads: topLevel, field, substitutionType,
-// tableType and valueCycle, and refType through field's value.
-func nillable(decl xsd.ElementDeclaration) bool {
-	if !decl.Nillable() {
-		return false
-	}
-	vc, ok := decl.ValueConstraint()
-	return !ok || vc.Kind() != xsd.ValueFixed
 }
 
 // nillableType returns the sealed interface Nillable over typ, the Go type a
@@ -1867,32 +1851,29 @@ type fieldSpec struct {
 // any and holds the raw-content struct AnyElement (anyTypeType) by p's occurrence
 // (occursGoType), whatever the wildcard's {namespace constraint} and {process
 // contents}, which it never reads; that path never calls shape, contentGroup,
-// nestedType or valueChain, and gives a choice's wildcard alternative its
-// branch struct's one field (sealedType). The field of a model group particle
-// (modelGroupTerm), inline or a <group ref>, a choice or a sequence which
-// spliced does not splice (goshape.Splices), is the one groupField returns for p at
-// ordinal under site, after a {max occurs} of 0 has declined naming the group,
-// as contentGroup declines one, before any occurrence type is emitted; an all
-// group is an error, never a decline: cos-all-limited (§3.8.6.2), checked at
-// Finalize, admits an all group particle only as a content {particle}, which
-// contentGroup and groupField handle, or exactly once among an all group's
-// {particles}, which spliced splices. An element particle whose declaration
-// abstractLocal answers true for declines, charged to that declaration, before
-// its type is resolved. The field of an <element ref> particle, whose declaration is
-// global, holds the type refType returns for the referenced declaration, after
-// declaredType has resolved that declaration's type: the sealed interface over its
+// nestedType or valueChain, and gives a choice's wildcard alternative its branch struct's one
+// field (sealedType). The field of a model group particle (modelGroupTerm), inline or a
+// <group ref>, a choice or a sequence which spliced does not splice (goshape.Splices), is the
+// one groupField returns for p at ordinal under site, after a {max occurs} of 0 has declined
+// naming the group, as contentGroup declines one, before any occurrence type is emitted; an
+// all group is an error, never a decline: cos-all-limited (§3.8.6.2), checked at Finalize,
+// admits an all group particle only as a content {particle}, which contentGroup and
+// groupField handle, or exactly once among an all group's {particles}, which spliced splices.
+// An element particle whose declaration abstractLocal answers true for declines, charged to
+// that declaration, before its type is resolved. The field of an <element ref> particle,
+// whose declaration is global, holds the type refType returns for the referenced declaration,
+// after declaredType has resolved that declaration's type: the sealed interface over its
 // substitution group's declarations with {abstract} false when goshape.SubstitutionSum
-// answers a sum, and the type elementType returns for it otherwise; the walk does not
-// enter that type's body, which topLevel emits, but valueCycle checks it when the
-// particle occurs exactly once, the declaration is not nillable, and the type is a
-// complex type other than xs:anyType emitted as a struct; valueCycle ends at once for a
-// type whose content particle occurs other than exactly once. A local declaration
-// governingTypes answers a sum for holds the sealed interface localTable returns. A
-// local declaration of type xs:anyType holds the raw-content struct AnyType
-// (anyTypeType). From field, neither a global declaration nor xs:anyType ever reaches
-// nestedType. A nillable declaration (nillable) holds, inside any MixedChild wrap and
-// by the same occurrence rules, Nillable over the type the rules above give
-// (nillableType), whose names are claimed after that type's, unless that type is
+// answers a sum, and the type elementType returns for it otherwise; the walk does not enter
+// that type's body, which topLevel emits, but valueCycle checks it when the particle occurs
+// exactly once, the declaration is not nillable, and the type is a complex type other than
+// xs:anyType emitted as a struct; valueCycle ends at once for a type whose content particle
+// occurs other than exactly once. A local declaration governingTypes answers a sum for holds
+// the sealed interface localTable returns. A local declaration of type xs:anyType holds the
+// raw-content struct AnyType (anyTypeType). From field, neither a global declaration nor
+// xs:anyType ever reaches nestedType. A nillable declaration (goshape.Nillable) holds, inside
+// any MixedChild wrap and by the same occurrence rules, Nillable over the type the rules
+// above give (nillableType), whose names are claimed after that type's, unless that type is
 // AnyType, which holds xsi:nil among its Attributes, or a sum over the declaration's
 // substitution group or governing types, whose branches wrap their own fields
 // (substitutionType, tableType); its particle is never a value field, whatever its
@@ -1942,7 +1923,7 @@ func (e *emitter) field(nested scope, site groupSite, ordinal int, chain []value
 	if goshape.Mixed(t) {
 		e.mixedChildType()
 	}
-	value := p.Occurs() == goshape.ExactlyOnce() && !nillable(decl)
+	value := p.Occurs() == goshape.ExactlyOnce() && !goshape.Nillable(decl)
 	st, isSimple := td.(*xsd.SimpleType)
 	ct, isComplex := td.(xsd.ComplexType)
 	var typ emittedType
@@ -1964,7 +1945,7 @@ func (e *emitter) field(nested scope, site groupSite, ordinal int, chain []value
 		return fieldSpec{}, err
 	}
 	_, substitution := goshape.SubstitutionSum(e.schema, decl)
-	if nillable(decl) && !sum && !isAnyType(td) && !substitution {
+	if goshape.Nillable(decl) && !sum && !isAnyType(td) && !substitution {
 		typ = e.nillableType(typ, td)
 	}
 	if goshape.Mixed(t) {
@@ -2025,16 +2006,15 @@ func abstractLocal(decl xsd.ElementDeclaration) bool {
 
 // refType returns the type of the field of an <element ref> particle to the
 // top-level element declaration decl, whose {type definition} declaredType
-// resolved to td: the sealed interface substitutionType emits when
-// goshape.SubstitutionSum answers a sum for decl, and elementType's otherwise. When
-// value is true, the particle occurring exactly once over a declaration that
-// is not nillable (field's value, which reads nillable), and that type is a struct
-// emitted for a complex td other than xs:anyType, valueCycle walks td's body
-// from the particles whose chain is chain, as it does whether or not decl's
-// type was emitted earlier. A td of xs:anyType gets no walk: AnyType reaches
-// itself only through slices. Nor does the substitution group's interface,
-// nor the governing types' interface elementType records as sealed: no field
-// holds either as a struct value.
+// resolved to td: the sealed interface substitutionType emits when goshape.SubstitutionSum
+// answers a sum for decl, and elementType's otherwise. When value is true, the particle
+// occurring exactly once over a declaration that is not nillable (field's value, which
+// reads goshape.Nillable), and that type is a struct emitted for a complex td other than
+// xs:anyType, valueCycle walks td's body from the particles whose chain is chain, as it
+// does whether or not decl's type was emitted earlier. A td of xs:anyType gets no walk:
+// AnyType reaches itself only through slices. Nor does the substitution group's interface,
+// nor the governing types' interface elementType records as sealed: no field holds either
+// as a struct value.
 func (e *emitter) refType(chain []valueNode, value bool, decl xsd.ElementDeclaration, td xsd.TypeDefinition) (emittedType, error) {
 	if members, sum := goshape.SubstitutionSum(e.schema, decl); sum {
 		return e.substitutionType(decl, members)
@@ -2064,7 +2044,7 @@ func (e *emitter) refType(chain []valueNode, value bool, decl xsd.ElementDeclara
 // a declaration's body is met only at its own turn. Each branch implements the
 // interface's method; the declarations' own types carry no method, since one may be
 // sealed or sit in several heads' groups. The field of a nillable declaration's branch
-// (nillable), the head's when it has a branch, holds Nillable over that type
+// (goshape.Nillable), the head's when it has a branch, holds Nillable over that type
 // (nillableType), its names claimed after the type's, unless the type is AnyType or
 // the sum over the declaration's governing types, whose branches wrap their own
 // fields; the interface itself is never wrapped, each declaration's own {nillable}
@@ -2091,7 +2071,7 @@ func (e *emitter) substitutionType(head xsd.ElementDeclaration, members []xsd.El
 		if err != nil {
 			return emittedType{}, err
 		}
-		if nillable(member) && !sum && !isAnyType(td) {
+		if goshape.Nillable(member) && !sum && !isAnyType(td) {
 			typ = e.nillableType(typ, td)
 		}
 		fields := []fieldSpec{{local: member.Name().Local, goType: typ.name}}
@@ -2139,7 +2119,7 @@ func (e *emitter) localTable(parent scope, decl xsd.ElementDeclaration, branches
 // the type branchType returns, each followed by the types that field first
 // needs. The branch's name is claimed before its field's type is computed.
 // The branch types carry no method: a named one may be selected by several
-// tables, or held by fields of its own. For a nillable decl (nillable), each
+// tables, or held by fields of its own. For a nillable decl (goshape.Nillable), each
 // branch's field holds Nillable over that type (nillableType), its names
 // claimed after the type's, but a branch of xs:anyType, whose AnyType holds
 // xsi:nil among its Attributes; the interface itself is not wrapped. With no
@@ -2159,7 +2139,7 @@ func (e *emitter) tableType(typ emittedType, ifc scope, decl xsd.ElementDeclarat
 		if err != nil {
 			return err
 		}
-		if nillable(decl) && !isAnyType(b.Type()) {
+		if goshape.Nillable(decl) && !isAnyType(b.Type()) {
 			field = e.nillableType(field, b.Type())
 		}
 		fields := []fieldSpec{{local: b.Local(), goType: field.name}}
@@ -2507,30 +2487,28 @@ func reacher(decl xsd.ElementDeclaration) string {
 }
 
 // valueCycle walks, through value fields only, the particles of the complex type t that the element declaration
-// decl, local or the top-level one an <element ref> particle names, reaches by a value field from particles
-// whose chain is chain, applying valueChain at each field; t's struct's scope is nested (structScope), and t is
-// named to the checks it calls as decl's elementOrigin or localOrigin names it. It walks the particles spliced
-// returns for t's content particle's group, a <group ref> content particle followed by contentGroup, the list
-// particleFields gives fields for, so a sequence or an all group spliced into its parent, inline or through a
-// <group ref>, is a value edge that pushes no node, and every other nested model group particle (modelGroupTerm)
-// is a leaf, passed before elementTerm: its field holds a slice, a pointer to its occurrence struct, or a bare
-// sealed interface (groupField), never a value. A choice t, a t whose content particle occurs other than exactly
-// once, and a step whose first node (valueNodes) is in e.acyclic, end the walk: a content particle goshape.Splices
-// answers true for though it occurs other than exactly once is emptiable, so no element particle among its
-// spliced particles occurs exactly once, and it never steps to an element of type xs:anyType, whose AnyType
-// reaches itself only through slices. A wildcard particle (wildcardTerm) is a leaf, passed before elementTerm:
-// its field holds AnyElement, which reaches AnyType, which reaches itself only through the slice Children. So is
-// an <element ref> particle to a head goshape.SubstitutionSum answers a sum for, passed after elementTerm: its field
-// holds the group's sealed interface (substitutionType). So is an element particle whose declaration governingTypes answers a
-// sum for, passed after that: its field holds the governing types' sealed interface (tableType); a declaration with one
-// governing type steps to that type, which declaredType returns. So is an element particle whose declaration is nillable
-// (nillable), passed with it: its field holds the sealed interface Nillable (nillableType). So is one whose declaration
-// abstractLocal answers true for, passed with it: field declines it, so no field holds its type. It reads the schema, never
-// e.emitted, e.elements or e.substitutions, so a type the emitting walk shares, and the type of a declaration an <element
-// ref> particle names, is walked again here unless e.acyclic holds its step's first node; that node joins e.acyclic once the
-// walk of t's particles reaches the end, and a step that pushes none, a local decl of an anonymous t that a complex type
-// declares, is never memoized. It returns only a struct-value recursion: every other failure on its path ends that path,
-// since the emitting walk meets it.
+// decl, local or the top-level one an <element ref> particle names, reaches by a value field from particles whose chain is
+// chain, applying valueChain at each field; t's struct's scope is nested (structScope), and t is named to the checks it calls
+// as decl's elementOrigin or localOrigin names it. It walks the particles spliced returns for t's content particle's group, a
+// <group ref> content particle followed by contentGroup, the list particleFields gives fields for, so a sequence or an all
+// group spliced into its parent, inline or through a <group ref>, is a value edge that pushes no node, and every other nested
+// model group particle (modelGroupTerm) is a leaf, passed before elementTerm: its field holds a slice, a pointer to its
+// occurrence struct, or a bare sealed interface (groupField), never a value. A choice t, a t whose content particle occurs
+// other than exactly once, and a step whose first node (valueNodes) is in e.acyclic, end the walk: a content particle
+// goshape.Splices answers true for though it occurs other than exactly once is emptiable, so no element particle among its
+// spliced particles occurs exactly once, and it never steps to an element of type xs:anyType, whose AnyType reaches itself only
+// through slices. A wildcard particle (wildcardTerm) is a leaf, passed before elementTerm: its field holds AnyElement, which
+// reaches AnyType, which reaches itself only through the slice Children. So is an <element ref> particle to a head
+// goshape.SubstitutionSum answers a sum for, passed after elementTerm: its field holds the group's sealed interface
+// (substitutionType). So is an element particle whose declaration governingTypes answers a sum for, passed after that: its
+// field holds the governing types' sealed interface (tableType); a declaration with one governing type steps to that type,
+// which declaredType returns. So is an element particle whose declaration is nillable (goshape.Nillable), passed with it: its
+// field holds the sealed interface Nillable (nillableType). So is one whose declaration abstractLocal answers true for, passed
+// with it: field declines it, so no field holds its type. It reads the schema, never e.emitted, e.elements or e.substitutions,
+// so a type the emitting walk shares, and the type of a declaration an <element ref> particle names, is walked again here
+// unless e.acyclic holds its step's first node; that node joins e.acyclic once the walk of t's particles reaches the end, and a
+// step that pushes none, a local decl of an anonymous t that a complex type declares, is never memoized. It returns only a
+// struct-value recursion: every other failure on its path ends that path, since the emitting walk meets it.
 func (e *emitter) valueCycle(chain []valueNode, decl xsd.ElementDeclaration, nested scope, t xsd.ComplexType) error {
 	subject := e.localOrigin(decl, nested, t).subject
 	if decl.ScopeVariety() == xsd.ScopeGlobal {
@@ -2573,7 +2551,7 @@ func (e *emitter) valueCycle(chain []valueNode, decl xsd.ElementDeclaration, nes
 		if _, sum := goshape.SubstitutionSum(e.schema, el); sum {
 			continue
 		}
-		if _, sum, err := e.governingTypes(el); err != nil || sum || nillable(el) || abstractLocal(el) {
+		if _, sum, err := e.governingTypes(el); err != nil || sum || goshape.Nillable(el) || abstractLocal(el) {
 			continue
 		}
 		td, err := e.declaredType(el)

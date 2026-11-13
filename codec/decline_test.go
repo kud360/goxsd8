@@ -30,6 +30,12 @@ func vStruct(name, attrs string) string {
 	return `<xs:element name="` + name + `"` + attrs + `><xs:complexType><xs:sequence><xs:element name="v" type="xs:string"/></xs:sequence></xs:complexType></xs:element>`
 }
 
+// nillableTables declares s:r, a nillable declaration of two governing types,
+// ttTypes' base and num, whose fields codegen's sum wraps branch by branch, a
+// shape Decode still declines as nillable; s:r with no kind attribute and the
+// content <s:a>x</s:a> is base's, and valid.
+const nillableTables = ttTypes + `<xs:element name="r" type="s:base" nillable="true"><xs:alternative test="@kind = 'num'" type="s:num"/></xs:element>`
+
 // TestDecodeDeclines pins one row per construct Decode declines: each
 // schema and instance is valid, so validation accepts, and Decode returns
 // the construct's *DeclineError at the declining element's instance Loc,
@@ -49,16 +55,13 @@ func TestDecodeDeclines(t *testing.T) {
 		{"two anonymous governing types", `<xs:element name="r"><xs:alternative test="@k = '1'"><xs:complexType><xs:sequence><xs:element name="a" type="xs:string"/></xs:sequence><xs:attribute name="k"/></xs:complexType></xs:alternative>
 			<xs:alternative><xs:complexType><xs:sequence><xs:element name="a" type="xs:string"/></xs:sequence></xs:complexType></xs:alternative></xs:element>`, "", a, constructAnonymousTypes, 1, 1},
 		{"a nilled document element selecting xs:error beside xs:anyType", `<xs:element name="r" nillable="true"><xs:alternative test="@xsi:nil" type="xs:error"/></xs:element>`, ` xsi:nil="true"`, "", constructNillable, 1, 1},
-		{"a nillable declaration of two governing types", ttTypes + `<xs:element name="r" type="s:base" nillable="true"><xs:alternative test="@kind = 'num'" type="s:num"/></xs:element>`, "", a, constructNillable, 1, 1},
+		{"a nillable declaration of two governing types", nillableTables, "", a, constructNillable, 1, 1},
 		{"governing types whose branch structs share a shape, t and T", `<xs:complexType name="b0"><xs:sequence><xs:element name="a" type="xs:string"/></xs:sequence><xs:attribute name="k" type="xs:string"/></xs:complexType>
 			<xs:complexType name="t"><xs:complexContent><xs:extension base="s:b0"/></xs:complexContent></xs:complexType><xs:complexType name="T"><xs:complexContent><xs:extension base="s:b0"/></xs:complexContent></xs:complexType>
 			<xs:element name="r" type="s:b0"><xs:alternative test="@k = 't'" type="s:t"/><xs:alternative type="s:T"/></xs:element>`, "", a, constructSharedBranch, 1, 1},
 		{"a governing type with {abstract} true", `<xs:complexType name="b0"><xs:sequence><xs:element name="a" type="xs:string"/></xs:sequence><xs:attribute name="k" type="xs:string"/></xs:complexType>
 			<xs:complexType name="ab" abstract="true"><xs:complexContent><xs:extension base="s:b0"/></xs:complexContent></xs:complexType>
 			<xs:element name="r" type="s:b0"><xs:alternative test="@k" type="s:ab"/></xs:element>`, "", a, constructAbstractTypeElement, 1, 1},
-		{"nillable", `<xs:element name="r" nillable="true"><xs:complexType><xs:sequence><xs:element name="a" type="xs:string"/></xs:sequence></xs:complexType></xs:element>`,
-			"", a, constructNillable, 1, 1},
-		{"nillable local element with a fixed value", sequenceOf(`<xs:element name="a" type="xs:string" nillable="true" fixed="x"/>`), "", `<s:a>x</s:a>`, constructNillable, 1, 1},
 		{"simple root of a union of xs:string and xs:token", `<xs:element name="r"><xs:simpleType><xs:union memberTypes="xs:string xs:token"/></xs:simpleType></xs:element>`, "", "1.0", constructSharedVariant, 1, 1},
 		{"simple root of a list of a union of xs:string and xs:token", `<xs:element name="r"><xs:simpleType><xs:list><xs:simpleType><xs:union memberTypes="xs:string xs:token"/></xs:simpleType></xs:list></xs:simpleType></xs:element>`, "", "1.0 2.0", constructSharedVariant, 1, 1},
 		{"document element of an abstract complex type of empty content, under xsi:type", `<xs:complexType name="ab" abstract="true"/>
@@ -78,6 +81,8 @@ func TestDecodeDeclines(t *testing.T) {
 		{"choice alternatives sharing a branch shape, qualified and not", root(`<xs:choice><xs:element name="x" type="xs:string"/><xs:element name="x" form="unqualified" type="xs:string"/></xs:choice>`),
 			"", `<s:x>v</s:x>`, constructSharedBranch, 1, 1},
 		{"mixed choice alternatives sharing a branch shape, qualified and not", `<xs:element name="r"><xs:complexType mixed="true"><xs:choice><xs:element name="x" type="xs:string"/><xs:element name="x" form="unqualified" type="xs:string"/></xs:choice></xs:complexType></xs:element>`,
+			"", `<s:x>v</s:x>`, constructSharedBranch, 1, 1},
+		{"choice alternatives sharing a branch shape, a nillable xs:string and a union, qualified and not", root(`<xs:choice><xs:element name="x" type="xs:string" nillable="true"/><xs:element name="x" form="unqualified"><xs:simpleType><xs:union memberTypes="xs:int xs:boolean"/></xs:simpleType></xs:element></xs:choice>`),
 			"", `<s:x>v</s:x>`, constructSharedBranch, 1, 1},
 		{"choice alternatives sharing a branch shape, a repeated xs:int and a list of xs:int", root(`<xs:choice><xs:element name="x" type="xs:int" maxOccurs="unbounded"/><xs:element name="X"><xs:simpleType><xs:list itemType="xs:int"/></xs:simpleType></xs:element></xs:choice>`),
 			"", `<s:x>1</s:x>`, constructSharedBranch, 1, 1},
@@ -127,7 +132,6 @@ func TestDecodeDeclines(t *testing.T) {
 		{"two refs whose groups share a member, s2_2_2v01's shape", `<xs:element name="e0" type="xs:string"/><xs:element name="e1" type="xs:string"/>
 			<xs:element name="e2" type="xs:string" abstract="true" substitutionGroup="s:e0 s:e1"/><xs:element name="e3" type="xs:string" substitutionGroup="s:e2"/>` +
 			sequenceOf(`<xs:element ref="s:e0"/><xs:element ref="s:e1"/>`), "", `<s:e3>x</s:e3><s:e3>y</s:e3>`, constructSharedName, 1, 1},
-		{"element ref to a nillable head", `<xs:element name="h" type="xs:string" nillable="true"/>` + sequenceOf(`<xs:element ref="s:h"/>`), "", `<s:h>x</s:h>`, constructNillable, 1, 1},
 		{"element ref to a head of a union of xs:string and xs:token", `<xs:element name="h"><xs:simpleType><xs:union memberTypes="xs:string xs:token"/></xs:simpleType></xs:element>` + sequenceOf(`<xs:element ref="s:h"/>`), "", `<s:h>1.0</s:h>`, constructSharedVariant, 1, 1},
 		{"element ref sharing a local particle's expanded name", `<xs:element name="a" type="xs:string"/>` + sequenceOf(`<xs:element name="a" type="xs:string"/><xs:element ref="s:a"/>`),
 			"", a + a, constructSharedName, 1, 1},
@@ -139,8 +143,6 @@ func TestDecodeDeclines(t *testing.T) {
 		{"local element of an abstract complex type", `<xs:complexType name="ab" abstract="true"><xs:sequence><xs:element name="x" type="xs:string"/></xs:sequence></xs:complexType>
 			<xs:complexType name="cc"><xs:complexContent><xs:extension base="s:ab"/></xs:complexContent></xs:complexType>` + sequenceOf(`<xs:element name="a" type="s:ab" minOccurs="0"/>`),
 			"", "", constructAbstractTypeElement, 1, 1},
-		{"nillable local element of complex type", sequenceOf(`<xs:element name="a" nillable="true"><xs:complexType><xs:sequence><xs:element name="b" type="xs:string"/></xs:sequence></xs:complexType></xs:element>`),
-			"", `<s:a><s:b>x</s:b></s:a>`, constructNillable, 1, 1},
 		{"a nested type's particle of a union of xs:string and xs:token", sequenceOf(`<xs:element name="a"><xs:complexType><xs:sequence><xs:element name="b"><xs:simpleType><xs:union memberTypes="xs:string xs:token"/></xs:simpleType></xs:element></xs:sequence></xs:complexType></xs:element>`),
 			"", `<s:a><s:b>1.0</s:b></s:a>`, constructSharedVariant, 1, 1},
 		{"choice alternatives sharing a branch shape, two structs of one shape", root(`<xs:choice>` + vStruct("x", "") + vStruct("X", "") + `</xs:choice>`),
@@ -172,9 +174,6 @@ func TestDecodeDeclines(t *testing.T) {
 		{"attribute of a list of a union of xs:string and xs:token", root(`<xs:sequence><xs:element name="a" type="xs:string"/></xs:sequence><xs:attribute name="b"><xs:simpleType><xs:list><xs:simpleType><xs:union memberTypes="xs:string xs:token"/></xs:simpleType></xs:list></xs:simpleType></xs:attribute>`),
 			` b="1.0"`, a, constructSharedVariant, 1, 1},
 		{"union of xs:string and xs:token", sequenceOf(`<xs:element name="a"><xs:simpleType><xs:union memberTypes="xs:string xs:token"/></xs:simpleType></xs:element>`), "", a, constructSharedVariant, 1, 1},
-		{"nillable declaration of a type with an xsi:nil use", `<xs:import namespace="http://www.w3.org/2001/XMLSchema-instance"/>` +
-			`<xs:element name="r" nillable="true"><xs:complexType><xs:sequence><xs:element name="a" type="xs:string"/></xs:sequence><xs:attribute ref="xsi:nil"/></xs:complexType></xs:element>`,
-			` xsi:nil="true"`, "", constructNillable, 1, 1},
 	}
 	for _, row := range rows {
 		t.Run(row.name, func(t *testing.T) {
@@ -467,8 +466,8 @@ func TestDeclineConstruct(t *testing.T) {
 		pair  [2]decl
 	}{
 		{"declaration", [2]decl{
-			{`<xs:element name="r" nillable="true"><xs:complexType><xs:sequence><xs:element name="a" type="xs:string"/></xs:sequence></xs:complexType></xs:element>`, "", a},
-			{sequenceOf(`<xs:element name="a" type="xs:string" nillable="true"/>`), "", a},
+			{nillableTables, "", a},
+			{sequenceOf(`<xs:element name="a" type="xs:string" nillable="true"><xs:alternative test="@k" type="xs:token"/></xs:element>`), "", a},
 		}},
 		{"content all group", [2]decl{
 			{root(`<xs:all minOccurs="0"><xs:element name="a" type="xs:string"/></xs:all>`), "", a},

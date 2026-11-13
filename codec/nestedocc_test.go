@@ -400,15 +400,14 @@ func TestDecodeNestedOccurrenceDeclines(t *testing.T) {
 	}
 }
 
-// TestCheckDecodeUntrackedNestedOccurrence pins the nested occurrence's
-// ContentMatcher decline and its place in item 5's order: of sequence(sequence(a,
-// b){1,2}, n nillable, sequence(c{1,2}){1,21845}), the third particle,
-// flattened by its repeating edge, makes the content model one
-// xsd.Schema.ContentMatcher declines as too wide to track, and the nested
-// occurrence declines constructUntrackedModel after its own last particle,
+// TestCheckDecodeUntrackedNestedOccurrence pins the nested occurrence's ContentMatcher
+// decline and its place in item 5's order: of sequence(sequence(a, b){1,2}, n nillable of two
+// governing types, sequence(c{1,2}){1,21845}), the third particle, flattened by its repeating
+// edge, makes the content model one xsd.Schema.ContentMatcher declines as too wide to track,
+// and the nested occurrence declines constructUntrackedModel after its own last particle,
 // before n's constructNillable.
 func TestCheckDecodeUntrackedNestedOccurrence(t *testing.T) {
-	schema := schemaOf(t, sequenceOf(`<xs:sequence maxOccurs="2">`+cgElA+cgElB+`</xs:sequence><xs:element name="n" type="xs:string" nillable="true"/>`+
+	schema := schemaOf(t, sequenceOf(`<xs:sequence maxOccurs="2">`+cgElA+cgElB+`</xs:sequence><xs:element name="n" type="xs:string" nillable="true"><xs:alternative test="@k" type="xs:token"/></xs:element>`+
 		`<xs:sequence maxOccurs="21845"><xs:element name="c" type="xs:string" maxOccurs="2"/></xs:sequence>`))
 	var de *DeclineError
 	if err := CheckDecode[struct{}](schema, rootName); !errors.As(err, &de) || de.Construct() != (Construct{constructUntrackedModel}) {

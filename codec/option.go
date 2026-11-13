@@ -81,7 +81,11 @@ func WithURI(uri string) Option {
 // codec.WithBranches[order.Pay](order.PayCard{}, order.PayCash{}); only each
 // value's dynamic type is read. Decode uses the set wherever T holds I as a
 // choice's, a substitution group's, a flattened slice element's, an element
-// declaration's governing types' or a union's interface, at any depth: T
+// declaration's governing types' or a union's interface, or as codegen's
+// Nillable over one nillable element's types, whose instantiation's arms are
+// Nilled's and Content's of the same type arguments, such as
+// codec.WithBranches[order.Nillable[int32, struct{}]](order.Nilled[int32,
+// struct{}]{}, order.Content[int32, struct{}]{}), at any depth: T
 // itself, a field, a list's element, a nested element's struct or interface, a
 // branch, or a variant, and ignores a set for any type T does not hold so, so
 // one option list may serve every document element of a package; a set for a
