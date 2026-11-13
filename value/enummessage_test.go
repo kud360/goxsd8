@@ -55,6 +55,15 @@ func TestEnumerationRejectionNamesItsType(t *testing.T) {
 	punct := derive("Punct", str, xsd.NewEnumerationFacet([]xsd.EnumerationMember{
 		xsd.NewEnumerationMember(`a"b`, nil, nil), xsd.NewEnumerationMember("x, y", nil, nil),
 	}))
+	intUnion, err := xsd.NewSimpleType(xsderr.Loc{}, xsd.QName{Space: "urn:t", Local: "IntUnion"},
+		xsd.UnionDerivation{Members: []xsd.SimpleTypeOrRef{xsd.OwnedSimpleType{Definition: xsInt}}},
+		xsd.OwnedSimpleType{Definition: xsd.AnySimpleType()}, nil, nil)
+	if err != nil {
+		t.Fatalf("NewSimpleType(IntUnion): %v", err)
+	}
+	fives := derive("Fives", intUnion, xsd.NewEnumerationFacet([]xsd.EnumerationMember{
+		xsd.NewEnumerationMember("5", nil, nil),
+	}))
 	for _, tc := range []struct {
 		name string
 		st   *xsd.SimpleType
@@ -72,6 +81,10 @@ func TestEnumerationRejectionNamesItsType(t *testing.T) {
 		// inside its quotes, as in a cvc-pattern-valid message.
 		{"escaped", punct, "z",
 			`"z" is not equal or identical to any member of the enumeration facet of the simple type {urn:t}Punct, whose {value} holds the values written "a&quot;b", "x, y", but cvc-enumeration-valid requires it to be equal or identical to one of them`},
+		// A union's own enumeration quotes the candidate as its active member,
+		// xs:int, collapsed it: "+007", not " +007 ".
+		{"union member normalized", fives, " +007 ",
+			`"+007" is not equal or identical to any member of the enumeration facet of the simple type {urn:t}Fives, whose {value} holds the values written "5", but cvc-enumeration-valid requires it to be equal or identical to one of them`},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			_, err := value.ValidateLexical(b, ownedChain{}, tc.st, tc.lit, nil, declineEvery{})
