@@ -707,7 +707,7 @@ func TestDecodeMixedTypeTable(t *testing.T) {
 // boundBinding.fill runs (charRun) comes first.
 func TestMixedCharAfterChildIsDefect(t *testing.T) {
 	const doc = "<r>\n<a>v</a>y</r>"
-	x := childIndex{children: map[xsd.QName]int{{Local: "a"}: 0}}
+	x := childIndex{children: map[xsd.QName]taker{{Local: "a"}: {}}}
 	for _, mixed := range []bool{false, true} {
 		r := xmltree.NewReader("", bytes.NewReader([]byte(doc)))
 		if _, err := documentElement(r); err != nil {

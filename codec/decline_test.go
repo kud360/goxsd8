@@ -102,8 +102,6 @@ func TestDecodeDeclines(t *testing.T) {
 			<xs:element name="r" type="s:t2"/>`, "", a + `<s:b>1</s:b>`, constructAllOccurs, 1, 1},
 		{"nested choice occurring twice in an occurrence field's item", root(`<xs:sequence maxOccurs="2"><xs:element name="a" type="xs:string"/><xs:choice maxOccurs="2"><xs:element name="b" type="xs:string"/></xs:choice></xs:sequence>`),
 			"", a + `<s:b>y</s:b>`, constructNestedGroup, 1, 1},
-		{"spliced sequence sharing an earlier particle's expanded name", sequenceOf(`<xs:element name="a" type="xs:string"/><xs:sequence><xs:element name="b" type="xs:string"/><xs:element name="a" type="xs:string"/></xs:sequence>`),
-			"", a + `<s:b>y</s:b>` + a, constructSharedName, 1, 1},
 		{"choice alternatives sharing a branch shape, two wildcards occurring once", root(`<xs:choice><xs:any namespace="##local"/><xs:any namespace="##other" processContents="lax"/></xs:choice>`),
 			"", `<o:w xmlns:o="urn:o"/>`, constructSharedBranch, 1, 1},
 		{"element ref to a head whose group holds a nillable member", `<xs:element name="a" type="xs:string"/><xs:element name="m" type="xs:string" nillable="true" substitutionGroup="s:a"/>` + sequenceOf(`<xs:element ref="s:a"/>`),
@@ -117,17 +115,9 @@ func TestDecodeDeclines(t *testing.T) {
 		{"element ref to a group whose members share a branch shape, a and A", `<xs:element name="h" type="xs:string" abstract="true"/>
 			<xs:element name="a" type="xs:string" substitutionGroup="s:h"/><xs:element name="A" type="xs:string" substitutionGroup="s:h"/>` + sequenceOf(`<xs:element ref="s:h"/>`),
 			"", a, constructSharedBranch, 1, 1},
-		{"a local particle sharing the expanded name of an earlier ref's member", `<xs:element name="g" type="xs:string"/><xs:element name="m" type="xs:string" substitutionGroup="s:g"/>` +
-			sequenceOf(`<xs:element ref="s:g"/><xs:element name="m" type="xs:string"/>`), "", `<s:g>x</s:g><s:m>y</s:m>`, constructSharedName, 1, 1},
-		{"a ref's member sharing the expanded name of an earlier local particle", `<xs:element name="g" type="xs:string"/><xs:element name="m" type="xs:string" substitutionGroup="s:g"/>` +
-			sequenceOf(`<xs:element name="m" type="xs:string"/><xs:element ref="s:g"/>`), "", `<s:m>x</s:m><s:g>y</s:g>`, constructSharedName, 1, 1},
-		{"a ref to a member of an earlier ref's group", `<xs:element name="g" type="xs:string"/><xs:element name="m" type="xs:string" substitutionGroup="s:g"/>` +
-			sequenceOf(`<xs:element ref="s:g"/><xs:element ref="s:m"/>`), "", `<s:g>x</s:g><s:m>y</s:m>`, constructSharedName, 1, 1},
 		{"two refs whose groups share a member, s2_2_2v01's shape", `<xs:element name="e0" type="xs:string"/><xs:element name="e1" type="xs:string"/>
 			<xs:element name="e2" type="xs:string" abstract="true" substitutionGroup="s:e0 s:e1"/><xs:element name="e3" type="xs:string" substitutionGroup="s:e2"/>` +
 			sequenceOf(`<xs:element ref="s:e0"/><xs:element ref="s:e1"/>`), "", `<s:e3>x</s:e3><s:e3>y</s:e3>`, constructSharedName, 1, 1},
-		{"element ref sharing a local particle's expanded name", `<xs:element name="a" type="xs:string"/>` + sequenceOf(`<xs:element name="a" type="xs:string"/><xs:element ref="s:a"/>`),
-			"", a + a, constructSharedName, 1, 1},
 		{"local element of an abstract complex type", `<xs:complexType name="ab" abstract="true"><xs:sequence><xs:element name="x" type="xs:string"/></xs:sequence></xs:complexType>
 			<xs:complexType name="cc"><xs:complexContent><xs:extension base="s:ab"/></xs:complexContent></xs:complexType>` + sequenceOf(`<xs:element name="a" type="s:ab" minOccurs="0"/>`),
 			"", "", constructAbstractTypeElement, 1, 1},
@@ -154,8 +144,6 @@ func TestDecodeDeclines(t *testing.T) {
 			"", `<s:any><s:v>v</s:v></s:any>`, constructSharedBranch, 1, 1},
 		{"choice alternatives sharing a name, a wildcard and an xs:date", root(`<xs:choice><xs:any namespace="##other" processContents="lax"/><xs:element name="any" type="xs:date"/></xs:choice>`),
 			"", `<s:any>2000-01-01</s:any>`, constructSharedBranch, 1, 1},
-		{"particles sharing an expanded name", sequenceOf(`<xs:element name="a" type="xs:string"/><xs:element name="b" type="xs:string"/><xs:element name="a" type="xs:string"/>`),
-			"", a + `<s:b>y</s:b>` + a, constructSharedName, 1, 1},
 	}
 	for _, row := range rows {
 		t.Run(row.name, func(t *testing.T) {
