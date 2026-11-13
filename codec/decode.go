@@ -392,9 +392,14 @@ var ErrTypeMismatch = errors.New("codec: T is not the type codegen emits for the
 //     depth. Then a branch struct of an earlier alternative's shape declines,
 //     as two branches of a sealed interface whose structs have one shape: one
 //     of as many fields as the earlier one's, each sharing its shape with the
-//     earlier one's field at its position. A field holding a nested choice's
-//     interface, a flattened particle's slice or an occurrence field's type
-//     for one occurrence shares its shape with any field of its name. Two
+//     earlier one's field at its position. Two fields holding nested choices'
+//     interfaces share it where one branch set could be held to both, as item
+//     6 holds a nested choice's field: they have one name and as many
+//     alternatives, and each alternative's branch of one shares its shape
+//     with some alternative's branch of the other. Otherwise a field holding
+//     a nested choice's interface, a flattened particle's slice or an
+//     occurrence field's type for one occurrence shares its shape with any
+//     field of its name. Two
 //     other fields of one name share it where either is of a simple type whose
 //     Go type is a datatype struct or a list of one, where one is codegen's
 //     struct and the other a wildcard's, of type xs:anyType, or of a simple
@@ -691,10 +696,14 @@ var ErrTypeMismatch = errors.New("codec: T is not the type codegen emits for the
 //     alternative's {min occurs} 0 read as 1, V its Go type for a simple
 //     type, any struct for codegen's struct, any interface for a sealed
 //     interface, and the E, X or N its bullet above matches for a wildcard or
-//     an element of type xs:anyType, any interface of one unexported method
-//     for a nested choice's field and a slice of one for a flattened
-//     particle's, and, for an occurrence field's, its shape over any struct
-//     for a sequence and over such an interface for a choice. A branch whose
+//     an element of type xs:anyType; for a nested choice's field, an
+//     interface of one unexported method whose branch set, as WithBranches
+//     supplied it, holds one struct per alternative of that choice, each one
+//     its alternative's fields could be, or no set where the choice has no
+//     alternatives; for a flattened particle's, a slice of any interface of
+//     one unexported method; and, for an occurrence field's, its shape over
+//     any struct for a sequence and over any interface of one unexported
+//     method for a choice. A branch whose
 //     fields could be no alternative is held to the first alternative, in
 //     alternative order, that names it: a one-field alternative of complex
 //     type, a wildcard or a substitution group's interface whose field's name
@@ -1717,7 +1726,7 @@ func (f field) check(owner reflect.Type, index int, cx *checkContext) (elementRe
 // arm admits. Every got that check holds to f, f admits; a got f does not
 // admit, check rejects before its arm checks anything further, so it stores
 // no checkContext.bound entry.
-func (f field) admits(got reflect.StructField) bool {
+func (f field) admits(got reflect.StructField, _ branchSets) bool {
 	if got.Name != f.name || got.Anonymous {
 		return false
 	}
@@ -2561,10 +2570,10 @@ type contentMember interface {
 	// returns one sink per target, in target order.
 	sinks(t reflect.Type, index int, cx *checkContext) ([]sink, error)
 	// admits reports whether got, a branch struct's field, could be the
-	// member: every got sinks holds to the member it admits, and a got it
-	// does not admit sinks rejects before checking anything further, so it
-	// stores no checkContext.bound entry.
-	admits(got reflect.StructField) bool
+	// member, a nested interface's branch types as sets supplies them: every
+	// got sinks holds to the member it admits. It reads sets, never a
+	// checkContext, so it stores no checkContext.bound entry.
+	admits(got reflect.StructField, sets branchSets) bool
 	// goName is the member's field's Go name.
 	goName() string
 }
@@ -3107,16 +3116,17 @@ func branchTargets(a branchArm) int {
 	return n
 }
 
-// branchAdmits reports whether bt, a struct, could be a's branch struct: as
-// many fields as a's members, each admitted by its member, position by
-// position (contentMember.admits).
-func branchAdmits(a branchArm, bt reflect.Type) bool {
+// branchAdmits reports whether bt, a struct, could be a's branch struct, a
+// nested interface's branch types as sets supplies them: as many fields as
+// a's members, each admitted by its member, position by position
+// (contentMember.admits).
+func branchAdmits(a branchArm, bt reflect.Type, sets branchSets) bool {
 	members := a.branchMembers()
 	if bt.NumField() != len(members) {
 		return false
 	}
 	for i, m := range members {
-		if !m.admits(bt.Field(i)) {
+		if !m.admits(bt.Field(i), sets) {
 			return false
 		}
 	}
@@ -3124,10 +3134,12 @@ func branchAdmits(a branchArm, bt reflect.Type) bool {
 }
 
 // branchesShare reports whether a and b, two alternatives of one sealed
-// interface, may admit a common branch struct (branchAdmits), so that no
-// branch type could tell them apart (sealed.alternative): exactly when they
-// hold as many members and each positional pair shares (membersShare).
-// Different counts never share, since no struct has two field counts.
+// interface, or of two nested choices at one position of two branch structs
+// that could be one struct (membersShare), may admit a common branch struct
+// (branchAdmits) under some branch sets, so that no branch type could tell
+// them apart (sealed.alternative): exactly when they hold as many members and
+// each positional pair shares (membersShare). Different counts never share,
+// since no struct has two field counts.
 func branchesShare(a, b branchArm) bool {
 	am, bm := a.branchMembers(), b.branchMembers()
 	if len(am) != len(bm) {
@@ -3142,20 +3154,46 @@ func branchesShare(a, b branchArm) bool {
 }
 
 // membersShare reports whether two members at one position of two branch
-// structs may admit a common struct field: field.sharesBranch's answer for
-// two fields, and otherwise, where either is a *choice, a *flatSlice or a
+// structs may admit a common struct field under some branch sets:
+// field.sharesBranch's answer for two fields; choicesShare's for two
+// *choices; and otherwise, where either is a *choice, a *flatSlice or a
 // *nestedOccurrence, whether they have one name, which is conservative,
 // since their Go types, an interface, a slice of one, or an occurrence's
 // shape over its item beside whatever the other admits, are not compared.
-// contentMember is a closed sum, so the assertions are STYLE T2's
-// sealed-sum exception.
+// It reads the members, bound from the schema, never T. contentMember is a
+// closed sum, so the assertions are STYLE T2's sealed-sum exception.
 func membersShare(a, b contentMember) bool {
 	fa, aField := a.(field)
 	fb, bField := b.(field)
 	if aField && bField {
 		return fa.sharesBranch(fb)
 	}
+	ca, aChoice := a.(*choice)
+	cb, bChoice := b.(*choice)
+	if aChoice && bChoice {
+		return choicesShare(ca, cb)
+	}
 	return a.goName() == b.goName()
+}
+
+// choicesShare reports whether a and b, two nested choices' fields, may
+// admit a common struct field, an interface one branch set could hold to
+// both (sealed.holds): exactly when they have one name, as many
+// alternatives, and each alternative of a shares a branch struct with some
+// alternative of b (branchesShare). That is conservative, since a set held
+// to both pairs each alternative of a with one of b, its branch struct
+// admitted by both, one to one, which the last test does not require; two
+// choices of no alternatives share.
+func choicesShare(a, b *choice) bool {
+	if a.name != b.name || len(a.sealed.alts) != len(b.sealed.alts) {
+		return false
+	}
+	for _, x := range a.sealed.alts {
+		if !slices.ContainsFunc(b.sealed.alts, func(y branchArm) bool { return branchesShare(x, y) }) {
+			return false
+		}
+	}
+	return true
 }
 
 // bindBranch holds bt to a's branch struct, each field to its member
@@ -3311,10 +3349,10 @@ func (c *choice) targets() int {
 }
 
 // admits reports whether got could be c's field: c's name, not embedded, an
-// interface of one unexported method (sealedShaped), so that every got sinks
-// holds c, c admits.
-func (c *choice) admits(got reflect.StructField) bool {
-	return got.Name == c.name && !got.Anonymous && sealedShaped(got.Type)
+// interface c's sealed could be under sets (sealed.holds), so that every got
+// sinks holds c, c admits.
+func (c *choice) admits(got reflect.StructField, sets branchSets) bool {
+	return got.Name == c.name && !got.Anonymous && c.sealed.holds(got.Type, sets)
 }
 
 // goName is c's field's Go name.
@@ -3604,7 +3642,7 @@ func (f *flatSlice) targets() int { return len(f.sealed.alts) }
 // admits reports whether got could be f's field: f's name, not embedded, a
 // slice whose element is an interface of one unexported method
 // (sealedShaped), so that every got checkField holds f, f admits.
-func (f *flatSlice) admits(got reflect.StructField) bool {
+func (f *flatSlice) admits(got reflect.StructField, _ branchSets) bool {
 	return got.Name == f.name && !got.Anonymous && got.Type.Kind() == reflect.Slice && sealedShaped(got.Type.Elem())
 }
 
@@ -3959,7 +3997,7 @@ func (o *nestedOccurrence) goName() string { return o.name }
 // o's shape over a struct for a sequence and over an interface of one
 // unexported method (sealedShaped) for a choice, so that every got sinks holds
 // o, o admits.
-func (o *nestedOccurrence) admits(got reflect.StructField) bool {
+func (o *nestedOccurrence) admits(got reflect.StructField, _ branchSets) bool {
 	it, ok := o.shape.elem(got.Type)
 	if got.Name != o.name || got.Anonymous || !ok {
 		return false
@@ -4331,15 +4369,13 @@ func (c *sealed[A]) checkSite(it reflect.Type, site string, cx *checkContext) (*
 
 // alternative returns the index in c.alts of the alternative whose branch
 // struct bt is, with the sinks of its targets (bindBranch), or -1 for none,
-// or that alternative's ErrTypeMismatch error: the first alternative that
-// admits bt (branchAdmits), every field held position by position, which
-// branchesShare keeps alone of those admitting any one struct; or else,
-// where none admits it, the first alternative that names bt
-// (branchArm.namesBranch), whose check then fails. The one alternative
-// selected is the only one checked, its check's error the check's. So no
-// check is tried and discarded.
+// or that alternative's ErrTypeMismatch error: the alternative admitting bt
+// under cx's sets (admitting); or else, where none admits it, the first
+// alternative that names bt (branchArm.namesBranch), whose check then fails.
+// The one alternative selected is the only one checked, its check's error
+// the check's. So no check is tried and discarded.
 func (c *sealed[A]) alternative(bt reflect.Type, cx *checkContext) (int, []sink, error) {
-	j := slices.IndexFunc(c.alts, func(a A) bool { return branchAdmits(a, bt) })
+	j := c.admitting(bt, cx.sets)
 	if j < 0 {
 		j = slices.IndexFunc(c.alts, func(a A) bool { return a.namesBranch(bt) })
 	}
@@ -4348,6 +4384,44 @@ func (c *sealed[A]) alternative(bt reflect.Type, cx *checkContext) (int, []sink,
 	}
 	sinks, err := bindBranch(c.alts[j], bt, cx)
 	return j, sinks, err
+}
+
+// admitting returns the index in c.alts of the first alternative that admits
+// bt, a struct, a nested interface's branch types as sets supplies them
+// (branchAdmits), every field held position by position, which branchesShare
+// keeps alone of those admitting any one struct, or -1 for none.
+func (c *sealed[A]) admitting(bt reflect.Type, sets branchSets) int {
+	return slices.IndexFunc(c.alts, func(a A) bool { return branchAdmits(a, bt, sets) })
+}
+
+// holds reports whether it could be c's sealed interface as checkSite holds
+// one, its branch types as sets supplies them: an interface of one unexported
+// method (sealedShaped) whose branch set, as WithBranches supplied it, or no
+// set where c has no alternatives, holds as many types as c has
+// alternatives, each a struct, none nil or twice, and each admitted by an
+// alternative (admitting) that admits no other of them. It answers
+// true for every it checkSite holds to c under sets, and reads no
+// checkContext.
+func (c *sealed[A]) holds(it reflect.Type, sets branchSets) bool {
+	if !sealedShaped(it) {
+		return false
+	}
+	branches, _ := sets.of(it)
+	if len(branches) != len(c.alts) {
+		return false
+	}
+	matched := make([]bool, len(c.alts))
+	for i, bt := range branches {
+		if bt == nil || bt.Kind() != reflect.Struct || slices.Contains(branches[:i], bt) {
+			return false
+		}
+		j := c.admitting(bt, sets)
+		if j < 0 || matched[j] {
+			return false
+		}
+		matched[j] = true
+	}
+	return true
 }
 
 // boundChoice is a sealed interface checkSite held, its branches read
