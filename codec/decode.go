@@ -4398,10 +4398,9 @@ func (c *sealed[A]) admitting(bt reflect.Type, sets branchSets) int {
 // one, its branch types as sets supplies them: an interface of one unexported
 // method (sealedShaped) whose branch set, as WithBranches supplied it, or no
 // set where c has no alternatives, holds as many types as c has
-// alternatives, each a struct, none nil or twice, and each admitted by an
-// alternative (admitting) that admits no other of them. It answers
-// true for every it checkSite holds to c under sets, and reads no
-// checkContext.
+// alternatives, each a struct, none nil, and each admitted by an alternative
+// (admitting) that admits no other of them, so none twice. It answers true
+// for every it checkSite holds to c under sets, and reads no checkContext.
 func (c *sealed[A]) holds(it reflect.Type, sets branchSets) bool {
 	if !sealedShaped(it) {
 		return false
@@ -4411,8 +4410,8 @@ func (c *sealed[A]) holds(it reflect.Type, sets branchSets) bool {
 		return false
 	}
 	matched := make([]bool, len(c.alts))
-	for i, bt := range branches {
-		if bt == nil || bt.Kind() != reflect.Struct || slices.Contains(branches[:i], bt) {
+	for _, bt := range branches {
+		if bt == nil || bt.Kind() != reflect.Struct {
 			return false
 		}
 		j := c.admitting(bt, sets)

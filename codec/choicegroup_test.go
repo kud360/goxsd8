@@ -497,6 +497,46 @@ func TestDecodeNestedChoiceAlternativesBind(t *testing.T) {
 	}
 }
 
+// cgTNStr is a branch of cgTNIn2 that is no struct.
+type cgTNStr string
+
+func (cgTNStr) isCgTNIn2() {}
+
+// TestDecodeNestedChoiceAlternativesTypeMismatch pins item 6 for a branch
+// set of a nested choice whose branch struct is one of two {Choice I}: a set
+// holding a nil value, a type that is no struct, or a type twice is held to
+// neither alternative, so the outer branch is held to the first alternative
+// that names it, the error that alternative's mismatch; CheckDecode's error
+// is Decode's.
+func TestDecodeNestedChoiceAlternativesTypeMismatch(t *testing.T) {
+	const prefix = "codec: T is not the type codegen emits for the document element: "
+	rows := []struct {
+		name  string
+		inner Option
+		want  string
+	}{
+		{"a nil branch", WithBranches[cgTNIn2](nil, cgTND{}), prefix + "WithBranches supplies a nil branch of codec.cgTNIn2"},
+		{"a branch that is no struct", WithBranches[cgTNIn2](cgTNStr(""), cgTND{}), prefix + "WithBranches supplies codec.cgTNStr, no struct, as a branch of codec.cgTNIn2"},
+		{"a branch twice", WithBranches[cgTNIn2](cgTNC{}, cgTNC{}), prefix + "branch codec.cgTNC of codec.cgTNIn2 has the shape of no branch struct codegen emits that an earlier branch did not match"},
+	}
+	schema := schemaOf(t, cgTwoNestedSchema)
+	data := instanceOf("", "<s:c>1</s:c>")
+	mustAccept(t, schema, data)
+	for _, row := range rows {
+		t.Run(row.name, func(t *testing.T) {
+			opts := []Option{WithBranches[cgTN](cgTN2{}, cgTN1{}), WithBranches[cgTNIn1](cgTNA{}, cgTNB{}), row.inner}
+			got, err := Decode[cgTN](schema, strict.New(), data, opts...)
+			if got != nil {
+				t.Fatalf("Decode = %v, want no value", *got)
+			}
+			if err == nil || !errors.Is(err, ErrTypeMismatch) || err.Error() != row.want {
+				t.Errorf("Decode error = %v, want %q", err, row.want)
+			}
+			assertProbeMismatch(t, CheckDecode[cgTN](schema, rootName, opts...), err)
+		})
+	}
+}
+
 // TestDecodeChoiceGroupTypeMismatch pins item 6 for a model-group
 // alternative's branch: a branch struct whose fields are its alternative's
 // names in another order matches no alternative, and one of its
