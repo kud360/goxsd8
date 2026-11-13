@@ -200,16 +200,6 @@ type rawNames struct {
 	anyType, attribute, child, element string
 }
 
-// isMixed reports whether the complex type t's {content type} has {variety}
-// mixed (§3.4.1): element content whose effective mixed value (§3.4.2.3.3
-// dcl.ctd.ctcc.common clause 1) is true, read from t's resolved {content type}
-// alone, never its base's, so that an extension's (clause 4.2) and a
-// restriction's are each its own.
-func isMixed(t xsd.ComplexType) bool {
-	content, isElement := t.ContentType().(xsd.ElementContent)
-	return isElement && content.Mixed
-}
-
 // isAnyType reports whether td is xs:anyType itself, by identity: every other
 // type definition is derived from it (§2.2.1.1 key-derived), whatever its
 // shape, and so is never xs:anyType.
@@ -1265,7 +1255,7 @@ func typeName(t xsd.TypeDefinition) string {
 // shape checks the complex type t against the package doc's "# Complex types"
 // shape, naming it in declines by o's subject, and returns the type it emits
 // as name, sealed exactly when "# Complex types" gives the choice t's content
-// particle holds as t itself — it reads t's mixedness (isMixed), then its
+// particle holds as t itself — it reads t's mixedness (goshape.Mixed), then its
 // attribute fields (goshape.HasAttributeFields) and its {open content}
 // (hasOpenContent) from the finalized component, so inherited ones count, and
 // then answers sealed for a choice with no {particles}, before asking
@@ -1277,7 +1267,7 @@ func (e *emitter) shape(name string, o origin, t xsd.ComplexType) (emittedType, 
 	if err != nil {
 		return emittedType{}, nil, err
 	}
-	if content == nil || content.group.Compositor() != xsd.CompositorChoice || content.occurs != goshape.ExactlyOnce() || isMixed(t) {
+	if content == nil || content.group.Compositor() != xsd.CompositorChoice || content.occurs != goshape.ExactlyOnce() || goshape.Mixed(t) {
 		return emittedType{name: name}, content, nil
 	}
 	if goshape.HasAttributeFields(t) || hasOpenContent(t) {
@@ -1304,7 +1294,7 @@ func hasOpenContent(t xsd.ComplexType) bool {
 }
 
 // body emits typ, which shape returned for the complex type t with content,
-// generated from o: a struct holding, for mixed content (isMixed), first the
+// generated from o: a struct holding, for mixed content (goshape.Mixed), first the
 // field named from the local name text holding a string, then the fields
 // contentFields returns for content, or for simple content (§3.4.2.2
 // dcl.ctd.ctsc) the value field, named from goshape.ValueLocal and holding in
@@ -1338,7 +1328,7 @@ func (e *emitter) body(typ emittedType, nested scope, chain []valueNode, o origi
 		}
 		fields = append(fields, fieldSpec{local: goshape.ValueLocal, goType: shapedGoType(goshape.ValueShape, goType.name)})
 	}
-	if isMixed(t) {
+	if goshape.Mixed(t) {
 		fields = append(fields, fieldSpec{local: "text", goType: "string"})
 	}
 	if content != nil {
@@ -1351,7 +1341,7 @@ func (e *emitter) body(typ emittedType, nested scope, chain []valueNode, o origi
 	if hasOpenContent(t) {
 		e.anyTypeType()
 		item := e.raw.element
-		if isMixed(t) {
+		if goshape.Mixed(t) {
 			item = e.raw.child
 		}
 		fields = append(fields, fieldSpec{local: "openContent", goType: "[]" + item})
@@ -1834,7 +1824,7 @@ type groupParticle struct {
 // {max occurs} (§3.7.2), whatever t's {open content}, which body gives its own
 // field (hasOpenContent); for {variety} empty (§3.4.1), which has no {particle},
 // and for {variety} simple, whose value field body gives, it returns nil and a
-// nil error. body and field read whether the content is mixed (isMixed).
+// nil error. body and field read whether the content is mixed (goshape.Mixed).
 // Particles and model groups carry no Loc, so their declines cite t's.
 func (e *emitter) contentGroup(subject string, t xsd.ComplexType) (*groupParticle, error) {
 	content, isElement := t.ContentType().(xsd.ElementContent)
@@ -1869,7 +1859,7 @@ type fieldSpec struct {
 // field returns the field of particle p in a struct whose nested types are
 // named in nested and whose particles chain is valueChain's for, of the complex
 // type t generated from o, typed by the package doc's "# Complex types" and
-// "# Particles" field rules. In a t of mixed content (isMixed), an element
+// "# Particles" field rules. In a t of mixed content (goshape.Mixed), an element
 // particle's field holds MixedChild (mixedChildType, claimed before the field's
 // type is computed) over the type the rules below give, and a wildcard particle's
 // AnyChild in place of AnyElement; a model group particle's field is not wrapped.
@@ -1912,7 +1902,7 @@ func (e *emitter) field(nested scope, site groupSite, ordinal int, chain []value
 	if wildcardTerm(p.Term()) {
 		e.anyTypeType()
 		item := e.raw.element
-		if isMixed(t) {
+		if goshape.Mixed(t) {
 			item = e.raw.child
 		}
 		goType, ok := occursGoType(emittedType{name: item}, p.Occurs())
@@ -1949,7 +1939,7 @@ func (e *emitter) field(nested scope, site groupSite, ordinal int, chain []value
 	if err != nil {
 		return fieldSpec{}, err
 	}
-	if isMixed(t) {
+	if goshape.Mixed(t) {
 		e.mixedChildType()
 	}
 	value := p.Occurs() == goshape.ExactlyOnce() && !nillable(decl)
@@ -1977,7 +1967,7 @@ func (e *emitter) field(nested scope, site groupSite, ordinal int, chain []value
 	if nillable(decl) && !sum && !isAnyType(td) && !substitution {
 		typ = e.nillableType(typ, td)
 	}
-	if isMixed(t) {
+	if goshape.Mixed(t) {
 		typ = emittedType{name: e.mixedChild + "[" + typ.name + "]"}
 	}
 	goType, ok := occursGoType(typ, p.Occurs())

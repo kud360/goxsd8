@@ -26,6 +26,7 @@
 //	func ModelGroupTerm(schema *xsd.Schema, term xsd.TermOrRef) (xsd.ModelGroup, bool, error)
 //	func FieldAttributeUses(t xsd.ComplexType) []xsd.AttributeUse
 //	func HasAttributeFields(t xsd.ComplexType) bool
+//	func Mixed(t xsd.ComplexType) bool
 //	type Shape uint8
 //	const Bare, Pointer, Slice Shape
 //	func ParticleShape(occurs xsd.Occurs, sealed bool) (s Shape, ok bool)
