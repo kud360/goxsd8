@@ -92,23 +92,26 @@
 // reference carries no position of its own: each by-name reference type —
 // TypeDefinitionRef, SimpleTypeRef, ElementDeclarationRef, ModelGroupRef,
 // AttributeDeclarationRef, AttributeGroupRef and IdentityConstraintRef — has a
-// Loc field for the position of the QName-valued attribute that wrote its
-// Name, and Finalize charges that reference's src-resolve rejection there. A
+// Loc field for the position of the QName-valued attribute whose value it is
+// (type=, base=, itemType=, memberTypes=, ref=, refer=), and Finalize charges
+// that reference's src-resolve rejection there. A reference the producer
+// derives from a name written for another purpose carries the zero Loc: the
+// xs:anyType default, the §3.4.2.4 defaultAttributes reference, and the {type
+// definition} a substitution-group member takes from its head (§3.3.2.1). A
 // complex type's by-name {base type definition} is the exception: the
 // ComplexType constructors take it as a bare QName, so it carries the zero Loc.
 // Two references name the same component exactly when their Names are equal,
 // so compare Name, never reference values with ==: two writings of one name
-// can differ in Loc. The zero xsderr.Loc means the position is unknown, and is the
-// correct value for a reference no attribute wrote — the xs:anyType default,
-// the §3.4.2.4 defaultAttributes reference — and for a component with no
-// schema document behind it — parser.Produce's synthesized xs:anyType and
-// §3.2.7 xsi: attribute declarations, the four xml: attribute declarations and
-// the xml:specialAttrs attribute group definition the parser supplies for an
-// <import> of the §1.3.2 XML namespace it cannot fetch, and package builtin's
-// seeded built-in datatypes, are the legitimate zero-Loc producers. Other
-// constructors take a loc to charge their own rejections and, except
-// NewAttributeUse, do not retain it; NewAttributeUse states what Finalize
-// charges against the loc it retains, and no accessor is exported for it.
+// can differ in Loc. The zero xsderr.Loc means the position is unknown. It is
+// also the correct value for a component with no schema document behind it:
+// parser.Produce's synthesized xs:anyType and §3.2.7 xsi: attribute
+// declarations, the four xml: attribute declarations and the xml:specialAttrs
+// attribute group definition the parser supplies for an <import> of the §1.3.2
+// XML namespace it cannot fetch, and package builtin's seeded built-in
+// datatypes are the legitimate zero-Loc producers. Other constructors take a
+// loc to charge their own rejections and, except NewAttributeUse, do not retain
+// it; NewAttributeUse states what Finalize charges against the loc it retains,
+// and no accessor is exported for it.
 //
 // # Query API
 //
