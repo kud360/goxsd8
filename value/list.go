@@ -28,7 +28,7 @@ import (
 // the list pipeline relies on: Lengthed realizes cvc-length-valid's "measured
 // in number of list items" unit (§4.3.1.3), and Identical/Eq realize
 // cvc-enumeration-valid's "equal or identical" over a list value space
-// (§4.3.5.4 + §2.2.1/§2.2.2). enumMatch (facets.go) and lengthFacet.CheckValue
+// (§4.3.5.4 + §2.2.1/§2.2.2). enumMatch (facets.go) and lengthFacet.checkValue
 // discover them via these interfaces, never a concrete type, so the assertions
 // have real call sites. Listed hands the items themselves to xpath, whose XDM
 // representation of a list value (Datatypes dt-xdmrep) is their sequence.
@@ -171,7 +171,7 @@ type listValue struct {
 // Len returns the number of list items, the unit cvc-length-valid (§4.3.1.3),
 // cvc-minLength-valid (§4.3.2.3) and cvc-maxLength-valid (§4.3.3.3) measure for
 // a datatype ·constructed· by ·list· (dt-length: "length is measured in number
-// of list items"). lengthFacet.CheckValue reads it through the Lengthed
+// of list items"). lengthFacet.checkValue reads it through the Lengthed
 // capability, so the list case needs no length-facet code of its own.
 func (l listValue) Len() int { return len(l.items) }
 

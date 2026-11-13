@@ -27,7 +27,7 @@ func (ownedChain) Type(xsd.QName) (xsd.TypeDefinition, bool) { return nil, false
 // facet xs:int inherits from xs:integer (Datatypes integer.pattern), not a
 // pattern the schema author never wrote (#2310), and a list item or union
 // member names the item or member type, not the list or union (#3335). With
-// CheckLexical's message reverted to the one naming neither, every row fails;
+// checkLexical's message reverted to the one naming neither, every row fails;
 // with its members unescaped again, the quote, line-break and ampersand rows
 // fail (#2350), and the backslash rows fail under a %q rendering.
 func TestPatternRejectionNamesFailedStep(t *testing.T) {

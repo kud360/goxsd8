@@ -53,7 +53,7 @@ func ApplyWhiteSpace(r xsd.TypeResolver, st *xsd.SimpleType, lexical string) (st
 // tab (#x9), line feed (#xA) and carriage return (#xD) to a space (#x20);
 // collapse does the replace step, then collapses every run of #x20 to a single
 // space and trims leading and trailing spaces. It is a transform that PRODUCES
-// the normalized lexical, not a LexicalFacet check (which only accepts or
+// the normalized lexical, not a lexicalFacet check (which only accepts or
 // rejects) — the two are kept structurally separate (warden pre-flight).
 func normalizeWhiteSpace(s string, ws whiteSpace) string {
 	switch ws {

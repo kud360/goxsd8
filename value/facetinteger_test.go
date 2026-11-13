@@ -45,46 +45,47 @@ func scaledLit(t *testing.T, lit string) scaledStub {
 // ·scale· past the host int" pin the other side (#1848): an instance ·scale·
 // past the host int, compared whole with the {value}; narrowing it to an int
 // turns the MaxInt+1, MinInt-1 and huge+1 rejections into accepts. msg, when
-// set, is the rejection's whole opening up to the limit it names: it fails if
-// the limit is printed as a parsed or saturated int rather than the literal.
+// set, is the rejection's whole opening up to the limit it names, from the
+// candidate lexical "abc" every row passes: it fails if the limit is printed as
+// a parsed or saturated int rather than the literal.
 func TestFacetValuePastMaxInt(t *testing.T) {
 	if strconv.IntSize != 64 {
 		t.Skip("the MaxInt rows spell a 64-bit math.MaxInt + 1")
 	}
 	const maxIntPlus1 = "9223372036854775808"
 	stringPrim := primType(t, "string", "preserve")
-	length := func(kind xsd.FacetKind, limit string) func() (ValueFacet, error) {
-		return func() (ValueFacet, error) {
+	length := func(kind xsd.FacetKind, limit string) func() (valueFacet, error) {
+		return func() (valueFacet, error) {
 			return newLengthFacet(noSchema{}, stringPrim, xsd.NewFacet(kind, []string{limit}, false))
 		}
 	}
-	digits := func(kind xsd.FacetKind, limit string) func() (ValueFacet, error) {
-		return func() (ValueFacet, error) { return newDigitsFacet(xsd.NewFacet(kind, []string{limit}, false)) }
+	digits := func(kind xsd.FacetKind, limit string) func() (valueFacet, error) {
+		return func() (valueFacet, error) { return newDigitsFacet(xsd.NewFacet(kind, []string{limit}, false)) }
 	}
-	scale := func(kind xsd.FacetKind, limit string) func() (ValueFacet, error) {
-		return func() (ValueFacet, error) { return newScaleFacet(xsd.NewFacet(kind, []string{limit}, false)) }
+	scale := func(kind xsd.FacetKind, limit string) func() (valueFacet, error) {
+		return func() (valueFacet, error) { return newScaleFacet(xsd.NewFacet(kind, []string{limit}, false)) }
 	}
 
 	cases := []struct {
 		name  string
-		facet func() (ValueFacet, error)
+		facet func() (valueFacet, error)
 		v     Value
 		rule  xsderr.Rule // "" means accepted
 		msg   string
 	}{
 		// --- facetCount via newLengthFacet ---
 		{name: "minLength huge rejects abc", facet: length(xsd.FacetMinLength, huge), v: lengthStub(3),
-			rule: ruleCvcMinLengthValid, msg: "value length 3 violates the minLength facet limit " + huge},
+			rule: ruleCvcMinLengthValid, msg: "\"abc\" has length 3, violating the minLength facet limit " + huge},
 		{name: "length huge rejects abc", facet: length(xsd.FacetLength, huge), v: lengthStub(3),
-			rule: ruleCvcLengthValid, msg: "value length 3 violates the length facet limit " + huge},
+			rule: ruleCvcLengthValid, msg: "\"abc\" has length 3, violating the length facet limit " + huge},
 		{name: "maxLength huge accepts abc", facet: length(xsd.FacetMaxLength, huge), v: lengthStub(3)},
 		{name: "length MaxInt+1 rejects MaxInt", facet: length(xsd.FacetLength, maxIntPlus1), v: lengthStub(math.MaxInt),
-			rule: ruleCvcLengthValid, msg: "value length " + strconv.Itoa(math.MaxInt) + " violates the length facet limit " + maxIntPlus1},
+			rule: ruleCvcLengthValid, msg: "\"abc\" has length " + strconv.Itoa(math.MaxInt) + ", violating the length facet limit " + maxIntPlus1},
 		{name: "maxLength +007 names the literal", facet: length(xsd.FacetMaxLength, "+007"), v: lengthStub(8),
-			rule: ruleCvcMaxLengthValid, msg: "value length 8 violates the maxLength facet limit +007"},
+			rule: ruleCvcMaxLengthValid, msg: "\"abc\" has length 8, violating the maxLength facet limit +007"},
 		{name: "maxLength +007 accepts 7", facet: length(xsd.FacetMaxLength, "+007"), v: lengthStub(7)},
 		{name: "totalDigits +03 names the literal", facet: digits(xsd.FacetTotalDigits, "+03"), v: digitsStub{total: 4},
-			rule: ruleCvcTotalDigitsValid, msg: "value has 4 totalDigits, exceeds facet limit +03"},
+			rule: ruleCvcTotalDigitsValid, msg: "\"abc\" has 4 totalDigits, exceeding facet limit +03"},
 
 		// --- facetCount via newDigitsFacet ---
 		{name: "totalDigits huge accepts", facet: digits(xsd.FacetTotalDigits, huge), v: digitsStub{total: 2, fraction: 1}},
@@ -92,22 +93,22 @@ func TestFacetValuePastMaxInt(t *testing.T) {
 
 		// --- facetInt via newScaleFacet ---
 		{name: "minScale huge rejects scale 1", facet: scale(xsd.FacetMinScale, huge), v: scaled(1),
-			rule: ruleCvcMinScaleValid, msg: "value scale 1 violates the minScale facet limit " + huge},
+			rule: ruleCvcMinScaleValid, msg: "\"abc\" has scale 1, violating the minScale facet limit " + huge},
 		{name: "maxScale huge accepts scale 1", facet: scale(xsd.FacetMaxScale, huge), v: scaled(1)},
 		{name: "minScale -huge accepts scale -1", facet: scale(xsd.FacetMinScale, "-"+huge), v: scaled(-1)},
 		{name: "maxScale -huge rejects scale -1", facet: scale(xsd.FacetMaxScale, "-"+huge), v: scaled(-1),
-			rule: ruleCvcMaxScaleValid, msg: "value scale -1 violates the maxScale facet limit -" + huge},
+			rule: ruleCvcMaxScaleValid, msg: "\"abc\" has scale -1, violating the maxScale facet limit -" + huge},
 		{name: "minScale MaxInt+1 rejects scale MaxInt", facet: scale(xsd.FacetMinScale, maxIntPlus1), v: scaled(math.MaxInt),
-			rule: ruleCvcMinScaleValid, msg: "value scale " + strconv.Itoa(math.MaxInt) + " violates the minScale facet limit " + maxIntPlus1},
+			rule: ruleCvcMinScaleValid, msg: "\"abc\" has scale " + strconv.Itoa(math.MaxInt) + ", violating the minScale facet limit " + maxIntPlus1},
 
 		// --- a ·scale· past the host int (#1848): compared whole, never narrowed ---
 		{name: "maxScale 0 rejects scale MaxInt+1", facet: scale(xsd.FacetMaxScale, "0"), v: scaledLit(t, maxIntPlus1),
-			rule: ruleCvcMaxScaleValid, msg: "value scale " + maxIntPlus1 + " violates the maxScale facet limit 0"},
+			rule: ruleCvcMaxScaleValid, msg: "\"abc\" has scale " + maxIntPlus1 + ", violating the maxScale facet limit 0"},
 		{name: "minScale 0 rejects scale MinInt-1", facet: scale(xsd.FacetMinScale, "0"), v: scaledLit(t, "-9223372036854775809"),
-			rule: ruleCvcMinScaleValid, msg: "value scale -9223372036854775809 violates the minScale facet limit 0"},
+			rule: ruleCvcMinScaleValid, msg: "\"abc\" has scale -9223372036854775809, violating the minScale facet limit 0"},
 		{name: "maxScale huge accepts scale huge", facet: scale(xsd.FacetMaxScale, huge), v: scaledLit(t, huge)},
 		{name: "maxScale huge rejects scale huge+1", facet: scale(xsd.FacetMaxScale, huge), v: scaledLit(t, "100000000000000000000"),
-			rule: ruleCvcMaxScaleValid, msg: "value scale 100000000000000000000 violates the maxScale facet limit " + huge},
+			rule: ruleCvcMaxScaleValid, msg: "\"abc\" has scale 100000000000000000000, violating the maxScale facet limit " + huge},
 		{name: "minScale -huge accepts scale -huge", facet: scale(xsd.FacetMinScale, "-"+huge), v: scaledLit(t, "-"+huge)},
 	}
 	for _, c := range cases {
@@ -116,16 +117,16 @@ func TestFacetValuePastMaxInt(t *testing.T) {
 			if err != nil {
 				t.Fatalf("building the facet: %v", err)
 			}
-			err = facet.CheckValue(c.v)
+			err = facet.checkValue(c.v, "abc")
 			if c.rule == "" {
 				if err != nil {
-					t.Fatalf("CheckValue = %v, want accept", err)
+					t.Fatalf("checkValue = %v, want accept", err)
 				}
 				return
 			}
 			var xe *xsderr.Error
 			if !errors.As(err, &xe) || xe.Rule != c.rule {
-				t.Fatalf("CheckValue = %v, want a rejection charging %s", err, c.rule)
+				t.Fatalf("checkValue = %v, want a rejection charging %s", err, c.rule)
 			}
 			if !strings.HasPrefix(xe.Msg, c.msg) {
 				t.Errorf("message = %q, want it to open %q", xe.Msg, c.msg)
