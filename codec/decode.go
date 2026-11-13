@@ -128,9 +128,9 @@ var ErrTypeMismatch = errors.New("codec: T is not the type codegen emits for the
 //     [validate.Result.FacetAssertions] returns for validate's assessment of
 //     the instance, the first member in order that accepts it, its assertions
 //     facets included, descended through a member that is itself a union, a
-//     {lexical form} included for a supplied value. The variant is the type
-//     [WithBranches] supplies for the union's interface whose Go type is that
-//     member's (item 6), and it holds the member's value read as above, from
+//     {lexical form} included for a supplied value. The variant is the type of
+//     [WithBranches]' set for the union's interface that item 6 matches to
+//     that member, and it holds the member's value read as above, from
 //     the string normalized by the member's own whiteSpace (cvc-datatype-valid
 //     clause 2.3, the note on its pre-lexical facets), under the member as a
 //     list or an atomic type. A list of a union is []I, I the item's
@@ -325,18 +325,14 @@ var ErrTypeMismatch = errors.New("codec: T is not the type codegen emits for the
 //     the list declines by, after which nothing further is examined; for a
 //     union, or a list's union item, each basic member in codegen's
 //     basic-member order examined as an atomic or list type is, the first
-//     declining member's construct the union's, then a basic member whose Go
-//     type an earlier one's is, as item 6 compares a variant's, two lists of a
-//     union or the same A or []A, such as xs:string's and xs:token's, which
-//     declines as a union two of whose basic members get one Go type; or a
-//     complex type's {abstract}, then its content, then, for simple content,
-//     its {simple type definition}, examined as the document element's simple
-//     type is, whose construct the content declines by, or, for element-only
-//     or mixed content, its {particle}'s model group, an all group declining where
-//     codegen does not splice it (codegen's package doc, "# Particles"): of a
-//     <group ref>, the compositor is the referenced definition's {model
-//     group}'s and the occurrence the referring particle's (§3.7.2
-//     declare-namedModelGroup).
+//     declining member's construct the union's; or a complex type's {abstract},
+//     then its content, then, for simple content, its {simple type definition},
+//     examined as the document element's simple type is, whose construct the
+//     content declines by, or, for element-only or mixed content, its {particle}'s
+//     model group, an all group declining where codegen does not splice it
+//     (codegen's package doc, "# Particles"): of a <group ref>, the compositor is
+//     the referenced definition's {model group}'s and the occurrence the referring
+//     particle's (§3.7.2 declare-namedModelGroup).
 //   - Each particle of the complex type's content in order, the whole of one
 //     before the next, but of a flattened one, which the sixth bullet examines
 //     in this bullet's place, and of a choice held in an occurrence field
@@ -716,13 +712,19 @@ var ErrTypeMismatch = errors.New("codec: T is not the type codegen emits for the
 //     member, or its count differs, or it holds a nil value, a type twice, or
 //     a variant matching no basic member an earlier variant did not match. A
 //     variant matches the first basic member, in codegen's basic-member order,
-//     whose Go type is its underlying type, by shape alone, as T is matched to
-//     a simple type above: the member's atomic Go type A, a struct of D's
-//     shape for a datatype struct, its arms then held as a PrecisionDecimal's
-//     are, []A for a list member, or []J for a list member whose item is a
-//     union, J any interface of one unexported method, then held to that
-//     union's variants by this same bullet. A union with no basic member
-//     takes the empty set.
+//     that an earlier variant did not match and whose Go type is its
+//     underlying type, by shape alone, as T is matched to a simple type above:
+//     the member's atomic Go type A, a struct of D's shape for a datatype
+//     struct, its arms then held as a PrecisionDecimal's are, []A for a list
+//     member, or []J for a list member whose item is a union, J any interface
+//     of one unexported method, then held to that union's variants by this
+//     same bullet. The variants are matched in the order WithBranches supplies
+//     them, so of basic members whose Go types are one, the same A or []A or
+//     two lists of a union, such as xs:string's and xs:token's, the first
+//     variant over that type matches the earliest of them, the next the next:
+//     a set supplying them out of basic-member order is no mismatch, and
+//     decodes each such member's value into another's variant. A union with no
+//     basic member takes the empty set.
 //   - The Value interface I of a PrecisionDecimal, T's own or a field's, at
 //     any depth, a list's element included, whose arms reach Decode only
 //     through [WithPrecisionDecimalArms]: it does not match when no

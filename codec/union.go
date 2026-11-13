@@ -26,9 +26,6 @@ type unionMember struct {
 	g  simpleGo
 }
 
-// bare returns unionValueType, as unionScalar.bare does.
-func (*unionGo) bare() reflect.Type { return unionValueType }
-
 // forScalar returns the unionScalar of u, a union labelled union: each basic
 // member's scalar, labelled by memberLabel after union.
 func (u *unionGo) forScalar(union string) scalarElem {
@@ -41,12 +38,10 @@ func (u *unionGo) forScalar(union string) scalarElem {
 
 // unionDecline returns the unionGo of st, a union simple type of the item
 // subject names, or else the *DeclineError Decode's doc states for st, item 5,
-// or a plain error, goshape.BasicMembers' naming subject, in this order: each
-// basic member in basic-member order (goshape.BasicMembers), examined as
-// simpleDecline examines an atomic or list type, the first declining member's
-// construct, its detail naming the member after subject; then a basic member
-// whose Go type an earlier one's is (simpleGo.oneGoType),
-// constructSharedVariant, naming the later member.
+// or a plain error, goshape.BasicMembers' naming subject: each basic member in
+// basic-member order (goshape.BasicMembers), examined as simpleDecline
+// examines an atomic or list type, the first declining member's construct,
+// its detail naming the member after subject.
 func unionDecline(r xsd.TypeResolver, st *xsd.SimpleType, subject string) (*unionGo, error) {
 	basic, err := goshape.BasicMembers(r, st)
 	if err != nil {
@@ -59,13 +54,6 @@ func unionDecline(r xsd.TypeResolver, st *xsd.SimpleType, subject string) (*unio
 			return nil, err
 		}
 		u.members = append(u.members, unionMember{st: m, g: g})
-	}
-	for i, m := range u.members {
-		for _, earlier := range u.members[:i] {
-			if earlier.g.oneGoType(m.g) {
-				return nil, decline(constructSharedVariant, memberSubject(subject, m.st))
-			}
-		}
 	}
 	return u, nil
 }

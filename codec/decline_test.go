@@ -62,22 +62,16 @@ func TestDecodeDeclines(t *testing.T) {
 		{"a governing type with {abstract} true", `<xs:complexType name="b0"><xs:sequence><xs:element name="a" type="xs:string"/></xs:sequence><xs:attribute name="k" type="xs:string"/></xs:complexType>
 			<xs:complexType name="ab" abstract="true"><xs:complexContent><xs:extension base="s:b0"/></xs:complexContent></xs:complexType>
 			<xs:element name="r" type="s:b0"><xs:alternative test="@k" type="s:ab"/></xs:element>`, "", a, constructAbstractTypeElement, 1, 1},
-		{"simple root of a union of xs:string and xs:token", `<xs:element name="r"><xs:simpleType><xs:union memberTypes="xs:string xs:token"/></xs:simpleType></xs:element>`, "", "1.0", constructSharedVariant, 1, 1},
-		{"simple root of a list of a union of xs:string and xs:token", `<xs:element name="r"><xs:simpleType><xs:list><xs:simpleType><xs:union memberTypes="xs:string xs:token"/></xs:simpleType></xs:list></xs:simpleType></xs:element>`, "", "1.0 2.0", constructSharedVariant, 1, 1},
 		{"document element of an abstract complex type of empty content, under xsi:type", `<xs:complexType name="ab" abstract="true"/>
 			<xs:complexType name="cc"><xs:complexContent><xs:extension base="s:ab"><xs:attribute name="k" type="xs:string"/></xs:extension></xs:complexContent></xs:complexType>
 			<xs:element name="r" type="s:ab"/>`, ` xsi:type="s:cc"`, "", constructAbstractTypeElement, 1, 1},
 		{"document element of an abstract complex type of element-only content, under xsi:type", `<xs:complexType name="ab" abstract="true"><xs:sequence><xs:element name="a" type="xs:string"/></xs:sequence></xs:complexType>
 			<xs:complexType name="cc"><xs:complexContent><xs:extension base="s:ab"/></xs:complexContent></xs:complexType>
 			<xs:element name="r" type="s:ab"/>`, ` xsi:type="s:cc"`, `<s:a>x</s:a>`, constructAbstractTypeElement, 1, 1},
-		{"simple content of a union of xs:string and xs:token", root(`<xs:simpleContent><xs:extension base="s:st"/></xs:simpleContent>`) +
-			`<xs:simpleType name="st"><xs:union memberTypes="xs:string xs:token"/></xs:simpleType>`, "", "x", constructSharedVariant, 1, 1},
 		{"an optional <group ref> content particle to a non-emptiable all group", `<xs:group name="g"><xs:all><xs:element name="a" type="xs:string"/></xs:all></xs:group>` + root(`<xs:group ref="s:g" minOccurs="0"/>`),
 			"", a, constructAllOccurs, 1, 1},
 		{"choice alternatives sharing a branch shape, refs to a and A", `<xs:element name="a" type="xs:string"/><xs:element name="A" type="xs:string"/>` + root(`<xs:choice><xs:element ref="s:a"/><xs:element ref="s:A"/></xs:choice>`),
 			"", a, constructSharedBranch, 1, 1},
-		{"choice alternative of a union of xs:string and xs:token", root(`<xs:choice><xs:element name="a" type="xs:string"/><xs:element name="b"><xs:simpleType><xs:union memberTypes="xs:string xs:token"/></xs:simpleType></xs:element></xs:choice>`),
-			"", a, constructSharedVariant, 1, 1},
 		{"choice alternatives sharing a branch shape, qualified and not", root(`<xs:choice><xs:element name="x" type="xs:string"/><xs:element name="x" form="unqualified" type="xs:string"/></xs:choice>`),
 			"", `<s:x>v</s:x>`, constructSharedBranch, 1, 1},
 		{"mixed choice alternatives sharing a branch shape, qualified and not", `<xs:element name="r"><xs:complexType mixed="true"><xs:choice><xs:element name="x" type="xs:string"/><xs:element name="x" form="unqualified" type="xs:string"/></xs:choice></xs:complexType></xs:element>`,
@@ -132,19 +126,11 @@ func TestDecodeDeclines(t *testing.T) {
 		{"two refs whose groups share a member, s2_2_2v01's shape", `<xs:element name="e0" type="xs:string"/><xs:element name="e1" type="xs:string"/>
 			<xs:element name="e2" type="xs:string" abstract="true" substitutionGroup="s:e0 s:e1"/><xs:element name="e3" type="xs:string" substitutionGroup="s:e2"/>` +
 			sequenceOf(`<xs:element ref="s:e0"/><xs:element ref="s:e1"/>`), "", `<s:e3>x</s:e3><s:e3>y</s:e3>`, constructSharedName, 1, 1},
-		{"element ref to a head of a union of xs:string and xs:token", `<xs:element name="h"><xs:simpleType><xs:union memberTypes="xs:string xs:token"/></xs:simpleType></xs:element>` + sequenceOf(`<xs:element ref="s:h"/>`), "", `<s:h>1.0</s:h>`, constructSharedVariant, 1, 1},
 		{"element ref sharing a local particle's expanded name", `<xs:element name="a" type="xs:string"/>` + sequenceOf(`<xs:element name="a" type="xs:string"/><xs:element ref="s:a"/>`),
 			"", a + a, constructSharedName, 1, 1},
-		{"local element of simple content of a union of xs:string and xs:token, ahead of its attribute uses", `<xs:import namespace="http://www.w3.org/2001/XMLSchema-instance"/><xs:simpleType name="st"><xs:union memberTypes="xs:string xs:token"/></xs:simpleType>` +
-			sequenceOf(`<xs:element name="a"><xs:complexType><xs:simpleContent><xs:extension base="s:st"><xs:attribute ref="xsi:type"/><xs:anyAttribute processContents="lax"/></xs:extension></xs:simpleContent></xs:complexType></xs:element>`),
-			"", a, constructSharedVariant, 1, 1},
-		{"local element of simple content, its attribute use of a union of xs:string and xs:token", sequenceOf(`<xs:element name="a"><xs:complexType><xs:simpleContent><xs:extension base="xs:string"><xs:attribute name="k"><xs:simpleType><xs:union memberTypes="xs:string xs:token"/></xs:simpleType></xs:attribute></xs:extension></xs:simpleContent></xs:complexType></xs:element>`),
-			"", a, constructSharedVariant, 1, 1},
 		{"local element of an abstract complex type", `<xs:complexType name="ab" abstract="true"><xs:sequence><xs:element name="x" type="xs:string"/></xs:sequence></xs:complexType>
 			<xs:complexType name="cc"><xs:complexContent><xs:extension base="s:ab"/></xs:complexContent></xs:complexType>` + sequenceOf(`<xs:element name="a" type="s:ab" minOccurs="0"/>`),
 			"", "", constructAbstractTypeElement, 1, 1},
-		{"a nested type's particle of a union of xs:string and xs:token", sequenceOf(`<xs:element name="a"><xs:complexType><xs:sequence><xs:element name="b"><xs:simpleType><xs:union memberTypes="xs:string xs:token"/></xs:simpleType></xs:element></xs:sequence></xs:complexType></xs:element>`),
-			"", `<s:a><s:b>1.0</s:b></s:a>`, constructSharedVariant, 1, 1},
 		{"choice alternatives sharing a branch shape, two structs of one shape", root(`<xs:choice>` + vStruct("x", "") + vStruct("X", "") + `</xs:choice>`),
 			"", `<s:x><s:v>v</s:v></s:x>`, constructSharedBranch, 1, 1},
 		{"choice alternatives sharing a name, two structs of differing fields", root(`<xs:choice>` + vStruct("x", "") +
@@ -170,10 +156,6 @@ func TestDecodeDeclines(t *testing.T) {
 			"", `<s:any>2000-01-01</s:any>`, constructSharedBranch, 1, 1},
 		{"particles sharing an expanded name", sequenceOf(`<xs:element name="a" type="xs:string"/><xs:element name="b" type="xs:string"/><xs:element name="a" type="xs:string"/>`),
 			"", a + `<s:b>y</s:b>` + a, constructSharedName, 1, 1},
-		{"list of a union of xs:string and xs:token", sequenceOf(`<xs:element name="a"><xs:simpleType><xs:list><xs:simpleType><xs:union memberTypes="xs:string xs:token"/></xs:simpleType></xs:list></xs:simpleType></xs:element>`), "", a, constructSharedVariant, 1, 1},
-		{"attribute of a list of a union of xs:string and xs:token", root(`<xs:sequence><xs:element name="a" type="xs:string"/></xs:sequence><xs:attribute name="b"><xs:simpleType><xs:list><xs:simpleType><xs:union memberTypes="xs:string xs:token"/></xs:simpleType></xs:list></xs:simpleType></xs:attribute>`),
-			` b="1.0"`, a, constructSharedVariant, 1, 1},
-		{"union of xs:string and xs:token", sequenceOf(`<xs:element name="a"><xs:simpleType><xs:union memberTypes="xs:string xs:token"/></xs:simpleType></xs:element>`), "", a, constructSharedVariant, 1, 1},
 	}
 	for _, row := range rows {
 		t.Run(row.name, func(t *testing.T) {
@@ -196,6 +178,39 @@ func TestDecodeDeclines(t *testing.T) {
 	var de *DeclineError
 	if err := CheckDecode[struct{}](selfPair, rootName); !errors.As(err, &de) || de.Construct() != (Construct{constructSharedBranch}) {
 		t.Errorf("CheckDecode(choice(e:C, E:C)) = %v, want the %s decline", err, constructSharedBranch.name())
+	}
+}
+
+// TestCheckDecodeSimpleTypeDeclineSites pins that each site a simple type
+// reaches is examined by item 5: a union of xs:int and the minted primitive
+// money (mintedSchema), or a list of one, at each site declines as
+// constructOtherPrimitive, which CheckDecode alone reaches.
+func TestCheckDecodeSimpleTypeDeclineSites(t *testing.T) {
+	const union = `<xs:simpleType><xs:union memberTypes="xs:int s:money"/></xs:simpleType>`
+	const list = `<xs:simpleType><xs:list>` + union + `</xs:list></xs:simpleType>`
+	const named = `<xs:simpleType name="st"><xs:union memberTypes="xs:int s:money"/></xs:simpleType>`
+	rows := []struct{ name, decls string }{
+		{"simple root of a union", `<xs:element name="r">` + union + `</xs:element>`},
+		{"simple root of a list of a union", `<xs:element name="r">` + list + `</xs:element>`},
+		{"simple content of a union", root(`<xs:simpleContent><xs:extension base="s:st"/></xs:simpleContent>`) + named},
+		{"choice alternative of a union", root(`<xs:choice><xs:element name="a" type="xs:string"/><xs:element name="b">` + union + `</xs:element></xs:choice>`)},
+		{"element ref to a head of a union", `<xs:element name="h">` + union + `</xs:element>` + sequenceOf(`<xs:element ref="s:h"/>`)},
+		{"local element of simple content of a union, ahead of its attribute uses", `<xs:import namespace="http://www.w3.org/2001/XMLSchema-instance"/>` + named +
+			sequenceOf(`<xs:element name="a"><xs:complexType><xs:simpleContent><xs:extension base="s:st"><xs:attribute ref="xsi:type"/><xs:anyAttribute processContents="lax"/></xs:extension></xs:simpleContent></xs:complexType></xs:element>`)},
+		{"local element of simple content, its attribute use of a union", sequenceOf(`<xs:element name="a"><xs:complexType><xs:simpleContent><xs:extension base="xs:string"><xs:attribute name="k">` + union + `</xs:attribute></xs:extension></xs:simpleContent></xs:complexType></xs:element>`)},
+		{"a nested type's particle of a union", sequenceOf(`<xs:element name="a"><xs:complexType><xs:sequence><xs:element name="b">` + union + `</xs:element></xs:sequence></xs:complexType></xs:element>`)},
+		{"list of a union", sequenceOf(`<xs:element name="a">` + list + `</xs:element>`)},
+		{"attribute of a list of a union", root(`<xs:sequence><xs:element name="a" type="xs:string"/></xs:sequence><xs:attribute name="b">` + list + `</xs:attribute>`)},
+		{"union", sequenceOf(`<xs:element name="a">` + union + `</xs:element>`)},
+	}
+	for _, row := range rows {
+		t.Run(row.name, func(t *testing.T) {
+			err := CheckDecode[struct{}](mintedSchema(t, row.decls), rootName)
+			var de *DeclineError
+			if !errors.As(err, &de) || de.Construct() != (Construct{constructOtherPrimitive}) {
+				t.Errorf("CheckDecode = %v, want the %s decline", err, constructOtherPrimitive.name())
+			}
+		})
 	}
 }
 
@@ -457,43 +472,53 @@ func TestDecodeUndeclaredRootXsiType(t *testing.T) {
 // of one construct, from two schemas and declining sites, have equal
 // Constructs, and declines of two different constructs have different ones.
 // One row per construct group: the declaration, the content, by a content all
-// group codegen does not splice, a particle, a simple type and xsi:type.
+// group codegen does not splice, a particle, a simple type and xsi:type. A
+// minted group's decls are mintedSchema's, which no instance validates
+// against, so CheckDecode alone probes them.
 func TestDeclineConstruct(t *testing.T) {
 	const a = `<s:a>x</s:a>`
 	type decl struct{ decls, attrs, content string }
 	rows := []struct {
-		group string
-		pair  [2]decl
+		group  string
+		pair   [2]decl
+		minted bool
 	}{
-		{"declaration", [2]decl{
+		{group: "declaration", pair: [2]decl{
 			{nillableTables, "", a},
 			{sequenceOf(`<xs:element name="a" type="xs:string" nillable="true"><xs:alternative test="@k" type="xs:token"/></xs:element>`), "", a},
 		}},
-		{"content all group", [2]decl{
+		{group: "content all group", pair: [2]decl{
 			{root(`<xs:all minOccurs="0"><xs:element name="a" type="xs:string"/></xs:all>`), "", a},
 			{`<xs:group name="g"><xs:all><xs:element name="b" type="xs:string" minOccurs="0"/><xs:element name="a" type="xs:string"/></xs:all></xs:group><xs:complexType name="ct"><xs:group ref="s:g" minOccurs="0"/></xs:complexType><xs:element name="r" type="s:ct"/>`, "", a},
 		}},
-		{"particle", [2]decl{
+		{group: "particle", pair: [2]decl{
 			{root(`<xs:sequence maxOccurs="2"><xs:element name="a" type="xs:string"/><xs:choice maxOccurs="2"><xs:element name="b" type="xs:string"/></xs:choice></xs:sequence>`), "", a + `<s:b>y</s:b>`},
 			{root(`<xs:choice maxOccurs="unbounded"><xs:sequence><xs:element name="a" type="xs:string"/><xs:sequence maxOccurs="unbounded"><xs:element name="b" type="xs:string" minOccurs="0"/></xs:sequence></xs:sequence></xs:choice>`), "", a},
 		}},
-		{"simple type", [2]decl{
-			{root(`<xs:sequence><xs:element name="a" type="xs:string"/></xs:sequence><xs:attribute name="k"><xs:simpleType><xs:union memberTypes="xs:string xs:token"/></xs:simpleType></xs:attribute>`), "", a},
-			{sequenceOf(`<xs:element name="a"><xs:simpleType><xs:union memberTypes="xs:string xs:token"/></xs:simpleType></xs:element>`), "", a},
+		{group: "simple type", minted: true, pair: [2]decl{
+			{root(`<xs:sequence><xs:element name="a" type="xs:string"/></xs:sequence><xs:attribute name="k"><xs:simpleType><xs:union memberTypes="xs:int s:money"/></xs:simpleType></xs:attribute>`), "", ""},
+			{sequenceOf(`<xs:element name="a" type="s:money"/>`), "", ""},
 		}},
-		{"xsi:type", [2]decl{
+		{group: "xsi:type", pair: [2]decl{
 			{`<xs:complexType name="rt"><xs:sequence><xs:element name="a" type="xs:string"/></xs:sequence></xs:complexType><xs:element name="r" type="s:rt"/>`, ` xsi:type="s:rt"`, a},
 			{sequenceOf(`<xs:element name="a" type="xs:string"/>`), "", `<s:a xsi:type="xs:token">x</s:a>`},
 		}},
+	}
+	declineOf := func(minted bool, d decl) error {
+		if minted {
+			return CheckDecode[struct{ A string }](mintedSchema(t, d.decls), rootName)
+		}
+		schema := schemaOf(t, d.decls)
+		data := instanceOf(d.attrs, d.content)
+		mustAccept(t, schema, data)
+		_, err := Decode[struct{ A string }](schema, strict.New(), data)
+		return err
 	}
 	constructs := make([]Construct, len(rows))
 	for i, row := range rows {
 		var got [2]Construct
 		for j, d := range row.pair {
-			schema := schemaOf(t, d.decls)
-			data := instanceOf(d.attrs, d.content)
-			mustAccept(t, schema, data)
-			_, err := Decode[struct{ A string }](schema, strict.New(), data)
+			err := declineOf(row.minted, d)
 			var de *DeclineError
 			if !errors.As(err, &de) {
 				t.Fatalf("%s %d: Decode error = %v, want a *DeclineError", row.group, j, err)
@@ -528,12 +553,13 @@ func TestDeclineErrorText(t *testing.T) {
 
 // TestDeclineErrorTextSimpleRoot pins the message of a decline of the
 // document element's type when that type is simple and named, a union of
-// xs:string and xs:token, and that it precedes the T check: T is int, which
-// is not the Go type of any simple type codegen emits.
+// xs:int and the minted primitive money (mintedSchema), and that it precedes
+// the T check: T is int, which is not the Go type of any simple type codegen
+// emits. CheckDecode alone reaches it, so the message carries no instance Loc.
 func TestDeclineErrorTextSimpleRoot(t *testing.T) {
-	schema := schemaOf(t, `<xs:simpleType name="st"><xs:union memberTypes="xs:string xs:token"/></xs:simpleType><xs:element name="r" type="s:st"/>`)
-	_, err := Decode[int](schema, strict.New(), instanceOf("", `1.0`))
-	const want = "?:1:1: codec does not decode a union simple type two of whose basic members get one Go type: the {type definition} of element {urn:s}r declared at s.xsd:1:266, a type defined at s.xsd:1:181, through the union's basic member {http://www.w3.org/2001/XMLSchema}token, a type defined at ?; a decoder refusal, not a schema or instance fault"
+	schema := mintedSchema(t, `<xs:simpleType name="st"><xs:union memberTypes="xs:int s:money"/></xs:simpleType><xs:element name="r" type="s:st"/>`)
+	err := CheckDecode[int](schema, rootName)
+	const want = "codec does not decode an atomic simple type whose primitive is ·implementation-defined·, other than xs:precisionDecimal: the {type definition} of element {urn:s}r declared at s.xsd:1:262, a type defined at s.xsd:1:181, through the union's basic member {urn:s}money, a type defined at ?; a decoder refusal, not a schema or instance fault"
 	if err == nil || err.Error() != want {
 		t.Errorf("error = %v, want %q", err, want)
 	}

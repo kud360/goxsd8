@@ -501,10 +501,12 @@ func generatedTypes(file *ast.File) []typeDecl {
 // each instantiation the census decodes through. The branches are each type B the file
 // gives a method of a single value receiver of type B, named "is" plus the interface's
 // name, with no parameters or results, the marker codegen's package doc "# Complex
-// types" states, in file order. An interface whose header records decimalProvenance is
-// PrecisionDecimal's Value interface, and its branches, in file order, are its arms in
-// the order codegen's package doc "# Simple types" states they are emitted: numerical,
-// positive infinity, negative infinity, not a number.
+// types" states, in file order; for a union's interface, file order is its variants'
+// basic-member order (codegen's package doc, "# Simple types"), the order WithBranches
+// takes a union's variants of one Go type in. An interface whose header records
+// decimalProvenance is PrecisionDecimal's Value interface, and its branches, in file
+// order, are its arms in the order codegen's package doc "# Simple types" states they
+// are emitted: numerical, positive infinity, negative infinity, not a number.
 func sealedInterfaces(file *ast.File) []sealedDecl {
 	var sealed []sealedDecl
 	for _, d := range file.Decls {

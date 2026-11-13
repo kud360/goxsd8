@@ -222,12 +222,9 @@ type simpleGo struct {
 // simpleDecline reads it: an atomic, the atomic Go type of an atomic type or
 // of a list's atomic {item type definition}, or a *unionGo, the sealed
 // interface of a union or of a list's union {item type definition}. It is a
-// closed sum, sealed by its unexported methods, so a union's simpleGo holds
-// no atomic Go type.
+// closed sum, sealed by its unexported method, so a union's simpleGo holds no
+// atomic Go type.
 type goElem interface {
-	// bare returns the Go type codec decodes the element's value as, the one
-	// the scalarElem forScalar returns answers.
-	bare() reflect.Type
 	// forScalar returns the element of a scalar of this element, labelled
 	// label: an atomic itself, or a union's unionScalar (unionGo.forScalar).
 	forScalar(label string) scalarElem
@@ -235,16 +232,6 @@ type goElem interface {
 
 // forScalar returns a itself.
 func (a atomic) forScalar(string) scalarElem { return a }
-
-// oneGoType reports whether g and h, the Go types of two basic members of one
-// union, are one Go type as item 6 of Decode's doc compares a variant's, by
-// shape alone, so that no variant could tell them apart: the same A or []A
-// (goType), so that xs:string and xs:token are one, and so are xs:QName and
-// xs:NOTATION, or both lists of a union, each a slice of any sealed
-// interface, whose element's bare type is unionValue, no atomic's. No basic
-// member is a union (goshape.BasicMembers), and the datatype structs of two
-// datatypes have different fields, so no variant is over both.
-func (g simpleGo) oneGoType(h simpleGo) bool { return g.goType() == h.goType() }
 
 // sealed reports whether g is a sealed interface, a union's own, which
 // codegen holds in an optional field bare, never behind a pointer
@@ -254,15 +241,6 @@ func (g simpleGo) sealed() bool {
 	// exception.
 	_, isUnion := g.elem.(*unionGo)
 	return isUnion && g.item == nil
-}
-
-// goType returns the Go type codec decodes a value of g as, as scalar.goType
-// does: g's element's bare type, or a slice of it for a list.
-func (g simpleGo) goType() reflect.Type {
-	if g.item == nil {
-		return g.elem.bare()
-	}
-	return reflect.SliceOf(g.elem.bare())
 }
 
 // supplied is the value constraint vc of the item subject names, its

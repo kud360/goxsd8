@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"math/big"
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 
@@ -324,11 +325,10 @@ func TestDecodeUnionMismatches(t *testing.T) {
 // TestDecodeUnionDeclines pins item 5 for a union, CheckDecode's decline for
 // each row: the union declines by its first declining basic member's
 // construct in basic-member order, xs:int before and after the minted
-// primitive (codegen/doc.go "# Simple types"), the member examined before any
-// two members' Go types are compared; then by two basic members of one Go
-// type, constructSharedVariant, an assertions facet beside them declining
-// nothing of its own (TestDecodeUnionAssertions). Each decline names the union
-// as its declaration's {type definition} and, for a member's, that member.
+// primitive (codegen/doc.go "# Simple types"), and after two members of one
+// Go type, which decline nothing (TestDecodeUnionOneGoTypeDeclinesNothing).
+// Each decline names the union as its declaration's {type definition} and,
+// for a member's, that member.
 func TestDecodeUnionDeclines(t *testing.T) {
 	union := func(members string) string {
 		return sequenceOf(`<xs:element name="a"><xs:simpleType><xs:union memberTypes="` + members + `"/></xs:simpleType></xs:element>`)
@@ -336,7 +336,6 @@ func TestDecodeUnionDeclines(t *testing.T) {
 	unionOf := func(memberTypes, inline string) string {
 		return sequenceOf(`<xs:element name="a"><xs:simpleType><xs:union memberTypes="` + memberTypes + `">` + inline + `</xs:union></xs:simpleType></xs:element>`)
 	}
-	const assertion = `<xs:simpleType><xs:restriction base="xs:string"><xs:assertion test="true()"/></xs:restriction></xs:simpleType>`
 	rows := []struct {
 		name, decls string
 		minted      bool
@@ -348,16 +347,6 @@ func TestDecodeUnionDeclines(t *testing.T) {
 		{"a minted primitive after two members of one Go type", union("xs:string xs:token s:money"), true, constructOtherPrimitive, "through the union's basic member {urn:s}money"},
 		{"a list member of a minted primitive", unionOf("xs:int", `<xs:simpleType><xs:list itemType="s:money"/></xs:simpleType>`), true, constructOtherPrimitive,
 			"through the union's anonymous basic member, a type defined at s.xsd:1:298, through the list type's {item type definition} {urn:s}money"},
-		{"xs:string and xs:token", union("xs:string xs:token"), false, constructSharedVariant, "through the union's basic member {http://www.w3.org/2001/XMLSchema}token"},
-		{"xs:string and an anonymous enumeration of it", unionOf("xs:string", `<xs:simpleType><xs:restriction base="xs:string"><xs:enumeration value="x"/></xs:restriction></xs:simpleType>`), false, constructSharedVariant, "through the union's anonymous basic member"},
-		{"xs:int and a restriction of it", unionOf("xs:int", `<xs:simpleType><xs:restriction base="xs:int"><xs:minInclusive value="0"/></xs:restriction></xs:simpleType>`), false, constructSharedVariant, "through the union's anonymous basic member"},
-		{"xs:QName and xs:NOTATION", union("xs:QName xs:NOTATION"), false, constructSharedVariant, "through the union's basic member {http://www.w3.org/2001/XMLSchema}NOTATION"},
-		{"xs:hexBinary and xs:base64Binary", union("xs:hexBinary xs:base64Binary"), false, constructSharedVariant, "through the union's basic member {http://www.w3.org/2001/XMLSchema}base64Binary"},
-		{"xs:integer and xs:nonNegativeInteger", union("xs:integer xs:nonNegativeInteger"), false, constructSharedVariant, "through the union's basic member {http://www.w3.org/2001/XMLSchema}nonNegativeInteger"},
-		{"two lists of xs:int", unionOf("", `<xs:simpleType><xs:list itemType="xs:int"/></xs:simpleType><xs:simpleType><xs:list itemType="xs:int"/></xs:simpleType>`), false, constructSharedVariant, "through the union's anonymous basic member, a type defined at s.xsd:1:351"},
-		{"two lists of a union", unionOf("", `<xs:simpleType><xs:list><xs:simpleType><xs:union memberTypes="xs:int"/></xs:simpleType></xs:list></xs:simpleType><xs:simpleType><xs:list><xs:simpleType><xs:union memberTypes="xs:date"/></xs:simpleType></xs:list></xs:simpleType>`),
-			false, constructSharedVariant, "through the union's anonymous basic member"},
-		{"members of one Go type before an assertions facet", unionOf("xs:string xs:token", assertion), false, constructSharedVariant, "through the union's basic member {http://www.w3.org/2001/XMLSchema}token"},
 	}
 	for _, row := range rows {
 		t.Run(row.name, func(t *testing.T) {
@@ -522,8 +511,7 @@ func TestDecodeUnionDeclinedAssertion(t *testing.T) {
 	}
 }
 
-// TestDecodeUnionMembersOfDistinctGoTypes pins the other half of
-// constructSharedVariant over its condition: a union of any two of the
+// TestDecodeUnionMembersOfDistinctGoTypes pins that a union of any two of the
 // fourteen datatypes whose Go type is a datatype struct of its own, xs:int
 // beside a list of xs:int, a list of xs:int beside a list of xs:short, and
 // xs:int beside itself, which basic-member order keeps once, decline
@@ -548,6 +536,210 @@ func TestDecodeUnionMembersOfDistinctGoTypes(t *testing.T) {
 			t.Errorf("union %s: CheckDecode = %v, want ErrTypeMismatch, no decline", row, err)
 		}
 	}
+}
+
+// TestDecodeUnionOneGoTypeDeclinesNothing pins item 5 for a union two of
+// whose basic members get one Go type, the same A or []A or two lists of a
+// union: it declines nothing, so CheckDecode of struct{} passes item 5 to
+// item 6's ErrTypeMismatch.
+func TestDecodeUnionOneGoTypeDeclinesNothing(t *testing.T) {
+	const assertion = `<xs:simpleType><xs:restriction base="xs:string"><xs:assertion test="true()"/></xs:restriction></xs:simpleType>`
+	rows := []struct{ name, members string }{
+		{"xs:string and xs:token", `memberTypes="xs:string xs:token">`},
+		{"xs:string and an anonymous enumeration of it", `memberTypes="xs:string"><xs:simpleType><xs:restriction base="xs:string"><xs:enumeration value="x"/></xs:restriction></xs:simpleType>`},
+		{"xs:int and a restriction of it", `memberTypes="xs:int"><xs:simpleType><xs:restriction base="xs:int"><xs:minInclusive value="0"/></xs:restriction></xs:simpleType>`},
+		{"xs:QName and xs:NOTATION", `memberTypes="xs:QName xs:NOTATION">`},
+		{"xs:hexBinary and xs:base64Binary", `memberTypes="xs:hexBinary xs:base64Binary">`},
+		{"xs:integer and xs:nonNegativeInteger", `memberTypes="xs:integer xs:nonNegativeInteger">`},
+		{"two lists of xs:int", `><xs:simpleType><xs:list itemType="xs:int"/></xs:simpleType><xs:simpleType><xs:list itemType="xs:int"/></xs:simpleType>`},
+		{"two lists of a union", `><xs:simpleType><xs:list><xs:simpleType><xs:union memberTypes="xs:int"/></xs:simpleType></xs:list></xs:simpleType>` +
+			`<xs:simpleType><xs:list><xs:simpleType><xs:union memberTypes="xs:date"/></xs:simpleType></xs:list></xs:simpleType>`},
+		{"members of one Go type before an assertions facet", `memberTypes="xs:string xs:token">` + assertion},
+	}
+	for _, row := range rows {
+		schema := schemaOf(t, sequenceOf(`<xs:element name="a"><xs:simpleType><xs:union `+row.members+`</xs:union></xs:simpleType></xs:element>`))
+		if err := CheckDecode[struct{}](schema, rootName); !errors.Is(err, ErrTypeMismatch) {
+			t.Errorf("%s: CheckDecode = %v, want ErrTypeMismatch, no decline", row.name, err)
+		}
+	}
+}
+
+// oneGoTypeSchema's s:r holds, in a to e, a union of each shape whose basic
+// members share a Go type: st, xs:string then xs:token; ls, lower, a
+// restriction of xs:token to [a-z]+, then xs:string; lis, lower, xs:int and
+// xs:string; ll, a list of lower then a list of xs:string; and lu, a list of
+// id, a union of xs:int and xs:date, then a list of ib, of xs:int and
+// xs:boolean.
+const oneGoTypeSchema = `<xs:simpleType name="lower"><xs:restriction base="xs:token"><xs:pattern value="[a-z]+"/></xs:restriction></xs:simpleType>
+<xs:simpleType name="st"><xs:union memberTypes="xs:string xs:token"/></xs:simpleType>
+<xs:simpleType name="ls"><xs:union memberTypes="s:lower xs:string"/></xs:simpleType>
+<xs:simpleType name="lis"><xs:union memberTypes="s:lower xs:int xs:string"/></xs:simpleType>
+<xs:simpleType name="ll"><xs:union><xs:simpleType><xs:list itemType="s:lower"/></xs:simpleType><xs:simpleType><xs:list itemType="xs:string"/></xs:simpleType></xs:union></xs:simpleType>
+<xs:simpleType name="id"><xs:union memberTypes="xs:int xs:date"/></xs:simpleType>
+<xs:simpleType name="ib"><xs:union memberTypes="xs:int xs:boolean"/></xs:simpleType>
+<xs:simpleType name="lu"><xs:union><xs:simpleType><xs:list itemType="s:id"/></xs:simpleType><xs:simpleType><xs:list itemType="s:ib"/></xs:simpleType></xs:union></xs:simpleType>
+<xs:element name="r"><xs:complexType><xs:sequence>
+<xs:element name="a" type="s:st"/><xs:element name="b" type="s:ls"/><xs:element name="c" type="s:lis"/><xs:element name="d" type="s:ll"/><xs:element name="e" type="s:lu"/>
+</xs:sequence></xs:complexType></xs:element>`
+
+// The types codegen emits for oneGoTypeSchema, by shape, which
+// TestOneGoTypeTypesAreCodegens pins.
+type (
+	ogt struct {
+		A ogtSt
+		B ogtLs
+		C ogtLis
+		D ogtLl
+		E ogtLu
+	}
+	ogtSt        interface{ isSt() }
+	ogtStString  string
+	ogtStToken   string
+	ogtLs        interface{ isLs() }
+	ogtLsLower   string
+	ogtLsString  string
+	ogtLis       interface{ isLis() }
+	ogtLisLower  string
+	ogtLisInt    int32
+	ogtLisString string
+	ogtLl        interface{ isLl() }
+	ogtLlList    []string
+	ogtLlList2   []string
+	ogtLu        interface{ isLu() }
+	ogtLuList    []ogtID
+	ogtLuList2   []ogtIB
+	ogtID        interface{ isID() }
+	ogtIDInt     int32
+	ogtIDDate    unionDate
+	ogtIB        interface{ isIB() }
+	ogtIBInt     int32
+	ogtIBBoolean bool
+)
+
+func (ogtStString) isSt()   {}
+func (ogtStToken) isSt()    {}
+func (ogtLsLower) isLs()    {}
+func (ogtLsString) isLs()   {}
+func (ogtLisLower) isLis()  {}
+func (ogtLisInt) isLis()    {}
+func (ogtLisString) isLis() {}
+func (ogtLlList) isLl()     {}
+func (ogtLlList2) isLl()    {}
+func (ogtLuList) isLu()     {}
+func (ogtLuList2) isLu()    {}
+func (ogtIDInt) isID()      {}
+func (ogtIDDate) isID()     {}
+func (ogtIBInt) isIB()      {}
+func (ogtIBBoolean) isIB()  {}
+
+// ogtVariants supplies every interface's variants of oneGoTypeSchema, those
+// over one Go type in basic-member order, which WithBranches requires, the
+// others not: lis's xs:int variant first, id's and ib's swapped.
+var ogtVariants = []Option{
+	WithBranches[ogtSt](ogtStString(""), ogtStToken("")),
+	WithBranches[ogtLs](ogtLsLower(""), ogtLsString("")),
+	WithBranches[ogtLis](ogtLisInt(0), ogtLisLower(""), ogtLisString("")),
+	WithBranches[ogtLl](ogtLlList(nil), ogtLlList2(nil)),
+	WithBranches[ogtLu](ogtLuList(nil), ogtLuList2(nil)),
+	WithBranches[ogtID](ogtIDDate{}, ogtIDInt(0)),
+	WithBranches[ogtIB](ogtIBBoolean(false), ogtIBInt(0)),
+}
+
+// TestOneGoTypeTypesAreCodegens pins the types above to those codegen emits
+// for oneGoTypeSchema, in shape and in emission order, the order ogtVariants
+// supplies each union's variants of one Go type in (codegen/doc.go "# Simple
+// types").
+func TestOneGoTypeTypesAreCodegens(t *testing.T) {
+	gen := string(generated(t, schemaOf(t, oneGoTypeSchema)))
+	want := []string{
+		"type R struct {\n\tA St\n\tB Ls\n\tC Lis\n\tD Ll\n\tE Lu\n}\n",
+		"type StString string\n", "type StToken string\n",
+		"type LsLower string\n", "type LsString string\n",
+		"type LisLower string\n", "type LisInt int32\n", "type LisString string\n",
+		"type LlList []string\n", "type LlList2 []string\n",
+		"type LuList []Id\n", "type LuList2 []Ib\n",
+		"type IdInt int32\n", "type IdDate Date\n",
+		"type IbInt int32\n", "type IbBoolean bool\n",
+	}
+	at := 0
+	for _, decl := range want {
+		i := strings.Index(gen[at:], decl)
+		if i < 0 {
+			t.Fatalf("codegen emits\n%s\nwhich does not declare\n%safter the declarations before it", gen, decl)
+		}
+		at += i + len(decl)
+	}
+}
+
+// TestDecodeUnionMembersOfOneGoType pins the union lift for basic members
+// whose Go types are one (Datatypes dt-active-basic-member, cvc-datatype-valid
+// clause 2.3; Decode's doc, item 6): a value decodes into the variant
+// WithBranches supplies in its ·active basic member·'s place among the
+// variants of that Go type, the earlier member's for a value the earlier
+// member accepts and the later member's for one only the later member
+// accepts, its value read under that member, its whiteSpace included:
+// xs:string keeps "  x  " whole, lower collapses " x ". lis' variants are
+// supplied xs:int first and id's and ib's out of basic-member order, which
+// distinct Go types admit. Of ls' two variants supplied against basic-member
+// order, each member's value lands in the other's variant, CheckDecode nil;
+// of lu's, Decode and CheckDecode return ErrTypeMismatch, each list's item
+// interface held to the other's union.
+func TestDecodeUnionMembersOfOneGoType(t *testing.T) {
+	date := func(y int64, m, d uint8) unionDate { return unionDate{Year: *big.NewInt(y), Month: m, Day: d} }
+	swapped := func(set Option) []Option {
+		return append(slices.Clip(ogtVariants), set)
+	}
+	lsSwapped := swapped(WithBranches[ogtLs](ogtLsString(""), ogtLsLower("")))
+	rows := []struct {
+		name, body string
+		into       target
+		want       ogt
+	}{
+		{"each earlier member",
+			"<s:a>  x  </s:a><s:b> x </s:b><s:c>x</s:c><s:d>x y</s:d><s:e>5 2000-01-01</s:e>", into[ogt](ogtVariants...),
+			ogt{A: ogtStString("  x  "), B: ogtLsLower("x"), C: ogtLisLower("x"), D: ogtLlList{"x", "y"}, E: ogtLuList{ogtIDInt(5), ogtIDDate(date(2000, 1, 1))}}},
+		{"each later member",
+			"<s:a>X</s:a><s:b> X </s:b><s:c> X </s:c><s:d>x Y</s:d><s:e>5 true</s:e>", into[ogt](ogtVariants...),
+			ogt{A: ogtStString("X"), B: ogtLsString(" X "), C: ogtLisString(" X "), D: ogtLlList2{"x", "Y"}, E: ogtLuList2{ogtIBInt(5), ogtIBBoolean(true)}}},
+		{"the member of the other Go type between them",
+			"<s:a>x</s:a><s:b>x</s:b><s:c> 7 </s:c><s:d/><s:e/>", into[ogt](ogtVariants...),
+			ogt{A: ogtStString("x"), B: ogtLsLower("x"), C: ogtLisInt(7), D: ogtLlList{}, E: ogtLuList{}}},
+		{"two variants supplied against basic-member order, the later member's value",
+			"<s:a>x</s:a><s:b>X</s:b><s:c>x</s:c><s:d>x</s:d><s:e>5</s:e>", into[ogt](lsSwapped...),
+			ogt{A: ogtStString("x"), B: ogtLsLower("X"), C: ogtLisLower("x"), D: ogtLlList{"x"}, E: ogtLuList{ogtIDInt(5)}}},
+		{"two variants supplied against basic-member order, the earlier member's value",
+			"<s:a>x</s:a><s:b>x</s:b><s:c>x</s:c><s:d>x</s:d><s:e>5</s:e>", into[ogt](lsSwapped...),
+			ogt{A: ogtStString("x"), B: ogtLsString("x"), C: ogtLisLower("x"), D: ogtLlList{"x"}, E: ogtLuList{ogtIDInt(5)}}},
+	}
+	for _, row := range rows {
+		t.Run(row.name, func(t *testing.T) {
+			schema := schemaOf(t, oneGoTypeSchema)
+			data := instanceOf("", row.body)
+			mustAccept(t, schema, data)
+			got, err := row.into.decode(schema, data)
+			if err != nil {
+				t.Fatal(err)
+			}
+			var want any = row.want
+			if g, w := spellUnion(reflect.ValueOf(&got).Elem()), spellUnion(reflect.ValueOf(&want).Elem()); g != w {
+				t.Errorf("Decode = %s\nwant     %s", g, w)
+			}
+			if err := row.into.check(schema); err != nil {
+				t.Errorf("CheckDecode = %v, want nil for a row Decode decodes", err)
+			}
+		})
+	}
+	t.Run("two lists of differing union items supplied against basic-member order", func(t *testing.T) {
+		schema := schemaOf(t, oneGoTypeSchema)
+		data := instanceOf("", "<s:a>x</s:a><s:b>x</s:b><s:c>x</s:c><s:d>x</s:d><s:e>5</s:e>")
+		mustAccept(t, schema, data)
+		swap := into[ogt](swapped(WithBranches[ogtLu](ogtLuList2(nil), ogtLuList(nil)))...)
+		_, err := swap.decode(schema, data)
+		if !errors.Is(err, ErrTypeMismatch) {
+			t.Fatalf("Decode error = %v, want ErrTypeMismatch", err)
+		}
+		assertProbeMismatch(t, swap.check(schema), err)
+	})
 }
 
 // TestDecodeUnionChoiceSharedBranch pins sharesBranch's union bullet over two
@@ -670,4 +862,48 @@ func TestWithLoggerUnion(t *testing.T) {
 func decodeInto[T any](schema *xsd.Schema, data []byte, opts ...Option) error {
 	_, err := Decode[T](schema, strict.New(), data, opts...)
 	return err
+}
+
+// precisionShape is a struct of the shape of codegen's PrecisionDecimal
+// (decimalShape) over uaIS, a sealed interface.
+type precisionShape struct{ Value uaIS }
+
+// TestNoVariantOverTwoGoTypes pins what item 6's "basic members whose Go
+// types are one" rests on: no variant is over two basic members' Go types
+// unless they are one Go type (scalar.goType), so unionScalar.bind ties the
+// variants of one Go type to its members alone. Every Go type a variant
+// matches anything by has the underlying type of one of these probes: each
+// atomic's bare type and a slice of it, a struct of PrecisionDecimal's shape
+// in decimalValue's place, and []I, I a sealed interface, for a list of a
+// union; each is probed against a scalar of every atomic, a list of each, and
+// a list of a union.
+func TestNoVariantOverTwoGoTypes(t *testing.T) {
+	var members []scalar
+	for a := atomic(1); int(a) < len(atomicTypes); a++ {
+		members = append(members, scalar{elem: a}, scalar{elem: a, item: &listItem{}})
+	}
+	members = append(members, scalar{elem: &unionScalar{}, item: &listItem{}})
+	probe := func(g reflect.Type) reflect.Type {
+		switch g {
+		case decimalValueType:
+			return reflect.TypeFor[precisionShape]()
+		case reflect.SliceOf(decimalValueType):
+			return reflect.TypeFor[[]precisionShape]()
+		case reflect.SliceOf(unionValueType):
+			return reflect.TypeFor[[]uaIS]()
+		}
+		return g
+	}
+	for _, m := range members {
+		v := probe(m.goType())
+		var over []reflect.Type
+		for _, n := range members {
+			if n.underlies(v) && !slices.Contains(over, n.goType()) {
+				over = append(over, n.goType())
+			}
+		}
+		if len(over) != 1 {
+			t.Errorf("a variant over %s is over the Go types %v, want %s alone", v, over, m.goType())
+		}
+	}
 }

@@ -86,11 +86,11 @@ type construct uint8
 // examined at the particle, declines by the same constructs from
 // constructAllOccurs on, and by constructAbstractTypeElement, which sits
 // with the particle's though the document element's type declines by it too,
-// ahead of its content. The two of a simple type, constructOtherPrimitive
-// and constructSharedVariant, sit with the particle's, though a document
-// element of simple type, a complex type's simple content, by its {simple type
-// definition}, an attribute use, a list type, by its {item type definition},
-// and a union, by a basic member, decline by them too. constructUntrackedModel
+// ahead of its content. The one of a simple type, constructOtherPrimitive,
+// sits with the particle's, though a document element of simple type, a
+// complex type's simple content, by its {simple type definition}, an
+// attribute use, a list type, by its {item type definition}, and a union, by
+// a basic member, decline by it too. constructUntrackedModel
 // follows every particle of a flattened content model or an occurrence
 // field's, ahead of the type's attribute uses, and every basic particle a
 // nested flattened particle reaches and every particle of a nested
@@ -104,7 +104,6 @@ const (
 	constructSharedName
 	constructSharedBranch
 	constructOtherPrimitive
-	constructSharedVariant
 	constructUntrackedModel
 	constructXsiType
 )
@@ -119,7 +118,6 @@ var constructNames = [...]string{
 	constructSharedName:          "two particles taking one expanded name, each by its own element declaration or a member of its substitution group",
 	constructSharedBranch:        "two branches of a sealed interface whose structs have one shape",
 	constructOtherPrimitive:      "an atomic simple type whose primitive is ·implementation-defined·, other than xs:precisionDecimal",
-	constructSharedVariant:       "a union simple type two of whose basic members get one Go type",
 	constructUntrackedModel:      "a content model the content matcher does not track",
 	constructXsiType:             "an element carrying xsi:type",
 }
