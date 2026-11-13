@@ -155,7 +155,7 @@ func TestSpliceTypesAreCodegens(t *testing.T) {
 // two, decodes into the fields its own particles give, in particle order,
 // and a wildcard particle inside a spliced sequence, inline or referenced,
 // or after one decodes into its own field at its place, the field index
-// wildcardSlot.places holds for its Matcher position. CheckDecode returns
+// matcherSlot.places holds for its Matcher position. CheckDecode returns
 // nil for each row's T.
 //
 // The content splice schemas' rows pin the same for a content {particle}

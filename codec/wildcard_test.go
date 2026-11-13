@@ -433,3 +433,55 @@ func TestDecodeWildcardSharedBranch(t *testing.T) {
 		}
 	}
 }
+
+// headWildSchema declares s:r of sequence(<element ref> h, any over ##other),
+// h of xs:string heading the group of m; headWild is the type codegen emits
+// for its s:r, over flatten_test.go's head interface flatGroup, which
+// TestDecodeMemberUnderMatcher pins.
+const headWildSchema = `<xs:element name="h" type="xs:string"/><xs:element name="m" type="xs:string" substitutionGroup="s:h"/>` +
+	`<xs:element name="r"><xs:complexType><xs:sequence><xs:element ref="s:h"/><xs:any namespace="##other" processContents="lax"/></xs:sequence></xs:complexType></xs:element>`
+
+type headWild struct {
+	H   flatGroup
+	Any anyElement
+}
+
+// TestDecodeMemberUnderMatcher pins attributeAt's element-declaration arm for
+// a substitution group's member: the wildcard has a Matcher attribute every
+// child of headWildSchema's s:r, which attributes the member m to its head's
+// particle's position (cvc-accept clause 2.3.2), and Decode puts it in the
+// head's field, m's branch, by that position. CheckDecode returns nil.
+func TestDecodeMemberUnderMatcher(t *testing.T) {
+	schema := schemaOf(t, headWildSchema)
+	gen := generated(t, schema)
+	for _, decl := range []string{"type R struct {\n\tH   HSubstitutionGroup\n\tAny AnyElement\n}\n", "type HSubstitutionGroupM struct {\n\tM M\n}\n"} {
+		if !bytes.Contains(gen, []byte(decl)) {
+			t.Errorf("codegen emits\n%s\nwhich does not declare\n%s", gen, decl)
+		}
+	}
+	w := anyElement{Space: "urn:o", Local: "w"}
+	rows := []struct {
+		name, body string
+		want       headWild
+	}{
+		{"the member", `<s:m>1</s:m><o:w xmlns:o="urn:o"/>`, headWild{H: flatGroupM{M: "1"}, Any: w}},
+		{"the head", `<s:h>2</s:h><o:w xmlns:o="urn:o"/>`, headWild{H: flatGroupH{H: "2"}, Any: w}},
+	}
+	target := into[headWild](flatGroupBranches)
+	for _, row := range rows {
+		t.Run(row.name, func(t *testing.T) {
+			data := instanceOf("", row.body)
+			mustAccept(t, schema, data)
+			got, err := target.decode(schema, data)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !reflect.DeepEqual(got, row.want) {
+				t.Errorf("Decode = %#v, want %#v", got, row.want)
+			}
+		})
+	}
+	if err := target.check(schema); err != nil {
+		t.Errorf("CheckDecode = %v, want nil", err)
+	}
+}
