@@ -15,8 +15,7 @@ import (
 // the two declines from codec's own parser/xmltree read, so each row fails
 // when the URI is dropped at the read it names.
 func TestDecodeURI(t *testing.T) {
-	const nillable = `<xs:element name="r" nillable="true"><xs:complexType><xs:sequence><xs:element name="a" type="xs:string"/></xs:sequence></xs:complexType></xs:element>`
-	const xsiType = `<xs:complexType name="rt"><xs:sequence><xs:element name="a" type="xs:string"/></xs:sequence></xs:complexType>
+		const xsiType = `<xs:complexType name="rt"><xs:sequence><xs:element name="a" type="xs:string"/></xs:sequence></xs:complexType>
 		<xs:element name="r" type="s:rt"/>`
 	// viaLocOf reads the Loc xsderr.LocOf reaches.
 	viaLocOf := func(err error) (string, bool) {
@@ -51,7 +50,7 @@ func TestDecodeURI(t *testing.T) {
 		{"source fault in the walk, the validator's read", shapesSchema, []byte(`<s:r xmlns:s="urn:s" req="r"><s:one>x</s:one>`), viaLocOf, "1:1"},
 		{"source fault after the walk, the validator's read", shapesSchema, []byte(`<s:r xmlns:s="urn:s" req="r"><s:one>x</s:one><s:tok>t</s:tok></s:r><bad`), viaLocOf, "1:72"},
 		{"undecided, the validator's read", undecidedSchema, instanceOf("", "<s:a>x</s:a>"), viaUndecided, "1:1"},
-		{"document element decline, codec's read", nillable, instanceOf("", "<s:a>x</s:a>"), viaDecline, "1:1"},
+		{"document element decline, codec's read", nillableTables, instanceOf("", "<s:a>x</s:a>"), viaDecline, "1:1"},
 		{"child xsi:type decline, codec's read", xsiType, instanceOf("", `<s:a xsi:type="xs:token"> x  y </s:a>`), viaDecline, "1:120"},
 	}
 	uris := []struct {

@@ -61,7 +61,7 @@ func TestDecodeErrorCategories(t *testing.T) {
 			return err
 		}},
 		{"decline", func() error {
-			_, err := Decode[struct{ A string }](schemaOf(t, `<xs:element name="r" nillable="true"><xs:complexType><xs:sequence><xs:element name="a" type="xs:string"/></xs:sequence></xs:complexType></xs:element>`), strict.New(), instanceOf("", "<s:a>x</s:a>"))
+			_, err := Decode[struct{ A string }](schemaOf(t, nillableTables), strict.New(), instanceOf("", "<s:a>x</s:a>"))
 			return err
 		}},
 		{"T mismatch", func() error {

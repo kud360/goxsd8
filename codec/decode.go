@@ -987,9 +987,11 @@ type field struct {
 // interface; a groupArm, the sealed interface over a substitution group; a
 // rawArm, a wildcard particle's or the {open content}'s AnyElement; an
 // anyTypeArm, an element of type xs:anyType's AnyType or a named type over
-// it; and, in mixed content, a mixedArm, an element particle's MixedChild
-// over the V one of the other arms holds, or a childArm, a wildcard
-// particle's or the {open content}'s AnyChild.
+// it; a nillableArm, a nillable element's Nillable, its Content the V a
+// scalarArm, a structArm or an ifaceArm holds; and, in mixed content, a
+// mixedArm, an element particle's MixedChild over the V one of the other
+// arms holds, or a childArm, a wildcard particle's or the {open content}'s
+// AnyChild.
 type fieldArm interface {
 	// bind holds v, the V the field's shape holds at at, to the arm, item 6 of
 	// Decode's doc, and returns the elementReader that reads the field's
@@ -999,10 +1001,10 @@ type fieldArm interface {
 	// a rawArm, an anyTypeArm and a childArm, exactly the V bind accepts, but
 	// that bind also holds a PrecisionDecimal scalarArm's V to the arms
 	// checkContext supplies for its Value interface; for a structArm, a
-	// struct; for an ifaceArm and a groupArm, an interface; for a mixedArm, a
-	// struct of MixedChild's shape whose Element its element arm admits. bind
-	// rejects every v the arm does not admit before it checks anything
-	// further, so such a v stores no checkContext.bound entry.
+	// struct; for an ifaceArm, a groupArm and a nillableArm, an interface; for
+	// a mixedArm, a struct of MixedChild's shape whose Element its element arm
+	// admits. bind rejects every v the arm does not admit before it checks
+	// anything further, so such a v stores no checkContext.bound entry.
 	admits(v reflect.Type) bool
 	// describe spells V for an ErrTypeMismatch message.
 	describe() string
@@ -1713,17 +1715,17 @@ func (f field) admits(got reflect.StructField) bool {
 //     valueNamed arm's N never one Go type (anyTypeArm.admits); beside a
 //     structArm, true, which is conservative, since a structArm admits any
 //     struct and X and N are structs; and beside a rawArm, a scalarArm, an
-//     ifaceArm or a groupArm, false, since contentShapeOf admits only a
+//     ifaceArm, a groupArm or a nillableArm, false, since contentShapeOf admits only a
 //     struct of the three exported fields Attributes, Text and Children,
 //     which no rawArm's E is, no scalar's V is but a datatype struct's, which
 //     the bullet above answers, and no interface is.
 //   - Either arm a rawArm: for two rawArms, true exactly when they have one
 //     shape; beside a structArm, true, which is conservative, since a
 //     structArm admits any struct and a rawArm's V is one; and beside a
-//     scalarArm, an ifaceArm or a groupArm, false, since rawShapeOf admits
-//     only a struct of three exported fields, which no scalar's V is but a
-//     datatype struct's, which the bullet above answers (big.Rat's and
-//     big.Int's fields are unexported), and no interface.
+//     scalarArm, an ifaceArm, a groupArm or a nillableArm, false, since
+//     rawShapeOf admits only a struct of three exported fields, which no
+//     scalar's V is but a datatype struct's, which the bullet above answers
+//     (big.Rat's and big.Int's fields are unexported), and no interface.
 //   - Both arms scalarArms: for two valueBare arms, true exactly when they
 //     have the same Go type of shape over scalar.goType, a repeated xs:int
 //     and a list of xs:int each []int32; for two valueNamed arms, true
@@ -1738,13 +1740,13 @@ func (f field) admits(got reflect.StructField) bool {
 //     big.Int, which is conservative, since a structArm admits any struct. No
 //     scalar's V the bullets above leave is an interface, and none holds one
 //     but a PrecisionDecimal's, which the datatype-struct bullet answers, so
-//     an ifaceArm or a groupArm gives false.
+//     an ifaceArm, a groupArm or a nillableArm gives false.
 //   - Both nested: true exactly when both are structArms, or neither is,
-//     each then an ifaceArm or a groupArm, and they have one shape, which is
-//     conservative, since their units' contents are not compared. A branch
-//     field occurs once or repeated, its shapeOptional read as shapeOne, and
-//     a nested arm's V is a struct or an interface, never a slice, so any
-//     other pair admits no common Go type.
+//     each then an ifaceArm, a groupArm or a nillableArm, and they have one
+//     shape, which is conservative, since their units' contents are not
+//     compared. A branch field occurs once or repeated, its shapeOptional
+//     read as shapeOne, and a nested arm's V is a struct or an interface,
+//     never a slice, so any other pair admits no common Go type.
 func (f field) sharesBranch(g field) bool {
 	if f.name != g.name {
 		return false
@@ -1811,11 +1813,12 @@ func (f field) sharesBranch(g field) bool {
 }
 
 // holdsInterface reports whether a's V is an interface or a slice of one: an
-// ifaceArm's, a groupArm's, or a scalarArm's of a union or a list of one.
-// fieldArm is a closed sum, so the switch is STYLE T2's sealed-sum exception.
+// ifaceArm's, a groupArm's, a nillableArm's, or a scalarArm's of a union or a
+// list of one. fieldArm is a closed sum, so the switch is STYLE T2's
+// sealed-sum exception.
 func holdsInterface(a fieldArm) bool {
 	switch a := a.(type) {
-	case ifaceArm, groupArm:
+	case ifaceArm, groupArm, nillableArm:
 		return true
 	case scalarArm:
 		_, isUnion := a.elem.(*unionScalar)
@@ -2044,7 +2047,7 @@ func bind(p *pipeline, root *xmltree.StartElement) (binder, error) {
 // no instance Loc, or the plain error item 5 states in a decline's place. It
 // reads only p's schema.
 func bindDecl(p *pipeline, decl xsd.ElementDeclaration) (binder, error) {
-	types, err := governingTypes(p.schema, decl)
+	types, wrapped, err := governingTypes(p.schema, decl, true)
 	if err != nil {
 		return nil, err
 	}
@@ -2056,10 +2059,27 @@ func bindDecl(p *pipeline, decl xsd.ElementDeclaration) (binder, error) {
 	if anyTypeItself(td) {
 		return anyTypeRoot{}, nil
 	}
-	// TypeDefinition is a closed sum of the two, so the assertions are STYLE
-	// T2's sealed-sum exception.
+	b, err := bindTyped(run, decl, td)
+	if err != nil || !wrapped {
+		return b, err
+	}
+	// The *binding of a struct R holds A's fields; a simple R and a sealed
+	// interface R have none, A being struct{}.
+	attrs, _ := b.(*binding)
+	sum, err := newNillableSum(p, attrs)
+	if err != nil {
+		return nil, err
+	}
+	return &nillableRoot{content: b, sum: sum}, nil
+}
+
+// bindTyped returns the binder of decl, a top-level element declaration
+// whose one governing type is td, other than xs:anyType itself: a
+// simpleRoot's or bindComplex's unit's. TypeDefinition is a closed sum of the
+// two, so the assertions are STYLE T2's sealed-sum exception.
+func bindTyped(run *bindRun, decl xsd.ElementDeclaration, td xsd.TypeDefinition) (binder, error) {
 	if st, ok := td.(*xsd.SimpleType); ok {
-		return bindSimpleRoot(p, decl, st, typeSubject(decl, td))
+		return bindSimpleRoot(run.p, decl, st, typeSubject(decl, td))
 	}
 	ct, _ := td.(xsd.ComplexType)
 	return bindComplex(run, decl, ct, run.elements, decl.Name())
@@ -4410,29 +4430,34 @@ func bindSimpleRoot(p *pipeline, decl xsd.ElementDeclaration, st *xsd.SimpleType
 
 // governingTypes returns the governing types of the element declaration decl
 // in schema, codegen's (goshape.GoverningTypes), but that a complex type with
-// {abstract} true is kept at its slot, where binding it declines (bindComplex); or the
-// first decline item 5 of Decode's doc states for decl's own properties, naming decl:
-// {nillable} true, unless exactly one governing type remains, it is xs:anyType itself,
-// and no slot holds xs:error, which a ·nilled· instance is valid against (cvc-type clause
-// 3.1.3 "If E is not nilled") and the anyType arm would read as xs:anyType's, a slot that
-// does not resolve declining so too; then, of two or more governing types, two anonymous
-// ones, whose branch the selection could not be matched to (tableRoot.branchOf). A slot
-// that does not resolve, of a declaration that is not nillable, is
-// goshape.GoverningTypes' plain error.
-func governingTypes(schema *xsd.Schema, decl xsd.ElementDeclaration) ([]goshape.GoverningType, error) {
+// {abstract} true is kept at its slot, where binding it declines (bindComplex), and
+// wrapped, whether the field over decl, or T for a document element, holds codegen's
+// Nillable over decl's one governing type: decl is nillable (goshape.Nillable) and that
+// type is not xs:anyType itself, whose AnyType holds xsi:nil among its raw attributes. Or
+// it returns the first decline item 5 of Decode's doc states for decl's own properties,
+// naming decl: a nillable decl, unless exactly one governing type remains, no slot holds
+// xs:error, which a ·nilled· instance is valid against (cvc-type clause 3.1.3 "If E is
+// not nilled") and which codegen's sum wraps branch by branch, and, where wraps is false,
+// a site that holds no Nillable, a substitution group's branch field, that type is
+// xs:anyType itself, a slot that does not resolve declining so too; then, of two or more
+// governing types, two anonymous ones, whose branch the selection could not be matched to
+// (tableRoot.branchOf). A slot that does not resolve, of a declaration that is not
+// nillable, is goshape.GoverningTypes' plain error.
+func governingTypes(schema *xsd.Schema, decl xsd.ElementDeclaration, wraps bool) (types []goshape.GoverningType, wrapped bool, err error) {
 	types, errorSlot, err := goshape.GoverningTypes(schema, decl, func(ct xsd.ComplexType) ([]xsd.TypeDefinition, error) {
 		return []xsd.TypeDefinition{ct}, nil
 	})
-	if decl.Nillable() && (err != nil || len(types) != 1 || !anyTypeItself(types[0].Type()) || errorSlot) {
-		return nil, decline(constructNillable, declSubject(decl))
+	nillable := goshape.Nillable(decl)
+	if nillable && (err != nil || len(types) != 1 || errorSlot || !wraps && !anyTypeItself(types[0].Type())) {
+		return nil, false, decline(constructNillable, declSubject(decl))
 	}
 	if err != nil {
-		return nil, fmt.Errorf("codec: %w", err)
+		return nil, false, fmt.Errorf("codec: %w", err)
 	}
 	if len(types) > 1 && anonymousTypes(types) > 1 {
-		return nil, decline(constructAnonymousTypes, declSubject(decl))
+		return nil, false, decline(constructAnonymousTypes, declSubject(decl))
 	}
-	return types, nil
+	return types, nillable && !anyTypeItself(types[0].Type()), nil
 }
 
 // anonymousTypes counts the anonymous types among types.
@@ -4603,7 +4628,7 @@ func elementV(run *bindRun, children map[xsd.QName]int, el xsd.ElementDeclaratio
 	if el.ScopeVariety() == xsd.ScopeGlobal {
 		value = valueNamed
 	}
-	f, err := declField(run, el, value, func(sealed bool) (shape, error) {
+	f, err := declField(run, el, value, true, func(sealed bool) (shape, error) {
 		return particleShape(children, []xsd.ElementDeclaration{el}, el, occurs, sealed && bare)
 	})
 	if err != nil {
@@ -4634,7 +4659,7 @@ func groupField(run *bindRun, children map[xsd.QName]int, head xsd.ElementDeclar
 	byName := map[xsd.QName]int{}
 	names := make([]xsd.QName, 0, len(members))
 	for _, m := range members {
-		f, err := declField(run, m, valueNamed, func(bool) (shape, error) { return shapeOne, nil })
+		f, err := declField(run, m, valueNamed, false, func(bool) (shape, error) { return shapeOne, nil })
 		if err != nil {
 			return field{}, nil, err
 		}
@@ -4662,14 +4687,21 @@ func groupField(run *bindRun, children map[xsd.QName]int, head xsd.ElementDeclar
 // (governingTypes), then its governing types, then shapeOf's error, shapeOf
 // returning the field's shape given whether its V is a sealed interface: a
 // union's (simpleGo.sealed), a choice's (complexUnit.sealedInterface) or a
-// governing types' interface, never AnyType. It never examines el's
+// governing types' interface or Nillable, never AnyType. It never examines el's
 // substitution group. With one governing type the field is typedField's for
 // it, a complex one's unit run.nested's, and with zero or two or more it holds
-// the governing types' interface run.table binds.
-func declField(run *bindRun, el xsd.ElementDeclaration, value valueType, shapeOf func(sealed bool) (shape, error)) (field, error) {
-	types, err := governingTypes(run.p.schema, el)
+// the governing types' interface run.table binds. wraps is governingTypes':
+// where it is true and el is nillable (goshape.Nillable), of a governing type
+// other than xs:anyType itself, the field holds codegen's Nillable over that
+// type (nillableArm), its Content holding what typedField gives an element of
+// it occurring exactly once, and its shape shapeOf's over a sealed interface.
+func declField(run *bindRun, el xsd.ElementDeclaration, value valueType, wraps bool, shapeOf func(sealed bool) (shape, error)) (field, error) {
+	types, wrapped, err := governingTypes(run.p.schema, el, wraps)
 	if err != nil {
 		return field{}, err
+	}
+	if wrapped {
+		return nillableField(run, el, types[0].Type(), value, shapeOf)
 	}
 	if len(types) != 1 {
 		u, err := run.table(el, types)
@@ -4683,6 +4715,26 @@ func declField(run *bindRun, el xsd.ElementDeclaration, value valueType, shapeOf
 		return u.field(s), nil
 	}
 	return typedField(run, el, types[0].Type(), value, shapeOf, func(ct xsd.ComplexType) (complexUnit, error) { return run.nested(el, ct) })
+}
+
+// nillableField returns declField's field of a nillable el whose one
+// governing type td it wraps: typedField's errors for td occurring once, then
+// newNillableSum's, then shapeOf's.
+func nillableField(run *bindRun, el xsd.ElementDeclaration, td xsd.TypeDefinition, value valueType, shapeOf func(sealed bool) (shape, error)) (field, error) {
+	once := func(bool) (shape, error) { return shapeOne, nil }
+	content, err := typedField(run, el, td, value, once, func(ct xsd.ComplexType) (complexUnit, error) { return run.nested(el, ct) })
+	if err != nil {
+		return field{}, err
+	}
+	sum, err := newNillableSum(run.p, attributesOf(content.arm))
+	if err != nil {
+		return field{}, err
+	}
+	s, err := shapeOf(true)
+	if err != nil {
+		return field{}, err
+	}
+	return field{shape: s, arm: nillableArm{content: content.arm, sum: sum}}, nil
 }
 
 // typedField returns the field, but for its name, of an element of the
@@ -4930,36 +4982,8 @@ func (b *boundBinding) fill(r *xmltree.Reader, root *xmltree.StartElement, out r
 		return err
 	}
 	bd := b.binding
-	width := bd.lead() + bd.content.width()
-	present := make([]bool, len(bd.attrs))
-	for _, a := range root.Attributes() {
-		i, ok := bd.attributes[expanded(a.Name())]
-		if !ok {
-			if bd.anyAttribute != nil && !instanceAttribute(a.Name()) {
-				appendRawAttribute(out.Field(width+len(bd.attrs)), a)
-				continue
-			}
-			if a.Name().Space() != xsd.XMLSchemaInstanceNS {
-				return unattributed(a)
-			}
-			continue
-		}
-		v, err := bd.attrs[i].decode(bd.p, a.Value(), attributeSource{a: a, owner: root})
-		if err != nil {
-			return err
-		}
-		bd.attrs[i].shape.store(bd.p, out.Field(width+i), v)
-		present[i] = true
-	}
-	for i, f := range bd.attrs {
-		if present[i] || f.supplied == nil {
-			continue
-		}
-		v, err := f.decode(bd.p, f.supplied.vc.LexicalForm(), suppliedSource{start: root, supplied: f.supplied})
-		if err != nil {
-			return err
-		}
-		f.shape.store(bd.p, out.Field(width+i), v)
+	if err := bd.fillAttributes(root, out, bd.lead()+bd.content.width()); err != nil {
+		return err
 	}
 	st := &fillState{mixed: bd.text != ""}
 	if st.mixed {
@@ -4974,6 +4998,49 @@ func (b *boundBinding) fill(r *xmltree.Reader, root *xmltree.StartElement, out r
 	err := b.content.fill(r, root, out, st)
 	bd.p.inherited = outer
 	return err
+}
+
+// fillAttributes sets the attribute fields of out, a struct holding bd's
+// attribute fields from field first on and then its {attribute wildcard}'s,
+// from root's attributes, as boundBinding.fill states: its present
+// attributes in start-tag order, then the supplied values of the absent ones
+// in attribute-use order, and each attribute no use's declaration names, but
+// the four instanceAttribute names, appended raw to the wildcard's field. An
+// attribute outside the xsi namespace that neither takes is the plain error
+// unattributed returns. It is the attribute fill of a struct and of a nilled
+// element's Attributes alike (nillableSum.nilledValue).
+func (bd *binding) fillAttributes(root *xmltree.StartElement, out reflect.Value, first int) error {
+	present := make([]bool, len(bd.attrs))
+	for _, a := range root.Attributes() {
+		i, ok := bd.attributes[expanded(a.Name())]
+		if !ok {
+			if bd.anyAttribute != nil && !instanceAttribute(a.Name()) {
+				appendRawAttribute(out.Field(first+len(bd.attrs)), a)
+				continue
+			}
+			if a.Name().Space() != xsd.XMLSchemaInstanceNS {
+				return unattributed(a)
+			}
+			continue
+		}
+		v, err := bd.attrs[i].decode(bd.p, a.Value(), attributeSource{a: a, owner: root})
+		if err != nil {
+			return err
+		}
+		bd.attrs[i].shape.store(bd.p, out.Field(first+i), v)
+		present[i] = true
+	}
+	for i, f := range bd.attrs {
+		if present[i] || f.supplied == nil {
+			continue
+		}
+		v, err := f.decode(bd.p, f.supplied.vc.LexicalForm(), suppliedSource{start: root, supplied: f.supplied})
+		if err != nil {
+			return err
+		}
+		f.shape.store(bd.p, out.Field(first+i), v)
+	}
+	return nil
 }
 
 // eachChild reads r's tokens up to the end tag of the element whose start tag
