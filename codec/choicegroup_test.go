@@ -476,13 +476,14 @@ func TestDecodeChoiceGroupDeclines(t *testing.T) {
 // alternatives no one branch set could hold, as many alternatives each of
 // one shape as one of the other's, bind with no decline, beside
 // TestDecodeChoiceGroup's choice(choice(a, b), choice(c, d)): where the
-// counts differ, and where they agree but one alternative shares no shape
-// with the other's. CheckDecode of struct{}, no interface, is then the
+// counts differ, the earlier choice's one alternative sharing a shape with
+// one of the later's two, and where they agree but one alternative shares no
+// shape with the other's. CheckDecode of struct{}, no interface, is then the
 // mismatch of T.
 func TestDecodeNestedChoiceAlternativesBind(t *testing.T) {
 	unqA := `<xs:element name="a" form="unqualified" type="xs:string"/>`
 	rows := []struct{ name, decls string }{
-		{"two alternatives beside one", root(`<xs:choice><xs:choice>` + cgEl("a") + cgEl("b") + `</xs:choice><xs:choice>` + unqA + `</xs:choice></xs:choice>`)},
+		{"one alternative before two", root(`<xs:choice><xs:choice>` + unqA + `</xs:choice><xs:choice>` + cgEl("a") + cgEl("b") + `</xs:choice></xs:choice>`)},
 		{"one shape shared, one not", root(`<xs:choice><xs:choice>` + cgEl("a") + cgEl("b") + `</xs:choice><xs:choice>` + unqA + cgEl("c") + `</xs:choice></xs:choice>`)},
 	}
 	for _, row := range rows {
