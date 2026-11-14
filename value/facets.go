@@ -262,10 +262,11 @@ func IsDatatypeVerdict(err error) bool {
 // a decides each {test} of an assertions facet the pipeline reaches
 // (cvc-assertions-valid, Datatypes §4.3.13.3) — st's own, and those of every
 // type the pipeline recurses into: a list's {item type definition} per item, a
-// union's members — and MUST be non-nil. Its stage runs last, after every other
-// value facet has accepted the value (cvc-datatype-valid clause 3): a {test} it
-// fails is a cvc-assertions-valid rejection, and one it declines returns an
-// error [IsAssertionDeclined] reports true for, which is not a verdict.
+// union's members — and MUST be non-nil; [AssertionEvaluator] says what to
+// pass. Its stage runs last, after every other value facet has accepted the
+// value (cvc-datatype-valid clause 3): a {test} it fails is a
+// cvc-assertions-valid rejection, and one it declines returns an error
+// [IsAssertionDeclined] reports true for, which is not a verdict.
 //
 // Where r answers notationDeclarer, as *xsd.Schema does, a literal whose
 // {primitive type definition} is NOTATION is also held to NOTATION's ·lexical
@@ -396,10 +397,11 @@ func ValidateLexical(b Backend, r xsd.TypeResolver, st *xsd.SimpleType, rawLexic
 // deliberate divergence, not a bug.
 //
 // Both scans run each member's assertions facets through a, which MUST be
-// non-nil, as ValidateLexical does: a member one of whose {test}s fails is not
-// Datatype Valid, so a later member is the ·validating type·
-// (dt-active-member), and a member one of whose {test}s a declines stops both
-// scans, so no later member is chosen on a verdict nobody decided.
+// non-nil ([AssertionEvaluator] says what to pass), as ValidateLexical
+// does: a member one of whose {test}s fails is not Datatype Valid, so a later
+// member is the ·validating type· (dt-active-member), and a member one of
+// whose {test}s a declines stops both scans, so no later member is chosen on
+// a verdict nobody decided.
 //
 // A non-nil err here is not necessarily a rejection of rawLexical —
 // [IsDatatypeVerdict] says which, on the same terms ValidateLexical's own

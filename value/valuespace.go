@@ -248,8 +248,9 @@ func (vs valueSpace) ValidDefault(r xsd.TypeResolver, t *xsd.SimpleType, vc xsd.
 //
 // a decides each {test} of an assertions facet the pipeline reaches on either
 // side (cvc-assertions-valid via cvc-datatype-valid clause 3, Datatypes
-// §4.1.4), on [ValidateLexical]'s terms, and MUST be non-nil — even for a
-// ·special· t, which never reads it.
+// §4.1.4), on [ValidateLexical]'s terms, and MUST be non-nil
+// ([AssertionEvaluator] says what to pass) — even for a ·special· t, which
+// never reads it.
 //
 // For a t that is not ·special·, a side that fails to validate is undecided,
 // never a mismatch: a {test} a FAILS on either side is such a failure like any
