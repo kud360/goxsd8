@@ -613,6 +613,25 @@ func TestResultStanding(t *testing.T) {
 	}
 }
 
+// TestStandingString pins Standing's text through fmt, so a removed String
+// method fails each row rather than the compile.
+func TestStandingString(t *testing.T) {
+	for _, c := range []struct {
+		s    Standing
+		want string
+	}{
+		{Charged, "Charged"},
+		{Undecided, "Undecided"},
+		{NotProvenInvalid, "NotProvenInvalid"},
+		{0, "Standing(0)"},
+		{4, "Standing(4)"},
+	} {
+		if got := fmt.Sprint(c.s); got != c.want {
+			t.Errorf("fmt.Sprint(Standing(%d)) = %q, want %q", int(c.s), got, c.want)
+		}
+	}
+}
+
 func TestAssessRejectsNilRoot(t *testing.T) {
 	v, err := New(emptySchema(t), testBackend())
 	if err != nil {

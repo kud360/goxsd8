@@ -65,7 +65,7 @@ func ExampleValidate_sourceFault() {
 			fmt.Printf("%s; no Result stands\n", fault)
 			continue
 		}
-		fmt.Printf("%s; %s, violations: %d\n", fault, standing(res.Standing()), len(res.Violations()))
+		fmt.Printf("%s; %s, violations: %d\n", fault, res.Standing(), len(res.Violations()))
 	}
 
 	// Output:
@@ -73,18 +73,4 @@ func ExampleValidate_sourceFault() {
 	// source fault: err [xml-wf]; no Result stands
 	// source fault: Result.Err [xml-wf]; Undecided, violations: 0
 	// source fault: Result.Err [xml-wf]; Charged, violations: 1
-}
-
-// standing names s; Standing has no String method, and its constants rank
-// by meaning rather than by value.
-func standing(s validate.Standing) string {
-	switch s {
-	case validate.Charged:
-		return "Charged"
-	case validate.Undecided:
-		return "Undecided"
-	case validate.NotProvenInvalid:
-		return "NotProvenInvalid"
-	}
-	return fmt.Sprintf("Standing(%d)", int(s))
 }
