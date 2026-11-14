@@ -19,8 +19,8 @@ type config struct {
 	uri string
 }
 
-// newConfig applies opts over the defaults: the document is unnamed, so
-// every Loc it produces renders with "?" for its URI.
+// newConfig applies opts over the defaults: the document is unnamed, with
+// the locations [Validate] states for that.
 func newConfig(opts []Option) config {
 	var cfg config
 	for _, opt := range opts {
@@ -38,6 +38,9 @@ func WithURI(uri string) Option {
 
 // Validate assesses the XML instance in r against v's schema and reports
 // what the assessment found.
+//
+// Pass [WithURI] to name the document: without it, every [xsderr.Loc] this
+// call reports has an empty URI, which [xsderr.Loc.String] renders "?".
 //
 // It returns (nil, err) when no assessment stands: v or r is nil, or the
 // source is faulty outside [validate.Validator.Assess] — before the document
