@@ -138,10 +138,13 @@ func GoverningTypes(schema *xsd.Schema, decl xsd.ElementDeclaration, members fun
 	table, hasTable := decl.TypeTable()
 	if hasTable {
 		slots = nil
-		for i, alt := range table.Alternatives() {
-			slots = append(slots, slotRef{AlternativeSlot(i + 1), alt.TypeDefinition()})
+		for i := 0; ; i++ {
+			slot, ref, ok := TableSlot(table, i)
+			if !ok {
+				break
+			}
+			slots = append(slots, slotRef{slot, ref})
 		}
-		slots = append(slots, slotRef{DefaultSlot{}, table.DefaultTypeDefinition().TypeDefinition()})
 	}
 	for _, s := range slots {
 		td, ok := schema.ResolvedType(s.ref)
@@ -167,6 +170,24 @@ func GoverningTypes(schema *xsd.Schema, decl xsd.ElementDeclaration, members fun
 		}
 	}
 	return types, errorSlot, nil
+}
+
+// TableSlot returns the Slot of the {type table} table at index, a position as
+// validate.Validator.ConditionallySelectedIndex's doc numbers them, and the
+// {type definition} that slot holds, unresolved, with ok true: the
+// AlternativeSlot index+1 where index is below len(table.Alternatives()), and
+// the DefaultSlot where it equals it. Any other index answers ok false. It is
+// the one map from that position to a Slot: GoverningTypes builds a table's
+// slots through it, and codec maps that method's answer through it.
+func TableSlot(table xsd.TypeTable, index int) (slot Slot, ref xsd.TypeDefinitionOrRef, ok bool) {
+	alts := table.Alternatives()
+	if index < 0 || index > len(alts) {
+		return nil, nil, false
+	}
+	if index < len(alts) {
+		return AlternativeSlot(index + 1), alts[index].TypeDefinition(), true
+	}
+	return DefaultSlot{}, table.DefaultTypeDefinition().TypeDefinition(), true
 }
 
 // BasicMembers returns the basic members of the union simple type st

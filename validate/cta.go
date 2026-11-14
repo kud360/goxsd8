@@ -204,9 +204,12 @@ func (w *walk) conditionallySelected(e Element, table xsd.TypeTable, inherited [
 // (key-governing-type-elem clause 3); that override is
 // [Validator.Governing]'s to decide, handed this method partly applied as
 // its selection, and not the adapter's.
+//
+// [Validator.ConditionallySelectedIndex] answers the same selection by
+// position.
 func (v *Validator) ConditionallySelected(table xsd.TypeTable, attributes, inherited []Attribute) (xsd.TypeDefinitionOrRef, bool) {
-	i, declined := selectAlternative(table, v.backend, v.schema, ctaAttributes(attributes, inherited))
-	if declined != nil {
+	i, ok := v.ConditionallySelectedIndex(table, attributes, inherited)
+	if !ok {
 		return nil, false
 	}
 	alts := table.Alternatives()
@@ -214,6 +217,24 @@ func (v *Validator) ConditionallySelected(table xsd.TypeTable, attributes, inher
 		return alts[i].TypeDefinition(), true
 	}
 	return table.DefaultTypeDefinition().TypeDefinition(), true
+}
+
+// ConditionallySelectedIndex is [Validator.ConditionallySelected] answered by
+// position instead of by slot. Its arguments, their preconditions and ok are
+// ConditionallySelected's. index is the position of the selected Type
+// Alternative in table's {alternatives} followed by its {default type
+// definition}, so it equals len(table.Alternatives()) exactly where the
+// {default type definition} is selected; where ok is false, index is 0 and is
+// not to be read. Read it to match the selection to a value of your own per
+// slot: an anonymous {type definition} is owned by value by its slot
+// (xsd.InlineTypeDefinition) and has no identity, so the position is what tells
+// two of them apart.
+func (v *Validator) ConditionallySelectedIndex(table xsd.TypeTable, attributes, inherited []Attribute) (index int, ok bool) {
+	i, declined := selectAlternative(table, v.backend, v.schema, ctaAttributes(attributes, inherited))
+	if declined != nil {
+		return 0, false
+	}
+	return i, true
 }
 
 // selectAlternative is key-cta-select's scan of table over attrs. With a nil
@@ -225,8 +246,8 @@ func (v *Validator) ConditionallySelected(table xsd.TypeTable, attributes, inher
 // one that compile returned, and the scan, having reached it before any
 // success, stopped there. types is the xsd.TypeResolver both halves of the
 // engine take, and backend the value space the evaluation casts in. It is the
-// one scan [walk.conditionallySelected] and [Validator.ConditionallySelected]
-// share.
+// one scan [walk.conditionallySelected] and
+// [Validator.ConditionallySelectedIndex] share.
 func selectAlternative(table xsd.TypeTable, backend value.Backend, types xsd.TypeResolver, attrs xpath.Attributes) (int, *xpath.Decline) {
 	alts := table.Alternatives()
 	for i, alt := range alts {

@@ -120,7 +120,8 @@ and imports `xsd`, `value`, `regex` and
 **[2] The infoset seam, the assessment skeleton, the XML adapter and the
 JSON adapter ship; the BER adapter does not.** `validate` exports the infoset views,
 `New`/`Validator`/`Result`, `Validator.ConditionallySelected`, the
-key-cta-select scan its walk makes, `Validator.Governing`, the governance
+key-cta-select scan its walk makes, `Validator.ConditionallySelectedIndex`,
+that scan answered by position, `Validator.Governing`, the governance
 decision its walk makes, and `Validator.HandedDown`, the [inherited
 attributes] composition its walk makes, and imports `xsd`, `xsderr`, `value`, `xpath`,
 `icpath` and `internal/xmlqname` — no longer `regex` directly, whose NCName class left with the
@@ -661,6 +662,8 @@ three constants (what `Result.Standing` returns: the acceptance test over a
 `Validator.Schema` returns: the schema reads an adapter makes),
 `Validator.ConditionallySelected` (the key-cta-select scan `Assess` makes, for
 an adapter that classifies members by the type a {type table} selects),
+`Validator.ConditionallySelectedIndex` (that scan answered by position, for
+`codec`, which tells anonymous alternative types apart by it),
 `Validator.Governing` (the governance `Assess` decides for an element, for an
 adapter that must know it before the engine sees the element),
 `Validator.HandedDown` (the [inherited attributes] composition `Assess` makes,

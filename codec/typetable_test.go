@@ -268,7 +268,7 @@ func TestTypeTableTypesAreCodegens(t *testing.T) {
 
 // TestDecodeTypeTable pins the {type table} lift: each element whose
 // declaration has two or more governing types fills the branch of the type
-// validate.Validator.ConditionallySelected selects (§3.3.4.1
+// validate.Validator.ConditionallySelectedIndex selects (§3.3.4.1
 // key-cta-select), the first alternative whose {test} is true, the {default
 // type definition}'s where none is, at the document element, a local
 // particle, an <element ref>, a choice's alternative and a substitution

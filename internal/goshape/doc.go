@@ -15,6 +15,7 @@
 //	type AlternativeSlot int
 //	type DefaultSlot struct{}
 //	type DeclaredSlot struct{}
+//	func TableSlot(table xsd.TypeTable, index int) (slot Slot, ref xsd.TypeDefinitionOrRef, ok bool)
 //	func GoverningTypes(schema *xsd.Schema, decl xsd.ElementDeclaration, members func(xsd.ComplexType) ([]xsd.TypeDefinition, error)) (types []GoverningType, errorSlot bool, err error)
 //	func BasicMembers(r xsd.TypeResolver, st *xsd.SimpleType) ([]*xsd.SimpleType, error)
 //	func Splices(schema *xsd.Schema, group xsd.ModelGroup, occurs xsd.Occurs) (bool, error)
@@ -47,9 +48,10 @@
 // ("# Simple types", "# Complex types", "# Substitution groups",
 // "# Particles", "# Attributes", "# Element declarations"): those sections
 // own them, and this package is their one implementation. TermEmptiable,
-// ExactlyOnce and ModelGroupTerm are the reads those rules are made from,
-// exported for the packages that make the same reads around them: all three
-// for codegen, and ExactlyOnce and ModelGroupTerm for codec.
+// ExactlyOnce, ModelGroupTerm and TableSlot are the reads those rules are made
+// from, exported for the packages that make the same reads around them: the
+// first three for codegen, and ExactlyOnce, ModelGroupTerm and TableSlot for
+// codec.
 //
 // It imports xsd, xsderr and the standard library.
 package goshape
