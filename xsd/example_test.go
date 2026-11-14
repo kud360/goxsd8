@@ -328,8 +328,9 @@ func Example_schemaEnumeration() {
 //
 // The model mixes inline groups with one <element ref> so both TermOrRef shapes
 // appear; a ModelGroupRef is deliberately absent from this fixture — following
-// one is Example_modelGroupScopeParent's demonstration, via the
-// Schema.ModelGroup(QName) accessor (§3.17.1).
+// one through the Schema.ModelGroup(QName) accessor (§3.17.1), with each
+// reference's Loc read from a parsed document, is Example_contentModelRefs's
+// demonstration.
 func Example_contentModelTraversal() {
 	// PurchaseOrderType: sequence( shipTo, choice( comment, note ), ref billTo )
 	poType := exampleQName("PurchaseOrderType")
@@ -406,7 +407,7 @@ func Example_contentModelTraversal() {
 			}
 			fmt.Printf("%selement %s (via ref)\n", indent, target.Name().Local)
 		case xsd.ModelGroupRef:
-			fmt.Printf("%sgroup ref %s (not in this fixture: see Example_modelGroupScopeParent)\n", indent, v.Name)
+			fmt.Printf("%sgroup ref %s (not in this fixture: see Example_contentModelRefs)\n", indent, v.Name)
 		}
 	}
 	walk(content.Particle, 1)

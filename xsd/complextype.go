@@ -981,7 +981,7 @@ func (c ComplexType) Context() (ComplexTypeContext, bool) {
 }
 
 // Loc reports the source position of the declaring element — provenance, not a
-// §3.4.1 component property (see the package doc's Components section). The
+// §3.4.1 component property (see the package doc's "Provenance" section). The
 // zero xsderr.Loc means the position is unknown, as it is for the synthesized
 // xs:anyType.
 func (c ComplexType) Loc() xsderr.Loc {
