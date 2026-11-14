@@ -422,7 +422,8 @@ func TestProduceExtensionSelfCycle(t *testing.T) {
 // is charged src-resolve clause 1.1 — the rule and clause finalize charges for an
 // unresolvable {base type definition} — in finalize's resolveTypeName template,
 // naming the referrer, the derivation element and the missing name (#3727). One
-// row per complexTypeIdentity arm that can reach the charge with a dangling name.
+// row per complexTypeIdentity arm, but redefiningComplexType: a redefining type
+// whose base is not its own name is charged src-redefine clause 5 first.
 func TestProduceDanglingBase(t *testing.T) {
 	const head = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" targetNamespace="urn:x" xmlns:tns="urn:x">`
 	const tail = `</xs:schema>`
