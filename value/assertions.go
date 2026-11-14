@@ -91,12 +91,14 @@ func (a AssertionAnswer) Outcome() AssertionOutcome { return a.outcome }
 // stage. b and r are the ones [ValidateLexical] was handed, passed per call and
 // stored nowhere, so one evaluator serves every schema.
 //
-// Its one consumer is the pipeline's assertions stage, which runs after every
-// other value facet has accepted v; validate injects package xpath's
-// implementation (xpath.FacetAssertions) at every [ValidateLexical],
-// [ValidatingType] and [ConstraintMatches] call. An implementation answers a
-// decline, [AssertionDeclinedBecause] where it can say why, for a {test} it
-// cannot evaluate, never a guess.
+// Its one consumer is the pipeline's assertions stage, whose place in the
+// pipeline [ValidateLexical] states. The module's implementation that decides
+// {test}s is the one [github.com/kud360/goxsd8/xpath.FacetAssertions] builds
+// from now, the current dateTime those {test}s read: validate passes it at
+// every [ValidateLexical], [ValidatingType] and [ConstraintMatches] call, and a
+// direct caller of those passes it too, or an evaluator of its own. An
+// implementation answers a decline, [AssertionDeclinedBecause] where it can say
+// why, for a {test} it cannot evaluate, never a guess.
 type AssertionEvaluator interface {
 	Evaluate(b Backend, r xsd.TypeResolver, st *xsd.SimpleType, test xsd.XPathExpression, v Value) AssertionAnswer
 }

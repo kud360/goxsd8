@@ -118,8 +118,7 @@
 // anything short of [IsFacetPrecondition] or [IsAssertionDeclined] into
 // "rejected" and keeps scanning (dv_union's own #462 gap) — so the two can
 // disagree on which members fault; ValidatingType's doc comment is the authority
-// on why. Both run each member's assertions facets, so a member one of whose
-// {test}s fails is passed over for a later one (dt-active-member).
+// on why, and on how both scans run each member's assertions facets.
 //
 // A facet's OWN {value} goes through the same whiteSpace normalization before it
 // is parsed, once at construction: a facet's {value} property is "a value from
