@@ -9,15 +9,18 @@
 //	func NewNamer() *Namer
 //	func (n *Namer) Claim(path ...string) string
 //	func (n *Namer) ClaimCandidate(candidate string) string
+//	func Rank(candidate, name string) (int, bool)
+//	func Extend(of string, words ...string) string
 //	func Render(path []string) string
 //	func Identifier(local string) string
 //
 // The rules are codegen's package doc's "# Naming": that section owns them,
 // and this package is their one implementation. Identifier maps one local
-// name, Render joins a path of them, and a Namer scopes one set of
-// identifiers that must not collide, settling each collision by claim order.
-// Two importers that claim the same candidates in the same order on fresh
-// Namers receive the same identifiers.
+// name, Render joins a path of them, Extend appends a path of them to a name
+// already claimed, and a Namer scopes one set of identifiers that must not
+// collide, settling each collision by claim order, which Rank reads back
+// from a claimed name. Two importers that claim the same candidates in the
+// same order on fresh Namers receive the same identifiers.
 //
 // It depends on nothing but the standard library.
 package goname

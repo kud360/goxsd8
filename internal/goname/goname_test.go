@@ -57,3 +57,63 @@ func TestNamer(t *testing.T) {
 		})
 	}
 }
+
+// TestRank pins Rank's rows: the candidate itself, a suffix from 2, and the
+// names it is no rank of.
+func TestRank(t *testing.T) {
+	tests := []struct {
+		name string
+		rank int
+		ok   bool
+	}{
+		{"RootX", 1, true},
+		{"RootX2", 2, true},
+		{"RootX10", 10, true},
+		{"RootX1", 0, false},
+		{"RootX0", 0, false},
+		{"RootX02", 0, false},
+		{"RootX+2", 0, false},
+		{"RootX2a", 0, false},
+		{"RootXa", 0, false},
+		{"RootY", 0, false},
+		{"Root", 0, false},
+		{"RootX99999999999999999999", 0, false},
+	}
+	for _, tt := range tests {
+		rank, ok := Rank("RootX", tt.name)
+		if rank != tt.rank || ok != tt.ok {
+			t.Errorf("Rank(RootX, %s) = %d, %t, want %d, %t", tt.name, rank, ok, tt.rank, tt.ok)
+		}
+	}
+}
+
+// TestRankFollowsClaimOrder pins that k claims of one candidate on one Namer
+// rank strictly increasing in claim order, whichever of its suffixed names
+// were claimed before them.
+func TestRankFollowsClaimOrder(t *testing.T) {
+	for _, holes := range [][]string{nil, {"B"}, {"B2"}, {"B", "B3"}, {"B2", "B4", "B5"}, {"B22"}} {
+		n := NewNamer()
+		for _, h := range holes {
+			n.ClaimCandidate(h)
+		}
+		last := 0
+		for k := range 6 {
+			name := n.ClaimCandidate("B")
+			rank, ok := Rank("B", name)
+			if !ok || rank <= last {
+				t.Fatalf("holes %q: claim %d is %s, rank %d, %t, after rank %d", holes, k+1, name, rank, ok, last)
+			}
+			last = rank
+		}
+	}
+}
+
+// TestExtend pins that Extend renders of's Identifier and then each word's.
+func TestExtend(t *testing.T) {
+	if got := Extend("RootChoice", "a_a"); got != "RootChoiceAA" {
+		t.Errorf("Extend(RootChoice, a_a) = %s, want RootChoiceAA", got)
+	}
+	if got := Extend("HSubstitutionGroup", "c", "d"); got != "HSubstitutionGroupCD" {
+		t.Errorf("Extend(HSubstitutionGroup, c, d) = %s, want HSubstitutionGroupCD", got)
+	}
+}
