@@ -28,7 +28,7 @@ type TypeDefinition interface {
 	Name() QName
 	// Loc is the type definition's source position — provenance, not a
 	// component property of either variant (§3.4.1, §3.16.1; see the package
-	// doc's Components section). Both variants already expose it
+	// doc's "Provenance" section). Both variants already expose it
 	// (ComplexType.Loc, (*SimpleType).Loc), so it is promoted into the sum to
 	// let the one {type definitions} bucket cite a position without a type
 	// switch.
@@ -122,7 +122,7 @@ type TypeDefinitionOrRef interface{ typeDefinitionOrRef() }
 // NewAttributeDeclaration and the ComplexType constructors reject one, exactly
 // as NewAttributeUse rejects a zero-named AttributeDeclarationRef.
 //
-// Loc is provenance, not a property: the package doc's provenance paragraph
+// Loc is provenance, not a property: the package doc's "Provenance" section
 // says what it holds, where Finalize charges it, and why references compare by
 // Name.
 type TypeDefinitionRef struct {

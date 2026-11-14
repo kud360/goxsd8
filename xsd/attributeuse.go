@@ -76,7 +76,7 @@ type LocalAttributeDeclaration struct{ Declaration AttributeDeclaration }
 // present". NewAttributeUse rejects a zero Name rather than deferring it (see
 // there for why).
 //
-// Loc is provenance, not a property: the package doc's provenance paragraph
+// Loc is provenance, not a property: the package doc's "Provenance" section
 // says what it holds, where Finalize charges it, and why references compare by
 // Name.
 type AttributeDeclarationRef struct {

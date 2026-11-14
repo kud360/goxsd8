@@ -32,9 +32,9 @@ type Term interface{ term() }
 // to a top-level Element Declaration (src-resolve clause 1.3), a ModelGroupRef to
 // a top-level Model Group Definition (clause 1.5) — and rejects an unresolvable
 // or circular target. It does NOT rewrite the slot: the ref is retained and a
-// consumer follows it by a read-time lookup through the schema (for a
-// ModelGroupRef, the referenced definition's {model group} per §3.7.2). There is
-// no WildcardRef: a wildcard is never referenced by QName, only declared inline.
+// consumer follows it by the read-time lookup through the schema that each ref
+// variant's doc names. There is no WildcardRef: a wildcard is never referenced by
+// QName, only declared inline.
 type TermOrRef interface{ termOrRef() }
 
 // ResolvedTerm is the TermOrRef variant wrapping an already-known Term: an
@@ -54,7 +54,7 @@ type ResolvedTerm struct{ Term Term }
 // exists only for the mapping branch whose precondition is "the ref attribute is
 // present". NewParticle rejects a zero Name (see there for why).
 //
-// Loc is provenance, not a property: the package doc's provenance paragraph
+// Loc is provenance, not a property: the package doc's "Provenance" section
 // says what it holds, where Finalize charges it, and why references compare by
 // Name.
 type ElementDeclarationRef struct {
@@ -67,16 +67,16 @@ type ElementDeclarationRef struct {
 // possibly-forward-referenced top-level Model Group Definition. Finalize (#173)
 // validates it resolves (src-resolve clause 1.5) and that the group-reference
 // graph is acyclic (mg-props-correct clause 2), but retains it; a consumer
-// follows it by a read-time lookup, reading the referenced definition's {model
-// group} (§3.7.2). The fields are read-only by convention; do not mutate them
-// after construction.
+// follows it by a read-time schema.ModelGroup(Name) lookup, reading the
+// returned definition's {model group} (§3.7.2). The fields are read-only by
+// convention; do not mutate them after construction.
 //
 // Name is a PRESENT reference, never the absent (zero) QName: a <group> inside a
 // content model is always the reference form (§3.7.2, whose named branch xr.mgd1
 // requires a <schema>/<redefine>/<override> parent), and group/@ref is typed
 // xs:QName there. NewParticle rejects a zero Name (see there for why).
 //
-// Loc is provenance, not a property: the package doc's provenance paragraph
+// Loc is provenance, not a property: the package doc's "Provenance" section
 // says what it holds, where Finalize charges it, and why references compare by
 // Name.
 type ModelGroupRef struct {

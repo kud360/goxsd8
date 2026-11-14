@@ -72,6 +72,8 @@
 // anonymous originals nest, stacks two such edges and mints one token
 // for each, so the containers stay distinguishable.
 //
+// # Provenance
+//
 // The eight component kinds a schema's §3.17.1 properties hold — element
 // and attribute declarations, complex and simple type definitions, model
 // group and attribute group definitions, notations, and identity
