@@ -383,11 +383,12 @@ var ErrTypeMismatch = errors.New("codec: T is not the type codegen emits for the
 //     sealed interface (item 6), in place of the referenced declaration's own
 //     properties and type: each declaration of the group with {abstract}
 //     false in group order, the head among them only where it has {abstract}
-//     false, examined as a particle's element declaration is, each then
-//     declining by a branch field of an earlier one's shape as a choice's
-//     alternatives do, and then the first of their expanded names in group
-//     order whose share with an earlier particle's field declines, as the
-//     bullet above states.
+//     false, examined as a particle's element declaration is, and then the
+//     first of their expanded names in group order whose share with an
+//     earlier particle's field declines, as the bullet above states. No
+//     declaration declines by a branch field of an earlier one's shape: two
+//     branch fields share a shape only under one name, which puts their
+//     declarations in one tie, whose branches item 6 places by name.
 //   - Of a choice, each alternative's own constructs: an element or wildcard
 //     alternative's as a sequence's particle's, and a model-group
 //     alternative's, inline or through <group ref>, its {min occurs} 0 read as
@@ -395,11 +396,12 @@ var ErrTypeMismatch = errors.New("codec: T is not the type codegen emits for the
 //     depth. Then a branch struct of an earlier alternative's shape declines,
 //     as two branches of a sealed interface whose structs have one shape: one
 //     of as many fields as the earlier one's, each sharing its shape with the
-//     earlier one's field at its position. Two fields holding nested choices'
-//     interfaces share it where one branch set could be held to both, as item 6
-//     holds a nested choice's field: they have one name and as many
-//     alternatives, and each alternative's branch of either shares its
-//     shape with some alternative's branch of the other. Otherwise a field
+//     earlier one's field at its position; but not where both are
+//     alternatives of one tie, whose branches item 6 places by name. Two fields
+//     holding nested choices' interfaces share it where one branch set could be
+//     held to both, as item 6 holds a nested choice's field: they have one name
+//     and as many alternatives, and each alternative's branch of either shares
+//     its shape with some alternative's branch of the other. Otherwise a field
 //     holding a nested choice's interface, a flattened particle's slice or an
 //     occurrence field's type for one occurrence shares its shape with any
 //     field of its name. Two other fields of one name share it where either is
@@ -418,17 +420,18 @@ var ErrTypeMismatch = errors.New("codec: T is not the type codegen emits for the
 //     own particles in its place at any depth with no field and no decline of
 //     its own; each examined as a sequence's element or wildcard particle is,
 //     occurring exactly once, then declining by a branch field of an earlier
-//     one's shape as a choice's alternatives do. No basic particle of the
-//     reach, the content {particle}'s or a nested one's, declines by an
-//     expanded name another particle takes, and none declines a later particle
-//     by its own, since a Matcher attributes every child of a content model
-//     holding a flattened particle, content or nested, by its particle's
-//     position. A particle with {max occurs} 0 is its plain error at its
-//     point, an element particle's after its declaration's own constructs.
-//     Then a content model xsd.Schema.ContentMatcher does not track declines,
-//     since its children cannot be attributed: of the content {particle}
-//     after its last basic particle, of a nested one after its own last,
-//     before the particles after it.
+//     one's shape as two of a choice's alternatives in no tie do, whatever
+//     their local names. No basic particle of the reach, the content
+//     {particle}'s or a nested one's, declines by an expanded name another
+//     particle takes, and none declines a later particle by its own, since a
+//     Matcher attributes every child of a content model holding a flattened
+//     particle, content or nested, by its particle's position. A particle with
+//     {max occurs} 0 is its plain error at its point, an element particle's
+//     after its declaration's own constructs. Then a content model
+//     xsd.Schema.ContentMatcher does not track declines, since its children
+//     cannot be attributed: of the content {particle} after its last basic
+//     particle, of a nested one after its own last, before the particles after
+//     it.
 //   - Each of the complex type's attribute uses in order but xsi:nil's
 //     (codegen's package doc, "# Attributes"). Its {attribute wildcard}
 //     gives the field item 6 states and is examined no further.
@@ -444,8 +447,10 @@ var ErrTypeMismatch = errors.New("codec: T is not the type codegen emits for the
 // field holding the reaching declaration's {value constraint}; no decline
 // differs, since one examination's answer is every other's.
 //
-// Item 6 compares T with the type codegen emits by shape alone: neither T's,
-// a sealed interface's, a branch's nor a variant's name is compared. Decode
+// Item 6 compares T with the type codegen emits by shape alone except at a
+// tie: neither T's, a sealed interface's, a branch's nor a variant's name is
+// compared, but for the branches of a tie, which the sealed-interface bullet
+// below places by their names and their interface's. Decode
 // never reads the fields from T, so for a type codegen emitted from this
 // schema an item 6 error is a defect of Decode's, or a branch or variant set
 // [WithBranches] or an arm set [WithPrecisionDecimalArms] did not supply as
@@ -681,7 +686,17 @@ var ErrTypeMismatch = errors.New("codec: T is not the type codegen emits for the
 //     occurrence: when no WithBranches supplies it for an interface with
 //     alternatives, or its count differs, or it holds a nil value, a type
 //     that is no struct, a type twice, or a branch matching no alternative an
-//     earlier branch did not match. A branch is held to the one alternative
+//     earlier branch did not match. A tie is two or more element alternatives
+//     of a choice, or members of a substitution group, whose local names
+//     render one Go identifier, which for a choice no wildcard alternative's
+//     word any and no model-group alternative's compositor renders: codegen
+//     names their branches B, B being the interface's name followed by that
+//     identifier, and B followed by a decimal from 2, in alternative order
+//     (codegen's package doc, "# Naming"). The branches a tie's alternatives'
+//     fields could be must be as many as its alternatives, each so named, no
+//     two of one suffix, and go to them in ascending suffix order, B first,
+//     each one its own alternative's fields could be; a set where they are
+//     not does not match. Any other branch is held to the one alternative
 //     its fields could be: as many fields as that alternative's branch holds,
 //     each of its field's name, not embedded, and of a Go type it could be,
 //     position by position: V, *V or []V by its particle's occurrence, an
@@ -1157,8 +1172,9 @@ func (structArm) describe() string { return "S for a struct S" }
 // ifaceArm is a field's V where the field's element is of a complex type
 // codegen gives a bare sealed interface, or of a declaration codegen gives its
 // governing types' interface, unit's: I, held to unit's choice or governing
-// types as T is, its name never compared. Its field's shape is never
-// shapeOptional (complexUnit.sealedInterface).
+// types as T is, its name read only to place a tie's branches
+// (sealed.placeBranches). Its field's shape is never shapeOptional
+// (complexUnit.sealedInterface).
 type ifaceArm struct{ unit sealedUnit }
 
 // sealedUnit is a complex unit whose type is a bare sealed interface, a closed
@@ -1744,7 +1760,7 @@ func (f field) admits(got reflect.StructField, _ branchSets) bool {
 // substitution group's members' or a declaration's governing types', or of
 // alternatives of two nested choices whose fields could be one (choicesShare),
 // may admit a common Go type, as field.admits reads one, so that no branch
-// type could tell them apart (sealed.alternative). It reads their names,
+// type's shape could tell them apart (sealed.placeBranches). It reads their names,
 // shapes, arm classes, scalar elements and valueTypes only, never a nested
 // unit's content, which may be unbound or reach itself here, and the first of
 // these that applies answers:
@@ -3084,19 +3100,14 @@ func (b *boundSequence) fill(r *xmltree.Reader, _ *xmltree.StartElement, out ref
 type sealed[A branchArm] struct {
 	p    *pipeline
 	alts []A
-	// ties are the groups of alts codegen names from one candidate, which
-	// place places by name; the bind building alts builds them (tiesOf).
+	// ties are the ties among alts, which placeBranches places by name; the
+	// bind building alts builds them (tiesOf).
 	ties []tieGroup
 }
 
-// tieGroup is one tie of a sealed interface: alts, two or more indices into
-// its alts in alternative order, each an element alternative of a choice or
-// a member of a substitution group, whose branch words, word the first of
-// them, render one Go identifier, which no other alternative's word renders.
-// Codegen names their branch structs from the interface's name followed by
-// that identifier, each later one taking the next free numeric suffix
-// (codegen/doc.go "# Naming"), so placeBranches tells a tie's branch types apart by
-// name, never by shape.
+// tieGroup is one tie of a sealed interface, as item 6 of Decode's doc
+// defines one: alts, its alternatives' indices in alternative order, and
+// word, the first one's branch word, which every one's renders.
 type tieGroup struct {
 	word string
 	alts []int
@@ -3105,10 +3116,10 @@ type tieGroup struct {
 // tiesOf returns the ties of the alternatives whose branch words are words,
 // in alternative order, placed[i] reporting whether alternative i is an
 // element alternative or a substitution group member: each group of two or
-// more alternatives whose words render one identifier, every one of them
-// placed. A wildcard's word any or a model group's compositor keeps the
-// identifier it renders out of every tie. An alternative whose word is ""
-// has no word, since its bind returns an error before any tie is read.
+// more alternatives whose words render one identifier (goname.Identifier),
+// every one of them placed, so a wildcard's word any or a model group's
+// compositor keeps the identifier it renders out of every tie. An
+// alternative whose word is "" is in no group.
 func tiesOf(words []string, placed []bool) []tieGroup {
 	var groups []tieGroup
 	// at maps a rendered word to its group's index in groups; a lookup
@@ -3231,8 +3242,8 @@ func branchAdmits(a branchArm, bt reflect.Type, sets branchSets) bool {
 // branchesShare reports whether a and b, two alternatives of one sealed
 // interface, or of two nested choices at one position of two branch structs
 // that could be one struct (membersShare), may admit a common branch struct
-// (branchAdmits) under some branch sets, so that no branch type could tell
-// them apart (sealed.alternative): exactly when they hold as many members and
+// (branchAdmits) under some branch sets, so that no branch type's shape could
+// tell them apart (sealed.placeBranches): exactly when they hold as many members and
 // each positional pair shares (membersShare). Different counts never share,
 // since no struct has two field counts.
 func branchesShare(a, b branchArm) bool {
@@ -3653,9 +3664,10 @@ type reachSite interface {
 // an element particle's by elementField over ct with a nil childIndex, so that no
 // expanded name another particle takes declines, then a branch struct of an
 // earlier alternative's shape (field.sharesBranch), which declines as a choice's
-// does. A particle with {max occurs} 0 is item 5's plain error, an element
-// particle's after its declaration's own constructs, as a sequence's is.
-// goshape.Reach's own error is plain, prefixed by typeSubject.
+// alternatives in no tie do, alts holding no tie. A particle with {max occurs} 0
+// is item 5's plain error, an element particle's after its declaration's own
+// constructs, as a sequence's is. goshape.Reach's own error is plain, prefixed by
+// typeSubject.
 func bindReach(run *bindRun, ct xsd.ComplexType, group xsd.ModelGroup, alts *sealed[field], site reachSite, typeSubject string) error {
 	visit := func(p xsd.Particle, position []int) error {
 		term, err := particleTerm(run.p.schema, p, typeSubject)

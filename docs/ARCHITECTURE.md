@@ -61,7 +61,7 @@ Value implementations, parsing, validation, and generation live above them.
                                     namer codegen's "# Naming" states, which
                                     codegen names its declarations with and
                                     codec finds a generated struct's fields
-                                    by.)
+                                    and orders a tie's branch types by.)
                  internal/goshape (the component → Go shape decisions codegen
                                   emits and codec binds against; imports xsd and xsderr)
                  value           (value-space contracts, facet pipeline; imports xsd, xsderr, regex)
@@ -747,7 +747,8 @@ present tense because it is a design contract; read it as "will", not
     needs; optionality and nillability are modeled in types, not comments.
 - **One namer owns every XSD-name → Go-identifier decision**:
   `internal/goname`, which `codegen` names its declarations with and `codec`
-  finds a generated struct's fields by. `codegen/doc.go` "# Naming" owns the
+  finds a generated struct's fields and orders a tie's branch types by.
+  `codegen/doc.go` "# Naming" owns the
   naming rule, anonymous types' included, and which generated declarations'
   header comments record their schema origin; do not restate either here.
 - **One shape home**: `internal/goshape`, which `codegen` renders from and
