@@ -743,11 +743,12 @@ func TestDecodeUnionMembersOfOneGoType(t *testing.T) {
 }
 
 // TestDecodeUnionChoiceSharedBranch pins sharesBranch's union bullet over two
-// alternatives of one Go field name, x and X: beside another union, a
-// complex type codegen gives a bare sealed interface, or a ref to a head of a
-// substitution group, each holding an interface, they decline as two branches
-// of one shape; beside codegen's struct, or an xs:int, they decline nothing,
-// so CheckDecode of struct{} reaches item 6's ErrTypeMismatch.
+// alternatives of one Go field name, x and a spliced sequence of X
+// (spliced), which no tie holds: beside another union, a complex type codegen
+// gives a bare sealed interface, or a ref to a head of a substitution group,
+// each holding an interface, they decline as two branches of one shape;
+// beside codegen's struct, or an xs:int, they decline nothing, so CheckDecode
+// of struct{} reaches item 6's ErrTypeMismatch.
 func TestDecodeUnionChoiceSharedBranch(t *testing.T) {
 	const decls = `<xs:complexType name="ci"><xs:choice><xs:element name="p" type="xs:string"/><xs:element name="q" type="xs:int"/></xs:choice></xs:complexType>
 <xs:element name="X" type="xs:string"/><xs:element name="m" type="xs:string" substitutionGroup="s:X"/>`
@@ -763,7 +764,7 @@ func TestDecodeUnionChoiceSharedBranch(t *testing.T) {
 	}
 	for _, row := range rows {
 		t.Run(row.name, func(t *testing.T) {
-			schema := schemaOf(t, unionTypes+decls+root(`<xs:choice><xs:element name="x" type="s:u"/>`+row.other+`</xs:choice>`))
+			schema := schemaOf(t, unionTypes+decls+root(`<xs:choice><xs:element name="x" type="s:u"/>`+spliced(row.other)+`</xs:choice>`))
 			err := CheckDecode[struct{}](schema, rootName)
 			var de *DeclineError
 			if declined := errors.As(err, &de) && de.Construct() == (Construct{constructSharedBranch}); declined != row.declines {

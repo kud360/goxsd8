@@ -2,6 +2,7 @@ package codec
 
 import (
 	"bytes"
+	"cmp"
 	"errors"
 	"fmt"
 	"reflect"
@@ -3083,6 +3084,61 @@ func (b *boundSequence) fill(r *xmltree.Reader, _ *xmltree.StartElement, out ref
 type sealed[A branchArm] struct {
 	p    *pipeline
 	alts []A
+	// ties are the groups of alts codegen names from one candidate, which
+	// place places by name; the bind building alts builds them (tiesOf).
+	ties []tieGroup
+}
+
+// tieGroup is one tie of a sealed interface: alts, two or more indices into
+// its alts in alternative order, each an element alternative of a choice or
+// a member of a substitution group, whose branch words, word the first of
+// them, render one Go identifier, which no other alternative's word renders.
+// Codegen names their branch structs from the interface's name followed by
+// that identifier, each later one taking the next free numeric suffix
+// (codegen/doc.go "# Naming"), so placeBranches tells a tie's branch types apart by
+// name, never by shape.
+type tieGroup struct {
+	word string
+	alts []int
+}
+
+// tiesOf returns the ties of the alternatives whose branch words are words,
+// in alternative order, placed[i] reporting whether alternative i is an
+// element alternative or a substitution group member: each group of two or
+// more alternatives whose words render one identifier, every one of them
+// placed. A wildcard's word any or a model group's compositor keeps the
+// identifier it renders out of every tie. An alternative whose word is ""
+// has no word, since its bind returns an error before any tie is read.
+func tiesOf(words []string, placed []bool) []tieGroup {
+	var groups []tieGroup
+	// at maps a rendered word to its group's index in groups; a lookup
+	// index only, never iterated (STYLE D2).
+	at := map[string]int{}
+	for i, w := range words {
+		if w == "" {
+			continue
+		}
+		id := goname.Identifier(w)
+		g, ok := at[id]
+		if !ok {
+			g = len(groups)
+			at[id] = g
+			groups = append(groups, tieGroup{word: w})
+		}
+		groups[g].alts = append(groups[g].alts, i)
+	}
+	var ties []tieGroup
+	for _, g := range groups {
+		if len(g.alts) >= 2 && !slices.ContainsFunc(g.alts, func(i int) bool { return !placed[i] }) {
+			ties = append(ties, g)
+		}
+	}
+	return ties
+}
+
+// tied reports whether alternatives i and j are in one of ties.
+func tied(ties []tieGroup, i, j int) bool {
+	return slices.ContainsFunc(ties, func(g tieGroup) bool { return slices.Contains(g.alts, i) && slices.Contains(g.alts, j) })
 }
 
 // A branchArm is one alternative of a sealed interface as Decode reads it, a
@@ -3294,16 +3350,17 @@ func bindContentChoice(run *bindRun, ct xsd.ComplexType, particles []xsd.Particl
 // alternative's own, a model-group alternative's as groupAlternative states,
 // an expanded name an earlier particle x indexes takes among them where
 // particleShape declines the pair, then an alternative whose branch struct has
-// an earlier one's shape, which no branch type could tell apart: one whose
-// branch may admit a struct the earlier one's does under some branch sets
-// (branchesShare), read from the schema, never T. item reports whether the
-// choice is in an occurrence field's item (bindItem), which its alternatives
-// are bound as. An element alternative's position and target are recorded in
-// x.elements, and the names it takes in x.children (childIndex.take). Its
-// caller builds x's attributor once the content model's every particle is
-// bound.
+// an earlier one's shape, which no branch type's shape could tell apart: one
+// whose branch may admit a struct the earlier one's does under some branch
+// sets (branchesShare), read from the schema, never T, unless the two are in
+// one of the choice's ties (tiesOf over choiceWords), which placeBranches tells apart
+// by name. item reports whether the choice is in an occurrence field's item
+// (bindItem), which its alternatives are bound as. An element alternative's
+// position and target are recorded in x.elements, and the names it takes in
+// x.children (childIndex.take). Its caller builds x's attributor once the
+// content model's every particle is bound.
 func bindChoice(run *bindRun, ct xsd.ComplexType, particles []xsd.Particle, x *childIndex, at []int, base int, item bool, names *goname.Namer, typeSubject string) (*choice, error) {
-	c := &choice{name: names.Claim("choice"), sealed: &sealed[branchArm]{p: run.p}}
+	c := &choice{name: names.Claim("choice"), sealed: &sealed[branchArm]{p: run.p, ties: tiesOf(choiceWords(run.p.schema, particles, typeSubject))}}
 	alts := c.sealed
 	for i, p := range particles {
 		term, err := particleTerm(run.p.schema, p, typeSubject)
@@ -3345,8 +3402,8 @@ func bindChoice(run *bindRun, ct xsd.ComplexType, particles []xsd.Particle, x *c
 			alt = f
 			x.elements = append(x.elements, place{position: position, index: target})
 		}
-		for _, earlier := range alts.alts {
-			if branchesShare(earlier, alt) {
+		for j, earlier := range alts.alts {
+			if branchesShare(earlier, alt) && !tied(alts.ties, j, i) {
 				return nil, decline(constructSharedBranch, subject)
 			}
 		}
@@ -3356,6 +3413,35 @@ func bindChoice(run *bindRun, ct xsd.ComplexType, particles []xsd.Particle, x *c
 		alts.alts = append(alts.alts, alt)
 	}
 	return c, nil
+}
+
+// choiceWords returns the branch word of each of particles, a choice's
+// alternatives, in order, as codegen names a choice's branch structs from
+// them (codegen/doc.go "# Naming"), and whether each is an element
+// alternative: an element declaration's local name, the referenced one's for
+// an <element ref>, any for a wildcard, and a model group's compositor. A
+// particle whose term particleTerm cannot read has the word "", bindChoice
+// returning that error when it reaches the particle.
+func choiceWords(schema *xsd.Schema, particles []xsd.Particle, typeSubject string) ([]string, []bool) {
+	words := make([]string, len(particles))
+	elements := make([]bool, len(particles))
+	for i, p := range particles {
+		term, err := particleTerm(schema, p, typeSubject)
+		if err != nil {
+			continue
+		}
+		// Term is a closed sum, so the switch is STYLE T2's sealed-sum
+		// exception.
+		switch term := term.(type) {
+		case xsd.Wildcard:
+			words[i] = "any"
+		case xsd.ModelGroup:
+			words[i] = term.Compositor().String()
+		case xsd.ElementDeclaration:
+			words[i], elements[i] = term.Name().Local, true
+		}
+	}
+	return words, elements
 }
 
 // groupAlternative returns the groupBranch of a choice's model-group
@@ -4373,8 +4459,9 @@ func continues(schema *xsd.Schema, group xsd.ModelGroup, last, next []int, count
 // checkSite holds it, the Go type at the site site names, to c's sealed
 // interface, item 6 of Decode's doc: an interface whose one method is
 // unexported, whose branch types cx's sets hold as one struct per alternative
-// of the alternative's branch shape. It returns c bound to those branch
-// types. Neither the interface's nor a branch's name is compared.
+// of the alternative's branch shape, each placed as placeBranches places it.
+// It returns c bound to those branch types. Neither the interface's nor a
+// branch's name is compared but at a tie, as placeBranches compares them.
 func (c *sealed[A]) checkSite(it reflect.Type, site string, cx *checkContext) (*boundChoice, error) {
 	if it.Kind() != reflect.Interface {
 		return nil, fmt.Errorf("%w: %s is %s, no interface, where codegen emits a sealed interface", ErrTypeMismatch, site, it)
@@ -4389,20 +4476,15 @@ func (c *sealed[A]) checkSite(it reflect.Type, site string, cx *checkContext) (*
 	if len(branches) != len(c.alts) {
 		return nil, fmt.Errorf("%w: WithBranches supplies %d branches of %s where codegen emits %d", ErrTypeMismatch, len(branches), it, len(c.alts))
 	}
+	placed, err := c.placeBranches(it, branches, cx.sets)
+	if err != nil {
+		return nil, err
+	}
 	// As many branches as alternatives, each matching one no earlier branch
 	// matched, leave no entry of matched without its branch type.
 	matched := make([]boundBranch, len(c.alts))
 	for i, bt := range branches {
-		if bt == nil {
-			return nil, fmt.Errorf("%w: WithBranches supplies a nil branch of %s", ErrTypeMismatch, it)
-		}
-		if bt.Kind() != reflect.Struct {
-			return nil, fmt.Errorf("%w: WithBranches supplies %s, no struct, as a branch of %s", ErrTypeMismatch, bt, it)
-		}
-		if slices.Contains(branches[:i], bt) {
-			return nil, fmt.Errorf("%w: WithBranches supplies %s twice as a branch of %s", ErrTypeMismatch, bt, it)
-		}
-		j, sinks, err := c.alternative(bt, cx)
+		j, sinks, err := c.alternative(bt, placed[i], cx)
 		if err != nil {
 			return nil, err
 		}
@@ -4414,15 +4496,94 @@ func (c *sealed[A]) checkSite(it reflect.Type, site string, cx *checkContext) (*
 	return &boundChoice{p: c.p, branches: matched}, nil
 }
 
+// placeBranches returns the index in c.alts of the alternative each of
+// branches, the branch types of it as WithBranches supplied them, is placed
+// at, under sets, or -1 for a branch no alternative admits, or the
+// ErrTypeMismatch error of a set holding a nil value, a type that is no
+// struct or a type twice, or one c's ties cannot place. It places the
+// branches of each tie first, B being it's name extended by the tie's word
+// (goname.Extend): those the tie's alternatives admit (branchAdmits), as
+// many as the tie has alternatives, each named B or B followed by a decimal
+// from 2 (goname.Rank), no two of one rank, go to the tie's alternatives in
+// ascending rank, each admitted by its own; every other branch goes to the
+// first alternative admitting it (admitting), which is in no tie, since a
+// tie's alternatives admit only the branches the tie placed. Both checkSite
+// and holds place through it, so that CheckDecode and Decode place alike.
+func (c *sealed[A]) placeBranches(it reflect.Type, branches []reflect.Type, sets branchSets) ([]int, error) {
+	placed := make([]int, len(branches))
+	for i, bt := range branches {
+		if bt == nil {
+			return nil, fmt.Errorf("%w: WithBranches supplies a nil branch of %s", ErrTypeMismatch, it)
+		}
+		if bt.Kind() != reflect.Struct {
+			return nil, fmt.Errorf("%w: WithBranches supplies %s, no struct, as a branch of %s", ErrTypeMismatch, bt, it)
+		}
+		if slices.Contains(branches[:i], bt) {
+			return nil, fmt.Errorf("%w: WithBranches supplies %s twice as a branch of %s", ErrTypeMismatch, bt, it)
+		}
+		placed[i] = -1
+	}
+	for _, g := range c.ties {
+		if err := c.placeTie(it, g, branches, sets, placed); err != nil {
+			return nil, err
+		}
+	}
+	for i, bt := range branches {
+		if placed[i] < 0 {
+			placed[i] = c.admitting(bt, sets)
+		}
+	}
+	return placed, nil
+}
+
+// placeTie places the branches of the tie g into placed, as placeBranches
+// states, or returns the ErrTypeMismatch error naming the branch type and B,
+// the name its tie's branches are named by.
+func (c *sealed[A]) placeTie(it reflect.Type, g tieGroup, branches []reflect.Type, sets branchSets, placed []int) error {
+	b := goname.Extend(it.Name(), g.word)
+	type ranked struct {
+		branch, rank int
+	}
+	var in []ranked
+	for i, bt := range branches {
+		if !slices.ContainsFunc(g.alts, func(a int) bool { return branchAdmits(c.alts[a], bt, sets) }) {
+			continue
+		}
+		if placed[i] >= 0 {
+			return fmt.Errorf("%w: branch %s of %s has the shape of two tied alternatives' branch structs codegen names apart", ErrTypeMismatch, bt, it)
+		}
+		rank, ok := goname.Rank(b, bt.Name())
+		if !ok {
+			return fmt.Errorf("%w: branch %s of %s is named neither %s nor %s followed by a decimal from 2, as codegen names the branch structs of its %d alternatives whose local names render one identifier", ErrTypeMismatch, bt, it, b, b, len(g.alts))
+		}
+		in = append(in, ranked{branch: i, rank: rank})
+	}
+	if len(in) != len(g.alts) {
+		return fmt.Errorf("%w: WithBranches supplies %d branches of %s of the shape of the %d alternatives codegen names %s and %s followed by a decimal from 2", ErrTypeMismatch, len(in), it, len(g.alts), b, b)
+	}
+	slices.SortFunc(in, func(x, y ranked) int { return cmp.Compare(x.rank, y.rank) })
+	for k, r := range in {
+		bt := branches[r.branch]
+		if k > 0 && in[k-1].rank == r.rank {
+			return fmt.Errorf("%w: branches %s and %s of %s are both named %s's rank %d", ErrTypeMismatch, branches[in[k-1].branch], bt, it, b, r.rank)
+		}
+		a := g.alts[k]
+		if !branchAdmits(c.alts[a], bt, sets) {
+			return fmt.Errorf("%w: branch %s of %s, by its name the branch of alternative %d of the %d codegen names from %s, has the shape of no branch struct codegen emits for it", ErrTypeMismatch, bt, it, k+1, len(g.alts), b)
+		}
+		placed[r.branch] = a
+	}
+	return nil
+}
+
 // alternative returns the index in c.alts of the alternative whose branch
 // struct bt is, with the sinks of its targets (bindBranch), or -1 for none,
-// or that alternative's ErrTypeMismatch error: the alternative admitting bt
-// under cx's sets (admitting); or else, where none admits it, the first
+// or that alternative's ErrTypeMismatch error: j, the alternative
+// placeBranches placed bt at; or else, where it placed bt at none, the first
 // alternative that names bt (branchArm.namesBranch), whose check then fails.
 // The one alternative selected is the only one checked, its check's error
 // the check's. So no check is tried and discarded.
-func (c *sealed[A]) alternative(bt reflect.Type, cx *checkContext) (int, []sink, error) {
-	j := c.admitting(bt, cx.sets)
+func (c *sealed[A]) alternative(bt reflect.Type, j int, cx *checkContext) (int, []sink, error) {
 	if j < 0 {
 		j = slices.IndexFunc(c.alts, func(a A) bool { return a.namesBranch(bt) })
 	}
@@ -4436,7 +4597,8 @@ func (c *sealed[A]) alternative(bt reflect.Type, cx *checkContext) (int, []sink,
 // admitting returns the index in c.alts of the first alternative that admits
 // bt, a struct, a nested interface's branch types as sets supplies them
 // (branchAdmits), every field held position by position, which branchesShare
-// keeps alone of those admitting any one struct, or -1 for none.
+// keeps alone of those admitting any one struct but at a tie, or -1 for
+// none.
 func (c *sealed[A]) admitting(bt reflect.Type, sets branchSets) int {
 	return slices.IndexFunc(c.alts, func(a A) bool { return branchAdmits(a, bt, sets) })
 }
@@ -4445,10 +4607,9 @@ func (c *sealed[A]) admitting(bt reflect.Type, sets branchSets) int {
 // one, its branch types as sets supplies them: an interface of one unexported
 // method (sealedShaped) whose branch set, as WithBranches supplied it, or no
 // set where c has no alternatives, holds as many types as c has
-// alternatives, each a struct, none nil, and each admitted by an alternative
-// (admitting), no alternative the first to admit two of them, so none twice.
-// It answers true for every it checkSite holds to c under sets, and reads no
-// checkContext.
+// alternatives, each placed at an alternative (placeBranches), no two at
+// one. It answers true for every it checkSite holds to c under sets, and
+// reads no checkContext.
 func (c *sealed[A]) holds(it reflect.Type, sets branchSets) bool {
 	if !sealedShaped(it) {
 		return false
@@ -4457,12 +4618,12 @@ func (c *sealed[A]) holds(it reflect.Type, sets branchSets) bool {
 	if len(branches) != len(c.alts) {
 		return false
 	}
+	placed, err := c.placeBranches(it, branches, sets)
+	if err != nil {
+		return false
+	}
 	matched := make([]bool, len(c.alts))
-	for _, bt := range branches {
-		if bt == nil || bt.Kind() != reflect.Struct {
-			return false
-		}
-		j := c.admitting(bt, sets)
+	for _, j := range placed {
 		if j < 0 || matched[j] {
 			return false
 		}
@@ -4798,31 +4959,36 @@ func elementV(run *bindRun, ct xsd.ComplexType, x *childIndex, inItem bool, el x
 // once. A head with {abstract} true is no member, so its own properties and
 // type are not examined, and with no member the interface has no branch. The
 // first of these in this order declines: each member in group order, by
-// declField's constructs and then by a branch field that may admit a Go type
-// an earlier member's does (field.sharesBranch); then particleShape's
-// decline of the members' expanded names, x and inItem as elementField's,
-// the field holding a substitution group's interface; then occursShape's
-// plain error. The field's shape is occursShape's over a sealed interface,
-// over a struct where bare is false.
+// declField's constructs; then particleShape's decline of the members'
+// expanded names, x and inItem as elementField's, the field holding a
+// substitution group's interface; then occursShape's plain error. No member
+// declines by a branch field of an earlier member's shape: two branch fields
+// sharing one (field.sharesBranch) have one name, the identifier their
+// members' local names render, so the two members are in one of the
+// interface's ties (tiesOf), which sealed.placeBranches tells apart by name.
+// The field's shape is occursShape's over a sealed interface, over a struct
+// where bare is false.
 func groupField(run *bindRun, ct xsd.ComplexType, x *childIndex, inItem bool, head xsd.ElementDeclaration, members []xsd.ElementDeclaration, occurs xsd.Occurs, bare bool) (field, []xsd.QName, error) {
 	group := &sealed[field]{p: run.p}
 	byName := map[xsd.QName]int{}
 	names := make([]xsd.QName, 0, len(members))
+	words := make([]string, 0, len(members))
 	for _, m := range members {
 		f, err := declField(run, m, valueNamed, false, func(bool) (shape, error) { return shapeOne, nil })
 		if err != nil {
 			return field{}, nil, err
 		}
 		f.name = goname.NewNamer().Claim(m.Name().Local)
-		for _, earlier := range group.alts {
-			if earlier.sharesBranch(f) {
-				return field{}, nil, decline(constructSharedBranch, declSubject(m))
-			}
-		}
 		byName[m.Name()] = len(group.alts)
 		group.alts = append(group.alts, f)
 		names = append(names, m.Name())
+		words = append(words, m.Name().Local)
 	}
+	every := make([]bool, len(words))
+	for i := range every {
+		every[i] = true
+	}
+	group.ties = tiesOf(words, every)
 	s, err := particleShape(ct, x, inItem, true, members, head, occurs, bare)
 	if err != nil {
 		return field{}, nil, err

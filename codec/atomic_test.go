@@ -32,8 +32,10 @@ const atomicSchema = `<xs:simpleType name="lo"><xs:restriction base="xs:int"><xs
 </xs:complexType></xs:element>
 <xs:element name="c"><xs:complexType><xs:choice><xs:element name="a" type="xs:int"/><xs:element name="A" type="xs:boolean"/></xs:choice></xs:complexType></xs:element>`
 
-// atomics to atomicCA2 are the types codegen emits for atomicSchema: R, H, D,
-// Lr, C, CA and CA2, which TestAtomicTypesAreCodegens pins.
+// atomics to AtomicCA2 are the types codegen emits for atomicSchema: R, H, D,
+// Lr, C, CA and CA2, which TestAtomicTypesAreCodegens pins. AtomicCA and
+// AtomicCA2 carry the names codegen gives them over their interface's, since
+// Decode places a tie's branches by name (item 6 of Decode's doc).
 type (
 	atomics struct {
 		B   bool
@@ -63,14 +65,14 @@ type (
 	atomicD   big.Rat
 	atomicLr  int32
 	atomicC   interface{ isC() }
-	atomicCA  struct{ A int32 }
-	atomicCA2 struct{ A bool }
+	AtomicCA  struct{ A int32 }
+	AtomicCA2 struct{ A bool }
 )
 
-func (atomicCA) isC()  {}
-func (atomicCA2) isC() {}
+func (AtomicCA) isC()  {}
+func (AtomicCA2) isC() {}
 
-var atomicCBranches = WithBranches[atomicC](atomicCA{}, atomicCA2{})
+var atomicCBranches = WithBranches[atomicC](AtomicCA{}, AtomicCA2{})
 
 // TestAtomicTypesAreCodegens pins the types above to those codegen emits for
 // atomicSchema, in shape, so that the rows decoding into them decode into
@@ -186,8 +188,8 @@ func TestDecodeAtomicRootsAndChoice(t *testing.T) {
 		body string
 		want atomicC
 	}{
-		{"<s:a> 01 </s:a>", atomicCA{A: 1}},
-		{"<s:A>1</s:A>", atomicCA2{A: true}},
+		{"<s:a> 01 </s:a>", AtomicCA{A: 1}},
+		{"<s:A>1</s:A>", AtomicCA2{A: true}},
 	} {
 		data := []byte(`<s:c xmlns:s="urn:s">` + row.body + `</s:c>`)
 		mustAccept(t, schema, data)
