@@ -418,7 +418,11 @@ func TestDecodeAnyTypeMismatch(t *testing.T) {
 // of type xs:anyType, read through CheckDecode into struct{}, which item 5's
 // shared-branch decline precedes and which mismatches the bare interface
 // every one of these choices otherwise is: a pair sharing a branch declines,
-// and any other pair passes item 5.
+// and any other pair passes item 5. Each pair but the wildcard's and the
+// local-and-ref one's is an element alternative and a spliced sequence
+// alternative (spliced), which no tie holds, so a decline is
+// field.sharesBranch's answer; two members of one group sharing a branch are
+// a tie, which no shape declines.
 func TestAnyTypeSharesBranch(t *testing.T) {
 	const cx = `<xs:complexType name="Cx"><xs:choice><xs:element name="p" type="xs:string"/><xs:element name="q" type="xs:int"/></xs:choice></xs:complexType>`
 	rows := []struct {
@@ -426,20 +430,20 @@ func TestAnyTypeSharesBranch(t *testing.T) {
 		decls  string
 		shares bool
 	}{
-		{"two local alternatives, a and A", root(`<xs:choice><xs:element name="a"/><xs:element name="A"/></xs:choice>`), true},
-		{"two ref alternatives, f and F", `<xs:element name="f"/><xs:element name="F"/>` + root(`<xs:choice><xs:element ref="s:f"/><xs:element ref="s:F"/></xs:choice>`), true},
+		{"two local alternatives, a and A", root(`<xs:choice><xs:element name="a"/>` + spliced(`<xs:element name="A"/>`) + `</xs:choice>`), true},
+		{"two ref alternatives, f and F", `<xs:element name="f"/><xs:element name="F"/>` + root(`<xs:choice><xs:element ref="s:f"/>`+spliced(`<xs:element ref="s:F"/>`)+`</xs:choice>`), true},
 		{"a local and a ref alternative", bareNamedSchema, false},
-		{"one alternative and a repeated one", root(`<xs:choice><xs:element name="a"/><xs:element name="A" maxOccurs="unbounded"/></xs:choice>`), false},
+		{"one alternative and a repeated one", root(`<xs:choice><xs:element name="a"/>` + spliced(`<xs:element name="A" maxOccurs="unbounded"/>`) + `</xs:choice>`), false},
 		{"beside a wildcard", wildAnySchema, false},
-		{"beside codegen's struct", root(`<xs:choice><xs:element name="v"/>` + vStruct("V", "") + `</xs:choice>`), true},
-		{"beside codegen's struct, the struct first", root(`<xs:choice>` + vStruct("v", "") + `<xs:element name="V"/></xs:choice>`), true},
-		{"beside an xs:date", root(`<xs:choice><xs:element name="a"/><xs:element name="A" type="xs:date"/></xs:choice>`), true},
-		{"beside an xs:string", root(`<xs:choice><xs:element name="a"/><xs:element name="A" type="xs:string"/></xs:choice>`), false},
-		{"beside a bare sealed interface", cx + root(`<xs:choice><xs:element name="x"/><xs:element name="X" type="s:Cx"/></xs:choice>`), false},
+		{"beside codegen's struct", root(`<xs:choice><xs:element name="v"/>` + spliced(vStruct("V", "")) + `</xs:choice>`), true},
+		{"beside codegen's struct, the struct first", root(`<xs:choice>` + vStruct("v", "") + spliced(`<xs:element name="V"/>`) + `</xs:choice>`), true},
+		{"beside an xs:date", root(`<xs:choice><xs:element name="a"/>` + spliced(`<xs:element name="A" type="xs:date"/>`) + `</xs:choice>`), true},
+		{"beside an xs:string", root(`<xs:choice><xs:element name="a"/>` + spliced(`<xs:element name="A" type="xs:string"/>`) + `</xs:choice>`), false},
+		{"beside a bare sealed interface", cx + root(`<xs:choice><xs:element name="x"/>`+spliced(`<xs:element name="X" type="s:Cx"/>`)+`</xs:choice>`), false},
 		{"beside a substitution group's interface", `<xs:element name="X" type="xs:string"/><xs:element name="m" type="xs:string" substitutionGroup="s:X"/>` +
-			root(`<xs:choice><xs:element name="x"/><xs:element ref="s:X"/></xs:choice>`), false},
-		{"two members of one group, a and A", `<xs:element name="h" abstract="true"/><xs:element name="a" substitutionGroup="s:h"/><xs:element name="A" substitutionGroup="s:h"/>` +
-			sequenceOf(`<xs:element ref="s:h"/>`), true},
+			root(`<xs:choice><xs:element name="x"/>`+spliced(`<xs:element ref="s:X"/>`)+`</xs:choice>`), false},
+		{"two members of one group, a and A, a tie", `<xs:element name="h" abstract="true"/><xs:element name="a" substitutionGroup="s:h"/><xs:element name="A" substitutionGroup="s:h"/>` +
+			sequenceOf(`<xs:element ref="s:h"/>`), false},
 	}
 	for _, row := range rows {
 		t.Run(row.name, func(t *testing.T) {

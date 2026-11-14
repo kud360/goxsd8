@@ -30,6 +30,15 @@ func vStruct(name, attrs string) string {
 	return `<xs:element name="` + name + `"` + attrs + `><xs:complexType><xs:sequence><xs:element name="v" type="xs:string"/></xs:sequence></xs:complexType></xs:element>`
 }
 
+// spliced is a sequence alternative of particle alone, which codegen splices
+// into a branch struct holding particle's one field. Its word is sequence,
+// so beside an element alternative whose field shares that field's shape it
+// is in no word group of the choice (wordGroups), so in no tie, and the pair
+// declines as one shape.
+func spliced(particle string) string {
+	return `<xs:sequence>` + particle + `</xs:sequence>`
+}
+
 // nillableTables declares s:r, a nillable declaration of two governing types,
 // ttTypes' base and num, whose fields codegen's sum wraps branch by branch, a
 // shape Decode still declines as nillable; s:r with no kind attribute and the
@@ -68,31 +77,31 @@ func TestDecodeDeclines(t *testing.T) {
 			<xs:element name="r" type="s:ab"/>`, ` xsi:type="s:cc"`, `<s:a>x</s:a>`, constructAbstractTypeElement, 1, 1},
 		{"an optional <group ref> content particle to a non-emptiable all group", `<xs:group name="g"><xs:all><xs:element name="a" type="xs:string"/></xs:all></xs:group>` + root(`<xs:group ref="s:g" minOccurs="0"/>`),
 			"", a, constructAllOccurs, 1, 1},
-		{"choice alternatives sharing a branch shape, refs to a and A", `<xs:element name="a" type="xs:string"/><xs:element name="A" type="xs:string"/>` + root(`<xs:choice><xs:element ref="s:a"/><xs:element ref="s:A"/></xs:choice>`),
+		{"an element and a spliced sequence alternative sharing a branch shape, refs to a and A", `<xs:element name="a" type="xs:string"/><xs:element name="A" type="xs:string"/>` + root(`<xs:choice><xs:element ref="s:a"/>`+spliced(`<xs:element ref="s:A"/>`)+`</xs:choice>`),
 			"", a, constructSharedBranch, 1, 1},
-		{"choice alternatives sharing a branch shape, qualified and not", root(`<xs:choice><xs:element name="x" type="xs:string"/><xs:element name="x" form="unqualified" type="xs:string"/></xs:choice>`),
+		{"an element and a spliced sequence alternative sharing a branch shape, qualified and not", root(`<xs:choice><xs:element name="x" type="xs:string"/>` + spliced(`<xs:element name="x" form="unqualified" type="xs:string"/>`) + `</xs:choice>`),
 			"", `<s:x>v</s:x>`, constructSharedBranch, 1, 1},
-		{"mixed choice alternatives sharing a branch shape, qualified and not", `<xs:element name="r"><xs:complexType mixed="true"><xs:choice><xs:element name="x" type="xs:string"/><xs:element name="x" form="unqualified" type="xs:string"/></xs:choice></xs:complexType></xs:element>`,
+		{"a mixed element and spliced sequence alternative sharing a branch shape, qualified and not", `<xs:element name="r"><xs:complexType mixed="true"><xs:choice><xs:element name="x" type="xs:string"/>` + spliced(`<xs:element name="x" form="unqualified" type="xs:string"/>`) + `</xs:choice></xs:complexType></xs:element>`,
 			"", `<s:x>v</s:x>`, constructSharedBranch, 1, 1},
-		{"choice alternatives sharing a branch shape, a nillable xs:string and a union, qualified and not", root(`<xs:choice><xs:element name="x" type="xs:string" nillable="true"/><xs:element name="x" form="unqualified"><xs:simpleType><xs:union memberTypes="xs:int xs:boolean"/></xs:simpleType></xs:element></xs:choice>`),
+		{"an element and a spliced sequence alternative sharing a branch shape, a nillable xs:string and a union, qualified and not", root(`<xs:choice><xs:element name="x" type="xs:string" nillable="true"/>` + spliced(`<xs:element name="x" form="unqualified"><xs:simpleType><xs:union memberTypes="xs:int xs:boolean"/></xs:simpleType></xs:element>`) + `</xs:choice>`),
 			"", `<s:x>v</s:x>`, constructSharedBranch, 1, 1},
-		{"choice alternatives sharing a branch shape, a repeated xs:int and a list of xs:int", root(`<xs:choice><xs:element name="x" type="xs:int" maxOccurs="unbounded"/><xs:element name="X"><xs:simpleType><xs:list itemType="xs:int"/></xs:simpleType></xs:element></xs:choice>`),
+		{"an element and a spliced sequence alternative sharing a branch shape, a repeated xs:int and a list of xs:int", root(`<xs:choice><xs:element name="x" type="xs:int" maxOccurs="unbounded"/>` + spliced(`<xs:element name="X"><xs:simpleType><xs:list itemType="xs:int"/></xs:simpleType></xs:element>`) + `</xs:choice>`),
 			"", `<s:x>1</s:x>`, constructSharedBranch, 1, 1},
-		{"choice alternatives sharing a branch shape, a repeated xs:hexBinary and a list of xs:hexBinary", root(`<xs:choice><xs:element name="x" type="xs:hexBinary" maxOccurs="unbounded"/><xs:element name="X"><xs:simpleType><xs:list itemType="xs:hexBinary"/></xs:simpleType></xs:element></xs:choice>`),
+		{"an element and a spliced sequence alternative sharing a branch shape, a repeated xs:hexBinary and a list of xs:hexBinary", root(`<xs:choice><xs:element name="x" type="xs:hexBinary" maxOccurs="unbounded"/>` + spliced(`<xs:element name="X"><xs:simpleType><xs:list itemType="xs:hexBinary"/></xs:simpleType></xs:element>`) + `</xs:choice>`),
 			"", `<s:x>0A</s:x>`, constructSharedBranch, 1, 1},
-		{"choice alternatives sharing a branch shape, an xs:hexBinary and an xs:base64Binary", root(`<xs:choice><xs:element name="x" type="xs:hexBinary"/><xs:element name="X" type="xs:base64Binary"/></xs:choice>`),
+		{"an element and a spliced sequence alternative sharing a branch shape, an xs:hexBinary and an xs:base64Binary", root(`<xs:choice><xs:element name="x" type="xs:hexBinary"/>` + spliced(`<xs:element name="X" type="xs:base64Binary"/>`) + `</xs:choice>`),
 			"", `<s:x>0A</s:x>`, constructSharedBranch, 1, 1},
-		{"choice alternatives sharing a branch shape, a repeated xs:unsignedByte and an xs:hexBinary", root(`<xs:choice><xs:element name="x" type="xs:unsignedByte" maxOccurs="unbounded"/><xs:element name="X" type="xs:hexBinary"/></xs:choice>`),
+		{"an element and a spliced sequence alternative sharing a branch shape, a repeated xs:unsignedByte and an xs:hexBinary", root(`<xs:choice><xs:element name="x" type="xs:unsignedByte" maxOccurs="unbounded"/>` + spliced(`<xs:element name="X" type="xs:hexBinary"/>`) + `</xs:choice>`),
 			"", `<s:x>1</s:x>`, constructSharedBranch, 1, 1},
-		{"choice alternatives sharing a branch shape, two lists of xs:int", root(`<xs:choice><xs:element name="x"><xs:simpleType><xs:list itemType="xs:int"/></xs:simpleType></xs:element><xs:element name="X"><xs:simpleType><xs:list itemType="xs:int"/></xs:simpleType></xs:element></xs:choice>`),
+		{"an element and a spliced sequence alternative sharing a branch shape, two lists of xs:int", root(`<xs:choice><xs:element name="x"><xs:simpleType><xs:list itemType="xs:int"/></xs:simpleType></xs:element>` + spliced(`<xs:element name="X"><xs:simpleType><xs:list itemType="xs:int"/></xs:simpleType></xs:element>`) + `</xs:choice>`),
 			"", `<s:x>1</s:x>`, constructSharedBranch, 1, 1},
-		{"choice alternatives sharing a branch shape, a repeated xs:int and a ref to a list of xs:int", `<xs:element name="X"><xs:simpleType><xs:list itemType="xs:int"/></xs:simpleType></xs:element>` + root(`<xs:choice><xs:element name="x" type="xs:int" maxOccurs="unbounded"/><xs:element ref="s:X"/></xs:choice>`),
+		{"an element and a spliced sequence alternative sharing a branch shape, a repeated xs:int and a ref to a list of xs:int", `<xs:element name="X"><xs:simpleType><xs:list itemType="xs:int"/></xs:simpleType></xs:element>` + root(`<xs:choice><xs:element name="x" type="xs:int" maxOccurs="unbounded"/>`+spliced(`<xs:element ref="s:X"/>`)+`</xs:choice>`),
 			"", `<s:X>1 2</s:X>`, constructSharedBranch, 1, 1},
-		{"choice alternatives sharing a branch shape, a ref to a list of xs:int and a repeated xs:int", `<xs:element name="X"><xs:simpleType><xs:list itemType="xs:int"/></xs:simpleType></xs:element>` + root(`<xs:choice><xs:element ref="s:X"/><xs:element name="x" type="xs:int" maxOccurs="unbounded"/></xs:choice>`),
+		{"an element and a spliced sequence alternative sharing a branch shape, a ref to a list of xs:int and a repeated xs:int", `<xs:element name="X"><xs:simpleType><xs:list itemType="xs:int"/></xs:simpleType></xs:element>` + root(`<xs:choice><xs:element ref="s:X"/>`+spliced(`<xs:element name="x" type="xs:int" maxOccurs="unbounded"/>`)+`</xs:choice>`),
 			"", `<s:X>1 2</s:X>`, constructSharedBranch, 1, 1},
-		{"choice alternatives sharing a branch shape, a ref to an xs:date element and a local xs:date", `<xs:element name="d" type="xs:date"/>` + root(`<xs:choice><xs:element ref="s:d"/><xs:element name="d" form="unqualified" type="xs:date"/></xs:choice>`),
+		{"an element and a spliced sequence alternative sharing a branch shape, a ref to an xs:date element and a local xs:date", `<xs:element name="d" type="xs:date"/>` + root(`<xs:choice><xs:element ref="s:d"/>`+spliced(`<xs:element name="d" form="unqualified" type="xs:date"/>`)+`</xs:choice>`),
 			"", `<s:d>2000-01-01</s:d>`, constructSharedBranch, 1, 1},
-		{"choice alternatives sharing a branch shape, a and A", root(`<xs:choice><xs:element name="a" type="xs:string"/><xs:element name="A" type="xs:token"/></xs:choice>`),
+		{"an element and a spliced sequence alternative sharing a branch shape, a and A", root(`<xs:choice><xs:element name="a" type="xs:string"/>` + spliced(`<xs:element name="A" type="xs:token"/>`) + `</xs:choice>`),
 			"", a, constructSharedBranch, 1, 1},
 		{"optional content all over a required element", root(`<xs:all minOccurs="0"><xs:element name="a" type="xs:string"/></xs:all>`), "", a, constructAllOccurs, 1, 1},
 		{"an extension merging two optional alls of required elements", `<xs:complexType name="t"><xs:all minOccurs="0"><xs:element name="a" type="xs:string"/></xs:all></xs:complexType>
@@ -110,33 +119,30 @@ func TestDecodeDeclines(t *testing.T) {
 		{"element ref to a group whose member of mixed content decodes, its later nillable member declining", `<xs:complexType name="ct" mixed="true"><xs:sequence/></xs:complexType><xs:element name="h" type="s:ct" abstract="true"/>
 			<xs:element name="n" type="s:ct" substitutionGroup="s:h"/><xs:element name="m" type="s:ct" nillable="true" substitutionGroup="s:h"/>` + sequenceOf(`<xs:element ref="s:h"/>`),
 			"", `<s:n/>`, constructNillable, 1, 1},
-		{"element ref to a group whose members share a branch shape, a and A", `<xs:element name="h" type="xs:string" abstract="true"/>
-			<xs:element name="a" type="xs:string" substitutionGroup="s:h"/><xs:element name="A" type="xs:string" substitutionGroup="s:h"/>` + sequenceOf(`<xs:element ref="s:h"/>`),
-			"", a, constructSharedBranch, 1, 1},
 		{"two refs whose groups share a member, s2_2_2v01's shape", `<xs:element name="e0" type="xs:string"/><xs:element name="e1" type="xs:string"/>
 			<xs:element name="e2" type="xs:string" abstract="true" substitutionGroup="s:e0 s:e1"/><xs:element name="e3" type="xs:string" substitutionGroup="s:e2"/>` +
 			sequenceOf(`<xs:element ref="s:e0"/><xs:element ref="s:e1"/>`), "", `<s:e3>x</s:e3><s:e3>y</s:e3>`, constructSharedName, 1, 1},
 		{"local element of an abstract complex type", `<xs:complexType name="ab" abstract="true"><xs:sequence><xs:element name="x" type="xs:string"/></xs:sequence></xs:complexType>
 			<xs:complexType name="cc"><xs:complexContent><xs:extension base="s:ab"/></xs:complexContent></xs:complexType>` + sequenceOf(`<xs:element name="a" type="s:ab" minOccurs="0"/>`),
 			"", "", constructAbstractTypeElement, 1, 1},
-		{"choice alternatives sharing a branch shape, two structs of one shape", root(`<xs:choice>` + vStruct("x", "") + vStruct("X", "") + `</xs:choice>`),
+		{"an element and a spliced sequence alternative sharing a branch shape, two structs of one shape", root(`<xs:choice>` + vStruct("x", "") + spliced(vStruct("X", "")) + `</xs:choice>`),
 			"", `<s:x><s:v>v</s:v></s:x>`, constructSharedBranch, 1, 1},
-		{"choice alternatives sharing a name, two structs of differing fields", root(`<xs:choice>` + vStruct("x", "") +
-			`<xs:element name="X"><xs:complexType><xs:sequence><xs:element name="y" type="xs:int"/></xs:sequence></xs:complexType></xs:element></xs:choice>`),
+		{"an element and a spliced sequence alternative sharing a name, two structs of differing fields", root(`<xs:choice>` + vStruct("x", "") +
+			spliced(`<xs:element name="X"><xs:complexType><xs:sequence><xs:element name="y" type="xs:int"/></xs:sequence></xs:complexType></xs:element>`) + `</xs:choice>`),
 			"", `<s:x><s:v>v</s:v></s:x>`, constructSharedBranch, 1, 1},
-		{"choice alternatives sharing a name, of Cj and of Ck holding an optional Cj", `<xs:complexType name="Cj"><xs:sequence><xs:element name="v" type="xs:string"/></xs:sequence></xs:complexType>
+		{"an element and a spliced sequence alternative sharing a name, of Cj and of Ck holding an optional Cj", `<xs:complexType name="Cj"><xs:sequence><xs:element name="v" type="xs:string"/></xs:sequence></xs:complexType>
 			<xs:complexType name="Ck"><xs:sequence><xs:element name="y" type="s:Cj" minOccurs="0"/></xs:sequence></xs:complexType>` +
-			root(`<xs:choice><xs:element name="x" type="s:Cj"/><xs:element name="X" type="s:Ck"/></xs:choice>`),
+			root(`<xs:choice><xs:element name="x" type="s:Cj"/>`+spliced(`<xs:element name="X" type="s:Ck"/>`)+`</xs:choice>`),
 			"", `<s:x><s:v>v</s:v></s:x>`, constructSharedBranch, 1, 1},
-		{"choice alternatives sharing a name, a choice's interface and a substitution group's", `<xs:complexType name="Cx"><xs:choice><xs:element name="a" type="xs:string"/><xs:element name="b" type="xs:int"/></xs:choice></xs:complexType>
+		{"an element and a spliced sequence alternative sharing a name, a choice's interface and a substitution group's", `<xs:complexType name="Cx"><xs:choice><xs:element name="a" type="xs:string"/><xs:element name="b" type="xs:int"/></xs:choice></xs:complexType>
 			<xs:element name="X" type="xs:string"/><xs:element name="m" type="xs:string" substitutionGroup="s:X"/>` +
-			root(`<xs:choice><xs:element name="x" type="s:Cx"/><xs:element ref="s:X"/></xs:choice>`),
+			root(`<xs:choice><xs:element name="x" type="s:Cx"/>`+spliced(`<xs:element ref="s:X"/>`)+`</xs:choice>`),
 			"", `<s:x><s:a>a</s:a></s:x>`, constructSharedBranch, 1, 1},
-		{"choice alternatives sharing a name, a struct and an xs:date", root(`<xs:choice>` + vStruct("x", "") + `<xs:element name="X" type="xs:date"/></xs:choice>`),
+		{"an element and a spliced sequence alternative sharing a name, a struct and an xs:date", root(`<xs:choice>` + vStruct("x", "") + spliced(`<xs:element name="X" type="xs:date"/>`) + `</xs:choice>`),
 			"", `<s:x><s:v>v</s:v></s:x>`, constructSharedBranch, 1, 1},
-		{"choice alternatives sharing a name, a struct and an xs:precisionDecimal", root(`<xs:choice>` + vStruct("x", "") + `<xs:element name="X" type="xs:precisionDecimal"/></xs:choice>`),
+		{"an element and a spliced sequence alternative sharing a name, a struct and an xs:precisionDecimal", root(`<xs:choice>` + vStruct("x", "") + spliced(`<xs:element name="X" type="xs:precisionDecimal"/>`) + `</xs:choice>`),
 			"", `<s:x><s:v>v</s:v></s:x>`, constructSharedBranch, 1, 1},
-		{"choice alternatives sharing a name, a struct and an xs:decimal", root(`<xs:choice>` + vStruct("x", "") + `<xs:element name="X" type="xs:decimal"/></xs:choice>`),
+		{"an element and a spliced sequence alternative sharing a name, a struct and an xs:decimal", root(`<xs:choice>` + vStruct("x", "") + spliced(`<xs:element name="X" type="xs:decimal"/>`) + `</xs:choice>`),
 			"", `<s:x><s:v>v</s:v></s:x>`, constructSharedBranch, 1, 1},
 		{"choice alternatives sharing a name, a struct and a wildcard", root(`<xs:choice>` + vStruct("any", "") + `<xs:any namespace="##other" processContents="lax"/></xs:choice>`),
 			"", `<s:any><s:v>v</s:v></s:any>`, constructSharedBranch, 1, 1},
@@ -156,14 +162,14 @@ func TestDecodeDeclines(t *testing.T) {
 			assertProbeDecline(t, CheckDecode[struct{}](schema, rootName), err)
 		})
 	}
-	// C's alternatives e and E each hold C's own interface, unbound when the
-	// second is read, and no finite instance validates, so CheckDecode alone
-	// probes it: it returns, declining.
-	selfPair := schemaOf(t, `<xs:complexType name="C"><xs:choice><xs:element name="e" type="s:C"/><xs:element name="E" type="s:C"/></xs:choice></xs:complexType>
+	// C's alternatives e and the spliced sequence of E each hold C's own
+	// interface, unbound when the second is read, and no finite instance
+	// validates, so CheckDecode alone probes it: it returns, declining.
+	selfPair := schemaOf(t, `<xs:complexType name="C"><xs:choice><xs:element name="e" type="s:C"/>`+spliced(`<xs:element name="E" type="s:C"/>`)+`</xs:choice></xs:complexType>
 		<xs:element name="r" type="s:C"/>`)
 	var de *DeclineError
 	if err := CheckDecode[struct{}](selfPair, rootName); !errors.As(err, &de) || de.Construct() != (Construct{constructSharedBranch}) {
-		t.Errorf("CheckDecode(choice(e:C, E:C)) = %v, want the %s decline", err, constructSharedBranch.name())
+		t.Errorf("CheckDecode(choice(e:C, sequence(E:C))) = %v, want the %s decline", err, constructSharedBranch.name())
 	}
 }
 

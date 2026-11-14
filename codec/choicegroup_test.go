@@ -539,7 +539,7 @@ func TestDecodeNestedChoiceAlternativesTypeMismatch(t *testing.T) {
 	}{
 		{"a nil branch", WithBranches[cgTNIn2](nil, cgTND{}), prefix + "WithBranches supplies a nil branch of codec.cgTNIn2"},
 		{"a branch that is no struct", WithBranches[cgTNIn2](cgTNStr(""), cgTND{}), prefix + "WithBranches supplies codec.cgTNStr, no struct, as a branch of codec.cgTNIn2"},
-		{"a branch twice", WithBranches[cgTNIn2](cgTNC{}, cgTNC{}), prefix + "branch codec.cgTNC of codec.cgTNIn2 has the shape of no branch struct codegen emits that an earlier branch did not match"},
+		{"a branch twice", WithBranches[cgTNIn2](cgTNC{}, cgTNC{}), prefix + "WithBranches supplies codec.cgTNC twice as a branch of codec.cgTNIn2"},
 	}
 	schema := schemaOf(t, cgTwoNestedSchema)
 	data := instanceOf("", "<s:c>1</s:c>")

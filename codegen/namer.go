@@ -103,7 +103,7 @@ func (s *surveyNamer) extend(of string, words ...string) string {
 	if !ok && s.err == nil {
 		s.err = fmt.Errorf("the type name %s extended by %q was never claimed", of, words)
 	}
-	return s.record(extendClaim{of: i, words: slices.Clone(words)}, goname.Identifier(of)+goname.Render(words))
+	return s.record(extendClaim{of: i, words: slices.Clone(words)}, goname.Extend(of, words...))
 }
 
 // replayNamer is the typeNamer of emit's second walk: it returns names[i] for
@@ -210,7 +210,7 @@ func resolve(claims []typeClaim) []string {
 		case pathClaim:
 			candidate = shortest(i, c, full, fixed)
 		case extendClaim:
-			candidate = goname.Identifier(names[c.of]) + goname.Render(c.words)
+			candidate = goname.Extend(names[c.of], c.words...)
 		}
 		names[i] = n.ClaimCandidate(candidate)
 	}
