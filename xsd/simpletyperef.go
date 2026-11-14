@@ -64,7 +64,7 @@ type SimpleTypeOrRef interface{ simpleTypeOrRef() }
 // exactly as the TypeDefinitionRef precedent (typedefinition.go) is rejected by
 // NewElementDeclaration and its siblings.
 //
-// Loc is provenance, not a property: the package doc's provenance paragraph
+// Loc is provenance, not a property: the package doc's "Provenance" section
 // says what it holds, where Finalize charges it, and why references compare by
 // Name.
 type SimpleTypeRef struct {

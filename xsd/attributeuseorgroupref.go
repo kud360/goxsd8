@@ -54,7 +54,7 @@ type ResolvedAttributeUse struct{ Use AttributeUse }
 // clauses 1.4, 1.5, 1.2 and 1.1); one shared ref type would make the target kind
 // a runtime property (STYLE T1).
 //
-// Loc is provenance, not a property: the package doc's provenance paragraph
+// Loc is provenance, not a property: the package doc's "Provenance" section
 // says what it holds, where Finalize charges it, and why references compare by
 // Name.
 type AttributeGroupRef struct {

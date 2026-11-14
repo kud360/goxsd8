@@ -797,7 +797,7 @@ func (t *SimpleType) Name() QName {
 }
 
 // Loc reports the source position of the declaring element — provenance, not a
-// §3.16.1 component property (see the package doc's Components section). The
+// §3.16.1 component property (see the package doc's "Provenance" section). The
 // zero xsderr.Loc means the position is unknown, as it is for every seeded
 // built-in datatype and for the xs:anySimpleType/xs:anyAtomicType anchors.
 func (t *SimpleType) Loc() xsderr.Loc {

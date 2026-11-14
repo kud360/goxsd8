@@ -62,7 +62,12 @@ type IdentityConstraint struct {
 // identity-constraint definition, resolved at finalize (src-resolve clause 1.7).
 // The fields are read-only by convention; do not mutate them after construction.
 //
-// Loc is provenance, not a property: the package doc's provenance paragraph
+// NewIdentityConstraint is its one consumer. A caller reads it back from the
+// IdentityConstraint through ReferencedKeyName, which returns its Name alone: no
+// IdentityConstraint method returns its Loc (IdentityConstraint.Loc is the
+// definition's own position).
+//
+// Loc is provenance, not a property: the package doc's "Provenance" section
 // says what it holds, where Finalize charges it, and why references compare by
 // Name.
 type IdentityConstraintRef struct {
@@ -140,7 +145,7 @@ func (c IdentityConstraint) Name() QName {
 }
 
 // Loc reports the source position of the declaring element — provenance, not a
-// §3.11.1 component property (see the package doc's Components section). The
+// §3.11.1 component property (see the package doc's "Provenance" section). The
 // zero xsderr.Loc means the position is unknown.
 func (c IdentityConstraint) Loc() xsderr.Loc {
 	return c.loc

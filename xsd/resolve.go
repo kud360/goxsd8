@@ -299,7 +299,7 @@ func (s *Schema) resolve() error {
 // external consumer justifies minting a capability interface for them (STYLE T5).
 //
 // REFERRER-LOC CONVENTION. This is the fallback chargedAt takes for a reference
-// carrying no Loc of its own (the package doc's provenance paragraph says when
+// carrying no Loc of its own (the package doc's "Provenance" section says when
 // one does): a src-resolve rejection is charged to the REFERRING component's
 // position, never to the target's — the target is exactly what does not exist,
 // so it has none. Each helper therefore takes a loc alongside its ctx phrase, and
