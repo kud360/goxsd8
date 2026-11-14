@@ -1,6 +1,7 @@
 package parser_test
 
 import (
+	"errors"
 	"reflect"
 	"strings"
 	"testing"
@@ -417,16 +418,48 @@ func TestProduceExtensionSelfCycle(t *testing.T) {
 	assertRule(t, err, "ct-props-correct")
 }
 
-// TestProduceExtensionDanglingBase pins that a base= naming no type at all is
-// charged src-resolve clause 1.1 — the same rule and clause finalize charges for
-// an unresolvable {base type definition}, and the same one the simple-type base
-// path already charges.
-func TestProduceExtensionDanglingBase(t *testing.T) {
-	_, err := produce(t, wrap("urn:x", `
-		<xs:complexType name="D"><xs:complexContent><xs:extension base="tns:missing"><xs:sequence/></xs:extension></xs:complexContent></xs:complexType>`))
-	assertRule(t, err, "src-resolve")
-	if !strings.Contains(err.Error(), "clause 1.1") {
-		t.Fatalf("error = %v, want it to cite src-resolve clause 1.1", err)
+// TestProduceDanglingBase pins that a complex type's base= naming no type at all
+// is charged src-resolve clause 1.1 — the rule and clause finalize charges for an
+// unresolvable {base type definition} — in finalize's resolveTypeName template,
+// naming the referrer, the derivation element and the missing name (#3727). One
+// row per complexTypeIdentity arm that can reach the charge with a dangling name.
+func TestProduceDanglingBase(t *testing.T) {
+	const head = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" targetNamespace="urn:x" xmlns:tns="urn:x">`
+	const tail = `</xs:schema>`
+	const rest = ", but no type definition with that expanded name is present in the schema (src-resolve clause 1.1)"
+	for _, tc := range []struct {
+		name string
+		docs map[string]string
+		want string
+	}{
+		{"named, complexContent extension", map[string]string{"main.xsd": head +
+			`<xs:complexType name="D"><xs:complexContent><xs:extension base="tns:missing"><xs:sequence/></xs:extension></xs:complexContent></xs:complexType>` + tail},
+			"complex type {urn:x}D {base type definition} <extension base> references type {urn:x}missing" + rest},
+		{"named, simpleContent restriction", map[string]string{"main.xsd": head +
+			`<xs:complexType name="D"><xs:simpleContent><xs:restriction base="tns:missing"/></xs:simpleContent></xs:complexType>` + tail},
+			"complex type {urn:x}D {base type definition} <restriction base> references type {urn:x}missing" + rest},
+		{"element-owned anonymous, complexContent restriction", map[string]string{"main.xsd": head +
+			`<xs:element name="e"><xs:complexType><xs:complexContent><xs:restriction base="tns:missing"/></xs:complexContent></xs:complexType></xs:element>` + tail},
+			"anonymous complex type {base type definition} <restriction base> references type {urn:x}missing" + rest},
+		{"type-alternative-owned anonymous, simpleContent extension", map[string]string{"main.xsd": head +
+			`<xs:element name="e" type="xs:anyType"><xs:alternative test="true()"><xs:complexType><xs:simpleContent><xs:extension base="tns:missing"/></xs:simpleContent></xs:complexType></xs:alternative></xs:element>` + tail},
+			"anonymous complex type {base type definition} <extension base> references type {urn:x}missing" + rest},
+		{"redefine original, complexContent restriction", map[string]string{
+			"main.xsd": head + `<xs:redefine schemaLocation="r.xsd"><xs:complexType name="T"><xs:complexContent><xs:extension base="tns:T"/></xs:complexContent></xs:complexType></xs:redefine>` + tail,
+			"r.xsd":    head + `<xs:complexType name="T"><xs:complexContent><xs:restriction base="tns:missing"/></xs:complexContent></xs:complexType>` + tail},
+			"anonymous complex type {base type definition} <restriction base> references type {urn:x}missing" + rest},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := parseMap(t, "main.xsd", tc.docs)
+			assertRule(t, err, "src-resolve")
+			var xe *xsderr.Error
+			if !errors.As(err, &xe) {
+				t.Fatalf("error = %v, want an *xsderr.Error", err)
+			}
+			if xe.Msg != tc.want {
+				t.Fatalf("message =\n  %s\nwant\n  %s", xe.Msg, tc.want)
+			}
+		})
 	}
 }
 

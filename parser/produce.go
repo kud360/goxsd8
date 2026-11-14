@@ -2143,7 +2143,11 @@ func (p *producer) namedComplexTypeIdentity(name xsd.QName, elem *Element) compl
 // (§3.17.6.2) at base (#3463) — the rule and clause finalize charges, at the
 // reference's Loc, for an unresolvable {base type definition} reference
 // (xsd/resolve.go's resolveTypeName), which is the only charge a simple type's
-// base= gets (resolveBase). Every TypeDefinitionRef returned here carries base's
+// base= gets (resolveBase). Its message is resolveTypeName's template, with the
+// referrer spelled as finalize's walk spells a complex type's base slot
+// (xsd/componentwalk.go's walkComplexType) plus the <restriction>/<extension>
+// that carries base, and "anonymous complex type" for a type with no {name}
+// (#3727). Every TypeDefinitionRef returned here carries base's
 // position, but no component retains it: newComplexType hands the by-name xsd
 // constructors the bare QName (baseTypeName), and a name this function resolves
 // never reaches finalize's charge.
@@ -2185,8 +2189,15 @@ func (p *producer) resolveBaseType(id complexTypeIdentity, at *Element, base xml
 		}
 		return finishedBase{def: st}, xsd.TypeDefinitionRef{Name: name, Loc: base.Loc()}, nil
 	}
+	// The anonymous label is spelled here and in xsd's complexTypeOwner; #3533
+	// gives it one home.
+	owner := "anonymous complex type"
+	if n, ok := topLevelComplexTypeName(id); ok {
+		owner = "complex type " + n.String()
+	}
 	return nil, nil, xsderr.New(ruleSrcResolve, base.Loc(),
-		"base type %s does not resolve to any type definition in scope (src-resolve clause 1.1)", name)
+		"%s {base type definition} <%s base> references type %s, but no type definition with that expanded name is present in the schema (src-resolve clause 1.1)",
+		owner, at.Name().Local(), name)
 }
 
 // resolvedBase is the {base type definition} COMPONENT resolveBaseType
