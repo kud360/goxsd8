@@ -476,6 +476,57 @@ func TestConditionallySelectedExport(t *testing.T) {
 	}
 }
 
+// TestConditionallySelectedIndex pins [Validator.ConditionallySelectedIndex]:
+// the position of the selected Type Alternative in {alternatives} followed by
+// the {default type definition}, so len(alternatives) where the default is
+// selected, 0 with ok false where the scan declines, and on every row the
+// slot at that position is the one [Validator.ConditionallySelected] answers.
+func TestConditionallySelectedIndex(t *testing.T) {
+	kind := func(v string) Attribute { return &testAttribute{name: local("kind"), value: v} }
+	for _, tc := range []struct {
+		name       string
+		alts       []ctaAlt
+		attributes []Attribute
+		want       int
+		wantOK     bool
+	}{
+		{"an alternative selected", []ctaAlt{{"@kind = 'cd'", "First"}, {"@kind = 'book'", "Second"}}, []Attribute{kind("book")}, 1, true},
+		{"the default with alternatives present", []ctaAlt{{"@kind = 'cd'", "First"}, {"@kind = 'dvd'", "Second"}}, []Attribute{kind("book")}, 2, true},
+		{"zero alternatives", nil, []Attribute{kind("book")}, 0, true},
+		{"a declining {test}", []ctaAlt{{"@kind = 'cd'", "First"}, {"count(@kind) > 0", "Second"}}, []Attribute{kind("book")}, 0, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			schema := ctaSchema(t, tc.alts...)
+			v, err := New(schema, testBackend())
+			if err != nil {
+				t.Fatalf("New: %v", err)
+			}
+			d, ok := schema.Element(local("root"))
+			if !ok {
+				t.Fatal("ctaSchema declares no root")
+			}
+			table, _ := d.TypeTable()
+			index, ok := v.ConditionallySelectedIndex(table, tc.attributes, nil)
+			if index != tc.want || ok != tc.wantOK {
+				t.Fatalf("ConditionallySelectedIndex = %d, %t; want %d, %t", index, ok, tc.want, tc.wantOK)
+			}
+			slot, slotOK := v.ConditionallySelected(table, tc.attributes, nil)
+			if slotOK != ok {
+				t.Fatalf("ConditionallySelected ok = %t, ConditionallySelectedIndex ok = %t", slotOK, ok)
+			}
+			if !ok {
+				return
+			}
+			slots := append(table.Alternatives(), table.DefaultTypeDefinition())
+			got, gotRef := slot.(xsd.TypeDefinitionRef)
+			want, _ := slots[index].TypeDefinition().(xsd.TypeDefinitionRef)
+			if !gotRef || got.Name != want.Name {
+				t.Errorf("ConditionallySelected = %v, want the slot at index %d, naming %s", slot, index, want.Name)
+			}
+		})
+	}
+}
+
 // namedTypeAlternative builds a Type Alternative whose {type definition} is the
 // by-name reference §3.12.2 declare-ta's type= arm yields, failing the test on
 // any rejection. Every fixture in package validate builds that arm; the inline
