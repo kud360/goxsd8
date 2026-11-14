@@ -218,8 +218,8 @@ func TestDecodeTieDeclines(t *testing.T) {
 func TestCheckDecodeNestedChoicesShare(t *testing.T) {
 	const first = `<xs:sequence><xs:choice><xs:element name="any"/><xs:any namespace="##other" processContents="skip"/></xs:choice></xs:sequence>`
 	rows := []struct{ name, second string }{
-		{"as many alternatives", `<xs:sequence><xs:choice>` + vStruct("Any", "") + `</xs:choice></xs:sequence>`},
-		{"each of the second's alternatives sharing one of the first's", `<xs:sequence><xs:choice>` + vStruct("Any", "") + `<xs:element name="z" type="xs:string"/></xs:choice></xs:sequence>`},
+		{"differing alternative counts", `<xs:sequence><xs:choice>` + vStruct("Any", "") + `</xs:choice></xs:sequence>`},
+		{"the second's z sharing no branch with the first's", `<xs:sequence><xs:choice>` + vStruct("Any", "") + `<xs:element name="z" type="xs:string"/></xs:choice></xs:sequence>`},
 	}
 	for _, row := range rows {
 		t.Run(row.name, func(t *testing.T) {
