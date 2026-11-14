@@ -4550,7 +4550,9 @@ func (c *sealed[A]) placeBranches(it reflect.Type, branches []reflect.Type, sets
 
 // placeTie places the branches of the tie g into placed, as placeBranches
 // states, or returns the ErrTypeMismatch error naming the branch type and B,
-// the name its tie's branches are named by.
+// the name its tie's branches are named by. No branch is placed by two ties:
+// a tie's alternatives each hold one field, named by the tie's identifier,
+// so no struct is admitted by alternatives of two ties.
 func (c *sealed[A]) placeTie(it reflect.Type, g tieGroup, branches []reflect.Type, sets branchSets, placed []int) error {
 	b := goname.Extend(it.Name(), g.word)
 	type ranked struct {
@@ -4560,9 +4562,6 @@ func (c *sealed[A]) placeTie(it reflect.Type, g tieGroup, branches []reflect.Typ
 	for i, bt := range branches {
 		if !slices.ContainsFunc(g.alts, func(a int) bool { return branchAdmits(c.alts[a], bt, sets) }) {
 			continue
-		}
-		if placed[i] >= 0 {
-			return fmt.Errorf("%w: branch %s of %s has the shape of two tied alternatives' branch structs codegen names apart", ErrTypeMismatch, bt, it)
 		}
 		rank, ok := goname.Rank(b, bt.Name())
 		if !ok {
@@ -4577,7 +4576,7 @@ func (c *sealed[A]) placeTie(it reflect.Type, g tieGroup, branches []reflect.Typ
 	for k, r := range in {
 		bt := branches[r.branch]
 		if k > 0 && in[k-1].rank == r.rank {
-			return fmt.Errorf("%w: branches %s and %s of %s are both named %s's rank %d", ErrTypeMismatch, branches[in[k-1].branch], bt, it, b, r.rank)
+			return fmt.Errorf("%w: branches %s and %s of %s both take rank %d among the names from %s", ErrTypeMismatch, branches[in[k-1].branch], bt, it, r.rank, b)
 		}
 		a := g.alts[k]
 		if !branchAdmits(c.alts[a], bt, sets) {
