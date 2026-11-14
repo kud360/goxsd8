@@ -662,43 +662,43 @@ var ErrTypeMismatch = errors.New("codec: T is not the type codegen emits for the
 //     doc's "# Naming" states, and holding the bare interface, never a
 //     pointer; a governing types' interface, its field and
 //     its branches are codegen's package doc's ("# Element declarations"),
-//     each branch's one field matched as an element-only content's field of
-//     that type is, never as a MixedChild, whatever content holds the
-//     interface's own field. Its branch types reach Decode only through
-//     [WithBranches]: it does not match when it is not an interface whose one
-//     method is unexported, or when its branch set, as WithBranches supplied
-//     it, is not one struct per alternative holding exactly the fields that
-//     alternative's branch holds, in order: an element or wildcard
-//     alternative's, a substitution group member's, a governing type's and a
-//     flattened slice's basic particle's one branch field, of its name and Go
-//     type; and a choice's model-group alternative's, inline or through
-//     <group ref>, for a sequence alternative codegen splices (codegen's
-//     package doc, "# Complex types") the fields its own particles give, as a
-//     struct's particles give them, and for any other the one field holding a
-//     nested choice's interface, a flattened particle's slice or an
-//     occurrence field's type for one occurrence: when no WithBranches
-//     supplies it for an interface with alternatives, or its count differs,
-//     or it holds a nil value, a type that is no struct, a type twice, or a
-//     branch matching no alternative an earlier branch did not match. A
-//     branch is held to the one alternative its fields could be: as many
-//     fields as that alternative's branch holds, each of its field's name,
-//     not embedded, and of a Go type it could be, position by position: V, *V
-//     or []V by its particle's occurrence, an element or wildcard
-//     alternative's {min occurs} 0 read as 1, V its Go type for a simple
-//     type, any struct for codegen's struct, any interface for a sealed
-//     interface, and the E, X or N its bullet above matches for a wildcard or
-//     an element of type xs:anyType; for a nested choice's field, an
-//     interface of one unexported method whose branch set, as WithBranches
-//     supplied it, holds one struct per alternative of that choice, each one
-//     its alternative's fields could be, or no set where the choice has no
-//     alternatives; for a flattened particle's, a slice of any interface of
-//     one unexported method; and, for an occurrence field's, its shape over
-//     any struct for a sequence and over any interface of one unexported
-//     method for a choice. A branch whose fields could be no alternative is
-//     held to the first alternative, in alternative order, that names it: a
-//     one-field alternative of complex type, a wildcard or a substitution
-//     group's interface whose field's name its one field has, or a
-//     model-group alternative whose fields' names its fields have, position
+//     each branch's one field matched as the field of a local declaration's
+//     particle of its type, occurring once, is in element-only content, never
+//     as a MixedChild, whatever content holds the interface's own field. Its
+//     branch types reach Decode only through [WithBranches]: it does not
+//     match when it is not an interface whose one method is unexported, or
+//     when its branch set, as WithBranches supplied it, is not one struct per
+//     alternative holding exactly the fields that alternative's branch holds,
+//     in order: an element or wildcard alternative's, a substitution group
+//     member's, a governing type's and a flattened slice's basic particle's
+//     one branch field, of its name and Go type; and a choice's model-group
+//     alternative's, inline or through <group ref>, for a sequence
+//     alternative codegen splices (codegen's package doc, "# Complex types")
+//     the fields its own particles give, as a struct's particles give them,
+//     and for any other the one field holding a nested choice's interface, a
+//     flattened particle's slice or an occurrence field's type for one
+//     occurrence: when no WithBranches supplies it for an interface with
+//     alternatives, or its count differs, or it holds a nil value, a type
+//     that is no struct, a type twice, or a branch matching no alternative an
+//     earlier branch did not match. A branch is held to the one alternative
+//     its fields could be: as many fields as that alternative's branch holds,
+//     each of its field's name, not embedded, and of a Go type it could be,
+//     position by position: V, *V or []V by its particle's occurrence, an
+//     element or wildcard alternative's {min occurs} 0 read as 1, V its Go
+//     type for a simple type, any struct for codegen's struct, any interface
+//     for a sealed interface, and the E, X or N its bullet above matches for
+//     a wildcard or an element of type xs:anyType; for a nested choice's
+//     field, an interface of one unexported method whose branch set, as
+//     WithBranches supplied it, holds one struct per alternative of that
+//     choice, each one its alternative's fields could be, or no set where the
+//     choice has no alternatives; for a flattened particle's, a slice of any
+//     interface of one unexported method; and, for an occurrence field's, its
+//     shape over any struct for a sequence and over any interface of one
+//     unexported method for a choice. A branch whose fields could be no
+//     alternative is held to the first alternative, in alternative order,
+//     that names it: a one-field alternative of complex type, a wildcard or a
+//     substitution group's interface whose field's name its one field has, or
+//     a model-group alternative whose fields' names its fields have, position
 //     by position; the error is that alternative's mismatch.
 //   - A union's sealed interface I, T's own or a field's, at any depth, a
 //     list's element and a variant's element included, whose variants reach
