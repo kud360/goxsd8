@@ -120,7 +120,7 @@ and imports `xsd`, `value`, `regex` and
 **[2] The infoset seam, the assessment skeleton, the XML adapter and the
 JSON adapter ship; the BER adapter does not.** `validate` exports the infoset views,
 `New`/`Validator`/`Result`, `Validator.ConditionallySelected`, the
-key-cta-select scan its walk makes, and `Validator.ConditionallySelectedIndex`,
+key-cta-select scan its walk makes, `Validator.ConditionallySelectedIndex`,
 that scan answered by position, `Validator.Governing`, the governance
 decision its walk makes, and `Validator.HandedDown`, the [inherited
 attributes] composition its walk makes, and imports `xsd`, `xsderr`, `value`, `xpath`,
