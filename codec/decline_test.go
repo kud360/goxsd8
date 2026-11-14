@@ -457,10 +457,10 @@ func TestDecodeUndeclaredRootXsiType(t *testing.T) {
 // TestDeclineConstruct pins DeclineError.Construct's contract: two declines
 // of one construct, from two schemas and declining sites, have equal
 // Constructs, and declines of two different constructs have different ones.
-// One row per construct group: the declaration, the content, by a content all
-// group codegen does not splice, a particle, a simple type and xsi:type. A
-// minted group's decls are mintedSchema's, which no instance validates
-// against, so CheckDecode alone probes them.
+// One row per construct group: the declaration, an abstract complex type, by
+// an element whose complex type has {abstract} true, a particle, a simple
+// type and xsi:type. A minted group's decls are mintedSchema's, which no
+// instance validates against, so CheckDecode alone probes them.
 func TestDeclineConstruct(t *testing.T) {
 	const a = `<s:a>x</s:a>`
 	type decl struct{ decls, attrs, content string }
