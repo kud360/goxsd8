@@ -115,7 +115,7 @@ func TestDecodeAnonymousTwins(t *testing.T) {
 // TestTableMatchedUnmatched pins tableRoot.matched where the selected type is
 // none of the table's governing types, which no instance Decode validated
 // reaches: xs:error at its slot, which goshape.GoverningTypes drops, and an
-// anonymous type at a slot the table does not have. Each is a plain error
+// anonymous type at a slot no governing type holds. Each is a plain error
 // naming the element's instance Loc and pointing at key-cta-ta-select, never
 // a branch.
 func TestTableMatchedUnmatched(t *testing.T) {
