@@ -2496,7 +2496,7 @@ type sequence struct {
 type childIndex struct {
 	// children maps each expanded name a particle outside every flattened
 	// reach takes to its takers (taker), whose target attributes a child
-	// where no Matcher does (attributeChild) and whose flags decide whether
+	// where no Matcher does (attributeChild) and whose inItem decides whether
 	// a later particle taking the name declines or forces the matcherSlot
 	// (particleShape); every name two particles take is so attributed by a
 	// Matcher, never by target. It is a lookup index only and never iterated
@@ -4985,14 +4985,13 @@ func elementV(run *bindRun, ct xsd.ComplexType, x *childIndex, inItem bool, el x
 // type are not examined, and with no member the interface has no branch. The
 // first of these in this order declines: each member in group order, by
 // declField's constructs; then particleShape's decline of the members'
-// expanded names, x and inItem as elementField's, the field holding a
-// substitution group's interface; then occursShape's plain error. No member
-// declines by a branch field of an earlier member's shape: two branch fields
-// sharing one (field.sharesBranch) have one name, the identifier their
-// members' local names render, so the two members are in one of the
-// interface's ties (tiesOf), which sealed.placeBranches tells apart by name.
-// The field's shape is occursShape's over a sealed interface, over a struct
-// where bare is false.
+// expanded names, x and inItem as elementField's; then occursShape's plain
+// error. No member declines by a branch field of an earlier member's shape:
+// two branch fields sharing one (field.sharesBranch) have one name, the
+// identifier their members' local names render, so the two members are in
+// one of the interface's ties (tiesOf), which sealed.placeBranches tells
+// apart by name. The field's shape is occursShape's over a sealed interface,
+// over a struct where bare is false.
 func groupField(run *bindRun, ct xsd.ComplexType, x *childIndex, inItem bool, head xsd.ElementDeclaration, members []xsd.ElementDeclaration, occurs xsd.Occurs, bare bool) (field, []xsd.QName, error) {
 	group := &sealed[field]{p: run.p}
 	byName := map[xsd.QName]int{}
