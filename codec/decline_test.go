@@ -33,7 +33,8 @@ func vStruct(name, attrs string) string {
 // spliced is a sequence alternative of particle alone, which codegen splices
 // into a branch struct holding particle's one field. Its word is sequence,
 // so beside an element alternative whose field shares that field's shape it
-// is in no tie of the choice (tiesOf), and the pair declines as one shape.
+// is in no word group of the choice (wordGroups), so in no tie, and the pair
+// declines as one shape.
 func spliced(particle string) string {
 	return `<xs:sequence>` + particle + `</xs:sequence>`
 }
