@@ -52,8 +52,6 @@ func TestDecodeDeclines(t *testing.T) {
 		construct construct
 		line, col int
 	}{
-		{"two anonymous governing types", `<xs:element name="r"><xs:alternative test="@k = '1'"><xs:complexType><xs:sequence><xs:element name="a" type="xs:string"/></xs:sequence><xs:attribute name="k"/></xs:complexType></xs:alternative>
-			<xs:alternative><xs:complexType><xs:sequence><xs:element name="a" type="xs:string"/></xs:sequence></xs:complexType></xs:alternative></xs:element>`, "", a, constructAnonymousTypes, 1, 1},
 		{"a nilled document element selecting xs:error beside xs:anyType", `<xs:element name="r" nillable="true"><xs:alternative test="@xsi:nil" type="xs:error"/></xs:element>`, ` xsi:nil="true"`, "", constructNillable, 1, 1},
 		{"a nillable declaration of two governing types", nillableTables, "", a, constructNillable, 1, 1},
 		{"governing types whose branch structs share a shape, t and T", `<xs:complexType name="b0"><xs:sequence><xs:element name="a" type="xs:string"/></xs:sequence><xs:attribute name="k" type="xs:string"/></xs:complexType>

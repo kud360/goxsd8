@@ -243,11 +243,13 @@ var ErrTypeMismatch = errors.New("codec: T is not the type codegen emits for the
 // supplied value whose attribute is present is never mapped. An element E
 // whose declaration has two or more governing types fills, past its xsi:type
 // and before its attributes, the branch of the type
-// validate.Validator.ConditionallySelected selects for E's [attributes]
-// (§3.3.4.1 key-cta-select), under the [inherited attributes]
-// validate.Validator.HandedDown composes for E from its ancestors' (§3.3.5.6
-// e-inherited_attributes), and never another: the selection Assess made,
-// which finds neither item.
+// validate.Validator.ConditionallySelectedIndex selects, by its position in
+// the {type table}, for E's [attributes] (§3.3.4.1 key-cta-select), under the
+// [inherited attributes] validate.Validator.HandedDown composes for E from its
+// ancestors' (§3.3.5.6 e-inherited_attributes), and never another: the
+// selection Assess made, which finds neither item. The type is matched to its
+// branch by that position's slot where it is anonymous and by its name where
+// it is named.
 //
 // Each child element fills the field of the particle validation attributes
 // it to (§3.4.4.4 key-att-to): of a content model with no wildcard or nested
@@ -308,9 +310,7 @@ var ErrTypeMismatch = errors.New("codec: T is not the type codegen emits for the
 //     sealed interface (the fourth bullet), whose branch field codegen wraps,
 //     when that one type is other than xs:anyType itself (§3.4.7
 //     any-type-itself), whose raw content holds xsi:nil among its attributes
-//     (item 6); then, of two or more governing types, two anonymous ones,
-//     since the type the validator selects could then be matched to no one
-//     branch. Of exactly one governing type, the declaration is examined as if
+//     (item 6). Of exactly one governing type, the declaration is examined as if
 //     that type were its {type definition}, by the bullet below. Of two or
 //     more, each is examined in slot order as the {type definition} of a local
 //     element declaration occurring exactly once is, the first declining one's
@@ -4616,10 +4616,8 @@ func bindSimpleRoot(p *pipeline, decl xsd.ElementDeclaration, st *xsd.SimpleType
 // xs:error, which a ·nilled· instance is valid against (cvc-type clause 3.1.3 "If E is
 // not nilled") and which codegen's sum wraps branch by branch, and, where wraps is false,
 // a site that holds no Nillable, a substitution group's branch field, that type is
-// xs:anyType itself, a slot that does not resolve declining so too; then, of two or more
-// governing types, two anonymous ones, whose branch the selection could not be matched to
-// (tableRoot.branchOf). A slot that does not resolve, of a declaration that is not
-// nillable, is goshape.GoverningTypes' plain error.
+// xs:anyType itself, a slot that does not resolve declining so too. A slot that does not
+// resolve, of a declaration that is not nillable, is goshape.GoverningTypes' plain error.
 func governingTypes(schema *xsd.Schema, decl xsd.ElementDeclaration, wraps bool) (types []goshape.GoverningType, wrapped bool, err error) {
 	types, errorSlot, err := goshape.GoverningTypes(schema, decl, func(ct xsd.ComplexType) ([]xsd.TypeDefinition, error) {
 		return []xsd.TypeDefinition{ct}, nil
@@ -4631,21 +4629,7 @@ func governingTypes(schema *xsd.Schema, decl xsd.ElementDeclaration, wraps bool)
 	if err != nil {
 		return nil, false, fmt.Errorf("codec: %w", err)
 	}
-	if len(types) > 1 && anonymousTypes(types) > 1 {
-		return nil, false, decline(constructAnonymousTypes, declSubject(decl))
-	}
 	return types, nillable && !anyTypeItself(types[0].Type()), nil
-}
-
-// anonymousTypes counts the anonymous types among types.
-func anonymousTypes(types []goshape.GoverningType) int {
-	n := 0
-	for _, g := range types {
-		if g.Type().Name() == (xsd.QName{}) {
-			n++
-		}
-	}
-	return n
 }
 
 // anyTypeName is the expanded name of xs:anyType.

@@ -149,45 +149,48 @@ func (b *boundTable) fill(r *xmltree.Reader, root *xmltree.StartElement, out ref
 
 // selected returns the index in t.types of the type the {type table} t.table
 // ·conditionally selects· for the element start (§3.3.4.1 key-cta-select):
-// validate.Validator.ConditionallySelected's answer, the selection Assess made,
-// for start's [attributes] as validate/xmlsrc presents them and p.inherited,
-// start's [inherited attributes], resolved and matched to its branch
-// (tableRoot.branchOf). Decode validated the instance first, and Assess
-// records a withheld selection as undecided (item 4 of Decode's doc), so a
-// withheld one, a slot that does not resolve, and a type that is no
-// governing type, xs:error's, are each a plain error naming start's instance
-// Loc and key-cta-ta-select, a defect of Decode's: no fallback to the
-// declared or default type is ever taken.
+// validate.Validator.ConditionallySelectedIndex's answer, the selection Assess
+// made, by position, for start's [attributes] as validate/xmlsrc presents them
+// and p.inherited, start's [inherited attributes], mapped to its slot
+// (goshape.TableSlot), resolved and matched to its branch (tableRoot.matched).
+// Decode validated the instance first, and Assess records a withheld selection
+// as undecided (item 4 of Decode's doc), so a withheld one, a position no slot
+// holds and a slot that does not resolve are each a plain error naming start's
+// instance Loc and key-cta-ta-select, as tableRoot.matched's answer of no
+// branch is, a defect of Decode's: no fallback to the declared or default type
+// is ever taken.
 func (t *tableRoot) selected(p *pipeline, start *xmltree.StartElement) (int, error) {
 	name := expanded(start.Name())
-	slot, decided := p.validator.ConditionallySelected(t.table, infosetAttributes(start), p.inherited)
+	index, decided := p.validator.ConditionallySelectedIndex(t.table, infosetAttributes(start), p.inherited)
 	if !decided {
 		return 0, fmt.Errorf("codec: %s: element %s: its {type table} withholds the selection (key-cta-ta-select) of an instance validate did not leave undecided", start.Loc(), name)
 	}
-	td, resolved := p.schema.ResolvedType(slot)
-	if !resolved {
+	slot, ref, mapped := goshape.TableSlot(t.table, index)
+	td, resolved := p.schema.ResolvedType(ref)
+	if !mapped || !resolved {
 		return 0, fmt.Errorf("codec: %s: element %s: the type its {type table} selects (key-cta-ta-select) does not resolve", start.Loc(), name)
 	}
-	i, ok := t.branchOf(td)
-	if !ok {
-		return 0, fmt.Errorf("codec: %s: element %s: the type its {type table} selects (key-cta-ta-select) is none of its governing types", start.Loc(), name)
-	}
-	return i, nil
+	return t.matched(start, slot, td)
 }
 
-// branchOf returns the index in t.types of td, as codegen's identity holds
-// types one (goshape.GoverningTypes): the first type named as td is, for a
-// named td, and for an anonymous one the one anonymous type governingTypes
-// lets t hold, since every slot of the table but xs:error's holds a governing
-// type and no two anonymous types are one.
-func (t *tableRoot) branchOf(td xsd.TypeDefinition) (int, bool) {
+// matched returns the index in t.types of td, the type the {type table}
+// t.table ·conditionally selects· for the element start, held at slot, as
+// codegen's identity holds types one (goshape.GoverningTypes) and as Decode's
+// doc matches them: for a named td, the first type named as td is, which holds
+// a type a later slot holds too, and for an anonymous td, the type whose Slot
+// is slot (validate.Validator.ConditionallySelectedIndex's doc says why). No
+// type is compared to td by value. A td that is none of t.types,
+// xs:error's, which GoverningTypes drops, is a plain error naming start's
+// instance Loc and pointing at key-cta-ta-select.
+func (t *tableRoot) matched(start *xmltree.StartElement, slot goshape.Slot, td xsd.TypeDefinition) (int, error) {
 	name := td.Name()
+	anonymous := name == (xsd.QName{})
 	for i, g := range t.types {
-		if g.Type().Name() == name {
-			return i, true
+		if anonymous && g.Slot() == slot || !anonymous && g.Type().Name() == name {
+			return i, nil
 		}
 	}
-	return 0, false
+	return 0, fmt.Errorf("codec: %s: element %s: the type its {type table} selects (key-cta-ta-select) at its %s is none of its governing types", start.Loc(), expanded(start.Name()), slot.Name())
 }
 
 // handDown sets p.inherited to the [inherited attributes] of the children of

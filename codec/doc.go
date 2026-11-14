@@ -253,8 +253,6 @@
 //     nor flattens and that is no choice occurring exactly once, whatever its
 //     occurrence.
 //   - A complex type with {abstract} true.
-//   - An element declaration two of whose governing types are anonymous;
-//     item 5 of [Decode]'s doc states when.
 //   - A nillable element (codegen's package doc, "# Element declarations")
 //     of two or more governing types, or of a {type table} slot holding
 //     xs:error, whose interface codegen wraps branch by branch, and one of a
@@ -278,7 +276,7 @@
 //
 // An element whose declaration has two or more governing types decodes into
 // the branch of the type the validator selected
-// (validate.Validator.ConditionallySelected), as [Decode]'s doc states, and
+// (validate.Validator.ConditionallySelectedIndex), as [Decode]'s doc states, and
 // codec never evaluates a {test} itself.
 //
 // A value constraint of an element declaration or attribute use, default or
