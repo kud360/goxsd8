@@ -197,22 +197,17 @@
 // cvc-accept clause 2.3.2), whose field and alternatives item 6 of
 // [Decode]'s doc states.
 //
-// Mixed content (Structures §3.4.1), read from the type's own {content type}
-// as codegen reads it, decodes into the struct codegen emits for it
-// (codegen's package doc, "# Particles"), its Text and each child's Tail
-// holding the instance's character data raw; [Decode]'s doc states the
-// fields.
+// Mixed content (Structures §3.4.1) decodes into the struct codegen emits for
+// it (codegen's package doc, "# Complex types"); [Decode]'s doc states how its
+// fields are matched and filled.
 //
 // Each wildcard particle decodes into its own AnyElement field codegen emits,
 // AnyChild in mixed content, or a choice's branch holding one, each child
 // attributed to that particle held raw; [Decode]'s doc states the field,
 // which children are attributed to it, and the raw content.
 //
-// A complex type's {open content} (Structures §3.4.2.3.3 dcl.ctd.ctcc.common
-// clauses 5 and 6), its own, one an extension inherits or one a
-// <defaultOpenContent> brings, read from the finalized {content type},
-// decodes into the slice of AnyElement, or of AnyChild in mixed content,
-// codegen emits after the particle fields, each child validation attributes
+// A complex type's {open content} decodes into the field codegen emits for it
+// (codegen's package doc, "# Open content"), each child validation attributes
 // to it (§3.4.4.4) held raw, whatever its {mode} and its wildcard's
 // constraints; [Decode]'s doc states the field and which children it holds.
 //

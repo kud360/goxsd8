@@ -16,22 +16,22 @@ import (
 const snGroups = `<xs:element name="g" type="xs:string"/><xs:element name="m" type="xs:string" substitutionGroup="s:g"/>`
 
 // The shared-name schemas, each declaring s:r, whose content model holds two
-// element particles taking one expanded name, neither inside an occurrence
-// field's item nor both holding a substitution group's interface:
-// snFlatSchema's sequence(a, b, a); snSpliceSchema's sequence(a, sequence(b,
-// a)), the inner sequence spliced; snSiblingSchema's sequence(b, sequence(b,
-// c)), likewise; snAroundSchema's sequence(b, sequence(c?) repeated, b), the
-// two b siblings around a nested reach; snWildSchema's sequence(a, a, any not
-// s:a), wild029's shape; snGroupDeclSchema's sequence(<element ref> g, m),
-// the head's group holding m before m's own particle; snDeclGroupSchema's
-// sequence(m, <element ref> g), the reverse; snGroupRefSchema's
-// sequence(<element ref> g, <element ref> m); snLocalRefSchema's sequence(a,
-// <element ref> a), a local declaration and a top-level one;
-// snChoiceAfterSchema's sequence(a, choice(a, b)) and snChoiceBeforeSchema's
-// sequence(choice(a, b), a), the choice bound in place, mgO006's shape;
-// snAltsSchema's content choice(sequence(a, b), sequence(c, a)), two spliced
-// alternatives; and snAltSeqSchema's content choice(sequence(a, b, a), b), two
-// particles of one spliced alternative, mgQ003's shape.
+// element particles taking one expanded name that item 5 of Decode's doc lets
+// decode: snFlatSchema's sequence(a, b, a); snSpliceSchema's sequence(a,
+// sequence(b, a)), the inner sequence spliced; snSiblingSchema's sequence(b,
+// sequence(b, c)), likewise; snAroundSchema's sequence(b, sequence(c?)
+// repeated, b), the two b siblings around a nested reach; snWildSchema's
+// sequence(a, a, any not s:a), wild029's shape; snGroupDeclSchema's
+// sequence(<element ref> g, m), the head's group holding m before m's own
+// particle; snDeclGroupSchema's sequence(m, <element ref> g), the reverse;
+// snGroupRefSchema's sequence(<element ref> g, <element ref> m);
+// snLocalRefSchema's sequence(a, <element ref> a), a local declaration and a
+// top-level one; snChoiceAfterSchema's sequence(a, choice(a, b)) and
+// snChoiceBeforeSchema's sequence(choice(a, b), a), the choice bound in
+// place, mgO006's shape; snAltsSchema's content choice(sequence(a, b),
+// sequence(c, a)), two spliced alternatives; and snAltSeqSchema's content
+// choice(sequence(a, b, a), b), two particles of one spliced alternative,
+// mgQ003's shape.
 const (
 	snFlatSchema         = `<xs:element name="r"><xs:complexType><xs:sequence>` + snA + snB + snA + `</xs:sequence></xs:complexType></xs:element>`
 	snSpliceSchema       = `<xs:element name="r"><xs:complexType><xs:sequence>` + snA + `<xs:sequence>` + snB + snA + `</xs:sequence></xs:sequence></xs:complexType></xs:element>`
@@ -183,16 +183,15 @@ func TestSharedNameTypesAreCodegens(t *testing.T) {
 }
 
 // TestDecodeSharedName pins the shared-name lift: two element particles of
-// one content model taking one expanded name, neither bound in an occurrence
-// field's item nor both holding a substitution group's interface, a
-// declaration's field beside another's or beside a group's, flat, spliced,
-// around a nested reach, beside a wildcard or a choice bound in place, or
-// across a content choice's alternatives, put each child to the field of the
-// particle the Matcher attributes it to by position (§3.8.4.1 cvc-accept;
-// §3.8.6.4 cos-nonambig), never by its name, a member of g's group to g's
-// particle's field where the Matcher attributes it to that particle's
-// position (cvc-accept clause 2.3.2). CheckDecode returns nil for each row's
-// T.
+// one content model taking one expanded name that item 5 of Decode's doc
+// lets decode, a declaration's field beside another's or beside a group's,
+// flat, spliced, around a nested reach, beside a wildcard or a choice bound
+// in place, or across a content choice's alternatives, put each child to the
+// field of the particle the Matcher attributes it to by position (§3.8.4.1
+// cvc-accept; §3.8.6.4 cos-nonambig), never by its name, a member of g's
+// group to g's particle's field where the Matcher attributes it to that
+// particle's position (cvc-accept clause 2.3.2). CheckDecode returns nil for
+// each row's T.
 func TestDecodeSharedName(t *testing.T) {
 	w := anyElement{Space: "urn:o", Local: "w"}
 	rows := []struct {

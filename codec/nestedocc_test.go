@@ -364,8 +364,8 @@ func TestDecodeNestedOccurrenceGroupPath(t *testing.T) {
 // inside an occurrence field's item, with {max occurs} above 1 and 0..1 alike,
 // for the reasons sequence.nested states, as constructNestedGroup; and an
 // element particle of a nested occurrence's item sharing an expanded name with
-// an earlier sibling particle, as constructSharedName, since a particle bound
-// in an occurrence field's item declines any share (particleShape).
+// an earlier sibling particle, as constructSharedName, as item 5 of Decode's
+// doc states (particleShape).
 func TestDecodeNestedOccurrenceDeclines(t *testing.T) {
 	rows := []struct {
 		name, decls, body string
