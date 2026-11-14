@@ -5129,8 +5129,7 @@ func typedField(run *bindRun, el xsd.ElementDeclaration, td xsd.TypeDefinition, 
 // occurs, which takes the instance children named by decls, or the
 // constructSharedName decline item 5 of Decode's doc states for the first of
 // decls, in order, whose expanded name an earlier particle x indexes takes
-// (childIndex.children), where either particle is bound in an occurrence
-// field's item, inItem the later particle's as taker states, or
+// (childIndex.children), inItem the later particle's as taker states, or
 // occursShape's plain error, in that order, sealed reporting whether its V
 // is a sealed interface. Every shared name that does not decline forces x's
 // matcherSlot (childIndex.slot), so that a Matcher attributes each child of
