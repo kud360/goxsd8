@@ -3113,12 +3113,10 @@ type tieGroup struct {
 	alts []int
 }
 
-// tiesOf returns the ties of the alternatives whose branch words are words,
-// in alternative order, placed[i] reporting whether alternative i is an
-// element alternative or a substitution group member: each group of two or
-// more alternatives whose words render one identifier (goname.Identifier),
-// every one of them placed, so a wildcard's word any or a model group's
-// compositor keeps the identifier it renders out of every tie. An
+// tiesOf returns the ties, as item 6 of Decode's doc defines them, of the
+// alternatives whose branch words are words, in alternative order, placed[i]
+// reporting whether alternative i is an element alternative or a
+// substitution group member, the only alternatives a tie holds. An
 // alternative whose word is "" is in no group.
 func tiesOf(words []string, placed []bool) []tieGroup {
 	var groups []tieGroup
@@ -4512,15 +4510,12 @@ func (c *sealed[A]) checkSite(it reflect.Type, site string, cx *checkContext) (*
 // branches, the branch types of it as WithBranches supplied them, is placed
 // at, under sets, or -1 for a branch no alternative admits, or the
 // ErrTypeMismatch error of a set holding a nil value, a type that is no
-// struct or a type twice, or one c's ties cannot place. It places the
-// branches of each tie first, B being it's name extended by the tie's word
-// (goname.Extend): those the tie's alternatives admit (branchAdmits), as
-// many as the tie has alternatives, each named B or B followed by a decimal
-// from 2 (goname.Rank), no two of one rank, go to the tie's alternatives in
-// ascending rank, each admitted by its own; every other branch goes to the
-// first alternative admitting it (admitting), which is in no tie, since a
-// tie's alternatives admit only the branches the tie placed. Both checkSite
-// and holds place through it, so that CheckDecode and Decode place alike.
+// struct or a type twice, or one c's ties cannot place. It places each tie's
+// branches first, as item 6 of Decode's doc states (placeTie); every other
+// branch goes to the first alternative admitting it (admitting), which is in
+// no tie, since a tie's alternatives admit only the branches the tie placed.
+// Both checkSite and holds place through it, so that CheckDecode and Decode
+// place alike.
 func (c *sealed[A]) placeBranches(it reflect.Type, branches []reflect.Type, sets branchSets) ([]int, error) {
 	placed := make([]int, len(branches))
 	for i, bt := range branches {
@@ -4548,11 +4543,12 @@ func (c *sealed[A]) placeBranches(it reflect.Type, branches []reflect.Type, sets
 	return placed, nil
 }
 
-// placeTie places the branches of the tie g into placed, as placeBranches
-// states, or returns the ErrTypeMismatch error naming the branch type and B,
-// the name its tie's branches are named by. No branch is placed by two ties:
-// a tie's alternatives each hold one field, named by the tie's identifier,
-// so no struct is admitted by alternatives of two ties.
+// placeTie places the branches of the tie g of it into placed, as item 6 of
+// Decode's doc states, B the interface's name extended by g's word (goname.Extend) and
+// a branch's suffix read by goname.Rank, or returns the ErrTypeMismatch error naming
+// the branch type and B. No branch is placed by two ties: a tie's alternatives each
+// hold one field, named by the tie's identifier, so no struct is admitted by
+// alternatives of two ties.
 func (c *sealed[A]) placeTie(it reflect.Type, g tieGroup, branches []reflect.Type, sets branchSets, placed []int) error {
 	b := goname.Extend(it.Name(), g.word)
 	type ranked struct {
