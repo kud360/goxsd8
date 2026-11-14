@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log/slog"
 	"slices"
+	"strconv"
 	"time"
 
 	"github.com/kud360/goxsd8/value"
@@ -366,6 +367,21 @@ const (
 	// (§3.3.5.1), as the package's Contract section details.
 	NotProvenInvalid
 )
+
+// String returns the constant's name, such as "Undecided", or "Standing(N)"
+// for a value that is no arm, the zero value included.
+func (s Standing) String() string {
+	switch s {
+	case Charged:
+		return "Charged"
+	case Undecided:
+		return "Undecided"
+	case NotProvenInvalid:
+		return "NotProvenInvalid"
+	default:
+		return "Standing(" + strconv.Itoa(int(s)) + ")"
+	}
+}
 
 // Standing returns where r leaves its document, computed from its
 // violations, its unevaluated checks and its source fault on every call.
