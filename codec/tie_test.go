@@ -17,12 +17,19 @@ import (
 // member's field type orders the tie against its branches. tieChoiceSchema's
 // r is a choice of a_a, a.a and a-a, each of xs:string, beside a top-level
 // rAA that claims RAA first, so codegen names the branches RAA2, RAA3 and
-// RAA4, never RAA.
+// RAA4, never RAA. shapeChoiceSchema's r is a choice of a, an xs:string, and
+// A, an xs:int, whose branches share no shape, so they are no tie; codegen
+// names them RA and RA2. partTieSchema's r is a choice of a_a, an xs:int,
+// then a.a and a-a, each an xs:string, so its tie is a.a and a-a alone;
+// codegen names them RAA, RAA2 and RAA3, the tie's rank 1 a hole.
 const (
 	tieGroupSchema = `<xs:element name="r"><xs:complexType><xs:sequence><xs:element ref="s:C"/><xs:element ref="s:h"/></xs:sequence></xs:complexType></xs:element>` +
 		`<xs:element name="h" abstract="true" type="xs:string"/><xs:element name="c" type="xs:string" substitutionGroup="s:h"/><xs:element name="C" type="xs:string" substitutionGroup="s:h"/>`
 	tieChoiceSchema = `<xs:element name="rAA" type="xs:string"/><xs:element name="r"><xs:complexType><xs:choice>` +
 		`<xs:element name="a_a" type="xs:string"/><xs:element name="a.a" type="xs:string"/><xs:element name="a-a" type="xs:string"/></xs:choice></xs:complexType></xs:element>`
+	shapeChoiceSchema = `<xs:element name="r"><xs:complexType><xs:choice><xs:element name="a" type="xs:string"/><xs:element name="A" type="xs:int"/></xs:choice></xs:complexType></xs:element>`
+	partTieSchema     = `<xs:element name="r"><xs:complexType><xs:choice>` +
+		`<xs:element name="a_a" type="xs:int"/><xs:element name="a.a" type="xs:string"/><xs:element name="a-a" type="xs:string"/></xs:choice></xs:complexType></xs:element>`
 )
 
 // tieGR to TieHC2 are tieGroupSchema's R, C, HSubstitutionGroup,
@@ -66,10 +73,34 @@ func (Alpha) isTieR()  {}
 func (Beta) isTieR()   {}
 func (tieInt) isTieR() {}
 
+// shapeR to shapeFoo stand for shapeChoiceSchema's R, RA2 and RA, and partR
+// to PartRAA3 for partTieSchema's R, RAA, RAA2 and RAA3, which
+// TestTieTypesAreCodegens pins in shape. shapeBar, shapeFoo and partInt
+// carry names codegen does not give them, since Decode places a branch in
+// no tie by shape alone (item 6 of Decode's doc).
+type (
+	shapeR   interface{ isShapeR() }
+	shapeBar struct{ A int32 }
+	shapeFoo struct{ A string }
+
+	partR    interface{ isPartR() }
+	partInt  struct{ AA int32 }
+	PartRAA2 struct{ AA string }
+	PartRAA3 struct{ AA string }
+)
+
+func (shapeBar) isShapeR() {}
+func (shapeFoo) isShapeR() {}
+func (partInt) isPartR()   {}
+func (PartRAA2) isPartR()  {}
+func (PartRAA3) isPartR()  {}
+
 // The tie schemas' branch sets, each supplied against alternative order.
 var (
-	tieGroupBranches  = WithBranches[tieH](TieHC2{}, TieHC{})
-	tieChoiceBranches = WithBranches[tieR](TieRAA4{}, TieRAA2{}, TieRAA3{})
+	tieGroupBranches    = WithBranches[tieH](TieHC2{}, TieHC{})
+	tieChoiceBranches   = WithBranches[tieR](TieRAA4{}, TieRAA2{}, TieRAA3{})
+	shapeChoiceBranches = WithBranches[shapeR](shapeBar{}, shapeFoo{})
+	partTieBranches     = WithBranches[partR](PartRAA3{}, PartRAA2{}, partInt{})
 )
 
 // TestTieTypesAreCodegens pins that the tie schemas' types are codegen's.
@@ -93,6 +124,17 @@ func TestTieTypesAreCodegens(t *testing.T) {
 			"type RAA3 struct {\n\tAA string\n}\n\nfunc (RAA3) isR() {}\n",
 			"type RAA4 struct {\n\tAA string\n}\n\nfunc (RAA4) isR() {}\n",
 		}},
+		{shapeChoiceSchema, []string{
+			"type R interface {\n\tisR()\n}\n",
+			"type RA struct {\n\tA string\n}\n\nfunc (RA) isR() {}\n",
+			"type RA2 struct {\n\tA int32\n}\n\nfunc (RA2) isR() {}\n",
+		}},
+		{partTieSchema, []string{
+			"type R interface {\n\tisR()\n}\n",
+			"type RAA struct {\n\tAA int32\n}\n\nfunc (RAA) isR() {}\n",
+			"type RAA2 struct {\n\tAA string\n}\n\nfunc (RAA2) isR() {}\n",
+			"type RAA3 struct {\n\tAA string\n}\n\nfunc (RAA3) isR() {}\n",
+		}},
 	}
 	for _, row := range rows {
 		gen := generated(t, schemaOf(t, row.decls))
@@ -106,9 +148,12 @@ func TestTieTypesAreCodegens(t *testing.T) {
 
 // TestDecodeTie pins item 6's tie: the branches of substitution group
 // members, and of choice alternatives, whose local names render one Go
-// identifier, each set supplied against alternative order, go to their
-// alternatives by name, so each child decodes into its own declaration's
-// branch; CheckDecode returns nil for each row's T.
+// identifier and whose branch shapes share, each set supplied against
+// alternative order, go to their alternatives by name, so each child decodes
+// into its own declaration's branch; a branch of such an alternative whose
+// shape shares no other's, partTieSchema's a_a and both of
+// shapeChoiceSchema's, goes to its alternative by shape, whatever its name;
+// CheckDecode returns nil for each row's T.
 func TestDecodeTie(t *testing.T) {
 	rows := []struct {
 		name, decls, body string
@@ -120,6 +165,11 @@ func TestDecodeTie(t *testing.T) {
 		{"a choice's alternative a_a", tieChoiceSchema, "<s:a_a>v</s:a_a>", into[tieR](tieChoiceBranches), tieR(TieRAA2{AA: "v"})},
 		{"a choice's alternative a.a", tieChoiceSchema, "<s:a.a>v</s:a.a>", into[tieR](tieChoiceBranches), tieR(TieRAA3{AA: "v"})},
 		{"a choice's alternative a-a", tieChoiceSchema, "<s:a-a>v</s:a-a>", into[tieR](tieChoiceBranches), tieR(TieRAA4{AA: "v"})},
+		{"no tie, a's branch by shape", shapeChoiceSchema, "<s:a>v</s:a>", into[shapeR](shapeChoiceBranches), shapeR(shapeFoo{A: "v"})},
+		{"no tie, A's branch by shape", shapeChoiceSchema, "<s:A>3</s:A>", into[shapeR](shapeChoiceBranches), shapeR(shapeBar{A: 3})},
+		{"a tie beside a_a, a_a's branch by shape", partTieSchema, "<s:a_a>3</s:a_a>", into[partR](partTieBranches), partR(partInt{AA: 3})},
+		{"a tie beside a_a, a.a's branch by name", partTieSchema, "<s:a.a>v</s:a.a>", into[partR](partTieBranches), partR(PartRAA2{AA: "v"})},
+		{"a tie beside a_a, a-a's branch by name", partTieSchema, "<s:a-a>v</s:a-a>", into[partR](partTieBranches), partR(PartRAA3{AA: "v"})},
 	}
 	for _, row := range rows {
 		t.Run(row.name, func(t *testing.T) {
