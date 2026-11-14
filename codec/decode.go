@@ -4480,7 +4480,7 @@ func continues(schema *xsd.Schema, group xsd.ModelGroup, last, next []int, count
 			return false, fmt.Errorf("the Matcher position %v is no basic particle's after %v", next, last)
 		}
 		if i != last[d] {
-			return g.Compositor() != xsd.CompositorChoice && i > last[d], nil
+			return g.Compositor() == xsd.CompositorAll || g.Compositor() == xsd.CompositorSequence && i > last[d], nil
 		}
 		p := particles[i]
 		if d == len(next)-1 {
@@ -4873,16 +4873,7 @@ func contentGroup(schema *xsd.Schema, content xsd.ElementContent, typeSubject st
 	}
 	occurs := content.Particle.Occurs()
 	switch group.Compositor() {
-	case xsd.CompositorAll:
-		splice, err := goshape.Splices(schema, group, occurs)
-		if err != nil {
-			return xsd.Particle{}, xsd.ModelGroup{}, 0, 0, fmt.Errorf("codec: %s: %w", typeSubject, err)
-		}
-		if !splice {
-			return xsd.Particle{}, xsd.ModelGroup{}, 0, constructAllOccurs, nil
-		}
-		return content.Particle, group, armOnce, 0, nil
-	case xsd.CompositorSequence:
+	case xsd.CompositorAll, xsd.CompositorSequence:
 		splice, err := goshape.Splices(schema, group, occurs)
 		if err != nil {
 			return xsd.Particle{}, xsd.ModelGroup{}, 0, 0, fmt.Errorf("codec: %s: %w", typeSubject, err)

@@ -97,7 +97,6 @@ type construct uint8
 // occurrence field's item, ahead of the particles after it.
 const (
 	constructNillable construct = iota + 1
-	constructAllOccurs
 	constructNestedGroup
 	constructAbstractTypeElement
 	constructSharedName
@@ -110,7 +109,6 @@ const (
 // constructNames holds, indexed by construct, each construct's name.
 var constructNames = [...]string{
 	constructNillable:            "an element declaration with {nillable} true",
-	constructAllOccurs:           "a content all group with {min occurs} 0 whose model group is not emptiable",
 	constructNestedGroup:         "a nested model group particle",
 	constructAbstractTypeElement: "an element declaration whose complex {type definition} has {abstract} true",
 	constructSharedName:          "two particles taking one expanded name, each by its own element declaration or a member of its substitution group",

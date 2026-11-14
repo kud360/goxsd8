@@ -573,11 +573,11 @@ func TestDecodeNestedXsiType(t *testing.T) {
 // declaration's {type definition}, as a construct of the document element's
 // type is, and no path from the document element.
 func TestDeclineErrorTextNested(t *testing.T) {
-	schema := schemaOf(t, sequenceOf(`<xs:element name="a"><xs:complexType><xs:all minOccurs="0"><xs:element name="b" type="xs:string"/></xs:all></xs:complexType></xs:element>`))
-	data := instanceOf("", `<s:a><s:b>x</s:b></s:a>`)
+	schema := schemaOf(t, abstractParticleSchema)
+	data := instanceOf("", "")
 	mustAccept(t, schema, data)
 	_, err := Decode[struct{}](schema, strict.New(), data)
-	const want = "?:1:1: codec does not decode a content all group with {min occurs} 0 whose model group is not emptiable: the {type definition} of element {urn:s}a declared at s.xsd:1:231, a type defined at s.xsd:1:252; a decoder refusal, not a schema or instance fault"
+	const want = "?:1:1: codec does not decode an element declaration whose complex {type definition} has {abstract} true: the {type definition} of element {urn:s}a declared at s.xsd:1:274, a type defined at s.xsd:1:181; a decoder refusal, not a schema or instance fault"
 	if err == nil || err.Error() != want {
 		t.Errorf("error = %v, want %q", err, want)
 	}
