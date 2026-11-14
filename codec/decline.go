@@ -81,10 +81,10 @@ func (c Construct) String() string { return c.c.name() }
 type construct uint8
 
 // The construct values, in the order Decode finds them: the document
-// element's declaration, its type, its content, each particle in order, its
+// element's declaration, its type's content, each particle in order, its
 // attribute uses in order, and the instance. A particle's complex type,
 // examined at the particle, declines by the same constructs from
-// constructAllOccurs on, and by constructAbstractTypeElement, which sits
+// constructNestedGroup on, and by constructAbstractTypeElement, which sits
 // with the particle's though the document element's type declines by it too,
 // ahead of its content. The one of a simple type, constructOtherPrimitive,
 // sits with the particle's, though a document element of simple type, a

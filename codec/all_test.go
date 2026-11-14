@@ -272,19 +272,35 @@ func TestDecodeAllOccurrence(t *testing.T) {
 	}
 }
 
-// TestCheckDecodeAllOccurrenceValue pins that a T whose occurrence field
-// holds the struct for one occurrence as a value, where codegen emits a
-// pointer to it for an all group with {min occurs} 0 (allOccASchema), is
-// ErrTypeMismatch alone, no decline, naming the field and the all group.
-func TestCheckDecodeAllOccurrenceValue(t *testing.T) {
-	type valued struct{ All allOccAItem }
-	err := CheckDecode[valued](schemaOf(t, allOccASchema), rootName)
-	const want = "field 0 of codec.valued is All codec.allOccAItem where codegen emits All, *I for the type I of one occurrence of the all"
-	if err == nil || err.Error() != ErrTypeMismatch.Error()+": "+want {
-		t.Errorf("CheckDecode = %v, want %q", err, want)
+// TestCheckDecodeAllOccurrenceMismatch pins that a T whose occurrence field
+// for an all group with {min occurs} 0 (allOccASchema) is not codegen's, a
+// pointer to the struct for its one occurrence, is ErrTypeMismatch alone, no
+// decline, its whole message naming the field and the all group: the struct
+// held as a value, a pointer to no struct, and a struct of another width.
+func TestCheckDecodeAllOccurrenceMismatch(t *testing.T) {
+	type (
+		valued    struct{ All allOccAItem }
+		scalar    struct{ All *string }
+		wideItem  struct{ A, B string }
+		wideOccur struct{ All *wideItem }
+	)
+	schema := schemaOf(t, allOccASchema)
+	rows := []struct {
+		name string
+		err  error
+		want string
+	}{
+		{"a value", CheckDecode[valued](schema, rootName), "field 0 of codec.valued is All codec.allOccAItem where codegen emits All, *I for the type I of one occurrence of the all"},
+		{"a pointer to no struct", CheckDecode[scalar](schema, rootName), "field All of codec.scalar is string, no struct, where codegen emits the struct for one occurrence of a sequence or all group"},
+		{"a struct of another width", CheckDecode[wideOccur](schema, rootName), "codec.wideItem, the struct for one occurrence of a sequence or all group, has 2 fields where codegen emits 1"},
 	}
-	var de *DeclineError
-	if !errors.Is(err, ErrTypeMismatch) || errors.As(err, &de) {
-		t.Errorf("error %v: want ErrTypeMismatch alone", err)
+	for _, row := range rows {
+		if row.err == nil || row.err.Error() != ErrTypeMismatch.Error()+": "+row.want {
+			t.Errorf("%s: CheckDecode = %v, want %q", row.name, row.err, row.want)
+		}
+		var de *DeclineError
+		if !errors.Is(row.err, ErrTypeMismatch) || errors.As(row.err, &de) {
+			t.Errorf("%s: error %v: want ErrTypeMismatch alone", row.name, row.err)
+		}
 	}
 }
