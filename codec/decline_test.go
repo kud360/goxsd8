@@ -75,8 +75,6 @@ func TestDecodeDeclines(t *testing.T) {
 		{"document element of an abstract complex type of element-only content, under xsi:type", `<xs:complexType name="ab" abstract="true"><xs:sequence><xs:element name="a" type="xs:string"/></xs:sequence></xs:complexType>
 			<xs:complexType name="cc"><xs:complexContent><xs:extension base="s:ab"/></xs:complexContent></xs:complexType>
 			<xs:element name="r" type="s:ab"/>`, ` xsi:type="s:cc"`, `<s:a>x</s:a>`, constructAbstractTypeElement, 1, 1},
-		{"an optional <group ref> content particle to a non-emptiable all group", `<xs:group name="g"><xs:all><xs:element name="a" type="xs:string"/></xs:all></xs:group>` + root(`<xs:group ref="s:g" minOccurs="0"/>`),
-			"", a, constructAllOccurs, 1, 1},
 		{"an element and a spliced sequence alternative sharing a branch shape, refs to a and A", `<xs:element name="a" type="xs:string"/><xs:element name="A" type="xs:string"/>` + root(`<xs:choice><xs:element ref="s:a"/>`+spliced(`<xs:element ref="s:A"/>`)+`</xs:choice>`),
 			"", a, constructSharedBranch, 1, 1},
 		{"an element and a spliced sequence alternative sharing a branch shape, qualified and not", root(`<xs:choice><xs:element name="x" type="xs:string"/>` + spliced(`<xs:element name="x" form="unqualified" type="xs:string"/>`) + `</xs:choice>`),
@@ -103,10 +101,6 @@ func TestDecodeDeclines(t *testing.T) {
 			"", `<s:d>2000-01-01</s:d>`, constructSharedBranch, 1, 1},
 		{"an element and a spliced sequence alternative sharing a branch shape, a and A", root(`<xs:choice><xs:element name="a" type="xs:string"/>` + spliced(`<xs:element name="A" type="xs:token"/>`) + `</xs:choice>`),
 			"", a, constructSharedBranch, 1, 1},
-		{"optional content all over a required element", root(`<xs:all minOccurs="0"><xs:element name="a" type="xs:string"/></xs:all>`), "", a, constructAllOccurs, 1, 1},
-		{"an extension merging two optional alls of required elements", `<xs:complexType name="t"><xs:all minOccurs="0"><xs:element name="a" type="xs:string"/></xs:all></xs:complexType>
-			<xs:complexType name="t2"><xs:complexContent><xs:extension base="s:t"><xs:all minOccurs="0"><xs:element name="b" type="xs:int"/></xs:all></xs:extension></xs:complexContent></xs:complexType>
-			<xs:element name="r" type="s:t2"/>`, "", a + `<s:b>1</s:b>`, constructAllOccurs, 1, 1},
 		{"nested choice occurring twice in an occurrence field's item", root(`<xs:sequence maxOccurs="2"><xs:element name="a" type="xs:string"/><xs:choice maxOccurs="2"><xs:element name="b" type="xs:string"/></xs:choice></xs:sequence>`),
 			"", a + `<s:b>y</s:b>`, constructNestedGroup, 1, 1},
 		{"choice alternatives sharing a branch shape, two wildcards occurring once", root(`<xs:choice><xs:any namespace="##local"/><xs:any namespace="##other" processContents="lax"/></xs:choice>`),
@@ -463,10 +457,10 @@ func TestDecodeUndeclaredRootXsiType(t *testing.T) {
 // TestDeclineConstruct pins DeclineError.Construct's contract: two declines
 // of one construct, from two schemas and declining sites, have equal
 // Constructs, and declines of two different constructs have different ones.
-// One row per construct group: the declaration, the content, by a content all
-// group codegen does not splice, a particle, a simple type and xsi:type. A
-// minted group's decls are mintedSchema's, which no instance validates
-// against, so CheckDecode alone probes them.
+// One row per construct group: the declaration, an abstract complex type, by
+// an element whose complex type has {abstract} true, a particle, a simple
+// type and xsi:type. A minted group's decls are mintedSchema's, which no
+// instance validates against, so CheckDecode alone probes them.
 func TestDeclineConstruct(t *testing.T) {
 	const a = `<s:a>x</s:a>`
 	type decl struct{ decls, attrs, content string }
@@ -479,9 +473,9 @@ func TestDeclineConstruct(t *testing.T) {
 			{nillableTables, "", a},
 			{sequenceOf(`<xs:element name="a" type="xs:string" nillable="true"><xs:alternative test="@k" type="xs:token"/></xs:element>`), "", a},
 		}},
-		{group: "content all group", pair: [2]decl{
-			{root(`<xs:all minOccurs="0"><xs:element name="a" type="xs:string"/></xs:all>`), "", a},
-			{`<xs:group name="g"><xs:all><xs:element name="b" type="xs:string" minOccurs="0"/><xs:element name="a" type="xs:string"/></xs:all></xs:group><xs:complexType name="ct"><xs:group ref="s:g" minOccurs="0"/></xs:complexType><xs:element name="r" type="s:ct"/>`, "", a},
+		{group: "abstract complex type", pair: [2]decl{
+			{abstractRootSchema, ` xsi:type="s:cc"`, ""},
+			{abstractParticleSchema, "", ""},
 		}},
 		{group: "particle", pair: [2]decl{
 			{root(`<xs:sequence maxOccurs="2"><xs:element name="a" type="xs:string"/><xs:choice maxOccurs="2"><xs:element name="b" type="xs:string"/></xs:choice></xs:sequence>`), "", a + `<s:b>y</s:b>`},
@@ -531,13 +525,23 @@ func TestDeclineConstruct(t *testing.T) {
 	}
 }
 
+// The abstract schemas, each of the complex type ab of empty content with
+// {abstract} true, which Decode declines by: abstractRootSchema's s:r is of
+// ab, so an instance names ab's extension cc by xsi:type (cvc-elt clause
+// 4), and abstractParticleSchema's s:r is of a sequence of an optional a of
+// ab, which an empty s:r leaves out.
+const (
+	abstractRootSchema     = `<xs:complexType name="ab" abstract="true"/><xs:complexType name="cc"><xs:complexContent><xs:extension base="s:ab"/></xs:complexContent></xs:complexType><xs:element name="r" type="s:ab"/>`
+	abstractParticleSchema = `<xs:complexType name="ab" abstract="true"/><xs:element name="r"><xs:complexType><xs:sequence><xs:element name="a" type="s:ab" minOccurs="0"/></xs:sequence></xs:complexType></xs:element>`
+)
+
 // TestDeclineErrorText pins a decline's whole message for a construct of the
 // document element's type: the declaration's schema Loc, then the type's,
 // labelled as the type's, then the refusal tail.
 func TestDeclineErrorText(t *testing.T) {
-	schema := schemaOf(t, root(`<xs:all minOccurs="0"><xs:element name="a" type="xs:string"/></xs:all>`))
-	_, err := Decode[struct{}](schema, strict.New(), instanceOf("", `<s:a>x</s:a>`))
-	const want = "?:1:1: codec does not decode a content all group with {min occurs} 0 whose model group is not emptiable: the {type definition} of element {urn:s}r declared at s.xsd:1:181, a type defined at s.xsd:1:202; a decoder refusal, not a schema or instance fault"
+	schema := schemaOf(t, abstractRootSchema)
+	_, err := Decode[struct{}](schema, strict.New(), instanceOf(` xsi:type="s:cc"`, ""))
+	const want = "?:1:1: codec does not decode an element declaration whose complex {type definition} has {abstract} true: the {type definition} of element {urn:s}r declared at s.xsd:1:333, a type defined at s.xsd:1:181; a decoder refusal, not a schema or instance fault"
 	if err == nil || err.Error() != want {
 		t.Errorf("error = %v, want %q", err, want)
 	}

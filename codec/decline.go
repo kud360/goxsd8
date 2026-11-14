@@ -81,10 +81,10 @@ func (c Construct) String() string { return c.c.name() }
 type construct uint8
 
 // The construct values, in the order Decode finds them: the document
-// element's declaration, its type, its content, each particle in order, its
+// element's declaration, its type's content, each particle in order, its
 // attribute uses in order, and the instance. A particle's complex type,
 // examined at the particle, declines by the same constructs from
-// constructAllOccurs on, and by constructAbstractTypeElement, which sits
+// constructNestedGroup on, and by constructAbstractTypeElement, which sits
 // with the particle's though the document element's type declines by it too,
 // ahead of its content. The one of a simple type, constructOtherPrimitive,
 // sits with the particle's, though a document element of simple type, a
@@ -97,7 +97,6 @@ type construct uint8
 // occurrence field's item, ahead of the particles after it.
 const (
 	constructNillable construct = iota + 1
-	constructAllOccurs
 	constructNestedGroup
 	constructAbstractTypeElement
 	constructSharedName
@@ -110,7 +109,6 @@ const (
 // constructNames holds, indexed by construct, each construct's name.
 var constructNames = [...]string{
 	constructNillable:            "an element declaration with {nillable} true",
-	constructAllOccurs:           "a content all group with {min occurs} 0 whose model group is not emptiable",
 	constructNestedGroup:         "a nested model group particle",
 	constructAbstractTypeElement: "an element declaration whose complex {type definition} has {abstract} true",
 	constructSharedName:          "two particles taking one expanded name, each by its own element declaration or a member of its substitution group",

@@ -156,3 +156,151 @@ func TestDecodeAllRefusesWhatValidateCharges(t *testing.T) {
 		t.Errorf("error %v is a decline, want a violation", err)
 	}
 }
+
+// The optional all schemas, each declaring s:r, whose content {particle} is
+// an all group with {min occurs} 0 over a model group that is not emptiable,
+// which codegen does not splice (goshape.Splices) and holds in its occurrence
+// field, All, a pointer to the struct for its one occurrence (codegen/doc.go
+// "# Particles"): allOccASchema's all(a); allOccRefSchema's an optional
+// <group ref> to the all group g of a; allOccABSchema's all(a, b);
+// allOccRepSchema's all(a, b), a with {max occurs} unbounded;
+// allOccNestedSchema's all(a, g), g a <group ref> to the all group of b,
+// nested with {min occurs} and {max occurs} 1 (cos-all-limited clause 1.3),
+// which codegen splices into the occurrence's struct; and allOccExtSchema's r
+// is of t2, an extension of t, all(a) with {min occurs} 0, adding all(b) with
+// {min occurs} 0, so t2's {particle} is one all(a, b) with {min occurs} 0
+// (§3.4.2.3.3 dcl.ctd.ctcc.common clause 4.2.3.2).
+const (
+	allOccASchema   = `<xs:element name="r"><xs:complexType><xs:all minOccurs="0"><xs:element name="a" type="xs:string"/></xs:all></xs:complexType></xs:element>`
+	allOccRefSchema = `<xs:group name="g"><xs:all><xs:element name="a" type="xs:string"/></xs:all></xs:group>
+  <xs:element name="r"><xs:complexType><xs:group ref="s:g" minOccurs="0"/></xs:complexType></xs:element>`
+	allOccABSchema     = `<xs:element name="r"><xs:complexType><xs:all minOccurs="0"><xs:element name="a" type="xs:string"/><xs:element name="b" type="xs:int"/></xs:all></xs:complexType></xs:element>`
+	allOccRepSchema    = `<xs:element name="r"><xs:complexType><xs:all minOccurs="0"><xs:element name="a" type="xs:string" maxOccurs="unbounded"/><xs:element name="b" type="xs:int"/></xs:all></xs:complexType></xs:element>`
+	allOccNestedSchema = `<xs:group name="g"><xs:all><xs:element name="b" type="xs:int"/></xs:all></xs:group>
+  <xs:element name="r"><xs:complexType><xs:all minOccurs="0"><xs:element name="a" type="xs:string"/><xs:group ref="s:g"/></xs:all></xs:complexType></xs:element>`
+	allOccExtSchema = `<xs:complexType name="t"><xs:all minOccurs="0"><xs:element name="a" type="xs:string"/></xs:all></xs:complexType>
+  <xs:complexType name="t2"><xs:complexContent><xs:extension base="s:t"><xs:all minOccurs="0"><xs:element name="b" type="xs:int"/></xs:all></xs:extension></xs:complexContent></xs:complexType>
+  <xs:element name="r" type="s:t2"/>`
+)
+
+// The types codegen emits for the optional all schemas' s:r, in shape, which
+// TestAllOccurrenceTypesAreCodegens pins.
+type (
+	allOccA      struct{ All *allOccAItem }
+	allOccAItem  struct{ A string }
+	allOccAB     struct{ All *allOccABItem }
+	allOccABItem struct {
+		A string
+		B int32
+	}
+	allOccRep     struct{ All *allOccRepItem }
+	allOccRepItem struct {
+		A []string
+		B int32
+	}
+)
+
+// TestAllOccurrenceTypesAreCodegens pins the types above to the struct
+// codegen emits for each optional all schema's s:r (codegen/doc.go
+// "# Particles"): the occurrence field All, a pointer to the struct of the
+// all group's particles' fields: outer is R's declaration, in the
+// occurrence struct's.
+func TestAllOccurrenceTypesAreCodegens(t *testing.T) {
+	rows := []struct {
+		decls     string
+		outer, in string
+	}{
+		{allOccASchema, "type R struct {\n\tAll *RAll\n}\n", "type RAll struct {\n\tA string\n}\n"},
+		{allOccRefSchema, "type R struct {\n\tAll *RAll\n}\n", "type RAll struct {\n\tA string\n}\n"},
+		{allOccABSchema, "type R struct {\n\tAll *RAll\n}\n", "type RAll struct {\n\tA string\n\tB int32\n}\n"},
+		{allOccRepSchema, "type R struct {\n\tAll *RAll\n}\n", "type RAll struct {\n\tA []string\n\tB int32\n}\n"},
+		{allOccNestedSchema, "type R struct {\n\tAll *RAll\n}\n", "type RAll struct {\n\tA string\n\tB int32\n}\n"},
+		{allOccExtSchema, "type R struct {\n\tAll *T2All\n}\n", "type T2All struct {\n\tA string\n\tB int32\n}\n"},
+	}
+	for _, row := range rows {
+		gen := generated(t, schemaOf(t, row.decls))
+		for _, want := range []string{row.outer, row.in} {
+			if !bytes.Contains(gen, []byte(want)) {
+				t.Errorf("codegen emits\n%s\nwhich does not declare\n%s", gen, want)
+			}
+		}
+	}
+}
+
+// TestDecodeAllOccurrence pins the optional all lift: a content all group
+// with {min occurs} 0 that goshape.Splices answers false for, inline, through
+// an optional <group ref>, or an extension's merged all, decodes into its
+// occurrence field: nil for an element with no children, the empty sequence
+// the particle's {min occurs} 0 admits (§3.9.4.3 cvc-accept clause 3), and
+// otherwise a pointer to one item holding every child, each in the field of
+// the particle it is attributed to (§3.4.4.4 key-att-to) whatever the
+// instance order (§3.8.4.1.3 all-mg), a repeated particle's children
+// appended in instance order. CheckDecode returns nil for each row's T.
+func TestDecodeAllOccurrence(t *testing.T) {
+	rows := []struct {
+		name, decls, body string
+		into              target
+		want              any
+	}{
+		{"one required particle", allOccASchema, "<s:a>x</s:a>", into[allOccA](), allOccA{All: &allOccAItem{A: "x"}}},
+		{"no children", allOccASchema, "", into[allOccA](), allOccA{}},
+		{"an optional <group ref>", allOccRefSchema, "<s:a>x</s:a>", into[allOccA](), allOccA{All: &allOccAItem{A: "x"}}},
+		{"an optional <group ref>, no children", allOccRefSchema, "", into[allOccA](), allOccA{}},
+		{"two particles in particle order", allOccABSchema, "<s:a>x</s:a><s:b>1</s:b>", into[allOccAB](), allOccAB{All: &allOccABItem{A: "x", B: 1}}},
+		{"two particles permuted", allOccABSchema, "<s:b>1</s:b><s:a>x</s:a>", into[allOccAB](), allOccAB{All: &allOccABItem{A: "x", B: 1}}},
+		{"a repeated particle interleaved with another's child", allOccRepSchema, "<s:a>p</s:a><s:b>3</s:b><s:a>q</s:a>", into[allOccRep](), allOccRep{All: &allOccRepItem{A: []string{"p", "q"}, B: 3}}},
+		{"a nested all's particle first", allOccNestedSchema, "<s:b>4</s:b><s:a>x</s:a>", into[allOccAB](), allOccAB{All: &allOccABItem{A: "x", B: 4}}},
+		{"an extension merging two alls", allOccExtSchema, "<s:a>x</s:a><s:b>6</s:b>", into[allOccAB](), allOccAB{All: &allOccABItem{A: "x", B: 6}}},
+		{"an extension merging two alls, permuted", allOccExtSchema, "<s:b>6</s:b><s:a>x</s:a>", into[allOccAB](), allOccAB{All: &allOccABItem{A: "x", B: 6}}},
+	}
+	for _, row := range rows {
+		t.Run(row.name, func(t *testing.T) {
+			schema := schemaOf(t, row.decls)
+			data := instanceOf("", row.body)
+			mustAccept(t, schema, data)
+			got, err := row.into.decode(schema, data)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !reflect.DeepEqual(got, row.want) {
+				t.Errorf("Decode = %#v, want %#v", got, row.want)
+			}
+			if err := row.into.check(schema); err != nil {
+				t.Errorf("CheckDecode = %v, want nil for a row Decode decodes", err)
+			}
+		})
+	}
+}
+
+// TestCheckDecodeAllOccurrenceMismatch pins that a T whose occurrence field
+// for an all group with {min occurs} 0 (allOccASchema) is not codegen's, a
+// pointer to the struct for its one occurrence, is ErrTypeMismatch alone, no
+// decline, its whole message naming the field and the all group: the struct
+// held as a value, a pointer to no struct, and a struct of another width.
+func TestCheckDecodeAllOccurrenceMismatch(t *testing.T) {
+	type (
+		valued    struct{ All allOccAItem }
+		scalar    struct{ All *string }
+		wideItem  struct{ A, B string }
+		wideOccur struct{ All *wideItem }
+	)
+	schema := schemaOf(t, allOccASchema)
+	rows := []struct {
+		name string
+		err  error
+		want string
+	}{
+		{"a value", CheckDecode[valued](schema, rootName), "field 0 of codec.valued is All codec.allOccAItem where codegen emits All, *I for the type I of one occurrence of the all"},
+		{"a pointer to no struct", CheckDecode[scalar](schema, rootName), "field All of codec.scalar is string, no struct, where codegen emits the struct for one occurrence of a sequence or all group"},
+		{"a struct of another width", CheckDecode[wideOccur](schema, rootName), "codec.wideItem, the struct for one occurrence of a sequence or all group, has 2 fields where codegen emits 1"},
+	}
+	for _, row := range rows {
+		if row.err == nil || row.err.Error() != ErrTypeMismatch.Error()+": "+row.want {
+			t.Errorf("%s: CheckDecode = %v, want %q", row.name, row.err, row.want)
+		}
+		var de *DeclineError
+		if !errors.Is(row.err, ErrTypeMismatch) || errors.As(row.err, &de) {
+			t.Errorf("%s: error %v: want ErrTypeMismatch alone", row.name, row.err)
+		}
+	}
+}

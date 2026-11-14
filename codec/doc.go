@@ -72,8 +72,9 @@
 //     than exactly once, that codegen neither splices nor flattens (codegen's
 //     package doc, "# Particles"), as a complex type's content {particle}, a
 //     sequence's nested particle or a choice's model-group alternative,
-//     outside a content particle held in an occurrence field, into its field
-//     of the type for one occurrence.
+//     outside a content particle held in an occurrence field, and a content
+//     all group, inline or through <group ref>, that codegen does not splice,
+//     into its field of the type for one occurrence.
 //   - An element particle, local or <element ref>.
 //   - A substitution group, into a sealed interface.
 //   - A choice, into a sealed interface.
@@ -129,25 +130,24 @@
 // content, simple content whose {simple type definition} is a simple type that decodes
 // (Structures §3.4.2.2 dcl.ctd.ctsc), its value field's, or element-only or mixed content whose
 // {particle} is a sequence or choice, inline or the {model group} of the definition a <group
-// ref> names, or is an all group, inline or through <group ref>, where codegen splices it. Each
-// particle of a sequence or choice not flattened or of a spliced all group, a sequence's nested
-// sequence particle and an all group's nested all group particle, through <group ref>, that
-// codegen splices replaced by its own particles at any depth, a sequence's nested choice
-// particle occurring exactly once that codegen does not flatten by its alternatives, a nested
-// particle held in an occurrence field by its own particles, and, of a flattened one, the
-// content {particle} or a sequence's nested particle, in place of its particles, each basic
-// particle its model group reaches through its model group particles at any depth, is an
-// element declaration whose governing types decode as the document element's do, by these same
-// rules at any depth: a local one, or the top-level one an <element ref> names where codegen
-// gives the particle's field that declaration's own type; or the particle is an <element ref>
-// where codegen gives its field a sealed interface over the referenced declaration's
-// substitution group (codegen's package doc, "# Substitution groups"), and each declaration of
-// the group with {abstract} false is such a declaration, an abstract head's own properties
-// never read; or the particle is a wildcard, whatever its {namespace constraint} and {process
-// contents}. Two element particles taking one expanded name decode or decline as item 5 of
-// [Decode]'s doc states. Each attribute use but xsi:nil's, to which codegen gives no field (codegen's
-// package doc, "# Attributes"), is typed the same way. No element in the instance carries
-// xsi:type, except inside a wildcard's match or an element of type xs:anyType's raw content.
+// ref> names, or is an all group, inline or through <group ref>. Each particle of a sequence or
+// choice not flattened or of an all group, a sequence's nested sequence particle and an all group's
+// nested all group particle, through <group ref>, that codegen splices replaced by its own particles
+// at any depth, a sequence's nested choice particle occurring exactly once that codegen does not
+// flatten by its alternatives, a nested particle held in an occurrence field by its own particles,
+// and, of a flattened one, the content {particle} or a sequence's nested particle, in place of its
+// particles, each basic particle its model group reaches through its model group particles at any
+// depth, is an element declaration whose governing types decode as the document element's do, by
+// these same rules at any depth: a local one, or the top-level one an <element ref> names where
+// codegen gives the particle's field that declaration's own type; or the particle is an <element ref>
+// where codegen gives its field a sealed interface over the referenced declaration's substitution
+// group (codegen's package doc, "# Substitution groups"), and each declaration of the group with
+// {abstract} false is such a declaration, an abstract head's own properties never read; or the
+// particle is a wildcard, whatever its {namespace constraint} and {process contents}. Two element
+// particles taking one expanded name decode or decline as item 5 of [Decode]'s doc states. Each
+// attribute use but xsi:nil's, to which codegen gives no field (codegen's package doc,
+// "# Attributes"), is typed the same way. No element in the instance carries xsi:type, except
+// inside a wildcard's match or an element of type xs:anyType's raw content.
 //
 // Item 6 of [Decode]'s doc states the Go type of each field, naming it V, S
 // or I as the next paragraph does. The field of a particle of complex type
@@ -240,8 +240,6 @@
 //     states when.
 //   - Two element particles taking one expanded name; item 5 of [Decode]'s
 //     doc states when.
-//   - A content all group codegen does not splice (codegen's package doc,
-//     "# Particles").
 //   - Inside a content particle held in an occurrence field, a nested
 //     sequence or choice, inline or through <group ref>, a sequence's
 //     particle or a choice's model-group alternative, an alternative's {min

@@ -282,13 +282,15 @@ var ErrTypeMismatch = errors.New("codec: T is not the type codegen emits for the
 // read below the nested particle's own: the first child opens an item, and each
 // later child continues the current item where, at the first index its particle's
 // position and that of the current item's last child differ, the model group holding
-// both is a sequence and the later child's index is the greater, or where the two
+// both is an all group, whose particles' children interleave in any order (§3.8.4.1.3
+// all-mg), or a sequence and the later child's index is the greater, or where the two
 // positions are equal and that particle has {max occurs} unbounded or above the
 // count of the current item's children it has taken; every other child opens the
 // next item. So no item is empty, a choice counting only the occurrences that match
 // something, of sequence(a, b?) repeated the children <a/><a/><b/> give the items
-// {A} and {A, B}, and of choice(a{2,2}, b) repeated the children <a/><a/><a/><a/>
-// two items of two each.
+// {A} and {A, B}, of choice(a{2,2}, b) repeated the children <a/><a/><a/><a/>
+// two items of two each, and of all(a, b) with {min occurs} 0 the children
+// <b/><a/> one item {A, B}.
 //
 // Items 5 and 6 read no instance; [CheckDecode] returns them for a
 // declaration before an instance arrives.
@@ -331,15 +333,15 @@ var ErrTypeMismatch = errors.New("codec: T is not the type codegen emits for the
 //     then its content, then, for simple content, its {simple type definition},
 //     examined as the document element's simple type is, whose construct the
 //     content declines by, or, for element-only or mixed content, its {particle}'s
-//     model group, an all group declining where codegen does not splice it
-//     (codegen's package doc, "# Particles"): of a <group ref>, the compositor is
-//     the referenced definition's {model group}'s and the occurrence the referring
-//     particle's (§3.7.2 declare-namedModelGroup).
+//     model group, which item 6 holds as codegen does (codegen's package doc,
+//     "# Particles"): of a <group ref>, the compositor is the referenced
+//     definition's {model group}'s and the occurrence the referring particle's
+//     (§3.7.2 declare-namedModelGroup).
 //   - Each particle of the complex type's content in order, the whole of one
 //     before the next, but of a flattened one, which the sixth bullet examines
 //     in this bullet's place, and of a choice held in an occurrence field
 //     (item 6), whose alternatives the choice bullet below examines; then, for
-//     an occurrence field's content model, sequence or choice, a content
+//     an occurrence field's content model, sequence, choice or all group, a content
 //     model xsd.Schema.ContentMatcher does not track declines, since its
 //     children cannot be attributed. A sequence's nested sequence particle, inline or
 //     through <group ref>, and an all group's nested all group particle,
@@ -649,17 +651,19 @@ var ErrTypeMismatch = errors.New("codec: T is not the type codegen emits for the
 //     give occurring exactly once.
 //   - The field of a sequence or choice, the content {particle} or nested,
 //     that occurs other than exactly once and that codegen neither splices
-//     nor flattens, its occurrence field, a content one's the struct's first
-//     and a nested one's the one at its particle's place, a choice's
-//     model-group alternative's its branch struct's one field: named as if
-//     from the local name sequence or choice, holding the type for one
-//     occurrence by the particle's occurrence, as a particle's field holds
-//     its V, over a struct for a sequence and a sealed interface for a
-//     choice: S, *S or []S for a sequence, S a struct, named or not, of
-//     exactly the fields its particles give as the complex type's own
-//     particles give them, with no attribute field; and I or []I for a
-//     choice, the bare interface for an optional one and never a pointer, I
-//     the sealed interface the bullet below holds.
+//     nor flattens, or of a content all group codegen does not splice, its
+//     occurrence field, a content one's the struct's first and a nested one's
+//     the one at its particle's place, a choice's model-group alternative's
+//     its branch struct's one field: named as if from the local name
+//     sequence, choice or all, holding the type for one occurrence by the
+//     particle's occurrence, as a particle's field holds its V, over a struct
+//     for a sequence or all group and a sealed interface for a choice: S, *S
+//     or []S for a sequence, and *S for an all group, whose {max occurs} is 1
+//     (§3.8.6.2 cos-all-limited clause 1.2) and {min occurs} 0, S a struct,
+//     named or not, of exactly the fields its particles give as the complex
+//     type's own particles give them, with no attribute field; and I or []I
+//     for a choice, the bare interface for an optional one and never a
+//     pointer, I the sealed interface the bullet below holds.
 //   - A sealed interface, T, a nested element's or a struct's field, of a
 //     choice, a substitution group, a flattened slice's element, an
 //     occurrence field's choice or an element declaration's governing types:
@@ -2366,7 +2370,7 @@ func groupScope(el xsd.ElementDeclaration) (xsd.QName, bool) {
 }
 
 // bindContent returns the elementContent of group, the content sequence,
-// choice or spliced all group of ct, bound in the arm contentGroup answered,
+// choice or all group of ct, bound in the arm contentGroup answered,
 // its fields named from names, or the first decline Decode's doc states for
 // its particles, item 5, typeSubject naming the type. armFlat is
 // bindFlattened's and armOccurrence bindOccurrence's, over the particle's
@@ -4016,11 +4020,12 @@ func trackedMatcher(schema *xsd.Schema, ct xsd.ComplexType) (*xsd.Matcher, error
 }
 
 // occurrence is a content sequence or choice that occurs other than exactly
-// once and that codegen neither splices nor flattens, as Decode reads it
-// (codegen/doc.go "# Particles"): the one field, named name, holding the type
-// for one occurrence of group, its item, in shape, goshape.ParticleShape's for
-// the particle's occurrence over a struct for a sequence and a sealed
-// interface for a choice. ct is the complex type whose {content type} it is,
+// once and that codegen neither splices nor flattens, or a content all group
+// codegen does not splice, as Decode reads it (codegen/doc.go "# Particles"):
+// the one field, named name, holding the type for one occurrence of group,
+// its item, in shape, goshape.ParticleShape's for the particle's occurrence
+// over a struct for a sequence or all group and a sealed interface for a
+// choice. ct is the complex type whose {content type} it is,
 // whose Matcher attributes every child (§3.8.4.2 key-vpath), and index the
 // item's childIndex, which attributes a child to its target in the item.
 // open is the field ct's {open content} gives (openContentField), the
@@ -4039,8 +4044,9 @@ type occurrence struct {
 
 // An occurrenceItem is the type for one occurrence of an occurrence field's
 // model group, as Decode reads it, a closed sum: a *sequence, the struct of a
-// field per particle of a sequence, bound as a content sequence's fields are;
-// or a choiceItem, a choice's sealed interface, bound as a nested choice's is.
+// field per particle of a sequence or all group, bound as a content
+// sequence's fields are; or a choiceItem, a choice's sealed interface, bound
+// as a nested choice's is.
 type occurrenceItem interface {
 	// itemTargets is how many attribution targets the item's members take.
 	itemTargets() int
@@ -4053,7 +4059,7 @@ type occurrenceItem interface {
 // bindOccurrence returns the occurrence of group, the model group of ct's
 // content {particle} occurring as occurs, for which contentGroup answered
 // armOccurrence, its field named from names by group's compositor's local
-// name, sequence or choice, before its item is read, or the first decline
+// name, sequence, choice or all, before its item is read, or the first decline
 // Decode's doc states for it, item 5, typeSubject naming the type, or the
 // plain error that item states in a decline's place. Its item is bindItem's
 // into a fresh childIndex, its targets from 0, its particles bound at the
@@ -4087,7 +4093,7 @@ func bindOccurrence(run *bindRun, ct xsd.ComplexType, group xsd.ModelGroup, occu
 // {particle}, nil for that particle's own, bound into x, the childIndex of the
 // content model holding them, their attribution targets from target on, or
 // the first decline Decode's doc states for them, item 5, typeSubject naming
-// the type: a sequence's item is the sequence its particles bind
+// the type: a sequence's or all group's item is the sequence its particles bind
 // (sequence.bind), its fields named from a fresh Namer, as codegen names one
 // occurrence's struct; a choice's is the choice bindChoice binds, as an item,
 // so that a flattened particle a model-group alternative holds declines as a
@@ -4117,10 +4123,10 @@ func bindItem(run *bindRun, ct xsd.ComplexType, group xsd.ModelGroup, x *childIn
 // fields, each held to its member (sequence.check).
 func (s *sequence) itemSinks(it reflect.Type, site string, cx *checkContext) ([]sink, error) {
 	if it.Kind() != reflect.Struct {
-		return nil, fmt.Errorf("%w: %s is %s, no struct, where codegen emits the struct for one occurrence of a sequence", ErrTypeMismatch, site, it)
+		return nil, fmt.Errorf("%w: %s is %s, no struct, where codegen emits the struct for one occurrence of a sequence or all group", ErrTypeMismatch, site, it)
 	}
 	if it.NumField() != s.width() {
-		return nil, fmt.Errorf("%w: %s, the struct for one occurrence of a sequence, has %d fields where codegen emits %d", ErrTypeMismatch, it, it.NumField(), s.width())
+		return nil, fmt.Errorf("%w: %s, the struct for one occurrence of a sequence or all group, has %d fields where codegen emits %d", ErrTypeMismatch, it, it.NumField(), s.width())
 	}
 	var sinks []sink
 	for i, m := range s.members {
@@ -4468,10 +4474,11 @@ func (p *partition) next(pos []int) (bool, error) {
 // of that occurrence having taken last, by the positional rule Decode's doc
 // states in the paragraph after item 8, reading each model group and the
 // particle at next through goshape.ModelGroupTerm: one occurrence of a choice
-// takes one alternative, so a choice's differing index never continues. Both
-// are positions of basic particles below group, each index of one group's
-// {particles} from group down, as xsd.Matcher.NextParticle reports them; any
-// other is an error.
+// takes one alternative, so a choice's differing index never continues, and
+// an all group's particles take their children in any order (§3.8.4.1.3
+// all-mg), so its differing index always does. Both are positions of basic
+// particles below group, each index of one group's {particles} from group
+// down, as xsd.Matcher.NextParticle reports them; any other is an error.
 func continues(schema *xsd.Schema, group xsd.ModelGroup, last, next []int, count int) (bool, error) {
 	g := group
 	for d, i := range next {
@@ -4480,7 +4487,7 @@ func continues(schema *xsd.Schema, group xsd.ModelGroup, last, next []int, count
 			return false, fmt.Errorf("the Matcher position %v is no basic particle's after %v", next, last)
 		}
 		if i != last[d] {
-			return g.Compositor() != xsd.CompositorChoice && i > last[d], nil
+			return g.Compositor() == xsd.CompositorAll || g.Compositor() == xsd.CompositorSequence && i > last[d], nil
 		}
 		p := particles[i]
 		if d == len(next)-1 {
@@ -4856,11 +4863,12 @@ const (
 // in its doc's item 5 order. Each compositor asks codegen's questions in
 // codegen's order (codegen/emit.go contentFields, then groupField). An all
 // group or a sequence goshape.Splices answers true for is armOnce, its
-// occurrence 0..1 or 1 alike; an all group it answers false for declines as
-// constructAllOccurs. Any other sequence or choice is armFlat where
-// goshape.Flattens answers true for it, a choice occurring exactly once
-// included, and otherwise armOnce for a choice occurring exactly once and
-// armOccurrence for the rest. Nothing recomputes arm: bindComplex reads
+// occurrence 0..1 or 1 alike. Any other all group, sequence or choice is
+// armFlat where goshape.Flattens answers true for it, a choice occurring
+// exactly once included, and otherwise armOnce for a choice occurring exactly
+// once and armOccurrence for the rest, an all group among them: Flattens
+// answers false for an all group, whose {max occurs} is 1 (§3.8.6.2
+// cos-all-limited clause 1.2). Nothing recomputes arm: bindComplex reads
 // it to keep all but armOnce out of choiceRoot, and bindContent to bind the
 // field. A <group ref> naming no definition, the content {particle}'s or one
 // goshape.Flattens follows inside it, is goshape.ModelGroupTerm's plain error,
@@ -4873,16 +4881,7 @@ func contentGroup(schema *xsd.Schema, content xsd.ElementContent, typeSubject st
 	}
 	occurs := content.Particle.Occurs()
 	switch group.Compositor() {
-	case xsd.CompositorAll:
-		splice, err := goshape.Splices(schema, group, occurs)
-		if err != nil {
-			return xsd.Particle{}, xsd.ModelGroup{}, 0, 0, fmt.Errorf("codec: %s: %w", typeSubject, err)
-		}
-		if !splice {
-			return xsd.Particle{}, xsd.ModelGroup{}, 0, constructAllOccurs, nil
-		}
-		return content.Particle, group, armOnce, 0, nil
-	case xsd.CompositorSequence:
+	case xsd.CompositorAll, xsd.CompositorSequence:
 		splice, err := goshape.Splices(schema, group, occurs)
 		if err != nil {
 			return xsd.Particle{}, xsd.ModelGroup{}, 0, 0, fmt.Errorf("codec: %s: %w", typeSubject, err)
@@ -5505,19 +5504,20 @@ func attributeChild(a *matchAttributor, x childIndex, start *xmltree.StartElemen
 // {open content}, a rejected name's. A wildcard particle's index is the one
 // places holds for its position, its target; a position places holds none
 // for is a defect of the premise the binds rest on, one sequence or choice, or
-// one spliced all group, of element and wildcard particles, nested sequences
-// and all groups spliced, nested choices bound in place, a choice's
-// model-group alternatives bound as nested particles are, and nested
-// particles flattened or held in an occurrence field (matcherSlot.attributor),
-// and a plain error. An {open content}'s is the one places holds for its empty
-// position, the open-content field's (sequence.openContent), and with none a
-// plain error, a defect of Decode's too. An element declaration's is the
-// target elements holds for its position, the element particle's, never its
-// expanded name's: the declaration is a substitution group's head where start
-// is a member, at the head's particle's position (cvc-accept clause 2.3.2),
-// and a position elements holds none for is a defect of Decode's, a plain
-// error, as a wildcard particle's is. Attribution is a closed sum, so the
-// switch is STYLE T2's sealed-sum exception.
+// one all group, spliced or held in its occurrence field, of element and
+// wildcard particles, nested sequences and all groups spliced, nested choices
+// bound in place, a choice's model-group alternatives bound as nested
+// particles are, and nested particles flattened or held in an occurrence field
+// (matcherSlot.attributor), and a plain error. An {open content}'s is the one
+// places holds for its empty position, the open-content field's
+// (sequence.openContent), and with none a plain error, a defect of Decode's
+// too. An element declaration's is the target elements holds for its position,
+// the element particle's, never its expanded name's: the declaration is a
+// substitution group's head where start is a member, at the head's particle's
+// position (cvc-accept clause 2.3.2), and a position elements holds none for
+// is a defect of Decode's, a plain error, as a wildcard particle's is.
+// Attribution is a closed sum, so the switch is STYLE T2's sealed-sum
+// exception.
 func attributeAt(t xsd.Attribution, pos []int, places, elements []place, start *xmltree.StartElement) (attribution, bool, error) {
 	name := expanded(start.Name())
 	switch t.(type) {
