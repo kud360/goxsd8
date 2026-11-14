@@ -39,6 +39,31 @@ func (n *Namer) ClaimCandidate(candidate string) string {
 	return name
 }
 
+// Rank reports where name falls among the identifiers ClaimCandidate hands out
+// for candidate: 1 for candidate itself, n for candidate followed by the
+// decimal n, n at least 2 with no leading zero, and false for any other name.
+// The k-th claim of one candidate on one Namer ranks above every earlier one.
+func Rank(candidate, name string) (int, bool) {
+	if name == candidate {
+		return 1, true
+	}
+	digits, ok := strings.CutPrefix(name, candidate)
+	if !ok || digits == "" || digits[0] < '1' || digits[0] > '9' {
+		return 0, false
+	}
+	n, err := strconv.Atoi(digits)
+	if err != nil || n < 2 {
+		return 0, false
+	}
+	return n, true
+}
+
+// Extend returns the candidate of a name extending of, an identifier already
+// claimed, by words: of's Identifier followed by Render's of words.
+func Extend(of string, words ...string) string {
+	return Identifier(of) + Render(words)
+}
+
 // Render joins the Identifier of each XSD local name in path.
 func Render(path []string) string {
 	var b strings.Builder

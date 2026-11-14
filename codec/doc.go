@@ -234,9 +234,10 @@
 //   - A content model xsd.Schema.ContentMatcher does not track, flattened,
 //     holding a nested flattened particle, held in an occurrence field, or
 //     holding a nested occurrence field.
-//   - Two alternatives of a choice, two declarations of a substitution
-//     group, or two governing types of an element declaration, whose branch
-//     structs could share a Go type; item 5 of [Decode]'s doc states when.
+//   - Two alternatives of a choice, two basic particles a flattened particle
+//     reaches, or two governing types of an element declaration, whose
+//     branch structs Decode cannot tell apart; item 5 of [Decode]'s doc
+//     states when.
 //   - Two element particles taking one expanded name; item 5 of [Decode]'s
 //     doc states when.
 //   - A content all group codegen does not splice (codegen's package doc,

@@ -52,11 +52,13 @@ const (
 <xs:element name="r"><xs:complexType><xs:choice><xs:element ref="s:a" maxOccurs="2"/><xs:element ref="s:A"/></xs:choice></xs:complexType></xs:element>`
 )
 
-// lists to listChoiceX2 are the types codegen emits for the list schemas:
+// lists to ListChoiceX2 are the types codegen emits for the list schemas:
 // listSchema's R, listRootSchema's R, listRestrictionRootSchema's R,
 // listRefSchema's H and R, listChoiceSchema's R, RX and RX2, and
 // listRefChoiceSchema's R, RA, RA2, A and A2, which TestListTypesAreCodegens
-// pins.
+// pins. Each choice's branches carry the names codegen gives them over their
+// interface's, since Decode places a tie's branches by name (item 6 of
+// Decode's doc).
 type (
 	lists struct {
 		Strs  []string
@@ -67,28 +69,28 @@ type (
 		At    *[]string
 		Dflt  []int32
 	}
-	listRoot       []string
-	listInts       []int32
-	listHead       []int32
-	listHolder     struct{ H []listHead }
-	listChoice     interface{ isListChoice() }
-	listChoiceX    struct{ X int32 }
-	listChoiceX2   struct{ X []int32 }
-	listRefChoice  interface{ isListRefChoice() }
-	listRefChoiceA struct{ A []listRefA }
-	listRefChoiceB struct{ A listRefB }
-	listRefA       int32
-	listRefB       []int32
+	listRoot        []string
+	listInts        []int32
+	listHead        []int32
+	listHolder      struct{ H []listHead }
+	listChoice      interface{ isListChoice() }
+	ListChoiceX     struct{ X int32 }
+	ListChoiceX2    struct{ X []int32 }
+	listRefChoice   interface{ isListRefChoice() }
+	ListRefChoiceA  struct{ A []listRefA }
+	ListRefChoiceA2 struct{ A listRefB }
+	listRefA        int32
+	listRefB        []int32
 )
 
-func (listChoiceX) isListChoice()       {}
-func (listChoiceX2) isListChoice()      {}
-func (listRefChoiceA) isListRefChoice() {}
-func (listRefChoiceB) isListRefChoice() {}
+func (ListChoiceX) isListChoice()        {}
+func (ListChoiceX2) isListChoice()       {}
+func (ListRefChoiceA) isListRefChoice()  {}
+func (ListRefChoiceA2) isListRefChoice() {}
 
 var (
-	listChoiceBranches    = WithBranches[listChoice](listChoiceX{}, listChoiceX2{})
-	listRefChoiceBranches = WithBranches[listRefChoice](listRefChoiceA{}, listRefChoiceB{})
+	listChoiceBranches    = WithBranches[listChoice](ListChoiceX{}, ListChoiceX2{})
+	listRefChoiceBranches = WithBranches[listRefChoice](ListRefChoiceA{}, ListRefChoiceA2{})
 )
 
 // TestListTypesAreCodegens pins the types above to those codegen emits for
@@ -158,10 +160,10 @@ func TestDecodeLists(t *testing.T) {
 		{"a simple root of xs:NMTOKENS", `<xs:element name="r" type="xs:NMTOKENS"/>`, "", " a:1  b ", into[[]string](), []string{"a:1", "b"}},
 		{"a simple root of a restriction of a list", listRestrictionRootSchema, "", "1 2 3", into[listInts](), listInts{1, 2, 3}},
 		{"a repeated <element ref> to a head of a list type", listRefSchema, "", "<s:h>1 2</s:h><s:h> 3 </s:h>", into[listHolder](), listHolder{H: []listHead{{1, 2}, {3}}}},
-		{"a choice's list alternative", listChoiceSchema, "", "<s:X> 1  2 </s:X>", into[listChoice](listChoiceBranches), listChoice(listChoiceX2{X: []int32{1, 2}})},
-		{"a choice's xs:int alternative beside it", listChoiceSchema, "", "<s:x> 3 </s:x>", into[listChoice](listChoiceBranches), listChoice(listChoiceX{X: 3})},
-		{"a choice's repeated ref over xs:int", listRefChoiceSchema, "", "<s:a>1</s:a><s:a>2</s:a>", into[listRefChoice](listRefChoiceBranches), listRefChoice(listRefChoiceA{A: []listRefA{1, 2}})},
-		{"a choice's ref over a list of xs:int beside it", listRefChoiceSchema, "", "<s:A>1 2</s:A>", into[listRefChoice](listRefChoiceBranches), listRefChoice(listRefChoiceB{A: listRefB{1, 2}})},
+		{"a choice's list alternative", listChoiceSchema, "", "<s:X> 1  2 </s:X>", into[listChoice](listChoiceBranches), listChoice(ListChoiceX2{X: []int32{1, 2}})},
+		{"a choice's xs:int alternative beside it", listChoiceSchema, "", "<s:x> 3 </s:x>", into[listChoice](listChoiceBranches), listChoice(ListChoiceX{X: 3})},
+		{"a choice's repeated ref over xs:int", listRefChoiceSchema, "", "<s:a>1</s:a><s:a>2</s:a>", into[listRefChoice](listRefChoiceBranches), listRefChoice(ListRefChoiceA{A: []listRefA{1, 2}})},
+		{"a choice's ref over a list of xs:int beside it", listRefChoiceSchema, "", "<s:A>1 2</s:A>", into[listRefChoice](listRefChoiceBranches), listRefChoice(ListRefChoiceA2{A: listRefB{1, 2}})},
 	}
 	for _, row := range rows {
 		t.Run(row.name, func(t *testing.T) {
