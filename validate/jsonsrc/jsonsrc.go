@@ -24,8 +24,8 @@ type config struct {
 	uri string
 }
 
-// newConfig applies opts over the defaults: the document is unnamed, so
-// every Loc it produces renders with "?" for its URI.
+// newConfig applies opts over the defaults: the document is unnamed, with
+// the locations [Validate] states for that.
 func newConfig(opts []Option) config {
 	var cfg config
 	for _, opt := range opts {
@@ -44,6 +44,9 @@ func WithURI(uri string) Option {
 
 // Validate maps the JSON instance in r onto the validate infoset, on the
 // mapping the package doc states, and assesses it against v's schema.
+//
+// Pass [WithURI] to name the document: without it, every [xsderr.Loc] this
+// call reports has an empty URI, which [xsderr.Loc.String] renders "?".
 //
 // It returns (nil, err) whenever no assessment of the whole document stands,
 // and (result, nil) otherwise; a result it returns never carries
@@ -194,8 +197,7 @@ func (e *Error) Unwrap() error {
 }
 
 // Loc is the location of the construct e names, as the package doc's
-// "Locations" section places it, under the URI [WithURI] gives: empty, and
-// rendered "?", without one.
+// "Locations" section places it, under the URI [Validate] states.
 func (e *Error) Loc() xsderr.Loc {
 	return e.loc
 }
