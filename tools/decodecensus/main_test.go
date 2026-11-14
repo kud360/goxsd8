@@ -53,7 +53,7 @@ func schemaTest(doc string) string {
 // nilled and nilled, each through the Nillable instantiations the census
 // binds, and v.xml, a union of two basic members of one Go type, through the
 // variant set it binds in file order), decline with an xsi:type (e.xml,
-// twice) and an optional content all over a required element (c.xml), and fail
+// twice) and a local element of an abstract complex type (c.xml), and fail
 // otherwise, charged (invalid.xml) and with no declaration for the document
 // element (u.xml), which decodes into the placeholder; its case old is withheld.
 // Group rec's schema assembles and does not generate, group bad's does not
@@ -64,7 +64,7 @@ var censusSuite = map[string]string{
   <testGroup name="g">` + schemaTest("s.xsd") +
 		instanceTest("decoded", "a.xml", "") + instanceTest("decoded2", "a.xml", "") +
 		instanceTest("typed", "e.xml", "") + instanceTest("typed2", "e.xml", "") + instanceTest("variant", "v.xml", "") + instanceTest("simpledecoded", "f.xml", "") +
-		instanceTest("all", "c.xml", "") + instanceTest("choice", "g.xml", "") + instanceTest("precision", "p.xml", "") + instanceTest("invalid", "invalid.xml", "") +
+		instanceTest("abstract", "c.xml", "") + instanceTest("choice", "g.xml", "") + instanceTest("precision", "p.xml", "") + instanceTest("invalid", "invalid.xml", "") +
 		instanceTest("nilledsimple", "n.xml", "") + instanceTest("nillable", "m.xml", "") + instanceTest("nilled", "m2.xml", "") +
 		instanceTest("undeclared", "u.xml", "") + instanceTest("old", "a.xml", ` version="1.0"`) + `</testGroup>
   <testGroup name="rec">` + schemaTest("rec.xsd") + instanceTest("i", "a.xml", "") + `</testGroup>
@@ -73,7 +73,8 @@ var censusSuite = map[string]string{
 </testSet>`,
 	"d/s.xsd": `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
   <xs:element name="a"><xs:complexType><xs:sequence><xs:element name="b" type="xs:string"/></xs:sequence></xs:complexType></xs:element>
-  <xs:element name="c"><xs:complexType><xs:all minOccurs="0"><xs:element name="d" type="xs:string"/></xs:all></xs:complexType></xs:element>
+  <xs:complexType name="ab" abstract="true"/>
+  <xs:element name="c"><xs:complexType><xs:sequence><xs:element name="d" type="ab" minOccurs="0"/></xs:sequence></xs:complexType></xs:element>
   <xs:element name="e" type="xs:string"/>
   <xs:simpleType name="lower"><xs:restriction base="xs:token"><xs:pattern value="[a-z]+"/></xs:restriction></xs:simpleType>
   <xs:element name="v"><xs:simpleType><xs:union memberTypes="lower xs:string"/></xs:simpleType></xs:element>
@@ -88,7 +89,7 @@ var censusSuite = map[string]string{
 </xs:schema>`,
 	"d/bad.xsd":       `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"><xs:element name="a" type="undeclared"/></xs:schema>`,
 	"d/a.xml":         `<a><b>x</b></a>`,
-	"d/c.xml":         `<c><d>x</d></c>`,
+	"d/c.xml":         `<c/>`,
 	"d/e.xml":         `<e xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:type="xs:string" xmlns:xs="http://www.w3.org/2001/XMLSchema">1.0</e>`,
 	"d/v.xml":         `<v>X</v>`,
 	"d/f.xml":         `<f>x</f>`,
@@ -116,7 +117,7 @@ const wantCounts = `decodecensus: 17 instance case(s) under %ROOT%
 
 === First decline, by construct: 2 construct(s) ===
        2  an element carrying xsi:type
-       1  a content all group with {min occurs} 0 whose model group is not emptiable
+       1  an element declaration whose complex {type definition} has {abstract} true
 
 === Caveats ===
 `
@@ -127,8 +128,8 @@ const wantPaths = `
 an element carrying xsi:type (2):
   S/g/instance/typed
   S/g/instance/typed2
-a content all group with {min occurs} 0 whose model group is not emptiable (1):
-  S/g/instance/all
+an element declaration whose complex {type definition} has {abstract} true (1):
+  S/g/instance/abstract
 
 === Cases, by listed count ===
 rejected codegen's own type (0):
