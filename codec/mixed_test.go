@@ -180,7 +180,7 @@ func (mxNameAnyAny2) isMxNameAny() {}
 var mxPickBranches = WithBranches[mxPickI](mxPickA{}, mxPickB{})
 
 // TestMixedTypesAreCodegens pins the types above to those codegen emits for
-// each mixed-content schema, in shape (codegen/doc.go "# Particles").
+// each mixed-content schema, in shape (codegen/doc.go "# Complex types").
 func TestMixedTypesAreCodegens(t *testing.T) {
 	mixedChildDecl := "type MixedChild[T any] struct {\n\tElement T\n\tTail    string\n}\n"
 	pair := "type R struct {\n\tText string\n\tA    MixedChild[string]\n\tB    MixedChild[int32]\n}\n"
@@ -220,25 +220,23 @@ func TestMixedTypesAreCodegens(t *testing.T) {
 	}
 }
 
-// TestDecodeMixed pins the mixed-content lift (§3.4.1 {variety} mixed):
-// Text holds the characters before the first child, each child's field holds
-// MixedChild over the V it would hold in element-only content, its Tail the
-// characters after it, and a wildcard's or the {open content}'s child holds
-// AnyChild (codegen/doc.go "# Particles"): sequence(a), each character run
-// raw; an empty {particle}, Text and the attribute alone; a 0..1 particle,
-// absent and present; a wildcard particle; an extension of a mixed base,
-// adding a particle under mixed="true" and adding only an attribute
-// (dcl.ctd.ctcc.common clause 4.2, cos-ct-extends clause 1.4.3.2.2.1); an
-// {open content}, before and after the particle's child; white space between
-// and around children kept verbatim, a run broken by a comment or CDATA
-// concatenated; a choice occurring once, which stays a struct field; an
-// element of type xs:anyType; a repeated choice and a repeated sequence,
-// each held in an occurrence field, and a flattened content model; a 0..1
-// element of a bare sealed interface, *MixedChild[I], absent and present;
-// a {value constraint}, which supplies no Text (§3.3.5.4 sic-eltType); a
-// mixed restriction of xs:anyType, the document element's and a local
-// element's; and a choice of a wildcard and an element any of xs:string,
-// whose branch fields, AnyChild and MixedChild[string], share no Go type.
+// TestDecodeMixed pins the mixed-content lift (§3.4.1 {variety} mixed), the
+// fields codegen/doc.go "# Complex types" gives filled as item 6 of Decode's
+// doc states: sequence(a), each character run raw; an empty {particle}, Text
+// and the attribute alone; a 0..1 particle, absent and present; a wildcard
+// particle; an extension of a mixed base, adding a particle under
+// mixed="true" and adding only an attribute (dcl.ctd.ctcc.common clause 4.2,
+// cos-ct-extends clause 1.4.3.2.2.1); an {open content}, before and after
+// the particle's child; white space between and around children kept
+// verbatim, a run broken by a comment or CDATA concatenated; a choice
+// occurring once, which stays a struct field; an element of type xs:anyType;
+// a repeated choice and a repeated sequence, each held in an occurrence
+// field, and a flattened content model; a 0..1 element of a bare sealed
+// interface, *MixedChild[I], absent and present; a {value constraint}, which
+// supplies no Text (§3.3.5.4 sic-eltType); a mixed restriction of
+// xs:anyType, the document element's and a local element's; and a choice of
+// a wildcard and an element any of xs:string, whose branch fields, AnyChild
+// and MixedChild[string], share no Go type.
 func TestDecodeMixed(t *testing.T) {
 	str := func(s string) *string { return &s }
 	rows := []struct {
@@ -343,7 +341,7 @@ func rootCharacters(t *testing.T, data []byte) string {
 // TestDecodeMixedRoundTrip pins codegen's round trip for mixed content
 // without an encoder: Text and then each child's Tail, in document order,
 // concatenate to the document element's own character data (codegen/doc.go
-// "# Particles"), white space included.
+// "# Complex types"), white space included.
 func TestDecodeMixedRoundTrip(t *testing.T) {
 	schema := schemaOf(t, mxRepChoiceSchema)
 	data := instanceOf(` xmlns:o="urn:o"`, "\n <s:a>1</s:a> two \t<s:b>2</s:b><s:a>3</s:a>\n<!--c-->end\n")
@@ -414,7 +412,7 @@ func (mxParaChoiceSeq) isMxParaChoice() {}
 // complex type's struct wrapped, its own element-only fields not, a
 // wildcard's []AnyChild, a choice's interface unwrapped with its branch
 // fields wrapped, and an occurrence field unwrapped with its item's fields
-// wrapped (codegen/doc.go "# Particles").
+// wrapped (codegen/doc.go "# Complex types").
 func TestDecodeMixedPara(t *testing.T) {
 	golden, err := os.ReadFile(filepath.Join("..", "codegen", "testdata", "mixed.golden"))
 	if err != nil {

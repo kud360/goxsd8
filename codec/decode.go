@@ -587,36 +587,27 @@ var ErrTypeMismatch = errors.New("codec: T is not the type codegen emits for the
 //     the element (cvc-elt clause 5.1). An absent element's field is nil, so
 //     an absent element, a nilled one and an emptiable choice's empty match,
 //     which the Content arm holds, are three values.
-//   - The field of a complex type's {open content}, read from its {content
-//     type} as codegen reads it (codegen's package doc, "# Open content"),
-//     after the particle fields, a flattened or occurrence field included,
-//     and before the attribute fields, named as if from local name
-//     openContent (codegen's package doc, "# Naming"), so OpenContent2 beside
-//     an element openContent: []E, never a pointer, E a struct of
+//   - The field of a complex type's {open content}, which codegen's package
+//     doc ("# Open content") reads, places and names: []E, E a struct of
 //     AnyElement's shape as the wildcard bullet above states it, matched by
 //     shape, or []C in mixed content, as the mixed-content bullet below
 //     states, and the slice named or not. It holds, in document order, one E
 //     per child attributed to the {open content} (the paragraph after item
-//     8), nil for none; no occurrence's or branch's struct holds one. Neither
-//     its {mode} nor its wildcard's {namespace constraint} or {process
-//     contents} is read: validation held each such child to them first
-//     (§3.4.4.3 cvc-complex-content clauses 2.4 and 3.4).
-//   - The fields of mixed content ({variety} mixed, Structures §3.4.1), read
-//     from the type's own {content type} as codegen reads it, never by
-//     finding a struct of MixedChild's shape in T (codegen's package doc,
-//     "# Particles", states which fields it wraps): T's first field, named as
-//     if from local name text ahead of every other (codegen's package doc,
-//     "# Naming"), so Text, an element text then taking Text2, a string
-//     holding the character data before the first child element; the field
-//     of each element particle codegen wraps holds M in place of its V, by the same
-//     occurrence, M a struct of exactly Element, holding that V as the
-//     bullets above match it, and Tail, a string, in that order, none
-//     embedded, struct tags aside, its name never compared, such as
-//     MixedChild2; and a wildcard particle's and the {open content}'s hold C,
-//     AnyChild's shape as the wildcard bullet above states it, E's own C and
-//     no other struct of its shape. Text and each Tail hold the characters
-//     codegen's package doc ("# Particles") assigns them, raw as that bullet
-//     states an E's Text and Tail, white space included.
+//     8), nil for none. Neither its {mode} nor its wildcard's {namespace
+//     constraint} or {process contents} is read: validation held each such
+//     child to them first (§3.4.4.3 cvc-complex-content clauses 2.4 and
+//     3.4).
+//   - The fields of mixed content ({variety} mixed, Structures §3.4.1) are
+//     found from the schema as codegen's package doc ("# Complex types")
+//     reads and gives them, never by finding a struct of MixedChild's shape
+//     in T, Text named as its "# Naming" states: Text is matched as
+//     the first bullet matches any field; M, in place of each MixedChild, is a
+//     struct of exactly Element, holding the V the bullets above match, and
+//     Tail, a string, in that order, none embedded, struct tags aside, its
+//     name never compared, such as MixedChild2; and C, in place of each
+//     AnyChild, is of AnyChild's shape as the wildcard bullet above states it,
+//     E's own C and no other struct of its shape. Decode fills Text and each
+//     Tail raw, as that bullet states an E's, white space included.
 //   - The field of a complex type's {attribute wildcard}, its struct's last,
 //     named as if from local name anyAttribute after the attribute fields
 //     (codegen's package doc, "# Naming"), so AnyAttribute2 where an
@@ -667,13 +658,12 @@ var ErrTypeMismatch = errors.New("codec: T is not the type codegen emits for the
 //     choice, a substitution group, a flattened slice's element, an
 //     occurrence field's choice or an element declaration's governing types:
 //     a choice's field is the struct's first for a content choice and the one
-//     at its particle's place for a nested choice, named as if from the local
-//     name choice (codegen's package doc, "# Naming") and holding the bare
-//     interface, never a pointer; a governing types' interface, its field and
-//     its branches are codegen's package doc's ("An element declaration's
-//     governing types"), each branch's one field holding what the field of a
-//     local element of its type occurring exactly once holds in
-//     element-only content, never a MixedChild, whatever content holds the
+//     at its particle's place for a nested choice, named as codegen's package
+//     doc's "# Naming" states, and holding the bare interface, never a
+//     pointer; a governing types' interface, its field and
+//     its branches are codegen's package doc's ("# Element declarations"),
+//     each branch's one field matched as an element-only content's field of
+//     that type is, never as a MixedChild, whatever content holds the
 //     interface's own field. Its branch types reach Decode only through
 //     [WithBranches]: it does not match when it is not an interface whose one
 //     method is unexported, or when its branch set, as WithBranches supplied
@@ -1282,7 +1272,7 @@ func (rawArm) describe() string { return "E for a struct E of codegen's AnyEleme
 // content (goshape.Mixed): M, a struct of the shape of codegen's MixedChild[V],
 // exactly Element, holding the V element's arm binds, and Tail, a string, in
 // that order, neither embedded, struct tags aside, its name never compared,
-// so codegen's MixedChild2 matches (codegen/doc.go "# Particles").
+// so codegen's MixedChild2 matches (codegen/doc.go "# Complex types").
 type mixedArm struct{ element fieldArm }
 
 // bind holds v to a's MixedChild shape, its Element to a.element, and returns
@@ -1315,7 +1305,7 @@ func (a mixedArm) describe() string {
 // of codegen's AnyChild, exactly Element, E, a struct of AnyElement's shape,
 // and Tail, a string, where C is the type E's Content's Children hold, as
 // rawShapeOf matches E, so E's own C and no other struct of its shape; no
-// struct's name is compared (codegen/doc.go "# Particles").
+// struct's name is compared (codegen/doc.go "# Complex types").
 type childArm struct{}
 
 // bind returns the tailReader that reads the field's element raw and its
@@ -1406,11 +1396,10 @@ func (t tailReader) read(p *pipeline, r *xmltree.Reader, start *xmltree.StartEle
 
 // charRun reads r up to its next start or end tag and returns the character
 // data before it, every run concatenated across the comments and processing
-// instructions between them, "" for none, and that tag: a run of mixed
-// content, raw and of no simple type (§3.4.4.2 cvc-complex-type clause 1.4
-// validates the element children alone), white space included. It is the
-// one reading of codegen's Text and of each Tail (codegen/doc.go
-// "# Particles"): boundBinding.fill reads Text with it, tailReader each Tail.
+// instructions between them, "" for none, and that tag, white space
+// included, raw as codegen's package doc ("# Complex types") states mixed
+// content's characters are. It is the one reading of Text and of each Tail:
+// boundBinding.fill reads Text with it, tailReader each Tail.
 func charRun(r *xmltree.Reader) (string, xmltree.Node, error) {
 	var run bytes.Buffer
 	for {
@@ -2951,7 +2940,7 @@ func wildcardField(ct xsd.ComplexType, occurs xsd.Occurs, subject string) (field
 // rawChild is the arm of a child ct's content holds raw, a wildcard
 // particle's or the {open content}'s: childArm, AnyChild, in mixed content
 // (goshape.Mixed), and otherwise rawArm, AnyElement (codegen/doc.go
-// "# Particles", "# Open content").
+// "# Complex types", "# Open content").
 func rawChild(ct xsd.ComplexType) fieldArm {
 	if goshape.Mixed(ct) {
 		return childArm{}
