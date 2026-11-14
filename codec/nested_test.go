@@ -135,101 +135,98 @@ type (
 	ifCV struct{ V string }
 )
 
-// shareR to ShareRX3 are shareSchema's R, RX, RX2 and RX3; shareGR to
+// shareR to shareXS are shareSchema's R, RX, RX2 and RX3; shareGR to
 // shareX2 are shareGroupSchema's R, HSubstitutionGroup, HSubstitutionGroupX,
 // HSubstitutionGroupX2, X and X2, shareXV standing for X; shareRR to shareM
 // are shareRefSchema's R, RG, RG2, GSubstitutionGroup, GSubstitutionGroupG,
-// GSubstitutionGroupM, G and M, shareXV standing for RG3; shareOR to ShareORX3
+// GSubstitutionGroupM, G and M, shareXV standing for RG3; shareOR to shareOXs
 // are shareOccursSchema's R, RX and RX3, shareXV standing for RX2 and RX4;
-// shareSR to ShareC1E12 are shareSelfSchema's R, RE1, RE12, C1, C1E1 and
+// shareSR to shareC1S are shareSelfSchema's R, RE1, RE12, C1, C1E1 and
 // C1E12; shareLR to shareLX are shareListSchema's R, RX, RX2 and X; and
-// shareLsR to ShareLsRX2 and shareSsR to ShareSsRX2 are shareListsSchema's
+// shareLsR to shareLsRX2 and shareSsR to shareSsRX2 are shareListsSchema's
 // and shareStringsSchema's R, RX and RX2, shareLX standing for X in each.
-// Each pin is TestNestedTypesAreCodegens'. The branches of each interface's
-// two alternatives, whose local names render one identifier, carry the name
-// codegen gives them over their interface's, since Decode places a tie's
-// branches by name (item 6 of Decode's doc).
+// Each pin is TestNestedTypesAreCodegens'.
 type (
-	shareR   interface{ isShareR() }
-	ShareRX  struct{ X shareXV }
-	shareXV  struct{ V string }
-	ShareRX3 struct{ X string }
+	shareR  interface{ isShareR() }
+	shareX  struct{ X shareXV }
+	shareXV struct{ V string }
+	shareXS struct{ X string }
 
 	shareGR  struct{ H shareH }
 	shareH   interface{ isShareH() }
-	ShareHX  struct{ X shareXV }
-	ShareHX2 struct{ X shareX2 }
+	shareHX  struct{ X shareXV }
+	shareHX2 struct{ X shareX2 }
 	shareX2  string
 
-	shareRR   interface{ isShareRR() }
-	ShareRRG  struct{ G shareGG }
-	ShareRRG2 struct{ G shareXV }
-	shareGG   interface{ isShareGG() }
-	shareGGG  struct{ G shareG }
-	shareGGM  struct{ M shareM }
-	shareG    string
-	shareM    string
+	shareRR  interface{ isShareRR() }
+	shareRG  struct{ G shareGG }
+	shareRG2 struct{ G shareXV }
+	shareGG  interface{ isShareGG() }
+	shareGGG struct{ G shareG }
+	shareGGM struct{ M shareM }
+	shareG   string
+	shareM   string
 
-	shareOR   interface{ isShareOR() }
-	ShareORX  struct{ X shareXV }
-	ShareORX3 struct{ X []shareXV }
+	shareOR  interface{ isShareOR() }
+	shareOX  struct{ X shareXV }
+	shareOXs struct{ X []shareXV }
 
-	shareSR    interface{ isShareSR() }
-	ShareSRE1  struct{ E1 shareC1 }
-	ShareSRE12 struct{ E1 string }
-	shareC1    interface{ isShareC1() }
-	ShareC1E1  struct{ E1 shareC1 }
-	ShareC1E12 struct{ E1 string }
+	shareSR  interface{ isShareSR() }
+	shareSRE struct{ E1 shareC1 }
+	shareSRS struct{ E1 string }
+	shareC1  interface{ isShareC1() }
+	shareC1E struct{ E1 shareC1 }
+	shareC1S struct{ E1 string }
 
 	shareLR   interface{ isShareLR() }
-	ShareLRX  struct{ X int32 }
-	ShareLRX2 struct{ X shareLX }
+	shareLRX  struct{ X int32 }
+	shareLRX2 struct{ X shareLX }
 	shareLX   []int32
 
 	shareLsR   interface{ isShareLsR() }
-	ShareLsRX  struct{ X []int32 }
-	ShareLsRX2 struct{ X []shareLX }
+	shareLsRX  struct{ X []int32 }
+	shareLsRX2 struct{ X []shareLX }
 
 	shareSsR   interface{ isShareSsR() }
-	ShareSsRX  struct{ X []string }
-	ShareSsRX2 struct{ X shareLX }
+	shareSsRX  struct{ X []string }
+	shareSsRX2 struct{ X shareLX }
 )
 
-func (ShareRX) isShareR()     {}
-func (ShareRX3) isShareR()    {}
-func (ShareHX) isShareH()     {}
-func (ShareHX2) isShareH()    {}
-func (ShareRRG) isShareRR()   {}
-func (ShareRRG2) isShareRR()  {}
-func (shareGGG) isShareGG()   {}
-func (shareGGM) isShareGG()   {}
-func (ShareORX) isShareOR()   {}
-func (ShareORX3) isShareOR()  {}
-func (ShareSRE1) isShareSR()  {}
-func (ShareSRE12) isShareSR() {}
-func (ShareC1E1) isShareC1()  {}
-func (ShareC1E12) isShareC1() {}
+func (shareX) isShareR()    {}
+func (shareXS) isShareR()   {}
+func (shareHX) isShareH()   {}
+func (shareHX2) isShareH()  {}
+func (shareRG) isShareRR()  {}
+func (shareRG2) isShareRR() {}
+func (shareGGG) isShareGG() {}
+func (shareGGM) isShareGG() {}
+func (shareOX) isShareOR()  {}
+func (shareOXs) isShareOR() {}
+func (shareSRE) isShareSR() {}
+func (shareSRS) isShareSR() {}
+func (shareC1E) isShareC1() {}
+func (shareC1S) isShareC1() {}
 
-func (ShareLRX) isShareLR()    {}
-func (ShareLRX2) isShareLR()   {}
-func (ShareLsRX) isShareLsR()  {}
-func (ShareLsRX2) isShareLsR() {}
-func (ShareSsRX) isShareSsR()  {}
-func (ShareSsRX2) isShareSsR() {}
+func (shareLRX) isShareLR()    {}
+func (shareLRX2) isShareLR()   {}
+func (shareLsRX) isShareLsR()  {}
+func (shareLsRX2) isShareLsR() {}
+func (shareSsRX) isShareSsR()  {}
+func (shareSsRX2) isShareSsR() {}
 
 // The branch sets of the shared-name schemas' interfaces, shareSchema's in
 // both orders.
 var (
-	shareStructFirst    = WithBranches[shareR](ShareRX{}, ShareRX3{})
-	shareScalarFirst    = WithBranches[shareR](ShareRX3{}, ShareRX{})
-	shareGroupBranches  = WithBranches[shareH](ShareHX{}, ShareHX2{})
-	shareRefBranches    = []Option{WithBranches[shareRR](ShareRRG{}, ShareRRG2{}), WithBranches[shareGG](shareGGG{}, shareGGM{})}
-	shareOccursBranches = WithBranches[shareOR](ShareORX{}, ShareORX3{})
-	shareSelfBranches   = []Option{WithBranches[shareSR](ShareSRE1{}, ShareSRE12{}), WithBranches[shareC1](ShareC1E1{}, ShareC1E12{})}
+	shareStructFirst    = WithBranches[shareR](shareX{}, shareXS{})
+	shareScalarFirst    = WithBranches[shareR](shareXS{}, shareX{})
+	shareGroupBranches  = WithBranches[shareH](shareHX{}, shareHX2{})
+	shareRefBranches    = []Option{WithBranches[shareRR](shareRG{}, shareRG2{}), WithBranches[shareGG](shareGGG{}, shareGGM{})}
+	shareOccursBranches = WithBranches[shareOR](shareOX{}, shareOXs{})
+	shareSelfBranches   = []Option{WithBranches[shareSR](shareSRE{}, shareSRS{}), WithBranches[shareC1](shareC1E{}, shareC1S{})}
 
-	shareListBranches    = WithBranches[shareLR](ShareLRX{}, ShareLRX2{})
-	shareListsBranches   = WithBranches[shareLsR](ShareLsRX{}, ShareLsRX2{})
-	shareStringsBranches = WithBranches[shareSsR](ShareSsRX{}, ShareSsRX2{})
+	shareListBranches    = WithBranches[shareLR](shareLRX{}, shareLRX2{})
+	shareListsBranches   = WithBranches[shareLsR](shareLsRX{}, shareLsRX2{})
+	shareStringsBranches = WithBranches[shareSsR](shareSsRX{}, shareSsRX2{})
 )
 
 func (ifRE) isIfR() {}
@@ -404,39 +401,39 @@ func TestDecodeNested(t *testing.T) {
 		{"a type reaching itself through interfaces alone", ifaceSelfSchema, instanceOf("", `<s:e><s:e><s:v>x</s:v></s:e></s:e>`),
 			into[ifR](ifBranches...), nil, ifR(ifRE{E: ifCE{E: ifCV{V: "x"}}})},
 		{"a choice's alternatives of a struct and a string named alike, the struct's branch", shareSchema, instanceOf("", `<s:x><s:v>v</s:v></s:x>`),
-			into[shareR](shareStructFirst), nil, shareR(ShareRX{X: shareXV{V: "v"}})},
+			into[shareR](shareStructFirst), nil, shareR(shareX{X: shareXV{V: "v"}})},
 		{"a choice's alternatives of a struct and a string named alike, the string's branch", shareSchema, instanceOf("", `<x>s</x>`),
-			into[shareR](shareStructFirst), nil, shareR(ShareRX3{X: "s"})},
+			into[shareR](shareStructFirst), nil, shareR(shareXS{X: "s"})},
 		{"a choice's alternatives of a struct and a string named alike, the struct's branch, the string's supplied first", shareSchema, instanceOf("", `<s:x><s:v>v</s:v></s:x>`),
-			into[shareR](shareScalarFirst), nil, shareR(ShareRX{X: shareXV{V: "v"}})},
+			into[shareR](shareScalarFirst), nil, shareR(shareX{X: shareXV{V: "v"}})},
 		{"a choice's alternatives of a struct and a string named alike, the string's branch, the string's supplied first", shareSchema, instanceOf("", `<x>s</x>`),
-			into[shareR](shareScalarFirst), nil, shareR(ShareRX3{X: "s"})},
+			into[shareR](shareScalarFirst), nil, shareR(shareXS{X: "s"})},
 		{"a substitution group's members of a struct and a string named alike, the struct's branch", shareGroupSchema, instanceOf("", `<s:x><s:v>v</s:v></s:x>`),
-			into[shareGR](shareGroupBranches), nil, shareGR{H: ShareHX{X: shareXV{V: "v"}}}},
+			into[shareGR](shareGroupBranches), nil, shareGR{H: shareHX{X: shareXV{V: "v"}}}},
 		{"a substitution group's members of a struct and a string named alike, the string's branch", shareGroupSchema, instanceOf("", `<s:X>s</s:X>`),
-			into[shareGR](shareGroupBranches), nil, shareGR{H: ShareHX2{X: "s"}}},
+			into[shareGR](shareGroupBranches), nil, shareGR{H: shareHX2{X: "s"}}},
 		{"a choice's alternatives of a substitution group's interface and a struct named alike, a member's branch", shareRefSchema, instanceOf("", `<s:m>m</s:m>`),
-			into[shareRR](shareRefBranches...), nil, shareRR(ShareRRG{G: shareGGM{M: "m"}})},
+			into[shareRR](shareRefBranches...), nil, shareRR(shareRG{G: shareGGM{M: "m"}})},
 		{"a choice's alternatives of a substitution group's interface and a struct named alike, the struct's branch", shareRefSchema, instanceOf("", `<s:G><s:v>v</s:v></s:G>`),
-			into[shareRR](shareRefBranches...), nil, shareRR(ShareRRG2{G: shareXV{V: "v"}})},
+			into[shareRR](shareRefBranches...), nil, shareRR(shareRG2{G: shareXV{V: "v"}})},
 		{"a choice's alternatives of a struct once and repeated named alike, the one's branch", shareOccursSchema, instanceOf("", `<s:x><s:v>v</s:v></s:x>`),
-			into[shareOR](shareOccursBranches), nil, shareOR(ShareORX{X: shareXV{V: "v"}})},
+			into[shareOR](shareOccursBranches), nil, shareOR(shareOX{X: shareXV{V: "v"}})},
 		{"a choice's alternatives of a struct once and repeated named alike, the repeated's branch", shareOccursSchema, instanceOf("", `<s:X><s:v>a</s:v></s:X><s:X><s:v>b</s:v></s:X>`),
-			into[shareOR](shareOccursBranches), nil, shareOR(ShareORX3{X: []shareXV{{V: "a"}, {V: "b"}}})},
+			into[shareOR](shareOccursBranches), nil, shareOR(shareOXs{X: []shareXV{{V: "a"}, {V: "b"}}})},
 		{"a choice's alternatives of its own interface and a string named alike", shareSelfSchema, instanceOf("", `<s:e1><s:E1>s</s:E1></s:e1>`),
-			into[shareSR](shareSelfBranches...), nil, shareSR(ShareSRE1{E1: ShareC1E12{E1: "s"}})},
+			into[shareSR](shareSelfBranches...), nil, shareSR(shareSRE{E1: shareC1S{E1: "s"}})},
 		{"a choice's alternatives of an xs:int once and a ref to a list of xs:int named alike, the xs:int's branch", shareListSchema, instanceOf("", `<s:x>1</s:x>`),
-			into[shareLR](shareListBranches), nil, shareLR(ShareLRX{X: 1})},
+			into[shareLR](shareListBranches), nil, shareLR(shareLRX{X: 1})},
 		{"a choice's alternatives of an xs:int once and a ref to a list of xs:int named alike, the list's branch", shareListSchema, instanceOf("", `<s:X>1 2</s:X>`),
-			into[shareLR](shareListBranches), nil, shareLR(ShareLRX2{X: shareLX{1, 2}})},
+			into[shareLR](shareListBranches), nil, shareLR(shareLRX2{X: shareLX{1, 2}})},
 		{"a choice's alternatives of an xs:int and a ref to a list of xs:int, both repeated, named alike, the xs:int's branch", shareListsSchema, instanceOf("", `<s:x>1</s:x><s:x>2</s:x>`),
-			into[shareLsR](shareListsBranches), nil, shareLsR(ShareLsRX{X: []int32{1, 2}})},
+			into[shareLsR](shareListsBranches), nil, shareLsR(shareLsRX{X: []int32{1, 2}})},
 		{"a choice's alternatives of an xs:int and a ref to a list of xs:int, both repeated, named alike, the list's branch", shareListsSchema, instanceOf("", `<s:X>1 2</s:X><s:X>3</s:X>`),
-			into[shareLsR](shareListsBranches), nil, shareLsR(ShareLsRX2{X: []shareLX{{1, 2}, {3}}})},
+			into[shareLsR](shareListsBranches), nil, shareLsR(shareLsRX2{X: []shareLX{{1, 2}, {3}}})},
 		{"a choice's alternatives of a repeated xs:string and a ref to a list of xs:int named alike, the xs:string's branch", shareStringsSchema, instanceOf("", `<s:x>a</s:x><s:x>b</s:x>`),
-			into[shareSsR](shareStringsBranches), nil, shareSsR(ShareSsRX{X: []string{"a", "b"}})},
+			into[shareSsR](shareStringsBranches), nil, shareSsR(shareSsRX{X: []string{"a", "b"}})},
 		{"a choice's alternatives of a repeated xs:string and a ref to a list of xs:int named alike, the list's branch", shareStringsSchema, instanceOf("", `<s:X>1 2</s:X>`),
-			into[shareSsR](shareStringsBranches), nil, shareSsR(ShareSsRX2{X: shareLX{1, 2}})},
+			into[shareSsR](shareStringsBranches), nil, shareSsR(shareSsRX2{X: shareLX{1, 2}})},
 		{"a type reaching itself, its empty match", selfSchema, instanceOf("", ``), into[selfR](selfBranches), nil, selfR{}},
 		{"codegen's own struct of a type reaching itself", sameShapeSchema, instanceOf("", `<s:e><s:e><s:v>i</s:v></s:e><s:v>m</s:v></s:e><s:v>o</s:v>`),
 			into[sameR](), nil, sameR{E: &sameE{E: &sameE{V: "i"}, V: "m"}, V: "o"}},

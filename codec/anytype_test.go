@@ -70,9 +70,7 @@ type rootAny anyType
 
 // The types codegen emits for those schemas' s:r, each named here by its
 // schema, which TestAnyTypeTypesAreCodegens pins; free, member and capA are
-// codegen's F, M and A, each a named type over AnyType. BareNamedA and
-// BareNamedA2 carry the names codegen gives them over their interface's,
-// since Decode places a tie's branches by name (item 6 of Decode's doc).
+// codegen's F, M and A, each a named type over AnyType.
 type (
 	pairAny   struct{ A, B anyType }
 	free      anyType
@@ -101,8 +99,8 @@ type (
 	groupAnyN    struct{ N memberString }
 	capA         anyType
 	bareNamed    interface{ isBareNamed() }
-	BareNamedA   struct{ A anyType }
-	BareNamedA2  struct{ A capA }
+	bareNamedA   struct{ A anyType }
+	bareNamedA2  struct{ A capA }
 )
 
 func (pickAnyA) isPickAny()       {}
@@ -113,8 +111,8 @@ func (wildAnyAny) isWildAny()     {}
 func (wildAnyAny2) isWildAny()    {}
 func (groupAnyM) isGroupAnyH()    {}
 func (groupAnyN) isGroupAnyH()    {}
-func (BareNamedA) isBareNamed()   {}
-func (BareNamedA2) isBareNamed()  {}
+func (bareNamedA) isBareNamed()   {}
+func (bareNamedA2) isBareNamed()  {}
 
 // The branch sets of those schemas' interfaces.
 var (
@@ -122,7 +120,7 @@ var (
 	pickRefAnyBranches = WithBranches[pickRefAny](pickRefAnyF{}, pickRefAnyB{})
 	wildAnyBranches    = WithBranches[wildAny](wildAnyAny{}, wildAnyAny2{})
 	groupAnyBranches   = WithBranches[groupAnyH](groupAnyM{}, groupAnyN{})
-	bareNamedBranches  = WithBranches[bareNamed](BareNamedA{}, BareNamedA2{})
+	bareNamedBranches  = WithBranches[bareNamed](bareNamedA{}, bareNamedA2{})
 )
 
 // TestAnyTypeTypesAreCodegens pins the types above to those codegen emits for
@@ -243,8 +241,8 @@ func TestDecodeAnyType(t *testing.T) {
 			wildAny(wildAnyAny2{Any: anyElement{Space: "urn:o", Local: "any", Content: text("v")}})},
 		{"a substitution group's member of its head's xs:anyType", groupAnySchema, `<s:m k="1">t</s:m>`, into[groupAny](groupAnyBranches),
 			groupAny{H: groupAnyM{M: member{Attributes: []anyAttribute{{Local: "k", Value: "1"}}, Text: "t"}}}},
-		{"a local alternative beside a ref one, the local", bareNamedSchema, `<s:a>l</s:a>`, into[bareNamed](bareNamedBranches), bareNamed(BareNamedA{A: text("l")})},
-		{"a local alternative beside a ref one, the ref", bareNamedSchema, `<s:A>n</s:A>`, into[bareNamed](bareNamedBranches), bareNamed(BareNamedA2{A: capA(text("n"))})},
+		{"a local alternative beside a ref one, the local", bareNamedSchema, `<s:a>l</s:a>`, into[bareNamed](bareNamedBranches), bareNamed(bareNamedA{A: text("l")})},
+		{"a local alternative beside a ref one, the ref", bareNamedSchema, `<s:A>n</s:A>`, into[bareNamed](bareNamedBranches), bareNamed(bareNamedA2{A: capA(text("n"))})},
 		{"xsi:schemaLocation on the element, in start-tag order", oneAnySchema, `<s:a xsi:schemaLocation="urn:x x.xsd" k="1"/>`, into[oneAny](),
 			oneAny{A: anyType{Attributes: []anyAttribute{{Space: xsi, Local: "schemaLocation", Value: "urn:x x.xsd"}, {Local: "k", Value: "1"}}}}},
 		{"xsi:noNamespaceSchemaLocation on the element", oneAnySchema, `<s:a k="1" xsi:noNamespaceSchemaLocation="x.xsd"/>`, into[oneAny](),
@@ -420,10 +418,11 @@ func TestDecodeAnyTypeMismatch(t *testing.T) {
 // of type xs:anyType, read through CheckDecode into struct{}, which item 5's
 // shared-branch decline precedes and which mismatches the bare interface
 // every one of these choices otherwise is: a pair sharing a branch declines,
-// and any other pair passes item 5. Each pair but the wildcard's is an
-// element alternative and a spliced sequence alternative (spliced), which no
-// tie holds, so a decline is field.sharesBranch's answer; two members of one
-// group are a tie, which no shape declines.
+// and any other pair passes item 5. Each pair but the wildcard's and the
+// local-and-ref one's is an element alternative and a spliced sequence
+// alternative (spliced), which no tie holds, so a decline is
+// field.sharesBranch's answer; two members of one group sharing a branch are
+// a tie, which no shape declines.
 func TestAnyTypeSharesBranch(t *testing.T) {
 	const cx = `<xs:complexType name="Cx"><xs:choice><xs:element name="p" type="xs:string"/><xs:element name="q" type="xs:int"/></xs:choice></xs:complexType>`
 	rows := []struct {
@@ -433,7 +432,7 @@ func TestAnyTypeSharesBranch(t *testing.T) {
 	}{
 		{"two local alternatives, a and A", root(`<xs:choice><xs:element name="a"/>` + spliced(`<xs:element name="A"/>`) + `</xs:choice>`), true},
 		{"two ref alternatives, f and F", `<xs:element name="f"/><xs:element name="F"/>` + root(`<xs:choice><xs:element ref="s:f"/>`+spliced(`<xs:element ref="s:F"/>`)+`</xs:choice>`), true},
-		{"a local and a ref alternative", `<xs:element name="A"/>` + root(`<xs:choice><xs:element name="a"/>`+spliced(`<xs:element ref="s:A"/>`)+`</xs:choice>`), false},
+		{"a local and a ref alternative", bareNamedSchema, false},
 		{"one alternative and a repeated one", root(`<xs:choice><xs:element name="a"/>` + spliced(`<xs:element name="A" maxOccurs="unbounded"/>`) + `</xs:choice>`), false},
 		{"beside a wildcard", wildAnySchema, false},
 		{"beside codegen's struct", root(`<xs:choice><xs:element name="v"/>` + spliced(vStruct("V", "")) + `</xs:choice>`), true},

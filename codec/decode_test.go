@@ -912,9 +912,7 @@ const (
 // refA to refs are refSchema's A, B, C and R; refH and refHolder are R and H
 // of blockedSchema, derivationBlockedSchema and abstractMemberSchema alike;
 // refChoice to refK are refChoiceSchema's R, RA, RA2, RK, A and K. Each pin
-// is TestRefTypesAreCodegens'. RefChoiceA and RefChoiceA2 carry the names
-// codegen gives them over their interface's, since Decode places a tie's
-// branches by name (item 6 of Decode's doc).
+// is TestRefTypesAreCodegens'.
 type (
 	refA string
 	refB string
@@ -927,17 +925,17 @@ type (
 	refH        string
 	refHolder   struct{ H refH }
 	refChoice   interface{ isRefChoice() }
-	RefChoiceA  struct{ A string }
-	RefChoiceA2 struct{ A refA }
+	refChoiceA  struct{ A string }
+	refChoiceA2 struct{ A refA }
 	refChoiceK  struct{ K []refK }
 	refK        string
 )
 
-func (RefChoiceA) isRefChoice()  {}
-func (RefChoiceA2) isRefChoice() {}
+func (refChoiceA) isRefChoice()  {}
+func (refChoiceA2) isRefChoice() {}
 func (refChoiceK) isRefChoice()  {}
 
-var refChoiceBranches = WithBranches[refChoice](RefChoiceA{}, RefChoiceA2{}, refChoiceK{})
+var refChoiceBranches = WithBranches[refChoice](refChoiceA{}, refChoiceA2{}, refChoiceK{})
 
 // TestRefTypesAreCodegens pins the types above to those codegen emits for
 // each <element ref> schema, in shape: each ref field holds the head's own
@@ -994,8 +992,8 @@ func TestDecodeElementRef(t *testing.T) {
 		{"a head blocking substitution", blockedSchema, "<s:h>x</s:h>", into[refHolder](), refHolder{H: "x"}},
 		{"a head blocking its member's derivation", derivationBlockedSchema, "<s:h> x </s:h>", into[refHolder](), refHolder{H: " x "}},
 		{"a head whose one member is abstract", abstractMemberSchema, "<s:h>x</s:h>", into[refHolder](), refHolder{H: "x"}},
-		{"a choice's local alternative beside a ref of its Go name and shape", refChoiceSchema, "<s:a>v</s:a>", into[refChoice](refChoiceBranches), refChoice(RefChoiceA{A: "v"})},
-		{"a choice's ref alternative", refChoiceSchema, "<s:A>v</s:A>", into[refChoice](refChoiceBranches), refChoice(RefChoiceA2{A: "v"})},
+		{"a choice's local alternative beside a ref of its Go name and shape", refChoiceSchema, "<s:a>v</s:a>", into[refChoice](refChoiceBranches), refChoice(refChoiceA{A: "v"})},
+		{"a choice's ref alternative", refChoiceSchema, "<s:A>v</s:A>", into[refChoice](refChoiceBranches), refChoice(refChoiceA2{A: "v"})},
 		{"a choice's repeated ref alternative", refChoiceSchema, "<s:k> u  v </s:k><s:k>w</s:k>", into[refChoice](refChoiceBranches), refChoice(refChoiceK{K: []refK{"u v", "w"}})},
 	}
 	for _, row := range rows {

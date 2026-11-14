@@ -686,17 +686,19 @@ var ErrTypeMismatch = errors.New("codec: T is not the type codegen emits for the
 //     occurrence: when no WithBranches supplies it for an interface with
 //     alternatives, or its count differs, or it holds a nil value, a type
 //     that is no struct, a type twice, or a branch matching no alternative an
-//     earlier branch did not match. A tie is two or more element alternatives
-//     of a choice, or members of a substitution group, whose local names
-//     render one Go identifier, which for a choice no wildcard alternative's
-//     word any and no model-group alternative's compositor renders: codegen
-//     names their branches B, B being the interface's name followed by that
-//     identifier, and B followed by a decimal from 2, in alternative order
-//     (codegen's package doc, "# Naming"). The branches a tie's alternatives'
-//     fields could be must be as many as its alternatives, each so named, no
-//     two of one suffix, and go to them in ascending suffix order, B first,
-//     each one its own alternative's fields could be; a set where they are
-//     not does not match. Any other branch is held to the one alternative
+//     earlier branch did not match. Of the element alternatives of a choice,
+//     or members of a substitution group, whose local names render one Go
+//     identifier, which for a choice no wildcard alternative's word any and
+//     no model-group alternative's compositor renders, those whose branch
+//     struct shares its shape with another one's, as item 5 states, are a
+//     tie, two or more where any are. Codegen names each of a tie's branches
+//     B or B followed by a decimal from 2, B being the interface's name
+//     followed by that identifier, their suffixes ascending in alternative
+//     order (codegen's package doc, "# Naming"). The branches a tie's
+//     alternatives' fields could be must be as many as its alternatives, each
+//     so named, no two of one suffix, and go to them in ascending suffix
+//     order, each one its own alternative's fields could be; a set where they
+//     are not does not match. Any other branch is held to the one alternative
 //     its fields could be: as many fields as that alternative's branch holds,
 //     each of its field's name, not embedded, and of a Go type it could be,
 //     position by position: V, *V or []V by its particle's occurrence, an
@@ -3106,19 +3108,21 @@ type sealed[A branchArm] struct {
 }
 
 // tieGroup is one tie of a sealed interface, as item 6 of Decode's doc
-// defines one: alts, its alternatives' indices in alternative order, and
-// word, the first one's branch word, which every one's renders.
+// defines one, or a word group (wordGroups): alts, its alternatives' indices
+// in alternative order, and word, its word group's first alternative's
+// branch word, whose Go identifier every one's renders.
 type tieGroup struct {
 	word string
 	alts []int
 }
 
-// tiesOf returns the ties, as item 6 of Decode's doc defines them, of the
-// alternatives whose branch words are words, in alternative order, placed[i]
-// reporting whether alternative i is an element alternative or a
-// substitution group member, the only alternatives a tie holds. An
-// alternative whose word is "" is in no group.
-func tiesOf(words []string, placed []bool) []tieGroup {
+// wordGroups returns the word groups of the alternatives whose branch words
+// are words, in alternative order, from which tiesOf takes a sealed
+// interface's ties: each group the two or more alternatives whose words
+// render one Go identifier, kept only where placed[i] reports each one an
+// element alternative or a substitution group member. An alternative whose
+// word is "" is in no group.
+func wordGroups(words []string, placed []bool) []tieGroup {
 	var groups []tieGroup
 	// at maps a rendered word to its group's index in groups; a lookup
 	// index only, never iterated (STYLE D2).
@@ -3136,18 +3140,47 @@ func tiesOf(words []string, placed []bool) []tieGroup {
 		}
 		groups[g].alts = append(groups[g].alts, i)
 	}
-	var ties []tieGroup
+	var kept []tieGroup
 	for _, g := range groups {
 		if len(g.alts) >= 2 && !slices.ContainsFunc(g.alts, func(i int) bool { return !placed[i] }) {
-			ties = append(ties, g)
+			kept = append(kept, g)
+		}
+	}
+	return kept
+}
+
+// tiesOf returns the ties, as item 6 of Decode's doc defines them, of groups,
+// wordGroups' answer: of each group, every alternative of a pair j, i of it,
+// j earlier, for which share(j, i) holds, where there is such a pair, which
+// makes them two or more; share(j, i) reports whether alternative j's branch
+// may share its shape with i's (branchesShare, field.sharesBranch).
+func tiesOf(groups []tieGroup, share func(j, i int) bool) []tieGroup {
+	var ties []tieGroup
+	for _, g := range groups {
+		in := make([]bool, len(g.alts))
+		for b, i := range g.alts {
+			for a, j := range g.alts[:b] {
+				if share(j, i) {
+					in[a], in[b] = true, true
+				}
+			}
+		}
+		tie := tieGroup{word: g.word}
+		for k, i := range g.alts {
+			if in[k] {
+				tie.alts = append(tie.alts, i)
+			}
+		}
+		if len(tie.alts) > 0 {
+			ties = append(ties, tie)
 		}
 	}
 	return ties
 }
 
-// tied reports whether alternatives i and j are in one of ties.
-func tied(ties []tieGroup, i, j int) bool {
-	return slices.ContainsFunc(ties, func(g tieGroup) bool { return slices.Contains(g.alts, i) && slices.Contains(g.alts, j) })
+// tied reports whether alternatives i and j are in one of groups.
+func tied(groups []tieGroup, i, j int) bool {
+	return slices.ContainsFunc(groups, func(g tieGroup) bool { return slices.Contains(g.alts, i) && slices.Contains(g.alts, j) })
 }
 
 // A branchArm is one alternative of a sealed interface as Decode reads it, a
@@ -3362,15 +3395,17 @@ func bindContentChoice(run *bindRun, ct xsd.ComplexType, particles []xsd.Particl
 // an earlier one's shape, which no branch type's shape could tell apart: one
 // whose branch may admit a struct the earlier one's does under some branch
 // sets (branchesShare), read from the schema, never T, unless the two are in
-// one of the choice's ties (tiesOf over choiceWords), which placeBranches tells apart
-// by name. item reports whether the choice is in an occurrence field's item
-// (bindItem), which its alternatives are bound as. An element alternative's
-// position and target are recorded in x.elements, and the names it takes in
-// x.children (childIndex.take). Its caller builds x's attributor once the
-// content model's every particle is bound.
+// one word group (wordGroups over choiceWords), which puts them in one of the
+// choice's ties (tiesOf), which placeBranches tells apart by name. item
+// reports whether the choice is in an occurrence field's item (bindItem),
+// which its alternatives are bound as. An element alternative's position and
+// target are recorded in x.elements, and the names it takes in x.children
+// (childIndex.take). Its caller builds x's attributor once the content model's
+// every particle is bound.
 func bindChoice(run *bindRun, ct xsd.ComplexType, particles []xsd.Particle, x *childIndex, at []int, base int, item bool, names *goname.Namer, typeSubject string) (*choice, error) {
-	c := &choice{name: names.Claim("choice"), sealed: &sealed[branchArm]{p: run.p, ties: tiesOf(choiceWords(run.p.schema, particles, typeSubject))}}
+	c := &choice{name: names.Claim("choice"), sealed: &sealed[branchArm]{p: run.p}}
 	alts := c.sealed
+	groups := wordGroups(choiceWords(run.p.schema, particles, typeSubject))
 	for i, p := range particles {
 		term, err := particleTerm(run.p.schema, p, typeSubject)
 		if err != nil {
@@ -3412,7 +3447,7 @@ func bindChoice(run *bindRun, ct xsd.ComplexType, particles []xsd.Particle, x *c
 			x.elements = append(x.elements, place{position: position, index: target})
 		}
 		for j, earlier := range alts.alts {
-			if branchesShare(earlier, alt) && !tied(alts.ties, j, i) {
+			if branchesShare(earlier, alt) && !tied(groups, j, i) {
 				return nil, decline(constructSharedBranch, subject)
 			}
 		}
@@ -3421,6 +3456,7 @@ func bindChoice(run *bindRun, ct xsd.ComplexType, particles []xsd.Particle, x *c
 		}
 		alts.alts = append(alts.alts, alt)
 	}
+	alts.ties = tiesOf(groups, func(j, i int) bool { return branchesShare(alts.alts[j], alts.alts[i]) })
 	return c, nil
 }
 
@@ -4995,7 +5031,7 @@ func groupField(run *bindRun, ct xsd.ComplexType, x *childIndex, inItem bool, he
 	for i := range every {
 		every[i] = true
 	}
-	group.ties = tiesOf(words, every)
+	group.ties = tiesOf(wordGroups(words, every), func(j, i int) bool { return group.alts[j].sharesBranch(group.alts[i]) })
 	s, err := particleShape(ct, x, inItem, true, members, head, occurs, bare)
 	if err != nil {
 		return field{}, nil, err
