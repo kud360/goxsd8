@@ -13,10 +13,8 @@ import (
 // Example_contentModelRefs is Example_contentModelTraversal's sibling over a
 // PARSED schema: it walks from a global element's complex type to the particles
 // whose terms are an ElementDeclarationRef and a ModelGroupRef, prints each
-// reference's Name and Loc, and follows each by its read-time lookup —
-// Schema.Element for the element reference, Schema.ModelGroup for the group
-// reference, whose definition's {model group} (§3.7.2) is the term. Each Loc is
-// the position parser.Parse read the ref= attribute at.
+// reference's Name and Loc, and follows each by the read-time lookup its type's
+// doc names. Each Loc is the position parser.Parse read the ref= attribute at.
 func Example_contentModelRefs() {
 	const doc = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
     xmlns:po="urn:example:po" targetNamespace="urn:example:po">

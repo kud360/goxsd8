@@ -32,9 +32,9 @@ type Term interface{ term() }
 // to a top-level Element Declaration (src-resolve clause 1.3), a ModelGroupRef to
 // a top-level Model Group Definition (clause 1.5) — and rejects an unresolvable
 // or circular target. It does NOT rewrite the slot: the ref is retained and a
-// consumer follows it by a read-time lookup through the schema (for a
-// ModelGroupRef, the referenced definition's {model group} per §3.7.2). There is
-// no WildcardRef: a wildcard is never referenced by QName, only declared inline.
+// consumer follows it by the read-time lookup through the schema that each ref
+// variant's doc names. There is no WildcardRef: a wildcard is never referenced by
+// QName, only declared inline.
 type TermOrRef interface{ termOrRef() }
 
 // ResolvedTerm is the TermOrRef variant wrapping an already-known Term: an
