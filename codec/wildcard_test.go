@@ -603,7 +603,7 @@ func TestDecodeWildcardTieMismatch(t *testing.T) {
 				return got != nil, err
 			},
 			func(s *xsd.Schema) error { return CheckDecode[wtNs](s, rootName, WithBranches[wtNs](wtNsP{}, wtNsQ{})) },
-			prefix + "branch codec.wtNsP of codec.wtNs is named neither WtNsAny nor WtNsAny followed by a decimal from 2, as codegen names the branch structs of its 2 alternatives whose branch words render one identifier"},
+			prefix + "branch codec.wtNsP of codec.wtNs is named neither WtNsAny nor WtNsAny followed by a decimal from 2, as codegen names the branch structs of its 2 tied alternatives, whose branch words render one identifier"},
 		{"an element's and a wildcard's branch names over each other's shapes", wtStructSchema, `<o:w xmlns:o="urn:o"/>`,
 			func(s *xsd.Schema, data []byte) (bool, error) {
 				got, err := Decode[wtSwap](s, strict.New(), data, WithBranches[wtSwap](WtSwapAny3{}, WtSwapAny{}))
@@ -612,7 +612,7 @@ func TestDecodeWildcardTieMismatch(t *testing.T) {
 			func(s *xsd.Schema) error {
 				return CheckDecode[wtSwap](s, rootName, WithBranches[wtSwap](WtSwapAny3{}, WtSwapAny{}))
 			},
-			prefix + "branch codec.WtSwapAny3 of codec.wtSwap, by its name the branch of alternative 2 of the 2 codegen names from WtSwapAny, has the shape of no branch struct codegen emits for it"},
+			prefix + "branch codec.WtSwapAny3 of codec.wtSwap, by its name the branch of tied alternative 2 of 2, whose branch structs codegen names from WtSwapAny, has the shape of no branch struct codegen emits for it"},
 	}
 	for _, row := range rows {
 		t.Run(row.name, func(t *testing.T) {

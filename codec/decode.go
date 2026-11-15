@@ -4594,12 +4594,12 @@ func (c *sealed[A]) placeTie(it reflect.Type, g tieGroup, branches []reflect.Typ
 		}
 		rank, ok := goname.Rank(b, bt.Name())
 		if !ok {
-			return fmt.Errorf("%w: branch %s of %s is named neither %s nor %s followed by a decimal from 2, as codegen names the branch structs of its %d alternatives whose branch words render one identifier", ErrTypeMismatch, bt, it, b, b, len(g.alts))
+			return fmt.Errorf("%w: branch %s of %s is named neither %s nor %s followed by a decimal from 2, as codegen names the branch structs of its %d tied alternatives, whose branch words render one identifier", ErrTypeMismatch, bt, it, b, b, len(g.alts))
 		}
 		in = append(in, ranked{branch: i, rank: rank})
 	}
 	if len(in) != len(g.alts) {
-		return fmt.Errorf("%w: WithBranches supplies %d branches of %s of the shape of the %d alternatives codegen names %s and %s followed by a decimal from 2", ErrTypeMismatch, len(in), it, len(g.alts), b, b)
+		return fmt.Errorf("%w: WithBranches supplies %d branches of %s of the shape of its %d tied alternatives, whose branch structs codegen names %s and %s followed by a decimal from 2", ErrTypeMismatch, len(in), it, len(g.alts), b, b)
 	}
 	slices.SortFunc(in, func(x, y ranked) int { return cmp.Compare(x.rank, y.rank) })
 	for k, r := range in {
@@ -4609,7 +4609,7 @@ func (c *sealed[A]) placeTie(it reflect.Type, g tieGroup, branches []reflect.Typ
 		}
 		a := g.alts[k]
 		if !branchAdmits(c.alts[a], bt, sets) {
-			return fmt.Errorf("%w: branch %s of %s, by its name the branch of alternative %d of the %d codegen names from %s, has the shape of no branch struct codegen emits for it", ErrTypeMismatch, bt, it, k+1, len(g.alts), b)
+			return fmt.Errorf("%w: branch %s of %s, by its name the branch of tied alternative %d of %d, whose branch structs codegen names from %s, has the shape of no branch struct codegen emits for it", ErrTypeMismatch, bt, it, k+1, len(g.alts), b)
 		}
 		placed[r.branch] = a
 	}

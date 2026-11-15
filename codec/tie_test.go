@@ -100,6 +100,7 @@ type (
 	WildRAny  struct{ Any string }
 	WildRAny2 struct{ Any string }
 	wildOther struct{ Any anyElement }
+	wildMis   struct{ Any string }
 )
 
 func (shapeBar) isShapeR() {}
@@ -110,6 +111,7 @@ func (PartRAA3) isPartR()  {}
 func (WildRAny) isWildR()  {}
 func (WildRAny2) isWildR() {}
 func (wildOther) isWildR() {}
+func (wildMis) isWildR()   {}
 
 // The tie schemas' branch sets, each supplied against alternative order.
 var (
@@ -230,11 +232,11 @@ func TestDecodeTieMismatch(t *testing.T) {
 		want   string
 	}{
 		{"branches not named from the interface's name", WithBranches[tieR](Alpha{}, Beta{}, TieRAA4{}),
-			prefix + "branch codec.Alpha of codec.tieR is named neither TieRAA nor TieRAA followed by a decimal from 2, as codegen names the branch structs of its 3 alternatives whose branch words render one identifier"},
+			prefix + "branch codec.Alpha of codec.tieR is named neither TieRAA nor TieRAA followed by a decimal from 2, as codegen names the branch structs of its 3 tied alternatives, whose branch words render one identifier"},
 		{"two of three branches named from the interface's name", WithBranches[tieR](TieRAA2{}, TieRAA3{}, Alpha{}),
-			prefix + "branch codec.Alpha of codec.tieR is named neither TieRAA nor TieRAA followed by a decimal from 2, as codegen names the branch structs of its 3 alternatives whose branch words render one identifier"},
+			prefix + "branch codec.Alpha of codec.tieR is named neither TieRAA nor TieRAA followed by a decimal from 2, as codegen names the branch structs of its 3 tied alternatives, whose branch words render one identifier"},
 		{"a branch of no alternative's shape", WithBranches[tieR](TieRAA2{}, TieRAA3{}, tieInt{}),
-			prefix + "WithBranches supplies 2 branches of codec.tieR of the shape of the 3 alternatives codegen names TieRAA and TieRAA followed by a decimal from 2"},
+			prefix + "WithBranches supplies 2 branches of codec.tieR of the shape of its 3 tied alternatives, whose branch structs codegen names TieRAA and TieRAA followed by a decimal from 2"},
 	}
 	schema := schemaOf(t, tieChoiceSchema)
 	data := instanceOf("", "<s:a_a>v</s:a_a>")
@@ -251,6 +253,26 @@ func TestDecodeTieMismatch(t *testing.T) {
 			assertProbeMismatch(t, CheckDecode[tieR](schema, rootName, row.branch), err)
 		})
 	}
+}
+
+// TestDecodeTieMismatchBeyondTie pins that the counts in a tie's mismatch
+// messages are the tie's: wildTieSchema's word group holds three
+// alternatives and its tie two, and a misnamed branch of the tie's shape is
+// ErrTypeMismatch naming 2 tied alternatives, from Decode and CheckDecode.
+func TestDecodeTieMismatchBeyondTie(t *testing.T) {
+	const want = "codec: T is not the type codegen emits for the document element: branch codec.wildMis of codec.wildR is named neither WildRAny nor WildRAny followed by a decimal from 2, as codegen names the branch structs of its 2 tied alternatives, whose branch words render one identifier"
+	branch := WithBranches[wildR](wildOther{}, WildRAny2{}, wildMis{})
+	schema := schemaOf(t, wildTieSchema)
+	data := instanceOf("", "<s:any>v</s:any>")
+	mustAccept(t, schema, data)
+	got, err := Decode[wildR](schema, strict.New(), data, branch)
+	if got != nil {
+		t.Fatalf("Decode = %#v, want no value", *got)
+	}
+	if err == nil || !errors.Is(err, ErrTypeMismatch) || err.Error() != want {
+		t.Fatalf("Decode error = %v, want %q", err, want)
+	}
+	assertProbeMismatch(t, CheckDecode[wildR](schema, rootName, branch), err)
 }
 
 // TestDecodeTieDeclines pins the shared-branch declines a tie leaves: two
