@@ -34,14 +34,18 @@ const snGroups = `<xs:element name="g" type="xs:string"/><xs:element name="m" ty
 // b))), s's group reached twice, the second ref in a choice alternative,
 // snbranch's shape; and snGroupDeclGroupSchema's sequence(<element ref> g, m,
 // <element ref> g2), m a member of both heads' groups and declared between
-// them. Five hold the share at an occurrence field's item (bindItem):
+// them. Eight hold the share at an occurrence field's item (bindItem):
 // snItemTwoSchema's sequence(a, sequence(b, c, b)?) and snItemTwiceSchema's
 // sequence(a, sequence(b, c, b){1,2}), both particles inside the item,
 // particlesQ030's and particlesQ032's shape; snItemBeforeSchema's
 // sequence(b, sequence(b, c){1,2}), the sibling before the item, and
 // snItemAfterSchema's sequence(sequence(b, c){1,2}, d, b), the item before
 // the sibling; and snItemRepSchema's sequence(b, sequence(b{1,2})?), the
-// item's particle repeated, particlesQ024's shape.
+// item's particle repeated, particlesQ024's shape; snItemChoiceBeforeSchema's
+// sequence(b, choice(b, c){1,2}) and snItemChoiceAfterSchema's
+// sequence(choice(b, c){1,2}, d, b), the item a choice (bindChoice); and
+// snItemAltSchema's content choice(sequence(b, sequence(b, c){1,2}), d), the
+// item inside a choice's model-group alternative (groupAlternative).
 const (
 	snFlatSchema         = `<xs:element name="r"><xs:complexType><xs:sequence>` + snA + snB + snA + `</xs:sequence></xs:complexType></xs:element>`
 	snSpliceSchema       = `<xs:element name="r"><xs:complexType><xs:sequence>` + snA + `<xs:sequence>` + snB + snA + `</xs:sequence></xs:sequence></xs:complexType></xs:element>`
@@ -72,6 +76,10 @@ const (
 	snItemAfterSchema  = `<xs:element name="r"><xs:complexType><xs:sequence><xs:sequence maxOccurs="2">` + snB + snC + `</xs:sequence><xs:element name="d" type="xs:string"/>` + snB + `</xs:sequence></xs:complexType></xs:element>`
 	snItemRepSchema    = `<xs:element name="r"><xs:complexType><xs:sequence>` + snB + `<xs:sequence minOccurs="0"><xs:element name="b" type="xs:string" maxOccurs="2"/></xs:sequence></xs:sequence></xs:complexType></xs:element>`
 
+	snItemChoiceBeforeSchema = `<xs:element name="r"><xs:complexType><xs:sequence>` + snB + `<xs:choice maxOccurs="2">` + snB + snC + `</xs:choice></xs:sequence></xs:complexType></xs:element>`
+	snItemChoiceAfterSchema  = `<xs:element name="r"><xs:complexType><xs:sequence><xs:choice maxOccurs="2">` + snB + snC + `</xs:choice><xs:element name="d" type="xs:string"/>` + snB + `</xs:sequence></xs:complexType></xs:element>`
+	snItemAltSchema          = `<xs:element name="r"><xs:complexType><xs:choice><xs:sequence>` + snB + `<xs:sequence maxOccurs="2">` + snB + snC + `</xs:sequence></xs:sequence><xs:element name="d" type="xs:string"/></xs:choice></xs:complexType></xs:element>`
+
 	snA = `<xs:element name="a" type="xs:string"/>`
 	snB = `<xs:element name="b" type="xs:string"/>`
 	snC = `<xs:element name="c" type="xs:string"/>`
@@ -89,10 +97,12 @@ const (
 // each with its own branch struct of e3, for snTwoHeadsSchema, snHeadTwice,
 // over the interface snSGroup in both of its particles' fields and the
 // choice snHeadTwiceChoice, for snHeadTwiceSchema, snGroupDeclGroup, over
-// snGroup and snG2Group, for snGroupDeclGroupSchema, and, for the five
+// snGroup and snG2Group, for snGroupDeclGroupSchema, and, for the eight
 // item schemas, snItemTwo and snItemTwice over the item snItemTwoItem,
-// snItemBefore and snItemAfter over snItemBC, and snItemRep over
-// snItemRepItem.
+// snItemBefore and snItemAfter over snItemBC, snItemRep over snItemRepItem,
+// snItemChoiceBefore and snItemChoiceAfter over the interface snItemChoice,
+// its branches snItemChoiceB and snItemChoiceC, and snItemAlt, its branches
+// snItemAltSeq, over snItemBC, and snItemAltD.
 type (
 	snABA struct{ A, B, A2 string }
 	snBBC struct{ B, B2, C string }
@@ -227,6 +237,26 @@ type (
 		B        string
 		Sequence *snItemRepItem
 	}
+
+	snItemChoice       interface{ isSnItemChoice() }
+	snItemChoiceB      struct{ B string }
+	snItemChoiceC      struct{ C string }
+	snItemChoiceBefore struct {
+		B      string
+		Choice []snItemChoice
+	}
+	snItemChoiceAfter struct {
+		Choice []snItemChoice
+		D      string
+		B      string
+	}
+
+	snItemAlt    interface{ isSnItemAlt() }
+	snItemAltSeq struct {
+		B        string
+		Sequence []snItemBC
+	}
+	snItemAltD struct{ D string }
 )
 
 func (snAroundC) isSnAroundItem()            {}
@@ -248,19 +278,25 @@ func (snHeadTwiceAnyA) isSnHeadTwiceChoice() {}
 func (snHeadTwiceSB) isSnHeadTwiceChoice()   {}
 func (snG2GroupG2) isSnG2Group()             {}
 func (snG2GroupM) isSnG2Group()              {}
+func (snItemChoiceB) isSnItemChoice()        {}
+func (snItemChoiceC) isSnItemChoice()        {}
+func (snItemAltSeq) isSnItemAlt()            {}
+func (snItemAltD) isSnItemAlt()              {}
 
 // The branch sets of the shared-name interfaces.
 var (
-	snAroundBranches    = WithBranches[snAroundItem](snAroundC{})
-	snGroupBranches     = WithBranches[snGroup](snGroupG{}, snGroupM{})
-	snChoiceBranches    = WithBranches[snChoice](snChoiceA{}, snChoiceB{})
-	snAltsBranches      = WithBranches[snAlts](snAltsAB{}, snAltsCA{})
-	snAltSeqBranches    = WithBranches[snAltSeq](snAltSeqABA{}, snAltSeqB{})
-	snE0Branches        = WithBranches[snE0Group](snE0GroupE0{}, snE0GroupE3{})
-	snE1Branches        = WithBranches[snE1Group](snE1GroupE1{}, snE1GroupE3{})
-	snSBranches         = WithBranches[snSGroup](snSGroupS{}, snSGroupS1{})
-	snHeadTwiceBranches = WithBranches[snHeadTwiceChoice](snHeadTwiceAnyA{}, snHeadTwiceSB{})
-	snG2Branches        = WithBranches[snG2Group](snG2GroupG2{}, snG2GroupM{})
+	snAroundBranches     = WithBranches[snAroundItem](snAroundC{})
+	snGroupBranches      = WithBranches[snGroup](snGroupG{}, snGroupM{})
+	snChoiceBranches     = WithBranches[snChoice](snChoiceA{}, snChoiceB{})
+	snAltsBranches       = WithBranches[snAlts](snAltsAB{}, snAltsCA{})
+	snAltSeqBranches     = WithBranches[snAltSeq](snAltSeqABA{}, snAltSeqB{})
+	snE0Branches         = WithBranches[snE0Group](snE0GroupE0{}, snE0GroupE3{})
+	snE1Branches         = WithBranches[snE1Group](snE1GroupE1{}, snE1GroupE3{})
+	snSBranches          = WithBranches[snSGroup](snSGroupS{}, snSGroupS1{})
+	snHeadTwiceBranches  = WithBranches[snHeadTwiceChoice](snHeadTwiceAnyA{}, snHeadTwiceSB{})
+	snG2Branches         = WithBranches[snG2Group](snG2GroupG2{}, snG2GroupM{})
+	snItemChoiceBranches = WithBranches[snItemChoice](snItemChoiceB{}, snItemChoiceC{})
+	snItemAltBranches    = WithBranches[snItemAlt](snItemAltSeq{}, snItemAltD{})
 )
 
 // TestSharedNameTypesAreCodegens pins the types above to those codegen emits
@@ -273,6 +309,7 @@ func TestSharedNameTypesAreCodegens(t *testing.T) {
 	aba := "type R struct {\n\tA  string\n\tB  string\n\tA2 string\n}\n"
 	group := []string{"type G string\n", "type M string\n", branch("GSubstitutionGroup", "GSubstitutionGroupG", "G G"), branch("GSubstitutionGroup", "GSubstitutionGroupM", "M M")}
 	choice := []string{branch("RChoice", "RChoiceA", "A string"), branch("RChoice", "RChoiceB", "B string")}
+	itemChoice := []string{branch("RChoice", "RChoiceB", "B string"), branch("RChoice", "RChoiceC", "C string")}
 	rows := []struct {
 		decls string
 		want  []string
@@ -304,6 +341,10 @@ func TestSharedNameTypesAreCodegens(t *testing.T) {
 		{snItemBeforeSchema, []string{"type R struct {\n\tB        string\n\tSequence []RSequence\n}\n", "type RSequence struct {\n\tB string\n\tC string\n}\n"}},
 		{snItemAfterSchema, []string{"type R struct {\n\tSequence []RSequence\n\tD        string\n\tB        string\n}\n", "type RSequence struct {\n\tB string\n\tC string\n}\n"}},
 		{snItemRepSchema, []string{"type R struct {\n\tB        string\n\tSequence *RSequence\n}\n", "type RSequence struct {\n\tB []string\n}\n"}},
+		{snItemChoiceBeforeSchema, append([]string{"type R struct {\n\tB      string\n\tChoice []RChoice\n}\n"}, itemChoice...)},
+		{snItemChoiceAfterSchema, append([]string{"type R struct {\n\tChoice []RChoice\n\tD      string\n\tB      string\n}\n"}, itemChoice...)},
+		{snItemAltSchema, []string{"type RSequence struct {\n\tB        string\n\tSequence []RSequence2\n}\n\nfunc (RSequence) isR() {}\n",
+			"type RSequence2 struct {\n\tB string\n\tC string\n}\n", branch("R", "RD", "D string")}},
 	}
 	for _, row := range rows {
 		gen := generated(t, schemaOf(t, row.decls))
@@ -422,6 +463,14 @@ func TestDecodeSharedNameInItem(t *testing.T) {
 			snItemAfter{Sequence: []snItemBC{{B: "1", C: "2"}}, D: "3", B: "4"}},
 		{"a repeated item particle sharing an earlier sibling's name, particlesQ024's shape", snItemRepSchema, "<s:b>1</s:b><s:b>2</s:b><s:b>3</s:b>", into[snItemRep](),
 			snItemRep{B: "1", Sequence: &snItemRepItem{B: []string{"2", "3"}}}},
+		{"a choice item's alternative sharing an earlier sibling's name, then the other", snItemChoiceBeforeSchema, "<s:b>1</s:b><s:b>2</s:b><s:c>3</s:c>",
+			into[snItemChoiceBefore](snItemChoiceBranches), snItemChoiceBefore{B: "1", Choice: []snItemChoice{snItemChoiceB{B: "2"}, snItemChoiceC{C: "3"}}}},
+		{"a choice item's alternative sharing an earlier sibling's name, one item", snItemChoiceBeforeSchema, "<s:b>1</s:b><s:b>2</s:b>",
+			into[snItemChoiceBefore](snItemChoiceBranches), snItemChoiceBefore{B: "1", Choice: []snItemChoice{snItemChoiceB{B: "2"}}}},
+		{"a sibling sharing an earlier choice item's alternative's name", snItemChoiceAfterSchema, "<s:b>1</s:b><s:c>2</s:c><s:d>3</s:d><s:b>4</s:b>",
+			into[snItemChoiceAfter](snItemChoiceBranches), snItemChoiceAfter{Choice: []snItemChoice{snItemChoiceB{B: "1"}, snItemChoiceC{C: "2"}}, D: "3", B: "4"}},
+		{"an item inside a choice's model-group alternative sharing its sibling's name", snItemAltSchema, "<s:b>1</s:b><s:b>2</s:b><s:c>3</s:c><s:b>4</s:b><s:c>5</s:c>",
+			into[snItemAlt](snItemAltBranches), snItemAlt(snItemAltSeq{B: "1", Sequence: []snItemBC{{B: "2", C: "3"}, {B: "4", C: "5"}}})},
 	}
 	for _, row := range rows {
 		t.Run(row.name, func(t *testing.T) {
