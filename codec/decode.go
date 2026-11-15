@@ -417,17 +417,12 @@ var ErrTypeMismatch = errors.New("codec: T is not the type codegen emits for the
 //     its own; each examined as a sequence's element or wildcard particle is,
 //     occurring exactly once, then declining by a branch field of an earlier
 //     one's shape as two of a choice's alternatives in no tie do, whatever
-//     their local names. No basic particle of the reach, the content
-//     {particle}'s or a nested one's, declines by an expanded name another
-//     particle takes, and none declines a later particle by its own, since a
-//     Matcher attributes every child of a content model holding a flattened
-//     particle, content or nested, by its particle's position. A particle with
-//     {max occurs} 0 is its plain error at its point, an element particle's
-//     after its declaration's own constructs. Then a content model
-//     xsd.Schema.ContentMatcher does not track declines, since its children
-//     cannot be attributed: of the content {particle} after its last basic
-//     particle, of a nested one after its own last, before the particles after
-//     it.
+//     their local names. A particle with {max occurs} 0 is its plain error at
+//     its point, an element particle's after its declaration's own constructs.
+//     Then a content model xsd.Schema.ContentMatcher does not track declines,
+//     since its children cannot be attributed: of the content {particle} after
+//     its last basic particle, of a nested one after its own last, before the
+//     particles after it.
 //   - Each of the complex type's attribute uses in order but xsi:nil's
 //     (codegen's package doc, "# Attributes"). Its {attribute wildcard}
 //     gives the field item 6 states and is examined no further.
@@ -3363,18 +3358,16 @@ func bindContentChoice(run *bindRun, ct xsd.ComplexType, particles []xsd.Particl
 // Decode's doc states for them, item 5, typeSubject naming the type: each
 // alternative's as a sequence's particle declines, an element or wildcard
 // alternative's own, a model-group alternative's as groupAlternative states,
-// an expanded name an earlier particle x indexes takes among them where
-// particleShape declines the pair, then an alternative whose branch struct has
-// an earlier one's shape, which no branch type's shape could tell apart: one
-// whose branch may admit a struct the earlier one's does under some branch
-// sets (branchesShare), read from the schema, never T, unless the two are in
-// one word group (wordGroups over choiceWords), which puts them in one of the
-// choice's ties (tiesOf), which placeBranches tells apart by name. item
-// reports whether the choice is in an occurrence field's item (bindItem),
-// which its alternatives are bound as. An element alternative's position and
-// target are recorded in x.elements, and the names it takes in x.children
-// (childIndex.take). Its caller builds x's attributor once the content model's
-// every particle is bound.
+// then an alternative whose branch struct has an earlier one's shape, which no
+// branch type's shape could tell apart: one whose branch may admit a struct
+// the earlier one's does under some branch sets (branchesShare), read from the
+// schema, never T, unless the two are in one word group (wordGroups over
+// choiceWords), which puts them in one of the choice's ties (tiesOf), which
+// placeBranches tells apart by name. item reports whether the choice is in an
+// occurrence field's item (bindItem), which its alternatives are bound as. An
+// element alternative's position and target are recorded in x.elements, and
+// the names it takes in x.children (childIndex.take). Its caller builds x's
+// attributor once the content model's every particle is bound.
 func bindChoice(run *bindRun, ct xsd.ComplexType, particles []xsd.Particle, x *childIndex, at []int, base int, item bool, names *goname.Namer, typeSubject string) (*choice, error) {
 	c := &choice{name: names.Claim("choice"), sealed: &sealed[branchArm]{p: run.p}}
 	alts := c.sealed
@@ -3474,8 +3467,7 @@ func choiceWords(schema *xsd.Schema, particles []xsd.Particle, typeSubject strin
 // its members are those sequence.nested gives the particle, named from a
 // fresh Namer, bound into x, the choice's childIndex, their attribution
 // targets from target on, item passed through, so that the particle
-// declines, where it does, as a sequence's nested particle declines, an
-// expanded name an earlier particle x indexes takes among them.
+// declines, where it does, as a sequence's nested particle declines.
 func groupAlternative(run *bindRun, ct xsd.ComplexType, group xsd.ModelGroup, occurs xsd.Occurs, x *childIndex, at []int, target int, item bool, typeSubject string) (groupBranch, string, error) {
 	subject := fmt.Sprintf("a %s model group particle of %s", group.Compositor(), typeSubject)
 	if upper, bounded := occurs.Max(); bounded && upper == 0 {
@@ -3483,7 +3475,8 @@ func groupAlternative(run *bindRun, ct xsd.ComplexType, group xsd.ModelGroup, oc
 		return groupBranch{}, "", err
 	}
 	// seq binds into a copy of *x, whose children map is x's own; the
-	// matcherSlot a wildcard or nested flattened particle may create is
+	// matcherSlot any of its particles forces, a wildcard's, a nested
+	// flattened particle's or a shared expanded name's (particleShape), is
 	// copied back.
 	seq := &sequence{p: run.p, index: *x, base: target}
 	if err := seq.nested(run, ct, group, occurs, at, item, goname.NewNamer(), typeSubject); err != nil {
@@ -3599,9 +3592,8 @@ type flattened struct {
 // states for it, item 5, typeSubject naming the type, or the plain error that
 // item states in a decline's place. Its alternatives are bindReach's, each
 // placed at its reach position, wildcards counted in reach order and every
-// element particle bound with a nil childIndex, so no expanded name an earlier
-// particle takes declines, since a child is attributed by its particle's
-// position and not by its name. Then the field ct's {open content} gives, if
+// element particle bound with a nil childIndex, a child being attributed by
+// its particle's position. Then the field ct's {open content} gives, if
 // any, claims its name from names (openContentField). Last, a content model
 // xsd.Schema.ContentMatcher does not track declines (trackedMatcher).
 func bindFlattened(run *bindRun, ct xsd.ComplexType, group xsd.ModelGroup, names *goname.Namer, typeSubject string) (*flattened, error) {
@@ -3629,11 +3621,10 @@ func bindFlattened(run *bindRun, ct xsd.ComplexType, group xsd.ModelGroup, names
 // take the targets after the earlier ones' (bindChoice), each placed at its
 // Matcher position below at: a wildcard in s.index's matcherSlot, its ordinal
 // counting the content model's wildcard particles in particle order, and an
-// element particle in s.index's elements, never in its children, so that no
-// expanded name declines between it and another particle of the content
-// model. s.index gets its matcherSlot (childIndex.slot) whether or not the
-// reach holds a wildcard, so that a Matcher attributes every child of the
-// content model by its particle's position (eachChild). Last, a content model
+// element particle in s.index's elements, never in its children. s.index gets
+// its matcherSlot (childIndex.slot) whether or not the reach holds a
+// wildcard, so that a Matcher attributes every child of the content model by
+// its particle's position (eachChild). Last, a content model
 // xsd.Schema.ContentMatcher does not track declines (trackedMatcher), since
 // validation leaves every instance of such a model undecided (item 4).
 func (s *sequence) flatten(run *bindRun, ct xsd.ComplexType, group xsd.ModelGroup, at []int, names *goname.Namer, typeSubject string) error {
@@ -3672,13 +3663,12 @@ type reachSite interface {
 // returns the first decline Decode's doc states for them, item 5, typeSubject
 // naming the type, or the plain error that item states in a decline's place: each
 // alternative's own constructs as a sequence's particle's, occurring exactly once,
-// an element particle's by elementField over ct with a nil childIndex, so that no
-// expanded name another particle takes declines, then a branch struct of an
-// earlier alternative's shape (field.sharesBranch), which declines as a choice's
-// alternatives in no tie do, alts holding no tie. A particle with {max occurs} 0
-// is item 5's plain error, an element particle's after its declaration's own
-// constructs, as a sequence's is. goshape.Reach's own error is plain, prefixed by
-// typeSubject.
+// an element particle's by elementField over ct with a nil childIndex, then a
+// branch struct of an earlier alternative's shape (field.sharesBranch), which
+// declines as a choice's alternatives in no tie do, alts holding no tie. A
+// particle with {max occurs} 0 is item 5's plain error, an element particle's
+// after its declaration's own constructs, as a sequence's is. goshape.Reach's own
+// error is plain, prefixed by typeSubject.
 func bindReach(run *bindRun, ct xsd.ComplexType, group xsd.ModelGroup, alts *sealed[field], site reachSite, typeSubject string) error {
 	visit := func(p xsd.Particle, position []int) error {
 		term, err := particleTerm(run.p.schema, p, typeSubject)
@@ -4082,9 +4072,8 @@ func bindItem(run *bindRun, ct xsd.ComplexType, group xsd.ModelGroup, x *childIn
 		return choiceItem{choice: c}, nil
 	}
 	// seq binds into a copy of *x, whose children map is x's own; the
-	// matcherSlot any of the item's particles may force, a wildcard's or one
-	// sharing an expanded name across the item (particleShape), is copied
-	// back.
+	// matcherSlot any of the item's particles forces, a wildcard's or a
+	// shared expanded name's (particleShape), is copied back.
 	seq := &sequence{p: run.p, index: *x, base: target}
 	if err := seq.bind(run, ct, group.Particles(), at, true, goname.NewNamer(), typeSubject); err != nil {
 		return nil, err
