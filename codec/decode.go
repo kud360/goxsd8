@@ -688,8 +688,8 @@ var ErrTypeMismatch = errors.New("codec: T is not the type codegen emits for the
 //     alternatives, or its count differs, or it holds a nil value, a type
 //     that is no struct, a type twice, or a branch matching no alternative an
 //     earlier branch did not match. Of the element and wildcard alternatives
-//     of a choice whose branch words, an element's local name and a
-//     wildcard's any, render one Go identifier, which no model-group
+//     of a choice whose branch words, as codegen's package doc "# Naming"
+//     gives them, render one Go identifier, which no model-group
 //     alternative's compositor renders, or of the members of a substitution
 //     group whose local names render one, those whose branch
 //     struct shares its shape with another one's, as item 5 states, are a
