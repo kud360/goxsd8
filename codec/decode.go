@@ -2840,19 +2840,19 @@ func (s *sequence) nested(run *bindRun, ct xsd.ComplexType, group xsd.ModelGroup
 // occurrence appends to s the nestedOccurrence member of a model group
 // particle of group occurring as occurs, at Matcher position at, inline or a
 // <group ref>, that codegen neither splices nor flattens and that is no
-// choice occurring exactly once, its field named from names by group's
-// compositor's local name, sequence or choice, before its item is read, or
-// returns the first decline Decode's doc states for it, item 5, typeSubject
-// naming the type, or the plain error that item states in a decline's place:
-// a {max occurs} 0 is occursShape's plain error, since codegen emits no field
-// for it; then its item is bindItem's into s.index, below at, taking the
-// targets from s.targets(), which holds through the bind since occurrence
-// appends the member only once its item is bound, so an expanded name an
-// earlier particle of the content model takes declines among them, each
-// particle bound in the item (particleShape). Last, a content model
-// xsd.Schema.ContentMatcher does not track declines (trackedMatcher), whether
-// or not a wildcard needs the Matcher, since validation leaves every instance
-// of such a model undecided (item 4).
+// choice occurring exactly once, its field named from names as codegen/doc.go
+// "# Naming" states, before its item is read, or returns the first decline
+// Decode's doc states for it, item 5, typeSubject naming the type, or the
+// plain error that item states in a decline's place: a {max occurs} 0 is
+// occursShape's plain error, since codegen emits no field for it; then its
+// item is bindItem's into s.index, below at, taking the targets from
+// s.targets(), which holds through the bind since occurrence appends the
+// member only once its item is bound, so an expanded name an earlier particle
+// of the content model takes declines among them, each particle bound in the
+// item (particleShape). Last, a content model xsd.Schema.ContentMatcher does
+// not track declines (trackedMatcher), whether or not a wildcard needs the
+// Matcher, since validation leaves every instance of such a model undecided
+// (item 4).
 func (s *sequence) occurrence(run *bindRun, ct xsd.ComplexType, group xsd.ModelGroup, occurs xsd.Occurs, at []int, names *goname.Namer, typeSubject string) error {
 	o := &nestedOccurrence{name: names.Claim(group.Compositor().String()), group: group, first: s.targets()}
 	shape, err := occursShape(occurs, group.Compositor() == xsd.CompositorChoice, fmt.Sprintf("a %s model group particle of %s", group.Compositor(), typeSubject))
@@ -3392,25 +3392,25 @@ func bindContentChoice(run *bindRun, ct xsd.ComplexType, particles []xsd.Particl
 
 // bindChoice returns the choice of particles, the {particles} of the choice
 // at Matcher position at (xsd.Matcher.NextParticle) below ct's content
-// {particle}, nil for that particle's own, its field named from names by the
-// local name choice before any alternative is read (codegen/doc.go
-// "# Particles"), each alternative read at goshape.BranchOccurs' occurrence,
-// each branch's fields named as a sequence's fields are from a fresh Namer per
-// alternative, alternative j at position at+[j], its attribution targets in x
-// following every earlier alternative's from base, or the first decline
-// Decode's doc states for them, item 5, typeSubject naming the type: each
-// alternative's as a sequence's particle declines, an element or wildcard
-// alternative's own, a model-group alternative's as groupAlternative states,
-// then an alternative whose branch struct has an earlier one's shape, which no
-// branch type's shape could tell apart: one whose branch may admit a struct
-// the earlier one's does under some branch sets (branchesShare), read from the
-// schema, never T, unless the two are in one word group (wordGroups over
-// choiceWords), which puts them in one of the choice's ties (tiesOf), which
-// placeBranches tells apart by name. item reports whether the choice is in an
-// occurrence field's item (bindItem), which its alternatives are bound as. An
-// element alternative's position and target are recorded in x.elements, and
-// the names it takes in x.children (childIndex.take). Its caller builds x's
-// attributor once the content model's every particle is bound.
+// {particle}, nil for that particle's own, its field named from names as
+// codegen/doc.go "# Naming" states, before any alternative is read, each
+// alternative read at goshape.BranchOccurs' occurrence, each branch's fields
+// named as a sequence's fields are from a fresh Namer per alternative,
+// alternative j at position at+[j], its attribution targets in x following
+// every earlier alternative's from base, or the first decline Decode's doc
+// states for them, item 5, typeSubject naming the type: each alternative's as
+// a sequence's particle declines, an element or wildcard alternative's own, a
+// model-group alternative's as groupAlternative states, then an alternative
+// whose branch struct has an earlier one's shape, which no branch type's shape
+// could tell apart: one whose branch may admit a struct the earlier one's does
+// under some branch sets (branchesShare), read from the schema, never T,
+// unless the two are in one word group (wordGroups over choiceWords), which
+// puts them in one of the choice's ties (tiesOf), which placeBranches tells
+// apart by name. item reports whether the choice is in an occurrence field's
+// item (bindItem), which its alternatives are bound as. An element
+// alternative's position and target are recorded in x.elements, and the names
+// it takes in x.children (childIndex.take). Its caller builds x's attributor
+// once the content model's every particle is bound.
 func bindChoice(run *bindRun, ct xsd.ComplexType, particles []xsd.Particle, x *childIndex, at []int, base int, item bool, names *goname.Namer, typeSubject string) (*choice, error) {
 	c := &choice{name: names.Claim("choice"), sealed: &sealed[branchArm]{p: run.p}}
 	alts := c.sealed
@@ -3632,15 +3632,15 @@ type flattened struct {
 
 // bindFlattened returns the flattened content of group, the model group of
 // ct's content {particle}, for which goshape.Flattens answered true, its
-// field named from names by group's compositor's local name, sequence or
-// choice, before any alternative is read, or the first decline Decode's doc
-// states for it, item 5, typeSubject naming the type, or the plain error that
-// item states in a decline's place. Its alternatives are bindReach's, each
-// placed at its reach position, wildcards counted in reach order and every
-// element particle bound with a nil childIndex, a child being attributed by
-// its particle's position. Then the field ct's {open content} gives, if
-// any, claims its name from names (openContentField). Last, a content model
-// xsd.Schema.ContentMatcher does not track declines (trackedMatcher).
+// field named from names as codegen/doc.go "# Naming" states, before any
+// alternative is read, or the first decline Decode's doc states for it, item
+// 5, typeSubject naming the type, or the plain error that item states in a
+// decline's place. Its alternatives are bindReach's, each placed at its reach
+// position, wildcards counted in reach order and every element particle bound
+// with a nil childIndex, a child being attributed by its particle's position.
+// Then the field ct's {open content} gives, if any, claims its name from
+// names (openContentField). Last, a content model xsd.Schema.ContentMatcher
+// does not track declines (trackedMatcher).
 func bindFlattened(run *bindRun, ct xsd.ComplexType, group xsd.ModelGroup, names *goname.Namer, typeSubject string) (*flattened, error) {
 	f := &flattened{slice: &flatSlice{name: names.Claim(group.Compositor().String()), sealed: &sealed[field]{p: run.p}}, ct: ct}
 	if err := bindReach(run, ct, group, f.slice.sealed, &contentReach{flattened: f}, typeSubject); err != nil {
@@ -3657,19 +3657,19 @@ func bindFlattened(run *bindRun, ct xsd.ComplexType, group xsd.ModelGroup, names
 
 // flatten appends to s the flatSlice member of a nested model group particle
 // of group at Matcher position at, inline or a <group ref>, for which
-// goshape.Flattens answered true, its field named from names by group's
-// compositor's local name, sequence or choice, before any alternative is
-// read, or returns the first decline Decode's doc states for it, item 5,
-// typeSubject naming the type, or the plain error that item states in a
-// decline's place. Its alternatives are bindReach's, alternative j taking
-// target s.targets()+j in s.index, as a nested choice's element alternatives
-// take the targets after the earlier ones' (bindChoice), each placed at its
-// Matcher position below at: a wildcard in s.index's matcherSlot, its ordinal
-// counting the content model's wildcard particles in particle order, and an
-// element particle in s.index's elements, never in its children. s.index gets
-// its matcherSlot (childIndex.slot) whether or not the reach holds a
-// wildcard, so that a Matcher attributes every child of the content model by
-// its particle's position (eachChild). Last, a content model
+// goshape.Flattens answered true, its field named from names as
+// codegen/doc.go "# Naming" states, before any alternative is read, or
+// returns the first decline Decode's doc states for it, item 5, typeSubject
+// naming the type, or the plain error that item states in a decline's place.
+// Its alternatives are bindReach's, alternative j taking target s.targets()+j
+// in s.index, as a nested choice's element alternatives take the targets
+// after the earlier ones' (bindChoice), each placed at its Matcher position
+// below at: a wildcard in s.index's matcherSlot, its ordinal counting the
+// content model's wildcard particles in particle order, and an element
+// particle in s.index's elements, never in its children. s.index gets its
+// matcherSlot (childIndex.slot) whether or not the reach holds a wildcard, so
+// that a Matcher attributes every child of the content model by its
+// particle's position (eachChild). Last, a content model
 // xsd.Schema.ContentMatcher does not track declines (trackedMatcher), since
 // validation leaves every instance of such a model undecided (item 4).
 func (s *sequence) flatten(run *bindRun, ct xsd.ComplexType, group xsd.ModelGroup, at []int, names *goname.Namer, typeSubject string) error {
@@ -4073,14 +4073,14 @@ type occurrenceItem interface {
 
 // bindOccurrence returns the occurrence of group, the model group of ct's
 // content {particle} occurring as occurs, for which contentGroup answered
-// armOccurrence, its field named from names by group's compositor's local
-// name, sequence, choice or all, before its item is read, or the first decline
-// Decode's doc states for it, item 5, typeSubject naming the type, or the
-// plain error that item states in a decline's place. Its item is bindItem's
-// into a fresh childIndex, its targets from 0, its particles bound at the
-// positions below the content {particle} that ct's Matcher reports, so its
-// places are the Matcher's. Then the field ct's {open content} gives, if
-// any, claims its name from names (openContentField). Last, a content model
+// armOccurrence, its field named from names as codegen/doc.go "# Naming"
+// states, before its item is read, or the first decline Decode's doc states
+// for it, item 5, typeSubject naming the type, or the plain error that item
+// states in a decline's place. Its item is bindItem's into a fresh
+// childIndex, its targets from 0, its particles bound at the positions
+// below the content {particle} that ct's Matcher reports, so its places are
+// the Matcher's. Then the field ct's {open content} gives, if any, claims
+// its name from names (openContentField). Last, a content model
 // xsd.Schema.ContentMatcher does not track declines (trackedMatcher).
 func bindOccurrence(run *bindRun, ct xsd.ComplexType, group xsd.ModelGroup, occurs xsd.Occurs, names *goname.Namer, typeSubject string) (*occurrence, error) {
 	o := &occurrence{name: names.Claim(group.Compositor().String()), group: group, ct: ct, p: run.p}
