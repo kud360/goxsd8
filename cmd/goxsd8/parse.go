@@ -121,8 +121,11 @@ func compileArgument(verb, bareRemedy, location string, strict bool, log *slog.L
 		// reportUnfollowed states: the shortfall is a fact about the assembly the
 		// error came out of, and this report carries it (#1312). A root document
 		// that could not be read returns an empty report, so that third error
-		// shape still prints nothing here.
-		reportUnfollowed(stderr, verb, assemblyRejected, report)
+		// shape still prints nothing here. strict is not passed: -strict charges
+		// a rejected assembly's line nothing, exitInvalid answering for the
+		// argument, so the line carries no strictMarker and the exitOK coming
+		// back is dropped.
+		reportUnfollowed(stderr, verb, assemblyRejected, false, report)
 		// Exit 1 covers more than a schema verdict. rootLocation already opened
 		// the ARGUMENT, so an argument that cannot be read is charged 2 and
 		// never reaches here; an I/O fault reading a document that argument
@@ -140,7 +143,7 @@ func compileArgument(verb, bareRemedy, location string, strict bool, log *slog.L
 	// summary is parse's informational output, and a directive the assembly
 	// behind it could not follow is a diagnosis, which doc.go forbids -q to
 	// silence.
-	return schema, skipCode(strict, reportUnfollowed(stderr, verb, assemblyCompiled, report))
+	return schema, reportUnfollowed(stderr, verb, assemblyCompiled, strict, report)
 }
 
 // rootLocation opens location to prove it is a readable file and returns its
@@ -201,9 +204,12 @@ const (
 
 // reportUnfollowed names on stderr, one line per directive at its own
 // position, every ·inter-schema-document reference· the assembly reached whose
-// schemaLocation resolved to no document, and reports whether it named any.
-// verb is the subcommand the diagnosis is charged to, and compiled says whether
-// that assembly went on to yield a schema.
+// schemaLocation resolved to no document, and returns skipCode's code over
+// those lines. verb is the subcommand the diagnosis is charged to, compiled
+// says whether that assembly went on to yield a schema, and strict whether
+// -strict charges the lines, each of which then closes with strictMarker. A
+// rejected assembly's caller passes false whatever -strict says, since the
+// rejection's code answers for it.
 //
 // BOTH outcomes are reported (#1312). The shortfall is a fact about the
 // assembly, which parser.AssemblyReport carries "as far as assembly got even
@@ -217,7 +223,7 @@ const (
 // and an <import>'s namespace or its absence (describeDirective), so an
 // operator can see which directive to correct (#2797).
 //
-// The line carries no rule ID, and moves no exit code unless -strict was given
+// The line carries no rule ID, and moves no exit code unless strict is set
 // (skipCode), because no rule charges the skip — usage's parse paragraph says
 // which rules make it legal, why none charges an empty <redefine>'s, for which
 // directive no normative clause states it either way, and where this processor
@@ -250,7 +256,7 @@ const (
 // not be read (parser.UnfollowedUnreadable) — do reach here now that the error
 // path reports too, and stay unnamed: each arrives with the error that charges
 // it, which says more than this line could.
-func reportUnfollowed(stderr io.Writer, verb string, compiled bool, report *parser.AssemblyReport) bool {
+func reportUnfollowed(stderr io.Writer, verb string, compiled, strict bool, report *parser.AssemblyReport) int {
 	named := false
 	for _, u := range report.Unfollowed() {
 		if u.Reason != parser.UnfollowedLocationUnresolved {
@@ -258,10 +264,10 @@ func reportUnfollowed(stderr io.Writer, verb string, compiled bool, report *pars
 		}
 		// A failed stderr write cannot change the outcome: the exit code is
 		// settled either way, and stderr is the only channel this line has.
-		_, _ = fmt.Fprintf(stderr, "goxsd8: %s: %s: %s resolved to no document%s\n", verb, u.At, describeDirective(report, u.At), shortfallClause(compiled, " and was skipped"))
+		_, _ = fmt.Fprintf(stderr, "goxsd8: %s: %s: %s resolved to no document%s%s\n", verb, u.At, describeDirective(report, u.At), shortfallClause(compiled, " and was skipped"), strictMarker(strict))
 		named = true
 	}
-	return named
+	return skipCode(strict, named)
 }
 
 // The remedies a reportBareImports line closes with, one per subcommand, each
@@ -286,9 +292,9 @@ const (
 // assembly's bare <import> stays unnamed.
 //
 // The line carries no rule ID, because none charges a bare <import>, and moves
-// no exit code: it returns nothing for skipCode, whose "named" is a
-// schemaLocation resolving to no document, and the rejection's own code stands
-// with or without -strict. It quotes no schemaLocation value and names no
+// no exit code: it returns nothing, skipCode's "named" being a schemaLocation
+// resolving to no document, and the rejection's own code stands with or
+// without -strict. It quotes no schemaLocation value and names no
 // document, the two things describeDirective's and shortfallClause's wording
 // assert and a bare <import> has none of.
 func reportBareImports(stderr io.Writer, verb, remedy string, report *parser.AssemblyReport) {
@@ -379,9 +385,10 @@ const (
 // skipCode is the one encoding of -strict's policy: the exit code a run is
 // charged for having named on stderr a schemaLocation that resolved to no
 // document — reportUnfollowed's line on parse, validate and gen, and
-// reportUnfollowedHints' on validate. named is what that reporter returned. It
-// is exitUndecided where strict is set and a line was named, and exitOK
-// otherwise.
+// reportUnfollowedHints' on validate, each of which returns it. named is
+// whether that reporter printed a line. It is exitUndecided where strict is set
+// and a line was named, and exitOK otherwise; strictMarker is what each such
+// line says of it.
 //
 // The charge is this CLI's policy and no spec verdict: no rule charges the skip
 // (reportUnfollowed and reportUnfollowedHints state why), §4.2.6.2 admitting a
@@ -393,6 +400,16 @@ func skipCode(strict, named bool) int {
 		return exitUndecided
 	}
 	return exitOK
+}
+
+// strictMarker is the close of a line skipCode's reporters print: under strict
+// the wording usage's -strict parenthetical quotes, and empty otherwise, so
+// that the line reads as it does without -strict.
+func strictMarker(strict bool) string {
+	if !strict {
+		return ""
+	}
+	return fmt.Sprintf("; -strict charges this note %d", exitUndecided)
 }
 
 // shortfallClause is what a line naming an unfollowed schemaLocation says about

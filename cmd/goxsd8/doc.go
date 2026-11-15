@@ -397,13 +397,16 @@
 // Flags common to all subcommands: -q (quiet), -v (debug logging via
 // slog to stderr; scope with GOXSD_DEBUG=parser,validate,codec),
 // -strict (exit 4, by the exit-code table's 4 row, when the run names a
-// schemaLocation resolving to no document; off, such a line moves no
-// exit code). They qualify a subcommand and follow its name — goxsd8
-// parse -q a.xsd, not goxsd8 -q parse a.xsd. -q suppresses a
-// subcommand's informational output, which is parse's summary and
-// validate's counts line, and never a diagnosis: neither the error
-// lines above nor validate's violations and undecided checks are
-// silenced by it.
+// schemaLocation resolving to no document, each line so charged ending
+// "; -strict charges this note 4", which names the charge and not the
+// run's exit code; a rejected schema's or -schema set's own directive
+// line is charged nothing and ends as it does without -strict; off,
+// such a line moves no exit code). They qualify a subcommand and follow
+// its name — goxsd8 parse -q a.xsd, not goxsd8 -q parse a.xsd. -q
+// suppresses a subcommand's informational output, which is parse's
+// summary and validate's counts line, and never a diagnosis: neither
+// the error lines above nor validate's violations and undecided checks
+// are silenced by it.
 //
 // Implemented today: the help path, parse, validate and gen. With no
 // arguments, or with -h, -help or --help in any argument position, goxsd8
