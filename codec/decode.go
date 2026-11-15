@@ -370,13 +370,13 @@ var ErrTypeMismatch = errors.New("codec: T is not the type codegen emits for the
 //     the document element's is; xs:anyType itself, known by its QName, gives the field
 //     item 6 states and is examined no further; and any other complex one, a type derived
 //     from xs:anyType included, is examined as the document element's complex type is,
-//     from its {abstract} to its attribute uses. An expanded name an earlier particle's
-//     field takes declines nothing, a particle's field taking its element's expanded name,
-//     or, for a substitution group's interface, each declaration the next bullet examines:
-//     both particles decode, wherever either is bound, an occurrence field's item
-//     included, each child going to the particle cvc-accept attributes it to, by position,
-//     as the paragraph above citing §3.4.4.4 key-att-to states. A basic particle of a
-//     flattened particle's reach takes no name here (the flattened bullet below).
+//     from its {abstract} to its attribute uses. The particle's field then takes its
+//     element's expanded name, or, for a substitution group's interface, the expanded name
+//     of each declaration the next bullet examines. Two particles taking one expanded name
+//     both decode, wherever either is bound, an occurrence field's item included, each
+//     child going to the particle cvc-accept attributes it to, by position, as the
+//     paragraph above citing §3.4.4.4 key-att-to states. A basic particle of a flattened
+//     particle's reach takes no name here (the flattened bullet below).
 //   - Of an <element ref> particle whose field holds a substitution group's
 //     sealed interface (item 6), in place of the referenced declaration's own
 //     properties and type: each declaration of the group with {abstract}
