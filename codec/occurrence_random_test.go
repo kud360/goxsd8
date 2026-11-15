@@ -227,7 +227,7 @@ func randomSchema(decls string) (*xsd.Schema, bool) {
 // child carries.
 func TestOccurrencePartitionDifferential(t *testing.T) {
 	rng := rand.New(rand.NewPCG(3593, 1))
-	models, instances, decoded, tries, choices, nested := 0, 0, 0, 0, 0, 0
+	models, instances, decoded, tries, choices, nested, shared := 0, 0, 0, 0, 0, 0, 0
 	for ; models < 2000 && tries < 20000; tries++ {
 		wilds := 0
 		top := genModel(rng, 0, &wilds)
@@ -309,14 +309,20 @@ func TestOccurrencePartitionDifferential(t *testing.T) {
 				continue
 			}
 			decoded++
+			if sharesName(top) {
+				shared++
+			}
 			holdDecoded(t, schema, top, rt, names, found[0])
 		}
 	}
 	if models < 2000 {
 		t.Fatalf("%d models kept of %d drawn, want 2000", models, tries)
 	}
-	t.Logf("%d models of %d drawn, %d of them choices and %d holding a model group particle; %d instances, %d decoded through reflect-built types",
-		models, tries, choices, nested, instances, decoded)
+	if shared == 0 {
+		t.Fatal("no decoded instance is of an item model two of whose particles take one expanded name, which Decode admits")
+	}
+	t.Logf("%d models of %d drawn, %d of them choices and %d holding a model group particle; %d instances, %d decoded through reflect-built types, %d of them of an item model sharing an expanded name",
+		models, tries, choices, nested, instances, decoded, shared)
 }
 
 // occurrenceGoType returns codegen's type for s:r of top's model, reflect
@@ -343,6 +349,23 @@ func occurrenceGoType(top *rnode) (reflect.Type, bool) {
 	}
 	item := reflect.StructOf(fields)
 	return reflect.StructOf([]reflect.StructField{{Name: "Sequence", Type: shapedType(top.min, top.max, item)}}), true
+}
+
+// sharesName reports whether two of top's element particles take one
+// expanded name, the share at an occurrence field's item that Decode
+// attributes by position (TestDecodeSharedNameInItem).
+func sharesName(top *rnode) bool {
+	seen := map[string]bool{}
+	for _, k := range top.kids {
+		if k.kind != "elem" {
+			continue
+		}
+		if seen[k.name] {
+			return true
+		}
+		seen[k.name] = true
+	}
+	return false
 }
 
 // shapedType is v in the shape goshape.ParticleShape gives a particle

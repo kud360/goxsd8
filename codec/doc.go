@@ -144,10 +144,10 @@
 // group (codegen's package doc, "# Substitution groups"), and each declaration of the group with
 // {abstract} false is such a declaration, an abstract head's own properties never read; or the
 // particle is a wildcard, whatever its {namespace constraint} and {process contents}. Two element
-// particles taking one expanded name decode or decline as item 5 of [Decode]'s doc states. Each
-// attribute use but xsi:nil's, to which codegen gives no field (codegen's package doc,
-// "# Attributes"), is typed the same way. No element in the instance carries xsi:type, except
-// inside a wildcard's match or an element of type xs:anyType's raw content.
+// particles taking one expanded name decode, as item 5 of [Decode]'s doc states. Each attribute use
+// but xsi:nil's, to which codegen gives no field (codegen's package doc, "# Attributes"), is typed
+// the same way. No element in the instance carries xsi:type, except inside a wildcard's match or an
+// element of type xs:anyType's raw content.
 //
 // Item 6 of [Decode]'s doc states the Go type of each field, naming it V, S
 // or I as the next paragraph does. The field of a particle of complex type
@@ -238,8 +238,6 @@
 //     reaches, or two governing types of an element declaration, whose
 //     branch structs Decode cannot tell apart; item 5 of [Decode]'s doc
 //     states when.
-//   - Two element particles taking one expanded name; item 5 of [Decode]'s
-//     doc states when.
 //   - Inside a content particle held in an occurrence field, a nested
 //     sequence or choice, inline or through <group ref>, a sequence's
 //     particle or a choice's model-group alternative, an alternative's {min

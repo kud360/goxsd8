@@ -362,10 +362,8 @@ func TestDecodeNestedOccurrenceGroupPath(t *testing.T) {
 // leaves declining, Decode and CheckDecode alike, each row's prefix the
 // decline's subject: a nested particle that would take an occurrence field
 // inside an occurrence field's item, with {max occurs} above 1 and 0..1 alike,
-// for the reasons sequence.nested states, as constructNestedGroup; and an
-// element particle of a nested occurrence's item sharing an expanded name with
-// an earlier sibling particle, as constructSharedName, as item 5 of Decode's
-// doc states (particleShape).
+// for the reasons sequence.nested states, as constructNestedGroup. An item's
+// particle sharing an expanded name decodes (TestDecodeSharedNameInItem).
 func TestDecodeNestedOccurrenceDeclines(t *testing.T) {
 	rows := []struct {
 		name, decls, body string
@@ -378,9 +376,6 @@ func TestDecodeNestedOccurrenceDeclines(t *testing.T) {
 		{"an optional nested choice in an occurrence field's item", root(`<xs:sequence maxOccurs="2">` + cgElA + `<xs:choice minOccurs="0">` + cgElB + cgElC + `</xs:choice></xs:sequence>`),
 			"<s:a>1</s:a><s:b>2</s:b>", constructNestedGroup,
 			"?:1:1: codec does not decode a nested model group particle: a particle of the {type definition} of element {urn:s}r declared at"},
-		{"a nested occurrence's particle sharing a sibling's expanded name", sequenceOf(cgElB + `<xs:sequence maxOccurs="2">` + cgElB + cgElC + `</xs:sequence>`),
-			"<s:b>1</s:b><s:b>2</s:b><s:c>3</s:c>", constructSharedName,
-			"?:1:1: codec does not decode two particles taking one expanded name, each by its own element declaration or a member of its substitution group: element {urn:s}b declared at s.xsd:1:297"},
 	}
 	for _, row := range rows {
 		t.Run(row.name, func(t *testing.T) {
