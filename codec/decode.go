@@ -426,8 +426,8 @@ var ErrTypeMismatch = errors.New("codec: T is not the type codegen emits for the
 //     own particles in its place at any depth with no field and no decline of
 //     its own; each examined as a sequence's element or wildcard particle is,
 //     occurring exactly once, then declining by a branch field of an earlier
-//     one's shape as two of a choice's alternatives in no tie do, whatever
-//     their local names. A particle with {max occurs} 0 is its plain error at
+//     one's shape as two of a choice's alternatives in no tie do, unless they
+//     are a tie (item 6). A particle with {max occurs} 0 is its plain error at
 //     its point, an element particle's after its declaration's own constructs.
 //     Then a content model xsd.Schema.ContentMatcher does not track declines,
 //     since its children cannot be attributed: of the content {particle} after
@@ -693,35 +693,37 @@ var ErrTypeMismatch = errors.New("codec: T is not the type codegen emits for the
 //     of a choice whose branch words, as codegen's package doc "# Naming"
 //     gives them, render one Go identifier, which no model-group
 //     alternative's compositor renders, or of the members of a substitution
-//     group whose local names render one, those whose branch
+//     group whose local names render one, or of the element alternatives of a
+//     flattened slice that take one expanded name, those whose branch
 //     struct shares its shape with another one's, as item 5 states, are a
 //     tie, two or more where any are. Codegen names each of a tie's branches
 //     B or B followed by a decimal from 2, B being the interface's name
-//     followed by that identifier, their suffixes ascending in alternative
-//     order (codegen's package doc, "# Naming"). The branches a tie's
-//     alternatives' fields could be must be as many as its alternatives, each
-//     so named, no two of one suffix, and go to them in ascending suffix
-//     order, each one its own alternative's fields could be; a set where they
-//     are not does not match. Any other branch is held to the one alternative
-//     its fields could be: as many fields as that alternative's branch holds,
-//     each of its field's name, not embedded, and of a Go type it could be,
-//     position by position: V, *V or []V by its particle's occurrence, an
-//     element or wildcard alternative's {min occurs} 0 read as 1, V its Go
-//     type for a simple type, any struct for codegen's struct, any interface
-//     for a sealed interface, and the E, X or N its bullet above matches for
-//     a wildcard or an element of type xs:anyType; for a nested choice's
-//     field, an interface of one unexported method whose branch set, as
-//     WithBranches supplied it, holds one struct per alternative of that
-//     choice, each one its alternative's fields could be, or no set where the
-//     choice has no alternatives; for a flattened particle's, a slice of any
-//     interface of one unexported method; and, for an occurrence field's, its
-//     shape over any struct for a sequence and over any interface of one
-//     unexported method for a choice. A branch whose fields could be no
-//     alternative is held to the first alternative, in alternative order,
-//     that names it: a one-field alternative of complex type, a wildcard or a
-//     substitution group's interface whose field's name its one field has, or
-//     a model-group alternative whose fields' names its fields have, position
-//     by position; the error is that alternative's mismatch.
+//     followed by the identifier their words render, their suffixes ascending
+//     in alternative order (codegen's package doc, "# Naming"). The branches
+//     a tie's alternatives' fields could be must be as many as its
+//     alternatives, each so named, no two of one suffix, and go to them in
+//     ascending suffix order, each one its own alternative's fields could be;
+//     a set where they are not does not match. Any other branch is held to
+//     the one alternative its fields could be: as many fields as that
+//     alternative's branch holds, each of its field's name, not embedded, and
+//     of a Go type it could be, position by position: V, *V or []V by its
+//     particle's occurrence, an element or wildcard alternative's {min
+//     occurs} 0 read as 1, V its Go type for a simple type, any struct for
+//     codegen's struct, any interface for a sealed interface, and the E, X or
+//     N its bullet above matches for a wildcard or an element of type
+//     xs:anyType; for a nested choice's field, an interface of one unexported
+//     method whose branch set, as WithBranches supplied it, holds one struct
+//     per alternative of that choice, each one its alternative's fields could
+//     be, or no set where the choice has no alternatives; for a flattened
+//     particle's, a slice of any interface of one unexported method; and, for
+//     an occurrence field's, its shape over any struct for a sequence and
+//     over any interface of one unexported method for a choice. A branch
+//     whose fields could be no alternative is held to the first alternative,
+//     in alternative order, that names it: a one-field alternative of complex
+//     type, a wildcard or a substitution group's interface whose field's name
+//     its one field has, or a model-group alternative whose fields' names its
+//     fields have, position by position; the error is that alternative's
+//     mismatch.
 //   - A union's sealed interface I, T's own or a field's, at any depth, a
 //     list's element and a variant's element included, whose variants reach
 //     Decode only through [WithBranches], whose doc states which set serves
@@ -3089,9 +3091,10 @@ type sealed[A branchArm] struct {
 }
 
 // tieGroup is one tie of a sealed interface, as item 6 of Decode's doc
-// defines one, or a word group (wordGroups): alts, its alternatives' indices
-// in alternative order, and word, its word group's first alternative's
-// branch word, whose Go identifier every one's renders.
+// defines one, or a word group (wordGroups, nameGroups): alts, its
+// alternatives' indices in alternative order, and word, its word
+// group's first alternative's branch word, whose Go identifier every
+// one's renders.
 type tieGroup struct {
 	word string
 	alts []int
@@ -3130,11 +3133,44 @@ func wordGroups(words []string, placed []bool) []tieGroup {
 	return kept
 }
 
+// nameGroups returns the groups of a flattened reach's alternatives whose
+// expanded names are names, in alternative order, from which tiesOf takes
+// the reach's ties (bindReach): each group the two or more element
+// alternatives of one expanded name, compared as xsd.QName values and never
+// by the Go identifier they render, as wordGroups compares, word their local
+// name. A wildcard alternative's name is the zero QName, in no group.
+func nameGroups(names []xsd.QName) []tieGroup {
+	var groups []tieGroup
+	// at maps an expanded name to its group's index in groups; a lookup
+	// index only, never iterated (STYLE D2).
+	at := map[xsd.QName]int{}
+	for i, n := range names {
+		if n == (xsd.QName{}) {
+			continue
+		}
+		g, ok := at[n]
+		if !ok {
+			g = len(groups)
+			at[n] = g
+			groups = append(groups, tieGroup{word: n.Local})
+		}
+		groups[g].alts = append(groups[g].alts, i)
+	}
+	var kept []tieGroup
+	for _, g := range groups {
+		if len(g.alts) >= 2 {
+			kept = append(kept, g)
+		}
+	}
+	return kept
+}
+
 // tiesOf returns the ties, as item 6 of Decode's doc defines them, of groups,
-// wordGroups' answer: of each group, every alternative of a pair j, i of it,
-// j earlier, for which share(j, i) holds, where there is such a pair, which
-// makes them two or more; share(j, i) reports whether alternative j's branch
-// may share its shape with i's (branchesShare, field.sharesBranch).
+// wordGroups' or nameGroups' answer: of each group, every alternative of a
+// pair j, i of it, j earlier, for which share(j, i) holds, where there is
+// such a pair, which makes them two or more; share(j, i) reports whether
+// alternative j's branch may share its shape with i's (branchesShare,
+// field.sharesBranch).
 func tiesOf(groups []tieGroup, share func(j, i int) bool) []tieGroup {
 	var ties []tieGroup
 	for _, g := range groups {
@@ -3680,11 +3716,17 @@ type reachSite interface {
 // alternative's own constructs as a sequence's particle's, occurring exactly once,
 // an element particle's by elementField over ct with a nil childIndex, then a
 // branch struct of an earlier alternative's shape (field.sharesBranch), which
-// declines as a choice's alternatives in no tie do, alts holding no tie. A
+// declines as a choice's alternatives in no tie do, unless the two are in one
+// name group (nameGroups), which puts them in one of alts' ties (tiesOf),
+// which placeBranches tells apart by name, each child reaching its
+// alternative by its particle's position (cvc-accept §3.9.4.3 clause 3). A
 // particle with {max occurs} 0 is item 5's plain error, an element particle's
 // after its declaration's own constructs, as a sequence's is. goshape.Reach's own
 // error is plain, prefixed by typeSubject.
 func bindReach(run *bindRun, ct xsd.ComplexType, group xsd.ModelGroup, alts *sealed[field], site reachSite, typeSubject string) error {
+	// names holds each alternative's expanded name, nameGroups' input, the
+	// zero QName for a wildcard's.
+	var names []xsd.QName
 	visit := func(p xsd.Particle, position []int) error {
 		term, err := particleTerm(run.p.schema, p, typeSubject)
 		if err != nil {
@@ -3696,6 +3738,7 @@ func bindReach(run *bindRun, ct xsd.ComplexType, group xsd.ModelGroup, alts *sea
 		}
 		var alt field
 		var subject string
+		var name xsd.QName
 		element := false
 		// Term is a closed sum, so the switch is STYLE T2's sealed-sum
 		// exception; particleTerm returns no nil Term.
@@ -3719,9 +3762,12 @@ func bindReach(run *bindRun, ct xsd.ComplexType, group xsd.ModelGroup, alts *sea
 			alt.name = goname.NewNamer().Claim(term.Name().Local)
 			subject = declSubject(term)
 			element = true
+			name = term.Name()
 		}
-		for _, earlier := range alts.alts {
-			if earlier.sharesBranch(alt) {
+		names = append(names, name)
+		groups := nameGroups(names)
+		for j, earlier := range alts.alts {
+			if earlier.sharesBranch(alt) && !tied(groups, j, len(alts.alts)) {
 				return decline(constructSharedBranch, subject)
 			}
 		}
@@ -3745,6 +3791,7 @@ func bindReach(run *bindRun, ct xsd.ComplexType, group xsd.ModelGroup, alts *sea
 	if err != nil {
 		return fmt.Errorf("codec: %s: %w", typeSubject, err)
 	}
+	alts.ties = tiesOf(nameGroups(names), func(j, i int) bool { return alts.alts[j].sharesBranch(alts.alts[i]) })
 	return nil
 }
 

@@ -33,7 +33,9 @@ import (
 // a, sequence(b?) repeated) and nfOccAfterSchema's sequence(a, sequence(b?)
 // repeated, c, sequence(b, d){1,2}), an occurrence field's particle before and
 // after the reach; and nfChoiceSchema's sequence(sequence(b?) repeated, c,
-// choice(b, d)), a choice bound in place after it.
+// choice(b, d)), a choice bound in place after it; and nfTieSchema's
+// sequence(a, sequence(sequence(c, b)?, sequence(d, b)?) repeated), one
+// reach, its two b particles' branch structs of one shape.
 const (
 	nfSeqSchema    = `<xs:element name="r"><xs:complexType><xs:sequence><xs:element name="a" type="xs:string"/><xs:sequence maxOccurs="unbounded"><xs:element name="b" type="xs:string" minOccurs="0"/></xs:sequence></xs:sequence></xs:complexType></xs:element>`
 	nfOnceSchema   = `<xs:element name="r"><xs:complexType><xs:choice><xs:element name="a" type="xs:string"/><xs:sequence><xs:element name="b" type="xs:string" minOccurs="0"/></xs:sequence></xs:choice></xs:complexType></xs:element>`
@@ -59,6 +61,8 @@ const (
 		`<xs:element name="c" type="xs:string"/><xs:sequence maxOccurs="2"><xs:element name="b" type="xs:string"/><xs:element name="d" type="xs:string"/></xs:sequence></xs:sequence></xs:complexType></xs:element>`
 	nfChoiceSchema = `<xs:element name="r"><xs:complexType><xs:sequence><xs:sequence maxOccurs="unbounded"><xs:element name="b" type="xs:string" minOccurs="0"/></xs:sequence>` +
 		`<xs:element name="c" type="xs:string"/><xs:choice><xs:element name="b" type="xs:string"/><xs:element name="d" type="xs:string"/></xs:choice></xs:sequence></xs:complexType></xs:element>`
+	nfTieSchema = `<xs:element name="r"><xs:complexType><xs:sequence><xs:element name="a" type="xs:string"/><xs:sequence maxOccurs="unbounded"><xs:sequence minOccurs="0"><xs:element name="c" type="xs:string"/><xs:element name="b" type="xs:string"/></xs:sequence>` +
+		`<xs:sequence minOccurs="0"><xs:element name="d" type="xs:string"/><xs:element name="b" type="xs:string"/></xs:sequence></xs:sequence></xs:sequence></xs:complexType></xs:element>`
 )
 
 // The types codegen emits for the nested-flatten schemas' s:r, in shape,
@@ -67,7 +71,9 @@ const (
 // nfNestedSchema, nfAfter for nfAfterSchema, nfWild for nfWildSchema,
 // nfSplice, over nfWild's interface, for nfSpliceSchema, and for each later
 // schema the type of its name: nfTwo, nfBefore, nfLater and nfChoice over
-// nfSeq's interface, nfShapes, nfOccBefore and nfOccAfter.
+// nfSeq's interface, nfShapes, nfOccBefore, nfOccAfter and nfTie, whose
+// tied branches carry the names codegen gives them over their interface's,
+// since Decode places a tie's branches by name (item 6 of Decode's doc).
 type (
 	nfSeq struct {
 		A        string
@@ -158,6 +164,16 @@ type (
 	nfChoiceItem interface{ isNfChoiceItem() }
 	nfChoiceB    struct{ B string }
 	nfChoiceD    struct{ D string }
+
+	nfTie struct {
+		A        string
+		Sequence []nfTieItem
+	}
+	nfTieItem   interface{ isNfTieItem() }
+	nfTieC      struct{ C string }
+	nfTieD      struct{ D string }
+	NfTieItemB  struct{ B string }
+	NfTieItemB2 struct{ B string }
 )
 
 func (nfSeqB) isNfSeqItem()        {}
@@ -173,6 +189,10 @@ func (nfShapesD) isNfShapesItem()  {}
 func (nfShapesB2) isNfShapesItem() {}
 func (nfChoiceB) isNfChoiceItem()  {}
 func (nfChoiceD) isNfChoiceItem()  {}
+func (nfTieC) isNfTieItem()        {}
+func (nfTieD) isNfTieItem()        {}
+func (NfTieItemB) isNfTieItem()    {}
+func (NfTieItemB2) isNfTieItem()   {}
 
 // The branch sets of the nested-flatten interfaces.
 var (
@@ -182,6 +202,7 @@ var (
 	nfTwoBranches    = []Option{WithBranches[nfTwoItem](nfTwoA{}), WithBranches[nfTwo2Item](nfTwo2A{})}
 	nfShapesBranches = WithBranches[nfShapesItem](nfShapesC{}, nfShapesB{}, nfShapesD{}, nfShapesB2{})
 	nfChoiceBranches = []Option{nfSeqBranches, WithBranches[nfChoiceItem](nfChoiceB{}, nfChoiceD{})}
+	nfTieBranches    = WithBranches[nfTieItem](NfTieItemB2{}, nfTieD{}, NfTieItemB{}, nfTieC{})
 )
 
 // TestNestedFlatTypesAreCodegens pins the types above to those codegen emits
@@ -212,6 +233,8 @@ func TestNestedFlatTypesAreCodegens(t *testing.T) {
 		{nfOccBeforeSchema, []string{"type R struct {\n\tSequence  []RSequence\n\tA         string\n\tSequence2 []RSequence2\n}\n", "type RSequence struct {\n\tB string\n\tC string\n}\n", branch("RSequence2", "RSequence2B", "B string")}},
 		{nfOccAfterSchema, []string{"type R struct {\n\tA         string\n\tSequence  []RSequence\n\tC         string\n\tSequence2 []RSequence2\n}\n", seq[1], "type RSequence2 struct {\n\tB string\n\tD string\n}\n"}},
 		{nfChoiceSchema, []string{"type R struct {\n\tSequence []RSequence\n\tC        string\n\tChoice   RChoice\n}\n", seq[1], branch("RChoice", "RChoiceB", "B string"), branch("RChoice", "RChoiceD", "D string")}},
+		{nfTieSchema, []string{"type R struct {\n\tA        string\n\tSequence []RSequence\n}\n", branch("RSequence", "RSequenceC", "C string"), branch("RSequence", "RSequenceB", "B string"),
+			branch("RSequence", "RSequenceD", "D string"), branch("RSequence", "RSequenceB2", "B string")}},
 	}
 	for _, row := range rows {
 		gen := generated(t, schemaOf(t, row.decls))
@@ -220,6 +243,17 @@ func TestNestedFlatTypesAreCodegens(t *testing.T) {
 				t.Errorf("codegen emits\n%s\nwhich does not declare\n%s", gen, decl)
 			}
 		}
+	}
+	// nfTieSchema's two branches of field B are of one shape, so only
+	// codegen's order, reach order, pins which particle's is RSequenceB2.
+	gen := generated(t, schemaOf(t, nfTieSchema))
+	rest := gen
+	for _, name := range []string{"RSequenceC", "RSequenceB", "RSequenceD", "RSequenceB2"} {
+		_, after, ok := bytes.Cut(rest, []byte("type "+name+" struct"))
+		if !ok {
+			t.Fatalf("codegen emits\n%s\nwhich does not declare %s after the branches before it in reach order", gen, name)
+		}
+		rest = after
 	}
 }
 
@@ -235,8 +269,9 @@ func TestNestedFlatTypesAreCodegens(t *testing.T) {
 // too, so a reach particle sharing an expanded name with a sibling before or
 // after the reach, with another reach's particle, with a particle of an
 // occurrence field or a choice bound in place, or with a particle of its own
-// reach whose branch struct differs in shape, puts each child to its own
-// particle's field. CheckDecode returns nil for each row's T.
+// reach, whose branch struct differs in shape or is a tie's (item 6 of
+// Decode's doc), puts each child to its own particle's field. CheckDecode
+// returns nil for each row's T.
 func TestDecodeNestedFlattened(t *testing.T) {
 	w := anyElement{Space: "urn:o", Local: "w"}
 	const ow = `<o:w xmlns:o="urn:o"/>`
@@ -280,6 +315,10 @@ func TestDecodeNestedFlattened(t *testing.T) {
 			nfOccAfter{A: "1", Sequence: []nfSeqItem{nfSeqB{B: "2"}}, C: "3", Sequence2: []nfOccBD{{B: "4", D: "5"}, {B: "6", D: "7"}}}},
 		{"a choice bound in place after a nested reach sharing its particle's expanded name", nfChoiceSchema, "<s:b>1</s:b><s:b>2</s:b><s:c>3</s:c><s:b>4</s:b>", into[nfChoice](nfChoiceBranches...),
 			nfChoice{Sequence: []nfSeqItem{nfSeqB{B: "1"}, nfSeqB{B: "2"}}, C: "3", Choice: nfChoiceB{B: "4"}}},
+		{"a nested reach's two particles of one expanded name, a tie, the first's", nfTieSchema, "<s:a>1</s:a><s:c>2</s:c><s:b>3</s:b>", into[nfTie](nfTieBranches),
+			nfTie{A: "1", Sequence: []nfTieItem{nfTieC{C: "2"}, NfTieItemB{B: "3"}}}},
+		{"a nested reach's two particles of one expanded name, a tie, each one's", nfTieSchema, "<s:a>1</s:a><s:d>2</s:d><s:b>3</s:b><s:c>4</s:c><s:b>5</s:b>", into[nfTie](nfTieBranches),
+			nfTie{A: "1", Sequence: []nfTieItem{nfTieD{D: "2"}, NfTieItemB2{B: "3"}, nfTieC{C: "4"}, NfTieItemB{B: "5"}}}},
 	}
 	for _, row := range rows {
 		t.Run(row.name, func(t *testing.T) {
@@ -303,10 +342,7 @@ func TestDecodeNestedFlattened(t *testing.T) {
 // TestDecodeNestedFlattenedDeclines pins what the nested flatten lift leaves
 // declining, Decode and CheckDecode alike: a nested particle codegen
 // flattens inside a content particle held in an occurrence field,
-// whose items' partition reads no repetition inside an item; a nested reach's
-// two particles of one expanded name whose branch structs have one shape, as
-// constructSharedBranch, as a content reach's do
-// (TestDecodeFlattenSharedBranch).
+// whose items' partition reads no repetition inside an item.
 func TestDecodeNestedFlattenedDeclines(t *testing.T) {
 	rows := []struct {
 		name, decls, body string
@@ -314,9 +350,6 @@ func TestDecodeNestedFlattenedDeclines(t *testing.T) {
 	}{
 		{"a nested flattened sequence in an occurrence field's item", root(`<xs:sequence maxOccurs="2"><xs:element name="a" type="xs:string"/><xs:sequence maxOccurs="unbounded"><xs:element name="b" type="xs:string" minOccurs="0"/></xs:sequence></xs:sequence>`),
 			"<s:a>1</s:a><s:b>2</s:b><s:b>3</s:b>", constructNestedGroup},
-		{"a nested reach's two particles of one expanded name", sequenceOf(`<xs:element name="a" type="xs:string"/><xs:sequence maxOccurs="unbounded"><xs:sequence minOccurs="0"><xs:element name="c" type="xs:string"/><xs:element name="b" type="xs:string"/></xs:sequence>` +
-			`<xs:sequence minOccurs="0"><xs:element name="d" type="xs:string"/><xs:element name="b" type="xs:string"/></xs:sequence></xs:sequence>`),
-			"<s:a>1</s:a><s:c>2</s:c><s:b>3</s:b>", constructSharedBranch},
 	}
 	for _, row := range rows {
 		t.Run(row.name, func(t *testing.T) {
