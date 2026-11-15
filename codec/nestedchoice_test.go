@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"errors"
 	"reflect"
-	"strings"
 	"testing"
 
 	"github.com/kud360/goxsd8/builtin/strict"
@@ -23,8 +22,11 @@ import (
 // (§3.4.2.3.3 dcl.ctd.ctcc.common clause 4.2.3.3); ncTwoSchema's
 // sequence(choice(a, b), choice(c repeated, d)), whose second field is
 // Choice2; ncWildSchema's sequence(any over urn:o, choice(b, any over
-// urn:p)), a sequence wildcard and an alternative's; and ncEmptiableSchema's
-// sequence(a, choice(b optional, c)), an emptiable choice.
+// urn:p)), a sequence wildcard and an alternative's; ncWildTieSchema's
+// sequence(any over urn:o, choice(any over urn:p, any over urn:q)), a
+// sequence wildcard and two alternatives' of one branch shape, a tie (item 6
+// of Decode's doc); and ncEmptiableSchema's sequence(a, choice(b optional,
+// c)), an emptiable choice.
 const (
 	ncInlineSchema = `<xs:element name="r"><xs:complexType><xs:sequence><xs:element name="a" type="xs:string"/>
   <xs:choice><xs:element name="b" type="xs:string"/><xs:element name="c" type="xs:int"/></xs:choice></xs:sequence></xs:complexType></xs:element>`
@@ -42,6 +44,8 @@ const (
   <xs:choice><xs:element name="c" type="xs:string" maxOccurs="2"/><xs:element name="d" type="xs:int"/></xs:choice></xs:sequence></xs:complexType></xs:element>`
 	ncWildSchema = `<xs:element name="r"><xs:complexType><xs:sequence><xs:any namespace="urn:o" processContents="lax"/>
   <xs:choice><xs:element name="b" type="xs:string"/><xs:any namespace="urn:p" processContents="lax"/></xs:choice></xs:sequence></xs:complexType></xs:element>`
+	ncWildTieSchema = `<xs:element name="r"><xs:complexType><xs:sequence><xs:any namespace="urn:o" processContents="lax"/>
+  <xs:choice><xs:any namespace="urn:p" processContents="lax"/><xs:any namespace="urn:q" processContents="lax"/></xs:choice></xs:sequence></xs:complexType></xs:element>`
 	ncEmptiableSchema = `<xs:element name="r"><xs:complexType><xs:sequence><xs:element name="a" type="xs:string"/>
   <xs:choice><xs:element name="b" type="xs:string" minOccurs="0"/><xs:element name="c" type="xs:int"/></xs:choice></xs:sequence></xs:complexType></xs:element>`
 )
@@ -51,7 +55,9 @@ const (
 // ncInlineSchema's, ncRefSchema's, ncSplicedSchema's and
 // ncEmptiableSchema's R, RChoice, RChoiceB and RChoiceC; ncx
 // ncComplexSchema's, ncxV its RB; ncE ncExtSchema's; ncT ncTwoSchema's; and
-// ncW ncWildSchema's.
+// ncW ncWildSchema's; and ncWT ncWildTieSchema's, its branches carrying the
+// names codegen gives them over their interface's, RChoiceAny and
+// RChoiceAny2, since Decode places a tie's branches by name.
 type (
 	nc struct {
 		A      string
@@ -95,6 +101,14 @@ type (
 	ncWChoice interface{ isNcWChoice() }
 	ncWB      struct{ B string }
 	ncWAny    struct{ Any anyElement }
+
+	ncWT struct {
+		Any    anyElement
+		Choice ncWTChoice
+	}
+	ncWTChoice     interface{ isNcWTChoice() }
+	NcWTChoiceAny  struct{ Any anyElement }
+	NcWTChoiceAny2 struct{ Any anyElement }
 )
 
 func (ncB) isNcChoice()     {}
@@ -109,6 +123,9 @@ func (ncT2D) isNcTChoice2() {}
 func (ncWB) isNcWChoice()   {}
 func (ncWAny) isNcWChoice() {}
 
+func (NcWTChoiceAny) isNcWTChoice()  {}
+func (NcWTChoiceAny2) isNcWTChoice() {}
+
 // The branch sets of the nested-choice interfaces.
 var (
 	ncBranches  = WithBranches[ncChoice](ncB{}, ncC{})
@@ -116,6 +133,8 @@ var (
 	ncEBranches = WithBranches[ncEChoice](ncEA{})
 	ncTBranches = []Option{WithBranches[ncTChoice](ncTA{}, ncTB{}), WithBranches[ncTChoice2](ncT2C{}, ncT2D{})}
 	ncWBranches = WithBranches[ncWChoice](ncWB{}, ncWAny{})
+	// ncWTBranches is supplied against alternative order.
+	ncWTBranches = WithBranches[ncWTChoice](NcWTChoiceAny2{}, NcWTChoiceAny{})
 )
 
 // TestNestedChoiceTypesAreCodegens pins the types above to those codegen
@@ -162,6 +181,11 @@ func TestNestedChoiceTypesAreCodegens(t *testing.T) {
 			"type RChoiceB struct {\n\tB string\n}\n\nfunc (RChoiceB) isRChoice() {}\n",
 			"type RChoiceAny struct {\n\tAny AnyElement\n}\n\nfunc (RChoiceAny) isRChoice() {}\n",
 		}},
+		{ncWildTieSchema, []string{
+			"type R struct {\n\tAny    AnyElement\n\tChoice RChoice\n}\n",
+			"type RChoiceAny struct {\n\tAny AnyElement\n}\n\nfunc (RChoiceAny) isRChoice() {}\n",
+			"type RChoiceAny2 struct {\n\tAny AnyElement\n}\n\nfunc (RChoiceAny2) isRChoice() {}\n",
+		}},
 	}
 	for _, row := range rows {
 		gen := generated(t, schemaOf(t, row.decls))
@@ -180,8 +204,10 @@ func TestNestedChoiceTypesAreCodegens(t *testing.T) {
 // branch of the alternative its child matches, an alternative of complex
 // type into its struct; two such choices fill Choice and Choice2, a repeated
 // alternative appending into its one branch; a sequence's wildcard and an
-// alternative's each fill their own; and an emptiable choice's empty match
-// is the nil interface. CheckDecode returns nil for each row's T.
+// alternative's each fill their own, two wildcard alternatives of one branch
+// shape each its own branch by name, the second wildcard particle of the
+// type the choice's first; and an emptiable choice's empty match is the nil
+// interface. CheckDecode returns nil for each row's T.
 func TestDecodeNestedChoice(t *testing.T) {
 	w := func(space string) anyElement { return anyElement{Space: space, Local: "w"} }
 	rows := []struct {
@@ -200,6 +226,10 @@ func TestDecodeNestedChoice(t *testing.T) {
 			ncW{Any: w("urn:o"), Choice: ncWAny{Any: w("urn:p")}}},
 		{"a sequence's wildcard and an element alternative", ncWildSchema, `<o:w xmlns:o="urn:o"/><s:b>y</s:b>`, into[ncW](ncWBranches),
 			ncW{Any: w("urn:o"), Choice: ncWB{B: "y"}}},
+		{"a sequence's wildcard and the first of two wildcard alternatives", ncWildTieSchema, `<o:w xmlns:o="urn:o"/><p:w xmlns:p="urn:p"/>`, into[ncWT](ncWTBranches),
+			ncWT{Any: w("urn:o"), Choice: NcWTChoiceAny{Any: w("urn:p")}}},
+		{"a sequence's wildcard and the second of two wildcard alternatives", ncWildTieSchema, `<o:w xmlns:o="urn:o"/><q:w xmlns:q="urn:q"/>`, into[ncWT](ncWTBranches),
+			ncWT{Any: w("urn:o"), Choice: NcWTChoiceAny2{Any: w("urn:q")}}},
 		{"an emptiable choice, empty match", ncEmptiableSchema, "<s:a>x</s:a>", into[nc](ncBranches), nc{A: "x"}},
 		{"an emptiable choice, its optional alternative present", ncEmptiableSchema, "<s:a>x</s:a><s:b>y</s:b>", into[nc](ncBranches), nc{A: "x", Choice: ncB{B: "y"}}},
 	}
@@ -217,38 +247,6 @@ func TestDecodeNestedChoice(t *testing.T) {
 			}
 			if err := row.into.check(schema); err != nil {
 				t.Errorf("CheckDecode = %v, want nil for a row Decode decodes", err)
-			}
-		})
-	}
-}
-
-// TestDecodeNestedChoiceDeclines pins the nested choice's decline, charged
-// to the document element at 1:1: two wildcard alternatives sharing a
-// branch shape after a sequence wildcard, which declines naming the second
-// alternative wildcard particle 3 of the type, its ordinal counted across
-// the sequence's wildcard and the choice's in one wildcard slot.
-func TestDecodeNestedChoiceDeclines(t *testing.T) {
-	const wildPrefix = "?:1:1: codec does not decode two branches of a sealed interface whose structs have one shape: wildcard particle 3 of the {type definition} of element {urn:s}r declared at"
-	rows := []struct {
-		name, decls, body string
-		construct         construct
-		prefix            string
-	}{
-		{"two wildcard alternatives sharing a branch shape after a sequence wildcard", sequenceOf(`<xs:any namespace="urn:o" processContents="lax"/><xs:choice><xs:any namespace="urn:p" processContents="lax"/><xs:any namespace="urn:q" processContents="lax"/></xs:choice>`),
-			`<o:w xmlns:o="urn:o"/><p:w xmlns:p="urn:p"/>`, constructSharedBranch, wildPrefix},
-	}
-	for _, row := range rows {
-		t.Run(row.name, func(t *testing.T) {
-			schema := schemaOf(t, row.decls)
-			data := instanceOf("", row.body)
-			mustAccept(t, schema, data)
-			got, err := Decode[struct{}](schema, strict.New(), data)
-			if got != nil {
-				t.Fatalf("Decode = %v, want no value", *got)
-			}
-			assertDecline(t, err, row.construct, 1, 1)
-			if !strings.HasPrefix(err.Error(), row.prefix) {
-				t.Errorf("Decode error = %v, want the prefix %q", err, row.prefix)
 			}
 		})
 	}

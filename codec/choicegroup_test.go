@@ -437,13 +437,12 @@ func TestDecodeChoiceGroup(t *testing.T) {
 // each charged to the document element at 1:1: two branch structs of one
 // shape, two nested choices' {Choice I} whose choices one branch set could
 // hold, as many alternatives each of one shape as one of the other's, two
-// wildcard alternatives' {Any E}, two spliced sequences' fields of one name
-// and Go type, and a spliced sequence of one field beside an element
-// alternative of its name and Go type; and, in an occurrence field's item, a
-// sequence alternative holding a particle codegen flattens, whose prefix is
-// the decline's subject. A repeated sequence alternative, which codegen
-// neither splices nor flattens, decodes into its occurrence field
-// (TestDecodeNestedOccurrence).
+// spliced sequences' fields of one name and Go type, and a spliced sequence
+// of one field beside an element alternative of its name and Go type; and,
+// in an occurrence field's item, a sequence alternative holding a particle
+// codegen flattens, whose prefix is the decline's subject. A repeated
+// sequence alternative, which codegen neither splices nor flattens, decodes
+// into its occurrence field (TestDecodeNestedOccurrence).
 func TestDecodeChoiceGroupDeclines(t *testing.T) {
 	unq := func(name string) string {
 		return `<xs:element name="` + name + `" form="unqualified" type="xs:string"/>`
@@ -459,9 +458,6 @@ func TestDecodeChoiceGroupDeclines(t *testing.T) {
 		{"two nested choice alternatives of one shape in another order", root(`<xs:choice><xs:choice>` + cgEl("a") + cgEl("b") + `</xs:choice><xs:choice>` + unq("b") + unq("a") + `</xs:choice></xs:choice>`),
 			"<s:a>1</s:a>", constructSharedBranch,
 			"?:1:1: codec does not decode two branches of a sealed interface whose structs have one shape: a choice model group particle of the {type definition} of element {urn:s}r declared at"},
-		{"two wildcard alternatives", root(`<xs:choice><xs:any namespace="urn:n1" processContents="skip"/><xs:any namespace="urn:n2" processContents="skip"/></xs:choice>`),
-			`<n:w xmlns:n="urn:n2"/>`, constructSharedBranch,
-			"?:1:1: codec does not decode two branches of a sealed interface whose structs have one shape: wildcard particle 2 of the {type definition} of element {urn:s}r declared at"},
 		{"two spliced sequences of one shape", root(`<xs:choice><xs:sequence>` + cgEl("x") + cgEl("y") + `</xs:sequence><xs:sequence>` + unq("x") + unq("y") + `</xs:sequence></xs:choice>`),
 			"<s:x>1</s:x><s:y>2</s:y>", constructSharedBranch,
 			"?:1:1: codec does not decode two branches of a sealed interface whose structs have one shape: a sequence model group particle of the {type definition} of element {urn:s}r declared at"},
