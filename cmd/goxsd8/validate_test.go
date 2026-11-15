@@ -76,17 +76,28 @@ func mustCiteOpenableLocations(t *testing.T, stream, text string) int {
 	return len(matches)
 }
 
-// TestValidateCleanInstance pins the quiet outcome: an instance that charges
-// nothing writes nothing on either stream and exits 0, so a script can run
-// validate in a pipeline and see output only when there is something to see.
+// TestValidateCleanInstance pins the clean outcome: an instance that charges
+// nothing writes no report on stdout and exits 0, stderr carrying the counts
+// line alone, which shows the run assessed it (#1409); under -q both streams
+// are empty, so a script can still run validate in a pipeline and see output
+// only when there is something to see.
 func TestValidateCleanInstance(t *testing.T) {
-	var stdout, stderr bytes.Buffer
-	code := run([]string{"validate", "-schema", orderSchema, validInstance}, &stdout, &stderr)
-	if code != exitOK {
-		t.Fatalf("code = %d, want %d (stdout %q, stderr %q)", code, exitOK, stdout.String(), stderr.String())
-	}
-	if stdout.Len() != 0 || stderr.Len() != 0 {
-		t.Errorf("stdout = %q, stderr = %q, want both empty", stdout.String(), stderr.String())
+	for _, c := range []struct {
+		flags  []string
+		stderr string
+	}{
+		{nil, "goxsd8: validate: instances=1 clean=1 undecided=0 invalid=0 faulted=0\n"},
+		{[]string{"-q"}, ""},
+	} {
+		var stdout, stderr bytes.Buffer
+		args := append(append([]string{"validate"}, c.flags...), "-schema", orderSchema, validInstance)
+		code := run(args, &stdout, &stderr)
+		if code != exitOK {
+			t.Fatalf("%q: code = %d, want %d (stdout %q, stderr %q)", args, code, exitOK, stdout.String(), stderr.String())
+		}
+		if stdout.Len() != 0 || stderr.String() != c.stderr {
+			t.Errorf("%q: stdout = %q, stderr = %q, want stdout empty and stderr %q", args, stdout.String(), stderr.String(), c.stderr)
+		}
 	}
 }
 
@@ -94,15 +105,16 @@ func TestValidateCleanInstance(t *testing.T) {
 // decided and this landing implements: validate's product is the violation
 // report a script pipes into grep, so it lands on stdout in the
 // "<loc>: [<rule>] <message>" shape parse gives a schema error on stderr, and
-// stderr stays empty because nothing went wrong with the run.
+// stderr carries the counts line alone because nothing went wrong with the
+// run.
 func TestValidateViolationsGoToStdout(t *testing.T) {
 	var stdout, stderr bytes.Buffer
 	code := run([]string{"validate", "-schema", orderSchema, invalidInstance}, &stdout, &stderr)
 	if code != exitInvalid {
 		t.Fatalf("code = %d, want %d (stderr %q)", code, exitInvalid, stderr.String())
 	}
-	if stderr.Len() != 0 {
-		t.Errorf("stderr = %q, want empty: an invalid instance is a verdict, not a fault", stderr.String())
+	if want := "goxsd8: validate: instances=1 clean=0 undecided=0 invalid=1 faulted=0\n"; stderr.String() != want {
+		t.Errorf("stderr = %q, want %q alone: an invalid instance is a verdict, not a fault", stderr.String(), want)
 	}
 	line, _, _ := strings.Cut(stdout.String(), "\n")
 	if !strings.HasPrefix(line, invalidInstance+":") {
@@ -274,7 +286,7 @@ func TestValidateRendersAnAnonymousTypeChargeAsASentence(t *testing.T) {
 // runIntPattern validates <n>x3</n> against an element of type xs:int, a
 // lexical outside xs:integer's built-in pattern, which xs:int inherits
 // (Datatypes integer.pattern), and returns the instance path and the run's
-// outcome.
+// outcome under -q, so that stderr is empty unless something faulted.
 func runIntPattern(t *testing.T) (instance string, code int, stdout, stderr string) {
 	t.Helper()
 	dir := t.TempDir()
@@ -287,7 +299,7 @@ func runIntPattern(t *testing.T) (instance string, code int, stdout, stderr stri
 		t.Fatal(err)
 	}
 	var out, errOut bytes.Buffer
-	code = run([]string{"validate", "-schema", schema, instance}, &out, &errOut)
+	code = run([]string{"validate", "-q", "-schema", schema, instance}, &out, &errOut)
 	return instance, code, out.String(), errOut.String()
 }
 
@@ -350,6 +362,84 @@ func TestValidateQuietDoesNotSuppressViolations(t *testing.T) {
 	}
 	if quiet.Len() == 0 {
 		t.Error("-q suppressed the whole report")
+	}
+}
+
+// TestValidateCountsLine pins #1409's end-of-run counts line: over one invalid
+// and one clean instance it is the whole of stderr, and stdout is the report
+// alone, byte for byte what the same run prints under -q, where stderr is
+// empty.
+func TestValidateCountsLine(t *testing.T) {
+	args := []string{"-schema", orderSchema, invalidInstance, validInstance}
+	var stdout, stderr bytes.Buffer
+	if code := run(append([]string{"validate"}, args...), &stdout, &stderr); code != exitInvalid {
+		t.Fatalf("code = %d, want %d (stderr %q)", code, exitInvalid, stderr.String())
+	}
+	if want := "goxsd8: validate: instances=2 clean=1 undecided=0 invalid=1 faulted=0\n"; stderr.String() != want {
+		t.Errorf("stderr = %q, want %q", stderr.String(), want)
+	}
+	var quiet, quietErr bytes.Buffer
+	if code := run(append([]string{"validate", "-q"}, args...), &quiet, &quietErr); code != exitInvalid {
+		t.Fatalf("-q: code = %d, want %d (stderr %q)", code, exitInvalid, quietErr.String())
+	}
+	if quietErr.Len() != 0 {
+		t.Errorf("-q: stderr = %q, want empty", quietErr.String())
+	}
+	if quiet.Len() == 0 || quiet.String() != stdout.String() {
+		t.Errorf("-q: stdout =\n%s\nwant the report the run without -q printed\n%s", quiet.String(), stdout.String())
+	}
+}
+
+// TestValidateCountsLineBuckets pins usage's validate paragraph on the counts
+// line, a row for each sentence of it: each bucket, the line as stderr's last,
+// the -strict skips of a -schema set's directive and of an instance's hint,
+// and the runs that print none.
+func TestValidateCountsLineBuckets(t *testing.T) {
+	dir := t.TempDir()
+	valid, err := os.ReadFile(validInstance)
+	if err != nil {
+		t.Fatal(err)
+	}
+	hinted := filepath.Join(dir, "hinted.xml")
+	body := strings.Replace(string(valid), `createdBy="ada"`, `createdBy="ada" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="urn:gone nosuch.xsd"`, 1)
+	if err := os.WriteFile(hinted, []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	const counts = "goxsd8: validate: instances="
+	for _, c := range []struct {
+		name string
+		args []string
+		code int
+		last string // stderr's last line, "" where no counts line prints
+	}{
+		{"clean", []string{"-schema", orderSchema, validInstance}, exitOK, counts + "1 clean=1 undecided=0 invalid=0 faulted=0"},
+		{"undecided", []string{"-schema", assertedSchema, assertedInstance}, exitUndecided, counts + "1 clean=0 undecided=1 invalid=0 faulted=0"},
+		{"invalid", []string{"-schema", orderSchema, invalidInstance}, exitInvalid, counts + "1 clean=0 undecided=0 invalid=1 faulted=0"},
+		{"faulted, missing", []string{"-schema", orderSchema, "testdata/nosuch.xml"}, exitUsage, counts + "1 clean=0 undecided=0 invalid=0 faulted=1"},
+		{"faulted, directory", []string{"-schema", orderSchema, dir}, exitUsage, counts + "1 clean=0 undecided=0 invalid=0 faulted=1"},
+		{"faulted, ber", []string{"-schema", orderSchema, "testdata/x.ber"}, exitUsage, counts + "1 clean=0 undecided=0 invalid=0 faulted=1"},
+		{"one of each", []string{"-schema", orderSchema, validInstance, invalidInstance, "testdata/nosuch.xml", validJSON}, exitUsage, counts + "4 clean=2 undecided=0 invalid=1 faulted=1"},
+		{"strict set skip is the run's", []string{"-strict", "-schema", shortSchema, shortValidInstance}, exitUndecided, counts + "1 clean=1 undecided=0 invalid=0 faulted=0"},
+		{"strict hint skip is the instance's", []string{"-strict", "-schema", orderSchema, hinted, validInstance}, exitUndecided, counts + "2 clean=1 undecided=1 invalid=0 faulted=0"},
+		{"schema set does not compile", []string{"-schema", brokenSchema, validInstance}, exitSchema, ""},
+		{"formatless instance refused", []string{"-schema", orderSchema, validInstance, "testdata/order.txt"}, exitUsage, ""},
+		{"no instance given", []string{"-schema", orderSchema}, exitUsage, ""},
+	} {
+		var stdout, stderr bytes.Buffer
+		args := append([]string{"validate"}, c.args...)
+		if code := run(args, &stdout, &stderr); code != c.code {
+			t.Errorf("%s: code = %d, want %d (stderr %q)", c.name, code, c.code, stderr.String())
+		}
+		got := stderr.String()
+		if c.last == "" {
+			if strings.Contains(got, counts) {
+				t.Errorf("%s: stderr = %q, want no counts line", c.name, got)
+			}
+			continue
+		}
+		if !strings.HasSuffix(got, c.last+"\n") || strings.Count(got, counts) != 1 {
+			t.Errorf("%s: stderr = %q, want it to end with %q, its one counts line", c.name, got, c.last)
+		}
 	}
 }
 
@@ -472,8 +562,8 @@ func TestValidateUndecidedInstanceHasItsOwnExitCode(t *testing.T) {
 	if code != exitUndecided {
 		t.Fatalf("code = %d, want %d (stdout %q, stderr %q)", code, exitUndecided, stdout.String(), stderr.String())
 	}
-	if stderr.Len() != 0 {
-		t.Errorf("stderr = %q, want empty: a check the assessment declined is a verdict about the instance, not a fault of the run", stderr.String())
+	if want := "goxsd8: validate: instances=1 clean=0 undecided=1 invalid=0 faulted=0\n"; stderr.String() != want {
+		t.Errorf("stderr = %q, want %q alone: a check the assessment declined is a verdict about the instance, not a fault of the run", stderr.String(), want)
 	}
 	line, _, _ := strings.Cut(stdout.String(), "\n")
 	if !strings.HasPrefix(line, assertedInstance+":") {
@@ -968,7 +1058,7 @@ func TestValidateNamesAMissingHintedDocument(t *testing.T) {
 	note := "goxsd8: validate: " + composing + ": the schema location hint " + missing + " resolved to no document, which is legal and skipped; the compiled schema is short of whatever that document declares\n"
 
 	var stdout, stderr bytes.Buffer
-	if code := run([]string{"validate", "-schema", orderSchema, composing}, &stdout, &stderr); code != exitOK {
+	if code := run([]string{"validate", "-q", "-schema", orderSchema, composing}, &stdout, &stderr); code != exitOK {
 		t.Fatalf("code = %d, want %d — the surviving hint still decides (stdout %q, stderr %q)", code, exitOK, stdout.String(), stderr.String())
 	}
 	if stdout.Len() != 0 {
@@ -1055,8 +1145,8 @@ func TestValidateStrictChargesASkip(t *testing.T) {
 		{"hint, composing, beside a clean instance", []string{"-strict", "-schema", orderSchema, validInstance, composing}, exitUndecided, "the schema location hint"},
 		{"hint, rejected", []string{"-strict", "-schema", orderSchema, rejected}, exitUndecided, "ignoring its schema location hints"},
 		{"hint, rejected, default", []string{"-schema", orderSchema, rejected}, exitOK, "the schema location hint"},
-		{"hint, no-hints", []string{"-strict", "-no-hints", "-schema", orderSchema, composing}, exitOK, ""},
-		{"no skip", []string{"-strict", "-schema", orderSchema, validInstance}, exitOK, ""},
+		{"hint, no-hints", []string{"-q", "-strict", "-no-hints", "-schema", orderSchema, composing}, exitOK, ""},
+		{"no skip", []string{"-q", "-strict", "-schema", orderSchema, validInstance}, exitOK, ""},
 	} {
 		var stdout, stderr bytes.Buffer
 		if code := run(append([]string{"validate"}, c.args...), &stdout, &stderr); code != c.want {
@@ -1093,7 +1183,7 @@ func TestValidateSchemaDirectiveIsNotReportedAsAHint(t *testing.T) {
 	want := "goxsd8: validate: " + base + `:3:3: this <include>'s schemaLocation "nosuch-nested.xsd" resolved to no document and was skipped; the compiled schema is short of whatever that document declares` + "\n"
 
 	var stdout, stderr bytes.Buffer
-	if code := run([]string{"validate", "-schema", base, instance}, &stdout, &stderr); code != exitOK {
+	if code := run([]string{"validate", "-q", "-schema", base, instance}, &stdout, &stderr); code != exitOK {
 		t.Fatalf("code = %d, want %d — the resolving hint decides (stdout %q, stderr %q)", code, exitOK, stdout.String(), stderr.String())
 	}
 	if stderr.String() != want {
@@ -1116,8 +1206,8 @@ func TestValidateSaysNothingOfABareImport(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, args := range [][]string{
-		{"validate", "-schema", schema, instance},
-		{"validate", "-strict", "-schema", schema, instance},
+		{"validate", "-q", "-schema", schema, instance},
+		{"validate", "-q", "-strict", "-schema", schema, instance},
 	} {
 		var stdout, stderr bytes.Buffer
 		if code := run(args, &stdout, &stderr); code != exitOK {
@@ -1207,7 +1297,7 @@ func TestValidateFormatVocabulary(t *testing.T) {
 	}{
 		{"unrecognized token", []string{"-format", "yaml"}, `-format "yaml" is not a source format; pass one of xml, json or ber`, true},
 		{"wrong case", []string{"-format", "XML"}, `-format "XML" is not a source format`, true},
-		{"forced ber is reserved", []string{"-format", "ber"}, "-format ber is reserved by the contract and not yet implemented", false},
+		{"forced ber is reserved", []string{"-q", "-format", "ber"}, "-format ber is reserved by the contract and not yet implemented", false},
 		{"extension is the default", []string{}, "the extension \".txt\" names no source format; pass -format with one of xml, json or ber", true},
 	}
 	for _, c := range cases {
@@ -1285,7 +1375,7 @@ func TestValidateJSONInstance(t *testing.T) {
 		t.Run(c.name, func(t *testing.T) {
 			var reports []string
 			for _, flags := range [][]string{nil, {"-no-hints"}} {
-				args := append(append([]string{"validate"}, flags...), "-schema", c.schema)
+				args := append(append([]string{"validate", "-q"}, flags...), "-schema", c.schema)
 				args = append(args, c.instances...)
 				var stdout, stderr bytes.Buffer
 				if code := run(args, &stdout, &stderr); code != c.code {
@@ -1452,7 +1542,7 @@ const readmeOrderXSD = "../../testdata/readme/order.xsd"
 // at the scalar's location and naming "order" in the clause.
 func TestValidateJSONScalarWhereObjectExpected(t *testing.T) {
 	const instance = "testdata/readme-text.json"
-	args := []string{"validate", "-schema", readmeOrderXSD, instance}
+	args := []string{"validate", "-q", "-schema", readmeOrderXSD, instance}
 	var stdout, stderr bytes.Buffer
 	if code := run(args, &stdout, &stderr); code != exitInvalid {
 		t.Errorf("run(%q) = %d, want %d (stdout %q, stderr %q)", args, code, exitInvalid, stdout.String(), stderr.String())
@@ -1495,7 +1585,7 @@ func TestValidateJSONMemberClauses(t *testing.T) {
 			if err := os.WriteFile(instance, []byte(c.doc), 0o600); err != nil {
 				t.Fatal(err)
 			}
-			args := []string{"validate", "-schema", readmeOrderXSD, instance}
+			args := []string{"validate", "-q", "-schema", readmeOrderXSD, instance}
 			var stdout, stderr bytes.Buffer
 			if code := run(args, &stdout, &stderr); code != exitInvalid {
 				t.Errorf("run(%q) = %d, want %d (stdout %q, stderr %q)", args, code, exitInvalid, stdout.String(), stderr.String())
@@ -1773,7 +1863,7 @@ func TestValidateUsageErrors(t *testing.T) {
 		{"missing schema", []string{"validate", "-schema", "testdata/nosuch.xsd", validInstance}, "no such file or directory", false},
 		{"schema is a directory", []string{"validate", "-schema", dir, validInstance}, "is a directory", false},
 		{"schema from stdin", []string{"validate", "-schema", "-", validInstance}, "standard input is not a schema location", true},
-		{"missing instance", []string{"validate", "-schema", orderSchema, "testdata/nosuch.xml"}, "no such file or directory", false},
+		{"missing instance", []string{"validate", "-q", "-schema", orderSchema, "testdata/nosuch.xml"}, "no such file or directory", false},
 		// - names no source format, and xml and json are both assessed, so
 		// standard input needs -format (#2403).
 		{"stdin without -format", []string{"validate", "-schema", orderSchema, "-"}, "goxsd8: validate: -: standard input has no extension to name a source format; pass -format with one of xml, json or ber", true},
@@ -1782,11 +1872,11 @@ func TestValidateUsageErrors(t *testing.T) {
 		// "." and the extension-less directory answered with the extension
 		// message without the check, and the .xml-named and forced ones with an
 		// exit-1 [xml-wf] read failure.
-		{"instance is .", []string{"validate", "-schema", orderSchema, "."}, "goxsd8: validate: open .: is a directory", false},
-		{"instance is a directory", []string{"validate", "-schema", orderSchema, plainDir}, "goxsd8: validate: open " + plainDir + ": is a directory", false},
-		{"instance is a directory named .xml", []string{"validate", "-schema", orderSchema, xmlDir}, "goxsd8: validate: open " + xmlDir + ": is a directory", false},
-		{"instance is a directory under -format", []string{"validate", "-format", "xml", "-schema", orderSchema, forcedDir}, "goxsd8: validate: open " + forcedDir + ": is a directory", false},
-		{"instance is a link to a directory", []string{"validate", "-schema", orderSchema, linkDir}, "goxsd8: validate: open " + linkDir + ": is a directory", false},
+		{"instance is .", []string{"validate", "-q", "-schema", orderSchema, "."}, "goxsd8: validate: open .: is a directory", false},
+		{"instance is a directory", []string{"validate", "-q", "-schema", orderSchema, plainDir}, "goxsd8: validate: open " + plainDir + ": is a directory", false},
+		{"instance is a directory named .xml", []string{"validate", "-q", "-schema", orderSchema, xmlDir}, "goxsd8: validate: open " + xmlDir + ": is a directory", false},
+		{"instance is a directory under -format", []string{"validate", "-q", "-format", "xml", "-schema", orderSchema, forcedDir}, "goxsd8: validate: open " + forcedDir + ": is a directory", false},
+		{"instance is a link to a directory", []string{"validate", "-q", "-schema", orderSchema, linkDir}, "goxsd8: validate: open " + linkDir + ": is a directory", false},
 		// -help=true is not one of the three help spellings, at any position
 		// (doc.go's argument vocabulary); after a subcommand it is a flag whose
 		// value that subcommand does not accept.
@@ -1940,10 +2030,10 @@ func TestValidateEndOfOptions(t *testing.T) {
 		code   int
 		stderr string
 	}{
-		{"operand after --", []string{"-schema", "order.xsd", "--", "-weird.xml"}, exitOK, ""},
-		{"two flag-shaped operands after --", []string{"-schema", "order.xsd", "--", "-weird.xml", "-q.xml"}, exitOK, ""},
-		{"-- after a boolean flag", []string{"-schema", "order.xsd", "-no-hints", "--", "-weird.xml"}, exitOK, ""},
-		{"-- after a flag spelled with =", []string{"-schema=order.xsd", "--", "-weird.xml"}, exitOK, ""},
+		{"operand after --", []string{"-q", "-schema", "order.xsd", "--", "-weird.xml"}, exitOK, ""},
+		{"two flag-shaped operands after --", []string{"-q", "-schema", "order.xsd", "--", "-weird.xml", "-q.xml"}, exitOK, ""},
+		{"-- after a boolean flag", []string{"-q", "-schema", "order.xsd", "-no-hints", "--", "-weird.xml"}, exitOK, ""},
+		{"-- after a flag spelled with =", []string{"-q", "-schema=order.xsd", "--", "-weird.xml"}, exitOK, ""},
 		{"-- as -schema's value", []string{"-schema", "--", "a.xml", "-weird.xml"}, exitUsage, misplaced("-weird.xml")},
 		{"-- after a positional", []string{"-schema", "order.xsd", "a.xml", "--", "-weird.xml"}, exitUsage, misplaced("--")},
 	}
@@ -1983,7 +2073,7 @@ func TestValidateExtensionCaseSensitive(t *testing.T) {
 // is a verdict about the document, not a fault in the run.
 func TestValidateMalformedInstanceIsAVerdict(t *testing.T) {
 	var stdout, stderr bytes.Buffer
-	args := []string{"validate", "-schema", orderSchema, "testdata/malformed.xml"}
+	args := []string{"validate", "-q", "-schema", orderSchema, "testdata/malformed.xml"}
 	if code := run(args, &stdout, &stderr); code != exitInvalid {
 		t.Fatalf("code = %d, want %d (stderr %q)", code, exitInvalid, stderr.String())
 	}

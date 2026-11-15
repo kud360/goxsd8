@@ -86,7 +86,8 @@ Usage (contract; subcommands land with their milestones):
   not well-formed or unreadable once open — and stderr carries every
   other line: schema rejections (parse and gen 1, validate 3), usage
   errors and the I/O faults charged 2, gen's refusals and its exit-4
-  declines, unresolved-directive and hint notes, and -v logging.
+  declines, unresolved-directive and hint notes, -v logging, and
+  validate's counts line (validate below).
 
   Paths, in parse, validate and gen alike: a line about an argument
   itself names it as it was typed, relative or ./ or absolute, and
@@ -334,6 +335,24 @@ Usage (contract; subcommands land with their milestones):
       no location of its own. An instance's violations print first,
       then the line of the fault that stopped its walk if one did,
       then its undecided checks.
+      After the last instance, the run prints one counts line, the
+      last line on stderr:
+        goxsd8: validate: instances=<n> clean=<n> undecided=<n> invalid=<n> faulted=<n>
+      Every key always appears, in that order, each count in decimal.
+      instances counts the instance arguments, each once, and is the
+      sum of the other four, which count each instance by its own
+      exit code: clean 0, undecided 4 (its own -strict hint skip
+      included), invalid 1 and faulted 2 (whatever charged it: an
+      instance that cannot be opened, a directory and a ber instance
+      among them, and a failed write of its report). The -strict 4
+      of the -schema set's own unresolved directive is the run's and
+      no instance's, so the line can read all clean while the run
+      exits 4. A run that assesses no instance prints no counts
+      line: a 3, and a 2 raised before any instance is opened. So a
+      clean run is not silent: it prints this line. -q silences the
+      line and nothing else: under -q a clean run's stderr carries
+      only the notes and -v logging stated above, and both streams
+      are empty without them.
 
   goxsd8 gen [-q] [-v] [-strict] -schema <schema.xsd> -out <dir> [-schema <s2> -out <d2>]...
       For example: goxsd8 gen -schema order.xsd -out ./gen/order
@@ -407,18 +426,19 @@ slog to stderr; scope with GOXSD_DEBUG=parser,validate,codec),
 schemaLocation resolving to no document; off, such a line moves no
 exit code). They qualify a subcommand and follow its name — goxsd8
 parse -q a.xsd, not goxsd8 -q parse a.xsd. -q suppresses a
-subcommand's informational output, which is parse's summary, and
-never a diagnosis: neither the error lines above nor validate's
-violations and undecided checks are silenced by it.
+subcommand's informational output, which is parse's summary and
+validate's counts line, and never a diagnosis: neither the error
+lines above nor validate's violations and undecided checks are
+silenced by it.
 
 Implemented today: the help path, parse, validate and gen. With no
 arguments, or with -h, -help or --help in any argument position, goxsd8
 prints this usage to stdout and exits 0, the whole of it even after a
 subcommand name, because a per-subcommand copy could drift from this one.
-goxsd8 parse compiles its arguments as above and honours -q, -v and
--strict; goxsd8 validate assesses XML and JSON instances and goxsd8 gen
-generates as above, and both honour -v and -strict, -q silencing nothing
-there because neither writes informational output. GOXSD_DEBUG scopes
+goxsd8 parse compiles its arguments and goxsd8 validate assesses XML
+and JSON instances as above, and both honour -q, -v and -strict;
+goxsd8 gen generates as above and honours -v and -strict, -q silencing
+nothing there because gen writes no informational output. GOXSD_DEBUG scopes
 -v for none of them. Every other invocation exits 2, reporting on
 stderr that the name is not one of the three, that a help flag is
 spelled with a value, as -help=<value>, that a flag stands before the

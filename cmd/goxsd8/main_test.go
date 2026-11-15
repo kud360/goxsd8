@@ -181,14 +181,15 @@ func TestSubcommandDiagnosisPrintsSynopsis(t *testing.T) {
 // TestStdoutFaultPrintsOneLine pins the stdout arm of #3333: a failed write of
 // parse's summary or of validate's report is charged exit 2 inside the
 // subcommand, and its line stands alone, with no synopsis or helpPointer under
-// it.
+// it; validate's counts line follows it, counting the instance faulted.
 func TestStdoutFaultPrintsOneLine(t *testing.T) {
 	for _, c := range []struct {
 		args []string
 		want string
 	}{
 		{[]string{"parse", "testdata/order.xsd"}, "goxsd8: parse: writing the summary for testdata/order.xsd: closed pipe\n"},
-		{[]string{"validate", "-schema", "testdata/order.xsd", "testdata/order-invalid.xml"}, "goxsd8: validate: writing the report of testdata/order-invalid.xml: closed pipe\n"},
+		{[]string{"validate", "-schema", "testdata/order.xsd", "testdata/order-invalid.xml"}, "goxsd8: validate: writing the report of testdata/order-invalid.xml: closed pipe\n" +
+			"goxsd8: validate: instances=1 clean=0 undecided=0 invalid=0 faulted=1\n"},
 	} {
 		var stderr bytes.Buffer
 		if code := run(c.args, errWriter{}, &stderr); code != exitUsage {
@@ -205,7 +206,8 @@ func TestStdoutFaultPrintsOneLine(t *testing.T) {
 // helpPointer, so with a second instance after it, the second's report
 // follows the line directly. The run with one writer as both stdout and
 // stderr is what makes "directly" observable; order-invalid.xml's report is
-// read from a run of its own rather than restated.
+// read from a run of its own under -q rather than restated. The counts line
+// closes each run, the faulted instance counted in it.
 func TestArgumentFaultPrintsOneLine(t *testing.T) {
 	const fault = "goxsd8: validate: open testdata/nosuch.xml: no such file or directory\n"
 	var stdout, stderr bytes.Buffer
@@ -216,12 +218,12 @@ func TestArgumentFaultPrintsOneLine(t *testing.T) {
 	if stdout.Len() != 0 {
 		t.Errorf("run(%q) stdout = %q, want empty", args, stdout.String())
 	}
-	if stderr.String() != fault {
-		t.Errorf("run(%q) stderr = %q, want %q", args, stderr.String(), fault)
+	if want := fault + "goxsd8: validate: instances=1 clean=0 undecided=0 invalid=0 faulted=1\n"; stderr.String() != want {
+		t.Errorf("run(%q) stderr = %q, want %q", args, stderr.String(), want)
 	}
 
 	var report, reportErr bytes.Buffer
-	if code := run([]string{"validate", "-schema", "testdata/order.xsd", "testdata/order-invalid.xml"}, &report, &reportErr); code != exitInvalid || report.Len() == 0 || reportErr.Len() != 0 {
+	if code := run([]string{"validate", "-q", "-schema", "testdata/order.xsd", "testdata/order-invalid.xml"}, &report, &reportErr); code != exitInvalid || report.Len() == 0 || reportErr.Len() != 0 {
 		t.Fatalf("order-invalid.xml alone = %d with report %q and stderr %q, want %d, a report and no stderr", code, report.String(), reportErr.String(), exitInvalid)
 	}
 	var both bytes.Buffer
@@ -229,7 +231,7 @@ func TestArgumentFaultPrintsOneLine(t *testing.T) {
 	if code := run(args, &both, &both); code != exitUsage {
 		t.Errorf("run(%q) = %d, want %d", args, code, exitUsage)
 	}
-	if want := fault + report.String(); both.String() != want {
+	if want := fault + report.String() + "goxsd8: validate: instances=2 clean=0 undecided=0 invalid=1 faulted=1\n"; both.String() != want {
 		t.Errorf("run(%q) output = %q, want %q", args, both.String(), want)
 	}
 	if strings.Contains(both.String(), "usage: ") || strings.Contains(both.String(), helpPointer) {
@@ -245,16 +247,18 @@ func TestArgumentFaultPrintsOneLine(t *testing.T) {
 // line each in argument order above one synopsis. -format names every
 // instance's format, and ber is a per-instance capability refusal, so neither
 // pin row hoists anything: order-invalid.xml's report precedes the one
-// subcommandFault line.
+// subcommandFault line, and the counts line closes the run. A refusal prints
+// no counts line, as usage's validate paragraph states.
 func TestFormatlessInstanceRefusesTheInvocation(t *testing.T) {
 	const (
 		pass    = "; pass -format with one of xml, json or ber\n"
 		txtLine = `goxsd8: validate: testdata/order.txt: the extension ".txt" names no source format` + pass
 		stdLine = "goxsd8: validate: -: standard input has no extension to name a source format" + pass
+		counts  = "goxsd8: validate: instances=2 clean=0 undecided=0 invalid=1 faulted=1\n"
 	)
 	refusal := validateUsageLine + "\n" + helpPointer + "\n"
 	var report, reportErr bytes.Buffer
-	if code := run([]string{"validate", "-schema", orderSchema, invalidInstance}, &report, &reportErr); code != exitInvalid || report.Len() == 0 || reportErr.Len() != 0 {
+	if code := run([]string{"validate", "-q", "-schema", orderSchema, invalidInstance}, &report, &reportErr); code != exitInvalid || report.Len() == 0 || reportErr.Len() != 0 {
 		t.Fatalf("order-invalid.xml alone = %d with report %q and stderr %q, want %d, a report and no stderr", code, report.String(), reportErr.String(), exitInvalid)
 	}
 	cases := []struct {
@@ -269,9 +273,9 @@ func TestFormatlessInstanceRefusesTheInvocation(t *testing.T) {
 				`goxsd8: validate: testdata/b: the extension "" names no source format` + pass +
 				stdLine + refusal},
 		{[]string{"-format", "xml", "-schema", orderSchema, invalidInstance, "testdata/order.txt"}, exitUsage,
-			report.String() + "goxsd8: validate: open testdata/order.txt: no such file or directory\n"},
+			report.String() + "goxsd8: validate: open testdata/order.txt: no such file or directory\n" + counts},
 		{[]string{"-schema", orderSchema, invalidInstance, "testdata/x.ber"}, exitUsage,
-			report.String() + "goxsd8: validate: testdata/x.ber: -format ber is reserved by the contract and not yet implemented; only xml and json instances are assessed today\n"},
+			report.String() + "goxsd8: validate: testdata/x.ber: -format ber is reserved by the contract and not yet implemented; only xml and json instances are assessed today\n" + counts},
 	}
 	for _, c := range cases {
 		args := append([]string{"validate"}, c.args...)
@@ -701,17 +705,20 @@ func TestBuiltBinaryMatrix(t *testing.T) {
 		// to suppress must not reach stdout ahead of the diagnosis (#1290).
 		{args: []string{"parse", "testdata/order.xsd", "-q"}, code: 2,
 			stderrMatch: "-q stands after a positional argument"},
-		{args: []string{"validate", "-schema", orderSchema, validInstance}, code: 0},
+		{args: []string{"validate", "-schema", orderSchema, validInstance}, code: 0,
+			stderrMatch: "goxsd8: validate: instances=1 clean=1 undecided=0 invalid=0 faulted=0\n"},
+		{args: []string{"validate", "-q", "-schema", orderSchema, validInstance}, code: 0},
 		{args: []string{"validate", "-schema", orderSchema, invalidInstance}, code: 1,
-			stdoutMatch: invalidInstance + ":5:11: [cvc-attribute]"},
+			stdoutMatch: invalidInstance + ":5:11: [cvc-attribute]",
+			stderrMatch: "goxsd8: validate: instances=1 clean=0 undecided=0 invalid=1 faulted=0\n"},
 		{args: []string{"validate", "-schema", "testdata/broken.xsd", validInstance}, code: 3,
 			stderrMatch: "[src-resolve]"},
 		{args: []string{"validate", "-schema", orderSchema, "testdata/nosuch.xml"}, code: 2,
 			stderrMatch: "no such file or directory"},
 		{args: []string{"validate"}, code: 2, stderrMatch: "goxsd8: validate: no schema given"},
-		{args: []string{"validate", "-format", "xml", "-schema", orderSchema, "-"},
+		{args: []string{"validate", "-q", "-format", "xml", "-schema", orderSchema, "-"},
 			stdin: readFixture(t, validInstance), code: 0},
-		{args: []string{"validate", "-format", "xml", "-schema", orderSchema, "-"},
+		{args: []string{"validate", "-q", "-format", "xml", "-schema", orderSchema, "-"},
 			stdin: readFixture(t, invalidInstance), code: 1, stdoutMatch: "-:5:11: [cvc-attribute]"},
 		// - names no source format once xml and json are both assessed, so
 		// without -format it exits 2 asking for one, whatever it holds (#2403).
@@ -719,9 +726,9 @@ func TestBuiltBinaryMatrix(t *testing.T) {
 			stdin: readFixture(t, validInstance), code: 2, stderrMatch: "-: standard input has no extension to name a source format"},
 		{args: []string{"validate", "-schema", orderSchema, "-"},
 			stdin: readFixture(t, invalidJSON), code: 2, stderrMatch: "-: standard input has no extension to name a source format"},
-		{args: []string{"validate", "-format", "json", "-schema", orderSchema, "-"},
+		{args: []string{"validate", "-q", "-format", "json", "-schema", orderSchema, "-"},
 			stdin: readFixture(t, validJSON), code: 0},
-		{args: []string{"validate", "-format", "json", "-schema", orderSchema, "-"},
+		{args: []string{"validate", "-q", "-format", "json", "-schema", orderSchema, "-"},
 			stdin: readFixture(t, invalidJSON), code: 1, stdoutMatch: "-:1:19: [cvc-attribute]"},
 		// gen's outcomes through the shipped binary; gen_test.go is the matrix.
 		{args: []string{"gen", "-schema", flatFixture, "-out", filepath.Join(moduleTempDir(t), "flat")}, code: 0},

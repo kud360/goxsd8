@@ -91,6 +91,11 @@ func formatVocabulary() string {
 // code is the worst outcome over the instances (main.go's exit codes), the way
 // runParse's is over its schemas.
 //
+// Unless -q was given, a run that reaches the instance loop ends with
+// instanceTally's counts line on stderr, every instance counted by the code
+// validation.one returned for it; usage's validate paragraph owns the line's
+// format and meaning.
+//
 // The flags are parsed here rather than by run, for the reason runParse states.
 func runValidate(args []string, stdout, stderr io.Writer) int {
 	flags := flag.NewFlagSet("validate", flag.ContinueOnError)
@@ -104,11 +109,10 @@ func runValidate(args []string, stdout, stderr io.Writer) int {
 	noHints := flags.Bool("no-hints", false, "ignore the xsi:schemaLocation hints of XML instances")
 	strictSkips := flags.Bool(strictFlag, false, strictFlagUsage)
 	verbose := flags.Bool("v", false, "log assembly and assessment at debug level to stderr")
-	// -q is defined because the contract makes it common to every subcommand,
-	// and is read by nothing: validate writes no informational output, its
-	// stdout carrying the report of violations and declined checks doc.go
-	// forbids -q to silence.
-	_ = flags.Bool("q", false, "accepted; validate has no informational output to suppress")
+	// -q silences the end-of-run counts line, validate's one informational
+	// line, and nothing else: stdout carries the report of violations and
+	// declined checks doc.go forbids -q to silence.
+	quiet := flags.Bool("q", false, "suppress the end-of-run counts line on stderr")
 	if err := flags.Parse(args); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
 			return subcommandUsageError(stderr, "validate", fmt.Sprintf(helpNotAFlagValueFmt, "validate"))
@@ -207,10 +211,52 @@ func runValidate(args []string, stdout, stderr io.Writer) int {
 	}
 
 	job := validation{roots: roots, base: v, backend: backend, forced: forced, hints: !*noHints, strict: *strictSkips, log: log}
+	var tally instanceTally
 	for _, instance := range instances {
-		code = worse(code, job.one(instance, stdout, stderr))
+		c := job.one(instance, stdout, stderr)
+		// The tally reads one's code and never the run's: code carries the
+		// run-level -strict set skip, which belongs to no instance.
+		tally.add(c)
+		code = worse(code, c)
+	}
+	if !*quiet {
+		// A failed stderr write cannot change the outcome, for the reason
+		// subcommandUsageError states.
+		_, _ = fmt.Fprintln(stderr, tally.line())
 	}
 	return code
+}
+
+// instanceTally counts a validate run's instance arguments into the buckets
+// usage's validate paragraph names, by the exit code validation.one returned
+// for each (add). The instances count is the buckets' sum, which line computes
+// rather than this type storing.
+type instanceTally struct{ clean, undecided, invalid, faulted int }
+
+// add counts one instance argument under code, validation.one's return. A code
+// one never returns, exitSchema included, panics: such a code is a broken
+// caller, and counting it nowhere would leave the buckets short of the
+// arguments.
+func (t *instanceTally) add(code int) {
+	switch code {
+	case exitOK:
+		t.clean++
+	case exitUndecided:
+		t.undecided++
+	case exitInvalid:
+		t.invalid++
+	case exitUsage:
+		t.faulted++
+	default:
+		panic(fmt.Sprintf("goxsd8: validate: instance exit code %d has no counts bucket", code))
+	}
+}
+
+// line renders the end-of-run counts line in the format usage's validate
+// paragraph states.
+func (t *instanceTally) line() string {
+	return fmt.Sprintf("goxsd8: validate: instances=%d clean=%d undecided=%d invalid=%d faulted=%d",
+		t.clean+t.undecided+t.invalid+t.faulted, t.clean, t.undecided, t.invalid, t.faulted)
 }
 
 // validation is one invocation's resolved configuration: the schema set every
