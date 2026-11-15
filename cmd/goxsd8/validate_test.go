@@ -1158,6 +1158,74 @@ func TestValidateStrictChargesASkip(t *testing.T) {
 	}
 }
 
+// TestStrictMarksTheLinesItCharges pins usage's -strict parenthetical on
+// strictMarker (#3761), comparing stderr's first line whole: with and without
+// -strict for a compiled argument's directive line, a compiled -schema set's,
+// a composing hint's and a hint rejected with its mis-paired sibling, and
+// under -strict for a rejected argument's and a rejected -schema set's
+// directive line.
+func TestStrictMarksTheLinesItCharges(t *testing.T) {
+	dir := t.TempDir()
+	valid, err := os.ReadFile(validInstance)
+	if err != nil {
+		t.Fatal(err)
+	}
+	instance := func(name, pairs string) string {
+		body := strings.Replace(string(valid), `createdBy="ada"`, `createdBy="ada" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="`+pairs+`"`, 1)
+		path := filepath.Join(dir, name)
+		if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		return path
+	}
+	if err := os.WriteFile(filepath.Join(dir, "actual.xsd"), []byte(`<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" targetNamespace="urn:actual"><xs:element name="note" type="xs:string"/></xs:schema>`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	composing := instance("composing.xml", "urn:gone nosuch.xsd")
+	rejected := instance("rejected.xml", "urn:gone nosuch.xsd urn:wrong actual.xsd")
+	short := absFixture(t, shortSchema)
+	broken := absFixture(t, shortBrokenSchema)
+	gone := filepath.Join(dir, "nosuch.xsd")
+
+	const marker = "; -strict charges this note 4"
+	directive := func(verb, schema string) string {
+		return "goxsd8: " + verb + ": " + schema + `:10:3: this <include>'s schemaLocation "nosuchdocument.xsd" resolved to no document and was skipped; the compiled schema is short of whatever that document declares`
+	}
+	rejectedDirective := func(verb string) string {
+		return "goxsd8: " + verb + ": " + broken + `:10:3: this <include>'s schemaLocation "nosuchdocument.xsd" resolved to no document; the rejected assembly is short of whatever that document declares`
+	}
+	hint := func(instance, shortfall string) string {
+		return "goxsd8: validate: " + instance + ": the schema location hint " + gone + " resolved to no document" + shortfall
+	}
+	compiledHint := ", which is legal and skipped; the compiled schema is short of whatever that document declares"
+	rejectedHint := "; the rejected assembly is short of whatever that document declares"
+	for _, c := range []struct {
+		name string
+		args []string
+		want int
+		line string
+	}{
+		{"parse directive", []string{"parse", shortSchema}, exitOK, directive("parse", short)},
+		{"parse directive, -strict", []string{"parse", "-strict", shortSchema}, exitUndecided, directive("parse", short) + marker},
+		{"set directive", []string{"validate", "-q", "-schema", shortSchema, shortValidInstance}, exitOK, directive("validate", short)},
+		{"set directive, -strict", []string{"validate", "-q", "-strict", "-schema", shortSchema, shortValidInstance}, exitUndecided, directive("validate", short) + marker},
+		{"hint", []string{"validate", "-q", "-schema", orderSchema, composing}, exitOK, hint(composing, compiledHint)},
+		{"hint, -strict", []string{"validate", "-q", "-strict", "-schema", orderSchema, composing}, exitUndecided, hint(composing, compiledHint) + marker},
+		{"rejected hint", []string{"validate", "-q", "-schema", orderSchema, rejected}, exitOK, hint(rejected, rejectedHint)},
+		{"rejected hint, -strict", []string{"validate", "-q", "-strict", "-schema", orderSchema, rejected}, exitUndecided, hint(rejected, rejectedHint) + marker},
+		{"rejected parse directive, -strict", []string{"parse", "-strict", shortBrokenSchema}, exitInvalid, rejectedDirective("parse")},
+		{"rejected set directive, -strict", []string{"validate", "-strict", "-schema", shortBrokenSchema, shortValidInstance}, exitSchema, rejectedDirective("validate")},
+	} {
+		var stdout, stderr bytes.Buffer
+		if code := run(c.args, &stdout, &stderr); code != c.want {
+			t.Errorf("%s: %q = %d, want %d (stderr %q)", c.name, c.args, code, c.want, stderr.String())
+		}
+		if got, _, _ := strings.Cut(stderr.String(), "\n"); got != c.line {
+			t.Errorf("%s: %q stderr line 1 =\n%q\nwant\n%q", c.name, c.args, got, c.line)
+		}
+	}
+}
+
 // TestValidateSchemaDirectiveIsNotReportedAsAHint pins that the two shortfall
 // reporters stay disjoint on one invocation (#1346): a -schema document's OWN
 // unresolved directive is named exactly once, by runValidate's reportUnfollowed
