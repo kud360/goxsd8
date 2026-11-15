@@ -446,8 +446,10 @@ Two access styles over the compiled model, one shared core:
   section names them and is authoritative on which. Of the two
   drivers over it one ships and one does not:
   - a **pull** driver — `Matcher`, the instance-guided advance of the
-    content model one child at a time (the validation consumer) —
-    **ships**, as `Schema.ContentMatcher`/`Matcher`/`Attribution`; it
+    content model one child at a time — **ships**, as
+    `Schema.ContentMatcher`/`Matcher`/`Attribution`, read by `validate`'s
+    walk and by `codec`, which re-runs it with `Matcher.NextParticle` to
+    learn where each attributed particle stands; it
     counts occurrences rather than unfolding them and never backtracks.
     `cos-nonambig` licenses that for which particle takes an item;
     `cvc-accept` clause 3.1's existential over partitions is why the walk
@@ -458,9 +460,12 @@ Two access styles over the compiled model, one shared core:
     every particle reachable through sequences/choices/all-groups and
     named-group references — **does not exist, and no milestone schedules
     it.** `codegen`, the consumer it was planned for, shipped M9 walking
-    the content model itself over the algebra's exported entry points
+    the content model itself; that walk is now `internal/goshape`'s
+    (`Reach`, `Splices`, `Flattens`, `SubstitutionSum`), shared with
+    `codec`, over the algebra's exported entry points
     (`Schema.ParticleEmptiable`, `Schema.SubstitutionGroup`,
-    `Schema.ValidlySubstitutable`, `Schema.ModelGroup`). `xsd/doc.go`'s
+    `Schema.ModelGroup`), and `codegen` reads
+    `Schema.ValidlySubstitutable` itself. `xsd/doc.go`'s
     "Planned contract" section still declares it; do not build one
     without a consumer issue.
   `go doc ./xsd` is the contract.
@@ -861,6 +866,11 @@ compiles, is documented, and has **zero** callers module-wide.
   §3.14.1 component properties the model contracts to expose.
   `xmltree.CharData.Offset` is off this list: `codec`'s stage errors name the
   byte offset it returns.
+- **`validate.SchemaView`'s `Attribute` (the embedded
+  `xsd.AttributeResolver`), `ResolvedInheritable`,
+  `AllowsAttributeWildcardName` and `EffectiveValueConstraint`** — no caller
+  through the view since `validate/jsonsrc` began reading
+  `Validator.HandedDown` (#3683). Filed as #3699.
 - **`codegen.TargetError.Index`** — no caller outside `codegen`'s tests:
   `cmd/goxsd8` prints each failure's text and `tools/gencensus` reads only
   the `*DeclineError`. **Justified and not to be filed**: it is the slice
