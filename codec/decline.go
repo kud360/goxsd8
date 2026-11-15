@@ -99,7 +99,6 @@ const (
 	constructNillable construct = iota + 1
 	constructNestedGroup
 	constructAbstractTypeElement
-	constructSharedName
 	constructSharedBranch
 	constructOtherPrimitive
 	constructUntrackedModel
@@ -111,7 +110,6 @@ var constructNames = [...]string{
 	constructNillable:            "an element declaration with {nillable} true",
 	constructNestedGroup:         "a nested model group particle",
 	constructAbstractTypeElement: "an element declaration whose complex {type definition} has {abstract} true",
-	constructSharedName:          "two particles taking one expanded name, each by its own element declaration or a member of its substitution group",
 	constructSharedBranch:        "two branches of a sealed interface whose structs have one shape",
 	constructOtherPrimitive:      "an atomic simple type whose primitive is ·implementation-defined·, other than xs:precisionDecimal",
 	constructUntrackedModel:      "a content model the content matcher does not track",

@@ -236,9 +236,9 @@ func TestDecodeFlattenedXsiType(t *testing.T) {
 // TestDecodeFlattenSharedBranch pins item 5 for a flattened reach holding two
 // local declarations of one expanded name: their {type definition}s are one
 // (Structures §3.8.6.3 cos-element-consistent), so their branch structs have
-// one shape and decline as constructSharedBranch, and no expanded name an
-// earlier particle takes declines as constructSharedName, since position,
-// not name, attributes a child. Decode and CheckDecode decline alike.
+// one shape and decline as constructSharedBranch, the one decline a share of
+// expanded names reaches, since position, not name, attributes a child.
+// Decode and CheckDecode decline alike.
 func TestDecodeFlattenSharedBranch(t *testing.T) {
 	schema := schemaOf(t, flatSharedSchema)
 	data := instanceOf("", "<s:c>1</s:c><s:a>2</s:a><s:d>3</s:d><s:a>4</s:a>")
