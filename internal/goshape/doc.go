@@ -16,7 +16,7 @@
 //	type DefaultSlot struct{}
 //	type DeclaredSlot struct{}
 //	func TableSlot(table xsd.TypeTable, index int) (slot Slot, ref xsd.TypeDefinitionOrRef, ok bool)
-//	func GoverningTypes(schema *xsd.Schema, decl xsd.ElementDeclaration, members func(xsd.ComplexType) ([]xsd.TypeDefinition, error)) (types []GoverningType, errorSlot bool, err error)
+//	func GoverningTypes(schema *xsd.Schema, decl xsd.ElementDeclaration) (types []GoverningType, errorSlot bool, err error)
 //	func BasicMembers(r xsd.TypeResolver, st *xsd.SimpleType) ([]*xsd.SimpleType, error)
 //	func Splices(schema *xsd.Schema, group xsd.ModelGroup, occurs xsd.Occurs) (bool, error)
 //	func Flattens(schema *xsd.Schema, group xsd.ModelGroup, occurs xsd.Occurs) (bool, error)

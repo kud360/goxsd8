@@ -27,7 +27,7 @@ func TestScopeKeyBranchStep(t *testing.T) {
 	if !ok {
 		t.Fatal("no element e")
 	}
-	branches, _, err := goshape.GoverningTypes(schema, decl, nil)
+	branches, _, err := goshape.GoverningTypes(schema, decl)
 	if err != nil {
 		t.Fatal(err)
 	}

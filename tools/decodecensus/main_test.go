@@ -52,8 +52,9 @@ func schemaTest(doc string) string {
 // nillable root holding an attribute and a nillable xs:decimal field, not
 // nilled and nilled, each through the Nillable instantiations the census
 // binds, and v.xml, a union of two basic members of one Go type, through the
-// variant set it binds in file order), decline with an xsi:type (e.xml,
-// twice) and a local element of an abstract complex type (c.xml), and fail
+// variant set it binds in file order, and c.xml, an optional local element of
+// an abstract complex type with no member, left out), decline with an xsi:type
+// (e.xml, twice) and a nested model group particle (q.xml), and fail
 // otherwise, charged (invalid.xml) and with no declaration for the document
 // element (u.xml), which decodes into the placeholder; its case old is withheld.
 // Group rec's schema assembles and does not generate, group bad's does not
@@ -64,7 +65,7 @@ var censusSuite = map[string]string{
   <testGroup name="g">` + schemaTest("s.xsd") +
 		instanceTest("decoded", "a.xml", "") + instanceTest("decoded2", "a.xml", "") +
 		instanceTest("typed", "e.xml", "") + instanceTest("typed2", "e.xml", "") + instanceTest("variant", "v.xml", "") + instanceTest("simpledecoded", "f.xml", "") +
-		instanceTest("abstract", "c.xml", "") + instanceTest("choice", "g.xml", "") + instanceTest("precision", "p.xml", "") + instanceTest("invalid", "invalid.xml", "") +
+		instanceTest("abstract", "c.xml", "") + instanceTest("nested", "q.xml", "") + instanceTest("choice", "g.xml", "") + instanceTest("precision", "p.xml", "") + instanceTest("invalid", "invalid.xml", "") +
 		instanceTest("nilledsimple", "n.xml", "") + instanceTest("nillable", "m.xml", "") + instanceTest("nilled", "m2.xml", "") +
 		instanceTest("undeclared", "u.xml", "") + instanceTest("old", "a.xml", ` version="1.0"`) + `</testGroup>
   <testGroup name="rec">` + schemaTest("rec.xsd") + instanceTest("i", "a.xml", "") + `</testGroup>
@@ -76,6 +77,7 @@ var censusSuite = map[string]string{
   <xs:complexType name="ab" abstract="true"/>
   <xs:element name="c"><xs:complexType><xs:sequence><xs:element name="d" type="ab" minOccurs="0"/></xs:sequence></xs:complexType></xs:element>
   <xs:element name="e" type="xs:string"/>
+  <xs:element name="q"><xs:complexType><xs:sequence maxOccurs="2"><xs:element name="b" type="xs:string"/><xs:choice maxOccurs="2"><xs:element name="d" type="xs:string"/></xs:choice></xs:sequence></xs:complexType></xs:element>
   <xs:simpleType name="lower"><xs:restriction base="xs:token"><xs:pattern value="[a-z]+"/></xs:restriction></xs:simpleType>
   <xs:element name="v"><xs:simpleType><xs:union memberTypes="lower xs:string"/></xs:simpleType></xs:element>
   <xs:element name="f" type="xs:string"/>
@@ -90,6 +92,7 @@ var censusSuite = map[string]string{
 	"d/bad.xsd":       `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"><xs:element name="a" type="undeclared"/></xs:schema>`,
 	"d/a.xml":         `<a><b>x</b></a>`,
 	"d/c.xml":         `<c/>`,
+	"d/q.xml":         `<q><b>x</b><d>y</d></q>`,
 	"d/e.xml":         `<e xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:type="xs:string" xmlns:xs="http://www.w3.org/2001/XMLSchema">1.0</e>`,
 	"d/v.xml":         `<v>X</v>`,
 	"d/f.xml":         `<f>x</f>`,
@@ -106,9 +109,9 @@ var censusSuite = map[string]string{
 
 // wantCounts is the report's head over censusSuite: every count, and its
 // construct lines.
-const wantCounts = `decodecensus: 17 instance case(s) under %ROOT%
-  schema generates: 14
-  decoded: 9
+const wantCounts = `decodecensus: 18 instance case(s) under %ROOT%
+  schema generates: 15
+  decoded: 10
   declined: 3
   undecided: 0
   rejected codegen's own type: 0
@@ -117,7 +120,7 @@ const wantCounts = `decodecensus: 17 instance case(s) under %ROOT%
 
 === First decline, by construct: 2 construct(s) ===
        2  an element carrying xsi:type
-       1  an element declaration whose complex {type definition} has {abstract} true
+       1  a nested model group particle
 
 === Caveats ===
 `
@@ -128,8 +131,8 @@ const wantPaths = `
 an element carrying xsi:type (2):
   S/g/instance/typed
   S/g/instance/typed2
-an element declaration whose complex {type definition} has {abstract} true (1):
-  S/g/instance/abstract
+a nested model group particle (1):
+  S/g/instance/nested
 
 === Cases, by listed count ===
 rejected codegen's own type (0):

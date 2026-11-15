@@ -46,8 +46,9 @@ type GoverningType struct {
 func (g GoverningType) Type() xsd.TypeDefinition { return g.typ }
 
 // Slot is the slot of the element declaration g's type is first held at, which
-// holds that type itself or, when it is one of the types GoverningTypes' members
-// returns, the complex type with {abstract} true it stands for.
+// holds that type itself or, when it is a member GoverningTypes gives in an
+// abstract type's place (abstractMembers), the complex type with {abstract}
+// true it stands for.
 func (g GoverningType) Slot() Slot { return g.slot }
 
 // Local is the local name the branch of g is named from (codegen/doc.go
@@ -122,14 +123,14 @@ var errorTypeName = xsd.QName{Space: xsd.XMLSchemaNS, Local: "error"}
 // key-selected-type, key-cta-select), or, with no {type table}, its {type
 // definition} alone, each resolved through [xsd.Schema.ResolvedType]. A {type
 // table} slot holding xs:error, matched by name, gives nothing. A slot holding
-// a complex type with {abstract} true gives the types members returns for it
-// in its place, its error returned as is. Each type is kept at its first slot
-// only, two types being one exactly when both are named and the names are
-// equal, so two anonymous types are never one. errorSlot reports whether a
-// slot held xs:error. A slot that does not resolve is a plain error naming
-// the slot, decl and decl's Loc, never a decline: Finalize resolves every
-// {type definition} slot (src-resolve).
-func GoverningTypes(schema *xsd.Schema, decl xsd.ElementDeclaration, members func(xsd.ComplexType) ([]xsd.TypeDefinition, error)) (types []GoverningType, errorSlot bool, err error) {
+// a complex type with {abstract} true gives its members in its place
+// (abstractMembers), an error of theirs returned as is. Each type is kept at
+// its first slot only, two types being one exactly when both are named and the
+// names are equal, so two anonymous types are never one. errorSlot reports
+// whether a slot held xs:error. A slot that does not resolve is a plain error
+// naming the slot, decl and decl's Loc, never a decline: Finalize resolves
+// every {type definition} slot (src-resolve).
+func GoverningTypes(schema *xsd.Schema, decl xsd.ElementDeclaration) (types []GoverningType, errorSlot bool, err error) {
 	type slotRef struct {
 		slot Slot
 		ref  xsd.TypeDefinitionOrRef
@@ -157,7 +158,7 @@ func GoverningTypes(schema *xsd.Schema, decl xsd.ElementDeclaration, members fun
 		}
 		given := []xsd.TypeDefinition{td}
 		if ct, isComplex := td.(xsd.ComplexType); isComplex && ct.Abstract() {
-			given, err = members(ct)
+			given, err = abstractMembers(schema, decl, ct)
 			if err != nil {
 				return nil, false, err
 			}
@@ -170,6 +171,29 @@ func GoverningTypes(schema *xsd.Schema, decl xsd.ElementDeclaration, members fun
 		}
 	}
 	return types, errorSlot, nil
+}
+
+// abstractMembers returns the members codegen/doc.go "An element
+// declaration's governing types" gives the complex type t, which has
+// {abstract} true, in a slot of the element declaration decl, in its order.
+// An error from [xsd.Schema.ValidlySubstitutable] is returned, never a
+// decline.
+func abstractMembers(schema *xsd.Schema, decl xsd.ElementDeclaration, t xsd.ComplexType) ([]xsd.TypeDefinition, error) {
+	var members []xsd.TypeDefinition
+	for _, td := range schema.Types() {
+		s, isComplex := td.(xsd.ComplexType)
+		if !isComplex || s.Name() == (xsd.QName{}) || s.Abstract() {
+			continue
+		}
+		ok, err := schema.ValidlySubstitutable(s, t, decl.DisallowedSubstitutions())
+		if err != nil {
+			return nil, fmt.Errorf("element %s at %s: complex type %s as a member of abstract complex type %s: %w", decl.Name(), decl.Loc(), s.Name(), t.Name(), err)
+		}
+		if ok {
+			members = append(members, s)
+		}
+	}
+	return members, nil
 }
 
 // TableSlot returns the Slot of the {type table} table at index, a position as

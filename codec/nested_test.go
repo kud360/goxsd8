@@ -568,16 +568,16 @@ func TestDecodeNestedXsiType(t *testing.T) {
 }
 
 // TestDeclineErrorTextNested pins a decline's whole message for a construct
-// of a particle's complex type: charged to the document element, it names the
-// particle's declaration and the type's schema Loc, labelled as that
-// declaration's {type definition}, as a construct of the document element's
-// type is, and no path from the document element.
+// of a particle's complex type, a particle of it: charged to the document
+// element, it names the particle's declaration and the type's schema Loc,
+// labelled as that declaration's {type definition}, as a construct of the
+// document element's type is, and no path from the document element.
 func TestDeclineErrorTextNested(t *testing.T) {
-	schema := schemaOf(t, abstractParticleSchema)
+	schema := schemaOf(t, nestedChoiceType+sequenceOf(`<xs:element name="a" type="s:rt" minOccurs="0"/>`))
 	data := instanceOf("", "")
 	mustAccept(t, schema, data)
 	_, err := Decode[struct{}](schema, strict.New(), data)
-	const want = "?:1:1: codec does not decode an element declaration whose complex {type definition} has {abstract} true: the {type definition} of element {urn:s}a declared at s.xsd:1:274, a type defined at s.xsd:1:181; a decoder refusal, not a schema or instance fault"
+	const want = "?:1:1: codec does not decode a nested model group particle: a particle of the {type definition} of element {urn:s}a declared at s.xsd:1:430, a type defined at s.xsd:1:181; a decoder refusal, not a schema or instance fault"
 	if err == nil || err.Error() != want {
 		t.Errorf("error = %v, want %q", err, want)
 	}
@@ -657,46 +657,55 @@ func TestAbstractTypesAreCodegens(t *testing.T) {
 	}
 }
 
-// TestDecodeAbstractTypeElement pins the document element's abstract type
-// declining into codegen's own T: ab has no valid instance (ctd-abstract,
-// cvc-type clause 2), codegen emits no struct for it, and CheckDecode and
-// Decode, the instance naming a concrete member by xsi:type (cvc-elt clause
-// 4), each return the constructAbstractTypeElement decline, never
-// ErrTypeMismatch. Without the abstract test in (*bindRun).complex every row
-// returns ErrTypeMismatch: "codec.abR is no struct" for the interface, "has 2
-// fields where codegen emits 1" and "has 1 fields where codegen emits 0" for
-// the members' structs.
+// TestDecodeAbstractTypeElement pins the document element of an abstract
+// complex type decoding into codegen's own T: no instance is valid against ab
+// itself (ctd-abstract, cvc-type clause 2), so each instance names a member by
+// xsi:type, which overrides r's type (cvc-elt clause 4), and decodes into the
+// member's struct where ab has one member, and into that member's branch of
+// the governing types' interface where it has two, the branch the xsi:type
+// names (instanceSelector). CheckDecode accepts each T.
 func TestDecodeAbstractTypeElement(t *testing.T) {
 	rows := []struct {
 		name  string
 		decls string
 		data  []byte
 		into  target
+		want  any
 	}{
-		{"two members: the governing types' interface", abstractTypeTwoSchema,
-			instanceOf(` xsi:type="s:c1" k="v"`, `<s:a>x</s:a>`), into[abR](WithBranches[abR](abRC1{}, abRC2{}))},
+		{"two members, naming the first: its branch of the governing types' interface", abstractTypeTwoSchema,
+			instanceOf(` xsi:type="s:c1" k="v"`, `<s:a>x</s:a>`), into[abR](WithBranches[abR](abRC1{}, abRC2{})), abRC1{C1: abC1{A: "x", K: strPtr("v")}}},
+		{"two members, naming the second: its branch", abstractTypeTwoSchema,
+			instanceOf(` xsi:type="s:c2" m="w"`, `<s:a>x</s:a>`), into[abR](WithBranches[abR](abRC1{}, abRC2{})), abRC2{C2: abC2{A: "x", M: strPtr("w")}}},
 		{"one member of element-only content: its struct", abstractTypeOneSchema,
-			instanceOf(` xsi:type="s:c1" k="v"`, `<s:a>x</s:a>`), into[abOneR]()},
+			instanceOf(` xsi:type="s:c1" k="v"`, `<s:a>x</s:a>`), into[abOneR](), abOneR{A: "x", K: strPtr("v")}},
 		{"one member of empty content: its struct", abstractTypeEmptySchema,
-			instanceOf(` xsi:type="s:e1" k="v"`, ``), into[abEmptyR]()},
+			instanceOf(` xsi:type="s:e1" k="v"`, ``), into[abEmptyR](), abEmptyR{K: strPtr("v")}},
+		{"one member of empty content adding an attribute, absent", `<xs:complexType name="ab" abstract="true"/>
+			<xs:complexType name="cc"><xs:complexContent><xs:extension base="s:ab"><xs:attribute name="k" type="xs:string"/></xs:extension></xs:complexContent></xs:complexType>
+			<xs:element name="r" type="s:ab"/>`, instanceOf(` xsi:type="s:cc"`, ""), into[struct{ K *string }](), struct{ K *string }{}},
+		{"one member of element-only content adding nothing", `<xs:complexType name="ab" abstract="true"><xs:sequence><xs:element name="a" type="xs:string"/></xs:sequence></xs:complexType>
+			<xs:complexType name="cc"><xs:complexContent><xs:extension base="s:ab"/></xs:complexContent></xs:complexType>
+			<xs:element name="r" type="s:ab"/>`, instanceOf(` xsi:type="s:cc"`, `<s:a>x</s:a>`), into[struct{ A string }](), struct{ A string }{A: "x"}},
+		{"one member of empty content adding nothing", abstractRootSchema, instanceOf(` xsi:type="s:cc"`, ""), into[struct{}](), struct{}{}},
+		{"one member whose content is a choice: the choice's interface", abstractChoiceSchema,
+			instanceOf(` xsi:type="s:cc"`, `<s:b>3</s:b>`), into[abChR](WithBranches[abChR](abChRA{}, abChRB{})), abChRB{B: 3}},
+		{"a nillable declaration of one member, not nilled", abstractKSchema + `<xs:element name="r" type="s:ab" nillable="true"/>`,
+			instanceOf(` xsi:type="s:cc" k="v"`, ""), into[nillable[abK, abK]](nilArms[abK, abK]()), content[abK, abK]{Content: abK{K: strPtr("v")}}},
 	}
 	for _, row := range rows {
 		t.Run(row.name, func(t *testing.T) {
 			schema := schemaOf(t, row.decls)
 			mustAccept(t, schema, row.data)
 			got, err := row.into.decode(schema, row.data)
-			if got != nil {
-				t.Fatalf("Decode = %v, want no value", got)
+			if err != nil {
+				t.Fatalf("Decode = %v", err)
 			}
-			if errors.Is(err, ErrTypeMismatch) {
-				t.Fatalf("Decode error = %v, want the decline, not ErrTypeMismatch", err)
+			if !reflect.DeepEqual(got, row.want) {
+				t.Errorf("Decode = %#v, want %#v", got, row.want)
 			}
-			assertDecline(t, err, constructAbstractTypeElement, 1, 1)
-			probe := row.into.check(schema)
-			if errors.Is(probe, ErrTypeMismatch) {
-				t.Fatalf("CheckDecode = %v, want the decline, not ErrTypeMismatch", probe)
+			if err := row.into.check(schema); err != nil {
+				t.Errorf("CheckDecode = %v, want nil", err)
 			}
-			assertProbeDecline(t, probe, err)
 		})
 	}
 }

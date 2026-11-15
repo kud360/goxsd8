@@ -6,6 +6,7 @@ import (
 
 	"github.com/kud360/goxsd8/internal/goname"
 	"github.com/kud360/goxsd8/internal/goshape"
+	"github.com/kud360/goxsd8/internal/xmlqname"
 	"github.com/kud360/goxsd8/parser/xmltree"
 	"github.com/kud360/goxsd8/validate"
 	"github.com/kud360/goxsd8/xsd"
@@ -13,15 +14,27 @@ import (
 )
 
 // tableRoot is the sealed interface codegen emits over the governing types of
-// an element declaration with a {type table} that has zero or two or more of
-// them (codegen/doc.go "# Element declarations"), as Decode reads it: table,
-// the declaration's {type table}; types, its governing types in slot order;
-// and sealed, one branch per type in that order, each holding the one field
-// typedField gives an element of that type occurring once (branchField).
+// an element declaration that has zero or two or more of them (codegen/doc.go
+// "An element declaration's governing types"), as Decode reads it: selector,
+// how an instance's branch is chosen; types, its governing types in slot
+// order; and sealed, one branch per type in that order, each holding the one
+// field typedField gives an element of that type occurring once
+// (branchField).
 type tableRoot struct {
-	table  xsd.TypeTable
-	types  []goshape.GoverningType
-	sealed *sealed[field]
+	selector selector
+	types    []goshape.GoverningType
+	sealed   *sealed[field]
+}
+
+// A selector returns the index in t.types of the governing type of the
+// element start, an instance of a declaration t is the tableRoot of, or a
+// plain error naming start's instance Loc, a defect of Decode's, which
+// validated the instance first. tableSelector is a {type table}'s and
+// instanceSelector that of a declaration with none, whose governing types
+// stand for its abstract {type definition}; bindTable picks by
+// xsd.ElementDeclaration.TypeTable.
+type selector interface {
+	selected(t *tableRoot, p *pipeline, start *xmltree.StartElement) (int, error)
 }
 
 // table returns the tableRoot of el, an element declaration whose governing
@@ -50,8 +63,11 @@ func bindTable[K comparable](run *bindRun, decl xsd.ElementDeclaration, types []
 	if u, ok := index[key]; ok {
 		return u, nil
 	}
-	table, _ := decl.TypeTable()
-	t := &tableRoot{table: table, types: types, sealed: &sealed[field]{p: run.p}}
+	var sel selector = instanceSelector{}
+	if table, hasTable := decl.TypeTable(); hasTable {
+		sel = tableSelector{table: table}
+	}
+	t := &tableRoot{selector: sel, types: types, sealed: &sealed[field]{p: run.p}}
 	index.store(key, t)
 	for _, g := range types {
 		f, err := branchField(run, decl, g)
@@ -132,22 +148,21 @@ type boundTable struct {
 	bound *boundChoice
 }
 
-// fill sets out, a value of the interface, as a filler does: root's xsi:type
-// declines first, item 7 of Decode's doc, and then out holds the branch of
-// the governing type the validator selects for root (tableRoot.selected), its
-// one field read from root as an element of that type occurring once.
+// fill sets out, a value of the interface, as a filler does: out holds the
+// branch of the governing type root.selector chooses for root, its one field
+// read from root as an element of that type occurring once.
 func (b *boundTable) fill(r *xmltree.Reader, root *xmltree.StartElement, out reflect.Value) error {
-	if err := checkXsiType(root); err != nil {
-		return err
-	}
-	i, err := b.root.selected(b.bound.p, root)
+	i, err := b.root.selector.selected(b.root, b.bound.p, root)
 	if err != nil {
 		return err
 	}
 	return b.bound.set(r, root, i, 0, out, &fillState{})
 }
 
-// selected returns the index in t.types of the type the {type table} t.table
+// tableSelector selects by the {type table} table.
+type tableSelector struct{ table xsd.TypeTable }
+
+// selected returns the index in t.types of the type the {type table} s.table
 // ·conditionally selects· for the element start (§3.3.4.1 key-cta-select):
 // validate.Validator.ConditionallySelectedIndex's answer, the selection Assess
 // made, by position, for start's [attributes] as validate/xmlsrc presents them
@@ -155,42 +170,87 @@ func (b *boundTable) fill(r *xmltree.Reader, root *xmltree.StartElement, out ref
 // (goshape.TableSlot), resolved and matched to its branch (tableRoot.matched).
 // Decode validated the instance first, and Assess records a withheld selection
 // as undecided (item 4 of Decode's doc), so a withheld one, a position no slot
-// holds and a slot that does not resolve are each a plain error naming start's
-// instance Loc and key-cta-ta-select, as tableRoot.matched's answer of no
-// branch is, a defect of Decode's: no fallback to the declared or default type
-// is ever taken.
-func (t *tableRoot) selected(p *pipeline, start *xmltree.StartElement) (int, error) {
+// holds, a slot that does not resolve and a type matched to no branch (match)
+// are each a plain error naming start's instance Loc and key-cta-ta-select, a
+// defect of Decode's: no fallback to the declared or default type is ever
+// taken.
+func (s tableSelector) selected(t *tableRoot, p *pipeline, start *xmltree.StartElement) (int, error) {
 	name := expanded(start.Name())
-	index, decided := p.validator.ConditionallySelectedIndex(t.table, infosetAttributes(start), p.inherited)
+	index, decided := p.validator.ConditionallySelectedIndex(s.table, infosetAttributes(start), p.inherited)
 	if !decided {
 		return 0, fmt.Errorf("codec: %s: element %s: its {type table} withholds the selection (key-cta-ta-select) of an instance validate did not leave undecided", start.Loc(), name)
 	}
-	slot, ref, mapped := goshape.TableSlot(t.table, index)
+	slot, ref, mapped := goshape.TableSlot(s.table, index)
 	td, resolved := p.schema.ResolvedType(ref)
 	if !mapped || !resolved {
 		return 0, fmt.Errorf("codec: %s: element %s: the type its {type table} selects (key-cta-ta-select) does not resolve", start.Loc(), name)
 	}
-	return t.matched(start, slot, td)
+	return s.match(t, start, slot, td)
 }
 
-// matched returns the index in t.types of td, the type the {type table}
-// t.table ·conditionally selects· for the element start, held at slot, as
-// codegen's identity holds types one (goshape.GoverningTypes) and as Decode's
-// doc matches them: for a named td, the first type named as td is, which holds
-// a type a later slot holds too, and for an anonymous td, the type whose Slot
-// is slot (validate.Validator.ConditionallySelectedIndex's doc says why). No
-// type is compared to td by value. A td that is none of t.types,
-// xs:error's, which GoverningTypes drops, is a plain error naming start's
-// instance Loc and pointing at key-cta-ta-select.
-func (t *tableRoot) matched(start *xmltree.StartElement, slot goshape.Slot, td xsd.TypeDefinition) (int, error) {
+// match returns tableRoot.matched's index of td, the type s.table selects for
+// the element start at slot, and in place of its false a plain error naming
+// start's instance Loc and pointing at key-cta-ta-select.
+func (tableSelector) match(t *tableRoot, start *xmltree.StartElement, slot goshape.Slot, td xsd.TypeDefinition) (int, error) {
+	i, matched := t.matched(slot, td)
+	if !matched {
+		return 0, fmt.Errorf("codec: %s: element %s: the type its {type table} selects (key-cta-ta-select) at its %s is none of its governing types", start.Loc(), expanded(start.Name()), slot.Name())
+	}
+	return i, nil
+}
+
+// instanceSelector selects by the element's xsi:type.
+type instanceSelector struct{}
+
+// selected returns the index in t.types of the type the xsi:type of the
+// element start names, which ·overrides· its declaration's abstract {type
+// definition} (§3.3.4.3 cvc-elt clause 4): its value resolved against start's
+// bindings (xmltree.StartElement.LookupPrefix) by xmlqname.Resolve, looked up
+// among the schema's top-level type definitions, as validate's walk resolves
+// it (cvc-resolve-instance), and matched to its branch by name
+// (tableRoot.matched). Decode validated the instance first, and no instance
+// of that {type definition} is valid without an xsi:type that overrides it
+// (cvc-type clause 2), each such type being a member (codegen/doc.go "An
+// element declaration's governing types"), so no xsi:type, one that does not
+// resolve, and one naming a type no branch holds are each a plain error
+// naming start's instance Loc and key-overrides, a defect of Decode's.
+func (instanceSelector) selected(t *tableRoot, p *pipeline, start *xmltree.StartElement) (int, error) {
+	name := expanded(start.Name())
+	for _, a := range start.Attributes() {
+		if a.Name().Space() != xsd.XMLSchemaInstanceNS || a.Name().Local() != "type" {
+			continue
+		}
+		space, local, ok := xmlqname.Resolve(a.Value(), start.LookupPrefix)
+		td, resolved := p.schema.ResolvedType(xsd.TypeDefinitionRef{Name: xsd.QName{Space: space, Local: local}})
+		if !ok || !resolved {
+			return 0, fmt.Errorf("codec: %s: element %s: its xsi:type %q names no type definition, but one overriding its {type definition} (key-overrides) is required", start.Loc(), name, a.Value())
+		}
+		i, matched := t.matched(goshape.DeclaredSlot{}, td)
+		if !matched {
+			return 0, fmt.Errorf("codec: %s: element %s: its xsi:type %q names %s, none of its governing types, the types that override its {type definition} (key-overrides)", start.Loc(), name, a.Value(), td.Name())
+		}
+		return i, nil
+	}
+	return 0, fmt.Errorf("codec: %s: element %s carries no xsi:type, but one overriding its {type definition} (key-overrides) is required", start.Loc(), name)
+}
+
+// matched returns the index in t.types of td, the type selected for an
+// element at slot, as codegen's identity holds types one
+// (goshape.GoverningTypes) and as Decode's doc matches them: for a named td,
+// the first type named as td is, which holds a type a later slot holds too,
+// and for an anonymous td, the type whose Slot is slot
+// (validate.Validator.ConditionallySelectedIndex's doc says why), and false
+// where td is none of t.types, xs:error's included, which GoverningTypes
+// drops. No type is compared to td by value.
+func (t *tableRoot) matched(slot goshape.Slot, td xsd.TypeDefinition) (int, bool) {
 	name := td.Name()
 	anonymous := name == (xsd.QName{})
 	for i, g := range t.types {
 		if anonymous && g.Slot() == slot || !anonymous && g.Type().Name() == name {
-			return i, nil
+			return i, true
 		}
 	}
-	return 0, fmt.Errorf("codec: %s: element %s: the type its {type table} selects (key-cta-ta-select) at its %s is none of its governing types", start.Loc(), expanded(start.Name()), slot.Name())
+	return 0, false
 }
 
 // handDown sets p.inherited to the [inherited attributes] of the children of
