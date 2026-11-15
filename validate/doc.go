@@ -11,7 +11,8 @@
 // and call [Validator.Assess] on its root, returning the [Result]. An adapter
 // of your own implements [Element] and calls Assess itself; [Validator.Schema],
 // [Validator.Governing], [Validator.ConditionallySelected] and
-// [Validator.HandedDown] are for it.
+// [Validator.HandedDown] are for it, and [Validator.ConditionallySelectedIndex]'s
+// doc says whom that method serves.
 //
 // Read the verdict off [Result.Standing], not off an empty [Result.Violations].
 // A Result keeps two lists apart: its violations, the charges the assessment
