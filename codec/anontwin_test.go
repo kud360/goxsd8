@@ -112,7 +112,7 @@ func TestDecodeAnonymousTwins(t *testing.T) {
 	}
 }
 
-// TestTableMatchedUnmatched pins tableRoot.matched where the selected type is
+// TestTableMatchedUnmatched pins tableSelector.match where the selected type is
 // none of the table's governing types, which no instance Decode validated
 // reaches: xs:error at its slot, which goshape.GoverningTypes drops, and an
 // anonymous type at a slot no governing type holds. Each is a plain error
@@ -129,7 +129,7 @@ func TestTableMatchedUnmatched(t *testing.T) {
 		t.Fatal(err)
 	}
 	table, _ := decl.TypeTable()
-	tr := &tableRoot{table: table, types: types}
+	tr := &tableRoot{selector: tableSelector{table: table}, types: types}
 	start, err := documentElement(xmltree.NewReader("", bytes.NewReader(instanceOf("", ""))))
 	if err != nil {
 		t.Fatal(err)
@@ -153,9 +153,9 @@ func TestTableMatchedUnmatched(t *testing.T) {
 		{goshape.AlternativeSlot(1), xsError, "codec: ?:1:1: element {urn:s}r: the type its {type table} selects (key-cta-ta-select) at its {type table} alternative 1 is none of its governing types"},
 		{goshape.AlternativeSlot(1), anonymous, "codec: ?:1:1: element {urn:s}r: the type its {type table} selects (key-cta-ta-select) at its {type table} alternative 1 is none of its governing types"},
 	} {
-		i, err := tr.matched(start, row.slot, row.td)
+		i, err := tableSelector{table: table}.match(tr, start, row.slot, row.td)
 		if err == nil || err.Error() != row.want {
-			t.Errorf("matched(%s, %s) = %d, %v; want the error %q", row.slot.Name(), row.td.Name(), i, err, row.want)
+			t.Errorf("match(%s, %s) = %d, %v; want the error %q", row.slot.Name(), row.td.Name(), i, err, row.want)
 		}
 	}
 }

@@ -192,12 +192,19 @@ var ErrTypeMismatch = errors.New("codec: T is not the type codegen emits for the
 //  7. An element carrying xsi:type, the document element, any descendant
 //     outside a wildcard's match, and any element outside an element of type
 //     xs:anyType's content, the element of type xs:anyType itself among
-//     them: a *DeclineError at that element's instance Loc, the first in
-//     document order, whose [DeclineError.Construct] is xsi:type's. Inside
-//     a wildcard's match and inside an element of type xs:anyType, xsi:type
-//     is one of an element's raw attributes (item 6). A document element no top-level
-//     declaration declares, which validation accepts only through its
-//     xsi:type (§3.3.4.6 cvc-assess-elt), declines so in place of item 5.
+//     them, unless its governing element declaration has no {type table} and
+//     a complex {type definition} with {abstract} true: a *DeclineError at
+//     that element's instance Loc, the first in document order, whose
+//     [DeclineError.Construct] is xsi:type's. The xsi:type of an element of
+//     such a declaration names one of the declaration's governing types, the
+//     abstract type's members (codegen's package doc, "An element
+//     declaration's governing types"), which no instance is valid without
+//     (§3.3.4.4 cvc-type clause 2, §3.3.4.3 cvc-elt clause 4), and is not
+//     itself decoded. Inside a wildcard's match and inside an element of type
+//     xs:anyType, xsi:type is one of an element's raw attributes (item 6). A
+//     document element no top-level declaration declares, which validation
+//     accepts only through its xsi:type (§3.3.4.6 cvc-assess-elt), declines
+//     so in place of item 5.
 //  8. A union's identification of its ·active basic member·, the lexical
 //     mapping or the conversion to the Go type failing on a value validate
 //     accepted on the same backend: value.ValidatingType returns an error for
@@ -243,14 +250,17 @@ var ErrTypeMismatch = errors.New("codec: T is not the type codegen emits for the
 // of type xs:anyType past its own xsi:type, read raw, which finds neither. A
 // supplied value whose attribute is present is never mapped. An element E
 // whose declaration has two or more governing types fills, past its xsi:type
-// and before its attributes, the branch of the type
+// and before its attributes, the branch of one type and never another, which
+// finds neither item: of a declaration with a {type table}, the type
 // validate.Validator.ConditionallySelectedIndex selects, by its position in
 // the {type table}, for E's [attributes] (§3.3.4.1 key-cta-select), under the
 // [inherited attributes] validate.Validator.HandedDown composes for E from its
-// ancestors' (§3.3.5.6 e-inherited_attributes), and never another: the
-// selection Assess made, which finds neither item. The type is matched to its
-// branch by that position's slot where it is anonymous and by its name where
-// it is named.
+// ancestors' (§3.3.5.6 e-inherited_attributes), the selection Assess made,
+// matched to its branch by that position's slot where it is anonymous and by
+// its name where it is named; and of one without, the type E's xsi:type names
+// (item 7), resolved against E's in-scope namespaces among the schema's
+// top-level type definitions as validation resolves it (§3.17.6.3
+// cvc-resolve-instance), matched to its branch by its name.
 //
 // Each child element fills the field of the particle validation attributes
 // it to (§3.4.4.4 key-att-to): of a content model with no wildcard or nested
@@ -301,26 +311,25 @@ var ErrTypeMismatch = errors.New("codec: T is not the type codegen emits for the
 // basic particles:
 //
 //   - The declaration's governing types, codegen's (codegen's package doc,
-//     "An element declaration's governing types"), but that a complex type
-//     with {abstract} true stays at its slot, declining by its {abstract}
-//     where it is examined: first, for a nillable declaration (codegen's
-//     package doc, "# Element declarations"), its {nillable}, which declines
-//     when other than exactly one governing type remains, or a {type table}
-//     slot holds xs:error, which a nilled instance is valid against (§3.3.4.3
-//     cvc-type clause 3.1.3), a slot that does not resolve declining so too,
-//     codegen wrapping the governing types' interface branch by branch; and,
-//     where the declaration is examined as a branch of a substitution group's
-//     sealed interface (the fourth bullet), whose branch field codegen wraps,
-//     when that one type is other than xs:anyType itself (§3.4.7
-//     any-type-itself), whose raw content holds xsi:nil among its attributes
-//     (item 6). Of exactly one governing type, the declaration is examined as if
-//     that type were its {type definition}, by the bullet below. Of two or
-//     more, each is examined in slot order as the {type definition} of a local
-//     element declaration occurring exactly once is, the first declining one's
-//     construct the declaration's, and then a branch field that may admit a Go
-//     type an earlier one's does declines, as two branches of a sealed
-//     interface whose structs have one shape (the choice bullet below). Of
-//     none, every slot xs:error's, nothing further is examined.
+//     "An element declaration's governing types"): first, for a nillable
+//     declaration (codegen's package doc, "# Element declarations"), its
+//     {nillable}, which declines when other than exactly one governing type
+//     remains, or a {type table} slot holds xs:error, which a nilled instance is
+//     valid against (§3.3.4.3 cvc-type clause 3.1.3), a slot that does not
+//     resolve declining so too, codegen wrapping the governing types' interface
+//     branch by branch; and, where the declaration is examined as a branch of a
+//     substitution group's sealed interface (the fourth bullet), whose branch
+//     field codegen wraps, when that one type is other than xs:anyType itself
+//     (§3.4.7 any-type-itself), whose raw content holds xsi:nil among its
+//     attributes (item 6). Of exactly one governing type, the declaration is
+//     examined as if that type were its {type definition}, by the bullet below.
+//     Of two or more, each is examined in slot order as the {type definition} of
+//     a local element declaration occurring exactly once is, the first declining
+//     one's construct the declaration's, and then a branch field that may admit
+//     a Go type an earlier one's does declines, as two branches of a sealed
+//     interface whose structs have one shape (the choice bullet below). Of none,
+//     every slot xs:error's or an abstract type's with no member, nothing
+//     further is examined.
 //   - Its {type definition}: xs:anyType itself, known by its QName, gives the
 //     T item 6 states and is examined no further; a simple type's identity
 //     as a special type (xsd.SimpleType.IsSpecial), which gives string and
@@ -329,14 +338,14 @@ var ErrTypeMismatch = errors.New("codec: T is not the type codegen emits for the
 //     the list declines by, after which nothing further is examined; for a
 //     union, or a list's union item, each basic member in codegen's
 //     basic-member order examined as an atomic or list type is, the first
-//     declining member's construct the union's; or a complex type's {abstract},
-//     then its content, then, for simple content, its {simple type definition},
-//     examined as the document element's simple type is, whose construct the
-//     content declines by, or, for element-only or mixed content, its {particle}'s
-//     model group, which item 6 holds as codegen does (codegen's package doc,
-//     "# Particles"): of a <group ref>, the compositor is the referenced
-//     definition's {model group}'s and the occurrence the referring particle's
-//     (§3.7.2 declare-namedModelGroup).
+//     declining member's construct the union's; or a complex type's content,
+//     then, for simple content, its {simple type definition}, examined as the
+//     document element's simple type is, whose construct the content declines by,
+//     or, for element-only or mixed content, its {particle}'s model group, which
+//     item 6 holds as codegen does (codegen's package doc, "# Particles"): of a
+//     <group ref>, the compositor is the referenced definition's {model group}'s
+//     and the occurrence the referring particle's (§3.7.2
+//     declare-namedModelGroup).
 //   - Each particle of the complex type's content in order, the whole of one
 //     before the next, but of a flattened one, which the sixth bullet examines
 //     in this bullet's place, and of a choice held in an occurrence field
@@ -370,7 +379,7 @@ var ErrTypeMismatch = errors.New("codec: T is not the type codegen emits for the
 //     the document element's is; xs:anyType itself, known by its QName, gives the field
 //     item 6 states and is examined no further; and any other complex one, a type derived
 //     from xs:anyType included, is examined as the document element's complex type is,
-//     from its {abstract} to its attribute uses. The particle's field then takes its
+//     from its content to its attribute uses. The particle's field then takes its
 //     element's expanded name, or, for a substitution group's interface, the expanded name
 //     of each declaration the next bullet examines. Two particles taking one expanded name
 //     both decode, wherever either is bound, an occurrence field's item included, each
@@ -773,13 +782,16 @@ func decodeValue(schema *xsd.Schema, backend value.Backend, data []byte, out ref
 	if err != nil {
 		return err
 	}
-	b, err := bind(&pipeline{schema: schema, backend: backend, log: cfg.log.WithGroup("codec"), decimals: cfg.decimals, branches: cfg.branches,
+	b, decl, err := bind(&pipeline{schema: schema, backend: backend, log: cfg.log.WithGroup("codec"), decimals: cfg.decimals, branches: cfg.branches,
 		assertions: res.FacetAssertions(), validator: v}, root)
 	if err != nil {
 		return err
 	}
 	f, err := b.check(out.Type(), newCheckContext(cfg))
 	if err != nil {
+		return err
+	}
+	if err := checkDeclaredXsiType(schema, decl, root); err != nil {
 		return err
 	}
 	return f.fill(r, root, out)
@@ -1500,14 +1512,10 @@ func (c rawContent) read(_ *pipeline, r *xmltree.Reader, start *xmltree.StartEle
 }
 
 // fill sets out, T for a document element of type xs:anyType itself
-// (anyTypeRoot), as a filler does: root's xsi:type declines, item 7 of
-// Decode's doc, and otherwise root's content is read raw, as read reads it,
-// and converted to T, every attribute of root among its raw Attributes, as
+// (anyTypeRoot), as a filler does: root's content is read raw, as read reads
+// it, and converted to T, every attribute of root among its raw Attributes, as
 // item 6 states.
 func (c rawContent) fill(r *xmltree.Reader, root *xmltree.StartElement, out reflect.Value) error {
-	if err := checkXsiType(root); err != nil {
-		return err
-	}
 	x, err := c.shape.readContent(r, root)
 	if err != nil {
 		return err
@@ -1967,7 +1975,10 @@ type boundKey struct {
 
 // A filler sets out, a value of the T a binder's check held, from the
 // element root, whose start tag r has just returned, and from r's tokens up
-// to its end tag, or returns the xsi:type decline Decode's doc states, item 7.
+// to its end tag, or returns the xsi:type decline Decode's doc states, item 7,
+// of an element inside root. Root's own xsi:type is read before fill is
+// called, by decodeValue for the document element (checkDeclaredXsiType)
+// and by the content loop that reads a child (checkChildXsiType).
 type filler interface {
 	fill(r *xmltree.Reader, root *xmltree.StartElement, out reflect.Value) error
 }
@@ -2081,28 +2092,29 @@ type contentFiller interface {
 	fill(r *xmltree.Reader, root *xmltree.StartElement, out reflect.Value, st *fillState) error
 }
 
-// bind returns the binder of root's declaration in p's schema, or the first
-// decline Decode's doc states for it, item 5, charged to root's instance Loc.
-// Item 5 is bindDecl's, which CheckDecode calls too.
-func bind(p *pipeline, root *xmltree.StartElement) (binder, error) {
+// bind returns the binder of root's declaration in p's schema, and that
+// declaration, or the first decline Decode's doc states for it, item 5,
+// charged to root's instance Loc. Item 5 is bindDecl's, which CheckDecode
+// calls too.
+func bind(p *pipeline, root *xmltree.StartElement) (binder, xsd.ElementDeclaration, error) {
 	name := expanded(root.Name())
 	decl, ok := p.schema.Element(name)
 	if !ok {
 		// Only an xsi:type lets such a document element be assessed
 		// (cvc-assess-elt), so it declines as one, in place of item 5.
 		if err := checkXsiType(root); err != nil {
-			return nil, err
+			return nil, xsd.ElementDeclaration{}, err
 		}
-		return nil, fmt.Errorf("codec: %s: the document element %s has no top-level declaration", root.Loc(), name)
+		return nil, xsd.ElementDeclaration{}, fmt.Errorf("codec: %s: the document element %s has no top-level declaration", root.Loc(), name)
 	}
 	b, err := bindDecl(p, decl)
 	// bindDecl returns its declines unwrapped and uncharged, and no other
 	// error of its wraps one, so the charged copy replaces err whole.
 	var de *DeclineError
 	if errors.As(err, &de) {
-		return nil, de.at(root.Loc())
+		return nil, xsd.ElementDeclaration{}, de.at(root.Loc())
 	}
-	return b, err
+	return b, decl, err
 }
 
 // bindDecl returns the binder of decl, a top-level element declaration in p's
@@ -2207,34 +2219,27 @@ type unitIndex[K comparable] map[K]complexUnit
 // bindComplex returns the complex unit of ct, the {type definition} of decl,
 // labelled by typeSubject, the one index already holds for key where it holds
 // one, or else the first decline Decode's doc states for ct, item 5, in its
-// order: {abstract} true, ct's content, for simple content its {simple type
-// definition} (simpleValueOf), for element-only or mixed content the occurrence of its
-// sequence, choice or all group (contentGroup) and each particle in order,
-// then each attribute use in order, none for a ct goshape.HasAttributeFields
-// answers false for whose content is the choice it binds as ct itself. Empty
-// content binds the struct codegen emits for it, with no field ahead of the
-// attribute fields, and simple content the struct whose one field ahead of
-// them is the value field (codegen/doc.go "# Complex types"), and mixed
-// content the struct its {particle} binds as element-only content, Text
-// ahead of its fields and each child's field wrapped (codegen/doc.go
-// "# Complex types"; elementField, rawChild); ct's {attribute wildcard}, read from the
-// finalized component (§3.4.2.5 dcl.ctd.anyatt), gives the struct's last field, its
-// name claimed after the attribute fields'. A nil index binds an inline anonymous ct
-// under no key. A ct of simple content is stored under no key either: it reaches no
-// particle, so nothing inside it reaches it again, and its value field holds decl's
-// own {value constraint} (cvc-elt clause 5.1), which another declaration of a named ct
-// does not share.
+// order: ct's content, for simple content its {simple type definition}
+// (simpleValueOf), for element-only or mixed content the occurrence of its sequence,
+// choice or all group (contentGroup) and each particle in order, then each attribute
+// use in order, none for a ct goshape.HasAttributeFields answers false for whose
+// content is the choice it binds as ct itself. Empty content binds the struct codegen
+// emits for it, with no field ahead of the attribute fields, and simple content the
+// struct whose one field ahead of them is the value field (codegen/doc.go "# Complex
+// types"), and mixed content the struct its {particle} binds as element-only content,
+// Text ahead of its fields and each child's field wrapped (codegen/doc.go "# Complex
+// types"; elementField, rawChild); ct's {attribute wildcard}, read from the finalized
+// component (§3.4.2.5 dcl.ctd.anyatt), gives the struct's last field, its name claimed
+// after the attribute fields'. A nil index binds an inline anonymous ct under no key.
+// A ct of simple content is stored under no key either: it reaches no particle, so
+// nothing inside it reaches it again, and its value field holds decl's own {value
+// constraint} (cvc-elt clause 5.1), which another declaration of a named ct does not
+// share.
 func bindComplex[K comparable](run *bindRun, decl xsd.ElementDeclaration, ct xsd.ComplexType, index unitIndex[K], key K) (complexUnit, error) {
 	if u, ok := index[key]; ok {
 		return u, nil
 	}
 	typeSubject := typeSubject(decl, ct)
-	// Codegen emits no struct for an abstract type: an element of one holds
-	// its governing types' interface, or the struct of its one member type
-	// (codegen/doc.go "# Element declarations").
-	if ct.Abstract() {
-		return nil, decline(constructAbstractTypeElement, typeSubject)
-	}
 	// names is the struct's Namer, from which its fields claim their names in
 	// the order codegen/doc.go "# Naming" states. A bare sealed interface has
 	// no struct and discards it.
@@ -2494,7 +2499,7 @@ type childIndex struct {
 	// matcherSlot (particleShape), so every name two particles take is
 	// attributed by a Matcher, never by target. It is a lookup index only and
 	// never iterated (STYLE D2).
-	children map[xsd.QName]int
+	children map[xsd.QName]taken
 	// matcher is set where a Matcher attributes the content model's children
 	// (matcherSlot), nil where children alone does.
 	matcher *matcherSlot
@@ -2527,7 +2532,7 @@ func (x childIndex) position(target int) ([]int, bool) {
 // newChildIndex returns the childIndex of a content model none of whose
 // particles is bound yet.
 func newChildIndex() childIndex {
-	return childIndex{children: map[xsd.QName]int{}}
+	return childIndex{children: map[xsd.QName]taken{}}
 }
 
 // take records in x that the particle of attribution target target takes
@@ -2535,11 +2540,19 @@ func newChildIndex() childIndex {
 // stays. Which target stays is unobservable: particleShape forced the
 // matcherSlot before any second take of n, and a Matcher then attributes
 // every child of the content model in target's place.
-func (x *childIndex) take(n xsd.QName, target int) {
+func (x *childIndex) take(n xsd.QName, target int, term xsd.ElementDeclaration) {
 	if _, ok := x.children[n]; ok {
 		return
 	}
-	x.children[n] = target
+	x.children[n] = taken{target: target, term: term}
+}
+
+// taken is the particle a childIndex attributes a child to by name: its
+// attribution target and its {term}, the element declaration
+// checkChildXsiType reads the child's governing one from.
+type taken struct {
+	target int
+	term   xsd.ElementDeclaration
 }
 
 // wildcard returns the field, but for its name, which its caller claims, of
@@ -2758,7 +2771,7 @@ func (s *sequence) bind(run *bindRun, ct xsd.ComplexType, particles []xsd.Partic
 			}
 			f.name = names.Claim(term.Name().Local)
 			for _, n := range takes {
-				s.index.take(n, s.targets())
+				s.index.take(n, s.targets(), term)
 			}
 			s.index.elements = append(s.index.elements, place{position: append(slices.Clone(at), i), index: s.targets()})
 			s.members = append(s.members, f)
@@ -3382,6 +3395,7 @@ func bindChoice(run *bindRun, ct xsd.ComplexType, particles []xsd.Particle, x *c
 		occurs := goshape.BranchOccurs(p.Occurs())
 		var alt branchArm
 		var takes []xsd.QName
+		var declared xsd.ElementDeclaration
 		var subject string
 		// Term is a closed sum, so the switch is STYLE T2's sealed-sum
 		// exception; particleTerm returns no nil Term.
@@ -3408,6 +3422,7 @@ func bindChoice(run *bindRun, ct xsd.ComplexType, particles []xsd.Particle, x *c
 			f.name = goname.NewNamer().Claim(term.Name().Local)
 			subject = declSubject(term)
 			alt = f
+			declared = term
 			x.elements = append(x.elements, place{position: position, index: target})
 		}
 		for j, earlier := range alts.alts {
@@ -3416,7 +3431,7 @@ func bindChoice(run *bindRun, ct xsd.ComplexType, particles []xsd.Particle, x *c
 			}
 		}
 		for _, n := range takes {
-			x.take(n, target)
+			x.take(n, target, declared)
 		}
 		alts.alts = append(alts.alts, alt)
 	}
@@ -3947,7 +3962,7 @@ func (b boundFlattened) fill(r *xmltree.Reader, _ *xmltree.StartElement, out ref
 				continue
 			}
 			if _, wild := t.(xsd.Wildcard); !wild {
-				if err := checkXsiType(tok); err != nil {
+				if err := checkChildXsiType(p.schema, t, tok); err != nil {
 					return err
 				}
 			}
@@ -4367,8 +4382,8 @@ func (b boundOccurrence) fill(r *xmltree.Reader, _ *xmltree.StartElement, out re
 			if err != nil {
 				return err
 			}
-			if !at.raw {
-				if err := checkXsiType(tok); err != nil {
+			if !at.raw() {
+				if err := checkChildXsiType(o.p.schema, at.to, tok); err != nil {
 					return err
 				}
 			}
@@ -4741,9 +4756,6 @@ type boundChoiceRoot struct {
 // branch of that target's alternative, every sink sharing one fillState of
 // this fill's own. An empty match leaves out nil.
 func (c *boundChoiceRoot) fill(r *xmltree.Reader, root *xmltree.StartElement, out reflect.Value) error {
-	if err := checkXsiType(root); err != nil {
-		return err
-	}
 	if err := noAttributes(root); err != nil {
 		return err
 	}
@@ -4770,22 +4782,19 @@ func bindSimpleRoot(p *pipeline, decl xsd.ElementDeclaration, st *xsd.SimpleType
 }
 
 // governingTypes returns the governing types of the element declaration decl
-// in schema, codegen's (goshape.GoverningTypes), but that a complex type with
-// {abstract} true is kept at its slot, where binding it declines (bindComplex), and
-// wrapped, whether the field over decl, or T for a document element, holds codegen's
-// Nillable over decl's one governing type: decl is nillable (goshape.Nillable) and that
-// type is not xs:anyType itself, whose AnyType holds xsi:nil among its raw attributes. Or
-// it returns the first decline item 5 of Decode's doc states for decl's own properties,
-// naming decl: a nillable decl, unless exactly one governing type remains, no slot holds
-// xs:error, which a ·nilled· instance is valid against (cvc-type clause 3.1.3 "If E is
-// not nilled") and which codegen's sum wraps branch by branch, and, where wraps is false,
-// a site that holds no Nillable, a substitution group's branch field, that type is
-// xs:anyType itself, a slot that does not resolve declining so too. A slot that does not
-// resolve, of a declaration that is not nillable, is goshape.GoverningTypes' plain error.
+// in schema, codegen's (goshape.GoverningTypes), and wrapped, whether the field over
+// decl, or T for a document element, holds codegen's Nillable over decl's one governing
+// type: decl is nillable (goshape.Nillable) and that type is not xs:anyType itself, whose
+// AnyType holds xsi:nil among its raw attributes. Or it returns the first decline item 5
+// of Decode's doc states for decl's own properties, naming decl: a nillable decl, unless
+// exactly one governing type remains, no slot holds xs:error, which a ·nilled· instance
+// is valid against (cvc-type clause 3.1.3 "If E is not nilled") and which codegen's sum
+// wraps branch by branch, and, where wraps is false, a site that holds no Nillable, a
+// substitution group's branch field, that type is xs:anyType itself,
+// goshape.GoverningTypes' error declining so too. Of a declaration that is not nillable,
+// that error is a plain error.
 func governingTypes(schema *xsd.Schema, decl xsd.ElementDeclaration, wraps bool) (types []goshape.GoverningType, wrapped bool, err error) {
-	types, errorSlot, err := goshape.GoverningTypes(schema, decl, func(ct xsd.ComplexType) ([]xsd.TypeDefinition, error) {
-		return []xsd.TypeDefinition{ct}, nil
-	})
+	types, errorSlot, err := goshape.GoverningTypes(schema, decl)
 	nillable := goshape.Nillable(decl)
 	if nillable && (err != nil || len(types) != 1 || errorSlot || !wraps && !anyTypeItself(types[0].Type())) {
 		return nil, false, decline(constructNillable, declSubject(decl))
@@ -5285,7 +5294,7 @@ type boundBinding struct {
 }
 
 // fill sets out's fields as a filler does, in the order Decode's doc states
-// for items 7 and 8: root's xsi:type, its present attributes in start-tag
+// for items 7 and 8: root's present attributes in start-tag
 // order, the supplied values of the absent ones in attribute-use order, then
 // its content, its value field's value or its children, mixed content's Text
 // read first (charRun). An attribute field with a supplied value holds it
@@ -5297,9 +5306,6 @@ type boundBinding struct {
 // whatever the wildcard's {process contents}: Decode validated the instance
 // first, so each such attribute is the wildcard's to take (clause 2.2).
 func (b *boundBinding) fill(r *xmltree.Reader, root *xmltree.StartElement, out reflect.Value) error {
-	if err := checkXsiType(root); err != nil {
-		return err
-	}
 	bd := b.binding
 	if err := bd.fillAttributes(root, out, bd.lead()+bd.content.width()); err != nil {
 		return err
@@ -5410,8 +5416,8 @@ func eachChild(r *xmltree.Reader, schema *xsd.Schema, x childIndex, st *fillStat
 			if err != nil {
 				return err
 			}
-			if !at.raw {
-				if err := checkXsiType(tok); err != nil {
+			if !at.raw() {
+				if err := checkChildXsiType(schema, at.to, tok); err != nil {
 					return err
 				}
 			}
@@ -5426,11 +5432,20 @@ func eachChild(r *xmltree.Reader, schema *xsd.Schema, x childIndex, st *fillStat
 }
 
 // attribution is where attributeChild puts one attributed child: index, the
-// attribution target (childIndex), and raw whether that is a wildcard
-// particle's or the open-content field's, whose child is read raw.
+// attribution target (childIndex), and to, what it is attributed to, an
+// element particle's {term}, a wildcard particle or the {open content}, nil
+// for a child attributed to none.
 type attribution struct {
 	index int
-	raw   bool
+	to    xsd.Attribution
+}
+
+// raw reports whether a's child is a wildcard particle's or the open-content
+// field's, which is read raw. Attribution is a closed sum, so the assertion
+// is STYLE T2's sealed-sum exception.
+func (a attribution) raw() bool {
+	_, isElement := a.to.(xsd.ElementDeclaration)
+	return a.to != nil && !isElement
 }
 
 // attributeChild returns where the child element start is attributed, as
@@ -5440,8 +5455,11 @@ type attribution struct {
 // Matcher's answer is attributeAt's, over a's places and x.elements.
 func attributeChild(a *matchAttributor, x childIndex, start *xmltree.StartElement) (attribution, bool, error) {
 	if a == nil {
-		target, ok := x.children[expanded(start.Name())]
-		return attribution{index: target}, ok, nil
+		taken, ok := x.children[expanded(start.Name())]
+		if !ok {
+			return attribution{}, false, nil
+		}
+		return attribution{index: taken.target, to: taken.term}, true, nil
 	}
 	t, pos, _ := a.m.NextParticle(expanded(start.Name()))
 	return attributeAt(t, pos, a.places, x.elements, start)
@@ -5469,25 +5487,25 @@ func attributeChild(a *matchAttributor, x childIndex, start *xmltree.StartElemen
 // exception.
 func attributeAt(t xsd.Attribution, pos []int, places, elements []place, start *xmltree.StartElement) (attribution, bool, error) {
 	name := expanded(start.Name())
-	switch t.(type) {
+	switch t := t.(type) {
 	case xsd.Wildcard:
 		i, placed := placeAt(places, pos)
 		if !placed {
 			return attribution{}, false, fmt.Errorf("codec: %s: element %s is attributed to the wildcard particle at position %v, for which Decode bound no field or alternative", start.Loc(), name, pos)
 		}
-		return attribution{index: i, raw: true}, true, nil
+		return attribution{index: i, to: t}, true, nil
 	case *xsd.OpenContent:
 		i, placed := placeAt(places, pos)
 		if !placed {
 			return attribution{}, false, fmt.Errorf("codec: %s: element %s is attributed to the {open content}, for which Decode bound no field", start.Loc(), name)
 		}
-		return attribution{index: i, raw: true}, true, nil
+		return attribution{index: i, to: t}, true, nil
 	case xsd.ElementDeclaration:
 		i, placed := placeAt(elements, pos)
 		if !placed {
 			return attribution{}, false, fmt.Errorf("codec: %s: element %s is attributed to the element particle at position %v, for which Decode bound no field or alternative", start.Loc(), name, pos)
 		}
-		return attribution{index: i}, true, nil
+		return attribution{index: i, to: t}, true, nil
 	}
 	return attribution{}, false, nil
 }
@@ -5554,9 +5572,6 @@ func (s *simpleRoot) check(t reflect.Type, cx *checkContext) (filler, error) {
 // fill sets out, whose underlying type is the Go type codegen gives s's
 // simple type, as a filler does.
 func (s *simpleRoot) fill(r *xmltree.Reader, root *xmltree.StartElement, out reflect.Value) error {
-	if err := checkXsiType(root); err != nil {
-		return err
-	}
 	if err := noAttributes(root); err != nil {
 		return err
 	}
@@ -5598,6 +5613,56 @@ func instanceAttribute(n xmltree.Name) bool {
 		return true
 	}
 	return false
+}
+
+// checkDeclaredXsiType returns checkXsiType's decline for the element start,
+// whose governing element declaration is decl, unless decl admits its
+// xsi:type (admitsXsiType).
+func checkDeclaredXsiType(schema *xsd.Schema, decl xsd.ElementDeclaration, start *xmltree.StartElement) error {
+	err := checkXsiType(start)
+	if err == nil || admitsXsiType(schema, decl) {
+		return nil
+	}
+	return err
+}
+
+// checkChildXsiType returns checkXsiType's decline for the child element
+// start, attributed to to, unless to is an element particle's {term} and
+// start's governing element declaration admits its xsi:type
+// (admitsXsiType). That declaration is its context-determined declaration
+// (§3.3.4.6 key-governing-ed clause 2): the term where start has its
+// expanded name, and otherwise the top-level declaration of start's, a
+// member of the term's substitution group (§3.9.4.3 cvc-accept clauses
+// 2.3.1 and 2.3.2), which Decode validated start against. A start no
+// top-level declaration names admits none. Attribution is a closed sum, so
+// the assertion is STYLE T2's sealed-sum exception.
+func checkChildXsiType(schema *xsd.Schema, to xsd.Attribution, start *xmltree.StartElement) error {
+	err := checkXsiType(start)
+	term, isElement := to.(xsd.ElementDeclaration)
+	if err == nil || !isElement {
+		return err
+	}
+	decl, declared := term, true
+	if name := expanded(start.Name()); term.Name() != name {
+		decl, declared = schema.Element(name)
+	}
+	if declared && admitsXsiType(schema, decl) {
+		return nil
+	}
+	return err
+}
+
+// admitsXsiType reports whether item 7 of Decode's doc admits an xsi:type on
+// an element whose governing element declaration is decl, its {type
+// definition} resolved through schema. Every other element's xsi:type
+// declines (checkXsiType).
+func admitsXsiType(schema *xsd.Schema, decl xsd.ElementDeclaration) bool {
+	if _, hasTable := decl.TypeTable(); hasTable {
+		return false
+	}
+	td, resolved := schema.ResolvedType(decl.TypeDefinition())
+	ct, isComplex := td.(xsd.ComplexType)
+	return resolved && isComplex && ct.Abstract()
 }
 
 // checkXsiType returns the xsi:type decline for start when it carries one.

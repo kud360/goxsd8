@@ -46,9 +46,10 @@ Value implementations, parsing, validation, and generation live above them.
                                     check read.
                                   - internal/xmlqname, the QName split and prefix
                                     resolution of an xsi:type lexical
-                                    (cvc-resolve-instance), which validate's walk
-                                    and validate/jsonsrc's "$type" member must
-                                    resolve alike, and of an xs:QName or
+                                    (cvc-resolve-instance), which validate's walk,
+                                    validate/jsonsrc's "$type" member and codec's
+                                    member selection must resolve alike, and of an
+                                    xs:QName or
                                     xs:NOTATION value codec decodes into
                                     QName's datatype struct.
                                   - internal/xmltok, encoding/xml's strict tokenizer
@@ -185,7 +186,8 @@ is still spelled package-locally across the library, and #3033 gives it
 its one home in `internal/xmlchar`; do not write another copy. The
 [7]-[11] `QName` split and prefix resolution of an xsi:type lexical lives in
 `internal/xmlqname`, read by `validate`'s walk and `validate/jsonsrc`'s
-"$type" member (#2615), and by `codec` for an xs:QName or xs:NOTATION value.
+"$type" member (#2615), and by `codec` for the xsi:type naming an abstract
+{type definition}'s member and for an xs:QName or xs:NOTATION value.
 
 `cmd/goxsd8` is a library CONSUMER, not a place to grow capability. A
 capability the CLI needs and the library does not export is a library gap to

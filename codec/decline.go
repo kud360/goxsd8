@@ -84,9 +84,7 @@ type construct uint8
 // element's declaration, its type's content, each particle in order, its
 // attribute uses in order, and the instance. A particle's complex type,
 // examined at the particle, declines by the same constructs from
-// constructNestedGroup on, and by constructAbstractTypeElement, which sits
-// with the particle's though the document element's type declines by it too,
-// ahead of its content. The one of a simple type, constructOtherPrimitive,
+// constructNestedGroup on. The one of a simple type, constructOtherPrimitive,
 // sits with the particle's, though a document element of simple type, a
 // complex type's simple content, by its {simple type definition}, an
 // attribute use, a list type, by its {item type definition}, and a union, by
@@ -98,7 +96,6 @@ type construct uint8
 const (
 	constructNillable construct = iota + 1
 	constructNestedGroup
-	constructAbstractTypeElement
 	constructSharedBranch
 	constructOtherPrimitive
 	constructUntrackedModel
@@ -107,13 +104,12 @@ const (
 
 // constructNames holds, indexed by construct, each construct's name.
 var constructNames = [...]string{
-	constructNillable:            "an element declaration with {nillable} true",
-	constructNestedGroup:         "a nested model group particle",
-	constructAbstractTypeElement: "an element declaration whose complex {type definition} has {abstract} true",
-	constructSharedBranch:        "two branches of a sealed interface whose structs have one shape",
-	constructOtherPrimitive:      "an atomic simple type whose primitive is ·implementation-defined·, other than xs:precisionDecimal",
-	constructUntrackedModel:      "a content model the content matcher does not track",
-	constructXsiType:             "an element carrying xsi:type",
+	constructNillable:       "an element declaration with {nillable} true",
+	constructNestedGroup:    "a nested model group particle",
+	constructSharedBranch:   "two branches of a sealed interface whose structs have one shape",
+	constructOtherPrimitive: "an atomic simple type whose primitive is ·implementation-defined·, other than xs:precisionDecimal",
+	constructUntrackedModel: "a content model the content matcher does not track",
+	constructXsiType:        "an element carrying xsi:type",
 }
 
 // name returns the construct's name.

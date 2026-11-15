@@ -732,48 +732,20 @@ func (e *emitter) declaredType(decl xsd.ElementDeclaration) (xsd.TypeDefinition,
 	return td, nil
 }
 
-// governingTypes returns the types the package doc's "# Element declarations"
-// lets govern an instance of the element declaration decl, goshape.GoverningTypes'
-// answer with a slot holding a complex type with {abstract} true giving its
-// members (abstractMembers) in its place, each with the slot it is first
-// held at (goshape.GoverningType.Slot), and sum, true exactly when "# Element
-// declarations" gives decl a sealed interface over them: false for exactly one
-// type, which declaredType returns in place of the {type definition}, and true for
-// zero or two or more. goshape.GoverningTypes' error and abstractMembers' are
-// returned, never a decline.
+// governingTypes returns the types the package doc's "An element
+// declaration's governing types" lets govern an instance of the element
+// declaration decl, goshape.GoverningTypes' answer, each with the slot it is
+// first held at (goshape.GoverningType.Slot), and sum, true exactly when that
+// section gives decl a sealed interface over them: false for exactly one
+// type, which declaredType returns in place of the {type definition}, and true
+// for zero or two or more. goshape.GoverningTypes' error is returned, never a
+// decline.
 func (e *emitter) governingTypes(decl xsd.ElementDeclaration) (branches []goshape.GoverningType, sum bool, err error) {
-	branches, _, err = goshape.GoverningTypes(e.schema, decl, func(ct xsd.ComplexType) ([]xsd.TypeDefinition, error) {
-		return e.abstractMembers(decl, ct)
-	})
+	branches, _, err = goshape.GoverningTypes(e.schema, decl)
 	if err != nil {
 		return nil, false, err
 	}
 	return branches, len(branches) != 1, nil
-}
-
-// abstractMembers returns the members "# Element declarations" gives the
-// complex type t, which has {abstract} true, in a slot of the element
-// declaration decl: each named complex type with {abstract} false among
-// [xsd.Schema.Types], in its order, for which [xsd.Schema.ValidlySubstitutable]
-// answers true against t under decl's {disallowed substitutions}, t's
-// {prohibited substitutions} being the one it adds (§3.3.4.2 key-overrides
-// clause 2). An error from ValidlySubstitutable is returned, never a decline.
-func (e *emitter) abstractMembers(decl xsd.ElementDeclaration, t xsd.ComplexType) ([]xsd.TypeDefinition, error) {
-	var members []xsd.TypeDefinition
-	for _, td := range e.schema.Types() {
-		s, isComplex := td.(xsd.ComplexType)
-		if !isComplex || s.Name() == (xsd.QName{}) || s.Abstract() {
-			continue
-		}
-		ok, err := e.schema.ValidlySubstitutable(s, t, decl.DisallowedSubstitutions())
-		if err != nil {
-			return nil, fmt.Errorf("element %s at %s: complex type %s as a member of abstract complex type %s: %w", decl.Name(), decl.Loc(), s.Name(), t.Name(), err)
-		}
-		if ok {
-			members = append(members, s)
-		}
-	}
-	return members, nil
 }
 
 // simpleGoType is a special type's string, the atomic Go type, the slice,

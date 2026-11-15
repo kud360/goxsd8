@@ -3,8 +3,10 @@
 // xsi:type: validate's walk (cvc-resolve-instance, §3.17.6.3) and
 // validate/jsonsrc's "$type" member, which must name the type the walk will
 // find, so that the members it classifies under that type are the ones the walk
-// assesses; and for codec, which decodes an xs:QName or xs:NOTATION value into
-// the expanded name it resolves to (Datatypes §3.3.18, §3.3.19).
+// assesses, and codec, whose branch for an element of an abstract {type
+// definition} is the member that element's xsi:type names; and for codec,
+// which decodes an xs:QName or xs:NOTATION value into the expanded name it
+// resolves to (Datatypes §3.3.18, §3.3.19).
 //
 // # Contract
 //

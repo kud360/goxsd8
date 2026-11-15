@@ -93,19 +93,17 @@ func (f *nillableFamily) add(args string) {
 // Nillable over typ (codegen's package doc, "# Element declarations"), sum
 // over typ and A, which it then binds (add). That holds exactly when the
 // declaration is nillable (goshape.Nillable) and has one governing type
-// (goshape.GoverningTypes, an abstract slot's type kept as codec keeps it)
-// that is not xs:anyType itself. A is struct{} unless that type is a complex
-// type with attribute fields (goshape.HasAttributeFields), when it is the type
-// whose header states it holds typ's attribute fields; ok is false where none
-// does, or where f has no sum.
+// (goshape.GoverningTypes) that is not xs:anyType itself. A is struct{} unless
+// that type is a complex type with attribute fields
+// (goshape.HasAttributeFields), when it is the type whose header states it
+// holds typ's attribute fields; ok is false where none does, or where f has no
+// sum.
 func (f *nillableFamily) root(schema *xsd.Schema, types []typeDecl, name xsd.QName, typ, pkg string) (qualified string, ok bool) {
 	d, _ := schema.Element(name)
 	if !goshape.Nillable(d) {
 		return pkg + "." + typ, true
 	}
-	governing, _, err := goshape.GoverningTypes(schema, d, func(ct xsd.ComplexType) ([]xsd.TypeDefinition, error) {
-		return []xsd.TypeDefinition{ct}, nil
-	})
+	governing, _, err := goshape.GoverningTypes(schema, d)
 	if err != nil || len(governing) != 1 || governing[0].Type().Name() == (xsd.QName{Space: xsd.XMLSchemaNS, Local: "anyType"}) {
 		return pkg + "." + typ, true
 	}

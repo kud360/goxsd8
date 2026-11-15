@@ -295,13 +295,10 @@ type boundNillableRoot struct {
 	content filler
 }
 
-// fill sets out as a filler does: root's xsi:type declines first, item 7 of
-// Decode's doc, then its xsi:nil is read, and out holds the Nilled arm of a
-// nilled root or the Content arm holding R as content fills it.
+// fill sets out as a filler does: root's xsi:nil is read, and out holds the
+// Nilled arm of a nilled root or the Content arm holding R as content fills
+// it.
 func (b boundNillableRoot) fill(r *xmltree.Reader, root *xmltree.StartElement, out reflect.Value) error {
-	if err := checkXsiType(root); err != nil {
-		return err
-	}
 	nilled, err := b.bound.isNilled(root)
 	if err != nil {
 		return err
