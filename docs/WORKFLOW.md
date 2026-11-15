@@ -80,7 +80,10 @@ about the tree, the queue or a measurement enters one:
   instrument's delta from another's baseline yields a figure no instrument
   ever printed (#1120).
 - **Anything unchecked is written as a hypothesis**, in the sentence that
-  makes the claim, not in a caveat elsewhere. A claim carried over from
+  makes the claim, not in a caveat elsewhere. A design an issue body
+  proposes — a signature, a site, a mechanism — is unchecked until its
+  writer has priced it: its call sites, and an answer for every arm it
+  creates (#3681). A claim carried over from
   another thread keeps its author's qualifiers verbatim: "for the shapes I
   could construct" is a bound, and quoting it somewhere more authoritative
   does not make it a finding (#550).
@@ -247,9 +250,10 @@ chooses (#350).
   into one (#1443).
 - **After that report the isolated branch's own commits go onto
   `wip/issue-<N>`, never a replay of them.** `git merge --ff-only` where
-  it applies; where it does not — the ordinary shape after a takeover,
-  whose mandatory heartbeat is a commit `wip/issue-<N>` has and the
-  worktree, cut from `origin/main`, does not — `git merge --no-ff`. No
+  it applies; where it does not — a worktree the harness cut from
+  `origin/main` that never reached the branch tip `/develop`'s brief
+  rule puts it at, or a tip that moved during the round — `git merge
+  --no-ff`. No
   cherry-pick, no rebase, no re-edit by hand: each rewrites the SHAs
   the subagent's account names, so a reader checking that account against
   the branch finds nothing (#1099). Then discard the worktree and
@@ -488,12 +492,17 @@ git commit
 gate reads the working tree and nothing reads the index, so a fix made
 after `git add` is silently reverted by the commit while every check
 reports green (#179). `.githooks/pre-commit` refuses a commit where a path
-has both staged and unstaged changes — activate it every session, since
-local git config does not survive a fresh clone:
+has both staged and unstaged changes. Activate it at every session start
+where `git config --get core.hooksPath` prints nothing, since local git
+config does not survive a fresh clone:
 
 ```sh
 git config core.hooksPath .githooks
 ```
+
+An isolated worktree reads its checkout's config, so there the read
+prints the checkout's hooks path and the write, which the worktree guard
+refuses, is not made (#3715).
 
 **The `docs/LOG` tail is the conflict every pre-land merge hits**, and the
 one file where a plausible resolution silently deletes landed history.

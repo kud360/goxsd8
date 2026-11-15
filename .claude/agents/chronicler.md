@@ -41,8 +41,11 @@ step, a cost a retro has already ruled on, a `docs/PLAN.md` Status stale
 between stamps — those are the process working, and they earn a clause
 naming the rule, not a paragraph re-deriving it. A refusal
 docs/ROUTINES.md gives a respelling for — the anchored `-skip`, a chained
-or looped command, GraphQL `gh`, `--paginate` — and an interim "waiting
-on background work" notice earn no Friction line at all. Before calling a
+or looped command, GraphQL `gh`, `--paginate` — a refused `rm` of
+scratch, a hooks-path write WORKFLOW says not to make, a `--no-ff`
+hand-off WORKFLOW names, a first gate run stopped by the missing-suite
+guard, and an interim "waiting on background work" notice earn no
+Friction line at all. Before calling a
 cost open or queued for `/retro`, search the closed `kind/process` queue
 for a ruling on its subject and cite that ruling instead; the full gate on
 a diff that touches no `.go` file is ruled — keep the gate uniform (#881).

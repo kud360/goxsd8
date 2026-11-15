@@ -64,7 +64,11 @@ the blocks — and the bars you rule are the ones your own verdict will
 apply. Post them headed as yours in the `GROUNDING:` comment, never as a
 `VERDICT:` block: an `unsatisfiable` read as a verdict is one of the two
 rejections the cap counts (#1087). Where the code goes is not yours to
-settle there. Quote the owner, never paraphrase it, in a bar resting on
+settle there. A grounding hands off and judges no tree, so it owes no
+gate run: run the probes its claims need at the base and the instruments
+its PREDICTION reads, and a conformance run only where a ruling reads that
+run's output. A PREDICTION of `unchanged` derived from `go list -deps
+./conformance` naming no changed package reads none (#3789). Quote the owner, never paraphrase it, in a bar resting on
 what another document says — a spec, a package `doc.go`, STYLE,
 ARCHITECTURE: its sentence verbatim, located by file and heading or
 identifier, as WORKFLOW's "Claims that outlive the session" requires
@@ -115,7 +119,10 @@ makes it wrong, and the verdict rules every other arm or site where that
 condition can hold — for a repeated string, every site the repo-wide
 `git grep` for it lists, test data included (#3158): each unsound one is a FINDINGS line of its own, and the
 sound ones are named on the line of the finding whose condition they clear
-(#2449).
+(#2449). Clearing a universal claim the diff makes over code sites — an
+order of charges, "every", "never" — names the census command run over
+the claim's whole population and its site list, not the sites a finding
+happened to touch (#3644).
 
 A verdict missing `RATCHET-STATE` is incomplete, not merely short a
 paragraph. Say each thing once: a count, summary or inventory in a verdict

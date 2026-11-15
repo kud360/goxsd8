@@ -11,32 +11,40 @@ landing and parking; this file is the sequence. **Checkpoint (commit +
 push) at every step boundary** — it is both the crash guard and the lease
 heartbeat.
 
-**Before every delegation**, re-read the issue's state and
-`git ls-remote --heads origin wip/issue-<N>`: a closed issue or a vanished
-ref ends the iteration, whatever the survey said when it ran (#1460). Then
+**Before every delegation**, re-read the issue's state, its body and the
+comments posted since your last read, and `git ls-remote --heads origin
+wip/issue-<N>`: a closed issue or a vanished ref ends the iteration,
+whatever the survey said when it ran (#1460), and a body a concurrent
+post-land pass restated is the body this round works from (#3684). Then
 push the heartbeat WORKFLOW's lease invariant requires before a round.
 
 **A brief carries the issue and never narrows the delegate's own file.**
 
 - **It carries its normative parts as files the REST read wrote, never
-  as text you typed.** The parts are the issue body — its `## Goal`,
-  `## Spec` and `## Acceptance` — and every thread comment that declares
-  itself normative, since the oracle has no tool that reads GitHub
-  (#2142); for a mason or judge round, also the `GROUNDING:` comment, the
-  latest `MASON:` account and the verdict a repair or round-2 judge
-  follows, so the delegate states its outcome with no GitHub read of the
-  thread (#2449). Write each one with one plain command into the session
-  scratchpad, and name the file in the brief under the part's source
-  heading — `issue #<N> body`, or `issuecomment-<id>`:
+  as text you typed, written afresh for this delegation.** Every round
+  gets the issue body — its `## Goal`, `## Spec` and `## Acceptance` —
+  and every thread comment that declares itself normative, since the
+  oracle has no tool that reads GitHub (#2142). After grounding, every
+  round also gets the `GROUNDING:` comment; a warden diff review, a judge
+  and a repair round get the latest `MASON:` account; a repair or round-2
+  judge gets the verdict it follows, and a repair round every earlier
+  review and verdict on the thread, so the delegate states its outcome
+  with no GitHub read of the thread (#2449, #3596). Write each with the
+  command below, which puts the source heading on the file's first line,
+  and name the file in the brief:
 
   ```sh
-  gh api repos/kud360/goxsd8/issues/<N> --jq .body > /abs/scratchpad/issue-<N>-body.md
-  gh api repos/kud360/goxsd8/issues/comments/<id> --jq .body > /abs/scratchpad/<id>.md
+  gh api repos/kud360/goxsd8/issues/<N> --jq '"issue #\(.number) body\n\n\(.body)"' > /abs/scratchpad/issue-<N>-body.md
+  gh api repos/kud360/goxsd8/issues/comments/<id> --jq '"issuecomment-\(.id)\n\n\(.body)"' > /abs/scratchpad/<id>.md
   ```
 
   The single-comment path carries no issue number. Never paste, summarize
   or excerpt a part in the brief: a condensed part is a placeholder, in a
   file or inline (#3137, #3314).
+- **Its first instruction puts the delegate's isolated worktree at
+  `origin/wip/issue-<N>`'s tip** by WORKFLOW's "To put any branch or
+  worktree at a given commit" sentence, since the harness cuts the
+  worktree from `origin/main` (#3707).
 - **The delegate refuses a part it cannot read whole as its source.** The
   mason's, the arbiter's and the warden's own files have them return
   `BRIEF INCOMPLETE: <part>` for a part missing, unheaded, condensed, a
@@ -76,8 +84,8 @@ comment naming the lost round and its evidence, whatever the branch
 holds** (#1468) — those comments are what WORKFLOW's **Parking** cap
 counts.
 
-1. **Survey.** `git config core.hooksPath .githooks` (idempotent, and a
-   fresh clone carries no local config), then `git fetch --prune origin`
+1. **Survey.** Activate the hooks as WORKFLOW's **Merge-conflict
+   resolution** says, then `git fetch --prune origin`
    — without `--prune` the local view keeps refs for branches GitHub
    deleted at merge. A dirty local tree gets pushed to
    `parked/untriaged-<YYYYMMDD-HHMMSS>` and logged — never cleaned. The
@@ -164,7 +172,9 @@ counts.
      an instrument the oracle has no tools for (#1588, #3276). The bars it
      rules are the ones its own verdict will apply.
 
-   Grounding rules bars, not designs: where the code goes is mason's.
+   Grounding rules bars, not designs: where the code goes is mason's, and
+   a design the body proposes reaches mason as the hypothesis WORKFLOW's
+   filing discipline makes it, never as decided (#3681).
 
    **A grounding statement holds only over what the grounding checked.** A
    licence, a precedent named for reuse, a marker's disposition or a
@@ -196,14 +206,18 @@ counts.
    and **is what it says TRUE?** A bullet describing the state this
    landing creates is judged on whether a conforming change can make it
    true, not on whether it is true yet; `unsatisfiable` means none can
-   (#1601). Where the deliverable is prose the bullet's sentence IS the
+   (#1601). A conforming change is one inside this issue's Scope
+   (WORKFLOW **Scope**), so a `satisfiable` ruling names the mechanism that
+   makes the bullet true — and, for a case declining at the base, the
+   decline it reaches next — and a mechanism an open issue's body claims
+   makes the bullet `elsewhere: #<M>` (#3693). Where the deliverable is prose the bullet's sentence IS the
    artifact, so a false premise ships (#1188). An "at least" list stays
    open, and narrowing its scope at grounding is not a ruling on it
    (#1050).
 
    ```
    ACCEPTANCE:
-   - "<the bullet>" — satisfiable | vacuous | false | unsatisfiable | n/a, and why
+   - "<the bullet>" — satisfiable | vacuous | false | unsatisfiable | elsewhere: #<M> | n/a, and why
    ```
 
    A bullet, locator or premise ruled vacuous, false, unsatisfiable,
@@ -280,8 +294,9 @@ counts.
    Then delegate to **mason**, always with worktree isolation, and put
    WORKFLOW's commit-as-you-go clause in its prompt — and in every mason
    prompt this command sends, step 5's repair round and a lost round's
-   re-delegation included. The ratchet run is the arbiter's, and no part
-   of the gate is it. Only once mason reports, bring its branch onto
+   re-delegation included. No mason prompt asks for the `docs/LOG` entry,
+   which step 6 gives the chronicler (#3663). The ratchet run is the
+   arbiter's, and no part of the gate is it. Only once mason reports, bring its branch onto
    `wip/issue-<N>` under WORKFLOW's **One writer per checkout** hand-off
    clause — fast-forward or merge, never a replay. If the change added or
    altered public API in that same sense, warden reviews the diff too
@@ -325,7 +340,11 @@ counts.
    repair round by mason, briefed from the whole posted verdict, each
    defect class's site list carried whole with the sites it rules sound
    (#2449) — never from a partial finding set, and never before the
-   verdict is posted (#1426) — then re-judge in full. On a second reject:
+   verdict is posted (#1426) — then re-judge in full. A repair account
+   whose site lists omit a defect class an earlier review or verdict on
+   the thread named goes back to a fresh mason with the same brief before
+   the arbiter sees it; like `BRIEF INCOMPLETE`, that is not a round
+   (#3596). On a second reject:
    park per WORKFLOW's **Parking**, and skip steps 6 and 7. Delegate the
    park's log entry to **chronicler** and land it as WORKFLOW's
    **Landing** lands an iteration that lands no code — never onto

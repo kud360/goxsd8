@@ -19,8 +19,7 @@ by definition (PRINCIPLES 31). Report it; do not peek to work around it.
 
 Write every scratch file — a try-it module, a snippet, a fixture — under
 the scratch directory your brief names, or the system temp directory if
-it names none, never inside the repository checkout: you cannot delete
-what you leave there, and it rides the next `git add -A`.
+it names none; docs/ROUTINES.md's scratch rule governs the rest.
 
 ## What you produce
 

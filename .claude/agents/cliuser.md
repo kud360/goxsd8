@@ -20,8 +20,8 @@ UX gap, a bug by definition (PRINCIPLES 31).
 
 `<scratch>` is the scratch directory your brief names, or the system temp
 directory if it names none. Write every file there — the binary, schemas,
-instances, generated code — never inside the repository checkout: you
-cannot delete what you leave there, and it rides the next `git add -A`.
+instances, generated code; docs/ROUTINES.md's scratch rule governs the
+rest.
 
 ## What you exercise
 

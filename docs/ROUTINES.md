@@ -178,6 +178,12 @@ translate the local times above and mind DST drift. Keep develop slots
     refused probe at the verdict, or dispatches a round for only what
     nobody could establish; whatever nobody could apply, the post-land
     pass records on the thread as owed (#1791).
+  - **Scratch files go under the session scratchpad and stay there.**
+    Every agent writes its trial trees, differential copies, probe modules
+    and built binaries under the scratchpad, never inside the checkout,
+    where they ride the next `git add -A`. The container reclaims the
+    scratchpad, so no agent removes them: an `rm` of them is not attempted,
+    and one refused needs no report and no log line (#3750).
   - **A security-warning notification on a subagent that refused nothing**
     — "Irreversible Local Destruction" on an agent, say — is not a refusal
     and loses no round. Run `git -C <dir> status` and `git -C <dir>
@@ -199,6 +205,16 @@ translate the local times above and mind DST drift. Keep develop slots
     entry in `.claude/settings.json`, or the permission mode the
     dispatching session gives the arbiter. A session holding that setting
     takes over (#2433).
+  - **A refused landing** — `gh pr create` or the squash-merge denied by
+    the classifier as "Merge Without Review" after an accept — ends the
+    session the same way: a `RESUME:` that quotes the refusal, calls it a
+    refusal and not a lost round, and names the accepted head, the
+    `go tool landcheck` result and the squash title and PR body files. The
+    takeover re-runs `landcheck` and lands; an `origin/main` that moved
+    meanwhile is merged forward and judged by WORKFLOW's **After the
+    verdict**, not re-judged by default. No setting that admits the step
+    is established; that the refusal is intermittent is a hypothesis
+    (#3640).
 - **`www.w3.org` is egress-denied from cloud containers** (a 403 on the
   CONNECT tunnel), so `go tool fetchspecs` cannot run there and the
   committed `docs/specs/` is the only source; a schema or document the suite
