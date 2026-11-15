@@ -243,9 +243,10 @@ func (s *Schema) resolveTermGroup(t TermOrRef) (ModelGroup, bool) {
 // choice, 0 for a group with no {particles}) is 0. s is needed because a
 // <group ref> term resolves on s; for one that does not resolve on s, clause
 // 2's antecedent fails, so the answer is whether p's {min occurs} is 0. It is
-// exported for package codegen, which reads it to decide whether a model
-// group term can match nothing and whether a sequence's other particles are
-// emptiable.
+// exported for packages codec and codegen: codec reads it to decide whether a
+// complex type's choice {content type} particle can match nothing, and both
+// read it through shared code to decide whether a model group term can match
+// nothing and whether a sequence's other particles are emptiable.
 func (s *Schema) ParticleEmptiable(p Particle) bool {
 	if p.Occurs().Min() == 0 {
 		return true // clause 1

@@ -10,10 +10,10 @@ package xsd
 // wildcards, once the second and third consumers appeared (STYLE T4/T5).
 //
 // It decides membership with ONE predicate, inSubstitutionGroupOf; the exported
-// SubstitutionGroup enumerates a head's group with it, for package codegen and
-// for the two finalize consumers that need the whole group rather than one
-// name's membership (elementconsistent.go, contentrestricts.go). The predicate
-// is EXACT: Substitution Group OK (Transitive) (§3.3.6.3,
+// SubstitutionGroup enumerates a head's group with it, for the packages its doc
+// names and for the two finalize consumers that need the whole group rather
+// than one name's membership (elementconsistent.go, contentrestricts.go). The
+// predicate is EXACT: Substitution Group OK (Transitive) (§3.3.6.3,
 // cos-equiv-derived-ok-rec) is decided in full, clause 1 (same declaration),
 // clause 2.1 ({disallowed substitutions}), clause 2.2 (the {substitution group
 // affiliations} chain) and clause 2.3 (the ·derivation· blocking test) alike.
@@ -57,8 +57,9 @@ package xsd
 // included, not only head's. The slice is fresh and the declarations are
 // shared with s and immutable. It is nil exactly when s declares no top-level
 // element named head: a local declaration heads no substitution group. It is
-// exported for package codegen, which types a field over an <element ref> to
-// head as a sum over this group.
+// exported for packages codegen and codec, which read it through shared code:
+// codegen types a field over an <element ref> to head as a sum over this
+// group, and codec decodes that field.
 func (s *Schema) SubstitutionGroup(head QName) []ElementDeclaration {
 	// The scan is over the document-order slice, never elementIndex (STYLE D2);
 	// each candidate's membership is the one exact predicate below (STYLE T4).
