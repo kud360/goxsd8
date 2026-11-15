@@ -652,7 +652,7 @@ func TestGenRefusalsOutrankEveryPair(t *testing.T) {
 		{"unresolved directive of the refused pair", []string{"-schema", short, "-out", "file", "-schema", flat, "-out", "ok"},
 			refusal(short, "file", "the output directory file exists and is not a directory"), "", note, []string{"ok"}},
 		{"unresolved directive of the refused pair under -strict", []string{"-strict", "-schema", short, "-out", "file", "-schema", flat, "-out", "ok"},
-			refusal(short, "file", "the output directory file exists and is not a directory"), "", note, []string{"ok"}},
+			refusal(short, "file", "the output directory file exists and is not a directory"), "", strings.TrimSuffix(note, "\n") + "; -strict charges this note 4\n", []string{"ok"}},
 		{"every refusal in argument order", []string{"-schema", "dec.xsd", "-out", "my-pkg", "-schema", flat, "-out", "ok", "-schema", broken, "-out", "type"},
 			refusal("dec.xsd", "my-pkg", notIdentifier) + refusal(broken, "type", `the package name "type" is a Go keyword`+packageClause), broken, "", []string{"my-pkg", "ok", "type"}},
 	}

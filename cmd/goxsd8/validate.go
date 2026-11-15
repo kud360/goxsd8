@@ -189,8 +189,10 @@ func runValidate(args []string, stdout, stderr io.Writer) int {
 		// document whose directive resolved to nothing is named whether or not a
 		// LATER one collides, or is not a schema document at all — a rejection
 		// here used to silence the whole set's notes, including those of documents
-		// that composed cleanly (#1312).
-		reportUnfollowed(stderr, "validate", assemblyRejected, report)
+		// that composed cleanly (#1312). strict is not passed: -strict charges a
+		// rejected set's line nothing, exitSchema answering alone
+		// (compileArgument's rejected path).
+		reportUnfollowed(stderr, "validate", assemblyRejected, false, report)
 		// Reported once, before any instance is read: with no schema set there
 		// is no assessment to run, and one line beats the same line per
 		// instance.
@@ -204,7 +206,7 @@ func runValidate(args []string, stdout, stderr io.Writer) int {
 	// roots, which the report never lists among its directives. Under -strict
 	// the set's skip is charged to the run once, beside the outcome of every
 	// instance, each of which is still assessed.
-	code := skipCode(*strictSkips, reportUnfollowed(stderr, "validate", assemblyCompiled, report))
+	code := reportUnfollowed(stderr, "validate", assemblyCompiled, *strictSkips, report)
 	v, err := validate.New(base, backend, validate.WithLogger(log))
 	if err != nil {
 		return subcommandFault(stderr, fmt.Sprintf("goxsd8: validate: %v", err))
@@ -515,8 +517,10 @@ func (vn *validation) validatorFor(instance string, src io.Reader, stderr io.Wri
 		// The hints' own shortfall stands above the diagnosis, on
 		// reportUnfollowed's terms: it is a fact about the assembly rather than a
 		// rider on what that assembly decided (#1312). It says nothing of the
-		// rejection, and the line below says nothing of it.
-		skipped := reportUnfollowedHints(stderr, instance, assemblyRejected, report)
+		// rejection, and the line below says nothing of it. vn.strict is passed,
+		// unlike on runValidate's rejected path: the instance is still assessed,
+		// so its hint's skip is charged.
+		code := reportUnfollowedHints(stderr, instance, assemblyRejected, vn.strict, report)
 		// A set that stops compiling only once THIS instance's hints are folded
 		// in is a fault of the instance, not of the -schema set the invocation
 		// named: exitSchema would send a script to a schema set that compiles.
@@ -528,23 +532,24 @@ func (vn *validation) validatorFor(instance string, src io.Reader, stderr io.Wri
 		// against a hint is charged at the hinted document itself (parser.HintAt),
 		// so the line keeps its location: that is the file the reader must edit.
 		_, _ = fmt.Fprintf(stderr, "goxsd8: validate: %s: ignoring its schema location hints, which do not compose with the -schema set: %s\n", instance, violationLine(err))
-		return vn.base, replay, skipCode(vn.strict, skipped)
+		return vn.base, replay, code
 	}
 	// Before the assessment reads a byte, so that the shortfall stands above the
 	// report it explains, exactly as runValidate places the -schema set's.
-	skipped := reportUnfollowedHints(stderr, instance, assemblyCompiled, report)
+	code := reportUnfollowedHints(stderr, instance, assemblyCompiled, vn.strict, report)
 	v, err := validate.New(augmented, vn.backend, validate.WithLogger(vn.log))
 	if err != nil {
 		return nil, nil, subcommandFault(stderr, fmt.Sprintf("goxsd8: validate: %v", err))
 	}
-	return v, replay, skipCode(vn.strict, skipped)
+	return v, replay, code
 }
 
 // reportUnfollowedHints names on stderr, one line per hint, every schema
 // location hint of instance whose location resolved to no document — §4.3.2
 // clause 3's "failure may cause less than complete ·assessment· outcomes",
 // which src-import makes legal to skip and which nothing else in this run
-// reports (#1251), and reports whether it named any.
+// reports (#1251), and returns skipCode's code over those lines, each of which
+// closes with strictMarker under strict.
 //
 // It reads parser.AssemblyReport.UnfollowedRoots, which holds exactly the
 // HintAt roots that named no document, each by the location it was built with —
@@ -553,14 +558,14 @@ func (vn *validation) validatorFor(instance string, src io.Reader, stderr io.Wri
 // is an Unfollowed entry instead, which runValidate already named off the
 // -schema set's own assembly (#1260): so no shortfall is named twice, and none
 // under a hint that resolved (#1346).
-func reportUnfollowedHints(stderr io.Writer, instance string, compiled bool, report *parser.AssemblyReport) bool {
+func reportUnfollowedHints(stderr io.Writer, instance string, compiled, strict bool, report *parser.AssemblyReport) int {
 	roots := report.UnfollowedRoots()
 	for _, r := range roots {
 		// A failed stderr write cannot change the outcome: the exit code is
 		// settled either way, and stderr is the only channel this line has.
-		_, _ = fmt.Fprintf(stderr, "goxsd8: validate: %s: the schema location hint %s resolved to no document%s\n", instance, r.Location(), shortfallClause(compiled, ", which is legal and skipped"))
+		_, _ = fmt.Fprintf(stderr, "goxsd8: validate: %s: the schema location hint %s resolved to no document%s%s\n", instance, r.Location(), shortfallClause(compiled, ", which is legal and skipped"), strictMarker(strict))
 	}
-	return len(roots) > 0
+	return skipCode(strict, len(roots) > 0)
 }
 
 // assessmentLines renders one assessment's report — every violation it
