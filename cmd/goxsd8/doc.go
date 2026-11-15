@@ -318,13 +318,15 @@
 //	    exit code: clean 0, undecided 4 (its own -strict hint skip
 //	    included), invalid 1 and faulted 2 (whatever charged it: an
 //	    instance that cannot be opened, a directory and a ber instance
-//	    among them, and a failed write of its report). The -strict 4 of the -schema set's own unresolved
-//	    directive is the run's and no instance's, so the line can read
-//	    all clean while the run exits 4. A run that assesses no
-//	    instance prints no counts line: a 3, and a 2 raised before any
-//	    instance is opened. So a clean run is not silent: it prints
-//	    this line. -q silences the line and nothing else, so under -q a
-//	    clean run writes nothing on either stream.
+//	    among them, and a failed write of its report). The -strict 4
+//	    of the -schema set's own unresolved directive is the run's and
+//	    no instance's, so the line can read all clean while the run
+//	    exits 4. A run that assesses no instance prints no counts
+//	    line: a 3, and a 2 raised before any instance is opened. So a
+//	    clean run is not silent: it prints this line. -q silences the
+//	    line and nothing else: under -q a clean run's stderr carries
+//	    only the notes and -v logging stated above, and both streams
+//	    are empty without them.
 //
 //	goxsd8 gen [-q] [-v] [-strict] -schema <schema.xsd> -out <dir> [-schema <s2> -out <d2>]...
 //	    For example: goxsd8 gen -schema order.xsd -out ./gen/order
