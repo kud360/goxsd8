@@ -3712,11 +3712,9 @@ type reachSite interface {
 // branch struct of an earlier alternative's shape (field.sharesBranch), which
 // declines as a choice's alternatives in no tie do, unless the two are in one
 // name group (nameGroups), which puts them in one of alts' ties (tiesOf),
-// which placeBranches tells apart by name, each child reaching its
-// alternative by its particle's position (cvc-accept §3.9.4.3 clause 3). A
-// particle with {max occurs} 0 is item 5's plain error, an element particle's
-// after its declaration's own constructs, as a sequence's is. goshape.Reach's own
-// error is plain, prefixed by typeSubject.
+// which placeBranches tells apart by name. A particle with {max occurs} 0 is item
+// 5's plain error, an element particle's after its declaration's own constructs,
+// as a sequence's is. goshape.Reach's own error is plain, prefixed by typeSubject.
 func bindReach(run *bindRun, ct xsd.ComplexType, group xsd.ModelGroup, alts *sealed[field], site reachSite, typeSubject string) error {
 	// names holds each alternative's expanded name, nameGroups' input, the
 	// zero QName for a wildcard's.
