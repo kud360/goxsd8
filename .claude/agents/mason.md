@@ -22,9 +22,10 @@ and name in your handoff. Renames, unexports, stale comments and call
 sites your own diff breaks are cheaper absorbed than filed. Do not go
 looking for adjacent work, and do not leave it behind when you find it.
 When your diff changes a mechanism some prose states — deletes a `GAP(`
-marker, re-keys a map, changes what a function returns — sweep the whole
-module, doc comments, test comments and package docs, for the prose it
-leaves stale: grep the owning identifier and its file name, then read the
+marker, re-keys a map, changes what a function returns or prints — sweep
+the whole repository, doc comments, test comments, package docs and every
+README or `docs/` transcript of the output it changes, for the prose it
+leaves stale (#3784): grep the owning identifier and its file name, then read the
 prose around every hit and search again by the operation itself, since
 most stale sites paraphrase the old state and name neither (#1167, #1361).
 When your diff writes the one statement that owns a fact (STYLE D3, "One
@@ -35,7 +36,11 @@ search through package docs, exported identifiers' docs and `cmd/goxsd8`'s
 usage, as its package doc states; grep unexported doc comments and test
 comments by the fact's words and by its identifiers. A pair it flags is
 resolved to one owner even when a pre-flight dictated both copies, and
-your account names the departure from the dictation (#3345).
+your account names the departure from the dictation (#3345). Every other
+token a ruling dictates — a heading pointer such as `doc.go "# Particles"`,
+an identifier, a message string — is written byte for byte as dictated,
+because its readers find it by `git grep`; a departure is named in the
+account the same way (#3668).
 
 Before writing: read the issue, its whole thread and its `GROUNDING:`
 comment. **A brief whose `GROUNDING:` part is missing, is not headed by
@@ -105,11 +110,13 @@ claims the part you did not do.
 A finding is not discharged at the one site a verdict happened to name.
 A finding against a claim is fixed at every copy of the claim: grep for
 it, or state which copies you left and why. A finding against a defect
-class names a condition: list every site where that condition can hold —
+class names a condition, and the classes are every one any review or
+verdict on the thread has named, not only the verdict you answer: for
+each, list every site where that condition can hold —
 the sites the verdict ruled sound, the ones the original mechanism
 reaches, and the ones your repair's own new mechanism creates — with the
 probe you ran at each, and mark any site you did not probe as unprobed
-(#2784). A repair that adds a mechanism — new state, a new key or index,
+(#2784, #3596). A repair that adds a mechanism — new state, a new key or index,
 a new emission path — lists the same way every condition under which that
 mechanism can be wrong, whatever class the finding named (#2896).
 
@@ -123,7 +130,15 @@ An uncommitted edit at handoff is an edit that does not exist. If that
 worktree is missing — your cwd is gone, or is a checkout a brief names —
 write nothing anywhere, make no worktree of your own, and return
 `NO WORKTREE: <what you found>`; `/develop` answers it with a fresh
-delegation (#3489).
+delegation (#3489). A worktree that exists but lacks commits the brief
+names is not missing: the harness cuts it from `origin/main`, and the
+brief's first instruction brings it to the branch tip; with no such
+instruction, return `BRIEF INCOMPLETE: base` (#3707).
+
+**Every commit you make passes gate part 1 before you make the next**, and
+where a pre-flight's commit order and per-commit green conflict, green
+wins and the account says which order changed. The account names each
+commit and whether gate part 1 was observed green at it (#2360, #3547).
 
 Run `git submodule update --init testdata/xsdtests` before the gate:
 `git worktree add` never populates submodules, so your worktree starts
@@ -194,12 +209,14 @@ scrutinized hardest. **That last is a question no document and no check
 you can run decides.** Anything else you would name there is settled
 before handoff, whatever the brief pressed for, and the account says how:
 
-- what PRINCIPLES 20 or a cited rule decides, however mildly it words it,
-  is a defect repaired — a risk that "can charge where the spec may say
-  otherwise" withheld under a `GAP(` marker, anything else made true, its
-  message, its location and its prose included, with a repair that
-  changes behaviour pinned by a test that fails without it, never merely
-  disclosed beside a marker (#2247, #2664);
+- what PRINCIPLES 20, a `docs/STYLE.md` letter rule or a cited rule
+  decides, however mildly it words it, is a defect repaired: a risk that
+  "can charge where the spec may say otherwise" withheld under a `GAP(`
+  marker, anything else made true, its message, its location and its
+  prose included, with a repair that changes behaviour pinned by a test
+  that fails without it, never merely disclosed beside a marker. An
+  invariant only a doc sentence guards is such a defect under STYLE T1
+  (#2247, #2664, #3606);
 - a shape you suspect the tests miss gets the row that fails if you are
   wrong, or the account says why no row can (#3239);
 - a sentence you wrote that generalises over a doc section — "every other

@@ -13,8 +13,8 @@
 # (worktree differs from index) — exactly that shape. Untracked files and
 # purely-unstaged edits are not the hazard and are not flagged.
 #
-# Activated per session (fresh clones carry no local git config) by
-# docs/WORKFLOW.md step 1: git config core.hooksPath .githooks
+# Activated per session (fresh clones carry no local git config) as
+# docs/WORKFLOW.md "Merge-conflict resolution" says: git config core.hooksPath .githooks
 
 set -u
 

@@ -180,7 +180,9 @@ Fill every section; write "n/a" or "none" rather than dropping one.
 <tests / conformance cases that prove it done — the ratchet lane it moves;
  a test bullet says which rows fail with the fix removed and which guard
  against over-charging or pin existing behaviour, each guard row failing
- under the misreading it guards against (#1913)>
+ under the misreading it guards against (#1913), and what its input does
+ at the stated base, probed or read there and saying which, or written as
+ a hypothesis (#3550)>
 
 ## Surface
 <exported-identifier additions or changes — or "none">

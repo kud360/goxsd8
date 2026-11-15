@@ -57,24 +57,36 @@ code does or will do is marked read, probed or inferred** — a site, a
 rule's result, a golden's predicted change, a text it dictates — with the
 owning text located by file and sentence (another package's `doc.go`
 included, a spec rule ID by its line in `docs/specs/md/`) or the probe
-named by its input and commit. Mason checks each inferred claim before
-building on it (#863). An item with no mark is not a ruling. The claims
-that most often ship false, and what marks each:
+named by its input and commit. A premise taken from the grounding or any
+other comment keeps that comment's mark, and is inferred where the source
+gave none. Mason checks each inferred claim before building on it (#863).
+An item with no mark is not a ruling, so the pre-flight ends with the
+block below, whose `INFERRED` line lists every claim not marked read or
+probed (#3590). The claims that most often ship false, and what marks
+each:
 
 - **A text it dictates** — doc wording, a message's subject or label, a
   test row's expected string, a "use helper X at site Y" composition.
   Its premise is located, or it is not dictated (#3007, #3168). It is
   rendered on each shape its site admits — named and anonymous types,
   local and top-level declarations, present and absent values — or marked
-  inferred (#3416). Doc wording names the one doc that owns its fact and
-  is placed nowhere else; the other docs get a pointer (#3345).
+  inferred (#3416). A text quantifying over code sites — an order of
+  charges, "every", "never", "at one location" — is ruled on the census
+  of those sites, named by its command with its output as the site list;
+  a probe of some shapes marks it inferred (#3644). Doc wording names the
+  one doc that owns its fact and is placed nowhere else; the other docs
+  get a pointer (#3345).
 - **A rule over shapes, kept or new.** It names each shape it was checked
   against — for a rule over pairs, each pair — with the answer for each,
   and a "true" or "declines" answer is the conservative direction for
   that pair. "Unchanged" is not a check: a kept rule is checked against
   every shape the same pre-flight rules for that construct, and where it
   yields another shape the pre-flight says which binds and what makes it
-  win. A rule that names no shapes is not a ruling (#3240, #3492).
+  win. A new rule's shapes include those base already decides that it
+  reaches, each with base's answer; a changed answer names the
+  Acceptance bar asking for it, and with none the rule is narrowed until
+  base's answer holds. A rule that names no shapes is not a ruling
+  (#3240, #3492, #3765).
 - **A surface prediction** counts every line `go tool surface` prints for
   the shape, a `method` line for each exported method of a new type
   included, whether the type is exported or not — an unexported error
@@ -101,8 +113,8 @@ branch; it is not by itself a reason to split the work into another issue
 (docs/WORKFLOW.md, "Scope"). Recommend a split only when the later part
 needs its own grounding or will not fit the session — and say which. A
 commit order is not shape: say whether each commit was observed green or
-only predicted, and mason keeps every commit green before it keeps the
-order (#2360).
+only predicted; `mason.md` owns what wins when green and the order
+conflict.
 
 A diff review runs the gate in your own worktree, judging the named
 commit there, and returns the verdict, never a notice that you are
@@ -113,6 +125,13 @@ tree under review; an earlier approval of identical text is not that
 check. A finding under a rule in **What you are accountable for** makes
 the verdict `revise`: `approve` carries no finding that names a defect
 (#2728).
+
+```
+PRE-FLIGHT: approve | revise
+RULINGS:
+- <ruling, each claim marked read | probed | inferred, with its location or probe>
+INFERRED: <each claim above not marked read or probed> | none
+```
 
 ```
 API REVIEW: approve | revise
