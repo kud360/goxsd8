@@ -161,13 +161,12 @@ func (w *walk) conditionallySelected(e Element, table xsd.TypeTable, inherited [
 //
 // table is the {type table} of E's ·governing element declaration·, as
 // [xsd.ElementDeclaration.TypeTable] returns it. Where that reports false, do
-// not call this method: the table returned then is the zero xsd.TypeTable{},
-// which selects its {default type definition}'s nil slot with ok true
-// ([Validator.ConditionallySelectedIndex] answers it 0, true), a slot
-// ResolvedType does not resolve, whereas key-selected-type clause 2 makes the
-// declaration's own {type definition} E's ·selected type definition·
-// outright. [Attribute] is an interface the caller implements, and this
-// package exports no constructor for it.
+// not call this method: key-selected-type clause 2 makes the declaration's own
+// {type definition} E's ·selected type definition· outright. Handed the zero
+// xsd.TypeTable{}, this method selects its {default type definition}'s nil
+// slot with ok true ([Validator.ConditionallySelectedIndex] answers it 0,
+// true), a slot ResolvedType does not resolve. [Attribute] is an interface the
+// caller implements, and this package exports no constructor for it.
 //
 // Each {test} reads E's attributes, then each of inherited whose ·expanded
 // name· no member of attributes has (key-cta-ta-select clauses 1.1.2 and

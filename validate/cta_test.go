@@ -528,8 +528,7 @@ func TestConditionallySelectedIndex(t *testing.T) {
 }
 
 // TestConditionallySelectedZeroTable pins the answer
-// [Validator.ConditionallySelected]'s doc gives for the zero xsd.TypeTable{},
-// the table [xsd.ElementDeclaration.TypeTable] returns where it reports false:
+// [Validator.ConditionallySelected]'s doc gives for the zero xsd.TypeTable{}:
 // index 0, len of its nil {alternatives}, with ok true, and the nil slot of its
 // zero {default type definition}, which ResolvedType does not resolve. It has
 // its own table source and assertions because TestConditionallySelectedIndex's
