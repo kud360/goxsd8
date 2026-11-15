@@ -634,8 +634,8 @@ var ErrTypeMismatch = errors.New("codec: T is not the type codegen emits for the
 //     declaration has no alternative and its field is nil.
 //   - The field of a sequence or choice codegen flattens, a content one's the
 //     struct's first and a nested one's the one at its particle's place, a
-//     choice occurring exactly once included: named as if from the local name
-//     sequence or choice, a slice, named or not, of I, I the sealed interface
+//     choice occurring exactly once included: named as codegen's package
+//     doc's "# Naming" states, a slice, named or not, of I, I the sealed interface
 //     the bullet below holds, whose alternatives are the basic particles its
 //     model group reaches, each branch field the field its particle would
 //     give occurring exactly once.
@@ -644,8 +644,8 @@ var ErrTypeMismatch = errors.New("codec: T is not the type codegen emits for the
 //     nor flattens, or of a content all group codegen does not splice, its
 //     occurrence field, a content one's the struct's first and a nested one's
 //     the one at its particle's place, a choice's model-group alternative's
-//     its branch struct's one field: named as if from the local name
-//     sequence, choice or all, holding the type for one occurrence by the
+//     its branch struct's one field: named as codegen's package doc's
+//     "# Naming" states, holding the type for one occurrence by the
 //     particle's occurrence, as a particle's field holds its V, over a struct
 //     for a sequence or all group and a sealed interface for a choice: S, *S
 //     or []S for a sequence, and *S for an all group, whose {max occurs} is 1
@@ -1976,8 +1976,8 @@ type filler interface {
 // element's or a particle's element declaration's, as Decode reads it: its
 // fields in codegen's order, mixed content's Text first, then its content's,
 // the open-content field among them, then each attribute use's, then its
-// {attribute wildcard}'s, the struct's last (codegen/doc.go "# Particles",
-// "# Attributes").
+// {attribute wildcard}'s, the struct's last (codegen/doc.go "# Complex types",
+// "# Particles", "# Open content", "# Attributes").
 type binding struct {
 	p *pipeline
 	// text is the Go name of mixed content's Text field (goshape.Mixed), a
@@ -2217,7 +2217,7 @@ type unitIndex[K comparable] map[K]complexUnit
 // them is the value field (codegen/doc.go "# Complex types"), and mixed
 // content the struct its {particle} binds as element-only content, Text
 // ahead of its fields and each child's field wrapped (codegen/doc.go
-// "# Particles"; elementField, rawChild); ct's {attribute wildcard}, read from the
+// "# Complex types"; elementField, rawChild); ct's {attribute wildcard}, read from the
 // finalized component (§3.4.2.5 dcl.ctd.anyatt), gives the struct's last field, its
 // name claimed after the attribute fields'. A nil index binds an inline anonymous ct
 // under no key. A ct of simple content is stored under no key either: it reaches no
@@ -2235,10 +2235,9 @@ func bindComplex[K comparable](run *bindRun, decl xsd.ElementDeclaration, ct xsd
 	if ct.Abstract() {
 		return nil, decline(constructAbstractTypeElement, typeSubject)
 	}
-	// names is the struct's Namer: mixed content's Text field claims from it
-	// first, then the content's fields in particle order, then the attribute
-	// fields (codegen/doc.go "# Particles"). A bare sealed interface has no
-	// struct and discards it.
+	// names is the struct's Namer, from which its fields claim their names in
+	// the order codegen/doc.go "# Naming" states. A bare sealed interface has
+	// no struct and discards it.
 	names := goname.NewNamer()
 	b := &binding{p: run.p, typ: ct, attributes: map[xsd.QName]int{}}
 	// ContentType is a closed sum, so the switch is STYLE T2's sealed-sum
@@ -4922,7 +4921,7 @@ func particleTerm(schema *xsd.Schema, p xsd.Particle, typeSubject string) (xsd.T
 // one's the named type codegen emits for el over it (valueNamed). In ct's mixed
 // content (goshape.Mixed) the field holds MixedChild over that V (mixedArm), a
 // struct, so its shape is occursShape's over no sealed interface (codegen/doc.go
-// "# Particles").
+// "# Complex types").
 func elementField(run *bindRun, ct xsd.ComplexType, x *childIndex, el xsd.ElementDeclaration, occurs xsd.Occurs) (field, []xsd.QName, error) {
 	mixed := goshape.Mixed(ct)
 	f, takes, err := elementV(run, ct, x, el, occurs, !mixed)
