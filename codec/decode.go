@@ -376,7 +376,8 @@ var ErrTypeMismatch = errors.New("codec: T is not the type codegen emits for the
 //     both decode, wherever either is bound, an occurrence field's item included, each
 //     child going to the particle cvc-accept attributes it to, by position, as the
 //     paragraph above citing §3.4.4.4 key-att-to states. A basic particle of a flattened
-//     particle's reach takes no name here (the flattened bullet below).
+//     particle's reach takes no name here: that paragraph attributes its
+//     children by position.
 //   - Of an <element ref> particle whose field holds a substitution group's
 //     sealed interface (item 6), in place of the referenced declaration's own
 //     properties and type: each declaration of the group with {abstract}
