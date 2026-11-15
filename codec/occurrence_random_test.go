@@ -12,6 +12,7 @@ import (
 	"testing"
 
 	"github.com/kud360/goxsd8/builtin/strict"
+	"github.com/kud360/goxsd8/internal/goname"
 	"github.com/kud360/goxsd8/internal/goshape"
 	"github.com/kud360/goxsd8/loader"
 	"github.com/kud360/goxsd8/parser"
@@ -320,21 +321,25 @@ func TestOccurrencePartitionDifferential(t *testing.T) {
 
 // occurrenceGoType returns codegen's type for s:r of top's model, reflect
 // built, and true, where top is a sequence whose particles are elements and
-// a wildcard only, so that the item is a struct of no sealed interface.
+// a wildcard only, so that the item is a struct of no sealed interface. Its
+// fields are named from one Namer in particle order, as codegen names one
+// occurrence's struct (codegen/doc.go "# Naming"), so that two particles of
+// one name get two fields.
 func occurrenceGoType(top *rnode) (reflect.Type, bool) {
 	if top.kind != "sequence" {
 		return nil, false
 	}
+	names := goname.NewNamer()
 	var fields []reflect.StructField
 	for _, k := range top.kids {
 		if k.kind != "elem" && k.kind != "wild" {
 			return nil, false
 		}
-		v, name := reflect.TypeFor[string](), strings.ToUpper(k.name)
+		v, local := reflect.TypeFor[string](), k.name
 		if k.kind == "wild" {
-			v, name = reflect.TypeFor[anyElement](), "Any"
+			v, local = reflect.TypeFor[anyElement](), "any"
 		}
-		fields = append(fields, reflect.StructField{Name: name, Type: shapedType(k.min, k.max, v)})
+		fields = append(fields, reflect.StructField{Name: names.Claim(local), Type: shapedType(k.min, k.max, v)})
 	}
 	item := reflect.StructOf(fields)
 	return reflect.StructOf([]reflect.StructField{{Name: "Sequence", Type: shapedType(top.min, top.max, item)}}), true
