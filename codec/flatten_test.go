@@ -381,6 +381,29 @@ func TestDecodeFlattenTieMismatch(t *testing.T) {
 	assertProbeMismatch(t, CheckDecode[flatTie](schema, rootName, branch), err)
 }
 
+// TestDecodeFlattenTieNamespaces pins that a flattened reach's tie is of
+// one expanded name, not one local name: of flatTieSchema's shape with g2's
+// r2 unqualified, the two r2 particles' branch structs share a shape but
+// their expanded names differ, so the second declines as
+// constructSharedBranch from Decode and CheckDecode alike.
+func TestDecodeFlattenTieNamespaces(t *testing.T) {
+	const want = "?:1:1: codec does not decode two branches of a sealed interface whose structs have one shape: element r2 declared at"
+	schema := schemaOf(t, `<xs:group name="g1"><xs:sequence><xs:element name="r1" type="xs:string"/><xs:element name="r2" type="xs:string"/></xs:sequence></xs:group>`+
+		`<xs:group name="g2"><xs:sequence><xs:element name="r2" type="xs:string" form="unqualified"/><xs:element name="r3" type="xs:string"/></xs:sequence></xs:group>`+
+		`<xs:element name="r"><xs:complexType><xs:sequence maxOccurs="2"><xs:group ref="s:g1" minOccurs="0"/><xs:group ref="s:g2" minOccurs="0"/></xs:sequence></xs:complexType></xs:element>`)
+	data := instanceOf("", "<r2>a</r2><s:r3>b</s:r3>")
+	mustAccept(t, schema, data)
+	got, err := Decode[struct{}](schema, strict.New(), data)
+	if got != nil {
+		t.Fatalf("Decode = %v, want no value", *got)
+	}
+	assertDecline(t, err, constructSharedBranch, 1, 1)
+	if !strings.HasPrefix(err.Error(), want) {
+		t.Errorf("Decode error = %v, want the prefix %q", err, want)
+	}
+	assertProbeDecline(t, CheckDecode[struct{}](schema, rootName), err)
+}
+
 // TestCheckDecodeUntrackedFlattened pins the flattened arm's ContentMatcher
 // decline: (a{1,2}){1,21845}, flattened by its repeating edge, is a content
 // model xsd.Schema.ContentMatcher declines as too wide to track, so

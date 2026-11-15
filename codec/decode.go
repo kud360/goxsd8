@@ -3135,8 +3135,8 @@ func wordGroups(words []string, placed []bool) []tieGroup {
 
 // nameGroups returns the groups of a flattened reach's alternatives whose
 // expanded names are names, in alternative order, from which tiesOf takes
-// the reach's ties (bindReach): each group the two or more element
-// alternatives of one expanded name, compared as xsd.QName values and never
+// the reach's ties (bindReach): each group the element alternatives of one
+// expanded name, one or more, compared as xsd.QName values and never
 // by the Go identifier they render, as wordGroups compares, word their local
 // name. A wildcard alternative's name is the zero QName, in no group.
 func nameGroups(names []xsd.QName) []tieGroup {
@@ -3156,13 +3156,7 @@ func nameGroups(names []xsd.QName) []tieGroup {
 		}
 		groups[g].alts = append(groups[g].alts, i)
 	}
-	var kept []tieGroup
-	for _, g := range groups {
-		if len(g.alts) >= 2 {
-			kept = append(kept, g)
-		}
-	}
-	return kept
+	return groups
 }
 
 // tiesOf returns the ties, as item 6 of Decode's doc defines them, of groups,
