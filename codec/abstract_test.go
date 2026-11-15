@@ -169,7 +169,7 @@ func TestAbstractTypeShapesAreCodegens(t *testing.T) {
 // (eachChild), an occurrence field's (boundOccurrence), a flattened particle's
 // (boundFlattened), and a member of a substitution group whose head's
 // particle it is attributed to, its governing declaration the member's own
-// (cvc-particle clause 2.3.2). A declaration with no member gives the
+// (cvc-accept clause 2.3.2). A declaration with no member gives the
 // interface alone, whose one value is nil, and the {type table} alternative
 // holding an abstract type with no member gives nothing, so its declaration's
 // one governing type is its {default type definition}.

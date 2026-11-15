@@ -5632,7 +5632,7 @@ func checkDeclaredXsiType(schema *xsd.Schema, decl xsd.ElementDeclaration, start
 // (admitsXsiType). That declaration is its context-determined declaration
 // (§3.3.4.6 key-governing-ed clause 2): the term where start has its
 // expanded name, and otherwise the top-level declaration of start's, a
-// member of the term's substitution group (§3.9.4.2 cvc-particle clauses
+// member of the term's substitution group (§3.9.4.3 cvc-accept clauses
 // 2.3.1 and 2.3.2), which Decode validated start against. A start no
 // top-level declaration names admits none. Attribution is a closed sum, so
 // the assertion is STYLE T2's sealed-sum exception.
