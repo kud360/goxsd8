@@ -153,6 +153,7 @@ rule. `twice.json` is
 ```sh
 $ goxsd8 validate -schema order.xsd twice.json    # exit 4
 twice.json:1:47: [jsonsrc] undecided: attribute member "kind" repeats in the object of {urn:o}order; an element carries one attribute of each expanded name, so give it once
+goxsd8: validate: instances=1 clean=0 undecided=1 invalid=0 faulted=0
 ```
 
 `goxsd8 -help` states the JSON shape in brief, and
