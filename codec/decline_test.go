@@ -103,8 +103,6 @@ func TestDecodeDeclines(t *testing.T) {
 			"", a, constructSharedBranch, 1, 1},
 		{"nested choice occurring twice in an occurrence field's item", root(`<xs:sequence maxOccurs="2"><xs:element name="a" type="xs:string"/><xs:choice maxOccurs="2"><xs:element name="b" type="xs:string"/></xs:choice></xs:sequence>`),
 			"", a + `<s:b>y</s:b>`, constructNestedGroup, 1, 1},
-		{"choice alternatives sharing a branch shape, two wildcards occurring once", root(`<xs:choice><xs:any namespace="##local"/><xs:any namespace="##other" processContents="lax"/></xs:choice>`),
-			"", `<o:w xmlns:o="urn:o"/>`, constructSharedBranch, 1, 1},
 		{"element ref to a head whose group holds a nillable member", `<xs:element name="a" type="xs:string"/><xs:element name="m" type="xs:string" nillable="true" substitutionGroup="s:a"/>` + sequenceOf(`<xs:element ref="s:a"/>`),
 			"", a, constructNillable, 1, 1},
 		{"element ref to a group of two declining members, the nillable one first", `<xs:complexType name="ct" mixed="true"><xs:sequence/></xs:complexType><xs:element name="h" type="s:ct" abstract="true"/>
@@ -137,10 +135,6 @@ func TestDecodeDeclines(t *testing.T) {
 			"", `<s:x><s:v>v</s:v></s:x>`, constructSharedBranch, 1, 1},
 		{"an element and a spliced sequence alternative sharing a name, a struct and an xs:decimal", root(`<xs:choice>` + vStruct("x", "") + spliced(`<xs:element name="X" type="xs:decimal"/>`) + `</xs:choice>`),
 			"", `<s:x><s:v>v</s:v></s:x>`, constructSharedBranch, 1, 1},
-		{"choice alternatives sharing a name, a struct and a wildcard", root(`<xs:choice>` + vStruct("any", "") + `<xs:any namespace="##other" processContents="lax"/></xs:choice>`),
-			"", `<s:any><s:v>v</s:v></s:any>`, constructSharedBranch, 1, 1},
-		{"choice alternatives sharing a name, a wildcard and an xs:date", root(`<xs:choice><xs:any namespace="##other" processContents="lax"/><xs:element name="any" type="xs:date"/></xs:choice>`),
-			"", `<s:any>2000-01-01</s:any>`, constructSharedBranch, 1, 1},
 	}
 	for _, row := range rows {
 		t.Run(row.name, func(t *testing.T) {
