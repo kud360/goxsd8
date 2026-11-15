@@ -3731,7 +3731,6 @@ func bindReach(run *bindRun, ct xsd.ComplexType, group xsd.ModelGroup, alts *sea
 		var alt field
 		var subject string
 		var name xsd.QName
-		element := false
 		// Term is a closed sum, so the switch is STYLE T2's sealed-sum
 		// exception; particleTerm returns no nil Term.
 		switch term := term.(type) {
@@ -3753,7 +3752,6 @@ func bindReach(run *bindRun, ct xsd.ComplexType, group xsd.ModelGroup, alts *sea
 			}
 			alt.name = goname.NewNamer().Claim(term.Name().Local)
 			subject = declSubject(term)
-			element = true
 			name = term.Name()
 		}
 		names = append(names, name)
@@ -3763,7 +3761,7 @@ func bindReach(run *bindRun, ct xsd.ComplexType, group xsd.ModelGroup, alts *sea
 				return decline(constructSharedBranch, subject)
 			}
 		}
-		if element {
+		if name != (xsd.QName{}) {
 			site.bound(len(alts.alts), position)
 		}
 		alts.alts = append(alts.alts, alt)
