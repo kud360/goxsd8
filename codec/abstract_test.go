@@ -29,15 +29,19 @@ import (
 // abstractAltMemberSchema adds cc, ab's one member, adding m. abstractRootSchema's
 // ab, of empty content, has cc, adding nothing, its one member, and r is of ab;
 // abstractParticleSchema's ab, of empty content, has no member, and r is a sequence
-// of an optional a of ab.
+// of an optional a of ab. abstractTableSchema's r is of ab, of empty content,
+// whose members are cc, adding k, and dd, adding m, under a {type table} whose
+// alternative selects cc where k is present, its default ab.
 const (
+	abstractTableSchema = abstractKSchema + `<xs:complexType name="dd"><xs:complexContent><xs:extension base="s:ab"><xs:attribute name="m" type="xs:string"/></xs:extension></xs:complexContent></xs:complexType>
+		<xs:element name="r" type="s:ab"><xs:alternative test="@k" type="s:cc"/></xs:element>`
 	abstractRootSchema     = `<xs:complexType name="ab" abstract="true"/><xs:complexType name="cc"><xs:complexContent><xs:extension base="s:ab"/></xs:complexContent></xs:complexType><xs:element name="r" type="s:ab"/>`
 	abstractParticleSchema = `<xs:complexType name="ab" abstract="true"/><xs:element name="r"><xs:complexType><xs:sequence><xs:element name="a" type="s:ab" minOccurs="0"/></xs:sequence></xs:complexType></xs:element>`
 	abstractKSchema        = `<xs:complexType name="ab" abstract="true"/><xs:complexType name="cc"><xs:complexContent><xs:extension base="s:ab"><xs:attribute name="k" type="xs:string"/></xs:extension></xs:complexContent></xs:complexType>`
 	abstractSeqSchema      = abstractKSchema + `<xs:element name="r"><xs:complexType><xs:sequence><xs:element name="a" type="s:ab"/><xs:element name="b" type="s:cc" minOccurs="0"/></xs:sequence></xs:complexType></xs:element>`
 	abstractMatcherSchema  = abstractKSchema + `<xs:element name="r"><xs:complexType><xs:sequence><xs:element name="a" type="s:ab"/><xs:element name="b" type="xs:string"/><xs:element name="a" type="s:ab" minOccurs="0"/></xs:sequence></xs:complexType></xs:element>`
 	abstractOccursSchema   = abstractKSchema + `<xs:element name="r"><xs:complexType><xs:sequence maxOccurs="2"><xs:element name="a" type="s:ab"/><xs:element name="b" type="xs:string"/></xs:sequence></xs:complexType></xs:element>`
-	abstractFlatSchema     = abstractKSchema + `<xs:element name="r"><xs:complexType><xs:choice maxOccurs="unbounded"><xs:element name="a" type="s:ab"/><xs:element name="b" type="xs:string"/></xs:choice></xs:complexType></xs:element>`
+	abstractFlatSchema     = abstractKSchema + `<xs:element name="r"><xs:complexType><xs:choice maxOccurs="unbounded"><xs:element name="a" type="s:ab" maxOccurs="2"/><xs:element name="b" type="xs:string"/></xs:choice></xs:complexType></xs:element>`
 	abstractSubstSchema    = `<xs:complexType name="hb"/><xs:complexType name="ab" abstract="true"><xs:complexContent><xs:extension base="s:hb"/></xs:complexContent></xs:complexType>
 		<xs:complexType name="cc"><xs:complexContent><xs:extension base="s:ab"><xs:attribute name="k" type="xs:string"/></xs:extension></xs:complexContent></xs:complexType>
 		<xs:element name="h" type="s:hb"/><xs:element name="m" type="s:ab" substitutionGroup="s:h"/>
@@ -60,7 +64,9 @@ const (
 // for; abChR and its branches abstractChoiceSchema's R, RA and RB; abNoneR and
 // abNone abstractParticleSchema's R and A, an interface with no branch;
 // abLocalR and abLocalCc abstractLocalSchema's R and Cc; abAltR, abAltRCc,
-// abAltCc, abAltRB0 and abB0 abstractAltMemberSchema's R, RCc, Cc, RB0 and B0.
+// abAltCc, abAltRB0 and abB0 abstractAltMemberSchema's R, RCc, Cc, RB0 and B0;
+// abTabR, abTabRCc and abTabRDd abstractTableSchema's R, RCc and RDd, abTabDd
+// its Dd.
 type (
 	abK    struct{ K *string }
 	abSeqR struct {
@@ -100,6 +106,10 @@ type (
 		K *string
 	}
 	abAltRB0 struct{ B0 abB0 }
+	abTabR   interface{ isAbTabR() }
+	abTabRCc struct{ Cc abK }
+	abTabRDd struct{ Dd abTabDd }
+	abTabDd  struct{ M *string }
 	abB0     struct {
 		A string
 		K *string
@@ -114,6 +124,8 @@ func (abChRA) isAbChR()         {}
 func (abChRB) isAbChR()         {}
 func (abAltRCc) isAbAltR()      {}
 func (abAltRB0) isAbAltR()      {}
+func (abTabRCc) isAbTabR()      {}
+func (abTabRDd) isAbTabR()      {}
 
 // TestAbstractTypeShapesAreCodegens pins the types above to those codegen
 // emits, in shape (codegen/doc.go "An element declaration's governing
@@ -137,6 +149,8 @@ func TestAbstractTypeShapesAreCodegens(t *testing.T) {
 		{abstractAltSchema, []string{"type R struct {\n\tA string\n\tK *string\n}\n"}},
 		{abstractAltMemberSchema, []string{"type R interface {\n\tisR()\n}\n", "type RCc struct {\n\tCc Cc\n}\n", "type Cc struct {\n\tA string\n\tM *string\n\tK *string\n}\n",
 			"type RB0 struct {\n\tB0 B0\n}\n", "type B0 struct {\n\tA string\n\tK *string\n}\n"}},
+		{abstractTableSchema, []string{"type R interface {\n\tisR()\n}\n", "type RCc struct {\n\tCc Cc\n}\n", "type RDd struct {\n\tDd Dd\n}\n",
+			"type Cc struct {\n\tK *string\n}\n", "type Dd struct {\n\tM *string\n}\n"}},
 	}
 	for _, row := range rows {
 		gen := generated(t, schemaOf(t, row.decls))
@@ -214,12 +228,12 @@ func TestDecodeAbstractTypeChild(t *testing.T) {
 // decode. An xsi:type is admitted by the element's governing declaration
 // (admitsXsiType), never by its bound unit: a {type table} alternative
 // holding an abstract type whose instance names its one member declines by
-// xsi:type, as every {type table} declaration's does, and so does b, of cc, the
-// member a's unit binds, beside a, of ab, and h, the head, of a concrete type,
-// whose particle m's element, of ab, is attributed to too. An xsi:type naming
-// the abstract type itself or no member, and an element of an abstract type
-// with no xsi:type, are charged by validate, which Decode runs first, and
-// decode into nothing.
+// xsi:type, as every {type table} declaration's does, an abstract declared
+// type's included, and so does b, of cc, the member a's unit binds, beside a,
+// of ab, and h, the head, of a concrete type, whose particle m's element, of
+// ab, is attributed to too. An xsi:type naming the abstract type itself or no
+// member, and an element of an abstract type with no xsi:type, are charged by
+// validate, which Decode runs first, and decode into nothing.
 func TestDecodeAbstractTypeGuards(t *testing.T) {
 	declines := []struct {
 		name    string
@@ -231,6 +245,8 @@ func TestDecodeAbstractTypeGuards(t *testing.T) {
 	}{
 		{"a {type table} alternative of an abstract type, naming its member", abstractAltMemberSchema, ` k="x" xsi:type="s:cc"`, `<s:a>x</s:a>`,
 			into[abAltR](WithBranches[abAltR](abAltRCc{}, abAltRB0{})), func([]byte) int { return 1 }},
+		{"an abstract {type definition} under a {type table}, its default selected, naming a member", abstractTableSchema, ` xsi:type="s:dd" m="w"`, "",
+			into[abTabR](WithBranches[abTabR](abTabRCc{}, abTabRDd{})), func([]byte) int { return 1 }},
 		{"a child of the member's type beside one of the abstract type", abstractSeqSchema, "", `<s:a xsi:type="s:cc"/><s:b xsi:type="s:cc"/>`,
 			into[abSeqR](), func(data []byte) int { return bytes.Index(data, []byte("<s:b")) + 1 }},
 		{"a substitution group's concrete head, its member's type abstract", abstractSubstSchema, "", `<s:h xsi:type="s:cc" k="v"/>`,
