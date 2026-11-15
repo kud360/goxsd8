@@ -3,12 +3,16 @@ package codec
 import (
 	"bytes"
 	"errors"
+	"io"
 	"math/big"
 	"reflect"
 	"strings"
 	"testing"
 
 	"github.com/kud360/goxsd8/builtin/strict"
+	"github.com/kud360/goxsd8/loader"
+	"github.com/kud360/goxsd8/parser"
+	"github.com/kud360/goxsd8/xsd"
 )
 
 // anyElement, anyType, anyAttribute and anyChild are of the shapes of
@@ -413,23 +417,238 @@ type (
 
 func (pickWildOther) isPickWild() {}
 
-// TestDecodeWildcardSharedBranch pins that a choice of two wildcard
-// alternatives occurring alike declines as a shared branch, which no branch
-// struct could tell apart (field.sharesBranch), the decline's detail opening
-// with the second wildcard particle, Decode and CheckDecode alike.
-func TestDecodeWildcardSharedBranch(t *testing.T) {
-	const want = "codec does not decode two branches of a sealed interface whose structs have one shape: wildcard particle 2 of "
-	schema := schemaOf(t, `<xs:element name="r"><xs:complexType><xs:choice><xs:any namespace="urn:a" processContents="lax"/><xs:any namespace="urn:b" processContents="lax"/></xs:choice></xs:complexType></xs:element>`)
-	data := instanceOf("", `<b:x xmlns:b="urn:b"/>`)
-	mustAccept(t, schema, data)
-	_, decodeErr := Decode[struct{}](schema, strict.New(), data)
-	for i, err := range []error{decodeErr, CheckDecode[struct{}](schema, rootName)} {
-		var de *DeclineError
-		if !errors.As(err, &de) || de.Construct() != (Construct{constructSharedBranch}) {
-			t.Fatalf("error %d = %v, want the shared-branch *DeclineError", i, err)
+// The wildcard-tie schemas, each declaring s:r of a choice of a wildcard
+// alternative and another alternative whose branch word is any too and
+// whose branch shares its shape, a tie (item 6 of Decode's doc). wtNsSchema's
+// is choice(any over urn:n1, any over urn:n2); wtLocalSchema's choice(any
+// over ##local, any over ##other); wtStructSchema's choice(any, any over
+// ##other), the element any of vStruct's anonymous complex type, which
+// codegen names RAny2, so its branches are RAny and RAny3; wtOverlapSchema's
+// the same over ##any, whose wildcard admits the element's name too, the
+// element particle taking it (Structures §3.8.4.2 key-compete); and
+// wtDateSchema's choice(any over ##other, any), the element of xs:date.
+// Two wildcards that could admit one name are no input: parser.Parse
+// rejects them by cos-nonambig (TestWildcardTieOverlapRejected).
+const (
+	wtNsSchema     = `<xs:element name="r"><xs:complexType><xs:choice><xs:any namespace="urn:n1" processContents="skip"/><xs:any namespace="urn:n2" processContents="skip"/></xs:choice></xs:complexType></xs:element>`
+	wtLocalSchema  = `<xs:element name="r"><xs:complexType><xs:choice><xs:any namespace="##local"/><xs:any namespace="##other" processContents="lax"/></xs:choice></xs:complexType></xs:element>`
+	wtStructSchema = `<xs:element name="r"><xs:complexType><xs:choice>` + `<xs:element name="any"><xs:complexType><xs:sequence><xs:element name="v" type="xs:string"/></xs:sequence></xs:complexType></xs:element>` +
+		`<xs:any namespace="##other" processContents="lax"/></xs:choice></xs:complexType></xs:element>`
+	wtOverlapSchema = `<xs:element name="r"><xs:complexType><xs:choice>` + `<xs:element name="any"><xs:complexType><xs:sequence><xs:element name="v" type="xs:string"/></xs:sequence></xs:complexType></xs:element>` +
+		`<xs:any namespace="##any" processContents="lax"/></xs:choice></xs:complexType></xs:element>`
+	wtDateSchema = `<xs:element name="r"><xs:complexType><xs:choice><xs:any namespace="##other" processContents="lax"/><xs:element name="any" type="xs:date"/></xs:choice></xs:complexType></xs:element>`
+)
+
+// The types codegen emits for the wildcard-tie schemas' s:r, which
+// TestWildcardTieTypesAreCodegens pins: wtNs, WtNsAny and WtNsAny2
+// wtNsSchema's R, RAny and RAny2; wtLocal and its branches wtLocalSchema's;
+// wtStruct, WtStructAny, wtV and WtStructAny3 wtStructSchema's and
+// wtOverlapSchema's R, RAny, RAny2 and RAny3; and wtDate, WtDateAny and
+// WtDateAny2 wtDateSchema's R, RAny and RAny2, over temporal_test.go's
+// tDate. Each branch carries the name codegen gives it over its
+// interface's, since Decode places a tie's branches by name. wtNsP and
+// wtNsQ are branches of wtNs's shape codegen does not name so, and wtSwap's
+// WtSwapAny and WtSwapAny3 wtStructSchema's branch names over each other's
+// shapes.
+type (
+	wtNs     interface{ isWtNs() }
+	WtNsAny  struct{ Any anyElement }
+	WtNsAny2 struct{ Any anyElement }
+	wtNsP    struct{ Any anyElement }
+	wtNsQ    struct{ Any anyElement }
+
+	wtLocal     interface{ isWtLocal() }
+	WtLocalAny  struct{ Any anyElement }
+	WtLocalAny2 struct{ Any anyElement }
+
+	wtStruct     interface{ isWtStruct() }
+	WtStructAny  struct{ Any wtV }
+	wtV          struct{ V string }
+	WtStructAny3 struct{ Any anyElement }
+
+	wtSwap     interface{ isWtSwap() }
+	WtSwapAny  struct{ Any anyElement }
+	WtSwapAny3 struct{ Any wtV }
+
+	wtDate     interface{ isWtDate() }
+	WtDateAny  struct{ Any anyElement }
+	WtDateAny2 struct{ Any tDate }
+)
+
+func (WtNsAny) isWtNs()          {}
+func (WtNsAny2) isWtNs()         {}
+func (wtNsP) isWtNs()            {}
+func (wtNsQ) isWtNs()            {}
+func (WtLocalAny) isWtLocal()    {}
+func (WtLocalAny2) isWtLocal()   {}
+func (WtStructAny) isWtStruct()  {}
+func (WtStructAny3) isWtStruct() {}
+func (WtSwapAny) isWtSwap()      {}
+func (WtSwapAny3) isWtSwap()     {}
+func (WtDateAny) isWtDate()      {}
+func (WtDateAny2) isWtDate()     {}
+
+// The wildcard-tie schemas' branch sets, each supplied against alternative
+// order.
+var (
+	wtNsBranches     = WithBranches[wtNs](WtNsAny2{}, WtNsAny{})
+	wtLocalBranches  = WithBranches[wtLocal](WtLocalAny2{}, WtLocalAny{})
+	wtStructBranches = WithBranches[wtStruct](WtStructAny3{}, WtStructAny{})
+	wtDateBranches   = WithBranches[wtDate](WtDateAny2{}, WtDateAny{})
+)
+
+// TestWildcardTieTypesAreCodegens pins that the wildcard-tie types are
+// codegen's, in shape and in their branches' names.
+func TestWildcardTieTypesAreCodegens(t *testing.T) {
+	iface := "type R interface {\n\tisR()\n}\n"
+	rows := []struct {
+		decls string
+		want  []string
+	}{
+		{wtNsSchema, []string{iface,
+			"type RAny struct {\n\tAny AnyElement\n}\n\nfunc (RAny) isR() {}\n",
+			"type RAny2 struct {\n\tAny AnyElement\n}\n\nfunc (RAny2) isR() {}\n"}},
+		{wtLocalSchema, []string{iface,
+			"type RAny struct {\n\tAny AnyElement\n}\n\nfunc (RAny) isR() {}\n",
+			"type RAny2 struct {\n\tAny AnyElement\n}\n\nfunc (RAny2) isR() {}\n"}},
+		{wtStructSchema, []string{iface,
+			"type RAny struct {\n\tAny RAny2\n}\n\nfunc (RAny) isR() {}\n",
+			"type RAny2 struct {\n\tV string\n}\n",
+			"type RAny3 struct {\n\tAny AnyElement\n}\n\nfunc (RAny3) isR() {}\n"}},
+		{wtOverlapSchema, []string{iface,
+			"type RAny struct {\n\tAny RAny2\n}\n\nfunc (RAny) isR() {}\n",
+			"type RAny2 struct {\n\tV string\n}\n",
+			"type RAny3 struct {\n\tAny AnyElement\n}\n\nfunc (RAny3) isR() {}\n"}},
+		{wtDateSchema, []string{iface,
+			"type RAny struct {\n\tAny AnyElement\n}\n\nfunc (RAny) isR() {}\n",
+			"type RAny2 struct {\n\tAny Date\n}\n\nfunc (RAny2) isR() {}\n"}},
+	}
+	for _, row := range rows {
+		gen := generated(t, schemaOf(t, row.decls))
+		for _, decl := range row.want {
+			if !bytes.Contains(gen, []byte(decl)) {
+				t.Errorf("codegen emits\n%s\nwhich does not declare\n%s", gen, decl)
+			}
 		}
-		if got := err.Error(); !strings.Contains(got, want) {
-			t.Errorf("error %d = %q, want it to hold %q", i, got, want)
+	}
+}
+
+// TestDecodeWildcardTie pins item 6's tie over wildcard alternatives: of a
+// choice whose wildcard alternatives' branches share one shape, or a
+// wildcard's shares an element any's, each branch set supplied against
+// alternative order, the child goes to the alternative whose wildcard
+// admits its expanded name (cvc-wildcard-name, cvc-wildcard-namespace), or
+// to the element alternative it matches, and decodes into that
+// alternative's branch, placed by name. CheckDecode returns nil for each
+// row's T.
+func TestDecodeWildcardTie(t *testing.T) {
+	w := func(space string) anyElement { return anyElement{Space: space, Local: "w"} }
+	rows := []struct {
+		name, decls, body string
+		into              target
+		want              any
+	}{
+		{"urn:n1 and urn:n2, the first", wtNsSchema, `<n:w xmlns:n="urn:n1"/>`, into[wtNs](wtNsBranches), wtNs(WtNsAny{Any: w("urn:n1")})},
+		{"urn:n1 and urn:n2, the second", wtNsSchema, `<n:w xmlns:n="urn:n2"/>`, into[wtNs](wtNsBranches), wtNs(WtNsAny2{Any: w("urn:n2")})},
+		{"##local and ##other, the second", wtLocalSchema, `<o:w xmlns:o="urn:o"/>`, into[wtLocal](wtLocalBranches), wtLocal(WtLocalAny2{Any: w("urn:o")})},
+		{"an element any of a struct beside ##other, the element", wtStructSchema, `<s:any><s:v>v</s:v></s:any>`, into[wtStruct](wtStructBranches),
+			wtStruct(WtStructAny{Any: wtV{V: "v"}})},
+		{"an element any of a struct beside ##other, the wildcard", wtStructSchema, `<o:w xmlns:o="urn:o"/>`, into[wtStruct](wtStructBranches),
+			wtStruct(WtStructAny3{Any: w("urn:o")})},
+		{"an element any of a struct beside ##any, the element taking its name", wtOverlapSchema, `<s:any><s:v>v</s:v></s:any>`, into[wtStruct](wtStructBranches),
+			wtStruct(WtStructAny{Any: wtV{V: "v"}})},
+		{"an element any of a struct beside ##any, the wildcard", wtOverlapSchema, `<s:w/>`, into[wtStruct](wtStructBranches),
+			wtStruct(WtStructAny3{Any: anyElement{Space: "urn:s", Local: "w"}})},
+		{"##other beside an element any of xs:date, the element", wtDateSchema, `<s:any>2000-01-01</s:any>`, into[wtDate](wtDateBranches),
+			wtDate(WtDateAny2{Any: tDate{Year: *big.NewInt(2000), Month: 1, Day: 1}})},
+		{"##other beside an element any of xs:date, the wildcard", wtDateSchema, `<o:w xmlns:o="urn:o"/>`, into[wtDate](wtDateBranches),
+			wtDate(WtDateAny{Any: w("urn:o")})},
+	}
+	for _, row := range rows {
+		t.Run(row.name, func(t *testing.T) {
+			schema := schemaOf(t, row.decls)
+			data := instanceOf("", row.body)
+			mustAccept(t, schema, data)
+			got, err := row.into.decode(schema, data)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !reflect.DeepEqual(got, row.want) {
+				t.Errorf("Decode = %#v, want %#v", got, row.want)
+			}
+			if err := row.into.check(schema); err != nil {
+				t.Errorf("CheckDecode = %v, want nil for a row Decode decodes", err)
+			}
+		})
+	}
+}
+
+// TestDecodeWildcardTieMismatch pins item 6's tie over wildcard
+// alternatives for a branch set it cannot place: branches of the tie's
+// shape not named from their interface's name, and an element any's and a
+// wildcard's branch names each over the other's shape, are ErrTypeMismatch,
+// Decode returning no value and CheckDecode Decode's error, never a decode
+// into either branch.
+func TestDecodeWildcardTieMismatch(t *testing.T) {
+	const prefix = "codec: T is not the type codegen emits for the document element: "
+	rows := []struct {
+		name, decls, body string
+		decode            func(*xsd.Schema, []byte) (bool, error)
+		check             func(*xsd.Schema) error
+		want              string
+	}{
+		{"wildcard branches not named from the interface's name", wtNsSchema, `<n:w xmlns:n="urn:n2"/>`,
+			func(s *xsd.Schema, data []byte) (bool, error) {
+				got, err := Decode[wtNs](s, strict.New(), data, WithBranches[wtNs](wtNsP{}, wtNsQ{}))
+				return got != nil, err
+			},
+			func(s *xsd.Schema) error { return CheckDecode[wtNs](s, rootName, WithBranches[wtNs](wtNsP{}, wtNsQ{})) },
+			prefix + "branch codec.wtNsP of codec.wtNs is named neither WtNsAny nor WtNsAny followed by a decimal from 2, as codegen names the branch structs of its 2 tied alternatives, whose branch words render one identifier"},
+		{"an element's and a wildcard's branch names over each other's shapes", wtStructSchema, `<o:w xmlns:o="urn:o"/>`,
+			func(s *xsd.Schema, data []byte) (bool, error) {
+				got, err := Decode[wtSwap](s, strict.New(), data, WithBranches[wtSwap](WtSwapAny3{}, WtSwapAny{}))
+				return got != nil, err
+			},
+			func(s *xsd.Schema) error {
+				return CheckDecode[wtSwap](s, rootName, WithBranches[wtSwap](WtSwapAny3{}, WtSwapAny{}))
+			},
+			prefix + "branch codec.WtSwapAny3 of codec.wtSwap, by its name the branch of tied alternative 2 of 2, whose branch structs codegen names from WtSwapAny, has the shape of no branch struct codegen emits for it"},
+	}
+	for _, row := range rows {
+		t.Run(row.name, func(t *testing.T) {
+			schema := schemaOf(t, row.decls)
+			data := instanceOf("", row.body)
+			mustAccept(t, schema, data)
+			decoded, err := row.decode(schema, data)
+			if decoded {
+				t.Fatal("Decode returned a value, want none")
+			}
+			if err == nil || !errors.Is(err, ErrTypeMismatch) || err.Error() != row.want {
+				t.Fatalf("Decode error = %v, want %q", err, row.want)
+			}
+			assertProbeMismatch(t, row.check(schema), err)
+		})
+	}
+}
+
+// TestWildcardTieOverlapRejected pins that two wildcard alternatives that
+// could admit one expanded name, by namespace or past their {disallowed
+// names}, are no input to Decode: parser.Parse rejects each pair by
+// cos-nonambig (Structures §3.8.6.4), so no order among them is ever read.
+func TestWildcardTieOverlapRejected(t *testing.T) {
+	for _, pair := range []string{
+		`<xs:any namespace="##any" processContents="skip"/><xs:any namespace="urn:n2" processContents="skip"/>`,
+		`<xs:any namespace="##other" processContents="skip"/><xs:any namespace="urn:n2 urn:n3" processContents="skip"/>`,
+		`<xs:any namespace="urn:n1" processContents="skip"/><xs:any namespace="urn:n1" processContents="lax"/>`,
+		`<xs:any namespace="urn:n1" notQName="n:a" processContents="skip"/><xs:any namespace="urn:n1" notQName="n:b" processContents="skip"/>`,
+	} {
+		doc := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:s="urn:s" xmlns:n="urn:n1" targetNamespace="urn:s" elementFormDefault="qualified">` +
+			root(`<xs:choice>`+pair+`</xs:choice>`) + `</xs:schema>`
+		resolve := loader.ResolverFunc(func(_, location string) (io.ReadCloser, string, error) {
+			return io.NopCloser(strings.NewReader(doc)), location, nil
+		})
+		if _, err := parser.Parse("s.xsd", parser.WithResolver(resolve)); err == nil || !strings.Contains(err.Error(), "cos-nonambig") {
+			t.Errorf("Parse(choice(%s)) = %v, want a cos-nonambig error", pair, err)
 		}
 	}
 }

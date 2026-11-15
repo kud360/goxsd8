@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"errors"
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/kud360/goxsd8/builtin/strict"
@@ -22,6 +23,10 @@ import (
 // names them RA and RA2. partTieSchema's r is a choice of a_a, an xs:int,
 // then a.a and a-a, each an xs:string, so its tie is a.a and a-a alone;
 // codegen names them RAA, RAA2 and RAA3, the tie's rank 1 a hole.
+// wildTieSchema's r is a choice of any and Any, each an xs:string, and a
+// wildcard over ##other, the three branch words rendering Any; the tie is
+// any and Any, whose branches share a shape the wildcard's does not;
+// codegen names them RAny, RAny2 and RAny3.
 const (
 	tieGroupSchema = `<xs:element name="r"><xs:complexType><xs:sequence><xs:element ref="s:C"/><xs:element ref="s:h"/></xs:sequence></xs:complexType></xs:element>` +
 		`<xs:element name="h" abstract="true" type="xs:string"/><xs:element name="c" type="xs:string" substitutionGroup="s:h"/><xs:element name="C" type="xs:string" substitutionGroup="s:h"/>`
@@ -30,6 +35,8 @@ const (
 	shapeChoiceSchema = `<xs:element name="r"><xs:complexType><xs:choice><xs:element name="a" type="xs:string"/><xs:element name="A" type="xs:int"/></xs:choice></xs:complexType></xs:element>`
 	partTieSchema     = `<xs:element name="r"><xs:complexType><xs:choice>` +
 		`<xs:element name="a_a" type="xs:int"/><xs:element name="a.a" type="xs:string"/><xs:element name="a-a" type="xs:string"/></xs:choice></xs:complexType></xs:element>`
+	wildTieSchema = `<xs:element name="r"><xs:complexType><xs:choice>` +
+		`<xs:element name="any" type="xs:string"/><xs:element name="Any" type="xs:string"/><xs:any namespace="##other" processContents="skip"/></xs:choice></xs:complexType></xs:element>`
 )
 
 // tieGR to TieHC2 are tieGroupSchema's R, C, HSubstitutionGroup,
@@ -74,10 +81,11 @@ func (Beta) isTieR()   {}
 func (tieInt) isTieR() {}
 
 // shapeR to shapeFoo stand for shapeChoiceSchema's R, RA2 and RA, and partR
-// to PartRAA3 for partTieSchema's R, RAA, RAA2 and RAA3, which
-// TestTieTypesAreCodegens pins in shape. shapeBar, shapeFoo and partInt
-// carry names codegen does not give them, since Decode places a branch in
-// no tie by shape alone (item 6 of Decode's doc).
+// to PartRAA3 for partTieSchema's R, RAA, RAA2 and RAA3, and wildR to
+// WildRAny3 for wildTieSchema's R, RAny, RAny2 and RAny3, which
+// TestTieTypesAreCodegens pins in shape. shapeBar, shapeFoo, partInt and
+// wildOther carry names codegen does not give them, since Decode places a
+// branch in no tie by shape alone (item 6 of Decode's doc).
 type (
 	shapeR   interface{ isShapeR() }
 	shapeBar struct{ A int32 }
@@ -87,6 +95,12 @@ type (
 	partInt  struct{ AA int32 }
 	PartRAA2 struct{ AA string }
 	PartRAA3 struct{ AA string }
+
+	wildR     interface{ isWildR() }
+	WildRAny  struct{ Any string }
+	WildRAny2 struct{ Any string }
+	wildOther struct{ Any anyElement }
+	wildMis   struct{ Any string }
 )
 
 func (shapeBar) isShapeR() {}
@@ -94,6 +108,10 @@ func (shapeFoo) isShapeR() {}
 func (partInt) isPartR()   {}
 func (PartRAA2) isPartR()  {}
 func (PartRAA3) isPartR()  {}
+func (WildRAny) isWildR()  {}
+func (WildRAny2) isWildR() {}
+func (wildOther) isWildR() {}
+func (wildMis) isWildR()   {}
 
 // The tie schemas' branch sets, each supplied against alternative order.
 var (
@@ -101,6 +119,7 @@ var (
 	tieChoiceBranches   = WithBranches[tieR](TieRAA4{}, TieRAA2{}, TieRAA3{})
 	shapeChoiceBranches = WithBranches[shapeR](shapeBar{}, shapeFoo{})
 	partTieBranches     = WithBranches[partR](PartRAA3{}, PartRAA2{}, partInt{})
+	wildTieBranches     = WithBranches[wildR](wildOther{}, WildRAny2{}, WildRAny{})
 )
 
 // TestTieTypesAreCodegens pins that the tie schemas' types are codegen's.
@@ -135,6 +154,12 @@ func TestTieTypesAreCodegens(t *testing.T) {
 			"type RAA2 struct {\n\tAA string\n}\n\nfunc (RAA2) isR() {}\n",
 			"type RAA3 struct {\n\tAA string\n}\n\nfunc (RAA3) isR() {}\n",
 		}},
+		{wildTieSchema, []string{
+			"type R interface {\n\tisR()\n}\n",
+			"type RAny struct {\n\tAny string\n}\n\nfunc (RAny) isR() {}\n",
+			"type RAny2 struct {\n\tAny string\n}\n\nfunc (RAny2) isR() {}\n",
+			"type RAny3 struct {\n\tAny AnyElement\n}\n\nfunc (RAny3) isR() {}\n",
+		}},
 	}
 	for _, row := range rows {
 		gen := generated(t, schemaOf(t, row.decls))
@@ -147,13 +172,13 @@ func TestTieTypesAreCodegens(t *testing.T) {
 }
 
 // TestDecodeTie pins item 6's tie: the branches of substitution group
-// members, and of choice alternatives, whose local names render one Go
-// identifier and whose branch shapes share, each set supplied against
-// alternative order, go to their alternatives by name, so each child decodes
-// into its own declaration's branch; a branch of such an alternative whose
-// shape shares no other's, partTieSchema's a_a and both of
-// shapeChoiceSchema's, goes to its alternative by shape, whatever its name;
-// CheckDecode returns nil for each row's T.
+// members whose local names render one Go identifier, and of choice
+// alternatives whose branch words do, and whose branch shapes share, each
+// set supplied against alternative order, go to their alternatives by name,
+// so each child decodes into its own declaration's branch; a branch of such
+// an alternative whose shape shares no other's, partTieSchema's a_a, both of
+// shapeChoiceSchema's and wildTieSchema's wildcard, goes to its alternative
+// by shape, whatever its name; CheckDecode returns nil for each row's T.
 func TestDecodeTie(t *testing.T) {
 	rows := []struct {
 		name, decls, body string
@@ -170,6 +195,10 @@ func TestDecodeTie(t *testing.T) {
 		{"a tie beside a_a, a_a's branch by shape", partTieSchema, "<s:a_a>3</s:a_a>", into[partR](partTieBranches), partR(partInt{AA: 3})},
 		{"a tie beside a_a, a.a's branch by name", partTieSchema, "<s:a.a>v</s:a.a>", into[partR](partTieBranches), partR(PartRAA2{AA: "v"})},
 		{"a tie beside a_a, a-a's branch by name", partTieSchema, "<s:a-a>v</s:a-a>", into[partR](partTieBranches), partR(PartRAA3{AA: "v"})},
+		{"a tie beside a wildcard, any's branch by name", wildTieSchema, "<s:any>v</s:any>", into[wildR](wildTieBranches), wildR(WildRAny{Any: "v"})},
+		{"a tie beside a wildcard, Any's branch by name", wildTieSchema, "<s:Any>v</s:Any>", into[wildR](wildTieBranches), wildR(WildRAny2{Any: "v"})},
+		{"a tie beside a wildcard, the wildcard's branch by shape", wildTieSchema, `<o:w xmlns:o="urn:o"/>`, into[wildR](wildTieBranches),
+			wildR(wildOther{Any: anyElement{Space: "urn:o", Local: "w"}})},
 	}
 	for _, row := range rows {
 		t.Run(row.name, func(t *testing.T) {
@@ -203,11 +232,11 @@ func TestDecodeTieMismatch(t *testing.T) {
 		want   string
 	}{
 		{"branches not named from the interface's name", WithBranches[tieR](Alpha{}, Beta{}, TieRAA4{}),
-			prefix + "branch codec.Alpha of codec.tieR is named neither TieRAA nor TieRAA followed by a decimal from 2, as codegen names the branch structs of its 3 alternatives whose local names render one identifier"},
+			prefix + "branch codec.Alpha of codec.tieR is named neither TieRAA nor TieRAA followed by a decimal from 2, as codegen names the branch structs of its 3 tied alternatives, whose branch words render one identifier"},
 		{"two of three branches named from the interface's name", WithBranches[tieR](TieRAA2{}, TieRAA3{}, Alpha{}),
-			prefix + "branch codec.Alpha of codec.tieR is named neither TieRAA nor TieRAA followed by a decimal from 2, as codegen names the branch structs of its 3 alternatives whose local names render one identifier"},
+			prefix + "branch codec.Alpha of codec.tieR is named neither TieRAA nor TieRAA followed by a decimal from 2, as codegen names the branch structs of its 3 tied alternatives, whose branch words render one identifier"},
 		{"a branch of no alternative's shape", WithBranches[tieR](TieRAA2{}, TieRAA3{}, tieInt{}),
-			prefix + "WithBranches supplies 2 branches of codec.tieR of the shape of the 3 alternatives codegen names TieRAA and TieRAA followed by a decimal from 2"},
+			prefix + "WithBranches supplies 2 branches of codec.tieR of the shape of its 3 tied alternatives, whose branch structs codegen names TieRAA and TieRAA followed by a decimal from 2"},
 	}
 	schema := schemaOf(t, tieChoiceSchema)
 	data := instanceOf("", "<s:a_a>v</s:a_a>")
@@ -226,22 +255,42 @@ func TestDecodeTieMismatch(t *testing.T) {
 	}
 }
 
+// TestDecodeTieMismatchBeyondTie pins that the counts in a tie's mismatch
+// messages are the tie's: wildTieSchema's word group holds three
+// alternatives and its tie two, and a misnamed branch of the tie's shape is
+// ErrTypeMismatch naming 2 tied alternatives, from Decode and CheckDecode.
+func TestDecodeTieMismatchBeyondTie(t *testing.T) {
+	const want = "codec: T is not the type codegen emits for the document element: branch codec.wildMis of codec.wildR is named neither WildRAny nor WildRAny followed by a decimal from 2, as codegen names the branch structs of its 2 tied alternatives, whose branch words render one identifier"
+	branch := WithBranches[wildR](wildOther{}, WildRAny2{}, wildMis{})
+	schema := schemaOf(t, wildTieSchema)
+	data := instanceOf("", "<s:any>v</s:any>")
+	mustAccept(t, schema, data)
+	got, err := Decode[wildR](schema, strict.New(), data, branch)
+	if got != nil {
+		t.Fatalf("Decode = %#v, want no value", *got)
+	}
+	if err == nil || !errors.Is(err, ErrTypeMismatch) || err.Error() != want {
+		t.Fatalf("Decode error = %v, want %q", err, want)
+	}
+	assertProbeMismatch(t, CheckDecode[wildR](schema, rootName, branch), err)
+}
+
 // TestDecodeTieDeclines pins the shared-branch declines a tie leaves: two
 // basic particles of one flattened reach whose local names render one
-// identifier, which no name places, and two element alternatives of one
-// rendered identifier that a wildcard alternative's word any renders too,
-// which is no tie; each declines constructSharedBranch from Decode and
-// CheckDecode alike. Two wildcard alternatives are
-// TestDecodeChoiceGroupDeclines', and two particles of one expanded name in a
-// flattened reach TestDecodeFlattenSharedBranch's.
+// identifier, and two wildcard particles of one, which no name places
+// (bindReach), the second declining as wildcard particle 2 of the type; each
+// declines constructSharedBranch from Decode and CheckDecode alike. Two
+// particles of one expanded name in a flattened reach are
+// TestDecodeFlattenSharedBranch's.
 func TestDecodeTieDeclines(t *testing.T) {
 	rows := []struct {
-		name, decls, body string
+		name, decls, body, prefix string
 	}{
 		{"a flattened reach of c and C", root(`<xs:choice maxOccurs="unbounded"><xs:element name="c" type="xs:string" maxOccurs="unbounded"/><xs:element name="C" type="xs:string"/></xs:choice>`),
-			"<s:c>v</s:c><s:C>w</s:C>"},
-		{"alternatives any and Any beside a wildcard", root(`<xs:choice><xs:element name="any" type="xs:string"/><xs:element name="Any" type="xs:string"/><xs:any namespace="##other" processContents="skip"/></xs:choice>`),
-			"<s:any>v</s:any>"},
+			"<s:c>v</s:c><s:C>w</s:C>", ""},
+		{"a flattened reach of two wildcards", root(`<xs:choice maxOccurs="unbounded"><xs:any namespace="urn:n1" processContents="skip" maxOccurs="unbounded"/><xs:any namespace="urn:n2" processContents="skip"/></xs:choice>`),
+			`<n:w xmlns:n="urn:n2"/>`,
+			"?:1:1: codec does not decode two branches of a sealed interface whose structs have one shape: wildcard particle 2 of the {type definition} of element {urn:s}r declared at"},
 	}
 	for _, row := range rows {
 		t.Run(row.name, func(t *testing.T) {
@@ -253,6 +302,9 @@ func TestDecodeTieDeclines(t *testing.T) {
 				t.Fatalf("Decode = %v, want no value", *got)
 			}
 			assertDecline(t, err, constructSharedBranch, 1, 1)
+			if !strings.HasPrefix(err.Error(), row.prefix) {
+				t.Errorf("Decode error = %v, want the prefix %q", err, row.prefix)
+			}
 			assertProbeDecline(t, CheckDecode[struct{}](schema, rootName), err)
 		})
 	}

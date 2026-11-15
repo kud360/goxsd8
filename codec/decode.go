@@ -687,10 +687,11 @@ var ErrTypeMismatch = errors.New("codec: T is not the type codegen emits for the
 //     occurrence: when no WithBranches supplies it for an interface with
 //     alternatives, or its count differs, or it holds a nil value, a type
 //     that is no struct, a type twice, or a branch matching no alternative an
-//     earlier branch did not match. Of the element alternatives of a choice,
-//     or members of a substitution group, whose local names render one Go
-//     identifier, which for a choice no wildcard alternative's word any and
-//     no model-group alternative's compositor renders, those whose branch
+//     earlier branch did not match. Of the element and wildcard alternatives
+//     of a choice whose branch words, as codegen's package doc "# Naming"
+//     gives them, render one Go identifier, which no model-group
+//     alternative's compositor renders, or of the members of a substitution
+//     group whose local names render one, those whose branch
 //     struct shares its shape with another one's, as item 5 states, are a
 //     tie, two or more where any are. Codegen names each of a tie's branches
 //     B or B followed by a decimal from 2, B being the interface's name
@@ -3109,8 +3110,8 @@ type tieGroup struct {
 // are words, in alternative order, from which tiesOf takes a sealed
 // interface's ties: each group the two or more alternatives whose words
 // render one Go identifier, kept only where placed[i] reports each one an
-// element alternative or a substitution group member. An alternative whose
-// word is "" is in no group.
+// element or wildcard alternative (choiceWords) or a substitution group
+// member. An alternative whose word is "" is in no group.
 func wordGroups(words []string, placed []bool) []tieGroup {
 	var groups []tieGroup
 	// at maps a rendered word to its group's index in groups; a lookup
@@ -3449,14 +3450,20 @@ func bindChoice(run *bindRun, ct xsd.ComplexType, particles []xsd.Particle, x *c
 
 // choiceWords returns the branch word of each of particles, a choice's
 // alternatives, in order, as codegen names a choice's branch structs from
-// them (codegen/doc.go "# Naming"), and whether each is an element
-// alternative: an element declaration's local name, the referenced one's for
-// an <element ref>, any for a wildcard, and a model group's compositor. A
-// particle whose term particleTerm cannot read has the word "", bindChoice
-// returning that error when it reaches the particle.
+// them (codegen/doc.go "# Naming"), and whether each is an element or
+// wildcard alternative, which a tie may hold: an element declaration's local
+// name, the referenced one's for an <element ref>, any for a wildcard, and a
+// model group's compositor, which no tie holds. A wildcard alternative may
+// be tied because a child's expanded name picks among two wildcards
+// (cvc-wildcard-name, cvc-wildcard-namespace), two that could admit one
+// name competing, which cos-nonambig rejects before Decode is reached, so
+// the child's attribution puts it to its alternative and only the branch
+// structs, of one shape, are left to tell apart, by name. A particle whose
+// term particleTerm cannot read has the word "", bindChoice returning that
+// error when it reaches the particle.
 func choiceWords(schema *xsd.Schema, particles []xsd.Particle, typeSubject string) ([]string, []bool) {
 	words := make([]string, len(particles))
-	elements := make([]bool, len(particles))
+	eligible := make([]bool, len(particles))
 	for i, p := range particles {
 		term, err := particleTerm(schema, p, typeSubject)
 		if err != nil {
@@ -3466,14 +3473,14 @@ func choiceWords(schema *xsd.Schema, particles []xsd.Particle, typeSubject strin
 		// exception.
 		switch term := term.(type) {
 		case xsd.Wildcard:
-			words[i] = "any"
+			words[i], eligible[i] = "any", true
 		case xsd.ModelGroup:
 			words[i] = term.Compositor().String()
 		case xsd.ElementDeclaration:
-			words[i], elements[i] = term.Name().Local, true
+			words[i], eligible[i] = term.Name().Local, true
 		}
 	}
-	return words, elements
+	return words, eligible
 }
 
 // groupAlternative returns the groupBranch of a choice's model-group
@@ -4587,12 +4594,12 @@ func (c *sealed[A]) placeTie(it reflect.Type, g tieGroup, branches []reflect.Typ
 		}
 		rank, ok := goname.Rank(b, bt.Name())
 		if !ok {
-			return fmt.Errorf("%w: branch %s of %s is named neither %s nor %s followed by a decimal from 2, as codegen names the branch structs of its %d alternatives whose local names render one identifier", ErrTypeMismatch, bt, it, b, b, len(g.alts))
+			return fmt.Errorf("%w: branch %s of %s is named neither %s nor %s followed by a decimal from 2, as codegen names the branch structs of its %d tied alternatives, whose branch words render one identifier", ErrTypeMismatch, bt, it, b, b, len(g.alts))
 		}
 		in = append(in, ranked{branch: i, rank: rank})
 	}
 	if len(in) != len(g.alts) {
-		return fmt.Errorf("%w: WithBranches supplies %d branches of %s of the shape of the %d alternatives codegen names %s and %s followed by a decimal from 2", ErrTypeMismatch, len(in), it, len(g.alts), b, b)
+		return fmt.Errorf("%w: WithBranches supplies %d branches of %s of the shape of its %d tied alternatives, whose branch structs codegen names %s and %s followed by a decimal from 2", ErrTypeMismatch, len(in), it, len(g.alts), b, b)
 	}
 	slices.SortFunc(in, func(x, y ranked) int { return cmp.Compare(x.rank, y.rank) })
 	for k, r := range in {
@@ -4602,7 +4609,7 @@ func (c *sealed[A]) placeTie(it reflect.Type, g tieGroup, branches []reflect.Typ
 		}
 		a := g.alts[k]
 		if !branchAdmits(c.alts[a], bt, sets) {
-			return fmt.Errorf("%w: branch %s of %s, by its name the branch of alternative %d of the %d codegen names from %s, has the shape of no branch struct codegen emits for it", ErrTypeMismatch, bt, it, k+1, len(g.alts), b)
+			return fmt.Errorf("%w: branch %s of %s, by its name the branch of tied alternative %d of %d, whose branch structs codegen names from %s, has the shape of no branch struct codegen emits for it", ErrTypeMismatch, bt, it, k+1, len(g.alts), b)
 		}
 		placed[r.branch] = a
 	}
