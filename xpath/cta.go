@@ -157,7 +157,7 @@ type CTATest struct{ root ctaExpr }
 // the zero CTATest, exactly when it did not: the reason the {expression} is
 // one this engine cannot evaluate. How a library caller learns from it which
 // {test}s a validate.Validator declines is package validate's Contract section
-// to say. The forms it declines are the CTA column of the package doc's "Forms
+// to say. Which forms it evaluates is the CTA column of the package doc's "Forms
 // each entry point evaluates" section.
 //
 // types resolves every QName the expression names a datatype with — [15]
