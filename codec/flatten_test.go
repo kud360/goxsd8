@@ -23,9 +23,15 @@ import (
 // any) repeated, its wildcard ##any; flatHeadSchema's sequence(h?, b?)
 // repeated, h an <element ref> to the head of m's substitution group; and
 // flatSharedSchema's sequence(sequence(c, a)?, sequence(d, a)?) repeated, two
-// local declarations of a in one reach. flatOnceSchema's sequence(a?, b?)
-// occurs exactly once, so codegen gives it its own fields and no slice,
-// though flatSeqSchema's repeated one is flattened.
+// local declarations of a in one reach; flatTieSchema's sequence(<group ref>
+// g1?, <group ref> g2?) occurring twice, g1 sequence(r1, r2) and g2
+// sequence(r2, r3), groupB004's shape (msData/group/groupB004.xsd); and
+// flatTriSchema's sequence(g1?, g2?, g3?) occurring three times, g3
+// sequence(r4, r2), three local declarations of r2 in one reach, g3's r2
+// after r4 so that no two compete (Structures §3.8.6.4 cos-nonambig).
+// flatOnceSchema's sequence(a?, b?) occurs exactly once, so codegen gives it
+// its own fields and no slice, though flatSeqSchema's repeated one is
+// flattened.
 const (
 	flatOnceSchema   = `<xs:element name="r"><xs:complexType><xs:sequence><xs:element name="a" type="xs:string" minOccurs="0"/><xs:element name="b" type="xs:string" minOccurs="0"/></xs:sequence></xs:complexType></xs:element>`
 	flatSeqSchema    = `<xs:element name="r"><xs:complexType><xs:sequence maxOccurs="unbounded"><xs:element name="a" type="xs:string" minOccurs="0"/><xs:element name="b" type="xs:string" minOccurs="0"/></xs:sequence></xs:complexType></xs:element>`
@@ -39,6 +45,11 @@ const (
 		`<xs:element name="r"><xs:complexType><xs:sequence maxOccurs="unbounded"><xs:element ref="s:h" minOccurs="0"/><xs:element name="b" type="xs:string" minOccurs="0"/></xs:sequence></xs:complexType></xs:element>`
 	flatSharedSchema = `<xs:element name="r"><xs:complexType><xs:sequence maxOccurs="unbounded"><xs:sequence minOccurs="0"><xs:element name="c" type="xs:string"/><xs:element name="a" type="xs:string"/></xs:sequence>` +
 		`<xs:sequence minOccurs="0"><xs:element name="d" type="xs:string"/><xs:element name="a" type="xs:string"/></xs:sequence></xs:sequence></xs:complexType></xs:element>`
+	flatTieGroups = `<xs:group name="g1"><xs:sequence><xs:element name="r1" type="xs:string"/><xs:element name="r2" type="xs:string"/></xs:sequence></xs:group>` +
+		`<xs:group name="g2"><xs:sequence><xs:element name="r2" type="xs:string"/><xs:element name="r3" type="xs:string"/></xs:sequence></xs:group>`
+	flatTieSchema = flatTieGroups + `<xs:element name="r"><xs:complexType><xs:sequence maxOccurs="2"><xs:group ref="s:g1" minOccurs="0"/><xs:group ref="s:g2" minOccurs="0"/></xs:sequence></xs:complexType></xs:element>`
+	flatTriSchema = flatTieGroups + `<xs:group name="g3"><xs:sequence><xs:element name="r4" type="xs:string"/><xs:element name="r2" type="xs:string"/></xs:sequence></xs:group>` +
+		`<xs:element name="r"><xs:complexType><xs:sequence maxOccurs="3"><xs:group ref="s:g1" minOccurs="0"/><xs:group ref="s:g2" minOccurs="0"/><xs:group ref="s:g3" minOccurs="0"/></xs:sequence></xs:complexType></xs:element>`
 )
 
 // The types codegen emits for the flatten schemas' s:r, in shape, which
@@ -90,6 +101,60 @@ type (
 	flatGroupMName string
 )
 
+// The types codegen emits for flatSharedSchema, flatTieSchema and
+// flatTriSchema, in shape, which TestFlattenTypesAreCodegens pins: each tied
+// branch carries the name codegen gives it over its interface's, since
+// Decode places a tie's branches by name (item 6 of Decode's doc), and each
+// other branch a name codegen does not give it, placed by shape alone.
+type (
+	flatShared       struct{ Sequence []flatSharedItem }
+	flatSharedItem   interface{ isFlatSharedItem() }
+	flatSharedC      struct{ C string }
+	flatSharedD      struct{ D string }
+	FlatSharedItemA  struct{ A string }
+	FlatSharedItemA2 struct{ A string }
+
+	flatTie         struct{ Sequence []flatTieItem }
+	flatTieItem     interface{ isFlatTieItem() }
+	flatTieR1       struct{ R1 string }
+	flatTieR3       struct{ R3 string }
+	FlatTieItemR2   struct{ R2 string }
+	FlatTieItemR22  struct{ R2 string }
+	flatTieMisnamed struct{ R2 string }
+
+	flatTri        struct{ Sequence []flatTriItem }
+	flatTriItem    interface{ isFlatTriItem() }
+	flatTriR1      struct{ R1 string }
+	flatTriR3      struct{ R3 string }
+	flatTriR4      struct{ R4 string }
+	FlatTriItemR2  struct{ R2 string }
+	FlatTriItemR22 struct{ R2 string }
+	FlatTriItemR23 struct{ R2 string }
+)
+
+func (flatSharedC) isFlatSharedItem()      {}
+func (flatSharedD) isFlatSharedItem()      {}
+func (FlatSharedItemA) isFlatSharedItem()  {}
+func (FlatSharedItemA2) isFlatSharedItem() {}
+func (flatTieR1) isFlatTieItem()           {}
+func (flatTieR3) isFlatTieItem()           {}
+func (FlatTieItemR2) isFlatTieItem()       {}
+func (FlatTieItemR22) isFlatTieItem()      {}
+func (flatTieMisnamed) isFlatTieItem()     {}
+func (flatTriR1) isFlatTriItem()           {}
+func (flatTriR3) isFlatTriItem()           {}
+func (flatTriR4) isFlatTriItem()           {}
+func (FlatTriItemR2) isFlatTriItem()       {}
+func (FlatTriItemR22) isFlatTriItem()      {}
+func (FlatTriItemR23) isFlatTriItem()      {}
+
+// The tied flatten types' branch sets, each supplied against reach order.
+var (
+	flatSharedBranches = WithBranches[flatSharedItem](FlatSharedItemA2{}, flatSharedD{}, FlatSharedItemA{}, flatSharedC{})
+	flatTieBranches    = WithBranches[flatTieItem](flatTieR3{}, FlatTieItemR22{}, flatTieR1{}, FlatTieItemR2{})
+	flatTriBranches    = WithBranches[flatTriItem](FlatTriItemR23{}, flatTriR4{}, FlatTriItemR2{}, flatTriR1{}, FlatTriItemR22{}, flatTriR3{})
+)
+
 func (flatSeqA) isFlatSeqItem()       {}
 func (flatSeqB) isFlatSeqItem()       {}
 func (flatChoiceA) isFlatChoiceItem() {}
@@ -118,8 +183,10 @@ var (
 
 // TestFlattenTypesAreCodegens pins the types above to those codegen emits for
 // each flatten schema, in shape, so that the rows decoding into them decode
-// into codegen's types; flatSharedSchema's two branches of field A, of one
-// shape, are the decline TestDecodeFlattenSharedBranch pins.
+// into codegen's types, the tied branches' names included. Each row's
+// declarations are in codegen's order, which for a flattened interface's
+// branches is reach order, so that a tie's suffixes are pinned to its
+// alternatives even where its branch structs are of one shape.
 func TestFlattenTypesAreCodegens(t *testing.T) {
 	branch := func(iface, name, field string) string {
 		return "type " + name + " struct {\n\t" + field + "\n}\n\nfunc (" + name + ") is" + iface + "() {}\n"
@@ -135,16 +202,26 @@ func TestFlattenTypesAreCodegens(t *testing.T) {
 		{flatOptSchema, []string{"type R struct {\n\tChoice []RChoice\n}\n", branch("RChoice", "RChoiceA", "A string"), branch("RChoice", "RChoiceB", "B string")}},
 		{flatWildSchema, []string{"type R struct {\n\tSequence []RSequence\n}\n", branch("RSequence", "RSequenceA", "A string"), branch("RSequence", "RSequenceAny", "Any AnyElement")}},
 		{flatPickSchema, []string{"type R struct {\n\tChoice []RChoice\n}\n", branch("RChoice", "RChoiceA", "A string"), branch("RChoice", "RChoiceAny", "Any AnyElement")}},
-		{flatHeadSchema, []string{"type R struct {\n\tSequence []RSequence\n}\n", branch("RSequence", "RSequenceH", "H HSubstitutionGroup"), branch("RSequence", "RSequenceB", "B string"),
-			branch("HSubstitutionGroup", "HSubstitutionGroupH", "H H"), branch("HSubstitutionGroup", "HSubstitutionGroupM", "M M")}},
-		{flatSharedSchema, []string{"type R struct {\n\tSequence []RSequence\n}\n", branch("RSequence", "RSequenceA", "A string"), branch("RSequence", "RSequenceA2", "A string")}},
+		{flatHeadSchema, []string{"type R struct {\n\tSequence []RSequence\n}\n", branch("RSequence", "RSequenceH", "H HSubstitutionGroup"),
+			branch("HSubstitutionGroup", "HSubstitutionGroupH", "H H"), branch("HSubstitutionGroup", "HSubstitutionGroupM", "M M"), branch("RSequence", "RSequenceB", "B string")}},
+		{flatSharedSchema, []string{"type R struct {\n\tSequence []RSequence\n}\n", branch("RSequence", "RSequenceC", "C string"), branch("RSequence", "RSequenceA", "A string"),
+			branch("RSequence", "RSequenceD", "D string"), branch("RSequence", "RSequenceA2", "A string")}},
+		{flatTieSchema, []string{"type R struct {\n\tSequence []RSequence\n}\n", branch("RSequence", "RSequenceR1", "R1 string"), branch("RSequence", "RSequenceR2", "R2 string"),
+			branch("RSequence", "RSequenceR22", "R2 string"), branch("RSequence", "RSequenceR3", "R3 string")}},
+		{flatTriSchema, []string{"type R struct {\n\tSequence []RSequence\n}\n", branch("RSequence", "RSequenceR1", "R1 string"), branch("RSequence", "RSequenceR2", "R2 string"),
+			branch("RSequence", "RSequenceR22", "R2 string"), branch("RSequence", "RSequenceR3", "R3 string"),
+			branch("RSequence", "RSequenceR4", "R4 string"), branch("RSequence", "RSequenceR23", "R2 string")}},
 	}
 	for _, row := range rows {
 		gen := generated(t, schemaOf(t, row.decls))
+		rest := gen
 		for _, decl := range row.want {
-			if !bytes.Contains(gen, []byte(decl)) {
-				t.Errorf("codegen emits\n%s\nwhich does not declare\n%s", gen, decl)
+			_, after, ok := bytes.Cut(rest, []byte(decl))
+			if !ok {
+				t.Errorf("codegen emits\n%s\nwhich does not declare\n%s\nafter the declarations before it in the row", gen, decl)
+				break
 			}
+			rest = after
 		}
 	}
 }
@@ -233,26 +310,98 @@ func TestDecodeFlattenedXsiType(t *testing.T) {
 	}
 }
 
-// TestDecodeFlattenSharedBranch pins item 5 for a flattened reach holding two
-// local declarations of one expanded name: their {type definition}s are one
-// (Structures §3.8.6.3 cos-element-consistent), so their branch structs have
-// one shape and decline as constructSharedBranch, the one decline a share of
-// expanded names reaches, since position, not name, attributes a child.
-// Decode and CheckDecode decline alike.
-func TestDecodeFlattenSharedBranch(t *testing.T) {
-	schema := schemaOf(t, flatSharedSchema)
-	data := instanceOf("", "<s:c>1</s:c><s:a>2</s:a><s:d>3</s:d><s:a>4</s:a>")
-	mustAccept(t, schema, data)
-	_, decoded := Decode[struct{}](schema, strict.New(), data)
-	for _, got := range []struct {
-		name string
-		err  error
-	}{{"Decode", decoded}, {"CheckDecode", CheckDecode[struct{}](schema, rootName)}} {
-		var de *DeclineError
-		if !errors.As(got.err, &de) || de.Construct() != (Construct{constructSharedBranch}) {
-			t.Errorf("%s = %v, want a *DeclineError of %v", got.name, got.err, Construct{constructSharedBranch})
-		}
+// TestDecodeFlattenTie pins item 6's tie at a flattened reach holding two or
+// more local declarations of one expanded name: their {type definition}s are
+// one (Structures §3.8.6.3 cos-element-consistent), so their branch structs
+// have one shape, and they are a tie, whose branches go to their alternatives
+// by name, each branch set supplied against reach order. Each child is
+// attributed to its particle by position (cvc-accept §3.9.4.3 clause 3,
+// cos-nonambig), so groupB004v's <r2/><r3/> fills g2's branch, R22, and
+// flatTriSchema's <r4/><r2/> g3's, R23. CheckDecode returns nil for each
+// row's T.
+func TestDecodeFlattenTie(t *testing.T) {
+	rows := []struct {
+		name, decls, body string
+		into              target
+		want              any
+	}{
+		{"two of a, the first group's and the second's", flatSharedSchema, "<s:c>1</s:c><s:a>2</s:a><s:d>3</s:d><s:a>4</s:a>", into[flatShared](flatSharedBranches),
+			flatShared{Sequence: []flatSharedItem{flatSharedC{C: "1"}, FlatSharedItemA{A: "2"}, flatSharedD{D: "3"}, FlatSharedItemA2{A: "4"}}}},
+		{"groupB004v, r2 of g2", flatTieSchema, "<s:r2>a</s:r2><s:r3>b</s:r3>", into[flatTie](flatTieBranches),
+			flatTie{Sequence: []flatTieItem{FlatTieItemR22{R2: "a"}, flatTieR3{R3: "b"}}}},
+		{"r2 of g1", flatTieSchema, "<s:r1>a</s:r1><s:r2>b</s:r2>", into[flatTie](flatTieBranches),
+			flatTie{Sequence: []flatTieItem{flatTieR1{R1: "a"}, FlatTieItemR2{R2: "b"}}}},
+		{"r2 of g1, then of g2", flatTieSchema, "<s:r1>a</s:r1><s:r2>b</s:r2><s:r2>c</s:r2><s:r3>d</s:r3>", into[flatTie](flatTieBranches),
+			flatTie{Sequence: []flatTieItem{flatTieR1{R1: "a"}, FlatTieItemR2{R2: "b"}, FlatTieItemR22{R2: "c"}, flatTieR3{R3: "d"}}}},
+		{"three of r2, r2 of g3", flatTriSchema, "<s:r4>a</s:r4><s:r2>b</s:r2>", into[flatTri](flatTriBranches),
+			flatTri{Sequence: []flatTriItem{flatTriR4{R4: "a"}, FlatTriItemR23{R2: "b"}}}},
+		{"three of r2, r2 of g2", flatTriSchema, "<s:r2>a</s:r2><s:r3>b</s:r3>", into[flatTri](flatTriBranches),
+			flatTri{Sequence: []flatTriItem{FlatTriItemR22{R2: "a"}, flatTriR3{R3: "b"}}}},
+		{"three of r2, each group's", flatTriSchema, "<s:r1>a</s:r1><s:r2>b</s:r2><s:r2>c</s:r2><s:r3>d</s:r3><s:r4>e</s:r4><s:r2>f</s:r2>", into[flatTri](flatTriBranches),
+			flatTri{Sequence: []flatTriItem{flatTriR1{R1: "a"}, FlatTriItemR2{R2: "b"}, FlatTriItemR22{R2: "c"}, flatTriR3{R3: "d"}, flatTriR4{R4: "e"}, FlatTriItemR23{R2: "f"}}}},
 	}
+	for _, row := range rows {
+		t.Run(row.name, func(t *testing.T) {
+			schema := schemaOf(t, row.decls)
+			data := instanceOf("", row.body)
+			mustAccept(t, schema, data)
+			got, err := row.into.decode(schema, data)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !reflect.DeepEqual(got, row.want) {
+				t.Errorf("Decode = %#v, want %#v", got, row.want)
+			}
+			if err := row.into.check(schema); err != nil {
+				t.Errorf("CheckDecode = %v, want nil for a row Decode decodes", err)
+			}
+		})
+	}
+}
+
+// TestDecodeFlattenTieMismatch pins item 6's tie at a flattened reach for a
+// branch set it cannot place: two branches of the tie's shape, one named
+// neither B nor B followed by a decimal from 2, are ErrTypeMismatch, Decode
+// returning no value and CheckDecode Decode's error, never a decode into
+// either branch, though each branch's shape is one the tie's alternatives
+// admit.
+func TestDecodeFlattenTieMismatch(t *testing.T) {
+	const want = "codec: T is not the type codegen emits for the document element: branch codec.flatTieMisnamed of codec.flatTieItem is named neither FlatTieItemR2 nor FlatTieItemR2 followed by a decimal from 2, as codegen names the branch structs of its 2 tied alternatives, whose branch words render one identifier"
+	branch := WithBranches[flatTieItem](flatTieR3{}, flatTieMisnamed{}, flatTieR1{}, FlatTieItemR22{})
+	schema := schemaOf(t, flatTieSchema)
+	data := instanceOf("", "<s:r2>a</s:r2><s:r3>b</s:r3>")
+	mustAccept(t, schema, data)
+	got, err := Decode[flatTie](schema, strict.New(), data, branch)
+	if got != nil {
+		t.Fatalf("Decode = %#v, want no value", *got)
+	}
+	if err == nil || !errors.Is(err, ErrTypeMismatch) || err.Error() != want {
+		t.Fatalf("Decode error = %v, want %q", err, want)
+	}
+	assertProbeMismatch(t, CheckDecode[flatTie](schema, rootName, branch), err)
+}
+
+// TestDecodeFlattenTieNamespaces pins that a flattened reach's tie is of
+// one expanded name, not one local name: of flatTieSchema's shape with g2's
+// r2 unqualified, the two r2 particles' branch structs share a shape but
+// their expanded names differ, so the second declines as
+// constructSharedBranch from Decode and CheckDecode alike.
+func TestDecodeFlattenTieNamespaces(t *testing.T) {
+	const want = "?:1:1: codec does not decode two branches of a sealed interface whose structs have one shape: element r2 declared at"
+	schema := schemaOf(t, `<xs:group name="g1"><xs:sequence><xs:element name="r1" type="xs:string"/><xs:element name="r2" type="xs:string"/></xs:sequence></xs:group>`+
+		`<xs:group name="g2"><xs:sequence><xs:element name="r2" type="xs:string" form="unqualified"/><xs:element name="r3" type="xs:string"/></xs:sequence></xs:group>`+
+		`<xs:element name="r"><xs:complexType><xs:sequence maxOccurs="2"><xs:group ref="s:g1" minOccurs="0"/><xs:group ref="s:g2" minOccurs="0"/></xs:sequence></xs:complexType></xs:element>`)
+	data := instanceOf("", "<r2>a</r2><s:r3>b</s:r3>")
+	mustAccept(t, schema, data)
+	got, err := Decode[struct{}](schema, strict.New(), data)
+	if got != nil {
+		t.Fatalf("Decode = %v, want no value", *got)
+	}
+	assertDecline(t, err, constructSharedBranch, 1, 1)
+	if !strings.HasPrefix(err.Error(), want) {
+		t.Errorf("Decode error = %v, want the prefix %q", err, want)
+	}
+	assertProbeDecline(t, CheckDecode[struct{}](schema, rootName), err)
 }
 
 // TestCheckDecodeUntrackedFlattened pins the flattened arm's ContentMatcher

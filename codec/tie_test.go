@@ -280,8 +280,8 @@ func TestDecodeTieMismatchBeyondTie(t *testing.T) {
 // identifier, and two wildcard particles of one, which no name places
 // (bindReach), the second declining as wildcard particle 2 of the type; each
 // declines constructSharedBranch from Decode and CheckDecode alike. Two
-// particles of one expanded name in a flattened reach are
-// TestDecodeFlattenSharedBranch's.
+// particles of one expanded name in a flattened reach are a tie,
+// TestDecodeFlattenTie's.
 func TestDecodeTieDeclines(t *testing.T) {
 	rows := []struct {
 		name, decls, body, prefix string
