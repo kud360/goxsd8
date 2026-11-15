@@ -161,11 +161,12 @@ func (w *walk) conditionallySelected(e Element, table xsd.TypeTable, inherited [
 //
 // table is the {type table} of E's ·governing element declaration·, as
 // [xsd.ElementDeclaration.TypeTable] returns it. Where that reports false, do
-// not call this method: the table returned then selects a nil slot with ok
-// true, which ResolvedType does not resolve, whereas key-selected-type clause 2
-// makes the declaration's own {type definition} E's ·selected type
-// definition· outright. [Attribute] is an interface the caller implements, and
-// this package exports no constructor for it.
+// not call this method: key-selected-type clause 2 makes the declaration's own
+// {type definition} E's ·selected type definition· outright. Handed the zero
+// xsd.TypeTable{}, this method selects its {default type definition}'s nil
+// slot with ok true ([Validator.ConditionallySelectedIndex] answers it 0,
+// true), a slot ResolvedType does not resolve. [Attribute] is an interface the
+// caller implements, and this package exports no constructor for it.
 //
 // Each {test} reads E's attributes, then each of inherited whose ·expanded
 // name· no member of attributes has (key-cta-ta-select clauses 1.1.2 and
@@ -205,6 +206,10 @@ func (w *walk) conditionallySelected(e Element, table xsd.TypeTable, inherited [
 // [Validator.Governing]'s to decide, handed this method partly applied as
 // its selection, and not the adapter's.
 //
+// ExampleValidator_ConditionallySelected builds a minimal schema whose
+// declarations carry a {type table}, implements [Attribute], and resolves each
+// slot through [Validator.Schema]'s ResolvedType.
+//
 // [Validator.ConditionallySelectedIndex] answers the same selection by
 // position.
 func (v *Validator) ConditionallySelected(table xsd.TypeTable, attributes, inherited []Attribute) (xsd.TypeDefinitionOrRef, bool) {
@@ -220,15 +225,17 @@ func (v *Validator) ConditionallySelected(table xsd.TypeTable, attributes, inher
 }
 
 // ConditionallySelectedIndex is [Validator.ConditionallySelected] answered by
-// position instead of by slot. Its arguments, their preconditions and ok are
-// ConditionallySelected's. index is the position of the selected Type
-// Alternative in table's {alternatives} followed by its {default type
-// definition}, so it equals len(table.Alternatives()) exactly where the
-// {default type definition} is selected; where ok is false, index is 0 and is
-// not to be read. Read it to match the selection to a value of your own per
-// slot: an anonymous {type definition} is owned by value by its slot
-// (xsd.InlineTypeDefinition) and has no identity, so the position is what tells
-// two of them apart.
+// position instead of by slot. Its arguments, their preconditions, ok and the
+// Example that builds them are ConditionallySelected's. index is the position
+// of the selected Type Alternative in table's {alternatives} followed by its
+// {default type definition}, so it equals len(table.Alternatives()) exactly
+// where the {default type definition} is selected; where ok is false, index is
+// 0, the comma-ok zero value, and indexing table.Alternatives() with it
+// unchecked reads the first alternative's slot, which the table did not
+// select. It is for a caller that matches the selection to a value of its own
+// per slot, as a binding generator's decoder (codec) does: an anonymous {type
+// definition} is owned by value by its slot (xsd.InlineTypeDefinition) and has
+// no identity, so the position is what tells two of them apart.
 func (v *Validator) ConditionallySelectedIndex(table xsd.TypeTable, attributes, inherited []Attribute) (index int, ok bool) {
 	i, declined := selectAlternative(table, v.backend, v.schema, ctaAttributes(attributes, inherited))
 	if declined != nil {

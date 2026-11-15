@@ -527,6 +527,31 @@ func TestConditionallySelectedIndex(t *testing.T) {
 	}
 }
 
+// TestConditionallySelectedZeroTable pins the answer
+// [Validator.ConditionallySelected]'s doc gives for the zero xsd.TypeTable{}:
+// index 0, len of its nil {alternatives}, with ok true, and the nil slot of its
+// zero {default type definition}, which ResolvedType does not resolve. It has
+// its own table source and assertions because TestConditionallySelectedIndex's
+// loop reads a by-name reference off every slot it selects.
+func TestConditionallySelectedZeroTable(t *testing.T) {
+	schema := ctaSchema(t)
+	v, err := New(schema, testBackend())
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	var table xsd.TypeTable
+	if index, ok := v.ConditionallySelectedIndex(table, nil, nil); index != 0 || !ok {
+		t.Fatalf("ConditionallySelectedIndex(xsd.TypeTable{}, nil, nil) = %d, %t; want 0, true", index, ok)
+	}
+	slot, ok := v.ConditionallySelected(table, nil, nil)
+	if slot != nil || !ok {
+		t.Fatalf("ConditionallySelected(xsd.TypeTable{}, nil, nil) = %v, %t; want nil, true", slot, ok)
+	}
+	if typ, resolved := v.Schema().ResolvedType(slot); resolved {
+		t.Errorf("ResolvedType(nil) = %v, true; want false", typ)
+	}
+}
+
 // namedTypeAlternative builds a Type Alternative whose {type definition} is the
 // by-name reference §3.12.2 declare-ta's type= arm yields, failing the test on
 // any rejection. Every fixture in package validate builds that arm; the inline
