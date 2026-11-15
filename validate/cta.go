@@ -183,8 +183,8 @@ func (w *walk) conditionallySelected(e Element, table xsd.TypeTable, inherited [
 // by the same scan: a dynamic or type error inside a {test} counts as false
 // (key-cta-ta-select clause 2), and ok is false exactly where the scan reaches
 // an alternative whose {test} the engine cannot evaluate before any succeeds —
-// which {test}s it compiles is [xpath.CompileCTATest]'s to say — never where no
-// alternative succeeds.
+// which {test}s it compiles is [xpath.CompileCTATest]'s to say, asked as the
+// package doc's Contract section states — never where no alternative succeeds.
 //
 // ok false is an undecided selection, not a false one: the type is withheld,
 // meaning no answer is given at all — neither the alternative's type nor the
