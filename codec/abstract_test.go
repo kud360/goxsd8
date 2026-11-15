@@ -18,11 +18,12 @@ import (
 // abstractMatcherSchema's a sequence of a, b, an xs:string, and a second
 // optional a, which forces a Matcher (particleShape); abstractOccursSchema's a
 // sequence of a and b occurring twice, an occurrence field; abstractFlatSchema's
-// a repeated choice of a and b, a flattened particle; and abstractSubstSchema's a
-// sequence of an <element ref> to h, of ab, the head of m, of ab too.
-// abstractChoiceSchema's ab has a choice of a and b, cc its one member adding
-// nothing, and r is of ab. abstractLocalSchema's ab has a sequence of x, cc its one
-// member adding nothing, and r a sequence of an optional a of ab.
+// a repeated choice of a and b, a flattened particle. abstractSubstSchema's ab,
+// of empty content, extends hb, of empty content too, and has cc, adding k,
+// its one member, and r is a sequence of an <element ref> to h, of hb, the
+// head of m, of ab. abstractChoiceSchema's ab has a choice of a and b, cc its one
+// member adding nothing, and r is of ab. abstractLocalSchema's ab has a sequence of
+// x, cc its one member adding nothing, and r a sequence of an optional a of ab.
 // abstractAltSchema's r is of b0, which ab extends adding nothing, under a {type
 // table} whose alternative selects ab, which has no member, where k is present;
 // abstractAltMemberSchema adds cc, ab's one member, adding m. abstractRootSchema's
@@ -37,7 +38,9 @@ const (
 	abstractMatcherSchema  = abstractKSchema + `<xs:element name="r"><xs:complexType><xs:sequence><xs:element name="a" type="s:ab"/><xs:element name="b" type="xs:string"/><xs:element name="a" type="s:ab" minOccurs="0"/></xs:sequence></xs:complexType></xs:element>`
 	abstractOccursSchema   = abstractKSchema + `<xs:element name="r"><xs:complexType><xs:sequence maxOccurs="2"><xs:element name="a" type="s:ab"/><xs:element name="b" type="xs:string"/></xs:sequence></xs:complexType></xs:element>`
 	abstractFlatSchema     = abstractKSchema + `<xs:element name="r"><xs:complexType><xs:choice maxOccurs="unbounded"><xs:element name="a" type="s:ab"/><xs:element name="b" type="xs:string"/></xs:choice></xs:complexType></xs:element>`
-	abstractSubstSchema    = abstractKSchema + `<xs:element name="h" type="s:ab"/><xs:element name="m" type="s:ab" substitutionGroup="s:h"/>
+	abstractSubstSchema    = `<xs:complexType name="hb"/><xs:complexType name="ab" abstract="true"><xs:complexContent><xs:extension base="s:hb"/></xs:complexContent></xs:complexType>
+		<xs:complexType name="cc"><xs:complexContent><xs:extension base="s:ab"><xs:attribute name="k" type="xs:string"/></xs:extension></xs:complexContent></xs:complexType>
+		<xs:element name="h" type="s:hb"/><xs:element name="m" type="s:ab" substitutionGroup="s:h"/>
 		<xs:element name="r"><xs:complexType><xs:sequence><xs:element ref="s:h"/></xs:sequence></xs:complexType></xs:element>`
 	abstractChoiceSchema = `<xs:complexType name="ab" abstract="true"><xs:choice><xs:element name="a" type="xs:string"/><xs:element name="b" type="xs:int"/></xs:choice></xs:complexType>
 		<xs:complexType name="cc"><xs:complexContent><xs:extension base="s:ab"/></xs:complexContent></xs:complexType><xs:element name="r" type="s:ab"/>`
@@ -80,7 +83,7 @@ type (
 	abFlatB      struct{ B string }
 	abSubR       struct{ H abSubGroup }
 	abSubGroup   interface{ isAbSubGroup() }
-	abSubH       struct{ H abK }
+	abSubH       struct{ H struct{} }
 	abSubM       struct{ M abK }
 	abChR        interface{ isAbChR() }
 	abChRA       struct{ A string }
@@ -124,7 +127,7 @@ func TestAbstractTypeShapesAreCodegens(t *testing.T) {
 		{abstractMatcherSchema, []string{"type R struct {\n\tA  Cc\n\tB  string\n\tA2 *Cc\n}\n"}},
 		{abstractOccursSchema, []string{"type R struct {\n\tSequence []RSequence\n}\n", "type RSequence struct {\n\tA Cc\n\tB string\n}\n"}},
 		{abstractFlatSchema, []string{"type R struct {\n\tChoice []RChoice\n}\n", "type RChoiceA struct {\n\tA Cc\n}\n", "type RChoiceB struct {\n\tB string\n}\n"}},
-		{abstractSubstSchema, []string{"type R struct {\n\tH HSubstitutionGroup\n}\n", "type H struct {\n\tK *string\n}\n", "type M struct {\n\tK *string\n}\n",
+		{abstractSubstSchema, []string{"type R struct {\n\tH HSubstitutionGroup\n}\n", "type H struct{}\n", "type M struct {\n\tK *string\n}\n",
 			"type HSubstitutionGroupH struct {\n\tH H\n}\n", "type HSubstitutionGroupM struct {\n\tM M\n}\n"}},
 		{abstractChoiceSchema, []string{"type R interface {\n\tisR()\n}\n", "type RA struct {\n\tA string\n}\n", "type RB struct {\n\tB int32\n}\n"}},
 		{abstractKSchema + `<xs:element name="r" type="s:ab" nillable="true"/>`, []string{"type R struct {\n\tK *string\n}\n", "type RAttributes struct {\n\tK *string\n}\n"}},
@@ -174,8 +177,6 @@ func TestDecodeAbstractTypeChild(t *testing.T) {
 			into[abFlatR](WithBranches[abFlatChoice](abFlatA{}, abFlatB{})), abFlatR{Choice: []abFlatChoice{abFlatB{B: "x"}, abFlatA{A: abK{K: strPtr("v")}}}}},
 		{"a substitution group's member", abstractSubstSchema, `<s:m xsi:type="s:cc" k="v"/>`, "",
 			into[abSubR](WithBranches[abSubGroup](abSubH{}, abSubM{})), abSubR{H: abSubM{M: abK{K: strPtr("v")}}}},
-		{"a substitution group's head", abstractSubstSchema, `<s:h xsi:type="s:cc"/>`, "",
-			into[abSubR](WithBranches[abSubGroup](abSubH{}, abSubM{})), abSubR{H: abSubH{}}},
 		{"an optional local element of an abstract type with one member, present", abstractLocalSchema, `<s:a xsi:type="s:cc"><s:x>v</s:x></s:a>`, "",
 			into[abLocalR](), abLocalR{A: &abLocalCc{X: "v"}}},
 		{"an optional local element of an abstract type with one member, absent", abstractLocalSchema, "", "", into[abLocalR](), abLocalR{}},
@@ -214,9 +215,11 @@ func TestDecodeAbstractTypeChild(t *testing.T) {
 // (admitsXsiType), never by its bound unit: a {type table} alternative
 // holding an abstract type whose instance names its one member declines by
 // xsi:type, as every {type table} declaration's does, and so does b, of cc, the
-// member a's unit binds, beside a, of ab. An xsi:type naming the abstract type
-// itself or no member, and an element of an abstract type with no xsi:type,
-// are charged by validate, which Decode runs first, and decode into nothing.
+// member a's unit binds, beside a, of ab, and h, the head, of a concrete type,
+// whose particle m's element, of ab, is attributed to too. An xsi:type naming
+// the abstract type itself or no member, and an element of an abstract type
+// with no xsi:type, are charged by validate, which Decode runs first, and
+// decode into nothing.
 func TestDecodeAbstractTypeGuards(t *testing.T) {
 	declines := []struct {
 		name    string
@@ -230,6 +233,8 @@ func TestDecodeAbstractTypeGuards(t *testing.T) {
 			into[abAltR](WithBranches[abAltR](abAltRCc{}, abAltRB0{})), func([]byte) int { return 1 }},
 		{"a child of the member's type beside one of the abstract type", abstractSeqSchema, "", `<s:a xsi:type="s:cc"/><s:b xsi:type="s:cc"/>`,
 			into[abSeqR](), func(data []byte) int { return bytes.Index(data, []byte("<s:b")) + 1 }},
+		{"a substitution group's concrete head, its member's type abstract", abstractSubstSchema, "", `<s:h xsi:type="s:cc" k="v"/>`,
+			into[abSubR](WithBranches[abSubGroup](abSubH{}, abSubM{})), func(data []byte) int { return bytes.Index(data, []byte("<s:h")) + 1 }},
 	}
 	for _, row := range declines {
 		t.Run(row.name, func(t *testing.T) {
