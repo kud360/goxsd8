@@ -3,7 +3,8 @@
 // (conditional type assignment, CTA) and of an assertion, and most callers
 // never import it: its entry points are exported because those two packages
 // call them across a package boundary, and a library caller reads their
-// answers off parser's and validate's results. It offers no free-standing
+// answers off parser's and validate's results, save where package validate's
+// Contract section routes it to CompileCTATest. It offers no free-standing
 // Compile(expr) and no evaluation of an expression outside a schema
 // component. CompileCTATest, CTATestStaticError and CompileAssertionTest take
 // xsd components, an xsd.XPathExpression and an xsd.TypeResolver among them,
