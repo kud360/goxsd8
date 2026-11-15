@@ -95,8 +95,9 @@
 //     records for a withheld one, and by position as
 //     [Validator.ConditionallySelectedIndex]; nothing else in the [Result]
 //     reports a withheld selection, since a withheld type charges the element
-//     nothing. The governance that selection feeds, the ·override· included,
-//     is exported as [Validator.Governing].
+//     nothing, and the Contract section below says how to ask which {test}s
+//     can withhold one before any instance. The governance that selection feeds,
+//     the ·override· included, is exported as [Validator.Governing].
 //   - Identity constraints: node tables propagate UPWARD — a keyref on
 //     element E resolves only against key sequences sourced within E's
 //     own subtree; selector/field paths honor xpathDefaultNamespace for
@@ -156,21 +157,25 @@
 // [Unevaluated] check, so the document stands undecided against exactly the
 // rules those entries name.
 //
-// Which assertion and Type Alternative {test}s the engine declines is
-// reported per instance, by [Result.Unevaluated], and by nothing at schema
-// time: no function of this module lists the {test}s a compiled schema's
+// No function of this module lists the {test}s a compiled schema's
 // assessments will decline. A caller that needs to know whether a schema's
-// {test}s are decided assesses an instance and reads its cvc-assertion,
-// key-cta-ta-select and cvc-assertions-valid entries, which the [Unevaluated]
-// doc describes. A decline reason is relative to the types the {test} was
-// compiled against where the assessment reached it: for an {assertions}
-// member of a complex type, the declared types of the attributes and elements
-// it reads, except that an attribute charged under cvc-attribute on that
-// element is read as xs:anySimpleType; for an assertions-facet {test}, the
-// type a [value.AssertionEvaluator] is handed as st: where the facet's type is
-// a union, its ·active basic member·, never the union; for a Type
-// Alternative, the schema alone. So one {test} can be declined at one element
-// and compiled at another.
+// Type Alternative {test}s are decided calls [xpath.CompileCTATest] on each
+// one, with the *xsd.Schema given to [New] as its types, which answers before
+// any instance is assessed whether the {type table} scan would decline it;
+// which elements a declined one withholds is
+// [Validator.ConditionallySelected]'s doc to say. A caller that needs to know
+// the same of its assertion {test}s assesses an instance and reads its
+// cvc-assertion and cvc-assertions-valid entries in [Result.Unevaluated],
+// which the [Unevaluated] doc describes, because whether one is declined
+// depends on what that instance's assessment reached. A decline reason is
+// relative to the types the {test} was compiled against where the assessment
+// reached it: for an {assertions} member of a complex type, the declared types
+// of the attributes and elements it reads, except that an attribute charged
+// under cvc-attribute on that element is read as xs:anySimpleType; for an
+// assertions-facet {test}, the type a [value.AssertionEvaluator] is handed as
+// st: where the facet's type is a union, its ·active basic member·, never the
+// union; for a Type Alternative, the schema alone. So one {test} can be
+// declined at one element and compiled at another.
 //
 // All four charges below that DELEGATE to String Valid (§3.16.4,
 // cvc-simple-type) carry the delegated verdict as their wrapped cause, so
