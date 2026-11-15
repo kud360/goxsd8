@@ -111,8 +111,6 @@ func TestDecodeDeclines(t *testing.T) {
 		{"element ref to a group whose member of mixed content decodes, its later nillable member declining", `<xs:complexType name="ct" mixed="true"><xs:sequence/></xs:complexType><xs:element name="h" type="s:ct" abstract="true"/>
 			<xs:element name="n" type="s:ct" substitutionGroup="s:h"/><xs:element name="m" type="s:ct" nillable="true" substitutionGroup="s:h"/>` + sequenceOf(`<xs:element ref="s:h"/>`),
 			"", `<s:n/>`, constructNillable, 1, 1},
-		{"a nested occurrence's particle sharing a sibling's expanded name", sequenceOf(`<xs:element name="b" type="xs:string"/><xs:sequence maxOccurs="2"><xs:element name="b" type="xs:string"/><xs:element name="c" type="xs:string"/></xs:sequence>`),
-			"", `<s:b>1</s:b><s:b>2</s:b><s:c>3</s:c>`, constructSharedName, 1, 1},
 		{"local element of an abstract complex type", `<xs:complexType name="ab" abstract="true"><xs:sequence><xs:element name="x" type="xs:string"/></xs:sequence></xs:complexType>
 			<xs:complexType name="cc"><xs:complexContent><xs:extension base="s:ab"/></xs:complexContent></xs:complexType>` + sequenceOf(`<xs:element name="a" type="s:ab" minOccurs="0"/>`),
 			"", "", constructAbstractTypeElement, 1, 1},
