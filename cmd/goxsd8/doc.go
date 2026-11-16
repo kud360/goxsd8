@@ -306,9 +306,14 @@
 //	    undecided: <message>. On a violation line the first [<rule>]
 //	    is the rule charged at <loc>, and the <message> may end with
 //	    the cause that rule delegates to, as [<rule>] <message> with
-//	    no location of its own. An instance's violations print first,
-//	    then the line of the fault that stopped its walk if one did,
-//	    then its undecided checks.
+//	    no location of its own. The violation and undecided lines keep
+//	    this full shape permanently, a delegated cause included:
+//	    validate has no shorter rendering, a script keys on the first
+//	    [<rule>], on a violation line the charged rule, and never on
+//	    one inside <message>, and <message> is UTF-8 and may set a spec
+//	    term between U+00B7 (·) marks. An instance's violations print
+//	    first, then the line of the fault that stopped its walk if one
+//	    did, then its undecided checks.
 //	    After the last instance, the run prints one counts line, the
 //	    last line on stderr:
 //	      goxsd8: validate: instances=<n> clean=<n> undecided=<n> invalid=<n> faulted=<n>
