@@ -450,7 +450,7 @@ func (w *walk) fixedAgreement(a Attribute, e Element, st *xsd.SimpleType, f fixe
 	same, decided := value.ConstraintMatches(w.backend, w.schema, st, a.Value(), elementContext{owner: e}, f.vc, w.res.FacetAssertions())
 	if !decided {
 		w.declineAttribute(a, f.rule, f.clause,
-			"attribute %s's value %q was not compared with %q, the {value} of the fixed {value constraint} on its %s: value.ConstraintMatches could not decide the comparison, a fault of the type or of the value backend, two literals of a ·special· type that some member of its lexical mapping cannot compare, an assertions-facet {test} not evaluated on either side or failed by the {value}, or a NOTATION {value} naming no declared notation, which no assembly judges yet (#667), rather than a verdict about the value, so %s is undecided",
+			"attribute %s's value %q was not compared with %q, the {value} of the fixed {value constraint} on its %s: value.ConstraintMatches could not decide the comparison, a fault of the type or of the value backend, two literals of a ·special· type that some member of its lexical mapping cannot compare, an assertions-facet {test} not evaluated on either side or failed by the {value}, or an xs:NOTATION {value} naming no declared notation, which no assembly judges yet (#667), rather than a verdict about the value, so %s is undecided",
 			a.Name().Display(), a.Value(), f.vc.LexicalForm(), f.owner, citation(f.rule, f.clause))
 		return attributeNotKnown
 	}

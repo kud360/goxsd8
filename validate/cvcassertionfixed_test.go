@@ -191,7 +191,9 @@ func TestAssertionReadsAnInvalidAttributesNormalizedValue(t *testing.T) {
 // fixed value 37 over xs:anySimpleType, under a backend that leaves xs:string,
 // one member of its lexical mapping union, unmapped (fixedAgreement). With
 // walk.compileAssertions ignoring an attributeNotKnown verdict, the assertion
-// is evaluated and this test fails.
+// is evaluated and this test fails. The clause 4 decline's whole message is
+// pinned, so the test also fails where it spells the datatype NOTATION rather
+// than xs:NOTATION.
 func TestAssertionOverAnUndecidedFixedValueIsDeclined(t *testing.T) {
 	fixed := xsd.NewValueConstraint(xsd.ValueFixed, "37", nil, nil)
 	uses := []xsd.AttributeUse{typedUse(t, "n", icBuiltin("anySimpleType"), false, &fixed, nil)}
@@ -199,7 +201,7 @@ func TestAssertionOverAnUndecidedFixedValueIsDeclined(t *testing.T) {
 	got, undecided := assessRecordedWith(t, gapBackend(icBuiltin("string")), schema, valuedRoot("n", "36"))
 	wantSilence(t, got, "an undecided comparison charges nothing")
 	wantDeclines(t, undecided,
-		Unevaluated{rule: ruleCvcAttribute, loc: loc(1, 10), msg: "cvc-attribute clause 4"},
+		Unevaluated{rule: ruleCvcAttribute, loc: loc(1, 10), msg: `attribute n's value "36" was not compared with "37", the {value} of the fixed {value constraint} on its attribute declaration: value.ConstraintMatches could not decide the comparison, a fault of the type or of the value backend, two literals of a ·special· type that some member of its lexical mapping cannot compare, an assertions-facet {test} not evaluated on either side or failed by the {value}, or an xs:NOTATION {value} naming no declared notation, which no assembly judges yet (#667), rather than a verdict about the value, so cvc-attribute clause 4 is undecided`},
 		Unevaluated{rule: ruleCvcAssertion, loc: loc(1, 1), msg: "the attribute n of the element root is not known to be ·valid· or invalid"})
 }
 
