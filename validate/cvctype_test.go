@@ -47,7 +47,7 @@ func TestSimpleTypeChargesAnInvalidInitialValue(t *testing.T) {
 
 	got := cAssess(t, schema, cRoot("#12,50"))
 	tWantCharge(t, got, "3.1.3", loc(1, 1))
-	if want := `element root's value "12,50" is not a valid {` + xsd.XMLSchemaNS + `}decimal, which cvc-type clause 3.1.3 requires: [cvc-datatype-valid] `; !strings.HasPrefix(got[0].Msg, want) {
+	if want := `element root's value "12,50" is not a valid xs:decimal, which cvc-type clause 3.1.3 requires: [cvc-datatype-valid] `; !strings.HasPrefix(got[0].Msg, want) {
 		t.Errorf("Msg = %q, want the prefix %q: the element, its value and the ·governing type definition·, then the delegated verdict", got[0].Msg, want)
 	}
 	// The charge names the ·governing type definition· ITSELF, never the
@@ -102,6 +102,24 @@ func TestSimpleTypeChargesEveryNonInstanceAttribute(t *testing.T) {
 		if !strings.Contains(got[0].Msg, name.Local) {
 			t.Errorf("case %d: Msg = %q, want it to name the offending attribute", i, got[0].Msg)
 		}
+	}
+}
+
+// An attribute in the XML Schema instance namespace that is none of the four
+// clause 3.1.1 excepts is charged like any other, and the charge spells it
+// xsi:bogus, the same display convention as the four fixed xsi: names it
+// prints beside it (xsd.QName.Display).
+func TestSimpleTypeChargeSpellsAnInstanceNamespaceAttributeXSI(t *testing.T) {
+	schema := simpleTypedSchema(t, icBuiltin("integer"), nil, false)
+
+	root := attributedRoot(xsd.QName{Space: xsd.XMLSchemaInstanceNS, Local: "bogus"})
+	root.kids = []Child{TextChild(&testText{data: "42", loc: loc(2, 1)})}
+
+	got := cAssess(t, schema, root)
+	tWantCharge(t, got, "3.1.1", loc(1, 10))
+	want := "the element root carries the attribute xsi:bogus, but its ·governing type definition· xs:integer is a Simple Type Definition, and cvc-type clause 3.1.1 admits no attribute on such an element beyond xsi:type, xsi:nil, xsi:schemaLocation and xsi:noNamespaceSchemaLocation"
+	if got[0].Msg != want {
+		t.Errorf("Msg = %q, want %q", got[0].Msg, want)
 	}
 }
 

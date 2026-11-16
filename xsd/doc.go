@@ -52,7 +52,7 @@
 //	type QName struct{ Space, Local string }
 //
 // The zero value means absent/anonymous; String() renders Clark notation
-// ("{ns}local").
+// ("{ns}local"), and [QName.Display] renders a name for message text.
 //
 // A name identifies a component that HAS one. An anonymous component has
 // none, so where one component must point at another that may be

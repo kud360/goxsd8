@@ -141,7 +141,7 @@ func simpleTypeLabel(name xsd.QName) string {
 	if name == (xsd.QName{}) {
 		return "an anonymous simple type"
 	}
-	return fmt.Sprintf("the simple type %s", name)
+	return fmt.Sprintf("the simple type %s", name.Display())
 }
 
 // IsAssertionDeclined reports whether err — an error [ValidateLexical] or

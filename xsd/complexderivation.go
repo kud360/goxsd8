@@ -987,14 +987,15 @@ func typeDefinitionName(t TypeDefinition) QName {
 
 // typeDefinitionLabel renders a type definition inside an error message. An
 // anonymous one — what an inline <simpleType> yields — has the zero QName, which
-// String()s to the empty string, so it is named as anonymous instead of leaving a
-// hole in the message (STYLE E1: the reader must be able to find the construct).
+// [QName.Display]s to the empty string, so it is named as anonymous instead of
+// leaving a hole in the message (STYLE E1: the reader must be able to find the
+// construct).
 func typeDefinitionLabel(t TypeDefinition) string {
 	name := typeDefinitionName(t)
 	if name == (QName{}) {
 		return "an anonymous type definition"
 	}
-	return name.String()
+	return name.Display()
 }
 
 // sameTypeDefinition decides the component identity cos-ct-derived-ok clause 2.1

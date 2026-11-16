@@ -350,7 +350,7 @@ func TestAssessNamesTheDeclarationsAnUndeclaredRootMissed(t *testing.T) {
 			if got.Rule != "cvc-assess-elt" {
 				t.Errorf("Rule = %q, want cvc-assess-elt", got.Rule)
 			}
-			if want := message(tc.root.String(), tc.clause); got.Msg != want {
+			if want := message(tc.root.Display(), tc.clause); got.Msg != want {
 				t.Errorf("Msg =\n\t%s\nwant\n\t%s", got.Msg, want)
 			}
 		})

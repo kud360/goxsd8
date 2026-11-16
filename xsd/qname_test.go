@@ -25,6 +25,27 @@ func TestQNameString(t *testing.T) {
 	}
 }
 
+func TestQNameDisplay(t *testing.T) {
+	cases := []struct {
+		name string
+		q    xsd.QName
+		want string
+	}{
+		{"xsd-namespace", xsd.QName{Space: xsd.XMLSchemaNS, Local: "decimal"}, "xs:decimal"},
+		{"xsi-namespace", xsd.QName{Space: xsd.XMLSchemaInstanceNS, Local: "nil"}, "xsi:nil"},
+		{"other-namespace", xsd.QName{Space: "urn:o", Local: "N"}, "{urn:o}N"},
+		{"no-namespace", xsd.QName{Local: "elem"}, "elem"},
+		{"zero-value-absent", xsd.QName{}, ""},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := tc.q.Display(); got != tc.want {
+				t.Errorf("QName%+v.Display() = %q, want %q", tc.q, got, tc.want)
+			}
+		})
+	}
+}
+
 func TestQNameComparable(t *testing.T) {
 	a := xsd.QName{Space: "urn:x", Local: "n"}
 	b := xsd.QName{Space: "urn:x", Local: "n"}

@@ -664,9 +664,10 @@ func TestNotationMemberMustBeDeclaredByTheResolver(t *testing.T) {
 	if rule, _ := xsderr.RuleOf(err); rule != "enumeration-valid-restriction" {
 		t.Fatalf("unbound p:foo: rule %q (%v), want enumeration-valid-restriction", rule, err)
 	}
+	const unboundMsg = `the xs:NOTATION value "p:foo" has a prefix no in-scope namespace binding declares, so it resolves to no QName and is outside the ·value space· of xs:NOTATION, which cvc-datatype-valid clause 2.1 requires it to be in`
 	var cause *xsderr.Error
 	if !errors.As(errors.Unwrap(err), &cause) || cause.Rule != "cvc-datatype-valid" ||
-		!strings.HasPrefix(cause.Msg, `the NOTATION value "p:foo" has a prefix no in-scope namespace binding declares`) {
-		t.Errorf("unbound p:foo: cause %v, want cvc-datatype-valid naming the unbound prefix of \"p:foo\"", errors.Unwrap(err))
+		cause.Msg != unboundMsg {
+		t.Errorf("unbound p:foo: cause %v, want cvc-datatype-valid %q", errors.Unwrap(err), unboundMsg)
 	}
 }

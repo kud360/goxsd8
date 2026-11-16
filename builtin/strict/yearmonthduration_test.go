@@ -53,7 +53,7 @@ func TestYearMonthDurationParseAndCanonical(t *testing.T) {
 func TestYearMonthDurationReject(t *testing.T) {
 	m := mappingFor(t, "yearMonthDuration")
 	pattern := `%q has a day or time field, so it does not match yearMonthDuration's pattern facet [^DT]*, which cvc-datatype-valid clause 1 requires it to match`
-	primitive := `%q is not in the lexical space of duration, the primitive of yearMonthDuration, which cvc-datatype-valid clause 2.1 requires it to be in`
+	primitive := `%q is not in the lexical space of xs:duration, the primitive of xs:yearMonthDuration, which cvc-datatype-valid clause 2.1 requires it to be in`
 	for _, c := range []struct{ lex, msg string }{
 		{"P1D", pattern}, {"PT5H", pattern}, {"PT5M", pattern}, {"P1DT2H", pattern},
 		{"P1Y1D", pattern}, {"PT0S", pattern}, {"P0DT0S", pattern},

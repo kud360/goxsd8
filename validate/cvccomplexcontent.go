@@ -288,14 +288,14 @@ func (c *contentCheck) defaultValid(w *walk) {
 		return
 	}
 	cause := w.schema.ElementDefaultValid(w.values, c.e.Loc(),
-		"the element "+c.e.Name().String(), c.g.typ, vc)
+		"the element "+c.e.Name().Display(), c.g.typ, vc)
 	if cause == nil {
 		c.log(w, c.e.Name(), c.e.Loc(), ruleCvcElt, "5.1.1", "satisfied")
 		return
 	}
 	c.chargeCause(w, ruleCvcElt, "5.1.1", c.e.Loc(), cause,
 		"element %s's default %q is not a valid default for %s, the ·instance-specified type definition· that governs it, which cvc-elt clause 5.1.1 requires",
-		c.e.Name(), vc.LexicalForm(), typeName(c.g.typ))
+		c.e.Name().Display(), vc.LexicalForm(), typeName(c.g.typ))
 }
 
 // gathers reports whether any charge reads this element's ·initial value·:
@@ -342,7 +342,7 @@ func (c *contentCheck) text(w *walk, t Text) {
 	if c.nilled {
 		c.charge(w, ruleCvcElt, "3.2.3.1", t.Loc(),
 			"the element %s has xsi:nil = true, so it is ·nilled·, but it has a character information item [[child]], and cvc-elt clause 3.2.3.1 admits no character or element information item [[children]] on a ·nilled· element",
-			c.e.Name())
+			c.e.Name().Display())
 		return
 	}
 	if c.gathers() {
@@ -355,14 +355,14 @@ func (c *contentCheck) text(w *walk, t Text) {
 	case xsd.ContentEmpty:
 		c.charge(w, ruleCvcComplexType, "1.1", t.Loc(),
 			"the element %s has a character information item [[child]], but cvc-complex-type clause 1.1 admits no character or element information item [[children]] at all where the {content type}.{variety} of the ·governing type definition· is empty — white space included, which clause 1.3 allows for element-only and clause 1.1 allows for nothing",
-			c.e.Name())
+			c.e.Name().Display())
 	case xsd.ContentElementOnly:
 		if isXMLWhitespace(t.Data()) {
 			return
 		}
 		c.charge(w, ruleCvcComplexType, "1.3", t.Loc(),
 			"the element %s has a character information item [[child]] that is not white space, but cvc-complex-type clause 1.3 admits white space alone where the {content type}.{variety} of the ·governing type definition· is element-only",
-			c.e.Name())
+			c.e.Name().Display())
 	case xsd.ContentSimple:
 		// Clause 1.2 tests the runs CONCATENATED, so no run decides anything on
 		// its own and none is charged here; gathers has already retained it.
@@ -414,13 +414,13 @@ func (c *contentCheck) element(w *walk, child Element) (a xsd.Attribution, undec
 	if c.nilled {
 		c.charge(w, ruleCvcElt, "3.2.3.1", child.Loc(),
 			"the element %s has xsi:nil = true, so it is ·nilled·, but it has the element information item %s among its [[children]], and cvc-elt clause 3.2.3.1 admits no character or element information item [[children]] on a ·nilled· element",
-			c.e.Name(), child.Name())
+			c.e.Name().Display(), child.Name().Display())
 		return nil, c.g.typeUndetermined()
 	}
 	if st := c.g.simpleType(); st != nil {
 		c.charge(w, ruleCvcType, "3.1.2", child.Loc(),
 			"the element %s has the element information item %s among its [[children]], but its ·governing type definition· %s is a Simple Type Definition, and cvc-type clause 3.1.2 admits no element information item [[children]] on such an element",
-			c.e.Name(), child.Name(), typeName(st))
+			c.e.Name().Display(), child.Name().Display(), typeName(st))
 		return nil, false
 	}
 	if c.governing() == nil {
@@ -430,11 +430,11 @@ func (c *contentCheck) element(w *walk, child Element) (a xsd.Attribution, undec
 	case xsd.ContentEmpty:
 		c.charge(w, ruleCvcComplexType, "1.1", child.Loc(),
 			"the element %s has the element information item %s among its [[children]], but cvc-complex-type clause 1.1 admits no character or element information item [[children]] where the {content type}.{variety} of the ·governing type definition· is empty",
-			c.e.Name(), child.Name())
+			c.e.Name().Display(), child.Name().Display())
 	case xsd.ContentSimple:
 		c.charge(w, ruleCvcComplexType, "1.2", child.Loc(),
 			"the element %s has the element information item %s among its [[children]], but cvc-complex-type clause 1.2 admits no element information item [[children]] where the {content type}.{variety} of the ·governing type definition· is simple",
-			c.e.Name(), child.Name())
+			c.e.Name().Display(), child.Name().Display())
 	case xsd.ContentElementOnly, xsd.ContentMixed:
 		return c.match(w, child)
 	}
@@ -469,7 +469,7 @@ func (c *contentCheck) match(w *walk, child Element) (xsd.Attribution, bool) {
 	if c.matcher == nil {
 		c.decline(w, child.Name(), child.Loc(), ruleCvcComplexContent, clause,
 			"element %s, a child of %s, was not matched against the {content type} of its parent's ·governing type definition·: xsd.Schema.ContentMatcher does not decide that {content type}'s shape, so cvc-complex-content clause %s is undecided for the sequence",
-			child.Name(), c.e.Name(), clause)
+			child.Name().Display(), c.e.Name().Display(), clause)
 		return nil, true
 	}
 	if a, ok := c.matcher.Next(child.Name()); ok {
@@ -482,12 +482,12 @@ func (c *contentCheck) match(w *walk, child Element) (xsd.Attribution, bool) {
 	if c.openContent() != nil {
 		c.charge(w, ruleCvcComplexContent, clause, child.Loc(),
 			"element %s, a child of %s, is not allowed at its position: no particle of the parent's {content type} admits it there, and neither does that {content type}'s {open content} wildcard, where the content model expects %s%s, but cvc-complex-content clause %s requires the [[children]] to be ·valid· with respect to that {content type}",
-			child.Name(), c.e.Name(), expected(arms, declining(child.Name())), namespaceMismatch(child.Name(), arms), clause)
+			child.Name().Display(), c.e.Name().Display(), expected(arms, declining(child.Name())), namespaceMismatch(child.Name(), arms), clause)
 		return nil, false
 	}
 	c.charge(w, ruleCvcComplexContent, "1", child.Loc(),
 		"element %s, a child of %s, is not allowed at its position: no particle of the parent's {content type} admits it there, where the content model expects %s%s, but cvc-complex-content clause 1 requires the [[children]] to be ·valid· with respect to that {content type}",
-		child.Name(), c.e.Name(), expected(arms, declining(child.Name())), namespaceMismatch(child.Name(), arms))
+		child.Name().Display(), c.e.Name().Display(), expected(arms, declining(child.Name())), namespaceMismatch(child.Name(), arms))
 	return nil, false
 }
 
@@ -649,7 +649,7 @@ func (c *contentCheck) fixedValue(w *walk) {
 	if c.sawElement {
 		c.charge(w, ruleCvcElt, "5.2.2.1", c.e.Loc(),
 			"the element %s has element information item [[children]], but its ·governing element declaration· carries the fixed {value constraint} %q, and cvc-elt clause 5.2.2.1 admits no element information item [[children]] on an element so constrained",
-			c.e.Name(), f.LexicalForm())
+			c.e.Name().Display(), f.LexicalForm())
 		return
 	}
 	if ct := c.governing(); ct != nil && ct.ContentType().Variety() == xsd.ContentMixed {
@@ -670,7 +670,7 @@ func (c *contentCheck) fixedLexical(w *walk, f xsd.ValueConstraint) {
 	}
 	c.charge(w, ruleCvcElt, "5.2.2.2.1", c.e.Loc(),
 		"element %s's value %q does not match %q, the {lexical form} of its declaration's fixed {value constraint}, which cvc-elt clause 5.2.2.2.1 requires of an element whose ·governing type definition· has {content type}.{variety} = mixed",
-		c.e.Name(), c.initial.String(), f.LexicalForm())
+		c.e.Name().Display(), c.initial.String(), f.LexicalForm())
 }
 
 // fixedActualValue settles clause 5.2.2.2.2: for a simple ·governing type
@@ -704,8 +704,8 @@ func (c *contentCheck) fixedActualValue(w *walk, f xsd.ValueConstraint) {
 	same, decided := value.ConstraintMatches(w.backend, w.schema, st, c.initial.String(), elementContext{owner: c.e}, f, w.res.FacetAssertions())
 	if !decided {
 		c.decline(w, c.e.Name(), c.e.Loc(), ruleCvcElt, "5.2.2.2.2",
-			"element %s's value %q was not compared with %q, the {value} of its declaration's fixed {value constraint}: value.ConstraintMatches could not decide the comparison, a fault of the type or of the value backend, two literals of a ·special· type that some member of its lexical mapping cannot compare, an assertions-facet {test} not evaluated on either side or failed by the {value}, or a NOTATION {value} naming no declared notation, which no assembly judges yet (#667), rather than a verdict about the value, so cvc-elt clause 5.2.2.2.2 is undecided",
-			c.e.Name(), c.initial.String(), f.LexicalForm())
+			"element %s's value %q was not compared with %q, the {value} of its declaration's fixed {value constraint}: value.ConstraintMatches could not decide the comparison, a fault of the type or of the value backend, two literals of a ·special· type that some member of its lexical mapping cannot compare, an assertions-facet {test} not evaluated on either side or failed by the {value}, or an xs:NOTATION {value} naming no declared notation, which no assembly judges yet (#667), rather than a verdict about the value, so cvc-elt clause 5.2.2.2.2 is undecided",
+			c.e.Name().Display(), c.initial.String(), f.LexicalForm())
 		return
 	}
 	if same {
@@ -714,7 +714,7 @@ func (c *contentCheck) fixedActualValue(w *walk, f xsd.ValueConstraint) {
 	}
 	c.charge(w, ruleCvcElt, "5.2.2.2.2", c.e.Loc(),
 		"element %s's value %q is neither equal nor identical to %q, the {value} of its declaration's fixed {value constraint}, which cvc-elt clause 5.2.2.2.2 requires",
-		c.e.Name(), c.initial.String(), f.LexicalForm())
+		c.e.Name().Display(), c.initial.String(), f.LexicalForm())
 }
 
 // stringValid runs String Valid (§3.16.4) over this element's ·initial value· —
@@ -789,12 +789,12 @@ func (c *contentCheck) simpleTypeValue(w *walk) {
 	decided, verdict := c.stringValid(w, st)
 	lexical, _ := c.assessed()
 	if !decided {
-		if w.declineAssertions(verdict, "assessing content", c.e.Name(), c.e.Loc(), fmt.Sprintf("element %s's value %q", c.e.Name(), lexical), "cvc-type clause 3.1.3") {
+		if w.declineAssertions(verdict, "assessing content", c.e.Name(), c.e.Loc(), fmt.Sprintf("element %s's value %q", c.e.Name().Display(), lexical), "cvc-type clause 3.1.3") {
 			return
 		}
 		c.decline(w, c.e.Name(), c.e.Loc(), ruleCvcType, "3.1.3",
 			"element %s's value %q was not decided against %s, its ·governing type definition·: String Valid was withheld, the value backend reporting a fault of the type rather than a verdict about the lexical or the ·validating type· of an ·ENTITY value· being undecidable, so cvc-type clause 3.1.3 is undecided",
-			c.e.Name(), lexical, typeName(st))
+			c.e.Name().Display(), lexical, typeName(st))
 		return
 	}
 	if verdict == nil {
@@ -803,7 +803,7 @@ func (c *contentCheck) simpleTypeValue(w *walk) {
 	}
 	c.chargeCause(w, ruleCvcType, "3.1.3", c.e.Loc(), verdict,
 		"element %s's value %q is not %s, which cvc-type clause 3.1.3 requires",
-		c.e.Name(), lexical, aValid(st))
+		c.e.Name().Display(), lexical, aValid(st))
 }
 
 // initialValue settles the ·initial value· half of clause 1.2: the ·initial
@@ -814,12 +814,12 @@ func (c *contentCheck) initialValue(w *walk, st *xsd.SimpleType) {
 	decided, verdict := c.stringValid(w, st)
 	lexical, _ := c.assessed()
 	if !decided {
-		if w.declineAssertions(verdict, "assessing content", c.e.Name(), c.e.Loc(), fmt.Sprintf("element %s's value %q", c.e.Name(), lexical), "cvc-complex-type clause 1.2") {
+		if w.declineAssertions(verdict, "assessing content", c.e.Name(), c.e.Loc(), fmt.Sprintf("element %s's value %q", c.e.Name().Display(), lexical), "cvc-complex-type clause 1.2") {
 			return
 		}
 		c.decline(w, c.e.Name(), c.e.Loc(), ruleCvcComplexType, "1.2",
 			"element %s's value %q was not decided against %s, the {simple type definition} of its ·governing type definition·'s {content type}: String Valid was withheld, the value backend reporting a fault of the type rather than a verdict about the lexical or the ·validating type· of an ·ENTITY value· being undecidable, so cvc-complex-type clause 1.2 is undecided",
-			c.e.Name(), lexical, typeName(st))
+			c.e.Name().Display(), lexical, typeName(st))
 		return
 	}
 	if verdict == nil {
@@ -828,7 +828,7 @@ func (c *contentCheck) initialValue(w *walk, st *xsd.SimpleType) {
 	}
 	c.chargeCause(w, ruleCvcComplexType, "1.2", c.e.Loc(), verdict,
 		"element %s's value %q is not %s, the {simple type definition} of its ·governing type definition·'s {content type}, which cvc-complex-type clause 1.2 requires",
-		c.e.Name(), lexical, aValid(st))
+		c.e.Name().Display(), lexical, aValid(st))
 }
 
 // sequenceEnd settles clause 1.4 for a sequence that ran out: every item was
@@ -866,7 +866,7 @@ func (c *contentCheck) sequenceEnd(w *walk) {
 		if !c.sawElement {
 			c.decline(w, c.e.Name(), c.e.Loc(), ruleCvcComplexContent, clause,
 				"element %s has no child element, and that empty sequence was not matched against the {content type} of its ·governing type definition·: xsd.Schema.ContentMatcher does not decide that {content type}'s shape, so cvc-complex-content clause %s is undecided for the sequence",
-				c.e.Name(), clause)
+				c.e.Name().Display(), clause)
 		}
 		return
 	}
@@ -880,7 +880,7 @@ func (c *contentCheck) sequenceEnd(w *walk) {
 	})
 	c.charge(w, ruleCvcComplexContent, clause, c.e.Loc(),
 		"element %s's children end before every particle of its ·governing type definition·'s {content type} has taken the occurrences its {min occurs} requires, where that {content type}'s {particle} expects %s, but cvc-complex-content clause %s requires the [[children]] to be ·valid· with respect to that {content type}",
-		c.e.Name(), expected(owed, attributedTo), clause)
+		c.e.Name().Display(), expected(owed, attributedTo), clause)
 }
 
 // charge records one violation and closes the element to any further content
@@ -978,7 +978,7 @@ func expected(arms []xsd.Attribution, name func(xsd.Attribution) string) string 
 func attributedTo(a xsd.Attribution) string {
 	switch t := a.(type) {
 	case xsd.ElementDeclaration:
-		return "element declaration " + t.Name().String()
+		return "element declaration " + t.Name().Display()
 	case xsd.Wildcard:
 		return "wildcard " + namespaceConstraint(t.NamespaceConstraint())
 	case *xsd.OpenContent:
@@ -1011,7 +1011,7 @@ func declining(child xsd.QName) func(xsd.Attribution) string {
 		if !nc.AllowsNamespace(ns) {
 			return attributedTo(a)
 		}
-		return attributedTo(a) + " that disallows " + child.String()
+		return attributedTo(a) + " that disallows " + child.Display()
 	}
 }
 

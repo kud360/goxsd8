@@ -93,11 +93,11 @@ func TestLocallyDeclaredTypeChargesAMismatchedWildcardChild(t *testing.T) {
 			if viol.Loc != loc(4, 3) {
 				t.Errorf("Loc = %s, want the wildcard child's %s", viol.Loc, loc(4, 3))
 			}
-			want := "element e, a child of doc, has the ·governing type definition· {" + xsd.XMLSchemaNS + "}time, which is neither"
+			want := "element e, a child of doc, has the ·governing type definition· xs:time, which is neither"
 			if !strings.HasPrefix(viol.Msg, want) {
 				t.Errorf("Msg = %q, want the prefix %q", viol.Msg, want)
 			}
-			if !strings.Contains(viol.Msg, "·locally declared type· {"+xsd.XMLSchemaNS+"}date within") ||
+			if !strings.Contains(viol.Msg, "·locally declared type· xs:date within") ||
 				!strings.Contains(viol.Msg, "cvc-complex-type clause 5") {
 				t.Errorf("Msg = %q, want the ·locally declared type· xs:date and clause 5 named", viol.Msg)
 			}
@@ -120,8 +120,8 @@ func TestLocallyDeclaredTypeChargesAnXSITypeWildcardChild(t *testing.T) {
 	if viol.Loc != loc(4, 3) {
 		t.Errorf("Loc = %s, want the wildcard child's %s", viol.Loc, loc(4, 3))
 	}
-	if !strings.Contains(viol.Msg, "{"+xsd.XMLSchemaNS+"}time, which is neither") ||
-		!strings.Contains(viol.Msg, "·locally declared type· {"+xsd.XMLSchemaNS+"}string within") {
+	if !strings.Contains(viol.Msg, "xs:time, which is neither") ||
+		!strings.Contains(viol.Msg, "·locally declared type· xs:string within") {
 		t.Errorf("Msg = %q, want xs:time against the ·locally declared type· xs:string", viol.Msg)
 	}
 }
@@ -257,7 +257,7 @@ func TestLocalGovernanceChargesAnOpenContentChild(t *testing.T) {
 			if viol.Loc != loc(4, 3) {
 				t.Errorf("Loc = %s, want the {open content} child's %s", viol.Loc, loc(4, 3))
 			}
-			want := `element e's value "` + tc.value + `" is not a valid {` + xsd.XMLSchemaNS + "}" + tc.governing + ","
+			want := `element e's value "` + tc.value + `" is not a valid xs:` + tc.governing + ","
 			if !strings.HasPrefix(viol.Msg, want) {
 				t.Errorf("Msg = %q, want the prefix %q", viol.Msg, want)
 			}
@@ -337,7 +337,7 @@ func TestLocallyDeclaredTypeChargesAnXSErrorSelection(t *testing.T) {
 	if !slices.Equal(rules, want) {
 		t.Fatalf("Violations() = %v, want the rules %v", got, want)
 	}
-	if !strings.HasPrefix(got[0].Msg, "element e, a child of doc, has the ·governing type definition· {"+xsd.XMLSchemaNS+"}error, which is neither") {
+	if !strings.HasPrefix(got[0].Msg, "element e, a child of doc, has the ·governing type definition· xs:error, which is neither") {
 		t.Errorf("Msg = %q, want clause 5 charged against ·xs:error·", got[0].Msg)
 	}
 }
