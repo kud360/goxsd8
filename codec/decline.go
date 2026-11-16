@@ -7,11 +7,13 @@ import (
 	"github.com/kud360/goxsd8/xsderr"
 )
 
-// A DeclineError is a construct [Decode] does not decode; it wraps
-// errors.ErrUnsupported, and Decode's and [CheckDecode]'s docs state when
-// each returns one.
+// A DeclineError is a construct [Decode] does not decode or [Append] does not
+// encode; it wraps errors.ErrUnsupported, and the docs of Decode,
+// [CheckDecode] and Append state when each returns one.
 type DeclineError struct {
 	construct construct
+	// path is the path that declined, Decode's or Append's.
+	path path
 	// loc is the instance Loc the decline is charged to, nil for none.
 	loc *xsderr.Loc
 	// detail is the text Error's doc states after the construct.
@@ -24,7 +26,7 @@ func (e *DeclineError) Construct() Construct { return Construct{e.construct} }
 // Loc returns the instance Loc of the element the decline is charged to: the
 // document element for a construct [Decode]'s item 5 finds, of its declaration or type
 // or of a declaration or type its particles reach at any depth, and the element carrying
-// it for xsi:type, and true. For a decline [CheckDecode] returns, which reads no
+// it for xsi:type, and true. For a decline [CheckDecode] or [Append] returns, which reads no
 // instance, it returns the zero Loc and false.
 func (e *DeclineError) Loc() (xsderr.Loc, bool) {
 	if e.loc == nil {
@@ -33,7 +35,9 @@ func (e *DeclineError) Loc() (xsderr.Loc, bool) {
 	return *e.loc, true
 }
 
-// Error names the instance Loc, where Loc reports one, and the construct,
+// Error opens with "codec does not decode" for a decline of [Decode] or
+// [CheckDecode] and "codec does not encode" for one of [Append]. For the
+// first it names the instance Loc, where Loc reports one, and the construct,
 // then the declining declaration, the document element's, a particle's
 // element declaration's, local or a top-level one an <element ref> names, or
 // a member of that one's substitution group, at any depth, or an attribute's,
@@ -46,10 +50,18 @@ func (e *DeclineError) Loc() (xsderr.Loc, bool) {
 // member, that item or member, by its QName where it has one, each with its
 // schema Loc, which is the zero Loc for a built-in component; for a wildcard
 // particle, it names the particle as [Decode]'s item 5 states; for xsi:type, it
-// names the element and the type the xsi:type names.
+// names the element and the type the xsi:type names. For the second it names
+// the construct, then the declining element declaration, attribute use or
+// simple type, by its QName where it has one, with its schema Loc, which is
+// the zero Loc for a built-in component, and, for a value with no canonical
+// representation, the Go path of its field from T and its value.
 func (e *DeclineError) Error() string {
 	text := "codec does not decode " + e.construct.name() + ": " + e.detail +
 		"; a decoder refusal, not a schema or instance fault"
+	if e.path == pathEncode {
+		text = "codec does not encode " + e.construct.name() + ": " + e.detail +
+			"; an encoder refusal, not a schema or value fault"
+	}
 	if e.loc == nil {
 		return text
 	}
@@ -59,25 +71,38 @@ func (e *DeclineError) Error() string {
 // Unwrap returns errors.ErrUnsupported.
 func (e *DeclineError) Unwrap() error { return errors.ErrUnsupported }
 
-// A Construct is a construct Decode declines: two declines of the same
+// A Construct is a construct Decode or [Append] declines: two declines of the same
 // construct have equal Constructs; the zero Construct names none. A Construct
 // is comparable: == reports whether two name the same construct, and it may be
 // used as a map key. The package exports no Construct value, because a
 // release that lifts a construct stops returning its Construct; compare a
 // Construct only with another obtained from [DeclineError.Construct]. The
-// package doc's "What decodes" section states what declines.
+// package doc's "What decodes" and "What encodes" sections state what declines.
 type Construct struct{ c construct }
 
 // String returns the construct's name for display, distinct for each
 // Construct; it is not the decline's message. The names are not stable across
 // releases: a release may rename a construct, split one into several, or stop
-// returning a name once Decode covers its construct, and no name is reserved.
+// returning a name once Decode or Append covers its construct, and no name is reserved.
 // To tell constructs apart, use the Constructs themselves, as [Construct]
 // states, never a name.
 func (c Construct) String() string { return c.c.name() }
 
-// construct is the closed set of constructs Decode declines, one per
-// declining site. The zero value is invalid (STYLE T1).
+// path is the closed set of the paths a DeclineError declines on: Decode's,
+// [CheckDecode]'s among it, and Append's. A construct does not imply its path,
+// since both paths decline constructNillable and constructNestedGroup. The
+// zero value is invalid (STYLE T1).
+type path uint8
+
+// The paths.
+const (
+	pathDecode path = iota + 1
+	pathEncode
+)
+
+// construct is the closed set of constructs Decode or Append declines, one per
+// declining site; one may be declined by both. The zero value is invalid
+// (STYLE T1).
 type construct uint8
 
 // The construct values, in the order Decode finds them: the document
@@ -92,7 +117,20 @@ type construct uint8
 // follows every particle of a flattened content model or an occurrence
 // field's, ahead of the type's attribute uses, and every basic particle a
 // nested flattened particle reaches and every particle of a nested
-// occurrence field's item, ahead of the particles after it.
+// occurrence field's item, ahead of the particles after it. The constructs
+// after constructXsiType are Append's alone, in the order Append finds them:
+// the document element's declaration, after constructNillable, its type's
+// content, its content {particle}, each particle in order, its attribute uses
+// in order, its {attribute wildcard}, and each value. A particle declines by
+// constructVacuousParticle first, as the content {particle} does, then by
+// constructNestedGroup where its term is a model group; its element
+// declaration declines by the document element's declaration's constructs,
+// constructNillable first, before constructComplexParticle; and an attribute
+// use declines by constructValueConstraint after constructQualifiedAttribute.
+// The ones of a simple type, constructSpecialType to constructAssertions, sit
+// after the {attribute wildcard}'s, though the document element's, a
+// particle's and an attribute use's simple type declines by them where that
+// declaration or use is examined.
 const (
 	constructNillable construct = iota + 1
 	constructNestedGroup
@@ -100,16 +138,62 @@ const (
 	constructOtherPrimitive
 	constructUntrackedModel
 	constructXsiType
+	constructTypeTable
+	constructValueConstraint
+	constructIdentityConstraint
+	constructAnyType
+	constructSimpleContent
+	constructMixed
+	constructOpenContent
+	constructVacuousParticle
+	constructAllGroup
+	constructSealedInterface
+	constructOccurrenceField
+	constructWildcard
+	constructElementRef
+	constructComplexParticle
+	constructQualifiedAttribute
+	constructAttributeWildcard
+	constructSpecialType
+	constructList
+	constructUnion
+	constructEncodePrimitive
+	constructIDType
+	constructAssertions
+	constructNoCanonical
 )
 
 // constructNames holds, indexed by construct, each construct's name.
 var constructNames = [...]string{
-	constructNillable:       "an element declaration with {nillable} true",
-	constructNestedGroup:    "a nested model group particle",
-	constructSharedBranch:   "two branches of a sealed interface whose structs have one shape",
-	constructOtherPrimitive: "an atomic simple type whose primitive is ·implementation-defined·, other than xs:precisionDecimal",
-	constructUntrackedModel: "a content model the content matcher does not track",
-	constructXsiType:        "an element carrying xsi:type",
+	constructNillable:           "an element declaration with {nillable} true",
+	constructNestedGroup:        "a nested model group particle",
+	constructSharedBranch:       "two branches of a sealed interface whose structs have one shape",
+	constructOtherPrimitive:     "an atomic simple type whose primitive is ·implementation-defined·, other than xs:precisionDecimal",
+	constructUntrackedModel:     "a content model the content matcher does not track",
+	constructXsiType:            "an element carrying xsi:type",
+	constructTypeTable:          "an element declaration with a {type table}",
+	constructValueConstraint:    "a value constraint, default or fixed",
+	constructIdentityConstraint: "an element declaration with {identity-constraint definitions}",
+	constructAnyType:            "an element declaration of type xs:anyType",
+	constructSimpleContent:      "a complex type with simple content",
+	constructMixed:              "a complex type with mixed content",
+	constructOpenContent:        "an {open content}",
+	constructVacuousParticle:    "a particle with {max occurs} 0",
+	constructAllGroup:           "an all group",
+	constructSealedInterface:    "a construct codegen holds in a sealed interface: a choice, a flattened particle or a substitution group",
+	constructOccurrenceField:    "a model group particle codegen holds in an occurrence field",
+	constructWildcard:           "a wildcard particle",
+	constructElementRef:         "an <element ref> particle",
+	constructComplexParticle:    "an element particle of complex type",
+	constructQualifiedAttribute: "an attribute use whose declaration has a {target namespace}",
+	constructAttributeWildcard:  "an {attribute wildcard}",
+	constructSpecialType:        "xs:anySimpleType or xs:anyAtomicType as a simple type",
+	constructList:               "a list simple type",
+	constructUnion:              "a union simple type",
+	constructEncodePrimitive:    "an atomic simple type whose primitive is other than xs:string or xs:double",
+	constructIDType:             "a simple type derived from xs:ID, xs:IDREF or xs:ENTITY",
+	constructAssertions:         "a simple type with an assertions facet",
+	constructNoCanonical:        "a value with no canonical representation",
 }
 
 // name returns the construct's name.
@@ -120,11 +204,20 @@ func (c construct) name() string {
 	return constructNames[c]
 }
 
-// decline returns the *DeclineError for construct c, charged to no instance
-// Loc, detail the text Error's doc states after the construct. No schema or
-// instance rule is violated, so it carries no xsderr rule (STYLE E2).
+// decline returns the *DeclineError of Decode for construct c, charged to no
+// instance Loc, detail the text Error's doc states after the construct. No
+// schema or instance rule is violated, so it carries no xsderr rule (STYLE
+// E2).
 func decline(c construct, detail string) *DeclineError {
-	return &DeclineError{construct: c, detail: detail}
+	return &DeclineError{construct: c, path: pathDecode, detail: detail}
+}
+
+// encodeDecline returns the *DeclineError of Append for construct c, detail
+// the text Error's doc states after the construct. Append never charges one
+// to an instance Loc (at), and it carries no xsderr rule, as decline's does
+// not.
+func encodeDecline(c construct, detail string) *DeclineError {
+	return &DeclineError{construct: c, path: pathEncode, detail: detail}
 }
 
 // at returns a copy of e charged to the instance Loc loc.
