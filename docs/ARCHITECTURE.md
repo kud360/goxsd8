@@ -734,7 +734,7 @@ basic member· (`value.ValidatingType`), then the whiteSpace stage
 (`value.GoverningMapping`), whose `codec.WithLogger` doc says which types
 convert from Canonical's form and which from the lexical Parse accepted;
 every other pipeline stage is
-`validate`'s, run first on the same backend. `value.Emitter` does
+`validate`'s, run first on the same backend. `Decode` reads the instance twice (#3795): `validate` assesses it and drops its walk state, and only then does `codec` tokenize the same bytes again with `parser/xmltree` and fill T, re-asking each decision the assessment made through the primitive the walk calls — attribution (`xsd.Matcher.NextParticle`), the {type table} selection (`validate.Validator.ConditionallySelectedIndex`), the [inherited attributes] (`validate.Validator.HandedDown`), a union's ·active basic member· (`value.ValidatingType`, under the assessment's own `validate.Result.FacetAssertions`) and an admitted xsi:type's resolution. One pass would hold a per-element record of the assessment until the verdict (STYLE P4), and the infoset `validate` walks carries neither the raw content nor the byte offsets `codec` fills and reports from, so `validate` exports no observer of its walk. `value.Emitter` does
 not exist (its API freezes in M10; not declared). A bullet `codegen/doc.go`
 or `codec/doc.go` does not state as shipped is the destination, stated in
 present tense because it is a design contract; read it as "will", not
