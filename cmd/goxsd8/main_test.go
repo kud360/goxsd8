@@ -768,6 +768,21 @@ func TestStderrLineShapes(t *testing.T) {
 	// line opens with the argument as typed: spelled as the counts line's
 	// opening, it is the note the counts template must not take.
 	const countsSpelled = "instances=1 clean=0 undecided=0 invalid=0 faulted=0.ber"
+	// An instance hinting a document that declares another namespace than the
+	// one its hint pairs: the note dropping its hints quotes the rejection, so
+	// a <loc>: [<rule>] sits inside a goxsd8: validate: line.
+	if err := os.WriteFile(filepath.Join(dir, "actual.xsd"), []byte(`<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" targetNamespace="urn:actual"><xs:element name="note" type="xs:string"/></xs:schema>`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	valid, err := os.ReadFile(validInstance)
+	if err != nil {
+		t.Fatal(err)
+	}
+	mispaired := filepath.Join(dir, "mispaired.xml")
+	body := strings.Replace(string(valid), `createdBy="ada"`, `createdBy="ada" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="urn:wrong actual.xsd"`, 1)
+	if err := os.WriteFile(mispaired, []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
 	var reached [shapeCount]bool
 	for _, c := range []struct {
 		name string
@@ -783,6 +798,7 @@ func TestStderrLineShapes(t *testing.T) {
 		{"note", []string{"parse", shortSchema}, exitOK, []int{shapeSubcommand}},
 		{"I/O fault, then counts", []string{"validate", "-schema", orderSchema, "testdata/nosuch.xml"}, exitUsage, []int{shapeSubcommand, shapeCounts}},
 		{"instances= note, then counts", []string{"validate", "-schema", orderSchema, countsSpelled}, exitUsage, []int{shapeSubcommand, shapeCounts}},
+		{"note quoting a rejection, then counts", []string{"validate", "-schema", orderSchema, mispaired}, exitOK, []int{shapeSubcommand, shapeCounts}},
 		{"clean, counts alone", []string{"validate", "-schema", orderSchema, validInstance}, exitOK, []int{shapeCounts}},
 		{"-q I/O fault, no counts", []string{"validate", "-q", "-schema", orderSchema, "testdata/nosuch.xml"}, exitUsage, []int{shapeSubcommand}},
 		{"-q clean, silent", []string{"validate", "-q", "-schema", orderSchema, validInstance}, exitOK, nil},

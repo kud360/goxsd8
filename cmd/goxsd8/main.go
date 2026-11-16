@@ -91,8 +91,9 @@ Usage (contract; subcommands land with their milestones):
 
   Stderr lines: each line on stderr is named by the first template
   below, in this order, that matches it whole, the lines indented
-  under a template saying what tells it apart. An argument or a
-  message spelled with a line break breaks its line there too.
+  under a template saying what tells it apart. An argument spelled
+  with a line break, or any text a line quotes holding one, breaks
+  that line there.
     <loc>: [<rule>] <message>
         a schema rejection (parse and gen 1, validate 3), <rule> the
         rule charged and <loc> the location Paths below names, or ?
