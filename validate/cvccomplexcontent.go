@@ -551,7 +551,7 @@ func formCanQualify(d xsd.ElementDeclaration) bool {
 	case xsd.AnonymousComplexTypeScopeParent:
 		return true
 	}
-	return true
+	panic("validate: formCanQualify: unknown ElementScopeParent arm")
 }
 
 // inNamespace names a namespace name as the object of "in": `namespace

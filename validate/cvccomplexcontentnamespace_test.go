@@ -99,6 +99,20 @@ func TestContentChargeNamesANamespaceMismatch(t *testing.T) {
 </xs:schema>`},
 			`<order xmlns="urn:o"><item>a</item></order>`,
 			`o.xml:1:22: [cvc-complex-content] element {urn:o}item, a child of {urn:o}order, is not allowed at its position: no particle of the parent's {content type} admits it there, where the content model expects element declaration item; the child's local name matches element declaration item, which is in no namespace, while the child is in namespace "urn:o", but cvc-complex-content clause 1 requires the [[children]] to be ·valid· with respect to that {content type}`},
+		// The same for a {scope}.{parent} that is a model group definition
+		// named in no namespace, reached through a <group ref>.
+		{"a local declaration of a no-namespace model group", map[string]string{
+			"o.xsd": `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" targetNamespace="urn:o">
+  <xs:import schemaLocation="n.xsd"/>
+  <xs:element name="order"><xs:complexType><xs:group ref="G"/></xs:complexType></xs:element>
+</xs:schema>`,
+			"n.xsd": `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:group name="G"><xs:sequence>
+    <xs:element name="item" type="xs:string"/>
+  </xs:sequence></xs:group>
+</xs:schema>`},
+			`<order xmlns="urn:o"><item>a</item></order>`,
+			`o.xml:1:22: [cvc-complex-content] element {urn:o}item, a child of {urn:o}order, is not allowed at its position: no particle of the parent's {content type} admits it there, where the content model expects element declaration item; the child's local name matches element declaration item, which is in no namespace, while the child is in namespace "urn:o", but cvc-complex-content clause 1 requires the [[children]] to be ·valid· with respect to that {content type}`},
 		// Two expected declarations share the child's local name, each in a
 		// namespace other than the child's: both are named.
 		{"two matching declarations", map[string]string{"o.xsd": `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" targetNamespace="urn:o" xmlns:o="urn:o">
