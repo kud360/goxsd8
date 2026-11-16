@@ -701,7 +701,7 @@ func appendEscaped(dst []byte, s string, attr bool) []byte {
 // any value is read (constructAssertions).
 type noAssertions struct{}
 
-// Evaluate declines t.
+// Evaluate declines every {test}.
 func (noAssertions) Evaluate(value.Backend, xsd.TypeResolver, *xsd.SimpleType, xsd.XPathExpression, value.Value) value.AssertionAnswer {
 	return value.AssertionDeclinedBecause("codec's encoder evaluates no assertion")
 }
