@@ -33,14 +33,18 @@ func (q QName) String() string {
 }
 
 // Display renders q for message text only: "xs:local" when q is in the XML
-// Schema namespace ([XMLSchemaNS]), "local" for a no-namespace name,
+// Schema namespace ([XMLSchemaNS]), "xsi:local" when it is in the XML Schema
+// instance namespace ([XMLSchemaInstanceNS]), "local" for a no-namespace name,
 // "{space}local" for any other namespace, and "" for the zero value (absent).
-// The "xs:" is a fixed display spelling, not a namespace binding and not a
-// lexical QName: never parse Display's output back or key on it.
+// The "xs:" and "xsi:" are fixed display spellings, not namespace bindings and
+// not lexical QNames: never parse Display's output back or key on it.
 // [QName.String] stays Clark notation for every other consumer.
 func (q QName) Display() string {
 	if q.Space == XMLSchemaNS {
 		return "xs:" + q.Local
+	}
+	if q.Space == XMLSchemaInstanceNS {
+		return "xsi:" + q.Local
 	}
 	return q.String()
 }

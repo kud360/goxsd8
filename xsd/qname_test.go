@@ -32,6 +32,7 @@ func TestQNameDisplay(t *testing.T) {
 		want string
 	}{
 		{"xsd-namespace", xsd.QName{Space: xsd.XMLSchemaNS, Local: "decimal"}, "xs:decimal"},
+		{"xsi-namespace", xsd.QName{Space: xsd.XMLSchemaInstanceNS, Local: "nil"}, "xsi:nil"},
 		{"other-namespace", xsd.QName{Space: "urn:o", Local: "N"}, "{urn:o}N"},
 		{"no-namespace", xsd.QName{Local: "elem"}, "elem"},
 		{"zero-value-absent", xsd.QName{}, ""},

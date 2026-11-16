@@ -105,6 +105,24 @@ func TestSimpleTypeChargesEveryNonInstanceAttribute(t *testing.T) {
 	}
 }
 
+// An attribute in the XML Schema instance namespace that is none of the four
+// clause 3.1.1 excepts is charged like any other, and the charge spells it
+// xsi:bogus, the same display convention as the four fixed xsi: names it
+// prints beside it (xsd.QName.Display).
+func TestSimpleTypeChargeSpellsAnInstanceNamespaceAttributeXSI(t *testing.T) {
+	schema := simpleTypedSchema(t, icBuiltin("integer"), nil, false)
+
+	root := attributedRoot(xsd.QName{Space: xsd.XMLSchemaInstanceNS, Local: "bogus"})
+	root.kids = []Child{TextChild(&testText{data: "42", loc: loc(2, 1)})}
+
+	got := cAssess(t, schema, root)
+	tWantCharge(t, got, "3.1.1", loc(1, 10))
+	want := "the element root carries the attribute xsi:bogus, but its ·governing type definition· xs:integer is a Simple Type Definition, and cvc-type clause 3.1.1 admits no attribute on such an element beyond xsi:type, xsi:nil, xsi:schemaLocation and xsi:noNamespaceSchemaLocation"
+	if got[0].Msg != want {
+		t.Errorf("Msg = %q, want %q", got[0].Msg, want)
+	}
+}
+
 // The four §3.2.7 instance attributes clause 3.1.1 excepts by name are silent,
 // and the exception is by ·expanded name· and not by prefix.
 func TestSimpleTypeExemptsTheFourInstanceAttributes(t *testing.T) {
