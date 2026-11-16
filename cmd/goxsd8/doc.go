@@ -634,7 +634,8 @@
 // delegates through cvc-simple-type (String Valid) to cvc-datatype-valid and
 // carries that verdict as a WRAPPED cause — rendered into the message, as
 // above, and reachable as an *xsderr.Error of its own through errors.As and
-// xsderr.RuleOf. Key a dispatcher on the outer rule.
+// xsderr.RuleOf. # Usage's validate entry says which [<rule>] a dispatcher keys
+// on.
 package main
 
 // The # Usage section of the package comment above is generated:
