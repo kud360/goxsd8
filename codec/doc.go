@@ -287,10 +287,9 @@
 //
 //	func Append[T any](dst []byte, schema *xsd.Schema, backend value.Backend, name xsd.QName, v T) ([]byte, error)
 //
-// [Append] appends the XML document that encodes a value of the type codegen
-// emits for a top-level element declaration, and its doc states what it
-// returns in every other case. It reads the schema, not T, as [Decode] does,
-// and holds T to the declaration by Decode's comparisons.
+// [Append]'s doc states what it writes and what it returns. It reads the
+// schema, not T, as [Decode] does, and holds T to the declaration by Decode's
+// comparisons.
 //
 // # What encodes
 //
@@ -321,19 +320,18 @@
 // fields (codegen's package doc, "# Attributes"), each value delimited by
 // '"'. A nil *V field writes nothing, a []V writes one element per item, and
 // an element with no content is written as an empty-element tag, <x/>. A
-// simple value is written in its canonical representation: an xs:double's the
-// form its governing mapping's Canonical renders, such as 1.0E0 for 1, and a
-// string's itself, which item 6 of Append's doc holds to its own
-// whiteSpace-normalized form, since xs:string's canonical mapping is the
-// identity (Datatypes §E.4 f-stringCanmap). It escapes '<', '&' and '>' as
-// &lt;, &amp; and &gt; everywhere, so that "]]>" is never written, and CR as
-// &#xD; everywhere, which XML 1.0 end-of-line handling (§2.11) would
-// otherwise rewrite to LF or remove; in an attribute value it escapes '"' as
-// &quot;, TAB as &#x9; and LF as &#xA;, which attribute-value normalization
-// (§3.3.3) would otherwise turn into spaces; and every other character, TAB and LF
-// in content and the apostrophe everywhere, is written as itself. So the Order
-// codegen emits for README's order.xsd, of Item {"a"} and Kind "k", is written
-// <order xmlns="urn:o" kind="k"><item>a</item></order>.
+// string value is written as itself, its canonical representation, since
+// xs:string's canonical mapping is the identity (Datatypes §E.4
+// f-stringCanmap) and item 6 of Append's doc holds the string to its own
+// whiteSpace-normalized form. It escapes '<', '&' and '>' as &lt;, &amp; and &gt;
+// everywhere, so that "]]>" is never written, and CR as &#xD; everywhere, which
+// XML 1.0 end-of-line handling (§2.11) would otherwise rewrite to LF or remove; in
+// an attribute value it escapes '"' as &quot;, TAB as &#x9; and LF as &#xA;, which
+// attribute-value normalization (§3.3.3) would otherwise turn into spaces; and
+// every other character, TAB and LF in content and the apostrophe everywhere, is
+// written as itself. So the Order codegen emits for README's order.xsd, of Item
+// {"a"} and Kind "k", is written <order xmlns="urn:o"
+// kind="k"><item>a</item></order>.
 //
 // # Debuggability
 //
