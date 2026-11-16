@@ -326,7 +326,9 @@
 // names. Each such charge names what the content model expected at that
 // position — the first few element declarations and wildcards in content-model
 // order, then a count of the rest, and at a rejected item the {open content}
-// wildcard, if present, always named and last — and no later child of a charged
+// wildcard, if present, always named and last — then, at a rejected item whose
+// local name an expected element declaration has under another namespace
+// name, that declaration and both namespace names — and no later child of a charged
 // element is matched, so a second misplaced child goes unreported until the
 // first is fixed. Clause 1.2 additionally reads a VALUE, through the same
 // backend the attribute charges use: a simple {content type} has the root's
