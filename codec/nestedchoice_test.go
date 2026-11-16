@@ -12,7 +12,7 @@ import (
 // The nested-choice schemas, each declaring s:r, whose content sequence
 // holds a choice particle occurring exactly once that codegen neither
 // splices nor flattens (codegen/doc.go "# Particles"), so codegen gives it a
-// field of its bare sealed interface named as if from local name choice:
+// field of its bare sealed interface named as codegen/doc.go "# Naming" states:
 // ncInlineSchema's is sequence(a, choice(b, c)); ncRefSchema's the same
 // through a <group ref> to the choice group g; ncComplexSchema's
 // sequence(a, choice(b, c)) with b of an anonymous complex type, vStruct's;
