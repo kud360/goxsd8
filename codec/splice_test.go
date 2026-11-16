@@ -149,7 +149,7 @@ func TestSpliceTypesAreCodegens(t *testing.T) {
 }
 
 // TestDecodeSplices pins the splice lift: a nested sequence particle
-// goshape.Splices answers true for, inline, through a <group ref>, with
+// goshape.ParticleHold answers Spliced for, inline, through a <group ref>, with
 // {min occurs} 0 over an emptiable group, absent and present, or an
 // extension's {particle} sequence(base particle, added) at one level and
 // two, decodes into the fields its own particles give, in particle order,

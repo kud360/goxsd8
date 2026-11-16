@@ -1210,40 +1210,26 @@ func typeName(t xsd.TypeDefinition) string {
 
 // shape checks the complex type t against the package doc's "# Complex types"
 // shape, naming it in declines by o's subject, and returns the type it emits
-// as name, sealed exactly when "# Complex types" gives the choice t's content
-// particle holds as t itself — it reads t's mixedness (goshape.Mixed), then its
-// attribute fields (goshape.HasAttributeFields) and its {open content}
-// (hasOpenContent) from the finalized component, so inherited ones count, and
-// then answers sealed for a choice with no {particles}, before asking
-// goshape.TermEmptiable about a choice with {particles} — and its content
-// particle (contentGroup), nil for empty content. It emits nothing: body does,
-// so that a caller can store the type in e.emitted before its body is walked.
+// as name, sealed exactly when goshape.ChoiceRoot answers true for t, after
+// its content particle (contentGroup), nil for empty content, has declined
+// nothing. It emits nothing: body does, so that a caller can store the type in
+// e.emitted before its body is walked.
 func (e *emitter) shape(name string, o origin, t xsd.ComplexType) (emittedType, *groupParticle, error) {
 	content, err := e.contentGroup(o.subject, t)
 	if err != nil {
 		return emittedType{}, nil, err
 	}
-	if content == nil || content.group.Compositor() != xsd.CompositorChoice || content.occurs != goshape.ExactlyOnce() || goshape.Mixed(t) {
-		return emittedType{name: name}, content, nil
-	}
-	if goshape.HasAttributeFields(t) || hasOpenContent(t) {
-		return emittedType{name: name}, content, nil
-	}
-	if len(content.group.Particles()) == 0 {
-		return emittedType{name: name, sealed: true}, content, nil
-	}
-	emptiable, err := goshape.TermEmptiable(e.schema, xsd.ResolvedTerm{Term: content.group})
+	root, err := goshape.ChoiceRoot(e.schema, t)
 	if err != nil {
 		return emittedType{}, nil, fmt.Errorf("%s at %s: %w", o.subject, t.Loc(), err)
 	}
-	return emittedType{name: name, sealed: !emptiable}, content, nil
+	return emittedType{name: name, sealed: root}, content, nil
 }
 
 // hasOpenContent reports whether the complex type t has an {open content},
 // read from its finalized {content type} as the package doc's
 // "# Open content" states: exactly when the struct body emits for t holds
-// the open-content field, and so when shape never answers a sealed
-// interface for t.
+// the open-content field.
 func hasOpenContent(t xsd.ComplexType) bool {
 	content, isElement := t.ContentType().(xsd.ElementContent)
 	return isElement && content.OpenContent != nil
@@ -1325,17 +1311,18 @@ func (e *emitter) body(typ emittedType, nested scope, chain []valueNode, o origi
 // contentFields returns the fields the content particle content of the
 // complex type t generated from o gives in the struct body emits for t, whose
 // nested types are named in nested and whose particles chain is valueChain's
-// for: particleFields' for its group's particles when goshape.Splices answers
-// true, and otherwise the one field groupField returns.
+// for: particleFields' for its group's particles where goshape.ParticleHold
+// answers Spliced, and otherwise the one field groupField returns for that
+// answer.
 func (e *emitter) contentFields(nested scope, chain []valueNode, o origin, t xsd.ComplexType, content groupParticle) ([]fieldSpec, error) {
-	splice, err := goshape.Splices(e.schema, content.group, content.occurs)
+	hold, err := goshape.ParticleHold(e.schema, content.group, content.occurs)
 	if err != nil {
 		return nil, fmt.Errorf("%s at %s: %w", o.subject, t.Loc(), err)
 	}
-	if splice {
+	if hold == goshape.Spliced {
 		return e.particleFields(nested, groupSite{}, chain, o, t, content.group.Particles())
 	}
-	field, err := e.groupField(nested, groupSite{}, 0, o, t, content)
+	field, err := e.groupField(nested, groupSite{}, 0, o, t, content, hold)
 	if err != nil {
 		return nil, err
 	}
@@ -1345,33 +1332,39 @@ func (e *emitter) contentFields(nested scope, chain []valueNode, o origin, t xsd
 // groupField returns the field of the model-group particle c at ordinal under
 // site (groupSite) of the complex type t generated from o, in a struct whose
 // nested types are named in nested: named from c's compositor, "sequence",
-// "choice" or "all". When goshape.Flattens answers true for c, decided before
-// any type of c's is built, the field holds a slice of the sealed interface
-// occurrenceType emits flattened, whatever c's occurrence, a choice occurring
-// exactly once included; otherwise it holds the type for one occurrence of c's
-// group (occurrenceType) by c's occurrence (occursGoType). Its two callers are
-// contentFields, for a content particle goshape.Splices does not splice, and field,
-// for a model group particle nested in a struct's or a branch's particles, so
-// the walk tests a particle before any particle in its term, and a particle
-// goshape.Flattens answers true for is the outermost one: its term is
-// goshape.Reach's walk, and no particle inside it reaches groupField.
-func (e *emitter) groupField(nested scope, site groupSite, ordinal int, o origin, t xsd.ComplexType, c groupParticle) (fieldSpec, error) {
-	flat, err := goshape.Flattens(e.schema, c.group, c.occurs)
-	if err != nil {
-		return fieldSpec{}, fmt.Errorf("%s at %s: %w", o.subject, t.Loc(), err)
-	}
-	typ, err := e.occurrenceType(nested, site, ordinal, o, t, c.group, flat)
-	if err != nil {
-		return fieldSpec{}, err
-	}
-	if flat {
+// "choice" or "all", by hold, goshape.ParticleHold's answer for c, asked
+// before any type of c's is built. Flattened holds a slice of the sealed
+// interface occurrenceType emits flattened, whatever c's occurrence;
+// OnceChoice and Occurrence hold the type for one occurrence of c's group
+// (occurrenceType) by c's occurrence (occursGoType); Spliced is an error,
+// since its fields are particleFields'. Its two callers are contentFields,
+// for a content particle, and field, for a model group particle nested in a
+// struct's or a branch's particles, so the walk asks of a particle before any
+// particle in its term, and a Flattened particle is the outermost one: its
+// term is goshape.Reach's walk, and no particle inside it reaches groupField.
+func (e *emitter) groupField(nested scope, site groupSite, ordinal int, o origin, t xsd.ComplexType, c groupParticle, hold goshape.Hold) (fieldSpec, error) {
+	switch hold {
+	case goshape.Flattened:
+		typ, err := e.occurrenceType(nested, site, ordinal, o, t, c.group, true)
+		if err != nil {
+			return fieldSpec{}, err
+		}
 		return fieldSpec{local: c.group.Compositor().String(), goType: "[]" + typ.name}, nil
+	case goshape.OnceChoice, goshape.Occurrence:
+		typ, err := e.occurrenceType(nested, site, ordinal, o, t, c.group, false)
+		if err != nil {
+			return fieldSpec{}, err
+		}
+		goType, ok := occursGoType(typ, c.occurs)
+		if !ok {
+			return fieldSpec{}, fmt.Errorf("%s at %s: a %s model group particle with {max occurs} 0 reached groupField", o.subject, t.Loc(), c.group.Compositor())
+		}
+		return fieldSpec{local: c.group.Compositor().String(), goType: goType}, nil
+	case goshape.Spliced:
+		return fieldSpec{}, fmt.Errorf("%s at %s: a spliced %s model group particle reached groupField", o.subject, t.Loc(), c.group.Compositor())
 	}
-	goType, ok := occursGoType(typ, c.occurs)
-	if !ok {
-		return fieldSpec{}, fmt.Errorf("%s at %s: a %s model group particle with {max occurs} 0 reached groupField", o.subject, t.Loc(), c.group.Compositor())
-	}
-	return fieldSpec{local: c.group.Compositor().String(), goType: goType}, nil
+	// The zero Hold is an internal bug, never input.
+	panic(fmt.Sprintf("codegen: invalid goshape.Hold %d", hold))
 }
 
 // occurrenceType returns the type for one occurrence of the model group group,
@@ -1387,7 +1380,7 @@ func (e *emitter) groupField(nested scope, site groupSite, ordinal int, o origin
 // Under a named complex type or a model group definition (scope.shared) it is stored in
 // e.emitted under nested.groupKey of its site before its particles are walked, shared by
 // every later walk of nested's path, and removed when that walk fails, as scopedType
-// stores a type; flat is a function of the particle at that site (goshape.Flattens), so
+// stores a type; flat is a function of the particle at that site (goshape.ParticleHold), so
 // every walk sharing the key reads one kind of type.
 func (e *emitter) occurrenceType(nested scope, parent groupSite, ordinal int, o origin, t xsd.ComplexType, group xsd.ModelGroup, flat bool) (emittedType, error) {
 	site := parent.group(ordinal, group.Compositor())
@@ -1439,8 +1432,8 @@ func (e *emitter) occurrence(typ emittedType, nested scope, site groupSite, o or
 }
 
 // flattened emits typ, the sealed interface occurrenceType names for a model
-// group particle at site whose term is group and which goshape.Flattens
-// answers true for, of the complex type t generated from o, in the package
+// group particle at site whose term is group and which goshape.ParticleHold
+// answers Flattened for, of the complex type t generated from o, in the package
 // doc's "# Particles" shape: the interface, then one branch struct per basic
 // particle reach returns for group, in that order, each followed by the types
 // its field reaches, the anonymous ones named in nested as if the flattened
@@ -1576,21 +1569,21 @@ func (e *emitter) particleFields(nested scope, site groupSite, chain []valueNode
 
 // spliced returns particles in order with each particle whose term is a model
 // group (modelGroupTerm), inline or the {model group} of the definition a
-// <group ref> names (§3.7.2), and which goshape.Splices answers true for replaced,
-// recursively, by that group's own particles: one occurrence of a sequence
-// particle is one pass through its particles in order (§3.8.4.1.1
+// <group ref> names (§3.7.2), and which goshape.ParticleHold answers Spliced
+// for replaced, recursively, by that group's own particles: one occurrence of
+// a sequence particle is one pass through its particles in order (§3.8.4.1.1
 // sec-sequences), and one of an all particle one sequence per particle
 // interleaved (§3.8.4.1.3 all-mg), so its fields are theirs; cos-all-limited
 // (§3.8.6.2 clauses 1.3 and 2), checked at Finalize, admits an all group
 // particle among particles only as an all group's member occurring exactly
-// once, so every one is spliced. A complex-content extension's content particle
-// (§3.4.2.3.3 dcl.ctd.ctcc.common clause 4.2.3.3) is one such sequence, nesting
-// its base's when the base is itself an extension, so the splice recurses; the
-// package doc's "# Particles" states the fields that gives. Every other particle
-// is kept as is, and field gives a choice and a sequence goshape.Splices does not
-// splice, inline or referenced alike, the field groupField returns. subject and
-// loc name the complex type holding particles in the errors modelGroupTerm and
-// goshape.Splices return.
+// once, so every one is spliced. A complex-content extension's content
+// particle (§3.4.2.3.3 dcl.ctd.ctcc.common clause 4.2.3.3) is one such
+// sequence, nesting its base's when the base is itself an extension, so the
+// splice recurses; the package doc's "# Particles" states the fields that
+// gives. Every other particle is kept as is, and field gives a choice and a
+// sequence it does not splice, inline or referenced alike, the field
+// groupField returns. subject and loc name the complex type holding particles
+// in the errors modelGroupTerm and goshape.ParticleHold return.
 func (e *emitter) spliced(subject string, loc xsderr.Loc, particles []xsd.Particle) ([]xsd.Particle, error) {
 	var leaves []xsd.Particle
 	for _, p := range particles {
@@ -1602,11 +1595,11 @@ func (e *emitter) spliced(subject string, loc xsderr.Loc, particles []xsd.Partic
 			leaves = append(leaves, p)
 			continue
 		}
-		splice, err := goshape.Splices(e.schema, group, p.Occurs())
+		hold, err := goshape.ParticleHold(e.schema, group, p.Occurs())
 		if err != nil {
 			return nil, fmt.Errorf("%s at %s: %w", subject, loc, err)
 		}
-		if !splice {
+		if hold != goshape.Spliced {
 			leaves = append(leaves, p)
 			continue
 		}
@@ -1680,8 +1673,8 @@ func renderStruct(name string, fields []goField) string {
 // No alternative's term is an emptiable model group, so no branch holds the
 // empty match, which the nil interface stands for: shape answers no sealed
 // interface for an emptiable content choice, and groupField flattens a nested
-// choice holding one (goshape.Flattens) rather than reaching occurrenceType's
-// sealedType.
+// choice holding one (goshape.ParticleHold's Flattened) rather than reaching
+// occurrenceType's sealedType.
 func (e *emitter) sealedType(name string, nested scope, site groupSite, o origin, t xsd.ComplexType, particles []xsd.Particle) error {
 	marker := "is" + name
 	e.decls = append(e.decls, declare(name, o.from, "", fmt.Sprintf("type %s interface {\n\t%s()\n}\n", name, marker)))
@@ -1825,30 +1818,30 @@ type fieldSpec struct {
 // contents}, which it never reads; that path never calls shape, contentGroup,
 // nestedType or valueChain, and gives a choice's wildcard alternative its branch struct's one
 // field (sealedType). The field of a model group particle (modelGroupTerm), inline or a
-// <group ref>, a choice or a sequence which spliced does not splice (goshape.Splices), is the
-// one groupField returns for p at ordinal under site, after a {max occurs} of 0 has declined
-// naming the group, as contentGroup declines one, before any occurrence type is emitted; an
-// all group is an error, never a decline: cos-all-limited (§3.8.6.2), checked at Finalize,
-// admits an all group particle only as a content {particle}, which contentGroup and
-// groupField handle, or exactly once among an all group's {particles}, which spliced splices.
-// An element particle whose declaration abstractLocal answers true for declines, charged to
-// that declaration, before its type is resolved. The field of an <element ref> particle,
-// whose declaration is global, holds the type refType returns for the referenced declaration,
-// after declaredType has resolved that declaration's type: the sealed interface over its
-// substitution group's declarations with {abstract} false when goshape.SubstitutionSum
-// answers a sum, and the type elementType returns for it otherwise; the walk does not enter
-// that type's body, which topLevel emits, but valueCycle checks it when the particle occurs
-// exactly once, the declaration is not nillable, and the type is a complex type other than
-// xs:anyType emitted as a struct; valueCycle ends at once for a type whose content particle
-// occurs other than exactly once. A local declaration governingTypes answers a sum for holds
-// the sealed interface localTable returns. A local declaration of type xs:anyType holds the
-// raw-content struct AnyType (anyTypeType). From field, neither a global declaration nor
-// xs:anyType ever reaches nestedType. A nillable declaration (goshape.Nillable) holds, inside
-// any MixedChild wrap and by the same occurrence rules, Nillable over the type the rules
-// above give (nillableType), whose names are claimed after that type's, unless that type is
-// AnyType, which holds xsi:nil among its Attributes, or a sum over the declaration's
-// substitution group or governing types, whose branches wrap their own fields
-// (substitutionType, tableType); its particle is never a value field, whatever its
+// <group ref>, a choice or a sequence which spliced does not splice, is the
+// one groupField returns for p at ordinal under site for goshape.ParticleHold's answer, after
+// a {max occurs} of 0 has declined naming the group, as contentGroup declines one, before any
+// occurrence type is emitted; an all group is an error, never a decline: cos-all-limited
+// (§3.8.6.2), checked at Finalize, admits an all group particle only as a content {particle},
+// which contentGroup and groupField handle, or exactly once among an all group's {particles},
+// which spliced splices. An element particle whose declaration abstractLocal answers true for
+// declines, charged to that declaration, before its type is resolved. The field of an
+// <element ref> particle, whose declaration is global, holds the type refType returns for the
+// referenced declaration, after declaredType has resolved that declaration's type: the sealed
+// interface over its substitution group's declarations with {abstract} false when
+// goshape.SubstitutionSum answers a sum, and the type elementType returns for it otherwise;
+// the walk does not enter that type's body, which topLevel emits, but valueCycle checks it
+// when the particle occurs exactly once, the declaration is not nillable, and the type is a
+// complex type other than xs:anyType emitted as a struct; valueCycle ends at once for a type
+// whose content particle occurs other than exactly once. A local declaration governingTypes
+// answers a sum for holds the sealed interface localTable returns. A local declaration of
+// type xs:anyType holds the raw-content struct AnyType (anyTypeType). From field, neither a
+// global declaration nor xs:anyType ever reaches nestedType. A nillable declaration
+// (goshape.Nillable) holds, inside any MixedChild wrap and by the same occurrence rules,
+// Nillable over the type the rules above give (nillableType), whose names are claimed after
+// that type's, unless that type is AnyType, which holds xsi:nil among its Attributes, or a
+// sum over the declaration's substitution group or governing types, whose branches wrap their
+// own fields (substitutionType, tableType); its particle is never a value field, whatever its
 // occurrence, since the field holds an interface or AnyType, whose walk ends at once.
 func (e *emitter) field(nested scope, site groupSite, ordinal int, chain []valueNode, o origin, t xsd.ComplexType, p xsd.Particle) (fieldSpec, error) {
 	subject, loc := o.subject, t.Loc()
@@ -1875,7 +1868,11 @@ func (e *emitter) field(nested scope, site groupSite, ordinal int, chain []value
 		if upper, bounded := p.Occurs().Max(); bounded && upper == 0 {
 			return fieldSpec{}, decline(loc, constructVacuousParticle, fmt.Sprintf("a %s model group", group.Compositor()), subject)
 		}
-		return e.groupField(nested, site, ordinal, o, t, groupParticle{group: group, occurs: p.Occurs()})
+		hold, err := goshape.ParticleHold(e.schema, group, p.Occurs())
+		if err != nil {
+			return fieldSpec{}, fmt.Errorf("%s at %s: %w", subject, loc, err)
+		}
+		return e.groupField(nested, site, ordinal, o, t, groupParticle{group: group, occurs: p.Occurs()}, hold)
 	}
 	decl, err := e.elementTerm(subject, loc, p.Term())
 	if err != nil {
@@ -2467,7 +2464,7 @@ func reacher(decl xsd.ElementDeclaration) string {
 // model group particle (modelGroupTerm) is a leaf, passed before elementTerm: its field holds a slice, a pointer to its
 // occurrence struct, or a bare sealed interface (groupField), never a value. A choice t, a t whose content particle occurs
 // other than exactly once, and a step whose first node (valueNodes) is in e.acyclic, end the walk: a content particle
-// goshape.Splices answers true for though it occurs other than exactly once is emptiable, so no element particle among its
+// goshape.ParticleHold answers Spliced for though it occurs other than exactly once is emptiable, so no element particle among its
 // spliced particles occurs exactly once, and it never steps to an element of type xs:anyType, whose AnyType reaches itself only
 // through slices. A wildcard particle (wildcardTerm) is a leaf, passed before elementTerm: its field holds AnyElement, which
 // reaches AnyType, which reaches itself only through the slice Children. So is an <element ref> particle to a head
