@@ -177,7 +177,7 @@ func findingAt(rep report, s site) (finding, bool) {
 
 // TestRestatementsPrinted holds F1-F3: each added sentence is printed with the
 // owner sentence it restates. Each fails when the matcher pairs nothing:
-// shared returning 0 fails all three rows.
+// shared returning 0 fails every row.
 func TestRestatementsPrinted(t *testing.T) {
 	rows := []struct {
 		name  string
@@ -216,6 +216,21 @@ func TestRestatementsPrinted(t *testing.T) {
 		name: "F3 usage restating jsonsrc.Validate's clause bullet",
 		add: func(tree map[string]string) map[string]string {
 			tree["cmd/goxsd8/main.go"] = usageSrc("Flags common to all subcommands: -q and -v.", "Assess instances against the compiled set.", f3)
+			return tree
+		},
+		added: func(tree map[string]string) site {
+			return site{"cmd/goxsd8/main.go", lineOf(t, tree, "cmd/goxsd8/main.go", f3)}
+		},
+		owner: func(tree map[string]string) site {
+			return site{"validate/jsonsrc/jsonsrc.go", lineOf(t, tree, "validate/jsonsrc/jsonsrc.go", ownerClause)}
+		},
+	}, {
+		// cmd/goxsd8's usage splices a constant into its text (#3798).
+		name: "F4 usage concatenating a constant, restating jsonsrc.Validate's clause bullet after it",
+		add: func(tree map[string]string) map[string]string {
+			src := usageSrc("Flags common to all subcommands: -q and -v.", "Assess instances against the compiled set.", f3)
+			src = strings.Replace(src, "\n\nUsage:", "` + pointer + `\n\nUsage:", 1) + "\nconst pointer = \"run goxsd8 -help\"\n"
+			tree["cmd/goxsd8/main.go"] = src
 			return tree
 		},
 		added: func(tree map[string]string) site {

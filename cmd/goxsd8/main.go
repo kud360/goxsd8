@@ -89,6 +89,35 @@ Usage (contract; subcommands land with their milestones):
   declines, unresolved-directive and hint notes, -v logging, and
   validate's counts line (validate below).
 
+  Stderr lines: each line on stderr is named by the first template
+  below, in this order, that matches it whole, the lines indented
+  under a template saying what tells it apart. An argument or a
+  message spelled with a line break breaks its line there too.
+    <loc>: [<rule>] <message>
+        a schema rejection (parse and gen 1, validate 3), <rule> the
+        rule charged and <loc> the location Paths below names, or ?
+        where none is known;
+    goxsd8: validate: instances=<n> clean=<n> undecided=<n> invalid=<n> faulted=<n>
+        validate's counts line, with nothing after its last <n>: an
+        opening instances= alone is not this line, since a line about
+        an instance argument spelled instances=... opens the same way;
+    goxsd8: <subcommand>: <message>
+        a diagnosis or note charged inside parse, validate or gen;
+    goxsd8: <message>
+        a diagnosis charged before any subcommand is known;
+    usage: <synopsis>
+        a subcommand's synopsis line below, under a diagnosis of its
+        command line's shape;
+    ` + helpPointer + `
+        the line pointing to this help, under every usage diagnosis;
+    time=<time> level=<level> msg=<message>
+        a -v record in log/slog's text-handler form, <message> being
+        its msg value and the key=value attributes after it;
+    <message>
+        a component's own message, parse's no-rule-to-cite line below:
+        it has no promised opener, and matching no template above is
+        what tells it apart.
+
   Paths, in parse, validate and gen alike: a line about an argument
   itself names it as it was typed, relative or ./ or absolute, and
   standard input as -. That is the I/O fault opening an argument,
@@ -119,9 +148,9 @@ Usage (contract; subcommands land with their milestones):
       which no namespace line is counted into. Each argument is its
       own root document and its own run, in argument order — several
       arguments are several compilations, not one set.
-      A rejected schema prints its first error on stderr as <loc>:
-      [<rule>] <message> (assembly stops there, so a rejected schema
-      is one error line). An argument that cannot be read stops no
+      A rejected schema prints its first error on stderr, in the
+      rejection's template under Stderr lines above (assembly stops
+      there, so a rejected schema is one error line). An argument that cannot be read stops no
       run but its own: the arguments after it are still compiled.
       Some errors have no rule to cite and print the producing
       component's own message instead, carrying what location they
@@ -341,8 +370,7 @@ Usage (contract; subcommands land with their milestones):
       first, then the line of the fault that stopped its walk if one
       did, then its undecided checks.
       After the last instance, the run prints one counts line, the
-      last line on stderr:
-        goxsd8: validate: instances=<n> clean=<n> undecided=<n> invalid=<n> faulted=<n>
+      last line on stderr, in the template Stderr lines above gives.
       Every key always appears, in that order, each count in decimal.
       instances counts the instance arguments, each once, and is the
       sum of the other four, which count each instance by its own
