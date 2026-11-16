@@ -679,6 +679,12 @@ func TestAppendDeclines(t *testing.T) {
 		"abstract type": func(dst []byte, schema *xsd.Schema, name xsd.QName) ([]byte, error) {
 			return Append(dst, schema, strict.New(), name, abstractMember{A: "a", C: "c", X: "x"})
 		},
+		"complex assertions": func(dst []byte, schema *xsd.Schema, name xsd.QName) ([]byte, error) {
+			return Append(dst, schema, strict.New(), name, struct{ A string }{A: "a"})
+		},
+		"restricted complex assertions": func(dst []byte, schema *xsd.Schema, name xsd.QName) ([]byte, error) {
+			return Append(dst, schema, strict.New(), name, struct{ A string }{A: "a"})
+		},
 	}
 	seen := map[string]Construct{}
 	for _, row := range rows {
