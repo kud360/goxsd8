@@ -458,7 +458,9 @@ func (c *contentCheck) element(w *walk, child Element) (a xsd.Attribution, undec
 // declining), the {open content} included where it is present. Every listed
 // arm was offered the item and declined it, so a wildcard arm whose {namespace
 // constraint} allows the item's namespace declined it under its {disallowed
-// names}, and is named as disallowing the item.
+// names}, and is named as disallowing the item. An element declaration arm
+// that has the item's local name and not its namespace name is named again
+// after that list, with both namespace names (namespaceMismatch).
 //
 // Its two results are [contentCheck.element]'s, undecided only for the nil
 // matcher.
@@ -476,16 +478,89 @@ func (c *contentCheck) match(w *walk, child Element) (xsd.Attribution, bool) {
 		}
 		return a, false
 	}
+	arms := c.matcher.Admissible()
 	if c.openContent() != nil {
 		c.charge(w, ruleCvcComplexContent, clause, child.Loc(),
-			"element %s, a child of %s, is not allowed at its position: no particle of the parent's {content type} admits it there, and neither does that {content type}'s {open content} wildcard, where the content model expects %s, but cvc-complex-content clause %s requires the [[children]] to be ·valid· with respect to that {content type}",
-			child.Name(), c.e.Name(), expected(c.matcher.Admissible(), declining(child.Name())), clause)
+			"element %s, a child of %s, is not allowed at its position: no particle of the parent's {content type} admits it there, and neither does that {content type}'s {open content} wildcard, where the content model expects %s%s, but cvc-complex-content clause %s requires the [[children]] to be ·valid· with respect to that {content type}",
+			child.Name(), c.e.Name(), expected(arms, declining(child.Name())), namespaceMismatch(child.Name(), arms), clause)
 		return nil, false
 	}
 	c.charge(w, ruleCvcComplexContent, "1", child.Loc(),
-		"element %s, a child of %s, is not allowed at its position: no particle of the parent's {content type} admits it there, where the content model expects %s, but cvc-complex-content clause 1 requires the [[children]] to be ·valid· with respect to that {content type}",
-		child.Name(), c.e.Name(), expected(c.matcher.Admissible(), declining(child.Name())))
+		"element %s, a child of %s, is not allowed at its position: no particle of the parent's {content type} admits it there, where the content model expects %s%s, but cvc-complex-content clause 1 requires the [[children]] to be ·valid· with respect to that {content type}",
+		child.Name(), c.e.Name(), expected(arms, declining(child.Name())), namespaceMismatch(child.Name(), arms))
 	return nil, false
+}
+
+// namespaceMismatch is the clause a rejected item's charge adds after what the
+// content model expects, naming every [xsd.ElementDeclaration] arm of arms
+// whose local name is child's and whose namespace name is not, or "" where no
+// arm is one: cvc-accept clause 2.3.1 compares ·expanded names·, so such an arm
+// declined child for its namespace name alone. Every arm is read, those past
+// maxExpectedListed included, so the clause can name an arm expected only
+// counts.
+//
+// Where a named arm has no {target namespace} and its {scope}.{variety} is
+// local, the clause also states how a local declaration gets one (§3.3.2.3
+// dcl.elt.local's {target namespace} row: its own targetNamespace attribute,
+// else form or elementFormDefault qualified, which take the ancestor <schema>'s
+// targetNamespace, "or absent if there is none"), and asserts neither which of
+// these the schema used nor that its document has a targetNamespace: the
+// component records neither. That chain is withheld only where the arm's
+// {scope}.{parent} is a named complex type or model group definition whose
+// {name} has no namespace, which proves the arm's schema document has no
+// targetNamespace, so neither form nor elementFormDefault can give it one. An
+// [xsd.AnonymousComplexTypeScopeParent] records no namespace and never
+// withholds it.
+func namespaceMismatch(child xsd.QName, arms []xsd.Attribution) string {
+	var named []string
+	local := ""
+	for _, a := range arms {
+		d, isDecl := a.(xsd.ElementDeclaration)
+		if !isDecl || d.Name().Local != child.Local || d.Name().Space == child.Space {
+			continue
+		}
+		named = append(named, attributedTo(d)+", which is in "+inNamespace(d.Name().Space))
+		if d.Name().Space == "" && formCanQualify(d) {
+			local = attributedTo(d)
+		}
+	}
+	if len(named) == 0 {
+		return ""
+	}
+	s := "; the child's local name matches " + strings.Join(named, ", and ") + ", while the child is in " + inNamespace(child.Space)
+	if local == "" {
+		return s
+	}
+	return s + ", and " + local + ` is local, so it takes a {target namespace} only from its own targetNamespace attribute, else from form="qualified" or the schema's elementFormDefault="qualified", and those two take the targetNamespace of its schema document if it has one`
+}
+
+// formCanQualify reports whether namespaceMismatch states the dcl.elt.local
+// chain for d, on the condition namespaceMismatch's doc states. The switch
+// is over the three variants [xsd.ElementScopeParent] seals (STYLE T2's
+// closed-sum exception).
+func formCanQualify(d xsd.ElementDeclaration) bool {
+	parent, isLocal := d.Scope().Parent()
+	if !isLocal {
+		return false
+	}
+	switch p := parent.(type) {
+	case xsd.ComplexTypeScopeParent:
+		return p.Name.Space != ""
+	case xsd.ModelGroupScopeParent:
+		return p.Name.Space != ""
+	case xsd.AnonymousComplexTypeScopeParent:
+		return true
+	}
+	return true
+}
+
+// inNamespace names a namespace name as the object of "in": `namespace
+// "urn:o"`, or "no namespace" for the empty one.
+func inNamespace(space string) string {
+	if space == "" {
+		return "no namespace"
+	}
+	return "namespace " + strconv.Quote(space)
 }
 
 // end settles the clauses that only exhausted [[children]] can settle.
