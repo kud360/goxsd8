@@ -367,7 +367,8 @@ Usage (contract; subcommands land with their milestones):
       validate has no shorter rendering, a script keys on the first
       [<rule>], on a violation line the charged rule, and never on
       one inside <message>, and <message> is UTF-8 and may set a spec
-      term between U+00B7 (·) marks. A name in <message> prints as
+      term between U+00B7 (·) marks. In the <message> of a violation
+      or undecided line about an XML instance, a name prints as
       {namespace}local, a name in the XML Schema namespace as
       xs:local, and a name in no namespace bare: xs: is a display
       convention, not a prefix the schema bound. An instance's
