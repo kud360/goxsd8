@@ -379,10 +379,12 @@
 //     element.
 //   - So the instance's character data round-trips: Text, then each child in
 //     the order the struct holds it, each followed by its Tail. The characters
-//     are raw and of no simple type (§3.4.4.2 cvc-complex-type clause 1.4
-//     validates the element children alone); mixed content with an empty
-//     {particle} gives Text and the attribute fields alone. A present
-//     MixedChild whose Element is a nil sealed interface is not a child.
+//     are raw and of no simple type ({simple type definition} is ·absent·,
+//     §3.4.2.3.3 dcl.ctd.ctcc.common clauses 4.1.2, 4.2.3 and 6.2, and §3.4.4.2
+//     cvc-complex-type clause 1.4 validates the element children alone); mixed
+//     content with an empty {particle} gives Text and the attribute fields
+//     alone. A present MixedChild whose Element is a nil sealed interface is
+//     not a child.
 //   - Mixedness is read from the type's own {content type}, never its base's: a
 //     restriction of a mixed base whose own content is element-only gets
 //     neither Text nor MixedChild, and an extension of a mixed base is mixed
@@ -637,17 +639,17 @@
 //
 //   - A complex type's {open content} (§3.4.2.3.3 dcl.ctd.ctcc.common clauses 5
 //     and 6), read from its own {content type}, so one an extension inherits
-//     counts (clause 4.2.3.3) and an <openContent mode="none"> adds none of its
-//     own, so an extension keeps the {open content} its base's {content type}
-//     carries (clause 6.1), gives one field in the struct the type itself
-//     gives, never in an occurrence type or a branch struct, after the particle
-//     fields and before the attribute fields, named as if from the local name
-//     openContent ("Naming"), so that beside an element openContent, which
-//     keeps OpenContent, the field is OpenContent2. The field is a slice of
-//     AnyElement, or of AnyChild in mixed content, never a pointer, nil and the
-//     empty slice being one value. Empty explicit content that clause 6.2 makes
-//     element-only, with a sequence of no {particles}, gives a struct holding
-//     the field alone.
+//     counts (clauses 4.2.2 and 4.2.3) and an <openContent mode="none"> adds
+//     none of its own, so an extension keeps the {open content} its base's
+//     {content type} carries (clause 6.1), gives one field in the struct the
+//     type itself gives, never in an occurrence type or a branch struct, after
+//     the particle fields and before the attribute fields, named as if from the
+//     local name openContent ("Naming"), so that beside an element openContent,
+//     which keeps OpenContent, the field is OpenContent2. The field is a slice
+//     of AnyElement, or of AnyChild in mixed content, never a pointer, nil and
+//     the empty slice being one value. Empty explicit content that clause 6.2
+//     makes element-only, with a sequence of no {particles}, gives a struct
+//     holding the field alone.
 //   - The open-content field holds, in order, the children attributed to the
 //     open content (§3.4.4.4): a child that the {particle} could take at that
 //     point in the sequence is the particle's, which the struct does not
