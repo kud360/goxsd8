@@ -1,6 +1,7 @@
-// Package codec is the dataset deserializer: schema-directed decode of
-// instance data into Go values; canonical encode back out is not yet built,
-// nor are the allocation-frugal decode paths "# Planned decode paths" names.
+// Package codec is the dataset codec: schema-directed decode of instance data
+// into Go values, and encode of Go values back out in canonical form for the
+// slice "# What encodes" states; the allocation-frugal decode paths
+// "# Planned decode paths" names are not yet built.
 //
 // # Decode
 //
@@ -282,6 +283,56 @@
 // declining component's schema Loc; and [DeclineError.Construct] returns its
 // construct.
 //
+// # Encode
+//
+//	func Append[T any](dst []byte, schema *xsd.Schema, backend value.Backend, name xsd.QName, v T) ([]byte, error)
+//
+// [Append]'s doc states what it writes and what it returns. It reads the
+// schema, not T, as [Decode] does, and holds T to the declaration by Decode's
+// comparisons.
+//
+// # What encodes
+//
+// Append encodes a document element whose top-level declaration is neither
+// abstract nor nillable and has no {type table}, value constraint or
+// identity-constraint definitions, and whose {type definition} is either a
+// simple type that encodes or a complex type with no {attribute wildcard}
+// and no {open content}, of empty content or of element-only content whose
+// {particle} is a sequence that codegen splices, inline or through
+// <group ref>, each of whose particles is a local element declaration,
+// {max occurs} at least 1, of a simple type that encodes and with the same
+// restrictions as the document element's declaration, into V, *V or []V by
+// its occurrence; each attribute use but xsi:nil's is unqualified, has no
+// value constraint and is of a simple type that encodes, into V or *V. A
+// simple type encodes when it is atomic, has no assertions facet, and has
+// {primitive type definition} xs:string, other than a type derived from
+// xs:ID, xs:IDREF or xs:ENTITY, into string, or xs:double, into float64.
+// Every other construct is a [*DeclineError], item 4 of Append's doc, and so
+// is a value with no canonical representation, item 7.
+//
+// The document Append writes has no XML declaration, so it is XML 1.0 in
+// UTF-8, and no white space between tags. It binds namespaces by default
+// declarations alone, with no prefix, no xmlns:p and no xsi declaration: the
+// document element carries xmlns="ns" for its non-absent namespace ns, and
+// nothing where it is absent, and every other element carries xmlns="ns", or
+// xmlns="" for an absent namespace, exactly where its namespace differs from
+// its parent's. Attributes are written unprefixed, in the order of codegen's
+// fields (codegen's package doc, "# Attributes"), each value delimited by
+// '"'. A nil *V field writes nothing, a []V writes one element per item, and
+// an element with no content is written as an empty-element tag, <x/>. A
+// string value is written as itself, its canonical representation, since
+// xs:string's canonical mapping is the identity (Datatypes §E.4
+// f-stringCanmap) and item 6 of Append's doc holds the string to its own
+// whiteSpace-normalized form. It escapes '<', '&' and '>' as &lt;, &amp; and &gt;
+// everywhere, so that "]]>" is never written, and CR as &#xD; everywhere, which
+// XML 1.0 end-of-line handling (§2.11) would otherwise rewrite to LF or remove; in
+// an attribute value it escapes '"' as &quot;, TAB as &#x9; and LF as &#xA;, which
+// attribute-value normalization (§3.3.3) would otherwise turn into spaces; and
+// every other character, TAB and LF in content and the apostrophe everywhere, is
+// written as itself. So the Order codegen emits for README's order.xsd, of Item
+// {"a"} and Kind "k", is written <order xmlns="urn:o"
+// kind="k"><item>a</item></order>.
+//
 // # Debuggability
 //
 // Decode runs three stages on a value: whiteSpace, then, for an atomic Go
@@ -303,19 +354,20 @@
 // # Planned decode paths
 //
 // Decode today is the slice above, validate's facet pipeline followed by the
-// stages the Debuggability section names; no value.Emitter exists. Two
-// paths are planned, neither implemented: a runtime path, always available,
-// of the facet pipeline and value.Mapping driven by the compiled schema,
-// general, reflective and allocation-tolerant, whose hot-path APIs follow the
-// appender convention (AppendCanonical(dst []byte, v) []byte;
-// ParseBytes([]byte)) so that it too is allocation-frugal; and a generated
-// fast path, code emitted at codegen time via value.Emitter, with no
-// intermediate strings, no boxed values, facet checks inlined and
-// zero-allocation scalar decode on the native backend. Both implement the
-// SAME pipeline stages with the SAME spec rule IDs: differential tests feed
-// identical input to both and require identical values and identical error
-// rule IDs, testing.AllocsPerRun benchmarks pin the fast path's budget, and a
-// fast path that disagrees with the runtime path is wrong by definition.
-// Generated fast paths preserve what the Debuggability section states and map
-// back to their emitting backend and schema construct via header comments.
+// stages the Debuggability section names; no value.Emitter exists. Append
+// follows the appender convention named below. Two paths are planned, neither
+// implemented: a runtime path, always available, of the facet pipeline and
+// value.Mapping driven by the compiled schema, general, reflective and
+// allocation-tolerant, whose hot-path APIs follow the appender convention
+// (AppendCanonical(dst []byte, v) []byte; ParseBytes([]byte)) so that it too
+// is allocation-frugal; and a generated fast path, code emitted at codegen
+// time via value.Emitter, with no intermediate strings, no boxed values,
+// facet checks inlined and zero-allocation scalar decode on the native
+// backend. Both implement the SAME pipeline stages with the SAME spec rule
+// IDs: differential tests feed identical input to both and require identical
+// values and identical error rule IDs, testing.AllocsPerRun benchmarks pin
+// the fast path's budget, and a fast path that disagrees with the runtime
+// path is wrong by definition. Generated fast paths preserve what the
+// Debuggability section states and map back to their emitting backend and
+// schema construct via header comments.
 package codec

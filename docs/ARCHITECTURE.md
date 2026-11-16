@@ -42,8 +42,9 @@ Value implementations, parsing, validation, and generation live above them.
                                     reads.
                                   - internal/xmlchar, XML 1.0 [2] Char, which
                                     parser/xmltree's character-reference and
-                                    markup checks and internal/xmltok's text
-                                    check read.
+                                    markup checks, internal/xmltok's text
+                                    check and codec's check of the strings
+                                    Append writes read.
                                   - internal/xmlqname, the QName split and prefix
                                     resolution of an xsi:type lexical
                                     (cvc-resolve-instance), which validate's walk,
@@ -107,9 +108,9 @@ identifier for either of them and they import nothing from this module, so the
 edges drawn above do not exist yet in `go list -deps`. Read every
 present-tense sentence in their sections below as "will", not "does".
 `codec` has left this note: it exports `Decode`/`CheckDecode`/`Option`/`WithURI`/`WithBranches`/`WithPrecisionDecimalArms`/`WithLogger`,
-`DeclineError` and its `Construct`, `UndecidedError`, `ViolationsOf` and `ErrTypeMismatch`, and
+`Append`, `DeclineError` and its `Construct`, `UndecidedError`, `ViolationsOf` and `ErrTypeMismatch`, and
 imports `parser/xmltree`, `validate`, `validate/xmlsrc`, `value`, `xsd`,
-`xsderr`, `internal/goname`, `internal/goshape` and `internal/xmlqname` (its section says what ships).
+`xsderr`, `internal/goname`, `internal/goshape`, `internal/xmlchar` and `internal/xmlqname` (its section says what ships).
 `codegen` has left this note: it exports `Generate`, `CheckTargets` and
 `Target`, with the error types they return, and imports `xsd`, `xsderr`,
 `internal/goname` and `internal/goshape` (its section says what ships).
@@ -181,7 +182,8 @@ checks. [5] `Name` over those tables is still written twice, as `isName` in
 gives it its one home there. Whether that table is generated is
 #989's question, asked of `internal/xmlname`. [2] `Char` lives in
 `internal/xmlchar`, read by `parser/xmltree`'s character-reference check and
-markup check and `internal/xmltok`'s text check (#2187, #2265). [3] `S`
+markup check, `internal/xmltok`'s text check (#2187, #2265) and `codec`'s
+check of the strings `Append` writes. [3] `S`
 is still spelled package-locally across the library, and #3033 gives it
 its one home in `internal/xmlchar`; do not write another copy. The
 [7]-[11] `QName` split and prefix resolution of an xsi:type lexical lives in
@@ -726,7 +728,9 @@ does not. `codec` (M10) exports `Decode`, which decodes a valid XML
 instance into the type `codegen` emits for its document element, for the
 slice `codec/doc.go`'s "What decodes" states, declining every other
 construct, `CheckDecode`, which returns `Decode`'s schema-level declines and T mismatches
-for a declaration before an instance arrives, `Option`/`WithURI`/`WithBranches`/`WithPrecisionDecimalArms`/`WithLogger`, `DeclineError` and its `Construct`, `UndecidedError`, `ViolationsOf`, and `ErrTypeMismatch`. Its
+for a declaration before an instance arrives, `Append`, which encodes a value of that type
+back out in canonical form for the slice `codec/doc.go`'s "What encodes" states, declining
+every other construct, `Option`/`WithURI`/`WithBranches`/`WithPrecisionDecimalArms`/`WithLogger`, `DeclineError` and its `Construct`, `UndecidedError`, `ViolationsOf`, and `ErrTypeMismatch`. Its
 runtime path today runs, for a union, the identification of its ·active
 basic member· (`value.ValidatingType`), then the whiteSpace stage
 (`value.ApplyWhiteSpace`) and, for a non-string atomic type, the governing
@@ -763,7 +767,8 @@ present tense because it is a design contract; read it as "will", not
   not restate them here.
 - `codec` is the dataset serializer/deserializer: schema-directed decode of
   instance documents into generated (or reflective) Go values and canonical
-  encode back out (planned).
+  encode back out, for the slices `codec/doc.go`'s "What decodes" and "What
+  encodes" state.
 
 ### Two decode paths, one semantics
 

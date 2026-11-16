@@ -3,7 +3,7 @@
 // character-reference check in entity replacement text and its check of the
 // source of comments, processing instructions and directives, and
 // internal/xmltok's check of character data, CDATA sections and attribute
-// values.
+// values, and codec's check of each string value Append writes.
 //
 // # Contract
 //
