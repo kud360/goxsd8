@@ -151,6 +151,9 @@ func encodePlanOf(schema *xsd.Schema, decl xsd.ElementDeclaration) (encodeElemen
 		return encodeElement{decl: decl, simple: st}, simpleEncodes(schema, st, declSubject(decl))
 	}
 	ct, _ := td.(xsd.ComplexType)
+	if ct.Abstract() {
+		return encodeElement{}, encodeDecline(constructAbstractType, typeSubject(decl, ct))
+	}
 	return complexPlanOf(schema, decl, ct)
 }
 
@@ -178,7 +181,7 @@ func declEncodes(decl xsd.ElementDeclaration) error {
 // then its content {particle}, {max occurs} 0 declined before
 // goshape.ParticleHold is asked (#3794), then each particle in order, then
 // each attribute use codegen gives a field (goshape.FieldAttributeUses), then
-// its {attribute wildcard}.
+// its {attribute wildcard}, then its {assertions}.
 func complexPlanOf(schema *xsd.Schema, decl xsd.ElementDeclaration, ct xsd.ComplexType) (encodeElement, error) {
 	subject := typeSubject(decl, ct)
 	plan := encodeElement{decl: decl}
@@ -203,6 +206,9 @@ func complexPlanOf(schema *xsd.Schema, decl xsd.ElementDeclaration, ct xsd.Compl
 	}
 	if _, has := ct.AttributeWildcard(); has {
 		return encodeElement{}, encodeDecline(constructAttributeWildcard, subject)
+	}
+	if len(ct.Assertions()) > 0 {
+		return encodeElement{}, encodeDecline(constructComplexAssertions, subject)
 	}
 	return plan, nil
 }

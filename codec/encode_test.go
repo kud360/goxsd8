@@ -608,7 +608,9 @@ func TestAppendVacuousParticle(t *testing.T) {
 // TestAppendDeclines pins item 4 of Append's doc for each construct of the
 // closed set it declines: each row's two declarations, r and q, decline with
 // equal Constructs, named by the opening of the decline's text, and rows of
-// different constructs with different ones; no bytes are written.
+// different constructs with different ones; no bytes are written. A row's
+// value is struct{}{}, or the one appendOf passes for it, which item 5
+// accepts.
 func TestAppendDeclines(t *testing.T) {
 	sequence := func(body string) string {
 		return `<xs:element name="%[1]s"><xs:complexType><xs:sequence>` + body + `</xs:sequence></xs:complexType></xs:element>`
@@ -620,6 +622,14 @@ func TestAppendDeclines(t *testing.T) {
 		return `<xs:element name="%[1]s"><xs:simpleType>` + body + `</xs:simpleType></xs:element>`
 	}
 	const a = `<xs:element name="a" type="xs:string"/>`
+	// abstractMember is codegen's struct for the one member, d, of r's
+	// abstract {type definition}, b.
+	type abstractMember struct{ A, C, X string }
+	const abstractType = `<xs:complexType name="b%[1]s" abstract="true"><xs:sequence>` + a + `</xs:sequence></xs:complexType>` +
+		`<xs:complexType name="d%[1]s"><xs:complexContent><xs:extension base="s:b%[1]s"><xs:sequence><xs:element name="c" type="xs:string"/></xs:sequence>` +
+		`<xs:attribute name="x" type="xs:string" use="required"/></xs:extension></xs:complexContent></xs:complexType>` +
+		`<xs:element name="%[1]s" type="s:b%[1]s"/>`
+	const asserted = `<xs:sequence>` + a + `</xs:sequence><xs:assert test="false()"/>`
 	rows := []struct {
 		name      string
 		construct string
@@ -635,6 +645,7 @@ func TestAppendDeclines(t *testing.T) {
 		{"identity constraint", "an element declaration with {identity-constraint definitions}", `<xs:element name="%[1]s"><xs:complexType><xs:sequence>` + a + `</xs:sequence></xs:complexType><xs:key name="k%[1]s"><xs:selector xpath="s:a"/><xs:field xpath="."/></xs:key></xs:element>`},
 		{"anyType", "an element declaration of type xs:anyType", `<xs:element name="%[1]s"/>`},
 		{"anyType particle", "an element declaration of type xs:anyType", sequence(`<xs:element name="a"/>`)},
+		{"abstract type", "an element declaration whose {type definition} is a complex type with {abstract} true", abstractType},
 		{"simple content", "a complex type with simple content", complexOf(`<xs:simpleContent><xs:extension base="xs:string"/></xs:simpleContent>`)},
 		{"mixed", "a complex type with mixed content", `<xs:element name="%[1]s"><xs:complexType mixed="true"><xs:sequence>` + a + `</xs:sequence></xs:complexType></xs:element>`},
 		{"open content", "an {open content}", complexOf(`<xs:openContent><xs:any namespace="##other" processContents="lax"/></xs:openContent><xs:sequence>` + a + `</xs:sequence>`)},
@@ -647,6 +658,9 @@ func TestAppendDeclines(t *testing.T) {
 		{"complex particle", "an element particle of complex type", sequence(`<xs:element name="a"><xs:complexType/></xs:element>`)},
 		{"qualified attribute", "an attribute use whose declaration has a {target namespace}", complexOf(`<xs:attribute name="a" type="xs:string" form="qualified"/>`)},
 		{"attribute wildcard", "an {attribute wildcard}", complexOf(`<xs:anyAttribute processContents="lax"/>`)},
+		{"complex assertions", "a complex type with {assertions}", complexOf(asserted)},
+		{"restricted complex assertions", "a complex type with {assertions}", `<xs:complexType name="ab%[1]s">` + asserted + `</xs:complexType>` +
+			`<xs:element name="%[1]s"><xs:complexType><xs:complexContent><xs:restriction base="s:ab%[1]s"><xs:sequence>` + a + `</xs:sequence></xs:restriction></xs:complexContent></xs:complexType></xs:element>`},
 		{"special type", "xs:anySimpleType or xs:anyAtomicType as a simple type", `<xs:element name="%[1]s" type="xs:anySimpleType"/>`},
 		{"list", "a list simple type", `<xs:element name="%[1]s" type="xs:NMTOKENS"/>`},
 		{"union", "a union simple type", simpleOf(`<xs:union memberTypes="xs:string xs:int"/>`)},
@@ -661,6 +675,11 @@ func TestAppendDeclines(t *testing.T) {
 		{"particle type table", "an element declaration with a {type table}", sequence(`<xs:element name="a" type="xs:string"><xs:alternative test="@b" type="xs:token"/></xs:element>`)},
 		{"particle identity constraint", "an element declaration with {identity-constraint definitions}", sequence(`<xs:element name="a" type="xs:string"><xs:unique name="u%[1]s"><xs:selector xpath="."/><xs:field xpath="."/></xs:unique></xs:element>`)},
 	}
+	appendOf := map[string]func(dst []byte, schema *xsd.Schema, name xsd.QName) ([]byte, error){
+		"abstract type": func(dst []byte, schema *xsd.Schema, name xsd.QName) ([]byte, error) {
+			return Append(dst, schema, strict.New(), name, abstractMember{A: "a", C: "c", X: "x"})
+		},
+	}
 	seen := map[string]Construct{}
 	for _, row := range rows {
 		t.Run(row.name, func(t *testing.T) {
@@ -669,6 +688,9 @@ func TestAppendDeclines(t *testing.T) {
 			var constructs []Construct
 			for _, name := range []string{"r", "q"} {
 				got, err := Append(dst, schema, strict.New(), sname(name), struct{}{})
+				if v, has := appendOf[row.name]; has {
+					got, err = v(dst, schema, sname(name))
+				}
 				d := asDecline(t, err, "codec does not encode "+row.construct+": ")
 				if string(got) != "pre" {
 					t.Errorf("Append wrote %q", got)

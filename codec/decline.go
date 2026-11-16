@@ -120,15 +120,16 @@ type construct uint8
 // occurrence field's item, ahead of the particles after it. The constructs
 // after constructXsiType are Append's alone, in the order Append finds them:
 // the document element's declaration, after constructNillable, its type's
-// content, its content {particle}, each particle in order, its attribute uses
-// in order, its {attribute wildcard}, and each value. A particle declines by
+// {abstract}, its type's content, its content {particle}, each particle in
+// order, its attribute uses in order, its {attribute wildcard}, its
+// {assertions}, and each value. A particle declines by
 // constructVacuousParticle first, as the content {particle} does, then by
 // constructNestedGroup where its term is a model group; its element
 // declaration declines by the document element's declaration's constructs,
 // constructNillable first, before constructComplexParticle; and an attribute
 // use declines by constructValueConstraint after constructQualifiedAttribute.
 // The ones of a simple type, constructSpecialType to constructAssertions, sit
-// after the {attribute wildcard}'s, though the document element's, a
+// after the {assertions}'s, though the document element's, a
 // particle's and an attribute use's simple type declines by them where that
 // declaration or use is examined.
 const (
@@ -142,6 +143,7 @@ const (
 	constructValueConstraint
 	constructIdentityConstraint
 	constructAnyType
+	constructAbstractType
 	constructSimpleContent
 	constructMixed
 	constructOpenContent
@@ -154,6 +156,7 @@ const (
 	constructComplexParticle
 	constructQualifiedAttribute
 	constructAttributeWildcard
+	constructComplexAssertions
 	constructSpecialType
 	constructList
 	constructUnion
@@ -175,6 +178,7 @@ var constructNames = [...]string{
 	constructValueConstraint:    "a value constraint, default or fixed",
 	constructIdentityConstraint: "an element declaration with {identity-constraint definitions}",
 	constructAnyType:            "an element declaration of type xs:anyType",
+	constructAbstractType:       "an element declaration whose {type definition} is a complex type with {abstract} true",
 	constructSimpleContent:      "a complex type with simple content",
 	constructMixed:              "a complex type with mixed content",
 	constructOpenContent:        "an {open content}",
@@ -187,6 +191,7 @@ var constructNames = [...]string{
 	constructComplexParticle:    "an element particle of complex type",
 	constructQualifiedAttribute: "an attribute use whose declaration has a {target namespace}",
 	constructAttributeWildcard:  "an {attribute wildcard}",
+	constructComplexAssertions:  "a complex type with {assertions}",
 	constructSpecialType:        "xs:anySimpleType or xs:anyAtomicType as a simple type",
 	constructList:               "a list simple type",
 	constructUnion:              "a union simple type",
