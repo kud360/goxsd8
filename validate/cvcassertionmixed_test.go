@@ -143,7 +143,7 @@ func TestAssertionOverAnUnreadableMixedChildIsDeclined(t *testing.T) {
 		want      string
 	}{
 		{"an xsi:type to xs:int", "string-length(body) eq 1", []Child{mxEl("body", 2, []Attribute{xsiTypeAttr("xs:int")}, mxText("5", 2))},
-			"the child element body of the element root at instance.xml:2:3, which a {test} reads, has no typed value for the data model instance cvc-assertion clause 1 builds: its ·governing type definition· {http://www.w3.org/2001/XMLSchema}int has no mixed content"},
+			"the child element body of the element root at instance.xml:2:3, which a {test} reads, has no typed value for the data model instance cvc-assertion clause 1 builds: its ·governing type definition· xs:int has no mixed content"},
 		{"an xsi:type to an element-only type", "string-length(body) eq 0", []Child{mxEl("body", 2, []Attribute{xsiTypeAttr("EO")})},
 			"its ·governing type definition· EO has no mixed content"},
 		{"a skipped descendant", "um = 'x'", []Child{mxEl("um", 2, nil, mxText("x", 2), skipped)},

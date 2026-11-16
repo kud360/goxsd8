@@ -96,7 +96,7 @@ func TestPatternRejectionNamesFailedStep(t *testing.T) {
 		want    string
 	}{
 		{"a built-in type fails its ancestor's built-in pattern", builtins["int"], "x3", "cvc-pattern-valid",
-			`"x3" matches no member of the pattern facet that the simple type {http://www.w3.org/2001/XMLSchema}int inherits from the simple type {http://www.w3.org/2001/XMLSchema}integer, whose {value} holds "[\-+]?[0-9]+", but cvc-pattern-valid requires one to match`},
+			`"x3" matches no member of the pattern facet that the simple type xs:int inherits from the simple type xs:integer, whose {value} holds "[\-+]?[0-9]+", but cvc-pattern-valid requires one to match`},
 		{"a user-derived type fails its own pattern", code, "abc", "cvc-pattern-valid",
 			`"abc" matches no member of the pattern facet of the simple type {urn:t}Code, whose {value} holds "[A-Z]{3}", but cvc-pattern-valid requires one to match`},
 		{"the derived step fails where its base's passes", narrower, "XYZ", "cvc-pattern-valid",
@@ -120,11 +120,11 @@ func TestPatternRejectionNamesFailedStep(t *testing.T) {
 		{"a member holding an ampersand", amp, "z", "cvc-pattern-valid",
 			`"z" matches no member of the pattern facet of the simple type {urn:t}Amp, whose {value} holds "a&amp;#10;b", but cvc-pattern-valid requires one to match`},
 		{"a list item fails its item type's ancestor's pattern", ints, "1 x3", "cvc-pattern-valid",
-			`"x3" matches no member of the pattern facet that the simple type {http://www.w3.org/2001/XMLSchema}int inherits from the simple type {http://www.w3.org/2001/XMLSchema}integer, whose {value} holds "[\-+]?[0-9]+", but cvc-pattern-valid requires one to match`},
+			`"x3" matches no member of the pattern facet that the simple type xs:int inherits from the simple type xs:integer, whose {value} holds "[\-+]?[0-9]+", but cvc-pattern-valid requires one to match`},
 		// No member accepts, so the union charges cvc-datatype-valid and folds
 		// each member's reason in (union.go dispatchUnion); xs:int's is this one.
 		{"a union member's reason inside the union's rejection", intOrDate, "x3", "cvc-datatype-valid",
-			`"x3" matches no member of the pattern facet that the simple type {http://www.w3.org/2001/XMLSchema}int inherits from the simple type {http://www.w3.org/2001/XMLSchema}integer, whose {value} holds "[\-+]?[0-9]+", but cvc-pattern-valid requires one to match`},
+			`"x3" matches no member of the pattern facet that the simple type xs:int inherits from the simple type xs:integer, whose {value} holds "[\-+]?[0-9]+", but cvc-pattern-valid requires one to match`},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			_, err := value.ValidateLexical(b, ownedChain{}, tc.st, tc.lexical, nil, declineEvery{})
@@ -163,7 +163,7 @@ func TestPatternRejectionRendersWhole(t *testing.T) {
 	if !errors.As(err, &xe) {
 		t.Fatalf("ValidateLexical(xs:int, %q) = %v, want an *xsderr.Error", "x3", err)
 	}
-	const want = `?: [cvc-pattern-valid] "x3" matches no member of the pattern facet that the simple type {http://www.w3.org/2001/XMLSchema}int inherits from the simple type {http://www.w3.org/2001/XMLSchema}integer, whose {value} holds "[\-+]?[0-9]+", but cvc-pattern-valid requires one to match`
+	const want = `?: [cvc-pattern-valid] "x3" matches no member of the pattern facet that the simple type xs:int inherits from the simple type xs:integer, whose {value} holds "[\-+]?[0-9]+", but cvc-pattern-valid requires one to match`
 	if got := xe.Error(); got != want {
 		t.Errorf("ValidateLexical(xs:int, %q).Error() =\n%s\nwant\n%s", "x3", got, want)
 	}

@@ -234,5 +234,5 @@ func simpleTypeLabel(t *SimpleType) string {
 	if t.name == (QName{}) {
 		return "anonymous simple type"
 	}
-	return "simple type " + t.name.String()
+	return "simple type " + t.name.Display()
 }

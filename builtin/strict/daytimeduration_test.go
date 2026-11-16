@@ -57,7 +57,7 @@ func TestDayTimeDurationParseAndCanonical(t *testing.T) {
 func TestDayTimeDurationReject(t *testing.T) {
 	m := mappingFor(t, "dayTimeDuration")
 	pattern := `%q has a year or month field, so it does not match dayTimeDuration's pattern facet [^YM]*(T.*)?, which cvc-datatype-valid clause 1 requires it to match`
-	primitive := `%q is not in the lexical space of duration, the primitive of dayTimeDuration, which cvc-datatype-valid clause 2.1 requires it to be in`
+	primitive := `%q is not in the lexical space of xs:duration, the primitive of xs:dayTimeDuration, which cvc-datatype-valid clause 2.1 requires it to be in`
 	for _, c := range []struct{ lex, msg string }{
 		{"P1Y", pattern}, {"P1M", pattern}, {"P1Y2M", pattern}, {"P1YT2H", pattern},
 		{"P1MT5M", pattern}, {"P1Y1D", pattern},

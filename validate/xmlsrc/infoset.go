@@ -85,7 +85,7 @@ func (e *element) Attributes() []validate.Attribute {
 // in the source, so it panics rather than reaching [validate.Result.Err].
 func (e *element) Children() validate.Children {
 	if e.n != e.w.n {
-		panic(fmt.Sprintf("validate/xmlsrc: Children called after the walk left %s", e.Name()))
+		panic(fmt.Sprintf("validate/xmlsrc: Children called after the walk left %s", e.Name().Display()))
 	}
 	return &children{w: e.w, depth: e.depth}
 }

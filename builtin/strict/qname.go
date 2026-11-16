@@ -52,7 +52,7 @@ type notationVal struct{ space, local string }
 // context-dependent: it resolves the prefix (or, for an unprefixed name, the
 // empty prefix = default namespace) against ctx's in-scope namespace bindings.
 func parseQName(lexical string, ctx value.Context) (value.Value, error) {
-	space, local, err := resolveQNameLexical(lexical, ctx, "QName")
+	space, local, err := resolveQNameLexical(lexical, ctx, "xs:QName")
 	if err != nil {
 		return nil, err
 	}
@@ -67,7 +67,7 @@ func parseQName(lexical string, ctx value.Context) (value.Value, error) {
 // value.ValidateLexical's, over a lexical this mapping accepted, wherever its
 // resolver holds the schema.
 func parseNOTATION(lexical string, ctx value.Context) (value.Value, error) {
-	space, local, err := resolveQNameLexical(lexical, ctx, "NOTATION")
+	space, local, err := resolveQNameLexical(lexical, ctx, "xs:NOTATION")
 	if err != nil {
 		return nil, err
 	}

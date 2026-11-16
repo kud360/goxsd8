@@ -11,7 +11,7 @@ import (
 // undeclaredNotation is the verdict opening, for member resolving to the QName
 // name, that it names no notation declaration.
 func undeclaredNotation(member, name string) string {
-	return `the NOTATION value "` + member + `" resolves to the QName ` + name + `, which names no notation declaration`
+	return `the xs:NOTATION value "` + member + `" resolves to the QName ` + name + `, which names no notation declaration`
 }
 
 // wantUndeclaredNotationMember fails unless err is enumeration valid

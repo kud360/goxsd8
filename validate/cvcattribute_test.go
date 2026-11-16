@@ -131,7 +131,7 @@ func TestAttributeLexicalIsCheckedAgainstItsType(t *testing.T) {
 	if got.Loc != loc(1, 10) {
 		t.Errorf("Loc = %s, want the attribute's %s", got.Loc, loc(1, 10))
 	}
-	if want := `attribute n's value "abc" is not a valid {` + xsd.XMLSchemaNS + `}integer, which cvc-attribute clause 3 requires: [cvc-pattern-valid] `; !strings.HasPrefix(got.Msg, want) {
+	if want := `attribute n's value "abc" is not a valid xs:integer, which cvc-attribute clause 3 requires: [cvc-pattern-valid] `; !strings.HasPrefix(got.Msg, want) {
 		t.Errorf("Msg = %q, want the prefix %q: the attribute, its value and its type, then the delegated verdict", got.Msg, want)
 	}
 
@@ -513,7 +513,7 @@ func TestNonQNameXSITypeChargesClauseThree(t *testing.T) {
 			t.Errorf("xsi:type=%q: charge = %v, want cvc-attribute at the attribute's own %s", lexical, got[0], loc(1, 10))
 		}
 		opening := `the xsi:type attribute of the element root has the value "` + lexical +
-			`", which is not a valid {http://www.w3.org/2001/XMLSchema}QName`
+			`", which is not a valid xs:QName`
 		if !strings.HasPrefix(got[0].Msg, opening) {
 			t.Errorf("xsi:type=%q: Msg = %q, want it to open %q", lexical, got[0].Msg, opening)
 		}
@@ -677,7 +677,7 @@ func wantAttributeCharge(t *testing.T, got []*xsderr.Error, at xsderr.Loc, prefi
 // The openings of the two cvc-attribute charges a wildcard-attributed
 // attribute can draw: clause 3 against n, clause 4 against f.
 const (
-	clause3OnN = `attribute n's value "abc" is not a valid {http://www.w3.org/2001/XMLSchema}integer`
+	clause3OnN = `attribute n's value "abc" is not a valid xs:integer`
 	clause4OnF = `attribute f's value "y" is neither equal nor identical to "x", the {value} of the fixed {value constraint} on its attribute declaration`
 )
 

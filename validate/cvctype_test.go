@@ -47,7 +47,7 @@ func TestSimpleTypeChargesAnInvalidInitialValue(t *testing.T) {
 
 	got := cAssess(t, schema, cRoot("#12,50"))
 	tWantCharge(t, got, "3.1.3", loc(1, 1))
-	if want := `element root's value "12,50" is not a valid {` + xsd.XMLSchemaNS + `}decimal, which cvc-type clause 3.1.3 requires: [cvc-datatype-valid] `; !strings.HasPrefix(got[0].Msg, want) {
+	if want := `element root's value "12,50" is not a valid xs:decimal, which cvc-type clause 3.1.3 requires: [cvc-datatype-valid] `; !strings.HasPrefix(got[0].Msg, want) {
 		t.Errorf("Msg = %q, want the prefix %q: the element, its value and the ·governing type definition·, then the delegated verdict", got[0].Msg, want)
 	}
 	// The charge names the ·governing type definition· ITSELF, never the
