@@ -18,6 +18,7 @@
 //	func TableSlot(table xsd.TypeTable, index int) (slot Slot, ref xsd.TypeDefinitionOrRef, ok bool)
 //	func GoverningTypes(schema *xsd.Schema, decl xsd.ElementDeclaration) (types []GoverningType, errorSlot bool, err error)
 //	func BasicMembers(r xsd.TypeResolver, st *xsd.SimpleType) ([]*xsd.SimpleType, error)
+//	func AnyTypeItself(td xsd.TypeDefinition) bool
 //	type Hold uint8
 //	const Spliced, Flattened, OnceChoice, Occurrence Hold
 //	func ParticleHold(schema *xsd.Schema, group xsd.ModelGroup, occurs xsd.Occurs) (Hold, error)

@@ -14,7 +14,8 @@ import (
 	"github.com/kud360/goxsd8/xsderr"
 )
 
-// anyTypeName is the name of xs:anyType, which the slice reads by identity.
+// anyTypeName is the name of xs:anyType, which the raw-content structs'
+// header records (anyTypeType).
 var anyTypeName = xsd.QName{Space: xsd.XMLSchemaNS, Local: "anyType"}
 
 // The math/big types "# Simple types" maps to; a field or named type of
@@ -199,11 +200,6 @@ type nilledAttributes struct {
 type rawNames struct {
 	anyType, attribute, child, element string
 }
-
-// isAnyType reports whether td is xs:anyType itself, by identity: every other
-// type definition is derived from it (§2.2.1.1 key-derived), whatever its
-// shape, and so is never xs:anyType.
-func isAnyType(td xsd.TypeDefinition) bool { return td.Name() == anyTypeName }
 
 // emittedType is the Go type emitted for one complex type definition or
 // top-level element declaration, or the Go type goType maps a simple type to:
@@ -606,7 +602,7 @@ func (e *emitter) topLevel(decl xsd.ElementDeclaration) error {
 	if sum {
 		return e.tableType(typ, scope{root: elementRoot, path: elementPath(decl.Name())}, decl, branches)
 	}
-	if isAnyType(td) {
+	if goshape.AnyTypeItself(td) {
 		e.decls = append(e.decls, declare(typ.name, e.elementFrom(decl), "", fmt.Sprintf("type %s %s\n", typ.name, e.raw.anyType)))
 		return nil
 	}
@@ -681,14 +677,14 @@ func (e *emitter) elementType(decl xsd.ElementDeclaration, td xsd.TypeDefinition
 		ifc := scope{root: elementRoot, path: elementPath(decl.Name())}
 		for _, b := range branches {
 			bt, isComplex := b.Type().(xsd.ComplexType)
-			if !isComplex || isAnyType(b.Type()) {
+			if !isComplex || goshape.AnyTypeItself(b.Type()) {
 				continue
 			}
 			if _, _, err := e.shape("", e.branchOrigin(branchScope(ifc, b), decl, b, bt), bt); err != nil {
 				return emittedType{}, err
 			}
 		}
-	case isAnyType(td):
+	case goshape.AnyTypeItself(td):
 		e.anyTypeType()
 		typ = emittedType{name: e.types.fixed(decl.Name().Local)}
 	case isSimple:
@@ -1901,7 +1897,7 @@ func (e *emitter) field(nested scope, site groupSite, ordinal int, chain []value
 		typ, err = e.refType(chain, value, decl, td)
 	case sum:
 		typ, err = e.localTable(nested, decl, branches)
-	case isAnyType(td):
+	case goshape.AnyTypeItself(td):
 		typ.name = e.anyTypeType()
 	case isSimple:
 		typ, err = e.simpleGoType("element "+decl.Name().String(), decl.Loc(), st, declaredUnion(localScope(nested, decl).steps()))
@@ -1914,7 +1910,7 @@ func (e *emitter) field(nested scope, site groupSite, ordinal int, chain []value
 		return fieldSpec{}, err
 	}
 	_, substitution := goshape.SubstitutionSum(e.schema, decl)
-	if goshape.Nillable(decl) && !sum && !isAnyType(td) && !substitution {
+	if goshape.Nillable(decl) && !sum && !goshape.AnyTypeItself(td) && !substitution {
 		typ = e.nillableType(typ, td)
 	}
 	if goshape.Mixed(t) {
@@ -1993,7 +1989,7 @@ func (e *emitter) refType(chain []valueNode, value bool, decl xsd.ElementDeclara
 		return emittedType{}, err
 	}
 	ct, isComplex := td.(xsd.ComplexType)
-	if isAnyType(td) || !value || !isComplex || typ.sealed {
+	if goshape.AnyTypeItself(td) || !value || !isComplex || typ.sealed {
 		return typ, nil
 	}
 	return typ, e.valueCycle(chain, decl, structScope(scope{}, decl, ct), ct)
@@ -2040,7 +2036,7 @@ func (e *emitter) substitutionType(head xsd.ElementDeclaration, members []xsd.El
 		if err != nil {
 			return emittedType{}, err
 		}
-		if goshape.Nillable(member) && !sum && !isAnyType(td) {
+		if goshape.Nillable(member) && !sum && !goshape.AnyTypeItself(td) {
 			typ = e.nillableType(typ, td)
 		}
 		fields := []fieldSpec{{local: member.Name().Local, goType: typ.name}}
@@ -2108,7 +2104,7 @@ func (e *emitter) tableType(typ emittedType, ifc scope, decl xsd.ElementDeclarat
 		if err != nil {
 			return err
 		}
-		if goshape.Nillable(decl) && !isAnyType(b.Type()) {
+		if goshape.Nillable(decl) && !goshape.AnyTypeItself(b.Type()) {
 			field = e.nillableType(field, b.Type())
 		}
 		fields := []fieldSpec{{local: b.Local(), goType: field.name}}
@@ -2132,7 +2128,7 @@ func (e *emitter) tableType(typ emittedType, ifc scope, decl xsd.ElementDeclarat
 // fields over decl, so the chain starts with the step through decl to that
 // type alone, whose node for decl itself no value field reaches.
 func (e *emitter) branchType(ifc scope, decl xsd.ElementDeclaration, b goshape.GoverningType) (emittedType, error) {
-	if isAnyType(b.Type()) {
+	if goshape.AnyTypeItself(b.Type()) {
 		return emittedType{name: e.anyTypeType()}, nil
 	}
 	child := branchScope(ifc, b)
@@ -2528,7 +2524,7 @@ func (e *emitter) valueCycle(chain []valueNode, decl xsd.ElementDeclaration, nes
 			continue
 		}
 		ct, isComplex := td.(xsd.ComplexType)
-		if isAnyType(td) || !isComplex {
+		if goshape.AnyTypeItself(td) || !isComplex {
 			continue
 		}
 		if err := e.valueCycle(chain, el, structScope(nested, el, ct), ct); err != nil {

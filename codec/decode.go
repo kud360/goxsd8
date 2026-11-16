@@ -2133,7 +2133,7 @@ func bindDecl(p *pipeline, decl xsd.ElementDeclaration) (binder, error) {
 		return bindTable(run, decl, types, run.elements, decl.Name())
 	}
 	td := types[0].Type()
-	if anyTypeItself(td) {
+	if goshape.AnyTypeItself(td) {
 		return anyTypeRoot{}, nil
 	}
 	b, err := bindTyped(run, decl, td)
@@ -4817,22 +4817,14 @@ func bindSimpleRoot(p *pipeline, decl xsd.ElementDeclaration, st *xsd.SimpleType
 func governingTypes(schema *xsd.Schema, decl xsd.ElementDeclaration, wraps bool) (types []goshape.GoverningType, wrapped bool, err error) {
 	types, errorSlot, err := goshape.GoverningTypes(schema, decl)
 	nillable := goshape.Nillable(decl)
-	if nillable && (err != nil || len(types) != 1 || errorSlot || !wraps && !anyTypeItself(types[0].Type())) {
+	if nillable && (err != nil || len(types) != 1 || errorSlot || !wraps && !goshape.AnyTypeItself(types[0].Type())) {
 		return nil, false, decline(constructNillable, declSubject(decl))
 	}
 	if err != nil {
 		return nil, false, fmt.Errorf("codec: %w", err)
 	}
-	return types, nillable && !anyTypeItself(types[0].Type()), nil
+	return types, nillable && !goshape.AnyTypeItself(types[0].Type()), nil
 }
-
-// anyTypeName is the expanded name of xs:anyType.
-var anyTypeName = xsd.QName{Space: xsd.XMLSchemaNS, Local: "anyType"}
-
-// anyTypeItself reports whether td is xs:anyType itself (§3.4.7
-// any-type-itself), known by its expanded name, as codegen's isAnyType knows
-// it, so a type derived from xs:anyType is not.
-func anyTypeItself(td xsd.TypeDefinition) bool { return td.Name() == anyTypeName }
 
 // contentGroup returns the model group of content, a complex type's
 // element-only or mixed content, whose {particle}'s {term} is an inline
@@ -5059,7 +5051,7 @@ func nillableField(run *bindRun, el xsd.ElementDeclaration, td xsd.TypeDefinitio
 func typedField(run *bindRun, el xsd.ElementDeclaration, td xsd.TypeDefinition, value valueType, shapeOf func(sealed bool) (shape, error), unit func(xsd.ComplexType) (complexUnit, error)) (field, error) {
 	schema := run.p.schema
 	subject := declSubject(el)
-	if anyTypeItself(td) {
+	if goshape.AnyTypeItself(td) {
 		s, err := shapeOf(false)
 		if err != nil {
 			return field{}, err

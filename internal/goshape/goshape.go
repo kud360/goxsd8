@@ -302,6 +302,16 @@ func flattens(schema *xsd.Schema, group xsd.ModelGroup, occurs xsd.Occurs) (bool
 	return repeatingEdge(schema, group)
 }
 
+// anyTypeName is the expanded name of xs:anyType (§3.4.7).
+var anyTypeName = xsd.QName{Space: xsd.XMLSchemaNS, Local: "anyType"}
+
+// AnyTypeItself reports whether td is xs:anyType itself (§3.4.7
+// any-type-itself), the type codegen/doc.go "# xs:anyType" gives the
+// raw-content struct AnyType, known by its expanded name: every other type
+// definition is derived from it (§2.2.1.1 key-derived), whatever its shape,
+// and so is never xs:anyType.
+func AnyTypeItself(td xsd.TypeDefinition) bool { return td.Name() == anyTypeName }
+
 // Hold is how codegen holds a model group particle, the content {particle} or
 // nested, as codegen/doc.go "# Particles" states it and ParticleHold answers
 // it. The zero value is invalid (STYLE T1).
