@@ -58,7 +58,7 @@ func declaringFoo(t *testing.T) *xsd.Schema {
 // the atomic and list routes, and folded into the union's on the union route.
 func wantUndeclaredBez(t *testing.T, route string, err error) {
 	t.Helper()
-	const verdict = `the NOTATION value "bez" resolves to the QName bez, which names no notation declaration of the schema`
+	const verdict = `the xs:NOTATION value "bez" resolves to the QName bez, which names no notation declaration of the schema`
 	rule, _ := xsderr.RuleOf(err)
 	if !IsDatatypeVerdict(err) || rule != ruleCvcDatatypeValid || !strings.Contains(err.Error(), verdict) {
 		t.Errorf("%s: err = %v, want a cvc-datatype-valid verdict carrying %q", route, err, verdict)

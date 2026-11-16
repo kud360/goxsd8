@@ -655,14 +655,14 @@ func declaredNotation(r xsd.TypeResolver, st *xsd.SimpleType, variety xsd.Variet
 	name, ok := resolveNotationLexical(lexical, ctx)
 	if !ok {
 		return xsderr.New(ruleCvcDatatypeValid, xsderr.Loc{},
-			"the NOTATION value %q has a prefix no in-scope namespace binding declares, so it resolves to no QName and is outside the ·value space· of NOTATION, which cvc-datatype-valid clause 2.1 requires it to be in",
+			"the xs:NOTATION value %q has a prefix no in-scope namespace binding declares, so it resolves to no QName and is outside the ·value space· of xs:NOTATION, which cvc-datatype-valid clause 2.1 requires it to be in",
 			lexical)
 	}
 	if slices.ContainsFunc(s.Notations(), func(n xsd.Notation) bool { return n.Name() == name }) {
 		return nil
 	}
 	return xsderr.New(ruleCvcDatatypeValid, xsderr.Loc{},
-		"the NOTATION value %q resolves to the QName %s, which names no notation declaration of the schema, so it is outside the ·value space· of NOTATION, \"the set of QNames of notations declared in the current schema\", which cvc-datatype-valid clause 2.1 requires it to be in",
+		"the xs:NOTATION value %q resolves to the QName %s, which names no notation declaration of the schema, so it is outside the ·value space· of xs:NOTATION, \"the set of QNames of notations declared in the current schema\", which cvc-datatype-valid clause 2.1 requires it to be in",
 		lexical, name.Display())
 }
 

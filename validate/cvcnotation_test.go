@@ -92,10 +92,10 @@ func wantUndeclaredNotation(t *testing.T, got []*xsderr.Error, value string, nam
 	if cause.Loc != (xsderr.Loc{}) {
 		t.Errorf("wrapped Loc = %s, want none", cause.Loc)
 	}
-	prefix := `the NOTATION value "` + value + `" resolves to the QName ` + name.Display() + `, which names no notation declaration`
-	suffix := `"the set of QNames of notations declared in the current schema", which cvc-datatype-valid clause 2.1 requires it to be in`
-	if !strings.HasPrefix(cause.Msg, prefix) || !strings.HasSuffix(cause.Msg, suffix) {
-		t.Fatalf("wrapped Msg = %q, want it to open %q and close %q", cause.Msg, prefix, suffix)
+	want := `the xs:NOTATION value "` + value + `" resolves to the QName ` + name.Display() +
+		`, which names no notation declaration of the schema, so it is outside the ·value space· of xs:NOTATION, "the set of QNames of notations declared in the current schema", which cvc-datatype-valid clause 2.1 requires it to be in`
+	if cause.Msg != want {
+		t.Fatalf("wrapped Msg = %q, want %q", cause.Msg, want)
 	}
 }
 
