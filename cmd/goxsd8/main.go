@@ -370,8 +370,10 @@ Usage (contract; subcommands land with their milestones):
       term between U+00B7 (·) marks. In the <message> of a violation
       or undecided line about an XML instance, a name prints as
       {namespace}local, a name in the XML Schema namespace as
-      xs:local, and a name in no namespace bare: xs: is a display
-      convention, not a prefix the schema bound. An instance's
+      xs:local, a name in the XML Schema instance namespace as
+      xsi:local, and a name in no namespace bare: xs: and xsi: are
+      display conventions, not prefixes the schema or the instance
+      bound. An instance's
       violations print first, then the line of the fault that stopped
       its walk if one did, then its undecided checks.
       After the last instance, the run prints one counts line, the
