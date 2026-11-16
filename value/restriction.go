@@ -663,7 +663,7 @@ func declaredNotation(r xsd.TypeResolver, st *xsd.SimpleType, variety xsd.Variet
 	}
 	return xsderr.New(ruleCvcDatatypeValid, xsderr.Loc{},
 		"the NOTATION value %q resolves to the QName %s, which names no notation declaration of the schema, so it is outside the ·value space· of NOTATION, \"the set of QNames of notations declared in the current schema\", which cvc-datatype-valid clause 2.1 requires it to be in",
-		lexical, name)
+		lexical, name.Display())
 }
 
 // resolveNotationLexical is the expanded name a NOTATION lexical denotes: its

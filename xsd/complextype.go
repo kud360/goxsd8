@@ -1019,7 +1019,7 @@ func complexTypeLabel(name QName) string {
 	if name == (QName{}) {
 		return "anonymous complex type"
 	}
-	return "complex type " + name.String()
+	return "complex type " + name.Display()
 }
 
 // DerivationMethod returns the {derivation method} property: DerivationExtension

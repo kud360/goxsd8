@@ -367,9 +367,12 @@ Usage (contract; subcommands land with their milestones):
       validate has no shorter rendering, a script keys on the first
       [<rule>], on a violation line the charged rule, and never on
       one inside <message>, and <message> is UTF-8 and may set a spec
-      term between U+00B7 (·) marks. An instance's violations print
-      first, then the line of the fault that stopped its walk if one
-      did, then its undecided checks.
+      term between U+00B7 (·) marks. A name in <message> prints as
+      {namespace}local, a name in the XML Schema namespace as
+      xs:local, and a name in no namespace bare: xs: is a display
+      convention, not a prefix the schema bound. An instance's
+      violations print first, then the line of the fault that stopped
+      its walk if one did, then its undecided checks.
       After the last instance, the run prints one counts line, the
       last line on stderr, in the template Stderr lines above gives.
       Every key always appears, in that order, each count in decimal.

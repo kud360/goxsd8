@@ -161,13 +161,13 @@ func (t *idTable) charge(w *walk, root Element) {
 		if len(e.binding) > 1 {
 			w.res.violations = append(w.res.violations, xsderr.New(ruleCvcID, e.dup,
 				"the id %q is claimed by more than one element information item of the sub-tree rooted at the ·validation root· %s, so its ID/IDREF binding has more than one member, which cvc-id clause 2 forbids",
-				e.id, root.Name()))
+				e.id, root.Name().Display()))
 			continue
 		}
 		if len(e.binding) == 0 && !t.declined {
 			w.res.violations = append(w.res.violations, xsderr.New(ruleCvcID, e.first,
 				"the id %q is referred to but no element information item of the sub-tree rooted at the ·validation root· %s declares it, so its ID/IDREF binding is the empty set, which cvc-id clause 1 forbids",
-				e.id, root.Name()))
+				e.id, root.Name().Display()))
 		}
 	}
 }
@@ -232,7 +232,7 @@ func (w *walk) idDefaultedAttributes(c *icCheck, attrs []Attribute, ct xsd.Compl
 		if !simple {
 			w.declineID(c.e, c.e.Loc(),
 				"element %s lacks attribute %s, whose default %q was not read into the ID/IDREF table: its declaration's {type definition} is absent, so cvc-id clause 1 is undecided",
-				c.e.Name(), u.DeclarationName(), vc.LexicalForm())
+				c.e.Name().Display(), u.DeclarationName().Display(), vc.LexicalForm())
 			continue
 		}
 		w.idRecord(st, vc.LexicalForm(), c.e, value.ConstraintContext(vc), c.node, c.e.Loc())
@@ -282,7 +282,7 @@ func (w *walk) idElement(c *icCheck) {
 	if c.g.hasDecl && c.g.typ == nil {
 		w.declineID(c.e, c.e.Loc(),
 			"the element %s was not read into the ID/IDREF table: its ·governing type definition· was not determinable, so cvc-id clause 1 is undecided",
-			c.e.Name())
+			c.e.Name().Display())
 		return
 	}
 	st := c.g.valueType()
@@ -327,7 +327,7 @@ func (w *walk) idRecord(st *xsd.SimpleType, lexical string, owner Element, ctx v
 	if !decided {
 		w.declineID(owner, loc,
 			"an item of element %s with the value %q was not read into the ID/IDREF table: whether its type %s is ·derived· or ·constructed· from ID, IDREF or IDREFS could not be decided, so cvc-id clause 1 is undecided",
-			owner.Name(), lexical, typeName(st))
+			owner.Name().Display(), lexical, typeName(st))
 		return
 	}
 	if !candidate {
@@ -337,7 +337,7 @@ func (w *walk) idRecord(st *xsd.SimpleType, lexical string, owner Element, ctx v
 		if !value.IsDatatypeVerdict(err) {
 			w.declineID(owner, loc,
 				"an item of element %s with the value %q was not read into the ID/IDREF table: the value backend reported a fault of its type %s rather than a verdict about the lexical, so cvc-id clause 1 is undecided",
-				owner.Name(), lexical, typeName(st))
+				owner.Name().Display(), lexical, typeName(st))
 		}
 		return
 	}
@@ -345,7 +345,7 @@ func (w *walk) idRecord(st *xsd.SimpleType, lexical string, owner Element, ctx v
 	if !decided {
 		w.declineID(owner, loc,
 			"an item of element %s with the value %q was not read into the ID/IDREF table: the ·validating type· of its value under %s could not be decided, so cvc-id clause 1 is undecided",
-			owner.Name(), lexical, typeName(st))
+			owner.Name().Display(), lexical, typeName(st))
 		return
 	}
 	for _, v := range values {

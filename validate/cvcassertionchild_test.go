@@ -249,7 +249,7 @@ func TestAssertionOverANonSubstitutableChildIsDeclined(t *testing.T) {
   <xs:element name="root" type="RootType"/>
 </xs:schema>`})
 	res := aAssess(t, schema, acRoot(acKid("e1", 2, "x"), acKid("e1", 3, "12:20:02", xsiTypeAttr("xs:time"))))
-	acDeclined(t, res, "its ·governing type definition· {"+xsd.XMLSchemaNS+"}time is neither its ·locally declared type· {"+xsd.XMLSchemaNS+"}string nor ·validly substitutable· for it")
+	acDeclined(t, res, "its ·governing type definition· xs:time is neither its ·locally declared type· xs:string nor ·validly substitutable· for it")
 }
 
 // fn:count over a child step whose predicate reads the child's value counts

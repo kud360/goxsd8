@@ -240,7 +240,7 @@ func TestValidateRendersALexicalSpaceFaultWhole(t *testing.T) {
 	if code := run([]string{"validate", "-schema", schema, instance}, &stdout, &stderr); code != exitInvalid {
 		t.Fatalf("code = %d, want %d (stdout %q, stderr %q)", code, exitInvalid, stdout.String(), stderr.String())
 	}
-	want := instance + `:1:1: [cvc-type] element amount's value "12,50" is not a valid {http://www.w3.org/2001/XMLSchema}decimal, which cvc-type clause 3.1.3 requires: [cvc-datatype-valid] "12,50" is not in the lexical space of decimal, which cvc-datatype-valid clause 2.1 requires it to be in` + "\n"
+	want := instance + `:1:1: [cvc-type] element amount's value "12,50" is not a valid xs:decimal, which cvc-type clause 3.1.3 requires: [cvc-datatype-valid] "12,50" is not in the lexical space of xs:decimal, which cvc-datatype-valid clause 2.1 requires it to be in` + "\n"
 	if got := stdout.String(); got != want {
 		t.Errorf("stdout =\n%s\nwant\n%s", got, want)
 	}
@@ -253,7 +253,7 @@ func TestValidateRendersALexicalSpaceFaultWhole(t *testing.T) {
 // reads "valid against an anonymous type definition" (#3458).
 func TestValidateRendersAnAnonymousTypeChargeAsASentence(t *testing.T) {
 	const anonInt = `<xs:simpleType><xs:restriction base="xs:int"/></xs:simpleType>`
-	const pattern = `[cvc-pattern-valid] "x3" matches no member of the pattern facet that an anonymous simple type inherits from the simple type {http://www.w3.org/2001/XMLSchema}integer, whose {value} holds "[\-+]?[0-9]+", but cvc-pattern-valid requires one to match`
+	const pattern = `[cvc-pattern-valid] "x3" matches no member of the pattern facet that an anonymous simple type inherits from the simple type xs:integer, whose {value} holds "[\-+]?[0-9]+", but cvc-pattern-valid requires one to match`
 	for _, tc := range []struct {
 		name, decl, doc, want string
 	}{
@@ -312,7 +312,7 @@ func TestValidateNamesTheBuiltinPatternAndItsDeclaringType(t *testing.T) {
 	if code != exitInvalid {
 		t.Fatalf("code = %d, want %d (stdout %q, stderr %q)", code, exitInvalid, stdout, stderr)
 	}
-	const want = `[cvc-pattern-valid] "x3" matches no member of the pattern facet that the simple type {http://www.w3.org/2001/XMLSchema}int inherits from the simple type {http://www.w3.org/2001/XMLSchema}integer, whose {value} holds "[\-+]?[0-9]+", but cvc-pattern-valid requires one to match`
+	const want = `[cvc-pattern-valid] "x3" matches no member of the pattern facet that the simple type xs:int inherits from the simple type xs:integer, whose {value} holds "[\-+]?[0-9]+", but cvc-pattern-valid requires one to match`
 	if !strings.Contains(stdout, want) {
 		t.Errorf("stdout =\n%s\nwant it to carry\n%s", stdout, want)
 	}
@@ -336,7 +336,7 @@ func TestValidateIntPatternRuleAndExitCode(t *testing.T) {
 		t.Errorf("stderr = %q, want empty", stderr)
 	}
 	line, _, _ := strings.Cut(stdout, "\n")
-	if prefix := instance + `:1:1: [cvc-type] element n's value "x3" is not a valid {http://www.w3.org/2001/XMLSchema}int, which cvc-type clause 3.1.3 requires: [cvc-pattern-valid] `; !strings.HasPrefix(line, prefix) {
+	if prefix := instance + `:1:1: [cvc-type] element n's value "x3" is not a valid xs:int, which cvc-type clause 3.1.3 requires: [cvc-pattern-valid] `; !strings.HasPrefix(line, prefix) {
 		t.Errorf("first line = %q, want it to open %q", line, prefix)
 	}
 	if !strings.Contains(line, `: [cvc-pattern-valid] "x3" `) {

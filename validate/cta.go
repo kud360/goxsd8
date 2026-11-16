@@ -44,7 +44,7 @@ const ruleKeyCTATASelect xsderr.Rule = "key-cta-ta-select"
 func (w *walk) absentSelection(e Element, slot string) {
 	w.res.violations = append(w.res.violations, xsderr.New(ruleCvcElt, e.Loc(),
 		"element %s has an ·absent· ·selected type definition·: %s names a substitution group head with no element declaration in the schema, a missing sub-component, so the element is ·laxly assessed· as if cvc-elt clause 1 had failed",
-		e.Name(), slot))
+		e.Name().Display(), slot))
 	w.logDecision("assessing element", e.Name(), e.Loc(), ruleCvcElt, "1", "charged")
 }
 
@@ -64,7 +64,7 @@ func (w *walk) absentSelection(e Element, slot string) {
 func (w *walk) resolvedSelection(e Element, slot string) {
 	w.decline("assessing element", e.Name(), e.Loc(), ruleCvcElt, "1",
 		"element %s has no ·governing type definition· and was assessed against nothing: its ·selected type definition· was not determined, as %s resolves to no type definition, an ·absent· (nil) {type definition} that sch-props-correct clause 1 leaves to the schema check, so cvc-elt clause 1 is not charged here",
-		e.Name(), slot)
+		e.Name().Display(), slot)
 }
 
 // conditionallySelected is the {type definition} slot a Type Table
@@ -137,7 +137,7 @@ func (w *walk) conditionallySelected(e Element, table xsd.TypeTable, inherited [
 		test, _ := alts[i].Test()
 		w.decline("assessing element", e.Name(), e.Loc(), ruleKeyCTATASelect, "2",
 			"element %s was not given a type by its declaration's {type table}: alternative %d of %d, whose {test} is %q, was not evaluated, this engine's XPath evaluator having declined it because %s, so the type the table ·conditionally selects· is withheld together with every alternative behind it, and key-cta-ta-select clause 2 is undecided for that alternative",
-			e.Name(), i+1, len(alts), test.Expression(), declined)
+			e.Name().Display(), i+1, len(alts), test.Expression(), declined)
 		return nil, "", false
 	}
 	if i < len(alts) {
