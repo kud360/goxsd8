@@ -632,6 +632,11 @@ func TestUsageCoversContract(t *testing.T) {
 			t.Errorf("usage does not state gen's sharing coupling or its one-run-per-pair route (%q)", want)
 		}
 	}
+	// validate's sentence on the permanence of its line shape (#3687).
+	permanent := "The violation and undecided lines keep this full shape permanently, a delegated cause included: validate has no shorter rendering, a script keys on the first [<rule>], on a violation line the charged rule, and never on one inside <message>, and <message> is UTF-8 and may set a spec term between U+00B7 (·) marks."
+	if !strings.Contains(folded, permanent) {
+		t.Errorf("usage does not state that the violation line's full shape is permanent and which [<rule>] to key on (%q)", permanent)
+	}
 	// The one statement that the undecided: literal marks both withholds,
 	// which doc.go's hand-written Diagnostic lines section carries (#2893).
 	src, err := os.ReadFile("doc.go")
