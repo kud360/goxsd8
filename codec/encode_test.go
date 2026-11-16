@@ -209,10 +209,10 @@ func sameDouble[T ~float64](a, b T) bool {
 
 // TestAppendDouble pins the canonical form of xs:double: 1 is written
 // 1.0E0, the form strict's Canonical renders, never strconv's 1; the
-// infinities, NaN and negative zero as INF, -INF, NaN and -0.0E0; each
-// accepted by validate and decoded back to the same float64, compared by
-// its bits, every NaN equal. A float64 in an element and an attribute takes
-// the same route.
+// infinities, NaN, of Go's payload or another, and negative zero as INF,
+// -INF, NaN and -0.0E0; each accepted by validate and decoded back to the
+// same float64, compared by its bits, every NaN equal. A float64 in an
+// element and an attribute takes the same route.
 func TestAppendDouble(t *testing.T) {
 	schema := schemaOf(t, encodeSchema)
 	for _, row := range []struct {
@@ -223,16 +223,14 @@ func TestAppendDouble(t *testing.T) {
 		{math.Inf(1), "INF"},
 		{math.Inf(-1), "-INF"},
 		{math.NaN(), "NaN"},
+		{math.Float64frombits(0x7FF4000000000000), "NaN"},
 		{math.Copysign(0, -1), "-0.0E0"},
 		{0.1, "1.0E-1"},
 		{1e21, "1.0E21"},
 		{5e-324, "5.0E-324"},
 	} {
 		t.Run(row.want, func(t *testing.T) {
-			data := roundTrip(t, schema, sname("d"), dblRoot(row.v), `<d xmlns="urn:s">`+row.want+`</d>`, sameDouble[dblRoot])
-			if goForm := `<d xmlns="urn:s">` + strconv.FormatFloat(row.v, 'g', -1, 64) + `</d>`; row.want != strconv.FormatFloat(row.v, 'g', -1, 64) && string(data) == goForm {
-				t.Errorf("Append wrote Go's own form %s", data)
-			}
+			roundTrip(t, schema, sname("d"), dblRoot(row.v), `<d xmlns="urn:s">`+row.want+`</d>`, sameDouble[dblRoot])
 		})
 	}
 	t.Run("not Go's own form", func(t *testing.T) {
