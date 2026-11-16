@@ -18,10 +18,12 @@
 //	func TableSlot(table xsd.TypeTable, index int) (slot Slot, ref xsd.TypeDefinitionOrRef, ok bool)
 //	func GoverningTypes(schema *xsd.Schema, decl xsd.ElementDeclaration) (types []GoverningType, errorSlot bool, err error)
 //	func BasicMembers(r xsd.TypeResolver, st *xsd.SimpleType) ([]*xsd.SimpleType, error)
-//	func Splices(schema *xsd.Schema, group xsd.ModelGroup, occurs xsd.Occurs) (bool, error)
-//	func Flattens(schema *xsd.Schema, group xsd.ModelGroup, occurs xsd.Occurs) (bool, error)
+//	func AnyTypeItself(td xsd.TypeDefinition) bool
+//	type Hold uint8
+//	const Spliced, Flattened, OnceChoice, Occurrence Hold
+//	func ParticleHold(schema *xsd.Schema, group xsd.ModelGroup, occurs xsd.Occurs) (Hold, error)
+//	func ChoiceRoot(schema *xsd.Schema, t xsd.ComplexType) (bool, error)
 //	func Reach(schema *xsd.Schema, group xsd.ModelGroup, visit func(p xsd.Particle, position []int) error) error
-//	func TermEmptiable(schema *xsd.Schema, term xsd.TermOrRef) (bool, error)
 //	func ExactlyOnce() xsd.Occurs
 //	func BranchOccurs(occurs xsd.Occurs) xsd.Occurs
 //	func ModelGroupTerm(schema *xsd.Schema, term xsd.TermOrRef) (xsd.ModelGroup, bool, error)
@@ -47,11 +49,10 @@
 // The rules are those codegen's package doc states, each in its own section
 // ("# Simple types", "# Complex types", "# Substitution groups",
 // "# Particles", "# Attributes", "# Element declarations"): those sections
-// own them, and this package is their one implementation. TermEmptiable,
-// ExactlyOnce, ModelGroupTerm and TableSlot are the reads those rules are made
-// from, exported for the packages that make the same reads around them: the
-// first three for codegen, and ExactlyOnce, ModelGroupTerm and TableSlot for
-// codec.
+// own them, and this package is their one implementation. ExactlyOnce,
+// ModelGroupTerm and TableSlot are the reads those rules are made from,
+// exported for the packages that make the same reads around them: ExactlyOnce
+// and ModelGroupTerm for codegen and codec, and TableSlot for codec.
 //
 // It imports xsd, xsderr and the standard library.
 package goshape

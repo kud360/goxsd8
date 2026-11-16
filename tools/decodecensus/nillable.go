@@ -104,7 +104,7 @@ func (f *nillableFamily) root(schema *xsd.Schema, types []typeDecl, name xsd.QNa
 		return pkg + "." + typ, true
 	}
 	governing, _, err := goshape.GoverningTypes(schema, d)
-	if err != nil || len(governing) != 1 || governing[0].Type().Name() == (xsd.QName{Space: xsd.XMLSchemaNS, Local: "anyType"}) {
+	if err != nil || len(governing) != 1 || goshape.AnyTypeItself(governing[0].Type()) {
 		return pkg + "." + typ, true
 	}
 	if f.sum == "" {

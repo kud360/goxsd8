@@ -246,15 +246,11 @@ func TestOccurrencePartitionDifferential(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		splice, err := goshape.Splices(schema, group, content.Particle.Occurs())
+		hold, err := goshape.ParticleHold(schema, group, content.Particle.Occurs())
 		if err != nil {
 			t.Fatal(err)
 		}
-		flat, err := goshape.Flattens(schema, group, content.Particle.Occurs())
-		if err != nil {
-			t.Fatal(err)
-		}
-		if splice || flat {
+		if hold == goshape.Spliced || hold == goshape.Flattened {
 			continue
 		}
 		var de *DeclineError

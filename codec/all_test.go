@@ -17,7 +17,7 @@ import (
 // with {max occurs} unbounded (§3.8.6.2 cos-all-limited admits it in XSD 1.1);
 // allRefSchema's a <group ref> to the all group g of a, b; allSplicedSchema's
 // an all with {min occurs} 0 over an optional a and an optional b, emptiable
-// (goshape.Splices); allWildSchema's all(a, any ##other); allNestedWildSchema's
+// (goshape.ParticleHold); allWildSchema's all(a, any ##other); allNestedWildSchema's
 // all(a, g), g a <group ref> to the all group of one ##other wildcard, nested
 // with {min occurs} and {max occurs} 1 (cos-all-limited clause 1.3), so the
 // wildcard's Matcher position is [1 0]; and allExtSchema's r is of t2, an
@@ -87,8 +87,8 @@ func TestAllTypesAreCodegens(t *testing.T) {
 	}
 }
 
-// TestDecodeAll pins the all lift: a content all group goshape.Splices
-// answers true for, inline, through a <group ref>, with {min occurs} 0 over
+// TestDecodeAll pins the all lift: a content all group goshape.ParticleHold
+// answers Spliced for, inline, through a <group ref>, with {min occurs} 0 over
 // an emptiable group, or an extension's merged all, decodes into the fields
 // its own particles give, each child into the field of the particle it is
 // attributed to (§3.4.4.4 key-att-to) whatever the instance order
@@ -159,17 +159,17 @@ func TestDecodeAllRefusesWhatValidateCharges(t *testing.T) {
 
 // The optional all schemas, each declaring s:r, whose content {particle} is
 // an all group with {min occurs} 0 over a model group that is not emptiable,
-// which codegen does not splice (goshape.Splices) and holds in its occurrence
+// which codegen does not splice (goshape.ParticleHold) and holds in its occurrence
 // field, All, a pointer to the struct for its one occurrence (codegen/doc.go
 // "# Particles"): allOccASchema's all(a); allOccRefSchema's an optional
 // <group ref> to the all group g of a; allOccABSchema's all(a, b);
-// allOccRepSchema's all(a, b), a with {max occurs} unbounded;
-// allOccNestedSchema's all(a, g), g a <group ref> to the all group of b,
-// nested with {min occurs} and {max occurs} 1 (cos-all-limited clause 1.3),
-// which codegen splices into the occurrence's struct; and allOccExtSchema's r
-// is of t2, an extension of t, all(a) with {min occurs} 0, adding all(b) with
-// {min occurs} 0, so t2's {particle} is one all(a, b) with {min occurs} 0
-// (§3.4.2.3.3 dcl.ctd.ctcc.common clause 4.2.3.2).
+// allOccRepSchema's all(a, b), a with {max occurs} unbounded; allOccNestedSchema's
+// all(a, g), g a <group ref> to the all group of b, nested with {min occurs} and
+// {max occurs} 1 (cos-all-limited clause 1.3), which codegen splices into the
+// occurrence's struct; and allOccExtSchema's r is of t2, an extension of t, all(a)
+// with {min occurs} 0, adding all(b) with {min occurs} 0, so t2's {particle} is
+// one all(a, b) with {min occurs} 0 (§3.4.2.3.3 dcl.ctd.ctcc.common clause
+// 4.2.3.2).
 const (
 	allOccASchema   = `<xs:element name="r"><xs:complexType><xs:all minOccurs="0"><xs:element name="a" type="xs:string"/></xs:all></xs:complexType></xs:element>`
 	allOccRefSchema = `<xs:group name="g"><xs:all><xs:element name="a" type="xs:string"/></xs:all></xs:group>
@@ -228,14 +228,15 @@ func TestAllOccurrenceTypesAreCodegens(t *testing.T) {
 }
 
 // TestDecodeAllOccurrence pins the optional all lift: a content all group
-// with {min occurs} 0 that goshape.Splices answers false for, inline, through
-// an optional <group ref>, or an extension's merged all, decodes into its
-// occurrence field: nil for an element with no children, the empty sequence
-// the particle's {min occurs} 0 admits (§3.9.4.3 cvc-accept clause 3), and
-// otherwise a pointer to one item holding every child, each in the field of
-// the particle it is attributed to (§3.4.4.4 key-att-to) whatever the
-// instance order (§3.8.4.1.3 all-mg), a repeated particle's children
-// appended in instance order. CheckDecode returns nil for each row's T.
+// with {min occurs} 0 that goshape.ParticleHold does not answer Spliced
+// for, inline, through an optional <group ref>, or an extension's merged
+// all, decodes into its occurrence field: nil for an element with no
+// children, the empty sequence the particle's {min occurs} 0 admits
+// (§3.9.4.3 cvc-accept clause 3), and otherwise a pointer to one item
+// holding every child, each in the field of the particle it is attributed
+// to (§3.4.4.4 key-att-to) whatever the instance order (§3.8.4.1.3 all-mg),
+// a repeated particle's children appended in instance order. CheckDecode
+// returns nil for each row's T.
 func TestDecodeAllOccurrence(t *testing.T) {
 	rows := []struct {
 		name, decls, body string
