@@ -289,44 +289,68 @@ func recvName(expr ast.Expr) string {
 // Its prose sits at column 0 and, under a subcommand's synopsis line at column
 // 2, at column 6; a synopsis line, and a line indented past 6 (an example),
 // is read as no sentence and ends the one before it, as a blank line does.
+// A constant concatenating string literals, with one another or with other
+// operands, is read literal by literal, the end of each ending the sentence in
+// it as a blank line does, and an operand that is no literal read as nothing.
 // A file declaring no usage constant has none.
 func usageSentences(fset *token.FileSet, file *ast.File) ([]sentence, error) {
-	lit := usageLiteral(file)
-	if lit == nil {
-		return nil, nil
-	}
-	text, err := strconv.Unquote(lit.Value)
-	if err != nil {
-		return nil, fmt.Errorf("unquoting: %w", err)
-	}
-	first := fset.Position(lit.ValuePos).Line
 	var out []sentence
 	var words []word
 	flush := func() {
 		out = append(out, sentences(words, usageFile, true)...)
 		words = nil
 	}
-	for i, line := range strings.Split(text, "\n") {
-		indent := len(line) - len(strings.TrimLeft(line, " "))
-		if strings.TrimSpace(line) == "" || indent == 2 || indent > 6 {
-			flush()
-			continue
+	for _, lit := range usageLiterals(file) {
+		text, err := strconv.Unquote(lit.Value)
+		if err != nil {
+			return nil, fmt.Errorf("unquoting: %w", err)
 		}
-		// A raw string's lines are its source lines; an interpreted one's
-		// escaped newlines are not, and all of it is located at its first.
-		num := first
-		if strings.HasPrefix(lit.Value, "`") {
-			num += i
+		first := fset.Position(lit.ValuePos).Line
+		for i, line := range strings.Split(text, "\n") {
+			indent := len(line) - len(strings.TrimLeft(line, " "))
+			if strings.TrimSpace(line) == "" || indent == 2 || indent > 6 {
+				flush()
+				continue
+			}
+			// A raw string's lines are its source lines; an interpreted one's
+			// escaped newlines are not, and all of it is located at its first.
+			num := first
+			if strings.HasPrefix(lit.Value, "`") {
+				num += i
+			}
+			words = appendWords(words, line, num)
 		}
-		words = appendWords(words, line, num)
+		flush()
 	}
-	flush()
 	return out, nil
 }
 
-// usageLiteral finds the string literal file's usage constant is declared
-// with, or nil.
-func usageLiteral(file *ast.File) *ast.BasicLit {
+// usageLiterals returns the string literals file's usage constant is declared
+// with, in source order: the one literal, or those a concatenation joins. It is
+// empty when file declares no usage constant.
+func usageLiterals(file *ast.File) []*ast.BasicLit {
+	value := usageValue(file)
+	if value == nil {
+		return nil
+	}
+	return stringLiterals(value)
+}
+
+// stringLiterals returns the string literals of a + concatenation in source
+// order, less its other operands.
+func stringLiterals(e ast.Expr) []*ast.BasicLit {
+	if lit, ok := e.(*ast.BasicLit); ok && lit.Kind == token.STRING {
+		return []*ast.BasicLit{lit}
+	}
+	if bin, ok := e.(*ast.BinaryExpr); ok && bin.Op == token.ADD {
+		return append(stringLiterals(bin.X), stringLiterals(bin.Y)...)
+	}
+	return nil
+}
+
+// usageValue finds the expression file's usage constant is declared with, or
+// nil.
+func usageValue(file *ast.File) ast.Expr {
 	for _, decl := range file.Decls {
 		d, ok := decl.(*ast.GenDecl)
 		if !ok || d.Tok != token.CONST {
@@ -341,9 +365,7 @@ func usageLiteral(file *ast.File) *ast.BasicLit {
 				if n.Name != usageConst || i >= len(vs.Values) {
 					continue
 				}
-				if lit, ok := vs.Values[i].(*ast.BasicLit); ok && lit.Kind == token.STRING {
-					return lit
-				}
+				return vs.Values[i]
 			}
 		}
 	}

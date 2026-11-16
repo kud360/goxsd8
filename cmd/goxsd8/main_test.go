@@ -649,6 +649,192 @@ func TestUsageCoversContract(t *testing.T) {
 	}
 }
 
+// stderrBlockHeading opens usage's Stderr lines block. Its template lines are
+// the ones indented four spaces below it, up to the blank line closing it; the
+// lines indented further say what tells a template apart and are not read.
+const stderrBlockHeading = "  Stderr lines:"
+
+// stderrPlaceholders is what each <placeholder> of a template stands for, as a
+// regular expression, but the two placeholderPattern reads from their own
+// encodings. Every other character of a template is literal. <loc> is ?, or an
+// absolute path, the Paths paragraph's location of a schema document, with or
+// without :<line>:<col>.
+var stderrPlaceholders = map[string]string{
+	"<loc>":     `(?:\?(?::[0-9]+){0,2}|/.*?)`,
+	"<rule>":    `[^\]\s]+`,
+	"<message>": `.*`,
+	"<n>":       `[0-9]+`,
+	"<time>":    `\S+`,
+	"<level>":   `[A-Z]+(?:[+-][0-9]+)?`,
+}
+
+// The shapes of usage's Stderr lines block, by the position of their template
+// there. TestStderrLineShapes fails when the block holds any other number.
+const (
+	shapeRejection = iota
+	shapeCounts
+	shapeSubcommand
+	shapePreSubcommand
+	shapeUsageLine
+	shapeHelpPointer
+	shapeRecord
+	shapeComponent
+	shapeCount
+)
+
+// stderrTemplates reads the template lines of usage's Stderr lines block and
+// compiles each into a regular expression matching a whole line.
+func stderrTemplates(t *testing.T) ([]string, []*regexp.Regexp) {
+	t.Helper()
+	_, block, ok := strings.Cut(usage, "\n"+stderrBlockHeading)
+	if !ok {
+		t.Fatalf("usage has no %q line", stderrBlockHeading)
+	}
+	block, _, _ = strings.Cut(block, "\n\n")
+	placeholder := regexp.MustCompile(`<[a-z]+>`)
+	var texts []string
+	var res []*regexp.Regexp
+	for _, line := range strings.Split(block, "\n") {
+		text, ok := strings.CutPrefix(line, "    ")
+		if !ok || strings.HasPrefix(text, " ") {
+			continue
+		}
+		var re strings.Builder
+		re.WriteString("^")
+		last := 0
+		for _, at := range placeholder.FindAllStringIndex(text, -1) {
+			name := text[at[0]:at[1]]
+			pattern, ok := placeholderPattern(name)
+			if !ok {
+				t.Fatalf("usage's Stderr lines template %q has placeholder %s, which stderrPlaceholders does not read", text, name)
+			}
+			re.WriteString(regexp.QuoteMeta(text[last:at[0]]) + pattern)
+			last = at[1]
+		}
+		re.WriteString(regexp.QuoteMeta(text[last:]) + "$")
+		texts = append(texts, text)
+		res = append(res, regexp.MustCompile(re.String()))
+	}
+	return texts, res
+}
+
+// placeholderPattern returns the regular expression a template's placeholder
+// stands for: <subcommand> any name of subcommands, <synopsis> any of their
+// synopsis lines, and every other one stderrPlaceholders' entry.
+func placeholderPattern(name string) (string, bool) {
+	switch name {
+	case "<subcommand>":
+		return alternation(subcommands), true
+	case "<synopsis>":
+		var lines []string
+		for _, s := range subcommands {
+			lines = append(lines, synopsis(s))
+		}
+		return alternation(lines), true
+	}
+	pattern, ok := stderrPlaceholders[name]
+	return pattern, ok
+}
+
+// alternation matches exactly one of words.
+func alternation(words []string) string {
+	quoted := make([]string, len(words))
+	for i, w := range words {
+		quoted[i] = regexp.QuoteMeta(w)
+	}
+	return "(?:" + strings.Join(quoted, "|") + ")"
+}
+
+// TestStderrLineShapes pins usage's Stderr lines block to what run prints on
+// stderr (#3798). Each row drives run once and names the shape of every stderr
+// line, the first template in the block's order that matches it whole, with a
+// run of lines of one shape named once. A row fails when a printed line
+// changes shape without the block changing with it, and when a line falls
+// through to the component's message, the template matching every line, in a
+// row naming another shape. Together the rows reach every template.
+func TestStderrLineShapes(t *testing.T) {
+	texts, templates := stderrTemplates(t)
+	if len(templates) != shapeCount {
+		t.Fatalf("usage's Stderr lines block holds %d templates (%q), want %d", len(templates), texts, shapeCount)
+	}
+	dir := t.TempDir()
+	// A <complexType> extending one whose {final} holds extension is charged
+	// cos-ct-extends at no known location, which prints <loc> as ?.
+	unlocated := filepath.Join(dir, "final.xsd")
+	if err := os.WriteFile(unlocated, []byte(`<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"><xs:complexType name="A" final="extension"/><xs:complexType name="B"><xs:complexContent><xs:extension base="A"/></xs:complexContent></xs:complexType></xs:schema>`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	// A ber instance argument is refused by name before it is opened, so its
+	// line opens with the argument as typed: spelled as the counts line's
+	// opening, it is the note the counts template must not take.
+	const countsSpelled = "instances=1 clean=0 undecided=0 invalid=0 faulted=0.ber"
+	// An instance hinting a document that declares another namespace than the
+	// one its hint pairs: the note dropping its hints quotes the rejection, so
+	// a <loc>: [<rule>] sits inside a goxsd8: validate: line.
+	if err := os.WriteFile(filepath.Join(dir, "actual.xsd"), []byte(`<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" targetNamespace="urn:actual"><xs:element name="note" type="xs:string"/></xs:schema>`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	valid, err := os.ReadFile(validInstance)
+	if err != nil {
+		t.Fatal(err)
+	}
+	mispaired := filepath.Join(dir, "mispaired.xml")
+	body := strings.Replace(string(valid), `createdBy="ada"`, `createdBy="ada" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="urn:wrong actual.xsd"`, 1)
+	if err := os.WriteFile(mispaired, []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	var reached [shapeCount]bool
+	for _, c := range []struct {
+		name string
+		args []string
+		code int
+		want []int
+	}{
+		{"parse rejection", []string{"parse", brokenSchema}, exitInvalid, []int{shapeRejection}},
+		{"validate rejection", []string{"validate", "-schema", brokenSchema, validInstance}, exitSchema, []int{shapeRejection}},
+		{"rejection at ?", []string{"parse", unlocated}, exitInvalid, []int{shapeRejection}},
+		{"component's message", []string{"parse", "testdata/notschema.xml"}, exitInvalid, []int{shapeComponent}},
+		{"note, then component's message", []string{"parse", "testdata/notdir-include.xsd"}, exitInvalid, []int{shapeSubcommand, shapeComponent}},
+		{"note", []string{"parse", shortSchema}, exitOK, []int{shapeSubcommand}},
+		{"I/O fault, then counts", []string{"validate", "-schema", orderSchema, "testdata/nosuch.xml"}, exitUsage, []int{shapeSubcommand, shapeCounts}},
+		{"instances= note, then counts", []string{"validate", "-schema", orderSchema, countsSpelled}, exitUsage, []int{shapeSubcommand, shapeCounts}},
+		{"note quoting a rejection, then counts", []string{"validate", "-schema", orderSchema, mispaired}, exitOK, []int{shapeSubcommand, shapeCounts}},
+		{"clean, counts alone", []string{"validate", "-schema", orderSchema, validInstance}, exitOK, []int{shapeCounts}},
+		{"-q I/O fault, no counts", []string{"validate", "-q", "-schema", orderSchema, "testdata/nosuch.xml"}, exitUsage, []int{shapeSubcommand}},
+		{"-q clean, silent", []string{"validate", "-q", "-schema", orderSchema, validInstance}, exitOK, nil},
+		{"parse -v records", []string{"parse", "-v", "-q", orderSchema}, exitOK, []int{shapeRecord}},
+		{"validate -v records, then counts", []string{"validate", "-v", "-schema", orderSchema, validInstance}, exitOK, []int{shapeRecord, shapeCounts}},
+		{"gen refusal", []string{"gen", "-schema", orderSchema, "-out", filepath.Join(dir, "my-pkg")}, exitUsage, []int{shapeSubcommand}},
+		{"subcommand usage diagnosis", []string{"parse"}, exitUsage, []int{shapeSubcommand, shapeUsageLine, shapeHelpPointer}},
+		{"pre-subcommand diagnosis", []string{"frobnicate"}, exitUsage, []int{shapePreSubcommand, shapeHelpPointer}},
+		{"misplaced flag", []string{"-q", "parse", orderSchema}, exitUsage, []int{shapePreSubcommand, shapeHelpPointer}},
+	} {
+		for _, shape := range c.want {
+			reached[shape] = true
+		}
+		var stdout, stderr bytes.Buffer
+		if code := run(c.args, &stdout, &stderr); code != c.code {
+			t.Errorf("%s: run(%q) = %d, want %d", c.name, c.args, code, c.code)
+		}
+		var got []int
+		for line := range strings.Lines(stderr.String()) {
+			line = strings.TrimSuffix(line, "\n")
+			shape := slices.IndexFunc(templates, func(re *regexp.Regexp) bool { return re.MatchString(line) })
+			if len(got) == 0 || got[len(got)-1] != shape {
+				got = append(got, shape)
+			}
+		}
+		if !slices.Equal(got, c.want) {
+			t.Errorf("%s: run(%q) stderr lines are shapes %v, want %v (templates %q)\nstderr:\n%s", c.name, c.args, got, c.want, texts, stderr.String())
+		}
+	}
+	for shape, ok := range reached {
+		if !ok {
+			t.Errorf("no row prints a line of usage's Stderr lines template %q", texts[shape])
+		}
+	}
+}
+
 // TestBuiltBinaryMatrix drives the real executable, following #251: exit
 // code, stdout and stderr of the shipped binary, not of a seam over run.
 func TestBuiltBinaryMatrix(t *testing.T) {

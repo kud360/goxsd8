@@ -93,8 +93,8 @@ func formatVocabulary() string {
 //
 // Unless -q was given, a run that reaches the instance loop ends with
 // instanceTally's counts line on stderr, every instance counted by the code
-// validation.one returned for it; usage's validate paragraph owns the line's
-// format and meaning.
+// validation.one returned for it; usage's Stderr lines block owns the line's
+// format, and its validate paragraph the line's meaning.
 //
 // The flags are parsed here rather than by run, for the reason runParse states.
 func runValidate(args []string, stdout, stderr io.Writer) int {
@@ -254,8 +254,8 @@ func (t *instanceTally) add(code int) {
 	}
 }
 
-// line renders the end-of-run counts line in the format usage's validate
-// paragraph states.
+// line renders the end-of-run counts line in the template usage's Stderr
+// lines block gives.
 func (t *instanceTally) line() string {
 	return fmt.Sprintf("goxsd8: validate: instances=%d clean=%d undecided=%d invalid=%d faulted=%d",
 		t.clean+t.undecided+t.invalid+t.faulted, t.clean, t.undecided, t.invalid, t.faulted)
