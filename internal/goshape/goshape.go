@@ -309,6 +309,89 @@ func Flattens(schema *xsd.Schema, group xsd.ModelGroup, occurs xsd.Occurs) (bool
 	return repeatingEdge(schema, group)
 }
 
+// Hold is how codegen holds a model group particle, the content {particle} or
+// nested, as codegen/doc.go "# Particles" states it and ParticleHold answers
+// it. The zero value is invalid (STYLE T1).
+type Hold uint8
+
+// The Holds.
+const (
+	// Spliced gives in the particle's place the fields its model group's own
+	// particles give.
+	Spliced Hold = iota + 1
+	// Flattened gives the one flattened field over the particle's reach
+	// (Reach).
+	Flattened
+	// OnceChoice gives the bare sealed interface of a choice occurring exactly
+	// once (ExactlyOnce).
+	OnceChoice
+	// Occurrence gives the one field holding the type for one occurrence of
+	// the particle's model group by the particle's occurrence (ParticleShape).
+	Occurrence
+)
+
+// ParticleHold returns the Hold of a model group particle of group occurring
+// as occurs, inline or a <group ref> to group's definition (§3.7.2
+// declare-namedModelGroup), the content {particle} or nested: Spliced where
+// Splices answers true, otherwise Flattened where Flattens does, otherwise
+// OnceChoice for a choice occurring exactly once, and Occurrence for the rest,
+// a particle with {max occurs} 0 among them, for which ParticleShape answers
+// no field. Each caller follows a <group ref> to group itself, and asks it of
+// a particle only outside a flattened particle's reach, as for Flattens. The
+// error is Splices' or Flattens', unwrapped.
+func ParticleHold(schema *xsd.Schema, group xsd.ModelGroup, occurs xsd.Occurs) (Hold, error) {
+	splice, err := Splices(schema, group, occurs)
+	if err != nil {
+		return 0, err
+	}
+	if splice {
+		return Spliced, nil
+	}
+	flat, err := Flattens(schema, group, occurs)
+	if err != nil {
+		return 0, err
+	}
+	if flat {
+		return Flattened, nil
+	}
+	if group.Compositor() == xsd.CompositorChoice && occurs == ExactlyOnce() {
+		return OnceChoice, nil
+	}
+	return Occurrence, nil
+}
+
+// ChoiceRoot reports whether the complex type t is the sealed interface of
+// the choice its content {particle} holds, as codegen/doc.go "# Complex types"
+// states it: t has element-only content whose {particle} is a choice, inline
+// or a <group ref> (ModelGroupTerm), occurring exactly once (ExactlyOnce), t
+// is not Mixed, has no attribute field (HasAttributeFields) and no {open
+// content}, read from t's own {content type}, and the choice has no
+// {particles} or one occurrence of it is not emptiable (TermEmptiable,
+// §3.9.6.3 cos-group-emptiable). Every t it answers true for has a content
+// {particle} ParticleHold answers OnceChoice for. The error is
+// ModelGroupTerm's or TermEmptiable's, unwrapped.
+func ChoiceRoot(schema *xsd.Schema, t xsd.ComplexType) (bool, error) {
+	content, isElement := t.ContentType().(xsd.ElementContent)
+	if !isElement {
+		return false, nil
+	}
+	group, _, err := ModelGroupTerm(schema, content.Particle.Term())
+	if err != nil {
+		return false, err
+	}
+	if group.Compositor() != xsd.CompositorChoice || content.Particle.Occurs() != ExactlyOnce() || Mixed(t) || HasAttributeFields(t) || content.OpenContent != nil {
+		return false, nil
+	}
+	if len(group.Particles()) == 0 {
+		return true, nil
+	}
+	emptiable, err := TermEmptiable(schema, xsd.ResolvedTerm{Term: group})
+	if err != nil {
+		return false, err
+	}
+	return !emptiable, nil
+}
+
 // Reach walks the reach of group, the model group of a particle Flattens
 // answers true for, as codegen/doc.go "# Particles" states it: depth-first
 // through group's {particles} in order, calling visit for each basic particle
