@@ -15,8 +15,9 @@
 //     with value/backendtest
 //   - codegen, codec — schema-directed Go code generation and dataset
 //     serialization (codegen's M9 slices ship; codec's first M10 slice
-//     decodes a valid XML instance into a generated struct, and nothing
-//     encodes yet)
+//     decodes a valid XML instance into a generated struct, and its encode
+//     slice, which codec's package doc "# What encodes" states, writes a
+//     value of one back out as XML in canonical form)
 //   - cmd/goxsd8 — the command-line interface
 //
 // This root package holds no code; it exists to document the module and

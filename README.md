@@ -8,7 +8,9 @@ marshalling code.
 > **Status: early.** XML and JSON instances validate today; BER is
 > planned (M11). The code generator ships Go type declarations for a slice
 > of schema shapes, and package `codec` decodes a valid XML instance into
-> them for a narrower slice still, with no encoder yet (M10). The XPath engine evaluates a conditional type assignment's
+> them for a narrower slice still, and encodes a value of them back out in
+> canonical form for the slice `codec`'s package doc "# What encodes" states
+> (M10). The XPath engine evaluates a conditional type assignment's
 > `{test}` over Structures §3.12.6's restricted subset, less some forms it
 > declines (M6), and an assertion's `{test}` in first slices (M6), reporting
 > one it declines as unevaluated, never as satisfied; the full XPath 2.0

@@ -19,10 +19,10 @@ import (
 	"github.com/kud360/goxsd8/xsderr"
 )
 
-// ErrTypeMismatch is the error [Decode] wraps when T does not match the T item
-// 6 of Decode's doc states for the document element's declaration: the type
-// codegen emits for it, or Nillable over that type where codegen wraps the
-// declaration.
+// ErrTypeMismatch is the error [Decode] and [Append] wrap when T does not
+// match the T item 6 of Decode's doc states for the document element's
+// declaration: the type codegen emits for it, or Nillable over that type
+// where codegen wraps the declaration.
 var ErrTypeMismatch = errors.New("codec: T is not the type codegen emits for the document element")
 
 // Decode decodes the XML instance data into a new value of T, the type
