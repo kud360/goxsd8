@@ -251,15 +251,12 @@ func BasicMembers(r xsd.TypeResolver, st *xsd.SimpleType) ([]*xsd.SimpleType, er
 	return basic, nil
 }
 
-// Splices reports whether a model group particle of group occurring as occurs,
-// inline or a <group ref> to group's definition (§3.7.2
-// declare-namedModelGroup), the content {particle} or nested, is spliced,
-// giving in its place the fields group's own particles give, as
-// codegen/doc.go "# Particles" states. Each caller follows a <group ref> to
-// group itself. Whether one occurrence of group can match nothing is
-// TermEmptiable's answer (§3.8.6.5 cos-seq-range). The error is
-// TermEmptiable's.
-func Splices(schema *xsd.Schema, group xsd.ModelGroup, occurs xsd.Occurs) (bool, error) {
+// splices reports whether ParticleHold's particle of group occurring as
+// occurs is spliced, giving in its place the fields group's own particles
+// give, as codegen/doc.go "# Particles" states. Whether one occurrence of
+// group can match nothing is termEmptiable's answer (§3.8.6.5 cos-seq-range).
+// The error is termEmptiable's.
+func splices(schema *xsd.Schema, group xsd.ModelGroup, occurs xsd.Occurs) (bool, error) {
 	if group.Compositor() == xsd.CompositorChoice {
 		return false, nil
 	}
@@ -270,22 +267,18 @@ func Splices(schema *xsd.Schema, group xsd.ModelGroup, occurs xsd.Occurs) (bool,
 	if occurs.Min() == 1 {
 		return true, nil
 	}
-	return TermEmptiable(schema, xsd.ResolvedTerm{Term: group})
+	return termEmptiable(schema, xsd.ResolvedTerm{Term: group})
 }
 
-// Flattens reports whether a model group particle of group occurring as
-// occurs, inline or a <group ref> to group's definition (§3.7.2
-// declare-namedModelGroup), the content {particle} or nested, meets one of
-// the three gates codegen/doc.go "# Particles" states for a flattened field,
-// which that section owns. Each caller follows a <group ref> to group itself,
-// as for Splices; Flattens follows the <group ref>s inside group itself. It
-// does not decide which particle on the walk inward is flattened: a caller
-// asks it of a particle only outside a flattened particle's reach. The error
-// is TermEmptiable's or ModelGroupTerm's, unwrapped.
-func Flattens(schema *xsd.Schema, group xsd.ModelGroup, occurs xsd.Occurs) (bool, error) {
+// flattens reports whether ParticleHold's particle of group occurring as
+// occurs meets one of the three gates codegen/doc.go "# Particles" states for
+// a flattened field, which that section owns, following the <group ref>s
+// inside group itself. The error is termEmptiable's or ModelGroupTerm's,
+// unwrapped.
+func flattens(schema *xsd.Schema, group xsd.ModelGroup, occurs xsd.Occurs) (bool, error) {
 	if group.Compositor() == xsd.CompositorChoice {
 		for _, p := range group.Particles() {
-			emptiable, err := TermEmptiable(schema, p.Term())
+			emptiable, err := termEmptiable(schema, p.Term())
 			if err != nil {
 				return false, err
 			}
@@ -298,7 +291,7 @@ func Flattens(schema *xsd.Schema, group xsd.ModelGroup, occurs xsd.Occurs) (bool
 		return false, nil
 	}
 	if group.Compositor() == xsd.CompositorSequence {
-		emptiable, err := TermEmptiable(schema, xsd.ResolvedTerm{Term: group})
+		emptiable, err := termEmptiable(schema, xsd.ResolvedTerm{Term: group})
 		if err != nil {
 			return false, err
 		}
@@ -314,40 +307,33 @@ func Flattens(schema *xsd.Schema, group xsd.ModelGroup, occurs xsd.Occurs) (bool
 // it. The zero value is invalid (STYLE T1).
 type Hold uint8
 
-// The Holds.
+// The Holds, each named for its case in "# Particles".
 const (
-	// Spliced gives in the particle's place the fields its model group's own
-	// particles give.
-	Spliced Hold = iota + 1
-	// Flattened gives the one flattened field over the particle's reach
-	// (Reach).
-	Flattened
-	// OnceChoice gives the bare sealed interface of a choice occurring exactly
-	// once (ExactlyOnce).
-	OnceChoice
-	// Occurrence gives the one field holding the type for one occurrence of
-	// the particle's model group by the particle's occurrence (ParticleShape).
-	Occurrence
+	Spliced    Hold = iota + 1 // spliced
+	Flattened                  // flattened, its reach Reach's walk
+	OnceChoice                 // a choice occurring exactly once, its bare interface
+	Occurrence                 // any other, its field by its occurrence (ParticleShape)
 )
 
 // ParticleHold returns the Hold of a model group particle of group occurring
 // as occurs, inline or a <group ref> to group's definition (§3.7.2
 // declare-namedModelGroup), the content {particle} or nested: Spliced where
-// Splices answers true, otherwise Flattened where Flattens does, otherwise
+// splices answers true, otherwise Flattened where flattens does, otherwise
 // OnceChoice for a choice occurring exactly once, and Occurrence for the rest,
 // a particle with {max occurs} 0 among them, for which ParticleShape answers
-// no field. Each caller follows a <group ref> to group itself, and asks it of
-// a particle only outside a flattened particle's reach, as for Flattens. The
-// error is Splices' or Flattens', unwrapped.
+// no field. Each caller follows a <group ref> to group itself. It does not
+// decide which particle on the walk inward is flattened: a caller asks it of
+// a particle only outside a Flattened particle's reach. The error is splices'
+// or flattens', unwrapped.
 func ParticleHold(schema *xsd.Schema, group xsd.ModelGroup, occurs xsd.Occurs) (Hold, error) {
-	splice, err := Splices(schema, group, occurs)
+	splice, err := splices(schema, group, occurs)
 	if err != nil {
 		return 0, err
 	}
 	if splice {
 		return Spliced, nil
 	}
-	flat, err := Flattens(schema, group, occurs)
+	flat, err := flattens(schema, group, occurs)
 	if err != nil {
 		return 0, err
 	}
@@ -360,16 +346,15 @@ func ParticleHold(schema *xsd.Schema, group xsd.ModelGroup, occurs xsd.Occurs) (
 	return Occurrence, nil
 }
 
-// ChoiceRoot reports whether the complex type t is the sealed interface of
-// the choice its content {particle} holds, as codegen/doc.go "# Complex types"
-// states it: t has element-only content whose {particle} is a choice, inline
-// or a <group ref> (ModelGroupTerm), occurring exactly once (ExactlyOnce), t
-// is not Mixed, has no attribute field (HasAttributeFields) and no {open
-// content}, read from t's own {content type}, and the choice has no
-// {particles} or one occurrence of it is not emptiable (TermEmptiable,
-// §3.9.6.3 cos-group-emptiable). Every t it answers true for has a content
+// ChoiceRoot reports whether codegen emits the complex type t as the sealed
+// interface of the choice its content {particle} holds, as codegen/doc.go
+// "# Complex types" states, which that section owns. It reads t's own
+// {content type}, so inherited components count, its {particle}'s model
+// group through ModelGroupTerm, its occurrence against ExactlyOnce, Mixed,
+// HasAttributeFields and, for a choice with {particles}, termEmptiable
+// (§3.9.6.3 cos-group-emptiable). Every t it answers true for has a content
 // {particle} ParticleHold answers OnceChoice for. The error is
-// ModelGroupTerm's or TermEmptiable's, unwrapped.
+// ModelGroupTerm's or termEmptiable's, unwrapped.
 func ChoiceRoot(schema *xsd.Schema, t xsd.ComplexType) (bool, error) {
 	content, isElement := t.ContentType().(xsd.ElementContent)
 	if !isElement {
@@ -385,15 +370,15 @@ func ChoiceRoot(schema *xsd.Schema, t xsd.ComplexType) (bool, error) {
 	if len(group.Particles()) == 0 {
 		return true, nil
 	}
-	emptiable, err := TermEmptiable(schema, xsd.ResolvedTerm{Term: group})
+	emptiable, err := termEmptiable(schema, xsd.ResolvedTerm{Term: group})
 	if err != nil {
 		return false, err
 	}
 	return !emptiable, nil
 }
 
-// Reach walks the reach of group, the model group of a particle Flattens
-// answers true for, as codegen/doc.go "# Particles" states it: depth-first
+// Reach walks the reach of group, the model group of a particle ParticleHold
+// answers Flattened for, as codegen/doc.go "# Particles" states it: depth-first
 // through group's {particles} in order, calling visit for each basic particle
 // (Structures §2.2.3.2 key-basic-particle), an element particle, local or an
 // <element ref>, or a wildcard particle, whatever its {max occurs}, which
@@ -495,14 +480,14 @@ func repeats(occurs xsd.Occurs) bool {
 	return !bounded || upper > 1 && upper != occurs.Min()
 }
 
-// TermEmptiable reports whether one occurrence of a particle's {term} can
+// termEmptiable reports whether one occurrence of a particle's {term} can
 // match nothing: [xsd.Schema.ParticleEmptiable] (§3.9.6.3
 // cos-group-emptiable) over a particle of term occurring exactly once
 // (ExactlyOnce), so that its clause 2 alone decides, never read off a
 // particle's own range. It is false for an element declaration or a wildcard
 // and true for a model group with no {particles}. The error is
 // xsd.NewParticle's, unwrapped; it does not reject a resolved term.
-func TermEmptiable(schema *xsd.Schema, term xsd.TermOrRef) (bool, error) {
+func termEmptiable(schema *xsd.Schema, term xsd.TermOrRef) (bool, error) {
 	p, err := xsd.NewParticle(xsderr.Loc{}, ExactlyOnce(), term)
 	if err != nil {
 		return false, err

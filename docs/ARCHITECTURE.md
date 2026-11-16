@@ -463,7 +463,7 @@ Two access styles over the compiled model, one shared core:
     named-group references — **does not exist, and no milestone schedules
     it.** `codegen`, the consumer it was planned for, shipped M9 walking
     the content model itself; that walk is now `internal/goshape`'s
-    (`Reach`, `Splices`, `Flattens`, `SubstitutionSum`), shared with
+    (`Reach`, `ParticleHold`, `SubstitutionSum`), shared with
     `codec`, over the algebra's exported entry points
     (`Schema.ParticleEmptiable`, `Schema.SubstitutionGroup`,
     `Schema.ModelGroup`), and `codegen` reads
