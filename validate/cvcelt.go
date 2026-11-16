@@ -128,7 +128,7 @@ func (w *walk) nilCheck(e Element, g governance) bool {
 		if present {
 			w.res.violations = append(w.res.violations, xsderr.New(ruleCvcElt, e.Loc(),
 				"the element %s carries an xsi:nil attribute, but the {nillable} of its ·governing element declaration· is false, and cvc-elt clause 3.1 admits no xsi:nil attribute on such an element whatever its ·actual value·",
-				e.Name()))
+				e.Name().Display()))
 		}
 		return false
 	}
@@ -136,14 +136,14 @@ func (w *walk) nilCheck(e Element, g governance) bool {
 		a, _ := instanceAttribute(e, "nil")
 		w.res.violations = append(w.res.violations, xsderr.New(ruleCvcElt, e.Loc(),
 			"the xsi:nil attribute of the element %s has the value %q, which is outside the lexical space of xs:boolean, the type the built-in declaration for the nil attribute gives it, so it has no ·actual value· and none of the three arms of cvc-elt clause 3.2 — no attribute (3.2.1), the value false (3.2.2), the value true (3.2.3) — holds, and the clause has no fourth",
-			e.Name(), a.Value()))
+			e.Name().Display(), a.Value()))
 		return false
 	}
 	isNilled := nilled(e, g)
 	if f, fixed := elementFixed(g); fixed && isNilled {
 		w.res.violations = append(w.res.violations, xsderr.New(ruleCvcElt, e.Loc(),
 			"the element %s has xsi:nil = true, so it is ·nilled·, but its ·governing element declaration· carries the fixed {value constraint} %q, and cvc-elt clause 3.2.3.2 admits no {value constraint} with {variety} = fixed on a ·nilled· element",
-			e.Name(), f.LexicalForm()))
+			e.Name().Display(), f.LexicalForm()))
 	}
 	return isNilled
 }

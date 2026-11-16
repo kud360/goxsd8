@@ -175,7 +175,7 @@ func dispatchUnion(b Backend, r xsd.TypeResolver, members []*xsd.SimpleType, raw
 		if IsFacetPrecondition(err) || IsAssertionDeclined(err) {
 			return nil, nil, err
 		}
-		rejections = append(rejections, fmt.Sprintf("member %d (%s): %s", i, m.Name(), xsderr.CauseText(err)))
+		rejections = append(rejections, fmt.Sprintf("member %d (%s): %s", i, m.Name().Display(), xsderr.CauseText(err)))
 	}
 	return nil, nil, xsderr.New(ruleCvcDatatypeValid, xsderr.Loc{},
 		"value %q is Datatype Valid with respect to no member of the union's %d {member type definitions}, but cvc-datatype-valid clause 2.3 requires it to be valid with respect to at least one: %s",

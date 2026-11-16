@@ -133,13 +133,13 @@ func (w *walk) elementAssertions(e Element, asserts *assertionCheck, content *co
 		if lack != nil {
 			w.decline("assessing element", e.Name(), e.Loc(), ruleCvcAssertion, "",
 				"element %s was not assessed against %s which was not evaluated: %s, so cvc-complex-type clause 6 is undecided for that assertion",
-				e.Name(), site, lack.declined(e.Name()))
+				e.Name().Display(), site, lack.declined(e.Name()))
 			continue
 		}
 		if c.declined != nil {
 			w.decline("assessing element", e.Name(), e.Loc(), ruleCvcAssertion, "",
 				"element %s was not assessed against %s which was not evaluated: this engine's XPath evaluator declined it because %s, so cvc-complex-type clause 6 is undecided for that assertion",
-				e.Name(), site, c.declined)
+				e.Name().Display(), site, c.declined)
 			continue
 		}
 		if c.test.Evaluate(w.backend, w.schema, e, in.yield, asserts.yieldChildren, c.tally, in.value, w.res.now) {
@@ -148,7 +148,7 @@ func (w *walk) elementAssertions(e Element, asserts *assertionCheck, content *co
 		}
 		w.res.violations = append(w.res.violations, xsderr.New(ruleCvcAssertion, e.Loc(),
 			"the element %s is not ·valid· with respect to %s which did not evaluate to true without raising a dynamic or type error, as cvc-assertion requires of each assertion cvc-complex-type clause 6 quantifies over",
-			e.Name(), site))
+			e.Name().Display(), site))
 		w.logDecision("assessing element", e.Name(), e.Loc(), ruleCvcAssertion, "", "charged")
 	}
 }
@@ -504,7 +504,7 @@ func (up assertionAncestry) collectElement(e Element, g governance, nilled bool)
 	if up.collecting == nil || nilled || !g.typeUndetermined() {
 		return
 	}
-	up.collecting.lacking(fmt.Sprintf("the element %s at %s below it has a ·governing type definition· that was not determined, so what its text contributes to the string-value is undecided", e.Name(), e.Loc()))
+	up.collecting.lacking(fmt.Sprintf("the element %s at %s below it has a ·governing type definition· that was not determined, so what its text contributes to the string-value is undecided", e.Name().Display(), e.Loc()))
 }
 
 // collectText appends t, one character run [[child]] of the element whose
@@ -617,22 +617,22 @@ func collectEnd(r xsd.TypeResolver, e Element, inner *stringValueFrame, g govern
 func undecidedContribution(r xsd.TypeResolver, e Element, g governance, content *contentCheck) string {
 	vc, defaulted := content.defaulted()
 	if mixedContent(g.typ) && defaulted {
-		return fmt.Sprintf("the element %s at %s, of mixed content, took the default of its {value constraint}, which the data model may or may not make a Text Node", e.Name(), e.Loc())
+		return fmt.Sprintf("the element %s at %s, of mixed content, took the default of its {value constraint}, which the data model may or may not make a Text Node", e.Name().Display(), e.Loc())
 	}
 	st := g.valueType()
 	if st == nil {
 		return ""
 	}
 	if content.sawElement {
-		return fmt.Sprintf("the element %s at %s below it has simple content and element [[children]], so what its text contributes to the string-value is undecided", e.Name(), e.Loc())
+		return fmt.Sprintf("the element %s at %s below it has simple content and element [[children]], so what its text contributes to the string-value is undecided", e.Name().Display(), e.Loc())
 	}
 	if defaulted && vc.LexicalForm() != "" {
-		return fmt.Sprintf("the element %s at %s below it, of simple content, took the default %q of its {value constraint}, which the data model makes a Text Node where it reads the [schema normalized value] and not where it reads the raw characters, so the string-value is undecided", e.Name(), e.Loc(), vc.LexicalForm())
+		return fmt.Sprintf("the element %s at %s below it, of simple content, took the default %q of its {value constraint}, which the data model makes a Text Node where it reads the [schema normalized value] and not where it reads the raw characters, so the string-value is undecided", e.Name().Display(), e.Loc(), vc.LexicalForm())
 	}
 	lexical, _ := content.assessed()
 	normalized, ok := normalizedLexical(r, st, lexical)
 	if !ok || normalized != lexical {
-		return fmt.Sprintf("the element %s at %s below it has simple content whose raw characters %q are not its [schema normalized value], and the data model lets its Text Node hold either, so the string-value is undecided", e.Name(), e.Loc(), lexical)
+		return fmt.Sprintf("the element %s at %s below it has simple content whose raw characters %q are not its [schema normalized value], and the data model lets its Text Node hold either, so the string-value is undecided", e.Name().Display(), e.Loc(), lexical)
 	}
 	return ""
 }
@@ -656,7 +656,7 @@ func (up assertionAncestry) skipped(e Element) error {
 		up.parent.lacking(lackingChild{name: e.Name(), loc: e.Loc(), why: "it is ·skipped·, so it is not ·assessed·"})
 	}
 	if up.collecting != nil {
-		up.collecting.lacking(fmt.Sprintf("the element %s at %s below it is ·skipped·, so its text is not read into the string-value", e.Name(), e.Loc()))
+		up.collecting.lacking(fmt.Sprintf("the element %s at %s below it is ·skipped·, so its text is not read into the string-value", e.Name().Display(), e.Loc()))
 	}
 	if up.counting == nil {
 		return nil
@@ -729,7 +729,7 @@ func (up assertionAncestry) tallySkipped(e Element) error {
 		}
 	}
 	if err := kids.Err(); err != nil {
-		return fmt.Errorf("reading the children of %s at %s: %w", e.Name(), e.Loc(), err)
+		return fmt.Errorf("reading the children of %s at %s: %w", e.Name().Display(), e.Loc(), err)
 	}
 	return nil
 }
@@ -1511,19 +1511,19 @@ type lackingChild struct {
 }
 
 func (l lackingAttribute) declined(e xsd.QName) string {
-	return fmt.Sprintf("the attribute %s of the element %s has no ·actual value· for the data model instance cvc-assertion clause 1 builds", l.a.Name(), e)
+	return fmt.Sprintf("the attribute %s of the element %s has no ·actual value· for the data model instance cvc-assertion clause 1 builds", l.a.Name().Display(), e.Display())
 }
 
 func (l lackingNormalized) declined(e xsd.QName) string {
-	return fmt.Sprintf("the attribute %s of the element %s is invalid by cvc-attribute clause 4, so the data model instance cvc-assertion clause 1 builds annotates it xs:anySimpleType with its [schema normalized value] as typed value, which this package does not read: its declaration's {type definition} has no single whiteSpace facet this package reads", l.attr, e)
+	return fmt.Sprintf("the attribute %s of the element %s is invalid by cvc-attribute clause 4, so the data model instance cvc-assertion clause 1 builds annotates it xs:anySimpleType with its [schema normalized value] as typed value, which this package does not read: its declaration's {type definition} has no single whiteSpace facet this package reads", l.attr.Display(), e.Display())
 }
 
 func (l lackingValidity) declined(e xsd.QName) string {
-	return fmt.Sprintf("the attribute %s of the element %s is not known to be ·valid· or invalid, cvc-attribute having been declined over it, so the type annotation it carries in the data model instance cvc-assertion clause 1 builds — its declaration's {type definition}, or xs:anySimpleType where it is invalid — is undecided", l.a.Name(), e)
+	return fmt.Sprintf("the attribute %s of the element %s is not known to be ·valid· or invalid, cvc-attribute having been declined over it, so the type annotation it carries in the data model instance cvc-assertion clause 1 builds — its declaration's {type definition}, or xs:anySimpleType where it is invalid — is undecided", l.a.Name().Display(), e.Display())
 }
 
 func (l lackingDefault) declined(e xsd.QName) string {
-	return fmt.Sprintf("the ·defaulted attribute· %s of the element %s has no ·actual value· for the data model instance cvc-assertion clause 1 builds", l.u.DeclarationName(), e)
+	return fmt.Sprintf("the ·defaulted attribute· %s of the element %s has no ·actual value· for the data model instance cvc-assertion clause 1 builds", l.u.DeclarationName().Display(), e.Display())
 }
 
 // lackingCount is an element, named name at loc, of the subtree of an element
@@ -1561,35 +1561,35 @@ type lackingElementBelow struct {
 }
 
 func (l lackingElementBelow) declined(e xsd.QName) string {
-	return fmt.Sprintf("the element %s at %s, in the subtree of the element %s, whose typed value a {test} reads, has no typed value for the data model instance cvc-assertion clause 1 builds: %s", l.name, l.loc, e, l.why)
+	return fmt.Sprintf("the element %s at %s, in the subtree of the element %s, whose typed value a {test} reads, has no typed value for the data model instance cvc-assertion clause 1 builds: %s", l.name.Display(), l.loc, e.Display(), l.why)
 }
 
 func (l lackingAttributeBelow) declined(e xsd.QName) string {
-	return fmt.Sprintf("the attribute %s of the element %s at %s, in the subtree of the element %s, whose typed value a {test} reads, has no typed value for the data model instance cvc-assertion clause 1 builds: %s", l.attr, l.name, l.loc, e, l.why)
+	return fmt.Sprintf("the attribute %s of the element %s at %s, in the subtree of the element %s, whose typed value a {test} reads, has no typed value for the data model instance cvc-assertion clause 1 builds: %s", l.attr.Display(), l.name.Display(), l.loc, e.Display(), l.why)
 }
 
 func (l lackingCount) declined(e xsd.QName) string {
-	return fmt.Sprintf("the element %s at %s, in the subtree of the element %s whose nodes a {test} counts, cannot be counted exactly for the data model instance cvc-assertion clause 1 builds: %s", l.name, l.loc, e, l.why)
+	return fmt.Sprintf("the element %s at %s, in the subtree of the element %s whose nodes a {test} counts, cannot be counted exactly for the data model instance cvc-assertion clause 1 builds: %s", l.name.Display(), l.loc, e.Display(), l.why)
 }
 
 func (l lackingChild) declined(e xsd.QName) string {
-	return fmt.Sprintf("the child element %s of the element %s at %s, which a {test} reads, has no typed value for the data model instance cvc-assertion clause 1 builds: %s", l.name, e, l.loc, l.why)
+	return fmt.Sprintf("the child element %s of the element %s at %s, which a {test} reads, has no typed value for the data model instance cvc-assertion clause 1 builds: %s", l.name.Display(), e.Display(), l.loc, l.why)
 }
 
 func (lackingText) declined(e xsd.QName) string {
-	return fmt.Sprintf("the element %s has simple content and element [[children]], which cvc-complex-type clause 1.2 charged, so its string value, the text of all its descendants, was not gathered", e)
+	return fmt.Sprintf("the element %s has simple content and element [[children]], which cvc-complex-type clause 1.2 charged, so its string value, the text of all its descendants, was not gathered", e.Display())
 }
 
 func (lackingNilledText) declined(e xsd.QName) string {
-	return fmt.Sprintf("the element %s has xsi:nil = true and [[children]], which cvc-elt clause 3.2.3.1 charged, so its string value, the text of its descendants and never the zero-length string while dm:nilled is false in the partial ·PSVI·, was not gathered", e)
+	return fmt.Sprintf("the element %s has xsi:nil = true and [[children]], which cvc-elt clause 3.2.3.1 charged, so its string value, the text of its descendants and never the zero-length string while dm:nilled is false in the partial ·PSVI·, was not gathered", e.Display())
 }
 
 func (l lackingStringValue) declined(e xsd.QName) string {
-	return fmt.Sprintf("the string value of the element %s, which `.` reads in the data model instance cvc-assertion clause 1 builds, is undecided: %s", e, l.why)
+	return fmt.Sprintf("the string value of the element %s, which `.` reads in the data model instance cvc-assertion clause 1 builds, is undecided: %s", e.Display(), l.why)
 }
 
 func (lackingValue) declined(e xsd.QName) string {
-	return fmt.Sprintf("the element %s has simple content whose [schema actual value], which cvc-assertion clause 2.3.1 binds to $value, is undecided: String Valid over its ·initial value· was withheld", e)
+	return fmt.Sprintf("the element %s has simple content whose [schema actual value], which cvc-assertion clause 2.3.1 binds to $value, is undecided: String Valid over its ·initial value· was withheld", e.Display())
 }
 
 // assertionValues is the input of e's assertions: the typed value

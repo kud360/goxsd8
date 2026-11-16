@@ -42,7 +42,7 @@ func (mb memberBackend) Mapping(typ xsd.QName) (Mapping, bool) {
 	return Mapping{Parse: func(lexical string, _ Context) (Value, error) {
 		if !accepts(lexical) {
 			return nil, xsderr.New("cvc-datatype-valid", xsderr.Loc{},
-				"%s: %q is not in the lexical space", typ, lexical)
+				"%s: %q is not in the lexical space", typ.Display(), lexical)
 		}
 		return unionMemberVal{member: typ.Local, lexical: lexical}, nil
 	}}, true
@@ -562,12 +562,12 @@ func TestDispatchUnionFoldRendersEachMemberReason(t *testing.T) {
 	}{
 		{"bare zero-Loc members", mb, bothReject, "abc",
 			`?: [cvc-datatype-valid] value "abc" is Datatype Valid with respect to no member of the union's 2 {member type definitions}, but cvc-datatype-valid clause 2.3 requires it to be valid with respect to at least one: ` +
-				`member 0 ({http://www.w3.org/2001/XMLSchema}numeric): [cvc-datatype-valid] {http://www.w3.org/2001/XMLSchema}numeric: "abc" is not in the lexical space; ` +
-				`member 1 ({http://www.w3.org/2001/XMLSchema}flag): [cvc-datatype-valid] {http://www.w3.org/2001/XMLSchema}flag: "abc" is not in the lexical space`},
+				`member 0 (xs:numeric): [cvc-datatype-valid] xs:numeric: "abc" is not in the lexical space; ` +
+				`member 1 (xs:flag): [cvc-datatype-valid] xs:flag: "abc" is not in the lexical space`},
 		{"wrapped fault keeps its rendering", pb, faultThenReject, "ab",
 			`?: [cvc-datatype-valid] value "ab" is Datatype Valid with respect to no member of the union's 2 {member type definitions}, but cvc-datatype-valid clause 2.3 requires it to be valid with respect to at least one: ` +
-				`member 0 ({http://www.w3.org/2001/XMLSchema}badPattern): value: a fault of the type or the backend, not a verdict about the lexical: ?: [src-pattern-value] regex: unclosed character class '[' (offset 0); ` +
-				`member 1 ({http://www.w3.org/2001/XMLSchema}onlyA): [cvc-pattern-valid] "ab" matches no member of the pattern facet of the simple type {http://www.w3.org/2001/XMLSchema}onlyA, whose {value} holds "a", but cvc-pattern-valid requires one to match`},
+				`member 0 (xs:badPattern): value: a fault of the type or the backend, not a verdict about the lexical: ?: [src-pattern-value] regex: unclosed character class '[' (offset 0); ` +
+				`member 1 (xs:onlyA): [cvc-pattern-valid] "ab" matches no member of the pattern facet of the simple type xs:onlyA, whose {value} holds "a", but cvc-pattern-valid requires one to match`},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			_, err := ValidateLexical(tc.b, noSchema{}, tc.st, tc.lexical, nil, assertionsUndecided{})

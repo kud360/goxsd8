@@ -41,7 +41,7 @@ type doubleVal float64
 // binary32 round-to-nearest-ties-to-even, which strconv.ParseFloat with bitSize
 // 32 performs (it is IEEE 754-conformant, so an acceptable floatingPointRound).
 func parseFloat(lexical string, _ value.Context) (value.Value, error) {
-	f, err := parseFloating(lexical, 32, "float")
+	f, err := parseFloating(lexical, 32, "xs:float")
 	if err != nil {
 		return nil, err
 	}
@@ -51,7 +51,7 @@ func parseFloat(lexical string, _ value.Context) (value.Value, error) {
 // parseDouble maps a double lexical to its value (f-doubleLexmap, §3.3.5.2):
 // binary64 round-to-nearest-ties-to-even via strconv.ParseFloat bitSize 64.
 func parseDouble(lexical string, _ value.Context) (value.Value, error) {
-	f, err := parseFloating(lexical, 64, "double")
+	f, err := parseFloating(lexical, 64, "xs:double")
 	if err != nil {
 		return nil, err
 	}

@@ -37,7 +37,7 @@ var errNoYearMonthCanonical = errors.New("yearMonthDuration: zero value has no c
 func parseYearMonthDuration(lexical string, _ value.Context) (value.Value, error) {
 	if !durationLexical.MatchString(lexical) {
 		return nil, xsderr.New(ruleDatatypeValid, xsderr.Loc{},
-			"%q is not in the lexical space of duration, the primitive of yearMonthDuration, which cvc-datatype-valid clause 2.1 requires it to be in", lexical)
+			"%q is not in the lexical space of xs:duration, the primitive of xs:yearMonthDuration, which cvc-datatype-valid clause 2.1 requires it to be in", lexical)
 	}
 	if !yearMonthDurationLexical.MatchString(lexical) {
 		return nil, xsderr.New(ruleDatatypeValid, xsderr.Loc{},

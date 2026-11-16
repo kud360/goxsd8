@@ -1339,15 +1339,17 @@ func TestFixedElementComparesThroughItsAssertionsFacet(t *testing.T) {
 // 5.2.2.2.2; instead clause 3.1.3 records the declined InRange facet under
 // cvc-assertions-valid and the comparison records its own clause 5.2.2.2.2
 // decline. With FacetAssertions answering AssertionHolds where it declines,
-// the row is charged and fails.
+// the row is charged and fails. The decline's whole message is pinned, so the
+// row also fails where it spells the datatype NOTATION rather than
+// xs:NOTATION.
 func TestFixedElementWithADeclinedAssertionIsUndecided(t *testing.T) {
 	res := aFixedElementAssessed(t, "InRange", "7", "4")
 	if got := res.Violations(); len(got) != 0 {
 		t.Fatalf("Violations() = %v, want none: a declined {test} decides nothing", got)
 	}
+	const want = `element root's value "4" was not compared with "7", the {value} of its declaration's fixed {value constraint}: value.ConstraintMatches could not decide the comparison, a fault of the type or of the value backend, two literals of a ·special· type that some member of its lexical mapping cannot compare, an assertions-facet {test} not evaluated on either side or failed by the {value}, or an xs:NOTATION {value} naming no declared notation, which no assembly judges yet (#667), rather than a verdict about the value, so cvc-elt clause 5.2.2.2.2 is undecided`
 	got := res.Unevaluated()
-	if len(got) != 2 || got[0].Rule() != "cvc-assertions-valid" || got[1].Rule() != "cvc-elt" ||
-		!strings.Contains(got[1].Msg(), "cvc-elt clause 5.2.2.2.2 is undecided") {
-		t.Errorf("Unevaluated() = %v, want the InRange facet's cvc-assertions-valid record then the cvc-elt clause 5.2.2.2.2 decline", messages(got))
+	if len(got) != 2 || got[0].Rule() != "cvc-assertions-valid" || got[1].Rule() != "cvc-elt" || got[1].Msg() != want {
+		t.Errorf("Unevaluated() = %v, want the InRange facet's cvc-assertions-valid record then the cvc-elt clause 5.2.2.2.2 decline %q", messages(got), want)
 	}
 }

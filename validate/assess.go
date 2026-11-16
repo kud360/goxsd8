@@ -167,7 +167,7 @@ func (v *Validator) assess(root Element, now time.Time) *Result {
 	if _, unresolved := decided.(unresolvedGovernance); unresolved {
 		w.res.violations = append(w.res.violations, xsderr.New(ruleCvcAssessElt, root.Loc(),
 			"element %s, the ·validation root·, has no top-level element declaration %s and no xsi:type ·resolving· to a type definition, so it determines neither a ·governing element declaration· nor a ·governing type definition· and cannot be ·strictly assessed·, which strict wildcard validation, entering at cvc-assess-elt, expects of the validation root",
-			root.Name(), declaredClause(root.Name(), w.schema.Elements())))
+			root.Name().Display(), declaredClause(root.Name(), w.schema.Elements())))
 		return &w.res
 	}
 	g, _ := w.charged(root, decided, slot)
@@ -183,7 +183,7 @@ func (v *Validator) assess(root Element, now time.Time) *Result {
 // [xsd.Schema.Elements] order, abstract ones included. Every one whose local
 // name is root's comes first, in that order among themselves, then the rest
 // in that order; each such one is in another namespace, since one in root's
-// own would have ·resolved·. At most three are named, by [xsd.QName.String],
+// own would have ·resolved·. At most three are named, by [xsd.QName.Display],
 // then how many more there are. An empty decls reads "and the schema declares
 // none".
 func declaredClause(root xsd.QName, decls []xsd.ElementDeclaration) string {
@@ -193,12 +193,12 @@ func declaredClause(root xsd.QName, decls []xsd.ElementDeclaration) string {
 	names := make([]string, 0, len(decls))
 	for _, d := range decls {
 		if d.Name().Local == root.Local {
-			names = append(names, d.Name().String())
+			names = append(names, d.Name().Display())
 		}
 	}
 	for _, d := range decls {
 		if d.Name().Local != root.Local {
-			names = append(names, d.Name().String())
+			names = append(names, d.Name().Display())
 		}
 	}
 	const shown = 3
@@ -448,7 +448,7 @@ func (w *walk) charged(e Element, decided governed, slot string) (governance, bo
 func (w *walk) absentAffiliation(e Element, head xsd.QName) {
 	w.res.violations = append(w.res.violations, xsderr.New(ruleCvcElt, e.Loc(),
 		"element %s is governed by a declaration with an ·absent· member in its {substitution group affiliations}: the substitution group head %s names no element declaration in the schema, a missing sub-component, so the element is ·laxly assessed· as if cvc-elt clause 1 had failed",
-		e.Name(), head))
+		e.Name().Display(), head.Display()))
 	w.logDecision("assessing element", e.Name(), e.Loc(), ruleCvcElt, "1", "charged")
 }
 
@@ -484,12 +484,12 @@ func (w *walk) instanceOverride(e Element, d xsd.ElementDeclaration, instance, s
 	if err != nil {
 		w.decline("assessing element", e.Name(), e.Loc(), ruleCvcElt, "4",
 			"element %s was not given a ·governing type definition·: whether its xsi:type %s ·overrides· its ·selected type definition· %s could not be settled, so cvc-elt clause 4 is undecided: %v",
-			e.Name(), typeName(instance), typeName(selected), err)
+			e.Name().Display(), typeName(instance), typeName(selected), err)
 		return governance{decl: d, hasDecl: true}
 	}
 	w.res.violations = append(w.res.violations, xsderr.New(ruleCvcElt, e.Loc(),
 		"the xsi:type attribute of the element %s names the type definition %s, which is not ·validly substitutable· for the ·selected type definition· %s of its ·governing element declaration· subject to that declaration's {disallowed substitutions}, so it does not ·override· it, which cvc-elt clause 4 requires",
-		e.Name(), typeName(instance), typeName(selected)))
+		e.Name().Display(), typeName(instance), typeName(selected)))
 	return governance{decl: d, hasDecl: true, typ: selected}
 }
 
@@ -500,7 +500,7 @@ func typeName(t xsd.TypeDefinition) string {
 	if name == (xsd.QName{}) {
 		return "an anonymous type definition"
 	}
-	return name.String()
+	return name.Display()
 }
 
 // aValid phrases t as what a String Valid charge says a value "is not": "a
@@ -648,7 +648,7 @@ func (w *walk) unresolvedStrictWildcardChild(content *contentCheck, child Elemen
 	}
 	w.res.violations = append(w.res.violations, xsderr.New(ruleCvcAssessElt, child.Loc(),
 		"element %s is ·attributed to· a ***strict*** ·wildcard particle· but %s, so it is ·laxly assessed· and its [validity] is ***notKnown***, which e-validity clause 1.1.3 makes the enclosing element %s invalid for",
-		child.Name(), cause, content.e.Name()))
+		child.Name().Display(), cause, content.e.Name().Display()))
 	content.log(w, child.Name(), child.Loc(), ruleCvcAssessElt, "", "charged")
 }
 
@@ -713,7 +713,7 @@ func (w *walk) locallyDeclaredType(content *contentCheck, child Element, g gover
 	if err != nil {
 		w.decline("assessing element", child.Name(), child.Loc(), ruleCvcComplexType, "5",
 			"element %s, a child of %s, was not checked against its ·locally declared type· %s: whether its ·governing type definition· %s is ·validly substitutable· for it could not be settled, so cvc-complex-type clause 5 is undecided: %v",
-			child.Name(), content.e.Name(), typeName(ldt), typeName(g.typ), err)
+			child.Name().Display(), content.e.Name().Display(), typeName(ldt), typeName(g.typ), err)
 		return
 	}
 	if substitutable {
@@ -722,7 +722,7 @@ func (w *walk) locallyDeclaredType(content *contentCheck, child Element, g gover
 	}
 	w.res.violations = append(w.res.violations, xsderr.New(ruleCvcComplexType, child.Loc(),
 		"element %s, a child of %s, has the ·governing type definition· %s, which is neither the same as nor ·validly substitutable· ·without limitation· for its ·locally declared type· %s within the parent's ·governing type definition·, but cvc-complex-type clause 5 requires one or the other",
-		child.Name(), content.e.Name(), typeName(g.typ), typeName(ldt)))
+		child.Name().Display(), content.e.Name().Display(), typeName(g.typ), typeName(ldt)))
 	content.log(w, child.Name(), child.Loc(), ruleCvcComplexType, "5", "charged")
 }
 
@@ -807,7 +807,7 @@ func sameType(a, b xsd.TypeDefinition) bool {
 func (w *walk) localGovernance(e Element, instance, ldt xsd.TypeDefinition, err error) governance {
 	w.decline("assessing element", e.Name(), e.Loc(), ruleCvcAssessElt, "",
 		"element %s was not given a ·governing type definition·: whether its xsi:type %s ·overrides· its ·locally declared type· %s could not be settled, so key-governing-type-elem clause 6 is undecided: %v",
-		e.Name(), typeName(instance), typeName(ldt), err)
+		e.Name().Display(), typeName(instance), typeName(ldt), err)
 	w.ids.declined = true
 	return governance{undecided: true}
 }
@@ -1026,7 +1026,7 @@ func (w *walk) abstractDeclaration(e Element, g governance) {
 	}
 	w.res.violations = append(w.res.violations, xsderr.New(ruleCvcElt, e.Loc(),
 		"the element %s is governed by an element declaration whose {abstract} is true, but cvc-elt clause 2 requires it to be false: an abstract declaration validates no element information item",
-		e.Name()))
+		e.Name().Display()))
 }
 
 // abstractType settles cvc-type (§3.3.4.4) clause 2 for e: where its
@@ -1056,7 +1056,7 @@ func (w *walk) abstractType(e Element, g governance) {
 	}
 	w.res.violations = append(w.res.violations, xsderr.New(ruleCvcType, e.Loc(),
 		"the element %s is governed by the complex type definition %s, whose {abstract} is true, but cvc-type clause 2 requires a complex ·governing type definition·'s {abstract} to be false",
-		e.Name(), typeName(g.typ)))
+		e.Name().Display(), typeName(g.typ)))
 }
 
 // attributes assesses E.[[attributes]] against the arm of cvc-type (§3.3.4.4)
@@ -1151,7 +1151,7 @@ func (w *walk) simpleTypeAttributes(e Element, st *xsd.SimpleType) {
 		}
 		w.res.violations = append(w.res.violations, xsderr.New(ruleCvcType, a.Loc(),
 			"the element %s carries the attribute %s, but its ·governing type definition· %s is a Simple Type Definition, and cvc-type clause 3.1.1 admits no attribute on such an element beyond xsi:type, xsi:nil, xsi:schemaLocation and xsi:noNamespaceSchemaLocation",
-			e.Name(), a.Name(), typeName(st)))
+			e.Name().Display(), a.Name().Display(), typeName(st)))
 		w.logAttribute(a, ruleCvcType, "3.1.1", "charged")
 	}
 }
@@ -1237,14 +1237,14 @@ func (w *walk) unmatchedAttribute(a Attribute, e Element, governing xsd.ComplexT
 	if !has {
 		w.res.violations = append(w.res.violations, xsderr.New(ruleCvcComplexType, a.Loc(),
 			"the attribute %s matches no attribute use among the {attribute uses} of its element's ·governing type definition·, so case 2.2 of clause 2 applies and not case 2.1, and that type has no {attribute wildcard}, which cvc-complex-type clause 2.2.1 requires",
-			a.Name()))
+			a.Name().Display()))
 		w.logAttribute(a, ruleCvcComplexType, "2", "charged")
 		return
 	}
 	if !w.schema.AllowsAttributeWildcardName(wild, a.Name()) {
 		w.res.violations = append(w.res.violations, xsderr.New(ruleCvcComplexType, a.Loc(),
 			"the attribute %s matches no attribute use among the {attribute uses} of its element's ·governing type definition·, and the {attribute wildcard} of that type does not admit its ·expanded name· either, so it is not ·valid· with respect to that wildcard, which cvc-complex-type clause 2.2.2 requires",
-			a.Name()))
+			a.Name().Display()))
 		w.logAttribute(a, ruleCvcComplexType, "2.2.2", "charged")
 		return
 	}
@@ -1275,7 +1275,7 @@ func (w *walk) requiredAttributeUses(e Element, attrs []Attribute, governing xsd
 		}
 		w.res.violations = append(w.res.violations, xsderr.New(ruleCvcComplexType, e.Loc(),
 			"the element %s carries no attribute information item named %s, but its ·governing type definition· has an attribute use for that name whose {required} is true, and cvc-complex-type clause 3 requires one to be present",
-			e.Name(), name))
+			e.Name().Display(), name.Display()))
 		if w.log.Enabled(context.Background(), slog.LevelDebug) {
 			w.log.Debug("assessing attribute use", slog.Any("name", name), slog.Any("loc", e.Loc()),
 				slog.String("rule", string(ruleCvcComplexType)), slog.String("clause", "3"),
@@ -1442,7 +1442,7 @@ func (w *walk) children(e Element, content *contentCheck, id *icCheck, below ass
 		}
 	}
 	if err := kids.Err(); err != nil {
-		w.res.err = fmt.Errorf("reading the children of %s at %s: %w", e.Name(), e.Loc(), err)
+		w.res.err = fmt.Errorf("reading the children of %s at %s: %w", e.Name().Display(), e.Loc(), err)
 		return
 	}
 	content.end(w)

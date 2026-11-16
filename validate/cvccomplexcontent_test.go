@@ -296,7 +296,7 @@ func TestSimpleContentValidatesTheInitialValue(t *testing.T) {
 
 	got := cAssess(t, schema, cRoot("#abc"))
 	wantContentCharge(t, got, "cvc-complex-type", "1.2", loc(1, 1))
-	if want := `element root's value "abc" is not a valid {` + xsd.XMLSchemaNS + `}integer, the {simple type definition} of its ·governing type definition·'s {content type}, which cvc-complex-type clause 1.2 requires: [cvc-pattern-valid] `; !strings.HasPrefix(got[0].Msg, want) {
+	if want := `element root's value "abc" is not a valid xs:integer, the {simple type definition} of its ·governing type definition·'s {content type}, which cvc-complex-type clause 1.2 requires: [cvc-pattern-valid] `; !strings.HasPrefix(got[0].Msg, want) {
 		t.Errorf("Msg = %q, want the prefix %q: the element, its value and the {simple type definition}, then the delegated verdict", got[0].Msg, want)
 	}
 }
