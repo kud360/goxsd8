@@ -5640,15 +5640,26 @@ func admitsXsiType(schema *xsd.Schema, decl xsd.ElementDeclaration) bool {
 	return resolved && isComplex && ct.Abstract()
 }
 
-// checkXsiType returns the xsi:type decline for start when it carries one.
-// It matches the attribute by expanded name alone: no QName is resolved.
+// checkXsiType returns the xsi:type decline for start when it carries one
+// (xsiType). No QName is resolved.
 func checkXsiType(start *xmltree.StartElement) error {
+	a, carries := xsiType(start)
+	if !carries {
+		return nil
+	}
+	return decline(constructXsiType, fmt.Sprintf("element %s with xsi:type %q", expanded(start.Name()), a.Value())).at(start.Loc())
+}
+
+// xsiType returns the first of start's attributes whose expanded name is
+// {http://www.w3.org/2001/XMLSchema-instance}type (§2.7.1), and whether start
+// carries one. It matches by expanded name alone.
+func xsiType(start *xmltree.StartElement) (xmltree.Attribute, bool) {
 	for _, a := range start.Attributes() {
 		if a.Name().Space() == xsd.XMLSchemaInstanceNS && a.Name().Local() == "type" {
-			return decline(constructXsiType, fmt.Sprintf("element %s with xsi:type %q", expanded(start.Name()), a.Value())).at(start.Loc())
+			return a, true
 		}
 	}
-	return nil
+	return xmltree.Attribute{}, false
 }
 
 // declSubject names the element declaration decl and its schema Loc.

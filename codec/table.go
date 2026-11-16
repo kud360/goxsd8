@@ -216,22 +216,20 @@ type instanceSelector struct{}
 // naming start's instance Loc and key-overrides, a defect of Decode's.
 func (instanceSelector) selected(t *tableRoot, p *pipeline, start *xmltree.StartElement) (int, error) {
 	name := expanded(start.Name())
-	for _, a := range start.Attributes() {
-		if a.Name().Space() != xsd.XMLSchemaInstanceNS || a.Name().Local() != "type" {
-			continue
-		}
-		space, local, ok := xmlqname.Resolve(a.Value(), start.LookupPrefix)
-		td, resolved := p.schema.ResolvedType(xsd.TypeDefinitionRef{Name: xsd.QName{Space: space, Local: local}})
-		if !ok || !resolved {
-			return 0, fmt.Errorf("codec: %s: element %s: its xsi:type %q names no type definition, but one overriding its {type definition} (key-overrides) is required", start.Loc(), name, a.Value())
-		}
-		i, matched := t.matched(goshape.DeclaredSlot{}, td)
-		if !matched {
-			return 0, fmt.Errorf("codec: %s: element %s: its xsi:type %q names %s, none of its governing types, the types that override its {type definition} (key-overrides)", start.Loc(), name, a.Value(), td.Name())
-		}
-		return i, nil
+	a, carries := xsiType(start)
+	if !carries {
+		return 0, fmt.Errorf("codec: %s: element %s carries no xsi:type, but one overriding its {type definition} (key-overrides) is required", start.Loc(), name)
 	}
-	return 0, fmt.Errorf("codec: %s: element %s carries no xsi:type, but one overriding its {type definition} (key-overrides) is required", start.Loc(), name)
+	space, local, ok := xmlqname.Resolve(a.Value(), start.LookupPrefix)
+	td, resolved := p.schema.ResolvedType(xsd.TypeDefinitionRef{Name: xsd.QName{Space: space, Local: local}})
+	if !ok || !resolved {
+		return 0, fmt.Errorf("codec: %s: element %s: its xsi:type %q names no type definition, but one overriding its {type definition} (key-overrides) is required", start.Loc(), name, a.Value())
+	}
+	i, matched := t.matched(goshape.DeclaredSlot{}, td)
+	if !matched {
+		return 0, fmt.Errorf("codec: %s: element %s: its xsi:type %q names %s, none of its governing types, the types that override its {type definition} (key-overrides)", start.Loc(), name, a.Value(), td.Name())
+	}
+	return i, nil
 }
 
 // matched returns the index in t.types of td, the type selected for an
