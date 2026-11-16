@@ -326,7 +326,7 @@ func (w *walk) idRecord(st *xsd.SimpleType, lexical string, owner Element, ctx v
 	candidate, decided := w.idCandidate(st)
 	if !decided {
 		w.declineID(owner, loc,
-			"an item of element %s with the value %q was not read into the ID/IDREF table: whether its type %s is ·derived· or ·constructed· from ID, IDREF or IDREFS could not be decided, so cvc-id clause 1 is undecided",
+			"an item of element %s with the value %q was not read into the ID/IDREF table: whether its type %s is ·derived· or ·constructed· from xs:ID, xs:IDREF or xs:IDREFS could not be decided, so cvc-id clause 1 is undecided",
 			owner.Name().Display(), lexical, typeName(st))
 		return
 	}
