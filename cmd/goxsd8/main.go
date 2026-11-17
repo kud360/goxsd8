@@ -471,13 +471,13 @@ schemaLocation resolving to no document, each line so charged ending
 run's exit code; a rejected schema's or -schema set's own directive
 line is charged nothing and ends as it does without -strict; off,
 such a line moves no exit code). They qualify a subcommand and follow
-its name — goxsd8 parse -q a.xsd, not goxsd8 -q parse a.xsd. They
-also precede its positional arguments — goxsd8 validate -schema
-s.xsd i.xml, not goxsd8 validate i.xml -schema s.xsd. -q suppresses
-a subcommand's informational output, which is parse's summary and
-validate's counts line, and never a diagnosis: neither the error
-lines above nor validate's violations and undecided checks are
-silenced by it.
+its name — goxsd8 parse -q a.xsd, not goxsd8 -q parse a.xsd. A
+subcommand's flags, these and its own, precede its positional
+arguments — goxsd8 validate -schema s.xsd i.xml, not goxsd8 validate
+i.xml -schema s.xsd. -q suppresses a subcommand's informational
+output, which is parse's summary and validate's counts line, and never
+a diagnosis: neither the error lines above nor validate's violations
+and undecided checks are silenced by it.
 
 Implemented today: the help path, parse, validate and gen. With no
 arguments, or with -h, -help or --help in any argument position, goxsd8
