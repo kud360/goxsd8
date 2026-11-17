@@ -147,7 +147,7 @@ func (w *walk) elementAssertions(e Element, asserts *assertionCheck, content *co
 			continue
 		}
 		w.res.violations = append(w.res.violations, xsderr.New(ruleCvcAssertion, e.Loc(),
-			"the element %s is not ·valid· with respect to %s which did not evaluate to true without raising a dynamic or type error, as cvc-assertion requires of each assertion cvc-complex-type clause 6 quantifies over",
+			"the element %s is not ·valid· with respect to %s which did not evaluate to true without raising a dynamic or type error, but cvc-assertion requires the {test} to evaluate to true",
 			e.Name().Display(), site))
 		w.logDecision("assessing element", e.Name(), e.Loc(), ruleCvcAssertion, "", "charged")
 	}
