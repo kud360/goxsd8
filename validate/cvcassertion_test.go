@@ -262,6 +262,23 @@ func TestAdmittedAssertionIsEvaluated(t *testing.T) {
 	wantAssertionCharge(t, aAssess(t, schema, aRoot()), "the element root is not ·valid· with respect to assertion 1 of 1")
 }
 
+// A cvc-assertion charge reads as one sentence in STYLE E5's shape: the element
+// and the {test} first, then cvc-assertion cited as a clause of the same
+// sentence. The whole Error() text is pinned, so any rewording of the ending
+// fails here where wantAssertionCharge's prefix would not.
+func TestAssertionChargeMessage(t *testing.T) {
+	schema := aTyped(t, []string{"x", "integer"}, "@x > 300")
+
+	got := aAssess(t, schema, aRoot("x", "200")).Violations()
+	if len(got) != 1 {
+		t.Fatalf("Violations() = %v, want one cvc-assertion charge", got)
+	}
+	const want = `instance.xml:1:1: [cvc-assertion] the element root is not ·valid· with respect to assertion 1 of 1 in the {assertions} of the ·governing type definition· RootType, whose {test} is "@x > 300", which did not evaluate to true without raising a dynamic or type error, but cvc-assertion requires the {test} to evaluate to true`
+	if got[0].Error() != want {
+		t.Errorf("Error() = %q, want %q", got[0].Error(), want)
+	}
+}
+
 // Attributes are compared TYPED: as xs:int values 10 <= 9 is false and
 // charged, where the xs:string comparison an untyped reading makes holds.
 func TestAssertionComparesTypedValues(t *testing.T) {
