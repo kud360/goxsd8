@@ -2,8 +2,10 @@ package codec
 
 import (
 	"errors"
+	"fmt"
 	"strconv"
 
+	"github.com/kud360/goxsd8/xsd"
 	"github.com/kud360/goxsd8/xsderr"
 )
 
@@ -48,13 +50,14 @@ func (e *DeclineError) Loc() (xsderr.Loc, bool) {
 // a complex type's simple content, its {content type}'s {simple type
 // definition}, and of a list type's {item type definition} or a union's basic
 // member, that item or member, by its QName where it has one, each with its
-// schema Loc, which is the zero Loc for a built-in component; for a wildcard
-// particle, it names the particle as [Decode]'s item 5 states; for xsi:type, it
-// names the element and the type the xsi:type names. For the second it names
-// the construct, then the declining element declaration, attribute use or
-// simple type, by its QName where it has one, with its schema Loc, which is
-// the zero Loc for a built-in component, and, for a value with no canonical
-// representation, the Go path of its field from T and its value.
+// schema Loc; for a wildcard particle, it names the particle as [Decode]'s item
+// 5 states; for xsi:type, it names the element and the type the xsi:type names.
+// For the second it names the construct, then the declining element
+// declaration, attribute use or simple type, by its QName where it has one,
+// with its schema Loc, and, for a value with no canonical representation, the
+// Go path of its field from T and its value. A type definition named in the XML
+// Schema namespace whose schema Loc is the zero Loc is named by its QName
+// alone, in place of the schema Loc the sentences above give it.
 func (e *DeclineError) Error() string {
 	text := "codec does not decode " + e.construct.name() + ": " + e.detail +
 		"; a decoder refusal, not a schema or instance fault"
@@ -230,4 +233,23 @@ func (e *DeclineError) at(loc xsderr.Loc) *DeclineError {
 	charged := *e
 	charged.loc = &loc
 	return &charged
+}
+
+// located reports whether a message names td with its schema Loc, which
+// [DeclineError.Error]'s doc states: every type definition but one named in
+// the XML Schema namespace whose Loc is the zero Loc, whose location such a
+// message would print as "?".
+func located(td xsd.TypeDefinition) bool {
+	return td.Name().Space != xsd.XMLSchemaNS || td.Loc() != (xsderr.Loc{})
+}
+
+// definedAt returns lead, then "defined at" and td's schema Loc, where
+// located(td) holds, and otherwise "": every subject that renders a type's Loc
+// renders it here, and one naming td by its Loc alone names it by its QName
+// where located(td) does not hold (typeSubject, complexSubject).
+func definedAt(lead string, td xsd.TypeDefinition) string {
+	if !located(td) {
+		return ""
+	}
+	return fmt.Sprintf("%sdefined at %s", lead, td.Loc())
 }

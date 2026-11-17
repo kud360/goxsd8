@@ -391,9 +391,9 @@ func simpleEncodes(r xsd.TypeResolver, st *xsd.SimpleType, owner string) error {
 }
 
 // simpleSubject names the simple type st of the declaration owner names, by
-// its QName where it has one, and its schema Loc.
+// its QName where it has one, and its schema Loc where located(st) holds.
 func simpleSubject(st *xsd.SimpleType, owner string) string {
-	return fmt.Sprintf("simple type %s defined at %s", typeLabel(st, owner), st.Loc())
+	return "simple type " + typeLabel(st, owner) + definedAt(" ", st)
 }
 
 // encoder is one Append's write of a document: out, the document so far,

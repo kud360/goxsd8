@@ -376,9 +376,10 @@ func TestDecodeNillableRoot(t *testing.T) {
 // TestDecodeNillableMismatch pins item 6 at Nillable: the bare R of a
 // nillable document element, nilled or not, is no type codegen emits for it,
 // so no nilled root decodes into a value of R indistinguishable from an empty
-// one; nor is a Nillable whose arms no WithBranches supplies, or whose
-// Attributes is no struct of the attribute fields. Each is ErrTypeMismatch
-// from Decode and CheckDecode alike, and nothing is filled.
+// one; nor is a Nillable whose arms no WithBranches supplies, whose Content
+// is a pointer to R, named as one, or whose Attributes is no struct of the
+// attribute fields. Each is ErrTypeMismatch from Decode and CheckDecode
+// alike, and nothing is filled.
 func TestDecodeNillableMismatch(t *testing.T) {
 	type wrongAttributes struct{ J string }
 	rows := []struct {
@@ -397,6 +398,9 @@ func TestDecodeNillableMismatch(t *testing.T) {
 			"codec: T is not the type codegen emits for the document element: T is codec.nilRootComplex, which is not an interface of one unexported method, codegen's Nillable"},
 		{"no arms supplied", nilRootSimpleSchema, "", "5", into[nillable[nilRootSimple, struct{}]](),
 			"codec: T is not the type codegen emits for the document element: no WithBranches supplies the arms of "},
+		{"a pointer R in Content", nilRootComplexSchema, "", "<s:a>x</s:a>",
+			into[nillable[*nilRootComplex, nilRootComplexAttributes]](nilArms[*nilRootComplex, nilRootComplexAttributes]()),
+			"codec: T is not the type codegen emits for the document element: *codec.nilRootComplex is a pointer to codec.nilRootComplex, which matches; use codec.nilRootComplex in its place"},
 		{"Attributes of no attribute field", nilRootComplexSchema, "", "<s:a>x</s:a>", into[nillable[nilRootComplex, wrongAttributes]](nilArms[nilRootComplex, wrongAttributes]()),
 			"codec: T is not the type codegen emits for the document element: field 0 of codec.wrongAttributes is J string where codegen emits K string"},
 		{"a field's Content of the wrong Go type", nilAltSchema, "", `<s:a>v</s:a>`,

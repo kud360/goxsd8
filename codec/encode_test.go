@@ -369,8 +369,8 @@ func TestAppendPlainErrors(t *testing.T) {
 	_, err = Append(nil, schema, strict.New(), sname("abs"), strRoot("x"))
 	plainError(t, err, "{abstract} true")
 	_, err = Append(nil, schema, strict.New(), rootName, &shapes{})
-	if !errors.Is(err, ErrTypeMismatch) {
-		t.Errorf("Append[*shapes] = %v, want ErrTypeMismatch", err)
+	if want := ErrTypeMismatch.Error() + ": *codec.shapes is a pointer to codec.shapes, which matches; use codec.shapes in its place"; !errors.Is(err, ErrTypeMismatch) || err.Error() != want {
+		t.Errorf("Append[*shapes] = %v, want ErrTypeMismatch %q", err, want)
 	}
 	_, err = Append(nil, schema, strict.New(), rootName, struct{ One string }{})
 	if !errors.Is(err, ErrTypeMismatch) {
