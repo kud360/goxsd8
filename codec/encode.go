@@ -62,7 +62,7 @@ import (
 // verdict.
 //
 // Items 2 to 5 read no value; [CheckAppend] returns them for a declaration
-// and T before any value exists.
+// and T.
 func Append[T any](dst []byte, schema *xsd.Schema, backend value.Backend, name xsd.QName, v T) ([]byte, error) {
 	if schema == nil {
 		return dst, errors.New("codec: Append: nil *xsd.Schema")
@@ -92,18 +92,16 @@ func Append[T any](dst []byte, schema *xsd.Schema, backend value.Backend, name x
 	return e.out, nil
 }
 
-// CheckAppend returns, reading no value, the error of the first of items 2
-// to 5 of [Append]'s doc that applies to a value of T encoded as the document
-// element of the top-level element declaration name in schema, or nil when
-// none applies; for a nil schema it returns a plain error. Items 2 and 3 are
-// plain errors, item 4 is the *DeclineError of a construct outside the slice
-// the package doc's "# What encodes" states, and item 5's error is one
-// errors.Is reports as [ErrTypeMismatch]. Items 6 and 7 and a fault of the
-// backend depend on the value, so they lie outside CheckAppend's answer, and
-// nil leaves them open. The backend is no input, so a nil backend, which
-// Append's item 1 refuses, lies outside it too. A non-nil error is the one
-// Append returns, of equal Error text and class, for every value of T and
-// every non-nil backend.
+// CheckAppend returns the error of the first of items 2 to 5 of [Append]'s
+// doc that applies to a value of T encoded as the document element of the
+// top-level element declaration name in schema, in the class that item
+// states, or nil when none applies; for a nil schema it returns a plain
+// error. Item 4's slice is the one the package doc's "# What encodes" states.
+// Items 6 and 7 and a fault of the backend depend on the value, so they lie
+// outside CheckAppend's answer, and nil leaves them open. The backend is no
+// input, so a nil backend, which Append's item 1 refuses, lies outside it
+// too. A non-nil error is the one Append returns, of equal Error text and
+// class, for every value of T and every non-nil backend.
 func CheckAppend[T any](schema *xsd.Schema, name xsd.QName) error {
 	if schema == nil {
 		return errors.New("codec: CheckAppend: nil *xsd.Schema")
