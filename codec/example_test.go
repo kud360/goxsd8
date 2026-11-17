@@ -51,6 +51,54 @@ func ExampleDecode() {
 	// order.xml:2:3 cvc-complex-content
 }
 
+// ExampleAppend decodes README's order.xml as ExampleDecode does and encodes
+// the decoded value back, passing Append the Order that Decode's *Order points
+// to and naming the document element by its expanded name. It then encodes an
+// xs:double element of an inline schema, whose value Append writes in its
+// canonical representation.
+func ExampleAppend() {
+	readme := filepath.Join("..", "testdata", "readme")
+	schema, err := parser.Parse("order.xsd", parser.WithResolver(loader.Dir(readme)))
+	if err != nil {
+		log.Fatal(err)
+	}
+	data, err := os.ReadFile(filepath.Join(readme, "order.xml"))
+	if err != nil {
+		log.Fatal(err)
+	}
+	o, err := codec.Decode[order.Order](schema, strict.New(), data, codec.WithURI("order.xml"))
+	if err != nil {
+		log.Fatal(err)
+	}
+	out, err := codec.Append(nil, schema, strict.New(), xsd.QName{Space: "urn:o", Local: "order"}, *o)
+	if err != nil {
+		log.Fatal(err)
+	}
+	fmt.Println(string(out))
+
+	const doc = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" targetNamespace="urn:s">
+  <xs:element name="d" type="xs:double"/>
+</xs:schema>`
+	resolve := loader.ResolverFunc(func(_, location string) (io.ReadCloser, string, error) {
+		if location != "s.xsd" {
+			return nil, "", fmt.Errorf("no document %q", location)
+		}
+		return io.NopCloser(strings.NewReader(doc)), location, nil
+	})
+	schema, err = parser.Parse("s.xsd", parser.WithResolver(resolve))
+	if err != nil {
+		log.Fatal(err)
+	}
+	out, err = codec.Append(nil, schema, strict.New(), xsd.QName{Space: "urn:s", Local: "d"}, 1.5)
+	if err != nil {
+		log.Fatal(err)
+	}
+	fmt.Println(string(out))
+	// Output:
+	// <order xmlns="urn:o" kind="x"><item>a</item><item>b</item></order>
+	// <d xmlns="urn:s">1.5E0</d>
+}
+
 // ExampleCheckDecode runs CheckDecode once at start-up, before any instance
 // arrives, on an inline schema's two top-level element declarations: s:r,
 // which decodes into r, and s:n, whose {nillable} true beside two governing

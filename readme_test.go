@@ -6,6 +6,7 @@ import (
 	"go/ast"
 	goparser "go/parser"
 	"go/token"
+	"io"
 	"log"
 	"os"
 	"path/filepath"
@@ -34,8 +35,10 @@ import (
 // It holds README's code-generation snippet to readmeCodegen's body, which
 // compiles with this file, and the xsd_gen.go README shows to the file that
 // running readmeCodegen writes for order.xsd, both byte for byte as a fence's
-// body. It holds README's decode snippet to readmeDecode's body the same way,
-// and runs it on order.xml.
+// body. It holds README's decode and encode snippets to readmeDecode's and
+// readmeAppend's bodies the same way, runs readmeDecode on order.xml and
+// readmeAppend on the Order it decodes, and holds what each prints to the
+// output its snippet's last comment states.
 func TestReadmeFixtures(t *testing.T) {
 	readme, err := os.ReadFile("README.md")
 	if err != nil {
@@ -66,13 +69,17 @@ func TestReadmeFixtures(t *testing.T) {
 	if want := "```go\n" + snippet + "```\n"; !strings.Contains(string(readme), want) {
 		t.Errorf("README.md does not show readmeCodegen's body as\n%s", want)
 	}
-	snippet, err = funcBody("readme_test.go", "readmeDecode")
-	if err != nil {
-		t.Fatal(err)
+	for _, name := range []string{"readmeDecode", "readmeAppend"} {
+		snippet, err = funcBody("readme_test.go", name)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if want := "```go\n" + snippet + "```\n"; !strings.Contains(string(readme), want) {
+			t.Errorf("README.md does not show %s's body as\n%s", name, want)
+		}
 	}
-	if want := "```go\n" + snippet + "```\n"; !strings.Contains(string(readme), want) {
-		t.Errorf("README.md does not show readmeDecode's body as\n%s", want)
-	}
+	// Read before the test leaves the checkout's root.
+	decodePrints, appendPrints := lastComment(t, "readmeDecode"), lastComment(t, "readmeAppend")
 
 	// The program parses order.xsd with testdata/readme as its working
 	// directory, so its Loc reads order.xsd:3:3.
@@ -104,7 +111,58 @@ func TestReadmeFixtures(t *testing.T) {
 	// is the golden copy of the file readmeCodegen writes, which
 	// codec.TestDecodeReadmeOrder holds to codegen's output.
 	t.Chdir(filepath.Join(wd, "testdata", "readme"))
-	readmeDecode(schema, strict.New())
+	if got := stdout(t, func() { readmeDecode(schema, strict.New()) }); got != decodePrints {
+		t.Errorf("readmeDecode prints %q, its last comment states %q", got, decodePrints)
+	}
+	data, err := os.ReadFile("order.xml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	o, err := codec.Decode[order.Order](schema, strict.New(), data, codec.WithURI("order.xml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := stdout(t, func() { readmeAppend(schema, strict.New(), o) }); got != appendPrints {
+		t.Errorf("readmeAppend prints %q, its last comment states %q", got, appendPrints)
+	}
+}
+
+// lastComment returns the text after "// " on the last line of the function
+// name declares in readme_test.go, a newline appended: the output README's
+// snippet states that line prints.
+func lastComment(t *testing.T, name string) string {
+	t.Helper()
+	body, err := funcBody("readme_test.go", name)
+	if err != nil {
+		t.Fatal(err)
+	}
+	lines := strings.Split(strings.TrimSuffix(body, "\n"), "\n")
+	_, comment, ok := strings.Cut(lines[len(lines)-1], "// ")
+	if !ok {
+		t.Fatalf("%s's last line carries no comment", name)
+	}
+	return comment + "\n"
+}
+
+// stdout returns what f writes to os.Stdout.
+func stdout(t *testing.T, f func()) string {
+	t.Helper()
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	saved := os.Stdout
+	os.Stdout = w
+	defer func() { os.Stdout = saved }()
+	f()
+	if err := w.Close(); err != nil {
+		t.Fatal(err)
+	}
+	out, err := io.ReadAll(r)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(out)
 }
 
 // TestReadmeSharedDocument holds README's two-target gen example: note.xsd,
@@ -242,6 +300,20 @@ func readmeDecode(schema *xsd.Schema, backend value.Backend) {
 		log.Fatal(err)
 	}
 	fmt.Println(o.Item, *o.Kind) // [a b] x
+}
+
+// readmeAppend is README's encode snippet: README shows its body byte for
+// byte, each line less one leading tab. schema and backend stand for the
+// program's variables of those names, and o for the *order.Order
+// readmeDecode's snippet decodes.
+func readmeAppend(schema *xsd.Schema, backend value.Backend, o *order.Order) {
+	// Append takes Decode's *o dereferenced and order.xml's document element
+	// {urn:o}order.
+	out, err := codec.Append(nil, schema, backend, xsd.QName{Space: "urn:o", Local: "order"}, *o)
+	if err != nil {
+		log.Fatal(err)
+	}
+	fmt.Println(string(out)) // <order xmlns="urn:o" kind="x"><item>a</item><item>b</item></order>
 }
 
 // funcBody returns the statements of the function name declares in file, the
