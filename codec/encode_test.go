@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"math/big"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -45,7 +46,7 @@ func accepts(t *testing.T, schema *xsd.Schema, data []byte) {
 // Decode's T equal to v by eq, and returns the bytes.
 func roundTrip[T any](t *testing.T, schema *xsd.Schema, name xsd.QName, v T, want string, eq func(a, b T) bool) []byte {
 	t.Helper()
-	data, err := Append(nil, schema, strict.New(), name, v)
+	data, err := appendChecked(t, nil, schema, strict.New(), name, v)
 	if err != nil {
 		t.Fatalf("Append: %v", err)
 	}
@@ -61,6 +62,46 @@ func roundTrip[T any](t *testing.T, schema *xsd.Schema, name xsd.QName, v T, wan
 		t.Fatalf("Decode(%s) = %#v, want %#v", data, *got, v)
 	}
 	return data
+}
+
+// appendChecked returns Append's answer for its arguments and fails t
+// unless CheckAppend[T]'s answer for schema and name agrees with it: a
+// non-nil CheckAppend error is Append's, of equal Error text and equal class
+// (staticClass), and a nil one leaves Append nil, an item 6 or item 7 error
+// or a fault of backend: nil, a plain error without item 2's or item 3's
+// text, or item 7's decline.
+func appendChecked[T any](t *testing.T, dst []byte, schema *xsd.Schema, backend value.Backend, name xsd.QName, v T) ([]byte, error) {
+	t.Helper()
+	out, err := Append(dst, schema, backend, name, v)
+	checked := CheckAppend[T](schema, name)
+	if checked == nil {
+		class := staticClass(err)
+		static := class == "plain" && (strings.HasPrefix(err.Error(), "codec: no top-level element declaration") || strings.Contains(err.Error(), "{abstract} true"))
+		if static || err != nil && class != "plain" && class != "decline "+constructNoCanonical.name() {
+			t.Errorf("CheckAppend = nil, but Append returned %v, %s", err, class)
+		}
+		return out, err
+	}
+	if err == nil || err.Error() != checked.Error() || staticClass(err) != staticClass(checked) {
+		t.Errorf("CheckAppend = %v, %s; Append returned %v, %s", checked, staticClass(checked), err, staticClass(err))
+	}
+	return out, err
+}
+
+// staticClass names err's class among Append's errors: "decline " and its
+// construct for a *DeclineError, "mismatch" for an error errors.Is reports as
+// ErrTypeMismatch, "plain" for every other non-nil error, and "nil".
+func staticClass(err error) string {
+	var d *DeclineError
+	switch {
+	case err == nil:
+		return "nil"
+	case errors.As(err, &d):
+		return "decline " + d.Construct().String()
+	case errors.Is(err, ErrTypeMismatch):
+		return "mismatch"
+	}
+	return "plain"
 }
 
 // deepEqual is reflect.DeepEqual over T.
@@ -234,7 +275,7 @@ func TestAppendDouble(t *testing.T) {
 		})
 	}
 	t.Run("not Go's own form", func(t *testing.T) {
-		data, err := Append(nil, schema, strict.New(), sname("d"), dblRoot(1))
+		data, err := appendChecked(t, nil, schema, strict.New(), sname("d"), dblRoot(1))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -328,31 +369,32 @@ func TestAppendGroupRef(t *testing.T) {
 func TestAppendDst(t *testing.T) {
 	schema := schemaOf(t, encodeSchema)
 	dst := []byte("pre")
-	got, err := Append(dst, schema, strict.New(), sname("str"), strRoot("v"))
+	got, err := appendChecked(t, dst, schema, strict.New(), sname("str"), strRoot("v"))
 	if err != nil || string(got) != `pre<str xmlns="urn:s">v</str>` {
 		t.Errorf("Append(pre) = %q, %v", got, err)
 	}
-	got, err = Append(dst, schema, strict.New(), sname("p"), dblRoot(1))
+	got, err = appendChecked(t, dst, schema, strict.New(), sname("p"), dblRoot(1))
 	if err == nil || string(got) != "pre" || len(got) != 3 {
 		t.Errorf("a declined Append(pre) = %q, %v; want pre and an error", got, err)
 	}
 }
 
-// plainError fails t unless err is a plain error of Append's doc: no
-// *DeclineError, wrapping neither ErrTypeMismatch nor
-// errors.ErrUnsupported, whose text holds each of want.
+// plainError fails t unless err, Append's or CheckAppend's, is a plain
+// error of Append's doc: no *DeclineError, wrapping neither
+// ErrTypeMismatch nor errors.ErrUnsupported, whose text holds each of
+// want.
 func plainError(t *testing.T, err error, want ...string) {
 	t.Helper()
 	if err == nil {
-		t.Fatal("Append returned no error")
+		t.Fatal("no error returned, want a plain error")
 	}
 	var d *DeclineError
 	if errors.As(err, &d) || errors.Is(err, errors.ErrUnsupported) || errors.Is(err, ErrTypeMismatch) {
-		t.Fatalf("Append returned %v, want a plain error", err)
+		t.Fatalf("returned %v, want a plain error", err)
 	}
 	for _, w := range want {
 		if !strings.Contains(err.Error(), w) {
-			t.Errorf("Append's error %q does not hold %q", err, w)
+			t.Errorf("error %q does not hold %q", err, w)
 		}
 	}
 }
@@ -364,18 +406,62 @@ func TestAppendPlainErrors(t *testing.T) {
 	plainError(t, err, "nil *xsd.Schema")
 	_, err = Append[shapes](nil, schema, nil, rootName, shapes{})
 	plainError(t, err, "nil value.Backend")
-	_, err = Append[shapes](nil, schema, strict.New(), sname("none"), shapes{})
+	_, err = appendChecked[shapes](t, nil, schema, strict.New(), sname("none"), shapes{})
 	plainError(t, err, "{urn:s}none")
-	_, err = Append(nil, schema, strict.New(), sname("abs"), strRoot("x"))
+	_, err = appendChecked(t, nil, schema, strict.New(), sname("abs"), strRoot("x"))
 	plainError(t, err, "{abstract} true")
-	_, err = Append(nil, schema, strict.New(), rootName, &shapes{})
+	_, err = appendChecked(t, nil, schema, strict.New(), rootName, &shapes{})
 	if want := ErrTypeMismatch.Error() + ": *codec.shapes is a pointer to codec.shapes, which matches; use codec.shapes in its place"; !errors.Is(err, ErrTypeMismatch) || err.Error() != want {
 		t.Errorf("Append[*shapes] = %v, want ErrTypeMismatch %q", err, want)
 	}
-	_, err = Append(nil, schema, strict.New(), rootName, struct{ One string }{})
+	_, err = appendChecked(t, nil, schema, strict.New(), rootName, struct{ One string }{})
 	if !errors.Is(err, ErrTypeMismatch) {
 		t.Errorf("Append[struct{One string}] = %v, want ErrTypeMismatch", err)
 	}
+}
+
+// TestCheckAppend pins CheckAppend's answers by Append's items: a plain
+// error for a nil schema; item 4's decline for an xs:integer declaration and
+// T big.Int, which CheckDecode accepts; nil for README's order.xsd and
+// order.Order, whose zero value Append refuses by item 6, and item 5's
+// ErrTypeMismatch for *order.Order; item 2's and item 3's plain errors; and
+// item 3 before item 4 on an abstract xs:boolean declaration. appendChecked
+// holds each answer to Append's.
+func TestCheckAppend(t *testing.T) {
+	schema := schemaOf(t, `<xs:element name="i" type="xs:integer"/><xs:element name="abs" type="xs:string" abstract="true"/>`+
+		`<xs:element name="absb" type="xs:boolean" abstract="true"/>`)
+	plainError(t, CheckAppend[string](nil, sname("i")), "codec: CheckAppend: nil *xsd.Schema")
+
+	if err := CheckDecode[big.Int](schema, sname("i")); err != nil {
+		t.Fatalf("CheckDecode[big.Int] = %v, want nil", err)
+	}
+	err := CheckAppend[big.Int](schema, sname("i"))
+	_ = asDecline(t, err, "codec does not encode an atomic simple type whose primitive is other than xs:string or xs:double: ")
+	_, _ = appendChecked(t, nil, schema, strict.New(), sname("i"), big.Int{})
+
+	plainError(t, CheckAppend[string](schema, sname("none")), "codec: no top-level element declaration has the expanded name", "{urn:s}none")
+	_, _ = appendChecked(t, nil, schema, strict.New(), sname("none"), "x")
+	plainError(t, CheckAppend[string](schema, sname("abs")), "{abstract} true")
+	_, _ = appendChecked(t, nil, schema, strict.New(), sname("abs"), "x")
+	plainError(t, CheckAppend[string](schema, sname("absb")), "{abstract} true")
+	_, _ = appendChecked(t, nil, schema, strict.New(), sname("absb"), "x")
+
+	readme := filepath.Join("..", "testdata", "readme")
+	orderSchema, err := parser.Parse("order.xsd", parser.WithResolver(loader.Dir(readme)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	name := xsd.QName{Space: "urn:o", Local: "order"}
+	if err := CheckAppend[order.Order](orderSchema, name); err != nil {
+		t.Errorf("CheckAppend[order.Order] = %v, want nil", err)
+	}
+	_, _ = appendChecked(t, nil, orderSchema, strict.New(), name, order.Order{})
+	err = CheckAppend[*order.Order](orderSchema, name)
+	if !errors.Is(err, ErrTypeMismatch) {
+		t.Errorf("CheckAppend[*order.Order] = %v, want ErrTypeMismatch", err)
+	}
+	_, _ = appendChecked(t, nil, orderSchema, strict.New(), name, &order.Order{})
+	_, _ = appendChecked(t, nil, orderSchema, strict.New(), name, (*order.Order)(nil))
 }
 
 // TestAppendInvalidValues pins item 6 of Append's doc: a plain error naming
@@ -406,12 +492,12 @@ func TestAppendInvalidValues(t *testing.T) {
 		{"an attribute before an earlier field's element", shapes{One: "\x00", Tok: "  t", Req: "\x01"}, []string{"shapes.Req"}},
 	} {
 		t.Run(row.name, func(t *testing.T) {
-			_, err := Append(nil, schema, strict.New(), rootName, row.v)
+			_, err := appendChecked(t, nil, schema, strict.New(), rootName, row.v)
 			plainError(t, err, row.want...)
 		})
 	}
 	t.Run("a token attribute not collapsed", func(t *testing.T) {
-		_, err := Append(nil, schema, strict.New(), sname("ta"), tokenAttr{T: "  a  b"})
+		_, err := appendChecked(t, nil, schema, strict.New(), sname("ta"), tokenAttr{T: "  a  b"})
 		plainError(t, err, "tokenAttr.T", `form "a b"`)
 	})
 	t.Run("a repeated field outside its occurrence", func(t *testing.T) {
@@ -420,29 +506,29 @@ func TestAppendInvalidValues(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		_, err = Append(nil, orderSchema, strict.New(), xsd.QName{Space: "urn:o", Local: "order"}, order.Order{})
+		_, err = appendChecked(t, nil, orderSchema, strict.New(), xsd.QName{Space: "urn:o", Local: "order"}, order.Order{})
 		plainError(t, err, "Order.Item holds 0 items", "1..unbounded")
 	})
 	t.Run("an xs:double a bound rejects", func(t *testing.T) {
-		_, err := Append(nil, schema, strict.New(), sname("np"), dblRoot(1))
+		_, err := appendChecked(t, nil, schema, strict.New(), sname("np"), dblRoot(1))
 		plainError(t, err, "dblRoot", "{urn:s}nonPositive")
 		if rule, _ := xsderr.RuleOf(err); rule != "cvc-maxInclusive-valid" {
 			t.Errorf("rule %q, want cvc-maxInclusive-valid", rule)
 		}
 	})
 	t.Run("an xs:string a pattern rejects", func(t *testing.T) {
-		_, err := Append(nil, schema, strict.New(), sname("oa"), strRoot("b"))
+		_, err := appendChecked(t, nil, schema, strict.New(), sname("oa"), strRoot("b"))
 		plainError(t, err, "strRoot", "{urn:s}onlyA")
 		if rule, _ := xsderr.RuleOf(err); rule != "cvc-pattern-valid" {
 			t.Errorf("rule %q, want cvc-pattern-valid", rule)
 		}
 	})
 	t.Run("item 6 after an earlier item 7", func(t *testing.T) {
-		_, err := Append(nil, schema, strict.New(), sname("order2"), order2{P: 1, Np: 1})
+		_, err := appendChecked(t, nil, schema, strict.New(), sname("order2"), order2{P: 1, Np: 1})
 		plainError(t, err, "order2.Np")
 	})
 	t.Run("an attribute's item 6 before its element's", func(t *testing.T) {
-		_, err := Append(nil, schema, strict.New(), sname("order2"), order2{P: 1, Np: 1, Oa: str("b")})
+		_, err := appendChecked(t, nil, schema, strict.New(), sname("order2"), order2{P: 1, Np: 1, Oa: str("b")})
 		plainError(t, err, "order2.Oa")
 	})
 }
@@ -497,9 +583,9 @@ func TestAppendNoCanonical(t *testing.T) {
 			var err error
 			switch v := row.v.(type) {
 			case dblRoot:
-				_, err = Append(nil, schema, row.backend, sname(row.elem), v)
+				_, err = appendChecked(t, nil, schema, row.backend, sname(row.elem), v)
 			case strRoot:
-				_, err = Append(nil, schema, row.backend, sname(row.elem), v)
+				_, err = appendChecked(t, nil, schema, row.backend, sname(row.elem), v)
 			}
 			d := asDecline(t, err, "codec does not encode a value with no canonical representation: ")
 			for _, w := range row.want {
@@ -521,22 +607,22 @@ func TestAppendNoCanonical(t *testing.T) {
 // error naming the value's Go path.
 func TestAppendBackendFaults(t *testing.T) {
 	schema := schemaOf(t, encodeSchema)
-	_, err := Append(nil, schema, doubleRejectingParse, sname("d"), dblRoot(1))
+	_, err := appendChecked(t, nil, schema, doubleRejectingParse, sname("d"), dblRoot(1))
 	plainError(t, err, "dblRoot", `doubleRep form "1E+00"`, "rejected")
-	_, err = Append(nil, schema, noMappings{}, sname("d"), dblRoot(1))
+	_, err = appendChecked(t, nil, schema, noMappings{}, sname("d"), dblRoot(1))
 	plainError(t, err, "dblRoot", "no mapping governing")
-	_, err = Append(nil, schema, noMappings{}, sname("str"), strRoot("v"))
+	_, err = appendChecked(t, nil, schema, noMappings{}, sname("str"), strRoot("v"))
 	plainError(t, err, "strRoot")
 }
 
-// asDecline fails t unless err is an Append *DeclineError that wraps
+// asDecline fails t unless err is an Append or CheckAppend *DeclineError that wraps
 // errors.ErrUnsupported, charged to no Loc, whose text opens with prefix,
 // and returns it.
 func asDecline(t *testing.T, err error, prefix string) *DeclineError {
 	t.Helper()
 	var d *DeclineError
 	if !errors.As(err, &d) || !errors.Is(err, errors.ErrUnsupported) {
-		t.Fatalf("Append returned %v, want a *DeclineError wrapping errors.ErrUnsupported", err)
+		t.Fatalf("returned %v, want a *DeclineError wrapping errors.ErrUnsupported", err)
 	}
 	if !strings.HasPrefix(err.Error(), prefix) || !strings.HasSuffix(err.Error(), "; an encoder refusal, not a schema or value fault") {
 		t.Errorf("decline %q does not open with %q and close as an encoder refusal", err, prefix)
@@ -599,7 +685,7 @@ func TestAppendVacuousParticle(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			_, err = Append(nil, replacedSchema(t, parsed, ct), strict.New(), rootName, struct{}{})
+			_, err = appendChecked(t, nil, replacedSchema(t, parsed, ct), strict.New(), rootName, struct{}{})
 			_ = asDecline(t, err, "codec does not encode a particle with {max occurs} 0: ")
 		})
 	}
@@ -675,15 +761,15 @@ func TestAppendDeclines(t *testing.T) {
 		{"particle type table", "an element declaration with a {type table}", sequence(`<xs:element name="a" type="xs:string"><xs:alternative test="@b" type="xs:token"/></xs:element>`)},
 		{"particle identity constraint", "an element declaration with {identity-constraint definitions}", sequence(`<xs:element name="a" type="xs:string"><xs:unique name="u%[1]s"><xs:selector xpath="."/><xs:field xpath="."/></xs:unique></xs:element>`)},
 	}
-	appendOf := map[string]func(dst []byte, schema *xsd.Schema, name xsd.QName) ([]byte, error){
-		"abstract type": func(dst []byte, schema *xsd.Schema, name xsd.QName) ([]byte, error) {
-			return Append(dst, schema, strict.New(), name, abstractMember{A: "a", C: "c", X: "x"})
+	appendOf := map[string]func(t *testing.T, dst []byte, schema *xsd.Schema, name xsd.QName) ([]byte, error){
+		"abstract type": func(t *testing.T, dst []byte, schema *xsd.Schema, name xsd.QName) ([]byte, error) {
+			return appendChecked(t, dst, schema, strict.New(), name, abstractMember{A: "a", C: "c", X: "x"})
 		},
-		"complex assertions": func(dst []byte, schema *xsd.Schema, name xsd.QName) ([]byte, error) {
-			return Append(dst, schema, strict.New(), name, struct{ A string }{A: "a"})
+		"complex assertions": func(t *testing.T, dst []byte, schema *xsd.Schema, name xsd.QName) ([]byte, error) {
+			return appendChecked(t, dst, schema, strict.New(), name, struct{ A string }{A: "a"})
 		},
-		"restricted complex assertions": func(dst []byte, schema *xsd.Schema, name xsd.QName) ([]byte, error) {
-			return Append(dst, schema, strict.New(), name, struct{ A string }{A: "a"})
+		"restricted complex assertions": func(t *testing.T, dst []byte, schema *xsd.Schema, name xsd.QName) ([]byte, error) {
+			return appendChecked(t, dst, schema, strict.New(), name, struct{ A string }{A: "a"})
 		},
 	}
 	seen := map[string]Construct{}
@@ -693,9 +779,9 @@ func TestAppendDeclines(t *testing.T) {
 			dst := []byte("pre")
 			var constructs []Construct
 			for _, name := range []string{"r", "q"} {
-				got, err := Append(dst, schema, strict.New(), sname(name), struct{}{})
+				got, err := appendChecked(t, dst, schema, strict.New(), sname(name), struct{}{})
 				if v, has := appendOf[row.name]; has {
-					got, err = v(dst, schema, sname(name))
+					got, err = v(t, dst, schema, sname(name))
 				}
 				d := asDecline(t, err, "codec does not encode "+row.construct+": ")
 				if string(got) != "pre" {

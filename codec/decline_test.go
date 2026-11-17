@@ -550,7 +550,7 @@ func TestDeclineErrorTextUnlocated(t *testing.T) {
 		{"at", "simple type {http://www.w3.org/2001/XMLSchema}boolean"},
 		{"u", "simple type {urn:s}st defined at s.xsd:1:465"},
 	} {
-		_, err := Append(nil, schema, strict.New(), sname(row.elem), struct{}{})
+		_, err := appendChecked(t, nil, schema, strict.New(), sname(row.elem), struct{}{})
 		if want := prefix + row.want + tail; err == nil || err.Error() != want {
 			t.Errorf("Append(%s) = %v, want %q", row.elem, err, want)
 		}
