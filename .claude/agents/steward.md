@@ -32,8 +32,7 @@ package's `doc.go` contract against what its code now does.
 **Placement.** Is anything living in the wrong package — a type whose
 methods all serve another package's concern? Are interfaces consumer-side
 and minimal (T3), or have they accreted methods only one implementation
-needs? Do the leaves stay leaves (`xsderr`, `xsd` import nothing from the
-module), and does anything in the LIBRARY tier import repo infrastructure
+needs? Do the leaves stay leaves (PRINCIPLES 1), and does anything in the LIBRARY tier import repo infrastructure
 (`conformance`, `tools/*`)? Infrastructure depending on the library, or on
 other infrastructure, is by design — ARCHITECTURE.md's two tiers.
 

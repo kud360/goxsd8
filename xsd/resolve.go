@@ -421,15 +421,16 @@ func (s *Schema) referenceWalk() componentWalk {
 // (src-resolve clause 1.1). A zero ref is absent and resolves to (nil, nil); a
 // present-but-missing ref is rejected. ctx names the referring site for the
 // message and loc positions it: the caller passes the reference's own Loc, or the
-// referring component's when that is zero (chargedAt, resolveReferences).
-func resolveTypeName(r TypeResolver, ref QName, loc xsderr.Loc, ctx string) (TypeDefinition, error) {
+// referring component's when that is zero (chargedAt, resolveReferences). hint
+// names the nearest type of the kind the caller's slot seeks (nameHint).
+func resolveTypeName(r TypeResolver, ref QName, loc xsderr.Loc, ctx string, hint nameHint) (TypeDefinition, error) {
 	if ref == (QName{}) {
 		return nil, nil
 	}
 	t, ok := r.Type(ref)
 	if !ok {
 		return nil, xsderr.New(ruleSrcResolve, loc,
-			"%s references type %s, but no type definition with that expanded name is present in the schema (src-resolve clause 1.1)", ctx, ref)
+			"%s references type %s, but no type definition with that expanded name is present in the schema%s (src-resolve clause 1.1)", ctx, ref, hint(ref))
 	}
 	return t, nil
 }
@@ -439,7 +440,9 @@ func resolveTypeName(r TypeResolver, ref QName, loc xsderr.Loc, ctx string) (Typ
 // dcl.elt.common, §3.2.2.2 dcl.att.local), exhaustively over
 // TypeDefinitionOrRef's three arms. ctx names the referring site for the message
 // and loc is the component holding the slot, where a rejection is charged when
-// the reference carries no Loc of its own (chargedAt).
+// the reference carries no Loc of its own (chargedAt). slot is the property ref
+// fills: a by-name miss names the nearest type that slot admits (admitsComplex),
+// so an attribute's type= is offered simple types only.
 //
 //   - nil is an absent {type definition}: src-resolve has nothing to resolve.
 //   - TypeDefinitionRef is the by-name arm: the src-resolve clause 1.1 lookup.
@@ -476,12 +479,16 @@ func resolveTypeName(r TypeResolver, ref QName, loc xsderr.Loc, ctx string) (Typ
 // ResolvedType's owner-of-owner branch unreachable for any schema that survived
 // finalize, rather than a silent fail-open (STYLE P3). Its ·absent·-head branch
 // stays reachable, by the §5.3 reading above.
-func (s *Schema) resolveTypeDefinitionSlot(ref TypeDefinitionOrRef, loc xsderr.Loc, ctx string) error {
+func (s *Schema) resolveTypeDefinitionSlot(ref TypeDefinitionOrRef, slot typeDefinitionSlot, loc xsderr.Loc, ctx string) error {
 	switch r := ref.(type) {
 	case nil:
 		return nil
 	case TypeDefinitionRef:
-		_, err := resolveTypeName(s, r.Name, chargedAt(r.Loc, loc), ctx)
+		hint := s.simpleTypeHint
+		if slot.admitsComplex() {
+			hint = s.typeHint
+		}
+		_, err := resolveTypeName(s, r.Name, chargedAt(r.Loc, loc), ctx, hint)
 		return err
 	case InlineTypeDefinition:
 		return nil // the descent enters it; the slot itself resolves nothing
@@ -502,30 +509,32 @@ func (s *Schema) resolveTypeDefinitionSlot(ref TypeDefinitionOrRef, loc xsderr.L
 
 // resolveElementName resolves an element-declaration reference (src-resolve
 // clause 1.3): an <element ref> {term}. A zero ref is absent and skipped; loc
-// positions a rejection (resolveTermRef). The other clause-1.3 site, a
-// {substitution group affiliations} member, is deliberately NOT routed here —
-// see resolveElementDecl for the §5.3 reason.
-func resolveElementName(r ElementResolver, ref QName, loc xsderr.Loc, ctx string) error {
+// positions a rejection and hint names the nearest element declaration
+// (resolveTermRef). The other clause-1.3 site, a {substitution group
+// affiliations} member, is deliberately NOT routed here — see
+// resolveElementDecl for the §5.3 reason.
+func resolveElementName(r ElementResolver, ref QName, loc xsderr.Loc, ctx string, hint nameHint) error {
 	if ref == (QName{}) {
 		return nil
 	}
 	if _, ok := r.Element(ref); !ok {
 		return xsderr.New(ruleSrcResolve, loc,
-			"%s references element declaration %s, but no element declaration with that expanded name is present in the schema (src-resolve clause 1.3)", ctx, ref)
+			"%s references element declaration %s, but no element declaration with that expanded name is present in the schema%s (src-resolve clause 1.3)", ctx, ref, hint(ref))
 	}
 	return nil
 }
 
 // resolveAttributeName resolves an <attribute ref> {attribute declaration}
 // reference (src-resolve clause 1.2). A zero ref is absent and skipped; loc
-// positions a rejection (resolveAttributeUse).
-func resolveAttributeName(r AttributeResolver, ref QName, loc xsderr.Loc, ctx string) error {
+// positions a rejection and hint names the nearest attribute declaration
+// (resolveAttributeUse).
+func resolveAttributeName(r AttributeResolver, ref QName, loc xsderr.Loc, ctx string, hint nameHint) error {
 	if ref == (QName{}) {
 		return nil
 	}
 	if _, ok := r.Attribute(ref); !ok {
 		return xsderr.New(ruleSrcResolve, loc,
-			"%s references attribute declaration %s, but no attribute declaration with that expanded name is present in the schema (src-resolve clause 1.2)", ctx, ref)
+			"%s references attribute declaration %s, but no attribute declaration with that expanded name is present in the schema%s (src-resolve clause 1.2)", ctx, ref, hint(ref))
 	}
 	return nil
 }
@@ -539,7 +548,7 @@ func (s *Schema) resolveModelGroupName(ref QName, loc xsderr.Loc, ctx string) er
 	}
 	if _, ok := s.modelGroupIndex[ref]; !ok {
 		return xsderr.New(ruleSrcResolve, loc,
-			"%s references model group definition %s, but no model group definition with that expanded name is present in the schema (src-resolve clause 1.5)", ctx, ref)
+			"%s references model group definition %s, but no model group definition with that expanded name is present in the schema%s (src-resolve clause 1.5)", ctx, ref, s.modelGroupHint(ref))
 	}
 	return nil
 }
@@ -562,7 +571,7 @@ func (s *Schema) resolveModelGroupName(ref QName, loc xsderr.Loc, ctx string) er
 func (s *Schema) resolveAttributeGroupRef(r AttributeGroupRef, loc xsderr.Loc, owner string) error {
 	if _, ok := s.attributeGroupIndex[r.Name]; !ok {
 		return xsderr.New(ruleSrcResolve, chargedAt(r.Loc, loc),
-			"%s references attribute group definition %s — through an <attributeGroup ref> child, or, on a complex type, the reference §3.4.2.4 synthesizes from <schema defaultAttributes> — but no attribute group definition with that expanded name is present in the schema (src-resolve clause 1.4)", owner, r.Name)
+			"%s references attribute group definition %s — through an <attributeGroup ref> child, or, on a complex type, the reference §3.4.2.4 synthesizes from <schema defaultAttributes> — but no attribute group definition with that expanded name is present in the schema%s (src-resolve clause 1.4)", owner, r.Name, s.attributeGroupHint(r.Name))
 	}
 	return nil
 }
@@ -603,7 +612,7 @@ func (s *Schema) resolveKeyref(ic IdentityConstraint) error {
 	target, ok := s.idcIndex[ref]
 	if !ok {
 		return xsderr.New(ruleSrcResolve, chargedAt(ic.referencedKey.Loc, ic.Loc()),
-			"keyref %s references identity constraint %s, but no identity-constraint definition with that expanded name is present in the schema (src-resolve clause 1.7)", ic.Name(), ref)
+			"keyref %s references identity constraint %s, but no identity-constraint definition with that expanded name is present in the schema%s (src-resolve clause 1.7)", ic.Name(), ref, s.referencedKeyHint(ref))
 	}
 	if target.Category() == IdentityConstraintKeyref {
 		return xsderr.New(ruleICProps, ic.Loc(),
@@ -678,7 +687,7 @@ func (s *Schema) resolveSimpleType(t *SimpleType) error {
 //
 // slot names the property for a rejection message ("{item type definition}").
 func (s *Schema) resolveSimpleTypeSlot(t *SimpleType, ref SimpleTypeOrRef, slot string) error {
-	if _, err := simpleTypeOfRef(s, ref, t.loc, simpleTypeLabel(t)+" "+slot); err != nil {
+	if _, err := simpleTypeOfRef(s, ref, t.loc, simpleTypeLabel(t)+" "+slot, s.simpleTypeHint); err != nil {
 		return err
 	}
 	return s.resolveSimpleType(ownedSimpleType(ref))
@@ -697,7 +706,7 @@ func (s *Schema) resolveSimpleTypeSlot(t *SimpleType, ref SimpleTypeOrRef, slot 
 func (s *Schema) resolveTermRef(t TermOrRef, loc xsderr.Loc) error {
 	switch t := t.(type) {
 	case ElementDeclarationRef:
-		return resolveElementName(s, t.Name, chargedAt(t.Loc, loc), "particle {term} <element ref>")
+		return resolveElementName(s, t.Name, chargedAt(t.Loc, loc), "particle {term} <element ref>", s.elementHint)
 	case ModelGroupRef:
 		return s.resolveModelGroupName(t.Name, chargedAt(t.Loc, loc), "particle {term} <group ref>")
 	default:
@@ -720,7 +729,7 @@ func (s *Schema) resolveAttributeUse(u AttributeUse, loc xsderr.Loc, _ string) e
 	case LocalAttributeDeclaration:
 		return nil
 	case AttributeDeclarationRef:
-		return resolveAttributeName(s, d.Name, chargedAt(d.Loc, u.chargedLoc(loc)), "attribute use <attribute ref>")
+		return resolveAttributeName(s, d.Name, chargedAt(d.Loc, u.chargedLoc(loc)), "attribute use <attribute ref>", s.attributeHint)
 	default:
 		panic("xsd: resolveAttributeUse: non-exhaustive AttributeDeclarationOrRef switch")
 	}
@@ -749,7 +758,7 @@ func (s *Schema) resolveAttributeDecl(a AttributeDeclaration) error {
 	}
 	ctx := "attribute declaration " + a.Name().String() + " {type definition}"
 	loc := chargedAt(r.Loc, a.Loc())
-	t, err := resolveTypeName(s, r.Name, loc, ctx)
+	t, err := resolveTypeName(s, r.Name, loc, ctx, s.simpleTypeHint)
 	if err != nil {
 		return err
 	}

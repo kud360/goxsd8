@@ -888,7 +888,7 @@ func (t *SimpleType) Primitive(r TypeResolver) (*SimpleType, error) {
 func (t *SimpleType) Item(r TypeResolver) (*SimpleType, error) {
 	switch d := t.derivation.(type) {
 	case ListDerivation:
-		return simpleTypeOfRef(r, d.Item, t.loc, simpleTypeLabel(t)+" {item type definition}")
+		return simpleTypeOfRef(r, d.Item, t.loc, simpleTypeLabel(t)+" {item type definition}", noHint)
 	case RestrictionDerivation:
 		base, err := t.Base(r)
 		if err != nil {
@@ -916,7 +916,7 @@ func (t *SimpleType) Members(r TypeResolver) ([]*SimpleType, error) {
 		out := make([]*SimpleType, 0, len(d.Members))
 		for i, m := range d.Members {
 			st, err := simpleTypeOfRef(r, m, t.loc,
-				fmt.Sprintf("%s {member type definitions}[%d]", simpleTypeLabel(t), i))
+				fmt.Sprintf("%s {member type definitions}[%d]", simpleTypeLabel(t), i), noHint)
 			if err != nil {
 				return nil, err
 			}
@@ -954,7 +954,7 @@ func (t *SimpleType) Base(r TypeResolver) (*SimpleType, error) {
 	if t == anySimpleType {
 		return nil, nil
 	}
-	return simpleTypeOfRef(r, t.base, t.loc, simpleTypeLabel(t)+" {base type definition}")
+	return simpleTypeOfRef(r, t.base, t.loc, simpleTypeLabel(t)+" {base type definition}", noHint)
 }
 
 // IsAnySimpleType reports whether t is xs:anySimpleType, the root of the

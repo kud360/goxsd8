@@ -5,6 +5,7 @@ import (
 	"slices"
 
 	"github.com/kud360/goxsd8/icpath"
+	"github.com/kud360/goxsd8/internal/nearname"
 	"github.com/kud360/goxsd8/xsd"
 	"github.com/kud360/goxsd8/xsderr"
 )
@@ -194,7 +195,9 @@ func (p *producer) produceIdentityConstraint(el *Element, category xsd.IdentityC
 //     key or unique) — a <keyref ref="…"> demands a keyref.
 //
 // A ref that names no definition of the assembly is charged src-resolve clause
-// 1.7 (§3.17.6.2), positioned at the referring element's ref attribute. Clause 5 is decided
+// 1.7 (§3.17.6.2), positioned at the referring element's ref attribute and
+// naming the nearest definition of the referring element's own category, the
+// one clause 5 would admit (identityConstraintHint). Clause 5 is decided
 // against the pre-scan index BEFORE the target is built, so a reference that is
 // both miscategorized and names a malformed definition reports its own local
 // violation rather than the target's (one deterministic first failure, STYLE D1).
@@ -211,13 +214,27 @@ func (p *producer) referencedIdentityConstraint(el *Element, category xsd.Identi
 	src, ok := p.symbols.identityConstraints[qn]
 	if !ok {
 		return xsd.IdentityConstraint{}, xsderr.New(ruleSrcResolve, ref.Loc(),
-			"<%s ref=%q> resolves to no identity-constraint definition in the schema (src-resolve clause 1.7)", local, qn)
+			"<%s ref=%q> resolves to no identity-constraint definition in the schema%s (src-resolve clause 1.7)", local, qn, p.symbols.identityConstraintHint(qn, category))
 	}
 	if src.category != category {
 		return xsd.IdentityConstraint{}, xsderr.New(ruleSrcIdentityConstraint, el.Loc(),
 			"<%s ref=%q> names a definition whose {identity-constraint category} is %s, but src-identity-constraint clause 5 requires it to match the referring element's name", local, qn, src.category)
 	}
 	return src.owner.buildIdentityConstraint(qn, src.elem, src.category)
+}
+
+// identityConstraintHint is the clause referencedIdentityConstraint's src-resolve
+// charge appends for missing: the nearest definition in identityConstraintOrder
+// whose category is the referring element's, quoted as the charge quotes missing
+// (internal/nearname owns the rule).
+func (s *symbols) identityConstraintHint(missing xsd.QName, category xsd.IdentityConstraintCategory) string {
+	var names []nearname.Name
+	for _, n := range s.identityConstraintOrder {
+		if s.identityConstraints[n].category == category {
+			names = append(names, nearname.Name(n))
+		}
+	}
+	return nearname.Hint(nearname.Name(missing), names, func(n nearname.Name) string { return fmt.Sprintf("%q", xsd.QName(n)) })
 }
 
 // checkIdentityConstraintChildOrder orders the children of one

@@ -8,8 +8,9 @@ codified as rules in docs/STYLE.md.
 
 ## Architecture
 
-1. **The core model is a pure leaf.** The component model (`xsd`) and the
-   error currency (`xsderr`) import nothing from this module. Every other
+1. **The core model is a pure leaf.** The error currency (`xsderr`)
+   imports nothing from this module, and the component model (`xsd`)
+   imports only `xsderr` and stdlib-only `internal/` leaves. Every other
    package builds above them. An upward import from a leaf is an
    architecture bug, full stop.
 

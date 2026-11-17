@@ -1,9 +1,9 @@
 // Package xsd is the XSD 1.1 component model: the immutable, in-memory
 // representation of a compiled schema set.
 //
-// It is a pure leaf — it imports only xsderr and the stdlib. Parsing
-// lives in package parser; values in package value; this package is the
-// shape those operate on.
+// It is a pure leaf — it imports only xsderr, internal/nearname and the
+// stdlib. Parsing lives in package parser; values in package value; this
+// package is the shape those operate on.
 //
 // # Components
 //
