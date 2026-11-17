@@ -3,21 +3,17 @@
 // type declarations.
 //
 // The module is organized as a strict dependency DAG (see
-// docs/ARCHITECTURE.md). Start here:
+// docs/ARCHITECTURE.md). Start here; each package's own doc states what
+// it implements today:
 //
 //   - parser — compile schema documents into the component model
 //   - xsd — the immutable component model, with query and walk APIs
-//   - validate — assess instance documents (XML and JSON adapters; BER,
-//     M11, is not yet implemented)
-//   - value, builtin — the value-space contracts and two backends
-//     (spec-exact strict, shipped; Go-friendly native, M12, not yet
-//     implemented); bring your own backend via value.Backend and prove it
-//     with value/backendtest
+//   - validate — assess instance documents
+//   - value, builtin — the value-space contracts and the builtin
+//     datatypes composed with a backend; bring your own backend via
+//     value.Backend and prove it with value/backendtest
 //   - codegen, codec — schema-directed Go code generation and dataset
-//     serialization (codegen's M9 slices ship; codec's first M10 slice
-//     decodes a valid XML instance into a generated struct, and its encode
-//     slice, which codec's package doc "# What encodes" states, writes a
-//     value of one back out as XML in canonical form)
+//     serialization
 //   - cmd/goxsd8 — the command-line interface
 //
 // This root package holds no code; it exists to document the module and
