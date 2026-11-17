@@ -118,7 +118,9 @@ func withCaveats(head string, rep report) string {
 // and run included, without and with -paths, and compares each whole report.
 // The encoded and declined rows run codec end to end; the four defect rows,
 // which no correct codec fills, are package assess's
-// TestDriveEncodeCountsEachRow and TestReportPrintsEachMergedCount's.
+// TestDriveEncodeCountsEachRow and TestReportPrintsEachMergedCount's. It
+// fails with roundTrip comparing by reflect.DeepEqual in place of same, and
+// with codeccensus's entryOf naming Drive for every summary.
 func TestCensusCounts(t *testing.T) {
 	root := writeTree(t, censusSuite)
 	plain := withCaveats(strings.ReplaceAll(wantCounts, "%ROOT%", root), report{Population: codeccensus.Population{Placeholder: 1}})

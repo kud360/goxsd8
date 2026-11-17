@@ -144,7 +144,7 @@ const (
 // carries its count.
 var caveats = slices.Concat([]string{
 	"Defects: \"" + appendFailedLabel + "\", \"" + reValidateLabel + "\", \"" + reDecodeLabel + "\" and \"" + unequalLabel + "\" are defects in codec, each count exact, and any count other than 0 is one to file.",
-	"Population: \"decoded\" is decodecensus's decoded count less its \"decoded where validate rejects\"; every other case is outside this census.",
+	"Population: \"decoded\" is the cases decodecensus counts decoded into codegen's own type, never the placeholder, less those it counts under \"decoded where validate rejects\"; every other case is outside this census.",
 	"Same value: the round trip compares decoded values, never bytes, each float by its bits with every NaN one, xs:double's identity, so 0 and -0 differ; an instance spelled other than canonically counts as encoded.",
 	"One decline per case: Append returns its first decline, so a case counts once, under that construct.",
 }, codeccensus.Caveats, []string{

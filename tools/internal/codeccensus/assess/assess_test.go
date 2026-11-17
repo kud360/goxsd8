@@ -17,9 +17,10 @@ import (
 
 // fixtureSchema declares a, in the slice codec decodes, n, whose nested choice
 // in an occurrence field's item codec declines, p, a choice codec
-// decodes into a sealed interface, and u, a's shape with an assertion
-// whose for expression the XPath subset declines, so validate leaves it
-// undecided (cvc-assertion).
+// decodes into a sealed interface, u, a's shape with an assertion whose for
+// expression the XPath subset declines, so validate leaves it undecided
+// (cvc-assertion), and e, of empty content, whose struct has the
+// placeholder's shape.
 const fixtureSchema = `<?xml version="1.0"?>
 <xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
   <xs:element name="a"><xs:complexType><xs:sequence><xs:element name="b" type="xs:string"/></xs:sequence></xs:complexType></xs:element>
@@ -27,6 +28,7 @@ const fixtureSchema = `<?xml version="1.0"?>
   <xs:element name="p"><xs:complexType><xs:choice><xs:element name="q" type="xs:string"/><xs:element name="r" type="xs:string"/></xs:choice></xs:complexType></xs:element>
   <xs:element name="u"><xs:complexType><xs:sequence><xs:element name="b" type="xs:string"/></xs:sequence>
     <xs:assert test="(for $x in b return string-length($x)) = 1"/></xs:complexType></xs:element>
+  <xs:element name="e"><xs:complexType/></xs:element>
 </xs:schema>
 `
 
@@ -41,9 +43,9 @@ type (
 func (pq) isP() {}
 func (pr) isP() {}
 
-// The fixture's instances: valid.xml, nested.xml and choice.xml are
-// valid, invalid.xml lacks a's required child b, so validate charges it,
-// and undecided.xml is Undecided.
+// The fixture's instances: valid.xml, nested.xml, choice.xml and empty.xml
+// are valid, invalid.xml lacks a's required child b, so validate charges
+// it, and undecided.xml is Undecided.
 var fixtureFiles = map[string]string{
 	"s.xsd":         fixtureSchema,
 	"valid.xml":     `<a><b>x</b></a>`,
@@ -51,6 +53,7 @@ var fixtureFiles = map[string]string{
 	"nested.xml":    `<n><b>x</b><d>y</d></n>`,
 	"choice.xml":    `<p><r>x</r></p>`,
 	"undecided.xml": `<u><b>x</b></u>`,
+	"empty.xml":     `<e/>`,
 }
 
 // a is the struct codegen emits for element a: Decode compares its fields
@@ -125,6 +128,7 @@ func TestDriveCountsEachBucket(t *testing.T) {
 		{"failed other", own, Case{"S/g/instance/f", "invalid.xml", 0}, Summary{FailedOther: 1}},
 		{"placeholder mismatch", nil, Case{"S/g/instance/m", "valid.xml", -1},
 			Summary{FailedOther: 1, PlaceholderMismatch: []string{"S/g/instance/m"}}},
+		{"placeholder decoded", nil, Case{"S/g/instance/e", "empty.xml", -1}, Summary{Decoded: 1}},
 		{"differential", []Codec{accepting}, Case{"S/g/instance/x", "invalid.xml", 0},
 			Summary{Decoded: 1, Differential: []string{"S/g/instance/x"}}},
 		{"no differential where validate accepts", []Codec{accepting}, Case{"S/g/instance/v", "valid.xml", 0}, Summary{Decoded: 1}},

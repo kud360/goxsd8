@@ -48,7 +48,10 @@ func encoding(out []byte, err error) Codec {
 // case that lands in one bucket alone, and to no row for a case outside its
 // population. encoded and declined run codec end to end; the rest inject
 // the encode or the second decode no correct codec returns. Each of the six
-// rows fails with its bucket's arm of tallyRoundTrip removed.
+// rows fails with its bucket's arm of tallyRoundTrip removed; the row over
+// empty.xml, which the placeholder decodes (TestDriveCountsEachBucket),
+// fails with DriveEncode's placeholder test removed, and the differential's
+// row with its differential test removed.
 func TestDriveEncodeCountsEachRow(t *testing.T) {
 	own := []Codec{CodecFor[a]()}
 	cases := []struct {
@@ -69,6 +72,7 @@ func TestDriveEncodeCountsEachRow(t *testing.T) {
 		{"round trip unequal", []Codec{secondDecode(func(first *a) (any, error) { return &a{B: first.B + "y"}, nil })}, Case{"S/g/instance/u", "valid.xml", 0},
 			EncodeSummary{RoundTripUnequal: []string{"S/g/instance/u"}}},
 		{"the placeholder is outside", nil, Case{"S/g/instance/m", "valid.xml", -1}, EncodeSummary{}},
+		{"the placeholder is outside where it decodes", nil, Case{"S/g/instance/p", "empty.xml", -1}, EncodeSummary{}},
 		{"an undecoded case is outside", own, Case{"S/g/instance/i", "invalid.xml", 0}, EncodeSummary{}},
 		{"decode's differential is outside", []Codec{accepting}, Case{"S/g/instance/x", "invalid.xml", 0}, EncodeSummary{}},
 	}
