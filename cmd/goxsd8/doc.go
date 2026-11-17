@@ -106,6 +106,8 @@
 //	lines carry the running host's own path.
 //
 //	goxsd8 parse [-q] [-v] [-strict] <schema.xsd>...
+//	    For example: goxsd8 parse order.xsd items.xsd prints two
+//	    summaries, one per argument: two compilations, not one set.
 //	    Compile each schema argument and print its summary on stdout:
 //	    the argument as it was spelled, then a block of lines indented
 //	    two spaces and spelled "<label>: <value>". A namespace: line
@@ -125,8 +127,9 @@
 //	    arguments are several compilations, not one set.
 //	    A rejected schema prints its first error on stderr, in the
 //	    rejection's template under Stderr lines above (assembly stops
-//	    there, so a rejected schema is one error line). An argument that cannot be read stops no
-//	    run but its own: the arguments after it are still compiled.
+//	    there, so a rejected schema is one error line). An argument
+//	    that cannot be read stops no run but its own: the arguments
+//	    after it are still compiled.
 //	    Some errors have no rule to cite and print the producing
 //	    component's own message instead, carrying what location they
 //	    have inside the sentence rather than as the <loc>: prefix.
