@@ -9,8 +9,9 @@ import (
 
 // These tests pin what a cvc-complex-content charge says the content model
 // expected at the charged position ([xsd.Matcher.Admissible], rendered by
-// expected): the whole message, so that the subject, the expected set and the
-// inline citation each stay where STYLE E5 puts them.
+// expected): the whole message (cWantMsg), or for the end-of-children charge
+// the whole Error() text (cWantError), so that the subject, the expected set
+// and the inline citation each stay where STYLE E5 puts them.
 
 // cGroup is a {min occurs} = {max occurs} = 1 particle over a model group of
 // the given compositor.

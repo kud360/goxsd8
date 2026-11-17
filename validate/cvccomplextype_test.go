@@ -301,6 +301,8 @@ func TestUndeclaredAttributeAdmittedByWildcardIsNotCharged(t *testing.T) {
 // (§3.10.4.1) clause 1, the ·expanded name· being outside the {namespace
 // constraint}. The charge cites the attribute's own position and names 2.2.2, so
 // it is distinguishable from the no-wildcard charge, which names 2.2.1 (#717).
+// This row and the 2.2.1 row each pin their whole Error() text, so one message
+// naming both clauses for both arms fails both rows.
 func TestUndeclaredAttributeOutsideTheWildcardChargesClauseTwoTwoTwo(t *testing.T) {
 	uses := []xsd.AttributeUse{aUse(t, "id", false, nil)}
 	wild := nsWildcard(t, xsd.ProcessStrict, "urn:elsewhere")
