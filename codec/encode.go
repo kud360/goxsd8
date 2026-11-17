@@ -67,25 +67,9 @@ func Append[T any](dst []byte, schema *xsd.Schema, backend value.Backend, name x
 	if backend == nil {
 		return dst, errors.New("codec: Append: nil value.Backend")
 	}
-	decl, ok := schema.Element(name)
-	if !ok {
-		return dst, fmt.Errorf("codec: no top-level element declaration has the expanded name %q", name.String())
-	}
-	// An answer about the schema, no violation of an instance, so it carries
-	// no xsderr rule (STYLE E2).
-	if decl.Abstract() {
-		return dst, fmt.Errorf("codec: %s has {abstract} true, so no document element validates against it (cvc-elt clause 2)", declSubject(decl))
-	}
-	plan, err := encodePlanOf(schema, decl)
-	if err != nil {
-		return dst, err
-	}
-	b, err := bindDecl(&pipeline{schema: schema}, decl)
-	if err != nil {
-		return dst, err
-	}
 	t := reflect.TypeFor[T]()
-	if _, err := b.check(t, newCheckContext(newConfig(nil))); err != nil {
+	plan, err := encodeStatic(schema, name, t)
+	if err != nil {
 		return dst, err
 	}
 	root := t.Name()
@@ -103,6 +87,34 @@ func Append[T any](dst []byte, schema *xsd.Schema, backend value.Backend, name x
 		return dst, e.uncanonical
 	}
 	return e.out, nil
+}
+
+// encodeStatic returns the encodeElement of the top-level element
+// declaration name in schema, a non-nil schema, encoded from a value of Go
+// type t, or the error of the first of items 2 to 5 of [Append]'s doc that
+// applies. It reads no value, so its answer holds for every value of t.
+func encodeStatic(schema *xsd.Schema, name xsd.QName, t reflect.Type) (encodeElement, error) {
+	decl, ok := schema.Element(name)
+	if !ok {
+		return encodeElement{}, fmt.Errorf("codec: no top-level element declaration has the expanded name %q", name.String())
+	}
+	// An answer about the schema, no violation of an instance, so it carries
+	// no xsderr rule (STYLE E2).
+	if decl.Abstract() {
+		return encodeElement{}, fmt.Errorf("codec: %s has {abstract} true, so no document element validates against it (cvc-elt clause 2)", declSubject(decl))
+	}
+	plan, err := encodePlanOf(schema, decl)
+	if err != nil {
+		return encodeElement{}, err
+	}
+	b, err := bindDecl(&pipeline{schema: schema}, decl)
+	if err != nil {
+		return encodeElement{}, err
+	}
+	if _, err := b.check(t, newCheckContext(newConfig(nil))); err != nil {
+		return encodeElement{}, err
+	}
+	return plan, nil
 }
 
 // encodeElement is an element declaration of the encoded slice, the
