@@ -27,7 +27,7 @@ var subcommands = []string{"parse", "validate", "gen"}
 // path prints — is hand-written there.
 const usage = `goxsd8 — XSD 1.1 schema compilation, instance validation, and code generation.
 
-Usage (contract; subcommands land with their milestones):
+Usage:
 
   Exit codes. A run over several arguments exits with its highest-ranked
   outcome: rank, not number, orders the codes.
@@ -132,6 +132,8 @@ Usage (contract; subcommands land with their milestones):
   lines carry the running host's own path.
 
   goxsd8 parse [-q] [-v] [-strict] <schema.xsd>...
+      For example: goxsd8 parse order.xsd items.xsd prints two
+      summaries, one per argument: two compilations, not one set.
       Compile each schema argument and print its summary on stdout:
       the argument as it was spelled, then a block of lines indented
       two spaces and spelled "<label>: <value>". A namespace: line
@@ -151,8 +153,9 @@ Usage (contract; subcommands land with their milestones):
       arguments are several compilations, not one set.
       A rejected schema prints its first error on stderr, in the
       rejection's template under Stderr lines above (assembly stops
-      there, so a rejected schema is one error line). An argument that cannot be read stops no
-      run but its own: the arguments after it are still compiled.
+      there, so a rejected schema is one error line). An argument
+      that cannot be read stops no run but its own: the arguments
+      after it are still compiled.
       Some errors have no rule to cite and print the producing
       component's own message instead, carrying what location they
       have inside the sentence rather than as the <loc>: prefix.
@@ -468,11 +471,13 @@ schemaLocation resolving to no document, each line so charged ending
 run's exit code; a rejected schema's or -schema set's own directive
 line is charged nothing and ends as it does without -strict; off,
 such a line moves no exit code). They qualify a subcommand and follow
-its name — goxsd8 parse -q a.xsd, not goxsd8 -q parse a.xsd. -q
-suppresses a subcommand's informational output, which is parse's
-summary and validate's counts line, and never a diagnosis: neither
-the error lines above nor validate's violations and undecided checks
-are silenced by it.
+its name — goxsd8 parse -q a.xsd, not goxsd8 -q parse a.xsd. A
+subcommand's flags, these and its own, precede its positional
+arguments — goxsd8 validate -schema s.xsd i.xml, not goxsd8 validate
+i.xml -schema s.xsd. -q suppresses a subcommand's informational
+output, which is parse's summary and validate's counts line, and never
+a diagnosis: neither the error lines above nor validate's violations
+and undecided checks are silenced by it.
 
 Implemented today: the help path, parse, validate and gen. With no
 arguments, or with -h, -help or --help in any argument position, goxsd8
