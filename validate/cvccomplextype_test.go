@@ -272,6 +272,7 @@ func TestOptionalAttributeAbsentIsNotCharged(t *testing.T) {
 func TestUndeclaredAttributeWithNoWildcardChargesClauseTwo(t *testing.T) {
 	got := assessRoot(t, attributedRoot(local("stray")), []xsd.AttributeUse{aUse(t, "id", false, nil)}, nil)
 	wantCharge(t, got, "cvc-complex-type clause 2.2.1", loc(1, 10), "stray")
+	cWantError(t, got, "instance.xml:1:10: [cvc-complex-type] attribute stray is not allowed on element root: the element's type declares no attribute use for it and has no attribute wildcard, but cvc-complex-type clause 2.2.1 requires an {attribute wildcard} for an attribute that no use among the {attribute uses} matches")
 }
 
 // The same attribute against a type carrying an {attribute wildcard} that
@@ -300,6 +301,8 @@ func TestUndeclaredAttributeAdmittedByWildcardIsNotCharged(t *testing.T) {
 // (§3.10.4.1) clause 1, the ·expanded name· being outside the {namespace
 // constraint}. The charge cites the attribute's own position and names 2.2.2, so
 // it is distinguishable from the no-wildcard charge, which names 2.2.1 (#717).
+// This row and the 2.2.1 row each pin their whole Error() text, so one message
+// naming both clauses for both arms fails both rows.
 func TestUndeclaredAttributeOutsideTheWildcardChargesClauseTwoTwoTwo(t *testing.T) {
 	uses := []xsd.AttributeUse{aUse(t, "id", false, nil)}
 	wild := nsWildcard(t, xsd.ProcessStrict, "urn:elsewhere")
@@ -307,6 +310,7 @@ func TestUndeclaredAttributeOutsideTheWildcardChargesClauseTwoTwoTwo(t *testing.
 
 	got := assessRoot(t, attributedRoot(stray), uses, wild)
 	wantCharge(t, got, "clause 2.2.2", loc(1, 10), "stray")
+	cWantError(t, got, "instance.xml:1:10: [cvc-complex-type] attribute {urn:here}stray is not allowed on element root: the element's type declares no attribute use for it and its attribute wildcard does not admit it, but cvc-complex-type clause 2.2.2 requires the attribute to be ·valid· with respect to that {attribute wildcard}")
 
 	// The same wildcard admits the name it was built for, so the charge above
 	// comes from the ·expanded name· and not from the wildcard's mere shape.

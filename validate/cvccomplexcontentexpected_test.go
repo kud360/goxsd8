@@ -9,8 +9,9 @@ import (
 
 // These tests pin what a cvc-complex-content charge says the content model
 // expected at the charged position ([xsd.Matcher.Admissible], rendered by
-// expected): the whole message, so that the subject, the expected set and the
-// inline citation each stay where STYLE E5 puts them.
+// expected): the whole message (cWantMsg), or for the end-of-children charge
+// the whole Error() text (cWantError), so that the subject, the expected set
+// and the inline citation each stay where STYLE E5 puts them.
 
 // cGroup is a {min occurs} = {max occurs} = 1 particle over a model group of
 // the given compositor.
@@ -48,10 +49,23 @@ func cUnadmitted(item, expects string) string {
 	return "element " + item + ", a child of root, is not allowed at its position: no particle of the parent's {content type} admits it there, where the content model expects " + expects + ", but cvc-complex-content clause 1 requires the [[children]] to be ·valid· with respect to that {content type}"
 }
 
-// cEndsShort is the message for [[children]] that end with a {min occurs}
-// owed, naming what the {particle} expected next.
+// cWantError fails unless the one violation's whole Error() text — location,
+// rule prefix and message — is exactly want.
+func cWantError(t *testing.T, got []*xsderr.Error, want string) {
+	t.Helper()
+	if len(got) != 1 {
+		t.Fatalf("Violations() = %v, want exactly one", got)
+	}
+	if got[0].Error() != want {
+		t.Errorf("Error() =\n\t%s\nwant\n\t%s", got[0].Error(), want)
+	}
+}
+
+// cEndsShort is the whole Error() text for root's [[children]] ending with a
+// {min occurs} owed: root's own location, then the item, then what the
+// {particle} would take next, ahead of every spec term (STYLE E5).
 func cEndsShort(expects, clause string) string {
-	return "element root's children end before every particle of its ·governing type definition·'s {content type} has taken the occurrences its {min occurs} requires, where that {content type}'s {particle} expects " + expects + ", but cvc-complex-content clause " + clause + " requires the [[children]] to be ·valid· with respect to that {content type}"
+	return "instance.xml:1:1: [cvc-complex-content] element root's children end too soon: its particles would take " + expects + " next, and a {min occurs} is still unmet, but cvc-complex-content clause " + clause + " requires the [[children]] the {particle} takes to be ·valid· with respect to it"
 }
 
 // A sequence that skips a required member is charged at the member after it,
@@ -128,7 +142,7 @@ func TestContentChargeAtTheEndNamesWhatIsOwed(t *testing.T) {
 	got := cAssess(t, schema, cRoot("a", "b"))
 
 	wantContentCharge(t, got, "cvc-complex-content", "1", loc(1, 1))
-	cWantMsg(t, got, cEndsShort("element declaration b", "1"))
+	cWantError(t, got, cEndsShort("element declaration b", "1"))
 }
 
 // At the end of the [[children]] the {open content} is not listed, though
@@ -142,7 +156,7 @@ func TestContentChargeAtTheEndLeavesTheOpenContentOut(t *testing.T) {
 	got := cAssess(t, schema, cRoot("a", "x"))
 
 	wantContentCharge(t, got, "cvc-complex-content", "3", loc(1, 1))
-	cWantMsg(t, got, cEndsShort("element declaration b", "3"))
+	cWantError(t, got, cEndsShort("element declaration b", "3"))
 }
 
 // An item neither the {particle} nor the {open content} admits names both
@@ -226,7 +240,7 @@ func TestContentChargeAtTheEndOnceTheSuffixHasBegun(t *testing.T) {
 	got := cAssess(t, schema, cRoot("a", "x"))
 
 	wantContentCharge(t, got, "cvc-complex-content", "2", loc(1, 1))
-	cWantMsg(t, got, cEndsShort("no further element information item", "2"))
+	cWantError(t, got, cEndsShort("no further element information item", "2"))
 }
 
 // A choice with no members accepts nothing, so [[children]] that end where
@@ -239,7 +253,7 @@ func TestContentChargeAtTheEndOfAnEmptyChoice(t *testing.T) {
 	got := cAssess(t, schema, cRoot("a"))
 
 	wantContentCharge(t, got, "cvc-complex-content", "1", loc(1, 1))
-	cWantMsg(t, got, cEndsShort("no further element information item", "1"))
+	cWantError(t, got, cEndsShort("no further element information item", "1"))
 }
 
 // The bound counts particle arms only: past it the {open content} arm is still

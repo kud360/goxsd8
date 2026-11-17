@@ -846,12 +846,13 @@ func (c *contentCheck) initialValue(w *walk, st *xsd.SimpleType) {
 // ([xsd.Matcher.Admissible], rendered by expected) with the {open content}
 // arm filtered out: an item the open wildcard takes is S2's and never advances
 // S1, so it pays none of the {min occurs} that clauses 2.2 and 3.2 find owed.
-// The charge says the {particle} expects the list, not the content model, since
-// the {open content} may still take items the list leaves out. The list can be
-// empty — under {mode} suffix once an item has begun S2 (clause 2.1's S = S1 +
-// S2 being a concatenation), and where what is owed is a choice with no
-// members, which accepts nothing — and expected then says the {particle}
-// expects no further element information item, which is true of both.
+// The charge says the element's particles would take the list, not the content
+// model, since the {open content} may still take items the list leaves out.
+// The list can be empty — under {mode} suffix once an item has begun S2
+// (clause 2.1's S = S1 + S2 being a concatenation), and where what is owed is
+// a choice with no members, which accepts nothing — and the charge then says
+// the particles would take no further element information item, which is true
+// of both.
 //
 // Under a nil matcher clause 1.4 is undecided for the sequence as a whole, the
 // EMPTY sequence included: whether a {content type} accepts no element
@@ -879,7 +880,7 @@ func (c *contentCheck) sequenceEnd(w *walk) {
 		return open
 	})
 	c.charge(w, ruleCvcComplexContent, clause, c.e.Loc(),
-		"element %s's children end before every particle of its ·governing type definition·'s {content type} has taken the occurrences its {min occurs} requires, where that {content type}'s {particle} expects %s, but cvc-complex-content clause %s requires the [[children]] to be ·valid· with respect to that {content type}",
+		"element %s's children end too soon: its particles would take %s next, and a {min occurs} is still unmet, but cvc-complex-content clause %s requires the [[children]] the {particle} takes to be ·valid· with respect to it",
 		c.e.Name().Display(), expected(owed, attributedTo), clause)
 }
 
