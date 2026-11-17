@@ -479,6 +479,25 @@ if err != nil {
 fmt.Println(o.Item, *o.Kind) // [a b] x
 ```
 
+`codec.Append` encodes a value of the generated type back into a document. It
+takes the value, not `Decode`'s pointer to it, so pass `*o`, and names the
+document element by its expanded name as an `xsd.QName`, importing
+`github.com/kud360/goxsd8/xsd`:
+
+```go
+// Append takes Decode's *o dereferenced and order.xml's document element
+// {urn:o}order.
+out, err := codec.Append(nil, schema, backend, xsd.QName{Space: "urn:o", Local: "order"}, *o)
+if err != nil {
+	log.Fatal(err)
+}
+fmt.Println(string(out)) // <order xmlns="urn:o" kind="x"><item>a</item><item>b</item></order>
+```
+
+`codec.CheckDecode` reports on `Decode` alone: a nil from it says nothing
+about `Append`, which encodes the narrower slice `codec`'s package doc states
+(section "What encodes").
+
 Two targets can compose one document. `ship.xsd` and `bill.xsd` each import
 `note.xsd`:
 
@@ -542,7 +561,7 @@ directly: `validate/jsonsrc/example_test.go` (`ExampleValidate`),
 `builtin/example_test.go` (`ExampleSeed`, `ExampleSeed_missingPrimitive`),
 `builtin/strict/example_test.go` (`ExampleNew`),
 `codegen/example_test.go` (`ExampleGenerate`),
-`codec/example_test.go` (`ExampleDecode`, `ExampleCheckDecode`,
+`codec/example_test.go` (`ExampleDecode`, `ExampleAppend`, `ExampleCheckDecode`,
 `ExampleUndecidedError`, `ExampleWithBranches`,
 `ExampleWithPrecisionDecimalArms`),
 `loader/example_test.go` (`Example_chain`), `xsd/example_test.go`
