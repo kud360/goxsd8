@@ -140,6 +140,47 @@ func ExampleCheckDecode() {
 	// true
 }
 
+// ExampleCheckAppend runs CheckAppend once at start-up, before any value
+// exists, on README's order.xsd, whose {urn:o}order encodes from
+// order.Order, and on an inline schema's xs:integer element s:i, which
+// CheckDecode accepts for big.Int but Append does not encode.
+func ExampleCheckAppend() {
+	readme := filepath.Join("..", "testdata", "readme")
+	schema, err := parser.Parse("order.xsd", parser.WithResolver(loader.Dir(readme)))
+	if err != nil {
+		log.Fatal(err)
+	}
+	fmt.Println(codec.CheckAppend[order.Order](schema, xsd.QName{Space: "urn:o", Local: "order"}))
+
+	const doc = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" targetNamespace="urn:s">
+  <xs:element name="i" type="xs:integer"/>
+</xs:schema>`
+	resolve := loader.ResolverFunc(func(_, location string) (io.ReadCloser, string, error) {
+		if location != "s.xsd" {
+			return nil, "", fmt.Errorf("no document %q", location)
+		}
+		return io.NopCloser(strings.NewReader(doc)), location, nil
+	})
+	schema, err = parser.Parse("s.xsd", parser.WithResolver(resolve))
+	if err != nil {
+		log.Fatal(err)
+	}
+	name := xsd.QName{Space: "urn:s", Local: "i"}
+	fmt.Println(codec.CheckDecode[big.Int](schema, name))
+
+	// Item 4 of Append's doc: a construct outside the encoded slice.
+	err = codec.CheckAppend[big.Int](schema, name)
+	var de *codec.DeclineError
+	if !errors.As(err, &de) {
+		log.Fatalf("CheckAppend: %v, want a *DeclineError", err)
+	}
+	fmt.Println(de.Construct())
+	// Output:
+	// <nil>
+	// <nil>
+	// an atomic simple type whose primitive is other than xs:string or xs:double
+}
+
 // ExampleUndecidedError parses an inline schema whose document element's
 // type carries an assertion the XPath subset declines, decodes an instance of
 // it, and prints the rule of the check the validator left undecided.
