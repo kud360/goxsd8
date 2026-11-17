@@ -11,7 +11,7 @@ import (
 
 // A DeclineError is a construct [Decode] does not decode or [Append] does not
 // encode; it wraps errors.ErrUnsupported, and the docs of Decode,
-// [CheckDecode] and Append state when each returns one.
+// [CheckDecode], Append and [CheckAppend] state when each returns one.
 type DeclineError struct {
 	construct construct
 	// path is the path that declined, Decode's or Append's.
@@ -28,8 +28,8 @@ func (e *DeclineError) Construct() Construct { return Construct{e.construct} }
 // Loc returns the instance Loc of the element the decline is charged to: the
 // document element for a construct [Decode]'s item 5 finds, of its declaration or type
 // or of a declaration or type its particles reach at any depth, and the element carrying
-// it for xsi:type, and true. For a decline [CheckDecode] or [Append] returns, which reads no
-// instance, it returns the zero Loc and false.
+// it for xsi:type, and true. For a decline [CheckDecode], [Append] or [CheckAppend]
+// returns, which reads no instance, it returns the zero Loc and false.
 func (e *DeclineError) Loc() (xsderr.Loc, bool) {
 	if e.loc == nil {
 		return xsderr.Loc{}, false
@@ -38,25 +38,25 @@ func (e *DeclineError) Loc() (xsderr.Loc, bool) {
 }
 
 // Error opens with "codec does not decode" for a decline of [Decode] or
-// [CheckDecode] and "codec does not encode" for one of [Append]. For the
-// first it names the instance Loc, where Loc reports one, and the construct,
-// then the declining declaration, the document element's, a particle's
-// element declaration's, local or a top-level one an <element ref> names, or
-// a member of that one's substitution group, at any depth, or an attribute's,
-// and, for a construct of a complex type, the document element's or one a
-// particle's element declaration has at any depth, or of the document
-// element's simple type, that type labelled as its declaration's {type
-// definition}, with no path from the document element, and, for a construct of
-// a complex type's simple content, its {content type}'s {simple type
-// definition}, and of a list type's {item type definition} or a union's basic
-// member, that item or member, by its QName where it has one, each with its
-// schema Loc; for a wildcard particle, it names the particle as [Decode]'s item
-// 5 states; for xsi:type, it names the element and the type the xsi:type names.
-// For the second it names the construct, then the declining element
-// declaration, attribute use or simple type, by its QName where it has one,
-// with its schema Loc, and, for a value with no canonical representation, the
-// Go path of its field from T and its value. A type definition named in the XML
-// Schema namespace whose schema Loc is the zero Loc is named by its QName
+// [CheckDecode] and "codec does not encode" for one of [Append] or
+// [CheckAppend]. For the first it names the instance Loc, where Loc reports
+// one, and the construct, then the declining declaration, the document
+// element's, a particle's element declaration's, local or a top-level one an
+// <element ref> names, or a member of that one's substitution group, at any
+// depth, or an attribute's, and, for a construct of a complex type, the
+// document element's or one a particle's element declaration has at any depth,
+// or of the document element's simple type, that type labelled as its
+// declaration's {type definition}, with no path from the document element, and,
+// for a construct of a complex type's simple content, its {content type}'s
+// {simple type definition}, and of a list type's {item type definition} or a
+// union's basic member, that item or member, by its QName where it has one,
+// each with its schema Loc; for a wildcard particle, it names the particle as
+// [Decode]'s item 5 states; for xsi:type, it names the element and the type the
+// xsi:type names. For the second it names the construct, then the declining
+// element declaration, attribute use or simple type, by its QName where it has
+// one, with its schema Loc, and, for a value with no canonical representation,
+// the Go path of its field from T and its value. A type definition named in the
+// XML Schema namespace whose schema Loc is the zero Loc is named by its QName
 // alone, in place of the schema Loc the sentences above give it.
 func (e *DeclineError) Error() string {
 	text := "codec does not decode " + e.construct.name() + ": " + e.detail +
@@ -92,9 +92,10 @@ type Construct struct{ c construct }
 func (c Construct) String() string { return c.c.name() }
 
 // path is the closed set of the paths a DeclineError declines on: Decode's,
-// [CheckDecode]'s among it, and Append's. A construct does not imply its path,
-// since both paths decline constructNillable and constructNestedGroup. The
-// zero value is invalid (STYLE T1).
+// [CheckDecode]'s among it, and Append's, [CheckAppend]'s among it. A
+// construct does not imply its path, since both paths decline
+// constructNillable and constructNestedGroup. The zero value is invalid
+// (STYLE T1).
 type path uint8
 
 // The paths.
