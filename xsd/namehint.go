@@ -3,11 +3,10 @@ package xsd
 import "github.com/kud360/goxsd8/internal/nearname"
 
 // nameHint is the clause a src-resolve clause 1 charge appends for missing, a
-// QName that names no component of the kind its lookup seeks: "; did you mean
-// C?" for the nearest such component, or "" when none is near
-// (internal/nearname owns the rule). Each *Schema method below is one kind's
-// hint, its candidates drawn from that §3.17.1 property's slice in builder
-// order; noHint is the one for a lookup with no population to draw from.
+// QName naming no component of the kind its lookup seeks: nearname.Hint's, over
+// the components of that kind. Each *Schema method below is one kind's hint,
+// drawing from that §3.17.1 property's slice in builder order; noHint is the
+// one for a lookup with no population to draw from.
 type nameHint func(missing QName) string
 
 // noHint adds nothing: SimpleType.Base, Item and Members resolve through an
