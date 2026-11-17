@@ -324,8 +324,9 @@ func TestDecodeNilArguments(t *testing.T) {
 // TestDecodeTypeMismatch pins item 6 of Decode's doc: a T that is not the
 // type codegen emits is an error errors.Is reports as ErrTypeMismatch, no
 // decline and no rule, and nothing is filled, for a document element of
-// complex type and, a T whose underlying type is not string, of simple type;
-// an error that is no T mismatch is not reported as one.
+// complex type, a pointer to codegen's struct named as one and a pointer to
+// any other type not, and, a T whose underlying type is not string, of simple
+// type; an error that is no T mismatch is not reported as one.
 func TestDecodeTypeMismatch(t *testing.T) {
 	schema := schemaOf(t, shapesSchema)
 	data := instanceOf(` req="r"`, "<s:one>x</s:one><s:tok>t</s:tok>")
@@ -366,6 +367,12 @@ func TestDecodeTypeMismatch(t *testing.T) {
 			ErrTypeMismatch.Error() + ": codec.short has 1 fields where codegen emits 6"},
 		{"no struct", schema, data, into[string](),
 			ErrTypeMismatch.Error() + ": string is no struct"},
+		{"a pointer to codegen's struct", schema, data, into[*shapes](),
+			ErrTypeMismatch.Error() + ": *codec.shapes is a pointer to codec.shapes, which matches; use codec.shapes in its place"},
+		{"a pointer to another struct", schema, data, into[*struct{ A int }](),
+			ErrTypeMismatch.Error() + ": *struct { A int } is no struct"},
+		{"a pointer to a pointer to codegen's struct", schema, data, into[**shapes](),
+			ErrTypeMismatch.Error() + ": **codec.shapes is no struct"},
 		{"a struct for a simple root", simple, simpleData, into[struct{ A string }](),
 			ErrTypeMismatch.Error() + ": the underlying type of struct { A string } is not string"},
 		{"a type over int for a simple root", simple, simpleData, into[count](),

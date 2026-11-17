@@ -1533,14 +1533,29 @@ type anyTypeRoot struct{}
 
 // check returns the rawContent that fills t when t is X or N, a type that
 // converts to the X contentShapeOf reaches from it, the union of what an
-// anyTypeArm admits for valueBare and for valueNamed, and otherwise the
-// ErrTypeMismatch error Decode's doc states, item 6.
+// anyTypeArm admits for valueBare and for valueNamed (anyTypeShape), and
+// otherwise the ErrTypeMismatch error Decode's doc states, item 6:
+// pointerMismatch's for a pointer whose element type anyTypeShape holds.
 func (anyTypeRoot) check(t reflect.Type, _ *checkContext) (filler, error) {
+	if s, ok := anyTypeShape(t); ok {
+		return rawContent{shape: s}, nil
+	}
+	if t.Kind() == reflect.Pointer {
+		if _, ok := anyTypeShape(t.Elem()); ok {
+			return nil, pointerMismatch(t)
+		}
+	}
+	return nil, fmt.Errorf("%w: %s is neither a struct X of codegen's AnyType shape nor a named type over one", ErrTypeMismatch, t)
+}
+
+// anyTypeShape returns the rawShape contentShapeOf reaches from t when t
+// converts to that shape's content, the T anyTypeRoot.check holds.
+func anyTypeShape(t reflect.Type) (rawShape, bool) {
 	s, ok := contentShapeOf(t)
 	if !ok || !t.ConvertibleTo(s.content) {
-		return nil, fmt.Errorf("%w: %s is neither a struct X of codegen's AnyType shape nor a named type over one", ErrTypeMismatch, t)
+		return rawShape{}, false
 	}
-	return rawContent{shape: s}, nil
+	return s, true
 }
 
 // rawShape is three of the four raw-content structs codegen emits
@@ -1959,7 +1974,9 @@ type checkContext struct {
 	// its entry stored before its fields are checked, and a later reach of the
 	// same pair, through a recursive type, links to that entry. It lives for
 	// one check only, a lookup index never iterated (STYLE D2); an entry left
-	// by a check that fails is never read, since the failure ends the check.
+	// by a check that fails, or by binding.check's probe of a pointer's element
+	// type, which fails the check, is never read, since the failure ends the
+	// check.
 	bound map[boundKey]filler
 }
 
@@ -2165,9 +2182,13 @@ func bindTyped(run *bindRun, decl xsd.ElementDeclaration, td xsd.TypeDefinition)
 }
 
 // typeSubject names td, the {type definition} of decl, as a decline of one
-// of td's constructs labels it: by decl and its schema Loc, then td's.
+// of td's constructs labels it: by decl and its schema Loc, then td's, or
+// td's QName where located(td) does not hold.
 func typeSubject(decl xsd.ElementDeclaration, td xsd.TypeDefinition) string {
-	return fmt.Sprintf("the {type definition} of %s, a type defined at %s", declSubject(decl), td.Loc())
+	if !located(td) {
+		return fmt.Sprintf("the {type definition} of %s, the type %s", declSubject(decl), td.Name())
+	}
+	return fmt.Sprintf("the {type definition} of %s%s", declSubject(decl), definedAt(", a type ", td))
 }
 
 // bindRun is one item-5 bind of a document element declaration: p, and the
@@ -2418,12 +2439,12 @@ func simpleValueOf(p *pipeline, decl xsd.ElementDeclaration, st *xsd.SimpleType,
 }
 
 // contentSubject names, after typeSubject, st, the {simple type definition}
-// of that type's simple content, and st's schema Loc.
+// of that type's simple content, and st's schema Loc where located(st) holds.
 func contentSubject(typeSubject string, st *xsd.SimpleType) string {
 	if st.Name() == (xsd.QName{}) {
-		return fmt.Sprintf("%s, through its {content type}'s anonymous {simple type definition}, a type defined at %s", typeSubject, st.Loc())
+		return fmt.Sprintf("%s, through its {content type}'s anonymous {simple type definition}%s", typeSubject, definedAt(", a type ", st))
 	}
-	return fmt.Sprintf("%s, through its {content type}'s {simple type definition} %s, a type defined at %s", typeSubject, st.Name(), st.Loc())
+	return fmt.Sprintf("%s, through its {content type}'s {simple type definition} %s%s", typeSubject, st.Name(), definedAt(", a type ", st))
 }
 
 // width is the value field.
@@ -3015,7 +3036,7 @@ func (w *matcherSlot) attributor(schema *xsd.Schema) (*matchAttributor, error) {
 	}
 	m, ok := schema.ContentMatcher(w.ct)
 	if !ok {
-		return nil, fmt.Errorf("codec: xsd.Schema.ContentMatcher declines the complex type defined at %s, whose children Decode attributes through one", w.ct.Loc())
+		return nil, fmt.Errorf("codec: xsd.Schema.ContentMatcher declines %s, whose children Decode attributes through one", complexSubject(w.ct))
 	}
 	return &matchAttributor{m: m, places: w.places}, nil
 }
@@ -4013,9 +4034,18 @@ func (b boundFlattened) fill(r *xmltree.Reader, _ *xmltree.StartElement, out ref
 func trackedMatcher(schema *xsd.Schema, ct xsd.ComplexType) (*xsd.Matcher, error) {
 	m, ok := schema.ContentMatcher(ct)
 	if !ok {
-		return nil, decline(constructUntrackedModel, fmt.Sprintf("the complex type defined at %s, whose children Decode attributes through xsd.Schema.ContentMatcher", ct.Loc()))
+		return nil, decline(constructUntrackedModel, complexSubject(ct)+", whose children Decode attributes through xsd.Schema.ContentMatcher")
 	}
 	return m, nil
+}
+
+// complexSubject names ct, a complex type, by its schema Loc, or by its QName
+// where located(ct) does not hold.
+func complexSubject(ct xsd.ComplexType) string {
+	if !located(ct) {
+		return "the complex type " + ct.Name().String()
+	}
+	return "the complex type" + definedAt(" ", ct)
 }
 
 // occurrence is a content sequence or choice that occurs other than exactly
@@ -5184,12 +5214,13 @@ func simpleDecline(r xsd.TypeResolver, st *xsd.SimpleType, subject string) (simp
 }
 
 // itemSubject names, after subject, item, the {item type definition} of the
-// list type whose item declines, and item's schema Loc.
+// list type whose item declines, and item's schema Loc where located(item)
+// holds.
 func itemSubject(subject string, item *xsd.SimpleType) string {
 	if item.Name() == (xsd.QName{}) {
-		return fmt.Sprintf("%s, through the list type's anonymous {item type definition}, a type defined at %s", subject, item.Loc())
+		return fmt.Sprintf("%s, through the list type's anonymous {item type definition}%s", subject, definedAt(", a type ", item))
 	}
-	return fmt.Sprintf("%s, through the list type's {item type definition} %s, a type defined at %s", subject, item.Name(), item.Loc())
+	return fmt.Sprintf("%s, through the list type's {item type definition} %s%s", subject, item.Name(), definedAt(", a type ", item))
 }
 
 // atomicGo returns the atomic Go type codegen gives the atomic or special
@@ -5224,9 +5255,28 @@ func occursShape(occurs xsd.Occurs, sealed bool, subject string) (shape, error) 
 
 // check returns the boundBinding that fills t when t is the struct codegen
 // emits for b, the one cx already bound for b and t where it holds one, and
-// otherwise the ErrTypeMismatch error Decode's doc states, item 6. Its fields
-// are compared, never its name.
+// otherwise the ErrTypeMismatch error Decode's doc states, item 6:
+// pointerMismatch's for a pointer whose element type checkStruct holds. Its
+// fields are compared, never its name.
 func (b *binding) check(t reflect.Type, cx *checkContext) (filler, error) {
+	if t.Kind() == reflect.Pointer {
+		if _, err := b.checkStruct(t.Elem(), cx); err == nil {
+			return nil, pointerMismatch(t)
+		}
+	}
+	return b.checkStruct(t, cx)
+}
+
+// pointerMismatch returns the ErrTypeMismatch error for t, a pointer whose
+// element type its unit's check holds, naming that element type as the one to
+// use in t's place.
+func pointerMismatch(t reflect.Type) error {
+	return fmt.Errorf("%w: %s is a pointer to %s, which matches; use %s in its place", ErrTypeMismatch, t, t.Elem(), t.Elem())
+}
+
+// checkStruct is check, except that it holds a pointer t as it holds any other
+// non-struct.
+func (b *binding) checkStruct(t reflect.Type, cx *checkContext) (filler, error) {
 	key := boundKey{unit: b, t: t}
 	if f, ok := cx.bound[key]; ok {
 		return f, nil

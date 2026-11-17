@@ -59,12 +59,12 @@ func unionDecline(r xsd.TypeResolver, st *xsd.SimpleType, subject string) (*unio
 }
 
 // memberSubject names, after subject, m, the basic member of the union whose
-// member declines, and m's schema Loc.
+// member declines, and m's schema Loc where located(m) holds.
 func memberSubject(subject string, m *xsd.SimpleType) string {
 	if m.Name() == (xsd.QName{}) {
-		return fmt.Sprintf("%s, through the union's anonymous basic member, a type defined at %s", subject, m.Loc())
+		return fmt.Sprintf("%s, through the union's anonymous basic member%s", subject, definedAt(", a type ", m))
 	}
-	return fmt.Sprintf("%s, through the union's basic member %s, a type defined at %s", subject, m.Name(), m.Loc())
+	return fmt.Sprintf("%s, through the union's basic member %s%s", subject, m.Name(), definedAt(", a type ", m))
 }
 
 // memberLabel names m, a basic member of the union union names, for a stage

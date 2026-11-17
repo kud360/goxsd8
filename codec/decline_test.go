@@ -532,6 +532,74 @@ func TestDeclineErrorTextSimpleRoot(t *testing.T) {
 	}
 }
 
+// TestDeclineErrorTextUnlocated pins [DeclineError.Error]'s location rule
+// through Append: a simple type named in the XML Schema namespace with the
+// zero Loc, xs:integer as the document element's type and a particle's, and xs:boolean
+// as an attribute's, is named with no Loc, and a user restriction of xs:integer
+// keeps its schema Loc.
+func TestDeclineErrorTextUnlocated(t *testing.T) {
+	schema := schemaOf(t, `<xs:element name="r" type="xs:integer"/>`+
+		`<xs:element name="p"><xs:complexType><xs:sequence><xs:element name="a" type="xs:integer"/></xs:sequence></xs:complexType></xs:element>`+
+		`<xs:element name="at"><xs:complexType><xs:attribute name="a" type="xs:boolean"/></xs:complexType></xs:element>`+
+		`<xs:simpleType name="st"><xs:restriction base="xs:integer"/></xs:simpleType><xs:element name="u" type="s:st"/>`)
+	const prefix = "codec does not encode an atomic simple type whose primitive is other than xs:string or xs:double: "
+	const tail = "; an encoder refusal, not a schema or value fault"
+	for _, row := range []struct{ elem, want string }{
+		{"r", "simple type {http://www.w3.org/2001/XMLSchema}integer"},
+		{"p", "simple type {http://www.w3.org/2001/XMLSchema}integer"},
+		{"at", "simple type {http://www.w3.org/2001/XMLSchema}boolean"},
+		{"u", "simple type {urn:s}st defined at s.xsd:1:465"},
+	} {
+		_, err := Append(nil, schema, strict.New(), sname(row.elem), struct{}{})
+		if want := prefix + row.want + tail; err == nil || err.Error() != want {
+			t.Errorf("Append(%s) = %v, want %q", row.elem, err, want)
+		}
+	}
+}
+
+// TestSubjectsUnlocated pins located's rule at each subject that renders a
+// type's Loc, which no exported entry point reaches with an unlocated type
+// but simpleSubject: an unlocated {item type definition}, basic member and
+// {simple type definition}, xs:integer, is named with no Loc, and an unlocated
+// {type definition} or complex type, xs:anyType, by its QName; every type
+// the parser seeds in the XML Schema namespace is unlocated, and the user
+// type st located.
+func TestSubjectsUnlocated(t *testing.T) {
+	schema := schemaOf(t, `<xs:simpleType name="st"><xs:restriction base="xs:integer"/></xs:simpleType><xs:element name="r"/>`)
+	integer, _ := schema.Type(xsd.QName{Space: xsd.XMLSchemaNS, Local: "integer"})
+	anyType, _ := schema.Type(xsd.QName{Space: xsd.XMLSchemaNS, Local: "anyType"})
+	decl, _ := schema.Element(rootName)
+	st := integer.(*xsd.SimpleType)
+	ct := anyType.(xsd.ComplexType)
+	for _, row := range []struct{ got, want string }{
+		{itemSubject("S", st), "S, through the list type's {item type definition} {http://www.w3.org/2001/XMLSchema}integer"},
+		{memberSubject("S", st), "S, through the union's basic member {http://www.w3.org/2001/XMLSchema}integer"},
+		{contentSubject("S", st), "S, through its {content type}'s {simple type definition} {http://www.w3.org/2001/XMLSchema}integer"},
+		{typeSubject(decl, anyType), "the {type definition} of element {urn:s}r declared at s.xsd:1:257, the type {http://www.w3.org/2001/XMLSchema}anyType"},
+		{complexSubject(ct), "the complex type {http://www.w3.org/2001/XMLSchema}anyType"},
+	} {
+		if row.got != row.want {
+			t.Errorf("subject %q, want %q", row.got, row.want)
+		}
+	}
+	seeded := 0
+	for _, td := range schema.Types() {
+		if td.Name().Space != xsd.XMLSchemaNS {
+			if !strings.HasPrefix(definedAt(" ", td), " defined at s.xsd:") {
+				t.Errorf("%v is named with %q, want its schema Loc", td.Name(), definedAt(" ", td))
+			}
+			continue
+		}
+		seeded++
+		if located(td) {
+			t.Errorf("seeded %v at %v is located", td.Name(), td.Loc())
+		}
+	}
+	if seeded == 0 {
+		t.Error("the schema holds no type in the XML Schema namespace")
+	}
+}
+
 // mustAccept fails the test unless validate accepts data against schema.
 func mustAccept(t *testing.T, schema *xsd.Schema, data []byte) {
 	t.Helper()

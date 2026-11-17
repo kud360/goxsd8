@@ -280,8 +280,8 @@
 // Every error about the instance carries its instance Loc, under the URI
 // [WithURI] names: a violation's, an undecided check's, and a decline's,
 // which also names its construct and, for a construct of the schema, the
-// declining component's schema Loc; and [DeclineError.Construct] returns its
-// construct.
+// declining component, as [DeclineError.Error] states; and
+// [DeclineError.Construct] returns its construct.
 //
 // # Encode
 //

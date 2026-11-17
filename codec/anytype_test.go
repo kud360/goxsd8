@@ -381,7 +381,8 @@ func TestDecodeAnyTypeXsiType(t *testing.T) {
 // xs:anyType: a local one's field holds X alone, so a named type over it
 // mismatches, and a ref's N alone, so X mismatches; a struct of AnyElement's
 // shape, a wildcard's E, mismatches either; each names the field, Decode and
-// CheckDecode alike.
+// CheckDecode alike. At the document element, a pointer to X is named as one,
+// and a pointer to E or to a pointer to X is not.
 func TestDecodeAnyTypeMismatch(t *testing.T) {
 	rows := []struct {
 		name  string
@@ -399,6 +400,9 @@ func TestDecodeAnyTypeMismatch(t *testing.T) {
 		}](), "field 0 of struct { A codec.anyType; B *codec.anyType } is A codec.anyType where codegen emits A []X for a struct X of codegen's AnyType shape"},
 		{"a document element's T of E", rootAnySchema, ``, into[anyElement](), "codec.anyElement is neither a struct X of codegen's AnyType shape nor a named type over one"},
 		{"a document element's T of no field", rootAnySchema, ``, into[struct{}](), "struct {} is neither a struct X of codegen's AnyType shape nor a named type over one"},
+		{"a document element's T of *X", rootAnySchema, ``, into[*anyType](), "*codec.anyType is a pointer to codec.anyType, which matches; use codec.anyType in its place"},
+		{"a document element's T of *E", rootAnySchema, ``, into[*anyElement](), "*codec.anyElement is neither a struct X of codegen's AnyType shape nor a named type over one"},
+		{"a document element's T of **X", rootAnySchema, ``, into[**anyType](), "**codec.anyType is neither a struct X of codegen's AnyType shape nor a named type over one"},
 	}
 	for _, row := range rows {
 		t.Run(row.name, func(t *testing.T) {
