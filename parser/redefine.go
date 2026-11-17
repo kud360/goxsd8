@@ -733,9 +733,9 @@ func (p *producer) prescanRedefine(el *Element) error {
 		// which produceRedefinition's own build of this declaration enters.
 		switch e.key.kind {
 		case "simpleType":
-			p.symbols.simpleTypes[qn] = src
+			p.symbols.declareType(p.symbols.simpleTypes, qn, src)
 		case "complexType":
-			p.symbols.complexTypes[qn] = src
+			p.symbols.declareType(p.symbols.complexTypes, qn, src)
 		case "group":
 			p.symbols.modelGroups[qn] = src
 		}

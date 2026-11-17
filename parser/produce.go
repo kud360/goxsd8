@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/kud360/goxsd8/builtin"
+	"github.com/kud360/goxsd8/internal/nearname"
 	"github.com/kud360/goxsd8/parser/xmltree"
 	"github.com/kud360/goxsd8/regex"
 	"github.com/kud360/goxsd8/value"
@@ -302,6 +303,23 @@ type symbols struct {
 	// local <element>.
 	identityConstraints map[xsd.QName]identityConstraintSource
 
+	// typeOrder is the ORDER the type indexes hold no record of: every name
+	// builtins, anyType, simpleTypes and complexTypes answer for, as it was
+	// entered — the builtins in [builtin.Seed] order, then xs:anyType, then each
+	// document's top-level <simpleType> and <complexType> declarations as the
+	// pre-scans register them, documents in assembly order (compile). Only
+	// declareType appends to it after newSymbols. It is the population
+	// resolveBaseType's src-resolve clause 1.1 charge names a near type from
+	// (typeHint), which may not range a map (STYLE D2).
+	typeOrder []xsd.QName
+
+	// identityConstraintOrder is identityConstraints' names in the order
+	// indexIdentityConstraint, their one writer, entered them: assembly order,
+	// then document order over each document's whole tree. It is the population
+	// a <key ref=>'s src-resolve clause 1.7 charge names a near definition from
+	// (referencedIdentityConstraint).
+	identityConstraintOrder []xsd.QName
+
 	// builtins is the FIXED set of Built-in Simple Type Definitions (§3.16.7),
 	// exactly what [builtin.Seed] yields, keyed by ·expanded name·. newSymbols
 	// fills it once and nothing writes it again, so it answers the same for a
@@ -509,9 +527,11 @@ func newSymbols(builder *xsd.SchemaBuilder, backend value.Backend) (*symbols, er
 		return nil, err
 	}
 	builtins := make(map[xsd.QName]*xsd.SimpleType, len(seeded))
+	typeOrder := make([]xsd.QName, 0, len(seeded)+1)
 	for _, b := range seeded {
 		builder.AddType(b)
 		builtins[b.Name()] = b
+		typeOrder = append(typeOrder, b.Name())
 	}
 	anyType, err := seedAnyType()
 	if err != nil {
@@ -532,6 +552,7 @@ func newSymbols(builder *xsd.SchemaBuilder, backend value.Backend) (*symbols, er
 		elements:            make(map[xsd.QName]typeSource),
 		identityConstraints: make(map[xsd.QName]identityConstraintSource),
 		builtins:            builtins,
+		typeOrder:           append(typeOrder, anyTypeName),
 		builtSimple:         make(map[*Element]*xsd.SimpleType),
 		builtGroups:         make(map[*Element]*xsd.ModelGroupDefinition),
 		builtIC:             make(map[xsd.QName]xsd.IdentityConstraint),
@@ -1088,9 +1109,9 @@ func (p *producer) prescan() error {
 		}
 		switch {
 		case isXSD(el, "simpleType"):
-			p.symbols.simpleTypes[xsd.QName{Space: p.target, Local: name}] = typeSource{elem: decl, owner: p}
+			p.symbols.declareType(p.symbols.simpleTypes, xsd.QName{Space: p.target, Local: name}, typeSource{elem: decl, owner: p})
 		case isXSD(el, "complexType"):
-			p.symbols.complexTypes[xsd.QName{Space: p.target, Local: name}] = typeSource{elem: decl, owner: p}
+			p.symbols.declareType(p.symbols.complexTypes, xsd.QName{Space: p.target, Local: name}, typeSource{elem: decl, owner: p})
 		case isXSD(el, "group"):
 			p.symbols.modelGroups[xsd.QName{Space: p.target, Local: name}] = typeSource{elem: decl, owner: p}
 		case isXSD(el, "element"):
@@ -1187,6 +1208,14 @@ func (p *producer) indexIdentityConstraint(el *Element) {
 	}
 	p.symbols.identityConstraints[name] =
 		identityConstraintSource{elem: el, category: category, owner: p}
+	p.symbols.identityConstraintOrder = append(p.symbols.identityConstraintOrder, name)
+}
+
+// declareType enters src under name in index, simpleTypes or complexTypes,
+// and records name in typeOrder: the one way a pre-scan registers a type.
+func (s *symbols) declareType(index map[xsd.QName]typeSource, name xsd.QName, src typeSource) {
+	index[name] = src
+	s.typeOrder = append(s.typeOrder, name)
 }
 
 // compositionDirective reports whether el is one of the four <schema> children
@@ -2147,7 +2176,8 @@ func (p *producer) namedComplexTypeIdentity(name xsd.QName, elem *Element) compl
 // referrer spelled as finalize's walk spells a complex type's base slot
 // (xsd/componentwalk.go's walkComplexType) plus the <restriction>/<extension>
 // that carries base, and "anonymous complex type" for a type with no {name}
-// (#3727). Every TypeDefinitionRef returned here carries base's
+// (#3727), naming the nearest type in typeOrder that name could have meant
+// (typeHint). Every TypeDefinitionRef returned here carries base's
 // position, but no component retains it: newComplexType hands the by-name xsd
 // constructors the bare QName (baseTypeName), and a name this function resolves
 // never reaches finalize's charge.
@@ -2196,8 +2226,20 @@ func (p *producer) resolveBaseType(id complexTypeIdentity, at *Element, base xml
 		owner = "complex type " + n.String()
 	}
 	return nil, nil, xsderr.New(ruleSrcResolve, base.Loc(),
-		"%s {base type definition} <%s base> references type %s, but no type definition with that expanded name is present in the schema (src-resolve clause 1.1)",
-		owner, at.Name().Local(), name)
+		"%s {base type definition} <%s base> references type %s, but no type definition with that expanded name is present in the schema%s (src-resolve clause 1.1)",
+		owner, at.Name().Local(), name, p.symbols.typeHint(name))
+}
+
+// typeHint is the clause resolveBaseType's charge appends for missing: the
+// nearest type of typeOrder that a base= naming it would have resolved to,
+// simple or complex alike, rendered as the charge renders missing
+// (internal/nearname owns the rule).
+func (s *symbols) typeHint(missing xsd.QName) string {
+	names := make([]nearname.Name, 0, len(s.typeOrder))
+	for _, n := range s.typeOrder {
+		names = append(names, nearname.Name(n))
+	}
+	return nearname.Hint(nearname.Name(missing), names, func(n nearname.Name) string { return xsd.QName(n).String() })
 }
 
 // resolvedBase is the {base type definition} COMPONENT resolveBaseType

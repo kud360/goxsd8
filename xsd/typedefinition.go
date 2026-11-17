@@ -363,6 +363,14 @@ func (s typeDefinitionSlot) property() string {
 	}
 }
 
+// admitsComplex reports whether this slot may hold a Complex Type Definition:
+// every slot but an Attribute Declaration's, whose {type definition} is a simple
+// type (§3.2.1), and whose type= naming a complex one resolveAttributeDecl
+// charges as the wrong kind.
+func (s typeDefinitionSlot) admitsComplex() bool {
+	return s != attributeTypeSlot
+}
+
 // admitsHeadInherited reports whether this slot may hold a
 // SubstitutionGroupHeadTypeRef. TWO slots may, and both trace to §3.3.2.1
 // dcl.elt.common clause 3, the sole mapping rule that yields one: the element

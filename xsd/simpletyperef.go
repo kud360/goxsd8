@@ -188,8 +188,10 @@ func checkSimpleTypeOrRefPresent(loc xsderr.Loc, ref SimpleTypeOrRef, slot strin
 // nothing (chargedAt, following resolveReferences' referrer-Loc convention); the
 // target is exactly what does not exist, so it has no position. The nil arm's
 // invariant error is charged at loc. ctx names that referring site for the
-// message.
-func simpleTypeOfRef(r TypeResolver, ref SimpleTypeOrRef, loc xsderr.Loc, ctx string) (*SimpleType, error) {
+// message, and hint the nearest simple type to a name that resolves to nothing
+// (nameHint): finalize's resolveSimpleTypeSlot passes the schema's, and Base,
+// Item and Members, which hold only a TypeResolver, pass noHint.
+func simpleTypeOfRef(r TypeResolver, ref SimpleTypeOrRef, loc xsderr.Loc, ctx string, hint nameHint) (*SimpleType, error) {
 	switch b := ref.(type) {
 	case nil:
 		return nil, xsderr.New(xsderr.RuleComponentInvariant, loc,
@@ -200,7 +202,7 @@ func simpleTypeOfRef(r TypeResolver, ref SimpleTypeOrRef, loc xsderr.Loc, ctx st
 		t, ok := r.Type(b.Name)
 		if !ok {
 			return nil, xsderr.New(ruleSrcResolve, chargedAt(b.Loc, loc),
-				"%s references simple type %s, but no type definition with that expanded name is present in the schema (src-resolve clause 1.1)", ctx, b.Name)
+				"%s references simple type %s, but no type definition with that expanded name is present in the schema%s (src-resolve clause 1.1)", ctx, b.Name, hint(b.Name))
 		}
 		st, ok := t.(*SimpleType)
 		if !ok {

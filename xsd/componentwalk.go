@@ -61,10 +61,11 @@ import "github.com/kud360/goxsd8/xsderr"
 // enumerates a different set of owned types (#841).
 type componentWalk struct {
 	// typeDefinitionSlot is charged on a {type definition}/{base type definition}
-	// slot in every arm, including the inline one the descent then enters. loc
-	// positions a rejection at the component holding the slot and ctx names the
-	// slot for the message (the referrer-Loc convention, resolveReferences).
-	typeDefinitionSlot func(ref TypeDefinitionOrRef, loc xsderr.Loc, ctx string) error
+	// slot in every arm, including the inline one the descent then enters. slot
+	// names which property ref fills, loc positions a rejection at the component
+	// holding the slot and ctx names the slot for the message (the referrer-Loc
+	// convention, resolveReferences).
+	typeDefinitionSlot func(ref TypeDefinitionOrRef, slot typeDefinitionSlot, loc xsderr.Loc, ctx string) error
 	// attributeUse is charged on an Attribute Use in both arms. loc is the
 	// enclosing complex type's or attribute group definition's position and owner
 	// names it, for AttributeUse.chargedLoc and the message.
@@ -120,7 +121,7 @@ func (w componentWalk) walkTypeRoot(t TypeDefinition) error {
 // element, which is nearer than the owning declaration's.
 func (w componentWalk) walkComplexType(c ComplexType) error {
 	owner := complexTypeOwner(c)
-	if err := w.walkTypeDefinition(c.Base(), c.Loc(), owner+" {base type definition}"); err != nil {
+	if err := w.walkTypeDefinition(c.Base(), baseTypeSlot, c.Loc(), owner+" {base type definition}"); err != nil {
 		return err
 	}
 	if err := w.walkAttributeMembers(attributeMembers(c.attributeContent, c.attributeUses), c.Loc(), owner); err != nil {
@@ -157,9 +158,9 @@ func complexTypeOwner(c ComplexType) string {
 // declaration that owns the anonymous type, which is itself a member of the
 // schema's {element declarations} (entering from the member too would charge the
 // same components twice and report a failure at the wrong declaration).
-func (w componentWalk) walkTypeDefinition(ref TypeDefinitionOrRef, loc xsderr.Loc, ctx string) error {
+func (w componentWalk) walkTypeDefinition(ref TypeDefinitionOrRef, slot typeDefinitionSlot, loc xsderr.Loc, ctx string) error {
 	if w.typeDefinitionSlot != nil {
-		if err := w.typeDefinitionSlot(ref, loc, ctx); err != nil {
+		if err := w.typeDefinitionSlot(ref, slot, loc, ctx); err != nil {
 			return err
 		}
 	}
@@ -222,7 +223,7 @@ func (w componentWalk) walkAttributeUse(u AttributeUse, loc xsderr.Loc, owner st
 func (w componentWalk) walkAttributeDeclaration(a AttributeDeclaration) error {
 	ref := a.TypeDefinition()
 	if w.typeDefinitionSlot != nil {
-		if err := w.typeDefinitionSlot(ref, a.Loc(),
+		if err := w.typeDefinitionSlot(ref, attributeTypeSlot, a.Loc(),
 			"attribute declaration "+a.Name().String()+" {type definition}"); err != nil {
 			return err
 		}
@@ -258,7 +259,7 @@ func (w componentWalk) walkElementDeclaration(e ElementDeclaration) error {
 	slots := ownedTypeSlots(e.TypeDefinition(), table)
 	if w.typeDefinitionSlot != nil {
 		for _, slot := range slots {
-			if err := w.typeDefinitionSlot(slot.ref, e.Loc(),
+			if err := w.typeDefinitionSlot(slot.ref, slot.slot, e.Loc(),
 				"element declaration "+e.Name().String()+" "+slot.property); err != nil {
 				return err
 			}

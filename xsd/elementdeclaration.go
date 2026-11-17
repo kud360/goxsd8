@@ -535,9 +535,10 @@ func NewElementDeclarationOwningTypes(loc xsderr.Loc, id ComponentID, name QName
 }
 
 // ownedTypeSlot is one TypeDefinitionOrRef slot an element declaration may own
-// an anonymous type through, paired with the §3 property label that names it in
-// a rejection message.
+// an anonymous type through, paired with the property it fills and the §3
+// property label that names it in a rejection message.
 type ownedTypeSlot struct {
+	slot     typeDefinitionSlot
 	property string
 	ref      TypeDefinitionOrRef
 }
@@ -573,17 +574,19 @@ type ownedTypeSlot struct {
 // option either: a TRAILING untested <alternative> feeds this slot and NO other,
 // so its owned type appears here alone.
 func ownedTypeSlots(typeDefinition TypeDefinitionOrRef, typeTable *TypeTable) []ownedTypeSlot {
-	slots := []ownedTypeSlot{{property: "{type definition}", ref: typeDefinition}}
+	slots := []ownedTypeSlot{{slot: elementTypeSlot, property: "{type definition}", ref: typeDefinition}}
 	if typeTable == nil {
 		return slots
 	}
 	for i, alt := range typeTable.alternatives {
 		slots = append(slots, ownedTypeSlot{
+			slot:     typeAlternativeTypeSlot,
 			property: "{type table}.{alternatives}[" + strconv.Itoa(i) + "].{type definition}",
 			ref:      alt.TypeDefinition(),
 		})
 	}
 	return append(slots, ownedTypeSlot{
+		slot:     typeAlternativeTypeSlot,
 		property: "{type table}.{default type definition}.{type definition}",
 		ref:      typeTable.defaultTypeDefinition.TypeDefinition(),
 	})
