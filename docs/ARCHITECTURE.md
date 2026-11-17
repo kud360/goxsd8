@@ -4,12 +4,14 @@
 
 Packages form a strict DAG. `xsderr` (the error currency) is the **pure
 leaf**: it imports nothing from this module. `xsd` (the component model)
-imports only `xsderr`; every other package builds above the two of them.
+imports only `xsderr` and `internal/nearname`, a stdlib-only leaf; every
+other package builds above the two of them.
 Value implementations, parsing, validation, and generation live above them.
 
 ```
                  xsderr          (leaf: errors, rule IDs, locations)
-                 xsd             (leaf: component model + query/walk APIs; imports xsderr only)
+                 xsd             (leaf: component model + query/walk APIs; imports xsderr
+                                    and internal/nearname only)
                  internal/...    (leaves: helpers over the standard library, unexportable
                                   because they are nobody's API. Each imports only the
                                   standard library, except internal/xmltok, whose
@@ -63,7 +65,12 @@ Value implementations, parsing, validation, and generation live above them.
                                     namer codegen's "# Naming" states, which
                                     codegen names its declarations with and
                                     codec finds a generated struct's fields
-                                    and orders a tie's branch types by.)
+                                    and orders a tie's branch types by.
+                                  - internal/nearname, the declared name
+                                    nearest a QName that names no component,
+                                    which xsd's finalize charges and parser's
+                                    complex base= and <key ref=> charges offer
+                                    under src-resolve clause 1.)
                  internal/goshape (the component → Go shape decisions codegen
                                   emits and codec binds against; imports xsd and xsderr)
                  value           (value-space contracts, facet pipeline; imports xsd, xsderr, regex)
@@ -147,7 +154,7 @@ them;
 
 Only `xsderr`, `xsd`, `internal/schemaloc`, `internal/xmldecl`,
 `internal/xmlenc`, `internal/xmlname`, `internal/xmlchar`,
-`internal/xmlqname`, `internal/xmltok`, `internal/goname`, `internal/goshape`, `value`, `value/backendtest`, `regex`, `builtin`, `builtin/strict`, `loader`,
+`internal/xmlqname`, `internal/xmltok`, `internal/goname`, `internal/nearname`, `internal/goshape`, `value`, `value/backendtest`, `regex`, `builtin`, `builtin/strict`, `loader`,
 `parser`, `parser/xmltree`, `xpath`, `icpath`, `validate`,
 `validate/xmlsrc`, `validate/jsonsrc`, `codegen`, `codec`, `conformance` and `cmd/goxsd8` carry
 code today.
@@ -190,6 +197,15 @@ its one home in `internal/xmlchar`; do not write another copy. The
 `internal/xmlqname`, read by `validate`'s walk and `validate/jsonsrc`'s
 "$type" member (#2615), and by `codec` for the xsi:type naming an abstract
 {type definition}'s member and for an xs:QName or xs:NOTATION value.
+
+**Give logic `xsd` and a package above it both run one home in a
+stdlib-only `internal/<name>` leaf**; do not write it twice, and do not
+export it from `xsd` for the other to call. Such a leaf declares its own
+types over the standard library, which `xsd` and its other reader convert
+to and from at the call. `internal/nearname` is the one today: the
+nearness rule naming the candidate in `xsd`'s src-resolve clause 1
+charges and in `parser`'s two eager ones, for a complex type's `base=` and
+a `<key ref=>`.
 
 `cmd/goxsd8` is a library CONSUMER, not a place to grow capability. A
 capability the CLI needs and the library does not export is a library gap to
