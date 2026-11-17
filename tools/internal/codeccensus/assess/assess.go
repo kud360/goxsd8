@@ -1,12 +1,13 @@
-// Package assess is the half of `go tool decodecensus` that runs inside its
-// driver: the program the census compiles, in a temporary module, beside the
-// packages codegen emitted, so that codec.Decode can be instantiated with each
-// generated type. Its importers are that driver's generated main package,
-// which calls [Drive] with one [DecoderFor] Decoder per type, and the
-// census command, which calls [Assemble] and writes the [Request] Drive reads.
-// The command's package doc owns the population, the assembly and the report;
-// this package owns how one instance is classified, so that the tests that
-// pin each class run the classifier the driver runs.
+// Package assess is the half of the codec census (package codeccensus) that
+// runs inside its driver: the program the census compiles, in a temporary
+// module, beside the packages codegen emitted, so that codec.Decode can be
+// instantiated with each generated type. Its importers are that driver's
+// generated main package, which calls [Drive] with one [DecoderFor] Decoder
+// per type, and package codeccensus, which calls [Assemble] and writes the
+// [Request] Drive reads. Package codeccensus owns the population, the
+// assembly and the drivers, and `go tool decodecensus` the report; this
+// package owns how one instance is classified, so that the tests that pin
+// each class run the classifier the driver runs.
 package assess
 
 import (
