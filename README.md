@@ -371,7 +371,12 @@ structs carry no struct tags and bind no element or attribute QName, so
 `encoding/xml`, because filling them is package `codec`'s (M10), whose
 `codec.Decode` fills the shapes its package doc's "What decodes" states,
 README's `Order` among them; `codegen`'s package doc, section "What you get",
-states this and the Go shape each construct gets. `Generate` requires each `Dir`,
+states this and the Go shape each construct gets. The types are declarations
+only: validate an instance against the Schema with package `validate`, never
+through the structs, because package `validate` is today what enforces the
+constraints the types do not (facets, {assertions}, identity constraints,
+value constraints and wildcard constraints), as "What you get" states.
+`Generate` requires each `Dir`,
 resolved against the working directory, to lie at or below a go.mod, whose module path
 and `Dir`'s path below it give the package's import path (`Target.Dir`'s
 doc), so the program runs in its module's root or any directory below it.
