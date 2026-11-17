@@ -27,7 +27,7 @@ var subcommands = []string{"parse", "validate", "gen"}
 // path prints — is hand-written there.
 const usage = `goxsd8 — XSD 1.1 schema compilation, instance validation, and code generation.
 
-Usage (contract; subcommands land with their milestones):
+Usage:
 
   Exit codes. A run over several arguments exits with its highest-ranked
   outcome: rank, not number, orders the codes.

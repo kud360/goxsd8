@@ -1,7 +1,7 @@
 // Command goxsd8 is the command-line interface: schema compilation,
 // instance validation, and code generation.
 //
-// # Usage (contract; subcommands land with their milestones)
+// # Usage
 //
 //	Exit codes. A run over several arguments exits with its highest-ranked
 //	outcome: rank, not number, orders the codes.
