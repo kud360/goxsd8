@@ -272,6 +272,7 @@ func TestOptionalAttributeAbsentIsNotCharged(t *testing.T) {
 func TestUndeclaredAttributeWithNoWildcardChargesClauseTwo(t *testing.T) {
 	got := assessRoot(t, attributedRoot(local("stray")), []xsd.AttributeUse{aUse(t, "id", false, nil)}, nil)
 	wantCharge(t, got, "cvc-complex-type clause 2.2.1", loc(1, 10), "stray")
+	cWantError(t, got, "instance.xml:1:10: [cvc-complex-type] attribute stray is not allowed on element root: the element's type declares no attribute use for it and has no attribute wildcard, but cvc-complex-type clause 2.2.1 requires an {attribute wildcard} for an attribute that no use among the {attribute uses} matches")
 }
 
 // The same attribute against a type carrying an {attribute wildcard} that
@@ -307,6 +308,7 @@ func TestUndeclaredAttributeOutsideTheWildcardChargesClauseTwoTwoTwo(t *testing.
 
 	got := assessRoot(t, attributedRoot(stray), uses, wild)
 	wantCharge(t, got, "clause 2.2.2", loc(1, 10), "stray")
+	cWantError(t, got, "instance.xml:1:10: [cvc-complex-type] attribute {urn:here}stray is not allowed on element root: the element's type declares no attribute use for it and its attribute wildcard does not admit it, but cvc-complex-type clause 2.2.2 requires the attribute to be ·valid· with respect to that {attribute wildcard}")
 
 	// The same wildcard admits the name it was built for, so the charge above
 	// comes from the ·expanded name· and not from the wildcard's mere shape.

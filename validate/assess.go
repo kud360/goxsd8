@@ -1236,15 +1236,15 @@ func (w *walk) unmatchedAttribute(a Attribute, e Element, governing xsd.ComplexT
 	wild, has := governing.AttributeWildcard()
 	if !has {
 		w.res.violations = append(w.res.violations, xsderr.New(ruleCvcComplexType, a.Loc(),
-			"the attribute %s matches no attribute use among the {attribute uses} of its element's ·governing type definition·, so case 2.2 of clause 2 applies and not case 2.1, and that type has no {attribute wildcard}, which cvc-complex-type clause 2.2.1 requires",
-			a.Name().Display()))
+			"attribute %s is not allowed on element %s: the element's type declares no attribute use for it and has no attribute wildcard, but cvc-complex-type clause 2.2.1 requires an {attribute wildcard} for an attribute that no use among the {attribute uses} matches",
+			a.Name().Display(), e.Name().Display()))
 		w.logAttribute(a, ruleCvcComplexType, "2", "charged")
 		return
 	}
 	if !w.schema.AllowsAttributeWildcardName(wild, a.Name()) {
 		w.res.violations = append(w.res.violations, xsderr.New(ruleCvcComplexType, a.Loc(),
-			"the attribute %s matches no attribute use among the {attribute uses} of its element's ·governing type definition·, and the {attribute wildcard} of that type does not admit its ·expanded name· either, so it is not ·valid· with respect to that wildcard, which cvc-complex-type clause 2.2.2 requires",
-			a.Name().Display()))
+			"attribute %s is not allowed on element %s: the element's type declares no attribute use for it and its attribute wildcard does not admit it, but cvc-complex-type clause 2.2.2 requires the attribute to be ·valid· with respect to that {attribute wildcard}",
+			a.Name().Display(), e.Name().Display()))
 		w.logAttribute(a, ruleCvcComplexType, "2.2.2", "charged")
 		return
 	}
