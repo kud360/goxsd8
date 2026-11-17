@@ -286,10 +286,12 @@
 // # Encode
 //
 //	func Append[T any](dst []byte, schema *xsd.Schema, backend value.Backend, name xsd.QName, v T) ([]byte, error)
+//	func CheckAppend[T any](schema *xsd.Schema, name xsd.QName) error
 //
-// [Append]'s doc states what it writes and what it returns. It reads the
-// schema, not T, as [Decode] does, and holds T to the declaration by Decode's
-// comparisons.
+// [Append]'s doc states what it writes and what it returns;
+// [CheckAppend]'s states what it returns for a declaration and T. Append
+// reads the schema, not T, as [Decode] does, and holds T to the declaration
+// by Decode's comparisons.
 //
 // # What encodes
 //

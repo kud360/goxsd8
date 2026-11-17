@@ -496,7 +496,11 @@ fmt.Println(string(out)) // <order xmlns="urn:o" kind="x"><item>a</item><item>b<
 
 `codec.CheckDecode` reports on `Decode` alone: a nil from it says nothing
 about `Append`, which encodes the narrower slice `codec`'s package doc states
-(section "What encodes").
+(section "What encodes"). Run `codec.CheckAppend` once at start-up, before
+any value exists, to learn whether `Append` refuses a declaration and a
+generated type whatever the value: `go doc github.com/kud360/goxsd8/codec
+CheckAppend` states what it returns, and `ExampleCheckAppend` in
+`codec/example_test.go` runs it.
 
 Two targets can compose one document. `ship.xsd` and `bill.xsd` each import
 `note.xsd`:
@@ -562,7 +566,7 @@ directly: `validate/jsonsrc/example_test.go` (`ExampleValidate`),
 `builtin/strict/example_test.go` (`ExampleNew`),
 `codegen/example_test.go` (`ExampleGenerate`),
 `codec/example_test.go` (`ExampleDecode`, `ExampleAppend`, `ExampleCheckDecode`,
-`ExampleUndecidedError`, `ExampleWithBranches`,
+`ExampleCheckAppend`, `ExampleUndecidedError`, `ExampleWithBranches`,
 `ExampleWithPrecisionDecimalArms`),
 `loader/example_test.go` (`Example_chain`), `xsd/example_test.go`
 (`Example_termOrRefDiscrimination`, `Example_buildFinalizeQuery`,

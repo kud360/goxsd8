@@ -115,7 +115,7 @@ identifier for either of them and they import nothing from this module, so the
 edges drawn above do not exist yet in `go list -deps`. Read every
 present-tense sentence in their sections below as "will", not "does".
 `codec` has left this note: it exports `Decode`/`CheckDecode`/`Option`/`WithURI`/`WithBranches`/`WithPrecisionDecimalArms`/`WithLogger`,
-`Append`, `DeclineError` and its `Construct`, `UndecidedError`, `ViolationsOf` and `ErrTypeMismatch`, and
+`Append`, `CheckAppend`, `DeclineError` and its `Construct`, `UndecidedError`, `ViolationsOf` and `ErrTypeMismatch`, and
 imports `parser/xmltree`, `validate`, `validate/xmlsrc`, `value`, `xsd`,
 `xsderr`, `internal/goname`, `internal/goshape`, `internal/xmlchar` and `internal/xmlqname` (its section says what ships).
 `codegen` has left this note: it exports `Generate`, `CheckTargets` and
@@ -746,7 +746,8 @@ slice `codec/doc.go`'s "What decodes" states, declining every other
 construct, `CheckDecode`, which returns `Decode`'s schema-level declines and T mismatches
 for a declaration before an instance arrives, `Append`, which encodes a value of that type
 back out in canonical form for the slice `codec/doc.go`'s "What encodes" states, declining
-every other construct, `Option`/`WithURI`/`WithBranches`/`WithPrecisionDecimalArms`/`WithLogger`, `DeclineError` and its `Construct`, `UndecidedError`, `ViolationsOf`, and `ErrTypeMismatch`. Its
+every other construct, `CheckAppend`, which returns `Append`'s schema-level declines and T
+mismatches for a declaration before any value exists, `Option`/`WithURI`/`WithBranches`/`WithPrecisionDecimalArms`/`WithLogger`, `DeclineError` and its `Construct`, `UndecidedError`, `ViolationsOf`, and `ErrTypeMismatch`. Its
 runtime path today runs, for a union, the identification of its ·active
 basic member· (`value.ValidatingType`), then the whiteSpace stage
 (`value.ApplyWhiteSpace`) and, for a non-string atomic type, the governing
@@ -899,10 +900,11 @@ compiles, is documented, and has **zero** callers module-wide.
   the `*DeclineError`. **Justified and not to be filed**: it is the slice
   index #3048 exported for an external caller of a multi-target `Generate`,
   on the same footing as `loader`'s helpers. Re-check, do not re-file.
-- **`codec.CheckDecode`, `codec.ViolationsOf`** — no caller outside
-  `codec`'s own examples and tests. **Justified and not to be filed**: each
-  answers a library-user story for an external caller of `Decode` (#3368,
-  #3367), on the same footing as `loader`'s helpers. Re-check, do not re-file.
+- **`codec.CheckDecode`, `codec.CheckAppend`, `codec.ViolationsOf`** — no
+  caller outside `codec`'s own examples and tests. **Justified and not to be
+  filed**: each answers a library-user story for an external caller of
+  `Decode` or `Append` (#3368, #3367, #3863), on the same footing as
+  `loader`'s helpers. Re-check, do not re-file.
 - **`xsderr.IsValidRule`** — **resolved (#273); re-check, do not re-file.**
   It still has zero non-test consumers, but the module-wide test
   `xsderr/doc.go` claims now exists and passes:
