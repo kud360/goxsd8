@@ -1,10 +1,11 @@
 // Package codeccensus is the census of codec over the W3C suite that `go tool
-// decodecensus` reports: [Walk] reads the population, assembles and generates
-// each case's schema, resolves the type each case decodes into, and builds and
-// runs the drivers whose summaries the command merges and prints. The command
-// owns its report; this package owns the population, the assembly and the
-// drivers, and package assess, beneath it, owns how a driver classifies one
-// instance.
+// decodecensus` and `go tool encodecensus` report: [Walk] reads the
+// population, assembles and generates each case's schema, resolves the type
+// each case decodes into, and builds and runs the drivers whose summaries
+// each command merges and prints. Each command owns its report; this package
+// owns the population, the assembly and the drivers, and the [Caveats] they
+// put on every figure; package assess, beneath it, owns how a driver
+// classifies one instance or one round trip.
 //
 // # Population
 //
@@ -21,13 +22,14 @@
 //
 // # Drivers
 //
-// codec.Decode fills a compiled T, so the census compiles what it generated:
-// the temporary module, at the path driverModule names, requires this module
-// by a replace directive on the module root `go env GOMOD` names from the
-// working directory, so that its generated main packages may import package
-// assess. Each batch of up to batchSize packages builds one driver
-// with `go build`, which calls assess.Drive with one assess.DecoderFor
-// Decoder per type the batch's cases decode into, bound to one
+// codec.Decode and codec.Append each take a compiled T, so the census compiles
+// what it generated: the temporary module, at the path driverModule names,
+// requires this module by a replace directive on the module root `go env
+// GOMOD` names from the working directory, so that its generated main packages
+// may import package assess. Each batch of up to batchSize packages builds one
+// driver with `go build`, which calls assess.Drive, for decodecensus, or
+// assess.DriveEncode, for encodecensus (entryOf), with one assess.CodecFor
+// Codec per type the batch's cases decode into, bound to one
 // codec.WithBranches per interface of that type's package, or for a
 // PrecisionDecimal's Value interface one codec.WithPrecisionDecimalArms, and
 // one codec.WithBranches per instantiation of codegen's generic Nillable the

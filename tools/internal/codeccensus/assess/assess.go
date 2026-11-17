@@ -1,13 +1,15 @@
 // Package assess is the half of the codec census (package codeccensus) that
 // runs inside its driver: the program the census compiles, in a temporary
-// module, beside the packages codegen emitted, so that codec.Decode can be
-// instantiated with each generated type. Its importers are that driver's
-// generated main package, which calls [Drive] with one [DecoderFor] Decoder
-// per type, and package codeccensus, which calls [Assemble] and writes the
-// [Request] Drive reads. Package codeccensus owns the population, the
-// assembly and the drivers, and `go tool decodecensus` the report; this
-// package owns how one instance is classified, so that the tests that pin
-// each class run the classifier the driver runs.
+// module, beside the packages codegen emitted, so that codec.Decode and
+// codec.Append can be instantiated with each generated type. Its importers
+// are that driver's generated main package, which calls [Drive] or
+// [DriveEncode] with one [CodecFor] Codec per type, and package codeccensus,
+// which calls [Assemble] and [DocumentElement] and writes the [Request] each
+// reads. Package codeccensus owns the population, the assembly and the
+// drivers, and `go tool decodecensus` and `go tool encodecensus` each own
+// their report; this package owns how one instance, and one round trip, is
+// classified, so that the tests that pin each class run the classifier the
+// driver runs.
 package assess
 
 import (
@@ -90,17 +92,33 @@ func closureReached(resolver loader.Resolver, report *parser.AssemblyReport, loc
 	return false, nil
 }
 
-// A Decoder decodes the instance data against schema, compiled with backend,
-// into the Go type its maker chose, and returns codec.Decode's error alone.
-type Decoder func(schema *xsd.Schema, backend value.Backend, data []byte, opts ...codec.Option) error
+// A Codec is one Go type's two directions, as [CodecFor] makes it: decode
+// decodes the instance data against schema, compiled with backend, into that
+// type and returns codec.Decode's *T, as an any, and its error, and encode
+// appends a value decode returned to no bytes as the document element name
+// names and returns codec.Append's result. A test makes a Codec of other
+// functions to drive a class no codec answer reaches.
+type Codec struct {
+	decode func(schema *xsd.Schema, backend value.Backend, data []byte, opts ...codec.Option) (any, error)
+	encode func(schema *xsd.Schema, backend value.Backend, name xsd.QName, v any) ([]byte, error)
+}
 
-// DecoderFor returns the Decoder into T: codec.Decode[T], its value
-// discarded, under bound and then the options each call passes. The census
-// binds every codec.WithBranches set of T's generated package.
-func DecoderFor[T any](bound ...codec.Option) Decoder {
-	return func(schema *xsd.Schema, backend value.Backend, data []byte, opts ...codec.Option) error {
-		_, err := codec.Decode[T](schema, backend, data, append(slices.Clone(bound), opts...)...)
-		return err
+// CodecFor returns the Codec of T: codec.Decode[T] under bound and then the
+// options each call passes, and codec.Append[T] of the T a *T decode
+// returned points to. The census binds every codec.WithBranches set of T's
+// generated package; codec.Append takes no option.
+func CodecFor[T any](bound ...codec.Option) Codec {
+	return Codec{
+		decode: func(schema *xsd.Schema, backend value.Backend, data []byte, opts ...codec.Option) (any, error) {
+			v, err := codec.Decode[T](schema, backend, data, append(slices.Clone(bound), opts...)...)
+			if err != nil {
+				return nil, err
+			}
+			return v, nil
+		},
+		encode: func(schema *xsd.Schema, backend value.Backend, name xsd.QName, v any) ([]byte, error) {
+			return codec.Append(nil, schema, backend, name, *v.(*T))
+		},
 	}
 }
 
@@ -141,8 +159,8 @@ type outcome struct {
 	differential bool
 }
 
-// classify returns the bucket of err, a Decoder's result, and for a decline
-// its construct. own reports whether the Decoder's T is the type codegen
+// classify returns the bucket of err, a Codec's decode error, and for a
+// decline its construct. own reports whether the Codec's T is the type codegen
 // emitted for the document element's declaration: an ErrTypeMismatch on any
 // other T is no codec defect.
 func classify(err error, own bool) (bucket, codec.Construct) {
@@ -181,12 +199,15 @@ func accepts(schema *xsd.Schema, backend value.Backend, data []byte, uri string)
 	return res.Standing() == validate.NotProvenInvalid
 }
 
-// assess classifies decode's result on the instance data, named uri: its
-// bucket by classify, and differential when decode returned no error where
-// the census's own validation, never decode's error, does not accept data.
-func assess(schema *xsd.Schema, backend value.Backend, data []byte, uri string, decode Decoder, own bool) outcome {
-	b, c := classify(decode(schema, backend, data, codec.WithURI(uri)), own)
-	return outcome{bucket: b, construct: c, differential: b == decoded && !accepts(schema, backend, data, uri)}
+// assess classifies c's decode of the instance data, named uri: its bucket
+// by classify, and differential when decode returned no error where the
+// census's own validation, never decode's error, does not accept data; it
+// returns the decoded value beside the outcome, nil unless the bucket is
+// decoded.
+func assess(schema *xsd.Schema, backend value.Backend, data []byte, uri string, c Codec, own bool) (outcome, any) {
+	v, err := c.decode(schema, backend, data, codec.WithURI(uri))
+	b, construct := classify(err, own)
+	return outcome{bucket: b, construct: construct, differential: b == decoded && !accepts(schema, backend, data, uri)}, v
 }
 
 // A Request is what [Drive] reads: the suite root every path is relative to,
@@ -207,16 +228,16 @@ type Group struct {
 
 // A Case is one instance case: its ID, the conformance.CatalogEntry's, its
 // instance document, a slash path relative to the suite root, and the index
-// into Drive's decoders of the Decoder into the type codegen emitted for its
+// into the driver's codecs of the Codec of the type codegen emitted for its
 // document element's declaration, or -1 for the placeholder, which an
 // ErrTypeMismatch is no codec defect for. ID is exported, as every field
 // here is, because the Request crosses the driver's process boundary as
-// JSON: the census writes it and Drive copies it into the [Summary], since
-// an instance document alone names no case (two cases can share one).
+// JSON: the census writes it and the driver copies it into its summary,
+// since an instance document alone names no case (two cases can share one).
 type Case struct {
 	ID       string
 	Instance string
-	Decoder  int
+	Codec    int
 }
 
 // A Summary is what [Drive] writes. Decoded, Undecided and FailedOther are
@@ -251,23 +272,40 @@ type Tally struct {
 }
 
 // Drive reads one JSON [Request] from r, assesses each of its cases with the
-// Decoder decoders holds at the case's index, or the placeholder's, and
-// writes one JSON [Summary] to w. Within the one process it keys each decline
-// on its codec.Construct, and writes the Construct's String, which codec
-// makes distinct for each Construct, only into the Summary. A group that does
-// not assemble, or an instance that does not read, is an error: the census
-// generated each group's package from the same assembly, and read each
-// instance's document element, before it wrote the Request.
-func Drive(r io.Reader, w io.Writer, decoders []Decoder) error {
+// Codec codecs holds at the case's index, or the placeholder's, and writes
+// one JSON [Summary] to w. Within the one process it keys each decline on
+// its codec.Construct, and writes the Construct's String, which codec makes
+// distinct for each Construct, only into the Summary; [DriveEncode] keys its
+// own declines the same way. A group that does not assemble, or an instance
+// that does not read, is an error: the census generated each group's package
+// from the same assembly, and read each instance's document element, before
+// it wrote the Request.
+func Drive(r io.Reader, w io.Writer, codecs []Codec) error {
+	var sum Summary
+	// index maps a construct to its position in sum.Declines, for lookup
+	// only; nothing ranges over it (STYLE D2).
+	index := map[codec.Construct]int{}
+	err := walk(r, codecs, func(schema *xsd.Schema, backend value.Backend, data []byte, c Case, k Codec, own bool) {
+		o, _ := assess(schema, backend, data, c.Instance, k, own)
+		tallyOutcome(&sum, index, c.ID, o)
+	})
+	if err != nil {
+		return err
+	}
+	return writeSummary(w, sum)
+}
+
+// walk reads one JSON Request from r and calls visit on each of its cases,
+// in request order, with its group's schema, the backend that schema was
+// assembled with, the instance's bytes, and the Codec codecs holds at the
+// case's index, own true, or the placeholder's, own false. It returns the
+// errors [Drive]'s doc states.
+func walk(r io.Reader, codecs []Codec, visit func(schema *xsd.Schema, backend value.Backend, data []byte, c Case, k Codec, own bool)) error {
 	var req Request
 	if err := json.NewDecoder(r).Decode(&req); err != nil {
 		return fmt.Errorf("assess: reading the request: %w", err)
 	}
 	backend := strict.New()
-	var sum Summary
-	// index maps a construct to its position in sum.Declines, for lookup
-	// only; nothing ranges over it (STYLE D2).
-	index := map[codec.Construct]int{}
 	for _, g := range req.Groups {
 		schema, err := Assemble(req.Root, g.Schema, backend)
 		if err != nil {
@@ -278,29 +316,34 @@ func Drive(r io.Reader, w io.Writer, decoders []Decoder) error {
 			if err != nil {
 				return fmt.Errorf("assess: reading instance %s: %w", c.Instance, err)
 			}
-			decode, own, err := decoderAt(decoders, c.Decoder)
+			k, own, err := codecAt(codecs, c.Codec)
 			if err != nil {
 				return fmt.Errorf("assess: case %s: %w", c.Instance, err)
 			}
-			tallyOutcome(&sum, index, c.ID, assess(schema, backend, data, c.Instance, decode, own))
+			visit(schema, backend, data, c, k, own)
 		}
 	}
+	return nil
+}
+
+// writeSummary writes sum, a driver's summary, to w as one JSON value.
+func writeSummary(w io.Writer, sum any) error {
 	if err := json.NewEncoder(w).Encode(sum); err != nil {
 		return fmt.Errorf("assess: writing the summary: %w", err)
 	}
 	return nil
 }
 
-// decoderAt returns decoders[i] and true, or for i -1 the placeholder's
-// Decoder and false.
-func decoderAt(decoders []Decoder, i int) (Decoder, bool, error) {
+// codecAt returns codecs[i] and true, or for i -1 the placeholder's Codec
+// and false.
+func codecAt(codecs []Codec, i int) (Codec, bool, error) {
 	if i == -1 {
-		return DecoderFor[placeholder](), false, nil
+		return CodecFor[placeholder](), false, nil
 	}
-	if i < 0 || i >= len(decoders) {
-		return nil, false, fmt.Errorf("decoder index %d is outside the %d decoders", i, len(decoders))
+	if i < 0 || i >= len(codecs) {
+		return Codec{}, false, fmt.Errorf("codec index %d is outside the %d codecs", i, len(codecs))
 	}
-	return decoders[i], true, nil
+	return codecs[i], true, nil
 }
 
 // tallyOutcome adds o, the outcome of the case id, to sum, index mapping a
@@ -313,13 +356,7 @@ func tallyOutcome(sum *Summary, index map[codec.Construct]int, id string, o outc
 	case decoded:
 		sum.Decoded++
 	case declined:
-		i, seen := index[o.construct]
-		if !seen {
-			i = len(sum.Declines)
-			index[o.construct] = i
-			sum.Declines = append(sum.Declines, Tally{Construct: o.construct.String()})
-		}
-		sum.Declines[i].Cases = append(sum.Declines[i].Cases, id)
+		sum.Declines = addDecline(sum.Declines, index, o.construct, id)
 	case undecided:
 		sum.Undecided++
 	case rejected:
@@ -330,4 +367,17 @@ func tallyOutcome(sum *Summary, index map[codec.Construct]int, id string, o outc
 	case failedOther:
 		sum.FailedOther++
 	}
+}
+
+// addDecline adds the case id, declining construct, to declines and returns
+// them, index mapping a construct to its Tally's position in declines.
+func addDecline(declines []Tally, index map[codec.Construct]int, construct codec.Construct, id string) []Tally {
+	i, seen := index[construct]
+	if !seen {
+		i = len(declines)
+		index[construct] = i
+		declines = append(declines, Tally{Construct: construct.String()})
+	}
+	declines[i].Cases = append(declines[i].Cases, id)
+	return declines
 }

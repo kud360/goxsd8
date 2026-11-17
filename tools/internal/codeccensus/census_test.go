@@ -145,7 +145,8 @@ func TestOwnTypeRendersAnAbsoluteLoc(t *testing.T) {
 // marker's name and a generic interface, yields sealedInterfaces' list, and a
 // driver source declaring one WithBranches per other non-generic interface
 // and one WithPrecisionDecimalArms of the arms in file order for the Value
-// interface, in file order, bound to each decoder of that package alone.
+// interface, in file order, bound to each codec of that package alone, and a
+// main calling the entry driverSource is given with those codecs.
 func TestDriverSourceBindsBranches(t *testing.T) {
 	const src = `package p0
 
@@ -213,12 +214,13 @@ func (DQ) isD() {}
 	if !reflect.DeepEqual(sealed, want) {
 		t.Errorf("sealedInterfaces = %+v, want %+v", sealed, want)
 	}
-	got := string(driverSource(batch{packages: []genPackage{{name: "p0", sealed: sealed}, {name: "p1"}}, decoders: []string{"p0.R", "p1.S", "p0.X"}}))
+	got := string(driverSource(batch{packages: []genPackage{{name: "p0", sealed: sealed}, {name: "p1"}}, codecs: []string{"p0.R", "p1.S", "p0.X"}}, "DriveEncode"))
 	for _, line := range []string{
 		"\t\"github.com/kud360/goxsd8/codec\"\n",
 		"var p0Branches = []codec.Option{\n\tcodec.WithBranches[p0.R](*new(p0.RA), *new(p0.RB)),\n\tcodec.WithBranches[p0.U](*new(p0.UInt)),\n" +
 			"\tcodec.WithPrecisionDecimalArms[p0.D](*new(p0.DN), *new(p0.DP), *new(p0.DM), *new(p0.DQ)),\n}\n",
-		"\tassess.DecoderFor[p0.R](p0Branches...),\n\tassess.DecoderFor[p1.S](),\n\tassess.DecoderFor[p0.X](p0Branches...),\n",
+		"\tassess.CodecFor[p0.R](p0Branches...),\n\tassess.CodecFor[p1.S](),\n\tassess.CodecFor[p0.X](p0Branches...),\n",
+		"\tif err := assess.DriveEncode(os.Stdin, os.Stdout, codecs); err != nil {\n",
 	} {
 		if !strings.Contains(got, line) {
 			t.Errorf("driver source\n%s\nlacks\n%s", got, line)

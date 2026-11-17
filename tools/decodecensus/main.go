@@ -34,6 +34,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"slices"
 
 	"github.com/kud360/goxsd8/tools/internal/codeccensus"
 	"github.com/kud360/goxsd8/tools/internal/codeccensus/assess"
@@ -105,17 +106,16 @@ func (r report) declined() int {
 	return n
 }
 
-// caveats are the limits on reading any figure the census prints; the
-// report adds the placeholder's, which carries its counts.
-var caveats = []string{
+// caveats are the limits on reading any figure the census prints,
+// codeccensus.Caveats among them; the report adds the placeholder's, which
+// carries its counts.
+var caveats = slices.Concat([]string{
 	"Defects: \"" + rejectedLabel + "\" and \"" + differentialLabel + "\" are defects in codec, and any count other than 0 is one to file.",
 	"\"failed other\" is no defect count: it holds every Decode error that is no decline, no undecided validation and no type mismatch on codegen's type: a source fault, every instance validate charges, as the suite's invalid instances are meant to be, and an error of Decode's second read after validation.",
 	"One decline per case: Decode returns its first decline, so a case counts once, under that construct.",
-	"Cases, not documents: each instance case counts once, however many cases name its instance document or share its schema.",
-	"Assembly: the instance lane's schema is wider. It also serves the suite's own XLink schema, declines an assembly outside the parser's decidable subset, widens the group's schema by the hints on the instance's document element for namespaces it leaves uncovered, and builds a schema from the instance's hints or the built-ins for a group declaring other than one schemaTest, whose cases the census counts as not generating.",
-	"The decline table keys a construct on its codec.Construct inside each driver, and across drivers on the Construct's String, which codec makes distinct for each Construct.",
+}, codeccensus.Caveats, []string{
 	"No count is a yield: lifting a construct exposes each of its cases' next decline, so its count bounds from above the cases lifting it alone makes decode.",
-}
+})
 
 // The labels of the counts -paths lists the cases of, each printed on its
 // count's line and over its list.

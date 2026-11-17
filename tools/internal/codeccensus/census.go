@@ -24,7 +24,6 @@ import (
 	"github.com/kud360/goxsd8/codegen"
 	"github.com/kud360/goxsd8/conformance"
 	"github.com/kud360/goxsd8/internal/goname"
-	"github.com/kud360/goxsd8/parser/xmltree"
 	"github.com/kud360/goxsd8/tools/internal/codeccensus/assess"
 	"github.com/kud360/goxsd8/tools/internal/suiteroot"
 	"github.com/kud360/goxsd8/xsd"
@@ -53,12 +52,20 @@ type Population struct {
 	Placeholder, Unresolved int
 }
 
+// A Summary is a driver's summary, the type its entry writes:
+// assess.Summary is assess.Drive's, and assess.EncodeSummary
+// assess.DriveEncode's (entryOf).
+type Summary interface {
+	assess.Summary | assess.EncodeSummary
+}
+
 // Walk runs the census over the suite at root up to its drivers' summaries:
 // it reads the catalog, generates and resolves each group, builds and runs
-// one driver per batch, and passes each driver's summary to merge, in batch
-// order. When root holds no suite index Walk writes the corpus-absent notice,
+// one driver per batch, whose main calls the entry of package assess that
+// writes an S, and passes each driver's summary to merge, in batch order.
+// When root holds no suite index Walk writes the corpus-absent notice,
 // naming tool, to stdout and returns present false and the write's error.
-func Walk(stdout io.Writer, tool, root string, merge func(assess.Summary)) (pop Population, present bool, err error) {
+func Walk[S Summary](stdout io.Writer, tool, root string, merge func(S)) (pop Population, present bool, err error) {
 	index := filepath.Join(root, "suite.xml")
 	if _, serr := os.Stat(index); errors.Is(serr, fs.ErrNotExist) {
 		return Population{}, false, suiteroot.PrintAbsent(stdout, tool, "no suite index at "+index, "census")
@@ -92,7 +99,7 @@ func Walk(stdout io.Writer, tool, root string, merge func(assess.Summary)) (pop 
 		return Population{}, true, err
 	}
 	for i, b := range batches {
-		sum, err := drive(tmp, i, b)
+		sum, err := drive[S](tmp, i, b)
 		if err != nil {
 			return Population{}, true, err
 		}
@@ -178,13 +185,13 @@ func writeModule(dir string, m module) error {
 }
 
 // batch is one driver's share of the census: the request it reads, the
-// generated packages it imports, and the decoders it compiles, each a
-// qualified type, `p<N>.<Name>`, at the index a case's assess.Case.Decoder
+// generated packages it imports, and the codecs it compiles, each a
+// qualified type, `p<N>.<Name>`, at the index a case's assess.Case.Codec
 // names.
 type batch struct {
 	req      assess.Request
 	packages []genPackage
-	decoders []string
+	codecs   []string
 }
 
 // genPackage is one generated package a driver imports: its name, p<N>, its
@@ -196,7 +203,7 @@ type genPackage struct {
 	nillable bool
 }
 
-// bound reports whether p's decoders take an option list: p declares a
+// bound reports whether p's codecs take an option list: p declares a
 // sealed interface or the census bound a Nillable instantiation of it.
 func (p genPackage) bound() bool { return len(p.sealed) > 0 || p.nillable }
 
@@ -283,11 +290,11 @@ func plan(abs, root string, cases []conformance.CatalogEntry, dir string) (Popul
 				if decl {
 					pop.Unresolved++
 				}
-				ag.Cases = append(ag.Cases, assess.Case{ID: c.ID, Instance: inst, Decoder: -1})
+				ag.Cases = append(ag.Cases, assess.Case{ID: c.ID, Instance: inst, Codec: -1})
 				continue
 			}
 			used = true
-			ag.Cases = append(ag.Cases, assess.Case{ID: c.ID, Instance: inst, Decoder: cur.decoder(qualified)})
+			ag.Cases = append(ag.Cases, assess.Case{ID: c.ID, Instance: inst, Codec: cur.codec(qualified)})
 		}
 		cur.req.Groups = append(cur.req.Groups, ag)
 		if !used {
@@ -311,14 +318,14 @@ type groupCases struct {
 	cases  []conformance.CatalogEntry
 }
 
-// decoder returns the index of the decoder into typ, a qualified type,
-// adding it when b has none.
-func (b *batch) decoder(typ string) int {
-	if i := slices.Index(b.decoders, typ); i >= 0 {
+// codec returns the index of the codec of typ, a qualified type, adding it
+// when b has none.
+func (b *batch) codec(typ string) int {
+	if i := slices.Index(b.codecs, typ); i >= 0 {
 		return i
 	}
-	b.decoders = append(b.decoders, typ)
-	return len(b.decoders) - 1
+	b.codecs = append(b.codecs, typ)
+	return len(b.codecs) - 1
 }
 
 // resolveCase returns the name of the type ownType finds for the top-level
@@ -338,25 +345,14 @@ func resolveCase(schema *xsd.Schema, types []typeDecl, name xsd.QName, dir strin
 	return typ, true, ok
 }
 
-// documentElement returns the expanded name of the document element of the
-// instance at path, or the zero QName when the document is not well-formed
-// before it.
+// documentElement returns assess.DocumentElement of the instance at path.
 func documentElement(path string) (xsd.QName, error) {
 	f, err := os.Open(path)
 	if err != nil {
 		return xsd.QName{}, fmt.Errorf("reading instance %s: %w", path, err)
 	}
 	defer func() { _ = f.Close() }() // read-only handle: close error cannot change what was read
-	r := xmltree.NewReader(path, f)
-	for {
-		tok, err := r.Token()
-		if err != nil {
-			return xsd.QName{}, nil
-		}
-		if start, ok := tok.(*xmltree.StartElement); ok {
-			return xsd.QName{Space: start.Name().Space(), Local: start.Name().Local()}, nil
-		}
-	}
+	return assess.DocumentElement(f, path), nil
 }
 
 // typeDecl is one type declaration of a generated file: its name, the first
@@ -535,25 +531,27 @@ func headerLoc(dir string, loc xsderr.Loc) string {
 }
 
 // drive writes batch b's driver into the module at dir as package b<n>,
-// builds it, runs it on b's request, and returns its summary.
-func drive(dir string, n int, b batch) (assess.Summary, error) {
+// its main calling the entry of package assess that writes an S, builds it,
+// runs it on b's request, and returns its summary.
+func drive[S Summary](dir string, n int, b batch) (S, error) {
+	var sum S
 	name := "b" + strconv.Itoa(n)
 	if err := os.MkdirAll(filepath.Join(dir, name), 0o755); err != nil {
-		return assess.Summary{}, fmt.Errorf("creating driver %s: %w", name, err)
+		return sum, fmt.Errorf("creating driver %s: %w", name, err)
 	}
-	if err := os.WriteFile(filepath.Join(dir, name, "main.go"), driverSource(b), 0o644); err != nil {
-		return assess.Summary{}, fmt.Errorf("writing driver %s: %w", name, err)
+	if err := os.WriteFile(filepath.Join(dir, name, "main.go"), driverSource(b, entryOf[S]()), 0o644); err != nil {
+		return sum, fmt.Errorf("writing driver %s: %w", name, err)
 	}
 	bin := filepath.Join(dir, name, name)
 	build := exec.Command("go", "build", "-o", bin, "./"+name)
 	build.Dir = dir
 	build.Env = append(os.Environ(), "GOFLAGS=-mod=mod", "GOWORK=off")
 	if out, err := build.CombinedOutput(); err != nil {
-		return assess.Summary{}, fmt.Errorf("building driver %s: %w\n%s", name, err, out)
+		return sum, fmt.Errorf("building driver %s: %w\n%s", name, err, out)
 	}
 	req, err := json.Marshal(b.req)
 	if err != nil {
-		return assess.Summary{}, fmt.Errorf("encoding driver %s's request: %w", name, err)
+		return sum, fmt.Errorf("encoding driver %s's request: %w", name, err)
 	}
 	var stdout, stderr bytes.Buffer
 	cmd := exec.Command(bin)
@@ -561,13 +559,22 @@ func drive(dir string, n int, b batch) (assess.Summary, error) {
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
 	if err := cmd.Run(); err != nil {
-		return assess.Summary{}, fmt.Errorf("running driver %s: %w\n%s", name, err, stderr.Bytes())
+		return sum, fmt.Errorf("running driver %s: %w\n%s", name, err, stderr.Bytes())
 	}
-	var sum assess.Summary
 	if err := json.Unmarshal(stdout.Bytes(), &sum); err != nil {
-		return assess.Summary{}, fmt.Errorf("reading driver %s's summary: %w", name, err)
+		return sum, fmt.Errorf("reading driver %s's summary: %w", name, err)
 	}
 	return sum, nil
+}
+
+// entryOf returns the name of the function of package assess that writes an
+// S: DriveEncode for an assess.EncodeSummary, and Drive for an
+// assess.Summary.
+func entryOf[S Summary]() string {
+	if _, ok := any(*new(S)).(assess.EncodeSummary); ok {
+		return "DriveEncode"
+	}
+	return "Drive"
 }
 
 // driverSource returns the main package of b's driver: an import of each of
@@ -576,9 +583,10 @@ func drive(dir string, n int, b batch) (assess.Summary, error) {
 // *new(B), so that a branch that is no struct compiles too: a
 // codec.WithPrecisionDecimalArms of its four arms in order for a
 // PrecisionDecimal's Value interface, and a codec.WithBranches for every
-// other; and a decoder per qualified type, in b's order, bound to its
-// package's list.
-func driverSource(b batch) []byte {
+// other; a codec per qualified type, in b's order, bound to its package's
+// list; and a main calling entry, assess.Drive or assess.DriveEncode, with
+// those codecs.
+func driverSource(b batch, entry string) []byte {
 	var s strings.Builder
 	s.WriteString("// Code generated by the codec census; DO NOT EDIT.\n\npackage main\n\nimport (\n\t\"fmt\"\n\t\"os\"\n\n")
 	if slices.ContainsFunc(b.packages, genPackage.bound) {
@@ -614,16 +622,16 @@ func driverSource(b batch) []byte {
 		}
 		s.WriteString(tail)
 	}
-	s.WriteString("\nvar decoders = []assess.Decoder{\n")
-	for _, d := range b.decoders {
+	s.WriteString("\nvar codecs = []assess.Codec{\n")
+	for _, d := range b.codecs {
 		pkg, _, _ := strings.Cut(d, ".")
 		bound := ""
 		if i := slices.IndexFunc(b.packages, func(p genPackage) bool { return p.name == pkg }); i >= 0 && b.packages[i].bound() {
 			bound = pkg + "Branches..."
 		}
-		fmt.Fprintf(&s, "\tassess.DecoderFor[%s](%s),\n", d, bound)
+		fmt.Fprintf(&s, "\tassess.CodecFor[%s](%s),\n", d, bound)
 	}
-	s.WriteString("}\n\nfunc main() {\n\tif err := assess.Drive(os.Stdin, os.Stdout, decoders); err != nil {\n" +
+	s.WriteString("}\n\nfunc main() {\n\tif err := assess." + entry + "(os.Stdin, os.Stdout, codecs); err != nil {\n" +
 		"\t\tfmt.Fprintln(os.Stderr, err)\n\t\tos.Exit(1)\n\t}\n}\n")
 	return []byte(s.String())
 }
@@ -665,4 +673,13 @@ func PrintCases(w *bufio.Writer, heading string, ids []string) {
 	for _, id := range slices.Sorted(slices.Values(ids)) {
 		_, _ = fmt.Fprintf(w, "  %s\n", id)
 	}
+}
+
+// Caveats are the limits on reading a figure either command prints that
+// come from the population, the assembly and the drivers, which this
+// package owns; each command adds its own report's.
+var Caveats = []string{
+	"Cases, not documents: each instance case counts once, however many cases name its instance document or share its schema.",
+	"Assembly: the instance lane's schema is wider. It also serves the suite's own XLink schema, declines an assembly outside the parser's decidable subset, widens the group's schema by the hints on the instance's document element for namespaces it leaves uncovered, and builds a schema from the instance's hints or the built-ins for a group declaring other than one schemaTest, whose cases the census counts as not generating.",
+	"The decline table keys a construct on its codec.Construct inside each driver, and across drivers on the Construct's String, which codec makes distinct for each Construct.",
 }

@@ -8,6 +8,7 @@ tool (
 	github.com/kud360/goxsd8/tools/casejoin
 	github.com/kud360/goxsd8/tools/commentwrap
 	github.com/kud360/goxsd8/tools/decodecensus
+	github.com/kud360/goxsd8/tools/encodecensus
 	github.com/kud360/goxsd8/tools/fetchspecs
 	github.com/kud360/goxsd8/tools/gapaudit
 	github.com/kud360/goxsd8/tools/gencensus

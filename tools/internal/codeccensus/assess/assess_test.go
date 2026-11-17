@@ -3,6 +3,7 @@ package assess
 import (
 	"bytes"
 	"encoding/json"
+	"io"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -71,28 +72,34 @@ func writeSuite(t *testing.T) string {
 	return root
 }
 
-// drive runs Drive over one group of the fixture schema holding cases, with
-// decoders, and returns its Summary.
-func drive(t *testing.T, decoders []Decoder, cases ...Case) Summary {
+// driveWith runs entry, Drive or DriveEncode, over one group of the fixture
+// schema holding cases, with codecs, and returns the summary it writes.
+func driveWith[S any](t *testing.T, entry func(io.Reader, io.Writer, []Codec) error, codecs []Codec, cases ...Case) S {
 	t.Helper()
 	req, err := json.Marshal(Request{Root: writeSuite(t), Groups: []Group{{Schema: []string{"s.xsd"}, Cases: cases}}})
 	if err != nil {
 		t.Fatalf("encoding the request: %v", err)
 	}
 	var out bytes.Buffer
-	if err := Drive(bytes.NewReader(req), &out, decoders); err != nil {
-		t.Fatalf("Drive: %v", err)
+	if err := entry(bytes.NewReader(req), &out, codecs); err != nil {
+		t.Fatalf("driving: %v", err)
 	}
-	var sum Summary
+	var sum S
 	if err := json.Unmarshal(out.Bytes(), &sum); err != nil {
 		t.Fatalf("reading the summary %q: %v", out.String(), err)
 	}
 	return sum
 }
 
-// accepting is a Decoder returning no error whatever the instance, as a
-// codec that decodes an instance validate does not accept would.
-func accepting(*xsd.Schema, value.Backend, []byte, ...codec.Option) error { return nil }
+// drive runs Drive as driveWith does.
+func drive(t *testing.T, codecs []Codec, cases ...Case) Summary {
+	t.Helper()
+	return driveWith[Summary](t, Drive, codecs, cases...)
+}
+
+// accepting is a Codec whose decode returns no error whatever the instance,
+// as a codec that decodes an instance validate does not accept would.
+var accepting = Codec{decode: func(*xsd.Schema, value.Backend, []byte, ...codec.Option) (any, error) { return nil, nil }}
 
 // TestDriveCountsEachBucket holds Drive, the loop the census's driver runs,
 // to one count per bucket of the classifier, each row a case that lands in
@@ -103,31 +110,31 @@ func accepting(*xsd.Schema, value.Backend, []byte, ...codec.Option) error { retu
 // and the row after it with the differential set on every decoded case. Each
 // listed bucket's row names its case by the ID the Case carries.
 func TestDriveCountsEachBucket(t *testing.T) {
-	own := []Decoder{DecoderFor[a]()}
+	own := []Codec{CodecFor[a]()}
 	cases := []struct {
-		name     string
-		decoders []Decoder
-		c        Case
-		want     Summary
+		name   string
+		codecs []Codec
+		c      Case
+		want   Summary
 	}{
 		{"decoded", own, Case{"S/g/instance/d", "valid.xml", 0}, Summary{Decoded: 1}},
-		{"declined", []Decoder{DecoderFor[a]()}, Case{"S/g/instance/c", "nested.xml", 0},
+		{"declined", []Codec{CodecFor[a]()}, Case{"S/g/instance/c", "nested.xml", 0},
 			Summary{Declines: []Tally{{Construct: "a nested model group particle", Cases: []string{"S/g/instance/c"}}}}},
 		{"undecided", own, Case{"S/g/instance/u", "undecided.xml", 0}, Summary{Undecided: 1}},
-		{"rejected", []Decoder{DecoderFor[mismatched]()}, Case{"S/g/instance/r", "valid.xml", 0}, Summary{Rejected: []string{"S/g/instance/r"}}},
+		{"rejected", []Codec{CodecFor[mismatched]()}, Case{"S/g/instance/r", "valid.xml", 0}, Summary{Rejected: []string{"S/g/instance/r"}}},
 		{"failed other", own, Case{"S/g/instance/f", "invalid.xml", 0}, Summary{FailedOther: 1}},
 		{"placeholder mismatch", nil, Case{"S/g/instance/m", "valid.xml", -1},
 			Summary{FailedOther: 1, PlaceholderMismatch: []string{"S/g/instance/m"}}},
-		{"differential", []Decoder{accepting}, Case{"S/g/instance/x", "invalid.xml", 0},
+		{"differential", []Codec{accepting}, Case{"S/g/instance/x", "invalid.xml", 0},
 			Summary{Decoded: 1, Differential: []string{"S/g/instance/x"}}},
-		{"no differential where validate accepts", []Decoder{accepting}, Case{"S/g/instance/v", "valid.xml", 0}, Summary{Decoded: 1}},
-		{"decoded under bound branches", []Decoder{DecoderFor[p](codec.WithBranches[p](pq{}, pr{}))}, Case{"S/g/instance/b", "choice.xml", 0},
+		{"no differential where validate accepts", []Codec{accepting}, Case{"S/g/instance/v", "valid.xml", 0}, Summary{Decoded: 1}},
+		{"decoded under bound branches", []Codec{CodecFor[p](codec.WithBranches[p](pq{}, pr{}))}, Case{"S/g/instance/b", "choice.xml", 0},
 			Summary{Decoded: 1}},
-		{"rejected without them", []Decoder{DecoderFor[p]()}, Case{"S/g/instance/w", "choice.xml", 0}, Summary{Rejected: []string{"S/g/instance/w"}}},
+		{"rejected without them", []Codec{CodecFor[p]()}, Case{"S/g/instance/w", "choice.xml", 0}, Summary{Rejected: []string{"S/g/instance/w"}}},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			if got := drive(t, tc.decoders, tc.c); !reflect.DeepEqual(got, tc.want) {
+			if got := drive(t, tc.codecs, tc.c); !reflect.DeepEqual(got, tc.want) {
 				t.Errorf("Summary = %+v, want %+v", got, tc.want)
 			}
 		})
@@ -138,7 +145,7 @@ func TestDriveCountsEachBucket(t *testing.T) {
 // cases declining one construct, over one instance document, are one Tally
 // listing both IDs in the order Drive met them.
 func TestDriveTalliesDeclinesByConstruct(t *testing.T) {
-	got := drive(t, []Decoder{DecoderFor[a]()}, Case{"S/g/instance/z", "nested.xml", 0}, Case{"S/g/instance/v", "valid.xml", 0},
+	got := drive(t, []Codec{CodecFor[a]()}, Case{"S/g/instance/z", "nested.xml", 0}, Case{"S/g/instance/v", "valid.xml", 0},
 		Case{"S/g/instance/a", "nested.xml", 0})
 	want := Summary{Decoded: 1, Declines: []Tally{{Construct: "a nested model group particle", Cases: []string{"S/g/instance/z", "S/g/instance/a"}}}}
 	if !reflect.DeepEqual(got, want) {
@@ -146,17 +153,17 @@ func TestDriveTalliesDeclinesByConstruct(t *testing.T) {
 	}
 }
 
-// TestDriveRefusesAnUnknownDecoder holds a decoder index outside the
-// decoders, and below the placeholder's -1, to an error.
-func TestDriveRefusesAnUnknownDecoder(t *testing.T) {
+// TestDriveRefusesAnUnknownCodec holds a codec index outside the
+// codecs, and below the placeholder's -1, to an error.
+func TestDriveRefusesAnUnknownCodec(t *testing.T) {
 	for _, i := range []int{1, -2} {
 		req, err := json.Marshal(Request{Root: writeSuite(t), Groups: []Group{{Schema: []string{"s.xsd"}, Cases: []Case{{"S/g/instance/v", "valid.xml", i}}}}})
 		if err != nil {
 			t.Fatalf("encoding the request: %v", err)
 		}
 		var out bytes.Buffer
-		if err := Drive(bytes.NewReader(req), &out, []Decoder{DecoderFor[a]()}); err == nil {
-			t.Errorf("Drive with decoder index %d: no error, summary %s", i, out.String())
+		if err := Drive(bytes.NewReader(req), &out, []Codec{CodecFor[a]()}); err == nil {
+			t.Errorf("Drive with codec index %d: no error, summary %s", i, out.String())
 		}
 	}
 }

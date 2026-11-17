@@ -803,8 +803,9 @@ The decode slice is finished: #3770 and #3764 landed, and every other
 row of that table is held by a ruling or a grounding. **Canonical encode
 is the next deliverable** (#3792's ruling). #3796 landed its first slice,
 `codec.Append` for README's `order.xsd` shapes and `xs:double`
-(`4a72d1e7`). Its measure is #3792's encode census, which re-encodes what
-`decodecensus` decodes, re-validates it and re-decodes it. Encode's second
+(`4a72d1e7`). Its measure is `go tool encodecensus` (#3792), which
+re-encodes what `decodecensus` decodes, re-validates it and re-decodes it
+to the same value. Encode's second
 slice, #3865, is filed `blocked` on that census and takes its largest
 first-decline row. The generated fast path, differential tests and
 `AllocsPerRun` budgets follow encode: each needs `value.Emitter` or a
