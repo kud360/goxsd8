@@ -100,8 +100,8 @@ func Append[T any](dst []byte, schema *xsd.Schema, backend value.Backend, name x
 // Items 6 and 7 and a fault of the backend depend on the value, so they lie
 // outside CheckAppend's answer, and nil leaves them open. The backend is no
 // input, so a nil backend, which Append's item 1 refuses, lies outside it
-// too. A non-nil error is the one Append returns, of equal Error text and
-// class, for every value of T and every non-nil backend.
+// too. For a non-nil schema, a non-nil error is the one Append returns, of
+// equal Error text and class, for every value of T and every non-nil backend.
 func CheckAppend[T any](schema *xsd.Schema, name xsd.QName) error {
 	if schema == nil {
 		return errors.New("codec: CheckAppend: nil *xsd.Schema")
