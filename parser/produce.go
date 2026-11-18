@@ -1958,7 +1958,7 @@ func rejectXSITargetNamespace(name xsd.QName, el *Element) error {
 		return nil
 	}
 	return xsderr.New(ruleNoXSI, el.Loc(),
-		"attribute declaration %s has the XML Schema Instance namespace as its {target namespace}, which no-xsi (§3.2.6.4) forbids whether the declaration is local or top-level: the only attribute declarations in that namespace are the four Built-in Attribute Declarations of §3.2.7 — xsi:type, xsi:nil, xsi:schemaLocation, xsi:noNamespaceSchemaLocation — which every schema holds by definition and no schema document may declare", name)
+		"attribute declaration %s has the XML Schema Instance namespace as its {target namespace}, which no-xsi (§3.2.6.4) forbids whether the declaration is local or top-level: the only attribute declarations in that namespace are the four Built-in Attribute Declarations of §3.2.7 — xsi:type, xsi:nil, xsi:schemaLocation, xsi:noNamespaceSchemaLocation — which every schema holds by definition and no schema document may declare", name.Display())
 }
 
 // buildSimpleType returns the compiled simple type the top-level declaration
@@ -2068,9 +2068,9 @@ func (p *producer) buildComplexType(name xsd.QName, elem *Element) (xsd.ComplexT
 		return b.ct, nil
 	case complexOnBaseChain:
 		return xsd.ComplexType{}, xsderr.New(ruleCTPropsCorr, elem.Loc(),
-			"circular complex type definition: %s derives ultimately from itself, but ct-props-correct clause 3 forbids a circular {base type definition} chain (only xs:anyType may be its own base)", name)
+			"circular complex type definition: %s derives ultimately from itself, but ct-props-correct clause 3 forbids a circular {base type definition} chain (only xs:anyType may be its own base)", name.Display())
 	case complexContentPending:
-		return xsd.ComplexType{}, fmt.Errorf("parser: complex type %s at %s was asked for while its content model is still being built; only resolveBaseType reads that state, and it answers from the pending entry without calling buildComplexType", name, elem.Loc())
+		return xsd.ComplexType{}, fmt.Errorf("parser: complex type %s at %s was asked for while its content model is still being built; only resolveBaseType reads that state, and it answers from the pending entry without calling buildComplexType", name.Display(), elem.Loc())
 	}
 	p.symbols.builtComplex[elem] = complexOnBaseChain{}
 
@@ -2223,11 +2223,11 @@ func (p *producer) resolveBaseType(id complexTypeIdentity, at *Element, base xml
 	// gives it one home.
 	owner := "anonymous complex type"
 	if n, ok := topLevelComplexTypeName(id); ok {
-		owner = "complex type " + n.String()
+		owner = "complex type " + n.Display()
 	}
 	return nil, nil, xsderr.New(ruleSrcResolve, base.Loc(),
 		"%s {base type definition} <%s base> references type %s, but no type definition with that expanded name is present in the schema%s (src-resolve clause 1.1)",
-		owner, at.Name().Local(), name, p.symbols.typeHint(name))
+		owner, at.Name().Local(), name.Display(), p.symbols.typeHint(name))
 }
 
 // typeHint is the clause resolveBaseType's charge appends for missing: the
@@ -2239,7 +2239,7 @@ func (s *symbols) typeHint(missing xsd.QName) string {
 	for _, n := range s.typeOrder {
 		names = append(names, nearname.Name(n))
 	}
-	return nearname.Hint(nearname.Name(missing), names, func(n nearname.Name) string { return xsd.QName(n).String() })
+	return nearname.Hint(nearname.Name(missing), names, func(n nearname.Name) string { return xsd.QName(n).Display() })
 }
 
 // resolvedBase is the {base type definition} COMPONENT resolveBaseType
@@ -2283,7 +2283,7 @@ func baseComponent(base resolvedBase, at *Element) (xsd.TypeDefinition, error) {
 	case finishedBase:
 		return b.def, nil
 	case pendingBase:
-		return nil, fmt.Errorf("parser: the <%s> at %s derives from %s from inside %s's own content model, and this producer cannot map a derivation that reads a base {content type} still being built", at.Name().Local(), at.Loc(), b.name, b.name)
+		return nil, fmt.Errorf("parser: the <%s> at %s derives from %s from inside %s's own content model, and this producer cannot map a derivation that reads a base {content type} still being built", at.Name().Local(), at.Loc(), b.name.Display(), b.name.Display())
 	}
 	panic("parser: baseComponent: non-exhaustive resolvedBase switch")
 }
@@ -2338,7 +2338,7 @@ func (p *producer) redefinedComplexBase(id complexTypeIdentity, at *Element, nam
 	}
 	if !p.enterOriginal(src.elem) {
 		return xsd.ComplexType{}, true, xsderr.New(ruleCTPropsCorr, at.Loc(),
-			"circular complex type definition: %s is redefined around a cycle of <redefine>s, so the original src-expredef clause 1.1 pairs this redefinition with derives ultimately from the redefinition again, but ct-props-correct clause 3 forbids a circular {base type definition} chain (only xs:anyType may be its own base)", name)
+			"circular complex type definition: %s is redefined around a cycle of <redefine>s, so the original src-expredef clause 1.1 pairs this redefinition with derives ultimately from the redefinition again, but ct-props-correct clause 3 forbids a circular {base type definition} chain (only xs:anyType may be its own base)", name.Display())
 	}
 	defer p.leaveOriginal(src.elem)
 
@@ -2827,7 +2827,7 @@ func (p *producer) resolveBase(restriction *Element) (xsd.SimpleTypeOrRef, error
 		// chain st-props-correct clause 2 forbids.
 		if !p.enterOriginal(src.elem) {
 			return nil, xsderr.New(ruleSTPropsCorr, restriction.Loc(),
-				"circular simple type definition: %s is redefined around a cycle of <redefine>s, so the original src-expredef clause 1.1 pairs this redefinition with restricts the redefinition again, but st-props-correct clause 2 requires every simple type to reach a primitive datatype or xs:anySimpleType by following {base type definition} zero or more times", qn)
+				"circular simple type definition: %s is redefined around a cycle of <redefine>s, so the original src-expredef clause 1.1 pairs this redefinition with restricts the redefinition again, but st-props-correct clause 2 requires every simple type to reach a primitive datatype or xs:anySimpleType by following {base type definition} zero or more times", qn.Display())
 		}
 		defer p.leaveOriginal(src.elem)
 

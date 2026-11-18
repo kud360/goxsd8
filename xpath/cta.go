@@ -356,7 +356,7 @@ const ruleXPST0008 xsderr.Rule = "err:XPST0008"
 //
 // naming the FIRST unbound prefix in expression order, or as
 //
-//	?: [err:XPST0051] the cast target "{http://www.w3.org/2001/XMLSchema}Missing" is no simple type in the in-scope schema types, which err:XPST0051 forbids
+//	?: [err:XPST0051] the cast target "xs:Missing" is no simple type in the in-scope schema types, which err:XPST0051 forbids
 //
 // or as
 //

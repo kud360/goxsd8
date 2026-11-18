@@ -14,9 +14,9 @@ type nameHint func(missing QName) string
 func noHint(QName) string { return "" }
 
 // hintAmong is nearname.Hint over candidates, spelling the one it names as
-// every src-resolve message spells the missing name, by QName.String.
+// every src-resolve message spells the missing name, by QName.Display.
 func hintAmong(missing QName, candidates []nearname.Name) string {
-	return nearname.Hint(nearname.Name(missing), candidates, func(n nearname.Name) string { return QName(n).String() })
+	return nearname.Hint(nearname.Name(missing), candidates, func(n nearname.Name) string { return QName(n).Display() })
 }
 
 // typeHint is the hint for a {type definition} slot that takes either variety

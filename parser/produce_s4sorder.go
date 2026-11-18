@@ -647,7 +647,7 @@ func checkS4SChildOrder(owner *Element, m s4sModel) error {
 
 // s4sChildName is how this file's diagnostics name the child element el: by its
 // local name in the XSD namespace, the vocabulary every quoted model spells, and
-// otherwise by its expanded name as xsd.QName spells it, so a child outside the
+// otherwise by its expanded name as xsd.QName.Display spells it, so a child outside the
 // XSD namespace is never printed as the XSD element of the same local name. An
 // ·absent· namespace still prints bare, which is why checkS4SChildOrder's
 // fills-no-position fault states the namespace in words beside it.
@@ -655,7 +655,7 @@ func s4sChildName(el *Element) string {
 	if el.Name().Space() == xsd.XMLSchemaNS {
 		return el.Name().Local()
 	}
-	return xsd.QName{Space: el.Name().Space(), Local: el.Name().Local()}.String()
+	return xsd.QName{Space: el.Name().Space(), Local: el.Name().Local()}.Display()
 }
 
 // s4sNamespacePhrase names the namespace space for a diagnostic sentence:

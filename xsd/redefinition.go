@@ -120,7 +120,7 @@ func (s *Schema) checkAttributeGroupRedefinitions() error {
 	for _, r := range s.attributeGroupRedefinitions {
 		g, ok := s.attributeGroupIndex[r.name]
 		if !ok {
-			panic("xsd: checkAttributeGroupRedefinitions: no attribute group definition named " + r.name.String() +
+			panic("xsd: checkAttributeGroupRedefinitions: no attribute group definition named " + r.name.Display() +
 				": AddRedefiningAttributeGroup records the pairing and the component together")
 		}
 		if err := s.checkAttributeRestriction(attributeGroupRedefinitionRestriction(g, r.original)); err != nil {
@@ -147,8 +147,8 @@ func attributeGroupRedefinitionRestriction(g, original AttributeGroupDefinition)
 		loc:     g.Loc(),
 		verb:    "must restrict",
 		clause:  "src-redefine clause 7.2.2 and derivation-ok-restriction clause 3, c-ran",
-		derived: attributeGroupAttributeSide(g, "the redefining attribute group "+g.Name().String()),
-		base:    attributeGroupAttributeSide(original, "the original attribute group "+original.Name().String()),
+		derived: attributeGroupAttributeSide(g, "the redefining attribute group "+g.Name().Display()),
+		base:    attributeGroupAttributeSide(original, "the original attribute group "+original.Name().Display()),
 	}
 }
 
@@ -246,7 +246,7 @@ func (s *Schema) checkModelGroupRedefinitions() error {
 	for _, r := range s.modelGroupRedefinitions {
 		d, ok := s.modelGroupIndex[r.name]
 		if !ok {
-			panic("xsd: checkModelGroupRedefinitions: no model group definition named " + r.name.String() +
+			panic("xsd: checkModelGroupRedefinitions: no model group definition named " + r.name.Display() +
 				": AddRedefiningModelGroup records the pairing and the component together")
 		}
 		redefining, err := modelGroupContent(d.ModelGroup(), d.Loc())
@@ -261,7 +261,7 @@ func (s *Schema) checkModelGroupRedefinitions() error {
 			continue
 		}
 		return xsderr.New(ruleSrcRedefine, d.Loc(),
-			"the redefining <group> %s accepts element sequences the original model group definition it replaces (at %s) does not, but src-redefine clause 6.2.2 requires its {model group} to accept a SUBSET of the sequences that definition in S2 accepts (§3.7.2)", r.name, r.original.Loc())
+			"the redefining <group> %s accepts element sequences the original model group definition it replaces (at %s) does not, but src-redefine clause 6.2.2 requires its {model group} to accept a SUBSET of the sequences that definition in S2 accepts (§3.7.2)", r.name.Display(), r.original.Loc())
 	}
 	return nil
 }

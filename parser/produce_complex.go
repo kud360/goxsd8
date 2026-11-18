@@ -446,7 +446,7 @@ func (p *producer) newComplexType(id complexTypeIdentity, loc xsderr.Loc, base x
 	case redefiningComplexType:
 		original, owns := ownedComplexBase(base)
 		if !owns {
-			return xsd.ComplexType{}, fmt.Errorf("parser: the redefining <complexType> %s at %s did not resolve its own name as its {base type definition}, so src-expredef clause 1.2 has no clause-1.1 original to pair it with; src-redefine clause 5 requires that self-derivation and checkRedefinedComplexType charges it before production", i.name, loc)
+			return xsd.ComplexType{}, fmt.Errorf("parser: the redefining <complexType> %s at %s did not resolve its own name as its {base type definition}, so src-expredef clause 1.2 has no clause-1.1 original to pair it with; src-redefine clause 5 requires that self-derivation and checkRedefinedComplexType charges it before production", i.name.Display(), loc)
 		}
 		return xsd.NewComplexTypeOwningBase(loc, i.owner, i.name, original, final,
 			derivationMethod, abstract, attributeContent, prohibitedAttributeNames, attributeWildcard, contentType, prohibitedSubstitutions, assertions)

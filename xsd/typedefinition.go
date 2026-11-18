@@ -423,13 +423,13 @@ func checkTypeDefinitionOrRef(loc xsderr.Loc, ref TypeDefinitionOrRef, slot type
 		}
 		if r.Definition.Name() != (QName{}) {
 			return xsderr.New(xsderr.RuleComponentInvariant, loc,
-				"%s is an InlineTypeDefinition wrapping the NAMED type %s, but a named type definition is reachable by name and so is always the TypeDefinitionRef variant", ctx, r.Definition.Name())
+				"%s is an InlineTypeDefinition wrapping the NAMED type %s, but a named type definition is reachable by name and so is always the TypeDefinitionRef variant", ctx, r.Definition.Name().Display())
 		}
 		return nil
 	case SubstitutionGroupHeadTypeRef:
 		if !slot.admitsHeadInherited() {
 			return xsderr.New(xsderr.RuleComponentInvariant, loc,
-				"%s is a SubstitutionGroupHeadTypeRef naming the substitution group head %s, but that variant encodes §3.3.2.1 dcl.elt.common clause 3, which only an ELEMENT declaration's {type definition} has; this property has no clause-3 analog", ctx, r.Head)
+				"%s is a SubstitutionGroupHeadTypeRef naming the substitution group head %s, but that variant encodes §3.3.2.1 dcl.elt.common clause 3, which only an ELEMENT declaration's {type definition} has; this property has no clause-3 analog", ctx, r.Head.Display())
 		}
 		if r.Head == (QName{}) {
 			return xsderr.New(xsderr.RuleComponentInvariant, loc,

@@ -184,7 +184,7 @@ func (s *Schema) checkElementSubstitutableForHeads(e ElementDeclaration) error {
 		}
 		return xsderr.New(ruleEPropsCorrect, e.Loc(),
 			"element declaration %s is typed %s, which is not validly ·derived· from %s, the {type definition} of the substitution group head %s it is affiliated to, subject to that head's {substitution group exclusions} %v; e-props-correct clause 4 (c-vs-sg) requires it to be",
-			e.Name(), typeDefinitionLabel(memberType), typeDefinitionLabel(headType), aff, head.substitutionGroupExclusions)
+			e.Name().Display(), typeDefinitionLabel(memberType), typeDefinitionLabel(headType), aff.Display(), head.substitutionGroupExclusions)
 	}
 	return nil
 }

@@ -118,7 +118,7 @@ func NewAttributeGroupDefinition(loc xsderr.Loc, name QName, attributeContent []
 		return AttributeGroupDefinition{}, xsderr.New(ruleAgPropsCorrect, loc,
 			"attribute group definition has an absent {name}, but the §3.6.1 tableau types it as a Required xs:NCName, whose value space excludes the empty string (ag-props-correct clause 1)")
 	}
-	if err := checkAttributeContent(loc, "attribute group definition "+name.String(), attributeContent); err != nil {
+	if err := checkAttributeContent(loc, "attribute group definition "+name.Display(), attributeContent); err != nil {
 		return AttributeGroupDefinition{}, err
 	}
 	if err := rejectSiblingOnAttributeWildcard(loc, wildcard); err != nil {
@@ -170,7 +170,7 @@ func checkAttributeGroupDefinitionUsesUnique(g AttributeGroupDefinition) error {
 		return nil
 	}
 	return xsderr.New(ruleAgPropsCorrect, g.Loc(),
-		"%s {attribute uses}[%d] repeats the expanded name %s, but ag-props-correct clause 2 forbids two attribute uses whose {attribute declaration}s share an expanded name", attributeGroupOwner(g), i, name)
+		"%s {attribute uses}[%d] repeats the expanded name %s, but ag-props-correct clause 2 forbids two attribute uses whose {attribute declaration}s share an expanded name", attributeGroupOwner(g), i, name.Display())
 }
 
 // Name returns the {name} property, bundled with {target namespace} as a QName.

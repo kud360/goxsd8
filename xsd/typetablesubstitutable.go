@@ -245,5 +245,5 @@ func (s *Schema) checkTypeAlternativeSubstitutable(e ElementDeclaration, declare
 	}
 	return xsderr.New(ruleEPropsCorrect, e.Loc(),
 		"element declaration %s has a {type table} whose %s is typed %s, which is neither ·validly substitutable· for the declaration's own {type definition} %s subject to its {disallowed substitutions} %v nor the type ·xs:error·; e-props-correct clause 7 requires one of the two",
-		e.Name(), slot, typeDefinitionLabel(t), typeDefinitionLabel(declared), e.disallowedSubstitutions)
+		e.Name().Display(), slot, typeDefinitionLabel(t), typeDefinitionLabel(declared), e.disallowedSubstitutions)
 }

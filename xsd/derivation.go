@@ -268,7 +268,7 @@ func (t *SimpleType) CheckDerivation(r TypeResolver) error {
 	}
 	if base != nil && finalContains(base.final, DerivationRestriction) {
 		return xsderr.New(ruleSTPropsCorrect, t.loc,
-			"simple type {base type definition} %s has restriction in its {final}, which blocks derivation (st-props-correct clause 3)", base.name)
+			"simple type {base type definition} %s has restriction in its {final}, which blocks derivation (st-props-correct clause 3)", base.name.Display())
 	}
 	if err := checkScaleFacets(r, t, base); err != nil {
 		return err
@@ -285,7 +285,7 @@ func (t *SimpleType) CheckDerivation(r TypeResolver) error {
 	}
 	if variety == nil && !t.IsAnySimpleType() {
 		return xsderr.New(ruleSTPropsCorrect, t.loc,
-			"simple type restricting %s has an absent {variety}, which only xs:anySimpleType may have (st-props-correct clause 1)", base.name)
+			"simple type restricting %s has an absent {variety}, which only xs:anySimpleType may have (st-props-correct clause 1)", base.name.Display())
 	}
 	switch variety.(type) {
 	case Atomic:
@@ -386,11 +386,11 @@ func checkAtomicGraph(r TypeResolver, t, base *SimpleType) error {
 	}
 	if _, ok := baseVariety.(Atomic); !ok {
 		return xsderr.New(ruleCosSTRestricts, t.loc,
-			"atomic simple type {base type definition} %s is not an atomic simple type definition (cos-st-restricts clause 1.1)", base.name)
+			"atomic simple type {base type definition} %s is not an atomic simple type definition (cos-st-restricts clause 1.1)", base.name.Display())
 	}
 	if base == anyAtomicType && !t.IsPrimitive() {
 		return xsderr.New(ruleSTPropsCorrect, t.loc,
-			"atomic simple type may not name %s as its {base type definition} unless it is a primitive datatype: it inherits that type's absent {primitive type definition} (st-restrict-facets clause 2), which the property tableau requires present (st-props-correct clause 1)", base.name)
+			"atomic simple type may not name %s as its {base type definition} unless it is a primitive datatype: it inherits that type's absent {primitive type definition} (st-restrict-facets clause 2), which the property tableau requires present (st-props-correct clause 1)", base.name.Display())
 	}
 	return nil
 }
@@ -424,7 +424,7 @@ func checkListGraph(r TypeResolver, t, base *SimpleType) error {
 	}
 	if item.IsSpecial() {
 		return xsderr.New(ruleCosSTRestricts, t.loc,
-			"list {item type definition} %s is a special type definition (cos-st-restricts clause 2.1)", item.name)
+			"list {item type definition} %s is a special type definition (cos-st-restricts clause 2.1)", item.name.Display())
 	}
 	itemVariety, err := item.Variety(r)
 	if err != nil {
@@ -439,17 +439,17 @@ func checkListGraph(r TypeResolver, t, base *SimpleType) error {
 		}
 		if hasList {
 			return xsderr.New(ruleCosSTRestricts, t.loc,
-				"list {item type definition} %s is a union with a list type in its transitive membership (cos-st-restricts clause 2.1)", item.name)
+				"list {item type definition} %s is a union with a list type in its transitive membership (cos-st-restricts clause 2.1)", item.name.Display())
 		}
 	default:
 		return xsderr.New(ruleCosSTRestricts, t.loc,
-			"list {item type definition} %s has a {variety} that is neither atomic nor union (cos-st-restricts clause 2.1)", item.name)
+			"list {item type definition} %s has a {variety} that is neither atomic nor union (cos-st-restricts clause 2.1)", item.name.Display())
 	}
 
 	if base == anySimpleType {
 		if finalContains(item.final, DerivationList) {
 			return xsderr.New(ruleCosSTRestricts, t.loc,
-				"list {item type definition} %s has list in its {final}, blocking its use as a list item (cos-st-restricts clause 2.2.1.1)", item.name)
+				"list {item type definition} %s has list in its {final}, blocking its use as a list item (cos-st-restricts clause 2.2.1.1)", item.name.Display())
 		}
 		return checkConstructedListFacets(t)
 	}
@@ -459,7 +459,7 @@ func checkListGraph(r TypeResolver, t, base *SimpleType) error {
 	}
 	if _, ok := baseVariety.(List); !ok {
 		return xsderr.New(ruleCosSTRestricts, t.loc,
-			"list simple type restricts base %s whose {variety} is not list (cos-st-restricts clause 2.2.2.1)", base.name)
+			"list simple type restricts base %s whose {variety} is not list (cos-st-restricts clause 2.2.2.1)", base.name.Display())
 	}
 	baseItem, err := base.Item(r)
 	if err != nil {
@@ -471,7 +471,7 @@ func checkListGraph(r TypeResolver, t, base *SimpleType) error {
 	}
 	if !ok {
 		return xsderr.New(ruleCosSTRestricts, t.loc,
-			"list {item type definition} %s is not validly derived from the base list's item type (cos-st-restricts clause 2.2.2.3 via cos-st-derived-ok §3.16.6.3)", item.name)
+			"list {item type definition} %s is not validly derived from the base list's item type (cos-st-restricts clause 2.2.2.3 via cos-st-derived-ok §3.16.6.3)", item.name.Display())
 	}
 	return nil
 }
@@ -556,7 +556,7 @@ func checkUnionGraph(r TypeResolver, t, base *SimpleType) error {
 	for _, m := range members {
 		if m.IsSpecial() {
 			return xsderr.New(ruleCosSTRestricts, t.loc,
-				"union {member type definitions} contains special type definition %s (cos-st-restricts clause 3.1)", m.name)
+				"union {member type definitions} contains special type definition %s (cos-st-restricts clause 3.1)", m.name.Display())
 		}
 	}
 
@@ -564,7 +564,7 @@ func checkUnionGraph(r TypeResolver, t, base *SimpleType) error {
 		for _, m := range members {
 			if finalContains(m.final, DerivationUnion) {
 				return xsderr.New(ruleCosSTRestricts, t.loc,
-					"union member %s has union in its {final}, blocking its use as a union member (cos-st-restricts clause 3.2.1.1)", m.name)
+					"union member %s has union in its {final}, blocking its use as a union member (cos-st-restricts clause 3.2.1.1)", m.name.Display())
 			}
 		}
 		if len(t.ownFacets) > 0 {
@@ -579,7 +579,7 @@ func checkUnionGraph(r TypeResolver, t, base *SimpleType) error {
 	}
 	if _, ok := baseVariety.(Union); !ok {
 		return xsderr.New(ruleCosSTRestricts, t.loc,
-			"union simple type restricts base %s whose {variety} is not union (cos-st-restricts clause 3.2.2.1)", base.name)
+			"union simple type restricts base %s whose {variety} is not union (cos-st-restricts clause 3.2.2.1)", base.name.Display())
 	}
 	baseMembers, err := base.Members(r)
 	if err != nil {
@@ -588,7 +588,7 @@ func checkUnionGraph(r TypeResolver, t, base *SimpleType) error {
 	if len(members) != len(baseMembers) {
 		return xsderr.New(ruleCosSTRestricts, t.loc,
 			"union restriction has %d member type definitions but base union %s has %d (cos-st-restricts clause 3.2.2.3)",
-			len(members), base.name, len(baseMembers))
+			len(members), base.name.Display(), len(baseMembers))
 	}
 	for i, m := range members {
 		ok, err := derivedOKSimple(r, m, baseMembers[i], nil)
@@ -597,7 +597,7 @@ func checkUnionGraph(r TypeResolver, t, base *SimpleType) error {
 		}
 		if !ok {
 			return xsderr.New(ruleCosSTRestricts, t.loc,
-				"union member %s is not validly derived from the corresponding base member (cos-st-restricts clause 3.2.2.3 via cos-st-derived-ok §3.16.6.3)", m.name)
+				"union member %s is not validly derived from the corresponding base member (cos-st-restricts clause 3.2.2.3 via cos-st-derived-ok §3.16.6.3)", m.name.Display())
 		}
 	}
 	return nil

@@ -491,12 +491,12 @@ func NewAttributeDeclaration(loc xsderr.Loc, name QName, typeDefinition TypeDefi
 		return AttributeDeclaration{}, xsderr.New(ruleAPropsCorrect, loc,
 			"attribute declaration has an absent {name}, but the §3.2.1 tableau types it as a Required xs:NCName, whose value space excludes the empty string (a-props-correct clause 1)")
 	}
-	if err := checkTypeDefinitionOrRef(loc, typeDefinition, attributeTypeSlot, "attribute declaration "+name.String()); err != nil {
+	if err := checkTypeDefinitionOrRef(loc, typeDefinition, attributeTypeSlot, "attribute declaration "+name.Display()); err != nil {
 		return AttributeDeclaration{}, err
 	}
 	if _, isComplex := ownedComplexType(typeDefinition); isComplex {
 		return AttributeDeclaration{}, xsderr.New(ruleAPropsCorrect, loc,
-			"attribute declaration %s {type definition} is an InlineTypeDefinition wrapping a ComplexType, but the §3.2.1 tableau types that property as a Simple Type Definition and <attribute>'s content model admits only a <simpleType> child, so no complex type can sit here through any mapping rule (a-props-correct clause 1)", name)
+			"attribute declaration %s {type definition} is an InlineTypeDefinition wrapping a ComplexType, but the §3.2.1 tableau types that property as a Simple Type Definition and <attribute>'s content model admits only a <simpleType> child, so no complex type can sit here through any mapping rule (a-props-correct clause 1)", name.Display())
 	}
 	if valueConstraint != nil {
 		switch valueConstraint.Kind() {

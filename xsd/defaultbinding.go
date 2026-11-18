@@ -290,7 +290,7 @@ func (s *Schema) ResolvedInheritable(u AttributeUse) bool {
 // guarantee.
 func (s *Schema) checkBindingSubsumes(n QName, r attributeRestriction, general, specific defaultBinding) error {
 	if g, ok := general.(wildcardKeywordBinding); ok {
-		return checkKeywordSubsumes("attribute "+n.String(), r, g, specific)
+		return checkKeywordSubsumes("attribute "+n.Display(), r, g, specific)
 	}
 	g, gIsUse := general.(attributeUseBinding)
 	sp, sIsUse := specific.(attributeUseBinding)
@@ -298,7 +298,7 @@ func (s *Schema) checkBindingSubsumes(n QName, r attributeRestriction, general, 
 		return s.checkAttributeUseSubsumes(n, r, g.use, sp.use) // clause 5
 	}
 	return xsderr.New(r.rule, r.loc,
-		"%s %s %s, but %s's ·default binding· for attribute %s does not ·subsume· the restriction's (%s, via loc-testSubP)", r.derived.label, r.verb, r.base.label, r.base.label, n, r.clause)
+		"%s %s %s, but %s's ·default binding· for attribute %s does not ·subsume· the restriction's (%s, via loc-testSubP)", r.derived.label, r.verb, r.base.label, r.base.label, n.Display(), r.clause)
 }
 
 // checkKeywordSubsumes decides loc-testSubP clauses 1-3, where the base's
@@ -651,7 +651,7 @@ func (s *Schema) checkAttributeUseSubsumes(n QName, r attributeRestriction, gene
 	g, sp := s.ResolvedInheritable(general), s.ResolvedInheritable(specific)
 	if g != sp {
 		return xsderr.New(r.rule, r.loc,
-			"%s %s %s, but attribute %s has {inheritable} = %t there and %t in the base, and loc-testSubP clause 5.3 requires them to be equal (%s)", r.derived.label, r.verb, r.base.label, n, sp, g, r.clause)
+			"%s %s %s, but attribute %s has {inheritable} = %t there and %t in the base, and loc-testSubP clause 5.3 requires them to be equal (%s)", r.derived.label, r.verb, r.base.label, n.Display(), sp, g, r.clause)
 	}
 	return nil
 }
@@ -692,7 +692,7 @@ func (s *Schema) checkAttributeTypeDerivedOK(n QName, r attributeRestriction, ge
 		return nil
 	}
 	return xsderr.New(r.rule, r.loc,
-		"%s %s %s but types attribute %s as %s, which is not validly derived from the base's %s (%s, via loc-testSubP clause 5.1 and cos-st-derived-ok §3.16.6.3)", r.derived.label, r.verb, r.base.label, n, typeDefinitionLabel(st), typeDefinitionLabel(gt), r.clause)
+		"%s %s %s but types attribute %s as %s, which is not validly derived from the base's %s (%s, via loc-testSubP clause 5.1 and cos-st-derived-ok §3.16.6.3)", r.derived.label, r.verb, r.base.label, n.Display(), typeDefinitionLabel(st), typeDefinitionLabel(gt), r.clause)
 }
 
 // checkAttributeValueConstraintSubsumes is loc-testSubP clause 5.2: with GVC and
@@ -733,13 +733,13 @@ func (s *Schema) checkAttributeValueConstraintSubsumes(n QName, r attributeRestr
 	svc, present := s.EffectiveValueConstraint(specific)
 	if !present || svc.Kind() != ValueFixed {
 		return xsderr.New(r.rule, r.loc,
-			"%s %s %s, but the base fixes attribute %s to %q while the restriction leaves it unfixed, and loc-testSubP clause 5.2 requires a fixed ·effective value constraint· with the same value (%s)", r.derived.label, r.verb, r.base.label, n, gvc.LexicalForm(), r.clause)
+			"%s %s %s, but the base fixes attribute %s to %q while the restriction leaves it unfixed, and loc-testSubP clause 5.2 requires a fixed ·effective value constraint· with the same value (%s)", r.derived.label, r.verb, r.base.label, n.Display(), gvc.LexicalForm(), r.clause)
 	}
 	if s.attributeValueConstraintsAgree(general, specific, gvc, svc) {
 		return nil // clause 5.2.2
 	}
 	return xsderr.New(r.rule, r.loc,
-		"%s %s %s and fixes attribute %s to %q, but the base fixes it to %q, and loc-testSubP clause 5.2.2 requires the two {value}s to be equal or identical (%s)", r.derived.label, r.verb, r.base.label, n, svc.LexicalForm(), gvc.LexicalForm(), r.clause)
+		"%s %s %s and fixes attribute %s to %q, but the base fixes it to %q, and loc-testSubP clause 5.2.2 requires the two {value}s to be equal or identical (%s)", r.derived.label, r.verb, r.base.label, n.Display(), svc.LexicalForm(), gvc.LexicalForm(), r.clause)
 }
 
 // attributeValueConstraintsAgree decides loc-testSubP clause 5.2.2's "SVC.{value}

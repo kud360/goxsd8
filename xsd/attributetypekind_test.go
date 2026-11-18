@@ -85,7 +85,7 @@ func TestAttributeTypeNamingComplexTypeRejected(t *testing.T) {
 				t.Fatal("Finalize(attribute type= naming a complex type) = nil, want a src-resolve rejection")
 			}
 			want := at.String() + ": [src-resolve] attribute declaration " + tc.decl +
-				" {type definition} references simple type " + tc.target.String() +
+				" {type definition} references simple type " + tc.target.Display() +
 				", but that expanded name is a complex type definition"
 			if !strings.HasPrefix(err.Error(), want) {
 				t.Fatalf("Finalize error = %q, want prefix %q", err, want)

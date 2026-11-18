@@ -471,7 +471,7 @@ func NewElementDeclaration(loc xsderr.Loc, name QName, typeDefinition TypeDefini
 	for _, slot := range ownedTypeSlots(typeDefinition, typeTable) {
 		if _, isComplex := ownedComplexType(slot.ref); isComplex {
 			return ElementDeclaration{}, xsderr.New(xsderr.RuleComponentInvariant, loc,
-				"element declaration %s %s is an InlineTypeDefinition wrapping a ComplexType, but a declaration that OWNS an anonymous complex type must be built through NewElementDeclarationOwningTypes, the only entry point that can check the type's {context} back-pointer (§3.4.2.1 dcl.ctd.common) against the declaration's own identity", name, slot.property)
+				"element declaration %s %s is an InlineTypeDefinition wrapping a ComplexType, but a declaration that OWNS an anonymous complex type must be built through NewElementDeclarationOwningTypes, the only entry point that can check the type's {context} back-pointer (§3.4.2.1 dcl.ctd.common) against the declaration's own identity", name.Display(), slot.property)
 		}
 	}
 	return newElementDeclaration(loc, name, typeDefinition, typeTable, scope, valueConstraint, nillable, identityConstraints, substitutionGroupAffiliations, substitutionGroupExclusions, abstract, disallowedSubstitutions)
@@ -526,7 +526,7 @@ func NewElementDeclaration(loc xsderr.Loc, name QName, typeDefinition TypeDefini
 func NewElementDeclarationOwningTypes(loc xsderr.Loc, id ComponentID, name QName, typeDefinition TypeDefinitionOrRef, typeTable *TypeTable, scope Scope, valueConstraint *ValueConstraint, nillable bool, identityConstraints []IdentityConstraint, substitutionGroupAffiliations []QName, substitutionGroupExclusions []DerivationMethod, abstract bool, disallowedSubstitutions []DerivationMethod) (ElementDeclaration, error) {
 	if id == (ComponentID{}) {
 		return ElementDeclaration{}, xsderr.New(xsderr.RuleComponentInvariant, loc,
-			"element declaration %s owns an anonymous complex type but carries an unminted identity, which that type's {context} back-pointer could not name; mint one with NewComponentID", name)
+			"element declaration %s owns an anonymous complex type but carries an unminted identity, which that type's {context} back-pointer could not name; mint one with NewComponentID", name.Display())
 	}
 	if err := checkOwnedTypeContexts(loc, id, name, typeDefinition, typeTable); err != nil {
 		return ElementDeclaration{}, err
@@ -639,12 +639,12 @@ func checkOwnedTypeContext(loc xsderr.Loc, id ComponentID, name QName, property 
 	case ElementDeclarationContext:
 		if c.ID() != id {
 			return xsderr.New(xsderr.RuleComponentInvariant, loc,
-				"element declaration %s owns through its %s an anonymous complex type whose {context} names a DIFFERENT element declaration, but §3.4.2.1 dcl.ctd.common makes an inline <complexType>'s {context} the nearest enclosing declaration; mint one identity per owning declaration and pass it to every type it owns", name, property)
+				"element declaration %s owns through its %s an anonymous complex type whose {context} names a DIFFERENT element declaration, but §3.4.2.1 dcl.ctd.common makes an inline <complexType>'s {context} the nearest enclosing declaration; mint one identity per owning declaration and pass it to every type it owns", name.Display(), property)
 		}
 		return nil
 	case ComplexTypeDefinitionContext:
 		return xsderr.New(xsderr.RuleComponentInvariant, loc,
-			"element declaration %s owns through its %s an anonymous complex type whose {context} is a ComplexTypeDefinitionContext, but §3.4.2.1 dcl.ctd.common has exactly one case and it yields an Element Declaration, so a <complexType> reached from an <element> is never contexted in a complex type definition", name, property)
+			"element declaration %s owns through its %s an anonymous complex type whose {context} is a ComplexTypeDefinitionContext, but §3.4.2.1 dcl.ctd.common has exactly one case and it yields an Element Declaration, so a <complexType> reached from an <element> is never contexted in a complex type definition", name.Display(), property)
 	default:
 		panic("xsd: checkOwnedTypeContext: non-exhaustive ComplexTypeContext switch")
 	}
@@ -665,7 +665,7 @@ func newElementDeclaration(loc xsderr.Loc, name QName, typeDefinition TypeDefini
 		return ElementDeclaration{}, xsderr.New(ruleEPropsCorrect, loc,
 			"element declaration has an absent {name}, but the §3.3.1 tableau types it as a Required xs:NCName, whose value space excludes the empty string (e-props-correct clause 1)")
 	}
-	if err := checkTypeDefinitionOrRef(loc, typeDefinition, elementTypeSlot, "element declaration "+name.String()); err != nil {
+	if err := checkTypeDefinitionOrRef(loc, typeDefinition, elementTypeSlot, "element declaration "+name.Display()); err != nil {
 		return ElementDeclaration{}, err
 	}
 	for i, m := range substitutionGroupExclusions {

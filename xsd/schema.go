@@ -422,7 +422,7 @@ func indexByName[T namedComponent](items []T, kind string) (map[QName]T, error) 
 		}
 		if first, dup := index[n]; dup {
 			return nil, xsderr.New(ruleSchPropsCorrect, item.Loc(),
-				"schema {%s}[%d] repeats the expanded name %s (first declared at %s), but sch-props-correct clause 2 forbids two components of the same kind sharing an expanded name", kind, i, n, first.Loc())
+				"schema {%s}[%d] repeats the expanded name %s (first declared at %s), but sch-props-correct clause 2 forbids two components of the same kind sharing an expanded name", kind, i, n.Display(), first.Loc())
 		}
 		index[n] = item
 	}

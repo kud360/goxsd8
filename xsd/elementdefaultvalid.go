@@ -90,7 +90,7 @@ func (s *Schema) checkElementDefaultValid(e ElementDeclaration) error {
 		return nil
 	}
 	return s.elementDefaultValid(s.valueSpace, ruleEPropsCorrect, "2", e.Loc(),
-		"element declaration "+e.Name().String(), t, vc)
+		"element declaration "+e.Name().Display(), t, vc)
 }
 
 // ElementDefaultValid decides Element Default Valid (Immediate) (§3.3.6.2,
