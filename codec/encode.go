@@ -71,8 +71,8 @@ var ErrInvalidValue = errors.New("codec: Append: a value no valid document holds
 // A fault of backend found at a value, in place of that value's item 6 or 7,
 // is a plain error too, returned at once and naming the value's Go path and
 // simple type: no governing mapping for the type, a Parse that rejects an
-// xs:double value's doubleRep spelling or the canonical representation its
-// Canonical renders, or an error of value.ValidateLexical that
+// xs:double value's doubleRep spelling or the whiteSpace-normalized canonical
+// representation its Canonical renders, or an error of value.ValidateLexical that
 // value.IsDatatypeVerdict does not report as a verdict.
 //
 // Items 2 to 5 read no value; [CheckAppend] returns them for a declaration
@@ -768,12 +768,12 @@ func (e *encoder) str(st *xsd.SimpleType, s, path, subject string) (text string,
 // double returns the canonical representation of f, a value of the simple
 // type st whose primitive is xs:double: f spelled in doubleRep (doubleLexical)
 // mapped by st's governing mapping's Parse, rendered by its Canonical, that
-// rendering accepted by Parse, then held to st's facets by
-// value.ValidateLexical and read back by strconv.ParseFloat, every NaN equal
-// to every NaN. A pattern facet's rejection is item 7 of [Append]'s doc, since
-// another lexical of the value may match it (Datatypes §2.1's note), but for
-// NaN and -INF, which have no other (soleLexical), item 6; any other facet's
-// is item 6. ok is atom's.
+// rendering whiteSpace-normalized (value.ApplyWhiteSpace) and accepted by
+// Parse, then held to st's facets by value.ValidateLexical and read back by
+// strconv.ParseFloat, every NaN equal to every NaN. A pattern facet's
+// rejection is item 7 of [Append]'s doc, since another lexical of the value
+// may match it (Datatypes §2.1's note), but for NaN and -INF, which have no
+// other (soleLexical), item 6; any other facet's is item 6. ok is atom's.
 func (e *encoder) double(st *xsd.SimpleType, f float64, path, subject string) (text string, ok bool, err error) {
 	shown := strconv.FormatFloat(f, 'g', -1, 64)
 	m, err := e.mapping(st, path, subject)
@@ -794,7 +794,11 @@ func (e *encoder) double(st *xsd.SimpleType, f float64, path, subject string) (t
 		e.noCanonical(subject, path, shown, err.Error())
 		return "", false, nil
 	}
-	if _, err := m.Parse(c, nil); err != nil {
+	normalized, err := value.ApplyWhiteSpace(e.schema, st, c)
+	if err != nil {
+		return "", false, fmt.Errorf("codec: Append: %s holds %s, of %s, which the backend cannot assess: %w", path, shown, subject, err)
+	}
+	if _, err := m.Parse(normalized, nil); err != nil {
 		return "", false, fmt.Errorf("codec: Append: %s holds %s, of %s, whose canonical representation %q the backend's Parse rejects: %w", path, shown, subject, c, err)
 	}
 	if _, err := value.ValidateLexical(e.backend, e.schema, st, c, nil, noAssertions{}); err != nil {

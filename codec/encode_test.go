@@ -609,6 +609,17 @@ var (
 			return base.Parse(s, ctx)
 		}, Canonical: base.Canonical}
 	})
+	doubleSpacedCanonical = overDatatype("double", func(base value.Mapping) value.Mapping {
+		return value.Mapping{Parse: func(s string, ctx value.Context) (value.Value, error) {
+			if s == "1.0E0" {
+				return nil, errors.New("rejects collapsed canonical")
+			}
+			return base.Parse(strings.TrimLeft(s, " "), ctx)
+		}, Canonical: func(v value.Value) (string, error) {
+			c, err := base.Canonical(v)
+			return " " + c, err
+		}}
+	})
 )
 
 // TestAppendNoCanonical pins item 7 of Append's doc: a value with no
@@ -668,6 +679,8 @@ func TestAppendBackendFaults(t *testing.T) {
 	plainError(t, err, "dblRoot", `doubleRep form "1E+00"`, "rejected")
 	_, err = appendChecked(t, nil, schema, doubleRejectingCanonical, sname("d"), dblRoot(1))
 	plainError(t, err, "dblRoot", "canonical representation", `"1.0E0"`)
+	_, err = appendChecked(t, nil, schema, doubleSpacedCanonical, sname("d"), dblRoot(1))
+	plainError(t, err, "dblRoot", "canonical representation", `" 1.0E0"`, "rejects collapsed canonical")
 	_, err = appendChecked(t, nil, schema, noMappings{}, sname("d"), dblRoot(1))
 	plainError(t, err, "dblRoot", "no mapping governing")
 	_, err = appendChecked(t, nil, schema, noMappings{}, sname("str"), strRoot("v"))
