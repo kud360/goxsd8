@@ -99,8 +99,8 @@ func TestDecimalVectors(t *testing.T) {
 }
 
 // TestStringVectors pins the string corpus: representative round-trips under the
-// identity mapping (§3.3.1.2) and NO invalid lexicals (every Char* sequence is
-// in the lexical space, nt-stringRep).
+// identity mapping (§3.3.1.2) and no invalid lexicals, which parseString's doc
+// says why it does not derive.
 func TestStringVectors(t *testing.T) {
 	s, err := parseString(readSpec(t))
 	if err != nil {
@@ -118,7 +118,7 @@ func TestStringVectors(t *testing.T) {
 		}
 	}
 	if len(s.Invalid) != 0 {
-		t.Errorf("invalid: got %q, want none (every string is in the lexical space)", s.Invalid)
+		t.Errorf("invalid: got %q, want none (parseString derives no non-Char lexical)", s.Invalid)
 	}
 }
 

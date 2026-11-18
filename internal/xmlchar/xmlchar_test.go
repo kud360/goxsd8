@@ -37,8 +37,8 @@ func TestIsChar(t *testing.T) {
 	}
 }
 
-// TestIndexNonChar pins the offset of the first byte that starts no UTF-8
-// encoding of a [2] Char, and -1 for strings of Chars only.
+// TestIndexNonChar pins IndexNonChar on each side of the invalid-byte and
+// literal-U+FFFD split, and on Chars an over-narrow reading would reject.
 func TestIndexNonChar(t *testing.T) {
 	for _, tc := range []struct {
 		name string

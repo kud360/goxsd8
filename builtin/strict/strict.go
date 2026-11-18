@@ -52,10 +52,16 @@ const ruleDatatypeValid xsderr.Rule = "cvc-datatype-valid"
 //     deliberately NOT [value.Ordered] (ordered=false, §3.3.2.3).
 //   - xs:string — [value.Eq], [value.Lengthed] (character count) and
 //     [value.Canonical]. It is deliberately NOT [value.Ordered]
-//     (ordered=false, §3.3.1.3).
+//     (ordered=false, §3.3.1.3). Its lexical space is Char* (§3.3.1.2), and
+//     which XML version's Char is implementation-defined: this backend reads
+//     XML 1.0's [2] Char, so Parse rejects a lexical that is not UTF-8, or
+//     that holds a character outside Char (U+0000, a surrogate, U+FFFE or
+//     U+FFFF among them), with "cvc-datatype-valid", and maps every other
+//     lexical to itself.
 //   - xs:anyURI — [value.Eq], [value.Lengthed] (character count) and
 //     [value.Canonical]. It is deliberately NOT [value.Ordered]
-//     (ordered=false, §3.3.17.3).
+//     (ordered=false, §3.3.17.3). Its lexical space is Char* too (§3.3.17.2),
+//     read and enforced as xs:string's is; no URI syntax is checked.
 //   - xs:float, xs:double — [value.Ordered] (PARTIAL order, §3.3.4.3/§3.3.5.3:
 //     NaN is incomparable with every value, itself included), [value.Eq],
 //     [value.Identical] and [value.Canonical]. Equality and identity genuinely

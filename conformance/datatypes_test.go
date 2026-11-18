@@ -143,7 +143,7 @@ func TestDatatypesExecutorAgreesWithSuite(t *testing.T) {
 		{"boolean005.xml", true},  // value "0"
 		{"boolean001.xml", false}, // value ""     (empty)
 		{"boolean011.xml", false}, // value "True" (case-sensitive)
-		{"string006.xml", true},   // any string is in the lexical space
+		{"string006.xml", true},   // every Char* lexical is in the lexical space
 	}
 	for _, tc := range cases {
 		c := caseSpec{

@@ -12,11 +12,8 @@ func IsChar(r rune) bool {
 		r >= 0x10000 && r <= 0x10FFFF
 }
 
-// IndexNonChar returns the byte offset of the first byte of s that does not
-// start a UTF-8 encoding of a [2] Char, or -1 when every character of s is
-// one. A literal U+FFFD is a Char; an invalid UTF-8 byte, which ranging over
-// s also yields as utf8.RuneError, is not, and the decoded size tells the two
-// apart.
+// IndexNonChar finds the first non-Char in s, as the package doc's
+// "# Contract" states.
 func IndexNonChar(s string) int {
 	for i, r := range s {
 		if r == utf8.RuneError {
