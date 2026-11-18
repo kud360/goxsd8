@@ -778,6 +778,75 @@ func TestUsageCoversContract(t *testing.T) {
 	}
 }
 
+// usageFirstScreen is how many lines of usage, -help's stdout as TestRunHelp
+// pins it, the synopses and the flag index stand within (#3866).
+const usageFirstScreen = 30
+
+// registeredFlags is every flag the parse, validate and gen flag sets register
+// (parse.go, validate.go, gen.go). The help flags run answers before dispatch
+// are in none of them.
+var registeredFlags = []string{"-q", "-v", "-strict", "-format", "-no-hints", "-schema", "-out"}
+
+// usageSynopsisFlag matches a flag a synopsis line spells, bracketed or bare.
+var usageSynopsisFlag = regexp.MustCompile(`(?:^| |\[)(-[a-z][a-z-]*)`)
+
+// usageIndexLine matches a line of usage's flag index by its shape: indented
+// four spaces, the flag, the subcommands taking it, its topic and the paragraph
+// stating it, each column two or more spaces from the next.
+var usageIndexLine = regexp.MustCompile(`^    (-[a-z][a-z-]*) {2,}(` + alternation(subcommands) + `(?: ` + alternation(subcommands) + `)*) {2,}(\S+(?: \S+)*) {2,}(\S+(?: \S+)*)$`)
+
+// TestUsageFirstScreen holds the opening of usage, which -help prints, to what
+// a reader types (#3866): every synopsis line within its first
+// usageFirstScreen lines, and exactly one flag-index line per registered flag,
+// there too, naming exactly the subcommands whose synopsis spells the flag, in
+// synopsis order. The subcommand column is read against the synopses, which
+// parseUsageLine, validateUsageLine and genUsageLine pin as literals, never
+// against the index itself.
+func TestUsageFirstScreen(t *testing.T) {
+	lines := strings.Split(usage, "\n")
+	takes := map[string][]string{}
+	for _, name := range subcommands {
+		line := synopsis(name)
+		if i := slices.Index(lines, synopsisIndent+line); i >= usageFirstScreen {
+			t.Errorf("usage's synopsis line for %s is line %d, past the first %d", name, i+1, usageFirstScreen)
+		}
+		for _, m := range usageSynopsisFlag.FindAllStringSubmatch(line, -1) {
+			if !slices.Contains(registeredFlags, m[1]) {
+				t.Errorf("%s's synopsis spells %s, which no flag set registers", name, m[1])
+			}
+			if !slices.Contains(takes[m[1]], name) {
+				takes[m[1]] = append(takes[m[1]], name)
+			}
+		}
+	}
+	indexed := map[string]int{}
+	for i, line := range lines {
+		m := usageIndexLine.FindStringSubmatch(line)
+		if m == nil {
+			continue
+		}
+		if !slices.Contains(registeredFlags, m[1]) {
+			t.Errorf("usage line %d indexes %s, which no flag set registers", i+1, m[1])
+			continue
+		}
+		indexed[m[1]]++
+		if i >= usageFirstScreen {
+			t.Errorf("usage's flag-index line for %s is line %d, past the first %d", m[1], i+1, usageFirstScreen)
+		}
+		if got := strings.Fields(m[2]); !slices.Equal(got, takes[m[1]]) {
+			t.Errorf("usage's flag-index line for %s names %q, and the synopses spelling it are %q", m[1], got, takes[m[1]])
+		}
+	}
+	for _, f := range registeredFlags {
+		if len(takes[f]) == 0 {
+			t.Errorf("no synopsis spells %s, which a flag set registers", f)
+		}
+		if indexed[f] != 1 {
+			t.Errorf("usage has %d flag-index lines for %s, want 1", indexed[f], f)
+		}
+	}
+}
+
 // stderrBlockHeading opens usage's Stderr lines block. Its template lines are
 // the ones indented four spaces below it, up to the blank line closing it; the
 // lines indented further say what tells a template apart and are not read.

@@ -286,9 +286,9 @@ func recvName(expr ast.Expr) string {
 }
 
 // usageSentences returns the sentences of file's usage constant, owners all.
-// Its prose sits at column 0 and, under a subcommand's synopsis line at column
-// 2, at column 6; a synopsis line, and a line indented past 6 (an example),
-// is read as no sentence and ends the one before it, as a blank line does.
+// Its prose sits at column 0 and, under a subcommand's head line at column 2,
+// at column 6; a line at column 2, and a line indented past 6 (an example), is
+// read as no sentence and ends the one before it, as a blank line does.
 // A constant concatenating string literals, with one another or with other
 // operands, is read literal by literal, the end of each ending the sentence in
 // it as a blank line does, and an operand that is no literal read as nothing.
