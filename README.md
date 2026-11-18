@@ -505,9 +505,6 @@ if err != nil {
 fmt.Println(string(out)) // <order xmlns="urn:o" kind="x"><item>a</item><item>b</item></order>
 ```
 
-`codec.Append` does not run package `validate` over the document it writes; to
-get a verdict on it, assess it with package `validate` as any document.
-
 `codec.CheckDecode` reports on `Decode` alone: a nil from it says nothing
 about `Append`, which encodes the narrower slice `codec`'s package doc states
 (section "What encodes"). Run `codec.CheckAppend` once at start-up, before
