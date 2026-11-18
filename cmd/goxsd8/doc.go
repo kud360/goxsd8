@@ -62,12 +62,13 @@
 //	      0) ;;             # pass
 //	      1|2|3) exit 1 ;;  # fail
 //	      4) exit 1 ;;      # fail, for a gate that must fail closed
+//	      *) exit 1 ;;      # fail: no code above (goxsd8 not run, killed)
 //	    esac
 //	For example, run from testdata/readme in the module source, where
-//	skip.xsd includes order.xsd and the absent missing.xsd, <dir>
+//	skip.xsd includes order.xsd and the absent missing.xsd, <readme>
 //	standing for that directory's absolute path (Paths below):
 //	    $ goxsd8 validate -q -strict -schema skip.xsd order.xml
-//	    goxsd8: validate: <dir>/skip.xsd:3:3: this <include>'s schemaLocation "missing.xsd" resolved to no document and was skipped; the compiled schema is short of whatever that document declares; -strict charges this note 4
+//	    goxsd8: validate: <readme>/skip.xsd:3:3: this <include>'s schemaLocation "missing.xsd" resolved to no document and was skipped; the compiled schema is short of whatever that document declares; -strict charges this note 4
 //	    $ echo $?
 //	    4
 //

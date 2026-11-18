@@ -417,21 +417,27 @@ const usagePipelineLead = "\n  In a pipeline, pass -strict:"
 // The lines of that paragraph's case snippet and worked example the test reads:
 // an arm's codes, an invocation, the line asking for its exit code, and the
 // placeholder standing for the example's working directory.
-var usageCaseArm = regexp.MustCompile(`^        ([0-9|]+)\) `)
+var usageCaseArm = regexp.MustCompile(`^        ([0-9|]+|\*)\) +(.*?) *;;`)
+
+// usageArmFails matches an arm's action that fails the job.
+var usageArmFails = regexp.MustCompile(`^exit [1-9][0-9]*$`)
 
 const (
 	usageExampleCommand = "      $ goxsd8 "
 	usageExampleStatus  = "      $ echo $?"
-	usageExampleDir     = "<dir>"
+	usageExampleDir     = "<readme>"
 )
 
 // TestUsagePipelineExample runs the invocations usage's pipeline paragraph
 // shows, from testdata/readme as it says, and holds each to the stderr lines
-// and the exit code shown under it, <dir> read as that directory's absolute
+// and the exit code shown under it, <readme> read as that directory's absolute
 // path and stdout as empty, as -q leaves it. A shown -strict line must also end
-// as strictMarker closes it. The case snippet's arms must name exactly the
-// codes of the exit-code table, each once. An edit to a shown code, line or arm
-// that the binary or the table no longer bears fails it (#3853).
+// as strictMarker closes it. The case snippet's numbered arms must name exactly
+// the codes of the exit-code table, each once, and a catch-all arm must follow
+// them. Each arm's action is held to the table's reading: 0 passes (an empty
+// arm), and every other code, the catch-all's included, fails (exit with a
+// nonzero code). An edit to a shown code, line, arm or arm's action that the
+// binary or the table no longer bears fails it (#3853).
 func TestUsagePipelineExample(t *testing.T) {
 	_, para, ok := strings.Cut(usage, usagePipelineLead)
 	if !ok {
@@ -441,12 +447,35 @@ func TestUsagePipelineExample(t *testing.T) {
 	lines := strings.Split(para, "\n")
 
 	var armCodes []string
+	catchAll := false
 	for _, line := range lines {
 		m := usageCaseArm.FindStringSubmatch(line)
 		if m == nil {
 			continue
 		}
-		armCodes = append(armCodes, strings.Split(m[1], "|")...)
+		if catchAll {
+			t.Errorf("the pipeline paragraph's case arm %q follows its catch-all arm, which already matched it", m[1])
+		}
+		fails := usageArmFails.MatchString(m[2])
+		if !fails && m[2] != "" {
+			t.Errorf("the pipeline paragraph's case arm %q acts %q, which neither passes (empty) nor fails (exit nonzero)", m[1], m[2])
+		}
+		if m[1] == "*" {
+			catchAll = true
+			if !fails {
+				t.Errorf("the pipeline paragraph's catch-all case arm acts %q, and a code the table does not define fails the job", m[2])
+			}
+			continue
+		}
+		for _, code := range strings.Split(m[1], "|") {
+			armCodes = append(armCodes, code)
+			if pass := code == "0"; pass == fails {
+				t.Errorf("the pipeline paragraph's case arm %q acts %q on %s, and the exit-code table passes 0 alone", m[1], m[2], code)
+			}
+		}
+	}
+	if !catchAll {
+		t.Errorf("the pipeline paragraph's case snippet has no catch-all arm, so a code the table does not define passes the job")
 	}
 	var tableCodes []string
 	for _, m := range usageRankRow.FindAllStringSubmatch(usage, -1) {
