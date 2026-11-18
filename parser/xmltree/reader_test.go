@@ -547,6 +547,31 @@ func TestUnclosedElementIsError(t *testing.T) {
 	}
 }
 
+// TestWellFormednessMessageNamesXSDNamespacesByDisplayPrefix pins that a
+// well-formedness message names its element through qnamefmt.Display: one row
+// per display-prefix arm, and one for a namespace that has none.
+func TestWellFormednessMessageNamesXSDNamespacesByDisplayPrefix(t *testing.T) {
+	cases := []struct {
+		name string
+		src  string
+		want string
+	}{
+		{"xs element left unclosed", `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">`, "unexpected end of document: element xs:schema left unclosed"},
+		{"xsi element left unclosed", `<xsi:r xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">`, "unexpected end of document: element xsi:r left unclosed"},
+		{"xs element end tag mismatch", `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"></xs:element>`, "end tag </xs:element> does not match open element xs:schema"},
+		{"other namespace stays Clark", `<p:r xmlns:p="urn:o">`, "unexpected end of document: element {urn:o}r left unclosed"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := collect(t, "t.xml", tc.src)
+			wantWellFormednessError(t, err)
+			if !strings.Contains(err.Error(), tc.want) {
+				t.Errorf("error = %q, want it to contain %q", err, tc.want)
+			}
+		})
+	}
+}
+
 func TestMalformedXMLIsErrorNotPanic(t *testing.T) {
 	_, err := collect(t, "t.xml", "<a>\n<b>\x00</b></a>")
 	if err == nil {

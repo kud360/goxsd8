@@ -3,8 +3,8 @@
 //
 // It is independent of the rest of the module (leaf besides xsderr and the
 // internal/ leaves internal/xmldecl, internal/xmlenc, internal/xmlname,
-// internal/xmlchar and internal/xmltok) and used for both schema documents
-// (parser) and XML instances (validate/xmlsrc).
+// internal/xmlchar, internal/qnamefmt and internal/xmltok) and used for both
+// schema documents (parser) and XML instances (validate/xmlsrc).
 //
 // # Contract (implemented in M2)
 //

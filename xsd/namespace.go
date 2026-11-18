@@ -1,5 +1,7 @@
 package xsd
 
+import "github.com/kud360/goxsd8/internal/qnamefmt"
+
 // XMLSchemaNS is the XML Schema namespace name, the literal
 // "http://www.w3.org/2001/XMLSchema" (Structures §1.3.1.1 "The Schema
 // Namespace (xs)", anchor xsd-namespace; independently stated for the built-in
@@ -22,7 +24,7 @@ package xsd
 // not a general namespace registry; other well-known URIs (the XML namespace,
 // the versioning namespace, the XMLSchema-datatypes namespace) are out of scope
 // and do not live here.
-const XMLSchemaNS = "http://www.w3.org/2001/XMLSchema"
+const XMLSchemaNS = qnamefmt.XMLSchemaNS
 
 // XMLSchemaInstanceNS is the XML Schema Instance namespace name, the literal
 // "http://www.w3.org/2001/XMLSchema-instance" (Structures §1.3.1.2 "The Schema
@@ -35,4 +37,4 @@ const XMLSchemaNS = "http://www.w3.org/2001/XMLSchema"
 // URIs — the schema vocabulary and the instance-markup vocabulary. This is not
 // a general namespace registry; other well-known URIs are out of scope and do
 // not live here.
-const XMLSchemaInstanceNS = "http://www.w3.org/2001/XMLSchema-instance"
+const XMLSchemaInstanceNS = qnamefmt.XMLSchemaInstanceNS
