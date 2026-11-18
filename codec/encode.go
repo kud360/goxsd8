@@ -24,8 +24,9 @@ var ErrInvalidValue = errors.New("codec: Append: a value no valid document holds
 // the extended slice; dst may be nil. It writes each simple value in its
 // canonical representation (Datatypes §2.3.1 dt-canonical-representation),
 // the form the Canonical of its governing mapping on backend
-// (value.GoverningMapping) renders, and validates nothing: a caller assesses
-// the document through package validate, as any document. The package doc's
+// (value.GoverningMapping) renders, and runs no assessment by package validate
+// of the document it writes: a caller wanting a verdict on it assesses it
+// through package validate, as any document. The package doc's
 // "# What encodes" section states the slice Append encodes and the document
 // it writes. On error Append returns dst unextended, its bytes beyond
 // len(dst) possibly overwritten, and the first of these that applies:
