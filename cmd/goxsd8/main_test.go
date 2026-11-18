@@ -410,6 +410,106 @@ func TestUsagePrecedenceReadsTheRanks(t *testing.T) {
 	}
 }
 
+// usagePipelineLead opens usage's paragraph for a pipeline author, which runs
+// to the first blank line after it.
+const usagePipelineLead = "\n  In a pipeline, pass -strict:"
+
+// The lines of that paragraph's case snippet and worked example the test reads:
+// an arm's codes, an invocation, the line asking for its exit code, and the
+// placeholder standing for the example's working directory.
+var usageCaseArm = regexp.MustCompile(`^        ([0-9|]+)\) `)
+
+const (
+	usageExampleCommand = "      $ goxsd8 "
+	usageExampleStatus  = "      $ echo $?"
+	usageExampleDir     = "<dir>"
+)
+
+// TestUsagePipelineExample runs the invocations usage's pipeline paragraph
+// shows, from testdata/readme as it says, and holds each to the stderr lines
+// and the exit code shown under it, <dir> read as that directory's absolute
+// path and stdout as empty, as -q leaves it. A shown -strict line must also end
+// as strictMarker closes it. The case snippet's arms must name exactly the
+// codes of the exit-code table, each once. An edit to a shown code, line or arm
+// that the binary or the table no longer bears fails it (#3853).
+func TestUsagePipelineExample(t *testing.T) {
+	_, para, ok := strings.Cut(usage, usagePipelineLead)
+	if !ok {
+		t.Fatalf("usage has no %q line", strings.TrimPrefix(usagePipelineLead, "\n"))
+	}
+	para, _, _ = strings.Cut(para, "\n\n")
+	lines := strings.Split(para, "\n")
+
+	var armCodes []string
+	for _, line := range lines {
+		m := usageCaseArm.FindStringSubmatch(line)
+		if m == nil {
+			continue
+		}
+		armCodes = append(armCodes, strings.Split(m[1], "|")...)
+	}
+	var tableCodes []string
+	for _, m := range usageRankRow.FindAllStringSubmatch(usage, -1) {
+		tableCodes = append(tableCodes, m[1])
+	}
+	slices.Sort(armCodes)
+	slices.Sort(tableCodes)
+	if !slices.Equal(armCodes, tableCodes) {
+		t.Errorf("the pipeline paragraph's case arms name codes %q, and the exit-code table defines %q", armCodes, tableCodes)
+	}
+
+	t.Chdir(filepath.Join("..", "..", "testdata", "readme"))
+	dir, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	ran := 0
+	for i := 0; i < len(lines); i++ {
+		rest, ok := strings.CutPrefix(lines[i], usageExampleCommand)
+		if !ok {
+			continue
+		}
+		args := strings.Fields(rest)
+		var shown []string
+		j := i + 1
+		for j < len(lines) && lines[j] != usageExampleStatus {
+			shown = append(shown, strings.TrimPrefix(lines[j], "      "))
+			j++
+		}
+		if j+1 >= len(lines) {
+			t.Fatalf("usage's example %q shows no %q line and code after it", args, strings.TrimSpace(usageExampleStatus))
+		}
+		wantCode, err := strconv.Atoi(strings.TrimSpace(lines[j+1]))
+		if err != nil {
+			t.Fatalf("usage's example %q shows exit code %q: %v", args, lines[j+1], err)
+		}
+		i = j + 1
+		ran++
+
+		var wantStderr strings.Builder
+		for _, line := range shown {
+			if strings.Contains(line, "-strict charges") && !strings.HasSuffix(line, strictMarker(true)) {
+				t.Errorf("usage's example %q shows %q, which does not end %q", args, line, strictMarker(true))
+			}
+			wantStderr.WriteString(strings.ReplaceAll(line, usageExampleDir, dir) + "\n")
+		}
+		var stdout, stderr bytes.Buffer
+		code := run(args, &stdout, &stderr)
+		if code != wantCode {
+			t.Errorf("usage's example %q exits %d, and usage shows %d", args, code, wantCode)
+		}
+		if stdout.Len() != 0 {
+			t.Errorf("usage's example %q prints %q on stdout, and usage shows nothing", args, stdout.String())
+		}
+		if stderr.String() != wantStderr.String() {
+			t.Errorf("usage's example %q prints on stderr\n%q\nand usage shows\n%q", args, stderr.String(), wantStderr.String())
+		}
+	}
+	if ran == 0 {
+		t.Errorf("usage's pipeline paragraph shows no %q line to run", strings.TrimSpace(usageExampleCommand))
+	}
+}
+
 // usageKindsLead opens usage's list of the kinds of declined check, whose
 // items follow it one per "- <kind>:" line.
 const usageKindsLead = "A declined check is one of these kinds:\n"

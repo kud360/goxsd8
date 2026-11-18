@@ -80,6 +80,23 @@ Usage:
   Precedence, by that rank: 2 over 1 over 4 over 0, with validate's 3
   answering alone, before any instance is opened.
 
+  In a pipeline, pass -strict: without it a skipped <xs:include> or
+  <xs:import> is a stderr note and the run exits 0. -q keeps a clean
+  run silent. Fail the job on the code the invocation exits with, its
+  highest-ranked outcome (Precedence above), so 2 beats 1:
+      case $? in
+        0) ;;             # pass
+        1|2|3) exit 1 ;;  # fail
+        4) exit 1 ;;      # fail, for a gate that must fail closed
+      esac
+  For example, run from testdata/readme in the module source, where
+  skip.xsd includes order.xsd and the absent missing.xsd, <dir>
+  standing for that directory's absolute path (Paths below):
+      $ goxsd8 validate -q -strict -schema skip.xsd order.xml
+      goxsd8: validate: <dir>/skip.xsd:3:3: this <include>'s schemaLocation "missing.xsd" resolved to no document and was skipped; the compiled schema is short of whatever that document declares; -strict charges this note 4
+      $ echo $?
+      4
+
   Streams: stdout carries this help text, parse's summary and each
   instance's report lines — its violations, its undecided checks, the
   line of the fault that stopped its walk, and the line of an instance
