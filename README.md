@@ -52,7 +52,7 @@ Install the binary alone:
 # needs Go 1.26 or newer, as go.mod sets; an older go downloads Go 1.26
 # rather than failing under the default GOTOOLCHAIN=auto, and fails under
 # GOTOOLCHAIN=local
-go install github.com/kud360/goxsd8/cmd/goxsd8@main   # needs no clone
+go install github.com/kud360/goxsd8/cmd/goxsd8@main   # needs no clone; the examples below do
 ```
 
 Or clone the repository to build, test and install it from source:
@@ -88,9 +88,11 @@ the shape of a diagnostic line and the CLI's relationship to the library. The
 invocations below are worked examples of it.
 
 Every file these examples and the Library ones name is committed in
-`testdata/readme/`; run them from there. `gen` writes `./gen/` beside them,
-which the checkout ignores. Every `-out` lies in a Go module, here the
-checkout's, as the `gen` paragraph of `goxsd8 -help` states.
+`testdata/readme/`, and README shows only some of them, so the examples run
+from a clone, not from the `go install …@main` binary alone: clone as the
+Quickstart does, then run them from `testdata/readme/`. `gen` writes `./gen/`
+beside them, which the checkout ignores. Every `-out` lies in a Go module,
+here the checkout's, as the `gen` paragraph of `goxsd8 -help` states.
 
 ```sh
 cd testdata/readme                              # from the checkout root
