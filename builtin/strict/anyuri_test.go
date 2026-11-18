@@ -11,8 +11,8 @@ func TestAnyURIIdentityAndLength(t *testing.T) {
 	m := mappingFor(t, "anyURI")
 	// The lexical mapping is the identity (§3.3.17.2) over every Char* sequence;
 	// no URI-syntax validation (§3.3.17.2: the spec disclaims RFC 3986/3987
-	// checking), so Parse accepts anything verbatim — including strings no URI
-	// parser would accept, matching xs:string's permissiveness.
+	// checking), so Parse accepts any Char* sequence verbatim — including strings
+	// no URI parser would accept, matching xs:string.
 	for _, s := range []string{
 		"", "http://example.com/", " relative/path ", "not a uri at all",
 		"%zz-not-valid-percent-encoding", "café", "𝔘nicode",

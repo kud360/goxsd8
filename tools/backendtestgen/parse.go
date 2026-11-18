@@ -176,10 +176,11 @@ func booleanInvalids(lexicals []string) []string {
 }
 
 // parseString derives the string vectors. f-stringLexmap and f-stringCanmap are
-// the identity on the whole domain (§3.3.1.2), and every finite Char* sequence
-// is in the lexical space (nt-stringRep) — so there is NO invalid string lexical
-// and the Invalid slot is deliberately left empty; inventing "invalid strings"
-// would contradict the lexical space. string's space is unbounded, so unlike
+// the identity on the whole domain (§3.3.1.2), and the lexical space is every
+// finite Char* sequence (nt-stringRep), so the only invalid string lexicals are
+// those holding a non-Char. Char is XML's [2] production, which this generator,
+// reading the Datatypes spec alone, does not read, so the Invalid slot is left
+// empty and the kit pins no string rejection. string's space is unbounded, so unlike
 // boolean/decimal there is no finite spec production to enumerate: the valid
 // sample is a small deterministic set of representative literals — the empty
 // string, ASCII, a multi-byte (combining) codepoint and an astral codepoint —

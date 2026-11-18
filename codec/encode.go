@@ -6,7 +6,6 @@ import (
 	"math"
 	"reflect"
 	"strconv"
-	"unicode/utf8"
 
 	"github.com/kud360/goxsd8/internal/goshape"
 	"github.com/kud360/goxsd8/internal/xmlchar"
@@ -575,7 +574,7 @@ func (e *encoder) simple(st *xsd.SimpleType, v reflect.Value, path, owner string
 // normalized lexical, and s may be none.
 func (e *encoder) str(st *xsd.SimpleType, s, path, subject string) (string, error) {
 	shown := strconv.Quote(s)
-	if i, bad := notChars(s); bad {
+	if i := xmlchar.IndexNonChar(s); i >= 0 {
 		e.invalidate(fmt.Errorf("codec: Append: %s holds %s, of %s, whose byte offset %d starts no XML 1.0 Char (Datatypes §3.3.1)", path, shown, subject, i))
 		return s, nil
 	}
@@ -684,22 +683,6 @@ func doubleLexical(f float64) string {
 		return "NaN"
 	}
 	return strconv.FormatFloat(f, 'E', -1, 64)
-}
-
-// notChars reports whether s holds a byte sequence that is not UTF-8 or a
-// rune xmlchar.IsChar rejects, and the byte offset of the first.
-func notChars(s string) (int, bool) {
-	for i, r := range s {
-		if r == utf8.RuneError {
-			if _, size := utf8.DecodeRuneInString(s[i:]); size <= 1 {
-				return i, true
-			}
-		}
-		if !xmlchar.IsChar(r) {
-			return i, true
-		}
-	}
-	return 0, false
 }
 
 // appendEscaped appends s to dst escaped for an attribute value delimited by

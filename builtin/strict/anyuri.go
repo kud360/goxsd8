@@ -12,16 +12,18 @@ import (
 type anyURIVal string
 
 // parseAnyURI maps an anyURI lexical to its value. The lexical mapping is the
-// IDENTITY on the domain (§3.3.17.2), value space == lexical space, and every
-// XML-well-formed string reaching this code already matches Char* — so anyURI
-// has no invalid lexical. The spec deliberately disclaims URI-syntax checking
+// IDENTITY on the lexical space (§3.3.17.2), value space == lexical space, so
+// Parse transforms nothing and rejects only a lexical outside it, as New's
+// xs:anyURI bullet states. The spec deliberately disclaims URI-syntax checking
 // (§3.3.17.2: "Because it is impractical for processors to check that a value is
 // a context-appropriate URI reference, neither the syntactic constraints defined
 // by the definitions of individual schemes nor the generic syntactic constraints
-// defined by [RFC 3987] and [RFC 3986] ... are part of this datatype"), so Parse
-// must NOT transform or reject anything, and never returns an error — mirroring
-// parseString exactly.
+// defined by [RFC 3987] and [RFC 3986] ... are part of this datatype"), so no
+// URI syntax is checked — mirroring parseString exactly.
 func parseAnyURI(lexical string, _ value.Context) (value.Value, error) {
+	if err := checkChars("anyURI", lexical); err != nil {
+		return nil, err
+	}
 	return anyURIVal(lexical), nil
 }
 
