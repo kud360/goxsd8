@@ -138,15 +138,9 @@ every member but `"$xmlns"` and `"$type"` is an attribute or a child. The root
 key `"o:order"` is prefixed through `"$xmlns"` so its namespace is spelled,
 though an unprefixed `"order"` also matches the top-level declaration of that
 local name, targetNamespace or not, unless two top-level declarations carry
-it (jsonsrc's "The validation root"). A number's lexical form is its source
-digits, never a float64 round trip (`1.0` stays `1.0`, `1e2` stays `1e2`),
-and `true` and `false` are those literals, so a JSON boolean is an
-`xs:boolean` lexical form.
+it (jsonsrc's "The validation root").
 
-A child key may repeat in one object: each member is one more child, in
-member order, which is how a model interleaving repeats (a, b, a) is
-spelled. A repeated attribute key, `"$xmlns"` or `"$type"` is declined
-(exit 4). Malformed JSON and a fault reading the instance each print one
+Malformed JSON and a fault reading the instance each print one
 `<loc>: [jsonsrc] <message>` line on stdout and exit 1, as malformed XML and
 a fault reading an XML instance do; a decline prints
 `<loc>: [jsonsrc] undecided: <message>` and exits 4.
