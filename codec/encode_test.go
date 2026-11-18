@@ -601,6 +601,14 @@ var (
 	stringRejectingParse = overDatatype("string", func(base value.Mapping) value.Mapping {
 		return value.Mapping{Parse: func(string, value.Context) (value.Value, error) { return nil, errors.New("rejected") }, Canonical: base.Canonical}
 	})
+	doubleRejectingCanonical = overDatatype("double", func(base value.Mapping) value.Mapping {
+		return value.Mapping{Parse: func(s string, ctx value.Context) (value.Value, error) {
+			if s == "1.0E0" {
+				return nil, errors.New("rejects canonical")
+			}
+			return base.Parse(s, ctx)
+		}, Canonical: base.Canonical}
+	})
 )
 
 // TestAppendNoCanonical pins item 7 of Append's doc: a value with no
@@ -658,6 +666,8 @@ func TestAppendBackendFaults(t *testing.T) {
 	schema := schemaOf(t, encodeSchema)
 	_, err := appendChecked(t, nil, schema, doubleRejectingParse, sname("d"), dblRoot(1))
 	plainError(t, err, "dblRoot", `doubleRep form "1E+00"`, "rejected")
+	_, err = appendChecked(t, nil, schema, doubleRejectingCanonical, sname("d"), dblRoot(1))
+	plainError(t, err, "dblRoot", "canonical representation", `"1.0E0"`)
 	_, err = appendChecked(t, nil, schema, noMappings{}, sname("d"), dblRoot(1))
 	plainError(t, err, "dblRoot", "no mapping governing")
 	_, err = appendChecked(t, nil, schema, noMappings{}, sname("str"), strRoot("v"))
