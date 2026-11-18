@@ -483,6 +483,23 @@ document element by its expanded name as an `xsd.QName`, importing
 // {urn:o}order.
 out, err := codec.Append(nil, schema, backend, xsd.QName{Space: "urn:o", Local: "order"}, *o)
 if err != nil {
+	var de *codec.DeclineError
+	switch {
+	case errors.Is(err, codec.ErrInvalidValue):
+		// Item 6: a value no valid document holds, named by its Go path.
+		fmt.Println(err)
+	case errors.As(err, &de):
+		// Items 4 and 7: a construct, or a value with no canonical
+		// representation, that codec declines.
+		fmt.Println(de.Construct())
+	case errors.Is(err, codec.ErrTypeMismatch):
+		// Item 5: T does not match the declaration.
+		fmt.Println(err)
+	default:
+		// Items 1 to 3's plain errors, a fault of the arguments, and a
+		// fault of the backend.
+		fmt.Println(err)
+	}
 	log.Fatal(err)
 }
 fmt.Println(string(out)) // <order xmlns="urn:o" kind="x"><item>a</item><item>b</item></order>

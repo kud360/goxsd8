@@ -15,6 +15,10 @@ import (
 	"github.com/kud360/goxsd8/xsderr"
 )
 
+// ErrInvalidValue is the error [Append] wraps for item 6 of its doc, adding
+// nothing to that error's text.
+var ErrInvalidValue = errors.New("codec: Append: a value no valid document holds")
+
 // Append appends to dst the XML document that encodes v as the document
 // element of the top-level element declaration name in schema, and returns
 // the extended slice; dst may be nil. It writes each simple value in its
@@ -35,19 +39,22 @@ import (
 //  5. A T that is not the type codegen emits for the declaration, item 6 of
 //     [Decode]'s doc: its error, which errors.Is reports as [ErrTypeMismatch].
 //  6. A value no valid document holds, the first in document order, an
-//     element's attributes before its content: a plain error naming the Go
-//     path of its field from T and, for a simple value, its simple type. It
-//     is the slice field of a particle with {max occurs} above 1 whose
-//     length lies outside its {min occurs} and {max occurs}; a string holding
-//     bytes that are not UTF-8 or a character the XML 1.0 Char production
-//     does not match, U+0000 among them (Datatypes §3.3.1); a string that
-//     differs from its own whiteSpace-normalized form under its simple type,
-//     such as an xs:token holding "  a  b"; a list item, a string, that is
-//     empty or holds TAB, LF, CR or a space, which no list item's lexical
-//     representation does (Datatypes §2.4.1.2); or a value a facet of its
-//     simple type rejects, that facet's *xsderr.Error wrapped, but for item
-//     7's pattern case, a list's own facets read once every item has passed
-//     its own checks.
+//     element's attributes before its content: an error, which errors.Is
+//     reports as [ErrInvalidValue], naming the Go path of its field from T
+//     and, for a simple value, its simple type. It is the slice field of a
+//     particle with {max occurs} above 1 whose length lies outside its {min
+//     occurs} and {max occurs}; a string holding bytes that are not UTF-8 or
+//     a character the XML 1.0 Char production does not match, U+0000 among
+//     them (Datatypes §3.3.1); a string that differs from its own
+//     whiteSpace-normalized form under its simple type, such as an xs:token
+//     holding "  a  b"; a list item, a string, that is empty or holds TAB,
+//     LF, CR or a space, which no list item's lexical representation does
+//     (Datatypes §2.4.1.2); or a value whose simple type rejects it, a
+//     value.ValidateLexical error value.IsDatatypeVerdict reports as a
+//     verdict, a facet's rejection or a backend Parse's among them, that
+//     error wrapped, and through it whatever *xsderr.Error it carries, but
+//     for item 7's pattern case, a list's own facets read once every item has
+//     passed its own checks.
 //  7. A value with no canonical representation, the first in document order
 //     as item 6 counts: its *DeclineError. That is a governing mapping with no
 //     Canonical, a Canonical that fails for the value, an xs:double value
@@ -57,15 +64,16 @@ import (
 //     other facet rejects it, or a canonical representation that does not map
 //     back to the value.
 //
-// A plain error is no *DeclineError and wraps neither [ErrTypeMismatch] nor
-// errors.ErrUnsupported; only item 6's facet case carries an xsderr rule.
+// A plain error is no *DeclineError and wraps none of [ErrTypeMismatch],
+// [ErrInvalidValue] and errors.ErrUnsupported; whether it wraps an
+// *xsderr.Error does not tell its item.
 //
 // A fault of backend found at a value, in place of that value's item 6 or 7,
 // is a plain error too, returned at once and naming the value's Go path and
-// simple type: no governing mapping for the type, a Parse that rejects the
-// form Append spells an xs:double value in, or an error of
-// value.ValidateLexical that value.IsDatatypeVerdict does not report as a
-// verdict.
+// simple type: no governing mapping for the type, a Parse that rejects an
+// xs:double value's doubleRep spelling or the whiteSpace-normalized canonical
+// representation its Canonical renders, or an error of value.ValidateLexical that
+// value.IsDatatypeVerdict does not report as a verdict.
 //
 // Items 2 to 5 read no value; [CheckAppend] returns them for a declaration
 // and T.
@@ -506,7 +514,7 @@ type encoder struct {
 	schema      *xsd.Schema
 	backend     value.Backend
 	out         []byte
-	invalid     error
+	invalid     *invalidValueError
 	uncanonical error
 }
 
@@ -611,13 +619,24 @@ func (e *encoder) particle(p encodeParticle, f reflect.Value, path string, paren
 	}
 }
 
-// invalidate records err as the document's item 6 error of [Append]'s doc
-// unless an earlier value's is recorded.
+// invalidate records err as the document's item 6 error of [Append]'s doc,
+// marked ErrInvalidValue, unless an earlier value's is recorded.
 func (e *encoder) invalidate(err error) {
 	if e.invalid == nil {
-		e.invalid = err
+		e.invalid = &invalidValueError{err}
 	}
 }
+
+// invalidValueError is item 6's error of [Append]'s doc: err, the cause one
+// of invalidate's callers built, marked ErrInvalidValue.
+type invalidValueError struct{ err error }
+
+// Error returns the cause's text unchanged.
+func (e *invalidValueError) Error() string { return e.err.Error() }
+
+// Unwrap returns ErrInvalidValue and the cause, for errors.Is and for the
+// errors.As and xsderr.RuleOf reads of the cause's chain.
+func (e *invalidValueError) Unwrap() []error { return []error{ErrInvalidValue, e.err} }
 
 // noCanonical records the item 7 decline of [Append]'s doc for the value
 // shown at path, of the simple type subject names, cause saying why, unless
@@ -748,8 +767,9 @@ func (e *encoder) str(st *xsd.SimpleType, s, path, subject string) (text string,
 
 // double returns the canonical representation of f, a value of the simple
 // type st whose primitive is xs:double: f spelled in doubleRep (doubleLexical)
-// mapped by st's governing mapping's Parse, rendered by its Canonical, then
-// held to st's facets by value.ValidateLexical and read back by
+// mapped by st's governing mapping's Parse, rendered by its Canonical, that
+// rendering whiteSpace-normalized (value.ApplyWhiteSpace) and accepted by
+// Parse, then held to st's facets by value.ValidateLexical and read back by
 // strconv.ParseFloat, every NaN equal to every NaN. A pattern facet's
 // rejection is item 7 of [Append]'s doc, since another lexical of the value
 // may match it (Datatypes §2.1's note), but for NaN and -INF, which have no
@@ -773,6 +793,13 @@ func (e *encoder) double(st *xsd.SimpleType, f float64, path, subject string) (t
 	if err != nil {
 		e.noCanonical(subject, path, shown, err.Error())
 		return "", false, nil
+	}
+	normalized, err := value.ApplyWhiteSpace(e.schema, st, c)
+	if err != nil {
+		return "", false, fmt.Errorf("codec: Append: %s holds %s, of %s, which the backend cannot assess: %w", path, shown, subject, err)
+	}
+	if _, err := m.Parse(normalized, nil); err != nil {
+		return "", false, fmt.Errorf("codec: Append: %s holds %s, of %s, whose canonical representation %q the backend's Parse rejects: %w", path, shown, subject, c, err)
 	}
 	if _, err := value.ValidateLexical(e.backend, e.schema, st, c, nil, noAssertions{}); err != nil {
 		if !value.IsDatatypeVerdict(err) {
