@@ -54,10 +54,12 @@ func (e *DeclineError) Loc() (xsderr.Loc, bool) {
 // [Decode]'s item 5 states; for xsi:type, it names the element and the type the
 // xsi:type names. For the second it names the construct, then the declining
 // element declaration, attribute use or simple type, by its QName where it has
-// one, with its schema Loc, and, for a value with no canonical representation,
-// the Go path of its field from T and its value. A type definition named in the
-// XML Schema namespace whose schema Loc is the zero Loc is named by its QName
-// alone, in place of the schema Loc the sentences above give it.
+// one, with its schema Loc, and, for a construct of a list type's {item type
+// definition}, that item, by its QName where it has one, with its schema Loc,
+// and, for a value with no canonical representation, the Go path of its field
+// from T and its value. A type definition named in the XML Schema namespace
+// whose schema Loc is the zero Loc is named by its QName alone, in place of the
+// schema Loc the sentences above give it.
 func (e *DeclineError) Error() string {
 	text := "codec does not decode " + e.construct.name() + ": " + e.detail +
 		"; a decoder refusal, not a schema or instance fault"
@@ -162,7 +164,6 @@ const (
 	constructAttributeWildcard
 	constructComplexAssertions
 	constructSpecialType
-	constructList
 	constructUnion
 	constructEncodePrimitive
 	constructIDType
@@ -197,7 +198,6 @@ var constructNames = [...]string{
 	constructAttributeWildcard:  "an {attribute wildcard}",
 	constructComplexAssertions:  "a complex type with {assertions}",
 	constructSpecialType:        "xs:anySimpleType or xs:anyAtomicType as a simple type",
-	constructList:               "a list simple type",
 	constructUnion:              "a union simple type",
 	constructEncodePrimitive:    "an atomic simple type whose primitive is other than xs:string or xs:double",
 	constructIDType:             "a simple type derived from xs:ID, xs:IDREF or xs:ENTITY",
