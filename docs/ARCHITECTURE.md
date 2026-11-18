@@ -4,14 +4,14 @@
 
 Packages form a strict DAG. `xsderr` (the error currency) is the **pure
 leaf**: it imports nothing from this module. `xsd` (the component model)
-imports only `xsderr` and `internal/nearname`, a stdlib-only leaf; every
-other package builds above the two of them.
+imports only `xsderr` and two stdlib-only leaves, `internal/nearname` and
+`internal/qnamefmt`; every other package builds above the two of them.
 Value implementations, parsing, validation, and generation live above them.
 
 ```
                  xsderr          (leaf: errors, rule IDs, locations)
-                 xsd             (leaf: component model + query/walk APIs; imports xsderr
-                                    and internal/nearname only)
+                 xsd             (leaf: component model + query/walk APIs; imports xsderr,
+                                    internal/nearname and internal/qnamefmt only)
                  internal/...    (leaves: helpers over the standard library, unexportable
                                   because they are nobody's API. Each imports only the
                                   standard library, except internal/xmltok, whose
@@ -71,7 +71,13 @@ Value implementations, parsing, validation, and generation live above them.
                                     nearest a QName that names no component,
                                     which xsd's finalize charges and parser's
                                     complex base= and <key ref=> charges offer
-                                    under src-resolve clause 1.)
+                                    under src-resolve clause 1.
+                                  - internal/qnamefmt, the two XSD namespace
+                                    names and an expanded name's Clark and
+                                    message display spellings (xs:/xsi: for
+                                    those two namespaces), which xsd's
+                                    QName.String/Display and parser/xmltree's
+                                    well-formedness messages render through.)
                  internal/goshape (the component → Go shape decisions codegen
                                   emits and codec binds against; imports xsd and xsderr)
                  value           (value-space contracts, facet pipeline; imports xsd, xsderr, regex)
@@ -84,8 +90,9 @@ Value implementations, parsing, validation, and generation live above them.
                  regex           (one engine, XSD + F&O flavors)
                  parser/xmltree  (position-tracking XML; imports xsderr,
                                   internal/xmldecl, internal/xmlenc,
-                                  internal/xmlname, internal/xmlchar and
-                                  internal/xmltok only, and nothing else in the
+                                  internal/xmlname, internal/xmlchar,
+                                  internal/qnamefmt and internal/xmltok only,
+                                  and nothing else in the
                                   module — independent of the schema pipeline, not
                                   of the error currency. An internal/ leaf whose
                                   own module edges, if any, are internal/ leaves
@@ -156,7 +163,7 @@ them;
 
 Only `xsderr`, `xsd`, `internal/schemaloc`, `internal/xmldecl`,
 `internal/xmlenc`, `internal/xmlname`, `internal/xmlchar`,
-`internal/xmlqname`, `internal/xmltok`, `internal/goname`, `internal/nearname`, `internal/goshape`, `value`, `value/backendtest`, `regex`, `builtin`, `builtin/strict`, `loader`,
+`internal/xmlqname`, `internal/xmltok`, `internal/goname`, `internal/nearname`, `internal/qnamefmt`, `internal/goshape`, `value`, `value/backendtest`, `regex`, `builtin`, `builtin/strict`, `loader`,
 `parser`, `parser/xmltree`, `xpath`, `icpath`, `validate`,
 `validate/xmlsrc`, `validate/jsonsrc`, `codegen`, `codec`, `conformance` and `cmd/goxsd8` carry
 code today.
@@ -201,14 +208,17 @@ its one home in `internal/xmlchar`; do not write another copy. The
 "$type" member (#2615), and by `codec` for the xsi:type naming an abstract
 {type definition}'s member and for an xs:QName or xs:NOTATION value.
 
-**Give logic `xsd` and a package above it both run one home in a
+**Give logic `xsd` and another library package both run one home in a
 stdlib-only `internal/<name>` leaf**; do not write it twice, and do not
-export it from `xsd` for the other to call. Such a leaf declares its own
-types over the standard library, which `xsd` and its other reader convert
-to and from at the call. `internal/nearname` is the one today: the
-nearness rule naming the candidate in `xsd`'s src-resolve clause 1
-charges and in `parser`'s two eager ones, for a complex type's `base=` and
-a `<key ref=>`.
+export it from `xsd` for the other to call. Such a leaf takes
+standard-library values, or declares its own types over the standard
+library, which `xsd` and its other reader convert to and from at the call.
+`internal/nearname` is the one today: the nearness rule naming the
+candidate in `xsd`'s src-resolve clause 1 charges and in `parser`'s two
+eager ones, for a complex type's `base=` and a `<key ref=>`.
+`internal/qnamefmt` is the other: the Clark and message display spellings
+`xsd.QName`'s String and Display render, and `parser/xmltree`'s
+well-formedness messages render an element name with.
 
 `cmd/goxsd8` is a library CONSUMER, not a place to grow capability. A
 capability the CLI needs and the library does not export is a library gap to

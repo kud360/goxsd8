@@ -1,5 +1,7 @@
 package xsd
 
+import "github.com/kud360/goxsd8/internal/qnamefmt"
+
 // QName is an expanded name: Structures §2.2 defines it as "a pair
 // consisting of a namespace name, which may be ·absent·, and a local name."
 // §3.17.2.1 restates this for the QName value type ("expanded names with a
@@ -26,10 +28,7 @@ type QName struct {
 // String renders Clark notation: "{space}local" for a namespaced name,
 // "local" for a no-namespace name, and "" for the zero value (absent).
 func (q QName) String() string {
-	if q.Space == "" {
-		return q.Local
-	}
-	return "{" + q.Space + "}" + q.Local
+	return qnamefmt.Clark(q.Space, q.Local)
 }
 
 // Display renders q for message text only: "xs:local" when q is in the XML
@@ -40,11 +39,5 @@ func (q QName) String() string {
 // not lexical QNames: never parse Display's output back or key on it.
 // [QName.String] stays Clark notation for every other consumer.
 func (q QName) Display() string {
-	if q.Space == XMLSchemaNS {
-		return "xs:" + q.Local
-	}
-	if q.Space == XMLSchemaInstanceNS {
-		return "xsi:" + q.Local
-	}
-	return q.String()
+	return qnamefmt.Display(q.Space, q.Local)
 }

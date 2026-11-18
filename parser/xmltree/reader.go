@@ -8,6 +8,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
+	"github.com/kud360/goxsd8/internal/qnamefmt"
 	"github.com/kud360/goxsd8/internal/xmlchar"
 	"github.com/kud360/goxsd8/internal/xmldecl"
 	"github.com/kud360/goxsd8/internal/xmlenc"
@@ -591,13 +592,10 @@ func rawName(n xml.Name) string {
 	return n.Space + ":" + n.Local
 }
 
-// qname renders a resolved Name for error messages as "{uri}local", or just
-// local for a name in no namespace.
+// qname renders a resolved Name for error messages through
+// [qnamefmt.Display], the spelling xsd.QName.Display shares.
 func qname(n Name) string {
-	if n.space == "" {
-		return n.local
-	}
-	return "{" + n.space + "}" + n.local
+	return qnamefmt.Display(n.space, n.local)
 }
 
 // locAt maps a byte offset to a 1-based (line, column) using the newline
