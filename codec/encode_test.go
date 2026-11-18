@@ -748,7 +748,12 @@ func TestAppendDeclines(t *testing.T) {
 		{"restricted complex assertions", "a complex type with {assertions}", `<xs:complexType name="ab%[1]s">` + asserted + `</xs:complexType>` +
 			`<xs:element name="%[1]s"><xs:complexType><xs:complexContent><xs:restriction base="s:ab%[1]s"><xs:sequence>` + a + `</xs:sequence></xs:restriction></xs:complexContent></xs:complexType></xs:element>`},
 		{"special type", "xs:anySimpleType or xs:anyAtomicType as a simple type", `<xs:element name="%[1]s" type="xs:anySimpleType"/>`},
-		{"list", "a list simple type", `<xs:element name="%[1]s" type="xs:NMTOKENS"/>`},
+		{"list of decimal", "an atomic simple type whose primitive is other than xs:string or xs:double", simpleOf(`<xs:list itemType="xs:decimal"/>`)},
+		{"list of union", "a union simple type", simpleOf(`<xs:list><xs:simpleType><xs:union memberTypes="xs:string xs:int"/></xs:simpleType></xs:list>`)},
+		{"IDREFS", "a simple type derived from xs:ID, xs:IDREF or xs:ENTITY", `<xs:element name="%[1]s" type="xs:IDREFS"/>`},
+		{"list assertions", "a simple type with an assertions facet", simpleOf(`<xs:restriction base="xs:NMTOKENS"><xs:assertion test="true()"/></xs:restriction>`)},
+		{"inherited list assertions", "a simple type with an assertions facet", `<xs:simpleType name="assertedList%[1]s"><xs:restriction base="xs:NMTOKENS"><xs:assertion test="true()"/></xs:restriction></xs:simpleType>` + simpleOf(`<xs:restriction base="s:assertedList%[1]s"><xs:maxLength value="3"/></xs:restriction>`)},
+		{"list item assertions", "a simple type with an assertions facet", `<xs:simpleType name="assertedItem%[1]s"><xs:restriction base="xs:string"><xs:assertion test="true()"/></xs:restriction></xs:simpleType>` + simpleOf(`<xs:list itemType="s:assertedItem%[1]s"/>`)},
 		{"union", "a union simple type", simpleOf(`<xs:union memberTypes="xs:string xs:int"/>`)},
 		{"boolean", "an atomic simple type whose primitive is other than xs:string or xs:double", `<xs:element name="%[1]s" type="xs:boolean"/>`},
 		{"anyURI attribute", "an atomic simple type whose primitive is other than xs:string or xs:double", complexOf(`<xs:attribute name="a" type="xs:anyURI"/>`)},
@@ -799,5 +804,244 @@ func TestAppendDeclines(t *testing.T) {
 			}
 			seen[row.construct] = constructs[0]
 		})
+	}
+}
+
+// encodeListSchema declares, in urn:s, document elements of the list types "#
+// What encodes" admits: xs:NMTOKENS, user lists over xs:double, xs:string and
+// xs:token, in an element, a required and an optional attribute and three
+// particles, once, optional and repeated, of lists over xs:string and
+// xs:double; and restrictions of them by a pattern, length, minLength,
+// maxLength and enumeration facet.
+const encodeListSchema = `
+  <xs:simpleType name="doubles"><xs:list itemType="xs:double"/></xs:simpleType>
+  <xs:simpleType name="strings"><xs:list itemType="xs:string"/></xs:simpleType>
+  <xs:simpleType name="tokens"><xs:list itemType="xs:token"/></xs:simpleType>
+  <xs:simpleType name="one"><xs:restriction base="xs:double"><xs:pattern value="1"/></xs:restriction></xs:simpleType>
+  <xs:simpleType name="ones"><xs:list itemType="s:one"/></xs:simpleType>
+  <xs:simpleType name="twoDoubles"><xs:restriction base="s:doubles"><xs:pattern value="1\.0 2"/></xs:restriction></xs:simpleType>
+  <xs:simpleType name="onlyX"><xs:restriction base="s:strings"><xs:pattern value="x"/></xs:restriction></xs:simpleType>
+  <xs:simpleType name="pair"><xs:restriction base="s:strings"><xs:length value="2"/></xs:restriction></xs:simpleType>
+  <xs:simpleType name="some"><xs:restriction base="s:strings"><xs:minLength value="1"/></xs:restriction></xs:simpleType>
+  <xs:simpleType name="single"><xs:restriction base="s:strings"><xs:maxLength value="1"/></xs:restriction></xs:simpleType>
+  <xs:simpleType name="ab"><xs:restriction base="s:strings"><xs:enumeration value="a b"/></xs:restriction></xs:simpleType>
+  <xs:element name="nm" type="xs:NMTOKENS"/>
+  <xs:element name="dl" type="s:doubles"/>
+  <xs:element name="sl" type="s:strings"/>
+  <xs:element name="tl" type="s:tokens"/>
+  <xs:element name="ol" type="s:ones"/>
+  <xs:element name="dp" type="s:twoDoubles"/>
+  <xs:element name="sx" type="s:onlyX"/>
+  <xs:element name="pair" type="s:pair"/>
+  <xs:element name="some" type="s:some"/>
+  <xs:element name="single" type="s:single"/>
+  <xs:element name="ab" type="s:ab"/>
+  <xs:element name="da">
+    <xs:complexType><xs:attribute name="a" type="s:doubles" use="required"/></xs:complexType>
+  </xs:element>
+  <xs:element name="oda">
+    <xs:complexType><xs:attribute name="a" type="s:doubles"/></xs:complexType>
+  </xs:element>
+  <xs:element name="lp">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element name="once" type="s:strings"/>
+        <xs:element name="opt" type="s:doubles" minOccurs="0"/>
+        <xs:element name="rep" type="s:strings" maxOccurs="2"/>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>`
+
+// The T codegen emits for encodeListSchema's document elements.
+type (
+	strList     []string
+	dblList     []float64
+	listAttr    struct{ A []float64 }
+	optListAttr struct{ A *[]float64 }
+	listParts   struct {
+		Once []string
+		Opt  *[]float64
+		Rep  [][]string
+	}
+)
+
+// sameLists reports whether a and b are one value, codegen's reading of a
+// list field that is not a pointer: nil and the empty slice one value, the
+// empty list, at any depth.
+func sameLists[T any](a, b T) bool { return sameValue(reflect.ValueOf(a), reflect.ValueOf(b)) }
+
+// sameValue is sameLists over reflect.Values of one type.
+func sameValue(a, b reflect.Value) bool {
+	switch a.Kind() {
+	case reflect.Slice:
+		if a.Len() != b.Len() {
+			return false
+		}
+		for i := range a.Len() {
+			if !sameValue(a.Index(i), b.Index(i)) {
+				return false
+			}
+		}
+		return true
+	case reflect.Pointer:
+		if a.IsNil() || b.IsNil() {
+			return a.IsNil() == b.IsNil()
+		}
+		return sameValue(a.Elem(), b.Elem())
+	case reflect.Struct:
+		for i := range a.NumField() {
+			if !sameValue(a.Field(i), b.Field(i)) {
+				return false
+			}
+		}
+		return true
+	default:
+		return a.Interface() == b.Interface()
+	}
+}
+
+// TestAppendLists pins the list form "# What encodes" states: a list's
+// items' canonical representations in order, separated by single spaces, an
+// xs:double item as 1.0E0, and the empty list, nil or empty, as no content,
+// <x/> in an element and a="" in an attribute; an optional attribute's nil
+// writes no attribute. A list particle occurring once writes one element for
+// its []V, an optional one none for nil and one for an empty list, and a
+// repeated one one element per item of its [][]V. Each document is accepted
+// by validate and decoded back into the value, nil and empty one value.
+func TestAppendLists(t *testing.T) {
+	schema := schemaOf(t, encodeListSchema)
+	dbl := func(f ...float64) *[]float64 { return &f }
+	t.Run("NMTOKENS element", func(t *testing.T) {
+		roundTrip(t, schema, sname("nm"), strList{"a", "b:c", "1"}, `<nm xmlns="urn:s">a b:c 1</nm>`, sameLists[strList])
+	})
+	t.Run("token and string items", func(t *testing.T) {
+		roundTrip(t, schema, sname("tl"), strList{"a", "b"}, `<tl xmlns="urn:s">a b</tl>`, sameLists[strList])
+		roundTrip(t, schema, sname("sl"), strList{"<&>"}, `<sl xmlns="urn:s">&lt;&amp;&gt;</sl>`, sameLists[strList])
+	})
+	t.Run("double element", func(t *testing.T) {
+		roundTrip(t, schema, sname("dl"), dblList{1, -0.5, math.Inf(1)}, `<dl xmlns="urn:s">1.0E0 -5.0E-1 INF</dl>`, sameLists[dblList])
+	})
+	t.Run("double attribute", func(t *testing.T) {
+		roundTrip(t, schema, sname("da"), listAttr{A: []float64{1, 2.5}}, `<da xmlns="urn:s" a="1.0E0 2.5E0"/>`, sameLists[listAttr])
+	})
+	for _, row := range []struct {
+		name string
+		v    []string
+	}{{"nil", nil}, {"empty", []string{}}} {
+		t.Run("empty list element, "+row.name, func(t *testing.T) {
+			roundTrip(t, schema, sname("sl"), strList(row.v), `<sl xmlns="urn:s"/>`, sameLists[strList])
+		})
+	}
+	for _, row := range []struct {
+		name string
+		v    []float64
+	}{{"nil", nil}, {"empty", []float64{}}} {
+		t.Run("empty list attribute, "+row.name, func(t *testing.T) {
+			roundTrip(t, schema, sname("da"), listAttr{A: row.v}, `<da xmlns="urn:s" a=""/>`, sameLists[listAttr])
+		})
+	}
+	t.Run("optional attribute", func(t *testing.T) {
+		roundTrip(t, schema, sname("oda"), optListAttr{}, `<oda xmlns="urn:s"/>`, sameLists[optListAttr])
+		roundTrip(t, schema, sname("oda"), optListAttr{A: dbl()}, `<oda xmlns="urn:s" a=""/>`, sameLists[optListAttr])
+		roundTrip(t, schema, sname("oda"), optListAttr{A: dbl(3)}, `<oda xmlns="urn:s" a="3.0E0"/>`, sameLists[optListAttr])
+	})
+	for _, row := range []struct {
+		name string
+		v    listParts
+		want string
+	}{
+		{"once of two items, repeated of two", listParts{Once: []string{"x", "y"}, Rep: [][]string{{"a", "b"}, {"c"}}},
+			`<lp xmlns="urn:s"><once>x y</once><rep>a b</rep><rep>c</rep></lp>`},
+		{"optional empty, repeated empty item", listParts{Once: []string{"x"}, Opt: dbl(), Rep: [][]string{{}}},
+			`<lp xmlns="urn:s"><once>x</once><opt/><rep/></lp>`},
+		{"once empty, optional of one item", listParts{Opt: dbl(1), Rep: [][]string{nil, {"d"}}},
+			`<lp xmlns="urn:s"><once/><opt>1.0E0</opt><rep/><rep>d</rep></lp>`},
+	} {
+		t.Run("particles, "+row.name, func(t *testing.T) {
+			roundTrip(t, schema, sname("lp"), row.v, row.want, sameLists[listParts])
+		})
+	}
+}
+
+// TestAppendListInvalid pins items 6 and 7 of Append's doc for a list: an
+// item that is empty or holds a white space character, any of the four that
+// separate list items, is item 6 under an item type that admits it, and an
+// item's own check answers first; a list facet's rejection of the written
+// text is item 6, a pattern's item 7 where the list holds xs:double items and
+// item 6 where it holds none or xs:string ones; an item's own pattern
+// rejection of an xs:double is item 7 at the item's path.
+func TestAppendListInvalid(t *testing.T) {
+	schema := schemaOf(t, encodeListSchema)
+	for _, row := range []struct {
+		name, elem string
+		v          strList
+		rule       xsderr.Rule
+		want       []string
+	}{
+		{"an item holding a space", "sl", strList{"a", "b c"}, "", []string{"strList[1]", `"b c"`, "empty or holds white space", "through the list type's {item type definition} {http://www.w3.org/2001/XMLSchema}string"}},
+		{"an empty item", "sl", strList{""}, "", []string{"strList[0]", `""`, "empty or holds white space"}},
+		{"an item holding TAB", "sl", strList{"a\tb"}, "", []string{"strList[0]", "empty or holds white space"}},
+		{"an item holding LF", "sl", strList{"a\nb"}, "", []string{"strList[0]", "empty or holds white space"}},
+		{"an item holding CR", "sl", strList{"a\rb"}, "", []string{"strList[0]", "empty or holds white space"}},
+		{"a token item holding a space", "tl", strList{"a b"}, "", []string{"strList[0]", "empty or holds white space"}},
+		{"a non-Char item", "sl", strList{"a", "\x00"}, "", []string{"strList[1]", "XML 1.0 Char"}},
+		{"a token item not collapsed", "tl", strList{" a"}, "", []string{"strList[0]", `whiteSpace-normalized form "a"`}},
+		{"an empty NMTOKENS", "nm", strList{}, "cvc-minLength-valid", []string{"strList", "{http://www.w3.org/2001/XMLSchema}NMTOKENS"}},
+		{"length", "pair", strList{"a"}, "cvc-length-valid", []string{"strList", `written "a"`, "{urn:s}pair"}},
+		{"minLength", "some", nil, "cvc-minLength-valid", []string{"strList", "{urn:s}some"}},
+		{"maxLength", "single", strList{"a", "b"}, "cvc-maxLength-valid", []string{"strList", `written "a b"`}},
+		{"enumeration", "ab", strList{"a"}, "cvc-enumeration-valid", []string{"strList", "{urn:s}ab"}},
+		{"a string list's pattern", "sx", strList{"a"}, "cvc-pattern-valid", []string{"strList", `written "a"`, "{urn:s}onlyX"}},
+	} {
+		t.Run(row.name, func(t *testing.T) {
+			_, err := appendChecked(t, nil, schema, strict.New(), sname(row.elem), row.v)
+			plainError(t, err, row.want...)
+			if !strings.HasPrefix(err.Error(), "codec: Append: "+row.want[0]+" holds ") {
+				t.Errorf("error %q does not open with the path %s", err, row.want[0])
+			}
+			if rule, _ := xsderr.RuleOf(err); rule != row.rule {
+				t.Errorf("rule %q, want %q", rule, row.rule)
+			}
+		})
+	}
+	t.Run("a double list's empty value its pattern rejects", func(t *testing.T) {
+		_, err := appendChecked(t, nil, schema, strict.New(), sname("dp"), dblList{})
+		plainError(t, err, "dblList", "{urn:s}twoDoubles")
+		if rule, _ := xsderr.RuleOf(err); rule != "cvc-pattern-valid" {
+			t.Errorf("rule %q, want cvc-pattern-valid", rule)
+		}
+	})
+	t.Run("a double list's pattern rejecting its canonical join", func(t *testing.T) {
+		_, err := appendChecked(t, nil, schema, strict.New(), sname("dp"), dblList{1, 2})
+		_ = asDecline(t, err, "codec does not encode a value with no canonical representation: simple type {urn:s}twoDoubles")
+		if !strings.Contains(err.Error(), `at dblList holding [1 2]: a pattern facet rejects its canonical representation "1.0E0 2.0E0"`) {
+			t.Errorf("decline %q does not name the path, value and join", err)
+		}
+	})
+	t.Run("an item's own pattern rejecting an xs:double", func(t *testing.T) {
+		_, err := appendChecked(t, nil, schema, strict.New(), sname("ol"), dblList{1})
+		_ = asDecline(t, err, "codec does not encode a value with no canonical representation: simple type {urn:s}ones")
+		if !strings.Contains(err.Error(), `through the list type's {item type definition} {urn:s}one`) || !strings.Contains(err.Error(), "at dblList[0] holding 1") {
+			t.Errorf("decline %q does not name the item type and the item's path", err)
+		}
+	})
+}
+
+// TestAppendListDeclineSubject pins the detail of a list's item decline: the
+// list type, then its {item type definition}, by its QName where it has one
+// and its schema Loc where it is located.
+func TestAppendListDeclineSubject(t *testing.T) {
+	schema := schemaOf(t, `<xs:element name="dec"><xs:simpleType><xs:list itemType="xs:decimal"/></xs:simpleType></xs:element>`+
+		`<xs:simpleType name="booleans"><xs:list><xs:simpleType><xs:restriction base="xs:boolean"/></xs:simpleType></xs:list></xs:simpleType>`+
+		`<xs:element name="anon" type="s:booleans"/>`)
+	err := CheckAppend[strList](schema, sname("dec"))
+	_ = asDecline(t, err, "codec does not encode an atomic simple type whose primitive is other than xs:string or xs:double: simple type the anonymous simple type of element {urn:s}dec declared at s.xsd:1:")
+	if !strings.Contains(err.Error(), ", through the list type's {item type definition} {http://www.w3.org/2001/XMLSchema}decimal; ") {
+		t.Errorf("decline %q does not name the item xs:decimal", err)
+	}
+	err = CheckAppend[strList](schema, sname("anon"))
+	_ = asDecline(t, err, "codec does not encode an atomic simple type whose primitive is other than xs:string or xs:double: simple type {urn:s}booleans defined at s.xsd:1:")
+	if !strings.Contains(err.Error(), ", through the list type's anonymous {item type definition}, a type defined at s.xsd:1:") {
+		t.Errorf("decline %q does not name the anonymous item by its Loc", err)
 	}
 }

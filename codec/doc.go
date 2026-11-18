@@ -309,9 +309,11 @@
 // that encodes, into V or *V. A simple type encodes when it is atomic, has
 // no assertions facet, and has {primitive type definition} xs:string, other
 // than a type derived from xs:ID, xs:IDREF or xs:ENTITY, into string, or
-// xs:double, into float64. Every other construct is a [*DeclineError], item
-// 4 of Append's doc, and so is a value with no canonical representation,
-// item 7.
+// xs:double, into float64, or is a list whose {item type definition} encodes
+// and which has no assertions facet, its own or inherited, into []V, V its
+// item's Go type. Every other construct is a [*DeclineError], item 4 of
+// Append's doc, a list's item declining by the item's construct, and so is a
+// value with no canonical representation, item 7.
 //
 // The document Append writes has no XML declaration, so it is XML 1.0 in
 // UTF-8, and no white space between tags. It binds namespaces by default
@@ -321,20 +323,23 @@
 // xmlns="" for an absent namespace, exactly where its namespace differs from
 // its parent's. Attributes are written unprefixed, in the order of codegen's
 // fields (codegen's package doc, "# Attributes"), each value delimited by
-// '"'. A nil *V field writes nothing, a []V writes one element per item, and
-// an element with no content is written as an empty-element tag, <x/>. A
-// string value is written as itself, its canonical representation, since
-// xs:string's canonical mapping is the identity (Datatypes §E.4
-// f-stringCanmap) and item 6 of Append's doc holds the string to its own
-// whiteSpace-normalized form. It escapes '<', '&' and '>' as &lt;, &amp; and &gt;
-// everywhere, so that "]]>" is never written, and CR as &#xD; everywhere, which
-// XML 1.0 end-of-line handling (§2.11) would otherwise rewrite to LF or remove; in
-// an attribute value it escapes '"' as &quot;, TAB as &#x9; and LF as &#xA;, which
-// attribute-value normalization (§3.3.3) would otherwise turn into spaces; and
-// every other character, TAB and LF in content and the apostrophe everywhere, is
-// written as itself. So the Order codegen emits for README's order.xsd, of Item
-// {"a"} and Kind "k", is written <order xmlns="urn:o"
-// kind="k"><item>a</item></order>.
+// '"'. A nil *V field writes nothing, a particle with {max occurs} above 1
+// writes one element per item of its slice, and an element with no content
+// is written as an empty-element tag, <x/>. A string value is written as
+// itself, its canonical representation, since xs:string's canonical mapping
+// is the identity (Datatypes §E.4 f-stringCanmap) and item 6 of Append's doc
+// holds the string to its own whiteSpace-normalized form. A list value is
+// written as its items' canonical representations, in order, separated by
+// single U+0020 characters (Datatypes §2.4.1.2), and the empty list, nil or
+// empty, as no content: <x/> for an element, a="" for an attribute. It
+// escapes '<', '&' and '>' as &lt;, &amp; and &gt; everywhere, so that "]]>" is
+// never written, and CR as &#xD; everywhere, which XML 1.0 end-of-line handling
+// (§2.11) would otherwise rewrite to LF or remove; in an attribute value it
+// escapes '"' as &quot;, TAB as &#x9; and LF as &#xA;, which attribute-value
+// normalization (§3.3.3) would otherwise turn into spaces; and every other
+// character, TAB and LF in content and the apostrophe everywhere, is written as
+// itself. So the Order codegen emits for README's order.xsd, of Item {"a"} and
+// Kind "k", is written <order xmlns="urn:o" kind="k"><item>a</item></order>.
 //
 // # Debuggability
 //
