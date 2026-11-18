@@ -1,6 +1,7 @@
 package strict
 
 import (
+	"github.com/kud360/goxsd8/internal/xmlchar"
 	"github.com/kud360/goxsd8/value"
 	"github.com/kud360/goxsd8/xsderr"
 )
@@ -9,13 +10,26 @@ import (
 // §3.3.1.3): it defines no Cmp, so it structurally lacks value.Ordered.
 type stringVal string
 
-// parseString maps a string lexical to its value. Both f-stringLexmap and
-// f-stringCanmap are the identity on the domain (§3.3.1.2), and every string is
-// in the lexical space (there is no invalid string lexical; whiteSpace=preserve
-// is not fixed). So Parse must NOT transform or reject anything, and never
-// returns an error.
+// parseString maps a string lexical to its value: f-stringLexmap is the
+// identity on the lexical space (§3.3.1.2), so Parse transforms nothing and
+// rejects only a lexical outside it, as New's xs:string bullet states.
 func parseString(lexical string, _ value.Context) (value.Value, error) {
+	if err := checkChars("string", lexical); err != nil {
+		return nil, err
+	}
 	return stringVal(lexical), nil
+}
+
+// checkChars returns the cvc-datatype-valid clause 2.1 error for a lexical of
+// xs:typ that is not UTF-8 of XML 1.0 [2] Char characters only, and nil for
+// one that is.
+func checkChars(typ, lexical string) error {
+	i := xmlchar.IndexNonChar(lexical)
+	if i < 0 {
+		return nil
+	}
+	return xsderr.New(ruleDatatypeValid, xsderr.Loc{},
+		"%q holds a byte at offset %d that starts no XML 1.0 Char, so it is not in the lexical space of xs:%s, which cvc-datatype-valid clause 2.1 requires it to be in", lexical, i, typ)
 }
 
 // canonicalString is the Mapping.Canonical wrapper: it rejects a foreign value

@@ -2,6 +2,7 @@ package strict_test
 
 import (
 	"errors"
+	"fmt"
 	"testing"
 
 	"github.com/kud360/goxsd8/builtin"
@@ -185,8 +186,8 @@ func TestBooleanCanonicalForeign(t *testing.T) {
 
 func TestStringIdentityAndLength(t *testing.T) {
 	m := mappingFor(t, "string")
-	// f-stringLexmap / f-stringCanmap are the identity (§3.3.1.2): every string
-	// is accepted verbatim, including whitespace (whiteSpace=preserve).
+	// f-stringLexmap / f-stringCanmap are the identity (§3.3.1.2): every Char*
+	// lexical is accepted verbatim, including whitespace (whiteSpace=preserve).
 	for _, s := range []string{"", "hello", " padded ", "a\tb\nc", "café", "𝔘nicode"} {
 		v, err := m.Parse(s, nil)
 		if err != nil {
@@ -218,6 +219,53 @@ func TestStringIdentityAndLength(t *testing.T) {
 		}
 		if got := l.Len(); got != want {
 			t.Errorf("Len(%q) = %d, want %d", s, got, want)
+		}
+	}
+}
+
+// TestStringAnyURIChar pins the lexical space of xs:string and xs:anyURI to
+// XML 1.0 [2] Char* (§3.3.1.2, §3.3.17.2): Parse rejects a lexical that is not
+// UTF-8 or holds a non-Char with cvc-datatype-valid clause 2.1, naming the
+// offending byte offset, and admits the guards, each a Char* lexical a
+// narrower reading of Char would reject.
+func TestStringAnyURIChar(t *testing.T) {
+	for _, typ := range []string{"string", "anyURI"} {
+		m := mappingFor(t, typ)
+		for _, tc := range []struct {
+			name, lexical string
+			offset        int // -1: admitted
+		}{
+			{"U+0000", "a\x00b", 1},
+			{"invalid UTF-8", "a\xffb", 1},
+			{"U+FFFE", "ab￾", 2},
+			{"empty", "", -1},
+			{"TAB LF CR", "a\t\n\rb", -1},
+			{"supplementary plane", "x\U0001D11Ey", -1},
+			{"literal U+FFFD", "a�b", -1},
+		} {
+			v, err := m.Parse(tc.lexical, nil)
+			if tc.offset < 0 {
+				if err != nil {
+					t.Errorf("xs:%s %s: Parse(%q): unexpected error %v", typ, tc.name, tc.lexical, err)
+					continue
+				}
+				if got, cerr := m.Canonical(v); cerr != nil || got != tc.lexical {
+					t.Errorf("xs:%s %s: Canonical(Parse(%q)) = %q, %v, want identity", typ, tc.name, tc.lexical, got, cerr)
+				}
+				continue
+			}
+			var xe *xsderr.Error
+			if !errors.As(err, &xe) {
+				t.Errorf("xs:%s %s: Parse(%q) = %#v, %v, want an *xsderr.Error", typ, tc.name, tc.lexical, v, err)
+				continue
+			}
+			if xe.Rule != "cvc-datatype-valid" {
+				t.Errorf("xs:%s %s: rule = %q, want cvc-datatype-valid", typ, tc.name, xe.Rule)
+			}
+			want := fmt.Sprintf("%q holds a byte at offset %d that starts no XML 1.0 Char, so it is not in the lexical space of xs:%s, which cvc-datatype-valid clause 2.1 requires it to be in", tc.lexical, tc.offset, typ)
+			if xe.Msg != want {
+				t.Errorf("xs:%s %s: message = %q, want %q", typ, tc.name, xe.Msg, want)
+			}
 		}
 	}
 }

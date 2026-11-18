@@ -45,8 +45,9 @@ Value implementations, parsing, validation, and generation live above them.
                                   - internal/xmlchar, XML 1.0 [2] Char, which
                                     parser/xmltree's character-reference and
                                     markup checks, internal/xmltok's text
-                                    check and codec's check of the strings
-                                    Append writes read.
+                                    check, codec's check of the strings
+                                    Append writes and builtin/strict's
+                                    xs:string and xs:anyURI Parse read.
                                   - internal/xmlqname, the QName split and prefix
                                     resolution of an xsi:type lexical
                                     (cvc-resolve-instance), which validate's walk,
@@ -78,7 +79,8 @@ Value implementations, parsing, validation, and generation live above them.
                  builtin         (the generated TypeSpec table and Seed; imports value, xsd, xsderr)
    builtin/strict  builtin/native  <user backends>   (implement value contracts; builtin/strict
                                   also imports builtin and regex, to compile xs:NCName's
-                                  generated pattern)
+                                  generated pattern, and internal/xmlchar, for the Char
+                                  check of xs:string and xs:anyURI lexicals)
                  regex           (one engine, XSD + F&O flavors)
                  parser/xmltree  (position-tracking XML; imports xsderr,
                                   internal/xmldecl, internal/xmlenc,
@@ -189,8 +191,9 @@ checks. [5] `Name` over those tables is still written twice, as `isName` in
 gives it its one home there. Whether that table is generated is
 #989's question, asked of `internal/xmlname`. [2] `Char` lives in
 `internal/xmlchar`, read by `parser/xmltree`'s character-reference check and
-markup check, `internal/xmltok`'s text check (#2187, #2265) and `codec`'s
-check of the strings `Append` writes. [3] `S`
+markup check, `internal/xmltok`'s text check (#2187, #2265), `codec`'s
+check of the strings `Append` writes and `builtin/strict`'s xs:string and
+xs:anyURI Parse. [3] `S`
 is still spelled package-locally across the library, and #3033 gives it
 its one home in `internal/xmlchar`; do not write another copy. The
 [7]-[11] `QName` split and prefix resolution of an xsi:type lexical lives in

@@ -427,7 +427,8 @@ import (
 //     only beside a decline, so no empty Result carries one; and xsi:schemaLocation
 //     and xsi:noNamespaceSchemaLocation are each ·valid· against their built-in
 //     declaration's anyURI or list-of-anyURI type (§3.2.7), whose lexical spaces
-//     admit every string (Datatypes §3.3.17).
+//     admit every Char* string (Datatypes §3.3.17), and an attribute value the
+//     XML reader delivers holds only Chars.
 //   - cvc-complex-type clause 5: the walk's for every element [[child]],
 //     which charges one whose ·governing type definition· is neither the same
 //     as nor ·validly substitutable· ·without limitation· for its non-·absent·
