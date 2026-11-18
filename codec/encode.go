@@ -50,11 +50,12 @@ import (
 //     its own checks.
 //  7. A value with no canonical representation, the first in document order
 //     as item 6 counts: its *DeclineError. That is a governing mapping with no
-//     Canonical, a Canonical that fails for the value, an xs:double value, or
-//     a list holding at least one xs:double item, whose canonical
-//     representation a pattern facet of its type rejects (Datatypes §2.1's
-//     note), whatever other facet rejects it, or a canonical representation
-//     that does not map back to the value.
+//     Canonical, a Canonical that fails for the value, an xs:double value
+//     other than NaN and -INF, or a list holding at least one such item, whose
+//     canonical representation a pattern facet of its type rejects (Datatypes
+//     §2.1's note; NaN and -INF have no other lexical, §3.3.5.2), whatever
+//     other facet rejects it, or a canonical representation that does not map
+//     back to the value.
 //
 // A plain error is no *DeclineError and wraps neither [ErrTypeMismatch] nor
 // errors.ErrUnsupported; only item 6's facet case carries an xsderr rule.
@@ -651,17 +652,18 @@ func (e *encoder) atom(st *xsd.SimpleType, v reflect.Value, path, subject string
 	return e.str(st, v.String(), path, subject)
 }
 
-// list returns the text the package doc's "# What encodes" states for v, a
-// []V holding a value of the list type s.st, at path, subject naming s.st,
-// each item written by atom under s.item at path "[i]", and records the item
-// 6 and 7 errors [Append]'s doc states for a list: an item's white space is
-// checked once its own checks pass, and s.st's own facets, through
+// list returns the text the package doc's "# What encodes" states for v, a []V
+// holding a value of the list type s.st, at path, subject naming s.st, each
+// item written by atom under s.item at path "[i]", and records the item 6 and
+// 7 errors [Append]'s doc states for a list: an item's white space is checked
+// once its own checks pass, and s.st's own facets, through
 // value.ValidateLexical, once every item has. An empty item is no list item
 // since the list's whiteSpace collapse (Datatypes §4.3.6) leaves no empty
-// token. A pattern rejection is item 7 only over xs:double items, another
-// lexical of which may match (§2.1's note): an xs:string-primitive item is
-// its own whiteSpace-normalized form, and the empty list has no other
-// lexical, so every lexical of such a value normalizes to the text written.
+// token. A pattern rejection is item 7 only where an xs:double item other than
+// NaN and -INF is held, another lexical of which may match (§2.1's note): an
+// xs:string-primitive item is its own whiteSpace-normalized form, and the
+// empty list has no other lexical, nor a list of NaN and -INF items, so every
+// lexical of such a value normalizes to the text written.
 func (e *encoder) list(s encodeSimple, v reflect.Value, path, subject string) (string, error) {
 	isubject := itemSubject(subject, s.item)
 	items := make([]string, v.Len())
@@ -688,7 +690,7 @@ func (e *encoder) list(s encodeSimple, v reflect.Value, path, subject string) (s
 		if !value.IsDatatypeVerdict(err) {
 			return "", fmt.Errorf("codec: Append: %s holds %s, of %s, which the backend cannot assess: %w", path, shown, subject, err)
 		}
-		if rule, _ := xsderr.RuleOf(err); rule == rulePatternValid && v.Len() > 0 && v.Type().Elem().Kind() == reflect.Float64 {
+		if rule, _ := xsderr.RuleOf(err); rule == rulePatternValid && otherLexical(v) {
 			e.noCanonical(subject, path, shown, fmt.Sprintf("a pattern facet rejects its canonical representation %q: %v", text, err))
 			return text, nil
 		}
@@ -750,8 +752,8 @@ func (e *encoder) str(st *xsd.SimpleType, s, path, subject string) (text string,
 // held to st's facets by value.ValidateLexical and read back by
 // strconv.ParseFloat, every NaN equal to every NaN. A pattern facet's
 // rejection is item 7 of [Append]'s doc, since another lexical of the value
-// may match it (Datatypes §2.1's note); any other facet's is item 6. ok is
-// atom's.
+// may match it (Datatypes §2.1's note), but for NaN and -INF, which have no
+// other (soleLexical), item 6; any other facet's is item 6. ok is atom's.
 func (e *encoder) double(st *xsd.SimpleType, f float64, path, subject string) (text string, ok bool, err error) {
 	shown := strconv.FormatFloat(f, 'g', -1, 64)
 	m, err := e.mapping(st, path, subject)
@@ -776,7 +778,7 @@ func (e *encoder) double(st *xsd.SimpleType, f float64, path, subject string) (t
 		if !value.IsDatatypeVerdict(err) {
 			return "", false, fmt.Errorf("codec: Append: %s holds %s, of %s, which the backend cannot assess: %w", path, shown, subject, err)
 		}
-		if rule, _ := xsderr.RuleOf(err); rule == rulePatternValid {
+		if rule, _ := xsderr.RuleOf(err); rule == rulePatternValid && !soleLexical(f) {
 			e.noCanonical(subject, path, shown, fmt.Sprintf("a pattern facet rejects its canonical representation %q: %v", c, err))
 			return c, false, nil
 		}
@@ -800,6 +802,25 @@ func mapsBack(c string, f float64) bool {
 	return math.Float64bits(back) == math.Float64bits(f) || math.IsNaN(back) && math.IsNaN(f)
 }
 
+// soleLexical reports whether doubleRep spells f by its canonical
+// representation alone, as it does NaN and -INF (Datatypes §3.3.5.2).
+func soleLexical(f float64) bool { return math.IsNaN(f) || math.IsInf(f, -1) }
+
+// otherLexical reports whether v, the []V of a list, holds an xs:double item
+// soleLexical does not hold of, so that a lexical of the list other than its
+// canonical one exists for a pattern facet to match.
+func otherLexical(v reflect.Value) bool {
+	if v.Type().Elem().Kind() != reflect.Float64 {
+		return false
+	}
+	for i := range v.Len() {
+		if !soleLexical(v.Index(i).Float()) {
+			return true
+		}
+	}
+	return false
+}
+
 // mapping returns the governing mapping of st on e's backend
 // (value.GoverningMapping), or a backend fault naming the value at path,
 // subject naming st.
@@ -815,8 +836,10 @@ func (e *encoder) mapping(st *xsd.SimpleType, path, subject string) (value.Mappi
 }
 
 // rulePatternValid is pattern Valid (Datatypes §4.3.4.4 cvc-pattern-valid),
-// the rule whose rejection of an xs:double value's canonical representation
-// double reads as item 7 of [Append]'s doc.
+// the rule whose rejection of the canonical representation of an xs:double
+// value, or of a list holding one, double and list read as item 7 of
+// [Append]'s doc where the value has another lexical (soleLexical,
+// otherLexical).
 const rulePatternValid xsderr.Rule = "cvc-pattern-valid"
 
 // doubleLexical spells f in doubleRep (Datatypes §3.3.5.2): a finite f as

@@ -516,6 +516,18 @@ func TestAppendInvalidValues(t *testing.T) {
 			t.Errorf("rule %q, want cvc-maxInclusive-valid", rule)
 		}
 	})
+	for _, f := range []float64{math.NaN(), math.Inf(-1)} {
+		t.Run("an xs:double "+doubleLexical(f)+" a pattern rejects", func(t *testing.T) {
+			_, err := appendChecked(t, nil, schema, strict.New(), sname("p"), dblRoot(f))
+			plainError(t, err, "dblRoot", "{urn:s}one")
+			if !strings.HasPrefix(err.Error(), "codec: Append: dblRoot holds ") {
+				t.Errorf("error %q does not open with the path dblRoot", err)
+			}
+			if rule, _ := xsderr.RuleOf(err); rule != "cvc-pattern-valid" {
+				t.Errorf("rule %q, want cvc-pattern-valid", rule)
+			}
+		})
+	}
 	t.Run("an xs:string a pattern rejects", func(t *testing.T) {
 		_, err := appendChecked(t, nil, schema, strict.New(), sname("oa"), strRoot("b"))
 		plainError(t, err, "strRoot", "{urn:s}onlyA")
@@ -573,6 +585,7 @@ func TestAppendNoCanonical(t *testing.T) {
 	}{
 		{"a pattern rejecting the canonical form", strict.New(), "p", dblRoot(1), []string{"dblRoot", "holding 1", `"1.0E0"`, "{urn:s}one"}},
 		{"a pattern and a bound rejecting it", strict.New(), "pb", dblRoot(1), []string{"dblRoot", "{urn:s}oneBelowZero"}},
+		{"a pattern rejecting INF, which +INF also spells", strict.New(), "p", dblRoot(math.Inf(1)), []string{"dblRoot", "holding +Inf", `"INF"`}},
 		{"a nil Canonical", doubleNilCanonical, "d", dblRoot(1), []string{"dblRoot", "no canonical mapping"}},
 		{"a failing Canonical", doubleFailingCanonical, "d", dblRoot(1), []string{"dblRoot", "no canonical form"}},
 		{"a Canonical not mapping back", doubleOtherCanonical, "d", dblRoot(1), []string{`"2.0E0" does not map back`}},
@@ -960,13 +973,9 @@ func TestAppendLists(t *testing.T) {
 	}
 }
 
-// TestAppendListInvalid pins items 6 and 7 of Append's doc for a list: an
-// item that is empty or holds a white space character, any of the four that
-// separate list items, is item 6 under an item type that admits it, and an
-// item's own check answers first; a list facet's rejection of the written
-// text is item 6, a pattern's item 7 where the list holds xs:double items and
-// item 6 where it holds none or xs:string ones; an item's own pattern
-// rejection of an xs:double is item 7 at the item's path.
+// TestAppendListInvalid pins the list cases of items 6 and 7 of Append's doc,
+// under item types that admit the item, an item's own check answering first
+// and an item's own item 7 named at the item's path.
 func TestAppendListInvalid(t *testing.T) {
 	schema := schemaOf(t, encodeListSchema)
 	for _, row := range []struct {
@@ -1006,6 +1015,32 @@ func TestAppendListInvalid(t *testing.T) {
 		plainError(t, err, "dblList", "{urn:s}twoDoubles")
 		if rule, _ := xsderr.RuleOf(err); rule != "cvc-pattern-valid" {
 			t.Errorf("rule %q, want cvc-pattern-valid", rule)
+		}
+	})
+	for _, row := range []struct {
+		name string
+		v    dblList
+	}{
+		{"a double list of NaN its pattern rejects", dblList{math.NaN()}},
+		{"a double list of -INF its pattern rejects", dblList{math.Inf(-1)}},
+		{"a double list of NaN and -INF its pattern rejects", dblList{math.NaN(), math.Inf(-1)}},
+	} {
+		t.Run(row.name, func(t *testing.T) {
+			_, err := appendChecked(t, nil, schema, strict.New(), sname("dp"), row.v)
+			plainError(t, err, "dblList", "{urn:s}twoDoubles")
+			if !strings.HasPrefix(err.Error(), "codec: Append: dblList holds ") {
+				t.Errorf("error %q does not open with the path dblList", err)
+			}
+			if rule, _ := xsderr.RuleOf(err); rule != "cvc-pattern-valid" {
+				t.Errorf("rule %q, want cvc-pattern-valid", rule)
+			}
+		})
+	}
+	t.Run("a double list holding NaN and 1 its pattern rejects", func(t *testing.T) {
+		_, err := appendChecked(t, nil, schema, strict.New(), sname("dp"), dblList{math.NaN(), 1})
+		_ = asDecline(t, err, "codec does not encode a value with no canonical representation: simple type {urn:s}twoDoubles")
+		if !strings.Contains(err.Error(), `a pattern facet rejects its canonical representation "NaN 1.0E0"`) {
+			t.Errorf("decline %q does not name the join", err)
 		}
 	})
 	t.Run("a double list's pattern rejecting its canonical join", func(t *testing.T) {
