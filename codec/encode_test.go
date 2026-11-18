@@ -680,7 +680,7 @@ func TestAppendBackendFaults(t *testing.T) {
 	_, err = appendChecked(t, nil, schema, doubleRejectingCanonical, sname("d"), dblRoot(1))
 	plainError(t, err, "dblRoot", "canonical representation", `"1.0E0"`)
 	_, err = appendChecked(t, nil, schema, doubleSpacedCanonical, sname("d"), dblRoot(1))
-	plainError(t, err, "dblRoot", "canonical representation", `" 1.0E0"`, "rejects collapsed canonical")
+	plainError(t, err, `codec: Append: dblRoot holds 1, of simple type {http://www.w3.org/2001/XMLSchema}double, whose canonical representation " 1.0E0" the backend's Parse rejects: rejects collapsed canonical`)
 	_, err = appendChecked(t, nil, schema, noMappings{}, sname("d"), dblRoot(1))
 	plainError(t, err, "dblRoot", "no mapping governing")
 	_, err = appendChecked(t, nil, schema, noMappings{}, sname("str"), strRoot("v"))
