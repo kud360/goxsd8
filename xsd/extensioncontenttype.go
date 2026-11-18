@@ -213,7 +213,7 @@ func allGroupOfParticle(part Particle, allGroup func(QName) (ModelGroup, bool, e
 			// caller's own rule and position already attached; this adds the
 			// context of what THIS package was asking it for and no second rule
 			// (STYLE E1/E2 — %w keeps xsderr.RuleOf reaching the real verdict).
-			return ModelGroup{}, false, fmt.Errorf("xsd: reading the <group ref> to %s for the §3.4.2.3.3 clause 4.2.3 sub-case test: %w", t.Name, err)
+			return ModelGroup{}, false, fmt.Errorf("xsd: reading the <group ref> to %s for the §3.4.2.3.3 clause 4.2.3 sub-case test: %w", t.Name.Display(), err)
 		}
 		if !ok || mg.Compositor() != CompositorAll {
 			return ModelGroup{}, false, nil

@@ -430,7 +430,7 @@ func resolveTypeName(r TypeResolver, ref QName, loc xsderr.Loc, ctx string, hint
 	t, ok := r.Type(ref)
 	if !ok {
 		return nil, xsderr.New(ruleSrcResolve, loc,
-			"%s references type %s, but no type definition with that expanded name is present in the schema%s (src-resolve clause 1.1)", ctx, ref, hint(ref))
+			"%s references type %s, but no type definition with that expanded name is present in the schema%s (src-resolve clause 1.1)", ctx, ref.Display(), hint(ref))
 	}
 	return t, nil
 }
@@ -499,7 +499,7 @@ func (s *Schema) resolveTypeDefinitionSlot(ref TypeDefinitionOrRef, slot typeDef
 		}
 		if _, chained := head.TypeDefinition().(SubstitutionGroupHeadTypeRef); chained {
 			return xsderr.New(xsderr.RuleComponentInvariant, loc,
-				"%s inherits its type from the substitution group head %s (§3.3.2.1 dcl.elt.common clause 3), but that head's own {type definition} is itself inherited from a further head, and this variant must name the declaration that OWNS the anonymous type", ctx, r.Head)
+				"%s inherits its type from the substitution group head %s (§3.3.2.1 dcl.elt.common clause 3), but that head's own {type definition} is itself inherited from a further head, and this variant must name the declaration that OWNS the anonymous type", ctx, r.Head.Display())
 		}
 		return nil
 	default:
@@ -519,7 +519,7 @@ func resolveElementName(r ElementResolver, ref QName, loc xsderr.Loc, ctx string
 	}
 	if _, ok := r.Element(ref); !ok {
 		return xsderr.New(ruleSrcResolve, loc,
-			"%s references element declaration %s, but no element declaration with that expanded name is present in the schema%s (src-resolve clause 1.3)", ctx, ref, hint(ref))
+			"%s references element declaration %s, but no element declaration with that expanded name is present in the schema%s (src-resolve clause 1.3)", ctx, ref.Display(), hint(ref))
 	}
 	return nil
 }
@@ -534,7 +534,7 @@ func resolveAttributeName(r AttributeResolver, ref QName, loc xsderr.Loc, ctx st
 	}
 	if _, ok := r.Attribute(ref); !ok {
 		return xsderr.New(ruleSrcResolve, loc,
-			"%s references attribute declaration %s, but no attribute declaration with that expanded name is present in the schema%s (src-resolve clause 1.2)", ctx, ref, hint(ref))
+			"%s references attribute declaration %s, but no attribute declaration with that expanded name is present in the schema%s (src-resolve clause 1.2)", ctx, ref.Display(), hint(ref))
 	}
 	return nil
 }
@@ -548,7 +548,7 @@ func (s *Schema) resolveModelGroupName(ref QName, loc xsderr.Loc, ctx string) er
 	}
 	if _, ok := s.modelGroupIndex[ref]; !ok {
 		return xsderr.New(ruleSrcResolve, loc,
-			"%s references model group definition %s, but no model group definition with that expanded name is present in the schema%s (src-resolve clause 1.5)", ctx, ref, s.modelGroupHint(ref))
+			"%s references model group definition %s, but no model group definition with that expanded name is present in the schema%s (src-resolve clause 1.5)", ctx, ref.Display(), s.modelGroupHint(ref))
 	}
 	return nil
 }
@@ -571,7 +571,7 @@ func (s *Schema) resolveModelGroupName(ref QName, loc xsderr.Loc, ctx string) er
 func (s *Schema) resolveAttributeGroupRef(r AttributeGroupRef, loc xsderr.Loc, owner string) error {
 	if _, ok := s.attributeGroupIndex[r.Name]; !ok {
 		return xsderr.New(ruleSrcResolve, chargedAt(r.Loc, loc),
-			"%s references attribute group definition %s — through an <attributeGroup ref> child, or, on a complex type, the reference §3.4.2.4 synthesizes from <schema defaultAttributes> — but no attribute group definition with that expanded name is present in the schema%s (src-resolve clause 1.4)", owner, r.Name, s.attributeGroupHint(r.Name))
+			"%s references attribute group definition %s — through an <attributeGroup ref> child, or, on a complex type, the reference §3.4.2.4 synthesizes from <schema defaultAttributes> — but no attribute group definition with that expanded name is present in the schema%s (src-resolve clause 1.4)", owner, r.Name.Display(), s.attributeGroupHint(r.Name))
 	}
 	return nil
 }
@@ -612,15 +612,15 @@ func (s *Schema) resolveKeyref(ic IdentityConstraint) error {
 	target, ok := s.idcIndex[ref]
 	if !ok {
 		return xsderr.New(ruleSrcResolve, chargedAt(ic.referencedKey.Loc, ic.Loc()),
-			"keyref %s references identity constraint %s, but no identity-constraint definition with that expanded name is present in the schema%s (src-resolve clause 1.7)", ic.Name(), ref, s.referencedKeyHint(ref))
+			"keyref %s references identity constraint %s, but no identity-constraint definition with that expanded name is present in the schema%s (src-resolve clause 1.7)", ic.Name().Display(), ref.Display(), s.referencedKeyHint(ref))
 	}
 	if target.Category() == IdentityConstraintKeyref {
 		return xsderr.New(ruleICProps, ic.Loc(),
-			"keyref %s references %s, which is itself a keyref, but c-props-correct clause 1 requires a keyref's {referenced key} to be a key or unique", ic.Name(), ref)
+			"keyref %s references %s, which is itself a keyref, but c-props-correct clause 1 requires a keyref's {referenced key} to be a key or unique", ic.Name().Display(), ref.Display())
 	}
 	if len(ic.fields) != len(target.fields) {
 		return xsderr.New(ruleICProps, ic.Loc(),
-			"keyref %s has %d {fields} but its {referenced key} %s has %d, and c-props-correct clause 2 requires equal cardinality", ic.Name(), len(ic.fields), ref, len(target.fields))
+			"keyref %s has %d {fields} but its {referenced key} %s has %d, and c-props-correct clause 2 requires equal cardinality", ic.Name().Display(), len(ic.fields), ref.Display(), len(target.fields))
 	}
 	return nil
 }
@@ -756,7 +756,7 @@ func (s *Schema) resolveAttributeDecl(a AttributeDeclaration) error {
 	if !ok {
 		return nil
 	}
-	ctx := "attribute declaration " + a.Name().String() + " {type definition}"
+	ctx := "attribute declaration " + a.Name().Display() + " {type definition}"
 	loc := chargedAt(r.Loc, a.Loc())
 	t, err := resolveTypeName(s, r.Name, loc, ctx, s.simpleTypeHint)
 	if err != nil {
@@ -766,7 +766,7 @@ func (s *Schema) resolveAttributeDecl(a AttributeDeclaration) error {
 		return nil
 	}
 	return xsderr.New(ruleSrcResolve, loc,
-		"%s references simple type %s, but that expanded name is a complex type definition, and src-resolve requires an attribute's type= to resolve to a simple type definition", ctx, r.Name)
+		"%s references simple type %s, but that expanded name is a complex type definition, and src-resolve requires an attribute's type= to resolve to a simple type definition", ctx, r.Name.Display())
 }
 
 // resolveElementDecl resolves the one reference-bearing slot of an element
@@ -1080,7 +1080,7 @@ func (s *Schema) checkComplexBaseAcyclic() error {
 			}
 			if nextName := nextCT.Name(); nextName != (QName{}) && path[nextName] {
 				return xsderr.New(ruleCTPropsCorrect, nextCT.Loc(),
-					"complex type %s participates in a circular {base type definition} chain, but ct-props-correct clause 3 forbids it (only xs:anyType may be its own base)", nextName)
+					"complex type %s participates in a circular {base type definition} chain, but ct-props-correct clause 3 forbids it (only xs:anyType may be its own base)", nextName.Display())
 			}
 			cur = nextCT
 		}
@@ -1336,7 +1336,7 @@ func (s *Schema) checkModelGroupsAcyclic() error {
 			// re-encountered onStack: the lookup here always hits, and the position is
 			// the offending definition's own <group> element.
 			return xsderr.New(ruleMgPropsCorrect, s.modelGroupIndex[name].Loc(),
-				"model group definition %s participates in a circular <group ref> chain, but mg-props-correct clause 2 forbids circular groups", name)
+				"model group definition %s participates in a circular <group ref> chain, but mg-props-correct clause 2 forbids circular groups", name.Display())
 		}
 		color[name] = onStack
 		if mgd, ok := s.modelGroupIndex[name]; ok {
@@ -1427,7 +1427,7 @@ func (s *Schema) checkSubstitutionGroupsAcyclic() error {
 			// because a §5.3 dangling affiliation legitimately names no declaration and
 			// Phase A does not reject it (resolveElementDecl).
 			return xsderr.New(ruleEPropsCorrect, s.elementIndex[name].Loc(),
-				"element declaration %s participates in a circular {substitution group affiliations} chain, but e-props-correct clause 5 forbids circular substitution groups", name)
+				"element declaration %s participates in a circular {substitution group affiliations} chain, but e-props-correct clause 5 forbids circular substitution groups", name.Display())
 		}
 		color[name] = onStack
 		if e, ok := s.elementIndex[name]; ok {

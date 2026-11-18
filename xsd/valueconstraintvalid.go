@@ -226,7 +226,7 @@ func (s *Schema) checkAttributeUseValueConstraint(u AttributeUse, loc xsderr.Loc
 	n, at := u.DeclarationName(), u.chargedLoc(loc)
 	t, hasType := s.ResolvedSimpleType(d.TypeDefinition())
 	if hasType {
-		if err := s.checkSimpleDefault(s.valueSpace, ruleAuPropsCorrect, "2", at, owner+" attribute "+n.String(), t, uvc); err != nil {
+		if err := s.checkSimpleDefault(s.valueSpace, ruleAuPropsCorrect, "2", at, owner+" attribute "+n.Display(), t, uvc); err != nil {
 			return err
 		}
 	}
@@ -236,7 +236,7 @@ func (s *Schema) checkAttributeUseValueConstraint(u AttributeUse, loc xsderr.Loc
 	}
 	if uvc.Kind() != ValueFixed {
 		return xsderr.New(ruleAuPropsCorrect, at,
-			"%s gives attribute %s a %s value constraint, but the attribute declaration fixes it to %q, and au-props-correct clause 3 requires the use's {value constraint}.{variety} to be fixed too", owner, n, uvc.Kind(), dvc.LexicalForm())
+			"%s gives attribute %s a %s value constraint, but the attribute declaration fixes it to %q, and au-props-correct clause 3 requires the use's {value constraint}.{variety} to be fixed too", owner, n.Display(), uvc.Kind(), dvc.LexicalForm())
 	}
 	if !hasType {
 		return nil
@@ -244,7 +244,7 @@ func (s *Schema) checkAttributeUseValueConstraint(u AttributeUse, loc xsderr.Loc
 	identical, decided := s.valueSpace.Identical(s, t, uvc, t, dvc)
 	if decided && !identical {
 		return xsderr.New(ruleAuPropsCorrect, at,
-			"%s fixes attribute %s to %q, but the attribute declaration fixes it to %q, and au-props-correct clause 3 requires the two {value}s to be identical", owner, n, uvc.LexicalForm(), dvc.LexicalForm())
+			"%s fixes attribute %s to %q, but the attribute declaration fixes it to %q, and au-props-correct clause 3 requires the two {value}s to be identical", owner, n.Display(), uvc.LexicalForm(), dvc.LexicalForm())
 	}
 	return nil
 }
@@ -290,7 +290,7 @@ func (s *Schema) checkAttributeDeclarationValueConstraint(d AttributeDeclaration
 	if !ok {
 		return nil
 	}
-	return s.checkSimpleDefault(s.valueSpace, ruleAPropsCorrect, "2", d.Loc(), "attribute declaration "+d.Name().String(), t, dvc)
+	return s.checkSimpleDefault(s.valueSpace, ruleAPropsCorrect, "2", d.Loc(), "attribute declaration "+d.Name().Display(), t, dvc)
 }
 
 // checkSimpleDefault is Simple Default Valid (§3.2.6.2, cos-valid-simple-default)

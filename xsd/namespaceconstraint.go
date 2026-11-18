@@ -212,7 +212,7 @@ func NewNamespaceConstraint(loc xsderr.Loc, variety NamespaceConstraintVariety, 
 			continue
 		}
 		return NamespaceConstraint{}, xsderr.New(ruleWildcardCorrect, loc,
-			"namespace name of {disallowed names} member %s is not allowed by the {namespace constraint} (w-props-correct clause 4)", name)
+			"namespace name of {disallowed names} member %s is not allowed by the {namespace constraint} (w-props-correct clause 4)", name.Display())
 	}
 	return c, nil
 }

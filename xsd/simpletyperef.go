@@ -202,12 +202,12 @@ func simpleTypeOfRef(r TypeResolver, ref SimpleTypeOrRef, loc xsderr.Loc, ctx st
 		t, ok := r.Type(b.Name)
 		if !ok {
 			return nil, xsderr.New(ruleSrcResolve, chargedAt(b.Loc, loc),
-				"%s references simple type %s, but no type definition with that expanded name is present in the schema%s (src-resolve clause 1.1)", ctx, b.Name, hint(b.Name))
+				"%s references simple type %s, but no type definition with that expanded name is present in the schema%s (src-resolve clause 1.1)", ctx, b.Name.Display(), hint(b.Name))
 		}
 		st, ok := t.(*SimpleType)
 		if !ok {
 			return nil, xsderr.New(ruleSrcResolve, chargedAt(b.Loc, loc),
-				"%s references simple type %s, but that expanded name is a complex type definition, and src-resolve requires it to resolve to a simple type definition", ctx, b.Name)
+				"%s references simple type %s, but that expanded name is a complex type definition, and src-resolve requires it to resolve to a simple type definition", ctx, b.Name.Display())
 		}
 		return st, nil
 	default:

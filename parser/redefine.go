@@ -363,7 +363,7 @@ func (s *redefineSet) recordOriginal(key componentKey, src typeSource) error {
 	if first, dup := s.originals[key]; dup {
 		name := xsd.QName{Space: src.owner.target, Local: key.name}
 		return xsderr.New(ruleSchPropsCorrect, src.elem.Loc(),
-			"the <redefine>d document repeats the expanded name %s among its top-level <%s> definitions (first declared at %s), but sch-props-correct clause 2 forbids two components of the same kind sharing an expanded name", name, key.kind, first.elem.Loc())
+			"the <redefine>d document repeats the expanded name %s among its top-level <%s> definitions (first declared at %s), but sch-props-correct clause 2 forbids two components of the same kind sharing an expanded name", name.Display(), key.kind, first.elem.Loc())
 	}
 	s.originals[key] = src
 	return nil
@@ -803,7 +803,7 @@ func (p *producer) produceRedefinition(rs *redefineSet, e redefineEntry) error {
 	if _, ok := rs.originals[e.key]; !ok {
 		return xsderr.New(ruleSrcExpRedefine, e.elem.Loc(),
 			"<redefine> redefines <%s> %s, but no top-level <%s> of that name was recorded from the redefined schema document: src-expredef requires \"a top-level definition item of the appropriate name and kind in the <redefine>d schema document\" in all cases",
-			e.key.kind, qn, e.key.kind)
+			e.key.kind, qn.Display(), e.key.kind)
 	}
 	decl := p.ov.replacement(e.elem)
 	if err := p.checkRedefinition(decl, qn); err != nil {
@@ -900,7 +900,7 @@ func (p *producer) checkRedefinedSimpleType(decl *Element, qn xsd.QName) error {
 	restriction := childElement(decl, xsd.XMLSchemaNS, "restriction")
 	if restriction == nil {
 		return xsderr.New(ruleSrcRedefine, decl.Loc(),
-			"the redefining <simpleType> %s has no <restriction> child, but src-redefine clause 5 requires one whose base is %s itself", qn, qn)
+			"the redefining <simpleType> %s has no <restriction> child, but src-redefine clause 5 requires one whose base is %s itself", qn.Display(), qn.Display())
 	}
 	same, err := p.namesSelf(restriction, qn)
 	if err != nil {
@@ -910,7 +910,7 @@ func (p *producer) checkRedefinedSimpleType(decl *Element, qn xsd.QName) error {
 		return nil
 	}
 	return xsderr.New(ruleSrcRedefine, restriction.Loc(),
-		"the redefining <simpleType> %s does not restrict itself: src-redefine clause 5 requires its <restriction>'s base to be %s, its own name plus target namespace", qn, qn)
+		"the redefining <simpleType> %s does not restrict itself: src-redefine clause 5 requires its <restriction>'s base to be %s, its own name plus target namespace", qn.Display(), qn.Display())
 }
 
 // checkRedefinedComplexType charges src-redefine clause 5's complex-type half:
@@ -951,7 +951,7 @@ func (p *producer) checkRedefinedComplexType(decl *Element, qn xsd.QName) error 
 		}
 	}
 	return xsderr.New(ruleSrcRedefine, decl.Loc(),
-		"the redefining <complexType> %s does not derive from itself: src-redefine clause 5 requires a <restriction> or <extension> among its grand-children whose base is %s, its own name plus target namespace", qn, qn)
+		"the redefining <complexType> %s does not derive from itself: src-redefine clause 5 requires a <restriction> or <extension> among its grand-children whose base is %s, its own name plus target namespace", qn.Display(), qn.Display())
 }
 
 // namesSelf reports whether the base attribute of derivation — a <restriction>
@@ -993,7 +993,7 @@ func (p *producer) checkRedefinedGroup(decl *Element, qn xsd.QName) error {
 	}
 	if len(refs) > 1 {
 		return xsderr.New(ruleSrcRedefine, refs[1].Loc(),
-			"the redefining <group> %s references itself %d times (the first at %s), but src-redefine clause 6.1.1 permits exactly one", qn, len(refs), refs[0].Loc())
+			"the redefining <group> %s references itself %d times (the first at %s), but src-redefine clause 6.1.1 permits exactly one", qn.Display(), len(refs), refs[0].Loc())
 	}
 	return checkSelfReferenceOccurs(refs[0], qn)
 }
@@ -1018,7 +1018,7 @@ func (p *producer) checkRedefinedAttributeGroup(decl *Element, qn xsd.QName) err
 		return nil // one self-reference: clause 7.1; none: clause 7.2, charged at finalize
 	}
 	return xsderr.New(ruleSrcRedefine, refs[1].Loc(),
-		"the redefining <attributeGroup> %s references itself %d times (the first at %s), but src-redefine clause 7.1 permits exactly one", qn, len(refs), refs[0].Loc())
+		"the redefining <attributeGroup> %s references itself %d times (the first at %s), but src-redefine clause 7.1 permits exactly one", qn.Display(), len(refs), refs[0].Loc())
 }
 
 // redefinedAttributeGroupRestricted returns the attribute group definition of S2
@@ -1222,7 +1222,7 @@ func checkSelfReferenceOccurs(ref *Element, qn xsd.QName) error {
 		lexical := a.Value()
 		if collapseTrim(lexical) == "unbounded" {
 			return xsderr.New(ruleSrcRedefine, ref.Loc(),
-				"the self-reference of the redefining <group> %s has %s=%q, but src-redefine clause 6.1.2 requires both minOccurs and maxOccurs to be 1 (or absent)", qn, attr, lexical)
+				"the self-reference of the redefining <group> %s has %s=%q, but src-redefine clause 6.1.2 requires both minOccurs and maxOccurs to be 1 (or absent)", qn.Display(), attr, lexical)
 		}
 		n, err := nonNegativeInt(lexical, a.Loc(), attr)
 		if err != nil {
@@ -1232,7 +1232,7 @@ func checkSelfReferenceOccurs(ref *Element, qn xsd.QName) error {
 			continue
 		}
 		return xsderr.New(ruleSrcRedefine, ref.Loc(),
-			"the self-reference of the redefining <group> %s has %s=%q, but src-redefine clause 6.1.2 requires both minOccurs and maxOccurs to be 1 (or absent)", qn, attr, lexical)
+			"the self-reference of the redefining <group> %s has %s=%q, but src-redefine clause 6.1.2 requires both minOccurs and maxOccurs to be 1 (or absent)", qn.Display(), attr, lexical)
 	}
 	return nil
 }

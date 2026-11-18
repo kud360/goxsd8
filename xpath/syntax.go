@@ -907,7 +907,7 @@ func (r *syntaxRecognizer) kindTypeName(t syntaxToken) {
 	if !resolved || r.static.types.inScopeType(name) {
 		return
 	}
-	r.record(ctaStaticDefect(ruleXPST0008, "the KindTest TypeName %q is no type in the in-scope schema types, which err:XPST0008 forbids", name))
+	r.record(ctaStaticDefect(ruleXPST0008, "the KindTest TypeName %q is no type in the in-scope schema types, which err:XPST0008 forbids", name.Display()))
 }
 
 // schemaElementName resolves the name of a SchemaElementTest in the default
@@ -922,7 +922,7 @@ func (r *syntaxRecognizer) schemaElementName(t syntaxToken) {
 	if !resolved {
 		return
 	}
-	r.record(ctaStaticDefect(ruleXPST0008, "the schema-element name %q is no in-scope element declaration, which err:XPST0008 forbids", name))
+	r.record(ctaStaticDefect(ruleXPST0008, "the schema-element name %q is no in-scope element declaration, which err:XPST0008 forbids", name.Display()))
 }
 
 // schemaAttributeName resolves the name of a SchemaAttributeTest, an
@@ -934,7 +934,7 @@ func (r *syntaxRecognizer) schemaAttributeName(t syntaxToken) {
 	if !resolved || ctaInScopeAttribute(name) {
 		return
 	}
-	r.record(ctaStaticDefect(ruleXPST0008, "the schema-attribute name %q is no in-scope attribute declaration, which err:XPST0008 forbids", name))
+	r.record(ctaStaticDefect(ruleXPST0008, "the schema-attribute name %q is no in-scope attribute declaration, which err:XPST0008 forbids", name.Display()))
 }
 
 // ctaInScopeAttribute reports whether name is one of the in-scope attribute

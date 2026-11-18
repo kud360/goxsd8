@@ -42,8 +42,8 @@ func parseTypeTableSchema(t *testing.T, body string) error {
 // table too.
 func TestParseChargesTypeTableOwnedComponents(t *testing.T) {
 	const (
-		absentVariety = "simple type restricting {http://www.w3.org/2001/XMLSchema}anySimpleType has an absent {variety}"
-		noPrimitive   = "atomic simple type may not name {http://www.w3.org/2001/XMLSchema}anyAtomicType as its {base type definition} unless it is a primitive datatype"
+		absentVariety = "simple type restricting xs:anySimpleType has an absent {variety}"
+		noPrimitive   = "atomic simple type may not name xs:anyAtomicType as its {base type definition} unless it is a primitive datatype"
 		restrictAny   = `<xs:simpleType><xs:restriction base="xs:anySimpleType"/></xs:simpleType>`
 		restrictAtom  = `<xs:simpleType><xs:restriction base="xs:anyAtomicType"/></xs:simpleType>`
 	)

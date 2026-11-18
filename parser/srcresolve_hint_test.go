@@ -22,7 +22,7 @@ import (
 // that site alone was not taught the clause. A row whose body opens <xs:schema>
 // is the whole document.
 func TestSrcResolveNamesTheNearDeclaration(t *testing.T) {
-	const xs = "{http://www.w3.org/2001/XMLSchema}"
+	const xs = "xs:"
 	const head = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">`
 	const tail = `</xs:schema>`
 	const keyBody = `<xs:selector xpath="."/><xs:field xpath="@a"/>`
@@ -88,7 +88,7 @@ func TestSrcResolveNamesTheNearDeclaration(t *testing.T) {
 			"complex type c {base type definition} <extension base> references type fo, but no type definition with that expanded name is present in the schema; did you mean fob? (src-resolve clause 1.1)"},
 		{"attribute ref= names a seeded xsi: declaration",
 			`<xs:complexType name="c" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"><xs:attribute ref="xsi:typ"/></xs:complexType>`,
-			"attribute use <attribute ref> references attribute declaration {http://www.w3.org/2001/XMLSchema-instance}typ, but no attribute declaration with that expanded name is present in the schema; did you mean {http://www.w3.org/2001/XMLSchema-instance}type? (src-resolve clause 1.2)"},
+			"attribute use <attribute ref> references attribute declaration xsi:typ, but no attribute declaration with that expanded name is present in the schema; did you mean xsi:type? (src-resolve clause 1.2)"},
 		{"attribute ref=",
 			`<xs:attribute name="foo"/><xs:complexType name="c"><xs:attribute ref="fo"/></xs:complexType>`,
 			"attribute use <attribute ref> references attribute declaration fo, but no attribute declaration with that expanded name is present in the schema; did you mean foo? (src-resolve clause 1.2)"},

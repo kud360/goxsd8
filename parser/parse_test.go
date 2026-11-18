@@ -606,7 +606,7 @@ func TestParseDuplicateTypeLocatesTheSecondDeclaration(t *testing.T) {
 			target:    xsdNS,
 			body:      "\n  " + `<xs:simpleType name="int"><xs:restriction base="xs:integer"/></xs:simpleType>`,
 			offending: "m.xsd:2:3: [sch-props-correct] schema {type definitions}",
-			first:     "{" + xsdNS + "}int (first declared at ",
+			first:     "xs:int (first declared at ",
 		},
 	} {
 		t.Run(c.name, func(t *testing.T) {

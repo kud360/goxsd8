@@ -87,7 +87,7 @@ func (s *Schema) checkAllGroupsLimited() error {
 		// its {compositor}, so only the particles BELOW it are decided. It is
 		// walked whether or not any <group ref> points at it: §3.8.6 binds every
 		// Model Group component.
-		if err := s.checkGroupAllLimited(mgd.ModelGroup(), mgd.Loc(), "model group definition "+mgd.Name().String()); err != nil {
+		if err := s.checkGroupAllLimited(mgd.ModelGroup(), mgd.Loc(), "model group definition "+mgd.Name().Display()); err != nil {
 			return err
 		}
 	}

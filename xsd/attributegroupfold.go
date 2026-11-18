@@ -253,7 +253,7 @@ func (s *Schema) closeAttributeContent(cl *attributeClosure, wildcard Wildcard, 
 			cl.reached[m.Name] = struct{}{}
 			g, ok := s.attributeGroupIndex[m.Name]
 			if !ok {
-				panic("xsd: closeAttributeContent: no attribute group definition named " + m.Name.String() +
+				panic("xsd: closeAttributeContent: no attribute group definition named " + m.Name.Display() +
 					": Phase A's resolveAttributeGroupRef rejects every unresolvable <attributeGroup ref> before this fold runs")
 			}
 			s.closeAttributeContent(cl, g.wildcard, g.hasWildcard, attributeMembers(g.attributeContent, g.attributeUses))

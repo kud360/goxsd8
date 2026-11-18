@@ -148,7 +148,7 @@ func complexTypeOwner(c ComplexType) string {
 	if n == (QName{}) {
 		return "anonymous complex type"
 	}
-	return "complex type " + n.String()
+	return "complex type " + n.Display()
 }
 
 // walkTypeDefinition charges one {type definition}/{base type definition} slot
@@ -224,7 +224,7 @@ func (w componentWalk) walkAttributeDeclaration(a AttributeDeclaration) error {
 	ref := a.TypeDefinition()
 	if w.typeDefinitionSlot != nil {
 		if err := w.typeDefinitionSlot(ref, attributeTypeSlot, a.Loc(),
-			"attribute declaration "+a.Name().String()+" {type definition}"); err != nil {
+			"attribute declaration "+a.Name().Display()+" {type definition}"); err != nil {
 			return err
 		}
 	}
@@ -260,7 +260,7 @@ func (w componentWalk) walkElementDeclaration(e ElementDeclaration) error {
 	if w.typeDefinitionSlot != nil {
 		for _, slot := range slots {
 			if err := w.typeDefinitionSlot(slot.ref, slot.slot, e.Loc(),
-				"element declaration "+e.Name().String()+" "+slot.property); err != nil {
+				"element declaration "+e.Name().Display()+" "+slot.property); err != nil {
 				return err
 			}
 		}
@@ -372,5 +372,5 @@ func (w componentWalk) walkAttributeGroupDefinition(g AttributeGroupDefinition) 
 // complex type's, its {name} is never absent (§3.6.1 requires it), so there is
 // no anonymous case to describe.
 func attributeGroupOwner(g AttributeGroupDefinition) string {
-	return "attribute group definition " + g.Name().String()
+	return "attribute group definition " + g.Name().Display()
 }

@@ -190,13 +190,13 @@ func (s *Schema) checkExtensionAttributeUses(t, b ComplexType) error {
 		tu, ok := findAttributeUse(t.attributeUses, name)
 		if !ok {
 			return xsderr.New(ruleCosCTExtends, xsderr.Loc{},
-				"%s extends %s, but the base's attribute use for %s has no counterpart in the extension's {attribute uses}, so B.{attribute uses} is not a subset of T.{attribute uses} (cos-ct-extends clause 1.2, c-cte)", complexTypeOwner(t), typeDefinitionLabel(b), name)
+				"%s extends %s, but the base's attribute use for %s has no counterpart in the extension's {attribute uses}, so B.{attribute uses} is not a subset of T.{attribute uses} (cos-ct-extends clause 1.2, c-cte)", complexTypeOwner(t), typeDefinitionLabel(b), name.Display())
 		}
 		if s.attributeUsesIdentical(tu, u) {
 			continue
 		}
 		return xsderr.New(ruleCosCTExtends, xsderr.Loc{},
-			"%s extends %s but re-declares attribute %s with properties that differ from the base's attribute use, which cos-ct-extends clause 1.2 (c-cte) requires to be identical", complexTypeOwner(t), typeDefinitionLabel(b), name)
+			"%s extends %s but re-declares attribute %s with properties that differ from the base's attribute use, which cos-ct-extends clause 1.2 (c-cte) requires to be identical", complexTypeOwner(t), typeDefinitionLabel(b), name.Display())
 	}
 	return nil
 }
@@ -465,7 +465,7 @@ func (s *Schema) checkExtensionTwoStepDerivable(t ComplexType) error {
 	}
 	if _, name, duplicate := duplicateAttributeUseName(m.attributeUses); duplicate {
 		return xsderr.New(ruleCosCTExtends, t.Loc(),
-			"%s is not ·derivable· in two steps — an extension followed by a possibly vacuous restriction — from the ancestor whose {base type definition} is xs:anyType, as cos-ct-extends clause 1.5 requires: re-ordering its derivation chain to put every extension step first collapses two attribute uses for %s into one type, which ct-props-correct clause 4 forbids, so an extension in the chain adds back an attribute a restriction in the chain removed", complexTypeOwner(t), name)
+			"%s is not ·derivable· in two steps — an extension followed by a possibly vacuous restriction — from the ancestor whose {base type definition} is xs:anyType, as cos-ct-extends clause 1.5 requires: re-ordering its derivation chain to put every extension step first collapses two attribute uses for %s into one type, which ct-props-correct clause 4 forbids, so an extension in the chain adds back an attribute a restriction in the chain removed", complexTypeOwner(t), name.Display())
 	}
 	if s.restrictionFromCollapseIsVacuous(t, m) {
 		return nil // clause 1.5's own "(possibly vacuous)" arm; see below

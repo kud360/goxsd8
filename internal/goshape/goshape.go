@@ -150,7 +150,7 @@ func GoverningTypes(schema *xsd.Schema, decl xsd.ElementDeclaration) (types []Go
 	for _, s := range slots {
 		td, ok := schema.ResolvedType(s.ref)
 		if !ok {
-			return nil, false, fmt.Errorf("%s of element %s at %s: its {type definition} does not resolve", s.slot.Name(), decl.Name(), decl.Loc())
+			return nil, false, fmt.Errorf("%s of element %s at %s: its {type definition} does not resolve", s.slot.Name(), decl.Name().Display(), decl.Loc())
 		}
 		if hasTable && td.Name() == errorTypeName {
 			errorSlot = true
@@ -187,7 +187,7 @@ func abstractMembers(schema *xsd.Schema, decl xsd.ElementDeclaration, t xsd.Comp
 		}
 		ok, err := schema.ValidlySubstitutable(s, t, decl.DisallowedSubstitutions())
 		if err != nil {
-			return nil, fmt.Errorf("element %s at %s: complex type %s as a member of abstract complex type %s: %w", decl.Name(), decl.Loc(), s.Name(), t.Name(), err)
+			return nil, fmt.Errorf("element %s at %s: complex type %s as a member of abstract complex type %s: %w", decl.Name().Display(), decl.Loc(), s.Name().Display(), t.Name().Display(), err)
 		}
 		if ok {
 			members = append(members, s)
@@ -682,7 +682,7 @@ func ModelGroupTerm(schema *xsd.Schema, term xsd.TermOrRef) (xsd.ModelGroup, boo
 	case xsd.ModelGroupRef:
 		def, ok := schema.ModelGroup(term.Name)
 		if !ok {
-			return xsd.ModelGroup{}, false, fmt.Errorf("its <group ref> particle to %s does not resolve", term.Name)
+			return xsd.ModelGroup{}, false, fmt.Errorf("its <group ref> particle to %s does not resolve", term.Name.Display())
 		}
 		return def.ModelGroup(), true, nil
 	case xsd.ResolvedTerm:

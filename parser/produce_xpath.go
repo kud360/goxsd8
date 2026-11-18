@@ -214,11 +214,11 @@ func (p *producer) referencedIdentityConstraint(el *Element, category xsd.Identi
 	src, ok := p.symbols.identityConstraints[qn]
 	if !ok {
 		return xsd.IdentityConstraint{}, xsderr.New(ruleSrcResolve, ref.Loc(),
-			"<%s ref=%q> resolves to no identity-constraint definition in the schema%s (src-resolve clause 1.7)", local, qn, p.symbols.identityConstraintHint(qn, category))
+			"<%s ref=%q> resolves to no identity-constraint definition in the schema%s (src-resolve clause 1.7)", local, qn.Display(), p.symbols.identityConstraintHint(qn, category))
 	}
 	if src.category != category {
 		return xsd.IdentityConstraint{}, xsderr.New(ruleSrcIdentityConstraint, el.Loc(),
-			"<%s ref=%q> names a definition whose {identity-constraint category} is %s, but src-identity-constraint clause 5 requires it to match the referring element's name", local, qn, src.category)
+			"<%s ref=%q> names a definition whose {identity-constraint category} is %s, but src-identity-constraint clause 5 requires it to match the referring element's name", local, qn.Display(), src.category)
 	}
 	return src.owner.buildIdentityConstraint(qn, src.elem, src.category)
 }
@@ -234,7 +234,7 @@ func (s *symbols) identityConstraintHint(missing xsd.QName, category xsd.Identit
 			names = append(names, nearname.Name(n))
 		}
 	}
-	return nearname.Hint(nearname.Name(missing), names, func(n nearname.Name) string { return fmt.Sprintf("%q", xsd.QName(n)) })
+	return nearname.Hint(nearname.Name(missing), names, func(n nearname.Name) string { return fmt.Sprintf("%q", xsd.QName(n).Display()) })
 }
 
 // checkIdentityConstraintChildOrder orders the children of one

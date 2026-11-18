@@ -815,16 +815,12 @@ func (t ctaToken) spelling() string {
 }
 
 // ctaDisplayName is how a reason names q: `fn:` for a name in the default
-// function namespace, `xs:` for one in the XSD namespace, and Clark notation
-// otherwise.
+// function namespace, and as [xsd.QName.Display] spells it otherwise.
 func ctaDisplayName(q xsd.QName) string {
-	switch q.Space {
-	case ctaFunctionNS:
+	if q.Space == ctaFunctionNS {
 		return "fn:" + q.Local
-	case xsd.XMLSchemaNS:
-		return "xs:" + q.Local
 	}
-	return q.String()
+	return q.Display()
 }
 
 // ctaTypePhrase is how a reason names the static type of v (ctaStaticOf), as

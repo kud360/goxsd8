@@ -107,7 +107,7 @@ func (s *Schema) checkAttributeRestriction(r attributeRestriction) error {
 		general, ok := s.attributeDefaultBinding(r.base, name)
 		if !ok {
 			return xsderr.New(r.rule, r.loc,
-				"%s %s %s but declares an attribute use for %s, which %s neither declares nor admits through an {attribute wildcard}, so an element valid against the restriction can carry an attribute the base rejects (%s)", r.derived.label, r.verb, r.base.label, name, r.base.label, r.clause)
+				"%s %s %s but declares an attribute use for %s, which %s neither declares nor admits through an {attribute wildcard}, so an element valid against the restriction can carry an attribute the base rejects (%s)", r.derived.label, r.verb, r.base.label, name.Display(), r.base.label, r.clause)
 		}
 		if err := s.checkBindingSubsumes(name, r, general, attributeUseBinding{use: u}); err != nil {
 			return err
@@ -266,13 +266,13 @@ func checkAttributeRestrictionRequired(r attributeRestriction) error {
 		tu, ok := findAttributeUse(r.derived.uses, name)
 		if !ok {
 			return xsderr.New(r.rule, r.loc,
-				"%s %s %s but its {attribute uses} carry no use for attribute %s, which the base requires, so an element omitting it is valid against the restriction and not against the base (%s, via cvc-complex-type clause 3)", r.derived.label, r.verb, r.base.label, name, r.clause)
+				"%s %s %s but its {attribute uses} carry no use for attribute %s, which the base requires, so an element omitting it is valid against the restriction and not against the base (%s, via cvc-complex-type clause 3)", r.derived.label, r.verb, r.base.label, name.Display(), r.clause)
 		}
 		if tu.Required() {
 			continue
 		}
 		return xsderr.New(r.rule, r.loc,
-			"%s %s %s but declares attribute %s as optional where the base requires it, so an element omitting it is valid against the restriction and not against the base (%s, via cvc-complex-type clause 3)", r.derived.label, r.verb, r.base.label, name, r.clause)
+			"%s %s %s but declares attribute %s as optional where the base requires it, so an element omitting it is valid against the restriction and not against the base (%s, via cvc-complex-type clause 3)", r.derived.label, r.verb, r.base.label, name.Display(), r.clause)
 	}
 	return nil
 }

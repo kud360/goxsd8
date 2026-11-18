@@ -202,7 +202,7 @@ func (s *Schema) checkModelGroupDefinitionUnambiguous(mgd ModelGroupDefinition) 
 	if err != nil {
 		return err
 	}
-	return b.check(first, "model group definition "+mgd.Name().String())
+	return b.check(first, "model group definition "+mgd.Name().Display())
 }
 
 // check reports the first competing pair in the automaton. States are visited in
@@ -281,7 +281,7 @@ func (b *automaton) competes(i, j int) (bool, error) {
 func (b *automaton) describe(i int) string {
 	switch t := b.positions[i].term.(type) {
 	case ElementDeclaration:
-		return "element declaration " + t.Name().String()
+		return "element declaration " + t.Name().Display()
 	case Wildcard:
 		return "wildcard " + t.NamespaceConstraint().Variety().String()
 	default:

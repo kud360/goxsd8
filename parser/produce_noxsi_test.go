@@ -101,7 +101,7 @@ func TestProduceXSIAttributeDeclarationRejected(t *testing.T) {
 			if xe.Loc.Line != tc.wantLine {
 				t.Fatalf("charged at line %d, want the <attribute> at line %d (%v)", xe.Loc.Line, tc.wantLine, err)
 			}
-			want := "attribute declaration {" + xsiNS + "}" + tc.wantName +
+			want := "attribute declaration xsi:" + tc.wantName +
 				" has the XML Schema Instance namespace as its {target namespace}"
 			if !strings.Contains(xe.Msg, want) {
 				t.Fatalf("message = %q, want it to name the offending declaration: %q", xe.Msg, want)

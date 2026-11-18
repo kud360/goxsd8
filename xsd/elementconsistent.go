@@ -215,7 +215,7 @@ func checkSameTypeDefinition(name QName, decls []ElementDeclaration) error {
 		ref, byName := d.TypeDefinition().(TypeDefinitionRef)
 		if !byName {
 			return xsderr.New(ruleCosElementConsistent, xsderr.Loc{},
-				"a content model contains two or more element declarations named %s, but one of them has an anonymous or absent declared {type definition}, and cos-element-consistent clause 1 requires every such {type definition} to have a ·non-absent· {name}", name)
+				"a content model contains two or more element declarations named %s, but one of them has an anonymous or absent declared {type definition}, and cos-element-consistent clause 1 requires every such {type definition} to have a ·non-absent· {name}", name.Display())
 		}
 		typeNames[i] = ref.Name
 	}
@@ -225,7 +225,7 @@ func checkSameTypeDefinition(name QName, decls []ElementDeclaration) error {
 		if tn != typeNames[0] {
 			return xsderr.New(ruleCosElementConsistent, xsderr.Loc{},
 				"a content model contains element declarations named %s with different declared {type definition}s (%s and %s), but cos-element-consistent clauses 2-3 require the same {name} and {target namespace}",
-				name, typeNames[0], tn)
+				name.Display(), typeNames[0].Display(), tn.Display())
 		}
 	}
 	return checkTypeTablesAgree(name, decls,
@@ -298,14 +298,14 @@ func checkTypeTablesAgree(name QName, decls []ElementDeclaration, reason string)
 		tt, present := d.TypeTable()
 		if present != headPresent {
 			return xsderr.New(ruleCosElementConsistent, xsderr.Loc{},
-				"element declarations named %s disagree on whether a {type table} is present, but %s", name, reason)
+				"element declarations named %s disagree on whether a {type table} is present, but %s", name.Display(), reason)
 		}
 		if !present {
 			continue
 		}
 		if !typeTablesEquivalent(head, tt) {
 			return xsderr.New(ruleCosElementConsistent, xsderr.Loc{},
-				"element declarations named %s have {type table}s that are not ·equivalent·, but %s", name, reason)
+				"element declarations named %s have {type table}s that are not ·equivalent·, but %s", name.Display(), reason)
 		}
 	}
 	return nil

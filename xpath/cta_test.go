@@ -408,8 +408,8 @@ func TestCTATestStaticErrorIsSilentForUnsupported(t *testing.T) {
 func TestCTATestStaticErrorBeforeADeclineIsCharged(t *testing.T) {
 	str := asBuiltin(t, "string")
 	for _, tc := range []struct{ expr, rule, msg string }{
-		{"@kind cast as xs:Missing = 'x' and count(//a:x) > 1", "err:XPST0051", `the cast target "{http://www.w3.org/2001/XMLSchema}Missing" is no simple type in the in-scope schema types, which err:XPST0051 forbids`},
-		{"@kind cast as xs:anyAtomicType = 'x' and count(//a:x) > 1", "err:XPST0080", `the cast target "{http://www.w3.org/2001/XMLSchema}anyAtomicType" is xs:NOTATION or xs:anyAtomicType, which err:XPST0080 forbids`},
+		{"@kind cast as xs:Missing = 'x' and count(//a:x) > 1", "err:XPST0051", `the cast target "xs:Missing" is no simple type in the in-scope schema types, which err:XPST0051 forbids`},
+		{"@kind cast as xs:anyAtomicType = 'x' and count(//a:x) > 1", "err:XPST0080", `the cast target "xs:anyAtomicType" is xs:NOTATION or xs:anyAtomicType, which err:XPST0080 forbids`},
 		{"@p:a = 'x' and count(@b) > 1", "err:XPST0081", `no statically-known namespace binding for prefix "p", which err:XPST0081 forbids`},
 		{"p:not(@kind = 'x')", "err:XPST0081", `no statically-known namespace binding for prefix "p", which err:XPST0081 forbids`},
 		{"count(//p:a) > 1", "err:XPST0081", `no statically-known namespace binding for prefix "p", which err:XPST0081 forbids`},
@@ -452,8 +452,8 @@ func TestCTATestStaticErrorBeforeADeclineIsCharged(t *testing.T) {
 // row.
 func TestCTATestStaticErrorTheSubsetNeverReachesIsCharged(t *testing.T) {
 	const (
-		missingTarget = `the cast target "{http://www.w3.org/2001/XMLSchema}Missing" is no simple type in the in-scope schema types, which err:XPST0051 forbids`
-		missingAtomic = `the AtomicType "{http://www.w3.org/2001/XMLSchema}Missing" is no simple type in the in-scope schema types, which err:XPST0051 forbids`
+		missingTarget = `the cast target "xs:Missing" is no simple type in the in-scope schema types, which err:XPST0051 forbids`
+		missingAtomic = `the AtomicType "xs:Missing" is no simple type in the in-scope schema types, which err:XPST0051 forbids`
 	)
 	for _, tc := range []struct{ expr, rule, msg string }{
 		{"count(//a:x) > 1 and @kind cast as xs:Missing = 'x'", "err:XPST0051", missingTarget},
@@ -466,9 +466,9 @@ func TestCTATestStaticErrorTheSubsetNeverReachesIsCharged(t *testing.T) {
 		{"@kind instance of xs:Missing", "err:XPST0051", missingAtomic},
 		{"@kind treat as xs:Missing = 'x'", "err:XPST0051", missingAtomic},
 		{"@kind instance of a:Kind", "err:XPST0051", `the AtomicType "{http://example.com/a}Kind" is no simple type in the in-scope schema types, which err:XPST0051 forbids`},
-		{"@kind instance of xs:NMTOKENS+", "err:XPST0051", `the AtomicType "{http://www.w3.org/2001/XMLSchema}NMTOKENS" is no atomic type, which err:XPST0051 forbids`},
+		{"@kind instance of xs:NMTOKENS+", "err:XPST0051", `the AtomicType "xs:NMTOKENS" is no atomic type, which err:XPST0051 forbids`},
 		{"@kind castable as xs:Missing", "err:XPST0051", missingTarget},
-		{"@kind castable as xs:anyAtomicType", "err:XPST0080", `the cast target "{http://www.w3.org/2001/XMLSchema}anyAtomicType" is xs:NOTATION or xs:anyAtomicType, which err:XPST0080 forbids`},
+		{"@kind castable as xs:anyAtomicType", "err:XPST0080", `the cast target "xs:anyAtomicType" is xs:NOTATION or xs:anyAtomicType, which err:XPST0080 forbids`},
 		// The first static error in expression order wins.
 		{"$value = 1 and @kind instance of xs:Missing", "err:XPST0008", `the variable reference $value names no in-scope variable, which err:XPST0008 forbids`},
 		{"@kind instance of xs:Missing and $value = 1", "err:XPST0051", missingAtomic},
@@ -479,12 +479,12 @@ func TestCTATestStaticErrorTheSubsetNeverReachesIsCharged(t *testing.T) {
 		// (xpath20.md §2.5.4.3–§2.5.4.6): a TypeName outside the in-scope
 		// schema types, a schema's own type included, every schema-element
 		// name, and a schema-attribute name no §3.2.7 declaration carries.
-		{". instance of element(*, xs:Missing)", "err:XPST0008", `the KindTest TypeName "{http://www.w3.org/2001/XMLSchema}Missing" is no type in the in-scope schema types, which err:XPST0008 forbids`},
-		{"@kind instance of attribute(*, xs:Missing)", "err:XPST0008", `the KindTest TypeName "{http://www.w3.org/2001/XMLSchema}Missing" is no type in the in-scope schema types, which err:XPST0008 forbids`},
+		{". instance of element(*, xs:Missing)", "err:XPST0008", `the KindTest TypeName "xs:Missing" is no type in the in-scope schema types, which err:XPST0008 forbids`},
+		{"@kind instance of attribute(*, xs:Missing)", "err:XPST0008", `the KindTest TypeName "xs:Missing" is no type in the in-scope schema types, which err:XPST0008 forbids`},
 		{". instance of element(*, a:T)", "err:XPST0008", `the KindTest TypeName "{http://example.com/a}T" is no type in the in-scope schema types, which err:XPST0008 forbids`},
 		{". instance of schema-element(a:x)", "err:XPST0008", `the schema-element name "{http://example.com/a}x" is no in-scope element declaration, which err:XPST0008 forbids`},
 		{"@kind instance of schema-attribute(a:kind)", "err:XPST0008", `the schema-attribute name "{http://example.com/a}kind" is no in-scope attribute declaration, which err:XPST0008 forbids`},
-		{"@kind instance of schema-attribute(xs:type)", "err:XPST0008", `the schema-attribute name "{http://www.w3.org/2001/XMLSchema}type" is no in-scope attribute declaration, which err:XPST0008 forbids`},
+		{"@kind instance of schema-attribute(xs:type)", "err:XPST0008", `the schema-attribute name "xs:type" is no in-scope attribute declaration, which err:XPST0008 forbids`},
 		{"self::q:* and $value", "err:XPST0081", `no statically-known namespace binding for prefix "q", which err:XPST0081 forbids`},
 		{".. and q:f(.)", "err:XPST0081", `no statically-known namespace binding for prefix "q", which err:XPST0081 forbids`},
 	} {
@@ -564,14 +564,14 @@ func TestCTATestStaticErrorKindTestNameTakesTheDefaultNamespace(t *testing.T) {
 // still declines every row.
 func TestCTATestStaticErrorReportsCastTarget(t *testing.T) {
 	for _, tc := range []struct{ expr, rule, msg string }{
-		{"@kind cast as xs:Missing = 'x'", "err:XPST0051", `the cast target "{http://www.w3.org/2001/XMLSchema}Missing" is no simple type in the in-scope schema types, which err:XPST0051 forbids`},
+		{"@kind cast as xs:Missing = 'x'", "err:XPST0051", `the cast target "xs:Missing" is no simple type in the in-scope schema types, which err:XPST0051 forbids`},
 		{"@kind cast as a:Missing", "err:XPST0051", `the cast target "{http://example.com/a}Missing" is no simple type in the in-scope schema types, which err:XPST0051 forbids`},
 		{"@kind cast as Missing = 'x'", "err:XPST0051", `the cast target "Missing" is no simple type in the in-scope schema types, which err:XPST0051 forbids`},
-		{"@kind cast as xs:anyType = 'x'", "err:XPST0051", `the cast target "{http://www.w3.org/2001/XMLSchema}anyType" is no simple type in the in-scope schema types, which err:XPST0051 forbids`},
-		{"@kind cast as xs:anySimpleType = 'x'", "err:XPST0051", `the cast target "{http://www.w3.org/2001/XMLSchema}anySimpleType" is no atomic type, which err:XPST0051 forbids`},
-		{"@kind cast as xs:NMTOKENS? = 'x'", "err:XPST0051", `the cast target "{http://www.w3.org/2001/XMLSchema}NMTOKENS" is no atomic type, which err:XPST0051 forbids`},
-		{"@kind cast as xs:anyAtomicType = 'x'", "err:XPST0080", `the cast target "{http://www.w3.org/2001/XMLSchema}anyAtomicType" is xs:NOTATION or xs:anyAtomicType, which err:XPST0080 forbids`},
-		{"@kind cast as xs:NOTATION", "err:XPST0080", `the cast target "{http://www.w3.org/2001/XMLSchema}NOTATION" is xs:NOTATION or xs:anyAtomicType, which err:XPST0080 forbids`},
+		{"@kind cast as xs:anyType = 'x'", "err:XPST0051", `the cast target "xs:anyType" is no simple type in the in-scope schema types, which err:XPST0051 forbids`},
+		{"@kind cast as xs:anySimpleType = 'x'", "err:XPST0051", `the cast target "xs:anySimpleType" is no atomic type, which err:XPST0051 forbids`},
+		{"@kind cast as xs:NMTOKENS? = 'x'", "err:XPST0051", `the cast target "xs:NMTOKENS" is no atomic type, which err:XPST0051 forbids`},
+		{"@kind cast as xs:anyAtomicType = 'x'", "err:XPST0080", `the cast target "xs:anyAtomicType" is xs:NOTATION or xs:anyAtomicType, which err:XPST0080 forbids`},
+		{"@kind cast as xs:NOTATION", "err:XPST0080", `the cast target "xs:NOTATION" is xs:NOTATION or xs:anyAtomicType, which err:XPST0080 forbids`},
 		// The stand-in lets every comparison after it settle: against an
 		// xs:float operand, a DoubleLiteral and an untyped attribute, and inside
 		// a conjunction.

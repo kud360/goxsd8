@@ -191,7 +191,7 @@ func checkAttributeUseNamesUnique(c ComplexType) error {
 		return nil
 	}
 	return xsderr.New(ruleCTPropsCorrect, c.Loc(),
-		"%s has two {attribute uses} whose {attribute declaration}s share the expanded name %s, but ct-props-correct clause 4 forbids it", complexTypeOwner(c), name)
+		"%s has two {attribute uses} whose {attribute declaration}s share the expanded name %s, but ct-props-correct clause 4 forbids it", complexTypeOwner(c), name.Display())
 }
 
 // duplicateAttributeUseName reports the FIRST expanded name that two members of
@@ -546,7 +546,7 @@ func (s *Schema) checkLocallyDeclaredAttributeTypes(t, b ComplexType, k locallyD
 			continue
 		}
 		return xsderr.New(k.rule, t.Loc(),
-			"%s %s %s, but the ·locally declared type· %s of attribute %s within the %s is not ·validly substitutable· for the base's %s %s (%s)", complexTypeOwner(t), k.verb, typeDefinitionLabel(b), typeDefinitionLabel(within), name, k.relation, typeDefinitionLabel(base), k.limitation, k.clause)
+			"%s %s %s, but the ·locally declared type· %s of attribute %s within the %s is not ·validly substitutable· for the base's %s %s (%s)", complexTypeOwner(t), k.verb, typeDefinitionLabel(b), typeDefinitionLabel(within), name.Display(), k.relation, typeDefinitionLabel(base), k.limitation, k.clause)
 	}
 	return nil
 }
@@ -578,7 +578,7 @@ func (s *Schema) checkLocallyDeclaredElementTypes(t, b ComplexType, k locallyDec
 			continue
 		}
 		return xsderr.New(k.rule, t.Loc(),
-			"%s %s %s, but the ·locally declared type· %s of element %s within the %s is not ·validly substitutable· for the base's %s %s (%s)", complexTypeOwner(t), k.verb, typeDefinitionLabel(b), typeDefinitionLabel(within), name, k.relation, typeDefinitionLabel(base), k.limitation, k.clause)
+			"%s %s %s, but the ·locally declared type· %s of element %s within the %s is not ·validly substitutable· for the base's %s %s (%s)", complexTypeOwner(t), k.verb, typeDefinitionLabel(b), typeDefinitionLabel(within), name.Display(), k.relation, typeDefinitionLabel(base), k.limitation, k.clause)
 	}
 	return nil
 }
