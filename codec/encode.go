@@ -651,21 +651,17 @@ func (e *encoder) atom(st *xsd.SimpleType, v reflect.Value, path, subject string
 	return e.str(st, v.String(), path, subject)
 }
 
-// list returns the text Append writes for v, a []V holding a value of the
-// list type s.st, at path, subject naming s.st: the canonical
-// representations of its items, each written by atom under s.item at path
-// "[i]", in order, separated by single U+0020 (Datatypes §2.4.1.2
-// list-datatypes), the empty list, nil or empty, as "". An item that is ""
-// or holds #x9, #xA, #xD or #x20, after its own checks pass, is item 6 of
-// [Append]'s doc, since no list item's lexical representation holds white
-// space (§2.4.1.2), nor is empty: the list's whiteSpace collapse (§4.3.6)
-// leaves no empty token. Where every item is clean, the written text is held
-// to s.st's own facets by value.ValidateLexical: a pattern facet's
-// rejection is item 7 where the list holds an item, all of them xs:double
-// values, another lexical of which may match it (§2.1's note), and every
-// other rejection is item 6, an xs:string-primitive item being its own
-// whiteSpace-normalized form, so that every lexical of the value normalizes
-// to the text written.
+// list returns the text the package doc's "# What encodes" states for v, a
+// []V holding a value of the list type s.st, at path, subject naming s.st,
+// each item written by atom under s.item at path "[i]", and records the item
+// 6 and 7 errors [Append]'s doc states for a list: an item's white space is
+// checked once its own checks pass, and s.st's own facets, through
+// value.ValidateLexical, once every item has. An empty item is no list item
+// since the list's whiteSpace collapse (Datatypes §4.3.6) leaves no empty
+// token. A pattern rejection is item 7 only over xs:double items, another
+// lexical of which may match (§2.1's note): an xs:string-primitive item is
+// its own whiteSpace-normalized form, and the empty list has no other
+// lexical, so every lexical of such a value normalizes to the text written.
 func (e *encoder) list(s encodeSimple, v reflect.Value, path, subject string) (string, error) {
 	isubject := itemSubject(subject, s.item)
 	items := make([]string, v.Len())

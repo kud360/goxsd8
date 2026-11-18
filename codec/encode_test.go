@@ -900,14 +900,11 @@ func sameValue(a, b reflect.Value) bool {
 	}
 }
 
-// TestAppendLists pins the list form "# What encodes" states: a list's
-// items' canonical representations in order, separated by single spaces, an
-// xs:double item as 1.0E0, and the empty list, nil or empty, as no content,
-// <x/> in an element and a="" in an attribute; an optional attribute's nil
-// writes no attribute. A list particle occurring once writes one element for
-// its []V, an optional one none for nil and one for an empty list, and a
-// repeated one one element per item of its [][]V. Each document is accepted
-// by validate and decoded back into the value, nil and empty one value.
+// TestAppendLists pins the list form "# What encodes" states, the empty list
+// as nil and as an empty slice, in an element, a required and an optional
+// attribute, and a particle occurring once ([]V), optionally (*[]V) and
+// repeatedly ([][]V). Each document is accepted by validate and decoded back
+// into the value, nil and empty one value.
 func TestAppendLists(t *testing.T) {
 	schema := schemaOf(t, encodeListSchema)
 	dbl := func(f ...float64) *[]float64 { return &f }
