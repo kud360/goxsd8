@@ -29,6 +29,20 @@ const usage = `goxsd8 — XSD 1.1 schema compilation, instance validation, and c
 
 Usage:
 
+  goxsd8 parse [-q] [-v] [-strict] <schema.xsd>...
+  goxsd8 validate [-q] [-v] [-strict] [-format xml|json|ber] [-no-hints] -schema <schema.xsd> [-schema <s2>]... <instance>...
+  goxsd8 gen [-q] [-v] [-strict] -schema <schema.xsd> -out <dir> [-schema <s2> -out <d2>]...
+
+  Flags, each with the subcommands taking it, its topic and the paragraph
+  stating it:
+    -q         parse validate gen  informational output  Flags common to all subcommands
+    -v         parse validate gen  logging               Flags common to all subcommands
+    -strict    parse validate gen  schemaLocation skips  Flags common to all subcommands
+    -format    validate            source format         validate below
+    -no-hints  validate            instance hints        validate below
+    -schema    validate gen        schema documents      validate and gen below
+    -out       gen                 output directory      gen below
+
   Exit codes. A run over several arguments exits with its highest-ranked
   outcome: rank, not number, orders the codes.
 
@@ -50,7 +64,7 @@ Usage:
               the command line's shape (an unknown or misplaced flag, a
               missing argument, a bad flag value, an instance whose
               name gives no format) is followed by usage: and that
-              subcommand's synopsis line below, then by the line
+              subcommand's synopsis line above, then by the line
               pointing to this help. Every other line a subcommand
               charges 2 (an I/O fault, gen's refusal of an -out, an
               instance in the ber format) is printed alone.
@@ -125,7 +139,7 @@ Usage:
     goxsd8: <message>
         a diagnosis charged before any subcommand is known;
     usage: <synopsis>
-        a subcommand's synopsis line below, under a diagnosis of its
+        a subcommand's synopsis line above, under a diagnosis of its
         command line's shape;
     ` + helpPointer + `
         the line pointing to this help, under every usage diagnosis;
@@ -149,7 +163,7 @@ Usage:
   lines repeat wherever the same command line runs, and a schema's
   lines carry the running host's own path.
 
-  goxsd8 parse [-q] [-v] [-strict] <schema.xsd>...
+  parse:
       For example: goxsd8 parse order.xsd items.xsd prints two
       summaries, one per argument: two compilations, not one set.
       Compile each schema argument and print its summary on stdout:
@@ -219,7 +233,7 @@ Usage:
       a line saying no document was read for it and to add a
       schemaLocation to it, since each argument is compiled alone.
 
-  goxsd8 validate [-q] [-v] [-strict] [-format xml|json|ber] [-no-hints] -schema <schema.xsd> [-schema <s2>]... <instance>...
+  validate:
       For example: goxsd8 validate -schema order.xsd order.xml order.json
       Assess instances against the compiled set; every schema needs
       its own -schema, and every positional argument is an instance.
@@ -415,7 +429,7 @@ Usage:
       only the notes and -v logging stated above, and both streams
       are empty without them.
 
-  goxsd8 gen [-q] [-v] [-strict] -schema <schema.xsd> -out <dir> [-schema <s2> -out <d2>]...
+  gen:
       For example: goxsd8 gen -schema order.xsd -out ./gen/order
       Generate Go types, one package per -schema/-out pair: the file
       xsd_gen.go in the -out directory, which is created with its
