@@ -68,8 +68,8 @@ func roundTrip[T any](t *testing.T, schema *xsd.Schema, name xsd.QName, v T, wan
 // unless CheckAppend[T]'s answer for schema and name agrees with it: a
 // non-nil CheckAppend error is Append's, of equal Error text and equal class
 // (staticClass), and a nil one leaves Append nil, an item 6 or item 7 error
-// or a fault of backend: nil, a plain error without item 2's or item 3's
-// text, or item 7's decline.
+// or a fault of backend: nil, item 6's ErrInvalidValue error, a plain error
+// without item 2's or item 3's text, or item 7's decline.
 func appendChecked[T any](t *testing.T, dst []byte, schema *xsd.Schema, backend value.Backend, name xsd.QName, v T) ([]byte, error) {
 	t.Helper()
 	out, err := Append(dst, schema, backend, name, v)
@@ -77,7 +77,7 @@ func appendChecked[T any](t *testing.T, dst []byte, schema *xsd.Schema, backend 
 	if checked == nil {
 		class := staticClass(err)
 		static := class == "plain" && (strings.HasPrefix(err.Error(), "codec: no top-level element declaration") || strings.Contains(err.Error(), "{abstract} true"))
-		if static || err != nil && class != "plain" && class != "decline "+constructNoCanonical.name() {
+		if static || err != nil && class != "plain" && class != "invalid" && class != "decline "+constructNoCanonical.name() {
 			t.Errorf("CheckAppend = nil, but Append returned %v, %s", err, class)
 		}
 		return out, err
@@ -90,7 +90,8 @@ func appendChecked[T any](t *testing.T, dst []byte, schema *xsd.Schema, backend 
 
 // staticClass names err's class among Append's errors: "decline " and its
 // construct for a *DeclineError, "mismatch" for an error errors.Is reports as
-// ErrTypeMismatch, "plain" for every other non-nil error, and "nil".
+// ErrTypeMismatch, "invalid" for one errors.Is reports as ErrInvalidValue,
+// "plain" for every other non-nil error, and "nil".
 func staticClass(err error) string {
 	var d *DeclineError
 	switch {
@@ -100,6 +101,8 @@ func staticClass(err error) string {
 		return "decline " + d.Construct().String()
 	case errors.Is(err, ErrTypeMismatch):
 		return "mismatch"
+	case errors.Is(err, ErrInvalidValue):
+		return "invalid"
 	}
 	return "plain"
 }
@@ -380,18 +383,39 @@ func TestAppendDst(t *testing.T) {
 }
 
 // plainError fails t unless err, Append's or CheckAppend's, is a plain
-// error of Append's doc: no *DeclineError, wrapping neither
-// ErrTypeMismatch nor errors.ErrUnsupported, whose text holds each of
-// want.
+// error of Append's doc: no *DeclineError, wrapping none of
+// ErrTypeMismatch, ErrInvalidValue and errors.ErrUnsupported, whose text
+// holds each of want.
 func plainError(t *testing.T, err error, want ...string) {
 	t.Helper()
 	if err == nil {
 		t.Fatal("no error returned, want a plain error")
 	}
 	var d *DeclineError
-	if errors.As(err, &d) || errors.Is(err, errors.ErrUnsupported) || errors.Is(err, ErrTypeMismatch) {
+	if errors.As(err, &d) || errors.Is(err, errors.ErrUnsupported) || errors.Is(err, ErrTypeMismatch) || errors.Is(err, ErrInvalidValue) {
 		t.Fatalf("returned %v, want a plain error", err)
 	}
+	holds(t, err, want...)
+}
+
+// invalidValue fails t unless err is item 6's error of Append's doc: one
+// errors.Is reports as ErrInvalidValue, no *DeclineError, wrapping neither
+// ErrTypeMismatch nor errors.ErrUnsupported, whose text holds each of want.
+func invalidValue(t *testing.T, err error, want ...string) {
+	t.Helper()
+	if err == nil {
+		t.Fatal("no error returned, want ErrInvalidValue")
+	}
+	var d *DeclineError
+	if !errors.Is(err, ErrInvalidValue) || errors.As(err, &d) || errors.Is(err, errors.ErrUnsupported) || errors.Is(err, ErrTypeMismatch) {
+		t.Fatalf("returned %v, want an error errors.Is reports as ErrInvalidValue alone", err)
+	}
+	holds(t, err, want...)
+}
+
+// holds fails t unless err's text holds each of want.
+func holds(t *testing.T, err error, want ...string) {
+	t.Helper()
 	for _, w := range want {
 		if !strings.Contains(err.Error(), w) {
 			t.Errorf("error %q does not hold %q", err, w)
@@ -464,10 +488,11 @@ func TestCheckAppend(t *testing.T) {
 	_, _ = appendChecked(t, nil, orderSchema, strict.New(), name, (*order.Order)(nil))
 }
 
-// TestAppendInvalidValues pins item 6 of Append's doc: a plain error naming
-// the Go path, for each value no valid document holds, and for the first in
-// document order, an element's attributes before its content, though an
-// item 7 value comes earlier.
+// TestAppendInvalidValues pins item 6 of Append's doc: an error errors.Is
+// reports as ErrInvalidValue naming the Go path, for each value no valid
+// document holds, a backend Parse's verdict carrying no xsderr rule among
+// them, and for the first in document order, an element's attributes before
+// its content, though an item 7 value comes earlier.
 func TestAppendInvalidValues(t *testing.T) {
 	schema := schemaOf(t, shapesSchema+encodeSchema)
 	tail := func(s shapes) shapes {
@@ -493,12 +518,12 @@ func TestAppendInvalidValues(t *testing.T) {
 	} {
 		t.Run(row.name, func(t *testing.T) {
 			_, err := appendChecked(t, nil, schema, strict.New(), rootName, row.v)
-			plainError(t, err, row.want...)
+			invalidValue(t, err, row.want...)
 		})
 	}
 	t.Run("a token attribute not collapsed", func(t *testing.T) {
 		_, err := appendChecked(t, nil, schema, strict.New(), sname("ta"), tokenAttr{T: "  a  b"})
-		plainError(t, err, "tokenAttr.T", `form "a b"`)
+		invalidValue(t, err, "tokenAttr.T", `form "a b"`)
 	})
 	t.Run("a repeated field outside its occurrence", func(t *testing.T) {
 		readme := filepath.Join("..", "testdata", "readme")
@@ -507,11 +532,11 @@ func TestAppendInvalidValues(t *testing.T) {
 			t.Fatal(err)
 		}
 		_, err = appendChecked(t, nil, orderSchema, strict.New(), xsd.QName{Space: "urn:o", Local: "order"}, order.Order{})
-		plainError(t, err, "Order.Item holds 0 items", "1..unbounded")
+		invalidValue(t, err, "Order.Item holds 0 items", "1..unbounded")
 	})
 	t.Run("an xs:double a bound rejects", func(t *testing.T) {
 		_, err := appendChecked(t, nil, schema, strict.New(), sname("np"), dblRoot(1))
-		plainError(t, err, "dblRoot", "{urn:s}nonPositive")
+		invalidValue(t, err, "dblRoot", "{urn:s}nonPositive")
 		if rule, _ := xsderr.RuleOf(err); rule != "cvc-maxInclusive-valid" {
 			t.Errorf("rule %q, want cvc-maxInclusive-valid", rule)
 		}
@@ -519,7 +544,7 @@ func TestAppendInvalidValues(t *testing.T) {
 	for _, f := range []float64{math.NaN(), math.Inf(-1)} {
 		t.Run("an xs:double "+doubleLexical(f)+" a pattern rejects", func(t *testing.T) {
 			_, err := appendChecked(t, nil, schema, strict.New(), sname("p"), dblRoot(f))
-			plainError(t, err, "dblRoot", "{urn:s}one")
+			invalidValue(t, err, "dblRoot", "{urn:s}one")
 			if !strings.HasPrefix(err.Error(), "codec: Append: dblRoot holds ") {
 				t.Errorf("error %q does not open with the path dblRoot", err)
 			}
@@ -530,23 +555,30 @@ func TestAppendInvalidValues(t *testing.T) {
 	}
 	t.Run("an xs:string a pattern rejects", func(t *testing.T) {
 		_, err := appendChecked(t, nil, schema, strict.New(), sname("oa"), strRoot("b"))
-		plainError(t, err, "strRoot", "{urn:s}onlyA")
+		invalidValue(t, err, "strRoot", "{urn:s}onlyA")
 		if rule, _ := xsderr.RuleOf(err); rule != "cvc-pattern-valid" {
 			t.Errorf("rule %q, want cvc-pattern-valid", rule)
 		}
 	})
+	t.Run("an xs:string a backend's Parse rejects", func(t *testing.T) {
+		_, err := appendChecked(t, nil, schema, stringRejectingParse, sname("str"), strRoot("v"))
+		invalidValue(t, err, "strRoot", "rejected")
+		if rule, ok := xsderr.RuleOf(err); ok {
+			t.Errorf("rule %q, want none", rule)
+		}
+	})
 	t.Run("item 6 after an earlier item 7", func(t *testing.T) {
 		_, err := appendChecked(t, nil, schema, strict.New(), sname("order2"), order2{P: 1, Np: 1})
-		plainError(t, err, "order2.Np")
+		invalidValue(t, err, "order2.Np")
 	})
 	t.Run("an attribute's item 6 before its element's", func(t *testing.T) {
 		_, err := appendChecked(t, nil, schema, strict.New(), sname("order2"), order2{P: 1, Np: 1, Oa: str("b")})
-		plainError(t, err, "order2.Oa")
+		invalidValue(t, err, "order2.Oa")
 	})
 }
 
-// The backends of TestAppendNoCanonical and TestAppendBackendFaults, each
-// strict's with one mapping replaced.
+// The backends of TestAppendNoCanonical, TestAppendBackendFaults and
+// TestAppendInvalidValues, each strict's with one mapping replaced.
 var (
 	doubleNilCanonical = overDatatype("double", func(base value.Mapping) value.Mapping {
 		return value.Mapping{Parse: base.Parse}
@@ -564,6 +596,9 @@ var (
 		return value.Mapping{Parse: base.Parse, Canonical: func(value.Value) (string, error) { return "", errors.New("no canonical form") }}
 	})
 	doubleRejectingParse = overDatatype("double", func(base value.Mapping) value.Mapping {
+		return value.Mapping{Parse: func(string, value.Context) (value.Value, error) { return nil, errors.New("rejected") }, Canonical: base.Canonical}
+	})
+	stringRejectingParse = overDatatype("string", func(base value.Mapping) value.Mapping {
 		return value.Mapping{Parse: func(string, value.Context) (value.Value, error) { return nil, errors.New("rejected") }, Canonical: base.Canonical}
 	})
 )
@@ -617,7 +652,8 @@ func TestAppendNoCanonical(t *testing.T) {
 }
 
 // TestAppendBackendFaults pins the backend faults of Append's doc: a plain
-// error naming the value's Go path.
+// error naming the value's Go path, the xs:string one plain though it wraps
+// value's *xsderr.Error.
 func TestAppendBackendFaults(t *testing.T) {
 	schema := schemaOf(t, encodeSchema)
 	_, err := appendChecked(t, nil, schema, doubleRejectingParse, sname("d"), dblRoot(1))
@@ -625,17 +661,20 @@ func TestAppendBackendFaults(t *testing.T) {
 	_, err = appendChecked(t, nil, schema, noMappings{}, sname("d"), dblRoot(1))
 	plainError(t, err, "dblRoot", "no mapping governing")
 	_, err = appendChecked(t, nil, schema, noMappings{}, sname("str"), strRoot("v"))
-	plainError(t, err, "strRoot")
+	plainError(t, err, "strRoot", "the backend cannot assess")
+	if rule, _ := xsderr.RuleOf(err); rule != "cvc-datatype-valid" {
+		t.Errorf("rule %q, want cvc-datatype-valid", rule)
+	}
 }
 
 // asDecline fails t unless err is an Append or CheckAppend *DeclineError that wraps
-// errors.ErrUnsupported, charged to no Loc, whose text opens with prefix,
-// and returns it.
+// errors.ErrUnsupported and not ErrInvalidValue, charged to no Loc, whose
+// text opens with prefix, and returns it.
 func asDecline(t *testing.T, err error, prefix string) *DeclineError {
 	t.Helper()
 	var d *DeclineError
-	if !errors.As(err, &d) || !errors.Is(err, errors.ErrUnsupported) {
-		t.Fatalf("returned %v, want a *DeclineError wrapping errors.ErrUnsupported", err)
+	if !errors.As(err, &d) || !errors.Is(err, errors.ErrUnsupported) || errors.Is(err, ErrInvalidValue) {
+		t.Fatalf("returned %v, want a *DeclineError wrapping errors.ErrUnsupported and not ErrInvalidValue", err)
 	}
 	if !strings.HasPrefix(err.Error(), prefix) || !strings.HasSuffix(err.Error(), "; an encoder refusal, not a schema or value fault") {
 		t.Errorf("decline %q does not open with %q and close as an encoder refusal", err, prefix)
@@ -1001,7 +1040,7 @@ func TestAppendListInvalid(t *testing.T) {
 	} {
 		t.Run(row.name, func(t *testing.T) {
 			_, err := appendChecked(t, nil, schema, strict.New(), sname(row.elem), row.v)
-			plainError(t, err, row.want...)
+			invalidValue(t, err, row.want...)
 			if !strings.HasPrefix(err.Error(), "codec: Append: "+row.want[0]+" holds ") {
 				t.Errorf("error %q does not open with the path %s", err, row.want[0])
 			}
@@ -1012,7 +1051,7 @@ func TestAppendListInvalid(t *testing.T) {
 	}
 	t.Run("a double list's empty value its pattern rejects", func(t *testing.T) {
 		_, err := appendChecked(t, nil, schema, strict.New(), sname("dp"), dblList{})
-		plainError(t, err, "dblList", "{urn:s}twoDoubles")
+		invalidValue(t, err, "dblList", "{urn:s}twoDoubles")
 		if rule, _ := xsderr.RuleOf(err); rule != "cvc-pattern-valid" {
 			t.Errorf("rule %q, want cvc-pattern-valid", rule)
 		}
@@ -1027,7 +1066,7 @@ func TestAppendListInvalid(t *testing.T) {
 	} {
 		t.Run(row.name, func(t *testing.T) {
 			_, err := appendChecked(t, nil, schema, strict.New(), sname("dp"), row.v)
-			plainError(t, err, "dblList", "{urn:s}twoDoubles")
+			invalidValue(t, err, "dblList", "{urn:s}twoDoubles")
 			if !strings.HasPrefix(err.Error(), "codec: Append: dblList holds ") {
 				t.Errorf("error %q does not open with the path dblList", err)
 			}
