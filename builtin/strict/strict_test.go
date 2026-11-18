@@ -247,6 +247,7 @@ func TestStringAnyURIChar(t *testing.T) {
 			if tc.offset < 0 {
 				if err != nil {
 					t.Errorf("xs:%s %s: Parse(%q): unexpected error %v", typ, tc.name, tc.lexical, err)
+					continue
 				}
 				if got, cerr := m.Canonical(v); cerr != nil || got != tc.lexical {
 					t.Errorf("xs:%s %s: Canonical(Parse(%q)) = %q, %v, want identity", typ, tc.name, tc.lexical, got, cerr)
@@ -255,7 +256,7 @@ func TestStringAnyURIChar(t *testing.T) {
 			}
 			var xe *xsderr.Error
 			if !errors.As(err, &xe) {
-				t.Errorf("xs:%s %s: Parse(%q) = %v, %v, want an *xsderr.Error", typ, tc.name, tc.lexical, v, err)
+				t.Errorf("xs:%s %s: Parse(%q) = %#v, %v, want an *xsderr.Error", typ, tc.name, tc.lexical, v, err)
 				continue
 			}
 			if xe.Rule != "cvc-datatype-valid" {
