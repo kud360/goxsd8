@@ -1,7 +1,12 @@
 // Package codec is the dataset codec: schema-directed decode of instance data
 // into Go values, and encode of Go values back out in canonical form for the
 // slice "# What encodes" states; the allocation-frugal decode paths
-// "# Planned decode paths" names are not yet built.
+// "# Planned decode paths" names are not yet built. [Decode] assesses the
+// instance itself, so no separate validate call precedes it; its doc states
+// how. [Append] leaves assessing the document it outputs to the caller, as its
+// doc states. Given a value from Decode that it encodes without error, Append
+// writes that value, not the input's bytes: "# What encodes" and [Append]'s
+// doc state the written form.
 //
 // # Decode
 //
