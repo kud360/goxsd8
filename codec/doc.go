@@ -3,10 +3,10 @@
 // slice "# What encodes" states; the allocation-frugal decode paths
 // "# Planned decode paths" names are not yet built. [Decode] assesses the
 // instance itself, so no separate validate call precedes it; its doc states
-// how. [Append] leaves assessing the document it outputs to the caller, as its
-// doc states. Given a value from Decode that it encodes without error, Append
-// writes that value, not the input's bytes: "# What encodes" and [Append]'s
-// doc state the written form.
+// how. [Append] makes no validate call on the document it writes; its doc
+// states how a caller gets a verdict on it. Given a value from Decode that it
+// encodes without error, Append writes that value, not the input's bytes:
+// [Append]'s doc and "# What encodes" state the written form.
 //
 // # Decode
 //
