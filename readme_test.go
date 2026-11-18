@@ -165,6 +165,162 @@ func stdout(t *testing.T, f func()) string {
 	return string(out)
 }
 
+// TestReadmeProgram holds testdata/readme/main.go, the file README's Library
+// section names as its program, to the program readmeProgram joins from
+// README's blocks. Each row then edits the file or README in one place and
+// must make readmeProgram report the mismatch.
+func TestReadmeProgram(t *testing.T) {
+	readme, err := os.ReadFile("README.md")
+	if err != nil {
+		t.Fatal(err)
+	}
+	file, err := os.ReadFile(filepath.Join("testdata", "readme", "main.go"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := readmeProgram(string(readme), string(file)); err != nil {
+		t.Fatal(err)
+	}
+	for _, c := range []struct {
+		name, old, new string
+		inReadme       bool
+	}{
+		{name: "first block", old: `"builtin types:"`, new: `"builtin type:"`},
+		{name: "validate block", old: "fmt.Println(res.Standing())", new: "fmt.Print(res.Standing())"},
+		{name: "jsonsrc block", old: `jsonsrc.WithURI("order.json")`, new: `jsonsrc.WithURI("order.jsn")`},
+		{name: "codegen block", old: `Dir: "gen/order"`, new: `Dir: "gen/ordr"`},
+		{name: "closing brace", old: "\tos.Exit(1)\n\t}\n}\n", new: "\tos.Exit(1)\n\t}\n"},
+		{name: "README fence", old: "fmt.Println(res.Standing())", new: "fmt.Print(res.Standing())", inReadme: true},
+	} {
+		r, f := string(readme), string(file)
+		target := &f
+		if c.inReadme {
+			target = &r
+		}
+		if n := strings.Count(*target, c.old); n != 1 {
+			t.Fatalf("%s: %q occurs %d times, want once", c.name, c.old, n)
+		}
+		*target = strings.Replace(*target, c.old, c.new, 1)
+		if readmeProgram(r, f) == nil {
+			t.Errorf("%s: readmeProgram reports no mismatch after %q became %q", c.name, c.old, c.new)
+		}
+	}
+}
+
+// readmeProgram reports where file departs from the program README's blocks
+// give, or nil when it reads as they do. The blocks are the go fence that
+// opens "package main" and the three go fences after it, in README order. The
+// program is the first block with its closing "}" line moved to the end and
+// its import declaration replaced by file's, then each later block, preceded
+// by a blank line and with one tab before each non-empty line. file's import
+// declaration is the one span it does not hold: README adds those imports in
+// prose, and `go vet ./testdata/readme` checks them.
+func readmeProgram(readme, file string) error {
+	var fences []string
+	var body strings.Builder
+	open := false
+	for line := range strings.Lines(readme) {
+		switch {
+		case !open && line == "```go\n":
+			open = true
+			body.Reset()
+		case open && line == "```\n":
+			open = false
+			fences = append(fences, body.String())
+		case open:
+			body.WriteString(line)
+		}
+	}
+	first := -1
+	for i, f := range fences {
+		if !strings.HasPrefix(f, "package main\n") {
+			continue
+		}
+		if first >= 0 {
+			return errors.New("README.md has two go fences that open package main")
+		}
+		first = i
+	}
+	if first < 0 || first+4 > len(fences) {
+		return errors.New("README.md has no go fence that opens package main with three go fences after it")
+	}
+	head, err := withImports(fences[first], file)
+	if err != nil {
+		return err
+	}
+	head, ok := strings.CutSuffix(head, "}\n")
+	if !ok {
+		return errors.New(`README.md's go fence that opens package main does not end in "}"`)
+	}
+	var want strings.Builder
+	want.WriteString(head)
+	for _, block := range fences[first+1 : first+4] {
+		want.WriteString("\n")
+		for line := range strings.Lines(block) {
+			if line != "\n" {
+				want.WriteString("\t")
+			}
+			want.WriteString(line)
+		}
+	}
+	want.WriteString("}\n")
+	return firstDifference(file, want.String())
+}
+
+// withImports returns src with its one import declaration replaced by file's.
+func withImports(src, file string) (string, error) {
+	start, end, err := importDecl(src)
+	if err != nil {
+		return "", fmt.Errorf("README.md's go fence that opens package main: %w", err)
+	}
+	fstart, fend, err := importDecl(file)
+	if err != nil {
+		return "", fmt.Errorf("testdata/readme/main.go: %w", err)
+	}
+	return src[:start] + file[fstart:fend] + src[end:], nil
+}
+
+// importDecl returns the byte offsets of src's one import declaration.
+func importDecl(src string) (start, end int, err error) {
+	fset := token.NewFileSet()
+	f, err := goparser.ParseFile(fset, "", src, goparser.ImportsOnly)
+	if err != nil {
+		return 0, 0, err
+	}
+	var decls []ast.Decl
+	for _, d := range f.Decls {
+		if g, ok := d.(*ast.GenDecl); ok && g.Tok == token.IMPORT {
+			decls = append(decls, g)
+		}
+	}
+	if len(decls) != 1 {
+		return 0, 0, fmt.Errorf("%d import declarations, want 1", len(decls))
+	}
+	return fset.Position(decls[0].Pos()).Offset, fset.Position(decls[0].End()).Offset, nil
+}
+
+// firstDifference reports the first line at which testdata/readme/main.go's
+// text got departs from want, or nil when they are equal.
+func firstDifference(got, want string) error {
+	if got == want {
+		return nil
+	}
+	g, w := strings.SplitAfter(got, "\n"), strings.SplitAfter(want, "\n")
+	for i := range max(len(g), len(w)) {
+		var gl, wl string
+		if i < len(g) {
+			gl = g[i]
+		}
+		if i < len(w) {
+			wl = w[i]
+		}
+		if gl != wl {
+			return fmt.Errorf("testdata/readme/main.go:%d reads %q, README.md's blocks give %q", i+1, gl, wl)
+		}
+	}
+	return errors.New("testdata/readme/main.go departs from README.md's blocks")
+}
+
 // TestReadmeSharedDocument holds README's two-target gen example: note.xsd,
 // ship.xsd and bill.xsd byte for byte as fences' bodies, and the
 // gen/bill/xsd_gen.go README shows to the file Generate writes for the run

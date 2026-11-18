@@ -175,7 +175,10 @@ go get github.com/kud360/goxsd8@main            # in YOUR module, not this check
 
 The program below and its continuations open the CLI section's files, so run
 it with `testdata/readme/` as the working directory. That directory sits
-inside the goxsd8 module, so the program needs no `go get`:
+inside the goxsd8 module, so the program needs no `go get`.
+`testdata/readme/main.go` is the program as one file, the block below and
+its three continuations joined with every import they add: run it from the
+checkout root as `cd testdata/readme && go run .`.
 
 ```go
 package main
@@ -308,14 +311,7 @@ if err != nil {
 // when a violation was charged, Undecided when none was but a check was left
 // unperformed or res.Err() stopped the walk, and NotProvenInvalid otherwise,
 // which means not proven invalid rather than valid.
-switch res.Standing() {
-case validate.Charged:
-	fmt.Println("charged")
-case validate.Undecided:
-	fmt.Println("undecided")
-case validate.NotProvenInvalid:
-	fmt.Println("not proven invalid")
-}
+fmt.Println(res.Standing())
 for _, e := range res.Violations() { // []*xsderr.Error, in the order Result.Violations states
 	fmt.Println(e)
 }
@@ -323,7 +319,7 @@ if err := res.Err(); err != nil { // the assessment is INCOMPLETE, not invalid
 	fmt.Println(err)
 }
 for _, u := range res.Unevaluated() { // no String method: this is the CLI's form
-	fmt.Println(fmt.Sprintf("%s: [%s] undecided: %s", u.Loc(), u.Rule(), u.Msg()))
+	fmt.Printf("%s: [%s] undecided: %s\n", u.Loc(), u.Rule(), u.Msg())
 }
 ```
 
@@ -438,7 +434,9 @@ Once `Generate` has written `gen/order`, a program in the same module with
 `schema` and `backend` as above decodes `order.xml` into it, importing
 `github.com/kud360/goxsd8/codec`, `github.com/kud360/goxsd8/xsderr` and the
 generated package, whose import path is the one `Target.Dir`'s doc derives
-for the `Dir` that `Generate` was given:
+for the `Dir` that `Generate` was given, so
+`github.com/kud360/goxsd8/testdata/readme/gen/order` for the program run in
+`testdata/readme/`:
 
 ```go
 data, err := os.ReadFile("order.xml")

@@ -17,4 +17,7 @@ flip.
 `readme/` holds the files the top-level README's CLI and Library examples
 name, which those examples run from. README also shows `order.xsd`,
 `order.json` and `twice.json`, and `TestReadmeFixtures` in the root
-`readme_test.go` holds each file to the text README shows for it.
+`readme_test.go` holds each file to the text README shows for it;
+`TestReadmeSharedDocument` holds `note.xsd`, `ship.xsd` and `bill.xsd` the
+same way. `main.go` is the Library program README's Library section names,
+and `TestReadmeProgram` holds it to README's blocks.
