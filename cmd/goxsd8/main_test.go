@@ -810,6 +810,41 @@ func TestUsageCoversContract(t *testing.T) {
 	}
 }
 
+// TestUsageRoutesOffBox checks that every go doc pointer usage prints carries a
+// route an installed binary can follow: go doc needs the module source, so
+// each pointer, before the next one, says so and names a page under the
+// project URL instead (#1089). It also checks that one pointer names the CLI's
+// own package doc, the fuller contract -help does not print whole.
+func TestUsageRoutesOffBox(t *testing.T) {
+	const (
+		pointer = "go doc github.com/kud360/goxsd8"
+		needs   = "which needs the module source"
+		instead = "without it, read "
+		project = "https://github.com/kud360/goxsd8"
+		self    = pointer + "/cmd/goxsd8,"
+	)
+	folded := strings.Join(strings.Fields(usage), " ")
+	if all, ours := strings.Count(folded, "go doc "), strings.Count(folded, pointer); all != ours {
+		t.Errorf("usage names %d go doc invocations and %d of them under %s; want every one there", all, ours, project)
+	}
+	if !strings.Contains(folded, self) {
+		t.Errorf("usage does not point at the CLI's own package doc (%q)", self)
+	}
+	segments := strings.Split(folded, pointer)[1:]
+	for i, seg := range segments {
+		n := strings.Index(seg, needs)
+		if n < 0 {
+			t.Errorf("go doc pointer %d of %d (%q) does not say %q", i+1, len(segments), pointer+seg[:min(len(seg), 40)], needs)
+			continue
+		}
+		rest := seg[n:]
+		r := strings.Index(rest, instead)
+		if r < 0 || !strings.Contains(rest[r:], project) {
+			t.Errorf("go doc pointer %d of %d (%q) names no %q route under %s", i+1, len(segments), pointer+seg[:min(len(seg), 40)], instead, project)
+		}
+	}
+}
+
 // usageFirstScreen is how many lines of usage, -help's stdout as TestRunHelp
 // pins it, the synopses and the flag index stand within (#3866).
 const usageFirstScreen = 30

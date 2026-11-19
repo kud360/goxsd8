@@ -177,7 +177,10 @@
 //	    with — so the line is that message as the component wrote it:
 //	    no <loc>: prefix, no [rule], its location named inside the
 //	    sentence. A document whose root is not <xs:schema> and a
-//	    rejection in the s4s-grammar class (xsderr/doc.go) are
+//	    rejection in the s4s-grammar class (go doc
+//	    github.com/kud360/goxsd8/xsderr, under # The s4s-grammar class,
+//	    which needs the module source; without it, read the package
+//	    comment at https://github.com/kud360/goxsd8/tree/main/xsderr) are
 //	    examples, not the whole class: an I/O fault reading a document
 //	    the argument REFERENCES prints the same way and is charged 1
 //	    like a rejection, though nothing about the schema was decided.
@@ -265,8 +268,11 @@
 //	    being jsonsrc's line and byte column. A violation's message
 //	    can end with a clause jsonsrc appends naming a member in JSON
 //	    terms, such as ; JSON member "<key>" ... object expected; go
-//	    doc github.com/kud360/goxsd8/validate/jsonsrc Validate lists
-//	    each clause and the one charge it goes on. Malformed JSON,
+//	    doc github.com/kud360/goxsd8/validate/jsonsrc Validate, which
+//	    needs the module source (without it, read func Validate's
+//	    comment at
+//	    https://github.com/kud360/goxsd8/tree/main/validate/jsonsrc),
+//	    lists each clause and the one charge it goes on. Malformed JSON,
 //	    content after the top-level object, an I/O fault reading the
 //	    instance once it is open and an input jsonsrc's mapping
 //	    declines all reach jsonsrc's one error channel, and validate
@@ -360,8 +366,11 @@
 //	    prints no undecided line. Whether a {test} is evaluated turns
 //	    on the XPath forms it uses, so one assertion can be decided in
 //	    one spelling and declined in another; go doc
-//	    github.com/kud360/goxsd8/xpath lists which forms are evaluated,
-//	    under # Forms each entry point evaluates. An XPath function
+//	    github.com/kud360/goxsd8/xpath, which needs the module source
+//	    (without it, read the package comment at
+//	    https://github.com/kud360/goxsd8/tree/main/xpath), lists which
+//	    forms are evaluated, under # Forms each entry point evaluates.
+//	    An XPath function
 //	    this build does not evaluate is not a kind of its own but a
 //	    cause inside assertions and the governing type definition, not
 //	    necessarily only those. The authority on
@@ -506,6 +515,13 @@
 // subcommand it qualifies, or that the first argument is a flag and no
 // subcommand was given.
 //
+// This usage is not the whole CLI contract: the argument vocabulary, a
+// worked diagnostic line with its wrapped cause, and the CLI's
+// relationship to the library complete it in go doc
+// github.com/kud360/goxsd8/cmd/goxsd8, which needs the module source;
+// without it, read the package comment at
+// https://github.com/kud360/goxsd8/tree/main/cmd/goxsd8.
+//
 // # Argument vocabulary
 //
 // The subcommand vocabulary is exactly parse, validate and gen, matched
@@ -535,18 +551,17 @@
 // -- -help are help requests, exit 0, so an argument spelled -h, -help or
 // --help is reached as ./-help even after --.
 //
-// Everything else is positional. The subcommand name comes first and the
-// common flags are its own, following it: goxsd8 parse -q a.xsd, never
-// goxsd8 -q parse a.xsd, which is the usage error that says so rather than
-// one claiming no subcommand was given. The usage above owns that a
-// subcommand's flags in turn precede its positional arguments; the flag
-// package stops at the first of them, so a flag-shaped token standing after
-// one is not read as a flag at all: it is reported as the misplacement it is,
-// exit 2, rather than taken for a path or silently dropped, so in goxsd8
-// parse a.xsd -q neither is -q a schema location nor is the summary it asked
-// to suppress printed. The exact spelling - is never a misplaced flag — it is
-// validate's standard-input instance argument — and a positional genuinely
-// named -q is spelled ./-q, as a file named - is.
+// Everything else is positional. The usage above owns that the subcommand
+// name comes first and its flags follow it, and that a subcommand's flags in
+// turn precede its positional arguments. A leading flag draws the diagnosis
+// telling the user to move it, not one claiming no subcommand was given. The
+// flag package stops at the first positional, so a flag-shaped token standing
+// after one is not read as a flag at all: it is reported as the misplacement
+// it is, exit 2, rather than taken for a path or silently dropped, so in
+// goxsd8 parse a.xsd -q neither is -q a schema location nor is the summary it
+// asked to suppress printed. The exact spelling - is never a misplaced flag —
+// it is validate's standard-input instance argument — and a positional
+// genuinely named -q is spelled ./-q, as a file named - is.
 //
 // A -- standing in a flag's place, before a subcommand's first positional, is
 // read by the flag package as the end of that subcommand's options: every

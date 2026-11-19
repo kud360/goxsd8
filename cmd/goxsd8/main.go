@@ -22,9 +22,8 @@ var subcommands = []string{"parse", "validate", "gen"}
 // subcommand syntax, the common flags and the implementation status. Edit it
 // here, then run go generate: doc.go's # Usage section is rendered from it
 // (docUsageBlock, main_test.go) and TestDocRendersUsage fails until the two
-// match. The rest of doc.go — the argument vocabulary, the diagnostic line
-// shape and the CLI's relationship to the library, none of which the help
-// path prints — is hand-written there.
+// match. The rest of doc.go, which usage's closing paragraph names, is
+// hand-written there.
 const usage = `goxsd8 — XSD 1.1 schema compilation, instance validation, and code generation.
 
 Usage:
@@ -203,7 +202,10 @@ Usage:
       with — so the line is that message as the component wrote it:
       no <loc>: prefix, no [rule], its location named inside the
       sentence. A document whose root is not <xs:schema> and a
-      rejection in the s4s-grammar class (xsderr/doc.go) are
+      rejection in the s4s-grammar class (go doc
+      github.com/kud360/goxsd8/xsderr, under # The s4s-grammar class,
+      which needs the module source; without it, read the package
+      comment at https://github.com/kud360/goxsd8/tree/main/xsderr) are
       examples, not the whole class: an I/O fault reading a document
       the argument REFERENCES prints the same way and is charged 1
       like a rejection, though nothing about the schema was decided.
@@ -291,8 +293,11 @@ Usage:
       being jsonsrc's line and byte column. A violation's message
       can end with a clause jsonsrc appends naming a member in JSON
       terms, such as ; JSON member "<key>" ... object expected; go
-      doc github.com/kud360/goxsd8/validate/jsonsrc Validate lists
-      each clause and the one charge it goes on. Malformed JSON,
+      doc github.com/kud360/goxsd8/validate/jsonsrc Validate, which
+      needs the module source (without it, read func Validate's
+      comment at
+      https://github.com/kud360/goxsd8/tree/main/validate/jsonsrc),
+      lists each clause and the one charge it goes on. Malformed JSON,
       content after the top-level object, an I/O fault reading the
       instance once it is open and an input jsonsrc's mapping
       declines all reach jsonsrc's one error channel, and validate
@@ -386,8 +391,11 @@ Usage:
       prints no undecided line. Whether a {test} is evaluated turns
       on the XPath forms it uses, so one assertion can be decided in
       one spelling and declined in another; go doc
-      github.com/kud360/goxsd8/xpath lists which forms are evaluated,
-      under # Forms each entry point evaluates. An XPath function
+      github.com/kud360/goxsd8/xpath, which needs the module source
+      (without it, read the package comment at
+      https://github.com/kud360/goxsd8/tree/main/xpath), lists which
+      forms are evaluated, under # Forms each entry point evaluates.
+      An XPath function
       this build does not evaluate is not a kind of its own but a
       cause inside assertions and the governing type definition, not
       necessarily only those. The authority on
@@ -531,6 +539,13 @@ stderr that the name is not one of the three, that a help flag is
 spelled with a value, as -help=<value>, that a flag stands before the
 subcommand it qualifies, or that the first argument is a flag and no
 subcommand was given.
+
+This usage is not the whole CLI contract: the argument vocabulary, a
+worked diagnostic line with its wrapped cause, and the CLI's
+relationship to the library complete it in go doc
+github.com/kud360/goxsd8/cmd/goxsd8, which needs the module source;
+without it, read the package comment at
+https://github.com/kud360/goxsd8/tree/main/cmd/goxsd8.
 `
 
 // synopsisIndent is the indent of a subcommand's synopsis line in usage. The
