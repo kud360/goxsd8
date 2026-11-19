@@ -114,6 +114,8 @@
 //	  classify differently, below an
 //	  unattributed element
 //	unresolved {type definition}          none: a permanent limitation
+//	string holding a non-Char or lone     none: a permanent limitation
+//	  surrogate escape
 //
 // # The validation root
 //
@@ -167,9 +169,11 @@
 //     lexical form, as below, is the attribute's [[normalized value]]
 //     unchanged: a JSON string holds no literal tab, LF or CR (RFC 8259 §7),
 //     and an escaped one is kept, as XML 1.0 §3.3.3 keeps a character
-//     reference. The empty string is an attribute with an empty value.
-//     Attribute members lead the object, before its first child member: the
-//     engine reads an element's attributes whole at its entry.
+//     reference. A string holding a character or a \u escape XML has no
+//     spelling of declines, as "Every decline" states. The empty string is
+//     an attribute with an empty value. Attribute members lead the object,
+//     before its first child member: the engine reads an element's attributes whole at
+//     its entry.
 //   - A member whose key neither carries, of a type with a wildcard, is named
 //     by a wildcard of the type where the key or the model fixes its namespace, and only
 //     there. Element kind: every element wildcard of the type — each Wildcard
@@ -220,8 +224,8 @@
 //   - A scalar value is the element's simple content: {"size":10} ≡
 //     <size>10</size>. Its lexical form is the token's source text — a
 //     number's own digits, never a float64 round trip; a string's decoded
-//     characters; true or false — and the empty string is no text at all,
-//     as in <size/>.
+//     characters, but where "Every decline" declines them; true or false —
+//     and the empty string is no text at all, as in <size/>.
 //   - A null value is an element whose one attribute is xsi:nil, in the XSI
 //     namespace with the lexical form true, and which has no [[children]]:
 //     {"qty":null} ≡ <qty xsi:nil="true"/>. The mapping reads no {nillable}:
@@ -393,10 +397,10 @@
 // itself an array, a key with no colon that is no NCName, a key whose colon
 // makes no QName, a prefix no "$xmlns" in scope binds, a repeated "$xmlns" or
 // "$type", a reserved member other than those two or at the top level, the
-// malformed "$xmlns" and "$type" values below, and the top-level shapes and
-// array root value that "The validation root" declines have no XML twin, and no
-// marker; the error for each names the spelling the mapping takes instead,
-// where one exists:
+// malformed "$xmlns" and "$type" values below, a string holding a non-Char or
+// a lone surrogate escape, and the top-level shapes and array root value that
+// "The validation root" declines have no XML twin, and no marker; the error for
+// each names the spelling the mapping takes instead, where one exists:
 //
 //   - GAP(jsonsrc): an unprefixed key two expanded names carry: among the
 //     top-level declarations at the root, among the declarations a type
@@ -491,7 +495,14 @@
 //     run of attributes settles, and members the candidate types classify
 //     differently where the engine withholds the selection, a {test} it
 //     reaches being outside its compiler's §3.12.6 subset;
-//   - a {type definition} that does not resolve, under an object value.
+//   - a {type definition} that does not resolve, under an object value;
+//   - a string — a key, a "$xmlns" prefix or namespace name, a "$type" or a
+//     scalar — holding a character that is no XML 1.0 [2] Char (§2.2),
+//     escaped or literal, or a lone surrogate escape (RFC 8259 §8.2), which
+//     names no character: no XML document holds either, as text or as a
+//     character reference (WFC: Legal Character), so no spelling exists. A
+//     string whose text is not UTF-8 is no decline: it is malformed, as
+//     [Validate]'s doc states.
 //
 // # Locations
 //

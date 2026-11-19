@@ -3,9 +3,9 @@
 // character-reference check in entity replacement text and its check of the
 // source of comments, processing instructions and directives, and
 // internal/xmltok's check of character data, CDATA sections and attribute
-// values, codec's check of each string value Append writes, and
+// values, codec's check of each string value Append writes,
 // builtin/strict's check of each xs:string and xs:anyURI lexical its Parse
-// maps.
+// maps, and validate/jsonsrc's check of each string token its walk reads.
 //
 // # Contract
 //
