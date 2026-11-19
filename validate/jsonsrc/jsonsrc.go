@@ -292,14 +292,31 @@ func newWalker(uri string, r io.Reader, schema validate.SchemaView, selected fun
 	return &walker{dec: dec, pos: pos, uri: uri, schema: schema, selected: selected, governance: governance, handed: handed, notes: map[noteAt]note{}}
 }
 
-// token pulls the next token and the location it starts at.
+// token pulls the next token and the location it starts at, as walker.read
+// does, and has walker.chars check a string token's characters.
+func (w *walker) token() (json.Token, xsderr.Loc, error) {
+	tok, loc, err := w.read()
+	if err != nil {
+		return nil, loc, err
+	}
+	if s, ok := tok.(string); ok {
+		if err := w.chars(s, loc); err != nil {
+			return nil, loc, err
+		}
+	}
+	return tok, loc, nil
+}
+
+// read pulls the next token and the location it starts at, checking no
+// string's characters: walker.end reads with it the token after the
+// top-level value, content its doc states is malformed whatever it holds.
 //
 // A token error is a fault reading the input when it is the error the
 // reader itself returned (positions.fault), and malformed JSON otherwise:
 // the reader's error decides, never the error's type, because the decoder
 // reports a document cut off mid-token as io.ErrUnexpectedEOF, no
 // *json.SyntaxError, and a reader can return any error at all (#2655).
-func (w *walker) token() (json.Token, xsderr.Loc, error) {
+func (w *walker) read() (json.Token, xsderr.Loc, error) {
 	off := w.dec.InputOffset()
 	tok, err := w.dec.Token()
 	line, col := w.pos.start(off)
@@ -312,11 +329,6 @@ func (w *walker) token() (json.Token, xsderr.Loc, error) {
 	}
 	if err != nil {
 		return nil, loc, malformed(loc, "malformed JSON", err)
-	}
-	if s, ok := tok.(string); ok {
-		if err := w.chars(s, loc); err != nil {
-			return nil, loc, err
-		}
 	}
 	return tok, loc, nil
 }
@@ -3759,7 +3771,7 @@ func (w *walker) end(root *element) error {
 	if key, ok := tok.(string); ok {
 		return w.declinef(loc, "the top-level object has a second member %q; its one member names the validation root", key)
 	}
-	_, loc, err = w.token()
+	_, loc, err = w.read()
 	if errors.Is(err, io.EOF) {
 		return nil
 	}

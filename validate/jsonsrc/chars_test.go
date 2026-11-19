@@ -63,6 +63,10 @@ func loneDecline(esc string) string {
 // notUTF8 is the message of walker.chars' malformed error.
 const notUTF8 = "malformed JSON: a string's source text is not UTF-8 (RFC 8259 §8.1)"
 
+// follows is the message of walker.end's malformed error for content after
+// the top-level object.
+const follows = "content follows the top-level object"
+
 // TestStringChars pins walker.chars over every string token walker.token
 // reads — content, an attribute member's value, a key at the root, under a
 // lax or skip wildcard, nested and under a "$type", a "$xmlns" prefix and
@@ -76,9 +80,11 @@ const notUTF8 = "malformed JSON: a string's source text is not UTF-8 (RFC 8259 �
 // source scan reads, the others being answered off the decoded string alone;
 // the last row, read whole, pins the scan to the token, a scan to the end of
 // what the decoder has read declining the U+0000 of the string after it at
-// the U+FFFD's location. Error is the whole of err.Error(), the location and
-// message prefix included; an empty one asks for a result standing
-// NotProvenInvalid with no violation and nothing unevaluated.
+// the U+FFFD's location. A string after the top-level object, which walker.end reads
+// with walker.read, is the content that follows it, whatever its characters or bytes.
+// Error is the whole of err.Error(), the location and message prefix included; an empty
+// one asks for a result standing NotProvenInvalid with no violation and nothing
+// unevaluated.
 func TestStringChars(t *testing.T) {
 	v := validatorOver(t, charsSchema)
 	lax := validatorOver(t, laxExtensionSchema)
@@ -144,6 +150,9 @@ func TestStringChars(t *testing.T) {
 		{"the other escapes beside an escaped U+FFFD", v, `{"r":{"m":"\"\\\/\u0041\u00e9\ufffd"}}`, 0, ""},
 		{"escaped backslash before the text ud800, beside an escaped U+FFFD", v, `{"r":{"m":"a\\ud800b\ufffd"}}`, 0, ""},
 		{"a non-Char in the string after an escaped U+FFFD", v, `{"r":{"m":"\ufffd","s":"\u0000"}}`, Decline, at(24, nonCharDecline(0))},
+		{"a non-Char string after the top-level object", v, `{"r":{}} "\u0000"`, Malformed, at(10, follows)},
+		{"a lone surrogate string after the top-level object", v, `{"r":{}} "\ud800"`, Malformed, at(10, follows)},
+		{"a string not UTF-8 after the top-level object", v, "{\"r\":{}} \"\xff\"", Malformed, at(10, follows)},
 	} {
 		for _, rd := range []struct {
 			name string
