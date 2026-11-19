@@ -8,6 +8,23 @@ import (
 	"github.com/kud360/goxsd8/xsd"
 )
 
+// TestDeclineNamesByDisplay pins that typeName and valueNode.String, which name
+// a component in declines, render an XSD-namespace name as [xsd.QName.Display]
+// renders it.
+func TestDeclineNamesByDisplay(t *testing.T) {
+	schema := parseString(t, `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"/>`)
+	td, ok := schema.Type(xsd.QName{Space: xsd.XMLSchemaNS, Local: "int"})
+	if !ok {
+		t.Fatal("the schema resolves no xs:int")
+	}
+	if got, want := typeName(td), "xs:int"; got != want {
+		t.Errorf("typeName(xs:int) = %q, want %q", got, want)
+	}
+	if got, want := (valueNode{space: typeSpace, name: anyTypeName}).String(), "complex type xs:anyType"; got != want {
+		t.Errorf("valueNode.String() = %q, want %q", got, want)
+	}
+}
+
 // TestScopeKeyBranchStep pins the "|" nestedKey writes before a {type table}
 // branch step: a branch step and an element step whose {target namespace} is
 // the branch's slot and whose {name} is its local name (both legal, the
