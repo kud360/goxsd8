@@ -314,12 +314,14 @@
 // xsi:nil's is unqualified, has no value constraint and is of a simple type
 // that encodes, into V or *V. A simple type encodes when it is atomic, has
 // no assertions facet, and has {primitive type definition} xs:string, other
-// than a type derived from xs:ID, xs:IDREF or xs:ENTITY, into string, or
-// xs:double, into float64, or is a list whose {item type definition} encodes
-// and which has no assertions facet, its own or inherited, into []V, V its
-// item's Go type. Every other construct is a [*DeclineError], item 4 of
-// Append's doc, a list's item declining by the item's construct, and so is a
-// value with no canonical representation, item 7.
+// than a type derived from xs:ID, xs:IDREF or xs:ENTITY, into string,
+// xs:double, into float64, xs:decimal, into the Go type codegen's package doc
+// "# Simple types" gives it, or xs:boolean, into bool, or is a list whose
+// {item type definition} encodes and which has no assertions facet, its own
+// or inherited, into []V, V its item's Go type. Every other construct is a
+// [*DeclineError], item 4 of Append's doc, a list's item declining by the
+// item's construct, and so is a value with no canonical representation, item
+// 7.
 //
 // The document Append writes has no XML declaration, so it is XML 1.0 in
 // UTF-8, and no white space between tags. It binds namespaces by default

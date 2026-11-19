@@ -534,21 +534,21 @@ func TestDeclineErrorTextSimpleRoot(t *testing.T) {
 
 // TestDeclineErrorTextUnlocated pins [DeclineError.Error]'s location rule
 // through Append: a simple type named in the XML Schema namespace with the
-// zero Loc, xs:integer as the document element's type and a particle's, and xs:boolean
-// as an attribute's, is named with no Loc, and a user restriction of xs:integer
+// zero Loc, xs:date as the document element's type and a particle's, and xs:anyURI
+// as an attribute's, is named with no Loc, and a user restriction of xs:date
 // keeps its schema Loc.
 func TestDeclineErrorTextUnlocated(t *testing.T) {
-	schema := schemaOf(t, `<xs:element name="r" type="xs:integer"/>`+
-		`<xs:element name="p"><xs:complexType><xs:sequence><xs:element name="a" type="xs:integer"/></xs:sequence></xs:complexType></xs:element>`+
-		`<xs:element name="at"><xs:complexType><xs:attribute name="a" type="xs:boolean"/></xs:complexType></xs:element>`+
-		`<xs:simpleType name="st"><xs:restriction base="xs:integer"/></xs:simpleType><xs:element name="u" type="s:st"/>`)
-	const prefix = "codec does not encode an atomic simple type whose primitive is other than xs:string or xs:double: "
+	schema := schemaOf(t, `<xs:element name="r" type="xs:date"/>`+
+		`<xs:element name="p"><xs:complexType><xs:sequence><xs:element name="a" type="xs:date"/></xs:sequence></xs:complexType></xs:element>`+
+		`<xs:element name="at"><xs:complexType><xs:attribute name="a" type="xs:anyURI"/></xs:complexType></xs:element>`+
+		`<xs:simpleType name="st"><xs:restriction base="xs:date"/></xs:simpleType><xs:element name="u" type="s:st"/>`)
+	const prefix = "codec does not encode an atomic simple type whose primitive is other than xs:string, xs:double, xs:decimal or xs:boolean: "
 	const tail = "; an encoder refusal, not a schema or value fault"
 	for _, row := range []struct{ elem, want string }{
-		{"r", "simple type {http://www.w3.org/2001/XMLSchema}integer"},
-		{"p", "simple type {http://www.w3.org/2001/XMLSchema}integer"},
-		{"at", "simple type {http://www.w3.org/2001/XMLSchema}boolean"},
-		{"u", "simple type {urn:s}st defined at s.xsd:1:465"},
+		{"r", "simple type {http://www.w3.org/2001/XMLSchema}date"},
+		{"p", "simple type {http://www.w3.org/2001/XMLSchema}date"},
+		{"at", "simple type {http://www.w3.org/2001/XMLSchema}anyURI"},
+		{"u", "simple type {urn:s}st defined at s.xsd:1:458"},
 	} {
 		_, err := appendChecked(t, nil, schema, strict.New(), sname(row.elem), struct{}{})
 		if want := prefix + row.want + tail; err == nil || err.Error() != want {

@@ -199,7 +199,7 @@ var constructNames = [...]string{
 	constructComplexAssertions:  "a complex type with {assertions}",
 	constructSpecialType:        "xs:anySimpleType or xs:anyAtomicType as a simple type",
 	constructUnion:              "a union simple type",
-	constructEncodePrimitive:    "an atomic simple type whose primitive is other than xs:string or xs:double",
+	constructEncodePrimitive:    "an atomic simple type whose primitive is other than xs:string, xs:double, xs:decimal or xs:boolean",
 	constructIDType:             "a simple type derived from xs:ID, xs:IDREF or xs:ENTITY",
 	constructAssertions:         "a simple type with an assertions facet",
 	constructNoCanonical:        "a value with no canonical representation",
