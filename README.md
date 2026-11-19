@@ -83,9 +83,8 @@ adds the default one, so put `go env GOBIN` there instead when it is set.
 This block is a **contract**, exactly like the Library one below, and it
 lives in one place: `goxsd8 -help` prints its usage block, and
 **`go doc github.com/kud360/goxsd8/cmd/goxsd8` renders the whole contract** —
-that usage block plus what `-help` does not print: the argument vocabulary,
-the shape of a diagnostic line and the CLI's relationship to the library. The
-invocations below are worked examples of it.
+that usage block plus the rest its closing paragraph names. The invocations
+below are worked examples of it.
 
 Every file these examples and the Library ones name is committed in
 `testdata/readme/`, and README shows only some of them, so the examples run
