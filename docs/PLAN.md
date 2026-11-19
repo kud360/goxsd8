@@ -57,7 +57,7 @@ one — appending is what this replaces.
 
 | first decline | cases | held by |
 |---|---:|---|
-| an atomic simple type whose primitive is other than xs:string or xs:double | 8604 | #3896 (decimal and boolean, 4686; `ready`, Tier A row 1) and #3902 (the rest, 3918; `blocked` on #3896) |
+| an atomic simple type whose primitive is other than xs:string, xs:double, xs:decimal or xs:boolean | 3919 | #3902 (every other primitive; `blocked` on #3896, which landed decimal and boolean) |
 | a construct codegen holds in a sealed interface: a choice, a flattened particle or a substitution group | 917 | #3930 (`blocked` on #3902; filed this pass) |
 | an `<element ref>` particle | 554 | unfiled |
 | a wildcard particle | 336 | unfiled |
