@@ -982,8 +982,9 @@ func sameValue(a, b reflect.Value) bool {
 // TestAppendLists pins the list form "# What encodes" states, the empty list
 // as nil and as an empty slice, in an element, a required and an optional
 // attribute, and a particle occurring once ([]V), optionally (*[]V) and
-// repeatedly ([][]V). Each document is accepted by validate and decoded back
-// into the value, nil and empty one value.
+// repeatedly ([][]V), and xs:string items holding white space other than S
+// written as themselves. Each document is accepted by validate and decoded
+// back into the value, nil and empty one value.
 func TestAppendLists(t *testing.T) {
 	schema := schemaOf(t, encodeListSchema)
 	dbl := func(f ...float64) *[]float64 { return &f }
@@ -993,6 +994,11 @@ func TestAppendLists(t *testing.T) {
 	t.Run("token and string items", func(t *testing.T) {
 		roundTrip(t, schema, sname("tl"), strList{"a", "b"}, `<tl xmlns="urn:s">a b</tl>`, sameLists[strList])
 		roundTrip(t, schema, sname("sl"), strList{"<&>"}, `<sl xmlns="urn:s">&lt;&amp;&gt;</sl>`, sameLists[strList])
+	})
+	t.Run("string items holding white space S is not", func(t *testing.T) {
+		// U+00A0 and U+0085 are unicode.IsSpace's and no list separator,
+		// which is XML's S (Datatypes §2.4.1.2, cvc-datatype-valid 2.2).
+		roundTrip(t, schema, sname("sl"), strList{"a b", "\u0085"}, "<sl xmlns=\"urn:s\">a b \u0085</sl>", sameLists[strList])
 	})
 	t.Run("double element", func(t *testing.T) {
 		roundTrip(t, schema, sname("dl"), dblList{1, -0.5, math.Inf(1)}, `<dl xmlns="urn:s">1.0E0 -5.0E-1 INF</dl>`, sameLists[dblList])
