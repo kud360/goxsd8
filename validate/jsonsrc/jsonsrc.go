@@ -323,11 +323,11 @@ func (w *walker) token() (json.Token, xsderr.Loc, error) {
 
 // chars checks s, the string token at loc that walker.token just read —
 // a key, a "$xmlns" prefix or namespace name, a "$type" or content — for a
-// character XML 1.0 has no spelling of. It reads the token's source text,
-// pending up to the decoder's offset, only where s holds a non-Char or a
-// U+FFFD: json.Decoder decodes a lone surrogate escape and a byte that is not
-// UTF-8 to U+FFFD alike, as it does a U+FFFD the source spells, so only the
-// source tells them apart.
+// character or a lone surrogate escape XML 1.0 has no spelling of. It reads
+// the token's source text, pending up to the decoder's offset, only where s
+// holds a non-Char or a U+FFFD: json.Decoder decodes a lone surrogate escape
+// and a byte that is not UTF-8 to U+FFFD alike, as it does a U+FFFD the
+// source spells, so only the source tells them apart.
 //
 // It DECLINES the string the package doc's "Every decline" lists for its
 // characters, naming the first such character in document order, and returns

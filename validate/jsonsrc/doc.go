@@ -169,10 +169,10 @@
 //     lexical form, as below, is the attribute's [[normalized value]]
 //     unchanged: a JSON string holds no literal tab, LF or CR (RFC 8259 §7),
 //     and an escaped one is kept, as XML 1.0 §3.3.3 keeps a character
-//     reference. A string some of whose characters XML has no spelling of
-//     declines, as "Every decline" states. The empty string is an attribute
-//     with an empty value. Attribute members lead the object, before its
-//     first child member: the engine reads an element's attributes whole at
+//     reference. A string holding a character or a \u escape XML has no
+//     spelling of declines, as "Every decline" states. The empty string is
+//     an attribute with an empty value. Attribute members lead the object,
+//     before its first child member: the engine reads an element's attributes whole at
 //     its entry.
 //   - A member whose key neither carries, of a type with a wildcard, is named
 //     by a wildcard of the type where the key or the model fixes its namespace, and only
