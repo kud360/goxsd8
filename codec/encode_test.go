@@ -1046,8 +1046,9 @@ func TestAppendLists(t *testing.T) {
 }
 
 // TestAppendListInvalid pins the list cases of items 6 and 7 of Append's doc,
-// under item types that admit the item, an item's own check answering first
-// and an item's own item 7 named at the item's path.
+// under item types that admit the item, an item's own check answering first,
+// before a backend fault of the list's own, and an item's own item 7 named at
+// the item's path.
 func TestAppendListInvalid(t *testing.T) {
 	schema := schemaOf(t, encodeListSchema)
 	for _, row := range []struct {
@@ -1082,6 +1083,16 @@ func TestAppendListInvalid(t *testing.T) {
 			}
 		})
 	}
+	t.Run("a dirty item under a backend that cannot assess the list", func(t *testing.T) {
+		// The item's own error answers, not the list-level fault of a
+		// backend with no mapping: s.st's facets are checked only once every
+		// item is clean.
+		_, err := appendChecked(t, nil, schema, noMappings{}, sname("sl"), strList{"\x00"})
+		invalidValue(t, err, "strList[0]", "XML 1.0 Char")
+		if !strings.HasPrefix(err.Error(), "codec: Append: strList[0] holds ") {
+			t.Errorf("error %q does not open with the path strList[0]", err)
+		}
+	})
 	t.Run("a double list's empty value its pattern rejects", func(t *testing.T) {
 		_, err := appendChecked(t, nil, schema, strict.New(), sname("dp"), dblList{})
 		invalidValue(t, err, "dblList", "{urn:s}twoDoubles")
