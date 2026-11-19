@@ -7,7 +7,10 @@ import (
 	"io"
 	"slices"
 	"strings"
+	"unicode/utf16"
+	"unicode/utf8"
 
+	"github.com/kud360/goxsd8/internal/xmlchar"
 	"github.com/kud360/goxsd8/internal/xmlname"
 	"github.com/kud360/goxsd8/internal/xmlqname"
 	"github.com/kud360/goxsd8/validate"
@@ -310,7 +313,116 @@ func (w *walker) token() (json.Token, xsderr.Loc, error) {
 	if err != nil {
 		return nil, loc, malformed(loc, "malformed JSON", err)
 	}
+	if s, ok := tok.(string); ok {
+		if err := w.chars(s, loc); err != nil {
+			return nil, loc, err
+		}
+	}
 	return tok, loc, nil
+}
+
+// chars checks s, the string token at loc that walker.token just read —
+// a key, a "$xmlns" prefix or namespace name, a "$type" or content — for a
+// character XML 1.0 has no spelling of. It reads the token's source text,
+// pending up to the decoder's offset, only where s holds a non-Char or a
+// U+FFFD: json.Decoder decodes a lone surrogate escape and a byte that is not
+// UTF-8 to U+FFFD alike, as it does a U+FFFD the source spells, so only the
+// source tells them apart.
+//
+// It DECLINES a string holding a character that is no XML 1.0 [2] Char
+// (xml.md §2.2), escaped or literal, or a lone surrogate escape, which names
+// no character (RFC 8259 §8.2): no XML document holds either, as text or as a
+// character reference (WFC: Legal Character), so neither has an XML twin, and
+// no marker tracks it. A string whose source is not UTF-8 is malformed (RFC
+// 8259 §8.1), its error of class [Malformed] wherever in it a decline's
+// character also is. Each is located at the token.
+func (w *walker) chars(s string, loc xsderr.Loc) error {
+	if xmlchar.IndexNonChar(s) < 0 && !strings.ContainsRune(s, utf8.RuneError) {
+		return nil
+	}
+	src := w.pos.pending[:w.dec.InputOffset()-w.pos.base]
+	if !utf8.Valid(src) {
+		return malformed(loc, "malformed JSON: a string's source text is not UTF-8 (RFC 8259 §8.1)", nil)
+	}
+	esc, r := nonChar(src)
+	if esc != "" {
+		return w.declinef(loc, "the string holds the lone surrogate escape %s, which names no character, and so no XML 1.0 Char (XML 1.0 §2.2 [2]): no XML document holds one", esc)
+	}
+	if r >= 0 {
+		return w.declinef(loc, "the string holds U+%04X, which is no XML 1.0 Char (XML 1.0 §2.2 [2]): no XML document holds it, as text or as a character reference", r)
+	}
+	return nil
+}
+
+// nonChar finds the first character in src, a string token's valid UTF-8
+// source text between and including its quotes, that is no XML 1.0 [2] Char:
+// esc is the escape where it is a lone surrogate one — a \u escape of
+// U+D800-U+DFFF that is not a high surrogate's immediately followed by a low
+// surrogate's, the pair encoding/json decodes as one character — and r the
+// character otherwise, escaped or literal. It returns "", -1 where every
+// character is a Char. A backslash opens an escape only where the one before
+// it does not escape it, so "\\ud800" is a backslash and the text ud800.
+func nonChar(src []byte) (esc string, r rune) {
+	for i := 1; i < len(src)-1; {
+		c, n := utf8.DecodeRune(src[i:])
+		if c == '\\' {
+			c, n = unescape(src[i:])
+		}
+		if utf16.IsSurrogate(c) {
+			return string(src[i : i+n]), -1
+		}
+		if !xmlchar.IsChar(c) {
+			return "", c
+		}
+		i += n
+	}
+	return "", -1
+}
+
+// unescape decodes the escape opening b, which the decoder has already found
+// grammatical (RFC 8259 §7), and returns its character and length: a high
+// surrogate's \u escape followed by a low surrogate's is the pair's one
+// character, and any other \u escape the code unit it names, a surrogate
+// included.
+func unescape(b []byte) (rune, int) {
+	switch b[1] {
+	case 'u':
+		hi := hex4(b[2:6])
+		if len(b) >= 12 && b[6] == '\\' && b[7] == 'u' {
+			if r := utf16.DecodeRune(hi, hex4(b[8:12])); r != utf8.RuneError {
+				return r, 12
+			}
+		}
+		return hi, 6
+	case 'b':
+		return '\b', 2
+	case 'f':
+		return '\f', 2
+	case 'n':
+		return '\n', 2
+	case 'r':
+		return '\r', 2
+	case 't':
+		return '\t', 2
+	}
+	return rune(b[1]), 2
+}
+
+// hex4 is the code unit the four hexadecimal digits of a \u escape name.
+func hex4(b []byte) rune {
+	var r rune
+	for _, c := range b {
+		r <<= 4
+		switch {
+		case c >= '0' && c <= '9':
+			r |= rune(c - '0')
+		case c >= 'a' && c <= 'f':
+			r |= rune(c - 'a' + 10)
+		default:
+			r |= rune(c - 'A' + 10)
+		}
+	}
+	return r
 }
 
 // fail latches err as the walk's fault, keeping the first one met.
