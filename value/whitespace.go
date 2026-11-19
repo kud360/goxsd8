@@ -32,7 +32,10 @@ const (
 // not the union's ·normalized value·, which its ·active basic member·'s
 // whiteSpace decides.
 //
-// r resolves st's {base type definition} chain. An error is a fault of st,
+// r resolves st's {base type definition} chain. For st drawn from a finalized
+// [*xsd.Schema], pass that Schema as r: it is an [xsd.TypeResolver], and its
+// [xsd.Schema.Type] returns the [xsd.TypeDefinition] the caller asserts to
+// [*xsd.SimpleType] to obtain st. An error is a fault of st,
 // never a verdict about lexical, so [IsDatatypeVerdict] reports false for it:
 // the [xsderr.RuleComponentInvariant] fault [IsFacetPrecondition] reports, for
 // any other type that has no whiteSpace {value} in force that is exactly one of
