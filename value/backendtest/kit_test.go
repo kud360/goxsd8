@@ -91,41 +91,36 @@ func buggyBoolean() value.Mapping {
 	}
 }
 
-// recordT is a recording reporter so tests can assert whether run reported any
-// failure without failing the enclosing test.
-type recordT struct{ errs int }
+// recordT is a recording reporter: it keeps each failure's formatted text, so
+// tests can assert on what run reported, or how many failures (len(msgs)),
+// without failing the enclosing test.
+type recordT struct{ msgs []string }
 
-func (r *recordT) Errorf(string, ...any) { r.errs++ }
-func (r *recordT) Helper()               {}
+func (r *recordT) Errorf(format string, args ...any) {
+	r.msgs = append(r.msgs, fmt.Sprintf(format, args...))
+}
+func (r *recordT) Helper() {}
 
 func TestRunCatchesBackends(t *testing.T) {
 	good := mapBackend{booleanQName(): correctBoolean()}
 	var rg recordT
 	run(&rg, good, othersAbsent())
-	if rg.errs != 0 {
-		t.Fatalf("correct backend: run reported %d failures, want 0", rg.errs)
+	if len(rg.msgs) != 0 {
+		t.Fatalf("correct backend: run reported %d failures, want 0", len(rg.msgs))
 	}
 
 	bad := mapBackend{booleanQName(): buggyBoolean()}
 	var rb recordT
 	run(&rb, bad, othersAbsent())
-	if rb.errs == 0 {
+	if len(rb.msgs) == 0 {
 		t.Fatal("buggy backend: run reported 0 failures, want > 0")
 	}
 }
 
-// textT is a reporter recording each failure's formatted text.
-type textT struct{ msgs []string }
-
-func (r *textT) Errorf(format string, args ...any) {
-	r.msgs = append(r.msgs, fmt.Sprintf(format, args...))
-}
-func (r *textT) Helper() {}
-
 // TestRunNamesTypesByDisplay pins that a failure names its type as
 // [xsd.QName.Display] renders it.
 func TestRunNamesTypesByDisplay(t *testing.T) {
-	var r textT
+	var r recordT
 	run(&r, mapBackend{}, nil)
 	want := "backendtest: xs:boolean has vectors but the backend does not map it (declare it Absent if intended)"
 	if !slices.Contains(r.msgs, want) {
@@ -138,15 +133,15 @@ func TestRunAbsentSkipsUnmapped(t *testing.T) {
 
 	var r1 recordT
 	run(&r1, empty, nil)
-	if r1.errs == 0 {
+	if len(r1.msgs) == 0 {
 		t.Fatal("unmapped boolean without Absent: run reported 0 failures, want > 0")
 	}
 
 	var r2 recordT
 	allCohort := append([]xsd.QName{booleanQName(), decimalQName(), stringQName(), floatQName(), doubleQName(), hexBinaryQName(), base64BinaryQName(), durationQName(), dateTimeQName()}, gregorianQNames()...)
 	run(&r2, empty, []Option{Absent(allCohort...)})
-	if r2.errs != 0 {
-		t.Fatalf("Absent(all cohort): run reported %d failures, want 0", r2.errs)
+	if len(r2.msgs) != 0 {
+		t.Fatalf("Absent(all cohort): run reported %d failures, want 0", len(r2.msgs))
 	}
 }
 
@@ -207,14 +202,14 @@ func TestCheckCapabilitiesCatchesMissing(t *testing.T) {
 
 	var miss recordT
 	checkCapabilities(&miss, tv, bare)
-	if miss.errs == 0 {
+	if len(miss.msgs) == 0 {
 		t.Fatal("bare value missing value.Ordered: checkCapabilities reported 0 failures, want > 0")
 	}
 
 	var ok recordT
 	checkCapabilities(&ok, tv, ordered)
-	if ok.errs != 0 {
-		t.Fatalf("ordered value: checkCapabilities reported %d failures, want 0", ok.errs)
+	if len(ok.msgs) != 0 {
+		t.Fatalf("ordered value: checkCapabilities reported %d failures, want 0", len(ok.msgs))
 	}
 }
 
@@ -229,7 +224,7 @@ func TestCheckCapabilitiesUnclassifiedFacet(t *testing.T) {
 	pass := value.Mapping{Parse: func(string, value.Context) (value.Value, error) { return orderedVal{}, nil }}
 	var r recordT
 	checkCapabilities(&r, tv, pass)
-	if r.errs == 0 {
+	if len(r.msgs) == 0 {
 		t.Fatal("unclassified facet: checkCapabilities reported 0 failures, want > 0")
 	}
 }
