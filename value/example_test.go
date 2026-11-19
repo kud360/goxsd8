@@ -2,11 +2,14 @@ package value_test
 
 import (
 	"fmt"
+	"io"
 	"strings"
 	"time"
 
 	"github.com/kud360/goxsd8/builtin"
 	"github.com/kud360/goxsd8/builtin/strict"
+	"github.com/kud360/goxsd8/loader"
+	"github.com/kud360/goxsd8/parser"
 	"github.com/kud360/goxsd8/value"
 	"github.com/kud360/goxsd8/xpath"
 	"github.com/kud360/goxsd8/xsd"
@@ -111,6 +114,50 @@ func ExampleValidateLexical() {
 	// Output:
 	// mapped directly: false
 	// value: 42
+}
+
+// ExampleApplyWhiteSpace normalizes a literal under a type looked up in a
+// compiled schema. The type restricts xs:token, so it inherits the collapse
+// whiteSpace facet.
+func ExampleApplyWhiteSpace() {
+	const doc = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" targetNamespace="urn:ex">
+  <xs:simpleType name="code">
+    <xs:restriction base="xs:token">
+      <xs:maxLength value="16"/>
+    </xs:restriction>
+  </xs:simpleType>
+</xs:schema>`
+	resolve := loader.ResolverFunc(func(_, location string) (io.ReadCloser, string, error) {
+		if location != "ex.xsd" {
+			return nil, "", fmt.Errorf("no document %q", location)
+		}
+		return io.NopCloser(strings.NewReader(doc)), location, nil
+	})
+	schema, err := parser.Parse("ex.xsd", parser.WithResolver(resolve))
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+	def, ok := schema.Type(xsd.QName{Space: "urn:ex", Local: "code"})
+	if !ok {
+		fmt.Println("no type {urn:ex}code")
+		return
+	}
+	code, ok := def.(*xsd.SimpleType)
+	if !ok {
+		fmt.Println("{urn:ex}code is not a simple type")
+		return
+	}
+
+	normalized, err := value.ApplyWhiteSpace(schema, code, "  a \t\n b  ")
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+	fmt.Printf("%q\n", normalized)
+
+	// Output:
+	// "a b"
 }
 
 // evenOnly is an evaluator that knows one {test}, `$value mod 2 = 0`, and
