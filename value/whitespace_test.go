@@ -36,6 +36,39 @@ func TestCollapseKeepsNonAsciiSpace(t *testing.T) {
 	}
 }
 
+// TestNormalizeWhiteSpaceKeepsBytes pins that replace and collapse act on
+// #x9/#xA/#xD/#x20 alone and keep every other byte as written (§4.3.6
+// rf-whiteSpace). The invalid-UTF-8 rows fail under a rune-decoding scan such
+// as strings.Map, which substitutes U+FFFD; the valid multi-byte rows fail
+// under a scan that also rewrites a byte ≥ 0x80.
+func TestNormalizeWhiteSpaceKeepsBytes(t *testing.T) {
+	const (
+		nbsp  = " "
+		plane = "\U0001F600" // supplementary plane, four bytes
+		fffd  = "�"
+	)
+	rows := []struct {
+		name string
+		in   string
+		mode whiteSpace
+		want string
+	}{
+		{"invalid byte under replace", "a\xff\tb", replaceWS, "a\xff b"},
+		{"invalid byte under collapse", " a\xffb ", collapseWS, "a\xffb"},
+		{"truncated sequence under replace", "a\xe2\x82", replaceWS, "a\xe2\x82"},
+		{"NBSP under replace", nbsp + "a\t" + nbsp, replaceWS, nbsp + "a " + nbsp},
+		{"supplementary plane under replace", plane + "\t", replaceWS, plane + " "},
+		{"supplementary plane under collapse", " " + plane + "  " + plane + " ", collapseWS, plane + " " + plane},
+		{"literal U+FFFD under replace", fffd + "\n", replaceWS, fffd + " "},
+		{"literal U+FFFD under collapse", " " + fffd + " ", collapseWS, fffd},
+	}
+	for _, row := range rows {
+		if got := normalizeWhiteSpace(row.in, row.mode); got != row.want {
+			t.Errorf("%s: normalizeWhiteSpace(%q, %d) = %q, want %q", row.name, row.in, row.mode, got, row.want)
+		}
+	}
+}
+
 // TestNormalizeWhiteSpaceInvalidModePanics confirms the zero-value sentinel is a
 // caught bug, not a silent identity.
 func TestNormalizeWhiteSpaceInvalidModePanics(t *testing.T) {
