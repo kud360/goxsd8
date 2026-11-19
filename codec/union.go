@@ -64,7 +64,7 @@ func memberSubject(subject string, m *xsd.SimpleType) string {
 	if m.Name() == (xsd.QName{}) {
 		return fmt.Sprintf("%s, through the union's anonymous basic member%s", subject, definedAt(", a type ", m))
 	}
-	return fmt.Sprintf("%s, through the union's basic member %s%s", subject, m.Name(), definedAt(", a type ", m))
+	return fmt.Sprintf("%s, through the union's basic member %s%s", subject, m.Name().Display(), definedAt(", a type ", m))
 }
 
 // memberLabel names m, a basic member of the union union names, for a stage
@@ -72,7 +72,7 @@ func memberSubject(subject string, m *xsd.SimpleType) string {
 // for an anonymous m that phrase alone.
 func memberLabel(m *xsd.SimpleType, union string) string {
 	if m.Name() != (xsd.QName{}) {
-		return m.Name().String() + ", a basic member of " + union
+		return m.Name().Display() + ", a basic member of " + union
 	}
 	return "a basic member of " + union
 }

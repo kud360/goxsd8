@@ -697,7 +697,7 @@ func TestAppendBackendFaults(t *testing.T) {
 	_, err = appendChecked(t, nil, schema, doubleRejectingCanonical, sname("d"), dblRoot(1))
 	plainError(t, err, "dblRoot", "canonical representation", `"1.0E0"`)
 	_, err = appendChecked(t, nil, schema, doubleSpacedCanonical, sname("d"), dblRoot(1))
-	plainError(t, err, `codec: Append: dblRoot holds 1, of simple type {http://www.w3.org/2001/XMLSchema}double, whose canonical representation " 1.0E0" the backend's Parse rejects: rejects collapsed canonical`)
+	plainError(t, err, `codec: Append: dblRoot holds 1, of simple type xs:double, whose canonical representation " 1.0E0" the backend's Parse rejects: rejects collapsed canonical`)
 	_, err = appendChecked(t, nil, schema, noMappings{}, sname("d"), dblRoot(1))
 	plainError(t, err, "dblRoot", "no mapping governing")
 	_, err = appendChecked(t, nil, schema, noMappings{}, sname("str"), strRoot("v"))
@@ -1073,7 +1073,7 @@ func TestAppendListInvalid(t *testing.T) {
 		rule       xsderr.Rule
 		want       []string
 	}{
-		{"an item holding a space", "sl", strList{"a", "b c"}, "", []string{"strList[1]", `"b c"`, "empty or holds white space", "through the list type's {item type definition} {http://www.w3.org/2001/XMLSchema}string"}},
+		{"an item holding a space", "sl", strList{"a", "b c"}, "", []string{"strList[1]", `"b c"`, "empty or holds white space", "through the list type's {item type definition} xs:string"}},
 		{"an empty item", "sl", strList{""}, "", []string{"strList[0]", `""`, "empty or holds white space"}},
 		{"an item holding TAB", "sl", strList{"a\tb"}, "", []string{"strList[0]", "empty or holds white space"}},
 		{"an item holding LF", "sl", strList{"a\nb"}, "", []string{"strList[0]", "empty or holds white space"}},
@@ -1081,7 +1081,7 @@ func TestAppendListInvalid(t *testing.T) {
 		{"a token item holding a space", "tl", strList{"a b"}, "", []string{"strList[0]", "empty or holds white space"}},
 		{"a non-Char item", "sl", strList{"a", "\x00"}, "", []string{"strList[1]", "XML 1.0 Char"}},
 		{"a token item not collapsed", "tl", strList{" a"}, "", []string{"strList[0]", `whiteSpace-normalized form "a"`}},
-		{"an empty NMTOKENS", "nm", strList{}, "cvc-minLength-valid", []string{"strList", "{http://www.w3.org/2001/XMLSchema}NMTOKENS"}},
+		{"an empty NMTOKENS", "nm", strList{}, "cvc-minLength-valid", []string{"strList", "xs:NMTOKENS"}},
 		{"length", "pair", strList{"a"}, "cvc-length-valid", []string{"strList", `written "a"`, "{urn:s}pair"}},
 		{"minLength", "some", nil, "cvc-minLength-valid", []string{"strList", "{urn:s}some"}},
 		{"maxLength", "single", strList{"a", "b"}, "cvc-maxLength-valid", []string{"strList", `written "a b"`}},
@@ -1167,7 +1167,7 @@ func TestAppendListDeclineSubject(t *testing.T) {
 		`<xs:element name="anon" type="s:dates"/>`)
 	err := CheckAppend[strList](schema, sname("flt"))
 	_ = asDecline(t, err, "codec does not encode an atomic simple type whose primitive is other than xs:string, xs:double, xs:decimal or xs:boolean: simple type the anonymous simple type of element {urn:s}flt declared at s.xsd:1:")
-	if !strings.Contains(err.Error(), ", through the list type's {item type definition} {http://www.w3.org/2001/XMLSchema}float; ") {
+	if !strings.Contains(err.Error(), ", through the list type's {item type definition} xs:float; ") {
 		t.Errorf("decline %q does not name the item xs:float", err)
 	}
 	err = CheckAppend[strList](schema, sname("anon"))
@@ -1367,14 +1367,14 @@ func TestAppendDecimalInvalid(t *testing.T) {
 		_, err := appendChecked(t, nil, schema, strict.New(), sname("dec"), *big.NewRat(1, 3))
 		invalidValue(t, err, "outside the decimal value space")
 		noRule(t, err)
-		if !strings.HasPrefix(err.Error(), "codec: Append: Rat holds 1/3, of simple type {http://www.w3.org/2001/XMLSchema}decimal, ") {
+		if !strings.HasPrefix(err.Error(), "codec: Append: Rat holds 1/3, of simple type xs:decimal, ") {
 			t.Errorf("error %q does not open with the path, value and type", err)
 		}
 	})
 	t.Run("a positiveInteger mapping rejecting 0", func(t *testing.T) {
 		_, err := appendChecked(t, nil, schema, positiveRejectsZero, sname("pos"), big.Int{})
 		invalidValue(t, err, "not positive")
-		if !strings.HasPrefix(err.Error(), "codec: Append: Int holds 0, which simple type {http://www.w3.org/2001/XMLSchema}positiveInteger rejects") {
+		if !strings.HasPrefix(err.Error(), "codec: Append: Int holds 0, which simple type xs:positiveInteger rejects") {
 			t.Errorf("error %q does not open with the path, value and type", err)
 		}
 	})
@@ -1418,9 +1418,9 @@ func TestAppendDecimalFaults(t *testing.T) {
 	schema := schemaOf(t, encodeDecimalSchema)
 	one := *big.NewRat(1, 1)
 	_, err := appendChecked(t, nil, schema, noMappings{}, sname("b"), true)
-	plainError(t, err, "codec: Append: bool, of simple type {http://www.w3.org/2001/XMLSchema}boolean: the backend has no mapping of its primitive {http://www.w3.org/2001/XMLSchema}boolean")
+	plainError(t, err, "codec: Append: bool, of simple type xs:boolean: the backend has no mapping of its primitive xs:boolean")
 	_, err = appendChecked(t, nil, schema, decimalRejectingParse, sname("dec"), one)
-	plainError(t, err, `codec: Append: Rat holds 1, of simple type {http://www.w3.org/2001/XMLSchema}decimal, whose canonical spelling the backend's Parse of {http://www.w3.org/2001/XMLSchema}decimal rejects: rejected`)
+	plainError(t, err, `codec: Append: Rat holds 1, of simple type xs:decimal, whose canonical spelling the backend's Parse of xs:decimal rejects: rejected`)
 	for _, row := range []struct {
 		name     string
 		backend  value.Backend
@@ -1431,10 +1431,10 @@ func TestAppendDecimalFaults(t *testing.T) {
 		{"a Canonical not mapping back", decimalOtherCanonical, `"2"`},
 	} {
 		_, err = appendChecked(t, nil, schema, row.backend, sname("dec"), one)
-		plainError(t, err, "codec: Append: Rat holds 1, of simple type {http://www.w3.org/2001/XMLSchema}decimal, which the backend's Canonical renders "+row.rendered+", other text than its canonical representation (f-decimalCanmap, f-booleanCanmap)")
+		plainError(t, err, "codec: Append: Rat holds 1, of simple type xs:decimal, which the backend's Canonical renders "+row.rendered+", other text than its canonical representation (f-decimalCanmap, f-booleanCanmap)")
 	}
 	_, err = appendChecked(t, nil, schema, decimalOnce{asked: new(bool)}, sname("dec"), one)
-	plainError(t, err, "codec: Append: Rat holds 1, of simple type {http://www.w3.org/2001/XMLSchema}decimal, which the backend cannot assess: ")
+	plainError(t, err, "codec: Append: Rat holds 1, of simple type xs:decimal, which the backend cannot assess: ")
 	for _, row := range []struct {
 		name    string
 		backend value.Backend
@@ -1445,7 +1445,7 @@ func TestAppendDecimalFaults(t *testing.T) {
 	} {
 		t.Run(row.name, func(t *testing.T) {
 			_, err := appendChecked(t, nil, schema, row.backend, sname("dec"), one)
-			_ = asDecline(t, err, "codec does not encode a value with no canonical representation: simple type {http://www.w3.org/2001/XMLSchema}decimal, at Rat holding 1: ")
+			_ = asDecline(t, err, "codec does not encode a value with no canonical representation: simple type xs:decimal, at Rat holding 1: ")
 			holds(t, err, row.want)
 		})
 	}

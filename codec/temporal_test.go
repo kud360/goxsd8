@@ -469,11 +469,11 @@ func TestDecodeTemporalStageErrors(t *testing.T) {
 		want        string
 	}{
 		{"a month of 13", date, dateData, month13, decodeErr[struct{ A tDate }],
-			fmt.Sprintf(`codec: ?:1:%d: the conversion to the Go type failed on "2000-01-01", a value of {http://www.w3.org/2001/XMLSchema}date in the character content of element {urn:s}a at byte offset %d: canonical form "2000-13-01" is no %s: the month 13 is outside 1 to 12 (§D.2.1)`, offset+1, offset, dateStruct)},
+			fmt.Sprintf(`codec: ?:1:%d: the conversion to the Go type failed on "2000-01-01", a value of xs:date in the character content of element {urn:s}a at byte offset %d: canonical form "2000-13-01" is no %s: the month 13 is outside 1 to 12 (§D.2.1)`, offset+1, offset, dateStruct)},
 		{"February 30", date, dateData, feb30, decodeErr[struct{ A tDate }],
-			fmt.Sprintf(`codec: ?:1:%d: the conversion to the Go type failed on "2000-01-01", a value of {http://www.w3.org/2001/XMLSchema}date in the character content of element {urn:s}a at byte offset %d: canonical form "2000-02-30" is no %s: the day 30 is outside 1 to 29 (§D.2.1)`, offset+1, offset, dateStruct)},
+			fmt.Sprintf(`codec: ?:1:%d: the conversion to the Go type failed on "2000-01-01", a value of xs:date in the character content of element {urn:s}a at byte offset %d: canonical form "2000-02-30" is no %s: the day 30 is outside 1 to 29 (§D.2.1)`, offset+1, offset, dateStruct)},
 		{"a yearMonthDuration read from its lexical", ymd, ymdData, lexicalX, decodeErr[struct{ A tYearMonthDuration }],
-			fmt.Sprintf(`codec: ?:1:%d: the conversion to the Go type failed on "x", a value of {http://www.w3.org/2001/XMLSchema}yearMonthDuration in the character content of element {urn:s}a at byte offset %d: it is no D for the datatype struct D of xs:yearMonthDuration (Months big.Int): 'x' at byte 0 where 'P' is expected`, offset+1, offset)},
+			fmt.Sprintf(`codec: ?:1:%d: the conversion to the Go type failed on "x", a value of xs:yearMonthDuration in the character content of element {urn:s}a at byte offset %d: it is no D for the datatype struct D of xs:yearMonthDuration (Months big.Int): 'x' at byte 0 where 'P' is expected`, offset+1, offset)},
 	}
 	for _, row := range rows {
 		t.Run(row.name, func(t *testing.T) {
@@ -539,7 +539,7 @@ func TestWithLoggerYearMonthDuration(t *testing.T) {
 			got = append(got, tr)
 		}
 	}
-	const ymd = "{http://www.w3.org/2001/XMLSchema}yearMonthDuration"
+	const ymd = "xs:yearMonthDuration"
 	loc := fmt.Sprintf("?:1:%d", bytes.Index(data, []byte("<s:a>"))+len("<s:a>")+1)
 	want := []traceRecord{
 		{"whiteSpace", map[string]string{"rule": "rf-whiteSpace", "type": ymd, "input": " P0M ", "loc": loc}},

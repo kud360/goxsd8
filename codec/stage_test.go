@@ -105,7 +105,7 @@ func rejectingCodecContext(loc xsderr.Loc) value.Backend {
 // nothing.
 func TestDecodeStageErrors(t *testing.T) {
 	const tail = "; validate accepted the value on the same backend, so this is a fault of the backend, not of the instance"
-	const intQName = "{http://www.w3.org/2001/XMLSchema}int"
+	const intQName = "xs:int"
 	element := sequenceOf(`<xs:element name="a" type="xs:int"/>`)
 	elementData := instanceOf("", "<s:a> 01 </s:a>")
 	offset := bytes.Index(elementData, []byte("<s:a>")) + len("<s:a>")
@@ -140,7 +140,7 @@ func TestDecodeStageErrors(t *testing.T) {
 		{"conversion, a form the Go type does not read", element, elementData, fractionCanonical, decodeErr[struct{ A int32 }], stageConversion,
 			fmt.Sprintf(`codec: ?:1:%d: the conversion to the Go type failed on "01", a value of %s in the character content of element {urn:s}a at byte offset %d: canonical form "1.5" is no int32: strconv.ParseInt: parsing "1.5": invalid syntax`, offset+1, intQName, offset)},
 		{"conversion, a finite form beyond the Go type's range", sequenceOf(`<xs:element name="a" type="xs:float"/>`), elementData, beyondFloat32, decodeErr[struct{ A float32 }], stageConversion,
-			fmt.Sprintf(`codec: ?:1:%d: the conversion to the Go type failed on "01", a value of {http://www.w3.org/2001/XMLSchema}float in the character content of element {urn:s}a at byte offset %d: canonical form "1e39" is no float32: strconv.ParseFloat: parsing "1e39": value out of range`, offset+1, offset)},
+			fmt.Sprintf(`codec: ?:1:%d: the conversion to the Go type failed on "01", a value of xs:float in the character content of element {urn:s}a at byte offset %d: canonical form "1e39" is no float32: strconv.ParseFloat: parsing "1e39": value out of range`, offset+1, offset)},
 	}
 	for _, row := range rows {
 		t.Run(row.name, func(t *testing.T) {
@@ -200,8 +200,8 @@ func TestDecodeStageErrorOrder(t *testing.T) {
 		want              string
 	}{
 		{"xsi:type before an attribute's value", ` c="1" xsi:type="s:rt"`, "<s:a>1</s:a>", "codec does not decode an element carrying xsi:type"},
-		{"a present attribute before a supplied value", ` c="1"`, "<s:a>1</s:a>", `failed on "1", a value of {http://www.w3.org/2001/XMLSchema}int in attribute c:`},
-		{"a supplied value before a child", "", "<s:a>1</s:a>", `failed on "3", a value of {http://www.w3.org/2001/XMLSchema}int in the value the value constraint of attribute b`},
+		{"a present attribute before a supplied value", ` c="1"`, "<s:a>1</s:a>", `failed on "1", a value of xs:int in attribute c:`},
+		{"a supplied value before a child", "", "<s:a>1</s:a>", `failed on "3", a value of xs:int in the value the value constraint of attribute b`},
 	}
 	for _, row := range rows {
 		t.Run(row.name, func(t *testing.T) {
@@ -265,7 +265,7 @@ func TestWithLogger(t *testing.T) {
 		}
 		got = append(got, tr)
 	}
-	const xsInt, xsString = "{http://www.w3.org/2001/XMLSchema}int", "{http://www.w3.org/2001/XMLSchema}string"
+	const xsInt, xsString = "xs:int", "xs:string"
 	aLoc := fmt.Sprintf("?:1:%d", bytes.Index(data, []byte("<s:a>"))+len("<s:a>")+1)
 	bLoc := fmt.Sprintf("?:1:%d", bytes.Index(data, []byte("<s:b>"))+len("<s:b>")+1)
 	want := []traceRecord{

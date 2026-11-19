@@ -327,7 +327,7 @@ func TestDecodeListStageErrors(t *testing.T) {
 		want        string
 	}{
 		{"a named list of a named item", `<xs:simpleType name="ints"><xs:list itemType="xs:int"/></xs:simpleType>` + sequenceOf(`<xs:element name="a" type="s:ints"/>`),
-			fmt.Sprintf(`codec: ?:1:%d: the lexical mapping failed on list item 2, "01", a value of {http://www.w3.org/2001/XMLSchema}int, the item type of {urn:s}ints in the character content of element {urn:s}a at byte offset %d: [cvc-datatype-valid] codec's Context`, offset+1, offset)},
+			fmt.Sprintf(`codec: ?:1:%d: the lexical mapping failed on list item 2, "01", a value of xs:int, the item type of {urn:s}ints in the character content of element {urn:s}a at byte offset %d: [cvc-datatype-valid] codec's Context`, offset+1, offset)},
 		{"an anonymous list of an anonymous item", sequenceOf(`<xs:element name="a"><xs:simpleType><xs:list><xs:simpleType><xs:restriction base="xs:int"/></xs:simpleType></xs:list></xs:simpleType></xs:element>`),
 			fmt.Sprintf(`codec: ?:1:%d: the lexical mapping failed on list item 2, "01", a value of the item type of the anonymous simple type of element {urn:s}a declared at s.xsd:1:231 in the character content of element {urn:s}a at byte offset %d: [cvc-datatype-valid] codec's Context`, offset+1, offset)},
 	}
@@ -365,7 +365,7 @@ func TestWithLoggerList(t *testing.T) {
 			got = append(got, tr)
 		}
 	}
-	const list, item = "{urn:s}ints", "{http://www.w3.org/2001/XMLSchema}int, the item type of {urn:s}ints"
+	const list, item = "{urn:s}ints", "xs:int, the item type of {urn:s}ints"
 	loc := fmt.Sprintf("?:1:%d", bytes.Index(data, []byte("<s:a>"))+len("<s:a>")+1)
 	want := []traceRecord{
 		{"whiteSpace", map[string]string{"rule": "rf-whiteSpace", "type": list, "input": " 01\n2 ", "loc": loc}},

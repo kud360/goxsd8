@@ -810,7 +810,7 @@ func TestDecodeUnionIdentificationError(t *testing.T) {
 // whiteSpace once, under the list, and each item's stages under its own
 // member.
 func TestWithLoggerUnion(t *testing.T) {
-	const intMember, dateMember = "{http://www.w3.org/2001/XMLSchema}int, a basic member of ", "{http://www.w3.org/2001/XMLSchema}date, a basic member of "
+	const intMember, dateMember = "xs:int, a basic member of ", "xs:date, a basic member of "
 	const list = "the anonymous simple type of element {urn:s}r declared at s.xsd:5:111"
 	const item = "{urn:s}u, the item type of " + list
 	rows := []struct {
