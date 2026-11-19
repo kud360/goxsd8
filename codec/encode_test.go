@@ -982,8 +982,9 @@ func sameValue(a, b reflect.Value) bool {
 // TestAppendLists pins the list form "# What encodes" states, the empty list
 // as nil and as an empty slice, in an element, a required and an optional
 // attribute, and a particle occurring once ([]V), optionally (*[]V) and
-// repeatedly ([][]V). Each document is accepted by validate and decoded back
-// into the value, nil and empty one value.
+// repeatedly ([][]V), and xs:string items holding white space other than S
+// written as themselves. Each document is accepted by validate and decoded
+// back into the value, nil and empty one value.
 func TestAppendLists(t *testing.T) {
 	schema := schemaOf(t, encodeListSchema)
 	dbl := func(f ...float64) *[]float64 { return &f }
@@ -993,6 +994,11 @@ func TestAppendLists(t *testing.T) {
 	t.Run("token and string items", func(t *testing.T) {
 		roundTrip(t, schema, sname("tl"), strList{"a", "b"}, `<tl xmlns="urn:s">a b</tl>`, sameLists[strList])
 		roundTrip(t, schema, sname("sl"), strList{"<&>"}, `<sl xmlns="urn:s">&lt;&amp;&gt;</sl>`, sameLists[strList])
+	})
+	t.Run("string items holding white space S is not", func(t *testing.T) {
+		// U+00A0 and U+0085 are unicode.IsSpace's and no list separator,
+		// which is XML's S (Datatypes §2.4.1.2, cvc-datatype-valid 2.2).
+		roundTrip(t, schema, sname("sl"), strList{"a b", "\u0085"}, "<sl xmlns=\"urn:s\">a b \u0085</sl>", sameLists[strList])
 	})
 	t.Run("double element", func(t *testing.T) {
 		roundTrip(t, schema, sname("dl"), dblList{1, -0.5, math.Inf(1)}, `<dl xmlns="urn:s">1.0E0 -5.0E-1 INF</dl>`, sameLists[dblList])
@@ -1040,8 +1046,9 @@ func TestAppendLists(t *testing.T) {
 }
 
 // TestAppendListInvalid pins the list cases of items 6 and 7 of Append's doc,
-// under item types that admit the item, an item's own check answering first
-// and an item's own item 7 named at the item's path.
+// under item types that admit the item, an item's own check answering first,
+// before a backend fault of the list's own, and an item's own item 7 named at
+// the item's path.
 func TestAppendListInvalid(t *testing.T) {
 	schema := schemaOf(t, encodeListSchema)
 	for _, row := range []struct {
@@ -1076,6 +1083,16 @@ func TestAppendListInvalid(t *testing.T) {
 			}
 		})
 	}
+	t.Run("a dirty item under a backend that cannot assess the list", func(t *testing.T) {
+		// The item's own error answers, not the list-level fault of a
+		// backend with no mapping: s.st's facets are checked only once every
+		// item is clean.
+		_, err := appendChecked(t, nil, schema, noMappings{}, sname("sl"), strList{"\x00"})
+		invalidValue(t, err, "strList[0]", "XML 1.0 Char")
+		if !strings.HasPrefix(err.Error(), "codec: Append: strList[0] holds ") {
+			t.Errorf("error %q does not open with the path strList[0]", err)
+		}
+	})
 	t.Run("a double list's empty value its pattern rejects", func(t *testing.T) {
 		_, err := appendChecked(t, nil, schema, strict.New(), sname("dp"), dblList{})
 		invalidValue(t, err, "dblList", "{urn:s}twoDoubles")
