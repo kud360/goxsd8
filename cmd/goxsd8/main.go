@@ -96,8 +96,15 @@ Usage:
 
   In a pipeline, pass -strict: without it a skipped <xs:include> or
   <xs:import> is a stderr note and the run exits 0. -q keeps a clean
-  run silent. Fail the job on the code the invocation exits with, its
-  highest-ranked outcome (Precedence above), so 2 beats 1:
+  run silent. A gate that must fail closed fails the job on every exit
+  code but 0:
+      [ $? -eq 0 ] || exit 1
+  The case form below does the same, arm by arm. Its 4) arm is the line
+  a gate that accepts 4 changes, and accepting 4 accepts every cause
+  the table's 4 row names, -strict's unresolved-schemaLocation charge
+  and gen's declines included. Such a gate still fails a run with any
+  rejection or fault: 1 and 2 outrank 4 (Precedence above), and
+  validate's 3 answers alone, so that run exits 1, 2 or 3.
       case $? in
         0) ;;             # pass
         1|2|3) exit 1 ;;  # fail

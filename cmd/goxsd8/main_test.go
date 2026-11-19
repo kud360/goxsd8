@@ -422,6 +422,14 @@ var usageCaseArm = regexp.MustCompile(`^        ([0-9|]+|\*)\) +(.*?) *;;`)
 // usageArmFails matches an arm's action that fails the job.
 var usageArmFails = regexp.MustCompile(`^exit [1-9][0-9]*$`)
 
+// usageOneLiner matches the paragraph's one-line form of the gate, a shell test
+// of $? that the snippet runs as written.
+var usageOneLiner = regexp.MustCompile(`^      (\[ \$\? .*)$`)
+
+// usageOneLinerCodes are the codes TestUsagePipelineExample feeds the one-line
+// form: the exit-code table's, and 127 for a goxsd8 that never ran.
+var usageOneLinerCodes = []int{0, 1, 2, 3, 4, 127}
+
 const (
 	usageExampleCommand = "      $ goxsd8 "
 	usageExampleStatus  = "      $ echo $?"
@@ -436,8 +444,10 @@ const (
 // the codes of the exit-code table, each once, and a catch-all arm must follow
 // them. Each arm's action is held to the table's reading: 0 passes (an empty
 // arm), and every other code, the catch-all's included, fails (exit with a
-// nonzero code). An edit to a shown code, line, arm or arm's action that the
-// binary or the table no longer bears fails it (#3853).
+// nonzero code). The paragraph's one-line form must be present, and run by sh
+// after each of usageOneLinerCodes it must pass 0 alone (#3899). An edit to a
+// shown code, line, arm or arm's action that the binary or the table no longer
+// bears fails it (#3853).
 func TestUsagePipelineExample(t *testing.T) {
 	_, para, ok := strings.Cut(usage, usagePipelineLead)
 	if !ok {
@@ -445,6 +455,28 @@ func TestUsagePipelineExample(t *testing.T) {
 	}
 	para, _, _ = strings.Cut(para, "\n\n")
 	lines := strings.Split(para, "\n")
+
+	oneLiners := 0
+	for _, line := range lines {
+		m := usageOneLiner.FindStringSubmatch(line)
+		if m == nil {
+			continue
+		}
+		oneLiners++
+		for _, code := range usageOneLinerCodes {
+			err := exec.Command("sh", "-c", fmt.Sprintf("(exit %d); %s", code, m[1])).Run()
+			var exitErr *exec.ExitError
+			if err != nil && !errors.As(err, &exitErr) {
+				t.Fatalf("running the pipeline paragraph's %q in sh: %v", m[1], err)
+			}
+			if passed := err == nil; passed != (code == 0) {
+				t.Errorf("the pipeline paragraph's %q, run after exit %d, passes %t, and only 0 passes the job", m[1], code, passed)
+			}
+		}
+	}
+	if oneLiners != 1 {
+		t.Errorf("the pipeline paragraph shows %d one-line gates matching %q, and it shows one", oneLiners, usageOneLiner)
+	}
 
 	var armCodes []string
 	catchAll := false
