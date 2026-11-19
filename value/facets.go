@@ -253,10 +253,11 @@ func IsDatatypeVerdict(err error) bool {
 // → value facets → assertions), returning the parsed value on success or the
 // first error a stage produces (stop-on-first-failure; this does not collect all
 // facet violations). A rejection carries the stage's *xsderr.Error, reachable
-// through [xsderr.RuleOf] whether or not the error is wrapped, but for the
-// lexical mapping stage's: that is the governing mapping's Parse error as Parse
-// returned it, an *xsderr.Error where Parse keeps [Mapping]'s contract; call
-// [IsDatatypeVerdict] before reading any of them as a verdict. ctx is the
+// through [xsderr.RuleOf] whether or not the error is wrapped, but where a
+// governing mapping's Parse rejected, at the lexical mapping stage or for a
+// bound facet's {value} while the checkers are built: that error carries
+// Parse's own error, an *xsderr.Error where Parse keeps [Mapping]'s contract;
+// call [IsDatatypeVerdict] before reading any of them as a verdict. ctx is the
 // VALIDATED INSTANCE's context, threaded to the governing mapping's Parse for the
 // candidate value; a context-free cohort (decimal/boolean/string) passes nil
 // here.

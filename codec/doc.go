@@ -9,8 +9,10 @@
 // [Append]'s doc and "# What encodes" state the written form.
 //
 // Call [CheckDecode] and [CheckAppend] once at start-up, for each top-level
-// element declaration and T a program decodes or encodes, then [Decode] or
-// [Append] for each instance or value; each Check's doc states what it reports.
+// element declaration and T a program decodes a document element into or
+// encodes one from, CheckDecode with the options [Decode] is passed; then call
+// Decode for each instance and [Append] for each value. Each Check's doc states
+// what it reports.
 //
 // # Decode
 //
