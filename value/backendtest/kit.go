@@ -106,7 +106,7 @@ func run(r reporter, b value.Backend, opts []Option) {
 			if cfg.absent[tv.typ] {
 				continue
 			}
-			r.Errorf("backendtest: %s has vectors but the backend does not map it (declare it Absent if intended)", tv.typ)
+			r.Errorf("backendtest: %s has vectors but the backend does not map it (declare it Absent if intended)", tv.typ.Display())
 			continue
 		}
 		checkType(r, tv, m)
@@ -193,13 +193,13 @@ func checkCapabilities(r reporter, tv typeVectors, m value.Mapping) {
 	for _, facet := range tv.applicableFacets {
 		cap, ok := requiredCapability(facet)
 		if !ok {
-			r.Errorf("%s: applicable facet %q is not classified by requiredCapability; an unclassified facet is drift the kit must catch", tv.typ, facet)
+			r.Errorf("%s: applicable facet %q is not classified by requiredCapability; an unclassified facet is drift the kit must catch", tv.typ.Display(), facet)
 			continue
 		}
 		if hasCapability(v, cap) {
 			continue
 		}
-		r.Errorf("%s: value of %q lacks %s, required by applicable facet %q", tv.typ, tv.valid[0].lexical, capabilityName(cap), facet)
+		r.Errorf("%s: value of %q lacks %s, required by applicable facet %q", tv.typ.Display(), tv.valid[0].lexical, capabilityName(cap), facet)
 	}
 }
 
@@ -257,7 +257,7 @@ func checkRoundtrip(r reporter, typ xsd.QName, m value.Mapping, rt roundtrip) {
 	r.Helper()
 	v, err := m.Parse(rt.lexical, nil)
 	if err != nil {
-		r.Errorf("%s: Parse(%q) = error %v; want it to map", typ, rt.lexical, err)
+		r.Errorf("%s: Parse(%q) = error %v; want it to map", typ.Display(), rt.lexical, err)
 		return
 	}
 	if m.Canonical == nil {
@@ -265,11 +265,11 @@ func checkRoundtrip(r reporter, typ xsd.QName, m value.Mapping, rt roundtrip) {
 	}
 	got, err := m.Canonical(v)
 	if err != nil {
-		r.Errorf("%s: Canonical(value of %q) = error %v", typ, rt.lexical, err)
+		r.Errorf("%s: Canonical(value of %q) = error %v", typ.Display(), rt.lexical, err)
 		return
 	}
 	if got != rt.canonical {
-		r.Errorf("%s: %q canonicalizes to %q; want %q", typ, rt.lexical, got, rt.canonical)
+		r.Errorf("%s: %q canonicalizes to %q; want %q", typ.Display(), rt.lexical, got, rt.canonical)
 	}
 }
 
@@ -278,10 +278,10 @@ func checkRejected(r reporter, typ xsd.QName, m value.Mapping, lex, why string) 
 	r.Helper()
 	_, err := m.Parse(lex, nil)
 	if err == nil {
-		r.Errorf("%s: Parse(%q) accepted %s; want a mapping error", typ, lex, why)
+		r.Errorf("%s: Parse(%q) accepted %s; want a mapping error", typ.Display(), lex, why)
 		return
 	}
 	if _, ok := xsderr.RuleOf(err); !ok {
-		r.Errorf("%s: Parse(%q) rejected with a non-xsderr error %T; want an *xsderr.Error", typ, lex, err)
+		r.Errorf("%s: Parse(%q) rejected with a non-xsderr error %T; want an *xsderr.Error", typ.Display(), lex, err)
 	}
 }

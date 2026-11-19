@@ -1,6 +1,8 @@
 package backendtest
 
 import (
+	"fmt"
+	"slices"
 	"testing"
 
 	"github.com/kud360/goxsd8/value"
@@ -109,6 +111,25 @@ func TestRunCatchesBackends(t *testing.T) {
 	run(&rb, bad, othersAbsent())
 	if rb.errs == 0 {
 		t.Fatal("buggy backend: run reported 0 failures, want > 0")
+	}
+}
+
+// textT is a reporter recording each failure's formatted text.
+type textT struct{ msgs []string }
+
+func (r *textT) Errorf(format string, args ...any) {
+	r.msgs = append(r.msgs, fmt.Sprintf(format, args...))
+}
+func (r *textT) Helper() {}
+
+// TestRunNamesTypesByDisplay pins that a failure names its type as
+// [xsd.QName.Display] renders it.
+func TestRunNamesTypesByDisplay(t *testing.T) {
+	var r textT
+	run(&r, mapBackend{}, nil)
+	want := "backendtest: xs:boolean has vectors but the backend does not map it (declare it Absent if intended)"
+	if !slices.Contains(r.msgs, want) {
+		t.Errorf("run over an empty backend reported %q, want it to include %q", r.msgs, want)
 	}
 }
 
