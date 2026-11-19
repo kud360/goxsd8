@@ -9,6 +9,7 @@ import (
 	"io"
 	"log"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -207,6 +208,18 @@ func TestReadmeProgram(t *testing.T) {
 	}
 }
 
+// TestReadmeProgramCompiles holds testdata/readme/main.go to compiling, which
+// checks the one span TestReadmeProgram leaves to it, the file's import
+// declaration. No pattern of gate part 1 compiles the program, since ./...
+// skips testdata. go vet writes nothing into the tree, so the test needs no
+// gen/ and leaves none.
+func TestReadmeProgramCompiles(t *testing.T) {
+	out, err := exec.Command("go", "vet", "./testdata/readme").CombinedOutput()
+	if err != nil {
+		t.Fatalf("go vet ./testdata/readme: %v: %s", err, out)
+	}
+}
+
 // readmeProgram reports where file departs from the program README's blocks
 // give, or nil when it reads as they do. The blocks are the go fence that
 // opens "package main" and the three go fences after it, in README order. The
@@ -214,7 +227,7 @@ func TestReadmeProgram(t *testing.T) {
 // its import declaration replaced by file's, then each later block, preceded
 // by a blank line and with one tab before each non-empty line. file's import
 // declaration is the one span it does not hold: README adds those imports in
-// prose, and `go vet ./testdata/readme` checks them.
+// prose, and TestReadmeProgramCompiles checks them.
 func readmeProgram(readme, file string) error {
 	var fences []string
 	var body strings.Builder
