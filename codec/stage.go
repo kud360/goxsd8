@@ -287,7 +287,7 @@ func scalarOf(g simpleGo, st *xsd.SimpleType, label string) scalar {
 // and list, or for an anonymous item that phrase alone.
 func itemLabel(item *xsd.SimpleType, list string) string {
 	if item.Name() != (xsd.QName{}) {
-		return item.Name().String() + ", the item type of " + list
+		return item.Name().Display() + ", the item type of " + list
 	}
 	return "the item type of " + list
 }
@@ -297,7 +297,7 @@ func itemLabel(item *xsd.SimpleType, list string) string {
 // declaration st is local to and its schema Loc.
 func typeLabel(st *xsd.SimpleType, subject string) string {
 	if st.Name() != (xsd.QName{}) {
-		return st.Name().String()
+		return st.Name().Display()
 	}
 	return "the anonymous simple type of " + subject
 }
@@ -613,9 +613,9 @@ func (c contentSource) loc() xsderr.Loc {
 // where names the element and the byte offset of its first character data.
 func (c contentSource) where() string {
 	if c.first == nil {
-		return fmt.Sprintf("the character content of element %s, which has none", expanded(c.start.Name()))
+		return fmt.Sprintf("the character content of element %s, which has none", expanded(c.start.Name()).Display())
 	}
-	return fmt.Sprintf("the character content of element %s at byte offset %d", expanded(c.start.Name()), c.first.Offset())
+	return fmt.Sprintf("the character content of element %s at byte offset %d", expanded(c.start.Name()).Display(), c.first.Offset())
 }
 
 // bindings returns the bindings in scope at start.
@@ -633,7 +633,7 @@ func (a attributeSource) loc() xsderr.Loc { return a.a.Loc() }
 
 // where names the attribute.
 func (a attributeSource) where() string {
-	return fmt.Sprintf("attribute %s", expanded(a.a.Name()))
+	return fmt.Sprintf("attribute %s", expanded(a.a.Name()).Display())
 }
 
 // bindings returns the bindings in scope at owner.
@@ -652,7 +652,7 @@ func (s suppliedSource) loc() xsderr.Loc { return s.start.Loc() }
 // where names the item whose value constraint supplied the value, and the
 // element it is supplied on.
 func (s suppliedSource) where() string {
-	return fmt.Sprintf("the value the value constraint of %s supplies on element %s", s.supplied.subject, expanded(s.start.Name()))
+	return fmt.Sprintf("the value the value constraint of %s supplies on element %s", s.supplied.subject, expanded(s.start.Name()).Display())
 }
 
 // bindings returns the value constraint's own, those in scope at the schema

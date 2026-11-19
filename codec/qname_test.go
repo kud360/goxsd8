@@ -217,7 +217,7 @@ func TestWithLoggerQName(t *testing.T) {
 			got = append(got, tr)
 		}
 	}
-	const qname = "{http://www.w3.org/2001/XMLSchema}QName"
+	const qname = "xs:QName"
 	loc := fmt.Sprintf("?:1:%d", bytes.Index(data, []byte("<s:a>"))+len("<s:a>")+1)
 	want := []traceRecord{
 		{"whiteSpace", map[string]string{"rule": "rf-whiteSpace", "type": qname, "input": " p:x ", "loc": loc}},
@@ -251,7 +251,7 @@ func TestDecodeQNameStageError(t *testing.T) {
 	if !errors.As(err, &se) || se.stage != stageConversion {
 		t.Fatalf("Decode error = %v, want a stage error of %s", err, stageConversion.name())
 	}
-	want := fmt.Sprintf(`codec: ?:1:%d: the conversion to the Go type failed on "u:x", a value of {http://www.w3.org/2001/XMLSchema}QName in the character content of element {urn:s}a at byte offset %d: it resolves to no expanded name against the bindings in scope`, offset+1, offset) + tail
+	want := fmt.Sprintf(`codec: ?:1:%d: the conversion to the Go type failed on "u:x", a value of xs:QName in the character content of element {urn:s}a at byte offset %d: it resolves to no expanded name against the bindings in scope`, offset+1, offset) + tail
 	if err.Error() != want {
 		t.Errorf("error = %q\nwant    %q", err, want)
 	}

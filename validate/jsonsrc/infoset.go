@@ -133,7 +133,7 @@ func (e *element) Attributes() []validate.Attribute { return e.attrs }
 // tokens it would read belong to a later element.
 func (e *element) Children() validate.Children {
 	if e.finished {
-		panic(fmt.Sprintf("validate/jsonsrc: Children called after the walk left %s", e.Name()))
+		panic(fmt.Sprintf("validate/jsonsrc: Children called after the walk left %s", e.Name().Display()))
 	}
 	return e.kids
 }
@@ -354,7 +354,7 @@ func (m *members) key() (peeked, error) {
 	child, ok := mem.(elementMember)
 	if !ok {
 		return peeked{}, m.w.declinef(p.loc, "attribute member %q follows a child member of %s; move attribute members ahead of the first child member, or declare a struct's attribute fields before its child fields, as an element's attributes are read before its children",
-			key, m.object.owner)
+			key, m.object.owner.Display())
 	}
 	p.member = child
 	return p, nil

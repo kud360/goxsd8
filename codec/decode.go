@@ -823,7 +823,7 @@ func CheckDecode[T any](schema *xsd.Schema, name xsd.QName, opts ...Option) erro
 	}
 	decl, ok := schema.Element(name)
 	if !ok {
-		return fmt.Errorf("codec: no top-level element declaration has the expanded name %q", name.String())
+		return fmt.Errorf("codec: no top-level element declaration has the expanded name %q", name.Display())
 	}
 	// An answer about the schema, no violation of an instance, so it carries
 	// no xsderr rule (STYLE E2).
@@ -2119,7 +2119,7 @@ func bind(p *pipeline, root *xmltree.StartElement) (binder, xsd.ElementDeclarati
 		if err := checkXsiType(root); err != nil {
 			return nil, xsd.ElementDeclaration{}, err
 		}
-		return nil, xsd.ElementDeclaration{}, fmt.Errorf("codec: %s: the document element %s has no top-level declaration", root.Loc(), name)
+		return nil, xsd.ElementDeclaration{}, fmt.Errorf("codec: %s: the document element %s has no top-level declaration", root.Loc(), name.Display())
 	}
 	b, err := bindDecl(p, decl)
 	// bindDecl returns its declines unwrapped and uncharged, and no other
@@ -2181,7 +2181,7 @@ func bindTyped(run *bindRun, decl xsd.ElementDeclaration, td xsd.TypeDefinition)
 // td's QName where located(td) does not hold.
 func typeSubject(decl xsd.ElementDeclaration, td xsd.TypeDefinition) string {
 	if !located(td) {
-		return fmt.Sprintf("the {type definition} of %s, the type %s", declSubject(decl), td.Name())
+		return fmt.Sprintf("the {type definition} of %s, the type %s", declSubject(decl), td.Name().Display())
 	}
 	return fmt.Sprintf("the {type definition} of %s%s", declSubject(decl), definedAt(", a type ", td))
 }
@@ -2439,7 +2439,7 @@ func contentSubject(typeSubject string, st *xsd.SimpleType) string {
 	if st.Name() == (xsd.QName{}) {
 		return fmt.Sprintf("%s, through its {content type}'s anonymous {simple type definition}%s", typeSubject, definedAt(", a type ", st))
 	}
-	return fmt.Sprintf("%s, through its {content type}'s {simple type definition} %s%s", typeSubject, st.Name(), definedAt(", a type ", st))
+	return fmt.Sprintf("%s, through its {content type}'s {simple type definition} %s%s", typeSubject, st.Name().Display(), definedAt(", a type ", st))
 }
 
 // width is the value field.
@@ -4008,7 +4008,7 @@ func (b boundFlattened) fill(r *xmltree.Reader, _ *xmltree.StartElement, out ref
 			}
 			i, placed := placeAt(f.places, pos)
 			if !placed {
-				return fmt.Errorf("codec: %s: element %s is attributed to the particle at position %v, for which Decode bound no alternative", tok.Loc(), name, pos)
+				return fmt.Errorf("codec: %s: element %s is attributed to the particle at position %v, for which Decode bound no alternative", tok.Loc(), name.Display(), pos)
 			}
 			if err := b.bound.appendItem(r, tok, i, out.Field(b.index), st); err != nil {
 				return err
@@ -4038,7 +4038,7 @@ func trackedMatcher(schema *xsd.Schema, ct xsd.ComplexType) (*xsd.Matcher, error
 // where located(ct) does not hold.
 func complexSubject(ct xsd.ComplexType) string {
 	if !located(ct) {
-		return "the complex type " + ct.Name().String()
+		return "the complex type " + ct.Name().Display()
 	}
 	return "the complex type" + definedAt(" ", ct)
 }
@@ -4263,7 +4263,7 @@ func (s occurrenceSink) put(p *pipeline, r *xmltree.Reader, start *xmltree.Start
 	o := s.occurrence
 	opens, err := st.partition(p.schema, o.group, o.first).next(o.positions[s.target])
 	if err != nil {
-		return fmt.Errorf("codec: %s: element %s: %w", start.Loc(), expanded(start.Name()), err)
+		return fmt.Errorf("codec: %s: element %s: %w", start.Loc(), expanded(start.Name()).Display(), err)
 	}
 	field := out.Field(s.index)
 	item, err := o.itemOf(field, opens, start)
@@ -4289,7 +4289,7 @@ func (o *nestedOccurrence) itemOf(field reflect.Value, opens bool, start *xmltre
 		return field.Index(field.Len() - 1), nil
 	}
 	if opens && !field.IsNil() {
-		return reflect.Value{}, fmt.Errorf("codec: %s: element %s opens a second occurrence of a %s model group particle with {max occurs} 1", start.Loc(), expanded(start.Name()), o.group.Compositor())
+		return reflect.Value{}, fmt.Errorf("codec: %s: element %s opens a second occurrence of a %s model group particle with {max occurs} 1", start.Loc(), expanded(start.Name()).Display(), o.group.Compositor())
 	}
 	if o.shape == shapeOne {
 		return field, nil
@@ -4438,11 +4438,11 @@ func (b boundOccurrence) fill(r *xmltree.Reader, _ *xmltree.StartElement, out re
 			}
 			opens, err := part.next(pos)
 			if err != nil {
-				return fmt.Errorf("codec: %s: element %s: %w", tok.Loc(), expanded(tok.Name()), err)
+				return fmt.Errorf("codec: %s: element %s: %w", tok.Loc(), expanded(tok.Name()).Display(), err)
 			}
 			if opens && item.IsValid() {
 				if o.shape != shapeRepeated {
-					return fmt.Errorf("codec: %s: element %s opens a second occurrence of a %s content particle with {max occurs} 1", tok.Loc(), expanded(tok.Name()), o.group.Compositor())
+					return fmt.Errorf("codec: %s: element %s opens a second occurrence of a %s content particle with {max occurs} 1", tok.Loc(), expanded(tok.Name()).Display(), o.group.Compositor())
 				}
 				o.shape.store(o.p, field, item)
 			}
@@ -4735,7 +4735,7 @@ func (bc *boundChoice) set(r *xmltree.Reader, start *xmltree.StartElement, i, k 
 		// Validation charges a child of a second alternative first
 		// (cvc-model-group); this is the defensive check.
 		if dst.Elem().Type() != bb.t {
-			return fmt.Errorf("codec: %s: element %s matches a second alternative of the choice", start.Loc(), expanded(start.Name()))
+			return fmt.Errorf("codec: %s: element %s matches a second alternative of the choice", start.Loc(), expanded(start.Name()).Display())
 		}
 		branch.Set(dst.Elem())
 	}
@@ -4898,7 +4898,7 @@ func particleTerm(schema *xsd.Schema, p xsd.Particle, typeSubject string) (xsd.T
 	case xsd.ElementDeclarationRef:
 		decl, ok := schema.Element(term.Name)
 		if !ok {
-			return nil, fmt.Errorf("codec: the <element ref> particle to %s does not resolve", term.Name)
+			return nil, fmt.Errorf("codec: the <element ref> particle to %s does not resolve", term.Name.Display())
 		}
 		return decl, nil
 	case xsd.ModelGroupRef:
@@ -5138,9 +5138,9 @@ func particleShape(ct xsd.ComplexType, x *childIndex, decls []xsd.ElementDeclara
 func attributeUse(schema *xsd.Schema, u xsd.AttributeUse) (attribute, error) {
 	decl, ok := schema.ResolvedAttributeDeclaration(u)
 	if !ok {
-		return attribute{}, fmt.Errorf("codec: the {attribute declaration} of attribute use %s does not resolve", u.DeclarationName())
+		return attribute{}, fmt.Errorf("codec: the {attribute declaration} of attribute use %s does not resolve", u.DeclarationName().Display())
 	}
-	subject := fmt.Sprintf("attribute %s declared at %s", decl.Name(), decl.Loc())
+	subject := fmt.Sprintf("attribute %s declared at %s", decl.Name().Display(), decl.Loc())
 	st, ok := schema.ResolvedSimpleType(decl.TypeDefinition())
 	if !ok {
 		return attribute{}, fmt.Errorf("codec: the {type definition} of %s does not resolve", subject)
@@ -5215,7 +5215,7 @@ func itemSubject(subject string, item *xsd.SimpleType) string {
 	if item.Name() == (xsd.QName{}) {
 		return fmt.Sprintf("%s, through the list type's anonymous {item type definition}%s", subject, definedAt(", a type ", item))
 	}
-	return fmt.Sprintf("%s, through the list type's {item type definition} %s%s", subject, item.Name(), definedAt(", a type ", item))
+	return fmt.Sprintf("%s, through the list type's {item type definition} %s%s", subject, item.Name().Display(), definedAt(", a type ", item))
 }
 
 // atomicGo returns the atomic Go type codegen gives the atomic or special
@@ -5511,19 +5511,19 @@ func attributeAt(t xsd.Attribution, pos []int, places, elements []place, start *
 	case xsd.Wildcard:
 		i, placed := placeAt(places, pos)
 		if !placed {
-			return attribution{}, false, fmt.Errorf("codec: %s: element %s is attributed to the wildcard particle at position %v, for which Decode bound no field or alternative", start.Loc(), name, pos)
+			return attribution{}, false, fmt.Errorf("codec: %s: element %s is attributed to the wildcard particle at position %v, for which Decode bound no field or alternative", start.Loc(), name.Display(), pos)
 		}
 		return attribution{index: i, to: t}, true, nil
 	case *xsd.OpenContent:
 		i, placed := placeAt(places, pos)
 		if !placed {
-			return attribution{}, false, fmt.Errorf("codec: %s: element %s is attributed to the {open content}, for which Decode bound no field", start.Loc(), name)
+			return attribution{}, false, fmt.Errorf("codec: %s: element %s is attributed to the {open content}, for which Decode bound no field", start.Loc(), name.Display())
 		}
 		return attribution{index: i, to: t}, true, nil
 	case xsd.ElementDeclaration:
 		i, placed := placeAt(elements, pos)
 		if !placed {
-			return attribution{}, false, fmt.Errorf("codec: %s: element %s is attributed to the element particle at position %v, for which Decode bound no field or alternative", start.Loc(), name, pos)
+			return attribution{}, false, fmt.Errorf("codec: %s: element %s is attributed to the element particle at position %v, for which Decode bound no field or alternative", start.Loc(), name.Display(), pos)
 		}
 		return attribution{index: i, to: t}, true, nil
 	}
@@ -5533,7 +5533,7 @@ func attributeAt(t xsd.Attribution, pos []int, places, elements []place, start *
 // unparticled is the error for the child element start when no particle of
 // its parent's content attributes it.
 func unparticled(start *xmltree.StartElement) error {
-	return fmt.Errorf("codec: %s: element %s is attributed to no particle", start.Loc(), expanded(start.Name()))
+	return fmt.Errorf("codec: %s: element %s is attributed to no particle", start.Loc(), expanded(start.Name()).Display())
 }
 
 // elementValue reads the character children of the element start from r up
@@ -5556,7 +5556,7 @@ func elementValue(r *xmltree.Reader, start *xmltree.StartElement, p *pipeline, s
 			}
 			text.WriteString(tok.Data())
 		case *xmltree.StartElement:
-			return reflect.Value{}, fmt.Errorf("codec: %s: element %s of simple type or simple content holds element %s", tok.Loc(), expanded(start.Name()), expanded(tok.Name()))
+			return reflect.Value{}, fmt.Errorf("codec: %s: element %s of simple type or simple content holds element %s", tok.Loc(), expanded(start.Name()).Display(), expanded(tok.Name()).Display())
 		case *xmltree.EndElement:
 			if s.supplied != nil && text.Len() == 0 {
 				return s.decode(p, s.supplied.vc.LexicalForm(), suppliedSource{start: start, supplied: s.supplied})
@@ -5617,7 +5617,7 @@ func noAttributes(root *xmltree.StartElement) error {
 // unattributed is the error for the attribute a of an element when no
 // attribute use of its declaration's type attributes it.
 func unattributed(a xmltree.Attribute) error {
-	return fmt.Errorf("codec: %s: attribute %s is attributed to no attribute use", a.Loc(), expanded(a.Name()))
+	return fmt.Errorf("codec: %s: attribute %s is attributed to no attribute use", a.Loc(), expanded(a.Name()).Display())
 }
 
 // instanceAttribute reports whether n is the expanded name of xsi:type,
@@ -5692,7 +5692,7 @@ func checkXsiType(start *xmltree.StartElement) error {
 	if !carries {
 		return nil
 	}
-	return decline(constructXsiType, fmt.Sprintf("element %s with xsi:type %q", expanded(start.Name()), a.Value())).at(start.Loc())
+	return decline(constructXsiType, fmt.Sprintf("element %s with xsi:type %q", expanded(start.Name()).Display(), a.Value())).at(start.Loc())
 }
 
 // xsiType returns the first of start's attributes whose expanded name is
@@ -5709,7 +5709,7 @@ func xsiType(start *xmltree.StartElement) (xmltree.Attribute, bool) {
 
 // declSubject names the element declaration decl and its schema Loc.
 func declSubject(decl xsd.ElementDeclaration) string {
-	return fmt.Sprintf("element %s declared at %s", decl.Name(), decl.Loc())
+	return fmt.Sprintf("element %s declared at %s", decl.Name().Display(), decl.Loc())
 }
 
 // expanded returns the expanded name of an instance name.

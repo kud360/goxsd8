@@ -326,9 +326,9 @@ func (s scope) place() string {
 			parts = append(parts, s.path[i].slot)
 			continue
 		}
-		parts = append(parts, "element "+s.path[i].name.String())
+		parts = append(parts, "element "+s.path[i].name.Display())
 	}
-	return strings.Join(append(parts, s.root.noun()+" "+s.path[0].name.String()), " of ")
+	return strings.Join(append(parts, s.root.noun()+" "+s.path[0].name.Display()), " of ")
 }
 
 // noun names the kind of component a scope's path starts at in declines
@@ -536,7 +536,7 @@ type origin struct {
 // elementOrigin is the origin of the type emitted for the top-level element
 // declaration decl's complex {type definition} t and named from decl.
 func (e *emitter) elementOrigin(decl xsd.ElementDeclaration, t xsd.ComplexType) origin {
-	return origin{from: e.elementFrom(decl), subject: "complex type " + typeName(t) + " of element " + decl.Name().String()}
+	return origin{from: e.elementFrom(decl), subject: "complex type " + typeName(t) + " of element " + decl.Name().Display()}
 }
 
 // typeOrigin is the origin of the type emitted for the named complex type t
@@ -608,7 +608,7 @@ func (e *emitter) topLevel(decl xsd.ElementDeclaration) error {
 	}
 	switch t := td.(type) {
 	case *xsd.SimpleType:
-		underlying, err := e.simpleGoType("element "+decl.Name().String(), decl.Loc(), t, declaredUnion{declaredStep(decl.Name().Local)})
+		underlying, err := e.simpleGoType("element "+decl.Name().Display(), decl.Loc(), t, declaredUnion{declaredStep(decl.Name().Local)})
 		if err != nil {
 			return err
 		}
@@ -628,13 +628,13 @@ func (e *emitter) topLevel(decl xsd.ElementDeclaration) error {
 			return err
 		}
 	default:
-		return fmt.Errorf("element %s at %s: unexpected type definition %T", decl.Name(), decl.Loc(), td)
+		return fmt.Errorf("element %s at %s: unexpected type definition %T", decl.Name().Display(), decl.Loc(), td)
 	}
 	if goshape.Nillable(decl) {
 		e.nillableType(typ, td)
 		i := slices.IndexFunc(e.decls, func(d declaration) bool { return d.name == typ.name })
 		if i < 0 {
-			return fmt.Errorf("element %s at %s: no declaration of its type %s", decl.Name(), decl.Loc(), typ.name)
+			return fmt.Errorf("element %s at %s: no declaration of its type %s", decl.Name().Display(), decl.Loc(), typ.name)
 		}
 		e.decls[i].reaches = append(e.decls[i].reaches, e.nillable.sum)
 	}
@@ -688,7 +688,7 @@ func (e *emitter) elementType(decl xsd.ElementDeclaration, td xsd.TypeDefinition
 		e.anyTypeType()
 		typ = emittedType{name: e.types.fixed(decl.Name().Local)}
 	case isSimple:
-		underlying, err := e.simpleGoType("element "+decl.Name().String(), decl.Loc(), st, declaredUnion{declaredStep(decl.Name().Local)})
+		underlying, err := e.simpleGoType("element "+decl.Name().Display(), decl.Loc(), st, declaredUnion{declaredStep(decl.Name().Local)})
 		if err != nil {
 			return emittedType{}, err
 		}
@@ -700,7 +700,7 @@ func (e *emitter) elementType(decl xsd.ElementDeclaration, td xsd.TypeDefinition
 		}
 		typ = shaped
 	default:
-		return emittedType{}, fmt.Errorf("element %s at %s: unexpected type definition %T", decl.Name(), decl.Loc(), td)
+		return emittedType{}, fmt.Errorf("element %s at %s: unexpected type definition %T", decl.Name().Display(), decl.Loc(), td)
 	}
 	e.elements[decl.Name()] = typ
 	return typ, nil
@@ -713,7 +713,7 @@ func (e *emitter) elementType(decl xsd.ElementDeclaration, td xsd.TypeDefinition
 // ahead of td's cases, refType returns once elementType's type is sealed, and
 // valueCycle skips such a decl before calling declaredType.
 func (e *emitter) declaredType(decl xsd.ElementDeclaration) (xsd.TypeDefinition, error) {
-	subject := "element " + decl.Name().String()
+	subject := "element " + decl.Name().Display()
 	branches, sum, err := e.governingTypes(decl)
 	if err != nil {
 		return nil, err
@@ -803,7 +803,7 @@ func (e *emitter) goType(subject, typed string, loc xsderr.Loc, t *xsd.SimpleTyp
 		if err != nil {
 			return emittedType{}, fmt.Errorf("%s at %s: %w", subject, loc, err)
 		}
-		return emittedType{}, decline(loc, constructUncoveredPrimitive, typed, primitive.Name())
+		return emittedType{}, decline(loc, constructUncoveredPrimitive, typed, primitive.Name().Display())
 	}
 	return emittedType{name: e.atomicType(a)}, nil
 }
@@ -994,7 +994,10 @@ func (e *emitter) variantWord(m *xsd.SimpleType) (string, error) {
 // expanded name or (anonymous), and its Loc, as elementFrom renders an
 // element's, which is omitted when t's Loc is zero, as a builtin's is.
 func (e *emitter) simpleFrom(t *xsd.SimpleType) provenance {
-	from := "simple type " + typeName(t)
+	from := "simple type (anonymous)"
+	if t.Name() != (xsd.QName{}) {
+		from = "simple type " + t.Name().String()
+	}
 	if t.Loc() == (xsderr.Loc{}) {
 		return provenance{text: from}
 	}
@@ -1201,7 +1204,7 @@ func typeName(t xsd.TypeDefinition) string {
 	if t.Name() == (xsd.QName{}) {
 		return "(anonymous)"
 	}
-	return t.Name().String()
+	return t.Name().Display()
 }
 
 // shape checks the complex type t against the package doc's "# Complex types"
@@ -1530,7 +1533,7 @@ func (e *emitter) vacuousBasic(subject string, loc xsderr.Loc, p xsd.Particle) e
 	if err != nil {
 		return err
 	}
-	return decline(loc, constructVacuousParticle, "element "+decl.Name().String(), subject)
+	return decline(loc, constructVacuousParticle, "element "+decl.Name().Display(), subject)
 }
 
 // particleFields returns the fields of particles, one per particle spliced
@@ -1875,7 +1878,7 @@ func (e *emitter) field(nested scope, site groupSite, ordinal int, chain []value
 		return fieldSpec{}, err
 	}
 	if abstractLocal(decl) {
-		return fieldSpec{}, decline(decl.Loc(), constructAbstractLocal, "local element "+decl.Name().String(), subject)
+		return fieldSpec{}, decline(decl.Loc(), constructAbstractLocal, "local element "+decl.Name().Display(), subject)
 	}
 	td, err := e.declaredType(decl)
 	if err != nil {
@@ -1900,11 +1903,11 @@ func (e *emitter) field(nested scope, site groupSite, ordinal int, chain []value
 	case goshape.AnyTypeItself(td):
 		typ.name = e.anyTypeType()
 	case isSimple:
-		typ, err = e.simpleGoType("element "+decl.Name().String(), decl.Loc(), st, declaredUnion(localScope(nested, decl).steps()))
+		typ, err = e.simpleGoType("element "+decl.Name().Display(), decl.Loc(), st, declaredUnion(localScope(nested, decl).steps()))
 	case isComplex:
 		typ, err = e.nestedType(nested, chain, value, decl, ct)
 	default:
-		err = fmt.Errorf("element %s at %s: unexpected type definition %T", decl.Name(), decl.Loc(), td)
+		err = fmt.Errorf("element %s at %s: unexpected type definition %T", decl.Name().Display(), decl.Loc(), td)
 	}
 	if err != nil {
 		return fieldSpec{}, err
@@ -1918,7 +1921,7 @@ func (e *emitter) field(nested scope, site groupSite, ordinal int, chain []value
 	}
 	goType, ok := occursGoType(typ, p.Occurs())
 	if !ok {
-		return fieldSpec{}, decline(loc, constructVacuousParticle, "element "+decl.Name().String(), subject)
+		return fieldSpec{}, decline(loc, constructVacuousParticle, "element "+decl.Name().Display(), subject)
 	}
 	return fieldSpec{local: decl.Name().Local, goType: goType}, nil
 }
@@ -2141,7 +2144,7 @@ func (e *emitter) branchType(ifc scope, decl xsd.ElementDeclaration, b goshape.G
 		}
 		return e.scopedType(child, e.branchOrigin(child, decl, b, t), nil, true, decl, t)
 	}
-	return emittedType{}, fmt.Errorf("%s of element %s at %s: unexpected type definition %T", b.Slot().Name(), decl.Name(), decl.Loc(), b.Type())
+	return emittedType{}, fmt.Errorf("%s of element %s at %s: unexpected type definition %T", b.Slot().Name(), decl.Name().Display(), decl.Loc(), b.Type())
 }
 
 // branchScope is the scope of the type emitted for b's anonymous type, a
@@ -2173,7 +2176,7 @@ func (e *emitter) branchOrigin(child scope, decl xsd.ElementDeclaration, b gosha
 // goshape.AttributeShape's.
 func (e *emitter) attributeField(nested scope, subject string, loc xsderr.Loc, u xsd.AttributeUse) (fieldSpec, error) {
 	name := u.DeclarationName()
-	attr := "attribute " + name.String() + " of " + subject
+	attr := "attribute " + name.Display() + " of " + subject
 	decl, ok := e.schema.ResolvedAttributeDeclaration(u)
 	if !ok {
 		return fieldSpec{}, fmt.Errorf("%s at %s: its {attribute declaration} does not resolve", attr, loc)
@@ -2374,11 +2377,11 @@ func groupElementNode(group, element xsd.QName) valueNode {
 func (n valueNode) String() string {
 	switch n.space {
 	case elementSpace:
-		return "element " + n.name.String()
+		return "element " + n.name.Display()
 	case typeSpace:
-		return "complex type " + n.name.String()
+		return "complex type " + n.name.Display()
 	case groupElementSpace:
-		return "element " + n.element.String() + " of model group " + n.name.String()
+		return "element " + n.element.Display() + " of model group " + n.name.Display()
 	}
 	return fmt.Sprintf("valueNode(%d)", n.space)
 }
@@ -2446,9 +2449,9 @@ func valueChain(chain []valueNode, value bool, decl xsd.ElementDeclaration, t xs
 // field.
 func reacher(decl xsd.ElementDeclaration) string {
 	if decl.ScopeVariety() == xsd.ScopeGlobal {
-		return "<element ref> particle to element " + decl.Name().String()
+		return "<element ref> particle to element " + decl.Name().Display()
 	}
-	return "local element " + decl.Name().String()
+	return "local element " + decl.Name().Display()
 }
 
 // valueCycle walks, through value fields only, the particles of the complex type t that the element declaration
@@ -2562,7 +2565,7 @@ func (e *emitter) elementTerm(subject string, loc xsderr.Loc, term xsd.TermOrRef
 		// branch. A head blocking substitution admits only itself.
 		decl, ok := e.schema.Element(term.Name)
 		if !ok {
-			return xsd.ElementDeclaration{}, fmt.Errorf("%s at %s: its <element ref> particle to %s does not resolve", subject, loc, term.Name)
+			return xsd.ElementDeclaration{}, fmt.Errorf("%s at %s: its <element ref> particle to %s does not resolve", subject, loc, term.Name.Display())
 		}
 		return decl, nil
 	case xsd.ResolvedTerm:

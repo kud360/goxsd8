@@ -142,7 +142,7 @@ func CheckAppend[T any](schema *xsd.Schema, name xsd.QName) error {
 func encodeStatic(schema *xsd.Schema, name xsd.QName, t reflect.Type) (encodeElement, error) {
 	decl, ok := schema.Element(name)
 	if !ok {
-		return encodeElement{}, fmt.Errorf("codec: no top-level element declaration has the expanded name %q", name.String())
+		return encodeElement{}, fmt.Errorf("codec: no top-level element declaration has the expanded name %q", name.Display())
 	}
 	// An answer about the schema, no violation of an instance, so it carries
 	// no xsderr rule (STYLE E2).
@@ -346,7 +346,7 @@ func particlePlanOf(schema *xsd.Schema, p xsd.Particle, subject string) (encodeE
 	case xsd.ModelGroupRef:
 		return encodeElement{}, encodeDecline(constructNestedGroup, subject)
 	case xsd.ElementDeclarationRef:
-		return encodeElement{}, encodeDecline(constructElementRef, fmt.Sprintf("%s, naming element %s", subject, term.Name))
+		return encodeElement{}, encodeDecline(constructElementRef, fmt.Sprintf("%s, naming element %s", subject, term.Name.Display()))
 	case xsd.ResolvedTerm:
 		switch term := term.Term.(type) {
 		case xsd.ModelGroup:
@@ -386,9 +386,9 @@ func particlePlanOf(schema *xsd.Schema, p xsd.Particle, subject string) (encodeE
 func attributePlanOf(schema *xsd.Schema, u xsd.AttributeUse) (encodeAttribute, error) {
 	decl, ok := schema.ResolvedAttributeDeclaration(u)
 	if !ok {
-		return encodeAttribute{}, fmt.Errorf("codec: the {attribute declaration} of attribute use %s does not resolve", u.DeclarationName())
+		return encodeAttribute{}, fmt.Errorf("codec: the {attribute declaration} of attribute use %s does not resolve", u.DeclarationName().Display())
 	}
-	subject := fmt.Sprintf("attribute %s declared at %s", decl.Name(), decl.Loc())
+	subject := fmt.Sprintf("attribute %s declared at %s", decl.Name().Display(), decl.Loc())
 	if decl.Name().Space != "" {
 		return encodeAttribute{}, encodeDecline(constructQualifiedAttribute, subject)
 	}
@@ -491,7 +491,7 @@ func atomicEncodes(r xsd.TypeResolver, st *xsd.SimpleType, subject string) (atom
 	for step := st; step != nil; {
 		for _, id := range idNames {
 			if step.Name() == id {
-				return 0, encodeDecline(constructIDType, fmt.Sprintf("%s, derived from %s", subject, id))
+				return 0, encodeDecline(constructIDType, fmt.Sprintf("%s, derived from %s", subject, id.Display()))
 			}
 		}
 		step, err = step.Base(r)
@@ -583,7 +583,7 @@ func (e *encoder) element(el encodeElement, v reflect.Value, path string, parent
 			}
 			f = f.Elem()
 		}
-		text, err := e.simple(a.simple, f, fpath, fmt.Sprintf("attribute %s declared at %s", a.decl.Name(), a.decl.Loc()))
+		text, err := e.simple(a.simple, f, fpath, fmt.Sprintf("attribute %s declared at %s", a.decl.Name().Display(), a.decl.Loc()))
 		if err != nil {
 			return err
 		}
@@ -886,10 +886,10 @@ func (e *encoder) spelled(st *xsd.SimpleType, a atomic, v reflect.Value, path, s
 	}
 	pm, has := e.backend.Mapping(primitive)
 	if !has {
-		return "", false, fmt.Errorf("codec: Append: %s, of %s: the backend has no mapping of its primitive %s", path, subject, primitive)
+		return "", false, fmt.Errorf("codec: Append: %s, of %s: the backend has no mapping of its primitive %s", path, subject, primitive.Display())
 	}
 	if _, err := pm.Parse(lexical, nil); err != nil {
-		return "", false, fmt.Errorf("codec: Append: %s holds %s, of %s, whose canonical spelling the backend's Parse of %s rejects: %w", path, lexical, subject, primitive, err)
+		return "", false, fmt.Errorf("codec: Append: %s holds %s, of %s, whose canonical spelling the backend's Parse of %s rejects: %w", path, lexical, subject, primitive.Display(), err)
 	}
 	val, err := value.ValidateLexical(e.backend, e.schema, st, lexical, nil, noAssertions{})
 	if err != nil {

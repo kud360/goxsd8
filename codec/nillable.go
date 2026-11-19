@@ -35,7 +35,7 @@ func newNillableSum(p *pipeline, attrs *binding) (nillableSum, error) {
 	td, ok := p.schema.Type(booleanName)
 	st, simple := td.(*xsd.SimpleType)
 	if !ok || !simple {
-		return nillableSum{}, fmt.Errorf("codec: %s, the {type definition} of the built-in xsi:nil (§3.2.7.2), is no simple type of the schema", booleanName)
+		return nillableSum{}, fmt.Errorf("codec: %s, the {type definition} of the built-in xsi:nil (§3.2.7.2), is no simple type of the schema", booleanName.Display())
 	}
 	g, err := simpleDecline(p.schema, st, "attribute xsi:nil")
 	if err != nil {
@@ -192,7 +192,7 @@ func (b boundNillable) nilledValue(r *xmltree.Reader, start *xmltree.StartElemen
 			v.Set(arm)
 			return v, nil
 		case *xmltree.StartElement, *xmltree.CharData:
-			return reflect.Value{}, fmt.Errorf("codec: %s: the nilled element %s has a character or element child (cvc-elt clause 3.2.3.1)", start.Loc(), expanded(start.Name()))
+			return reflect.Value{}, fmt.Errorf("codec: %s: the nilled element %s has a character or element child (cvc-elt clause 3.2.3.1)", start.Loc(), expanded(start.Name()).Display())
 		}
 	}
 }

@@ -178,12 +178,12 @@ func (s tableSelector) selected(t *tableRoot, p *pipeline, start *xmltree.StartE
 	name := expanded(start.Name())
 	index, decided := p.validator.ConditionallySelectedIndex(s.table, infosetAttributes(start), p.inherited)
 	if !decided {
-		return 0, fmt.Errorf("codec: %s: element %s: its {type table} withholds the selection (key-cta-ta-select) of an instance validate did not leave undecided", start.Loc(), name)
+		return 0, fmt.Errorf("codec: %s: element %s: its {type table} withholds the selection (key-cta-ta-select) of an instance validate did not leave undecided", start.Loc(), name.Display())
 	}
 	slot, ref, mapped := goshape.TableSlot(s.table, index)
 	td, resolved := p.schema.ResolvedType(ref)
 	if !mapped || !resolved {
-		return 0, fmt.Errorf("codec: %s: element %s: the type its {type table} selects (key-cta-ta-select) does not resolve", start.Loc(), name)
+		return 0, fmt.Errorf("codec: %s: element %s: the type its {type table} selects (key-cta-ta-select) does not resolve", start.Loc(), name.Display())
 	}
 	return s.match(t, start, slot, td)
 }
@@ -194,7 +194,7 @@ func (s tableSelector) selected(t *tableRoot, p *pipeline, start *xmltree.StartE
 func (tableSelector) match(t *tableRoot, start *xmltree.StartElement, slot goshape.Slot, td xsd.TypeDefinition) (int, error) {
 	i, matched := t.matched(slot, td)
 	if !matched {
-		return 0, fmt.Errorf("codec: %s: element %s: the type its {type table} selects (key-cta-ta-select) at its %s is none of its governing types", start.Loc(), expanded(start.Name()), slot.Name())
+		return 0, fmt.Errorf("codec: %s: element %s: the type its {type table} selects (key-cta-ta-select) at its %s is none of its governing types", start.Loc(), expanded(start.Name()).Display(), slot.Name())
 	}
 	return i, nil
 }
@@ -218,16 +218,16 @@ func (instanceSelector) selected(t *tableRoot, p *pipeline, start *xmltree.Start
 	name := expanded(start.Name())
 	a, carries := xsiType(start)
 	if !carries {
-		return 0, fmt.Errorf("codec: %s: element %s carries no xsi:type, but one overriding its {type definition} (key-overrides) is required", start.Loc(), name)
+		return 0, fmt.Errorf("codec: %s: element %s carries no xsi:type, but one overriding its {type definition} (key-overrides) is required", start.Loc(), name.Display())
 	}
 	space, local, ok := xmlqname.Resolve(a.Value(), start.LookupPrefix)
 	td, resolved := p.schema.ResolvedType(xsd.TypeDefinitionRef{Name: xsd.QName{Space: space, Local: local}})
 	if !ok || !resolved {
-		return 0, fmt.Errorf("codec: %s: element %s: its xsi:type %q names no type definition, but one overriding its {type definition} (key-overrides) is required", start.Loc(), name, a.Value())
+		return 0, fmt.Errorf("codec: %s: element %s: its xsi:type %q names no type definition, but one overriding its {type definition} (key-overrides) is required", start.Loc(), name.Display(), a.Value())
 	}
 	i, matched := t.matched(goshape.DeclaredSlot{}, td)
 	if !matched {
-		return 0, fmt.Errorf("codec: %s: element %s: its xsi:type %q names %s, none of its governing types, the types that override its {type definition} (key-overrides)", start.Loc(), name, a.Value(), td.Name())
+		return 0, fmt.Errorf("codec: %s: element %s: its xsi:type %q names %s, none of its governing types, the types that override its {type definition} (key-overrides)", start.Loc(), name.Display(), a.Value(), td.Name().Display())
 	}
 	return i, nil
 }

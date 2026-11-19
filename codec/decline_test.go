@@ -545,9 +545,9 @@ func TestDeclineErrorTextUnlocated(t *testing.T) {
 	const prefix = "codec does not encode an atomic simple type whose primitive is other than xs:string, xs:double, xs:decimal or xs:boolean: "
 	const tail = "; an encoder refusal, not a schema or value fault"
 	for _, row := range []struct{ elem, want string }{
-		{"r", "simple type {http://www.w3.org/2001/XMLSchema}date"},
-		{"p", "simple type {http://www.w3.org/2001/XMLSchema}date"},
-		{"at", "simple type {http://www.w3.org/2001/XMLSchema}anyURI"},
+		{"r", "simple type xs:date"},
+		{"p", "simple type xs:date"},
+		{"at", "simple type xs:anyURI"},
 		{"u", "simple type {urn:s}st defined at s.xsd:1:458"},
 	} {
 		_, err := appendChecked(t, nil, schema, strict.New(), sname(row.elem), struct{}{})
@@ -572,11 +572,11 @@ func TestSubjectsUnlocated(t *testing.T) {
 	st := integer.(*xsd.SimpleType)
 	ct := anyType.(xsd.ComplexType)
 	for _, row := range []struct{ got, want string }{
-		{itemSubject("S", st), "S, through the list type's {item type definition} {http://www.w3.org/2001/XMLSchema}integer"},
-		{memberSubject("S", st), "S, through the union's basic member {http://www.w3.org/2001/XMLSchema}integer"},
-		{contentSubject("S", st), "S, through its {content type}'s {simple type definition} {http://www.w3.org/2001/XMLSchema}integer"},
-		{typeSubject(decl, anyType), "the {type definition} of element {urn:s}r declared at s.xsd:1:257, the type {http://www.w3.org/2001/XMLSchema}anyType"},
-		{complexSubject(ct), "the complex type {http://www.w3.org/2001/XMLSchema}anyType"},
+		{itemSubject("S", st), "S, through the list type's {item type definition} xs:integer"},
+		{memberSubject("S", st), "S, through the union's basic member xs:integer"},
+		{contentSubject("S", st), "S, through its {content type}'s {simple type definition} xs:integer"},
+		{typeSubject(decl, anyType), "the {type definition} of element {urn:s}r declared at s.xsd:1:257, the type xs:anyType"},
+		{complexSubject(ct), "the complex type xs:anyType"},
 	} {
 		if row.got != row.want {
 			t.Errorf("subject %q, want %q", row.got, row.want)
