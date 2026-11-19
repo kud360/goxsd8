@@ -551,15 +551,15 @@ func (w *walker) rootMember(key string, sc *scope, scalar bool, loc xsderr.Loc) 
 	}
 	if !scalar {
 		return nil, w.declinef(loc, "root member %q names top-level element declarations of %d expanded names (%s and %s); an unprefixed key does not choose between them, and a prefixed one, \"p:%s\", names one",
-			key, len(match), match[0].Name(), match[1].Name(), key)
+			key, len(match), match[0].Name().Display(), match[1].Name().Display(), key)
 	}
 	inXML := slices.IndexFunc(match, func(d xsd.ElementDeclaration) bool { return d.Name().Space == xmlNamespace })
 	if inXML < 0 {
 		return nil, w.declinef(loc, "root member %q names top-level element declarations of %d expanded names (%s and %s); an unprefixed key does not choose between them, and a root whose value is a scalar or null has no object for a \"$xmlns\" member to lead, so \"xml\" is the one prefix bound there and no key names any of them with this value",
-			key, len(match), match[0].Name(), match[1].Name())
+			key, len(match), match[0].Name().Display(), match[1].Name().Display())
 	}
 	return nil, w.declinef(loc, "root member %q names top-level element declarations of %d expanded names (%s and %s); an unprefixed key does not choose between them, and a root whose value is a scalar or null has no object for a \"$xmlns\" member to lead, so \"xml\" is the one prefix bound there: key it \"xml:%s\" for %s, and no key names any other of them with this value",
-		key, len(match), match[0].Name(), match[1].Name(), key, match[inXML].Name())
+		key, len(match), match[0].Name().Display(), match[1].Name().Display(), key, match[inXML].Name().Display())
 }
 
 // keyName is a member's key as classification reads it: name.Local, the local
@@ -648,7 +648,7 @@ func (w *walker) notNCName(key string, o *object, loc xsderr.Loc) error {
 		return w.declinef(loc, base, key)
 	}
 	return w.declinef(loc, base+", and an attribute member's key takes no \"@\" or \"-\": the attribute use %s of the type of %s is named by the key %q",
-		key, name, o.owner, local)
+		key, name.Display(), o.owner.Display(), local)
 }
 
 // attributeKeyed is the expanded name of the attribute use among o.uses that
@@ -1154,7 +1154,7 @@ func (w *walker) allAlike(ms []member, scalar bool) bool {
 // the owner (walker.selector, walker.unselected).
 func (w *walker) notAlike(o *object, key string, loc xsderr.Loc) error {
 	return w.declinef(loc, "member %q of %s is not classified alike under its declaration's {type definition} and every type its {type table} can select; the mapping reads no ·selected type definition· for it",
-		key, o.owner)
+		key, o.owner.Display())
 }
 
 // undetermined declines the member key, at loc, of o's object, the attribute
@@ -1167,7 +1167,7 @@ func (w *walker) notAlike(o *object, key string, loc xsderr.Loc) error {
 // it, reading on settles no one reading, under walker.readAhead's.
 func (w *walker) undetermined(o *object, key string, loc xsderr.Loc) error {
 	return w.declinef(loc, "member %q of %s is declined under a type its {type table} can select and classified under another; the type the table ·conditionally selects· reads the whole run of attribute members, and the mapping maps the member only where no reading of the run up to it selects a type that declines it, and, reading on, one reading alone is classified as it reads by the type it selects",
-		key, o.owner)
+		key, o.owner.Display())
 }
 
 // memberOf classifies the key, read as k, at loc, against o alone: classify's
@@ -1183,7 +1183,7 @@ func (w *walker) memberOf(o *object, key string, k keyName, loc xsderr.Loc) (mem
 	}
 	if declared && used {
 		return nil, w.declinef(loc, "member %q names both the child element declaration %s and the attribute use %s of the type of %s; the mapping does not choose between them",
-			key, decl.Name(), use.DeclarationName(), o.owner)
+			key, decl.Name().Display(), use.DeclarationName().Display(), o.owner.Display())
 	}
 	if used {
 		return attributeMember{name: use.DeclarationName()}, nil
@@ -1375,26 +1375,26 @@ func sameNamed(s, t xsd.TypeDefinition) bool {
 func (w *walker) wildcardMember(o *object, key string, k keyName, loc xsderr.Loc) (member, error) {
 	if o.undeclared {
 		return nil, w.declinef(loc, "member %q of %s, an element no contained and no top-level element declaration names; only an empty object maps under it",
-			key, o.owner)
+			key, o.owner.Display())
 	}
 	elemental := len(o.elementWildcards) > 0
 	if elemental && o.attributeWildcard != nil {
 		return nil, w.declinef(loc, "member %q names no child element declaration and no attribute use of the type of %s, which has both an element wildcard and an {attribute wildcard}; a JSON key does not say which it is",
-			key, o.owner)
+			key, o.owner.Display())
 	}
 	if !elemental && o.attributeWildcard != nil && o.simpleContent {
 		return nil, w.declinef(loc, "member %q names only the {attribute wildcard} of the type of %s, whose {content type} is simple; the mapping spells no text beside attribute members",
-			key, o.owner)
+			key, o.owner.Display())
 	}
 	if k.prefixed {
 		if k.name.Space == xsd.XMLSchemaInstanceNS {
-			return nil, w.declinef(loc, "member %q names no child element declaration and no attribute use of the type of %s, and its prefix puts it in the namespace %s; the mapping names no key in the xsi namespace", key, o.owner, k.name.Space)
+			return nil, w.declinef(loc, "member %q names no child element declaration and no attribute use of the type of %s, and its prefix puts it in the namespace %s; the mapping names no key in the xsi namespace", key, o.owner.Display(), k.name.Space)
 		}
 		if o.attributeWildcard != nil {
 			return attributeMember{name: k.name}, nil
 		}
 		if k.name.Space == xmlNamespace {
-			return nil, w.declinef(loc, "member %q names no child element declaration and no attribute use of the type of %s, and its prefix puts it in the namespace %s; the mapping names no child element in the xml namespace", key, o.owner, k.name.Space)
+			return nil, w.declinef(loc, "member %q names no child element declaration and no attribute use of the type of %s, and its prefix puts it in the namespace %s; the mapping names no child element in the xml namespace", key, o.owner.Display(), k.name.Space)
 		}
 		return w.namedChild(k.name), nil
 	}
@@ -1402,7 +1402,7 @@ func (w *walker) wildcardMember(o *object, key string, k keyName, loc xsderr.Loc
 		ns, why, ok := fixedNamespace(o.elementWildcards)
 		if !ok {
 			return nil, w.declinef(loc, "member %q names no child element declaration and no attribute use of the type of %s, and its element wildcard set %s",
-				key, o.owner, why)
+				key, o.owner.Display(), why)
 		}
 		return w.namedChild(xsd.QName{Space: ns, Local: key}), nil
 	}
@@ -1412,7 +1412,7 @@ func (w *walker) wildcardMember(o *object, key string, k keyName, loc xsderr.Loc
 	ns, why, ok := fixedNamespace([]xsd.Wildcard{*o.attributeWildcard})
 	if !ok {
 		return nil, w.declinef(loc, "member %q names no child element declaration and no attribute use of the type of %s, and its {attribute wildcard} set %s",
-			key, o.owner, why)
+			key, o.owner.Display(), why)
 	}
 	return attributeMember{name: xsd.QName{Space: ns, Local: key}}, nil
 }
@@ -1485,7 +1485,7 @@ func (w *walker) childNamed(o *object, key string, k keyName, loc xsderr.Loc) (x
 		}
 		if d.Name() != first.Name() {
 			return xsd.ElementDeclaration{}, false, w.declinef(loc, "member %q names child element declarations of two expanded names in the type of %s (%s and %s); an unprefixed key does not choose between them, and a prefixed one, \"p:%s\", names one",
-				key, o.owner, first.Name(), d.Name(), key)
+				key, o.owner.Display(), first.Name().Display(), d.Name().Display(), key)
 		}
 	}
 	return first, found, nil
@@ -1539,7 +1539,7 @@ func (w *walker) useNamed(o *object, key string, k keyName, loc xsderr.Loc) (xsd
 		}
 		if u.DeclarationName() != first.DeclarationName() {
 			return xsd.AttributeUse{}, false, w.declinef(loc, "member %q names attribute uses of two expanded names in the type of %s (%s and %s); an unprefixed key does not choose between them, and a prefixed one, \"p:%s\", names one",
-				key, o.owner, first.DeclarationName(), u.DeclarationName(), key)
+				key, o.owner.Display(), first.DeclarationName().Display(), u.DeclarationName().Display(), key)
 		}
 	}
 	if !found {
@@ -1547,11 +1547,11 @@ func (w *walker) useNamed(o *object, key string, k keyName, loc xsderr.Loc) (xsd
 	}
 	if first.DeclarationName().Space == xsd.XMLSchemaInstanceNS {
 		return xsd.AttributeUse{}, false, w.declinef(loc, "member %q names the attribute use %s of the type of %s; an xsi: attribute is presented only by the null => xsi:nil arm and the \"$type\" member",
-			key, first.DeclarationName(), o.owner)
+			key, first.DeclarationName().Display(), o.owner.Display())
 	}
 	if o.simpleContent {
 		return xsd.AttributeUse{}, false, w.declinef(loc, "member %q names an attribute use of the type of %s, whose {content type} is simple; the mapping spells no text beside attribute members",
-			key, o.owner)
+			key, o.owner.Display())
 	}
 	return first, true, nil
 }
@@ -1578,7 +1578,7 @@ func (w *walker) selectable(d xsd.ElementDeclaration, owner xsd.QName, tokLoc xs
 		t, ok := w.schema.ResolvedType(alt.TypeDefinition())
 		if !ok {
 			return nil, w.declinef(tokLoc, "the {type definition} of Type Alternative %d of %d in the {type table} of %s does not resolve; its members cannot be classified",
-				i+1, len(alternatives), d.Name())
+				i+1, len(alternatives), d.Name().Display())
 		}
 		objects = append(objects, w.object(owner, t))
 	}
@@ -1839,7 +1839,7 @@ func (w *walker) typeMember(e *element, tok json.Token, loc xsderr.Loc) (*attrib
 	}
 	lexical, ok := vtok.(string)
 	if !ok {
-		return nil, nil, vloc, w.declinef(vloc, "the \"$type\" member of %s is not a string; its value is the lexical form of the element's xsi:type, so give it as a string, \"local\" or \"p:local\"", e.name)
+		return nil, nil, vloc, w.declinef(vloc, "the \"$type\" member of %s is not a string; its value is the lexical form of the element's xsi:type, so give it as a string, \"local\" or \"p:local\"", e.name.Display())
 	}
 	typ := &attribute{name: xsiType, value: lexical, loc: loc}
 	if tok, loc, err = w.token(); err != nil {
@@ -1924,7 +1924,7 @@ func (w *walker) xmlns(key string) ([]binding, error) {
 func (w *walker) declaredType(decl xsd.ElementDeclaration, tokLoc xsderr.Loc) (xsd.TypeDefinition, error) {
 	declared, ok := w.schema.ResolvedType(decl.TypeDefinition())
 	if !ok {
-		return nil, w.declinef(tokLoc, "the {type definition} of %s does not resolve; its members cannot be classified", decl.Name())
+		return nil, w.declinef(tokLoc, "the {type definition} of %s does not resolve; its members cannot be classified", decl.Name().Display())
 	}
 	return declared, nil
 }
@@ -2106,7 +2106,7 @@ func (w *walker) governedTypes(p xsd.TypeDefinition, a xsd.Attribution, name xsd
 // (walker.governedTypes).
 func (w *walker) overrideUndecided(name xsd.QName, typ *attribute, err error) error {
 	return w.declinef(typ.loc, "the \"$type\" member of %s: whether the type it names ·overrides· the one %s would otherwise take could not be settled: %v",
-		name, name, err)
+		name.Display(), name.Display(), err)
 }
 
 // governedAt is validate.Validator.Governing for the element named name,
@@ -2312,7 +2312,7 @@ func (w *walker) instanceGoverned(e *element, typ *attribute, instance xsd.TypeD
 	}
 	if len(parent.governing) == 0 {
 		return nil, w.declinef(typ.loc, "the \"$type\" member of %s: the mapping determines no type that governs %s, so the type governing %s is not settled",
-			e.name, parent.owner, e.name)
+			e.name.Display(), parent.owner.Display(), e.name.Display())
 	}
 	var settled xsd.TypeDefinition
 	for i, p := range parent.governing {
@@ -2322,7 +2322,7 @@ func (w *walker) instanceGoverned(e *element, typ *attribute, instance xsd.TypeD
 		}
 		if i > 0 && !oneType(td, settled) {
 			return nil, w.declinef(typ.loc, "the \"$type\" member of %s: the types the {type table} of %s or of an ancestor can select settle the type governing %s differently, and the mapping reads no ·selected type definition· for it: the engine withholds the selection, or one above it, and determines no type governing %s",
-				e.name, parent.owner, e.name, parent.owner)
+				e.name.Display(), parent.owner.Display(), e.name.Display(), parent.owner.Display())
 		}
 		settled = td
 	}
@@ -2980,12 +2980,12 @@ func (w *walker) extend(r *attributeRun, next *runMember) (unsettled, err error)
 		}
 		if len(live) > 0 && a.name != name {
 			return w.declinef(next.loc, "member %q of %s is an attribute of the expanded names %s and %s under two types its {type table} can select, and no one reading of its attribute members settles which",
-				next.key, r.owner.owner, name, a.name), nil
+				next.key, r.owner.owner.Display(), name.Display(), a.name.Display()), nil
 		}
 		live, name = append(live, r.live[i]), a.name
 	}
 	if r.has(name) {
-		return nil, w.declinef(next.loc, "attribute member %q repeats in the object of %s; an element carries one attribute of each expanded name, so give it once", next.key, r.owner.owner)
+		return nil, w.declinef(next.loc, "attribute member %q repeats in the object of %s; an element carries one attribute of each expanded name, so give it once", next.key, r.owner.owner.Display())
 	}
 	if _, ok := scalarLexical(next.val.tok); !ok {
 		return nil, w.notScalar(r.owner, next.key, next.val.loc)
@@ -3466,7 +3466,7 @@ func (w *walker) settled(r *attributeRun, next *runMember, loc xsderr.Loc) (fina
 	}
 	s, ok := w.schema.ResolvedType(slot)
 	if !ok {
-		return nil, nil, w.declinef(loc, "the type the {type table} of %s ·conditionally selects· does not resolve; its members cannot be classified", r.owner.owner)
+		return nil, nil, w.declinef(loc, "the type the {type table} of %s ·conditionally selects· does not resolve; its members cannot be classified", r.owner.owner.Display())
 	}
 	so := w.object(r.owner.owner, s)
 	agrees, err := w.agrees(so, r.run, next)
@@ -3478,11 +3478,11 @@ func (w *walker) settled(r *attributeRun, next *runMember, loc xsderr.Loc) (fina
 	}
 	if !agrees {
 		return nil, nil, w.declinef(loc, "the members of %s settle no type its {type table} ·conditionally selects·: the type its leading attribute members select classifies them otherwise",
-			r.owner.owner)
+			r.owner.owner.Display())
 	}
 	if next != nil && next.attribute() {
 		return nil, w.declinef(loc, "member %q of %s is an attribute under a type its {type table} can select and a child under the one the attributes before it select, and no one reading of its attribute members settles which",
-			next.key, r.owner.owner), nil
+			next.key, r.owner.owner.Display()), nil
 	}
 	w.govern(so, []xsd.TypeDefinition{s})
 	return so, nil, nil
@@ -3573,11 +3573,11 @@ func (w *walker) overrode(r *attributeRun, next *runMember, sc *scope, closed *p
 	}
 	if agrees {
 		return nil, nil, nil, w.declinef(r.typ.loc, "the \"$type\" member of %s: the type that governs %s for the attributes its members are classified with, %s, classifies those members as they read, but another reading of its attribute members stands too, or one the mapping cannot settle",
-			r.owner.owner, r.owner.owner, typeName(t))
+			r.owner.owner.Display(), r.owner.owner.Display(), typeName(t))
 	}
 	s, _ := w.schema.ResolvedType(slot)
 	return nil, nil, nil, w.declinef(r.typ.loc, "the \"$type\" member of %s: the type its {type table} selects for the attributes its members are classified with, %s, is one the type it names does not ·override·, so it governs %s, and it classifies those members otherwise; and no one reading of its attribute members is classified as it reads by the type that governs it",
-		r.owner.owner, typeName(s), r.owner.owner)
+		r.owner.owner.Display(), typeName(s), r.owner.owner.Display())
 }
 
 // ended is what walker.attributes hands the element's members cursor where
@@ -3670,7 +3670,7 @@ func typeName(t xsd.TypeDefinition) string {
 	if t.Name() == (xsd.QName{}) {
 		return "an anonymous type definition"
 	}
-	return t.Name().String()
+	return t.Name().Display()
 }
 
 // unselected ends r's run at next, or at the object's close where next is
@@ -3697,7 +3697,7 @@ func (w *walker) unselected(r *attributeRun, next *runMember) (final *object, un
 // GAP(jsonsrc) marker).
 func (w *walker) withheld(o *object, loc xsderr.Loc) error {
 	return w.declinef(loc, "the members of %s are classified differently under the types its {type table} can select, and the engine withholds the type the table ·conditionally selects·: a {test} it reaches is outside its compiler's subset",
-		o.owner)
+		o.owner.Display())
 }
 
 // agrees reports whether so classifies each member of run as the attribute
@@ -3729,7 +3729,7 @@ func (w *walker) agrees(so *object, run []*runMember, next *runMember) (bool, er
 // notScalar declines the attribute member key of o's object whose value, at
 // loc, is null, an object or an array.
 func (w *walker) notScalar(o *object, key string, loc xsderr.Loc) error {
-	return w.declinef(loc, "attribute member %q of %s is not a string, number or boolean; an attribute's value is a scalar", key, o.owner)
+	return w.declinef(loc, "attribute member %q of %s is not a string, number or boolean; an attribute's value is a scalar", key, o.owner.Display())
 }
 
 // item classifies run's key over one of its items, whose element has the
