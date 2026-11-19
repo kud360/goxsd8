@@ -177,8 +177,8 @@ func TestSeedMissingErrorMessageNamesQNames(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected an error")
 	}
-	if got := err.Error(); !strings.Contains(got, "{http://www.w3.org/2001/XMLSchema}decimal") {
-		t.Errorf("error %q must name the missing primitive in Clark notation", got)
+	if got := err.Error(); !strings.Contains(got, "xs:decimal") {
+		t.Errorf("error %q must name the missing primitive as xs:decimal", got)
 	}
 }
 

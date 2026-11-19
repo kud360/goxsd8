@@ -26,11 +26,11 @@ type MissingPrimitivesError struct {
 	Missing []xsd.QName
 }
 
-// Error renders the missing primitives in Clark notation, in Types order.
+// Error renders the missing primitives as [xsd.QName.Display] renders them, in Types order.
 func (e *MissingPrimitivesError) Error() string {
 	names := make([]string, len(e.Missing))
 	for i, q := range e.Missing {
-		names[i] = q.String()
+		names[i] = q.Display()
 	}
 	return "builtin: backend does not map required primitive datatype(s): " + strings.Join(names, ", ")
 }
