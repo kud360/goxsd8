@@ -16,8 +16,11 @@ import (
 	"github.com/kud360/goxsd8/xsderr"
 )
 
-// ErrInvalidValue is the error [Append] wraps for item 6 of its doc, adding
-// nothing to that error's text.
+// ErrInvalidValue is the sentinel errors.Is finds in item 6's error of
+// [Append], whose text is its cause's alone, never this sentinel's. In the
+// last of item 6's cases that error wraps the value.ValidateLexical rejection
+// and carries whatever *xsderr.Error the rejection carries; in the others it
+// carries none.
 var ErrInvalidValue = errors.New("codec: Append: a value no valid document holds")
 
 // Append appends to dst the XML document that encodes v as the document
@@ -55,9 +58,9 @@ var ErrInvalidValue = errors.New("codec: Append: a value no valid document holds
 //     denominator in lowest terms is no 2^m·5^n (§3.3.3.1), such as 1/3; or
 //     a value whose simple type rejects it, a value.ValidateLexical error
 //     value.IsDatatypeVerdict reports as a verdict, a facet's rejection or a
-//     backend Parse's among them, that error wrapped, and through it whatever
-//     *xsderr.Error it carries, but for item 7's pattern case, a list's own
-//     facets read once every item has passed its own checks.
+//     backend Parse's among them, that error wrapped, but for item 7's
+//     pattern case, a list's own facets read once every item has passed its
+//     own checks.
 //  7. A value with no canonical representation, the first in document order
 //     as item 6 counts: its *DeclineError. That is a governing mapping with no
 //     Canonical, a Canonical that fails for the value, an xs:decimal-primitive

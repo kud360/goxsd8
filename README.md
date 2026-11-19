@@ -417,12 +417,13 @@ climbing with `../` out of it, as `goxsd8 -help` states: the CLI section's
 `codec.Decode` validates an instance against the schema and decodes it into
 the generated type, here `order.Order`; `go doc
 github.com/kud360/goxsd8/codec Decode` states every error it returns.
-Run `codec.CheckDecode` once at start-up, before any instance arrives: it
-reports whether `Decode` returns, for a declaration and a generated type, its
-item 5 error, a construct outside the decoded slice, or its item 6 error, a
-type that is not the one codegen emits for the declaration. `go doc
-github.com/kud360/goxsd8/codec CheckDecode` states what it returns, and
-`ExampleCheckDecode` in `codec/example_test.go` runs it.
+`go doc github.com/kud360/goxsd8/codec` states when to run
+`codec.CheckDecode`, which reports whether `Decode` returns, for a
+declaration and a generated type, its item 5 error, a construct outside the
+decoded slice, or its item 6 error, a type that is not the one codegen emits
+for the declaration. `go doc github.com/kud360/goxsd8/codec CheckDecode`
+states what it returns, and `ExampleCheckDecode` in `codec/example_test.go`
+runs it.
 Once `Generate` has written `gen/order`, a program in the same module with
 `schema` and `backend` as above decodes `order.xml` into it, importing
 `github.com/kud360/goxsd8/codec`, `github.com/kud360/goxsd8/xsderr` and the
@@ -509,11 +510,11 @@ get a verdict on it, assess it with package `validate` as any document.
 
 `codec.CheckDecode` reports on `Decode` alone: a nil from it says nothing
 about `Append`, which encodes the narrower slice `codec`'s package doc states
-(section "What encodes"). Run `codec.CheckAppend` once at start-up, before
-any value exists, to learn whether `Append` refuses a declaration and a
-generated type whatever the value: `go doc github.com/kud360/goxsd8/codec
-CheckAppend` states what it returns, and `ExampleCheckAppend` in
-`codec/example_test.go` runs it.
+(section "What encodes"). `go doc github.com/kud360/goxsd8/codec` states
+when to run `codec.CheckAppend`, which reports whether `Append` refuses a
+declaration and a generated type whatever the value: `go doc
+github.com/kud360/goxsd8/codec CheckAppend` states what it returns, and
+`ExampleCheckAppend` in `codec/example_test.go` runs it.
 
 Two targets can compose one document. `ship.xsd` and `bill.xsd` each import
 `note.xsd`:

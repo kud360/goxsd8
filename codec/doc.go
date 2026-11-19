@@ -8,6 +8,10 @@
 // encodes without error, Append writes that value, not the input's bytes:
 // [Append]'s doc and "# What encodes" state the written form.
 //
+// Call [CheckDecode] and [CheckAppend] once at start-up, for each top-level
+// element declaration and T a program decodes or encodes, then [Decode] or
+// [Append] for each instance or value; each Check's doc states what it reports.
+//
 // # Decode
 //
 //	func Decode[T any](schema *xsd.Schema, backend value.Backend, data []byte, opts ...Option) (*T, error)
