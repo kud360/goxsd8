@@ -72,9 +72,14 @@ const notUTF8 = "malformed JSON: a string's source text is not UTF-8 (RFC 8259 Â
 // source is not UTF-8 is malformed wherever a decline's character also is,
 // and the guards, which the decoder decodes to U+FFFD, a paired surrogate or
 // an escaped Char, or which escape the backslash before the text ud800, are
-// assessed with no violation. Error is the whole of err.Error(), the
-// location and message prefix included; an empty one asks for a result
-// standing NotProvenInvalid with no violation and nothing unevaluated.
+// assessed with no violation. A guard beside an escaped U+FFFD is one the
+// source scan reads, the others being answered off the decoded string alone;
+// the last row, read whole, pins the scan to the token, a scan to the end of
+// what the decoder has read declining the U+0000 of the string after it at
+// the U+FFFD's location. Error is the whole of
+// err.Error(), the location and message prefix included; an empty one asks
+// for a result standing NotProvenInvalid with no violation and nothing
+// unevaluated.
 func TestStringChars(t *testing.T) {
 	v := validatorOver(t, charsSchema)
 	lax := validatorOver(t, laxExtensionSchema)
@@ -135,6 +140,11 @@ func TestStringChars(t *testing.T) {
 		{"escaped backslash before the text ud800", v, `{"r":{"m":"a\\ud800b"}}`, 0, ""},
 		{"escaped U+FFFD in an attribute", v, `{"r":{"ks":"\ufffd"}}`, 0, ""},
 		{"supplementary-plane literal", v, "{\"r\":{\"m\":\"\U0001D11E\"}}", 0, ""},
+		{"paired surrogate escapes beside an escaped U+FFFD", v, `{"r":{"m":"\ud834\udd1e\ufffd"}}`, 0, ""},
+		{"tab, LF and CR escapes beside an escaped U+FFFD", v, `{"r":{"m":"\t\n\r\ufffd"}}`, 0, ""},
+		{"the other escapes beside an escaped U+FFFD", v, `{"r":{"m":"\"\\\/\u0041\u00e9\ufffd"}}`, 0, ""},
+		{"escaped backslash before the text ud800, beside an escaped U+FFFD", v, `{"r":{"m":"a\\ud800b\ufffd"}}`, 0, ""},
+		{"a non-Char in the string after an escaped U+FFFD", v, `{"r":{"m":"\ufffd","s":"\u0000"}}`, Decline, at(24, nonCharDecline(0))},
 	} {
 		for _, rd := range []struct {
 			name string
