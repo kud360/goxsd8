@@ -82,7 +82,7 @@
 //	    case $? in
 //	      0) ;;             # pass
 //	      1|2|3) exit 1 ;;  # fail
-//	      4) exit 1 ;;      # fail; the line a gate accepting 4 changes
+//	      4) exit 1 ;;      # fail, for a gate that must fail closed
 //	      *) exit 1 ;;      # fail: no code above (goxsd8 not run, killed)
 //	    esac
 //	For example, run from testdata/readme in the module source, where
