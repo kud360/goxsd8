@@ -46,8 +46,10 @@ Value implementations, parsing, validation, and generation live above them.
                                     parser/xmltree's character-reference and
                                     markup checks, internal/xmltok's text
                                     check, codec's check of the strings
-                                    Append writes and builtin/strict's
-                                    xs:string and xs:anyURI Parse read.
+                                    Append writes, builtin/strict's
+                                    xs:string and xs:anyURI Parse and
+                                    validate/jsonsrc's check of each
+                                    string token read.
                                   - internal/xmlqname, the QName split and prefix
                                     resolution of an xsi:type lexical
                                     (cvc-resolve-instance), which validate's walk,
@@ -152,7 +154,7 @@ backend: `New` takes the `value.Backend` as a required parameter, so
 `parser/xmltree`, `validate`, `xsd` and `xsderr` — and neither `loader` nor
 `parser`, which an imports test pins; `validate/jsonsrc` exports
 `Validate`/`Option`/`WithURI` and `Error`/`Class` with its constants, imports `validate`, `xsd`, `xsderr`,
-`internal/xmlname`, `internal/xmlqname` and `encoding/json`, and reads the schema through `validate.SchemaView`, the
+`internal/xmlchar`, `internal/xmlname`, `internal/xmlqname` and `encoding/json`, and reads the schema through `validate.SchemaView`, the
 view `Validator.Schema` returns, alone and with no capability assertion, to
 name the root, classify members and attribute children, hands down
 inherited attributes through `Validator.HandedDown`, reads each
@@ -199,8 +201,8 @@ gives it its one home there. Whether that table is generated is
 #989's question, asked of `internal/xmlname`. [2] `Char` lives in
 `internal/xmlchar`, read by `parser/xmltree`'s character-reference check and
 markup check, `internal/xmltok`'s text check (#2187, #2265), `codec`'s
-check of the strings `Append` writes and `builtin/strict`'s xs:string and
-xs:anyURI Parse. [3] `S`
+check of the strings `Append` writes, `builtin/strict`'s xs:string and
+xs:anyURI Parse and `validate/jsonsrc`'s check of each string token. [3] `S`
 is still spelled package-locally across the library, and #3033 gives it
 its one home in `internal/xmlchar`; do not write another copy. The
 [7]-[11] `QName` split and prefix resolution of an xsi:type lexical lives in

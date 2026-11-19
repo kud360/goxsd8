@@ -85,10 +85,10 @@ func WithURI(uri string) Option {
 //     "jsonsrc: Validate: nil io.Reader", a plain error and no *Error. It
 //     wraps nothing.
 //   - Malformed JSON, class [Malformed]: an input that is not exactly one JSON
-//     value (RFC 8259 §2), whose message is "malformed JSON: …", "the
-//     document holds no JSON value; …" or "content follows the top-level
-//     object". The first may wrap an error, whose identity is not part of
-//     this contract; the other two wrap nothing.
+//     value (RFC 8259 §2), or whose text is not UTF-8 (RFC 8259 §8.1), whose
+//     message is "malformed JSON: …", "the document holds no JSON value; …"
+//     or "content follows the top-level object". The first may wrap an error,
+//     whose identity is not part of this contract; the other two wrap nothing.
 //   - A fault reading r, class [ReadFault]: "fault reading the input: …",
 //     wrapping the error r returned, which [errors.Is] reaches. The class is
 //     decided by whether the decoder's error is the one r returned, never by
@@ -329,13 +329,11 @@ func (w *walker) token() (json.Token, xsderr.Loc, error) {
 // UTF-8 to U+FFFD alike, as it does a U+FFFD the source spells, so only the
 // source tells them apart.
 //
-// It DECLINES a string holding a character that is no XML 1.0 [2] Char
-// (xml.md §2.2), escaped or literal, or a lone surrogate escape, which names
-// no character (RFC 8259 §8.2): no XML document holds either, as text or as a
-// character reference (WFC: Legal Character), so neither has an XML twin, and
-// no marker tracks it. A string whose source is not UTF-8 is malformed (RFC
-// 8259 §8.1), its error of class [Malformed] wherever in it a decline's
-// character also is. Each is located at the token.
+// It DECLINES the string the package doc's "Every decline" lists for its
+// characters, naming the first such character in document order, and returns
+// the [Malformed] error [Validate]'s doc states for one whose source is not
+// UTF-8, wherever in it a decline's character also is. Each is located at the
+// token.
 func (w *walker) chars(s string, loc xsderr.Loc) error {
 	if xmlchar.IndexNonChar(s) < 0 && !strings.ContainsRune(s, utf8.RuneError) {
 		return nil
@@ -2592,11 +2590,14 @@ func (w *walker) object(owner xsd.QName, td xsd.TypeDefinition) *object {
 // form (scalarLexical) unchanged, and the empty string is an attribute whose
 // value is empty. XML 1.0 §3.3.3 maps a literal #x9, #xA or #xD to #x20 and
 // keeps one a character reference names; a JSON string holds none literally
-// (RFC 8259 §7 requires a control character to be escaped), and its escape is
-// read as the character reference would be. It declines a null, object or
-// array value, and a key repeated in the run. Neither has an XML twin, so no
-// marker tracks them: an attribute's value is a string, and an element carries
-// one attribute of each expanded name (XML 1.0 §3.1, Unique Att Spec).
+// (RFC 8259 §7 requires a control character to be escaped), and an escape
+// naming a Char is read as the character reference would be. One naming a
+// non-Char, which no character reference may name (WFC: Legal Character), or
+// a lone surrogate escape, has already declined at walker.token
+// (walker.chars). It declines a null, object or array value, and a key repeated
+// in the run. Neither has an XML twin, so no marker tracks them: an attribute's
+// value is a string, and an element carries one attribute of each expanded name
+// (XML 1.0 §3.1, Unique Att Spec).
 //
 // Where o.table is nil, each member is classified under o and alike under
 // each of o.selectable (walker.classify), and the members after the run are

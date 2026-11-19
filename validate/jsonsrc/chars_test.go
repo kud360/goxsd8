@@ -76,10 +76,9 @@ const notUTF8 = "malformed JSON: a string's source text is not UTF-8 (RFC 8259 Â
 // source scan reads, the others being answered off the decoded string alone;
 // the last row, read whole, pins the scan to the token, a scan to the end of
 // what the decoder has read declining the U+0000 of the string after it at
-// the U+FFFD's location. Error is the whole of
-// err.Error(), the location and message prefix included; an empty one asks
-// for a result standing NotProvenInvalid with no violation and nothing
-// unevaluated.
+// the U+FFFD's location. Error is the whole of err.Error(), the location and
+// message prefix included; an empty one asks for a result standing
+// NotProvenInvalid with no violation and nothing unevaluated.
 func TestStringChars(t *testing.T) {
 	v := validatorOver(t, charsSchema)
 	lax := validatorOver(t, laxExtensionSchema)
