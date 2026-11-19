@@ -70,14 +70,20 @@ func normalizeWhiteSpace(s string, ws whiteSpace) string {
 
 // replaceSpace maps #x9/#xA/#xD to #x20 (the replace step of §4.3.6), leaving
 // every other character — including other Unicode whitespace — untouched.
+// Byte-wise scanning is safe because #x9, #xA and #xD are bytes below 0x80 and
+// never appear inside a multi-byte UTF-8 sequence (continuation bytes are ≥
+// 0x80). It also keeps a byte that is not valid UTF-8 as written, so a
+// mapping's Parse sees the literal's real bytes and not a substituted U+FFFD, a
+// legal Char that would hide the cvc-datatype-valid error.
 func replaceSpace(s string) string {
-	return strings.Map(func(r rune) rune {
-		switch r {
+	b := []byte(s)
+	for i, c := range b {
+		switch c {
 		case '\t', '\n', '\r':
-			return ' '
+			b[i] = ' '
 		}
-		return r
-	}, s)
+	}
+	return string(b)
 }
 
 // collapseSpace collapses runs of #x20 to a single space and trims leading and
