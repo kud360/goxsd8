@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"math"
 	"reflect"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -50,20 +51,21 @@ var ErrInvalidValue = errors.New("codec: Append: a value no valid document holds
 //     whiteSpace-normalized form under its simple type, such as an xs:token
 //     holding "  a  b"; a list item, a string, that is empty or holds TAB,
 //     LF, CR or a space, which no list item's lexical representation does
-//     (Datatypes §2.4.1.2); or a value whose simple type rejects it, a
-//     value.ValidateLexical error value.IsDatatypeVerdict reports as a
-//     verdict, a facet's rejection or a backend Parse's among them, that
-//     error wrapped, and through it whatever *xsderr.Error it carries, but
-//     for item 7's pattern case, a list's own facets read once every item has
-//     passed its own checks.
+//     (Datatypes §2.4.1.2); a big.Rat outside the decimal value space, whose
+//     denominator in lowest terms is no 2^m·5^n (§3.3.3.1), such as 1/3; or
+//     a value whose simple type rejects it, a value.ValidateLexical error
+//     value.IsDatatypeVerdict reports as a verdict, a facet's rejection or a
+//     backend Parse's among them, that error wrapped, and through it whatever
+//     *xsderr.Error it carries, but for item 7's pattern case, a list's own
+//     facets read once every item has passed its own checks.
 //  7. A value with no canonical representation, the first in document order
 //     as item 6 counts: its *DeclineError. That is a governing mapping with no
-//     Canonical, a Canonical that fails for the value, an xs:double value
-//     other than NaN and -INF, or a list holding at least one such item, whose
-//     canonical representation a pattern facet of its type rejects (Datatypes
-//     §2.1's note; NaN and -INF have no other lexical, §3.3.5.2), whatever
-//     other facet rejects it, or a canonical representation that does not map
-//     back to the value.
+//     Canonical, a Canonical that fails for the value, an xs:decimal-primitive
+//     or xs:boolean value, an xs:double value other than NaN and -INF, or a
+//     list holding at least one such item, whose canonical representation a
+//     pattern facet of its type rejects (Datatypes §2.1's note; NaN and -INF
+//     have no other lexical, §3.3.5.2), whatever other facet rejects it, or a
+//     canonical representation that does not map back to the value.
 //
 // A plain error is no *DeclineError and wraps none of [ErrTypeMismatch],
 // [ErrInvalidValue] and errors.ErrUnsupported; whether it wraps an
@@ -71,10 +73,15 @@ var ErrInvalidValue = errors.New("codec: Append: a value no valid document holds
 //
 // A fault of backend found at a value, in place of that value's item 6 or 7,
 // is a plain error too, returned at once and naming the value's Go path and
-// simple type: no governing mapping for the type, a Parse that rejects an
-// xs:double value's doubleRep spelling or the whiteSpace-normalized canonical
-// representation its Canonical renders, or an error of value.ValidateLexical that
-// value.IsDatatypeVerdict does not report as a verdict.
+// simple type: no mapping of the value's primitive, no governing mapping, a
+// Parse that rejects the spelling Append gives the value or the
+// whiteSpace-normalized canonical representation Canonical renders, the
+// primitive's mapping's Parse for an xs:decimal-primitive or xs:boolean value
+// and the governing mapping's for an xs:double one, a Canonical that renders
+// an xs:decimal-primitive or xs:boolean value, mapping back to it, as another
+// lexical than its canonical representation (Datatypes §E.1
+// f-decimalCanmap, §E.4 f-booleanCanmap), or an error of value.ValidateLexical
+// that value.IsDatatypeVerdict does not report as a verdict.
 //
 // Items 2 to 5 read no value; [CheckAppend] returns them for a declaration
 // and T.
@@ -180,11 +187,14 @@ type encodeAttribute struct {
 }
 
 // encodeSimple is a simple type of the encoded slice: st itself and, where st
-// is a list, item, its {item type definition}, nil where st is atomic.
+// is a list, item, its {item type definition}, nil where st is atomic, and
+// atom, the atomic Go type codegen gives st where it is atomic and item where
+// st is a list (goshape.AtomicType), which the encoder reads a value by.
 // simpleEncodes is its one constructor.
 type encodeSimple struct {
 	st   *xsd.SimpleType
 	item *xsd.SimpleType
+	atom atomic
 }
 
 // encodePlanOf returns the encodeElement of decl, the document element's
@@ -394,11 +404,12 @@ func attributePlanOf(schema *xsd.Schema, u xsd.AttributeUse) (encodeAttribute, e
 }
 
 // The expanded names simpleEncodes reads a simple type's primitive and base
-// chain by.
+// chain by, and the encoder its primitive's mapping by, with booleanName.
 var (
-	stringName = xsd.QName{Space: xsd.XMLSchemaNS, Local: "string"}
-	doubleName = xsd.QName{Space: xsd.XMLSchemaNS, Local: "double"}
-	idNames    = []xsd.QName{
+	stringName  = xsd.QName{Space: xsd.XMLSchemaNS, Local: "string"}
+	doubleName  = xsd.QName{Space: xsd.XMLSchemaNS, Local: "double"}
+	decimalName = xsd.QName{Space: xsd.XMLSchemaNS, Local: "decimal"}
+	idNames     = []xsd.QName{
 		{Space: xsd.XMLSchemaNS, Local: "ID"},
 		{Space: xsd.XMLSchemaNS, Local: "IDREF"},
 		{Space: xsd.XMLSchemaNS, Local: "ENTITY"},
@@ -424,10 +435,11 @@ func simpleEncodes(r xsd.TypeResolver, st *xsd.SimpleType, owner string) (encode
 		return encodeSimple{}, err
 	}
 	if _, isList := variety.(xsd.List); !isList {
-		if err := atomicEncodes(r, st, subject); err != nil {
+		atom, err := atomicEncodes(r, st, subject)
+		if err != nil {
 			return encodeSimple{}, err
 		}
-		return encodeSimple{st: st}, nil
+		return encodeSimple{st: st, atom: atom}, nil
 	}
 	item, err := st.Item(r)
 	if err != nil {
@@ -436,53 +448,67 @@ func simpleEncodes(r xsd.TypeResolver, st *xsd.SimpleType, owner string) (encode
 	if item == nil {
 		return encodeSimple{}, fmt.Errorf("codec: the list type %s has no {item type definition}", subject)
 	}
-	if err := atomicEncodes(r, item, itemSubject(subject, item)); err != nil {
+	atom, err := atomicEncodes(r, item, itemSubject(subject, item))
+	if err != nil {
 		return encodeSimple{}, err
 	}
 	if err := assertionsDecline(r, st, subject); err != nil {
 		return encodeSimple{}, err
 	}
-	return encodeSimple{st: st, item: item}, nil
+	return encodeSimple{st: st, item: item, atom: atom}, nil
 }
 
-// atomicEncodes returns nil where st, an atomic or union simple type subject
+// atomicEncodes returns the atomic Go type codegen gives st
+// (goshape.AtomicType) where st, an atomic or union simple type subject
 // names, a list's {item type definition} among them, which cos-st-restricts
 // clause 2.1 holds to one of those two, encodes, and otherwise the decline
 // of the first construct it finds: a special type, a union, a primitive
-// other than xs:string and xs:double, a type on whose {base type definition}
-// chain xs:ID, xs:IDREF or xs:ENTITY lies, then an assertions facet among its
-// effective facets, its own or inherited. An error reading st is returned as
-// is.
-func atomicEncodes(r xsd.TypeResolver, st *xsd.SimpleType, subject string) error {
+// other than xs:string, xs:double, xs:decimal and xs:boolean, a type on whose
+// {base type definition} chain xs:ID, xs:IDREF or xs:ENTITY lies, then an
+// assertions facet among its effective facets, its own or inherited. An error
+// reading st is returned as is.
+func atomicEncodes(r xsd.TypeResolver, st *xsd.SimpleType, subject string) (atomic, error) {
 	if st.IsSpecial() {
-		return encodeDecline(constructSpecialType, subject)
+		return 0, encodeDecline(constructSpecialType, subject)
 	}
 	variety, err := st.Variety(r)
 	if err != nil {
-		return err
+		return 0, err
 	}
 	if _, isUnion := variety.(xsd.Union); isUnion {
-		return encodeDecline(constructUnion, subject)
+		return 0, encodeDecline(constructUnion, subject)
 	}
 	primitive, err := st.Primitive(r)
 	if err != nil {
-		return err
+		return 0, err
 	}
-	if primitive == nil || primitive.Name() != stringName && primitive.Name() != doubleName {
-		return encodeDecline(constructEncodePrimitive, subject)
+	if primitive == nil || !slices.Contains([]xsd.QName{stringName, doubleName, decimalName, booleanName}, primitive.Name()) {
+		return 0, encodeDecline(constructEncodePrimitive, subject)
 	}
 	for step := st; step != nil; {
 		for _, id := range idNames {
 			if step.Name() == id {
-				return encodeDecline(constructIDType, fmt.Sprintf("%s, derived from %s", subject, id))
+				return 0, encodeDecline(constructIDType, fmt.Sprintf("%s, derived from %s", subject, id))
 			}
 		}
 		step, err = step.Base(r)
 		if err != nil {
-			return err
+			return 0, err
 		}
 	}
-	return assertionsDecline(r, st, subject)
+	if err := assertionsDecline(r, st, subject); err != nil {
+		return 0, err
+	}
+	a, ok, err := goshape.AtomicType(r, st)
+	if err != nil {
+		return 0, err
+	}
+	if !ok {
+		// goshape.AtomicType gives each of the four primitives above an
+		// atomic Go type, so no schema reaches this.
+		return 0, fmt.Errorf("codec: codegen gives %s no atomic Go type", subject)
+	}
+	return atomic(a), nil
 }
 
 // assertionsDecline returns constructAssertions's decline, subject naming
@@ -657,19 +683,25 @@ func (e *encoder) simple(s encodeSimple, v reflect.Value, path, owner string) (s
 	if s.item != nil {
 		return e.list(s, v, path, subject)
 	}
-	text, _, err := e.atom(s.st, v, path, subject)
+	text, _, err := e.atom(s.st, s.atom, v, path, subject)
 	return text, err
 }
 
 // atom returns the text Append writes for v, a value of the atomic simple
-// type st held as string or float64, at path, subject naming st: a string
-// as itself (str), a float64 in its canonical representation (double). ok
-// reports that it recorded no item 6 or 7 error of [Append]'s doc for v.
-func (e *encoder) atom(st *xsd.SimpleType, v reflect.Value, path, subject string) (text string, ok bool, err error) {
-	if v.Kind() == reflect.Float64 {
+// type st held in a, its atomic Go type, at path, subject naming st: a string
+// as itself (str), a float64 in its canonical representation (double), and
+// the value of a type whose primitive is xs:decimal or xs:boolean in its
+// canonical representation (spelled). ok reports that it recorded no item 6
+// or 7 error of [Append]'s doc for v.
+func (e *encoder) atom(st *xsd.SimpleType, a atomic, v reflect.Value, path, subject string) (text string, ok bool, err error) {
+	switch a {
+	case atomicString:
+		return e.str(st, v.String(), path, subject)
+	case atomicFloat64:
 		return e.double(st, v.Float(), path, subject)
+	default:
+		return e.spelled(st, a, v, path, subject)
 	}
-	return e.str(st, v.String(), path, subject)
 }
 
 // list returns the text the package doc's "# What encodes" states for v, a []V
@@ -679,8 +711,10 @@ func (e *encoder) atom(st *xsd.SimpleType, v reflect.Value, path, subject string
 // once its own checks pass, and s.st's own facets, through
 // value.ValidateLexical, once every item has. An empty item is no list item
 // since the list's whiteSpace collapse (Datatypes §4.3.6) leaves no empty
-// token. A pattern rejection is item 7 only where an xs:double item other than
-// NaN and -INF is held, another lexical of which may match (§2.1's note): an
+// token. A pattern rejection is item 7 only where an item with another
+// lexical is held, which a pattern may match (§2.1's note): an xs:decimal- or
+// xs:boolean-primitive item, every one of which has another lexical, or an
+// xs:double item other than NaN and -INF (otherLexical). An
 // xs:string-primitive item is its own whiteSpace-normalized form, and the
 // empty list has no other lexical, nor a list of NaN and -INF items, so every
 // lexical of such a value normalizes to the text written.
@@ -690,7 +724,7 @@ func (e *encoder) list(s encodeSimple, v reflect.Value, path, subject string) (s
 	clean := true
 	for i := range v.Len() {
 		ipath := path + "[" + strconv.Itoa(i) + "]"
-		text, ok, err := e.atom(s.item, v.Index(i), ipath, isubject)
+		text, ok, err := e.atom(s.item, s.atom, v.Index(i), ipath, isubject)
 		if err != nil {
 			return "", err
 		}
@@ -706,11 +740,16 @@ func (e *encoder) list(s encodeSimple, v reflect.Value, path, subject string) (s
 		return text, nil
 	}
 	shown := fmt.Sprintf("%v", v)
+	if s.atom != atomicString && s.atom != atomicFloat64 {
+		// fmt spells a big.Rat or big.Int by its fields; each item's text is
+		// its form (spelled).
+		shown = "[" + text + "]"
+	}
 	if _, err := value.ValidateLexical(e.backend, e.schema, s.st, text, nil, noAssertions{}); err != nil {
 		if !value.IsDatatypeVerdict(err) {
 			return "", fmt.Errorf("codec: Append: %s holds %s, of %s, which the backend cannot assess: %w", path, shown, subject, err)
 		}
-		if rule, _ := xsderr.RuleOf(err); rule == rulePatternValid && otherLexical(v) {
+		if rule, _ := xsderr.RuleOf(err); rule == rulePatternValid && otherLexical(s.atom, v) {
 			e.noCanonical(subject, path, shown, fmt.Sprintf("a pattern facet rejects its canonical representation %q: %v", text, err))
 			return text, nil
 		}
@@ -820,6 +859,80 @@ func (e *encoder) double(st *xsd.SimpleType, f float64, path, subject string) (t
 	return c, true, nil
 }
 
+// spelled returns the canonical representation of v, a value of the simple
+// type st whose primitive is xs:decimal or xs:boolean, held in a, its atomic
+// Go type, at path, subject naming st: a.form's spelling of v, which Parse of
+// the primitive's mapping on e's backend must accept, held to st's facets by
+// value.ValidateLexical, the value that returns rendered by st's governing
+// mapping's Canonical, that rendering whiteSpace-normalized
+// (value.ApplyWhiteSpace) and accepted by the primitive's Parse, read back by
+// a.convert as v, and equal to the spelling. The governing mapping's Parse is
+// reached inside ValidateLexical alone, so a rejection by it is a verdict on
+// the value: a backend may map a derived builtin more narrowly than the
+// Go type codegen gives it, as big.Int holds 0 though xs:positiveInteger
+// does not. A big.Rat that form spells no lexical of is item 6 of [Append]'s
+// doc; a pattern facet's rejection is item 7, since every such value has
+// another lexical (otherLexical), and any other facet's is item 6. ok is
+// atom's.
+func (e *encoder) spelled(st *xsd.SimpleType, a atomic, v reflect.Value, path, subject string) (text string, ok bool, err error) {
+	lexical, ok := a.form(v)
+	if !ok {
+		e.invalidate(fmt.Errorf("codec: Append: %s holds %s, of %s, whose denominator in lowest terms is no 2^m·5^n, so it lies outside the decimal value space (Datatypes §3.3.3.1)", path, lexical, subject))
+		return "", false, nil
+	}
+	primitive := decimalName
+	if a == atomicBool {
+		primitive = booleanName
+	}
+	pm, has := e.backend.Mapping(primitive)
+	if !has {
+		return "", false, fmt.Errorf("codec: Append: %s, of %s: the backend has no mapping of its primitive %s", path, subject, primitive)
+	}
+	if _, err := pm.Parse(lexical, nil); err != nil {
+		return "", false, fmt.Errorf("codec: Append: %s holds %s, of %s, whose canonical spelling the backend's Parse of %s rejects: %w", path, lexical, subject, primitive, err)
+	}
+	val, err := value.ValidateLexical(e.backend, e.schema, st, lexical, nil, noAssertions{})
+	if err != nil {
+		if !value.IsDatatypeVerdict(err) {
+			return "", false, fmt.Errorf("codec: Append: %s holds %s, of %s, which the backend cannot assess: %w", path, lexical, subject, err)
+		}
+		if rule, _ := xsderr.RuleOf(err); rule == rulePatternValid {
+			e.noCanonical(subject, path, lexical, fmt.Sprintf("a pattern facet rejects its canonical representation %q: %v", lexical, err))
+			return lexical, false, nil
+		}
+		e.invalidate(fmt.Errorf("codec: Append: %s holds %s, which %s rejects: %w", path, lexical, subject, err))
+		return lexical, false, nil
+	}
+	m, err := e.mapping(st, path, subject)
+	if err != nil {
+		return "", false, err
+	}
+	if m.Canonical == nil {
+		e.noCanonical(subject, path, lexical, "its governing mapping has no canonical mapping")
+		return "", false, nil
+	}
+	c, err := m.Canonical(val)
+	if err != nil {
+		e.noCanonical(subject, path, lexical, err.Error())
+		return "", false, nil
+	}
+	normalized, err := value.ApplyWhiteSpace(e.schema, st, c)
+	if err != nil {
+		return "", false, fmt.Errorf("codec: Append: %s holds %s, of %s, which the backend cannot assess: %w", path, lexical, subject, err)
+	}
+	if _, err := pm.Parse(normalized, nil); err != nil {
+		return "", false, fmt.Errorf("codec: Append: %s holds %s, of %s, whose canonical representation %q the backend's Parse of %s rejects: %w", path, lexical, subject, c, primitive, err)
+	}
+	if !a.readsBack(c, v) {
+		e.noCanonical(subject, path, lexical, fmt.Sprintf("its canonical representation %q does not map back to it", c))
+		return c, false, nil
+	}
+	if c != lexical {
+		return "", false, fmt.Errorf("codec: Append: %s holds %s, of %s, which the backend's Canonical renders %q, another lexical than its canonical representation (f-decimalCanmap, f-booleanCanmap)", path, lexical, subject, c)
+	}
+	return c, true, nil
+}
+
 // mapsBack reports whether strconv.ParseFloat reads c, double's canonical
 // representation of f, back as f, every NaN equal to every NaN.
 func mapsBack(c string, f float64) bool {
@@ -834,12 +947,18 @@ func mapsBack(c string, f float64) bool {
 // representation alone, as it does NaN and -INF (Datatypes §3.3.5.2).
 func soleLexical(f float64) bool { return math.IsNaN(f) || math.IsInf(f, -1) }
 
-// otherLexical reports whether v, the []V of a list, holds an xs:double item
-// soleLexical does not hold of, so that a lexical of the list other than its
-// canonical one exists for a pattern facet to match.
-func otherLexical(v reflect.Value) bool {
-	if v.Type().Elem().Kind() != reflect.Float64 {
+// otherLexical reports whether v, the []V of a list whose items a, the item's
+// atomic Go type, holds, has a lexical other than its canonical one for a
+// pattern facet to match: v holds an item, and a is that of an xs:decimal- or
+// xs:boolean-primitive type, every value of which has another lexical (a
+// leading zero, Datatypes §3.3.3 and §3.4.13; 1 or 0, §3.3.2.2), or a is
+// float64 and v holds an item soleLexical does not hold of.
+func otherLexical(a atomic, v reflect.Value) bool {
+	if v.Len() == 0 || a == atomicString {
 		return false
+	}
+	if a != atomicFloat64 {
+		return true
 	}
 	for i := range v.Len() {
 		if !soleLexical(v.Index(i).Float()) {
@@ -864,10 +983,11 @@ func (e *encoder) mapping(st *xsd.SimpleType, path, subject string) (value.Mappi
 }
 
 // rulePatternValid is pattern Valid (Datatypes §4.3.4.4 cvc-pattern-valid),
-// the rule whose rejection of the canonical representation of an xs:double
-// value, or of a list holding one, double and list read as item 7 of
-// [Append]'s doc where the value has another lexical (soleLexical,
-// otherLexical).
+// the rule whose rejection of the canonical representation of an
+// xs:decimal-primitive, xs:boolean or xs:double value, or of a list holding
+// one, spelled, double and list read as item 7 of [Append]'s doc where the
+// value has another lexical: always for spelled, and where soleLexical does
+// not hold for double and otherLexical holds for list.
 const rulePatternValid xsderr.Rule = "cvc-pattern-valid"
 
 // doubleLexical spells f in doubleRep (Datatypes §3.3.5.2): a finite f as

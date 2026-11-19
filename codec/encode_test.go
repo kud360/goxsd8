@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -445,23 +446,23 @@ func TestAppendPlainErrors(t *testing.T) {
 }
 
 // TestCheckAppend pins CheckAppend's answers by Append's items: a plain
-// error for a nil schema; item 4's decline for an xs:integer declaration and
-// T big.Int, which CheckDecode accepts; nil for README's order.xsd and
+// error for a nil schema; item 4's decline for an xs:float declaration and
+// T float32, which CheckDecode accepts; nil for README's order.xsd and
 // order.Order, whose zero value Append refuses by item 6, and item 5's
 // ErrTypeMismatch for *order.Order; item 2's and item 3's plain errors; and
-// item 3 before item 4 on an abstract xs:boolean declaration. appendChecked
+// item 3 before item 4 on an abstract xs:float declaration. appendChecked
 // holds each answer to Append's.
 func TestCheckAppend(t *testing.T) {
-	schema := schemaOf(t, `<xs:element name="i" type="xs:integer"/><xs:element name="abs" type="xs:string" abstract="true"/>`+
-		`<xs:element name="absb" type="xs:boolean" abstract="true"/>`)
+	schema := schemaOf(t, `<xs:element name="i" type="xs:float"/><xs:element name="abs" type="xs:string" abstract="true"/>`+
+		`<xs:element name="absb" type="xs:float" abstract="true"/>`)
 	plainError(t, CheckAppend[string](nil, sname("i")), "codec: CheckAppend: nil *xsd.Schema")
 
-	if err := CheckDecode[big.Int](schema, sname("i")); err != nil {
-		t.Fatalf("CheckDecode[big.Int] = %v, want nil", err)
+	if err := CheckDecode[float32](schema, sname("i")); err != nil {
+		t.Fatalf("CheckDecode[float32] = %v, want nil", err)
 	}
-	err := CheckAppend[big.Int](schema, sname("i"))
-	_ = asDecline(t, err, "codec does not encode an atomic simple type whose primitive is other than xs:string or xs:double: ")
-	_, _ = appendChecked(t, nil, schema, strict.New(), sname("i"), big.Int{})
+	err := CheckAppend[float32](schema, sname("i"))
+	_ = asDecline(t, err, "codec does not encode an atomic simple type whose primitive is other than xs:string, xs:double, xs:decimal or xs:boolean: ")
+	_, _ = appendChecked(t, nil, schema, strict.New(), sname("i"), float32(0))
 
 	plainError(t, CheckAppend[string](schema, sname("none")), "codec: no top-level element declaration has the expanded name", "{urn:s}none")
 	_, _ = appendChecked(t, nil, schema, strict.New(), sname("none"), "x")
@@ -823,19 +824,22 @@ func TestAppendDeclines(t *testing.T) {
 		{"restricted complex assertions", "a complex type with {assertions}", `<xs:complexType name="ab%[1]s">` + asserted + `</xs:complexType>` +
 			`<xs:element name="%[1]s"><xs:complexType><xs:complexContent><xs:restriction base="s:ab%[1]s"><xs:sequence>` + a + `</xs:sequence></xs:restriction></xs:complexContent></xs:complexType></xs:element>`},
 		{"special type", "xs:anySimpleType or xs:anyAtomicType as a simple type", `<xs:element name="%[1]s" type="xs:anySimpleType"/>`},
-		{"list of decimal", "an atomic simple type whose primitive is other than xs:string or xs:double", simpleOf(`<xs:list itemType="xs:decimal"/>`)},
+		{"list of float", "an atomic simple type whose primitive is other than xs:string, xs:double, xs:decimal or xs:boolean", simpleOf(`<xs:list itemType="xs:float"/>`)},
 		{"list of union", "a union simple type", simpleOf(`<xs:list><xs:simpleType><xs:union memberTypes="xs:string xs:int"/></xs:simpleType></xs:list>`)},
 		{"IDREFS", "a simple type derived from xs:ID, xs:IDREF or xs:ENTITY", `<xs:element name="%[1]s" type="xs:IDREFS"/>`},
 		{"list assertions", "a simple type with an assertions facet", simpleOf(`<xs:restriction base="xs:NMTOKENS"><xs:assertion test="true()"/></xs:restriction>`)},
 		{"inherited list assertions", "a simple type with an assertions facet", `<xs:simpleType name="assertedList%[1]s"><xs:restriction base="xs:NMTOKENS"><xs:assertion test="true()"/></xs:restriction></xs:simpleType>` + simpleOf(`<xs:restriction base="s:assertedList%[1]s"><xs:maxLength value="3"/></xs:restriction>`)},
 		{"list item assertions", "a simple type with an assertions facet", `<xs:simpleType name="assertedItem%[1]s"><xs:restriction base="xs:string"><xs:assertion test="true()"/></xs:restriction></xs:simpleType>` + simpleOf(`<xs:list itemType="s:assertedItem%[1]s"/>`)},
 		{"union", "a union simple type", simpleOf(`<xs:union memberTypes="xs:string xs:int"/>`)},
-		{"boolean", "an atomic simple type whose primitive is other than xs:string or xs:double", `<xs:element name="%[1]s" type="xs:boolean"/>`},
-		{"anyURI attribute", "an atomic simple type whose primitive is other than xs:string or xs:double", complexOf(`<xs:attribute name="a" type="xs:anyURI"/>`)},
+		{"date", "an atomic simple type whose primitive is other than xs:string, xs:double, xs:decimal or xs:boolean", `<xs:element name="%[1]s" type="xs:date"/>`},
+		{"anyURI attribute", "an atomic simple type whose primitive is other than xs:string, xs:double, xs:decimal or xs:boolean", complexOf(`<xs:attribute name="a" type="xs:anyURI"/>`)},
 		{"ID", "a simple type derived from xs:ID, xs:IDREF or xs:ENTITY", `<xs:element name="%[1]s" type="xs:ID"/>`},
 		{"IDREF particle", "a simple type derived from xs:ID, xs:IDREF or xs:ENTITY", sequence(`<xs:element name="a" type="xs:IDREF"/>`)},
 		{"ENTITY restriction", "a simple type derived from xs:ID, xs:IDREF or xs:ENTITY", simpleOf(`<xs:restriction base="xs:ENTITY"/>`)},
 		{"assertions", "a simple type with an assertions facet", simpleOf(`<xs:restriction base="xs:string"><xs:assertion test="true()"/></xs:restriction>`)},
+		{"decimal assertions", "a simple type with an assertions facet", simpleOf(`<xs:restriction base="xs:decimal"><xs:assertion test="true()"/></xs:restriction>`)},
+		{"boolean assertions", "a simple type with an assertions facet", simpleOf(`<xs:restriction base="xs:boolean"><xs:assertion test="true()"/></xs:restriction>`)},
+		{"date assertions", "an atomic simple type whose primitive is other than xs:string, xs:double, xs:decimal or xs:boolean", simpleOf(`<xs:restriction base="xs:date"><xs:assertion test="true()"/></xs:restriction>`)},
 		{"inherited assertions", "a simple type with an assertions facet", `<xs:simpleType name="asserted%[1]s"><xs:restriction base="xs:string"><xs:assertion test="true()"/></xs:restriction></xs:simpleType>` + simpleOf(`<xs:restriction base="s:asserted%[1]s"><xs:maxLength value="3"/></xs:restriction>`)},
 		{"particle value constraint", "a value constraint, default or fixed", sequence(`<xs:element name="a" type="xs:string" fixed="x"/>`)},
 		{"particle type table", "an element declaration with a {type table}", sequence(`<xs:element name="a" type="xs:string"><xs:alternative test="@b" type="xs:token"/></xs:element>`)},
@@ -1125,17 +1129,287 @@ func TestAppendListInvalid(t *testing.T) {
 // list type, then its {item type definition}, by its QName where it has one
 // and its schema Loc where it is located.
 func TestAppendListDeclineSubject(t *testing.T) {
-	schema := schemaOf(t, `<xs:element name="dec"><xs:simpleType><xs:list itemType="xs:decimal"/></xs:simpleType></xs:element>`+
-		`<xs:simpleType name="booleans"><xs:list><xs:simpleType><xs:restriction base="xs:boolean"/></xs:simpleType></xs:list></xs:simpleType>`+
-		`<xs:element name="anon" type="s:booleans"/>`)
-	err := CheckAppend[strList](schema, sname("dec"))
-	_ = asDecline(t, err, "codec does not encode an atomic simple type whose primitive is other than xs:string or xs:double: simple type the anonymous simple type of element {urn:s}dec declared at s.xsd:1:")
-	if !strings.Contains(err.Error(), ", through the list type's {item type definition} {http://www.w3.org/2001/XMLSchema}decimal; ") {
-		t.Errorf("decline %q does not name the item xs:decimal", err)
+	schema := schemaOf(t, `<xs:element name="flt"><xs:simpleType><xs:list itemType="xs:float"/></xs:simpleType></xs:element>`+
+		`<xs:simpleType name="dates"><xs:list><xs:simpleType><xs:restriction base="xs:date"/></xs:simpleType></xs:list></xs:simpleType>`+
+		`<xs:element name="anon" type="s:dates"/>`)
+	err := CheckAppend[strList](schema, sname("flt"))
+	_ = asDecline(t, err, "codec does not encode an atomic simple type whose primitive is other than xs:string, xs:double, xs:decimal or xs:boolean: simple type the anonymous simple type of element {urn:s}flt declared at s.xsd:1:")
+	if !strings.Contains(err.Error(), ", through the list type's {item type definition} {http://www.w3.org/2001/XMLSchema}float; ") {
+		t.Errorf("decline %q does not name the item xs:float", err)
 	}
 	err = CheckAppend[strList](schema, sname("anon"))
-	_ = asDecline(t, err, "codec does not encode an atomic simple type whose primitive is other than xs:string or xs:double: simple type {urn:s}booleans defined at s.xsd:1:")
+	_ = asDecline(t, err, "codec does not encode an atomic simple type whose primitive is other than xs:string, xs:double, xs:decimal or xs:boolean: simple type {urn:s}dates defined at s.xsd:1:")
 	if !strings.Contains(err.Error(), ", through the list type's anonymous {item type definition}, a type defined at s.xsd:1:") {
 		t.Errorf("decline %q does not name the anonymous item by its Loc", err)
+	}
+}
+
+// encodeDecimalSchema declares, in urn:s, document elements of the types
+// whose primitive is xs:decimal or xs:boolean, one per Go type codegen gives
+// them that the rows below hold, a list over xs:integer, an element and an
+// attribute of complex type, and restrictions by a bound, a pattern on an
+// atom and on a list, and an assertion.
+const encodeDecimalSchema = `
+  <xs:simpleType name="integers"><xs:list itemType="xs:integer"/></xs:simpleType>
+  <xs:simpleType name="booleans"><xs:list itemType="xs:boolean"/></xs:simpleType>
+  <xs:simpleType name="small"><xs:restriction base="xs:decimal"><xs:maxInclusive value="10"/></xs:restriction></xs:simpleType>
+  <xs:simpleType name="onePoint"><xs:restriction base="xs:decimal"><xs:pattern value="1\.0"/></xs:restriction></xs:simpleType>
+  <xs:simpleType name="digitBool"><xs:restriction base="xs:boolean"><xs:pattern value="1|0"/></xs:restriction></xs:simpleType>
+  <xs:simpleType name="bits"><xs:restriction base="s:booleans"><xs:pattern value="[01]( [01])*"/></xs:restriction></xs:simpleType>
+  <xs:simpleType name="plusOnes"><xs:restriction base="s:integers"><xs:pattern value="\+1( \+1)*"/></xs:restriction></xs:simpleType>
+  <xs:element name="dec" type="xs:decimal"/>
+  <xs:element name="int" type="xs:integer"/>
+  <xs:element name="pos" type="xs:positiveInteger"/>
+  <xs:element name="long" type="xs:long"/>
+  <xs:element name="ulong" type="xs:unsignedLong"/>
+  <xs:element name="b" type="xs:boolean"/>
+  <xs:element name="ints" type="s:integers"/>
+  <xs:element name="small" type="s:small"/>
+  <xs:element name="onePoint" type="s:onePoint"/>
+  <xs:element name="digitBool" type="s:digitBool"/>
+  <xs:element name="bits" type="s:bits"/>
+  <xs:element name="plusOnes" type="s:plusOnes"/>
+  <xs:element name="ea">
+    <xs:complexType>
+      <xs:sequence><xs:element name="v" type="xs:decimal"/></xs:sequence>
+      <xs:attribute name="a" type="xs:boolean" use="required"/>
+      <xs:attribute name="n" type="xs:byte"/>
+    </xs:complexType>
+  </xs:element>`
+
+// The T codegen emits for encodeDecimalSchema's document elements, but for
+// the ones held in big.Rat, big.Int, int64, uint64 and bool themselves.
+type (
+	intList  []big.Int
+	boolList []bool
+	decParts struct {
+		V big.Rat
+		A bool
+		N *int8
+	}
+)
+
+// sameRat and sameInt report whether a and b are one value, by Cmp.
+func sameRat(a, b big.Rat) bool { return a.Cmp(&b) == 0 }
+func sameInt(a, b big.Int) bool { return a.Cmp(&b) == 0 }
+
+// sameInts is sameInt over each item of a and b.
+func sameInts(a, b intList) bool { return slices.EqualFunc(a, b, sameInt) }
+
+// sameParts is sameRat over V and == over A and *N.
+func sameParts(a, b decParts) bool {
+	return sameRat(a.V, b.V) && a.A == b.A && (a.N == nil) == (b.N == nil) && (a.N == nil || *a.N == *b.N)
+}
+
+// TestAppendDecimalAndBoolean pins the canonical forms of the types whose
+// primitive is xs:decimal or xs:boolean, one row per Go type codegen gives
+// them that these rows hold: a big.Rat not an integer, with its shortest
+// exact expansion (f-decCanFragMap), and an integer one with no decimal point
+// (f-decimalCanmap through f-noDecCanMap); a big.Int beyond int64; a signed
+// bounded integer, its minimum; a uint64 above math.MaxInt64 under
+// xs:unsignedLong; a bool, true and false; a list over xs:integer; and an
+// element and an attribute of complex type. Each is accepted by validate and
+// decoded back equal, big.Rat and big.Int by Cmp.
+func TestAppendDecimalAndBoolean(t *testing.T) {
+	schema := schemaOf(t, encodeDecimalSchema)
+	for _, row := range []struct {
+		r    *big.Rat
+		want string
+	}{
+		{big.NewRat(3, 2), "1.5"},
+		{big.NewRat(-1, 2), "-0.5"},
+		{big.NewRat(1, 20), "0.05"},
+		{big.NewRat(4, 2), "2"},
+		{big.NewRat(-7, 1), "-7"},
+		{new(big.Rat), "0"},
+	} {
+		t.Run("decimal "+row.want, func(t *testing.T) {
+			roundTrip(t, schema, sname("dec"), *row.r, `<dec xmlns="urn:s">`+row.want+`</dec>`, sameRat)
+		})
+	}
+	t.Run("integer beyond int64", func(t *testing.T) {
+		i, _ := new(big.Int).SetString("-12345678901234567890", 10)
+		roundTrip(t, schema, sname("int"), *i, `<int xmlns="urn:s">-12345678901234567890</int>`, sameInt)
+	})
+	t.Run("long minimum", func(t *testing.T) {
+		roundTrip(t, schema, sname("long"), int64(math.MinInt64), `<long xmlns="urn:s">-9223372036854775808</long>`, deepEqual[int64])
+	})
+	t.Run("unsignedLong above math.MaxInt64", func(t *testing.T) {
+		roundTrip(t, schema, sname("ulong"), uint64(math.MaxUint64), `<ulong xmlns="urn:s">18446744073709551615</ulong>`, deepEqual[uint64])
+	})
+	for _, b := range []bool{true, false} {
+		t.Run("boolean "+strconv.FormatBool(b), func(t *testing.T) {
+			roundTrip(t, schema, sname("b"), b, `<b xmlns="urn:s">`+strconv.FormatBool(b)+`</b>`, deepEqual[bool])
+		})
+	}
+	t.Run("list of integer", func(t *testing.T) {
+		roundTrip(t, schema, sname("ints"), intList{*big.NewInt(1), *big.NewInt(-20), {}}, `<ints xmlns="urn:s">1 -20 0</ints>`, sameInts)
+	})
+	t.Run("element and attributes", func(t *testing.T) {
+		n := int8(-3)
+		roundTrip(t, schema, sname("ea"), decParts{V: *big.NewRat(5, 4), A: true, N: &n}, `<ea xmlns="urn:s" a="true" n="-3"><v>1.25</v></ea>`, sameParts)
+		roundTrip(t, schema, sname("ea"), decParts{V: *big.NewRat(10, 1)}, `<ea xmlns="urn:s" a="false"><v>10</v></ea>`, sameParts)
+	})
+}
+
+// The backends of TestAppendDecimalFaults and TestAppendDecimalInvalid, each
+// strict's with xs:decimal's mapping replaced, but for positiveRejectsZero,
+// which adds one for xs:positiveInteger.
+var (
+	decimalRejectingParse = overDatatype("decimal", func(base value.Mapping) value.Mapping {
+		return value.Mapping{Parse: func(string, value.Context) (value.Value, error) { return nil, errors.New("rejected") }, Canonical: base.Canonical}
+	})
+	decimalPointedCanonical = overDatatype("decimal", func(base value.Mapping) value.Mapping {
+		return value.Mapping{Parse: base.Parse, Canonical: func(v value.Value) (string, error) {
+			c, err := base.Canonical(v)
+			return c + ".0", err
+		}}
+	})
+	decimalSpacedCanonical = overDatatype("decimal", func(base value.Mapping) value.Mapping {
+		return value.Mapping{Parse: func(s string, ctx value.Context) (value.Value, error) {
+			if s == "1.0" {
+				return nil, errors.New("rejects collapsed canonical")
+			}
+			return base.Parse(s, ctx)
+		}, Canonical: func(v value.Value) (string, error) {
+			c, err := base.Canonical(v)
+			return " " + c + ".0", err
+		}}
+	})
+	decimalOtherCanonical = overDatatype("decimal", func(base value.Mapping) value.Mapping {
+		return value.Mapping{Parse: base.Parse, Canonical: func(value.Value) (string, error) { return "2", nil }}
+	})
+	decimalNilCanonical = overDatatype("decimal", func(base value.Mapping) value.Mapping {
+		return value.Mapping{Parse: base.Parse}
+	})
+	decimalFailingCanonical = overDatatype("decimal", func(base value.Mapping) value.Mapping {
+		return value.Mapping{Parse: base.Parse, Canonical: func(value.Value) (string, error) { return "", errors.New("no canonical form") }}
+	})
+	positiveRejectsZero = func() value.Backend {
+		decimal, _ := strict.New().Mapping(decimalName)
+		return value.Override(strict.New(), oneMapping{name: xsd.QName{Space: xsd.XMLSchemaNS, Local: "positiveInteger"}, m: value.Mapping{
+			Parse: func(s string, ctx value.Context) (value.Value, error) {
+				if s == "0" {
+					return nil, errors.New("not positive")
+				}
+				return decimal.Parse(s, ctx)
+			},
+			Canonical: decimal.Canonical,
+		}})
+	}()
+)
+
+// decimalOnce is strict's backend, but that it maps xs:decimal at the first
+// ask alone, so that value.ValidateLexical, asking after Append's own lookup
+// of the primitive's mapping, finds no governing mapping.
+type decimalOnce struct{ asked *bool }
+
+func (d decimalOnce) Mapping(typ xsd.QName) (value.Mapping, bool) {
+	if typ == decimalName {
+		if *d.asked {
+			return value.Mapping{}, false
+		}
+		*d.asked = true
+	}
+	return strict.New().Mapping(typ)
+}
+
+// TestAppendDecimalInvalid pins items 6 and 7 of Append's doc for the types
+// whose primitive is xs:decimal or xs:boolean: a value a bound rejects and a
+// big.Rat outside the decimal value space, 1/3, are item 6, each error
+// opening with its Go path; a value whose canonical representation a
+// pattern rejects is item 7, as an atom, a decimal and a boolean, and as a
+// list under a list-level pattern, a boolean and an integer list, since every
+// such value has another lexical; and a backend's mapping of
+// xs:positiveInteger rejecting 0 is item 6, a verdict of the governing
+// mapping's Parse, never a backend fault.
+func TestAppendDecimalInvalid(t *testing.T) {
+	schema := schemaOf(t, encodeDecimalSchema)
+	t.Run("a bound", func(t *testing.T) {
+		_, err := appendChecked(t, nil, schema, strict.New(), sname("small"), *big.NewRat(11, 1))
+		invalidValue(t, err, "{urn:s}small")
+		if !strings.HasPrefix(err.Error(), "codec: Append: Rat holds 11, which simple type {urn:s}small") {
+			t.Errorf("error %q does not open with the path, value and type", err)
+		}
+		if rule, _ := xsderr.RuleOf(err); rule != "cvc-maxInclusive-valid" {
+			t.Errorf("rule %q, want cvc-maxInclusive-valid", rule)
+		}
+	})
+	t.Run("outside the decimal value space", func(t *testing.T) {
+		_, err := appendChecked(t, nil, schema, strict.New(), sname("dec"), *big.NewRat(1, 3))
+		invalidValue(t, err, "outside the decimal value space")
+		if !strings.HasPrefix(err.Error(), "codec: Append: Rat holds 1/3, of simple type {http://www.w3.org/2001/XMLSchema}decimal, ") {
+			t.Errorf("error %q does not open with the path, value and type", err)
+		}
+	})
+	t.Run("a positiveInteger mapping rejecting 0", func(t *testing.T) {
+		_, err := appendChecked(t, nil, schema, positiveRejectsZero, sname("pos"), big.Int{})
+		invalidValue(t, err, "not positive")
+		if !strings.HasPrefix(err.Error(), "codec: Append: Int holds 0, which simple type {http://www.w3.org/2001/XMLSchema}positiveInteger rejects") {
+			t.Errorf("error %q does not open with the path, value and type", err)
+		}
+	})
+	for _, row := range []struct {
+		name, elem string
+		v          any
+	}{
+		{"a decimal's pattern", "onePoint", *big.NewRat(1, 1)},
+		{"a boolean's pattern", "digitBool", true},
+		{"a boolean list's pattern", "bits", boolList{true, false}},
+		{"an integer list's pattern", "plusOnes", intList{*big.NewInt(1)}},
+	} {
+		t.Run(row.name, func(t *testing.T) {
+			var err error
+			switch v := row.v.(type) {
+			case big.Rat:
+				_, err = appendChecked(t, nil, schema, strict.New(), sname(row.elem), v)
+			case bool:
+				_, err = appendChecked(t, nil, schema, strict.New(), sname(row.elem), v)
+			case boolList:
+				_, err = appendChecked(t, nil, schema, strict.New(), sname(row.elem), v)
+			case intList:
+				_, err = appendChecked(t, nil, schema, strict.New(), sname(row.elem), v)
+			}
+			_ = asDecline(t, err, "codec does not encode a value with no canonical representation: simple type {urn:s}"+row.elem+" defined at s.xsd:")
+			holds(t, err, "a pattern facet rejects its canonical representation")
+		})
+	}
+}
+
+// TestAppendDecimalFaults pins the backend faults and the backend's item 7
+// declines of Append's doc for a type whose primitive is xs:decimal or
+// xs:boolean: no mapping of the primitive, the primitive's Parse rejecting
+// the spelling or the whiteSpace-normalized canonical representation, a
+// Canonical rendering another lexical that maps back, and no governing
+// mapping inside value.ValidateLexical are plain errors opening with the
+// value's Go path; a nil or failing Canonical and one that does not map back
+// are item 7.
+func TestAppendDecimalFaults(t *testing.T) {
+	schema := schemaOf(t, encodeDecimalSchema)
+	one := *big.NewRat(1, 1)
+	_, err := appendChecked(t, nil, schema, noMappings{}, sname("b"), true)
+	plainError(t, err, "codec: Append: bool, of simple type {http://www.w3.org/2001/XMLSchema}boolean: the backend has no mapping of its primitive {http://www.w3.org/2001/XMLSchema}boolean")
+	_, err = appendChecked(t, nil, schema, decimalRejectingParse, sname("dec"), one)
+	plainError(t, err, `codec: Append: Rat holds 1, of simple type {http://www.w3.org/2001/XMLSchema}decimal, whose canonical spelling the backend's Parse of {http://www.w3.org/2001/XMLSchema}decimal rejects: rejected`)
+	_, err = appendChecked(t, nil, schema, decimalSpacedCanonical, sname("dec"), one)
+	plainError(t, err, `codec: Append: Rat holds 1, of simple type {http://www.w3.org/2001/XMLSchema}decimal, whose canonical representation " 1.0" the backend's Parse of {http://www.w3.org/2001/XMLSchema}decimal rejects: rejects collapsed canonical`)
+	_, err = appendChecked(t, nil, schema, decimalPointedCanonical, sname("dec"), one)
+	plainError(t, err, `codec: Append: Rat holds 1, of simple type {http://www.w3.org/2001/XMLSchema}decimal, which the backend's Canonical renders "1.0", another lexical than its canonical representation`)
+	_, err = appendChecked(t, nil, schema, decimalOnce{asked: new(bool)}, sname("dec"), one)
+	plainError(t, err, "codec: Append: Rat holds 1, of simple type {http://www.w3.org/2001/XMLSchema}decimal, which the backend cannot assess: ")
+	for _, row := range []struct {
+		name    string
+		backend value.Backend
+		want    string
+	}{
+		{"a nil Canonical", decimalNilCanonical, "no canonical mapping"},
+		{"a failing Canonical", decimalFailingCanonical, "no canonical form"},
+		{"a Canonical not mapping back", decimalOtherCanonical, `"2" does not map back`},
+	} {
+		t.Run(row.name, func(t *testing.T) {
+			_, err := appendChecked(t, nil, schema, row.backend, sname("dec"), one)
+			_ = asDecline(t, err, "codec does not encode a value with no canonical representation: simple type {http://www.w3.org/2001/XMLSchema}decimal, at Rat holding 1: ")
+			holds(t, err, row.want)
+		})
 	}
 }

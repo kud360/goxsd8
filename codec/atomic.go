@@ -288,6 +288,92 @@ func (a atomic) convert(form string) (reflect.Value, error) {
 	}
 }
 
+// form returns, as convert's inverse, the canonical representation of v, a
+// value of a Go type that converts to a's bare type, codegen's named type over
+// it among them, a being the atomic Go type of a type whose primitive is
+// xs:decimal or xs:boolean, and true: a bool as true or false
+// (f-booleanCanmap); an integer in base 10 with no decimal point, no '+' and
+// no leading zero (f-decimalCanmap through f-noDecCanMap); and any other
+// big.Rat as the shortest decimal expansion that is exact, a digit at least
+// on each side of the point (f-decCanFragMap). For a big.Rat outside the
+// decimal value space, whose denominator in lowest terms is no 2^m·5^n
+// (Datatypes §3.3.3.1), which no lexical spells, it returns v as a fraction
+// (big.Rat.RatString) and false. Any other a is an internal bug, which
+// panics.
+func (a atomic) form(v reflect.Value) (string, bool) {
+	v = v.Convert(a.bare())
+	switch a {
+	case atomicBool:
+		return strconv.FormatBool(v.Bool()), true
+	case atomicBigRat:
+		r := v.Interface().(big.Rat)
+		return decimalForm(&r)
+	case atomicBigInt:
+		i := v.Interface().(big.Int)
+		return i.String(), true
+	case atomicInt8, atomicInt16, atomicInt32, atomicInt64:
+		return strconv.FormatInt(v.Int(), 10), true
+	case atomicUint8, atomicUint16, atomicUint32, atomicUint64:
+		return strconv.FormatUint(v.Uint(), 10), true
+	default:
+		panic(fmt.Sprintf("codec: no canonical form of atomic %d", a))
+	}
+}
+
+// decimalForm is form's for a big.Rat r: its digits after the point number
+// the larger of the exponents of 2 and 5 in its denominator, the fewest that
+// spell r exactly, and none for an integer.
+func decimalForm(r *big.Rat) (string, bool) {
+	if r.IsInt() {
+		return r.Num().String(), true
+	}
+	d := new(big.Int).Set(r.Denom())
+	twos := d.TrailingZeroBits()
+	d.Rsh(d, twos)
+	fives := uint(0)
+	q, m := new(big.Int), new(big.Int)
+	for {
+		q.QuoRem(d, bigFive, m)
+		if m.Sign() != 0 {
+			break
+		}
+		d.Set(q)
+		fives++
+	}
+	if d.Cmp(bigOne) != 0 {
+		return r.RatString(), false
+	}
+	return r.FloatString(int(max(twos, fives))), true
+}
+
+// bigOne and bigFive are the constants decimalForm compares with and divides
+// by; nothing writes them.
+var (
+	bigOne  = big.NewInt(1)
+	bigFive = big.NewInt(5)
+)
+
+// readsBack reports whether convert reads c as v, a value form takes: as
+// one value, by Cmp for big.Rat and big.Int, whose == compares
+// representations, and by == otherwise.
+func (a atomic) readsBack(c string, v reflect.Value) bool {
+	back, err := a.convert(c)
+	if err != nil {
+		return false
+	}
+	v = v.Convert(a.bare())
+	switch a {
+	case atomicBigRat:
+		x, y := back.Interface().(big.Rat), v.Interface().(big.Rat)
+		return x.Cmp(&y) == 0
+	case atomicBigInt:
+		x, y := back.Interface().(big.Int), v.Interface().(big.Int)
+		return x.Cmp(&y) == 0
+	default:
+		return back.Interface() == v.Interface()
+	}
+}
+
 // expandedName returns the value of QName's datatype struct, as a value of
 // atomicQName's bare type, that lexical denotes: the expanded name it
 // resolves to against ctx, the bindings the governing mapping's Parse
