@@ -1352,11 +1352,12 @@ func TestAppendDecimalInvalid(t *testing.T) {
 	for _, row := range []struct {
 		name, elem string
 		v          any
+		at         string
 	}{
-		{"a decimal's pattern", "onePoint", *big.NewRat(1, 1)},
-		{"a boolean's pattern", "digitBool", true},
-		{"a boolean list's pattern", "bits", boolList{true, false}},
-		{"an integer list's pattern", "plusOnes", intList{*big.NewInt(1)}},
+		{"a decimal's pattern", "onePoint", *big.NewRat(1, 1), "at Rat holding 1: "},
+		{"a boolean's pattern", "digitBool", true, "at bool holding true: "},
+		{"a boolean list's pattern", "bits", boolList{true, false}, "at boolList holding [true false]: "},
+		{"an integer list's pattern", "plusOnes", intList{*big.NewInt(1), *big.NewInt(-2)}, "at intList holding [1 -2]: "},
 	} {
 		t.Run(row.name, func(t *testing.T) {
 			var err error
@@ -1371,7 +1372,7 @@ func TestAppendDecimalInvalid(t *testing.T) {
 				_, err = appendChecked(t, nil, schema, strict.New(), sname(row.elem), v)
 			}
 			_ = asDecline(t, err, "codec does not encode a value with no canonical representation: simple type {urn:s}"+row.elem+" defined at s.xsd:")
-			holds(t, err, "a pattern facet rejects its canonical representation")
+			holds(t, err, row.at+"a pattern facet rejects its canonical representation")
 		})
 	}
 }

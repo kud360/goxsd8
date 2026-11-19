@@ -868,12 +868,11 @@ func (e *encoder) double(st *xsd.SimpleType, f float64, path, subject string) (t
 // (value.ApplyWhiteSpace) and accepted by the primitive's Parse, read back by
 // a.convert as v, and equal to the spelling. The governing mapping's Parse is
 // reached inside ValidateLexical alone, so a rejection by it is a verdict on
-// the value: a backend may map a derived builtin more narrowly than the
-// Go type codegen gives it, as big.Int holds 0 though xs:positiveInteger
-// does not. A big.Rat that form spells no lexical of is item 6 of [Append]'s
-// doc; a pattern facet's rejection is item 7, since every such value has
-// another lexical (otherLexical), and any other facet's is item 6. ok is
-// atom's.
+// the value, never a backend fault: the governing mapping may be a derived
+// builtin's (value.Backend), narrower than the Go type codegen gives it, as
+// big.Int holds 0 though xs:positiveInteger does not. It records the item 6
+// or 7 error [Append]'s doc states for v, a pattern facet's rejection always
+// item 7 (otherLexical). ok is atom's.
 func (e *encoder) spelled(st *xsd.SimpleType, a atomic, v reflect.Value, path, subject string) (text string, ok bool, err error) {
 	lexical, ok := a.form(v)
 	if !ok {

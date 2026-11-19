@@ -296,10 +296,9 @@ func (a atomic) convert(form string) (reflect.Value, error) {
 // no leading zero (f-decimalCanmap through f-noDecCanMap); and any other
 // big.Rat as the shortest decimal expansion that is exact, a digit at least
 // on each side of the point (f-decCanFragMap). For a big.Rat outside the
-// decimal value space, whose denominator in lowest terms is no 2^m·5^n
-// (Datatypes §3.3.3.1), which no lexical spells, it returns v as a fraction
-// (big.Rat.RatString) and false. Any other a is an internal bug, which
-// panics.
+// decimal value space, as item 6 of [Append]'s doc states it, which no
+// lexical spells, it returns v as a fraction (big.Rat.RatString) and false.
+// Any other a is an internal bug, which panics.
 func (a atomic) form(v reflect.Value) (string, bool) {
 	v = v.Convert(a.bare())
 	switch a {
