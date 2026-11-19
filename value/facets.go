@@ -26,7 +26,7 @@ import (
 // (cvc-pattern-valid, §4.3.4.4); enumeration/bounds/digits/length operate on
 // the parsed VALUE (cvc-enumeration-valid §4.3.5.4, cvc-*Inclusive/*Exclusive
 // §4.3.7–4.3.10, cvc-totalDigits/fractionDigits §4.3.11–4.3.12,
-// cvc-length/minLength/maxLength §4.3.1–4.3.3). Each stage failure carries the
+// cvc-length/minLength/maxLength §4.3.1–4.3.3). Each facet's failure carries the
 // SPECIFIC per-facet rule ID, never the cvc-facet-valid umbrella (§4.1.4).
 //
 // Compile-time assertions that the concrete checkers satisfy the pipeline-stage
@@ -253,8 +253,11 @@ func IsDatatypeVerdict(err error) bool {
 // → value facets → assertions), returning the parsed value on success or the
 // first error a stage produces (stop-on-first-failure; this does not collect all
 // facet violations). A rejection carries the stage's *xsderr.Error, reachable
-// through [xsderr.RuleOf] whether or not the error is wrapped; call
-// [IsDatatypeVerdict] before reading any of them as a verdict. ctx is the
+// through [xsderr.RuleOf] whether or not the error is wrapped, but where a
+// governing mapping's Parse rejected, at the lexical mapping stage or for a
+// bound facet's {value} while the checkers are built: that error carries
+// Parse's own error, an *xsderr.Error where Parse keeps [Mapping]'s contract;
+// call [IsDatatypeVerdict] before reading any of them as a verdict. ctx is the
 // VALIDATED INSTANCE's context, threaded to the governing mapping's Parse for the
 // candidate value; a context-free cohort (decimal/boolean/string) passes nil
 // here.

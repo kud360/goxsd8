@@ -401,7 +401,8 @@ func plainError(t *testing.T, err error, want ...string) {
 
 // invalidValue fails t unless err is item 6's error of Append's doc: one
 // errors.Is reports as ErrInvalidValue, no *DeclineError, wrapping neither
-// ErrTypeMismatch nor errors.ErrUnsupported, whose text holds each of want.
+// ErrTypeMismatch nor errors.ErrUnsupported, whose text holds each of want
+// and not ErrInvalidValue's own.
 func invalidValue(t *testing.T, err error, want ...string) {
 	t.Helper()
 	if err == nil {
@@ -411,7 +412,19 @@ func invalidValue(t *testing.T, err error, want ...string) {
 	if !errors.Is(err, ErrInvalidValue) || errors.As(err, &d) || errors.Is(err, errors.ErrUnsupported) || errors.Is(err, ErrTypeMismatch) {
 		t.Fatalf("returned %v, want an error errors.Is reports as ErrInvalidValue alone", err)
 	}
+	if strings.Contains(err.Error(), ErrInvalidValue.Error()) {
+		t.Errorf("error %q holds ErrInvalidValue's own text", err)
+	}
 	holds(t, err, want...)
+}
+
+// noRule fails t if err carries an *xsderr.Error, as item 6's error of
+// Append's doc does in none but its last case.
+func noRule(t *testing.T, err error) {
+	t.Helper()
+	if rule, ok := xsderr.RuleOf(err); ok {
+		t.Errorf("rule %q, want none", rule)
+	}
 }
 
 // holds fails t unless err's text holds each of want.
@@ -520,11 +533,13 @@ func TestAppendInvalidValues(t *testing.T) {
 		t.Run(row.name, func(t *testing.T) {
 			_, err := appendChecked(t, nil, schema, strict.New(), rootName, row.v)
 			invalidValue(t, err, row.want...)
+			noRule(t, err)
 		})
 	}
 	t.Run("a token attribute not collapsed", func(t *testing.T) {
 		_, err := appendChecked(t, nil, schema, strict.New(), sname("ta"), tokenAttr{T: "  a  b"})
 		invalidValue(t, err, "tokenAttr.T", `form "a b"`)
+		noRule(t, err)
 	})
 	t.Run("a repeated field outside its occurrence", func(t *testing.T) {
 		readme := filepath.Join("..", "testdata", "readme")
@@ -534,6 +549,7 @@ func TestAppendInvalidValues(t *testing.T) {
 		}
 		_, err = appendChecked(t, nil, orderSchema, strict.New(), xsd.QName{Space: "urn:o", Local: "order"}, order.Order{})
 		invalidValue(t, err, "Order.Item holds 0 items", "1..unbounded")
+		noRule(t, err)
 	})
 	t.Run("an xs:double a bound rejects", func(t *testing.T) {
 		_, err := appendChecked(t, nil, schema, strict.New(), sname("np"), dblRoot(1))
@@ -1350,6 +1366,7 @@ func TestAppendDecimalInvalid(t *testing.T) {
 	t.Run("outside the decimal value space", func(t *testing.T) {
 		_, err := appendChecked(t, nil, schema, strict.New(), sname("dec"), *big.NewRat(1, 3))
 		invalidValue(t, err, "outside the decimal value space")
+		noRule(t, err)
 		if !strings.HasPrefix(err.Error(), "codec: Append: Rat holds 1/3, of simple type {http://www.w3.org/2001/XMLSchema}decimal, ") {
 			t.Errorf("error %q does not open with the path, value and type", err)
 		}
