@@ -352,27 +352,6 @@ var (
 	bigFive = big.NewInt(5)
 )
 
-// readsBack reports whether convert reads c as v, a value form takes: as
-// one value, by Cmp for big.Rat and big.Int, whose == compares
-// representations, and by == otherwise.
-func (a atomic) readsBack(c string, v reflect.Value) bool {
-	back, err := a.convert(c)
-	if err != nil {
-		return false
-	}
-	v = v.Convert(a.bare())
-	switch a {
-	case atomicBigRat:
-		x, y := back.Interface().(big.Rat), v.Interface().(big.Rat)
-		return x.Cmp(&y) == 0
-	case atomicBigInt:
-		x, y := back.Interface().(big.Int), v.Interface().(big.Int)
-		return x.Cmp(&y) == 0
-	default:
-		return back.Interface() == v.Interface()
-	}
-}
-
 // expandedName returns the value of QName's datatype struct, as a value of
 // atomicQName's bare type, that lexical denotes: the expanded name it
 // resolves to against ctx, the bindings the governing mapping's Parse

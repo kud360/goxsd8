@@ -71,15 +71,15 @@ var ErrInvalidValue = errors.New("codec: Append: a value no valid document holds
 // [ErrInvalidValue] and errors.ErrUnsupported; whether it wraps an
 // *xsderr.Error does not tell its item.
 //
-// A fault of backend found at a value, in place of that value's item 6 or 7,
-// is a plain error too, returned at once and naming the value's Go path and
-// simple type: no mapping of the value's primitive, no governing mapping, a
-// Parse that rejects the spelling Append gives the value or the
-// whiteSpace-normalized canonical representation Canonical renders, the
-// primitive's mapping's Parse for an xs:decimal-primitive or xs:boolean value
-// and the governing mapping's for an xs:double one, a Canonical that renders
-// an xs:decimal-primitive or xs:boolean value, mapping back to it, as another
-// lexical than its canonical representation (Datatypes §E.1
+// A fault of backend found at a value, in place of that value's item 6 or 7, is
+// a plain error too, returned at once and naming the value's Go path and simple
+// type: no mapping of the value's primitive, no governing mapping, a Parse that
+// rejects the spelling Append gives the value, the primitive's mapping's for an
+// xs:decimal-primitive or xs:boolean value and the governing mapping's for an
+// xs:double one, a Parse of the governing mapping that rejects the
+// whiteSpace-normalized canonical representation an xs:double value's Canonical
+// renders, a Canonical that renders an xs:decimal-primitive or xs:boolean value
+// as other text than its canonical representation (Datatypes §E.1
 // f-decimalCanmap, §E.4 f-booleanCanmap), or an error of value.ValidateLexical
 // that value.IsDatatypeVerdict does not report as a verdict.
 //
@@ -864,15 +864,13 @@ func (e *encoder) double(st *xsd.SimpleType, f float64, path, subject string) (t
 // Go type, at path, subject naming st: a.form's spelling of v, which Parse of
 // the primitive's mapping on e's backend must accept, held to st's facets by
 // value.ValidateLexical, the value that returns rendered by st's governing
-// mapping's Canonical, that rendering whiteSpace-normalized
-// (value.ApplyWhiteSpace) and accepted by the primitive's Parse, read back by
-// a.convert as v, and equal to the spelling. The governing mapping's Parse is
-// reached inside ValidateLexical alone, so a rejection by it is a verdict on
-// the value, never a backend fault: the governing mapping may be a derived
-// builtin's (value.Backend), narrower than the Go type codegen gives it, as
-// big.Int holds 0 though xs:positiveInteger does not. It records the item 6
-// or 7 error [Append]'s doc states for v, a pattern facet's rejection always
-// item 7 (otherLexical). ok is atom's.
+// mapping's Canonical, which must be the spelling itself. The governing
+// mapping's Parse is reached inside ValidateLexical alone, so a rejection by
+// it is a verdict on the value, never a backend fault: the governing mapping
+// may be a derived builtin's (value.Backend), narrower than the Go type
+// codegen gives it, as big.Int holds 0 though xs:positiveInteger does not. It
+// records the item 6 or 7 error [Append]'s doc states for v, a pattern
+// facet's rejection always item 7 (otherLexical). ok is atom's.
 func (e *encoder) spelled(st *xsd.SimpleType, a atomic, v reflect.Value, path, subject string) (text string, ok bool, err error) {
 	lexical, ok := a.form(v)
 	if !ok {
@@ -915,19 +913,8 @@ func (e *encoder) spelled(st *xsd.SimpleType, a atomic, v reflect.Value, path, s
 		e.noCanonical(subject, path, lexical, err.Error())
 		return "", false, nil
 	}
-	normalized, err := value.ApplyWhiteSpace(e.schema, st, c)
-	if err != nil {
-		return "", false, fmt.Errorf("codec: Append: %s holds %s, of %s, which the backend cannot assess: %w", path, lexical, subject, err)
-	}
-	if _, err := pm.Parse(normalized, nil); err != nil {
-		return "", false, fmt.Errorf("codec: Append: %s holds %s, of %s, whose canonical representation %q the backend's Parse of %s rejects: %w", path, lexical, subject, c, primitive, err)
-	}
-	if !a.readsBack(c, v) {
-		e.noCanonical(subject, path, lexical, fmt.Sprintf("its canonical representation %q does not map back to it", c))
-		return c, false, nil
-	}
 	if c != lexical {
-		return "", false, fmt.Errorf("codec: Append: %s holds %s, of %s, which the backend's Canonical renders %q, another lexical than its canonical representation (f-decimalCanmap, f-booleanCanmap)", path, lexical, subject, c)
+		return "", false, fmt.Errorf("codec: Append: %s holds %s, of %s, which the backend's Canonical renders %q, other text than its canonical representation (f-decimalCanmap, f-booleanCanmap)", path, lexical, subject, c)
 	}
 	return c, true, nil
 }
@@ -951,20 +938,27 @@ func soleLexical(f float64) bool { return math.IsNaN(f) || math.IsInf(f, -1) }
 // pattern facet to match: v holds an item, and a is that of an xs:decimal- or
 // xs:boolean-primitive type, every value of which has another lexical (a
 // leading zero, Datatypes §3.3.3 and §3.4.13; 1 or 0, §3.3.2.2), or a is
-// float64 and v holds an item soleLexical does not hold of.
+// float64 and v holds an item soleLexical does not hold of. An a of a primitive
+// atomicEncodes declines is an internal bug, which panics.
 func otherLexical(a atomic, v reflect.Value) bool {
-	if v.Len() == 0 || a == atomicString {
+	if v.Len() == 0 {
 		return false
 	}
-	if a != atomicFloat64 {
-		return true
-	}
-	for i := range v.Len() {
-		if !soleLexical(v.Index(i).Float()) {
-			return true
+	switch a {
+	case atomicString:
+		return false
+	case atomicFloat64:
+		for i := range v.Len() {
+			if !soleLexical(v.Index(i).Float()) {
+				return true
+			}
 		}
+		return false
+	case atomicBool, atomicBigRat, atomicBigInt, atomicInt8, atomicInt16, atomicInt32, atomicInt64, atomicUint8, atomicUint16, atomicUint32, atomicUint64:
+		return true
+	default:
+		panic(fmt.Sprintf("codec: no other-lexical answer for atomic %d", a))
 	}
-	return false
 }
 
 // mapping returns the governing mapping of st on e's backend

@@ -1266,12 +1266,7 @@ var (
 		}}
 	})
 	decimalSpacedCanonical = overDatatype("decimal", func(base value.Mapping) value.Mapping {
-		return value.Mapping{Parse: func(s string, ctx value.Context) (value.Value, error) {
-			if s == "1.0" {
-				return nil, errors.New("rejects collapsed canonical")
-			}
-			return base.Parse(s, ctx)
-		}, Canonical: func(v value.Value) (string, error) {
+		return value.Mapping{Parse: base.Parse, Canonical: func(v value.Value) (string, error) {
 			c, err := base.Canonical(v)
 			return " " + c + ".0", err
 		}}
@@ -1380,11 +1375,11 @@ func TestAppendDecimalInvalid(t *testing.T) {
 // TestAppendDecimalFaults pins the backend faults and the backend's item 7
 // declines of Append's doc for a type whose primitive is xs:decimal or
 // xs:boolean: no mapping of the primitive, the primitive's Parse rejecting
-// the spelling or the whiteSpace-normalized canonical representation, a
-// Canonical rendering another lexical that maps back, and no governing
-// mapping inside value.ValidateLexical are plain errors opening with the
-// value's Go path; a nil or failing Canonical and one that does not map back
-// are item 7.
+// the spelling, a Canonical rendering other text than the canonical
+// representation, whether that text maps back to the value ("1.0", " 1.0")
+// or not ("2"), and no governing mapping inside value.ValidateLexical are
+// plain errors opening with the value's Go path; a nil or failing Canonical
+// is item 7.
 func TestAppendDecimalFaults(t *testing.T) {
 	schema := schemaOf(t, encodeDecimalSchema)
 	one := *big.NewRat(1, 1)
@@ -1392,10 +1387,18 @@ func TestAppendDecimalFaults(t *testing.T) {
 	plainError(t, err, "codec: Append: bool, of simple type {http://www.w3.org/2001/XMLSchema}boolean: the backend has no mapping of its primitive {http://www.w3.org/2001/XMLSchema}boolean")
 	_, err = appendChecked(t, nil, schema, decimalRejectingParse, sname("dec"), one)
 	plainError(t, err, `codec: Append: Rat holds 1, of simple type {http://www.w3.org/2001/XMLSchema}decimal, whose canonical spelling the backend's Parse of {http://www.w3.org/2001/XMLSchema}decimal rejects: rejected`)
-	_, err = appendChecked(t, nil, schema, decimalSpacedCanonical, sname("dec"), one)
-	plainError(t, err, `codec: Append: Rat holds 1, of simple type {http://www.w3.org/2001/XMLSchema}decimal, whose canonical representation " 1.0" the backend's Parse of {http://www.w3.org/2001/XMLSchema}decimal rejects: rejects collapsed canonical`)
-	_, err = appendChecked(t, nil, schema, decimalPointedCanonical, sname("dec"), one)
-	plainError(t, err, `codec: Append: Rat holds 1, of simple type {http://www.w3.org/2001/XMLSchema}decimal, which the backend's Canonical renders "1.0", another lexical than its canonical representation`)
+	for _, row := range []struct {
+		name     string
+		backend  value.Backend
+		rendered string
+	}{
+		{"a spaced Canonical", decimalSpacedCanonical, `" 1.0"`},
+		{"a pointed Canonical", decimalPointedCanonical, `"1.0"`},
+		{"a Canonical not mapping back", decimalOtherCanonical, `"2"`},
+	} {
+		_, err = appendChecked(t, nil, schema, row.backend, sname("dec"), one)
+		plainError(t, err, "codec: Append: Rat holds 1, of simple type {http://www.w3.org/2001/XMLSchema}decimal, which the backend's Canonical renders "+row.rendered+", other text than its canonical representation (f-decimalCanmap, f-booleanCanmap)")
+	}
 	_, err = appendChecked(t, nil, schema, decimalOnce{asked: new(bool)}, sname("dec"), one)
 	plainError(t, err, "codec: Append: Rat holds 1, of simple type {http://www.w3.org/2001/XMLSchema}decimal, which the backend cannot assess: ")
 	for _, row := range []struct {
@@ -1405,7 +1408,6 @@ func TestAppendDecimalFaults(t *testing.T) {
 	}{
 		{"a nil Canonical", decimalNilCanonical, "no canonical mapping"},
 		{"a failing Canonical", decimalFailingCanonical, "no canonical form"},
-		{"a Canonical not mapping back", decimalOtherCanonical, `"2" does not map back`},
 	} {
 		t.Run(row.name, func(t *testing.T) {
 			_, err := appendChecked(t, nil, schema, row.backend, sname("dec"), one)
