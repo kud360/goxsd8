@@ -237,7 +237,7 @@ func (e *DeclineError) at(loc xsderr.Loc) *DeclineError {
 }
 
 // located reports whether a message names td with its schema Loc, which
-// [DeclineError.Error]'s doc states: every type definition but one named in
+// [DeclineError.Error]'s doc states: every type definition except one named in
 // the XML Schema namespace whose Loc is the zero Loc, whose location such a
 // message would print as "?".
 func located(td xsd.TypeDefinition) bool {

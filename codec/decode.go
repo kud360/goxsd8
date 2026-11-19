@@ -526,30 +526,28 @@ var ErrTypeMismatch = errors.New("codec: T is not the type codegen emits for the
 //     sealed interface as the type itself, I or []I, I that interface, held
 //     as T is, the bare interface for an optional one and never a pointer,
 //     nil meaning absent.
-//   - The field of a wildcard particle, named as if from local name any
-//     (codegen's package doc, "# Naming"), and a choice's wildcard
-//     alternative's branch field: E, *E or []E by its occurrence, a choice's
-//     {min occurs} 0 read as 1, E a struct of the shape of codegen's
-//     AnyElement, which codegen declares in the caller's package, so E is
-//     matched by shape, every struct's name never compared, whatever codegen
-//     numbers it, such as AnyElement2 or AnyType2: E's fields exactly Space
-//     and Local, each a string, and Content, X, in that order; X's, AnyType's,
-//     exactly Attributes, a slice of A, Text, a string, and Children, a slice
-//     of C; A's, AnyAttribute's, exactly Space, Local and Value, each a
-//     string; and C's, AnyChild's, exactly Element and Tail, a string, where
-//     Element is of E itself, not another struct of E's shape. Fields are
-//     matched in name, order and Go type, none embedded, struct tags aside,
-//     and a slice named or not. Each child attributed to the wildcard (the
+//   - The field of a wildcard particle, named as codegen's package doc,
+//     "# Naming", states, and a choice's wildcard alternative's branch field: E,
+//     *E or []E by its occurrence, a choice's {min occurs} 0 read as 1, E a
+//     struct of the shape of codegen's AnyElement, which codegen declares in the
+//     caller's package, so E is matched by shape, every struct's name never
+//     compared, whatever codegen numbers it, such as AnyElement2 or AnyType2: E's
+//     fields exactly Space and Local, each a string, and Content, X, in that
+//     order; X's, AnyType's, exactly Attributes, a slice of A, Text, a string,
+//     and Children, a slice of C; A's, AnyAttribute's, exactly Space, Local and
+//     Value, each a string; and C's, AnyChild's, exactly Element and Tail, a
+//     string, where Element is of E itself, not another struct of E's shape.
+//     Fields are matched in name, order and Go type, none embedded, struct tags
+//     aside, and a slice named or not. Each child attributed to the wildcard (the
 //     paragraph after item 8) is one E, holding its expanded name and its content
-//     raw: Attributes its attributes in start-tag order, xsi: ones included
-//     and namespace declarations not, each value as the XML reader normalized
-//     it, any prefix in it unresolved; Text the character data before its
-//     first child element; and Children each child element, read the same
-//     way, as Element, and as Tail the character data after it, before the
-//     next child or the end, each run of character data concatenated across
-//     the comments and processing instructions that break it. In mixed
-//     content the wildcard's field holds C, *C or []C in place of E, as the
-//     mixed-content bullet below states.
+//     raw: Attributes its attributes in start-tag order, xsi: ones included and
+//     namespace declarations not, each value as the XML reader normalized it, any
+//     prefix in it unresolved; Text the character data before its first child
+//     element; and Children each child element, read the same way, as Element,
+//     and as Tail the character data after it, before the next child or the end,
+//     each run of character data concatenated across the comments and processing
+//     instructions that break it. In mixed content the wildcard's field holds C,
+//     *C or []C in place of E, as the mixed-content bullet below states.
 //   - The field of a particle whose element declaration has {type definition}
 //     xs:anyType itself (Structures §3.4.7 any-type-itself), and a choice's
 //     such alternative's branch field, a type derived from xs:anyType being
@@ -616,19 +614,17 @@ var ErrTypeMismatch = errors.New("codec: T is not the type codegen emits for the
 //     E's own C and no other struct of its shape. Decode fills Text and each
 //     Tail raw, as that bullet states an E's, white space included.
 //   - The field of a complex type's {attribute wildcard}, its struct's last,
-//     named as if from local name anyAttribute after the attribute fields
-//     (codegen's package doc, "# Naming"), so AnyAttribute2 where an
-//     attribute or element field took AnyAttribute: []A, never a pointer, A
-//     a struct of AnyAttribute's shape as the wildcard bullet above states
-//     it, matched by shape, and the slice named or not. It holds, in
-//     start-tag order, each attribute of the element that no attribute use's
-//     declaration names but xsi:type, xsi:nil, xsi:schemaLocation and
-//     xsi:noNamespaceSchemaLocation (Structures §3.4.4.2 cvc-complex-type
-//     clause 2, a use taking precedence by clause 2.1), another xsi: one
-//     included, each raw as that bullet states an E's Attributes, nil for
-//     none. Neither the wildcard's {namespace constraint} nor its {process
-//     contents} is read: validation held each such attribute to the wildcard
-//     first (clause 2.2.2).
+//     named, after the attribute fields, as codegen's package doc,
+//     "# Naming", states: []A, never a pointer, A a struct of AnyAttribute's
+//     shape as the wildcard bullet above states it, matched by shape, and
+//     the slice named or not. It holds, in start-tag order, each attribute
+//     of the element that no attribute use's declaration names but xsi:type,
+//     xsi:nil, xsi:schemaLocation and xsi:noNamespaceSchemaLocation
+//     (Structures §3.4.4.2 cvc-complex-type clause 2, a use taking
+//     precedence by clause 2.1), another xsi: one included, each raw as that
+//     bullet states an E's Attributes, nil for none. Neither the wildcard's
+//     {namespace constraint} nor its {process contents} is read: validation
+//     held each such attribute to the wildcard first (clause 2.2.2).
 //   - The field of an <element ref> particle that codegen gives a sealed
 //     interface over the referenced declaration's substitution group
 //     (§3.3.6.4 key-eq; codegen's package doc, "# Substitution groups"
@@ -2029,10 +2025,9 @@ type binding struct {
 }
 
 // anyAttributeField is the field an {attribute wildcard} gives a complex
-// type's struct, after every attribute field: name, its Go name, claimed
-// from the local name anyAttribute after the attribute fields', so
-// AnyAttribute2 where an earlier field took AnyAttribute (codegen/doc.go
-// "# Attributes"). It holds a slice of a struct of AnyAttribute's shape
+// type's struct, after every attribute field (codegen/doc.go "# Attributes"):
+// name, its Go name, claimed after the attribute fields' as codegen/doc.go
+// "# Naming" states. It holds a slice of a struct of AnyAttribute's shape
 // (rawAttributeShaped).
 type anyAttributeField struct {
 	name string
@@ -2755,13 +2750,13 @@ func bindSequence(run *bindRun, ct xsd.ComplexType, particles []xsd.Particle, na
 // group at Matcher position at (xsd.Matcher.NextParticle) below ct's content
 // {particle}, nil for that particle's own, each named from names in particle
 // order, an element particle's by its element's local name and a wildcard
-// particle's as if from local name any (codegen/doc.go "# Naming"), or
-// returns the first decline Decode's doc states for them, item 5,
-// typeSubject naming the type. A model group particle, inline or a <group
-// ref> (particleTerm), is bound by nested, item reporting whether s is an
-// occurrence field's item (bindItem). An element particle's position and
-// target are recorded in s.index.elements, and the names its field takes in
-// s.index.children (childIndex.take).
+// particle's as codegen/doc.go "# Naming" states, or returns the first
+// decline Decode's doc states for them, item 5, typeSubject naming the type.
+// A model group particle, inline or a <group ref> (particleTerm), is bound
+// by nested, item reporting whether s is an occurrence field's item
+// (bindItem). An element particle's position and target are recorded in
+// s.index.elements, and the names its field takes in s.index.children
+// (childIndex.take).
 func (s *sequence) bind(run *bindRun, ct xsd.ComplexType, particles []xsd.Particle, at []int, item bool, names *goname.Namer, typeSubject string) error {
 	for i, p := range particles {
 		term, err := particleTerm(run.p.schema, p, typeSubject)
@@ -2894,7 +2889,7 @@ func (s *sequence) occurrence(run *bindRun, ct xsd.ComplexType, group xsd.ModelG
 // (codegen/doc.go "# Open content"): read from ct's own {content type}, as
 // codegen reads it, so that no clause of §3.4.2.3.3 dcl.ctd.ctcc.common is
 // recomputed here, its name claimed from names, the struct's Namer, after the
-// particle fields', as if from the local name openContent, and its Go type a
+// particle fields' as codegen/doc.go "# Naming" states, and its Go type a
 // slice, never a pointer, of the arm rawChild gives ct: E, of AnyElement's
 // shape, or C, of AnyChild's in mixed content.
 func openContentField(ct xsd.ComplexType, names *goname.Namer) (field, bool) {
