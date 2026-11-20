@@ -41,10 +41,11 @@ push the heartbeat WORKFLOW's lease invariant requires before a round.
   The single-comment path carries no issue number. Never paste, summarize
   or excerpt a part in the brief: a condensed part is a placeholder, in a
   file or inline (#3137, #3314).
-- **Its first instruction puts the delegate's isolated worktree at
-  `origin/wip/issue-<N>`'s tip** by WORKFLOW's "To put any branch or
-  worktree at a given commit" sentence, since the harness cuts the
-  worktree from `origin/main` (#3707).
+- **Its first instruction puts the delegate's isolated worktree's own
+  branch at `origin/wip/issue-<N>`'s tip** by WORKFLOW's "To put any
+  branch or worktree at a given commit" sentence, since the harness cuts
+  the worktree from `origin/main` (#3707). The delegate never checks out
+  `wip/issue-<N>` by name (#3806).
 - **The delegate refuses a part it cannot read whole as its source.** The
   mason's, the arbiter's and the warden's own files have them return
   `BRIEF INCOMPLETE: <part>` for a part missing, unheaded, condensed, a
