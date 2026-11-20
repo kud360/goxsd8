@@ -799,7 +799,7 @@ func TestSubsetUnclosedProcessingInstructionIsNotWellFormed(t *testing.T) {
 	const doc = `<!DOCTYPE r [<?x a > b]><r/>`
 	_, err := collect(t, "t.xml", doc)
 	wantWellFormednessError(t, err)
-	const want = `t.xml:1:29: [xml-wf] XML syntax error on line 1: unexpected EOF`
+	const want = `t.xml:1:29: [xml-wf] unexpected EOF`
 	if err == nil || err.Error() != want {
 		t.Errorf("error = %v, want %q", err, want)
 	}

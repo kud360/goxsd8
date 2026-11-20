@@ -200,7 +200,7 @@ func (c *content) include(name, text string, ref int64, open []string) error {
 			if strayInToken(text[from:]) {
 				return noReference(loc, open)
 			}
-			return xsderr.Wrap(xsderr.RuleXMLWellFormed, loc, fmt.Errorf("in the replacement text of entity %s: %w", name, err))
+			return decoderFault(loc, "in the replacement text of entity "+name+": ", err)
 		}
 		raw := text[from:dec.InputOffset()]
 		if err := c.token(tok, raw, at, depth, loc, open); err != nil {

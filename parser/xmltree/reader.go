@@ -186,7 +186,8 @@ func (r *Reader) Token() (Node, error) {
 
 // handleReadErr maps a RawToken error to the reader's contract: io.EOF ends a
 // well-formed document (unclosed elements are an error instead); any other
-// error is a malformed-XML failure wrapped with the current location.
+// error is a malformed-XML failure wrapped with the current location, quoted
+// as decoderFault quotes it.
 func (r *Reader) handleReadErr(err error) (Node, error) {
 	if errors.Is(err, io.EOF) {
 		r.eof = true
@@ -196,7 +197,23 @@ func (r *Reader) handleReadErr(err error) (Node, error) {
 		}
 		return nil, io.EOF
 	}
-	return nil, xsderr.Wrap(xsderr.RuleXMLWellFormed, r.locAt(r.dec.InputOffset()), err)
+	return nil, decoderFault(r.locAt(r.dec.InputOffset()), "", err)
+}
+
+// decoderFault charges err, an error a decoder's RawToken returned, as a
+// well-formedness fault at loc, wrapping err as the cause, with the message
+// lead followed by err's text. An *xml.SyntaxError — err itself — quotes its
+// Msg alone: its Line counts lines of the input that decoder read, which loc
+// already places, so "XML syntax error on line N:" would say the line twice
+// in the document and name a line of the replacement text in an entity's.
+// Every other err quotes as xsderr.CauseText renders it.
+func decoderFault(loc xsderr.Loc, lead string, err error) *xsderr.Error {
+	msg := xsderr.CauseText(err)
+	//nolint:errorlint // only err ITSELF quotes its Msg: a wrapper around a syntax error keeps its own text.
+	if se, ok := err.(*xml.SyntaxError); ok {
+		msg = se.Msg
+	}
+	return &xsderr.Error{Rule: xsderr.RuleXMLWellFormed, Loc: loc, Msg: lead + msg, Err: err}
 }
 
 // classify resolves one raw token. It returns (node, true, nil) to emit a
