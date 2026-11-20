@@ -59,7 +59,8 @@ var ErrInvalidValue = errors.New("codec: Append: a value no valid document holds
 //     date, time or duration datatype struct value no value of its datatype
 //     maps to, as codegen's package doc "# Simple types" states such values
 //     exist, the error naming the first property found outside it, its
-//     fields read in order; or a value whose simple type rejects it, a
+//     fields read in order, or, ahead of its Seconds, a duration's Months
+//     and Seconds of opposite signs; or a value whose simple type rejects it, a
 //     value.ValidateLexical error value.IsDatatypeVerdict reports as a
 //     verdict, a facet's rejection or a backend Parse's among them, that
 //     error wrapped, but for item 7's pattern case, a list's own facets read

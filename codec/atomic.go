@@ -363,9 +363,8 @@ func shownField(v reflect.Value) string {
 // float64, any doubleRep spelling but for NaN and -INF (soleLexical); for an
 // xs:boolean value 1 or 0 (§3.3.2.2); for an xs:decimal-primitive or
 // duration-primitive one a leading zero; for a dateTime, dateTimeStamp or
-// time one a trailing zero of its seconds; for a date, gYearMonth or gYear
-// one +00:00 for Z or -0000 for the year 0; and for a gMonthDay, gDay or
-// gMonth one +00:00 for Z. An a of a primitive atomicEncodes declines is an
+// time one a trailing zero of its seconds; and for a date or g* value, one
+// item 7 spells. An a of a primitive atomicEncodes declines is an
 // internal bug, which panics.
 func (a atomic) otherLexicalOf(v reflect.Value) bool {
 	switch a {
