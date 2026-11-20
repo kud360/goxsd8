@@ -307,26 +307,35 @@
 //
 // # What encodes
 //
-// Append encodes a document element whose top-level declaration is neither
-// abstract nor nillable and has no {type table}, value constraint or
-// identity-constraint definitions, and whose {type definition} is either a
-// simple type that encodes or a complex type with {abstract} false, no
-// {assertions}, no {attribute wildcard} and no {open content}, of empty
-// content or of element-only content whose {particle} is a sequence that
-// codegen splices, inline or through <group ref>, each of whose particles is
-// a local element declaration, {max occurs} at least 1, of a simple type
-// that encodes and with the same restrictions as the document element's
-// declaration, into V, *V or []V by its occurrence; each attribute use but
-// xsi:nil's is unqualified, has no value constraint and is of a simple type
-// that encodes, into V or *V. A simple type encodes when it is atomic, has
-// no assertions facet, and has {primitive type definition} xs:string, other
-// than a type derived from xs:ID, xs:IDREF or xs:ENTITY, into string,
-// xs:double, into float64, xs:decimal, into the Go type codegen's package doc
-// "# Simple types" gives it, xs:boolean, into bool, or one of xs:duration,
-// xs:dateTime, xs:time, xs:date, xs:gYearMonth, xs:gYear, xs:gMonthDay,
-// xs:gDay and xs:gMonth, into the datatype struct codegen's "# Simple types"
-// gives it, or is a list whose {item type definition} encodes and which has
-// no assertions facet, its own or inherited, into []V, V its item's Go type.
+// Append encodes each construct the list names under the conditions its
+// bullet states, into the Go type the bullet names where it names one:
+//
+//   - A top-level element declaration, as the document element's, neither
+//     abstract nor nillable, with no {type table}, value constraint or
+//     identity-constraint definitions, whose {type definition} is either a
+//     simple type that encodes or a complex type that encodes.
+//   - A complex type with {abstract} false, no {assertions}, no {attribute
+//     wildcard} and no {open content}, of empty content or of element-only
+//     content whose {particle} is a sequence that codegen splices, inline or
+//     through <group ref>, each of whose particles is a local element
+//     declaration.
+//   - An element particle of that sequence with {max occurs} at least 1, of
+//     a simple type that encodes and with the same restrictions as the
+//     document element's declaration, into V, *V or []V by its occurrence.
+//   - An attribute use other than xsi:nil's, unqualified, with no value
+//     constraint and of a simple type that encodes, into V or *V.
+//   - An atomic simple type with no assertions facet whose {primitive type
+//     definition} is xs:string, other than a type derived from xs:ID,
+//     xs:IDREF or xs:ENTITY, into string; xs:double, into float64;
+//     xs:decimal, a type derived from xs:integer included, into the Go type
+//     codegen's package doc "# Simple types" gives it; xs:boolean, into
+//     bool; or one of xs:duration, xs:dateTime, xs:time, xs:date,
+//     xs:gYearMonth, xs:gYear, xs:gMonthDay, xs:gDay and xs:gMonth, into the
+//     datatype struct codegen's "# Simple types" gives it.
+//   - A list simple type whose {item type definition} encodes and which has
+//     no assertions facet, its own or inherited, into []V, V its item's Go
+//     type.
+//
 // Every other construct is a [*DeclineError], item 4 of Append's doc, a
 // list's item declining by the item's construct, and so is a value with no
 // canonical representation, item 7.
