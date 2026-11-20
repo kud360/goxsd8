@@ -328,7 +328,10 @@ func TestParseNonSchemaRootCarriesNoRule(t *testing.T) {
 //
 // Two stderr lines, not one, and the order is the contract's: reportUnfollowed
 // names the shortfall first (fetch records UnfollowedLocationUnresolved before
-// returning), then the violation line. It is the LAST line that is pinned.
+// returning), then the violation line. The first is pinned whole, since it is
+// the one line naming the directive whose wording must hold of a fault as of
+// an absent document (shortfallClause); the second up to where the operating
+// system's words begin.
 //
 // Exit 1, not 2 — the code the contract reserves for a schema verdict, though
 // nothing here was decided about the schema. #1419 ruled it stays 1, and the
@@ -365,8 +368,8 @@ func TestParseIOFaultOnReferencedDocumentCarriesNoRule(t *testing.T) {
 	if len(lines) != 2 {
 		t.Fatalf("stderr = %q, want two lines: the unfollowed-directive shortfall, then the violation", stderr.String())
 	}
-	if !strings.Contains(lines[0], `this <include>'s schemaLocation "notdir-include.xsd/inner.xsd" resolved to no document;`) {
-		t.Errorf("stderr line 1 = %q, want reportUnfollowed's shortfall line", lines[0])
+	if want := "goxsd8: parse: " + abs + `:12:3: this <include>'s schemaLocation "notdir-include.xsd/inner.xsd" yielded no document; the rejected assembly is short of whatever that document declares`; lines[0] != want {
+		t.Errorf("stderr line 1 = %q, want reportUnfollowed's shortfall line %q, which claims no absence of a document the resolver failed to open", lines[0], want)
 	}
 	line := lines[1]
 	if strings.Contains(line, "[") {
@@ -494,7 +497,7 @@ func TestParseNamesAnUnresolvedDirectiveOfARejectedSchema(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	note := "goxsd8: parse: " + abs + `:10:3: this <include>'s schemaLocation "nosuchdocument.xsd" resolved to no document; the rejected assembly is short of whatever that document declares` + "\n"
+	note := "goxsd8: parse: " + abs + `:10:3: this <include>'s schemaLocation "nosuchdocument.xsd" yielded no document; the rejected assembly is short of whatever that document declares` + "\n"
 
 	var stdout, stderr bytes.Buffer
 	if code := run([]string{"parse", shortBrokenSchema}, &stdout, &stderr); code != exitInvalid {

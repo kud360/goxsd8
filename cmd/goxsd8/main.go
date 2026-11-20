@@ -230,11 +230,12 @@ Usage:
       Under -strict the summary is printed all the same and the
       argument is charged 4. Such a directive of a REJECTED schema
       is named the same way, for the directives assembly reached
-      before it stopped, in a line saying the assembly was rejected
-      rather than compiled and saying nothing about whether the
-      unread document had a part in that. The I/O fault above is not
-      that skip: it is charged 1, though the faulting run names the
-      directive on stderr too, before printing the fault.
+      before it stopped, in a line saying the schemaLocation yielded
+      no document, that the assembly was rejected rather than
+      compiled, and nothing about whether the unread document had a
+      part in that. The I/O fault above is not that skip: it is
+      charged 1, though the faulting run names the directive on
+      stderr too, in that same line, before printing the fault.
       A bare <xs:import>, which names no schemaLocation, is not
       reported for a compiled schema; for a rejected one it is named
       after the error line, at its own position and by its namespace
@@ -369,7 +370,8 @@ Usage:
       argument that cannot be read. The fault is not the skip of a
       schemaLocation resolving to no document, which moves no exit
       code without -strict, though the faulting run names the
-      directive on stderr too, before printing the fault.
+      directive on stderr too, in a rejected set's line, before
+      printing the fault.
       A declined check is one of these kinds:
         - assertions: an <xs:assert> {test}, or an assertions
           facet's, left unevaluated;
