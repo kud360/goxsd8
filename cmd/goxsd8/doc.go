@@ -205,11 +205,12 @@
 //	    Under -strict the summary is printed all the same and the
 //	    argument is charged 4. Such a directive of a REJECTED schema
 //	    is named the same way, for the directives assembly reached
-//	    before it stopped, in a line saying the assembly was rejected
-//	    rather than compiled and saying nothing about whether the
-//	    unread document had a part in that. The I/O fault above is not
-//	    that skip: it is charged 1, though the faulting run names the
-//	    directive on stderr too, before printing the fault.
+//	    before it stopped, in a line saying the schemaLocation yielded
+//	    no document, that the assembly was rejected rather than
+//	    compiled, and nothing about whether the unread document had a
+//	    part in that. The I/O fault above is not that skip: it is
+//	    charged 1, though the faulting run names the directive on
+//	    stderr too, in that same line, before printing the fault.
 //	    A bare <xs:import>, which names no schemaLocation, is not
 //	    reported for a compiled schema; for a rejected one it is named
 //	    after the error line, at its own position and by its namespace
@@ -344,7 +345,8 @@
 //	    argument that cannot be read. The fault is not the skip of a
 //	    schemaLocation resolving to no document, which moves no exit
 //	    code without -strict, though the faulting run names the
-//	    directive on stderr too, before printing the fault.
+//	    directive on stderr too, in a rejected set's line, before
+//	    printing the fault.
 //	    A declined check is one of these kinds:
 //	      - assertions: an <xs:assert> {test}, or an assertions
 //	        facet's, left unevaluated;
@@ -659,10 +661,13 @@
 // document would have declared, which is the fact the line carries and clause 3
 // calls "less than complete ·assessment· outcomes". When the instance's hints
 // instead fail to compose with the -schema set, the same shortfall is named
-// first, in a line saying the augmented set was rejected rather than compiled
-// and saying nothing about whether the unread document had a part in that;
-// the hints are then reported unusable and the instance falls back to the
-// -schema set alone.
+// first, in a line saying the hint yielded no document, that the augmented set
+// was rejected rather than compiled, and nothing about whether the unread
+// document had a part in that; the hints are then reported unusable and the
+// instance falls back to the -schema set alone. A hint whose location the
+// resolver failed to open rather than found absent is named in that line too,
+// its fault being what rejected the set, which is why the line claims no
+// absence.
 //
 // -no-hints turns all of it off — clause 3's "Schema processors should provide
 // an option to control whether they do so" — and turning it off is what makes

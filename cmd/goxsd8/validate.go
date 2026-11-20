@@ -519,7 +519,8 @@ func (vn *validation) validatorFor(instance string, src io.Reader, stderr io.Wri
 		// rider on what that assembly decided (#1312). It says nothing of the
 		// rejection, and the line below says nothing of it. vn.strict is passed,
 		// unlike on runValidate's rejected path: the instance is still assessed,
-		// so its hint's skip is charged.
+		// so its hint's skip is charged. A hint whose resolver faulted is named
+		// and charged here too, err being that fault (reportUnfollowedHints).
 		code := reportUnfollowedHints(stderr, instance, assemblyRejected, vn.strict, report)
 		// A set that stops compiling only once THIS instance's hints are folded
 		// in is a fault of the instance, not of the -schema set the invocation
@@ -545,11 +546,14 @@ func (vn *validation) validatorFor(instance string, src io.Reader, stderr io.Wri
 }
 
 // reportUnfollowedHints names on stderr, one line per hint, every schema
-// location hint of instance whose location resolved to no document — §4.3.2
+// location hint of instance whose location yielded no document — §4.3.2
 // clause 3's "failure may cause less than complete ·assessment· outcomes",
-// which src-import makes legal to skip and which nothing else in this run
-// reports (#1251), and returns skipCode's code over those lines, each of which
-// closes with strictMarker under strict.
+// which src-import makes legal to skip where the location resolved to none and
+// which nothing else in this run reports (#1251) — and returns skipCode's code
+// over those lines, each of which closes with strictMarker under strict. A
+// hint whose resolver failed rather than reported absence is among them too,
+// on the rejected outcome alone: shortfallClause says which wording each
+// outcome earns, and why.
 //
 // It reads parser.AssemblyReport.UnfollowedRoots, which holds exactly the
 // HintAt roots that named no document, each by the location it was built with —
@@ -563,7 +567,7 @@ func reportUnfollowedHints(stderr io.Writer, instance string, compiled, strict b
 	for _, r := range roots {
 		// A failed stderr write cannot change the outcome: the exit code is
 		// settled either way, and stderr is the only channel this line has.
-		_, _ = fmt.Fprintf(stderr, "goxsd8: validate: %s: the schema location hint %s resolved to no document%s%s\n", instance, r.Location(), shortfallClause(compiled, ", which is legal and skipped"), strictMarker(strict))
+		_, _ = fmt.Fprintf(stderr, "goxsd8: validate: %s: the schema location hint %s%s%s\n", instance, r.Location(), shortfallClause(compiled, ", which is legal and skipped"), strictMarker(strict))
 	}
 	return skipCode(strict, len(roots) > 0)
 }

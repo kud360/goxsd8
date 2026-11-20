@@ -231,9 +231,11 @@ FIRST error, not a list of them.
 expected: `AssemblyReport.Documents()` lists the readings the assembly
 performed, and `Unfollowed()` the `xs:include` / `xs:redefine` /
 `xs:override` / `xs:import` references that yielded no document, each with
-the directive element's position and the reason — a `schemaLocation` that
-resolved to nothing, or a bare `xs:import` naming no document at all, which
-§4.2.6.2 makes legal. The report is never nil and is populated as far as
+the directive element's position and the reason — among them a
+`schemaLocation` the resolver returned no document for, because it found
+nothing there or because it failed, a fault that also comes back as the
+error, or a bare `xs:import` naming no document at all, which §4.2.6.2 makes
+legal. The report is never nil and is populated as far as
 assembly got even when an error comes back; `go doc
 github.com/kud360/goxsd8/parser AssemblyReport` is its contract. It does not
 lift the first-error limit above — `ParseReport` stops at the first error

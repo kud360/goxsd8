@@ -818,7 +818,7 @@ func TestValidateNamesAnUnresolvedDirectiveOfARejectedSet(t *testing.T) {
 	}
 	// The <xs:include> the fixture carries on line 10, in the rejected
 	// assembly's wording.
-	note := "goxsd8: validate: " + abs + `:10:3: this <include>'s schemaLocation "nosuchdocument.xsd" resolved to no document; the rejected assembly is short of whatever that document declares` + "\n"
+	note := "goxsd8: validate: " + abs + `:10:3: this <include>'s schemaLocation "nosuchdocument.xsd" yielded no document; the rejected assembly is short of whatever that document declares` + "\n"
 
 	var stdout, stderr bytes.Buffer
 	args := []string{"validate", "-no-hints", "-schema", shortSchema, "-schema", brokenSchema, shortValidInstance}
@@ -876,8 +876,8 @@ func TestValidateIOFaultOnReferencedDocumentIsASchemaFault(t *testing.T) {
 	if len(lines) != 2 {
 		t.Fatalf("stderr = %q, want two lines: the unfollowed-directive shortfall, then the fault", stderr.String())
 	}
-	if want := "goxsd8: validate: " + abs + ":12:3: "; !strings.HasPrefix(lines[0], want) {
-		t.Errorf("stderr line 1 = %q, want reportUnfollowed's line for the directive, prefix %q", lines[0], want)
+	if want := "goxsd8: validate: " + abs + `:12:3: this <include>'s schemaLocation "notdir-include.xsd/inner.xsd" yielded no document; the rejected assembly is short of whatever that document declares`; lines[0] != want {
+		t.Errorf("stderr line 1 = %q, want reportUnfollowed's line for the directive %q, which claims no absence of a document the resolver failed to open", lines[0], want)
 	}
 	prefix := fmt.Sprintf("parser: resolving <include> schemaLocation %q at %s:12:3: loader: opening %q under %q: ",
 		inner, abs, inner, filesystemRoot(abs))
@@ -1085,7 +1085,7 @@ func TestValidateNamesAMissingHintedDocument(t *testing.T) {
 	stdout.Reset()
 	stderr.Reset()
 	rejected := instance("rejected.xml", "urn:gone nosuch.xsd urn:wrong actual.xsd")
-	rejectedNote := "goxsd8: validate: " + rejected + ": the schema location hint " + missing + " resolved to no document; the rejected assembly is short of whatever that document declares\n"
+	rejectedNote := "goxsd8: validate: " + rejected + ": the schema location hint " + missing + " yielded no document; the rejected assembly is short of whatever that document declares\n"
 	if code := run([]string{"validate", "-schema", orderSchema, rejected}, &stdout, &stderr); code != exitInvalid {
 		t.Fatalf("rejected: code = %d, want %d (stdout %q, stderr %q)", code, exitInvalid, stdout.String(), stderr.String())
 	}
@@ -1100,6 +1100,66 @@ func TestValidateNamesAMissingHintedDocument(t *testing.T) {
 	}
 	if n := mustCiteOpenableLocations(t, "rejected stderr", stderr.String()); n == 0 {
 		t.Errorf("rejected stderr =\n%s\nwant the mis-paired hint's charge located in the document it names", stderr.String())
+	}
+}
+
+// TestValidateNamesAFaultingHint pins the hint line on the resolver-fault arm
+// (#1421): a hint whose resolver failed rather than reported absence is
+// recorded among parser.AssemblyReport.UnfollowedRoots like a missing one, but
+// its fault rejects the augmented set, so it is named in the rejected wording,
+// which claims no absence of a document the resolver failed to open, and then
+// the hints are reported unusable with the fault itself. The instance is
+// assessed against the -schema set alone, and the exit codes are those of a
+// skipped hint. The ENOTDIR trigger and its platform probe are
+// TestParseIOFaultOnReferencedDocumentCarriesNoRule's, for its reason.
+func TestValidateNamesAFaultingHint(t *testing.T) {
+	dir := t.TempDir()
+	valid, err := os.ReadFile(validInstance)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "file.xsd"), nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	faulting := filepath.Join(dir, "file.xsd", "inner.xsd")
+	probe, probeErr := os.Open(faulting)
+	if probeErr == nil {
+		_ = probe.Close()
+	}
+	if probeErr == nil || os.IsNotExist(probeErr) {
+		t.Skipf("open %q = %v, want a non-not-exist error: this platform does not answer a path through a regular file with ENOTDIR", faulting, probeErr)
+	}
+	body := strings.Replace(string(valid), `createdBy="ada"`, `createdBy="ada" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="urn:gone file.xsd/inner.xsd"`, 1)
+	instance := filepath.Join(dir, "faulting.xml")
+	if err := os.WriteFile(instance, []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	note := "goxsd8: validate: " + instance + ": the schema location hint " + faulting + " yielded no document; the rejected assembly is short of whatever that document declares"
+	ignoring := "goxsd8: validate: " + instance + ": ignoring its schema location hints, which do not compose with the -schema set: parser: resolving schema location hint "
+
+	for _, c := range []struct {
+		name string
+		args []string
+		want int
+		line string
+	}{
+		{"default", []string{"validate", "-q", "-schema", orderSchema, instance}, exitOK, note},
+		{"-strict", []string{"validate", "-q", "-strict", "-schema", orderSchema, instance}, exitUndecided, note + "; -strict charges this note 4"},
+	} {
+		var stdout, stderr bytes.Buffer
+		if code := run(c.args, &stdout, &stderr); code != c.want {
+			t.Errorf("%s: code = %d, want %d (stdout %q, stderr %q)", c.name, code, c.want, stdout.String(), stderr.String())
+		}
+		lines := strings.Split(strings.TrimSuffix(stderr.String(), "\n"), "\n")
+		if len(lines) != 2 {
+			t.Fatalf("%s: stderr = %q, want two lines: the hint's shortfall, then the hints reported unusable", c.name, stderr.String())
+		}
+		if lines[0] != c.line {
+			t.Errorf("%s: stderr line 1 =\n%q\nwant\n%q", c.name, lines[0], c.line)
+		}
+		if !strings.HasPrefix(lines[1], ignoring) {
+			t.Errorf("%s: stderr line 2 = %q, want prefix %q", c.name, lines[1], ignoring)
+		}
 	}
 }
 
@@ -1192,13 +1252,13 @@ func TestStrictMarksTheLinesItCharges(t *testing.T) {
 		return "goxsd8: " + verb + ": " + schema + `:10:3: this <include>'s schemaLocation "nosuchdocument.xsd" resolved to no document and was skipped; the compiled schema is short of whatever that document declares`
 	}
 	rejectedDirective := func(verb string) string {
-		return "goxsd8: " + verb + ": " + broken + `:10:3: this <include>'s schemaLocation "nosuchdocument.xsd" resolved to no document; the rejected assembly is short of whatever that document declares`
+		return "goxsd8: " + verb + ": " + broken + `:10:3: this <include>'s schemaLocation "nosuchdocument.xsd" yielded no document; the rejected assembly is short of whatever that document declares`
 	}
 	hint := func(instance, shortfall string) string {
-		return "goxsd8: validate: " + instance + ": the schema location hint " + gone + " resolved to no document" + shortfall
+		return "goxsd8: validate: " + instance + ": the schema location hint " + gone + shortfall
 	}
-	compiledHint := ", which is legal and skipped; the compiled schema is short of whatever that document declares"
-	rejectedHint := "; the rejected assembly is short of whatever that document declares"
+	compiledHint := " resolved to no document, which is legal and skipped; the compiled schema is short of whatever that document declares"
+	rejectedHint := " yielded no document; the rejected assembly is short of whatever that document declares"
 	for _, c := range []struct {
 		name string
 		args []string

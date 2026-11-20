@@ -119,7 +119,9 @@ func compileArgument(verb, bareRemedy, location string, strict bool, log *slog.L
 	if err != nil {
 		// Above the verdict, and reported on this path for the reason
 		// reportUnfollowed states: the shortfall is a fact about the assembly the
-		// error came out of, and this report carries it (#1312). A root document
+		// error came out of, and this report carries it (#1312). That includes
+		// the directive whose resolver fault err is, in the wording
+		// shortfallClause gives a rejected assembly. A root document
 		// that could not be read returns an empty report, so that third error
 		// shape still prints nothing here. strict is not passed: -strict charges
 		// a rejected assembly's line nothing, exitInvalid answering for the
@@ -183,10 +185,11 @@ func rootLocation(location string) (string, error) {
 // REFERENCED document is no spec class at all: parser's fetch wraps every
 // resolver error other than loader.ErrNotFound in plain assembly context and
 // each hop back returns it unwrapped, so it lands here with nothing charged
-// (parser/parse.go). A schemaLocation that merely resolves to no document is
-// the ErrNotFound arm instead — a skip, whichever directive it is, reported by
-// reportUnfollowed and never reaching this function; usage's parse paragraph
-// says for which directives a rule makes that skip legal.
+// (parser/parse.go), its directive already named above it by reportUnfollowed
+// in the wording shortfallClause gives a rejected assembly. A schemaLocation that
+// merely resolves to no document is the ErrNotFound arm instead — a skip, whichever
+// directive it is, reported by reportUnfollowed and never reaching this function;
+// usage's parse paragraph says for which directives a rule makes that skip legal.
 func violationLine(err error) string {
 	var e *xsderr.Error
 	if errors.As(err, &e) {
@@ -204,7 +207,8 @@ const (
 
 // reportUnfollowed names on stderr, one line per directive at its own
 // position, every ·inter-schema-document reference· the assembly reached whose
-// schemaLocation resolved to no document, and returns skipCode's code over
+// schemaLocation yielded no document (parser.UnfollowedLocationUnresolved, whose
+// members shortfallClause words a line for), and returns skipCode's code over
 // those lines. verb is the subcommand the diagnosis is charged to, compiled
 // says whether that assembly went on to yield a schema, and strict whether
 // -strict charges the lines, each of which then closes with strictMarker. A
@@ -255,7 +259,11 @@ const (
 // (parser.UnfollowedNoSchemaLocation) and a document that resolved but could
 // not be read (parser.UnfollowedUnreadable) — do reach here now that the error
 // path reports too, and stay unnamed: each arrives with the error that charges
-// it, which says more than this line could.
+// it, which says more than this line could. A resolver that failed rather than
+// reported absence arrives with its error too, yet is named: parser records it
+// under parser.UnfollowedLocationUnresolved, which nothing in the report tells
+// apart from the loader.ErrNotFound arm, so it gets the rejected line, which
+// shortfallClause words to hold of both.
 func reportUnfollowed(stderr io.Writer, verb string, compiled, strict bool, report *parser.AssemblyReport) int {
 	named := false
 	for _, u := range report.Unfollowed() {
@@ -264,7 +272,7 @@ func reportUnfollowed(stderr io.Writer, verb string, compiled, strict bool, repo
 		}
 		// A failed stderr write cannot change the outcome: the exit code is
 		// settled either way, and stderr is the only channel this line has.
-		_, _ = fmt.Fprintf(stderr, "goxsd8: %s: %s: %s resolved to no document%s%s\n", verb, u.At, describeDirective(report, u.At), shortfallClause(compiled, " and was skipped"), strictMarker(strict))
+		_, _ = fmt.Fprintf(stderr, "goxsd8: %s: %s: %s%s%s\n", verb, u.At, describeDirective(report, u.At), shortfallClause(compiled, " and was skipped"), strictMarker(strict))
 		named = true
 	}
 	return skipCode(strict, named)
@@ -412,29 +420,40 @@ func strictMarker(strict bool) string {
 	return fmt.Sprintf("; -strict charges this note %d", exitUndecided)
 }
 
-// shortfallClause is what a line naming an unfollowed schemaLocation says about
-// the assembly it came out of, which is not the same sentence on both outcomes:
-// two of the compiled wording's claims hold only when the assembly compiled,
-// and every caller reporting an unfollowed directive says it the same way
-// (STYLE D3).
+// shortfallClause is the predicate of a line naming an unfollowed
+// schemaLocation, the caller supplying its subject: what the line says the
+// location came to, and what that leaves the assembly it came out of. It is
+// not the same sentence on both outcomes, since three of the compiled wording's
+// claims hold only when the assembly compiled, and every caller reporting an
+// unfollowed schemaLocation says it the same way (STYLE D3).
 //
-// skipped is what the caller can say of the skip itself, and is printed only
-// when compiled: reportUnfollowed passes " and was skipped", and
+// The compiled wording claims, first, that the location resolved to no
+// document: the one resolver answer parser.UnfollowedLocationUnresolved
+// records on a compiled assembly is loader.ErrNotFound, because fetch returns
+// every other resolver error as an error and the assembly then does not
+// compile (parser/parse.go). Second, skipped, what the caller can say of the
+// skip itself: reportUnfollowed passes " and was skipped", and
 // reportUnfollowedHints ", which is legal and skipped", src-import making a
 // hint's skip legal; reportUnfollowed's doc says why a directive's line claims
-// less. Neither holds on the rejected path, where
-// parser.UnfollowedLocationUnresolved also records the two unresolved locations
-// that are faults — a non-empty <xs:redefine>'s (src-redefine clause 1) and a
-// resolver that failed rather than reported absence — and each arrives with
-// the verdict charging it, which a line calling it legal, or merely skipped,
-// would contradict. Nor does the claim that the shortfall is all that is wrong:
-// on the error path nothing in the report says whether the unread document had
-// any part in the rejection, so the line says nothing of it either.
+// less. Third, that the shortfall is all that is wrong with the schema.
+//
+// None of the three holds on the rejected path. There
+// parser.UnfollowedLocationUnresolved also records the two unresolved
+// locations that are faults, each arriving with the error charging it: a
+// non-empty <xs:redefine>'s (src-redefine clause 1), which a line calling its
+// skip legal, or merely skipped, would contradict, and a resolver that failed
+// rather than reported absence — a permission or transport fault on a document
+// that may well exist — which a line saying the location resolved to no
+// document would contradict too. So the rejected wording says only what is true
+// of every member of the reason, in parser's own words for it: the location
+// yielded no document. And on the error path nothing in the report says
+// whether the unread document had any part in the rejection, so the line says
+// nothing of it either.
 func shortfallClause(compiled bool, skipped string) string {
 	if compiled {
-		return skipped + "; the compiled schema is short of whatever that document declares"
+		return " resolved to no document" + skipped + "; the compiled schema is short of whatever that document declares"
 	}
-	return "; the rejected assembly is short of whatever that document declares"
+	return " yielded no document; the rejected assembly is short of whatever that document declares"
 }
 
 // usageError reports a usage fault charged before any subcommand is known: the
