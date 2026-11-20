@@ -13,15 +13,14 @@ import (
 // datatype struct, that form denotes, or the error for a form that is not of
 // a's lexical grammar (Datatypes §3.3.6.2, §3.3.7.2–§3.3.14.2, §3.4.26.2–
 // §3.4.28.2, the fragments of §D.2.2) or that denotes no value of a's value
-// space: a property outside its range (§D.2.1: month 1 to 12, day 1 to
-// ·daysInMonth·, hour 0 to 23, minute 0 to 59, second below 60, timezoneOffset
-// −840 to 840), so an hour of 24, which the lexical mapping normalizes away
-// (§E.3.1), included, dateTimeStamp's absent timezoneOffset (§3.4.28), and a
-// yearMonthDuration's seconds or a dayTimeDuration's months other than 0
-// (§3.4.26, §3.4.27). Each property is the local value the form shows, never
-// converted to UTC (§D.2.1), and a duration's Months and Seconds both take the
-// form's one sign (§3.3.6.1). Any other a panics, since convert delegates to
-// it every atomic convert does not name.
+// space: a property outside its §D.2.1 range, as monthWithin and the checks
+// beside it state the ranges, so an hour of 24, which the lexical mapping
+// normalizes away (§E.3.1), included, dateTimeStamp's absent timezoneOffset
+// (§3.4.28), and a yearMonthDuration's seconds or a dayTimeDuration's months
+// other than 0 (§3.4.26, §3.4.27). Each property is the local value the form
+// shows, never converted to UTC (§D.2.1), and a duration's Months and Seconds
+// both take the form's one sign (§3.3.6.1). Any other a panics, since convert
+// delegates to it every atomic convert does not name.
 func convertTemporal(a atomic, form string) (reflect.Value, error) {
 	c := &scanner{s: form}
 	var v reflect.Value
@@ -99,9 +98,8 @@ func (c *scanner) digits() string {
 }
 
 // two consumes exactly two digits and returns their value as the property
-// name, read by strconv at uint8's width, an error unless it lies between lo
-// and hi inclusive.
-func (c *scanner) two(name string, lo, hi uint64) (uint8, error) {
+// name, read by strconv at uint8's width; the caller checks its range.
+func (c *scanner) two(name string) (uint8, error) {
 	start := c.i
 	d := c.digits()
 	if len(d) != 2 {
@@ -111,11 +109,50 @@ func (c *scanner) two(name string, lo, hi uint64) (uint8, error) {
 	if err != nil {
 		return 0, err
 	}
-	if n < lo || n > hi {
-		return 0, fmt.Errorf("the %s %d is outside %d to %d (§D.2.1)", name, n, lo, hi)
-	}
 	return uint8(n), nil
 }
+
+// within returns nil where n, the property name, lies between lo and hi
+// inclusive, and otherwise the error naming n and the bounds (§D.2.1).
+func within(name string, n, lo, hi uint64) error {
+	if n < lo || n > hi {
+		return fmt.Errorf("the %s %d is outside %d to %d (§D.2.1)", name, n, lo, hi)
+	}
+	return nil
+}
+
+// monthWithin, dayWithin, hourWithin, minuteWithin, secondWithin and
+// offsetWithin are the one check of each §D.2.1 bound of the seven-property
+// model, made by the scanner on a form it reads and by (atomic).form on a
+// datatype struct value it writes: month 1 to 12; day 1 to
+// ·daysInMonth·(year, m), or to 31 where the month is absent, m 0 (gDay,
+// §3.3.13.1); hour 0 to 23; minute 0 to 59; second 0 to 60, 60 excluded; and
+// timezoneOffset −840 to 840. Each returns nil for a property in range, and
+// otherwise the error naming it.
+func monthWithin(m uint8) error  { return within("month", uint64(m), 1, 12) }
+func hourWithin(h uint8) error   { return within("hour", uint64(h), 0, 23) }
+func minuteWithin(m uint8) error { return within("minute", uint64(m), 0, 59) }
+
+func dayWithin(year *big.Int, m, d uint8) error {
+	return within("day", uint64(d), 1, uint64(daysInMonth(year, m)))
+}
+
+func secondWithin(s *big.Rat) error {
+	if s.Sign() < 0 || s.Cmp(sixty) >= 0 {
+		return fmt.Errorf("the second %s is outside 0 to 60, 60 excluded (§D.2.1)", s.RatString())
+	}
+	return nil
+}
+
+func offsetWithin(off int16) error {
+	if off < -840 || off > 840 {
+		return fmt.Errorf("the timezoneOffset %d is outside -840 to 840 minutes (§D.2.1)", off)
+	}
+	return nil
+}
+
+// sixty is the bound secondWithin compares with; nothing writes it.
+var sixty = big.NewRat(60, 1)
 
 // year consumes a yearFrag (§D.2.2): an optional '-' and four or more digits,
 // a leading zero only in exactly four.
@@ -134,7 +171,7 @@ func (c *scanner) year() (big.Int, error) {
 }
 
 // second consumes a secondFrag (§D.2.2): two digits and an optional '.' with
-// one or more digits, a value below 60.
+// one or more digits, a value secondWithin holds.
 func (c *scanner) second() (big.Rat, error) {
 	start := c.i
 	if len(c.digits()) != 2 {
@@ -147,16 +184,13 @@ func (c *scanner) second() (big.Rat, error) {
 	if _, ok := s.SetString(c.s[start:c.i]); !ok {
 		return big.Rat{}, fmt.Errorf("big.Rat does not read the second %q", c.s[start:c.i])
 	}
-	if s.Cmp(big.NewRat(60, 1)) >= 0 {
-		return big.Rat{}, fmt.Errorf("the second %s is not below 60 (§D.2.1)", c.s[start:c.i])
-	}
-	return s, nil
+	return s, secondWithin(&s)
 }
 
 // timezone consumes an optional timezoneFrag (§D.2.2) ending the form and
 // returns its timezoneOffset in minutes, nil where the form ends without one:
-// 'Z' is 0, and a sign, two-digit hours and two-digit minutes are at most
-// 14:00 either way.
+// 'Z' is 0, and a sign, two-digit hours of at most 14 and two-digit minutes
+// are an offset offsetWithin holds.
 func (c *scanner) timezone() (*int16, error) {
 	if c.done() {
 		return nil, nil
@@ -172,22 +206,25 @@ func (c *scanner) timezone() (*int16, error) {
 	default:
 		return nil, fmt.Errorf("%q at byte %d is no timezoneFrag", c.s[c.i], c.i)
 	}
-	h, err := c.two("timezone hour", 0, 14)
+	h, err := c.two("timezone hour")
 	if err != nil {
+		return nil, err
+	}
+	if err := within("timezone hour", uint64(h), 0, 14); err != nil {
 		return nil, err
 	}
 	if err := c.expect(':'); err != nil {
 		return nil, err
 	}
-	m, err := c.two("timezone minute", 0, 59)
+	m, err := c.two("timezone minute")
 	if err != nil {
 		return nil, err
 	}
-	if h == 14 && m != 0 {
-		return nil, errors.New("the timezoneOffset is beyond 840 minutes (§D.2.1)")
+	if err := within("timezone minute", uint64(m), 0, 59); err != nil {
+		return nil, err
 	}
 	off := sign * (int16(h)*60 + int16(m))
-	return &off, nil
+	return &off, offsetWithin(off)
 }
 
 // yearMonthDay consumes year '-' month '-' day.
@@ -206,28 +243,40 @@ func (c *scanner) monthDay(year *big.Int) (uint8, uint8, error) {
 	if err := c.expect('-'); err != nil {
 		return 0, 0, err
 	}
-	m, err := c.two("month", 1, 12)
+	m, err := c.two("month")
 	if err != nil {
+		return 0, 0, err
+	}
+	if err := monthWithin(m); err != nil {
 		return 0, 0, err
 	}
 	if err := c.expect('-'); err != nil {
 		return 0, 0, err
 	}
-	d, err := c.two("day", 1, uint64(daysInMonth(year, m)))
-	return m, d, err
+	d, err := c.two("day")
+	if err != nil {
+		return 0, 0, err
+	}
+	return m, d, dayWithin(year, m, d)
 }
 
 // clock consumes hour ':' minute ':' second, the hour at most 23.
 func (c *scanner) clock() (uint8, uint8, big.Rat, error) {
-	h, err := c.two("hour", 0, 23)
+	h, err := c.two("hour")
 	if err != nil {
+		return 0, 0, big.Rat{}, err
+	}
+	if err := hourWithin(h); err != nil {
 		return 0, 0, big.Rat{}, err
 	}
 	if err := c.expect(':'); err != nil {
 		return 0, 0, big.Rat{}, err
 	}
-	m, err := c.two("minute", 0, 59)
+	m, err := c.two("minute")
 	if err != nil {
+		return 0, 0, big.Rat{}, err
+	}
+	if err := minuteWithin(m); err != nil {
 		return 0, 0, big.Rat{}, err
 	}
 	if err := c.expect(':'); err != nil {
@@ -294,8 +343,11 @@ func (c *scanner) gYearMonth() (reflect.Value, error) {
 	if err := c.expect('-'); err != nil {
 		return reflect.Value{}, err
 	}
-	mo, err := c.two("month", 1, 12)
+	mo, err := c.two("month")
 	if err != nil {
+		return reflect.Value{}, err
+	}
+	if err := monthWithin(mo); err != nil {
 		return reflect.Value{}, err
 	}
 	tz, err := c.timezone()
@@ -333,8 +385,11 @@ func (c *scanner) gDay() (reflect.Value, error) {
 			return reflect.Value{}, err
 		}
 	}
-	d, err := c.two("day", 1, 31)
+	d, err := c.two("day")
 	if err != nil {
+		return reflect.Value{}, err
+	}
+	if err := dayWithin(nil, 0, d); err != nil {
 		return reflect.Value{}, err
 	}
 	tz, err := c.timezone()
@@ -348,8 +403,11 @@ func (c *scanner) gMonth() (reflect.Value, error) {
 			return reflect.Value{}, err
 		}
 	}
-	mo, err := c.two("month", 1, 12)
+	mo, err := c.two("month")
 	if err != nil {
+		return reflect.Value{}, err
+	}
+	if err := monthWithin(mo); err != nil {
 		return reflect.Value{}, err
 	}
 	tz, err := c.timezone()
@@ -467,7 +525,8 @@ func (c *scanner) durationHalf(parts []durationPart, months *big.Int, seconds *b
 // daysInMonth is ·daysInMonth·(y, m) (Datatypes §E.3.2 f-daysInMonth): 28 for
 // February of a year not divisible by 4, or divisible by 100 and not by 400,
 // 29 for February of any other year or of an absent one, nil, 30 for April,
-// June, September and November, and 31 otherwise.
+// June, September and November, and 31 otherwise, an absent month, 0, among
+// them.
 func daysInMonth(year *big.Int, m uint8) uint8 {
 	switch m {
 	case 2:
