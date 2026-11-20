@@ -71,9 +71,10 @@ var ErrInvalidValue = errors.New("codec: Append: a value no valid document holds
 //     the zero xs:yearMonthDuration (Datatypes §3.4.26.1's note), or a value
 //     with a lexical other than its canonical representation, or a list
 //     holding at least one such item, whose canonical representation a
-//     pattern facet of its type rejects (§2.1's note), whatever other facet
-//     rejects it; or a canonical representation that does not map back to the
-//     value. Every xs:boolean, xs:decimal-primitive, xs:dateTime,
+//     pattern facet of its type rejects (§2.1's note), such as 3/2 under an
+//     xs:decimal pattern \d+\.\d\d, which admits 1.50 but not 1.5, whatever
+//     other facet rejects it; or a canonical representation that does not map
+//     back to the value. Every xs:boolean, xs:decimal-primitive, xs:dateTime,
 //     xs:dateTimeStamp, xs:time and xs:duration-primitive value has another
 //     lexical; an xs:double value has one but for NaN and -INF (§3.3.5.2); an
 //     xs:date, xs:gYearMonth or xs:gYear value only where its timezoneOffset

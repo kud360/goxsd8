@@ -1188,6 +1188,7 @@ const encodeDecimalSchema = `
   <xs:simpleType name="booleans"><xs:list itemType="xs:boolean"/></xs:simpleType>
   <xs:simpleType name="small"><xs:restriction base="xs:decimal"><xs:maxInclusive value="10"/></xs:restriction></xs:simpleType>
   <xs:simpleType name="onePoint"><xs:restriction base="xs:decimal"><xs:pattern value="1\.0"/></xs:restriction></xs:simpleType>
+  <xs:simpleType name="cents"><xs:restriction base="xs:decimal"><xs:pattern value="\d+\.\d\d"/></xs:restriction></xs:simpleType>
   <xs:simpleType name="digitBool"><xs:restriction base="xs:boolean"><xs:pattern value="1|0"/></xs:restriction></xs:simpleType>
   <xs:simpleType name="bits"><xs:restriction base="s:booleans"><xs:pattern value="[01]( [01])*"/></xs:restriction></xs:simpleType>
   <xs:simpleType name="plusOnes"><xs:restriction base="s:integers"><xs:pattern value="\+1( \+1)*"/></xs:restriction></xs:simpleType>
@@ -1200,6 +1201,7 @@ const encodeDecimalSchema = `
   <xs:element name="ints" type="s:integers"/>
   <xs:element name="small" type="s:small"/>
   <xs:element name="onePoint" type="s:onePoint"/>
+  <xs:element name="cents" type="s:cents"/>
   <xs:element name="digitBool" type="s:digitBool"/>
   <xs:element name="bits" type="s:bits"/>
   <xs:element name="plusOnes" type="s:plusOnes"/>
@@ -1349,9 +1351,10 @@ func (d decimalOnce) Mapping(typ xsd.QName) (value.Mapping, bool) {
 // opening with its Go path; a value whose canonical representation a
 // pattern rejects is item 7, as an atom, a decimal and a boolean, and as a
 // list under a list-level pattern, a boolean and an integer list, since every
-// such value has another lexical; and a backend's mapping of
-// xs:positiveInteger rejecting 0 is item 6, a verdict of the governing
-// mapping's Parse, never a backend fault.
+// such value has another lexical; item 7's example, 3/2 under the pattern
+// \d+\.\d\d, is the "cents" row, and Decode of its 1.50 returns 3/2; and a
+// backend's mapping of xs:positiveInteger rejecting 0 is item 6, a verdict of
+// the governing mapping's Parse, never a backend fault.
 func TestAppendDecimalInvalid(t *testing.T) {
 	schema := schemaOf(t, encodeDecimalSchema)
 	t.Run("a bound", func(t *testing.T) {
@@ -1372,6 +1375,15 @@ func TestAppendDecimalInvalid(t *testing.T) {
 			t.Errorf("error %q does not open with the path, value and type", err)
 		}
 	})
+	t.Run("a two-place pattern admitting 1.50", func(t *testing.T) {
+		got, err := Decode[big.Rat](schema, strict.New(), []byte(`<s:cents xmlns:s="urn:s">1.50</s:cents>`))
+		if err != nil {
+			t.Fatalf("Decode: %v", err)
+		}
+		if !sameRat(*got, *big.NewRat(3, 2)) {
+			t.Errorf("Decode = %s, want 3/2", got.RatString())
+		}
+	})
 	t.Run("a positiveInteger mapping rejecting 0", func(t *testing.T) {
 		_, err := appendChecked(t, nil, schema, positiveRejectsZero, sname("pos"), big.Int{})
 		invalidValue(t, err, "not positive")
@@ -1385,6 +1397,7 @@ func TestAppendDecimalInvalid(t *testing.T) {
 		at         string
 	}{
 		{"a decimal's pattern", "onePoint", *big.NewRat(1, 1), "at Rat holding 1: "},
+		{"a decimal's two-place pattern", "cents", *big.NewRat(3, 2), "at Rat holding 1.5: "},
 		{"a boolean's pattern", "digitBool", true, "at bool holding true: "},
 		{"a boolean list's pattern", "bits", boolList{true, false}, "at boolList holding [true false]: "},
 		{"an integer list's pattern", "plusOnes", intList{*big.NewInt(1), *big.NewInt(-2)}, "at intList holding [1 -2]: "},
