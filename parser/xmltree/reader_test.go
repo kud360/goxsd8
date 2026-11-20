@@ -1,6 +1,7 @@
 package xmltree_test
 
 import (
+	"encoding/xml"
 	"errors"
 	"fmt"
 	"io"
@@ -956,7 +957,8 @@ func TestFaultAfterDeclarationLocatedAlikeUnder10And11(t *testing.T) {
 // [#xF8-#x2FF]) reads as an element and attribute name, in the document and in
 // an internal entity's replacement text; a name [4] does not admit ('-' is
 // only a NameChar) is a well-formedness fault, located at the decoder's offset
-// after the name in the document and at the reference in replacement text.
+// after the name in the document and at the reference in replacement text,
+// quoting the decoder's syntax error without its line and wrapping it.
 func TestNamesAreFifthEdition(t *testing.T) {
 	const ref = `<!DOCTYPE r [<!ENTITY e "<-04-29/>">]><r>`
 	for _, tc := range []struct {
@@ -968,10 +970,10 @@ func TestNamesAreFifthEdition(t *testing.T) {
 		{"5e name in replacement text", `<!DOCTYPE r [<!ENTITY e "<Dĳkstra vrĳtag='0'/>">]><r>&e;</r>`,
 			`<r><Dĳkstra vrĳtag="0"></Dĳkstra></r>`, xsderr.Loc{}},
 		{"name outside [4] in the document", `<-04-29/>`,
-			"t.xml:1:8: [xml-wf] XML syntax error on line 1: invalid XML name: -04-29",
+			"t.xml:1:8: [xml-wf] invalid XML name: -04-29",
 			xsderr.Loc{URI: "t.xml", Line: 1, Col: 8}},
 		{"name outside [4] in replacement text", ref + `&e;</r>`,
-			"t.xml:1:42: [xml-wf] in the replacement text of entity e: XML syntax error on line 1: invalid XML name: -04-29",
+			"t.xml:1:42: [xml-wf] in the replacement text of entity e: invalid XML name: -04-29",
 			xsderr.Loc{URI: "t.xml", Line: 1, Col: len(ref) + 1}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -992,6 +994,26 @@ func TestNamesAreFifthEdition(t *testing.T) {
 			if !strings.HasPrefix(err.Error(), tc.want) {
 				t.Errorf("error = %q, want it to open %q", err, tc.want)
 			}
+			var se *xml.SyntaxError
+			if !errors.As(err, &se) {
+				t.Errorf("error %v wraps no *xml.SyntaxError", err)
+			}
 		})
+	}
+}
+
+// A decoder error that is not an *xml.SyntaxError — here the refusal of an
+// encoding declaration the reader does not decode — is quoted whole under the
+// charge and wrapped as its cause.
+func TestDecoderRefusalKeepsItsOwnText(t *testing.T) {
+	_, err := collect(t, "t.xml", `<?xml version="1.0" encoding="EBCDIC-XX"?><a/>`)
+	wantWellFormednessError(t, err)
+	const want = `t.xml:1:43: [xml-wf] xml: opening charset "EBCDIC-XX": `
+	if err == nil || !strings.HasPrefix(err.Error(), want) {
+		t.Fatalf("error = %v, want it to open %q", err, want)
+	}
+	var e *xsderr.Error
+	if !errors.As(err, &e) || e.Err == nil || e.Msg != e.Err.Error() {
+		t.Errorf("error %v: want the refusal wrapped and quoted whole", err)
 	}
 }
