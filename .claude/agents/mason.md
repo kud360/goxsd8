@@ -148,12 +148,15 @@ gate fails on the missing-suite guard (#659).
 The gate (CLAUDE.md) passes, each command run to its exit code as
 docs/ROUTINES.md's environment bullets say — a backgrounded part 4 with a
 tool `timeout` of at least 1800000 ms (#2906) — and your return is your
-account, never a notice that you are waiting on a run (#2250). The one
-failing gate you may hand off is part 4 failing only on cases your account
-names, by lane and case ID, as candidate superseded passes; the arbiter
-verifies and banks them, and `.claude/agents/arbiter.md` "Ratchet
-integrity" owns that path (#1880). New behavior has tests that can
-actually fail.
+account, never a notice that you are waiting on a run (#2250). Run all
+four parts whatever the brief says: a brief that names part 4 as the
+arbiter's, or scopes the gate to some of its parts, is wrong, your account
+says so in one line, and the arbiter's own run is the `GOXSD_RATCHET=1`
+one alone (#3907). The one failing gate you may hand off is part 4
+failing only on cases your account names, by lane and case ID, as
+candidate superseded passes; the arbiter verifies and banks them, and
+`.claude/agents/arbiter.md` "Ratchet integrity" owns that path (#1880).
+New behavior has tests that can actually fail.
 
 **Every claim the change makes about behaviour is run, not imagined** —
 in your account, and in every doc comment, `doc.go` line, marker, test
