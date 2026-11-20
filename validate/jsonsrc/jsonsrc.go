@@ -312,8 +312,9 @@ func (w *walker) token() (json.Token, xsderr.Loc, error) {
 // read pulls the next token and the location it starts at, checking no
 // string's characters: walker.end reads with it what follows the top-level
 // object, whose error [Validate]'s doc states whatever it holds. It also
-// returns content, the location positions.content gives the bytes the read
-// starts at, which walker.end alone reads.
+// returns content, the read's location as the package doc's "Locations"
+// section places content after the top-level object, which walker.end alone
+// reads.
 //
 // A token error is a fault reading the input when it is the error the
 // reader itself returned (positions.fault), and malformed JSON otherwise:
@@ -323,7 +324,7 @@ func (w *walker) token() (json.Token, xsderr.Loc, error) {
 func (w *walker) read() (tok json.Token, loc, content xsderr.Loc, err error) {
 	off := w.dec.InputOffset()
 	tok, err = w.dec.Token()
-	cl, cc := w.pos.content(off)
+	_, cl, cc := w.pos.locate(off, space)
 	content = xsderr.Loc{URI: w.uri, Line: cl, Col: cc}
 	line, col := w.pos.start(off)
 	loc = xsderr.Loc{URI: w.uri, Line: line, Col: col}

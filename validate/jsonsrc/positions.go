@@ -48,43 +48,30 @@ func (p *positions) Read(b []byte) (int, error) {
 }
 
 // start locates the token that follows offset off, the decoder's position
-// before it was read: the first byte at or after off that is neither JSON
-// white space nor the ':' or ',' separator Token consumes silently. It
-// returns that byte's line and column, and forgets every byte before it. off
-// is never before the last token located, because the decoder's offset only
-// advances.
+// before it was read: the byte locate finds for off under skipped, the first
+// that is neither JSON white space nor the ':' or ',' separator Token consumes
+// silently. It returns that byte's line and column, and forgets every byte
+// before it. off is never before the last token located, because the
+// decoder's offset only advances.
+func (p *positions) start(off int64) (line, col int) {
+	i, line, col := p.locate(off, skipped)
+	p.pending = p.pending[i:]
+	p.base += int64(i)
+	p.line, p.col = line, col
+	return line, col
+}
+
+// locate finds the first byte at or after offset off for which skip is false,
+// and returns its index in pending and its line and column, changing nothing.
 //
 // Past the bytes read so far it locates one past the last of them, but at the
 // last where r ended and that byte is '\n': the end of the input, as the
 // package doc's "Locations" section places it. Where r has not ended, as after
 // a fault reading it, a last '\n' read is counted, since the input goes on
 // past it.
-func (p *positions) start(off int64) (line, col int) {
-	i := int(off - p.base)
-	for i < len(p.pending) && skipped(p.pending[i]) && !p.finalNewline(i) {
-		i++
-	}
-	if i > len(p.pending) {
-		i = len(p.pending)
-	}
-	for _, c := range p.pending[:i] {
-		if c == '\n' {
-			p.line, p.col = p.line+1, 1
-			continue
-		}
-		p.col++
-	}
-	p.pending = p.pending[i:]
-	p.base += int64(i)
-	return p.line, p.col
-}
-
-// content locates the first byte at or after offset off, the decoder's
-// position before its last read, that is not JSON white space: as start does,
-// but with no ':' or ',' skipped, and changing nothing.
-func (p *positions) content(off int64) (line, col int) {
-	i := int(off - p.base)
-	for i < len(p.pending) && space(p.pending[i]) && !p.finalNewline(i) {
+func (p *positions) locate(off int64, skip func(byte) bool) (i, line, col int) {
+	i = int(off - p.base)
+	for i < len(p.pending) && skip(p.pending[i]) && !p.finalNewline(i) {
 		i++
 	}
 	if i > len(p.pending) {
@@ -98,7 +85,7 @@ func (p *positions) content(off int64) (line, col int) {
 		}
 		col++
 	}
-	return line, col
+	return i, line, col
 }
 
 // finalNewline reports whether pending[i] is the input's last byte and a '\n'.
