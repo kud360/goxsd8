@@ -139,9 +139,12 @@ Invariants:
 - **Checkpoint pushes are the lease heartbeat.** A long step pushes
   intermediate commits rather than letting its lease lapse, and a step
   that produces nothing to commit pushes `git commit --allow-empty` instead.
-  **Push one immediately before every delegation**: the orchestrator cannot
-  push while a subagent round runs, so the round's whole life must fit
-  inside the TTL that push starts (#1493).
+  `--allow-empty` commits whatever the index holds, so the heartbeat is
+  never run from a checkout whose `git status` shows staged changes the
+  orchestrator did not make. **Push one immediately before every
+  delegation**: the orchestrator cannot push while a subagent round runs,
+  so the round's whole life must fit inside the TTL that push starts
+  (#1493).
 - **A branch with no commits of its own — a claim pushed without its
   claim commit — is dated by its thread.** Its tip
   is the landing it branched from, so no tip-age reading may date it or
@@ -233,8 +236,11 @@ chooses (#350).
   (#1392, #2251). A mason may also break lines deliberately at any moment
   to check that a test notices. An isolated agent writes and moves HEAD in
   its own worktree only: never `git checkout` or `git switch` in a
-  checkout a brief names. The worktree's branch is local-only and never
-  pushed; the two halves of a `/retro` each get their own.
+  checkout a brief names, and never a move, by any command, of a ref
+  another checkout has checked out — a commit on it, `git checkout -B`,
+  `git branch -f` and `git update-ref` among them. The worktree's branch
+  is local-only and never pushed; the two halves of a `/retro` each get
+  their own.
 - The orchestrator never commits on a live subagent's behalf, for any
   reason — including a stop-hook "uncommitted changes" warning, which
   fires on an in-progress edit exactly as readily as a finished one
