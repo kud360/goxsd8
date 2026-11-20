@@ -1353,9 +1353,8 @@ func (d decimalOnce) Mapping(typ xsd.QName) (value.Mapping, bool) {
 // list under a list-level pattern, a boolean and an integer list, since every
 // such value has another lexical; item 7's example, 3/2 under the pattern
 // \d+\.\d\d, is the "cents" row, and Decode of its 1.50 returns 3/2; and a
-// backend's mapping of
-// xs:positiveInteger rejecting 0 is item 6, a verdict of the governing
-// mapping's Parse, never a backend fault.
+// backend's mapping of xs:positiveInteger rejecting 0 is item 6, a verdict of
+// the governing mapping's Parse, never a backend fault.
 func TestAppendDecimalInvalid(t *testing.T) {
 	schema := schemaOf(t, encodeDecimalSchema)
 	t.Run("a bound", func(t *testing.T) {
