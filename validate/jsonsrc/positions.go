@@ -109,11 +109,7 @@ func (p *positions) finalNewline(i int) bool {
 // skipped reports whether c is JSON white space (RFC 8259 §2, ws) or a
 // separator between tokens.
 func skipped(c byte) bool {
-	switch c {
-	case ' ', '\t', '\n', '\r', ':', ',':
-		return true
-	}
-	return false
+	return space(c) || c == ':' || c == ','
 }
 
 // space reports whether c is JSON white space (RFC 8259 §2, ws).

@@ -642,7 +642,6 @@ func TestErrorWraps(t *testing.T) {
 // off, read whole and a byte per Read, and the two rows where reading the
 // trailer faults, which keep their class.
 func TestContentFollows(t *testing.T) {
-	const follows = "content follows the top-level object"
 	boom := errors.New("disk on fire")
 	v := validatorOver(t, orderSchema)
 	at := func(line, col int) xsderr.Loc { return xsderr.Loc{URI: jsonURI, Line: line, Col: col} }
