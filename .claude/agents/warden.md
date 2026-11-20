@@ -83,10 +83,12 @@ each:
   every shape the same pre-flight rules for that construct, and where it
   yields another shape the pre-flight says which binds and what makes it
   win. A new rule's shapes include those base already decides that it
-  reaches, each with base's answer; a changed answer names the
-  Acceptance bar asking for it, and with none the rule is narrowed until
-  base's answer holds. A rule that names no shapes is not a ruling
-  (#3240, #3492, #3765).
+  reaches — a rule placed at a shared site reaches every caller of that
+  site, so those shapes are its callers, listed from the census of those
+  callers, named by its command with its output — each with base's
+  answer; a changed answer names the Acceptance bar asking for it, and
+  with none the rule is narrowed until base's answer holds. A rule that
+  names no shapes is not a ruling (#3240, #3492, #3765, #3915).
 - **A surface prediction** counts every line `go tool surface` prints for
   the shape, a `method` line for each exported method of a new type
   included, whether the type is exported or not — an unexported error
