@@ -290,41 +290,116 @@ func (a atomic) convert(form string) (reflect.Value, error) {
 
 // form returns, as convert's inverse, the canonical representation of v, a
 // value of a Go type that converts to a's bare type, codegen's named type over
-// it among them, a being the atomic Go type of a type whose primitive is
-// xs:decimal or xs:boolean, and true: a bool as true or false
-// (f-booleanCanmap); an integer in base 10 with no decimal point, no '+' and
-// no leading zero (f-decimalCanmap through f-noDecCanMap); and any other
-// big.Rat as the shortest decimal expansion that is exact, a digit at least
-// on each side of the point (f-decCanFragMap). For a big.Rat outside the
-// decimal value space, as item 6 of [Append]'s doc states it, which no
-// lexical spells, it returns v as a fraction (big.Rat.RatString) and false.
-// Any other a is an internal bug, which panics.
-func (a atomic) form(v reflect.Value) (string, bool) {
+// it among them, a being the atomic Go type of a type whose primitive is one
+// of encodedPrimitives other than xs:string and xs:double, and a nil error: a
+// bool as true or false (f-booleanCanmap); an integer in base 10 with no
+// decimal point, no '+' and no leading zero (f-decimalCanmap through
+// f-noDecCanMap); any other big.Rat as the shortest decimal expansion that is
+// exact, a digit at least on each side of the point (f-decCanFragMap); and a
+// date, time or duration datatype struct value as temporalForm states. A
+// non-nil error is the cause v lies outside a's value space, as item 6 of
+// [Append]'s doc states it, which no lexical spells: a big.Rat whose
+// denominator in lowest terms is no 2^m·5^n, or a datatype struct value
+// temporalForm refuses; it names the property, its value and the bound, and
+// carries no *xsderr.Error, since no rule charges it. Any other a is an
+// internal bug, which panics.
+func (a atomic) form(v reflect.Value) (string, error) {
 	v = v.Convert(a.bare())
 	switch a {
 	case atomicBool:
-		return strconv.FormatBool(v.Bool()), true
+		return strconv.FormatBool(v.Bool()), nil
 	case atomicBigRat:
 		r := v.Interface().(big.Rat)
 		return decimalForm(&r)
 	case atomicBigInt:
 		i := v.Interface().(big.Int)
-		return i.String(), true
+		return i.String(), nil
 	case atomicInt8, atomicInt16, atomicInt32, atomicInt64:
-		return strconv.FormatInt(v.Int(), 10), true
+		return strconv.FormatInt(v.Int(), 10), nil
 	case atomicUint8, atomicUint16, atomicUint32, atomicUint64:
-		return strconv.FormatUint(v.Uint(), 10), true
+		return strconv.FormatUint(v.Uint(), 10), nil
 	default:
-		panic(fmt.Sprintf("codec: no canonical form of atomic %d", a))
+		return temporalForm(a, v)
 	}
+}
+
+// shown spells v, a value of a Go type that converts to a's bare type, for an
+// error message about a value form refuses: a big.Rat as a fraction
+// (big.Rat.RatString), a datatype struct as its fields, each its name and its
+// value, a nil *int16 as nil, and any other value as fmt's %v.
+func (a atomic) shown(v reflect.Value) string {
+	v = v.Convert(a.bare())
+	if !a.datatypeStruct() {
+		return shownField(v)
+	}
+	fields := make([]string, v.NumField())
+	for i := range fields {
+		fields[i] = v.Type().Field(i).Name + " " + shownField(v.Field(i))
+	}
+	return "{" + strings.Join(fields, ", ") + "}"
+}
+
+// shownField is shown's spelling of one value or field.
+func shownField(v reflect.Value) string {
+	switch x := v.Interface().(type) {
+	case big.Rat:
+		return x.RatString()
+	case big.Int:
+		return x.String()
+	case *int16:
+		if x == nil {
+			return "nil"
+		}
+		return strconv.Itoa(int(*x))
+	}
+	return fmt.Sprint(v.Interface())
+}
+
+// otherLexicalOf reports whether v, a value of a Go type that converts to a's
+// bare type, has a lexical other than its canonical representation, which a
+// pattern facet may match where it rejects the canonical one (Datatypes
+// §2.1's note), so that the rejection is item 7 of [Append]'s doc and not item
+// 6, for each primitive as item 7 states it. The other lexical is, for a
+// float64, any doubleRep spelling but for NaN and -INF (soleLexical); for an
+// xs:boolean value 1 or 0 (§3.3.2.2); for an xs:decimal-primitive or
+// duration-primitive one a leading zero; for a dateTime, dateTimeStamp or
+// time one a trailing zero of its seconds; and for a date or g* value, one
+// item 7 spells. An a of a primitive atomicEncodes declines is an
+// internal bug, which panics.
+func (a atomic) otherLexicalOf(v reflect.Value) bool {
+	switch a {
+	case atomicString:
+		return false
+	case atomicFloat64:
+		return !soleLexical(v.Float())
+	case atomicBool, atomicBigRat, atomicBigInt, atomicInt8, atomicInt16, atomicInt32, atomicInt64, atomicUint8, atomicUint16, atomicUint32, atomicUint64,
+		atomicDateTime, atomicDateTimeStamp, atomicTime, atomicDuration, atomicDayTimeDuration, atomicYearMonthDuration:
+		return true
+	case atomicDate, atomicGYearMonth, atomicGYear:
+		v = v.Convert(a.bare())
+		year := v.FieldByName("Year").Interface().(big.Int)
+		return zeroOffset(v) || year.Sign() == 0
+	case atomicGMonthDay, atomicGDay, atomicGMonth:
+		return zeroOffset(v.Convert(a.bare()))
+	default:
+		panic(fmt.Sprintf("codec: no other-lexical answer for atomic %d", a))
+	}
+}
+
+// zeroOffset reports whether v, a datatype struct value of a's bare type with
+// a *int16 TimezoneOffset, holds the timezoneOffset 0.
+func zeroOffset(v reflect.Value) bool {
+	off := v.FieldByName("TimezoneOffset").Interface().(*int16)
+	return off != nil && *off == 0
 }
 
 // decimalForm is form's for a big.Rat r: its digits after the point number
 // the larger of the exponents of 2 and 5 in its denominator, the fewest that
-// spell r exactly, and none for an integer.
-func decimalForm(r *big.Rat) (string, bool) {
+// spell r exactly, and none for an integer; or form's error for an r outside
+// the decimal value space.
+func decimalForm(r *big.Rat) (string, error) {
 	if r.IsInt() {
-		return r.Num().String(), true
+		return r.Num().String(), nil
 	}
 	d := new(big.Int).Set(r.Denom())
 	twos := d.TrailingZeroBits()
@@ -340,10 +415,14 @@ func decimalForm(r *big.Rat) (string, bool) {
 		fives++
 	}
 	if d.Cmp(bigOne) != 0 {
-		return r.RatString(), false
+		return "", errOutsideDecimal
 	}
-	return r.FloatString(int(max(twos, fives))), true
+	return r.FloatString(int(max(twos, fives))), nil
 }
+
+// errOutsideDecimal is decimalForm's error, a plain one, since no rule
+// charges it.
+var errOutsideDecimal = errors.New("its denominator in lowest terms is no 2^m·5^n, so it lies outside the decimal value space (Datatypes §3.3.3.1)")
 
 // bigOne and bigFive are the constants decimalForm compares with and divides
 // by; nothing writes them.
