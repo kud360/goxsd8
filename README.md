@@ -510,9 +510,8 @@ fmt.Println(string(out)) // <order xmlns="urn:o" kind="x"><item>a</item><item>b<
 `codec.Append` does not run package `validate` over the document it writes; to
 get a verdict on it, assess it with package `validate` as any document.
 
-`codec.CheckDecode` reports on `Decode` alone: a nil from it says nothing
-about `Append`, which encodes the narrower slice `codec`'s package doc states
-(section "What encodes"). `go doc github.com/kud360/goxsd8/codec` states
+`go doc github.com/kud360/goxsd8/codec CheckDecode` states what a nil from
+`codec.CheckDecode` leaves to `codec.CheckAppend`. `go doc github.com/kud360/goxsd8/codec` states
 when to run `codec.CheckAppend`, which reports whether `Append` refuses a
 declaration and a generated type whatever the value: `go doc
 github.com/kud360/goxsd8/codec CheckAppend` states what it returns, and
