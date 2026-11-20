@@ -89,6 +89,8 @@ func WithURI(uri string) Option {
 //     message is "malformed JSON: …", "the document holds no JSON value; …"
 //     or "content follows the top-level object". The first may wrap an error,
 //     whose identity is not part of this contract; the other two wrap nothing.
+//     Whatever but white space follows the top-level object is "content
+//     follows the top-level object", unless reading it faults.
 //   - A fault reading r, class [ReadFault]: "fault reading the input: …",
 //     wrapping the error r returned, which [errors.Is] reaches. The class is
 //     decided by whether the decoder's error is the one r returned, never by
@@ -295,7 +297,7 @@ func newWalker(uri string, r io.Reader, schema validate.SchemaView, selected fun
 // token pulls the next token and the location it starts at, as walker.read
 // does, and has walker.chars check a string token's characters.
 func (w *walker) token() (json.Token, xsderr.Loc, error) {
-	tok, loc, err := w.read()
+	tok, loc, _, err := w.read()
 	if err != nil {
 		return nil, loc, err
 	}
@@ -308,29 +310,34 @@ func (w *walker) token() (json.Token, xsderr.Loc, error) {
 }
 
 // read pulls the next token and the location it starts at, checking no
-// string's characters: walker.end reads with it the token after the
-// top-level value, content its doc states is malformed whatever it holds.
+// string's characters: walker.end reads with it what follows the top-level
+// object, whose error [Validate]'s doc states whatever it holds. It also
+// returns content, the read's location as the package doc's "Locations"
+// section places content after the top-level object, which walker.end alone
+// reads.
 //
 // A token error is a fault reading the input when it is the error the
 // reader itself returned (positions.fault), and malformed JSON otherwise:
 // the reader's error decides, never the error's type, because the decoder
 // reports a document cut off mid-token as io.ErrUnexpectedEOF, no
 // *json.SyntaxError, and a reader can return any error at all (#2655).
-func (w *walker) read() (json.Token, xsderr.Loc, error) {
+func (w *walker) read() (tok json.Token, loc, content xsderr.Loc, err error) {
 	off := w.dec.InputOffset()
-	tok, err := w.dec.Token()
+	tok, err = w.dec.Token()
+	_, cl, cc := w.pos.locate(off, space)
+	content = xsderr.Loc{URI: w.uri, Line: cl, Col: cc}
 	line, col := w.pos.start(off)
-	loc := xsderr.Loc{URI: w.uri, Line: line, Col: col}
+	loc = xsderr.Loc{URI: w.uri, Line: line, Col: col}
 	if errors.Is(err, io.EOF) {
-		return nil, loc, err
+		return nil, loc, content, err
 	}
 	if w.pos.fault != nil && errors.Is(err, w.pos.fault) {
-		return nil, loc, readFault(loc, err)
+		return nil, loc, content, readFault(loc, err)
 	}
 	if err != nil {
-		return nil, loc, malformed(loc, "malformed JSON", err)
+		return nil, loc, content, malformed(loc, "malformed JSON", err)
 	}
-	return tok, loc, nil
+	return tok, loc, content, nil
 }
 
 // chars checks s, the string token at loc that walker.token just read —
@@ -3756,9 +3763,8 @@ func (w *walker) item(o *object, run *arrayRun, sc *scope, scalar bool) (element
 //
 // It DECLINES a second member of the top-level object, which has no XML twin,
 // so no marker tracks it: it would be a second document element (XML 1.0 §2.1
-// [1]). Content after the object is no decline but malformed, JSON text being
-// one value (RFC 8259 §2), and its error's class is [Malformed], whether the
-// decoder reads that content as a value or as a syntax error.
+// [1]). Content after the object is no decline: [Validate]'s doc states its
+// error, and the package doc's "Locations" section its location.
 func (w *walker) end(root *element) error {
 	root.finish()
 	if w.err != nil {
@@ -3771,14 +3777,14 @@ func (w *walker) end(root *element) error {
 	if key, ok := tok.(string); ok {
 		return w.declinef(loc, "the top-level object has a second member %q; its one member names the validation root", key)
 	}
-	_, loc, err = w.read()
+	_, _, content, err := w.read()
 	if errors.Is(err, io.EOF) {
 		return nil
 	}
-	if err != nil {
+	if e := (*Error)(nil); errors.As(err, &e) && e.class == ReadFault {
 		return err
 	}
-	return malformed(loc, "content follows the top-level object", nil)
+	return malformed(content, "content follows the top-level object", nil)
 }
 
 // unexpectedEOF turns the io.EOF token reports at the end of the input into

@@ -515,5 +515,6 @@
 // the input, which ended while a value or a close was still due, is on the
 // input's last line, the one holding its last byte: at that byte where it is
 // the '\n' ending the line, and one past it otherwise, 1:1 for an input with
-// no byte.
+// no byte. Content after the top-level object is located at its first byte
+// that is not white space, a ',' or ':' included.
 package jsonsrc

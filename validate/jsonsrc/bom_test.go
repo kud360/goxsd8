@@ -99,10 +99,10 @@ func TestByteOrderMarkIgnored(t *testing.T) {
 }
 
 // TestByteOrderMarkElsewhere pins that only one mark, as the document's first
-// three bytes, is ignored: a second mark, a mark after white space, between
-// tokens or after the top-level value, and a UTF-16 mark are malformed JSON,
-// each at its own location, and so are the mark's first two bytes, whatever
-// follows them.
+// three bytes, is ignored: a second mark, a mark after white space or between
+// tokens, and a UTF-16 mark are malformed JSON, each at its own location, and
+// so are the mark's first two bytes, whatever follows them. A mark after the
+// top-level value is the content that follows it.
 func TestByteOrderMarkElsewhere(t *testing.T) {
 	for _, tc := range []struct {
 		name, doc, prefix string
@@ -110,7 +110,7 @@ func TestByteOrderMarkElsewhere(t *testing.T) {
 		{"two marks", bom + bom + readmeOrder, "jsonsrc: instance.json:1:1: malformed JSON: "},
 		{"after white space", " " + bom + readmeOrder, "jsonsrc: instance.json:1:2: malformed JSON: "},
 		{"between tokens", `{"o:order":` + bom + readmeOrder[len(`{"o:order":`):], "jsonsrc: instance.json:1:12: malformed JSON: "},
-		{"after the top-level value", readmeOrder + bom, "jsonsrc: instance.json:1:65: malformed JSON: "},
+		{"after the top-level value", readmeOrder + bom, "jsonsrc: instance.json:1:65: content follows the top-level object"},
 		{"part of a mark", "\xEF\xBB" + readmeOrder, "jsonsrc: instance.json:1:1: malformed JSON: "},
 		{"part of a mark, then the end", "\xEF\xBB", "jsonsrc: instance.json:1:1: malformed JSON: "},
 		{"UTF-16LE mark", "\xFF\xFE" + readmeOrder, "jsonsrc: instance.json:1:1: malformed JSON: "},
