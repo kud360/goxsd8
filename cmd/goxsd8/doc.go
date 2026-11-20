@@ -664,10 +664,9 @@
 // first, in a line saying the hint yielded no document, that the augmented set
 // was rejected rather than compiled, and nothing about whether the unread
 // document had a part in that; the hints are then reported unusable and the
-// instance falls back to the -schema set alone. A hint whose location the
-// resolver failed to open rather than found absent is named in that line too,
-// its fault being what rejected the set, which is why the line claims no
-// absence.
+// instance falls back to the -schema set alone. A hint whose document could
+// not be opened is named in that line too, its fault being what rejected the
+// set, which is why that line says "yielded" and not "resolved to".
 //
 // -no-hints turns all of it off — clause 3's "Schema processors should provide
 // an option to control whether they do so" — and turning it off is what makes

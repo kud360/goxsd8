@@ -550,10 +550,9 @@ func (vn *validation) validatorFor(instance string, src io.Reader, stderr io.Wri
 // clause 3's "failure may cause less than complete ·assessment· outcomes",
 // which src-import makes legal to skip where the location resolved to none and
 // which nothing else in this run reports (#1251) — and returns skipCode's code
-// over those lines, each of which closes with strictMarker under strict. A
-// hint whose resolver failed rather than reported absence is among them too,
-// on the rejected outcome alone: shortfallClause says which wording each
-// outcome earns, and why.
+// over those lines, each of which closes with strictMarker under strict.
+// shortfallClause says which wording each outcome earns, a hint whose
+// resolver faulted included.
 //
 // It reads parser.AssemblyReport.UnfollowedRoots, which holds exactly the
 // HintAt roots that named no document, each by the location it was built with —

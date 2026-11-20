@@ -1104,11 +1104,9 @@ func TestValidateNamesAMissingHintedDocument(t *testing.T) {
 }
 
 // TestValidateNamesAFaultingHint pins the hint line on the resolver-fault arm
-// (#1421): a hint whose resolver failed rather than reported absence is
-// recorded among parser.AssemblyReport.UnfollowedRoots like a missing one, but
-// its fault rejects the augmented set, so it is named in the rejected wording,
-// which claims no absence of a document the resolver failed to open, and then
-// the hints are reported unusable with the fault itself. The instance is
+// (#1421): parser.AssemblyReport.UnfollowedRoots records such a hint and its
+// fault rejects the augmented set, so it is named in shortfallClause's rejected
+// wording, and then the hints are reported unusable with the fault itself. The instance is
 // assessed against the -schema set alone, and the exit codes are those of a
 // skipped hint. The ENOTDIR trigger and its platform probe are
 // TestParseIOFaultOnReferencedDocumentCarriesNoRule's, for its reason.
