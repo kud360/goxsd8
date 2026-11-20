@@ -79,6 +79,28 @@ func (p *positions) start(off int64) (line, col int) {
 	return p.line, p.col
 }
 
+// content locates the first byte at or after offset off, the decoder's
+// position before its last read, that is not JSON white space: as start does,
+// but with no ':' or ',' skipped, and changing nothing.
+func (p *positions) content(off int64) (line, col int) {
+	i := int(off - p.base)
+	for i < len(p.pending) && space(p.pending[i]) && !p.finalNewline(i) {
+		i++
+	}
+	if i > len(p.pending) {
+		i = len(p.pending)
+	}
+	line, col = p.line, p.col
+	for _, c := range p.pending[:i] {
+		if c == '\n' {
+			line, col = line+1, 1
+			continue
+		}
+		col++
+	}
+	return line, col
+}
+
 // finalNewline reports whether pending[i] is the input's last byte and a '\n'.
 func (p *positions) finalNewline(i int) bool {
 	return p.ended && i == len(p.pending)-1 && p.pending[i] == '\n'
@@ -89,6 +111,15 @@ func (p *positions) finalNewline(i int) bool {
 func skipped(c byte) bool {
 	switch c {
 	case ' ', '\t', '\n', '\r', ':', ',':
+		return true
+	}
+	return false
+}
+
+// space reports whether c is JSON white space (RFC 8259 §2, ws).
+func space(c byte) bool {
+	switch c {
+	case ' ', '\t', '\n', '\r':
 		return true
 	}
 	return false

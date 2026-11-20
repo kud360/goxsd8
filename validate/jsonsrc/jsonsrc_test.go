@@ -636,6 +636,70 @@ func TestErrorWraps(t *testing.T) {
 	}
 }
 
+// TestContentFollows pins the error Validate's doc states for content after
+// the top-level object, at the location the package doc's "Locations" section
+// gives it, for a trailer the decoder reads as a value, rejects or finds cut
+// off, read whole and a byte per Read, and the two rows where reading the
+// trailer faults, which keep their class.
+func TestContentFollows(t *testing.T) {
+	const follows = "content follows the top-level object"
+	boom := errors.New("disk on fire")
+	v := validatorOver(t, orderSchema)
+	at := func(line, col int) xsderr.Loc { return xsderr.Loc{URI: jsonURI, Line: line, Col: col} }
+	for _, tc := range []struct {
+		name  string
+		r     func() io.Reader
+		class Class
+		loc   xsderr.Loc
+		msg   string
+	}{
+		{"a JSON value", readerOf(`{"order":null} {}`), Malformed, at(1, 16), follows},
+		{"a bare word", readerOf(`{"order":null} junk`), Malformed, at(1, 16), follows},
+		{"a stray close", readerOf(`{"order":null} ]`), Malformed, at(1, 16), follows},
+		{"a truncated literal", readerOf(`{"order":null} tru`), Malformed, at(1, 16), follows},
+		{"a comma", readerOf(`{"order":null} ,`), Malformed, at(1, 16), follows},
+		{"a comma, then a word", readerOf(`{"order":null}, junk`), Malformed, at(1, 15), follows},
+		{"a colon, then a value", readerOf(`{"order":null}:{}`), Malformed, at(1, 15), follows},
+		{"a comma on its own line", readerOf("{\"order\":null}\n,\n"), Malformed, at(2, 1), follows},
+		{"a fault reading the input", func() io.Reader {
+			return io.MultiReader(strings.NewReader(`{"order":null} `), iotest.ErrReader(boom))
+		}, ReadFault, at(1, 16), "fault reading the input: disk on fire"},
+		{"a fault cutting off a literal", func() io.Reader {
+			return io.MultiReader(strings.NewReader(`{"order":null} tr`), iotest.ErrReader(boom))
+		}, ReadFault, at(1, 16), "fault reading the input: disk on fire"},
+	} {
+		for _, rd := range []struct {
+			name string
+			wrap func(io.Reader) io.Reader
+		}{
+			{"whole", func(r io.Reader) io.Reader { return r }},
+			{"one byte", iotest.OneByteReader},
+		} {
+			t.Run(tc.name+"/"+rd.name, func(t *testing.T) {
+				_, err := Validate(v, rd.wrap(tc.r()), WithURI(jsonURI))
+				var e *Error
+				if !errors.As(err, &e) {
+					t.Fatalf("Validate = %v; errors.As does not reach an *Error", err)
+				}
+				if e.Class() != tc.class || e.Loc() != tc.loc || e.Msg() != tc.msg {
+					t.Errorf("Validate = %d %v %q, want %d %v %q", e.Class(), e.Loc(), e.Msg(), tc.class, tc.loc, tc.msg)
+				}
+				if tc.class == Malformed && errors.Unwrap(err) != nil {
+					t.Errorf("Validate = %q wraps %v; content after the object wraps nothing", err, errors.Unwrap(err))
+				}
+				if tc.class == ReadFault && !errors.Is(err, boom) {
+					t.Errorf("Validate = %q; errors.Is does not reach the reader's error", err)
+				}
+			})
+		}
+	}
+}
+
+// readerOf returns a func returning a fresh strings.Reader over s.
+func readerOf(s string) func() io.Reader {
+	return func() io.Reader { return strings.NewReader(s) }
+}
+
 // attributeSchema declares one root, shipment, whose element-only type holds a
 // required unqualified id (xs:NCName), an optional priority (xs:integer), an
 // optional flag (xs:boolean), a reference to the qualified top-level attribute
