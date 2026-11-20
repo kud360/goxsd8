@@ -75,7 +75,16 @@ each:
   of those sites, named by its command with its output as the site list;
   a probe of some shapes marks it inferred (#3644). Doc wording names the
   one doc that owns its fact and is placed nowhere else; the other docs
-  get a pointer (#3345).
+  get a pointer (#3345). Doc wording it dictates, a summary or pointer
+  sentence included, and a contract it describes for the mason to write
+  into a doc comment, rendered as that sentence, is probed with
+  `go tool restatements -base origin/main` on a tree carrying it —
+  `tools/restatements`' package doc owns which comments that compares —
+  with the output quoted and the probe named by its base commit and the
+  wording's file:line, or marked inferred. Each pair the probe prints is
+  settled in the pre-flight: the dictated text becomes a pointer to the
+  owner, or the pair is read and ruled not a restatement, with the reason
+  (#3910).
 - **A rule over shapes, kept or new.** It names each shape it was checked
   against — for a rule over pairs, each pair — with the answer for each,
   and a "true" or "declines" answer is the conservative direction for
