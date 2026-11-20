@@ -474,7 +474,7 @@ func TestCheckAppend(t *testing.T) {
 		t.Fatalf("CheckDecode[float32] = %v, want nil", err)
 	}
 	err := CheckAppend[float32](schema, sname("i"))
-	_ = asDecline(t, err, "codec does not encode an atomic simple type whose primitive is other than xs:string, xs:double, xs:decimal or xs:boolean: ")
+	_ = asDecline(t, err, "codec does not encode an atomic simple type whose primitive is other than xs:string, xs:boolean, xs:decimal, xs:double, xs:duration, xs:dateTime, xs:time, xs:date, xs:gYearMonth, xs:gYear, xs:gMonthDay, xs:gDay or xs:gMonth: ")
 	_, _ = appendChecked(t, nil, schema, strict.New(), sname("i"), float32(0))
 
 	plainError(t, CheckAppend[string](schema, sname("none")), "codec: no top-level element declaration has the expanded name", "{urn:s}none")
@@ -840,22 +840,23 @@ func TestAppendDeclines(t *testing.T) {
 		{"restricted complex assertions", "a complex type with {assertions}", `<xs:complexType name="ab%[1]s">` + asserted + `</xs:complexType>` +
 			`<xs:element name="%[1]s"><xs:complexType><xs:complexContent><xs:restriction base="s:ab%[1]s"><xs:sequence>` + a + `</xs:sequence></xs:restriction></xs:complexContent></xs:complexType></xs:element>`},
 		{"special type", "xs:anySimpleType or xs:anyAtomicType as a simple type", `<xs:element name="%[1]s" type="xs:anySimpleType"/>`},
-		{"list of float", "an atomic simple type whose primitive is other than xs:string, xs:double, xs:decimal or xs:boolean", simpleOf(`<xs:list itemType="xs:float"/>`)},
+		{"list of float", "an atomic simple type whose primitive is other than xs:string, xs:boolean, xs:decimal, xs:double, xs:duration, xs:dateTime, xs:time, xs:date, xs:gYearMonth, xs:gYear, xs:gMonthDay, xs:gDay or xs:gMonth", simpleOf(`<xs:list itemType="xs:float"/>`)},
 		{"list of union", "a union simple type", simpleOf(`<xs:list><xs:simpleType><xs:union memberTypes="xs:string xs:int"/></xs:simpleType></xs:list>`)},
 		{"IDREFS", "a simple type derived from xs:ID, xs:IDREF or xs:ENTITY", `<xs:element name="%[1]s" type="xs:IDREFS"/>`},
 		{"list assertions", "a simple type with an assertions facet", simpleOf(`<xs:restriction base="xs:NMTOKENS"><xs:assertion test="true()"/></xs:restriction>`)},
 		{"inherited list assertions", "a simple type with an assertions facet", `<xs:simpleType name="assertedList%[1]s"><xs:restriction base="xs:NMTOKENS"><xs:assertion test="true()"/></xs:restriction></xs:simpleType>` + simpleOf(`<xs:restriction base="s:assertedList%[1]s"><xs:maxLength value="3"/></xs:restriction>`)},
 		{"list item assertions", "a simple type with an assertions facet", `<xs:simpleType name="assertedItem%[1]s"><xs:restriction base="xs:string"><xs:assertion test="true()"/></xs:restriction></xs:simpleType>` + simpleOf(`<xs:list itemType="s:assertedItem%[1]s"/>`)},
 		{"union", "a union simple type", simpleOf(`<xs:union memberTypes="xs:string xs:int"/>`)},
-		{"date", "an atomic simple type whose primitive is other than xs:string, xs:double, xs:decimal or xs:boolean", `<xs:element name="%[1]s" type="xs:date"/>`},
-		{"anyURI attribute", "an atomic simple type whose primitive is other than xs:string, xs:double, xs:decimal or xs:boolean", complexOf(`<xs:attribute name="a" type="xs:anyURI"/>`)},
+		{"hexBinary", "an atomic simple type whose primitive is other than xs:string, xs:boolean, xs:decimal, xs:double, xs:duration, xs:dateTime, xs:time, xs:date, xs:gYearMonth, xs:gYear, xs:gMonthDay, xs:gDay or xs:gMonth", `<xs:element name="%[1]s" type="xs:hexBinary"/>`},
+		{"float", "an atomic simple type whose primitive is other than xs:string, xs:boolean, xs:decimal, xs:double, xs:duration, xs:dateTime, xs:time, xs:date, xs:gYearMonth, xs:gYear, xs:gMonthDay, xs:gDay or xs:gMonth", `<xs:element name="%[1]s" type="xs:float"/>`},
+		{"anyURI attribute", "an atomic simple type whose primitive is other than xs:string, xs:boolean, xs:decimal, xs:double, xs:duration, xs:dateTime, xs:time, xs:date, xs:gYearMonth, xs:gYear, xs:gMonthDay, xs:gDay or xs:gMonth", complexOf(`<xs:attribute name="a" type="xs:anyURI"/>`)},
 		{"ID", "a simple type derived from xs:ID, xs:IDREF or xs:ENTITY", `<xs:element name="%[1]s" type="xs:ID"/>`},
 		{"IDREF particle", "a simple type derived from xs:ID, xs:IDREF or xs:ENTITY", sequence(`<xs:element name="a" type="xs:IDREF"/>`)},
 		{"ENTITY restriction", "a simple type derived from xs:ID, xs:IDREF or xs:ENTITY", simpleOf(`<xs:restriction base="xs:ENTITY"/>`)},
 		{"assertions", "a simple type with an assertions facet", simpleOf(`<xs:restriction base="xs:string"><xs:assertion test="true()"/></xs:restriction>`)},
 		{"decimal assertions", "a simple type with an assertions facet", simpleOf(`<xs:restriction base="xs:decimal"><xs:assertion test="true()"/></xs:restriction>`)},
 		{"boolean assertions", "a simple type with an assertions facet", simpleOf(`<xs:restriction base="xs:boolean"><xs:assertion test="true()"/></xs:restriction>`)},
-		{"date assertions", "an atomic simple type whose primitive is other than xs:string, xs:double, xs:decimal or xs:boolean", simpleOf(`<xs:restriction base="xs:date"><xs:assertion test="true()"/></xs:restriction>`)},
+		{"date assertions", "a simple type with an assertions facet", simpleOf(`<xs:restriction base="xs:date"><xs:assertion test="true()"/></xs:restriction>`)},
 		{"inherited assertions", "a simple type with an assertions facet", `<xs:simpleType name="asserted%[1]s"><xs:restriction base="xs:string"><xs:assertion test="true()"/></xs:restriction></xs:simpleType>` + simpleOf(`<xs:restriction base="s:asserted%[1]s"><xs:maxLength value="3"/></xs:restriction>`)},
 		{"particle value constraint", "a value constraint, default or fixed", sequence(`<xs:element name="a" type="xs:string" fixed="x"/>`)},
 		{"particle type table", "an element declaration with a {type table}", sequence(`<xs:element name="a" type="xs:string"><xs:alternative test="@b" type="xs:token"/></xs:element>`)},
@@ -1163,15 +1164,15 @@ func TestAppendListInvalid(t *testing.T) {
 // and its schema Loc where it is located.
 func TestAppendListDeclineSubject(t *testing.T) {
 	schema := schemaOf(t, `<xs:element name="flt"><xs:simpleType><xs:list itemType="xs:float"/></xs:simpleType></xs:element>`+
-		`<xs:simpleType name="dates"><xs:list><xs:simpleType><xs:restriction base="xs:date"/></xs:simpleType></xs:list></xs:simpleType>`+
+		`<xs:simpleType name="dates"><xs:list><xs:simpleType><xs:restriction base="xs:hexBinary"/></xs:simpleType></xs:list></xs:simpleType>`+
 		`<xs:element name="anon" type="s:dates"/>`)
 	err := CheckAppend[strList](schema, sname("flt"))
-	_ = asDecline(t, err, "codec does not encode an atomic simple type whose primitive is other than xs:string, xs:double, xs:decimal or xs:boolean: simple type the anonymous simple type of element {urn:s}flt declared at s.xsd:1:")
+	_ = asDecline(t, err, "codec does not encode an atomic simple type whose primitive is other than xs:string, xs:boolean, xs:decimal, xs:double, xs:duration, xs:dateTime, xs:time, xs:date, xs:gYearMonth, xs:gYear, xs:gMonthDay, xs:gDay or xs:gMonth: simple type the anonymous simple type of element {urn:s}flt declared at s.xsd:1:")
 	if !strings.Contains(err.Error(), ", through the list type's {item type definition} xs:float; ") {
 		t.Errorf("decline %q does not name the item xs:float", err)
 	}
 	err = CheckAppend[strList](schema, sname("anon"))
-	_ = asDecline(t, err, "codec does not encode an atomic simple type whose primitive is other than xs:string, xs:double, xs:decimal or xs:boolean: simple type {urn:s}dates defined at s.xsd:1:")
+	_ = asDecline(t, err, "codec does not encode an atomic simple type whose primitive is other than xs:string, xs:boolean, xs:decimal, xs:double, xs:duration, xs:dateTime, xs:time, xs:date, xs:gYearMonth, xs:gYear, xs:gMonthDay, xs:gDay or xs:gMonth: simple type {urn:s}dates defined at s.xsd:1:")
 	if !strings.Contains(err.Error(), ", through the list type's anonymous {item type definition}, a type defined at s.xsd:1:") {
 		t.Errorf("decline %q does not name the anonymous item by its Loc", err)
 	}
@@ -1431,7 +1432,7 @@ func TestAppendDecimalFaults(t *testing.T) {
 		{"a Canonical not mapping back", decimalOtherCanonical, `"2"`},
 	} {
 		_, err = appendChecked(t, nil, schema, row.backend, sname("dec"), one)
-		plainError(t, err, "codec: Append: Rat holds 1, of simple type xs:decimal, which the backend's Canonical renders "+row.rendered+", other text than its canonical representation (f-decimalCanmap, f-booleanCanmap)")
+		plainError(t, err, "codec: Append: Rat holds 1, of simple type xs:decimal, which the backend's Canonical renders "+row.rendered+", other text than its canonical representation (Datatypes Appendix E, the canonical mapping of xs:decimal)")
 	}
 	_, err = appendChecked(t, nil, schema, decimalOnce{asked: new(bool)}, sname("dec"), one)
 	plainError(t, err, "codec: Append: Rat holds 1, of simple type xs:decimal, which the backend cannot assess: ")
@@ -1449,4 +1450,403 @@ func TestAppendDecimalFaults(t *testing.T) {
 			holds(t, err, row.want)
 		})
 	}
+}
+
+// encodeTemporalSchema declares, in urn:s, a document element of each date,
+// time and duration builtin codegen gives a datatype struct, a list over
+// xs:date, an element and an attribute of complex type, and restrictions of
+// xs:date by a bound and by explicitTimezone, and of xs:dateTime, xs:date,
+// xs:gDay and the list by a pattern that rejects the canonical
+// representation of the values the rows hold.
+const encodeTemporalSchema = `
+  <xs:element name="dt" type="xs:dateTime"/>
+  <xs:element name="dts" type="xs:dateTimeStamp"/>
+  <xs:element name="tm" type="xs:time"/>
+  <xs:element name="da" type="xs:date"/>
+  <xs:element name="ym" type="xs:gYearMonth"/>
+  <xs:element name="gy" type="xs:gYear"/>
+  <xs:element name="md" type="xs:gMonthDay"/>
+  <xs:element name="gd" type="xs:gDay"/>
+  <xs:element name="gm" type="xs:gMonth"/>
+  <xs:element name="du" type="xs:duration"/>
+  <xs:element name="dtd" type="xs:dayTimeDuration"/>
+  <xs:element name="ymd" type="xs:yearMonthDuration"/>
+  <xs:simpleType name="dates"><xs:list itemType="xs:date"/></xs:simpleType>
+  <xs:simpleType name="early"><xs:restriction base="xs:date"><xs:maxInclusive value="2000-01-01"/></xs:restriction></xs:simpleType>
+  <xs:simpleType name="zoned"><xs:restriction base="xs:date"><xs:explicitTimezone value="required"/></xs:restriction></xs:simpleType>
+  <xs:simpleType name="pointed"><xs:restriction base="xs:dateTime"><xs:pattern value=".*\.0"/></xs:restriction></xs:simpleType>
+  <xs:simpleType name="plusZero"><xs:restriction base="xs:date"><xs:pattern value=".*\+00:00"/></xs:restriction></xs:simpleType>
+  <xs:simpleType name="minusYear"><xs:restriction base="xs:date"><xs:pattern value="-.*"/></xs:restriction></xs:simpleType>
+  <xs:simpleType name="plusZeroDay"><xs:restriction base="xs:gDay"><xs:pattern value=".*\+00:00"/></xs:restriction></xs:simpleType>
+  <xs:simpleType name="plusZeroDates"><xs:restriction base="s:dates"><xs:pattern value="\S*\+00:00( \S*\+00:00)*"/></xs:restriction></xs:simpleType>
+  <xs:element name="dl" type="s:dates"/>
+  <xs:element name="early" type="s:early"/>
+  <xs:element name="zoned" type="s:zoned"/>
+  <xs:element name="pointed" type="s:pointed"/>
+  <xs:element name="plusZero" type="s:plusZero"/>
+  <xs:element name="minusYear" type="s:minusYear"/>
+  <xs:element name="plusZeroDay" type="s:plusZeroDay"/>
+  <xs:element name="plusZeroDates" type="s:plusZeroDates"/>
+  <xs:element name="ta">
+    <xs:complexType>
+      <xs:sequence><xs:element name="v" type="xs:dateTime"/></xs:sequence>
+      <xs:attribute name="a" type="xs:date" use="required"/>
+    </xs:complexType>
+  </xs:element>`
+
+// The T codegen emits for encodeTemporalSchema's list and complex document
+// elements; the simple ones take temporal_test.go's datatype structs.
+type (
+	dateList  []tDate
+	tempParts struct {
+		V tDateTime
+		A tDate
+	}
+)
+
+// sameSpelled reports whether a and b are one value, by spellValue.
+func sameSpelled[T any](a, b T) bool {
+	return spellValue(reflect.ValueOf(a)) == spellValue(reflect.ValueOf(b))
+}
+
+// bigYear is the big.Int s spells in base 10.
+func bigYear(s string) big.Int {
+	var y big.Int
+	y.SetString(s, 10)
+	return y
+}
+
+// offset is a *int16 holding n.
+func offset(n int16) *int16 { return &n }
+
+// TestAppendTemporals pins the canonical forms of the date, time and
+// duration builtins (Datatypes §E.3.5's canonical mappings, §E.2
+// f-durationCanMap and f-yearMonthDurationCanMap), one row or more per
+// datatype struct codegen gives them, the derived dateTimeStamp,
+// dayTimeDuration and yearMonthDuration among them: a timezoneOffset as Z,
+// and as a sign, hours and minutes; a year of four digits, zero-padded, and
+// beyond them; a fractional second with no trailing zero; and a duration's
+// fields with every zero one omitted. A list over xs:date and an element and
+// an attribute of complex type take the same route. Each is accepted by
+// validate and decoded back equal.
+func TestAppendTemporals(t *testing.T) {
+	schema := schemaOf(t, encodeTemporalSchema)
+	el := func(name, text string) string { return `<` + name + ` xmlns="urn:s">` + text + `</` + name + `>` }
+	for _, row := range []struct {
+		name string
+		run  func(t *testing.T)
+	}{
+		{"dateTime with an offset", func(t *testing.T) {
+			roundTrip(t, schema, sname("dt"), tDateTime{Year: bigYear("2002"), Month: 10, Day: 10, Hour: 12, TimezoneOffset: offset(-300)},
+				el("dt", "2002-10-10T12:00:00-05:00"), sameSpelled[tDateTime])
+		}},
+		{"dateTime with a fractional second and no offset", func(t *testing.T) {
+			roundTrip(t, schema, sname("dt"), tDateTime{Year: bigYear("2002"), Month: 10, Day: 10, Hour: 12, Minute: 7, Second: *big.NewRat(1, 2)},
+				el("dt", "2002-10-10T12:07:00.5"), sameSpelled[tDateTime])
+		}},
+		{"dateTime of a negative year at +14:00", func(t *testing.T) {
+			roundTrip(t, schema, sname("dt"), tDateTime{Year: bigYear("-44"), Month: 3, Day: 15, Hour: 23, Minute: 59, Second: *big.NewRat(59999, 1000), TimezoneOffset: offset(840)},
+				el("dt", "-0044-03-15T23:59:59.999+14:00"), sameSpelled[tDateTime])
+		}},
+		{"dateTime of a year beyond 9999 at Z", func(t *testing.T) {
+			roundTrip(t, schema, sname("dt"), tDateTime{Year: bigYear("123456789012345678901234"), Month: 1, Day: 1, TimezoneOffset: offset(0)},
+				el("dt", "123456789012345678901234-01-01T00:00:00Z"), sameSpelled[tDateTime])
+		}},
+		{"dateTimeStamp", func(t *testing.T) {
+			roundTrip(t, schema, sname("dts"), tDateTimeStamp{Year: bigYear("2002"), Month: 10, Day: 10, Hour: 12, TimezoneOffset: -840},
+				el("dts", "2002-10-10T12:00:00-14:00"), sameSpelled[tDateTimeStamp])
+		}},
+		{"time", func(t *testing.T) {
+			roundTrip(t, schema, sname("tm"), tTime{Hour: 13, Minute: 20, Second: *big.NewRat(121, 4)}, el("tm", "13:20:30.25"), sameSpelled[tTime])
+		}},
+		{"time at Z", func(t *testing.T) {
+			roundTrip(t, schema, sname("tm"), tTime{Hour: 1, Second: *big.NewRat(5, 1), TimezoneOffset: offset(0)}, el("tm", "01:00:05Z"), sameSpelled[tTime])
+		}},
+		{"date of February 29", func(t *testing.T) {
+			roundTrip(t, schema, sname("da"), tDate{Year: bigYear("2000"), Month: 2, Day: 29, TimezoneOffset: offset(780)}, el("da", "2000-02-29+13:00"), sameSpelled[tDate])
+		}},
+		{"date of year 0", func(t *testing.T) {
+			roundTrip(t, schema, sname("da"), tDate{Month: 1, Day: 1}, el("da", "0000-01-01"), sameSpelled[tDate])
+		}},
+		{"gYearMonth", func(t *testing.T) {
+			roundTrip(t, schema, sname("ym"), tGYearMonth{Year: bigYear("1999"), Month: 5, TimezoneOffset: offset(330)}, el("ym", "1999-05+05:30"), sameSpelled[tGYearMonth])
+		}},
+		{"gYear negative", func(t *testing.T) {
+			roundTrip(t, schema, sname("gy"), tGYear{Year: bigYear("-1")}, el("gy", "-0001"), sameSpelled[tGYear])
+		}},
+		{"gYear beyond 9999 at Z", func(t *testing.T) {
+			roundTrip(t, schema, sname("gy"), tGYear{Year: bigYear("12345"), TimezoneOffset: offset(0)}, el("gy", "12345Z"), sameSpelled[tGYear])
+		}},
+		{"gMonthDay", func(t *testing.T) {
+			roundTrip(t, schema, sname("md"), tGMonthDay{Month: 2, Day: 29}, el("md", "--02-29"), sameSpelled[tGMonthDay])
+		}},
+		{"gDay", func(t *testing.T) {
+			roundTrip(t, schema, sname("gd"), tGDay{Day: 31, TimezoneOffset: offset(-180)}, el("gd", "---31-03:00"), sameSpelled[tGDay])
+		}},
+		{"gMonth", func(t *testing.T) {
+			roundTrip(t, schema, sname("gm"), tGMonth{Month: 5}, el("gm", "--05"), sameSpelled[tGMonth])
+		}},
+		{"duration of every field", func(t *testing.T) {
+			roundTrip(t, schema, sname("du"), tDuration{Months: *big.NewInt(14), Seconds: *big.NewRat(187569, 2)}, el("du", "P1Y2M1DT2H3M4.5S"), sameSpelled[tDuration])
+		}},
+		{"duration negative", func(t *testing.T) {
+			roundTrip(t, schema, sname("du"), tDuration{Months: *big.NewInt(-1), Seconds: *big.NewRat(-60, 1)}, el("du", "-P1MT1M"), sameSpelled[tDuration])
+		}},
+		{"duration zero", func(t *testing.T) {
+			roundTrip(t, schema, sname("du"), tDuration{}, el("du", "PT0S"), sameSpelled[tDuration])
+		}},
+		{"duration of months alone", func(t *testing.T) {
+			roundTrip(t, schema, sname("du"), tDuration{Months: *big.NewInt(12)}, el("du", "P1Y"), sameSpelled[tDuration])
+		}},
+		{"dayTimeDuration", func(t *testing.T) {
+			roundTrip(t, schema, sname("dtd"), tDayTimeDuration{Seconds: *big.NewRat(129600, 1)}, el("dtd", "P1DT12H"), sameSpelled[tDayTimeDuration])
+		}},
+		{"dayTimeDuration below a second", func(t *testing.T) {
+			roundTrip(t, schema, sname("dtd"), tDayTimeDuration{Seconds: *big.NewRat(-1, 2)}, el("dtd", "-PT0.5S"), sameSpelled[tDayTimeDuration])
+		}},
+		{"yearMonthDuration", func(t *testing.T) {
+			roundTrip(t, schema, sname("ymd"), tYearMonthDuration{Months: *big.NewInt(-3)}, el("ymd", "-P3M"), sameSpelled[tYearMonthDuration])
+		}},
+		{"list of date", func(t *testing.T) {
+			roundTrip(t, schema, sname("dl"), dateList{{Year: bigYear("2000"), Month: 1, Day: 1}, {Year: bigYear("2000"), Month: 1, Day: 2, TimezoneOffset: offset(0)}},
+				el("dl", "2000-01-01 2000-01-02Z"), sameSpelled[dateList])
+		}},
+		{"element and attribute", func(t *testing.T) {
+			roundTrip(t, schema, sname("ta"), tempParts{V: tDateTime{Year: bigYear("2001"), Month: 12, Day: 31, Hour: 23, Minute: 59, Second: *big.NewRat(59, 1)}, A: tDate{Year: bigYear("2001"), Month: 1, Day: 1, TimezoneOffset: offset(60)}},
+				`<ta xmlns="urn:s" a="2001-01-01+01:00"><v>2001-12-31T23:59:59</v></ta>`, sameSpelled[tempParts])
+		}},
+	} {
+		t.Run(row.name, row.run)
+	}
+}
+
+// TestAppendTemporalOutsideValueSpace pins item 6 of Append's doc for a
+// datatype struct value no value maps to (codegen/doc.go "# Simple types"),
+// one row per kind of property outside its range each struct can hold, the
+// first in field order answering: an error errors.Is reports as
+// ErrInvalidValue, carrying no *xsderr.Error, opening with the Go path, the
+// value and its type, and naming the property, its value and its bound. The
+// check precedes the backend's Parse and Canonical: under a backend whose
+// mapping of the primitive rejects every lexical and renders none, the error
+// is item 6 still.
+func TestAppendTemporalOutsideValueSpace(t *testing.T) {
+	schema := schemaOf(t, encodeTemporalSchema)
+	day := tDate{Year: bigYear("2001"), Month: 2, Day: 29}
+	with := func(f func(*tDateTime)) tDateTime {
+		c := tDateTime{Year: bigYear("2001"), Month: 1, Day: 1}
+		f(&c)
+		return c
+	}
+	for _, row := range []struct {
+		name, elem string
+		v          any
+		want       string
+	}{
+		{"a month of 13", "da", tDate{Year: bigYear("2000"), Month: 13, Day: 1}, "the month 13 is outside 1 to 12 (§D.2.1)"},
+		{"a month of 0 before a day of 0", "da", tDate{Year: bigYear("2000")}, "the month 0 is outside 1 to 12 (§D.2.1)"},
+		{"February 29 of 2001", "da", day, "the day 29 is outside 1 to 28 (§D.2.1)"},
+		{"a day of 0", "dt", with(func(c *tDateTime) { c.Day = 0 }), "the day 0 is outside 1 to 31 (§D.2.1)"},
+		{"an hour of 24", "dt", with(func(c *tDateTime) { c.Hour = 24 }), "the hour 24 is outside 0 to 23 (§D.2.1)"},
+		{"a minute of 60", "dt", with(func(c *tDateTime) { c.Minute = 60 }), "the minute 60 is outside 0 to 59 (§D.2.1)"},
+		{"a second of 60", "dt", with(func(c *tDateTime) { c.Second = *big.NewRat(60, 1) }), "the second 60 is outside 0 to 60, 60 excluded (§D.2.1)"},
+		{"a negative second", "dt", with(func(c *tDateTime) { c.Second = *big.NewRat(-1, 2) }), "the second -1/2 is outside 0 to 60, 60 excluded (§D.2.1)"},
+		{"a second outside the decimal value space", "dt", with(func(c *tDateTime) { c.Second = *big.NewRat(1, 3) }), "the second 1/3: its denominator in lowest terms is no 2^m·5^n, so it lies outside the decimal value space (Datatypes §3.3.3.1)"},
+		{"an offset beyond 840", "dt", with(func(c *tDateTime) { c.TimezoneOffset = offset(841) }), "the timezoneOffset 841 is outside -840 to 840 minutes (§D.2.1)"},
+		{"an hour before an offset", "dt", with(func(c *tDateTime) { c.Hour, c.TimezoneOffset = 24, offset(-841) }), "the hour 24 is outside"},
+		{"a dateTimeStamp offset below -840", "dts", tDateTimeStamp{Year: bigYear("1"), Month: 1, Day: 1, TimezoneOffset: -841}, "the timezoneOffset -841 is outside"},
+		{"a time second outside the decimal value space", "tm", tTime{Second: *big.NewRat(1, 3)}, "the second 1/3: its denominator"},
+		{"a time offset", "tm", tTime{TimezoneOffset: offset(900)}, "the timezoneOffset 900 is outside"},
+		{"a date offset", "da", tDate{Year: bigYear("1"), Month: 1, Day: 1, TimezoneOffset: offset(-900)}, "the timezoneOffset -900 is outside"},
+		{"a gYearMonth month", "ym", tGYearMonth{Month: 0}, "the month 0 is outside 1 to 12"},
+		{"a gYearMonth offset", "ym", tGYearMonth{Month: 1, TimezoneOffset: offset(841)}, "the timezoneOffset 841 is outside"},
+		{"a gYear offset", "gy", tGYear{TimezoneOffset: offset(841)}, "the timezoneOffset 841 is outside"},
+		{"a gMonthDay of February 30", "md", tGMonthDay{Month: 2, Day: 30}, "the day 30 is outside 1 to 29 (§D.2.1)"},
+		{"a gMonthDay of April 31", "md", tGMonthDay{Month: 4, Day: 31}, "the day 31 is outside 1 to 30 (§D.2.1)"},
+		{"a gMonthDay month", "md", tGMonthDay{Month: 13, Day: 1}, "the month 13 is outside 1 to 12"},
+		{"a gMonthDay offset", "md", tGMonthDay{Month: 1, Day: 1, TimezoneOffset: offset(841)}, "the timezoneOffset 841 is outside"},
+		{"a gDay of 32", "gd", tGDay{Day: 32}, "the day 32 is outside 1 to 31 (§D.2.1)"},
+		{"a gDay of 0", "gd", tGDay{}, "the day 0 is outside 1 to 31 (§D.2.1)"},
+		{"a gDay offset", "gd", tGDay{Day: 1, TimezoneOffset: offset(841)}, "the timezoneOffset 841 is outside"},
+		{"a gMonth of 13", "gm", tGMonth{Month: 13}, "the month 13 is outside 1 to 12 (§D.2.1)"},
+		{"a gMonth offset", "gm", tGMonth{Month: 1, TimezoneOffset: offset(841)}, "the timezoneOffset 841 is outside"},
+		{"a duration of opposite signs", "du", tDuration{Months: *big.NewInt(1), Seconds: *big.NewRat(-1, 1)}, "the Months 1 and the Seconds -1 are of opposite signs (§3.3.6.1)"},
+		{"a duration's seconds outside the decimal value space", "du", tDuration{Seconds: *big.NewRat(1, 3)}, "the Seconds 1/3: its denominator in lowest terms is no 2^m·5^n"},
+		{"a dayTimeDuration's seconds outside the decimal value space", "dtd", tDayTimeDuration{Seconds: *big.NewRat(-1, 3)}, "the Seconds -1/3: its denominator"},
+	} {
+		t.Run(row.name, func(t *testing.T) {
+			for _, backend := range []value.Backend{strict.New(), overPrimitive(row.elem)} {
+				err := appendValue(t, schema, backend, row.elem, row.v)
+				invalidValue(t, err, row.want)
+				noRule(t, err)
+				typ := reflect.TypeOf(row.v).Name()
+				if !strings.HasPrefix(err.Error(), "codec: Append: "+typ+" holds {") || !strings.Contains(err.Error(), "}, of simple type xs:") {
+					t.Errorf("error %q does not open with the path %s, the value and its type", err, typ)
+				}
+			}
+		})
+	}
+	t.Run("the value shown", func(t *testing.T) {
+		err := appendValue(t, schema, strict.New(), "da", day)
+		const want = "codec: Append: tDate holds {Year 2001, Month 2, Day 29, TimezoneOffset nil}, of simple type xs:date, no value of its datatype: the day 29 is outside 1 to 28 (§D.2.1)"
+		if err == nil || err.Error() != want {
+			t.Errorf("error %v, want %q", err, want)
+		}
+	})
+	t.Run("a list item", func(t *testing.T) {
+		err := appendValue(t, schema, strict.New(), "dl", dateList{{Year: bigYear("1"), Month: 1, Day: 1}, {Month: 13, Day: 1}})
+		invalidValue(t, err, "the month 13 is outside 1 to 12")
+		if !strings.HasPrefix(err.Error(), "codec: Append: dateList[1] holds {") {
+			t.Errorf("error %q does not open with the item's path", err)
+		}
+	})
+}
+
+// temporalPrimitives names, by encodeTemporalSchema's document element, the
+// local name of its type's primitive.
+var temporalPrimitives = map[string]string{
+	"dt": "dateTime", "dts": "dateTime", "tm": "time", "da": "date", "ym": "gYearMonth", "gy": "gYear",
+	"md": "gMonthDay", "gd": "gDay", "gm": "gMonth", "du": "duration", "dtd": "duration", "dl": "date",
+}
+
+// overPrimitive is strict's backend with the mapping of the primitive of
+// elem's type (temporalPrimitives) rejecting every lexical and rendering no
+// form.
+func overPrimitive(elem string) value.Backend {
+	return overDatatype(temporalPrimitives[elem], func(value.Mapping) value.Mapping {
+		return value.Mapping{
+			Parse:     func(string, value.Context) (value.Value, error) { return nil, errors.New("rejected") },
+			Canonical: func(value.Value) (string, error) { return "", errors.New("no canonical form") },
+		}
+	})
+}
+
+// appendValue is appendChecked's error for v, of one of the T
+// encodeTemporalSchema's document elements take, as the document element
+// elem.
+func appendValue(t *testing.T, schema *xsd.Schema, backend value.Backend, elem string, v any) error {
+	t.Helper()
+	var err error
+	switch v := v.(type) {
+	case tDateTime:
+		_, err = appendChecked(t, nil, schema, backend, sname(elem), v)
+	case tDateTimeStamp:
+		_, err = appendChecked(t, nil, schema, backend, sname(elem), v)
+	case tTime:
+		_, err = appendChecked(t, nil, schema, backend, sname(elem), v)
+	case tDate:
+		_, err = appendChecked(t, nil, schema, backend, sname(elem), v)
+	case tGYearMonth:
+		_, err = appendChecked(t, nil, schema, backend, sname(elem), v)
+	case tGYear:
+		_, err = appendChecked(t, nil, schema, backend, sname(elem), v)
+	case tGMonthDay:
+		_, err = appendChecked(t, nil, schema, backend, sname(elem), v)
+	case tGDay:
+		_, err = appendChecked(t, nil, schema, backend, sname(elem), v)
+	case tGMonth:
+		_, err = appendChecked(t, nil, schema, backend, sname(elem), v)
+	case tDuration:
+		_, err = appendChecked(t, nil, schema, backend, sname(elem), v)
+	case tDayTimeDuration:
+		_, err = appendChecked(t, nil, schema, backend, sname(elem), v)
+	case tYearMonthDuration:
+		_, err = appendChecked(t, nil, schema, backend, sname(elem), v)
+	case dateList:
+		_, err = appendChecked(t, nil, schema, backend, sname(elem), v)
+	default:
+		t.Fatalf("appendValue holds no %T", v)
+	}
+	return err
+}
+
+// TestAppendTemporalInvalid pins items 6 and 7 of Append's doc for the date,
+// time and duration builtins: a value a bound or explicitTimezone rejects is
+// item 6 carrying the facet's rule; a value whose canonical representation a
+// pattern rejects is item 7 where it has another lexical, a dateTime always,
+// a date or gDay only where its timezoneOffset is 0 or a date's year is 0,
+// as an atom and in a list, and item 6, carrying cvc-pattern-valid, where it
+// has none; and the zero yearMonthDuration, which strict's Canonical refuses
+// (§3.4.26.1's note), is item 7.
+func TestAppendTemporalInvalid(t *testing.T) {
+	schema := schemaOf(t, encodeTemporalSchema)
+	for _, row := range []struct {
+		name, elem string
+		v          any
+		rule       xsderr.Rule
+	}{
+		{"a bound", "early", tDate{Year: bigYear("2001"), Month: 1, Day: 1}, "cvc-maxInclusive-valid"},
+		{"explicitTimezone required", "zoned", tDate{Year: bigYear("2001"), Month: 1, Day: 1}, "cvc-explicitTimezone-valid"},
+		{"a pattern on a date with no offset", "plusZero", tDate{Year: bigYear("2001"), Month: 1, Day: 1}, "cvc-pattern-valid"},
+		{"a pattern on a date at +05:00", "plusZero", tDate{Year: bigYear("2001"), Month: 1, Day: 1, TimezoneOffset: offset(300)}, "cvc-pattern-valid"},
+		{"a pattern on a date of year 1", "minusYear", tDate{Year: bigYear("1"), Month: 1, Day: 1}, "cvc-pattern-valid"},
+		{"a pattern on a gDay with no offset", "plusZeroDay", tGDay{Day: 1}, "cvc-pattern-valid"},
+		{"a pattern on a list of dates with no offset 0", "plusZeroDates", dateList{{Year: bigYear("1"), Month: 1, Day: 1}, {Year: bigYear("2"), Month: 1, Day: 1, TimezoneOffset: offset(60)}}, "cvc-pattern-valid"},
+	} {
+		t.Run(row.name, func(t *testing.T) {
+			err := appendValue(t, schema, strict.New(), row.elem, row.v)
+			invalidValue(t, err, "{urn:s}"+row.elem)
+			if typ := reflect.TypeOf(row.v).Name(); !strings.HasPrefix(err.Error(), "codec: Append: "+typ+" holds ") {
+				t.Errorf("error %q does not open with the path %s", err, typ)
+			}
+			if rule, _ := xsderr.RuleOf(err); rule != row.rule {
+				t.Errorf("rule %q, want %q", rule, row.rule)
+			}
+		})
+	}
+	for _, row := range []struct {
+		name, elem string
+		v          any
+		at         string
+	}{
+		{"a pattern on a dateTime", "pointed", tDateTime{Year: bigYear("2001"), Month: 1, Day: 1}, `at tDateTime holding 2001-01-01T00:00:00: a pattern facet rejects its canonical representation "2001-01-01T00:00:00"`},
+		{"a pattern on a date at Z", "plusZero", tDate{Year: bigYear("2001"), Month: 1, Day: 1, TimezoneOffset: offset(0)}, "at tDate holding 2001-01-01Z: a pattern facet"},
+		{"a pattern on a date of year 0", "minusYear", tDate{Month: 1, Day: 1}, "at tDate holding 0000-01-01: a pattern facet"},
+		{"a pattern on a gDay at Z", "plusZeroDay", tGDay{Day: 1, TimezoneOffset: offset(0)}, "at tGDay holding ---01Z: a pattern facet"},
+		{"a pattern on a list holding a date at Z", "plusZeroDates", dateList{{Year: bigYear("1"), Month: 1, Day: 1}, {Year: bigYear("2"), Month: 1, Day: 1, TimezoneOffset: offset(0)}}, "at dateList holding [0001-01-01 0002-01-01Z]: a pattern facet"},
+		{"the zero yearMonthDuration", "ymd", tYearMonthDuration{}, "at tYearMonthDuration holding P0M: yearMonthDuration: zero value has no canonical representation"},
+	} {
+		t.Run(row.name, func(t *testing.T) {
+			err := appendValue(t, schema, strict.New(), row.elem, row.v)
+			_ = asDecline(t, err, "codec does not encode a value with no canonical representation: simple type ")
+			holds(t, err, row.at)
+		})
+	}
+}
+
+// TestAppendTemporalFaults pins the backend faults of Append's doc for the
+// date, time and duration builtins: no mapping of the primitive, read from
+// the type, a dateTimeStamp's xs:dateTime and a dayTimeDuration's
+// xs:duration; the primitive's Parse rejecting the canonical spelling; and a
+// Canonical rendering other text, each a plain error opening with the value's
+// Go path.
+func TestAppendTemporalFaults(t *testing.T) {
+	schema := schemaOf(t, encodeTemporalSchema)
+	err := appendValue(t, schema, noMappingOf{xsd.QName{Space: xsd.XMLSchemaNS, Local: "dateTime"}}, "dts", tDateTimeStamp{Year: bigYear("1"), Month: 1, Day: 1})
+	plainError(t, err, "codec: Append: tDateTimeStamp, of simple type xs:dateTimeStamp: the backend has no mapping of its primitive xs:dateTime")
+	err = appendValue(t, schema, noMappingOf{xsd.QName{Space: xsd.XMLSchemaNS, Local: "duration"}}, "dtd", tDayTimeDuration{})
+	plainError(t, err, "codec: Append: tDayTimeDuration, of simple type xs:dayTimeDuration: the backend has no mapping of its primitive xs:duration")
+	rejecting := overDatatype("date", func(base value.Mapping) value.Mapping {
+		return value.Mapping{Parse: func(string, value.Context) (value.Value, error) { return nil, errors.New("rejected") }, Canonical: base.Canonical}
+	})
+	err = appendValue(t, schema, rejecting, "da", tDate{Year: bigYear("1"), Month: 1, Day: 1})
+	plainError(t, err, "codec: Append: tDate holds 0001-01-01, of simple type xs:date, whose canonical spelling the backend's Parse of xs:date rejects: rejected")
+	offsetCanonical := overDatatype("date", func(base value.Mapping) value.Mapping {
+		return value.Mapping{Parse: base.Parse, Canonical: func(v value.Value) (string, error) {
+			c, err := base.Canonical(v)
+			return strings.TrimSuffix(c, "Z") + "+00:00", err
+		}}
+	})
+	err = appendValue(t, schema, offsetCanonical, "da", tDate{Year: bigYear("1"), Month: 1, Day: 1, TimezoneOffset: offset(0)})
+	plainError(t, err, `codec: Append: tDate holds 0001-01-01Z, of simple type xs:date, which the backend's Canonical renders "0001-01-01+00:00", other text than its canonical representation (Datatypes Appendix E, the canonical mapping of xs:date)`)
+}
+
+// noMappingOf is strict's backend, but that it maps no name.
+type noMappingOf struct{ name xsd.QName }
+
+// Mapping is strict's, but for name, which it does not map.
+func (n noMappingOf) Mapping(typ xsd.QName) (value.Mapping, bool) {
+	if typ == n.name {
+		return value.Mapping{}, false
+	}
+	return strict.New().Mapping(typ)
 }

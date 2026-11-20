@@ -55,20 +55,31 @@ var ErrInvalidValue = errors.New("codec: Append: a value no valid document holds
 //     holding "  a  b"; a list item, a string, that is empty or holds TAB,
 //     LF, CR or a space, which no list item's lexical representation does
 //     (Datatypes §2.4.1.2); a big.Rat outside the decimal value space, whose
-//     denominator in lowest terms is no 2^m·5^n (§3.3.3.1), such as 1/3; or
-//     a value whose simple type rejects it, a value.ValidateLexical error
-//     value.IsDatatypeVerdict reports as a verdict, a facet's rejection or a
-//     backend Parse's among them, that error wrapped, but for item 7's
-//     pattern case, a list's own facets read once every item has passed its
-//     own checks.
+//     denominator in lowest terms is no 2^m·5^n (§3.3.3.1), such as 1/3; a
+//     date, time or duration datatype struct value no value of its datatype
+//     maps to, as codegen's package doc "# Simple types" states such values
+//     exist, the error naming the first property found outside it, its
+//     fields read in order; or a value whose simple type rejects it, a
+//     value.ValidateLexical error value.IsDatatypeVerdict reports as a
+//     verdict, a facet's rejection or a backend Parse's among them, that
+//     error wrapped, but for item 7's pattern case, a list's own facets read
+//     once every item has passed its own checks.
 //  7. A value with no canonical representation, the first in document order
 //     as item 6 counts: its *DeclineError. That is a governing mapping with no
-//     Canonical, a Canonical that fails for the value, an xs:decimal-primitive
-//     or xs:boolean value, an xs:double value other than NaN and -INF, or a
-//     list holding at least one such item, whose canonical representation a
-//     pattern facet of its type rejects (Datatypes §2.1's note; NaN and -INF
-//     have no other lexical, §3.3.5.2), whatever other facet rejects it, or a
-//     canonical representation that does not map back to the value.
+//     Canonical, a Canonical that fails for the value, such as strict's for
+//     the zero xs:yearMonthDuration (Datatypes §3.4.26.1's note), or a value
+//     with a lexical other than its canonical representation, or a list
+//     holding at least one such item, whose canonical representation a
+//     pattern facet of its type rejects (§2.1's note), whatever other facet
+//     rejects it; or a canonical representation that does not map back to the
+//     value. Every xs:boolean, xs:decimal-primitive, xs:dateTime,
+//     xs:dateTimeStamp, xs:time and xs:duration-primitive value has another
+//     lexical; an xs:double value has one but for NaN and -INF (§3.3.5.2); an
+//     xs:date, xs:gYearMonth or xs:gYear value only where its timezoneOffset
+//     is 0, spelled Z, +00:00 or -00:00 (§D.2.2's note), or its year is 0,
+//     spelled 0000 or -0000; an xs:gMonthDay, xs:gDay or xs:gMonth value only
+//     where its timezoneOffset is 0; and an xs:string-primitive value never,
+//     being its own whiteSpace-normalized form.
 //
 // A plain error is no *DeclineError and wraps none of [ErrTypeMismatch],
 // [ErrInvalidValue] and errors.ErrUnsupported; whether it wraps an
@@ -77,14 +88,18 @@ var ErrInvalidValue = errors.New("codec: Append: a value no valid document holds
 // A fault of backend found at a value, in place of that value's item 6 or 7, is
 // a plain error too, returned at once and naming the value's Go path and simple
 // type: no mapping of the value's primitive, no governing mapping, a Parse that
-// rejects the spelling Append gives the value, the primitive's mapping's for an
-// xs:decimal-primitive or xs:boolean value and the governing mapping's for an
-// xs:double one, a Parse of the governing mapping that rejects the
-// whiteSpace-normalized canonical representation an xs:double value's Canonical
-// renders, a Canonical that renders an xs:decimal-primitive or xs:boolean value
-// as other text than its canonical representation (Datatypes §E.1
-// f-decimalCanmap, §E.4 f-booleanCanmap), or an error of value.ValidateLexical
-// that value.IsDatatypeVerdict does not report as a verdict.
+// rejects the spelling Append gives the value, the mapping's of the type's
+// {primitive type definition} for a value of neither xs:string nor xs:double
+// primitive and the governing mapping's for an xs:double one, a Parse of the
+// governing mapping that rejects the whiteSpace-normalized canonical
+// representation an xs:double value's Canonical renders, a Canonical that
+// renders a value of neither xs:string nor xs:double primitive as other text
+// than its canonical representation (Datatypes §E.1 f-decimalCanmap, §E.4
+// f-booleanCanmap, §E.2 f-durationCanMap, §E.3.5 vp-dateTimeCanRep,
+// vp-timeCanRep, vp-dateCanRep, vp-gYearMonthCanRep, vp-gYearCanRep,
+// vp-gMonthDayCanRep, vp-gDayCanRep and vp-gMonthCanRep), or an error of
+// value.ValidateLexical that value.IsDatatypeVerdict does not report as a
+// verdict.
 //
 // Items 2 to 5 read no value; [CheckAppend] returns them for a declaration
 // and T.
@@ -407,12 +422,29 @@ func attributePlanOf(schema *xsd.Schema, u xsd.AttributeUse) (encodeAttribute, e
 }
 
 // The expanded names simpleEncodes reads a simple type's primitive and base
-// chain by, and the encoder its primitive's mapping by, with booleanName.
+// chain by, with booleanName: encodedPrimitives, the one encoding of the
+// primitives an atomic type that encodes has (atomicEncodes), in the order of
+// Datatypes §3.3, which constructEncodePrimitive's name lists; and idNames.
 var (
-	stringName  = xsd.QName{Space: xsd.XMLSchemaNS, Local: "string"}
-	doubleName  = xsd.QName{Space: xsd.XMLSchemaNS, Local: "double"}
-	decimalName = xsd.QName{Space: xsd.XMLSchemaNS, Local: "decimal"}
-	idNames     = []xsd.QName{
+	stringName        = xsd.QName{Space: xsd.XMLSchemaNS, Local: "string"}
+	doubleName        = xsd.QName{Space: xsd.XMLSchemaNS, Local: "double"}
+	decimalName       = xsd.QName{Space: xsd.XMLSchemaNS, Local: "decimal"}
+	encodedPrimitives = []xsd.QName{
+		stringName,
+		booleanName,
+		decimalName,
+		doubleName,
+		{Space: xsd.XMLSchemaNS, Local: "duration"},
+		{Space: xsd.XMLSchemaNS, Local: "dateTime"},
+		{Space: xsd.XMLSchemaNS, Local: "time"},
+		{Space: xsd.XMLSchemaNS, Local: "date"},
+		{Space: xsd.XMLSchemaNS, Local: "gYearMonth"},
+		{Space: xsd.XMLSchemaNS, Local: "gYear"},
+		{Space: xsd.XMLSchemaNS, Local: "gMonthDay"},
+		{Space: xsd.XMLSchemaNS, Local: "gDay"},
+		{Space: xsd.XMLSchemaNS, Local: "gMonth"},
+	}
+	idNames = []xsd.QName{
 		{Space: xsd.XMLSchemaNS, Local: "ID"},
 		{Space: xsd.XMLSchemaNS, Local: "IDREF"},
 		{Space: xsd.XMLSchemaNS, Local: "ENTITY"},
@@ -466,10 +498,10 @@ func simpleEncodes(r xsd.TypeResolver, st *xsd.SimpleType, owner string) (encode
 // names, a list's {item type definition} among them, which cos-st-restricts
 // clause 2.1 holds to one of those two, encodes, and otherwise the decline
 // of the first construct it finds: a special type, a union, a primitive
-// other than xs:string, xs:double, xs:decimal and xs:boolean, a type on whose
-// {base type definition} chain xs:ID, xs:IDREF or xs:ENTITY lies, then an
-// assertions facet among its effective facets, its own or inherited. An error
-// reading st is returned as is.
+// not in encodedPrimitives, a type on whose {base type definition} chain
+// xs:ID, xs:IDREF or xs:ENTITY lies, then an assertions facet among its
+// effective facets, its own or inherited. An error reading st is returned as
+// is.
 func atomicEncodes(r xsd.TypeResolver, st *xsd.SimpleType, subject string) (atomic, error) {
 	if st.IsSpecial() {
 		return 0, encodeDecline(constructSpecialType, subject)
@@ -485,7 +517,7 @@ func atomicEncodes(r xsd.TypeResolver, st *xsd.SimpleType, subject string) (atom
 	if err != nil {
 		return 0, err
 	}
-	if primitive == nil || !slices.Contains([]xsd.QName{stringName, doubleName, decimalName, booleanName}, primitive.Name()) {
+	if primitive == nil || !slices.Contains(encodedPrimitives, primitive.Name()) {
 		return 0, encodeDecline(constructEncodePrimitive, subject)
 	}
 	for step := st; step != nil; {
@@ -507,7 +539,7 @@ func atomicEncodes(r xsd.TypeResolver, st *xsd.SimpleType, subject string) (atom
 		return 0, err
 	}
 	if !ok {
-		// goshape.AtomicType gives each of the four primitives above an
+		// goshape.AtomicType gives each primitive of encodedPrimitives an
 		// atomic Go type, so no schema reaches this.
 		return 0, fmt.Errorf("codec: codegen gives %s no atomic Go type", subject)
 	}
@@ -693,7 +725,7 @@ func (e *encoder) simple(s encodeSimple, v reflect.Value, path, owner string) (s
 // atom returns the text Append writes for v, a value of the atomic simple
 // type st held in a, its atomic Go type, at path, subject naming st: a string
 // as itself (str), a float64 in its canonical representation (double), and
-// the value of a type whose primitive is xs:decimal or xs:boolean in its
+// the value of a type of any other primitive of encodedPrimitives in its
 // canonical representation (spelled). ok reports that it recorded no item 6
 // or 7 error of [Append]'s doc for v.
 func (e *encoder) atom(st *xsd.SimpleType, a atomic, v reflect.Value, path, subject string) (text string, ok bool, err error) {
@@ -715,12 +747,9 @@ func (e *encoder) atom(st *xsd.SimpleType, a atomic, v reflect.Value, path, subj
 // value.ValidateLexical, once every item has. An empty item is no list item
 // since the list's whiteSpace collapse (Datatypes §4.3.6) leaves no empty
 // token. A pattern rejection is item 7 only where an item with another
-// lexical is held, which a pattern may match (§2.1's note): an xs:decimal- or
-// xs:boolean-primitive item, every one of which has another lexical, or an
-// xs:double item other than NaN and -INF (otherLexical). An
-// xs:string-primitive item is its own whiteSpace-normalized form, and the
-// empty list has no other lexical, nor a list of NaN and -INF items, so every
-// lexical of such a value normalizes to the text written.
+// lexical is held, which a pattern may match (§2.1's note, otherLexical); the
+// empty list has no other lexical, nor a list none of whose items has one, so
+// every lexical of such a value normalizes to the text written.
 func (e *encoder) list(s encodeSimple, v reflect.Value, path, subject string) (string, error) {
 	isubject := itemSubject(subject, s.item)
 	items := make([]string, v.Len())
@@ -744,8 +773,8 @@ func (e *encoder) list(s encodeSimple, v reflect.Value, path, subject string) (s
 	}
 	shown := fmt.Sprintf("%v", v)
 	if s.atom != atomicString && s.atom != atomicFloat64 {
-		// fmt spells a big.Rat or big.Int by its fields; each item's text is
-		// its form (spelled).
+		// fmt spells a big.Rat, a big.Int or a datatype struct by its fields;
+		// each item's text is its form (spelled).
 		shown = "[" + text + "]"
 	}
 	if _, err := value.ValidateLexical(e.backend, e.schema, s.st, text, nil, noAssertions{}); err != nil {
@@ -863,40 +892,47 @@ func (e *encoder) double(st *xsd.SimpleType, f float64, path, subject string) (t
 }
 
 // spelled returns the canonical representation of v, a value of the simple
-// type st whose primitive is xs:decimal or xs:boolean, held in a, its atomic
-// Go type, at path, subject naming st: a.form's spelling of v, which Parse of
-// the primitive's mapping on e's backend must accept, held to st's facets by
+// type st whose primitive is one of encodedPrimitives other than xs:string and
+// xs:double, held in a, its atomic Go type, at path, subject naming st:
+// a.form's spelling of v, which Parse of the mapping of st's {primitive type
+// definition} on e's backend must accept, held to st's facets by
 // value.ValidateLexical, the value that returns rendered by st's governing
-// mapping's Canonical, which must be the spelling itself. The governing
-// mapping's Parse is reached inside ValidateLexical alone, so a rejection by
-// it is a verdict on the value, never a backend fault: the governing mapping
-// may be a derived builtin's (value.Backend), narrower than the Go type
-// codegen gives it, as big.Int holds 0 though xs:positiveInteger does not. It
-// records the item 6 or 7 error [Append]'s doc states for v, a pattern
-// facet's rejection always item 7 (otherLexical). ok is atom's.
+// mapping's Canonical, which must be the spelling itself. a.form runs first and
+// is the only check that v lies in a's value space, so that the backend's
+// Parse and Canonical see no value outside it. The governing mapping's Parse
+// is reached inside ValidateLexical alone, so a rejection by it is a verdict
+// on the value, never a backend fault: the governing mapping may be a derived
+// builtin's (value.Backend), narrower than the Go type codegen gives it, as
+// big.Int holds 0 though xs:positiveInteger does not. It records the item 6
+// or 7 error [Append]'s doc states for v, a pattern facet's rejection item 7
+// where v has another lexical (a.otherLexicalOf). ok is atom's.
 func (e *encoder) spelled(st *xsd.SimpleType, a atomic, v reflect.Value, path, subject string) (text string, ok bool, err error) {
-	lexical, ok := a.form(v)
-	if !ok {
-		e.invalidate(fmt.Errorf("codec: Append: %s holds %s, of %s, whose denominator in lowest terms is no 2^m·5^n, so it lies outside the decimal value space (Datatypes §3.3.3.1)", path, lexical, subject))
+	lexical, err := a.form(v)
+	if err != nil {
+		e.invalidate(fmt.Errorf("codec: Append: %s holds %s, of %s, no value of its datatype: %w", path, a.shown(v), subject, err))
 		return "", false, nil
 	}
-	primitive := decimalName
-	if a == atomicBool {
-		primitive = booleanName
+	primitive, err := st.Primitive(e.schema)
+	if err != nil {
+		return "", false, fmt.Errorf("codec: Append: %s, of %s: %w", path, subject, err)
 	}
-	pm, has := e.backend.Mapping(primitive)
+	if primitive == nil {
+		// atomicEncodes declines a type with no {primitive type definition}.
+		return "", false, fmt.Errorf("codec: Append: %s, of %s: the type has no {primitive type definition}", path, subject)
+	}
+	pm, has := e.backend.Mapping(primitive.Name())
 	if !has {
-		return "", false, fmt.Errorf("codec: Append: %s, of %s: the backend has no mapping of its primitive %s", path, subject, primitive.Display())
+		return "", false, fmt.Errorf("codec: Append: %s, of %s: the backend has no mapping of its primitive %s", path, subject, primitive.Name().Display())
 	}
 	if _, err := pm.Parse(lexical, nil); err != nil {
-		return "", false, fmt.Errorf("codec: Append: %s holds %s, of %s, whose canonical spelling the backend's Parse of %s rejects: %w", path, lexical, subject, primitive.Display(), err)
+		return "", false, fmt.Errorf("codec: Append: %s holds %s, of %s, whose canonical spelling the backend's Parse of %s rejects: %w", path, lexical, subject, primitive.Name().Display(), err)
 	}
 	val, err := value.ValidateLexical(e.backend, e.schema, st, lexical, nil, noAssertions{})
 	if err != nil {
 		if !value.IsDatatypeVerdict(err) {
 			return "", false, fmt.Errorf("codec: Append: %s holds %s, of %s, which the backend cannot assess: %w", path, lexical, subject, err)
 		}
-		if rule, _ := xsderr.RuleOf(err); rule == rulePatternValid {
+		if rule, _ := xsderr.RuleOf(err); rule == rulePatternValid && a.otherLexicalOf(v) {
 			e.noCanonical(subject, path, lexical, fmt.Sprintf("a pattern facet rejects its canonical representation %q: %v", lexical, err))
 			return lexical, false, nil
 		}
@@ -917,7 +953,7 @@ func (e *encoder) spelled(st *xsd.SimpleType, a atomic, v reflect.Value, path, s
 		return "", false, nil
 	}
 	if c != lexical {
-		return "", false, fmt.Errorf("codec: Append: %s holds %s, of %s, which the backend's Canonical renders %q, other text than its canonical representation (f-decimalCanmap, f-booleanCanmap)", path, lexical, subject, c)
+		return "", false, fmt.Errorf("codec: Append: %s holds %s, of %s, which the backend's Canonical renders %q, other text than its canonical representation (Datatypes Appendix E, the canonical mapping of %s)", path, lexical, subject, c, primitive.Name().Display())
 	}
 	return c, true, nil
 }
@@ -938,30 +974,15 @@ func soleLexical(f float64) bool { return math.IsNaN(f) || math.IsInf(f, -1) }
 
 // otherLexical reports whether v, the []V of a list whose items a, the item's
 // atomic Go type, holds, has a lexical other than its canonical one for a
-// pattern facet to match: v holds an item, and a is that of an xs:decimal- or
-// xs:boolean-primitive type, every value of which has another lexical (a
-// leading zero, Datatypes §3.3.3 and §3.4.13; 1 or 0, §3.3.2.2), or a is
-// float64 and v holds an item soleLexical does not hold of. An a of a primitive
-// atomicEncodes declines is an internal bug, which panics.
+// pattern facet to match: v holds an item a.otherLexicalOf holds of, since the
+// list's text has another lexical exactly where one of its items has.
 func otherLexical(a atomic, v reflect.Value) bool {
-	if v.Len() == 0 {
-		return false
-	}
-	switch a {
-	case atomicString:
-		return false
-	case atomicFloat64:
-		for i := range v.Len() {
-			if !soleLexical(v.Index(i).Float()) {
-				return true
-			}
+	for i := range v.Len() {
+		if a.otherLexicalOf(v.Index(i)) {
+			return true
 		}
-		return false
-	case atomicBool, atomicBigRat, atomicBigInt, atomicInt8, atomicInt16, atomicInt32, atomicInt64, atomicUint8, atomicUint16, atomicUint32, atomicUint64:
-		return true
-	default:
-		panic(fmt.Sprintf("codec: no other-lexical answer for atomic %d", a))
 	}
+	return false
 }
 
 // mapping returns the governing mapping of st on e's backend
@@ -979,11 +1000,11 @@ func (e *encoder) mapping(st *xsd.SimpleType, path, subject string) (value.Mappi
 }
 
 // rulePatternValid is pattern Valid (Datatypes §4.3.4.4 cvc-pattern-valid),
-// the rule whose rejection of the canonical representation of an
-// xs:decimal-primitive, xs:boolean or xs:double value, or of a list holding
-// one, spelled, double and list read as item 7 of [Append]'s doc where the
-// value has another lexical: always for spelled, and where soleLexical does
-// not hold for double and otherLexical holds for list.
+// the rule whose rejection of the canonical representation of a value other
+// than an xs:string-primitive one, or of a list holding one, spelled, double
+// and list read as item 7 of [Append]'s doc where the value has another
+// lexical: where otherLexicalOf holds for spelled, soleLexical does not hold
+// for double and otherLexical holds for list.
 const rulePatternValid xsderr.Rule = "cvc-pattern-valid"
 
 // doubleLexical spells f in doubleRep (Datatypes §3.3.5.2): a finite f as

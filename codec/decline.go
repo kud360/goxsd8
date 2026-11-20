@@ -199,10 +199,20 @@ var constructNames = [...]string{
 	constructComplexAssertions:  "a complex type with {assertions}",
 	constructSpecialType:        "xs:anySimpleType or xs:anyAtomicType as a simple type",
 	constructUnion:              "a union simple type",
-	constructEncodePrimitive:    "an atomic simple type whose primitive is other than xs:string, xs:double, xs:decimal or xs:boolean",
+	constructEncodePrimitive:    "an atomic simple type whose primitive is other than " + displayList(encodedPrimitives),
 	constructIDType:             "a simple type derived from xs:ID, xs:IDREF or xs:ENTITY",
 	constructAssertions:         "a simple type with an assertions facet",
 	constructNoCanonical:        "a value with no canonical representation",
+}
+
+// displayList spells names, at least two, each by its Display, separated by
+// ", " but for " or " before the last.
+func displayList(names []xsd.QName) string {
+	s := names[0].Display()
+	for _, n := range names[1 : len(names)-1] {
+		s += ", " + n.Display()
+	}
+	return s + " or " + names[len(names)-1].Display()
 }
 
 // name returns the construct's name.

@@ -7,6 +7,7 @@ import (
 	"reflect"
 	"slices"
 	"strconv"
+	"strings"
 )
 
 // convertTemporal returns the value of a's bare type, a date, time or duration
@@ -543,4 +544,263 @@ func daysInMonth(year *big.Int, m uint8) uint8 {
 // divisible reports whether n is divisible by d.
 func divisible(n *big.Int, d int64) bool {
 	return new(big.Int).Rem(n, big.NewInt(d)).Sign() == 0
+}
+
+// temporalForm is form's for a, a date, time or duration atomic, and v, a
+// value of its bare type: the canonical mapping of a's datatype, a
+// dateTimeStamp's being dateTime's (§3.4.28), of Datatypes §E.3.5
+// (vp-dateTimeCanRep, vp-timeCanRep, vp-dateCanRep, vp-gYearMonthCanRep,
+// vp-gYearCanRep, vp-gMonthDayCanRep, vp-gDayCanRep, vp-gMonthCanRep) and §E.2
+// (f-durationCanMap, of which f-dayTimeDurationCanMap is a restriction, and
+// f-yearMonthDurationCanMap, which spells the zero yearMonthDuration P0M and
+// never PT0S, §3.4.26.1's note saying it has none). Its error is that of the
+// first property, in field order, that lies outside its §D.2.1 range
+// (monthWithin and the checks beside it), a Second or Seconds outside the
+// decimal value space, or a duration's Months and Seconds of opposite signs
+// (§3.3.6.1), checked before its Seconds. Any other a is an internal bug,
+// which panics.
+func temporalForm(a atomic, v reflect.Value) (string, error) {
+	switch a {
+	case atomicDateTime, atomicDateTimeStamp:
+		date, err := dateFrag(v)
+		if err != nil {
+			return "", err
+		}
+		clock, err := clockFrag(v)
+		if err != nil {
+			return "", err
+		}
+		return withOffset(date+"T"+clock, v)
+	case atomicTime:
+		clock, err := clockFrag(v)
+		if err != nil {
+			return "", err
+		}
+		return withOffset(clock, v)
+	case atomicDate:
+		date, err := dateFrag(v)
+		if err != nil {
+			return "", err
+		}
+		return withOffset(date, v)
+	case atomicGYearMonth:
+		m := uintOf(v, "Month")
+		if err := monthWithin(m); err != nil {
+			return "", err
+		}
+		return withOffset(yearFrag(intOf(v, "Year"))+"-"+twoDigits(m), v)
+	case atomicGYear:
+		return withOffset(yearFrag(intOf(v, "Year")), v)
+	case atomicGMonthDay:
+		m, d := uintOf(v, "Month"), uintOf(v, "Day")
+		if err := monthWithin(m); err != nil {
+			return "", err
+		}
+		if err := dayWithin(nil, m, d); err != nil {
+			return "", err
+		}
+		return withOffset("--"+twoDigits(m)+"-"+twoDigits(d), v)
+	case atomicGDay:
+		d := uintOf(v, "Day")
+		if err := dayWithin(nil, 0, d); err != nil {
+			return "", err
+		}
+		return withOffset("---"+twoDigits(d), v)
+	case atomicGMonth:
+		m := uintOf(v, "Month")
+		if err := monthWithin(m); err != nil {
+			return "", err
+		}
+		return withOffset("--"+twoDigits(m), v)
+	case atomicDuration:
+		return durationForm(intOf(v, "Months"), ratOf(v, "Seconds"))
+	case atomicDayTimeDuration:
+		return durationForm(new(big.Int), ratOf(v, "Seconds"))
+	case atomicYearMonthDuration:
+		m := intOf(v, "Months")
+		return durationSign(m.Sign() < 0) + "P" + yearMonthFrag(new(big.Int).Abs(m)), nil
+	default:
+		panic(fmt.Sprintf("codec: no canonical form of atomic %d", a))
+	}
+}
+
+// uintOf, intOf and ratOf read v's field name, of type uint8, big.Int and
+// big.Rat; the big.Int and big.Rat are copies the caller only reads.
+func uintOf(v reflect.Value, name string) uint8 { return uint8(v.FieldByName(name).Uint()) }
+
+func intOf(v reflect.Value, name string) *big.Int {
+	i := v.FieldByName(name).Interface().(big.Int)
+	return &i
+}
+
+func ratOf(v reflect.Value, name string) *big.Rat {
+	r := v.FieldByName(name).Interface().(big.Rat)
+	return &r
+}
+
+// twoDigits is ·unsTwoDigitCanonicalFragmentMap·(n) (§E.3.5
+// f-unsTwoDigCanFragMap), n below 100.
+func twoDigits(n uint8) string { return fmt.Sprintf("%02d", n) }
+
+// yearFrag is ·yearCanonicalFragmentMap·(y) (f-yrCanFragMap): y in base 10
+// where |y| exceeds 9999, and otherwise four digits, zero-padded, after a '-'
+// for a negative y.
+func yearFrag(y *big.Int) string {
+	if y.CmpAbs(big.NewInt(9999)) > 0 {
+		return y.String()
+	}
+	if y.Sign() < 0 {
+		return fmt.Sprintf("-%04d", -y.Int64())
+	}
+	return fmt.Sprintf("%04d", y.Int64())
+}
+
+// dateFrag is the yearFrag '-' monthFrag '-' dayFrag of v's Year, Month and
+// Day, or the error of the first of Month and Day outside its range.
+func dateFrag(v reflect.Value) (string, error) {
+	y, m, d := intOf(v, "Year"), uintOf(v, "Month"), uintOf(v, "Day")
+	if err := monthWithin(m); err != nil {
+		return "", err
+	}
+	if err := dayWithin(y, m, d); err != nil {
+		return "", err
+	}
+	return yearFrag(y) + "-" + twoDigits(m) + "-" + twoDigits(d), nil
+}
+
+// clockFrag is the hourFrag ':' minuteFrag ':' secondFrag of v's Hour, Minute
+// and Second, or the error of the first of them outside its range.
+func clockFrag(v reflect.Value) (string, error) {
+	h, m, s := uintOf(v, "Hour"), uintOf(v, "Minute"), ratOf(v, "Second")
+	if err := hourWithin(h); err != nil {
+		return "", err
+	}
+	if err := minuteWithin(m); err != nil {
+		return "", err
+	}
+	if err := secondWithin(s); err != nil {
+		return "", err
+	}
+	c, err := decimalForm(s)
+	if err != nil {
+		return "", fmt.Errorf("the second %s: %w", s.RatString(), err)
+	}
+	// ·secondCanonicalFragmentMap· (f-seCanFragMap): two digits before any
+	// point, and the fewest after it.
+	if strings.IndexByte(c+".", '.') == 1 {
+		c = "0" + c
+	}
+	return twoDigits(h) + ":" + twoDigits(m) + ":" + c, nil
+}
+
+// withOffset returns lead followed by ·timezoneCanonicalFragmentMap· of v's
+// TimezoneOffset (f-tzCanFragMap), an int16 or a *int16, nothing where that
+// is nil: Z for 0, and otherwise its sign, two-digit hours, ':' and two-digit
+// minutes; or the error of an offset outside its range.
+func withOffset(lead string, v reflect.Value) (string, error) {
+	var off int16
+	switch x := v.FieldByName("TimezoneOffset").Interface().(type) {
+	case int16:
+		off = x
+	case *int16:
+		if x == nil {
+			return lead, nil
+		}
+		off = *x
+	}
+	if err := offsetWithin(off); err != nil {
+		return "", err
+	}
+	if off == 0 {
+		return lead + "Z", nil
+	}
+	sign := "+"
+	if off < 0 {
+		sign, off = "-", -off
+	}
+	return fmt.Sprintf("%s%s%02d:%02d", lead, sign, off/60, off%60), nil
+}
+
+// durationSign is the sgn of f-durationCanMap and f-yearMonthDurationCanMap:
+// '-' for a negative value, and otherwise nothing.
+func durationSign(negative bool) string {
+	if negative {
+		return "-"
+	}
+	return ""
+}
+
+// durationForm is ·durationCanonicalMap·(m, s) (§E.2 f-durationCanMap) for
+// the ·months· m and ·seconds· s, or the error for m and s of opposite signs
+// (§3.3.6.1) or an s outside the decimal value space.
+func durationForm(m *big.Int, s *big.Rat) (string, error) {
+	if m.Sign()*s.Sign() < 0 {
+		return "", fmt.Errorf("the Months %s and the Seconds %s are of opposite signs (§3.3.6.1)", m, s.RatString())
+	}
+	lead := durationSign(m.Sign() < 0 || s.Sign() < 0) + "P"
+	if s.Sign() == 0 && m.Sign() != 0 {
+		return lead + yearMonthFrag(new(big.Int).Abs(m)), nil
+	}
+	dt, err := dayTimeFrag(new(big.Rat).Abs(s))
+	if err != nil {
+		return "", fmt.Errorf("the Seconds %s: %w", s.RatString(), err)
+	}
+	if m.Sign() == 0 {
+		return lead + dt, nil
+	}
+	return lead + yearMonthFrag(new(big.Int).Abs(m)) + dt, nil
+}
+
+// yearMonthFrag is ·duYearMonthCanonicalFragmentMap·(ym) (f-duYMCan), ym not
+// negative: its years and its months beyond them, each with its designator
+// and omitted where 0 but for months where both are, 0M.
+func yearMonthFrag(ym *big.Int) string {
+	y, m := new(big.Int).QuoRem(ym, big.NewInt(12), new(big.Int))
+	switch {
+	case y.Sign() == 0:
+		return m.String() + "M"
+	case m.Sign() == 0:
+		return y.String() + "Y"
+	}
+	return y.String() + "Y" + m.String() + "M"
+}
+
+// dayTimeFrag is ·duDayTimeCanonicalFragmentMap·(ss) (f-duDTCan), ss not
+// negative: T0S for 0, and otherwise its days, then 'T' and its hours,
+// minutes and seconds where any is not 0, each with its designator and
+// omitted where 0, the seconds the shortest exact decimal
+// (f-duSCan); or decimalForm's error for an ss outside the decimal value
+// space.
+func dayTimeFrag(ss *big.Rat) (string, error) {
+	if ss.Sign() == 0 {
+		return "T0S", nil
+	}
+	whole := new(big.Int).Quo(ss.Num(), ss.Denom())
+	frac := new(big.Rat).Sub(ss, new(big.Rat).SetInt(whole))
+	d, rest := new(big.Int).QuoRem(whole, big.NewInt(86400), new(big.Int))
+	h, rest := new(big.Int).QuoRem(rest, big.NewInt(3600), new(big.Int))
+	mi, rest := new(big.Int).QuoRem(rest, big.NewInt(60), new(big.Int))
+	sec := new(big.Rat).Add(new(big.Rat).SetInt(rest), frac)
+	out := ""
+	if d.Sign() != 0 {
+		out = d.String() + "D"
+	}
+	t := ""
+	if h.Sign() != 0 {
+		t += h.String() + "H"
+	}
+	if mi.Sign() != 0 {
+		t += mi.String() + "M"
+	}
+	if sec.Sign() != 0 {
+		c, err := decimalForm(sec)
+		if err != nil {
+			return "", err
+		}
+		t += c + "S"
+	}
+	if t != "" {
+		out += "T" + t
+	}
+	return out, nil
 }
