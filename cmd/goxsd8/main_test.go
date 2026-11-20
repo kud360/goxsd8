@@ -426,6 +426,15 @@ var usageArmFails = regexp.MustCompile(`^exit [1-9][0-9]*$`)
 // of $? that the snippet runs as written.
 var usageOneLiner = regexp.MustCompile(`^      (\[ \$\? .*)$`)
 
+// usagePipelineQuiet is the pipeline paragraph's clause naming the skip note's
+// survival under -q, and usageParseQuiet the parse paragraph's sentence it
+// points at, which owns that fact (#3932). Both compare with runs of
+// whitespace read as one space, so a reflow does not move them.
+const (
+	usagePipelineQuiet = "is a stderr note, one -q does not silence (parse below),"
+	usageParseQuiet    = "-q does not silence it."
+)
+
 // usageOneLinerCodes are the codes TestUsagePipelineExample feeds the one-line
 // form: the exit-code table's, and 127 for a goxsd8 that never ran.
 var usageOneLinerCodes = []int{0, 1, 2, 3, 4, 127}
@@ -445,9 +454,10 @@ const (
 // them. Each arm's action is held to the table's reading: 0 passes (an empty
 // arm), and every other code, the catch-all's included, fails (exit with a
 // nonzero code). The paragraph's one-line form must be present, and run by sh
-// after each of usageOneLinerCodes it must pass 0 alone (#3899). An edit to a
-// shown code, line, arm or arm's action that the binary or the table no longer
-// bears fails it (#3853).
+// after each of usageOneLinerCodes it must pass 0 alone (#3899). The paragraph
+// must hold usagePipelineQuiet, and the parse paragraph usageParseQuiet, the
+// sentence that clause points at (#3932). An edit to a shown code, line, arm or
+// arm's action that the binary or the table no longer bears fails it (#3853).
 func TestUsagePipelineExample(t *testing.T) {
 	_, para, ok := strings.Cut(usage, usagePipelineLead)
 	if !ok {
@@ -455,6 +465,15 @@ func TestUsagePipelineExample(t *testing.T) {
 	}
 	para, _, _ = strings.Cut(para, "\n\n")
 	lines := strings.Split(para, "\n")
+
+	if !strings.Contains(strings.Join(strings.Fields(para), " "), usagePipelineQuiet) {
+		t.Errorf("usage's pipeline paragraph does not say %q, so a reader of it takes -q to silence the skip note", usagePipelineQuiet)
+	}
+	_, parse, _ := strings.Cut(usage, "\n  parse:\n")
+	parse, _, _ = strings.Cut(parse, "\n  validate:\n")
+	if !strings.Contains(strings.Join(strings.Fields(parse), " "), usageParseQuiet) {
+		t.Errorf("usage's parse paragraph does not say %q, which the pipeline paragraph's (parse below) points at", usageParseQuiet)
+	}
 
 	oneLiners := 0
 	for _, line := range lines {
