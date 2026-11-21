@@ -6,11 +6,11 @@ import (
 	"slices"
 )
 
-// Option configures [Decode] and [CheckDecode]. The zero set of options is a complete,
-// usable configuration: options only replace defaults.
+// Option configures [Decode], [CheckDecode], [Append] and [CheckAppend]. The zero set of
+// options is a complete, usable configuration: options only replace defaults.
 type Option func(*config)
 
-// config is the resolved [Decode] configuration.
+// config is the resolved configuration of [Decode] and [Append].
 type config struct {
 	uri      string
 	branches branchSets
@@ -76,7 +76,7 @@ func WithURI(uri string) Option {
 }
 
 // WithBranches supplies the branch types of I, a sealed interface codegen
-// emitted, which [Decode] cannot find from T: a Go interface names none of its
+// emitted, which package codec cannot find from T: a Go interface names none of its
 // implementers. Pass one value of each branch or variant, in any order but
 // that a union's variants over one Go type go in their basic members' order,
 // codegen's emission order, which Decode cannot check (Decode's doc, item 6),
@@ -93,7 +93,9 @@ func WithURI(uri string) Option {
 // one option list may serve every document element of a package; a set for a
 // type that is no interface is never used. Codegen emits no such option list:
 // the caller writes one WithBranches for each such interface T holds, and
-// [CheckDecode] reports a set that does not match before any instance arrives.
+// [CheckDecode] and [CheckAppend] report a set that does not match before any
+// instance or value arrives. [Append] matches and places the set as Decode
+// does, and writes each branch as the alternative it places that branch at.
 // A set for I serves every interface type of I's method set, such as the named
 // type codegen emits over I for a top-level element of I's union type, and a
 // later WithBranches for an interface of I's method set replaces an earlier
