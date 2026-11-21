@@ -327,7 +327,13 @@ func (vn *validation) one(instance string, stdout, stderr io.Writer) int {
 		// A token the contract reserves and no milestone has built:
 		// validate/bersrc carries a doc.go and no Validate, so the honest
 		// answer is the usage code and this diagnosis, never a silent pass.
-		return subcommandFault(stderr, fmt.Sprintf("goxsd8: validate: %s: -format %s is reserved by the contract and not yet implemented; only %s and %s instances are assessed today", instance, format, formatXML, formatJSON))
+		// The line names the route that chose ber, so a user who typed no
+		// -format is not told one (#3967).
+		route := "-format " + string(format)
+		if vn.forced == "" {
+			route = fmt.Sprintf("the extension %q names %s, which", filepath.Ext(instance), format)
+		}
+		return subcommandFault(stderr, fmt.Sprintf("goxsd8: validate: %s: %s is reserved by the contract and not yet implemented; only %s and %s instances are assessed today", instance, route, formatXML, formatJSON))
 	}
 	opened, closeSrc, err := openInstance(instance)
 	if err != nil {

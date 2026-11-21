@@ -275,7 +275,7 @@ func TestFormatlessInstanceRefusesTheInvocation(t *testing.T) {
 		{[]string{"-format", "xml", "-schema", orderSchema, invalidInstance, "testdata/order.txt"}, exitUsage,
 			report.String() + "goxsd8: validate: open testdata/order.txt: no such file or directory\n" + counts},
 		{[]string{"-schema", orderSchema, invalidInstance, "testdata/x.ber"}, exitUsage,
-			report.String() + "goxsd8: validate: testdata/x.ber: -format ber is reserved by the contract and not yet implemented; only xml and json instances are assessed today\n" + counts},
+			report.String() + "goxsd8: validate: testdata/x.ber: the extension \".ber\" names ber, which is reserved by the contract and not yet implemented; only xml and json instances are assessed today\n" + counts},
 	}
 	for _, c := range cases {
 		args := append([]string{"validate"}, c.args...)
