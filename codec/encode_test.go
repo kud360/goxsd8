@@ -2,6 +2,7 @@ package codec
 
 import (
 	"bytes"
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"math"
@@ -459,23 +460,27 @@ func TestAppendPlainErrors(t *testing.T) {
 }
 
 // TestCheckAppend pins CheckAppend's answers by Append's items: a plain
-// error for a nil schema; item 4's decline for an xs:float declaration and
-// T float32, which CheckDecode accepts; nil for README's order.xsd and
-// order.Order, whose zero value Append refuses by item 6, and item 5's
-// ErrTypeMismatch for *order.Order; item 2's and item 3's plain errors; and
-// item 3 before item 4 on an abstract xs:float declaration. appendChecked
-// holds each answer to Append's.
+// error for a nil schema; item 4's decline for an xs:QName declaration and T
+// QName's datatype struct, which CheckDecode accepts; nil for an xs:float
+// declaration and T float32; nil for README's order.xsd and order.Order,
+// whose zero value Append refuses by item 6, and item 5's ErrTypeMismatch for
+// *order.Order; item 2's and item 3's plain errors; and item 3 before item 4
+// on an abstract xs:QName declaration. appendChecked holds each answer to
+// Append's.
 func TestCheckAppend(t *testing.T) {
-	schema := schemaOf(t, `<xs:element name="i" type="xs:float"/><xs:element name="abs" type="xs:string" abstract="true"/>`+
-		`<xs:element name="absb" type="xs:float" abstract="true"/>`)
+	schema := schemaOf(t, `<xs:element name="i" type="xs:QName"/><xs:element name="abs" type="xs:string" abstract="true"/>`+
+		`<xs:element name="absb" type="xs:QName" abstract="true"/><xs:element name="f" type="xs:float"/>`)
 	plainError(t, CheckAppend[string](nil, sname("i")), "codec: CheckAppend: nil *xsd.Schema")
 
-	if err := CheckDecode[float32](schema, sname("i")); err != nil {
-		t.Fatalf("CheckDecode[float32] = %v, want nil", err)
+	if err := CheckDecode[tQName](schema, sname("i")); err != nil {
+		t.Fatalf("CheckDecode[tQName] = %v, want nil", err)
 	}
-	err := CheckAppend[float32](schema, sname("i"))
-	_ = asDecline(t, err, "codec does not encode an atomic simple type whose primitive is other than xs:string, xs:boolean, xs:decimal, xs:double, xs:duration, xs:dateTime, xs:time, xs:date, xs:gYearMonth, xs:gYear, xs:gMonthDay, xs:gDay or xs:gMonth: ")
-	_, _ = appendChecked(t, nil, schema, strict.New(), sname("i"), float32(0))
+	err := CheckAppend[tQName](schema, sname("i"))
+	_ = asDecline(t, err, "codec does not encode an atomic simple type whose primitive is other than xs:string, xs:boolean, xs:decimal, xs:float, xs:double, xs:duration, xs:dateTime, xs:time, xs:date, xs:gYearMonth, xs:gYear, xs:gMonthDay, xs:gDay, xs:gMonth, xs:hexBinary, xs:base64Binary or xs:anyURI: ")
+	_, _ = appendChecked(t, nil, schema, strict.New(), sname("i"), tQName{})
+	if err := CheckAppend[float32](schema, sname("f")); err != nil {
+		t.Errorf("CheckAppend[float32] = %v, want nil", err)
+	}
 
 	plainError(t, CheckAppend[string](schema, sname("none")), "codec: no top-level element declaration has the expanded name", "{urn:s}none")
 	_, _ = appendChecked(t, nil, schema, strict.New(), sname("none"), "x")
@@ -559,7 +564,7 @@ func TestAppendInvalidValues(t *testing.T) {
 		}
 	})
 	for _, f := range []float64{math.NaN(), math.Inf(-1)} {
-		t.Run("an xs:double "+doubleLexical(f)+" a pattern rejects", func(t *testing.T) {
+		t.Run("an xs:double "+doubleLexical(f, 64)+" a pattern rejects", func(t *testing.T) {
 			_, err := appendChecked(t, nil, schema, strict.New(), sname("p"), dblRoot(f))
 			invalidValue(t, err, "dblRoot", "{urn:s}one")
 			if !strings.HasPrefix(err.Error(), "codec: Append: dblRoot holds ") {
@@ -840,16 +845,16 @@ func TestAppendDeclines(t *testing.T) {
 		{"restricted complex assertions", "a complex type with {assertions}", `<xs:complexType name="ab%[1]s">` + asserted + `</xs:complexType>` +
 			`<xs:element name="%[1]s"><xs:complexType><xs:complexContent><xs:restriction base="s:ab%[1]s"><xs:sequence>` + a + `</xs:sequence></xs:restriction></xs:complexContent></xs:complexType></xs:element>`},
 		{"special type", "xs:anySimpleType or xs:anyAtomicType as a simple type", `<xs:element name="%[1]s" type="xs:anySimpleType"/>`},
-		{"list of float", "an atomic simple type whose primitive is other than xs:string, xs:boolean, xs:decimal, xs:double, xs:duration, xs:dateTime, xs:time, xs:date, xs:gYearMonth, xs:gYear, xs:gMonthDay, xs:gDay or xs:gMonth", simpleOf(`<xs:list itemType="xs:float"/>`)},
+		{"list of QName", "an atomic simple type whose primitive is other than xs:string, xs:boolean, xs:decimal, xs:float, xs:double, xs:duration, xs:dateTime, xs:time, xs:date, xs:gYearMonth, xs:gYear, xs:gMonthDay, xs:gDay, xs:gMonth, xs:hexBinary, xs:base64Binary or xs:anyURI", simpleOf(`<xs:list itemType="xs:QName"/>`)},
 		{"list of union", "a union simple type", simpleOf(`<xs:list><xs:simpleType><xs:union memberTypes="xs:string xs:int"/></xs:simpleType></xs:list>`)},
 		{"IDREFS", "a simple type derived from xs:ID, xs:IDREF or xs:ENTITY", `<xs:element name="%[1]s" type="xs:IDREFS"/>`},
 		{"list assertions", "a simple type with an assertions facet", simpleOf(`<xs:restriction base="xs:NMTOKENS"><xs:assertion test="true()"/></xs:restriction>`)},
 		{"inherited list assertions", "a simple type with an assertions facet", `<xs:simpleType name="assertedList%[1]s"><xs:restriction base="xs:NMTOKENS"><xs:assertion test="true()"/></xs:restriction></xs:simpleType>` + simpleOf(`<xs:restriction base="s:assertedList%[1]s"><xs:maxLength value="3"/></xs:restriction>`)},
 		{"list item assertions", "a simple type with an assertions facet", `<xs:simpleType name="assertedItem%[1]s"><xs:restriction base="xs:string"><xs:assertion test="true()"/></xs:restriction></xs:simpleType>` + simpleOf(`<xs:list itemType="s:assertedItem%[1]s"/>`)},
 		{"union", "a union simple type", simpleOf(`<xs:union memberTypes="xs:string xs:int"/>`)},
-		{"hexBinary", "an atomic simple type whose primitive is other than xs:string, xs:boolean, xs:decimal, xs:double, xs:duration, xs:dateTime, xs:time, xs:date, xs:gYearMonth, xs:gYear, xs:gMonthDay, xs:gDay or xs:gMonth", `<xs:element name="%[1]s" type="xs:hexBinary"/>`},
-		{"float", "an atomic simple type whose primitive is other than xs:string, xs:boolean, xs:decimal, xs:double, xs:duration, xs:dateTime, xs:time, xs:date, xs:gYearMonth, xs:gYear, xs:gMonthDay, xs:gDay or xs:gMonth", `<xs:element name="%[1]s" type="xs:float"/>`},
-		{"anyURI attribute", "an atomic simple type whose primitive is other than xs:string, xs:boolean, xs:decimal, xs:double, xs:duration, xs:dateTime, xs:time, xs:date, xs:gYearMonth, xs:gYear, xs:gMonthDay, xs:gDay or xs:gMonth", complexOf(`<xs:attribute name="a" type="xs:anyURI"/>`)},
+		{"QName", "an atomic simple type whose primitive is other than xs:string, xs:boolean, xs:decimal, xs:float, xs:double, xs:duration, xs:dateTime, xs:time, xs:date, xs:gYearMonth, xs:gYear, xs:gMonthDay, xs:gDay, xs:gMonth, xs:hexBinary, xs:base64Binary or xs:anyURI", `<xs:element name="%[1]s" type="xs:QName"/>`},
+		{"precisionDecimal", "an atomic simple type whose primitive is other than xs:string, xs:boolean, xs:decimal, xs:float, xs:double, xs:duration, xs:dateTime, xs:time, xs:date, xs:gYearMonth, xs:gYear, xs:gMonthDay, xs:gDay, xs:gMonth, xs:hexBinary, xs:base64Binary or xs:anyURI", `<xs:element name="%[1]s" type="xs:precisionDecimal"/>`},
+		{"QName attribute", "an atomic simple type whose primitive is other than xs:string, xs:boolean, xs:decimal, xs:float, xs:double, xs:duration, xs:dateTime, xs:time, xs:date, xs:gYearMonth, xs:gYear, xs:gMonthDay, xs:gDay, xs:gMonth, xs:hexBinary, xs:base64Binary or xs:anyURI", complexOf(`<xs:attribute name="a" type="xs:QName"/>`)},
 		{"ID", "a simple type derived from xs:ID, xs:IDREF or xs:ENTITY", `<xs:element name="%[1]s" type="xs:ID"/>`},
 		{"IDREF particle", "a simple type derived from xs:ID, xs:IDREF or xs:ENTITY", sequence(`<xs:element name="a" type="xs:IDREF"/>`)},
 		{"ENTITY restriction", "a simple type derived from xs:ID, xs:IDREF or xs:ENTITY", simpleOf(`<xs:restriction base="xs:ENTITY"/>`)},
@@ -1163,16 +1168,16 @@ func TestAppendListInvalid(t *testing.T) {
 // list type, then its {item type definition}, by its QName where it has one
 // and its schema Loc where it is located.
 func TestAppendListDeclineSubject(t *testing.T) {
-	schema := schemaOf(t, `<xs:element name="flt"><xs:simpleType><xs:list itemType="xs:float"/></xs:simpleType></xs:element>`+
-		`<xs:simpleType name="dates"><xs:list><xs:simpleType><xs:restriction base="xs:hexBinary"/></xs:simpleType></xs:list></xs:simpleType>`+
+	schema := schemaOf(t, `<xs:element name="flt"><xs:simpleType><xs:list itemType="xs:QName"/></xs:simpleType></xs:element>`+
+		`<xs:simpleType name="dates"><xs:list><xs:simpleType><xs:restriction base="xs:QName"/></xs:simpleType></xs:list></xs:simpleType>`+
 		`<xs:element name="anon" type="s:dates"/>`)
 	err := CheckAppend[strList](schema, sname("flt"))
-	_ = asDecline(t, err, "codec does not encode an atomic simple type whose primitive is other than xs:string, xs:boolean, xs:decimal, xs:double, xs:duration, xs:dateTime, xs:time, xs:date, xs:gYearMonth, xs:gYear, xs:gMonthDay, xs:gDay or xs:gMonth: simple type the anonymous simple type of element {urn:s}flt declared at s.xsd:1:")
-	if !strings.Contains(err.Error(), ", through the list type's {item type definition} xs:float; ") {
-		t.Errorf("decline %q does not name the item xs:float", err)
+	_ = asDecline(t, err, "codec does not encode an atomic simple type whose primitive is other than xs:string, xs:boolean, xs:decimal, xs:float, xs:double, xs:duration, xs:dateTime, xs:time, xs:date, xs:gYearMonth, xs:gYear, xs:gMonthDay, xs:gDay, xs:gMonth, xs:hexBinary, xs:base64Binary or xs:anyURI: simple type the anonymous simple type of element {urn:s}flt declared at s.xsd:1:")
+	if !strings.Contains(err.Error(), ", through the list type's {item type definition} xs:QName; ") {
+		t.Errorf("decline %q does not name the item xs:QName", err)
 	}
 	err = CheckAppend[strList](schema, sname("anon"))
-	_ = asDecline(t, err, "codec does not encode an atomic simple type whose primitive is other than xs:string, xs:boolean, xs:decimal, xs:double, xs:duration, xs:dateTime, xs:time, xs:date, xs:gYearMonth, xs:gYear, xs:gMonthDay, xs:gDay or xs:gMonth: simple type {urn:s}dates defined at s.xsd:1:")
+	_ = asDecline(t, err, "codec does not encode an atomic simple type whose primitive is other than xs:string, xs:boolean, xs:decimal, xs:float, xs:double, xs:duration, xs:dateTime, xs:time, xs:date, xs:gYearMonth, xs:gYear, xs:gMonthDay, xs:gDay, xs:gMonth, xs:hexBinary, xs:base64Binary or xs:anyURI: simple type {urn:s}dates defined at s.xsd:1:")
 	if !strings.Contains(err.Error(), ", through the list type's anonymous {item type definition}, a type defined at s.xsd:1:") {
 		t.Errorf("decline %q does not name the anonymous item by its Loc", err)
 	}
@@ -1862,4 +1867,239 @@ func (n noMappingOf) Mapping(typ xsd.QName) (value.Mapping, bool) {
 		return value.Mapping{}, false
 	}
 	return strict.New().Mapping(typ)
+}
+
+// encodeBinarySchema declares, in urn:s, document elements of xs:hexBinary,
+// xs:base64Binary, xs:anyURI and xs:float, an attribute of xs:anyURI, lists
+// over xs:float and xs:hexBinary, and restrictions of each by a pattern, a
+// length, a maxLength or a bound.
+const encodeBinarySchema = `
+  <xs:simpleType name="hexCD"><xs:restriction base="xs:hexBinary"><xs:pattern value="CD"/></xs:restriction></xs:simpleType>
+  <xs:simpleType name="hexTwo"><xs:restriction base="xs:hexBinary"><xs:length value="2"/></xs:restriction></xs:simpleType>
+  <xs:simpleType name="b64Foo"><xs:restriction base="xs:base64Binary"><xs:pattern value="Zm9v"/></xs:restriction></xs:simpleType>
+  <xs:simpleType name="uriShort"><xs:restriction base="xs:anyURI"><xs:maxLength value="3"/></xs:restriction></xs:simpleType>
+  <xs:simpleType name="floatOne"><xs:restriction base="xs:float"><xs:pattern value="1"/></xs:restriction></xs:simpleType>
+  <xs:simpleType name="floatNonPositive"><xs:restriction base="xs:float"><xs:maxInclusive value="0"/></xs:restriction></xs:simpleType>
+  <xs:simpleType name="floats"><xs:list itemType="xs:float"/></xs:simpleType>
+  <xs:simpleType name="hexes"><xs:list itemType="xs:hexBinary"/></xs:simpleType>
+  <xs:simpleType name="floatOnes"><xs:restriction base="s:floats"><xs:pattern value="1"/></xs:restriction></xs:simpleType>
+  <xs:element name="hb" type="xs:hexBinary"/>
+  <xs:element name="bb" type="xs:base64Binary"/>
+  <xs:element name="u" type="xs:anyURI"/>
+  <xs:element name="ua"><xs:complexType><xs:attribute name="a" type="xs:anyURI" use="required"/></xs:complexType></xs:element>
+  <xs:element name="f" type="xs:float"/>
+  <xs:element name="fl" type="s:floats"/>
+  <xs:element name="hl" type="s:hexes"/>
+  <xs:element name="hcd" type="s:hexCD"/>
+  <xs:element name="htwo" type="s:hexTwo"/>
+  <xs:element name="bfoo" type="s:b64Foo"/>
+  <xs:element name="ushort" type="s:uriShort"/>
+  <xs:element name="fone" type="s:floatOne"/>
+  <xs:element name="fnp" type="s:floatNonPositive"/>
+  <xs:element name="flp" type="s:floatOnes"/>`
+
+// The Go types the rows below hold encodeBinarySchema's values in, beside
+// binary_test.go's binaryRoot and binaryListRoot: ua's, u's, f's and fl's.
+type (
+	uriAttr struct{ A string }
+	uriRoot string
+	fltRoot float32
+	fltList []float32
+)
+
+// sameFloat reports whether a and b are one float32, every NaN one.
+func sameFloat[T ~float32](a, b T) bool {
+	return math.Float32bits(float32(a)) == math.Float32bits(float32(b)) || a != a && b != b
+}
+
+// sameBytes is bytes.Equal over T, so that nil and empty are one value.
+func sameBytes[T ~[]byte](a, b T) bool { return bytes.Equal(a, b) }
+
+// TestAppendBinaryAndURI pins the canonical forms of xs:hexBinary, two
+// upper-case hex digits per octet (f-hexBinaryCanonical); of xs:base64Binary,
+// padded Base64 with no white space (Canonical-base64Binary); and of
+// xs:anyURI, the value's own characters, neither normalized nor
+// percent-escaped (§3.3.17.2's identity mapping); each in an element, the
+// empty value as an empty-element tag, an xs:anyURI attribute and a list of
+// xs:hexBinary too, accepted by validate and decoded back equal.
+func TestAppendBinaryAndURI(t *testing.T) {
+	schema := schemaOf(t, encodeBinarySchema)
+	for _, row := range []struct {
+		elem string
+		v    binaryRoot
+		want string
+	}{
+		{"hb", binaryRoot{0x0F, 0xB7}, `<hb xmlns="urn:s">0FB7</hb>`},
+		{"hb", binaryRoot{0xab, 0xcd, 0x09}, `<hb xmlns="urn:s">ABCD09</hb>`},
+		{"hb", binaryRoot{}, `<hb xmlns="urn:s"/>`},
+		{"bb", binaryRoot("foo"), `<bb xmlns="urn:s">Zm9v</bb>`},
+		{"bb", binaryRoot{0xff}, `<bb xmlns="urn:s">/w==</bb>`},
+		{"bb", binaryRoot{0xff, 0xfe}, `<bb xmlns="urn:s">//4=</bb>`},
+		{"bb", binaryRoot("a value of more than 57 octets, which RFC 2045 would break into lines"), `<bb xmlns="urn:s">` + base64.StdEncoding.EncodeToString([]byte("a value of more than 57 octets, which RFC 2045 would break into lines")) + `</bb>`},
+		{"bb", nil, `<bb xmlns="urn:s"/>`},
+	} {
+		t.Run(row.elem+" "+row.want, func(t *testing.T) {
+			roundTrip(t, schema, sname(row.elem), row.v, row.want, sameBytes[binaryRoot])
+		})
+	}
+	for _, s := range []string{"http://example.com/a%20b?q=é#Frag", "HTTP://Example.COM/./a/../b", "", "a b", "ü"} {
+		t.Run("anyURI "+strconv.Quote(s), func(t *testing.T) {
+			want := `<u xmlns="urn:s">` + s + `</u>`
+			if s == "" {
+				want = `<u xmlns="urn:s"/>`
+			}
+			roundTrip(t, schema, sname("u"), uriRoot(s), want, deepEqual[uriRoot])
+		})
+	}
+	t.Run("anyURI attribute", func(t *testing.T) {
+		roundTrip(t, schema, sname("ua"), uriAttr{A: "#x y"}, `<ua xmlns="urn:s" a="#x y"/>`, deepEqual[uriAttr])
+	})
+	t.Run("hexBinary list", func(t *testing.T) {
+		roundTrip(t, schema, sname("hl"), binaryListRoot{{0xab}, {0x01, 0x02}}, `<hl xmlns="urn:s">AB 0102</hl>`, deepEqual[binaryListRoot])
+	})
+}
+
+// TestAppendFloat pins xs:float down double's path at 32 bits: each value,
+// the infinities, NaN, the zeros, the largest finite float32 and its
+// smallest subnormal among them, is written as the backend's Canonical
+// renders it and decoded back to the same float32 by its bits, every NaN
+// equal. A list of xs:float takes the same route. With mapsBack reading at 64
+// bits, the rows 0.1, 3.4028235e+38, 1e-45 and the list fail.
+func TestAppendFloat(t *testing.T) {
+	schema := schemaOf(t, encodeBinarySchema)
+	for _, f := range []float32{1, 0.1, -2.5, float32(math.Inf(1)), float32(math.Inf(-1)), float32(math.NaN()), float32(math.Copysign(0, -1)), 0, math.MaxFloat32, math.SmallestNonzeroFloat32, 16777216} {
+		t.Run(strconv.FormatFloat(float64(f), 'g', -1, 32), func(t *testing.T) {
+			roundTrip(t, schema, sname("f"), fltRoot(f), "", sameFloat[fltRoot])
+		})
+	}
+	t.Run("list", func(t *testing.T) {
+		roundTrip(t, schema, sname("fl"), fltList{0.1, float32(math.Inf(-1)), 3}, "", func(a, b fltList) bool {
+			return slices.EqualFunc(a, b, sameFloat[float32])
+		})
+	})
+}
+
+// TestAppendBinaryInvalid pins items 6 and 7 of Append's doc for xs:hexBinary,
+// xs:base64Binary, xs:float and xs:anyURI: a pattern's rejection of an
+// xs:hexBinary value is item 7 where one of its octets holds a hex digit A to
+// F and item 6 where none does; of an xs:base64Binary value item 7 but for
+// the empty value, item 6; of an xs:float value, or a list of xs:float, item
+// 7 but for NaN, item 6; a length, maxLength or bound rejection, an xs:anyURI
+// that is not its own whiteSpace-normalized form or holds no XML 1.0 Char,
+// and an empty xs:hexBinary list item, item 6. The rows "a hexBinary pattern,
+// no letter" and "a base64Binary pattern, the empty value" fail where
+// otherLexicalOf answers true for xs:hexBinary and xs:base64Binary
+// respectively, and "an xs:float list's pattern" where it answers false for
+// xs:float. Where hexLetter reads only the low nibble, "a hexBinary pattern,
+// a high-nibble letter" fails; only the high nibble, "a low-nibble letter"
+// and "a letter after the first octet"; only the first octet, "a letter after
+// the first octet".
+func TestAppendBinaryInvalid(t *testing.T) {
+	schema := schemaOf(t, encodeBinarySchema)
+	for _, row := range []struct {
+		name, elem string
+		v          binaryRoot
+		want       string
+		rule       xsderr.Rule
+	}{
+		{"a hexBinary pattern, no letter", "hcd", binaryRoot{0x12}, "codec: Append: binaryRoot holds 12, which simple type {urn:s}hexCD", "cvc-pattern-valid"},
+		{"a base64Binary pattern, the empty value", "bfoo", nil, "codec: Append: binaryRoot holds , which simple type {urn:s}b64Foo", "cvc-pattern-valid"},
+		{"a hexBinary length", "htwo", binaryRoot{0xAB}, "codec: Append: binaryRoot holds AB, which simple type {urn:s}hexTwo", "cvc-length-valid"},
+	} {
+		t.Run(row.name, func(t *testing.T) {
+			_, err := appendChecked(t, nil, schema, strict.New(), sname(row.elem), row.v)
+			invalidValue(t, err)
+			if !strings.HasPrefix(err.Error(), row.want) {
+				t.Errorf("error %q, want the prefix %q", err, row.want)
+			}
+			if rule, _ := xsderr.RuleOf(err); rule != row.rule {
+				t.Errorf("rule %q, want %s", rule, row.rule)
+			}
+		})
+	}
+	for _, row := range []struct {
+		name, elem string
+		v          binaryRoot
+		want       string
+	}{
+		{"a hexBinary pattern, a letter", "hcd", binaryRoot{0xAB}, "codec does not encode a value with no canonical representation: simple type {urn:s}hexCD defined at s.xsd:"},
+		{"a hexBinary pattern, a low-nibble letter", "hcd", binaryRoot{0x1A}, "codec does not encode a value with no canonical representation: simple type {urn:s}hexCD defined at s.xsd:"},
+		{"a hexBinary pattern, a high-nibble letter", "hcd", binaryRoot{0xA1}, "codec does not encode a value with no canonical representation: simple type {urn:s}hexCD defined at s.xsd:"},
+		{"a hexBinary pattern, a letter after the first octet", "hcd", binaryRoot{0x12, 0x3A}, "codec does not encode a value with no canonical representation: simple type {urn:s}hexCD defined at s.xsd:"},
+		{"a base64Binary pattern, a non-empty value", "bfoo", binaryRoot("bar"), "codec does not encode a value with no canonical representation: simple type {urn:s}b64Foo defined at s.xsd:"},
+	} {
+		t.Run(row.name, func(t *testing.T) {
+			_, err := appendChecked(t, nil, schema, strict.New(), sname(row.elem), row.v)
+			_ = asDecline(t, err, row.want)
+			holds(t, err, "a pattern facet rejects its canonical representation")
+		})
+	}
+	t.Run("an xs:float pattern", func(t *testing.T) {
+		_, err := appendChecked(t, nil, schema, strict.New(), sname("fone"), fltRoot(1))
+		_ = asDecline(t, err, "codec does not encode a value with no canonical representation: simple type {urn:s}floatOne defined at s.xsd:")
+		holds(t, err, "at fltRoot holding 1: a pattern facet rejects its canonical representation")
+	})
+	t.Run("an xs:float NaN a pattern rejects", func(t *testing.T) {
+		_, err := appendChecked(t, nil, schema, strict.New(), sname("fone"), fltRoot(float32(math.NaN())))
+		invalidValue(t, err)
+		if !strings.HasPrefix(err.Error(), "codec: Append: fltRoot holds NaN, which simple type {urn:s}floatOne") {
+			t.Errorf("error %q does not open with the path, value and type", err)
+		}
+	})
+	t.Run("an xs:float list's pattern", func(t *testing.T) {
+		_, err := appendChecked(t, nil, schema, strict.New(), sname("flp"), fltList{1})
+		_ = asDecline(t, err, "codec does not encode a value with no canonical representation: simple type {urn:s}floatOnes defined at s.xsd:")
+		holds(t, err, "at fltList holding [1]: a pattern facet rejects its canonical representation")
+	})
+	t.Run("an xs:float list of NaN its pattern rejects", func(t *testing.T) {
+		_, err := appendChecked(t, nil, schema, strict.New(), sname("flp"), fltList{float32(math.NaN())})
+		invalidValue(t, err)
+		if !strings.HasPrefix(err.Error(), "codec: Append: fltList holds [NaN], written \"NaN\", which simple type {urn:s}floatOnes") {
+			t.Errorf("error %q does not open with the path, value and type", err)
+		}
+	})
+	t.Run("an xs:float a bound rejects", func(t *testing.T) {
+		_, err := appendChecked(t, nil, schema, strict.New(), sname("fnp"), fltRoot(1))
+		invalidValue(t, err)
+		if !strings.HasPrefix(err.Error(), "codec: Append: fltRoot holds 1, which simple type {urn:s}floatNonPositive") {
+			t.Errorf("error %q does not open with the path, value and type", err)
+		}
+		if rule, _ := xsderr.RuleOf(err); rule != "cvc-maxInclusive-valid" {
+			t.Errorf("rule %q, want cvc-maxInclusive-valid", rule)
+		}
+	})
+	t.Run("an xs:anyURI a maxLength rejects", func(t *testing.T) {
+		_, err := appendChecked(t, nil, schema, strict.New(), sname("ushort"), uriRoot("abcd"))
+		invalidValue(t, err)
+		if !strings.HasPrefix(err.Error(), `codec: Append: uriRoot holds "abcd", which simple type {urn:s}uriShort`) {
+			t.Errorf("error %q does not open with the path, value and type", err)
+		}
+		if rule, _ := xsderr.RuleOf(err); rule != "cvc-maxLength-valid" {
+			t.Errorf("rule %q, want cvc-maxLength-valid", rule)
+		}
+	})
+	t.Run("an xs:anyURI not collapsed", func(t *testing.T) {
+		_, err := appendChecked(t, nil, schema, strict.New(), sname("u"), uriRoot(" a"))
+		invalidValue(t, err)
+		if want := `codec: Append: uriRoot holds " a", of simple type xs:anyURI, which differs from its whiteSpace-normalized form "a"`; err.Error() != want {
+			t.Errorf("error %q, want %q", err, want)
+		}
+		noRule(t, err)
+	})
+	t.Run("an xs:anyURI holding U+0000", func(t *testing.T) {
+		_, err := appendChecked(t, nil, schema, strict.New(), sname("u"), uriRoot("a\x00"))
+		invalidValue(t, err)
+		if want := `codec: Append: uriRoot holds "a\x00", of simple type xs:anyURI, whose byte offset 1 starts no XML 1.0 Char (Datatypes §3.3.1.1, §3.3.17.1)`; err.Error() != want {
+			t.Errorf("error %q, want %q", err, want)
+		}
+		noRule(t, err)
+	})
+	t.Run("an empty xs:hexBinary list item", func(t *testing.T) {
+		_, err := appendChecked(t, nil, schema, strict.New(), sname("hl"), binaryListRoot{{0xab}, {}})
+		invalidValue(t, err)
+		if want := `codec: Append: binaryListRoot[1] holds "", of simple type {urn:s}hexes defined at s.xsd:9:3, through the list type's {item type definition} xs:hexBinary, which is empty or holds white space, so no list item's lexical representation spells it (Datatypes §2.4.1.2)`; err.Error() != want {
+			t.Errorf("error %q, want %q", err, want)
+		}
+		noRule(t, err)
+	})
 }

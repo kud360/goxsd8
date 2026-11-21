@@ -1,6 +1,8 @@
 package codec
 
 import (
+	"bytes"
+	"math"
 	"math/big"
 	"math/rand/v2"
 	"reflect"
@@ -118,12 +120,92 @@ func TestTemporalFormDifferential(t *testing.T) {
 	}
 }
 
+// TestBinaryFormDifferential is the randomized differential R9 of #3935's
+// warden pre-flight owes for the binary atomics: for 10000 random []byte
+// values of up to 40 octets, seeded, the empty one among them, strict's
+// Canonical of strict's Parse of form's spelling under xs:hexBinary and
+// xs:base64Binary is that spelling, and convert reads it back as the value.
+func TestBinaryFormDifferential(t *testing.T) {
+	rng := rand.New(rand.NewPCG(3935, 1))
+	backend := strict.New()
+	for _, row := range []struct {
+		a     atomic
+		local string
+	}{{atomicHexBinary, "hexBinary"}, {atomicBase64Binary, "base64Binary"}} {
+		a, datatype := row.a, xsd.QName{Space: xsd.XMLSchemaNS, Local: row.local}
+		m, ok := backend.Mapping(datatype)
+		if !ok {
+			t.Fatalf("strict maps no %s", datatype.Display())
+		}
+		t.Run(datatype.Local, func(t *testing.T) {
+			for range 10000 {
+				b := make([]byte, rng.IntN(41))
+				for i := range b {
+					b[i] = byte(rng.UintN(256))
+				}
+				form, err := a.form(reflect.ValueOf(b))
+				if err != nil {
+					t.Fatalf("form(%x) = %v", b, err)
+				}
+				back, err := a.convert(form)
+				if err != nil || !bytes.Equal(back.Bytes(), b) {
+					t.Fatalf("form(%x) = %q, which convert reads as %x, %v", b, form, back.Bytes(), err)
+				}
+				parsed, err := m.Parse(form, nil)
+				if err != nil {
+					t.Fatalf("form(%x) = %q, which strict's Parse rejects: %v", b, form, err)
+				}
+				c, err := m.Canonical(parsed)
+				if err != nil || c != form {
+					t.Fatalf("form(%x) = %q, which strict's Canonical renders %q, %v", b, form, c, err)
+				}
+			}
+		})
+	}
+}
+
+// TestFloatDoubleDifferential is the randomized differential R9 of #3935's
+// warden pre-flight owes for xs:float: for 10000 random float32 bit
+// patterns, seeded, NaNs, infinities, zeros and subnormals among them,
+// double at 32 bits under xs:float on strict's backend records no item 6 or
+// 7 error and returns a text convert reads back as the same float32 by its
+// bits, every NaN equal to every NaN.
+func TestFloatDoubleDifferential(t *testing.T) {
+	schema := schemaOf(t, ``)
+	var st *xsd.SimpleType
+	for _, td := range schema.Types() {
+		if s, ok := td.(*xsd.SimpleType); ok && td.Name() == (xsd.QName{Space: xsd.XMLSchemaNS, Local: "float"}) {
+			st = s
+		}
+	}
+	if st == nil {
+		t.Fatal("no xs:float among the schema's types")
+	}
+	rng := rand.New(rand.NewPCG(3935, 2))
+	for range 10000 {
+		f := math.Float32frombits(rng.Uint32())
+		e := &encoder{schema: schema, backend: strict.New()}
+		c, ok, err := e.double(st, float64(f), 32, "f", "xs:float")
+		if err != nil || !ok || e.invalid != nil || e.uncanonical != nil {
+			t.Fatalf("double(%x) = %q, %v, %v; recorded %v, %v", math.Float32bits(f), c, ok, err, e.invalid, e.uncanonical)
+		}
+		back, err := atomicFloat32.convert(c)
+		if err != nil {
+			t.Fatalf("double(%x) = %q, which convert rejects: %v", math.Float32bits(f), c, err)
+		}
+		g := float32(back.Float())
+		if math.Float32bits(g) != math.Float32bits(f) && !(math.IsNaN(float64(f)) && math.IsNaN(float64(g))) {
+			t.Fatalf("double(%x) = %q, which convert reads as %x", math.Float32bits(f), c, math.Float32bits(g))
+		}
+	}
+}
+
 // TestFormArms is the bar R7 of #3902's warden pre-flight sets in place of a
 // lint over form's and otherLexicalOf's switches: for every builtin of a
 // parsed schema whose primitive is in encodedPrimitives, the atomic
 // goshape.AtomicType gives it answers otherLexicalOf without a panic, and
 // form too, with no error, on an in-range value (zero but for Month and Day,
-// 1), but for string and float64, which str and double spell.
+// 1), where formed holds for the atomic.
 func TestFormArms(t *testing.T) {
 	schema := schemaOf(t, ``)
 	seen := 0
@@ -167,7 +249,7 @@ func TestFormArms(t *testing.T) {
 				}
 			}()
 			_ = a.otherLexicalOf(v)
-			if a == atomicString || a == atomicFloat64 {
+			if !a.formed() {
 				return
 			}
 			if _, err := a.form(v); err != nil {
@@ -175,10 +257,10 @@ func TestFormArms(t *testing.T) {
 			}
 		})
 	}
-	// The 38 atomic builtins of the thirteen primitives: the primitives, nine
+	// The 42 atomic builtins of the seventeen primitives: the primitives, nine
 	// below xs:string, thirteen below xs:decimal, two below xs:duration and one
 	// below xs:dateTime.
-	if seen != 38 {
-		t.Errorf("%d builtins checked, want 38", seen)
+	if seen != 42 {
+		t.Errorf("%d builtins checked, want 42", seen)
 	}
 }
