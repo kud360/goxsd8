@@ -61,10 +61,10 @@ func WithURI(uri string) Option {
 // never a silent drop or a guessed mapping: a member the mapping cannot name
 // is not part of the document the assessment saw, so its result is discarded
 // rather than returned. A decline is returned where the walk meets it, and no
-// later error of any class is reported. Short of one, the document is read
-// through the top-level object's close whatever the assessment needed, so the
-// first error before the close is reported; the [Malformed] bullet below owns
-// what follows the close.
+// later error of any class is reported. Short of one, reading goes on past
+// wherever the assessment stopped, to the first error before the top-level
+// object's close, which is reported, or else to that close; the [Malformed]
+// bullet below owns what follows the close.
 //
 // An attribute member after a child member is the order encoding/json
 // marshals a struct whose child field is declared before an attribute field:
