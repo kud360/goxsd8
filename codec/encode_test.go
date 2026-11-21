@@ -1882,6 +1882,7 @@ const encodeBinarySchema = `
   <xs:simpleType name="floatNonPositive"><xs:restriction base="xs:float"><xs:maxInclusive value="0"/></xs:restriction></xs:simpleType>
   <xs:simpleType name="floats"><xs:list itemType="xs:float"/></xs:simpleType>
   <xs:simpleType name="hexes"><xs:list itemType="xs:hexBinary"/></xs:simpleType>
+  <xs:simpleType name="floatOnes"><xs:restriction base="s:floats"><xs:pattern value="1"/></xs:restriction></xs:simpleType>
   <xs:element name="hb" type="xs:hexBinary"/>
   <xs:element name="bb" type="xs:base64Binary"/>
   <xs:element name="u" type="xs:anyURI"/>
@@ -1894,7 +1895,8 @@ const encodeBinarySchema = `
   <xs:element name="bfoo" type="s:b64Foo"/>
   <xs:element name="ushort" type="s:uriShort"/>
   <xs:element name="fone" type="s:floatOne"/>
-  <xs:element name="fnp" type="s:floatNonPositive"/>`
+  <xs:element name="fnp" type="s:floatNonPositive"/>
+  <xs:element name="flp" type="s:floatOnes"/>`
 
 // The Go types the rows below hold encodeBinarySchema's values in, beside
 // binary_test.go's binaryRoot and binaryListRoot: ua's, u's, f's and fl's.
@@ -1961,7 +1963,8 @@ func TestAppendBinaryAndURI(t *testing.T) {
 // the infinities, NaN, the zeros, the largest finite float32 and its
 // smallest subnormal among them, is written as the backend's Canonical
 // renders it and decoded back to the same float32 by its bits, every NaN
-// equal. A list of xs:float takes the same route.
+// equal. A list of xs:float takes the same route. With mapsBack reading at 64
+// bits, the rows 0.1, 3.4028235e+38, 1e-45 and the list fail.
 func TestAppendFloat(t *testing.T) {
 	schema := schemaOf(t, encodeBinarySchema)
 	for _, f := range []float32{1, 0.1, -2.5, float32(math.Inf(1)), float32(math.Inf(-1)), float32(math.NaN()), float32(math.Copysign(0, -1)), 0, math.MaxFloat32, math.SmallestNonzeroFloat32, 16777216} {
@@ -1980,10 +1983,14 @@ func TestAppendFloat(t *testing.T) {
 // xs:base64Binary, xs:float and xs:anyURI: a pattern's rejection of an
 // xs:hexBinary value is item 7 where one of its octets holds a hex digit A to
 // F and item 6 where none does; of an xs:base64Binary value item 7 but for
-// the empty value, item 6; of an xs:float value item 7 but for NaN, item 6; a
-// length, maxLength or bound rejection, an xs:anyURI that is not its own
-// whiteSpace-normalized form or holds no XML 1.0 Char, and an empty
-// xs:hexBinary list item, item 6.
+// the empty value, item 6; of an xs:float value, or a list of xs:float, item
+// 7 but for NaN, item 6; a length, maxLength or bound rejection, an xs:anyURI
+// that is not its own whiteSpace-normalized form or holds no XML 1.0 Char,
+// and an empty xs:hexBinary list item, item 6. The rows "a hexBinary pattern,
+// no letter" and "a base64Binary pattern, the empty value" fail where
+// otherLexicalOf answers true for xs:hexBinary and xs:base64Binary
+// respectively, and "an xs:float list's pattern" where it answers false for
+// xs:float.
 func TestAppendBinaryInvalid(t *testing.T) {
 	schema := schemaOf(t, encodeBinarySchema)
 	for _, row := range []struct {
@@ -2030,6 +2037,18 @@ func TestAppendBinaryInvalid(t *testing.T) {
 		_, err := appendChecked(t, nil, schema, strict.New(), sname("fone"), fltRoot(float32(math.NaN())))
 		invalidValue(t, err)
 		if !strings.HasPrefix(err.Error(), "codec: Append: fltRoot holds NaN, which simple type {urn:s}floatOne") {
+			t.Errorf("error %q does not open with the path, value and type", err)
+		}
+	})
+	t.Run("an xs:float list's pattern", func(t *testing.T) {
+		_, err := appendChecked(t, nil, schema, strict.New(), sname("flp"), fltList{1})
+		_ = asDecline(t, err, "codec does not encode a value with no canonical representation: simple type {urn:s}floatOnes defined at s.xsd:")
+		holds(t, err, "at fltList holding [1]: a pattern facet rejects its canonical representation")
+	})
+	t.Run("an xs:float list of NaN its pattern rejects", func(t *testing.T) {
+		_, err := appendChecked(t, nil, schema, strict.New(), sname("flp"), fltList{float32(math.NaN())})
+		invalidValue(t, err)
+		if !strings.HasPrefix(err.Error(), "codec: Append: fltList holds [NaN], written \"NaN\", which simple type {urn:s}floatOnes") {
 			t.Errorf("error %q does not open with the path, value and type", err)
 		}
 	})
