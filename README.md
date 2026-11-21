@@ -490,27 +490,27 @@ if err != nil {
 	rule, _ := xsderr.RuleOf(err)
 	switch vs := codec.ViolationsOf(err); {
 	case vs != nil:
-		// Item 3: every violation of a rejected instance.
+		// Decode's item 3: every violation of a rejected instance.
 		for _, v := range vs {
 			fmt.Println(v.Loc, v.Rule)
 		}
 	case rule == xsderr.RuleXMLWellFormed:
-		// Item 2: the instance's source fault.
+		// Decode's item 2: the instance's source fault.
 		fmt.Println(err)
 	case errors.As(err, &ue):
-		// Item 4: the check the validator left undecided.
+		// Decode's item 4: the check the validator left undecided.
 		fmt.Println(ue.Unevaluated().Loc(), ue.Unevaluated().Rule())
 	case errors.As(err, &de):
-		// Items 5 and 7: the construct codec declined, charged to an
-		// instance Loc.
+		// Decode's items 5 and 7: the construct codec declined, charged to
+		// an instance Loc.
 		loc, _ := de.Loc()
 		fmt.Println(loc, de.Construct())
 	case errors.Is(err, codec.ErrTypeMismatch):
-		// Item 6: T does not match the declaration.
+		// Decode's item 6: T does not match the declaration.
 		fmt.Println(err)
 	default:
-		// Item 1's and item 5's plain errors, and item 8's fault of the
-		// backend.
+		// The plain errors of Decode's items 1 and 5, and its item 8's
+		// fault of the backend.
 		fmt.Println(err)
 	}
 	log.Fatal(err)
@@ -531,18 +531,19 @@ if err != nil {
 	var de *codec.DeclineError
 	switch {
 	case errors.Is(err, codec.ErrInvalidValue):
-		// Item 6: a value no valid document holds, named by its Go path.
+		// Append's item 6: a value no valid document holds, named by its Go
+		// path.
 		fmt.Println(err)
 	case errors.As(err, &de):
-		// Items 4 and 7: a construct, or a value with no canonical
+		// Append's items 4 and 7: a construct, or a value with no canonical
 		// representation, that codec declines.
 		fmt.Println(de.Construct())
 	case errors.Is(err, codec.ErrTypeMismatch):
-		// Item 5: T does not match the declaration.
+		// Append's item 5: T does not match the declaration.
 		fmt.Println(err)
 	default:
-		// Items 1 to 3's plain errors, a fault of the arguments, and a
-		// fault of the backend.
+		// The plain errors of Append's items 1 to 3, a fault of the
+		// arguments, and a fault of the backend.
 		fmt.Println(err)
 	}
 	log.Fatal(err)
