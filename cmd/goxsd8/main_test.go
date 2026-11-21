@@ -817,6 +817,13 @@ func TestUsageCoversContract(t *testing.T) {
 	if !strings.Contains(folded, permanent) {
 		t.Errorf("usage does not state that the violation line's full shape is permanent and which [<rule>] to key on (%q)", permanent)
 	}
+	// The exit table's 2 row names the lines a diagnosis charged 2 that is not
+	// about the command line's shape does not get, rather than calling it
+	// alone (#4002).
+	notAlone := "is followed by no usage: line and no line pointing to this help."
+	if !strings.Contains(folded, notAlone) {
+		t.Errorf("usage does not state that an exit-2 line not about the command line's shape gets no usage: or pointer line (%q)", notAlone)
+	}
 	// The one statement that the undecided: literal marks both withholds,
 	// which doc.go's hand-written Diagnostic lines section carries (#2893).
 	src, err := os.ReadFile("doc.go")
