@@ -18,9 +18,10 @@ const readmeTranscriptPrompt = "$ goxsd8 "
 // opening "$ goxsd8 " and ending in a "# exit N" comment, and the lines after
 // it up to the next line opening "$ " or the fence's end; it holds the
 // command's exit code to N and its stdout's lines followed by its stderr's to
-// those lines. Each command runs from testdata/readme, the directory README
-// runs its examples in; README's other goxsd8 lines open with no "$ " and
-// show no output, and are not run.
+// those lines. Each command runs from testdata/readme, which holds a committed
+// copy of every file a transcript names, the files README's heredocs write
+// into a fresh directory included; README's other goxsd8 lines open with no
+// "$ " and show no output, and are not run.
 func TestReadmeTranscripts(t *testing.T) {
 	src, err := os.ReadFile(filepath.Join("..", "..", "README.md"))
 	if err != nil {
