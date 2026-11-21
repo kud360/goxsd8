@@ -25,7 +25,9 @@ var ErrInvalidValue = errors.New("codec: Append: a value no valid document holds
 
 // Append appends to dst the XML document that encodes v as the document
 // element of the top-level element declaration name in schema, and returns
-// the extended slice; dst may be nil. It writes each simple value in its
+// the extended slice; dst may be nil. Read name from the header comment of the
+// type codegen emits for that declaration, the header the "# Naming" section
+// of codegen's package doc describes. It writes each simple value in its
 // canonical representation (Datatypes §2.3.1 dt-canonical-representation),
 // the form the Canonical of its governing mapping on backend
 // (value.GoverningMapping) renders, and runs no assessment by package validate
