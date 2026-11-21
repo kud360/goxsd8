@@ -432,7 +432,7 @@ var usageOneLiner = regexp.MustCompile(`^      (\[ \$\? .*)$`)
 // whitespace read as one space, so a reflow does not move them.
 const (
 	usagePipelineQuiet = "is a stderr note, one -q does not silence (parse below),"
-	usageParseQuiet    = "-q does not silence it."
+	usageParseQuiet    = "-q does not silence the skip's stderr note."
 )
 
 // usageOneLinerCodes are the codes TestUsagePipelineExample feeds the one-line
