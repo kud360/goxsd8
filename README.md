@@ -305,7 +305,9 @@ contract.
 The component model is also constructible directly, without a schema
 document: `xsd.NewSchemaBuilder()` → `Add*` → `Finalize()` returns an
 immutable `*xsd.Schema` you query by `xsd.QName` (`Type`, `Element`,
-`Attribute`). That builder is PRODUCER surface, not application surface:
+`Attribute`). A caller who can supply the lexical→value mapping calls
+`FinalizeWith` instead; plain `Finalize` leaves the value-space-dependent
+constraints unenforced. That builder is PRODUCER surface, not application surface:
 every `Add*` takes an already-validated component value, and building one
 correctly means honoring every §3 tableau and cross-property invariant its
 constructors cannot check — which is `parser.Produce`'s job. An application
