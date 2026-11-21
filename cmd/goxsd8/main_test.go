@@ -817,10 +817,9 @@ func TestUsageCoversContract(t *testing.T) {
 	if !strings.Contains(folded, permanent) {
 		t.Errorf("usage does not state that the violation line's full shape is permanent and which [<rule>] to key on (%q)", permanent)
 	}
-	// What the exit table's 2 row withholds from a line charged 2 that is not
-	// about the command line's shape: the usage: and pointer lines, not every
-	// later line, since validate's counts line follows a faulting instance's
-	// (#4002).
+	// The exit table's 2 row names the lines a diagnosis charged 2 that is not
+	// about the command line's shape does not get, rather than calling it
+	// alone (#4002).
 	notAlone := "is followed by no usage: line and no line pointing to this help."
 	if !strings.Contains(folded, notAlone) {
 		t.Errorf("usage does not state that an exit-2 line not about the command line's shape gets no usage: or pointer line (%q)", notAlone)
