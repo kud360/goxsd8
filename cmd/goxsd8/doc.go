@@ -41,7 +41,8 @@
 //	            subcommand's synopsis line above, then by the line
 //	            pointing to this help. Every other line a subcommand
 //	            charges 2 (an I/O fault, gen's refusal of an -out, an
-//	            instance in the ber format) is printed alone.
+//	            instance in the ber format) is followed by no usage: line
+//	            and no line pointing to this help.
 //	3     none  validate only: the -schema set does not compile, an I/O
 //	            fault reading a document it references included. Unranked:
 //	            it answers before any instance is opened, so no instance's
