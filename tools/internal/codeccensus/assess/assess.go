@@ -104,9 +104,9 @@ type Codec struct {
 }
 
 // CodecFor returns the Codec of T: codec.Decode[T] under bound and then the
-// options each call passes, and codec.Append[T] of the T a *T decode
-// returned points to. The census binds every codec.WithBranches set of T's
-// generated package; codec.Append takes no option.
+// options each call passes, and codec.Append[T] under bound of the T a *T
+// decode returned points to. The census binds every codec.WithBranches set of
+// T's generated package.
 func CodecFor[T any](bound ...codec.Option) Codec {
 	return Codec{
 		decode: func(schema *xsd.Schema, backend value.Backend, data []byte, opts ...codec.Option) (any, error) {
@@ -117,7 +117,7 @@ func CodecFor[T any](bound ...codec.Option) Codec {
 			return v, nil
 		},
 		encode: func(schema *xsd.Schema, backend value.Backend, name xsd.QName, v any) ([]byte, error) {
-			return codec.Append(nil, schema, backend, name, *v.(*T))
+			return codec.Append(nil, schema, backend, name, *v.(*T), bound...)
 		},
 	}
 }
