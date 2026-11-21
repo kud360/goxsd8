@@ -52,11 +52,11 @@ type (
 	ecSliceB      struct{ B []string }
 )
 
-func (ecRefA) isEcRef()                 {}
-func (ecRefB) isEcRef()                 {}
-func (ecSliceA) isEcSliceChoice()       {}
-func (ecSliceB) isEcSliceChoice()       {}
-func (ecEmptyNone) isEcEmpty()          {}
+func (ecRefA) isEcRef()                  {}
+func (ecRefB) isEcRef()                  {}
+func (ecSliceA) isEcSliceChoice()        {}
+func (ecSliceB) isEcSliceChoice()        {}
+func (ecEmptyNone) isEcEmpty()           {}
 func (ecEmptyNone) isEcEmptyAttrChoice() {}
 
 // ecEmptyNone implements ecEmpty and ecEmptyAttrChoice, whose choice has no

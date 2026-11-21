@@ -39,9 +39,8 @@ func instanceTest(name, doc string) string {
 // o.xml, xs:double values NaN, −0 and 1, the last spelled other than
 // canonically, and g.xml, a choice), decline (l.xml, a sequence codegen
 // flattens, and p.xml, of xs:precisionDecimal), and lie outside the
-// population: invalid.xml, which
-// does not decode, and u.xml, whose document element no declaration names,
-// which decodes into the placeholder.
+// population: invalid.xml, which does not decode, and u.xml, whose document
+// element no declaration names, which decodes into the placeholder.
 var censusSuite = map[string]string{
 	"suite.xml": `<testSuite xmlns:xlink="http://www.w3.org/1999/xlink"><testSetRef xlink:href="sets/s.testSet"/></testSuite>`,
 	"sets/s.testSet": `<testSet name="S" xmlns:xlink="http://www.w3.org/1999/xlink">

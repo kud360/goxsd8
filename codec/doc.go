@@ -10,9 +10,10 @@
 //
 // Call [CheckDecode] once at start-up for each top-level element declaration
 // and T a program decodes a document element into, and [CheckAppend] for each
-// it encodes one from. Pass CheckDecode the options [Decode] is passed, of
-// which its doc names the ones it reads; then call Decode for each instance and
-// [Append] for each value. Each Check's doc states what it reports.
+// it encodes one from. Pass CheckDecode the options [Decode] is passed and
+// CheckAppend those [Append] is passed, of which each doc names the ones it
+// reads; then call Decode for each instance and Append for each value. Each
+// Check's doc states what it reports.
 //
 // # Decode
 //
@@ -296,14 +297,14 @@
 //
 // # Encode
 //
-//	func Append[T any](dst []byte, schema *xsd.Schema, backend value.Backend, name xsd.QName, v T) ([]byte, error)
-//	func CheckAppend[T any](schema *xsd.Schema, name xsd.QName) error
+//	func Append[T any](dst []byte, schema *xsd.Schema, backend value.Backend, name xsd.QName, v T, opts ...Option) ([]byte, error)
+//	func CheckAppend[T any](schema *xsd.Schema, name xsd.QName, opts ...Option) error
 //	var ErrInvalidValue error
 //
 // [Append]'s doc states what it writes and what it returns;
 // [CheckAppend]'s states what it returns for a declaration and T. Append
 // reads the schema, not T, as [Decode] does, and holds T to the declaration
-// by Decode's comparisons.
+// by Decode's comparisons, under the [WithBranches] sets it is passed.
 //
 // # What encodes
 //
@@ -316,12 +317,16 @@
 //     simple type that encodes or a complex type that encodes.
 //   - A complex type with {abstract} false, no {assertions}, no {attribute
 //     wildcard} and no {open content}, of empty content or of element-only
-//     content whose {particle} is a sequence that codegen splices, inline or
+//     content whose {particle} is a sequence that codegen splices, or a
+//     choice occurring exactly once that codegen does not flatten, inline or
 //     through <group ref>, each of whose particles is a local element
-//     declaration.
-//   - An element particle of that sequence with {max occurs} at least 1, of
-//     a simple type that encodes and with the same restrictions as the
-//     document element's declaration, into V, *V or []V by its occurrence.
+//     declaration; the choice into its sealed interface, T itself or the
+//     first field of T's struct, as "# What decodes" states.
+//   - An element particle of that sequence or choice with {max occurs} at
+//     least 1, of a simple type that encodes and with the same restrictions
+//     as the document element's declaration, into V, *V or []V by its
+//     occurrence, or, for a choice's alternative, into its branch's field as
+//     "# What decodes" states.
 //   - An attribute use other than xsi:nil's, unqualified, with no value
 //     constraint and of a simple type that encodes, into V or *V.
 //   - An atomic simple type with no assertions facet whose {primitive type
@@ -351,25 +356,26 @@
 // its parent's. Attributes are written unprefixed, in the order of codegen's
 // fields (codegen's package doc, "# Attributes"), each value delimited by
 // '"'. A nil *V field writes nothing, a particle with {max occurs} above 1
-// writes one element per item of its slice, and an element with no content
-// is written as an empty-element tag, <x/>. A string value, of xs:string or
-// xs:anyURI primitive, is written as itself, its canonical representation,
-// since xs:string's canonical mapping is the identity (Datatypes §E.4
-// f-stringCanmap) and so is xs:anyURI's lexical mapping, so that an xs:anyURI
-// value is neither normalized nor percent-escaped (§3.3.17.2), and item 6 of
-// Append's doc holds the string to its own whiteSpace-normalized form. A list
-// value is written as its items' canonical representations, in order,
-// separated by single U+0020 characters (Datatypes §2.4.1.2), and the empty
-// list, nil or empty, as no content: <x/> for an element, a="" for an
-// attribute. It escapes '<', '&' and '>' as &lt;, &amp; and &gt; everywhere,
-// so that "]]>" is never written, and CR as &#xD; everywhere, which XML 1.0
-// end-of-line handling (§2.11) would otherwise rewrite to LF or remove; in an
-// attribute value it escapes '"' as &quot;, TAB as &#x9; and LF as &#xA;,
-// which attribute-value normalization (§3.3.3) would otherwise turn into
-// spaces; and every other character, TAB and LF in content and the
-// apostrophe everywhere, is written as itself. So the Order codegen emits for
-// README's order.xsd, of Item {"a"} and Kind "k", is written
-// <order xmlns="urn:o" kind="k"><item>a</item></order>.
+// writes one element per item of its slice, a choice's branch writes its
+// alternative's elements, the empty match, the nil interface, writes no child
+// element, and an element with no content is written as an empty-element tag,
+// <x/>. A string value, of xs:string or xs:anyURI primitive, is written as
+// itself, its canonical representation, since xs:string's canonical mapping
+// is the identity (Datatypes §E.4 f-stringCanmap) and so is xs:anyURI's
+// lexical mapping, so that an xs:anyURI value is neither normalized nor
+// percent-escaped (§3.3.17.2), and item 6 of Append's doc holds the string to
+// its own whiteSpace-normalized form. A list value is written as its items'
+// canonical representations, in order, separated by single U+0020 characters
+// (Datatypes §2.4.1.2), and the empty list, nil or empty, as no content: <x/>
+// for an element, a="" for an attribute. It escapes '<', '&' and '>' as &lt;,
+// &amp; and &gt; everywhere, so that "]]>" is never written, and CR as &#xD;
+// everywhere, which XML 1.0 end-of-line handling (§2.11) would otherwise
+// rewrite to LF or remove; in an attribute value it escapes '"' as &quot;,
+// TAB as &#x9; and LF as &#xA;, which attribute-value normalization (§3.3.3)
+// would otherwise turn into spaces; and every other character, TAB and LF in
+// content and the apostrophe everywhere, is written as itself. So the Order
+// codegen emits for README's order.xsd, of Item {"a"} and Kind "k", is
+// written <order xmlns="urn:o" kind="k"><item>a</item></order>.
 //
 // # Debuggability
 //

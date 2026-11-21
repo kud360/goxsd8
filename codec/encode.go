@@ -43,14 +43,21 @@ var ErrInvalidValue = errors.New("codec: Append: a value no valid document holds
 //  3. The declaration has {abstract} true: a plain error.
 //  4. A construct outside the encoded slice: its *DeclineError, charged to
 //     no instance Loc ([DeclineError.Loc]).
-//  5. A T that is not the type codegen emits for the declaration, item 6 of
-//     [Decode]'s doc: its error, which errors.Is reports as [ErrTypeMismatch].
+//  5. A T that is not the type codegen emits for the declaration under opts,
+//     item 6 of [Decode]'s doc: its error, which errors.Is reports as
+//     [ErrTypeMismatch].
 //  6. A value no valid document holds, the first in document order, an
 //     element's attributes before its content: an error, which errors.Is
 //     reports as [ErrInvalidValue], naming the Go path of its field from T
 //     and, for a simple value, its simple type. It is the slice field of a
 //     particle with {max occurs} above 1 whose length lies outside its {min
-//     occurs} and {max occurs}; a string holding bytes that are not UTF-8 or
+//     occurs} and {max occurs}, a choice's alternative's {min occurs} 0 read
+//     as 1 in its branch; the nil sealed interface of a content choice none of
+//     whose alternatives is emptiable (Structures §3.8.4.3 cvc-model-group,
+//     §3.9.6.3 cos-group-emptiable), a choice of no {particles} among them; a
+//     value of that interface whose dynamic type the [WithBranches] set in
+//     opts places at no alternative, a pointer to a branch among them, which
+//     Decode never returns; a string holding bytes that are not UTF-8 or
 //     a character the XML 1.0 Char production does not match, U+0000 among
 //     them (Datatypes §3.3.1.1, §3.3.17.1); a string that differs from its own
 //     whiteSpace-normalized form under its simple type, such as an xs:token
@@ -110,8 +117,9 @@ var ErrInvalidValue = errors.New("codec: Append: a value no valid document holds
 // of value.ValidateLexical that value.IsDatatypeVerdict does not report as a
 // verdict.
 //
-// Items 2 to 5 read no value; [CheckAppend] returns them for a declaration
-// and T.
+// Of opts Append reads only the sets [WithBranches] and
+// [WithPrecisionDecimalArms] supply. Items 2 to 5 read no value;
+// [CheckAppend] returns them for a declaration, T and opts.
 func Append[T any](dst []byte, schema *xsd.Schema, backend value.Backend, name xsd.QName, v T, opts ...Option) ([]byte, error) {
 	if schema == nil {
 		return dst, errors.New("codec: Append: nil *xsd.Schema")
@@ -141,14 +149,15 @@ func Append[T any](dst []byte, schema *xsd.Schema, backend value.Backend, name x
 
 // CheckAppend returns the error of the first of items 2 to 5 of [Append]'s
 // doc that applies to a value of T encoded as the document element of the
-// top-level element declaration name in schema, in the class that item
-// states, or nil when none applies; for a nil schema it returns a plain
-// error. Item 4's slice is the one the package doc's "# What encodes" states.
-// Items 6 and 7 and a fault of the backend depend on the value, so they lie
-// outside CheckAppend's answer, and nil leaves them open. The backend is no
-// input, so a nil backend, which Append's item 1 refuses, lies outside it
-// too. For a non-nil schema, a non-nil error is the one Append returns, of
-// equal Error text and class, for every value of T and every non-nil backend.
+// top-level element declaration name in schema under opts, in the class
+// that item states, or nil when none applies; for a nil schema it returns a
+// plain error. Item 4's slice is the one the package doc's "# What encodes"
+// states. Items 6 and 7 and a fault of the backend depend on the value, so
+// they lie outside CheckAppend's answer, and nil leaves them open. The
+// backend is no input, so a nil backend, which Append's item 1 refuses, lies
+// outside it too. For a non-nil schema, a non-nil error is the one Append
+// returns, of equal Error text and class, for every value of T, every non-nil
+// backend and the same opts.
 func CheckAppend[T any](schema *xsd.Schema, name xsd.QName, opts ...Option) error {
 	if schema == nil {
 		return errors.New("codec: CheckAppend: nil *xsd.Schema")
@@ -513,12 +522,11 @@ func contentPlanOf(schema *xsd.Schema, content xsd.ElementContent, subject strin
 }
 
 // particlePlanOf returns the encodeElement of the particle p of a spliced
-// content sequence or of a content choice's alternative, subject naming p,
-// or the error encodePlanOf states:
-// {max occurs} 0, then a term other than a local element declaration, then
-// the declaration's own properties and type, of which a complex one other
-// than xs:anyType itself declines whole. {term} is a closed sum, so the
-// switches are STYLE T2's sealed-sum exception.
+// content sequence or of a content choice's alternative, subject naming p, or
+// the error encodePlanOf states: {max occurs} 0, then a term other than a
+// local element declaration, then the declaration's own properties and type,
+// of which a complex one other than xs:anyType itself declines whole. {term}
+// is a closed sum, so the switches are STYLE T2's sealed-sum exception.
 func particlePlanOf(schema *xsd.Schema, p xsd.Particle, subject string) (encodeElement, error) {
 	if upper, bounded := p.Occurs().Max(); bounded && upper == 0 {
 		return encodeElement{}, encodeDecline(constructVacuousParticle, subject)
@@ -754,9 +762,9 @@ type encoder struct {
 // element writes the element el, holding v, whose Go path from T is path:
 // its start tag, with a default namespace declaration where its namespace
 // differs from parent's, the document element's from no namespace, then its
-// attributes in field order, then its value or its particles' elements, an
-// element with no content written as an empty-element tag. The error is a
-// backend fault (simple).
+// attributes in field order, then its value or its content's elements
+// (encodeContent.write), an element with no content written as an
+// empty-element tag. The error is a backend fault (simple).
 func (e *encoder) element(el encodeElement, v reflect.Value, path string, parent xsd.QName, root bool) error {
 	name := el.decl.Name()
 	e.out = append(e.out, '<')
