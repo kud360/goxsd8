@@ -27,11 +27,14 @@ import (
 
 // TestReadmeFixtures holds each file of testdata/readme that README.md's CLI
 // section shows to the text README shows for it (TestReadmeSharedDocument
-// holds the files of the two-target gen example): order.xsd and order.json
-// byte for byte as a fence's body, and the one-line twice.json, its newline
-// dropped, as an inline code span. README's examples run against the
-// committed files, so a fence edited without its file, or a file without its
-// fence, would show the reader one document and run another.
+// holds the files of the two-target gen example): qty.xsd, qty.xml and
+// zero.xml byte for byte as the body of a quoted heredoc (heredoc), which the
+// shell writes unaltered; order.xsd and order.json byte for byte as a fence's
+// body; and the one-line twice.json, its newline dropped, as an inline code
+// span. README's examples run against the committed files, and its first
+// example against the files its heredocs write, so a fence edited without its
+// file, or a file without its fence, would show the reader one document and
+// run another.
 //
 // It holds README's code-generation snippet to readmeCodegen's body, which
 // compiles with this file, and the xsd_gen.go README shows to the file that
@@ -49,6 +52,9 @@ func TestReadmeFixtures(t *testing.T) {
 		file string
 		want func(body string) string
 	}{
+		{"qty.xsd", func(body string) string { return heredoc("qty.xsd", body) }},
+		{"qty.xml", func(body string) string { return heredoc("qty.xml", body) }},
+		{"zero.xml", func(body string) string { return heredoc("zero.xml", body) }},
 		{"order.xsd", func(body string) string { return "```xml\n" + body + "```\n" }},
 		{"order.json", func(body string) string { return "```json\n" + body + "```\n" }},
 		{"twice.json", func(body string) string { return "`" + strings.TrimSuffix(body, "\n") + "`" }},
@@ -126,6 +132,13 @@ func TestReadmeFixtures(t *testing.T) {
 	if got := stdout(t, func() { readmeAppend(schema, strict.New(), o) }); got != appendPrints {
 		t.Errorf("readmeAppend prints %q, its last comment states %q", got, appendPrints)
 	}
+}
+
+// heredoc returns the shell lines README's first CLI example writes file
+// with: `cat > <file> <<'EOF'`, body, then `EOF`. The delimiter is quoted, so
+// the shell expands nothing in body and writes it byte for byte.
+func heredoc(file, body string) string {
+	return "cat > " + file + " <<'EOF'\n" + body + "EOF\n"
 }
 
 // lastComment returns the text after "// " on the last line of the function

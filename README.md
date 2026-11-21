@@ -52,7 +52,7 @@ Install the binary alone:
 # needs Go 1.26 or newer, as go.mod sets; an older go downloads Go 1.26
 # rather than failing under the default GOTOOLCHAIN=auto, and fails under
 # GOTOOLCHAIN=local
-go install github.com/kud360/goxsd8/cmd/goxsd8@main   # needs no clone; the examples below do
+go install github.com/kud360/goxsd8/cmd/goxsd8@main   # needs no clone, nor does the CLI section's first example
 ```
 
 Or clone the repository to build, test and install it from source:
@@ -86,12 +86,55 @@ lives in one place: `goxsd8 -help` prints its usage block, and
 that usage block plus the rest its closing paragraph names. The invocations
 below are worked examples of it.
 
+The first example needs the binary alone: it writes a schema and two
+instances into a fresh directory and runs there.
+
+```sh
+cd "$(mktemp -d)"                               # a fresh, empty directory
+cat > qty.xsd <<'EOF'
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="qty" type="xs:positiveInteger"/>
+</xs:schema>
+EOF
+cat > qty.xml <<'EOF'
+<qty>3</qty>
+EOF
+cat > zero.xml <<'EOF'
+<qty>0</qty>
+EOF
+```
+
+`qty.xsd` declares one element, `qty`, whose value is an
+`xs:positiveInteger`. `parse` prints the compiled schema's summary;
+`validate` prints a violation as one `<loc>: [<rule>] <message>` line on
+stdout, and its counts on stderr:
+
+```sh
+$ goxsd8 parse qty.xsd                          # exit 0
+qty.xsd
+  namespace: (absent)
+  types: 0
+  elements: 1
+  attributes: 0
+  attribute groups: 0
+  model groups: 0
+  notations: 0
+  identity constraints: 0
+  components: 1
+$ goxsd8 validate -schema qty.xsd qty.xml       # exit 0
+goxsd8: validate: instances=1 clean=1 undecided=0 invalid=0 faulted=0
+$ goxsd8 validate -schema qty.xsd zero.xml      # exit 1
+zero.xml:1:1: [cvc-type] element qty's value "0" is not a valid xs:positiveInteger, which cvc-type clause 3.1.3 requires: [cvc-minInclusive-valid] "0" violates the minInclusive facet of the simple type xs:positiveInteger, whose {value} is "1", but cvc-minInclusive-valid requires a value greater than or equal to it
+goxsd8: validate: instances=1 clean=0 undecided=0 invalid=1 faulted=0
+```
+
 Every file these examples and the Library ones name is committed in
-`testdata/readme/`, and README shows only some of them, so the examples run
-from a clone, not from the `go install …@main` binary alone: clone as the
-Quickstart does, then run them from `testdata/readme/`. `gen` writes `./gen/`
-beside them, which the checkout ignores. Every `-out` lies in a Go module,
-here the checkout's, as the `gen` paragraph of `goxsd8 -help` states.
+`testdata/readme/`, the first example's three included, and README shows
+only some of them, so the examples after the first run from a clone, not
+from the `go install …@main` binary alone: clone as the Quickstart does,
+then run them from `testdata/readme/`. `gen` writes `./gen/` beside them,
+which the checkout ignores. Every `-out` lies in a Go module, here the
+checkout's, as the `gen` paragraph of `goxsd8 -help` states.
 
 ```sh
 cd testdata/readme                              # from the checkout root
