@@ -208,11 +208,10 @@ func TestAppendChoiceInvalid(t *testing.T) {
 // TestAppendChoiceBranches pins item 5 of Append's doc for a content choice
 // occurring once: with no WithBranches set for its interface, Append and
 // CheckAppend return Decode's ErrTypeMismatch, whatever the value, a branch
-// the set would place and nil included, so a reading that takes the branch
-// from the value alone fails it; under the set, CheckAppend returns nil, and
-// for a choice of no {particles} it returns nil with no set. A set placing an
-// implementer other than codegen's, of a branch's shape, is placed as Decode
-// places it.
+// the set would place and nil included; under the set, CheckAppend returns
+// nil, and for a choice of no {particles} it returns nil with no set. A set
+// placing an implementer other than codegen's, of a branch's shape, is placed
+// as Decode places it. It fails with item 5's check run under no options.
 func TestAppendChoiceBranches(t *testing.T) {
 	schema := schemaOf(t, pickSchema)
 	for _, v := range []pick{pickA{A: "x"}, nil} {
