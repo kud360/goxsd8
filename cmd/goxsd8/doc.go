@@ -202,16 +202,17 @@
 //	    processor reads §F.2's rewrite of that include into an
 //	    <xs:override> as putting it under the override's silence
 //	    instead — so the summary above is printed off a schema short
-//	    of whatever that document declares. -q does not silence it.
-//	    Under -strict the summary is printed all the same and the
-//	    argument is charged 4. Such a directive of a REJECTED schema
-//	    is named the same way, for the directives assembly reached
-//	    before it stopped, in a line saying the schemaLocation yielded
-//	    no document, that the assembly was rejected rather than
-//	    compiled, and nothing about whether the unread document had a
-//	    part in that. The I/O fault above is not that skip: it is
-//	    charged 1, though the faulting run names the directive on
-//	    stderr too, in that same line, before printing the fault.
+//	    of whatever that document declares. -q does not silence the
+//	    skip's stderr note. Under -strict the summary is printed all the
+//	    same and the argument is charged 4. Such a directive of a
+//	    REJECTED schema is named the same way, for the directives
+//	    assembly reached before it stopped, in a line saying the
+//	    schemaLocation yielded no document, that the assembly was
+//	    rejected rather than compiled, and nothing about whether the
+//	    unread document had a part in that. The I/O fault above is not
+//	    that skip: it is charged 1, though the faulting run names the
+//	    directive on stderr too, in that same line, before printing the
+//	    fault.
 //	    A bare <xs:import>, which names no schemaLocation, is not
 //	    reported for a compiled schema; for a rejected one it is named
 //	    after the error line, at its own position and by its namespace
