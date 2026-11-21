@@ -112,7 +112,7 @@ var ErrInvalidValue = errors.New("codec: Append: a value no valid document holds
 //
 // Items 2 to 5 read no value; [CheckAppend] returns them for a declaration
 // and T.
-func Append[T any](dst []byte, schema *xsd.Schema, backend value.Backend, name xsd.QName, v T) ([]byte, error) {
+func Append[T any](dst []byte, schema *xsd.Schema, backend value.Backend, name xsd.QName, v T, opts ...Option) ([]byte, error) {
 	if schema == nil {
 		return dst, errors.New("codec: Append: nil *xsd.Schema")
 	}
@@ -120,16 +120,14 @@ func Append[T any](dst []byte, schema *xsd.Schema, backend value.Backend, name x
 		return dst, errors.New("codec: Append: nil value.Backend")
 	}
 	t := reflect.TypeFor[T]()
-	plan, err := encodeStatic(schema, name, t)
+	plan, err := encodeStatic(schema, name, t, opts)
 	if err != nil {
 		return dst, err
 	}
-	root := t.Name()
-	if root == "" {
-		root = t.String()
-	}
 	e := &encoder{schema: schema, backend: backend, out: dst}
-	if err := e.element(plan, reflect.ValueOf(v), root, xsd.QName{}, true); err != nil {
+	// v's own Value, of Kind Interface where T is one, so that a nil T and a
+	// branch's dynamic type both reach element as T holds them.
+	if err := e.element(plan, reflect.ValueOf(&v).Elem(), typePath(t), xsd.QName{}, true); err != nil {
 		return dst, err
 	}
 	if e.invalid != nil {
@@ -151,19 +149,31 @@ func Append[T any](dst []byte, schema *xsd.Schema, backend value.Backend, name x
 // input, so a nil backend, which Append's item 1 refuses, lies outside it
 // too. For a non-nil schema, a non-nil error is the one Append returns, of
 // equal Error text and class, for every value of T and every non-nil backend.
-func CheckAppend[T any](schema *xsd.Schema, name xsd.QName) error {
+func CheckAppend[T any](schema *xsd.Schema, name xsd.QName, opts ...Option) error {
 	if schema == nil {
 		return errors.New("codec: CheckAppend: nil *xsd.Schema")
 	}
-	_, err := encodeStatic(schema, name, reflect.TypeFor[T]())
+	_, err := encodeStatic(schema, name, reflect.TypeFor[T](), opts)
 	return err
+}
+
+// typePath names t as the Go path of a value from T starts it: by its name,
+// or, for a type with none, its String.
+func typePath(t reflect.Type) string {
+	if t.Name() == "" {
+		return t.String()
+	}
+	return t.Name()
 }
 
 // encodeStatic returns the encodeElement of the top-level element
 // declaration name in schema, a non-nil schema, encoded from a value of Go
-// type t, or the error of the first of items 2 to 5 of [Append]'s doc that
-// applies. It reads no value, so its answer holds for every value of t.
-func encodeStatic(schema *xsd.Schema, name xsd.QName, t reflect.Type) (encodeElement, error) {
+// type t under opts, or the error of the first of items 2 to 5 of [Append]'s
+// doc that applies. It reads no value, so its answer holds for every value of
+// t. Item 5's check, Decode's under the same opts, places each branch type of
+// a content choice's interface at its alternative, and the plan's choice
+// takes those placements (encodeChoice.place), computing none of its own.
+func encodeStatic(schema *xsd.Schema, name xsd.QName, t reflect.Type, opts []Option) (encodeElement, error) {
 	decl, ok := schema.Element(name)
 	if !ok {
 		return encodeElement{}, fmt.Errorf("codec: no top-level element declaration has the expanded name %q", name.Display())
@@ -181,26 +191,160 @@ func encodeStatic(schema *xsd.Schema, name xsd.QName, t reflect.Type) (encodeEle
 	if err != nil {
 		return encodeElement{}, err
 	}
-	if _, err := b.check(t, newCheckContext(newConfig(nil))); err != nil {
+	f, err := b.check(t, newCheckContext(newConfig(opts)))
+	if err != nil {
 		return encodeElement{}, err
+	}
+	// encodeContent is a closed sum, so the assertion is STYLE T2's
+	// sealed-sum exception.
+	if c, isChoice := plan.content.(*encodeChoice); isChoice {
+		c.place(f)
 	}
 	return plan, nil
 }
 
 // encodeElement is an element declaration of the encoded slice, the
 // document element's or a particle's, as Append writes it: of a simple
-// {type definition}, simple; of a complex one, its particles, each a local
-// element declaration, and its attribute uses, in the order codegen gives
-// their fields (codegen's package doc, "# Particles" and "# Attributes").
+// {type definition}, simple; of a complex one, its content and its attribute
+// uses, in the order codegen gives their fields (codegen's package doc,
+// "# Particles" and "# Attributes").
 type encodeElement struct {
 	decl       xsd.ElementDeclaration
 	simple     *encodeSimple
-	particles  []encodeParticle
+	content    encodeContent
 	attributes []encodeAttribute
 }
 
-// encodeParticle is an element particle of a spliced content sequence: its
-// occurrence and its local element declaration.
+// encodeContent is a complex type's content as Append writes it, a closed
+// sum: splicedContent, the particles of empty content or of a spliced content
+// sequence, or *encodeChoice, a content choice occurring once.
+type encodeContent interface {
+	// width is the number of fields of the element's struct the content's
+	// fields take, ahead of the attribute fields.
+	width() int
+	// write writes the content's elements from v, the value of el, el's
+	// content, whose Go path from T is path.
+	write(e *encoder, el encodeElement, v reflect.Value, path string) error
+}
+
+// splicedContent is the element particles of empty content, none, or of a spliced
+// content sequence, each a local element declaration, field i holding
+// particle i.
+type splicedContent []encodeParticle
+
+// width is one field per particle.
+func (s splicedContent) width() int { return len(s) }
+
+// write writes each particle's elements from its field, in order.
+func (s splicedContent) write(e *encoder, el encodeElement, v reflect.Value, path string) error {
+	for i, p := range s {
+		if err := e.particle(p, p.occurs, v.Field(i), path+"."+v.Type().Field(i).Name, el.decl.Name()); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// encodeChoice is a content choice occurring once that codegen does not
+// flatten, held in its sealed interface (codegen's package doc, "# Complex
+// types"): T itself, or the first field of T's struct. alts holds one
+// alternative per particle of the choice, in order, each a local element
+// declaration.
+type encodeChoice struct {
+	alts []encodeAlternative
+}
+
+// encodeAlternative is an alternative of an encodeChoice: its element
+// particle, at its own occurrence, and branch, the branch type item 5's check
+// placed at it.
+type encodeAlternative struct {
+	particle encodeParticle
+	branch   reflect.Type
+}
+
+// place pairs each of c's alternatives with the branch type item 5's check
+// placed at it, f the filler that check returned for T: a *boundChoiceRoot
+// where T is the interface, and otherwise a *boundBinding of a
+// *boundSequence whose first sinks are the choice's (bindComplex,
+// bindContent). Every alternative of c is an element particle, of one
+// attribution target, so the choice's sinks are one per alternative, in
+// order, and share the choice's one boundChoice, whose branches the check
+// placed (sealed.checkSite); a choice of no {particles} has no sink and no
+// branch to pair.
+func (c *encodeChoice) place(f filler) {
+	var sinks []itemBranchSink
+	if root, isRoot := f.(*boundChoiceRoot); isRoot {
+		sinks = root.sinks
+	}
+	if b, isStruct := f.(*boundBinding); isStruct {
+		for _, s := range b.content.(*boundSequence).sinks[:len(c.alts)] {
+			sinks = append(sinks, s.(branchSink).item)
+		}
+	}
+	for i, s := range sinks {
+		c.alts[i].branch = s.bound.branches[s.alt].t
+	}
+}
+
+// width is the one field holding the interface. Where T is the interface
+// itself, a type with no attribute field, no field follows it.
+func (c *encodeChoice) width() int { return 1 }
+
+// emptiable reports whether one occurrence of the choice matches the empty
+// sequence: one of its alternatives, each an element particle, has {min
+// occurs} 0 (§3.9.6.3 cos-group-emptiable).
+func (c *encodeChoice) emptiable() bool {
+	return slices.ContainsFunc(c.alts, func(a encodeAlternative) bool { return a.particle.occurs.Min() == 0 })
+}
+
+// write writes the branch the interface holds, v itself where v is of Kind
+// Interface, T being the interface (goshape.ChoiceRoot), and v's first field
+// otherwise: the elements of its alternative's one field, held at the
+// alternative's occurrence with {min occurs} 0 read as 1
+// (goshape.BranchOccurs), or nothing for the nil interface where the choice
+// is emptiable. The nil interface of a choice no alternative of which is
+// emptiable, and a dynamic type item 5's check placed at no alternative, a
+// pointer to a branch among them, are item 6 of [Append]'s doc. The error is
+// element's.
+func (c *encodeChoice) write(e *encoder, el encodeElement, v reflect.Value, path string) error {
+	if v.Kind() != reflect.Interface {
+		v, path = v.Field(0), path+"."+v.Type().Field(0).Name
+	}
+	if v.IsNil() {
+		if !c.emptiable() {
+			e.invalidate(fmt.Errorf("codec: Append: %s is nil, the empty match, which the content choice of %s does not accept: %s", path, e.complexSubject(el.decl), c.unemptiable()))
+		}
+		return nil
+	}
+	b := v.Elem()
+	i := slices.IndexFunc(c.alts, func(a encodeAlternative) bool { return a.branch == b.Type() })
+	if i < 0 {
+		e.invalidate(fmt.Errorf("codec: Append: %s holds a %s, which the WithBranches set of %s places at no alternative of the content choice of %s, so that Decode returns no such value", path, b.Type(), v.Type(), e.complexSubject(el.decl)))
+		return nil
+	}
+	p := c.alts[i].particle
+	return e.particle(p, goshape.BranchOccurs(p.occurs), b.Field(0), path+".("+typePath(b.Type())+")."+b.Type().Field(0).Name, el.decl.Name())
+}
+
+// unemptiable says why the empty sequence lies outside the language of c, a
+// choice none of whose alternatives is emptiable: it has none (§3.8.4.3's
+// note), or each has {min occurs} at least 1.
+func (c *encodeChoice) unemptiable() string {
+	if len(c.alts) == 0 {
+		return "the choice has no alternative, so that it accepts no sequence (§3.8.4.3 cvc-model-group)"
+	}
+	return fmt.Sprintf("none of its %d alternatives is emptiable (§3.8.4.3 cvc-model-group, §3.9.6.3 cos-group-emptiable)", len(c.alts))
+}
+
+// complexSubject names the {type definition} of decl, which encodePlanOf
+// resolved, as typeSubject does.
+func (e *encoder) complexSubject(decl xsd.ElementDeclaration) string {
+	td, _ := e.schema.ResolvedType(decl.TypeDefinition())
+	return typeSubject(decl, td)
+}
+
+// encodeParticle is an element particle of a spliced content sequence or a
+// choice's alternative: its occurrence and its local element declaration.
 type encodeParticle struct {
 	occurs  xsd.Occurs
 	element encodeElement
@@ -281,18 +425,18 @@ func declEncodes(decl xsd.ElementDeclaration) error {
 // its {attribute wildcard}, then its {assertions}.
 func complexPlanOf(schema *xsd.Schema, decl xsd.ElementDeclaration, ct xsd.ComplexType) (encodeElement, error) {
 	subject := typeSubject(decl, ct)
-	plan := encodeElement{decl: decl}
+	plan := encodeElement{decl: decl, content: splicedContent(nil)}
 	// {content type} is a closed sum, so the switch is STYLE T2's sealed-sum
 	// exception.
 	switch content := ct.ContentType().(type) {
 	case xsd.SimpleContent:
 		return encodeElement{}, encodeDecline(constructSimpleContent, subject)
 	case xsd.ElementContent:
-		particles, err := contentPlanOf(schema, content, subject)
+		c, err := contentPlanOf(schema, content, subject)
 		if err != nil {
 			return encodeElement{}, err
 		}
-		plan.particles = particles
+		plan.content = c
 	}
 	for _, u := range goshape.FieldAttributeUses(ct) {
 		a, err := attributePlanOf(schema, u)
@@ -310,9 +454,12 @@ func complexPlanOf(schema *xsd.Schema, decl xsd.ElementDeclaration, ct xsd.Compl
 	return plan, nil
 }
 
-// contentPlanOf returns the encodeParticles of content, element-only or
-// mixed content of the complex type subject names, or complexPlanOf's error.
-func contentPlanOf(schema *xsd.Schema, content xsd.ElementContent, subject string) ([]encodeParticle, error) {
+// contentPlanOf returns the encodeContent of content, element-only or mixed
+// content of the complex type subject names, or complexPlanOf's error: a
+// spliced sequence's particles, or, for a choice occurring once that codegen
+// does not flatten, its alternatives, each as particlePlanOf admits it, in an
+// *encodeChoice whose branch types item 5's check places.
+func contentPlanOf(schema *xsd.Schema, content xsd.ElementContent, subject string) (encodeContent, error) {
 	if content.Mixed {
 		return nil, encodeDecline(constructMixed, subject)
 	}
@@ -335,8 +482,18 @@ func contentPlanOf(schema *xsd.Schema, content xsd.ElementContent, subject strin
 		return nil, fmt.Errorf("codec: %s: %w", subject, err)
 	}
 	switch hold {
-	case goshape.Flattened, goshape.OnceChoice:
+	case goshape.Flattened:
 		return nil, encodeDecline(constructSealedInterface, subject)
+	case goshape.OnceChoice:
+		c := &encodeChoice{}
+		for i, p := range group.Particles() {
+			el, err := particlePlanOf(schema, p, fmt.Sprintf("alternative %d of the content {particle} of %s", i+1, subject))
+			if err != nil {
+				return nil, err
+			}
+			c.alts = append(c.alts, encodeAlternative{particle: encodeParticle{occurs: p.Occurs(), element: el}})
+		}
+		return c, nil
 	case goshape.Occurrence:
 		return nil, encodeDecline(constructOccurrenceField, subject)
 	case goshape.Spliced:
@@ -344,7 +501,7 @@ func contentPlanOf(schema *xsd.Schema, content xsd.ElementContent, subject strin
 			return nil, encodeDecline(constructAllGroup, subject)
 		}
 	}
-	var particles []encodeParticle
+	var particles splicedContent
 	for i, p := range group.Particles() {
 		el, err := particlePlanOf(schema, p, fmt.Sprintf("particle %d of the content {particle} of %s", i+1, subject))
 		if err != nil {
@@ -356,7 +513,8 @@ func contentPlanOf(schema *xsd.Schema, content xsd.ElementContent, subject strin
 }
 
 // particlePlanOf returns the encodeElement of the particle p of a spliced
-// content sequence, subject naming p, or the error encodePlanOf states:
+// content sequence or of a content choice's alternative, subject naming p,
+// or the error encodePlanOf states:
 // {max occurs} 0, then a term other than a local element declaration, then
 // the declaration's own properties and type, of which a complex one other
 // than xs:anyType itself declines whole. {term} is a closed sum, so the
@@ -619,7 +777,7 @@ func (e *encoder) element(el encodeElement, v reflect.Value, path string, parent
 		e.close(name, start)
 		return nil
 	}
-	first := len(el.particles)
+	first := el.content.width()
 	for i, a := range el.attributes {
 		f, fpath := v.Field(first+i), path+"."+v.Type().Field(first+i).Name
 		if f.Kind() == reflect.Pointer {
@@ -640,10 +798,8 @@ func (e *encoder) element(el encodeElement, v reflect.Value, path string, parent
 	}
 	start := len(e.out)
 	e.out = append(e.out, '>')
-	for i, p := range el.particles {
-		if err := e.particle(p, v.Field(i), path+"."+v.Type().Field(i).Name, name); err != nil {
-			return err
-		}
+	if err := el.content.write(e, el, v, path); err != nil {
+		return err
 	}
 	e.close(name, start)
 	return nil
@@ -662,17 +818,19 @@ func (e *encoder) close(name xsd.QName, start int) {
 	e.out = append(e.out, '>')
 }
 
-// particle writes the elements of the field f of the particle p, path its Go
-// path, its parent element named parent, by the shape codegen gives the field
+// particle writes the elements of the field f of the particle p, held at
+// the occurrence held, p's own for a sequence's particle and
+// goshape.BranchOccurs' for a choice's alternative, path its Go path, its
+// parent element named parent, by the shape codegen gives the field
 // (goshape.ParticleShape), never by f's Kind, since a list's V is itself a
 // slice: one per item of a []V, which is item 6 of [Append]'s doc where its
-// length lies outside p's occurrence, none for a nil *V, and one for a V.
-// The error is element's.
-func (e *encoder) particle(p encodeParticle, f reflect.Value, path string, parent xsd.QName) error {
+// length lies outside held, none for a nil *V, and one for a V. The error is
+// element's.
+func (e *encoder) particle(p encodeParticle, held xsd.Occurs, f reflect.Value, path string, parent xsd.QName) error {
 	// ok is false only for {max occurs} 0, which particlePlanOf declines
 	// (constructVacuousParticle), and sealed is false since a union declines
 	// (constructUnion).
-	shape, _ := goshape.ParticleShape(p.occurs, false)
+	shape, _ := goshape.ParticleShape(held, false)
 	switch shape {
 	case goshape.Pointer:
 		if f.IsNil() {
@@ -680,8 +838,12 @@ func (e *encoder) particle(p encodeParticle, f reflect.Value, path string, paren
 		}
 		return e.element(p.element, f.Elem(), path, parent, false)
 	case goshape.Slice:
-		if !p.occurs.Permits(f.Len()) {
-			e.invalidate(fmt.Errorf("codec: Append: %s holds %d items, outside the occurrence %s of the particle of %s", path, f.Len(), p.occurs, declSubject(p.element.decl)))
+		if !held.Permits(f.Len()) {
+			raised := ""
+			if held != p.occurs {
+				raised = fmt.Sprintf(", the occurrence %s with {min occurs} 0 read as 1 in its branch,", p.occurs)
+			}
+			e.invalidate(fmt.Errorf("codec: Append: %s holds %d items, outside the occurrence %s%s of the particle of %s", path, f.Len(), held, raised, declSubject(p.element.decl)))
 		}
 		for j := range f.Len() {
 			if err := e.element(p.element, f.Index(j), path+"["+strconv.Itoa(j)+"]", parent, false); err != nil {

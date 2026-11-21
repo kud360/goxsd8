@@ -35,10 +35,11 @@ func instanceTest(name, doc string) string {
 }
 
 // censusSuite is the fixture suite, one group whose schema generates. Its
-// cases encode (a.xml, a sequence, f.xml, of simple type, and n.xml, z.xml
-// and o.xml, xs:double values NaN, −0 and 1, the last spelled other than
-// canonically), decline (g.xml, a choice, and p.xml, of
-// xs:precisionDecimal), and lie outside the population: invalid.xml, which
+// cases encode (a.xml, a sequence, f.xml, of simple type, n.xml, z.xml and
+// o.xml, xs:double values NaN, −0 and 1, the last spelled other than
+// canonically, and g.xml, a choice), decline (l.xml, a sequence codegen
+// flattens, and p.xml, of xs:precisionDecimal), and lie outside the
+// population: invalid.xml, which
 // does not decode, and u.xml, whose document element no declaration names,
 // which decodes into the placeholder.
 var censusSuite = map[string]string{
@@ -46,7 +47,7 @@ var censusSuite = map[string]string{
 	"sets/s.testSet": `<testSet name="S" xmlns:xlink="http://www.w3.org/1999/xlink">
   <testGroup name="g"><schemaTest name="s"><schemaDocument xlink:href="../d/s.xsd"/><expected validity="valid"/></schemaTest>` +
 		instanceTest("seq", "a.xml") + instanceTest("simple", "f.xml") + instanceTest("nan", "n.xml") + instanceTest("negzero", "z.xml") +
-		instanceTest("one", "o.xml") + instanceTest("choice", "g.xml") + instanceTest("precision", "p.xml") +
+		instanceTest("one", "o.xml") + instanceTest("choice", "g.xml") + instanceTest("flattened", "l.xml") + instanceTest("precision", "p.xml") +
 		instanceTest("invalid", "invalid.xml") + instanceTest("undeclared", "u.xml") + `</testGroup>
 </testSet>`,
 	"d/s.xsd": `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
@@ -54,6 +55,7 @@ var censusSuite = map[string]string{
   <xs:element name="f" type="xs:string"/>
   <xs:element name="d" type="xs:double"/>
   <xs:element name="g"><xs:complexType><xs:choice><xs:element name="h" type="xs:string"/><xs:element name="i" type="xs:string"/></xs:choice></xs:complexType></xs:element>
+  <xs:element name="l"><xs:complexType><xs:sequence maxOccurs="unbounded"><xs:element name="m" type="xs:string" minOccurs="0"/></xs:sequence></xs:complexType></xs:element>
   <xs:element name="p" type="xs:precisionDecimal"/>
 </xs:schema>`,
 	"d/a.xml":       `<a><b>x</b></a>`,
@@ -62,6 +64,7 @@ var censusSuite = map[string]string{
 	"d/z.xml":       `<d>-0</d>`,
 	"d/o.xml":       `<d> 1 </d>`,
 	"d/g.xml":       `<g><i>x</i></g>`,
+	"d/l.xml":       `<l><m>x</m></l>`,
 	"d/p.xml":       `<p>3.00</p>`,
 	"d/invalid.xml": `<a/>`,
 	"d/u.xml":       `<u/>`,
@@ -69,10 +72,10 @@ var censusSuite = map[string]string{
 
 // wantCounts is the report's head over censusSuite: every count, and its
 // construct lines.
-const wantCounts = `encodecensus: 9 instance case(s) under %ROOT%
-  schema generates: 9
-  decoded: 7
-  encoded: 5
+const wantCounts = `encodecensus: 10 instance case(s) under %ROOT%
+  schema generates: 10
+  decoded: 8
+  encoded: 6
   declined: 2
   append failed, no decline: 0
   re-validate rejected: 0
@@ -90,7 +93,7 @@ const wantCounts = `encodecensus: 9 instance case(s) under %ROOT%
 const wantPaths = `
 === Cases, by construct ===
 a construct codegen holds in a sealed interface: a choice, a flattened particle or a substitution group (1):
-  S/g/instance/choice
+  S/g/instance/flattened
 an atomic simple type whose primitive is other than xs:string, xs:boolean, xs:decimal, xs:float, xs:double, xs:duration, xs:dateTime, xs:time, xs:date, xs:gYearMonth, xs:gYear, xs:gMonthDay, xs:gDay, xs:gMonth, xs:hexBinary, xs:base64Binary or xs:anyURI (1):
   S/g/instance/precision
 

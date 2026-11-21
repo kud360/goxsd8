@@ -50,8 +50,9 @@ func encoding(out []byte, err error) Codec {
 // the encode or the second decode no correct codec returns. Each of the six
 // rows fails with its bucket's arm of tallyRoundTrip removed; the row over
 // empty.xml, which the placeholder decodes (TestDriveCountsEachBucket),
-// fails with DriveEncode's placeholder test removed, and the differential's
-// row with its differential test removed.
+// fails with DriveEncode's placeholder test removed, the differential's row
+// with its differential test removed, and the row encoded under bound
+// branches with CodecFor's encode passing codec.Append no bound option.
 func TestDriveEncodeCountsEachRow(t *testing.T) {
 	own := []Codec{CodecFor[a]()}
 	cases := []struct {
@@ -61,7 +62,8 @@ func TestDriveEncodeCountsEachRow(t *testing.T) {
 		want   EncodeSummary
 	}{
 		{"encoded", own, Case{"S/g/instance/e", "valid.xml", 0}, EncodeSummary{Encoded: 1}},
-		{"declined", []Codec{CodecFor[p](codec.WithBranches[p](pq{}, pr{}))}, Case{"S/g/instance/c", "choice.xml", 0},
+		{"encoded under bound branches", []Codec{CodecFor[p](codec.WithBranches[p](pq{}, pr{}))}, Case{"S/g/instance/b", "choice.xml", 0}, EncodeSummary{Encoded: 1}},
+		{"declined", []Codec{CodecFor[l](codec.WithBranches[lItem](lm{}))}, Case{"S/g/instance/c", "flat.xml", 0},
 			EncodeSummary{Declines: []Tally{{Construct: "a construct codegen holds in a sealed interface: a choice, a flattened particle or a substitution group", Cases: []string{"S/g/instance/c"}}}}},
 		{"append failed", []Codec{encoding(nil, errors.New("a fault"))}, Case{"S/g/instance/f", "valid.xml", 0},
 			EncodeSummary{AppendFailed: []string{"S/g/instance/f"}}},

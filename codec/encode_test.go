@@ -43,12 +43,12 @@ func accepts(t *testing.T, schema *xsd.Schema, data []byte) {
 	}
 }
 
-// roundTrip appends v as the document element name of schema, requires the
-// bytes want when want is not empty, validate's acceptance of them, and
-// Decode's T equal to v by eq, and returns the bytes.
-func roundTrip[T any](t *testing.T, schema *xsd.Schema, name xsd.QName, v T, want string, eq func(a, b T) bool) []byte {
+// roundTrip appends v as the document element name of schema under opts,
+// requires the bytes want when want is not empty, validate's acceptance of
+// them, and Decode's T under opts equal to v by eq, and returns the bytes.
+func roundTrip[T any](t *testing.T, schema *xsd.Schema, name xsd.QName, v T, want string, eq func(a, b T) bool, opts ...Option) []byte {
 	t.Helper()
-	data, err := appendChecked(t, nil, schema, strict.New(), name, v)
+	data, err := appendChecked(t, nil, schema, strict.New(), name, v, opts...)
 	if err != nil {
 		t.Fatalf("Append: %v", err)
 	}
@@ -56,7 +56,7 @@ func roundTrip[T any](t *testing.T, schema *xsd.Schema, name xsd.QName, v T, wan
 		t.Fatalf("Append wrote\n%s\nwant\n%s", data, want)
 	}
 	accepts(t, schema, data)
-	got, err := Decode[T](schema, strict.New(), data)
+	got, err := Decode[T](schema, strict.New(), data, opts...)
 	if err != nil {
 		t.Fatalf("Decode(%s): %v", data, err)
 	}
@@ -67,15 +67,15 @@ func roundTrip[T any](t *testing.T, schema *xsd.Schema, name xsd.QName, v T, wan
 }
 
 // appendChecked returns Append's answer for its arguments and fails t
-// unless CheckAppend[T]'s answer for schema and name agrees with it: a
+// unless CheckAppend[T]'s answer for schema, name and opts agrees with it: a
 // non-nil CheckAppend error is Append's, of equal Error text and equal class
 // (staticClass), and a nil one leaves Append nil, an item 6 or item 7 error
 // or a fault of backend: nil, item 6's ErrInvalidValue error, a plain error
 // without item 2's or item 3's text, or item 7's decline.
-func appendChecked[T any](t *testing.T, dst []byte, schema *xsd.Schema, backend value.Backend, name xsd.QName, v T) ([]byte, error) {
+func appendChecked[T any](t *testing.T, dst []byte, schema *xsd.Schema, backend value.Backend, name xsd.QName, v T, opts ...Option) ([]byte, error) {
 	t.Helper()
-	out, err := Append(dst, schema, backend, name, v)
-	checked := CheckAppend[T](schema, name)
+	out, err := Append(dst, schema, backend, name, v, opts...)
+	checked := CheckAppend[T](schema, name, opts...)
 	if checked == nil {
 		class := staticClass(err)
 		static := class == "plain" && (strings.HasPrefix(err.Error(), "codec: no top-level element declaration") || strings.Contains(err.Error(), "{abstract} true"))
@@ -833,7 +833,6 @@ func TestAppendDeclines(t *testing.T) {
 		{"mixed", "a complex type with mixed content", `<xs:element name="%[1]s"><xs:complexType mixed="true"><xs:sequence>` + a + `</xs:sequence></xs:complexType></xs:element>`},
 		{"open content", "an {open content}", complexOf(`<xs:openContent><xs:any namespace="##other" processContents="lax"/></xs:openContent><xs:sequence>` + a + `</xs:sequence>`)},
 		{"all group", "an all group", complexOf(`<xs:all>` + a + `</xs:all>`)},
-		{"choice", "a construct codegen holds in a sealed interface: a choice, a flattened particle or a substitution group", complexOf(`<xs:choice>` + a + `<xs:element name="b" type="xs:string"/></xs:choice>`)},
 		{"flattened", "a construct codegen holds in a sealed interface: a choice, a flattened particle or a substitution group", complexOf(`<xs:sequence maxOccurs="unbounded"><xs:element name="a" type="xs:string" minOccurs="0"/></xs:sequence>`)},
 		{"occurrence field", "a model group particle codegen holds in an occurrence field", complexOf(`<xs:sequence maxOccurs="2">` + a + `<xs:element name="b" type="xs:string"/></xs:sequence>`)},
 		{"wildcard", "a wildcard particle", sequence(`<xs:any processContents="lax"/>`)},
