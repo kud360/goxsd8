@@ -2084,11 +2084,12 @@ func (b *binding) sealedInterface() bool { return false }
 
 // elementContent is the content of the struct a *binding binds, the fields
 // that precede its attribute fields, a closed sum: a *sequence, the fields of
-// a sequence's particles, the one field holding a choice's sealed interface,
-// or no field for empty content, a *flattened, the one field holding a
-// flattened content model's slice, or an *occurrence, the occurrence field,
-// each of the three then holding the open-content field, if any; or a
-// *simpleValue, simple content's value field.
+// a sequence's particles, or no field for empty content, a *contentChoice,
+// the one field holding a content choice's sealed interface, a *flattened,
+// the one field holding a flattened content model's slice, or an
+// *occurrence, the occurrence field, each of the four then holding the
+// open-content field, if any; or a *simpleValue, simple content's value
+// field.
 type elementContent interface {
 	// width is how many of the struct's fields the content's are.
 	width() int
@@ -2482,14 +2483,14 @@ func (b boundValue) fill(r *xmltree.Reader, root *xmltree.StartElement, out refl
 // Spliced for giving in its place the members its own particles give, a nested
 // choice bound in place its *choice, a nested particle goshape.ParticleHold
 // answers Flattened for its flatSlice and any other nested model group particle
-// its *nestedOccurrence (codegen/doc.go "# Particles"), or a content choice's,
-// its one *choice, either then holding the open-content field, if any, as its
-// last member (sequence.openContent). Its members' attribution targets are
-// numbered in bind order from base, a field taking one, a *choice those of
-// each alternative's branch members in turn (branchTargets), a flatSlice one
-// per alternative and a *nestedOccurrence those of its item, and check
-// returns one sink per target in that order, so the target index holds for a
-// child is the index of the sink that sets it.
+// its *nestedOccurrence (codegen/doc.go "# Particles"), then holding the
+// open-content field, if any, as its last member (sequence.openContent); or
+// a *contentChoice's rest, holding that field alone, if any. Its members'
+// attribution targets are numbered in bind order from base, a field taking
+// one, a *choice those of each alternative's branch members in turn
+// (branchTargets), a flatSlice one per alternative and a *nestedOccurrence
+// those of its item, and check returns one sink per target in that order, so
+// the target index holds for a child is the index of the sink that sets it.
 type sequence struct {
 	p       *pipeline
 	members []contentMember
@@ -3430,8 +3431,9 @@ func bindBranch(a branchArm, bt reflect.Type, cx *checkContext) ([]sink, error) 
 // with one branch struct per alternative, in particle order, each holding the
 // fields its alternative's particle gives, its {min occurs} 0 read as 1 and
 // its {max occurs} kept (codegen/doc.go "# Complex types"). The interface is
-// the type itself (*choiceRoot) or, as a member of a *sequence, a field of
-// the type's struct, named name.
+// the type itself (*choiceRoot); a field of the type's struct, named name, a
+// content choice's as a *contentChoice's choice or a nested choice's as a
+// member of a *sequence; or an occurrence field's item (choiceItem).
 type choice struct {
 	name   string
 	sealed *sealed[branchArm]
