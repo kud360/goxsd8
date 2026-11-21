@@ -785,8 +785,8 @@ func (e *encoder) list(s encodeSimple, v reflect.Value, path, subject string) (s
 	}
 	shown := fmt.Sprintf("%v", v)
 	if s.atom.formed() {
-		// fmt spells a big.Rat, a big.Int or a datatype struct by its fields;
-		// each item's text is its form (spelled).
+		// fmt spells a big.Rat, a big.Int or a datatype struct by its fields, and a
+		// []byte by its octets in decimal; each item's text is its form (spelled).
 		shown = "[" + text + "]"
 	}
 	if _, err := value.ValidateLexical(e.backend, e.schema, s.st, text, nil, noAssertions{}); err != nil {
