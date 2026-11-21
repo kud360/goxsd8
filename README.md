@@ -90,7 +90,7 @@ The first example needs the binary alone: it writes a schema and two
 instances into a fresh directory and runs there.
 
 ```sh
-cd "$(mktemp -d)"                               # an empty directory, outside any checkout
+cd "$(mktemp -d)"                               # a fresh, empty directory
 cat > qty.xsd <<'EOF'
 <xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
   <xs:element name="qty" type="xs:positiveInteger"/>
