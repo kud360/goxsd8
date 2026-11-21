@@ -51,7 +51,7 @@ Usage:
               leaving no check undecided; that is not proven invalid,
               which is not proven valid. gen: every pair generated.
               Under -strict, in each of the three, no schemaLocation
-              was named resolving to no document either.
+              was named yielding no document either.
   1     3     parse and gen: a schema rejected, an I/O fault reading a
               document it references included. validate: an instance
               invalid, not well-formed XML, its walk stopped by a fault,
@@ -83,8 +83,9 @@ Usage:
               refusal and not a schema fault, so nothing is written.
               Nothing was proven wrong and something was not done: not
               a pass either. And under -strict, in parse, validate and
-              gen alike: a schemaLocation named on stderr resolving to
-              no document, a directive's or an instance's hint's. That
+              gen alike: a schemaLocation named on stderr yielding no
+              document, a compiled schema's or -schema set's
+              directive's or an instance's hint's. That
               4 is this CLI's policy, not a spec verdict: nothing was
               proven wrong and a document was not read. It ranks as
               any 4 does, so a rejection's 1 or a fault's 2 answers
@@ -260,9 +261,9 @@ Usage:
       to add a schemaLocation to it. Under -strict an
       unresolved-directive line charges the run 4 and every instance
       is still assessed,
-      and an XML instance's xsi:schemaLocation hint (below) that
-      resolves to no document, named on stderr against that
-      instance, charges that instance 4 likewise.
+      and an XML instance's xsi:schemaLocation hint (below)
+      yielding no document, named on stderr against that instance,
+      charges that instance 4 likewise.
       Source format by extension (.xml, .json, .ber) or forced with
       -format xml|json|ber, the extension and the token both matched
       case-sensitively (a.XML names no format, as -format XML names
@@ -514,7 +515,7 @@ Usage:
 Flags common to all subcommands: -q (quiet), -v (debug logging via
 slog to stderr; scope with GOXSD_DEBUG=parser,validate,codec),
 -strict (exit 4, by the exit-code table's 4 row, when the run names a
-schemaLocation resolving to no document, each line so charged ending
+schemaLocation yielding no document, each line so charged ending
 "; -strict charges this note 4", which names the charge and not the
 run's exit code; a rejected schema's or -schema set's own directive
 line is charged nothing and ends as it does without -strict; off,
@@ -585,7 +586,7 @@ func synopsis(name string) string {
 // argument list or a file this process could not work with at all, a schema set
 // that does not compile (validate alone), and an instance the assessment
 // declined to decide, a schema the generator declined (validate and gen) or,
-// under -strict, a schemaLocation named resolving to no document (skipCode).
+// under -strict, a schemaLocation named yielding no document (skipCode).
 //
 // Which fault each code names is per subcommand and stated in doc.go: parse and
 // gen charge exitInvalid for the schema they were asked to compile, where

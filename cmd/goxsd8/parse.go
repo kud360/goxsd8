@@ -301,7 +301,7 @@ const (
 //
 // The line carries no rule ID, because none charges a bare <import>, and moves
 // no exit code: it returns nothing, skipCode's "named" being a schemaLocation
-// resolving to no document, and the rejection's own code stands with or
+// yielding no document, and the rejection's own code stands with or
 // without -strict. It quotes no schemaLocation value and names no
 // document, the two things describeDirective's and shortfallClause's wording
 // assert and a bare <import> has none of.
@@ -387,13 +387,14 @@ func directiveAt(report *parser.AssemblyReport, at xsderr.Loc) *parser.Element {
 // is discarded, usage (main.go) being the contract.
 const (
 	strictFlag      = "strict"
-	strictFlagUsage = "exit 4 when a schemaLocation is named resolving to no document"
+	strictFlagUsage = "exit 4 when a schemaLocation is named yielding no document, on the lines usage's 4 row names"
 )
 
 // skipCode is the one encoding of -strict's policy: the exit code a run is
-// charged for having named on stderr a schemaLocation that resolved to no
-// document — reportUnfollowed's line on parse, validate and gen, and
-// reportUnfollowedHints' on validate, each of which returns it. named is
+// charged for having named on stderr a schemaLocation that yielded no document,
+// in shortfallClause's wording — reportUnfollowed's line on a compiled assembly
+// in parse, validate and gen, and reportUnfollowedHints' on validate on either
+// outcome of the hints' assembly, each of which returns it. named is
 // whether that reporter printed a line. It is exitUndecided where strict is set
 // and a line was named, and exitOK otherwise; strictMarker is what each such
 // line says of it.

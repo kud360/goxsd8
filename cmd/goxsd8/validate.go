@@ -281,8 +281,8 @@ type validation struct {
 	// the set, which -no-hints turns off. A JSON instance carries none
 	// (assessJSON).
 	hints bool
-	// strict is -strict, under which an instance's hint resolving to no
-	// document charges that instance skipCode's code.
+	// strict is -strict, under which an instance's hint yielding no document
+	// charges that instance skipCode's code.
 	strict bool
 	// log is the debug logger -v installed, nil when it was not given.
 	log *slog.Logger
