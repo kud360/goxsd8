@@ -288,21 +288,30 @@ func (a atomic) convert(form string) (reflect.Value, error) {
 	}
 }
 
+// formed reports whether form spells a's values, so that spelled writes them:
+// every atomic but atomicString, which str writes, and atomicFloat32 and
+// atomicFloat64, which double writes. atom, list and TestFormArms read it.
+func (a atomic) formed() bool {
+	return a != atomicString && a != atomicFloat32 && a != atomicFloat64
+}
+
 // form returns, as convert's inverse, the canonical representation of v, a
 // value of a Go type that converts to a's bare type, codegen's named type over
 // it among them, a being the atomic Go type of a type whose primitive is one
-// of encodedPrimitives other than xs:string and xs:double, and a nil error: a
-// bool as true or false (f-booleanCanmap); an integer in base 10 with no
-// decimal point, no '+' and no leading zero (f-decimalCanmap through
-// f-noDecCanMap); any other big.Rat as the shortest decimal expansion that is
-// exact, a digit at least on each side of the point (f-decCanFragMap); and a
-// date, time or duration datatype struct value as temporalForm states. A
-// non-nil error is the cause v lies outside a's value space, as item 6 of
-// [Append]'s doc states it, which no lexical spells: a big.Rat whose
-// denominator in lowest terms is no 2^m·5^n, or a datatype struct value
-// temporalForm refuses; it names the property, its value and the bound, and
-// carries no *xsderr.Error, since no rule charges it. Any other a is an
-// internal bug, which panics.
+// of encodedPrimitives and an atomic formed holds for, and a nil error: a bool
+// as true or false (f-booleanCanmap); an integer in base 10 with no decimal
+// point, no '+' and no leading zero (f-decimalCanmap through f-noDecCanMap);
+// any other big.Rat as the shortest decimal expansion that is exact, a digit
+// at least on each side of the point (f-decCanFragMap); a []byte of
+// xs:hexBinary as two upper-case hex digits per octet (Datatypes §E.4.1
+// f-hexBinaryCanonical) and of xs:base64Binary as padded Base64 with no white
+// space (§3.3.16.2 Canonical-base64Binary); and a date, time or duration
+// datatype struct value as temporalForm states. A non-nil error is the cause
+// v lies outside a's value space, as item 6 of [Append]'s doc states it,
+// which no lexical spells: a big.Rat whose denominator in lowest terms is no
+// 2^m·5^n, or a datatype struct value temporalForm refuses; it names the
+// property, its value and the bound, and carries no *xsderr.Error, since no
+// rule charges it. Any other a is an internal bug, which panics.
 func (a atomic) form(v reflect.Value) (string, error) {
 	v = v.Convert(a.bare())
 	switch a {
@@ -318,6 +327,10 @@ func (a atomic) form(v reflect.Value) (string, error) {
 		return strconv.FormatInt(v.Int(), 10), nil
 	case atomicUint8, atomicUint16, atomicUint32, atomicUint64:
 		return strconv.FormatUint(v.Uint(), 10), nil
+	case atomicHexBinary:
+		return strings.ToUpper(hex.EncodeToString(v.Bytes())), nil
+	case atomicBase64Binary:
+		return base64.StdEncoding.EncodeToString(v.Bytes()), nil
 	default:
 		return temporalForm(a, v)
 	}
@@ -360,18 +373,25 @@ func shownField(v reflect.Value) string {
 // pattern facet may match where it rejects the canonical one (Datatypes
 // §2.1's note), so that the rejection is item 7 of [Append]'s doc and not item
 // 6, for each primitive as item 7 states it. The other lexical is, for a
-// float64, any doubleRep spelling but for NaN and -INF (soleLexical); for an
-// xs:boolean value 1 or 0 (§3.3.2.2); for an xs:decimal-primitive or
-// duration-primitive one a leading zero; for a dateTime, dateTimeStamp or
-// time one a trailing zero of its seconds; and for a date or g* value, one
-// item 7 spells. An a of a primitive atomicEncodes declines is an
+// float32 or float64, any floatRep or doubleRep spelling but for NaN and -INF
+// (soleLexical); for an xs:boolean value 1 or 0 (§3.3.2.2); for an
+// xs:decimal-primitive or duration-primitive one a leading zero; for a
+// dateTime, dateTimeStamp or time one a trailing zero of its seconds; for a
+// date or g* value, one item 7 spells; for an xs:hexBinary value a lower-case
+// hex digit (§3.3.15.2's hexDigit production); and for an xs:base64Binary
+// value a single space between two of its characters (§3.3.16.2's B64
+// production and its note). An a of a primitive atomicEncodes declines is an
 // internal bug, which panics.
 func (a atomic) otherLexicalOf(v reflect.Value) bool {
 	switch a {
 	case atomicString:
 		return false
-	case atomicFloat64:
+	case atomicFloat32, atomicFloat64:
 		return !soleLexical(v.Float())
+	case atomicHexBinary:
+		return hexLetter(v.Bytes())
+	case atomicBase64Binary:
+		return v.Len() > 0
 	case atomicBool, atomicBigRat, atomicBigInt, atomicInt8, atomicInt16, atomicInt32, atomicInt64, atomicUint8, atomicUint16, atomicUint32, atomicUint64,
 		atomicDateTime, atomicDateTimeStamp, atomicTime, atomicDuration, atomicDayTimeDuration, atomicYearMonthDuration:
 		return true
@@ -384,6 +404,17 @@ func (a atomic) otherLexicalOf(v reflect.Value) bool {
 	default:
 		panic(fmt.Sprintf("codec: no other-lexical answer for atomic %d", a))
 	}
+}
+
+// hexLetter reports whether one of b's octets has a nibble of 0xA or above,
+// which f-hexDigitCanonical spells by a letter (Datatypes §E.4.1).
+func hexLetter(b []byte) bool {
+	for _, o := range b {
+		if o>>4 >= 0xA || o&0xF >= 0xA {
+			return true
+		}
+	}
+	return false
 }
 
 // zeroOffset reports whether v, a datatype struct value of a's bare type with

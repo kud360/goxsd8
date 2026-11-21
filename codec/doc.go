@@ -326,12 +326,14 @@
 //     constraint and of a simple type that encodes, into V or *V.
 //   - An atomic simple type with no assertions facet whose {primitive type
 //     definition} is xs:string, other than a type derived from xs:ID,
-//     xs:IDREF or xs:ENTITY, into string; xs:double, into float64;
-//     xs:decimal, a type derived from xs:integer included, into the Go type
-//     codegen's package doc "# Simple types" gives it; xs:boolean, into
-//     bool; or one of xs:duration, xs:dateTime, xs:time, xs:date,
-//     xs:gYearMonth, xs:gYear, xs:gMonthDay, xs:gDay and xs:gMonth, into the
-//     datatype struct codegen's "# Simple types" gives it.
+//     xs:IDREF or xs:ENTITY, into string; xs:anyURI, into string; xs:float,
+//     into float32; xs:double, into float64; xs:decimal, a type derived from
+//     xs:integer included, into the Go type codegen's package doc "# Simple
+//     types" gives it; xs:boolean, into bool; xs:hexBinary and
+//     xs:base64Binary, into []byte; or one of xs:duration, xs:dateTime,
+//     xs:time, xs:date, xs:gYearMonth, xs:gYear, xs:gMonthDay, xs:gDay and
+//     xs:gMonth, into the datatype struct codegen's "# Simple types" gives
+//     it.
 //   - A list simple type whose {item type definition} encodes and which has
 //     no assertions facet, its own or inherited, into []V, V its item's Go
 //     type.
@@ -350,21 +352,24 @@
 // fields (codegen's package doc, "# Attributes"), each value delimited by
 // '"'. A nil *V field writes nothing, a particle with {max occurs} above 1
 // writes one element per item of its slice, and an element with no content
-// is written as an empty-element tag, <x/>. A string value is written as
-// itself, its canonical representation, since xs:string's canonical mapping
-// is the identity (Datatypes §E.4 f-stringCanmap) and item 6 of Append's doc
-// holds the string to its own whiteSpace-normalized form. A list value is
-// written as its items' canonical representations, in order, separated by
-// single U+0020 characters (Datatypes §2.4.1.2), and the empty list, nil or
-// empty, as no content: <x/> for an element, a="" for an attribute. It
-// escapes '<', '&' and '>' as &lt;, &amp; and &gt; everywhere, so that "]]>" is
-// never written, and CR as &#xD; everywhere, which XML 1.0 end-of-line handling
-// (§2.11) would otherwise rewrite to LF or remove; in an attribute value it
-// escapes '"' as &quot;, TAB as &#x9; and LF as &#xA;, which attribute-value
-// normalization (§3.3.3) would otherwise turn into spaces; and every other
-// character, TAB and LF in content and the apostrophe everywhere, is written as
-// itself. So the Order codegen emits for README's order.xsd, of Item {"a"} and
-// Kind "k", is written <order xmlns="urn:o" kind="k"><item>a</item></order>.
+// is written as an empty-element tag, <x/>. A string value, of xs:string or
+// xs:anyURI primitive, is written as itself, its canonical representation,
+// since xs:string's canonical mapping is the identity (Datatypes §E.4
+// f-stringCanmap) and so is xs:anyURI's lexical mapping, so that an xs:anyURI
+// value is neither normalized nor percent-escaped (§3.3.17.2), and item 6 of
+// Append's doc holds the string to its own whiteSpace-normalized form. A list
+// value is written as its items' canonical representations, in order,
+// separated by single U+0020 characters (Datatypes §2.4.1.2), and the empty
+// list, nil or empty, as no content: <x/> for an element, a="" for an
+// attribute. It escapes '<', '&' and '>' as &lt;, &amp; and &gt; everywhere,
+// so that "]]>" is never written, and CR as &#xD; everywhere, which XML 1.0
+// end-of-line handling (§2.11) would otherwise rewrite to LF or remove; in an
+// attribute value it escapes '"' as &quot;, TAB as &#x9; and LF as &#xA;,
+// which attribute-value normalization (§3.3.3) would otherwise turn into
+// spaces; and every other character, TAB and LF in content and the
+// apostrophe everywhere, is written as itself. So the Order codegen emits for
+// README's order.xsd, of Item {"a"} and Kind "k", is written
+// <order xmlns="urn:o" kind="k"><item>a</item></order>.
 //
 // # Debuggability
 //
