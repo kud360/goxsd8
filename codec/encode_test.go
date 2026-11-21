@@ -1990,7 +1990,10 @@ func TestAppendFloat(t *testing.T) {
 // no letter" and "a base64Binary pattern, the empty value" fail where
 // otherLexicalOf answers true for xs:hexBinary and xs:base64Binary
 // respectively, and "an xs:float list's pattern" where it answers false for
-// xs:float.
+// xs:float. Where hexLetter reads only the low nibble, "a hexBinary pattern,
+// a high-nibble letter" fails; only the high nibble, "a low-nibble letter"
+// and "a letter after the first octet"; only the first octet, "a letter after
+// the first octet".
 func TestAppendBinaryInvalid(t *testing.T) {
 	schema := schemaOf(t, encodeBinarySchema)
 	for _, row := range []struct {
@@ -2020,6 +2023,9 @@ func TestAppendBinaryInvalid(t *testing.T) {
 		want       string
 	}{
 		{"a hexBinary pattern, a letter", "hcd", binaryRoot{0xAB}, "codec does not encode a value with no canonical representation: simple type {urn:s}hexCD defined at s.xsd:"},
+		{"a hexBinary pattern, a low-nibble letter", "hcd", binaryRoot{0x1A}, "codec does not encode a value with no canonical representation: simple type {urn:s}hexCD defined at s.xsd:"},
+		{"a hexBinary pattern, a high-nibble letter", "hcd", binaryRoot{0xA1}, "codec does not encode a value with no canonical representation: simple type {urn:s}hexCD defined at s.xsd:"},
+		{"a hexBinary pattern, a letter after the first octet", "hcd", binaryRoot{0x12, 0x3A}, "codec does not encode a value with no canonical representation: simple type {urn:s}hexCD defined at s.xsd:"},
 		{"a base64Binary pattern, a non-empty value", "bfoo", binaryRoot("bar"), "codec does not encode a value with no canonical representation: simple type {urn:s}b64Foo defined at s.xsd:"},
 	} {
 		t.Run(row.name, func(t *testing.T) {
