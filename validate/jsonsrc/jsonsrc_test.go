@@ -636,11 +636,11 @@ func TestErrorWraps(t *testing.T) {
 	}
 }
 
-// TestContentFollows pins the error Validate's doc states for content after
-// the top-level object, at the location the package doc's "Locations" section
-// gives it, for a trailer the decoder reads as a value, rejects or finds cut
-// off, read whole and a byte per Read, and the two rows where reading the
-// trailer faults, which keep their class.
+// TestContentFollows pins the error Validate's doc states for a trailer, at the
+// location the package doc's "Locations" section gives it, whether the decoder
+// reads the trailer as a value, rejects it or finds it cut off, read whole and
+// a byte per Read. Rows ending in an [iotest.ErrReader] pin the class the
+// Malformed bullet of Validate's doc gives each.
 func TestContentFollows(t *testing.T) {
 	boom := errors.New("disk on fire")
 	v := validatorOver(t, orderSchema)
@@ -666,6 +666,15 @@ func TestContentFollows(t *testing.T) {
 		{"a fault cutting off a literal", func() io.Reader {
 			return io.MultiReader(strings.NewReader(`{"order":null} tr`), iotest.ErrReader(boom))
 		}, ReadFault, at(1, 16), "fault reading the input: disk on fire"},
+		{"a fault after a string", func() io.Reader {
+			return io.MultiReader(strings.NewReader(`{"order":null} "x"`), iotest.ErrReader(boom))
+		}, ReadFault, at(1, 16), "fault reading the input: disk on fire"},
+		{"a fault after a delimiter", func() io.Reader {
+			return io.MultiReader(strings.NewReader(`{"order":null} {}`), iotest.ErrReader(boom))
+		}, Malformed, at(1, 16), follows},
+		{"a fault after the byte past a string", func() io.Reader {
+			return io.MultiReader(strings.NewReader(`{"order":null} "x" junk`), iotest.ErrReader(boom))
+		}, Malformed, at(1, 16), follows},
 	} {
 		for _, rd := range []struct {
 			name string
@@ -688,6 +697,51 @@ func TestContentFollows(t *testing.T) {
 				}
 				if tc.class == ReadFault && !errors.Is(err, boom) {
 					t.Errorf("Validate = %q; errors.Is does not reach the reader's error", err)
+				}
+				if tc.class != ReadFault && errors.Is(err, boom) {
+					t.Errorf("Validate = %q; errors.Is reaches the reader's error, which this row never reports", err)
+				}
+			})
+		}
+	}
+}
+
+// TestDeclineEndsReading pins Validate's doc on a decline met in a document cut
+// off after it, with r ending there and with r faulting there, each read whole
+// and a byte per Read.
+func TestDeclineEndsReading(t *testing.T) {
+	boom := errors.New("disk on fire")
+	v := validatorOver(t, orderSchema)
+	const doc = `{"z:nosuch":{"a":1`
+	const want = `member "z:nosuch": no "$xmlns" in scope binds its prefix "z"; a prefixed key names the expanded name its prefix's binding gives it, so bind "z" in a "$xmlns" member, {"z":"<namespace name>"}, leading the object of the element the key names or is an attribute of, or of an ancestor`
+	for _, tc := range []struct {
+		name string
+		r    func() io.Reader
+	}{
+		{"truncated", readerOf(doc)},
+		{"then a fault", func() io.Reader {
+			return io.MultiReader(strings.NewReader(doc), iotest.ErrReader(boom))
+		}},
+	} {
+		for _, rd := range []struct {
+			name string
+			wrap func(io.Reader) io.Reader
+		}{
+			{"whole", func(r io.Reader) io.Reader { return r }},
+			{"one byte", iotest.OneByteReader},
+		} {
+			t.Run(tc.name+"/"+rd.name, func(t *testing.T) {
+				_, err := Validate(v, rd.wrap(tc.r()), WithURI(jsonURI))
+				var e *Error
+				if !errors.As(err, &e) {
+					t.Fatalf("Validate = %v; errors.As does not reach an *Error", err)
+				}
+				at := xsderr.Loc{URI: jsonURI, Line: 1, Col: 2}
+				if e.Class() != Decline || e.Loc() != at || e.Msg() != want {
+					t.Errorf("Validate = %d %v %q, want %d %v %q", e.Class(), e.Loc(), e.Msg(), Decline, at, want)
+				}
+				if errors.Is(err, boom) {
+					t.Errorf("Validate = %q; errors.Is reaches the reader's error, which a decline never reports", err)
 				}
 			})
 		}

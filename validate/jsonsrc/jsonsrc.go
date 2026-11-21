@@ -60,8 +60,11 @@ func WithURI(uri string) Option {
 // XML twin the spelling the mapping takes instead where one exists; it is
 // never a silent drop or a guessed mapping: a member the mapping cannot name
 // is not part of the document the assessment saw, so its result is discarded
-// rather than returned. The whole document is read either way, so a fault
-// after the point the assessment stopped at is still reported.
+// rather than returned. A decline is returned where the walk meets it, and no
+// later error of any class is reported. Short of one, reading goes on past
+// wherever the assessment stopped, to the first error before the top-level
+// object's close, which is reported, or else to that close; the [Malformed]
+// bullet below owns what follows the close.
 //
 // An attribute member after a child member is the order encoding/json
 // marshals a struct whose child field is declared before an attribute field:
@@ -89,8 +92,12 @@ func WithURI(uri string) Option {
 //     message is "malformed JSON: …", "the document holds no JSON value; …"
 //     or "content follows the top-level object". The first may wrap an error,
 //     whose identity is not part of this contract; the other two wrap nothing.
-//     Whatever but white space follows the top-level object is "content
-//     follows the top-level object", unless reading it faults.
+//     Past that object's close, only the first token is decided, at one
+//     byte: that byte itself for a delimiter or a byte no token begins
+//     or continues, the byte after it for a string, number or literal. That
+//     token draws the third message; where r faults before that byte, with
+//     or without a token ahead of the fault, the error is [ReadFault]
+//     instead, and a fault after it is never reported.
 //   - A fault reading r, class [ReadFault]: "fault reading the input: …",
 //     wrapping the error r returned, which [errors.Is] reaches. The class is
 //     decided by whether the decoder's error is the one r returned, never by
@@ -3759,7 +3766,9 @@ func (w *walker) item(o *object, run *arrayRun, sc *scope, scalar bool) (element
 
 // end reads what follows the root's value once the assessment returns: the
 // rest of the root's subtree the assessment did not read, classified as the
-// walk would have, then the top-level object's close and the end of the input.
+// walk would have, then the outermost close and, past it, what [Validate]'s
+// doc says is decided there: the end of the input only where nothing but
+// white space follows.
 //
 // It DECLINES a second member of the top-level object, which has no XML twin,
 // so no marker tracks it: it would be a second document element (XML 1.0 §2.1
