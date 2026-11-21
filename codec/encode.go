@@ -180,8 +180,8 @@ func typePath(t reflect.Type) string {
 // type t under opts, or the error of the first of items 2 to 5 of [Append]'s
 // doc that applies. It reads no value, so its answer holds for every value of
 // t. Item 5's check, Decode's under the same opts, places each branch type of
-// a content choice's interface at its alternative, and the plan's choice
-// takes those placements (encodeChoice.place), computing none of its own.
+// a content choice's interface at its alternative, and the plan's content
+// takes those placements (encodeContent.place), computing none of its own.
 func encodeStatic(schema *xsd.Schema, name xsd.QName, t reflect.Type, opts []Option) (encodeElement, error) {
 	decl, ok := schema.Element(name)
 	if !ok {
@@ -204,11 +204,10 @@ func encodeStatic(schema *xsd.Schema, name xsd.QName, t reflect.Type, opts []Opt
 	if err != nil {
 		return encodeElement{}, err
 	}
-	// encodeContent is a closed sum, so the assertion is STYLE T2's
-	// sealed-sum exception.
-	if c, isChoice := plan.content.(*encodeChoice); isChoice {
-		c.place(f)
+	if plan.simple != nil {
+		return plan, nil
 	}
+	plan.content.place(f)
 	return plan, nil
 }
 
@@ -231,6 +230,9 @@ type encodeContent interface {
 	// width is the number of fields of the element's struct the content's
 	// fields take, ahead of the attribute fields.
 	width() int
+	// place takes, from f, the filler item 5's check returned for T, the
+	// branch type that check placed at each of the content's alternatives.
+	place(f filler)
 	// write writes the content's elements from v, the value of el, el's
 	// content, whose Go path from T is path.
 	write(e *encoder, el encodeElement, v reflect.Value, path string) error
@@ -243,6 +245,9 @@ type splicedContent []encodeParticle
 
 // width is one field per particle.
 func (s splicedContent) width() int { return len(s) }
+
+// place takes nothing: a spliced sequence has no alternative.
+func (s splicedContent) place(filler) {}
 
 // write writes each particle's elements from its field, in order.
 func (s splicedContent) write(e *encoder, el encodeElement, v reflect.Value, path string) error {
@@ -258,9 +263,10 @@ func (s splicedContent) write(e *encoder, el encodeElement, v reflect.Value, pat
 // flatten, held in its sealed interface (codegen's package doc, "# Complex
 // types"): T itself, or the first field of T's struct. alts holds one
 // alternative per particle of the choice, in order, each a local element
-// declaration.
+// declaration, and subject names the complex type whose content it is.
 type encodeChoice struct {
-	alts []encodeAlternative
+	alts    []encodeAlternative
+	subject string
 }
 
 // encodeAlternative is an alternative of an encodeChoice: its element
@@ -271,27 +277,34 @@ type encodeAlternative struct {
 	branch   reflect.Type
 }
 
+// placedChoice is a filler of a content choice occurring once, the
+// *boundChoiceRoot where T is the choice's interface and the *boundBinding of
+// a boundContentChoice where T is a struct: onceChoice returns the choice's
+// sealed interface as item 5's check bound it, ok false for a *boundBinding
+// of any other content.
+type placedChoice interface {
+	onceChoice() (choice *boundChoice, ok bool)
+}
+
 // place pairs each of c's alternatives with the branch type item 5's check
-// placed at it, f the filler that check returned for T: a *boundChoiceRoot
-// where T is the interface, and otherwise a *boundBinding of a
-// *boundSequence whose first sinks are the choice's (bindComplex,
-// bindContent). Every alternative of c is an element particle, of one
-// attribution target, so the choice's sinks are one per alternative, in
-// order, and share the choice's one boundChoice, whose branches the check
-// placed (sealed.checkSite); a choice of no {particles} has no sink and no
-// branch to pair.
+// placed at it, f the filler that check returned for T, which holds the
+// choice it bound (placedChoice): its branches[j] is the branch of
+// alternative j (sealed.checkSite), one per particle of the choice, in
+// order (bindChoice), as c's alts are. A filler holding no such choice, or
+// one of another alternative count, is an internal bug, never input: the
+// plan and the check both read the content particle by
+// goshape.ParticleHold.
 func (c *encodeChoice) place(f filler) {
-	var sinks []itemBranchSink
-	if root, isRoot := f.(*boundChoiceRoot); isRoot {
-		sinks = root.sinks
+	pc, isPlaced := f.(placedChoice)
+	if !isPlaced {
+		panic(fmt.Sprintf("codec: item 5's check returned a %T, which holds no content choice, for %s", f, c.subject))
 	}
-	if b, isStruct := f.(*boundBinding); isStruct {
-		for _, s := range b.content.(*boundSequence).sinks[:len(c.alts)] {
-			sinks = append(sinks, s.(branchSink).item)
-		}
+	bc, ok := pc.onceChoice()
+	if !ok || len(bc.branches) != len(c.alts) {
+		panic(fmt.Sprintf("codec: item 5's check returned a %T, which holds no content choice of %d alternatives, for %s", f, len(c.alts), c.subject))
 	}
-	for i, s := range sinks {
-		c.alts[i].branch = s.bound.branches[s.alt].t
+	for j, b := range bc.branches {
+		c.alts[j].branch = b.t
 	}
 }
 
@@ -321,14 +334,14 @@ func (c *encodeChoice) write(e *encoder, el encodeElement, v reflect.Value, path
 	}
 	if v.IsNil() {
 		if !c.emptiable() {
-			e.invalidate(fmt.Errorf("codec: Append: %s is nil, the empty match, which the content choice of %s does not accept: %s", path, e.complexSubject(el.decl), c.unemptiable()))
+			e.invalidate(fmt.Errorf("codec: Append: %s is nil, the empty match, which the content choice of %s does not accept: %s", path, c.subject, c.unemptiable()))
 		}
 		return nil
 	}
 	b := v.Elem()
 	i := slices.IndexFunc(c.alts, func(a encodeAlternative) bool { return a.branch == b.Type() })
 	if i < 0 {
-		e.invalidate(fmt.Errorf("codec: Append: %s holds a %s, which the WithBranches set of %s places at no alternative of the content choice of %s, so that Decode returns no such value", path, b.Type(), v.Type(), e.complexSubject(el.decl)))
+		e.invalidate(fmt.Errorf("codec: Append: %s holds a %s, which the WithBranches set of %s places at no alternative of the content choice of %s, so that Decode returns no such value", path, b.Type(), v.Type(), c.subject))
 		return nil
 	}
 	p := c.alts[i].particle
@@ -343,13 +356,6 @@ func (c *encodeChoice) unemptiable() string {
 		return "the choice has no alternative, so that it accepts no sequence (§3.8.4.3 cvc-model-group)"
 	}
 	return fmt.Sprintf("none of its %d alternatives is emptiable (§3.8.4.3 cvc-model-group, §3.9.6.3 cos-group-emptiable)", len(c.alts))
-}
-
-// complexSubject names the {type definition} of decl, which encodePlanOf
-// resolved, as typeSubject does.
-func (e *encoder) complexSubject(decl xsd.ElementDeclaration) string {
-	td, _ := e.schema.ResolvedType(decl.TypeDefinition())
-	return typeSubject(decl, td)
 }
 
 // encodeParticle is an element particle of a spliced content sequence or a
@@ -494,7 +500,7 @@ func contentPlanOf(schema *xsd.Schema, content xsd.ElementContent, subject strin
 	case goshape.Flattened:
 		return nil, encodeDecline(constructSealedInterface, subject)
 	case goshape.OnceChoice:
-		c := &encodeChoice{}
+		c := &encodeChoice{subject: subject}
 		for i, p := range group.Particles() {
 			el, err := particlePlanOf(schema, p, fmt.Sprintf("alternative %d of the content {particle} of %s", i+1, subject))
 			if err != nil {

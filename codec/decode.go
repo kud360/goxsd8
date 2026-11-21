@@ -2376,10 +2376,10 @@ func groupScope(el xsd.ElementDeclaration) (xsd.QName, bool) {
 // particles, item 5, typeSubject naming the type. Flattened is
 // bindFlattened's and Occurrence bindOccurrence's, over the particle's
 // occurs; Spliced is the sequence of group's particles (bindSequence); and
-// OnceChoice the sequence whose members are its *choice and the field ct's
-// {open content} gives, if any (sequence.openContent), and then, for a choice
-// that took an open-content field, the plain error matcherSlot.attributor
-// states.
+// OnceChoice the contentChoice of its *choice and of the sequence of the
+// field ct's {open content} gives, if any (sequence.openContent), and then,
+// for a choice that took an open-content field, the plain error
+// matcherSlot.attributor states.
 func bindContent(run *bindRun, ct xsd.ComplexType, group xsd.ModelGroup, occurs xsd.Occurs, hold goshape.Hold, names *goname.Namer, typeSubject string) (elementContent, error) {
 	switch hold {
 	case goshape.Flattened:
@@ -2393,14 +2393,14 @@ func bindContent(run *bindRun, ct xsd.ComplexType, group xsd.ModelGroup, occurs 
 		if err != nil {
 			return nil, err
 		}
-		s := &sequence{p: run.p, members: []contentMember{c}, index: x}
-		if !s.openContent(ct, names) {
-			return s, nil
+		cc := &contentChoice{choice: c, rest: &sequence{p: run.p, index: x, base: c.targets()}}
+		if !cc.rest.openContent(ct, names) {
+			return cc, nil
 		}
-		if _, err := s.index.matcher.attributor(run.p.schema); err != nil {
+		if _, err := cc.rest.index.matcher.attributor(run.p.schema); err != nil {
 			return nil, err
 		}
-		return s, nil
+		return cc, nil
 	}
 	// The zero Hold is an internal bug, never input.
 	panic(fmt.Sprintf("codec: invalid goshape.Hold %d", hold))
@@ -2497,9 +2497,10 @@ type sequence struct {
 	// base is the attribution target of s's first member: 0 but for the
 	// sequence a choice's model-group alternative is bound through, whose
 	// targets follow every earlier alternative's in the choice's childIndex
-	// (groupAlternative), and a nested occurrence field's sequence item, whose
+	// (groupAlternative), a nested occurrence field's sequence item, whose
 	// targets follow every earlier member's in its content model's
-	// (bindItem).
+	// (bindItem), and a contentChoice's rest, whose targets follow its
+	// choice's.
 	base int
 }
 
@@ -3044,6 +3045,16 @@ func (s *sequence) width() int { return len(s.members) }
 // check holds t's fields from field first on to s's members, in name, order
 // and Go type, and returns the boundSequence that sets them.
 func (s *sequence) check(t reflect.Type, first int, cx *checkContext) (contentFiller, error) {
+	sinks, err := s.memberSinks(t, first, cx)
+	if err != nil {
+		return nil, err
+	}
+	return &boundSequence{sequence: s, sinks: sinks}, nil
+}
+
+// memberSinks holds t's fields from field first on to s's members, as check
+// does, and returns each member's sinks, in target order.
+func (s *sequence) memberSinks(t reflect.Type, first int, cx *checkContext) ([]sink, error) {
 	var sinks []sink
 	for i, m := range s.members {
 		got, err := m.sinks(t, first+i, cx)
@@ -3052,8 +3063,59 @@ func (s *sequence) check(t reflect.Type, first int, cx *checkContext) (contentFi
 		}
 		sinks = append(sinks, got...)
 	}
-	return &boundSequence{sequence: s, sinks: sinks}, nil
+	return sinks, nil
 }
+
+// contentChoice is a content choice occurring once as Decode reads it
+// (bindContent): choice, the struct's first content field, and rest, the
+// sequence of the field ct's {open content} gives, if any, whose targets
+// follow choice's and whose childIndex attributes the content model's
+// children.
+type contentChoice struct {
+	choice *choice
+	rest   *sequence
+}
+
+// width is the choice's one field and rest's.
+func (c *contentChoice) width() int { return 1 + c.rest.width() }
+
+// check holds field first of t to c.choice (choice.bind) and the fields after
+// it to c.rest's members, and returns the boundContentChoice that sets them.
+func (c *contentChoice) check(t reflect.Type, first int, cx *checkContext) (contentFiller, error) {
+	bc, err := c.choice.bind(t, first, cx)
+	if err != nil {
+		return nil, err
+	}
+	rest, err := c.rest.memberSinks(t, first+1, cx)
+	if err != nil {
+		return nil, err
+	}
+	return &boundContentChoice{content: c, index: first, choice: bc, rest: rest}, nil
+}
+
+// boundContentChoice is content whose check held: choice, the sealed
+// interface held in field index, bound, and rest, the sinks of the targets
+// that follow the choice's.
+type boundContentChoice struct {
+	content *contentChoice
+	index   int
+	choice  *boundChoice
+	rest    []sink
+}
+
+// fill sets, from each child element, through the sink of the target
+// eachChild attributes it to, the field of that target, the choice's
+// interface's (choice.sinksOf) or a rest member's, every sink sharing st.
+func (b *boundContentChoice) fill(r *xmltree.Reader, _ *xmltree.StartElement, out reflect.Value, st *fillState) error {
+	s := b.content.rest
+	sinks := append(b.content.choice.sinksOf(b.index, b.choice), b.rest...)
+	return eachChild(r, s.p.schema, s.index, st, func(start *xmltree.StartElement, i int) error {
+		return sinks[i].put(s.p, r, start, out, st)
+	})
+}
+
+// onceChoice is b's choice, b being a content choice occurring once.
+func (b *boundContentChoice) onceChoice() (*boundChoice, bool) { return b.choice, true }
 
 // boundSequence is a sequence whose members check held: sinks[i] sets the
 // field of attribution target i.
@@ -3559,23 +3621,35 @@ func sealedShaped(it reflect.Type) bool {
 	return it.Kind() == reflect.Interface && it.NumMethod() == 1 && !it.Method(0).IsExported()
 }
 
-// sinks holds field index of t to the one holding c's interface, c's name,
-// not embedded, of c's sealed interface (sealed.checkSite), and returns one
-// branchSink per target of each alternative, in target order.
+// sinks holds field index of t to c (choice.bind), and returns its sinks
+// (choice.sinksOf).
 func (c *choice) sinks(t reflect.Type, index int, cx *checkContext) ([]sink, error) {
+	bc, err := c.bind(t, index, cx)
+	if err != nil {
+		return nil, err
+	}
+	return c.sinksOf(index, bc), nil
+}
+
+// bind holds field index of t to the one holding c's interface, c's name, not
+// embedded, of c's sealed interface (sealed.checkSite), and returns that
+// interface bound.
+func (c *choice) bind(t reflect.Type, index int, cx *checkContext) (*boundChoice, error) {
 	got := t.Field(index)
 	if got.Name != c.name || got.Anonymous {
 		return nil, fmt.Errorf("%w: field %d of %s is %s %s where codegen emits %s, a sealed interface", ErrTypeMismatch, index, t, got.Name, got.Type, c.name)
 	}
-	bc, err := c.sealed.checkSite(got.Type, fieldAt{owner: t, index: index}.site(), cx)
-	if err != nil {
-		return nil, err
-	}
+	return c.sealed.checkSite(got.Type, fieldAt{owner: t, index: index}.site(), cx)
+}
+
+// sinksOf returns one branchSink per target of each of c's alternatives, in
+// target order, setting the interface bc, c bound, held in field index.
+func (c *choice) sinksOf(index int, bc *boundChoice) []sink {
 	var sinks []sink
 	for _, s := range branchSinks(c.sealed.alts, bc) {
 		sinks = append(sinks, branchSink{index: index, item: s})
 	}
-	return sinks, nil
+	return sinks
 }
 
 // branchSink is a target of a choice whose check held, item setting it in
@@ -4787,21 +4861,24 @@ func (c *choiceRoot) checkAt(t reflect.Type, site string, cx *checkContext) (fil
 	if err != nil {
 		return nil, err
 	}
-	bc.sinks = branchSinks(c.sealed.alts, choice)
+	bc.choice = choice
 	return bc, nil
 }
 
-// boundChoiceRoot is root whose check held, sinks[i] setting its interface's
-// target i (branchSinks).
+// boundChoiceRoot is root whose check held, choice its sealed interface
+// bound.
 type boundChoiceRoot struct {
-	root  *choiceRoot
-	sinks []itemBranchSink
+	root   *choiceRoot
+	choice *boundChoice
 }
 
+// onceChoice is c's choice, a content choice occurring once.
+func (c *boundChoiceRoot) onceChoice() (*boundChoice, bool) { return c.choice, true }
+
 // fill sets out, a value of the interface, as a filler does, from each child
-// element, through the sink of the target eachChild attributes it to, in the
-// branch of that target's alternative, every sink sharing one fillState of
-// this fill's own. An empty match leaves out nil.
+// element, through the sink of the target eachChild attributes it to
+// (branchSinks), in the branch of that target's alternative, every sink
+// sharing one fillState of this fill's own. An empty match leaves out nil.
 func (c *boundChoiceRoot) fill(r *xmltree.Reader, root *xmltree.StartElement, out reflect.Value) error {
 	if err := noAttributes(root); err != nil {
 		return err
@@ -4809,8 +4886,9 @@ func (c *boundChoiceRoot) fill(r *xmltree.Reader, root *xmltree.StartElement, ou
 	p := c.root.sealed.p
 	st := &fillState{}
 	outer := p.handDown(c.root.typ, root)
+	sinks := branchSinks(c.root.sealed.alts, c.choice)
 	err := eachChild(r, p.schema, c.root.index, st, func(start *xmltree.StartElement, i int) error {
-		return c.sinks[i].put(p, r, start, out, st)
+		return sinks[i].put(p, r, start, out, st)
 	})
 	p.inherited = outer
 	return err
@@ -5312,6 +5390,16 @@ func (b *binding) checkStruct(t reflect.Type, cx *checkContext) (filler, error) 
 type boundBinding struct {
 	binding *binding
 	content contentFiller
+}
+
+// onceChoice is b's content's, where that content is a content choice
+// occurring once (boundContentChoice); ok is false for any other content.
+func (b *boundBinding) onceChoice() (choice *boundChoice, ok bool) {
+	pc, ok := b.content.(placedChoice)
+	if !ok {
+		return nil, false
+	}
+	return pc.onceChoice()
 }
 
 // fill sets out's fields as a filler does, in the order Decode's doc states

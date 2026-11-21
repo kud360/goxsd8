@@ -181,11 +181,11 @@ func TestAppendChoiceInvalid(t *testing.T) {
 	})
 	t.Run("an implementer of a choice of no {particles}", func(t *testing.T) {
 		_, err := appendChecked(t, nil, schemaOf(t, ecEmptySchema), strict.New(), sname("r"), ecEmpty(ecEmptyNone{}))
-		invalidChoice(t, err, "codec: Append: ecEmpty holds a codec.ecEmptyNone, which the WithBranches set of codec.ecEmpty places at no alternative of the content choice of ")
+		invalidChoice(t, err, "codec: Append: ecEmpty holds a codec.ecEmptyNone, which the WithBranches set of codec.ecEmpty places at no alternative of the content choice of the {type definition} of element {urn:s}r declared at ")
 	})
 	t.Run("a pointer to a branch", func(t *testing.T) {
 		_, err := appendChecked(t, nil, pickS, strict.New(), sname("r"), pick(&pickA{A: "x"}), pickBranches)
-		invalidChoice(t, err, "codec: Append: pick holds a *codec.pickA, which the WithBranches set of codec.pick places at no alternative of the content choice of ", "so that Decode returns no such value")
+		invalidChoice(t, err, "codec: Append: pick holds a *codec.pickA, which the WithBranches set of codec.pick places at no alternative of the content choice of the {type definition} of element {urn:s}r declared at ", "so that Decode returns no such value")
 	})
 	t.Run("an implementer the set does not hold", func(t *testing.T) {
 		_, err := appendChecked(t, nil, pickS, strict.New(), sname("r"), pick(pickC{C: "x"}), pickBranches)
@@ -203,6 +203,36 @@ func TestAppendChoiceInvalid(t *testing.T) {
 		_, err := appendChecked(t, nil, attributedS, strict.New(), sname("r"), attributed{Tag: "\x00"}, attributedBranches)
 		invalidChoice(t, err, "codec: Append: attributed.Tag holds ")
 	})
+}
+
+// TestEncodeChoicePlaceInternalBug pins that encodeChoice.place panics, as an
+// internal bug, never leaving an alternative without its branch type, where
+// item 5's filler holds no content choice: a filler with no placedChoice, a
+// *boundBinding of other content, and a choice bound with another
+// alternative count.
+func TestEncodeChoicePlaceInternalBug(t *testing.T) {
+	two := func() *encodeChoice {
+		return &encodeChoice{alts: make([]encodeAlternative, 2), subject: "the complex type T"}
+	}
+	for _, row := range []struct {
+		name string
+		f    filler
+		want string
+	}{
+		{"a filler of no choice", rawContent{}, "codec: item 5's check returned a codec.rawContent, which holds no content choice, for the complex type T"},
+		{"a struct of other content", &boundBinding{content: &boundSequence{}}, "codec: item 5's check returned a *codec.boundBinding, which holds no content choice of 2 alternatives, for the complex type T"},
+		{"another alternative count", &boundChoiceRoot{choice: &boundChoice{branches: make([]boundBranch, 1)}}, "codec: item 5's check returned a *codec.boundChoiceRoot, which holds no content choice of 2 alternatives, for the complex type T"},
+	} {
+		t.Run(row.name, func(t *testing.T) {
+			c := two()
+			defer func() {
+				if got := recover(); got != row.want {
+					t.Errorf("place panicked with %v, want %q; alternatives %v", got, row.want, c.alts)
+				}
+			}()
+			c.place(row.f)
+		})
+	}
 }
 
 // TestAppendChoiceBranches pins item 5 of Append's doc for a content choice
