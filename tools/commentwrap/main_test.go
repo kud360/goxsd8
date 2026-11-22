@@ -367,6 +367,114 @@ func TestFixKeepsABlockCommentInsideItsGroup(t *testing.T) {
 	}
 }
 
+// fix writes src to a temporary Go file, runs -fix over it and returns the
+// fixed file's lines.
+func fix(t *testing.T, src string) []string {
+	t.Helper()
+	path := filepath.Join(t.TempDir(), "x.go")
+	if err := os.WriteFile(path, []byte(src), 0o600); err != nil {
+		t.Fatalf("writing fixture: %v", err)
+	}
+	if _, err := process(path, true, map[int]bool{}); err != nil {
+		t.Fatalf("process(fix): %v", err)
+	}
+	fixed, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("reading fixed file: %v", err)
+	}
+	return strings.Split(string(fixed), "\n")
+}
+
+// TestFixKeepsInteriorRunsOfSpaces is #3903's sighting: the ragged line holds a
+// quoted literal whose two-space runs are its meaning, and stays the first
+// output line, so its runs are inside a line and not on a break.
+func TestFixKeepsInteriorRunsOfSpaces(t *testing.T) {
+	const literal = `// abcd abcd an xs:token holding "  a  b" is kept`
+	src := "package p\n\n" +
+		mkLine(0, 80) + "\n" +
+		literal + "\n" +
+		mkLine(0, 79) + "\n" +
+		mkLine(0, 40) + "\n" +
+		"var x = 1\n"
+	got := fix(t, src)
+	if want := literal + strings.Repeat(" abcd", 6); got[3] != want {
+		t.Fatalf("reflowed line 4:\n got %q\nwant %q", got[3], want)
+	}
+}
+
+// TestFixDropsTheRunABreakLandsOn places a two-space run where the greedy fill
+// reaches it at column 78 of an 80-column paragraph: kept and counted, `  y`
+// would end at 81, so the break lands on the run and drops it whole, where a
+// single space would have fit `y` at 80.
+func TestFixDropsTheRunABreakLandsOn(t *testing.T) {
+	src := "package p\n\n" +
+		mkLine(0, 80) + "\n" +
+		mkLine(0, 50) + "\n" +
+		"//" + strings.Repeat(" abcd", 5) + " ab  y" + strings.Repeat(" abcd", 9) + "\n" +
+		mkLine(0, 40) + "\n" +
+		"var x = 1\n"
+	got := fix(t, src)
+	if want := mkLine(0, 50) + strings.Repeat(" abcd", 5) + " ab"; got[3] != want {
+		t.Fatalf("reflowed line 4:\n got %q\nwant %q", got[3], want)
+	}
+	if !strings.HasPrefix(got[4], "// y abcd") {
+		t.Fatalf("reflowed line 5 = %q, want it to open with the lead, then y", got[4])
+	}
+}
+
+// TestReflowDropsATrailingRun hands reflow a body ending in a run directly:
+// commentpara takes a `//` line with trailing whitespace for one sharing its
+// line with code, so no such body reaches reflow through process. The run joins
+// nothing, and the next line's first word follows by one space.
+func TestReflowDropsATrailingRun(t *testing.T) {
+	para := []commentpara.Line{
+		{Num: 1, Raw: "// abcd  b  ", Body: " abcd  b  "},
+		{Num: 2, Raw: "// c", Body: " c"},
+	}
+	got := reflow(para, 80, 0)
+	if len(got) != 1 || got[0] != "// abcd  b c" {
+		t.Fatalf("reflow = %q, want [%q]", got, "// abcd  b c")
+	}
+}
+
+// TestFixWithoutInteriorRunsIsUnchanged pins -fix's output on paragraphs with
+// no interior run to what the tool produced before #3903, byte for byte: the
+// want lines were produced by the base tool, not computed here. The list item's
+// continuation lines carry five columns of body indentation, which is lead and
+// not an interior run, so the words they open join the line above by one space.
+func TestFixWithoutInteriorRunsIsUnchanged(t *testing.T) {
+	cases := []struct {
+		name string
+		src  string
+		want string
+	}{{
+		name: "plain",
+		src: "package p\n\n" +
+			mkLine(0, 80) + "\n" +
+			mkLine(0, 50) + "\n" +
+			mkLine(0, 79) + "\n" +
+			mkLine(0, 40) + "\n" +
+			"var x = 1\n",
+		want: "package p\n\n// abcd abcd abcd abcd abcd abcd abcd abcd abcd abcd abcd abcd abcd abcd abcdxxx\n// abcd abcd abcd abcd abcd abcd abcd abcd abcdxxx abcd abcd abcd abcd abcd abcd\n// abcd abcd abcd abcd abcd abcd abcd abcd abcdxx abcd abcd abcd abcd abcd abcd\n// abcdxxx\nvar x = 1\n",
+	}, {
+		name: "list item continuation",
+		src: "package p\n\n" +
+			"//  6. A value no valid document holds, the first in document order, an\n" +
+			"//     element's attributes before its content: an\n" +
+			"//     error, which errors.Is reports as [ErrInvalidValue], naming the Go\n" +
+			"//     path of its field from T and, for a simple value, its simple type.\n" +
+			"var x = 1\n",
+		want: "package p\n\n//  6. A value no valid document holds, the first in document order, an\n//     element's attributes before its content: an error, which errors.Is\n//     reports as [ErrInvalidValue], naming the Go path of its field from\n//     T and, for a simple value, its simple type.\nvar x = 1\n",
+	}}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := strings.Join(fix(t, tc.src), "\n"); got != tc.want {
+				t.Fatalf("-fix output:\n got %q\nwant %q", got, tc.want)
+			}
+		})
+	}
+}
+
 func TestWaiverCoversItsParagraph(t *testing.T) {
 	if len(waivers) == 0 {
 		t.Skip("no waivers to exercise")

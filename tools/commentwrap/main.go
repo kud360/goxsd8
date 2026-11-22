@@ -35,6 +35,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"unicode"
 	"unicode/utf8"
 
 	"github.com/kud360/goxsd8/tools/internal/commentpara"
@@ -299,6 +300,12 @@ func report(path string, para []commentpara.Line, width int, flaws []flaw) []fin
 // the paragraph's own wrap width. Everything above that line is left byte-identical:
 // the break the edit disturbed is the first one that has to move, and a reflow
 // that reaches further would rewrite lines no edit touched.
+//
+// Only where lines break changes: each word keeps the whitespace run written
+// before it inside its source line, so an interior run such as the two spaces
+// of `"  a  b"` survives byte for byte, its columns counted toward the fit
+// (#3903). A word that opens a source line is joined by one space, as is every
+// word when no run precedes it; a break drops the run it lands on whole.
 func reflow(para []commentpara.Line, width, from int) []string {
 	first := lead(para[from])
 	cont := first
@@ -306,27 +313,56 @@ func reflow(para []commentpara.Line, width, from int) []string {
 		cont = lead(para[from+1])
 	}
 
-	var words []string
+	var words []word
 	for _, line := range para[from:] {
-		words = append(words, strings.Fields(line.Body)...)
+		words = append(words, splitWords(line.Body)...)
 	}
 
 	var out []string
 	cur := first
 	empty := true
 	for _, w := range words {
-		if !empty && utf8.RuneCountInString(cur)+1+utf8.RuneCountInString(w) > width {
+		if !empty && utf8.RuneCountInString(cur)+utf8.RuneCountInString(w.sep)+utf8.RuneCountInString(w.text) > width {
 			out = append(out, cur)
 			cur, empty = cont, true
 		}
 		if !empty {
-			cur += " "
+			cur += w.sep
 		}
-		cur += w
+		cur += w.text
 		empty = false
 	}
 	if !empty {
 		out = append(out, cur)
+	}
+	return out
+}
+
+// word is one whitespace-delimited word of a comment body and sep, the run that
+// joins it to the word before it when both stay on one reflowed line.
+type word struct {
+	sep  string
+	text string
+}
+
+// splitWords splits a comment body into the words strings.Fields would, each
+// carrying the whitespace run written before it in body. The body's lead is no
+// interior run, so the first word carries a single space, and a trailing run
+// joins nothing and is dropped.
+func splitWords(body string) []word {
+	var out []word
+	sep := " "
+	rest := strings.TrimLeftFunc(body, unicode.IsSpace)
+	for rest != "" {
+		end := strings.IndexFunc(rest, unicode.IsSpace)
+		if end < 0 {
+			end = len(rest)
+		}
+		out = append(out, word{sep: sep, text: rest[:end]})
+		rest = rest[end:]
+		trimmed := strings.TrimLeftFunc(rest, unicode.IsSpace)
+		sep = rest[:len(rest)-len(trimmed)]
+		rest = trimmed
 	}
 	return out
 }
