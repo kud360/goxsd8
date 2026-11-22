@@ -304,8 +304,8 @@ func report(path string, para []commentpara.Line, width int, flaws []flaw) []fin
 // Only where lines break changes: each word keeps the whitespace run written
 // before it inside its source line, so an interior run such as the two spaces
 // of `"  a  b"` survives byte for byte, its columns counted toward the fit
-// (#3903). A word that opens a source line is joined by one space, as is every
-// word when no run precedes it; a break drops the run it lands on whole.
+// (#3903). A word that opens a source line joins the word before it by one
+// space, and a break drops the run it lands on whole.
 func reflow(para []commentpara.Line, width, from int) []string {
 	first := lead(para[from])
 	cont := first
