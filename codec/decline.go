@@ -148,6 +148,7 @@ const (
 	constructTypeTable
 	constructValueConstraint
 	constructIdentityConstraint
+	constructAbstractElement
 	constructAnyType
 	constructAbstractType
 	constructSimpleContent
@@ -182,6 +183,7 @@ var constructNames = [...]string{
 	constructTypeTable:          "an element declaration with a {type table}",
 	constructValueConstraint:    "a value constraint, default or fixed",
 	constructIdentityConstraint: "an element declaration with {identity-constraint definitions}",
+	constructAbstractElement:    "an element declaration with {abstract} true",
 	constructAnyType:            "an element declaration of type xs:anyType",
 	constructAbstractType:       "an element declaration whose {type definition} is a complex type with {abstract} true",
 	constructSimpleContent:      "a complex type with simple content",

@@ -17,6 +17,7 @@ import (
 
 	"github.com/kud360/goxsd8/builtin/strict"
 	"github.com/kud360/goxsd8/codec/testdata/readme/order"
+	"github.com/kud360/goxsd8/internal/goshape"
 	"github.com/kud360/goxsd8/loader"
 	"github.com/kud360/goxsd8/parser"
 	"github.com/kud360/goxsd8/validate"
@@ -786,6 +787,47 @@ func TestAppendVacuousParticle(t *testing.T) {
 			_ = asDecline(t, err, "codec does not encode a particle with {max occurs} 0: ")
 		})
 	}
+}
+
+// TestAppendAbstractParticle pins declEncodes' {abstract} check (cvc-elt
+// clause 2) at a particle: the parser rejects abstract on a local <element>,
+// so type v's one particle, a of xs:string, is rebuilt through
+// xsd.NewElementDeclaration with {abstract} true, and Append and CheckAppend
+// decline it naming a, where without the check they would write <a>.
+func TestAppendAbstractParticle(t *testing.T) {
+	parsed := schemaOf(t, `<xs:complexType name="v"><xs:sequence><xs:element name="a" type="xs:string"/></xs:sequence></xs:complexType><xs:element name="r" type="s:v"/>`)
+	v := xsd.QName{Space: "urn:s", Local: "v"}
+	declared, ok := parsed.Type(v)
+	if !ok {
+		t.Fatalf("the parsed schema declares no type %s", v)
+	}
+	scope, err := xsd.NewLocalScope(xsderr.Loc{}, xsd.ComplexTypeScopeParent{Name: v})
+	if err != nil {
+		t.Fatal(err)
+	}
+	a, err := xsd.NewElementDeclaration(xsderr.Loc{}, sname("a"), xsd.TypeDefinitionRef{Name: xsd.QName{Space: xsd.XMLSchemaNS, Local: "string"}}, nil, scope, nil, false, nil, nil, nil, true, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	p, err := xsd.NewParticle(xsderr.Loc{}, goshape.ExactlyOnce(), xsd.ResolvedTerm{Term: a})
+	if err != nil {
+		t.Fatal(err)
+	}
+	group, err := xsd.NewModelGroup(xsderr.Loc{}, xsd.CompositorSequence, []xsd.Particle{p})
+	if err != nil {
+		t.Fatal(err)
+	}
+	particle, err := xsd.NewParticle(xsderr.Loc{}, goshape.ExactlyOnce(), xsd.ResolvedTerm{Term: group})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ct, err := xsd.NewComplexType(declared.Loc(), v, xsd.QName{Space: xsd.XMLSchemaNS, Local: "anyType"}, nil, xsd.DerivationRestriction, false,
+		nil, nil, nil, xsd.ElementContent{Particle: particle}, nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = appendChecked(t, nil, replacedSchema(t, parsed, ct), strict.New(), rootName, struct{ A string }{A: "x"})
+	_ = asDecline(t, err, "codec does not encode an element declaration with {abstract} true: element {urn:s}a declared at ")
 }
 
 // TestAppendDeclines pins item 4 of Append's doc for each construct of the

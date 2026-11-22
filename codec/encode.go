@@ -443,7 +443,11 @@ func elementEncodes(schema *xsd.Schema, decl xsd.ElementDeclaration) error {
 
 // declEncodes returns the decline of the first of decl's own properties the
 // slice excludes: {nillable} as codegen reads it (goshape.Nillable), a {type
-// table}, a {value constraint} and {identity-constraint definitions}.
+// table}, a {value constraint}, {identity-constraint definitions}, and
+// {abstract} true, which no element validates against (cvc-elt clause 2): the
+// document element's is item 3 of [Append]'s doc, found before declEncodes
+// runs, so that only a particle's declines so, one the parser never builds
+// but xsd.NewElementDeclaration does.
 func declEncodes(decl xsd.ElementDeclaration) error {
 	if goshape.Nillable(decl) {
 		return encodeDecline(constructNillable, declSubject(decl))
@@ -456,6 +460,9 @@ func declEncodes(decl xsd.ElementDeclaration) error {
 	}
 	if len(decl.IdentityConstraints()) > 0 {
 		return encodeDecline(constructIdentityConstraint, declSubject(decl))
+	}
+	if decl.Abstract() {
+		return encodeDecline(constructAbstractElement, declSubject(decl))
 	}
 	return nil
 }
