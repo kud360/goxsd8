@@ -30,11 +30,12 @@ func main() {
 		log.Fatal(err)
 	}
 
-	// parser.Parse assembles the <xs:include> / <xs:import> / <xs:override>
-	// closure of the root document — including chameleon coercion of a
-	// no-targetNamespace included (or overridden) document into the including
-	// namespace — and returns it finalized. Every option has a default, so
-	// parser.Parse("order.xsd") alone is valid too.
+	// parser.Parse assembles the <xs:include> / <xs:override> /
+	// <xs:redefine> / <xs:import> closure of the root document — including
+	// chameleon coercion of a no-targetNamespace included (or overridden, or
+	// redefined) document into the including namespace — and returns it
+	// finalized. Every option has a default, so parser.Parse("order.xsd")
+	// alone is valid too.
 	schema, err := parser.Parse("order.xsd",
 		parser.WithBackend(backend),          // default: builtin/strict
 		parser.WithResolver(loader.Dir(".")), // default: loader.Dir("."), the working directory
