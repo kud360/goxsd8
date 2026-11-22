@@ -126,7 +126,7 @@ identifier for either of them and they import nothing from this module, so the
 edges drawn above do not exist yet in `go list -deps`. Read every
 present-tense sentence in their sections below as "will", not "does".
 `codec` has left this note: it exports `Decode`/`CheckDecode`/`Option`/`WithURI`/`WithBranches`/`WithPrecisionDecimalArms`/`WithLogger`,
-`Append`, `CheckAppend`, `DeclineError` and its `Construct`, `UndecidedError`, `ViolationsOf` and `ErrTypeMismatch`, and
+`Append`, `CheckAppend`, `ErrInvalidValue`, `DeclineError` and its `Construct`, `UndecidedError`, `ViolationsOf` and `ErrTypeMismatch`, and
 imports `parser/xmltree`, `validate`, `validate/xmlsrc`, `value`, `xsd`,
 `xsderr`, `internal/goname`, `internal/goshape`, `internal/xmlchar` and `internal/xmlqname` (its section says what ships).
 `codegen` has left this note: it exports `Generate`, `CheckTargets` and
@@ -762,7 +762,7 @@ construct, `CheckDecode`, which returns `Decode`'s schema-level declines and T m
 for a declaration before an instance arrives, `Append`, which encodes a value of that type
 back out in canonical form for the slice `codec/doc.go`'s "What encodes" states, declining
 every other construct, `CheckAppend`, which returns `Append`'s schema-level declines and T
-mismatches for a declaration before any value exists, `Option`/`WithURI`/`WithBranches`/`WithPrecisionDecimalArms`/`WithLogger`, `DeclineError` and its `Construct`, `UndecidedError`, `ViolationsOf`, and `ErrTypeMismatch`. Its
+mismatches for a declaration before any value exists, `Option`/`WithURI`/`WithBranches`/`WithPrecisionDecimalArms`/`WithLogger`, `ErrInvalidValue`, `DeclineError` and its `Construct`, `UndecidedError`, `ViolationsOf`, and `ErrTypeMismatch`. `Decode`'s
 runtime path today runs, for a union, the identification of its ·active
 basic member· (`value.ValidatingType`), then the whiteSpace stage
 (`value.ApplyWhiteSpace`) and, for a non-string atomic type, the governing
@@ -770,7 +770,7 @@ basic member· (`value.ValidatingType`), then the whiteSpace stage
 (`value.GoverningMapping`), whose `codec.WithLogger` doc says which types
 convert from Canonical's form and which from the lexical Parse accepted;
 every other pipeline stage is
-`validate`'s, run first on the same backend. `Decode` reads the instance twice (#3795): `validate` assesses it and drops its walk state, and only then does `codec` tokenize the same bytes again with `parser/xmltree` and fill T, re-asking each decision the assessment made through the primitive the walk calls — attribution (`xsd.Matcher.NextParticle`), the {type table} selection (`validate.Validator.ConditionallySelectedIndex`), the [inherited attributes] (`validate.Validator.HandedDown`), a union's ·active basic member· (`value.ValidatingType`, under the assessment's own `validate.Result.FacetAssertions`) and an admitted xsi:type's resolution. One pass would hold a per-element record of the assessment until the verdict (STYLE P4), and the infoset `validate` walks carries neither the raw content nor the byte offsets `codec` fills and reports from, so `validate` exports no observer of its walk. `value.Emitter` does
+`validate`'s, run first on the same backend. `Append` calls no `validate`: it holds each value it writes to its simple type through `value.ValidateLexical` itself. `Decode` reads the instance twice (#3795): `validate` assesses it and drops its walk state, and only then does `codec` tokenize the same bytes again with `parser/xmltree` and fill T, re-asking each decision the assessment made through the primitive the walk calls — attribution (`xsd.Matcher.NextParticle`), the {type table} selection (`validate.Validator.ConditionallySelectedIndex`), the [inherited attributes] (`validate.Validator.HandedDown`), a union's ·active basic member· (`value.ValidatingType`, under the assessment's own `validate.Result.FacetAssertions`) and an admitted xsi:type's resolution. One pass would hold a per-element record of the assessment until the verdict (STYLE P4), and the infoset `validate` walks carries neither the raw content nor the byte offsets `codec` fills and reports from, so `validate` exports no observer of its walk. `value.Emitter` does
 not exist (its API freezes in M10; not declared). A bullet `codegen/doc.go`
 or `codec/doc.go` does not state as shipped is the destination, stated in
 present tense because it is a design contract; read it as "will", not
@@ -889,11 +889,10 @@ compiles, is documented, and has **zero** callers module-wide.
   canonicalization and the `<xs:notation>` content check), so the annotation
   deletion left it a type with a job, and whether it stays EXPORTED is
   #1051's question alone.
-- **`xsd.Occurs.Permits`, `xsd.Namespace.IsAbsent`** — no non-test caller
-  anywhere. `Permits` answers a closed `min <= n <= max` question no caller
-  asks, every occurrence site reading `Min`/`Max` for a one-sided bound
-  instead; `IsAbsent` is `URI`'s second result spelled a second way (D3).
-  Filed at the 2026-09-06 audit as #1287.
+- **`xsd.Namespace.IsAbsent`** — no non-test caller anywhere: it is `URI`'s
+  second result spelled a second way (D3). Filed at the 2026-09-06 audit as
+  #1287. `xsd.Occurs.Permits` left this list when `codec`'s `Append` began
+  holding a repeated particle's item count to its occurrence with it (#3796).
   `xsd.NamespaceConstraint.AllowsNamespace` left this list when `validate`'s
   content charges began reading it to say whether a wildcard arm declined a
   child by namespace or by {disallowed names} (#1898): that explains a
@@ -915,10 +914,11 @@ compiles, is documented, and has **zero** callers module-wide.
   the `*DeclineError`. **Justified and not to be filed**: it is the slice
   index #3048 exported for an external caller of a multi-target `Generate`,
   on the same footing as `loader`'s helpers. Re-check, do not re-file.
-- **`codec.CheckDecode`, `codec.CheckAppend`, `codec.ViolationsOf`** — no
-  caller outside `codec`'s own examples and tests. **Justified and not to be
+- **`codec.CheckDecode`, `codec.CheckAppend`, `codec.ViolationsOf`,
+  `codec.ErrInvalidValue`** — no caller outside `codec`'s own examples and
+  tests and the root package's README test. **Justified and not to be
   filed**: each answers a library-user story for an external caller of
-  `Decode` or `Append` (#3368, #3367, #3863), on the same footing as
+  `Decode` or `Append` (#3368, #3367, #3863, #3898), on the same footing as
   `loader`'s helpers. Re-check, do not re-file.
 - **`xsderr.IsValidRule`** — **resolved (#273); re-check, do not re-file.**
   It still has zero non-test consumers, but the module-wide test
