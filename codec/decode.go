@@ -2148,9 +2148,9 @@ func bindDecl(p *pipeline, decl xsd.ElementDeclaration) (binder, error) {
 	if err != nil {
 		return nil, err
 	}
-	run := &bindRun{p: p, elements: unitIndex[xsd.QName]{}, types: unitIndex[xsd.QName]{}, groups: unitIndex[groupPath]{}}
+	run := &bindRun{p: p, units: unitIndex{}}
 	if len(types) != 1 {
-		return bindTable(run, decl, types, run.elements, decl.Name())
+		return bindTable(run, decl, types, run.units, elementKey(decl.Name()))
 	}
 	td := types[0].Type()
 	if goshape.AnyTypeItself(td) {
@@ -2181,7 +2181,7 @@ func bindTyped(run *bindRun, decl xsd.ElementDeclaration, td xsd.TypeDefinition)
 		return bindSimpleRoot(run.p, decl, st, typeSubject(decl, td))
 	}
 	ct, _ := td.(xsd.ComplexType)
-	return bindComplex(run, decl, ct, run.elements, decl.Name())
+	return bindComplex(run, decl, ct, run.units, elementKey(decl.Name()))
 }
 
 // typeSubject names td, the {type definition} of decl, as a decline of one
@@ -2205,21 +2205,35 @@ func typeSubject(decl xsd.ElementDeclaration, td xsd.TypeDefinition) string {
 // the model groups a flattened one reaches, the content particle's or a
 // nested one's (bindReach); a local declaration's type is either inline, a
 // tree it owns, or named. So every recursion through types passes one of
-// the three keys of codegen's emitted types: a top-level element
-// declaration, the document element's or one an <element ref> reaches,
-// keyed by its expanded name in elements; the named {type definition} of a
-// local element declaration, keyed by its QName in types; and the anonymous
-// type of a local element declaration whose {scope}'s {parent} is a model
-// group definition, which only a <group ref> reaches, keyed by its
-// groupPath in groups. Every other inline anonymous type is bound in place,
-// under no key, inside the unit of the type or group that declares it,
-// which is bound once.
+// the three keys of codegen's emitted types, the unitKeys units holds: a
+// top-level element declaration, the document element's or one an <element
+// ref> reaches, keyed by its expanded name; the named {type definition} of a
+// local element declaration, keyed by its QName; and the anonymous type of a
+// local element declaration whose {scope}'s {parent} is a model group
+// definition, which only a <group ref> reaches, keyed by its groupPath. Every
+// other inline anonymous type is bound in place, under no key, inside the
+// unit of the type or group that declares it, which is bound once.
 type bindRun struct {
-	p        *pipeline
-	elements unitIndex[xsd.QName]
-	types    unitIndex[xsd.QName]
-	groups   unitIndex[groupPath]
+	p     *pipeline
+	units unitIndex
 }
+
+// unitKey is one of the three keys bindRun's doc states, a sealed sum of
+// elementKey, typeKey and groupPath; a key of one never equals a key of
+// another, whatever names they hold. nestedKey derives it for an element
+// declaration of complex type, for Decode's bind and Append's walk
+// (encodeWalk) alike.
+type unitKey interface{ isUnitKey() }
+
+// elementKey keys a top-level element declaration by its expanded name.
+type elementKey xsd.QName
+
+// typeKey keys a named complex type by its QName.
+type typeKey xsd.QName
+
+func (elementKey) isUnitKey() {}
+func (typeKey) isUnitKey()    {}
+func (groupPath) isUnitKey()  {}
 
 // groupPath keys the anonymous complex type of element, a local element
 // declaration whose {scope}'s {parent} is the model group definition group
@@ -2240,7 +2254,7 @@ type groupPath struct {
 // set. It lives for one bindRun only and is a lookup index never iterated
 // (STYLE D2). No entry is removed when a bind fails: any item-5 error ends
 // the whole bind.
-type unitIndex[K comparable] map[K]complexUnit
+type unitIndex map[unitKey]complexUnit
 
 // bindComplex returns the complex unit of ct, the {type definition} of decl,
 // labelled by typeSubject, the one index already holds for key where it holds
@@ -2261,7 +2275,7 @@ type unitIndex[K comparable] map[K]complexUnit
 // nothing inside it reaches it again, and its value field holds decl's own {value
 // constraint} (cvc-elt clause 5.1), which another declaration of a named ct does not
 // share.
-func bindComplex[K comparable](run *bindRun, decl xsd.ElementDeclaration, ct xsd.ComplexType, index unitIndex[K], key K) (complexUnit, error) {
+func bindComplex(run *bindRun, decl xsd.ElementDeclaration, ct xsd.ComplexType, index unitIndex, key unitKey) (complexUnit, error) {
 	if u, ok := index[key]; ok {
 		return u, nil
 	}
@@ -2336,7 +2350,7 @@ func bindComplex[K comparable](run *bindRun, decl xsd.ElementDeclaration, ct xsd
 
 // store stores u as key's unit, unless index is nil, that of an anonymous
 // type bound under no key.
-func (index unitIndex[K]) store(key K, u complexUnit) {
+func (index unitIndex) store(key unitKey, u complexUnit) {
 	if index != nil {
 		index[key] = u
 	}
@@ -2345,23 +2359,33 @@ func (index unitIndex[K]) store(key K, u complexUnit) {
 // nested returns the complex unit of ct, the one governing type of el, a
 // particle's element declaration, other than xs:anyType, which declField
 // binds in its place, or the first decline Decode's doc states for it, item
-// 5: the constructs of ct in the order bindComplex states, keyed by el's
-// expanded name for a top-level el, by ct's QName for a local el whose
-// governing type is named, by its groupPath for an anonymous one of a local
-// el declared in a model group definition, and under no key for any other
-// anonymous one, a ct of simple content stored under none of these
-// (bindComplex).
+// 5: the constructs of ct in the order bindComplex states, under nestedKey's
+// key, or under no key where it answers nil, a ct of simple content stored
+// under none (bindComplex).
 func (run *bindRun) nested(el xsd.ElementDeclaration, ct xsd.ComplexType) (complexUnit, error) {
+	key := nestedKey(el, ct)
+	if key == nil {
+		return bindComplex(run, el, ct, nil, nil)
+	}
+	return bindComplex(run, el, ct, run.units, key)
+}
+
+// nestedKey returns the key bindRun.nested binds ct, the one governing type
+// of el, under: el's expanded name for a top-level el, ct's QName for a named
+// ct of a local el, its groupPath for an anonymous ct of a local el declared
+// in a model group definition, and nil for every other anonymous ct, bound
+// under no key.
+func nestedKey(el xsd.ElementDeclaration, ct xsd.ComplexType) unitKey {
 	if el.ScopeVariety() == xsd.ScopeGlobal {
-		return bindComplex(run, el, ct, run.elements, el.Name())
+		return elementKey(el.Name())
 	}
 	if ct.Name() != (xsd.QName{}) {
-		return bindComplex(run, el, ct, run.types, ct.Name())
+		return typeKey(ct.Name())
 	}
 	if group, inGroup := groupScope(el); inGroup {
-		return bindComplex(run, el, ct, run.groups, groupPath{group: group, element: el.Name()})
+		return groupPath{group: group, element: el.Name()}
 	}
-	return bindComplex(run, el, ct, unitIndex[xsd.QName](nil), xsd.QName{})
+	return nil
 }
 
 // groupScope returns the name of the model group definition that is the
@@ -2708,7 +2732,7 @@ func (st *fillState) partition(schema *xsd.Schema, group xsd.ModelGroup, first i
 // {min occurs} and {max occurs}, and held, the occurrence the field's shape
 // was computed at (particleShape): own for a sequence's particle and
 // goshape.BranchOccurs' for a choice's alternative. Append writes the
-// particle's elements from it (elementMember.write).
+// particle's elements from it (elementMember.writeElements).
 type elementMember struct {
 	field
 	decl      xsd.ElementDeclaration

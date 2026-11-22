@@ -58,6 +58,24 @@ const (
 <xs:element name="r"><xs:complexType><xs:sequence><xs:element ref="s:h" maxOccurs="unbounded"/></xs:sequence><xs:attribute name="type" type="xs:string" inheritable="true"/></xs:complexType></xs:element>`
 )
 
+// Two more {type table} schemas declaring s:r, each with a governing type
+// that shares its element's expanded name, so that a unit keyed by the one
+// must not be found by the other (bindRun). ttNamesakeSchema's r, of base,
+// selects the complex type r where it has a kind, and base otherwise; and
+// ttRefNamesakeSchema's r holds a ref to e, of that table but for the complex
+// type e.
+var (
+	ttNamesakeSchema    = ttTypes + ttNamesake("r") + `<xs:element name="r" type="s:base"><xs:alternative test="@kind" type="s:r"/></xs:element>`
+	ttRefNamesakeSchema = ttTypes + ttNamesake("e") + `<xs:element name="e" type="s:base"><xs:alternative test="@kind" type="s:e"/></xs:element>
+<xs:element name="r"><xs:complexType><xs:sequence><xs:element ref="s:e"/></xs:sequence></xs:complexType></xs:element>`
+)
+
+// ttNamesake declares the complex type name, an extension of base adding n,
+// an xs:int, as num does.
+func ttNamesake(name string) string {
+	return `<xs:complexType name="` + name + `"><xs:complexContent><xs:extension base="s:base"><xs:sequence><xs:element name="n" type="xs:int"/></xs:sequence></xs:extension></xs:complexContent></xs:complexType>`
+}
+
 // ttRowsSchemas are the five {type table}s TestDecodeDeclines held as
 // declines before tables decoded, each of whose governing types collapse to
 // one: rt, a sequence of a, an xs:string, on the document element;
@@ -82,7 +100,10 @@ var ttRowsSchemas = [...]string{
 // ttUtBoolean; ttInheritSchema's R, Ev, Evd, V, VInt and VLong are ttInh to
 // ttVLong; ttChoiceSchema's R, RChoice, RChoiceWhen and RChoiceZ are ttCh to
 // ttChZ; ttGroupSchema's R, HSubstitutionGroup, its branches, Wh, WhBoolean,
-// WhUt and N are ttGr to ttN; and ttRowsSchemas[0]'s R is ttRow.
+// WhUt and N are ttGr to ttN; ttNamesakeSchema's R, RR and RBase are ttNs to
+// ttNsBase, its R2 ttNum's shape; ttRefNamesakeSchema's R, E, EE and EBase
+// are ttRefNs to ttRefNsBase, its E2 ttNum's shape; and ttRowsSchemas[0]'s R
+// is ttRow.
 type (
 	ttBase struct {
 		A    string
@@ -169,6 +190,15 @@ type (
 	ttWhUt      struct{ Ut ttUt }
 	ttN         int32
 
+	ttNs     interface{ isTtNs() }
+	ttNsR    struct{ R ttNum }
+	ttNsBase struct{ Base ttBase }
+
+	ttRefNs     struct{ E ttRefNsE }
+	ttRefNsE    interface{ isTtRefNsE() }
+	ttRefNsEE   struct{ E ttNum }
+	ttRefNsBase struct{ Base ttBase }
+
 	ttRow struct{ A string }
 )
 
@@ -192,18 +222,24 @@ func (ttGrWh) isTtGroup()       {}
 func (ttGrN) isTtGroup()        {}
 func (ttWhBoolean) isTtWh()     {}
 func (ttWhUt) isTtWh()          {}
+func (ttNsR) isTtNs()           {}
+func (ttNsBase) isTtNs()        {}
+func (ttRefNsEE) isTtRefNsE()   {}
+func (ttRefNsBase) isTtRefNsE() {}
 
 // The branch sets of the interfaces above.
 var (
-	ttRBranches    = WithBranches[ttR](ttRNum{}, ttRFlag{}, ttRBase{})
-	ttEBranches    = WithBranches[ttE](ttENum{}, ttEBase{})
-	ttABranches    = WithBranches[ttA](ttAAlt1{}, ttABase{})
-	ttWhenBranches = WithBranches[ttWhenI](ttWhenBoolean{}, ttWhenInt{}, ttWhenUt{})
-	ttUtBranches   = WithBranches[ttUt](ttUtInt(0), ttUtBoolean(false))
-	ttVBranches    = WithBranches[ttV](ttVInt{}, ttVLong{})
-	ttChBranches   = WithBranches[ttChoice](ttChWhen{}, ttChZ{})
-	ttGrBranches   = WithBranches[ttGroup](ttGrWh{}, ttGrN{})
-	ttWhBranches   = WithBranches[ttWh](ttWhBoolean{}, ttWhUt{})
+	ttRBranches     = WithBranches[ttR](ttRNum{}, ttRFlag{}, ttRBase{})
+	ttEBranches     = WithBranches[ttE](ttENum{}, ttEBase{})
+	ttABranches     = WithBranches[ttA](ttAAlt1{}, ttABase{})
+	ttWhenBranches  = WithBranches[ttWhenI](ttWhenBoolean{}, ttWhenInt{}, ttWhenUt{})
+	ttUtBranches    = WithBranches[ttUt](ttUtInt(0), ttUtBoolean(false))
+	ttVBranches     = WithBranches[ttV](ttVInt{}, ttVLong{})
+	ttChBranches    = WithBranches[ttChoice](ttChWhen{}, ttChZ{})
+	ttGrBranches    = WithBranches[ttGroup](ttGrWh{}, ttGrN{})
+	ttWhBranches    = WithBranches[ttWh](ttWhBoolean{}, ttWhUt{})
+	ttNsBranches    = WithBranches[ttNs](ttNsR{}, ttNsBase{})
+	ttRefNsBranches = WithBranches[ttRefNsE](ttRefNsEE{}, ttRefNsBase{})
 )
 
 // TestTypeTableTypesAreCodegens pins the types above to those codegen emits
@@ -250,6 +286,11 @@ func TestTypeTableTypesAreCodegens(t *testing.T) {
 			"type HSubstitutionGroupN struct {\n\tN N\n}\n\nfunc (HSubstitutionGroupN) isHSubstitutionGroup() {}\n",
 			"type Wh interface {\n\tisWh()\n}\n", "type WhBoolean struct {\n\tBoolean bool\n}\n\nfunc (WhBoolean) isWh() {}\n",
 			"type WhUt struct {\n\tUt Ut\n}\n\nfunc (WhUt) isWh() {}\n", "type N int32\n", ut, utInt, utBool}},
+		{ttNamesakeSchema, []string{r, "type RR struct {\n\tR R2\n}\n\nfunc (RR) isR() {}\n",
+			"type R2 struct {\n\tA    string\n\tN    int32\n\tKind *string\n}\n", rBase, base}},
+		{ttRefNamesakeSchema, []string{"type R struct {\n\tE E\n}\n", "type E interface {\n\tisE()\n}\n",
+			"type EE struct {\n\tE E2\n}\n\nfunc (EE) isE() {}\n", "type E2 struct {\n\tA    string\n\tN    int32\n\tKind *string\n}\n",
+			"type EBase struct {\n\tBase Base\n}\n\nfunc (EBase) isE() {}\n", base}},
 		{ttRowsSchemas[0], []string{"type R struct {\n\tA string\n}\n"}},
 		{ttRowsSchemas[1], []string{"type R AnyType\n"}},
 		{ttRowsSchemas[2], []string{"type R AnyType\n"}},
@@ -276,9 +317,11 @@ func TestTypeTableTypesAreCodegens(t *testing.T) {
 // validate.Validator.HandedDown composes them (e-inherited_attributes): a
 // parent's, a grandparent's through a parent that hands down nothing of its
 // own, and a parent's ·defaulted attribute·, which shadows the grandparent's;
-// a branch of simple type holds its declaration's default; and a table that
-// collapses to one governing type decodes as that type, xs:error's slot
-// giving none.
+// a branch of simple type holds its declaration's default; a named governing
+// type sharing its element's expanded name, at the document element and an
+// <element ref>, fills its own branch's struct, not the element's interface;
+// and a table that collapses to one governing type decodes as that type,
+// xs:error's slot giving none.
 func TestDecodeTypeTable(t *testing.T) {
 	str := func(s string) *string { return &s }
 	inh := into[ttInh](ttWhenBranches, ttUtBranches, ttVBranches)
@@ -325,6 +368,10 @@ func TestDecodeTypeTable(t *testing.T) {
 			ttGr{H: []ttGroup{ttGrWh{Wh: ttWhBoolean{Boolean: true}}, ttGrN{N: 2}}, Type: str("bool")}},
 		{"a substitution group's member, its default", ttGroupSchema, "", `<s:wh>1</s:wh>`, into[ttGr](ttGrBranches, ttWhBranches, ttUtBranches),
 			ttGr{H: []ttGroup{ttGrWh{Wh: ttWhUt{Ut: ttUtInt(1)}}}}},
+		{"document element, a governing type sharing its name", ttNamesakeSchema, ` kind="x"`, "<s:a>x</s:a><s:n>1</s:n>", into[ttNs](ttNsBranches),
+			ttNs(ttNsR{R: ttNum{A: "x", N: 1, Kind: str("x")}})},
+		{"an <element ref>, a governing type sharing its name", ttRefNamesakeSchema, "", `<s:e kind="x"><s:a>x</s:a><s:n>1</s:n></s:e>`, into[ttRefNs](ttRefNsBranches),
+			ttRefNs{E: ttRefNsEE{E: ttNum{A: "x", N: 1, Kind: str("x")}}}},
 		{"one governing type, a named complex type", ttRowsSchemas[0], "", "<s:a>x</s:a>", into[ttRow](), ttRow{A: "x"}},
 		{"one governing type, xs:anyType on the document element", ttRowsSchemas[1], "", "t", into[rootAny](), rootAny{Text: "t"}},
 		{"one governing type, xs:anyType on a nillable document element", ttRowsSchemas[2], "", "t", into[rootAny](), rootAny{Text: "t"}},
