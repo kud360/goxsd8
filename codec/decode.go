@@ -36,8 +36,8 @@ var ErrTypeMismatch = errors.New("codec: T is not the type codegen emits for the
 // documents of several roots therefore reads the document element's expanded
 // name itself before choosing T: [xmltree.NewReader] over data, read by
 // [xmltree.Reader.Token] to the first *[xmltree.StartElement], whose Name's
-// Space and Local are the [xsd.QName] items 5 and 6 read, the name
-// [CheckDecode] takes.
+// Space and Local are those of the [xsd.QName] whose top-level element
+// declaration items 5 and 6 examine, the name [CheckDecode] takes.
 //
 // The slice Decode covers is the package doc's "# What decodes". Decode first
 // assesses data against schema with package validate and decodes only an
