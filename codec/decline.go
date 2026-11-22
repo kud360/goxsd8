@@ -132,12 +132,14 @@ type construct uint8
 // constructVacuousParticle first, as the content {particle} does, then by
 // constructNestedGroup where its term is a model group; its element
 // declaration declines by the document element's declaration's constructs,
-// constructNillable first, before constructComplexParticle; and an attribute
-// use declines by constructValueConstraint after constructQualifiedAttribute.
-// The ones of a simple type, constructSpecialType to constructAssertions, sit
-// after the {assertions}'s, though the document element's, a
-// particle's and an attribute use's simple type declines by them where that
-// declaration or use is examined.
+// constructNillable first and constructAbstractElement last, then by its
+// type's as the document element's type does, from constructAnyType on, a
+// complex type's content and attribute uses examined at the particle; and an
+// attribute use declines by constructValueConstraint after
+// constructQualifiedAttribute. The ones of a simple type,
+// constructSpecialType to constructAssertions, sit after the {assertions}'s,
+// though the document element's, a particle's and an attribute use's simple
+// type declines by them where that declaration or use is examined.
 const (
 	constructNillable construct = iota + 1
 	constructNestedGroup
@@ -148,6 +150,7 @@ const (
 	constructTypeTable
 	constructValueConstraint
 	constructIdentityConstraint
+	constructAbstractElement
 	constructAnyType
 	constructAbstractType
 	constructSimpleContent
@@ -159,7 +162,6 @@ const (
 	constructOccurrenceField
 	constructWildcard
 	constructElementRef
-	constructComplexParticle
 	constructQualifiedAttribute
 	constructAttributeWildcard
 	constructComplexAssertions
@@ -182,6 +184,7 @@ var constructNames = [...]string{
 	constructTypeTable:          "an element declaration with a {type table}",
 	constructValueConstraint:    "a value constraint, default or fixed",
 	constructIdentityConstraint: "an element declaration with {identity-constraint definitions}",
+	constructAbstractElement:    "an element declaration with {abstract} true",
 	constructAnyType:            "an element declaration of type xs:anyType",
 	constructAbstractType:       "an element declaration whose {type definition} is a complex type with {abstract} true",
 	constructSimpleContent:      "a complex type with simple content",
@@ -193,7 +196,6 @@ var constructNames = [...]string{
 	constructOccurrenceField:    "a model group particle codegen holds in an occurrence field",
 	constructWildcard:           "a wildcard particle",
 	constructElementRef:         "an <element ref> particle",
-	constructComplexParticle:    "an element particle of complex type",
 	constructQualifiedAttribute: "an attribute use whose declaration has a {target namespace}",
 	constructAttributeWildcard:  "an {attribute wildcard}",
 	constructComplexAssertions:  "a complex type with {assertions}",

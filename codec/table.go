@@ -45,12 +45,12 @@ type selector interface {
 // place inside the unit that declares it (bindRun).
 func (run *bindRun) table(el xsd.ElementDeclaration, types []goshape.GoverningType) (complexUnit, error) {
 	if el.ScopeVariety() == xsd.ScopeGlobal {
-		return bindTable(run, el, types, run.elements, el.Name())
+		return bindTable(run, el, types, run.units, elementKey(el.Name()))
 	}
 	if group, inGroup := groupScope(el); inGroup {
-		return bindTable(run, el, types, run.groups, groupPath{group: group, element: el.Name()})
+		return bindTable(run, el, types, run.units, groupPath{group: group, element: el.Name()})
 	}
-	return bindTable(run, el, types, unitIndex[xsd.QName](nil), xsd.QName{})
+	return bindTable(run, el, types, nil, nil)
 }
 
 // bindTable returns the tableRoot of decl, whose governing types are types,
@@ -59,7 +59,7 @@ func (run *bindRun) table(el xsd.ElementDeclaration, types []goshape.GoverningTy
 // in slot order (branchField), then a branch field that may admit a Go type an
 // earlier one's does (field.sharesBranch). The unit is stored before any
 // branch is bound, so a type that reaches decl again links to it.
-func bindTable[K comparable](run *bindRun, decl xsd.ElementDeclaration, types []goshape.GoverningType, index unitIndex[K], key K) (complexUnit, error) {
+func bindTable(run *bindRun, decl xsd.ElementDeclaration, types []goshape.GoverningType, index unitIndex, key unitKey) (complexUnit, error) {
 	if u, ok := index[key]; ok {
 		return u, nil
 	}
@@ -98,9 +98,9 @@ func branchField(run *bindRun, decl xsd.ElementDeclaration, g goshape.GoverningT
 	}
 	f, err := typedField(run, decl, g.Type(), valueBare, once, func(ct xsd.ComplexType) (complexUnit, error) {
 		if ct.Name() != (xsd.QName{}) {
-			return bindComplex(run, decl, ct, run.types, ct.Name())
+			return bindComplex(run, decl, ct, run.units, typeKey(ct.Name()))
 		}
-		return bindComplex(run, decl, ct, unitIndex[xsd.QName](nil), xsd.QName{})
+		return bindComplex(run, decl, ct, nil, nil)
 	})
 	if err != nil {
 		return field{}, err

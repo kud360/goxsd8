@@ -17,6 +17,7 @@ import (
 
 	"github.com/kud360/goxsd8/builtin/strict"
 	"github.com/kud360/goxsd8/codec/testdata/readme/order"
+	"github.com/kud360/goxsd8/internal/goshape"
 	"github.com/kud360/goxsd8/loader"
 	"github.com/kud360/goxsd8/parser"
 	"github.com/kud360/goxsd8/validate"
@@ -788,6 +789,47 @@ func TestAppendVacuousParticle(t *testing.T) {
 	}
 }
 
+// TestAppendAbstractParticle pins declEncodes' {abstract} check (cvc-elt
+// clause 2) at a particle: the parser rejects abstract on a local <element>,
+// so type v's one particle, a of xs:string, is rebuilt through
+// xsd.NewElementDeclaration with {abstract} true, and Append and CheckAppend
+// decline it naming a, where without the check they would write <a>.
+func TestAppendAbstractParticle(t *testing.T) {
+	parsed := schemaOf(t, `<xs:complexType name="v"><xs:sequence><xs:element name="a" type="xs:string"/></xs:sequence></xs:complexType><xs:element name="r" type="s:v"/>`)
+	v := xsd.QName{Space: "urn:s", Local: "v"}
+	declared, ok := parsed.Type(v)
+	if !ok {
+		t.Fatalf("the parsed schema declares no type %s", v)
+	}
+	scope, err := xsd.NewLocalScope(xsderr.Loc{}, xsd.ComplexTypeScopeParent{Name: v})
+	if err != nil {
+		t.Fatal(err)
+	}
+	a, err := xsd.NewElementDeclaration(xsderr.Loc{}, sname("a"), xsd.TypeDefinitionRef{Name: xsd.QName{Space: xsd.XMLSchemaNS, Local: "string"}}, nil, scope, nil, false, nil, nil, nil, true, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	p, err := xsd.NewParticle(xsderr.Loc{}, goshape.ExactlyOnce(), xsd.ResolvedTerm{Term: a})
+	if err != nil {
+		t.Fatal(err)
+	}
+	group, err := xsd.NewModelGroup(xsderr.Loc{}, xsd.CompositorSequence, []xsd.Particle{p})
+	if err != nil {
+		t.Fatal(err)
+	}
+	particle, err := xsd.NewParticle(xsderr.Loc{}, goshape.ExactlyOnce(), xsd.ResolvedTerm{Term: group})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ct, err := xsd.NewComplexType(declared.Loc(), v, xsd.QName{Space: xsd.XMLSchemaNS, Local: "anyType"}, nil, xsd.DerivationRestriction, false,
+		nil, nil, nil, xsd.ElementContent{Particle: particle}, nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = appendChecked(t, nil, replacedSchema(t, parsed, ct), strict.New(), rootName, struct{ A string }{A: "x"})
+	_ = asDecline(t, err, "codec does not encode an element declaration with {abstract} true: element {urn:s}a declared at ")
+}
+
 // TestAppendDeclines pins item 4 of Append's doc for each construct of the
 // closed set it declines: each row's two declarations, r and q, decline with
 // equal Constructs, named by the opening of the decline's text, and rows of
@@ -829,6 +871,7 @@ func TestAppendDeclines(t *testing.T) {
 		{"anyType", "an element declaration of type xs:anyType", `<xs:element name="%[1]s"/>`},
 		{"anyType particle", "an element declaration of type xs:anyType", sequence(`<xs:element name="a"/>`)},
 		{"abstract type", "an element declaration whose {type definition} is a complex type with {abstract} true", abstractType},
+		{"abstract particle type", "an element declaration whose {type definition} is a complex type with {abstract} true", `<xs:complexType name="ab%[1]s" abstract="true"/>` + sequence(`<xs:element name="a" type="s:ab%[1]s"/>`)},
 		{"simple content", "a complex type with simple content", complexOf(`<xs:simpleContent><xs:extension base="xs:string"/></xs:simpleContent>`)},
 		{"mixed", "a complex type with mixed content", `<xs:element name="%[1]s"><xs:complexType mixed="true"><xs:sequence>` + a + `</xs:sequence></xs:complexType></xs:element>`},
 		{"open content", "an {open content}", complexOf(`<xs:openContent><xs:any namespace="##other" processContents="lax"/></xs:openContent><xs:sequence>` + a + `</xs:sequence>`)},
@@ -837,7 +880,9 @@ func TestAppendDeclines(t *testing.T) {
 		{"occurrence field", "a model group particle codegen holds in an occurrence field", complexOf(`<xs:sequence maxOccurs="2">` + a + `<xs:element name="b" type="xs:string"/></xs:sequence>`)},
 		{"wildcard", "a wildcard particle", sequence(`<xs:any processContents="lax"/>`)},
 		{"element ref", "an <element ref> particle", `<xs:element name="x%[1]s" type="xs:string"/>` + sequence(`<xs:element ref="s:x%[1]s"/>`)},
-		{"complex particle", "an element particle of complex type", sequence(`<xs:element name="a"><xs:complexType/></xs:element>`)},
+		{"complex particle", "a wildcard particle", sequence(`<xs:element name="a"><xs:complexType><xs:sequence><xs:any processContents="lax"/></xs:sequence></xs:complexType></xs:element>`)},
+		{"particle type sharing its element's name", "a wildcard particle", `<xs:complexType name="%[1]s"><xs:sequence><xs:any processContents="lax"/></xs:sequence></xs:complexType>` +
+			sequence(`<xs:element name="c" type="s:%[1]s"/>`)},
 		{"qualified attribute", "an attribute use whose declaration has a {target namespace}", complexOf(`<xs:attribute name="a" type="xs:string" form="qualified"/>`)},
 		{"attribute wildcard", "an {attribute wildcard}", complexOf(`<xs:anyAttribute processContents="lax"/>`)},
 		{"complex assertions", "a complex type with {assertions}", complexOf(asserted)},
@@ -2100,5 +2145,294 @@ func TestAppendBinaryInvalid(t *testing.T) {
 			t.Errorf("error %q, want %q", err, want)
 		}
 		noRule(t, err)
+	})
+}
+
+// nestedEncodeSchema declares, in urn:s, document elements whose element
+// particles are of a complex type, which "# What encodes" admits: kid, named,
+// with element-only content and a required attribute; ch, named, whose
+// content is an emptiable choice, a struct holding its sealed interface, and
+// hard, named, a bare sealed interface over a choice none of whose
+// alternatives is emptiable; r, a sequence of kid once (n), optional (no) and
+// repeated (nr), of an anonymous type once (a), optional (ao) and repeated
+// (ar), of hard once (ci), optional (co) and repeated (cr), and of ch once
+// (ce); alt, a choice of kid (s), of kid repeated (ss), of hard (i) and of
+// hard repeated (ii); tree, of node, whose particles o and p hold node itself,
+// optional and repeated; rec, of c1, ctZ003's shape
+// (msData/complexType/ctZ003.xsd), a choice of e1, of c1, occurring 0 to 10
+// times; lp, of loop, a bare sealed interface over a choice of z, a string,
+// and l, of loop itself, repeated; and grp, the group g, whose one particle
+// gc, optional, has an anonymous type holding g again, keyed by its
+// groupPath.
+const nestedEncodeSchema = `
+  <xs:complexType name="kid">
+    <xs:sequence><xs:element name="v" type="xs:string"/></xs:sequence>
+    <xs:attribute name="k" type="xs:string" use="required"/>
+  </xs:complexType>
+  <xs:complexType name="ch">
+    <xs:choice><xs:element name="x" type="xs:string"/><xs:element name="y" type="xs:double" minOccurs="0"/></xs:choice>
+  </xs:complexType>
+  <xs:complexType name="hard">
+    <xs:choice><xs:element name="x" type="xs:string"/><xs:element name="y" type="xs:double"/></xs:choice>
+  </xs:complexType>
+  <xs:element name="r">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element name="n" type="s:kid"/>
+        <xs:element name="no" type="s:kid" minOccurs="0"/>
+        <xs:element name="nr" type="s:kid" minOccurs="0" maxOccurs="unbounded"/>
+        <xs:element name="a"><xs:complexType><xs:sequence><xs:element name="w" type="xs:double"/></xs:sequence></xs:complexType></xs:element>
+        <xs:element name="ao" minOccurs="0"><xs:complexType><xs:sequence><xs:element name="w" type="xs:double"/></xs:sequence></xs:complexType></xs:element>
+        <xs:element name="ar" maxOccurs="2"><xs:complexType><xs:sequence><xs:element name="w" type="xs:double"/></xs:sequence></xs:complexType></xs:element>
+        <xs:element name="ci" type="s:hard"/>
+        <xs:element name="co" type="s:hard" minOccurs="0"/>
+        <xs:element name="cr" type="s:hard" minOccurs="0" maxOccurs="2"/>
+        <xs:element name="ce" type="s:ch"/>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="alt">
+    <xs:complexType>
+      <xs:choice>
+        <xs:element name="s" type="s:kid"/>
+        <xs:element name="ss" type="s:kid" maxOccurs="2"/>
+        <xs:element name="i" type="s:hard"/>
+        <xs:element name="ii" type="s:hard" maxOccurs="2"/>
+      </xs:choice>
+    </xs:complexType>
+  </xs:element>
+  <xs:complexType name="node">
+    <xs:sequence>
+      <xs:element name="o" type="s:node" minOccurs="0"/>
+      <xs:element name="p" type="s:node" minOccurs="0" maxOccurs="unbounded"/>
+    </xs:sequence>
+  </xs:complexType>
+  <xs:element name="tree" type="s:node"/>
+  <xs:complexType name="c1">
+    <xs:choice><xs:element name="e1" type="s:c1" minOccurs="0" maxOccurs="10"/></xs:choice>
+  </xs:complexType>
+  <xs:element name="rec" type="s:c1"/>
+  <xs:complexType name="loop">
+    <xs:choice><xs:element name="z" type="xs:string"/><xs:element name="l" type="s:loop" maxOccurs="2"/></xs:choice>
+  </xs:complexType>
+  <xs:element name="lp" type="s:loop"/>
+  <xs:group name="g">
+    <xs:sequence>
+      <xs:element name="gc" minOccurs="0"><xs:complexType><xs:group ref="s:g"/></xs:complexType></xs:element>
+    </xs:sequence>
+  </xs:group>
+  <xs:element name="grp"><xs:complexType><xs:group ref="s:g"/></xs:complexType></xs:element>`
+
+// The T codegen emits for nestedEncodeSchema's document elements, in shape,
+// which TestNestedEncodeTypesAreCodegens pins: neR for r, its anonymous
+// types' structs all neW; neAlt and its branches for alt; neNode for tree and
+// node; neC1 for rec and c1; neLoop and its branches for lp and loop; neGc for
+// grp and gc.
+type (
+	neR struct {
+		N  neKid
+		No *neKid
+		Nr []neKid
+		A  neW
+		Ao *neW
+		Ar []neW
+		Ci neHard
+		Co neHard
+		Cr []neHard
+		Ce neCh
+	}
+	neKid      struct{ V, K string }
+	neW        struct{ W float64 }
+	neHard     interface{ isNeHard() }
+	neHardX    struct{ X string }
+	neHardY    struct{ Y float64 }
+	neCh       struct{ Choice neChChoice }
+	neChChoice interface{ isNeChChoice() }
+	neChX      struct{ X string }
+	neChY      struct{ Y float64 }
+	neAlt      interface{ isNeAlt() }
+	neAltS     struct{ S neKid }
+	neAltSs    struct{ Ss []neKid }
+	neAltI     struct{ I neHard }
+	neAltIi    struct{ Ii []neHard }
+	neNode     struct {
+		O *neNode
+		P []neNode
+	}
+	neC1       struct{ Choice neC1Choice }
+	neC1Choice interface{ isNeC1Choice() }
+	neC1E1     struct{ E1 []neC1 }
+	neLoop     interface{ isNeLoop() }
+	neLoopZ    struct{ Z string }
+	neLoopL    struct{ L []neLoop }
+	neGc       struct{ Gc *neGc }
+)
+
+func (neHardX) isNeHard()    {}
+func (neHardY) isNeHard()    {}
+func (neChX) isNeChChoice()  {}
+func (neChY) isNeChChoice()  {}
+func (neAltS) isNeAlt()      {}
+func (neAltSs) isNeAlt()     {}
+func (neAltI) isNeAlt()      {}
+func (neAltIi) isNeAlt()     {}
+func (neC1E1) isNeC1Choice() {}
+func (neLoopZ) isNeLoop()    {}
+func (neLoopL) isNeLoop()    {}
+
+// nestedBranches is every branch set nestedEncodeSchema's interfaces take.
+var nestedBranches = []Option{
+	WithBranches[neHard](neHardX{}, neHardY{}),
+	WithBranches[neChChoice](neChX{}, neChY{}),
+	WithBranches[neAlt](neAltS{}, neAltSs{}, neAltI{}, neAltIi{}),
+	WithBranches[neC1Choice](neC1E1{}),
+	WithBranches[neLoop](neLoopZ{}, neLoopL{}),
+}
+
+// TestNestedEncodeTypesAreCodegens pins the types above to those codegen
+// emits for nestedEncodeSchema, in shape.
+func TestNestedEncodeTypesAreCodegens(t *testing.T) {
+	gen := generated(t, schemaOf(t, nestedEncodeSchema))
+	for _, decl := range []string{
+		"type R struct {\n\tN  Kid\n\tNo *Kid\n\tNr []Kid\n\tA  A\n\tAo *Ao\n\tAr []Ar\n\tCi Hard\n\tCo Hard\n\tCr []Hard\n\tCe Ch\n}\n",
+		"type Kid struct {\n\tV string\n\tK string\n}\n",
+		"type A struct {\n\tW float64\n}\n",
+		"type Ao struct {\n\tW float64\n}\n",
+		"type Ar struct {\n\tW float64\n}\n",
+		"type Hard interface {\n\tisHard()\n}\n",
+		"type HardX struct {\n\tX string\n}\n",
+		"type HardY struct {\n\tY float64\n}\n",
+		"type Ch struct {\n\tChoice ChChoice\n}\n",
+		"type ChChoiceX struct {\n\tX string\n}\n",
+		"type ChChoiceY struct {\n\tY float64\n}\n",
+		"type AltS struct {\n\tS Kid\n}\n",
+		"type AltSs struct {\n\tSs []Kid\n}\n",
+		"type AltI struct {\n\tI Hard\n}\n",
+		"type AltIi struct {\n\tIi []Hard\n}\n",
+		"type Tree struct {\n\tO *Node\n\tP []Node\n}\n",
+		"type Node struct {\n\tO *Node\n\tP []Node\n}\n",
+		"type Rec struct {\n\tChoice C1Choice\n}\n",
+		"type C1ChoiceE1 struct {\n\tE1 []C1\n}\n",
+		"type C1 struct {\n\tChoice C1Choice\n}\n",
+		"type LpL struct {\n\tL []Loop\n}\n",
+		"type LoopZ struct {\n\tZ string\n}\n",
+		"type LoopL struct {\n\tL []Loop\n}\n",
+		"type Grp struct {\n\tGc *Gc\n}\n",
+		"type Gc struct {\n\tGc *Gc\n}\n",
+	} {
+		if !bytes.Contains(gen, []byte(decl)) {
+			t.Errorf("codegen emits\n%s\nwhich does not declare\n%s", gen, decl)
+		}
+	}
+}
+
+// TestAppendComplexParticle pins the element particle of a complex type that
+// "# What encodes" admits, its content assessed against its own type
+// (cvc-complex-type, cvc-complex-content), in each shape item 6 of Decode's
+// doc holds it to: a named and an anonymous type's struct S once, *S
+// optional, present and absent, and []S repeated; a bare sealed interface I
+// once, optional, nil meaning absent, and []I repeated; a struct holding an
+// emptiable choice, its empty match an empty-element tag; a choice's
+// alternative into its branch's field, S, []S, I and []I; and recursive
+// types, a struct through *S and []S, ctZ003's c1 through []S, a bare
+// interface through []I, and a model group definition's anonymous type
+// through its groupPath, each walked once by item 4 and written to the
+// value's finite depth. Each value is written, validate accepts it, and
+// Decode returns it, a shared *S written at each of its sites.
+func TestAppendComplexParticle(t *testing.T) {
+	schema := schemaOf(t, nestedEncodeSchema)
+	kid := func(v string) neKid { return neKid{V: v, K: "k" + v} }
+	shared := &neNode{P: []neNode{{}}}
+	for _, row := range []struct {
+		name string
+		elem string
+		v    any
+		want string
+	}{
+		{"each shape once, the optional ones absent", "r", neR{N: kid("1"), A: neW{W: 1}, Ar: []neW{{W: 2}}, Ci: neHardX{X: "x"}, Ce: neCh{}},
+			`<r xmlns="urn:s"><n k="k1"><v>1</v></n><a><w>1.0E0</w></a><ar><w>2.0E0</w></ar><ci><x>x</x></ci><ce/></r>`},
+		{"optional ones present, repeated ones of two", "r", neR{N: kid("1"), No: &neKid{V: "2", K: "k2"}, Nr: []neKid{kid("3"), kid("4")}, A: neW{W: 1}, Ao: &neW{W: 2},
+			Ar: []neW{{W: 3}, {W: 4}}, Ci: neHardY{Y: 1}, Co: neHardX{X: "o"}, Cr: []neHard{neHardX{X: "r"}, neHardY{Y: 2}}, Ce: neCh{Choice: neChY{Y: 5}}}, ""},
+		{"alternative S", "alt", neAlt(neAltS{S: kid("s")}), `<alt xmlns="urn:s"><s k="ks"><v>s</v></s></alt>`},
+		{"alternative []S", "alt", neAlt(neAltSs{Ss: []neKid{kid("1"), kid("2")}}), ""},
+		{"alternative I", "alt", neAlt(neAltI{I: neHardX{X: "i"}}), `<alt xmlns="urn:s"><i><x>i</x></i></alt>`},
+		{"alternative []I", "alt", neAlt(neAltIi{Ii: []neHard{neHardY{Y: 1}, neHardX{X: "2"}}}), ""},
+		{"a struct holding itself through *S and []S", "tree", neNode{O: &neNode{P: []neNode{{}, {O: &neNode{}}}}, P: []neNode{{}}},
+			`<tree xmlns="urn:s"><o><p/><p><o/></p></o><p/></tree>`},
+		{"a shared *S", "tree", neNode{O: shared, P: []neNode{{O: shared}}}, `<tree xmlns="urn:s"><o><p/></o><p><o><p/></o></p></tree>`},
+		{"ctZ003's c1", "rec", neC1{Choice: neC1E1{E1: []neC1{{Choice: neC1E1{E1: []neC1{{}}}}, {}}}}, `<rec xmlns="urn:s"><e1><e1/></e1><e1/></rec>`},
+		{"a bare interface holding itself through []I", "lp", neLoop(neLoopL{L: []neLoop{neLoopZ{Z: "a"}, neLoopL{L: []neLoop{neLoopZ{Z: "b"}}}}}),
+			`<lp xmlns="urn:s"><l><z>a</z></l><l><l><z>b</z></l></l></lp>`},
+		{"a group's anonymous type holding itself", "grp", neGc{Gc: &neGc{Gc: &neGc{}}}, `<grp xmlns="urn:s"><gc><gc/></gc></grp>`},
+	} {
+		t.Run(row.name, func(t *testing.T) {
+			// The rows' Ts differ, and roundTrip takes each as its own T.
+			switch v := row.v.(type) {
+			case neR:
+				roundTrip(t, schema, sname(row.elem), v, row.want, deepEqual[neR], nestedBranches...)
+			case neAlt:
+				roundTrip(t, schema, sname(row.elem), v, row.want, deepEqual[neAlt], nestedBranches...)
+			case neNode:
+				roundTrip(t, schema, sname(row.elem), v, row.want, deepEqual[neNode], nestedBranches...)
+			case neC1:
+				roundTrip(t, schema, sname(row.elem), v, row.want, deepEqual[neC1], nestedBranches...)
+			case neLoop:
+				roundTrip(t, schema, sname(row.elem), v, row.want, deepEqual[neLoop], nestedBranches...)
+			case neGc:
+				roundTrip(t, schema, sname(row.elem), v, row.want, deepEqual[neGc], nestedBranches...)
+			default:
+				t.Fatalf("row of %T", row.v)
+			}
+		})
+	}
+}
+
+// TestAppendParticleTypeSharingElementName pins that a named complex type
+// sharing the expanded name of a top-level element declaration is its own
+// unit, apart from that element's: r, of an anonymous type, holds c of the
+// complex type r, a sequence of v, an xs:string, and r's value is written,
+// validate accepts it, and Decode returns it.
+func TestAppendParticleTypeSharingElementName(t *testing.T) {
+	schema := schemaOf(t, `<xs:complexType name="r"><xs:sequence><xs:element name="v" type="xs:string"/></xs:sequence></xs:complexType>`+
+		`<xs:element name="r"><xs:complexType><xs:sequence><xs:element name="c" type="s:r"/></xs:sequence></xs:complexType></xs:element>`)
+	// namesake and its C are codegen's R and R2.
+	type namesake struct{ C struct{ V string } }
+	if gen := generated(t, schema); !bytes.Contains(gen, []byte("type R struct {\n\tC R2\n}\n")) || !bytes.Contains(gen, []byte("type R2 struct {\n\tV string\n}\n")) {
+		t.Fatalf("codegen emits\n%s\nwhich does not declare R{C R2} and R2{V string}", gen)
+	}
+	v := namesake{}
+	v.C.V = "x"
+	roundTrip(t, schema, rootName, v, `<r xmlns="urn:s"><c><v>x</v></c></r>`, deepEqual[namesake])
+}
+
+// TestAppendComplexParticleInvalid pins item 6 of Append's doc at an element
+// particle of complex type: the nil bare interface of a particle held at
+// {min occurs} 1, whose choice no alternative of is emptiable; and a value
+// that holds itself, through *S (v.O = &v), []S (s[0].P = s) and []I (s[0] a
+// branch holding s), the error naming the Go path where the value is reached
+// again and the one it is reached from. None carries an xsderr rule.
+func TestAppendComplexParticleInvalid(t *testing.T) {
+	schema := schemaOf(t, nestedEncodeSchema)
+	t.Run("nil I of a particle held once", func(t *testing.T) {
+		_, err := appendChecked(t, nil, schema, strict.New(), sname("r"), neR{Ar: []neW{{}}}, nestedBranches...)
+		invalidChoice(t, err, "codec: Append: neR.Ci is nil, the empty match, which the content choice of the {type definition} of element {urn:s}ci declared at ", "none of its 2 alternatives is emptiable")
+	})
+	t.Run("through *S", func(t *testing.T) {
+		var v neNode
+		v.O = &v
+		_, err := appendChecked(t, nil, schema, strict.New(), sname("tree"), v, nestedBranches...)
+		invalidChoice(t, err, "codec: Append: neNode.O.O is the value at neNode.O, whose element is still being written, a value that holds itself, which no finite document holds")
+	})
+	t.Run("through []S", func(t *testing.T) {
+		s := make([]neNode, 1)
+		s[0].P = s
+		_, err := appendChecked(t, nil, schema, strict.New(), sname("tree"), neNode{P: s}, nestedBranches...)
+		invalidChoice(t, err, "codec: Append: neNode.P[0].P[0] is the value at neNode.P[0], whose element is still being written")
+	})
+	t.Run("through []I", func(t *testing.T) {
+		s := make([]neLoop, 1)
+		s[0] = neLoopL{L: s}
+		_, err := appendChecked(t, nil, schema, strict.New(), sname("lp"), neLoop(neLoopL{L: s}), nestedBranches...)
+		invalidChoice(t, err, "codec: Append: neLoop.(neLoopL).L[0].(neLoopL).L[0] is the value at neLoop.(neLoopL).L[0], whose element is still being written")
 	})
 }
