@@ -562,18 +562,16 @@
 // --help is reached as ./-help even after --.
 //
 // Everything else is positional. The usage above owns that the subcommand
-// name comes first and its flags follow it, and that a subcommand's flags in
-// turn precede its positional arguments. A leading flag the named subcommand
-// defines draws the diagnosis telling the user to move it, not one claiming no
-// subcommand was given; one it does not define draws the answer that
-// subcommand gives the undefined flag, as goxsd8 <subcommand> <flag> prints
-// it. The flag package stops at the first positional, so a flag-shaped token
-// standing after one is not read as a flag at all: it is reported as the
-// misplacement it is, exit 2, rather than taken for a path or silently
-// dropped, so in goxsd8 parse a.xsd -q neither is -q a schema location nor is
-// the summary it asked to suppress printed. The exact spelling - is never a
-// misplaced flag — it is validate's standard-input instance argument — and a
-// positional genuinely named -q is spelled ./-q, as a file named - is.
+// name comes first and its flags follow it, that a subcommand's flags in turn
+// precede its positional arguments, and which answer a flag standing before
+// the subcommand name draws. The flag package stops at the first positional,
+// so a flag-shaped token standing after one is not read as a flag at all: it
+// is reported as the misplacement it is, exit 2, rather than taken for a path
+// or silently dropped, so in goxsd8 parse a.xsd -q neither is -q a schema
+// location nor is the summary it asked to suppress printed. The exact
+// spelling - is never a misplaced flag — it is validate's standard-input
+// instance argument — and a positional genuinely named -q is spelled ./-q, as
+// a file named - is.
 //
 // A -- standing in a flag's place, before a subcommand's first positional, is
 // read by the flag package as the end of that subcommand's options: every

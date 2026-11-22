@@ -171,10 +171,9 @@ const (
 // print no synopsis; TestArgumentFaultPrintsOneLine pins the faults the shape
 // did not cause, which print neither (#3333).
 //
-// A flag standing before a subcommand that does not define it is charged to
-// that subcommand: it draws the answer goxsd8 <name> <flag> ... prints, which
-// for --version names -version and for --h and --h=1 is the flag package's
-// help spelling (#4020). -out is gen's and not parse's.
+// The rows from -version on are leadingFlag's second arm (#4020): each expects
+// what goxsd8 <name> <flag> ... prints, which names --version -version and
+// answers --h and --h=1 as a help spelling. -out is gen's and not parse's.
 func TestSubcommandDiagnosisPrintsSynopsis(t *testing.T) {
 	for _, c := range []struct {
 		args []string
