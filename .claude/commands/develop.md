@@ -88,8 +88,8 @@ counts.
 1. **Survey.** Activate the hooks as WORKFLOW's **Merge-conflict
    resolution** says, then `git fetch --prune origin`
    — without `--prune` the local view keeps refs for branches GitHub
-   deleted at merge. A dirty local tree gets pushed to
-   `parked/untriaged-<YYYYMMDD-HHMMSS>` and logged — never cleaned. The
+   deleted at merge. A dirty local tree is parked as WORKFLOW's
+   **Checkpointing and hand-off** spells it, never cleaned. The
    log entry names each file the park holds and, where every hunk removes
    text `origin/main` already carries, the landing whose text it removes,
    so a `/backlog` pass can report the ref deletable without reading it
@@ -227,7 +227,8 @@ counts.
    text**, so the orchestrator transcribes it (WORKFLOW's pen): a locator
    as the spec reads, a premise as the probe showed it, a list of tests or
    sites re-derived by the command that lists them at the base and quoting
-   that command (#3265, #3276). The **cartographer** re-states only a
+   that command and its printed output, never a list edited by hand: to
+   narrow the list, narrow the command (#3265, #3276). The **cartographer** re-states only a
    change to what the issue delivers — a Goal the probe overturns, a scope
    that splits (#1380). A re-statement carries
    every standing ruling on the bullets it keeps: a bar ruled unreachable
@@ -235,10 +236,15 @@ counts.
    before posting, because a grounding's error copied into the body is
    what the mason builds to: every rule ID, clause number or Note locator
    it carries is opened in `docs/specs/md/` and written as the spec reads
-   there, or dropped to the bare rule ID; and every bar is read against
+   there, or dropped to the bare rule ID; every bar is read against
    the document that owns the convention it names and against the body's
    other bars, since a file fence forbidding what a bar requires makes one
-   of them false (#2637).
+   of them false (#2637); a condition that decides what code does names
+   the component property it reads — by its spec name and the accessor
+   that returns it — or says the component records none and rules what the
+   change reads instead, since "its parent" or "the enclosing" fits two
+   readings (#3832); and a universal it states carries the census or probe
+   that makes it true, or is written as unchecked.
 
    **SURFACE** — name what this change adds to or alters in the exported
    contract, taken from the tree: whether the contract moves, never where
@@ -296,17 +302,21 @@ counts.
    WORKFLOW's commit-as-you-go clause in its prompt — and in every mason
    prompt this command sends, step 5's repair round and a lost round's
    re-delegation included. No mason prompt asks for the `docs/LOG` entry,
-   which step 6 gives the chronicler (#3663). The ratchet run is the
-   arbiter's, and no part of the gate is it. Only once mason reports, bring its branch onto
+   which step 6 gives the chronicler (#3663). The mason runs all four
+   parts of CLAUDE.md's gate; the arbiter's own run is the
+   `GOXSD_RATCHET=1` one, which is no gate part (#3987). Only once mason
+   reports, bring its branch onto
    `wip/issue-<N>` under WORKFLOW's **One writer per checkout** hand-off
-   clause — fast-forward or merge, never a replay. If the change added or
+   clause — fast-forward or merge, never a replay; a checkout the move
+   leaves dirty is parked, never reset (WORKFLOW, #3802). If the change added or
    altered public API in that same sense, warden reviews the diff too
    (#1168), with worktree isolation, since it runs the gate. Post both
    verdicts on the issue.
 
    A mason return of `RULING AMBIGUOUS: <item>` goes to that ruling's
    author — the warden, the grounding arbiter or the `RULING:` writer —
-   for a one-item ruling posted on the thread, then delegate a fresh
+   for a one-item ruling, which you post on the thread, saying whose it
+   is, before you delegate or write a `RESUME:` (#3858); then delegate a fresh
    isolated mason with the original brief and the ruling as a part beside
    it, naming the returned mason's worktree if it holds commits so the
    round resumes from them. Like `BRIEF INCOMPLETE`, it is not a round.
@@ -349,7 +359,10 @@ counts.
    park per WORKFLOW's **Parking**, and skip steps 6 and 7. Delegate the
    park's log entry to **chronicler** and land it as WORKFLOW's
    **Landing** lands an iteration that lands no code — never onto
-   `wip/issue-<N>`. Then delegate to **cartographer** the entry's items
+   `wip/issue-<N>`. That PR closes no issue, so it is checked with `go tool
+   landcheck -no-issue`, and the parked issue must read `open` after the
+   merge, or the post-land pass reopens it and closes it `not_planned`
+   (#3829). Then delegate to **cartographer** the entry's items
    owed to the post-land pass — the replacement issue **Parking** assigns
    it, widened bodies, friction — telling it that unblocking is the zero
    case its entry records and that the entry lands through its own PR, as
