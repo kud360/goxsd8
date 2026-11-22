@@ -1,6 +1,7 @@
 package codec_test
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"io"
@@ -15,6 +16,7 @@ import (
 	"github.com/kud360/goxsd8/codec/testdata/readme/order"
 	"github.com/kud360/goxsd8/loader"
 	"github.com/kud360/goxsd8/parser"
+	"github.com/kud360/goxsd8/parser/xmltree"
 	"github.com/kud360/goxsd8/xsd"
 )
 
@@ -179,6 +181,72 @@ func ExampleCheckAppend() {
 	// <nil>
 	// <nil>
 	// a value constraint, default or fixed
+}
+
+// ExampleDecode_severalRoots decodes documents of an inline schema's two
+// top-level element declarations, s:r into r and s:n into int32, choosing T
+// by the expanded name Decode's doc reads off each document element through
+// parser/xmltree.
+func ExampleDecode_severalRoots() {
+	const doc = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" targetNamespace="urn:s" elementFormDefault="qualified">
+  <xs:element name="r"><xs:complexType><xs:sequence><xs:element name="a" type="xs:string"/></xs:sequence></xs:complexType></xs:element>
+  <xs:element name="n" type="xs:int"/>
+</xs:schema>`
+	resolve := loader.ResolverFunc(func(_, location string) (io.ReadCloser, string, error) {
+		if location != "s.xsd" {
+			return nil, "", fmt.Errorf("no document %q", location)
+		}
+		return io.NopCloser(strings.NewReader(doc)), location, nil
+	})
+	schema, err := parser.Parse("s.xsd", parser.WithResolver(resolve))
+	if err != nil {
+		log.Fatal(err)
+	}
+	type r struct{ A string }
+	documents := []string{
+		`<!-- r --> <r xmlns="urn:s"><a>x</a></r>`,
+		`<p:n xmlns:p="urn:s">42</p:n>`,
+	}
+	for _, data := range documents {
+		name, err := rootName([]byte(data))
+		if err != nil {
+			log.Fatal(err)
+		}
+		switch name {
+		case xsd.QName{Space: "urn:s", Local: "r"}:
+			v, err := codec.Decode[r](schema, strict.New(), []byte(data))
+			if err != nil {
+				log.Fatal(err)
+			}
+			fmt.Println(name, v.A)
+		case xsd.QName{Space: "urn:s", Local: "n"}:
+			v, err := codec.Decode[int32](schema, strict.New(), []byte(data))
+			if err != nil {
+				log.Fatal(err)
+			}
+			fmt.Println(name, *v)
+		default:
+			log.Fatalf("%v: no T for this document element", name)
+		}
+	}
+	// Output:
+	// {urn:s}r x
+	// {urn:s}n 42
+}
+
+// rootName returns the expanded name of data's document element, read as
+// Decode's doc states.
+func rootName(data []byte) (xsd.QName, error) {
+	rd := xmltree.NewReader("", bytes.NewReader(data))
+	for {
+		tok, err := rd.Token()
+		if err != nil {
+			return xsd.QName{}, err
+		}
+		if start, ok := tok.(*xmltree.StartElement); ok {
+			return xsd.QName{Space: start.Name().Space(), Local: start.Name().Local()}, nil
+		}
+	}
 }
 
 // ExampleUndecidedError parses an inline schema whose document element's
