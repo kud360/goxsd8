@@ -69,15 +69,16 @@ var dispatchCases = []struct {
 	{[]string{"version"}, `goxsd8: unknown subcommand "version"`},
 	// A flag as args[0] with no subcommand anywhere after it is no subcommand
 	// at all — not an unknown one. -q is documented and -version is not, and
-	// neither is a subcommand name.
-	{[]string{"-q"}, noSubcommand},
-	{[]string{"-xyz"}, noSubcommand},
-	{[]string{"-version"}, noSubcommand},
-	{[]string{"-q", "frobnicate"}, noSubcommand},
+	// neither is a subcommand name; each is answered by its own token (#1626).
+	{[]string{"-q"}, "goxsd8: no subcommand given: -q stands where one belongs, and none follows it"},
+	{[]string{"-xyz"}, "goxsd8: no subcommand given: -xyz stands where one belongs, and none follows it"},
+	{[]string{"-version"}, "goxsd8: no subcommand given: -version stands where one belongs, and none follows it"},
+	{[]string{"--version"}, "goxsd8: no subcommand given: --version stands where one belongs, and none follows it"},
+	{[]string{"-q", "frobnicate"}, "goxsd8: no subcommand given: -q stands where one belongs, and none follows it"},
 	// A valued help spelling is an answer of its own (#1189): it is a usage error
 	// in every position, and before a subcommand it names the three spellings
 	// rather than a rewrite that fails there too. The first row expected
-	// noSubcommand until this landed.
+	// the no-subcommand answer until this landed.
 	{[]string{"-help=true"}, helpNotAFlagValue},
 	{[]string{"-h=1"}, helpNotAFlagValue},
 	{[]string{"-help=true", "parse", "a.xsd"}, helpNotAFlagValue},
@@ -113,11 +114,12 @@ func TestRunHelp(t *testing.T) {
 // (removed, #999): that test asserted the same distinctness by comparing
 // diagnose's rendered strings, which cannot fail on a collapse between two
 // branches whose diagnosis interpolates the input argument —
-// unknownSubcommandFmt and leadingFlagFmt both do, so two inputs those branches
-// misclassify as the same kind still render different strings. It stays armed
-// against a collapse into noSubcommand, a bare constant with nothing to
-// interpolate — which is exactly the collapse a pre-#472 diagnose regresses to,
-// and dispatchCases below still catches it.
+// unknownSubcommandFmt, leadingFlagFmt and noSubcommandFmt all do (#1626), so
+// two inputs those branches misclassify as the same kind still render
+// different strings. Each dispatchCases row names its whole expected line
+// instead, so a collapse of either branch into the other fails the rows of
+// the branch that lost — the pre-#472 diagnose, which answers -q parse a.xsd
+// as no subcommand, among them.
 func TestRunDispatch(t *testing.T) {
 	for _, c := range dispatchCases {
 		var stdout, stderr bytes.Buffer
