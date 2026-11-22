@@ -2726,7 +2726,7 @@ func (st *fillState) partition(schema *xsd.Schema, group xsd.ModelGroup, first i
 // {min occurs} and {max occurs}, and held, the occurrence the field's shape
 // was computed at (particleShape): own for a sequence's particle and
 // goshape.BranchOccurs' for a choice's alternative. Append writes the
-// particle's elements from it (elementMember.write).
+// particle's elements from it (elementMember.writeElements).
 type elementMember struct {
 	field
 	decl      xsd.ElementDeclaration

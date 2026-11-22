@@ -57,23 +57,26 @@ var ErrInvalidValue = errors.New("codec: Append: a value no valid document holds
 //     §3.9.6.3 cos-group-emptiable), a choice of no {particles} among them; a
 //     value of that interface whose dynamic type the [WithBranches] set in
 //     opts places at no alternative, a pointer to a branch among them, which
-//     Decode never returns; a string holding bytes that are not UTF-8 or
-//     a character the XML 1.0 Char production does not match, U+0000 among
-//     them (Datatypes §3.3.1.1, §3.3.17.1); a string that differs from its own
-//     whiteSpace-normalized form under its simple type, such as an xs:token
-//     holding "  a  b"; a list item, a string, that is empty or holds TAB,
-//     LF, CR or a space, which no list item's lexical representation does
-//     (Datatypes §2.4.1.2); a big.Rat outside the decimal value space, whose
-//     denominator in lowest terms is no 2^m·5^n (§3.3.3.1), such as 1/3; a
-//     date, time or duration datatype struct value no value of its datatype
-//     maps to, as codegen's package doc "# Simple types" states such values
-//     exist, the error naming the first property found outside it, its
-//     fields read in order, or, ahead of its Seconds, a duration's Months
-//     and Seconds of opposite signs; or a value whose simple type rejects it, a
-//     value.ValidateLexical error value.IsDatatypeVerdict reports as a
-//     verdict, a facet's rejection or a backend Parse's among them, that
-//     error wrapped, but for item 7's pattern case, a list's own facets read
-//     once every item has passed its own checks.
+//     Decode never returns; a value that holds itself, a struct or sealed
+//     interface value its own write reaches again through a *S, []S or []I
+//     field, which no finite document holds, the error naming the Go path
+//     where the value is reached again and nothing written beneath it; a
+//     string holding bytes that are not UTF-8 or a character the XML 1.0 Char
+//     production does not match, U+0000 among them (Datatypes §3.3.1.1,
+//     §3.3.17.1); a string that differs from its own whiteSpace-normalized form
+//     under its simple type, such as an xs:token holding "  a  b"; a list item,
+//     a string, that is empty or holds TAB, LF, CR or a space, which no list
+//     item's lexical representation does (Datatypes §2.4.1.2); a big.Rat
+//     outside the decimal value space, whose denominator in lowest terms is no
+//     2^m·5^n (§3.3.3.1), such as 1/3; a date, time or duration datatype struct
+//     value no value of its datatype maps to, as codegen's package doc "#
+//     Simple types" states such values exist, the error naming the first
+//     property found outside it, its fields read in order, or, ahead of its
+//     Seconds, a duration's Months and Seconds of opposite signs; or a value
+//     whose simple type rejects it, a value.ValidateLexical error
+//     value.IsDatatypeVerdict reports as a verdict, a facet's rejection or a
+//     backend Parse's among them, that error wrapped, but for item 7's pattern
+//     case, a list's own facets read once every item has passed its own checks.
 //  7. A value with no canonical representation, the first in document order
 //     as item 6 counts: its *DeclineError. That is a governing mapping with no
 //     Canonical, a Canonical that fails for the value, such as strict's for
@@ -211,11 +214,10 @@ func encodeStatic(schema *xsd.Schema, name xsd.QName, t reflect.Type, opts []Opt
 // the Go type the arm is bound to, at at, and returns a backend fault. Its
 // implementers are exactly the arms the slice the package doc's "# What
 // encodes" states reaches: the root arms, *simpleRoot, *boundBinding and
-// *boundChoiceRoot, writing at.el itself, the document element; the content
-// arms, *boundSequence and *boundContentChoice, writing at.el's content; and
-// elementMember, writing an element particle's elements, a sequence's or a
-// choice alternative's, children of at.el. Append reaches each through
-// encoded.
+// *boundChoiceRoot, writing the element at.el; and the content arms,
+// *boundSequence and *boundContentChoice, writing at.el's content, each
+// element particle's elements by its member (elementMember.writeElements).
+// Append reaches each through encoded.
 type writer interface {
 	write(e *encoder, v reflect.Value, at writeAt) error
 }
@@ -233,9 +235,10 @@ type writeAt struct {
 }
 
 // encoded returns x, an arm of the filler item 5's check returns or of the
-// binder under it, as C, what Append's write reads it as: the writer capability, or a
-// closed sum's arm, a fieldArm's scalarArm, a branchArm's elementMember or a
-// scalarElem's atomic. It is the write's one assertion of the binder's arms, and its one
+// binder under it, as C, what Append's write reads it as: the writer capability, the
+// elementWriter capability of a fieldSink's elementReader, or a closed sum's arm, a
+// contentMember's or a branchArm's elementMember, a sink's fieldSink or a scalarElem's
+// atomic. It is the write's one assertion of the binder's arms, and its one
 // panic. Invariant: where item 4 of [Append]'s doc admits a construct, every arm the
 // binder builds for it that the write reaches is such a C. A failed assertion breaks it,
 // an internal bug, never input, and panics naming x's type.
@@ -248,17 +251,23 @@ func encoded[C any](x any) C {
 }
 
 // write writes at.el, the document element, holding v, a value of s's simple
-// type (encoder.simpleElement).
+// type (encoder.simpleElement); only the document element's type is a
+// simpleRoot.
 func (s *simpleRoot) write(e *encoder, v reflect.Value, at writeAt) error {
 	return e.simpleElement(at.el, s.scalar, v, at.path)
 }
 
-// write writes at.el, the document element, holding v, a value of b's struct:
-// its start tag, then each attribute field's attribute, in field order, the
-// fields after the content's (binding.lead, elementContent.width), a nil
-// *V's written as none, then the content's elements (b.content's write), an
-// element with no content written as an empty-element tag.
+// write writes the element at.el holding v, a value of b's struct: its start
+// tag, then each attribute field's attribute, in field order, the fields after
+// the content's (binding.lead, elementContent.width), a nil *V's written as
+// none, then the content's elements (b.content's write), an element with no
+// content written as an empty-element tag; or nothing, where v holds itself
+// (encoder.enter).
 func (b *boundBinding) write(e *encoder, v reflect.Value, at writeAt) error {
+	if !e.enter(v, at.path) {
+		return nil
+	}
+	defer e.leave()
 	bd := b.binding
 	name := at.el.Name()
 	outer := e.startTag(name)
@@ -290,10 +299,15 @@ func (b *boundBinding) write(e *encoder, v reflect.Value, at writeAt) error {
 	return nil
 }
 
-// write writes at.el, the document element, holding v, a value of the
-// choice's sealed interface: its start tag, then the branch v holds
-// (writeChoice), an empty match written as an empty-element tag.
+// write writes the element at.el holding v, a value of the choice's sealed
+// interface: its start tag, then the branch v holds (writeChoice), an empty
+// match written as an empty-element tag; or nothing, where v holds itself
+// (encoder.enter).
 func (c *boundChoiceRoot) write(e *encoder, v reflect.Value, at writeAt) error {
+	if !e.enter(v, at.path) {
+		return nil
+	}
+	defer e.leave()
 	name := at.el.Name()
 	outer := e.startTag(name)
 	start := len(e.out)
@@ -306,11 +320,13 @@ func (c *boundChoiceRoot) write(e *encoder, v reflect.Value, at writeAt) error {
 }
 
 // write writes the elements of each of b's members from its field, member i's
-// field b.first+i of v, in member order.
+// field b.first+i of v, read by b.sinks[i], in member order: each member is an
+// element particle's field, which takes one attribution target
+// (field.targets), so member i's sink is sinks[i].
 func (b *boundSequence) write(e *encoder, v reflect.Value, at writeAt) error {
 	for i, m := range b.sequence.members {
 		j := b.first + i
-		if err := encoded[writer](m).write(e, v.Field(j), writeAt{el: at.el, path: at.path + "." + v.Type().Field(j).Name}); err != nil {
+		if err := encoded[elementMember](m).writeElements(e, b.sinks[i], v.Field(j), writeAt{el: at.el, path: at.path + "." + v.Type().Field(j).Name}); err != nil {
 			return err
 		}
 	}
@@ -319,14 +335,15 @@ func (b *boundSequence) write(e *encoder, v reflect.Value, at writeAt) error {
 
 // write writes the branch the choice's sealed interface holds, field b.index
 // of v (writeChoice), then the elements of each member of the rest, whose
-// fields follow it.
+// fields follow it, member i read by b.rest[i] as boundSequence's write pairs
+// them.
 func (b *boundContentChoice) write(e *encoder, v reflect.Value, at writeAt) error {
 	if err := writeChoice(e, b.content.choice.sealed.alts, b.choice, v.Field(b.index), writeAt{el: at.el, typ: at.typ, path: at.path + "." + v.Type().Field(b.index).Name}); err != nil {
 		return err
 	}
 	for i, m := range b.content.rest.members {
 		j := b.index + 1 + i
-		if err := encoded[writer](m).write(e, v.Field(j), writeAt{el: at.el, path: at.path + "." + v.Type().Field(j).Name}); err != nil {
+		if err := encoded[elementMember](m).writeElements(e, b.rest[i], v.Field(j), writeAt{el: at.el, path: at.path + "." + v.Type().Field(j).Name}); err != nil {
 			return err
 		}
 	}
@@ -337,7 +354,8 @@ func (b *boundContentChoice) write(e *encoder, v reflect.Value, at writeAt) erro
 // choice occurring once whose alternatives are alts, holds, bc that interface
 // as item 5's check bound it: its branches[j], the branch type placed at
 // alts[j] (sealed.checkSite), is matched to v's dynamic type, and the members
-// of alts[j] are written from the branch struct's fields, in field order. The
+// of alts[j] are written from the branch struct's fields, in field order,
+// member i read by branches[j].sinks[i] as boundSequence's write pairs them. The
 // nil interface writes nothing, the empty match, but is item 6 of [Append]'s
 // doc where no alternative is emptiable (choiceEmptiable), and so is a
 // dynamic type bc places at no alternative, a pointer to a branch among them;
@@ -356,7 +374,7 @@ func writeChoice(e *encoder, alts []branchArm, bc *boundChoice, v reflect.Value,
 		return nil
 	}
 	for i, m := range alts[j].branchMembers() {
-		if err := encoded[writer](m).write(e, b.Field(i), writeAt{el: at.el, path: at.path + ".(" + typePath(b.Type()) + ")." + b.Type().Field(i).Name}); err != nil {
+		if err := encoded[elementMember](m).writeElements(e, bc.branches[j].sinks[i], b.Field(i), writeAt{el: at.el, path: at.path + ".(" + typePath(b.Type()) + ")." + b.Type().Field(i).Name}); err != nil {
 			return err
 		}
 	}
@@ -380,21 +398,23 @@ func unemptiable(alts []branchArm) string {
 	return fmt.Sprintf("none of its %d alternatives is emptiable (§3.8.4.3 cvc-model-group, §3.9.6.3 cos-group-emptiable)", len(alts))
 }
 
-// write writes the elements of f, the field of m's particle, at.path its Go
-// path, each an element of m.decl, of a simple type (scalarArm), by the shape
-// item 5 bound the field in (field.shape), computed at m.held, never by f's
-// Kind, since a list's V is itself a slice: one per item of a []V, which is
-// item 6 of [Append]'s doc where its length lies outside m.held, the error
-// naming m.own where a choice's alternative raised it, none for a nil *V, and
-// one for a V.
-func (m elementMember) write(e *encoder, f reflect.Value, at writeAt) error {
-	a := encoded[scalarArm](m.arm)
+// writeElements writes the elements of f, the field of m's particle, at.path
+// its Go path, each an element of m.decl written by the elementWriter s, the
+// field's sink, reads it with, by the shape item 5 bound the field in
+// (field.shape), computed at m.held, never by f's Kind, since a list's V is
+// itself a slice: one per item of a []V, which is item 6 of [Append]'s doc
+// where its length lies outside m.held, the error naming m.own where a
+// choice's alternative raised it, none for a nil *V, and one for a V, but none
+// for a nil V where m.held's {min occurs} is 0, which shape V takes only over
+// a sealed interface (goshape.ParticleShape), nil meaning absent.
+func (m elementMember) writeElements(e *encoder, s sink, f reflect.Value, at writeAt) error {
+	w := encoded[elementWriter](encoded[fieldSink](s).read)
 	switch m.shape {
 	case shapeOptional:
 		if f.IsNil() {
 			return nil
 		}
-		return e.simpleElement(m.decl, a.scalar, f.Elem(), at.path)
+		return w.writeElement(e, m.decl, f.Elem(), at.path)
 	case shapeRepeated:
 		if !m.held.Permits(f.Len()) {
 			raised := ""
@@ -404,27 +424,78 @@ func (m elementMember) write(e *encoder, f reflect.Value, at writeAt) error {
 			e.invalidate(fmt.Errorf("codec: Append: %s holds %d items, outside the occurrence %s%s of the particle of %s", at.path, f.Len(), m.held, raised, declSubject(m.decl)))
 		}
 		for j := range f.Len() {
-			if err := e.simpleElement(m.decl, a.scalar, f.Index(j), at.path+"["+strconv.Itoa(j)+"]"); err != nil {
+			if err := w.writeElement(e, m.decl, f.Index(j), at.path+"["+strconv.Itoa(j)+"]"); err != nil {
 				return err
 			}
 		}
 		return nil
 	default:
-		return e.simpleElement(m.decl, a.scalar, f, at.path)
+		if m.held.Min() == 0 && f.IsNil() {
+			return nil
+		}
+		return w.writeElement(e, m.decl, f, at.path)
 	}
+}
+
+// An elementWriter is the elementReader of an element particle's field whose
+// element Append writes: writeElement appends the element of decl holding v,
+// a V the reader reads, whose Go path from T is path, and returns a backend
+// fault. Its implementers are scalarArm, of a simple type, and nestedReader,
+// of a complex type, a structArm's or an ifaceArm's.
+type elementWriter interface {
+	writeElement(e *encoder, decl xsd.ElementDeclaration, v reflect.Value, path string) error
+}
+
+// writeElement writes the element of decl holding v, a value of a's simple
+// type (encoder.simpleElement).
+func (a scalarArm) writeElement(e *encoder, decl xsd.ElementDeclaration, v reflect.Value, path string) error {
+	return e.simpleElement(decl, a.scalar, v, path)
+}
+
+// writeElement writes the element of decl holding v, a value of n.t, by the
+// writer n.fill is.
+func (n nestedReader) writeElement(e *encoder, decl xsd.ElementDeclaration, v reflect.Value, path string) error {
+	return encoded[writer](n.fill).write(e, v, writeAt{el: decl, path: path})
 }
 
 // elementEncodes returns the error item 4 of [Append]'s doc states for the
 // first construct of decl, the document element's declaration, outside the
 // slice the package doc's "# What encodes" states, in the order the construct
 // constants list, or a plain error for a component that does not resolve, and
-// otherwise nil. It reads the schema alone, never the binder, and builds
-// nothing.
+// otherwise nil: encodeWalk.element's for decl. It reads the schema alone,
+// never the binder, and builds nothing.
 func elementEncodes(schema *xsd.Schema, decl xsd.ElementDeclaration) error {
+	w := &encodeWalk{schema: schema, walked: map[unitKey]bool{}}
+	return w.element(decl)
+}
+
+// encodeWalk is one pass of elementEncodes: schema, and walked, the complex
+// types whose constructs it has examined or is examining, each under the key
+// Decode's bind indexes its unit by (nestedKey). An entry is stored before its
+// type's content is examined, so that a later reach of the key, a recursive
+// one included, examines nothing again: the first reach answers for the type,
+// and every other component it reaches carries no key of its own only where
+// it lies inside that type (bindRun). It lives for one pass only and is a
+// lookup index never iterated (STYLE D2); an entry left by a pass that
+// declines is never read, since the decline ends the pass.
+type encodeWalk struct {
+	schema *xsd.Schema
+	walked map[unitKey]bool
+}
+
+// element returns elementEncodes' error for decl, the document element's
+// declaration or a particle's element declaration, examined at every reach:
+// decl's own properties (declEncodes), then its {type definition}, which
+// declines as xs:anyType itself, is examined as a simple type (simpleEncodes)
+// or, for a complex type, declines by its {abstract} true, and else is
+// examined by complexEncodes, unless walked already holds its key. complexEncodes
+// and the functions under it read decl only to name a decline's subject, so
+// that a type reached again through another declaration answers as it did.
+func (w *encodeWalk) element(decl xsd.ElementDeclaration) error {
 	if err := declEncodes(decl); err != nil {
 		return err
 	}
-	td, ok := schema.ResolvedType(decl.TypeDefinition())
+	td, ok := w.schema.ResolvedType(decl.TypeDefinition())
 	if !ok {
 		return fmt.Errorf("codec: the {type definition} of %s does not resolve", declSubject(decl))
 	}
@@ -432,13 +503,19 @@ func elementEncodes(schema *xsd.Schema, decl xsd.ElementDeclaration) error {
 		return encodeDecline(constructAnyType, declSubject(decl))
 	}
 	if st, isSimple := td.(*xsd.SimpleType); isSimple {
-		return simpleEncodes(schema, st, declSubject(decl))
+		return simpleEncodes(w.schema, st, declSubject(decl))
 	}
 	ct, _ := td.(xsd.ComplexType)
 	if ct.Abstract() {
 		return encodeDecline(constructAbstractType, typeSubject(decl, ct))
 	}
-	return complexEncodes(schema, decl, ct)
+	if key, keyed := nestedKey(decl, ct); keyed {
+		if w.walked[key] {
+			return nil
+		}
+		w.walked[key] = true
+	}
+	return w.complexEncodes(decl, ct)
 }
 
 // declEncodes returns the decline of the first of decl's own properties the
@@ -473,7 +550,7 @@ func declEncodes(decl xsd.ElementDeclaration) error {
 // each particle in order, then each attribute use codegen gives a field
 // (goshape.FieldAttributeUses), then its {attribute wildcard}, then its
 // {assertions}.
-func complexEncodes(schema *xsd.Schema, decl xsd.ElementDeclaration, ct xsd.ComplexType) error {
+func (w *encodeWalk) complexEncodes(decl xsd.ElementDeclaration, ct xsd.ComplexType) error {
 	subject := typeSubject(decl, ct)
 	// {content type} is a closed sum, so the switch is STYLE T2's sealed-sum
 	// exception.
@@ -481,12 +558,12 @@ func complexEncodes(schema *xsd.Schema, decl xsd.ElementDeclaration, ct xsd.Comp
 	case xsd.SimpleContent:
 		return encodeDecline(constructSimpleContent, subject)
 	case xsd.ElementContent:
-		if err := contentEncodes(schema, content, subject); err != nil {
+		if err := w.contentEncodes(content, subject); err != nil {
 			return err
 		}
 	}
 	for _, u := range goshape.FieldAttributeUses(ct) {
-		if err := attributeEncodes(schema, u); err != nil {
+		if err := attributeEncodes(w.schema, u); err != nil {
 			return err
 		}
 	}
@@ -506,7 +583,7 @@ func complexEncodes(schema *xsd.Schema, decl xsd.ElementDeclaration, ct xsd.Comp
 // they are and its construct, which §3.4.2.3.3 leaves no schema to reach, as
 // a plain error; then each particle of a spliced sequence, or of a choice
 // occurring once that codegen does not flatten, as particleEncodes admits it.
-func contentEncodes(schema *xsd.Schema, content xsd.ElementContent, subject string) error {
+func (w *encodeWalk) contentEncodes(content xsd.ElementContent, subject string) error {
 	if content.Mixed {
 		return encodeDecline(constructMixed, subject)
 	}
@@ -516,7 +593,7 @@ func contentEncodes(schema *xsd.Schema, content xsd.ElementContent, subject stri
 	if upper, bounded := content.Particle.Occurs().Max(); bounded && upper == 0 {
 		return encodeDecline(constructVacuousParticle, "the content {particle} of "+subject)
 	}
-	group, hold, d, err := contentGroup(schema, content, subject)
+	group, hold, d, err := contentGroup(w.schema, content, subject)
 	if err != nil {
 		return err
 	}
@@ -537,7 +614,7 @@ func contentEncodes(schema *xsd.Schema, content xsd.ElementContent, subject stri
 		}
 	}
 	for i, p := range group.Particles() {
-		if err := particleEncodes(schema, p, fmt.Sprintf(label, i+1, subject)); err != nil {
+		if err := w.particleEncodes(p, fmt.Sprintf(label, i+1, subject)); err != nil {
 			return err
 		}
 	}
@@ -547,10 +624,10 @@ func contentEncodes(schema *xsd.Schema, content xsd.ElementContent, subject stri
 // particleEncodes returns elementEncodes' error for the particle p of a
 // spliced content sequence or of a content choice's alternative, subject
 // naming p: {max occurs} 0, then a term other than a local element
-// declaration, then the declaration's own properties and type, of which a
-// complex one other than xs:anyType itself declines whole. {term} is a closed
-// sum, so the switches are STYLE T2's sealed-sum exception.
-func particleEncodes(schema *xsd.Schema, p xsd.Particle, subject string) error {
+// declaration, then the declaration as the document element's is examined
+// (encodeWalk.element). {term} is a closed sum, so the switches are STYLE T2's
+// sealed-sum exception.
+func (w *encodeWalk) particleEncodes(p xsd.Particle, subject string) error {
 	if upper, bounded := p.Occurs().Max(); bounded && upper == 0 {
 		return encodeDecline(constructVacuousParticle, subject)
 	}
@@ -570,21 +647,7 @@ func particleEncodes(schema *xsd.Schema, p xsd.Particle, subject string) error {
 			el = term
 		}
 	}
-	if err := declEncodes(el); err != nil {
-		return err
-	}
-	td, ok := schema.ResolvedType(el.TypeDefinition())
-	if !ok {
-		return fmt.Errorf("codec: the {type definition} of %s does not resolve", declSubject(el))
-	}
-	if goshape.AnyTypeItself(td) {
-		return encodeDecline(constructAnyType, declSubject(el))
-	}
-	st, isSimple := td.(*xsd.SimpleType)
-	if !isSimple {
-		return encodeDecline(constructComplexParticle, declSubject(el))
-	}
-	return simpleEncodes(schema, st, declSubject(el))
+	return w.element(el)
 }
 
 // attributeEncodes returns elementEncodes' error for the attribute use u: a
@@ -742,7 +805,8 @@ func simpleSubject(st *xsd.SimpleType, owner string) string {
 
 // encoder is one Append's write of a document: out, the document so far; ns,
 // the in-scope default namespace, that of the element whose content is being
-// written, "" outside the document element; and the first item 6 and item 7
+// written, "" outside the document element; open, the values whose element's
+// write is open, outermost first (enter); and the first item 6 and item 7
 // errors of [Append]'s doc it has found, in document order. Every value is
 // written whatever was found before it, so that the walk finds an item 6
 // error after an item 7 one.
@@ -751,9 +815,44 @@ type encoder struct {
 	backend     value.Backend
 	out         []byte
 	ns          string
+	open        []openValue
 	invalid     *invalidValueError
 	uncanonical error
 }
+
+// openValue is a value of complex type whose element's write is open: ptr,
+// its address, a pointer to its Go type, or the zero Value for a value that
+// is not addressable, and path, its Go path from T.
+type openValue struct {
+	ptr  reflect.Value
+	path string
+}
+
+// enter opens the write of v, a struct or sealed interface value of complex
+// type at path, and reports whether to write it: false, after recording item
+// 6 of [Append]'s doc, where v is addressable and a value at its address of
+// its Go type is open, a value that holds itself, which the write would
+// reach again without end. Only a *S, []S or []I field leads to a value
+// already open, and each of them yields an addressable value, so a value
+// that is not addressable is opened unchecked; a value written twice outside
+// one path, shared, is no cycle. Where it answers true, leave closes v.
+func (e *encoder) enter(v reflect.Value, path string) bool {
+	var ptr reflect.Value
+	if v.CanAddr() {
+		ptr = v.Addr()
+		for _, o := range e.open {
+			if o.ptr.IsValid() && o.ptr.Type() == ptr.Type() && o.ptr.Pointer() == ptr.Pointer() {
+				e.invalidate(fmt.Errorf("codec: Append: %s is the value at %s, whose element is still being written, a value that holds itself, which no finite document holds", path, o.path))
+				return false
+			}
+		}
+	}
+	e.open = append(e.open, openValue{ptr: ptr, path: path})
+	return true
+}
+
+// leave closes the innermost value enter opened.
+func (e *encoder) leave() { e.open = e.open[:len(e.open)-1] }
 
 // startTag appends the start tag of the element name, but for its '>', with a
 // default namespace declaration where name's namespace differs from e.ns, the
