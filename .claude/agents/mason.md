@@ -68,9 +68,14 @@ return `RULING AMBIGUOUS: <item> — <the two readings>` before implementing
 either (#3239). A grounding's ruling on how
 the change reads an input is a requirement: the doc comment of the
 function it governs states it, and your account names that site (#2096).
-Grep for existing structures before adding a parallel one (STYLE T4), and
-read the `doc.go` contract of every package you touch: your change keeps
-it true or changes it explicitly in the same commit.
+Grep for existing structures before adding a parallel one (STYLE T4): your
+account names each type and function the diff adds, test files included,
+beside the nearest structure of the same shape in its package — a fake of
+the same interface, a helper of the same signature, a loop over the same
+scan — and the diff folds into it or the commit message says why the two
+must differ (#3942). Read the `doc.go` contract of every package you
+touch: your change keeps it true or changes it explicitly in the same
+commit.
 
 ## What trips you most
 

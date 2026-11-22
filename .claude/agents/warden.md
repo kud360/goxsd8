@@ -67,24 +67,38 @@ each:
 
 - **A text it dictates** — doc wording, a message's subject or label, a
   test row's expected string, a "use helper X at site Y" composition.
-  Its premise is located, or it is not dictated (#3007, #3168). It is
-  rendered on each shape its site admits — named and anonymous types,
-  local and top-level declarations, present and absent values — or marked
-  inferred (#3416). A text quantifying over code sites — an order of
-  charges, "every", "never", "at one location" — is ruled on the census
-  of those sites, named by its command with its output as the site list;
-  a probe of some shapes marks it inferred (#3644). Doc wording names the
-  one doc that owns its fact and is placed nowhere else; the other docs
-  get a pointer (#3345). Doc wording it dictates, a summary or pointer
-  sentence included, and a contract it describes for the mason to write
-  into a doc comment, rendered as that sentence, is probed with
-  `go tool restatements -base origin/main` on a tree carrying it —
-  `tools/restatements`' package doc owns which comments that compares —
-  with the output quoted and the probe named by its base commit and the
-  wording's file:line, or marked inferred. Each pair the probe prints is
-  settled in the pre-flight: the dictated text becomes a pointer to the
-  owner, or the pair is read and ruled not a restatement, with the reason
-  (#3910).
+  Its premise is located, or it is not dictated (#3007, #3168), and each
+  thing it says code does — "reads", "examines", "stops at" — is a claim
+  marked like any other (#4017). It is rendered on each shape its site
+  admits — named and anonymous types, local and top-level declarations,
+  present and absent values — or marked inferred (#3416). A quantifier in
+  it — an order of charges, "every", "never", "at one location" — is
+  ruled on a census of the set the quantifier ranges over, which can be
+  wider than the sites the change edits: the ruling names that set in
+  words beside the census command and its output, and a census or probe
+  of a narrower set marks the text inferred (#3644, #3827). Doc wording
+  names the one doc that owns its fact and is placed nowhere else; the
+  other docs get a pointer (#3345). Dictated doc wording — a summary or
+  pointer sentence, or a contract the mason is to write into a doc
+  comment, rendered as that sentence — is probed with `go tool
+  restatements -base origin/main` on a tree carrying it, the output quoted
+  with the base commit and the wording's file:line, or marked inferred;
+  `tools/restatements`' package doc owns which comments it compares. Each
+  pair it prints is settled in the pre-flight: the dictated text becomes a
+  pointer to the owner, or the pair is ruled not a restatement, with the
+  reason (#3910).
+- **A constraint that keeps code as it is** — "stays byte-identical",
+  "untouched" — names what is kept as the results its named callers
+  observe, never as source text, so a STYLE T4 or D3 unification stays
+  the mason's to make. A ruling whose constraints must hold together
+  names one design that meets them all, marked probed or inferred (#3953).
+- **What a writer admits** — an encoder, or any path that emits an
+  instance it does not assess. For each component kind it admits, the
+  statement lists every property `validate` reads on that component in the
+  rules the output is assessed by, taken from those rules in
+  `docs/specs/md/` and named by rule ID, and marks each one declined
+  (naming its construct) or checked (naming its site). A property it does
+  not name is not admitted (#3838).
 - **A rule over shapes, kept or new.** It names each shape it was checked
   against — for a rule over pairs, each pair — with the answer for each,
   and a "true" or "declines" answer is the conservative direction for

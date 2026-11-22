@@ -29,9 +29,10 @@ For issue operations use whichever GitHub channel works — docs/ROUTINES.md
 ranks them and states the fall-through rule. **A subagent's sandbox
 carries its own channel, and it is regularly not the orchestrator's**: an
 agent that cannot post returns the text it would have posted, and the
-orchestrator posts it saying whose it is. A verdict, grounding,
-implementation account or RESUME note that reaches no thread is lost,
-whoever's fault the channel was.
+orchestrator posts it saying whose it is. Any return a later step acts on
+— a grounding, a ruling or pre-flight, an implementation account, a
+verdict, a RESUME note — that reaches no thread is lost, whoever's fault
+the channel was, so it is posted before the session acts on it (#3858).
 
 ## Claims that outlive the session
 
@@ -204,7 +205,8 @@ git push origin wip/issue-<N>
 
 Add a `RESUME:` comment on the issue whenever the next action is not
 obvious from the branch alone — last completed step, the exact next
-action, and where the grounding is. On a branch with **no commits of its
+action, and where the grounding is. It cites each ruling it relies on by
+comment ID, never by paraphrase (#3858). On a branch with **no commits of its
 own**, post one at every checkpoint whether or not the next action is
 obvious: it is the only thing that dates such a branch's lease, and
 without it the claim reads as undated for as long as it lives. The branch
@@ -212,8 +214,14 @@ carries the CONTENT; the comment carries the INTENT. Discovery never
 depends on the comment.
 
 Never destroy uncommitted work: `git clean`, `git restore .`,
-`git checkout -- <file>` and stashing of any kind are forbidden. A dirty
-local tree is pushed to `parked/untriaged-<ts>` and logged.
+`git checkout -- <file>` and stashing of any kind are forbidden. **A dirty
+local tree is parked, never reset**, however it got dirty — stale staged
+content a fast-forward left behind included: `git checkout -b
+parked/untriaged-<YYYYMMDD-HHMMSS>`, `git add -A`, commit, push that
+branch, `git checkout` the working branch again, and log the park. The
+park commits onto its own new branch, never onto the working branch, so a
+tree whose diff reverts the working branch's commits reverts nothing there
+(#3802).
 
 Ending early at a checkpoint — time budget, second reject, a wall — is a
 first-class outcome, not a failure.

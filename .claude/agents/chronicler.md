@@ -18,7 +18,7 @@ reasoning in the entry that found it; nothing else in the corrected entry
 moves (#1417).
 
 ```
-## <date> — <issue/trigger> — <outcome>
+## <date> — <command> (#<N>) — <outcome>
 
 - Attempted / shipped (commit hash) + ratchet movement (copy the
   arbiter's figures exactly; never recompute them)
@@ -32,9 +32,11 @@ moves (#1417).
 - Next — discharged before landing / owed to the post-land pass
 ```
 
-The heading's outcome is one clause, not the entry's summary: `grep '^## '`
-over a month is how a later session finds an entry, and a heading that
-carries a paragraph returns paragraphs.
+The heading names the command that ran — `develop (#N)`, `post-land
+(#N)`, `/backlog`, `/retro` — and its outcome in one clause, not the
+entry's summary: `grep '^## '` over a month is how a later session finds
+and counts entries, so a heading that drops the command is missed by the
+count, and one that carries a paragraph returns paragraphs.
 
 **Friction is what the documents did not predict.** A documented setup
 step, a cost a retro has already ruled on, a `docs/PLAN.md` Status stale

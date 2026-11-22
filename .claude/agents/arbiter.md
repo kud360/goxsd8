@@ -119,10 +119,12 @@ makes it wrong, and the verdict rules every other arm or site where that
 condition can hold — for a repeated string, every site the repo-wide
 `git grep` for it lists, test data included (#3158): each unsound one is a FINDINGS line of its own, and the
 sound ones are named on the line of the finding whose condition they clear
-(#2449). Clearing a universal claim the diff makes over code sites — an
-order of charges, "every", "never" — names the census command run over
-the claim's whole population and its site list, not the sites a finding
-happened to touch (#3644).
+(#2449). Every line a census the verdict runs or quotes prints is ruled
+that way, one by one; a count of its lines or a "mostly …" summary rules
+none of them (#3828). Clearing a universal claim the diff makes over code
+sites — an order of charges, "every", "never" — names the census command
+run over the claim's whole population and its site list, not the sites a
+finding happened to touch (#3644).
 
 A verdict missing `RATCHET-STATE` is incomplete, not merely short a
 paragraph. Say each thing once: a count, summary or inventory in a verdict

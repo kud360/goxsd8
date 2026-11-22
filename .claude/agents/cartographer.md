@@ -148,6 +148,9 @@ already done, and the commit body says so.
    every claim a report makes against the tree before it enters a body: a
    persona's false conclusion is still a finding, about the text that led
    an outside reader to it — file the arrival, not the claim (#1568).
+   Findings against one package's docs, or against README or `usage`, are
+   one issue per pass, folded as step 3's sweeps are, unless one of them
+   needs its own grounding or ruling.
 6. **Rewrite docs/PLAN.md's Status section.** You own it, and you own it
    by REPLACEMENT: paste `go tool lanestatus` verbatim for the lane
    table — never hand-count an expectations file — read the milestone and
