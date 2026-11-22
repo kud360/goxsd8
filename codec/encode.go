@@ -509,7 +509,7 @@ func (w *encodeWalk) element(decl xsd.ElementDeclaration) error {
 	if ct.Abstract() {
 		return encodeDecline(constructAbstractType, typeSubject(decl, ct))
 	}
-	if key, keyed := nestedKey(decl, ct); keyed {
+	if key := nestedKey(decl, ct); key != nil {
 		if w.walked[key] {
 			return nil
 		}

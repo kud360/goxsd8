@@ -2150,7 +2150,7 @@ func bindDecl(p *pipeline, decl xsd.ElementDeclaration) (binder, error) {
 	}
 	run := &bindRun{p: p, units: unitIndex{}}
 	if len(types) != 1 {
-		return bindTable(run, decl, types, run.units, unitKey{element: decl.Name()})
+		return bindTable(run, decl, types, run.units, elementKey(decl.Name()))
 	}
 	td := types[0].Type()
 	if goshape.AnyTypeItself(td) {
@@ -2181,7 +2181,7 @@ func bindTyped(run *bindRun, decl xsd.ElementDeclaration, td xsd.TypeDefinition)
 		return bindSimpleRoot(run.p, decl, st, typeSubject(decl, td))
 	}
 	ct, _ := td.(xsd.ComplexType)
-	return bindComplex(run, decl, ct, run.units, unitKey{element: decl.Name()})
+	return bindComplex(run, decl, ct, run.units, elementKey(decl.Name()))
 }
 
 // typeSubject names td, the {type definition} of decl, as a decline of one
@@ -2218,16 +2218,22 @@ type bindRun struct {
 	units unitIndex
 }
 
-// unitKey is one of the three keys bindRun's doc states, exactly one of its
-// fields set: element, a top-level element declaration's expanded name; typ,
-// a named complex type's QName; or group, the groupPath of a local element
-// declaration's anonymous type. nestedKey derives it for an element
+// unitKey is one of the three keys bindRun's doc states, a sealed sum of
+// elementKey, typeKey and groupPath; a key of one never equals a key of
+// another, whatever names they hold. nestedKey derives it for an element
 // declaration of complex type, for Decode's bind and Append's walk
 // (encodeWalk) alike.
-type unitKey struct {
-	element, typ xsd.QName
-	group        groupPath
-}
+type unitKey interface{ isUnitKey() }
+
+// elementKey keys a top-level element declaration by its expanded name.
+type elementKey xsd.QName
+
+// typeKey keys a named complex type by its QName.
+type typeKey xsd.QName
+
+func (elementKey) isUnitKey() {}
+func (typeKey) isUnitKey()    {}
+func (groupPath) isUnitKey()  {}
 
 // groupPath keys the anonymous complex type of element, a local element
 // declaration whose {scope}'s {parent} is the model group definition group
@@ -2354,12 +2360,12 @@ func (index unitIndex) store(key unitKey, u complexUnit) {
 // particle's element declaration, other than xs:anyType, which declField
 // binds in its place, or the first decline Decode's doc states for it, item
 // 5: the constructs of ct in the order bindComplex states, under nestedKey's
-// key, or under no key where it answers false, a ct of simple content stored
+// key, or under no key where it answers nil, a ct of simple content stored
 // under none (bindComplex).
 func (run *bindRun) nested(el xsd.ElementDeclaration, ct xsd.ComplexType) (complexUnit, error) {
-	key, keyed := nestedKey(el, ct)
-	if !keyed {
-		return bindComplex(run, el, ct, nil, unitKey{})
+	key := nestedKey(el, ct)
+	if key == nil {
+		return bindComplex(run, el, ct, nil, nil)
 	}
 	return bindComplex(run, el, ct, run.units, key)
 }
@@ -2367,19 +2373,19 @@ func (run *bindRun) nested(el xsd.ElementDeclaration, ct xsd.ComplexType) (compl
 // nestedKey returns the key bindRun.nested binds ct, the one governing type
 // of el, under: el's expanded name for a top-level el, ct's QName for a named
 // ct of a local el, its groupPath for an anonymous ct of a local el declared
-// in a model group definition, and false for every other anonymous ct, bound
+// in a model group definition, and nil for every other anonymous ct, bound
 // under no key.
-func nestedKey(el xsd.ElementDeclaration, ct xsd.ComplexType) (unitKey, bool) {
+func nestedKey(el xsd.ElementDeclaration, ct xsd.ComplexType) unitKey {
 	if el.ScopeVariety() == xsd.ScopeGlobal {
-		return unitKey{element: el.Name()}, true
+		return elementKey(el.Name())
 	}
 	if ct.Name() != (xsd.QName{}) {
-		return unitKey{typ: ct.Name()}, true
+		return typeKey(ct.Name())
 	}
 	if group, inGroup := groupScope(el); inGroup {
-		return unitKey{group: groupPath{group: group, element: el.Name()}}, true
+		return groupPath{group: group, element: el.Name()}
 	}
-	return unitKey{}, false
+	return nil
 }
 
 // groupScope returns the name of the model group definition that is the

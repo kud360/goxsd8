@@ -45,12 +45,12 @@ type selector interface {
 // place inside the unit that declares it (bindRun).
 func (run *bindRun) table(el xsd.ElementDeclaration, types []goshape.GoverningType) (complexUnit, error) {
 	if el.ScopeVariety() == xsd.ScopeGlobal {
-		return bindTable(run, el, types, run.units, unitKey{element: el.Name()})
+		return bindTable(run, el, types, run.units, elementKey(el.Name()))
 	}
 	if group, inGroup := groupScope(el); inGroup {
-		return bindTable(run, el, types, run.units, unitKey{group: groupPath{group: group, element: el.Name()}})
+		return bindTable(run, el, types, run.units, groupPath{group: group, element: el.Name()})
 	}
-	return bindTable(run, el, types, nil, unitKey{})
+	return bindTable(run, el, types, nil, nil)
 }
 
 // bindTable returns the tableRoot of decl, whose governing types are types,
@@ -98,9 +98,9 @@ func branchField(run *bindRun, decl xsd.ElementDeclaration, g goshape.GoverningT
 	}
 	f, err := typedField(run, decl, g.Type(), valueBare, once, func(ct xsd.ComplexType) (complexUnit, error) {
 		if ct.Name() != (xsd.QName{}) {
-			return bindComplex(run, decl, ct, run.units, unitKey{typ: ct.Name()})
+			return bindComplex(run, decl, ct, run.units, typeKey(ct.Name()))
 		}
-		return bindComplex(run, decl, ct, nil, unitKey{})
+		return bindComplex(run, decl, ct, nil, nil)
 	})
 	if err != nil {
 		return field{}, err
