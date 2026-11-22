@@ -653,11 +653,12 @@ const (
 	// unknownSubcommandFmt answers a name outside the vocabulary.
 	unknownSubcommandFmt = "goxsd8: unknown subcommand %q"
 
-	// noSubcommand answers a first argument shaped like a flag with no
-	// subcommand anywhere after it. The common flags qualify a subcommand and
-	// never stand alone, so -q is neither unknown nor unimplemented — it is a
-	// subcommand short of an invocation.
-	noSubcommand = "goxsd8: no subcommand given"
+	// noSubcommandFmt answers a first argument shaped like a flag with no
+	// subcommand anywhere after it, and fills that argument, so -version and
+	// --version are answered by the token the user typed (#1626). The common
+	// flags qualify a subcommand and never stand alone, so -q is neither
+	// unknown nor unimplemented — it is a subcommand short of an invocation.
+	noSubcommandFmt = "goxsd8: no subcommand given: %s stands where one belongs, and none follows it"
 
 	// leadingFlagFmt answers a flag placed BEFORE the subcommand it qualifies.
 	// The flags are the subcommand's own and follow its name (doc.go's
@@ -727,7 +728,7 @@ func diagnose(args []string) string {
 		if name, ok := subcommandIn(args[1:]); ok {
 			return fmt.Sprintf(leadingFlagFmt, arg, name, arg)
 		}
-		return noSubcommand
+		return fmt.Sprintf(noSubcommandFmt, arg)
 	}
 	return fmt.Sprintf(unknownSubcommandFmt, arg)
 }
