@@ -48,7 +48,7 @@ var helpCases = [][]string{
 
 // dispatchCases is the diagnosis every non-help invocation that reaches no
 // subcommand earns: a name outside the vocabulary, a help request carrying a
-// value, a flag before the subcommand it qualifies, or no subcommand at all.
+// value, a flag before the subcommand that defines it, or no subcommand at all.
 // Each is followed on stderr by helpPointer. One encoding of the matrix, driven
 // twice — through run below and through the built binary in
 // TestBuiltBinaryMatrix.
@@ -88,6 +88,14 @@ var dispatchCases = []struct {
 	// claiming a subcommand that is right there was never given.
 	{[]string{"-q", "parse", "a.xsd"}, `goxsd8: -q must follow the subcommand: goxsd8 parse -q ...`},
 	{[]string{"-v", "gen", "-schema", "a.xsd"}, `goxsd8: -v must follow the subcommand: goxsd8 gen -v ...`},
+	// leadingFlag's first arm (#4020); the rewrite repeats the token as typed.
+	{[]string{"--q", "parse", "a.xsd"}, `goxsd8: --q must follow the subcommand: goxsd8 parse --q ...`},
+	{[]string{"-q=true", "parse", "a.xsd"}, `goxsd8: -q=true must follow the subcommand: goxsd8 parse -q=true ...`},
+	{[]string{"-q=maybe", "parse", "a.xsd"}, `goxsd8: -q=maybe must follow the subcommand: goxsd8 parse -q=maybe ...`},
+	{[]string{"-schema", "validate", "a.xml"}, `goxsd8: -schema must follow the subcommand: goxsd8 validate -schema ...`},
+	// leadingFlag's third arm (#4020).
+	{[]string{"--", "parse", "a.xsd"}, `goxsd8: unknown subcommand "--"`},
+	{[]string{"-", "parse", "a.xsd"}, `goxsd8: unknown subcommand "-"`},
 }
 
 // TestRunHelp pins issue #251: a help request — including the bare
@@ -137,6 +145,25 @@ func TestRunDispatch(t *testing.T) {
 	}
 }
 
+// TestSubcommandFlagsCoversSubcommands holds subcommandFlags's switch to
+// subcommands, the vocabulary run's dispatch reads: a name added to the one and
+// not the other fails here rather than panicking at a user who types a flag
+// before it.
+func TestSubcommandFlagsCoversSubcommands(t *testing.T) {
+	for _, name := range subcommands {
+		func() {
+			defer func() {
+				if r := recover(); r != nil {
+					t.Errorf("subcommandFlags(%q) panicked: %v", name, r)
+				}
+			}()
+			if got := subcommandFlags(name).Name(); got != name {
+				t.Errorf("subcommandFlags(%q) is %q's flag set", name, got)
+			}
+		}()
+	}
+}
+
 // The usage: lines a subcommand's diagnosis of the command line's shape prints
 // (#3333), held as literals so that a test comparing stderr against them fails
 // when usage loses or changes the synopsis line: an expectation read through
@@ -157,6 +184,9 @@ const (
 // dispatchCases pins the diagnoses charged before a subcommand is known, which
 // print no synopsis; TestArgumentFaultPrintsOneLine pins the faults the shape
 // did not cause, which print neither (#3333).
+//
+// The rows from -version on are leadingFlag's second arm (#4020). --version is
+// named -version, and -out is gen's and not parse's.
 func TestSubcommandDiagnosisPrintsSynopsis(t *testing.T) {
 	for _, c := range []struct {
 		args []string
@@ -166,6 +196,14 @@ func TestSubcommandDiagnosisPrintsSynopsis(t *testing.T) {
 		{[]string{"validate", "testdata/order-valid.xml", "-schema", "testdata/order.xsd"},
 			fmt.Sprintf(flagAfterPositionalFmt, "validate", "-schema") + "\n" + validateUsageLine + "\n" + helpPointer + "\n"},
 		{[]string{"gen", "-schema"}, "goxsd8: gen: flag needs an argument: -schema\n" + genUsageLine + "\n" + helpPointer + "\n"},
+		{[]string{"-version", "parse", "a.xsd"}, "goxsd8: parse: flag provided but not defined: -version\n" + parseUsageLine + "\n" + helpPointer + "\n"},
+		{[]string{"-xyz", "parse", "a.xsd"}, "goxsd8: parse: flag provided but not defined: -xyz\n" + parseUsageLine + "\n" + helpPointer + "\n"},
+		{[]string{"-out", "parse", "a.xsd"}, "goxsd8: parse: flag provided but not defined: -out\n" + parseUsageLine + "\n" + helpPointer + "\n"},
+		{[]string{"--version", "parse", "a.xsd"}, "goxsd8: parse: flag provided but not defined: -version\n" + parseUsageLine + "\n" + helpPointer + "\n"},
+		{[]string{"--h", "parse", "a.xsd"}, "goxsd8: parse: a help request is spelled -h, -help or --help, with no value\n" + parseUsageLine + "\n" + helpPointer + "\n"},
+		{[]string{"--h=1", "parse", "a.xsd"}, "goxsd8: parse: a help request is spelled -h, -help or --help, with no value\n" + parseUsageLine + "\n" + helpPointer + "\n"},
+		{[]string{"-out", "validate", "a.xml"}, "goxsd8: validate: flag provided but not defined: -out\n" + validateUsageLine + "\n" + helpPointer + "\n"},
+		{[]string{"-format", "gen", "-schema", "a.xsd", "-out", "d"}, "goxsd8: gen: flag provided but not defined: -format" + genShapeTail + "\n"},
 	} {
 		var stdout, stderr bytes.Buffer
 		if code := run(c.args, &stdout, &stderr); code != exitUsage {

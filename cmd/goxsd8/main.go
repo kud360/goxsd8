@@ -540,9 +540,15 @@ goxsd8 gen generates as above and honours -v and -strict, -q silencing
 nothing there because gen writes no informational output. GOXSD_DEBUG scopes
 -v for none of them. Every other invocation exits 2, reporting on
 stderr that the name is not one of the three, that a help flag is
-spelled with a value, as -help=<value>, that a flag stands before the
-subcommand it qualifies, or that the first argument is a flag and no
-subcommand was given.
+spelled with a value, as -help=<value>, that a flag the subcommand
+after it defines stands before that subcommand, or that the first
+argument is a flag and no subcommand was given. A leading flag the
+subcommand after it does not define draws the answer that subcommand
+gives the undefined flag, as goxsd8 <subcommand> <flag> prints it:
+goxsd8 -version parse a.xsd reports goxsd8: parse: flag provided but
+not defined: -version. There is no version entry point and none is
+planned before 1.0: run go version -m $(which goxsd8) for the module
+version of a tagged build.
 
 This usage is not the whole CLI contract: the argument vocabulary, a
 worked diagnostic line with its wrapped cause, and the CLI's
@@ -660,7 +666,8 @@ const (
 	// unknown nor unimplemented — it is a subcommand short of an invocation.
 	noSubcommandFmt = "goxsd8: no subcommand given: %s stands where one belongs, and none follows it"
 
-	// leadingFlagFmt answers a flag placed BEFORE the subcommand it qualifies.
+	// leadingFlagFmt answers a flag placed BEFORE the subcommand it qualifies,
+	// when that subcommand's flag set defines the flag's name (leadingFlag).
 	// The flags are the subcommand's own and follow its name (doc.go's
 	// Argument vocabulary), so this invocation names a real subcommand and is
 	// still a usage error — one that must not be reported as no subcommand at
@@ -702,35 +709,89 @@ func run(args []string, stdout, stderr io.Writer) int {
 	if args[0] == "gen" {
 		return runGen(args[1:], stderr)
 	}
-	return usageError(stderr, diagnose(args))
+	return diagnose(args, stderr)
 }
 
-// diagnose names what is wrong with an invocation that neither requests help
-// nor names a subcommand: every name in subcommands is dispatched by run
-// before diagnose is reached. Matching is case-sensitive per Go CLI
-// convention, so goxsd8 VALIDATE is an unknown subcommand rather than
-// validate.
+// diagnose reports on stderr what is wrong with an invocation that neither
+// requests help nor names a subcommand first, and returns exit 2: every name in
+// subcommands is dispatched by run before diagnose is reached. Matching is
+// case-sensitive per Go CLI convention, so goxsd8 VALIDATE is an unknown
+// subcommand rather than validate.
 //
 // It reads past the first argument for one purpose only: a flag standing where
 // a subcommand belongs is a different fault depending on whether a subcommand
 // follows it, and reporting `goxsd8 -q parse a.xsd` as no subcommand at all
-// contradicts the argument list (#472). args is non-empty.
+// contradicts the argument list (#472). leadingFlag answers the case where one
+// follows. args is non-empty.
 //
 // A valued help spelling is answered ahead of that split and without reading
 // past it: no argument position accepts one, so there is no position to send
 // the user to (#1189).
-func diagnose(args []string) string {
+func diagnose(args []string, stderr io.Writer) int {
 	arg := args[0]
 	if valuedHelpFlag(arg) {
-		return helpNotAFlagValue
+		return usageError(stderr, helpNotAFlagValue)
 	}
-	if strings.HasPrefix(arg, "-") {
-		if name, ok := subcommandIn(args[1:]); ok {
-			return fmt.Sprintf(leadingFlagFmt, arg, name, arg)
-		}
-		return fmt.Sprintf(noSubcommandFmt, arg)
+	if !strings.HasPrefix(arg, "-") {
+		return usageError(stderr, fmt.Sprintf(unknownSubcommandFmt, arg))
 	}
-	return fmt.Sprintf(unknownSubcommandFmt, arg)
+	name, ok := subcommandIn(args[1:])
+	if !ok {
+		return usageError(stderr, fmt.Sprintf(noSubcommandFmt, arg))
+	}
+	return leadingFlag(stderr, arg, name)
+}
+
+// leadingFlag answers arg, a flag-shaped first argument standing before the
+// subcommand name, with the answers usage states, from name's own flag set
+// (subcommandFlags), and returns exit 2. It reads arg's flag name through
+// flagName:
+//
+//   - A name the flag set defines draws leadingFlagFmt, telling the user to
+//     move arg after name, whatever its value: whether the subcommand accepts
+//     -q=maybe is the subcommand's to answer once the flag stands there.
+//   - Any other arg the flag set refuses draws the subcommand's own answer to
+//     it, flagParseError's, byte for byte what goxsd8 <name> <arg> prints: the
+//     same flag gets one answer on either side of the name (#4020). That
+//     covers --h and --h=1, which the flag package answers flag.ErrHelp.
+//   - The flag package refuses neither - nor --: it reads - as a positional
+//     and -- as the end of options, so neither is a flag, and the token stands
+//     where a subcommand name belongs. It draws unknownSubcommandFmt, as any
+//     other non-name in that position does.
+func leadingFlag(stderr io.Writer, arg, name string) int {
+	flags := subcommandFlags(name)
+	if n, _ := flagName(arg); flags.Lookup(n) != nil {
+		return usageError(stderr, fmt.Sprintf(leadingFlagFmt, arg, name, arg))
+	}
+	if err := flags.Parse([]string{arg}); err != nil {
+		return flagParseError(stderr, flags, err)
+	}
+	return usageError(stderr, fmt.Sprintf(unknownSubcommandFmt, arg))
+}
+
+// subcommandFlags returns a fresh copy of the flag set the contract subcommand
+// name parses its arguments with, built by the constructor its run function
+// calls, so the flags diagnose reads are the ones dispatch defines (STYLE D3).
+// A name outside subcommands is a broken caller, and panics.
+func subcommandFlags(name string) *flag.FlagSet {
+	switch name {
+	case "parse":
+		return parseFlags(new(parseOptions))
+	case "validate":
+		return validateFlags(new(validateOptions))
+	case "gen":
+		return genFlags(new(genOptions))
+	}
+	panic(fmt.Sprintf("goxsd8: %q is not a contract subcommand", name))
+}
+
+// flagName returns the name the flag package reads from token, a flag-shaped
+// argument: token with up to two leading dashes removed and cut at its first =,
+// and whether token carries that =. leadingFlag and endedOptions both read
+// a token's name through it, so each names a flag as flags.Parse does.
+func flagName(token string) (string, bool) {
+	name, _, valued := strings.Cut(strings.TrimPrefix(strings.TrimPrefix(token, "-"), "-"), "=")
+	return name, valued
 }
 
 // subcommandIn returns the first argument that is a contract subcommand name.
@@ -815,8 +876,8 @@ func endedOptions(flags *flag.FlagSet, args []string) bool {
 		if consumed[i] == "--" {
 			return true
 		}
-		name := strings.TrimPrefix(strings.TrimPrefix(consumed[i], "-"), "-")
-		if strings.Contains(name, "=") {
+		name, valued := flagName(consumed[i])
+		if valued {
 			continue
 		}
 		if b, ok := flags.Lookup(name).Value.(interface{ IsBoolFlag() bool }); ok && b.IsBoolFlag() {

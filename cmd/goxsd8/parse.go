@@ -27,19 +27,10 @@ import (
 // dispatches, so wiring a flag set here cannot take -h away from the help
 // path.
 func runParse(args []string, stdout, stderr io.Writer) int {
-	flags := flag.NewFlagSet("parse", flag.ContinueOnError)
-	// Discarding the flag set's output silences its own usage rendering, which
-	// would print a second, narrower contract next to doc.go's; helpPointer
-	// names the real one instead.
-	flags.SetOutput(io.Discard)
-	quiet := flags.Bool("q", false, "suppress the summary")
-	verbose := flags.Bool("v", false, "log the parser's assembly at debug level to stderr")
-	strict := flags.Bool(strictFlag, false, strictFlagUsage)
+	var opts parseOptions
+	flags := parseFlags(&opts)
 	if err := flags.Parse(args); err != nil {
-		if errors.Is(err, flag.ErrHelp) {
-			return subcommandUsageError(stderr, "parse", fmt.Sprintf(helpNotAFlagValueFmt, "parse"))
-		}
-		return subcommandUsageError(stderr, "parse", fmt.Sprintf("goxsd8: parse: %v", err))
+		return flagParseError(stderr, flags, err)
 	}
 	locations := flags.Args()
 	// Before anything is compiled: a flag written after the first schema
@@ -60,15 +51,33 @@ func runParse(args []string, stdout, stderr io.Writer) int {
 	// GOXSD_DEBUG=parser,validate,codec and nothing reads the variable, so -v
 	// is all or nothing. #1185 owns wiring the scoping or dropping the mention.
 	var log *slog.Logger
-	if *verbose {
+	if opts.verbose {
 		log = slog.New(slog.NewTextHandler(stderr, &slog.HandlerOptions{Level: slog.LevelDebug}))
 	}
 
 	code := exitOK
 	for _, location := range locations {
-		code = worse(code, parseOne(location, *quiet, *strict, log, stdout, stderr))
+		code = worse(code, parseOne(location, opts.quiet, opts.strict, log, stdout, stderr))
 	}
 	return code
+}
+
+// parseOptions holds the values of parse's flags once parseFlags' flag set has
+// parsed them.
+type parseOptions struct {
+	quiet, verbose, strict bool
+}
+
+// parseFlags returns parse's flag set, recording into opts. It is the one
+// encoding of the flags parse defines, read twice: runParse parses its
+// arguments with it, and diagnose looks up in it a flag standing before the
+// name parse (subcommandFlags).
+func parseFlags(opts *parseOptions) *flag.FlagSet {
+	flags := newFlagSet("parse")
+	flags.BoolVar(&opts.quiet, "q", false, "suppress the summary")
+	flags.BoolVar(&opts.verbose, "v", false, "log the parser's assembly at debug level to stderr")
+	flags.BoolVar(&opts.strict, strictFlag, false, strictFlagUsage)
+	return flags
 }
 
 // parseOne compiles one schema argument and reports its exit code. It never
@@ -479,6 +488,30 @@ func subcommandUsageError(stderr io.Writer, name, msg string) int {
 	// either way, and stderr is the only channel left to report it on.
 	_, _ = fmt.Fprintf(stderr, "%s\nusage: %s\n%s\n", msg, synopsis(name), helpPointer)
 	return exitUsage
+}
+
+// newFlagSet returns the empty flag set a subcommand's flags are defined in,
+// named for that subcommand. Discarding the flag set's output silences its own
+// usage rendering, which would print a second, narrower contract next to
+// doc.go's; helpPointer names the real one instead.
+func newFlagSet(name string) *flag.FlagSet {
+	flags := flag.NewFlagSet(name, flag.ContinueOnError)
+	flags.SetOutput(io.Discard)
+	return flags
+}
+
+// flagParseError reports err, which flags.Parse returned, for the subcommand
+// flags is named for: a help spelling the flag package caught (flag.ErrHelp) is
+// answered helpNotAFlagValueFmt, and every other error is quoted after the
+// subcommand's lead-in, each through subcommandUsageError. It is the whole of a
+// subcommand's answer to a flag its flag set refused, wherever the flag stood:
+// after the subcommand's name, or before it (diagnose).
+func flagParseError(stderr io.Writer, flags *flag.FlagSet, err error) int {
+	name := flags.Name()
+	if errors.Is(err, flag.ErrHelp) {
+		return subcommandUsageError(stderr, name, fmt.Sprintf(helpNotAFlagValueFmt, name))
+	}
+	return subcommandUsageError(stderr, name, fmt.Sprintf("goxsd8: %s: %v", name, err))
 }
 
 // subcommandFault reports an exit-2 fault charged inside a subcommand that the

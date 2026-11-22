@@ -31,6 +31,31 @@ type genPair struct {
 	schema, out string
 }
 
+// genOptions holds the values of gen's flags once genFlags' flag set has
+// parsed them.
+type genOptions struct {
+	occurrences     []genFlag
+	verbose, strict bool
+}
+
+// genFlags returns gen's flag set, recording into opts. It is the one encoding
+// of the flags gen defines, read by the two readers parseFlags names.
+func genFlags(opts *genOptions) *flag.FlagSet {
+	flags := newFlagSet("gen")
+	for _, name := range []string{schemaFlag, outFlag} {
+		flags.Func(name, "one half of a -schema/-out pair", func(v string) error {
+			opts.occurrences = append(opts.occurrences, genFlag{name, v})
+			return nil
+		})
+	}
+	flags.BoolVar(&opts.verbose, "v", false, "log the parser's assembly at debug level to stderr")
+	flags.BoolVar(&opts.strict, strictFlag, false, strictFlagUsage)
+	// -q is defined because the contract makes it common to every subcommand,
+	// and is read by nothing: gen writes no informational output.
+	_ = flags.Bool("q", false, "accepted; gen has no informational output to suppress")
+	return flags
+}
+
 // runGen implements `goxsd8 gen`: it checks every -out through
 // codegen.CheckTargets before compiling any -schema, compiles the -schema of
 // each -schema/-out pair alone, as parse compiles an argument, and, when no
@@ -46,28 +71,10 @@ type genPair struct {
 //
 // The flags are parsed here rather than by run, for the reason runParse states.
 func runGen(args []string, stderr io.Writer) int {
-	flags := flag.NewFlagSet("gen", flag.ContinueOnError)
-	// Discarding the flag set's output silences its own usage rendering, which
-	// would print a second, narrower contract next to doc.go's; helpPointer
-	// names the real one instead.
-	flags.SetOutput(io.Discard)
-	var occurrences []genFlag
-	for _, name := range []string{schemaFlag, outFlag} {
-		flags.Func(name, "one half of a -schema/-out pair", func(v string) error {
-			occurrences = append(occurrences, genFlag{name, v})
-			return nil
-		})
-	}
-	verbose := flags.Bool("v", false, "log the parser's assembly at debug level to stderr")
-	strict := flags.Bool(strictFlag, false, strictFlagUsage)
-	// -q is defined because the contract makes it common to every subcommand,
-	// and is read by nothing: gen writes no informational output.
-	_ = flags.Bool("q", false, "accepted; gen has no informational output to suppress")
+	var opts genOptions
+	flags := genFlags(&opts)
 	if err := flags.Parse(args); err != nil {
-		if errors.Is(err, flag.ErrHelp) {
-			return subcommandUsageError(stderr, "gen", fmt.Sprintf(helpNotAFlagValueFmt, "gen"))
-		}
-		return subcommandUsageError(stderr, "gen", fmt.Sprintf("goxsd8: gen: %v", err))
+		return flagParseError(stderr, flags, err)
 	}
 	if arg, ok := flagShapedIn(flags, args); ok {
 		return subcommandUsageError(stderr, "gen", fmt.Sprintf(flagAfterPositionalFmt, "gen", arg))
@@ -75,7 +82,7 @@ func runGen(args []string, stderr io.Writer) int {
 	if len(flags.Args()) > 0 {
 		return subcommandUsageError(stderr, "gen", fmt.Sprintf("goxsd8: gen: %s: gen takes no positional argument, only -schema/-out pairs", flags.Arg(0)))
 	}
-	pairs, err := pairTargets(occurrences)
+	pairs, err := pairTargets(opts.occurrences)
 	if err != nil {
 		return subcommandUsageError(stderr, "gen", fmt.Sprintf("goxsd8: gen: %v", err))
 	}
@@ -83,7 +90,7 @@ func runGen(args []string, stderr io.Writer) int {
 	// A nil logger selects parser's silent default, for the reason parse.go's
 	// GAP(cmd) marker records (#1185).
 	var log *slog.Logger
-	if *verbose {
+	if opts.verbose {
 		log = slog.New(slog.NewTextHandler(stderr, &slog.HandlerOptions{Level: slog.LevelDebug}))
 	}
 
@@ -110,7 +117,7 @@ func runGen(args []string, stderr io.Writer) int {
 		code = worse(code, subcommandFault(stderr, line))
 	}
 	for i, p := range pairs {
-		schema, c := compileArgument("gen", genBareImportRemedy, p.schema, *strict, log, stderr)
+		schema, c := compileArgument("gen", genBareImportRemedy, p.schema, opts.strict, log, stderr)
 		code = worse(code, c)
 		targets[i].Schema = schema
 	}
