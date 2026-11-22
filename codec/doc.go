@@ -317,17 +317,19 @@
 //     simple type that encodes or a complex type that encodes.
 //   - A complex type with {abstract} false, no {assertions}, no {attribute
 //     wildcard} and no {open content}, of empty content or of element-only
-//     content whose {particle} is a sequence that codegen splices, or a
-//     choice occurring exactly once that codegen does not flatten, inline or
-//     through <group ref>, each of whose particles is a local element
-//     declaration; the choice into its sealed interface, T itself or the
-//     first field of T's struct, as "# What decodes" states.
-//   - An element particle of that sequence or choice with {max occurs} at
-//     least 1, whose element declaration has the same restrictions as the
-//     document element's, of a simple type that encodes, into V, *V or []V
-//     by its occurrence, or of a complex type that encodes, into the field
-//     item 6 of [Decode]'s doc holds to it; or, for a choice's alternative,
-//     into its branch's field as "# What decodes" states.
+//     content whose {particle} is a sequence that codegen splices, or a choice
+//     occurring exactly once that codegen does not flatten, inline or through
+//     <group ref>, each of whose particles is an element particle; the choice
+//     into its sealed interface, T itself or the first field of T's struct, as
+//     "# What decodes" states.
+//   - An element particle of that sequence or choice with {max occurs} at least
+//     1, its {term} a local element declaration or, for an <element ref> whose
+//     field codegen's package doc "# Substitution groups" gives no sealed
+//     interface, the top-level declaration it names, that declaration having
+//     the same restrictions as the document element's and a simple type or a
+//     complex type that encodes, into the field item 6 of [Decode]'s doc holds
+//     to it; or, for a choice's alternative, into its branch's field as
+//     "# What decodes" states.
 //   - An attribute use other than xsi:nil's, unqualified, with no value
 //     constraint and of a simple type that encodes, into V or *V.
 //   - An atomic simple type with no assertions facet whose {primitive type

@@ -370,6 +370,90 @@ func TestAppendGroupRef(t *testing.T) {
 	roundTrip(t, schema, rootName, grouped{A: "x", B: &b}, `<r xmlns="urn:s"><a>x</a><b>2.0E0</b></r>`, deepEqual[grouped])
 }
 
+// The <element ref> types Append writes beside decode_test.go's: refX,
+// refNested and refOuter are refNamespaceSchema's X, its complex N and R;
+// refSelf is refSelfSchema's R, whose optional ref names r itself.
+type (
+	refX      string
+	refNested struct{ A string }
+	refOuter  struct {
+		X refX
+		N refNested
+	}
+	refSelf struct {
+		A string
+		R *refSelf
+	}
+)
+
+// refSelfSchema declares s:r of a local a and an optional <element ref> back
+// to r, which its own complex type reaches again.
+const refSelfSchema = `<xs:element name="r"><xs:complexType><xs:sequence><xs:element name="a" type="xs:string"/><xs:element ref="s:r" minOccurs="0"/></xs:sequence></xs:complexType></xs:element>`
+
+// TestAppendElementRef pins "# What encodes"' <element ref> particle
+// (§3.3.2.4 ref.elt.global): a ref to a top-level declaration whose field
+// codegen gives no sealed interface is written as an element of the
+// declaration's own expanded name (§3.9.4.3 cvc-accept clause 2.3.1), which
+// validate accepts and Decode returns equal: decode_test.go's refSchema in
+// each occurrence shape, present and absent; a head blocking substitution,
+// and one whose one member is abstract, examined as a local declaration; a
+// choice's ref alternative, once and repeated; a ref into another target
+// namespace, beside a ref of complex type; and a ref from a declaration's own
+// type back to it; and a ref to a head with a member, declining
+// constructSealedInterface naming the particle and the head.
+func TestAppendElementRef(t *testing.T) {
+	b := refB("1 2")
+	t.Run("one, optional and repeated, present", func(t *testing.T) {
+		roundTrip(t, schemaOf(t, refSchema), rootName, refs{A: "x", B: &b, C: []refC{"p", "q"}},
+			`<r xmlns="urn:s"><a>x</a><b>1 2</b><c>p</c><c>q</c></r>`, deepEqual[refs])
+	})
+	t.Run("optional and repeated absent", func(t *testing.T) {
+		roundTrip(t, schemaOf(t, refSchema), rootName, refs{A: "x"}, `<r xmlns="urn:s"><a>x</a></r>`, deepEqual[refs])
+	})
+	t.Run("a head blocking substitution", func(t *testing.T) {
+		roundTrip(t, schemaOf(t, blockedSchema), rootName, refHolder{H: "x"}, `<r xmlns="urn:s"><h>x</h></r>`, deepEqual[refHolder])
+	})
+	t.Run("a head whose one member is abstract", func(t *testing.T) {
+		roundTrip(t, schemaOf(t, abstractMemberSchema), rootName, refHolder{H: "x"}, `<r xmlns="urn:s"><h>x</h></r>`, deepEqual[refHolder])
+	})
+	t.Run("a choice's ref alternative", func(t *testing.T) {
+		roundTrip(t, schemaOf(t, refChoiceSchema), rootName, refChoice(refChoiceA2{A: "v"}), `<r xmlns="urn:s"><A>v</A></r>`, deepEqual[refChoice], refChoiceBranches)
+	})
+	t.Run("a choice's repeated ref alternative", func(t *testing.T) {
+		roundTrip(t, schemaOf(t, refChoiceSchema), rootName, refChoice(refChoiceK{K: []refK{"u v", "w"}}), `<r xmlns="urn:s"><k>u v</k><k>w</k></r>`, deepEqual[refChoice], refChoiceBranches)
+	})
+	t.Run("another target namespace and a complex type", func(t *testing.T) {
+		schema, err := parser.Parse("a.xsd", parser.WithResolver(loader.Map(map[string]string{
+			"a.xsd": `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:b="urn:b" targetNamespace="urn:a">
+			  <xs:import namespace="urn:b" schemaLocation="b.xsd"/>
+			  <xs:element name="n"><xs:complexType><xs:sequence><xs:element name="a" type="xs:string"/></xs:sequence></xs:complexType></xs:element>
+			  <xs:element name="r"><xs:complexType><xs:sequence><xs:element ref="b:x"/><xs:element ref="n" xmlns="urn:a"/></xs:sequence></xs:complexType></xs:element>
+			</xs:schema>`,
+			"b.xsd": `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" targetNamespace="urn:b">
+			  <xs:element name="x" type="xs:string"/>
+			</xs:schema>`,
+		})))
+		if err != nil {
+			t.Fatal(err)
+		}
+		roundTrip(t, schema, xsd.QName{Space: "urn:a", Local: "r"}, refOuter{X: "v", N: refNested{A: "w"}},
+			`<r xmlns="urn:a"><x xmlns="urn:b">v</x><n><a xmlns="">w</a></n></r>`, deepEqual[refOuter])
+	})
+	t.Run("a ref back to its own declaration", func(t *testing.T) {
+		roundTrip(t, schemaOf(t, refSelfSchema), rootName, refSelf{A: "x", R: &refSelf{A: "y", R: &refSelf{A: "z"}}},
+			`<r xmlns="urn:s"><a>x</a><r><a>y</a><r><a>z</a></r></r></r>`, deepEqual[refSelf])
+	})
+	t.Run("a head with a member declines naming the particle and the head", func(t *testing.T) {
+		schema := schemaOf(t, `<xs:element name="h" type="xs:string"/><xs:element name="m" type="xs:string" substitutionGroup="s:h"/>`+
+			`<xs:element name="r"><xs:complexType><xs:sequence><xs:element ref="s:h"/></xs:sequence></xs:complexType></xs:element>`)
+		_, err := appendChecked(t, nil, schema, strict.New(), rootName, refHolder{H: "x"})
+		d := asDecline(t, err, "codec does not encode a construct codegen holds in a sealed interface: a choice, a flattened particle or a substitution group: particle 1 of the content {particle} of the {type definition} of element {urn:s}r declared at ")
+		if d.Construct() != (Construct{constructSealedInterface}) || !strings.HasSuffix(err.Error(), ", naming element {urn:s}h; an encoder refusal, not a schema or value fault") {
+			t.Errorf("decline %q, construct %v, does not name the head h", err, d.Construct())
+		}
+	})
+}
+
 // TestAppendDst pins that Append appends to dst, and on error returns dst
 // unextended.
 func TestAppendDst(t *testing.T) {
@@ -879,7 +963,15 @@ func TestAppendDeclines(t *testing.T) {
 		{"flattened", "a construct codegen holds in a sealed interface: a choice, a flattened particle or a substitution group", complexOf(`<xs:sequence maxOccurs="unbounded"><xs:element name="a" type="xs:string" minOccurs="0"/></xs:sequence>`)},
 		{"occurrence field", "a model group particle codegen holds in an occurrence field", complexOf(`<xs:sequence maxOccurs="2">` + a + `<xs:element name="b" type="xs:string"/></xs:sequence>`)},
 		{"wildcard", "a wildcard particle", sequence(`<xs:any processContents="lax"/>`)},
-		{"element ref", "an <element ref> particle", `<xs:element name="x%[1]s" type="xs:string"/>` + sequence(`<xs:element ref="s:x%[1]s"/>`)},
+		{"element ref", "a construct codegen holds in a sealed interface: a choice, a flattened particle or a substitution group", `<xs:element name="x%[1]s" type="xs:string"/><xs:element name="m%[1]s" type="xs:string" substitutionGroup="s:x%[1]s"/>` +
+			sequence(`<xs:element ref="s:x%[1]s"/>`)},
+		{"abstract head ref", "a construct codegen holds in a sealed interface: a choice, a flattened particle or a substitution group", `<xs:element name="x%[1]s" type="xs:string" abstract="true"/><xs:element name="m%[1]s" type="xs:string" substitutionGroup="s:x%[1]s"/>` +
+			sequence(`<xs:element ref="s:x%[1]s"/>`)},
+		{"abstract memberless ref", "a construct codegen holds in a sealed interface: a choice, a flattened particle or a substitution group", `<xs:element name="x%[1]s" type="xs:string" abstract="true"/>` +
+			sequence(`<xs:element ref="s:x%[1]s" minOccurs="0"/>`)},
+		{"ref value constraint", "a value constraint, default or fixed", `<xs:element name="x%[1]s" type="xs:string" default="x"/>` + sequence(`<xs:element ref="s:x%[1]s"/>`)},
+		{"ref simple content", "a complex type with simple content", `<xs:element name="x%[1]s"><xs:complexType><xs:simpleContent><xs:extension base="xs:string"/></xs:simpleContent></xs:complexType></xs:element>` +
+			sequence(`<xs:element ref="s:x%[1]s"/>`)},
 		{"complex particle", "a wildcard particle", sequence(`<xs:element name="a"><xs:complexType><xs:sequence><xs:any processContents="lax"/></xs:sequence></xs:complexType></xs:element>`)},
 		{"particle type sharing its element's name", "a wildcard particle", `<xs:complexType name="%[1]s"><xs:sequence><xs:any processContents="lax"/></xs:sequence></xs:complexType>` +
 			sequence(`<xs:element name="c" type="s:%[1]s"/>`)},
