@@ -33,8 +33,11 @@ var ErrTypeMismatch = errors.New("codec: T is not the type codegen emits for the
 //
 // T is the caller's choice: nothing dispatches a document element to its
 // generated type, and item 6 below states which T match. A caller decoding
-// documents of several roots therefore reads the document element's name
-// itself, through parser/xmltree or encoding/xml, before choosing T.
+// documents of several roots therefore reads the document element's expanded
+// name itself before choosing T: [xmltree.NewReader] over data, read by
+// [xmltree.Reader.Token] to the first *[xmltree.StartElement], whose Name's
+// Space and Local are the [xsd.QName] items 5 and 6 read, the name
+// [CheckDecode] takes.
 //
 // The slice Decode covers is the package doc's "# What decodes". Decode first
 // assesses data against schema with package validate and decodes only an
