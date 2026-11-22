@@ -881,6 +881,8 @@ func TestAppendDeclines(t *testing.T) {
 		{"wildcard", "a wildcard particle", sequence(`<xs:any processContents="lax"/>`)},
 		{"element ref", "an <element ref> particle", `<xs:element name="x%[1]s" type="xs:string"/>` + sequence(`<xs:element ref="s:x%[1]s"/>`)},
 		{"complex particle", "a wildcard particle", sequence(`<xs:element name="a"><xs:complexType><xs:sequence><xs:any processContents="lax"/></xs:sequence></xs:complexType></xs:element>`)},
+		{"particle type sharing its element's name", "a wildcard particle", `<xs:complexType name="%[1]s"><xs:sequence><xs:any processContents="lax"/></xs:sequence></xs:complexType>` +
+			sequence(`<xs:element name="c" type="s:%[1]s"/>`)},
 		{"qualified attribute", "an attribute use whose declaration has a {target namespace}", complexOf(`<xs:attribute name="a" type="xs:string" form="qualified"/>`)},
 		{"attribute wildcard", "an {attribute wildcard}", complexOf(`<xs:anyAttribute processContents="lax"/>`)},
 		{"complex assertions", "a complex type with {assertions}", complexOf(asserted)},
@@ -2383,6 +2385,24 @@ func TestAppendComplexParticle(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestAppendParticleTypeSharingElementName pins that a named complex type
+// sharing the expanded name of a top-level element declaration is its own
+// unit, apart from that element's: r, of an anonymous type, holds c of the
+// complex type r, a sequence of v, an xs:string, and r's value is written,
+// validate accepts it, and Decode returns it.
+func TestAppendParticleTypeSharingElementName(t *testing.T) {
+	schema := schemaOf(t, `<xs:complexType name="r"><xs:sequence><xs:element name="v" type="xs:string"/></xs:sequence></xs:complexType>`+
+		`<xs:element name="r"><xs:complexType><xs:sequence><xs:element name="c" type="s:r"/></xs:sequence></xs:complexType></xs:element>`)
+	// namesake and its C are codegen's R and R2.
+	type namesake struct{ C struct{ V string } }
+	if gen := generated(t, schema); !bytes.Contains(gen, []byte("type R struct {\n\tC R2\n}\n")) || !bytes.Contains(gen, []byte("type R2 struct {\n\tV string\n}\n")) {
+		t.Fatalf("codegen emits\n%s\nwhich does not declare R{C R2} and R2{V string}", gen)
+	}
+	v := namesake{}
+	v.C.V = "x"
+	roundTrip(t, schema, rootName, v, `<r xmlns="urn:s"><c><v>x</v></c></r>`, deepEqual[namesake])
 }
 
 // TestAppendComplexParticleInvalid pins item 6 of Append's doc at an element
