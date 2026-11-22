@@ -28,6 +28,12 @@ README or `docs/` transcript of the output it changes, for the prose it
 leaves stale (#3784): grep the owning identifier and its file name, then read the
 prose around every hit and search again by the operation itself, since
 most stale sites paraphrase the old state and name neither (#1167, #1361).
+When your diff adds or removes a member of a set some prose lists or
+counts — a fixture file, a README example, an emitted kind, a sum's arm,
+an export — sweep the same way for every sentence that lists or counts
+that set, grepping the names of the set's other members, since an
+inventory the diff never touched names none of the diff's own words
+(#3990).
 When your diff writes the one statement that owns a fact (STYLE D3, "One
 fact, one encoding — no derivable state."), mechanism change or none, find
 every other place that states that fact, then delete each copy or point it
