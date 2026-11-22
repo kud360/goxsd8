@@ -437,6 +437,20 @@ func TestReflowDropsATrailingRun(t *testing.T) {
 	}
 }
 
+// TestReflowKeepsANonASCIISpace is parser/produce_test.go's `" true"` shape:
+// the quoted value opens with a U+00A0, which strings.Fields splits on and a
+// single-space join turned into U+0020, changing the value the comment quotes.
+func TestReflowKeepsANonASCIISpace(t *testing.T) {
+	para := []commentpara.Line{
+		{Num: 1, Raw: "// so \" true\" stays", Body: " so \" true\" stays"},
+		{Num: 2, Raw: "// out", Body: " out"},
+	}
+	want := "// so \" true\" stays out"
+	if got := reflow(para, 80, 0); len(got) != 1 || got[0] != want {
+		t.Fatalf("reflow = %q, want [%q]", got, want)
+	}
+}
+
 // TestFixWithoutInteriorRunsIsUnchanged pins -fix's output on paragraphs with
 // no interior run to what the tool produced before #3903, byte for byte: the
 // want lines were produced by the base tool, not computed here. The list item's
