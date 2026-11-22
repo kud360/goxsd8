@@ -744,9 +744,8 @@ func diagnose(args []string, stderr io.Writer) int {
 
 // leadingFlag answers arg, a flag-shaped first argument standing before the
 // subcommand name, with the answers usage states, from name's own flag set
-// (subcommandFlags), and returns exit 2. It reads arg's flag name as the
-// flag package does, with one or two dashes and any =value removed
-// (flagName), so --q and -q=maybe name the flag q:
+// (subcommandFlags), and returns exit 2. It reads arg's flag name through
+// flagName:
 //
 //   - A name the flag set defines draws leadingFlagFmt, telling the user to
 //     move arg after name, whatever its value: whether the subcommand accepts

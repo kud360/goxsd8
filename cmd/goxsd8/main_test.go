@@ -88,17 +88,12 @@ var dispatchCases = []struct {
 	// claiming a subcommand that is right there was never given.
 	{[]string{"-q", "parse", "a.xsd"}, `goxsd8: -q must follow the subcommand: goxsd8 parse -q ...`},
 	{[]string{"-v", "gen", "-schema", "a.xsd"}, `goxsd8: -v must follow the subcommand: goxsd8 gen -v ...`},
-	// The move answer is chosen by the flag's NAME, read with its dashes and
-	// any =value removed, in the named subcommand's own flag set (#4020): a
-	// defined name spelled with two dashes or a value keeps it, whatever the
-	// value, and the rewrite repeats the token as typed.
+	// leadingFlag's first arm (#4020); the rewrite repeats the token as typed.
 	{[]string{"--q", "parse", "a.xsd"}, `goxsd8: --q must follow the subcommand: goxsd8 parse --q ...`},
 	{[]string{"-q=true", "parse", "a.xsd"}, `goxsd8: -q=true must follow the subcommand: goxsd8 parse -q=true ...`},
 	{[]string{"-q=maybe", "parse", "a.xsd"}, `goxsd8: -q=maybe must follow the subcommand: goxsd8 parse -q=maybe ...`},
 	{[]string{"-schema", "validate", "a.xml"}, `goxsd8: -schema must follow the subcommand: goxsd8 validate -schema ...`},
-	// - and -- are no flag to any flag set, which reads - as a positional and
-	// -- as the end of options, so neither is told to move nor answered as an
-	// undefined flag: each stands where a subcommand name belongs (#4020).
+	// leadingFlag's third arm (#4020).
 	{[]string{"--", "parse", "a.xsd"}, `goxsd8: unknown subcommand "--"`},
 	{[]string{"-", "parse", "a.xsd"}, `goxsd8: unknown subcommand "-"`},
 }
@@ -150,6 +145,25 @@ func TestRunDispatch(t *testing.T) {
 	}
 }
 
+// TestSubcommandFlagsCoversSubcommands holds subcommandFlags's switch to
+// subcommands, the vocabulary run's dispatch reads: a name added to the one and
+// not the other fails here rather than panicking at a user who types a flag
+// before it.
+func TestSubcommandFlagsCoversSubcommands(t *testing.T) {
+	for _, name := range subcommands {
+		func() {
+			defer func() {
+				if r := recover(); r != nil {
+					t.Errorf("subcommandFlags(%q) panicked: %v", name, r)
+				}
+			}()
+			if got := subcommandFlags(name).Name(); got != name {
+				t.Errorf("subcommandFlags(%q) is %q's flag set", name, got)
+			}
+		}()
+	}
+}
+
 // The usage: lines a subcommand's diagnosis of the command line's shape prints
 // (#3333), held as literals so that a test comparing stderr against them fails
 // when usage loses or changes the synopsis line: an expectation read through
@@ -171,9 +185,8 @@ const (
 // print no synopsis; TestArgumentFaultPrintsOneLine pins the faults the shape
 // did not cause, which print neither (#3333).
 //
-// The rows from -version on are leadingFlag's second arm (#4020): each expects
-// what goxsd8 <name> <flag> ... prints, which names --version -version and
-// answers --h and --h=1 as a help spelling. -out is gen's and not parse's.
+// The rows from -version on are leadingFlag's second arm (#4020). --version is
+// named -version, and -out is gen's and not parse's.
 func TestSubcommandDiagnosisPrintsSynopsis(t *testing.T) {
 	for _, c := range []struct {
 		args []string
