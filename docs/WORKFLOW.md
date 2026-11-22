@@ -269,10 +269,12 @@ chooses (#350).
   reset --hard` (#2223).
 
 **The orchestrator holds the pen only for words already written on the
-thread.** Its edit transcribes a verdict's or a ruling's text, or is
+thread.** Its edit transcribes an issue-body re-statement a grounding
+writes, or a fix whose replacement text a review or verdict states, or is
 mechanical — a reflow, a renumbering, a SHA — and its commit body links the
-comment it transcribes. Composing new text is design content, in a `.md`
-file as much as a `.go` one, and is a mason round (#1442).
+comment it transcribes. Every other implementation diff is a mason round,
+one whose whole text a `RULING:` dictates included (#3996): composing new
+text is design content, in a `.md` file as much as a `.go` one (#1442).
 
 **Every orchestrator edit is a new commit.** Amend and force-push of a
 pushed `wip/*` or `parked/*` ref are forbidden without exception —
@@ -391,9 +393,10 @@ is anyone else's to volunteer:
    `--allow-empty` lease heartbeats fall out of it and owe nothing, and the
    `(top)` magic is what holds that answer steady from a subdirectory.
    Every commit it does yield is covered by some `MASON:` comment on the
-   thread, or the orchestrator states here which thread comment its pen
-   transcribed (**One writer per checkout**). A commit that is neither is a
-   mason round that was skipped, and the branch does not land (#1227). A
+   thread, or the orchestrator states here which review or verdict comment
+   its pen transcribed, or that the commit is mechanical (**One writer per
+   checkout**). A commit covered by none of these is a mason round that
+   was skipped, and the branch does not land (#1227). A
    `MASON:` comment covers a commit only if it carries the account itself —
    a body that is a local path carries nothing (**What survives a
    session**, #992) — and every SHA it names resolves in this checkout
