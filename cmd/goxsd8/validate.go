@@ -77,6 +77,31 @@ func formatVocabulary() string {
 	return strings.Join(spellings[:last], ", ") + " or " + spellings[last]
 }
 
+// validateOptions holds the values of validate's flags once validateFlags'
+// flag set has parsed them.
+type validateOptions struct {
+	schemas                         stringList
+	format                          string
+	noHints, strict, verbose, quiet bool
+}
+
+// validateFlags returns validate's flag set, recording into opts. It is the
+// one encoding of the flags validate defines, read by the two readers
+// parseFlags names.
+func validateFlags(opts *validateOptions) *flag.FlagSet {
+	flags := newFlagSet("validate")
+	flags.Var(&opts.schemas, "schema", "a schema document of the set; repeat it for each")
+	flags.StringVar(&opts.format, "format", "", "force the instance source format: xml, json or ber")
+	flags.BoolVar(&opts.noHints, "no-hints", false, "ignore the xsi:schemaLocation hints of XML instances")
+	flags.BoolVar(&opts.strict, strictFlag, false, strictFlagUsage)
+	flags.BoolVar(&opts.verbose, "v", false, "log assembly and assessment at debug level to stderr")
+	// -q silences the end-of-run counts line, validate's one informational
+	// line, and nothing else: stdout carries the report of violations and
+	// declined checks doc.go forbids -q to silence.
+	flags.BoolVar(&opts.quiet, "q", false, "suppress the end-of-run counts line on stderr")
+	return flags
+}
+
 // runValidate implements `goxsd8 validate`: it compiles the -schema arguments
 // into ONE schema set and assesses every positional argument against it,
 // writing each violation to stdout as the contract's "<loc>: [<rule>]
@@ -98,28 +123,13 @@ func formatVocabulary() string {
 //
 // The flags are parsed here rather than by run, for the reason runParse states.
 func runValidate(args []string, stdout, stderr io.Writer) int {
-	flags := flag.NewFlagSet("validate", flag.ContinueOnError)
-	// Discarding the flag set's output silences its own usage rendering, which
-	// would print a second, narrower contract next to doc.go's; helpPointer
-	// names the real one instead.
-	flags.SetOutput(io.Discard)
-	var schemas stringList
-	flags.Var(&schemas, "schema", "a schema document of the set; repeat it for each")
-	format := flags.String("format", "", "force the instance source format: xml, json or ber")
-	noHints := flags.Bool("no-hints", false, "ignore the xsi:schemaLocation hints of XML instances")
-	strictSkips := flags.Bool(strictFlag, false, strictFlagUsage)
-	verbose := flags.Bool("v", false, "log assembly and assessment at debug level to stderr")
-	// -q silences the end-of-run counts line, validate's one informational
-	// line, and nothing else: stdout carries the report of violations and
-	// declined checks doc.go forbids -q to silence.
-	quiet := flags.Bool("q", false, "suppress the end-of-run counts line on stderr")
+	var opts validateOptions
+	flags := validateFlags(&opts)
 	if err := flags.Parse(args); err != nil {
-		if errors.Is(err, flag.ErrHelp) {
-			return subcommandUsageError(stderr, "validate", fmt.Sprintf(helpNotAFlagValueFmt, "validate"))
-		}
-		return subcommandUsageError(stderr, "validate", fmt.Sprintf("goxsd8: validate: %v", err))
+		return flagParseError(stderr, flags, err)
 	}
-	forced, err := forcedFormat(*format)
+	schemas := opts.schemas
+	forced, err := forcedFormat(opts.format)
 	if err != nil {
 		return subcommandUsageError(stderr, "validate", fmt.Sprintf("goxsd8: validate: %v", err))
 	}
@@ -148,7 +158,7 @@ func runValidate(args []string, stdout, stderr io.Writer) int {
 	// all or nothing here too, for the reason parse.go's GAP(cmd) marker
 	// records (#1185).
 	var log *slog.Logger
-	if *verbose {
+	if opts.verbose {
 		log = slog.New(slog.NewTextHandler(stderr, &slog.HandlerOptions{Level: slog.LevelDebug}))
 	}
 
@@ -206,13 +216,13 @@ func runValidate(args []string, stdout, stderr io.Writer) int {
 	// roots, which the report never lists among its directives. Under -strict
 	// the set's skip is charged to the run once, beside the outcome of every
 	// instance, each of which is still assessed.
-	code := reportUnfollowed(stderr, "validate", assemblyCompiled, *strictSkips, report)
+	code := reportUnfollowed(stderr, "validate", assemblyCompiled, opts.strict, report)
 	v, err := validate.New(base, backend, validate.WithLogger(log))
 	if err != nil {
 		return subcommandFault(stderr, fmt.Sprintf("goxsd8: validate: %v", err))
 	}
 
-	job := validation{roots: roots, base: v, backend: backend, forced: forced, hints: !*noHints, strict: *strictSkips, log: log}
+	job := validation{roots: roots, base: v, backend: backend, forced: forced, hints: !opts.noHints, strict: opts.strict, log: log}
 	var tally instanceTally
 	for _, instance := range instances {
 		c := job.one(instance, stdout, stderr)
@@ -221,7 +231,7 @@ func runValidate(args []string, stdout, stderr io.Writer) int {
 		tally.add(c)
 		code = worse(code, c)
 	}
-	if !*quiet {
+	if !opts.quiet {
 		// A failed stderr write cannot change the outcome, for the reason
 		// subcommandUsageError states.
 		_, _ = fmt.Fprintln(stderr, tally.line())
