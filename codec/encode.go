@@ -623,10 +623,17 @@ func (w *encodeWalk) contentEncodes(content xsd.ElementContent, subject string) 
 
 // particleEncodes returns elementEncodes' error for the particle p of a
 // spliced content sequence or of a content choice's alternative, subject
-// naming p: {max occurs} 0, then a term other than a local element
-// declaration, then the declaration as the document element's is examined
-// (encodeWalk.element). {term} is a closed sum, so the switches are STYLE T2's
-// sealed-sum exception.
+// naming p: {max occurs} 0, then a term other than an element declaration,
+// then the declaration as the document element's is examined
+// (encodeWalk.element). The declaration of an <element ref> is the top-level
+// one its name resolves to through [xsd.Schema.Element] (§3.3.2.4
+// ref.elt.global), as Decode's particleTerm follows it, a name resolving to
+// none a plain error; where codegen gives its field a sealed interface
+// (goshape.SubstitutionSum), an abstract declaration's always, it declines
+// before the declaration is examined, and otherwise the declaration is
+// examined as a local one, an element of its own expanded name matching the
+// particle (§3.9.4.3 cvc-accept clause 2.3.1). {term} is a closed sum, so the
+// switches are STYLE T2's sealed-sum exception.
 func (w *encodeWalk) particleEncodes(p xsd.Particle, subject string) error {
 	if upper, bounded := p.Occurs().Max(); bounded && upper == 0 {
 		return encodeDecline(constructVacuousParticle, subject)
@@ -636,7 +643,14 @@ func (w *encodeWalk) particleEncodes(p xsd.Particle, subject string) error {
 	case xsd.ModelGroupRef:
 		return encodeDecline(constructNestedGroup, subject)
 	case xsd.ElementDeclarationRef:
-		return encodeDecline(constructElementRef, fmt.Sprintf("%s, naming element %s", subject, term.Name.Display()))
+		decl, ok := w.schema.Element(term.Name)
+		if !ok {
+			return fmt.Errorf("codec: the <element ref> particle to %s does not resolve", term.Name.Display())
+		}
+		if _, sum := goshape.SubstitutionSum(w.schema, decl); sum {
+			return encodeDecline(constructSealedInterface, fmt.Sprintf("%s, naming element %s", subject, term.Name.Display()))
+		}
+		el = decl
 	case xsd.ResolvedTerm:
 		switch term := term.Term.(type) {
 		case xsd.ModelGroup:
