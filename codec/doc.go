@@ -345,7 +345,10 @@
 //
 // Every other construct is a [*DeclineError], item 4 of Append's doc, a
 // list's item declining by the item's construct, and so is a value with no
-// canonical representation, item 7.
+// canonical representation, item 7. The one exception is the declaration
+// name names, as the document element's, with {abstract} true: it is item 3,
+// a plain error. A declaration with {abstract} true that a particle reaches
+// is no exception.
 //
 // The document Append writes has no XML declaration, so it is XML 1.0 in
 // UTF-8, and no white space between tags. It binds namespaces by default
