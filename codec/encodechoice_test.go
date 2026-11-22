@@ -112,7 +112,7 @@ func TestEncodeChoiceTypesAreCodegens(t *testing.T) {
 // branch placed by the WithBranches set Append is passed, validate accepts
 // the document, and Decode under that set returns the value; the emptiable
 // choice's nil interface, the empty match (§3.9.6.3 cos-group-emptiable),
-// writes no child element. Each row fails with contentPlanOf's OnceChoice
+// writes no child element. Each row fails with contentEncodes' OnceChoice
 // case declining as it did before, and the nil row of opt with the nil
 // interface charged as item 6 wherever it is met.
 func TestAppendChoice(t *testing.T) {
@@ -205,34 +205,18 @@ func TestAppendChoiceInvalid(t *testing.T) {
 	})
 }
 
-// TestEncodeChoicePlaceInternalBug pins that encodeChoice.place panics, as an
-// internal bug, never leaving an alternative without its branch type, where
-// item 5's filler holds no content choice: a filler with no placedChoice, a
-// *boundBinding of other content, and a choice bound with another
-// alternative count.
-func TestEncodeChoicePlaceInternalBug(t *testing.T) {
-	two := func() *encodeChoice {
-		return &encodeChoice{alts: make([]encodeAlternative, 2), subject: "the complex type T"}
-	}
-	for _, row := range []struct {
-		name string
-		f    filler
-		want string
-	}{
-		{"a filler of no choice", rawContent{}, "codec: item 5's check returned a codec.rawContent, which holds no content choice, for the complex type T"},
-		{"a struct of other content", &boundBinding{content: &boundSequence{}}, "codec: item 5's check returned a *codec.boundBinding, which holds no content choice of 2 alternatives, for the complex type T"},
-		{"another alternative count", &boundChoiceRoot{choice: &boundChoice{branches: make([]boundBranch, 1)}}, "codec: item 5's check returned a *codec.boundChoiceRoot, which holds no content choice of 2 alternatives, for the complex type T"},
-	} {
-		t.Run(row.name, func(t *testing.T) {
-			c := two()
-			defer func() {
-				if got := recover(); got != row.want {
-					t.Errorf("place panicked with %v, want %q; alternatives %v", got, row.want, c.alts)
-				}
-			}()
-			c.place(row.f)
-		})
-	}
+// TestEncodedInternalBug pins that encoded panics, as an internal bug, naming
+// the arm's type and the capability it lacks, where Append's write reaches a
+// bound arm with no write: rawContent, the filler of an xs:anyType element's
+// raw content, which item 4 declines (constructAnyType).
+func TestEncodedInternalBug(t *testing.T) {
+	want := "codec: Append reached a codec.rawContent, which is no codec.writer: item 4 of Append's doc admitted a construct whose bound arm Append does not write"
+	defer func() {
+		if got := recover(); got != want {
+			t.Errorf("encoded panicked with %v, want %q", got, want)
+		}
+	}()
+	encoded[writer](rawContent{})
 }
 
 // TestAppendChoiceBranches pins item 5 of Append's doc for a content choice
