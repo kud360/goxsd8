@@ -2483,20 +2483,19 @@ func (b boundValue) fill(r *xmltree.Reader, root *xmltree.StartElement, out refl
 }
 
 // sequence is a content model's particles as the struct codegen emits holds
-// them, one member per struct field, in particle order: a content
-// sequence's or spliced all group's, an element or wildcard particle giving a
-// field, a nested sequence or all group particle goshape.ParticleHold answers
-// Spliced for giving in its place the members its own particles give, a nested
-// choice bound in place its *choice, a nested particle goshape.ParticleHold
-// answers Flattened for its flatSlice and any other nested model group particle
-// its *nestedOccurrence (codegen/doc.go "# Particles"), then holding the
-// open-content field, if any, as its last member (sequence.openContent); or
-// a *contentChoice's rest, holding that field alone, if any. Its members'
-// attribution targets are numbered in bind order from base, a field taking
-// one, a *choice those of each alternative's branch members in turn
-// (branchTargets), a flatSlice one per alternative and a *nestedOccurrence
-// those of its item, and check returns one sink per target in that order, so
-// the target index holds for a child is the index of the sink that sets it.
+// them, one member per struct field, in particle order: a content sequence's or spliced
+// all group's, an element particle giving an elementMember and a wildcard particle a
+// field, a nested sequence or all group particle goshape.ParticleHold answers Spliced
+// for giving in its place the members its own particles give, a nested choice bound in
+// place its *choice, a nested particle goshape.ParticleHold answers Flattened for its
+// flatSlice and any other nested model group particle its *nestedOccurrence
+// (codegen/doc.go "# Particles"), then holding the open-content field, if any, as its
+// last member (sequence.openContent); or a *contentChoice's rest, holding that field
+// alone, if any. Its members' attribution targets are numbered in bind order from base,
+// a field or an elementMember taking one, a *choice those of each alternative's branch
+// members in turn (branchTargets), a flatSlice one per alternative and a
+// *nestedOccurrence those of its item, and check returns one sink per target in that
+// order, so the target index holds for a child is the index of the sink that sets it.
 type sequence struct {
 	p       *pipeline
 	members []contentMember
@@ -2620,10 +2619,10 @@ func (s *sequence) targets() int {
 // *flatSlice, a nested flattened particle's slice of a sealed interface; or a
 // *nestedOccurrence, a nested particle's occurrence field.
 type contentMember interface {
-	// targets is how many attribution targets the member takes: a field one,
-	// a *choice those of each alternative's branch members in turn
-	// (branchTargets), a *flatSlice one per alternative, and a
-	// *nestedOccurrence those of its item.
+	// targets is how many attribution targets the member takes: a field and an
+	// elementMember one, a *choice those of each alternative's branch members in turn
+	// (branchTargets), a *flatSlice one per alternative, and a *nestedOccurrence
+	// those of its item.
 	targets() int
 	// sinks holds field index of t to the member, item 6 of Decode's doc, and
 	// returns one sink per target, in target order.
@@ -3297,8 +3296,8 @@ type branchArm interface {
 	namesBranch(bt reflect.Type) bool
 }
 
-// branchMembers is f alone: an element, wildcard, member or basic particle's
-// branch struct holds one field.
+// branchMembers is f alone: a wildcard, member or basic particle's branch
+// struct holds one field.
 func (f field) branchMembers() []contentMember { return []contentMember{f} }
 
 // namesBranch reports whether bt is a struct of one field named as f and f's

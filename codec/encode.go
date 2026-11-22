@@ -222,21 +222,23 @@ type writer interface {
 
 // writeAt is what a writer reads beside its value: el, the element
 // declaration of the element the value is written as, for a root arm, or of
-// the element whose content holds it, for every other writer; typ, the complex
-// type a content arm writes the content of, el's, which its item 6 errors name
-// (typeSubject); and path, the value's Go path from T.
+// the element whose content holds it, for every other writer; typ, for a
+// content arm, the complex type whose content it writes, el's, which a
+// choice's item 6 errors name (typeSubject), and the zero ComplexType for
+// every other writer, which reads none; and path, the value's Go path from T.
 type writeAt struct {
 	el   xsd.ElementDeclaration
 	typ  xsd.ComplexType
 	path string
 }
 
-// encoded returns x, an arm of the filler item 5's check returns, as C, the
-// capability (writer) or closed-sum arm (scalarArm, elementMember, atomic)
-// Append's write reads it as. Invariant: where item 4 of [Append]'s doc admits
-// a construct, every arm the binder builds for it that the write reaches is
-// such a C. A failed assertion breaks it, an internal bug, never input, and
-// panics naming x's type.
+// encoded returns x, an arm of the filler item 5's check returns or of the
+// binder under it, as C, what Append's write reads it as: the writer capability, or a
+// closed sum's arm, a fieldArm's scalarArm, a branchArm's elementMember or a
+// scalarElem's atomic. It is the write's one assertion of the binder's arms, and its one
+// panic. Invariant: where item 4 of [Append]'s doc admits a construct, every arm the
+// binder builds for it that the write reaches is such a C. A failed assertion breaks it,
+// an internal bug, never input, and panics naming x's type.
 func encoded[C any](x any) C {
 	c, ok := x.(C)
 	if !ok {
