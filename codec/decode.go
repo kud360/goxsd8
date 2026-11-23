@@ -4206,9 +4206,9 @@ func complexSubject(ct xsd.ComplexType) string {
 // once and that codegen neither splices nor flattens, or a content all group
 // codegen does not splice, as Decode reads it (codegen/doc.go "# Particles"):
 // the one field, named name, holding the type for one occurrence of group,
-// its item, in shape, goshape.ParticleShape's for the particle's occurrence
-// over a struct for a sequence or all group and a sealed interface for a
-// choice. ct is the complex type whose {content type} it is,
+// its item, in shape, goshape.ParticleShape's for own, the particle's
+// occurrence, over a struct for a sequence or all group and a sealed interface
+// for a choice. ct is the complex type whose {content type} it is,
 // whose Matcher attributes every child (§3.8.4.2 key-vpath), and index the
 // item's childIndex, which attributes a child to its target in the item.
 // open is the field ct's {open content} gives (openContentField), the
@@ -4217,6 +4217,7 @@ func complexSubject(ct xsd.ComplexType) string {
 type occurrence struct {
 	name  string
 	shape shape
+	own   xsd.Occurs
 	group xsd.ModelGroup
 	item  occurrenceItem
 	index childIndex
@@ -4233,10 +4234,23 @@ type occurrence struct {
 type occurrenceItem interface {
 	// itemTargets is how many attribution targets the item's members take.
 	itemTargets() int
-	// itemSinks holds it, the item's Go type at the site site names, to the
-	// item, item 6 of Decode's doc, and returns one sink per target, in target
-	// order, each setting a value of it.
-	itemSinks(it reflect.Type, site string, cx *checkContext) ([]sink, error)
+	// holdItem holds it, the item's Go type at the site site names, to the
+	// item, item 6 of Decode's doc, and returns the item bound.
+	holdItem(it reflect.Type, site string, cx *checkContext) (boundItem, error)
+}
+
+// A boundItem is an occurrenceItem whose hold held, a closed sum: a
+// boundSequenceItem, a sequence's or all group's, or a boundChoiceItem, a
+// choice's.
+type boundItem interface {
+	// sinks returns one sink per target of the item, in target order, each
+	// setting a value of the item's Go type.
+	sinks() []sink
+	// writeItem writes the elements of v, one occurrence of the item's model
+	// group, a value of its Go type, at at, each taken by check, the
+	// attributionCheck of the content the occurrence field is written into, nil
+	// for none, and returns a backend fault.
+	writeItem(e *encoder, v reflect.Value, at writeAt, check *attributionCheck) error
 }
 
 // bindOccurrence returns the occurrence of group, the model group of ct's
@@ -4251,7 +4265,7 @@ type occurrenceItem interface {
 // its name from names (openContentField). Last, a content model
 // xsd.Schema.ContentMatcher does not track declines (trackedMatcher).
 func bindOccurrence(run *bindRun, ct xsd.ComplexType, group xsd.ModelGroup, occurs xsd.Occurs, names *goname.Namer, typeSubject string) (*occurrence, error) {
-	o := &occurrence{name: names.Claim(group.Compositor().String()), group: group, ct: ct, p: run.p}
+	o := &occurrence{name: names.Claim(group.Compositor().String()), own: occurs, group: group, ct: ct, p: run.p}
 	choice := group.Compositor() == xsd.CompositorChoice
 	s, err := occursShape(occurs, choice, fmt.Sprintf("the %s content particle of %s", group.Compositor(), typeSubject))
 	if err != nil {
@@ -4302,10 +4316,11 @@ func bindItem(run *bindRun, ct xsd.ComplexType, group xsd.ModelGroup, x *childIn
 	return seq, nil
 }
 
-// itemSinks holds it to the struct s's members give, as a binding holds its
+// holdItem holds it to the struct s's members give, as a binding holds its
 // content fields, with no attribute field: a struct of exactly s's width
-// fields, each held to its member (sequence.check).
-func (s *sequence) itemSinks(it reflect.Type, site string, cx *checkContext) ([]sink, error) {
+// fields, each held to its member (sequence.check), its sinks those of each
+// member in turn.
+func (s *sequence) holdItem(it reflect.Type, site string, cx *checkContext) (boundItem, error) {
 	if it.Kind() != reflect.Struct {
 		return nil, fmt.Errorf("%w: %s is %s, no struct, where codegen emits the struct for one occurrence of a sequence or all group", ErrTypeMismatch, site, it)
 	}
@@ -4320,8 +4335,18 @@ func (s *sequence) itemSinks(it reflect.Type, site string, cx *checkContext) ([]
 		}
 		sinks = append(sinks, got...)
 	}
-	return sinks, nil
+	return boundSequenceItem{sequence: s, fields: sinks}, nil
 }
+
+// boundSequenceItem is the item of a sequence or all group occurrence whose
+// hold held: fields[k] sets the item struct's target sequence.base+k.
+type boundSequenceItem struct {
+	sequence *sequence
+	fields   []sink
+}
+
+// sinks is b.fields.
+func (b boundSequenceItem) sinks() []sink { return b.fields }
 
 // itemTargets is the targets s's members take after s.base.
 func (s *sequence) itemTargets() int { return s.targets() - s.base }
@@ -4379,7 +4404,7 @@ func (o *nestedOccurrence) admits(got reflect.StructField, _ branchSets) bool {
 
 // sinks holds field index of t to o's field: o's name, not embedded, of o's
 // shape over the item's Go type, which the item holds
-// (occurrenceItem.itemSinks), and returns one occurrenceSink per target of
+// (occurrenceItem.holdItem), and returns one occurrenceSink per target of
 // the item, in target order.
 func (o *nestedOccurrence) sinks(t reflect.Type, index int, cx *checkContext) ([]sink, error) {
 	got := t.Field(index)
@@ -4387,10 +4412,11 @@ func (o *nestedOccurrence) sinks(t reflect.Type, index int, cx *checkContext) ([
 	if got.Name != o.name || got.Anonymous || !ok {
 		return nil, fmt.Errorf("%w: field %d of %s is %s %s where codegen emits %s, %sI for the type I of one occurrence of the %s", ErrTypeMismatch, index, t, got.Name, got.Type, o.name, o.shape.prefix(), o.group.Compositor())
 	}
-	items, err := o.item.itemSinks(it, fieldAt{owner: t, index: index}.site(), cx)
+	bound, err := o.item.holdItem(it, fieldAt{owner: t, index: index}.site(), cx)
 	if err != nil {
 		return nil, err
 	}
+	items := bound.sinks()
 	sinks := make([]sink, len(items))
 	for k, item := range items {
 		sinks[k] = occurrenceSink{index: index, target: k, occurrence: o, item: item}
@@ -4459,18 +4485,31 @@ func (o *nestedOccurrence) itemOf(field reflect.Value, opens bool, start *xmltre
 	return field.Elem(), nil
 }
 
-// itemSinks holds it to c's sealed interface (sealed.checkSite) and returns
-// one itemBranchSink per target of each alternative, in target order.
-func (c choiceItem) itemSinks(it reflect.Type, site string, cx *checkContext) ([]sink, error) {
+// holdItem holds it to c's sealed interface (sealed.checkSite) and returns
+// the interface bound.
+func (c choiceItem) holdItem(it reflect.Type, site string, cx *checkContext) (boundItem, error) {
 	bc, err := c.choice.sealed.checkSite(it, site, cx)
 	if err != nil {
 		return nil, err
 	}
+	return boundChoiceItem{choice: c.choice, bound: bc}, nil
+}
+
+// boundChoiceItem is the item of a choice occurrence whose hold held: bound,
+// the choice's sealed interface bound.
+type boundChoiceItem struct {
+	choice *choice
+	bound  *boundChoice
+}
+
+// sinks returns one itemBranchSink per target of each alternative, in target
+// order (branchSinks).
+func (c boundChoiceItem) sinks() []sink {
 	var sinks []sink
-	for _, s := range branchSinks(c.choice.sealed.alts, bc) {
+	for _, s := range branchSinks(c.choice.sealed.alts, c.bound) {
 		sinks = append(sinks, s)
 	}
-	return sinks, nil
+	return sinks
 }
 
 // itemBranchSink is target target of alternative alt of a choice's
@@ -4494,7 +4533,7 @@ func (o *occurrence) width() int { return 1 + openWidth(o.open) }
 
 // check holds field first of t to the occurrence field: o's name, not
 // embedded, of o's shape over the item's Go type, which the item holds
-// (occurrenceItem.itemSinks), and the next to the open-content field, if any
+// (occurrenceItem.holdItem), and the next to the open-content field, if any
 // (checkOpen). It returns the boundOccurrence that sets them.
 func (o *occurrence) check(t reflect.Type, first int, cx *checkContext) (contentFiller, error) {
 	got := t.Field(first)
@@ -4502,7 +4541,7 @@ func (o *occurrence) check(t reflect.Type, first int, cx *checkContext) (content
 	if got.Name != o.name || got.Anonymous || !ok {
 		return nil, fmt.Errorf("%w: field %d of %s is %s %s where codegen emits %s, %sI for the type I of one occurrence of the %s", ErrTypeMismatch, first, t, got.Name, got.Type, o.name, o.shape.prefix(), o.group.Compositor())
 	}
-	sinks, err := o.item.itemSinks(it, fieldAt{owner: t, index: first}.site(), cx)
+	bound, err := o.item.holdItem(it, fieldAt{owner: t, index: first}.site(), cx)
 	if err != nil {
 		return nil, err
 	}
@@ -4510,18 +4549,17 @@ func (o *occurrence) check(t reflect.Type, first int, cx *checkContext) (content
 	if err != nil {
 		return nil, err
 	}
-	return boundOccurrence{occurrence: o, index: first, item: it, sinks: sinks, open: open}, nil
+	return boundOccurrence{occurrence: o, index: first, item: it, bound: bound, open: open}, nil
 }
 
 // boundOccurrence is an occurrence whose check held: field index of the
-// struct its occurrence field, item, the Go type of one occurrence, sinks[i],
-// setting the item's target i, and open, the open-content field's sink, nil
-// for none.
+// struct its occurrence field, item, the Go type of one occurrence, bound,
+// that item bound, and open, the open-content field's sink, nil for none.
 type boundOccurrence struct {
 	occurrence *occurrence
 	index      int
 	item       reflect.Type
-	sinks      []sink
+	bound      boundItem
 	open       sink
 }
 
@@ -4559,6 +4597,7 @@ func (b boundOccurrence) fill(r *xmltree.Reader, _ *xmltree.StartElement, out re
 	}
 	field := out.Field(b.index)
 	part := partition{schema: o.p.schema, group: o.group}
+	sinks := b.bound.sinks()
 	var item reflect.Value
 	for {
 		tok, err := st.token(r)
@@ -4609,7 +4648,7 @@ func (b boundOccurrence) fill(r *xmltree.Reader, _ *xmltree.StartElement, out re
 			if opens {
 				item = reflect.New(b.item).Elem()
 			}
-			if err := b.sinks[at.index].put(o.p, r, tok, item, st); err != nil {
+			if err := sinks[at.index].put(o.p, r, tok, item, st); err != nil {
 				return err
 			}
 		}

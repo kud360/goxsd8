@@ -318,13 +318,15 @@
 //     simple type that encodes or a complex type that encodes.
 //   - A complex type with {abstract} false, no {assertions}, no {attribute
 //     wildcard} and no {open content}, of empty content or of element-only
-//     content whose {particle} is a sequence that codegen splices, or a choice
-//     occurring exactly once that codegen does not flatten, inline or through
-//     <group ref>, each of whose particles is an element particle or a
-//     wildcard particle with {process contents} skip, and, holding a wildcard
-//     particle, whose content model xsd.Schema.ContentMatcher tracks; the
-//     choice into its sealed interface, T itself or the first field of T's
-//     struct, as "# What decodes" states.
+//     content whose {particle} is a sequence that codegen splices, a choice
+//     occurring exactly once that codegen does not flatten, or a sequence or
+//     choice codegen holds in an occurrence field, inline or through <group
+//     ref>, each of whose particles is an element particle or a wildcard
+//     particle with {process contents} skip, and, holding a wildcard particle,
+//     whose content model xsd.Schema.ContentMatcher tracks; the choice
+//     occurring exactly once into its sealed interface, T itself or the first
+//     field of T's struct, and the sequence or choice held in an occurrence
+//     field into that field, as "# What decodes" states.
 //   - An element particle of that sequence or choice with {max occurs} at least
 //     1, its {term} a local element declaration or, for an <element ref> whose
 //     field codegen's package doc "# Substitution groups" gives no sealed
@@ -414,14 +416,15 @@
 // then each of its Children, written so, followed by its Tail. A nil pointer
 // field writes nothing, and so does a nil interface field where nil means
 // absent (codegen's package doc, "# Particles", "# Attributes"), a particle
-// with {max occurs} above 1 writes one element per item of its slice, a
-// choice's branch writes its alternative's elements, the empty match, the nil
-// interface of a present element, writes no child element, and an element with
-// no content is written as an empty-element tag, <x/>. A string value, of
-// xs:string or xs:anyURI primitive, is written as itself, its canonical
-// representation, since xs:string's canonical mapping is the identity
-// (Datatypes §E.4 f-stringCanmap) and so is xs:anyURI's lexical mapping, so
-// that an xs:anyURI value is neither normalized nor percent-escaped
+// with {max occurs} above 1 writes one element per item of its slice, an
+// occurrence field writes each item it holds, in order, as its model group's
+// particles in order, a choice's branch writes its alternative's elements,
+// the empty match, the nil interface of a present element, writes no child
+// element, and an element with no content is written as an empty-element tag,
+// <x/>. A string value, of xs:string or xs:anyURI primitive, is written as
+// itself, its canonical representation, since xs:string's canonical mapping is
+// the identity (Datatypes §E.4 f-stringCanmap) and so is xs:anyURI's lexical
+// mapping, so that an xs:anyURI value is neither normalized nor percent-escaped
 // (§3.3.17.2), and item 6 of Append's doc holds the string to its own
 // whiteSpace-normalized form. A list value is written as its items are written,
 // in order, separated by single U+0020 characters (Datatypes §2.4.1.2), and the
