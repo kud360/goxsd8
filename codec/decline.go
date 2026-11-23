@@ -170,6 +170,7 @@ const (
 	constructIDType
 	constructAssertions
 	constructNoCanonical
+	constructQNameSpelling
 )
 
 // constructNames holds, indexed by construct, each construct's name.
@@ -203,6 +204,7 @@ var constructNames = [...]string{
 	constructIDType:             "a simple type derived from xs:ID, xs:IDREF or xs:ENTITY",
 	constructAssertions:         "a simple type with an assertions facet",
 	constructNoCanonical:        "a value with no canonical representation",
+	constructQNameSpelling:      "an xs:QName or xs:NOTATION value with no spelling Append writes where it is written",
 }
 
 // displayList spells names, at least two, each by its Display, separated by

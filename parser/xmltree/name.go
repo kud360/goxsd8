@@ -6,7 +6,8 @@ package xmltree
 // XSD-layer fact, so it lives in this leaf (unlike the XMLSchema /
 // XMLSchema-instance URIs, which belong to the xsd/parser packages). It is
 // exported for parser, which recognizes xml:base attributes by matching
-// Name{Space: XMLNamespaceURI, Local: "base"} rather than duplicating the URI.
+// Name{Space: XMLNamespaceURI, Local: "base"} rather than duplicating the URI,
+// and for codec, whose Append spells a QName value in it under the prefix xml.
 const XMLNamespaceURI = "http://www.w3.org/XML/1998/namespace"
 
 // xmlnsPrefix and xmlPrefix are the two reserved prefixes. "xmlns" may only

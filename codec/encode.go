@@ -11,6 +11,7 @@ import (
 
 	"github.com/kud360/goxsd8/internal/goshape"
 	"github.com/kud360/goxsd8/internal/xmlchar"
+	"github.com/kud360/goxsd8/parser/xmltree"
 	"github.com/kud360/goxsd8/value"
 	"github.com/kud360/goxsd8/xsd"
 	"github.com/kud360/goxsd8/xsderr"
@@ -144,8 +145,8 @@ func Append[T any](dst []byte, schema *xsd.Schema, backend value.Backend, name x
 	if e.invalid != nil {
 		return dst, e.invalid
 	}
-	if e.uncanonical != nil {
-		return dst, e.uncanonical
+	if e.declined != nil {
+		return dst, e.declined
 	}
 	return e.out, nil
 }
@@ -270,7 +271,7 @@ func (b *boundBinding) write(e *encoder, v reflect.Value, at writeAt) error {
 	defer e.leave()
 	bd := b.binding
 	name := at.el.Name()
-	outer := e.startTag(name)
+	outer, mark := e.startTag(name)
 	first := bd.lead() + bd.content.width()
 	for i, a := range bd.attrs {
 		f, fpath := v.Field(first+i), at.path+"."+v.Type().Field(first+i).Name
@@ -295,7 +296,7 @@ func (b *boundBinding) write(e *encoder, v reflect.Value, at writeAt) error {
 	if err := encoded[writer](b.content).write(e, v, writeAt{el: at.el, typ: bd.typ, path: at.path}); err != nil {
 		return err
 	}
-	e.endTag(name, start, outer)
+	e.endTag(name, start, outer, mark)
 	return nil
 }
 
@@ -309,13 +310,13 @@ func (c *boundChoiceRoot) write(e *encoder, v reflect.Value, at writeAt) error {
 	}
 	defer e.leave()
 	name := at.el.Name()
-	outer := e.startTag(name)
+	outer, mark := e.startTag(name)
 	start := len(e.out)
 	e.out = append(e.out, '>')
 	if err := writeChoice(e, c.root.sealed.alts, c.choice, v, writeAt{el: at.el, typ: c.root.typ, path: at.path}); err != nil {
 		return err
 	}
-	e.endTag(name, start, outer)
+	e.endTag(name, start, outer, mark)
 	return nil
 }
 
@@ -713,6 +714,8 @@ var (
 		{Space: xsd.XMLSchemaNS, Local: "hexBinary"},
 		{Space: xsd.XMLSchemaNS, Local: "base64Binary"},
 		{Space: xsd.XMLSchemaNS, Local: "anyURI"},
+		{Space: xsd.XMLSchemaNS, Local: "QName"},
+		{Space: xsd.XMLSchemaNS, Local: "NOTATION"},
 	}
 	idNames = []xsd.QName{
 		{Space: xsd.XMLSchemaNS, Local: "ID"},
@@ -818,20 +821,24 @@ func simpleSubject(st *xsd.SimpleType, owner string) string {
 }
 
 // encoder is one Append's write of a document: out, the document so far; ns,
-// the in-scope default namespace, that of the element whose content is being
-// written, "" outside the document element; open, the values whose element's
-// write is open, outermost first (enter); and the first item 6 and item 7
-// errors of [Append]'s doc it has found, in document order. Every value is
-// written whatever was found before it, so that the walk finds an item 6
-// error after an item 7 one.
+// the in-scope default namespace, that of the element whose start tag is open
+// or whose content is being written, "" outside the document element; bound,
+// the namespace names qname has declared a prefix for on the open elements,
+// outermost first, bound[i] under the prefix "p" and i+1 in decimal, which no
+// field stores (writtenBindings); open, the values whose element's write is
+// open, outermost first (enter); and the first item 6 and item 7 errors of
+// [Append]'s doc it has found, in document order. Every value is written
+// whatever was found before it, so that the walk finds an item 6 error after
+// an item 7 one.
 type encoder struct {
-	schema      *xsd.Schema
-	backend     value.Backend
-	out         []byte
-	ns          string
-	open        []openValue
-	invalid     *invalidValueError
-	uncanonical error
+	schema   *xsd.Schema
+	backend  value.Backend
+	out      []byte
+	ns       string
+	bound    []string
+	open     []openValue
+	invalid  *invalidValueError
+	declined error
 }
 
 // openValue is a value of complex type whose element's write is open: ptr,
@@ -871,8 +878,10 @@ func (e *encoder) leave() { e.open = e.open[:len(e.open)-1] }
 // startTag appends the start tag of the element name, but for its '>', with a
 // default namespace declaration where name's namespace differs from e.ns, the
 // document element's from no namespace, and makes name's namespace e.ns for
-// its content, returning the one it replaced, which endTag restores.
-func (e *encoder) startTag(name xsd.QName) (outer string) {
+// its attributes and content, returning the one it replaced and mark, the
+// length of e.bound, both of which endTag restores, so that a prefix qname
+// declares in this start tag is in scope until endTag.
+func (e *encoder) startTag(name xsd.QName) (outer string, mark int) {
 	e.out = append(e.out, '<')
 	e.out = append(e.out, name.Local...)
 	if name.Space != e.ns {
@@ -881,15 +890,16 @@ func (e *encoder) startTag(name xsd.QName) (outer string) {
 		e.out = append(e.out, '"')
 	}
 	outer, e.ns = e.ns, name.Space
-	return outer
+	return outer, len(e.bound)
 }
 
 // endTag ends the element name whose start tag's '>' is e.out's byte at
 // start: with its end tag, or, where nothing follows that '>', by turning the
-// start tag into an empty-element tag; and restores outer, startTag's
-// answer, as e.ns.
-func (e *encoder) endTag(name xsd.QName, start int, outer string) {
+// start tag into an empty-element tag; and restores outer and mark,
+// startTag's answers, as e.ns and the length of e.bound.
+func (e *encoder) endTag(name xsd.QName, start int, outer string, mark int) {
 	e.ns = outer
+	e.bound = e.bound[:mark]
 	if len(e.out) == start+1 {
 		e.out = append(e.out[:start], "/>"...)
 		return
@@ -905,7 +915,7 @@ func (e *encoder) endTag(name xsd.QName, start int, outer string) {
 // error is a backend fault.
 func (e *encoder) simpleElement(decl xsd.ElementDeclaration, s scalar, v reflect.Value, path string) error {
 	name := decl.Name()
-	outer := e.startTag(name)
+	outer, mark := e.startTag(name)
 	text, err := e.simple(s, v, path, declSubject(decl))
 	if err != nil {
 		return err
@@ -913,7 +923,7 @@ func (e *encoder) simpleElement(decl xsd.ElementDeclaration, s scalar, v reflect
 	start := len(e.out)
 	e.out = append(e.out, '>')
 	e.out = appendEscaped(e.out, text, false)
-	e.endTag(name, start, outer)
+	e.endTag(name, start, outer, mark)
 	return nil
 }
 
@@ -936,12 +946,13 @@ func (e *invalidValueError) Error() string { return e.err.Error() }
 // errors.As and xsderr.RuleOf reads of the cause's chain.
 func (e *invalidValueError) Unwrap() []error { return []error{ErrInvalidValue, e.err} }
 
-// noCanonical records the item 7 decline of [Append]'s doc for the value
-// shown at path, of the simple type subject names, cause saying why, unless
-// an earlier value's is recorded.
-func (e *encoder) noCanonical(subject, path, shown, cause string) {
-	if e.uncanonical == nil {
-		e.uncanonical = encodeDecline(constructNoCanonical, fmt.Sprintf("%s, at %s holding %s: %s", subject, path, shown, cause))
+// declineValue records the item 7 decline of [Append]'s doc by the construct
+// c, constructNoCanonical or constructQNameSpelling, for the value shown at
+// path, of the simple type subject names, cause saying why, unless an earlier
+// value's is recorded.
+func (e *encoder) declineValue(c construct, subject, path, shown, cause string) {
+	if e.declined == nil {
+		e.declined = encodeDecline(c, fmt.Sprintf("%s, at %s holding %s: %s", subject, path, shown, cause))
 	}
 }
 
@@ -963,15 +974,19 @@ func (e *encoder) simple(s scalar, v reflect.Value, path, owner string) (string,
 // atom returns the text Append writes for v, a value of the atomic simple
 // type st held in a, its atomic Go type, at path, subject naming st: the
 // value of an atomic formed holds for in its canonical representation
-// (spelled), a string as itself (str), and a float32 or float64 in its
-// canonical representation (double). ok reports that it recorded no item 6 or
-// 7 error of [Append]'s doc for v.
+// (spelled), a string as itself (str), an xs:QName or xs:NOTATION value under
+// a prefix in scope (qname), and a float32 or float64 in its canonical
+// representation (double). ok reports that it recorded no item 6 or 7 error
+// of [Append]'s doc for v.
 func (e *encoder) atom(st *xsd.SimpleType, a atomic, v reflect.Value, path, subject string) (text string, ok bool, err error) {
 	if a.formed() {
 		return e.spelled(st, a, v, path, subject)
 	}
 	if a == atomicString {
 		return e.str(st, v.String(), path, subject)
+	}
+	if a == atomicQName {
+		return e.qname(st, v, path, subject)
 	}
 	return e.double(st, v.Float(), a.bare().Bits(), path, subject)
 }
@@ -987,7 +1002,9 @@ func (e *encoder) atom(st *xsd.SimpleType, a atomic, v reflect.Value, path, subj
 // item 7 only where an item with another lexical is held, which a pattern may
 // match (§2.1's note, otherLexical); the empty list has no other lexical, nor
 // a list none of whose items has one, so every lexical of such a value
-// normalizes to the text written.
+// normalizes to the text written. A list of xs:QName or xs:NOTATION items
+// records that item 7 by constructQNameSpelling, its text being their
+// spellings, no canonical representation.
 func (e *encoder) list(st, item *xsd.SimpleType, a atomic, v reflect.Value, path, subject string) (string, error) {
 	isubject := itemSubject(subject, item)
 	items := make([]string, v.Len())
@@ -1015,12 +1032,16 @@ func (e *encoder) list(st, item *xsd.SimpleType, a atomic, v reflect.Value, path
 		// []byte by its octets in decimal; each item's text is its form (spelled).
 		shown = "[" + text + "]"
 	}
-	if _, err := value.ValidateLexical(e.backend, e.schema, st, text, nil, noAssertions{}); err != nil {
+	if _, err := value.ValidateLexical(e.backend, e.schema, st, text, writtenBindings{e}, noAssertions{}); err != nil {
 		if !value.IsDatatypeVerdict(err) {
 			return "", fmt.Errorf("codec: Append: %s holds %s, of %s, which the backend cannot assess: %w", path, shown, subject, err)
 		}
 		if rule, _ := xsderr.RuleOf(err); rule == rulePatternValid && otherLexical(a, v) {
-			e.noCanonical(subject, path, shown, fmt.Sprintf("a pattern facet rejects its canonical representation %q: %v", text, err))
+			if a == atomicQName {
+				e.declineValue(constructQNameSpelling, subject, path, shown, fmt.Sprintf("a pattern facet rejects its spelling %q: %v", text, err))
+				return text, nil
+			}
+			e.declineValue(constructNoCanonical, subject, path, shown, fmt.Sprintf("a pattern facet rejects its canonical representation %q: %v", text, err))
 			return text, nil
 		}
 		e.invalidate(fmt.Errorf("codec: Append: %s holds %s, written %q, which %s rejects: %w", path, shown, text, subject, err))
@@ -1048,7 +1069,7 @@ func (e *encoder) str(st *xsd.SimpleType, s, path, subject string) (text string,
 		e.invalidate(fmt.Errorf("codec: Append: %s holds %s, of %s, whose byte offset %d starts no XML 1.0 Char (Datatypes §3.3.1.1, §3.3.17.1)", path, shown, subject, i))
 		return s, false, nil
 	}
-	v, err := value.ValidateLexical(e.backend, e.schema, st, s, nil, noAssertions{})
+	v, err := value.ValidateLexical(e.backend, e.schema, st, s, writtenBindings{e}, noAssertions{})
 	if err != nil {
 		if !value.IsDatatypeVerdict(err) {
 			return "", false, fmt.Errorf("codec: Append: %s holds %s, of %s, which the backend cannot assess: %w", path, shown, subject, err)
@@ -1061,12 +1082,12 @@ func (e *encoder) str(st *xsd.SimpleType, s, path, subject string) (text string,
 		return "", false, err
 	}
 	if m.Canonical == nil {
-		e.noCanonical(subject, path, shown, "its governing mapping has no canonical mapping")
+		e.declineValue(constructNoCanonical, subject, path, shown, "its governing mapping has no canonical mapping")
 		return s, false, nil
 	}
 	c, err := m.Canonical(v)
 	if err != nil {
-		e.noCanonical(subject, path, shown, err.Error())
+		e.declineValue(constructNoCanonical, subject, path, shown, err.Error())
 		return s, false, nil
 	}
 	if c != s {
@@ -1103,12 +1124,12 @@ func (e *encoder) double(st *xsd.SimpleType, f float64, bits int, path, subject 
 		return "", false, fmt.Errorf("codec: Append: %s holds %s, of %s, whose %s form %q the backend's Parse rejects: %w", path, shown, subject, rep, lexical, err)
 	}
 	if m.Canonical == nil {
-		e.noCanonical(subject, path, shown, "its governing mapping has no canonical mapping")
+		e.declineValue(constructNoCanonical, subject, path, shown, "its governing mapping has no canonical mapping")
 		return "", false, nil
 	}
 	c, err := m.Canonical(v)
 	if err != nil {
-		e.noCanonical(subject, path, shown, err.Error())
+		e.declineValue(constructNoCanonical, subject, path, shown, err.Error())
 		return "", false, nil
 	}
 	normalized, err := value.ApplyWhiteSpace(e.schema, st, c)
@@ -1118,19 +1139,19 @@ func (e *encoder) double(st *xsd.SimpleType, f float64, bits int, path, subject 
 	if _, err := m.Parse(normalized, nil); err != nil {
 		return "", false, fmt.Errorf("codec: Append: %s holds %s, of %s, whose canonical representation %q the backend's Parse rejects: %w", path, shown, subject, c, err)
 	}
-	if _, err := value.ValidateLexical(e.backend, e.schema, st, c, nil, noAssertions{}); err != nil {
+	if _, err := value.ValidateLexical(e.backend, e.schema, st, c, writtenBindings{e}, noAssertions{}); err != nil {
 		if !value.IsDatatypeVerdict(err) {
 			return "", false, fmt.Errorf("codec: Append: %s holds %s, of %s, which the backend cannot assess: %w", path, shown, subject, err)
 		}
 		if rule, _ := xsderr.RuleOf(err); rule == rulePatternValid && !soleLexical(f) {
-			e.noCanonical(subject, path, shown, fmt.Sprintf("a pattern facet rejects its canonical representation %q: %v", c, err))
+			e.declineValue(constructNoCanonical, subject, path, shown, fmt.Sprintf("a pattern facet rejects its canonical representation %q: %v", c, err))
 			return c, false, nil
 		}
 		e.invalidate(fmt.Errorf("codec: Append: %s holds %s, which %s rejects: %w", path, shown, subject, err))
 		return c, false, nil
 	}
 	if !mapsBack(c, f, bits) {
-		e.noCanonical(subject, path, shown, fmt.Sprintf("its canonical representation %q does not map back to it", c))
+		e.declineValue(constructNoCanonical, subject, path, shown, fmt.Sprintf("its canonical representation %q does not map back to it", c))
 		return c, false, nil
 	}
 	return c, true, nil
@@ -1157,28 +1178,20 @@ func (e *encoder) spelled(st *xsd.SimpleType, a atomic, v reflect.Value, path, s
 		e.invalidate(fmt.Errorf("codec: Append: %s holds %s, of %s, no value of its datatype: %w", path, a.shown(v), subject, err))
 		return "", false, nil
 	}
-	primitive, err := st.Primitive(e.schema)
+	pm, primitive, err := e.primitiveMapping(st, path, subject)
 	if err != nil {
-		return "", false, fmt.Errorf("codec: Append: %s, of %s: %w", path, subject, err)
-	}
-	if primitive == nil {
-		// atomicEncodes declines a type with no {primitive type definition}.
-		return "", false, fmt.Errorf("codec: Append: %s, of %s: the type has no {primitive type definition}", path, subject)
-	}
-	pm, has := e.backend.Mapping(primitive.Name())
-	if !has {
-		return "", false, fmt.Errorf("codec: Append: %s, of %s: the backend has no mapping of its primitive %s", path, subject, primitive.Name().Display())
+		return "", false, err
 	}
 	if _, err := pm.Parse(lexical, nil); err != nil {
-		return "", false, fmt.Errorf("codec: Append: %s holds %s, of %s, whose canonical spelling the backend's Parse of %s rejects: %w", path, lexical, subject, primitive.Name().Display(), err)
+		return "", false, fmt.Errorf("codec: Append: %s holds %s, of %s, whose canonical spelling the backend's Parse of %s rejects: %w", path, lexical, subject, primitive.Display(), err)
 	}
-	val, err := value.ValidateLexical(e.backend, e.schema, st, lexical, nil, noAssertions{})
+	val, err := value.ValidateLexical(e.backend, e.schema, st, lexical, writtenBindings{e}, noAssertions{})
 	if err != nil {
 		if !value.IsDatatypeVerdict(err) {
 			return "", false, fmt.Errorf("codec: Append: %s holds %s, of %s, which the backend cannot assess: %w", path, lexical, subject, err)
 		}
 		if rule, _ := xsderr.RuleOf(err); rule == rulePatternValid && a.otherLexicalOf(v) {
-			e.noCanonical(subject, path, lexical, fmt.Sprintf("a pattern facet rejects its canonical representation %q: %v", lexical, err))
+			e.declineValue(constructNoCanonical, subject, path, lexical, fmt.Sprintf("a pattern facet rejects its canonical representation %q: %v", lexical, err))
 			return lexical, false, nil
 		}
 		e.invalidate(fmt.Errorf("codec: Append: %s holds %s, which %s rejects: %w", path, lexical, subject, err))
@@ -1189,18 +1202,168 @@ func (e *encoder) spelled(st *xsd.SimpleType, a atomic, v reflect.Value, path, s
 		return "", false, err
 	}
 	if m.Canonical == nil {
-		e.noCanonical(subject, path, lexical, "its governing mapping has no canonical mapping")
+		e.declineValue(constructNoCanonical, subject, path, lexical, "its governing mapping has no canonical mapping")
 		return "", false, nil
 	}
 	c, err := m.Canonical(val)
 	if err != nil {
-		e.noCanonical(subject, path, lexical, err.Error())
+		e.declineValue(constructNoCanonical, subject, path, lexical, err.Error())
 		return "", false, nil
 	}
 	if c != lexical {
-		return "", false, fmt.Errorf("codec: Append: %s holds %s, of %s, which the backend's Canonical renders %q, other text than its canonical representation (Datatypes Appendix E, the canonical mapping of %s)", path, lexical, subject, c, primitive.Name().Display())
+		return "", false, fmt.Errorf("codec: Append: %s holds %s, of %s, which the backend's Canonical renders %q, other text than its canonical representation (Datatypes Appendix E, the canonical mapping of %s)", path, lexical, subject, c, primitive.Display())
 	}
 	return c, true, nil
+}
+
+// primitiveMapping returns the mapping on e's backend of the {primitive type
+// definition} of st, and that primitive's expanded name, or a backend fault
+// naming the value at path, subject naming st, where st has no primitive or
+// the backend no mapping of it; an error reading st is returned wrapped.
+func (e *encoder) primitiveMapping(st *xsd.SimpleType, path, subject string) (value.Mapping, xsd.QName, error) {
+	primitive, err := st.Primitive(e.schema)
+	if err != nil {
+		return value.Mapping{}, xsd.QName{}, fmt.Errorf("codec: Append: %s, of %s: %w", path, subject, err)
+	}
+	if primitive == nil {
+		// atomicEncodes declines a type with no {primitive type definition}.
+		return value.Mapping{}, xsd.QName{}, fmt.Errorf("codec: Append: %s, of %s: the type has no {primitive type definition}", path, subject)
+	}
+	pm, has := e.backend.Mapping(primitive.Name())
+	if !has {
+		return value.Mapping{}, xsd.QName{}, fmt.Errorf("codec: Append: %s, of %s: the backend has no mapping of its primitive %s", path, subject, primitive.Name().Display())
+	}
+	return pm, primitive.Name(), nil
+}
+
+// qname returns the spelling of v, QName's datatype struct holding the
+// expanded name {Space, Local} of the simple type st whose primitive is
+// xs:QName or xs:NOTATION, at path, subject naming st, written on the element
+// whose start tag is open, e.ns its namespace, as the package doc's "# What
+// encodes" states, in this order: a Space "" where e.ns is not "" is item 7 of
+// [Append]'s doc by constructQNameSpelling, since no unprefixed spelling
+// resolves to the absent namespace there and no prefix can be bound to it
+// (Namespaces in XML §5 nsc-NoPrefixUndecl); a Space holding a byte that
+// starts no XML 1.0 Char, which no namespace declaration's value spells, or
+// the namespace name xmlns is bound to, which no other prefix may be bound to
+// (Namespaces in XML §3), is item 6; then the spelling is xml:Local for the
+// XML namespace, which is never declared, Local unprefixed where Space is
+// e.ns, the default namespace in scope (Datatypes §3.3.18), pI:Local where
+// Space is e.bound[I-1], and otherwise pN:Local after appending to the open
+// start tag ` xmlns:pN="Space"`, N being len(e.bound)+1, and pushing Space
+// onto e.bound. That spelling is then held, in order, to Parse of the mapping
+// of st's primitive under writtenBindings, a verdict item 6 and any other
+// error a backend fault; to resolving back to {Space, Local} (expandedName),
+// item 6 where it does not; and to st's facets by value.ValidateLexical under
+// writtenBindings, a pattern facet's rejection item 7 by
+// constructQNameSpelling where Space is not "" (a.otherLexicalOf), another
+// verdict item 6, and any other error a backend fault. No Canonical is read:
+// neither datatype has a canonical representation (Datatypes §3.3.18,
+// §3.3.19). ok is atom's.
+func (e *encoder) qname(st *xsd.SimpleType, v reflect.Value, path, subject string) (text string, ok bool, err error) {
+	q := v.Convert(atomicQName.bare())
+	space, local := q.FieldByName("Space").String(), q.FieldByName("Local").String()
+	shown := atomicQName.shown(v)
+	if space == "" && e.ns != "" {
+		e.declineValue(constructQNameSpelling, subject, path, shown, fmt.Sprintf("its namespace name is absent where the default namespace in scope, its element's own, is %s, so that no unprefixed spelling resolves to it, and no prefix can be bound to no namespace (Namespaces in XML §5 nsc-NoPrefixUndecl)", e.ns))
+		return "", false, nil
+	}
+	if i := xmlchar.IndexNonChar(space); i >= 0 {
+		e.invalidate(fmt.Errorf("codec: Append: %s holds %s, of %s, whose namespace name's byte offset %d starts no XML 1.0 Char, so that no namespace declaration binds it (Datatypes §3.3.17.1)", path, shown, subject, i))
+		return "", false, nil
+	}
+	if space == xmlnsNamespace {
+		e.invalidate(fmt.Errorf("codec: Append: %s holds %s, of %s, whose namespace name is the one the prefix xmlns is bound to, which no other prefix may be bound to and no lexical's prefix resolves to (Namespaces in XML §3)", path, shown, subject))
+		return "", false, nil
+	}
+	text = e.spellQName(space, local)
+	scope := writtenBindings{e}
+	pm, primitive, err := e.primitiveMapping(st, path, subject)
+	if err != nil {
+		return "", false, err
+	}
+	if _, err := pm.Parse(text, scope); err != nil {
+		if !value.IsDatatypeVerdict(err) {
+			return "", false, fmt.Errorf("codec: Append: %s holds %s, of %s, written %q, which the backend cannot assess: %w", path, shown, subject, text, err)
+		}
+		e.invalidate(fmt.Errorf("codec: Append: %s holds %s, of %s, written %q, which the backend's Parse of %s rejects: %w", path, shown, subject, text, primitive.Display(), err))
+		return text, false, nil
+	}
+	back, err := expandedName(text, scope)
+	if err != nil || back.Interface() != q.Interface() {
+		e.invalidate(fmt.Errorf("codec: Append: %s holds %s, of %s, written %q, which does not resolve back to it", path, shown, subject, text))
+		return text, false, nil
+	}
+	if _, err := value.ValidateLexical(e.backend, e.schema, st, text, scope, noAssertions{}); err != nil {
+		if !value.IsDatatypeVerdict(err) {
+			return "", false, fmt.Errorf("codec: Append: %s holds %s, of %s, which the backend cannot assess: %w", path, shown, subject, err)
+		}
+		if rule, _ := xsderr.RuleOf(err); rule == rulePatternValid && atomicQName.otherLexicalOf(v) {
+			e.declineValue(constructQNameSpelling, subject, path, shown, fmt.Sprintf("a pattern facet rejects its spelling %q: %v", text, err))
+			return text, false, nil
+		}
+		e.invalidate(fmt.Errorf("codec: Append: %s holds %s, written %q, which %s rejects: %w", path, shown, text, subject, err))
+		return text, false, nil
+	}
+	return text, true, nil
+}
+
+// spellQName returns qname's spelling of the expanded name {space, local}, a
+// space that is neither "" under a non-absent e.ns nor xmlnsNamespace,
+// declaring a prefix for space on the open start tag where its arms call for
+// one.
+func (e *encoder) spellQName(space, local string) string {
+	switch {
+	case space == xmltree.XMLNamespaceURI:
+		return "xml:" + local
+	case space == e.ns:
+		return local
+	}
+	i := slices.Index(e.bound, space)
+	if i < 0 {
+		i = len(e.bound)
+		e.bound = append(e.bound, space)
+		e.out = append(e.out, " xmlns:"+boundPrefix(i)+`="`...)
+		e.out = appendEscaped(e.out, space, true)
+		e.out = append(e.out, '"')
+	}
+	return boundPrefix(i) + ":" + local
+}
+
+// boundPrefix is the prefix of e.bound[i]: "p" and i+1 in decimal.
+func boundPrefix(i int) string { return "p" + strconv.Itoa(i+1) }
+
+// xmlnsNamespace is the namespace name the prefix xmlns is bound to by
+// definition (Namespaces in XML §3); xml's is xmltree.XMLNamespaceURI.
+const xmlnsNamespace = "http://www.w3.org/2000/xmlns/"
+
+// writtenBindings is the value.Context of the namespace bindings in scope at
+// the element whose start tag e has open, the ones the document Append writes
+// declares there: the empty prefix bound to e.ns, "" where it is absent; xml
+// to the XML namespace; pI, I from 1 to len(e.bound) in decimal with no
+// leading zero, to e.bound[I-1]; and every other prefix, xmlns among them,
+// unbound, as parser/xmltree answers xmlns. It reads e live, so that a prefix
+// qname declares is bound for the checks after it. Decode's elementBindings
+// reads a parsed start tag's scope instead, which the writer has none of.
+type writtenBindings struct{ e *encoder }
+
+// LookupNamespace resolves prefix against the bindings writtenBindings states.
+func (b writtenBindings) LookupNamespace(prefix string) (string, bool) {
+	switch prefix {
+	case "":
+		return b.e.ns, true
+	case "xml":
+		return xmltree.XMLNamespaceURI, true
+	}
+	digits, ok := strings.CutPrefix(prefix, "p")
+	if !ok {
+		return "", false
+	}
+	i, err := strconv.Atoi(digits)
+	if err != nil || i < 1 || i > len(b.e.bound) || boundPrefix(i-1) != prefix {
+		return "", false
+	}
+	return b.e.bound[i-1], true
 }
 
 // mapsBack reports whether strconv.ParseFloat, rounding at bits, reads c,
