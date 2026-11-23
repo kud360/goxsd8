@@ -2510,7 +2510,7 @@ func (b boundValue) fill(r *xmltree.Reader, root *xmltree.StartElement, out refl
 // sequence is a content model's particles as the struct codegen emits holds
 // them, one member per struct field, in particle order: a content sequence's or spliced
 // all group's, an element particle giving an elementMember and a wildcard particle a
-// field, a nested sequence or all group particle goshape.ParticleHold answers Spliced
+// wildcardMember, a nested sequence or all group particle goshape.ParticleHold answers Spliced
 // for giving in its place the members its own particles give, a nested choice bound in
 // place its *choice, a nested particle goshape.ParticleHold answers Flattened for its
 // flatSlice and any other nested model group particle its *nestedOccurrence
@@ -2518,9 +2518,9 @@ func (b boundValue) fill(r *xmltree.Reader, root *xmltree.StartElement, out refl
 // last member (sequence.openContent); or a *contentChoice's rest, holding that field
 // alone, if any. Its members' attribution targets are numbered in bind order from base,
 // a field or an elementMember taking one, a *choice those of each alternative's branch
-// members in turn (branchTargets), a flatSlice one per alternative and a
-// *nestedOccurrence those of its item, and check returns one sink per target in that
-// order, so the target index holds for a child is the index of the sink that sets it.
+// members in turn (branchTargets), a flatSlice one per alternative and a *nestedOccurrence
+// those of its item, and check returns one sink per target in that order, so the target index
+// holds for a child is the index of the sink that sets it.
 type sequence struct {
 	p       *pipeline
 	members []contentMember
@@ -2639,8 +2639,8 @@ func (s *sequence) targets() int {
 }
 
 // A contentMember is one field of the struct a sequence binds, a closed sum: an
-// elementMember, an element particle's field; a field, a wildcard particle's
-// or the open-content field; a *choice, a choice's sealed interface; a
+// elementMember, an element particle's field; a wildcardMember, a wildcard
+// particle's; a field, the open-content field; a *choice, a choice's sealed interface; a
 // *flatSlice, a nested flattened particle's slice of a sealed interface; or a
 // *nestedOccurrence, a nested particle's occurrence field.
 type contentMember interface {
@@ -2744,6 +2744,21 @@ type elementMember struct {
 // field.
 func (m elementMember) branchMembers() []contentMember { return []contentMember{m} }
 
+// wildcardMember is the member a wildcard particle gives a sequence, or a
+// choice's alternative its branch struct's one field, as Decode binds it: its
+// field, subject, the particle's as item 5 of Decode's doc names it
+// (wildcardSubject), and own and held, as elementMember's are. Append writes
+// the particle's elements from it (wildcardMember.writeElements).
+type wildcardMember struct {
+	field
+	subject   string
+	own, held xsd.Occurs
+}
+
+// branchMembers is m alone: a wildcard alternative's branch struct holds one
+// field.
+func (m wildcardMember) branchMembers() []contentMember { return []contentMember{m} }
+
 // targets is 1: a field takes its particle's children.
 func (field) targets() int { return 1 }
 
@@ -2818,12 +2833,12 @@ func (s *sequence) bind(run *bindRun, ct xsd.ComplexType, particles []xsd.Partic
 		// exception; particleTerm returns no nil Term.
 		switch term := term.(type) {
 		case xsd.Wildcard:
-			f, _, err := s.index.wildcard(ct, p.Occurs(), append(slices.Clone(at), i), s.targets(), typeSubject)
+			f, subject, err := s.index.wildcard(ct, p.Occurs(), append(slices.Clone(at), i), s.targets(), typeSubject)
 			if err != nil {
 				return err
 			}
 			f.name = names.Claim("any")
-			s.members = append(s.members, f)
+			s.members = append(s.members, wildcardMember{field: f, subject: subject, own: p.Occurs(), held: p.Occurs()})
 		case xsd.ModelGroup:
 			if err := s.nested(run, ct, term, p.Occurs(), append(slices.Clone(at), i), item, names, typeSubject); err != nil {
 				return err
@@ -3307,10 +3322,10 @@ func tied(groups []tieGroup, i, j int) bool {
 
 // A branchArm is one alternative of a sealed interface as Decode reads it, a
 // closed sum: an elementMember, a choice's element alternative's branch
-// struct's one field; a field, the branch struct's one field, a wildcard
-// alternative's, a substitution group member's, a governing type's or a
-// flattened particle's basic particle's; or a groupBranch, a choice's
-// model-group alternative's.
+// struct's one field; a wildcardMember, a choice's wildcard alternative's; a
+// field, the branch struct's one field, a substitution group member's, a
+// governing type's or a flattened particle's basic particle's; or a
+// groupBranch, a choice's model-group alternative's.
 type branchArm interface {
 	// branchMembers returns the members the branch struct's fields hold, one
 	// per field, in field order.
@@ -3321,8 +3336,8 @@ type branchArm interface {
 	namesBranch(bt reflect.Type) bool
 }
 
-// branchMembers is f alone: a wildcard, member or basic particle's branch
-// struct holds one field.
+// branchMembers is f alone: a member or basic particle's branch struct holds
+// one field.
 func (f field) branchMembers() []contentMember { return []contentMember{f} }
 
 // namesBranch reports whether bt is a struct of one field named as f and f's
@@ -3415,14 +3430,14 @@ func branchesShare(a, b branchArm) bool {
 
 // membersShare reports whether two members at one position of two branch
 // structs may admit a common struct field under some branch sets:
-// field.sharesBranch's answer for two fields, an elementMember's its field's
-// (memberField); choicesShare's for two *choices; and otherwise, where either
-// is a *choice, a *flatSlice or a *nestedOccurrence, whether they have one
-// name, which is conservative, since their Go types, an interface, a slice of
-// one, or an occurrence's shape over its item beside whatever the other
-// admits, are not compared. It reads the members, bound from the schema,
-// never T. contentMember is a closed sum, so the assertions are STYLE T2's
-// sealed-sum exception.
+// field.sharesBranch's answer for two fields, an elementMember's or a
+// wildcardMember's its field's (memberField); choicesShare's for two
+// *choices; and otherwise, where either is a *choice, a *flatSlice or a
+// *nestedOccurrence, whether they have one name, which is conservative, since
+// their Go types, an interface, a slice of one, or an occurrence's shape over
+// its item beside whatever the other admits, are not compared. It reads the
+// members, bound from the schema, never T. contentMember is a closed sum, so
+// the assertions are STYLE T2's sealed-sum exception.
 func membersShare(a, b contentMember) bool {
 	fa, aField := memberField(a)
 	fb, bField := memberField(b)
@@ -3437,14 +3452,16 @@ func membersShare(a, b contentMember) bool {
 	return a.goName() == b.goName()
 }
 
-// memberField returns the field m is, or an elementMember's field, and false
-// for any other member. contentMember is a closed sum, so the switch is STYLE
-// T2's sealed-sum exception.
+// memberField returns the field m is, or an elementMember's or a
+// wildcardMember's field, and false for any other member. contentMember is a
+// closed sum, so the switch is STYLE T2's sealed-sum exception.
 func memberField(m contentMember) (field, bool) {
 	switch m := m.(type) {
 	case field:
 		return m, true
 	case elementMember:
+		return m.field, true
+	case wildcardMember:
 		return m.field, true
 	}
 	return field{}, false
@@ -3564,7 +3581,7 @@ func bindChoice(run *bindRun, ct xsd.ComplexType, particles []xsd.Particle, x *c
 				return nil, err
 			}
 			f.name = goname.NewNamer().Claim("any")
-			alt = f
+			alt = wildcardMember{field: f, subject: subject, own: p.Occurs(), held: occurs}
 		case xsd.ModelGroup:
 			alt, subject, err = groupAlternative(run, ct, term, occurs, x, position, target, item, typeSubject)
 			if err != nil {
