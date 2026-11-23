@@ -313,11 +313,9 @@ func report(path string, para []commentpara.Line, width int, flaws []flaw) []fin
 // before it inside its source line, so an interior run such as the two spaces
 // of `"  a  b"` survives byte for byte, its columns counted toward the fit
 // (#3903). A word that opens a source line joins the word before it by one
-// space, and a break drops the run it lands on whole. A run its word overflows
-// width with, where one space would fit, collapses to one space instead wherever
-// breaking on it would leave the line ragged at width: flaws reads the next
-// line's first word as joined by one space, so it would report that break
-// (#4032).
+// space, and a break drops the run it lands on whole, except where the line that
+// break would end is ragged before the word: the run then collapses to one
+// space, so no break placed on a run is one flaws reports at width (#4032).
 func reflow(para []commentpara.Line, width, from int) []string {
 	first := lead(para[from])
 	cont := first
