@@ -42,27 +42,33 @@ func reasons(report *parser.AssemblyReport) []parser.UnfollowedReason {
 
 // TestParseReportDocumentsAreDiscoveryOrder pins the reported order against the
 // order the assembly actually resolved documents in: ONE document-order pass,
-// depth-first and pre-order over <include>, <override> and <import> alike
-// (§4.2.1). The interleaved import/include/import shape is what makes this able
-// to fail — a report rebuilt from the load-once map, or from a kind-segregated
-// pass, would come back in another order (STYLE D1/D2).
+// depth-first and pre-order over <include>, <override>, <redefine> and <import>
+// alike (§4.2.1). The interleaved import/include/redefine/import/override shape
+// is what makes this able to fail — a report rebuilt from the load-once map, or
+// from a kind-segregated pass, would come back in another order (STYLE D1/D2).
 func TestParseReportDocumentsAreDiscoveryOrder(t *testing.T) {
 	docs := map[string]string{
 		"main.xsd": wrapImporting("urn:a", "urn:b",
 			`<xs:import namespace="urn:b" schemaLocation="b1.xsd"/>`+
 				`<xs:include schemaLocation="lib.xsd"/>`+
-				`<xs:import namespace="urn:b" schemaLocation="b2.xsd"/>`),
+				`<xs:redefine schemaLocation="red.xsd">`+
+				`<xs:simpleType name="t"><xs:restriction base="tns:t"/></xs:simpleType>`+
+				`</xs:redefine>`+
+				`<xs:import namespace="urn:b" schemaLocation="b2.xsd"/>`+
+				`<xs:override schemaLocation="ov.xsd"/>`),
 		"lib.xsd": wrapImporting("urn:a", "urn:b",
 			`<xs:import namespace="urn:b" schemaLocation="b3.xsd"/>`),
-		"b1.xsd": wrap("urn:b", `<xs:element name="e1" type="xs:string"/>`),
-		"b2.xsd": wrap("urn:b", `<xs:element name="e2" type="xs:string"/>`),
-		"b3.xsd": wrap("urn:b", `<xs:element name="e3" type="xs:string"/>`),
+		"red.xsd": wrap("urn:a", `<xs:simpleType name="t"><xs:restriction base="xs:string"/></xs:simpleType>`),
+		"ov.xsd":  wrap("urn:a", `<xs:element name="e4" type="xs:string"/>`),
+		"b1.xsd":  wrap("urn:b", `<xs:element name="e1" type="xs:string"/>`),
+		"b2.xsd":  wrap("urn:b", `<xs:element name="e2" type="xs:string"/>`),
+		"b3.xsd":  wrap("urn:b", `<xs:element name="e3" type="xs:string"/>`),
 	}
 	report, err := reportOf(t, "main.xsd", docs)
 	if err != nil {
 		t.Fatalf("ParseReport: %v", err)
 	}
-	want := []string{"main.xsd", "b1.xsd", "lib.xsd", "b3.xsd", "b2.xsd"}
+	want := []string{"main.xsd", "b1.xsd", "lib.xsd", "b3.xsd", "red.xsd", "b2.xsd", "ov.xsd"}
 	if got := locations(report); !slices.Equal(got, want) {
 		t.Errorf("Documents() locations = %v, want %v", got, want)
 	}
