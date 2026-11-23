@@ -3,10 +3,12 @@ package loader
 import (
 	"errors"
 	"io"
+	"io/fs"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"testing/fstest"
 )
@@ -76,6 +78,55 @@ func TestFSResolve(t *testing.T) {
 	_, _, err = r.Resolve("", "schemas/missing.xsd")
 	if !errors.Is(err, ErrNotFound) {
 		t.Errorf("missing entry err = %v, want ErrNotFound", err)
+	}
+}
+
+// TestFSRejectsInvalidPath pins the refusal FS's doc describes. The os.DirFS
+// row is the one that needs the check before fsys.Open: os.DirFS answers
+// these paths with fs.ErrInvalid, not fs.ErrNotExist.
+func TestFSRejectsInvalidPath(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "m.xsd"), []byte("<m/>"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	mapFS := fstest.MapFS{"m.xsd": {Data: []byte("<m/>")}}
+	for _, tc := range []struct {
+		name string
+		fsys fs.FS
+		loc  string
+	}{
+		{"MapFS", mapFS, "./m.xsd"},
+		{"MapFS", mapFS, "/m.xsd"},
+		{"DirFS", os.DirFS(dir), "./m.xsd"},
+	} {
+		_, _, err := FS(tc.fsys).Resolve("", tc.loc)
+		if !errors.Is(err, ErrNotFound) {
+			t.Errorf("%s Resolve(%q) err = %v, want ErrNotFound", tc.name, tc.loc, err)
+		}
+		want := `loader: "` + tc.loc + `" is not a valid fs.FS path (fs.ValidPath)`
+		if err == nil || err.Error() != want {
+			t.Errorf("%s Resolve(%q) err = %v, want %s", tc.name, tc.loc, err, want)
+		}
+		if err != nil && strings.Contains(err.Error(), "not found") {
+			t.Errorf("%s Resolve(%q) err = %q, names \"not found\"", tc.name, tc.loc, err)
+		}
+	}
+
+	// Guards: a valid, absent path keeps the not-found text; a valid present
+	// one resolves.
+	_, _, err := FS(mapFS).Resolve("", "missing.xsd")
+	want := `loader: "missing.xsd" not found in fs: loader: schema document not found`
+	if err == nil || err.Error() != want {
+		t.Errorf("Resolve(missing.xsd) err = %v, want %s", err, want)
+	}
+	for _, fsys := range []fs.FS{mapFS, os.DirFS(dir)} {
+		rc, _, err := FS(fsys).Resolve("", "m.xsd")
+		if err != nil {
+			t.Fatalf("Resolve(m.xsd): %v", err)
+		}
+		if got := readAll(t, rc); got != "<m/>" {
+			t.Errorf("Resolve(m.xsd) body = %q, want <m/>", got)
+		}
 	}
 }
 
