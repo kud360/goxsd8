@@ -41,7 +41,8 @@ Value implementations, parsing, validation, and generation live above them.
                                     internal/xmltok's name checks read, and
                                     Namespaces in XML [4] NCName over them,
                                     which validate/jsonsrc's "$xmlns" check
-                                    reads.
+                                    and codec's check of the names a
+                                    wildcard's match holds read.
                                   - internal/xmlchar, XML 1.0 [2] Char, which
                                     parser/xmltree's character-reference and
                                     markup checks, internal/xmltok's text
@@ -128,7 +129,7 @@ present-tense sentence in their sections below as "will", not "does".
 `codec` has left this note: it exports `Decode`/`CheckDecode`/`Option`/`WithURI`/`WithBranches`/`WithPrecisionDecimalArms`/`WithLogger`,
 `Append`, `CheckAppend`, `ErrInvalidValue`, `DeclineError` and its `Construct`, `UndecidedError`, `ViolationsOf` and `ErrTypeMismatch`, and
 imports `parser/xmltree`, `validate`, `validate/xmlsrc`, `value`, `xsd`,
-`xsderr`, `internal/goname`, `internal/goshape`, `internal/xmlchar` and `internal/xmlqname` (its section says what ships).
+`xsderr`, `internal/goname`, `internal/goshape`, `internal/xmlchar`, `internal/xmlname` and `internal/xmlqname` (its section says what ships).
 `codegen` has left this note: it exports `Generate`, `CheckTargets` and
 `Target`, with the error types they return, and imports `xsd`, `xsderr`,
 `internal/goname` and `internal/goshape` (its section says what ships).
