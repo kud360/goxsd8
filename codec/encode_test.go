@@ -2707,3 +2707,212 @@ func TestAppendQNameInvalid(t *testing.T) {
 		plainError(t, err, "codec: Append: tQName, of simple type xs:QName: the backend has no mapping of its primitive xs:QName")
 	})
 }
+
+// encodePDSchema declares, in urn:s, document elements of xs:precisionDecimal
+// types: h, of xs:precisionDecimal itself; hl, a list of it; pa, a required
+// attribute of it; pat, a restriction by the pattern \d+\.\d\d, which admits
+// 3.00 but not 3, INF, -INF or NaN; max, a restriction by maxInclusive 5; and
+// pl, a list of it restricted by the pattern NaN.
+const encodePDSchema = `<xs:element name="h" type="xs:precisionDecimal"/>
+<xs:element name="hl"><xs:simpleType><xs:list itemType="xs:precisionDecimal"/></xs:simpleType></xs:element>
+<xs:element name="pa"><xs:complexType><xs:attribute name="a" type="xs:precisionDecimal" use="required"/></xs:complexType></xs:element>
+<xs:element name="pat"><xs:simpleType><xs:restriction base="xs:precisionDecimal"><xs:pattern value="\d+\.\d\d"/></xs:restriction></xs:simpleType></xs:element>
+<xs:element name="max"><xs:simpleType><xs:restriction base="xs:precisionDecimal"><xs:maxInclusive value="5"/></xs:restriction></xs:simpleType></xs:element>
+<xs:element name="pl"><xs:simpleType><xs:restriction><xs:simpleType><xs:list itemType="xs:precisionDecimal"/></xs:simpleType><xs:pattern value="NaN"/></xs:restriction></xs:simpleType></xs:element>`
+
+// pdNumerical returns the tPrecisionDecimal of the numerical arm of
+// coefficient, scale and negative.
+func pdNumerical(coefficient, scale int64, negative bool) tPrecisionDecimal {
+	n := tPDNumerical{Negative: negative}
+	n.Coefficient.SetInt64(coefficient)
+	n.Scale.SetInt64(scale)
+	return tPrecisionDecimal{n}
+}
+
+// samePD reports whether a and b, of a type over tPrecisionDecimal or a
+// struct or slice of them, hold one value by arm, spellDecimal's, so that NaN
+// equals NaN, which value equality never makes it (precisionDecimal §3.1).
+func samePD[T any](a, b T) bool {
+	return fmt.Sprint(pdSpelled(reflect.ValueOf(a))) == fmt.Sprint(pdSpelled(reflect.ValueOf(b)))
+}
+
+// pdSpelled spells v as samePD compares it: a slice by its items, a struct of
+// one field Value by spellDecimal, and any other struct by its fields.
+func pdSpelled(v reflect.Value) []string {
+	if v.Kind() == reflect.Slice {
+		var out []string
+		for i := range v.Len() {
+			out = append(out, pdSpelled(v.Index(i))...)
+		}
+		return out
+	}
+	if v.Type().Field(0).Name == "Value" {
+		return []string{spellDecimal(v)}
+	}
+	var out []string
+	for i := range v.NumField() {
+		out = append(out, pdSpelled(v.Field(i))...)
+	}
+	return out
+}
+
+// TestAppendPrecisionDecimal pins xs:precisionDecimal's write: a finite value
+// keeps its scale (3.00, precisionDecimal §6 f-precDecCanmap step 4), and
+// INF, -INF and NaN take their roles from the WithPrecisionDecimalArms set,
+// each validated and decoded back under the same set to the same arm; a list
+// and an attribute write each value so. Under a set passing the infinities in
+// each other's roles, the positiveInfinity arm writes -INF, the misuse
+// WithPrecisionDecimalArms' doc states, and decodes back to that arm. With no
+// set, CheckAppend and Append return item 5's ErrTypeMismatch.
+func TestAppendPrecisionDecimal(t *testing.T) {
+	schema := schemaOf(t, encodePDSchema)
+	for _, row := range []struct {
+		name string
+		v    tPrecisionDecimal
+		want string
+	}{
+		{"finite", pdNumerical(300, 2, false), `<h xmlns="urn:s">3.00</h>`},
+		{"positiveInfinity", tPrecisionDecimal{tPDPositiveInfinity{}}, `<h xmlns="urn:s">INF</h>`},
+		{"negativeInfinity", tPrecisionDecimal{tPDNegativeInfinity{}}, `<h xmlns="urn:s">-INF</h>`},
+		{"notANumber", tPrecisionDecimal{tPDNotANumber{}}, `<h xmlns="urn:s">NaN</h>`},
+	} {
+		t.Run(row.name, func(t *testing.T) {
+			_ = roundTrip(t, schema, sname("h"), row.v, row.want, samePD, pdArms)
+		})
+	}
+	_ = roundTrip(t, schema, sname("hl"), tHl{pdNumerical(3, -2, false), {tPDNotANumber{}}, {tPDNegativeInfinity{}}}, `<hl xmlns="urn:s">3E2 NaN -INF</hl>`, samePD, pdArms)
+	_ = roundTrip(t, schema, sname("pa"), struct{ A tPrecisionDecimal }{pdNumerical(15, 1, false)}, `<pa xmlns="urn:s" a="1.5"/>`, samePD, pdArms)
+
+	swapped := WithPrecisionDecimalArms[tPDValue](tPDNumerical{}, tPDNegativeInfinity{}, tPDPositiveInfinity{}, tPDNotANumber{})
+	_ = roundTrip(t, schema, sname("h"), tPrecisionDecimal{tPDPositiveInfinity{}}, `<h xmlns="urn:s">-INF</h>`, samePD, swapped)
+
+	if err := CheckAppend[tPrecisionDecimal](schema, sname("h")); !errors.Is(err, ErrTypeMismatch) {
+		t.Errorf("CheckAppend with no WithPrecisionDecimalArms = %v, want ErrTypeMismatch", err)
+	}
+	_, _ = appendChecked(t, nil, schema, strict.New(), sname("h"), tPrecisionDecimal{tPDNotANumber{}})
+}
+
+// TestAppendPrecisionDecimalInvalid pins item 6 of Append's doc for a
+// PrecisionDecimal: a nil Value, a numerical arm of negative Coefficient, a
+// pointer to an arm, which the set supplies in no role, and a list item of a
+// nil Value, each named by the Value's Go path and carrying no rule; a
+// maxInclusive facet's rejection, carrying cvc-maxInclusive-valid; and a
+// pattern's rejection of -INF and of NaN, which have no other lexical, and a
+// list's pattern rejecting a list of -INF alone.
+func TestAppendPrecisionDecimalInvalid(t *testing.T) {
+	schema := schemaOf(t, encodePDSchema)
+	for _, row := range []struct {
+		name string
+		elem string
+		v    tPrecisionDecimal
+		want string
+	}{
+		{"a nil Value", "h", tPrecisionDecimal{}, `codec: Append: tPrecisionDecimal.Value is nil, of simple type xs:precisionDecimal, which no precisionDecimal value maps to`},
+		{"a negative Coefficient", "h", pdNumerical(-3, 0, false), `codec: Append: tPrecisionDecimal.Value holds the Coefficient -3, of simple type xs:precisionDecimal, negative`},
+		{"a pointer to an arm", "h", tPrecisionDecimal{&tPDNumerical{}}, `codec: Append: tPrecisionDecimal.Value holds a *codec.tPDNumerical, of simple type xs:precisionDecimal, which the WithPrecisionDecimalArms set of codec.tPDValue supplies in no role`},
+	} {
+		t.Run(row.name, func(t *testing.T) {
+			_, err := appendChecked(t, nil, schema, strict.New(), sname(row.elem), row.v, pdArms)
+			invalidValue(t, err)
+			if !strings.HasPrefix(err.Error(), row.want) {
+				t.Errorf("error %q does not open with %q", err, row.want)
+			}
+			noRule(t, err)
+		})
+	}
+	t.Run("a list item's nil Value", func(t *testing.T) {
+		_, err := appendChecked(t, nil, schema, strict.New(), sname("hl"), tHl{pdNumerical(3, 0, false), {}}, pdArms)
+		invalidValue(t, err)
+		if want := "codec: Append: tHl[1].Value is nil, of simple type "; !strings.HasPrefix(err.Error(), want) {
+			t.Errorf("error %q does not open with %q", err, want)
+		}
+	})
+	t.Run("a maxInclusive facet", func(t *testing.T) {
+		_, err := appendChecked(t, nil, schema, strict.New(), sname("max"), pdNumerical(6, 0, false), pdArms)
+		invalidValue(t, err, "codec: Append: tPrecisionDecimal holds 6E0, which simple type the anonymous simple type of element {urn:s}max")
+		if rule, _ := xsderr.RuleOf(err); rule != "cvc-maxInclusive-valid" {
+			t.Errorf("rule %q, want cvc-maxInclusive-valid", rule)
+		}
+	})
+	t.Run("a list's pattern rejecting [-INF]", func(t *testing.T) {
+		_, err := appendChecked(t, nil, schema, strict.New(), sname("pl"), tHl{{tPDNegativeInfinity{}}}, pdArms)
+		invalidValue(t, err, `codec: Append: tHl holds [-INF], written "-INF", which simple type`)
+	})
+	for _, v := range []tPrecisionDecimal{{tPDNegativeInfinity{}}, {tPDNotANumber{}}} {
+		t.Run("a pattern rejecting "+spellDecimal(reflect.ValueOf(v)), func(t *testing.T) {
+			_, err := appendChecked(t, nil, schema, strict.New(), sname("pat"), v, pdArms)
+			invalidValue(t, err, "codec: Append: tPrecisionDecimal holds "+spellDecimal(reflect.ValueOf(v))+", which simple type the anonymous simple type of element {urn:s}pat")
+			if rule, _ := xsderr.RuleOf(err); rule != rulePatternValid {
+				t.Errorf("rule %q, want %s", rule, rulePatternValid)
+			}
+		})
+	}
+}
+
+// The backends of TestAppendPrecisionDecimalBackend, each strict's with its
+// xs:precisionDecimal mapping replaced: one whose Canonical renders 300E-2,
+// a pDecimalRep other than f-precDecCanmap's 3.00 that maps back to the
+// value; one whose Canonical renders 3, which does not; a nil and a failing
+// Canonical; and one whose Parse rejects every lexical.
+var (
+	pdExponentCanonical = overDatatype("precisionDecimal", func(base value.Mapping) value.Mapping {
+		return value.Mapping{Parse: base.Parse, Canonical: func(value.Value) (string, error) { return "300E-2", nil }}
+	})
+	pdOtherCanonical = overDatatype("precisionDecimal", func(base value.Mapping) value.Mapping {
+		return value.Mapping{Parse: base.Parse, Canonical: func(value.Value) (string, error) { return "3", nil }}
+	})
+	pdNilCanonical = overDatatype("precisionDecimal", func(base value.Mapping) value.Mapping {
+		return value.Mapping{Parse: base.Parse}
+	})
+	pdFailingCanonical = overDatatype("precisionDecimal", func(base value.Mapping) value.Mapping {
+		return value.Mapping{Parse: base.Parse, Canonical: func(value.Value) (string, error) { return "", errors.New("no canonical form") }}
+	})
+	pdRejectingParse = overDatatype("precisionDecimal", func(base value.Mapping) value.Mapping {
+		return value.Mapping{Parse: func(string, value.Context) (value.Value, error) { return nil, errors.New("rejected") }, Canonical: base.Canonical}
+	})
+)
+
+// TestAppendPrecisionDecimalBackend pins the write's reading of the backend:
+// Canonical's text is written where it maps back to the value, though it is
+// not f-precDecCanmap's, so no backend fault is charged against a canonical
+// string of the codec's own; it is item 7 where it does not map back, or
+// where Canonical is nil or fails, and where a pattern rejects a numerical
+// value or INF, each of which has another lexical, or a list holding one
+// beside -INF; and a Parse rejecting the value's pDecimalRep is a backend
+// fault.
+func TestAppendPrecisionDecimalBackend(t *testing.T) {
+	schema := schemaOf(t, encodePDSchema)
+	got, err := appendChecked(t, nil, schema, pdExponentCanonical, sname("h"), pdNumerical(300, 2, false), pdArms)
+	if want := `<h xmlns="urn:s">300E-2</h>`; err != nil || string(got) != want {
+		t.Errorf("Append = %q, %v, want %q", got, err, want)
+	}
+	for _, row := range []struct {
+		name    string
+		backend value.Backend
+		elem    string
+		v       tPrecisionDecimal
+		want    string
+	}{
+		{"a Canonical not mapping back", pdOtherCanonical, "h", pdNumerical(300, 2, false), `simple type xs:precisionDecimal, at tPrecisionDecimal holding 300E-2: its canonical representation "3" does not map back to it`},
+		{"a nil Canonical", pdNilCanonical, "h", pdNumerical(300, 2, false), "at tPrecisionDecimal holding 300E-2: its governing mapping has no canonical mapping"},
+		{"a failing Canonical", pdFailingCanonical, "h", tPrecisionDecimal{tPDNotANumber{}}, "at tPrecisionDecimal holding NaN: no canonical form"},
+		{"a pattern rejecting a numerical value", strict.New(), "pat", pdNumerical(3, 0, false), `at tPrecisionDecimal holding 3E0: a pattern facet rejects its canonical representation "3"`},
+		{"a pattern rejecting INF, which +INF also spells", strict.New(), "pat", tPrecisionDecimal{tPDPositiveInfinity{}}, `at tPrecisionDecimal holding INF: a pattern facet rejects its canonical representation "INF"`},
+	} {
+		t.Run(row.name, func(t *testing.T) {
+			_, err := appendChecked(t, nil, schema, row.backend, sname(row.elem), row.v, pdArms)
+			_ = asDecline(t, err, "codec does not encode a value with no canonical representation: ")
+			holds(t, err, row.want)
+		})
+	}
+	t.Run("a list's pattern rejecting [-INF 3E0]", func(t *testing.T) {
+		_, err := appendChecked(t, nil, schema, strict.New(), sname("pl"), tHl{{tPDNegativeInfinity{}}, pdNumerical(3, 0, false)}, pdArms)
+		_ = asDecline(t, err, "codec does not encode a value with no canonical representation: ")
+		holds(t, err, `at tHl holding [-INF 3]: a pattern facet rejects its canonical representation "-INF 3"`)
+	})
+	_, err = appendChecked(t, nil, schema, pdRejectingParse, sname("h"), pdNumerical(300, 2, false), pdArms)
+	plainError(t, err)
+	if want := "codec: Append: tPrecisionDecimal holds 300E-2, of simple type xs:precisionDecimal, whose pDecimalRep form the backend's Parse rejects: rejected"; err.Error() != want {
+		t.Errorf("error %q, want %q", err, want)
+	}
+}
