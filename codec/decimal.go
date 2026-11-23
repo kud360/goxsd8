@@ -29,7 +29,7 @@ type decimalValue interface {
 	// facet may match where it rejects that one (Datatypes §2.1's note): a
 	// numerical value's, spelled with a leading '+' or zero, and
 	// positiveInfinity's, +INF, do; negativeInfinity's -INF and notANumber's
-	// NaN are their only lexicals (§3.2's pDecimalRep production).
+	// NaN are their only lexicals, as item 7 of [Append]'s doc states.
 	otherLexical() bool
 }
 

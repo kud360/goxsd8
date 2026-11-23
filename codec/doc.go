@@ -333,21 +333,41 @@
 //     "# What decodes" states.
 //   - An attribute use other than xsi:nil's, unqualified, with no value
 //     constraint and of a simple type that encodes, into V or *V.
-//   - An atomic simple type with no assertions facet whose {primitive type
-//     definition} is xs:string, other than a type derived from xs:ID,
-//     xs:IDREF or xs:ENTITY, into string; xs:anyURI, into string; xs:float,
-//     into float32; xs:double, into float64; xs:decimal, a type derived from
-//     xs:integer included, into the Go type codegen's package doc "# Simple
-//     types" gives it; xs:boolean, into bool; xs:hexBinary and
-//     xs:base64Binary, into []byte; or one of xs:duration, xs:dateTime,
-//     xs:time, xs:date, xs:gYearMonth, xs:gYear, xs:gMonthDay, xs:gDay and
-//     xs:gMonth, into the datatype struct codegen's "# Simple types" gives
-//     it; xs:QName or xs:NOTATION, into QName's datatype struct; or
-//     xs:precisionDecimal, into PrecisionDecimal's datatype struct, whose arms
-//     [WithPrecisionDecimalArms] supplies.
+//   - An atomic simple type whose {primitive type definition} is one the list
+//     of primitives below names, into the Go type that list gives it. It has
+//     no assertions facet, its own or inherited. It is derived from none of
+//     xs:ID, xs:IDREF and xs:ENTITY, though xs:string is the primitive of
+//     each.
 //   - A list simple type whose {item type definition} encodes and which has
 //     no assertions facet, its own or inherited, into []V, V its item's Go
 //     type.
+//
+// The primitives an atomic simple type that encodes has are these, each into
+// the Go type its item gives, a primitive's datatype struct being the one
+// codegen's package doc "# Simple types" gives it:
+//
+//   - xs:string, into string.
+//   - xs:boolean, into bool.
+//   - xs:decimal, a type derived from xs:integer included, into the Go type
+//     codegen's "# Simple types" gives it.
+//   - xs:float, into float32.
+//   - xs:double, into float64.
+//   - xs:duration, into its datatype struct.
+//   - xs:dateTime, into its datatype struct.
+//   - xs:time, into its datatype struct.
+//   - xs:date, into its datatype struct.
+//   - xs:gYearMonth, into its datatype struct.
+//   - xs:gYear, into its datatype struct.
+//   - xs:gMonthDay, into its datatype struct.
+//   - xs:gDay, into its datatype struct.
+//   - xs:gMonth, into its datatype struct.
+//   - xs:hexBinary, into []byte.
+//   - xs:base64Binary, into []byte.
+//   - xs:anyURI, into string.
+//   - xs:QName, into QName's datatype struct.
+//   - xs:NOTATION, into QName's datatype struct.
+//   - xs:precisionDecimal, into PrecisionDecimal's datatype struct, whose arms
+//     [WithPrecisionDecimalArms] supplies.
 //
 // Every other construct is a [*DeclineError], item 4 of Append's doc, a
 // list's item declining by the item's construct, and so is a value with no
