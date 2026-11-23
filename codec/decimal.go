@@ -18,6 +18,19 @@ import (
 type decimalValue interface {
 	// armOf returns the arm type of arms whose role is the arm's.
 	armOf(arms decimalArms) reflect.Type
+	// lexical spells the value as a pDecimalRep that denotes it exactly
+	// (precisionDecimal §3.2 nt-precDecRep), the spelling Append hands the
+	// governing mapping's Parse: a numerical value as its Coefficient, then E
+	// and its Scale negated, a leading '-' where Negative, zero included, and
+	// the special values as INF, -INF and NaN.
+	lexical() string
+	// otherLexical reports whether a pDecimalRep other than the one the
+	// governing mapping's Canonical renders denotes the value, which a pattern
+	// facet may match where it rejects that one (Datatypes §2.1's note): a
+	// numerical value's, spelled with a leading '+' or zero, and
+	// positiveInfinity's, +INF, do; negativeInfinity's -INF and notANumber's
+	// NaN are their only lexicals (§3.2's pDecimalRep production).
+	otherLexical() bool
 }
 
 // decimalNumerical is the arm of a finite value, of the fields of codegen's
@@ -52,6 +65,56 @@ func (decimalNegativeInfinity) armOf(arms decimalArms) reflect.Type { return arm
 
 // armOf returns arms' notANumber arm.
 func (decimalNotANumber) armOf(arms decimalArms) reflect.Type { return arms.notANumber }
+
+// lexical returns the Coefficient, E and the Scale negated, after a '-' where
+// Negative.
+func (n decimalNumerical) lexical() string {
+	sign := ""
+	if n.Negative {
+		sign = "-"
+	}
+	return sign + n.Coefficient.String() + "E" + new(big.Int).Neg(&n.Scale).String()
+}
+
+// lexical returns INF.
+func (decimalPositiveInfinity) lexical() string { return "INF" }
+
+// lexical returns -INF.
+func (decimalNegativeInfinity) lexical() string { return "-INF" }
+
+// lexical returns NaN.
+func (decimalNotANumber) lexical() string { return "NaN" }
+
+// otherLexical reports true: a leading '+' or a leading zero spells any
+// numerical value otherwise (precisionDecimal §3.2).
+func (decimalNumerical) otherLexical() bool { return true }
+
+// otherLexical reports true: +INF spells positiveInfinity beside INF.
+func (decimalPositiveInfinity) otherLexical() bool { return true }
+
+// otherLexical reports false: -INF is negativeInfinity's only lexical.
+func (decimalNegativeInfinity) otherLexical() bool { return false }
+
+// otherLexical reports false: NaN is notANumber's only lexical.
+func (decimalNotANumber) otherLexical() bool { return false }
+
+// sameDecimal reports whether a and b are one precisionDecimal value as codegen's
+// PrecisionDecimal tells values apart (codegen/doc.go "# Simple types"): two
+// numerical values of equal Coefficient, Scale and Negative, so that 3 and
+// 3.00 differ, and 0 and −0, or two special values of one arm, NaN equal to
+// NaN, which the datatype's equality never makes it (precisionDecimal §3.1).
+func sameDecimal(a, b decimalValue) bool {
+	an, aNumerical := a.(decimalNumerical)
+	bn, bNumerical := b.(decimalNumerical)
+	if !aNumerical || !bNumerical {
+		return reflect.TypeOf(a) == reflect.TypeOf(b)
+	}
+	return an.Coefficient.Cmp(&bn.Coefficient) == 0 && an.Scale.Cmp(&bn.Scale) == 0 && an.Negative == bn.Negative
+}
+
+// decimalSpecials are the special values' arms, which hold no field, in the
+// order of decimalArms' roles.
+var decimalSpecials = [...]decimalValue{decimalPositiveInfinity{}, decimalNegativeInfinity{}, decimalNotANumber{}}
 
 // decimalValueType is decimalValue's reflect.Type, the bare Go type of
 // atomicPrecisionDecimal.

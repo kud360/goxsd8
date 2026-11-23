@@ -201,8 +201,9 @@ func TestFloatDoubleDifferential(t *testing.T) {
 }
 
 // TestFormArms is the bar R7 of #3902's warden pre-flight sets in place of a
-// lint over form's and otherLexicalOf's switches: for every builtin of a
-// parsed schema whose primitive is in encodedPrimitives, the atomic
+// lint over form's and otherLexicalOf's switches: every atomic builtin of a
+// parsed schema has its primitive in encodedPrimitives, which a type of a
+// primitive xsd.NewPrimitiveType mints alone lies outside, and the atomic
 // goshape.AtomicType gives it answers otherLexicalOf without a panic, and
 // form too, with no error, on an in-range value (zero but for Month and Day,
 // 1), where formed holds for the atomic.
@@ -226,6 +227,7 @@ func TestFormArms(t *testing.T) {
 			t.Fatal(err)
 		}
 		if primitive == nil || !slices.Contains(encodedPrimitives, primitive.Name()) {
+			t.Errorf("the primitive of the atomic builtin %s is no member of encodedPrimitives", td.Name().Display())
 			continue
 		}
 		g, ok, err := goshape.AtomicType(schema, st)
@@ -236,6 +238,10 @@ func TestFormArms(t *testing.T) {
 		seen++
 		t.Run(td.Name().Local, func(t *testing.T) {
 			v := reflect.New(a.bare()).Elem()
+			if a == atomicPrecisionDecimal {
+				// The nil decimalValue has no method to call.
+				v.Set(reflect.ValueOf(decimalNumerical{}))
+			}
 			for _, name := range []string{"Month", "Day"} {
 				if v.Kind() == reflect.Struct {
 					if f := v.FieldByName(name); f.IsValid() {
@@ -257,10 +263,10 @@ func TestFormArms(t *testing.T) {
 			}
 		})
 	}
-	// The 44 atomic builtins of the nineteen primitives: the primitives, nine
+	// The 45 atomic builtins of the twenty primitives: the primitives, nine
 	// below xs:string, thirteen below xs:decimal, two below xs:duration and one
 	// below xs:dateTime.
-	if seen != 44 {
-		t.Errorf("%d builtins checked, want 44", seen)
+	if seen != 45 {
+		t.Errorf("%d builtins checked, want 45", seen)
 	}
 }

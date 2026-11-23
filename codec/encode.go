@@ -32,7 +32,9 @@ var ErrInvalidValue = errors.New("codec: Append: a value no valid document holds
 // of codegen's package doc describes. It writes each simple value in its
 // canonical representation (Datatypes §2.3.1 dt-canonical-representation),
 // the form the Canonical of its governing mapping on backend
-// (value.GoverningMapping) renders, but for an xs:QName or xs:NOTATION value,
+// (value.GoverningMapping) renders, which for an xs:precisionDecimal zero,
+// whose canonical representation precisionDecimal §6 f-precDecCanmap does not
+// decide, is that form alone, but for an xs:QName or xs:NOTATION value,
 // which has none (§3.3.18, §3.3.19) and is spelled as the package doc's
 // "# What encodes" states, and runs no assessment by package validate
 // of the document it writes: a caller wanting a verdict on it assesses it
@@ -76,7 +78,12 @@ var ErrInvalidValue = errors.New("codec: Append: a value no valid document holds
 //     value no value of its datatype maps to, as codegen's package doc "#
 //     Simple types" states such values exist, the error naming the first
 //     property found outside it, its fields read in order, or, ahead of its
-//     Seconds, a duration's Months and Seconds of opposite signs; an xs:QName
+//     Seconds, a duration's Months and Seconds of opposite signs; a
+//     PrecisionDecimal datatype struct value no value maps to, as codegen's "#
+//     Simple types" states such values exist, a nil Value or the numerical arm
+//     with a negative Coefficient, or a Value whose dynamic type the
+//     [WithPrecisionDecimalArms] set in opts supplies in no role, a pointer to
+//     an arm among them, which Decode never returns; an xs:QName
 //     or xs:NOTATION value whose namespace name holds a byte that starts no
 //     XML 1.0 Char or is the one the prefix xmlns is bound to (Namespaces in
 //     XML §3), or whose Local the Parse of its primitive's mapping rejects in
@@ -101,15 +108,16 @@ var ErrInvalidValue = errors.New("codec: Append: a value no valid document holds
 //     unprefixed spelling resolves to there and no prefix can be bound to
 //     (Namespaces in XML §5 nsc-NoPrefixUndecl), whatever else rejects it.
 //     Every xs:boolean, xs:decimal-primitive, xs:dateTime, xs:dateTimeStamp,
-//     xs:time and xs:duration-primitive value has another lexical; an xs:float
-//     or xs:double value has one but for NaN and -INF (§3.3.4.2, §3.3.5.2); an
-//     xs:date, xs:gYearMonth or xs:gYear value only where its timezoneOffset
-//     is 0, spelled Z, +00:00 or -00:00 (§D.2.2's note), or its year is 0,
-//     spelled 0000 or -0000; an xs:gMonthDay, xs:gDay or xs:gMonth value only
-//     where its timezoneOffset is 0; an xs:hexBinary value only where one of
-//     its octets holds a hex digit A to F (§3.3.15.2); an xs:base64Binary
-//     value but for the empty one (§3.3.16.2); an xs:QName or xs:NOTATION
-//     value only where its namespace name is not absent; and an xs:string- or
+//     xs:time and xs:duration-primitive value has another lexical; an
+//     xs:float, xs:double or xs:precisionDecimal value has one but for NaN and
+//     -INF (§3.3.4.2, §3.3.5.2, precisionDecimal §3.2); an xs:date,
+//     xs:gYearMonth or xs:gYear value only where its timezoneOffset is 0,
+//     spelled Z, +00:00 or -00:00 (§D.2.2's note), or its year is 0, spelled
+//     0000 or -0000; an xs:gMonthDay, xs:gDay or xs:gMonth value only where
+//     its timezoneOffset is 0; an xs:hexBinary value only where one of its
+//     octets holds a hex digit A to F (§3.3.15.2); an xs:base64Binary value
+//     but for the empty one (§3.3.16.2); an xs:QName or xs:NOTATION value only
+//     where its namespace name is not absent; and an xs:string- or
 //     xs:anyURI-primitive value never, being its own whiteSpace-normalized
 //     form.
 //
@@ -122,14 +130,15 @@ var ErrInvalidValue = errors.New("codec: Append: a value no valid document holds
 // type: no mapping of the value's primitive, no governing mapping, a Parse that
 // rejects the spelling Append gives the value, the mapping's of the type's
 // {primitive type definition} for a value of none of xs:string, xs:anyURI,
-// xs:float, xs:double, xs:QName and xs:NOTATION primitive, the governing
-// mapping's for an xs:float or xs:double one and, for an xs:QName or
-// xs:NOTATION one, its primitive's mapping's with an error
-// value.IsDatatypeVerdict does not report as a verdict, a Parse of the
-// governing mapping that rejects the whiteSpace-normalized canonical
-// representation an xs:float or xs:double value's Canonical renders, a
-// Canonical that renders a value of none of xs:string, xs:anyURI, xs:float,
-// xs:double, xs:QName and xs:NOTATION primitive as other text than
+// xs:float, xs:double, xs:QName, xs:NOTATION and xs:precisionDecimal
+// primitive, the governing mapping's for an xs:float, xs:double or
+// xs:precisionDecimal one and, for an xs:QName or xs:NOTATION one, its
+// primitive's mapping's with an error value.IsDatatypeVerdict does not report
+// as a verdict, a Parse of the governing mapping that rejects the
+// whiteSpace-normalized canonical representation an xs:float, xs:double or
+// xs:precisionDecimal value's Canonical renders, a Canonical that renders a
+// value of none of xs:string, xs:anyURI, xs:float, xs:double, xs:QName,
+// xs:NOTATION and xs:precisionDecimal primitive as other text than
 // its canonical representation (Datatypes §E.1 f-decimalCanmap, §E.4
 // f-booleanCanmap, §E.2 f-durationCanMap, §E.3.5 vp-dateTimeCanRep,
 // vp-timeCanRep, vp-dateCanRep, vp-gYearMonthCanRep, vp-gYearCanRep,
@@ -149,11 +158,12 @@ func Append[T any](dst []byte, schema *xsd.Schema, backend value.Backend, name x
 		return dst, errors.New("codec: Append: nil value.Backend")
 	}
 	t := reflect.TypeFor[T]()
-	decl, f, err := encodeStatic(schema, name, t, opts)
+	cfg := newConfig(opts)
+	decl, f, err := encodeStatic(schema, name, t, cfg)
 	if err != nil {
 		return dst, err
 	}
-	e := &encoder{schema: schema, backend: backend, out: dst}
+	e := &encoder{schema: schema, backend: backend, decimals: cfg.decimals, out: dst}
 	// v's own Value, of Kind Interface where T is one, so that a nil T and a
 	// branch's dynamic type both reach the write as T holds them.
 	if err := encoded[writer](f).write(e, reflect.ValueOf(&v).Elem(), writeAt{el: decl, path: typePath(t)}); err != nil {
@@ -183,7 +193,7 @@ func CheckAppend[T any](schema *xsd.Schema, name xsd.QName, opts ...Option) erro
 	if schema == nil {
 		return errors.New("codec: CheckAppend: nil *xsd.Schema")
 	}
-	_, _, err := encodeStatic(schema, name, reflect.TypeFor[T](), opts)
+	_, _, err := encodeStatic(schema, name, reflect.TypeFor[T](), newConfig(opts))
 	return err
 }
 
@@ -197,13 +207,14 @@ func typePath(t reflect.Type) string {
 }
 
 // encodeStatic returns the top-level element declaration name in schema, a
-// non-nil schema, and the filler item 5's check returns for it under opts,
-// Decode's for a T of Go type t, or the error of the first of items 2 to 5 of
-// [Append]'s doc that applies. It reads no value, so its answer holds for
-// every value of t. Item 4's pass (elementEncodes) walks the schema and
-// returns before bindDecl is called, so that its declines come first; it
-// builds nothing, and Append writes from the filler alone (writer).
-func encodeStatic(schema *xsd.Schema, name xsd.QName, t reflect.Type, opts []Option) (xsd.ElementDeclaration, filler, error) {
+// non-nil schema, and the filler item 5's check returns for it under cfg,
+// opts resolved once by its caller, Decode's for a T of Go type t, or the
+// error of the first of items 2 to 5 of [Append]'s doc that applies. It
+// reads no value, so its answer holds for every value of t. Item 4's pass
+// (elementEncodes) walks the schema and returns before bindDecl is called,
+// so that its declines come first; it builds nothing, and Append writes
+// from the filler alone (writer).
+func encodeStatic(schema *xsd.Schema, name xsd.QName, t reflect.Type, cfg config) (xsd.ElementDeclaration, filler, error) {
 	decl, ok := schema.Element(name)
 	if !ok {
 		return xsd.ElementDeclaration{}, nil, fmt.Errorf("codec: no top-level element declaration has the expanded name %q", name.Display())
@@ -220,7 +231,7 @@ func encodeStatic(schema *xsd.Schema, name xsd.QName, t reflect.Type, opts []Opt
 	if err != nil {
 		return xsd.ElementDeclaration{}, nil, err
 	}
-	f, err := b.check(t, newCheckContext(newConfig(opts)))
+	f, err := b.check(t, newCheckContext(cfg))
 	if err != nil {
 		return xsd.ElementDeclaration{}, nil, err
 	}
@@ -256,10 +267,10 @@ type writeAt struct {
 // binder under it, as C, what Append's write reads it as: the writer capability, the
 // elementWriter capability of a fieldSink's elementReader, or a closed sum's arm, a
 // contentMember's or a branchArm's elementMember, a sink's fieldSink or a scalarElem's
-// atomic. It is the write's one assertion of the binder's arms, and its one
-// panic. Invariant: where item 4 of [Append]'s doc admits a construct, every arm the
-// binder builds for it that the write reaches is such a C. A failed assertion breaks it,
-// an internal bug, never input, and panics naming x's type.
+// atomic. It is the write's one assertion of the binder's arms. Invariant: where item 4
+// of [Append]'s doc admits a construct, every arm the binder builds for it that the
+// write reaches is such a C. A failed assertion breaks it, an internal bug, never input,
+// and panics naming x's type.
 func encoded[C any](x any) C {
 	c, ok := x.(C)
 	if !ok {
@@ -708,7 +719,8 @@ func attributeEncodes(schema *xsd.Schema, u xsd.AttributeUse) error {
 // The expanded names simpleEncodes reads a simple type's primitive and base
 // chain by, with booleanName: encodedPrimitives, the one encoding of the
 // primitives an atomic type that encodes has (atomicEncodes), in the order of
-// Datatypes §3.3, which constructEncodePrimitive's name lists; and idNames.
+// Datatypes §3.3 and then xs:precisionDecimal, which §3.3 does not list, the
+// order constructEncodePrimitive's name lists them in; and idNames.
 var (
 	stringName        = xsd.QName{Space: xsd.XMLSchemaNS, Local: "string"}
 	doubleName        = xsd.QName{Space: xsd.XMLSchemaNS, Local: "double"}
@@ -733,6 +745,7 @@ var (
 		{Space: xsd.XMLSchemaNS, Local: "anyURI"},
 		{Space: xsd.XMLSchemaNS, Local: "QName"},
 		{Space: xsd.XMLSchemaNS, Local: "NOTATION"},
+		{Space: xsd.XMLSchemaNS, Local: "precisionDecimal"},
 	}
 	idNames = []xsd.QName{
 		{Space: xsd.XMLSchemaNS, Local: "ID"},
@@ -837,19 +850,22 @@ func simpleSubject(st *xsd.SimpleType, owner string) string {
 	return "simple type " + typeLabel(st, owner) + definedAt(" ", st)
 }
 
-// encoder is one Append's write of a document: out, the document so far; ns,
-// the in-scope default namespace, that of the element whose start tag is open
-// or whose content is being written, "" outside the document element; bound,
-// the namespace names qname has declared a prefix for on the open elements,
-// outermost first, bound[i] under boundPrefix(i), which no field stores
-// (writtenBindings); open, the values whose element's write is
-// open, outermost first (enter); and the first item 6 and item 7 errors of
-// [Append]'s doc it has found, in document order. Every value is written
-// whatever was found before it, so that the walk finds an item 6 error after
-// an item 7 one.
+// encoder is one Append's write of a document: decimals, the arm sets
+// [WithPrecisionDecimalArms] supplied, from the config item 5's check read
+// (encodeStatic), by which a PrecisionDecimal's Value is read (decimalOf);
+// out, the document so far; ns, the in-scope default namespace, that of the
+// element whose start tag is open or whose content is being written, ""
+// outside the document element; bound, the namespace names qname has declared
+// a prefix for on the open elements, outermost first, bound[i] under
+// boundPrefix(i), which no field stores (writtenBindings); open, the values
+// whose element's write is open, outermost first (enter); and the first item
+// 6 and item 7 errors of [Append]'s doc it has found, in document order.
+// Every value is written whatever was found before it, so that the walk finds
+// an item 6 error after an item 7 one.
 type encoder struct {
 	schema   *xsd.Schema
 	backend  value.Backend
+	decimals decimalArmSets
 	out      []byte
 	ns       string
 	bound    []string
@@ -976,16 +992,20 @@ func (e *encoder) declineValue(c construct, subject, path, shown, cause string) 
 
 // simple returns the text Append writes for v, a value of s's simple type,
 // s.st, held in the Go type the slice gives it, at path, owner naming s.st's
-// declaration: an atomic value by atom, a list by list, each under the atomic
-// Go type of s's element (encoded). It records the value's item 6 or 7 error
-// of [Append]'s doc, and returns a backend fault.
+// declaration: an atomic value by atom, as held reads it, a list by list,
+// each under the atomic Go type of s's element (encoded). It records the
+// value's item 6 or 7 error of [Append]'s doc, and returns a backend fault.
 func (e *encoder) simple(s scalar, v reflect.Value, path, owner string) (string, error) {
 	subject := simpleSubject(s.st, owner)
 	a := encoded[atomic](s.elem)
 	if s.item != nil {
 		return e.list(s.st, s.item.st, a, v, path, subject)
 	}
-	text, _, err := e.atom(s.st, a, v, path, subject)
+	hv, ok := e.held(a, v, path, subject)
+	if !ok {
+		return "", nil
+	}
+	text, _, err := e.atom(s.st, a, hv, path, subject)
 	return text, err
 }
 
@@ -993,10 +1013,14 @@ func (e *encoder) simple(s scalar, v reflect.Value, path, owner string) (string,
 // type st held in a, its atomic Go type, at path, subject naming st: the
 // value of an atomic formed holds for in its canonical representation
 // (spelled), a string as itself (str), an xs:QName or xs:NOTATION value under
-// a prefix in scope (qname), and a float32 or float64 in its canonical
-// representation (double). ok reports that it recorded no item 6 or 7 error
-// of [Append]'s doc for v.
+// a prefix in scope (qname), a float32 or float64 in its canonical
+// representation (double), and a precisionDecimal, v the decimalValue held
+// translated it into, in its canonical representation (precisionDecimal). ok
+// reports that it recorded no item 6 or 7 error of [Append]'s doc for v.
 func (e *encoder) atom(st *xsd.SimpleType, a atomic, v reflect.Value, path, subject string) (text string, ok bool, err error) {
+	if a == atomicPrecisionDecimal {
+		return e.precisionDecimal(st, v.Interface().(decimalValue), path, subject)
+	}
 	if a.formed() {
 		return e.spelled(st, a, v, path, subject)
 	}
@@ -1012,7 +1036,7 @@ func (e *encoder) atom(st *xsd.SimpleType, a atomic, v reflect.Value, path, subj
 // list returns the text the package doc's "# What encodes" states for v, a []V
 // holding a value of the list type st, at path, subject naming st, each item
 // written by atom under item, st's {item type definition}, held in a, its
-// atomic Go type, at path "[i]", and records the item 6 and 7 errors
+// atomic Go type, at path "[i]", as held reads it, and records the item 6 and 7 errors
 // [Append]'s doc states for a list: an item's white space is checked once its
 // own checks pass, and st's own facets, through value.ValidateLexical, once
 // every item has. An empty item is no list item since the list's whiteSpace
@@ -1026,10 +1050,17 @@ func (e *encoder) atom(st *xsd.SimpleType, a atomic, v reflect.Value, path, subj
 func (e *encoder) list(st, item *xsd.SimpleType, a atomic, v reflect.Value, path, subject string) (string, error) {
 	isubject := itemSubject(subject, item)
 	items := make([]string, v.Len())
+	held := make([]reflect.Value, v.Len())
 	clean := true
 	for i := range v.Len() {
 		ipath := path + "[" + strconv.Itoa(i) + "]"
-		text, ok, err := e.atom(item, a, v.Index(i), ipath, isubject)
+		hv, ok := e.held(a, v.Index(i), ipath, isubject)
+		if !ok {
+			clean = false
+			continue
+		}
+		held[i] = hv
+		text, ok, err := e.atom(item, a, hv, ipath, isubject)
 		if err != nil {
 			return "", err
 		}
@@ -1045,16 +1076,17 @@ func (e *encoder) list(st, item *xsd.SimpleType, a atomic, v reflect.Value, path
 		return text, nil
 	}
 	shown := fmt.Sprintf("%v", v)
-	if a.formed() {
+	if a.formed() || a == atomicPrecisionDecimal {
 		// fmt spells a big.Rat, a big.Int or a datatype struct by its fields, and a
-		// []byte by its octets in decimal; each item's text is its form (spelled).
+		// []byte by its octets in decimal; each item's text is its form (spelled)
+		// or, for a precisionDecimal, its canonical representation.
 		shown = "[" + text + "]"
 	}
 	if _, err := value.ValidateLexical(e.backend, e.schema, st, text, writtenBindings{e}, noAssertions{}); err != nil {
 		if !value.IsDatatypeVerdict(err) {
 			return "", fmt.Errorf("codec: Append: %s holds %s, of %s, which the backend cannot assess: %w", path, shown, subject, err)
 		}
-		if rule, _ := xsderr.RuleOf(err); rule == rulePatternValid && otherLexical(a, v) {
+		if rule, _ := xsderr.RuleOf(err); rule == rulePatternValid && otherLexical(a, held) {
 			if a == atomicQName {
 				e.declineValue(constructQNameSpelling, subject, path, shown, fmt.Sprintf("a pattern facet rejects its spelling %q: %v", text, err))
 				return text, nil
@@ -1169,6 +1201,118 @@ func (e *encoder) double(st *xsd.SimpleType, f float64, bits int, path, subject 
 		return c, false, nil
 	}
 	if !mapsBack(c, f, bits) {
+		e.declineValue(constructNoCanonical, subject, path, shown, fmt.Sprintf("its canonical representation %q does not map back to it", c))
+		return c, false, nil
+	}
+	return c, true, nil
+}
+
+// held returns v, a value of a Go type over a's, at path, subject naming its
+// simple type, as atom reads it: for atomicPrecisionDecimal, the decimalValue
+// value of decimalValueType its PrecisionDecimal denotes (decimalOf), and ok
+// false where it denotes none, item 6 of [Append]'s doc recorded; every other
+// a's v itself.
+func (e *encoder) held(a atomic, v reflect.Value, path, subject string) (reflect.Value, bool) {
+	if a != atomicPrecisionDecimal {
+		return v, true
+	}
+	d, ok := e.decimalOf(v, path, subject)
+	if !ok {
+		return reflect.Value{}, false
+	}
+	dv := reflect.New(decimalValueType).Elem()
+	dv.Set(reflect.ValueOf(d))
+	return dv, true
+}
+
+// decimalOf returns the decimalValue that v, a struct of codegen's PrecisionDecimal
+// shape (decimalShape), at path, subject naming its simple type, holds in its Value
+// field, by the role e.decimals' set for that field's interface gives its dynamic type,
+// pipeline.decimal's inverse: the numerical arm converted to decimalNumerical, which
+// checkDecimalArms held it to, and each special arm its own. Where v is item 6's
+// PrecisionDecimal case of [Append]'s doc, it records that error, and ok is false. Item
+// 5 held the arms first (checkDecimalArms), so an interface with none is an internal
+// bug, which panics.
+func (e *encoder) decimalOf(v reflect.Value, path, subject string) (decimalValue, bool) {
+	field := v.Field(0)
+	fpath := path + "." + v.Type().Field(0).Name
+	arms, ok := e.decimals.of(field.Type())
+	if !ok {
+		panic(fmt.Sprintf("codec: no arms of %s reached the write", field.Type()))
+	}
+	if field.IsNil() {
+		e.invalidate(fmt.Errorf("codec: Append: %s is nil, of %s, which no precisionDecimal value maps to (codegen's package doc, \"# Simple types\")", fpath, subject))
+		return nil, false
+	}
+	arm := field.Elem()
+	if arm.Type() == arms.numerical {
+		n := arm.Convert(reflect.TypeFor[decimalNumerical]()).Interface().(decimalNumerical)
+		if n.Coefficient.Sign() < 0 {
+			e.invalidate(fmt.Errorf("codec: Append: %s holds the Coefficient %s, of %s, negative, which no precisionDecimal value maps to (codegen's package doc, \"# Simple types\")", fpath, n.Coefficient.String(), subject))
+			return nil, false
+		}
+		return n, true
+	}
+	for _, s := range decimalSpecials {
+		if s.armOf(arms) == arm.Type() {
+			return s, true
+		}
+	}
+	e.invalidate(fmt.Errorf("codec: Append: %s holds a %s, of %s, which the WithPrecisionDecimalArms set of %s supplies in no role, so that Decode returns no such value", fpath, arm.Type(), subject, field.Type()))
+	return nil, false
+}
+
+// precisionDecimal returns the canonical representation of d, a value of the
+// simple type st whose primitive is xs:precisionDecimal, at path, subject
+// naming st, as double writes a float's: d's pDecimalRep (decimalValue.lexical)
+// mapped by st's governing mapping's Parse, rendered by its Canonical, that
+// rendering whiteSpace-normalized (value.ApplyWhiteSpace) and accepted by
+// Parse, then held to st's facets by value.ValidateLexical, and the normalized
+// rendering read back by convertDecimal to d itself (sameDecimal). The
+// rendering is held to mapping back alone, never to text of the codec's own, so
+// the codec writes what the backend renders where precisionDecimal §6
+// f-precDecCanmap decides no canonical representation, at a zero. A pattern
+// facet's rejection is item 7 of [Append]'s doc where d has another lexical
+// (decimalValue.otherLexical), and item 6 otherwise; any other facet's is item
+// 6. ok is atom's.
+func (e *encoder) precisionDecimal(st *xsd.SimpleType, d decimalValue, path, subject string) (text string, ok bool, err error) {
+	shown := d.lexical()
+	m, err := e.mapping(st, path, subject)
+	if err != nil {
+		return "", false, err
+	}
+	v, err := m.Parse(shown, nil)
+	if err != nil {
+		return "", false, fmt.Errorf("codec: Append: %s holds %s, of %s, whose pDecimalRep form the backend's Parse rejects: %w", path, shown, subject, err)
+	}
+	if m.Canonical == nil {
+		e.declineValue(constructNoCanonical, subject, path, shown, "its governing mapping has no canonical mapping")
+		return "", false, nil
+	}
+	c, err := m.Canonical(v)
+	if err != nil {
+		e.declineValue(constructNoCanonical, subject, path, shown, err.Error())
+		return "", false, nil
+	}
+	normalized, err := value.ApplyWhiteSpace(e.schema, st, c)
+	if err != nil {
+		return "", false, fmt.Errorf("codec: Append: %s holds %s, of %s, which the backend cannot assess: %w", path, shown, subject, err)
+	}
+	if _, err := m.Parse(normalized, nil); err != nil {
+		return "", false, fmt.Errorf("codec: Append: %s holds %s, of %s, whose canonical representation %q the backend's Parse rejects: %w", path, shown, subject, c, err)
+	}
+	if _, err := value.ValidateLexical(e.backend, e.schema, st, c, writtenBindings{e}, noAssertions{}); err != nil {
+		if !value.IsDatatypeVerdict(err) {
+			return "", false, fmt.Errorf("codec: Append: %s holds %s, of %s, which the backend cannot assess: %w", path, shown, subject, err)
+		}
+		if rule, _ := xsderr.RuleOf(err); rule == rulePatternValid && d.otherLexical() {
+			e.declineValue(constructNoCanonical, subject, path, shown, fmt.Sprintf("a pattern facet rejects its canonical representation %q: %v", c, err))
+			return c, false, nil
+		}
+		e.invalidate(fmt.Errorf("codec: Append: %s holds %s, which %s rejects: %w", path, shown, subject, err))
+		return c, false, nil
+	}
+	if !decimalMapsBack(normalized, d) {
 		e.declineValue(constructNoCanonical, subject, path, shown, fmt.Sprintf("its canonical representation %q does not map back to it", c))
 		return c, false, nil
 	}
@@ -1393,22 +1537,27 @@ func mapsBack(c string, f float64, bits int) bool {
 	return math.Float64bits(back) == math.Float64bits(f) || math.IsNaN(back) && math.IsNaN(f)
 }
 
+// decimalMapsBack reports whether convertDecimal, the lexical mapping
+// (precisionDecimal §6 f-precDecLexmap), reads c, precisionDecimal's
+// whiteSpace-normalized canonical representation of d, back as d
+// (sameDecimal).
+func decimalMapsBack(c string, d decimalValue) bool {
+	back, err := convertDecimal(c)
+	return err == nil && sameDecimal(back.Interface().(decimalValue), d)
+}
+
 // soleLexical reports whether floatRep or doubleRep spells f by its canonical
 // representation alone, as each does NaN and -INF (Datatypes §3.3.4.2,
 // §3.3.5.2).
 func soleLexical(f float64) bool { return math.IsNaN(f) || math.IsInf(f, -1) }
 
-// otherLexical reports whether v, the []V of a list whose items a, the item's
-// atomic Go type, holds, has a lexical other than its canonical one for a
-// pattern facet to match: v holds an item a.otherLexicalOf holds of, since the
-// list's text has another lexical exactly where one of its items has.
-func otherLexical(a atomic, v reflect.Value) bool {
-	for i := range v.Len() {
-		if a.otherLexicalOf(v.Index(i)) {
-			return true
-		}
-	}
-	return false
+// otherLexical reports whether the list whose items held holds, each as atom
+// reads it under a, the item's atomic Go type (encoder.held), has a lexical
+// other than its canonical one for a pattern facet to match: held holds an
+// item a.otherLexicalOf holds of, since the list's text has another lexical
+// exactly where one of its items has.
+func otherLexical(a atomic, held []reflect.Value) bool {
+	return slices.ContainsFunc(held, a.otherLexicalOf)
 }
 
 // mapping returns the governing mapping of st on e's backend
@@ -1429,9 +1578,10 @@ func (e *encoder) mapping(st *xsd.SimpleType, path, subject string) (value.Mappi
 // the rule whose rejection of the canonical representation of a value other
 // than an xs:string- or xs:anyURI-primitive one, of the spelling of an
 // xs:QName or xs:NOTATION one, or of a list holding one, spelled, double,
-// qname and list read as item 7 of [Append]'s doc where the value has another
-// lexical: where otherLexicalOf holds for spelled and qname, soleLexical does
-// not hold for double and otherLexical holds for list.
+// precisionDecimal, qname and list read as item 7 of [Append]'s doc where the
+// value has another lexical: where otherLexicalOf holds for spelled and qname,
+// soleLexical does not hold for double, decimalValue.otherLexical holds for
+// precisionDecimal and otherLexical holds for list.
 const rulePatternValid xsderr.Rule = "cvc-pattern-valid"
 
 // doubleLexical spells f in floatRep where bits is 32 and in doubleRep where

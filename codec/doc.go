@@ -304,7 +304,8 @@
 // [Append]'s doc states what it writes and what it returns;
 // [CheckAppend]'s states what it returns for a declaration and T. Append
 // reads the schema, not T, as [Decode] does, and holds T to the declaration
-// by Decode's comparisons, under the [WithBranches] sets it is passed.
+// by Decode's comparisons, under the [WithBranches] sets and the
+// [WithPrecisionDecimalArms] arms it is passed.
 //
 // # What encodes
 //
@@ -341,7 +342,9 @@
 //     xs:base64Binary, into []byte; or one of xs:duration, xs:dateTime,
 //     xs:time, xs:date, xs:gYearMonth, xs:gYear, xs:gMonthDay, xs:gDay and
 //     xs:gMonth, into the datatype struct codegen's "# Simple types" gives
-//     it; or xs:QName or xs:NOTATION, into QName's datatype struct.
+//     it; xs:QName or xs:NOTATION, into QName's datatype struct; or
+//     xs:precisionDecimal, into PrecisionDecimal's datatype struct, whose arms
+//     [WithPrecisionDecimalArms] supplies.
 //   - A list simple type whose {item type definition} encodes and which has
 //     no assertions facet, its own or inherited, into []V, V its item's Go
 //     type.
