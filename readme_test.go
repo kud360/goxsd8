@@ -501,7 +501,7 @@ func readmeAppend(schema *xsd.Schema, backend value.Backend, o *order.Order) {
 			fmt.Println(err)
 		case errors.As(err, &de):
 			// Append's items 4 and 7: a construct, or a value with no canonical
-			// representation, that codec declines.
+			// representation or no spelling Append writes, that codec declines.
 			fmt.Println(de.Construct())
 		case errors.Is(err, codec.ErrTypeMismatch):
 			// Append's item 5: T does not match the declaration.

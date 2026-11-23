@@ -382,11 +382,9 @@ func shownField(v reflect.Value) string {
 // hex digit (§3.3.15.2's hexDigit production); and for an xs:base64Binary
 // value a single space between two of its characters (§3.3.16.2's B64
 // production and its note); and for an xs:QName or xs:NOTATION value, which
-// has no canonical representation, a lexical other than qname's spelling of
-// it exists where its Space is not "": a prefix other than qname's bound to
-// Space, a Space "" having the one lexical Local, since no prefix can be bound
-// to no namespace (Namespaces in XML §5 nsc-NoPrefixUndecl). An a of a
-// primitive atomicEncodes declines is an internal bug, which panics.
+// has no canonical representation, its Local under a prefix other than
+// qname's bound to its Space. An a of a primitive atomicEncodes declines is an
+// internal bug, which panics.
 func (a atomic) otherLexicalOf(v reflect.Value) bool {
 	switch a {
 	case atomicString:

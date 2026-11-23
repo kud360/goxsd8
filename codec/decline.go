@@ -56,10 +56,10 @@ func (e *DeclineError) Loc() (xsderr.Loc, bool) {
 // element declaration, attribute use or simple type, by its QName where it has
 // one, with its schema Loc, and, for a construct of a list type's {item type
 // definition}, that item, by its QName where it has one, with its schema Loc,
-// and, for a value with no canonical representation, the Go path of its field
-// from T and its value. A type definition named in the XML Schema namespace
-// whose schema Loc is the zero Loc is named by its QName alone, in place of the
-// schema Loc the sentences above give it.
+// and, for a value with no canonical representation or no spelling Append
+// writes, the Go path of its field from T and its value. A type definition
+// named in the XML Schema namespace whose schema Loc is the zero Loc is named
+// by its QName alone, in place of the schema Loc the sentences above give it.
 func (e *DeclineError) Error() string {
 	text := "codec does not decode " + e.construct.name() + ": " + e.detail +
 		"; a decoder refusal, not a schema or instance fault"
