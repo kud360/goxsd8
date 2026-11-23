@@ -201,8 +201,9 @@ func TestFloatDoubleDifferential(t *testing.T) {
 }
 
 // TestFormArms is the bar R7 of #3902's warden pre-flight sets in place of a
-// lint over form's and otherLexicalOf's switches: for every builtin of a
-// parsed schema whose primitive is in encodedPrimitives, the atomic
+// lint over form's and otherLexicalOf's switches: every atomic builtin of a
+// parsed schema has its primitive in encodedPrimitives, which a type of a
+// primitive xsd.NewPrimitiveType mints alone lies outside, and the atomic
 // goshape.AtomicType gives it answers otherLexicalOf without a panic, and
 // form too, with no error, on an in-range value (zero but for Month and Day,
 // 1), where formed holds for the atomic.
@@ -226,6 +227,7 @@ func TestFormArms(t *testing.T) {
 			t.Fatal(err)
 		}
 		if primitive == nil || !slices.Contains(encodedPrimitives, primitive.Name()) {
+			t.Errorf("the primitive of the atomic builtin %s is no member of encodedPrimitives", td.Name().Display())
 			continue
 		}
 		g, ok, err := goshape.AtomicType(schema, st)
