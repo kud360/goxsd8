@@ -336,10 +336,9 @@
 //   - A wildcard particle of that sequence or choice with {process contents}
 //     skip and {max occurs} at least 1, into the field "# What decodes" states
 //     for it, each element it holds written raw, as below.
-//   - xs:anyType itself (Structures §3.4.7) as the {type definition} of an
-//     element declaration above, the document element's or a particle's, a
-//     choice's alternative's among them, into the Go type "# What decodes"
-//     states for that declaration, its content written raw, as below.
+//   - xs:anyType itself (Structures §3.4.7), where the bullets above admit
+//     it, into the Go type "# What decodes" states for its declaration, its
+//     content written raw, as below.
 //   - An attribute use other than xsi:nil's, unqualified, with no value
 //     constraint and of a simple type that encodes, into V or *V.
 //   - An atomic simple type whose {primitive type definition} is one the list
@@ -379,13 +378,11 @@
 //     [WithPrecisionDecimalArms] supplies.
 //
 // Every other construct is a [*DeclineError], item 4 of Append's doc, a
-// list's item declining by the item's construct, and so is what item 7
-// states: a value with no canonical representation or no spelling Append
-// writes, an attribute in the XSI namespace in raw content, and an item a
-// top-level declaration governs in an xs:anyType element's content. The one
-// exception is the declaration name names, as the document element's, with
-// {abstract} true: it is item 3, a plain error. A declaration with
-// {abstract} true that a particle reaches is no exception.
+// list's item declining by the item's construct, and so is what item 7 of
+// Append's doc states. The one exception is the declaration name names, as
+// the document element's, with {abstract} true: it is item 3, a plain
+// error. A declaration with {abstract} true that a particle reaches is no
+// exception.
 //
 // The document Append writes has no XML declaration, so it is XML 1.0 in
 // UTF-8, and no white space between tags. It binds element names by default
@@ -407,9 +404,8 @@
 // package doc, "# Attributes"), each value delimited by '"'. An element held
 // raw in a wildcard's field, at any depth, is written raw, nothing in it
 // assessed or resolved, and so is the content of an element of type xs:anyType
-// itself, its own attributes included, nothing in it resolved, though
-// xs:anyType's lax wildcards assess an item a top-level declaration names,
-// which item 7 of Append's doc declines: its attributes in held order, one of
+// itself, its own attributes included, nothing in it resolved, but for the
+// items item 7 of Append's doc declines in it: its attributes in held order, one of
 // absent namespace unprefixed, one in the XML namespace xml:Local, and every
 // other one pN:Local, pN chosen and declared as for an xs:QName value, though
 // its namespace be that element's own; then its Text, then each of its
