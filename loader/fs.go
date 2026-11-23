@@ -15,10 +15,12 @@ type fsResolver struct {
 // FS returns a Resolver that serves each location as a path within fsys
 // (an embed.FS, os.DirFS, testing fstest.MapFS, etc.).
 //
-// location is passed straight to fsys.Open, so fs.ValidPath governs it:
-// rooted ("/…"), "." / ".." segment, and Windows-volume paths are rejected
-// by the filesystem itself, giving traversal safety for free (engineering
-// property, not a spec rule). A missing entry maps to ErrNotFound.
+// FS refuses a location that fs.ValidPath rejects, such as "/m.xsd",
+// "./m.xsd" or "a/../m.xsd", before calling fsys.Open, so the refusal does
+// not depend on what fsys would answer; like Dir's refusal of a location
+// that escapes its root, it wraps ErrNotFound (an engineering decision, not
+// a spec rule). A valid location that fsys answers with fs.ErrNotExist also
+// maps to ErrNotFound.
 //
 // Unlike Dir, FS does NOT canonicalize the resolved location it returns: it
 // hands back location as given. fs.FS guarantees no directory-listing
@@ -32,6 +34,9 @@ func FS(fsys fs.FS) Resolver {
 
 // Resolve implements Resolver.
 func (r fsResolver) Resolve(namespace, location string) (io.ReadCloser, string, error) {
+	if !fs.ValidPath(location) {
+		return nil, "", invalidPathError{location}
+	}
 	f, err := r.fsys.Open(location)
 	if errors.Is(err, fs.ErrNotExist) {
 		return nil, "", fmt.Errorf("loader: %q not found in fs: %w", location, ErrNotFound)
@@ -42,3 +47,14 @@ func (r fsResolver) Resolve(namespace, location string) (io.ReadCloser, string, 
 	// f streams from fsys; the caller closes it (P4 — no buffering here).
 	return f, location, nil
 }
+
+// invalidPathError is the refusal FS's doc describes; see FS.
+type invalidPathError struct{ location string }
+
+// Error names the location and fs.ValidPath, without ErrNotFound's text.
+func (e invalidPathError) Error() string {
+	return fmt.Sprintf("loader: %q is not a valid fs.FS path (fs.ValidPath)", e.location)
+}
+
+// Unwrap returns ErrNotFound, for Chain's and parser's errors.Is reads.
+func (e invalidPathError) Unwrap() error { return ErrNotFound }

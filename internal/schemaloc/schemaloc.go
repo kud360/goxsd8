@@ -23,14 +23,14 @@ import (
 //
 // Which resolvers that rooting breaks is not uniform, and the strategy is chosen
 // for the ones it does break: the EXACT-KEY resolvers. loader.Map looks the
-// location up as a map key, and loader.FS hands it to fs.Open, whose fs.ValidPath
-// contract rejects a rooted path outright — so neither serves the document it
-// holds under "schemas/sub/c.xsd" when asked for "/schemas/sub/c.xsd". loader.Dir
-// is NOT among them: it joins the location onto its root, where
-// [path/filepath.Join] reads a leading "/" as no different from none, so it opens
-// the same file and reports the same identity string either way. Resolve still
-// may not lean on that, because Resolver is an interface any consumer implements
-// and exact-key lookup is the easiest shape to implement.
+// location up as a map key, and loader.FS refuses a rooted path before fsys sees
+// it, as its doc states — so neither serves the document it holds under
+// "schemas/sub/c.xsd" when asked for "/schemas/sub/c.xsd". loader.Dir is NOT
+// among them: it joins the location onto its root, where [path/filepath.Join]
+// reads a leading "/" as no different from none, so it opens the same file and
+// reports the same identity string either way. Resolve still may not lean on
+// that, because Resolver is an interface any consumer implements and exact-key
+// lookup is the easiest shape to implement.
 func Resolve(base, location string) string {
 	if location == "" {
 		return base
