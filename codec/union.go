@@ -59,12 +59,27 @@ func unionDecline(r xsd.TypeResolver, st *xsd.SimpleType, subject string) (*unio
 }
 
 // memberSubject names, after subject, m, the basic member of the union whose
-// member declines, and m's schema Loc where located(m) holds.
+// member declines, or whose value Append writes, and m's schema Loc where
+// located(m) holds.
 func memberSubject(subject string, m *xsd.SimpleType) string {
+	return throughMember(subject, "basic member", m)
+}
+
+// nestedUnionSubject names, after subject, m, a union among the {member type
+// definitions} of the union subject names, as memberSubject names a basic
+// member: a union member is no basic member (Datatypes dt-basicmember).
+func nestedUnionSubject(subject string, m *xsd.SimpleType) string {
+	return throughMember(subject, "member union", m)
+}
+
+// throughMember names, after subject, m, the union's member in the role role
+// names, by its QName where it has one, and its schema Loc where located(m)
+// holds.
+func throughMember(subject, role string, m *xsd.SimpleType) string {
 	if m.Name() == (xsd.QName{}) {
-		return fmt.Sprintf("%s, through the union's anonymous basic member%s", subject, definedAt(", a type ", m))
+		return fmt.Sprintf("%s, through the union's anonymous %s%s", subject, role, definedAt(", a type ", m))
 	}
-	return fmt.Sprintf("%s, through the union's basic member %s%s", subject, m.Name().Display(), definedAt(", a type ", m))
+	return fmt.Sprintf("%s, through the union's %s %s%s", subject, role, m.Name().Display(), definedAt(", a type ", m))
 }
 
 // memberLabel names m, a basic member of the union union names, for a stage
@@ -228,21 +243,34 @@ func (u *unionScalar) item(p *pipeline, item *listItem, tok string, src source, 
 	return reflect.ValueOf(unionValue{u: u, i: i, v: v}), nil
 }
 
+// boundIn returns bind's answer for it, a union's sealed interface, under the
+// set sets supplies for it, none for a union with no basic member, for which
+// check requires none. Item 6 of Decode's doc, item 5 of Append's, held the
+// variants first (check), so an interface with members and no set, or a set
+// bind refuses, is an internal bug, which panics.
+func (u *unionScalar) boundIn(sets branchSets, it reflect.Type) []reflect.Type {
+	variants, ok := sets.of(it)
+	if !ok && len(u.members) > 0 {
+		panic(fmt.Sprintf("codec: no variants of %s reached the fill or the write", it))
+	}
+	bound, err := u.bind(it, variants)
+	if err != nil {
+		panic(fmt.Sprintf("codec: the variants of %s that check held do not bind: %v", it, err))
+	}
+	return bound
+}
+
 // union returns the value of t, a sealed interface of a union, that v, a
 // unionValue, holds: t's variant that unionScalar.bind matches to v's member,
-// of the set p.branches supplies for t, holding v's member value converted to
-// it as convertTo converts. Item 6 held the variants first
-// (unionScalar.check), so an interface with none, or a set bind refuses or
-// matches no variant to the member, is an internal bug.
+// of the set p.branches supplies for t (boundIn), holding v's member value
+// converted to it as convertTo converts. Item 6 held the variants first
+// (unionScalar.check), so a set that matches no variant to the member is an
+// internal bug.
 func (p *pipeline) union(v reflect.Value, t reflect.Type) reflect.Value {
 	uv := v.Interface().(unionValue)
-	variants, ok := p.branches.of(t)
-	if !ok {
-		panic(fmt.Sprintf("codec: no variants of %s reached the fill", t))
-	}
-	bound, err := uv.u.bind(t, variants)
-	if err != nil || bound[uv.i] == nil {
-		panic(fmt.Sprintf("codec: no variant of %s is bound to %s: %v", t, uv.u.members[uv.i].label, err))
+	bound := uv.u.boundIn(p.branches, t)
+	if bound[uv.i] == nil {
+		panic(fmt.Sprintf("codec: no variant of %s is bound to %s", t, uv.u.members[uv.i].label))
 	}
 	out := reflect.New(t).Elem()
 	out.Set(convertTo(p, uv.v, bound[uv.i]))

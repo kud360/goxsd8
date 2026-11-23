@@ -37,10 +37,10 @@ func instanceTest(name, doc string) string {
 // censusSuite is the fixture suite, one group whose schema generates. Its
 // cases encode (a.xml, a sequence, f.xml, of simple type, n.xml, z.xml and
 // o.xml, xs:double values NaN, −0 and 1, the last spelled other than
-// canonically, and g.xml, a choice), decline (l.xml, a sequence codegen
-// flattens, and p.xml, of a union type), and lie outside the
-// population: invalid.xml, which does not decode, and u.xml, whose document
-// element no declaration names, which decodes into the placeholder.
+// canonically, g.xml, a choice, and p.xml, of a union type), decline (l.xml,
+// a sequence codegen flattens), and lie outside the population: invalid.xml,
+// which does not decode, and u.xml, whose document element no declaration
+// names, which decodes into the placeholder.
 var censusSuite = map[string]string{
 	"suite.xml": `<testSuite xmlns:xlink="http://www.w3.org/1999/xlink"><testSetRef xlink:href="sets/s.testSet"/></testSuite>`,
 	"sets/s.testSet": `<testSet name="S" xmlns:xlink="http://www.w3.org/1999/xlink">
@@ -74,16 +74,15 @@ var censusSuite = map[string]string{
 const wantCounts = `encodecensus: 10 instance case(s) under %ROOT%
   schema generates: 10
   decoded: 8
-  encoded: 6
-  declined: 2
+  encoded: 7
+  declined: 1
   append failed, no decline: 0
   re-validate rejected: 0
   re-decode failed: 0
   round trip unequal: 0
 
-=== First decline, by construct: 2 construct(s) ===
+=== First decline, by construct: 1 construct(s) ===
        1  a construct codegen holds in a sealed interface: a choice, a flattened particle or a substitution group
-       1  a union simple type
 
 === Caveats ===
 `
@@ -93,8 +92,6 @@ const wantPaths = `
 === Cases, by construct ===
 a construct codegen holds in a sealed interface: a choice, a flattened particle or a substitution group (1):
   S/g/instance/flattened
-a union simple type (1):
-  S/g/instance/union
 
 === Cases, by defect count ===
 append failed, no decline (0):

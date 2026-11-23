@@ -1000,12 +1000,16 @@ func TestAppendDeclines(t *testing.T) {
 			`<xs:element name="%[1]s"><xs:complexType><xs:complexContent><xs:restriction base="s:ab%[1]s"><xs:sequence>` + a + `</xs:sequence></xs:restriction></xs:complexContent></xs:complexType></xs:element>`},
 		{"special type", "xs:anySimpleType or xs:anyAtomicType as a simple type", `<xs:element name="%[1]s" type="xs:anySimpleType"/>`},
 		{"list of a minted primitive", encodePrimitiveName, simpleOf(`<xs:list itemType="s:money"/>`)},
-		{"list of union", "a union simple type", simpleOf(`<xs:list><xs:simpleType><xs:union memberTypes="xs:string xs:int"/></xs:simpleType></xs:list>`)},
+		{"list of union of an ID member", "a simple type derived from xs:ID, xs:IDREF or xs:ENTITY", simpleOf(`<xs:list><xs:simpleType><xs:union memberTypes="xs:int xs:IDREF"/></xs:simpleType></xs:list>`)},
 		{"IDREFS", "a simple type derived from xs:ID, xs:IDREF or xs:ENTITY", `<xs:element name="%[1]s" type="xs:IDREFS"/>`},
 		{"list assertions", "a simple type with an assertions facet", simpleOf(`<xs:restriction base="xs:NMTOKENS"><xs:assertion test="true()"/></xs:restriction>`)},
 		{"inherited list assertions", "a simple type with an assertions facet", `<xs:simpleType name="assertedList%[1]s"><xs:restriction base="xs:NMTOKENS"><xs:assertion test="true()"/></xs:restriction></xs:simpleType>` + simpleOf(`<xs:restriction base="s:assertedList%[1]s"><xs:maxLength value="3"/></xs:restriction>`)},
 		{"list item assertions", "a simple type with an assertions facet", `<xs:simpleType name="assertedItem%[1]s"><xs:restriction base="xs:string"><xs:assertion test="true()"/></xs:restriction></xs:simpleType>` + simpleOf(`<xs:list itemType="s:assertedItem%[1]s"/>`)},
-		{"union", "a union simple type", simpleOf(`<xs:union memberTypes="xs:string xs:int"/>`)},
+		{"union of an ID member", "a simple type derived from xs:ID, xs:IDREF or xs:ENTITY", simpleOf(`<xs:union memberTypes="xs:int xs:ID"/>`)},
+		{"union of a minted member", encodePrimitiveName, simpleOf(`<xs:union memberTypes="xs:int s:money"/>`)},
+		{"union assertions", "a simple type with an assertions facet", simpleOf(`<xs:restriction><xs:simpleType><xs:union memberTypes="xs:int xs:date"/></xs:simpleType><xs:assertion test="true()"/></xs:restriction>`)},
+		{"member union assertions", "a simple type with an assertions facet", `<xs:simpleType name="assertedUnion%[1]s"><xs:restriction><xs:simpleType><xs:union memberTypes="xs:int"/></xs:simpleType><xs:assertion test="true()"/></xs:restriction></xs:simpleType>` +
+			simpleOf(`<xs:union memberTypes="s:assertedUnion%[1]s xs:date"/>`)},
 		{"minted primitive", encodePrimitiveName, `<xs:element name="%[1]s" type="s:money"/>`},
 		{"minted primitive attribute", encodePrimitiveName, complexOf(`<xs:attribute name="a" type="s:money"/>`)},
 		{"ID", "a simple type derived from xs:ID, xs:IDREF or xs:ENTITY", `<xs:element name="%[1]s" type="xs:ID"/>`},
@@ -2920,6 +2924,278 @@ func TestAppendPrecisionDecimalBackend(t *testing.T) {
 	plainError(t, err)
 	if want := "codec: Append: tPrecisionDecimal holds 300E-2, of simple type xs:precisionDecimal, whose pDecimalRep form the backend's Parse rejects: rejected"; err.Error() != want {
 		t.Errorf("error %q, want %q", err, want)
+	}
+}
+
+// encodeUnionSchema declares, beside unionTypes, document elements of the
+// union types "# What encodes" admits: root, of u; list, a list of u; num;
+// nest; wl, withList; parts, of u in a local element occurring once,
+// optionally and repeatedly and in an optional and a required attribute;
+// leading, a restriction of u whose pattern admits only a lexical with a
+// leading digit 0, which no canonical xs:int representation but 0's has;
+// five, a restriction of u enumerating 5; str, a restriction by the pattern
+// a of a union of xs:string alone, whose values have no other lexical; qn, a
+// union of xs:int and xs:QName; and wlp, a restriction of withList by the
+// pattern 0.*, which rejects the canonical representation of its list
+// member's values but for one whose first item is 0.
+const encodeUnionSchema = unionTypes + `
+<xs:element name="root" type="s:u"/>
+<xs:element name="list"><xs:simpleType><xs:list itemType="s:u"/></xs:simpleType></xs:element>
+<xs:element name="num" type="s:num"/>
+<xs:element name="nest" type="s:nest"/>
+<xs:element name="wl" type="s:withList"/>
+<xs:element name="parts"><xs:complexType><xs:sequence>
+<xs:element name="a" type="s:u"/><xs:element name="opt" type="s:u" minOccurs="0"/><xs:element name="many" type="s:u" maxOccurs="unbounded"/>
+</xs:sequence><xs:attribute name="at" type="s:u"/><xs:attribute name="req" type="s:u" use="required"/></xs:complexType></xs:element>
+<xs:element name="leading"><xs:simpleType><xs:restriction base="s:u"><xs:pattern value="0\d+"/></xs:restriction></xs:simpleType></xs:element>
+<xs:element name="five"><xs:simpleType><xs:restriction base="s:u"><xs:enumeration value="5"/></xs:restriction></xs:simpleType></xs:element>
+<xs:element name="str"><xs:simpleType><xs:restriction><xs:simpleType><xs:union memberTypes="xs:string"/></xs:simpleType><xs:pattern value="a"/></xs:restriction></xs:simpleType></xs:element>
+<xs:element name="qn"><xs:simpleType><xs:union memberTypes="xs:int xs:QName"/></xs:simpleType></xs:element>
+<xs:element name="wlp"><xs:simpleType><xs:restriction base="s:withList"><xs:pattern value="0.*"/></xs:restriction></xs:simpleType></xs:element>`
+
+// unionParts is codegen's struct for encodeUnionSchema's parts, its particle
+// fields before its attribute fields; unionStr and its variant are str's
+// interface, and unionQn and its variants qn's, which
+// TestEncodeUnionTypesAreCodegens pins.
+type (
+	unionParts struct {
+		A    unionU
+		Opt  unionU
+		Many []unionU
+		At   unionU
+		Req  unionU
+	}
+	unionStr       interface{ isStr() }
+	unionStrString string
+	unionQn        interface{ isQn() }
+	unionQnInt     int32
+	unionQnQName   struct{ Space, Local string }
+)
+
+func (unionStrString) isStr() {}
+func (unionQnInt) isQn()      {}
+func (unionQnQName) isQn()    {}
+
+// encodeUnionVariants is unionVariants with str's and qn's sets.
+var encodeUnionVariants = append(slices.Clone(unionVariants),
+	WithBranches[unionStr](unionStrString("")), WithBranches[unionQn](unionQnInt(0), unionQnQName{}))
+
+// TestEncodeUnionTypesAreCodegens pins the types above to those codegen
+// emits for encodeUnionSchema, in shape.
+func TestEncodeUnionTypesAreCodegens(t *testing.T) {
+	gen := generated(t, schemaOf(t, encodeUnionSchema))
+	for _, decl := range []string{
+		"type Parts struct {\n\tA    U\n\tOpt  U\n\tMany []U\n\tAt   U\n\tReq  U\n}\n",
+		"type StrUnionString string\n", "type QnUnionInt int32\n", "type QnUnionQName QName\n",
+	} {
+		if !bytes.Contains(gen, []byte(decl)) {
+			t.Errorf("codegen emits\n%s\nwhich does not declare\n%s", gen, decl)
+		}
+	}
+}
+
+// sameUnion reports whether a and b are one value as spellUnion spells it,
+// each variant named.
+func sameUnion[T any](a, b T) bool {
+	return spellUnion(reflect.ValueOf(&a).Elem()) == spellUnion(reflect.ValueOf(&b).Elem())
+}
+
+// unionDateOf is the unionDate of y-m-d with no timezone.
+func unionDateOf(y int64, m, d uint8) unionDate {
+	return unionDate{Year: *big.NewInt(y), Month: m, Day: d}
+}
+
+// TestAppendUnions pins the union lift (Datatypes §2.4.1.3): a value of a
+// union's sealed interface is written as its variant's member value is, in
+// that member's canonical representation, and validate accepts it and Decode
+// returns the same variant, at every site a union reaches: a document
+// element, each of two members with disjoint lexical spaces, a list of a
+// union, items of both members in one list, a nested union's inner basic
+// member and its own, xs:decimal 3/2 under num, where xs:int rejects 1.5, a
+// list member, a list member of a union of a list of a union, an element
+// particle occurring once, optionally, absent, and repeatedly, an optional
+// attribute absent and present and a required one, and an xs:QName member,
+// its prefix declared on the element's start tag. CheckAppend returns nil for
+// each.
+func TestAppendUnions(t *testing.T) {
+	schema := schemaOf(t, encodeUnionSchema)
+	opts := encodeUnionVariants
+	t.Run("root, the xs:int member", func(t *testing.T) {
+		roundTrip(t, schema, sname("root"), unionRoot(unionUInt(5)), `<root xmlns="urn:s">5</root>`, sameUnion[unionRoot], opts...)
+	})
+	t.Run("root, the xs:date member", func(t *testing.T) {
+		roundTrip(t, schema, sname("root"), unionRoot(unionUDate(unionDateOf(2000, 1, 2))), `<root xmlns="urn:s">2000-01-02</root>`, sameUnion[unionRoot], opts...)
+	})
+	t.Run("a list of a union, items of both members", func(t *testing.T) {
+		roundTrip(t, schema, sname("list"), unionListRoot{unionUInt(5), unionUDate(unionDateOf(2000, 1, 2))}, `<list xmlns="urn:s">5 2000-01-02</list>`, sameUnion[unionListRoot], opts...)
+	})
+	t.Run("xs:decimal 3/2 beside xs:int", func(t *testing.T) {
+		roundTrip(t, schema, sname("num"), unionNum(unionNumDecimal(*big.NewRat(3, 2))), `<num xmlns="urn:s">1.5</num>`, sameUnion[unionNum], opts...)
+	})
+	t.Run("a nested union's inner member and its own", func(t *testing.T) {
+		roundTrip(t, schema, sname("nest"), unionNest(unionNestInt(6)), `<nest xmlns="urn:s">6</nest>`, sameUnion[unionNest], opts...)
+		roundTrip(t, schema, sname("nest"), unionNest(unionNestBoolean(true)), `<nest xmlns="urn:s">true</nest>`, sameUnion[unionNest], opts...)
+	})
+	t.Run("a list member", func(t *testing.T) {
+		roundTrip(t, schema, sname("wl"), unionWithList(unionWithListList{1, 2}), `<wl xmlns="urn:s">1 2</wl>`, sameUnion[unionWithList], opts...)
+		roundTrip(t, schema, sname("wl"), unionWithList(unionWithListBoolean(false)), `<wl xmlns="urn:s">false</wl>`, sameUnion[unionWithList], opts...)
+	})
+	t.Run("a list member of a union of a list of a union", func(t *testing.T) {
+		lm := schemaOf(t, unionListMemberRoot)
+		roundTrip(t, lm, sname("r"), unionLM(unionLMUnionList{unionUInt(5), unionUDate(unionDateOf(2000, 1, 1))}), `<r xmlns="urn:s">5 2000-01-01</r>`, sameUnion[unionLM], opts...)
+		roundTrip(t, lm, sname("r"), unionLM(unionLMUnionDate(unionDateOf(2000, 1, 1))), `<r xmlns="urn:s">2000-01-01</r>`, sameUnion[unionLM], opts...)
+	})
+	t.Run("particles and attributes", func(t *testing.T) {
+		roundTrip(t, schema, sname("parts"), unionParts{A: unionUInt(1), Many: []unionU{unionUDate(unionDateOf(2000, 1, 2)), unionUInt(3)}, Req: unionUInt(7)},
+			`<parts xmlns="urn:s" req="7"><a>1</a><many>2000-01-02</many><many>3</many></parts>`, sameUnion[unionParts], opts...)
+		roundTrip(t, schema, sname("parts"), unionParts{A: unionUInt(1), Opt: unionUInt(2), Many: []unionU{unionUInt(3)}, At: unionUDate(unionDateOf(2000, 1, 4)), Req: unionUInt(7)},
+			`<parts xmlns="urn:s" at="2000-01-04" req="7"><a>1</a><opt>2</opt><many>3</many></parts>`, sameUnion[unionParts], opts...)
+	})
+	t.Run("an xs:QName member", func(t *testing.T) {
+		roundTrip(t, schema, sname("qn"), unionQn(unionQnQName{Space: "urn:o", Local: "a"}), `<qn xmlns="urn:s" xmlns:p1="urn:o">p1:a</qn>`, sameUnion[unionQn], opts...)
+		roundTrip(t, schema, sname("qn"), unionQn(unionQnQName{Space: "urn:s", Local: "a"}), `<qn xmlns="urn:s">a</qn>`, sameUnion[unionQn], opts...)
+	})
+}
+
+// TestAppendUnionsOfOneGoType pins the lift where basic members share a Go
+// type (oneGoTypeSchema): each variant is written where no earlier member
+// accepts its text, a list-of-a-union member's items among them, the variants
+// placed at their members by WithBranches' supplied order.
+func TestAppendUnionsOfOneGoType(t *testing.T) {
+	v := ogt{A: ogtStString("a b"), B: ogtLsString("ABC"), C: ogtLisString("A1"), D: ogtLlList2{"A"}, E: ogtLuList2{ogtIBBoolean(true)}}
+	roundTrip(t, schemaOf(t, oneGoTypeSchema), sname("r"), v, `<r xmlns="urn:s"><a>a b</a><b>ABC</b><c>A1</c><d>A</d><e>true</e></r>`, sameUnion[ogt], ogtVariants...)
+}
+
+// TestAppendUnionInvalid pins item 6 of Append's doc for a union: the nil
+// interface where a value is required, at the document element, a required
+// attribute, a list item and a repeated particle's item; a dynamic type the
+// WithBranches set places at no basic member, a stray implementing the
+// interface and a pointer to a variant; an enumeration of the union itself
+// rejecting the active member's value (cvc-datatype-valid clause 3); a union
+// pattern rejecting a string, which has no other lexical; and a member's own
+// rejection, under the member's subject.
+func TestAppendUnionInvalid(t *testing.T) {
+	schema := schemaOf(t, encodeUnionSchema)
+	date := unionUDate(unionDateOf(2000, 1, 2))
+	for _, row := range []struct {
+		name string
+		elem string
+		v    any
+		want []string
+	}{
+		{"a nil root", "root", nil, []string{"codec: Append: unionRoot is nil, of simple type {urn:s}u defined at ", "where a value is required"}},
+		{"a nil required attribute", "parts", unionParts{A: date, Many: []unionU{date}}, []string{"codec: Append: unionParts.Req is nil, of simple type {urn:s}u"}},
+		{"a nil list item", "list", unionListRoot{date, nil}, []string{"codec: Append: unionListRoot[1] is nil, of simple type ", "through the list type's {item type definition} {urn:s}u"}},
+		{"a nil repeated item", "parts", unionParts{A: date, Many: []unionU{nil}, Req: date}, []string{"codec: Append: unionParts.Many[0] is nil"}},
+		{"a stray", "root", unionRoot(unionUOther(1)), []string{"codec: Append: unionRoot holds a codec.unionUOther, which the WithBranches set of codec.unionRoot places at no basic member of simple type {urn:s}u"}},
+		{"a pointer to a variant", "root", unionRoot(new(unionUInt)), []string{"codec: Append: unionRoot holds a *codec.unionUInt, which the WithBranches set"}},
+		{"an enumeration of the union", "five", unionRoot(unionUInt(6)), []string{`codec: Append: unionRoot holds a codec.unionUInt written "6", which simple type the anonymous simple type of element {urn:s}five`, "cvc-enumeration-valid"}},
+		{"a union pattern rejecting a string", "str", unionStr(unionStrString("b")), []string{`codec: Append: unionStr holds a codec.unionStrString written "b", which simple type the anonymous simple type of element {urn:s}str`, "cvc-pattern-valid"}},
+		{"a member's own rejection", "qn", unionQn(unionQnQName{Space: "urn:o", Local: "1a"}), []string{"codec: Append: unionQn.(unionQnQName) holds", "through the union's basic member xs:QName"}},
+	} {
+		t.Run(row.name, func(t *testing.T) {
+			var err error
+			switch v := row.v.(type) {
+			case nil:
+				// A nil unionRoot held in any is the nil any.
+				_, err = appendChecked(t, nil, schema, strict.New(), sname(row.elem), unionRoot(nil), encodeUnionVariants...)
+			case unionRoot:
+				_, err = appendChecked(t, nil, schema, strict.New(), sname(row.elem), v, encodeUnionVariants...)
+			case unionParts:
+				_, err = appendChecked(t, nil, schema, strict.New(), sname(row.elem), v, encodeUnionVariants...)
+			case unionListRoot:
+				_, err = appendChecked(t, nil, schema, strict.New(), sname(row.elem), v, encodeUnionVariants...)
+			case unionStr:
+				_, err = appendChecked(t, nil, schema, strict.New(), sname(row.elem), v, encodeUnionVariants...)
+			case unionQn:
+				_, err = appendChecked(t, nil, schema, strict.New(), sname(row.elem), v, encodeUnionVariants...)
+			}
+			invalidValue(t, err, row.want...)
+			if !strings.HasPrefix(err.Error(), row.want[0]) {
+				t.Errorf("error %q does not open with %q", err, row.want[0])
+			}
+		})
+	}
+}
+
+// TestAppendUnionNoCanonical pins item 7 of Append's doc for a union: a
+// variant whose canonical representation an earlier member accepts, its
+// ·active basic member· (Datatypes §2.4.1.3 dt-active-basic-member, §4.1.4
+// cvc-datatype-valid clause 2.3), so that Decode returns another variant
+// though a valid document holds the value: xs:decimal 1 under num, written 1,
+// which xs:int takes, though 1.0, which validate accepts, decodes into the
+// xs:decimal variant; ls's xs:string variant, which lower takes; and a
+// list-of-union member's item, which the earlier list member takes; and a
+// pattern of the union itself rejecting the canonical representation of a
+// value with another lexical, as 05 spells xs:int 5, and as 01 2 spells a
+// list member's value [1 2].
+func TestAppendUnionNoCanonical(t *testing.T) {
+	schema := schemaOf(t, encodeUnionSchema)
+	ogtSchema := schemaOf(t, oneGoTypeSchema)
+	for _, row := range []struct {
+		name string
+		err  func(t *testing.T) error
+		want []string
+	}{
+		{"xs:decimal 1 beside xs:int", func(t *testing.T) error {
+			accepts(t, schema, []byte(`<num xmlns="urn:s">1.0</num>`))
+			_, err := appendChecked(t, nil, schema, strict.New(), sname("num"), unionNum(unionNumDecimal(*big.NewRat(1, 1))), encodeUnionVariants...)
+			return err
+		}, []string{`codec does not encode a value with no canonical representation: simple type {urn:s}num defined at `,
+			`, at unionNum holding a codec.unionNumDecimal written "1": the ·active basic member· of its canonical representation "1" is xs:int, not its variant's member xs:decimal`}},
+		{"the string variant lower takes", func(t *testing.T) error {
+			v := ogt{A: ogtStString("a"), B: ogtLsString("abc"), C: ogtLisString("A"), D: ogtLlList2{"A"}, E: ogtLuList2{ogtIBBoolean(true)}}
+			_, err := appendChecked(t, nil, ogtSchema, strict.New(), sname("r"), v, ogtVariants...)
+			return err
+		}, []string{`at ogt.B holding a codec.ogtLsString written "abc": the ·active basic member· of its canonical representation "abc" is {urn:s}lower, not its variant's member xs:string`}},
+		{"a list-of-union member's item the earlier list member takes", func(t *testing.T) error {
+			v := ogt{A: ogtStString("a"), B: ogtLsString("A"), C: ogtLisString("A"), D: ogtLlList2{"A"}, E: ogtLuList2{ogtIBInt(1)}}
+			_, err := appendChecked(t, nil, ogtSchema, strict.New(), sname("r"), v, ogtVariants...)
+			return err
+		}, []string{`at ogt.E holding a codec.ogtLuList2 written "1": the ·active basic member· of its canonical representation "1" is the anonymous simple type defined at `}},
+		{"a union pattern rejecting a canonical representation", func(t *testing.T) error {
+			accepts(t, schema, []byte(`<leading xmlns="urn:s">05</leading>`))
+			_, err := appendChecked(t, nil, schema, strict.New(), sname("leading"), unionRoot(unionUInt(5)), encodeUnionVariants...)
+			return err
+		}, []string{`at unionRoot holding a codec.unionUInt written "5": a pattern facet rejects its canonical representation "5"`}},
+		{"a union pattern rejecting a list member's text", func(t *testing.T) error {
+			accepts(t, schema, []byte(`<wlp xmlns="urn:s">01 2</wlp>`))
+			_, err := appendChecked(t, nil, schema, strict.New(), sname("wlp"), unionWithList(unionWithListList{1, 2}), encodeUnionVariants...)
+			return err
+		}, []string{`at unionWithList holding a codec.unionWithListList written "1 2": a pattern facet rejects its canonical representation "1 2"`}},
+	} {
+		t.Run(row.name, func(t *testing.T) {
+			err := row.err(t)
+			_ = asDecline(t, err, "codec does not encode a value with no canonical representation: ")
+			holds(t, err, row.want...)
+		})
+	}
+}
+
+// TestAppendUnionDeclineSubject pins the detail of a union's item 4 decline:
+// a basic member's construct names the member after the union, as Decode's
+// does, and a member union's assertions facet names that union, which
+// goshape.BasicMembers flattens away.
+func TestAppendUnionDeclineSubject(t *testing.T) {
+	schema := schemaOf(t, `<xs:element name="id"><xs:simpleType><xs:union memberTypes="xs:int xs:ID"/></xs:simpleType></xs:element>
+<xs:simpleType name="asserted"><xs:restriction><xs:simpleType><xs:union memberTypes="xs:int"/></xs:simpleType><xs:assertion test="true()"/></xs:restriction></xs:simpleType>
+<xs:element name="mu"><xs:simpleType><xs:union memberTypes="s:asserted xs:date"/></xs:simpleType></xs:element>`)
+	err := CheckAppend[unionU](schema, sname("id"))
+	_ = asDecline(t, err, "codec does not encode a simple type derived from xs:ID, xs:IDREF or xs:ENTITY: simple type the anonymous simple type of element {urn:s}id declared at s.xsd:")
+	holds(t, err, ", through the union's basic member xs:ID, derived from xs:ID;")
+	err = CheckAppend[unionU](schema, sname("mu"))
+	_ = asDecline(t, err, "codec does not encode a simple type with an assertions facet: simple type the anonymous simple type of element {urn:s}mu declared at s.xsd:")
+	holds(t, err, ", through the union's member union {urn:s}asserted, a type defined at s.xsd:")
+}
+
+// TestCheckAppendUnionMismatch pins item 5 of Append's doc for a union's
+// interface, which item 4 now admits: no WithBranches set for it is
+// ErrTypeMismatch, from Append and CheckAppend alike.
+func TestCheckAppendUnionMismatch(t *testing.T) {
+	schema := schemaOf(t, encodeUnionSchema)
+	_, err := appendChecked(t, nil, schema, strict.New(), sname("root"), unionRoot(unionUInt(5)))
+	if !errors.Is(err, ErrTypeMismatch) || !strings.Contains(err.Error(), "no WithBranches supplies the variants of codec.unionRoot, the union's interface of T, where codegen emits 2") {
+		t.Errorf("Append = %v, want item 5's ErrTypeMismatch for the union's missing set", err)
 	}
 }
 
