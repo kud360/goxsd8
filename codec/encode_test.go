@@ -2932,8 +2932,10 @@ func TestAppendPrecisionDecimalBackend(t *testing.T) {
 // leading, a restriction of u whose pattern admits only a lexical with a
 // leading digit 0, which no canonical xs:int representation but 0's has;
 // five, a restriction of u enumerating 5; str, a restriction by the pattern
-// a of a union of xs:string alone, whose values have no other lexical; and
-// qn, a union of xs:int and xs:QName.
+// a of a union of xs:string alone, whose values have no other lexical; qn, a
+// union of xs:int and xs:QName; and wlp, a restriction of withList by the
+// pattern 0.*, which rejects the canonical representation of its list
+// member's values but for one whose first item is 0.
 const encodeUnionSchema = unionTypes + `
 <xs:element name="root" type="s:u"/>
 <xs:element name="list"><xs:simpleType><xs:list itemType="s:u"/></xs:simpleType></xs:element>
@@ -2946,7 +2948,8 @@ const encodeUnionSchema = unionTypes + `
 <xs:element name="leading"><xs:simpleType><xs:restriction base="s:u"><xs:pattern value="0\d+"/></xs:restriction></xs:simpleType></xs:element>
 <xs:element name="five"><xs:simpleType><xs:restriction base="s:u"><xs:enumeration value="5"/></xs:restriction></xs:simpleType></xs:element>
 <xs:element name="str"><xs:simpleType><xs:restriction><xs:simpleType><xs:union memberTypes="xs:string"/></xs:simpleType><xs:pattern value="a"/></xs:restriction></xs:simpleType></xs:element>
-<xs:element name="qn"><xs:simpleType><xs:union memberTypes="xs:int xs:QName"/></xs:simpleType></xs:element>`
+<xs:element name="qn"><xs:simpleType><xs:union memberTypes="xs:int xs:QName"/></xs:simpleType></xs:element>
+<xs:element name="wlp"><xs:simpleType><xs:restriction base="s:withList"><xs:pattern value="0.*"/></xs:restriction></xs:simpleType></xs:element>`
 
 // unionParts is codegen's struct for encodeUnionSchema's parts, its particle
 // fields before its attribute fields; unionStr and its variant are str's
@@ -3122,7 +3125,8 @@ func TestAppendUnionInvalid(t *testing.T) {
 // xs:decimal variant; ls's xs:string variant, which lower takes; and a
 // list-of-union member's item, which the earlier list member takes; and a
 // pattern of the union itself rejecting the canonical representation of a
-// value with another lexical, as 05 spells xs:int 5.
+// value with another lexical, as 05 spells xs:int 5, and as 01 2 spells a
+// list member's value [1 2].
 func TestAppendUnionNoCanonical(t *testing.T) {
 	schema := schemaOf(t, encodeUnionSchema)
 	ogtSchema := schemaOf(t, oneGoTypeSchema)
@@ -3148,9 +3152,15 @@ func TestAppendUnionNoCanonical(t *testing.T) {
 			return err
 		}, []string{`at ogt.E holding a codec.ogtLuList2 written "1": the ·active basic member· of its canonical representation "1" is the anonymous simple type defined at `}},
 		{"a union pattern rejecting a canonical representation", func(t *testing.T) error {
+			accepts(t, schema, []byte(`<leading xmlns="urn:s">05</leading>`))
 			_, err := appendChecked(t, nil, schema, strict.New(), sname("leading"), unionRoot(unionUInt(5)), encodeUnionVariants...)
 			return err
 		}, []string{`at unionRoot holding a codec.unionUInt written "5": a pattern facet rejects its canonical representation "5"`}},
+		{"a union pattern rejecting a list member's text", func(t *testing.T) error {
+			accepts(t, schema, []byte(`<wlp xmlns="urn:s">01 2</wlp>`))
+			_, err := appendChecked(t, nil, schema, strict.New(), sname("wlp"), unionWithList(unionWithListList{1, 2}), encodeUnionVariants...)
+			return err
+		}, []string{`at unionWithList holding a codec.unionWithListList written "1 2": a pattern facet rejects its canonical representation "1 2"`}},
 	} {
 		t.Run(row.name, func(t *testing.T) {
 			err := row.err(t)
