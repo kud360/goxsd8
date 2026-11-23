@@ -121,7 +121,7 @@ var ErrInvalidValue = errors.New("codec: Append: a value no valid document holds
 //     spelling resolves to there and no prefix can be bound to (Namespaces in
 //     XML §5 nsc-NoPrefixUndecl), whatever else rejects it; or an attribute in
 //     the XSI namespace on an element a wildcard particle's field holds, at any
-//     depth, whose value, an xsi:type's among them, may hold a prefix that no
+//     depth, whatever its value, since an xsi:type's may hold a prefix no
 //     binding the struct holds resolves. The values with a lexical other than
 //     the one Append writes, the ones whose rejection by a pattern facet is
 //     this item, are: every xs:boolean, xs:decimal-primitive, xs:dateTime,
@@ -998,13 +998,14 @@ type openValue struct {
 }
 
 // enter opens the write of v, a struct or sealed interface value of complex
-// type, or the AnyType content of an element held raw, at path, and reports whether to write it: false, after recording item
-// 6 of [Append]'s doc, where v is addressable and a value at its address of
-// its Go type is open, a value that holds itself, which the write would
-// reach again without end. Only a *S, []S or []I field leads to a value
-// already open, and each of them yields an addressable value, so a value
-// that is not addressable is opened unchecked; a value written twice outside
-// one path, shared, is no cycle. Where it answers true, leave closes v.
+// type, or the AnyType content of an element held raw, at path, and reports
+// whether to write it: false, after recording item 6 of [Append]'s doc,
+// where v is addressable and a value at its address of its Go type is open,
+// a value that holds itself, which the write would reach again without end.
+// Only a *S, []S or []I field leads to a value already open, and each of
+// them yields an addressable value, so a value that is not addressable is
+// opened unchecked; a value written twice outside one path, shared, is no
+// cycle. Where it answers true, leave closes v.
 func (e *encoder) enter(v reflect.Value, path string) bool {
 	var ptr reflect.Value
 	if v.CanAddr() {
