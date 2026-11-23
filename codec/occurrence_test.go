@@ -296,6 +296,18 @@ func TestAppendOccurrence(t *testing.T) {
 	}
 }
 
+// TestAppendOccurrenceDeclineSubject pins the subject item 4 of Append's doc
+// names for a particle of a model group held in an occurrence field, here a
+// lax wildcard: a sequence's particle by its place, a choice's by its
+// alternative, as a content choice occurring once names its own.
+func TestAppendOccurrenceDeclineSubject(t *testing.T) {
+	const lax = "codec does not encode a wildcard particle with {process contents} strict or lax: "
+	_, err := appendChecked(t, nil, schemaOf(t, occWildSchema), strict.New(), rootName, occWild{})
+	_ = asDecline(t, err, lax+"particle 2 of the content {particle} of the {type definition} of element {urn:s}r declared at ")
+	_, err = appendChecked(t, nil, schemaOf(t, occPickSchema), strict.New(), rootName, occPick{}, occPickBranches)
+	_ = asDecline(t, err, lax+"alternative 2 of the content {particle} of the {type definition} of element {urn:s}r declared at ")
+}
+
 // TestAppendOccurrenceInvalid pins item 6 of Append's doc for an occurrence
 // field: a slice whose length lies outside the content particle's occurrence,
 // zero items of a sequence with {min occurs} 1 among them (cvc-accept clause
