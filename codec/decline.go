@@ -57,9 +57,12 @@ func (e *DeclineError) Loc() (xsderr.Loc, bool) {
 // one, with its schema Loc, and, for a construct of a list type's {item type
 // definition}, that item, by its QName where it has one, with its schema Loc,
 // and, for a value with no canonical representation or no spelling Append
-// writes, the Go path of its field from T and its value. A type definition
-// named in the XML Schema namespace whose schema Loc is the zero Loc is named
-// by its QName alone, in place of the schema Loc the sentences above give it.
+// writes, the Go path of its field from T and its value, and, for an attribute
+// in the XSI namespace an element held in a wildcard's match carries, that
+// attribute, its Go path from T and the wildcard particle, as [Decode]'s item
+// 5 names it. A type definition named in the XML Schema namespace whose schema
+// Loc is the zero Loc is named by its QName alone, in place of the schema Loc
+// the sentences above give it.
 func (e *DeclineError) Error() string {
 	text := "codec does not decode " + e.construct.name() + ": " + e.detail +
 		"; a decoder refusal, not a schema or instance fault"
@@ -126,20 +129,21 @@ type construct uint8
 // Append's alone, in the order Append finds them: the document element's declaration,
 // after constructNillable, its type's {abstract}, its type's content, its content
 // {particle}, each particle in order, its attribute uses in order, its {attribute
-// wildcard}, its {assertions}, and each value. A particle declines by
-// constructVacuousParticle first, as the content {particle} does, then by
-// constructNestedGroup where its term is a model group, and by
-// constructSealedInterface where it is an <element ref> whose field codegen gives a
-// sealed interface (goshape.SubstitutionSum), before the declaration it names is
-// examined; its element declaration, local or the top-level one an <element ref>
-// names, declines by the document element's declaration's constructs,
-// constructNillable first and constructAbstractElement last, then by its type's as the
-// document element's type does, from constructAnyType on, a complex type's content and
-// attribute uses examined at the particle; and an attribute use declines by
-// constructValueConstraint after constructQualifiedAttribute. The ones of a simple
-// type, constructSpecialType to constructAssertions, sit after the {assertions}'s,
-// though the document element's, a particle's and an attribute use's simple type
-// declines by them where that declaration or use is examined.
+// wildcard}, its {assertions}, and each value. Append declines by
+// constructUntrackedModel too, once every particle of a content model holding a
+// wildcard particle is examined. A particle declines by constructVacuousParticle
+// first, as the content {particle} does, then by constructNestedGroup where its term
+// is a model group, and by constructSealedInterface where it is an <element ref> whose
+// field codegen gives a sealed interface (goshape.SubstitutionSum), before the
+// declaration it names is examined; its element declaration, local or the top-level
+// one an <element ref> names, declines by the document element's declaration's
+// constructs, constructNillable first and constructAbstractElement last, then by its
+// type's as the document element's type does, from constructAnyType on, a complex
+// type's content and attribute uses examined at the particle; and an attribute use
+// declines by constructValueConstraint after constructQualifiedAttribute. The ones of
+// a simple type, constructSpecialType to constructAssertions, sit after the
+// {assertions}'s, though the document element's, a particle's and an attribute use's
+// simple type declines by them where that declaration or use is examined.
 const (
 	constructNillable construct = iota + 1
 	constructNestedGroup
@@ -171,6 +175,7 @@ const (
 	constructAssertions
 	constructNoCanonical
 	constructQNameSpelling
+	constructXsiAttribute
 )
 
 // constructNames holds, indexed by construct, each construct's name.
@@ -194,7 +199,7 @@ var constructNames = [...]string{
 	constructAllGroup:           "an all group",
 	constructSealedInterface:    "a construct codegen holds in a sealed interface: a choice, a flattened particle or a substitution group",
 	constructOccurrenceField:    "a model group particle codegen holds in an occurrence field",
-	constructWildcard:           "a wildcard particle",
+	constructWildcard:           "a wildcard particle with {process contents} strict or lax",
 	constructQualifiedAttribute: "an attribute use whose declaration has a {target namespace}",
 	constructAttributeWildcard:  "an {attribute wildcard}",
 	constructComplexAssertions:  "a complex type with {assertions}",
@@ -205,6 +210,7 @@ var constructNames = [...]string{
 	constructAssertions:         "a simple type with an assertions facet",
 	constructNoCanonical:        "a value with no canonical representation",
 	constructQNameSpelling:      "an xs:QName or xs:NOTATION value with no spelling Append writes where it is written",
+	constructXsiAttribute:       "an attribute in the XSI namespace held in a wildcard's match",
 }
 
 // displayList spells names, at least two, each by its Display, separated by
