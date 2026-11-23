@@ -231,6 +231,11 @@ func TestWildcardTypesAreCodegens(t *testing.T) {
 			"type RA struct {\n\tA string\n}\n\nfunc (RA) isR() {}\n",
 			"type RAny struct {\n\tAny AnyElement\n}\n\nfunc (RAny) isR() {}\n",
 		}},
+		{skipEmptySchema, []string{
+			"type R struct {\n\tChoice RChoice\n}\n",
+			"type RChoiceA struct {\n\tA string\n}\n\nfunc (RChoiceA) isRChoice() {}\n",
+			"type RChoiceAny struct {\n\tAny AnyElement\n}\n\nfunc (RChoiceAny) isRChoice() {}\n",
+		}},
 		{skipAttrSchema, []string{
 			"type R struct {\n\tChoice RChoice\n\tX      *string\n}\n",
 			"type RChoiceA struct {\n\tA string\n}\n\nfunc (RChoiceA) isRChoice() {}\n",

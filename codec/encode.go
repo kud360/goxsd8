@@ -489,7 +489,7 @@ func (m wildcardMember) occurs() xsd.Occurs { return m.own }
 // reads it with.
 func (m elementMember) writeElements(e *encoder, s sink, f reflect.Value, at writeAt) error {
 	w := encoded[elementWriter](encoded[fieldSink](s).read)
-	return e.writeOccurring(m.field, m.own, m.held, "the particle of "+declSubject(m.decl), f, at, func(v reflect.Value, path string) error {
+	return e.writeOccurring(m.shape, m.own, m.held, "the particle of "+declSubject(m.decl), f, at, func(v reflect.Value, path string) error {
 		at.check.take(e, m.decl.Name(), at.target, path)
 		return w.writeElement(e, m.decl, v, path)
 	})
@@ -500,7 +500,7 @@ func (m elementMember) writeElements(e *encoder, s sink, f reflect.Value, at wri
 // (encoder.rawElement), its name taken by at.check (attributionCheck.take)
 // once rawName admits it.
 func (m wildcardMember) writeElements(e *encoder, _ sink, f reflect.Value, at writeAt) error {
-	return e.writeOccurring(m.field, m.own, m.held, m.subject, f, at, func(v reflect.Value, path string) error {
+	return e.writeOccurring(m.shape, m.own, m.held, m.subject, f, at, func(v reflect.Value, path string) error {
 		name, ok := e.rawName(v, path)
 		if !ok {
 			return nil
@@ -511,8 +511,8 @@ func (m wildcardMember) writeElements(e *encoder, _ sink, f reflect.Value, at wr
 	})
 }
 
-// writeOccurring writes the elements of f, the field fd of the particle
-// subject names, occurring as own, at.path its Go path, each by write, by the
+// writeOccurring writes the elements of f, the field of the particle subject
+// names, occurring as own, at.path its Go path, each by write, by sh, the
 // shape item 5 bound the field in (field.shape), computed at held, never by
 // f's Kind, since a list's V is itself a slice: one per item of a []V, which
 // is item 6 of [Append]'s doc where its length lies outside held, the error
@@ -520,8 +520,8 @@ func (m wildcardMember) writeElements(e *encoder, _ sink, f reflect.Value, at wr
 // one for a V, but none for a nil V where held's {min occurs} is 0, which
 // shape V takes only over a sealed interface (goshape.ParticleShape), nil
 // meaning absent.
-func (e *encoder) writeOccurring(fd field, own, held xsd.Occurs, subject string, f reflect.Value, at writeAt, write func(v reflect.Value, path string) error) error {
-	switch fd.shape {
+func (e *encoder) writeOccurring(sh shape, own, held xsd.Occurs, subject string, f reflect.Value, at writeAt, write func(v reflect.Value, path string) error) error {
+	switch sh {
 	case shapeOptional:
 		if f.IsNil() {
 			return nil

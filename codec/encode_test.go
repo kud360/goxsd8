@@ -2928,10 +2928,12 @@ func TestAppendPrecisionDecimalBackend(t *testing.T) {
 // at most after a; skipOptionalSchema is seqOptionalSchema's sequence(a, b?,
 // any?) under skip; skipLeadingSchema's optional wildcard precedes a;
 // skipTargetSchema's is over ##targetNamespace and skipNotSchema's disallows
-// s:x; skipPickSchema's choice holds a and the wildcard, and skipAttrSchema's
-// the same choice beside an attribute x. Their s:r types are wildcard_test.go's
-// seqRepeated, seqOptional, seqLeading, seqWild and pickWild, and skipAttr,
-// which TestWildcardTypesAreCodegens pins.
+// s:x; skipPickSchema's choice holds a and the wildcard, skipEmptySchema's a
+// and an optional wildcard, and skipAttrSchema's is skipPickSchema's beside
+// an attribute x. Their s:r types are wildcard_test.go's seqRepeated,
+// seqOptional, seqLeading, seqWild for both constrained wildcards, pickWild
+// for skipPickSchema, and skipEmpty and skipAttr, which
+// TestWildcardTypesAreCodegens pins.
 const (
 	skipManySchema     = `<xs:element name="r"><xs:complexType><xs:sequence><xs:element name="a" type="xs:string"/><xs:any processContents="skip" maxOccurs="2"/></xs:sequence></xs:complexType></xs:element>`
 	skipOptionalSchema = `<xs:element name="r"><xs:complexType><xs:sequence><xs:element name="a" type="xs:string"/><xs:element name="b" type="xs:string" minOccurs="0"/><xs:any processContents="skip" minOccurs="0"/></xs:sequence></xs:complexType></xs:element>`
@@ -2939,16 +2941,19 @@ const (
 	skipTargetSchema   = `<xs:element name="r"><xs:complexType><xs:sequence><xs:element name="a" type="xs:string"/><xs:any namespace="##targetNamespace" processContents="skip"/></xs:sequence></xs:complexType></xs:element>`
 	skipNotSchema      = `<xs:element name="r"><xs:complexType><xs:sequence><xs:element name="a" type="xs:string"/><xs:any notQName="s:x" processContents="skip"/></xs:sequence></xs:complexType></xs:element>`
 	skipPickSchema     = `<xs:element name="r"><xs:complexType><xs:choice><xs:element name="a" type="xs:string"/><xs:any processContents="skip"/></xs:choice></xs:complexType></xs:element>`
+	skipEmptySchema    = `<xs:element name="r"><xs:complexType><xs:choice><xs:element name="a" type="xs:string"/><xs:any processContents="skip" minOccurs="0"/></xs:choice></xs:complexType></xs:element>`
 	skipAttrSchema     = `<xs:element name="r"><xs:complexType><xs:choice><xs:element name="a" type="xs:string"/><xs:any processContents="skip"/></xs:choice><xs:attribute name="x" type="xs:string"/></xs:complexType></xs:element>`
 )
 
-// skipAttr is the type codegen emits for skipAttrSchema's s:r, its choice
-// in the struct's first field.
+// skipAttr and skipEmpty are the types codegen emits for skipAttrSchema's and
+// skipEmptySchema's s:r, each choice in the struct's first field, of one
+// interface's shape.
 type (
 	skipAttr struct {
 		Choice skipAttrChoice
 		X      *string
 	}
+	skipEmpty      struct{ Choice skipAttrChoice }
 	skipAttrChoice interface{ isSkipAttrChoice() }
 	skipAttrA      struct{ A string }
 	skipAttrAny    struct{ Any anyElement }
@@ -2972,7 +2977,9 @@ const xmlNS = "http://www.w3.org/XML/1998/namespace"
 // each child followed by its Tail; an element in the XML namespace as
 // xml:Local, moving no default namespace. Each document validate accepts and
 // Decode turns back into the value; an optional wildcard holding nothing
-// writes nothing. The rows of one and several held elements are the ones the
+// writes nothing, and so does the nil interface of a choice whose wildcard
+// alternative has {min occurs} 0, which is emptiable though its branch reads
+// it as 1 (choiceEmptiable). The rows of one and several held elements are the ones the
 // static decline failed before the slice (constructWildcard).
 func TestAppendWildcard(t *testing.T) {
 	t.Run("one held element", func(t *testing.T) {
@@ -3009,6 +3016,9 @@ func TestAppendWildcard(t *testing.T) {
 	t.Run("a choice's wildcard alternative", func(t *testing.T) {
 		roundTrip(t, schemaOf(t, skipPickSchema), rootName, pickWild(pickWildAny{Any: anyElement{Space: "urn:o", Local: "w"}}),
 			`<r xmlns="urn:s"><w xmlns="urn:o"/></r>`, deepEqual[pickWild], pickWildBranches)
+	})
+	t.Run("the empty match of a choice of an optional wildcard", func(t *testing.T) {
+		roundTrip(t, schemaOf(t, skipEmptySchema), rootName, skipEmpty{}, `<r xmlns="urn:s"/>`, deepEqual[skipEmpty], skipAttrBranches)
 	})
 	t.Run("a content choice's wildcard alternative beside an attribute", func(t *testing.T) {
 		x := "v"
