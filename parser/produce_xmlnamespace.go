@@ -100,9 +100,9 @@ func supplyXMLNamespace(docs []composedDocument) bool {
 // and the group the very {attribute group definitions} set its top-level
 // <attributeGroup> definitions reach, so a second helping would collide with
 // the first under sch-props-correct clause 2. It runs AFTER the whole
-// <include>/<import> closure is discovered, because supplyXMLNamespace's
-// composed half is a fact about the finished document set and not about any one
-// <import> element.
+// <include>/<override>/<redefine>/<import> closure is discovered, because
+// supplyXMLNamespace's composed half is a fact about the finished document set
+// and not about any one <import> element.
 func addXMLNamespace(builder *xsd.SchemaBuilder, docs []composedDocument) error {
 	if !supplyXMLNamespace(docs) {
 		return nil

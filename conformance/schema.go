@@ -89,17 +89,17 @@ import (
 // actually processes.
 //
 // Since #242 that qualifier binds over a CLOSURE, not one document. The assembly
-// reads the whole <include>/<override>/<import> closure, so a composed document
-// holding a skipped representation false-accepts exactly as a root one would. So
-// the harness runs parser.ParseReport (parser.ParseSet for several roots), which
-// reports the DOCUMENT SET it assembled, and gates every document of that set on
-// the allowlist below (closureDecidable, conformance/schema_closure.go). Until
-// #272 the harness instead re-walked §4.2's composition edges itself, because
-// parser.Parse could not be asked which documents it read; the gated set is now
-// the assembled set by construction rather than by two walks agreeing, which is
-// what closes the under-gating hazard — a document the harness missed but the
-// parser read would be a document whose shape was never gated, the false accept
-// back again.
+// reads the whole <include>/<override>/<redefine>/<import> closure, so a
+// composed document holding a skipped representation false-accepts exactly as a
+// root one would. So the harness runs parser.ParseReport (parser.ParseSet for
+// several roots), which reports the DOCUMENT SET it assembled, and gates every
+// document of that set on the allowlist below (closureDecidable,
+// conformance/schema_closure.go). Until #272 the harness instead re-walked §4.2's
+// composition edges itself, because parser.Parse could not be asked which
+// documents it read; the gated set is now the assembled set by construction
+// rather than by two walks agreeing, which is what closes the under-gating hazard
+// — a document the harness missed but the parser read would be a document whose
+// shape was never gated, the false accept back again.
 //
 // # The decidable shape (the strict top-level allowlist)
 //
@@ -552,15 +552,15 @@ func newSchemaCharge() func(caseSpec) string {
 // answers with a plain Go error rather than a validity verdict (rootReadable),
 // runs parser.ParseReport from doc, re-assembles with parser.ParseSet when a
 // further declared document lies outside that closure (extraRoots), and gates
-// the WHOLE <xs:include>/<xs:override>/<xs:import> closure of every root on the
-// decidable top-level shape (closureDecidable, which runs schemaShapeDecidable on
-// every document the assembly consumed) unless the assembly failed with a
-// grammarRejection (assemblyDeclined). The third result, decidable, is false —
-// and the caller DECLINES — under any of five conditions: a declared document it
-// cannot resolve; one it cannot read (any ReadDocument error, including a
-// reader limitation such as an encoding it does not decode); one whose root
-// element is not <schema>; a closure holding one document outside the
-// producer's decidable subset, where the assembly succeeded or failed with
+// the WHOLE <xs:include>/<xs:override>/<xs:redefine>/<xs:import> closure of
+// every root on the decidable top-level shape (closureDecidable, which runs
+// schemaShapeDecidable on every document the assembly consumed) unless the
+// assembly failed with a grammarRejection (assemblyDeclined). The third result,
+// decidable, is false — and the caller DECLINES — under any of five conditions:
+// a declared document it cannot resolve; one it cannot read (any ReadDocument
+// error, including a reader limitation such as an encoding it does not decode);
+// one whose root element is not <schema>; a closure holding one document outside
+// the producer's decidable subset, where the assembly succeeded or failed with
 // anything but a grammarRejection (#2076); and a case whose parse failed with a
 // rejection its own unfollowed directives could have fabricated
 // (fabricatedRejection, #276/#404). The other three results say nothing then.

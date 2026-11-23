@@ -36,8 +36,8 @@ type AssemblyReport struct {
 }
 
 // Documents returns the schema documents the assembly read, in DISCOVERY order:
-// depth-first, pre-order, over each <schema>'s <include>, <override> and
-// <import> children in one document-order pass — the same order their
+// depth-first, pre-order, over each <schema>'s <include>, <override>, <redefine>
+// and <import> children in one document-order pass — the same order their
 // components enter the builder (STYLE D2; assembly.docs, never rebuilt from the
 // load-once index).
 //

@@ -530,9 +530,10 @@ Two access styles over the compiled model, one shared core:
 - `parser`: the schema-document compiler — the M4 spine, and the only
   writer of `xsd` components. `Parse(location, opts…)` reads the root
   document through one `loader.Resolver`, walks the
-  `<xs:include>`/`<xs:import>`/`<xs:override>` closure (§4.2.3, §4.2.6.2,
-  §4.2.5) depth-first in document order with a load-once index keyed by
-  resolved location, the namespace the document was reached under and the
+  `<xs:include>`/`<xs:override>`/`<xs:redefine>`/`<xs:import>` closure
+  (§4.2.3, §4.2.5, §4.2.4, §4.2.6.2) depth-first in document order with a
+  load-once index keyed by resolved location, the namespace the document
+  was reached under and the
   override applied to it (document identity, *not* a cycle guard — include
   cycles are spec-legal); the redefinition is deliberately outside that key,
   so a document reached both plainly and as an `<xs:redefine>` target is

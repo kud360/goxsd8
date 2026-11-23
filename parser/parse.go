@@ -334,8 +334,8 @@ type docKey struct {
 }
 
 // assembly is the multi-document build context for one [ParseSet] call: the
-// <include>/<import> closure of every root, and the single builder every one of
-// those documents produces into.
+// <include>/<override>/<redefine>/<import> closure of every root, and the single
+// builder every one of those documents produces into.
 type assembly struct {
 	resolver loader.Resolver
 	log      *slog.Logger
@@ -358,12 +358,11 @@ type assembly struct {
 	// D2 (#275).
 	loaded map[docKey]*discovered
 
-	// docs holds every discovered document in discovery order: depth-first,
-	// pre-order, over each <schema>'s <include>, <override> and <import> children
-	// in a single document-order pass. That order is the order components enter
-	// the builder, so it is user-visible in sch-props-correct duplicate reports
-	// (STYLE D1/D2) and must not be made to depend on which KIND of directive was
-	// seen.
+	// docs holds every discovered document in discovery order, the order discover
+	// appends them in and [AssemblyReport.Documents] states. That order is the
+	// order components enter the builder, so it is user-visible in sch-props-correct
+	// duplicate reports (STYLE D1/D2) and must not be made to depend on which KIND
+	// of directive was seen.
 	//
 	// The entries are POINTERS, shared with loaded: a discovery is written back to
 	// after it is appended — its census, its own <redefine> sets, and the readings
@@ -421,10 +420,12 @@ func newAssembly(cfg config) *assembly {
 // and then, in ONE document-order pass, follows each of the document's top-level
 // <include> (§4.2.3: schema(D1) contains immed(D1) plus the components of
 // schema(D2) for each <include>d D2), <override> (§4.2.5: plus the components of
-// schema(override(E,Dold))) and <import> (§4.2.6.2: plus a set of components
-// identical to those of each imported S2) children depth-first. The three
-// directive kinds share the pass so that component entry order stays document
-// order rather than becoming directive-kind-dependent (STYLE D1).
+// schema(override(E,Dold))), <redefine> (§4.2.4 clause 4.1.2: plus the
+// components of the redefined S2 bar those explicitly redefined) and <import>
+// (§4.2.6.2: plus a set of components identical to those of each imported S2)
+// children depth-first. The four directive kinds share the pass so that
+// component entry order stays document order rather than becoming
+// directive-kind-dependent (STYLE D1).
 //
 // A later directive resolving to key does not discover the document again; fetch
 // merges that reading's redefinition into this discovery instead.
@@ -767,17 +768,20 @@ func checkImportedNamespace(at xsderr.Loc, words importWording, requested, names
 }
 
 // fetch resolves requested through the assembly's resolver, under namespace, and
-// reads the schema document it names. It serves <include>, <override>, <import>
-// and a [HintAt] root alike, so it is handed the rule the caller answers to and
-// reads everything else that differs between them off ref rather than carrying a
-// second, stringly-typed kind.
+// reads the schema document it names. It serves <include>, <override>,
+// <redefine>, <import> and a [HintAt] root alike, so it is handed the rule the
+// caller answers to and reads everything else that differs between them off ref
+// rather than carrying a second, stringly-typed kind.
 //
-// namespace is what the resolver is asked under AND the namespace half of the
-// load-once key: for <include>/<override> the composing document's effective
-// target namespace (which is also what the composed document is discovered
-// under), for <import> the import's own namespace attribute (which clause 3 then
-// requires D2 to agree with). ov is the override half of that key and is nil for
-// every directive but <override> (§F.2 clause 5 leaves an <import> unchanged).
+// namespace is what the resolver is asked under, per directive kind as
+// [loader.Resolver] states it, AND the namespace half of the load-once key: for
+// <include>/<override>/<redefine> it is also what the composed document is
+// discovered under, and for <import> what clause 3 then requires D2 to agree
+// with. ov is the override half of that key: the ·override pre-processing· in
+// force over the fetched document — an <override>'s own merged under the one
+// already in force over its document (§F.2 clause 4), or the one an <include>
+// cascades (§F.2 clause 3) — and nil for <redefine>, <import> and a hint root
+// (§F.2 clause 5 copies an <import> or <redefine> unchanged).
 //
 // It reports the outcome as a [fetched], which distinguishes the two ways a
 // directive can end in nothing to compose — outcomes neither the report nor the
