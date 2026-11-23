@@ -1647,11 +1647,9 @@ func (e *encoder) attribution(x childIndex, el xsd.ElementDeclaration, typ xsd.C
 // take puts the child named name, written at path from the field of the
 // particle of attribution target target, to c's Matcher, in document order,
 // and records item 6 of [Append]'s doc where the Matcher admits it at no
-// particle or attributes it to a particle other than that one (attributeAt),
-// a name its {namespace constraint} or {disallowed names} excludes or one an
-// element particle takes before the wildcard does among them. A nil c checks
-// nothing. A Matcher position c's places do not hold is a defect of the
-// premise matcherSlot.attributor states, which panics.
+// particle or attributes it to a particle other than that one (attributeAt).
+// A nil c checks nothing. A Matcher position c's places do not hold is a
+// defect of the premise matcherSlot.attributor states, which panics.
 func (c *attributionCheck) take(e *encoder, name xsd.QName, target int, path string) {
 	if c == nil {
 		return
@@ -1690,10 +1688,9 @@ func (e *encoder) rawName(v reflect.Value, path string) (xsd.QName, bool) {
 
 // writableName reports whether an element or attribute can be named name, the
 // expanded name held at path, in the document Append writes, and otherwise
-// records item 6 of [Append]'s doc and reports false: a Local of a byte that
-// starts no XML 1.0 Char or that is no NCName (Namespaces in XML [4]), a Space
-// of a byte that starts no XML 1.0 Char, or a Space that is xmlnsNamespace,
-// which no element or attribute is in (Namespaces in XML §3).
+// records item 6 of [Append]'s doc for its Local or Space and reports false.
+// A Local holding a byte that is not UTF-8 is checked as no Char first, since
+// xmlname.IsNCName reads it as U+FFFD, a NameStartChar.
 func (e *encoder) writableName(name xsd.QName, path string) bool {
 	if xmlchar.IndexNonChar(name.Local) >= 0 || !xmlname.IsNCName(name.Local) {
 		e.invalidate(fmt.Errorf("codec: Append: %s holds the local name %s, which is no NCName, so that nothing is so named (Namespaces in XML [4] NCName)", path, strconv.Quote(name.Local)))
@@ -1724,9 +1721,9 @@ func (e *encoder) rawElement(name xsd.QName, x reflect.Value, path, owner string
 
 // rawStartTag appends the start tag of the element name, but for its '>', and
 // returns the tag's name and startTag's answers: startTag's, but for a name in
-// the XML namespace, which is written xml:Local, never declared, since that
-// namespace may not be the default one (Namespaces in XML §3), and moves no
-// default namespace.
+// the XML namespace, written as the package doc's "# What encodes" states,
+// which moves no default namespace, since that namespace may not be the
+// default one (Namespaces in XML §3).
 func (e *encoder) rawStartTag(name xsd.QName) (tag, outer string, mark int) {
 	if name.Space != xmltree.XMLNamespaceURI {
 		outer, mark = e.startTag(name)
@@ -1739,20 +1736,13 @@ func (e *encoder) rawStartTag(name xsd.QName) (tag, outer string, mark int) {
 }
 
 // rawContent appends to the start tag that is open the attributes of x, a
-// struct of AnyType's shape at path, held raw, in held order, then the tag's
-// '>', whose offset it returns, which endTag reads, then x's Text and each of
-// its Children's Element, written by rawElement, followed by its Tail. An
-// attribute of absent Space is written unprefixed, one in the XML namespace
-// xml:Local, undeclared, and every other one prefixed by declaredPrefix,
-// though its namespace name be the element's own. It records item 6 of
-// [Append]'s doc, in document order, for an attribute name writableName
-// refuses, one of absent Space whose Local is xmlns, an attribute of the
-// expanded name of one before it (Namespaces in XML §6.3 nsc-AttrsUnique), an
-// element name rawName refuses, and a Value, Text or Tail holding a byte that
-// starts no XML 1.0 Char, and item 7 for an attribute in the XSI namespace
-// (constructXsiAttribute), an xsi:type's value among them holding a prefix
-// that no binding the struct holds resolves; each is then left out of what it
-// writes.
+// struct of AnyType's shape at path, held raw, then the tag's '>', whose
+// offset it returns, which endTag reads, then x's Text and each of its
+// Children's Element, written by rawElement, followed by its Tail, each as the
+// package doc's "# What encodes" states, a prefix by declaredPrefix. It
+// records the item 6 and item 7 errors of [Append]'s doc these raise, in
+// document order (rawAttribute, rawName, rawText), and leaves each such
+// attribute, element or text out of what it writes.
 func (e *encoder) rawContent(x reflect.Value, path, owner string) int {
 	attrs := x.Field(0)
 	for i := range attrs.Len() {
@@ -1793,7 +1783,10 @@ func (e *encoder) rawContent(x reflect.Value, path, owner string) int {
 
 // rawAttribute reports whether rawContent writes the attribute name of value
 // value, attrs' item i at path, recording its item 6 or item 7 error of
-// [Append]'s doc, as rawContent states, where it does not.
+// [Append]'s doc where it does not: writableName's, an unqualified xmlns, an
+// expanded name an attribute before it holds, the XSI namespace's
+// (constructXsiAttribute), and a Value of a byte that starts no Char, in that
+// order.
 func (e *encoder) rawAttribute(name xsd.QName, value string, attrs reflect.Value, i int, path, owner string) bool {
 	if !e.writableName(name, path) {
 		return false

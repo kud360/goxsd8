@@ -3,10 +3,11 @@
 // character-reference check in entity replacement text and its check of the
 // source of comments, processing instructions and directives, and
 // internal/xmltok's check of character data, CDATA sections and attribute
-// values, codec's check of each string value and each xs:QName or xs:NOTATION
-// namespace name Append writes, builtin/strict's check of each xs:string and
-// xs:anyURI lexical its Parse maps, and validate/jsonsrc's check of each
-// string token its walk reads.
+// values, codec's check of each string value, each xs:QName or xs:NOTATION
+// namespace name and each name and string a wildcard's match holds that Append
+// writes, builtin/strict's check of each xs:string and xs:anyURI lexical its
+// Parse maps, and validate/jsonsrc's check of each string token its walk
+// reads.
 //
 // # Contract
 //
