@@ -58,9 +58,13 @@ func (e *DeclineError) Loc() (xsderr.Loc, bool) {
 // definition}, that item, by its QName where it has one, with its schema Loc,
 // and, for a value with no canonical representation or no spelling Append
 // writes, the Go path of its field from T and its value, and, for an attribute
-// in the XSI namespace an element held in a wildcard's match carries, that
-// attribute, its Go path from T and the wildcard particle, as [Decode]'s item
-// 5 names it. A type definition named in the XML Schema namespace whose schema
+// in the XSI namespace an element held in a wildcard's match carries, or the
+// content of an element of type xs:anyType itself holds, that attribute, its
+// Go path from T and the wildcard particle, as [Decode]'s item 5 names it, or
+// that element's declaration, and, for an element or attribute such content
+// holds whose expanded name a top-level declaration names, that item, its Go
+// path from T, that element's declaration and the top-level declaration, with
+// its schema Loc. A type definition named in the XML Schema namespace whose schema
 // Loc is the zero Loc is named by its QName alone, in place of the schema Loc
 // the sentences above give it.
 func (e *DeclineError) Error() string {
@@ -138,7 +142,7 @@ type construct uint8
 // declaration it names is examined; its element declaration, local or the top-level
 // one an <element ref> names, declines by the document element's declaration's
 // constructs, constructNillable first and constructAbstractElement last, then by its
-// type's as the document element's type does, from constructAnyType on, a complex
+// type's as the document element's type does, from constructAbstractType on, a complex
 // type's content and attribute uses examined at the particle; and an attribute use
 // declines by constructValueConstraint after constructQualifiedAttribute. The ones of
 // a simple type, constructSpecialType to constructAssertions, sit after the
@@ -155,7 +159,6 @@ const (
 	constructValueConstraint
 	constructIdentityConstraint
 	constructAbstractElement
-	constructAnyType
 	constructAbstractType
 	constructSimpleContent
 	constructMixed
@@ -176,6 +179,7 @@ const (
 	constructNoCanonical
 	constructQNameSpelling
 	constructXsiAttribute
+	constructGovernedContent
 )
 
 // constructNames holds, indexed by construct, each construct's name.
@@ -190,7 +194,6 @@ var constructNames = [...]string{
 	constructValueConstraint:    "a value constraint, default or fixed",
 	constructIdentityConstraint: "an element declaration with {identity-constraint definitions}",
 	constructAbstractElement:    "an element declaration with {abstract} true",
-	constructAnyType:            "an element declaration of type xs:anyType",
 	constructAbstractType:       "an element declaration whose {type definition} is a complex type with {abstract} true",
 	constructSimpleContent:      "a complex type with simple content",
 	constructMixed:              "a complex type with mixed content",
@@ -210,7 +213,8 @@ var constructNames = [...]string{
 	constructAssertions:         "a simple type with an assertions facet",
 	constructNoCanonical:        "a value with no canonical representation",
 	constructQNameSpelling:      "an xs:QName or xs:NOTATION value with no spelling Append writes where it is written",
-	constructXsiAttribute:       "an attribute in the XSI namespace held in a wildcard's match",
+	constructXsiAttribute:       "an attribute in the XSI namespace held in a wildcard's match or an xs:anyType element's content",
+	constructGovernedContent:    "an element or attribute held in an xs:anyType element's content whose expanded name a top-level declaration names",
 }
 
 // displayList spells names, at least two, each by its Display, separated by

@@ -5300,7 +5300,7 @@ func attributeUse(schema *xsd.Schema, u xsd.AttributeUse) (attribute, error) {
 	if !ok {
 		return attribute{}, fmt.Errorf("codec: the {attribute declaration} of attribute use %s does not resolve", u.DeclarationName().Display())
 	}
-	subject := fmt.Sprintf("attribute %s declared at %s", decl.Name().Display(), decl.Loc())
+	subject := attributeSubject(decl)
 	st, ok := schema.ResolvedSimpleType(decl.TypeDefinition())
 	if !ok {
 		return attribute{}, fmt.Errorf("codec: the {type definition} of %s does not resolve", subject)
@@ -5870,6 +5870,11 @@ func xsiType(start *xmltree.StartElement) (xmltree.Attribute, bool) {
 // declSubject names the element declaration decl and its schema Loc.
 func declSubject(decl xsd.ElementDeclaration) string {
 	return fmt.Sprintf("element %s declared at %s", decl.Name().Display(), decl.Loc())
+}
+
+// attributeSubject names the attribute declaration decl and its schema Loc.
+func attributeSubject(decl xsd.AttributeDeclaration) string {
+	return fmt.Sprintf("attribute %s declared at %s", decl.Name().Display(), decl.Loc())
 }
 
 // namedMismatch returns err, the error of the item-6 check of T against the
