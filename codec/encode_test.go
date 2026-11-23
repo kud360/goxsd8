@@ -3223,14 +3223,16 @@ func TestAppendAnyType(t *testing.T) {
 }
 
 // TestAppendAnyTypeGuards pins what Append does with the content of an
-// element of type xs:anyType itself beyond what it writes, each row's answer
-// at base constructAnyType's item 4 decline. Item 6 of Append's doc: a held
+// element of type xs:anyType itself beyond what it writes, each row but the
+// last two answered, before Append encoded such an element, by item 4's
+// decline of its declaration. Item 6 of Append's doc: a held
 // Local that is no NCName, at depth, a Text holding a non-Char, a held
 // attribute named xmlns, and a held element's self-holding Children. Item 7:
 // an attribute in the XSI namespace, on the element or at depth, declines by
 // constructXsiAttribute; and an element or attribute whose expanded name a
 // top-level declaration names, at any depth, under an ungoverned child too,
-// declines by constructGovernedContent, whatever its value: a governed
+// declines by constructGovernedContent, whatever its value, the XSI check
+// first on one attribute, since the schema declares xsi:type: a governed
 // xs:QName child Decode returns from a valid document, a governed xs:int child
 // built invalid against its declaration, a governed attribute on the element
 // and on a descendant, and a governed child of a particle's element. An item 6
