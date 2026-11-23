@@ -171,13 +171,16 @@ func sameMethods(a, b reflect.Type) bool {
 // m.PrecisionDecimalValueNegativeInfinity{},
 // m.PrecisionDecimalValueNotANumber{}); only each value's dynamic type is
 // read. A later WithPrecisionDecimalArms for the same I replaces an earlier
-// one's arms. Decode reads them only where T holds a PrecisionDecimal whose
-// Value is of type I, at any depth, and ignores them elsewhere, a choice's or
-// a substitution group's interface included; Decode's doc, item 6, states
-// when they are [ErrTypeMismatch]. Decode matches each arm by its shape
-// alone, so it cannot tell the three field-less arms apart: passed in one
-// another's roles, they decode the special values into the wrong arm, a
-// misuse Decode cannot report. ExampleWithPrecisionDecimalArms decodes
+// one's arms. Decode and [Append] read them only where T holds a
+// PrecisionDecimal whose Value is of type I, at any depth, and ignore them
+// elsewhere, a choice's or a substitution group's interface included;
+// Decode's doc, item 6, states when they are [ErrTypeMismatch]. Decode
+// matches each arm by its shape alone, so it cannot tell the three
+// field-less arms apart: passed in one another's roles, they decode the
+// special values into the wrong arm, and Append writes each arm as the
+// special value of the role the set gives its type, so the wrong value,
+// which decodes back into the same arm under the same set, a misuse neither
+// Decode nor Append can report. ExampleWithPrecisionDecimalArms decodes
 // 3E2, -0 and INF through hand-written copies of codegen's four arms.
 func WithPrecisionDecimalArms[I any](numerical, positiveInfinity, negativeInfinity, notANumber I) Option {
 	set := decimalArms{

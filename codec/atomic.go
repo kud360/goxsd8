@@ -290,10 +290,11 @@ func (a atomic) convert(form string) (reflect.Value, error) {
 
 // formed reports whether form spells a's values, so that spelled writes them:
 // every atomic but atomicString, which str writes, atomicFloat32 and
-// atomicFloat64, which double writes, and atomicQName, which qname writes.
-// atom, list and TestFormArms read it.
+// atomicFloat64, which double writes, atomicQName, which qname writes, and
+// atomicPrecisionDecimal, which precisionDecimal writes. atom, list and
+// TestFormArms read it.
 func (a atomic) formed() bool {
-	return a != atomicString && a != atomicFloat32 && a != atomicFloat64 && a != atomicQName
+	return a != atomicString && a != atomicFloat32 && a != atomicFloat64 && a != atomicQName && a != atomicPrecisionDecimal
 }
 
 // form returns, as convert's inverse, the canonical representation of v, a
@@ -381,10 +382,13 @@ func shownField(v reflect.Value) string {
 // date or g* value, one item 7 spells; for an xs:hexBinary value a lower-case
 // hex digit (§3.3.15.2's hexDigit production); and for an xs:base64Binary
 // value a single space between two of its characters (§3.3.16.2's B64
-// production and its note); and for an xs:QName or xs:NOTATION value, which
+// production and its note); for an xs:QName or xs:NOTATION value, which
 // has no canonical representation, its Local under a prefix other than
-// spellQName's bound to its Space. An a of a primitive atomicEncodes declines is an
-// internal bug, which panics.
+// spellQName's bound to its Space; and for an xs:precisionDecimal value, v
+// being of atomicPrecisionDecimal's bare type, the decimalValue encoder.held
+// translates the caller's into, any pDecimalRep spelling but for NaN and -INF
+// (decimalValue.otherLexical). An a of a primitive atomicEncodes declines is
+// an internal bug, which panics.
 func (a atomic) otherLexicalOf(v reflect.Value) bool {
 	switch a {
 	case atomicString:
@@ -406,6 +410,8 @@ func (a atomic) otherLexicalOf(v reflect.Value) bool {
 		return zeroOffset(v.Convert(a.bare()))
 	case atomicQName:
 		return v.Convert(a.bare()).FieldByName("Space").String() != ""
+	case atomicPrecisionDecimal:
+		return v.Interface().(decimalValue).otherLexical()
 	default:
 		panic(fmt.Sprintf("codec: no other-lexical answer for atomic %d", a))
 	}

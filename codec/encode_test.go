@@ -547,24 +547,32 @@ func TestAppendPlainErrors(t *testing.T) {
 }
 
 // TestCheckAppend pins CheckAppend's answers by Append's items: a plain
-// error for a nil schema; item 4's decline for an xs:precisionDecimal
-// declaration and T its datatype struct, which CheckDecode accepts; nil for
-// an xs:float declaration and T float32; nil for README's order.xsd and
-// order.Order, whose zero value Append refuses by item 6, and item 5's
-// ErrTypeMismatch for *order.Order; item 2's and item 3's plain errors; and
-// item 3 before item 4 on an abstract xs:precisionDecimal declaration.
-// appendChecked holds each answer to Append's.
+// error for a nil schema; item 4's decline for an xs:ID declaration and T
+// string, which CheckDecode accepts; nil for an xs:precisionDecimal
+// declaration and T its datatype struct under WithPrecisionDecimalArms, and
+// item 5's ErrTypeMismatch with none; nil for an xs:float declaration and T
+// float32; nil for README's order.xsd and order.Order, whose zero value
+// Append refuses by item 6, and item 5's ErrTypeMismatch for *order.Order;
+// item 2's and item 3's plain errors; and item 3 before item 4 on an
+// abstract xs:ID declaration. appendChecked holds each answer to Append's.
 func TestCheckAppend(t *testing.T) {
-	schema := schemaOf(t, `<xs:element name="i" type="xs:precisionDecimal"/><xs:element name="abs" type="xs:string" abstract="true"/>`+
-		`<xs:element name="absb" type="xs:precisionDecimal" abstract="true"/><xs:element name="f" type="xs:float"/>`)
+	schema := schemaOf(t, `<xs:element name="i" type="xs:ID"/><xs:element name="abs" type="xs:string" abstract="true"/>`+
+		`<xs:element name="absb" type="xs:ID" abstract="true"/><xs:element name="f" type="xs:float"/><xs:element name="pd" type="xs:precisionDecimal"/>`)
 	plainError(t, CheckAppend[string](nil, sname("i")), "codec: CheckAppend: nil *xsd.Schema")
 
-	if err := CheckDecode[tPrecisionDecimal](schema, sname("i"), pdArms); err != nil {
-		t.Fatalf("CheckDecode[tPrecisionDecimal] = %v, want nil", err)
+	if err := CheckDecode[string](schema, sname("i")); err != nil {
+		t.Fatalf("CheckDecode[string] = %v, want nil", err)
 	}
-	err := CheckAppend[tPrecisionDecimal](schema, sname("i"), pdArms)
-	_ = asDecline(t, err, "codec does not encode an atomic simple type whose primitive is other than xs:string, xs:boolean, xs:decimal, xs:float, xs:double, xs:duration, xs:dateTime, xs:time, xs:date, xs:gYearMonth, xs:gYear, xs:gMonthDay, xs:gDay, xs:gMonth, xs:hexBinary, xs:base64Binary, xs:anyURI, xs:QName or xs:NOTATION: ")
-	_, _ = appendChecked(t, nil, schema, strict.New(), sname("i"), tPrecisionDecimal{}, pdArms)
+	err := CheckAppend[string](schema, sname("i"))
+	_ = asDecline(t, err, "codec does not encode a simple type derived from xs:ID, xs:IDREF or xs:ENTITY: ")
+	_, _ = appendChecked(t, nil, schema, strict.New(), sname("i"), "x")
+	if err := CheckAppend[tPrecisionDecimal](schema, sname("pd"), pdArms); err != nil {
+		t.Errorf("CheckAppend[tPrecisionDecimal] = %v, want nil", err)
+	}
+	if err := CheckAppend[tPrecisionDecimal](schema, sname("pd")); !errors.Is(err, ErrTypeMismatch) {
+		t.Errorf("CheckAppend[tPrecisionDecimal] with no WithPrecisionDecimalArms = %v, want ErrTypeMismatch", err)
+	}
+	_, _ = appendChecked(t, nil, schema, strict.New(), sname("pd"), tPrecisionDecimal{})
 	if err := CheckAppend[float32](schema, sname("f")); err != nil {
 		t.Errorf("CheckAppend[float32] = %v, want nil", err)
 	}
@@ -916,12 +924,18 @@ func TestAppendAbstractParticle(t *testing.T) {
 	_ = asDecline(t, err, "codec does not encode an element declaration with {abstract} true: element {urn:s}a declared at ")
 }
 
+// encodePrimitiveName is constructEncodePrimitive's name, spelled out where
+// its code generates it from encodedPrimitives, so that a change to the list
+// fails here.
+const encodePrimitiveName = "an atomic simple type whose primitive is other than xs:string, xs:boolean, xs:decimal, xs:float, xs:double, xs:duration, xs:dateTime, xs:time, xs:date, xs:gYearMonth, xs:gYear, xs:gMonthDay, xs:gDay, xs:gMonth, xs:hexBinary, xs:base64Binary, xs:anyURI, xs:QName, xs:NOTATION or xs:precisionDecimal"
+
 // TestAppendDeclines pins item 4 of Append's doc for each construct of the
 // closed set it declines: each row's two declarations, r and q, decline with
 // equal Constructs, named by the opening of the decline's text, and rows of
 // different constructs with different ones; no bytes are written. A row's
 // value is struct{}{}, or the one appendOf passes for it, which item 5
-// accepts.
+// accepts. A row whose declarations reference s:money is read through
+// mintedSchema, its primitive the one no primitive builtin/strict defines.
 func TestAppendDeclines(t *testing.T) {
 	sequence := func(body string) string {
 		return `<xs:element name="%[1]s"><xs:complexType><xs:sequence>` + body + `</xs:sequence></xs:complexType></xs:element>`
@@ -983,15 +997,15 @@ func TestAppendDeclines(t *testing.T) {
 		{"restricted complex assertions", "a complex type with {assertions}", `<xs:complexType name="ab%[1]s">` + asserted + `</xs:complexType>` +
 			`<xs:element name="%[1]s"><xs:complexType><xs:complexContent><xs:restriction base="s:ab%[1]s"><xs:sequence>` + a + `</xs:sequence></xs:restriction></xs:complexContent></xs:complexType></xs:element>`},
 		{"special type", "xs:anySimpleType or xs:anyAtomicType as a simple type", `<xs:element name="%[1]s" type="xs:anySimpleType"/>`},
-		{"list of precisionDecimal", "an atomic simple type whose primitive is other than xs:string, xs:boolean, xs:decimal, xs:float, xs:double, xs:duration, xs:dateTime, xs:time, xs:date, xs:gYearMonth, xs:gYear, xs:gMonthDay, xs:gDay, xs:gMonth, xs:hexBinary, xs:base64Binary, xs:anyURI, xs:QName or xs:NOTATION", simpleOf(`<xs:list itemType="xs:precisionDecimal"/>`)},
+		{"list of a minted primitive", encodePrimitiveName, simpleOf(`<xs:list itemType="s:money"/>`)},
 		{"list of union", "a union simple type", simpleOf(`<xs:list><xs:simpleType><xs:union memberTypes="xs:string xs:int"/></xs:simpleType></xs:list>`)},
 		{"IDREFS", "a simple type derived from xs:ID, xs:IDREF or xs:ENTITY", `<xs:element name="%[1]s" type="xs:IDREFS"/>`},
 		{"list assertions", "a simple type with an assertions facet", simpleOf(`<xs:restriction base="xs:NMTOKENS"><xs:assertion test="true()"/></xs:restriction>`)},
 		{"inherited list assertions", "a simple type with an assertions facet", `<xs:simpleType name="assertedList%[1]s"><xs:restriction base="xs:NMTOKENS"><xs:assertion test="true()"/></xs:restriction></xs:simpleType>` + simpleOf(`<xs:restriction base="s:assertedList%[1]s"><xs:maxLength value="3"/></xs:restriction>`)},
 		{"list item assertions", "a simple type with an assertions facet", `<xs:simpleType name="assertedItem%[1]s"><xs:restriction base="xs:string"><xs:assertion test="true()"/></xs:restriction></xs:simpleType>` + simpleOf(`<xs:list itemType="s:assertedItem%[1]s"/>`)},
 		{"union", "a union simple type", simpleOf(`<xs:union memberTypes="xs:string xs:int"/>`)},
-		{"precisionDecimal", "an atomic simple type whose primitive is other than xs:string, xs:boolean, xs:decimal, xs:float, xs:double, xs:duration, xs:dateTime, xs:time, xs:date, xs:gYearMonth, xs:gYear, xs:gMonthDay, xs:gDay, xs:gMonth, xs:hexBinary, xs:base64Binary, xs:anyURI, xs:QName or xs:NOTATION", `<xs:element name="%[1]s" type="xs:precisionDecimal"/>`},
-		{"precisionDecimal attribute", "an atomic simple type whose primitive is other than xs:string, xs:boolean, xs:decimal, xs:float, xs:double, xs:duration, xs:dateTime, xs:time, xs:date, xs:gYearMonth, xs:gYear, xs:gMonthDay, xs:gDay, xs:gMonth, xs:hexBinary, xs:base64Binary, xs:anyURI, xs:QName or xs:NOTATION", complexOf(`<xs:attribute name="a" type="xs:precisionDecimal"/>`)},
+		{"minted primitive", encodePrimitiveName, `<xs:element name="%[1]s" type="s:money"/>`},
+		{"minted primitive attribute", encodePrimitiveName, complexOf(`<xs:attribute name="a" type="s:money"/>`)},
 		{"ID", "a simple type derived from xs:ID, xs:IDREF or xs:ENTITY", `<xs:element name="%[1]s" type="xs:ID"/>`},
 		{"IDREF particle", "a simple type derived from xs:ID, xs:IDREF or xs:ENTITY", sequence(`<xs:element name="a" type="xs:IDREF"/>`)},
 		{"ENTITY restriction", "a simple type derived from xs:ID, xs:IDREF or xs:ENTITY", simpleOf(`<xs:restriction base="xs:ENTITY"/>`)},
@@ -1018,7 +1032,12 @@ func TestAppendDeclines(t *testing.T) {
 	seen := map[string]Construct{}
 	for _, row := range rows {
 		t.Run(row.name, func(t *testing.T) {
-			schema := schemaOf(t, fmt.Sprintf(row.decl, "r")+fmt.Sprintf(row.decl, "q"))
+			decls := fmt.Sprintf(row.decl, "r") + fmt.Sprintf(row.decl, "q")
+			schemaFor := schemaOf
+			if strings.Contains(decls, "s:money") {
+				schemaFor = mintedSchema
+			}
+			schema := schemaFor(t, decls)
 			dst := []byte("pre")
 			var constructs []Construct
 			for _, name := range []string{"r", "q"} {
@@ -1305,16 +1324,16 @@ func TestAppendListInvalid(t *testing.T) {
 // list type, then its {item type definition}, by its QName where it has one
 // and its schema Loc where it is located.
 func TestAppendListDeclineSubject(t *testing.T) {
-	schema := schemaOf(t, `<xs:element name="flt"><xs:simpleType><xs:list itemType="xs:precisionDecimal"/></xs:simpleType></xs:element>`+
-		`<xs:simpleType name="dates"><xs:list><xs:simpleType><xs:restriction base="xs:precisionDecimal"/></xs:simpleType></xs:list></xs:simpleType>`+
+	schema := schemaOf(t, `<xs:element name="flt"><xs:simpleType><xs:list itemType="xs:ID"/></xs:simpleType></xs:element>`+
+		`<xs:simpleType name="dates"><xs:list><xs:simpleType><xs:restriction base="xs:ID"/></xs:simpleType></xs:list></xs:simpleType>`+
 		`<xs:element name="anon" type="s:dates"/>`)
 	err := CheckAppend[strList](schema, sname("flt"))
-	_ = asDecline(t, err, "codec does not encode an atomic simple type whose primitive is other than xs:string, xs:boolean, xs:decimal, xs:float, xs:double, xs:duration, xs:dateTime, xs:time, xs:date, xs:gYearMonth, xs:gYear, xs:gMonthDay, xs:gDay, xs:gMonth, xs:hexBinary, xs:base64Binary, xs:anyURI, xs:QName or xs:NOTATION: simple type the anonymous simple type of element {urn:s}flt declared at s.xsd:1:")
-	if !strings.Contains(err.Error(), ", through the list type's {item type definition} xs:precisionDecimal; ") {
-		t.Errorf("decline %q does not name the item xs:precisionDecimal", err)
+	_ = asDecline(t, err, "codec does not encode a simple type derived from xs:ID, xs:IDREF or xs:ENTITY: simple type the anonymous simple type of element {urn:s}flt declared at s.xsd:1:")
+	if !strings.Contains(err.Error(), ", through the list type's {item type definition} xs:ID, derived from xs:ID; ") {
+		t.Errorf("decline %q does not name the item xs:ID", err)
 	}
 	err = CheckAppend[strList](schema, sname("anon"))
-	_ = asDecline(t, err, "codec does not encode an atomic simple type whose primitive is other than xs:string, xs:boolean, xs:decimal, xs:float, xs:double, xs:duration, xs:dateTime, xs:time, xs:date, xs:gYearMonth, xs:gYear, xs:gMonthDay, xs:gDay, xs:gMonth, xs:hexBinary, xs:base64Binary, xs:anyURI, xs:QName or xs:NOTATION: simple type {urn:s}dates defined at s.xsd:1:")
+	_ = asDecline(t, err, "codec does not encode a simple type derived from xs:ID, xs:IDREF or xs:ENTITY: simple type {urn:s}dates defined at s.xsd:1:")
 	if !strings.Contains(err.Error(), ", through the list type's anonymous {item type definition}, a type defined at s.xsd:1:") {
 		t.Errorf("decline %q does not name the anonymous item by its Loc", err)
 	}

@@ -534,21 +534,21 @@ func TestDeclineErrorTextSimpleRoot(t *testing.T) {
 
 // TestDeclineErrorTextUnlocated pins [DeclineError.Error]'s location rule
 // through Append: a simple type named in the XML Schema namespace with the
-// zero Loc, xs:precisionDecimal as the document element's type, a particle's and an
-// attribute's, is named with no Loc, and a user restriction of xs:precisionDecimal keeps
+// zero Loc, xs:ID as the document element's type, a particle's and an
+// attribute's, is named with no Loc, and a user restriction of xs:ID keeps
 // its schema Loc.
 func TestDeclineErrorTextUnlocated(t *testing.T) {
-	schema := schemaOf(t, `<xs:element name="r" type="xs:precisionDecimal"/>`+
-		`<xs:element name="p"><xs:complexType><xs:sequence><xs:element name="a" type="xs:precisionDecimal"/></xs:sequence></xs:complexType></xs:element>`+
-		`<xs:element name="at"><xs:complexType><xs:attribute name="a" type="xs:precisionDecimal"/></xs:complexType></xs:element>`+
-		`<xs:simpleType name="st"><xs:restriction base="xs:precisionDecimal"/></xs:simpleType><xs:element name="u" type="s:st"/>`)
-	const prefix = "codec does not encode an atomic simple type whose primitive is other than xs:string, xs:boolean, xs:decimal, xs:float, xs:double, xs:duration, xs:dateTime, xs:time, xs:date, xs:gYearMonth, xs:gYear, xs:gMonthDay, xs:gDay, xs:gMonth, xs:hexBinary, xs:base64Binary, xs:anyURI, xs:QName or xs:NOTATION: "
-	const tail = "; an encoder refusal, not a schema or value fault"
+	schema := schemaOf(t, `<xs:element name="r" type="xs:ID"/>`+
+		`<xs:element name="p"><xs:complexType><xs:sequence><xs:element name="a" type="xs:ID"/></xs:sequence></xs:complexType></xs:element>`+
+		`<xs:element name="at"><xs:complexType><xs:attribute name="a" type="xs:ID"/></xs:complexType></xs:element>`+
+		`<xs:simpleType name="st"><xs:restriction base="xs:ID"/></xs:simpleType><xs:element name="u" type="s:st"/>`)
+	const prefix = "codec does not encode a simple type derived from xs:ID, xs:IDREF or xs:ENTITY: "
+	const tail = ", derived from xs:ID; an encoder refusal, not a schema or value fault"
 	for _, row := range []struct{ elem, want string }{
-		{"r", "simple type xs:precisionDecimal"},
-		{"p", "simple type xs:precisionDecimal"},
-		{"at", "simple type xs:precisionDecimal"},
-		{"u", "simple type {urn:s}st defined at s.xsd:1:492"},
+		{"r", "simple type xs:ID"},
+		{"p", "simple type xs:ID"},
+		{"at", "simple type xs:ID"},
+		{"u", "simple type {urn:s}st defined at s.xsd:1:450"},
 	} {
 		_, err := appendChecked(t, nil, schema, strict.New(), sname(row.elem), struct{}{})
 		if want := prefix + row.want + tail; err == nil || err.Error() != want {

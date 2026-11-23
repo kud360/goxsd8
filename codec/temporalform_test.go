@@ -236,6 +236,10 @@ func TestFormArms(t *testing.T) {
 		seen++
 		t.Run(td.Name().Local, func(t *testing.T) {
 			v := reflect.New(a.bare()).Elem()
+			if a == atomicPrecisionDecimal {
+				// The nil decimalValue has no method to call.
+				v.Set(reflect.ValueOf(decimalNumerical{}))
+			}
 			for _, name := range []string{"Month", "Day"} {
 				if v.Kind() == reflect.Struct {
 					if f := v.FieldByName(name); f.IsValid() {
@@ -257,10 +261,10 @@ func TestFormArms(t *testing.T) {
 			}
 		})
 	}
-	// The 44 atomic builtins of the nineteen primitives: the primitives, nine
+	// The 45 atomic builtins of the twenty primitives: the primitives, nine
 	// below xs:string, thirteen below xs:decimal, two below xs:duration and one
 	// below xs:dateTime.
-	if seen != 44 {
-		t.Errorf("%d builtins checked, want 44", seen)
+	if seen != 45 {
+		t.Errorf("%d builtins checked, want 45", seen)
 	}
 }
