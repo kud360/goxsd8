@@ -74,7 +74,8 @@ func roundTrip[T any](t *testing.T, schema *xsd.Schema, name xsd.QName, v T, wan
 // (staticClass), and a nil one leaves Append nil, an item 6 or item 7 error
 // or a fault of backend: nil, item 6's ErrInvalidValue error, a plain error
 // without item 2's or item 3's text, or item 7's decline, by
-// constructNoCanonical, constructQNameSpelling or constructXsiAttribute.
+// constructNoCanonical, constructQNameSpelling, constructXsiAttribute or
+// constructGovernedContent.
 func appendChecked[T any](t *testing.T, dst []byte, schema *xsd.Schema, backend value.Backend, name xsd.QName, v T, opts ...Option) ([]byte, error) {
 	t.Helper()
 	out, err := Append(dst, schema, backend, name, v, opts...)
@@ -82,7 +83,7 @@ func appendChecked[T any](t *testing.T, dst []byte, schema *xsd.Schema, backend 
 	if checked == nil {
 		class := staticClass(err)
 		static := class == "plain" && (strings.HasPrefix(err.Error(), "codec: no top-level element declaration") || strings.Contains(err.Error(), "{abstract} true"))
-		if static || err != nil && class != "plain" && class != "invalid" && class != "decline "+constructNoCanonical.name() && class != "decline "+constructQNameSpelling.name() && class != "decline "+constructXsiAttribute.name() {
+		if static || err != nil && class != "plain" && class != "invalid" && class != "decline "+constructNoCanonical.name() && class != "decline "+constructQNameSpelling.name() && class != "decline "+constructXsiAttribute.name() && class != "decline "+constructGovernedContent.name() {
 			t.Errorf("CheckAppend = nil, but Append returned %v, %s", err, class)
 		}
 		return out, err
@@ -969,8 +970,8 @@ func TestAppendDeclines(t *testing.T) {
 		{"element value constraint", "a value constraint, default or fixed", `<xs:element name="%[1]s" type="xs:string" default="x"/>`},
 		{"attribute value constraint", "a value constraint, default or fixed", complexOf(`<xs:attribute name="a" type="xs:string" default="x"/>`)},
 		{"identity constraint", "an element declaration with {identity-constraint definitions}", `<xs:element name="%[1]s"><xs:complexType><xs:sequence>` + a + `</xs:sequence></xs:complexType><xs:key name="k%[1]s"><xs:selector xpath="s:a"/><xs:field xpath="."/></xs:key></xs:element>`},
-		{"anyType", "an element declaration of type xs:anyType", `<xs:element name="%[1]s"/>`},
-		{"anyType particle", "an element declaration of type xs:anyType", sequence(`<xs:element name="a"/>`)},
+		{"nillable anyType", "an element declaration with {nillable} true", `<xs:element name="%[1]s" nillable="true"/>`},
+		{"anyType particle value constraint", "a value constraint, default or fixed", sequence(`<xs:element name="a" default="d"/>`)},
 		{"abstract type", "an element declaration whose {type definition} is a complex type with {abstract} true", abstractType},
 		{"abstract particle type", "an element declaration whose {type definition} is a complex type with {abstract} true", `<xs:complexType name="ab%[1]s" abstract="true"/>` + sequence(`<xs:element name="a" type="s:ab%[1]s"/>`)},
 		{"simple content", "a complex type with simple content", complexOf(`<xs:simpleContent><xs:extension base="xs:string"/></xs:simpleContent>`)},
@@ -3438,7 +3439,164 @@ func TestAppendWildcardInvalid(t *testing.T) {
 	} {
 		t.Run(row.name, func(t *testing.T) {
 			_, err := appendChecked(t, nil, one, strict.New(), rootName, row.v)
-			_ = asDecline(t, err, "codec does not encode an attribute in the XSI namespace held in a wildcard's match: "+row.want)
+			_ = asDecline(t, err, "codec does not encode "+constructXsiAttribute.name()+": "+row.want)
 		})
 	}
+}
+
+// governedAnySchema declares, beside s:r of type xs:anyType itself, the
+// top-level declarations that govern an item so named in its content: q of
+// xs:QName, i of xs:int, and the attribute qa of xs:QName.
+const governedAnySchema = `<xs:element name="r"/><xs:element name="q" type="xs:QName"/><xs:element name="i" type="xs:int"/><xs:attribute name="qa" type="xs:QName"/>`
+
+// TestAppendAnyType pins the element declaration of type xs:anyType itself
+// "# What encodes" admits, the document element's and a particle's, written
+// raw as a skip wildcard's match is: the document element's content, into its
+// named type and into AnyType itself, holding text, an unqualified attribute,
+// a qualified one and an xml:lang, and nested children; a particle's once,
+// local, as an <element ref> into its named type, and beside another;
+// repeated and optional, an absent optional writing nothing; and a choice's
+// local and <element ref> alternatives. Each document validate accepts and
+// Decode turns back into the value. Every row declines by item 4 with the
+// arm removed (elementEncodes' xs:anyType case returning a decline).
+func TestAppendAnyType(t *testing.T) {
+	content := anyType{
+		Attributes: []anyAttribute{{"", "k", "v"}, {"urn:z", "y", "1"}, {xmltree.XMLNamespaceURI, "lang", "en"}},
+		Text:       "t ",
+		Children: []anyChild{
+			{Element: anyElement{Space: "urn:s", Local: "c", Content: anyType{Text: "in"}}, Tail: "out"},
+			{Element: anyElement{Space: "urn:o", Local: "d", Content: anyType{Children: []anyChild{{Element: anyElement{Local: "e"}}}}}},
+		},
+	}
+	const written = ` k="v" xmlns:p1="urn:z" p1:y="1" xml:lang="en">t <c>in</c>out<d xmlns="urn:o"><e xmlns=""/></d>`
+	t.Run("the document element", func(t *testing.T) {
+		roundTrip(t, schemaOf(t, rootAnySchema), rootName, rootAny(content), `<r xmlns="urn:s"`+written+`</r>`, deepEqual[rootAny])
+	})
+	t.Run("the document element of type xs:anyType, into AnyType itself", func(t *testing.T) {
+		roundTrip(t, schemaOf(t, typedRootAnySchema), rootName, content, `<r xmlns="urn:s"`+written+`</r>`, deepEqual[anyType])
+	})
+	t.Run("an empty document element", func(t *testing.T) {
+		roundTrip(t, schemaOf(t, rootAnySchema), rootName, rootAny{}, `<r xmlns="urn:s"/>`, deepEqual[rootAny])
+	})
+	t.Run("a particle once", func(t *testing.T) {
+		roundTrip(t, schemaOf(t, oneAnySchema), rootName, oneAny{A: content}, `<r xmlns="urn:s"><a`+written+`</a></r>`, deepEqual[oneAny])
+	})
+	t.Run("an <element ref> particle", func(t *testing.T) {
+		roundTrip(t, schemaOf(t, refAnySchema), rootName, refAny{F: free{Text: "x"}}, `<r xmlns="urn:s"><f>x</f></r>`, deepEqual[refAny])
+	})
+	t.Run("two particles", func(t *testing.T) {
+		roundTrip(t, schemaOf(t, pairAnySchema), rootName, pairAny{A: anyType{Text: "1"}, B: content}, `<r xmlns="urn:s"><a>1</a><b`+written+`</b></r>`, deepEqual[pairAny])
+	})
+	t.Run("a repeated particle and an optional one", func(t *testing.T) {
+		roundTrip(t, schemaOf(t, occursAnySchema), rootName, occursAny{A: []anyType{{Text: "1"}, {}}, B: &anyType{Text: "2"}}, `<r xmlns="urn:s"><a>1</a><a/><b>2</b></r>`, deepEqual[occursAny])
+	})
+	t.Run("an absent optional particle", func(t *testing.T) {
+		roundTrip(t, schemaOf(t, occursAnySchema), rootName, occursAny{A: []anyType{{}}}, `<r xmlns="urn:s"><a/></r>`, deepEqual[occursAny])
+	})
+	t.Run("a choice's local alternative", func(t *testing.T) {
+		roundTrip(t, schemaOf(t, pickAnySchema), rootName, pickAny(pickAnyA{A: anyType{Text: "x"}}), `<r xmlns="urn:s"><a>x</a></r>`, deepEqual[pickAny], pickAnyBranches)
+	})
+	t.Run("a choice's <element ref> alternative", func(t *testing.T) {
+		roundTrip(t, schemaOf(t, pickRefAnySchema), rootName, pickRefAny(pickRefAnyF{F: free{Text: "x"}}), `<r xmlns="urn:s"><f>x</f></r>`, deepEqual[pickRefAny], pickRefAnyBranches)
+	})
+}
+
+// TestAppendAnyTypeGuards pins what Append does with the content of an
+// element of type xs:anyType itself beyond what it writes, each row but the
+// last two answered, before Append encoded such an element, by item 4's
+// decline of its declaration. Item 6 of Append's doc: a held
+// Local that is no NCName, at depth, a Text holding a non-Char, a held
+// attribute named xmlns, and a held element's self-holding Children. Item 7:
+// an attribute in the XSI namespace, on the element or at depth, declines by
+// constructXsiAttribute; and an element whose expanded name a top-level
+// element declaration names, or an attribute whose expanded name a top-level
+// attribute declaration names, at any depth, under an ungoverned child too,
+// declines by constructGovernedContent, whatever its value, the XSI check
+// first on one attribute, since the schema declares xsi:type: a governed
+// xs:QName child Decode returns from a valid document, a governed xs:int child
+// built invalid against its declaration, a governed attribute on the element
+// and on a descendant, and a governed child of a particle's element. An item 6
+// error inside a governed element's content, and one in a later sibling, wins
+// over that decline. A skip wildcard's match holding a governed name is still
+// written, and a type derived from xs:anyType still encodes as its own complex
+// type.
+func TestAppendAnyTypeGuards(t *testing.T) {
+	governed := schemaOf(t, governedAnySchema)
+	child := func(e anyElement) []anyChild { return []anyChild{{Element: e}} }
+	q := anyElement{Space: "urn:s", Local: "q", Content: anyType{Text: "s:x"}}
+	for _, row := range []struct {
+		name string
+		v    rootAny
+		want string
+	}{
+		{"a held Local that is no NCName, at depth", rootAny{Children: child(anyElement{Local: "c", Content: anyType{Children: child(anyElement{Local: "1c"})}})},
+			`codec: Append: rootAny.Children[0].Element.Content.Children[0].Element holds the local name "1c", which is no NCName`},
+		{"a Text holding a non-Char", rootAny{Text: "\x01"}, `codec: Append: rootAny.Text holds "\x01", whose byte offset 0 starts no XML 1.0 Char`},
+		{"an attribute named xmlns", rootAny{Attributes: []anyAttribute{{"", "xmlns", "urn:q"}}}, "codec: Append: rootAny.Attributes[0] holds the attribute xmlns, a namespace declaration"},
+		{"a governed element holding a non-Char", rootAny{Children: child(anyElement{Space: "urn:s", Local: "q", Content: anyType{Text: "\x01"}})},
+			`codec: Append: rootAny.Children[0].Element.Content.Text holds "\x01"`},
+		{"a governed element, then a sibling's Tail holding a non-Char", rootAny{Children: []anyChild{{Element: q}, {Element: anyElement{Local: "c"}, Tail: "\xff"}}},
+			`codec: Append: rootAny.Children[1].Tail holds "\xff"`},
+	} {
+		t.Run(row.name, func(t *testing.T) {
+			_, err := appendChecked(t, nil, governed, strict.New(), rootName, row.v)
+			invalidValue(t, err, row.want)
+			if !strings.HasPrefix(err.Error(), row.want) {
+				t.Errorf("error %q does not open with %q", err, row.want)
+			}
+			noRule(t, err)
+		})
+	}
+	t.Run("a held element whose Children slice holds itself", func(t *testing.T) {
+		c := make([]anyChild, 1)
+		c[0].Element = anyElement{Local: "c"}
+		c[0].Element.Content.Children = c
+		_, err := appendChecked(t, nil, governed, strict.New(), rootName, rootAny{Children: c})
+		invalidValue(t, err, "codec: Append: rootAny.Children[0].Element.Content.Children[0].Element.Content is the value at rootAny.Children[0].Element.Content, whose element is still being written")
+	})
+	const in = "in the content of element {urn:s}r declared at "
+	decoded, err := Decode[rootAny](governed, strict.New(), instanceOf("", `<s:q>s:x</s:q>`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, row := range []struct {
+		name, construct string
+		v               rootAny
+		want            []string
+	}{
+		{"xsi:type on the element", constructXsiAttribute.name(), rootAny{Attributes: []anyAttribute{{"", "k", "v"}, {xsd.XMLSchemaInstanceNS, "type", "xs:string"}}},
+			[]string{"attribute xsi:type at rootAny.Attributes[1], " + in}},
+		{"xsi:schemaLocation at depth", constructXsiAttribute.name(), rootAny{Children: child(anyElement{Local: "c", Content: anyType{Attributes: []anyAttribute{{xsd.XMLSchemaInstanceNS, "schemaLocation", "urn:x x.xsd"}}}})},
+			[]string{"attribute xsi:schemaLocation at rootAny.Children[0].Element.Content.Attributes[0], " + in}},
+		{"a governed xs:QName child decoded from a valid document", constructGovernedContent.name(), *decoded,
+			[]string{"element {urn:s}q at rootAny.Children[0].Element, " + in, ", governed by element {urn:s}q declared at "}},
+		{"a governed xs:int child built invalid against its declaration", constructGovernedContent.name(), rootAny{Children: child(anyElement{Space: "urn:s", Local: "i", Content: anyType{Text: "abc"}})},
+			[]string{"element {urn:s}i at rootAny.Children[0].Element, " + in, ", governed by element {urn:s}i declared at "}},
+		{"a governed element under an ungoverned child", constructGovernedContent.name(), rootAny{Children: child(anyElement{Local: "c", Content: anyType{Children: child(q)}})},
+			[]string{"element {urn:s}q at rootAny.Children[0].Element.Content.Children[0].Element, " + in}},
+		{"a governed attribute on the element", constructGovernedContent.name(), rootAny{Attributes: []anyAttribute{{"urn:s", "qa", "s:x"}}},
+			[]string{"attribute {urn:s}qa at rootAny.Attributes[0], " + in, ", governed by attribute {urn:s}qa declared at "}},
+		{"a governed attribute on a descendant", constructGovernedContent.name(), rootAny{Children: child(anyElement{Local: "c", Content: anyType{Attributes: []anyAttribute{{"urn:s", "qa", "s:x"}}}})},
+			[]string{"attribute {urn:s}qa at rootAny.Children[0].Element.Content.Attributes[0], " + in}},
+		{"an XSI attribute ahead of a governed element", constructXsiAttribute.name(), rootAny{Attributes: []anyAttribute{{xsd.XMLSchemaInstanceNS, "nil", "true"}}, Children: child(q)},
+			[]string{"attribute xsi:nil at rootAny.Attributes[0], " + in}},
+	} {
+		t.Run(row.name, func(t *testing.T) {
+			_, err := appendChecked(t, nil, governed, strict.New(), rootName, row.v)
+			_ = asDecline(t, err, "codec does not encode "+row.construct+": "+row.want[0])
+			holds(t, err, row.want[1:]...)
+		})
+	}
+	t.Run("a governed child of a particle's element", func(t *testing.T) {
+		schema := schemaOf(t, oneAnySchema+`<xs:element name="q" type="xs:QName"/>`)
+		_, err := appendChecked(t, nil, schema, strict.New(), rootName, oneAny{A: anyType{Children: child(q)}})
+		_ = asDecline(t, err, "codec does not encode "+constructGovernedContent.name()+": element {urn:s}q at oneAny.A.Children[0].Element, in the content of element {urn:s}a declared at ")
+	})
+	t.Run("a skip wildcard's match holding a governed name", func(t *testing.T) {
+		v := seqWild{A: "x", Any: anyElement{Space: "urn:o", Local: "w", Content: anyType{Children: child(anyElement{Space: "urn:s", Local: "r", Content: anyType{Text: "s:x"}})}}}
+		roundTrip(t, schemaOf(t, seqSkipSchema), rootName, v, `<r xmlns="urn:s"><a>x</a><w xmlns="urn:o"><r xmlns="urn:s">s:x</r></w></r>`, deepEqual[seqWild])
+	})
+	t.Run("a type derived from xs:anyType", func(t *testing.T) {
+		roundTrip(t, schemaOf(t, derivedAnySchema), rootName, derivedAny{A: struct{ B string }{B: "x"}}, `<r xmlns="urn:s"><a><b>x</b></a></r>`, deepEqual[derivedAny])
+	})
 }

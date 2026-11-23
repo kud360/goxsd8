@@ -207,16 +207,16 @@ func TestAppendChoiceInvalid(t *testing.T) {
 
 // TestEncodedInternalBug pins that encoded panics, as an internal bug, naming
 // the arm's type and the capability it lacks, where Append's write reaches a
-// bound arm with no write: rawContent, the filler of an xs:anyType element's
-// raw content, which item 4 declines (constructAnyType).
+// bound arm with no write: boundNillableRoot, the filler of a nillable
+// document element, which item 4 declines (constructNillable).
 func TestEncodedInternalBug(t *testing.T) {
-	want := "codec: Append reached a codec.rawContent, which is no codec.writer: item 4 of Append's doc admitted a construct whose bound arm Append does not write"
+	want := "codec: Append reached a codec.boundNillableRoot, which is no codec.writer: item 4 of Append's doc admitted a construct whose bound arm Append does not write"
 	defer func() {
 		if got := recover(); got != want {
 			t.Errorf("encoded panicked with %v, want %q", got, want)
 		}
 	}()
-	encoded[writer](rawContent{})
+	encoded[writer](boundNillableRoot{})
 }
 
 // TestAppendChoiceBranches pins item 5 of Append's doc for a content choice

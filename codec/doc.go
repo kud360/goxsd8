@@ -314,8 +314,8 @@
 //
 //   - A top-level element declaration, as the document element's, neither
 //     abstract nor nillable, with no {type table}, value constraint or
-//     identity-constraint definitions, whose {type definition} is either a
-//     simple type that encodes or a complex type that encodes.
+//     identity-constraint definitions, whose {type definition} is a simple
+//     type that encodes, a complex type that encodes, or xs:anyType itself.
 //   - A complex type with {abstract} false, no {assertions}, no {attribute
 //     wildcard} and no {open content}, of empty content or of element-only
 //     content whose {particle} is a sequence that codegen splices, a choice
@@ -332,12 +332,15 @@
 //     field codegen's package doc "# Substitution groups" gives no sealed
 //     interface, the top-level declaration it names, that declaration having
 //     the same restrictions as the document element's and a simple type or a
-//     complex type that encodes, into the field item 6 of [Decode]'s doc holds
-//     to it; or, for a choice's alternative, into its branch's field as
-//     "# What decodes" states.
+//     complex type that encodes, or xs:anyType itself, into the field item 6
+//     of [Decode]'s doc holds to it; or, for a choice's alternative, into its
+//     branch's field as "# What decodes" states.
 //   - A wildcard particle of that sequence or choice with {process contents}
 //     skip and {max occurs} at least 1, into the field "# What decodes" states
 //     for it, each element it holds written raw, as below.
+//   - xs:anyType itself (Structures §3.4.7), where the bullets above admit
+//     it, into the Go type "# What decodes" states for its declaration, its
+//     content written raw, as below.
 //   - An attribute use other than xsi:nil's, unqualified, with no value
 //     constraint and of a simple type that encodes, into V or *V.
 //   - An atomic simple type whose {primitive type definition} is one the list
@@ -385,46 +388,48 @@
 //
 // Every other construct is a [*DeclineError], item 4 of Append's doc, a
 // list's item declining by the item's construct and a union's basic member
-// by that member's construct, and so is a value with no canonical
-// representation or no spelling Append writes, item 7. The one exception is
-// the declaration name names, as the document element's, with {abstract}
-// true: it is item 3, a plain error. A declaration with {abstract} true that
-// a particle reaches is no exception.
+// by that member's construct, and so is what item 7 of Append's doc states.
+// The one exception is the declaration name names, as the document element's,
+// with {abstract} true: it is item 3, a plain error. A declaration with
+// {abstract} true that a particle reaches is no exception.
 //
 // The document Append writes has no XML declaration, so it is XML 1.0 in
 // UTF-8, and no white space between tags. It binds element names by default
-// declarations alone, never prefixing one but an element held raw in a
-// wildcard's field, at any depth, in the XML namespace, written xml:Local,
-// which is never declared, and writes no attribute in the XSI namespace: the
-// document element carries xmlns="ns" for its non-absent namespace ns, and
-// nothing where it is absent, and every other element carries xmlns="ns", or
-// xmlns="" for an absent namespace, exactly where its namespace differs from
-// its parent's. An xs:QName or xs:NOTATION value, written in an attribute or as
-// content of an element, is spelled Local unprefixed where its namespace name
-// is that element's namespace, the absent one included; xml:Local for the XML
-// namespace, which is never declared; and otherwise pN:Local, where pN is the
-// prefix an open start tag, that element's or an ancestor's, declares for its
-// namespace name, or else p1, p2 and so on, the first not in scope, declared as
-// xmlns:pN="ns" on that element's start tag ahead of the attribute or content
-// that writes it. An attribute use's attribute is written unprefixed, in the
-// order of codegen's fields (codegen's package doc, "# Attributes"), each value
-// delimited by '"'. An element held raw in a wildcard's field, at any depth, is
-// written raw, nothing in it assessed or resolved: its attributes in held
-// order, one of absent namespace unprefixed, one in the XML namespace
-// xml:Local, and every other one pN:Local, pN chosen and declared as for an
-// xs:QName value, though its namespace be that element's own; then its Text,
-// then each of its Children, written so, followed by its Tail. A nil pointer
-// field writes nothing, and so does a nil interface field where nil means
-// absent (codegen's package doc, "# Particles", "# Attributes"), a particle
-// with {max occurs} above 1 writes one element per item of its slice, an
-// occurrence field writes each item it holds, in order, as its model group's
-// particles in order, a choice's branch writes its alternative's elements,
-// the empty match, the nil interface of a present element, writes no child
-// element, and an element with no content is written as an empty-element tag,
-// <x/>. A string value, of xs:string or xs:anyURI primitive, is written as
-// itself, its canonical representation, since xs:string's canonical mapping is
-// the identity (Datatypes §E.4 f-stringCanmap) and so is xs:anyURI's lexical
-// mapping, so that an xs:anyURI value is neither normalized nor percent-escaped
+// declarations alone, never prefixing one but an element held raw, in a
+// wildcard's field or an xs:anyType element's content, at any depth, in the
+// XML namespace, written xml:Local, which is never declared, and writes no
+// attribute in the XSI namespace: the document element carries xmlns="ns" for
+// its non-absent namespace ns, and nothing where it is absent, and every other
+// element carries xmlns="ns", or xmlns="" for an absent namespace, exactly
+// where its namespace differs from its parent's. An xs:QName or xs:NOTATION
+// value, written in an attribute or as content of an element, is spelled Local
+// unprefixed where its namespace name is that element's namespace, the absent
+// one included; xml:Local for the XML namespace, which is never declared; and
+// otherwise pN:Local, where pN is the prefix an open start tag, that element's
+// or an ancestor's, declares for its namespace name, or else p1, p2 and so on,
+// the first not in scope, declared as xmlns:pN="ns" on that element's start tag
+// ahead of the attribute or content that writes it. An attribute use's
+// attribute is written unprefixed, in the order of codegen's fields (codegen's
+// package doc, "# Attributes"), each value delimited by '"'. An element held
+// raw in a wildcard's field, at any depth, is written raw, nothing in it
+// assessed or resolved, and so is the content of an element of type xs:anyType
+// itself, its own attributes included, nothing in it resolved, but for the
+// items item 7 of Append's doc declines in it: its attributes in held order,
+// one of absent namespace unprefixed, one in the XML namespace xml:Local, and
+// every other one pN:Local, pN chosen and declared as for an xs:QName value,
+// though its namespace be that element's own; then its Text, then each of its
+// Children, written so, followed by its Tail. A nil pointer field writes
+// nothing, and so does a nil interface field where nil means absent (codegen's
+// package doc, "# Particles", "# Attributes"), a particle with {max occurs}
+// above 1 writes one element per item of its slice, an occurrence field writes
+// each item it holds, in order, as its model group's particles in order, a
+// choice's branch writes its alternative's elements, the empty match, the nil
+// interface of a present element, writes no child element, and an element with
+// no content is written as an empty-element tag, <x/>. A string value, of
+// xs:string or xs:anyURI primitive, is written as itself, its canonical
+// representation, since xs:string's canonical mapping is the identity
+// (Datatypes §E.4 f-stringCanmap) and so is xs:anyURI's lexical mapping, so
+// that an xs:anyURI value is neither normalized nor percent-escaped
 // (§3.3.17.2), and item 6 of Append's doc holds the string to its own
 // whiteSpace-normalized form. A list value is written as its items are written,
 // in order, separated by single U+0020 characters (Datatypes §2.4.1.2), and the
