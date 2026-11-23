@@ -778,7 +778,8 @@ func checkImportedNamespace(at xsderr.Loc, words importWording, requested, names
 // <include>/<override>/<redefine> it is also what the composed document is
 // discovered under, and for <import> what clause 3 then requires D2 to agree
 // with. ov is the override half of that key: the ·override pre-processing· in
-// force over the fetched document — an <override>'s own, or one an <include>
+// force over the fetched document — an <override>'s own merged under the one
+// already in force over its document (§F.2 clause 4), or the one an <include>
 // cascades (§F.2 clause 3) — and nil for <redefine>, <import> and a hint root
 // (§F.2 clause 5 copies an <import> or <redefine> unchanged).
 //
