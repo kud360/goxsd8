@@ -420,7 +420,7 @@ func TestCheckDecodeNestedOccurrenceMismatch(t *testing.T) {
 		Sequence noSeqBC
 	}
 	err := CheckDecode[noBare](schemaOf(t, noRepSeqSchema), rootName)
-	const want = "codec: T is not the type codegen emits for the document element: field 1 of codec.noBare is Sequence codec.noSeqBC where codegen emits Sequence, []I for the type I of one occurrence of the sequence"
+	const want = "codec: T is not the type codegen emits for the document element: field 1 of codec.noBare is Sequence codec.noSeqBC where codegen emits Sequence, []I for the type I of one occurrence of the sequence; the document element's declaration is element {urn:s}r declared at s.xsd:1:181"
 	if !errors.Is(err, ErrTypeMismatch) || err.Error() != want {
 		t.Errorf("CheckDecode = %v, want %q", err, want)
 	}

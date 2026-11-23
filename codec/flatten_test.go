@@ -366,7 +366,7 @@ func TestDecodeFlattenTie(t *testing.T) {
 // either branch, though each branch's shape is one the tie's alternatives
 // admit.
 func TestDecodeFlattenTieMismatch(t *testing.T) {
-	const want = "codec: T is not the type codegen emits for the document element: branch codec.flatTieMisnamed of codec.flatTieItem is named neither FlatTieItemR2 nor FlatTieItemR2 followed by a decimal from 2, as codegen names the branch structs of its 2 tied alternatives, whose branch words render one identifier"
+	const want = "codec: T is not the type codegen emits for the document element: branch codec.flatTieMisnamed of codec.flatTieItem is named neither FlatTieItemR2 nor FlatTieItemR2 followed by a decimal from 2, as codegen names the branch structs of its 2 tied alternatives, whose branch words render one identifier; the document element's declaration is element {urn:s}r declared at s.xsd:1:457"
 	branch := WithBranches[flatTieItem](flatTieR3{}, flatTieMisnamed{}, flatTieR1{}, FlatTieItemR22{})
 	schema := schemaOf(t, flatTieSchema)
 	data := instanceOf("", "<s:r2>a</s:r2><s:r3>b</s:r3>")

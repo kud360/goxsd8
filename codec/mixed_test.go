@@ -526,18 +526,18 @@ func TestDecodeMixedTypeMismatch(t *testing.T) {
 		Txt string
 		A   mixedChild[string]
 	}
-	const want = "codec: T is not the type codegen emits for the document element: field 0 of codec.txt is Txt string where codegen emits Text string, the characters of mixed content before its first child"
+	const want = "codec: T is not the type codegen emits for the document element: field 0 of codec.txt is Txt string where codegen emits Text string, the characters of mixed content before its first child; the document element's declaration is element {urn:s}r declared at s.xsd:1:181"
 	if err := CheckDecode[txt](schemaOf(t, mxSeqSchema), rootName); err == nil || err.Error() != want {
 		t.Errorf("CheckDecode = %v, want %q", err, want)
 	}
-	const wantWrap = "codec: T is not the type codegen emits for the document element: field 1 of codec.unwrapped is A string where codegen emits A M for a struct M of codegen's MixedChild shape whose Element is string"
+	const wantWrap = "codec: T is not the type codegen emits for the document element: field 1 of codec.unwrapped is A string where codegen emits A M for a struct M of codegen's MixedChild shape whose Element is string; the document element's declaration is element {urn:s}r declared at s.xsd:1:181"
 	if err := CheckDecode[unwrapped](schemaOf(t, mxSeqSchema), rootName); err == nil || err.Error() != wantWrap {
 		t.Errorf("CheckDecode = %v, want %q", err, wantWrap)
 	}
 	// A branch of an unwrapped field is held to no alternative, as a scalar
 	// one-field branch matching none is, rather than to the alternative it
 	// names (field.namesBranch reads the wrapped arm's Element).
-	const wantBranch = "codec: T is not the type codegen emits for the document element: branch codec.mxBareA of codec.mxPickI has the shape of no branch struct codegen emits that an earlier branch did not match"
+	const wantBranch = "codec: T is not the type codegen emits for the document element: branch codec.mxBareA of codec.mxPickI has the shape of no branch struct codegen emits that an earlier branch did not match; the document element's declaration is element {urn:s}r declared at s.xsd:1:181"
 	err := CheckDecode[mxPick](schemaOf(t, mxPickSchema), rootName, WithBranches[mxPickI](mxBareA{}, mxBareB{}))
 	if err == nil || err.Error() != wantBranch {
 		t.Errorf("CheckDecode = %v, want %q", err, wantBranch)

@@ -171,12 +171,12 @@ func TestDecodeQNameTypeMismatch(t *testing.T) {
 		into        target
 		want        string
 	}{
-		{"Space and Local swapped", elem, data, into[struct{ A swapped }](), "field 0 of struct { A codec.swapped } is A codec.swapped where codegen emits A " + qname},
-		{"a Prefix field", elem, data, into[struct{ A prefixed }](), "field 0 of struct { A codec.prefixed } is A codec.prefixed where codegen emits A " + qname},
-		{"Local []byte", elem, data, into[struct{ A bytesLocal }](), "field 0 of struct { A codec.bytesLocal } is A codec.bytesLocal where codegen emits A " + qname},
-		{"a simple root of string", `<xs:element name="r" type="xs:QName"/>`, instanceOf("", "s:x"), into[string](), "the underlying type of string is not " + qname},
+		{"Space and Local swapped", elem, data, into[struct{ A swapped }](), "field 0 of struct { A codec.swapped } is A codec.swapped where codegen emits A " + qname + "; the document element's declaration is element {urn:s}r declared at s.xsd:1:181"},
+		{"a Prefix field", elem, data, into[struct{ A prefixed }](), "field 0 of struct { A codec.prefixed } is A codec.prefixed where codegen emits A " + qname + "; the document element's declaration is element {urn:s}r declared at s.xsd:1:181"},
+		{"Local []byte", elem, data, into[struct{ A bytesLocal }](), "field 0 of struct { A codec.bytesLocal } is A codec.bytesLocal where codegen emits A " + qname + "; the document element's declaration is element {urn:s}r declared at s.xsd:1:181"},
+		{"a simple root of string", `<xs:element name="r" type="xs:QName"/>`, instanceOf("", "s:x"), into[string](), "the underlying type of string is not " + qname + "; the document element's declaration is element {urn:s}r declared at s.xsd:1:181"},
 		{"a NOTATION root of string", `<xs:notation name="png" public="image/png"/><xs:element name="r"><xs:simpleType><xs:restriction base="xs:NOTATION"><xs:enumeration value="s:png"/></xs:restriction></xs:simpleType></xs:element>`,
-			instanceOf("", "s:png"), into[string](), "the underlying type of string is not " + qname},
+			instanceOf("", "s:png"), into[string](), "the underlying type of string is not " + qname + "; the document element's declaration is element {urn:s}r declared at s.xsd:1:225"},
 	}
 	for _, row := range rows {
 		t.Run(row.name, func(t *testing.T) {

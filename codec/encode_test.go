@@ -537,7 +537,7 @@ func TestAppendPlainErrors(t *testing.T) {
 	_, err = appendChecked(t, nil, schema, strict.New(), sname("abs"), strRoot("x"))
 	plainError(t, err, "{abstract} true")
 	_, err = appendChecked(t, nil, schema, strict.New(), rootName, &shapes{})
-	if want := ErrTypeMismatch.Error() + ": *codec.shapes is a pointer to codec.shapes, which matches; use codec.shapes in its place"; !errors.Is(err, ErrTypeMismatch) || err.Error() != want {
+	if want := ErrTypeMismatch.Error() + ": *codec.shapes is a pointer to codec.shapes, which matches; use codec.shapes in its place; the document element's declaration is element {urn:s}r declared at s.xsd:2:3"; !errors.Is(err, ErrTypeMismatch) || err.Error() != want {
 		t.Errorf("Append[*shapes] = %v, want ErrTypeMismatch %q", err, want)
 	}
 	_, err = appendChecked(t, nil, schema, strict.New(), rootName, struct{ One string }{})

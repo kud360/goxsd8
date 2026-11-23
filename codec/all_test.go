@@ -291,9 +291,9 @@ func TestCheckDecodeAllOccurrenceMismatch(t *testing.T) {
 		err  error
 		want string
 	}{
-		{"a value", CheckDecode[valued](schema, rootName), "field 0 of codec.valued is All codec.allOccAItem where codegen emits All, *I for the type I of one occurrence of the all"},
-		{"a pointer to no struct", CheckDecode[scalar](schema, rootName), "field All of codec.scalar is string, no struct, where codegen emits the struct for one occurrence of a sequence or all group"},
-		{"a struct of another width", CheckDecode[wideOccur](schema, rootName), "codec.wideItem, the struct for one occurrence of a sequence or all group, has 2 fields where codegen emits 1"},
+		{"a value", CheckDecode[valued](schema, rootName), "field 0 of codec.valued is All codec.allOccAItem where codegen emits All, *I for the type I of one occurrence of the all; the document element's declaration is element {urn:s}r declared at s.xsd:1:181"},
+		{"a pointer to no struct", CheckDecode[scalar](schema, rootName), "field All of codec.scalar is string, no struct, where codegen emits the struct for one occurrence of a sequence or all group; the document element's declaration is element {urn:s}r declared at s.xsd:1:181"},
+		{"a struct of another width", CheckDecode[wideOccur](schema, rootName), "codec.wideItem, the struct for one occurrence of a sequence or all group, has 2 fields where codegen emits 1; the document element's declaration is element {urn:s}r declared at s.xsd:1:181"},
 	}
 	for _, row := range rows {
 		if row.err == nil || row.err.Error() != ErrTypeMismatch.Error()+": "+row.want {
