@@ -169,7 +169,6 @@ const (
 	constructVacuousParticle
 	constructAllGroup
 	constructSealedInterface
-	constructOccurrenceField
 	constructWildcard
 	constructQualifiedAttribute
 	constructAttributeWildcard
@@ -203,7 +202,6 @@ var constructNames = [...]string{
 	constructVacuousParticle:    "a particle with {max occurs} 0",
 	constructAllGroup:           "an all group",
 	constructSealedInterface:    "a construct codegen holds in a sealed interface: a choice, a flattened particle or a substitution group",
-	constructOccurrenceField:    "a model group particle codegen holds in an occurrence field",
 	constructWildcard:           "a wildcard particle with {process contents} strict or lax",
 	constructQualifiedAttribute: "an attribute use whose declaration has a {target namespace}",
 	constructAttributeWildcard:  "an {attribute wildcard}",

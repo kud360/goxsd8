@@ -979,7 +979,10 @@ func TestAppendDeclines(t *testing.T) {
 		{"open content", "an {open content}", complexOf(`<xs:openContent><xs:any namespace="##other" processContents="lax"/></xs:openContent><xs:sequence>` + a + `</xs:sequence>`)},
 		{"all group", "an all group", complexOf(`<xs:all>` + a + `</xs:all>`)},
 		{"flattened", "a construct codegen holds in a sealed interface: a choice, a flattened particle or a substitution group", complexOf(`<xs:sequence maxOccurs="unbounded"><xs:element name="a" type="xs:string" minOccurs="0"/></xs:sequence>`)},
-		{"occurrence field", "a model group particle codegen holds in an occurrence field", complexOf(`<xs:sequence maxOccurs="2">` + a + `<xs:element name="b" type="xs:string"/></xs:sequence>`)},
+		{"all group in an occurrence field", "an all group", complexOf(`<xs:all minOccurs="0">` + a + `</xs:all>`)},
+		{"nested sequence in an occurrence field", "a nested model group particle", complexOf(`<xs:sequence maxOccurs="2">` + a + `<xs:sequence><xs:element name="b" type="xs:string"/></xs:sequence></xs:sequence>`)},
+		{"nested group ref in an occurrence field", "a nested model group particle", `<xs:group name="g%[1]s"><xs:sequence><xs:element name="b" type="xs:string"/></xs:sequence></xs:group>` +
+			complexOf(`<xs:sequence maxOccurs="2">`+a+`<xs:group ref="s:g%[1]s"/></xs:sequence>`)},
 		{"wildcard", "a wildcard particle with {process contents} strict or lax", sequence(`<xs:any processContents="lax"/>`)},
 		{"strict wildcard", "a wildcard particle with {process contents} strict or lax", sequence(`<xs:any/>`)},
 		{"element ref", "a construct codegen holds in a sealed interface: a choice, a flattened particle or a substitution group", `<xs:element name="x%[1]s" type="xs:string"/><xs:element name="m%[1]s" type="xs:string" substitutionGroup="s:x%[1]s"/>` +
