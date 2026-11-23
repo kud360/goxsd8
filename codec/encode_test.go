@@ -3074,6 +3074,10 @@ func TestAppendWildcardInvalid(t *testing.T) {
 			_, err := appendChecked(t, nil, one, strict.New(), rootName, seqWild{A: "x", Any: anyElement{Space: "urn:o", Local: "1w"}})
 			return err
 		}, `codec: Append: seqWild.Any holds the local name "1w", which is no NCName`},
+		{"a Local holding a byte that is not UTF-8", func(t *testing.T) error {
+			_, err := appendChecked(t, nil, one, strict.New(), rootName, seqWild{A: "x", Any: anyElement{Space: "urn:o", Local: "w\xff"}})
+			return err
+		}, `codec: Append: seqWild.Any holds the local name "w\xff", which is no NCName`},
 		{"an empty Local", func(t *testing.T) error {
 			_, err := appendChecked(t, nil, one, strict.New(), rootName, seqWild{A: "x", Any: anyElement{Space: "urn:o"}})
 			return err
