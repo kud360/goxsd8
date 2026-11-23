@@ -11,6 +11,7 @@ import (
 
 	"github.com/kud360/goxsd8/internal/goshape"
 	"github.com/kud360/goxsd8/internal/xmlchar"
+	"github.com/kud360/goxsd8/internal/xmlname"
 	"github.com/kud360/goxsd8/parser/xmltree"
 	"github.com/kud360/goxsd8/value"
 	"github.com/kud360/goxsd8/xsd"
@@ -54,45 +55,57 @@ var ErrInvalidValue = errors.New("codec: Append: a value no valid document holds
 //     [ErrTypeMismatch].
 //  6. A value no valid document holds, the first in document order, an
 //     element's attributes before its content: an error, which errors.Is
-//     reports as [ErrInvalidValue], naming the Go path of its field from T
-//     and, for a simple value, its simple type. It is the slice field of a
-//     particle with {max occurs} above 1 whose length lies outside its {min
-//     occurs} and {max occurs}, a choice's alternative's {min occurs} 0 read
-//     as 1 in its branch; the nil sealed interface of a content choice none of
-//     whose alternatives is emptiable (Structures §3.8.4.3 cvc-model-group,
-//     §3.9.6.3 cos-group-emptiable), a choice of no {particles} among them; a
-//     value of that interface whose dynamic type the [WithBranches] set in
-//     opts places at no alternative, a pointer to a branch among them, which
-//     Decode never returns; a value that holds itself, a struct or sealed
-//     interface value its own write reaches again through a *S, []S or []I
-//     field, which no finite document holds, the error naming the Go path
-//     where the value is reached again and nothing written beneath it; a
-//     string holding bytes that are not UTF-8 or a character the XML 1.0 Char
-//     production does not match, U+0000 among them (Datatypes §3.3.1.1,
-//     §3.3.17.1); a string that differs from its own whiteSpace-normalized form
-//     under its simple type, such as an xs:token holding "  a  b"; a list item,
-//     a string, that is empty or holds TAB, LF, CR or a space, which no list
-//     item's lexical representation does (Datatypes §2.4.1.2); a big.Rat
-//     outside the decimal value space, whose denominator in lowest terms is no
-//     2^m·5^n (§3.3.3.1), such as 1/3; a date, time or duration datatype struct
-//     value no value of its datatype maps to, as codegen's package doc "#
-//     Simple types" states such values exist, the error naming the first
-//     property found outside it, its fields read in order, or, ahead of its
-//     Seconds, a duration's Months and Seconds of opposite signs; a
-//     PrecisionDecimal datatype struct value no value maps to, as codegen's "#
-//     Simple types" states such values exist, a nil Value or the numerical arm
-//     with a negative Coefficient, or a Value whose dynamic type the
-//     [WithPrecisionDecimalArms] set in opts supplies in no role, a pointer to
-//     an arm among them, which Decode never returns; an xs:QName
-//     or xs:NOTATION value whose namespace name holds a byte that starts no
-//     XML 1.0 Char or is the one the prefix xmlns is bound to (Namespaces in
-//     XML §3), or whose Local the Parse of its primitive's mapping rejects in
-//     Append's spelling, that Parse's verdict wrapped, or makes a spelling
-//     that resolves back to another expanded name; or a value whose simple
-//     type rejects it, a value.ValidateLexical error value.IsDatatypeVerdict
-//     reports as a verdict, a facet's rejection or a backend Parse's among
-//     them, that error wrapped, but for item 7's pattern case, a list's own
-//     facets read once every item has passed its own checks.
+//     reports as [ErrInvalidValue], naming the Go path of its field from T and,
+//     for a simple value, its simple type. It is the slice field of a particle
+//     with {max occurs} above 1 whose length lies outside its {min occurs} and
+//     {max occurs}, a choice's alternative's {min occurs} 0 read as 1 in its
+//     branch; the nil sealed interface of a content choice none of whose
+//     alternatives is emptiable (Structures §3.8.4.3 cvc-model-group, §3.9.6.3
+//     cos-group-emptiable), a choice of no {particles} among them; a value of
+//     that interface whose dynamic type the [WithBranches] set in opts places
+//     at no alternative, a pointer to a branch among them, which Decode never
+//     returns; a value that holds itself, a struct or sealed interface value
+//     its own write reaches again through a *S, []S or []I field, which no
+//     finite document holds, the error naming the Go path where the value is
+//     reached again and nothing written beneath it; a string holding bytes that
+//     are not UTF-8 or a character the XML 1.0 Char production does not match,
+//     U+0000 among them (Datatypes §3.3.1.1, §3.3.17.1), a held element's
+//     Space, an attribute's Space or Value, a Text and a Tail among them; a
+//     string that differs from its own whiteSpace-normalized form under its
+//     simple type, such as an xs:token holding "  a  b"; a list item, a string,
+//     that is empty or holds TAB, LF, CR or a space, which no list item's
+//     lexical representation does (Datatypes §2.4.1.2); a big.Rat outside the
+//     decimal value space, whose denominator in lowest terms is no 2^m·5^n
+//     (§3.3.3.1), such as 1/3; an element a wildcard particle's field holds, of
+//     {process contents} skip, that its content model admits at no particle
+//     where it is written, a name outside the wildcard's {namespace constraint}
+//     or in its {disallowed names} among them, or attributes to a particle
+//     other than that wildcard, an element particle taking its name first among
+//     them, or after whose content's last child the content model is not
+//     accepting, as xsd.Schema.ContentMatcher's Matcher decides (§3.9.4.3
+//     cvc-accept, §3.10.4.1 cvc-wildcard, §3.8.4.3 cvc-model-group); in such an
+//     element, at any depth, a Local that is no NCName or a Space that is the
+//     namespace name the prefix xmlns is bound to, of the element or of an
+//     attribute, an attribute of absent Space named xmlns (Namespaces in XML
+//     §3), and an attribute of the expanded name of one before it (§6.3
+//     nsc-AttrsUnique); a date, time or duration datatype struct value no value
+//     of its datatype maps to, as codegen's package doc "# Simple types" states
+//     such values exist, the error naming the first property found outside it,
+//     its fields read in order, or, ahead of its Seconds, a duration's Months
+//     and Seconds of opposite signs; a PrecisionDecimal datatype struct value
+//     no value maps to, as codegen's "# Simple types" states such values exist,
+//     a nil Value or the numerical arm with a negative Coefficient, or a Value
+//     whose dynamic type the [WithPrecisionDecimalArms] set in opts supplies in
+//     no role, a pointer to an arm among them, which Decode never returns; an
+//     xs:QName or xs:NOTATION value whose namespace name holds a byte that
+//     starts no XML 1.0 Char or is the one the prefix xmlns is bound to
+//     (Namespaces in XML §3), or whose Local the Parse of its primitive's
+//     mapping rejects in Append's spelling, that Parse's verdict wrapped, or
+//     makes a spelling that resolves back to another expanded name; or a value
+//     whose simple type rejects it, a value.ValidateLexical error
+//     value.IsDatatypeVerdict reports as a verdict, a facet's rejection or a
+//     backend Parse's among them, that error wrapped, but for item 7's pattern
+//     case, a list's own facets read once every item has passed its own checks.
 //  7. A value with no canonical representation or no spelling Append writes,
 //     the first in document order as item 6 counts: its *DeclineError. That is
 //     a governing mapping with no Canonical, a Canonical that fails for the
@@ -102,27 +115,30 @@ var ErrInvalidValue = errors.New("codec: Append: a value no valid document holds
 //     representation, or for an xs:QName or xs:NOTATION value its spelling, a
 //     pattern facet of its type rejects (§2.1's note), such as 3/2 under an
 //     xs:decimal pattern \d+\.\d\d, which admits 1.50 but not 1.5, whatever
-//     other facet rejects it; a canonical representation that does not map
-//     back to the value; or an xs:QName or xs:NOTATION value whose namespace
-//     name is absent, written on an element whose namespace is not, which no
-//     unprefixed spelling resolves to there and no prefix can be bound to
-//     (Namespaces in XML §5 nsc-NoPrefixUndecl), whatever else rejects it.
-//     The values with a lexical other than the one Append writes, the ones
-//     whose rejection by a pattern facet is this item, are: every xs:boolean,
-//     xs:decimal-primitive, xs:dateTime, xs:dateTimeStamp, xs:time and
-//     xs:duration-primitive value; every xs:float, xs:double and
-//     xs:precisionDecimal value other than NaN and -INF; an xs:date,
-//     xs:gYearMonth or xs:gYear value whose timezoneOffset is 0, spelled Z,
-//     +00:00 or -00:00 (§D.2.2's note), or whose year is 0, spelled 0000 or
-//     -0000; an xs:gMonthDay, xs:gDay or xs:gMonth value whose timezoneOffset
-//     is 0; an xs:hexBinary value one of whose octets holds a hex digit A to F
-//     (§3.3.15.2); every xs:base64Binary value but the empty one (§3.3.16.2);
-//     an xs:QName or xs:NOTATION value whose namespace name is not absent; and
-//     no xs:string- or xs:anyURI-primitive value, each being its own
-//     whiteSpace-normalized form. NaN and -INF, of xs:float, xs:double and
-//     xs:precisionDecimal alike, are written NaN and -INF, their only lexicals
-//     (§3.3.4.2, §3.3.5.2, precisionDecimal §3.2), so a pattern facet of their
-//     own simple type that rejects one of them is item 6, not this item.
+//     other facet rejects it; a canonical representation that does not map back
+//     to the value; or an xs:QName or xs:NOTATION value whose namespace name is
+//     absent, written on an element whose namespace is not, which no unprefixed
+//     spelling resolves to there and no prefix can be bound to (Namespaces in
+//     XML §5 nsc-NoPrefixUndecl), whatever else rejects it; or an attribute in
+//     the XSI namespace on an element a wildcard particle's field holds, at any
+//     depth, whose value, an xsi:type's among them, may hold a prefix that no
+//     binding the struct holds resolves. The values with a lexical other than
+//     the one Append writes, the ones whose rejection by a pattern facet is
+//     this item, are: every xs:boolean, xs:decimal-primitive, xs:dateTime,
+//     xs:dateTimeStamp, xs:time and xs:duration-primitive value; every
+//     xs:float, xs:double and xs:precisionDecimal value other than NaN and
+//     -INF; an xs:date, xs:gYearMonth or xs:gYear value whose timezoneOffset is
+//     0, spelled Z, +00:00 or -00:00 (§D.2.2's note), or whose year is 0,
+//     spelled 0000 or -0000; an xs:gMonthDay, xs:gDay or xs:gMonth value whose
+//     timezoneOffset is 0; an xs:hexBinary value one of whose octets holds a
+//     hex digit A to F (§3.3.15.2); every xs:base64Binary value but the empty
+//     one (§3.3.16.2); an xs:QName or xs:NOTATION value whose namespace name is
+//     not absent; and no xs:string- or xs:anyURI-primitive value, each being
+//     its own whiteSpace-normalized form. NaN and -INF, of xs:float, xs:double
+//     and xs:precisionDecimal alike, are written NaN and -INF, their only
+//     lexicals (§3.3.4.2, §3.3.5.2, precisionDecimal §3.2), so a pattern facet
+//     of their own simple type that rejects one of them is item 6, not this
+//     item.
 //
 // A plain error is no *DeclineError and wraps none of [ErrTypeMismatch],
 // [ErrInvalidValue] and errors.ErrUnsupported; whether it wraps an
@@ -248,8 +264,8 @@ func encodeStatic(schema *xsd.Schema, name xsd.QName, t reflect.Type, cfg config
 // encodes" states reaches: the root arms, *simpleRoot, *boundBinding and
 // *boundChoiceRoot, writing the element at.el; and the content arms,
 // *boundSequence and *boundContentChoice, writing at.el's content, each
-// element particle's elements by its member (elementMember.writeElements).
-// Append reaches each through encoded.
+// particle's elements by its member (particleWriter). Append reaches each
+// through encoded.
 type writer interface {
 	write(e *encoder, v reflect.Value, at writeAt) error
 }
@@ -259,21 +275,26 @@ type writer interface {
 // the element whose content holds it, for every other writer; typ, for a
 // content arm, the complex type whose content it writes, el's, which a
 // choice's item 6 errors name (typeSubject), and the zero ComplexType for
-// every other writer, which reads none; and path, the value's Go path from T.
+// every other writer, which reads none; path, the value's Go path from T;
+// and, for a particleWriter, check, the attributionCheck of the content it
+// writes into, nil for none, and target, its particle's attribution target
+// (childIndex), which every other writer leaves zero.
 type writeAt struct {
-	el   xsd.ElementDeclaration
-	typ  xsd.ComplexType
-	path string
+	el     xsd.ElementDeclaration
+	typ    xsd.ComplexType
+	path   string
+	check  *attributionCheck
+	target int
 }
 
 // encoded returns x, an arm of the filler item 5's check returns or of the
 // binder under it, as C, what Append's write reads it as: the writer capability, the
-// elementWriter capability of a fieldSink's elementReader, or a closed sum's arm, a
-// contentMember's or a branchArm's elementMember, a sink's fieldSink or a scalarElem's
-// atomic. It is the write's one assertion of the binder's arms. Invariant: where item 4
-// of [Append]'s doc admits a construct, every arm the binder builds for it that the
-// write reaches is such a C. A failed assertion breaks it, an internal bug, never input,
-// and panics naming x's type.
+// elementWriter capability of a fieldSink's elementReader, the particleWriter
+// capability of a contentMember's or a branchArm's elementMember or wildcardMember, or a
+// closed sum's arm, a sink's fieldSink or a scalarElem's atomic. It is the write's one
+// assertion of the binder's arms. Invariant: where item 4 of [Append]'s doc admits a
+// construct, every arm the binder builds for it that the write reaches is such a C. A
+// failed assertion breaks it, an internal bug, never input, and panics naming x's type.
 func encoded[C any](x any) C {
 	c, ok := x.(C)
 	if !ok {
@@ -327,7 +348,7 @@ func (b *boundBinding) write(e *encoder, v reflect.Value, at writeAt) error {
 	if err := encoded[writer](b.content).write(e, v, writeAt{el: at.el, typ: bd.typ, path: at.path}); err != nil {
 		return err
 	}
-	e.endTag(name, start, outer, mark)
+	e.endTag(name.Local, start, outer, mark)
 	return nil
 }
 
@@ -344,41 +365,50 @@ func (c *boundChoiceRoot) write(e *encoder, v reflect.Value, at writeAt) error {
 	outer, mark := e.startTag(name)
 	start := len(e.out)
 	e.out = append(e.out, '>')
-	if err := writeChoice(e, c.root.sealed.alts, c.choice, v, writeAt{el: at.el, typ: c.root.typ, path: at.path}); err != nil {
+	check := e.attribution(c.root.index, at.el, c.root.typ)
+	if err := writeChoice(e, c.root.sealed.alts, c.choice, v, writeAt{el: at.el, typ: c.root.typ, path: at.path, check: check}); err != nil {
 		return err
 	}
-	e.endTag(name, start, outer, mark)
+	check.end(e, at.path)
+	e.endTag(name.Local, start, outer, mark)
 	return nil
 }
 
 // write writes the elements of each of b's members from its field, member i's
-// field b.first+i of v, read by b.sinks[i], in member order: each member is an
-// element particle's field, which takes one attribution target
-// (field.targets), so member i's sink is sinks[i].
+// field b.first+i of v, read by b.sinks[i], in member order, under the
+// content's attributionCheck (encoder.attribution): each member is an element
+// or wildcard particle's field, which takes one attribution target
+// (field.targets), so member i's sink is sinks[i] and its target i.
 func (b *boundSequence) write(e *encoder, v reflect.Value, at writeAt) error {
+	check := e.attribution(b.sequence.index, at.el, at.typ)
 	for i, m := range b.sequence.members {
 		j := b.first + i
-		if err := encoded[elementMember](m).writeElements(e, b.sinks[i], v.Field(j), writeAt{el: at.el, path: at.path + "." + v.Type().Field(j).Name}); err != nil {
+		if err := encoded[particleWriter](m).writeElements(e, b.sinks[i], v.Field(j), writeAt{el: at.el, path: at.path + "." + v.Type().Field(j).Name, check: check, target: i}); err != nil {
 			return err
 		}
 	}
+	check.end(e, at.path)
 	return nil
 }
 
 // write writes the branch the choice's sealed interface holds, field b.index
 // of v (writeChoice), then the elements of each member of the rest, whose
 // fields follow it, member i read by b.rest[i] as boundSequence's write pairs
-// them.
+// them, its target the rest's base plus i, all under the content's
+// attributionCheck (encoder.attribution).
 func (b *boundContentChoice) write(e *encoder, v reflect.Value, at writeAt) error {
-	if err := writeChoice(e, b.content.choice.sealed.alts, b.choice, v.Field(b.index), writeAt{el: at.el, typ: at.typ, path: at.path + "." + v.Type().Field(b.index).Name}); err != nil {
+	rest := b.content.rest
+	check := e.attribution(rest.index, at.el, at.typ)
+	if err := writeChoice(e, b.content.choice.sealed.alts, b.choice, v.Field(b.index), writeAt{el: at.el, typ: at.typ, path: at.path + "." + v.Type().Field(b.index).Name, check: check}); err != nil {
 		return err
 	}
-	for i, m := range b.content.rest.members {
+	for i, m := range rest.members {
 		j := b.index + 1 + i
-		if err := encoded[elementMember](m).writeElements(e, b.rest[i], v.Field(j), writeAt{el: at.el, path: at.path + "." + v.Type().Field(j).Name}); err != nil {
+		if err := encoded[particleWriter](m).writeElements(e, b.rest[i], v.Field(j), writeAt{el: at.el, path: at.path + "." + v.Type().Field(j).Name, check: check, target: rest.base + i}); err != nil {
 			return err
 		}
 	}
+	check.end(e, at.path)
 	return nil
 }
 
@@ -387,11 +417,13 @@ func (b *boundContentChoice) write(e *encoder, v reflect.Value, at writeAt) erro
 // as item 5's check bound it: its branches[j], the branch type placed at
 // alts[j] (sealed.checkSite), is matched to v's dynamic type, and the members
 // of alts[j] are written from the branch struct's fields, in field order,
-// member i read by branches[j].sinks[i] as boundSequence's write pairs them. The
-// nil interface writes nothing, the empty match, but is item 6 of [Append]'s
-// doc where no alternative is emptiable (choiceEmptiable), and so is a
-// dynamic type bc places at no alternative, a pointer to a branch among them;
-// at.typ is the complex type whose content the choice is.
+// member i read by branches[j].sinks[i] as boundSequence's write pairs them,
+// its target the targets of every earlier alternative (branchTargets) plus i,
+// under at.check. The nil interface writes nothing, the empty match, but is
+// item 6 of [Append]'s doc where no alternative is emptiable
+// (choiceEmptiable), and so is a dynamic type bc places at no alternative, a
+// pointer to a branch among them; at.typ is the complex type whose content the
+// choice is.
 func writeChoice(e *encoder, alts []branchArm, bc *boundChoice, v reflect.Value, at writeAt) error {
 	if v.IsNil() {
 		if !choiceEmptiable(alts) {
@@ -405,8 +437,12 @@ func writeChoice(e *encoder, alts []branchArm, bc *boundChoice, v reflect.Value,
 		e.invalidate(fmt.Errorf("codec: Append: %s holds a %s, which the WithBranches set of %s places at no alternative of the content choice of %s, so that Decode returns no such value", at.path, b.Type(), v.Type(), typeSubject(at.el, at.typ)))
 		return nil
 	}
+	first := 0
+	for _, a := range alts[:j] {
+		first += branchTargets(a)
+	}
 	for i, m := range alts[j].branchMembers() {
-		if err := encoded[elementMember](m).writeElements(e, bc.branches[j].sinks[i], b.Field(i), writeAt{el: at.el, path: at.path + ".(" + typePath(b.Type()) + ")." + b.Type().Field(i).Name}); err != nil {
+		if err := encoded[particleWriter](m).writeElements(e, bc.branches[j].sinks[i], b.Field(i), writeAt{el: at.el, path: at.path + ".(" + typePath(b.Type()) + ")." + b.Type().Field(i).Name, check: at.check, target: first + i}); err != nil {
 			return err
 		}
 	}
@@ -414,10 +450,11 @@ func writeChoice(e *encoder, alts []branchArm, bc *boundChoice, v reflect.Value,
 }
 
 // choiceEmptiable reports whether one occurrence of the choice whose
-// alternatives are alts, each an element particle, matches the empty
-// sequence: one of them has {min occurs} 0 (§3.9.6.3 cos-group-emptiable).
+// alternatives are alts, each an element or wildcard particle, matches the
+// empty sequence: one of them has {min occurs} 0 (§3.9.6.3
+// cos-group-emptiable).
 func choiceEmptiable(alts []branchArm) bool {
-	return slices.ContainsFunc(alts, func(a branchArm) bool { return encoded[elementMember](a).own.Min() == 0 })
+	return slices.ContainsFunc(alts, func(a branchArm) bool { return encoded[particleWriter](a).occurs().Min() == 0 })
 }
 
 // unemptiable says why the empty sequence lies outside the language of the
@@ -430,42 +467,85 @@ func unemptiable(alts []branchArm) string {
 	return fmt.Sprintf("none of its %d alternatives is emptiable (§3.8.4.3 cvc-model-group, §3.9.6.3 cos-group-emptiable)", len(alts))
 }
 
-// writeElements writes the elements of f, the field of m's particle, at.path
-// its Go path, each an element of m.decl written by the elementWriter s, the
-// field's sink, reads it with, by the shape item 5 bound the field in
-// (field.shape), computed at m.held, never by f's Kind, since a list's V is
-// itself a slice: one per item of a []V, which is item 6 of [Append]'s doc
-// where its length lies outside m.held, the error naming m.own where a
-// choice's alternative raised it, none for a nil *V, and one for a V, but none
-// for a nil V where m.held's {min occurs} is 0, which shape V takes only over
-// a sealed interface (goshape.ParticleShape), nil meaning absent.
+// A particleWriter is the member of an element or wildcard particle Append
+// writes, a contentMember's or a branchArm's: writeElements writes the
+// elements of f, the field of its particle, read by s, the field's sink, at
+// at, and returns a backend fault; occurs is the particle's own {min occurs}
+// and {max occurs}. Its implementers are elementMember and wildcardMember.
+type particleWriter interface {
+	writeElements(e *encoder, s sink, f reflect.Value, at writeAt) error
+	occurs() xsd.Occurs
+}
+
+// occurs is m.own.
+func (m elementMember) occurs() xsd.Occurs { return m.own }
+
+// occurs is m.own.
+func (m wildcardMember) occurs() xsd.Occurs { return m.own }
+
+// writeElements writes the elements of f, the field of m's particle, as
+// writeOccurring states, each an element of m.decl, taken by at.check
+// (attributionCheck.take), written by the elementWriter s, the field's sink,
+// reads it with.
 func (m elementMember) writeElements(e *encoder, s sink, f reflect.Value, at writeAt) error {
 	w := encoded[elementWriter](encoded[fieldSink](s).read)
-	switch m.shape {
+	return e.writeOccurring(m.field, m.own, m.held, "the particle of "+declSubject(m.decl), f, at, func(v reflect.Value, path string) error {
+		at.check.take(e, m.decl.Name(), at.target, path)
+		return w.writeElement(e, m.decl, v, path)
+	})
+}
+
+// writeElements writes the elements of f, the field of m's particle, as
+// writeOccurring states, each a value of AnyElement's shape written raw
+// (encoder.rawElement), its name taken by at.check (attributionCheck.take)
+// once rawName admits it.
+func (m wildcardMember) writeElements(e *encoder, _ sink, f reflect.Value, at writeAt) error {
+	return e.writeOccurring(m.field, m.own, m.held, m.subject, f, at, func(v reflect.Value, path string) error {
+		name, ok := e.rawName(v, path)
+		if !ok {
+			return nil
+		}
+		at.check.take(e, name, at.target, path)
+		e.rawElement(name, v.Field(2), path, m.subject)
+		return nil
+	})
+}
+
+// writeOccurring writes the elements of f, the field fd of the particle
+// subject names, occurring as own, at.path its Go path, each by write, by the
+// shape item 5 bound the field in (field.shape), computed at held, never by
+// f's Kind, since a list's V is itself a slice: one per item of a []V, which
+// is item 6 of [Append]'s doc where its length lies outside held, the error
+// naming own where a choice's alternative raised it, none for a nil *V, and
+// one for a V, but none for a nil V where held's {min occurs} is 0, which
+// shape V takes only over a sealed interface (goshape.ParticleShape), nil
+// meaning absent.
+func (e *encoder) writeOccurring(fd field, own, held xsd.Occurs, subject string, f reflect.Value, at writeAt, write func(v reflect.Value, path string) error) error {
+	switch fd.shape {
 	case shapeOptional:
 		if f.IsNil() {
 			return nil
 		}
-		return w.writeElement(e, m.decl, f.Elem(), at.path)
+		return write(f.Elem(), at.path)
 	case shapeRepeated:
-		if !m.held.Permits(f.Len()) {
+		if !held.Permits(f.Len()) {
 			raised := ""
-			if m.held != m.own {
-				raised = fmt.Sprintf(", the occurrence %s with {min occurs} 0 read as 1 in its branch,", m.own)
+			if held != own {
+				raised = fmt.Sprintf(", the occurrence %s with {min occurs} 0 read as 1 in its branch,", own)
 			}
-			e.invalidate(fmt.Errorf("codec: Append: %s holds %d items, outside the occurrence %s%s of the particle of %s", at.path, f.Len(), m.held, raised, declSubject(m.decl)))
+			e.invalidate(fmt.Errorf("codec: Append: %s holds %d items, outside the occurrence %s%s of %s", at.path, f.Len(), held, raised, subject))
 		}
 		for j := range f.Len() {
-			if err := w.writeElement(e, m.decl, f.Index(j), at.path+"["+strconv.Itoa(j)+"]"); err != nil {
+			if err := write(f.Index(j), at.path+"["+strconv.Itoa(j)+"]"); err != nil {
 				return err
 			}
 		}
 		return nil
 	default:
-		if m.held.Min() == 0 && f.IsNil() {
+		if held.Min() == 0 && f.IsNil() {
 			return nil
 		}
-		return w.writeElement(e, m.decl, f, at.path)
+		return write(f, at.path)
 	}
 }
 
@@ -590,7 +670,7 @@ func (w *encodeWalk) complexEncodes(decl xsd.ElementDeclaration, ct xsd.ComplexT
 	case xsd.SimpleContent:
 		return encodeDecline(constructSimpleContent, subject)
 	case xsd.ElementContent:
-		if err := w.contentEncodes(content, subject); err != nil {
+		if err := w.contentEncodes(ct, content, subject); err != nil {
 			return err
 		}
 	}
@@ -609,13 +689,16 @@ func (w *encodeWalk) complexEncodes(decl xsd.ElementDeclaration, ct xsd.ComplexT
 }
 
 // contentEncodes returns complexEncodes' error for content, element-only or
-// mixed content of the complex type subject names: its {variety}, its {open
-// content}, its {particle}'s {max occurs} 0, then its model group and hold as
-// contentGroup, Decode's, answers them, contentGroup's errors returned as
-// they are and its construct, which §3.4.2.3.3 leaves no schema to reach, as
-// a plain error; then each particle of a spliced sequence, or of a choice
-// occurring once that codegen does not flatten, as particleEncodes admits it.
-func (w *encodeWalk) contentEncodes(content xsd.ElementContent, subject string) error {
+// mixed content of ct, the complex type subject names: its {variety}, its
+// {open content}, its {particle}'s {max occurs} 0, then its model group and
+// hold as contentGroup, Decode's, answers them, contentGroup's errors returned
+// as they are and its construct, which §3.4.2.3.3 leaves no schema to reach,
+// as a plain error; then each particle of a spliced sequence, or of a choice
+// occurring once that codegen does not flatten, as particleEncodes admits it;
+// then, for a model group holding a wildcard particle, whose children Append
+// attributes through a Matcher (attributionCheck), ct's content model where
+// xsd.Schema.ContentMatcher does not track it.
+func (w *encodeWalk) contentEncodes(ct xsd.ComplexType, content xsd.ElementContent, subject string) error {
 	if content.Mixed {
 		return encodeDecline(constructMixed, subject)
 	}
@@ -650,22 +733,40 @@ func (w *encodeWalk) contentEncodes(content xsd.ElementContent, subject string) 
 			return err
 		}
 	}
+	if !slices.ContainsFunc(group.Particles(), wildcardParticle) {
+		return nil
+	}
+	if _, tracked := w.schema.ContentMatcher(ct); !tracked {
+		return encodeDecline(constructUntrackedModel, subject)
+	}
 	return nil
+}
+
+// wildcardParticle reports whether p's {term} is a wildcard. TermOrRef and
+// Term are closed sums, so the assertions are STYLE T2's sealed-sum exception.
+func wildcardParticle(p xsd.Particle) bool {
+	resolved, ok := p.Term().(xsd.ResolvedTerm)
+	if !ok {
+		return false
+	}
+	_, ok = resolved.Term.(xsd.Wildcard)
+	return ok
 }
 
 // particleEncodes returns elementEncodes' error for the particle p of a
 // spliced content sequence or of a content choice's alternative, subject
-// naming p: {max occurs} 0, then a term other than an element declaration,
-// then the declaration as the document element's is examined
-// (encodeWalk.element). The declaration of an <element ref> is the top-level
-// one its name resolves to through [xsd.Schema.Element] (§3.3.2.4
-// ref.elt.global), as Decode's particleTerm follows it, a name resolving to
-// none a plain error; where codegen gives its field a sealed interface
-// (goshape.SubstitutionSum), an abstract declaration's always, it declines
-// before the declaration is examined, and otherwise the declaration is
-// examined as a local one, an element of its own expanded name matching the
-// particle (§3.9.4.3 cvc-accept clause 2.3.1). {term} is a closed sum, so the
-// switches are STYLE T2's sealed-sum exception.
+// naming p: {max occurs} 0, then a term other than an element declaration or
+// a wildcard with {process contents} skip, which is examined no further, then
+// the declaration as the document element's is examined (encodeWalk.element).
+// The declaration of an <element ref> is the top-level one its name resolves
+// to through [xsd.Schema.Element] (§3.3.2.4 ref.elt.global), as Decode's
+// particleTerm follows it, a name resolving to none a plain error; where
+// codegen gives its field a sealed interface (goshape.SubstitutionSum), an
+// abstract declaration's always, it declines before the declaration is
+// examined, and otherwise the declaration is examined as a local one, an
+// element of its own expanded name matching the particle (§3.9.4.3 cvc-accept
+// clause 2.3.1). {term} is a closed sum, so the switches are STYLE T2's
+// sealed-sum exception.
 func (w *encodeWalk) particleEncodes(p xsd.Particle, subject string) error {
 	if upper, bounded := p.Occurs().Max(); bounded && upper == 0 {
 		return encodeDecline(constructVacuousParticle, subject)
@@ -688,7 +789,13 @@ func (w *encodeWalk) particleEncodes(p xsd.Particle, subject string) error {
 		case xsd.ModelGroup:
 			return encodeDecline(constructNestedGroup, subject)
 		case xsd.Wildcard:
-			return encodeDecline(constructWildcard, subject)
+			// A strict or lax match is assessed against a declaration its name
+			// resolves (§3.3.4.6 key-governing-ed), which no check of Append's
+			// decides; a skip match is not assessed (§3.10.1 key-skipped).
+			if term.ProcessContents() != xsd.ProcessSkip {
+				return encodeDecline(constructWildcard, subject)
+			}
+			return nil
 		case xsd.ElementDeclaration:
 			el = term
 		}
@@ -929,11 +1036,11 @@ func (e *encoder) startTag(name xsd.QName) (outer string, mark int) {
 	return outer, len(e.bound)
 }
 
-// endTag ends the element name whose start tag's '>' is e.out's byte at
-// start: with its end tag, or, where nothing follows that '>', by turning the
-// start tag into an empty-element tag; and restores outer and mark,
-// startTag's answers, as e.ns and the length of e.bound.
-func (e *encoder) endTag(name xsd.QName, start int, outer string, mark int) {
+// endTag ends the element whose start tag, which names it tag, has its '>'
+// at e.out's byte start: with its end tag, or, where nothing follows that
+// '>', by turning the start tag into an empty-element tag; and restores outer
+// and mark, startTag's answers, as e.ns and the length of e.bound.
+func (e *encoder) endTag(tag string, start int, outer string, mark int) {
 	e.ns = outer
 	e.bound = e.bound[:mark]
 	if len(e.out) == start+1 {
@@ -941,7 +1048,7 @@ func (e *encoder) endTag(name xsd.QName, start int, outer string, mark int) {
 		return
 	}
 	e.out = append(e.out, "</"...)
-	e.out = append(e.out, name.Local...)
+	e.out = append(e.out, tag...)
 	e.out = append(e.out, '>')
 }
 
@@ -960,7 +1067,7 @@ func (e *encoder) simpleElement(decl xsd.ElementDeclaration, s scalar, v reflect
 	start := len(e.out)
 	e.out = append(e.out, '>')
 	e.out = appendEscaped(e.out, text, false)
-	e.endTag(name, start, outer, mark)
+	e.endTag(name.Local, start, outer, mark)
 	return nil
 }
 
@@ -1483,6 +1590,16 @@ func (e *encoder) spellQName(space, local, path, shown, subject string) (text st
 	case e.ns:
 		return local, true
 	}
+	return e.declaredPrefix(space) + ":" + local, true
+}
+
+// declaredPrefix returns the prefix of space, a namespace name other than
+// the XML namespace, xmlnsNamespace and "": the one an open start tag
+// declares for it, boundPrefix(i) where e.bound[i] is space, or else, where
+// e.bound does not hold it, boundPrefix(len(e.bound)), whose declaration it
+// appends to the start tag that is open and pushes space onto e.bound, so
+// that e.bound holds only namespace names a declaration binds.
+func (e *encoder) declaredPrefix(space string) string {
 	i := slices.Index(e.bound, space)
 	if i < 0 {
 		i = len(e.bound)
@@ -1491,7 +1608,228 @@ func (e *encoder) spellQName(space, local, path, shown, subject string) (text st
 		e.out = appendEscaped(e.out, space, true)
 		e.out = append(e.out, '"')
 	}
-	return boundPrefix(i) + ":" + local, true
+	return boundPrefix(i)
+}
+
+// attributionCheck is how Append holds the children it writes into one
+// element's content, whose content model holds a wildcard particle, to
+// that content model (§3.9.4.2 cvc-particle, §3.9.4.3 cvc-accept, §3.8.4.3
+// cvc-model-group): a, a matchAttributor over a fresh Matcher of the content
+// model's {content type} and its wildcard particles' places, which decides
+// for each name cvc-wildcard (§3.10.4.1), clauses 1 to 3, {disallowed names}
+// included, and cvc-accept's element particle before wildcard particle
+// precedence; elements, the content model's element particles' places
+// (childIndex.elements); and subject, the content's complex type and element
+// as typeSubject names them.
+type attributionCheck struct {
+	a        *matchAttributor
+	elements []place
+	subject  string
+}
+
+// attribution returns the attributionCheck of the content of el, of the
+// complex type typ, whose children x attributes, or nil where x places no
+// wildcard particle, a content model whose children Append writes unchecked.
+// Item 4 of [Append]'s doc declines a content model holding a wildcard
+// particle that xsd.Schema.ContentMatcher does not track (contentEncodes), so
+// that a matcherSlot.attributor error here is an internal bug, which panics.
+func (e *encoder) attribution(x childIndex, el xsd.ElementDeclaration, typ xsd.ComplexType) *attributionCheck {
+	if x.matcher == nil || len(x.matcher.places) == 0 {
+		return nil
+	}
+	a, err := x.matcher.attributor(e.schema)
+	if err != nil {
+		panic(fmt.Sprintf("codec: Append reached a content model item 4 of Append's doc admitted: %v", err))
+	}
+	return &attributionCheck{a: a, elements: x.elements, subject: typeSubject(el, typ)}
+}
+
+// take puts the child named name, written at path from the field of the
+// particle of attribution target target, to c's Matcher, in document order,
+// and records item 6 of [Append]'s doc where the Matcher admits it at no
+// particle or attributes it to a particle other than that one (attributeAt),
+// a name its {namespace constraint} or {disallowed names} excludes or one an
+// element particle takes before the wildcard does among them. A nil c checks
+// nothing. A Matcher position c's places do not hold is a defect of the
+// premise matcherSlot.attributor states, which panics.
+func (c *attributionCheck) take(e *encoder, name xsd.QName, target int, path string) {
+	if c == nil {
+		return
+	}
+	t, pos, _ := c.a.m.NextParticle(name)
+	got, ok, err := attributeAt(t, pos, c.a.places, c.elements, name, path)
+	if err != nil {
+		panic(err.Error())
+	}
+	if !ok {
+		e.invalidate(fmt.Errorf("codec: Append: %s holds element %s, which no particle of the content model of %s admits where it is written (§3.9.4.3 cvc-accept, §3.10.4.1 cvc-wildcard)", path, name.Display(), c.subject))
+		return
+	}
+	if got.index != target {
+		e.invalidate(fmt.Errorf("codec: Append: %s holds element %s, which the content model of %s attributes to a particle other than the one whose field holds it (§3.9.4.3 cvc-accept, §3.4.4.4 key-att-to)", path, name.Display(), c.subject))
+	}
+}
+
+// end records item 6 of [Append]'s doc, at path, the content's Go path, where
+// c's Matcher is not accepting once the content's every child is taken
+// (§3.9.4.3 cvc-accept clause 1). A nil c checks nothing.
+func (c *attributionCheck) end(e *encoder, path string) {
+	if c == nil || c.a.m.Accepting() {
+		return
+	}
+	e.invalidate(fmt.Errorf("codec: Append: %s holds content the content model of %s does not accept: it ends short of a particle it must satisfy (§3.9.4.3 cvc-accept)", path, c.subject))
+}
+
+// rawName returns the expanded name {Space, Local} v, a struct of
+// AnyElement's shape at path, holds, or records item 6 of [Append]'s doc
+// where no element is so named (writableName), and ok is false.
+func (e *encoder) rawName(v reflect.Value, path string) (xsd.QName, bool) {
+	name := xsd.QName{Space: v.Field(0).String(), Local: v.Field(1).String()}
+	return name, e.writableName(name, path)
+}
+
+// writableName reports whether an element or attribute can be named name, the
+// expanded name held at path, in the document Append writes, and otherwise
+// records item 6 of [Append]'s doc and reports false: a Local of a byte that
+// starts no XML 1.0 Char or that is no NCName (Namespaces in XML [4]), a Space
+// of a byte that starts no XML 1.0 Char, or a Space that is xmlnsNamespace,
+// which no element or attribute is in (Namespaces in XML §3).
+func (e *encoder) writableName(name xsd.QName, path string) bool {
+	if xmlchar.IndexNonChar(name.Local) >= 0 || !xmlname.IsNCName(name.Local) {
+		e.invalidate(fmt.Errorf("codec: Append: %s holds the local name %s, which is no NCName, so that nothing is so named (Namespaces in XML [4] NCName)", path, strconv.Quote(name.Local)))
+		return false
+	}
+	if i := xmlchar.IndexNonChar(name.Space); i >= 0 {
+		e.invalidate(fmt.Errorf("codec: Append: %s holds the namespace name %s, whose byte offset %d starts no XML 1.0 Char", path, strconv.Quote(name.Space), i))
+		return false
+	}
+	if name.Space == xmlnsNamespace {
+		e.invalidate(fmt.Errorf("codec: Append: %s holds %s, whose namespace name is the one the prefix xmlns is bound to, which no element or attribute is in (Namespaces in XML §3)", path, name.Display()))
+		return false
+	}
+	return true
+}
+
+// rawElement writes the element name, held raw at path, rawName having
+// admitted name, whose content is x, a struct of AnyType's shape, as the
+// package doc's "# What encodes" states a match of a wildcard with {process
+// contents} skip is written, owner naming that wildcard particle: its start
+// tag (rawStartTag), then its content (rawContent). Nothing in it is assessed
+// (§3.10.1 key-skipped), so that no text is read for a prefix.
+func (e *encoder) rawElement(name xsd.QName, x reflect.Value, path, owner string) {
+	tag, outer, mark := e.rawStartTag(name)
+	start := e.rawContent(x, path+".Content", owner)
+	e.endTag(tag, start, outer, mark)
+}
+
+// rawStartTag appends the start tag of the element name, but for its '>', and
+// returns the tag's name and startTag's answers: startTag's, but for a name in
+// the XML namespace, which is written xml:Local, never declared, since that
+// namespace may not be the default one (Namespaces in XML §3), and moves no
+// default namespace.
+func (e *encoder) rawStartTag(name xsd.QName) (tag, outer string, mark int) {
+	if name.Space != xmltree.XMLNamespaceURI {
+		outer, mark = e.startTag(name)
+		return name.Local, outer, mark
+	}
+	tag = "xml:" + name.Local
+	e.out = append(e.out, '<')
+	e.out = append(e.out, tag...)
+	return tag, e.ns, len(e.bound)
+}
+
+// rawContent appends to the start tag that is open the attributes of x, a
+// struct of AnyType's shape at path, held raw, in held order, then the tag's
+// '>', whose offset it returns, which endTag reads, then x's Text and each of
+// its Children's Element, written by rawElement, followed by its Tail. An
+// attribute of absent Space is written unprefixed, one in the XML namespace
+// xml:Local, undeclared, and every other one prefixed by declaredPrefix,
+// though its namespace name be the element's own. It records item 6 of
+// [Append]'s doc, in document order, for an attribute name writableName
+// refuses, one of absent Space whose Local is xmlns, an attribute of the
+// expanded name of one before it (Namespaces in XML §6.3 nsc-AttrsUnique), an
+// element name rawName refuses, and a Value, Text or Tail holding a byte that
+// starts no XML 1.0 Char, and item 7 for an attribute in the XSI namespace
+// (constructXsiAttribute), an xsi:type's value among them holding a prefix
+// that no binding the struct holds resolves; each is then left out of what it
+// writes.
+func (e *encoder) rawContent(x reflect.Value, path, owner string) int {
+	attrs := x.Field(0)
+	for i := range attrs.Len() {
+		a := attrs.Index(i)
+		apath := path + ".Attributes[" + strconv.Itoa(i) + "]"
+		name := xsd.QName{Space: a.Field(0).String(), Local: a.Field(1).String()}
+		value := a.Field(2).String()
+		if !e.rawAttribute(name, value, attrs, i, apath, owner) {
+			continue
+		}
+		qualified := name.Local
+		switch {
+		case name.Space == xmltree.XMLNamespaceURI:
+			qualified = "xml:" + name.Local
+		case name.Space != "":
+			qualified = e.declaredPrefix(name.Space) + ":" + name.Local
+		}
+		e.out = append(e.out, ' ')
+		e.out = append(e.out, qualified...)
+		e.out = append(e.out, `="`...)
+		e.out = appendEscaped(e.out, value, true)
+		e.out = append(e.out, '"')
+	}
+	start := len(e.out)
+	e.out = append(e.out, '>')
+	e.rawText(x.Field(1).String(), path+".Text")
+	children := x.Field(2)
+	for i := range children.Len() {
+		c := children.Index(i)
+		cpath := path + ".Children[" + strconv.Itoa(i) + "]"
+		if name, ok := e.rawName(c.Field(0), cpath+".Element"); ok {
+			e.rawElement(name, c.Field(0).Field(2), cpath+".Element", owner)
+		}
+		e.rawText(c.Field(1).String(), cpath+".Tail")
+	}
+	return start
+}
+
+// rawAttribute reports whether rawContent writes the attribute name of value
+// value, attrs' item i at path, recording its item 6 or item 7 error of
+// [Append]'s doc, as rawContent states, where it does not.
+func (e *encoder) rawAttribute(name xsd.QName, value string, attrs reflect.Value, i int, path, owner string) bool {
+	if !e.writableName(name, path) {
+		return false
+	}
+	if name.Space == "" && name.Local == "xmlns" {
+		e.invalidate(fmt.Errorf("codec: Append: %s holds the attribute xmlns, a namespace declaration, which no element holds as an attribute (Namespaces in XML §3)", path))
+		return false
+	}
+	for j := range i {
+		if b := attrs.Index(j); b.Field(0).String() == name.Space && b.Field(1).String() == name.Local {
+			e.invalidate(fmt.Errorf("codec: Append: %s holds the attribute %s, as item %d before it does, and no element holds two attributes of one expanded name (Namespaces in XML §6.3 nsc-AttrsUnique)", path, name.Display(), j))
+			return false
+		}
+	}
+	if name.Space == xsd.XMLSchemaInstanceNS {
+		if e.declined == nil {
+			e.declined = encodeDecline(constructXsiAttribute, fmt.Sprintf("attribute %s at %s, in the match of %s", name.Display(), path, owner))
+		}
+		return false
+	}
+	if j := xmlchar.IndexNonChar(value); j >= 0 {
+		e.invalidate(fmt.Errorf("codec: Append: %s.Value holds %s, whose byte offset %d starts no XML 1.0 Char", path, strconv.Quote(value), j))
+		return false
+	}
+	return true
+}
+
+// rawText appends text, character data held raw at path, escaped as element
+// content, or records item 6 of [Append]'s doc where it holds a byte that
+// starts no XML 1.0 Char, and writes nothing.
+func (e *encoder) rawText(text, path string) {
+	if i := xmlchar.IndexNonChar(text); i >= 0 {
+		e.invalidate(fmt.Errorf("codec: Append: %s holds %s, whose byte offset %d starts no XML 1.0 Char", path, strconv.Quote(text), i))
+		return
+	}
+	e.out = appendEscaped(e.out, text, false)
 }
 
 // boundPrefix is the prefix of e.bound[i]: "p" and i+1 in decimal.

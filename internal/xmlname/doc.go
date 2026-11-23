@@ -4,7 +4,7 @@
 // §G.4.2.5), parser/xmltree's DOCTYPE name checks and internal/xmltok's
 // element, attribute, PI-target and entity-reference name checks; and
 // Namespaces in XML [4] NCName over them, which validate/jsonsrc's "$xmlns"
-// prefix check reads.
+// prefix check and codec's check of the names a wildcard's match holds read.
 //
 // # Contract
 //

@@ -221,6 +221,21 @@ func TestWildcardTypesAreCodegens(t *testing.T) {
 			"type RAny struct {\n\tAny AnyElement\n}\n\nfunc (RAny) isR() {}\n",
 			"type RAny2 struct {\n\tAny []AnyElement\n}\n\nfunc (RAny2) isR() {}\n",
 		}},
+		{skipManySchema, []string{"type R struct {\n\tA   string\n\tAny []AnyElement\n}\n"}},
+		{skipOptionalSchema, []string{"type R struct {\n\tA   string\n\tB   *string\n\tAny *AnyElement\n}\n"}},
+		{skipLeadingSchema, []string{"type R struct {\n\tAny *AnyElement\n\tA   string\n}\n"}},
+		{skipTargetSchema, []string{"type R struct {\n\tA   string\n\tAny AnyElement\n}\n"}},
+		{skipNotSchema, []string{"type R struct {\n\tA   string\n\tAny AnyElement\n}\n"}},
+		{skipPickSchema, []string{
+			"type R interface {\n\tisR()\n}\n",
+			"type RA struct {\n\tA string\n}\n\nfunc (RA) isR() {}\n",
+			"type RAny struct {\n\tAny AnyElement\n}\n\nfunc (RAny) isR() {}\n",
+		}},
+		{skipAttrSchema, []string{
+			"type R struct {\n\tChoice RChoice\n\tX      *string\n}\n",
+			"type RChoiceA struct {\n\tA string\n}\n\nfunc (RChoiceA) isRChoice() {}\n",
+			"type RChoiceAny struct {\n\tAny AnyElement\n}\n\nfunc (RChoiceAny) isRChoice() {}\n",
+		}},
 	}
 	for _, row := range rows {
 		gen := generated(t, schemaOf(t, row.decls))

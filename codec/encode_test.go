@@ -74,7 +74,7 @@ func roundTrip[T any](t *testing.T, schema *xsd.Schema, name xsd.QName, v T, wan
 // (staticClass), and a nil one leaves Append nil, an item 6 or item 7 error
 // or a fault of backend: nil, item 6's ErrInvalidValue error, a plain error
 // without item 2's or item 3's text, or item 7's decline, by
-// constructNoCanonical or constructQNameSpelling.
+// constructNoCanonical, constructQNameSpelling or constructXsiAttribute.
 func appendChecked[T any](t *testing.T, dst []byte, schema *xsd.Schema, backend value.Backend, name xsd.QName, v T, opts ...Option) ([]byte, error) {
 	t.Helper()
 	out, err := Append(dst, schema, backend, name, v, opts...)
@@ -82,7 +82,7 @@ func appendChecked[T any](t *testing.T, dst []byte, schema *xsd.Schema, backend 
 	if checked == nil {
 		class := staticClass(err)
 		static := class == "plain" && (strings.HasPrefix(err.Error(), "codec: no top-level element declaration") || strings.Contains(err.Error(), "{abstract} true"))
-		if static || err != nil && class != "plain" && class != "invalid" && class != "decline "+constructNoCanonical.name() && class != "decline "+constructQNameSpelling.name() {
+		if static || err != nil && class != "plain" && class != "invalid" && class != "decline "+constructNoCanonical.name() && class != "decline "+constructQNameSpelling.name() && class != "decline "+constructXsiAttribute.name() {
 			t.Errorf("CheckAppend = nil, but Append returned %v, %s", err, class)
 		}
 		return out, err
@@ -933,9 +933,10 @@ const encodePrimitiveName = "an atomic simple type whose primitive is other than
 // closed set it declines: each row's two declarations, r and q, decline with
 // equal Constructs, named by the opening of the decline's text, and rows of
 // different constructs with different ones; no bytes are written. A row's
-// value is struct{}{}, or the one appendOf passes for it, which item 5
-// accepts. A row whose declarations reference s:money is read through
-// mintedSchema, its primitive the one no primitive builtin/strict defines.
+// value is struct{}{}, or the one appendOf passes for it, and no row's value
+// reaches item 5: Append finds item 4 before it binds T (encodeStatic). A row
+// whose declarations reference s:money is read through mintedSchema, its
+// primitive the one no primitive builtin/strict defines.
 func TestAppendDeclines(t *testing.T) {
 	sequence := func(body string) string {
 		return `<xs:element name="%[1]s"><xs:complexType><xs:sequence>` + body + `</xs:sequence></xs:complexType></xs:element>`
@@ -978,7 +979,8 @@ func TestAppendDeclines(t *testing.T) {
 		{"all group", "an all group", complexOf(`<xs:all>` + a + `</xs:all>`)},
 		{"flattened", "a construct codegen holds in a sealed interface: a choice, a flattened particle or a substitution group", complexOf(`<xs:sequence maxOccurs="unbounded"><xs:element name="a" type="xs:string" minOccurs="0"/></xs:sequence>`)},
 		{"occurrence field", "a model group particle codegen holds in an occurrence field", complexOf(`<xs:sequence maxOccurs="2">` + a + `<xs:element name="b" type="xs:string"/></xs:sequence>`)},
-		{"wildcard", "a wildcard particle", sequence(`<xs:any processContents="lax"/>`)},
+		{"wildcard", "a wildcard particle with {process contents} strict or lax", sequence(`<xs:any processContents="lax"/>`)},
+		{"strict wildcard", "a wildcard particle with {process contents} strict or lax", sequence(`<xs:any/>`)},
 		{"element ref", "a construct codegen holds in a sealed interface: a choice, a flattened particle or a substitution group", `<xs:element name="x%[1]s" type="xs:string"/><xs:element name="m%[1]s" type="xs:string" substitutionGroup="s:x%[1]s"/>` +
 			sequence(`<xs:element ref="s:x%[1]s"/>`)},
 		{"abstract head ref", "a construct codegen holds in a sealed interface: a choice, a flattened particle or a substitution group", `<xs:element name="x%[1]s" type="xs:string" abstract="true"/><xs:element name="m%[1]s" type="xs:string" substitutionGroup="s:x%[1]s"/>` +
@@ -988,8 +990,8 @@ func TestAppendDeclines(t *testing.T) {
 		{"ref value constraint", "a value constraint, default or fixed", `<xs:element name="x%[1]s" type="xs:string" default="x"/>` + sequence(`<xs:element ref="s:x%[1]s"/>`)},
 		{"ref simple content", "a complex type with simple content", `<xs:element name="x%[1]s"><xs:complexType><xs:simpleContent><xs:extension base="xs:string"/></xs:simpleContent></xs:complexType></xs:element>` +
 			sequence(`<xs:element ref="s:x%[1]s"/>`)},
-		{"complex particle", "a wildcard particle", sequence(`<xs:element name="a"><xs:complexType><xs:sequence><xs:any processContents="lax"/></xs:sequence></xs:complexType></xs:element>`)},
-		{"particle type sharing its element's name", "a wildcard particle", `<xs:complexType name="%[1]s"><xs:sequence><xs:any processContents="lax"/></xs:sequence></xs:complexType>` +
+		{"complex particle", "a wildcard particle with {process contents} strict or lax", sequence(`<xs:element name="a"><xs:complexType><xs:sequence><xs:any processContents="lax"/></xs:sequence></xs:complexType></xs:element>`)},
+		{"particle type sharing its element's name", "a wildcard particle with {process contents} strict or lax", `<xs:complexType name="%[1]s"><xs:sequence><xs:any processContents="lax"/></xs:sequence></xs:complexType>` +
 			sequence(`<xs:element name="c" type="s:%[1]s"/>`)},
 		{"qualified attribute", "an attribute use whose declaration has a {target namespace}", complexOf(`<xs:attribute name="a" type="xs:string" form="qualified"/>`)},
 		{"attribute wildcard", "an {attribute wildcard}", complexOf(`<xs:anyAttribute processContents="lax"/>`)},
@@ -2918,5 +2920,221 @@ func TestAppendPrecisionDecimalBackend(t *testing.T) {
 	plainError(t, err)
 	if want := "codec: Append: tPrecisionDecimal holds 300E-2, of simple type xs:precisionDecimal, whose pDecimalRep form the backend's Parse rejects: rejected"; err.Error() != want {
 		t.Errorf("error %q, want %q", err, want)
+	}
+}
+
+// The skip-wildcard schemas Append encodes, each declaring s:r, beside
+// wildcard_test.go's seqSkipSchema: skipManySchema's wildcard repeats twice
+// at most after a; skipOptionalSchema is seqOptionalSchema's sequence(a, b?,
+// any?) under skip; skipLeadingSchema's optional wildcard precedes a;
+// skipTargetSchema's is over ##targetNamespace and skipNotSchema's disallows
+// s:x; skipPickSchema's choice holds a and the wildcard, and skipAttrSchema's
+// the same choice beside an attribute x. Their s:r types are wildcard_test.go's
+// seqRepeated, seqOptional, seqLeading, seqWild and pickWild, and skipAttr,
+// which TestWildcardTypesAreCodegens pins.
+const (
+	skipManySchema     = `<xs:element name="r"><xs:complexType><xs:sequence><xs:element name="a" type="xs:string"/><xs:any processContents="skip" maxOccurs="2"/></xs:sequence></xs:complexType></xs:element>`
+	skipOptionalSchema = `<xs:element name="r"><xs:complexType><xs:sequence><xs:element name="a" type="xs:string"/><xs:element name="b" type="xs:string" minOccurs="0"/><xs:any processContents="skip" minOccurs="0"/></xs:sequence></xs:complexType></xs:element>`
+	skipLeadingSchema  = `<xs:element name="r"><xs:complexType><xs:sequence><xs:any processContents="skip" minOccurs="0"/><xs:element name="a" type="xs:string"/></xs:sequence></xs:complexType></xs:element>`
+	skipTargetSchema   = `<xs:element name="r"><xs:complexType><xs:sequence><xs:element name="a" type="xs:string"/><xs:any namespace="##targetNamespace" processContents="skip"/></xs:sequence></xs:complexType></xs:element>`
+	skipNotSchema      = `<xs:element name="r"><xs:complexType><xs:sequence><xs:element name="a" type="xs:string"/><xs:any notQName="s:x" processContents="skip"/></xs:sequence></xs:complexType></xs:element>`
+	skipPickSchema     = `<xs:element name="r"><xs:complexType><xs:choice><xs:element name="a" type="xs:string"/><xs:any processContents="skip"/></xs:choice></xs:complexType></xs:element>`
+	skipAttrSchema     = `<xs:element name="r"><xs:complexType><xs:choice><xs:element name="a" type="xs:string"/><xs:any processContents="skip"/></xs:choice><xs:attribute name="x" type="xs:string"/></xs:complexType></xs:element>`
+)
+
+// skipAttr is the type codegen emits for skipAttrSchema's s:r, its choice
+// in the struct's first field.
+type (
+	skipAttr struct {
+		Choice skipAttrChoice
+		X      *string
+	}
+	skipAttrChoice interface{ isSkipAttrChoice() }
+	skipAttrA      struct{ A string }
+	skipAttrAny    struct{ Any anyElement }
+)
+
+func (skipAttrA) isSkipAttrChoice()   {}
+func (skipAttrAny) isSkipAttrChoice() {}
+
+// skipAttrBranches is skipAttrChoice's branch set.
+var skipAttrBranches = WithBranches[skipAttrChoice](skipAttrA{}, skipAttrAny{})
+
+// xmlNS is the XML namespace's name, xml's.
+const xmlNS = "http://www.w3.org/XML/1998/namespace"
+
+// TestAppendWildcard pins the wildcard particle with {process contents} skip
+// "# What encodes" admits: each element its field holds is written raw, its
+// attributes in held order, an unqualified one unprefixed, one in the XML
+// namespace as xml:, undeclared, and every other one under the prefix an
+// open start tag declares for its namespace, or a fresh pN declared on its
+// element's own, though the namespace be the element's; then its Text, then
+// each child followed by its Tail; an element in the XML namespace as
+// xml:Local, moving no default namespace. Each document validate accepts and
+// Decode turns back into the value; an optional wildcard holding nothing
+// writes nothing. The rows of one and several held elements are the ones the
+// static decline failed before the slice (constructWildcard).
+func TestAppendWildcard(t *testing.T) {
+	t.Run("one held element", func(t *testing.T) {
+		roundTrip(t, schemaOf(t, seqSkipSchema), rootName, seqWild{A: "x", Any: anyElement{Space: "urn:o", Local: "w"}},
+			`<r xmlns="urn:s"><a>x</a><w xmlns="urn:o"/></r>`, deepEqual[seqWild])
+	})
+	t.Run("several held elements, raw content", func(t *testing.T) {
+		v := seqRepeated{A: "x", Any: []anyElement{
+			{Space: "urn:o", Local: "p", Content: anyType{
+				Attributes: []anyAttribute{{"", "k", "v\t1"}, {"urn:o", "q", "w"}, {xmlNS, "lang", "en"}, {"urn:z", "z", `<&"`}},
+				Text:       "t ",
+				Children: []anyChild{
+					{Element: anyElement{Local: "c", Content: anyType{Text: "c\r"}}, Tail: " tail"},
+					{Element: anyElement{Space: "urn:o", Local: "d", Content: anyType{Attributes: []anyAttribute{{"urn:z", "y", "1"}}}}},
+				},
+			}},
+			{Space: "urn:s", Local: "a"},
+		}}
+		roundTrip(t, schemaOf(t, skipManySchema), rootName, v,
+			`<r xmlns="urn:s"><a>x</a><p xmlns="urn:o" k="v&#x9;1" xmlns:p1="urn:o" p1:q="w" xml:lang="en" xmlns:p2="urn:z" p2:z="&lt;&amp;&quot;">t <c xmlns="">c&#xD;</c> tail<d p2:y="1"/></p><a/></r>`,
+			deepEqual[seqRepeated])
+	})
+	t.Run("elements in the XML namespace and in none", func(t *testing.T) {
+		v := seqRepeated{A: "x", Any: []anyElement{
+			{Space: xmlNS, Local: "e", Content: anyType{Children: []anyChild{{Element: anyElement{Space: "urn:s", Local: "in"}}}}},
+			{Local: "n", Content: anyType{Children: []anyChild{{Element: anyElement{Space: "urn:s", Local: "in"}}}}},
+		}}
+		roundTrip(t, schemaOf(t, skipManySchema), rootName, v,
+			`<r xmlns="urn:s"><a>x</a><xml:e><in/></xml:e><n xmlns=""><in xmlns="urn:s"/></n></r>`, deepEqual[seqRepeated])
+	})
+	t.Run("an optional wildcard holding nothing", func(t *testing.T) {
+		roundTrip(t, schemaOf(t, skipOptionalSchema), rootName, seqOptional{A: "x"}, `<r xmlns="urn:s"><a>x</a></r>`, deepEqual[seqOptional])
+	})
+	t.Run("a choice's wildcard alternative", func(t *testing.T) {
+		roundTrip(t, schemaOf(t, skipPickSchema), rootName, pickWild(pickWildAny{Any: anyElement{Space: "urn:o", Local: "w"}}),
+			`<r xmlns="urn:s"><w xmlns="urn:o"/></r>`, deepEqual[pickWild], pickWildBranches)
+	})
+	t.Run("a content choice's wildcard alternative beside an attribute", func(t *testing.T) {
+		x := "v"
+		roundTrip(t, schemaOf(t, skipAttrSchema), rootName, skipAttr{Choice: skipAttrAny{Any: anyElement{Space: "urn:o", Local: "w"}}, X: &x},
+			`<r xmlns="urn:s" x="v"><w xmlns="urn:o"/></r>`, deepEqual[skipAttr], skipAttrBranches)
+	})
+}
+
+// TestAppendWildcardInvalid pins item 6 of Append's doc for a skip
+// wildcard's field: a slice outside the particle's occurrence; an element
+// the content model admits at no particle where it is written, outside the
+// {namespace constraint} or among the {disallowed names}; one the content
+// model attributes to an element particle ahead of the wildcard (cvc-accept),
+// in a sequence and in a choice; and the raw content no document holds: a
+// Local that is no NCName, at any depth, a Space that is the xmlns namespace
+// or holds a non-Char, an unqualified attribute named xmlns, two attributes of
+// one expanded name, and a Value, Text or Tail holding a non-Char. None
+// carries an *xsderr.Error. Then item 7: an attribute in the XSI namespace, at
+// any depth of the match, declines by constructXsiAttribute, behind an item
+// 6 error found after it.
+func TestAppendWildcardInvalid(t *testing.T) {
+	many, one := schemaOf(t, skipManySchema), schemaOf(t, seqSkipSchema)
+	w := anyElement{Space: "urn:o", Local: "w"}
+	held := func(c anyType) seqWild {
+		return seqWild{A: "x", Any: anyElement{Space: "urn:o", Local: "w", Content: c}}
+	}
+	for _, row := range []struct {
+		name string
+		run  func(t *testing.T) error
+		want string
+	}{
+		{"three held elements of a wildcard of {max occurs} 2", func(t *testing.T) error {
+			_, err := appendChecked(t, nil, many, strict.New(), rootName, seqRepeated{A: "x", Any: []anyElement{w, w, w}})
+			return err
+		}, "codec: Append: seqRepeated.Any holds 3 items, outside the occurrence"},
+		{"outside the {namespace constraint}", func(t *testing.T) error {
+			_, err := appendChecked(t, nil, schemaOf(t, skipTargetSchema), strict.New(), rootName, seqWild{A: "x", Any: w})
+			return err
+		}, "codec: Append: seqWild.Any holds element {urn:o}w, which no particle of the content model of "},
+		{"a {disallowed names} QName", func(t *testing.T) error {
+			_, err := appendChecked(t, nil, schemaOf(t, skipNotSchema), strict.New(), rootName, seqWild{A: "x", Any: anyElement{Space: "urn:s", Local: "x"}})
+			return err
+		}, "codec: Append: seqWild.Any holds element {urn:s}x, which no particle of the content model of "},
+		{"a name the element particle after the wildcard takes", func(t *testing.T) error {
+			_, err := appendChecked(t, nil, schemaOf(t, skipLeadingSchema), strict.New(), rootName, seqLeading{Any: &anyElement{Space: "urn:s", Local: "a"}, A: "x"})
+			return err
+		}, "codec: Append: seqLeading.Any holds element {urn:s}a, which the content model of "},
+		{"a name the choice's element alternative takes", func(t *testing.T) error {
+			_, err := appendChecked(t, nil, schemaOf(t, skipPickSchema), strict.New(), rootName, pickWild(pickWildAny{Any: anyElement{Space: "urn:s", Local: "a"}}), pickWildBranches)
+			return err
+		}, "codec: Append: pickWild.(pickWildAny).Any holds element {urn:s}a, which the content model of "},
+		{"a Local that is no NCName", func(t *testing.T) error {
+			_, err := appendChecked(t, nil, one, strict.New(), rootName, seqWild{A: "x", Any: anyElement{Space: "urn:o", Local: "1w"}})
+			return err
+		}, `codec: Append: seqWild.Any holds the local name "1w", which is no NCName`},
+		{"an empty Local", func(t *testing.T) error {
+			_, err := appendChecked(t, nil, one, strict.New(), rootName, seqWild{A: "x", Any: anyElement{Space: "urn:o"}})
+			return err
+		}, `codec: Append: seqWild.Any holds the local name "", which is no NCName`},
+		{"a child's Local holding a colon", func(t *testing.T) error {
+			_, err := appendChecked(t, nil, one, strict.New(), rootName, held(anyType{Children: []anyChild{{Element: anyElement{Local: "a:b"}}}}))
+			return err
+		}, `codec: Append: seqWild.Any.Content.Children[0].Element holds the local name "a:b", which is no NCName`},
+		{"a Space that is the xmlns namespace", func(t *testing.T) error {
+			_, err := appendChecked(t, nil, one, strict.New(), rootName, seqWild{A: "x", Any: anyElement{Space: xmlnsNamespace, Local: "w"}})
+			return err
+		}, "codec: Append: seqWild.Any holds {http://www.w3.org/2000/xmlns/}w, whose namespace name is the one the prefix xmlns is bound to"},
+		{"a Space holding a non-Char", func(t *testing.T) error {
+			_, err := appendChecked(t, nil, one, strict.New(), rootName, seqWild{A: "x", Any: anyElement{Space: "urn:\xff", Local: "w"}})
+			return err
+		}, `codec: Append: seqWild.Any holds the namespace name "urn:\xff", whose byte offset 4 starts no XML 1.0 Char`},
+		{"an attribute's Local that is no NCName", func(t *testing.T) error {
+			_, err := appendChecked(t, nil, one, strict.New(), rootName, held(anyType{Attributes: []anyAttribute{{"", "-k", "v"}}}))
+			return err
+		}, `codec: Append: seqWild.Any.Content.Attributes[0] holds the local name "-k", which is no NCName`},
+		{"an attribute named xmlns", func(t *testing.T) error {
+			_, err := appendChecked(t, nil, one, strict.New(), rootName, held(anyType{Attributes: []anyAttribute{{"", "xmlns", "urn:q"}}}))
+			return err
+		}, "codec: Append: seqWild.Any.Content.Attributes[0] holds the attribute xmlns, a namespace declaration"},
+		{"an attribute in the xmlns namespace", func(t *testing.T) error {
+			_, err := appendChecked(t, nil, one, strict.New(), rootName, held(anyType{Attributes: []anyAttribute{{xmlnsNamespace, "q", "urn:q"}}}))
+			return err
+		}, "codec: Append: seqWild.Any.Content.Attributes[0] holds {http://www.w3.org/2000/xmlns/}q, whose namespace name is the one the prefix xmlns is bound to"},
+		{"two attributes of one expanded name", func(t *testing.T) error {
+			_, err := appendChecked(t, nil, one, strict.New(), rootName, held(anyType{Attributes: []anyAttribute{{"urn:q", "k", "1"}, {"", "j", "2"}, {"urn:q", "k", "3"}}}))
+			return err
+		}, "codec: Append: seqWild.Any.Content.Attributes[2] holds the attribute {urn:q}k, as item 0 before it does"},
+		{"a Value holding a non-Char", func(t *testing.T) error {
+			_, err := appendChecked(t, nil, one, strict.New(), rootName, held(anyType{Attributes: []anyAttribute{{"", "k", "a\x00"}}}))
+			return err
+		}, `codec: Append: seqWild.Any.Content.Attributes[0].Value holds "a\x00", whose byte offset 1 starts no XML 1.0 Char`},
+		{"a Text holding a non-Char", func(t *testing.T) error {
+			_, err := appendChecked(t, nil, one, strict.New(), rootName, held(anyType{Text: "\x01"}))
+			return err
+		}, `codec: Append: seqWild.Any.Content.Text holds "\x01", whose byte offset 0 starts no XML 1.0 Char`},
+		{"a Tail holding a non-Char", func(t *testing.T) error {
+			_, err := appendChecked(t, nil, one, strict.New(), rootName, held(anyType{Children: []anyChild{{Element: w, Tail: "ok\xff"}}}))
+			return err
+		}, `codec: Append: seqWild.Any.Content.Children[0].Tail holds "ok\xff", whose byte offset 2 starts no XML 1.0 Char`},
+		{"an XSI attribute, then a Text holding a non-Char", func(t *testing.T) error {
+			_, err := appendChecked(t, nil, one, strict.New(), rootName, held(anyType{Attributes: []anyAttribute{{xsd.XMLSchemaInstanceNS, "type", "xs:byte"}}, Text: "\x01"}))
+			return err
+		}, `codec: Append: seqWild.Any.Content.Text holds "\x01"`},
+	} {
+		t.Run(row.name, func(t *testing.T) {
+			err := row.run(t)
+			invalidValue(t, err, row.want)
+			if !strings.HasPrefix(err.Error(), row.want) {
+				t.Errorf("error %q does not open with %q", err, row.want)
+			}
+			noRule(t, err)
+		})
+	}
+	for _, row := range []struct {
+		name string
+		v    seqWild
+		want string
+	}{
+		{"xsi:type on the match", held(anyType{Attributes: []anyAttribute{{"", "k", "v"}, {xsd.XMLSchemaInstanceNS, "type", "xs:byte"}}}),
+			"attribute xsi:type at seqWild.Any.Content.Attributes[1], in the match of wildcard particle 1 of "},
+		{"xsi:nil on a child of the match", held(anyType{Children: []anyChild{{Element: anyElement{Local: "c", Content: anyType{Attributes: []anyAttribute{{xsd.XMLSchemaInstanceNS, "nil", "true"}}}}}}}),
+			"attribute xsi:nil at seqWild.Any.Content.Children[0].Element.Content.Attributes[0], in the match of wildcard particle 1 of "},
+	} {
+		t.Run(row.name, func(t *testing.T) {
+			_, err := appendChecked(t, nil, one, strict.New(), rootName, row.v)
+			_ = asDecline(t, err, "codec does not encode an attribute in the XSI namespace held in a wildcard's match: "+row.want)
+		})
 	}
 }

@@ -4573,14 +4573,15 @@ func (b boundOccurrence) fill(r *xmltree.Reader, _ *xmltree.StartElement, out re
 			}
 			return nil
 		case *xmltree.StartElement:
-			t, pos, ok := m.NextParticle(expanded(tok.Name()))
+			name := expanded(tok.Name())
+			t, pos, ok := m.NextParticle(name)
 			if _, open := t.(*xsd.OpenContent); open && b.open != nil {
 				if err := b.open.put(o.p, r, tok, out, st); err != nil {
 					return err
 				}
 				continue
 			}
-			at, attributed, err := attributeAt(t, pos, places, x.elements, tok)
+			at, attributed, err := attributeAt(t, pos, places, x.elements, name, tok.Loc().String())
 			if err != nil {
 				return err
 			}
@@ -5640,49 +5641,49 @@ func attributeChild(a *matchAttributor, x childIndex, start *xmltree.StartElemen
 		}
 		return attribution{index: taken.target, to: taken.term}, true, nil
 	}
-	t, pos, _ := a.m.NextParticle(expanded(start.Name()))
-	return attributeAt(t, pos, a.places, x.elements, start)
+	name := expanded(start.Name())
+	t, pos, _ := a.m.NextParticle(name)
+	return attributeAt(t, pos, a.places, x.elements, name, start.Loc().String())
 }
 
-// attributeAt returns where the child element start is attributed, given t
-// and pos, a Matcher's answer for it (xsd.Matcher.NextParticle), and false
-// where t is none of a wildcard particle, an element declaration and an
-// {open content}, a rejected name's. A wildcard particle's index is the one
-// places holds for its position, its target; a position places holds none
-// for is a defect of the premise the binds rest on, one sequence or choice, or
-// one all group, spliced or held in its occurrence field, of element and
-// wildcard particles, nested sequences and all groups spliced, nested choices
-// bound in place, a choice's model-group alternatives bound as nested
-// particles are, and nested particles flattened or held in an occurrence field
-// (matcherSlot.attributor), and a plain error. An {open content}'s is the one
-// places holds for its empty position, the open-content field's
-// (sequence.openContent), and with none a plain error, a defect of Decode's
-// too. An element declaration's is the target elements holds for its position,
-// the element particle's, never its expanded name's: the declaration is a
-// substitution group's head where start is a member, at the head's particle's
-// position (cvc-accept clause 2.3.2), and a position elements holds none for
-// is a defect of Decode's, a plain error, as a wildcard particle's is.
-// Attribution is a closed sum, so the switch is STYLE T2's sealed-sum
-// exception.
-func attributeAt(t xsd.Attribution, pos []int, places, elements []place, start *xmltree.StartElement) (attribution, bool, error) {
-	name := expanded(start.Name())
+// attributeAt returns where the child element named name, at where, its
+// instance Loc or, for Append (attributionCheck.take), its Go path, is
+// attributed, given t and pos, a Matcher's answer for it
+// (xsd.Matcher.NextParticle), and false where t is none of a wildcard particle,
+// an element declaration and an {open content}, a rejected name's. A wildcard
+// particle's index is the one places holds for its position, its target; a
+// position places holds none for is a defect of the premise the binds rest on,
+// one sequence or choice, or one all group, spliced or held in its occurrence
+// field, of element and wildcard particles, nested sequences and all groups
+// spliced, nested choices bound in place, a choice's model-group alternatives
+// bound as nested particles are, and nested particles flattened or held in an
+// occurrence field (matcherSlot.attributor), and a plain error. An {open
+// content}'s is the one places holds for its empty position, the open-content
+// field's (sequence.openContent), and with none a plain error, a defect of
+// Decode's too. An element declaration's is the target elements holds for its
+// position, the element particle's, never its expanded name's: the declaration is
+// a substitution group's head where the child is a member, at the head's
+// particle's position (cvc-accept clause 2.3.2), and a position elements holds
+// none for is a defect of Decode's, a plain error, as a wildcard particle's is.
+// Attribution is a closed sum, so the switch is STYLE T2's sealed-sum exception.
+func attributeAt(t xsd.Attribution, pos []int, places, elements []place, name xsd.QName, where string) (attribution, bool, error) {
 	switch t := t.(type) {
 	case xsd.Wildcard:
 		i, placed := placeAt(places, pos)
 		if !placed {
-			return attribution{}, false, fmt.Errorf("codec: %s: element %s is attributed to the wildcard particle at position %v, for which Decode bound no field or alternative", start.Loc(), name.Display(), pos)
+			return attribution{}, false, fmt.Errorf("codec: %s: element %s is attributed to the wildcard particle at position %v, for which Decode bound no field or alternative", where, name.Display(), pos)
 		}
 		return attribution{index: i, to: t}, true, nil
 	case *xsd.OpenContent:
 		i, placed := placeAt(places, pos)
 		if !placed {
-			return attribution{}, false, fmt.Errorf("codec: %s: element %s is attributed to the {open content}, for which Decode bound no field", start.Loc(), name.Display())
+			return attribution{}, false, fmt.Errorf("codec: %s: element %s is attributed to the {open content}, for which Decode bound no field", where, name.Display())
 		}
 		return attribution{index: i, to: t}, true, nil
 	case xsd.ElementDeclaration:
 		i, placed := placeAt(elements, pos)
 		if !placed {
-			return attribution{}, false, fmt.Errorf("codec: %s: element %s is attributed to the element particle at position %v, for which Decode bound no field or alternative", start.Loc(), name.Display(), pos)
+			return attribution{}, false, fmt.Errorf("codec: %s: element %s is attributed to the element particle at position %v, for which Decode bound no field or alternative", where, name.Display(), pos)
 		}
 		return attribution{index: i, to: t}, true, nil
 	}
