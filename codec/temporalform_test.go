@@ -186,8 +186,8 @@ func TestFloatDoubleDifferential(t *testing.T) {
 		f := math.Float32frombits(rng.Uint32())
 		e := &encoder{schema: schema, backend: strict.New()}
 		c, ok, err := e.double(st, float64(f), 32, "f", "xs:float")
-		if err != nil || !ok || e.invalid != nil || e.uncanonical != nil {
-			t.Fatalf("double(%x) = %q, %v, %v; recorded %v, %v", math.Float32bits(f), c, ok, err, e.invalid, e.uncanonical)
+		if err != nil || !ok || e.invalid != nil || e.declined != nil {
+			t.Fatalf("double(%x) = %q, %v, %v; recorded %v, %v", math.Float32bits(f), c, ok, err, e.invalid, e.declined)
 		}
 		back, err := atomicFloat32.convert(c)
 		if err != nil {
@@ -257,10 +257,10 @@ func TestFormArms(t *testing.T) {
 			}
 		})
 	}
-	// The 42 atomic builtins of the seventeen primitives: the primitives, nine
+	// The 44 atomic builtins of the nineteen primitives: the primitives, nine
 	// below xs:string, thirteen below xs:decimal, two below xs:duration and one
 	// below xs:dateTime.
-	if seen != 42 {
-		t.Errorf("%d builtins checked, want 42", seen)
+	if seen != 44 {
+		t.Errorf("%d builtins checked, want 44", seen)
 	}
 }

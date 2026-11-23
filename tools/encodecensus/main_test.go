@@ -83,7 +83,7 @@ const wantCounts = `encodecensus: 10 instance case(s) under %ROOT%
 
 === First decline, by construct: 2 construct(s) ===
        1  a construct codegen holds in a sealed interface: a choice, a flattened particle or a substitution group
-       1  an atomic simple type whose primitive is other than xs:string, xs:boolean, xs:decimal, xs:float, xs:double, xs:duration, xs:dateTime, xs:time, xs:date, xs:gYearMonth, xs:gYear, xs:gMonthDay, xs:gDay, xs:gMonth, xs:hexBinary, xs:base64Binary or xs:anyURI
+       1  an atomic simple type whose primitive is other than xs:string, xs:boolean, xs:decimal, xs:float, xs:double, xs:duration, xs:dateTime, xs:time, xs:date, xs:gYearMonth, xs:gYear, xs:gMonthDay, xs:gDay, xs:gMonth, xs:hexBinary, xs:base64Binary, xs:anyURI, xs:QName or xs:NOTATION
 
 === Caveats ===
 `
@@ -93,7 +93,7 @@ const wantPaths = `
 === Cases, by construct ===
 a construct codegen holds in a sealed interface: a choice, a flattened particle or a substitution group (1):
   S/g/instance/flattened
-an atomic simple type whose primitive is other than xs:string, xs:boolean, xs:decimal, xs:float, xs:double, xs:duration, xs:dateTime, xs:time, xs:date, xs:gYearMonth, xs:gYear, xs:gMonthDay, xs:gDay, xs:gMonth, xs:hexBinary, xs:base64Binary or xs:anyURI (1):
+an atomic simple type whose primitive is other than xs:string, xs:boolean, xs:decimal, xs:float, xs:double, xs:duration, xs:dateTime, xs:time, xs:date, xs:gYearMonth, xs:gYear, xs:gMonthDay, xs:gDay, xs:gMonth, xs:hexBinary, xs:base64Binary, xs:anyURI, xs:QName or xs:NOTATION (1):
   S/g/instance/precision
 
 === Cases, by defect count ===

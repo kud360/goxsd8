@@ -534,21 +534,21 @@ func TestDeclineErrorTextSimpleRoot(t *testing.T) {
 
 // TestDeclineErrorTextUnlocated pins [DeclineError.Error]'s location rule
 // through Append: a simple type named in the XML Schema namespace with the
-// zero Loc, xs:QName as the document element's type, a particle's and an
-// attribute's, is named with no Loc, and a user restriction of xs:QName keeps
+// zero Loc, xs:precisionDecimal as the document element's type, a particle's and an
+// attribute's, is named with no Loc, and a user restriction of xs:precisionDecimal keeps
 // its schema Loc.
 func TestDeclineErrorTextUnlocated(t *testing.T) {
-	schema := schemaOf(t, `<xs:element name="r" type="xs:QName"/>`+
-		`<xs:element name="p"><xs:complexType><xs:sequence><xs:element name="a" type="xs:QName"/></xs:sequence></xs:complexType></xs:element>`+
-		`<xs:element name="at"><xs:complexType><xs:attribute name="a" type="xs:QName"/></xs:complexType></xs:element>`+
-		`<xs:simpleType name="st"><xs:restriction base="xs:QName"/></xs:simpleType><xs:element name="u" type="s:st"/>`)
-	const prefix = "codec does not encode an atomic simple type whose primitive is other than xs:string, xs:boolean, xs:decimal, xs:float, xs:double, xs:duration, xs:dateTime, xs:time, xs:date, xs:gYearMonth, xs:gYear, xs:gMonthDay, xs:gDay, xs:gMonth, xs:hexBinary, xs:base64Binary or xs:anyURI: "
+	schema := schemaOf(t, `<xs:element name="r" type="xs:precisionDecimal"/>`+
+		`<xs:element name="p"><xs:complexType><xs:sequence><xs:element name="a" type="xs:precisionDecimal"/></xs:sequence></xs:complexType></xs:element>`+
+		`<xs:element name="at"><xs:complexType><xs:attribute name="a" type="xs:precisionDecimal"/></xs:complexType></xs:element>`+
+		`<xs:simpleType name="st"><xs:restriction base="xs:precisionDecimal"/></xs:simpleType><xs:element name="u" type="s:st"/>`)
+	const prefix = "codec does not encode an atomic simple type whose primitive is other than xs:string, xs:boolean, xs:decimal, xs:float, xs:double, xs:duration, xs:dateTime, xs:time, xs:date, xs:gYearMonth, xs:gYear, xs:gMonthDay, xs:gDay, xs:gMonth, xs:hexBinary, xs:base64Binary, xs:anyURI, xs:QName or xs:NOTATION: "
 	const tail = "; an encoder refusal, not a schema or value fault"
 	for _, row := range []struct{ elem, want string }{
-		{"r", "simple type xs:QName"},
-		{"p", "simple type xs:QName"},
-		{"at", "simple type xs:QName"},
-		{"u", "simple type {urn:s}st defined at s.xsd:1:459"},
+		{"r", "simple type xs:precisionDecimal"},
+		{"p", "simple type xs:precisionDecimal"},
+		{"at", "simple type xs:precisionDecimal"},
+		{"u", "simple type {urn:s}st defined at s.xsd:1:492"},
 	} {
 		_, err := appendChecked(t, nil, schema, strict.New(), sname(row.elem), struct{}{})
 		if want := prefix + row.want + tail; err == nil || err.Error() != want {
