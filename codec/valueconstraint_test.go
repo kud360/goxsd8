@@ -173,7 +173,7 @@ func TestDecodeAttributeValueConstraint(t *testing.T) {
 			}
 			schema := schemaOf(t, uses(`<xs:attribute name="b" type="xs:string" default="d"/>`))
 			got, err := Decode[opt](schema, strict.New(), instanceOf("", a))
-			const want = "codec: T is not the type codegen emits for the document element: field 1 of codec.opt is B *string where codegen emits B string"
+			const want = "codec: T is not the type codegen emits for the document element: field 1 of codec.opt is B *string where codegen emits B string; the document element's declaration is element {urn:s}r declared at s.xsd:1:181"
 			if got != nil || !errors.Is(err, ErrTypeMismatch) || err.Error() != want {
 				t.Errorf("Decode = (%v, %v), want no value and %q", got, err, want)
 			}

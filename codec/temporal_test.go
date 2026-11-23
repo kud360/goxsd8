@@ -382,24 +382,24 @@ func TestDecodeTemporalTypeMismatch(t *testing.T) {
 		into        target
 		want        string
 	}{
-		{"Month uint16", dateElem, dateData, into[wideMonthR](), "field 0 of codec.wideMonthR is A codec.wideMonth where codegen emits A " + date},
-		{"Month and Day swapped", dateElem, dateData, into[swappedR](), "field 0 of codec.swappedR is A codec.swapped where codegen emits A " + date},
-		{"TimezoneOffset missing", dateElem, dateData, into[missingR](), "field 0 of codec.missingR is A codec.missing where codegen emits A " + date},
-		{"TimezoneOffset int16", dateElem, dateData, into[requiredR](), "field 0 of codec.requiredR is A codec.required where codegen emits A " + date},
+		{"Month uint16", dateElem, dateData, into[wideMonthR](), "field 0 of codec.wideMonthR is A codec.wideMonth where codegen emits A " + date + "; the document element's declaration is element {urn:s}r declared at s.xsd:1:181"},
+		{"Month and Day swapped", dateElem, dateData, into[swappedR](), "field 0 of codec.swappedR is A codec.swapped where codegen emits A " + date + "; the document element's declaration is element {urn:s}r declared at s.xsd:1:181"},
+		{"TimezoneOffset missing", dateElem, dateData, into[missingR](), "field 0 of codec.missingR is A codec.missing where codegen emits A " + date + "; the document element's declaration is element {urn:s}r declared at s.xsd:1:181"},
+		{"TimezoneOffset int16", dateElem, dateData, into[requiredR](), "field 0 of codec.requiredR is A codec.required where codegen emits A " + date + "; the document element's declaration is element {urn:s}r declared at s.xsd:1:181"},
 		{"a dateTimeStamp's struct for a dateTime", sequenceOf(`<xs:element name="a" type="xs:dateTime"/>`), instanceOf("", "<s:a>2000-01-01T00:00:00Z</s:a>"),
-			into[stampForDateTime](), "field 0 of codec.stampForDateTime is A codec.tDateTimeStamp where codegen emits A D for the datatype struct D of xs:dateTime (Year big.Int, Month uint8, Day uint8, Hour uint8, Minute uint8, Second big.Rat, TimezoneOffset *int16)"},
+			into[stampForDateTime](), "field 0 of codec.stampForDateTime is A codec.tDateTimeStamp where codegen emits A D for the datatype struct D of xs:dateTime (Year big.Int, Month uint8, Day uint8, Hour uint8, Minute uint8, Second big.Rat, TimezoneOffset *int16); the document element's declaration is element {urn:s}r declared at s.xsd:1:181"},
 		{"a dateTime's struct for a dateTimeStamp", sequenceOf(`<xs:element name="a" type="xs:dateTimeStamp"/>`), instanceOf("", "<s:a>2000-01-01T00:00:00Z</s:a>"),
-			into[dateTimeForStamp](), "field 0 of codec.dateTimeForStamp is A codec.tDateTime where codegen emits A D for the datatype struct D of xs:dateTimeStamp (Year big.Int, Month uint8, Day uint8, Hour uint8, Minute uint8, Second big.Rat, TimezoneOffset int16)"},
+			into[dateTimeForStamp](), "field 0 of codec.dateTimeForStamp is A codec.tDateTime where codegen emits A D for the datatype struct D of xs:dateTimeStamp (Year big.Int, Month uint8, Day uint8, Hour uint8, Minute uint8, Second big.Rat, TimezoneOffset int16); the document element's declaration is element {urn:s}r declared at s.xsd:1:181"},
 		{"a local list field of a named slice type", sequenceOf(`<xs:element name="a"><xs:simpleType><xs:list itemType="xs:date"/></xs:simpleType></xs:element>`), dateData,
-			into[namedList](), "field 0 of codec.namedList is A codec.tWl where codegen emits A []" + date},
+			into[namedList](), "field 0 of codec.namedList is A codec.tWl where codegen emits A []" + date + "; the document element's declaration is element {urn:s}r declared at s.xsd:1:181"},
 		{"a ref's list field of []Date", listOfDate + sequenceOf(`<xs:element ref="s:wl"/>`), instanceOf("", "<s:wl>2000-01-01</s:wl>"),
-			into[unnamedRef](), "field 0 of codec.unnamedRef is Wl []codec.tDate where codegen emits Wl N for a named type N over []" + date},
+			into[unnamedRef](), "field 0 of codec.unnamedRef is Wl []codec.tDate where codegen emits Wl N for a named type N over []" + date + "; the document element's declaration is element {urn:s}r declared at s.xsd:1:276"},
 		{"a ref's field of another struct", `<xs:element name="w" type="xs:date"/>` + sequenceOf(`<xs:element ref="s:w"/>`), instanceOf("", "<s:w>2000-01-01</s:w>"),
-			into[refOther](), "field 0 of codec.refOther is W codec.tGYear where codegen emits W " + date},
+			into[refOther](), "field 0 of codec.refOther is W codec.tGYear where codegen emits W " + date + "; the document element's declaration is element {urn:s}r declared at s.xsd:1:218"},
 		{"a simple root of another struct", `<xs:element name="r" type="xs:date"/>`, instanceOf("", "2000-01-01"),
-			into[tGYearMonth](), "the underlying type of codec.tGYearMonth is not " + date},
+			into[tGYearMonth](), "the underlying type of codec.tGYearMonth is not " + date + "; the document element's declaration is element {urn:s}r declared at s.xsd:1:181"},
 		{"a list root of another struct", `<xs:element name="r"><xs:simpleType><xs:list itemType="xs:date"/></xs:simpleType></xs:element>`, instanceOf("", "2000-01-01"),
-			into[[]tGYearMonth](), "the underlying type of []codec.tGYearMonth is not []" + date},
+			into[[]tGYearMonth](), "the underlying type of []codec.tGYearMonth is not []" + date + "; the document element's declaration is element {urn:s}r declared at s.xsd:1:181"},
 	}
 	for _, row := range rows {
 		t.Run(row.name, func(t *testing.T) {

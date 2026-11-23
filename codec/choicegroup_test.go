@@ -507,7 +507,7 @@ func TestDecodeNestedChoiceAlternativesBind(t *testing.T) {
 	for _, row := range rows {
 		t.Run(row.name, func(t *testing.T) {
 			err := CheckDecode[struct{}](schemaOf(t, row.decls), rootName)
-			const want = "codec: T is not the type codegen emits for the document element: T is struct {}, no interface, where codegen emits a sealed interface"
+			const want = "codec: T is not the type codegen emits for the document element: T is struct {}, no interface, where codegen emits a sealed interface; the document element's declaration is element {urn:s}r declared at s.xsd:1:181"
 			if err == nil || !errors.Is(err, ErrTypeMismatch) || err.Error() != want {
 				t.Errorf("CheckDecode = %v, want %q", err, want)
 			}
@@ -533,9 +533,9 @@ func TestDecodeNestedChoiceAlternativesTypeMismatch(t *testing.T) {
 		inner Option
 		want  string
 	}{
-		{"a nil branch", WithBranches[cgTNIn2](nil, cgTND{}), prefix + "WithBranches supplies a nil branch of codec.cgTNIn2"},
-		{"a branch that is no struct", WithBranches[cgTNIn2](cgTNStr(""), cgTND{}), prefix + "WithBranches supplies codec.cgTNStr, no struct, as a branch of codec.cgTNIn2"},
-		{"a branch twice", WithBranches[cgTNIn2](cgTNC{}, cgTNC{}), prefix + "WithBranches supplies codec.cgTNC twice as a branch of codec.cgTNIn2"},
+		{"a nil branch", WithBranches[cgTNIn2](nil, cgTND{}), prefix + "WithBranches supplies a nil branch of codec.cgTNIn2; the document element's declaration is element {urn:s}r declared at s.xsd:1:181"},
+		{"a branch that is no struct", WithBranches[cgTNIn2](cgTNStr(""), cgTND{}), prefix + "WithBranches supplies codec.cgTNStr, no struct, as a branch of codec.cgTNIn2; the document element's declaration is element {urn:s}r declared at s.xsd:1:181"},
+		{"a branch twice", WithBranches[cgTNIn2](cgTNC{}, cgTNC{}), prefix + "WithBranches supplies codec.cgTNC twice as a branch of codec.cgTNIn2; the document element's declaration is element {urn:s}r declared at s.xsd:1:181"},
 	}
 	schema := schemaOf(t, cgTwoNestedSchema)
 	data := instanceOf("", "<s:c>1</s:c>")
@@ -567,8 +567,8 @@ func TestDecodeChoiceGroupTypeMismatch(t *testing.T) {
 		branch cgR
 		want   string
 	}{
-		{"fields out of order", cgSwapped{}, "codec: T is not the type codegen emits for the document element: branch codec.cgSwapped of codec.cgR has the shape of no branch struct codegen emits that an earlier branch did not match"},
-		{"a field of another Go type", cgRetyped{}, "codec: T is not the type codegen emits for the document element: field 1 of codec.cgRetyped is C int32 where codegen emits C string"},
+		{"fields out of order", cgSwapped{}, "codec: T is not the type codegen emits for the document element: branch codec.cgSwapped of codec.cgR has the shape of no branch struct codegen emits that an earlier branch did not match; the document element's declaration is element {urn:s}r declared at s.xsd:1:181"},
+		{"a field of another Go type", cgRetyped{}, "codec: T is not the type codegen emits for the document element: field 1 of codec.cgRetyped is C int32 where codegen emits C string; the document element's declaration is element {urn:s}r declared at s.xsd:1:181"},
 	}
 	schema := schemaOf(t, cgSeqSchema)
 	data := instanceOf("", "<s:b>1</s:b><s:c>2</s:c>")

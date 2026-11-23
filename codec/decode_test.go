@@ -360,23 +360,23 @@ func TestDecodeTypeMismatch(t *testing.T) {
 		want   string
 	}{
 		{"renamed field", schema, data, into[renamed](),
-			ErrTypeMismatch.Error() + ": field 5 of codec.renamed is Opt3 *string where codegen emits Opt2 *string"},
+			ErrTypeMismatch.Error() + ": field 5 of codec.renamed is Opt3 *string where codegen emits Opt2 *string; the document element's declaration is element {urn:s}r declared at s.xsd:2:3"},
 		{"retyped field", schema, data, into[retyped](),
-			ErrTypeMismatch.Error() + ": field 1 of codec.retyped is Opt string where codegen emits Opt *string"},
+			ErrTypeMismatch.Error() + ": field 1 of codec.retyped is Opt string where codegen emits Opt *string; the document element's declaration is element {urn:s}r declared at s.xsd:2:3"},
 		{"field count", schema, data, into[short](),
-			ErrTypeMismatch.Error() + ": codec.short has 1 fields where codegen emits 6"},
+			ErrTypeMismatch.Error() + ": codec.short has 1 fields where codegen emits 6; the document element's declaration is element {urn:s}r declared at s.xsd:2:3"},
 		{"no struct", schema, data, into[string](),
-			ErrTypeMismatch.Error() + ": string is no struct"},
+			ErrTypeMismatch.Error() + ": string is no struct; the document element's declaration is element {urn:s}r declared at s.xsd:2:3"},
 		{"a pointer to codegen's struct", schema, data, into[*shapes](),
-			ErrTypeMismatch.Error() + ": *codec.shapes is a pointer to codec.shapes, which matches; use codec.shapes in its place"},
+			ErrTypeMismatch.Error() + ": *codec.shapes is a pointer to codec.shapes, which matches; use codec.shapes in its place; the document element's declaration is element {urn:s}r declared at s.xsd:2:3"},
 		{"a pointer to another struct", schema, data, into[*struct{ A int }](),
-			ErrTypeMismatch.Error() + ": *struct { A int } is no struct"},
+			ErrTypeMismatch.Error() + ": *struct { A int } is no struct; the document element's declaration is element {urn:s}r declared at s.xsd:2:3"},
 		{"a pointer to a pointer to codegen's struct", schema, data, into[**shapes](),
-			ErrTypeMismatch.Error() + ": **codec.shapes is no struct"},
+			ErrTypeMismatch.Error() + ": **codec.shapes is no struct; the document element's declaration is element {urn:s}r declared at s.xsd:2:3"},
 		{"a struct for a simple root", simple, simpleData, into[struct{ A string }](),
-			ErrTypeMismatch.Error() + ": the underlying type of struct { A string } is not string"},
+			ErrTypeMismatch.Error() + ": the underlying type of struct { A string } is not string; the document element's declaration is element {urn:s}r declared at s.xsd:1:181"},
 		{"a type over int for a simple root", simple, simpleData, into[count](),
-			ErrTypeMismatch.Error() + ": the underlying type of codec.count is not string"},
+			ErrTypeMismatch.Error() + ": the underlying type of codec.count is not string; the document element's declaration is element {urn:s}r declared at s.xsd:1:181"},
 	}
 	for _, row := range rows {
 		t.Run(row.name, func(t *testing.T) {
@@ -413,6 +413,50 @@ func TestDecodeTypeMismatch(t *testing.T) {
 	const want = "codec: ?:1:1: the document element {urn:s}r has no top-level declaration"
 	if err == nil || err.Error() != want || errors.Is(err, ErrTypeMismatch) {
 		t.Errorf("bind(undeclared document element) = %v, want %q, no ErrTypeMismatch", err, want)
+	}
+}
+
+// TestTypeMismatchNamesDeclaration pins the end item 6 of Decode's doc states
+// for its error, from Decode, CheckDecode and CheckAppend alike, once and
+// after the check's own detail, for a declaration in a namespace and one in
+// none; each error is ErrTypeMismatch and no decline.
+func TestTypeMismatchNamesDeclaration(t *testing.T) {
+	type probeMsg struct{ A string }
+	const choice = `<xs:complexType><xs:choice><xs:element name="a" type="xs:string"/><xs:element name="b" type="xs:token" maxOccurs="3"/></xs:choice></xs:complexType>`
+	rows := []struct {
+		name   string
+		schema *xsd.Schema
+		root   xsd.QName
+		data   []byte
+		want   string
+	}{
+		{"in a namespace", schemaOf(t, `<xs:element name="r">`+choice+`</xs:element>`), rootName, instanceOf("", "<s:a>x</s:a>"),
+			"codec: T is not the type codegen emits for the document element: T is codec.probeMsg, no interface, where codegen emits a sealed interface; the document element's declaration is element {urn:s}r declared at s.xsd:1:181"},
+		{"in no namespace", parseString(t, `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"><xs:element name="pick">`+choice+`</xs:element></xs:schema>`),
+			xsd.QName{Local: "pick"}, []byte(`<pick><a>x</a></pick>`),
+			"codec: T is not the type codegen emits for the document element: T is codec.probeMsg, no interface, where codegen emits a sealed interface; the document element's declaration is element pick declared at s.xsd:1:56"},
+	}
+	for _, row := range rows {
+		t.Run(row.name, func(t *testing.T) {
+			mustAccept(t, row.schema, row.data)
+			_, decoded := Decode[probeMsg](row.schema, strict.New(), row.data)
+			for _, got := range []struct {
+				entry string
+				err   error
+			}{
+				{"Decode", decoded},
+				{"CheckDecode", CheckDecode[probeMsg](row.schema, row.root)},
+				{"CheckAppend", CheckAppend[probeMsg](row.schema, row.root)},
+			} {
+				if got.err == nil || got.err.Error() != row.want {
+					t.Errorf("%s = %v, want %q", got.entry, got.err, row.want)
+				}
+				var de *DeclineError
+				if !errors.Is(got.err, ErrTypeMismatch) || errors.As(got.err, &de) {
+					t.Errorf("%s = %v, want ErrTypeMismatch and no decline", got.entry, got.err)
+				}
+			}
+		})
 	}
 }
 
@@ -808,35 +852,35 @@ func TestDecodeChoiceTypeMismatch(t *testing.T) {
 		want  string
 	}{
 		{"no WithBranches", pickSchema, pickData, into[pick](),
-			"no WithBranches supplies the branches of codec.pick, the interface of T, where codegen emits 2"},
+			"no WithBranches supplies the branches of codec.pick, the interface of T, where codegen emits 2; the document element's declaration is element {urn:s}r declared at s.xsd:1:181"},
 		{"one branch short", pickSchema, pickData, into[pick](WithBranches[pick](pickA{})),
-			"WithBranches supplies 1 branches of codec.pick where codegen emits 2"},
+			"WithBranches supplies 1 branches of codec.pick where codegen emits 2; the document element's declaration is element {urn:s}r declared at s.xsd:1:181"},
 		{"one extra branch", pickSchema, pickData, into[pick](WithBranches[pick](pickA{}, pickB{}, pickC{})),
-			"WithBranches supplies 3 branches of codec.pick where codegen emits 2"},
+			"WithBranches supplies 3 branches of codec.pick where codegen emits 2; the document element's declaration is element {urn:s}r declared at s.xsd:1:181"},
 		{"a pointer branch", pickSchema, pickData, into[pick](WithBranches[pick](&pickA{}, pickB{})),
-			"WithBranches supplies *codec.pickA, no struct, as a branch of codec.pick"},
+			"WithBranches supplies *codec.pickA, no struct, as a branch of codec.pick; the document element's declaration is element {urn:s}r declared at s.xsd:1:181"},
 		{"a nil branch", pickSchema, pickData, into[pick](WithBranches[pick](pickA{}, nil)),
-			"WithBranches supplies a nil branch of codec.pick"},
+			"WithBranches supplies a nil branch of codec.pick; the document element's declaration is element {urn:s}r declared at s.xsd:1:181"},
 		{"a branch twice", pickSchema, pickData, into[pick](WithBranches[pick](pickA{}, pickA{})),
-			"WithBranches supplies codec.pickA twice as a branch of codec.pick"},
+			"WithBranches supplies codec.pickA twice as a branch of codec.pick; the document element's declaration is element {urn:s}r declared at s.xsd:1:181"},
 		{"a branch of no alternative's shape", pickSchema, pickData, into[pick](WithBranches[pick](pickA{}, pickC{})),
-			"branch codec.pickC of codec.pick has the shape of no branch struct codegen emits that an earlier branch did not match"},
+			"branch codec.pickC of codec.pick has the shape of no branch struct codegen emits that an earlier branch did not match; the document element's declaration is element {urn:s}r declared at s.xsd:1:181"},
 		{"two branches of one alternative's shape", pickSchema, pickData, into[pick](WithBranches[pick](pickA{}, pickA2{})),
-			"branch codec.pickA2 of codec.pick has the shape of no branch struct codegen emits that an earlier branch did not match"},
+			"branch codec.pickA2 of codec.pick has the shape of no branch struct codegen emits that an earlier branch did not match; the document element's declaration is element {urn:s}r declared at s.xsd:1:181"},
 		{"a struct where codegen emits the bare interface", pickSchema, pickData, into[opt](optBranches),
-			"T is codec.opt, no interface, where codegen emits a sealed interface"},
+			"T is codec.opt, no interface, where codegen emits a sealed interface; the document element's declaration is element {urn:s}r declared at s.xsd:1:181"},
 		{"the bare interface where codegen emits a struct", optSchema, pickData, into[optChoice](optBranches),
-			"codec.optChoice is no struct"},
+			"codec.optChoice is no struct; the document element's declaration is element {urn:s}r declared at s.xsd:1:181"},
 		{"an interface whose method is exported", pickSchema, pickData, into[exported](),
-			"T is codec.exported, which is not an interface of one unexported method, codegen's sealed interface"},
+			"T is codec.exported, which is not an interface of one unexported method, codegen's sealed interface; the document element's declaration is element {urn:s}r declared at s.xsd:1:181"},
 		{"an interface of two methods", pickSchema, pickData, into[twoMethods](),
-			"T is codec.twoMethods, which is not an interface of one unexported method, codegen's sealed interface"},
+			"T is codec.twoMethods, which is not an interface of one unexported method, codegen's sealed interface; the document element's declaration is element {urn:s}r declared at s.xsd:1:181"},
 		{"the choice's field not an interface", attributedSchema, tagged, into[stringChoice](),
-			"field Choice of codec.stringChoice is string, no interface, where codegen emits a sealed interface"},
+			"field Choice of codec.stringChoice is string, no interface, where codegen emits a sealed interface; the document element's declaration is element {urn:s}r declared at s.xsd:1:181"},
 		{"the choice's field misnamed", attributedSchema, tagged, into[misnamed](attributedBranches),
-			"field 0 of codec.misnamed is C codec.attributedChoice where codegen emits Choice, a sealed interface"},
+			"field 0 of codec.misnamed is C codec.attributedChoice where codegen emits Choice, a sealed interface; the document element's declaration is element {urn:s}r declared at s.xsd:1:181"},
 		{"an attribute field after the choice's", attributedSchema, tagged, into[attributeShort](attributedBranches),
-			"field 1 of codec.attributeShort is Tag string where codegen emits Choice2 *string"},
+			"field 1 of codec.attributeShort is Tag string where codegen emits Choice2 *string; the document element's declaration is element {urn:s}r declared at s.xsd:1:181"},
 	}
 	for _, row := range rows {
 		t.Run(row.name, func(t *testing.T) {
@@ -890,7 +934,7 @@ func TestWithBranches(t *testing.T) {
 		})
 	}
 	_, err := Decode[pick](schema, strict.New(), data, pickBranches, WithBranches[pick](pickA{}))
-	if want := ErrTypeMismatch.Error() + ": WithBranches supplies 1 branches of codec.pick where codegen emits 2"; err == nil || err.Error() != want {
+	if want := ErrTypeMismatch.Error() + ": WithBranches supplies 1 branches of codec.pick where codegen emits 2; the document element's declaration is element {urn:s}r declared at s.xsd:1:181"; err == nil || err.Error() != want {
 		t.Errorf("Decode under a full set then a short one = %v, want %q: the later set replaces the earlier", err, want)
 	}
 }
@@ -1059,13 +1103,13 @@ func TestDecodeElementRefTypeMismatch(t *testing.T) {
 		want  string
 	}{
 		{"string at a ref", refSchema, refData, into[plainOne](),
-			"field 0 of codec.plainOne is A string where codegen emits A N for a named type N over string"},
+			"field 0 of codec.plainOne is A string where codegen emits A N for a named type N over string; the document element's declaration is element {urn:s}r declared at s.xsd:2:3"},
 		{"*string at an optional ref", refSchema, refData, into[plainOptional](),
-			"field 1 of codec.plainOptional is B *string where codegen emits B *N for a named type N over string"},
+			"field 1 of codec.plainOptional is B *string where codegen emits B *N for a named type N over string; the document element's declaration is element {urn:s}r declared at s.xsd:2:3"},
 		{"[]string at a repeated ref", refSchema, refData, into[plainRepeated](),
-			"field 2 of codec.plainRepeated is C []string where codegen emits C []N for a named type N over string"},
+			"field 2 of codec.plainRepeated is C []string where codegen emits C []N for a named type N over string; the document element's declaration is element {urn:s}r declared at s.xsd:2:3"},
 		{"a named type at a local element", shapesSchema, instanceOf(` req="r"`, "<s:one>x</s:one><s:tok>t</s:tok>"), into[namedLocal](),
-			"field 0 of codec.namedLocal is One codec.refA where codegen emits One string"},
+			"field 0 of codec.namedLocal is One codec.refA where codegen emits One string; the document element's declaration is element {urn:s}r declared at s.xsd:2:3"},
 	}
 	for _, row := range rows {
 		t.Run(row.name, func(t *testing.T) {
@@ -1407,11 +1451,11 @@ func TestDecodeSubstitutionGroupTypeMismatch(t *testing.T) {
 		want string
 	}{
 		{"no WithBranches", into[grpHolder](),
-			"no WithBranches supplies the branches of codec.grpAGroup, the interface of field A of codec.grpHolder, where codegen emits 2"},
+			"no WithBranches supplies the branches of codec.grpAGroup, the interface of field A of codec.grpHolder, where codegen emits 2; the document element's declaration is element {urn:s}r declared at s.xsd:2:3"},
 		{"one branch short", into[grpHolder](WithBranches[grpAGroup](grpAGroupA{})),
-			"WithBranches supplies 1 branches of codec.grpAGroup where codegen emits 2"},
+			"WithBranches supplies 1 branches of codec.grpAGroup where codegen emits 2; the document element's declaration is element {urn:s}r declared at s.xsd:2:3"},
 		{"the head's named type", into[headTyped](),
-			"field 0 of codec.headTyped is A codec.grpA where codegen emits A I for a substitution group's sealed interface I"},
+			"field 0 of codec.headTyped is A codec.grpA where codegen emits A I for a substitution group's sealed interface I; the document element's declaration is element {urn:s}r declared at s.xsd:2:3"},
 	}
 	for _, row := range rows {
 		t.Run(row.name, func(t *testing.T) {

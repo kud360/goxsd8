@@ -247,13 +247,13 @@ func TestDecodeListTypeMismatch(t *testing.T) {
 		want  string
 	}{
 		{"string for a simple root's []string", listRootSchema, instanceOf("", "x"), into[string](),
-			"the underlying type of string is not []string"},
+			"the underlying type of string is not []string; the document element's declaration is element {urn:s}r declared at s.xsd:1:181"},
 		{"string for a field's []string", listSchema, data, into[flat](),
-			"field 0 of codec.flat is Strs string where codegen emits Strs []string"},
+			"field 0 of codec.flat is Strs string where codegen emits Strs []string; the document element's declaration is element {urn:s}r declared at s.xsd:3:1"},
 		{"[]int64 for a field's []int32", listSchema, data, into[wide](),
-			"field 4 of codec.wide is Res []int64 where codegen emits Res []int32"},
+			"field 4 of codec.wide is Res []int64 where codegen emits Res []int32; the document element's declaration is element {urn:s}r declared at s.xsd:3:1"},
 		{"[][]int32 for a ref's []N", listRefSchema, instanceOf("", "<s:h>1</s:h>"), into[unnamedRef](),
-			"field 0 of codec.unnamedRef is H [][]int32 where codegen emits H []N for a named type N over []int32"},
+			"field 0 of codec.unnamedRef is H [][]int32 where codegen emits H []N for a named type N over []int32; the document element's declaration is element {urn:s}r declared at s.xsd:2:1"},
 	}
 	for _, row := range rows {
 		t.Run(row.name, func(t *testing.T) {

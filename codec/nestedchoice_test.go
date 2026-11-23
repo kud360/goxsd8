@@ -268,7 +268,7 @@ func TestDecodeNestedChoiceTypeMismatch(t *testing.T) {
 	if got != nil {
 		t.Fatalf("Decode = %v, want no value", *got)
 	}
-	const want = "codec: T is not the type codegen emits for the document element: field 1 of codec.misnamed is C codec.ncChoice where codegen emits Choice, a sealed interface"
+	const want = "codec: T is not the type codegen emits for the document element: field 1 of codec.misnamed is C codec.ncChoice where codegen emits Choice, a sealed interface; the document element's declaration is element {urn:s}r declared at s.xsd:1:181"
 	if err == nil || !errors.Is(err, ErrTypeMismatch) || err.Error() != want {
 		t.Errorf("Decode error = %v, want %q", err, want)
 	}

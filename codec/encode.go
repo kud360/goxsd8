@@ -233,7 +233,7 @@ func encodeStatic(schema *xsd.Schema, name xsd.QName, t reflect.Type, cfg config
 	}
 	f, err := b.check(t, newCheckContext(cfg))
 	if err != nil {
-		return xsd.ElementDeclaration{}, nil, err
+		return xsd.ElementDeclaration{}, nil, namedMismatch(decl, err)
 	}
 	return decl, f, nil
 }

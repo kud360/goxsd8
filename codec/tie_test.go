@@ -232,11 +232,11 @@ func TestDecodeTieMismatch(t *testing.T) {
 		want   string
 	}{
 		{"branches not named from the interface's name", WithBranches[tieR](Alpha{}, Beta{}, TieRAA4{}),
-			prefix + "branch codec.Alpha of codec.tieR is named neither TieRAA nor TieRAA followed by a decimal from 2, as codegen names the branch structs of its 3 tied alternatives, whose branch words render one identifier"},
+			prefix + "branch codec.Alpha of codec.tieR is named neither TieRAA nor TieRAA followed by a decimal from 2, as codegen names the branch structs of its 3 tied alternatives, whose branch words render one identifier; the document element's declaration is element {urn:s}r declared at s.xsd:1:222"},
 		{"two of three branches named from the interface's name", WithBranches[tieR](TieRAA2{}, TieRAA3{}, Alpha{}),
-			prefix + "branch codec.Alpha of codec.tieR is named neither TieRAA nor TieRAA followed by a decimal from 2, as codegen names the branch structs of its 3 tied alternatives, whose branch words render one identifier"},
+			prefix + "branch codec.Alpha of codec.tieR is named neither TieRAA nor TieRAA followed by a decimal from 2, as codegen names the branch structs of its 3 tied alternatives, whose branch words render one identifier; the document element's declaration is element {urn:s}r declared at s.xsd:1:222"},
 		{"a branch of no alternative's shape", WithBranches[tieR](TieRAA2{}, TieRAA3{}, tieInt{}),
-			prefix + "WithBranches supplies 2 branches of codec.tieR of the shape of its 3 tied alternatives, whose branch structs codegen names TieRAA and TieRAA followed by a decimal from 2"},
+			prefix + "WithBranches supplies 2 branches of codec.tieR of the shape of its 3 tied alternatives, whose branch structs codegen names TieRAA and TieRAA followed by a decimal from 2; the document element's declaration is element {urn:s}r declared at s.xsd:1:222"},
 	}
 	schema := schemaOf(t, tieChoiceSchema)
 	data := instanceOf("", "<s:a_a>v</s:a_a>")
@@ -260,7 +260,7 @@ func TestDecodeTieMismatch(t *testing.T) {
 // alternatives and its tie two, and a misnamed branch of the tie's shape is
 // ErrTypeMismatch naming 2 tied alternatives, from Decode and CheckDecode.
 func TestDecodeTieMismatchBeyondTie(t *testing.T) {
-	const want = "codec: T is not the type codegen emits for the document element: branch codec.wildMis of codec.wildR is named neither WildRAny nor WildRAny followed by a decimal from 2, as codegen names the branch structs of its 2 tied alternatives, whose branch words render one identifier"
+	const want = "codec: T is not the type codegen emits for the document element: branch codec.wildMis of codec.wildR is named neither WildRAny nor WildRAny followed by a decimal from 2, as codegen names the branch structs of its 2 tied alternatives, whose branch words render one identifier; the document element's declaration is element {urn:s}r declared at s.xsd:1:181"
 	branch := WithBranches[wildR](wildOther{}, WildRAny2{}, wildMis{})
 	schema := schemaOf(t, wildTieSchema)
 	data := instanceOf("", "<s:any>v</s:any>")

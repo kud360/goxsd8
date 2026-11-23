@@ -284,13 +284,13 @@ func TestDecodeAtomicTypeMismatch(t *testing.T) {
 		want        string
 	}{
 		{"a field's width", sequenceOf(`<xs:element name="a" type="xs:int"/>`), instanceOf("", "<s:a>1</s:a>"),
-			into[width](), "field 0 of codec.width is A int64 where codegen emits A int32"},
+			into[width](), "field 0 of codec.width is A int64 where codegen emits A int32; the document element's declaration is element {urn:s}r declared at s.xsd:1:181"},
 		{"a simple root's width", `<xs:element name="r" type="xs:int"/>`, instanceOf("", "1"),
-			into[int64](), "the underlying type of int64 is not int32"},
+			into[int64](), "the underlying type of int64 is not int32; the document element's declaration is element {urn:s}r declared at s.xsd:1:181"},
 		{"a ref's named type's width", `<xs:element name="h" type="xs:int"/>` + sequenceOf(`<xs:element ref="s:h"/>`), instanceOf("", "<s:h>1</s:h>"),
-			into[refWidth](), "field 0 of codec.refWidth is H codec.wideH where codegen emits H N for a named type N over int32"},
+			into[refWidth](), "field 0 of codec.refWidth is H codec.wideH where codegen emits H N for a named type N over int32; the document element's declaration is element {urn:s}r declared at s.xsd:1:217"},
 		{"a ref's named type's underlying type", `<xs:element name="d" type="xs:decimal"/>` + sequenceOf(`<xs:element ref="s:d"/>`), instanceOf("", "<s:d>1</s:d>"),
-			into[refUnderlying](), "field 0 of codec.refUnderlying is D codec.intD where codegen emits D N for a named type N over big.Rat"},
+			into[refUnderlying](), "field 0 of codec.refUnderlying is D codec.intD where codegen emits D N for a named type N over big.Rat; the document element's declaration is element {urn:s}r declared at s.xsd:1:221"},
 	}
 	for _, row := range rows {
 		t.Run(row.name, func(t *testing.T) {

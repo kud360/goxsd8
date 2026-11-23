@@ -299,15 +299,15 @@ func TestDecodeAnyAttributeTypeMismatch(t *testing.T) {
 		into  target
 		want  string
 	}{
-		{"no wildcard field", awUseSchema, into[short](), "codec.short has 2 fields where codegen emits 3"},
+		{"no wildcard field", awUseSchema, into[short](), "codec.short has 2 fields where codegen emits 3; the document element's declaration is element {urn:s}r declared at s.xsd:1:181"},
 		{"the wildcard field misnamed", awUseSchema, into[misnamed](),
-			"field 2 of codec.misnamed is Any []codec.anyAttribute where codegen emits AnyAttribute, a slice of a struct of codegen's AnyAttribute shape"},
+			"field 2 of codec.misnamed is Any []codec.anyAttribute where codegen emits AnyAttribute, a slice of a struct of codegen's AnyAttribute shape; the document element's declaration is element {urn:s}r declared at s.xsd:1:181"},
 		{"the wildcard field a slice of no AnyAttribute shape", awUseSchema, into[ofString](),
-			"field 2 of codec.ofString is AnyAttribute []string where codegen emits AnyAttribute, a slice of a struct of codegen's AnyAttribute shape"},
+			"field 2 of codec.ofString is AnyAttribute []string where codegen emits AnyAttribute, a slice of a struct of codegen's AnyAttribute shape; the document element's declaration is element {urn:s}r declared at s.xsd:1:181"},
 		{"the wildcard field no slice", awUseSchema, into[single](),
-			"field 2 of codec.single is AnyAttribute codec.anyAttribute where codegen emits AnyAttribute, a slice of a struct of codegen's AnyAttribute shape"},
-		{"a wildcard field where the type has no wildcard", plain, into[extra](), "codec.extra has 3 fields where codegen emits 2"},
-		{"a wildcard field where a restriction inherits none", awRestrictSchema, into[extra](), "codec.extra has 3 fields where codegen emits 2"},
+			"field 2 of codec.single is AnyAttribute codec.anyAttribute where codegen emits AnyAttribute, a slice of a struct of codegen's AnyAttribute shape; the document element's declaration is element {urn:s}r declared at s.xsd:1:181"},
+		{"a wildcard field where the type has no wildcard", plain, into[extra](), "codec.extra has 3 fields where codegen emits 2; the document element's declaration is element {urn:s}r declared at s.xsd:1:181"},
+		{"a wildcard field where a restriction inherits none", awRestrictSchema, into[extra](), "codec.extra has 3 fields where codegen emits 2; the document element's declaration is element {urn:s}r declared at s.xsd:2:3"},
 	}
 	for _, row := range rows {
 		t.Run(row.name, func(t *testing.T) {

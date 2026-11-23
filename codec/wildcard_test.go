@@ -360,7 +360,7 @@ func TestDecodeWildcardTypeMismatch(t *testing.T) {
 			Content anyType
 		}
 	)
-	const want = " where codegen emits Any E for a struct E of codegen's AnyElement shape"
+	const want = " where codegen emits Any E for a struct E of codegen's AnyElement shape; the document element's declaration is element {urn:s}r declared at s.xsd:1:181"
 	rows := []struct {
 		name string
 		into target
@@ -603,7 +603,7 @@ func TestDecodeWildcardTieMismatch(t *testing.T) {
 				return got != nil, err
 			},
 			func(s *xsd.Schema) error { return CheckDecode[wtNs](s, rootName, WithBranches[wtNs](wtNsP{}, wtNsQ{})) },
-			prefix + "branch codec.wtNsP of codec.wtNs is named neither WtNsAny nor WtNsAny followed by a decimal from 2, as codegen names the branch structs of its 2 tied alternatives, whose branch words render one identifier"},
+			prefix + "branch codec.wtNsP of codec.wtNs is named neither WtNsAny nor WtNsAny followed by a decimal from 2, as codegen names the branch structs of its 2 tied alternatives, whose branch words render one identifier; the document element's declaration is element {urn:s}r declared at s.xsd:1:181"},
 		{"an element's and a wildcard's branch names over each other's shapes", wtStructSchema, `<o:w xmlns:o="urn:o"/>`,
 			func(s *xsd.Schema, data []byte) (bool, error) {
 				got, err := Decode[wtSwap](s, strict.New(), data, WithBranches[wtSwap](WtSwapAny3{}, WtSwapAny{}))
@@ -612,7 +612,7 @@ func TestDecodeWildcardTieMismatch(t *testing.T) {
 			func(s *xsd.Schema) error {
 				return CheckDecode[wtSwap](s, rootName, WithBranches[wtSwap](WtSwapAny3{}, WtSwapAny{}))
 			},
-			prefix + "branch codec.WtSwapAny3 of codec.wtSwap, by its name the branch of tied alternative 2 of 2, whose branch structs codegen names from WtSwapAny, has the shape of no branch struct codegen emits for it"},
+			prefix + "branch codec.WtSwapAny3 of codec.wtSwap, by its name the branch of tied alternative 2 of 2, whose branch structs codegen names from WtSwapAny, has the shape of no branch struct codegen emits for it; the document element's declaration is element {urn:s}r declared at s.xsd:1:181"},
 	}
 	for _, row := range rows {
 		t.Run(row.name, func(t *testing.T) {

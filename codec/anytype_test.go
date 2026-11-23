@@ -391,18 +391,18 @@ func TestDecodeAnyTypeMismatch(t *testing.T) {
 		into  target
 		want  string
 	}{
-		{"a local field of a named type over X", oneAnySchema, `<s:a/>`, into[struct{ A free }](), "field 0 of struct { A codec.free } is A codec.free where codegen emits A X for a struct X of codegen's AnyType shape"},
-		{"a local field of E", oneAnySchema, `<s:a/>`, into[struct{ A anyElement }](), "field 0 of struct { A codec.anyElement } is A codec.anyElement where codegen emits A X for a struct X of codegen's AnyType shape"},
-		{"a ref's field of X", refAnySchema, `<s:f/>`, into[struct{ F anyType }](), "field 0 of struct { F codec.anyType } is F codec.anyType where codegen emits F N for a named type N over a struct of AnyType's shape"},
+		{"a local field of a named type over X", oneAnySchema, `<s:a/>`, into[struct{ A free }](), "field 0 of struct { A codec.free } is A codec.free where codegen emits A X for a struct X of codegen's AnyType shape; the document element's declaration is element {urn:s}r declared at s.xsd:1:181"},
+		{"a local field of E", oneAnySchema, `<s:a/>`, into[struct{ A anyElement }](), "field 0 of struct { A codec.anyElement } is A codec.anyElement where codegen emits A X for a struct X of codegen's AnyType shape; the document element's declaration is element {urn:s}r declared at s.xsd:1:181"},
+		{"a ref's field of X", refAnySchema, `<s:f/>`, into[struct{ F anyType }](), "field 0 of struct { F codec.anyType } is F codec.anyType where codegen emits F N for a named type N over a struct of AnyType's shape; the document element's declaration is element {urn:s}r declared at s.xsd:1:203"},
 		{"a repeated field of X, not []X", occursAnySchema, `<s:a/>`, into[struct {
 			A anyType
 			B *anyType
-		}](), "field 0 of struct { A codec.anyType; B *codec.anyType } is A codec.anyType where codegen emits A []X for a struct X of codegen's AnyType shape"},
-		{"a document element's T of E", rootAnySchema, ``, into[anyElement](), "codec.anyElement is neither a struct X of codegen's AnyType shape nor a named type over one"},
-		{"a document element's T of no field", rootAnySchema, ``, into[struct{}](), "struct {} is neither a struct X of codegen's AnyType shape nor a named type over one"},
-		{"a document element's T of *X", rootAnySchema, ``, into[*anyType](), "*codec.anyType is a pointer to codec.anyType, which matches; use codec.anyType in its place"},
-		{"a document element's T of *E", rootAnySchema, ``, into[*anyElement](), "*codec.anyElement is neither a struct X of codegen's AnyType shape nor a named type over one"},
-		{"a document element's T of **X", rootAnySchema, ``, into[**anyType](), "**codec.anyType is neither a struct X of codegen's AnyType shape nor a named type over one"},
+		}](), "field 0 of struct { A codec.anyType; B *codec.anyType } is A codec.anyType where codegen emits A []X for a struct X of codegen's AnyType shape; the document element's declaration is element {urn:s}r declared at s.xsd:1:181"},
+		{"a document element's T of E", rootAnySchema, ``, into[anyElement](), "codec.anyElement is neither a struct X of codegen's AnyType shape nor a named type over one; the document element's declaration is element {urn:s}r declared at s.xsd:1:181"},
+		{"a document element's T of no field", rootAnySchema, ``, into[struct{}](), "struct {} is neither a struct X of codegen's AnyType shape nor a named type over one; the document element's declaration is element {urn:s}r declared at s.xsd:1:181"},
+		{"a document element's T of *X", rootAnySchema, ``, into[*anyType](), "*codec.anyType is a pointer to codec.anyType, which matches; use codec.anyType in its place; the document element's declaration is element {urn:s}r declared at s.xsd:1:181"},
+		{"a document element's T of *E", rootAnySchema, ``, into[*anyElement](), "*codec.anyElement is neither a struct X of codegen's AnyType shape nor a named type over one; the document element's declaration is element {urn:s}r declared at s.xsd:1:181"},
+		{"a document element's T of **X", rootAnySchema, ``, into[**anyType](), "**codec.anyType is neither a struct X of codegen's AnyType shape nor a named type over one; the document element's declaration is element {urn:s}r declared at s.xsd:1:181"},
 	}
 	for _, row := range rows {
 		t.Run(row.name, func(t *testing.T) {

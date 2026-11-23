@@ -509,17 +509,17 @@ func TestDecodeNestedTypeMismatch(t *testing.T) {
 		want  string
 	}{
 		{"a nested struct's field retyped", nestedRefSchema, refData, into[badRef](),
-			"field 1 of codec.badH is Y string where codegen emits Y int32"},
+			"field 1 of codec.badH is Y string where codegen emits Y int32; the document element's declaration is element {urn:s}r declared at s.xsd:2:3"},
 		{"a string where codegen emits a struct", nestedRefSchema, refData, into[plainRef](),
-			"field 0 of codec.plainRef is H string where codegen emits H S for a struct S"},
+			"field 0 of codec.plainRef is H string where codegen emits H S for a struct S; the document element's declaration is element {urn:s}r declared at s.xsd:2:3"},
 		{"a string two levels deep", nestedSchema, nestedData, into[plainMid](nestedPickBranches),
-			"field 0 of struct { Mid string } is Mid string where codegen emits Mid S for a struct S"},
+			"field 0 of struct { Mid string } is Mid string where codegen emits Mid S for a struct S; the document element's declaration is element {urn:s}r declared at s.xsd:5:3"},
 		{"a pointer to an optional choice's interface", nestedSchema, nestedData, into[pointerChoice](nestedPickBranches),
-			"field 5 of codec.pointerChoice is Pick *codec.nestedPick where codegen emits Pick I for a sealed interface I"},
+			"field 5 of codec.pointerChoice is Pick *codec.nestedPick where codegen emits Pick I for a sealed interface I; the document element's declaration is element {urn:s}r declared at s.xsd:5:3"},
 		{"no WithBranches for a nested interface", nestedSchema, nestedData, into[nestedR](),
-			"no WithBranches supplies the branches of codec.nestedPick, the interface of field Pick of codec.nestedR, where codegen emits 2"},
+			"no WithBranches supplies the branches of codec.nestedPick, the interface of field Pick of codec.nestedR, where codegen emits 2; the document element's declaration is element {urn:s}r declared at s.xsd:5:3"},
 		{"a nested alternative's branch selected by its field's name", selfSchema, instanceOf("", ""), into[selfR](WithBranches[selfChoice](selfBad{})),
-			"field 0 of codec.selfBad is E1 []string where codegen emits E1 []S for a struct S"},
+			"field 0 of codec.selfBad is E1 []string where codegen emits E1 []S for a struct S; the document element's declaration is element {urn:s}r declared at s.xsd:2:3"},
 	}
 	for _, row := range rows {
 		t.Run(row.name, func(t *testing.T) {
@@ -545,8 +545,8 @@ func TestDecodeNestedTypeMismatch(t *testing.T) {
 		err  error
 		want string
 	}{
-		{"struct{ R struct{} }", CheckDecode[struct{ R struct{} }](self, rootName), "struct {} has 0 fields where codegen emits 1"},
-		{"selfPtr", CheckDecode[selfPtr](self, rootName), "field 0 of codec.selfPtr is R *codec.selfPtr where codegen emits R S for a struct S"},
+		{"struct{ R struct{} }", CheckDecode[struct{ R struct{} }](self, rootName), "struct {} has 0 fields where codegen emits 1; the document element's declaration is element {urn:s}r declared at s.xsd:1:181"},
+		{"selfPtr", CheckDecode[selfPtr](self, rootName), "field 0 of codec.selfPtr is R *codec.selfPtr where codegen emits R S for a struct S; the document element's declaration is element {urn:s}r declared at s.xsd:1:181"},
 	} {
 		if want := ErrTypeMismatch.Error() + ": " + probe.want; probe.err == nil || probe.err.Error() != want || !errors.Is(probe.err, ErrTypeMismatch) {
 			t.Errorf("CheckDecode[%s](a ref to itself occurring once) = %v, want %q", probe.name, probe.err, want)

@@ -261,23 +261,25 @@ func choiceBytesEqual(a, b binaryChoice) bool {
 // defined type over []byte, which binaryRef's passes; the bare []byte, a local
 // particle's V, and string are each ErrTypeMismatch, whose message spells
 // codegen's type as []byte, never reflect's []uint8 (atomic.spell); T's own
-// field type is reflect's spelling.
+// field type is reflect's spelling, and the declaration ends the message.
 func TestDecodeBinaryRefTypeMismatch(t *testing.T) {
 	for _, p := range []struct {
 		primitive string
 		want      []byte
+		end       string
 	}{
-		{"hexBinary", []byte("AB")},
-		{"base64Binary", []byte{0xe3, 0x5e, 0x36}},
+		{"hexBinary", []byte("AB"), "where codegen emits H N for a named type N over []byte; the document element's declaration is element {urn:s}r declared at s.xsd:1:223"},
+		{"base64Binary", []byte{0xe3, 0x5e, 0x36}, "where codegen emits H N for a named type N over []byte; the document element's declaration is element {urn:s}r declared at s.xsd:1:226"},
 	} {
-		t.Run(p.primitive, func(t *testing.T) { assertBinaryRef(t, binaryRefSchema(p.primitive), p.want) })
+		t.Run(p.primitive, func(t *testing.T) { assertBinaryRef(t, binaryRefSchema(p.primitive), p.want, p.end) })
 	}
 }
 
 // assertBinaryRef fails the test unless the ref schema decls decodes its
 // instance into binaryRef, H holding want, and mismatches a bare []byte H
-// and a string one as TestDecodeBinaryRefTypeMismatch states.
-func assertBinaryRef(t *testing.T, decls string, want []byte) {
+// and a string one as TestDecodeBinaryRefTypeMismatch states, each message
+// ending end.
+func assertBinaryRef(t *testing.T, decls string, want []byte, end string) {
 	t.Helper()
 	schema := schemaOf(t, decls)
 	data := instanceOf("", "<s:h>4142</s:h>")
@@ -301,8 +303,8 @@ func assertBinaryRef(t *testing.T, decls string, want []byte) {
 			t.Errorf("%s: Decode = %v, want ErrTypeMismatch", row.name, err)
 			continue
 		}
-		if want := "where codegen emits H N for a named type N over []byte"; !strings.HasSuffix(err.Error(), want) {
-			t.Errorf("%s: Decode = %q, want it to end %q", row.name, err, want)
+		if !strings.HasSuffix(err.Error(), end) {
+			t.Errorf("%s: Decode = %q, want it to end %q", row.name, err, end)
 		}
 		assertProbeMismatch(t, row.check, err)
 	}

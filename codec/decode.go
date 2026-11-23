@@ -191,7 +191,8 @@ var ErrTypeMismatch = errors.New("codec: T is not the type codegen emits for the
 //     derives it from the schema by the comparisons the list "Item 6
 //     compares" below states: an error errors.Is reports as
 //     [ErrTypeMismatch], no *DeclineError, so that a T that does not match
-//     the schema is never filled.
+//     the schema is never filled. Its text ends by naming the declaration, its
+//     expanded name as [xsd.QName.Display] renders it and its schema Loc.
 //  7. An element carrying xsi:type, the document element, any descendant
 //     outside a wildcard's match, and any element outside an element of type
 //     xs:anyType's content, the element of type xs:anyType itself among
@@ -790,7 +791,7 @@ func decodeValue(schema *xsd.Schema, backend value.Backend, data []byte, out ref
 	}
 	f, err := b.check(out.Type(), newCheckContext(cfg))
 	if err != nil {
-		return err
+		return namedMismatch(decl, err)
 	}
 	if err := checkDeclaredXsiType(schema, decl, root); err != nil {
 		return err
@@ -839,7 +840,7 @@ func CheckDecode[T any](schema *xsd.Schema, name xsd.QName, opts ...Option) erro
 		return err
 	}
 	_, err = b.check(reflect.TypeFor[T](), newCheckContext(newConfig(opts)))
-	return err
+	return namedMismatch(decl, err)
 }
 
 // verdict returns nil for a Result Decode decodes, and otherwise the error
@@ -5851,6 +5852,19 @@ func xsiType(start *xmltree.StartElement) (xmltree.Attribute, bool) {
 // declSubject names the element declaration decl and its schema Loc.
 func declSubject(decl xsd.ElementDeclaration) string {
 	return fmt.Sprintf("element %s declared at %s", decl.Name().Display(), decl.Loc())
+}
+
+// namedMismatch returns err, the error of the item-6 check of T against the
+// document element's declaration decl, naming decl by declSubject where
+// errors.Is reports err as ErrTypeMismatch (STYLE E1), and err as it is
+// otherwise, nil included. The check sites never receive decl, so
+// each entry point that checks T names it here: decodeValue, CheckDecode and
+// encodeStatic.
+func namedMismatch(decl xsd.ElementDeclaration, err error) error {
+	if !errors.Is(err, ErrTypeMismatch) {
+		return err
+	}
+	return fmt.Errorf("%w; the document element's declaration is %s", err, declSubject(decl))
 }
 
 // expanded returns the expanded name of an instance name.

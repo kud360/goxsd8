@@ -311,7 +311,7 @@ func TestDecodePrecisionDecimalTypeMismatch(t *testing.T) {
 			if got != nil {
 				t.Errorf("Decode = %v, want no value", got)
 			}
-			if want := ErrTypeMismatch.Error() + ": " + row.want; err == nil || err.Error() != want {
+			if want := ErrTypeMismatch.Error() + ": " + row.want + "; the document element's declaration is element {urn:s}r declared at s.xsd:1:181"; err == nil || err.Error() != want {
 				t.Errorf("error = %v\nwant    %q", err, want)
 			}
 			var de *DeclineError
@@ -355,7 +355,7 @@ func TestPrecisionDecimalArmsApart(t *testing.T) {
 	data := instanceOf("", "<s:x>1</s:x>")
 	mustAccept(t, choice, data)
 	_, err := Decode[tC](choice, strict.New(), data, pdArms, WithPrecisionDecimalArms[tC](tCX{}, tCY{}, tCX{}, tCY{}))
-	if want := ErrTypeMismatch.Error() + ": no WithBranches supplies the branches of codec.tC, the interface of T, where codegen emits 2"; err == nil || err.Error() != want {
+	if want := ErrTypeMismatch.Error() + ": no WithBranches supplies the branches of codec.tC, the interface of T, where codegen emits 2; the document element's declaration is element {urn:s}r declared at s.xsd:1:181"; err == nil || err.Error() != want {
 		t.Errorf("error = %v\nwant    %q", err, want)
 	}
 	root := schemaOf(t, `<xs:element name="r" type="xs:precisionDecimal"/>`)
