@@ -242,16 +242,24 @@ func flaws(para []commentpara.Line) (int, []flaw) {
 			out = append(out, flaw{line: i, over: true, off: columns(line) - width})
 			continue
 		}
-		if i == len(para)-1 || width-columns(line) < shortSlack {
+		if i == len(para)-1 {
 			continue
 		}
 		word := firstWord(para[i+1].Body)
-		if word == 0 || columns(line)+1+word > width {
+		if word == 0 || !ragged(columns(line), word, width) {
 			continue
 		}
 		out = append(out, flaw{line: i, off: width - columns(line)})
 	}
 	return width, out
+}
+
+// ragged reports whether a line of n columns, broken before a word of word
+// columns, is the short shape: at least shortSlack short of width, with room
+// for the word at a one-space join. flaws asks it of every line but a
+// paragraph's last, and reflow of every break it would place on a run.
+func ragged(n, word, width int) bool {
+	return width-n >= shortSlack && n+1+word <= width
 }
 
 // wrapWidth is the width the paragraph was filled to: its longest line, except
@@ -305,7 +313,9 @@ func report(path string, para []commentpara.Line, width int, flaws []flaw) []fin
 // before it inside its source line, so an interior run such as the two spaces
 // of `"  a  b"` survives byte for byte, its columns counted toward the fit
 // (#3903). A word that opens a source line joins the word before it by one
-// space, and a break drops the run it lands on whole.
+// space, and a break drops the run it lands on whole, except where the line that
+// break would end is ragged before the word: the run then collapses to one
+// space, so no break placed on a run is one flaws reports at width (#4032).
 func reflow(para []commentpara.Line, width, from int) []string {
 	first := lead(para[from])
 	cont := first
@@ -322,7 +332,11 @@ func reflow(para []commentpara.Line, width, from int) []string {
 	cur := first
 	empty := true
 	for _, w := range words {
-		if !empty && utf8.RuneCountInString(cur)+utf8.RuneCountInString(w.sep)+utf8.RuneCountInString(w.text) > width {
+		n, t := utf8.RuneCountInString(cur), utf8.RuneCountInString(w.text)
+		if !empty && n+utf8.RuneCountInString(w.sep)+t > width && ragged(n, t, width) {
+			w.sep = " "
+		}
+		if !empty && n+utf8.RuneCountInString(w.sep)+t > width {
 			out = append(out, cur)
 			cur, empty = cont, true
 		}

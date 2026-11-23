@@ -422,6 +422,42 @@ func TestFixDropsTheRunABreakLandsOn(t *testing.T) {
 	}
 }
 
+// TestFixIsOnePassOverARunItWouldBreakOn is #4032's shape: the greedy fill
+// reaches `a  ABCDEFGHIJKLMNOPQRST` at column 59 of an 80-column paragraph,
+// where the two-space run overflows the line by one and a single space fits it
+// exactly. Breaking on the run would end the line 21 columns short, before a
+// word the check reads as fitting at a one-space join, so the run collapses
+// instead: the check is clean on what -fix wrote and a second -fix is a no-op.
+func TestFixIsOnePassOverARunItWouldBreakOn(t *testing.T) {
+	src := "package p\n\n" +
+		mkLine(0, 80) + "\n" +
+		"//" + strings.Repeat(" abcd", 9) + "\n" +
+		"// abcd abcd a  ABCDEFGHIJKLMNOPQRST" + strings.Repeat(" abcd", 8) + "\n" +
+		"// abcd abcd\n" +
+		"var x = 1\n"
+	once := strings.Join(fix(t, src), "\n")
+	if got := lines(t, once); len(got) != 0 {
+		t.Fatalf("the check reports lines %v on -fix's output:\n%s", got, once)
+	}
+	if twice := strings.Join(fix(t, once), "\n"); twice != once {
+		t.Fatalf("a second -fix changed the file:\n got %q\nwant %q", twice, once)
+	}
+}
+
+// TestReportsAShortLineBeforeASingleSpacedWord is the guard on that collapse:
+// the same 21-column shortfall before the same word, joined to the next line
+// by no run, is still the ragged shape the check reports.
+func TestReportsAShortLineBeforeASingleSpacedWord(t *testing.T) {
+	src := "package p\n\n" +
+		mkLine(0, 80) + "\n" +
+		"//" + strings.Repeat(" abcd", 11) + " a\n" +
+		"// ABCDEFGHIJKLMNOPQRST" + strings.Repeat(" abcd", 10) + "\n" +
+		"var x = 1\n"
+	if got := lines(t, src); !equal(got, 4) {
+		t.Fatalf("reported lines %v, want [4]", got)
+	}
+}
+
 // TestReflowDropsATrailingRun hands reflow a body ending in a run directly:
 // commentpara takes a `//` line with trailing whitespace for one sharing its
 // line with code, so no such body reaches reflow through process. The run joins
