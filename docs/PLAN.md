@@ -111,7 +111,7 @@ Twenty-two constructs decline in all, down from twenty-five. The other fourteen 
 
 ### Milestones and queue
 
-**Read from GitHub after this pass: 347 open issues.** That is 345 in the `issuefeed` walk plus this pass's two filings, #4075 and #4076. The walk's 345 is the last stamp's 348, plus eight post-land filings (#4048, #4049, #4050, #4051, #4056, #4061, #4064 and #4073), less the eleven landings.
+**Read from GitHub after this pass: 352 open issues.** That is 345 in the `issuefeed` walk plus this pass's seven filings: #4075 and #4076, and the persona round's #4077, #4078, #4079, #4080 and #4081. The walk's 345 is the last stamp's 348, plus eight post-land filings (#4048, #4049, #4050, #4051, #4056, #4061, #4064 and #4073), less the eleven landings.
 
 | milestone | open | closed | state |
 |---|---:|---:|---|
@@ -127,7 +127,7 @@ Twenty-two constructs decline in all, down from twenty-five. The other fourteen 
 | **M10 — Codec** | **10** | **116** | **north star**: decode done; encode #4038, #4050, #4039, #4075, #4040, #4051, #3971, #4056 and #4049 (`ready`), #4076 (`blocked`) |
 | M11–M12 | 0 | 0 | not started |
 
-The open issues are **327 `ready`, 18 `blocked` and 2 `epic`**, which sums to 347. No issue is `needs-replan` or unlabelled. 254 open issues carry no milestone. Open `kind/process` is 3: #4048 and #4061 (`ready`) and #1885 (`blocked`).
+The open issues are **332 `ready`, 18 `blocked` and 2 `epic`**, which sums to 352. No issue is `needs-replan` or unlabelled. 259 open issues carry no milestone. Open `kind/process` is 3: #4048 and #4061 (`ready`) and #1885 (`blocked`).
 
 - **`blocked` is 18:** #16, #555, #1042, #1051, #1374, #1609, #1790, #1885, #2022, #2081, #2533, #2670, #2749, #2977, #3031, #3477, #3791 and #4076 (on #4075).
   - `go tool issuefeed -owner-comments` prints "no owner comment since the blocked label on any of the 17 open blocked issues". It was run before this pass filed #4076.
@@ -175,41 +175,43 @@ This is ordered for a `/develop` session: take the highest row you can start. **
 | 10 | #4064 | **Decode's item 8 and `readLexical`'s doc misstate why precisionDecimal is read lexically.** It is #4004's follow-up. |
 | 11 | #1291 | **A stable per-violation key for a library caller's error.** Libuser has sighted it twice. It is the precondition for #1409's arm (b). |
 | 12 | #1236 | **README names FinalizeWith beside Finalize.** An outside PR, #3994, answers it, so a session reviews that PR first. |
+| 13 | #4077 | **`parser.Parse` of an absolute path fails "not found under `.`".** Libuser's second finding: Parse's doc never says the default `loader.Dir(".")` joins it beneath the working directory, and the message hides the joined path. |
+| 14 | #4078 | **`loader.FS`'s invalid-path refusal: say what wrapping ErrNotFound does to `Chain` and parser.** Libuser's first finding; a warden ruling on also reporting `fs.ErrInvalid` comes first. Same file as #425. |
 
 **Tier C: process, tooling and refactors.** #4048 is the window's one process cost that took a round. #4021 has three sightings, and #4061 has two. The refactors keep the last stamp's order, since none of their figures grew.
 
 | # | issue | why here |
 |---|---|---|
-| 13 | #4048 | **A warden revise finding that moves an invariant names the row pinning it.** It cost #4035's reject round. |
-| 14 | #4021 | **A probe's `go build` of `cmd/goxsd8` leaves a binary `git add -A` commits.** Three sightings, the third at #4020. |
-| 15 | #4061 | **WORKFLOW's "put a worktree at a given commit" names no fetch.** Two sightings of a two-ref `FETCH_HEAD`, at #3964 and #4043. |
-| 16 | #4073 | **`commentwrap -fix` fills at the pre-reflow width.** It is #4032's residue and binds every reflow in Tier A. |
-| 17 | #4027 | **`restatements` reads a `.md`-only diff as clean.** Three sightings, none costing a round. |
-| 18 | #3398 | **A landed `docs/LOG` entry left as a removal and parked.** Five sightings, none new this window. |
-| 19 | #2539 | **`surface` counts an unexported receiver's method.** This pass's `surface` run showed it again (+3, all unexported receivers). |
-| 20 | #3880 | **`backendtestgen` derives no `xs:string` Invalid vectors from Char's complement.** |
-| 21 | #3700 | **An opaque `validate.Inherited`** (3). It needs its own grounding first. |
-| 22 | #3701 | **One shared attribute adapter** (2). It is in the same file as row 21. |
-| 23 | #3699 | **`SchemaView`'s four methods with no consumer through the view** (4). |
-| 24 | #3656 | **One key-dflt-att clause 4 predicate** (2). |
-| 25 | #3648 | **One exported xsderr constructor for a delegating charge** (2). |
-| 26 | #3551 | **One exported `<group ref>` resolver** (1). |
-| 27 | #3918 | **`normalizedLexical`'s replace branch calls `value.ApplyWhiteSpace`** (1). |
-| 28 | #3532 | **`LookupNamespace` renamed `LookupPrefix`** (2). It now has six implementers, one of them `codec`'s new `writtenBindings`. |
-| 29 | #3446 | **A phrase census that sees a phrase wrapped across comment lines.** |
-| 30 | #3393 | **`rulecat` emits no dotted rule IDs.** |
-| 31 | #3363 | **Pin doc.go's `"12,50"` exemplar.** |
-| 32 | #3533 | **One home for the anonymous-type label** (5). |
-| 33 | #3531 | **`UnfollowedDirective` carries its kind, schemaLocation and namespace** (6). |
-| 34 | #3286 | **`gencensus` type-checks what it counts.** It is M9's measure. |
-| 35 | #3324 | **Pin the text of `validate`'s remaining unpinned messages.** |
-| 36 | #3204 | **A § number cited beside an anchor ID is unchecked.** |
-| 37 | #2203 | **`surface` is blind to signature changes.** It is the same tool as row 19. |
-| 38 | #3294 | **Retire `xsd`'s planned Walker** (5). |
-| 39 | #3214 | **`commentwrap -fix` reflows at the edited line's width.** It is the same tool as row 16. |
-| 40 | #2748 | **`issuefeed -comments`.** |
-| 41 | #3273 | **STYLE's `exhaustive` overstatement.** |
-| 42 | #3301 | **The third whitespace copy moves onto `value.ApplyWhiteSpace`** (2). It goes with row 27. |
+| 15 | #4048 | **A warden revise finding that moves an invariant names the row pinning it.** It cost #4035's reject round. |
+| 16 | #4021 | **A probe's `go build` of `cmd/goxsd8` leaves a binary `git add -A` commits.** Three sightings, the third at #4020. |
+| 17 | #4061 | **WORKFLOW's "put a worktree at a given commit" names no fetch.** Two sightings of a two-ref `FETCH_HEAD`, at #3964 and #4043. |
+| 18 | #4073 | **`commentwrap -fix` fills at the pre-reflow width.** It is #4032's residue and binds every reflow in Tier A. |
+| 19 | #4027 | **`restatements` reads a `.md`-only diff as clean.** Three sightings, none costing a round. |
+| 20 | #3398 | **A landed `docs/LOG` entry left as a removal and parked.** Five sightings, none new this window. |
+| 21 | #2539 | **`surface` counts an unexported receiver's method.** This pass's `surface` run showed it again (+3, all unexported receivers). |
+| 22 | #3880 | **`backendtestgen` derives no `xs:string` Invalid vectors from Char's complement.** |
+| 23 | #3700 | **An opaque `validate.Inherited`** (3). It needs its own grounding first. |
+| 24 | #3701 | **One shared attribute adapter** (2). It is in the same file as row 23. |
+| 25 | #3699 | **`SchemaView`'s four methods with no consumer through the view** (4). |
+| 26 | #3656 | **One key-dflt-att clause 4 predicate** (2). |
+| 27 | #3648 | **One exported xsderr constructor for a delegating charge** (2). |
+| 28 | #3551 | **One exported `<group ref>` resolver** (1). |
+| 29 | #3918 | **`normalizedLexical`'s replace branch calls `value.ApplyWhiteSpace`** (1). |
+| 30 | #3532 | **`LookupNamespace` renamed `LookupPrefix`** (2). It now has six implementers, one of them `codec`'s new `writtenBindings`. |
+| 31 | #3446 | **A phrase census that sees a phrase wrapped across comment lines.** |
+| 32 | #3393 | **`rulecat` emits no dotted rule IDs.** |
+| 33 | #3363 | **Pin doc.go's `"12,50"` exemplar.** |
+| 34 | #3533 | **One home for the anonymous-type label** (5). |
+| 35 | #3531 | **`UnfollowedDirective` carries its kind, schemaLocation and namespace** (6). |
+| 36 | #3286 | **`gencensus` type-checks what it counts.** It is M9's measure. |
+| 37 | #3324 | **Pin the text of `validate`'s remaining unpinned messages.** |
+| 38 | #3204 | **A § number cited beside an anchor ID is unchecked.** |
+| 39 | #2203 | **`surface` is blind to signature changes.** It is the same tool as row 21. |
+| 40 | #3294 | **Retire `xsd`'s planned Walker** (5). |
+| 41 | #3214 | **`commentwrap -fix` reflows at the edited line's width.** It is the same tool as row 18. |
+| 42 | #2748 | **`issuefeed -comments`.** |
+| 43 | #3273 | **STYLE's `exhaustive` overstatement.** |
+| 44 | #3301 | **The third whitespace copy moves onto `value.ApplyWhiteSpace`** (2). It goes with row 29. |
 
 **Named below the band, on purpose.**
 - **M10, `blocked`:** #4076 (nested model groups, 163, on #4075). The xsi:type decode row (122) is a ruling, not unfiled work. Encode's rows below 160 are unfiled, except item 7's by-design row and the sealed-interface row's two issues. Each is filed when its slice is next.
@@ -217,7 +219,8 @@ This is ordered for a `/develop` session: take the highest row you can start. **
 - **M4:** #3306 (an oracle question first) and #3307.
 - **M8:** #2670 (it waits on #1601's ruling reopening).
 - **`cmd/goxsd8`'s `usage` constant:** #1432, #1549 and #1185.
-- **README, outside the band:** #1144 (the go-install reader) and #1593 (parser's go doc opening).
+- **README, outside the band:** #1144 (the go-install reader), #1593 (parser's go doc opening) and #4081 (an entry-point table for the Library section, with #1234).
+- **Persona round 2026-11-23, below the band:** #4079 (codec's go doc opens with no quick start; take it between encode slices, since every Tier A row edits `# What encodes`) and #4080 (bare `goxsd8` exits 0).
 - **T5a sweeps:** #2948, #2949, #2950, #2953, #2954 and #2955. #2985 goes with #2955 or alone, and #1408's README tokens go with it.
 - **Marker bookkeeping:** #3019 and #2719. A session in `value/valuespace.go`, `xsd/defaultbinding.go` or `xsd/contentrestricts.go` absorbs its #2719 row.
 - **Library contract:** #1382, #1371, #1454, #1594, #1685, #1088, #1005, #1430, #1094, #1234 and #486.
@@ -233,12 +236,12 @@ This is ordered for a `/develop` session: take the highest row you can start. **
 - **Docs and bookkeeping:** #2679, #2624 with #793, #1803, #1881, #785, #1343, #1502 and #656.
 - **`value`:** #721, #2045, #462, #546 and #787.
 - **`regex`:** #2148 and #2147.
-- **Tooling, after row 40:** #1897, #2542, #2605, #2541, #1935, #2070, #2066, #678, #1464, #1838, #1794, #1735 and #839. #839 has the retro's sighting comment.
+- **Tooling, after row 42:** #1897, #2542, #2605, #2541, #1935, #2070, #2066, #678, #1464, #1838, #1794, #1735 and #839. #839 has the retro's sighting comment.
 - **Refactors:** #3033 (14/3), #2601 (0), #2600 (2), #2793 (3), #2239 (2), #2359 (14), #2329 (1), #2205 (2), #2101 (0/1), #1958 (2), #1865 (2), #1757 (1), #1080 (8), #363 (2), and the E5 list above. #3034, #989, #1736, #1701, #845, #1825, #2416, #2419, #2437 and #3307 are unmeasured.
 
 ### Next planning action
 
-1. **Run the persona round this pass's triggers owe.** Both fired. The orchestrating session runs libuser and cliuser on README, `go doc` and `-help`, and the cartographer folds their reports.
+1. **Take Tier A.** The persona round this pass owed has run and is folded: rows 13 and 14 and the two below-the-band rows are its filings.
 2. **#4075's post-land pass unblocks #4076**, which names #4075 alone in `## Depends on`. It re-measures #4076's row from `go tool encodecensus` and writes the figure into its body.
 3. **The next `/backlog` files encode's next unfiled rows** once one of Tier A's rows lands. The rows are "an {attribute wildcard}" (108) and "a value constraint, default or fixed" (107). Each is filed `blocked` on the slice it waits for, so a slice always waits.
 
