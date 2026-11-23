@@ -41,9 +41,8 @@ func reasons(report *parser.AssemblyReport) []parser.UnfollowedReason {
 }
 
 // TestParseReportDocumentsAreDiscoveryOrder pins the reported order against the
-// order the assembly actually resolved documents in: ONE document-order pass,
-// depth-first and pre-order over <include>, <override>, <redefine> and <import>
-// alike (§4.2.1). The interleaved import/include/redefine/import/override shape
+// order the assembly actually resolved documents in, the one Documents' doc
+// states (§4.2.1). The interleaved import/include/redefine/import/override shape
 // is what makes this able to fail — a report rebuilt from the load-once map, or
 // from a kind-segregated pass, would come back in another order (STYLE D1/D2).
 func TestParseReportDocumentsAreDiscoveryOrder(t *testing.T) {

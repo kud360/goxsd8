@@ -358,10 +358,9 @@ type assembly struct {
 	// D2 (#275).
 	loaded map[docKey]*discovered
 
-	// docs holds every discovered document in discovery order: depth-first,
-	// pre-order, over each <schema>'s <include>, <override>, <redefine> and
-	// <import> children in a single document-order pass. That order is the order
-	// components enter the builder, so it is user-visible in sch-props-correct
+	// docs holds every discovered document in discovery order, the order discover
+	// appends them in and [AssemblyReport.Documents] states. That order is the
+	// order components enter the builder, so it is user-visible in sch-props-correct
 	// duplicate reports (STYLE D1/D2) and must not be made to depend on which KIND
 	// of directive was seen.
 	//
@@ -774,15 +773,14 @@ func checkImportedNamespace(at xsderr.Loc, words importWording, requested, names
 // caller answers to and reads everything else that differs between them off ref
 // rather than carrying a second, stringly-typed kind.
 //
-// namespace is what the resolver is asked under AND the namespace half of the
-// load-once key: for <include>/<override>/<redefine> the composing document's
-// effective target namespace (which is also what the composed document is
-// discovered under), for <import> the import's own namespace attribute (which
-// clause 3 then requires D2 to agree with). ov is the override half of that key:
-// the ·override pre-processing· in force over the fetched document — an
-// <override>'s own, or one an <include> cascades (§F.2 clause 3) — and nil for
-// <redefine>, <import> and a hint root (§F.2 clause 5 copies an <import> or
-// <redefine> unchanged).
+// namespace is what the resolver is asked under, per directive kind as
+// [loader.Resolver] states it, AND the namespace half of the load-once key: for
+// <include>/<override>/<redefine> it is also what the composed document is
+// discovered under, and for <import> what clause 3 then requires D2 to agree
+// with. ov is the override half of that key: the ·override pre-processing· in
+// force over the fetched document — an <override>'s own, or one an <include>
+// cascades (§F.2 clause 3) — and nil for <redefine>, <import> and a hint root
+// (§F.2 clause 5 copies an <import> or <redefine> unchanged).
 //
 // It reports the outcome as a [fetched], which distinguishes the two ways a
 // directive can end in nothing to compose — outcomes neither the report nor the
