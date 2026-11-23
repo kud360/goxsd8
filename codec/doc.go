@@ -341,49 +341,56 @@
 //     xs:base64Binary, into []byte; or one of xs:duration, xs:dateTime,
 //     xs:time, xs:date, xs:gYearMonth, xs:gYear, xs:gMonthDay, xs:gDay and
 //     xs:gMonth, into the datatype struct codegen's "# Simple types" gives
-//     it.
+//     it; or xs:QName or xs:NOTATION, into QName's datatype struct.
 //   - A list simple type whose {item type definition} encodes and which has
 //     no assertions facet, its own or inherited, into []V, V its item's Go
 //     type.
 //
 // Every other construct is a [*DeclineError], item 4 of Append's doc, a
 // list's item declining by the item's construct, and so is a value with no
-// canonical representation, item 7. The one exception is the declaration
-// name names, as the document element's, with {abstract} true: it is item 3,
-// a plain error. A declaration with {abstract} true that a particle reaches
-// is no exception.
+// canonical representation or no spelling Append writes, item 7. The one
+// exception is the declaration name names, as the document element's, with
+// {abstract} true: it is item 3, a plain error. A declaration with
+// {abstract} true that a particle reaches is no exception.
 //
 // The document Append writes has no XML declaration, so it is XML 1.0 in
-// UTF-8, and no white space between tags. It binds namespaces by default
-// declarations alone, with no prefix, no xmlns:p and no xsi declaration: the
+// UTF-8, and no white space between tags. It binds element names by default
+// declarations alone, never prefixing one, and writes no xsi declaration: the
 // document element carries xmlns="ns" for its non-absent namespace ns, and
 // nothing where it is absent, and every other element carries xmlns="ns", or
 // xmlns="" for an absent namespace, exactly where its namespace differs from
-// its parent's. Attributes are written unprefixed, in the order of codegen's
-// fields (codegen's package doc, "# Attributes"), each value delimited by
-// '"'. A nil pointer field writes nothing, and so does a nil interface field
-// where nil means absent (codegen's package doc, "# Particles"), a particle
-// with {max occurs} above 1 writes one element per item of its slice, a
-// choice's branch writes its alternative's elements, the empty match, the nil
-// interface of a present element, writes no child element, and an element
-// with no content is written as an empty-element tag, <x/>. A string value,
-// of xs:string or xs:anyURI primitive, is written as itself, its canonical
-// representation, since xs:string's canonical mapping is the identity
+// its parent's. An xs:QName or xs:NOTATION value, written in an attribute or
+// as content of an element, is spelled Local unprefixed where its namespace
+// name is that element's namespace, the absent one included; xml:Local for
+// the XML namespace, which is never declared; and otherwise pN:Local, where
+// pN is the prefix an open start tag, that element's or an ancestor's,
+// declares for its namespace name, or else p1, p2 and so on, the first not
+// in scope, declared as xmlns:pN="ns" on that element's start tag ahead of
+// the attribute or content that writes it. Attributes are written unprefixed,
+// in the order of codegen's fields (codegen's package doc, "# Attributes"),
+// each value delimited by '"'. A nil pointer field writes nothing, and so does
+// a nil interface field where nil means absent (codegen's package doc, "#
+// Particles"), a particle with {max occurs} above 1 writes one element per item
+// of its slice, a choice's branch writes its alternative's elements, the empty
+// match, the nil interface of a present element, writes no child element, and
+// an element with no content is written as an empty-element tag, <x/>. A string
+// value, of xs:string or xs:anyURI primitive, is written as itself, its
+// canonical representation, since xs:string's canonical mapping is the identity
 // (Datatypes §E.4 f-stringCanmap) and so is xs:anyURI's lexical mapping, so
 // that an xs:anyURI value is neither normalized nor percent-escaped
 // (§3.3.17.2), and item 6 of Append's doc holds the string to its own
-// whiteSpace-normalized form. A list value is written as its items' canonical
-// representations, in order, separated by single U+0020 characters (Datatypes
-// §2.4.1.2), and the empty list, nil or empty, as no content: <x/> for an
-// element, a="" for an attribute. It escapes '<', '&' and '>' as &lt;, &amp;
-// and &gt; everywhere, so that "]]>" is never written, and CR as &#xD;
-// everywhere, which XML 1.0 end-of-line handling (§2.11) would otherwise
-// rewrite to LF or remove; in an attribute value it escapes '"' as &quot;,
-// TAB as &#x9; and LF as &#xA;, which attribute-value normalization (§3.3.3)
-// would otherwise turn into spaces; and every other character, TAB and LF in
-// content and the apostrophe everywhere, is written as itself. So the Order
-// codegen emits for README's order.xsd, of Item {"a"} and Kind "k", is
-// written <order xmlns="urn:o" kind="k"><item>a</item></order>.
+// whiteSpace-normalized form. A list value is written as its items are written,
+// in order, separated by single U+0020 characters (Datatypes §2.4.1.2), and the
+// empty list, nil or empty, as no content: <x/> for an element, a="" for an
+// attribute. It escapes '<', '&' and '>' as &lt;, &amp; and &gt; everywhere, so
+// that "]]>" is never written, and CR as &#xD; everywhere, which XML 1.0
+// end-of-line handling (§2.11) would otherwise rewrite to LF or remove; in an
+// attribute value it escapes '"' as &quot;, TAB as &#x9; and LF as &#xA;, which
+// attribute-value normalization (§3.3.3) would otherwise turn into spaces; and
+// every other character, TAB and LF in content and the apostrophe everywhere,
+// is written as itself. So the Order codegen emits for README's order.xsd, of
+// Item {"a"} and Kind "k", is written <order xmlns="urn:o"
+// kind="k"><item>a</item></order>.
 //
 // # Debuggability
 //
