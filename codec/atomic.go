@@ -383,7 +383,7 @@ func shownField(v reflect.Value) string {
 // value a single space between two of its characters (§3.3.16.2's B64
 // production and its note); and for an xs:QName or xs:NOTATION value, which
 // has no canonical representation, its Local under a prefix other than
-// qname's bound to its Space. An a of a primitive atomicEncodes declines is an
+// spellQName's bound to its Space. An a of a primitive atomicEncodes declines is an
 // internal bug, which panics.
 func (a atomic) otherLexicalOf(v reflect.Value) bool {
 	switch a {

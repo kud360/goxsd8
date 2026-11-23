@@ -18,11 +18,11 @@ import (
 )
 
 // ErrInvalidValue is the sentinel errors.Is finds in item 6's error of
-// [Append], whose text is its cause's alone, never this sentinel's. In the
-// last of item 6's cases that error wraps the value.ValidateLexical rejection,
-// and in its case of an xs:QName or xs:NOTATION Local the Parse of its
-// primitive's mapping rejects that Parse's verdict, and carries whatever
-// *xsderr.Error the rejection carries; in the others it carries none.
+// [Append], whose text is its cause's alone, never this sentinel's. That error
+// wraps the value.ValidateLexical rejection in the last of item 6's cases, and
+// the verdict of its primitive mapping's Parse in its case of an xs:QName or
+// xs:NOTATION Local that Parse rejects, and carries whatever *xsderr.Error
+// that rejection carries; in the others it carries none.
 var ErrInvalidValue = errors.New("codec: Append: a value no valid document holds")
 
 // Append appends to dst the XML document that encodes v as the document
@@ -1257,32 +1257,22 @@ func (e *encoder) primitiveMapping(st *xsd.SimpleType, path, subject string) (va
 // qname returns the spelling of v, QName's datatype struct holding {Space,
 // Local}, of the simple type st whose primitive is xs:QName or xs:NOTATION, at
 // path, subject naming st, written on the element whose start tag is open
-// (spellQName), and records v's item 6 or 7 error of [Append]'s doc, deciding
-// its cases in this order: a Space "" under a non-absent e.ns, before any
-// other check; a Space holding a non-Char, then the xmlns namespace; then, on
-// the spelling, the Parse of st's primitive's mapping under writtenBindings,
-// the resolution back to {Space, Local} (expandedName), and
-// value.ValidateLexical under writtenBindings, a pattern rejection item 7
-// where atomicQName.otherLexicalOf holds. A Parse or ValidateLexical error
+// (spellQName, which records the error where no spelling exists), and records
+// v's item 6 or 7 error of [Append]'s doc for the spelling, deciding in this
+// order: the Parse of st's primitive's mapping under writtenBindings, the
+// resolution back to {Space, Local} (expandedName), and value.ValidateLexical
+// under writtenBindings, a pattern rejection item 7 where
+// atomicQName.otherLexicalOf holds. A Parse or ValidateLexical error
 // value.IsDatatypeVerdict does not report as a verdict is a backend fault. No
 // Canonical is read. ok is atom's.
 func (e *encoder) qname(st *xsd.SimpleType, v reflect.Value, path, subject string) (text string, ok bool, err error) {
 	q := v.Convert(atomicQName.bare())
 	space, local := q.FieldByName("Space").String(), q.FieldByName("Local").String()
 	shown := atomicQName.shown(v)
-	if space == "" && e.ns != "" {
-		e.declineValue(constructQNameSpelling, subject, path, shown, fmt.Sprintf("its namespace name is absent where the default namespace in scope, its element's own, is %s, so that no unprefixed spelling resolves to it, and no prefix can be bound to no namespace (Namespaces in XML §5 nsc-NoPrefixUndecl)", e.ns))
+	text, ok = e.spellQName(space, local, path, shown, subject)
+	if !ok {
 		return "", false, nil
 	}
-	if i := xmlchar.IndexNonChar(space); i >= 0 {
-		e.invalidate(fmt.Errorf("codec: Append: %s holds %s, of %s, whose namespace name's byte offset %d starts no XML 1.0 Char, so that no namespace declaration binds it (Datatypes §3.3.17.1)", path, shown, subject, i))
-		return "", false, nil
-	}
-	if space == xmlnsNamespace {
-		e.invalidate(fmt.Errorf("codec: Append: %s holds %s, of %s, whose namespace name is the one the prefix xmlns is bound to, which no other prefix may be bound to and no lexical's prefix resolves to (Namespaces in XML §3)", path, shown, subject))
-		return "", false, nil
-	}
-	text = e.spellQName(space, local)
 	scope := writtenBindings{e}
 	pm, primitive, err := e.primitiveMapping(st, path, subject)
 	if err != nil {
@@ -1318,17 +1308,33 @@ func (e *encoder) qname(st *xsd.SimpleType, v reflect.Value, path, subject strin
 }
 
 // spellQName returns the spelling the package doc's "# What encodes" states
-// for the expanded name {space, local}, a space that is neither "" under a
-// non-absent e.ns nor xmlnsNamespace, on the element whose start tag is open:
-// for a space other than the XML namespace and e.ns that e.bound does not
-// hold, it appends the declaration of boundPrefix(len(e.bound)) to that start
-// tag and pushes space onto e.bound.
-func (e *encoder) spellQName(space, local string) string {
+// for the expanded name {space, local}, the value shown at path of the simple
+// type subject names, on the element whose start tag is open: for a space
+// other than the XML namespace and e.ns that e.bound does not hold, it appends
+// the declaration of boundPrefix(len(e.bound)) to that start tag and pushes
+// space onto e.bound, so that e.bound holds only namespace names a declaration
+// binds. Where none spells it — a space "" under a non-absent e.ns, then a
+// space holding a byte that starts no XML 1.0 Char, then xmlnsNamespace — it
+// records that value's item 7 or item 6 error of [Append]'s doc, in that
+// order, and ok is false.
+func (e *encoder) spellQName(space, local, path, shown, subject string) (text string, ok bool) {
+	if space == "" && e.ns != "" {
+		e.declineValue(constructQNameSpelling, subject, path, shown, fmt.Sprintf("its namespace name is absent where the default namespace in scope, its element's own, is %s, so that no unprefixed spelling resolves to it, and no prefix can be bound to no namespace (Namespaces in XML §5 nsc-NoPrefixUndecl)", e.ns))
+		return "", false
+	}
+	if i := xmlchar.IndexNonChar(space); i >= 0 {
+		e.invalidate(fmt.Errorf("codec: Append: %s holds %s, of %s, whose namespace name's byte offset %d starts no XML 1.0 Char, so that no namespace declaration binds it (Datatypes §3.3.17.1)", path, shown, subject, i))
+		return "", false
+	}
+	if space == xmlnsNamespace {
+		e.invalidate(fmt.Errorf("codec: Append: %s holds %s, of %s, whose namespace name is the one the prefix xmlns is bound to, which no other prefix may be bound to and no lexical's prefix resolves to (Namespaces in XML §3)", path, shown, subject))
+		return "", false
+	}
 	switch space {
 	case xmltree.XMLNamespaceURI:
-		return "xml:" + local
+		return "xml:" + local, true
 	case e.ns:
-		return local
+		return local, true
 	}
 	i := slices.Index(e.bound, space)
 	if i < 0 {
@@ -1338,7 +1344,7 @@ func (e *encoder) spellQName(space, local string) string {
 		e.out = appendEscaped(e.out, space, true)
 		e.out = append(e.out, '"')
 	}
-	return boundPrefix(i) + ":" + local
+	return boundPrefix(i) + ":" + local, true
 }
 
 // boundPrefix is the prefix of e.bound[i]: "p" and i+1 in decimal.
