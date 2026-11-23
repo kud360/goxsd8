@@ -177,10 +177,10 @@ func sameMethods(a, b reflect.Type) bool {
 // Decode's doc, item 6, states when they are [ErrTypeMismatch]. Decode
 // matches each arm by its shape alone, so it cannot tell the three
 // field-less arms apart: passed in one another's roles, they decode the
-// special values into the wrong arm, and Append writes each arm as the
-// special value of the role the set gives its type, so the wrong value,
-// which decodes back into the same arm under the same set, a misuse neither
-// Decode nor Append can report. ExampleWithPrecisionDecimalArms decodes
+// special values into the wrong arm, and Append, which writes each arm as
+// the special value of the role the set gives its type, writes the wrong
+// one, which decodes back into the same arm under the same set: a misuse
+// neither Decode nor Append can report. ExampleWithPrecisionDecimalArms decodes
 // 3E2, -0 and INF through hand-written copies of codegen's four arms.
 func WithPrecisionDecimalArms[I any](numerical, positiveInfinity, negativeInfinity, notANumber I) Option {
 	set := decimalArms{

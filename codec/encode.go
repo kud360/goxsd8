@@ -267,11 +267,10 @@ type writeAt struct {
 // binder under it, as C, what Append's write reads it as: the writer capability, the
 // elementWriter capability of a fieldSink's elementReader, or a closed sum's arm, a
 // contentMember's or a branchArm's elementMember, a sink's fieldSink or a scalarElem's
-// atomic. It is the write's one assertion of the binder's arms, and its one
-// panic but decimalOf's, which reads the arm sets item 5 held, not the binder.
-// Invariant: where item 4 of [Append]'s doc admits a construct, every arm the
-// binder builds for it that the write reaches is such a C. A failed assertion breaks it,
-// an internal bug, never input, and panics naming x's type.
+// atomic. It is the write's one assertion of the binder's arms. Invariant: where item 4
+// of [Append]'s doc admits a construct, every arm the binder builds for it that the
+// write reaches is such a C. A failed assertion breaks it, an internal bug, never input,
+// and panics naming x's type.
 func encoded[C any](x any) C {
 	c, ok := x.(C)
 	if !ok {
