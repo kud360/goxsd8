@@ -348,9 +348,9 @@
 //     type.
 //   - A union simple type (Datatypes §2.4.1.3) each of whose basic members, in
 //     codegen's basic-member order (codegen's package doc, "# Simple types"),
-//     is an atomic or list simple type that encodes, and which has no
-//     assertions facet, its own or inherited, nor has any union among its
-//     {member type definitions} at any depth, into codegen's sealed
+//     is an atomic or list simple type that encodes, and neither it
+//     nor any union among its {member type definitions}, at any depth, has an
+//     assertions facet, its own or inherited, into codegen's sealed
 //     interface, whose variants [WithBranches] supplies, as "# What decodes"
 //     states.
 //

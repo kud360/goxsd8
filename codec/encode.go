@@ -53,65 +53,56 @@ var ErrInvalidValue = errors.New("codec: Append: a value no valid document holds
 //  5. A T that is not the type codegen emits for the declaration under opts,
 //     item 6 of [Decode]'s doc: its error, which errors.Is reports as
 //     [ErrTypeMismatch].
-//  6. A value no valid document holds, the first in document order, an
-//     element's attributes before its content: an error, which errors.Is
-//     reports as [ErrInvalidValue], naming the Go path of its field from T and,
-//     for a simple value, its simple type. It is the slice field of a particle
-//     with {max occurs} above 1 whose length lies outside its {min occurs} and
-//     {max occurs}, a choice's alternative's {min occurs} 0 read as 1 in its
-//     branch; the nil sealed interface of a content choice none of whose
-//     alternatives is emptiable (Structures §3.8.4.3 cvc-model-group, §3.9.6.3
-//     cos-group-emptiable), a choice of no {particles} among them; a value of
-//     that interface whose dynamic type the [WithBranches] set in opts places
-//     at no alternative, a pointer to a branch among them, which Decode never
-//     returns; the nil sealed interface of a union simple type where a value
-//     is required, the document element's, a required attribute's, a list
-//     item's or an item of a particle's slice, nil meaning absent nowhere else
-//     (codegen's package doc, "# Particles", "# Attributes"); a value of that
-//     interface whose dynamic type the [WithBranches] set in opts places at no
-//     basic member, a pointer to a variant among them, which Decode never
-//     returns; a value that holds itself, a struct or sealed interface value
-//     its own write reaches again through a *S, []S or []I field, which no
-//     finite document holds, the error naming the Go path where the value is
-//     reached again and nothing written beneath it; a string holding bytes that
-//     are not UTF-8 or a character the XML 1.0 Char production does not match,
-//     U+0000 among them (Datatypes §3.3.1.1, §3.3.17.1), a held element's
-//     Space, an attribute's Space or Value, a Text and a Tail among them; a
-//     string that differs from its own whiteSpace-normalized form under its
-//     simple type, such as an xs:token holding "  a  b"; a list item, a string,
-//     that is empty or holds TAB, LF, CR or a space, which no list item's
-//     lexical representation does (Datatypes §2.4.1.2); a big.Rat outside the
-//     decimal value space, whose denominator in lowest terms is no 2^m·5^n
-//     (§3.3.3.1), such as 1/3; an element a wildcard particle's field holds, of
-//     {process contents} skip, that its content model admits at no particle
-//     where it is written, a name outside the wildcard's {namespace constraint}
-//     or in its {disallowed names} among them, or attributes to a particle
-//     other than that wildcard, an element particle taking its name first among
-//     them, or after whose content's last child the content model is not
-//     accepting, as xsd.Schema.ContentMatcher's Matcher decides (§3.9.4.3
-//     cvc-accept, §3.10.4.1 cvc-wildcard, §3.8.4.3 cvc-model-group); in such an
-//     element, at any depth, a Local that is no NCName or a Space that is the
-//     namespace name the prefix xmlns is bound to, of the element or of an
-//     attribute, an attribute of absent Space named xmlns (Namespaces in XML
-//     §3), and an attribute of the expanded name of one before it (§6.3
-//     nsc-AttrsUnique); a date, time or duration datatype struct value no value
-//     of its datatype maps to, as codegen's package doc "# Simple types" states
-//     such values exist, the error naming the first property found outside it,
-//     its fields read in order, or, ahead of its Seconds, a duration's Months
-//     and Seconds of opposite signs; a PrecisionDecimal datatype struct value
-//     no value maps to, as codegen's "# Simple types" states such values exist,
-//     a nil Value or the numerical arm with a negative Coefficient, or a Value
-//     whose dynamic type the [WithPrecisionDecimalArms] set in opts supplies in
-//     no role, a pointer to an arm among them, which Decode never returns; an
-//     xs:QName or xs:NOTATION value whose namespace name holds a byte that
-//     starts no XML 1.0 Char or is the one the prefix xmlns is bound to
-//     (Namespaces in XML §3), or whose Local the Parse of its primitive's
-//     mapping rejects in Append's spelling, that Parse's verdict wrapped, or
-//     makes a spelling that resolves back to another expanded name; or a value
-//     whose simple type rejects it, a value.ValidateLexical error
-//     value.IsDatatypeVerdict reports as a verdict, a facet's rejection or a
-//     backend Parse's among them, that error wrapped, but for item 7's pattern
-//     case, a list's own facets read once every item has passed its own checks.
+//  6. A value no valid document holds, the first in document order, an element's attributes
+//     before its content: an error, which errors.Is reports as [ErrInvalidValue], naming the
+//     Go path of its field from T and, for a simple value, its simple type. It is the slice
+//     field of a particle with {max occurs} above 1 whose length lies outside its {min occurs}
+//     and {max occurs}, a choice's alternative's {min occurs} 0 read as 1 in its branch; the
+//     nil sealed interface of a content choice none of whose alternatives is emptiable
+//     (Structures §3.8.4.3 cvc-model-group, §3.9.6.3 cos-group-emptiable), a choice of no
+//     {particles} among them; a value of that interface whose dynamic type the [WithBranches]
+//     set in opts places at no alternative, a pointer to a branch among them, which Decode
+//     never returns; the nil sealed interface of a union simple type wherever nil does not
+//     mean absent, that is, every field but an element particle's of {min occurs} 0 and {max
+//     occurs} 1 and an optional attribute use's (codegen's package doc, "# Particles", "#
+//     Attributes"); a value of that interface whose dynamic type the [WithBranches] set in
+//     opts places at no basic member, a pointer to a variant among them, which Decode never
+//     returns; a value that holds itself, a struct or sealed interface value its own write
+//     reaches again through a *S, []S or []I field, which no finite document holds, the error
+//     naming the Go path where the value is reached again and nothing written beneath it; a
+//     string holding bytes that are not UTF-8 or a character the XML 1.0 Char production does
+//     not match, U+0000 among them (Datatypes §3.3.1.1, §3.3.17.1), a held element's Space, an
+//     attribute's Space or Value, a Text and a Tail among them; a string that differs from its
+//     own whiteSpace-normalized form under its simple type, such as an xs:token holding "  a
+//     b"; a list item, a string, that is empty or holds TAB, LF, CR or a space, which no list
+//     item's lexical representation does (Datatypes §2.4.1.2); a big.Rat outside the decimal
+//     value space, whose denominator in lowest terms is no 2^m·5^n (§3.3.3.1), such as 1/3; an
+//     element a wildcard particle's field holds, of {process contents} skip, that its content
+//     model admits at no particle where it is written, a name outside the wildcard's
+//     {namespace constraint} or in its {disallowed names} among them, or attributes to a
+//     particle other than that wildcard, an element particle taking its name first among them,
+//     or after whose content's last child the content model is not accepting, as
+//     xsd.Schema.ContentMatcher's Matcher decides (§3.9.4.3 cvc-accept, §3.10.4.1
+//     cvc-wildcard, §3.8.4.3 cvc-model-group); in such an element, at any depth, a Local that
+//     is no NCName or a Space that is the namespace name the prefix xmlns is bound to, of the
+//     element or of an attribute, an attribute of absent Space named xmlns (Namespaces in XML
+//     §3), and an attribute of the expanded name of one before it (§6.3 nsc-AttrsUnique); a
+//     date, time or duration datatype struct value no value of its datatype maps to, as
+//     codegen's package doc "# Simple types" states such values exist, the error naming the
+//     first property found outside it, its fields read in order, or, ahead of its Seconds, a
+//     duration's Months and Seconds of opposite signs; a PrecisionDecimal datatype struct
+//     value no value maps to, as codegen's "# Simple types" states such values exist, a nil
+//     Value or the numerical arm with a negative Coefficient, or a Value whose dynamic type
+//     the [WithPrecisionDecimalArms] set in opts supplies in no role, a pointer to an arm
+//     among them, which Decode never returns; an xs:QName or xs:NOTATION value whose namespace
+//     name holds a byte that starts no XML 1.0 Char or is the one the prefix xmlns is bound to
+//     (Namespaces in XML §3), or whose Local the Parse of its primitive's mapping rejects in
+//     Append's spelling, that Parse's verdict wrapped, or makes a spelling that resolves back
+//     to another expanded name; or a value whose simple type rejects it, a
+//     value.ValidateLexical error value.IsDatatypeVerdict reports as a verdict, a facet's
+//     rejection or a backend Parse's among them, that error wrapped, but for item 7's pattern
+//     and union-variant cases, a list's own facets read once every item has passed its own
+//     checks.
 //  7. A value with no canonical representation or no spelling Append writes,
 //     the first in document order as item 6 counts: its *DeclineError. That is
 //     a governing mapping with no Canonical, a Canonical that fails for the
@@ -131,19 +122,19 @@ var ErrInvalidValue = errors.New("codec: Append: a value no valid document holds
 //     xs:decimal 1 under a union of xs:int and xs:decimal is written 1, which
 //     Decode returns as the xs:int variant, though 1.0 decodes into the
 //     xs:decimal variant holding 1, so that a valid document holds the value
-//     and item 6 does not apply; or an xs:QName or xs:NOTATION value whose
-//     namespace name is absent, written on an element whose namespace is not,
-//     which no unprefixed spelling resolves to there and no prefix can be bound
-//     to (Namespaces in XML §5 nsc-NoPrefixUndecl), whatever else rejects it;
-//     or an attribute in the XSI namespace on an element a wildcard particle's
-//     field holds, at any depth, whatever its value, since an xsi:type's may
-//     hold a prefix no binding the struct holds resolves. The values with a
-//     lexical other than the one Append writes, the ones whose rejection by a
-//     pattern facet is this item, a union's own pattern facet among them, read
-//     once the variant's member is its text's ·active basic member·, are: a
-//     union's value whose member value is one; every xs:boolean,
-//     xs:decimal-primitive, xs:dateTime, xs:dateTimeStamp, xs:time and
-//     xs:duration-primitive value; every xs:float, xs:double and
+//     and item 6 does not apply, whatever else rejects it; or an xs:QName or
+//     xs:NOTATION value whose namespace name is absent, written on an element
+//     whose namespace is not, which no unprefixed spelling resolves to there
+//     and no prefix can be bound to (Namespaces in XML §5 nsc-NoPrefixUndecl),
+//     whatever else rejects it; or an attribute in the XSI namespace on an
+//     element a wildcard particle's field holds, at any depth, whatever its
+//     value, since an xsi:type's may hold a prefix no binding the struct holds
+//     resolves. The values with a lexical other than the one Append writes, the
+//     ones whose rejection by a pattern facet is this item, a union's own
+//     pattern facet among them, read once the variant's member is its text's
+//     ·active basic member·, are: a union's value whose member value is one;
+//     every xs:boolean, xs:decimal-primitive, xs:dateTime, xs:dateTimeStamp,
+//     xs:time and xs:duration-primitive value; every xs:float, xs:double and
 //     xs:precisionDecimal value other than NaN and -INF; an xs:date,
 //     xs:gYearMonth or xs:gYear value whose timezoneOffset is 0, spelled Z,
 //     +00:00 or -00:00 (§D.2.2's note), or whose year is 0, spelled 0000 or
