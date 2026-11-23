@@ -2965,9 +2965,6 @@ func (skipAttrAny) isSkipAttrChoice() {}
 // skipAttrBranches is skipAttrChoice's branch set.
 var skipAttrBranches = WithBranches[skipAttrChoice](skipAttrA{}, skipAttrAny{})
 
-// xmlNS is the XML namespace's name, xml's.
-const xmlNS = "http://www.w3.org/XML/1998/namespace"
-
 // TestAppendWildcard pins the wildcard particle with {process contents} skip "# What encodes"
 // admits: each element its field holds is written raw, its attributes in held order, an
 // unqualified one unprefixed, one in the XML namespace as xml:, undeclared, and every other one
@@ -2988,7 +2985,7 @@ func TestAppendWildcard(t *testing.T) {
 	t.Run("several held elements, raw content", func(t *testing.T) {
 		v := seqRepeated{A: "x", Any: []anyElement{
 			{Space: "urn:o", Local: "p", Content: anyType{
-				Attributes: []anyAttribute{{"", "k", "v\t1"}, {"urn:o", "q", "w"}, {xmlNS, "lang", "en"}, {"urn:z", "z", `<&"`}},
+				Attributes: []anyAttribute{{"", "k", "v\t1"}, {"urn:o", "q", "w"}, {xmltree.XMLNamespaceURI, "lang", "en"}, {"urn:z", "z", `<&"`}},
 				Text:       "t ",
 				Children: []anyChild{
 					{Element: anyElement{Local: "c", Content: anyType{Text: "c\r"}}, Tail: " tail"},
@@ -3003,7 +3000,7 @@ func TestAppendWildcard(t *testing.T) {
 	})
 	t.Run("elements in the XML namespace and in none", func(t *testing.T) {
 		v := seqRepeated{A: "x", Any: []anyElement{
-			{Space: xmlNS, Local: "e", Content: anyType{Children: []anyChild{{Element: anyElement{Space: "urn:s", Local: "in"}}}}},
+			{Space: xmltree.XMLNamespaceURI, Local: "e", Content: anyType{Children: []anyChild{{Element: anyElement{Space: "urn:s", Local: "in"}}}}},
 			{Local: "n", Content: anyType{Children: []anyChild{{Element: anyElement{Space: "urn:s", Local: "in"}}}}},
 		}}
 		roundTrip(t, schemaOf(t, skipManySchema), rootName, v,
