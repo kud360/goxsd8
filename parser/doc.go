@@ -147,11 +147,12 @@
 // document's target namespace and schema-level defaults apply to it
 // (§4.2.5's document-level-defaults note, PRINCIPLES 16). An
 // <xs:redefine>d document is coerced on the same terms too (§4.2.4
-// clause 3.3), and is the one composition kind that BOTH includes and
-// subtracts: the redefined document contributes every component it
-// declares EXCEPT those the <redefine> names (clause 4.1.2), while the
-// <redefine>'s own children contribute the replacements (clause 4.1.1)
-// as definitions of the REDEFINING document. A redefining
+// clause 3.3, made operative by §4.2.4 `src-redefine` clause 4.2.1
+// (`c-chamvalidr`) with §F.1), and is the one composition kind that
+// BOTH includes and subtracts: the redefined document contributes every
+// component it declares EXCEPT those the <redefine> names (clause 4.1.2),
+// while the <redefine>'s own children contribute the replacements
+// (clause 4.1.1) as definitions of the REDEFINING document. A redefining
 // simpleType/complexType is paired with a hidden {name}-·absent· copy of
 // the definition it replaces, which is what its own base= resolves to; a
 // redefining group/attributeGroup self-reference resolves to the
