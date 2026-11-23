@@ -3037,8 +3037,9 @@ func TestAppendWildcard(t *testing.T) {
 // the wildcard (cvc-accept), in a sequence, a choice and a content choice; and the raw
 // content no document holds: a Local that is no NCName, at any depth, a Space that is
 // the xmlns namespace or holds a non-Char, an unqualified attribute named xmlns, two
-// attributes of one expanded name, and a Value, Text or Tail holding a non-Char. None
-// carries an *xsderr.Error. Then item 7: an attribute in the XSI namespace, at any depth
+// attributes of one expanded name, and a Value, Text or Tail holding a non-Char; and a
+// held element whose Children slice holds itself (encoder.enter). None carries an
+// *xsderr.Error. Then item 7: an attribute in the XSI namespace, at any depth
 // of the match, declines by constructXsiAttribute, behind an item 6 error found after
 // it.
 func TestAppendWildcardInvalid(t *testing.T) {
@@ -3132,6 +3133,13 @@ func TestAppendWildcardInvalid(t *testing.T) {
 			_, err := appendChecked(t, nil, one, strict.New(), rootName, held(anyType{Attributes: []anyAttribute{{xsd.XMLSchemaInstanceNS, "type", "xs:byte"}}, Text: "\x01"}))
 			return err
 		}, `codec: Append: seqWild.Any.Content.Text holds "\x01"`},
+		{"a Children slice that holds itself", func(t *testing.T) error {
+			c := make([]anyChild, 1)
+			c[0].Element = anyElement{Local: "c"}
+			c[0].Element.Content.Children = c
+			_, err := appendChecked(t, nil, one, strict.New(), rootName, held(anyType{Children: c}))
+			return err
+		}, "codec: Append: seqWild.Any.Content.Children[0].Element.Content.Children[0].Element.Content is the value at seqWild.Any.Content.Children[0].Element.Content, whose element is still being written, a value that holds itself, which no finite document holds"},
 	} {
 		t.Run(row.name, func(t *testing.T) {
 			err := row.run(t)

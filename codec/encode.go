@@ -993,7 +993,7 @@ type openValue struct {
 }
 
 // enter opens the write of v, a struct or sealed interface value of complex
-// type at path, and reports whether to write it: false, after recording item
+// type, or the AnyType content of an element held raw, at path, and reports whether to write it: false, after recording item
 // 6 of [Append]'s doc, where v is addressable and a value at its address of
 // its Go type is open, a value that holds itself, which the write would
 // reach again without end. Only a *S, []S or []I field leads to a value
@@ -1711,9 +1711,14 @@ func (e *encoder) writableName(name xsd.QName, path string) bool {
 // admitted name, whose content is x, a struct of AnyType's shape, as the
 // package doc's "# What encodes" states a match of a wildcard with {process
 // contents} skip is written, owner naming that wildcard particle: its start
-// tag (rawStartTag), then its content (rawContent). Nothing in it is assessed
-// (§3.10.1 key-skipped), so that no text is read for a prefix.
+// tag (rawStartTag), then its content (rawContent); or nothing, where x holds
+// itself (encoder.enter). Nothing in it is assessed (§3.10.1 key-skipped), so
+// that no text is read for a prefix.
 func (e *encoder) rawElement(name xsd.QName, x reflect.Value, path, owner string) {
+	if !e.enter(x, path+".Content") {
+		return
+	}
+	defer e.leave()
 	tag, outer, mark := e.rawStartTag(name)
 	start := e.rawContent(x, path+".Content", owner)
 	e.endTag(tag, start, outer, mark)
