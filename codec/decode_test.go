@@ -417,11 +417,9 @@ func TestDecodeTypeMismatch(t *testing.T) {
 }
 
 // TestTypeMismatchNamesDeclaration pins the end item 6 of Decode's doc states
-// for an ErrTypeMismatch error: Decode, CheckDecode and CheckAppend each name
-// the declaration T was held to, its expanded name as xsd.QName.Display
-// renders it and its schema Loc, once, after the check's own detail, for a
-// declaration in a namespace and one in none; each error is ErrTypeMismatch
-// and no decline.
+// for its error, from Decode, CheckDecode and CheckAppend alike, once and
+// after the check's own detail, for a declaration in a namespace and one in
+// none; each error is ErrTypeMismatch and no decline.
 func TestTypeMismatchNamesDeclaration(t *testing.T) {
 	type probeMsg struct{ A string }
 	const choice = `<xs:complexType><xs:choice><xs:element name="a" type="xs:string"/><xs:element name="b" type="xs:token" maxOccurs="3"/></xs:choice></xs:complexType>`
