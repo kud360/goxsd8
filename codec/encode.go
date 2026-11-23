@@ -107,19 +107,22 @@ var ErrInvalidValue = errors.New("codec: Append: a value no valid document holds
 //     name is absent, written on an element whose namespace is not, which no
 //     unprefixed spelling resolves to there and no prefix can be bound to
 //     (Namespaces in XML §5 nsc-NoPrefixUndecl), whatever else rejects it.
-//     Every xs:boolean, xs:decimal-primitive, xs:dateTime, xs:dateTimeStamp,
-//     xs:time and xs:duration-primitive value has another lexical; an
-//     xs:float, xs:double or xs:precisionDecimal value has one but for NaN and
-//     -INF (§3.3.4.2, §3.3.5.2, precisionDecimal §3.2); an xs:date,
-//     xs:gYearMonth or xs:gYear value only where its timezoneOffset is 0,
-//     spelled Z, +00:00 or -00:00 (§D.2.2's note), or its year is 0, spelled
-//     0000 or -0000; an xs:gMonthDay, xs:gDay or xs:gMonth value only where
-//     its timezoneOffset is 0; an xs:hexBinary value only where one of its
-//     octets holds a hex digit A to F (§3.3.15.2); an xs:base64Binary value
-//     but for the empty one (§3.3.16.2); an xs:QName or xs:NOTATION value only
-//     where its namespace name is not absent; and an xs:string- or
-//     xs:anyURI-primitive value never, being its own whiteSpace-normalized
-//     form.
+//     The values with a lexical other than the one Append writes, the ones
+//     whose rejection by a pattern facet is this item, are: every xs:boolean,
+//     xs:decimal-primitive, xs:dateTime, xs:dateTimeStamp, xs:time and
+//     xs:duration-primitive value; every xs:float, xs:double and
+//     xs:precisionDecimal value other than NaN and -INF; an xs:date,
+//     xs:gYearMonth or xs:gYear value whose timezoneOffset is 0, spelled Z,
+//     +00:00 or -00:00 (§D.2.2's note), or whose year is 0, spelled 0000 or
+//     -0000; an xs:gMonthDay, xs:gDay or xs:gMonth value whose timezoneOffset
+//     is 0; an xs:hexBinary value one of whose octets holds a hex digit A to F
+//     (§3.3.15.2); every xs:base64Binary value but the empty one (§3.3.16.2);
+//     an xs:QName or xs:NOTATION value whose namespace name is not absent; and
+//     no xs:string- or xs:anyURI-primitive value, each being its own
+//     whiteSpace-normalized form. NaN and -INF, of xs:float, xs:double and
+//     xs:precisionDecimal alike, are written NaN and -INF, their only lexicals
+//     (§3.3.4.2, §3.3.5.2, precisionDecimal §3.2), so a pattern facet of their
+//     own simple type that rejects one of them is item 6, not this item.
 //
 // A plain error is no *DeclineError and wraps none of [ErrTypeMismatch],
 // [ErrInvalidValue] and errors.ErrUnsupported; whether it wraps an
@@ -1547,8 +1550,8 @@ func decimalMapsBack(c string, d decimalValue) bool {
 }
 
 // soleLexical reports whether floatRep or doubleRep spells f by its canonical
-// representation alone, as each does NaN and -INF (Datatypes §3.3.4.2,
-// §3.3.5.2).
+// representation alone, as item 7 of [Append]'s doc states each does NaN and
+// -INF.
 func soleLexical(f float64) bool { return math.IsNaN(f) || math.IsInf(f, -1) }
 
 // otherLexical reports whether the list whose items held holds, each as atom
