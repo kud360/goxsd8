@@ -3027,18 +3027,17 @@ func TestAppendWildcard(t *testing.T) {
 	})
 }
 
-// TestAppendWildcardInvalid pins item 6 of Append's doc for a skip
-// wildcard's field: a slice outside the particle's occurrence; an element
-// the content model admits at no particle where it is written, outside the
-// {namespace constraint} or among the {disallowed names}; one the content
-// model attributes to an element particle ahead of the wildcard (cvc-accept),
-// in a sequence and in a choice; and the raw content no document holds: a
-// Local that is no NCName, at any depth, a Space that is the xmlns namespace
-// or holds a non-Char, an unqualified attribute named xmlns, two attributes of
-// one expanded name, and a Value, Text or Tail holding a non-Char. None
-// carries an *xsderr.Error. Then item 7: an attribute in the XSI namespace, at
-// any depth of the match, declines by constructXsiAttribute, behind an item
-// 6 error found after it.
+// TestAppendWildcardInvalid pins item 6 of Append's doc for a skip wildcard's field: a
+// slice outside the particle's occurrence; an element the content model admits at no
+// particle where it is written, outside the {namespace constraint} or among the
+// {disallowed names}; one the content model attributes to an element particle ahead of
+// the wildcard (cvc-accept), in a sequence, a choice and a content choice; and the raw
+// content no document holds: a Local that is no NCName, at any depth, a Space that is
+// the xmlns namespace or holds a non-Char, an unqualified attribute named xmlns, two
+// attributes of one expanded name, and a Value, Text or Tail holding a non-Char. None
+// carries an *xsderr.Error. Then item 7: an attribute in the XSI namespace, at any depth
+// of the match, declines by constructXsiAttribute, behind an item 6 error found after
+// it.
 func TestAppendWildcardInvalid(t *testing.T) {
 	many, one := schemaOf(t, skipManySchema), schemaOf(t, seqSkipSchema)
 	w := anyElement{Space: "urn:o", Local: "w"}
@@ -3070,6 +3069,10 @@ func TestAppendWildcardInvalid(t *testing.T) {
 			_, err := appendChecked(t, nil, schemaOf(t, skipPickSchema), strict.New(), rootName, pickWild(pickWildAny{Any: anyElement{Space: "urn:s", Local: "a"}}), pickWildBranches)
 			return err
 		}, "codec: Append: pickWild.(pickWildAny).Any holds element {urn:s}a, which the content model of "},
+		{"a name a content choice's element alternative takes", func(t *testing.T) error {
+			_, err := appendChecked(t, nil, schemaOf(t, skipAttrSchema), strict.New(), rootName, skipAttr{Choice: skipAttrAny{Any: anyElement{Space: "urn:s", Local: "a"}}}, skipAttrBranches)
+			return err
+		}, "codec: Append: skipAttr.Choice.(skipAttrAny).Any holds element {urn:s}a, which the content model of "},
 		{"a Local that is no NCName", func(t *testing.T) error {
 			_, err := appendChecked(t, nil, one, strict.New(), rootName, seqWild{A: "x", Any: anyElement{Space: "urn:o", Local: "1w"}})
 			return err
