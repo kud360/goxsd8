@@ -6,7 +6,8 @@
 // assesses, and codec, whose branch for an element of an abstract {type
 // definition} is the member that element's xsi:type names; and for codec,
 // which decodes an xs:QName or xs:NOTATION value into the expanded name it
-// resolves to (Datatypes §3.3.18, §3.3.19).
+// resolves to (Datatypes §3.3.18, §3.3.19) and holds the spelling Append
+// writes for one to resolving back to it.
 //
 // # Contract
 //

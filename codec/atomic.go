@@ -289,10 +289,11 @@ func (a atomic) convert(form string) (reflect.Value, error) {
 }
 
 // formed reports whether form spells a's values, so that spelled writes them:
-// every atomic but atomicString, which str writes, and atomicFloat32 and
-// atomicFloat64, which double writes. atom, list and TestFormArms read it.
+// every atomic but atomicString, which str writes, atomicFloat32 and
+// atomicFloat64, which double writes, and atomicQName, which qname writes.
+// atom, list and TestFormArms read it.
 func (a atomic) formed() bool {
-	return a != atomicString && a != atomicFloat32 && a != atomicFloat64
+	return a != atomicString && a != atomicFloat32 && a != atomicFloat64 && a != atomicQName
 }
 
 // form returns, as convert's inverse, the canonical representation of v, a
@@ -380,7 +381,9 @@ func shownField(v reflect.Value) string {
 // date or g* value, one item 7 spells; for an xs:hexBinary value a lower-case
 // hex digit (§3.3.15.2's hexDigit production); and for an xs:base64Binary
 // value a single space between two of its characters (§3.3.16.2's B64
-// production and its note). An a of a primitive atomicEncodes declines is an
+// production and its note); and for an xs:QName or xs:NOTATION value, which
+// has no canonical representation, its Local under a prefix other than
+// qname's bound to its Space. An a of a primitive atomicEncodes declines is an
 // internal bug, which panics.
 func (a atomic) otherLexicalOf(v reflect.Value) bool {
 	switch a {
@@ -401,6 +404,8 @@ func (a atomic) otherLexicalOf(v reflect.Value) bool {
 		return zeroOffset(v) || year.Sign() == 0
 	case atomicGMonthDay, atomicGDay, atomicGMonth:
 		return zeroOffset(v.Convert(a.bare()))
+	case atomicQName:
+		return v.Convert(a.bare()).FieldByName("Space").String() != ""
 	default:
 		panic(fmt.Sprintf("codec: no other-lexical answer for atomic %d", a))
 	}

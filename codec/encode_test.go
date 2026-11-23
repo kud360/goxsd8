@@ -20,6 +20,7 @@ import (
 	"github.com/kud360/goxsd8/internal/goshape"
 	"github.com/kud360/goxsd8/loader"
 	"github.com/kud360/goxsd8/parser"
+	"github.com/kud360/goxsd8/parser/xmltree"
 	"github.com/kud360/goxsd8/validate"
 	"github.com/kud360/goxsd8/validate/xmlsrc"
 	"github.com/kud360/goxsd8/value"
@@ -72,7 +73,8 @@ func roundTrip[T any](t *testing.T, schema *xsd.Schema, name xsd.QName, v T, wan
 // non-nil CheckAppend error is Append's, of equal Error text and equal class
 // (staticClass), and a nil one leaves Append nil, an item 6 or item 7 error
 // or a fault of backend: nil, item 6's ErrInvalidValue error, a plain error
-// without item 2's or item 3's text, or item 7's decline.
+// without item 2's or item 3's text, or item 7's decline, by
+// constructNoCanonical or constructQNameSpelling.
 func appendChecked[T any](t *testing.T, dst []byte, schema *xsd.Schema, backend value.Backend, name xsd.QName, v T, opts ...Option) ([]byte, error) {
 	t.Helper()
 	out, err := Append(dst, schema, backend, name, v, opts...)
@@ -80,7 +82,7 @@ func appendChecked[T any](t *testing.T, dst []byte, schema *xsd.Schema, backend 
 	if checked == nil {
 		class := staticClass(err)
 		static := class == "plain" && (strings.HasPrefix(err.Error(), "codec: no top-level element declaration") || strings.Contains(err.Error(), "{abstract} true"))
-		if static || err != nil && class != "plain" && class != "invalid" && class != "decline "+constructNoCanonical.name() {
+		if static || err != nil && class != "plain" && class != "invalid" && class != "decline "+constructNoCanonical.name() && class != "decline "+constructQNameSpelling.name() {
 			t.Errorf("CheckAppend = nil, but Append returned %v, %s", err, class)
 		}
 		return out, err
@@ -545,24 +547,24 @@ func TestAppendPlainErrors(t *testing.T) {
 }
 
 // TestCheckAppend pins CheckAppend's answers by Append's items: a plain
-// error for a nil schema; item 4's decline for an xs:QName declaration and T
-// QName's datatype struct, which CheckDecode accepts; nil for an xs:float
-// declaration and T float32; nil for README's order.xsd and order.Order,
-// whose zero value Append refuses by item 6, and item 5's ErrTypeMismatch for
-// *order.Order; item 2's and item 3's plain errors; and item 3 before item 4
-// on an abstract xs:QName declaration. appendChecked holds each answer to
-// Append's.
+// error for a nil schema; item 4's decline for an xs:precisionDecimal
+// declaration and T its datatype struct, which CheckDecode accepts; nil for
+// an xs:float declaration and T float32; nil for README's order.xsd and
+// order.Order, whose zero value Append refuses by item 6, and item 5's
+// ErrTypeMismatch for *order.Order; item 2's and item 3's plain errors; and
+// item 3 before item 4 on an abstract xs:precisionDecimal declaration.
+// appendChecked holds each answer to Append's.
 func TestCheckAppend(t *testing.T) {
-	schema := schemaOf(t, `<xs:element name="i" type="xs:QName"/><xs:element name="abs" type="xs:string" abstract="true"/>`+
-		`<xs:element name="absb" type="xs:QName" abstract="true"/><xs:element name="f" type="xs:float"/>`)
+	schema := schemaOf(t, `<xs:element name="i" type="xs:precisionDecimal"/><xs:element name="abs" type="xs:string" abstract="true"/>`+
+		`<xs:element name="absb" type="xs:precisionDecimal" abstract="true"/><xs:element name="f" type="xs:float"/>`)
 	plainError(t, CheckAppend[string](nil, sname("i")), "codec: CheckAppend: nil *xsd.Schema")
 
-	if err := CheckDecode[tQName](schema, sname("i")); err != nil {
-		t.Fatalf("CheckDecode[tQName] = %v, want nil", err)
+	if err := CheckDecode[tPrecisionDecimal](schema, sname("i"), pdArms); err != nil {
+		t.Fatalf("CheckDecode[tPrecisionDecimal] = %v, want nil", err)
 	}
-	err := CheckAppend[tQName](schema, sname("i"))
-	_ = asDecline(t, err, "codec does not encode an atomic simple type whose primitive is other than xs:string, xs:boolean, xs:decimal, xs:float, xs:double, xs:duration, xs:dateTime, xs:time, xs:date, xs:gYearMonth, xs:gYear, xs:gMonthDay, xs:gDay, xs:gMonth, xs:hexBinary, xs:base64Binary or xs:anyURI: ")
-	_, _ = appendChecked(t, nil, schema, strict.New(), sname("i"), tQName{})
+	err := CheckAppend[tPrecisionDecimal](schema, sname("i"), pdArms)
+	_ = asDecline(t, err, "codec does not encode an atomic simple type whose primitive is other than xs:string, xs:boolean, xs:decimal, xs:float, xs:double, xs:duration, xs:dateTime, xs:time, xs:date, xs:gYearMonth, xs:gYear, xs:gMonthDay, xs:gDay, xs:gMonth, xs:hexBinary, xs:base64Binary, xs:anyURI, xs:QName or xs:NOTATION: ")
+	_, _ = appendChecked(t, nil, schema, strict.New(), sname("i"), tPrecisionDecimal{}, pdArms)
 	if err := CheckAppend[float32](schema, sname("f")); err != nil {
 		t.Errorf("CheckAppend[float32] = %v, want nil", err)
 	}
@@ -981,16 +983,15 @@ func TestAppendDeclines(t *testing.T) {
 		{"restricted complex assertions", "a complex type with {assertions}", `<xs:complexType name="ab%[1]s">` + asserted + `</xs:complexType>` +
 			`<xs:element name="%[1]s"><xs:complexType><xs:complexContent><xs:restriction base="s:ab%[1]s"><xs:sequence>` + a + `</xs:sequence></xs:restriction></xs:complexContent></xs:complexType></xs:element>`},
 		{"special type", "xs:anySimpleType or xs:anyAtomicType as a simple type", `<xs:element name="%[1]s" type="xs:anySimpleType"/>`},
-		{"list of QName", "an atomic simple type whose primitive is other than xs:string, xs:boolean, xs:decimal, xs:float, xs:double, xs:duration, xs:dateTime, xs:time, xs:date, xs:gYearMonth, xs:gYear, xs:gMonthDay, xs:gDay, xs:gMonth, xs:hexBinary, xs:base64Binary or xs:anyURI", simpleOf(`<xs:list itemType="xs:QName"/>`)},
+		{"list of precisionDecimal", "an atomic simple type whose primitive is other than xs:string, xs:boolean, xs:decimal, xs:float, xs:double, xs:duration, xs:dateTime, xs:time, xs:date, xs:gYearMonth, xs:gYear, xs:gMonthDay, xs:gDay, xs:gMonth, xs:hexBinary, xs:base64Binary, xs:anyURI, xs:QName or xs:NOTATION", simpleOf(`<xs:list itemType="xs:precisionDecimal"/>`)},
 		{"list of union", "a union simple type", simpleOf(`<xs:list><xs:simpleType><xs:union memberTypes="xs:string xs:int"/></xs:simpleType></xs:list>`)},
 		{"IDREFS", "a simple type derived from xs:ID, xs:IDREF or xs:ENTITY", `<xs:element name="%[1]s" type="xs:IDREFS"/>`},
 		{"list assertions", "a simple type with an assertions facet", simpleOf(`<xs:restriction base="xs:NMTOKENS"><xs:assertion test="true()"/></xs:restriction>`)},
 		{"inherited list assertions", "a simple type with an assertions facet", `<xs:simpleType name="assertedList%[1]s"><xs:restriction base="xs:NMTOKENS"><xs:assertion test="true()"/></xs:restriction></xs:simpleType>` + simpleOf(`<xs:restriction base="s:assertedList%[1]s"><xs:maxLength value="3"/></xs:restriction>`)},
 		{"list item assertions", "a simple type with an assertions facet", `<xs:simpleType name="assertedItem%[1]s"><xs:restriction base="xs:string"><xs:assertion test="true()"/></xs:restriction></xs:simpleType>` + simpleOf(`<xs:list itemType="s:assertedItem%[1]s"/>`)},
 		{"union", "a union simple type", simpleOf(`<xs:union memberTypes="xs:string xs:int"/>`)},
-		{"QName", "an atomic simple type whose primitive is other than xs:string, xs:boolean, xs:decimal, xs:float, xs:double, xs:duration, xs:dateTime, xs:time, xs:date, xs:gYearMonth, xs:gYear, xs:gMonthDay, xs:gDay, xs:gMonth, xs:hexBinary, xs:base64Binary or xs:anyURI", `<xs:element name="%[1]s" type="xs:QName"/>`},
-		{"precisionDecimal", "an atomic simple type whose primitive is other than xs:string, xs:boolean, xs:decimal, xs:float, xs:double, xs:duration, xs:dateTime, xs:time, xs:date, xs:gYearMonth, xs:gYear, xs:gMonthDay, xs:gDay, xs:gMonth, xs:hexBinary, xs:base64Binary or xs:anyURI", `<xs:element name="%[1]s" type="xs:precisionDecimal"/>`},
-		{"QName attribute", "an atomic simple type whose primitive is other than xs:string, xs:boolean, xs:decimal, xs:float, xs:double, xs:duration, xs:dateTime, xs:time, xs:date, xs:gYearMonth, xs:gYear, xs:gMonthDay, xs:gDay, xs:gMonth, xs:hexBinary, xs:base64Binary or xs:anyURI", complexOf(`<xs:attribute name="a" type="xs:QName"/>`)},
+		{"precisionDecimal", "an atomic simple type whose primitive is other than xs:string, xs:boolean, xs:decimal, xs:float, xs:double, xs:duration, xs:dateTime, xs:time, xs:date, xs:gYearMonth, xs:gYear, xs:gMonthDay, xs:gDay, xs:gMonth, xs:hexBinary, xs:base64Binary, xs:anyURI, xs:QName or xs:NOTATION", `<xs:element name="%[1]s" type="xs:precisionDecimal"/>`},
+		{"precisionDecimal attribute", "an atomic simple type whose primitive is other than xs:string, xs:boolean, xs:decimal, xs:float, xs:double, xs:duration, xs:dateTime, xs:time, xs:date, xs:gYearMonth, xs:gYear, xs:gMonthDay, xs:gDay, xs:gMonth, xs:hexBinary, xs:base64Binary, xs:anyURI, xs:QName or xs:NOTATION", complexOf(`<xs:attribute name="a" type="xs:precisionDecimal"/>`)},
 		{"ID", "a simple type derived from xs:ID, xs:IDREF or xs:ENTITY", `<xs:element name="%[1]s" type="xs:ID"/>`},
 		{"IDREF particle", "a simple type derived from xs:ID, xs:IDREF or xs:ENTITY", sequence(`<xs:element name="a" type="xs:IDREF"/>`)},
 		{"ENTITY restriction", "a simple type derived from xs:ID, xs:IDREF or xs:ENTITY", simpleOf(`<xs:restriction base="xs:ENTITY"/>`)},
@@ -1304,16 +1305,16 @@ func TestAppendListInvalid(t *testing.T) {
 // list type, then its {item type definition}, by its QName where it has one
 // and its schema Loc where it is located.
 func TestAppendListDeclineSubject(t *testing.T) {
-	schema := schemaOf(t, `<xs:element name="flt"><xs:simpleType><xs:list itemType="xs:QName"/></xs:simpleType></xs:element>`+
-		`<xs:simpleType name="dates"><xs:list><xs:simpleType><xs:restriction base="xs:QName"/></xs:simpleType></xs:list></xs:simpleType>`+
+	schema := schemaOf(t, `<xs:element name="flt"><xs:simpleType><xs:list itemType="xs:precisionDecimal"/></xs:simpleType></xs:element>`+
+		`<xs:simpleType name="dates"><xs:list><xs:simpleType><xs:restriction base="xs:precisionDecimal"/></xs:simpleType></xs:list></xs:simpleType>`+
 		`<xs:element name="anon" type="s:dates"/>`)
 	err := CheckAppend[strList](schema, sname("flt"))
-	_ = asDecline(t, err, "codec does not encode an atomic simple type whose primitive is other than xs:string, xs:boolean, xs:decimal, xs:float, xs:double, xs:duration, xs:dateTime, xs:time, xs:date, xs:gYearMonth, xs:gYear, xs:gMonthDay, xs:gDay, xs:gMonth, xs:hexBinary, xs:base64Binary or xs:anyURI: simple type the anonymous simple type of element {urn:s}flt declared at s.xsd:1:")
-	if !strings.Contains(err.Error(), ", through the list type's {item type definition} xs:QName; ") {
-		t.Errorf("decline %q does not name the item xs:QName", err)
+	_ = asDecline(t, err, "codec does not encode an atomic simple type whose primitive is other than xs:string, xs:boolean, xs:decimal, xs:float, xs:double, xs:duration, xs:dateTime, xs:time, xs:date, xs:gYearMonth, xs:gYear, xs:gMonthDay, xs:gDay, xs:gMonth, xs:hexBinary, xs:base64Binary, xs:anyURI, xs:QName or xs:NOTATION: simple type the anonymous simple type of element {urn:s}flt declared at s.xsd:1:")
+	if !strings.Contains(err.Error(), ", through the list type's {item type definition} xs:precisionDecimal; ") {
+		t.Errorf("decline %q does not name the item xs:precisionDecimal", err)
 	}
 	err = CheckAppend[strList](schema, sname("anon"))
-	_ = asDecline(t, err, "codec does not encode an atomic simple type whose primitive is other than xs:string, xs:boolean, xs:decimal, xs:float, xs:double, xs:duration, xs:dateTime, xs:time, xs:date, xs:gYearMonth, xs:gYear, xs:gMonthDay, xs:gDay, xs:gMonth, xs:hexBinary, xs:base64Binary or xs:anyURI: simple type {urn:s}dates defined at s.xsd:1:")
+	_ = asDecline(t, err, "codec does not encode an atomic simple type whose primitive is other than xs:string, xs:boolean, xs:decimal, xs:float, xs:double, xs:duration, xs:dateTime, xs:time, xs:date, xs:gYearMonth, xs:gYear, xs:gMonthDay, xs:gDay, xs:gMonth, xs:hexBinary, xs:base64Binary, xs:anyURI, xs:QName or xs:NOTATION: simple type {urn:s}dates defined at s.xsd:1:")
 	if !strings.Contains(err.Error(), ", through the list type's anonymous {item type definition}, a type defined at s.xsd:1:") {
 		t.Errorf("decline %q does not name the anonymous item by its Loc", err)
 	}
@@ -2526,5 +2527,164 @@ func TestAppendComplexParticleInvalid(t *testing.T) {
 		s[0] = neLoopL{L: s}
 		_, err := appendChecked(t, nil, schema, strict.New(), sname("lp"), neLoop(neLoopL{L: s}), nestedBranches...)
 		invalidChoice(t, err, "codec: Append: neLoop.(neLoopL).L[0].(neLoopL).L[0] is the value at neLoop.(neLoopL).L[0], whose element is still being written")
+	})
+}
+
+// encodeQNameSchema declares, in urn:s, document elements of xs:QName (q); of
+// nt, an enumeration of xs:NOTATION over the notation png, gif being declared
+// and not enumerated (n); of qe, an enumeration of xs:QName over s:x (qe); of
+// unprefixed, a pattern admitting only an unprefixed lexical (up); of a list
+// of xs:QName (l) and its restriction by the same pattern (ul); an element
+// whose attribute a is of xs:QName (at); an element of that attribute and of
+// repeated xs:QName children c (pc); and an element of two unqualified
+// children in no namespace, c of xs:QName and p of prefixed, a pattern
+// admitting only a prefixed lexical (nons).
+const encodeQNameSchema = `<xs:notation name="png" public="image/png"/><xs:notation name="gif" public="image/gif"/>
+  <xs:simpleType name="nt"><xs:restriction base="xs:NOTATION"><xs:enumeration value="s:png"/></xs:restriction></xs:simpleType>
+  <xs:simpleType name="qe"><xs:restriction base="xs:QName"><xs:enumeration value="s:x"/></xs:restriction></xs:simpleType>
+  <xs:simpleType name="unprefixed"><xs:restriction base="xs:QName"><xs:pattern value="[^:]+"/></xs:restriction></xs:simpleType>
+  <xs:simpleType name="prefixed"><xs:restriction base="xs:QName"><xs:pattern value="p\d+:.+"/></xs:restriction></xs:simpleType>
+  <xs:simpleType name="qnames"><xs:list itemType="xs:QName"/></xs:simpleType>
+  <xs:simpleType name="unprefixedList"><xs:restriction base="s:qnames"><xs:pattern value="[^:]+( [^:]+)*"/></xs:restriction></xs:simpleType>
+  <xs:element name="q" type="xs:QName"/>
+  <xs:element name="n" type="s:nt"/>
+  <xs:element name="qe" type="s:qe"/>
+  <xs:element name="up" type="s:unprefixed"/>
+  <xs:element name="l" type="s:qnames"/>
+  <xs:element name="ul" type="s:unprefixedList"/>
+  <xs:element name="at"><xs:complexType><xs:sequence/><xs:attribute name="a" type="xs:QName"/></xs:complexType></xs:element>
+  <xs:element name="pc"><xs:complexType><xs:sequence><xs:element name="c" type="xs:QName" maxOccurs="unbounded"/></xs:sequence>
+    <xs:attribute name="a" type="xs:QName"/></xs:complexType></xs:element>
+  <xs:element name="nons"><xs:complexType><xs:sequence><xs:element name="c" type="xs:QName" form="unqualified"/>
+    <xs:element name="p" type="s:prefixed" form="unqualified"/></xs:sequence></xs:complexType></xs:element>`
+
+// qnameList, qnameAt, qnameParent and qnameNoNS are the types codegen emits
+// for encodeQNameSchema's l, at, pc and nons, which item 5 of Append's doc
+// holds them to.
+type (
+	qnameList   []tQName
+	qnameAt     struct{ A *tQName }
+	qnameParent struct {
+		C []tQName
+		A *tQName
+	}
+	qnameNoNS struct{ C, P tQName }
+)
+
+// TestAppendQNames pins how Append spells an xs:QName or xs:NOTATION value,
+// as the package doc's "# What encodes" states, each document accepted by
+// validate and decoded back equal: unprefixed in its element's own namespace,
+// the absent one included; xml:Local for the XML namespace, undeclared; and
+// otherwise under a prefix p1, p2, … declared on the start tag of the element
+// it is written on, its namespace name escaped, reused where an ancestor's or
+// an earlier value's start tag declares it in scope, and declared again by a
+// sibling, whose scope the earlier sibling's declaration has left; in an
+// attribute, an element, a list holding a prefixed and an unprefixed item,
+// and an xs:NOTATION enumeration.
+func TestAppendQNames(t *testing.T) {
+	schema := schemaOf(t, encodeQNameSchema)
+	for _, row := range []struct {
+		name string
+		v    tQName
+		want string
+	}{
+		{"own namespace", tQName{Space: "urn:s", Local: "x"}, `<q xmlns="urn:s">x</q>`},
+		{"another namespace", tQName{Space: "urn:o", Local: "y"}, `<q xmlns="urn:s" xmlns:p1="urn:o">p1:y</q>`},
+		{"the XML namespace", tQName{Space: xmltree.XMLNamespaceURI, Local: "lang"}, `<q xmlns="urn:s">xml:lang</q>`},
+		{"an escaped namespace name", tQName{Space: `urn:a&b"c`, Local: "y"}, `<q xmlns="urn:s" xmlns:p1="urn:a&amp;b&quot;c">p1:y</q>`},
+	} {
+		t.Run(row.name, func(t *testing.T) {
+			roundTrip(t, schema, sname("q"), row.v, row.want, deepEqual[tQName])
+		})
+	}
+	t.Run("NOTATION", func(t *testing.T) {
+		roundTrip(t, schema, sname("n"), tQName{Space: "urn:s", Local: "png"}, `<n xmlns="urn:s">png</n>`, deepEqual[tQName])
+	})
+	t.Run("attribute", func(t *testing.T) {
+		roundTrip(t, schema, sname("at"), qnameAt{A: &tQName{Space: "urn:o", Local: "z"}}, `<at xmlns="urn:s" xmlns:p1="urn:o" a="p1:z"/>`, deepEqual[qnameAt])
+	})
+	t.Run("parent and child", func(t *testing.T) {
+		v := qnameParent{C: []tQName{{Space: "urn:o", Local: "b"}, {Space: "urn:t", Local: "c"}}, A: &tQName{Space: "urn:o", Local: "a"}}
+		roundTrip(t, schema, sname("pc"), v, `<pc xmlns="urn:s" xmlns:p1="urn:o" a="p1:a"><c>p1:b</c><c xmlns:p2="urn:t">p2:c</c></pc>`, deepEqual[qnameParent])
+	})
+	t.Run("siblings", func(t *testing.T) {
+		v := qnameParent{C: []tQName{{Space: "urn:t", Local: "a"}, {Space: "urn:t", Local: "b"}}}
+		roundTrip(t, schema, sname("pc"), v, `<pc xmlns="urn:s"><c xmlns:p1="urn:t">p1:a</c><c xmlns:p1="urn:t">p1:b</c></pc>`, deepEqual[qnameParent])
+	})
+	t.Run("no namespace", func(t *testing.T) {
+		v := qnameNoNS{C: tQName{Local: "x"}, P: tQName{Space: "urn:o", Local: "a"}}
+		roundTrip(t, schema, sname("nons"), v, `<nons xmlns="urn:s"><c xmlns="">x</c><p xmlns="" xmlns:p1="urn:o">p1:a</p></nons>`, deepEqual[qnameNoNS])
+	})
+	t.Run("list, one prefixed", func(t *testing.T) {
+		roundTrip(t, schema, sname("l"), qnameList{{Space: "urn:o", Local: "a"}, {Space: "urn:s", Local: "b"}}, `<l xmlns="urn:s" xmlns:p1="urn:o">p1:a b</l>`, deepEqual[qnameList])
+	})
+	t.Run("list, one prefix twice", func(t *testing.T) {
+		roundTrip(t, schema, sname("l"), qnameList{{Space: "urn:o", Local: "a"}, {Space: "urn:o", Local: "b"}}, `<l xmlns="urn:s" xmlns:p1="urn:o">p1:a p1:b</l>`, deepEqual[qnameList])
+	})
+}
+
+// TestAppendQNameInvalid pins items 6 and 7 of Append's doc and a backend
+// fault for an xs:QName or xs:NOTATION value: a namespace name holding no XML
+// 1.0 Char or the xmlns namespace, a Local the mapping's Parse rejects, a
+// list item spelled as another expanded name, a value outside an enumeration
+// of xs:QName or of xs:NOTATION, and a pattern's rejection of the spelling of
+// a value of no namespace, item 6; a pattern's rejection of the spelling of a
+// value of a namespace, an atom or a list, and a value of no namespace
+// written where the default namespace is not absent, item 7 by
+// constructQNameSpelling; and a backend with no xs:QName mapping, a plain
+// error.
+func TestAppendQNameInvalid(t *testing.T) {
+	schema := schemaOf(t, encodeQNameSchema)
+	for _, row := range []struct {
+		name, elem string
+		v          any
+		want       string
+		rule       xsderr.Rule
+	}{
+		{"a non-Char namespace name", "q", tQName{Space: "urn:\x00", Local: "x"}, "codec: Append: tQName holds {Space urn:\x00, Local x}, of simple type xs:QName, whose namespace name's byte offset 4 starts no XML 1.0 Char", ""},
+		{"the xmlns namespace", "q", tQName{Space: "http://www.w3.org/2000/xmlns/", Local: "x"}, "codec: Append: tQName holds {Space http://www.w3.org/2000/xmlns/, Local x}, of simple type xs:QName, whose namespace name is the one the prefix xmlns is bound to", ""},
+		{"a Local that is no NCName", "q", tQName{Space: "urn:s", Local: "1x"}, `codec: Append: tQName holds {Space urn:s, Local 1x}, of simple type xs:QName, written "1x", which the backend's Parse of xs:QName rejects`, "cvc-datatype-valid"},
+		{"a Local spelling another name", "l", qnameList{{Space: "urn:o", Local: "a"}, {Space: "urn:s", Local: "p1:x"}}, `codec: Append: qnameList[1] holds {Space urn:s, Local p1:x}, of simple type {urn:s}qnames defined at s.xsd:6:3, through the list type's {item type definition} xs:QName, written "p1:x", which does not resolve back to it: it resolves to {Space urn:o, Local x}`, ""},
+		{"a QName enumeration", "qe", tQName{Space: "urn:s", Local: "y"}, `codec: Append: tQName holds {Space urn:s, Local y}, written "y", which simple type {urn:s}qe`, "cvc-enumeration-valid"},
+		{"a NOTATION enumeration", "n", tQName{Space: "urn:s", Local: "gif"}, `codec: Append: tQName holds {Space urn:s, Local gif}, written "gif", which simple type {urn:s}nt`, "cvc-enumeration-valid"},
+		{"a pattern, no namespace", "nons", qnameNoNS{C: tQName{Local: "x"}, P: tQName{Local: "a"}}, `codec: Append: qnameNoNS.P holds {Space , Local a}, written "a", which simple type {urn:s}prefixed`, "cvc-pattern-valid"},
+	} {
+		t.Run(row.name, func(t *testing.T) {
+			var err error
+			switch v := row.v.(type) {
+			case tQName:
+				_, err = appendChecked(t, nil, schema, strict.New(), sname(row.elem), v)
+			case qnameList:
+				_, err = appendChecked(t, nil, schema, strict.New(), sname(row.elem), v)
+			case qnameNoNS:
+				_, err = appendChecked(t, nil, schema, strict.New(), sname(row.elem), v)
+			}
+			invalidValue(t, err)
+			if !strings.HasPrefix(err.Error(), row.want) {
+				t.Errorf("error %q, want the prefix %q", err, row.want)
+			}
+			if rule, _ := xsderr.RuleOf(err); rule != row.rule {
+				t.Errorf("rule %q, want %q", rule, row.rule)
+			}
+		})
+	}
+	const spelling = "codec does not encode an xs:QName or xs:NOTATION value with no spelling Append writes where it is written: "
+	t.Run("no namespace under a default", func(t *testing.T) {
+		_, err := appendChecked(t, nil, schema, strict.New(), sname("q"), tQName{Local: "x"})
+		_ = asDecline(t, err, spelling+"simple type xs:QName, at tQName holding {Space , Local x}: its namespace name is absent where the default namespace in scope, its element's own, is urn:s")
+	})
+	t.Run("a pattern, prefixed", func(t *testing.T) {
+		_, err := appendChecked(t, nil, schema, strict.New(), sname("up"), tQName{Space: "urn:o", Local: "a"})
+		_ = asDecline(t, err, spelling+"simple type {urn:s}unprefixed defined at s.xsd:")
+		holds(t, err, `at tQName holding {Space urn:o, Local a}: a pattern facet rejects its spelling "p1:a"`)
+	})
+	t.Run("a list pattern", func(t *testing.T) {
+		_, err := appendChecked(t, nil, schema, strict.New(), sname("ul"), qnameList{{Space: "urn:s", Local: "a"}, {Space: "urn:o", Local: "b"}})
+		_ = asDecline(t, err, spelling+"simple type {urn:s}unprefixedList defined at s.xsd:")
+		holds(t, err, `a pattern facet rejects its spelling "a p1:b"`)
+	})
+	t.Run("no mapping of xs:QName", func(t *testing.T) {
+		_, err := appendChecked(t, nil, schema, noMappingOf{xsd.QName{Space: xsd.XMLSchemaNS, Local: "QName"}}, sname("q"), tQName{Space: "urn:s", Local: "x"})
+		plainError(t, err, "codec: Append: tQName, of simple type xs:QName: the backend has no mapping of its primitive xs:QName")
 	})
 }
