@@ -349,6 +349,13 @@
 //   - A list simple type whose {item type definition} encodes and which has
 //     no assertions facet, its own or inherited, into []V, V its item's Go
 //     type.
+//   - A union simple type (Datatypes §2.4.1.3) each of whose basic members, in
+//     codegen's basic-member order (codegen's package doc, "# Simple types"),
+//     is an atomic or list simple type that encodes, and neither it
+//     nor any union among its {member type definitions}, at any depth, has an
+//     assertions facet, its own or inherited, into codegen's sealed
+//     interface, whose variants [WithBranches] supplies, as "# What decodes"
+//     states.
 //
 // The primitives an atomic simple type that encodes has are these, each into
 // the Go type its item gives, a primitive's datatype struct being the one
@@ -378,11 +385,11 @@
 //     [WithPrecisionDecimalArms] supplies.
 //
 // Every other construct is a [*DeclineError], item 4 of Append's doc, a
-// list's item declining by the item's construct, and so is what item 7 of
-// Append's doc states. The one exception is the declaration name names, as
-// the document element's, with {abstract} true: it is item 3, a plain
-// error. A declaration with {abstract} true that a particle reaches is no
-// exception.
+// list's item declining by the item's construct and a union's basic member
+// by that member's construct, and so is what item 7 of Append's doc states.
+// The one exception is the declaration name names, as the document element's,
+// with {abstract} true: it is item 3, a plain error. A declaration with
+// {abstract} true that a particle reaches is no exception.
 //
 // The document Append writes has no XML declaration, so it is XML 1.0 in
 // UTF-8, and no white space between tags. It binds element names by default
@@ -405,25 +412,28 @@
 // raw in a wildcard's field, at any depth, is written raw, nothing in it
 // assessed or resolved, and so is the content of an element of type xs:anyType
 // itself, its own attributes included, nothing in it resolved, but for the
-// items item 7 of Append's doc declines in it: its attributes in held order, one of
-// absent namespace unprefixed, one in the XML namespace xml:Local, and every
-// other one pN:Local, pN chosen and declared as for an xs:QName value, though
-// its namespace be that element's own; then its Text, then each of its
+// items item 7 of Append's doc declines in it: its attributes in held order,
+// one of absent namespace unprefixed, one in the XML namespace xml:Local, and
+// every other one pN:Local, pN chosen and declared as for an xs:QName value,
+// though its namespace be that element's own; then its Text, then each of its
 // Children, written so, followed by its Tail. A nil pointer field writes
 // nothing, and so does a nil interface field where nil means absent (codegen's
-// package doc, "# Particles"), a particle with {max occurs} above 1 writes one
-// element per item of its slice, a choice's branch writes its alternative's
-// elements, the empty match, the nil interface of a present element, writes no
-// child element, and an element with no content is written as an empty-element
-// tag, <x/>. A string value, of xs:string or xs:anyURI primitive, is written as
-// itself, its canonical representation, since xs:string's canonical mapping is
-// the identity (Datatypes §E.4 f-stringCanmap) and so is xs:anyURI's lexical
-// mapping, so that an xs:anyURI value is neither normalized nor percent-escaped
-// (§3.3.17.2), and item 6 of Append's doc holds the string to its own
-// whiteSpace-normalized form. A list value is written as its items are written,
-// in order, separated by single U+0020 characters (Datatypes §2.4.1.2), and the
-// empty list, nil or empty, as no content: <x/> for an element, a="" for an
-// attribute. It escapes '<', '&' and '>' as &lt;, &amp; and &gt; everywhere, so
+// package doc, "# Particles", "# Attributes"), a particle with {max occurs}
+// above 1 writes one element per item of its slice, a choice's branch writes
+// its alternative's elements, the empty match, the nil interface of a present
+// element, writes no child element, and an element with no content is written
+// as an empty-element tag, <x/>. A string value, of xs:string or xs:anyURI
+// primitive, is written as itself, its canonical representation, since
+// xs:string's canonical mapping is the identity (Datatypes §E.4
+// f-stringCanmap) and so is xs:anyURI's lexical mapping, so that an xs:anyURI
+// value is neither normalized nor percent-escaped (§3.3.17.2), and item 6 of
+// Append's doc holds the string to its own whiteSpace-normalized form. A list
+// value is written as its items are written, in order, separated by single
+// U+0020 characters (Datatypes §2.4.1.2), and the empty list, nil or empty, as
+// no content: <x/> for an element, a="" for an attribute. A union value is
+// written as its variant's member value is, under that member, item 7 of
+// Append's doc stating when the text it writes would decode into another
+// variant. It escapes '<', '&' and '>' as &lt;, &amp; and &gt; everywhere, so
 // that "]]>" is never written, and CR as &#xD; everywhere, which XML 1.0
 // end-of-line handling (§2.11) would otherwise rewrite to LF or remove; in an
 // attribute value it escapes '"' as &quot;, TAB as &#x9; and LF as &#xA;, which

@@ -55,19 +55,21 @@ func (e *DeclineError) Loc() (xsderr.Loc, bool) {
 // xsi:type names. For the second it names the construct, then the declining
 // element declaration, attribute use or simple type, by its QName where it has
 // one, with its schema Loc, and, for a construct of a list type's {item type
-// definition}, that item, by its QName where it has one, with its schema Loc,
-// and, for a value with no canonical representation or no spelling Append
-// writes, the Go path of its field from T and its value, and, for an attribute
-// in the XSI namespace an element held in a wildcard's match carries, or the
-// content of an element of type xs:anyType itself holds, that attribute, its
-// Go path from T and the wildcard particle, as [Decode]'s item 5 names it, or
-// that element's declaration, and, for an element such content holds whose
-// expanded name a top-level element declaration names, or an attribute it holds
-// whose expanded name a top-level attribute declaration names, that item, its Go
-// path from T, that element's declaration and the top-level declaration, with
-// its schema Loc. A type definition named in the XML Schema namespace whose schema
-// Loc is the zero Loc is named by its QName alone, in place of the schema Loc
-// the sentences above give it.
+// definition}, a union's basic member or a union among a union's {member type
+// definitions} at any depth, that item, member or member union, by its QName
+// where it has one, with its schema Loc, and, for a value with no canonical
+// representation or no spelling Append writes, the Go path of its field from T
+// and its value, and, for an attribute in the XSI namespace an element held in
+// a wildcard's match carries, or the content of an element of type xs:anyType
+// itself holds, that attribute, its Go path from T and the wildcard particle,
+// as [Decode]'s item 5 names it, or that element's declaration, and, for an
+// element such content holds whose expanded name a top-level element
+// declaration names, or an attribute it holds whose expanded name a top-level
+// attribute declaration names, that item, its Go path from T, that element's
+// declaration and the top-level declaration, with its schema Loc. A type
+// definition named in the XML Schema namespace whose schema Loc is the zero Loc
+// is named by its QName alone, in place of the schema Loc the sentences above
+// give it.
 func (e *DeclineError) Error() string {
 	text := "codec does not decode " + e.construct.name() + ": " + e.detail +
 		"; a decoder refusal, not a schema or instance fault"
@@ -173,7 +175,6 @@ const (
 	constructAttributeWildcard
 	constructComplexAssertions
 	constructSpecialType
-	constructUnion
 	constructEncodePrimitive
 	constructIDType
 	constructAssertions
@@ -208,7 +209,6 @@ var constructNames = [...]string{
 	constructAttributeWildcard:  "an {attribute wildcard}",
 	constructComplexAssertions:  "a complex type with {assertions}",
 	constructSpecialType:        "xs:anySimpleType or xs:anyAtomicType as a simple type",
-	constructUnion:              "a union simple type",
 	constructEncodePrimitive:    "an atomic simple type whose primitive is other than " + displayList(encodedPrimitives),
 	constructIDType:             "a simple type derived from xs:ID, xs:IDREF or xs:ENTITY",
 	constructAssertions:         "a simple type with an assertions facet",
