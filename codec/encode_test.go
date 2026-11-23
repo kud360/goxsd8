@@ -2849,18 +2849,18 @@ func TestAppendPrecisionDecimalInvalid(t *testing.T) {
 	}
 }
 
-// The backends of TestAppendPrecisionDecimalBackend, each strict's with its
-// xs:precisionDecimal mapping replaced: one whose Canonical renders 300E-2,
-// a pDecimalRep other than f-precDecCanmap's 3.00 that maps back to the
-// value; one whose Canonical renders 3, which does not; a nil and a failing
-// Canonical; and one whose Parse rejects every lexical.
+// pdRendering returns strict's backend with its xs:precisionDecimal mapping's
+// Canonical replaced by one rendering text for every value.
+func pdRendering(text string) value.Backend {
+	return overDatatype("precisionDecimal", func(base value.Mapping) value.Mapping {
+		return value.Mapping{Parse: base.Parse, Canonical: func(value.Value) (string, error) { return text, nil }}
+	})
+}
+
+// The other backends of TestAppendPrecisionDecimalBackend, each strict's with
+// its xs:precisionDecimal mapping replaced: a nil and a failing Canonical,
+// and one whose Parse rejects every lexical.
 var (
-	pdExponentCanonical = overDatatype("precisionDecimal", func(base value.Mapping) value.Mapping {
-		return value.Mapping{Parse: base.Parse, Canonical: func(value.Value) (string, error) { return "300E-2", nil }}
-	})
-	pdOtherCanonical = overDatatype("precisionDecimal", func(base value.Mapping) value.Mapping {
-		return value.Mapping{Parse: base.Parse, Canonical: func(value.Value) (string, error) { return "3", nil }}
-	})
 	pdNilCanonical = overDatatype("precisionDecimal", func(base value.Mapping) value.Mapping {
 		return value.Mapping{Parse: base.Parse}
 	})
@@ -2873,16 +2873,17 @@ var (
 )
 
 // TestAppendPrecisionDecimalBackend pins the write's reading of the backend:
-// Canonical's text is written where it maps back to the value, though it is
-// not f-precDecCanmap's, so no backend fault is charged against a canonical
-// string of the codec's own; it is item 7 where it does not map back, or
-// where Canonical is nil or fails, and where a pattern rejects a numerical
-// value or INF, each of which has another lexical, or a list holding one
-// beside -INF; and a Parse rejecting the value's pDecimalRep is a backend
-// fault.
+// Canonical's text is written where it maps back to the value, as 300E-2 does
+// to 3.00 though it is not f-precDecCanmap's, so no backend fault is charged
+// against a canonical string of the codec's own; it is item 7 where it does
+// not map back, as 3 does not, nor 300E-1, of another Scale alone, nor -3.00,
+// of another sign alone, or where Canonical is nil or fails, and where a
+// pattern rejects a numerical value or INF, each of which has another
+// lexical, or a list holding one beside -INF; and a Parse rejecting the
+// value's pDecimalRep is a backend fault.
 func TestAppendPrecisionDecimalBackend(t *testing.T) {
 	schema := schemaOf(t, encodePDSchema)
-	got, err := appendChecked(t, nil, schema, pdExponentCanonical, sname("h"), pdNumerical(300, 2, false), pdArms)
+	got, err := appendChecked(t, nil, schema, pdRendering("300E-2"), sname("h"), pdNumerical(300, 2, false), pdArms)
 	if want := `<h xmlns="urn:s">300E-2</h>`; err != nil || string(got) != want {
 		t.Errorf("Append = %q, %v, want %q", got, err, want)
 	}
@@ -2893,7 +2894,10 @@ func TestAppendPrecisionDecimalBackend(t *testing.T) {
 		v       tPrecisionDecimal
 		want    string
 	}{
-		{"a Canonical not mapping back", pdOtherCanonical, "h", pdNumerical(300, 2, false), `simple type xs:precisionDecimal, at tPrecisionDecimal holding 300E-2: its canonical representation "3" does not map back to it`},
+		{"a Canonical not mapping back", pdRendering("3"), "h", pdNumerical(300, 2, false), `simple type xs:precisionDecimal, at tPrecisionDecimal holding 300E-2: its canonical representation "3" does not map back to it`},
+		{"a Canonical of another Scale", pdRendering("300E-1"), "h", pdNumerical(300, 2, false), `its canonical representation "300E-1" does not map back to it`},
+		{"a Canonical of another sign", pdRendering("-3.00"), "h", pdNumerical(300, 2, false), `its canonical representation "-3.00" does not map back to it`},
+		{"a Canonical of another arm", pdRendering("-INF"), "h", tPrecisionDecimal{tPDPositiveInfinity{}}, `its canonical representation "-INF" does not map back to it`},
 		{"a nil Canonical", pdNilCanonical, "h", pdNumerical(300, 2, false), "at tPrecisionDecimal holding 300E-2: its governing mapping has no canonical mapping"},
 		{"a failing Canonical", pdFailingCanonical, "h", tPrecisionDecimal{tPDNotANumber{}}, "at tPrecisionDecimal holding NaN: no canonical form"},
 		{"a pattern rejecting a numerical value", strict.New(), "pat", pdNumerical(3, 0, false), `at tPrecisionDecimal holding 3E0: a pattern facet rejects its canonical representation "3"`},
