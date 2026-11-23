@@ -2968,19 +2968,18 @@ var skipAttrBranches = WithBranches[skipAttrChoice](skipAttrA{}, skipAttrAny{})
 // xmlNS is the XML namespace's name, xml's.
 const xmlNS = "http://www.w3.org/XML/1998/namespace"
 
-// TestAppendWildcard pins the wildcard particle with {process contents} skip
-// "# What encodes" admits: each element its field holds is written raw, its
-// attributes in held order, an unqualified one unprefixed, one in the XML
-// namespace as xml:, undeclared, and every other one under the prefix an
-// open start tag declares for its namespace, or a fresh pN declared on its
-// element's own, though the namespace be the element's; then its Text, then
-// each child followed by its Tail; an element in the XML namespace as
-// xml:Local, moving no default namespace. Each document validate accepts and
-// Decode turns back into the value; an optional wildcard holding nothing
-// writes nothing, and so does the nil interface of a choice whose wildcard
-// alternative has {min occurs} 0, which is emptiable though its branch reads
-// it as 1 (choiceEmptiable). The rows of one and several held elements are the ones the
-// static decline failed before the slice (constructWildcard).
+// TestAppendWildcard pins the wildcard particle with {process contents} skip "# What encodes"
+// admits: each element its field holds is written raw, its attributes in held order, an
+// unqualified one unprefixed, one in the XML namespace as xml:, undeclared, and every other one
+// under the prefix an open start tag declares for its namespace, or a fresh pN declared on its
+// element's own, though the namespace be the element's; then its Text, then each child followed by
+// its Tail; an element in the XML namespace as xml:Local, moving no default namespace, and one in
+// the XSI namespace under a default declaration of it, an attribute in it being item 7. Each
+// document validate accepts and Decode turns back into the value; an optional wildcard holding
+// nothing writes nothing, and so does the nil interface of a choice whose wildcard alternative has
+// {min occurs} 0, which is emptiable though its branch reads it as 1 (choiceEmptiable). The rows
+// of one and several held elements are the ones the static decline failed before the slice
+// (constructWildcard).
 func TestAppendWildcard(t *testing.T) {
 	t.Run("one held element", func(t *testing.T) {
 		roundTrip(t, schemaOf(t, seqSkipSchema), rootName, seqWild{A: "x", Any: anyElement{Space: "urn:o", Local: "w"}},
@@ -3009,6 +3008,10 @@ func TestAppendWildcard(t *testing.T) {
 		}}
 		roundTrip(t, schemaOf(t, skipManySchema), rootName, v,
 			`<r xmlns="urn:s"><a>x</a><xml:e><in/></xml:e><n xmlns=""><in xmlns="urn:s"/></n></r>`, deepEqual[seqRepeated])
+	})
+	t.Run("an element in the XSI namespace, under a default declaration", func(t *testing.T) {
+		roundTrip(t, schemaOf(t, seqSkipSchema), rootName, seqWild{A: "x", Any: anyElement{Space: xsd.XMLSchemaInstanceNS, Local: "w"}},
+			`<r xmlns="urn:s"><a>x</a><w xmlns="http://www.w3.org/2001/XMLSchema-instance"/></r>`, deepEqual[seqWild])
 	})
 	t.Run("an optional wildcard holding nothing", func(t *testing.T) {
 		roundTrip(t, schemaOf(t, skipOptionalSchema), rootName, seqOptional{A: "x"}, `<r xmlns="urn:s"><a>x</a></r>`, deepEqual[seqOptional])
