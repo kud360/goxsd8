@@ -3229,8 +3229,9 @@ func TestAppendAnyType(t *testing.T) {
 // Local that is no NCName, at depth, a Text holding a non-Char, a held
 // attribute named xmlns, and a held element's self-holding Children. Item 7:
 // an attribute in the XSI namespace, on the element or at depth, declines by
-// constructXsiAttribute; and an element or attribute whose expanded name a
-// top-level declaration names, at any depth, under an ungoverned child too,
+// constructXsiAttribute; and an element whose expanded name a top-level
+// element declaration names, or an attribute whose expanded name a top-level
+// attribute declaration names, at any depth, under an ungoverned child too,
 // declines by constructGovernedContent, whatever its value, the XSI check
 // first on one attribute, since the schema declares xsi:type: a governed
 // xs:QName child Decode returns from a valid document, a governed xs:int child

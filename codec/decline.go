@@ -61,8 +61,9 @@ func (e *DeclineError) Loc() (xsderr.Loc, bool) {
 // in the XSI namespace an element held in a wildcard's match carries, or the
 // content of an element of type xs:anyType itself holds, that attribute, its
 // Go path from T and the wildcard particle, as [Decode]'s item 5 names it, or
-// that element's declaration, and, for an element or attribute such content
-// holds whose expanded name a top-level declaration names, that item, its Go
+// that element's declaration, and, for an element such content holds whose
+// expanded name a top-level element declaration names, or an attribute it holds
+// whose expanded name a top-level attribute declaration names, that item, its Go
 // path from T, that element's declaration and the top-level declaration, with
 // its schema Loc. A type definition named in the XML Schema namespace whose schema
 // Loc is the zero Loc is named by its QName alone, in place of the schema Loc
@@ -214,7 +215,7 @@ var constructNames = [...]string{
 	constructNoCanonical:        "a value with no canonical representation",
 	constructQNameSpelling:      "an xs:QName or xs:NOTATION value with no spelling Append writes where it is written",
 	constructXsiAttribute:       "an attribute in the XSI namespace held in a wildcard's match or an xs:anyType element's content",
-	constructGovernedContent:    "an element or attribute held in an xs:anyType element's content whose expanded name a top-level declaration names",
+	constructGovernedContent:    "an element held in an xs:anyType element's content whose expanded name a top-level element declaration names, or an attribute it holds whose expanded name a top-level attribute declaration names",
 }
 
 // displayList spells names, at least two, each by its Display, separated by

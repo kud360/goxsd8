@@ -126,8 +126,9 @@ var ErrInvalidValue = errors.New("codec: Append: a value no valid document holds
 //     the content of an element of type xs:anyType itself, its own attributes
 //     among it, at any depth, whatever its value, since an xsi:type's may hold a
 //     prefix no binding the struct holds resolves; or, in such content of an
-//     xs:anyType element, at any depth, an element or attribute whose expanded
-//     name a top-level element or attribute declaration of schema names,
+//     xs:anyType element, at any depth, an element whose expanded name a
+//     top-level element declaration of schema names, or an attribute whose
+//     expanded name a top-level attribute declaration of schema names,
 //     whatever its content or value, since xs:anyType's lax wildcards assess it
 //     against that declaration (Structures §3.4.7, §3.3.4.6 key-governing-ed
 //     clause 3, §3.2.4.2 key-governing-ad clause 3). The values with a lexical other than
@@ -1754,9 +1755,9 @@ type anyTypeContent struct{ decl xsd.ElementDeclaration }
 // in names c.decl.
 func (c anyTypeContent) in() string { return "in the content of " + declSubject(c.decl) }
 
-// governing returns the top-level element declaration, or for attribute the
-// top-level attribute declaration, of schema named name: under xs:anyType's
-// lax wildcards (§3.4.7) an item so named is assessed against it
+// governing returns the subject of the top-level element declaration, or for
+// attribute the top-level attribute declaration, of schema named name: under
+// xs:anyType's lax wildcards (§3.4.7) an item so named is assessed against it
 // (§3.3.4.6 key-governing-ed clause 3, §3.2.4.2 key-governing-ad clause 3),
 // and every other one laxly again (§3.3.4.6 key-lva) or not at all.
 func (anyTypeContent) governing(schema *xsd.Schema, name xsd.QName, attribute bool) (string, bool) {
