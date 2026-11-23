@@ -1922,13 +1922,16 @@ func (f field) describe() string {
 
 // attribute is the field an attribute use gives a complex type's struct: its
 // Go name, its shape, decl, the use's attribute declaration, whose name and
-// subject Append writes and names (boundBinding.write), and the scalar its
-// value decodes as; its V is the Go type codegen gives the attribute's simple
-// type itself.
+// subject Append writes and names (boundBinding.write), required, the use's
+// {required}, by which Append tells a nil union interface absent from one
+// required (codegen's package doc, "# Attributes"), and the scalar its value
+// decodes as; its V is the Go type codegen gives the attribute's simple type
+// itself.
 type attribute struct {
-	name  string
-	shape shape
-	decl  xsd.AttributeDeclaration
+	name     string
+	shape    shape
+	decl     xsd.AttributeDeclaration
+	required bool
 	scalar
 }
 
@@ -5292,7 +5295,7 @@ func attributeUse(schema *xsd.Schema, u xsd.AttributeUse) (attribute, error) {
 		return attribute{}, err
 	}
 	vc, has := goshape.SuppliedValueConstraint(schema, u)
-	return attribute{shape: shape(goshape.AttributeShape(schema, u, g.sealed())), decl: decl, scalar: newScalar(g, st, subject, vc, has)}, nil
+	return attribute{shape: shape(goshape.AttributeShape(schema, u, g.sealed())), decl: decl, required: u.Required(), scalar: newScalar(g, st, subject, vc, has)}, nil
 }
 
 // simpleDecline returns the Go type codegen gives the simple type st of the

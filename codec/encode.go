@@ -63,36 +63,42 @@ var ErrInvalidValue = errors.New("codec: Append: a value no valid document holds
 //     §3.9.6.3 cos-group-emptiable), a choice of no {particles} among them; a
 //     value of that interface whose dynamic type the [WithBranches] set in
 //     opts places at no alternative, a pointer to a branch among them, which
-//     Decode never returns; a value that holds itself, a struct or sealed
-//     interface value its own write reaches again through a *S, []S or []I
-//     field, which no finite document holds, the error naming the Go path
-//     where the value is reached again and nothing written beneath it; a
-//     string holding bytes that are not UTF-8 or a character the XML 1.0 Char
-//     production does not match, U+0000 among them (Datatypes §3.3.1.1,
-//     §3.3.17.1); a string that differs from its own whiteSpace-normalized form
-//     under its simple type, such as an xs:token holding "  a  b"; a list item,
-//     a string, that is empty or holds TAB, LF, CR or a space, which no list
-//     item's lexical representation does (Datatypes §2.4.1.2); a big.Rat
-//     outside the decimal value space, whose denominator in lowest terms is no
-//     2^m·5^n (§3.3.3.1), such as 1/3; a date, time or duration datatype struct
-//     value no value of its datatype maps to, as codegen's package doc "#
-//     Simple types" states such values exist, the error naming the first
-//     property found outside it, its fields read in order, or, ahead of its
-//     Seconds, a duration's Months and Seconds of opposite signs; a
-//     PrecisionDecimal datatype struct value no value maps to, as codegen's "#
-//     Simple types" states such values exist, a nil Value or the numerical arm
-//     with a negative Coefficient, or a Value whose dynamic type the
-//     [WithPrecisionDecimalArms] set in opts supplies in no role, a pointer to
-//     an arm among them, which Decode never returns; an xs:QName
-//     or xs:NOTATION value whose namespace name holds a byte that starts no
-//     XML 1.0 Char or is the one the prefix xmlns is bound to (Namespaces in
-//     XML §3), or whose Local the Parse of its primitive's mapping rejects in
-//     Append's spelling, that Parse's verdict wrapped, or makes a spelling
-//     that resolves back to another expanded name; or a value whose simple
-//     type rejects it, a value.ValidateLexical error value.IsDatatypeVerdict
-//     reports as a verdict, a facet's rejection or a backend Parse's among
-//     them, that error wrapped, but for item 7's pattern case, a list's own
-//     facets read once every item has passed its own checks.
+//     Decode never returns; the nil sealed interface of a union simple type
+//     where a value is required, the document element's, a required
+//     attribute's, a list item's or an item of a particle's slice, nil meaning
+//     absent nowhere else (codegen's package doc, "# Particles",
+//     "# Attributes"); a value of that interface whose dynamic type the
+//     [WithBranches] set in opts places at no basic member, a pointer to a
+//     variant among them, which Decode never returns; a value that holds
+//     itself, a struct or sealed interface value its own write reaches again
+//     through a *S, []S or []I field, which no finite document holds, the error
+//     naming the Go path where the value is reached again and nothing written
+//     beneath it; a string holding bytes that are not UTF-8 or a character the
+//     XML 1.0 Char production does not match, U+0000 among them (Datatypes
+//     §3.3.1.1, §3.3.17.1); a string that differs from its own
+//     whiteSpace-normalized form under its simple type, such as an xs:token
+//     holding "  a  b"; a list item, a string, that is empty or holds TAB, LF,
+//     CR or a space, which no list item's lexical representation does
+//     (Datatypes §2.4.1.2); a big.Rat outside the decimal value space, whose
+//     denominator in lowest terms is no 2^m·5^n (§3.3.3.1), such as 1/3; a
+//     date, time or duration datatype struct value no value of its datatype
+//     maps to, as codegen's package doc "# Simple types" states such values
+//     exist, the error naming the first property found outside it, its fields
+//     read in order, or, ahead of its Seconds, a duration's Months and Seconds
+//     of opposite signs; a PrecisionDecimal datatype struct value no value maps
+//     to, as codegen's "# Simple types" states such values exist, a nil Value
+//     or the numerical arm with a negative Coefficient, or a Value whose
+//     dynamic type the [WithPrecisionDecimalArms] set in opts supplies in no
+//     role, a pointer to an arm among them, which Decode never returns; an
+//     xs:QName or xs:NOTATION value whose namespace name holds a byte that
+//     starts no XML 1.0 Char or is the one the prefix xmlns is bound to
+//     (Namespaces in XML §3), or whose Local the Parse of its primitive's
+//     mapping rejects in Append's spelling, that Parse's verdict wrapped, or
+//     makes a spelling that resolves back to another expanded name; or a value
+//     whose simple type rejects it, a value.ValidateLexical error
+//     value.IsDatatypeVerdict reports as a verdict, a facet's rejection or a
+//     backend Parse's among them, that error wrapped, but for item 7's pattern
+//     case, a list's own facets read once every item has passed its own checks.
 //  7. A value with no canonical representation or no spelling Append writes,
 //     the first in document order as item 6 counts: its *DeclineError. That is
 //     a governing mapping with no Canonical, a Canonical that fails for the
@@ -103,26 +109,38 @@ var ErrInvalidValue = errors.New("codec: Append: a value no valid document holds
 //     pattern facet of its type rejects (§2.1's note), such as 3/2 under an
 //     xs:decimal pattern \d+\.\d\d, which admits 1.50 but not 1.5, whatever
 //     other facet rejects it; a canonical representation that does not map
-//     back to the value; or an xs:QName or xs:NOTATION value whose namespace
-//     name is absent, written on an element whose namespace is not, which no
-//     unprefixed spelling resolves to there and no prefix can be bound to
-//     (Namespaces in XML §5 nsc-NoPrefixUndecl), whatever else rejects it.
-//     The values with a lexical other than the one Append writes, the ones
-//     whose rejection by a pattern facet is this item, are: every xs:boolean,
-//     xs:decimal-primitive, xs:dateTime, xs:dateTimeStamp, xs:time and
-//     xs:duration-primitive value; every xs:float, xs:double and
-//     xs:precisionDecimal value other than NaN and -INF; an xs:date,
-//     xs:gYearMonth or xs:gYear value whose timezoneOffset is 0, spelled Z,
-//     +00:00 or -00:00 (§D.2.2's note), or whose year is 0, spelled 0000 or
-//     -0000; an xs:gMonthDay, xs:gDay or xs:gMonth value whose timezoneOffset
-//     is 0; an xs:hexBinary value one of whose octets holds a hex digit A to F
-//     (§3.3.15.2); every xs:base64Binary value but the empty one (§3.3.16.2);
-//     an xs:QName or xs:NOTATION value whose namespace name is not absent; and
-//     no xs:string- or xs:anyURI-primitive value, each being its own
-//     whiteSpace-normalized form. NaN and -INF, of xs:float, xs:double and
-//     xs:precisionDecimal alike, are written NaN and -INF, their only lexicals
-//     (§3.3.4.2, §3.3.5.2, precisionDecimal §3.2), so a pattern facet of their
-//     own simple type that rejects one of them is item 6, not this item.
+//     back to the value; a union's variant whose member value Append writes as
+//     text whose ·active basic member· (Datatypes §2.4.1.3
+//     dt-active-basic-member, §4.1.4 cvc-datatype-valid clause 2.3) is not that
+//     variant's member, or that no member of the union accepts, so that Decode
+//     returns another variant or none, by the construct of the clause before,
+//     or for an xs:QName or xs:NOTATION member's spelling by its spelling's
+//     construct: xs:decimal 1 under a union of xs:int and xs:decimal is
+//     written 1, which Decode returns as the xs:int variant, though 1.0
+//     decodes into the xs:decimal variant holding 1, so that a valid document
+//     holds the value and item 6 does not apply; or an xs:QName or xs:NOTATION
+//     value whose namespace name is absent, written on an element whose
+//     namespace is not, which no unprefixed spelling resolves to there and no
+//     prefix can be bound to (Namespaces in XML §5 nsc-NoPrefixUndecl),
+//     whatever else rejects it. The values with a lexical other than the one
+//     Append writes, the ones whose rejection by a pattern facet is this item,
+//     a union's own pattern facet among them, read once the variant's member
+//     is its text's ·active basic member·, are: a union's value whose member
+//     value is one; every xs:boolean, xs:decimal-primitive, xs:dateTime,
+//     xs:dateTimeStamp, xs:time and xs:duration-primitive value; every
+//     xs:float, xs:double and xs:precisionDecimal value other than NaN and
+//     -INF; an xs:date, xs:gYearMonth or xs:gYear value whose timezoneOffset is
+//     0, spelled Z, +00:00 or -00:00 (§D.2.2's note), or whose year is 0,
+//     spelled 0000 or -0000; an xs:gMonthDay, xs:gDay or xs:gMonth value whose
+//     timezoneOffset is 0; an xs:hexBinary value one of whose octets holds a
+//     hex digit A to F (§3.3.15.2); every xs:base64Binary value but the empty
+//     one (§3.3.16.2); an xs:QName or xs:NOTATION value whose namespace name is
+//     not absent; and no xs:string- or xs:anyURI-primitive value, each being
+//     its own whiteSpace-normalized form. NaN and -INF, of xs:float, xs:double
+//     and xs:precisionDecimal alike, are written NaN and -INF, their only
+//     lexicals (§3.3.4.2, §3.3.5.2, precisionDecimal §3.2), so a pattern facet
+//     of their own simple type that rejects one of them is item 6, not this
+//     item.
 //
 // A plain error is no *DeclineError and wraps none of [ErrTypeMismatch],
 // [ErrInvalidValue] and errors.ErrUnsupported; whether it wraps an
@@ -147,8 +165,9 @@ var ErrInvalidValue = errors.New("codec: Append: a value no valid document holds
 // vp-timeCanRep, vp-dateCanRep, vp-gYearMonthCanRep, vp-gYearCanRep,
 // vp-gMonthDayCanRep, vp-gDayCanRep and vp-gMonthCanRep, §E.4.1
 // f-hexBinaryCanonical and §3.3.16.2's Canonical-base64Binary), or an error
-// of value.ValidateLexical that value.IsDatatypeVerdict does not report as a
-// verdict.
+// of value.ValidateLexical or, identifying a union value's ·active basic
+// member·, of value.ValidatingType that value.IsDatatypeVerdict does not
+// report as a verdict.
 //
 // Of opts Append reads only the sets [WithBranches] and
 // [WithPrecisionDecimalArms] supply. Items 2 to 5 read no value;
@@ -166,7 +185,7 @@ func Append[T any](dst []byte, schema *xsd.Schema, backend value.Backend, name x
 	if err != nil {
 		return dst, err
 	}
-	e := &encoder{schema: schema, backend: backend, decimals: cfg.decimals, out: dst}
+	e := &encoder{schema: schema, backend: backend, decimals: cfg.decimals, branches: cfg.branches, out: dst}
 	// v's own Value, of Kind Interface where T is one, so that a nil T and a
 	// branch's dynamic type both reach the write as T holds them.
 	if err := encoded[writer](f).write(e, reflect.ValueOf(&v).Elem(), writeAt{el: decl, path: typePath(t)}); err != nil {
@@ -292,7 +311,8 @@ func (s *simpleRoot) write(e *encoder, v reflect.Value, at writeAt) error {
 // write writes the element at.el holding v, a value of b's struct: its start
 // tag, then each attribute field's attribute, in field order, the fields after
 // the content's (binding.lead, elementContent.width), a nil *V's written as
-// none, then the content's elements (b.content's write), an element with no
+// none, and so is a nil union interface of a use whose {required} is false,
+// then the content's elements (b.content's write), an element with no
 // content written as an empty-element tag; or nothing, where v holds itself
 // (encoder.enter).
 func (b *boundBinding) write(e *encoder, v reflect.Value, at writeAt) error {
@@ -311,6 +331,11 @@ func (b *boundBinding) write(e *encoder, v reflect.Value, at writeAt) error {
 				continue
 			}
 			f = f.Elem()
+		}
+		// An optional union use's field is its bare sealed interface, nil
+		// meaning absent (codegen's package doc, "# Attributes").
+		if f.Kind() == reflect.Interface && f.IsNil() && !a.required {
+			continue
 		}
 		text, err := e.simple(a.scalar, f, fpath, fmt.Sprintf("attribute %s declared at %s", a.decl.Name().Display(), a.decl.Loc()))
 		if err != nil {
@@ -767,7 +792,13 @@ var (
 // reading st is returned as is, and a list with no {item type definition} is
 // a plain error.
 func simpleEncodes(r xsd.TypeResolver, st *xsd.SimpleType, owner string) error {
-	subject := simpleSubject(st, owner)
+	return typeEncodes(r, st, simpleSubject(st, owner))
+}
+
+// typeEncodes is simpleEncodes for st, subject naming it already: a
+// declaration's type as simpleSubject names it, or a union's basic member as
+// memberSubject names it after its union (unionEncodes).
+func typeEncodes(r xsd.TypeResolver, st *xsd.SimpleType, subject string) error {
 	if st.IsSpecial() {
 		return encodeDecline(constructSpecialType, subject)
 	}
@@ -794,11 +825,11 @@ func simpleEncodes(r xsd.TypeResolver, st *xsd.SimpleType, owner string) error {
 // atomicEncodes returns nil where st, an atomic or union simple type subject
 // names, a list's {item type definition} among them, which cos-st-restricts
 // clause 2.1 holds to one of those two, encodes, and otherwise the decline
-// of the first construct it finds: a special type, a union, a primitive
-// not in encodedPrimitives, a type on whose {base type definition} chain
-// xs:ID, xs:IDREF or xs:ENTITY lies, then an assertions facet among its
-// effective facets, its own or inherited. An error reading st is returned as
-// is.
+// of the first construct it finds: a special type, then, for a union,
+// unionEncodes's, and for an atomic type a primitive not in
+// encodedPrimitives, a type on whose {base type definition} chain xs:ID,
+// xs:IDREF or xs:ENTITY lies, then an assertions facet among its effective
+// facets, its own or inherited. An error reading st is returned as is.
 func atomicEncodes(r xsd.TypeResolver, st *xsd.SimpleType, subject string) error {
 	if st.IsSpecial() {
 		return encodeDecline(constructSpecialType, subject)
@@ -808,7 +839,7 @@ func atomicEncodes(r xsd.TypeResolver, st *xsd.SimpleType, subject string) error
 		return err
 	}
 	if _, isUnion := variety.(xsd.Union); isUnion {
-		return encodeDecline(constructUnion, subject)
+		return unionEncodes(r, st, subject)
 	}
 	primitive, err := st.Primitive(r)
 	if err != nil {
@@ -829,6 +860,59 @@ func atomicEncodes(r xsd.TypeResolver, st *xsd.SimpleType, subject string) error
 		}
 	}
 	return assertionsDecline(r, st, subject)
+}
+
+// unionEncodes returns atomicEncodes's answer for st, a union simple type
+// subject names: the first construct of its basic members, in basic-member
+// order (goshape.BasicMembers), each examined by typeEncodes, the detail
+// naming the member after subject (memberSubject), as Decode's unionDecline
+// examines them; then unionAssertionsDecline's for st. An error reading st is
+// returned as is.
+func unionEncodes(r xsd.TypeResolver, st *xsd.SimpleType, subject string) error {
+	basic, err := goshape.BasicMembers(r, st)
+	if err != nil {
+		return err
+	}
+	for _, m := range basic {
+		if err := typeEncodes(r, m, memberSubject(subject, m)); err != nil {
+			return err
+		}
+	}
+	return unionAssertionsDecline(r, st, subject)
+}
+
+// unionAssertionsDecline returns constructAssertions's decline for the first
+// union with an assertions facet among its effective facets, its own or
+// inherited, of st, a union simple type subject names, and every union its
+// {member type definitions} reach at any depth, st first and then each member
+// union in order, depth first, named after subject by nestedUnionSubject.
+// goshape.BasicMembers flattens a member union away, and value.ValidatingType
+// reads its facets on every literal Append's identification hands it
+// (encoder.activeMember), so its assertions facet would reach noAssertions.
+// An error reading a type is returned as is.
+func unionAssertionsDecline(r xsd.TypeResolver, st *xsd.SimpleType, subject string) error {
+	if err := assertionsDecline(r, st, subject); err != nil {
+		return err
+	}
+	members, err := st.Members(r)
+	if err != nil {
+		return err
+	}
+	for _, m := range members {
+		variety, err := m.Variety(r)
+		if err != nil {
+			return err
+		}
+		// {variety} is a closed sum, so the assertion is STYLE T2's sealed-sum
+		// exception.
+		if _, isUnion := variety.(xsd.Union); !isUnion {
+			continue
+		}
+		if err := unionAssertionsDecline(r, m, nestedUnionSubject(subject, m)); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // assertionsDecline returns constructAssertions's decline, subject naming
@@ -854,21 +938,24 @@ func simpleSubject(st *xsd.SimpleType, owner string) string {
 }
 
 // encoder is one Append's write of a document: decimals, the arm sets
-// [WithPrecisionDecimalArms] supplied, from the config item 5's check read
-// (encodeStatic), by which a PrecisionDecimal's Value is read (decimalOf);
-// out, the document so far; ns, the in-scope default namespace, that of the
-// element whose start tag is open or whose content is being written, ""
-// outside the document element; bound, the namespace names qname has declared
-// a prefix for on the open elements, outermost first, bound[i] under
-// boundPrefix(i), which no field stores (writtenBindings); open, the values
-// whose element's write is open, outermost first (enter); and the first item
-// 6 and item 7 errors of [Append]'s doc it has found, in document order.
-// Every value is written whatever was found before it, so that the walk finds
-// an item 6 error after an item 7 one.
+// [WithPrecisionDecimalArms] supplied, and branches, the sets [WithBranches]
+// supplied, each from the config item 5's check read (encodeStatic), by
+// which a PrecisionDecimal's Value is read (decimalOf) and a union's variant
+// placed at its basic member (encoder.union); out, the document so far; ns,
+// the in-scope default namespace, that of the element whose start tag is open
+// or whose content is being written, "" outside the document element; bound,
+// the namespace names qname has declared a prefix for on the open elements,
+// outermost first, bound[i] under boundPrefix(i), which no field stores
+// (writtenBindings); open, the values whose element's write is open,
+// outermost first (enter); and the first item 6 and item 7 errors of
+// [Append]'s doc it has found, in document order. Every value is written
+// whatever was found before it, so that the walk finds an item 6 error after
+// an item 7 one.
 type encoder struct {
 	schema   *xsd.Schema
 	backend  value.Backend
 	decimals decimalArmSets
+	branches branchSets
 	out      []byte
 	ns       string
 	bound    []string
@@ -995,21 +1082,171 @@ func (e *encoder) declineValue(c construct, subject, path, shown, cause string) 
 
 // simple returns the text Append writes for v, a value of s's simple type,
 // s.st, held in the Go type the slice gives it, at path, owner naming s.st's
-// declaration: an atomic value by atom, as held reads it, a list by list,
-// each under the atomic Go type of s's element (encoded). It records the
-// value's item 6 or 7 error of [Append]'s doc, and returns a backend fault.
+// declaration (scalarText). It records the value's item 6 or 7 error of
+// [Append]'s doc, and returns a backend fault.
 func (e *encoder) simple(s scalar, v reflect.Value, path, owner string) (string, error) {
-	subject := simpleSubject(s.st, owner)
-	a := encoded[atomic](s.elem)
+	w, err := e.scalarText(s, v, path, simpleSubject(s.st, owner))
+	return w.text, err
+}
+
+// written is what Append's write of one simple value found: text, the text it
+// writes; ok, that it recorded no item 6 or 7 error of [Append]'s doc for the
+// value; other, that the value has a lexical other than text, which a pattern
+// facet may match where it rejects text (Datatypes §2.1's note); and
+// spelling, that text spells an xs:QName or xs:NOTATION value, which has no
+// canonical representation, or holds a list item or a union's member value
+// that does.
+type written struct {
+	text            string
+	ok              bool
+	other, spelling bool
+}
+
+// scalarText returns what Append writes for v, a value of s's simple type,
+// s.st, at path, subject naming s.st: a list by list, and an atomic or union
+// value by value, under s's element.
+func (e *encoder) scalarText(s scalar, v reflect.Value, path, subject string) (written, error) {
 	if s.item != nil {
-		return e.list(s.st, s.item.st, a, v, path, subject)
+		return e.list(s, v, path, subject)
 	}
+	return e.value(s.elem, s.st, v, path, subject)
+}
+
+// value returns what Append writes for v, a value of st, an atomic or union
+// simple type whose scalar element is elem, at path, subject naming st: a
+// union's by union, and an atomic's by atom, as held reads it, under its
+// atomic Go type (encoded).
+func (e *encoder) value(elem scalarElem, st *xsd.SimpleType, v reflect.Value, path, subject string) (written, error) {
+	// scalarElem is a closed sum, so the assertion is STYLE T2's sealed-sum
+	// exception.
+	if u, isUnion := elem.(*unionScalar); isUnion {
+		return e.union(u, st, v, path, subject)
+	}
+	a := encoded[atomic](elem)
 	hv, ok := e.held(a, v, path, subject)
 	if !ok {
-		return "", nil
+		return written{}, nil
 	}
-	text, _, err := e.atom(s.st, a, hv, path, subject)
-	return text, err
+	text, ok, err := e.atom(st, a, hv, path, subject)
+	return written{text: text, ok: ok, other: a.otherLexicalOf(hv), spelling: a == atomicQName}, err
+}
+
+// union returns what Append writes for v, a value of u's sealed interface, of
+// the union simple type st, at path, subject naming st, deciding in this order
+// (Datatypes §2.4.1.3, §4.1.4 cvc-datatype-valid): the nil interface, which
+// reaches union only where a value is required, item 6 of [Append]'s doc;
+// then a dynamic type the [WithBranches] set e.branches holds for the
+// interface places at no basic member (unionScalar.boundIn), a pointer to a
+// variant among them, item 6; then the variant's member value, written by
+// that member's scalar (scalarText), whose own item 6 and 7 errors it
+// records under the member's subject (memberSubject); then the ·active basic
+// member· of that text (activeMember), item 7 where it is not the variant's
+// member or no member accepts the text, by constructNoCanonical, or by
+// constructQNameSpelling for a spelling, since another lexical of the value
+// may activate its member where the one Append writes does not; then st's own
+// facets, through value.ValidateLexical, a pattern rejection item 7 where the
+// member value has another lexical (written.other), any other rejection item
+// 6. other and spelling are the member value's.
+func (e *encoder) union(u *unionScalar, st *xsd.SimpleType, v reflect.Value, path, subject string) (written, error) {
+	if v.IsNil() {
+		e.invalidate(fmt.Errorf("codec: Append: %s is nil, of %s, where a value is required, and no variant of the union's sealed interface is nil", path, subject))
+		return written{}, nil
+	}
+	vt := v.Elem().Type()
+	j := slices.Index(u.boundIn(e.branches, v.Type()), vt)
+	if j < 0 {
+		e.invalidate(fmt.Errorf("codec: Append: %s holds a %s, which the WithBranches set of %s places at no basic member of %s, so that Decode returns no such value", path, vt, v.Type(), subject))
+		return written{}, nil
+	}
+	m := u.members[j]
+	w, err := e.scalarText(m, v.Elem(), path+".("+typePath(vt)+")", memberSubject(subject, m.st))
+	if err != nil || !w.ok {
+		return w, err
+	}
+	shown := fmt.Sprintf("a %s written %q", vt, w.text)
+	form := "canonical representation"
+	c := constructNoCanonical
+	if w.spelling {
+		form, c = "spelling", constructQNameSpelling
+	}
+	active, err := e.activeMember(st, w.text, path, subject)
+	if err != nil {
+		return written{}, err
+	}
+	if active == nil {
+		e.declineValue(c, subject, path, shown, fmt.Sprintf("no member of the union accepts its %s %q (Datatypes §4.1.4 cvc-datatype-valid clause 2.3)", form, w.text))
+		w.ok = false
+		return w, nil
+	}
+	if active != m.st {
+		e.declineValue(c, subject, path, shown, fmt.Sprintf("the ·active basic member· of its %s %q is %s, not its variant's member %s, so that Decode returns another variant (Datatypes §2.4.1.3 dt-active-basic-member, §4.1.4 cvc-datatype-valid clause 2.3)",
+			form, w.text, memberName(active), memberName(m.st)))
+		w.ok = false
+		return w, nil
+	}
+	if _, err := value.ValidateLexical(e.backend, e.schema, st, w.text, writtenBindings{e}, noAssertions{}); err != nil {
+		if !value.IsDatatypeVerdict(err) {
+			return written{}, fmt.Errorf("codec: Append: %s holds %s, of %s, which the backend cannot assess: %w", path, shown, subject, err)
+		}
+		w.ok = false
+		if rule, _ := xsderr.RuleOf(err); rule == rulePatternValid && w.other {
+			e.patternDecline(w.spelling, subject, path, shown, w.text, err)
+			return w, nil
+		}
+		e.invalidate(fmt.Errorf("codec: Append: %s holds %s, which %s rejects: %w", path, shown, subject, err))
+	}
+	return w, nil
+}
+
+// memberName names m, a basic member of a union, in a cause: by its QName, or
+// for an anonymous m as one and by its schema Loc.
+func memberName(m *xsd.SimpleType) string {
+	if m.Name() == (xsd.QName{}) {
+		return "the anonymous simple type" + definedAt(" ", m)
+	}
+	return m.Name().Display()
+}
+
+// activeMember returns the ·active basic member· of the union st for text,
+// under the bindings of the element whose start tag is open
+// (writtenBindings): the first of st's {member type definitions}, in order,
+// that value.ValidatingType accepts text under, whose answer for a member
+// that is itself a union is that member's own ·active basic member·
+// (Datatypes dt-active-member, dt-active-basic-member, §4.1.4
+// cvc-datatype-valid clause 2.3), or nil where none accepts it. Each member is
+// handed text itself, as value.ValidatingType hands its members the raw
+// literal, never a normalized form. A ValidatingType error
+// value.IsDatatypeVerdict does not report as a verdict, or an error reading
+// st's members, is a backend fault naming the value at path, subject naming
+// st.
+func (e *encoder) activeMember(st *xsd.SimpleType, text, path, subject string) (*xsd.SimpleType, error) {
+	members, err := st.Members(e.schema)
+	if err != nil {
+		return nil, fmt.Errorf("codec: Append: %s, of %s: %w", path, subject, err)
+	}
+	for _, mt := range members {
+		active, _, err := value.ValidatingType(e.backend, e.schema, mt, text, writtenBindings{e}, noAssertions{})
+		if err == nil {
+			return active, nil
+		}
+		if !value.IsDatatypeVerdict(err) {
+			return nil, fmt.Errorf("codec: Append: %s, written %q, of %s, which the backend cannot assess: %w", path, text, subject, err)
+		}
+	}
+	return nil, nil
+}
+
+// patternDecline records the item 7 decline of [Append]'s doc for the value
+// shown at path, of the simple type subject names, whose text a pattern facet
+// rejects with err, the value having another lexical: by
+// constructQNameSpelling where spelling holds, text being a spelling, and by
+// constructNoCanonical otherwise.
+func (e *encoder) patternDecline(spelling bool, subject, path, shown, text string, err error) {
+	if spelling {
+		e.declineValue(constructQNameSpelling, subject, path, shown, fmt.Sprintf("a pattern facet rejects its spelling %q: %v", text, err))
+		return
+	}
+	e.declineValue(constructNoCanonical, subject, path, shown, fmt.Sprintf("a pattern facet rejects its canonical representation %q: %v", text, err))
 }
 
 // atom returns the text Append writes for v, a value of the atomic simple
@@ -1036,70 +1273,68 @@ func (e *encoder) atom(st *xsd.SimpleType, a atomic, v reflect.Value, path, subj
 	return e.double(st, v.Float(), a.bare().Bits(), path, subject)
 }
 
-// list returns the text the package doc's "# What encodes" states for v, a []V
-// holding a value of the list type st, at path, subject naming st, each item
-// written by atom under item, st's {item type definition}, held in a, its
-// atomic Go type, at path "[i]", as held reads it, and records the item 6 and 7 errors
-// [Append]'s doc states for a list: an item's white space is checked once its
-// own checks pass, and st's own facets, through value.ValidateLexical, once
-// every item has. An empty item is no list item since the list's whiteSpace
-// collapse (Datatypes §4.3.6) leaves no empty token. A pattern rejection is
-// item 7 only where an item with another lexical is held, which a pattern may
-// match (§2.1's note, otherLexical); the empty list has no other lexical, nor
-// a list none of whose items has one, so every lexical of such a value
-// normalizes to the text written. A list of xs:QName or xs:NOTATION items
-// records that item 7 by constructQNameSpelling, its text being their
-// spellings, no canonical representation.
-func (e *encoder) list(st, item *xsd.SimpleType, a atomic, v reflect.Value, path, subject string) (string, error) {
-	isubject := itemSubject(subject, item)
+// list returns what Append writes for v, a []V holding a value of s's list
+// type, s.st, at path, subject naming s.st: the text the package doc's
+// "# What encodes" states, each item written by value under s.item.st, its
+// {item type definition}, and s's element, at path "[i]", and records the item
+// 6 and 7 errors [Append]'s doc states for a list: an item's white space is
+// checked once its own checks pass, and s.st's own facets, through
+// value.ValidateLexical, once every item has. An empty item is no list item
+// since the list's whiteSpace collapse (Datatypes §4.3.6) leaves no empty
+// token. A pattern rejection is item 7 only where an item with another lexical
+// is held, which a pattern may match (§2.1's note, written.other), since the
+// list's text has another lexical exactly where one of its items has; the
+// empty list has no other lexical, nor a list none of whose items has one, so
+// every lexical of such a value normalizes to the text written. A list holding
+// a spelling of an xs:QName or xs:NOTATION value records that item 7 by
+// constructQNameSpelling (patternDecline). A union item's own facets and
+// ·active basic member· are its own (encoder.union); its token holds no white
+// space, so a member's whiteSpace is the identity on it.
+func (e *encoder) list(s scalar, v reflect.Value, path, subject string) (written, error) {
+	isubject := itemSubject(subject, s.item.st)
 	items := make([]string, v.Len())
-	held := make([]reflect.Value, v.Len())
-	clean := true
+	out := written{ok: true}
 	for i := range v.Len() {
 		ipath := path + "[" + strconv.Itoa(i) + "]"
-		hv, ok := e.held(a, v.Index(i), ipath, isubject)
-		if !ok {
-			clean = false
-			continue
-		}
-		held[i] = hv
-		text, ok, err := e.atom(item, a, hv, ipath, isubject)
+		w, err := e.value(s.elem, s.item.st, v.Index(i), ipath, isubject)
 		if err != nil {
-			return "", err
+			return written{}, err
 		}
-		if ok && (text == "" || strings.ContainsAny(text, listSeparators)) {
-			e.invalidate(fmt.Errorf("codec: Append: %s holds %s, of %s, which is empty or holds white space, so no list item's lexical representation spells it (Datatypes §2.4.1.2)", ipath, strconv.Quote(text), isubject))
-			ok = false
+		if w.ok && (w.text == "" || strings.ContainsAny(w.text, listSeparators)) {
+			e.invalidate(fmt.Errorf("codec: Append: %s holds %s, of %s, which is empty or holds white space, so no list item's lexical representation spells it (Datatypes §2.4.1.2)", ipath, strconv.Quote(w.text), isubject))
+			w.ok = false
 		}
-		clean = clean && ok
-		items[i] = text
+		out.ok = out.ok && w.ok
+		out.other = out.other || w.other
+		out.spelling = out.spelling || w.spelling
+		items[i] = w.text
 	}
-	text := strings.Join(items, " ")
-	if !clean {
-		return text, nil
+	out.text = strings.Join(items, " ")
+	if !out.ok {
+		return out, nil
 	}
 	shown := fmt.Sprintf("%v", v)
-	if a.formed() || a == atomicPrecisionDecimal {
-		// fmt spells a big.Rat, a big.Int or a datatype struct by its fields, and a
-		// []byte by its octets in decimal; each item's text is its form (spelled)
-		// or, for a precisionDecimal, its canonical representation.
-		shown = "[" + text + "]"
+	// scalarElem is a closed sum, so the assertion is STYLE T2's sealed-sum
+	// exception.
+	if a, isAtomic := s.elem.(atomic); !isAtomic || a.formed() || a == atomicPrecisionDecimal {
+		// fmt spells a big.Rat, a big.Int or a datatype struct by its fields, a
+		// []byte by its octets in decimal, and a union's variant by its member
+		// value as those; each item's text is its form (spelled), its canonical
+		// representation, or a union member's text.
+		shown = "[" + out.text + "]"
 	}
-	if _, err := value.ValidateLexical(e.backend, e.schema, st, text, writtenBindings{e}, noAssertions{}); err != nil {
+	if _, err := value.ValidateLexical(e.backend, e.schema, s.st, out.text, writtenBindings{e}, noAssertions{}); err != nil {
 		if !value.IsDatatypeVerdict(err) {
-			return "", fmt.Errorf("codec: Append: %s holds %s, of %s, which the backend cannot assess: %w", path, shown, subject, err)
+			return written{}, fmt.Errorf("codec: Append: %s holds %s, of %s, which the backend cannot assess: %w", path, shown, subject, err)
 		}
-		if rule, _ := xsderr.RuleOf(err); rule == rulePatternValid && otherLexical(a, held) {
-			if a == atomicQName {
-				e.declineValue(constructQNameSpelling, subject, path, shown, fmt.Sprintf("a pattern facet rejects its spelling %q: %v", text, err))
-				return text, nil
-			}
-			e.declineValue(constructNoCanonical, subject, path, shown, fmt.Sprintf("a pattern facet rejects its canonical representation %q: %v", text, err))
-			return text, nil
+		out.ok = false
+		if rule, _ := xsderr.RuleOf(err); rule == rulePatternValid && out.other {
+			e.patternDecline(out.spelling, subject, path, shown, out.text, err)
+			return out, nil
 		}
-		e.invalidate(fmt.Errorf("codec: Append: %s holds %s, written %q, which %s rejects: %w", path, shown, text, subject, err))
+		e.invalidate(fmt.Errorf("codec: Append: %s holds %s, written %q, which %s rejects: %w", path, shown, out.text, subject, err))
 	}
-	return text, nil
+	return out, nil
 }
 
 // listSeparators are the white space characters that separate a list's items
@@ -1554,15 +1789,6 @@ func decimalMapsBack(c string, d decimalValue) bool {
 // -INF.
 func soleLexical(f float64) bool { return math.IsNaN(f) || math.IsInf(f, -1) }
 
-// otherLexical reports whether the list whose items held holds, each as atom
-// reads it under a, the item's atomic Go type (encoder.held), has a lexical
-// other than its canonical one for a pattern facet to match: held holds an
-// item a.otherLexicalOf holds of, since the list's text has another lexical
-// exactly where one of its items has.
-func otherLexical(a atomic, held []reflect.Value) bool {
-	return slices.ContainsFunc(held, a.otherLexicalOf)
-}
-
 // mapping returns the governing mapping of st on e's backend
 // (value.GoverningMapping), or a backend fault naming the value at path,
 // subject naming st.
@@ -1580,11 +1806,12 @@ func (e *encoder) mapping(st *xsd.SimpleType, path, subject string) (value.Mappi
 // rulePatternValid is pattern Valid (Datatypes §4.3.4.4 cvc-pattern-valid),
 // the rule whose rejection of the canonical representation of a value other
 // than an xs:string- or xs:anyURI-primitive one, of the spelling of an
-// xs:QName or xs:NOTATION one, or of a list holding one, spelled, double,
-// precisionDecimal, qname and list read as item 7 of [Append]'s doc where the
-// value has another lexical: where otherLexicalOf holds for spelled and qname,
-// soleLexical does not hold for double, decimalValue.otherLexical holds for
-// precisionDecimal and otherLexical holds for list.
+// xs:QName or xs:NOTATION one, or of a list or union value holding one,
+// spelled, double, precisionDecimal, qname, list and union read as item 7 of
+// [Append]'s doc where the value has another lexical: where otherLexicalOf
+// holds for spelled and qname, soleLexical does not hold for double,
+// decimalValue.otherLexical holds for precisionDecimal and written.other holds
+// for list and union.
 const rulePatternValid xsderr.Rule = "cvc-pattern-valid"
 
 // doubleLexical spells f in floatRep where bits is 32 and in doubleRep where
@@ -1637,9 +1864,11 @@ func appendEscaped(dst []byte, s string, attr bool) []byte {
 }
 
 // noAssertions is the value.AssertionEvaluator Append passes
-// value.ValidateLexical, which requires one: it decides no {test}. No call
-// reaches it, since a simple type with an assertions facet declines before
-// any value is read (constructAssertions).
+// value.ValidateLexical and value.ValidatingType, which require one: it
+// decides no {test}. No call reaches it, since a simple type with an
+// assertions facet, a union's basic member or member union at any depth
+// among them, declines before any value is read (constructAssertions,
+// unionEncodes).
 type noAssertions struct{}
 
 // Evaluate declines every {test}.
