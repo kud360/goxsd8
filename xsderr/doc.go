@@ -14,6 +14,12 @@
 // Error's doc says how a caller tells an *Error that is a validity verdict
 // from one that is a fault.
 //
+// An *Error locates the offending item by its Loc — URI, Line and Col — alone,
+// and carries no instance path before 1.0: Loc is its only positional field.
+// By the same convention as above, Msg names the item in prose, by its
+// expanded name (element {urn:t}e, attribute a), not as a key a caller can
+// read the item's position from, so look for no other carrier of it.
+//
 // One validity class is no *Error at all: the s4s-grammar class below,
 // which the spec catalogs nowhere, is a plain error that errors.As does not
 // reach and RuleOf reports false for.
