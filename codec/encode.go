@@ -1090,7 +1090,7 @@ func (w *encodeWalk) particleEncodes(p xsd.Particle, subject string) error {
 			return fmt.Errorf("codec: the <element ref> particle to %s does not resolve", term.Name.Display())
 		}
 		if _, sum := goshape.SubstitutionSum(w.schema, decl); sum {
-			return encodeDecline(constructSealedInterface, fmt.Sprintf("%s, naming element %s", subject, term.Name.Display()))
+			return encodeDecline(constructSubstitutionGroup, fmt.Sprintf("%s, naming element %s", subject, term.Name.Display()))
 		}
 		el = decl
 	case xsd.ResolvedTerm:

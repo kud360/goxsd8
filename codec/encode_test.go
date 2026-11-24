@@ -403,7 +403,7 @@ const refSelfSchema = `<xs:element name="r"><xs:complexType><xs:sequence><xs:ele
 // choice's ref alternative, once and repeated; a ref into another target
 // namespace, beside a ref of complex type; and a ref from a declaration's own
 // type back to it; and a ref to a head with a member, declining
-// constructSealedInterface naming the particle and the head.
+// constructSubstitutionGroup naming the particle and the head.
 func TestAppendElementRef(t *testing.T) {
 	b := refB("1 2")
 	t.Run("one, optional and repeated, present", func(t *testing.T) {
@@ -450,8 +450,8 @@ func TestAppendElementRef(t *testing.T) {
 		schema := schemaOf(t, `<xs:element name="h" type="xs:string"/><xs:element name="m" type="xs:string" substitutionGroup="s:h"/>`+
 			`<xs:element name="r"><xs:complexType><xs:sequence><xs:element ref="s:h"/></xs:sequence></xs:complexType></xs:element>`)
 		_, err := appendChecked(t, nil, schema, strict.New(), rootName, refHolder{H: "x"})
-		d := asDecline(t, err, "codec does not encode a construct codegen holds in a sealed interface: a choice, a flattened particle or a substitution group: particle 1 of the content {particle} of the {type definition} of element {urn:s}r declared at ")
-		if d.Construct() != (Construct{constructSealedInterface}) || !strings.HasSuffix(err.Error(), ", naming element {urn:s}h; an encoder refusal, not a schema or value fault") {
+		d := asDecline(t, err, "codec does not encode an <element ref> whose field codegen holds in a sealed interface over its substitution group: particle 1 of the content {particle} of the {type definition} of element {urn:s}r declared at ")
+		if d.Construct() != (Construct{constructSubstitutionGroup}) || !strings.HasSuffix(err.Error(), ", naming element {urn:s}h; an encoder refusal, not a schema or value fault") {
 			t.Errorf("decline %q, construct %v, does not name the head h", err, d.Construct())
 		}
 	})
@@ -993,11 +993,11 @@ func TestAppendDeclines(t *testing.T) {
 			complexOf(`<xs:sequence maxOccurs="2">`+a+`<xs:group ref="s:g%[1]s"/></xs:sequence>`)},
 		{"wildcard", "a wildcard particle with {process contents} strict or lax", sequence(`<xs:any processContents="lax"/>`)},
 		{"strict wildcard", "a wildcard particle with {process contents} strict or lax", sequence(`<xs:any/>`)},
-		{"element ref", "a construct codegen holds in a sealed interface: a choice, a flattened particle or a substitution group", `<xs:element name="x%[1]s" type="xs:string"/><xs:element name="m%[1]s" type="xs:string" substitutionGroup="s:x%[1]s"/>` +
+		{"element ref", "an <element ref> whose field codegen holds in a sealed interface over its substitution group", `<xs:element name="x%[1]s" type="xs:string"/><xs:element name="m%[1]s" type="xs:string" substitutionGroup="s:x%[1]s"/>` +
 			sequence(`<xs:element ref="s:x%[1]s"/>`)},
-		{"abstract head ref", "a construct codegen holds in a sealed interface: a choice, a flattened particle or a substitution group", `<xs:element name="x%[1]s" type="xs:string" abstract="true"/><xs:element name="m%[1]s" type="xs:string" substitutionGroup="s:x%[1]s"/>` +
+		{"abstract head ref", "an <element ref> whose field codegen holds in a sealed interface over its substitution group", `<xs:element name="x%[1]s" type="xs:string" abstract="true"/><xs:element name="m%[1]s" type="xs:string" substitutionGroup="s:x%[1]s"/>` +
 			sequence(`<xs:element ref="s:x%[1]s"/>`)},
-		{"abstract memberless ref", "a construct codegen holds in a sealed interface: a choice, a flattened particle or a substitution group", `<xs:element name="x%[1]s" type="xs:string" abstract="true"/>` +
+		{"abstract memberless ref", "an <element ref> whose field codegen holds in a sealed interface over its substitution group", `<xs:element name="x%[1]s" type="xs:string" abstract="true"/>` +
 			sequence(`<xs:element ref="s:x%[1]s" minOccurs="0"/>`)},
 		{"ref value constraint", "a value constraint, default or fixed", `<xs:element name="x%[1]s" type="xs:string" default="x"/>` + sequence(`<xs:element ref="s:x%[1]s"/>`)},
 		{"ref simple content", "xs:anySimpleType or xs:anyAtomicType as a simple type", `<xs:element name="x%[1]s"><xs:complexType><xs:simpleContent><xs:extension base="xs:anySimpleType"/></xs:simpleContent></xs:complexType></xs:element>` +
