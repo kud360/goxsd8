@@ -1226,12 +1226,13 @@ func (ifaceArm) describe() string { return "I for a sealed interface I" }
 // groupArm is a field's V where the field is an <element ref> particle's to a
 // head whose substitution group codegen gives a sealed interface (groupField):
 // I, held to sealed's branches as a choice's interface is, its name never
-// compared. Its field's shape is never shapeOptional. children maps each
-// member's expanded name to its alternative's index in sealed.alts; it is a
-// lookup index only and never iterated (STYLE D2).
+// compared. Its field's shape is never shapeOptional. members are the
+// declarations sealed.alts' fields are given for, in that order, so that the
+// alternative of a member's element is the index of its expanded name in
+// members.
 type groupArm struct {
-	sealed   *sealed[field]
-	children map[xsd.QName]int
+	sealed  *sealed[field]
+	members []xsd.ElementDeclaration
 }
 
 // bind holds v to a's interface, and returns the reader that reads one
@@ -1244,7 +1245,7 @@ func (a groupArm) bind(v reflect.Type, at fieldAt, cx *checkContext) (elementRea
 	if err != nil {
 		return nil, err
 	}
-	return groupReader{t: v, bound: bc, children: a.children}, nil
+	return groupReader{t: v, bound: bc, members: a.members}, nil
 }
 
 // admits reports whether v is an interface, the kind of every I.
@@ -1255,19 +1256,20 @@ func (groupArm) describe() string { return "I for a substitution group's sealed 
 
 // groupReader reads a member's element into a new value of t, the interface
 // a groupArm bound, through bound, so a repeated field holds one interface
-// value per child; children is the groupArm's.
+// value per child; members is the groupArm's.
 type groupReader struct {
-	t        reflect.Type
-	bound    *boundChoice
-	children map[xsd.QName]int
+	t       reflect.Type
+	bound   *boundChoice
+	members []xsd.ElementDeclaration
 }
 
 // read returns a new value of g.t holding the branch of start's member, the
 // one whose expanded name is start's, its sink given a fillState of this
 // read's own, start being the one child of that fill.
 func (g groupReader) read(_ *pipeline, r *xmltree.Reader, start *xmltree.StartElement, _ *fillState) (reflect.Value, error) {
-	i, ok := g.children[expanded(start.Name())]
-	if !ok {
+	name := expanded(start.Name())
+	i := slices.IndexFunc(g.members, func(m xsd.ElementDeclaration) bool { return m.Name() == name })
+	if i < 0 {
 		return reflect.Value{}, unparticled(start)
 	}
 	v := reflect.New(g.t).Elem()
@@ -5208,7 +5210,6 @@ func elementV(run *bindRun, ct xsd.ComplexType, x *childIndex, el xsd.ElementDec
 // occursShape's over a sealed interface, over a struct where bare is false.
 func groupField(run *bindRun, ct xsd.ComplexType, x *childIndex, head xsd.ElementDeclaration, members []xsd.ElementDeclaration, occurs xsd.Occurs, bare bool) (field, []xsd.QName, error) {
 	group := &sealed[field]{p: run.p}
-	byName := map[xsd.QName]int{}
 	names := make([]xsd.QName, 0, len(members))
 	words := make([]string, 0, len(members))
 	for _, m := range members {
@@ -5217,7 +5218,6 @@ func groupField(run *bindRun, ct xsd.ComplexType, x *childIndex, head xsd.Elemen
 			return field{}, nil, err
 		}
 		f.name = goname.NewNamer().Claim(m.Name().Local)
-		byName[m.Name()] = len(group.alts)
 		group.alts = append(group.alts, f)
 		names = append(names, m.Name())
 		words = append(words, m.Name().Local)
@@ -5231,7 +5231,7 @@ func groupField(run *bindRun, ct xsd.ComplexType, x *childIndex, head xsd.Elemen
 	if err != nil {
 		return field{}, nil, err
 	}
-	return field{shape: s, arm: groupArm{sealed: group, children: byName}}, names, nil
+	return field{shape: s, arm: groupArm{sealed: group, members: members}}, names, nil
 }
 
 // declField returns the field, but for its name, of the element declaration
