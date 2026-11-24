@@ -2881,7 +2881,7 @@ func (s *sequence) bind(run *bindRun, ct xsd.ComplexType, particles []xsd.Partic
 			f.name = names.Claim("any")
 			s.members = append(s.members, wildcardMember{field: f, subject: subject, own: p.Occurs(), held: p.Occurs(), process: term.ProcessContents()})
 		case xsd.ModelGroup:
-			if err := s.nested(run, ct, term, p.Occurs(), append(slices.Clone(at), i), item, names, typeSubject); err != nil {
+			if err := s.nested(run, ct, term, p.Occurs(), p.Occurs(), append(slices.Clone(at), i), item, names, typeSubject); err != nil {
 				return err
 			}
 		case xsd.ElementDeclaration:
@@ -2901,28 +2901,29 @@ func (s *sequence) bind(run *bindRun, ct xsd.ComplexType, particles []xsd.Partic
 }
 
 // nested appends to s the members of a model group particle of group
-// occurring as occurs, at Matcher position at, inline or a <group ref>,
-// group then the {model group} of the definition it names and occurs the
-// referring particle's own (§3.7.2 declare-namedModelGroup), by its
-// goshape.ParticleHold answer, or returns the first decline Decode's doc
-// states for it, item 5, typeSubject naming the type. Spliced gives the
-// members its own particles give, bound by the same walk into the same names
-// and s.index, as codegen claims the fields of every particle its spliced
-// returns from one Namer. Flattened gives one flatSlice member
-// (sequence.flatten), but in an occurrence field's item, item true, where it
-// declines as a nested model group: the item's partition (partition.next)
-// reads no repetition of a model group inside the item. OnceChoice gives one
-// *choice member, bound by bindChoice into s.index, its alternatives below
-// at, taking the targets after every earlier member's, its field named from
-// names, item passed through. Occurrence gives one *nestedOccurrence member
-// (sequence.occurrence), but in an occurrence field's item, where it declines
-// as a nested model group, whatever its occurrence: one with {max occurs}
-// above 1 for the same reason, and a 0..1 one because the item's fill
-// (boundOccurrence.fill) keeps one fillState across its items, so a nested
-// field's partition would continue into the next item. ParticleHold's errors
-// are plain, prefixed by typeSubject.
-func (s *sequence) nested(run *bindRun, ct xsd.ComplexType, group xsd.ModelGroup, occurs xsd.Occurs, at []int, item bool, names *goname.Namer, typeSubject string) error {
-	hold, err := goshape.ParticleHold(run.p.schema, group, occurs)
+// occurring as own, read at held, at Matcher position at, inline or a <group
+// ref>, group then the {model group} of the definition it names and own the
+// referring particle's (§3.7.2 declare-namedModelGroup), held own itself for
+// a sequence's particle and goshape.BranchOccurs' for a choice's alternative
+// (groupAlternative), by its goshape.ParticleHold answer at held, or returns
+// the first decline Decode's doc states for it, item 5, typeSubject naming
+// the type. Spliced gives the members its own particles give, bound by the
+// same walk into the same names and s.index, as codegen claims the fields of
+// every particle its spliced returns from one Namer. Flattened gives one
+// flatSlice member (sequence.flatten), but in an occurrence field's item,
+// item true, where it declines as a nested model group: the item's partition
+// (partition.next) reads no repetition of a model group inside the item.
+// OnceChoice gives one *choice member, bound by bindChoice into s.index, its
+// alternatives below at, taking the targets after every earlier member's, its
+// field named from names, item passed through. Occurrence gives one
+// *nestedOccurrence member (sequence.occurrence), but in an occurrence
+// field's item, where it declines as a nested model group, whatever its
+// occurrence: one with {max occurs} above 1 for the same reason, and a 0..1
+// one because the item's fill (boundOccurrence.fill) keeps one fillState
+// across its items, so a nested field's partition would continue into the
+// next item. ParticleHold's errors are plain, prefixed by typeSubject.
+func (s *sequence) nested(run *bindRun, ct xsd.ComplexType, group xsd.ModelGroup, own, held xsd.Occurs, at []int, item bool, names *goname.Namer, typeSubject string) error {
+	hold, err := goshape.ParticleHold(run.p.schema, group, held)
 	if err != nil {
 		return fmt.Errorf("codec: %s: %w", typeSubject, err)
 	}
@@ -2945,16 +2946,17 @@ func (s *sequence) nested(run *bindRun, ct xsd.ComplexType, group xsd.ModelGroup
 		if item {
 			return decline(constructNestedGroup, "a particle of "+typeSubject)
 		}
-		return s.occurrence(run, ct, group, occurs, at, names, typeSubject)
+		return s.occurrence(run, ct, group, own, held, at, names, typeSubject)
 	}
 	// The zero Hold is an internal bug, never input.
 	panic(fmt.Sprintf("codec: invalid goshape.Hold %d", hold))
 }
 
 // occurrence appends to s the nestedOccurrence member of a model group
-// particle of group occurring as occurs, at Matcher position at, inline or a
-// <group ref>, that codegen neither splices nor flattens and that is no
-// choice occurring exactly once, its field named from names as codegen/doc.go
+// particle of group occurring as own, read at held (sequence.nested), at
+// Matcher position at, inline or a <group ref>, that codegen neither splices
+// nor flattens and that is no choice occurring exactly once, its field's
+// shape computed at held, its field named from names as codegen/doc.go
 // "# Naming" states, before its item is read, or returns the first decline
 // Decode's doc states for it, item 5, typeSubject naming the type, or the
 // plain error that item states in a decline's place: a {max occurs} 0 is
@@ -2967,9 +2969,9 @@ func (s *sequence) nested(run *bindRun, ct xsd.ComplexType, group xsd.ModelGroup
 // not track declines (trackedMatcher), whether or not a wildcard needs the
 // Matcher, since validation leaves every instance of such a model undecided
 // (item 4).
-func (s *sequence) occurrence(run *bindRun, ct xsd.ComplexType, group xsd.ModelGroup, occurs xsd.Occurs, at []int, names *goname.Namer, typeSubject string) error {
-	o := &nestedOccurrence{name: names.Claim(group.Compositor().String()), group: group, first: s.targets()}
-	shape, err := occursShape(occurs, group.Compositor() == xsd.CompositorChoice, fmt.Sprintf("a %s model group particle of %s", group.Compositor(), typeSubject))
+func (s *sequence) occurrence(run *bindRun, ct xsd.ComplexType, group xsd.ModelGroup, own, held xsd.Occurs, at []int, names *goname.Namer, typeSubject string) error {
+	o := &nestedOccurrence{name: names.Claim(group.Compositor().String()), group: group, own: own, held: held, first: s.targets()}
+	shape, err := occursShape(held, group.Compositor() == xsd.CompositorChoice, fmt.Sprintf("a %s model group particle of %s", group.Compositor(), typeSubject))
 	if err != nil {
 		return err
 	}
@@ -3415,8 +3417,11 @@ func (f field) namesBranch(bt reflect.Type) bool {
 // own particles for a sequence codegen splices, nested splices included, and
 // otherwise the one member codegen gives the group, a nested choice's
 // *choice, a flattened particle's *flatSlice or any other's
-// *nestedOccurrence (codegen/doc.go "# Complex types").
+// *nestedOccurrence (codegen/doc.go "# Complex types"); and own, the
+// alternative particle's own {min occurs} and {max occurs}, which Append reads
+// its emptiability from (groupBranch.emptiable).
 type groupBranch struct {
+	own     xsd.Occurs
 	members []contentMember
 }
 
@@ -3631,7 +3636,7 @@ func bindChoice(run *bindRun, ct xsd.ComplexType, particles []xsd.Particle, x *c
 			f.name = goname.NewNamer().Claim("any")
 			alt = wildcardMember{field: f, subject: subject, own: p.Occurs(), held: occurs, process: term.ProcessContents()}
 		case xsd.ModelGroup:
-			alt, subject, err = groupAlternative(run, ct, term, occurs, x, position, target, item, typeSubject)
+			alt, subject, err = groupAlternative(run, ct, term, p.Occurs(), occurs, x, position, target, item, typeSubject)
 			if err != nil {
 				return nil, err
 			}
@@ -3697,18 +3702,19 @@ func choiceWords(schema *xsd.Schema, particles []xsd.Particle, typeSubject strin
 }
 
 // groupAlternative returns the groupBranch of a choice's model-group
-// alternative of group, inline or a <group ref>, occurring as occurs, at
-// Matcher position at, and its subject, or the first decline Decode's doc
-// states for it, item 5, typeSubject naming the type: a {max occurs} 0 is
-// occursShape's plain error, since codegen emits no branch for it; otherwise
-// its members are those sequence.nested gives the particle, named from a
-// fresh Namer, bound into x, the choice's childIndex, their attribution
-// targets from target on, item passed through, so that the particle
-// declines, where it does, as a sequence's nested particle declines.
-func groupAlternative(run *bindRun, ct xsd.ComplexType, group xsd.ModelGroup, occurs xsd.Occurs, x *childIndex, at []int, target int, item bool, typeSubject string) (groupBranch, string, error) {
+// alternative of group, inline or a <group ref>, occurring as own, read at
+// held, goshape.BranchOccurs' occurrence, at Matcher position at, and its
+// subject, or the first decline Decode's doc states for it, item 5,
+// typeSubject naming the type: a {max occurs} 0 is occursShape's plain
+// error, since codegen emits no branch for it; otherwise its members are
+// those sequence.nested gives the particle, named from a fresh Namer, bound
+// into x, the choice's childIndex, their attribution targets from target on,
+// item passed through, so that the particle declines, where it does, as a
+// sequence's nested particle declines. The groupBranch keeps own.
+func groupAlternative(run *bindRun, ct xsd.ComplexType, group xsd.ModelGroup, own, held xsd.Occurs, x *childIndex, at []int, target int, item bool, typeSubject string) (groupBranch, string, error) {
 	subject := fmt.Sprintf("a %s model group particle of %s", group.Compositor(), typeSubject)
-	if upper, bounded := occurs.Max(); bounded && upper == 0 {
-		_, err := occursShape(occurs, false, subject)
+	if upper, bounded := held.Max(); bounded && upper == 0 {
+		_, err := occursShape(held, false, subject)
 		return groupBranch{}, "", err
 	}
 	// seq binds into a copy of *x, whose children map is x's own; the
@@ -3716,11 +3722,11 @@ func groupAlternative(run *bindRun, ct xsd.ComplexType, group xsd.ModelGroup, oc
 	// flattened particle's or a shared expanded name's (particleShape), is
 	// copied back.
 	seq := &sequence{p: run.p, index: *x, base: target}
-	if err := seq.nested(run, ct, group, occurs, at, item, goname.NewNamer(), typeSubject); err != nil {
+	if err := seq.nested(run, ct, group, own, held, at, item, goname.NewNamer(), typeSubject); err != nil {
 		return groupBranch{}, "", err
 	}
 	*x = seq.index
-	return groupBranch{members: seq.members}, subject, nil
+	return groupBranch{own: own, members: seq.members}, subject, nil
 }
 
 // targets is one per target of each alternative, in alternative order
@@ -4319,10 +4325,11 @@ type boundItem interface {
 	// setting a value of the item's Go type.
 	sinks() []sink
 	// writeItem writes the elements of v, one occurrence of the item's model
-	// group, a value of its Go type, at at, each taken by check, the
+	// group, which group names, a value of its Go type, at at, its first
+	// attribution target slot.target, each taken by slot.check, the
 	// attributionCheck of the content the occurrence field is written into, nil
 	// for none, and returns a backend fault.
-	writeItem(e *encoder, v reflect.Value, at writeAt, check *attributionCheck) error
+	writeItem(e *encoder, v reflect.Value, at writeAt, group string, slot attributionSlot) error
 }
 
 // bindOccurrence returns the occurrence of group, the model group of ct's
@@ -4434,16 +4441,21 @@ func (c choiceItem) itemTargets() int { return c.choice.targets() }
 // neither splices nor flattens and that is no choice occurring exactly once,
 // as Decode reads it (codegen/doc.go "# Particles"): its occurrence field, at
 // its particle's place, named name, holding item, the type for one
-// occurrence of group, in shape, goshape.ParticleShape's for the particle's
-// occurrence over a struct for a sequence and a sealed interface for a
-// choice. Its item's targets are first on in its content model's childIndex,
-// and positions[k] is the Matcher position of the particle of the item's
-// target k below the nested particle's own, a position of a basic particle
-// of group as continues reads one: an element particle's, whose child the
-// index attributes as eachChild states, or a wildcard particle's.
+// occurrence of group, in shape, goshape.ParticleShape's for held over a
+// struct for a sequence and a sealed interface for a choice, own being the
+// particle's {min occurs} and {max occurs} and held the occurrence the shape
+// was computed at, as elementMember's are: own for a sequence's particle and
+// goshape.BranchOccurs' for a choice's alternative, which Append's length
+// check reads (nestedOccurrence.writeMember). Its item's targets are first on
+// in its content model's childIndex, and positions[k] is the Matcher position
+// of the particle of the item's target k below the nested particle's own, a
+// position of a basic particle of group as continues reads one: an element
+// particle's, whose child the index attributes as eachChild states, or a
+// wildcard particle's.
 type nestedOccurrence struct {
 	name      string
 	shape     shape
+	own, held xsd.Occurs
 	group     xsd.ModelGroup
 	item      occurrenceItem
 	first     int

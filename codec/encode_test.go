@@ -1160,8 +1160,6 @@ func TestAppendDeclines(t *testing.T) {
 	}{
 		{"nillable", "an element declaration with {nillable} true", `<xs:element name="%[1]s" type="xs:string" nillable="true"/>`},
 		{"nillable particle", "an element declaration with {nillable} true", sequence(`<xs:element name="a" type="xs:string" nillable="true"/>`)},
-		{"nested sequence", "a nested model group particle", sequence(`<xs:sequence>` + a + `</xs:sequence>`)},
-		{"nested group ref", "a nested model group particle", `<xs:group name="g%[1]s"><xs:sequence>` + a + `</xs:sequence></xs:group>` + sequence(`<xs:group ref="s:g%[1]s"/>`)},
 		{"type table", "an element declaration with a {type table}", `<xs:element name="%[1]s" type="xs:string"><xs:alternative test="@a" type="xs:token"/></xs:element>`},
 		{"element value constraint", "a value constraint, default or fixed", `<xs:element name="%[1]s" type="xs:string" default="x"/>`},
 		{"attribute value constraint", "a value constraint, default or fixed", complexOf(`<xs:attribute name="a" type="xs:string" default="x"/>`)},
@@ -1188,9 +1186,14 @@ func TestAppendDeclines(t *testing.T) {
 		{"flattened", "a value constraint, default or fixed", complexOf(`<xs:sequence maxOccurs="unbounded"><xs:element name="a" type="xs:string" minOccurs="0" default="x"/></xs:sequence>`)},
 		{"flattened untracked", "a content model the content matcher does not track", complexOf(`<xs:sequence maxOccurs="21845"><xs:element name="a" type="xs:string" maxOccurs="2"/></xs:sequence>`)},
 		{"all group in an occurrence field", "an all group", complexOf(`<xs:all minOccurs="0">` + a + `</xs:all>`)},
-		{"nested sequence in an occurrence field", "a nested model group particle", complexOf(`<xs:sequence maxOccurs="2">` + a + `<xs:sequence><xs:element name="b" type="xs:string"/></xs:sequence></xs:sequence>`)},
-		{"nested group ref in an occurrence field", "a nested model group particle", `<xs:group name="g%[1]s"><xs:sequence><xs:element name="b" type="xs:string"/></xs:sequence></xs:group>` +
-			complexOf(`<xs:sequence maxOccurs="2">`+a+`<xs:group ref="s:g%[1]s"/></xs:sequence>`)},
+		{"nested flattened particle in an occurrence field", "a nested model group particle", complexOf(`<xs:sequence maxOccurs="2">` + a +
+			`<xs:sequence maxOccurs="unbounded"><xs:element name="b" type="xs:string" minOccurs="0"/></xs:sequence></xs:sequence>`)},
+		{"nested occurrence field in an occurrence field", "a nested model group particle", complexOf(`<xs:sequence maxOccurs="2">` + a +
+			`<xs:choice maxOccurs="2"><xs:element name="b" type="xs:string"/><xs:element name="c" type="xs:string"/></xs:choice></xs:sequence>`)},
+		{"nested occurrence field as an item's model-group alternative", "a nested model group particle", complexOf(`<xs:sequence maxOccurs="2">` + a +
+			`<xs:choice><xs:element name="b" type="xs:string"/><xs:sequence maxOccurs="2"><xs:element name="c" type="xs:string"/></xs:sequence></xs:choice></xs:sequence>`)},
+		{"nested untracked", "a content model the content matcher does not track", sequence(`<xs:sequence><xs:any namespace="##other" processContents="lax"/></xs:sequence>` +
+			`<xs:sequence maxOccurs="21845"><xs:element name="c" type="xs:string" maxOccurs="2"/></xs:sequence>`)},
 		{"strict wildcard", "a wildcard particle with {process contents} strict", sequence(`<xs:any/>`)},
 		{"ref value constraint", "a value constraint, default or fixed", `<xs:element name="x%[1]s" type="xs:string" default="x"/>` + sequence(`<xs:element ref="s:x%[1]s"/>`)},
 		{"ref simple content", "xs:anySimpleType or xs:anyAtomicType as a simple type", `<xs:element name="x%[1]s"><xs:complexType><xs:simpleContent><xs:extension base="xs:anySimpleType"/></xs:simpleContent></xs:complexType></xs:element>` +

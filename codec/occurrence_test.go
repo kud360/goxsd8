@@ -313,8 +313,9 @@ func TestAppendOccurrenceDeclineSubject(t *testing.T) {
 // TestAppendOccurrenceInvalid pins item 6 of Append's doc for an occurrence
 // field: a slice whose length lies outside the content particle's occurrence,
 // zero items of a sequence with {min occurs} 1 among them (cvc-accept clause
-// 3.1); a nil item of a choice's slice, none of whose alternatives is
-// emptiable; and a skip wildcard's element of an element particle's name,
+// 3.1); a nil item of a choice's slice, whether or not one of the choice's
+// alternatives is emptiable, since Decode returns no item that holds no
+// child; and a skip wildcard's element of an element particle's name,
 // which the content model's Matcher attributes to that particle, opening the
 // next occurrence. None carries an xsderr rule.
 func TestAppendOccurrenceInvalid(t *testing.T) {
@@ -336,7 +337,11 @@ func TestAppendOccurrenceInvalid(t *testing.T) {
 		{"a nil item of a choice's slice", func(t *testing.T) error {
 			_, err := appendChecked(t, nil, schemaOf(t, occChoiceSchema), strict.New(), rootName, occChoice{Choice: []occChoiceItem{occChoiceA{A: "1"}, nil}}, occChoiceBranches)
 			return err
-		}, "codec: Append: occChoice.Choice[1] is nil, the empty match, which the content choice of the {type definition} of element {urn:s}r declared at ", []string{"none of its 2 alternatives is emptiable"}},
+		}, "codec: Append: occChoice.Choice[1] is nil, an item holding no child element, which Decode never returns in the occurrence field of the content choice of the {type definition} of element {urn:s}r declared at ", nil},
+		{"a nil item of a choice's slice one of whose element alternatives is emptiable", func(t *testing.T) error {
+			_, err := appendChecked(t, nil, schemaOf(t, occEmptyBranchSchema), strict.New(), rootName, occChoice{Choice: []occChoiceItem{occChoiceB{B: "1"}, nil}}, occChoiceBranches)
+			return err
+		}, "codec: Append: occChoice.Choice[1] is nil, an item holding no child element, which Decode never returns in the occurrence field of the content choice of the {type definition} of element {urn:s}r declared at ", nil},
 		{"a wildcard's element attributed to an element particle", func(t *testing.T) error {
 			_, err := appendChecked(t, nil, schemaOf(t, occSkipSchema), strict.New(), rootName, wild)
 			return err
