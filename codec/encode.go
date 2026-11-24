@@ -1272,9 +1272,11 @@ var (
 // states, and otherwise the decline of the first construct it finds: for a
 // list, the first construct of its {item type definition} (atomicEncodes),
 // the detail naming the item after st (itemSubject), and an assertions facet
-// among st's own effective facets, its own or inherited; for an atomic or
-// union st, atomicEncodes's. An error reading st is returned as is, and a
-// list with no {item type definition} is a plain error.
+// among st's own effective facets, its own or inherited; for a special st,
+// xs:anySimpleType or xs:anyAtomicType itself (Datatypes §2.4.2 dt-special),
+// nil; for any other atomic or union st, atomicEncodes's. An error reading
+// st is returned as is, and a list with no {item type definition} is a plain
+// error.
 func simpleEncodes(r xsd.TypeResolver, st *xsd.SimpleType, owner string) error {
 	return typeEncodes(r, st, simpleSubject(st, owner))
 }
@@ -1596,8 +1598,10 @@ type written struct {
 }
 
 // scalarText returns what Append writes for v, a value of s's simple type,
-// s.st, at path, subject naming s.st: a list by list, and an atomic or union
-// value by value, under s's element.
+// s.st, at path, subject naming s.st: a list by list, and any other value,
+// of an atomic or union simple type or of a special type, xs:anySimpleType's
+// {variety} being absent (Datatypes §2.4.2 dt-special, §4.1.1), by value, under s's
+// element.
 func (e *encoder) scalarText(s scalar, v reflect.Value, path, subject string) (written, error) {
 	if s.item != nil {
 		return e.list(s, v, path, subject)
@@ -1606,9 +1610,10 @@ func (e *encoder) scalarText(s scalar, v reflect.Value, path, subject string) (w
 }
 
 // value returns what Append writes for v, a value of st, an atomic or union
-// simple type whose scalar element is elem, at path, subject naming st: a
-// union's by union, and an atomic's by atom, as held reads it, under its
-// atomic Go type (encoded).
+// simple type or a special type, xs:anySimpleType's {variety} being absent
+// (Datatypes §2.4.2 dt-special, §4.1.1), whose scalar element is elem, at path,
+// subject naming st: a union's by union, and every other's by atom, as held
+// reads it, under its atomic Go type (encoded).
 func (e *encoder) value(elem scalarElem, st *xsd.SimpleType, v reflect.Value, path, subject string) (written, error) {
 	// scalarElem is a closed sum, so the assertion is STYLE T2's sealed-sum
 	// exception.
@@ -1742,14 +1747,15 @@ func (e *encoder) patternDecline(spelling bool, subject, path, shown, text strin
 	e.declineValue(constructNoCanonical, subject, path, shown, fmt.Sprintf("a pattern facet rejects its canonical representation %q: %v", text, err))
 }
 
-// atom returns the text Append writes for v, a value of the atomic simple
-// type st held in a, its atomic Go type, at path, subject naming st: the
-// value of an atomic formed holds for in its canonical representation
-// (spelled), a string as itself (str), an xs:QName or xs:NOTATION value under
-// a prefix in scope (qname), a float32 or float64 in its canonical
-// representation (double), and a precisionDecimal, v the decimalValue held
-// translated it into, in its canonical representation (precisionDecimal). ok
-// reports that it recorded no item 6 or 7 error of [Append]'s doc for v.
+// atom returns the text Append writes for v, a value of st, an atomic simple
+// type or a special type, xs:anySimpleType's {variety} being absent (Datatypes
+// §2.4.2 dt-special, §4.1.1), held in a, its atomic Go type, at path, subject naming
+// st: the value of an atomic formed holds for in its canonical representation
+// (spelled), a string, a special type's among them, as itself (str), an xs:QName or
+// xs:NOTATION value under a prefix in scope (qname), a float32 or float64 in its
+// canonical representation (double), and a precisionDecimal, v the decimalValue held
+// translated it into, in its canonical representation (precisionDecimal). ok reports
+// that it recorded no item 6 or 7 error of [Append]'s doc for v.
 func (e *encoder) atom(st *xsd.SimpleType, a atomic, v reflect.Value, path, subject string) (text string, ok bool, err error) {
 	if a == atomicPrecisionDecimal {
 		return e.precisionDecimal(st, v.Interface().(decimalValue), path, subject)
