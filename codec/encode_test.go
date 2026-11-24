@@ -3997,3 +3997,26 @@ func TestAppendFlattenedInvalid(t *testing.T) {
 		}
 	})
 }
+
+// TestAppendFlattenedDeclineSubject pins the subject of a decline item 4 of
+// Append's doc charges inside a flattened content {particle}: the basic
+// particle by its index among the slice's alternatives, in reach order, as
+// "alternative 2 of the flattened content {particle} of" the type; and,
+// beside it, a choice occurring exactly once that codegen does not flatten
+// naming its alternative as "alternative 2 of the content {particle} of" the
+// type, so that routing that hold through the flattened arm fails here.
+func TestAppendFlattenedDeclineSubject(t *testing.T) {
+	rows := []struct {
+		name, decls, want string
+	}{
+		{"flattened", flatWildSchema, "codec does not encode a wildcard particle with {process contents} strict or lax: alternative 2 of the flattened content {particle} of the {type definition} of element {urn:s}r declared at "},
+		{"once choice", `<xs:element name="r"><xs:complexType><xs:choice><xs:element name="a" type="xs:string"/><xs:any processContents="lax"/></xs:choice></xs:complexType></xs:element>`,
+			"codec does not encode a wildcard particle with {process contents} strict or lax: alternative 2 of the content {particle} of the {type definition} of element {urn:s}r declared at "},
+	}
+	for _, row := range rows {
+		t.Run(row.name, func(t *testing.T) {
+			err := CheckAppend[struct{}](schemaOf(t, row.decls), rootName)
+			_ = asDecline(t, err, row.want)
+		})
+	}
+}
