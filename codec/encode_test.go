@@ -3607,3 +3607,216 @@ func TestAppendAnyTypeGuards(t *testing.T) {
 		roundTrip(t, schemaOf(t, derivedAnySchema), rootName, derivedAny{A: struct{ B string }{B: "x"}}, `<r xmlns="urn:s"><a><b>x</b></a></r>`, deepEqual[derivedAny])
 	})
 }
+
+// encodeSimpleContentSchema declares, in urn:s, beside simpleContentTypes:
+// note, an extension of xs:string with the attribute lang; qv, an extension of
+// xs:QName with the attribute k; mr, a restriction of the mixed emptiable mx
+// by a child <simpleType> restricting xs:int (Structures §3.4.2.2
+// dcl.ctd.ctsc case 2); a document element of each of note, rich, capped,
+// tagged, nums, qv and mr; and ps, a sequence of particles of note, rich and
+// capped, once, optional and repeated.
+const encodeSimpleContentSchema = simpleContentTypes + `<xs:complexType name="note"><xs:simpleContent><xs:extension base="xs:string"><xs:attribute name="lang" type="xs:string"/></xs:extension></xs:simpleContent></xs:complexType>
+<xs:complexType name="qv"><xs:simpleContent><xs:extension base="xs:QName"><xs:attribute name="k" type="xs:string"/></xs:extension></xs:simpleContent></xs:complexType>
+<xs:complexType name="mx" mixed="true"><xs:sequence><xs:element name="e" type="xs:string" minOccurs="0"/></xs:sequence></xs:complexType>
+<xs:complexType name="mr"><xs:simpleContent><xs:restriction base="s:mx"><xs:simpleType><xs:restriction base="xs:int"/></xs:simpleType></xs:restriction></xs:simpleContent></xs:complexType>
+<xs:element name="note" type="s:note"/>
+<xs:element name="rich" type="s:rich"/>
+<xs:element name="capped" type="s:capped"/>
+<xs:element name="tagged" type="s:tagged"/>
+<xs:element name="nums" type="s:nums"/>
+<xs:element name="qv" type="s:qv"/>
+<xs:element name="mr" type="s:mr"/>
+<xs:element name="ps"><xs:complexType><xs:sequence>
+<xs:element name="n" type="s:note"/><xs:element name="no" type="s:note" minOccurs="0"/><xs:element name="nr" type="s:note" maxOccurs="unbounded"/>
+<xs:element name="x" type="s:rich"/><xs:element name="xo" type="s:rich" minOccurs="0"/><xs:element name="xr" type="s:rich" maxOccurs="unbounded"/>
+<xs:element name="c" type="s:capped"/><xs:element name="co" type="s:capped" minOccurs="0"/><xs:element name="cr" type="s:capped" maxOccurs="unbounded"/>
+</xs:sequence></xs:complexType></xs:element>`
+
+// scNote, scQName, scMixedRestriction and scParticles are the types codegen
+// emits for encodeSimpleContentSchema's note, qv, mr and ps, which
+// TestEncodeSimpleContentTypesAreCodegens pins; rich and capped are
+// simplecontent_test.go's scRich and scPrice.
+type (
+	scNote struct {
+		Value string
+		Lang  *string
+	}
+	scQName struct {
+		Value tQName
+		K     *string
+	}
+	scMixedRestriction struct{ Value int32 }
+	scParticles        struct {
+		N  scNote
+		No *scNote
+		Nr []scNote
+		X  scRich
+		Xo *scRich
+		Xr []scRich
+		C  scPrice
+		Co *scPrice
+		Cr []scPrice
+	}
+)
+
+// TestEncodeSimpleContentTypesAreCodegens pins the types above to those
+// codegen emits for encodeSimpleContentSchema, in shape (codegen/doc.go "#
+// Complex types").
+func TestEncodeSimpleContentTypesAreCodegens(t *testing.T) {
+	gen := generated(t, schemaOf(t, encodeSimpleContentSchema))
+	for _, decl := range []string{
+		"type Note struct {\n\tValue string\n\tLang  *string\n}\n",
+		"type Qv struct {\n\tValue QName\n\tK     *string\n}\n",
+		"type Mr struct {\n\tValue int32\n}\n",
+		"type Ps struct {\n\tN  Note2\n\tNo *Note2\n\tNr []Note2\n\tX  Rich2\n\tXo *Rich2\n\tXr []Rich2\n\tC  Capped2\n\tCo *Capped2\n\tCr []Capped2\n}\n",
+	} {
+		if !bytes.Contains(gen, []byte(decl)) {
+			t.Errorf("codegen emits\n%s\nwhich does not declare\n%s", gen, decl)
+		}
+	}
+}
+
+// TestAppendSimpleContent pins the simple-content bullet of "# What encodes"
+// (Structures §3.4.4.2 cvc-complex-type clause 1.2, §3.4.2.2 dcl.ctd.ctsc):
+// an element of a complex type with simple content is written with its
+// attributes, then its value field's text as its character content, each
+// document accepted by validate and decoded back equal: an
+// extension of xs:string with an attribute, an extension of a complex type
+// with simple content, and a restriction adding a facet, each as the document
+// element and as a particle once, optional and repeated; an extension of a
+// union and of a list; an empty xs:string value, written <x/>, and a CR,
+// written &#xD;; an xs:QName value in another namespace, its prefix declared
+// on the start tag after the attributes; and a restriction of a mixed
+// emptiable base by a child <simpleType> (case 2).
+func TestAppendSimpleContent(t *testing.T) {
+	schema := schemaOf(t, encodeSimpleContentSchema)
+	str := func(s string) *string { return &s }
+	i32 := func(i int32) *int32 { return &i }
+	rat := func(s string) big.Rat {
+		r, ok := new(big.Rat).SetString(s)
+		if !ok {
+			t.Fatalf("bad rational %q", s)
+		}
+		return *r
+	}
+	t.Run("an extension of xs:string with an attribute", func(t *testing.T) {
+		roundTrip(t, schema, sname("note"), scNote{Value: "a<b", Lang: str("en")}, `<note xmlns="urn:s" lang="en">a&lt;b</note>`, deepEqual[scNote])
+	})
+	t.Run("an empty value", func(t *testing.T) {
+		roundTrip(t, schema, sname("note"), scNote{}, `<note xmlns="urn:s"/>`, deepEqual[scNote])
+	})
+	t.Run("white space", func(t *testing.T) {
+		roundTrip(t, schema, sname("note"), scNote{Value: " a\r\n\tb "}, "<note xmlns=\"urn:s\"> a&#xD;\n\tb </note>", deepEqual[scNote])
+	})
+	t.Run("an extension of a complex type with simple content", func(t *testing.T) {
+		roundTrip(t, schema, sname("rich"), scRich{Value: rat("12.5"), K: i32(3), Cur: str("EUR")}, `<rich xmlns="urn:s" k="3" cur="EUR">12.5</rich>`, deepEqual[scRich])
+	})
+	t.Run("a restriction adding a facet", func(t *testing.T) {
+		roundTrip(t, schema, sname("capped"), scPrice{Value: rat("100")}, `<capped xmlns="urn:s">100</capped>`, deepEqual[scPrice])
+	})
+	t.Run("an extension of a union", func(t *testing.T) {
+		roundTrip(t, schema, sname("tagged"), scTagged{Value: unionUInt(5), Value2: str("v")}, `<tagged xmlns="urn:s" value="v">5</tagged>`, deepEqual[scTagged], WithBranches[unionU](unionUInt(0), unionUDate{}))
+	})
+	t.Run("an extension of a list", func(t *testing.T) {
+		roundTrip(t, schema, sname("nums"), scNums{Value: []int32{1, 2}, N: i32(2)}, `<nums xmlns="urn:s" n="2">1 2</nums>`, deepEqual[scNums])
+	})
+	t.Run("an xs:QName in another namespace", func(t *testing.T) {
+		roundTrip(t, schema, sname("qv"), scQName{Value: tQName{Space: "urn:o", Local: "x"}, K: str("EUR")}, `<qv xmlns="urn:s" k="EUR" xmlns:p1="urn:o">p1:x</qv>`, deepEqual[scQName])
+	})
+	t.Run("a restriction of a mixed emptiable base", func(t *testing.T) {
+		roundTrip(t, schema, sname("mr"), scMixedRestriction{Value: -7}, `<mr xmlns="urn:s">-7</mr>`, deepEqual[scMixedRestriction])
+	})
+	t.Run("particles once, optional and repeated", func(t *testing.T) {
+		v := scParticles{
+			N: scNote{Value: "a", Lang: str("en")}, No: &scNote{Value: "b"}, Nr: []scNote{{Value: "c"}, {Value: "d", Lang: str("fr")}},
+			X: scRich{Value: rat("1"), Cur: str("x")}, Xo: &scRich{Value: rat("2"), K: i32(4)}, Xr: []scRich{{Value: rat("3")}},
+			C: scPrice{Value: rat("5")}, Co: &scPrice{Value: rat("6"), Cur: str("y")}, Cr: []scPrice{{Value: rat("7")}, {Value: rat("8")}},
+		}
+		roundTrip(t, schema, sname("ps"), v, `<ps xmlns="urn:s"><n lang="en">a</n><no>b</no><nr>c</nr><nr lang="fr">d</nr>`+
+			`<x cur="x">1</x><xo k="4">2</xo><xr>3</xr><c>5</c><co cur="y">6</co><cr>7</cr><cr>8</cr></ps>`, deepEqual[scParticles])
+	})
+	t.Run("particles, the optional absent", func(t *testing.T) {
+		v := scParticles{N: scNote{Value: "a"}, Nr: []scNote{{}}, X: scRich{Value: rat("1")}, Xr: []scRich{{Value: rat("3")}}, C: scPrice{Value: rat("5")}, Cr: []scPrice{{Value: rat("7")}}}
+		roundTrip(t, schema, sname("ps"), v, `<ps xmlns="urn:s"><n>a</n><nr/><x>1</x><xr>3</xr><c>5</c><cr>7</cr></ps>`, deepEqual[scParticles])
+	})
+}
+
+// TestAppendSimpleContentInvalid pins item 6 of Append's doc for simple
+// content, each error naming the value field's Go path and the {content
+// type}'s {simple type definition} after its complex type: a value a
+// restriction's facet rejects, as the document element and as a particle; the
+// nil interface of a union value field, which never means absent; and a value
+// invalid in an attribute and in the value field, the attribute's error
+// reported, an element's attributes before its content.
+func TestAppendSimpleContentInvalid(t *testing.T) {
+	schema := schemaOf(t, encodeSimpleContentSchema)
+	rat := func(s string) big.Rat {
+		r, ok := new(big.Rat).SetString(s)
+		if !ok {
+			t.Fatalf("bad rational %q", s)
+		}
+		return *r
+	}
+	bad := "\x00"
+	t.Run("a facet of a restriction", func(t *testing.T) {
+		_, err := appendChecked(t, nil, schema, strict.New(), sname("capped"), scPrice{Value: rat("101")})
+		invalidValue(t, err)
+		const want = "codec: Append: scPrice.Value holds 101, which the {type definition} of element {urn:s}capped declared at s.xsd:16:1, a type defined at s.xsd:6:1, through its {content type}'s anonymous {simple type definition}, a type defined at s.xsd:6:49 rejects: "
+		if !strings.HasPrefix(err.Error(), want) {
+			t.Errorf("error %q, want the prefix %q", err, want)
+		}
+		if rule, _ := xsderr.RuleOf(err); rule != "cvc-maxInclusive-valid" {
+			t.Errorf("rule %q, want cvc-maxInclusive-valid", rule)
+		}
+	})
+	t.Run("a facet of a restriction, a particle", func(t *testing.T) {
+		v := scParticles{N: scNote{Value: "a"}, Nr: []scNote{{}}, X: scRich{Value: rat("1")}, Xr: []scRich{{Value: rat("3")}}, C: scPrice{Value: rat("5")}, Cr: []scPrice{{Value: rat("7")}, {Value: rat("200")}}}
+		_, err := appendChecked(t, nil, schema, strict.New(), sname("ps"), v)
+		invalidValue(t, err)
+		const want = "codec: Append: scParticles.Cr[1].Value holds 200, which the {type definition} of element {urn:s}cr declared at s.xsd:24:92, a type defined at s.xsd:6:1, through its {content type}'s anonymous {simple type definition}, a type defined at s.xsd:6:49 rejects: "
+		if !strings.HasPrefix(err.Error(), want) {
+			t.Errorf("error %q, want the prefix %q", err, want)
+		}
+	})
+	t.Run("a nil union value field", func(t *testing.T) {
+		_, err := appendChecked(t, nil, schema, strict.New(), sname("tagged"), scTagged{}, WithBranches[unionU](unionUInt(0), unionUDate{}))
+		invalidValue(t, err)
+		const want = "codec: Append: scTagged.Value is nil, of the {type definition} of element {urn:s}tagged declared at "
+		if !strings.HasPrefix(err.Error(), want) {
+			t.Errorf("error %q, want the prefix %q", err, want)
+		}
+		holds(t, err, "through its {content type}'s {simple type definition} {urn:s}u")
+	})
+	t.Run("attributes before content", func(t *testing.T) {
+		_, err := appendChecked(t, nil, schema, strict.New(), sname("capped"), scPrice{Value: rat("101"), Cur: &bad})
+		invalidValue(t, err)
+		const want = "codec: Append: scPrice.Cur "
+		if !strings.HasPrefix(err.Error(), want) {
+			t.Errorf("error %q, want the prefix %q", err, want)
+		}
+	})
+}
+
+// TestAppendSimpleContentDeclineText pins the message of a decline of simple
+// content's {simple type definition}, named after the complex type it is the
+// {content type} of, as TestDeclineErrorTextSimpleContent pins CheckDecode's:
+// for a named one, xs:ID an extension's base, and for the anonymous one a
+// restriction carrying an assertions facet gives.
+func TestAppendSimpleContentDeclineText(t *testing.T) {
+	named := schemaOf(t, root(`<xs:simpleContent><xs:extension base="xs:ID"><xs:attribute name="k" type="xs:string"/></xs:extension></xs:simpleContent>`))
+	const wantNamed = "codec does not encode a simple type derived from xs:ID, xs:IDREF or xs:ENTITY: the {type definition} of element {urn:s}r declared at s.xsd:1:181, a type defined at s.xsd:1:202, through its {content type}'s {simple type definition} xs:ID, derived from xs:ID; an encoder refusal, not a schema or value fault"
+	if err := CheckAppend[struct{}](named, rootName); err == nil || err.Error() != wantNamed {
+		t.Errorf("CheckAppend = %v, want %q", err, wantNamed)
+	}
+	anon := schemaOf(t, `<xs:complexType name="b"><xs:simpleContent><xs:extension base="xs:string"/></xs:simpleContent></xs:complexType>`+
+		root(`<xs:simpleContent><xs:restriction base="s:b"><xs:assertion test="true()"/></xs:restriction></xs:simpleContent>`))
+	const wantAnon = "codec does not encode a simple type with an assertions facet: the {type definition} of element {urn:s}r declared at s.xsd:1:292, a type defined at s.xsd:1:313, through its {content type}'s anonymous {simple type definition}, a type defined at s.xsd:1:347; an encoder refusal, not a schema or value fault"
+	err := CheckAppend[struct{}](anon, rootName)
+	if err == nil || err.Error() != wantAnon {
+		t.Errorf("CheckAppend = %v, want %q", err, wantAnon)
+	}
+	var de *DeclineError
+	if !errors.As(err, &de) || de.Construct() != (Construct{constructAssertions}) {
+		t.Errorf("Construct = %v, want %s", err, constructAssertions.name())
+	}
+}
