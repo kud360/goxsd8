@@ -1129,7 +1129,10 @@ const absentAffiliationName = "an element declaration with an ·absent· member 
 // TestAppendDeclines pins item 4 of Append's doc for each construct of the
 // closed set it declines: each row's two declarations, r and q, decline with
 // equal Constructs, named by the opening of the decline's text, and rows of
-// different constructs with different ones; no bytes are written. A row's
+// different constructs with different ones; no bytes are written. A row
+// subjectOf names also opens its subject so after the construct, which is how
+// the two nested particles inside a nested occurrence field's item fail where
+// Decode's in-item decline leaks through in Append's place. A row's
 // value is struct{}{}, or the one appendOf passes for it, and no row's value
 // reaches item 5: Append finds item 4 before it binds T (encodeStatic). A row
 // whose declarations reference s:money is read through mintedSchema, its
@@ -1192,6 +1195,10 @@ func TestAppendDeclines(t *testing.T) {
 			`<xs:choice maxOccurs="2"><xs:element name="b" type="xs:string"/><xs:element name="c" type="xs:string"/></xs:choice></xs:sequence>`)},
 		{"nested occurrence field as an item's model-group alternative", "a nested model group particle", complexOf(`<xs:sequence maxOccurs="2">` + a +
 			`<xs:choice><xs:element name="b" type="xs:string"/><xs:sequence maxOccurs="2"><xs:element name="c" type="xs:string"/></xs:sequence></xs:choice></xs:sequence>`)},
+		{"nested occurrence field in a nested occurrence field's item", "a nested model group particle", sequence(a + `<xs:sequence maxOccurs="2"><xs:element name="b" type="xs:string"/>` +
+			`<xs:sequence maxOccurs="2"><xs:element name="c" type="xs:string"/></xs:sequence></xs:sequence>`)},
+		{"nested flattened particle in a nested occurrence field's item", "a nested model group particle", sequence(a + `<xs:sequence maxOccurs="2"><xs:element name="b" type="xs:string"/>` +
+			`<xs:sequence minOccurs="0" maxOccurs="unbounded"><xs:element name="c" type="xs:string" minOccurs="0"/></xs:sequence></xs:sequence>`)},
 		{"nested flattened untracked", "a content model the content matcher does not track", sequence(a + `<xs:sequence maxOccurs="21845"><xs:element name="c" type="xs:string" maxOccurs="2"/></xs:sequence>`)},
 		{"strict wildcard", "a wildcard particle with {process contents} strict", sequence(`<xs:any/>`)},
 		{"ref value constraint", "a value constraint, default or fixed", `<xs:element name="x%[1]s" type="xs:string" default="x"/>` + sequence(`<xs:element ref="s:x%[1]s"/>`)},
@@ -1242,6 +1249,14 @@ func TestAppendDeclines(t *testing.T) {
 			return appendChecked(t, dst, schema, strict.New(), name, struct{ A string }{A: "a"})
 		},
 	}
+	// subjectOf is the subject a row's decline names after its construct, where
+	// the row pins it: a particle inside a nested occurrence field's item by
+	// its place, which Decode's text for the same particle does not open with.
+	nestedInItem := "particle 2 of particle 2 of the content {particle} of "
+	subjectOf := map[string]string{
+		"nested occurrence field in a nested occurrence field's item":   nestedInItem,
+		"nested flattened particle in a nested occurrence field's item": nestedInItem,
+	}
 	seen := map[string]Construct{}
 	for _, row := range rows {
 		t.Run(row.name, func(t *testing.T) {
@@ -1258,7 +1273,7 @@ func TestAppendDeclines(t *testing.T) {
 				if v, has := appendOf[row.name]; has {
 					got, err = v(t, dst, schema, sname(name))
 				}
-				d := asDecline(t, err, "codec does not encode "+row.construct+": ")
+				d := asDecline(t, err, "codec does not encode "+row.construct+": "+subjectOf[row.name])
 				if string(got) != "pre" {
 					t.Errorf("Append wrote %q", got)
 				}

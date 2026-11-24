@@ -13,9 +13,13 @@ import (
 // emptiable term repeated; enPairFirstSchema's sequence(sequence(a?,
 // b?){1,2}, c), the same flattened particle ahead of an element;
 // enChoiceAnySchema's sequence(choice(b, c), any over ##other), a wildcard
-// after a nested choice of two alternatives; and enOptOccSchema's sequence(a,
+// after a nested choice of two alternatives; enOptOccSchema's sequence(a,
 // choice(b, sequence(c, d){0,2})), noOnceAltSchema's with the occurrence
-// alternative's {min occurs} 0, which its branch reads as 1.
+// alternative's {min occurs} 0, which its branch reads as 1;
+// enItemChoiceSchema's sequence(choice(b, c)){1,2}, an occurrence field
+// whose item's one member is a once-choice none of whose alternatives is
+// emptiable; and enItemGroupSchema's sequence(choice(a, sequence(b,
+// c))){1,2}, the same with a model-group alternative of {min occurs} 1.
 const (
 	enFlatPairSchema = `<xs:element name="r"><xs:complexType><xs:sequence>` + cgElC + `<xs:sequence maxOccurs="2"><xs:element name="a" type="xs:string" minOccurs="0"/>` +
 		`<xs:element name="b" type="xs:string" minOccurs="0"/></xs:sequence></xs:sequence></xs:complexType></xs:element>`
@@ -25,12 +29,15 @@ const (
 		`<xs:any namespace="##other" processContents="lax"/></xs:sequence></xs:complexType></xs:element>`
 	enOptOccSchema = `<xs:element name="r"><xs:complexType><xs:sequence>` + cgElA + `<xs:choice>` + cgElB + `<xs:sequence minOccurs="0" maxOccurs="2">` + cgElC +
 		`<xs:element name="d" type="xs:string"/></xs:sequence></xs:choice></xs:sequence></xs:complexType></xs:element>`
+	enItemChoiceSchema = `<xs:element name="r"><xs:complexType><xs:sequence maxOccurs="2"><xs:choice>` + cgElB + cgElC + `</xs:choice></xs:sequence></xs:complexType></xs:element>`
+	enItemGroupSchema  = `<xs:element name="r"><xs:complexType><xs:sequence maxOccurs="2"><xs:choice>` + cgElA + `<xs:sequence>` + cgElB + cgElC +
+		`</xs:sequence></xs:choice></xs:sequence></xs:complexType></xs:element>`
 )
 
 // The types codegen emits for the nested-encode schemas' s:r, in shape,
 // which TestEncodeNestedTypesAreCodegens pins: enFlatPair, enPairFirst over
-// enFlatPair's interface, enChoiceAny over noBC, and noOnceAlt for
-// enOptOccSchema.
+// enFlatPair's interface, enChoiceAny over noBC, noOnceAlt for
+// enOptOccSchema, enItemChoice over noBC and enItemGroup over cgOChoice.
 type (
 	enFlatPair struct {
 		C        string
@@ -49,6 +56,12 @@ type (
 		Choice noBC
 		Any    anyElement
 	}
+
+	enItemChoice     struct{ Sequence []enItemChoiceItem }
+	enItemChoiceItem struct{ Choice noBC }
+
+	enItemGroup     struct{ Sequence []enItemGroupItem }
+	enItemGroupItem struct{ Choice cgOChoice }
 )
 
 func (enFlatPairA) isEnFlatPairItem() {}
@@ -72,6 +85,10 @@ func TestEncodeNestedTypesAreCodegens(t *testing.T) {
 		{enChoiceAnySchema, []string{"type R struct {\n\tChoice RChoice\n\tAny    AnyElement\n}\n", branch("RChoice", "RChoiceB", "B string"), branch("RChoice", "RChoiceC", "C string")}},
 		{enOptOccSchema, []string{"type R struct {\n\tA      string\n\tChoice RChoice\n}\n", branch("RChoice", "RChoiceB", "B string"),
 			branch("RChoice", "RChoiceSequence", "Sequence []RChoiceSequence2"), "type RChoiceSequence2 struct {\n\tC string\n\tD string\n}\n"}},
+		{enItemChoiceSchema, []string{"type R struct {\n\tSequence []RSequence\n}\n", "type RSequence struct {\n\tChoice RSequenceChoice\n}\n",
+			branch("RSequenceChoice", "RSequenceChoiceB", "B string"), branch("RSequenceChoice", "RSequenceChoiceC", "C string")}},
+		{enItemGroupSchema, []string{"type R struct {\n\tSequence []RSequence\n}\n", "type RSequence struct {\n\tChoice RSequenceChoice\n}\n",
+			branch("RSequenceChoice", "RSequenceChoiceA", "A string"), "type RSequenceChoiceSequence struct {\n\tB string\n\tC string\n}\n\nfunc (RSequenceChoiceSequence) isRSequenceChoice() {}\n"}},
 	}
 	for _, row := range rows {
 		gen := generated(t, schemaOf(t, row.decls))
@@ -245,15 +262,18 @@ func TestAppendNested(t *testing.T) {
 // TestAppendNestedInvalid pins item 6 of Append's doc for a nested model
 // group particle, none carrying an xsderr rule: the nil interface of a nested
 // choice occurring once none of whose alternatives is emptiable, its
-// model-group alternative's {min occurs} 1 among them, and a dynamic type its
-// WithBranches set places at no alternative; a nil item of a nested flattened
-// particle's slice, and items whose order the content model rejects, the
-// third a of sequence(a?, b?){1,2}, which no Matcher check but the content's
-// catches, since the schema has no identity constraint and Append assesses
-// nothing; a nested occurrence field's length outside its occurrence, and
-// outside the occurrence its branch reads a model-group alternative's {min
-// occurs} 0 as, the error naming both; and a nil item of a nested
-// occurrence's choice. Each row's prefix names the value's Go path first.
+// model-group alternative's {min occurs} 1 among them, and so inside an
+// occurrence field's item whose one member it is, an element alternative's
+// and a model-group alternative's of {min occurs} 1, an item that would
+// otherwise write nothing, and a dynamic type its WithBranches set places at
+// no alternative; a nil item of a nested flattened particle's slice, and
+// items whose order the content model rejects, the third a of sequence(a?,
+// b?){1,2}, which no Matcher check but the content's catches, since the
+// schema has no identity constraint and Append assesses nothing; a nested
+// occurrence field's length outside its occurrence, and outside the
+// occurrence its branch reads a model-group alternative's {min occurs} 0 as,
+// the error naming both; and a nil item of a nested occurrence's choice. Each
+// row's prefix names the value's Go path first.
 func TestAppendNestedInvalid(t *testing.T) {
 	for _, row := range []struct {
 		name   string
@@ -265,6 +285,16 @@ func TestAppendNestedInvalid(t *testing.T) {
 			_, err := appendChecked(t, nil, schemaOf(t, cgNestedSchema), strict.New(), rootName, cgN{X: "1"}, cgOBranches)
 			return err
 		}, "codec: Append: cgN.Choice is nil, the empty match, which a nested choice particle of the {type definition} of element {urn:s}r declared at ", []string{"none of its 2 alternatives is emptiable"}},
+		{"an occurrence item's nil once-choice", func(t *testing.T) error {
+			v := enItemChoice{Sequence: []enItemChoiceItem{{Choice: noB{B: "1"}}, {}}}
+			_, err := appendChecked(t, nil, schemaOf(t, enItemChoiceSchema), strict.New(), rootName, v, noBCBranches)
+			return err
+		}, "codec: Append: enItemChoice.Sequence[1].Choice is nil, the empty match, which a nested choice particle of ", []string{"none of its 2 alternatives is emptiable"}},
+		{"an occurrence item's nil once-choice of a model-group alternative", func(t *testing.T) error {
+			v := enItemGroup{Sequence: []enItemGroupItem{{Choice: cgOA{A: "1"}}, {}}}
+			_, err := appendChecked(t, nil, schemaOf(t, enItemGroupSchema), strict.New(), rootName, v, cgOBranches)
+			return err
+		}, "codec: Append: enItemGroup.Sequence[1].Choice is nil, the empty match, which a nested choice particle of ", []string{"none of its 2 alternatives is emptiable"}},
 		{"a nested choice's branch pointer", func(t *testing.T) error {
 			_, err := appendChecked(t, nil, schemaOf(t, ncInlineSchema), strict.New(), rootName, nc{A: "1", Choice: &ncB{B: "2"}}, WithBranches[ncChoice](ncB{}, ncC{}))
 			return err
