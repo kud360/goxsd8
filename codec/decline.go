@@ -145,21 +145,24 @@ type construct uint8
 // content, its content {particle}, each particle in order, its attribute uses in order,
 // its {attribute wildcard}, its {assertions}, and each value. Append declines by
 // constructUntrackedModel too, once every particle of a content model holding a wildcard
-// particle, or every basic particle a flattened content {particle} reaches, is examined.
-// A particle declines by constructVacuousParticle first, as the content {particle} does,
-// then by constructNestedGroup where its term is a model group; its element declaration,
-// local or the top-level one an <element ref> names, or, for an <element ref> whose field
-// codegen gives a sealed interface (goshape.SubstitutionSum), each declaration that
-// interface has a branch for, in group order, declines by the document element's
-// declaration's constructs, constructNillable first and constructAbstractElement last,
-// then by its type's as the document element's type does, from constructAbstractType on,
-// a complex type's content and attribute uses examined at the particle; and an attribute
-// use declines by constructValueConstraint after constructQualifiedAttribute. The ones of
-// a simple type, constructSpecialType to constructAssertions, sit after the
-// {assertions}'s, though the document element's, a particle's and an attribute use's
-// simple type declines by them where that declaration or use is examined, and a complex
-// type's simple content, by its {simple type definition}, where its type's content is,
-// ahead of its attribute uses.
+// particle, a nested flattened particle or a nested occurrence field, at any depth, or
+// every basic particle a flattened content {particle} reaches, is examined. A particle
+// declines by constructVacuousParticle first, as the content {particle} does; where its
+// term is a model group, then by constructNestedGroup where codegen flattens it or holds
+// it in an occurrence field inside an occurrence field's item, by constructAllGroup where
+// it is an all group, and otherwise by its own particles' constructs, in its place; its
+// element declaration, local or the top-level one an <element ref> names, or, for an
+// <element ref> whose field codegen gives a sealed interface (goshape.SubstitutionSum),
+// each declaration that interface has a branch for, in group order, declines by the
+// document element's declaration's constructs, constructNillable first and
+// constructAbstractElement last, then by its type's as the document element's type does,
+// from constructAbstractType on, a complex type's content and attribute uses examined at
+// the particle; and an attribute use declines by constructValueConstraint after
+// constructQualifiedAttribute. The ones of a simple type, constructSpecialType to
+// constructAssertions, sit after the {assertions}'s, though the document element's, a
+// particle's and an attribute use's simple type declines by them where that declaration
+// or use is examined, and a complex type's simple content, by its {simple type
+// definition}, where its type's content is, ahead of its attribute uses.
 const (
 	constructNillable construct = iota + 1
 	constructNestedGroup

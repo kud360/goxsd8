@@ -381,16 +381,8 @@ func shapedType(lo, hi int, v reflect.Type) reflect.Type {
 // indices, to the sub-sequence of starts it stands for.
 func holdDecoded(t *testing.T, schema *xsd.Schema, top *rnode, rt reflect.Type, names []string, starts []int) {
 	t.Helper()
-	var body strings.Builder
-	for i, n := range names {
-		if n == "w" {
-			fmt.Fprintf(&body, `<o:w xmlns:o="urn:o">%d</o:w>`, i)
-			continue
-		}
-		fmt.Fprintf(&body, "<s:%s>%d</s:%s>", n, i, n)
-	}
 	out := reflect.New(rt).Elem()
-	if err := decodeValue(schema, strict.New(), instanceOf("", body.String()), out, nil); err != nil {
+	if err := decodeValue(schema, strict.New(), idInstance(names), out, nil); err != nil {
 		t.Fatalf("model %s, instance %v: Decode = %v", top.xsdOf(), names, err)
 	}
 	var items []reflect.Value
@@ -426,6 +418,137 @@ func holdDecoded(t *testing.T, schema *xsd.Schema, top *rnode, rt reflect.Type, 
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("model %s, instance %v: Decode's items hold children %v, the partition's are %v", top.xsdOf(), names, got, want)
 	}
+}
+
+// idInstance returns the instance of s:r whose children are names, in order,
+// "w" an urn:o child, each carrying its index as its text.
+func idInstance(names []string) []byte {
+	var body strings.Builder
+	for i, n := range names {
+		if n == "w" {
+			fmt.Fprintf(&body, `<o:w xmlns:o="urn:o">%d</o:w>`, i)
+			continue
+		}
+		fmt.Fprintf(&body, "<s:%s>%d</s:%s>", n, i, n)
+	}
+	return instanceOf("", body.String())
+}
+
+// TestAppendOccurrenceRoundTripDifferential holds Append's occurrence field
+// to Decode's partition with a nested model group in the item: over random
+// content models drawn as TestOccurrencePartitionDifferential draws them,
+// seeded, kept where Finalize accepts the model, codegen holds the content
+// particle in an occurrence field, a sequence whose item holds at least one
+// nested model group particle and only nested sequences codegen splices, at
+// any depth, so that reflect builds the item's struct (splicedFields), and
+// Append encodes the type, each with random valid instances decoded into it.
+// Each decoded value is appended, and the written bytes are checked
+// independently by validate's verdict, which must accept them, and by
+// Decode, whose value must equal the one appended. Its seed keeps 2000
+// models of 112824 drawn, over 6519 instances, which its log states.
+func TestAppendOccurrenceRoundTripDifferential(t *testing.T) {
+	rng := rand.New(rand.NewPCG(4076, 1))
+	models, instances, tries := 0, 0, 0
+	for ; models < 2000 && tries < 1000000; tries++ {
+		wilds := 0
+		top := genModel(rng, 0, &wilds)
+		if top.kind != "sequence" || top.min == 1 && top.max == 1 || !slices.ContainsFunc(top.kids, func(k *rnode) bool { return len(k.kids) > 0 }) {
+			continue
+		}
+		schema, ok := randomSchema(`<xs:element name="r"><xs:complexType>` + top.xsdOf() + `</xs:complexType></xs:element>`)
+		if !ok {
+			continue
+		}
+		decl, _ := schema.Element(rootName)
+		td, _ := schema.ResolvedType(decl.TypeDefinition())
+		content := td.(xsd.ComplexType).ContentType().(xsd.ElementContent)
+		group, _, err := goshape.ModelGroupTerm(schema, content.Particle.Term())
+		if err != nil {
+			t.Fatal(err)
+		}
+		if hold, err := goshape.ParticleHold(schema, group, content.Particle.Occurs()); err != nil || hold != goshape.Occurrence {
+			continue
+		}
+		fields, structured := splicedFields(t, schema, group, top, goname.NewNamer())
+		if !structured {
+			continue
+		}
+		rt := reflect.StructOf([]reflect.StructField{{Name: "Sequence", Type: shapedType(top.min, top.max, reflect.StructOf(fields))}})
+		var de *DeclineError
+		if _, err := encodeValue(nil, schema, strict.New(), rootName, reflect.New(rt).Elem(), nil); errors.As(err, &de) {
+			continue
+		}
+		models++
+		for range 4 {
+			names := top.genInstance(rng, nil)
+			if len(names) > 10 {
+				continue
+			}
+			instances++
+			v := reflect.New(rt).Elem()
+			if err := decodeValue(schema, strict.New(), idInstance(names), v, nil); err != nil {
+				t.Fatalf("model %s, instance %v: Decode = %v", top.xsdOf(), names, err)
+			}
+			data, err := encodeValue(nil, schema, strict.New(), rootName, v, nil)
+			if err != nil {
+				t.Fatalf("model %s, instance %v: Append = %v", top.xsdOf(), names, err)
+			}
+			accepts(t, schema, data)
+			back := reflect.New(rt).Elem()
+			if err := decodeValue(schema, strict.New(), data, back, nil); err != nil {
+				t.Fatalf("model %s, instance %v: Decode(%s) = %v", top.xsdOf(), names, data, err)
+			}
+			if !reflect.DeepEqual(back.Interface(), v.Interface()) {
+				t.Fatalf("model %s, instance %v: Decode(%s) = %#v, Append wrote %#v", top.xsdOf(), names, data, back.Interface(), v.Interface())
+			}
+		}
+	}
+	if models < 2000 {
+		t.Fatalf("%d models kept of %d drawn, want 2000", models, tries)
+	}
+	t.Logf("%d models of %d drawn, %d instances appended and decoded back", models, tries, instances)
+}
+
+// splicedFields returns the fields of the struct codegen emits for one
+// occurrence of group, the model group of n, a random sequence's, and true,
+// where each of its particles is an element, a wildcard or a nested sequence
+// goshape.ParticleHold answers Spliced for, whose own particles are so in
+// turn, at any depth: each element's and wildcard's field in particle order,
+// a spliced sequence's in its place, named from names, one Namer, as codegen
+// claims the fields of every particle its spliced returns (codegen/doc.go
+// "# Naming").
+func splicedFields(t *testing.T, schema *xsd.Schema, group xsd.ModelGroup, n *rnode, names *goname.Namer) ([]reflect.StructField, bool) {
+	t.Helper()
+	var fields []reflect.StructField
+	for i, k := range n.kids {
+		p := group.Particles()[i]
+		switch k.kind {
+		case "elem", "wild":
+			v, local := reflect.TypeFor[string](), k.name
+			if k.kind == "wild" {
+				v, local = reflect.TypeFor[anyElement](), "any"
+			}
+			fields = append(fields, reflect.StructField{Name: names.Claim(local), Type: shapedType(k.min, k.max, v)})
+			continue
+		}
+		inner, _, err := goshape.ModelGroupTerm(schema, p.Term())
+		if err != nil {
+			t.Fatal(err)
+		}
+		hold, err := goshape.ParticleHold(schema, inner, p.Occurs())
+		if err != nil {
+			t.Fatal(err)
+		}
+		if k.kind != "sequence" || hold != goshape.Spliced {
+			return nil, false
+		}
+		got, ok := splicedFields(t, schema, inner, k, names)
+		if !ok {
+			return nil, false
+		}
+		fields = append(fields, got...)
+	}
+	return fields, true
 }
 
 // idsOf returns the child indices an item holds in field order: each string

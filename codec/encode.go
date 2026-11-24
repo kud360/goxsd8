@@ -70,11 +70,13 @@ var ErrInvalidValue = errors.New("codec: Append: a value no valid document holds
 //     and {max occurs}, a choice's alternative's {min occurs} 0 read as 1 in its branch,
 //     though never a flattened sequence's or choice's slice field, which holds one item per
 //     child, not per occurrence (codegen's package doc, "# Particles"); the nil sealed interface
-//     of a content choice, or of an item of an occurrence field's slice of a choice, none of whose
-//     alternatives is emptiable (Structures §3.8.4.3 cvc-model-group, §3.9.6.3 cos-group-emptiable), a
-//     choice of no {particles} among them; a value of that interface whose dynamic type the
-//     [WithBranches] set in opts places at no alternative, a pointer to a branch among them, which
-//     Decode never returns; a nil item of a flattened sequence's or choice's slice, which Decode never
+//     of a choice occurring once, the content choice or a nested one, none of whose alternatives is
+//     emptiable (Structures §3.8.4.3 cvc-model-group, §3.9.6.3 cos-group-emptiable), a choice of no
+//     {particles} among them; a nil item of an occurrence field's slice of a choice, the content
+//     {particle}'s or a nested one's, whatever its alternatives, which Decode never returns; a value of
+//     either interface whose dynamic type the [WithBranches] set in opts places at no alternative, a
+//     pointer to a branch among them, which Decode never returns; a nil item of a flattened sequence's
+//     or choice's slice, the content {particle}'s or a nested one's, which Decode never
 //     returns either, and an item of it whose dynamic type the [WithBranches] set in opts places at no
 //     alternative, a pointer to a branch among them; the nil sealed interface of an <element ref>
 //     particle's field over a substitution group (codegen's package doc, "# Substitution groups"), or of
@@ -223,22 +225,28 @@ var ErrInvalidValue = errors.New("codec: Append: a value no valid document holds
 // [WithPrecisionDecimalArms] supply. Items 2 to 5 read no value;
 // [CheckAppend] returns them for a declaration, T and opts.
 func Append[T any](dst []byte, schema *xsd.Schema, backend value.Backend, name xsd.QName, v T, opts ...Option) ([]byte, error) {
+	// v's own Value, of Kind Interface where T is one, so that a nil T and a
+	// branch's dynamic type both reach the write as T holds them.
+	return encodeValue(dst, schema, backend, name, reflect.ValueOf(&v).Elem(), opts)
+}
+
+// encodeValue is Append with T as v's Go type, read by reflection, as
+// decodeValue is Decode's.
+func encodeValue(dst []byte, schema *xsd.Schema, backend value.Backend, name xsd.QName, v reflect.Value, opts []Option) ([]byte, error) {
 	if schema == nil {
 		return dst, errors.New("codec: Append: nil *xsd.Schema")
 	}
 	if backend == nil {
 		return dst, errors.New("codec: Append: nil value.Backend")
 	}
-	t := reflect.TypeFor[T]()
+	t := v.Type()
 	cfg := newConfig(opts)
 	decl, f, assess, err := encodeStatic(schema, name, t, cfg)
 	if err != nil {
 		return dst, err
 	}
 	e := &encoder{schema: schema, backend: backend, decimals: cfg.decimals, branches: cfg.branches, out: dst}
-	// v's own Value, of Kind Interface where T is one, so that a nil T and a
-	// branch's dynamic type both reach the write as T holds them.
-	if err := encoded[writer](f).write(e, reflect.ValueOf(&v).Elem(), writeAt{el: decl, path: typePath(t)}); err != nil {
+	if err := encoded[writer](f).write(e, v, writeAt{el: decl, path: typePath(t)}); err != nil {
 		return dst, err
 	}
 	if e.invalid != nil {
@@ -339,11 +347,11 @@ func encodeStatic(schema *xsd.Schema, name xsd.QName, t reflect.Type, cfg config
 // A writer is a bound arm of the filler item 5's check returns that Append
 // writes a value from: write appends to e.out the XML encoding v, a value of
 // the Go type the arm is bound to, at at, and returns a backend fault. Its
-// implementers are exactly the arms the slice the package doc's "# What
-// encodes" states reaches: the root arms, *simpleRoot, *boundBinding, *boundChoiceRoot and
-// rawContent, writing the element at.el; and the content arms, *boundSequence,
-// *boundContentChoice, boundOccurrence and boundFlattened, writing at.el's content, each
-// particle's elements by its member (particleWriter). Append reaches each through encoded.
+// implementers are exactly the arms the slice the package doc's "# What encodes" states
+// reaches: the root arms, *simpleRoot, *boundBinding, *boundChoiceRoot and rawContent,
+// writing the element at.el; and the content arms, *boundSequence, *boundContentChoice,
+// boundOccurrence and boundFlattened, writing at.el's content, each member's elements by
+// its bound state (memberWriter). Append reaches each through encoded.
 type writer interface {
 	write(e *encoder, v reflect.Value, at writeAt) error
 }
@@ -390,12 +398,13 @@ func (s attributionSlot) take(e *encoder, decl xsd.ElementDeclaration, path stri
 // encoded returns x, an arm of the filler item 5's check returns or of the
 // binder under it, as C, what Append's write reads it as: the writer capability, the
 // texter capability of simple content's contentFiller, the elementWriter capability of
-// a fieldSink's elementReader, the particleWriter capability of a contentMember's or a
-// branchArm's elementMember or wildcardMember, or a closed sum's arm, a sink's
-// fieldSink, a fieldArm's scalarArm or a scalarElem's atomic. It is the write's one
-// assertion of the binder's arms. Invariant: where item 4 of [Append]'s doc admits a
-// construct, every arm the binder builds for it that the write reaches is such a C. A
-// failed assertion breaks it, an internal bug, never input, and panics naming x's type.
+// a fieldSink's elementReader, the memberWriter capability of a boundMember, the
+// flatHolder capability of a contentMember, the emptier capability of a branchArm,
+// or a closed sum's arm, a boundMember's boundParticle or fieldSink, a fieldArm's
+// scalarArm or a scalarElem's atomic. It is the write's one assertion of the binder's
+// arms. Invariant: where item 4 of [Append]'s doc admits a construct, every arm the
+// binder builds for it that the write reaches is such a C. A failed assertion breaks
+// it, an internal bug, never input, and panics naming x's type.
 func encoded[C any](x any) C {
 	c, ok := x.(C)
 	if !ok {
@@ -499,8 +508,9 @@ func (c *boundChoiceRoot) write(e *encoder, v reflect.Value, at writeAt) error {
 	outer, mark := e.startTag(name)
 	start := len(e.out)
 	e.out = append(e.out, '>')
-	check := e.attribution(c.root.index, at.el, c.root.typ)
-	if err := writeChoice(e, c.root.sealed.alts, c.choice, v, writeAt{el: at.el, typ: c.root.typ, path: at.path}, check); err != nil {
+	alts := c.root.sealed.alts
+	check := e.attribution(c.root.index, at.el, c.root.typ, altsFlatten(alts))
+	if err := writeChoice(e, alts, c.choice, v, writeAt{el: at.el, typ: c.root.typ, path: at.path}, contentChoiceSubject(at.el, c.root.typ), attributionSlot{check: check}); err != nil {
 		return err
 	}
 	check.end(e, at.path)
@@ -508,44 +518,147 @@ func (c *boundChoiceRoot) write(e *encoder, v reflect.Value, at writeAt) error {
 	return nil
 }
 
-// write writes the elements of each of b's members from its field, member i's
-// field b.first+i of v, read by b.sinks[i] (writeMembers), under the content's
-// attributionCheck (encoder.attribution).
+// write writes the elements of each of b's members from its field of v, each
+// member by its bound state (writeMembers), under the content's
+// attributionCheck (encoder.attribution), its first target the sequence's
+// base.
 func (b *boundSequence) write(e *encoder, v reflect.Value, at writeAt) error {
-	check := e.attribution(b.sequence.index, at.el, at.typ)
-	if err := writeMembers(e, b.sequence, b.sinks, v, b.first, at, check); err != nil {
+	check := e.attribution(b.sequence.index, at.el, at.typ, membersFlatten(b.sequence.members))
+	if err := writeMembers(e, b.members, v, at, attributionSlot{check: check, target: b.sequence.base}); err != nil {
 		return err
 	}
 	check.end(e, at.path)
 	return nil
 }
 
-// writeMembers writes the elements of each of s's members from its field of
-// v, member i's field first+i, read by sinks[i], in member order, each taken
-// by check: each member is an element or wildcard particle's field, which
-// takes one attribution target (field.targets), so member i's sink is
-// sinks[i] and its target s.base+i.
-func writeMembers(e *encoder, s *sequence, sinks []sink, v reflect.Value, first int, at writeAt, check *attributionCheck) error {
-	for i, m := range s.members {
-		j := first + i
-		if err := encoded[particleWriter](m).writeElements(e, sinks[i], v.Field(j), writeAt{el: at.el, typ: at.typ, path: at.path + "." + v.Type().Field(j).Name}, attributionSlot{check: check, target: s.base + i}); err != nil {
+// writeMembers writes the elements of each member of a sequence, of a
+// choice's alternative or of an occurrence field's item from its field of v,
+// the struct holding them, in member order, each by bound[i], its own bound
+// state (memberWriter), each taken by slot.check: member i's first
+// attribution target is slot.target, the first member's, plus the targets
+// every earlier member takes, one per sink (boundMember.sinks).
+func writeMembers(e *encoder, bound []boundMember, v reflect.Value, at writeAt, slot attributionSlot) error {
+	target := slot.target
+	for _, b := range bound {
+		if err := encoded[memberWriter](b).writeMember(e, v, at, attributionSlot{check: slot.check, target: target}); err != nil {
 			return err
 		}
+		target += len(b.sinks())
 	}
 	return nil
 }
 
+// A memberWriter is a boundMember Append writes, the bound state of a member
+// of a sequence, a choice's alternative or an occurrence field's item, which
+// holds its own member: writeMember writes the member's elements from its
+// field of v, the struct holding it, at.path being v's Go path, its first
+// attribution target slot.target in slot.check, and returns a backend fault.
+// Its implementers are boundParticle, an element or wildcard particle's, and
+// the bound states of a nested model group particle: boundNestedChoice, a
+// choice occurring once; boundFlatSlice, a flattened particle; and
+// boundNestedOccurrence, an occurrence field. A fieldSink is none: item 4
+// declines the open-content field's {open content} (contentEncodes) and a
+// governing type's branch field's {type table}, and Append writes a
+// substitution group member's branch field through its reader
+// (groupReader.writeElement).
+type memberWriter interface {
+	writeMember(e *encoder, v reflect.Value, at writeAt, slot attributionSlot) error
+}
+
+// writeMember writes the elements of b's particle from field b.sink.index of
+// v (particleWriter.writeElements), read by b.sink, taken at slot.
+func (b boundParticle) writeMember(e *encoder, v reflect.Value, at writeAt, slot attributionSlot) error {
+	f, field := fieldOf(v, b.sink.index, at)
+	return b.writer.writeElements(e, b.sink, f, field, slot)
+}
+
+// fieldOf returns field index of v, the struct at.path names, and its own
+// writeAt, its Go path the struct's and its name.
+func fieldOf(v reflect.Value, index int, at writeAt) (reflect.Value, writeAt) {
+	return v.Field(index), writeAt{el: at.el, typ: at.typ, path: at.path + "." + v.Type().Field(index).Name}
+}
+
+// writeMember writes the branch field b.index of v holds, the nested choice's
+// sealed interface (writeChoice), its alternatives' targets from slot.target.
+func (b boundNestedChoice) writeMember(e *encoder, v reflect.Value, at writeAt, slot attributionSlot) error {
+	f, field := fieldOf(v, b.index, at)
+	return writeChoice(e, b.choice.sealed.alts, b.bound, f, field, "a nested choice particle of "+typeSubject(at.el, at.typ), slot)
+}
+
+// writeMember writes field b.index of v, the nested flattened particle's
+// slice, one element per item in slice order (writeFlatItems), alternative j
+// taking target slot.target+j.
+func (b boundFlatSlice) writeMember(e *encoder, v reflect.Value, at writeAt, slot attributionSlot) error {
+	f, field := fieldOf(v, b.index, at)
+	return writeFlatItems(e, b.bound, f, field, "the nested flattened particle of "+typeSubject(at.el, at.typ), slot)
+}
+
+// writeMember writes field b.index of v, the nested occurrence field, as
+// writeOccurring states, its length held to the occurrence its shape was
+// computed at (nestedOccurrence.held) and its error naming the particle's own
+// where the two differ: each item it holds, in slice order, as its model
+// group's particles in order (boundItem.writeItem), its targets from
+// slot.target, under slot.check, the content's.
+func (b boundNestedOccurrence) writeMember(e *encoder, v reflect.Value, at writeAt, slot attributionSlot) error {
+	o := b.occurrence
+	subject := fmt.Sprintf("a nested %s model group particle of %s", o.group.Compositor(), typeSubject(at.el, at.typ))
+	f, field := fieldOf(v, b.index, at)
+	return e.writeOccurring(o.shape, o.own, o.held, subject, f, field, func(item reflect.Value, path string) error {
+		return b.item.writeItem(e, item, writeAt{el: at.el, typ: at.typ, path: path}, subject, slot)
+	})
+}
+
+// A flatHolder is a contentMember whose content's attributionCheck Append
+// reads: holdsFlat reports whether the member holds a nested flattened
+// particle's slice, itself or at any depth inside it, whose items' order is
+// the caller's, so that the content model's Matcher must check it
+// (encoder.attribution). Its implementers are field, false, and through it
+// elementMember and wildcardMember; *flatSlice, true; *choice, where one of
+// its alternatives' members holds one (altsFlatten); and *nestedOccurrence,
+// false, since item 4 of [Append]'s doc declines a flattened particle inside
+// an occurrence field's item (encodeWalk.groupEncodes), which writeFlatItems'
+// nil-check panic guards.
+type flatHolder interface {
+	holdsFlat() bool
+}
+
+// holdsFlat is false: a field holds no model group.
+func (field) holdsFlat() bool { return false }
+
+// holdsFlat is true: f is a flattened particle's slice.
+func (*flatSlice) holdsFlat() bool { return true }
+
+// holdsFlat is whether one of c's alternatives holds one (altsFlatten).
+func (c *choice) holdsFlat() bool { return altsFlatten(c.sealed.alts) }
+
+// holdsFlat is false: no flattened particle lies inside an occurrence field's
+// item that item 4 admits.
+func (*nestedOccurrence) holdsFlat() bool { return false }
+
+// membersFlatten reports whether one of members holds a nested flattened
+// particle's slice (flatHolder).
+func membersFlatten(members []contentMember) bool {
+	return slices.ContainsFunc(members, func(m contentMember) bool { return encoded[flatHolder](m).holdsFlat() })
+}
+
+// altsFlatten reports whether the members of one of alts, a choice's
+// alternatives, hold a nested flattened particle's slice (membersFlatten).
+func altsFlatten(alts []branchArm) bool {
+	return slices.ContainsFunc(alts, func(a branchArm) bool { return membersFlatten(a.branchMembers()) })
+}
+
 // write writes the branch the choice's sealed interface holds, field b.index
 // of v (writeChoice), then the elements of each member of the rest, whose
-// fields follow it, member i read by b.rest[i] (writeMembers), all under the
+// fields follow it, each by its bound state (writeMembers), all under the
 // content's attributionCheck (encoder.attribution).
 func (b *boundContentChoice) write(e *encoder, v reflect.Value, at writeAt) error {
 	rest := b.content.rest
-	check := e.attribution(rest.index, at.el, at.typ)
-	if err := writeChoice(e, b.content.choice.sealed.alts, b.choice, v.Field(b.index), writeAt{el: at.el, typ: at.typ, path: at.path + "." + v.Type().Field(b.index).Name}, check); err != nil {
+	check := e.attribution(rest.index, at.el, at.typ, b.content.choice.holdsFlat() || membersFlatten(rest.members))
+	f, field := fieldOf(v, b.index, at)
+	if err := writeChoice(e, b.content.choice.sealed.alts, b.choice, f, field, contentChoiceSubject(at.el, at.typ), attributionSlot{check: check}); err != nil {
 		return err
 	}
-	if err := writeMembers(e, rest, b.rest, v, b.index+1, at, check); err != nil {
+	if err := writeMembers(e, b.rest, v, at, attributionSlot{check: check, target: rest.base}); err != nil {
 		return err
 	}
 	check.end(e, at.path)
@@ -557,14 +670,16 @@ func (b *boundContentChoice) write(e *encoder, v reflect.Value, at writeAt) erro
 // occurrence (occurrence.shape, occurrence.own): each item it holds, in slice
 // order, as its model group's particles in order (boundItem.writeItem), all
 // under one attributionCheck of the content (encoder.attribution), since the
-// content model's Matcher spans every occurrence.
+// content model's Matcher spans every occurrence, the item's targets from 0.
+// An item holds no flattened particle (flatHolder).
 func (b boundOccurrence) write(e *encoder, v reflect.Value, at writeAt) error {
 	o := b.occurrence
-	check := e.attribution(o.index, at.el, at.typ)
+	check := e.attribution(o.index, at.el, at.typ, false)
 	subject := fmt.Sprintf("the %s content particle of %s", o.group.Compositor(), typeSubject(at.el, at.typ))
-	field := writeAt{el: at.el, typ: at.typ, path: at.path + "." + v.Type().Field(b.index).Name}
-	if err := e.writeOccurring(o.shape, o.own, o.own, subject, v.Field(b.index), field, func(item reflect.Value, path string) error {
-		return b.bound.writeItem(e, item, writeAt{el: at.el, typ: at.typ, path: path}, check)
+	group := contentChoiceSubject(at.el, at.typ)
+	f, field := fieldOf(v, b.index, at)
+	if err := e.writeOccurring(o.shape, o.own, o.own, subject, f, field, func(item reflect.Value, path string) error {
+		return b.bound.writeItem(e, item, writeAt{el: at.el, typ: at.typ, path: path}, group, attributionSlot{check: check})
 	}); err != nil {
 		return err
 	}
@@ -572,56 +687,71 @@ func (b boundOccurrence) write(e *encoder, v reflect.Value, at writeAt) error {
 	return nil
 }
 
+// contentChoiceSubject names the content choice of el's complex type typ,
+// whose item 6 errors of [Append]'s doc name it so: a choice occurring once,
+// T itself or a content field, or one occurrence of a content choice held in
+// an occurrence field.
+func contentChoiceSubject(el xsd.ElementDeclaration, typ xsd.ComplexType) string {
+	return "the content choice of " + typeSubject(el, typ)
+}
+
 // writeItem writes the elements of each member of the sequence or all group
-// from its field of v, the item's struct, member i's field i, read by
-// b.fields[i] (writeMembers).
-func (b boundSequenceItem) writeItem(e *encoder, v reflect.Value, at writeAt, check *attributionCheck) error {
-	return writeMembers(e, b.sequence, b.fields, v, 0, at, check)
+// from its field of v, the item's struct, member i's field i, each by its
+// bound state (writeMembers), the first target slot.target, the sequence's
+// base.
+func (b boundSequenceItem) writeItem(e *encoder, v reflect.Value, at writeAt, _ string, slot attributionSlot) error {
+	return writeMembers(e, b.members, v, at, slot)
 }
 
 // writeItem writes the branch v, a value of the choice's sealed interface,
-// holds (writeChoice).
-func (c boundChoiceItem) writeItem(e *encoder, v reflect.Value, at writeAt, check *attributionCheck) error {
-	return writeChoice(e, c.choice.sealed.alts, c.bound, v, at, check)
+// holds (writeChoice), the choice named group, its alternatives' targets from
+// slot.target. A nil v is item 6 of [Append]'s doc, whatever the choice's
+// alternatives, and writes nothing: an item is written only as an item of a
+// []I, since writeOccurring writes no nil V of {min occurs} 0, and Decode
+// returns no nil item, each item holding the children of one non-empty
+// sub-sequence of the ·partition· (boundOccurrence.fill), so that the empty
+// match would leave the item out of the slice Decode returns.
+func (c boundChoiceItem) writeItem(e *encoder, v reflect.Value, at writeAt, group string, slot attributionSlot) error {
+	if v.IsNil() {
+		e.invalidate(fmt.Errorf("codec: Append: %s is nil, an item holding no child element, which Decode never returns in the occurrence field of %s", at.path, group))
+		return nil
+	}
+	return writeChoice(e, c.choice.sealed.alts, c.bound, v, at, group, slot)
 }
 
 // writeChoice writes the branch v, a value of the sealed interface of a
-// choice occurring once or of one occurrence of a choice held in an
-// occurrence field, whose alternatives are alts, holds, bc that interface
-// as item 5's check bound it: its branches[j], the branch type placed at
-// alts[j] (sealed.checkSite), is matched to v's dynamic type, and the members
-// of alts[j] are written from the branch struct's fields, in field order,
-// member i read by branches[j].sinks[i] as boundSequence's write pairs them,
-// its target the targets of every earlier alternative (branchTargets) plus i,
-// under check, the attributionCheck of the content the choice is written
-// into, nil for none. The nil interface writes nothing, the empty match, but is
-// item 6 of [Append]'s doc where no alternative is emptiable
-// (choiceEmptiable), and so is a dynamic type bc places at no alternative, a
-// pointer to a branch among them; at.typ is the complex type whose content the
-// choice is.
-func writeChoice(e *encoder, alts []branchArm, bc *boundChoice, v reflect.Value, at writeAt, check *attributionCheck) error {
+// choice occurring once, the content's or a nested one, or of one occurrence
+// of a choice held in an occurrence field, whose alternatives are alts and
+// which subject names, holds, bc that interface as item 5's check bound it: its
+// branches[j], the branch type placed at alts[j] (sealed.checkSite), is
+// matched to v's dynamic type, and the members of alts[j] are written from the
+// branch struct's fields, in field order, each by its bound state in
+// branches[j] (writeMembers), the first target slot.target, the choice's
+// first, plus the targets of every earlier alternative (branchTargets), under
+// slot.check, the attributionCheck of the content the choice is written into,
+// nil for none. The nil interface writes nothing, the empty match, but is item
+// 6 of [Append]'s doc where no alternative is emptiable (choiceEmptiable), and
+// so is a dynamic type bc places at no alternative, a pointer to a branch
+// among them.
+func writeChoice(e *encoder, alts []branchArm, bc *boundChoice, v reflect.Value, at writeAt, subject string, slot attributionSlot) error {
 	if v.IsNil() {
 		if !choiceEmptiable(alts) {
-			e.invalidate(fmt.Errorf("codec: Append: %s is nil, the empty match, which the content choice of %s does not accept: %s", at.path, typeSubject(at.el, at.typ), unemptiable(alts)))
+			e.invalidate(fmt.Errorf("codec: Append: %s is nil, the empty match, which %s does not accept: %s", at.path, subject, unemptiable(alts)))
 		}
 		return nil
 	}
 	b := v.Elem()
 	j := bc.branchOf(b.Type())
 	if j < 0 {
-		e.invalidate(fmt.Errorf("codec: Append: %s holds a %s, which the WithBranches set of %s places at no alternative of the content choice of %s, so that Decode returns no such value", at.path, b.Type(), v.Type(), typeSubject(at.el, at.typ)))
+		e.invalidate(fmt.Errorf("codec: Append: %s holds a %s, which the WithBranches set of %s places at no alternative of %s, so that Decode returns no such value", at.path, b.Type(), v.Type(), subject))
 		return nil
 	}
-	first := 0
+	first := slot.target
 	for _, a := range alts[:j] {
 		first += branchTargets(a)
 	}
-	for i, m := range alts[j].branchMembers() {
-		if err := encoded[particleWriter](m).writeElements(e, bc.branches[j].sinks[i], b.Field(i), writeAt{el: at.el, typ: at.typ, path: at.path + ".(" + typePath(b.Type()) + ")." + b.Type().Field(i).Name}, attributionSlot{check: check, target: first + i}); err != nil {
-			return err
-		}
-	}
-	return nil
+	branch := writeAt{el: at.el, typ: at.typ, path: at.path + ".(" + typePath(b.Type()) + ")"}
+	return writeMembers(e, bc.branches[j].members, b, branch, attributionSlot{check: slot.check, target: first})
 }
 
 // branchOf returns the index in bc.branches of the branch whose type is t, the
@@ -633,50 +763,88 @@ func (bc *boundChoice) branchOf(t reflect.Type) int {
 }
 
 // write writes the slice field of v, field b.index, which holds at.typ's
-// flattened content {particle}, one element per item in slice order, all
-// under one attributionCheck of the content (flattenedCheck), never nil, since
-// the order of a flattened slice's items is the caller's: each item's branch,
-// matched to its dynamic type (boundChoice.branchOf), writes its
-// alternative's one field (particleWriter.writeElements), taken at the
-// alternative's index, the one its place in b.flattened.places holds. It
-// records item 6 of [Append]'s doc for the slice: a nil item and an item of a
-// dynamic type placed at no alternative here, and the content model's verdict
-// on each item and on the slice's end through attributionCheck.take and
-// attributionCheck.end; the slice's length it never reads, since no
-// writeOccurring runs over the slice. b.open is never written: item 4 declines
-// {open content} (contentEncodes).
+// flattened content {particle}, as writeFlatItems states, all under one
+// attributionCheck of the content (flattenedCheck), never nil, alternative j
+// taking target j, the index its place in b.flattened.places holds, then
+// records item 6 of [Append]'s doc where the content model is not accepting at
+// the slice's end (attributionCheck.end). b.open is never written: item 4
+// declines {open content} (contentEncodes).
 func (b boundFlattened) write(e *encoder, v reflect.Value, at writeAt) error {
-	alts := b.flattened.slice.sealed.alts
 	check := e.flattenedCheck(b.flattened, at)
-	slice := v.Field(b.index)
-	path := at.path + "." + v.Type().Field(b.index).Name
-	for i := range slice.Len() {
-		item, ipath := slice.Index(i), path+"["+strconv.Itoa(i)+"]"
-		if item.IsNil() {
-			e.invalidate(fmt.Errorf("codec: Append: %s is nil, an item of the flattened content of %s that holds no child element, so that Decode returns no such item", ipath, check.subject))
-			continue
-		}
-		br := item.Elem()
-		j := b.bound.branchOf(br.Type())
-		if j < 0 {
-			e.invalidate(fmt.Errorf("codec: Append: %s holds a %s, which the WithBranches set of %s places at no alternative of the flattened content of %s, so that Decode returns no such value", ipath, br.Type(), item.Type(), check.subject))
-			continue
-		}
-		field := writeAt{el: at.el, typ: at.typ, path: ipath + ".(" + typePath(br.Type()) + ")." + br.Type().Field(0).Name}
-		if err := alts[j].writeElements(e, b.bound.branches[j].sinks[0], br.Field(0), field, attributionSlot{check: check, target: j}); err != nil {
-			return err
-		}
+	f, field := fieldOf(v, b.index, at)
+	if err := writeFlatItems(e, b.bound, f, field, "the flattened content of "+check.subject, attributionSlot{check: check}); err != nil {
+		return err
 	}
 	check.end(e, at.path)
 	return nil
 }
 
+// writeFlatItems writes slice, at at, the slice field of a flattened
+// particle, the content {particle} or nested, which subject names, bc its
+// interface bound, one element per item in slice order: each item's branch,
+// matched to its dynamic type (boundChoice.branchOf), writes its
+// alternative's one field by the boundParticle the branch's one member is
+// bound to (boundParticle.writeMember), alternative j taking target slot.target+j
+// in slot.check, the content's attributionCheck, since the order of a
+// flattened slice's items is the caller's. It records item 6 of [Append]'s
+// doc for the slice: a nil item and an item of a dynamic type placed at no
+// alternative, and the content model's verdict on each item through
+// attributionCheck.take; the slice's length it never reads, since no
+// writeOccurring runs over the slice. A nil slot.check, a content whose
+// attributionCheck item 4 left nil (encoder.attribution, flatHolder), is an
+// internal bug, which panics, as encoded's assertion does.
+func writeFlatItems(e *encoder, bc *boundChoice, slice reflect.Value, at writeAt, subject string, slot attributionSlot) error {
+	if slot.check == nil {
+		panic(fmt.Sprintf("codec: Append reached %s with no attributionCheck of its content", subject))
+	}
+	for i := range slice.Len() {
+		item, ipath := slice.Index(i), at.path+"["+strconv.Itoa(i)+"]"
+		if item.IsNil() {
+			e.invalidate(fmt.Errorf("codec: Append: %s is nil, an item of %s that holds no child element, so that Decode returns no such item", ipath, subject))
+			continue
+		}
+		br := item.Elem()
+		j := bc.branchOf(br.Type())
+		if j < 0 {
+			e.invalidate(fmt.Errorf("codec: Append: %s holds a %s, which the WithBranches set of %s places at no alternative of %s, so that Decode returns no such value", ipath, br.Type(), item.Type(), subject))
+			continue
+		}
+		branch := writeAt{el: at.el, typ: at.typ, path: ipath + ".(" + typePath(br.Type()) + ")"}
+		if err := encoded[boundParticle](bc.branches[j].members[0]).writeMember(e, br, branch, attributionSlot{check: slot.check, target: slot.target + j}); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// An emptier is a choice's alternative as Append reads its emptiability, an
+// elementMember, a wildcardMember or a groupBranch: emptiable reports whether
+// one occurrence of the alternative's particle matches the empty sequence,
+// which §3.9.6.3 cos-group-emptiable decides by its clause 1, the particle's
+// own {min occurs} 0, or its clause 2, its term's range minimum 0. Clause 2
+// never holds for an alternative of a choice codegen does not flatten, which
+// is every choice writeChoice writes: an element or wildcard term has range
+// minimum 1, and goshape.ParticleHold flattens a choice one of whose
+// alternatives' terms is emptiable, its flattens' first gate (codegen/doc.go
+// "# Particles"). So each answers own.Min() == 0.
+type emptier interface {
+	emptiable() bool
+}
+
+// emptiable is whether m.own's {min occurs} is 0.
+func (m elementMember) emptiable() bool { return m.own.Min() == 0 }
+
+// emptiable is whether m.own's {min occurs} is 0.
+func (m wildcardMember) emptiable() bool { return m.own.Min() == 0 }
+
+// emptiable is whether g.own's {min occurs} is 0.
+func (g groupBranch) emptiable() bool { return g.own.Min() == 0 }
+
 // choiceEmptiable reports whether one occurrence of the choice whose
-// alternatives are alts, each an element or wildcard particle, matches the
-// empty sequence: one of them has {min occurs} 0 (§3.9.6.3
-// cos-group-emptiable).
+// alternatives are alts matches the empty sequence: one of them is emptiable
+// (emptier, §3.9.6.3 cos-group-emptiable).
 func choiceEmptiable(alts []branchArm) bool {
-	return slices.ContainsFunc(alts, func(a branchArm) bool { return encoded[particleWriter](a).occurs().Min() == 0 })
+	return slices.ContainsFunc(alts, func(a branchArm) bool { return encoded[emptier](a).emptiable() })
 }
 
 // unemptiable says why the empty sequence lies outside the language of the
@@ -690,28 +858,21 @@ func unemptiable(alts []branchArm) string {
 }
 
 // A particleWriter is the member of an element or wildcard particle Append
-// writes, a contentMember's or a branchArm's: writeElements writes the
-// elements of f, the field of its particle, read by s, the field's sink, at
-// at, each taken by slot's attributionCheck at slot's target, and returns a
-// backend fault; occurs is the particle's own {min occurs}
-// and {max occurs}. Its implementers are elementMember and wildcardMember.
+// writes, a contentMember's or a branchArm's, held by the boundParticle it
+// binds (boundParticle.writeMember): writeElements writes the elements of f,
+// the field of its particle, read by s, the field's sink, at at, each taken
+// by slot's attributionCheck at slot's target, and returns a backend fault.
+// Its implementers are elementMember and wildcardMember.
 type particleWriter interface {
-	writeElements(e *encoder, s sink, f reflect.Value, at writeAt, slot attributionSlot) error
-	occurs() xsd.Occurs
+	writeElements(e *encoder, s fieldSink, f reflect.Value, at writeAt, slot attributionSlot) error
 }
-
-// occurs is m.own.
-func (m elementMember) occurs() xsd.Occurs { return m.own }
-
-// occurs is m.own.
-func (m wildcardMember) occurs() xsd.Occurs { return m.own }
 
 // writeElements writes the elements of f, the field of m's particle, as
 // writeOccurring states, each by the elementWriter s, the field's sink, reads
 // it with, as an element of m.decl or, for a groupReader, of the member its
 // value holds, taken by slot.
-func (m elementMember) writeElements(e *encoder, s sink, f reflect.Value, at writeAt, slot attributionSlot) error {
-	w := encoded[elementWriter](encoded[fieldSink](s).read)
+func (m elementMember) writeElements(e *encoder, s fieldSink, f reflect.Value, at writeAt, slot attributionSlot) error {
+	w := encoded[elementWriter](s.read)
 	return e.writeOccurring(m.shape, m.own, m.held, "the particle of "+declSubject(m.decl), f, at, func(v reflect.Value, path string) error {
 		return w.writeElement(e, m.decl, v, path, slot)
 	})
@@ -727,7 +888,7 @@ func (m elementMember) writeElements(e *encoder, s sink, f reflect.Value, at wri
 // Item 4 declines a strict wildcard particle (particleEncodes), so that any
 // other m.process is an internal bug, which panics, as encoded's assertion
 // does.
-func (m wildcardMember) writeElements(e *encoder, _ sink, f reflect.Value, at writeAt, slot attributionSlot) error {
+func (m wildcardMember) writeElements(e *encoder, _ fieldSink, f reflect.Value, at writeAt, slot attributionSlot) error {
 	var hold rawHold
 	// {process contents} is a closed set, so the switch is STYLE T2's
 	// sealed-sum exception.
@@ -841,7 +1002,7 @@ func (g groupReader) writeElement(e *encoder, head xsd.ElementDeclaration, v ref
 		e.invalidate(fmt.Errorf("codec: Append: %s holds a %s, which the WithBranches set of %s places at no branch of the substitution group of %s, so that Decode returns no such value", path, br.Type(), v.Type(), declSubject(head)))
 		return nil
 	}
-	w := encoded[elementWriter](encoded[fieldSink](g.bound.branches[j].sinks[0]).read)
+	w := encoded[elementWriter](encoded[fieldSink](g.bound.branches[j].members[0]).read)
 	return w.writeElement(e, g.members[j], br.Field(0), path+".("+typePath(br.Type())+")."+br.Type().Field(0).Name, slot)
 }
 
@@ -1038,9 +1199,11 @@ func (w *encodeWalk) complexEncodes(decl xsd.ElementDeclaration, ct xsd.ComplexT
 // as a plain error; then a model group codegen flattens as reachEncodes
 // examines it; or each particle of a spliced sequence, of a choice
 // occurring once that codegen does not flatten, or of a sequence or choice
-// held in an occurrence field, as particleEncodes admits it, an all group
-// spliced or held in an occurrence field declining before any particle is
-// examined; then, for a model group holding a wildcard particle, whose
+// held in an occurrence field, as particleEncodes admits it at its
+// particleSite, an all group spliced or held in an occurrence field
+// declining before any particle is examined; then, where a particle the
+// walk examined sets the site's matcher, a wildcard particle, a nested
+// flattened particle or a nested occurrence field at any depth, whose
 // children Append attributes through a Matcher (attributionCheck), ct's
 // content model where xsd.Schema.ContentMatcher does not track it.
 func (w *encodeWalk) contentEncodes(ct xsd.ComplexType, content xsd.ElementContent, subject string) error {
@@ -1079,12 +1242,14 @@ func (w *encodeWalk) contentEncodes(ct xsd.ComplexType, content xsd.ElementConte
 			return encodeDecline(constructAllGroup, subject)
 		}
 	}
+	var matcher bool
+	site := particleSite{item: hold == goshape.Occurrence, alternative: label == alternative, matcher: &matcher}
 	for i, p := range group.Particles() {
-		if err := w.particleEncodes(p, fmt.Sprintf(label, i+1, subject)); err != nil {
+		if err := w.particleEncodes(p, fmt.Sprintf(label, i+1, subject), site); err != nil {
 			return err
 		}
 	}
-	if !slices.ContainsFunc(group.Particles(), wildcardParticle) {
+	if !matcher {
 		return nil
 	}
 	if _, tracked := w.schema.ContentMatcher(ct); !tracked {
@@ -1093,26 +1258,133 @@ func (w *encodeWalk) contentEncodes(ct xsd.ComplexType, content xsd.ElementConte
 	return nil
 }
 
+// particleSite is where particleEncodes examines a particle of a content
+// model: item, whether the particle lies inside an occurrence field's item,
+// the content {particle}'s or a nested one's, as Decode's bind carries it
+// (sequence.nested, bindItem); alternative, whether it is a choice's
+// alternative, whose model group's hold is asked at goshape.BranchOccurs'
+// occurrence (bindChoice); and matcher, set where Append's write builds a
+// Matcher of the content model (encoder.attribution): for a wildcard particle
+// at any depth, for a nested flattened particle, whose bind gives the content
+// its matcherSlot (sequence.flatten), and for a nested occurrence field,
+// whose bind builds one (sequence.occurrence), so that contentEncodes
+// declines a content model xsd.Schema.ContentMatcher does not track.
+type particleSite struct {
+	item, alternative bool
+	matcher           *bool
+}
+
+// occurs is the occurrence a model group particle p at s is read at: its own,
+// or goshape.BranchOccurs' for a choice's alternative.
+func (s particleSite) occurs(p xsd.Particle) xsd.Occurs {
+	if s.alternative {
+		return goshape.BranchOccurs(p.Occurs())
+	}
+	return p.Occurs()
+}
+
+// particlesEncode returns particleEncodes' error for each of particles, the
+// {particles} of a model group subject names, in order, particle i named kind
+// i+1 of subject ("particle" or "alternative"), at site.
+func (w *encodeWalk) particlesEncode(particles []xsd.Particle, kind, subject string, site particleSite) error {
+	for i, p := range particles {
+		if err := w.particleEncodes(p, fmt.Sprintf("%s %d of %s", kind, i+1, subject), site); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// groupEncodes returns particleEncodes' error for a nested model group
+// particle of group, the inline one or the {model group} of the definition a
+// <group ref> names, occurring as occurs, its own or, for a choice's
+// alternative, goshape.BranchOccurs' (§3.7.2 declare-namedModelGroup), at
+// site, subject naming it, by the hold goshape.ParticleHold answers for it,
+// as Decode's sequence.nested binds it. Spliced examines group's particles in
+// its place, an all group declining first; OnceChoice examines its
+// alternatives, as alternatives; Flattened, inside an occurrence field's
+// item, declines by constructNestedGroup, as Decode's bind does, since the
+// item's partition reads no repetition of a model group inside it, and
+// otherwise examines each basic particle of its reach (reachEach); Occurrence,
+// inside an item, declines by constructNestedGroup too, whatever its
+// occurrence, and otherwise, an all group declining first, examines its
+// particles, a choice's as alternatives, each inside the field's item. Each
+// particle examined inside group keeps site's item, and a Flattened or
+// Occurrence group sets site.matcher. ParticleHold's errors are plain,
+// prefixed by subject.
+func (w *encodeWalk) groupEncodes(group xsd.ModelGroup, occurs xsd.Occurs, subject string, site particleSite) error {
+	hold, err := goshape.ParticleHold(w.schema, group, occurs)
+	if err != nil {
+		return fmt.Errorf("codec: %s: %w", subject, err)
+	}
+	switch hold {
+	case goshape.Spliced:
+		if group.Compositor() == xsd.CompositorAll {
+			return encodeDecline(constructAllGroup, subject)
+		}
+		return w.particlesEncode(group.Particles(), "particle", subject, particleSite{item: site.item, matcher: site.matcher})
+	case goshape.OnceChoice:
+		return w.particlesEncode(group.Particles(), "alternative", subject, particleSite{item: site.item, alternative: true, matcher: site.matcher})
+	case goshape.Flattened:
+		if site.item {
+			return encodeDecline(constructNestedGroup, subject)
+		}
+		*site.matcher = true
+		return w.reachEach(group, "the flattened "+subject, subject)
+	case goshape.Occurrence:
+		if site.item {
+			return encodeDecline(constructNestedGroup, subject)
+		}
+		if group.Compositor() == xsd.CompositorAll {
+			return encodeDecline(constructAllGroup, subject)
+		}
+		*site.matcher = true
+		inner := particleSite{item: true, alternative: group.Compositor() == xsd.CompositorChoice, matcher: site.matcher}
+		kind := "particle"
+		if inner.alternative {
+			kind = "alternative"
+		}
+		return w.particlesEncode(group.Particles(), kind, subject, inner)
+	}
+	// The zero Hold is an internal bug, never input.
+	panic(fmt.Sprintf("codec: invalid goshape.Hold %d", hold))
+}
+
 // reachEncodes returns contentEncodes' error for group, the model group of
 // ct's content {particle}, which codegen flattens, subject naming ct: each
-// basic particle goshape.Reach visits, in reach order, as particleEncodes
-// admits it, the subject counting the alternatives the slice's sealed
-// interface holds (bindReach), a model group particle with {max occurs} 0
-// declining by particleEncodes too, and goshape.Reach's own error plain,
-// prefixed by subject, as bindReach's is; then ct's content model where
-// xsd.Schema.ContentMatcher does not track it, with or without a wildcard
-// particle in the reach, since Append attributes every child of a flattened
-// content model through a Matcher (flattenedCheck), as Decode's bindFlattened
-// does.
+// basic particle goshape.Reach visits (reachEach), the subject counting the
+// alternatives the slice's sealed interface holds (bindReach), as bindReach's
+// error is prefixed; then ct's content model where xsd.Schema.ContentMatcher
+// does not track it, with or without a wildcard particle in the reach, since
+// Append attributes every child of a flattened content model through a
+// Matcher (flattenedCheck), as Decode's bindFlattened does.
 func (w *encodeWalk) reachEncodes(ct xsd.ComplexType, group xsd.ModelGroup, subject string) error {
+	if err := w.reachEach(group, "the flattened content {particle} of "+subject, subject); err != nil {
+		return err
+	}
+	if _, tracked := w.schema.ContentMatcher(ct); !tracked {
+		return encodeDecline(constructUntrackedModel, subject)
+	}
+	return nil
+}
+
+// reachEach returns particleEncodes' error for each basic particle
+// goshape.Reach visits in group, a model group codegen flattens, the content
+// {particle}'s or a nested one's, in reach order, alternative n named
+// "alternative n of" flattened, which names the flattened particle, a model
+// group particle with {max occurs} 0 declining by particleEncodes too, and
+// goshape.Reach's own error plain, prefixed by subject.
+func (w *encodeWalk) reachEach(group xsd.ModelGroup, flattened, subject string) error {
 	alt := 0
 	// visitErr is particleEncodes' error, which already carries its context
 	// and, set, ended the walk as goshape.Reach's error, so that only
-	// goshape.Reach's own is wrapped.
+	// goshape.Reach's own is wrapped. The reach's site needs no matcher of its
+	// own: its caller builds the flattened particle's.
 	var visitErr error
+	var matcher bool
 	err := goshape.Reach(w.schema, group, func(p xsd.Particle, _ []int) error {
 		alt++
-		visitErr = w.particleEncodes(p, fmt.Sprintf("alternative %d of the flattened content {particle} of %s", alt, subject))
+		visitErr = w.particleEncodes(p, fmt.Sprintf("alternative %d of %s", alt, flattened), particleSite{matcher: &matcher})
 		return visitErr
 	})
 	if visitErr != nil {
@@ -1121,51 +1393,45 @@ func (w *encodeWalk) reachEncodes(ct xsd.ComplexType, group xsd.ModelGroup, subj
 	if err != nil {
 		return fmt.Errorf("codec: %s: %w", subject, err)
 	}
-	if _, tracked := w.schema.ContentMatcher(ct); !tracked {
-		return encodeDecline(constructUntrackedModel, subject)
-	}
 	return nil
-}
-
-// wildcardParticle reports whether p's {term} is a wildcard. TermOrRef and
-// Term are closed sums, so the assertions are STYLE T2's sealed-sum exception.
-func wildcardParticle(p xsd.Particle) bool {
-	resolved, ok := p.Term().(xsd.ResolvedTerm)
-	if !ok {
-		return false
-	}
-	_, ok = resolved.Term.(xsd.Wildcard)
-	return ok
 }
 
 // particleEncodes returns elementEncodes' error for the particle p of a
 // spliced content sequence, of a content choice's alternative, of a
-// sequence or choice held in an occurrence field, or a basic particle a
-// flattened content {particle} reaches (reachEncodes), subject naming p: {max
-// occurs} 0, then a term other than an element declaration or a wildcard with
-// {process contents} skip or lax, which is examined no further, then the
-// declaration as the document element's is examined (encodeWalk.element). The
-// declaration of an <element ref> is the top-level one its name resolves to
-// through [xsd.Schema.Element] (§3.3.2.4 ref.elt.global), as Decode's
-// particleTerm follows it, a name resolving to none a plain error. Where
-// codegen gives its field a sealed interface (goshape.SubstitutionSum), an
-// abstract declaration's always, the declarations examined are the members
-// that interface has a branch for, in group order, the first decline winning,
-// since Append writes each under its own expanded name (§3.9.4.3 cvc-accept
-// clause 2.3.2), and the declaration itself only as one of them, so that with
-// none nothing is examined. Otherwise the declaration alone is examined, as a
-// local one is, an element of its own expanded name matching the particle
-// (clause 2.3.1). A member whose type reaches the declaration again answers
-// through encodeWalk.walked. {term} is a closed sum, so the switches are
-// STYLE T2's sealed-sum exception.
-func (w *encodeWalk) particleEncodes(p xsd.Particle, subject string) error {
+// sequence or choice held in an occurrence field, of a nested model group
+// (encodeWalk.groupEncodes), or a basic particle a flattened content
+// {particle} or a nested one reaches (reachEach), at site, subject naming p:
+// {max occurs} 0, then a model group term, inline or the {model group} of the
+// definition a <group ref> names (goshape.ModelGroupTerm), as groupEncodes
+// examines it at the occurrence site reads it at (particleSite.occurs), a
+// <group ref> naming none a plain error, prefixed by subject; a wildcard term,
+// which sets site's matcher and declines with {process contents} strict, and is
+// examined no further; and otherwise the element declaration, examined as the
+// document element's is (encodeWalk.element). The declaration of an <element
+// ref> is the top-level one its name resolves to through [xsd.Schema.Element]
+// (§3.3.2.4 ref.elt.global), as Decode's particleTerm follows it, a name
+// resolving to none a plain error. Where codegen gives its field a sealed
+// interface (goshape.SubstitutionSum), an abstract declaration's always, the
+// declarations examined are the members that interface has a branch for, in
+// group order, the first decline winning, since Append writes each under its
+// own expanded name (§3.9.4.3 cvc-accept clause 2.3.2), and the declaration
+// itself only as one of them, so that with none nothing is examined. Otherwise
+// the declaration alone is examined, as a local one is, an element of its own
+// expanded name matching the particle (clause 2.3.1). A member whose type
+// reaches the declaration again answers through encodeWalk.walked. {term} is a
+// closed sum, so the switches are STYLE T2's sealed-sum exception.
+func (w *encodeWalk) particleEncodes(p xsd.Particle, subject string, site particleSite) error {
 	if upper, bounded := p.Occurs().Max(); bounded && upper == 0 {
 		return encodeDecline(constructVacuousParticle, subject)
 	}
 	var el xsd.ElementDeclaration
 	switch term := p.Term().(type) {
 	case xsd.ModelGroupRef:
-		return encodeDecline(constructNestedGroup, subject)
+		group, _, err := goshape.ModelGroupTerm(w.schema, term)
+		if err != nil {
+			return fmt.Errorf("codec: %s: %w", subject, err)
+		}
+		return w.groupEncodes(group, site.occurs(p), subject, site)
 	case xsd.ElementDeclarationRef:
 		decl, ok := w.schema.Element(term.Name)
 		if !ok {
@@ -1184,8 +1450,9 @@ func (w *encodeWalk) particleEncodes(p xsd.Particle, subject string) error {
 	case xsd.ResolvedTerm:
 		switch term := term.Term.(type) {
 		case xsd.ModelGroup:
-			return encodeDecline(constructNestedGroup, subject)
+			return w.groupEncodes(term, site.occurs(p), subject, site)
 		case xsd.Wildcard:
+			*site.matcher = true
 			// A strict match with no governing declaration or type invalidates
 			// its parent (§3.3.5.1 sic-e-outcome clause 1.1.3) and one with
 			// either is assessed against it (§3.3.4.6 cvc-assess-elt clause 1),
@@ -2234,16 +2501,17 @@ func (e *encoder) declaredPrefix(space string) string {
 }
 
 // attributionCheck is how Append holds the children it writes into one
-// element's content, whose content model holds a wildcard particle or is
-// flattened, to that content model (§3.9.4.2 cvc-particle, §3.9.4.3
-// cvc-accept, §3.8.4.3 cvc-model-group): a, a matchAttributor over a fresh
-// Matcher of the content model's {content type} and its wildcard particles'
-// places, or a flattened one's every basic particle's (flattenedCheck), which
-// decides for each name cvc-wildcard (§3.10.4.1), clauses 1 to 3, {disallowed
-// names} included, and cvc-accept's element particle before wildcard particle
-// precedence; elements, the content model's element particles' places
-// (childIndex.elements), or a flattened one's every basic particle's; and
-// subject, the content's complex type and element as typeSubject names them.
+// element's content, whose content model holds a wildcard particle or a
+// nested flattened particle, or is flattened, to that content model (§3.9.4.2
+// cvc-particle, §3.9.4.3 cvc-accept, §3.8.4.3 cvc-model-group): a, a
+// matchAttributor over a fresh Matcher of the content model's {content type}
+// and its wildcard particles' places, or a flattened one's every basic
+// particle's (flattenedCheck), which decides for each name cvc-wildcard
+// (§3.10.4.1), clauses 1 to 3, {disallowed names} included, and cvc-accept's
+// element particle before wildcard particle precedence; elements, the content
+// model's element particles' places (childIndex.elements), or a flattened
+// one's every basic particle's; and subject, the content's complex type and
+// element as typeSubject names them.
 type attributionCheck struct {
 	a        *matchAttributor
 	elements []place
@@ -2252,12 +2520,16 @@ type attributionCheck struct {
 
 // attribution returns the attributionCheck of the content of el, of the
 // complex type typ, whose children x attributes, or nil where x places no
-// wildcard particle, a content model whose children Append writes unchecked.
-// Item 4 of [Append]'s doc declines a content model holding a wildcard
-// particle that xsd.Schema.ContentMatcher does not track (contentEncodes), so
-// that a matcherSlot.attributor error here is an internal bug, which panics.
-func (e *encoder) attribution(x childIndex, el xsd.ElementDeclaration, typ xsd.ComplexType) *attributionCheck {
-	if x.matcher == nil || len(x.matcher.places) == 0 {
+// wildcard particle and flat is false, a content model whose children Append
+// writes unchecked. flat is whether the content holds a nested flattened
+// particle's slice (flatHolder), whose items' order is the caller's, and
+// whose bind gave x its matcherSlot (sequence.flatten). Item 4 of [Append]'s
+// doc declines a content model holding a wildcard particle or a nested
+// flattened particle that xsd.Schema.ContentMatcher does not track
+// (contentEncodes), so that a matcherSlot.attributor error here is an
+// internal bug, which panics.
+func (e *encoder) attribution(x childIndex, el xsd.ElementDeclaration, typ xsd.ComplexType, flat bool) *attributionCheck {
+	if x.matcher == nil || len(x.matcher.places) == 0 && !flat {
 		return nil
 	}
 	a, err := x.matcher.attributor(e.schema)
