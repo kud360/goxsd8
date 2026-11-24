@@ -390,12 +390,13 @@ func (s attributionSlot) take(e *encoder, decl xsd.ElementDeclaration, path stri
 // encoded returns x, an arm of the filler item 5's check returns or of the
 // binder under it, as C, what Append's write reads it as: the writer capability, the
 // texter capability of simple content's contentFiller, the elementWriter capability of
-// a fieldSink's elementReader, the particleWriter capability of a contentMember's or a
-// branchArm's elementMember or wildcardMember, or a closed sum's arm, a sink's
-// fieldSink, a fieldArm's scalarArm or a scalarElem's atomic. It is the write's one
-// assertion of the binder's arms. Invariant: where item 4 of [Append]'s doc admits a
-// construct, every arm the binder builds for it that the write reaches is such a C. A
-// failed assertion breaks it, an internal bug, never input, and panics naming x's type.
+// a fieldSink's elementReader, the memberWriter capability of a boundMember, the
+// particleWriter capability of a contentMember's or a branchArm's elementMember or
+// wildcardMember, or a closed sum's arm, a boundMember's fieldSink, a fieldArm's
+// scalarArm or a scalarElem's atomic. It is the write's one assertion of the binder's
+// arms. Invariant: where item 4 of [Append]'s doc admits a construct, every arm the
+// binder builds for it that the write reaches is such a C. A failed assertion breaks
+// it, an internal bug, never input, and panics naming x's type.
 func encoded[C any](x any) C {
 	c, ok := x.(C)
 	if !ok {
@@ -508,36 +509,56 @@ func (c *boundChoiceRoot) write(e *encoder, v reflect.Value, at writeAt) error {
 	return nil
 }
 
-// write writes the elements of each of b's members from its field, member i's
-// field b.first+i of v, read by b.sinks[i] (writeMembers), under the content's
-// attributionCheck (encoder.attribution).
+// write writes the elements of each of b's members from its field of v, each
+// member by its bound state (writeMembers), under the content's
+// attributionCheck (encoder.attribution), its first target the sequence's
+// base.
 func (b *boundSequence) write(e *encoder, v reflect.Value, at writeAt) error {
 	check := e.attribution(b.sequence.index, at.el, at.typ)
-	if err := writeMembers(e, b.sequence, b.sinks, v, b.first, at, check); err != nil {
+	if err := writeMembers(e, b.sequence.members, b.members, v, at, attributionSlot{check: check, target: b.sequence.base}); err != nil {
 		return err
 	}
 	check.end(e, at.path)
 	return nil
 }
 
-// writeMembers writes the elements of each of s's members from its field of
-// v, member i's field first+i, read by sinks[i], in member order, each taken
-// by check: each member is an element or wildcard particle's field, which
-// takes one attribution target (field.targets), so member i's sink is
-// sinks[i] and its target s.base+i.
-func writeMembers(e *encoder, s *sequence, sinks []sink, v reflect.Value, first int, at writeAt, check *attributionCheck) error {
-	for i, m := range s.members {
-		j := first + i
-		if err := encoded[particleWriter](m).writeElements(e, sinks[i], v.Field(j), writeAt{el: at.el, typ: at.typ, path: at.path + "." + v.Type().Field(j).Name}, attributionSlot{check: check, target: s.base + i}); err != nil {
+// writeMembers writes the elements of each of members, the members of a
+// sequence, of a choice's alternative or of an occurrence field's item, from
+// its field of v, the struct holding them, in member order, members[i] by
+// bound[i], its own bound state (memberWriter), each taken by slot.check:
+// member i's first attribution target is slot.target, the first member's,
+// plus the targets every earlier member takes (contentMember.targets).
+func writeMembers(e *encoder, members []contentMember, bound []boundMember, v reflect.Value, at writeAt, slot attributionSlot) error {
+	target := slot.target
+	for i, m := range members {
+		if err := encoded[memberWriter](bound[i]).writeMember(e, m, v, at, attributionSlot{check: slot.check, target: target}); err != nil {
 			return err
 		}
+		target += m.targets()
 	}
 	return nil
 }
 
+// A memberWriter is a boundMember Append writes, the bound state of a member
+// of a sequence, a choice's alternative or an occurrence field's item:
+// writeMember writes the elements of m, the member it was bound from, from
+// its field of v, the struct holding it, at.path being v's Go path, its first
+// attribution target slot.target in slot.check, and returns a backend fault.
+// Its implementers are fieldSink, an element or wildcard particle's, which
+// reads m as the particleWriter it is.
+type memberWriter interface {
+	writeMember(e *encoder, m contentMember, v reflect.Value, at writeAt, slot attributionSlot) error
+}
+
+// writeMember writes the elements of m's particle from field s.index of v
+// (particleWriter.writeElements), read by s, taken at slot.
+func (s fieldSink) writeMember(e *encoder, m contentMember, v reflect.Value, at writeAt, slot attributionSlot) error {
+	return encoded[particleWriter](m).writeElements(e, s, v.Field(s.index), writeAt{el: at.el, typ: at.typ, path: at.path + "." + v.Type().Field(s.index).Name}, slot)
+}
+
 // write writes the branch the choice's sealed interface holds, field b.index
 // of v (writeChoice), then the elements of each member of the rest, whose
-// fields follow it, member i read by b.rest[i] (writeMembers), all under the
+// fields follow it, each by its bound state (writeMembers), all under the
 // content's attributionCheck (encoder.attribution).
 func (b *boundContentChoice) write(e *encoder, v reflect.Value, at writeAt) error {
 	rest := b.content.rest
@@ -545,7 +566,7 @@ func (b *boundContentChoice) write(e *encoder, v reflect.Value, at writeAt) erro
 	if err := writeChoice(e, b.content.choice.sealed.alts, b.choice, v.Field(b.index), writeAt{el: at.el, typ: at.typ, path: at.path + "." + v.Type().Field(b.index).Name}, check); err != nil {
 		return err
 	}
-	if err := writeMembers(e, rest, b.rest, v, b.index+1, at, check); err != nil {
+	if err := writeMembers(e, rest.members, b.rest, v, at, attributionSlot{check: check, target: rest.base}); err != nil {
 		return err
 	}
 	check.end(e, at.path)
@@ -573,10 +594,10 @@ func (b boundOccurrence) write(e *encoder, v reflect.Value, at writeAt) error {
 }
 
 // writeItem writes the elements of each member of the sequence or all group
-// from its field of v, the item's struct, member i's field i, read by
-// b.fields[i] (writeMembers).
+// from its field of v, the item's struct, member i's field i, each by its
+// bound state (writeMembers), the first target the sequence's base.
 func (b boundSequenceItem) writeItem(e *encoder, v reflect.Value, at writeAt, check *attributionCheck) error {
-	return writeMembers(e, b.sequence, b.fields, v, 0, at, check)
+	return writeMembers(e, b.sequence.members, b.members, v, at, attributionSlot{check: check, target: b.sequence.base})
 }
 
 // writeItem writes the branch v, a value of the choice's sealed interface,
@@ -590,15 +611,14 @@ func (c boundChoiceItem) writeItem(e *encoder, v reflect.Value, at writeAt, chec
 // occurrence field, whose alternatives are alts, holds, bc that interface
 // as item 5's check bound it: its branches[j], the branch type placed at
 // alts[j] (sealed.checkSite), is matched to v's dynamic type, and the members
-// of alts[j] are written from the branch struct's fields, in field order,
-// member i read by branches[j].sinks[i] as boundSequence's write pairs them,
-// its target the targets of every earlier alternative (branchTargets) plus i,
-// under check, the attributionCheck of the content the choice is written
-// into, nil for none. The nil interface writes nothing, the empty match, but is
-// item 6 of [Append]'s doc where no alternative is emptiable
-// (choiceEmptiable), and so is a dynamic type bc places at no alternative, a
-// pointer to a branch among them; at.typ is the complex type whose content the
-// choice is.
+// of alts[j] are written from the branch struct's fields, in field order, each
+// by its bound state in branches[j] (writeMembers), the first target the
+// targets of every earlier alternative (branchTargets), under check, the
+// attributionCheck of the content the choice is written into, nil for none. The
+// nil interface writes nothing, the empty match, but is item 6 of [Append]'s
+// doc where no alternative is emptiable (choiceEmptiable), and so is a dynamic
+// type bc places at no alternative, a pointer to a branch among them; at.typ is
+// the complex type whose content the choice is.
 func writeChoice(e *encoder, alts []branchArm, bc *boundChoice, v reflect.Value, at writeAt, check *attributionCheck) error {
 	if v.IsNil() {
 		if !choiceEmptiable(alts) {
@@ -616,12 +636,8 @@ func writeChoice(e *encoder, alts []branchArm, bc *boundChoice, v reflect.Value,
 	for _, a := range alts[:j] {
 		first += branchTargets(a)
 	}
-	for i, m := range alts[j].branchMembers() {
-		if err := encoded[particleWriter](m).writeElements(e, bc.branches[j].sinks[i], b.Field(i), writeAt{el: at.el, typ: at.typ, path: at.path + ".(" + typePath(b.Type()) + ")." + b.Type().Field(i).Name}, attributionSlot{check: check, target: first + i}); err != nil {
-			return err
-		}
-	}
-	return nil
+	branch := writeAt{el: at.el, typ: at.typ, path: at.path + ".(" + typePath(b.Type()) + ")"}
+	return writeMembers(e, alts[j].branchMembers(), bc.branches[j].members, b, branch, attributionSlot{check: check, target: first})
 }
 
 // branchOf returns the index in bc.branches of the branch whose type is t, the
@@ -663,7 +679,7 @@ func (b boundFlattened) write(e *encoder, v reflect.Value, at writeAt) error {
 			continue
 		}
 		field := writeAt{el: at.el, typ: at.typ, path: ipath + ".(" + typePath(br.Type()) + ")." + br.Type().Field(0).Name}
-		if err := alts[j].writeElements(e, b.bound.branches[j].sinks[0], br.Field(0), field, attributionSlot{check: check, target: j}); err != nil {
+		if err := alts[j].writeElements(e, encoded[fieldSink](b.bound.branches[j].members[0]), br.Field(0), field, attributionSlot{check: check, target: j}); err != nil {
 			return err
 		}
 	}
@@ -696,7 +712,7 @@ func unemptiable(alts []branchArm) string {
 // backend fault; occurs is the particle's own {min occurs}
 // and {max occurs}. Its implementers are elementMember and wildcardMember.
 type particleWriter interface {
-	writeElements(e *encoder, s sink, f reflect.Value, at writeAt, slot attributionSlot) error
+	writeElements(e *encoder, s fieldSink, f reflect.Value, at writeAt, slot attributionSlot) error
 	occurs() xsd.Occurs
 }
 
@@ -710,8 +726,8 @@ func (m wildcardMember) occurs() xsd.Occurs { return m.own }
 // writeOccurring states, each by the elementWriter s, the field's sink, reads
 // it with, as an element of m.decl or, for a groupReader, of the member its
 // value holds, taken by slot.
-func (m elementMember) writeElements(e *encoder, s sink, f reflect.Value, at writeAt, slot attributionSlot) error {
-	w := encoded[elementWriter](encoded[fieldSink](s).read)
+func (m elementMember) writeElements(e *encoder, s fieldSink, f reflect.Value, at writeAt, slot attributionSlot) error {
+	w := encoded[elementWriter](s.read)
 	return e.writeOccurring(m.shape, m.own, m.held, "the particle of "+declSubject(m.decl), f, at, func(v reflect.Value, path string) error {
 		return w.writeElement(e, m.decl, v, path, slot)
 	})
@@ -727,7 +743,7 @@ func (m elementMember) writeElements(e *encoder, s sink, f reflect.Value, at wri
 // Item 4 declines a strict wildcard particle (particleEncodes), so that any
 // other m.process is an internal bug, which panics, as encoded's assertion
 // does.
-func (m wildcardMember) writeElements(e *encoder, _ sink, f reflect.Value, at writeAt, slot attributionSlot) error {
+func (m wildcardMember) writeElements(e *encoder, _ fieldSink, f reflect.Value, at writeAt, slot attributionSlot) error {
 	var hold rawHold
 	// {process contents} is a closed set, so the switch is STYLE T2's
 	// sealed-sum exception.
@@ -841,7 +857,7 @@ func (g groupReader) writeElement(e *encoder, head xsd.ElementDeclaration, v ref
 		e.invalidate(fmt.Errorf("codec: Append: %s holds a %s, which the WithBranches set of %s places at no branch of the substitution group of %s, so that Decode returns no such value", path, br.Type(), v.Type(), declSubject(head)))
 		return nil
 	}
-	w := encoded[elementWriter](encoded[fieldSink](g.bound.branches[j].sinks[0]).read)
+	w := encoded[elementWriter](encoded[fieldSink](g.bound.branches[j].members[0]).read)
 	return w.writeElement(e, g.members[j], br.Field(0), path+".("+typePath(br.Type())+")."+br.Type().Field(0).Name, slot)
 }
 

@@ -2529,8 +2529,9 @@ func (b boundValue) fill(r *xmltree.Reader, root *xmltree.StartElement, out refl
 // alone, if any. Its members' attribution targets are numbered in bind order from base,
 // a field or an elementMember taking one, a *choice those of each alternative's branch
 // members in turn (branchTargets), a flatSlice one per alternative and a *nestedOccurrence
-// those of its item, and check returns one sink per target in that order, so the target index
-// holds for a child is the index of the sink that sets it.
+// those of its item, and check returns each member bound, whose sinks in turn
+// (targetSinks) are one per target in that order, so the target index holds for a child is
+// the index of the sink that sets it.
 type sequence struct {
 	p       *pipeline
 	members []contentMember
@@ -2659,9 +2660,9 @@ type contentMember interface {
 	// (branchTargets), a *flatSlice one per alternative, and a *nestedOccurrence
 	// those of its item.
 	targets() int
-	// sinks holds field index of t to the member, item 6 of Decode's doc, and
-	// returns one sink per target, in target order.
-	sinks(t reflect.Type, index int, cx *checkContext) ([]sink, error)
+	// bindMember holds field index of t to the member, item 6 of Decode's doc,
+	// and returns the member bound.
+	bindMember(t reflect.Type, index int, cx *checkContext) (boundMember, error)
 	// admits reports whether got, a branch struct's field, could be the
 	// member, a nested interface's branch types as sets supplies them: every
 	// got sinks holds to the member it admits. It reads sets, never a
@@ -2669,6 +2670,29 @@ type contentMember interface {
 	admits(got reflect.StructField, sets branchSets) bool
 	// goName is the member's field's Go name.
 	goName() string
+}
+
+// A boundMember is a contentMember whose check held, the member's own bound
+// state, a closed sum: a fieldSink, a field's, an elementMember's or a
+// wildcardMember's; a boundNestedChoice, a *choice's; a boundFlatSlice, a
+// *flatSlice's; or a boundNestedOccurrence, a *nestedOccurrence's. A sequence,
+// a branch struct and an occurrence's struct item keep one per member, in
+// member order, and derive their per-target sinks from them (targetSinks)
+// where they read them.
+type boundMember interface {
+	// sinks returns one sink per target of the member, in target order.
+	sinks() []sink
+}
+
+// targetSinks returns the sinks of each of members in turn
+// (boundMember.sinks), one per attribution target, in target order: the sink
+// of target k sets that target's field.
+func targetSinks(members []boundMember) []sink {
+	var sinks []sink
+	for _, m := range members {
+		sinks = append(sinks, m.sinks()...)
+	}
+	return sinks
 }
 
 // A sink sets the struct field of out its member's check held from the child
@@ -2779,14 +2803,14 @@ func (field) targets() int { return 1 }
 // goName is f's Go name.
 func (f field) goName() string { return f.name }
 
-// sinks holds field index of t to f (field.check) and returns its one
+// bindMember holds field index of t to f (field.check) and returns its
 // fieldSink.
-func (f field) sinks(t reflect.Type, index int, cx *checkContext) ([]sink, error) {
+func (f field) bindMember(t reflect.Type, index int, cx *checkContext) (boundMember, error) {
 	read, err := f.check(t, index, cx)
 	if err != nil {
 		return nil, err
 	}
-	return []sink{fieldSink{index: index, shape: f.shape, read: read}}, nil
+	return fieldSink{index: index, shape: f.shape, read: read}, nil
 }
 
 // fieldSink is a field whose check held: field index of the struct, of
@@ -2796,6 +2820,9 @@ type fieldSink struct {
 	shape shape
 	read  elementReader
 }
+
+// sinks is s alone: a field takes one attribution target.
+func (s fieldSink) sinks() []sink { return []sink{s} }
 
 // put stores in field s.index of out the value s.read reads from start.
 func (s fieldSink) put(p *pipeline, r *xmltree.Reader, start *xmltree.StartElement, out reflect.Value, st *fillState) error {
@@ -3123,25 +3150,25 @@ func (s *sequence) width() int { return len(s.members) }
 // check holds t's fields from field first on to s's members, in name, order
 // and Go type, and returns the boundSequence that sets them.
 func (s *sequence) check(t reflect.Type, first int, cx *checkContext) (contentFiller, error) {
-	sinks, err := s.memberSinks(t, first, cx)
+	members, err := bindEach(s.members, t, first, cx)
 	if err != nil {
 		return nil, err
 	}
-	return &boundSequence{sequence: s, first: first, sinks: sinks}, nil
+	return &boundSequence{sequence: s, members: members}, nil
 }
 
-// memberSinks holds t's fields from field first on to s's members, as check
-// does, and returns each member's sinks, in target order.
-func (s *sequence) memberSinks(t reflect.Type, first int, cx *checkContext) ([]sink, error) {
-	var sinks []sink
-	for i, m := range s.members {
-		got, err := m.sinks(t, first+i, cx)
+// bindEach holds field first+i of t to members[i], each in turn
+// (contentMember.bindMember), and returns each member bound, in member order.
+func bindEach(members []contentMember, t reflect.Type, first int, cx *checkContext) ([]boundMember, error) {
+	bound := make([]boundMember, 0, len(members))
+	for i, m := range members {
+		b, err := m.bindMember(t, first+i, cx)
 		if err != nil {
 			return nil, err
 		}
-		sinks = append(sinks, got...)
+		bound = append(bound, b)
 	}
-	return sinks, nil
+	return bound, nil
 }
 
 // contentChoice is a content choice occurring once as Decode reads it
@@ -3164,7 +3191,7 @@ func (c *contentChoice) check(t reflect.Type, first int, cx *checkContext) (cont
 	if err != nil {
 		return nil, err
 	}
-	rest, err := c.rest.memberSinks(t, first+1, cx)
+	rest, err := bindEach(c.rest.members, t, first+1, cx)
 	if err != nil {
 		return nil, err
 	}
@@ -3172,42 +3199,42 @@ func (c *contentChoice) check(t reflect.Type, first int, cx *checkContext) (cont
 }
 
 // boundContentChoice is content whose check held: choice, the sealed
-// interface held in field index, bound, and rest, the sinks of the targets
-// that follow the choice's.
+// interface held in field index, bound, and rest, each member of the rest
+// bound, whose targets follow the choice's.
 type boundContentChoice struct {
 	content *contentChoice
 	index   int
 	choice  *boundChoice
-	rest    []sink
+	rest    []boundMember
 }
 
 // fill sets, from each child element, through the sink of the target
 // eachChild attributes it to, the field of that target, the choice's
-// interface's (choice.sinksOf) or a rest member's, every sink sharing st.
+// interface's (choice.sinksOf) or a rest member's (targetSinks), every sink
+// sharing st.
 func (b *boundContentChoice) fill(r *xmltree.Reader, _ *xmltree.StartElement, out reflect.Value, st *fillState) error {
 	s := b.content.rest
-	sinks := append(b.content.choice.sinksOf(b.index, b.choice), b.rest...)
+	sinks := append(b.content.choice.sinksOf(b.index, b.choice), targetSinks(b.rest)...)
 	return eachChild(r, s.p.schema, s.index, st, func(start *xmltree.StartElement, i int) error {
 		return sinks[i].put(s.p, r, start, out, st)
 	})
 }
 
-// boundSequence is a sequence whose members check held, its member i in
-// field first+i of the struct: sinks[i] sets the field of attribution target
-// i.
+// boundSequence is a sequence whose members check held: members[i] is its
+// member i bound, in its field of the struct.
 type boundSequence struct {
 	sequence *sequence
-	first    int
-	sinks    []sink
+	members  []boundMember
 }
 
 // fill sets, from each child element, through the sink of the target
-// eachChild attributes it to, the field of that target's member, every sink
-// sharing st.
+// eachChild attributes it to (targetSinks), the field of that target's
+// member, every sink sharing st.
 func (b *boundSequence) fill(r *xmltree.Reader, _ *xmltree.StartElement, out reflect.Value, st *fillState) error {
 	s := b.sequence
+	sinks := targetSinks(b.members)
 	return eachChild(r, s.p.schema, s.index, st, func(start *xmltree.StartElement, i int) error {
-		return b.sinks[i].put(s.p, r, start, out, st)
+		return sinks[i].put(s.p, r, start, out, st)
 	})
 }
 
@@ -3521,18 +3548,10 @@ func coversAlts(a, b *choice) bool {
 }
 
 // bindBranch holds bt to a's branch struct, each field to its member
-// (contentMember.sinks), and returns one sink per target of a, in target
-// order, each setting a value of bt.
-func bindBranch(a branchArm, bt reflect.Type, cx *checkContext) ([]sink, error) {
-	var sinks []sink
-	for i, m := range a.branchMembers() {
-		got, err := m.sinks(bt, i, cx)
-		if err != nil {
-			return nil, err
-		}
-		sinks = append(sinks, got...)
-	}
-	return sinks, nil
+// (contentMember.bindMember), and returns each member bound, in member order,
+// each setting a value of bt.
+func bindBranch(a branchArm, bt reflect.Type, cx *checkContext) ([]boundMember, error) {
+	return bindEach(a.branchMembers(), bt, 0, cx)
 }
 
 // choice is a choice occurring once as codegen emits it: a sealed interface
@@ -3731,15 +3750,26 @@ func sealedShaped(it reflect.Type) bool {
 	return it.Kind() == reflect.Interface && it.NumMethod() == 1 && !it.Method(0).IsExported()
 }
 
-// sinks holds field index of t to c (choice.bind), and returns its sinks
-// (choice.sinksOf).
-func (c *choice) sinks(t reflect.Type, index int, cx *checkContext) ([]sink, error) {
+// bindMember holds field index of t to c (choice.bind), and returns the
+// boundNestedChoice of c held there.
+func (c *choice) bindMember(t reflect.Type, index int, cx *checkContext) (boundMember, error) {
 	bc, err := c.bind(t, index, cx)
 	if err != nil {
 		return nil, err
 	}
-	return c.sinksOf(index, bc), nil
+	return boundNestedChoice{choice: c, index: index, bound: bc}, nil
 }
+
+// boundNestedChoice is a nested choice whose check held: choice, held in
+// field index of the struct, its sealed interface bound.
+type boundNestedChoice struct {
+	choice *choice
+	index  int
+	bound  *boundChoice
+}
+
+// sinks is the choice's (choice.sinksOf).
+func (b boundNestedChoice) sinks() []sink { return b.choice.sinksOf(b.index, b.bound) }
 
 // bind holds field index of t to the one holding c's interface, c's name, not
 // embedded, of c's sealed interface (sealed.checkSite), and returns that
@@ -4046,18 +4076,31 @@ func (f *flatSlice) checkField(t reflect.Type, index int, cx *checkContext) (*bo
 	return f.sealed.checkSite(got.Type.Elem(), fieldAt{owner: t, index: index}.site(), cx)
 }
 
-// sinks holds field index of t to f (flatSlice.checkField) and returns one
-// flatSink per alternative, in order.
-func (f *flatSlice) sinks(t reflect.Type, index int, cx *checkContext) ([]sink, error) {
+// bindMember holds field index of t to f (flatSlice.checkField) and returns
+// the boundFlatSlice of f held there.
+func (f *flatSlice) bindMember(t reflect.Type, index int, cx *checkContext) (boundMember, error) {
 	bc, err := f.checkField(t, index, cx)
 	if err != nil {
 		return nil, err
 	}
-	sinks := make([]sink, len(f.sealed.alts))
+	return boundFlatSlice{slice: f, index: index, bound: bc}, nil
+}
+
+// boundFlatSlice is a nested flatSlice whose check held: slice, held in field
+// index of the struct, its sealed interface bound.
+type boundFlatSlice struct {
+	slice *flatSlice
+	index int
+	bound *boundChoice
+}
+
+// sinks returns one flatSink per alternative, in order.
+func (b boundFlatSlice) sinks() []sink {
+	sinks := make([]sink, len(b.slice.sealed.alts))
 	for j := range sinks {
-		sinks[j] = flatSink{index: index, alt: j, bound: bc}
+		sinks[j] = flatSink{index: b.index, alt: j, bound: b.bound}
 	}
-	return sinks, nil
+	return sinks
 }
 
 // flatSink is alternative alt of a nested flatSlice whose check held, bound,
@@ -4080,7 +4123,7 @@ func (s flatSink) put(_ *pipeline, r *xmltree.Reader, start *xmltree.StartElemen
 // item, its sink given st, the state of the fill putting start.
 func (bc *boundChoice) appendItem(r *xmltree.Reader, start *xmltree.StartElement, i int, slice reflect.Value, st *fillState) error {
 	branch := reflect.New(bc.branches[i].t).Elem()
-	if err := bc.branches[i].sinks[0].put(bc.p, r, start, branch, st); err != nil {
+	if err := targetSinks(bc.branches[i].members)[0].put(bc.p, r, start, branch, st); err != nil {
 		return err
 	}
 	item := reflect.New(slice.Type().Elem()).Elem()
@@ -4109,11 +4152,11 @@ func checkOpen(open *field, t reflect.Type, index int, cx *checkContext) (sink, 
 	if open == nil {
 		return nil, nil
 	}
-	sinks, err := open.sinks(t, index, cx)
+	b, err := open.bindMember(t, index, cx)
 	if err != nil {
 		return nil, err
 	}
-	return sinks[0], nil
+	return b.sinks()[0], nil
 }
 
 // check holds field first of t to f's slice (flatSlice.checkField), and the
@@ -4347,8 +4390,7 @@ func bindItem(run *bindRun, ct xsd.ComplexType, group xsd.ModelGroup, x *childIn
 
 // holdItem holds it to the struct s's members give, as a binding holds its
 // content fields, with no attribute field: a struct of exactly s's width
-// fields, each held to its member (sequence.check), its sinks those of each
-// member in turn.
+// fields, each held to its member (sequence.check), each member bound.
 func (s *sequence) holdItem(it reflect.Type, site string, cx *checkContext) (boundItem, error) {
 	if it.Kind() != reflect.Struct {
 		return nil, fmt.Errorf("%w: %s is %s, no struct, where codegen emits the struct for one occurrence of a sequence or all group", ErrTypeMismatch, site, it)
@@ -4356,26 +4398,24 @@ func (s *sequence) holdItem(it reflect.Type, site string, cx *checkContext) (bou
 	if it.NumField() != s.width() {
 		return nil, fmt.Errorf("%w: %s, the struct for one occurrence of a sequence or all group, has %d fields where codegen emits %d", ErrTypeMismatch, it, it.NumField(), s.width())
 	}
-	var sinks []sink
-	for i, m := range s.members {
-		got, err := m.sinks(it, i, cx)
-		if err != nil {
-			return nil, err
-		}
-		sinks = append(sinks, got...)
+	members, err := bindEach(s.members, it, 0, cx)
+	if err != nil {
+		return nil, err
 	}
-	return boundSequenceItem{sequence: s, fields: sinks}, nil
+	return boundSequenceItem{sequence: s, members: members}, nil
 }
 
 // boundSequenceItem is the item of a sequence or all group occurrence whose
-// hold held: fields[k] sets the item struct's target sequence.base+k.
+// hold held: members[i] is the item's member i bound, in field i of the item
+// struct.
 type boundSequenceItem struct {
 	sequence *sequence
-	fields   []sink
+	members  []boundMember
 }
 
-// sinks is b.fields.
-func (b boundSequenceItem) sinks() []sink { return b.fields }
+// sinks is each member's in turn (targetSinks): sinks()[k] sets the item
+// struct's target sequence.base+k.
+func (b boundSequenceItem) sinks() []sink { return targetSinks(b.members) }
 
 // itemTargets is the targets s's members take after s.base.
 func (s *sequence) itemTargets() int { return s.targets() - s.base }
@@ -4431,11 +4471,11 @@ func (o *nestedOccurrence) admits(got reflect.StructField, _ branchSets) bool {
 	return it.Kind() == reflect.Struct
 }
 
-// sinks holds field index of t to o's field: o's name, not embedded, of o's
-// shape over the item's Go type, which the item holds
-// (occurrenceItem.holdItem), and returns one occurrenceSink per target of
-// the item, in target order.
-func (o *nestedOccurrence) sinks(t reflect.Type, index int, cx *checkContext) ([]sink, error) {
+// bindMember holds field index of t to o's field: o's name, not embedded, of
+// o's shape over the item's Go type, which the item holds
+// (occurrenceItem.holdItem), and returns the boundNestedOccurrence of o held
+// there.
+func (o *nestedOccurrence) bindMember(t reflect.Type, index int, cx *checkContext) (boundMember, error) {
 	got := t.Field(index)
 	it, ok := o.shape.elem(got.Type)
 	if got.Name != o.name || got.Anonymous || !ok {
@@ -4445,12 +4485,25 @@ func (o *nestedOccurrence) sinks(t reflect.Type, index int, cx *checkContext) ([
 	if err != nil {
 		return nil, err
 	}
-	items := bound.sinks()
+	return boundNestedOccurrence{occurrence: o, index: index, item: bound}, nil
+}
+
+// boundNestedOccurrence is a nestedOccurrence whose check held: occurrence,
+// its field field index of the struct, and item, the item held.
+type boundNestedOccurrence struct {
+	occurrence *nestedOccurrence
+	index      int
+	item       boundItem
+}
+
+// sinks returns one occurrenceSink per target of the item, in target order.
+func (b boundNestedOccurrence) sinks() []sink {
+	items := b.item.sinks()
 	sinks := make([]sink, len(items))
 	for k, item := range items {
-		sinks[k] = occurrenceSink{index: index, target: k, occurrence: o, item: item}
+		sinks[k] = occurrenceSink{index: b.index, target: k, occurrence: b.occurrence, item: item}
 	}
-	return sinks, nil
+	return sinks
 }
 
 // occurrenceSink is target target of the item of a nestedOccurrence whose
@@ -4790,14 +4843,14 @@ func (c *sealed[A]) checkSite(it reflect.Type, site string, cx *checkContext) (*
 	// matched, leave no entry of matched without its branch type.
 	matched := make([]boundBranch, len(c.alts))
 	for i, bt := range branches {
-		j, sinks, err := c.alternative(bt, placed[i], cx)
+		j, members, err := c.alternative(bt, placed[i], cx)
 		if err != nil {
 			return nil, err
 		}
 		if j < 0 || matched[j].t != nil {
 			return nil, fmt.Errorf("%w: branch %s of %s has the shape of no branch struct codegen emits that an earlier branch did not match", ErrTypeMismatch, bt, it)
 		}
-		matched[j] = boundBranch{t: bt, sinks: sinks}
+		matched[j] = boundBranch{t: bt, members: members}
 	}
 	return &boundChoice{p: c.p, branches: matched}, nil
 }
@@ -4886,15 +4939,15 @@ func (c *sealed[A]) placeTie(it reflect.Type, g tieGroup, branches []reflect.Typ
 // alternative that names bt (branchArm.namesBranch), whose check then fails.
 // The one alternative selected is the only one checked, its check's error
 // the check's. So no check is tried and discarded.
-func (c *sealed[A]) alternative(bt reflect.Type, j int, cx *checkContext) (int, []sink, error) {
+func (c *sealed[A]) alternative(bt reflect.Type, j int, cx *checkContext) (int, []boundMember, error) {
 	if j < 0 {
 		j = slices.IndexFunc(c.alts, func(a A) bool { return a.namesBranch(bt) })
 	}
 	if j < 0 {
 		return -1, nil, nil
 	}
-	sinks, err := bindBranch(c.alts[j], bt, cx)
-	return j, sinks, err
+	members, err := bindBranch(c.alts[j], bt, cx)
+	return j, members, err
 }
 
 // admitting returns the index in c.alts of the first alternative that admits
@@ -4943,11 +4996,12 @@ type boundChoice struct {
 	branches []boundBranch
 }
 
-// boundBranch is one branch struct t of a sealed interface, sinks[k] setting
-// its alternative's target k in a value of t (bindBranch).
+// boundBranch is one branch struct t of a sealed interface, members[i] its
+// alternative's member i bound in field i of t (bindBranch), whose sinks in
+// turn (targetSinks) set its alternative's targets in a value of t.
 type boundBranch struct {
-	t     reflect.Type
-	sinks []sink
+	t       reflect.Type
+	members []boundMember
 }
 
 // set sets dst, a value of the sealed interface, from the child element
@@ -4967,7 +5021,7 @@ func (bc *boundChoice) set(r *xmltree.Reader, start *xmltree.StartElement, i, k 
 		}
 		branch.Set(dst.Elem())
 	}
-	if err := bb.sinks[k].put(bc.p, r, start, branch, st); err != nil {
+	if err := targetSinks(bb.members)[k].put(bc.p, r, start, branch, st); err != nil {
 		return err
 	}
 	dst.Set(branch)
