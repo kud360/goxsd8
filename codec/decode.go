@@ -105,8 +105,9 @@ var ErrTypeMismatch = errors.New("codec: T is not the type codegen emits for the
 //   - A type whose datatype struct is PrecisionDecimal's, an
 //     xs:precisionDecimal type: converted from the string Parse accepted by
 //     ·precisionDecimalLexicalMap· (precisionDecimal §6 f-precDecLexmap),
-//     since its canonical mapping keeps neither the ·scale· of zero nor its
-//     ·sign· (f-precDecCanmap); its Canonical is never consulted. Its Value
+//     since its canonical mapping decides no rendering of a zero
+//     (f-precDecCanmap), so a Canonical cannot be relied on to keep a zero's
+//     ·scale· or ·sign·; its Canonical is never consulted. Its Value
 //     holds the arm [WithPrecisionDecimalArms] supplies for the value's
 //     ·numericalValue· (§3.1 vp-pd-numVal): INF and +INF the positive
 //     infinity's, -INF the negative infinity's and NaN the not-a-number's,
