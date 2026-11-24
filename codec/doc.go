@@ -329,31 +329,48 @@
 //     that codegen splices, a choice occurring exactly once that codegen does
 //     not flatten, or a sequence or choice codegen holds in an occurrence
 //     field, inline or through <group ref>, each of whose particles is an
-//     element particle or a wildcard particle with {process contents} skip
-//     or lax, and, holding a wildcard particle, whose content model
-//     xsd.Schema.ContentMatcher tracks, or a sequence or choice codegen
-//     flattens, each basic particle of whose reach (codegen's package doc, "#
-//     Particles") is such an element or wildcard particle, and whose content
-//     model xsd.Schema.ContentMatcher tracks, with or without a wildcard
-//     particle; the choice occurring exactly once into its sealed interface, T
-//     itself or the first field of T's struct, the sequence or choice held in
-//     an occurrence field into that field, and the flattened one into its
-//     slice field, as "# What decodes" states.
-//   - An element particle of that sequence or choice, or one a flattened
-//     sequence or choice reaches, with {max occurs} at least 1, its {term} a
-//     local element declaration or, for an <element ref>, the top-level
-//     declaration it names or, where codegen's package doc "# Substitution
-//     groups" gives its field a sealed interface, each declaration that
-//     interface has a branch for, each such declaration having the same
-//     restrictions as the document element's and a simple type or a complex
-//     type that encodes, or xs:anyType itself, into the field item 6 of
-//     [Decode]'s doc holds to it, the branch a value of that interface holds
-//     written as an element of its own declaration's expanded name; or, for a
-//     choice's alternative, into its branch's field, and for a basic particle
-//     a flattened sequence or choice reaches, into the one field of its
-//     branch, each item of the slice one element, as "# What decodes" states.
-//   - A wildcard particle of that sequence or choice, or one a flattened
-//     sequence or choice reaches, with {process contents} skip or lax and {max
+//     element particle, a wildcard particle with {process contents} skip or
+//     lax, or a nested sequence or choice particle, inline or through <group
+//     ref>, held as codegen's package doc "# Particles" holds it: one codegen
+//     splices, as its own particles in its place; a choice occurring exactly
+//     once that codegen does not flatten, into its sealed interface field, as
+//     its alternatives; one codegen flattens, into its slice field, each basic
+//     particle of its reach such an element or wildcard particle; and any
+//     other, into its occurrence field, as its own particles. A choice's
+//     alternative, the content choice's or a nested one's, is such a particle
+//     too, its model group held at the occurrence its branch reads, {min
+//     occurs} 0 read as 1, into its branch's fields. Inside a content particle
+//     codegen holds in an occurrence field, a nested particle codegen flattens
+//     or holds in an occurrence field of its own is a [*DeclineError],
+//     whatever its occurrence, as it is for Decode ("# What decodes"). A
+//     content model holding a wildcard particle, a nested flattened particle
+//     or a nested occurrence field, at any depth, is one
+//     xsd.Schema.ContentMatcher tracks. The content {particle} may also be a
+//     sequence or choice codegen flattens, each basic particle of whose reach
+//     (codegen's package doc, "# Particles") is such an element or wildcard
+//     particle, and whose content model xsd.Schema.ContentMatcher tracks,
+//     with or without a wildcard particle. The choice occurring exactly once
+//     encodes into its sealed interface, T itself or the first field of T's
+//     struct, the sequence or choice held in an occurrence field into that
+//     field, and the flattened one into its slice field, as "# What decodes"
+//     states.
+//   - An element particle of that sequence or choice or of a model group
+//     nested in it, at any depth, or one a flattened sequence or choice
+//     reaches, with {max occurs} at least 1, its {term} a local element
+//     declaration or, for an <element ref>, the top-level declaration it
+//     names or, where codegen's package doc "# Substitution groups" gives its
+//     field a sealed interface, each declaration that interface has a branch
+//     for, each such declaration having the same restrictions as the document
+//     element's and a simple type or a complex type that encodes, or
+//     xs:anyType itself, into the field item 6 of [Decode]'s doc holds to it,
+//     the branch a value of that interface holds written as an element of its
+//     own declaration's expanded name; or, for a choice's alternative, into
+//     its branch's field, and for a basic particle a flattened sequence or
+//     choice reaches, into the one field of its branch, each item of the
+//     slice one element, as "# What decodes" states.
+//   - A wildcard particle of that sequence or choice or of a model group
+//     nested in it, at any depth, or one a flattened sequence or choice
+//     reaches, with {process contents} skip or lax and {max
 //     occurs} at least 1, into the field "# What decodes" states for it, each
 //     element it holds written raw, as below.
 //   - xs:anyType itself (Structures §3.4.7), where the bullets above admit
