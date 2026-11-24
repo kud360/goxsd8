@@ -2734,13 +2734,15 @@ func (st *fillState) partition(schema *xsd.Schema, group xsd.ModelGroup, first i
 }
 
 // elementMember is the member an element particle gives a sequence, or a
-// choice's alternative its branch struct's one field, as Decode binds it:
-// its field, decl, the element declaration that is the particle's {term},
-// followed through an <element ref> (particleTerm), own, the particle's
-// {min occurs} and {max occurs}, and held, the occurrence the field's shape
-// was computed at (particleShape): own for a sequence's particle and
-// goshape.BranchOccurs' for a choice's alternative. Append writes the
-// particle's elements from it (elementMember.writeElements).
+// choice's alternative or a flattened particle's basic particle its branch
+// struct's one field, as Decode binds it: its field, decl, the element
+// declaration that is the particle's {term}, followed through an <element
+// ref> (particleTerm), own, the particle's {min occurs} and {max occurs}, and
+// held, the occurrence the field's shape was computed at (particleShape): own
+// for a sequence's particle and goshape.BranchOccurs' for a choice's
+// alternative; for a basic particle of a flattened particle's reach both are
+// exactly once, the occurrence bindReach gives its field (flatArm). Append
+// writes the particle's elements from it (elementMember.writeElements).
 type elementMember struct {
 	field
 	decl      xsd.ElementDeclaration
@@ -2752,10 +2754,11 @@ type elementMember struct {
 func (m elementMember) branchMembers() []contentMember { return []contentMember{m} }
 
 // wildcardMember is the member a wildcard particle gives a sequence, or a
-// choice's alternative its branch struct's one field, as Decode binds it: its
-// field, subject, the particle's as item 5 of Decode's doc names it
-// (wildcardSubject), and own and held, as elementMember's are. Append writes
-// the particle's elements from it (wildcardMember.writeElements).
+// choice's alternative or a flattened particle's basic particle its branch
+// struct's one field, as Decode binds it: its field, subject, the particle's
+// as item 5 of Decode's doc names it (wildcardSubject), and own and held, as
+// elementMember's are. Append writes the particle's elements from it
+// (wildcardMember.writeElements).
 type wildcardMember struct {
 	field
 	subject   string
@@ -3207,9 +3210,10 @@ func (b *boundSequence) fill(r *xmltree.Reader, _ *xmltree.StartElement, out ref
 // sealed is a sealed interface as codegen emits it, whose one method is
 // unexported, and one branch struct per alternative, in order, each holding
 // the fields alts holds for it, as Decode reads them: A is field for a
-// substitution group's, a declaration's governing types' and a flattened
-// particle's, whose every branch holds one field, and branchArm for a
-// choice's, whose model-group alternative's branch may hold several. A child
+// substitution group's and a declaration's governing types', whose every
+// branch holds one field, flatArm for a flattened particle's, whose every
+// branch holds its basic particle's one field, and branchArm for a choice's,
+// whose model-group alternative's branch may hold several. A child
 // is put to an alternative by the bind holding the sealed: for a choice and a
 // nested flattened particle, through its content model's childIndex; for a
 // substitution group, by expanded name, through its own children index; for
@@ -3328,10 +3332,11 @@ func tied(groups []tieGroup, i, j int) bool {
 }
 
 // A branchArm is one alternative of a sealed interface as Decode reads it, a
-// closed sum: an elementMember, a choice's element alternative's branch
-// struct's one field; a wildcardMember, a choice's wildcard alternative's; a
-// field, the branch struct's one field, a substitution group member's, a
-// governing type's or a flattened particle's basic particle's; or a
+// closed sum: an elementMember, a choice's element alternative's or a
+// flattened particle's element basic particle's branch struct's one field; a
+// wildcardMember, a choice's wildcard alternative's or a flattened
+// particle's wildcard basic particle's; a field, the branch struct's one
+// field, a substitution group member's or a governing type's; or a
 // groupBranch, a choice's model-group alternative's.
 type branchArm interface {
 	// branchMembers returns the members the branch struct's fields hold, one
@@ -3343,8 +3348,21 @@ type branchArm interface {
 	namesBranch(bt reflect.Type) bool
 }
 
-// branchMembers is f alone: a member or basic particle's branch struct holds
-// one field.
+// A flatArm is one alternative of a flattened particle's sealed interface, the
+// content {particle}'s or a nested one's (bindReach), a closed sum of exactly
+// particleWriter's implementers: an elementMember, an element basic
+// particle's, or a wildcardMember, a wildcard one's, each its branch struct's
+// one field, occurring exactly once, so its own and held both
+// goshape.ExactlyOnce(). Decode reads it as the branchArm it is, and Append
+// writes each item of the slice through it (boundFlattened.write), so that it
+// carries the declaration that write reads.
+type flatArm interface {
+	branchArm
+	particleWriter
+}
+
+// branchMembers is f alone: a substitution group member's or a governing
+// type's branch struct holds one field.
 func (f field) branchMembers() []contentMember { return []contentMember{f} }
 
 // namesBranch reports whether bt is a struct of one field named as f and f's
@@ -3776,7 +3794,7 @@ func branchSinks(alts []branchArm, bc *boundChoice) []itemBranchSink {
 // each child attributed to one appends an item of that alternative's branch.
 type flatSlice struct {
 	name   string
-	sealed *sealed[field]
+	sealed *sealed[flatArm]
 }
 
 // flattened is a content sequence or choice codegen flattens, as Decode
@@ -3805,7 +3823,7 @@ type flattened struct {
 // names (openContentField). Last, a content model xsd.Schema.ContentMatcher
 // does not track declines (trackedMatcher).
 func bindFlattened(run *bindRun, ct xsd.ComplexType, group xsd.ModelGroup, names *goname.Namer, typeSubject string) (*flattened, error) {
-	f := &flattened{slice: &flatSlice{name: names.Claim(group.Compositor().String()), sealed: &sealed[field]{p: run.p}}, ct: ct}
+	f := &flattened{slice: &flatSlice{name: names.Claim(group.Compositor().String()), sealed: &sealed[flatArm]{p: run.p}}, ct: ct}
 	if err := bindReach(run, ct, group, f.slice.sealed, &contentReach{flattened: f}, typeSubject); err != nil {
 		return nil, err
 	}
@@ -3836,7 +3854,7 @@ func bindFlattened(run *bindRun, ct xsd.ComplexType, group xsd.ModelGroup, names
 // xsd.Schema.ContentMatcher does not track declines (trackedMatcher), since
 // validation leaves every instance of such a model undecided (item 4).
 func (s *sequence) flatten(run *bindRun, ct xsd.ComplexType, group xsd.ModelGroup, at []int, names *goname.Namer, typeSubject string) error {
-	f := &flatSlice{name: names.Claim(group.Compositor().String()), sealed: &sealed[field]{p: run.p}}
+	f := &flatSlice{name: names.Claim(group.Compositor().String()), sealed: &sealed[flatArm]{p: run.p}}
 	s.index.slot(ct)
 	site := &nestedReach{s: s, ct: ct, at: at}
 	if err := bindReach(run, ct, group, f.sealed, site, typeSubject); err != nil {
@@ -3866,19 +3884,20 @@ type reachSite interface {
 }
 
 // bindReach appends to alts one alternative per basic particle goshape.Reach
-// visits in group, a model group of ct's content model, in its order, each branch
-// field named as a choice's is from a fresh Namer, bound where site states, or
-// returns the first decline Decode's doc states for them, item 5, typeSubject
-// naming the type, or the plain error that item states in a decline's place: each
-// alternative's own constructs as a sequence's particle's, occurring exactly once,
-// an element particle's by elementField over ct with a nil childIndex, then a
-// branch struct of an earlier alternative's shape (field.sharesBranch), which
-// declines as a choice's alternatives in no tie do, unless the two are in one
-// name group (nameGroups), which puts them in one of alts' ties (tiesOf),
-// which placeBranches tells apart by name. A particle with {max occurs} 0 is item
-// 5's plain error, an element particle's after its declaration's own constructs,
-// as a sequence's is. goshape.Reach's own error is plain, prefixed by typeSubject.
-func bindReach(run *bindRun, ct xsd.ComplexType, group xsd.ModelGroup, alts *sealed[field], site reachSite, typeSubject string) error {
+// visits in group, a model group of ct's content model, in its order, an
+// elementMember or a wildcardMember (flatArm), each branch field named as a
+// choice's is from a fresh Namer, bound where site states, or returns the first
+// decline Decode's doc states for them, item 5, typeSubject naming the type, or
+// the plain error that item states in a decline's place: each alternative's own
+// constructs as a sequence's particle's, occurring exactly once, an element
+// particle's by elementField over ct with a nil childIndex, then a branch struct
+// of an earlier alternative's shape (branchesShare), which declines as a choice's
+// alternatives in no tie do, unless the two are in one name group (nameGroups),
+// which puts them in one of alts' ties (tiesOf), which placeBranches tells apart
+// by name. A particle with {max occurs} 0 is item 5's plain error, an element
+// particle's after its declaration's own constructs, as a sequence's is.
+// goshape.Reach's own error is plain, prefixed by typeSubject.
+func bindReach(run *bindRun, ct xsd.ComplexType, group xsd.ModelGroup, alts *sealed[flatArm], site reachSite, typeSubject string) error {
 	// names holds each alternative's expanded name, nameGroups' input, the
 	// zero QName for a wildcard's.
 	var names []xsd.QName
@@ -3891,36 +3910,38 @@ func bindReach(run *bindRun, ct xsd.ComplexType, group xsd.ModelGroup, alts *sea
 		if upper, bounded := p.Occurs().Max(); bounded && upper == 0 {
 			occurs = p.Occurs()
 		}
-		var alt field
+		var alt flatArm
 		var subject string
 		var name xsd.QName
 		// Term is a closed sum, so the switch is STYLE T2's sealed-sum
 		// exception; particleTerm returns no nil Term.
 		switch term := term.(type) {
 		case xsd.Wildcard:
-			alt, subject, err = site.wildcard(occurs, position, len(alts.alts), typeSubject)
+			f, s, err := site.wildcard(occurs, position, len(alts.alts), typeSubject)
 			if err != nil {
 				return err
 			}
-			alt.name = goname.NewNamer().Claim("any")
+			f.name = goname.NewNamer().Claim("any")
+			alt, subject = wildcardMember{field: f, subject: s, own: occurs, held: occurs}, s
 		case xsd.ModelGroup:
 			// goshape.Reach visits a model group particle only with {max
 			// occurs} 0.
 			_, err := occursShape(p.Occurs(), false, fmt.Sprintf("a %s model group particle of %s", term.Compositor(), typeSubject))
 			return err
 		case xsd.ElementDeclaration:
-			alt, _, err = elementField(run, ct, nil, term, occurs)
+			f, _, err := elementField(run, ct, nil, term, occurs)
 			if err != nil {
 				return err
 			}
-			alt.name = goname.NewNamer().Claim(term.Name().Local)
+			f.name = goname.NewNamer().Claim(term.Name().Local)
+			alt = elementMember{field: f, decl: term, own: occurs, held: occurs}
 			subject = declSubject(term)
 			name = term.Name()
 		}
 		names = append(names, name)
 		groups := nameGroups(names)
 		for j, earlier := range alts.alts {
-			if earlier.sharesBranch(alt) && !tied(groups, j, len(alts.alts)) {
+			if branchesShare(earlier, alt) && !tied(groups, j, len(alts.alts)) {
 				return decline(constructSharedBranch, subject)
 			}
 		}
@@ -3944,7 +3965,7 @@ func bindReach(run *bindRun, ct xsd.ComplexType, group xsd.ModelGroup, alts *sea
 	if err != nil {
 		return fmt.Errorf("codec: %s: %w", typeSubject, err)
 	}
-	alts.ties = tiesOf(nameGroups(names), func(j, i int) bool { return alts.alts[j].sharesBranch(alts.alts[i]) })
+	alts.ties = tiesOf(nameGroups(names), func(j, i int) bool { return branchesShare(alts.alts[j], alts.alts[i]) })
 	return nil
 }
 
