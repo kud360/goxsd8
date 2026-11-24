@@ -1021,8 +1021,8 @@ func asDecline(t *testing.T, err error, prefix string) *DeclineError {
 // §3.4.2.3.3 dcl.ctd.ctcc.common clause 2.1.4 for a content {particle}), so
 // each schema is built from a parsed one with type v's particle rebuilt
 // through xsd.NewParticle with Occurs{0,0}: the content {particle}, an
-// element particle, and a wildcard particle, which declines so before it
-// declines as a wildcard.
+// element particle, and a strict wildcard particle, which declines so before
+// it declines as a strict wildcard.
 func TestAppendVacuousParticle(t *testing.T) {
 	none, err := xsd.NewOccurs(xsderr.Loc{}, 0, 0)
 	if err != nil {
@@ -1034,7 +1034,7 @@ func TestAppendVacuousParticle(t *testing.T) {
 	}{
 		{"content particle", `<xs:element name="a" type="xs:string"/>`, true},
 		{"element particle", `<xs:element name="a" type="xs:string"/>`, false},
-		{"wildcard particle", `<xs:any processContents="lax"/>`, false},
+		{"wildcard particle", `<xs:any/>`, false},
 	} {
 		t.Run(row.name, func(t *testing.T) {
 			parsed := schemaOf(t, `<xs:complexType name="v"><xs:sequence>`+row.particle+`</xs:sequence></xs:complexType><xs:element name="r" type="s:v"/>`)

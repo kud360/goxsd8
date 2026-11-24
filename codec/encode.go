@@ -2535,11 +2535,9 @@ func (e *encoder) heldElement(name xsd.QName, path string, hold rawHold) {
 // locallyTyped records item 7 of [Append]'s doc, constructGovernedContent,
 // where the element name, the match of a lax wildcard particle held at path
 // in hold, has a ·locally declared type· in at.typ, the complex type whose
-// content it is written into, at.el's, and no decline is recorded yet: that
-// type governs it (§3.3.4.6 key-governing-type-elem clause 7, §3.4.6.4
-// key-ldt-elem clause 2), so that it is strictly assessed (cvc-assess-elt
-// clause 1). Only the match itself has one: below it every item is laxly
-// assessed against xs:anyType (laxMatch.governing).
+// content it is written into, at.el's (xsd.Schema.LocallyDeclaredElementType),
+// and no decline is recorded yet. Only the match itself has one: below it no
+// item does (laxMatch.governing).
 func (e *encoder) locallyTyped(name xsd.QName, path string, hold rawHold, at writeAt) {
 	if e.declined != nil {
 		return
