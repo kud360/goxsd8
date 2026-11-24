@@ -313,11 +313,13 @@
 // bullet states, into the Go type the bullet names where it names one:
 //
 //   - A top-level element declaration, as the document element's, neither
-//     abstract nor nillable, with no {type table} or value constraint, each
-//     of whose {identity-constraint definitions} has a {selector} and {fields}
-//     icpath compiles, and for a keyref a {referenced key} whose own it
-//     compiles, whose {type definition} is a simple type that encodes, a
-//     complex type that encodes, or xs:anyType itself.
+//     abstract nor nillable, with no {type table} or value constraint, each of
+//     whose {substitution group affiliations} names a top-level element
+//     declaration of the schema, each of whose {identity-constraint
+//     definitions} has a {selector} and {fields} icpath compiles, and for a
+//     keyref a {referenced key} whose own it compiles, whose {type definition}
+//     is a simple type that encodes, a complex type that encodes, or
+//     xs:anyType itself.
 //   - A complex type with {abstract} false, no {assertions}, no {attribute
 //     wildcard} and no {open content}, of empty content, of simple content
 //     whose {simple type definition} (Structures §3.4.2.2 dcl.ctd.ctsc) is a

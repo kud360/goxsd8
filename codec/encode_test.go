@@ -933,6 +933,9 @@ const encodePrimitiveName = "an atomic simple type whose primitive is other than
 // identityName is constructIdentityConstraint's name.
 const identityName = "an identity constraint whose {selector} or {fields}, or whose {referenced key}'s, lie outside the path subset icpath compiles (Structures §3.11.6.2 ·selector subset·, §3.11.6.3 ·field subset·)"
 
+// absentAffiliationName is constructAbsentAffiliation's name.
+const absentAffiliationName = "an element declaration with an ·absent· member of its {substitution group affiliations}"
+
 // TestAppendDeclines pins item 4 of Append's doc for each construct of the
 // closed set it declines: each row's two declarations, r and q, decline with
 // equal Constructs, named by the opening of the decline's text, and rows of
@@ -976,6 +979,9 @@ func TestAppendDeclines(t *testing.T) {
 		{"identity constraint field", identityName, `<xs:element name="%[1]s"><xs:complexType><xs:sequence>` + a + `</xs:sequence></xs:complexType><xs:unique name="k%[1]s"><xs:selector xpath="s:a"/><xs:field xpath="."/><xs:field xpath="s:a[1]"/></xs:unique></xs:element>`},
 		{"keyref referenced key", identityName, `<xs:element name="h%[1]s"><xs:complexType><xs:sequence>` + a + `</xs:sequence></xs:complexType><xs:key name="hk%[1]s"><xs:selector xpath="s:a[1]"/><xs:field xpath="."/></xs:key></xs:element>` +
 			`<xs:element name="%[1]s"><xs:complexType><xs:sequence>` + a + `</xs:sequence></xs:complexType><xs:keyref name="kr%[1]s" refer="s:hk%[1]s"><xs:selector xpath="s:a"/><xs:field xpath="."/></xs:keyref></xs:element>`},
+		{"absent affiliation", absentAffiliationName, `<xs:element name="%[1]s" type="xs:string" substitutionGroup="s:nope%[1]s"/>`},
+		{"ref absent affiliation", absentAffiliationName, `<xs:element name="x%[1]s" type="xs:string" substitutionGroup="s:nope%[1]s"/>` +
+			sequence(`<xs:element ref="s:x%[1]s"/>`)},
 		{"nillable anyType", "an element declaration with {nillable} true", `<xs:element name="%[1]s" nillable="true"/>`},
 		{"anyType particle value constraint", "a value constraint, default or fixed", sequence(`<xs:element name="a" default="d"/>`)},
 		{"abstract type", "an element declaration whose {type definition} is a complex type with {abstract} true", abstractType},

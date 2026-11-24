@@ -850,12 +850,15 @@ func (w *encodeWalk) element(decl xsd.ElementDeclaration) error {
 // declEncodes returns the decline of the first of decl's own properties the
 // slice excludes: {nillable} as codegen reads it (goshape.Nillable), a {type
 // table}, a {value constraint}, an identity constraint whose paths icpath
-// does not compile (encodeWalk.identityEncodes), and {abstract} true, which
-// no element validates against (cvc-elt clause 2): the document element's is
-// item 3 of [Append]'s doc, found before declEncodes runs, so that only a
-// particle's declines so, one the parser never builds but
-// xsd.NewElementDeclaration does. A decl whose {identity-constraint
-// definitions} it admits sets w.identity.
+// does not compile (encodeWalk.identityEncodes), a member of its {substitution
+// group affiliations} that names no top-level element declaration of the
+// schema, the first in document order, an ·absent· member Finalize keeps
+// (§5.3), under which validate assesses the element laxly, as if cvc-elt
+// clause 1 had failed, and {abstract} true, which no element validates against
+// (cvc-elt clause 2): the document element's is item 3 of [Append]'s doc,
+// found before declEncodes runs, so that only a particle's declines so, one
+// the parser never builds but xsd.NewElementDeclaration does. A decl whose
+// {identity-constraint definitions} it admits sets w.identity.
 func (w *encodeWalk) declEncodes(decl xsd.ElementDeclaration) error {
 	if goshape.Nillable(decl) {
 		return encodeDecline(constructNillable, declSubject(decl))
@@ -871,6 +874,11 @@ func (w *encodeWalk) declEncodes(decl xsd.ElementDeclaration) error {
 			return err
 		}
 		w.identity = true
+	}
+	for _, head := range decl.SubstitutionGroupAffiliationNames() {
+		if _, ok := w.schema.Element(head); !ok {
+			return encodeDecline(constructAbsentAffiliation, fmt.Sprintf("%s, whose {substitution group affiliations} member %s names no top-level element declaration", declSubject(decl), head.Display()))
+		}
 	}
 	if decl.Abstract() {
 		return encodeDecline(constructAbstractElement, declSubject(decl))

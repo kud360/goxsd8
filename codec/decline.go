@@ -167,6 +167,7 @@ const (
 	constructTypeTable
 	constructValueConstraint
 	constructIdentityConstraint
+	constructAbsentAffiliation
 	constructAbstractElement
 	constructAbstractType
 	constructMixed
@@ -199,6 +200,7 @@ var constructNames = [...]string{
 	constructTypeTable:          "an element declaration with a {type table}",
 	constructValueConstraint:    "a value constraint, default or fixed",
 	constructIdentityConstraint: "an identity constraint whose {selector} or {fields}, or whose {referenced key}'s, lie outside the path subset icpath compiles (Structures §3.11.6.2 ·selector subset·, §3.11.6.3 ·field subset·)",
+	constructAbsentAffiliation:  "an element declaration with an ·absent· member of its {substitution group affiliations}",
 	constructAbstractElement:    "an element declaration with {abstract} true",
 	constructAbstractType:       "an element declaration whose {type definition} is a complex type with {abstract} true",
 	constructMixed:              "a complex type with mixed content",
