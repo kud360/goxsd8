@@ -3426,6 +3426,16 @@ const (
 	skipAttrSchema     = `<xs:element name="r"><xs:complexType><xs:choice><xs:element name="a" type="xs:string"/><xs:any processContents="skip"/></xs:choice><xs:attribute name="x" type="xs:string"/></xs:complexType></xs:element>`
 )
 
+// The lax-wildcard schemas, each declaring s:r of wildcard_test.go's seqWild
+// shape, sequence(a, any): laxGovernedSchema is seqLaxSchema beside a
+// top-level element w and a top-level attribute t, each of xs:int, which
+// govern an item so named at any depth of the match; laxTargetSchema's
+// wildcard is over ##targetNamespace.
+const (
+	laxGovernedSchema = seqLaxSchema + `<xs:element name="w" type="xs:int"/><xs:attribute name="t" type="xs:int"/>`
+	laxTargetSchema   = `<xs:element name="r"><xs:complexType><xs:sequence><xs:element name="a" type="xs:string"/><xs:any namespace="##targetNamespace" processContents="lax"/></xs:sequence></xs:complexType></xs:element>`
+)
+
 // skipAttr and skipEmpty are the types codegen emits for skipAttrSchema's and
 // skipEmptySchema's s:r, each choice in the struct's first field, of one
 // interface's shape.
@@ -3505,6 +3515,25 @@ func TestAppendWildcard(t *testing.T) {
 		x := "v"
 		roundTrip(t, schemaOf(t, skipAttrSchema), rootName, skipAttr{Choice: skipAttrAny{Any: anyElement{Space: "urn:o", Local: "w"}}, X: &x},
 			`<r xmlns="urn:s" x="v"><w xmlns="urn:o"/></r>`, deepEqual[skipAttr], skipAttrBranches)
+	})
+	t.Run("a skip match named as the element particle beside it", func(t *testing.T) {
+		roundTrip(t, schemaOf(t, seqSkipSchema), rootName, seqWild{A: "x", Any: anyElement{Space: "urn:s", Local: "a", Content: anyType{Text: "y"}}},
+			`<r xmlns="urn:s"><a>x</a><a>y</a></r>`, deepEqual[seqWild])
+	})
+	lax := schemaOf(t, laxGovernedSchema)
+	t.Run("a lax match no declaration governs", func(t *testing.T) {
+		roundTrip(t, lax, rootName, seqWild{A: "x", Any: anyElement{Space: "urn:o", Local: "w", Content: anyType{Attributes: []anyAttribute{{"", "t", "v"}}, Text: "y"}}},
+			`<r xmlns="urn:s"><a>x</a><w xmlns="urn:o" t="v">y</w></r>`, deepEqual[seqWild])
+	})
+	t.Run("a lax match holding a child no declaration governs", func(t *testing.T) {
+		v := seqWild{A: "x", Any: anyElement{Space: "urn:o", Local: "p", Content: anyType{Children: []anyChild{
+			{Element: anyElement{Space: "urn:o", Local: "w", Content: anyType{Attributes: []anyAttribute{{"urn:o", "t", "v"}}, Text: "z"}}, Tail: "tail"},
+		}}}}
+		roundTrip(t, lax, rootName, v, `<r xmlns="urn:s"><a>x</a><p xmlns="urn:o"><w xmlns:p1="urn:o" p1:t="v">z</w>tail</p></r>`, deepEqual[seqWild])
+	})
+	t.Run("a lax match holding a child named as the element particle beside it", func(t *testing.T) {
+		v := seqWild{A: "x", Any: anyElement{Space: "urn:o", Local: "p", Content: anyType{Children: []anyChild{{Element: anyElement{Space: "urn:s", Local: "a", Content: anyType{Text: "y"}}}}}}}
+		roundTrip(t, lax, rootName, v, `<r xmlns="urn:s"><a>x</a><p xmlns="urn:o"><a xmlns="urn:s">y</a></p></r>`, deepEqual[seqWild])
 	})
 }
 
@@ -3628,19 +3657,49 @@ func TestAppendWildcardInvalid(t *testing.T) {
 			noRule(t, err)
 		})
 	}
+	t.Run("a lax match outside the {namespace constraint}", func(t *testing.T) {
+		dst := []byte("<prior/>")
+		out, err := appendChecked(t, dst, schemaOf(t, laxTargetSchema), strict.New(), rootName, seqWild{A: "x", Any: w})
+		want := "codec: Append: seqWild.Any holds element {urn:o}w, which no particle of the content model of "
+		invalidValue(t, err, want)
+		if !strings.HasPrefix(err.Error(), want) {
+			t.Errorf("error %q does not open with %q", err, want)
+		}
+		if !bytes.Equal(out, dst) {
+			t.Errorf("Append returned %q, want dst %q unextended", out, dst)
+		}
+	})
+	lax := schemaOf(t, laxGovernedSchema)
+	laxHeld := func(c anyType) seqWild {
+		return seqWild{A: "x", Any: anyElement{Space: "urn:o", Local: "p", Content: c}}
+	}
+	const match = ", in the match of wildcard particle 1 of the {type definition} of element {urn:s}r declared at "
 	for _, row := range []struct {
-		name string
-		v    seqWild
-		want string
+		name      string
+		schema    *xsd.Schema
+		construct construct
+		v         seqWild
+		want      []string
 	}{
-		{"xsi:type on the match", held(anyType{Attributes: []anyAttribute{{"", "k", "v"}, {xsd.XMLSchemaInstanceNS, "type", "xs:byte"}}}),
-			"attribute xsi:type at seqWild.Any.Content.Attributes[1], in the match of wildcard particle 1 of "},
-		{"xsi:nil on a child of the match", held(anyType{Children: []anyChild{{Element: anyElement{Local: "c", Content: anyType{Attributes: []anyAttribute{{xsd.XMLSchemaInstanceNS, "nil", "true"}}}}}}}),
-			"attribute xsi:nil at seqWild.Any.Content.Children[0].Element.Content.Attributes[0], in the match of wildcard particle 1 of "},
+		{"xsi:type on the match", one, constructXsiAttribute, held(anyType{Attributes: []anyAttribute{{"", "k", "v"}, {xsd.XMLSchemaInstanceNS, "type", "xs:byte"}}}),
+			[]string{"attribute xsi:type at seqWild.Any.Content.Attributes[1]" + match}},
+		{"xsi:nil on a child of the match", one, constructXsiAttribute, held(anyType{Children: []anyChild{{Element: anyElement{Local: "c", Content: anyType{Attributes: []anyAttribute{{xsd.XMLSchemaInstanceNS, "nil", "true"}}}}}}}),
+			[]string{"attribute xsi:nil at seqWild.Any.Content.Children[0].Element.Content.Attributes[0]" + match}},
+		{"a lax match a top-level declaration governs", lax, constructGovernedContent, seqWild{A: "x", Any: anyElement{Space: "urn:s", Local: "w", Content: anyType{Text: "abc"}}},
+			[]string{"element {urn:s}w at seqWild.Any" + match, ", governed by element {urn:s}w declared at "}},
+		{"a lax match's child a top-level declaration governs", lax, constructGovernedContent, laxHeld(anyType{Children: []anyChild{{Element: anyElement{Space: "urn:s", Local: "w", Content: anyType{Text: "abc"}}}}}),
+			[]string{"element {urn:s}w at seqWild.Any.Content.Children[0].Element" + match, ", governed by element {urn:s}w declared at "}},
+		{"a lax match's attribute a top-level declaration governs", lax, constructGovernedContent, laxHeld(anyType{Attributes: []anyAttribute{{"urn:s", "t", "abc"}}}),
+			[]string{"attribute {urn:s}t at seqWild.Any.Content.Attributes[0]" + match, ", governed by attribute {urn:s}t declared at "}},
+		{"xsi:type on a lax match", lax, constructXsiAttribute, laxHeld(anyType{Attributes: []anyAttribute{{xsd.XMLSchemaInstanceNS, "type", "xs:int"}}, Text: "abc"}),
+			[]string{"attribute xsi:type at seqWild.Any.Content.Attributes[0]" + match}},
+		{"a lax match named as the element particle beside it", lax, constructGovernedContent, seqWild{A: "1", Any: anyElement{Space: "urn:s", Local: "a", Content: anyType{Text: "hello"}}},
+			[]string{"element {urn:s}a at seqWild.Any" + match, ", governed by its locally declared type in the {type definition} of element {urn:s}r declared at "}},
 	} {
 		t.Run(row.name, func(t *testing.T) {
-			_, err := appendChecked(t, nil, one, strict.New(), rootName, row.v)
-			_ = asDecline(t, err, "codec does not encode "+constructXsiAttribute.name()+": "+row.want)
+			_, err := appendChecked(t, nil, row.schema, strict.New(), rootName, row.v)
+			_ = asDecline(t, err, "codec does not encode "+row.construct.name()+": "+row.want[0])
+			holds(t, err, row.want[1:]...)
 		})
 	}
 }
