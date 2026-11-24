@@ -74,8 +74,8 @@ func roundTrip[T any](t *testing.T, schema *xsd.Schema, name xsd.QName, v T, wan
 // (staticClass), and a nil one leaves Append nil, an item 6 or item 7 error
 // or a fault of backend: nil, item 6's ErrInvalidValue error, a plain error
 // without item 2's or item 3's text, or item 7's decline, by
-// constructNoCanonical, constructQNameSpelling, constructXsiAttribute or
-// constructGovernedContent.
+// constructNoCanonical, constructQNameSpelling, constructXsiAttribute,
+// constructGovernedContent or constructLocallyTypedMatch.
 func appendChecked[T any](t *testing.T, dst []byte, schema *xsd.Schema, backend value.Backend, name xsd.QName, v T, opts ...Option) ([]byte, error) {
 	t.Helper()
 	out, err := Append(dst, schema, backend, name, v, opts...)
@@ -83,7 +83,7 @@ func appendChecked[T any](t *testing.T, dst []byte, schema *xsd.Schema, backend 
 	if checked == nil {
 		class := staticClass(err)
 		static := class == "plain" && (strings.HasPrefix(err.Error(), "codec: no top-level element declaration") || strings.Contains(err.Error(), "{abstract} true"))
-		if static || err != nil && class != "plain" && class != "invalid" && class != "decline "+constructNoCanonical.name() && class != "decline "+constructQNameSpelling.name() && class != "decline "+constructXsiAttribute.name() && class != "decline "+constructGovernedContent.name() {
+		if static || err != nil && class != "plain" && class != "invalid" && class != "decline "+constructNoCanonical.name() && class != "decline "+constructQNameSpelling.name() && class != "decline "+constructXsiAttribute.name() && class != "decline "+constructGovernedContent.name() && class != "decline "+constructLocallyTypedMatch.name() {
 			t.Errorf("CheckAppend = nil, but Append returned %v, %s", err, class)
 		}
 		return out, err
@@ -3565,11 +3565,12 @@ func TestAppendWildcard(t *testing.T) {
 // a skip or a lax match, declines by constructXsiAttribute, behind an item 6 error found
 // after it; and in a lax match an element or attribute a top-level declaration governs,
 // the match itself, a child and an attribute, declines by constructGovernedContent, and
-// so does a match with a ·locally declared type· (§3.3.4.6 key-governing-type-elem
-// clause 7): named as the element particle beside it in a sequence, and as an element
-// only the base type's content model contains, through a choice's and a flattened
-// choice's branch, each failing with writeAt.typ left unthreaded on its path; a
-// top-level declaration names the governor where both govern.
+// a match with a ·locally declared type· (§3.3.4.6 key-governing-type-elem clause 7)
+// declines by constructLocallyTypedMatch: named as the element particle beside it in a
+// sequence, and as an element only the base type's content model contains, through a
+// choice's and a flattened choice's branch, each failing with writeAt.typ left
+// unthreaded on its path; a top-level declaration governs, by constructGovernedContent,
+// where both govern.
 func TestAppendWildcardInvalid(t *testing.T) {
 	many, one := schemaOf(t, skipManySchema), schemaOf(t, seqSkipSchema)
 	w := anyElement{Space: "urn:o", Local: "w"}
@@ -3714,7 +3715,7 @@ func TestAppendWildcardInvalid(t *testing.T) {
 			[]string{"attribute {urn:s}t at seqWild.Any.Content.Attributes[0]" + match, ", governed by attribute {urn:s}t declared at "}},
 		{"xsi:type on a lax match", lax, constructXsiAttribute, laxHeld(anyType{Attributes: []anyAttribute{{xsd.XMLSchemaInstanceNS, "type", "xs:int"}}, Text: "abc"}),
 			[]string{"attribute xsi:type at seqWild.Any.Content.Attributes[0]" + match}},
-		{"a lax match named as the element particle beside it", lax, constructGovernedContent, seqWild{A: "1", Any: anyElement{Space: "urn:s", Local: "a", Content: anyType{Text: "hello"}}},
+		{"a lax match named as the element particle beside it", lax, constructLocallyTypedMatch, seqWild{A: "1", Any: anyElement{Space: "urn:s", Local: "a", Content: anyType{Text: "hello"}}},
 			[]string{"element {urn:s}a at seqWild.Any" + match, ", governed by its locally declared type in the {type definition} of element {urn:s}r declared at "}},
 		{"a lax match a top-level declaration and its locally declared type both govern", schemaOf(t, seqLaxSchema+`<xs:element name="a" type="xs:string"/>`), constructGovernedContent,
 			seqWild{A: "1", Any: anyElement{Space: "urn:s", Local: "a", Content: anyType{Text: "hello"}}},
@@ -3730,12 +3731,12 @@ func TestAppendWildcardInvalid(t *testing.T) {
 	c := anyElement{Space: "urn:s", Local: "c", Content: anyType{Text: "hello"}}
 	t.Run("a choice's lax match named as an element of the base type", func(t *testing.T) {
 		_, err := appendChecked(t, nil, schemaOf(t, laxPickBaseSchema), strict.New(), rootName, pickWild(pickWildAny{Any: c}), pickWildBranches)
-		_ = asDecline(t, err, "codec does not encode "+constructGovernedContent.name()+": element {urn:s}c at pickWild.(pickWildAny).Any, in the match of ")
+		_ = asDecline(t, err, "codec does not encode "+constructLocallyTypedMatch.name()+": element {urn:s}c at pickWild.(pickWildAny).Any, in the match of ")
 		holds(t, err, local)
 	})
 	t.Run("a flattened lax match named as an element of the base type", func(t *testing.T) {
 		_, err := appendChecked(t, nil, schemaOf(t, laxFlatBaseSchema), strict.New(), rootName, flatPick{Choice: []flatPickItem{flatPickAny{Any: c}}}, flatPickBranches)
-		_ = asDecline(t, err, "codec does not encode "+constructGovernedContent.name()+": element {urn:s}c at flatPick.Choice[0].(flatPickAny).Any, in the match of ")
+		_ = asDecline(t, err, "codec does not encode "+constructLocallyTypedMatch.name()+": element {urn:s}c at flatPick.Choice[0].(flatPickAny).Any, in the match of ")
 		holds(t, err, local)
 	})
 }

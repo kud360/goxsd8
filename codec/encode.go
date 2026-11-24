@@ -2532,7 +2532,7 @@ func (e *encoder) heldElement(name xsd.QName, path string, hold rawHold) {
 	}
 }
 
-// locallyTyped records item 7 of [Append]'s doc, constructGovernedContent,
+// locallyTyped records item 7 of [Append]'s doc, constructLocallyTypedMatch,
 // where the element name, the match of a lax wildcard particle held at path
 // in hold, has a ·locally declared type· in at.typ, the complex type whose
 // content it is written into, at.el's (xsd.Schema.LocallyDeclaredElementType),
@@ -2545,7 +2545,7 @@ func (e *encoder) locallyTyped(name xsd.QName, path string, hold rawHold, at wri
 	if _, ok := e.schema.LocallyDeclaredElementType(at.typ, name); !ok {
 		return
 	}
-	e.declined = encodeDecline(constructGovernedContent, fmt.Sprintf("element %s at %s, %s, governed by its locally declared type in %s", name.Display(), path, hold.in(), typeSubject(at.el, at.typ)))
+	e.declined = encodeDecline(constructLocallyTypedMatch, fmt.Sprintf("element %s at %s, %s, governed by its locally declared type in %s", name.Display(), path, hold.in(), typeSubject(at.el, at.typ)))
 }
 
 // rawAttribute reports whether rawContent writes the attribute name of value

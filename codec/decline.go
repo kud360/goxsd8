@@ -68,13 +68,16 @@ func (e *DeclineError) Loc() (xsderr.Loc, bool) {
 // a wildcard's match carries, or the content of an element of type xs:anyType
 // itself holds, that attribute, its Go path from T and the wildcard particle,
 // as [Decode]'s item 5 names it, or that element's declaration, and, for an
-// element such content holds whose expanded name a top-level element
-// declaration names, or an attribute it holds whose expanded name a top-level
-// attribute declaration names, that item, its Go path from T, that element's
-// declaration and the top-level declaration, with its schema Loc. A type
-// definition named in the XML Schema namespace whose schema Loc is the zero Loc
-// is named by its QName alone, in place of the schema Loc the sentences above
-// give it.
+// element a lax wildcard's match is or holds, or such content holds, whose
+// expanded name a top-level element declaration names, or an attribute either
+// holds whose expanded name a top-level attribute declaration names, that item,
+// its Go path from T, the wildcard particle or that element's declaration, and
+// the top-level declaration, with its schema Loc, and, for a lax wildcard's
+// match with a ·locally declared type·, that element, its Go path from T, the
+// wildcard particle and the complex type, labelled as its declaration's {type
+// definition}, with its schema Loc. A type definition named in the XML Schema
+// namespace whose schema Loc is the zero Loc is named by its QName alone, in
+// place of the schema Loc the sentences above give it.
 func (e *DeclineError) Error() string {
 	text := "codec does not decode " + e.construct.name() + ": " + e.detail +
 		"; a decoder refusal, not a schema or instance fault"
@@ -186,6 +189,7 @@ const (
 	constructQNameSpelling
 	constructXsiAttribute
 	constructGovernedContent
+	constructLocallyTypedMatch
 )
 
 // constructNames holds, indexed by construct, each construct's name.
@@ -217,7 +221,8 @@ var constructNames = [...]string{
 	constructNoCanonical:        "a value with no canonical representation",
 	constructQNameSpelling:      "an xs:QName or xs:NOTATION value with no spelling Append writes where it is written",
 	constructXsiAttribute:       "an attribute in the XSI namespace held in a wildcard's match or an xs:anyType element's content",
-	constructGovernedContent:    "an element a lax wildcard's match is or holds, or an xs:anyType element's content holds, whose expanded name a top-level element declaration names, or an attribute either holds whose expanded name a top-level attribute declaration names, or a lax wildcard's match with a locally declared type",
+	constructGovernedContent:    "an element a lax wildcard's match is or holds, or an xs:anyType element's content holds, whose expanded name a top-level element declaration names, or an attribute either holds whose expanded name a top-level attribute declaration names",
+	constructLocallyTypedMatch:  "a lax wildcard's match whose expanded name has a ·locally declared type· in the complex type it is written into",
 }
 
 // displayList spells names, at least two, each by its Display, separated by
