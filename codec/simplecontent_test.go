@@ -105,6 +105,16 @@ func TestSimpleContentTypesAreCodegens(t *testing.T) {
 	}
 }
 
+// testRat returns the big.Rat s spells, failing t where it spells none.
+func testRat(t testing.TB, s string) big.Rat {
+	t.Helper()
+	r, ok := new(big.Rat).SetString(s)
+	if !ok {
+		t.Fatalf("bad rational %q", s)
+	}
+	return *r
+}
+
 // TestDecodeSimpleContent pins the lift of simple content (§3.4.2.2
 // dcl.ctd.ctsc): an element of a complex type with simple content decodes
 // into codegen's struct, its value field the element's ·normalized value·
@@ -122,16 +132,6 @@ func TestSimpleContentTypesAreCodegens(t *testing.T) {
 // A whitespace-only element has a character child and holds its own value,
 // and an absent <element ref> supplies nothing. CheckDecode returns nil for
 // each row's T.
-// testRat returns the big.Rat s spells, failing t where it spells none.
-func testRat(t testing.TB, s string) big.Rat {
-	t.Helper()
-	r, ok := new(big.Rat).SetString(s)
-	if !ok {
-		t.Fatalf("bad rational %q", s)
-	}
-	return *r
-}
-
 func TestDecodeSimpleContent(t *testing.T) {
 	str := func(s string) *string { return &s }
 	i32 := func(i int32) *int32 { return &i }
