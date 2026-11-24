@@ -3692,13 +3692,6 @@ func TestAppendSimpleContent(t *testing.T) {
 	schema := schemaOf(t, encodeSimpleContentSchema)
 	str := func(s string) *string { return &s }
 	i32 := func(i int32) *int32 { return &i }
-	rat := func(s string) big.Rat {
-		r, ok := new(big.Rat).SetString(s)
-		if !ok {
-			t.Fatalf("bad rational %q", s)
-		}
-		return *r
-	}
 	t.Run("an extension of xs:string with an attribute", func(t *testing.T) {
 		roundTrip(t, schema, sname("note"), scNote{Value: "a<b", Lang: str("en")}, `<note xmlns="urn:s" lang="en">a&lt;b</note>`, deepEqual[scNote])
 	})
@@ -3709,10 +3702,10 @@ func TestAppendSimpleContent(t *testing.T) {
 		roundTrip(t, schema, sname("note"), scNote{Value: " a\r\n\tb "}, "<note xmlns=\"urn:s\"> a&#xD;\n\tb </note>", deepEqual[scNote])
 	})
 	t.Run("an extension of a complex type with simple content", func(t *testing.T) {
-		roundTrip(t, schema, sname("rich"), scRich{Value: rat("12.5"), K: i32(3), Cur: str("EUR")}, `<rich xmlns="urn:s" k="3" cur="EUR">12.5</rich>`, deepEqual[scRich])
+		roundTrip(t, schema, sname("rich"), scRich{Value: testRat(t, "12.5"), K: i32(3), Cur: str("EUR")}, `<rich xmlns="urn:s" k="3" cur="EUR">12.5</rich>`, deepEqual[scRich])
 	})
 	t.Run("a restriction adding a facet", func(t *testing.T) {
-		roundTrip(t, schema, sname("capped"), scPrice{Value: rat("100")}, `<capped xmlns="urn:s">100</capped>`, deepEqual[scPrice])
+		roundTrip(t, schema, sname("capped"), scPrice{Value: testRat(t, "100")}, `<capped xmlns="urn:s">100</capped>`, deepEqual[scPrice])
 	})
 	t.Run("an extension of a union", func(t *testing.T) {
 		roundTrip(t, schema, sname("tagged"), scTagged{Value: unionUInt(5), Value2: str("v")}, `<tagged xmlns="urn:s" value="v">5</tagged>`, deepEqual[scTagged], WithBranches[unionU](unionUInt(0), unionUDate{}))
@@ -3729,14 +3722,14 @@ func TestAppendSimpleContent(t *testing.T) {
 	t.Run("particles once, optional and repeated", func(t *testing.T) {
 		v := scParticles{
 			N: scNote{Value: "a", Lang: str("en")}, No: &scNote{Value: "b"}, Nr: []scNote{{Value: "c"}, {Value: "d", Lang: str("fr")}},
-			X: scRich{Value: rat("1"), Cur: str("x")}, Xo: &scRich{Value: rat("2"), K: i32(4)}, Xr: []scRich{{Value: rat("3")}},
-			C: scPrice{Value: rat("5")}, Co: &scPrice{Value: rat("6"), Cur: str("y")}, Cr: []scPrice{{Value: rat("7")}, {Value: rat("8")}},
+			X: scRich{Value: testRat(t, "1"), Cur: str("x")}, Xo: &scRich{Value: testRat(t, "2"), K: i32(4)}, Xr: []scRich{{Value: testRat(t, "3")}},
+			C: scPrice{Value: testRat(t, "5")}, Co: &scPrice{Value: testRat(t, "6"), Cur: str("y")}, Cr: []scPrice{{Value: testRat(t, "7")}, {Value: testRat(t, "8")}},
 		}
 		roundTrip(t, schema, sname("ps"), v, `<ps xmlns="urn:s"><n lang="en">a</n><no>b</no><nr>c</nr><nr lang="fr">d</nr>`+
 			`<x cur="x">1</x><xo k="4">2</xo><xr>3</xr><c>5</c><co cur="y">6</co><cr>7</cr><cr>8</cr></ps>`, deepEqual[scParticles])
 	})
 	t.Run("particles, the optional absent", func(t *testing.T) {
-		v := scParticles{N: scNote{Value: "a"}, Nr: []scNote{{}}, X: scRich{Value: rat("1")}, Xr: []scRich{{Value: rat("3")}}, C: scPrice{Value: rat("5")}, Cr: []scPrice{{Value: rat("7")}}}
+		v := scParticles{N: scNote{Value: "a"}, Nr: []scNote{{}}, X: scRich{Value: testRat(t, "1")}, Xr: []scRich{{Value: testRat(t, "3")}}, C: scPrice{Value: testRat(t, "5")}, Cr: []scPrice{{Value: testRat(t, "7")}}}
 		roundTrip(t, schema, sname("ps"), v, `<ps xmlns="urn:s"><n>a</n><nr/><x>1</x><xr>3</xr><c>5</c><cr>7</cr></ps>`, deepEqual[scParticles])
 	})
 }
@@ -3750,16 +3743,9 @@ func TestAppendSimpleContent(t *testing.T) {
 // reported, an element's attributes before its content.
 func TestAppendSimpleContentInvalid(t *testing.T) {
 	schema := schemaOf(t, encodeSimpleContentSchema)
-	rat := func(s string) big.Rat {
-		r, ok := new(big.Rat).SetString(s)
-		if !ok {
-			t.Fatalf("bad rational %q", s)
-		}
-		return *r
-	}
 	bad := "\x00"
 	t.Run("a facet of a restriction", func(t *testing.T) {
-		_, err := appendChecked(t, nil, schema, strict.New(), sname("capped"), scPrice{Value: rat("101")})
+		_, err := appendChecked(t, nil, schema, strict.New(), sname("capped"), scPrice{Value: testRat(t, "101")})
 		invalidValue(t, err)
 		const want = "codec: Append: scPrice.Value holds 101, which the {type definition} of element {urn:s}capped declared at s.xsd:16:1, a type defined at s.xsd:6:1, through its {content type}'s anonymous {simple type definition}, a type defined at s.xsd:6:49 rejects: "
 		if !strings.HasPrefix(err.Error(), want) {
@@ -3770,7 +3756,7 @@ func TestAppendSimpleContentInvalid(t *testing.T) {
 		}
 	})
 	t.Run("a facet of a restriction, a particle", func(t *testing.T) {
-		v := scParticles{N: scNote{Value: "a"}, Nr: []scNote{{}}, X: scRich{Value: rat("1")}, Xr: []scRich{{Value: rat("3")}}, C: scPrice{Value: rat("5")}, Cr: []scPrice{{Value: rat("7")}, {Value: rat("200")}}}
+		v := scParticles{N: scNote{Value: "a"}, Nr: []scNote{{}}, X: scRich{Value: testRat(t, "1")}, Xr: []scRich{{Value: testRat(t, "3")}}, C: scPrice{Value: testRat(t, "5")}, Cr: []scPrice{{Value: testRat(t, "7")}, {Value: testRat(t, "200")}}}
 		_, err := appendChecked(t, nil, schema, strict.New(), sname("ps"), v)
 		invalidValue(t, err)
 		const want = "codec: Append: scParticles.Cr[1].Value holds 200, which the {type definition} of element {urn:s}cr declared at s.xsd:24:92, a type defined at s.xsd:6:1, through its {content type}'s anonymous {simple type definition}, a type defined at s.xsd:6:49 rejects: "
@@ -3788,7 +3774,7 @@ func TestAppendSimpleContentInvalid(t *testing.T) {
 		holds(t, err, "through its {content type}'s {simple type definition} {urn:s}u")
 	})
 	t.Run("attributes before content", func(t *testing.T) {
-		_, err := appendChecked(t, nil, schema, strict.New(), sname("capped"), scPrice{Value: rat("101"), Cur: &bad})
+		_, err := appendChecked(t, nil, schema, strict.New(), sname("capped"), scPrice{Value: testRat(t, "101"), Cur: &bad})
 		invalidValue(t, err)
 		const want = "codec: Append: scPrice.Cur "
 		if !strings.HasPrefix(err.Error(), want) {

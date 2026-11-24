@@ -438,10 +438,7 @@ func (b *boundBinding) write(e *encoder, v reflect.Value, at writeAt) error {
 		if err != nil {
 			return err
 		}
-		start := len(e.out)
-		e.out = append(e.out, '>')
-		e.out = appendEscaped(e.out, text, false)
-		e.endTag(name.Local, start, outer, mark)
+		e.textTag(name.Local, text, outer, mark)
 		return nil
 	}
 	start := len(e.out)
@@ -1342,10 +1339,20 @@ func (e *encoder) endTag(tag string, start int, outer string, mark int) {
 	e.out = append(e.out, '>')
 }
 
+// textTag ends the start tag of the element tag names, whose startTag
+// answered outer and mark, with text, escaped, as its character content, an
+// empty text written as an empty-element tag (endTag).
+func (e *encoder) textTag(tag, text, outer string, mark int) {
+	start := len(e.out)
+	e.out = append(e.out, '>')
+	e.out = appendEscaped(e.out, text, false)
+	e.endTag(tag, start, outer, mark)
+}
+
 // simpleElement writes the element of decl, holding v, a value of s's simple
 // type, whose Go path from T is path: its start tag (startTag), then its
 // value's text (simple), which may first declare a prefix on that start tag
-// (qname), an empty text written as an empty-element tag. The
+// (qname), an empty text written as an empty-element tag (textTag). The
 // error is a backend fault.
 func (e *encoder) simpleElement(decl xsd.ElementDeclaration, s scalar, v reflect.Value, path string) error {
 	name := decl.Name()
@@ -1354,10 +1361,7 @@ func (e *encoder) simpleElement(decl xsd.ElementDeclaration, s scalar, v reflect
 	if err != nil {
 		return err
 	}
-	start := len(e.out)
-	e.out = append(e.out, '>')
-	e.out = appendEscaped(e.out, text, false)
-	e.endTag(name.Local, start, outer, mark)
+	e.textTag(name.Local, text, outer, mark)
 	return nil
 }
 
