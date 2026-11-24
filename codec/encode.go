@@ -347,11 +347,11 @@ func encodeStatic(schema *xsd.Schema, name xsd.QName, t reflect.Type, cfg config
 // A writer is a bound arm of the filler item 5's check returns that Append
 // writes a value from: write appends to e.out the XML encoding v, a value of
 // the Go type the arm is bound to, at at, and returns a backend fault. Its
-// implementers are exactly the arms the slice the package doc's "# What
-// encodes" states reaches: the root arms, *simpleRoot, *boundBinding, *boundChoiceRoot and
-// rawContent, writing the element at.el; and the content arms, *boundSequence,
-// *boundContentChoice, boundOccurrence and boundFlattened, writing at.el's content, each
-// particle's elements by its member (particleWriter). Append reaches each through encoded.
+// implementers are exactly the arms the slice the package doc's "# What encodes" states
+// reaches: the root arms, *simpleRoot, *boundBinding, *boundChoiceRoot and rawContent,
+// writing the element at.el; and the content arms, *boundSequence, *boundContentChoice,
+// boundOccurrence and boundFlattened, writing at.el's content, each member's elements by
+// its bound state (memberWriter). Append reaches each through encoded.
 type writer interface {
 	write(e *encoder, v reflect.Value, at writeAt) error
 }
@@ -399,8 +399,8 @@ func (s attributionSlot) take(e *encoder, decl xsd.ElementDeclaration, path stri
 // binder under it, as C, what Append's write reads it as: the writer capability, the
 // texter capability of simple content's contentFiller, the elementWriter capability of
 // a fieldSink's elementReader, the memberWriter capability of a boundMember, the
-// particleWriter capability of a contentMember's or a branchArm's elementMember or
-// wildcardMember, or a closed sum's arm, a boundMember's fieldSink, a fieldArm's
+// flatHolder capability of a contentMember, the emptier capability of a branchArm,
+// or a closed sum's arm, a boundMember's boundParticle or fieldSink, a fieldArm's
 // scalarArm or a scalarElem's atomic. It is the write's one assertion of the binder's
 // arms. Invariant: where item 4 of [Append]'s doc admits a construct, every arm the
 // binder builds for it that the write reaches is such a C. A failed assertion breaks
@@ -524,49 +524,52 @@ func (c *boundChoiceRoot) write(e *encoder, v reflect.Value, at writeAt) error {
 // base.
 func (b *boundSequence) write(e *encoder, v reflect.Value, at writeAt) error {
 	check := e.attribution(b.sequence.index, at.el, at.typ, membersFlatten(b.sequence.members))
-	if err := writeMembers(e, b.sequence.members, b.members, v, at, attributionSlot{check: check, target: b.sequence.base}); err != nil {
+	if err := writeMembers(e, b.members, v, at, attributionSlot{check: check, target: b.sequence.base}); err != nil {
 		return err
 	}
 	check.end(e, at.path)
 	return nil
 }
 
-// writeMembers writes the elements of each of members, the members of a
-// sequence, of a choice's alternative or of an occurrence field's item, from
-// its field of v, the struct holding them, in member order, members[i] by
-// bound[i], its own bound state (memberWriter), each taken by slot.check:
-// member i's first attribution target is slot.target, the first member's,
-// plus the targets every earlier member takes (contentMember.targets).
-func writeMembers(e *encoder, members []contentMember, bound []boundMember, v reflect.Value, at writeAt, slot attributionSlot) error {
+// writeMembers writes the elements of each member of a sequence, of a
+// choice's alternative or of an occurrence field's item from its field of v,
+// the struct holding them, in member order, each by bound[i], its own bound
+// state (memberWriter), each taken by slot.check: member i's first
+// attribution target is slot.target, the first member's, plus the targets
+// every earlier member takes, one per sink (boundMember.sinks).
+func writeMembers(e *encoder, bound []boundMember, v reflect.Value, at writeAt, slot attributionSlot) error {
 	target := slot.target
-	for i, m := range members {
-		if err := encoded[memberWriter](bound[i]).writeMember(e, m, v, at, attributionSlot{check: slot.check, target: target}); err != nil {
+	for _, b := range bound {
+		if err := encoded[memberWriter](b).writeMember(e, v, at, attributionSlot{check: slot.check, target: target}); err != nil {
 			return err
 		}
-		target += m.targets()
+		target += len(b.sinks())
 	}
 	return nil
 }
 
 // A memberWriter is a boundMember Append writes, the bound state of a member
-// of a sequence, a choice's alternative or an occurrence field's item:
-// writeMember writes the elements of m, the member it was bound from, from
-// its field of v, the struct holding it, at.path being v's Go path, its first
+// of a sequence, a choice's alternative or an occurrence field's item, which
+// holds its own member: writeMember writes the member's elements from its
+// field of v, the struct holding it, at.path being v's Go path, its first
 // attribution target slot.target in slot.check, and returns a backend fault.
-// Its implementers are fieldSink, an element or wildcard particle's, which
-// reads m as the particleWriter it is, and the bound states of a nested model
-// group particle, each holding its own member, which ignore m:
-// boundNestedChoice, a choice occurring once; boundFlatSlice, a flattened
-// particle; and boundNestedOccurrence, an occurrence field.
+// Its implementers are boundParticle, an element or wildcard particle's, and
+// the bound states of a nested model group particle: boundNestedChoice, a
+// choice occurring once; boundFlatSlice, a flattened particle; and
+// boundNestedOccurrence, an occurrence field. A fieldSink is none: item 4
+// declines the open-content field's {open content} (contentEncodes) and a
+// governing type's branch field's {type table}, and Append writes a
+// substitution group member's branch field through its reader
+// (groupReader.writeElement).
 type memberWriter interface {
-	writeMember(e *encoder, m contentMember, v reflect.Value, at writeAt, slot attributionSlot) error
+	writeMember(e *encoder, v reflect.Value, at writeAt, slot attributionSlot) error
 }
 
-// writeMember writes the elements of m's particle from field s.index of v
-// (particleWriter.writeElements), read by s, taken at slot.
-func (s fieldSink) writeMember(e *encoder, m contentMember, v reflect.Value, at writeAt, slot attributionSlot) error {
-	f, field := fieldOf(v, s.index, at)
-	return encoded[particleWriter](m).writeElements(e, s, f, field, slot)
+// writeMember writes the elements of b's particle from field b.sink.index of
+// v (particleWriter.writeElements), read by b.sink, taken at slot.
+func (b boundParticle) writeMember(e *encoder, v reflect.Value, at writeAt, slot attributionSlot) error {
+	f, field := fieldOf(v, b.sink.index, at)
+	return b.writer.writeElements(e, b.sink, f, field, slot)
 }
 
 // fieldOf returns field index of v, the struct at.path names, and its own
@@ -577,7 +580,7 @@ func fieldOf(v reflect.Value, index int, at writeAt) (reflect.Value, writeAt) {
 
 // writeMember writes the branch field b.index of v holds, the nested choice's
 // sealed interface (writeChoice), its alternatives' targets from slot.target.
-func (b boundNestedChoice) writeMember(e *encoder, _ contentMember, v reflect.Value, at writeAt, slot attributionSlot) error {
+func (b boundNestedChoice) writeMember(e *encoder, v reflect.Value, at writeAt, slot attributionSlot) error {
 	f, field := fieldOf(v, b.index, at)
 	return writeChoice(e, b.choice.sealed.alts, b.bound, f, field, "a nested choice particle of "+typeSubject(at.el, at.typ), slot)
 }
@@ -585,9 +588,9 @@ func (b boundNestedChoice) writeMember(e *encoder, _ contentMember, v reflect.Va
 // writeMember writes field b.index of v, the nested flattened particle's
 // slice, one element per item in slice order (writeFlatItems), alternative j
 // taking target slot.target+j.
-func (b boundFlatSlice) writeMember(e *encoder, _ contentMember, v reflect.Value, at writeAt, slot attributionSlot) error {
+func (b boundFlatSlice) writeMember(e *encoder, v reflect.Value, at writeAt, slot attributionSlot) error {
 	f, field := fieldOf(v, b.index, at)
-	return writeFlatItems(e, b.slice.sealed.alts, b.bound, f, field, "the nested flattened particle of "+typeSubject(at.el, at.typ), slot)
+	return writeFlatItems(e, b.bound, f, field, "the nested flattened particle of "+typeSubject(at.el, at.typ), slot)
 }
 
 // writeMember writes field b.index of v, the nested occurrence field, as
@@ -596,7 +599,7 @@ func (b boundFlatSlice) writeMember(e *encoder, _ contentMember, v reflect.Value
 // where the two differ: each item it holds, in slice order, as its model
 // group's particles in order (boundItem.writeItem), its targets from
 // slot.target, under slot.check, the content's.
-func (b boundNestedOccurrence) writeMember(e *encoder, _ contentMember, v reflect.Value, at writeAt, slot attributionSlot) error {
+func (b boundNestedOccurrence) writeMember(e *encoder, v reflect.Value, at writeAt, slot attributionSlot) error {
 	o := b.occurrence
 	subject := fmt.Sprintf("a nested %s model group particle of %s", o.group.Compositor(), typeSubject(at.el, at.typ))
 	f, field := fieldOf(v, b.index, at)
@@ -655,7 +658,7 @@ func (b *boundContentChoice) write(e *encoder, v reflect.Value, at writeAt) erro
 	if err := writeChoice(e, b.content.choice.sealed.alts, b.choice, f, field, contentChoiceSubject(at.el, at.typ), attributionSlot{check: check}); err != nil {
 		return err
 	}
-	if err := writeMembers(e, rest.members, b.rest, v, at, attributionSlot{check: check, target: rest.base}); err != nil {
+	if err := writeMembers(e, b.rest, v, at, attributionSlot{check: check, target: rest.base}); err != nil {
 		return err
 	}
 	check.end(e, at.path)
@@ -697,7 +700,7 @@ func contentChoiceSubject(el xsd.ElementDeclaration, typ xsd.ComplexType) string
 // bound state (writeMembers), the first target slot.target, the sequence's
 // base.
 func (b boundSequenceItem) writeItem(e *encoder, v reflect.Value, at writeAt, _ string, slot attributionSlot) error {
-	return writeMembers(e, b.sequence.members, b.members, v, at, slot)
+	return writeMembers(e, b.members, v, at, slot)
 }
 
 // writeItem writes the branch v, a value of the choice's sealed interface,
@@ -748,7 +751,7 @@ func writeChoice(e *encoder, alts []branchArm, bc *boundChoice, v reflect.Value,
 		first += branchTargets(a)
 	}
 	branch := writeAt{el: at.el, typ: at.typ, path: at.path + ".(" + typePath(b.Type()) + ")"}
-	return writeMembers(e, alts[j].branchMembers(), bc.branches[j].members, b, branch, attributionSlot{check: slot.check, target: first})
+	return writeMembers(e, bc.branches[j].members, b, branch, attributionSlot{check: slot.check, target: first})
 }
 
 // branchOf returns the index in bc.branches of the branch whose type is t, the
@@ -769,7 +772,7 @@ func (bc *boundChoice) branchOf(t reflect.Type) int {
 func (b boundFlattened) write(e *encoder, v reflect.Value, at writeAt) error {
 	check := e.flattenedCheck(b.flattened, at)
 	f, field := fieldOf(v, b.index, at)
-	if err := writeFlatItems(e, b.flattened.slice.sealed.alts, b.bound, f, field, "the flattened content of "+check.subject, attributionSlot{check: check}); err != nil {
+	if err := writeFlatItems(e, b.bound, f, field, "the flattened content of "+check.subject, attributionSlot{check: check}); err != nil {
 		return err
 	}
 	check.end(e, at.path)
@@ -777,11 +780,11 @@ func (b boundFlattened) write(e *encoder, v reflect.Value, at writeAt) error {
 }
 
 // writeFlatItems writes slice, at at, the slice field of a flattened
-// particle, the content {particle} or nested, whose alternatives are alts and
-// which subject names, bc its interface bound, one element per item in slice
-// order: each item's branch, matched to its dynamic type
-// (boundChoice.branchOf), writes its alternative's one field
-// (particleWriter.writeElements), alternative j taking target slot.target+j
+// particle, the content {particle} or nested, which subject names, bc its
+// interface bound, one element per item in slice order: each item's branch,
+// matched to its dynamic type (boundChoice.branchOf), writes its
+// alternative's one field by the boundParticle the branch's one member is
+// bound to (boundParticle.writeMember), alternative j taking target slot.target+j
 // in slot.check, the content's attributionCheck, since the order of a
 // flattened slice's items is the caller's. It records item 6 of [Append]'s
 // doc for the slice: a nil item and an item of a dynamic type placed at no
@@ -790,7 +793,7 @@ func (b boundFlattened) write(e *encoder, v reflect.Value, at writeAt) error {
 // writeOccurring runs over the slice. A nil slot.check, a content whose
 // attributionCheck item 4 left nil (encoder.attribution, flatHolder), is an
 // internal bug, which panics, as encoded's assertion does.
-func writeFlatItems(e *encoder, alts []flatArm, bc *boundChoice, slice reflect.Value, at writeAt, subject string, slot attributionSlot) error {
+func writeFlatItems(e *encoder, bc *boundChoice, slice reflect.Value, at writeAt, subject string, slot attributionSlot) error {
 	if slot.check == nil {
 		panic(fmt.Sprintf("codec: Append reached %s with no attributionCheck of its content", subject))
 	}
@@ -806,8 +809,8 @@ func writeFlatItems(e *encoder, alts []flatArm, bc *boundChoice, slice reflect.V
 			e.invalidate(fmt.Errorf("codec: Append: %s holds a %s, which the WithBranches set of %s places at no alternative of %s, so that Decode returns no such value", ipath, br.Type(), item.Type(), subject))
 			continue
 		}
-		field := writeAt{el: at.el, typ: at.typ, path: ipath + ".(" + typePath(br.Type()) + ")." + br.Type().Field(0).Name}
-		if err := alts[j].writeElements(e, encoded[fieldSink](bc.branches[j].members[0]), br.Field(0), field, attributionSlot{check: slot.check, target: slot.target + j}); err != nil {
+		branch := writeAt{el: at.el, typ: at.typ, path: ipath + ".(" + typePath(br.Type()) + ")"}
+		if err := encoded[boundParticle](bc.branches[j].members[0]).writeMember(e, br, branch, attributionSlot{check: slot.check, target: slot.target + j}); err != nil {
 			return err
 		}
 	}
@@ -855,10 +858,11 @@ func unemptiable(alts []branchArm) string {
 }
 
 // A particleWriter is the member of an element or wildcard particle Append
-// writes, a contentMember's or a branchArm's: writeElements writes the
-// elements of f, the field of its particle, read by s, the field's sink, at
-// at, each taken by slot's attributionCheck at slot's target, and returns a
-// backend fault. Its implementers are elementMember and wildcardMember.
+// writes, a contentMember's or a branchArm's, held by the boundParticle it
+// binds (boundParticle.writeMember): writeElements writes the elements of f,
+// the field of its particle, read by s, the field's sink, at at, each taken
+// by slot's attributionCheck at slot's target, and returns a backend fault.
+// Its implementers are elementMember and wildcardMember.
 type particleWriter interface {
 	writeElements(e *encoder, s fieldSink, f reflect.Value, at writeAt, slot attributionSlot) error
 }

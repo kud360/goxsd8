@@ -2673,12 +2673,12 @@ type contentMember interface {
 }
 
 // A boundMember is a contentMember whose check held, the member's own bound
-// state, a closed sum: a fieldSink, a field's, an elementMember's or a
-// wildcardMember's; a boundNestedChoice, a *choice's; a boundFlatSlice, a
-// *flatSlice's; or a boundNestedOccurrence, a *nestedOccurrence's. A sequence,
-// a branch struct and an occurrence's struct item keep one per member, in
-// member order, and derive their per-target sinks from them (targetSinks)
-// where they read them.
+// state, a closed sum: a fieldSink, a field's (field.bindMember); a
+// boundParticle, an elementMember's or a wildcardMember's; a
+// boundNestedChoice, a *choice's; a boundFlatSlice, a *flatSlice's; or a
+// boundNestedOccurrence, a *nestedOccurrence's. A sequence, a branch struct
+// and an occurrence's struct item keep one per member, in member order, and
+// derive their per-target sinks from them (targetSinks) where they read them.
 type boundMember interface {
 	// sinks returns one sink per target of the member, in target order.
 	sinks() []sink
@@ -2803,15 +2803,60 @@ func (field) targets() int { return 1 }
 // goName is f's Go name.
 func (f field) goName() string { return f.name }
 
-// bindMember holds field index of t to f (field.check) and returns its
-// fieldSink.
+// bindMember holds field index of t to f, the open-content field
+// (sequence.openContent) or the one field of a substitution group member's
+// or a governing type's branch struct (branchArm), and returns its fieldSink
+// (field.bindSink). elementMember and wildcardMember shadow it.
 func (f field) bindMember(t reflect.Type, index int, cx *checkContext) (boundMember, error) {
-	read, err := f.check(t, index, cx)
+	s, err := f.bindSink(t, index, cx)
 	if err != nil {
 		return nil, err
 	}
+	return s, nil
+}
+
+// bindSink holds field index of t to f (field.check) and returns its
+// fieldSink.
+func (f field) bindSink(t reflect.Type, index int, cx *checkContext) (fieldSink, error) {
+	read, err := f.check(t, index, cx)
+	if err != nil {
+		return fieldSink{}, err
+	}
 	return fieldSink{index: index, shape: f.shape, read: read}, nil
 }
+
+// bindMember holds field index of t to m's field (field.bindSink) and returns
+// the boundParticle of m held there.
+func (m elementMember) bindMember(t reflect.Type, index int, cx *checkContext) (boundMember, error) {
+	return bindParticle(m, m.field, t, index, cx)
+}
+
+// bindMember holds field index of t to m's field (field.bindSink) and returns
+// the boundParticle of m held there.
+func (m wildcardMember) bindMember(t reflect.Type, index int, cx *checkContext) (boundMember, error) {
+	return bindParticle(m, m.field, t, index, cx)
+}
+
+// bindParticle holds field index of t to f, the field of the element or
+// wildcard particle whose member is w (field.bindSink), and returns the
+// boundParticle of w held there.
+func bindParticle(w particleWriter, f field, t reflect.Type, index int, cx *checkContext) (boundMember, error) {
+	s, err := f.bindSink(t, index, cx)
+	if err != nil {
+		return nil, err
+	}
+	return boundParticle{writer: w, sink: s}, nil
+}
+
+// boundParticle is an element or wildcard particle's member whose check
+// held: writer, the member itself, its field's sink, sink.
+type boundParticle struct {
+	writer particleWriter
+	sink   fieldSink
+}
+
+// sinks is b.sink alone: a particle's field takes one attribution target.
+func (b boundParticle) sinks() []sink { return []sink{b.sink} }
 
 // fieldSink is a field whose check held: field index of the struct, of
 // shape, read reading its element.
@@ -3387,8 +3432,9 @@ type branchArm interface {
 // particle's, or a wildcardMember, a wildcard one's, each its branch struct's
 // one field, occurring exactly once, so its own and held both
 // goshape.ExactlyOnce(). Decode reads it as the branchArm it is, and Append
-// writes each item of the slice through it (boundFlattened.write), so that it
-// carries the declaration that write reads.
+// writes each item of the slice through the boundParticle it binds its
+// branch struct's field to (writeFlatItems), so that it carries the
+// declaration that write reads.
 type flatArm interface {
 	branchArm
 	particleWriter
@@ -4446,7 +4492,7 @@ func (c choiceItem) itemTargets() int { return c.choice.targets() }
 // particle's {min occurs} and {max occurs} and held the occurrence the shape
 // was computed at, as elementMember's are: own for a sequence's particle and
 // goshape.BranchOccurs' for a choice's alternative, which Append's length
-// check reads (nestedOccurrence.writeMember). Its item's targets are first on
+// check reads (boundNestedOccurrence.writeMember). Its item's targets are first on
 // in its content model's childIndex, and positions[k] is the Matcher position
 // of the particle of the item's target k below the nested particle's own, a
 // position of a basic particle of group as continues reads one: an element
