@@ -31,7 +31,7 @@ const facetDeclined = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" xm
 // because": a function decline is the one kind the two façades state alike.
 func TestDeclinedFacetAssertionNamesWhy(t *testing.T) {
 	const reason = "function fn:tokenize is not supported"
-	res := orderAssess(t, facetDeclined, `<r xmlns="urn:t"><e>2</e><p>5</p></r>`)
+	res := orderAssess(t, "order.xml", facetDeclined, `<r xmlns="urn:t"><e>2</e><p>5</p></r>`)
 	if got := res.Violations(); len(got) != 0 {
 		t.Fatalf("Violations() = %v, want none: a decline is never a charge", got)
 	}
@@ -55,7 +55,7 @@ func TestDeclinedFacetAssertionNamesWhy(t *testing.T) {
 
 // A {test} the evaluator decides records nothing: `$value eq 5` holds on 5.
 func TestDecidedFacetAssertionRecordsNothing(t *testing.T) {
-	res := orderAssess(t, facetDeclined, `<f xmlns="urn:t"><q>5</q></f>`)
+	res := orderAssess(t, "order.xml", facetDeclined, `<f xmlns="urn:t"><q>5</q></f>`)
 	if len(res.Violations()) != 0 || len(res.Unevaluated()) != 0 {
 		t.Errorf("Violations() = %v, Unevaluated() = %d records, want both empty: the {test} holds", res.Violations(), len(res.Unevaluated()))
 	}

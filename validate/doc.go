@@ -136,7 +136,7 @@
 // # Contract (M5, landing rule by rule)
 //
 // [Result] carries every violation charged so far as an *xsderr.Error
-// (cvc-* rule + instance and/or schema Loc), in the order [Result.Violations]
+// (cvc-* rule + its one Loc, as [xsderr] states), in the order [Result.Violations]
 // states. Ten rules are charged today, at the ·validation root· and at every
 // descendant the descent assesses — against a ·governing element declaration·,
 // against a ·governing type definition· alone, or, ·laxly assessed·, against

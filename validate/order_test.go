@@ -260,7 +260,7 @@ func TestViolationsAreListedInWalkOrder(t *testing.T) {
 			"<g xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\" xmlns:xs=\"http://www.w3.org/2001/XMLSchema\">\n  <e xsi:type=\"xs:string\">1</e>\n</g>", false,
 			[]string{"2:3 cvc-elt", "2:3 cvc-complex-type", "2:3 cvc-type"}, ""},
 	} {
-		res := orderAssess(t, tc.schema, tc.doc)
+		res := orderAssess(t, "order.xml", tc.schema, tc.doc)
 		var got, msgs []string
 		if tc.unevaluated {
 			for _, u := range res.Unevaluated() {
@@ -284,9 +284,9 @@ func TestViolationsAreListedInWalkOrder(t *testing.T) {
 	}
 }
 
-// orderAssess assesses doc against schemaText, failing t unless both read and
-// the walk reached the document's end.
-func orderAssess(t *testing.T, schemaText, doc string) *validate.Result {
+// orderAssess assesses doc, read as uri, against schemaText, failing t unless
+// both read and the walk reached the document's end.
+func orderAssess(t *testing.T, uri, schemaText, doc string) *validate.Result {
 	t.Helper()
 	backend := strict.New()
 	schema, err := parser.Parse("order.xsd",
@@ -299,7 +299,7 @@ func orderAssess(t *testing.T, schemaText, doc string) *validate.Result {
 	if err != nil {
 		t.Fatalf("validate.New: %v", err)
 	}
-	res, err := xmlsrc.Validate(v, strings.NewReader(doc), xmlsrc.WithURI("order.xml"))
+	res, err := xmlsrc.Validate(v, strings.NewReader(doc), xmlsrc.WithURI(uri))
 	if err != nil {
 		t.Fatalf("xmlsrc.Validate: %v", err)
 	}
