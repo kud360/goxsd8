@@ -3807,3 +3807,193 @@ func TestAppendSimpleContentDeclineText(t *testing.T) {
 		t.Errorf("Construct = %v, want %s", err, constructAssertions.name())
 	}
 }
+
+// The encode flatten schemas, each declaring s:r, whose content {particle}
+// codegen flattens, beside flatten_test.go's: efPairSchema's sequence(a?, b?)
+// occurring exactly twice, read into flatSeq; efOnceSchema's choice(a,
+// sequence(b?)) occurring exactly once, flattened by its emptiable
+// model-group alternative, read into flatOpt; efSkipSchema's sequence(a+,
+// any?) repeated, its wildcard ##other of {process contents} skip, read into
+// flatWild; efRefSchema's sequence(x?, b?) repeated, x an <element ref> to a
+// top-level declaration that heads no substitution group; and efKeySchema's
+// sequence(g?, b?) repeated, g a local declaration with a unique gu over its
+// k children.
+const (
+	efPairSchema = `<xs:element name="r"><xs:complexType><xs:sequence minOccurs="2" maxOccurs="2"><xs:element name="a" type="xs:string" minOccurs="0"/><xs:element name="b" type="xs:string" minOccurs="0"/></xs:sequence></xs:complexType></xs:element>`
+	efOnceSchema = `<xs:element name="r"><xs:complexType><xs:choice><xs:element name="a" type="xs:string"/><xs:sequence><xs:element name="b" type="xs:string" minOccurs="0"/></xs:sequence></xs:choice></xs:complexType></xs:element>`
+	efSkipSchema = `<xs:element name="r"><xs:complexType><xs:sequence maxOccurs="unbounded"><xs:element name="a" type="xs:string" maxOccurs="unbounded"/><xs:any namespace="##other" minOccurs="0" processContents="skip"/></xs:sequence></xs:complexType></xs:element>`
+	efRefSchema  = `<xs:element name="x" type="xs:string"/><xs:element name="r"><xs:complexType><xs:sequence maxOccurs="unbounded"><xs:element ref="s:x" minOccurs="0"/><xs:element name="b" type="xs:string" minOccurs="0"/></xs:sequence></xs:complexType></xs:element>`
+	efKeySchema  = `<xs:element name="r"><xs:complexType><xs:sequence maxOccurs="unbounded"><xs:element name="g" minOccurs="0"><xs:complexType><xs:sequence><xs:element name="k" type="xs:string" maxOccurs="2"/></xs:sequence></xs:complexType>` +
+		`<xs:unique name="gu"><xs:selector xpath="s:k"/><xs:field xpath="."/></xs:unique></xs:element><xs:element name="b" type="xs:string" minOccurs="0"/></xs:sequence></xs:complexType></xs:element>`
+)
+
+// The types codegen emits for efRefSchema's and efKeySchema's s:r, in shape,
+// which TestEncodeFlattenTypesAreCodegens pins: efRef, efRefX, efRefB and
+// efX, the named type of top-level x; efKey, efKeyG, efKeyB and efKeyGroup,
+// g's struct.
+type (
+	efRef     struct{ Sequence []efRefItem }
+	efRefItem interface{ isEfRefItem() }
+	efRefX    struct{ X efX }
+	efRefB    struct{ B string }
+	efX       string
+
+	efKey      struct{ Sequence []efKeyItem }
+	efKeyItem  interface{ isEfKeyItem() }
+	efKeyG     struct{ G efKeyGroup }
+	efKeyB     struct{ B string }
+	efKeyGroup struct{ K []string }
+)
+
+func (efRefX) isEfRefItem() {}
+func (efRefB) isEfRefItem() {}
+func (efKeyG) isEfKeyItem() {}
+func (efKeyB) isEfKeyItem() {}
+
+// The branch sets of efRefSchema's and efKeySchema's interfaces.
+var (
+	efRefBranches = WithBranches[efRefItem](efRefX{}, efRefB{})
+	efKeyBranches = WithBranches[efKeyItem](efKeyG{}, efKeyB{})
+)
+
+// TestEncodeFlattenTypesAreCodegens pins the types the encode flatten
+// schemas are read into to those codegen emits, in shape: flatSeq's,
+// flatOpt's and flatWild's for efPairSchema, efOnceSchema and efSkipSchema,
+// and the ones above for efRefSchema and efKeySchema.
+func TestEncodeFlattenTypesAreCodegens(t *testing.T) {
+	branch := func(iface, name, field string) string {
+		return "type " + name + " struct {\n\t" + field + "\n}\n\nfunc (" + name + ") is" + iface + "() {}\n"
+	}
+	rows := []struct {
+		decls string
+		want  []string
+	}{
+		{efPairSchema, []string{"type R struct {\n\tSequence []RSequence\n}\n", branch("RSequence", "RSequenceA", "A string"), branch("RSequence", "RSequenceB", "B string")}},
+		{efOnceSchema, []string{"type R struct {\n\tChoice []RChoice\n}\n", branch("RChoice", "RChoiceA", "A string"), branch("RChoice", "RChoiceB", "B string")}},
+		{efSkipSchema, []string{"type R struct {\n\tSequence []RSequence\n}\n", branch("RSequence", "RSequenceA", "A string"), branch("RSequence", "RSequenceAny", "Any AnyElement")}},
+		{efRefSchema, []string{"type X string\n", "type R struct {\n\tSequence []RSequence\n}\n", branch("RSequence", "RSequenceX", "X X"), branch("RSequence", "RSequenceB", "B string")}},
+		{efKeySchema, []string{"type R struct {\n\tSequence []RSequence\n}\n", branch("RSequence", "RSequenceG", "G RG"), "type RG struct {\n\tK []string\n}\n", branch("RSequence", "RSequenceB", "B string")}},
+	}
+	for _, row := range rows {
+		gen := generated(t, schemaOf(t, row.decls))
+		for _, decl := range row.want {
+			if !bytes.Contains(gen, []byte(decl)) {
+				t.Errorf("codegen emits\n%s\nwhich does not declare\n%s", gen, decl)
+			}
+		}
+	}
+}
+
+// TestAppendFlattened pins "# What encodes"' flattened content {particle}, in
+// each shape of reach its rows name: each item of the slice is written, in
+// slice order, as the element of its branch's basic particle (Structures
+// §3.8.4.2 key-vpath), validate accepts the document, and Decode under the
+// same sets returns the value. The rows of efPairSchema hold three items and
+// one under a sequence occurring exactly twice, since the slice holds one
+// item per child, not per occurrence (§3.9.4.3 cvc-accept clause 3.1), and
+// efOnceSchema's empty slice is the empty match. Each row fails with
+// contentEncodes' Flattened case declining as it did before.
+func TestAppendFlattened(t *testing.T) {
+	t.Run("a repeated sequence of element particles", func(t *testing.T) {
+		v := flatSeq{Sequence: []flatSeqItem{flatSeqA{A: "1"}, flatSeqB{B: "2"}, flatSeqB{B: "3"}, flatSeqA{A: "4"}}}
+		roundTrip(t, schemaOf(t, flatSeqSchema), rootName, v, `<r xmlns="urn:s"><a>1</a><b>2</b><b>3</b><a>4</a></r>`, deepEqual[flatSeq], flatSeqBranches)
+	})
+	t.Run("a sequence occurring twice, three items", func(t *testing.T) {
+		v := flatSeq{Sequence: []flatSeqItem{flatSeqA{A: "1"}, flatSeqA{A: "2"}, flatSeqB{B: "3"}}}
+		roundTrip(t, schemaOf(t, efPairSchema), rootName, v, `<r xmlns="urn:s"><a>1</a><a>2</a><b>3</b></r>`, deepEqual[flatSeq], flatSeqBranches)
+	})
+	t.Run("a sequence occurring twice, one item", func(t *testing.T) {
+		v := flatSeq{Sequence: []flatSeqItem{flatSeqB{B: "1"}}}
+		roundTrip(t, schemaOf(t, efPairSchema), rootName, v, `<r xmlns="urn:s"><b>1</b></r>`, deepEqual[flatSeq], flatSeqBranches)
+	})
+	t.Run("a <group ref> occurring twice", func(t *testing.T) {
+		v := flatSeq{Sequence: []flatSeqItem{flatSeqA{A: "1"}, flatSeqB{B: "2"}, flatSeqA{A: "3"}}}
+		roundTrip(t, schemaOf(t, flatRefSchema), rootName, v, `<r xmlns="urn:s"><a>1</a><b>2</b><a>3</a></r>`, deepEqual[flatSeq], flatSeqBranches)
+	})
+	t.Run("a repeated choice with a repeating edge, beside attributes", func(t *testing.T) {
+		c, q := "c", "q"
+		v := flatChoice{Choice: []flatChoiceItem{flatChoiceA{A: "x"}, flatChoiceA{A: "y"}, flatChoiceB{B: 1}, flatChoiceA{A: "z"}, flatChoiceB{B: 2}}, Sequence: &q, Choice2: &c}
+		roundTrip(t, schemaOf(t, flatChoiceSchema), rootName, v, `<r xmlns="urn:s" sequence="q" choice="c"><a>x</a><a>y</a><b>1</b><a>z</a><b>2</b></r>`, deepEqual[flatChoice], flatChoiceBranches)
+	})
+	t.Run("a choice occurring once, its element alternative", func(t *testing.T) {
+		v := flatOpt{Choice: []flatOptItem{flatOptA{A: "v"}}}
+		roundTrip(t, schemaOf(t, efOnceSchema), rootName, v, `<r xmlns="urn:s"><a>v</a></r>`, deepEqual[flatOpt], flatOptBranches)
+	})
+	t.Run("a choice occurring once, its emptiable sequence's element", func(t *testing.T) {
+		v := flatOpt{Choice: []flatOptItem{flatOptB{B: "v"}}}
+		roundTrip(t, schemaOf(t, efOnceSchema), rootName, v, `<r xmlns="urn:s"><b>v</b></r>`, deepEqual[flatOpt], flatOptBranches)
+	})
+	t.Run("a choice occurring once, the empty match", func(t *testing.T) {
+		roundTrip(t, schemaOf(t, efOnceSchema), rootName, flatOpt{}, `<r xmlns="urn:s"/>`, deepEqual[flatOpt], flatOptBranches)
+	})
+	t.Run("an optional choice with an emptiable model-group alternative", func(t *testing.T) {
+		roundTrip(t, schemaOf(t, flatOptSchema), rootName, flatOpt{Choice: []flatOptItem{flatOptB{B: "v"}}}, `<r xmlns="urn:s"><b>v</b></r>`, deepEqual[flatOpt], flatOptBranches)
+	})
+	t.Run("a skip wildcard in the reach", func(t *testing.T) {
+		v := flatWild{Sequence: []flatWildItem{flatWildA{A: "1"}, flatWildA{A: "2"}, flatWildAny{Any: anyElement{Space: "urn:o", Local: "w"}}, flatWildA{A: "3"}}}
+		roundTrip(t, schemaOf(t, efSkipSchema), rootName, v, `<r xmlns="urn:s"><a>1</a><a>2</a><w xmlns="urn:o"/><a>3</a></r>`, deepEqual[flatWild], flatWildBranches)
+	})
+	t.Run("an <element ref> alternative", func(t *testing.T) {
+		v := efRef{Sequence: []efRefItem{efRefX{X: "1"}, efRefB{B: "2"}, efRefX{X: "3"}}}
+		roundTrip(t, schemaOf(t, efRefSchema), rootName, v, `<r xmlns="urn:s"><x>1</x><b>2</b><x>3</x></r>`, deepEqual[efRef], efRefBranches)
+	})
+	t.Run("two branches of one name, a tie", func(t *testing.T) {
+		v := flatTie{Sequence: []flatTieItem{flatTieR1{R1: "1"}, FlatTieItemR2{R2: "2"}, FlatTieItemR22{R2: "3"}, flatTieR3{R3: "4"}}}
+		roundTrip(t, schemaOf(t, flatTieSchema), rootName, v, `<r xmlns="urn:s"><r1>1</r1><r2>2</r2><r2>3</r2><r3>4</r3></r>`, deepEqual[flatTie], flatTieBranches)
+	})
+	t.Run("a declaration with an identity constraint in the reach", func(t *testing.T) {
+		v := efKey{Sequence: []efKeyItem{efKeyG{G: efKeyGroup{K: []string{"1", "2"}}}, efKeyB{B: "b"}, efKeyG{G: efKeyGroup{K: []string{"1"}}}}}
+		roundTrip(t, schemaOf(t, efKeySchema), rootName, v, `<r xmlns="urn:s"><g><k>1</k><k>2</k></g><b>b</b><g><k>1</k></g></r>`, deepEqual[efKey], efKeyBranches)
+	})
+}
+
+// TestAppendFlattenedInvalid pins item 6 of Append's doc for a flattened
+// content {particle}'s slice, each error with no xsderr rule and opening with
+// the Go path of the item it names: a nil item, which Decode never returns;
+// an item of a dynamic type the WithBranches set placed at no alternative, a
+// pointer to a branch among them; an item the content model admits at no
+// particle where it is written, a second item of a choice occurring once and
+// a name outside the skip wildcard's {namespace constraint} among them
+// (§3.9.4.3 cvc-accept, §3.10.4.1 cvc-wildcard); an item the content model
+// attributes to a particle other than its branch's, the tie's g1 r2 where
+// g2's branch holds it (§3.4.4.4 key-att-to); and a slice after whose last
+// item the content model is not accepting (§3.8.4.3 cvc-model-group). The
+// reached declaration's identity constraint is assessed, so a duplicate
+// value in one g is item 8's error instead.
+func TestAppendFlattenedInvalid(t *testing.T) {
+	seqS := schemaOf(t, flatSeqSchema)
+	t.Run("a nil item", func(t *testing.T) {
+		_, err := appendChecked(t, nil, seqS, strict.New(), rootName, flatSeq{Sequence: []flatSeqItem{flatSeqA{A: "1"}, nil}}, flatSeqBranches)
+		invalidChoice(t, err, "codec: Append: flatSeq.Sequence[1] is nil, an item of the flattened content of the {type definition} of element {urn:s}r declared at ", "so that Decode returns no such item")
+	})
+	t.Run("a pointer to a branch", func(t *testing.T) {
+		_, err := appendChecked(t, nil, seqS, strict.New(), rootName, flatSeq{Sequence: []flatSeqItem{&flatSeqA{A: "1"}}}, flatSeqBranches)
+		invalidChoice(t, err, "codec: Append: flatSeq.Sequence[0] holds a *codec.flatSeqA, which the WithBranches set of codec.flatSeqItem places at no alternative of the flattened content of the {type definition} of element {urn:s}r declared at ", "so that Decode returns no such value")
+	})
+	t.Run("a second item of a choice occurring once", func(t *testing.T) {
+		_, err := appendChecked(t, nil, schemaOf(t, efOnceSchema), strict.New(), rootName, flatOpt{Choice: []flatOptItem{flatOptA{A: "1"}, flatOptA{A: "2"}}}, flatOptBranches)
+		invalidChoice(t, err, "codec: Append: flatOpt.Choice[1].(flatOptA).A holds element {urn:s}a, which no particle of the content model of the {type definition} of element {urn:s}r declared at ", "admits where it is written")
+	})
+	t.Run("a name outside the skip wildcard's {namespace constraint}", func(t *testing.T) {
+		v := flatWild{Sequence: []flatWildItem{flatWildA{A: "1"}, flatWildAny{Any: anyElement{Space: "urn:s", Local: "w"}}}}
+		_, err := appendChecked(t, nil, schemaOf(t, efSkipSchema), strict.New(), rootName, v, flatWildBranches)
+		invalidChoice(t, err, "codec: Append: flatWild.Sequence[1].(flatWildAny).Any holds element {urn:s}w, which no particle of the content model of ", "cvc-wildcard")
+	})
+	t.Run("an item attributed to another alternative's particle", func(t *testing.T) {
+		v := flatTie{Sequence: []flatTieItem{flatTieR1{R1: "1"}, FlatTieItemR22{R2: "2"}}}
+		_, err := appendChecked(t, nil, schemaOf(t, flatTieSchema), strict.New(), rootName, v, flatTieBranches)
+		invalidChoice(t, err, "codec: Append: flatTie.Sequence[1].(FlatTieItemR22).R2 holds element {urn:s}r2, which the content model of the {type definition} of element {urn:s}r declared at ", "attributes to a particle other than the one whose field holds it")
+	})
+	t.Run("a slice the content model does not accept at its end", func(t *testing.T) {
+		v := flatShared{Sequence: []flatSharedItem{flatSharedC{C: "1"}}}
+		_, err := appendChecked(t, nil, schemaOf(t, flatSharedSchema), strict.New(), rootName, v, flatSharedBranches)
+		invalidChoice(t, err, "codec: Append: flatShared holds content the content model of the {type definition} of element {urn:s}r declared at ", "it ends short of a particle it must satisfy")
+	})
+	t.Run("an identity constraint in the reach, assessed", func(t *testing.T) {
+		v := efKey{Sequence: []efKeyItem{efKeyG{G: efKeyGroup{K: []string{"1", "1"}}}}}
+		_, err := appendChecked(t, nil, schemaOf(t, efKeySchema), strict.New(), rootName, v, efKeyBranches)
+		if !errors.Is(err, ErrInvalidValue) || !strings.Contains(err.Error(), "{urn:s}gu") {
+			t.Errorf("Append = %v, want item 8's ErrInvalidValue naming the unique {urn:s}gu", err)
+		}
+	})
+}
