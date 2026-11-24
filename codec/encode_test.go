@@ -1191,13 +1191,12 @@ func TestAppendDeclines(t *testing.T) {
 		{"nested sequence in an occurrence field", "a nested model group particle", complexOf(`<xs:sequence maxOccurs="2">` + a + `<xs:sequence><xs:element name="b" type="xs:string"/></xs:sequence></xs:sequence>`)},
 		{"nested group ref in an occurrence field", "a nested model group particle", `<xs:group name="g%[1]s"><xs:sequence><xs:element name="b" type="xs:string"/></xs:sequence></xs:group>` +
 			complexOf(`<xs:sequence maxOccurs="2">`+a+`<xs:group ref="s:g%[1]s"/></xs:sequence>`)},
-		{"wildcard", "a wildcard particle with {process contents} strict or lax", sequence(`<xs:any processContents="lax"/>`)},
-		{"strict wildcard", "a wildcard particle with {process contents} strict or lax", sequence(`<xs:any/>`)},
+		{"strict wildcard", "a wildcard particle with {process contents} strict", sequence(`<xs:any/>`)},
 		{"ref value constraint", "a value constraint, default or fixed", `<xs:element name="x%[1]s" type="xs:string" default="x"/>` + sequence(`<xs:element ref="s:x%[1]s"/>`)},
 		{"ref simple content", "xs:anySimpleType or xs:anyAtomicType as a simple type", `<xs:element name="x%[1]s"><xs:complexType><xs:simpleContent><xs:extension base="xs:anySimpleType"/></xs:simpleContent></xs:complexType></xs:element>` +
 			sequence(`<xs:element ref="s:x%[1]s"/>`)},
-		{"complex particle", "a wildcard particle with {process contents} strict or lax", sequence(`<xs:element name="a"><xs:complexType><xs:sequence><xs:any processContents="lax"/></xs:sequence></xs:complexType></xs:element>`)},
-		{"particle type sharing its element's name", "a wildcard particle with {process contents} strict or lax", `<xs:complexType name="%[1]s"><xs:sequence><xs:any processContents="lax"/></xs:sequence></xs:complexType>` +
+		{"complex particle", "a wildcard particle with {process contents} strict", sequence(`<xs:element name="a"><xs:complexType><xs:sequence><xs:any/></xs:sequence></xs:complexType></xs:element>`)},
+		{"particle type sharing its element's name", "a wildcard particle with {process contents} strict", `<xs:complexType name="%[1]s"><xs:sequence><xs:any/></xs:sequence></xs:complexType>` +
 			sequence(`<xs:element name="c" type="s:%[1]s"/>`)},
 		{"qualified attribute", "an attribute use whose declaration has a {target namespace}", complexOf(`<xs:attribute name="a" type="xs:string" form="qualified"/>`)},
 		{"attribute wildcard", "an {attribute wildcard}", complexOf(`<xs:anyAttribute processContents="lax"/>`)},
@@ -4176,9 +4175,9 @@ func TestAppendFlattenedDeclineSubject(t *testing.T) {
 	rows := []struct {
 		name, decls, want string
 	}{
-		{"flattened", flatWildSchema, "codec does not encode a wildcard particle with {process contents} strict or lax: alternative 2 of the flattened content {particle} of the {type definition} of element {urn:s}r declared at "},
-		{"once choice", `<xs:element name="r"><xs:complexType><xs:choice><xs:element name="a" type="xs:string"/><xs:any processContents="lax"/></xs:choice></xs:complexType></xs:element>`,
-			"codec does not encode a wildcard particle with {process contents} strict or lax: alternative 2 of the content {particle} of the {type definition} of element {urn:s}r declared at "},
+		{"flattened", strings.Replace(flatWildSchema, ` processContents="lax"`, "", 1), "codec does not encode a wildcard particle with {process contents} strict: alternative 2 of the flattened content {particle} of the {type definition} of element {urn:s}r declared at "},
+		{"once choice", `<xs:element name="r"><xs:complexType><xs:choice><xs:element name="a" type="xs:string"/><xs:any/></xs:choice></xs:complexType></xs:element>`,
+			"codec does not encode a wildcard particle with {process contents} strict: alternative 2 of the content {particle} of the {type definition} of element {urn:s}r declared at "},
 	}
 	for _, row := range rows {
 		t.Run(row.name, func(t *testing.T) {

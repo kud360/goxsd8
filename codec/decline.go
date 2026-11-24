@@ -206,7 +206,7 @@ var constructNames = [...]string{
 	constructOpenContent:        "an {open content}",
 	constructVacuousParticle:    "a particle with {max occurs} 0",
 	constructAllGroup:           "an all group",
-	constructWildcard:           "a wildcard particle with {process contents} strict or lax",
+	constructWildcard:           "a wildcard particle with {process contents} strict",
 	constructQualifiedAttribute: "an attribute use whose declaration has a {target namespace}",
 	constructAttributeWildcard:  "an {attribute wildcard}",
 	constructComplexAssertions:  "a complex type with {assertions}",
@@ -217,7 +217,7 @@ var constructNames = [...]string{
 	constructNoCanonical:        "a value with no canonical representation",
 	constructQNameSpelling:      "an xs:QName or xs:NOTATION value with no spelling Append writes where it is written",
 	constructXsiAttribute:       "an attribute in the XSI namespace held in a wildcard's match or an xs:anyType element's content",
-	constructGovernedContent:    "an element held in an xs:anyType element's content whose expanded name a top-level element declaration names, or an attribute it holds whose expanded name a top-level attribute declaration names",
+	constructGovernedContent:    "an element a lax wildcard's match is or holds, or an xs:anyType element's content holds, whose expanded name a top-level element declaration names, or an attribute either holds whose expanded name a top-level attribute declaration names, or a lax wildcard's match with a locally declared type",
 }
 
 // displayList spells names, at least two, each by its Display, separated by

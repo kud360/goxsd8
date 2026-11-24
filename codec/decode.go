@@ -2759,13 +2759,14 @@ func (m elementMember) branchMembers() []contentMember { return []contentMember{
 // wildcardMember is the member a wildcard particle gives a sequence, or a
 // choice's alternative or a flattened particle's basic particle its branch
 // struct's one field, as Decode binds it: its field, subject, the particle's
-// as item 5 of Decode's doc names it (wildcardSubject), and own and held, as
-// elementMember's are. Append writes the particle's elements from it
-// (wildcardMember.writeElements).
+// as item 5 of Decode's doc names it (wildcardSubject), own and held, as
+// elementMember's are, and process, the wildcard's {process contents}. Append
+// writes the particle's elements from it (wildcardMember.writeElements).
 type wildcardMember struct {
 	field
 	subject   string
 	own, held xsd.Occurs
+	process   xsd.ProcessContents
 }
 
 // branchMembers is m alone: a wildcard alternative's branch struct holds one
@@ -2851,7 +2852,7 @@ func (s *sequence) bind(run *bindRun, ct xsd.ComplexType, particles []xsd.Partic
 				return err
 			}
 			f.name = names.Claim("any")
-			s.members = append(s.members, wildcardMember{field: f, subject: subject, own: p.Occurs(), held: p.Occurs()})
+			s.members = append(s.members, wildcardMember{field: f, subject: subject, own: p.Occurs(), held: p.Occurs(), process: term.ProcessContents()})
 		case xsd.ModelGroup:
 			if err := s.nested(run, ct, term, p.Occurs(), append(slices.Clone(at), i), item, names, typeSubject); err != nil {
 				return err
@@ -3609,7 +3610,7 @@ func bindChoice(run *bindRun, ct xsd.ComplexType, particles []xsd.Particle, x *c
 				return nil, err
 			}
 			f.name = goname.NewNamer().Claim("any")
-			alt = wildcardMember{field: f, subject: subject, own: p.Occurs(), held: occurs}
+			alt = wildcardMember{field: f, subject: subject, own: p.Occurs(), held: occurs, process: term.ProcessContents()}
 		case xsd.ModelGroup:
 			alt, subject, err = groupAlternative(run, ct, term, occurs, x, position, target, item, typeSubject)
 			if err != nil {
@@ -3925,7 +3926,7 @@ func bindReach(run *bindRun, ct xsd.ComplexType, group xsd.ModelGroup, alts *sea
 				return err
 			}
 			f.name = goname.NewNamer().Claim("any")
-			alt, subject = wildcardMember{field: f, subject: s, own: occurs, held: occurs}, s
+			alt, subject = wildcardMember{field: f, subject: s, own: occurs, held: occurs, process: term.ProcessContents()}, s
 		case xsd.ModelGroup:
 			// goshape.Reach visits a model group particle only with {max
 			// occurs} 0.
