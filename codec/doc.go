@@ -329,8 +329,8 @@
 //     that codegen splices, a choice occurring exactly once that codegen does
 //     not flatten, or a sequence or choice codegen holds in an occurrence
 //     field, inline or through <group ref>, each of whose particles is an
-//     element particle or a wildcard particle with {process contents} skip,
-//     and, holding a wildcard particle, whose content model
+//     element particle or a wildcard particle with {process contents} skip
+//     or lax, and, holding a wildcard particle, whose content model
 //     xsd.Schema.ContentMatcher tracks, or a sequence or choice codegen
 //     flattens, each basic particle of whose reach (codegen's package doc, "#
 //     Particles") is such an element or wildcard particle, and whose content
@@ -353,9 +353,9 @@
 //     a flattened sequence or choice reaches, into the one field of its
 //     branch, each item of the slice one element, as "# What decodes" states.
 //   - A wildcard particle of that sequence or choice, or one a flattened
-//     sequence or choice reaches, with {process contents} skip and {max occurs}
-//     at least 1, into the field "# What decodes" states for it, each element
-//     it holds written raw, as below.
+//     sequence or choice reaches, with {process contents} skip or lax and {max
+//     occurs} at least 1, into the field "# What decodes" states for it, each
+//     element it holds written raw, as below.
 //   - xs:anyType itself (Structures §3.4.7), where the bullets above admit
 //     it, into the Go type "# What decodes" states for its declaration, its
 //     content written raw, as below.
@@ -430,25 +430,25 @@
 // ahead of the attribute or content that writes it. An attribute use's
 // attribute is written unprefixed, in the order of codegen's fields (codegen's
 // package doc, "# Attributes"), each value delimited by '"'. An element held
-// raw in a wildcard's field, at any depth, is written raw, nothing in it
-// assessed or resolved, and so is the content of an element of type xs:anyType
-// itself, its own attributes included, nothing in it resolved, but for the
-// items item 7 of Append's doc declines in it: its attributes in held order,
-// one of absent namespace unprefixed, one in the XML namespace xml:Local, and
-// every other one pN:Local, pN chosen and declared as for an xs:QName value,
-// though its namespace be that element's own; then its Text, then each of its
-// Children, written so, followed by its Tail. A nil pointer field writes
-// nothing, and so does a nil interface field where nil means absent (codegen's
-// package doc, "# Particles", "# Attributes"), a particle with {max occurs}
-// above 1 writes one element per item of its slice, a flattened sequence or
-// choice one per item of its slice, in order, its branch's basic particle's,
-// whatever the particle's occurrence, an occurrence field writes
-// each item it holds, in order, as its model group's particles in order, a
-// choice's branch writes its alternative's elements, the empty match, the nil
-// interface of a present element, writes no child element, and an element with
-// no content is written as an empty-element tag, <x/>. A string value, of
-// xs:string or xs:anyURI primitive, is written as itself, its canonical
-// representation, since xs:string's canonical mapping is the identity
+// raw in a skip wildcard's field, at any depth, is written raw, nothing in it
+// assessed or resolved, and so is one held in a lax wildcard's field and the
+// content of an element of type xs:anyType itself, its own attributes
+// included, nothing in either resolved, but for the items item 7 of Append's
+// doc declines in it: its attributes in held order, one of absent namespace
+// unprefixed, one in the XML namespace xml:Local, and every other one pN:Local,
+// pN chosen and declared as for an xs:QName value, though its namespace be that
+// element's own; then its Text, then each of its Children, written so, followed
+// by its Tail. A nil pointer field writes nothing, and so does a nil interface
+// field where nil means absent (codegen's package doc, "# Particles", "#
+// Attributes"), a particle with {max occurs} above 1 writes one element per
+// item of its slice, a flattened sequence or choice one per item of its slice,
+// in order, its branch's basic particle's, whatever the particle's occurrence,
+// an occurrence field writes each item it holds, in order, as its model group's
+// particles in order, a choice's branch writes its alternative's elements, the
+// empty match, the nil interface of a present element, writes no child element,
+// and an element with no content is written as an empty-element tag, <x/>. A
+// string value, of xs:string or xs:anyURI primitive, is written as itself, its
+// canonical representation, since xs:string's canonical mapping is the identity
 // (Datatypes §E.4 f-stringCanmap) and so is xs:anyURI's lexical mapping, so
 // that an xs:anyURI value is neither normalized nor percent-escaped
 // (§3.3.17.2), and item 6 of Append's doc holds the string to its own

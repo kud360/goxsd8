@@ -74,8 +74,8 @@ func roundTrip[T any](t *testing.T, schema *xsd.Schema, name xsd.QName, v T, wan
 // (staticClass), and a nil one leaves Append nil, an item 6 or item 7 error
 // or a fault of backend: nil, item 6's ErrInvalidValue error, a plain error
 // without item 2's or item 3's text, or item 7's decline, by
-// constructNoCanonical, constructQNameSpelling, constructXsiAttribute or
-// constructGovernedContent.
+// constructNoCanonical, constructQNameSpelling, constructXsiAttribute,
+// constructGovernedContent or constructLocallyTypedMatch.
 func appendChecked[T any](t *testing.T, dst []byte, schema *xsd.Schema, backend value.Backend, name xsd.QName, v T, opts ...Option) ([]byte, error) {
 	t.Helper()
 	out, err := Append(dst, schema, backend, name, v, opts...)
@@ -83,7 +83,7 @@ func appendChecked[T any](t *testing.T, dst []byte, schema *xsd.Schema, backend 
 	if checked == nil {
 		class := staticClass(err)
 		static := class == "plain" && (strings.HasPrefix(err.Error(), "codec: no top-level element declaration") || strings.Contains(err.Error(), "{abstract} true"))
-		if static || err != nil && class != "plain" && class != "invalid" && class != "decline "+constructNoCanonical.name() && class != "decline "+constructQNameSpelling.name() && class != "decline "+constructXsiAttribute.name() && class != "decline "+constructGovernedContent.name() {
+		if static || err != nil && class != "plain" && class != "invalid" && class != "decline "+constructNoCanonical.name() && class != "decline "+constructQNameSpelling.name() && class != "decline "+constructXsiAttribute.name() && class != "decline "+constructGovernedContent.name() && class != "decline "+constructLocallyTypedMatch.name() {
 			t.Errorf("CheckAppend = nil, but Append returned %v, %s", err, class)
 		}
 		return out, err
@@ -1021,8 +1021,8 @@ func asDecline(t *testing.T, err error, prefix string) *DeclineError {
 // §3.4.2.3.3 dcl.ctd.ctcc.common clause 2.1.4 for a content {particle}), so
 // each schema is built from a parsed one with type v's particle rebuilt
 // through xsd.NewParticle with Occurs{0,0}: the content {particle}, an
-// element particle, and a wildcard particle, which declines so before it
-// declines as a wildcard.
+// element particle, and a strict wildcard particle, which declines so before
+// it declines as a strict wildcard.
 func TestAppendVacuousParticle(t *testing.T) {
 	none, err := xsd.NewOccurs(xsderr.Loc{}, 0, 0)
 	if err != nil {
@@ -1034,7 +1034,7 @@ func TestAppendVacuousParticle(t *testing.T) {
 	}{
 		{"content particle", `<xs:element name="a" type="xs:string"/>`, true},
 		{"element particle", `<xs:element name="a" type="xs:string"/>`, false},
-		{"wildcard particle", `<xs:any processContents="lax"/>`, false},
+		{"wildcard particle", `<xs:any/>`, false},
 	} {
 		t.Run(row.name, func(t *testing.T) {
 			parsed := schemaOf(t, `<xs:complexType name="v"><xs:sequence>`+row.particle+`</xs:sequence></xs:complexType><xs:element name="r" type="s:v"/>`)
@@ -1191,13 +1191,12 @@ func TestAppendDeclines(t *testing.T) {
 		{"nested sequence in an occurrence field", "a nested model group particle", complexOf(`<xs:sequence maxOccurs="2">` + a + `<xs:sequence><xs:element name="b" type="xs:string"/></xs:sequence></xs:sequence>`)},
 		{"nested group ref in an occurrence field", "a nested model group particle", `<xs:group name="g%[1]s"><xs:sequence><xs:element name="b" type="xs:string"/></xs:sequence></xs:group>` +
 			complexOf(`<xs:sequence maxOccurs="2">`+a+`<xs:group ref="s:g%[1]s"/></xs:sequence>`)},
-		{"wildcard", "a wildcard particle with {process contents} strict or lax", sequence(`<xs:any processContents="lax"/>`)},
-		{"strict wildcard", "a wildcard particle with {process contents} strict or lax", sequence(`<xs:any/>`)},
+		{"strict wildcard", "a wildcard particle with {process contents} strict", sequence(`<xs:any/>`)},
 		{"ref value constraint", "a value constraint, default or fixed", `<xs:element name="x%[1]s" type="xs:string" default="x"/>` + sequence(`<xs:element ref="s:x%[1]s"/>`)},
 		{"ref simple content", "xs:anySimpleType or xs:anyAtomicType as a simple type", `<xs:element name="x%[1]s"><xs:complexType><xs:simpleContent><xs:extension base="xs:anySimpleType"/></xs:simpleContent></xs:complexType></xs:element>` +
 			sequence(`<xs:element ref="s:x%[1]s"/>`)},
-		{"complex particle", "a wildcard particle with {process contents} strict or lax", sequence(`<xs:element name="a"><xs:complexType><xs:sequence><xs:any processContents="lax"/></xs:sequence></xs:complexType></xs:element>`)},
-		{"particle type sharing its element's name", "a wildcard particle with {process contents} strict or lax", `<xs:complexType name="%[1]s"><xs:sequence><xs:any processContents="lax"/></xs:sequence></xs:complexType>` +
+		{"complex particle", "a wildcard particle with {process contents} strict", sequence(`<xs:element name="a"><xs:complexType><xs:sequence><xs:any/></xs:sequence></xs:complexType></xs:element>`)},
+		{"particle type sharing its element's name", "a wildcard particle with {process contents} strict", `<xs:complexType name="%[1]s"><xs:sequence><xs:any/></xs:sequence></xs:complexType>` +
 			sequence(`<xs:element name="c" type="s:%[1]s"/>`)},
 		{"qualified attribute", "an attribute use whose declaration has a {target namespace}", complexOf(`<xs:attribute name="a" type="xs:string" form="qualified"/>`)},
 		{"attribute wildcard", "an {attribute wildcard}", complexOf(`<xs:anyAttribute processContents="lax"/>`)},
@@ -3427,6 +3426,25 @@ const (
 	skipAttrSchema     = `<xs:element name="r"><xs:complexType><xs:choice><xs:element name="a" type="xs:string"/><xs:any processContents="skip"/></xs:choice><xs:attribute name="x" type="xs:string"/></xs:complexType></xs:element>`
 )
 
+// The lax-wildcard schemas, each declaring s:r: laxGovernedSchema is
+// seqLaxSchema, sequence(a, any), beside a top-level element w and a
+// top-level attribute t, each of xs:int, which govern an item so named at any
+// depth of the match; laxTargetSchema is sequence(a, any) over
+// ##targetNamespace; and laxPickBaseSchema and laxFlatBaseSchema restrict
+// laxBase, sequence(c?, any*), by pickWildSchema's choice(a, any) and by
+// flatPickSchema's flattened choice(a+, any), repeated, so that a match named
+// c has its ·locally declared type· from the base type alone (§3.4.6.4
+// key-ldt-elem clause 3). Their s:r types are wildcard_test.go's seqWild for
+// the first two and pickWild, and flatten_test.go's flatPick, which
+// TestWildcardTypesAreCodegens and TestFlattenTypesAreCodegens pin.
+const (
+	laxGovernedSchema = seqLaxSchema + `<xs:element name="w" type="xs:int"/><xs:attribute name="t" type="xs:int"/>`
+	laxTargetSchema   = `<xs:element name="r"><xs:complexType><xs:sequence><xs:element name="a" type="xs:string"/><xs:any namespace="##targetNamespace" processContents="lax"/></xs:sequence></xs:complexType></xs:element>`
+	laxBase           = `<xs:complexType name="lb"><xs:sequence><xs:element name="c" type="xs:string" minOccurs="0"/><xs:any processContents="lax" minOccurs="0" maxOccurs="unbounded"/></xs:sequence></xs:complexType>`
+	laxPickBaseSchema = laxBase + `<xs:element name="r"><xs:complexType><xs:complexContent><xs:restriction base="s:lb"><xs:choice><xs:element name="a" type="xs:string"/><xs:any processContents="lax"/></xs:choice></xs:restriction></xs:complexContent></xs:complexType></xs:element>`
+	laxFlatBaseSchema = laxBase + `<xs:element name="r"><xs:complexType><xs:complexContent><xs:restriction base="s:lb"><xs:choice maxOccurs="unbounded"><xs:element name="a" type="xs:string" maxOccurs="unbounded"/><xs:any processContents="lax"/></xs:choice></xs:restriction></xs:complexContent></xs:complexType></xs:element>`
+)
+
 // skipAttr and skipEmpty are the types codegen emits for skipAttrSchema's and
 // skipEmptySchema's s:r, each choice in the struct's first field, of one
 // interface's shape.
@@ -3458,7 +3476,12 @@ var skipAttrBranches = WithBranches[skipAttrChoice](skipAttrA{}, skipAttrAny{})
 // nothing writes nothing, and so does the nil interface of a choice whose wildcard alternative has
 // {min occurs} 0, which is emptiable though its branch reads it as 1 (choiceEmptiable). The rows
 // of one and several held elements are the ones the static decline failed before the slice
-// (constructWildcard).
+// (constructWildcard). A skip match named as the element particle beside it is written, no
+// ·locally declared type· read for it, and so is a lax match no declaration governs, at the
+// top and with a child at depth, unqualified and foreign attributes on each, and one holding a
+// child named as that element particle, which has no locally declared type below the match
+// (§3.4.6.4 key-ldt-elem clause 1); the three lax rows decline constructWildcard with
+// particleEncodes' narrowing to strict undone.
 func TestAppendWildcard(t *testing.T) {
 	t.Run("one held element", func(t *testing.T) {
 		roundTrip(t, schemaOf(t, seqSkipSchema), rootName, seqWild{A: "x", Any: anyElement{Space: "urn:o", Local: "w"}},
@@ -3507,6 +3530,25 @@ func TestAppendWildcard(t *testing.T) {
 		roundTrip(t, schemaOf(t, skipAttrSchema), rootName, skipAttr{Choice: skipAttrAny{Any: anyElement{Space: "urn:o", Local: "w"}}, X: &x},
 			`<r xmlns="urn:s" x="v"><w xmlns="urn:o"/></r>`, deepEqual[skipAttr], skipAttrBranches)
 	})
+	t.Run("a skip match named as the element particle beside it", func(t *testing.T) {
+		roundTrip(t, schemaOf(t, seqSkipSchema), rootName, seqWild{A: "x", Any: anyElement{Space: "urn:s", Local: "a", Content: anyType{Text: "y"}}},
+			`<r xmlns="urn:s"><a>x</a><a>y</a></r>`, deepEqual[seqWild])
+	})
+	lax := schemaOf(t, laxGovernedSchema)
+	t.Run("a lax match no declaration governs", func(t *testing.T) {
+		roundTrip(t, lax, rootName, seqWild{A: "x", Any: anyElement{Space: "urn:o", Local: "w", Content: anyType{Attributes: []anyAttribute{{"", "t", "v"}}, Text: "y"}}},
+			`<r xmlns="urn:s"><a>x</a><w xmlns="urn:o" t="v">y</w></r>`, deepEqual[seqWild])
+	})
+	t.Run("a lax match holding a child no declaration governs", func(t *testing.T) {
+		v := seqWild{A: "x", Any: anyElement{Space: "urn:o", Local: "p", Content: anyType{Children: []anyChild{
+			{Element: anyElement{Space: "urn:o", Local: "w", Content: anyType{Attributes: []anyAttribute{{"urn:o", "t", "v"}}, Text: "z"}}, Tail: "tail"},
+		}}}}
+		roundTrip(t, lax, rootName, v, `<r xmlns="urn:s"><a>x</a><p xmlns="urn:o"><w xmlns:p1="urn:o" p1:t="v">z</w>tail</p></r>`, deepEqual[seqWild])
+	})
+	t.Run("a lax match holding a child named as the element particle beside it", func(t *testing.T) {
+		v := seqWild{A: "x", Any: anyElement{Space: "urn:o", Local: "p", Content: anyType{Children: []anyChild{{Element: anyElement{Space: "urn:s", Local: "a", Content: anyType{Text: "y"}}}}}}}
+		roundTrip(t, lax, rootName, v, `<r xmlns="urn:s"><a>x</a><p xmlns="urn:o"><a xmlns="urn:s">y</a></p></r>`, deepEqual[seqWild])
+	})
 }
 
 // TestAppendWildcardInvalid pins item 6 of Append's doc for a skip wildcard's field: a
@@ -3518,9 +3560,17 @@ func TestAppendWildcard(t *testing.T) {
 // the xmlns namespace or holds a non-Char, an unqualified attribute named xmlns, two
 // attributes of one expanded name, and a Value, Text or Tail holding a non-Char; and a
 // held element whose Children slice holds itself (encoder.enter). None carries an
-// *xsderr.Error. Then item 7: an attribute in the XSI namespace, at any depth
-// of the match, declines by constructXsiAttribute, behind an item 6 error found after
-// it.
+// *xsderr.Error. A lax match outside its {namespace constraint} is item 6 too, dst
+// returned unextended. Then item 7: an attribute in the XSI namespace, at any depth of
+// a skip or a lax match, declines by constructXsiAttribute, behind an item 6 error found
+// after it; and in a lax match an element or attribute a top-level declaration governs,
+// the match itself, a child and an attribute, declines by constructGovernedContent, and
+// a match with a ·locally declared type· (§3.3.4.6 key-governing-type-elem clause 7)
+// declines by constructLocallyTypedMatch: named as the element particle beside it in a
+// sequence, and as an element only the base type's content model contains, through a
+// choice's and a flattened choice's branch, each failing with writeAt.typ left
+// unthreaded on its path; a top-level declaration governs, by constructGovernedContent,
+// where both govern.
 func TestAppendWildcardInvalid(t *testing.T) {
 	many, one := schemaOf(t, skipManySchema), schemaOf(t, seqSkipSchema)
 	w := anyElement{Space: "urn:o", Local: "w"}
@@ -3629,21 +3679,66 @@ func TestAppendWildcardInvalid(t *testing.T) {
 			noRule(t, err)
 		})
 	}
+	t.Run("a lax match outside the {namespace constraint}", func(t *testing.T) {
+		dst := []byte("<prior/>")
+		out, err := appendChecked(t, dst, schemaOf(t, laxTargetSchema), strict.New(), rootName, seqWild{A: "x", Any: w})
+		want := "codec: Append: seqWild.Any holds element {urn:o}w, which no particle of the content model of "
+		invalidValue(t, err, want)
+		if !strings.HasPrefix(err.Error(), want) {
+			t.Errorf("error %q does not open with %q", err, want)
+		}
+		if !bytes.Equal(out, dst) {
+			t.Errorf("Append returned %q, want dst %q unextended", out, dst)
+		}
+	})
+	lax := schemaOf(t, laxGovernedSchema)
+	laxHeld := func(c anyType) seqWild {
+		return seqWild{A: "x", Any: anyElement{Space: "urn:o", Local: "p", Content: c}}
+	}
+	const match = ", in the match of wildcard particle 1 of the {type definition} of element {urn:s}r declared at "
 	for _, row := range []struct {
-		name string
-		v    seqWild
-		want string
+		name      string
+		schema    *xsd.Schema
+		construct construct
+		v         seqWild
+		want      []string
 	}{
-		{"xsi:type on the match", held(anyType{Attributes: []anyAttribute{{"", "k", "v"}, {xsd.XMLSchemaInstanceNS, "type", "xs:byte"}}}),
-			"attribute xsi:type at seqWild.Any.Content.Attributes[1], in the match of wildcard particle 1 of "},
-		{"xsi:nil on a child of the match", held(anyType{Children: []anyChild{{Element: anyElement{Local: "c", Content: anyType{Attributes: []anyAttribute{{xsd.XMLSchemaInstanceNS, "nil", "true"}}}}}}}),
-			"attribute xsi:nil at seqWild.Any.Content.Children[0].Element.Content.Attributes[0], in the match of wildcard particle 1 of "},
+		{"xsi:type on the match", one, constructXsiAttribute, held(anyType{Attributes: []anyAttribute{{"", "k", "v"}, {xsd.XMLSchemaInstanceNS, "type", "xs:byte"}}}),
+			[]string{"attribute xsi:type at seqWild.Any.Content.Attributes[1]" + match}},
+		{"xsi:nil on a child of the match", one, constructXsiAttribute, held(anyType{Children: []anyChild{{Element: anyElement{Local: "c", Content: anyType{Attributes: []anyAttribute{{xsd.XMLSchemaInstanceNS, "nil", "true"}}}}}}}),
+			[]string{"attribute xsi:nil at seqWild.Any.Content.Children[0].Element.Content.Attributes[0]" + match}},
+		{"a lax match a top-level declaration governs", lax, constructGovernedContent, seqWild{A: "x", Any: anyElement{Space: "urn:s", Local: "w", Content: anyType{Text: "abc"}}},
+			[]string{"element {urn:s}w at seqWild.Any" + match, ", governed by element {urn:s}w declared at "}},
+		{"a lax match's child a top-level declaration governs", lax, constructGovernedContent, laxHeld(anyType{Children: []anyChild{{Element: anyElement{Space: "urn:s", Local: "w", Content: anyType{Text: "abc"}}}}}),
+			[]string{"element {urn:s}w at seqWild.Any.Content.Children[0].Element" + match, ", governed by element {urn:s}w declared at "}},
+		{"a lax match's attribute a top-level declaration governs", lax, constructGovernedContent, laxHeld(anyType{Attributes: []anyAttribute{{"urn:s", "t", "abc"}}}),
+			[]string{"attribute {urn:s}t at seqWild.Any.Content.Attributes[0]" + match, ", governed by attribute {urn:s}t declared at "}},
+		{"xsi:type on a lax match", lax, constructXsiAttribute, laxHeld(anyType{Attributes: []anyAttribute{{xsd.XMLSchemaInstanceNS, "type", "xs:int"}}, Text: "abc"}),
+			[]string{"attribute xsi:type at seqWild.Any.Content.Attributes[0]" + match}},
+		{"a lax match named as the element particle beside it", lax, constructLocallyTypedMatch, seqWild{A: "1", Any: anyElement{Space: "urn:s", Local: "a", Content: anyType{Text: "hello"}}},
+			[]string{"element {urn:s}a at seqWild.Any" + match, ", governed by its locally declared type in the {type definition} of element {urn:s}r declared at "}},
+		{"a lax match a top-level declaration and its locally declared type both govern", schemaOf(t, seqLaxSchema+`<xs:element name="a" type="xs:string"/>`), constructGovernedContent,
+			seqWild{A: "1", Any: anyElement{Space: "urn:s", Local: "a", Content: anyType{Text: "hello"}}},
+			[]string{"element {urn:s}a at seqWild.Any" + match, ", governed by element {urn:s}a declared at "}},
 	} {
 		t.Run(row.name, func(t *testing.T) {
-			_, err := appendChecked(t, nil, one, strict.New(), rootName, row.v)
-			_ = asDecline(t, err, "codec does not encode "+constructXsiAttribute.name()+": "+row.want)
+			_, err := appendChecked(t, nil, row.schema, strict.New(), rootName, row.v)
+			_ = asDecline(t, err, "codec does not encode "+row.construct.name()+": "+row.want[0])
+			holds(t, err, row.want[1:]...)
 		})
 	}
+	const local = ", governed by its locally declared type in the {type definition} of element {urn:s}r declared at "
+	c := anyElement{Space: "urn:s", Local: "c", Content: anyType{Text: "hello"}}
+	t.Run("a choice's lax match named as an element of the base type", func(t *testing.T) {
+		_, err := appendChecked(t, nil, schemaOf(t, laxPickBaseSchema), strict.New(), rootName, pickWild(pickWildAny{Any: c}), pickWildBranches)
+		_ = asDecline(t, err, "codec does not encode "+constructLocallyTypedMatch.name()+": element {urn:s}c at pickWild.(pickWildAny).Any, in the match of ")
+		holds(t, err, local)
+	})
+	t.Run("a flattened lax match named as an element of the base type", func(t *testing.T) {
+		_, err := appendChecked(t, nil, schemaOf(t, laxFlatBaseSchema), strict.New(), rootName, flatPick{Choice: []flatPickItem{flatPickAny{Any: c}}}, flatPickBranches)
+		_ = asDecline(t, err, "codec does not encode "+constructLocallyTypedMatch.name()+": element {urn:s}c at flatPick.Choice[0].(flatPickAny).Any, in the match of ")
+		holds(t, err, local)
+	})
 }
 
 // governedAnySchema declares, beside s:r of type xs:anyType itself, the
@@ -4176,9 +4271,9 @@ func TestAppendFlattenedDeclineSubject(t *testing.T) {
 	rows := []struct {
 		name, decls, want string
 	}{
-		{"flattened", flatWildSchema, "codec does not encode a wildcard particle with {process contents} strict or lax: alternative 2 of the flattened content {particle} of the {type definition} of element {urn:s}r declared at "},
-		{"once choice", `<xs:element name="r"><xs:complexType><xs:choice><xs:element name="a" type="xs:string"/><xs:any processContents="lax"/></xs:choice></xs:complexType></xs:element>`,
-			"codec does not encode a wildcard particle with {process contents} strict or lax: alternative 2 of the content {particle} of the {type definition} of element {urn:s}r declared at "},
+		{"flattened", strings.Replace(flatWildSchema, ` processContents="lax"`, "", 1), "codec does not encode a wildcard particle with {process contents} strict: alternative 2 of the flattened content {particle} of the {type definition} of element {urn:s}r declared at "},
+		{"once choice", `<xs:element name="r"><xs:complexType><xs:choice><xs:element name="a" type="xs:string"/><xs:any/></xs:choice></xs:complexType></xs:element>`,
+			"codec does not encode a wildcard particle with {process contents} strict: alternative 2 of the content {particle} of the {type definition} of element {urn:s}r declared at "},
 	}
 	for _, row := range rows {
 		t.Run(row.name, func(t *testing.T) {
