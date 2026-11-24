@@ -1,6 +1,7 @@
 package codec
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"math"
@@ -9,21 +10,25 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/kud360/goxsd8/icpath"
 	"github.com/kud360/goxsd8/internal/goshape"
 	"github.com/kud360/goxsd8/internal/xmlchar"
 	"github.com/kud360/goxsd8/internal/xmlname"
 	"github.com/kud360/goxsd8/parser/xmltree"
+	"github.com/kud360/goxsd8/validate"
+	"github.com/kud360/goxsd8/validate/xmlsrc"
 	"github.com/kud360/goxsd8/value"
 	"github.com/kud360/goxsd8/xsd"
 	"github.com/kud360/goxsd8/xsderr"
 )
 
-// ErrInvalidValue is the sentinel errors.Is finds in item 6's error of
-// [Append], whose text is its cause's alone, never this sentinel's. That error
-// wraps the value.ValidateLexical rejection in the last of item 6's cases, and
-// the verdict of its primitive mapping's Parse in its case of an xs:QName or
-// xs:NOTATION Local that Parse rejects, and carries whatever *xsderr.Error
-// that rejection carries; in the others it carries none.
+// ErrInvalidValue is the sentinel errors.Is finds in the errors of items 6 and
+// 8 of [Append], whose text is its cause's alone, never this sentinel's.
+// Item 6's error wraps the value.ValidateLexical rejection in the last of item
+// 6's cases, and the verdict of its primitive mapping's Parse in its case of
+// an xs:QName or xs:NOTATION Local that Parse rejects, and carries whatever
+// *xsderr.Error that rejection carries; in the others it carries none. Item
+// 8's carries the violations it states.
 var ErrInvalidValue = errors.New("codec: Append: a value no valid document holds")
 
 // Append appends to dst the XML document that encodes v as the document
@@ -37,9 +42,14 @@ var ErrInvalidValue = errors.New("codec: Append: a value no valid document holds
 // whose canonical representation precisionDecimal §6 f-precDecCanmap does not
 // decide, is that form alone, but for an xs:QName or xs:NOTATION value,
 // which has none (§3.3.18, §3.3.19) and is spelled as the package doc's
-// "# What encodes" states, and runs no assessment by package validate
-// of the document it writes: a caller wanting a verdict on it assesses it
-// through package validate, as any document. The package doc's
+// "# What encodes" states. It assesses the document it writes, the bytes past
+// len(dst) alone, through package validate, on backend and under no URI,
+// exactly when an element declaration item 4 examines, the document
+// element's or one a particle reaches at any depth, has {identity-constraint
+// definitions} (Structures §3.3.4.3 cvc-elt clause 6, §3.11.4
+// cvc-identity-constraint), which holds for every value of T or for none, and
+// runs no assessment otherwise: a caller wanting a verdict on such a document
+// assesses it through package validate, as any document. The package doc's
 // "# What encodes" section states the slice Append encodes and the document
 // it writes. On error Append returns dst unextended, its bytes beyond
 // len(dst) possibly overwritten, and the first of these that applies:
@@ -156,10 +166,20 @@ var ErrInvalidValue = errors.New("codec: Append: a value no valid document holds
 //     written NaN and -INF, their only lexicals (§3.3.4.2, §3.3.5.2,
 //     precisionDecimal §3.2), so a pattern facet of their own simple type that
 //     rejects one of them is item 6, not this item.
+//  8. An assessed document validate charges: the error item 3 of [Decode]'s
+//     doc states for it, which errors.Is also reports as [ErrInvalidValue],
+//     each violation charged to the written document, a
+//     cvc-identity-constraint one naming its constraint and the clause it
+//     breaks, 3, 4.1, 4.2.1, 4.2.2 or 4.3. A violation of any other rule is a
+//     fault of Append's, reported so all the same.
+//  9. An assessed document validate leaves undecided: the error item 4 of
+//     [Decode]'s doc states for it.
 //
 // A plain error is no *DeclineError and wraps none of [ErrTypeMismatch],
 // [ErrInvalidValue] and errors.ErrUnsupported; whether it wraps an
-// *xsderr.Error does not tell its item.
+// *xsderr.Error does not tell its item. A source fault validate/xmlsrc.Validate
+// reports in the document an assessment reads, in either channel it carries
+// one in, is a plain error in place of items 8 and 9.
 //
 // A fault of backend found at a value, in place of that value's item 6 or 7, is
 // a plain error too, returned at once and naming the value's Go path and simple
@@ -196,7 +216,7 @@ func Append[T any](dst []byte, schema *xsd.Schema, backend value.Backend, name x
 	}
 	t := reflect.TypeFor[T]()
 	cfg := newConfig(opts)
-	decl, f, err := encodeStatic(schema, name, t, cfg)
+	decl, f, assess, err := encodeStatic(schema, name, t, cfg)
 	if err != nil {
 		return dst, err
 	}
@@ -212,7 +232,32 @@ func Append[T any](dst []byte, schema *xsd.Schema, backend value.Backend, name x
 	if e.declined != nil {
 		return dst, e.declined
 	}
+	if !assess {
+		return e.out, nil
+	}
+	if err := assessWritten(schema, backend, e.out[len(dst):]); err != nil {
+		return dst, err
+	}
 	return e.out, nil
+}
+
+// assessWritten returns the error items 8 and 9 of [Append]'s doc state for
+// doc, the document Append wrote, assessed through package validate on
+// backend under no URI, or a plain error: validate.New's, or a source fault
+// in either channel validate/xmlsrc.Validate carries one in.
+func assessWritten(schema *xsd.Schema, backend value.Backend, doc []byte) error {
+	v, err := validate.New(schema, backend)
+	if err != nil {
+		return err
+	}
+	res, err := xmlsrc.Validate(v, bytes.NewReader(doc))
+	if err != nil {
+		return err
+	}
+	if res.Err() == nil && res.Standing() == validate.Charged {
+		return &invalidValueError{&chargedError{violations: res.Violations()}}
+	}
+	return verdict(res)
 }
 
 // CheckAppend returns the error of the first of items 2 to 5 of [Append]'s
@@ -220,7 +265,7 @@ func Append[T any](dst []byte, schema *xsd.Schema, backend value.Backend, name x
 // top-level element declaration name in schema under opts, in the class
 // that item states, or nil when none applies; for a nil schema it returns a
 // plain error. Item 4's slice is the one the package doc's "# What encodes"
-// states. Items 6 and 7 and a fault of the backend depend on the value, so
+// states. Items 6 to 9 and a fault of the backend depend on the value, so
 // they lie outside CheckAppend's answer, and nil leaves them open. The
 // backend is no input, so a nil backend, which Append's item 1 refuses, lies
 // outside it too. For a non-nil schema, a non-nil error is the one Append
@@ -230,7 +275,7 @@ func CheckAppend[T any](schema *xsd.Schema, name xsd.QName, opts ...Option) erro
 	if schema == nil {
 		return errors.New("codec: CheckAppend: nil *xsd.Schema")
 	}
-	_, _, err := encodeStatic(schema, name, reflect.TypeFor[T](), newConfig(opts))
+	_, _, _, err := encodeStatic(schema, name, reflect.TypeFor[T](), newConfig(opts))
 	return err
 }
 
@@ -244,35 +289,36 @@ func typePath(t reflect.Type) string {
 }
 
 // encodeStatic returns the top-level element declaration name in schema, a
-// non-nil schema, and the filler item 5's check returns for it under cfg,
-// opts resolved once by its caller, Decode's for a T of Go type t, or the
-// error of the first of items 2 to 5 of [Append]'s doc that applies. It
-// reads no value, so its answer holds for every value of t. Item 4's pass
-// (elementEncodes) walks the schema and returns before bindDecl is called,
-// so that its declines come first; it builds nothing, and Append writes
-// from the filler alone (writer).
-func encodeStatic(schema *xsd.Schema, name xsd.QName, t reflect.Type, cfg config) (xsd.ElementDeclaration, filler, error) {
+// non-nil schema, the filler item 5's check returns for it under cfg, opts
+// resolved once by its caller, Decode's for a T of Go type t, and whether
+// Append assesses what it writes (elementEncodes), or the error of the first
+// of items 2 to 5 of [Append]'s doc that applies. It reads no value, so its
+// answer holds for every value of t. Item 4's pass (elementEncodes) walks the
+// schema and returns before bindDecl is called, so that its declines come
+// first; it builds nothing, and Append writes from the filler alone (writer).
+func encodeStatic(schema *xsd.Schema, name xsd.QName, t reflect.Type, cfg config) (xsd.ElementDeclaration, filler, bool, error) {
 	decl, ok := schema.Element(name)
 	if !ok {
-		return xsd.ElementDeclaration{}, nil, fmt.Errorf("codec: no top-level element declaration has the expanded name %q", name.Display())
+		return xsd.ElementDeclaration{}, nil, false, fmt.Errorf("codec: no top-level element declaration has the expanded name %q", name.Display())
 	}
 	// An answer about the schema, no violation of an instance, so it carries
 	// no xsderr rule (STYLE E2).
 	if decl.Abstract() {
-		return xsd.ElementDeclaration{}, nil, fmt.Errorf("codec: %s has {abstract} true, so no document element validates against it (cvc-elt clause 2)", declSubject(decl))
+		return xsd.ElementDeclaration{}, nil, false, fmt.Errorf("codec: %s has {abstract} true, so no document element validates against it (cvc-elt clause 2)", declSubject(decl))
 	}
-	if err := elementEncodes(schema, decl); err != nil {
-		return xsd.ElementDeclaration{}, nil, err
+	assess, err := elementEncodes(schema, decl)
+	if err != nil {
+		return xsd.ElementDeclaration{}, nil, false, err
 	}
 	b, err := bindDecl(&pipeline{schema: schema}, decl)
 	if err != nil {
-		return xsd.ElementDeclaration{}, nil, err
+		return xsd.ElementDeclaration{}, nil, false, err
 	}
 	f, err := b.check(t, newCheckContext(cfg))
 	if err != nil {
-		return xsd.ElementDeclaration{}, nil, namedMismatch(decl, err)
+		return xsd.ElementDeclaration{}, nil, false, namedMismatch(decl, err)
 	}
-	return decl, f, nil
+	return decl, f, assess, nil
 }
 
 // A writer is a bound arm of the filler item 5's check returns that Append
@@ -644,38 +690,46 @@ func (n nestedReader) writeElement(e *encoder, decl xsd.ElementDeclaration, v re
 // first construct of decl, the document element's declaration, outside the
 // slice the package doc's "# What encodes" states, in the order the construct
 // constants list, or a plain error for a component that does not resolve, and
-// otherwise nil: encodeWalk.element's for decl. It reads the schema alone,
-// never the binder, and builds nothing.
-func elementEncodes(schema *xsd.Schema, decl xsd.ElementDeclaration) error {
+// otherwise nil: encodeWalk.element's for decl. With nil it returns whether
+// an element declaration the pass examined has {identity-constraint
+// definitions}, which is when Append assesses what it writes (items 8 and 9).
+// It reads the schema alone, never the binder, and builds nothing.
+func elementEncodes(schema *xsd.Schema, decl xsd.ElementDeclaration) (bool, error) {
 	w := &encodeWalk{schema: schema, walked: map[unitKey]bool{}}
-	return w.element(decl)
+	if err := w.element(decl); err != nil {
+		return false, err
+	}
+	return w.identity, nil
 }
 
-// encodeWalk is one pass of elementEncodes: schema, and walked, the complex
-// types whose constructs it has examined or is examining, each under the key
-// Decode's bind indexes its unit by (nestedKey). An entry is stored before its
-// type's content is examined, so that a later reach of the key, a recursive
-// one included, examines nothing again: the first reach answers for the type,
-// and every other component it reaches carries no key of its own only where
-// it lies inside that type (bindRun). It lives for one pass only and is a
-// lookup index never iterated (STYLE D2); an entry left by a pass that
-// declines is never read, since the decline ends the pass.
+// encodeWalk is one pass of elementEncodes: schema; walked, the complex types
+// whose constructs it has examined or is examining, each under the key
+// Decode's bind indexes its unit by (nestedKey); and identity, whether a
+// declaration it examined has {identity-constraint definitions}
+// (encodeWalk.declEncodes). An entry is stored before its type's content is
+// examined, so that a later reach of the key, a recursive one included,
+// examines nothing again: the first reach answers for the type, and every
+// other component it reaches carries no key of its own only where it lies
+// inside that type (bindRun). walked lives for one pass only and is a lookup
+// index never iterated (STYLE D2); an entry left by a pass that declines is
+// never read, since the decline ends the pass.
 type encodeWalk struct {
-	schema *xsd.Schema
-	walked map[unitKey]bool
+	schema   *xsd.Schema
+	walked   map[unitKey]bool
+	identity bool
 }
 
 // element returns elementEncodes' error for decl, the document element's
 // declaration or a particle's element declaration, examined at every reach:
-// decl's own properties (declEncodes), then its {type definition}, which
-// encodes as xs:anyType itself, its content written raw (rawContent's write),
+// decl's own properties (encodeWalk.declEncodes), then its {type definition},
+// which encodes as xs:anyType itself, its content written raw (rawContent's write),
 // is examined as a simple type (simpleEncodes) or, for a complex type,
 // declines by its {abstract} true, and else is examined by complexEncodes,
 // unless walked already holds its key. complexEncodes and the functions under
 // it read decl only to name a decline's subject, so that a type reached again
 // through another declaration answers as it did.
 func (w *encodeWalk) element(decl xsd.ElementDeclaration) error {
-	if err := declEncodes(decl); err != nil {
+	if err := w.declEncodes(decl); err != nil {
 		return err
 	}
 	td, ok := w.schema.ResolvedType(decl.TypeDefinition())
@@ -703,12 +757,14 @@ func (w *encodeWalk) element(decl xsd.ElementDeclaration) error {
 
 // declEncodes returns the decline of the first of decl's own properties the
 // slice excludes: {nillable} as codegen reads it (goshape.Nillable), a {type
-// table}, a {value constraint}, {identity-constraint definitions}, and
-// {abstract} true, which no element validates against (cvc-elt clause 2): the
-// document element's is item 3 of [Append]'s doc, found before declEncodes
-// runs, so that only a particle's declines so, one the parser never builds
-// but xsd.NewElementDeclaration does.
-func declEncodes(decl xsd.ElementDeclaration) error {
+// table}, a {value constraint}, an identity constraint whose paths icpath
+// does not compile (encodeWalk.identityEncodes), and {abstract} true, which
+// no element validates against (cvc-elt clause 2): the document element's is
+// item 3 of [Append]'s doc, found before declEncodes runs, so that only a
+// particle's declines so, one the parser never builds but
+// xsd.NewElementDeclaration does. A decl whose {identity-constraint
+// definitions} it admits sets w.identity.
+func (w *encodeWalk) declEncodes(decl xsd.ElementDeclaration) error {
 	if goshape.Nillable(decl) {
 		return encodeDecline(constructNillable, declSubject(decl))
 	}
@@ -718,13 +774,56 @@ func declEncodes(decl xsd.ElementDeclaration) error {
 	if _, has := decl.ValueConstraint(); has {
 		return encodeDecline(constructValueConstraint, declSubject(decl))
 	}
-	if len(decl.IdentityConstraints()) > 0 {
-		return encodeDecline(constructIdentityConstraint, declSubject(decl))
+	for _, ic := range decl.IdentityConstraints() {
+		if err := w.identityEncodes(decl, ic); err != nil {
+			return err
+		}
+		w.identity = true
 	}
 	if decl.Abstract() {
 		return encodeDecline(constructAbstractElement, declSubject(decl))
 	}
 	return nil
+}
+
+// identityEncodes returns the decline by constructIdentityConstraint of ic, an
+// identity constraint of decl, whose {selector} icpath.CompileSelector or one
+// of whose {fields} icpath.CompileField does not compile, or, for a keyref,
+// whose {referenced key}'s do not, the first in that order; a {referenced key}
+// that names no identity constraint of the schema is a plain error.
+func (w *encodeWalk) identityEncodes(decl xsd.ElementDeclaration, ic xsd.IdentityConstraint) error {
+	subject := fmt.Sprintf("%s, its identity constraint %s", declSubject(decl), ic.Name().Display())
+	if part, ok := pathsCompile(ic); !ok {
+		return encodeDecline(constructIdentityConstraint, subject+"'s "+part)
+	}
+	ref, isKeyref := ic.ReferencedKeyName()
+	if !isKeyref {
+		return nil
+	}
+	all := w.schema.IdentityConstraints()
+	i := slices.IndexFunc(all, func(c xsd.IdentityConstraint) bool { return c.Name() == ref })
+	if i < 0 {
+		return fmt.Errorf("codec: %s's {referenced key} %s does not resolve", subject, ref.Display())
+	}
+	if part, ok := pathsCompile(all[i]); !ok {
+		return encodeDecline(constructIdentityConstraint, fmt.Sprintf("%s's {referenced key} %s's %s", subject, ref.Display(), part))
+	}
+	return nil
+}
+
+// pathsCompile reports whether icpath compiles ic's {selector}
+// (icpath.CompileSelector) and each of its {fields} (icpath.CompileField),
+// and otherwise names the first part it does not compile.
+func pathsCompile(ic xsd.IdentityConstraint) (string, bool) {
+	if _, ok := icpath.CompileSelector(ic.Selector()); !ok {
+		return "{selector}", false
+	}
+	for i, f := range ic.Fields() {
+		if _, ok := icpath.CompileField(f); !ok {
+			return fmt.Sprintf("{fields} member %d", i+1), false
+		}
+	}
+	return "", true
 }
 
 // complexEncodes returns elementEncodes' error for decl, whose {type
@@ -1215,15 +1314,17 @@ func (e *encoder) simpleElement(decl xsd.ElementDeclaration, s scalar, v reflect
 }
 
 // invalidate records err as the document's item 6 error of [Append]'s doc,
-// marked ErrInvalidValue, unless an earlier value's is recorded.
+// marked ErrInvalidValue (invalidValueError), unless an earlier value's is
+// recorded.
 func (e *encoder) invalidate(err error) {
 	if e.invalid == nil {
 		e.invalid = &invalidValueError{err}
 	}
 }
 
-// invalidValueError is item 6's error of [Append]'s doc: err, the cause one
-// of invalidate's callers built, marked ErrInvalidValue.
+// invalidValueError is the error of items 6 and 8 of [Append]'s doc: err, the
+// cause one of invalidate's callers built or, for item 8, a chargedError
+// (assessWritten), marked ErrInvalidValue.
 type invalidValueError struct{ err error }
 
 // Error returns the cause's text unchanged.
