@@ -144,19 +144,19 @@ type construct uint8
 // constructUntrackedModel too, once every particle of a content model holding a wildcard
 // particle, or every basic particle a flattened content {particle} reaches, is examined.
 // A particle declines by constructVacuousParticle first, as the content {particle} does,
-// then by constructNestedGroup where its term is a model group, and by
-// constructSubstitutionGroup where it is an <element ref> whose field codegen gives a
-// sealed interface (goshape.SubstitutionSum), before the declaration it names is
-// examined; its element declaration, local or the top-level one an <element ref> names,
-// declines by the document element's declaration's constructs, constructNillable first
-// and constructAbstractElement last, then by its type's as the document element's type
-// does, from constructAbstractType on, a complex type's content and attribute uses
-// examined at the particle; and an attribute use declines by constructValueConstraint
-// after constructQualifiedAttribute. The ones of a simple type, constructSpecialType to
-// constructAssertions, sit after the {assertions}'s, though the document element's, a
-// particle's and an attribute use's simple type declines by them where that declaration
-// or use is examined, and a complex type's simple content, by its {simple type
-// definition}, where its type's content is, ahead of its attribute uses.
+// then by constructNestedGroup where its term is a model group; its element declaration,
+// local or the top-level one an <element ref> names, or, for an <element ref> whose field
+// codegen gives a sealed interface (goshape.SubstitutionSum), each declaration that
+// interface has a branch for, in group order, declines by the document element's
+// declaration's constructs, constructNillable first and constructAbstractElement last,
+// then by its type's as the document element's type does, from constructAbstractType on,
+// a complex type's content and attribute uses examined at the particle; and an attribute
+// use declines by constructValueConstraint after constructQualifiedAttribute. The ones of
+// a simple type, constructSpecialType to constructAssertions, sit after the
+// {assertions}'s, though the document element's, a particle's and an attribute use's
+// simple type declines by them where that declaration or use is examined, and a complex
+// type's simple content, by its {simple type definition}, where its type's content is,
+// ahead of its attribute uses.
 const (
 	constructNillable construct = iota + 1
 	constructNestedGroup
@@ -167,13 +167,13 @@ const (
 	constructTypeTable
 	constructValueConstraint
 	constructIdentityConstraint
+	constructAbsentAffiliation
 	constructAbstractElement
 	constructAbstractType
 	constructMixed
 	constructOpenContent
 	constructVacuousParticle
 	constructAllGroup
-	constructSubstitutionGroup
 	constructWildcard
 	constructQualifiedAttribute
 	constructAttributeWildcard
@@ -199,13 +199,13 @@ var constructNames = [...]string{
 	constructTypeTable:          "an element declaration with a {type table}",
 	constructValueConstraint:    "a value constraint, default or fixed",
 	constructIdentityConstraint: "an identity constraint whose {selector} or {fields}, or whose {referenced key}'s, lie outside the path subset icpath compiles (Structures §3.11.6.2 ·selector subset·, §3.11.6.3 ·field subset·)",
+	constructAbsentAffiliation:  "an element declaration with an ·absent· member of its {substitution group affiliations}",
 	constructAbstractElement:    "an element declaration with {abstract} true",
 	constructAbstractType:       "an element declaration whose {type definition} is a complex type with {abstract} true",
 	constructMixed:              "a complex type with mixed content",
 	constructOpenContent:        "an {open content}",
 	constructVacuousParticle:    "a particle with {max occurs} 0",
 	constructAllGroup:           "an all group",
-	constructSubstitutionGroup:  "an <element ref> whose field codegen holds in a sealed interface over its substitution group",
 	constructWildcard:           "a wildcard particle with {process contents} strict or lax",
 	constructQualifiedAttribute: "an attribute use whose declaration has a {target namespace}",
 	constructAttributeWildcard:  "an {attribute wildcard}",

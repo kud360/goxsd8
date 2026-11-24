@@ -77,25 +77,30 @@ var ErrInvalidValue = errors.New("codec: Append: a value no valid document holds
 //     among them, which Decode never returns; a nil item of a flattened sequence's or choice's
 //     slice, which Decode never returns either, and an item of it whose dynamic type the
 //     [WithBranches] set in opts places at no alternative, a pointer to a branch among them; the
-//     nil sealed interface of a union simple type wherever nil does not mean absent, that is,
-//     every field but an element particle's of {min occurs} 0 and {max occurs} 1 and an optional
-//     attribute use's (codegen's package doc, "# Particles", "# Attributes"); a value of that
-//     interface whose dynamic type the [WithBranches] set in opts places at no basic member, a
-//     pointer to a variant among them, which Decode never returns; a value that holds itself, a
-//     struct or sealed interface value its own write reaches again through a *S, []S or []I field,
-//     which no finite document holds, the error naming the Go path where the value is reached
-//     again and nothing written beneath it; a string holding bytes that are not UTF-8 or a
-//     character the XML 1.0 Char production does not match, U+0000 among them (Datatypes §3.3.1.1,
-//     §3.3.17.1), a held element's Space, an attribute's Space or Value, a Text and a Tail among
-//     them; a string that differs from its own whiteSpace-normalized form under its simple type,
-//     such as an xs:token holding "  a b"; a list item, a string, that is empty or holds TAB, LF,
-//     CR or a space, which no list item's lexical representation does (Datatypes §2.4.1.2); a
-//     big.Rat outside the decimal value space, whose denominator in lowest terms is no 2^m·5^n
-//     (§3.3.3.1), such as 1/3; an element a wildcard particle's field holds, of {process contents}
-//     skip, that its content model admits at no particle where it is written, a name outside the
-//     wildcard's {namespace constraint} or in its {disallowed names} among them, or attributes to
-//     a particle other than that wildcard, an element particle taking its name first among them,
-//     or after whose content's last child the content model is not accepting, as
+//     nil sealed interface of an <element ref> particle's field over a substitution group
+//     (codegen's package doc, "# Substitution groups"), or of an item of its slice, wherever nil
+//     does not mean absent, that of a head with {abstract} true and no branch among them, and a
+//     value of that interface whose dynamic type the [WithBranches] set in opts places at no
+//     branch, a pointer to a branch among them, which Decode never returns; the nil sealed
+//     interface of a union simple type wherever nil does not mean absent, that is, every field but
+//     an element particle's of {min occurs} 0 and {max occurs} 1 and an optional attribute use's
+//     (codegen's package doc, "# Particles", "# Attributes"); a value of that interface whose
+//     dynamic type the [WithBranches] set in opts places at no basic member, a pointer to a
+//     variant among them, which Decode never returns; a value that holds itself, a struct or
+//     sealed interface value its own write reaches again through a *S, []S or []I field, which no
+//     finite document holds, the error naming the Go path where the value is reached again and
+//     nothing written beneath it; a string holding bytes that are not UTF-8 or a character the XML
+//     1.0 Char production does not match, U+0000 among them (Datatypes §3.3.1.1, §3.3.17.1), a
+//     held element's Space, an attribute's Space or Value, a Text and a Tail among them; a string
+//     that differs from its own whiteSpace-normalized form under its simple type, such as an
+//     xs:token holding "  a b"; a list item, a string, that is empty or holds TAB, LF, CR or a
+//     space, which no list item's lexical representation does (Datatypes §2.4.1.2); a big.Rat
+//     outside the decimal value space, whose denominator in lowest terms is no 2^m·5^n (§3.3.3.1),
+//     such as 1/3; an element a wildcard particle's field holds, of {process contents} skip, that
+//     its content model admits at no particle where it is written, a name outside the wildcard's
+//     {namespace constraint} or in its {disallowed names} among them, or attributes to a particle
+//     other than that wildcard, an element particle taking its name first among them, or after
+//     whose content's last child the content model is not accepting, as
 //     xsd.Schema.ContentMatcher's Matcher decides (§3.9.4.3 cvc-accept, §3.10.4.1 cvc-wildcard,
 //     §3.8.4.3 cvc-model-group); in such an element, and in the content of an element of type
 //     xs:anyType itself, its own attributes among it, at any depth, a Local that is no NCName or a
@@ -369,6 +374,12 @@ type writeAt struct {
 type attributionSlot struct {
 	check  *attributionCheck
 	target int
+}
+
+// take puts the element of decl, written at path, to s.check at s.target
+// (attributionCheck.take), by decl's own expanded name.
+func (s attributionSlot) take(e *encoder, decl xsd.ElementDeclaration, path string) {
+	s.check.take(e, decl.Name(), s.target, path)
 }
 
 // encoded returns x, an arm of the filler item 5's check returns or of the
@@ -691,14 +702,13 @@ func (m elementMember) occurs() xsd.Occurs { return m.own }
 func (m wildcardMember) occurs() xsd.Occurs { return m.own }
 
 // writeElements writes the elements of f, the field of m's particle, as
-// writeOccurring states, each an element of m.decl, taken by slot.check
-// (attributionCheck.take), written by the elementWriter s, the field's sink,
-// reads it with.
+// writeOccurring states, each by the elementWriter s, the field's sink, reads
+// it with, as an element of m.decl or, for a groupReader, of the member its
+// value holds, taken by slot.
 func (m elementMember) writeElements(e *encoder, s sink, f reflect.Value, at writeAt, slot attributionSlot) error {
 	w := encoded[elementWriter](encoded[fieldSink](s).read)
 	return e.writeOccurring(m.shape, m.own, m.held, "the particle of "+declSubject(m.decl), f, at, func(v reflect.Value, path string) error {
-		slot.check.take(e, m.decl.Name(), slot.target, path)
-		return w.writeElement(e, m.decl, v, path)
+		return w.writeElement(e, m.decl, v, path, slot)
 	})
 }
 
@@ -758,24 +768,55 @@ func (e *encoder) writeOccurring(sh shape, own, held xsd.Occurs, subject string,
 
 // An elementWriter is the elementReader of an element particle's field whose
 // element Append writes: writeElement appends the element of decl holding v,
-// a V the reader reads, whose Go path from T is path, and returns a backend
-// fault. Its implementers are scalarArm, of a simple type, nestedReader, of a
-// complex type, a structArm's or an ifaceArm's, and rawContent, of
-// xs:anyType itself, an anyTypeArm's.
+// a V the reader reads, whose Go path from T is path, taken first by slot
+// (attributionSlot.take), and returns a backend fault. Its implementers are
+// scalarArm, of a simple type, nestedReader, of a complex type, a structArm's
+// or an ifaceArm's, rawContent, of xs:anyType itself, an anyTypeArm's, and
+// groupReader, of a substitution group's sealed interface, a groupArm's,
+// which writes the element of the member its value holds in decl's place.
 type elementWriter interface {
-	writeElement(e *encoder, decl xsd.ElementDeclaration, v reflect.Value, path string) error
+	writeElement(e *encoder, decl xsd.ElementDeclaration, v reflect.Value, path string, slot attributionSlot) error
 }
 
 // writeElement writes the element of decl holding v, a value of a's simple
-// type (encoder.simpleElement).
-func (a scalarArm) writeElement(e *encoder, decl xsd.ElementDeclaration, v reflect.Value, path string) error {
+// type (encoder.simpleElement), taken by slot.
+func (a scalarArm) writeElement(e *encoder, decl xsd.ElementDeclaration, v reflect.Value, path string, slot attributionSlot) error {
+	slot.take(e, decl, path)
 	return e.simpleElement(decl, a.scalar, v, path)
 }
 
 // writeElement writes the element of decl holding v, a value of n.t, by the
-// writer n.fill is.
-func (n nestedReader) writeElement(e *encoder, decl xsd.ElementDeclaration, v reflect.Value, path string) error {
+// writer n.fill is, taken by slot.
+func (n nestedReader) writeElement(e *encoder, decl xsd.ElementDeclaration, v reflect.Value, path string, slot attributionSlot) error {
+	slot.take(e, decl, path)
 	return encoded[writer](n.fill).write(e, v, writeAt{el: decl, path: path})
+}
+
+// writeElement writes v, a value of g.t, the sealed interface over the
+// substitution group of head, the declaration an <element ref> particle
+// names: the branch v holds, matched to its dynamic type
+// (boundChoice.branchOf), as an element of the member that branch is given
+// for, g.members at the branch's index, under the member's own expanded name
+// (§3.9.4.3 cvc-accept clause 2.3.2, §3.3.4.3 cvc-elt clause 1), from the
+// branch's one field by the elementWriter its sink reads it with, taken by
+// slot. A nil v, which writeOccurring passes only where nil does not mean
+// absent, and a dynamic type the WithBranches set places at no branch, a
+// pointer to a branch among them, are item 6 of [Append]'s doc, and write
+// nothing: no element of an abstract head's own name is valid (cvc-elt clause
+// 2), and Decode returns neither.
+func (g groupReader) writeElement(e *encoder, head xsd.ElementDeclaration, v reflect.Value, path string, slot attributionSlot) error {
+	if v.IsNil() {
+		e.invalidate(fmt.Errorf("codec: Append: %s is nil, the sealed interface over the substitution group of %s, which holds no element where one is written", path, declSubject(head)))
+		return nil
+	}
+	br := v.Elem()
+	j := g.bound.branchOf(br.Type())
+	if j < 0 {
+		e.invalidate(fmt.Errorf("codec: Append: %s holds a %s, which the WithBranches set of %s places at no branch of the substitution group of %s, so that Decode returns no such value", path, br.Type(), v.Type(), declSubject(head)))
+		return nil
+	}
+	w := encoded[elementWriter](encoded[fieldSink](g.bound.branches[j].sinks[0]).read)
+	return w.writeElement(e, g.members[j], br.Field(0), path+".("+typePath(br.Type())+")."+br.Type().Field(0).Name, slot)
 }
 
 // elementEncodes returns the error item 4 of [Append]'s doc states for the
@@ -850,12 +891,15 @@ func (w *encodeWalk) element(decl xsd.ElementDeclaration) error {
 // declEncodes returns the decline of the first of decl's own properties the
 // slice excludes: {nillable} as codegen reads it (goshape.Nillable), a {type
 // table}, a {value constraint}, an identity constraint whose paths icpath
-// does not compile (encodeWalk.identityEncodes), and {abstract} true, which
-// no element validates against (cvc-elt clause 2): the document element's is
-// item 3 of [Append]'s doc, found before declEncodes runs, so that only a
-// particle's declines so, one the parser never builds but
-// xsd.NewElementDeclaration does. A decl whose {identity-constraint
-// definitions} it admits sets w.identity.
+// does not compile (encodeWalk.identityEncodes), a member of its {substitution
+// group affiliations} that names no top-level element declaration of the
+// schema, the first in document order, an ·absent· member Finalize keeps
+// (§5.3), under which validate assesses the element laxly, as if cvc-elt
+// clause 1 had failed, and {abstract} true, which no element validates against
+// (cvc-elt clause 2): the document element's is item 3 of [Append]'s doc,
+// found before declEncodes runs, so that only a particle's declines so, one
+// the parser never builds but xsd.NewElementDeclaration does. A decl whose
+// {identity-constraint definitions} it admits sets w.identity.
 func (w *encodeWalk) declEncodes(decl xsd.ElementDeclaration) error {
 	if goshape.Nillable(decl) {
 		return encodeDecline(constructNillable, declSubject(decl))
@@ -871,6 +915,11 @@ func (w *encodeWalk) declEncodes(decl xsd.ElementDeclaration) error {
 			return err
 		}
 		w.identity = true
+	}
+	for _, head := range decl.SubstitutionGroupAffiliationNames() {
+		if _, ok := w.schema.Element(head); !ok {
+			return encodeDecline(constructAbsentAffiliation, fmt.Sprintf("%s, whose {substitution group affiliations} member %s names no top-level element declaration", declSubject(decl), head.Display()))
+		}
 	}
 	if decl.Abstract() {
 		return encodeDecline(constructAbstractElement, declSubject(decl))
@@ -1072,13 +1121,17 @@ func wildcardParticle(p xsd.Particle) bool {
 // as the document element's is examined (encodeWalk.element). The declaration
 // of an <element ref> is the top-level one its name resolves to through
 // [xsd.Schema.Element] (§3.3.2.4 ref.elt.global), as Decode's particleTerm
-// follows it, a name resolving to none a plain error; where codegen gives its
+// follows it, a name resolving to none a plain error. Where codegen gives its
 // field a sealed interface (goshape.SubstitutionSum), an abstract
-// declaration's always, it declines before the declaration is examined, and
-// otherwise the declaration is examined as a local one, an element of its own
-// expanded name matching the particle (§3.9.4.3 cvc-accept clause 2.3.1).
-// {term} is a closed sum, so the switches are STYLE T2's sealed-sum
-// exception.
+// declaration's always, the declarations examined are the members that
+// interface has a branch for, in group order, the first decline winning,
+// since Append writes each under its own expanded name (§3.9.4.3 cvc-accept
+// clause 2.3.2), and the declaration itself only as one of them, so that with
+// none nothing is examined. Otherwise the declaration alone is examined,
+// as a local one is, an element of its own expanded name matching the
+// particle (clause 2.3.1). A member whose type reaches the declaration again
+// answers through encodeWalk.walked. {term} is a closed sum, so the switches
+// are STYLE T2's sealed-sum exception.
 func (w *encodeWalk) particleEncodes(p xsd.Particle, subject string) error {
 	if upper, bounded := p.Occurs().Max(); bounded && upper == 0 {
 		return encodeDecline(constructVacuousParticle, subject)
@@ -1092,10 +1145,16 @@ func (w *encodeWalk) particleEncodes(p xsd.Particle, subject string) error {
 		if !ok {
 			return fmt.Errorf("codec: the <element ref> particle to %s does not resolve", term.Name.Display())
 		}
-		if _, sum := goshape.SubstitutionSum(w.schema, decl); sum {
-			return encodeDecline(constructSubstitutionGroup, fmt.Sprintf("%s, naming element %s", subject, term.Name.Display()))
+		members, sum := goshape.SubstitutionSum(w.schema, decl)
+		if !sum {
+			members = []xsd.ElementDeclaration{decl}
 		}
-		el = decl
+		for _, m := range members {
+			if err := w.element(m); err != nil {
+				return err
+			}
+		}
+		return nil
 	case xsd.ResolvedTerm:
 		switch term := term.Term.(type) {
 		case xsd.ModelGroup:
@@ -2311,16 +2370,17 @@ func (anyTypeContent) governing(schema *xsd.Schema, name xsd.QName, attribute bo
 // write writes at.el, the document element, of type xs:anyType itself,
 // holding v (writeElement).
 func (c rawContent) write(e *encoder, v reflect.Value, at writeAt) error {
-	return c.writeElement(e, at.el, v, at.path)
+	return c.writeElement(e, at.el, v, at.path, attributionSlot{})
 }
 
 // writeElement writes the element of decl, of type xs:anyType itself, whose
 // content is v, a struct of AnyType's shape or a named type over one, at
 // path: its start tag, then v as rawContent writes it under anyTypeContent,
 // as the package doc's "# What encodes" states; or nothing, where v holds
-// itself (encoder.enter). It reads no simple value, so it returns no backend
-// fault.
-func (rawContent) writeElement(e *encoder, decl xsd.ElementDeclaration, v reflect.Value, path string) error {
+// itself (encoder.enter), taken by slot first either way. It reads no simple
+// value, so it returns no backend fault.
+func (rawContent) writeElement(e *encoder, decl xsd.ElementDeclaration, v reflect.Value, path string, slot attributionSlot) error {
+	slot.take(e, decl, path)
 	if !e.enter(v, path) {
 		return nil
 	}

@@ -313,11 +313,13 @@
 // bullet states, into the Go type the bullet names where it names one:
 //
 //   - A top-level element declaration, as the document element's, neither
-//     abstract nor nillable, with no {type table} or value constraint, each
-//     of whose {identity-constraint definitions} has a {selector} and {fields}
-//     icpath compiles, and for a keyref a {referenced key} whose own it
-//     compiles, whose {type definition} is a simple type that encodes, a
-//     complex type that encodes, or xs:anyType itself.
+//     abstract nor nillable, with no {type table} or value constraint, each of
+//     whose {substitution group affiliations} names a top-level element
+//     declaration of the schema, each of whose {identity-constraint
+//     definitions} has a {selector} and {fields} icpath compiles, and for a
+//     keyref a {referenced key} whose own it compiles, whose {type definition}
+//     is a simple type that encodes, a complex type that encodes, or
+//     xs:anyType itself.
 //   - A complex type with {abstract} false, no {assertions}, no {attribute
 //     wildcard} and no {open content}, of empty content, of simple content
 //     whose {simple type definition} (Structures §3.4.2.2 dcl.ctd.ctsc) is a
@@ -339,15 +341,17 @@
 //     slice field, as "# What decodes" states.
 //   - An element particle of that sequence or choice, or one a flattened
 //     sequence or choice reaches, with {max occurs} at least 1, its {term} a
-//     local element declaration or, for an <element ref> whose field
-//     codegen's package doc "# Substitution groups" gives no sealed
-//     interface, the top-level declaration it names, that declaration having
-//     the same restrictions as the document element's and a simple type or a
-//     complex type that encodes, or xs:anyType itself, into the field item 6
-//     of [Decode]'s doc holds to it; or, for a choice's alternative, into its
-//     branch's field, and for a basic particle a flattened sequence or choice
-//     reaches, into the one field of its branch, each item of the slice one
-//     element, as "# What decodes" states.
+//     local element declaration or, for an <element ref>, the top-level
+//     declaration it names or, where codegen's package doc "# Substitution
+//     groups" gives its field a sealed interface, each declaration that
+//     interface has a branch for, each such declaration having the same
+//     restrictions as the document element's and a simple type or a complex
+//     type that encodes, or xs:anyType itself, into the field item 6 of
+//     [Decode]'s doc holds to it, the branch a value of that interface holds
+//     written as an element of its own declaration's expanded name; or, for a
+//     choice's alternative, into its branch's field, and for a basic particle
+//     a flattened sequence or choice reaches, into the one field of its
+//     branch, each item of the slice one element, as "# What decodes" states.
 //   - A wildcard particle of that sequence or choice, or one a flattened
 //     sequence or choice reaches, with {process contents} skip and {max occurs}
 //     at least 1, into the field "# What decodes" states for it, each element
