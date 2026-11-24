@@ -1192,8 +1192,7 @@ func TestAppendDeclines(t *testing.T) {
 			`<xs:choice maxOccurs="2"><xs:element name="b" type="xs:string"/><xs:element name="c" type="xs:string"/></xs:choice></xs:sequence>`)},
 		{"nested occurrence field as an item's model-group alternative", "a nested model group particle", complexOf(`<xs:sequence maxOccurs="2">` + a +
 			`<xs:choice><xs:element name="b" type="xs:string"/><xs:sequence maxOccurs="2"><xs:element name="c" type="xs:string"/></xs:sequence></xs:choice></xs:sequence>`)},
-		{"nested untracked", "a content model the content matcher does not track", sequence(`<xs:sequence><xs:any namespace="##other" processContents="lax"/></xs:sequence>` +
-			`<xs:sequence maxOccurs="21845"><xs:element name="c" type="xs:string" maxOccurs="2"/></xs:sequence>`)},
+		{"nested flattened untracked", "a content model the content matcher does not track", sequence(a + `<xs:sequence maxOccurs="21845"><xs:element name="c" type="xs:string" maxOccurs="2"/></xs:sequence>`)},
 		{"strict wildcard", "a wildcard particle with {process contents} strict", sequence(`<xs:any/>`)},
 		{"ref value constraint", "a value constraint, default or fixed", `<xs:element name="x%[1]s" type="xs:string" default="x"/>` + sequence(`<xs:element ref="s:x%[1]s"/>`)},
 		{"ref simple content", "xs:anySimpleType or xs:anyAtomicType as a simple type", `<xs:element name="x%[1]s"><xs:complexType><xs:simpleContent><xs:extension base="xs:anySimpleType"/></xs:simpleContent></xs:complexType></xs:element>` +

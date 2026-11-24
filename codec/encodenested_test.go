@@ -10,18 +10,27 @@ import (
 
 // The nested-encode schemas, each declaring s:r: enFlatPairSchema's
 // sequence(c, sequence(a?, b?){1,2}), the nested sequence flattened, its
-// emptiable term repeated, and enOptOccSchema's sequence(a, choice(b,
-// sequence(c, d){0,2})), noOnceAltSchema's with the occurrence alternative's
-// {min occurs} 0, which its branch reads as 1.
+// emptiable term repeated; enPairFirstSchema's sequence(sequence(a?,
+// b?){1,2}, c), the same flattened particle ahead of an element;
+// enChoiceAnySchema's sequence(choice(b, c), any over ##other), a wildcard
+// after a nested choice of two alternatives; and enOptOccSchema's sequence(a,
+// choice(b, sequence(c, d){0,2})), noOnceAltSchema's with the occurrence
+// alternative's {min occurs} 0, which its branch reads as 1.
 const (
 	enFlatPairSchema = `<xs:element name="r"><xs:complexType><xs:sequence>` + cgElC + `<xs:sequence maxOccurs="2"><xs:element name="a" type="xs:string" minOccurs="0"/>` +
 		`<xs:element name="b" type="xs:string" minOccurs="0"/></xs:sequence></xs:sequence></xs:complexType></xs:element>`
+	enPairFirstSchema = `<xs:element name="r"><xs:complexType><xs:sequence><xs:sequence maxOccurs="2"><xs:element name="a" type="xs:string" minOccurs="0"/>` +
+		`<xs:element name="b" type="xs:string" minOccurs="0"/></xs:sequence>` + cgElC + `</xs:sequence></xs:complexType></xs:element>`
+	enChoiceAnySchema = `<xs:element name="r"><xs:complexType><xs:sequence><xs:choice>` + cgElB + cgElC + `</xs:choice>` +
+		`<xs:any namespace="##other" processContents="lax"/></xs:sequence></xs:complexType></xs:element>`
 	enOptOccSchema = `<xs:element name="r"><xs:complexType><xs:sequence>` + cgElA + `<xs:choice>` + cgElB + `<xs:sequence minOccurs="0" maxOccurs="2">` + cgElC +
 		`<xs:element name="d" type="xs:string"/></xs:sequence></xs:choice></xs:sequence></xs:complexType></xs:element>`
 )
 
-// The types codegen emits for enFlatPairSchema's s:r, in shape, which
-// TestEncodeNestedTypesAreCodegens pins; enOptOccSchema's s:r is noOnceAlt.
+// The types codegen emits for the nested-encode schemas' s:r, in shape,
+// which TestEncodeNestedTypesAreCodegens pins: enFlatPair, enPairFirst over
+// enFlatPair's interface, enChoiceAny over noBC, and noOnceAlt for
+// enOptOccSchema.
 type (
 	enFlatPair struct {
 		C        string
@@ -30,6 +39,16 @@ type (
 	enFlatPairItem interface{ isEnFlatPairItem() }
 	enFlatPairA    struct{ A string }
 	enFlatPairB    struct{ B string }
+
+	enPairFirst struct {
+		Sequence []enFlatPairItem
+		C        string
+	}
+
+	enChoiceAny struct {
+		Choice noBC
+		Any    anyElement
+	}
 )
 
 func (enFlatPairA) isEnFlatPairItem() {}
@@ -49,6 +68,8 @@ func TestEncodeNestedTypesAreCodegens(t *testing.T) {
 		want  []string
 	}{
 		{enFlatPairSchema, []string{"type R struct {\n\tC        string\n\tSequence []RSequence\n}\n", branch("RSequence", "RSequenceA", "A string"), branch("RSequence", "RSequenceB", "B string")}},
+		{enPairFirstSchema, []string{"type R struct {\n\tSequence []RSequence\n\tC        string\n}\n", branch("RSequence", "RSequenceA", "A string"), branch("RSequence", "RSequenceB", "B string")}},
+		{enChoiceAnySchema, []string{"type R struct {\n\tChoice RChoice\n\tAny    AnyElement\n}\n", branch("RChoice", "RChoiceB", "B string"), branch("RChoice", "RChoiceC", "C string")}},
 		{enOptOccSchema, []string{"type R struct {\n\tA      string\n\tChoice RChoice\n}\n", branch("RChoice", "RChoiceB", "B string"),
 			branch("RChoice", "RChoiceSequence", "Sequence []RChoiceSequence2"), "type RChoiceSequence2 struct {\n\tC string\n\tD string\n}\n"}},
 	}
@@ -71,15 +92,18 @@ func TestEncodeNestedTypesAreCodegens(t *testing.T) {
 // an alternative is emptiable; a nested particle codegen flattens, inline or
 // through <group ref>, a sequence's and a choice's, holding a wildcard,
 // inside a spliced sequence, beside a later occurrence field and a later
-// choice, whose targets follow its own; a nested occurrence field, a
-// sequence's and a choice's, repeated and optional, through <group ref>,
-// holding a wildcard, a once-choice in its item, and two siblings; a choice's
-// model-group alternative, spliced, through <group ref>, of the content
-// choice, of a nested choice, of an occurrence choice's item, holding a nested
-// choice, flattened and held in an occurrence field, and the nil interface of
-// a content choice whose model-group alternative has {min occurs} 0. Each row
-// fails with item 4's constructNestedGroup arm in particleEncodes put back
-// (encodeWalk.groupEncodes), every row reaching a nested model group.
+// choice, and one of two alternatives ahead of an element, whose targets
+// follow its two, as a wildcard's follow a nested choice's two alternatives'
+// targets, both rows failing where writeMembers counts one target per
+// member; a nested occurrence field, a sequence's and a choice's, repeated and
+// optional, through <group ref>, holding a wildcard, a once-choice in its item,
+// and two siblings; a choice's model-group alternative, spliced, through <group
+// ref>, of the content choice, of a nested choice, of an occurrence choice's
+// item, holding a nested choice, flattened and held in an occurrence field, and
+// the nil interface of a content choice whose model-group alternative has {min
+// occurs} 0. Each row fails with item 4's constructNestedGroup arm in
+// particleEncodes put back (encodeWalk.groupEncodes), every row reaching a
+// nested model group.
 func TestAppendNested(t *testing.T) {
 	const r = `<r xmlns="urn:s">`
 	w := anyElement{Space: "urn:o", Local: "w", Content: anyType{Text: "w"}}
@@ -145,6 +169,13 @@ func TestAppendNested(t *testing.T) {
 		{"a nested flattened sequence before a nested choice", func(t *testing.T) {
 			v := nfChoice{Sequence: []nfSeqItem{nfSeqB{B: "1"}}, C: "2", Choice: nfChoiceB{B: "3"}}
 			roundTrip(t, schemaOf(t, nfChoiceSchema), rootName, v, r+`<b>1</b><c>2</c><b>3</b></r>`, deepEqual[nfChoice], nfChoiceBranches...)
+		}},
+		{"a nested flattened particle of two alternatives before an element", func(t *testing.T) {
+			v := enPairFirst{Sequence: []enFlatPairItem{enFlatPairA{A: "1"}, enFlatPairB{B: "2"}}, C: "3"}
+			roundTrip(t, schemaOf(t, enPairFirstSchema), rootName, v, r+`<a>1</a><b>2</b><c>3</c></r>`, deepEqual[enPairFirst], enFlatPairBranches)
+		}},
+		{"a wildcard after a nested choice of two alternatives", func(t *testing.T) {
+			roundTrip(t, schemaOf(t, enChoiceAnySchema), rootName, enChoiceAny{Choice: noB{B: "1"}, Any: w}, r+`<b>1</b>`+ow+`</r>`, deepEqual[enChoiceAny], noBCBranches)
 		}},
 		{"a nested repeated sequence", func(t *testing.T) {
 			v := noRepSeq{A: "1", Sequence: []noSeqBC{{B: "2", C: "3"}, {B: "4", C: "5"}}}
