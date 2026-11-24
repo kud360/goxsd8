@@ -126,38 +126,37 @@ const (
 // (STYLE T1).
 type construct uint8
 
-// The construct values, in the order Decode finds them: the document
-// element's declaration, its type's content, each particle in order, its
-// attribute uses in order, and the instance. A particle's complex type,
-// examined at the particle, declines by the same constructs from constructNestedGroup
-// on. The one of a simple type, constructOtherPrimitive, sits with the particle's,
-// though a document element of simple type, a complex type's simple content, by its
-// {simple type definition}, an attribute use, a list type, by its {item type
-// definition}, and a union, by a basic member, decline by it too.
-// constructUntrackedModel follows every particle of a flattened content model or an
-// occurrence field's, ahead of the type's attribute uses, and every basic particle a
-// nested flattened particle reaches and every particle of a nested occurrence field's
-// item, ahead of the particles after it. The constructs after constructXsiType are
-// Append's alone, in the order Append finds them: the document element's declaration,
-// after constructNillable, its type's {abstract}, its type's content, its content
-// {particle}, each particle in order, its attribute uses in order, its {attribute
-// wildcard}, its {assertions}, and each value. Append declines by
-// constructUntrackedModel too, once every particle of a content model holding a
-// wildcard particle is examined. A particle declines by constructVacuousParticle
-// first, as the content {particle} does, then by constructNestedGroup where its term
-// is a model group, and by constructSealedInterface where it is an <element ref> whose
-// field codegen gives a sealed interface (goshape.SubstitutionSum), before the
-// declaration it names is examined; its element declaration, local or the top-level
-// one an <element ref> names, declines by the document element's declaration's
-// constructs, constructNillable first and constructAbstractElement last, then by its
-// type's as the document element's type does, from constructAbstractType on, a complex
-// type's content and attribute uses examined at the particle; and an attribute use
-// declines by constructValueConstraint after constructQualifiedAttribute. The ones of
-// a simple type, constructSpecialType to constructAssertions, sit after the
-// {assertions}'s, though the document element's, a particle's and an attribute use's
-// simple type declines by them where that declaration or use is examined, and a
-// complex type's simple content, by its {simple type definition}, where its type's
-// content is, ahead of its attribute uses.
+// The construct values, in the order Decode finds them: the document element's
+// declaration, its type's content, each particle in order, its attribute uses in order,
+// and the instance. A particle's complex type, examined at the particle, declines by the
+// same constructs from constructNestedGroup on. The one of a simple type,
+// constructOtherPrimitive, sits with the particle's, though a document element of simple
+// type, a complex type's simple content, by its {simple type definition}, an attribute
+// use, a list type, by its {item type definition}, and a union, by a basic member,
+// decline by it too. constructUntrackedModel follows every particle of a flattened
+// content model or an occurrence field's, ahead of the type's attribute uses, and every
+// basic particle a nested flattened particle reaches and every particle of a nested
+// occurrence field's item, ahead of the particles after it. The constructs after
+// constructXsiType are Append's alone, in the order Append finds them: the document
+// element's declaration, after constructNillable, its type's {abstract}, its type's
+// content, its content {particle}, each particle in order, its attribute uses in order,
+// its {attribute wildcard}, its {assertions}, and each value. Append declines by
+// constructUntrackedModel too, once every particle of a content model holding a wildcard
+// particle, or every basic particle a flattened content {particle} reaches, is examined.
+// A particle declines by constructVacuousParticle first, as the content {particle} does,
+// then by constructNestedGroup where its term is a model group, and by
+// constructSubstitutionGroup where it is an <element ref> whose field codegen gives a
+// sealed interface (goshape.SubstitutionSum), before the declaration it names is
+// examined; its element declaration, local or the top-level one an <element ref> names,
+// declines by the document element's declaration's constructs, constructNillable first
+// and constructAbstractElement last, then by its type's as the document element's type
+// does, from constructAbstractType on, a complex type's content and attribute uses
+// examined at the particle; and an attribute use declines by constructValueConstraint
+// after constructQualifiedAttribute. The ones of a simple type, constructSpecialType to
+// constructAssertions, sit after the {assertions}'s, though the document element's, a
+// particle's and an attribute use's simple type declines by them where that declaration
+// or use is examined, and a complex type's simple content, by its {simple type
+// definition}, where its type's content is, ahead of its attribute uses.
 const (
 	constructNillable construct = iota + 1
 	constructNestedGroup
@@ -174,7 +173,7 @@ const (
 	constructOpenContent
 	constructVacuousParticle
 	constructAllGroup
-	constructSealedInterface
+	constructSubstitutionGroup
 	constructWildcard
 	constructQualifiedAttribute
 	constructAttributeWildcard
@@ -206,7 +205,7 @@ var constructNames = [...]string{
 	constructOpenContent:        "an {open content}",
 	constructVacuousParticle:    "a particle with {max occurs} 0",
 	constructAllGroup:           "an all group",
-	constructSealedInterface:    "a construct codegen holds in a sealed interface: a choice, a flattened particle or a substitution group",
+	constructSubstitutionGroup:  "an <element ref> whose field codegen holds in a sealed interface over its substitution group",
 	constructWildcard:           "a wildcard particle with {process contents} strict or lax",
 	constructQualifiedAttribute: "an attribute use whose declaration has a {target namespace}",
 	constructAttributeWildcard:  "an {attribute wildcard}",

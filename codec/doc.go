@@ -329,21 +329,29 @@
 //     field, inline or through <group ref>, each of whose particles is an
 //     element particle or a wildcard particle with {process contents} skip,
 //     and, holding a wildcard particle, whose content model
-//     xsd.Schema.ContentMatcher tracks; the choice occurring exactly once into
-//     its sealed interface, T itself or the first field of T's struct, and the
-//     sequence or choice held in an occurrence field into that field, as "#
-//     What decodes" states.
-//   - An element particle of that sequence or choice with {max occurs} at least
-//     1, its {term} a local element declaration or, for an <element ref> whose
-//     field codegen's package doc "# Substitution groups" gives no sealed
+//     xsd.Schema.ContentMatcher tracks, or a sequence or choice codegen
+//     flattens, each basic particle of whose reach (codegen's package doc, "#
+//     Particles") is such an element or wildcard particle, and whose content
+//     model xsd.Schema.ContentMatcher tracks, with or without a wildcard
+//     particle; the choice occurring exactly once into its sealed interface, T
+//     itself or the first field of T's struct, the sequence or choice held in
+//     an occurrence field into that field, and the flattened one into its
+//     slice field, as "# What decodes" states.
+//   - An element particle of that sequence or choice, or one a flattened
+//     sequence or choice reaches, with {max occurs} at least 1, its {term} a
+//     local element declaration or, for an <element ref> whose field
+//     codegen's package doc "# Substitution groups" gives no sealed
 //     interface, the top-level declaration it names, that declaration having
 //     the same restrictions as the document element's and a simple type or a
 //     complex type that encodes, or xs:anyType itself, into the field item 6
 //     of [Decode]'s doc holds to it; or, for a choice's alternative, into its
-//     branch's field as "# What decodes" states.
-//   - A wildcard particle of that sequence or choice with {process contents}
-//     skip and {max occurs} at least 1, into the field "# What decodes" states
-//     for it, each element it holds written raw, as below.
+//     branch's field, and for a basic particle a flattened sequence or choice
+//     reaches, into the one field of its branch, each item of the slice one
+//     element, as "# What decodes" states.
+//   - A wildcard particle of that sequence or choice, or one a flattened
+//     sequence or choice reaches, with {process contents} skip and {max occurs}
+//     at least 1, into the field "# What decodes" states for it, each element
+//     it holds written raw, as below.
 //   - xs:anyType itself (Structures §3.4.7), where the bullets above admit
 //     it, into the Go type "# What decodes" states for its declaration, its
 //     content written raw, as below.
@@ -428,7 +436,9 @@
 // Children, written so, followed by its Tail. A nil pointer field writes
 // nothing, and so does a nil interface field where nil means absent (codegen's
 // package doc, "# Particles", "# Attributes"), a particle with {max occurs}
-// above 1 writes one element per item of its slice, an occurrence field writes
+// above 1 writes one element per item of its slice, a flattened sequence or
+// choice one per item of its slice, in order, its branch's basic particle's,
+// whatever the particle's occurrence, an occurrence field writes
 // each item it holds, in order, as its model group's particles in order, a
 // choice's branch writes its alternative's elements, the empty match, the nil
 // interface of a present element, writes no child element, and an element with

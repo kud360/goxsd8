@@ -182,8 +182,9 @@ var (
 )
 
 // TestFlattenTypesAreCodegens pins the types above to those codegen emits for
-// each flatten schema, in shape, so that the rows decoding into them decode
-// into codegen's types, the tied branches' names included. Each row's
+// each flatten schema, in shape, and so encode_test.go's for each encode
+// flatten schema, so that the rows decoding into them, and Append's writing
+// from them, read codegen's types, the tied branches' names included. Each row's
 // declarations are in codegen's order, which for a flattened interface's
 // branches is reach order, so that a tie's suffixes are pinned to its
 // alternatives even where its branch structs are of one shape.
@@ -211,6 +212,11 @@ func TestFlattenTypesAreCodegens(t *testing.T) {
 		{flatTriSchema, []string{"type R struct {\n\tSequence []RSequence\n}\n", branch("RSequence", "RSequenceR1", "R1 string"), branch("RSequence", "RSequenceR2", "R2 string"),
 			branch("RSequence", "RSequenceR22", "R2 string"), branch("RSequence", "RSequenceR3", "R3 string"),
 			branch("RSequence", "RSequenceR4", "R4 string"), branch("RSequence", "RSequenceR23", "R2 string")}},
+		{efPairSchema, []string{"type R struct {\n\tSequence []RSequence\n}\n", branch("RSequence", "RSequenceA", "A string"), branch("RSequence", "RSequenceB", "B string")}},
+		{efOnceSchema, []string{"type R struct {\n\tChoice []RChoice\n}\n", branch("RChoice", "RChoiceA", "A string"), branch("RChoice", "RChoiceB", "B string")}},
+		{efSkipSchema, []string{"type R struct {\n\tSequence []RSequence\n}\n", branch("RSequence", "RSequenceA", "A string"), branch("RSequence", "RSequenceAny", "Any AnyElement")}},
+		{efRefSchema, []string{"type X string\n", "type R struct {\n\tSequence []RSequence\n}\n", branch("RSequence", "RSequenceX", "X X"), branch("RSequence", "RSequenceB", "B string")}},
+		{efKeySchema, []string{"type R struct {\n\tSequence []RSequence\n}\n", branch("RSequence", "RSequenceG", "G RG"), "type RG struct {\n\tK []string\n}\n", branch("RSequence", "RSequenceB", "B string")}},
 	}
 	for _, row := range rows {
 		gen := generated(t, schemaOf(t, row.decls))
