@@ -361,6 +361,8 @@
 //     content written raw, as below.
 //   - An attribute use other than xsi:nil's, unqualified, with no value
 //     constraint and of a simple type that encodes, into V or *V.
+//   - xs:anySimpleType or xs:anyAtomicType itself (Datatypes §2.4.2
+//     dt-special), into string.
 //   - An atomic simple type whose {primitive type definition} is one the list
 //     of primitives below names, into the Go type that list gives it. It has
 //     no assertions facet, its own or inherited. It is derived from none of
@@ -452,20 +454,23 @@
 // (Datatypes §E.4 f-stringCanmap) and so is xs:anyURI's lexical mapping, so
 // that an xs:anyURI value is neither normalized nor percent-escaped
 // (§3.3.17.2), and item 6 of Append's doc holds the string to its own
-// whiteSpace-normalized form. A list value is written as its items are written,
-// in order, separated by single U+0020 characters (Datatypes §2.4.1.2), and the
-// empty list, nil or empty, as no content: <x/> for an element, a="" for an
-// attribute. A union value is written as its variant's member value is, under
-// that member, item 7 of Append's doc stating when the text it writes would
-// decode into another variant. It escapes '<', '&' and '>' as &lt;, &amp; and
-// &gt; everywhere, so that "]]>" is never written, and CR as &#xD; everywhere,
-// which XML 1.0 end-of-line handling (§2.11) would otherwise rewrite to LF or
-// remove; in an attribute value it escapes '"' as &quot;, TAB as &#x9; and LF
-// as &#xA;, which attribute-value normalization (§3.3.3) would otherwise turn
-// into spaces; and every other character, TAB and LF in content and the
-// apostrophe everywhere, is written as itself. So the Order codegen emits for
-// README's order.xsd, of Item {"a"} and Kind "k", is written <order
-// xmlns="urn:o" kind="k"><item>a</item></order>.
+// whiteSpace-normalized form. A value of xs:anySimpleType or xs:anyAtomicType
+// itself is written as the string it holds, the ·literal· Decode returns,
+// whose lexical mapping is no function (Datatypes §3.2.1.2, §3.2.2.2), and
+// item 6 of Append's doc holds it to the Char production alone. A list value is
+// written as its items are written, in order, separated by single U+0020
+// characters (Datatypes §2.4.1.2), and the empty list, nil or empty, as no
+// content: <x/> for an element, a="" for an attribute. A union value is written
+// as its variant's member value is, under that member, item 7 of Append's doc
+// stating when the text it writes would decode into another variant. It escapes
+// '<', '&' and '>' as &lt;, &amp; and &gt; everywhere, so that "]]>" is never
+// written, and CR as &#xD; everywhere, which XML 1.0 end-of-line handling
+// (§2.11) would otherwise rewrite to LF or remove; in an attribute value it
+// escapes '"' as &quot;, TAB as &#x9; and LF as &#xA;, which attribute-value
+// normalization (§3.3.3) would otherwise turn into spaces; and every other
+// character, TAB and LF in content and the apostrophe everywhere, is written as
+// itself. So the Order codegen emits for README's order.xsd, of Item {"a"} and
+// Kind "k", is written <order xmlns="urn:o" kind="k"><item>a</item></order>.
 //
 // # Debuggability
 //

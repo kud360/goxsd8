@@ -41,17 +41,19 @@ var ErrInvalidValue = errors.New("codec: Append: a value no valid document holds
 // (value.GoverningMapping) renders, which for an xs:precisionDecimal zero,
 // whose canonical representation precisionDecimal §6 f-precDecCanmap does not
 // decide, is that form alone, but for an xs:QName or xs:NOTATION value,
-// which has none (§3.3.18, §3.3.19) and is spelled as the package doc's
-// "# What encodes" states. It assesses the document it writes, the bytes past
-// len(dst) alone, through package validate, on backend and under no URI,
-// exactly when an element declaration item 4 examines, the document
-// element's or one a particle reaches at any depth, has {identity-constraint
-// definitions} (Structures §3.3.4.3 cvc-elt clause 6, §3.11.4
-// cvc-identity-constraint), which holds for every value of T or for none, and
-// runs no assessment otherwise: a caller wanting a verdict on such a document
-// assesses it through package validate, as any document. The package doc's
-// "# What encodes" section states the slice Append encodes and the document
-// it writes. On error Append returns dst unextended, its bytes beyond
+// which has none (§3.3.18, §3.3.19), and a value of xs:anySimpleType or
+// xs:anyAtomicType itself, which has none either, canonical mappings being
+// defined for primitive datatypes alone (§2.1's note, §2.4.2 dt-special),
+// each written as the package doc's "# What encodes" states. It assesses the
+// document it writes, the bytes past len(dst) alone, through package validate,
+// on backend and under no URI, exactly when an element declaration item 4
+// examines, the document element's or one a particle reaches at any depth, has
+// {identity-constraint definitions} (Structures §3.3.4.3 cvc-elt clause 6,
+// §3.11.4 cvc-identity-constraint), which holds for every value of T or for
+// none, and runs no assessment otherwise: a caller wanting a verdict on such a
+// document assesses it through package validate, as any document. The package
+// doc's "# What encodes" section states the slice Append encodes and the
+// document it writes. On error Append returns dst unextended, its bytes beyond
 // len(dst) possibly overwritten, and the first of these that applies:
 //
 //  1. A nil schema or a nil backend: a plain error.
@@ -89,39 +91,39 @@ var ErrInvalidValue = errors.New("codec: Append: a value no valid document holds
 //     write reaches again through a *S, []S or []I field, which no finite document holds, the error
 //     naming the Go path where the value is reached again and nothing written beneath it; a string
 //     holding bytes that are not UTF-8 or a character the XML 1.0 Char production does not match, U+0000
-//     among them (Datatypes §3.3.1.1, §3.3.17.1), a held element's Space, an attribute's Space or Value,
-//     a Text and a Tail among them; a string that differs from its own whiteSpace-normalized form under
-//     its simple type, such as an xs:token holding "  a b"; a list item, a string, that is empty or
-//     holds TAB, LF, CR or a space, which no list item's lexical representation does (Datatypes
-//     §2.4.1.2); a big.Rat outside the decimal value space, whose denominator in lowest terms is no
-//     2^m·5^n (§3.3.3.1), such as 1/3; an element a wildcard particle's field holds, of {process
-//     contents} skip or lax, that its content model admits at no particle where it is written, a name
-//     outside the wildcard's {namespace constraint} or in its {disallowed names} among them, or
-//     attributes to a particle other than that wildcard, an element particle taking its name first among
-//     them, or after whose content's last child the content model is not accepting, as
-//     xsd.Schema.ContentMatcher's Matcher decides (§3.9.4.3 cvc-accept, §3.10.4.1 cvc-wildcard, §3.8.4.3
-//     cvc-model-group); in such an element, and in the content of an element of type xs:anyType itself,
-//     its own attributes among it, at any depth, a Local that is no NCName or a Space that is the
-//     namespace name the prefix xmlns is bound to, of the element or of an attribute, an attribute of
-//     absent Space named xmlns (Namespaces in XML §3), and an attribute of the expanded name of one
-//     before it (§6.3 nsc-AttrsUnique); an element an item of a flattened sequence's or choice's slice
-//     holds that its content model admits at no particle where it is written, or attributes to a basic
-//     particle other than the one whose branch the item is, or a slice after whose last item the content
-//     model is not accepting, as that Matcher decides (§3.9.4.3 cvc-accept, §3.10.4.1 cvc-wildcard,
-//     §3.8.4.3 cvc-model-group); a date, time or duration datatype struct value no value of its datatype
-//     maps to, as codegen's package doc "# Simple types" states such values exist, the error naming the
-//     first property found outside it, its fields read in order, or, ahead of its Seconds, a duration's
-//     Months and Seconds of opposite signs; a PrecisionDecimal datatype struct value no value maps to,
-//     as codegen's "# Simple types" states such values exist, a nil Value or the numerical arm with a
-//     negative Coefficient, or a Value whose dynamic type the [WithPrecisionDecimalArms] set in opts
-//     supplies in no role, a pointer to an arm among them, which Decode never returns; an xs:QName or
-//     xs:NOTATION value whose namespace name holds a byte that starts no XML 1.0 Char or is the one the
-//     prefix xmlns is bound to (Namespaces in XML §3), or whose Local the Parse of its primitive's
-//     mapping rejects in Append's spelling, that Parse's verdict wrapped, or makes a spelling that
-//     resolves back to another expanded name; or a value whose simple type rejects it, a
-//     value.ValidateLexical error value.IsDatatypeVerdict reports as a verdict, a facet's rejection or a
-//     backend Parse's among them, that error wrapped, but for item 7's pattern and union-variant cases,
-//     a list's own facets read once every item has passed its own checks.
+//     among them (Datatypes §3.3.1.1, §3.3.17.1, §3.2.1.2, §3.2.2.2), a held element's Space, an
+//     attribute's Space or Value, a Text and a Tail among them; a string that differs from its own
+//     whiteSpace-normalized form under its simple type, such as an xs:token holding "  a b"; a list
+//     item, a string, that is empty or holds TAB, LF, CR or a space, which no list item's lexical
+//     representation does (Datatypes §2.4.1.2); a big.Rat outside the decimal value space, whose
+//     denominator in lowest terms is no 2^m·5^n (§3.3.3.1), such as 1/3; an element a wildcard
+//     particle's field holds, of {process contents} skip or lax, that its content model admits at no
+//     particle where it is written, a name outside the wildcard's {namespace constraint} or in its
+//     {disallowed names} among them, or attributes to a particle other than that wildcard, an element
+//     particle taking its name first among them, or after whose content's last child the content model
+//     is not accepting, as xsd.Schema.ContentMatcher's Matcher decides (§3.9.4.3 cvc-accept, §3.10.4.1
+//     cvc-wildcard, §3.8.4.3 cvc-model-group); in such an element, and in the content of an element of
+//     type xs:anyType itself, its own attributes among it, at any depth, a Local that is no NCName or a
+//     Space that is the namespace name the prefix xmlns is bound to, of the element or of an attribute,
+//     an attribute of absent Space named xmlns (Namespaces in XML §3), and an attribute of the expanded
+//     name of one before it (§6.3 nsc-AttrsUnique); an element an item of a flattened sequence's or
+//     choice's slice holds that its content model admits at no particle where it is written, or
+//     attributes to a basic particle other than the one whose branch the item is, or a slice after whose
+//     last item the content model is not accepting, as that Matcher decides (§3.9.4.3 cvc-accept,
+//     §3.10.4.1 cvc-wildcard, §3.8.4.3 cvc-model-group); a date, time or duration datatype struct value
+//     no value of its datatype maps to, as codegen's package doc "# Simple types" states such values
+//     exist, the error naming the first property found outside it, its fields read in order, or, ahead
+//     of its Seconds, a duration's Months and Seconds of opposite signs; a PrecisionDecimal datatype
+//     struct value no value maps to, as codegen's "# Simple types" states such values exist, a nil Value
+//     or the numerical arm with a negative Coefficient, or a Value whose dynamic type the
+//     [WithPrecisionDecimalArms] set in opts supplies in no role, a pointer to an arm among them, which
+//     Decode never returns; an xs:QName or xs:NOTATION value whose namespace name holds a byte that
+//     starts no XML 1.0 Char or is the one the prefix xmlns is bound to (Namespaces in XML §3), or whose
+//     Local the Parse of its primitive's mapping rejects in Append's spelling, that Parse's verdict
+//     wrapped, or makes a spelling that resolves back to another expanded name; or a value whose simple
+//     type rejects it, a value.ValidateLexical error value.IsDatatypeVerdict reports as a verdict, a
+//     facet's rejection or a backend Parse's among them, that error wrapped, but for item 7's pattern
+//     and union-variant cases, a list's own facets read once every item has passed its own checks.
 //  7. A value with no canonical representation or no spelling Append writes,
 //     the first in document order as item 6 counts: its *DeclineError. That is
 //     a governing mapping with no Canonical, a Canonical that fails for the
@@ -1266,13 +1268,12 @@ var (
 
 // simpleEncodes returns nil where the simple type st, the type of the
 // declaration owner names, encodes as the package doc's "# What encodes"
-// states, and otherwise the decline of the first construct it finds: a
-// special type, then, for a list, the first construct of its {item type
-// definition} (atomicEncodes), the detail naming the item after st
-// (itemSubject), and an assertions facet among st's own effective facets, its
-// own or inherited; for an atomic or union st, atomicEncodes's. An error
-// reading st is returned as is, and a list with no {item type definition} is
-// a plain error.
+// states, and otherwise the decline of the first construct it finds: for a
+// list, the first construct of its {item type definition} (atomicEncodes),
+// the detail naming the item after st (itemSubject), and an assertions facet
+// among st's own effective facets, its own or inherited; for an atomic or
+// union st, atomicEncodes's. An error reading st is returned as is, and a
+// list with no {item type definition} is a plain error.
 func simpleEncodes(r xsd.TypeResolver, st *xsd.SimpleType, owner string) error {
 	return typeEncodes(r, st, simpleSubject(st, owner))
 }
@@ -1284,7 +1285,7 @@ func simpleEncodes(r xsd.TypeResolver, st *xsd.SimpleType, owner string) error {
 // its union (unionEncodes).
 func typeEncodes(r xsd.TypeResolver, st *xsd.SimpleType, subject string) error {
 	if st.IsSpecial() {
-		return encodeDecline(constructSpecialType, subject)
+		return nil
 	}
 	variety, err := st.Variety(r)
 	if err != nil {
@@ -1309,15 +1310,12 @@ func typeEncodes(r xsd.TypeResolver, st *xsd.SimpleType, subject string) error {
 // atomicEncodes returns nil where st, an atomic or union simple type subject
 // names, a list's {item type definition} among them, which cos-st-restricts
 // clause 2.1 holds to one of those two, encodes, and otherwise the decline
-// of the first construct it finds: a special type, then, for a union,
-// unionEncodes's, and for an atomic type a primitive not in
-// encodedPrimitives, a type on whose {base type definition} chain xs:ID,
-// xs:IDREF or xs:ENTITY lies, then an assertions facet among its effective
-// facets, its own or inherited. An error reading st is returned as is.
+// of the first construct it finds: for a union, unionEncodes's, and for an
+// atomic type a primitive not in encodedPrimitives, a type on whose {base
+// type definition} chain xs:ID, xs:IDREF or xs:ENTITY lies, then an
+// assertions facet among its effective facets, its own or inherited. An error
+// reading st is returned as is.
 func atomicEncodes(r xsd.TypeResolver, st *xsd.SimpleType, subject string) error {
-	if st.IsSpecial() {
-		return encodeDecline(constructSpecialType, subject)
-	}
 	variety, err := st.Variety(r)
 	if err != nil {
 		return err
@@ -1837,9 +1835,11 @@ func (e *encoder) list(s scalar, v reflect.Value, path, subject string) (written
 const listSeparators = "\t\n\r "
 
 // str returns s, a value of the simple type st whose primitive is xs:string
-// or xs:anyURI, after checking, in this order, that it is UTF-8 of XML 1.0
-// Char characters only, which both value spaces are sequences of (Datatypes
-// §3.3.1.1, §3.3.17.1), that value.ValidateLexical accepts it under st, and
+// or xs:anyURI, or a special type, which it returns after the Char check
+// alone, after checking, in this order, that it is UTF-8 of XML 1.0 Char
+// characters only, which both value spaces and both special types' lexical
+// spaces are sequences of (Datatypes §3.3.1.1, §3.3.17.1, §3.2.1.2,
+// §3.2.2.2), that value.ValidateLexical accepts it under st, and
 // that it is the canonical representation of the value that returns, its own
 // whiteSpace-normalized form, as the package doc's "# What encodes" states a
 // string value is written. Canonical renders the value ValidateLexical
@@ -1848,8 +1848,11 @@ const listSeparators = "\t\n\r "
 func (e *encoder) str(st *xsd.SimpleType, s, path, subject string) (text string, ok bool, err error) {
 	shown := strconv.Quote(s)
 	if i := xmlchar.IndexNonChar(s); i >= 0 {
-		e.invalidate(fmt.Errorf("codec: Append: %s holds %s, of %s, whose byte offset %d starts no XML 1.0 Char (Datatypes §3.3.1.1, §3.3.17.1)", path, shown, subject, i))
+		e.invalidate(fmt.Errorf("codec: Append: %s holds %s, of %s, whose byte offset %d starts no XML 1.0 Char (Datatypes §3.3.1.1, §3.3.17.1, §3.2.1.2, §3.2.2.2)", path, shown, subject, i))
 		return s, false, nil
+	}
+	if st.IsSpecial() {
+		return s, true, nil
 	}
 	v, err := value.ValidateLexical(e.backend, e.schema, st, s, writtenBindings{e}, noAssertions{})
 	if err != nil {
