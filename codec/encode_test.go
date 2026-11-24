@@ -980,7 +980,8 @@ func TestAppendDeclines(t *testing.T) {
 		{"anyType particle value constraint", "a value constraint, default or fixed", sequence(`<xs:element name="a" default="d"/>`)},
 		{"abstract type", "an element declaration whose {type definition} is a complex type with {abstract} true", abstractType},
 		{"abstract particle type", "an element declaration whose {type definition} is a complex type with {abstract} true", `<xs:complexType name="ab%[1]s" abstract="true"/>` + sequence(`<xs:element name="a" type="s:ab%[1]s"/>`)},
-		{"simple content", "a complex type with simple content", complexOf(`<xs:simpleContent><xs:extension base="xs:string"/></xs:simpleContent>`)},
+		{"simple content", "a simple type derived from xs:ID, xs:IDREF or xs:ENTITY", complexOf(`<xs:simpleContent><xs:extension base="xs:ID"/></xs:simpleContent>`)},
+		{"simple content before attribute uses", "a simple type derived from xs:ID, xs:IDREF or xs:ENTITY", complexOf(`<xs:simpleContent><xs:extension base="xs:ID"><xs:attribute name="a" type="xs:string" form="qualified"/></xs:extension></xs:simpleContent>`)},
 		{"mixed", "a complex type with mixed content", `<xs:element name="%[1]s"><xs:complexType mixed="true"><xs:sequence>` + a + `</xs:sequence></xs:complexType></xs:element>`},
 		{"open content", "an {open content}", complexOf(`<xs:openContent><xs:any namespace="##other" processContents="lax"/></xs:openContent><xs:sequence>` + a + `</xs:sequence>`)},
 		{"all group", "an all group", complexOf(`<xs:all>` + a + `</xs:all>`)},
@@ -998,7 +999,7 @@ func TestAppendDeclines(t *testing.T) {
 		{"abstract memberless ref", "a construct codegen holds in a sealed interface: a choice, a flattened particle or a substitution group", `<xs:element name="x%[1]s" type="xs:string" abstract="true"/>` +
 			sequence(`<xs:element ref="s:x%[1]s" minOccurs="0"/>`)},
 		{"ref value constraint", "a value constraint, default or fixed", `<xs:element name="x%[1]s" type="xs:string" default="x"/>` + sequence(`<xs:element ref="s:x%[1]s"/>`)},
-		{"ref simple content", "a complex type with simple content", `<xs:element name="x%[1]s"><xs:complexType><xs:simpleContent><xs:extension base="xs:string"/></xs:simpleContent></xs:complexType></xs:element>` +
+		{"ref simple content", "xs:anySimpleType or xs:anyAtomicType as a simple type", `<xs:element name="x%[1]s"><xs:complexType><xs:simpleContent><xs:extension base="xs:anySimpleType"/></xs:simpleContent></xs:complexType></xs:element>` +
 			sequence(`<xs:element ref="s:x%[1]s"/>`)},
 		{"complex particle", "a wildcard particle with {process contents} strict or lax", sequence(`<xs:element name="a"><xs:complexType><xs:sequence><xs:any processContents="lax"/></xs:sequence></xs:complexType></xs:element>`)},
 		{"particle type sharing its element's name", "a wildcard particle with {process contents} strict or lax", `<xs:complexType name="%[1]s"><xs:sequence><xs:any processContents="lax"/></xs:sequence></xs:complexType>` +

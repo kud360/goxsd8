@@ -54,7 +54,10 @@ func (e *DeclineError) Loc() (xsderr.Loc, bool) {
 // [Decode]'s item 5 states; for xsi:type, it names the element and the type the
 // xsi:type names. For the second it names the construct, then the declining
 // element declaration, attribute use or simple type, by its QName where it has
-// one, with its schema Loc, and, for a construct of a list type's {item type
+// one, with its schema Loc, and, for a construct of a complex type's simple
+// content, that type labelled as its declaration's {type definition}, then its
+// {content type}'s {simple type definition}, by its QName where it has one,
+// with its schema Loc, and, for a construct of a list type's {item type
 // definition}, a union's basic member or a union among a union's {member type
 // definitions} at any depth, that item, member or member union, by its QName
 // where it has one, with its schema Loc, and, for an identity constraint whose
@@ -152,7 +155,9 @@ type construct uint8
 // declines by constructValueConstraint after constructQualifiedAttribute. The ones of
 // a simple type, constructSpecialType to constructAssertions, sit after the
 // {assertions}'s, though the document element's, a particle's and an attribute use's
-// simple type declines by them where that declaration or use is examined.
+// simple type declines by them where that declaration or use is examined, and a
+// complex type's simple content, by its {simple type definition}, where its type's
+// content is, ahead of its attribute uses.
 const (
 	constructNillable construct = iota + 1
 	constructNestedGroup
@@ -165,7 +170,6 @@ const (
 	constructIdentityConstraint
 	constructAbstractElement
 	constructAbstractType
-	constructSimpleContent
 	constructMixed
 	constructOpenContent
 	constructVacuousParticle
@@ -198,7 +202,6 @@ var constructNames = [...]string{
 	constructIdentityConstraint: "an identity constraint whose {selector} or {fields}, or whose {referenced key}'s, lie outside the path subset icpath compiles (Structures §3.11.6.2 ·selector subset·, §3.11.6.3 ·field subset·)",
 	constructAbstractElement:    "an element declaration with {abstract} true",
 	constructAbstractType:       "an element declaration whose {type definition} is a complex type with {abstract} true",
-	constructSimpleContent:      "a complex type with simple content",
 	constructMixed:              "a complex type with mixed content",
 	constructOpenContent:        "an {open content}",
 	constructVacuousParticle:    "a particle with {max occurs} 0",
