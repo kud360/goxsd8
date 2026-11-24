@@ -38,9 +38,10 @@ func instanceTest(name, doc string) string {
 // cases encode (a.xml, a sequence, f.xml, of simple type, n.xml, z.xml and
 // o.xml, xs:double values NaN, −0 and 1, the last spelled other than
 // canonically, g.xml, a choice, and p.xml, of a union type), decline (l.xml,
-// a sequence codegen flattens), and lie outside the population: invalid.xml,
-// which does not decode, and u.xml, whose document element no declaration
-// names, which decodes into the placeholder.
+// a sequence codegen flattens whose particle has a value constraint), and
+// lie outside the population: invalid.xml, which does not decode, and u.xml,
+// whose document element no declaration names, which decodes into the
+// placeholder.
 var censusSuite = map[string]string{
 	"suite.xml": `<testSuite xmlns:xlink="http://www.w3.org/1999/xlink"><testSetRef xlink:href="sets/s.testSet"/></testSuite>`,
 	"sets/s.testSet": `<testSet name="S" xmlns:xlink="http://www.w3.org/1999/xlink">
@@ -54,7 +55,7 @@ var censusSuite = map[string]string{
   <xs:element name="f" type="xs:string"/>
   <xs:element name="d" type="xs:double"/>
   <xs:element name="g"><xs:complexType><xs:choice><xs:element name="h" type="xs:string"/><xs:element name="i" type="xs:string"/></xs:choice></xs:complexType></xs:element>
-  <xs:element name="l"><xs:complexType><xs:sequence maxOccurs="unbounded"><xs:element name="m" type="xs:string" minOccurs="0"/></xs:sequence></xs:complexType></xs:element>
+  <xs:element name="l"><xs:complexType><xs:sequence maxOccurs="unbounded"><xs:element name="m" type="xs:string" minOccurs="0" default="d"/></xs:sequence></xs:complexType></xs:element>
   <xs:element name="p"><xs:simpleType><xs:union memberTypes="xs:string xs:int"/></xs:simpleType></xs:element>
 </xs:schema>`,
 	"d/a.xml":       `<a><b>x</b></a>`,
@@ -82,7 +83,7 @@ const wantCounts = `encodecensus: 10 instance case(s) under %ROOT%
   round trip unequal: 0
 
 === First decline, by construct: 1 construct(s) ===
-       1  a construct codegen holds in a sealed interface: a choice, a flattened particle or a substitution group
+       1  a value constraint, default or fixed
 
 === Caveats ===
 `
@@ -90,7 +91,7 @@ const wantCounts = `encodecensus: 10 instance case(s) under %ROOT%
 // wantPaths is the -paths sections over censusSuite.
 const wantPaths = `
 === Cases, by construct ===
-a construct codegen holds in a sealed interface: a choice, a flattened particle or a substitution group (1):
+a value constraint, default or fixed (1):
   S/g/instance/flattened
 
 === Cases, by defect count ===

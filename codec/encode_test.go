@@ -985,7 +985,8 @@ func TestAppendDeclines(t *testing.T) {
 		{"mixed", "a complex type with mixed content", `<xs:element name="%[1]s"><xs:complexType mixed="true"><xs:sequence>` + a + `</xs:sequence></xs:complexType></xs:element>`},
 		{"open content", "an {open content}", complexOf(`<xs:openContent><xs:any namespace="##other" processContents="lax"/></xs:openContent><xs:sequence>` + a + `</xs:sequence>`)},
 		{"all group", "an all group", complexOf(`<xs:all>` + a + `</xs:all>`)},
-		{"flattened", "a construct codegen holds in a sealed interface: a choice, a flattened particle or a substitution group", complexOf(`<xs:sequence maxOccurs="unbounded"><xs:element name="a" type="xs:string" minOccurs="0"/></xs:sequence>`)},
+		{"flattened", "a value constraint, default or fixed", complexOf(`<xs:sequence maxOccurs="unbounded"><xs:element name="a" type="xs:string" minOccurs="0" default="x"/></xs:sequence>`)},
+		{"flattened untracked", "a content model the content matcher does not track", complexOf(`<xs:sequence maxOccurs="21845"><xs:element name="a" type="xs:string" maxOccurs="2"/></xs:sequence>`)},
 		{"all group in an occurrence field", "an all group", complexOf(`<xs:all minOccurs="0">` + a + `</xs:all>`)},
 		{"nested sequence in an occurrence field", "a nested model group particle", complexOf(`<xs:sequence maxOccurs="2">` + a + `<xs:sequence><xs:element name="b" type="xs:string"/></xs:sequence></xs:sequence>`)},
 		{"nested group ref in an occurrence field", "a nested model group particle", `<xs:group name="g%[1]s"><xs:sequence><xs:element name="b" type="xs:string"/></xs:sequence></xs:group>` +
