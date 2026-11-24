@@ -334,12 +334,23 @@ type writer interface {
 	write(e *encoder, v reflect.Value, at writeAt) error
 }
 
-// writeAt is what a writer reads beside its value: el, the element
+// A texter is the bound simple content of a complex type, which Append
+// writes as character content rather than as elements: text returns the text
+// Append writes for v, the struct at.el's element holds, at at, and a backend
+// fault. *boundBinding's write reads it before the start tag's '>', so that a
+// prefix an xs:QName or xs:NOTATION value's spelling declares lands on that
+// start tag. Its one implementer is boundValue.
+type texter interface {
+	text(e *encoder, v reflect.Value, at writeAt) (string, error)
+}
+
+// writeAt is what a writer or a texter reads beside its value: el, the element
 // declaration of the element the value is written as, for a root arm, or of
-// the element whose content holds it, for every other writer; typ, for a
-// content arm, the complex type whose content it writes, el's, which a
-// choice's item 6 errors name (typeSubject), and the zero ComplexType for
-// every other writer, which reads none; and path, the value's Go path from T.
+// the element whose content holds it, for every other writer and a texter;
+// typ, for a content arm or a texter, the complex type whose content it
+// writes, el's, which a choice's item 6 errors and a texter's value name
+// (typeSubject), and the zero ComplexType for every other writer, which reads
+// none; and path, the value's Go path from T.
 type writeAt struct {
 	el   xsd.ElementDeclaration
 	typ  xsd.ComplexType
@@ -356,9 +367,10 @@ type attributionSlot struct {
 
 // encoded returns x, an arm of the filler item 5's check returns or of the
 // binder under it, as C, what Append's write reads it as: the writer capability, the
-// elementWriter capability of a fieldSink's elementReader, the particleWriter
-// capability of a contentMember's or a branchArm's elementMember or wildcardMember, or a
-// closed sum's arm, a sink's fieldSink or a scalarElem's atomic. It is the write's one
+// texter capability of simple content's contentFiller, the elementWriter capability of
+// a fieldSink's elementReader, the particleWriter capability of a contentMember's or a
+// branchArm's elementMember or wildcardMember, or a closed sum's arm, a sink's
+// fieldSink, a fieldArm's scalarArm or a scalarElem's atomic. It is the write's one
 // assertion of the binder's arms. Invariant: where item 4 of [Append]'s doc admits a
 // construct, every arm the binder builds for it that the write reaches is such a C. A
 // failed assertion breaks it, an internal bug, never input, and panics naming x's type.
@@ -381,9 +393,10 @@ func (s *simpleRoot) write(e *encoder, v reflect.Value, at writeAt) error {
 // tag, then each attribute field's attribute, in field order, the fields after
 // the content's (binding.lead, elementContent.width), a nil *V's written as
 // none, and so is a nil union interface of a use whose {required} is false,
-// then the content's elements (b.content's write), an element with no
-// content written as an empty-element tag; or nothing, where v holds itself
-// (encoder.enter).
+// then the content: for simple content the value field's text (texter),
+// computed before the start tag's '>', and otherwise the content's elements
+// (b.content's write), an element with no content written as an empty-element
+// tag; or nothing, where v holds itself (encoder.enter).
 func (b *boundBinding) write(e *encoder, v reflect.Value, at writeAt) error {
 	if !e.enter(v, at.path) {
 		return nil
@@ -416,13 +429,39 @@ func (b *boundBinding) write(e *encoder, v reflect.Value, at writeAt) error {
 		e.out = appendEscaped(e.out, text, true)
 		e.out = append(e.out, '"')
 	}
+	content := writeAt{el: at.el, typ: bd.typ, path: at.path}
+	// {content type} is a closed sum, so the switch is STYLE T2's sealed-sum
+	// exception.
+	switch bd.typ.ContentType().(type) {
+	case xsd.SimpleContent:
+		text, err := encoded[texter](b.content).text(e, v, content)
+		if err != nil {
+			return err
+		}
+		e.textTag(name.Local, text, outer, mark)
+		return nil
+	}
 	start := len(e.out)
 	e.out = append(e.out, '>')
-	if err := encoded[writer](b.content).write(e, v, writeAt{el: at.el, typ: bd.typ, path: at.path}); err != nil {
+	if err := encoded[writer](b.content).write(e, v, content); err != nil {
 		return err
 	}
 	e.endTag(name.Local, start, outer, mark)
 	return nil
+}
+
+// text returns the text Append writes for v's value field, field b.index of
+// its struct, under the field's scalar (encoder.scalarText), the scalar
+// Decode's simpleValueOf bound, of {content type}.{simple type definition}, so
+// that its facets, an anonymous restriction's own among them, reach the value
+// through value.ValidateLexical; the field's item 6 and 7 errors of [Append]'s
+// doc name that type after at.typ as simpleValueOf names it (contentSubject).
+// A union's nil interface is item 6 there: a value field is never absent.
+func (b boundValue) text(e *encoder, v reflect.Value, at writeAt) (string, error) {
+	s := encoded[scalarArm](b.value.value.arm).scalar
+	path := at.path + "." + v.Type().Field(b.index).Name
+	w, err := e.scalarText(s, v.Field(b.index), path, contentSubject(typeSubject(at.el, at.typ), s.st))
+	return w.text, err
 }
 
 // write writes the element at.el holding v, a value of the choice's sealed
@@ -827,18 +866,22 @@ func pathsCompile(ic xsd.IdentityConstraint) (string, bool) {
 }
 
 // complexEncodes returns elementEncodes' error for decl, whose {type
-// definition} is the complex type ct: ct's content, then its content
-// {particle}, {max occurs} 0 declined before its hold is asked (#3794), then
-// each particle in order, then each attribute use codegen gives a field
-// (goshape.FieldAttributeUses), then its {attribute wildcard}, then its
-// {assertions}.
+// definition} is the complex type ct: ct's content, for simple content its
+// {simple type definition} as typeEncodes examines it, named after ct as
+// Decode's simpleValueOf names it (contentSubject), and for element-only or
+// mixed content its content {particle}, {max occurs} 0 declined before its
+// hold is asked (#3794), then each particle in order; then each attribute use
+// codegen gives a field (goshape.FieldAttributeUses), then its {attribute
+// wildcard}, then its {assertions}.
 func (w *encodeWalk) complexEncodes(decl xsd.ElementDeclaration, ct xsd.ComplexType) error {
 	subject := typeSubject(decl, ct)
 	// {content type} is a closed sum, so the switch is STYLE T2's sealed-sum
 	// exception.
 	switch content := ct.ContentType().(type) {
 	case xsd.SimpleContent:
-		return encodeDecline(constructSimpleContent, subject)
+		if err := typeEncodes(w.schema, content.SimpleType, contentSubject(subject, content.SimpleType)); err != nil {
+			return err
+		}
 	case xsd.ElementContent:
 		if err := w.contentEncodes(ct, content, subject); err != nil {
 			return err
@@ -1057,8 +1100,10 @@ func simpleEncodes(r xsd.TypeResolver, st *xsd.SimpleType, owner string) error {
 }
 
 // typeEncodes is simpleEncodes for st, subject naming it already: a
-// declaration's type as simpleSubject names it, or a union's basic member as
-// memberSubject names it after its union (unionEncodes).
+// declaration's type as simpleSubject names it, a complex type's {content
+// type}'s {simple type definition} as contentSubject names it after that type
+// (complexEncodes), or a union's basic member as memberSubject names it after
+// its union (unionEncodes).
 func typeEncodes(r xsd.TypeResolver, st *xsd.SimpleType, subject string) error {
 	if st.IsSpecial() {
 		return encodeDecline(constructSpecialType, subject)
@@ -1294,10 +1339,20 @@ func (e *encoder) endTag(tag string, start int, outer string, mark int) {
 	e.out = append(e.out, '>')
 }
 
+// textTag ends the start tag of the element tag names, whose startTag
+// answered outer and mark, with text, escaped, as its character content, an
+// empty text written as an empty-element tag (endTag).
+func (e *encoder) textTag(tag, text, outer string, mark int) {
+	start := len(e.out)
+	e.out = append(e.out, '>')
+	e.out = appendEscaped(e.out, text, false)
+	e.endTag(tag, start, outer, mark)
+}
+
 // simpleElement writes the element of decl, holding v, a value of s's simple
 // type, whose Go path from T is path: its start tag (startTag), then its
 // value's text (simple), which may first declare a prefix on that start tag
-// (qname), an empty text written as an empty-element tag. The
+// (qname), an empty text written as an empty-element tag (textTag). The
 // error is a backend fault.
 func (e *encoder) simpleElement(decl xsd.ElementDeclaration, s scalar, v reflect.Value, path string) error {
 	name := decl.Name()
@@ -1306,10 +1361,7 @@ func (e *encoder) simpleElement(decl xsd.ElementDeclaration, s scalar, v reflect
 	if err != nil {
 		return err
 	}
-	start := len(e.out)
-	e.out = append(e.out, '>')
-	e.out = appendEscaped(e.out, text, false)
-	e.endTag(name.Local, start, outer, mark)
+	e.textTag(name.Local, text, outer, mark)
 	return nil
 }
 

@@ -105,6 +105,16 @@ func TestSimpleContentTypesAreCodegens(t *testing.T) {
 	}
 }
 
+// testRat returns the big.Rat s spells, failing t where it spells none.
+func testRat(t testing.TB, s string) big.Rat {
+	t.Helper()
+	r, ok := new(big.Rat).SetString(s)
+	if !ok {
+		t.Fatalf("bad rational %q", s)
+	}
+	return *r
+}
+
 // TestDecodeSimpleContent pins the lift of simple content (§3.4.2.2
 // dcl.ctd.ctsc): an element of a complex type with simple content decodes
 // into codegen's struct, its value field the element's ·normalized value·
@@ -125,42 +135,35 @@ func TestSimpleContentTypesAreCodegens(t *testing.T) {
 func TestDecodeSimpleContent(t *testing.T) {
 	str := func(s string) *string { return &s }
 	i32 := func(i int32) *int32 { return &i }
-	rat := func(s string) big.Rat {
-		r, ok := new(big.Rat).SetString(s)
-		if !ok {
-			t.Fatalf("bad rational %q", s)
-		}
-		return *r
-	}
 	variants := WithBranches[unionU](unionUInt(0), unionUDate{})
 	rows := []struct {
 		name, decls, attrs, body string
 		into                     target
 		want                     any
 	}{
-		{"an extension of xs:decimal with an attribute", scPriceRoot, ` cur="EUR"`, " 12.50 ", into[scPrice](), scPrice{Value: rat("12.5"), Cur: str("EUR")}},
-		{"an extension of xs:decimal, its attribute absent", scPriceRoot, "", "7", into[scPrice](), scPrice{Value: rat("7")}},
-		{"a restriction with a facet, the Go type unchanged", scCappedRoot, ` cur="x"`, "99.9", into[scPrice](), scPrice{Value: rat("99.9"), Cur: str("x")}},
+		{"an extension of xs:decimal with an attribute", scPriceRoot, ` cur="EUR"`, " 12.50 ", into[scPrice](), scPrice{Value: testRat(t, "12.5"), Cur: str("EUR")}},
+		{"an extension of xs:decimal, its attribute absent", scPriceRoot, "", "7", into[scPrice](), scPrice{Value: testRat(t, "7")}},
+		{"a restriction with a facet, the Go type unchanged", scCappedRoot, ` cur="x"`, "99.9", into[scPrice](), scPrice{Value: testRat(t, "99.9"), Cur: str("x")}},
 		{"an extension of a list", scNumsRoot, ` n="2"`, " 1  2\n3 ", into[scNums](), scNums{Value: []int32{1, 2, 3}, N: i32(2)}},
 		{"an extension of a list, empty", scNumsRoot, "", "", into[scNums](), scNums{Value: []int32{}}},
 		{"an extension of a union, its xs:int member", scTaggedRoot, ` value="v"`, " 5 ", into[scTagged](variants), scTagged{Value: unionUInt(5), Value2: str("v")}},
 		{"an extension of a union, its xs:date member", scTaggedRoot, "", "2000-01-02", into[scTagged](variants),
 			scTagged{Value: unionUDate{Year: *big.NewInt(2000), Month: 1, Day: 2}}},
-		{"a default on the document element, empty", scDefaultRoot, ` cur="c"`, "", into[scPrice](), scPrice{Value: rat("3.25"), Cur: str("c")}},
-		{"a default on the document element, present", scDefaultRoot, "", "1", into[scPrice](), scPrice{Value: rat("1")}},
-		{"a fixed value on the document element, empty", scFixedRoot, "", "", into[scPrice](), scPrice{Value: rat("4")}},
-		{"a fixed value on the document element, equal and not identical", scFixedRoot, "", "4.0", into[scPrice](), scPrice{Value: rat("4")}},
+		{"a default on the document element, empty", scDefaultRoot, ` cur="c"`, "", into[scPrice](), scPrice{Value: testRat(t, "3.25"), Cur: str("c")}},
+		{"a default on the document element, present", scDefaultRoot, "", "1", into[scPrice](), scPrice{Value: testRat(t, "1")}},
+		{"a fixed value on the document element, empty", scFixedRoot, "", "", into[scPrice](), scPrice{Value: testRat(t, "4")}},
+		{"a fixed value on the document element, equal and not identical", scFixedRoot, "", "4.0", into[scPrice](), scPrice{Value: testRat(t, "4")}},
 		{"particles of a sequence", scSeqSchema, "", `<s:p cur="a">1</s:p><s:c>2</s:c><s:l>3 4</s:l><s:t>2001-02-03</s:t><s:x k="6" cur="b">5</s:x><s:d/><s:f></s:f><s:h/>`,
 			into[scSeq](variants), scSeq{
-				P: scPrice{Value: rat("1"), Cur: str("a")}, C: scPrice{Value: rat("2")}, L: scNums{Value: []int32{3, 4}},
+				P: scPrice{Value: testRat(t, "1"), Cur: str("a")}, C: scPrice{Value: testRat(t, "2")}, L: scNums{Value: []int32{3, 4}},
 				T: scTagged{Value: unionUDate{Year: *big.NewInt(2001), Month: 2, Day: 3}},
-				X: scRich{Value: rat("5"), K: i32(6), Cur: str("b")},
-				D: scPrice{Value: rat("1.5")}, F: scPrice{Value: rat("2")}, H: &scPrice{Value: rat("9")},
+				X: scRich{Value: testRat(t, "5"), K: i32(6), Cur: str("b")},
+				D: scPrice{Value: testRat(t, "1.5")}, F: scPrice{Value: testRat(t, "2")}, H: &scPrice{Value: testRat(t, "9")},
 			}},
 		{"particles of a sequence, values present, the ref absent", scSeqSchema, "", `<s:p>1</s:p><s:c>2</s:c><s:l/><s:t>8</s:t><s:x>5</s:x><s:d> 0.5 </s:d><s:f>2.00</s:f>`,
 			into[scSeq](variants), scSeq{
-				P: scPrice{Value: rat("1")}, C: scPrice{Value: rat("2")}, L: scNums{Value: []int32{}}, T: scTagged{Value: unionUInt(8)},
-				X: scRich{Value: rat("5")}, D: scPrice{Value: rat("0.5")}, F: scPrice{Value: rat("2")},
+				P: scPrice{Value: testRat(t, "1")}, C: scPrice{Value: testRat(t, "2")}, L: scNums{Value: []int32{}}, T: scTagged{Value: unionUInt(8)},
+				X: scRich{Value: testRat(t, "5")}, D: scPrice{Value: testRat(t, "0.5")}, F: scPrice{Value: testRat(t, "2")},
 			}},
 	}
 	for _, row := range rows {

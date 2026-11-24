@@ -319,16 +319,20 @@
 //     compiles, whose {type definition} is a simple type that encodes, a
 //     complex type that encodes, or xs:anyType itself.
 //   - A complex type with {abstract} false, no {assertions}, no {attribute
-//     wildcard} and no {open content}, of empty content or of element-only
-//     content whose {particle} is a sequence that codegen splices, a choice
-//     occurring exactly once that codegen does not flatten, or a sequence or
-//     choice codegen holds in an occurrence field, inline or through <group
-//     ref>, each of whose particles is an element particle or a wildcard
-//     particle with {process contents} skip, and, holding a wildcard particle,
-//     whose content model xsd.Schema.ContentMatcher tracks; the choice
-//     occurring exactly once into its sealed interface, T itself or the first
-//     field of T's struct, and the sequence or choice held in an occurrence
-//     field into that field, as "# What decodes" states.
+//     wildcard} and no {open content}, of empty content, of simple content
+//     whose {simple type definition} (Structures §3.4.2.2 dcl.ctd.ctsc) is a
+//     simple type that encodes, its value field (codegen's package doc, "#
+//     Complex types") written as the element's character content after its
+//     attributes, or of element-only content whose {particle} is a sequence
+//     that codegen splices, a choice occurring exactly once that codegen does
+//     not flatten, or a sequence or choice codegen holds in an occurrence
+//     field, inline or through <group ref>, each of whose particles is an
+//     element particle or a wildcard particle with {process contents} skip,
+//     and, holding a wildcard particle, whose content model
+//     xsd.Schema.ContentMatcher tracks; the choice occurring exactly once into
+//     its sealed interface, T itself or the first field of T's struct, and the
+//     sequence or choice held in an occurrence field into that field, as "#
+//     What decodes" states.
 //   - An element particle of that sequence or choice with {max occurs} at least
 //     1, its {term} a local element declaration or, for an <element ref> whose
 //     field codegen's package doc "# Substitution groups" gives no sealed
@@ -389,11 +393,12 @@
 //     [WithPrecisionDecimalArms] supplies.
 //
 // Every other construct is a [*DeclineError], item 4 of Append's doc, a
-// list's item declining by the item's construct and a union's basic member
-// by that member's construct, and so is what item 7 of Append's doc states.
-// The one exception is the declaration name names, as the document element's,
-// with {abstract} true: it is item 3, a plain error. A declaration with
-// {abstract} true that a particle reaches is no exception.
+// list's item declining by the item's construct, a union's basic member
+// by that member's construct and a complex type's simple content by its
+// {simple type definition}'s construct, and so is what item 7 of Append's doc
+// states. The one exception is the declaration name names, as the document
+// element's, with {abstract} true: it is item 3, a plain error. A declaration
+// with {abstract} true that a particle reaches is no exception.
 //
 // The document Append writes has no XML declaration, so it is XML 1.0 in
 // UTF-8, and no white space between tags. It binds element names by default
