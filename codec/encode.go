@@ -43,7 +43,8 @@ var ErrInvalidValue = errors.New("codec: Append: a value no valid document holds
 // decide, is that form alone, but for an xs:QName or xs:NOTATION value,
 // which has none (§3.3.18, §3.3.19), and a value of xs:anySimpleType or
 // xs:anyAtomicType itself, which has none either, canonical mappings being
-// defined for primitive datatypes alone (§2.1's note, §2.4.2 dt-special),
+// defined for primitive datatypes and inherited by those derived from them
+// (§2.1's note), and never for a special one (§2.4.2 dt-special),
 // each written as the package doc's "# What encodes" states. It assesses the
 // document it writes, the bytes past len(dst) alone, through package validate,
 // on backend and under no URI, exactly when an element declaration item 4
@@ -1835,16 +1836,16 @@ func (e *encoder) list(s scalar, v reflect.Value, path, subject string) (written
 const listSeparators = "\t\n\r "
 
 // str returns s, a value of the simple type st whose primitive is xs:string
-// or xs:anyURI, or a special type, which it returns after the Char check
-// alone, after checking, in this order, that it is UTF-8 of XML 1.0 Char
-// characters only, which both value spaces and both special types' lexical
-// spaces are sequences of (Datatypes §3.3.1.1, §3.3.17.1, §3.2.1.2,
-// §3.2.2.2), that value.ValidateLexical accepts it under st, and
-// that it is the canonical representation of the value that returns, its own
-// whiteSpace-normalized form, as the package doc's "# What encodes" states a
-// string value is written. Canonical renders the value ValidateLexical
-// returns, never one Parse maps s to: Parse takes a normalized lexical, and s
-// may be none. ok is atom's.
+// or xs:anyURI or that is a special type, after checking, in this order, that
+// it is UTF-8 of XML 1.0 Char characters only, which both value spaces and
+// both special types' lexical spaces are sequences of (Datatypes §3.3.1.1,
+// §3.3.17.1, §3.2.1.2, §3.2.2.2), and then, for st other than a special type,
+// which it returns after that check alone, that value.ValidateLexical accepts
+// it under st, and that it is the canonical representation of the value that
+// returns, its own whiteSpace-normalized form, as the package doc's "# What
+// encodes" states a string value is written. Canonical renders the value
+// ValidateLexical returns, never one Parse maps s to: Parse takes a
+// normalized lexical, and s may be none. ok is atom's.
 func (e *encoder) str(st *xsd.SimpleType, s, path, subject string) (text string, ok bool, err error) {
 	shown := strconv.Quote(s)
 	if i := xmlchar.IndexNonChar(s); i >= 0 {
