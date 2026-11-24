@@ -67,53 +67,60 @@ var ErrInvalidValue = errors.New("codec: Append: a value no valid document holds
 //     before its content: an error, which errors.Is reports as [ErrInvalidValue], naming the
 //     Go path of its field from T and, for a simple value, its simple type. It is the slice
 //     field of a particle with {max occurs} above 1 whose length lies outside its {min occurs}
-//     and {max occurs}, a choice's alternative's {min occurs} 0 read as 1 in its branch; the
-//     nil sealed interface of a content choice, or of an item of an occurrence field's slice
-//     of a choice, none of whose alternatives is emptiable (Structures §3.8.4.3
-//     cvc-model-group, §3.9.6.3 cos-group-emptiable), a choice of no {particles} among them; a
-//     value of that interface whose dynamic type the [WithBranches] set in opts places at no
-//     alternative, a pointer to a branch among them, which Decode never returns; the nil
-//     sealed interface of a union simple type wherever nil does not mean absent, that is,
-//     every field but an element particle's of {min occurs} 0 and {max occurs} 1 and an
-//     optional attribute use's (codegen's package doc, "# Particles", "# Attributes"); a value
-//     of that interface whose dynamic type the [WithBranches] set in opts places at no basic
-//     member, a pointer to a variant among them, which Decode never returns; a value that
-//     holds itself, a struct or sealed interface value its own write reaches again through a
-//     *S, []S or []I field, which no finite document holds, the error naming the Go path where
-//     the value is reached again and nothing written beneath it; a string holding bytes that
-//     are not UTF-8 or a character the XML 1.0 Char production does not match, U+0000 among
-//     them (Datatypes §3.3.1.1, §3.3.17.1), a held element's Space, an attribute's Space or
-//     Value, a Text and a Tail among them; a string that differs from its own
-//     whiteSpace-normalized form under its simple type, such as an xs:token holding "  a b"; a
-//     list item, a string, that is empty or holds TAB, LF, CR or a space, which no list item's
-//     lexical representation does (Datatypes §2.4.1.2); a big.Rat outside the decimal value
-//     space, whose denominator in lowest terms is no 2^m·5^n (§3.3.3.1), such as 1/3; an
-//     element a wildcard particle's field holds, of {process contents} skip, that its content
-//     model admits at no particle where it is written, a name outside the wildcard's
-//     {namespace constraint} or in its {disallowed names} among them, or attributes to a
-//     particle other than that wildcard, an element particle taking its name first among them,
+//     and {max occurs}, a choice's alternative's {min occurs} 0 read as 1 in its branch,
+//     though never a flattened sequence's or choice's slice field, which holds one item per
+//     child, not per occurrence (codegen's package doc, "# Particles"); the nil sealed interface
+//     of a content choice, or of an item of an occurrence field's slice of a choice, none of whose
+//     alternatives is emptiable (Structures §3.8.4.3 cvc-model-group, §3.9.6.3
+//     cos-group-emptiable), a choice of no {particles} among them; a value of that interface whose
+//     dynamic type the [WithBranches] set in opts places at no alternative, a pointer to a branch
+//     among them, which Decode never returns; a nil item of a flattened sequence's or choice's
+//     slice, which Decode never returns either, and an item of it whose dynamic type the
+//     [WithBranches] set in opts places at no alternative, a pointer to a branch among them; the
+//     nil sealed interface of a union simple type wherever nil does not mean absent, that is,
+//     every field but an element particle's of {min occurs} 0 and {max occurs} 1 and an optional
+//     attribute use's (codegen's package doc, "# Particles", "# Attributes"); a value of that
+//     interface whose dynamic type the [WithBranches] set in opts places at no basic member, a
+//     pointer to a variant among them, which Decode never returns; a value that holds itself, a
+//     struct or sealed interface value its own write reaches again through a *S, []S or []I field,
+//     which no finite document holds, the error naming the Go path where the value is reached
+//     again and nothing written beneath it; a string holding bytes that are not UTF-8 or a
+//     character the XML 1.0 Char production does not match, U+0000 among them (Datatypes §3.3.1.1,
+//     §3.3.17.1), a held element's Space, an attribute's Space or Value, a Text and a Tail among
+//     them; a string that differs from its own whiteSpace-normalized form under its simple type,
+//     such as an xs:token holding "  a b"; a list item, a string, that is empty or holds TAB, LF,
+//     CR or a space, which no list item's lexical representation does (Datatypes §2.4.1.2); a
+//     big.Rat outside the decimal value space, whose denominator in lowest terms is no 2^m·5^n
+//     (§3.3.3.1), such as 1/3; an element a wildcard particle's field holds, of {process contents}
+//     skip, that its content model admits at no particle where it is written, a name outside the
+//     wildcard's {namespace constraint} or in its {disallowed names} among them, or attributes to
+//     a particle other than that wildcard, an element particle taking its name first among them,
 //     or after whose content's last child the content model is not accepting, as
-//     xsd.Schema.ContentMatcher's Matcher decides (§3.9.4.3 cvc-accept, §3.10.4.1
-//     cvc-wildcard, §3.8.4.3 cvc-model-group); in such an element, and in the content of an
-//     element of type xs:anyType itself, its own attributes among it, at any depth, a Local
-//     that is no NCName or a Space that is the namespace name the prefix xmlns is bound to, of the
-//     element or of an attribute, an attribute of absent Space named xmlns (Namespaces in XML
-//     §3), and an attribute of the expanded name of one before it (§6.3 nsc-AttrsUnique); a
-//     date, time or duration datatype struct value no value of its datatype maps to, as
-//     codegen's package doc "# Simple types" states such values exist, the error naming the
-//     first property found outside it, its fields read in order, or, ahead of its Seconds, a
-//     duration's Months and Seconds of opposite signs; a PrecisionDecimal datatype struct
-//     value no value maps to, as codegen's "# Simple types" states such values exist, a nil
-//     Value or the numerical arm with a negative Coefficient, or a Value whose dynamic type
-//     the [WithPrecisionDecimalArms] set in opts supplies in no role, a pointer to an arm
-//     among them, which Decode never returns; an xs:QName or xs:NOTATION value whose namespace
-//     name holds a byte that starts no XML 1.0 Char or is the one the prefix xmlns is bound to
-//     (Namespaces in XML §3), or whose Local the Parse of its primitive's mapping rejects in
-//     Append's spelling, that Parse's verdict wrapped, or makes a spelling that resolves back
-//     to another expanded name; or a value whose simple type rejects it, a value.ValidateLexical
-//     error value.IsDatatypeVerdict reports as a verdict, a facet's rejection or a backend Parse's
-//     among them, that error wrapped, but for item 7's pattern and union-variant cases, a list's
-//     own facets read once every item has passed its own checks.
+//     xsd.Schema.ContentMatcher's Matcher decides (§3.9.4.3 cvc-accept, §3.10.4.1 cvc-wildcard,
+//     §3.8.4.3 cvc-model-group); in such an element, and in the content of an element of type
+//     xs:anyType itself, its own attributes among it, at any depth, a Local that is no NCName or a
+//     Space that is the namespace name the prefix xmlns is bound to, of the element or of an
+//     attribute, an attribute of absent Space named xmlns (Namespaces in XML §3), and an attribute
+//     of the expanded name of one before it (§6.3 nsc-AttrsUnique); an element an item of a
+//     flattened sequence's or choice's slice holds that its content model admits at no particle
+//     where it is written, or attributes to a basic particle other than the one whose branch the
+//     item is, or a slice after whose last item the content model is not accepting, as that
+//     Matcher decides (§3.9.4.3 cvc-accept, §3.10.4.1 cvc-wildcard, §3.8.4.3 cvc-model-group); a
+//     date, time or duration datatype struct value no value of its datatype maps to, as codegen's
+//     package doc "# Simple types" states such values exist, the error naming the first property
+//     found outside it, its fields read in order, or, ahead of its Seconds, a duration's Months
+//     and Seconds of opposite signs; a PrecisionDecimal datatype struct value no value maps to, as
+//     codegen's "# Simple types" states such values exist, a nil Value or the numerical arm with a
+//     negative Coefficient, or a Value whose dynamic type the [WithPrecisionDecimalArms] set in
+//     opts supplies in no role, a pointer to an arm among them, which Decode never returns; an
+//     xs:QName or xs:NOTATION value whose namespace name holds a byte that starts no XML 1.0 Char
+//     or is the one the prefix xmlns is bound to (Namespaces in XML §3), or whose Local the Parse
+//     of its primitive's mapping rejects in Append's spelling, that Parse's verdict wrapped, or
+//     makes a spelling that resolves back to another expanded name; or a value whose simple type
+//     rejects it, a value.ValidateLexical error value.IsDatatypeVerdict reports as a verdict, a
+//     facet's rejection or a backend Parse's among them, that error wrapped, but for item 7's
+//     pattern and union-variant cases, a list's own facets read once every item has passed its own
+//     checks.
 //  7. A value with no canonical representation or no spelling Append writes,
 //     the first in document order as item 6 counts: its *DeclineError. That is
 //     a governing mapping with no Canonical, a Canonical that fails for the
@@ -609,24 +616,19 @@ func (bc *boundChoice) branchOf(t reflect.Type) int {
 	return slices.IndexFunc(bc.branches, func(bb boundBranch) bool { return bb.t == t })
 }
 
-// write writes the slice field of v, field b.index, of the flattened content
-// at.typ's {particle} codegen holds there, one element per item in slice
-// order, all under one attributionCheck of the content (flattenedCheck), never
-// nil, since the order of a flattened slice's items is the caller's: each
-// item's branch, matched to its dynamic type (boundChoice.branchOf), writes
-// its alternative's one field as an occurrence exactly once
-// (particleWriter.writeElements), taken at the alternative's index, which
-// alternative j's place in b.flattened.places holds. A nil item, which Decode
-// never appends (boundFlattened.fill), and an item whose dynamic type the
-// WithBranches set places at no alternative, a pointer to a branch among
-// them, are item 6 of [Append]'s doc, and so are an item the content model
-// admits at no particle or attributes to another alternative's particle, and
-// a slice after whose last item it is not accepting (attributionCheck.take,
-// attributionCheck.end; §3.9.4.3 cvc-accept clauses 2 and 3, §3.8.4.3
-// cvc-model-group). The slice's length is no item 6 case of its own: a
-// flattened slice holds one item per child, not per occurrence of the
-// particle. b.open is never written: item 4 declines {open content}
-// (contentEncodes).
+// write writes the slice field of v, field b.index, which holds at.typ's
+// flattened content {particle}, one element per item in slice order, all
+// under one attributionCheck of the content (flattenedCheck), never nil, since
+// the order of a flattened slice's items is the caller's: each item's branch,
+// matched to its dynamic type (boundChoice.branchOf), writes its
+// alternative's one field (particleWriter.writeElements), taken at the
+// alternative's index, the one its place in b.flattened.places holds. It
+// records item 6 of [Append]'s doc for the slice: a nil item and an item of a
+// dynamic type placed at no alternative here, and the content model's verdict
+// on each item and on the slice's end through attributionCheck.take and
+// attributionCheck.end; the slice's length it never reads, since no
+// writeOccurring runs over the slice. b.open is never written: item 4 declines
+// {open content} (contentEncodes).
 func (b boundFlattened) write(e *encoder, v reflect.Value, at writeAt) error {
 	alts := b.flattened.slice.sealed.alts
 	check := e.flattenedCheck(b.flattened, at)
@@ -921,7 +923,8 @@ func pathsCompile(ic xsd.IdentityConstraint) (string, bool) {
 // {simple type definition} as typeEncodes examines it, named after ct as
 // Decode's simpleValueOf names it (contentSubject), and for element-only or
 // mixed content its content {particle}, {max occurs} 0 declined before its
-// hold is asked (#3794), then each particle in order; then each attribute use
+// hold is asked (#3794), then each particle in order, of a flattened one
+// each basic particle it reaches (contentEncodes); then each attribute use
 // codegen gives a field (goshape.FieldAttributeUses), then its {attribute
 // wildcard}, then its {assertions}.
 func (w *encodeWalk) complexEncodes(decl xsd.ElementDeclaration, ct xsd.ComplexType) error {
