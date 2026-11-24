@@ -3219,7 +3219,7 @@ func (b *boundSequence) fill(r *xmltree.Reader, _ *xmltree.StartElement, out ref
 // whose model-group alternative's branch may hold several. A child
 // is put to an alternative by the bind holding the sealed: for a choice and a
 // nested flattened particle, through its content model's childIndex; for a
-// substitution group, by expanded name, through its own children index; for
+// substitution group, by expanded name, among its members (groupReader); for
 // governing types, by the validator's selection (tableRoot.selected); and by
 // Matcher position for a flattened content model.
 type sealed[A branchArm] struct {

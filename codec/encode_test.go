@@ -402,8 +402,8 @@ const refSelfSchema = `<xs:element name="r"><xs:complexType><xs:sequence><xs:ele
 // and one whose one member is abstract, examined as a local declaration; a
 // choice's ref alternative, once and repeated; a ref into another target
 // namespace, beside a ref of complex type; and a ref from a declaration's own
-// type back to it; and a ref to a head with a member, declining
-// constructSubstitutionGroup naming the particle and the head.
+// type back to it. TestAppendSubstitutionGroup pins a ref whose field codegen
+// gives a sealed interface.
 func TestAppendElementRef(t *testing.T) {
 	b := refB("1 2")
 	t.Run("one, optional and repeated, present", func(t *testing.T) {
@@ -446,15 +446,205 @@ func TestAppendElementRef(t *testing.T) {
 		roundTrip(t, schemaOf(t, refSelfSchema), rootName, refSelf{A: "x", R: &refSelf{A: "y", R: &refSelf{A: "z"}}},
 			`<r xmlns="urn:s"><a>x</a><r><a>y</a><r><a>z</a></r></r></r>`, deepEqual[refSelf])
 	})
-	t.Run("a head with a member declines naming the particle and the head", func(t *testing.T) {
-		schema := schemaOf(t, `<xs:element name="h" type="xs:string"/><xs:element name="m" type="xs:string" substitutionGroup="s:h"/>`+
-			`<xs:element name="r"><xs:complexType><xs:sequence><xs:element ref="s:h"/></xs:sequence></xs:complexType></xs:element>`)
-		_, err := appendChecked(t, nil, schema, strict.New(), rootName, refHolder{H: "x"})
-		d := asDecline(t, err, "codec does not encode an <element ref> whose field codegen holds in a sealed interface over its substitution group: particle 1 of the content {particle} of the {type definition} of element {urn:s}r declared at ")
-		if d.Construct() != (Construct{constructSubstitutionGroup}) || !strings.HasSuffix(err.Error(), ", naming element {urn:s}h; an encoder refusal, not a schema or value fault") {
-			t.Errorf("decline %q, construct %v, does not name the head h", err, d.Construct())
-		}
+}
+
+// The substitution-group types Append writes beside decode_test.go's: fc* are
+// flatGroupSchema's R, its flattened choice's interface and branches, and the
+// head's interface and branches, h as grpA and m as grpM; wcHolder is
+// wildGroupSchema's R, beside abstractOneSchema's interface; rec* are
+// recursiveGroupSchema's H and M, of one complex type that reaches h again,
+// and its R, interface and branches; blk* are derivationGroupSchema's R,
+// interface and branches, h and n as grpA; xn* are the cross-namespace
+// schema's R, interface and branches; and memberless is the R of an abstract
+// head whose group holds no other declaration, referenced once.
+type (
+	fcHolder  struct{ Choice []fcChoice }
+	fcChoice  interface{ isFcChoice() }
+	fcChoiceA struct{ A string }
+	fcChoiceH struct{ H fcGroup }
+	fcGroup   interface{ isFcGroup() }
+	fcGroupH  struct{ H grpA }
+	fcGroupM  struct{ M grpM }
+	wcHolder  struct {
+		H   abs1Group
+		Any *anyElement
+	}
+	recH struct {
+		V string
+		H recGroup
+	}
+	recM       recH
+	recHolder  struct{ H recGroup }
+	recGroup   interface{ isRecGroup() }
+	recGroupH  struct{ H recH }
+	recGroupM  struct{ M recM }
+	blkHolder  struct{ H blkGroup }
+	blkGroup   interface{ isBlkGroup() }
+	blkGroupH  struct{ H grpA }
+	blkGroupN  struct{ N grpA }
+	xnHolder   struct{ H xnGroup }
+	xnGroup    interface{ isXnGroup() }
+	xnGroupH   struct{ H grpA }
+	xnGroupM   struct{ M grpA }
+	memberless struct{ H aloneGroup }
+)
+
+func (fcChoiceA) isFcChoice() {}
+func (fcChoiceH) isFcChoice() {}
+func (fcGroupH) isFcGroup()   {}
+func (fcGroupM) isFcGroup()   {}
+func (recGroupH) isRecGroup() {}
+func (recGroupM) isRecGroup() {}
+func (blkGroupH) isBlkGroup() {}
+func (blkGroupN) isBlkGroup() {}
+func (xnGroupH) isXnGroup()   {}
+func (xnGroupM) isXnGroup()   {}
+
+// The substitution-group schemas Append writes beside decode_test.go's:
+// flatGroupSchema's head h, with the member m, is an alternative of r's
+// flattened choice beside a local a; wildGroupSchema's abstract h, with the
+// member m, is referenced ahead of a skip wildcard, so that r's children are
+// attributed by a Matcher (attributionCheck); recursiveGroupSchema's h and m,
+// of the complex type ct, each optionally hold h again; and
+// derivationGroupSchema's h blocks restriction, so that of its members m, of
+// a restriction of xs:string, and n, of xs:string, only n is substitutable
+// (cos-equiv-derived-ok-rec clause 2.3).
+const (
+	flatGroupSchema = `<xs:element name="h" type="xs:string"/><xs:element name="m" type="xs:string" substitutionGroup="s:h"/>` +
+		`<xs:element name="r"><xs:complexType><xs:choice maxOccurs="unbounded"><xs:element name="a" type="xs:string"/><xs:element ref="s:h"/></xs:choice></xs:complexType></xs:element>`
+	wildGroupSchema = `<xs:element name="h" type="xs:string" abstract="true"/><xs:element name="m" type="xs:string" substitutionGroup="s:h"/>` +
+		`<xs:element name="r"><xs:complexType><xs:sequence><xs:element ref="s:h"/><xs:any processContents="skip" minOccurs="0"/></xs:sequence></xs:complexType></xs:element>`
+	recursiveGroupSchema = `<xs:complexType name="ct"><xs:sequence><xs:element name="v" type="xs:string"/><xs:element ref="s:h" minOccurs="0"/></xs:sequence></xs:complexType>` +
+		`<xs:element name="h" type="s:ct"/><xs:element name="m" type="s:ct" substitutionGroup="s:h"/>` +
+		`<xs:element name="r"><xs:complexType><xs:sequence><xs:element ref="s:h"/></xs:sequence></xs:complexType></xs:element>`
+	derivationGroupSchema = `<xs:simpleType name="t"><xs:restriction base="xs:string"/></xs:simpleType>` +
+		`<xs:element name="h" type="xs:string" block="restriction"/><xs:element name="m" type="s:t" substitutionGroup="s:h"/><xs:element name="n" type="xs:string" substitutionGroup="s:h"/>` +
+		`<xs:element name="r"><xs:complexType><xs:sequence><xs:element ref="s:h"/></xs:sequence></xs:complexType></xs:element>`
+)
+
+// TestAppendSubstitutionGroup pins "# What encodes"' <element ref> particle
+// whose field codegen gives the sealed interface over its head's substitution
+// group: the branch a value of it holds is written as an element of its
+// member's own expanded name (§3.9.4.3 cvc-accept clause 2.3.2, §3.3.4.3
+// cvc-elt clause 1), which validate accepts and Decode returns equal: a head
+// of {abstract} false, by its own branch and its member's; an abstract head
+// with two members; the field repeated and optional, by heads and members, and
+// the optional absent; a member in another target namespace than its head's;
+// a member of complex type whose type reaches the head again; a head blocking
+// one member's derivation, by the other; a member whose own block is #all; a
+// head whose final is #all; a head ref among a flattened choice's
+// alternatives, its slice holding the head's branch and a member's in document
+// order; a member in content a Matcher attributes, taken at its head's
+// particle; and, under {min occurs} 0, an abstract head whose group holds no
+// other declaration, its interface nil, writing nothing.
+func TestAppendSubstitutionGroup(t *testing.T) {
+	t.Run("a head of {abstract} false, the head's branch", func(t *testing.T) {
+		roundTrip(t, schemaOf(t, groupSchema), rootName, grpHolder{A: grpAGroupA{A: "x"}}, `<r xmlns="urn:s"><a>x</a></r>`, deepEqual[grpHolder], grpBranches)
 	})
+	t.Run("a head of {abstract} false, the member's branch", func(t *testing.T) {
+		roundTrip(t, schemaOf(t, groupSchema), rootName, grpHolder{A: grpAGroupM{M: "y"}}, `<r xmlns="urn:s"><m>y</m></r>`, deepEqual[grpHolder], grpBranches)
+	})
+	t.Run("an abstract head with two members", func(t *testing.T) {
+		roundTrip(t, schemaOf(t, abstractTwoSchema), rootName, abs2Holder{H: abs2GroupM{M: "x"}}, `<r xmlns="urn:s"><m>x</m></r>`, deepEqual[abs2Holder], abs2Branches)
+		roundTrip(t, schemaOf(t, abstractTwoSchema), rootName, abs2Holder{H: abs2GroupN{N: "1 2"}}, `<r xmlns="urn:s"><n>1 2</n></r>`, deepEqual[abs2Holder], abs2Branches)
+	})
+	t.Run("repeated and optional, by heads and members", func(t *testing.T) {
+		roundTrip(t, schemaOf(t, occursGroupSchema), rootName,
+			occHolder{A: occAGroupX{X: "1"}, B: occBGroupB{B: "2"}, C: []occCGroup{occCGroupC{C: "3"}, occCGroupZ{Z: "4"}, occCGroupC{C: "5"}}},
+			`<r xmlns="urn:s"><x>1</x><b>2</b><c>3</c><z>4</z><c>5</c></r>`, deepEqual[occHolder], occBranches...)
+	})
+	t.Run("optional and repeated absent", func(t *testing.T) {
+		roundTrip(t, schemaOf(t, occursGroupSchema), rootName, occHolder{A: occAGroupA{A: "1"}}, `<r xmlns="urn:s"><a>1</a></r>`, deepEqual[occHolder], occBranches...)
+	})
+	t.Run("a member in another target namespace", func(t *testing.T) {
+		schema, err := parser.Parse("a.xsd", parser.WithResolver(loader.Map(map[string]string{
+			"a.xsd": `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:b="urn:b" targetNamespace="urn:a">
+			  <xs:import namespace="urn:b" schemaLocation="b.xsd"/>
+			  <xs:element name="m" type="xs:string" substitutionGroup="b:h"/>
+			  <xs:element name="r"><xs:complexType><xs:sequence><xs:element ref="b:h"/></xs:sequence></xs:complexType></xs:element>
+			</xs:schema>`,
+			"b.xsd": `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" targetNamespace="urn:b">
+			  <xs:element name="h" type="xs:string"/>
+			</xs:schema>`,
+		})))
+		if err != nil {
+			t.Fatal(err)
+		}
+		r, branches := xsd.QName{Space: "urn:a", Local: "r"}, WithBranches[xnGroup](xnGroupH{}, xnGroupM{})
+		roundTrip(t, schema, r, xnHolder{H: xnGroupM{M: "x"}}, `<r xmlns="urn:a"><m>x</m></r>`, deepEqual[xnHolder], branches)
+		roundTrip(t, schema, r, xnHolder{H: xnGroupH{H: "y"}}, `<r xmlns="urn:a"><h xmlns="urn:b">y</h></r>`, deepEqual[xnHolder], branches)
+	})
+	t.Run("a member whose type reaches the head again", func(t *testing.T) {
+		v := recHolder{H: recGroupM{M: recM{V: "1", H: recGroupH{H: recH{V: "2", H: recGroupM{M: recM{V: "3"}}}}}}}
+		roundTrip(t, schemaOf(t, recursiveGroupSchema), rootName, v, `<r xmlns="urn:s"><m><v>1</v><h><v>2</v><m><v>3</v></m></h></m></r>`,
+			deepEqual[recHolder], WithBranches[recGroup](recGroupH{}, recGroupM{}))
+	})
+	t.Run("a head blocking one member's derivation, by the other", func(t *testing.T) {
+		roundTrip(t, schemaOf(t, derivationGroupSchema), rootName, blkHolder{H: blkGroupN{N: "x"}}, `<r xmlns="urn:s"><n>x</n></r>`,
+			deepEqual[blkHolder], WithBranches[blkGroup](blkGroupH{}, blkGroupN{}))
+	})
+	t.Run("a member whose block is #all", func(t *testing.T) {
+		schema := schemaOf(t, strings.Replace(groupSchema, `substitutionGroup="s:a"`, `block="#all" substitutionGroup="s:a"`, 1))
+		roundTrip(t, schema, rootName, grpHolder{A: grpAGroupM{M: "y"}}, `<r xmlns="urn:s"><m>y</m></r>`, deepEqual[grpHolder], grpBranches)
+	})
+	t.Run("a head whose final is #all", func(t *testing.T) {
+		schema := schemaOf(t, strings.Replace(groupSchema, `<xs:element name="a" type="xs:string"/>`, `<xs:element name="a" type="xs:string" final="#all"/>`, 1))
+		roundTrip(t, schema, rootName, grpHolder{A: grpAGroupM{M: "y"}}, `<r xmlns="urn:s"><m>y</m></r>`, deepEqual[grpHolder], grpBranches)
+	})
+	t.Run("a flattened choice's head ref alternative", func(t *testing.T) {
+		v := fcHolder{Choice: []fcChoice{fcChoiceH{H: fcGroupM{M: "1"}}, fcChoiceA{A: "2"}, fcChoiceH{H: fcGroupH{H: "3"}}}}
+		roundTrip(t, schemaOf(t, flatGroupSchema), rootName, v, `<r xmlns="urn:s"><m>1</m><a>2</a><h>3</h></r>`, deepEqual[fcHolder],
+			WithBranches[fcChoice](fcChoiceA{}, fcChoiceH{}), WithBranches[fcGroup](fcGroupH{}, fcGroupM{}))
+	})
+	t.Run("a member taken at its head's particle by a Matcher", func(t *testing.T) {
+		roundTrip(t, schemaOf(t, wildGroupSchema), rootName, wcHolder{H: abs1GroupM{M: "x"}, Any: &anyElement{Space: "urn:o", Local: "w"}},
+			`<r xmlns="urn:s"><m>x</m><w xmlns="urn:o"/></r>`, deepEqual[wcHolder], abs1Branches)
+	})
+	for _, s := range aloneSchemas {
+		t.Run("the interface alone, nil, optional, "+s.name, func(t *testing.T) {
+			roundTrip(t, schemaOf(t, s.decls), rootName, aloneHolder{A: "x"}, `<r xmlns="urn:s"><a>x</a></r>`, deepEqual[aloneHolder])
+		})
+	}
+}
+
+// TestAppendSubstitutionGroupInvalid pins item 6 of Append's doc for the
+// sealed interface over a substitution group: nil where nil does not mean
+// absent, as a required field of a head of {abstract} false, as an item of
+// its slice, and as the required field of an abstract head whose group holds
+// no other declaration, which has no branch; and a value of a dynamic type
+// the WithBranches set places at no branch, a pointer to a branch. Each opens
+// with the Go path of the field and writes nothing.
+func TestAppendSubstitutionGroupInvalid(t *testing.T) {
+	const nilled = " is nil, the sealed interface over the substitution group of element "
+	rows := []struct {
+		name   string
+		append func(t *testing.T) ([]byte, error)
+		prefix string
+	}{
+		{"a required field nil", func(t *testing.T) ([]byte, error) {
+			return appendChecked(t, nil, schemaOf(t, groupSchema), strict.New(), rootName, grpHolder{}, grpBranches)
+		}, "codec: Append: grpHolder.A" + nilled + "{urn:s}a declared at "},
+		{"an item of the slice nil", func(t *testing.T) ([]byte, error) {
+			v := occHolder{A: occAGroupA{A: "1"}, C: []occCGroup{occCGroupC{C: "3"}, nil}}
+			return appendChecked(t, nil, schemaOf(t, occursGroupSchema), strict.New(), rootName, v, occBranches...)
+		}, "codec: Append: occHolder.C[1]" + nilled + "{urn:s}c declared at "},
+		{"an abstract head with no branch, required", func(t *testing.T) ([]byte, error) {
+			schema := schemaOf(t, `<xs:element name="h" type="xs:string" abstract="true"/>`+sequenceOf(`<xs:element ref="s:h"/>`))
+			return appendChecked(t, nil, schema, strict.New(), rootName, memberless{})
+		}, "codec: Append: memberless.H" + nilled + "{urn:s}h declared at "},
+		{"a pointer to a branch", func(t *testing.T) ([]byte, error) {
+			return appendChecked(t, nil, schemaOf(t, groupSchema), strict.New(), rootName, grpHolder{A: &grpAGroupM{M: "y"}}, grpBranches)
+		}, "codec: Append: grpHolder.A holds a *codec.grpAGroupM, which the WithBranches set of codec.grpAGroup places at no branch of the substitution group of element {urn:s}a declared at "},
+	}
+	for _, row := range rows {
+		t.Run(row.name, func(t *testing.T) {
+			got, err := row.append(t)
+			invalidChoice(t, err, row.prefix)
+			if got != nil {
+				t.Errorf("Append wrote %q", got)
+			}
+		})
+	}
 }
 
 // TestAppendDst pins that Append appends to dst, and on error returns dst
@@ -982,6 +1172,10 @@ func TestAppendDeclines(t *testing.T) {
 		{"absent affiliation", absentAffiliationName, `<xs:element name="%[1]s" type="xs:string" substitutionGroup="s:nope%[1]s"/>`},
 		{"ref absent affiliation", absentAffiliationName, `<xs:element name="x%[1]s" type="xs:string" substitutionGroup="s:nope%[1]s"/>` +
 			sequence(`<xs:element ref="s:x%[1]s"/>`)},
+		{"member value constraint", "a value constraint, default or fixed", `<xs:element name="x%[1]s" type="xs:string"/><xs:element name="m%[1]s" type="xs:string" default="d" substitutionGroup="s:x%[1]s"/>` +
+			sequence(`<xs:element ref="s:x%[1]s"/>`)},
+		{"member absent affiliation", absentAffiliationName, `<xs:element name="x%[1]s" type="xs:string"/><xs:element name="m%[1]s" type="xs:string" substitutionGroup="s:x%[1]s s:nope%[1]s"/>` +
+			sequence(`<xs:element ref="s:x%[1]s"/>`)},
 		{"nillable anyType", "an element declaration with {nillable} true", `<xs:element name="%[1]s" nillable="true"/>`},
 		{"anyType particle value constraint", "a value constraint, default or fixed", sequence(`<xs:element name="a" default="d"/>`)},
 		{"abstract type", "an element declaration whose {type definition} is a complex type with {abstract} true", abstractType},
@@ -999,12 +1193,6 @@ func TestAppendDeclines(t *testing.T) {
 			complexOf(`<xs:sequence maxOccurs="2">`+a+`<xs:group ref="s:g%[1]s"/></xs:sequence>`)},
 		{"wildcard", "a wildcard particle with {process contents} strict or lax", sequence(`<xs:any processContents="lax"/>`)},
 		{"strict wildcard", "a wildcard particle with {process contents} strict or lax", sequence(`<xs:any/>`)},
-		{"element ref", "an <element ref> whose field codegen holds in a sealed interface over its substitution group", `<xs:element name="x%[1]s" type="xs:string"/><xs:element name="m%[1]s" type="xs:string" substitutionGroup="s:x%[1]s"/>` +
-			sequence(`<xs:element ref="s:x%[1]s"/>`)},
-		{"abstract head ref", "an <element ref> whose field codegen holds in a sealed interface over its substitution group", `<xs:element name="x%[1]s" type="xs:string" abstract="true"/><xs:element name="m%[1]s" type="xs:string" substitutionGroup="s:x%[1]s"/>` +
-			sequence(`<xs:element ref="s:x%[1]s"/>`)},
-		{"abstract memberless ref", "an <element ref> whose field codegen holds in a sealed interface over its substitution group", `<xs:element name="x%[1]s" type="xs:string" abstract="true"/>` +
-			sequence(`<xs:element ref="s:x%[1]s" minOccurs="0"/>`)},
 		{"ref value constraint", "a value constraint, default or fixed", `<xs:element name="x%[1]s" type="xs:string" default="x"/>` + sequence(`<xs:element ref="s:x%[1]s"/>`)},
 		{"ref simple content", "xs:anySimpleType or xs:anyAtomicType as a simple type", `<xs:element name="x%[1]s"><xs:complexType><xs:simpleContent><xs:extension base="xs:anySimpleType"/></xs:simpleContent></xs:complexType></xs:element>` +
 			sequence(`<xs:element ref="s:x%[1]s"/>`)},
