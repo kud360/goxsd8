@@ -3,8 +3,8 @@
 // slice "# What encodes" states; the allocation-frugal decode paths
 // "# Planned decode paths" names are not yet built. [Decode] assesses the
 // instance itself, so no separate validate call precedes it; its doc states
-// how. [Append] makes no validate call on the document it writes; its doc
-// states how a caller gets a verdict on it. Given a value from Decode that it
+// how. [Append]'s doc states when it assesses the document it writes and how
+// a caller gets a verdict on it otherwise. Given a value from Decode that it
 // encodes without error, Append writes that value, not the input's bytes:
 // [Append]'s doc and "# What encodes" state the written form.
 //
@@ -313,9 +313,11 @@
 // bullet states, into the Go type the bullet names where it names one:
 //
 //   - A top-level element declaration, as the document element's, neither
-//     abstract nor nillable, with no {type table}, value constraint or
-//     identity-constraint definitions, whose {type definition} is a simple
-//     type that encodes, a complex type that encodes, or xs:anyType itself.
+//     abstract nor nillable, with no {type table} or value constraint, each
+//     of whose {identity-constraint definitions} has a {selector} and {fields}
+//     icpath compiles, and for a keyref a {referenced key} whose own it
+//     compiles, whose {type definition} is a simple type that encodes, a
+//     complex type that encodes, or xs:anyType itself.
 //   - A complex type with {abstract} false, no {assertions}, no {attribute
 //     wildcard} and no {open content}, of empty content or of element-only
 //     content whose {particle} is a sequence that codegen splices, a choice

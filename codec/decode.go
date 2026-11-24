@@ -844,7 +844,8 @@ func CheckDecode[T any](schema *xsd.Schema, name xsd.QName, opts ...Option) erro
 }
 
 // verdict returns nil for a Result Decode decodes, and otherwise the error
-// Decode's doc states for it, items 2 to 4.
+// Decode's doc states for it, items 2 to 4; assessWritten returns it for a
+// Result [Append] assesses but for a charged one.
 func verdict(res *validate.Result) error {
 	if err := res.Err(); err != nil {
 		return err
@@ -861,8 +862,9 @@ func verdict(res *validate.Result) error {
 }
 
 // ViolationsOf returns every violation of the charged error [Decode]
-// returns for a validate.Charged Result (Decode's doc, item 3), in the
-// order Result.Violations lists them, however many layers wrap that error.
+// returns for a validate.Charged Result (Decode's doc, item 3), or [Append]
+// for the document it assesses (Append's doc, item 8), in the order
+// Result.Violations lists them, however many layers wrap that error.
 // It returns nil for every other error, a nil err included. The slice is
 // fresh on each call: mutating it does not affect err.
 func ViolationsOf(err error) []*xsderr.Error {
@@ -873,8 +875,9 @@ func ViolationsOf(err error) []*xsderr.Error {
 	return slices.Clone(ce.violations)
 }
 
-// chargedError is the error Decode's doc states in item 3; violations is the
-// Result's, never empty.
+// chargedError is the error Decode's doc states in item 3, and the cause of
+// Append's item 8 error (assessWritten); violations is the Result's, never
+// empty.
 type chargedError struct{ violations []*xsderr.Error }
 
 // Error opens with codec's statement of the charge and then gives each
@@ -894,11 +897,12 @@ func (e *chargedError) Unwrap() []error {
 }
 
 // An UndecidedError is the error [Decode] returns for a validate.Undecided
-// Result (Decode's doc, item 4): the validator reached a check it did not
-// perform, so the instance is not proven valid. It wraps
-// errors.ErrUnsupported, as a [*DeclineError] does; errors.As to each type
-// tells the two apart. It carries only the first, in document order, of the
-// Result's validate.Unevaluated checks; the full list is
+// Result (Decode's doc, item 4), and [Append] for the document it assesses
+// (Append's doc, item 9): the validator reached a check it did not perform,
+// so the instance is not proven valid. It wraps errors.ErrUnsupported, as a
+// [*DeclineError] does; errors.As to each type tells the two apart. It
+// carries only the first, in document order, of the Result's
+// validate.Unevaluated checks; the full list is
 // validate.Result.Unevaluated, which a caller reaches by validating with
 // package validate directly (validate.New, then validate/xmlsrc.Validate).
 type UndecidedError struct{ u validate.Unevaluated }

@@ -57,7 +57,9 @@ func (e *DeclineError) Loc() (xsderr.Loc, bool) {
 // one, with its schema Loc, and, for a construct of a list type's {item type
 // definition}, a union's basic member or a union among a union's {member type
 // definitions} at any depth, that item, member or member union, by its QName
-// where it has one, with its schema Loc, and, for a value with no canonical
+// where it has one, with its schema Loc, and, for an identity constraint whose
+// paths icpath does not compile, that constraint and the part, for a keyref's
+// {referenced key} that key and its part, and, for a value with no canonical
 // representation or no spelling Append writes, the Go path of its field from T
 // and its value, and, for an attribute in the XSI namespace an element held in
 // a wildcard's match carries, or the content of an element of type xs:anyType
@@ -193,7 +195,7 @@ var constructNames = [...]string{
 	constructXsiType:            "an element carrying xsi:type",
 	constructTypeTable:          "an element declaration with a {type table}",
 	constructValueConstraint:    "a value constraint, default or fixed",
-	constructIdentityConstraint: "an element declaration with {identity-constraint definitions}",
+	constructIdentityConstraint: "an identity constraint whose {selector} or {fields}, or whose {referenced key}'s, lie outside the path subset icpath compiles (Structures §3.11.6.2 ·selector subset·, §3.11.6.3 ·field subset·)",
 	constructAbstractElement:    "an element declaration with {abstract} true",
 	constructAbstractType:       "an element declaration whose {type definition} is a complex type with {abstract} true",
 	constructSimpleContent:      "a complex type with simple content",
