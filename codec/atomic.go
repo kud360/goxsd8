@@ -171,9 +171,10 @@ const (
 	// readLexical is the normalized lexical Parse accepted, never Canonical:
 	// yearMonthDuration's, whose zero value has no canonical representation
 	// (§3.4.26.1, §2.3.1 dt-canonical-mapping's "where possible"), and
-	// precisionDecimal's, whose canonical mapping keeps neither the ·scale·
-	// of zero nor its ·sign· (precisionDecimal §6 f-precDecCanmap), read by
-	// the lexical mapping (f-precDecLexmap).
+	// precisionDecimal's, read by the lexical mapping (f-precDecLexmap),
+	// since its canonical mapping decides no rendering of a zero
+	// (precisionDecimal §6 f-precDecCanmap), so a Canonical cannot be relied
+	// on to keep a zero's ·scale· or ·sign·.
 	readLexical
 	// readExpanded is the expanded name the normalized lexical resolves to
 	// against the bindings Parse was given, never Canonical: QName's, which
