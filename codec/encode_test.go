@@ -3426,14 +3426,23 @@ const (
 	skipAttrSchema     = `<xs:element name="r"><xs:complexType><xs:choice><xs:element name="a" type="xs:string"/><xs:any processContents="skip"/></xs:choice><xs:attribute name="x" type="xs:string"/></xs:complexType></xs:element>`
 )
 
-// The lax-wildcard schemas, each declaring s:r of wildcard_test.go's seqWild
-// shape, sequence(a, any): laxGovernedSchema is seqLaxSchema beside a
-// top-level element w and a top-level attribute t, each of xs:int, which
-// govern an item so named at any depth of the match; laxTargetSchema's
-// wildcard is over ##targetNamespace.
+// The lax-wildcard schemas, each declaring s:r: laxGovernedSchema is
+// seqLaxSchema, sequence(a, any), beside a top-level element w and a
+// top-level attribute t, each of xs:int, which govern an item so named at any
+// depth of the match; laxTargetSchema is sequence(a, any) over
+// ##targetNamespace; and laxPickBaseSchema and laxFlatBaseSchema restrict
+// laxBase, sequence(c?, any*), by pickWildSchema's choice(a, any) and by
+// flatPickSchema's flattened choice(a+, any), repeated, so that a match named
+// c has its ·locally declared type· from the base type alone (§3.4.6.4
+// key-ldt-elem clause 3). Their s:r types are wildcard_test.go's seqWild for
+// the first two and pickWild, and flatten_test.go's flatPick, which
+// TestWildcardTypesAreCodegens and TestFlattenTypesAreCodegens pin.
 const (
 	laxGovernedSchema = seqLaxSchema + `<xs:element name="w" type="xs:int"/><xs:attribute name="t" type="xs:int"/>`
 	laxTargetSchema   = `<xs:element name="r"><xs:complexType><xs:sequence><xs:element name="a" type="xs:string"/><xs:any namespace="##targetNamespace" processContents="lax"/></xs:sequence></xs:complexType></xs:element>`
+	laxBase           = `<xs:complexType name="lb"><xs:sequence><xs:element name="c" type="xs:string" minOccurs="0"/><xs:any processContents="lax" minOccurs="0" maxOccurs="unbounded"/></xs:sequence></xs:complexType>`
+	laxPickBaseSchema = laxBase + `<xs:element name="r"><xs:complexType><xs:complexContent><xs:restriction base="s:lb"><xs:choice><xs:element name="a" type="xs:string"/><xs:any processContents="lax"/></xs:choice></xs:restriction></xs:complexContent></xs:complexType></xs:element>`
+	laxFlatBaseSchema = laxBase + `<xs:element name="r"><xs:complexType><xs:complexContent><xs:restriction base="s:lb"><xs:choice maxOccurs="unbounded"><xs:element name="a" type="xs:string" maxOccurs="unbounded"/><xs:any processContents="lax"/></xs:choice></xs:restriction></xs:complexContent></xs:complexType></xs:element>`
 )
 
 // skipAttr and skipEmpty are the types codegen emits for skipAttrSchema's and
@@ -3467,7 +3476,12 @@ var skipAttrBranches = WithBranches[skipAttrChoice](skipAttrA{}, skipAttrAny{})
 // nothing writes nothing, and so does the nil interface of a choice whose wildcard alternative has
 // {min occurs} 0, which is emptiable though its branch reads it as 1 (choiceEmptiable). The rows
 // of one and several held elements are the ones the static decline failed before the slice
-// (constructWildcard).
+// (constructWildcard). A skip match named as the element particle beside it is written, no
+// ·locally declared type· read for it, and so is a lax match no declaration governs, at the
+// top and with a child at depth, unqualified and foreign attributes on each, and one holding a
+// child named as that element particle, which has no locally declared type below the match
+// (§3.4.6.4 key-ldt-elem clause 1); the three lax rows decline constructWildcard with
+// particleEncodes' narrowing to strict undone.
 func TestAppendWildcard(t *testing.T) {
 	t.Run("one held element", func(t *testing.T) {
 		roundTrip(t, schemaOf(t, seqSkipSchema), rootName, seqWild{A: "x", Any: anyElement{Space: "urn:o", Local: "w"}},
@@ -3546,9 +3560,16 @@ func TestAppendWildcard(t *testing.T) {
 // the xmlns namespace or holds a non-Char, an unqualified attribute named xmlns, two
 // attributes of one expanded name, and a Value, Text or Tail holding a non-Char; and a
 // held element whose Children slice holds itself (encoder.enter). None carries an
-// *xsderr.Error. Then item 7: an attribute in the XSI namespace, at any depth
-// of the match, declines by constructXsiAttribute, behind an item 6 error found after
-// it.
+// *xsderr.Error. A lax match outside its {namespace constraint} is item 6 too, dst
+// returned unextended. Then item 7: an attribute in the XSI namespace, at any depth of
+// a skip or a lax match, declines by constructXsiAttribute, behind an item 6 error found
+// after it; and in a lax match an element or attribute a top-level declaration governs,
+// the match itself, a child and an attribute, declines by constructGovernedContent, and
+// so does a match with a ·locally declared type· (§3.3.4.6 key-governing-type-elem
+// clause 7): named as the element particle beside it in a sequence, and as an element
+// only the base type's content model contains, through a choice's and a flattened
+// choice's branch, each failing with writeAt.typ left unthreaded on its path; a
+// top-level declaration names the governor where both govern.
 func TestAppendWildcardInvalid(t *testing.T) {
 	many, one := schemaOf(t, skipManySchema), schemaOf(t, seqSkipSchema)
 	w := anyElement{Space: "urn:o", Local: "w"}
@@ -3695,6 +3716,9 @@ func TestAppendWildcardInvalid(t *testing.T) {
 			[]string{"attribute xsi:type at seqWild.Any.Content.Attributes[0]" + match}},
 		{"a lax match named as the element particle beside it", lax, constructGovernedContent, seqWild{A: "1", Any: anyElement{Space: "urn:s", Local: "a", Content: anyType{Text: "hello"}}},
 			[]string{"element {urn:s}a at seqWild.Any" + match, ", governed by its locally declared type in the {type definition} of element {urn:s}r declared at "}},
+		{"a lax match a top-level declaration and its locally declared type both govern", schemaOf(t, seqLaxSchema+`<xs:element name="a" type="xs:string"/>`), constructGovernedContent,
+			seqWild{A: "1", Any: anyElement{Space: "urn:s", Local: "a", Content: anyType{Text: "hello"}}},
+			[]string{"element {urn:s}a at seqWild.Any" + match, ", governed by element {urn:s}a declared at "}},
 	} {
 		t.Run(row.name, func(t *testing.T) {
 			_, err := appendChecked(t, nil, row.schema, strict.New(), rootName, row.v)
@@ -3702,6 +3726,18 @@ func TestAppendWildcardInvalid(t *testing.T) {
 			holds(t, err, row.want[1:]...)
 		})
 	}
+	const local = ", governed by its locally declared type in the {type definition} of element {urn:s}r declared at "
+	c := anyElement{Space: "urn:s", Local: "c", Content: anyType{Text: "hello"}}
+	t.Run("a choice's lax match named as an element of the base type", func(t *testing.T) {
+		_, err := appendChecked(t, nil, schemaOf(t, laxPickBaseSchema), strict.New(), rootName, pickWild(pickWildAny{Any: c}), pickWildBranches)
+		_ = asDecline(t, err, "codec does not encode "+constructGovernedContent.name()+": element {urn:s}c at pickWild.(pickWildAny).Any, in the match of ")
+		holds(t, err, local)
+	})
+	t.Run("a flattened lax match named as an element of the base type", func(t *testing.T) {
+		_, err := appendChecked(t, nil, schemaOf(t, laxFlatBaseSchema), strict.New(), rootName, flatPick{Choice: []flatPickItem{flatPickAny{Any: c}}}, flatPickBranches)
+		_ = asDecline(t, err, "codec does not encode "+constructGovernedContent.name()+": element {urn:s}c at flatPick.Choice[0].(flatPickAny).Any, in the match of ")
+		holds(t, err, local)
+	})
 }
 
 // governedAnySchema declares, beside s:r of type xs:anyType itself, the

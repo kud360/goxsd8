@@ -241,6 +241,13 @@ func TestWildcardTypesAreCodegens(t *testing.T) {
 			"type RChoiceA struct {\n\tA string\n}\n\nfunc (RChoiceA) isRChoice() {}\n",
 			"type RChoiceAny struct {\n\tAny AnyElement\n}\n\nfunc (RChoiceAny) isRChoice() {}\n",
 		}},
+		{laxGovernedSchema, []string{"type R struct {\n\tA   string\n\tAny AnyElement\n}\n"}},
+		{laxTargetSchema, []string{"type R struct {\n\tA   string\n\tAny AnyElement\n}\n"}},
+		{laxPickBaseSchema, []string{
+			"type R interface {\n\tisR()\n}\n",
+			"type RA struct {\n\tA string\n}\n\nfunc (RA) isR() {}\n",
+			"type RAny struct {\n\tAny AnyElement\n}\n\nfunc (RAny) isR() {}\n",
+		}},
 	}
 	for _, row := range rows {
 		gen := generated(t, schemaOf(t, row.decls))

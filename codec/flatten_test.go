@@ -202,6 +202,7 @@ func TestFlattenTypesAreCodegens(t *testing.T) {
 		{flatChoiceSchema, []string{"type R struct {\n\tChoice   []RChoice\n\tSequence *string\n\tChoice2  *string\n}\n", branch("RChoice", "RChoiceA", "A string"), branch("RChoice", "RChoiceB", "B int32")}},
 		{flatOptSchema, []string{"type R struct {\n\tChoice []RChoice\n}\n", branch("RChoice", "RChoiceA", "A string"), branch("RChoice", "RChoiceB", "B string")}},
 		{flatWildSchema, []string{"type R struct {\n\tSequence []RSequence\n}\n", branch("RSequence", "RSequenceA", "A string"), branch("RSequence", "RSequenceAny", "Any AnyElement")}},
+		{laxFlatBaseSchema, []string{"type R struct {\n\tChoice []RChoice\n}\n", branch("RChoice", "RChoiceA", "A string"), branch("RChoice", "RChoiceAny", "Any AnyElement")}},
 		{flatPickSchema, []string{"type R struct {\n\tChoice []RChoice\n}\n", branch("RChoice", "RChoiceA", "A string"), branch("RChoice", "RChoiceAny", "Any AnyElement")}},
 		{flatHeadSchema, []string{"type R struct {\n\tSequence []RSequence\n}\n", branch("RSequence", "RSequenceH", "H HSubstitutionGroup"),
 			branch("HSubstitutionGroup", "HSubstitutionGroupH", "H H"), branch("HSubstitutionGroup", "HSubstitutionGroupM", "M M"), branch("RSequence", "RSequenceB", "B string")}},
