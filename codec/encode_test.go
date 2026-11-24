@@ -3828,9 +3828,10 @@ const (
 )
 
 // The types codegen emits for efRefSchema's and efKeySchema's s:r, in shape,
-// which TestEncodeFlattenTypesAreCodegens pins: efRef, efRefX, efRefB and
-// efX, the named type of top-level x; efKey, efKeyG, efKeyB and efKeyGroup,
-// g's struct.
+// which flatten_test.go's TestFlattenTypesAreCodegens pins, as it pins
+// flatSeq's, flatOpt's and flatWild's for efPairSchema, efOnceSchema and
+// efSkipSchema: efRef, efRefX, efRefB and efX, the named type of top-level
+// x; efKey, efKeyG, efKeyB and efKeyGroup, g's struct.
 type (
 	efRef     struct{ Sequence []efRefItem }
 	efRefItem interface{ isEfRefItem() }
@@ -3855,34 +3856,6 @@ var (
 	efRefBranches = WithBranches[efRefItem](efRefX{}, efRefB{})
 	efKeyBranches = WithBranches[efKeyItem](efKeyG{}, efKeyB{})
 )
-
-// TestEncodeFlattenTypesAreCodegens pins the types the encode flatten
-// schemas are read into to those codegen emits, in shape: flatSeq's,
-// flatOpt's and flatWild's for efPairSchema, efOnceSchema and efSkipSchema,
-// and the ones above for efRefSchema and efKeySchema.
-func TestEncodeFlattenTypesAreCodegens(t *testing.T) {
-	branch := func(iface, name, field string) string {
-		return "type " + name + " struct {\n\t" + field + "\n}\n\nfunc (" + name + ") is" + iface + "() {}\n"
-	}
-	rows := []struct {
-		decls string
-		want  []string
-	}{
-		{efPairSchema, []string{"type R struct {\n\tSequence []RSequence\n}\n", branch("RSequence", "RSequenceA", "A string"), branch("RSequence", "RSequenceB", "B string")}},
-		{efOnceSchema, []string{"type R struct {\n\tChoice []RChoice\n}\n", branch("RChoice", "RChoiceA", "A string"), branch("RChoice", "RChoiceB", "B string")}},
-		{efSkipSchema, []string{"type R struct {\n\tSequence []RSequence\n}\n", branch("RSequence", "RSequenceA", "A string"), branch("RSequence", "RSequenceAny", "Any AnyElement")}},
-		{efRefSchema, []string{"type X string\n", "type R struct {\n\tSequence []RSequence\n}\n", branch("RSequence", "RSequenceX", "X X"), branch("RSequence", "RSequenceB", "B string")}},
-		{efKeySchema, []string{"type R struct {\n\tSequence []RSequence\n}\n", branch("RSequence", "RSequenceG", "G RG"), "type RG struct {\n\tK []string\n}\n", branch("RSequence", "RSequenceB", "B string")}},
-	}
-	for _, row := range rows {
-		gen := generated(t, schemaOf(t, row.decls))
-		for _, decl := range row.want {
-			if !bytes.Contains(gen, []byte(decl)) {
-				t.Errorf("codegen emits\n%s\nwhich does not declare\n%s", gen, decl)
-			}
-		}
-	}
-}
 
 // TestAppendFlattened pins "# What encodes"' flattened content {particle}, in
 // each shape of reach its rows name: each item of the slice is written, in
