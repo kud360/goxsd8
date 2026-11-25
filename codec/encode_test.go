@@ -3200,8 +3200,10 @@ func TestAppendPrecisionDecimalBackend(t *testing.T) {
 // leading digit 0, which no canonical xs:int representation but 0's has;
 // five, a restriction of u enumerating 5; str, a restriction by the pattern
 // a of a union of xs:string alone, whose values have no other lexical; qn, a
-// union of xs:int and xs:QName; and wlp, a restriction of withList by the
-// pattern 0.*, which rejects the canonical representation of its list
+// union of xs:int and xs:QName; nq, a union of xs:Name and xs:QName, whose
+// xs:Name member accepts every prefixed spelling of an xs:QName value first;
+// qnn, a union of xs:QName and xs:Name; and wlp, a restriction of withList by
+// the pattern 0.*, which rejects the canonical representation of its list
 // member's values but for one whose first item is 0.
 const encodeUnionSchema = unionTypes + `
 <xs:element name="root" type="s:u"/>
@@ -3216,12 +3218,14 @@ const encodeUnionSchema = unionTypes + `
 <xs:element name="five"><xs:simpleType><xs:restriction base="s:u"><xs:enumeration value="5"/></xs:restriction></xs:simpleType></xs:element>
 <xs:element name="str"><xs:simpleType><xs:restriction><xs:simpleType><xs:union memberTypes="xs:string"/></xs:simpleType><xs:pattern value="a"/></xs:restriction></xs:simpleType></xs:element>
 <xs:element name="qn"><xs:simpleType><xs:union memberTypes="xs:int xs:QName"/></xs:simpleType></xs:element>
+<xs:element name="nq"><xs:simpleType><xs:union memberTypes="xs:Name xs:QName"/></xs:simpleType></xs:element>
+<xs:element name="qnn"><xs:simpleType><xs:union memberTypes="xs:QName xs:Name"/></xs:simpleType></xs:element>
 <xs:element name="wlp"><xs:simpleType><xs:restriction base="s:withList"><xs:pattern value="0.*"/></xs:restriction></xs:simpleType></xs:element>`
 
 // unionParts is codegen's struct for encodeUnionSchema's parts, its particle
 // fields before its attribute fields; unionStr and its variant are str's
-// interface, and unionQn and its variants qn's, which
-// TestEncodeUnionTypesAreCodegens pins.
+// interface, and unionQn, unionNq and unionQnn and their variants qn's, nq's
+// and qnn's, which TestEncodeUnionTypesAreCodegens pins.
 type (
 	unionParts struct {
 		A    unionU
@@ -3235,15 +3239,26 @@ type (
 	unionQn        interface{ isQn() }
 	unionQnInt     int32
 	unionQnQName   struct{ Space, Local string }
+	unionNq        interface{ isNq() }
+	unionNqName    string
+	unionNqQName   struct{ Space, Local string }
+	unionQnn       interface{ isQnn() }
+	unionQnnQName  struct{ Space, Local string }
+	unionQnnName   string
 )
 
 func (unionStrString) isStr() {}
 func (unionQnInt) isQn()      {}
 func (unionQnQName) isQn()    {}
+func (unionNqName) isNq()     {}
+func (unionNqQName) isNq()    {}
+func (unionQnnQName) isQnn()  {}
+func (unionQnnName) isQnn()   {}
 
-// encodeUnionVariants is unionVariants with str's and qn's sets.
+// encodeUnionVariants is unionVariants with str's, qn's, nq's and qnn's sets.
 var encodeUnionVariants = append(slices.Clone(unionVariants),
-	WithBranches[unionStr](unionStrString("")), WithBranches[unionQn](unionQnInt(0), unionQnQName{}))
+	WithBranches[unionStr](unionStrString("")), WithBranches[unionQn](unionQnInt(0), unionQnQName{}),
+	WithBranches[unionNq](unionNqName(""), unionNqQName{}), WithBranches[unionQnn](unionQnnQName{}, unionQnnName("")))
 
 // TestEncodeUnionTypesAreCodegens pins the types above to those codegen
 // emits for encodeUnionSchema, in shape.
@@ -3252,6 +3267,7 @@ func TestEncodeUnionTypesAreCodegens(t *testing.T) {
 	for _, decl := range []string{
 		"type Parts struct {\n\tA    U\n\tOpt  U\n\tMany []U\n\tAt   U\n\tReq  U\n}\n",
 		"type StrUnionString string\n", "type QnUnionInt int32\n", "type QnUnionQName QName\n",
+		"type NqUnionName string\n", "type NqUnionQName QName\n", "type QnnUnionQName QName\n", "type QnnUnionName string\n",
 	} {
 		if !bytes.Contains(gen, []byte(decl)) {
 			t.Errorf("codegen emits\n%s\nwhich does not declare\n%s", gen, decl)
@@ -3280,8 +3296,10 @@ func unionDateOf(y int64, m, d uint8) unionDate {
 // list member, a list member of a union of a list of a union, an element
 // particle occurring once, optionally, absent, and repeatedly, an optional
 // attribute absent and present and a required one, and an xs:QName member,
-// its prefix declared on the element's start tag. CheckAppend returns nil for
-// each.
+// its prefix declared on the element's start tag, under qn and under qnn,
+// whose xs:QName member precedes xs:Name and so is the ·active basic member·
+// of the prefixed spelling (dt-active-basic-member). CheckAppend returns nil
+// for each.
 func TestAppendUnions(t *testing.T) {
 	schema := schemaOf(t, encodeUnionSchema)
 	opts := encodeUnionVariants
@@ -3319,6 +3337,7 @@ func TestAppendUnions(t *testing.T) {
 	t.Run("an xs:QName member", func(t *testing.T) {
 		roundTrip(t, schema, sname("qn"), unionQn(unionQnQName{Space: "urn:o", Local: "a"}), `<qn xmlns="urn:s" xmlns:p1="urn:o">p1:a</qn>`, sameUnion[unionQn], opts...)
 		roundTrip(t, schema, sname("qn"), unionQn(unionQnQName{Space: "urn:s", Local: "a"}), `<qn xmlns="urn:s">a</qn>`, sameUnion[unionQn], opts...)
+		roundTrip(t, schema, sname("qnn"), unionQnn(unionQnnQName{Space: "urn:o", Local: "a"}), `<qnn xmlns="urn:s" xmlns:p1="urn:o">p1:a</qnn>`, sameUnion[unionQnn], opts...)
 	})
 }
 
@@ -3393,45 +3412,55 @@ func TestAppendUnionInvalid(t *testing.T) {
 // list-of-union member's item, which the earlier list member takes; and a
 // pattern of the union itself rejecting the canonical representation of a
 // value with another lexical, as 05 spells xs:int 5, and as 01 2 spells a
-// list member's value [1 2].
+// list member's value [1 2]; and, by constructQNameSpelling, nq's xs:QName
+// variant, whose spelling p1:a xs:Name accepts first, so that it is xs:Name's
+// value Decode returns. Each row opens with its construct's decline.
 func TestAppendUnionNoCanonical(t *testing.T) {
 	schema := schemaOf(t, encodeUnionSchema)
 	ogtSchema := schemaOf(t, oneGoTypeSchema)
+	const noCanonical = "codec does not encode a value with no canonical representation: "
 	for _, row := range []struct {
-		name string
-		err  func(t *testing.T) error
-		want []string
+		name   string
+		err    func(t *testing.T) error
+		prefix string
+		want   []string
 	}{
 		{"xs:decimal 1 beside xs:int", func(t *testing.T) error {
 			accepts(t, schema, []byte(`<num xmlns="urn:s">1.0</num>`))
 			_, err := appendChecked(t, nil, schema, strict.New(), sname("num"), unionNum(unionNumDecimal(*big.NewRat(1, 1))), encodeUnionVariants...)
 			return err
-		}, []string{`codec does not encode a value with no canonical representation: simple type {urn:s}num defined at `,
+		}, noCanonical, []string{`simple type {urn:s}num defined at `,
 			`, at unionNum holding a codec.unionNumDecimal written "1": the ·active basic member· of its canonical representation "1" is xs:int, not its variant's member xs:decimal`}},
 		{"the string variant lower takes", func(t *testing.T) error {
 			v := ogt{A: ogtStString("a"), B: ogtLsString("abc"), C: ogtLisString("A"), D: ogtLlList2{"A"}, E: ogtLuList2{ogtIBBoolean(true)}}
 			_, err := appendChecked(t, nil, ogtSchema, strict.New(), sname("r"), v, ogtVariants...)
 			return err
-		}, []string{`at ogt.B holding a codec.ogtLsString written "abc": the ·active basic member· of its canonical representation "abc" is {urn:s}lower, not its variant's member xs:string`}},
+		}, noCanonical, []string{`at ogt.B holding a codec.ogtLsString written "abc": the ·active basic member· of its canonical representation "abc" is {urn:s}lower, not its variant's member xs:string`}},
 		{"a list-of-union member's item the earlier list member takes", func(t *testing.T) error {
 			v := ogt{A: ogtStString("a"), B: ogtLsString("A"), C: ogtLisString("A"), D: ogtLlList2{"A"}, E: ogtLuList2{ogtIBInt(1)}}
 			_, err := appendChecked(t, nil, ogtSchema, strict.New(), sname("r"), v, ogtVariants...)
 			return err
-		}, []string{`at ogt.E holding a codec.ogtLuList2 written "1": the ·active basic member· of its canonical representation "1" is the anonymous simple type defined at `}},
+		}, noCanonical, []string{`at ogt.E holding a codec.ogtLuList2 written "1": the ·active basic member· of its canonical representation "1" is the anonymous simple type defined at `}},
 		{"a union pattern rejecting a canonical representation", func(t *testing.T) error {
 			accepts(t, schema, []byte(`<leading xmlns="urn:s">05</leading>`))
 			_, err := appendChecked(t, nil, schema, strict.New(), sname("leading"), unionRoot(unionUInt(5)), encodeUnionVariants...)
 			return err
-		}, []string{`at unionRoot holding a codec.unionUInt written "5": a pattern facet rejects its canonical representation "5"`}},
+		}, noCanonical, []string{`at unionRoot holding a codec.unionUInt written "5": a pattern facet rejects its canonical representation "5"`}},
 		{"a union pattern rejecting a list member's text", func(t *testing.T) error {
 			accepts(t, schema, []byte(`<wlp xmlns="urn:s">01 2</wlp>`))
 			_, err := appendChecked(t, nil, schema, strict.New(), sname("wlp"), unionWithList(unionWithListList{1, 2}), encodeUnionVariants...)
 			return err
-		}, []string{`at unionWithList holding a codec.unionWithListList written "1 2": a pattern facet rejects its canonical representation "1 2"`}},
+		}, noCanonical, []string{`at unionWithList holding a codec.unionWithListList written "1 2": a pattern facet rejects its canonical representation "1 2"`}},
+		{"an xs:QName variant xs:Name shadows", func(t *testing.T) error {
+			accepts(t, schema, []byte(`<nq xmlns="urn:s" xmlns:p1="urn:o">p1:a</nq>`))
+			_, err := appendChecked(t, nil, schema, strict.New(), sname("nq"), unionNq(unionNqQName{Space: "urn:o", Local: "a"}), encodeUnionVariants...)
+			return err
+		}, "codec does not encode an xs:QName or xs:NOTATION value with no spelling Append writes where it is written: ",
+			[]string{`at unionNq holding a codec.unionNqQName written "p1:a": the ·active basic member· of its spelling "p1:a" is xs:Name, not its variant's member xs:QName`}},
 	} {
 		t.Run(row.name, func(t *testing.T) {
 			err := row.err(t)
-			_ = asDecline(t, err, "codec does not encode a value with no canonical representation: ")
+			_ = asDecline(t, err, row.prefix)
 			holds(t, err, row.want...)
 		})
 	}
