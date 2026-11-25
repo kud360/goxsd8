@@ -65,14 +65,19 @@ func (e *DeclineError) Loc() (xsderr.Loc, bool) {
 // {referenced key} that key and its part, and, for a value with no canonical
 // representation or no spelling Append writes, the Go path of its field from T
 // and its value, and, for an attribute in the XSI namespace an element held in
-// a wildcard's match carries, or the content of an element of type xs:anyType
-// itself holds, that attribute, its Go path from T and the wildcard particle,
-// as [Decode]'s item 5 names it, or that element's declaration, and, for an
-// element a lax wildcard's match is or holds, or such content holds, whose
-// expanded name a top-level element declaration names, or an attribute either
-// holds whose expanded name a top-level attribute declaration names, that item,
-// its Go path from T, the wildcard particle or that element's declaration, and
-// the top-level declaration, with its schema Loc, and, for a lax wildcard's
+// a wildcard's match carries, the content of an element of type xs:anyType
+// itself holds, or an {attribute wildcard}'s field holds, that attribute, its
+// Go path from T and the wildcard particle, as [Decode]'s item 5 names it,
+// that element's declaration, or the field's complex type, labelled as its
+// declaration's {type definition}, with its schema Loc, and, for an attribute
+// a strict {attribute wildcard}'s field holds, that attribute, its Go path
+// from T and that complex type, so labelled, and, for an element a lax
+// wildcard's match is or holds, or such content holds, whose expanded name a
+// top-level element declaration names, or an attribute either holds, or a lax
+// {attribute wildcard}'s field holds, whose expanded name a top-level
+// attribute declaration names, that item, its Go path from T, the wildcard
+// particle, that element's declaration or that complex type, and the
+// top-level declaration, with its schema Loc, and, for a lax wildcard's
 // match with a ·locally declared type·, that element, its Go path from T, the
 // wildcard particle and the complex type, labelled as its declaration's {type
 // definition}, with its schema Loc. A type definition named in the XML Schema
@@ -143,26 +148,27 @@ type construct uint8
 // constructXsiType are Append's alone, in the order Append finds them: the document
 // element's declaration, after constructNillable, its type's {abstract}, its type's
 // content, its content {particle}, each particle in order, its attribute uses in order,
-// its {attribute wildcard}, its {assertions}, and each value. Append declines by
-// constructUntrackedModel too, once every particle of a content model holding a wildcard
-// particle, a nested flattened particle or a nested occurrence field, at any depth, or
-// every basic particle a flattened content {particle} reaches, is examined. A particle
-// declines by constructVacuousParticle first, as the content {particle} does; where its
-// term is a model group, then by constructNestedGroup where codegen flattens it or holds
-// it in an occurrence field inside an occurrence field's item, by constructAllGroup where
-// it is an all group, and otherwise by its own particles' constructs, in its place; its
-// element declaration, local or the top-level one an <element ref> names, or, for an
-// <element ref> whose field codegen gives a sealed interface (goshape.SubstitutionSum),
-// each declaration that interface has a branch for, in group order, declines by the
-// document element's declaration's constructs, constructNillable first and
-// constructAbstractElement last, then by its type's as the document element's type does,
-// from constructAbstractType on, a complex type's content and attribute uses examined at
-// the particle; and an attribute use declines by constructValueConstraint after
-// constructQualifiedAttribute. The ones of a simple type, constructEncodePrimitive to
-// constructAssertions, sit after the {assertions}'s, though the document element's, a
-// particle's and an attribute use's simple type declines by them where that declaration
-// or use is examined, and a complex type's simple content, by its {simple type
-// definition}, where its type's content is, ahead of its attribute uses.
+// its {assertions}, and each value, the {attribute wildcard} field's attributes by
+// constructXsiAttribute, constructStrictAttributeWildcard and constructGovernedContent
+// among the value's. Append declines by constructUntrackedModel too, once every particle
+// of a content model holding a wildcard particle, a nested flattened particle or a nested
+// occurrence field, at any depth, or every basic particle a flattened content {particle}
+// reaches, is examined. A particle declines by constructVacuousParticle first, as the
+// content {particle} does; where its term is a model group, then by constructNestedGroup
+// where codegen flattens it or holds it in an occurrence field inside an occurrence
+// field's item, by constructAllGroup where it is an all group, and otherwise by its own
+// particles' constructs, in its place; its element declaration, local or the top-level
+// one an <element ref> names, or, for an <element ref> whose field codegen gives a sealed
+// interface (goshape.SubstitutionSum), each declaration that interface has a branch for,
+// in group order, declines by the document element's declaration's constructs,
+// constructNillable first and constructAbstractElement last, then by its type's as the
+// document element's type does, from constructAbstractType on, a complex type's content
+// and attribute uses examined at the particle; and an attribute use declines by
+// constructValueConstraint after constructQualifiedAttribute. The ones of a simple type,
+// constructEncodePrimitive to constructAssertions, sit after the {assertions}'s, though
+// the document element's, a particle's and an attribute use's simple type declines by
+// them where that declaration or use is examined, and a complex type's simple content, by
+// its {simple type definition}, where its type's content is, ahead of its attribute uses.
 const (
 	constructNillable construct = iota + 1
 	constructNestedGroup
@@ -182,7 +188,6 @@ const (
 	constructAllGroup
 	constructWildcard
 	constructQualifiedAttribute
-	constructAttributeWildcard
 	constructComplexAssertions
 	constructEncodePrimitive
 	constructIDType
@@ -190,40 +195,41 @@ const (
 	constructNoCanonical
 	constructQNameSpelling
 	constructXsiAttribute
+	constructStrictAttributeWildcard
 	constructGovernedContent
 	constructLocallyTypedMatch
 )
 
 // constructNames holds, indexed by construct, each construct's name.
 var constructNames = [...]string{
-	constructNillable:           "an element declaration with {nillable} true",
-	constructNestedGroup:        "a nested model group particle",
-	constructSharedBranch:       "two branches of a sealed interface whose structs have one shape",
-	constructOtherPrimitive:     "an atomic simple type whose primitive is ·implementation-defined·, other than xs:precisionDecimal",
-	constructUntrackedModel:     "a content model the content matcher does not track",
-	constructXsiType:            "an element carrying xsi:type",
-	constructTypeTable:          "an element declaration with a {type table}",
-	constructValueConstraint:    "a value constraint, default or fixed",
-	constructIdentityConstraint: "an identity constraint whose {selector} or {fields}, or whose {referenced key}'s, lie outside the path subset icpath compiles (Structures §3.11.6.2 ·selector subset·, §3.11.6.3 ·field subset·)",
-	constructAbsentAffiliation:  "an element declaration with an ·absent· member of its {substitution group affiliations}",
-	constructAbstractElement:    "an element declaration with {abstract} true",
-	constructAbstractType:       "an element declaration whose {type definition} is a complex type with {abstract} true",
-	constructMixed:              "a complex type with mixed content",
-	constructOpenContent:        "an {open content}",
-	constructVacuousParticle:    "a particle with {max occurs} 0",
-	constructAllGroup:           "an all group",
-	constructWildcard:           "a wildcard particle with {process contents} strict",
-	constructQualifiedAttribute: "an attribute use whose declaration has a {target namespace}",
-	constructAttributeWildcard:  "an {attribute wildcard}",
-	constructComplexAssertions:  "a complex type with {assertions}",
-	constructEncodePrimitive:    "an atomic simple type whose primitive is other than " + displayList(encodedPrimitives),
-	constructIDType:             "a simple type derived from xs:ID, xs:IDREF or xs:ENTITY",
-	constructAssertions:         "a simple type with an assertions facet",
-	constructNoCanonical:        "a value with no canonical representation",
-	constructQNameSpelling:      "an xs:QName or xs:NOTATION value with no spelling Append writes where it is written",
-	constructXsiAttribute:       "an attribute in the XSI namespace held in a wildcard's match or an xs:anyType element's content",
-	constructGovernedContent:    "an element a lax wildcard's match is or holds, or an xs:anyType element's content holds, whose expanded name a top-level element declaration names, or an attribute either holds whose expanded name a top-level attribute declaration names",
-	constructLocallyTypedMatch:  "a lax wildcard's match whose expanded name has a ·locally declared type· in the complex type it is written into",
+	constructNillable:                "an element declaration with {nillable} true",
+	constructNestedGroup:             "a nested model group particle",
+	constructSharedBranch:            "two branches of a sealed interface whose structs have one shape",
+	constructOtherPrimitive:          "an atomic simple type whose primitive is ·implementation-defined·, other than xs:precisionDecimal",
+	constructUntrackedModel:          "a content model the content matcher does not track",
+	constructXsiType:                 "an element carrying xsi:type",
+	constructTypeTable:               "an element declaration with a {type table}",
+	constructValueConstraint:         "a value constraint, default or fixed",
+	constructIdentityConstraint:      "an identity constraint whose {selector} or {fields}, or whose {referenced key}'s, lie outside the path subset icpath compiles (Structures §3.11.6.2 ·selector subset·, §3.11.6.3 ·field subset·)",
+	constructAbsentAffiliation:       "an element declaration with an ·absent· member of its {substitution group affiliations}",
+	constructAbstractElement:         "an element declaration with {abstract} true",
+	constructAbstractType:            "an element declaration whose {type definition} is a complex type with {abstract} true",
+	constructMixed:                   "a complex type with mixed content",
+	constructOpenContent:             "an {open content}",
+	constructVacuousParticle:         "a particle with {max occurs} 0",
+	constructAllGroup:                "an all group",
+	constructWildcard:                "a wildcard particle with {process contents} strict",
+	constructQualifiedAttribute:      "an attribute use whose declaration has a {target namespace}",
+	constructComplexAssertions:       "a complex type with {assertions}",
+	constructEncodePrimitive:         "an atomic simple type whose primitive is other than " + displayList(encodedPrimitives),
+	constructIDType:                  "a simple type derived from xs:ID, xs:IDREF or xs:ENTITY",
+	constructAssertions:              "a simple type with an assertions facet",
+	constructNoCanonical:             "a value with no canonical representation",
+	constructQNameSpelling:           "an xs:QName or xs:NOTATION value with no spelling Append writes where it is written",
+	constructXsiAttribute:            "an attribute in the XSI namespace held in a wildcard's match, an xs:anyType element's content or an {attribute wildcard} field",
+	constructStrictAttributeWildcard: "an attribute held in the {attribute wildcard} field of a complex type whose {attribute wildcard} has {process contents} strict",
+	constructGovernedContent:         "an element a lax wildcard's match is or holds, or an xs:anyType element's content holds, whose expanded name a top-level element declaration names, or an attribute either holds, or a lax {attribute wildcard} field holds, whose expanded name a top-level attribute declaration names",
+	constructLocallyTypedMatch:       "a lax wildcard's match whose expanded name has a ·locally declared type· in the complex type it is written into",
 }
 
 // displayList spells names, at least two, each by its Display, separated by

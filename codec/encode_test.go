@@ -75,7 +75,8 @@ func roundTrip[T any](t *testing.T, schema *xsd.Schema, name xsd.QName, v T, wan
 // or a fault of backend: nil, item 6's ErrInvalidValue error, a plain error
 // without item 2's or item 3's text, or item 7's decline, by
 // constructNoCanonical, constructQNameSpelling, constructXsiAttribute,
-// constructGovernedContent or constructLocallyTypedMatch.
+// constructStrictAttributeWildcard, constructGovernedContent or
+// constructLocallyTypedMatch.
 func appendChecked[T any](t *testing.T, dst []byte, schema *xsd.Schema, backend value.Backend, name xsd.QName, v T, opts ...Option) ([]byte, error) {
 	t.Helper()
 	out, err := Append(dst, schema, backend, name, v, opts...)
@@ -83,7 +84,7 @@ func appendChecked[T any](t *testing.T, dst []byte, schema *xsd.Schema, backend 
 	if checked == nil {
 		class := staticClass(err)
 		static := class == "plain" && (strings.HasPrefix(err.Error(), "codec: no top-level element declaration") || strings.Contains(err.Error(), "{abstract} true"))
-		if static || err != nil && class != "plain" && class != "invalid" && class != "decline "+constructNoCanonical.name() && class != "decline "+constructQNameSpelling.name() && class != "decline "+constructXsiAttribute.name() && class != "decline "+constructGovernedContent.name() && class != "decline "+constructLocallyTypedMatch.name() {
+		if static || err != nil && class != "plain" && class != "invalid" && class != "decline "+constructNoCanonical.name() && class != "decline "+constructQNameSpelling.name() && class != "decline "+constructXsiAttribute.name() && class != "decline "+constructStrictAttributeWildcard.name() && class != "decline "+constructGovernedContent.name() && class != "decline "+constructLocallyTypedMatch.name() {
 			t.Errorf("CheckAppend = nil, but Append returned %v, %s", err, class)
 		}
 		return out, err
@@ -1208,7 +1209,6 @@ func TestAppendDeclines(t *testing.T) {
 		{"particle type sharing its element's name", "a wildcard particle with {process contents} strict", `<xs:complexType name="%[1]s"><xs:sequence><xs:any/></xs:sequence></xs:complexType>` +
 			sequence(`<xs:element name="c" type="s:%[1]s"/>`)},
 		{"qualified attribute", "an attribute use whose declaration has a {target namespace}", complexOf(`<xs:attribute name="a" type="xs:string" form="qualified"/>`)},
-		{"attribute wildcard", "an {attribute wildcard}", complexOf(`<xs:anyAttribute processContents="lax"/>`)},
 		{"complex assertions", "a complex type with {assertions}", complexOf(asserted)},
 		{"restricted complex assertions", "a complex type with {assertions}", `<xs:complexType name="ab%[1]s">` + asserted + `</xs:complexType>` +
 			`<xs:element name="%[1]s"><xs:complexType><xs:complexContent><xs:restriction base="s:ab%[1]s"><xs:sequence>` + a + `</xs:sequence></xs:restriction></xs:complexContent></xs:complexType></xs:element>`},
@@ -3808,6 +3808,166 @@ func TestAppendWildcardInvalid(t *testing.T) {
 // top-level declarations that govern an item so named in its content: q of
 // xs:QName, i of xs:int, and the attribute qa of xs:QName.
 const governedAnySchema = `<xs:element name="r"/><xs:element name="q" type="xs:QName"/><xs:element name="i" type="xs:int"/><xs:attribute name="qa" type="xs:QName"/>`
+
+// Schemas beside anyattribute_test.go's, each of whose s:r is of awOne's
+// shape: awNotSchema's skip wildcard names s:no in its {disallowed names},
+// awDefinedSchema's lax one ##defined beside a top-level attribute g, and
+// awLaxGovernedSchema's lax one sits beside a top-level attribute t.
+const (
+	awNotSchema         = `<xs:element name="r"><xs:complexType><xs:sequence><xs:element name="e" type="xs:string"/></xs:sequence><xs:anyAttribute notQName="s:no" processContents="skip"/></xs:complexType></xs:element>`
+	awDefinedSchema     = `<xs:attribute name="g" type="xs:int"/><xs:element name="r"><xs:complexType><xs:sequence><xs:element name="e" type="xs:string"/></xs:sequence><xs:anyAttribute notQName="##defined" processContents="lax"/></xs:complexType></xs:element>`
+	awLaxGovernedSchema = `<xs:attribute name="t" type="xs:int"/><xs:element name="r"><xs:complexType><xs:sequence><xs:element name="e" type="xs:string"/></xs:sequence><xs:anyAttribute processContents="lax"/></xs:complexType></xs:element>`
+)
+
+// TestAppendAttributeWildcard pins the {attribute wildcard} "# What encodes"
+// admits: each attribute its field holds written after the attribute uses'
+// attributes, in held order, raw, as a wildcard particle's match's are, under
+// a skip wildcard, the effective one an extension unites with its base's
+// (awUnionSchema), and a lax one no top-level declaration governs, a use's
+// attribute ahead, on the document element, beside simple content and on a
+// particle's element; and an empty field writes no attribute, whatever the
+// {process contents}, strict included. Each document validate accepts and
+// Decode turns back into the value. Every row fails with complexEncodes'
+// static decline of a type with an {attribute wildcard} put back.
+func TestAppendAttributeWildcard(t *testing.T) {
+	one := int32(1)
+	t.Run("a skip wildcard's attribute in an admitted namespace", func(t *testing.T) {
+		roundTrip(t, schemaOf(t, awUnionSchema), rootName, awOne{E: "v", AnyAttribute: []anyAttribute{{"urn:x", "q", "1"}, {"urn:b", "p", `<&"`}}},
+			`<r xmlns="urn:s" xmlns:p1="urn:x" p1:q="1" xmlns:p2="urn:b" p2:p="&lt;&amp;&quot;"><e>v</e></r>`, deepEqual[awOne])
+	})
+	t.Run("a lax wildcard's undeclared attributes after a use's", func(t *testing.T) {
+		roundTrip(t, schemaOf(t, awUseSchema+`<xs:attribute name="t" type="xs:int"/>`), rootName, awUse{E: "v", A: &one, AnyAttribute: []anyAttribute{{"", "y", "3"}, {"urn:p", "x", "2"}, {xmltree.XMLNamespaceURI, "lang", "en"}}},
+			`<r xmlns="urn:s" a="1" y="3" xmlns:p1="urn:p" p1:x="2" xml:lang="en"><e>v</e></r>`, deepEqual[awUse])
+	})
+	t.Run("an attribute in the element's own namespace", func(t *testing.T) {
+		roundTrip(t, schemaOf(t, awUseSchema), rootName, awUse{E: "v", AnyAttribute: []anyAttribute{{"urn:s", "y", "3"}}},
+			`<r xmlns="urn:s" xmlns:p1="urn:s" p1:y="3"><e>v</e></r>`, deepEqual[awUse])
+	})
+	t.Run("beside simple content", func(t *testing.T) {
+		v := awSimple{}
+		v.A.Value = "v"
+		v.A.AnyAttribute = []anyAttribute{{"", "w", "1"}}
+		roundTrip(t, schemaOf(t, awSimpleSchema), rootName, v, `<r xmlns="urn:s"><a w="1">v</a></r>`, deepEqual[awSimple])
+	})
+	t.Run("on a particle's element", func(t *testing.T) {
+		v := awNested{}
+		v.A.B = "x"
+		v.A.AnyAttribute = []anyAttribute{{"", "w", "1"}}
+		roundTrip(t, schemaOf(t, awNestedSchema), rootName, v, `<r xmlns="urn:s"><a w="1"><b>x</b></a></r>`, deepEqual[awNested])
+	})
+	for _, row := range []struct {
+		name, decls string
+		v           awOne
+		want        string
+	}{
+		{"an empty skip field", awUnionSchema, awOne{E: "v"}, `<r xmlns="urn:s"><e>v</e></r>`},
+		{"an empty strict field", awStrictSchema, awOne{E: "v"}, `<r xmlns="urn:s"><e>v</e></r>`},
+		{"an empty lax field, defaultAttributes's", awDefaultDoc, awOne{E: "v", AnyAttribute: []anyAttribute{}}, `<r xmlns="urn:s"><e>v</e></r>`},
+	} {
+		t.Run(row.name, func(t *testing.T) {
+			roundTrip(t, awSchema(t, row.decls), rootName, row.v, row.want, func(a, b awOne) bool { return a.E == b.E && len(a.AnyAttribute) == 0 && len(b.AnyAttribute) == 0 })
+		})
+	}
+	t.Run("an empty field of empty content", func(t *testing.T) {
+		roundTrip(t, schemaOf(t, awEmptySchema), rootName, awEmpty{}, `<r xmlns="urn:s"/>`, deepEqual[awEmpty])
+	})
+}
+
+// TestAppendAttributeWildcardInvalid pins item 6 of Append's doc for an
+// {attribute wildcard}'s field, dst returned unextended: an attribute whose
+// expanded name an attribute use names, its field nil and set (§3.4.4.2
+// cvc-complex-type clause 2.1), which Decode never returns; one the wildcard
+// does not admit (clause 2.2.2, §3.10.4.1 cvc-wildcard), its namespace outside
+// the {namespace constraint}, an XSI one other than the four clause 2 excepts
+// among them, its name in {disallowed names}, and one ##defined excludes,
+// though a lax wildcard would decline it as governed; rawAttribute's own, a
+// Local that is no NCName and two attributes of one expanded name; and one
+// found after a strict wildcard's decline, which item 6 outranks. Then item 7:
+// a strict wildcard's attribute, governed by a top-level declaration or by
+// none, declines by constructStrictAttributeWildcard; a lax wildcard's
+// governed one by constructGovernedContent; and an XSI attribute, xsi:type
+// under a wildcard whose {namespace constraint} excludes the XSI namespace
+// among them, by constructXsiAttribute. Each item 6 row returns nil, having
+// written the attribute, under a writer that writes the field unchecked.
+func TestAppendAttributeWildcardInvalid(t *testing.T) {
+	one := int32(1)
+	held := func(a ...anyAttribute) awOne { return awOne{E: "v", AnyAttribute: a} }
+	const field = ", in the {attribute wildcard} field of the {type definition} of element {urn:s}r declared at "
+	for _, row := range []struct {
+		name, decls string
+		v           any
+		want        string
+	}{
+		{"a use's expanded name, its field nil", awUseSchema, awUse{E: "v", AnyAttribute: []anyAttribute{{"", "a", "1"}}},
+			"codec: Append: awUse.AnyAttribute[0] holds the attribute a, whose expanded name an attribute use of the {type definition} of element {urn:s}r declared at "},
+		{"a use's expanded name, its field set", awUseSchema, awUse{E: "v", A: &one, AnyAttribute: []anyAttribute{{"", "a", "1"}}},
+			"codec: Append: awUse.AnyAttribute[0] holds the attribute a, whose expanded name an attribute use of the {type definition} of element {urn:s}r declared at "},
+		{"a namespace outside the {namespace constraint}", awUnionSchema, held(anyAttribute{"urn:x", "q", "1"}, anyAttribute{"urn:o", "q", "1"}),
+			"codec: Append: awOne.AnyAttribute[1] holds the attribute {urn:o}q, which the {attribute wildcard} of the {type definition} of element {urn:s}r declared at "},
+		{"an XSI attribute outside the {namespace constraint}", awUnionSchema, held(anyAttribute{xsd.XMLSchemaInstanceNS, "banana", "1"}),
+			"codec: Append: awOne.AnyAttribute[0] holds the attribute xsi:banana, which the {attribute wildcard} of "},
+		{"a {disallowed names} QName", awNotSchema, held(anyAttribute{"urn:s", "no", "1"}),
+			"codec: Append: awOne.AnyAttribute[0] holds the attribute {urn:s}no, which the {attribute wildcard} of "},
+		{"a name ##defined excludes", awDefinedSchema, held(anyAttribute{"urn:s", "g", "1"}),
+			"codec: Append: awOne.AnyAttribute[0] holds the attribute {urn:s}g, which the {attribute wildcard} of "},
+		{"a Local that is no NCName", awUseSchema, awUse{E: "v", AnyAttribute: []anyAttribute{{"", "-k", "1"}}},
+			`codec: Append: awUse.AnyAttribute[0] holds the local name "-k", which is no NCName`},
+		{"two attributes of one expanded name", awUseSchema, awUse{E: "v", AnyAttribute: []anyAttribute{{"urn:q", "k", "1"}, {"urn:q", "k", "2"}}},
+			"codec: Append: awUse.AnyAttribute[1] holds the attribute {urn:q}k, as item 0 before it does"},
+		{"an invalid attribute after a strict one", awStrictSchema, held(anyAttribute{"urn:s", "g", "5"}, anyAttribute{"urn:o", "q", "1"}),
+			"codec: Append: awOne.AnyAttribute[1] holds the attribute {urn:o}q, which the {attribute wildcard} of "},
+	} {
+		t.Run(row.name, func(t *testing.T) {
+			dst := []byte("<prior/>")
+			var out []byte
+			var err error
+			// The row's T is its v's own type, so that CheckAppend[T] reads it.
+			switch v := row.v.(type) {
+			case awUse:
+				out, err = appendChecked(t, dst, schemaOf(t, row.decls), strict.New(), rootName, v)
+			case awOne:
+				out, err = appendChecked(t, dst, schemaOf(t, row.decls), strict.New(), rootName, v)
+			}
+			invalidValue(t, err, row.want)
+			if !strings.HasPrefix(err.Error(), row.want) {
+				t.Errorf("error %q does not open with %q", err, row.want)
+			}
+			noRule(t, err)
+			if !bytes.Equal(out, dst) {
+				t.Errorf("Append returned %q, want dst %q unextended", out, dst)
+			}
+		})
+	}
+	for _, row := range []struct {
+		name, decls string
+		construct   construct
+		v           awOne
+		want        []string
+	}{
+		{"a strict wildcard's attribute a top-level declaration governs", awStrictSchema, constructStrictAttributeWildcard, held(anyAttribute{"urn:s", "g", "5"}),
+			[]string{"attribute {urn:s}g at awOne.AnyAttribute[0]" + field}},
+		{"a strict wildcard's attribute no declaration governs", awStrictSchema, constructStrictAttributeWildcard, held(anyAttribute{"urn:s", "h", "5"}),
+			[]string{"attribute {urn:s}h at awOne.AnyAttribute[0]" + field}},
+		{"xsi:type under a skip wildcard", awNotSchema, constructXsiAttribute, held(anyAttribute{xsd.XMLSchemaInstanceNS, "type", "xs:int"}),
+			[]string{"attribute xsi:type at awOne.AnyAttribute[0]" + field}},
+		{"xsi:type under a wildcard excluding the XSI namespace", awUnionSchema, constructXsiAttribute, held(anyAttribute{xsd.XMLSchemaInstanceNS, "type", "xs:int"}),
+			[]string{"attribute xsi:type at awOne.AnyAttribute[0]" + field}},
+		{"an XSI attribute the wildcard admits", awNotSchema, constructXsiAttribute, held(anyAttribute{xsd.XMLSchemaInstanceNS, "banana", "1"}),
+			[]string{"attribute xsi:banana at awOne.AnyAttribute[0]" + field}},
+		{"a lax wildcard's attribute a top-level declaration governs", awLaxGovernedSchema, constructGovernedContent, held(anyAttribute{"", "y", "3"}, anyAttribute{"urn:s", "t", "abc"}),
+			[]string{"attribute {urn:s}t at awOne.AnyAttribute[1]" + field, ", governed by attribute {urn:s}t declared at "}},
+	} {
+		t.Run(row.name, func(t *testing.T) {
+			dst := []byte("<prior/>")
+			out, err := appendChecked(t, dst, schemaOf(t, row.decls), strict.New(), rootName, row.v)
+			_ = asDecline(t, err, "codec does not encode "+row.construct.name()+": "+row.want[0])
+			holds(t, err, row.want[1:]...)
+			if !bytes.Equal(out, dst) {
+				t.Errorf("Append returned %q, want dst %q unextended", out, dst)
+			}
+		})
+	}
+}
 
 // TestAppendAnyType pins the element declaration of type xs:anyType itself
 // "# What encodes" admits, the document element's and a particle's, written

@@ -5700,7 +5700,7 @@ func (bd *binding) fillAttributes(root *xmltree.StartElement, out reflect.Value,
 	for _, a := range root.Attributes() {
 		i, ok := bd.attributes[expanded(a.Name())]
 		if !ok {
-			if bd.anyAttribute != nil && !instanceAttribute(a.Name()) {
+			if bd.anyAttribute != nil && !instanceAttribute(expanded(a.Name())) {
 				appendRawAttribute(out.Field(first+len(bd.attrs)), a)
 				continue
 			}
@@ -5965,11 +5965,11 @@ func unattributed(a xmltree.Attribute) error {
 // xsi:nil, xsi:schemaLocation or xsi:noNamespaceSchemaLocation, the four
 // attributes cvc-complex-type clause 2 attributes to no attribute use and no
 // wildcard; any other name in the xsi namespace is not excepted.
-func instanceAttribute(n xmltree.Name) bool {
-	if n.Space() != xsd.XMLSchemaInstanceNS {
+func instanceAttribute(n xsd.QName) bool {
+	if n.Space != xsd.XMLSchemaInstanceNS {
 		return false
 	}
-	switch n.Local() {
+	switch n.Local {
 	case "type", "nil", "schemaLocation", "noNamespaceSchemaLocation":
 		return true
 	}
