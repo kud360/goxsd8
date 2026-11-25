@@ -2753,8 +2753,7 @@ func (e *encoder) writableName(name xsd.QName, path string) bool {
 // attribute a held attribute, of the expanded name name, and true, or false
 // where none does; writesHints reports whether Append writes a held
 // xsi:schemaLocation or xsi:noNamespaceSchemaLocation (locationHint), true
-// for the three holds rawContent writes and false for attributeWildcardHold,
-// whose field Decode never fills with either.
+// for the three holds rawContent writes and false for attributeWildcardHold.
 type rawHold interface {
 	in() string
 	governing(schema *xsd.Schema, name xsd.QName, attribute bool) (string, bool)
@@ -2836,7 +2835,8 @@ func (h attributeWildcardHold) governing(schema *xsd.Schema, name xsd.QName, att
 }
 
 // writesHints reports false: Decode never returns a hint in an {attribute
-// wildcard} field, so that one written there would not decode back.
+// wildcard} field ([Decode]'s doc), so that one written there would not
+// decode back.
 func (attributeWildcardHold) writesHints() bool { return false }
 
 // topLevelGoverning returns the subject of the top-level element declaration,
@@ -3078,7 +3078,7 @@ func (e *encoder) rawAttribute(name xsd.QName, value string, attrs reflect.Value
 			return false
 		}
 	}
-	if name.Space == xsd.XMLSchemaInstanceNS && !(hold.writesHints() && locationHint(name)) {
+	if name.Space == xsd.XMLSchemaInstanceNS && (!hold.writesHints() || !locationHint(name)) {
 		if e.declined == nil {
 			e.declined = encodeDecline(constructXsiAttribute, fmt.Sprintf("attribute %s at %s, %s", name.Display(), path, hold.in()))
 		}
