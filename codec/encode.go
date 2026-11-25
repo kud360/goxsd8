@@ -171,12 +171,12 @@ var ErrInvalidValue = errors.New("codec: Append: a value no valid document holds
 //     field holds, or in the content of an element of type xs:anyType
 //     itself, its own attributes among it, at any depth, whatever its value,
 //     since an xsi:type's may hold a prefix no binding the struct holds
-//     resolves, and Decode returns neither of those two in such a field; or,
-//     in such content of an xs:anyType element, or in an element a lax
-//     wildcard particle's field holds, the element itself among it, at any
-//     depth, an element whose expanded name a top-level element declaration of
-//     schema names, or there or in a lax {attribute wildcard}'s field an
-//     attribute other than those two whose expanded name a top-level
+//     resolves, and Decode returns neither of those two in an {attribute
+//     wildcard}'s field; or, in such content of an xs:anyType element, or in an
+//     element a lax wildcard particle's field holds, the element itself among
+//     it, at any depth, an element whose expanded name a top-level element
+//     declaration of schema names, or there or in a lax {attribute wildcard}'s
+//     field an attribute other than those two whose expanded name a top-level
 //     attribute declaration of schema names, whatever its content or value,
 //     since a lax wildcard, xs:anyType's among them, assesses it against that
 //     declaration (Structures §3.4.7, §3.3.4.6 key-governing-ed clause 3,
