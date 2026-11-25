@@ -77,7 +77,7 @@ Every figure is unchanged since `c5c1a23b`, though `codec/decode.go` changed by 
 | a nested model group particle | 242 | #4076 (`ready`; up from 163, the cases earlier slices exposed) |
 | a value with no canonical representation | 207 | by design: Append's item 7 |
 | xs:anySimpleType or xs:anyAtomicType as a simple type | 134 | #4115 (`ready`; filed this pass) |
-| a value constraint, default or fixed | 131 | #4116 (`ready`; filed this pass) |
+| a value constraint, default or fixed | 131 | #4116 (lifted; at `ee2dc226`'s 133, 96 encode and 37 reach a next decline) |
 | an {attribute wildcard} | 120 | #4117 (`ready`; filed this pass) |
 | an attribute use whose declaration has a {target namespace} | 105 | unfiled |
 | an all group | 96 | unfiled |
@@ -159,7 +159,7 @@ This is ordered for a `/develop` session: take the highest row you can start. **
 | 1 | #4084 | **A strict or lax wildcard particle**, 411, the census's largest row. Its grounding first rules how a match's namespace bindings are carried, which may change codegen's shape. |
 | 2 | #4076 | **A nested model group particle**, 242. It encodes by the hold codegen gives the nested particle, reusing the occurrence-field and flattened arms. |
 | 3 | #4115 | **xs:anySimpleType or xs:anyAtomicType**, 134. A warden ruling first decides whether it is lifted or folds into item 7. |
-| 4 | #4116 | **A value constraint, default or fixed**, 131. A warden ruling first decides whether a defaulted value is written or omitted. |
+| 4 | #4116 | **A value constraint, default or fixed**, 131. Lifted: Append writes the held value and holds it to a fixed constraint; 37 of `ee2dc226`'s 133 reach a next decline (30 xs:ID-derived, 5 mixed, 1 strict wildcard, 1 qualified attribute). |
 | 5 | #4117 | **An {attribute wildcard}**, 120. It is the attribute side of #4038's skip writer. |
 | 6 | #4092 | **A held xsi:schemaLocation or xsi:noNamespaceSchemaLocation**, 88. |
 | 7 | #4093 | **Governed xs:anyType content**, 2. It is small, so take it with row 6, which is in the same writer. |

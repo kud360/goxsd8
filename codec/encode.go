@@ -88,7 +88,8 @@ var ErrInvalidValue = errors.New("codec: Append: a value no valid document holds
 //     opts places at no branch, a pointer to a branch among them, which Decode never returns; the nil
 //     sealed interface of a union simple type wherever nil does not mean absent, that is, every field
 //     but an element particle's of {min occurs} 0 and {max occurs} 1 and an optional attribute use's
-//     (codegen's package doc, "# Particles", "# Attributes"); a value of that interface whose dynamic
+//     to which no value constraint supplies a value (codegen's package doc, "# Particles", "#
+//     Attributes"), which Decode never returns; a value of that interface whose dynamic
 //     type the [WithBranches] set in opts places at no basic member, a pointer to a variant among them,
 //     which Decode never returns; a value that holds itself, a struct or sealed interface value its own
 //     write reaches again through a *S, []S or []I field, which no finite document holds, the error
@@ -125,13 +126,22 @@ var ErrInvalidValue = errors.New("codec: Append: a value no valid document holds
 //     struct value no value maps to, as codegen's "# Simple types" states such values exist, a nil Value
 //     or the numerical arm with a negative Coefficient, or a Value whose dynamic type the
 //     [WithPrecisionDecimalArms] set in opts supplies in no role, a pointer to an arm among them, which
-//     Decode never returns; an xs:QName or xs:NOTATION value whose namespace name holds a byte that starts
-//     no XML 1.0 Char or is the one the prefix xmlns is bound to (Namespaces in XML §3), or whose Local
-//     the Parse of its primitive's mapping rejects in Append's spelling, that Parse's verdict wrapped, or
-//     makes a spelling that resolves back to another expanded name; or a value whose simple type rejects
-//     it, a value.ValidateLexical error value.IsDatatypeVerdict reports as a verdict, a facet's rejection
-//     or a backend Parse's among them, that error wrapped, but for item 7's pattern and union-variant
-//     cases, a list's own facets read once every item has passed its own checks.
+//     Decode never returns; an xs:QName or xs:NOTATION value whose namespace name holds a byte that
+//     starts no XML 1.0 Char or is the one the prefix xmlns is bound to (Namespaces in XML §3), or whose
+//     Local the Parse of its primitive's mapping rejects in Append's spelling, that Parse's verdict
+//     wrapped, or makes a spelling that resolves back to another expanded name; a value written as
+//     an element's character content, or as an attribute, whose value value.ConstraintMatches finds
+//     neither equal nor identical to the {value} of a fixed {value constraint} there (Datatypes
+//     §2.2.1, §2.2.2): an element's own (Structures §3.3.4.3 cvc-elt clause 5.2.2.2.2), the empty
+//     text included, which Append writes as an empty element that takes on the constraint's {lexical
+//     form} (clause 5.1, §3.3.5.4 sic-eltType), and an attribute use's and its declaration's, each
+//     (§3.5.4 cvc-au, §3.2.4.1 cvc-attribute clause 4); the content of an element of type xs:anyType
+//     itself whose declaration has a fixed {value constraint}, where it holds Children (cvc-elt
+//     clause 5.2.2.1) or a Text other than "" and the constraint's {lexical form} (clause
+//     5.2.2.2.1); or a value whose simple type rejects it, a value.ValidateLexical error
+//     value.IsDatatypeVerdict reports as a verdict, a facet's rejection or a backend Parse's among them,
+//     that error wrapped, but for item 7's pattern and union-variant cases, a list's own facets read
+//     once every item has passed its own checks.
 //  7. A value with no canonical representation or no spelling Append writes,
 //     the first in document order as item 6 counts: its *DeclineError. That is
 //     a governing mapping with no Canonical, a Canonical that fails for the
@@ -178,25 +188,31 @@ var ErrInvalidValue = errors.New("codec: Append: a value no valid document holds
 //     that type's content model, or that of a type on its {base type
 //     definition} chain, contains, whatever its content, since that type
 //     governs it (§3.3.4.6 key-governing-type-elem clause 7, §3.4.6.4
-//     key-ldt-elem). The values with a lexical other than the one Append
-//     writes, the ones whose rejection by a pattern facet is this item, a
-//     union's own pattern facet among them, read once the variant's member is
-//     its text's ·active basic member·, are: a union's value whose member value
-//     is one; every xs:boolean, xs:decimal-primitive, xs:dateTime,
-//     xs:dateTimeStamp, xs:time and xs:duration-primitive value; every
-//     xs:float, xs:double and xs:precisionDecimal value other than NaN and
-//     -INF; an xs:date, xs:gYearMonth or xs:gYear value whose timezoneOffset is
-//     0, spelled Z, +00:00 or -00:00 (§D.2.2's note), or whose year is 0,
-//     spelled 0000 or -0000; an xs:gMonthDay, xs:gDay or xs:gMonth value whose
-//     timezoneOffset is 0; an xs:hexBinary value one of whose octets holds a
-//     hex digit A to F (§3.3.15.2); every xs:base64Binary value but the empty
-//     one (§3.3.16.2); an xs:QName or xs:NOTATION value whose namespace name is
-//     not absent; and no xs:string- or xs:anyURI-primitive value, each being
-//     its own whiteSpace-normalized form. NaN and -INF, of xs:float, xs:double
-//     and xs:precisionDecimal alike, are written NaN and -INF, their only
-//     lexicals (§3.3.4.2, §3.3.5.2, precisionDecimal §3.2), so a pattern facet
-//     of their own simple type that rejects one of them is item 6, not this
-//     item.
+//     key-ldt-elem); or a value item 6 holds to a fixed {value constraint}
+//     whose comparison value.ConstraintMatches leaves undecided, such as a
+//     NOTATION {lexical form} naming no declared notation, and the empty text
+//     of an element whose default's {value} it is not, or whose comparison is
+//     undecided, since Append writes it as an empty element that takes on the
+//     default (cvc-elt clause 5.1), though another lexical, such as a single
+//     space for an xs:token, may hold the value. The values with a lexical
+//     other than the one Append writes, the ones whose rejection by a pattern
+//     facet is this item, a union's own pattern facet among them, read once the
+//     variant's member is its text's ·active basic member·, are: a union's
+//     value whose member value is one; every xs:boolean, xs:decimal-primitive,
+//     xs:dateTime, xs:dateTimeStamp, xs:time and xs:duration-primitive value;
+//     every xs:float, xs:double and xs:precisionDecimal value other than NaN
+//     and -INF; an xs:date, xs:gYearMonth or xs:gYear value whose
+//     timezoneOffset is 0, spelled Z, +00:00 or -00:00 (§D.2.2's note), or
+//     whose year is 0, spelled 0000 or -0000; an xs:gMonthDay, xs:gDay or
+//     xs:gMonth value whose timezoneOffset is 0; an xs:hexBinary value one of
+//     whose octets holds a hex digit A to F (§3.3.15.2); every xs:base64Binary
+//     value but the empty one (§3.3.16.2); an xs:QName or xs:NOTATION value
+//     whose namespace name is not absent; and no xs:string- or
+//     xs:anyURI-primitive value, each being its own whiteSpace-normalized form.
+//     NaN and -INF, of xs:float, xs:double and xs:precisionDecimal alike, are
+//     written NaN and -INF, their only lexicals (§3.3.4.2, §3.3.5.2,
+//     precisionDecimal §3.2), so a pattern facet of their own simple type that
+//     rejects one of them is item 6, not this item.
 //  8. An assessed document validate charges: the error item 3 of [Decode]'s
 //     doc states for it, which errors.Is also reports as [ErrInvalidValue],
 //     each violation charged to the written document, a
@@ -437,13 +453,15 @@ func (s *simpleRoot) write(e *encoder, v reflect.Value, at writeAt) error {
 // write writes the element at.el holding v, a value of b's struct: its start
 // tag, then each attribute field's attribute, in field order, the fields after
 // the content's (binding.lead, elementContent.width), a nil *V's written as
-// none, and so is a nil union interface of a use whose {required} is false,
-// then, for a type with an {attribute wildcard}, the attributes its field
-// holds (encoder.wildcardAttributes), then the content: for simple content the
-// value field's text (texter), computed before the start tag's '>', and
-// otherwise the content's elements (b.content's write), an element with no
-// content written as an empty-element tag; or nothing, where v holds itself
-// (encoder.enter).
+// none, and so is a nil union interface of a use whose {required} is false
+// and to which no value constraint supplies a value (supply), each written
+// value held to its use's and its declaration's fixed {value constraint}
+// (encoder.attributeFixed), then, for a type with an {attribute wildcard},
+// the attributes its field holds (encoder.wildcardAttributes), then the
+// content: for simple content the value field's text (texter), computed before
+// the start tag's '>', and otherwise the content's elements (b.content's
+// write), an element with no content written as an empty-element tag; or
+// nothing, where v holds itself (encoder.enter).
 func (b *boundBinding) write(e *encoder, v reflect.Value, at writeAt) error {
 	if !e.enter(v, at.path) {
 		return nil
@@ -462,18 +480,22 @@ func (b *boundBinding) write(e *encoder, v reflect.Value, at writeAt) error {
 			f = f.Elem()
 		}
 		// An optional union use's field is its bare sealed interface, nil
-		// meaning absent (codegen's package doc, "# Attributes").
-		if f.Kind() == reflect.Interface && f.IsNil() && !a.required {
+		// meaning absent (codegen's package doc, "# Attributes"), but where a
+		// value constraint supplies the attribute's value, which Decode then
+		// holds there (Structures §3.4.5.1 sic-attrDefault), so that a nil one
+		// reaches union, item 6 of Append's doc.
+		if f.Kind() == reflect.Interface && f.IsNil() && !a.use.Required() && a.supplied == nil {
 			continue
 		}
-		text, err := e.simple(a.scalar, f, fpath, attributeSubject(a.decl))
+		w, err := e.scalarText(a.scalar, f, fpath, simpleSubject(a.st, attributeSubject(a.decl)))
 		if err != nil {
 			return err
 		}
+		e.attributeFixed(a, w, fpath)
 		e.out = append(e.out, ' ')
 		e.out = append(e.out, a.decl.Name().Local...)
 		e.out = append(e.out, `="`...)
-		e.out = appendEscaped(e.out, text, true)
+		e.out = appendEscaped(e.out, w.text, true)
 		e.out = append(e.out, '"')
 	}
 	if bd.anyAttribute != nil {
@@ -507,12 +529,20 @@ func (b *boundBinding) write(e *encoder, v reflect.Value, at writeAt) error {
 // that its facets, an anonymous restriction's own among them, reach the value
 // through value.ValidateLexical; the field's item 6 and 7 errors of [Append]'s
 // doc name that type after at.typ as simpleValueOf names it (contentSubject).
-// A union's nil interface is item 6 there: a value field is never absent.
+// A union's nil interface is item 6 there: a value field is never absent. The
+// text is held to at.el's {value constraint} under that type
+// (encoder.elementConstraint), the type cvc-elt clause 5.2.2.2.2 compares it
+// under.
 func (b boundValue) text(e *encoder, v reflect.Value, at writeAt) (string, error) {
 	s := encoded[scalarArm](b.value.value.arm).scalar
 	path := at.path + "." + v.Type().Field(b.index).Name
-	w, err := e.scalarText(s, v.Field(b.index), path, contentSubject(typeSubject(at.el, at.typ), s.st))
-	return w.text, err
+	subject := contentSubject(typeSubject(at.el, at.typ), s.st)
+	w, err := e.scalarText(s, v.Field(b.index), path, subject)
+	if err != nil {
+		return "", err
+	}
+	e.elementConstraint(at.el, s.st, w, path, subject)
+	return w.text, nil
 }
 
 // write writes the element at.el holding v, a value of the choice's sealed
@@ -1097,15 +1127,15 @@ func (w *encodeWalk) element(decl xsd.ElementDeclaration) error {
 
 // declEncodes returns the decline of the first of decl's own properties the
 // slice excludes: {nillable} as codegen reads it (goshape.Nillable), a {type
-// table}, a {value constraint}, an identity constraint whose paths icpath
-// does not compile (encodeWalk.identityEncodes), a member of its {substitution
-// group affiliations} that names no top-level element declaration of the
-// schema, the first in document order, an ·absent· member Finalize keeps
-// (§5.3), under which validate assesses the element laxly, as if cvc-elt
-// clause 1 had failed, and {abstract} true, which no element validates against
-// (cvc-elt clause 2): the document element's is item 3 of [Append]'s doc,
-// found before declEncodes runs, so that only a particle's declines so, one
-// the parser never builds but xsd.NewElementDeclaration does. A decl whose
+// table}, an identity constraint whose paths icpath does not compile
+// (encodeWalk.identityEncodes), a member of its {substitution group
+// affiliations} that names no top-level element declaration of the schema, the
+// first in document order, an ·absent· member Finalize keeps (§5.3), under
+// which validate assesses the element laxly, as if cvc-elt clause 1 had
+// failed, and {abstract} true, which no element validates against (cvc-elt
+// clause 2): the document element's is item 3 of [Append]'s doc, found before
+// declEncodes runs, so that only a particle's declines so, one the parser
+// never builds but xsd.NewElementDeclaration does. A decl whose
 // {identity-constraint definitions} it admits sets w.identity.
 func (w *encodeWalk) declEncodes(decl xsd.ElementDeclaration) error {
 	if goshape.Nillable(decl) {
@@ -1113,9 +1143,6 @@ func (w *encodeWalk) declEncodes(decl xsd.ElementDeclaration) error {
 	}
 	if _, has := decl.TypeTable(); has {
 		return encodeDecline(constructTypeTable, declSubject(decl))
-	}
-	if _, has := decl.ValueConstraint(); has {
-		return encodeDecline(constructValueConstraint, declSubject(decl))
 	}
 	for _, ic := range decl.IdentityConstraints() {
 		if err := w.identityEncodes(decl, ic); err != nil {
@@ -1490,8 +1517,7 @@ func (w *encodeWalk) particleEncodes(p xsd.Particle, subject string, site partic
 
 // attributeEncodes returns elementEncodes' error for the attribute use u: a
 // qualified declaration, whose name the default namespace binding Append
-// writes cannot spell (Namespaces in XML §6.2), then an effective value
-// constraint ([xsd.Schema.EffectiveValueConstraint]), then its simple type.
+// writes cannot spell (Namespaces in XML §6.2), then its simple type.
 func attributeEncodes(schema *xsd.Schema, u xsd.AttributeUse) error {
 	decl, ok := schema.ResolvedAttributeDeclaration(u)
 	if !ok {
@@ -1500,9 +1526,6 @@ func attributeEncodes(schema *xsd.Schema, u xsd.AttributeUse) error {
 	subject := attributeSubject(decl)
 	if decl.Name().Space != "" {
 		return encodeDecline(constructQualifiedAttribute, subject)
-	}
-	if _, has := schema.EffectiveValueConstraint(u); has {
-		return encodeDecline(constructValueConstraint, subject)
 	}
 	st, ok := schema.ResolvedSimpleType(decl.TypeDefinition())
 	if !ok {
@@ -1812,18 +1835,100 @@ func (e *encoder) textTag(tag, text, outer string, mark int) {
 
 // simpleElement writes the element of decl, holding v, a value of s's simple
 // type, whose Go path from T is path: its start tag (startTag), then its
-// value's text (simple), which may first declare a prefix on that start tag
-// (qname), an empty text written as an empty-element tag (textTag). The
-// error is a backend fault.
+// value's text (scalarText), which may first declare a prefix on that start
+// tag (qname), held to decl's {value constraint} (elementConstraint), an
+// empty text written as an empty-element tag (textTag). The error is a
+// backend fault.
 func (e *encoder) simpleElement(decl xsd.ElementDeclaration, s scalar, v reflect.Value, path string) error {
 	name := decl.Name()
 	outer, mark := e.startTag(name)
-	text, err := e.simple(s, v, path, declSubject(decl))
+	subject := simpleSubject(s.st, declSubject(decl))
+	w, err := e.scalarText(s, v, path, subject)
 	if err != nil {
 		return err
 	}
-	e.textTag(name.Local, text, outer, mark)
+	e.elementConstraint(decl, s.st, w, path, subject)
+	e.textTag(name.Local, w.text, outer, mark)
 	return nil
+}
+
+// elementConstraint holds w, what Append writes as the character content of
+// decl's element for the value at path, of st, the element's simple type or
+// its type's {content type}.{simple type definition}, subject naming st, to
+// decl's {value constraint} (heldTo), where w recorded no item 6 or 7 error
+// of [Append]'s doc: a non-empty text under a fixed constraint, as
+// Structures §3.3.4.3 cvc-elt clause 5.2.2.2.2 compares it, and the empty
+// text under either variety, which Append writes as an empty-element tag, to
+// which clause 5.1 and §3.3.5.4 sic-eltType supply the constraint's {lexical
+// form}. A non-empty text under a default is written whatever it holds:
+// clause 5.2 compares nothing to a default.
+func (e *encoder) elementConstraint(decl xsd.ElementDeclaration, st *xsd.SimpleType, w written, path, subject string) {
+	vc, has := decl.ValueConstraint()
+	if !has || !w.ok {
+		return
+	}
+	if w.text == "" {
+		e.heldTo(vc, declSubject(decl), "§3.3.4.3 cvc-elt clause 5.1, §3.3.5.4 sic-eltType", st, w.text, path, subject)
+		return
+	}
+	if vc.Kind() == xsd.ValueFixed {
+		e.heldTo(vc, declSubject(decl), "§3.3.4.3 cvc-elt clause 5.2.2.2.2", st, w.text, path, subject)
+	}
+}
+
+// attributeFixed holds w, what Append writes as a's attribute for the value
+// at path, to a's fixed {value constraint} (heldTo), where w recorded no
+// item 6 or 7 error of [Append]'s doc: the use's own, which Structures
+// §3.5.4 cvc-au reads, then its declaration's, which §3.2.4.1 cvc-attribute
+// clause 4 reads, each separately and never the ·effective value constraint·
+// alone (xsd.Schema.EffectiveValueConstraint), since a use's default would
+// hide its declaration's fixed one. A default is read by neither rule, and
+// Append writes every attribute a value holds, so that no attribute it
+// writes is ·defaulted· (§3.4.4.2 key-dflt-att).
+func (e *encoder) attributeFixed(a attribute, w written, path string) {
+	if !w.ok {
+		return
+	}
+	subject := simpleSubject(a.st, attributeSubject(a.decl))
+	if vc, has := a.use.ValueConstraint(); has && vc.Kind() == xsd.ValueFixed {
+		e.heldTo(vc, "the attribute use of "+attributeSubject(a.decl), "§3.5.4 cvc-au", a.st, w.text, path, subject)
+	}
+	if vc, has := a.decl.ValueConstraint(); has && vc.Kind() == xsd.ValueFixed {
+		e.heldTo(vc, attributeSubject(a.decl), "§3.2.4.1 cvc-attribute clause 4", a.st, w.text, path, subject)
+	}
+}
+
+// heldTo records the item 6 or item 7 error of [Append]'s doc that vc, the
+// {value constraint} of the component on names, which the Structures rule
+// rule reads, raises for text, written for the value at path, of st, subject
+// naming st. It compares them by value.ConstraintMatches under st, text under
+// the bindings in scope where it is written (writtenBindings), in the value
+// space, equal or identical (Datatypes §2.2.1, §2.2.2), as validate compares
+// them. The same is written; not the same is item 6 under a fixed vc, whose
+// value every valid document holds there, and item 7 by
+// constructValueConstraint under a default, which elementConstraint passes
+// only for the empty text, since another lexical of the value may be valid
+// there, as a single space is for an empty xs:token under default "abc"; and
+// a comparison ConstraintMatches leaves undecided, such as a NOTATION
+// {lexical form} naming no declared notation, is item 7 by the same
+// construct. A comparison found the same has validated vc's {lexical form}
+// under st, so that cvc-elt clause 5.1.2 holds for the empty text written.
+func (e *encoder) heldTo(vc xsd.ValueConstraint, on, rule string, st *xsd.SimpleType, text, path, subject string) {
+	variety := "default"
+	if vc.Kind() == xsd.ValueFixed {
+		variety = "fixed"
+	}
+	shown := fmt.Sprintf("the value written %q", text)
+	same, decided := value.ConstraintMatches(e.backend, e.schema, st, text, writtenBindings{e}, vc, noAssertions{})
+	switch {
+	case !decided:
+		e.declineValue(constructValueConstraint, subject, path, shown, fmt.Sprintf("value.ConstraintMatches does not decide whether its value is equal or identical to %q, the {value} of the %s {value constraint} of %s (Datatypes §2.2.1, §2.2.2; Structures %s)", vc.LexicalForm(), variety, on, rule))
+	case same:
+	case vc.Kind() == xsd.ValueFixed:
+		e.invalidate(fmt.Errorf("codec: Append: %s, of %s, is written %q, whose value is neither equal nor identical to %q, the {value} of the fixed {value constraint} of %s, which every valid document holds there (Structures %s)", path, subject, text, vc.LexicalForm(), on, rule))
+	default:
+		e.declineValue(constructValueConstraint, subject, path, shown, fmt.Sprintf("its value is neither equal nor identical to %q, the {value} of the default {value constraint} of %s, which the empty element it is written as takes on (Structures %s)", vc.LexicalForm(), on, rule))
+	}
 }
 
 // invalidate records err as the document's item 6 error of [Append]'s doc,
@@ -1855,15 +1960,6 @@ func (e *encoder) declineValue(c construct, subject, path, shown, cause string) 
 	if e.declined == nil {
 		e.declined = encodeDecline(c, fmt.Sprintf("%s, at %s holding %s: %s", subject, path, shown, cause))
 	}
-}
-
-// simple returns the text Append writes for v, a value of s's simple type,
-// s.st, held in the Go type the slice gives it, at path, owner naming s.st's
-// declaration (scalarText). It records the value's item 6 or 7 error of
-// [Append]'s doc, and returns a backend fault.
-func (e *encoder) simple(s scalar, v reflect.Value, path, owner string) (string, error) {
-	w, err := e.scalarText(s, v, path, simpleSubject(s.st, owner))
-	return w.text, err
 }
 
 // written is what Append's write of one simple value found: text, the text it
@@ -2753,9 +2849,10 @@ func (c rawContent) write(e *encoder, v reflect.Value, at writeAt) error {
 // writeElement writes the element of decl, of type xs:anyType itself, whose
 // content is v, a struct of AnyType's shape or a named type over one, at
 // path: its start tag, then v as rawContent writes it under anyTypeContent,
-// as the package doc's "# What encodes" states; or nothing, where v holds
-// itself (encoder.enter), taken by slot first either way. It reads no simple
-// value, so it returns no backend fault.
+// as the package doc's "# What encodes" states, its content held to decl's
+// fixed {value constraint} after its Text (anyTypeFixed); or nothing,
+// where v holds itself (encoder.enter), taken by slot first either way. It
+// reads no simple value, so it returns no backend fault.
 func (rawContent) writeElement(e *encoder, decl xsd.ElementDeclaration, v reflect.Value, path string, slot attributionSlot) error {
 	slot.take(e, decl, path)
 	if !e.enter(v, path) {
@@ -2764,9 +2861,38 @@ func (rawContent) writeElement(e *encoder, decl xsd.ElementDeclaration, v reflec
 	defer e.leave()
 	name := decl.Name()
 	outer, mark := e.startTag(name)
-	start := e.rawContent(v, path, anyTypeContent{decl: decl})
+	hold := anyTypeContent{decl: decl}
+	start := e.rawAttributes(v, path, hold)
+	e.rawText(v.Field(1).String(), path+".Text")
+	e.anyTypeFixed(decl, v, path)
+	e.rawChildren(v, path, hold)
 	e.endTag(name.Local, start, outer, mark)
 	return nil
+}
+
+// anyTypeFixed records item 6 of [Append]'s doc where decl, of type
+// xs:anyType itself, has a fixed {value constraint} and x, the AnyType
+// content of its element at path, is written as content no valid element
+// holds: x holds Children, an element child cvc-elt clause 5.2.2.1 admits
+// none of, or a Text other than "" and the constraint's {lexical form}, which
+// clause 5.2.2.2.1 matches the ·initial value· to as a string, xs:anyType's
+// {content type} being mixed (Structures §3.4.7, §3.3.4.3). With no children
+// and an empty Text the element is written empty, valid by clause 5.1. A
+// default constrains nothing Append writes there, and Decode supplies no
+// value to xs:anyType, so that x decodes as itself; its attributes are read
+// by no clause of cvc-elt 5.
+func (e *encoder) anyTypeFixed(decl xsd.ElementDeclaration, x reflect.Value, path string) {
+	vc, has := decl.ValueConstraint()
+	if !has || vc.Kind() != xsd.ValueFixed {
+		return
+	}
+	if n := x.Field(2).Len(); n > 0 {
+		e.invalidate(fmt.Errorf("codec: Append: %s.Children holds %d, though the fixed {value constraint} %q of %s admits no element child (Structures §3.3.4.3 cvc-elt clause 5.2.2.1)", path, n, vc.LexicalForm(), declSubject(decl)))
+		return
+	}
+	if text := x.Field(1).String(); text != "" && text != vc.LexicalForm() {
+		e.invalidate(fmt.Errorf("codec: Append: %s.Text holds %q, which does not match %q, the {lexical form} of the fixed {value constraint} of %s (Structures §3.3.4.3 cvc-elt clause 5.2.2.2.1)", path, text, vc.LexicalForm(), declSubject(decl)))
+	}
 }
 
 // rawElement writes the element name, held raw at path in hold, rawName
@@ -2809,8 +2935,18 @@ func (e *encoder) rawStartTag(name xsd.QName) (tag, outer string, mark int) {
 // document order (rawAttribute, rawName, governed, rawText), and leaves
 // each such attribute or text, and each element rawName refuses, out of what
 // it writes; an element governed declines is written, so that its content
-// is examined for item 6 too, though Append returns no byte of it.
+// is examined for item 6 too, though Append returns no byte of it. It is
+// rawAttributes, then x's Text (rawText), then rawChildren.
 func (e *encoder) rawContent(x reflect.Value, path string, hold rawHold) int {
+	start := e.rawAttributes(x, path, hold)
+	e.rawText(x.Field(1).String(), path+".Text")
+	e.rawChildren(x, path, hold)
+	return start
+}
+
+// rawAttributes is rawContent's write of x's attributes and the tag's '>',
+// whose offset it returns.
+func (e *encoder) rawAttributes(x reflect.Value, path string, hold rawHold) int {
 	attrs := x.Field(0)
 	for i := range attrs.Len() {
 		a := attrs.Index(i)
@@ -2824,7 +2960,11 @@ func (e *encoder) rawContent(x reflect.Value, path string, hold rawHold) int {
 	}
 	start := len(e.out)
 	e.out = append(e.out, '>')
-	e.rawText(x.Field(1).String(), path+".Text")
+	return start
+}
+
+// rawChildren is rawContent's write of each of x's Children, each followed by its Tail.
+func (e *encoder) rawChildren(x reflect.Value, path string, hold rawHold) {
 	children := x.Field(2)
 	for i := range children.Len() {
 		c := children.Index(i)
@@ -2835,7 +2975,6 @@ func (e *encoder) rawContent(x reflect.Value, path string, hold rawHold) int {
 		}
 		e.rawText(c.Field(1).String(), cpath+".Tail")
 	}
-	return start
 }
 
 // writeRawAttribute appends to the start tag that is open the attribute name
