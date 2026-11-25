@@ -313,13 +313,15 @@
 // bullet states, into the Go type the bullet names where it names one:
 //
 //   - A top-level element declaration, as the document element's, neither
-//     abstract nor nillable, with no {type table} or value constraint, each of
-//     whose {substitution group affiliations} names a top-level element
+//     abstract nor nillable, with no {type table}, with or without a value
+//     constraint, default or fixed, its value written as it is held, which
+//     items 6 and 7 of Append's doc hold to that constraint, each of whose
+//     {substitution group affiliations} names a top-level element
 //     declaration of the schema, each of whose {identity-constraint
 //     definitions} has a {selector} and {fields} icpath compiles, and for a
-//     keyref a {referenced key} whose own it compiles, whose {type definition}
-//     is a simple type that encodes, a complex type that encodes, or
-//     xs:anyType itself.
+//     keyref a {referenced key} whose own it compiles, whose {type
+//     definition} is a simple type that encodes, a complex type that
+//     encodes, or xs:anyType itself.
 //   - A complex type with {abstract} false, no {assertions}, no {attribute
 //     wildcard} and no {open content}, of empty content, of simple content
 //     whose {simple type definition} (Structures §3.4.2.2 dcl.ctd.ctsc) is a
@@ -376,8 +378,10 @@
 //   - xs:anyType itself (Structures §3.4.7), where the bullets above admit
 //     it, into the Go type "# What decodes" states for its declaration, its
 //     content written raw, as below.
-//   - An attribute use other than xsi:nil's, unqualified, with no value
-//     constraint and of a simple type that encodes, into V or *V.
+//   - An attribute use other than xsi:nil's, unqualified, of a simple type
+//     that encodes, with or without a value constraint, into V or *V, its
+//     value written as it is held, never omitted where it equals a default,
+//     which items 6 and 7 of Append's doc hold to a fixed one.
 //   - xs:anySimpleType or xs:anyAtomicType itself (Datatypes §2.4.2
 //     dt-special), into string.
 //   - An atomic simple type whose {primitive type definition} is one the list

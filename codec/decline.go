@@ -157,8 +157,7 @@ type construct uint8
 // document element's declaration's constructs, constructNillable first and
 // constructAbstractElement last, then by its type's as the document element's type does,
 // from constructAbstractType on, a complex type's content and attribute uses examined at
-// the particle; and an attribute use declines by constructValueConstraint after
-// constructQualifiedAttribute. The ones of a simple type, constructEncodePrimitive to
+// the particle. The ones of a simple type, constructEncodePrimitive to
 // constructAssertions, sit after the {assertions}'s, though the document element's, a
 // particle's and an attribute use's simple type declines by them where that declaration
 // or use is examined, and a complex type's simple content, by its {simple type
@@ -171,7 +170,6 @@ const (
 	constructUntrackedModel
 	constructXsiType
 	constructTypeTable
-	constructValueConstraint
 	constructIdentityConstraint
 	constructAbsentAffiliation
 	constructAbstractElement
@@ -189,6 +187,7 @@ const (
 	constructAssertions
 	constructNoCanonical
 	constructQNameSpelling
+	constructValueConstraint
 	constructXsiAttribute
 	constructGovernedContent
 	constructLocallyTypedMatch
@@ -203,7 +202,6 @@ var constructNames = [...]string{
 	constructUntrackedModel:     "a content model the content matcher does not track",
 	constructXsiType:            "an element carrying xsi:type",
 	constructTypeTable:          "an element declaration with a {type table}",
-	constructValueConstraint:    "a value constraint, default or fixed",
 	constructIdentityConstraint: "an identity constraint whose {selector} or {fields}, or whose {referenced key}'s, lie outside the path subset icpath compiles (Structures §3.11.6.2 ·selector subset·, §3.11.6.3 ·field subset·)",
 	constructAbsentAffiliation:  "an element declaration with an ·absent· member of its {substitution group affiliations}",
 	constructAbstractElement:    "an element declaration with {abstract} true",
@@ -221,6 +219,7 @@ var constructNames = [...]string{
 	constructAssertions:         "a simple type with an assertions facet",
 	constructNoCanonical:        "a value with no canonical representation",
 	constructQNameSpelling:      "an xs:QName or xs:NOTATION value with no spelling Append writes where it is written",
+	constructValueConstraint:    "a value whose agreement with its value constraint value.ConstraintMatches does not decide, or an empty element's value its default replaces",
 	constructXsiAttribute:       "an attribute in the XSI namespace held in a wildcard's match or an xs:anyType element's content",
 	constructGovernedContent:    "an element a lax wildcard's match is or holds, or an xs:anyType element's content holds, whose expanded name a top-level element declaration names, or an attribute either holds whose expanded name a top-level attribute declaration names",
 	constructLocallyTypedMatch:  "a lax wildcard's match whose expanded name has a ·locally declared type· in the complex type it is written into",
