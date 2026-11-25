@@ -144,7 +144,7 @@ func ExampleCheckDecode() {
 
 // ExampleCheckAppend runs CheckAppend once at start-up, before any value
 // exists, on README's order.xsd, whose {urn:o}order encodes from
-// order.Order, and on an inline schema's xs:ID element s:i, which
+// order.Order, and on an inline schema's xs:ENTITY element s:i, which
 // CheckDecode accepts for string but Append does not encode.
 func ExampleCheckAppend() {
 	readme := filepath.Join("..", "testdata", "readme")
@@ -155,7 +155,7 @@ func ExampleCheckAppend() {
 	fmt.Println(codec.CheckAppend[order.Order](schema, xsd.QName{Space: "urn:o", Local: "order"}))
 
 	const doc = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" targetNamespace="urn:s">
-  <xs:element name="i" type="xs:ID"/>
+  <xs:element name="i" type="xs:ENTITY"/>
 </xs:schema>`
 	resolve := loader.ResolverFunc(func(_, location string) (io.ReadCloser, string, error) {
 		if location != "s.xsd" {
@@ -180,7 +180,7 @@ func ExampleCheckAppend() {
 	// Output:
 	// <nil>
 	// <nil>
-	// a simple type derived from xs:ID, xs:IDREF or xs:ENTITY
+	// a simple type derived from xs:ENTITY
 }
 
 // ExampleDecode_severalRoots decodes documents of an inline schema's two

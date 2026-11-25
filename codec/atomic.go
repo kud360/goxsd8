@@ -376,19 +376,17 @@ func shownField(v reflect.Value) string {
 // §2.1's note), so that the rejection is item 7 of [Append]'s doc and not item
 // 6, for each primitive as item 7 states it. The other lexical is, for a
 // float32 or float64, any floatRep or doubleRep spelling but for NaN and -INF
-// (soleLexical); for an xs:boolean value 1 or 0 (§3.3.2.2); for an
-// xs:decimal-primitive or duration-primitive one a leading zero; for a
-// dateTime, dateTimeStamp or time one a trailing zero of its seconds; for a
-// date or g* value, one item 7 spells; for an xs:hexBinary value a lower-case
-// hex digit (§3.3.15.2's hexDigit production); and for an xs:base64Binary
-// value a single space between two of its characters (§3.3.16.2's B64
-// production and its note); for an xs:QName or xs:NOTATION value, which
-// has no canonical representation, its Local under a prefix other than
-// spellQName's bound to its Space; and for an xs:precisionDecimal value, v
-// being of atomicPrecisionDecimal's bare type, the decimalValue encoder.held
-// translates the caller's into, any pDecimalRep spelling but for NaN and -INF
-// (decimalValue.otherLexical). An a of a primitive atomicEncodes declines is
-// an internal bug, which panics.
+// (soleLexical); for an xs:boolean value 1 or 0 (§3.3.2.2); for an xs:decimal-primitive
+// or duration-primitive one a leading zero; for a dateTime, dateTimeStamp or time one a
+// trailing zero of its seconds; for a date or g* value, one item 7 spells; for an
+// xs:hexBinary value a lower-case hex digit (§3.3.15.2's hexDigit production); and for
+// an xs:base64Binary value a single space between two of its characters (§3.3.16.2's
+// B64 production and its note); for an xs:QName or xs:NOTATION value, which has no
+// canonical representation, its Local under a prefix other than spellQName's bound to
+// its Space; and for an xs:precisionDecimal value, v being of atomicPrecisionDecimal's
+// bare type, the decimalValue encoder.held translates the caller's into, any
+// pDecimalRep spelling but for NaN and -INF (decimalValue.otherLexical). An a of a
+// primitive encodeWalk.atomicEncodes declines is an internal bug, which panics.
 func (a atomic) otherLexicalOf(v reflect.Value) bool {
 	switch a {
 	case atomicString:

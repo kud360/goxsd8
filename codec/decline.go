@@ -189,7 +189,7 @@ const (
 	constructReservedAttributeUse
 	constructComplexAssertions
 	constructEncodePrimitive
-	constructIDType
+	constructEntityType
 	constructAssertions
 	constructNoCanonical
 	constructQNameSpelling
@@ -221,7 +221,7 @@ var constructNames = [...]string{
 	constructReservedAttributeUse:    "an attribute use whose declaration's {target namespace} is the XSI namespace, other than xsi:schemaLocation's and xsi:noNamespaceSchemaLocation's, or the one the prefix xmlns is bound to",
 	constructComplexAssertions:       "a complex type with {assertions}",
 	constructEncodePrimitive:         "an atomic simple type whose primitive is other than " + displayList(encodedPrimitives),
-	constructIDType:                  "a simple type derived from xs:ID, xs:IDREF or xs:ENTITY",
+	constructEntityType:              "a simple type derived from xs:ENTITY",
 	constructAssertions:              "a simple type with an assertions facet",
 	constructNoCanonical:             "a value with no canonical representation",
 	constructQNameSpelling:           "an xs:QName or xs:NOTATION value with no spelling Append writes where it is written",

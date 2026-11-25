@@ -50,8 +50,12 @@ var ErrInvalidValue = errors.New("codec: Append: a value no valid document holds
 // on backend and under no URI, exactly when an element declaration item 4
 // examines, the document element's or one a particle reaches at any depth, has
 // {identity-constraint definitions} (Structures §3.3.4.3 cvc-elt clause 6,
-// §3.11.4 cvc-identity-constraint), which holds for every value of T or for
-// none, and runs no assessment otherwise: a caller wanting a verdict on such a
+// §3.11.4 cvc-identity-constraint), or when a simple type item 4 examines, an
+// element's, a complex type's simple content's, an attribute's, a list's item
+// type or a union's basic member, is xs:ID, xs:IDREF or a type derived from
+// either (§3.3.4.5 cvc-id, cvc-elt clause 7), whatever variant a union's value
+// holds, each of which holds for every value of T or for none, and runs no
+// assessment otherwise: a caller wanting a verdict on such a
 // document assesses it through package validate, as any document. The package
 // doc's "# What encodes" section states the slice Append encodes and the
 // document it writes. On error Append returns dst unextended, its bytes beyond
@@ -220,8 +224,11 @@ var ErrInvalidValue = errors.New("codec: Append: a value no valid document holds
 //     doc states for it, which errors.Is also reports as [ErrInvalidValue],
 //     each violation charged to the written document, a
 //     cvc-identity-constraint one naming its constraint and the clause it
-//     breaks, 3, 4.1, 4.2.1, 4.2.2 or 4.3. A violation of any other rule is a
-//     fault of Append's, reported so all the same.
+//     breaks, 3, 4.1, 4.2.1, 4.2.2 or 4.3, and a cvc-id one naming the ID and
+//     the clause it breaks, 1, an ID no element is bound to or an IDREF no ID
+//     matches, or 2, an ID bound to more than one element (§3.17.5.2 sic-id).
+//     A violation of any other rule is a fault of Append's, reported so all
+//     the same.
 //  9. An assessed document validate leaves undecided: the error item 4 of
 //     [Decode]'s doc states for it.
 //
@@ -1060,40 +1067,41 @@ func (g groupReader) writeElement(e *encoder, head xsd.ElementDeclaration, v ref
 // first construct of decl, the document element's declaration, outside the
 // slice the package doc's "# What encodes" states, in the order the construct
 // constants list, or a plain error for a component that does not resolve, and
-// otherwise nil: encodeWalk.element's for decl. With nil it returns whether
-// an element declaration the pass examined has {identity-constraint
-// definitions}, which is when Append assesses what it writes (items 8 and 9).
+// otherwise nil: encodeWalk.element's for decl. With nil it returns
+// encodeWalk.assess, whether Append assesses what it writes (items 8 and 9).
 // It reads the schema alone, never the binder, and builds nothing.
 func elementEncodes(schema *xsd.Schema, decl xsd.ElementDeclaration) (bool, error) {
 	w := &encodeWalk{schema: schema, walked: map[unitKey]bool{}}
 	if err := w.element(decl); err != nil {
 		return false, err
 	}
-	return w.identity, nil
+	return w.assess, nil
 }
 
 // encodeWalk is one pass of elementEncodes: schema; walked, the complex types
 // whose constructs it has examined or is examining, each under the key
-// Decode's bind indexes its unit by (nestedKey); and identity, whether a
-// declaration it examined has {identity-constraint definitions}
-// (encodeWalk.declEncodes). An entry is stored before its type's content is
-// examined, so that a later reach of the key, a recursive one included,
-// examines nothing again: the first reach answers for the type, and every
-// other component it reaches carries no key of its own only where it lies
-// inside that type (bindRun). walked lives for one pass only and is a lookup
-// index never iterated (STYLE D2); an entry left by a pass that declines is
-// never read, since the decline ends the pass.
+// Decode's bind indexes its unit by (nestedKey); and assess, whether Append
+// assesses what it writes, set where an element declaration the pass examined
+// has {identity-constraint definitions} (encodeWalk.declEncodes) or a simple
+// type it examined is derived from xs:ID or xs:IDREF (encodeWalk.atomicEncodes),
+// and never cleared, so that a type walked answers for its second reach too. An
+// entry is stored before its type's content is examined, so that a later reach of
+// the key, a recursive one included, examines nothing again: the first reach
+// answers for the type, and every other component it reaches carries no key of its
+// own only where it lies inside that type (bindRun). walked lives for one pass only
+// and is a lookup index never iterated (STYLE D2); an entry left by a pass that
+// declines is never read, since the decline ends the pass.
 type encodeWalk struct {
-	schema   *xsd.Schema
-	walked   map[unitKey]bool
-	identity bool
+	schema *xsd.Schema
+	walked map[unitKey]bool
+	assess bool
 }
 
 // element returns elementEncodes' error for decl, the document element's
 // declaration or a particle's element declaration, examined at every reach:
 // decl's own properties (encodeWalk.declEncodes), then its {type definition},
 // which encodes as xs:anyType itself, its content written raw (rawContent's write),
-// is examined as a simple type (simpleEncodes) or, for a complex type,
+// is examined as a simple type (encodeWalk.simpleEncodes) or, for a complex type,
 // declines by its {abstract} true, and else is examined by complexEncodes,
 // unless walked already holds its key. complexEncodes and the functions under
 // it read decl only to name a decline's subject, so that a type reached again
@@ -1110,7 +1118,7 @@ func (w *encodeWalk) element(decl xsd.ElementDeclaration) error {
 		return nil
 	}
 	if st, isSimple := td.(*xsd.SimpleType); isSimple {
-		return simpleEncodes(w.schema, st, declSubject(decl))
+		return w.simpleEncodes(st, declSubject(decl))
 	}
 	ct, _ := td.(xsd.ComplexType)
 	if ct.Abstract() {
@@ -1136,7 +1144,7 @@ func (w *encodeWalk) element(decl xsd.ElementDeclaration) error {
 // clause 2): the document element's is item 3 of [Append]'s doc, found before
 // declEncodes runs, so that only a particle's declines so, one the parser
 // never builds but xsd.NewElementDeclaration does. A decl whose
-// {identity-constraint definitions} it admits sets w.identity.
+// {identity-constraint definitions} it admits sets w.assess.
 func (w *encodeWalk) declEncodes(decl xsd.ElementDeclaration) error {
 	if goshape.Nillable(decl) {
 		return encodeDecline(constructNillable, declSubject(decl))
@@ -1148,7 +1156,7 @@ func (w *encodeWalk) declEncodes(decl xsd.ElementDeclaration) error {
 		if err := w.identityEncodes(decl, ic); err != nil {
 			return err
 		}
-		w.identity = true
+		w.assess = true
 	}
 	for _, head := range decl.SubstitutionGroupAffiliationNames() {
 		if _, ok := w.schema.Element(head); !ok {
@@ -1203,7 +1211,7 @@ func pathsCompile(ic xsd.IdentityConstraint) (string, bool) {
 
 // complexEncodes returns elementEncodes' error for decl, whose {type
 // definition} is the complex type ct: ct's content, for simple content its
-// {simple type definition} as typeEncodes examines it, named after ct as
+// {simple type definition} as encodeWalk.typeEncodes examines it, named after ct as
 // Decode's simpleValueOf names it (contentSubject), and for element-only or
 // mixed content its content {particle}, {max occurs} 0 declined before its
 // hold is asked (#3794), then each particle in order, of a flattened one
@@ -1217,7 +1225,7 @@ func (w *encodeWalk) complexEncodes(decl xsd.ElementDeclaration, ct xsd.ComplexT
 	// exception.
 	switch content := ct.ContentType().(type) {
 	case xsd.SimpleContent:
-		if err := typeEncodes(w.schema, content.SimpleType, contentSubject(subject, content.SimpleType)); err != nil {
+		if err := w.typeEncodes(content.SimpleType, contentSubject(subject, content.SimpleType)); err != nil {
 			return err
 		}
 	case xsd.ElementContent:
@@ -1226,7 +1234,7 @@ func (w *encodeWalk) complexEncodes(decl xsd.ElementDeclaration, ct xsd.ComplexT
 		}
 	}
 	for _, u := range goshape.FieldAttributeUses(ct) {
-		if err := attributeEncodes(w.schema, u); err != nil {
+		if err := w.attributeEncodes(u); err != nil {
 			return err
 		}
 	}
@@ -1521,8 +1529,8 @@ func (w *encodeWalk) particleEncodes(p xsd.Particle, subject string, site partic
 // (an xsi:type it never holds to Structures §3.3.4.3 cvc-elt clause 4), or
 // xmlnsNamespace, which no prefix declaredPrefix declares may be bound to
 // (Namespaces in XML §3), then its simple type.
-func attributeEncodes(schema *xsd.Schema, u xsd.AttributeUse) error {
-	decl, ok := schema.ResolvedAttributeDeclaration(u)
+func (w *encodeWalk) attributeEncodes(u xsd.AttributeUse) error {
+	decl, ok := w.schema.ResolvedAttributeDeclaration(u)
 	if !ok {
 		return fmt.Errorf("codec: the {attribute declaration} of attribute use %s does not resolve", u.DeclarationName().Display())
 	}
@@ -1530,18 +1538,20 @@ func attributeEncodes(schema *xsd.Schema, u xsd.AttributeUse) error {
 	if space := decl.Name().Space; space == xsd.XMLSchemaInstanceNS && !locationHint(decl.Name()) || space == xmlnsNamespace {
 		return encodeDecline(constructReservedAttributeUse, subject)
 	}
-	st, ok := schema.ResolvedSimpleType(decl.TypeDefinition())
+	st, ok := w.schema.ResolvedSimpleType(decl.TypeDefinition())
 	if !ok {
 		return fmt.Errorf("codec: the {type definition} of %s does not resolve", subject)
 	}
-	return simpleEncodes(schema, st, subject)
+	return w.simpleEncodes(st, subject)
 }
 
-// The expanded names simpleEncodes reads a simple type's primitive and base
-// chain by, with booleanName: encodedPrimitives, the one encoding of the
-// primitives an atomic type that encodes has (atomicEncodes), in the order of
-// Datatypes §3.3 and then xs:precisionDecimal, which §3.3 does not list, the
-// order constructEncodePrimitive's name lists them in; and idNames.
+// The expanded names encodeWalk.simpleEncodes reads a simple type's primitive
+// and base chain by, with booleanName: encodedPrimitives, the one encoding of
+// the primitives an atomic type that encodes has (encodeWalk.atomicEncodes),
+// in the order of Datatypes §3.3 and then xs:precisionDecimal, which §3.3 does
+// not list, the order constructEncodePrimitive's name lists them in;
+// idNames, the types a type derived from sets encodeWalk.assess; and
+// entityName, the one a type derived from declines.
 var (
 	stringName        = xsd.QName{Space: xsd.XMLSchemaNS, Local: "string"}
 	doubleName        = xsd.QName{Space: xsd.XMLSchemaNS, Local: "double"}
@@ -1571,8 +1581,8 @@ var (
 	idNames = []xsd.QName{
 		{Space: xsd.XMLSchemaNS, Local: "ID"},
 		{Space: xsd.XMLSchemaNS, Local: "IDREF"},
-		{Space: xsd.XMLSchemaNS, Local: "ENTITY"},
 	}
+	entityName = xsd.QName{Space: xsd.XMLSchemaNS, Local: "ENTITY"}
 )
 
 // simpleEncodes returns nil where the simple type st, the type of the
@@ -1585,56 +1595,59 @@ var (
 // nil; for any other atomic or union st, atomicEncodes's. An error reading
 // st is returned as is, and a list with no {item type definition} is a plain
 // error.
-func simpleEncodes(r xsd.TypeResolver, st *xsd.SimpleType, owner string) error {
-	return typeEncodes(r, st, simpleSubject(st, owner))
+func (w *encodeWalk) simpleEncodes(st *xsd.SimpleType, owner string) error {
+	return w.typeEncodes(st, simpleSubject(st, owner))
 }
 
 // typeEncodes is simpleEncodes for st, subject naming it already: a
 // declaration's type as simpleSubject names it, a complex type's {content
 // type}'s {simple type definition} as contentSubject names it after that type
 // (complexEncodes), or a union's basic member as memberSubject names it after
-// its union (unionEncodes).
-func typeEncodes(r xsd.TypeResolver, st *xsd.SimpleType, subject string) error {
+// its union (encodeWalk.unionEncodes).
+func (w *encodeWalk) typeEncodes(st *xsd.SimpleType, subject string) error {
 	if st.IsSpecial() {
 		return nil
 	}
-	variety, err := st.Variety(r)
+	variety, err := st.Variety(w.schema)
 	if err != nil {
 		return err
 	}
 	if _, isList := variety.(xsd.List); !isList {
-		return atomicEncodes(r, st, subject)
+		return w.atomicEncodes(st, subject)
 	}
-	item, err := st.Item(r)
+	item, err := st.Item(w.schema)
 	if err != nil {
 		return err
 	}
 	if item == nil {
 		return fmt.Errorf("codec: the list type %s has no {item type definition}", subject)
 	}
-	if err := atomicEncodes(r, item, itemSubject(subject, item)); err != nil {
+	if err := w.atomicEncodes(item, itemSubject(subject, item)); err != nil {
 		return err
 	}
-	return assertionsDecline(r, st, subject)
+	return assertionsDecline(w.schema, st, subject)
 }
 
 // atomicEncodes returns nil where st, an atomic or union simple type subject
 // names, a list's {item type definition} among them, which cos-st-restricts
 // clause 2.1 holds to one of those two, encodes, and otherwise the decline
-// of the first construct it finds: for a union, unionEncodes's, and for an
-// atomic type a primitive not in encodedPrimitives, a type on whose {base
-// type definition} chain xs:ID, xs:IDREF or xs:ENTITY lies, then an
-// assertions facet among its effective facets, its own or inherited. An error
-// reading st is returned as is.
-func atomicEncodes(r xsd.TypeResolver, st *xsd.SimpleType, subject string) error {
-	variety, err := st.Variety(r)
+// of the first construct it finds: for a union, encodeWalk.unionEncodes's,
+// and for an atomic type a primitive not in encodedPrimitives, a type on
+// whose {base type definition} chain xs:ENTITY lies, then an assertions facet
+// among its effective facets, its own or inherited. A type on whose chain
+// xs:ID or xs:IDREF lies sets w.assess, the cvc-id condition of [Append]'s
+// doc: a list over one, xs:IDREFS among them, reaches here as its item, and
+// a union as each of its basic members. An error reading st is returned as
+// is.
+func (w *encodeWalk) atomicEncodes(st *xsd.SimpleType, subject string) error {
+	variety, err := st.Variety(w.schema)
 	if err != nil {
 		return err
 	}
 	if _, isUnion := variety.(xsd.Union); isUnion {
-		return unionEncodes(r, st, subject)
+		return w.unionEncodes(st, subject)
 	}
-	primitive, err := st.Primitive(r)
+	primitive, err := st.Primitive(w.schema)
 	if err != nil {
 		return err
 	}
@@ -1642,17 +1655,18 @@ func atomicEncodes(r xsd.TypeResolver, st *xsd.SimpleType, subject string) error
 		return encodeDecline(constructEncodePrimitive, subject)
 	}
 	for step := st; step != nil; {
-		for _, id := range idNames {
-			if step.Name() == id {
-				return encodeDecline(constructIDType, fmt.Sprintf("%s, derived from %s", subject, id.Display()))
-			}
+		if step.Name() == entityName {
+			return encodeDecline(constructEntityType, subject)
 		}
-		step, err = step.Base(r)
+		if slices.Contains(idNames, step.Name()) {
+			w.assess = true
+		}
+		step, err = step.Base(w.schema)
 		if err != nil {
 			return err
 		}
 	}
-	return assertionsDecline(r, st, subject)
+	return assertionsDecline(w.schema, st, subject)
 }
 
 // unionEncodes returns atomicEncodes's answer for st, a union simple type
@@ -1661,17 +1675,17 @@ func atomicEncodes(r xsd.TypeResolver, st *xsd.SimpleType, subject string) error
 // naming the member after subject (memberSubject), as Decode's unionDecline
 // examines them; then unionAssertionsDecline's for st. An error reading st is
 // returned as is.
-func unionEncodes(r xsd.TypeResolver, st *xsd.SimpleType, subject string) error {
-	basic, err := goshape.BasicMembers(r, st)
+func (w *encodeWalk) unionEncodes(st *xsd.SimpleType, subject string) error {
+	basic, err := goshape.BasicMembers(w.schema, st)
 	if err != nil {
 		return err
 	}
 	for _, m := range basic {
-		if err := typeEncodes(r, m, memberSubject(subject, m)); err != nil {
+		if err := w.typeEncodes(m, memberSubject(subject, m)); err != nil {
 			return err
 		}
 	}
-	return unionAssertionsDecline(r, st, subject)
+	return unionAssertionsDecline(w.schema, st, subject)
 }
 
 // unionAssertionsDecline returns constructAssertions's decline for the first
@@ -2511,7 +2525,7 @@ func (e *encoder) primitiveMapping(st *xsd.SimpleType, path, subject string) (va
 		return value.Mapping{}, xsd.QName{}, fmt.Errorf("codec: Append: %s, of %s: %w", path, subject, err)
 	}
 	if primitive == nil {
-		// atomicEncodes declines a type with no {primitive type definition}.
+		// encodeWalk.atomicEncodes declines a type with no {primitive type definition}.
 		return value.Mapping{}, xsd.QName{}, fmt.Errorf("codec: Append: %s, of %s: the type has no {primitive type definition}", path, subject)
 	}
 	pm, has := e.backend.Mapping(primitive.Name())
@@ -3296,7 +3310,7 @@ func appendEscaped(dst []byte, s string, attr bool) []byte {
 // decides no {test}. No call reaches it, since a simple type with an
 // assertions facet, a union's basic member or member union at any depth
 // among them, declines before any value is read (constructAssertions,
-// unionEncodes).
+// encodeWalk.unionEncodes).
 type noAssertions struct{}
 
 // Evaluate declines every {test}.

@@ -812,24 +812,24 @@ func TestAppendPlainErrors(t *testing.T) {
 }
 
 // TestCheckAppend pins CheckAppend's answers by Append's items: a plain
-// error for a nil schema; item 4's decline for an xs:ID declaration and T
+// error for a nil schema; item 4's decline for an xs:ENTITY declaration and T
 // string, which CheckDecode accepts; nil for an xs:precisionDecimal
 // declaration and T its datatype struct under WithPrecisionDecimalArms, and
 // item 5's ErrTypeMismatch with none; nil for an xs:float declaration and T
 // float32; nil for README's order.xsd and order.Order, whose zero value
 // Append refuses by item 6, and item 5's ErrTypeMismatch for *order.Order;
 // item 2's and item 3's plain errors; and item 3 before item 4 on an
-// abstract xs:ID declaration. appendChecked holds each answer to Append's.
+// abstract xs:ENTITY declaration. appendChecked holds each answer to Append's.
 func TestCheckAppend(t *testing.T) {
-	schema := schemaOf(t, `<xs:element name="i" type="xs:ID"/><xs:element name="abs" type="xs:string" abstract="true"/>`+
-		`<xs:element name="absb" type="xs:ID" abstract="true"/><xs:element name="f" type="xs:float"/><xs:element name="pd" type="xs:precisionDecimal"/>`)
+	schema := schemaOf(t, `<xs:element name="i" type="xs:ENTITY"/><xs:element name="abs" type="xs:string" abstract="true"/>`+
+		`<xs:element name="absb" type="xs:ENTITY" abstract="true"/><xs:element name="f" type="xs:float"/><xs:element name="pd" type="xs:precisionDecimal"/>`)
 	plainError(t, CheckAppend[string](nil, sname("i")), "codec: CheckAppend: nil *xsd.Schema")
 
 	if err := CheckDecode[string](schema, sname("i")); err != nil {
 		t.Fatalf("CheckDecode[string] = %v, want nil", err)
 	}
 	err := CheckAppend[string](schema, sname("i"))
-	_ = asDecline(t, err, "codec does not encode a simple type derived from xs:ID, xs:IDREF or xs:ENTITY: ")
+	_ = asDecline(t, err, "codec does not encode a simple type derived from xs:ENTITY: ")
 	_, _ = appendChecked(t, nil, schema, strict.New(), sname("i"), "x")
 	if err := CheckAppend[tPrecisionDecimal](schema, sname("pd"), pdArms); err != nil {
 		t.Errorf("CheckAppend[tPrecisionDecimal] = %v, want nil", err)
@@ -1200,6 +1200,9 @@ const identityName = "an identity constraint whose {selector} or {fields}, or wh
 // absentAffiliationName is constructAbsentAffiliation's name.
 const absentAffiliationName = "an element declaration with an ·absent· member of its {substitution group affiliations}"
 
+// entityTypeName is constructEntityType's name.
+const entityTypeName = "a simple type derived from xs:ENTITY"
+
 // TestAppendDeclines pins item 4 of Append's doc for each construct of the
 // closed set it declines: each row's two declarations, r and q, decline with
 // equal Constructs, named by the opening of the decline's text, and rows of
@@ -1253,8 +1256,8 @@ func TestAppendDeclines(t *testing.T) {
 		{"anyType particle identity constraint", identityName, sequence(`<xs:element name="a"><xs:unique name="u%[1]s"><xs:selector xpath="."/><xs:field xpath="..[1]"/></xs:unique></xs:element>`)},
 		{"abstract type", "an element declaration whose {type definition} is a complex type with {abstract} true", abstractType},
 		{"abstract particle type", "an element declaration whose {type definition} is a complex type with {abstract} true", `<xs:complexType name="ab%[1]s" abstract="true"/>` + sequence(`<xs:element name="a" type="s:ab%[1]s"/>`)},
-		{"simple content", "a simple type derived from xs:ID, xs:IDREF or xs:ENTITY", complexOf(`<xs:simpleContent><xs:extension base="xs:ID"/></xs:simpleContent>`)},
-		{"simple content before attribute uses", "a simple type derived from xs:ID, xs:IDREF or xs:ENTITY", complexOf(`<xs:simpleContent><xs:extension base="xs:ID"><xs:attribute name="a" type="xs:string" form="qualified"/></xs:extension></xs:simpleContent>`)},
+		{"simple content", entityTypeName, complexOf(`<xs:simpleContent><xs:extension base="xs:ENTITY"/></xs:simpleContent>`)},
+		{"simple content before attribute uses", entityTypeName, complexOf(`<xs:simpleContent><xs:extension base="xs:ENTITY"><xs:attribute name="a" type="xs:string" form="qualified"/></xs:extension></xs:simpleContent>`)},
 		{"mixed", "a complex type with mixed content", `<xs:element name="%[1]s"><xs:complexType mixed="true"><xs:sequence>` + a + `</xs:sequence></xs:complexType></xs:element>`},
 		{"open content", "an {open content}", complexOf(`<xs:openContent><xs:any namespace="##other" processContents="lax"/></xs:openContent><xs:sequence>` + a + `</xs:sequence>`)},
 		{"all group", "an all group", complexOf(`<xs:all>` + a + `</xs:all>`)},
@@ -1274,7 +1277,7 @@ func TestAppendDeclines(t *testing.T) {
 		{"nested flattened untracked", "a content model the content matcher does not track", sequence(a + `<xs:sequence maxOccurs="21845"><xs:element name="c" type="xs:string" maxOccurs="2"/></xs:sequence>`)},
 		{"strict wildcard", "a wildcard particle with {process contents} strict", sequence(`<xs:any/>`)},
 		{"ref type table", "an element declaration with a {type table}", `<xs:element name="x%[1]s" type="xs:string"><xs:alternative test="@a" type="xs:token"/></xs:element>` + sequence(`<xs:element ref="s:x%[1]s"/>`)},
-		{"ref simple content", "a simple type derived from xs:ID, xs:IDREF or xs:ENTITY", `<xs:element name="x%[1]s"><xs:complexType><xs:simpleContent><xs:extension base="xs:ID"/></xs:simpleContent></xs:complexType></xs:element>` +
+		{"ref simple content", entityTypeName, `<xs:element name="x%[1]s"><xs:complexType><xs:simpleContent><xs:extension base="xs:ENTITY"/></xs:simpleContent></xs:complexType></xs:element>` +
 			sequence(`<xs:element ref="s:x%[1]s"/>`)},
 		{"complex particle", "a wildcard particle with {process contents} strict", sequence(`<xs:element name="a"><xs:complexType><xs:sequence><xs:any/></xs:sequence></xs:complexType></xs:element>`)},
 		{"particle type sharing its element's name", "a wildcard particle with {process contents} strict", `<xs:complexType name="%[1]s"><xs:sequence><xs:any/></xs:sequence></xs:complexType>` +
@@ -1284,21 +1287,21 @@ func TestAppendDeclines(t *testing.T) {
 		{"restricted complex assertions", "a complex type with {assertions}", `<xs:complexType name="ab%[1]s">` + asserted + `</xs:complexType>` +
 			`<xs:element name="%[1]s"><xs:complexType><xs:complexContent><xs:restriction base="s:ab%[1]s"><xs:sequence>` + a + `</xs:sequence></xs:restriction></xs:complexContent></xs:complexType></xs:element>`},
 		{"list of a minted primitive", encodePrimitiveName, simpleOf(`<xs:list itemType="s:money"/>`)},
-		{"list of union of an ID member", "a simple type derived from xs:ID, xs:IDREF or xs:ENTITY", simpleOf(`<xs:list><xs:simpleType><xs:union memberTypes="xs:int xs:IDREF"/></xs:simpleType></xs:list>`)},
-		{"IDREFS", "a simple type derived from xs:ID, xs:IDREF or xs:ENTITY", `<xs:element name="%[1]s" type="xs:IDREFS"/>`},
+		{"list of union of an ENTITY member", entityTypeName, simpleOf(`<xs:list><xs:simpleType><xs:union memberTypes="xs:int xs:ENTITY"/></xs:simpleType></xs:list>`)},
+		{"ENTITIES", entityTypeName, `<xs:element name="%[1]s" type="xs:ENTITIES"/>`},
 		{"list assertions", "a simple type with an assertions facet", simpleOf(`<xs:restriction base="xs:NMTOKENS"><xs:assertion test="true()"/></xs:restriction>`)},
 		{"inherited list assertions", "a simple type with an assertions facet", `<xs:simpleType name="assertedList%[1]s"><xs:restriction base="xs:NMTOKENS"><xs:assertion test="true()"/></xs:restriction></xs:simpleType>` + simpleOf(`<xs:restriction base="s:assertedList%[1]s"><xs:maxLength value="3"/></xs:restriction>`)},
 		{"list item assertions", "a simple type with an assertions facet", `<xs:simpleType name="assertedItem%[1]s"><xs:restriction base="xs:string"><xs:assertion test="true()"/></xs:restriction></xs:simpleType>` + simpleOf(`<xs:list itemType="s:assertedItem%[1]s"/>`)},
-		{"union of an ID member", "a simple type derived from xs:ID, xs:IDREF or xs:ENTITY", simpleOf(`<xs:union memberTypes="xs:int xs:ID"/>`)},
+		{"union of an ENTITY member", entityTypeName, simpleOf(`<xs:union memberTypes="xs:int xs:ENTITY"/>`)},
 		{"union of a minted member", encodePrimitiveName, simpleOf(`<xs:union memberTypes="xs:int s:money"/>`)},
 		{"union assertions", "a simple type with an assertions facet", simpleOf(`<xs:restriction><xs:simpleType><xs:union memberTypes="xs:int xs:date"/></xs:simpleType><xs:assertion test="true()"/></xs:restriction>`)},
 		{"member union assertions", "a simple type with an assertions facet", `<xs:simpleType name="assertedUnion%[1]s"><xs:restriction><xs:simpleType><xs:union memberTypes="xs:int"/></xs:simpleType><xs:assertion test="true()"/></xs:restriction></xs:simpleType>` +
 			simpleOf(`<xs:union memberTypes="s:assertedUnion%[1]s xs:date"/>`)},
 		{"minted primitive", encodePrimitiveName, `<xs:element name="%[1]s" type="s:money"/>`},
 		{"minted primitive attribute", encodePrimitiveName, complexOf(`<xs:attribute name="a" type="s:money"/>`)},
-		{"ID", "a simple type derived from xs:ID, xs:IDREF or xs:ENTITY", `<xs:element name="%[1]s" type="xs:ID"/>`},
-		{"IDREF particle", "a simple type derived from xs:ID, xs:IDREF or xs:ENTITY", sequence(`<xs:element name="a" type="xs:IDREF"/>`)},
-		{"ENTITY restriction", "a simple type derived from xs:ID, xs:IDREF or xs:ENTITY", simpleOf(`<xs:restriction base="xs:ENTITY"/>`)},
+		{"ENTITY", entityTypeName, `<xs:element name="%[1]s" type="xs:ENTITY"/>`},
+		{"ENTITY particle", entityTypeName, sequence(`<xs:element name="a" type="xs:ENTITY"/>`)},
+		{"ENTITY restriction", entityTypeName, simpleOf(`<xs:restriction base="xs:ENTITY"/>`)},
 		{"assertions", "a simple type with an assertions facet", simpleOf(`<xs:restriction base="xs:string"><xs:assertion test="true()"/></xs:restriction>`)},
 		{"decimal assertions", "a simple type with an assertions facet", simpleOf(`<xs:restriction base="xs:decimal"><xs:assertion test="true()"/></xs:restriction>`)},
 		{"boolean assertions", "a simple type with an assertions facet", simpleOf(`<xs:restriction base="xs:boolean"><xs:assertion test="true()"/></xs:restriction>`)},
@@ -1644,16 +1647,16 @@ func TestAppendListInvalid(t *testing.T) {
 // list type, then its {item type definition}, by its QName where it has one
 // and its schema Loc where it is located.
 func TestAppendListDeclineSubject(t *testing.T) {
-	schema := schemaOf(t, `<xs:element name="flt"><xs:simpleType><xs:list itemType="xs:ID"/></xs:simpleType></xs:element>`+
-		`<xs:simpleType name="dates"><xs:list><xs:simpleType><xs:restriction base="xs:ID"/></xs:simpleType></xs:list></xs:simpleType>`+
+	schema := schemaOf(t, `<xs:element name="flt"><xs:simpleType><xs:list itemType="xs:ENTITY"/></xs:simpleType></xs:element>`+
+		`<xs:simpleType name="dates"><xs:list><xs:simpleType><xs:restriction base="xs:ENTITY"/></xs:simpleType></xs:list></xs:simpleType>`+
 		`<xs:element name="anon" type="s:dates"/>`)
 	err := CheckAppend[strList](schema, sname("flt"))
-	_ = asDecline(t, err, "codec does not encode a simple type derived from xs:ID, xs:IDREF or xs:ENTITY: simple type the anonymous simple type of element {urn:s}flt declared at s.xsd:1:")
-	if !strings.Contains(err.Error(), ", through the list type's {item type definition} xs:ID, derived from xs:ID; ") {
-		t.Errorf("decline %q does not name the item xs:ID", err)
+	_ = asDecline(t, err, "codec does not encode a simple type derived from xs:ENTITY: simple type the anonymous simple type of element {urn:s}flt declared at s.xsd:1:")
+	if !strings.Contains(err.Error(), ", through the list type's {item type definition} xs:ENTITY; ") {
+		t.Errorf("decline %q does not name the item xs:ENTITY", err)
 	}
 	err = CheckAppend[strList](schema, sname("anon"))
-	_ = asDecline(t, err, "codec does not encode a simple type derived from xs:ID, xs:IDREF or xs:ENTITY: simple type {urn:s}dates defined at s.xsd:1:")
+	_ = asDecline(t, err, "codec does not encode a simple type derived from xs:ENTITY: simple type {urn:s}dates defined at s.xsd:1:")
 	if !strings.Contains(err.Error(), ", through the list type's anonymous {item type definition}, a type defined at s.xsd:1:") {
 		t.Errorf("decline %q does not name the anonymous item by its Loc", err)
 	}
@@ -3567,12 +3570,12 @@ func TestAppendUnionNoCanonical(t *testing.T) {
 // does, and a member union's assertions facet names that union, which
 // goshape.BasicMembers flattens away.
 func TestAppendUnionDeclineSubject(t *testing.T) {
-	schema := schemaOf(t, `<xs:element name="id"><xs:simpleType><xs:union memberTypes="xs:int xs:ID"/></xs:simpleType></xs:element>
+	schema := schemaOf(t, `<xs:element name="id"><xs:simpleType><xs:union memberTypes="xs:int xs:ENTITY"/></xs:simpleType></xs:element>
 <xs:simpleType name="asserted"><xs:restriction><xs:simpleType><xs:union memberTypes="xs:int"/></xs:simpleType><xs:assertion test="true()"/></xs:restriction></xs:simpleType>
 <xs:element name="mu"><xs:simpleType><xs:union memberTypes="s:asserted xs:date"/></xs:simpleType></xs:element>`)
 	err := CheckAppend[unionU](schema, sname("id"))
-	_ = asDecline(t, err, "codec does not encode a simple type derived from xs:ID, xs:IDREF or xs:ENTITY: simple type the anonymous simple type of element {urn:s}id declared at s.xsd:")
-	holds(t, err, ", through the union's basic member xs:ID, derived from xs:ID;")
+	_ = asDecline(t, err, "codec does not encode a simple type derived from xs:ENTITY: simple type the anonymous simple type of element {urn:s}id declared at s.xsd:")
+	holds(t, err, ", through the union's basic member xs:ENTITY;")
 	err = CheckAppend[unionU](schema, sname("mu"))
 	_ = asDecline(t, err, "codec does not encode a simple type with an assertions facet: simple type the anonymous simple type of element {urn:s}mu declared at s.xsd:")
 	holds(t, err, ", through the union's member union {urn:s}asserted, a type defined at s.xsd:")
@@ -4475,11 +4478,11 @@ func TestAppendSimpleContentInvalid(t *testing.T) {
 // TestAppendSimpleContentDeclineText pins the message of a decline of simple
 // content's {simple type definition}, named after the complex type it is the
 // {content type} of, as TestDeclineErrorTextSimpleContent pins CheckDecode's:
-// for a named one, xs:ID an extension's base, and for the anonymous one a
+// for a named one, xs:ENTITY an extension's base, and for the anonymous one a
 // restriction carrying an assertions facet gives.
 func TestAppendSimpleContentDeclineText(t *testing.T) {
-	named := schemaOf(t, root(`<xs:simpleContent><xs:extension base="xs:ID"><xs:attribute name="k" type="xs:string"/></xs:extension></xs:simpleContent>`))
-	const wantNamed = "codec does not encode a simple type derived from xs:ID, xs:IDREF or xs:ENTITY: the {type definition} of element {urn:s}r declared at s.xsd:1:181, a type defined at s.xsd:1:202, through its {content type}'s {simple type definition} xs:ID, derived from xs:ID; an encoder refusal, not a schema or value fault"
+	named := schemaOf(t, root(`<xs:simpleContent><xs:extension base="xs:ENTITY"><xs:attribute name="k" type="xs:string"/></xs:extension></xs:simpleContent>`))
+	const wantNamed = "codec does not encode a simple type derived from xs:ENTITY: the {type definition} of element {urn:s}r declared at s.xsd:1:181, a type defined at s.xsd:1:202, through its {content type}'s {simple type definition} xs:ENTITY; an encoder refusal, not a schema or value fault"
 	if err := CheckAppend[struct{}](named, rootName); err == nil || err.Error() != wantNamed {
 		t.Errorf("CheckAppend = %v, want %q", err, wantNamed)
 	}
