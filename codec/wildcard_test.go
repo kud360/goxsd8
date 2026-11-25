@@ -464,6 +464,14 @@ func TestDecodeWildcardTypeMismatch(t *testing.T) {
 			A   string
 			Any otherBack
 		}](), "Any codec.otherBack"},
+		{"an AnyType with no Namespaces", into[struct {
+			A   string
+			Any noNamespacesElement
+		}](), "Any codec.noNamespacesElement"},
+		{"a Namespaces whose Prefix is an int", into[struct {
+			A   string
+			Any intPrefixElement
+		}](), "Any codec.intPrefixElement"},
 	}
 	pick := schemaOf(t, pickWildSchema)
 	_, err := Decode[pickWild](pick, strict.New(), instanceOf("", `<s:a>x</s:a>`), WithBranches[pickWild](pickWildA{}, pickWildOther{}))
@@ -502,6 +510,43 @@ type (
 )
 
 func (pickWildOther) isPickWild() {}
+
+// noNamespacesElement is of anyElement's shape over an AnyType with no
+// Namespaces, the shape codegen emitted before AnyNamespace, and
+// intPrefixElement over one whose Namespaces' Prefix is an int; each is
+// TestDecodeWildcardTypeMismatch's mismatch.
+type (
+	noNamespacesElement struct {
+		Space, Local string
+		Content      noNamespacesType
+	}
+	noNamespacesType struct {
+		Attributes []anyAttribute
+		Text       string
+		Children   []noNamespacesChild
+	}
+	noNamespacesChild struct {
+		Element noNamespacesElement
+		Tail    string
+	}
+	intPrefixElement struct {
+		Space, Local string
+		Content      intPrefixType
+	}
+	intPrefixType struct {
+		Attributes []anyAttribute
+		Namespaces []struct {
+			Prefix int
+			Space  string
+		}
+		Text     string
+		Children []intPrefixChild
+	}
+	intPrefixChild struct {
+		Element intPrefixElement
+		Tail    string
+	}
+)
 
 // The wildcard-tie schemas, each declaring s:r of a choice of a wildcard
 // alternative and another alternative whose branch word is any too and
