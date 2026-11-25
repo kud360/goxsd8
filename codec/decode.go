@@ -5977,6 +5977,20 @@ func instanceAttribute(n xsd.QName) bool {
 	return false
 }
 
+// locationHint reports whether n is the expanded name of xsi:schemaLocation
+// or xsi:noNamespaceSchemaLocation, the two schema location hints (Structures
+// §2.7.3), whose built-in declarations admit every value of XML 1.0 Chars:
+// their types are a list of xs:anyURI, {facets} absent, and xs:anyURI, whose
+// lexical space is every Char sequence (§3.2.7.3, §3.2.7.4; Datatypes
+// §3.3.17.2), and neither has a {value constraint} (cvc-attribute clauses 3
+// and 4).
+func locationHint(n xsd.QName) bool {
+	if n.Space != xsd.XMLSchemaInstanceNS {
+		return false
+	}
+	return n.Local == "schemaLocation" || n.Local == "noNamespaceSchemaLocation"
+}
+
 // checkDeclaredXsiType returns checkXsiType's decline for the element start,
 // whose governing element declaration is decl, unless decl admits its
 // xsi:type (admitsXsiType).
