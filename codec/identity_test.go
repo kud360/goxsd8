@@ -168,3 +168,45 @@ func TestAppendIdentityViolation(t *testing.T) {
 		})
 	}
 }
+
+// laxFieldSchema declares, in urn:s, r, whose a elements, of xs:anyType, hold
+// a unique lu on their no-namespace b children. Such a b, laxly assessed
+// under xs:anyType's wildcard with no ·instance-specified type definition·,
+// has no ·governing type definition·, and validate's field assessment
+// declines it rather than contribute a value (validate/cvcidentityconstraint.go
+// icCheck.fill, icTarget.decline), leaving the document Undecided.
+const laxFieldSchema = `
+  <xs:element name="r">
+    <xs:complexType><xs:sequence>
+      <xs:element name="a" type="xs:anyType" maxOccurs="unbounded"/>
+    </xs:sequence></xs:complexType>
+    <xs:unique name="lu"><xs:selector xpath="s:a"/><xs:field xpath="b"/></xs:unique>
+  </xs:element>`
+
+// laxFieldR is codegen's type for laxFieldSchema's r.
+type laxFieldR struct{ A []anyType }
+
+// TestAppendIdentityUndecided pins item 9 of Append's doc: a value whose
+// written document validate leaves Undecided, an a holding a b laxFieldSchema
+// declares no type for, returns dst unextended and an error errors.As reaches
+// as an *UndecidedError for cvc-identity-constraint, which errors.Is reports
+// as errors.ErrUnsupported and not as ErrInvalidValue; CheckAppend returns nil
+// for it.
+func TestAppendIdentityUndecided(t *testing.T) {
+	schema := schemaOf(t, laxFieldSchema)
+	b := anyChild{Element: anyElement{Local: "b", Content: anyType{Text: "x"}}}
+	got, err := appendChecked(t, []byte("pre"), schema, strict.New(), sname("r"), laxFieldR{A: []anyType{{Children: []anyChild{b}}}})
+	if string(got) != "pre" {
+		t.Errorf("Append returned %q, want dst unextended", got)
+	}
+	var ue *UndecidedError
+	if !errors.As(err, &ue) || !errors.Is(err, errors.ErrUnsupported) || errors.Is(err, ErrInvalidValue) {
+		t.Fatalf("Append returned %v, want an *UndecidedError that errors.Is reports as errors.ErrUnsupported and not ErrInvalidValue", err)
+	}
+	if rule := ue.Unevaluated().Rule(); rule != "cvc-identity-constraint" {
+		t.Errorf("Unevaluated().Rule() = %q, want cvc-identity-constraint", rule)
+	}
+	if err := CheckAppend[laxFieldR](schema, sname("r")); err != nil {
+		t.Errorf("CheckAppend = %v", err)
+	}
+}
