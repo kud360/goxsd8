@@ -442,44 +442,44 @@
 // UTF-8, and no white space between tags. It binds element names by default
 // declarations alone, never prefixing one but an element held raw, in a
 // wildcard's field or an xs:anyType element's content, at any depth, in the
-// XML namespace, written xml:Local, which is never declared, and writes no
-// attribute in the XSI namespace: the document element carries xmlns="ns" for
-// its non-absent namespace ns, and nothing where it is absent, and every other
-// element carries xmlns="ns", or xmlns="" for an absent namespace, exactly
-// where its namespace differs from its parent's. An xs:QName or xs:NOTATION
-// value, written in an attribute or as content of an element, is spelled Local
-// unprefixed where its namespace name is that element's namespace, the absent
-// one included; xml:Local for the XML namespace, which is never declared; and
-// otherwise pN:Local, where pN is the prefix an open start tag, that element's
-// or an ancestor's, declares for its namespace name, or else p1, p2 and so on,
-// the first not in scope, declared as xmlns:pN="ns" on that element's start tag
-// ahead of the attribute or content that writes it. An attribute use's
-// attribute is written unprefixed, in the order of codegen's fields (codegen's
-// package doc, "# Attributes"), each value delimited by '"', and after them
-// each attribute an {attribute wildcard}'s field holds, in held order, as a raw
-// element's attributes are written below, nothing in it resolved, but for the
-// ones item 7 of Append's doc declines. An element held raw in a skip
-// wildcard's field, at any depth, is written raw, nothing in it assessed or
-// resolved, and so is one held in a lax wildcard's field and the content of an
-// element of type xs:anyType itself, its own attributes included, nothing in
-// either resolved, but for the items item 7 of Append's doc declines in it: its
-// attributes in held order, one of absent namespace unprefixed, one in the XML
-// namespace xml:Local, and every other one pN:Local, pN chosen and declared as
-// for an xs:QName value, though its namespace be that element's own; then its
-// Text, then each of its Children, written so, followed by its Tail. A nil
-// pointer field writes nothing, and so does a nil interface field where nil
-// means absent (codegen's package doc, "# Particles", "# Attributes"), a
-// particle with {max occurs} above 1 writes one element per item of its slice,
-// a flattened sequence or choice one per item of its slice, in order, its
-// branch's basic particle's, whatever the particle's occurrence, an occurrence
-// field writes each item it holds, in order, as its model group's particles in
-// order, a choice's branch writes its alternative's elements, the empty match,
-// the nil interface of a present element, writes no child element, and an
-// element with no content is written as an empty-element tag, <x/>. A string
-// value, of xs:string or xs:anyURI primitive, is written as itself, its
-// canonical representation, since xs:string's canonical mapping is the identity
-// (Datatypes §E.4 f-stringCanmap) and so is xs:anyURI's lexical mapping, so
-// that an xs:anyURI value is neither normalized nor percent-escaped
+// XML namespace, written xml:Local, which is never declared, and writes an
+// attribute in the XSI namespace only where item 7 of Append's doc admits
+// one: the document element carries xmlns="ns" for its non-absent namespace ns,
+// and nothing where it is absent, and every other element carries xmlns="ns",
+// or xmlns="" for an absent namespace, exactly where its namespace differs from
+// its parent's. An xs:QName or xs:NOTATION value, written in an attribute or as
+// content of an element, is spelled Local unprefixed where its namespace name
+// is that element's namespace, the absent one included; xml:Local for the XML
+// namespace, which is never declared; and otherwise pN:Local, where pN is the
+// prefix an open start tag, that element's or an ancestor's, declares for its
+// namespace name, or else p1, p2 and so on, the first not in scope, declared as
+// xmlns:pN="ns" on that element's start tag ahead of the attribute or content
+// that writes it. An attribute use's attribute is written unprefixed, in the
+// order of codegen's fields (codegen's package doc, "# Attributes"), each value
+// delimited by '"', and after them each attribute an {attribute wildcard}'s
+// field holds, in held order, as a raw element's attributes are written below,
+// nothing in it resolved, but for the ones item 7 of Append's doc declines. An
+// element held raw in a skip wildcard's field, at any depth, is written raw,
+// nothing in it assessed or resolved, and so is one held in a lax wildcard's
+// field and the content of an element of type xs:anyType itself, its own
+// attributes included, nothing in either resolved, but for the items item 7 of
+// Append's doc declines in it: its attributes in held order, one of absent
+// namespace unprefixed, one in the XML namespace xml:Local, and every other one
+// pN:Local, pN chosen and declared as for an xs:QName value, though its
+// namespace be that element's own; then its Text, then each of its Children,
+// written so, followed by its Tail. A nil pointer field writes nothing, and so
+// does a nil interface field where nil means absent (codegen's package doc, "#
+// Particles", "# Attributes"), a particle with {max occurs} above 1 writes one
+// element per item of its slice, a flattened sequence or choice one per item of
+// its slice, in order, its branch's basic particle's, whatever the particle's
+// occurrence, an occurrence field writes each item it holds, in order, as its
+// model group's particles in order, a choice's branch writes its alternative's
+// elements, the empty match, the nil interface of a present element, writes no
+// child element, and an element with no content is written as an empty-element
+// tag, <x/>. A string value, of xs:string or xs:anyURI primitive, is written as
+// itself, its canonical representation, since xs:string's canonical mapping is
+// the identity (Datatypes §E.4 f-stringCanmap) and so is xs:anyURI's lexical
+// mapping, so that an xs:anyURI value is neither normalized nor percent-escaped
 // (§3.3.17.2), and item 6 of Append's doc holds the string to its own
 // whiteSpace-normalized form. A value of xs:anySimpleType or xs:anyAtomicType
 // itself is written as the string it holds, the ·literal· Decode returns, whose
