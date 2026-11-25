@@ -69,20 +69,20 @@ func (e *DeclineError) Loc() (xsderr.Loc, bool) {
 // itself holds, or an {attribute wildcard}'s field holds, that attribute, its
 // Go path from T and the wildcard particle, as [Decode]'s item 5 names it,
 // that element's declaration, or the field's complex type, labelled as its
-// declaration's {type definition}, with its schema Loc, and, for an attribute
-// a strict {attribute wildcard}'s field holds, that attribute, its Go path
-// from T and that complex type, so labelled, and, for an element a lax
+// declaration's {type definition}, with its schema Loc, and, for an element a lax
 // wildcard's match is or holds, or such content holds, whose expanded name a
 // top-level element declaration names, or an attribute either holds, or a lax
 // {attribute wildcard}'s field holds, whose expanded name a top-level
 // attribute declaration names, that item, its Go path from T, the wildcard
 // particle, that element's declaration or that complex type, and the
-// top-level declaration, with its schema Loc, and, for a lax wildcard's
-// match with a ·locally declared type·, that element, its Go path from T, the
-// wildcard particle and the complex type, labelled as its declaration's {type
-// definition}, with its schema Loc. A type definition named in the XML Schema
-// namespace whose schema Loc is the zero Loc is named by its QName alone, in
-// place of the schema Loc the sentences above give it.
+// top-level declaration, with its schema Loc, and, for an attribute a strict
+// {attribute wildcard}'s field holds, that attribute, its Go path from T and
+// that complex type, so labelled, and, for a lax wildcard's match with a ·locally
+// declared type·, that element, its Go path from T, the wildcard particle and the
+// complex type, labelled as its declaration's {type definition}, with its schema
+// Loc. A type definition named in the XML Schema namespace whose schema Loc is
+// the zero Loc is named by its QName alone, in place of the schema Loc the
+// sentences above give it.
 func (e *DeclineError) Error() string {
 	text := "codec does not decode " + e.construct.name() + ": " + e.detail +
 		"; a decoder refusal, not a schema or instance fault"

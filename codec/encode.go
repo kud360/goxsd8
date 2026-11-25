@@ -169,11 +169,7 @@ var ErrInvalidValue = errors.New("codec: Append: a value no valid document holds
 //     element a wildcard particle's field holds, or in the content of an
 //     element of type xs:anyType itself, its own attributes among it, at any
 //     depth, or in an {attribute wildcard}'s field, whatever its value, since
-//     an xsi:type's may hold a prefix no binding the struct holds resolves; or
-//     an attribute the {attribute wildcard} field of a type whose {attribute
-//     wildcard} has {process contents} strict holds, whatever its name and
-//     value, since the wildcard assesses it against the top-level attribute
-//     declaration it must name (§3.10.1, §3.2.4.2 key-governing-ad clause 3);
+//     an xsi:type's may hold a prefix no binding the struct holds resolves;
 //     or, in such content of an xs:anyType element, or in an element a lax
 //     wildcard particle's field holds, the element itself among it, at any
 //     depth, an element whose expanded name a top-level element declaration of
@@ -182,6 +178,11 @@ var ErrInvalidValue = errors.New("codec: Append: a value no valid document holds
 //     schema names, whatever its content or value, since a lax wildcard,
 //     xs:anyType's among them, assesses it against that declaration
 //     (Structures §3.4.7, §3.3.4.6 key-governing-ed clause 3, §3.2.4.2
+//     key-governing-ad clause 3); or an attribute the {attribute wildcard} field
+//     of a type whose {attribute wildcard} has {process contents} strict holds,
+//     whatever its name and value, since the wildcard assesses it against the
+//     top-level attribute declaration its expanded name resolves to, where
+//     there is one, and §3.10.1 requires that there be one (§3.10.1, §3.2.4.2
 //     key-governing-ad clause 3); or an element a lax wildcard particle's field
 //     holds that has a ·locally declared type· in the complex type whose
 //     content it is written into, an element declaration of its expanded name
