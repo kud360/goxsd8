@@ -64,7 +64,7 @@ func TestDriveEncodeCountsEachRow(t *testing.T) {
 		{"encoded", own, Case{"S/g/instance/e", "valid.xml", 0}, EncodeSummary{Encoded: 1}},
 		{"encoded under bound branches", []Codec{CodecFor[p](codec.WithBranches[p](pq{}, pr{}))}, Case{"S/g/instance/b", "choice.xml", 0}, EncodeSummary{Encoded: 1}},
 		{"declined", []Codec{CodecFor[l](codec.WithBranches[lItem](lm{}))}, Case{"S/g/instance/c", "flat.xml", 0},
-			EncodeSummary{Declines: []Tally{{Construct: "a value constraint, default or fixed", Cases: []string{"S/g/instance/c"}}}}},
+			EncodeSummary{Declines: []Tally{{Construct: "a simple type derived from xs:ID, xs:IDREF or xs:ENTITY", Cases: []string{"S/g/instance/c"}}}}},
 		{"append failed", []Codec{encoding(nil, errors.New("a fault"))}, Case{"S/g/instance/f", "valid.xml", 0},
 			EncodeSummary{AppendFailed: []string{"S/g/instance/f"}}},
 		{"re-validate rejected", []Codec{encoding([]byte(`<a/>`), nil)}, Case{"S/g/instance/r", "valid.xml", 0},

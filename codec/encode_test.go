@@ -74,8 +74,9 @@ func roundTrip[T any](t *testing.T, schema *xsd.Schema, name xsd.QName, v T, wan
 // (staticClass), and a nil one leaves Append nil, an item 6 or item 7 error
 // or a fault of backend: nil, item 6's ErrInvalidValue error, a plain error
 // without item 2's or item 3's text, or item 7's decline, by
-// constructNoCanonical, constructQNameSpelling, constructXsiAttribute,
-// constructGovernedContent or constructLocallyTypedMatch.
+// constructNoCanonical, constructQNameSpelling, constructValueConstraint,
+// constructXsiAttribute, constructGovernedContent or
+// constructLocallyTypedMatch.
 func appendChecked[T any](t *testing.T, dst []byte, schema *xsd.Schema, backend value.Backend, name xsd.QName, v T, opts ...Option) ([]byte, error) {
 	t.Helper()
 	out, err := Append(dst, schema, backend, name, v, opts...)
@@ -83,7 +84,7 @@ func appendChecked[T any](t *testing.T, dst []byte, schema *xsd.Schema, backend 
 	if checked == nil {
 		class := staticClass(err)
 		static := class == "plain" && (strings.HasPrefix(err.Error(), "codec: no top-level element declaration") || strings.Contains(err.Error(), "{abstract} true"))
-		if static || err != nil && class != "plain" && class != "invalid" && class != "decline "+constructNoCanonical.name() && class != "decline "+constructQNameSpelling.name() && class != "decline "+constructXsiAttribute.name() && class != "decline "+constructGovernedContent.name() && class != "decline "+constructLocallyTypedMatch.name() {
+		if static || err != nil && class != "plain" && class != "invalid" && class != "decline "+constructNoCanonical.name() && class != "decline "+constructQNameSpelling.name() && class != "decline "+constructValueConstraint.name() && class != "decline "+constructXsiAttribute.name() && class != "decline "+constructGovernedContent.name() && class != "decline "+constructLocallyTypedMatch.name() {
 			t.Errorf("CheckAppend = nil, but Append returned %v, %s", err, class)
 		}
 		return out, err
@@ -1164,8 +1165,6 @@ func TestAppendDeclines(t *testing.T) {
 		{"nillable", "an element declaration with {nillable} true", `<xs:element name="%[1]s" type="xs:string" nillable="true"/>`},
 		{"nillable particle", "an element declaration with {nillable} true", sequence(`<xs:element name="a" type="xs:string" nillable="true"/>`)},
 		{"type table", "an element declaration with a {type table}", `<xs:element name="%[1]s" type="xs:string"><xs:alternative test="@a" type="xs:token"/></xs:element>`},
-		{"element value constraint", "a value constraint, default or fixed", `<xs:element name="%[1]s" type="xs:string" default="x"/>`},
-		{"attribute value constraint", "a value constraint, default or fixed", complexOf(`<xs:attribute name="a" type="xs:string" default="x"/>`)},
 		{"identity constraint", identityName, `<xs:element name="%[1]s"><xs:complexType><xs:sequence>` + a + `</xs:sequence></xs:complexType><xs:key name="k%[1]s"><xs:selector xpath="s:a[1]"/><xs:field xpath="."/></xs:key></xs:element>`},
 		{"identity constraint field", identityName, `<xs:element name="%[1]s"><xs:complexType><xs:sequence>` + a + `</xs:sequence></xs:complexType><xs:unique name="k%[1]s"><xs:selector xpath="s:a"/><xs:field xpath="."/><xs:field xpath="s:a[1]"/></xs:unique></xs:element>`},
 		{"keyref referenced key", identityName, `<xs:element name="h%[1]s"><xs:complexType><xs:sequence>` + a + `</xs:sequence></xs:complexType><xs:key name="hk%[1]s"><xs:selector xpath="s:a[1]"/><xs:field xpath="."/></xs:key></xs:element>` +
@@ -1173,12 +1172,12 @@ func TestAppendDeclines(t *testing.T) {
 		{"absent affiliation", absentAffiliationName, `<xs:element name="%[1]s" type="xs:string" substitutionGroup="s:nope%[1]s"/>`},
 		{"ref absent affiliation", absentAffiliationName, `<xs:element name="x%[1]s" type="xs:string" substitutionGroup="s:nope%[1]s"/>` +
 			sequence(`<xs:element ref="s:x%[1]s"/>`)},
-		{"member value constraint", "a value constraint, default or fixed", `<xs:element name="x%[1]s" type="xs:string"/><xs:element name="m%[1]s" type="xs:string" default="d" substitutionGroup="s:x%[1]s"/>` +
+		{"member type table", "an element declaration with a {type table}", `<xs:element name="x%[1]s" type="xs:string"/><xs:element name="m%[1]s" type="xs:string" substitutionGroup="s:x%[1]s"><xs:alternative test="@a" type="xs:token"/></xs:element>` +
 			sequence(`<xs:element ref="s:x%[1]s"/>`)},
 		{"member absent affiliation", absentAffiliationName, `<xs:element name="x%[1]s" type="xs:string"/><xs:element name="m%[1]s" type="xs:string" substitutionGroup="s:x%[1]s s:nope%[1]s"/>` +
 			sequence(`<xs:element ref="s:x%[1]s"/>`)},
 		{"nillable anyType", "an element declaration with {nillable} true", `<xs:element name="%[1]s" nillable="true"/>`},
-		{"anyType particle value constraint", "a value constraint, default or fixed", sequence(`<xs:element name="a" default="d"/>`)},
+		{"anyType particle identity constraint", identityName, sequence(`<xs:element name="a"><xs:unique name="u%[1]s"><xs:selector xpath="."/><xs:field xpath="..[1]"/></xs:unique></xs:element>`)},
 		{"abstract type", "an element declaration whose {type definition} is a complex type with {abstract} true", abstractType},
 		{"abstract particle type", "an element declaration whose {type definition} is a complex type with {abstract} true", `<xs:complexType name="ab%[1]s" abstract="true"/>` + sequence(`<xs:element name="a" type="s:ab%[1]s"/>`)},
 		{"simple content", "a simple type derived from xs:ID, xs:IDREF or xs:ENTITY", complexOf(`<xs:simpleContent><xs:extension base="xs:ID"/></xs:simpleContent>`)},
@@ -1186,7 +1185,7 @@ func TestAppendDeclines(t *testing.T) {
 		{"mixed", "a complex type with mixed content", `<xs:element name="%[1]s"><xs:complexType mixed="true"><xs:sequence>` + a + `</xs:sequence></xs:complexType></xs:element>`},
 		{"open content", "an {open content}", complexOf(`<xs:openContent><xs:any namespace="##other" processContents="lax"/></xs:openContent><xs:sequence>` + a + `</xs:sequence>`)},
 		{"all group", "an all group", complexOf(`<xs:all>` + a + `</xs:all>`)},
-		{"flattened", "a value constraint, default or fixed", complexOf(`<xs:sequence maxOccurs="unbounded"><xs:element name="a" type="xs:string" minOccurs="0" default="x"/></xs:sequence>`)},
+		{"flattened", "an element declaration with {nillable} true", complexOf(`<xs:sequence maxOccurs="unbounded"><xs:element name="a" type="xs:string" minOccurs="0" nillable="true"/></xs:sequence>`)},
 		{"flattened untracked", "a content model the content matcher does not track", complexOf(`<xs:sequence maxOccurs="21845"><xs:element name="a" type="xs:string" maxOccurs="2"/></xs:sequence>`)},
 		{"all group in an occurrence field", "an all group", complexOf(`<xs:all minOccurs="0">` + a + `</xs:all>`)},
 		{"nested flattened particle in an occurrence field", "a nested model group particle", complexOf(`<xs:sequence maxOccurs="2">` + a +
@@ -1201,7 +1200,7 @@ func TestAppendDeclines(t *testing.T) {
 			`<xs:sequence minOccurs="0" maxOccurs="unbounded"><xs:element name="c" type="xs:string" minOccurs="0"/></xs:sequence></xs:sequence>`)},
 		{"nested flattened untracked", "a content model the content matcher does not track", sequence(a + `<xs:sequence maxOccurs="21845"><xs:element name="c" type="xs:string" maxOccurs="2"/></xs:sequence>`)},
 		{"strict wildcard", "a wildcard particle with {process contents} strict", sequence(`<xs:any/>`)},
-		{"ref value constraint", "a value constraint, default or fixed", `<xs:element name="x%[1]s" type="xs:string" default="x"/>` + sequence(`<xs:element ref="s:x%[1]s"/>`)},
+		{"ref type table", "an element declaration with a {type table}", `<xs:element name="x%[1]s" type="xs:string"><xs:alternative test="@a" type="xs:token"/></xs:element>` + sequence(`<xs:element ref="s:x%[1]s"/>`)},
 		{"ref simple content", "a simple type derived from xs:ID, xs:IDREF or xs:ENTITY", `<xs:element name="x%[1]s"><xs:complexType><xs:simpleContent><xs:extension base="xs:ID"/></xs:simpleContent></xs:complexType></xs:element>` +
 			sequence(`<xs:element ref="s:x%[1]s"/>`)},
 		{"complex particle", "a wildcard particle with {process contents} strict", sequence(`<xs:element name="a"><xs:complexType><xs:sequence><xs:any/></xs:sequence></xs:complexType></xs:element>`)},
@@ -1233,7 +1232,6 @@ func TestAppendDeclines(t *testing.T) {
 		{"boolean assertions", "a simple type with an assertions facet", simpleOf(`<xs:restriction base="xs:boolean"><xs:assertion test="true()"/></xs:restriction>`)},
 		{"date assertions", "a simple type with an assertions facet", simpleOf(`<xs:restriction base="xs:date"><xs:assertion test="true()"/></xs:restriction>`)},
 		{"inherited assertions", "a simple type with an assertions facet", `<xs:simpleType name="asserted%[1]s"><xs:restriction base="xs:string"><xs:assertion test="true()"/></xs:restriction></xs:simpleType>` + simpleOf(`<xs:restriction base="s:asserted%[1]s"><xs:maxLength value="3"/></xs:restriction>`)},
-		{"particle value constraint", "a value constraint, default or fixed", sequence(`<xs:element name="a" type="xs:string" fixed="x"/>`)},
 		{"particle type table", "an element declaration with a {type table}", sequence(`<xs:element name="a" type="xs:string"><xs:alternative test="@b" type="xs:token"/></xs:element>`)},
 		{"particle identity constraint", identityName, sequence(`<xs:element name="a" type="xs:string"><xs:unique name="u%[1]s"><xs:selector xpath="."/><xs:field xpath="..[1]"/></xs:unique></xs:element>`)},
 	}
@@ -4342,6 +4340,149 @@ func TestAppendFlattenedDeclineSubject(t *testing.T) {
 		t.Run(row.name, func(t *testing.T) {
 			err := CheckAppend[struct{}](schemaOf(t, row.decls), rootName)
 			_ = asDecline(t, err, row.want)
+		})
+	}
+}
+
+// vcSchema declares the value constraints TestAppendValueConstraint writes
+// under: ed, an xs:int element with a default, and ef, one with a fixed
+// value; es and fs, xs:string elements with default and fixed "abc"; el, a
+// list of xs:int with default "1 2"; dec, an xs:decimal element fixed "1.0";
+// nan, an xs:double one fixed "NaN"; at, a complex type of an xs:string
+// attribute a with a default and an xs:int attribute f with a fixed value;
+// un, one of an attribute of the union u with a default; and ad and af,
+// xs:anyType elements with a default and a fixed value.
+const vcSchema = unionTypes + `<xs:element name="ed" type="xs:int" default="7"/>
+<xs:element name="ef" type="xs:int" fixed="7"/>
+<xs:element name="es" type="xs:string" default="abc"/>
+<xs:element name="fs" type="xs:string" fixed="abc"/>
+<xs:element name="el" default="1 2"><xs:simpleType><xs:list itemType="xs:int"/></xs:simpleType></xs:element>
+<xs:element name="dec" type="xs:decimal" fixed="1.0"/>
+<xs:element name="nan" type="xs:double" fixed="NaN"/>
+<xs:element name="at"><xs:complexType><xs:attribute name="a" type="xs:string" default="x"/><xs:attribute name="f" type="xs:int" fixed="7"/></xs:complexType></xs:element>
+<xs:element name="un"><xs:complexType><xs:attribute name="dflt" type="s:u" default="7"/></xs:complexType></xs:element>
+<xs:element name="ad" default="x"/>
+<xs:element name="af" fixed="x"/>`
+
+// vcGlobalSchema declares, in no namespace, the top-level attribute g of
+// xs:int fixed "7" and the element r whose complex type uses it by ref and
+// carries no value constraint of its own, so that only g's declaration
+// constrains it (Structures §3.2.4.1 cvc-attribute clause 4).
+const vcGlobalSchema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"><xs:attribute name="g" type="xs:int" fixed="7"/>
+<xs:element name="r"><xs:complexType><xs:attribute ref="g"/></xs:complexType></xs:element></xs:schema>`
+
+// The Go types codegen emits for vcSchema's and vcGlobalSchema's
+// declarations: a bare V for each attribute use with a value constraint
+// (codegen's package doc, "# Attributes").
+type (
+	vcInt     int32
+	vcString  string
+	vcList    []int32
+	vcDecimal big.Rat
+	vcDouble  float64
+	vcAttrs   struct {
+		A string
+		F int32
+	}
+	vcUnion  struct{ Dflt unionU }
+	vcGlobal struct{ G int32 }
+)
+
+// appendRow returns the Append, through appendChecked on strict's backend,
+// of v as root of schema under opts, for a row of TestAppendValueConstraint.
+func appendRow[T any](schema *xsd.Schema, root xsd.QName, v T, opts ...Option) func(t *testing.T, dst []byte) ([]byte, error) {
+	return func(t *testing.T, dst []byte) ([]byte, error) {
+		t.Helper()
+		return appendChecked(t, dst, schema, strict.New(), root, v, opts...)
+	}
+}
+
+// TestAppendValueConstraint pins Append on a declaration with a value
+// constraint, default or fixed, which it writes as it is held and never
+// omits (items 6 and 7 of Append's doc): an element's value, a simple
+// content's and an attribute's each written, validated and decoded equal,
+// an equal value spelled other than the constraint, 1 for "1.0", and NaN
+// for "NaN", among them; a value no valid document holds under a fixed one,
+// at an element, a simple content, an attribute use and an attribute
+// declaration alone, the empty text and the content of an xs:anyType
+// element among them, item 6; the empty text under an element default whose
+// value it is not, item 7; and a nil union under an attribute default, item
+// 6, since Decode supplies the default there. Each error leaves dst
+// unextended.
+func TestAppendValueConstraint(t *testing.T) {
+	schema := schemaOf(t, vcSchema)
+	global := parseString(t, vcGlobalSchema)
+	t.Run("written", func(t *testing.T) {
+		roundTrip(t, schema, sname("ed"), vcInt(5), `<ed xmlns="urn:s">5</ed>`, deepEqual[vcInt])
+		roundTrip(t, schema, sname("ed"), vcInt(7), `<ed xmlns="urn:s">7</ed>`, deepEqual[vcInt])
+		roundTrip(t, schema, sname("ef"), vcInt(7), `<ef xmlns="urn:s">7</ef>`, deepEqual[vcInt])
+		roundTrip(t, schema, sname("es"), vcString("abc"), `<es xmlns="urn:s">abc</es>`, deepEqual[vcString])
+		roundTrip(t, schema, sname("fs"), vcString("abc"), `<fs xmlns="urn:s">abc</fs>`, deepEqual[vcString])
+		roundTrip(t, schema, sname("el"), vcList{1, 2}, `<el xmlns="urn:s">1 2</el>`, sameLists[vcList])
+		var one big.Rat
+		one.SetInt64(1)
+		roundTrip(t, schema, sname("dec"), vcDecimal(one), `<dec xmlns="urn:s">1</dec>`, func(a, b vcDecimal) bool { return sameRat(big.Rat(a), big.Rat(b)) })
+		roundTrip(t, schema, sname("nan"), vcDouble(math.NaN()), `<nan xmlns="urn:s">NaN</nan>`, sameDouble[vcDouble])
+		roundTrip(t, schema, sname("at"), vcAttrs{A: "y", F: 7}, `<at xmlns="urn:s" a="y" f="7"/>`, deepEqual[vcAttrs])
+		roundTrip(t, schema, sname("at"), vcAttrs{A: "x", F: 7}, `<at xmlns="urn:s" a="x" f="7"/>`, deepEqual[vcAttrs])
+		roundTrip(t, schema, sname("at"), vcAttrs{A: "", F: 7}, `<at xmlns="urn:s" a="" f="7"/>`, deepEqual[vcAttrs])
+		roundTrip(t, schema, sname("un"), vcUnion{Dflt: unionUInt(3)}, `<un xmlns="urn:s" dflt="3"/>`, deepEqual[vcUnion], unionVariants...)
+		roundTrip(t, schema, sname("ad"), anyType{Text: "y"}, `<ad xmlns="urn:s">y</ad>`, deepEqual[anyType])
+		roundTrip(t, schema, sname("ad"), anyType{Children: []anyChild{{Element: anyElement{Local: "c"}}}}, `<ad xmlns="urn:s"><c xmlns=""/></ad>`, deepEqual[anyType])
+		roundTrip(t, schema, sname("af"), anyType{Text: "x"}, `<af xmlns="urn:s">x</af>`, deepEqual[anyType])
+		roundTrip(t, schema, sname("af"), anyType{}, `<af xmlns="urn:s"/>`, deepEqual[anyType])
+		roundTrip(t, schema, sname("af"), anyType{Attributes: []anyAttribute{{Local: "k", Value: "v"}}, Text: "x"}, `<af xmlns="urn:s" k="v">x</af>`, deepEqual[anyType])
+		roundTrip(t, global, xsd.QName{Local: "r"}, vcGlobal{G: 7}, `<r g="7"/>`, deepEqual[vcGlobal])
+		var four big.Rat
+		four.SetInt64(4)
+		roundTrip(t, schemaOf(t, scFixedRoot), sname("r"), scPrice{Value: four}, `<r xmlns="urn:s">4</r>`, func(a, b scPrice) bool { return sameRat(a.Value, b.Value) && reflect.DeepEqual(a.Cur, b.Cur) })
+	})
+	var five big.Rat
+	five.SetInt64(5)
+	for _, row := range []struct {
+		name string
+		app  func(t *testing.T, dst []byte) ([]byte, error)
+		want []string
+	}{
+		{"fixed element", appendRow(schema, sname("ef"), vcInt(8)), []string{"codec: Append: vcInt, of simple type xs:int, is written ", `"8", whose value is neither equal nor identical to "7", the {value} of the fixed {value constraint} of element {urn:s}ef`, "cvc-elt clause 5.2.2.2.2"}},
+		{"fixed element, empty", appendRow(schema, sname("fs"), vcString("")), []string{"codec: Append: vcString, of simple type xs:string, is written ", `"", whose value is neither equal nor identical to "abc"`, "cvc-elt clause 5.1, §3.3.5.4 sic-eltType"}},
+		{"fixed simple content", appendRow(schemaOf(t, scFixedRoot), sname("r"), scPrice{Value: five}), []string{"codec: Append: scPrice.Value, of ", `is written "5", whose value is neither equal nor identical to "4", the {value} of the fixed {value constraint} of element {urn:s}r`, "cvc-elt clause 5.2.2.2.2"}},
+		{"fixed attribute use", appendRow(schema, sname("at"), vcAttrs{A: "y", F: 8}), []string{"codec: Append: vcAttrs.F, of simple type xs:int, is written ", `"8", whose value is neither equal nor identical to "7", the {value} of the fixed {value constraint} of the attribute use of attribute f`, "§3.5.4 cvc-au"}},
+		{"fixed attribute declaration", appendRow(global, xsd.QName{Local: "r"}, vcGlobal{G: 8}), []string{"codec: Append: vcGlobal.G, of simple type xs:int, is written ", `"8", whose value is neither equal nor identical to "7", the {value} of the fixed {value constraint} of attribute g`, "§3.2.4.1 cvc-attribute clause 4"}},
+		{"nil union under a default", appendRow(schema, sname("un"), vcUnion{}, unionVariants...), []string{"codec: Append: vcUnion.Dflt is nil, of simple type {urn:s}u", "where a value is required"}},
+		{"anyType fixed text", appendRow(schema, sname("af"), anyType{Text: "y"}), []string{`codec: Append: anyType.Text holds "y", which does not match "x", the {lexical form} of the fixed {value constraint} of element {urn:s}af`, "cvc-elt clause 5.2.2.2.1"}},
+		{"anyType fixed child", appendRow(schema, sname("af"), anyType{Text: "x", Children: []anyChild{{Element: anyElement{Local: "c"}}}}), []string{`codec: Append: anyType.Children holds 1, though the fixed {value constraint} "x" of element {urn:s}af`, "admits no element child", "cvc-elt clause 5.2.2.1"}},
+	} {
+		t.Run(row.name, func(t *testing.T) {
+			got, err := row.app(t, []byte("pre"))
+			invalidValue(t, err, row.want...)
+			if !strings.HasPrefix(err.Error(), row.want[0]) {
+				t.Errorf("error %q does not open with %q", err, row.want[0])
+			}
+			noRule(t, err)
+			if string(got) != "pre" {
+				t.Errorf("Append wrote %q", got)
+			}
+		})
+	}
+	for _, row := range []struct {
+		name string
+		app  func(t *testing.T, dst []byte) ([]byte, error)
+		want string
+	}{
+		{"empty string under a default", appendRow(schema, sname("es"), vcString("")), `simple type xs:string, at vcString holding the value written "": its value is neither equal nor identical to "abc", the {value} of the default {value constraint} of element {urn:s}es`},
+		{"empty list under a default", appendRow(schema, sname("el"), vcList{}), `at vcList holding the value written "": its value is neither equal nor identical to "1 2", the {value} of the default {value constraint} of element {urn:s}el`},
+	} {
+		t.Run(row.name, func(t *testing.T) {
+			got, err := row.app(t, []byte("pre"))
+			d := asDecline(t, err, "codec does not encode "+constructValueConstraint.name()+": ")
+			holds(t, err, row.want, "cvc-elt clause 5.1, §3.3.5.4 sic-eltType")
+			if d.Construct() != (Construct{constructValueConstraint}) {
+				t.Errorf("Construct %v, want constructValueConstraint's", d.Construct())
+			}
+			if string(got) != "pre" {
+				t.Errorf("Append wrote %q", got)
+			}
 		})
 	}
 }
