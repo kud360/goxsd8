@@ -393,9 +393,9 @@
 //   - An atomic simple type whose {primitive type definition} is one the list
 //     of primitives below names, into the Go type that list gives it. It has
 //     no assertions facet, its own or inherited. It is not derived from
-//     xs:ENTITY, though xs:string is its primitive; one derived from xs:ID or
-//     xs:IDREF encodes, and Append's doc states when it assesses what it
-//     writes.
+//     xs:ENTITY, though xs:ENTITY's primitive is xs:string; one derived from
+//     xs:ID or xs:IDREF encodes, and [Append]'s doc states when Append
+//     assesses what it writes.
 //   - A list simple type whose {item type definition} encodes and which has
 //     no assertions facet, its own or inherited, into []V, V its item's Go
 //     type.
