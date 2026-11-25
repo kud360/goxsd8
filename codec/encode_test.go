@@ -4892,6 +4892,7 @@ const (
 	allBASchema           = `<xs:element name="r"><xs:complexType><xs:all><xs:element name="b" type="xs:int"/><xs:element name="a" type="xs:string"/></xs:all></xs:complexType></xs:element>`
 	allSkipFirstSchema    = `<xs:element name="r"><xs:complexType><xs:all><xs:any processContents="skip"/><xs:element name="a" type="xs:string"/></xs:all></xs:complexType></xs:element>`
 	allOccSkipFirstSchema = `<xs:element name="r"><xs:complexType><xs:all minOccurs="0"><xs:any processContents="skip"/><xs:element name="a" type="xs:string"/></xs:all></xs:complexType></xs:element>`
+	allSkipManySchema     = `<xs:element name="r"><xs:complexType><xs:all><xs:any processContents="skip" maxOccurs="2"/><xs:element name="a" type="xs:string" maxOccurs="2"/></xs:all></xs:complexType></xs:element>`
 	allEmptySchema        = `<xs:element name="r"><xs:complexType><xs:all/></xs:complexType></xs:element>`
 	allGroupSchema        = `<xs:element name="a" type="xs:string"/><xs:element name="m" type="xs:string" substitutionGroup="s:a"/>
 		<xs:element name="r"><xs:complexType><xs:all><xs:element ref="s:a"/><xs:element name="b" type="xs:string"/></xs:all></xs:complexType></xs:element>`
@@ -4913,7 +4914,11 @@ type (
 		A   string
 	}
 	allOccSkipFirst struct{ All *allSkipFirst }
-	allGroup        struct {
+	allSkipMany     struct {
+		Any []anyElement
+		A   []string
+	}
+	allGroup struct {
 		A grpAGroup
 		B string
 	}
@@ -4939,14 +4944,15 @@ type (
 // place in {particles}: all(a, any ##other), all(a, <group ref> to
 // all(any)), and all(any skip, a), whose value Decode returns for
 // <a>x</a><a>y</a>, Any holding the second <a>, is written <a>x</a><a>y</a>,
-// spliced and in an occurrence field: with boundSequence.write writing its
-// members in member order (writeMembers) the spliced row fails, and with
-// boundSequenceItem.writeItem doing so the occurrence row, each the one row
-// of the package that fails. A value Decode returns for a permuted
-// document re-encodes in {particles} order. A sealed-interface field (a
-// substitution group's, a union's, xs:precisionDecimal's) and an xs:ID and
-// xs:IDREF pair, which Append assesses (cvc-id), are written inside an all
-// group as anywhere else.
+// spliced and in an occurrence field, and so is all(any skip, a), each of
+// {max occurs} 2, whose value Decode returns for three <a> holds the first two
+// in A: with boundSequence.write writing its members in member order
+// (writeMembers) the two spliced skip rows fail and no other row of the
+// package, and with boundSequenceItem.writeItem doing so the occurrence row
+// alone. A value Decode returns for a permuted document re-encodes in
+// {particles} order. A sealed-interface field (a substitution group's, a
+// union's, xs:precisionDecimal's) and an xs:ID and xs:IDREF pair, which Append
+// assesses (cvc-id), are written inside an all group as anywhere else.
 func TestAppendAll(t *testing.T) {
 	w := anyElement{Space: "urn:o", Local: "w"}
 	second := anyElement{Space: "urn:s", Local: "a", Content: anyType{Text: "y"}}
@@ -4986,6 +4992,12 @@ func TestAppendAll(t *testing.T) {
 		schema := schemaOf(t, allOccSkipFirstSchema)
 		v := decodedAs(t, schema, "<s:a>x</s:a><s:a>y</s:a>", allOccSkipFirst{All: &allSkipFirst{Any: second, A: "x"}})
 		roundTrip(t, schema, rootName, v, `<r xmlns="urn:s"><a>x</a><a>y</a></r>`, deepEqual[allOccSkipFirst])
+	})
+	t.Run("all(any skip, a), each of {max occurs} 2, the value Decode returns", func(t *testing.T) {
+		schema := schemaOf(t, allSkipManySchema)
+		third := anyElement{Space: "urn:s", Local: "a", Content: anyType{Text: "3"}}
+		v := decodedAs(t, schema, "<s:a>1</s:a><s:a>2</s:a><s:a>3</s:a>", allSkipMany{Any: []anyElement{third}, A: []string{"1", "2"}})
+		roundTrip(t, schema, rootName, v, `<r xmlns="urn:s"><a>1</a><a>2</a><a>3</a></r>`, deepEqual[allSkipMany])
 	})
 	t.Run("a value decoded from a permuted document", func(t *testing.T) {
 		schema := schemaOf(t, allABSchema)
