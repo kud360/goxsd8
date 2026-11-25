@@ -2476,7 +2476,7 @@ func bindContent(run *bindRun, ct xsd.ComplexType, group xsd.ModelGroup, occurs 
 	case goshape.Occurrence:
 		return bindOccurrence(run, ct, group, occurs, names, typeSubject)
 	case goshape.Spliced:
-		return bindSequence(run, ct, group.Particles(), names, typeSubject)
+		return bindSequence(run, ct, group, names, typeSubject)
 	case goshape.OnceChoice:
 		c, x, err := bindContentChoice(run, ct, group.Particles(), names, typeSubject)
 		if err != nil {
@@ -2591,6 +2591,14 @@ type sequence struct {
 	// (bindItem), and a contentChoice's rest, whose targets follow its
 	// choice's.
 	base int
+	// all is whether s holds the {particles} of an all group, the content's
+	// spliced one or an occurrence field's item, set from its {compositor} at
+	// bind (bindSequence, bindItem): Append writes an all group's element
+	// particles before its wildcard particles (writeAll). It is false for
+	// every other sequence, a choice's alternative and a contentChoice's rest
+	// among them, none of which an all group can be (§3.8.6.2
+	// cos-all-limited).
+	all bool
 }
 
 // childIndex attributes one content model's children to the attribution
@@ -2926,16 +2934,16 @@ func (s fieldSink) put(p *pipeline, r *xmltree.Reader, start *xmltree.StartEleme
 	return nil
 }
 
-// bindSequence returns the sequence of particles, the {particles} of the
+// bindSequence returns the sequence of the {particles} of group, the
 // content sequence or spliced all group of ct, its members bound by bind and
 // then the field ct's {open content} gives, if any (sequence.openContent),
 // each filled from the children attributed to it (eachChild), whatever their
 // instance order (§3.8.4.1.3 all-mg), or the first decline Decode's doc states
 // for them, item 5, typeSubject naming the type, or, once every member is
 // bound, the plain error matcherSlot.attributor states.
-func bindSequence(run *bindRun, ct xsd.ComplexType, particles []xsd.Particle, names *goname.Namer, typeSubject string) (*sequence, error) {
-	s := &sequence{p: run.p, index: newChildIndex()}
-	if err := s.bind(run, ct, particles, nil, false, names, typeSubject); err != nil {
+func bindSequence(run *bindRun, ct xsd.ComplexType, group xsd.ModelGroup, names *goname.Namer, typeSubject string) (*sequence, error) {
+	s := &sequence{p: run.p, index: newChildIndex(), all: group.Compositor() == xsd.CompositorAll}
+	if err := s.bind(run, ct, group.Particles(), nil, false, names, typeSubject); err != nil {
 		return nil, err
 	}
 	s.openContent(ct, names)
@@ -4480,7 +4488,7 @@ func bindItem(run *bindRun, ct xsd.ComplexType, group xsd.ModelGroup, x *childIn
 	// seq binds into a copy of *x, whose children map is x's own; the
 	// matcherSlot any of the item's particles forces, a wildcard's or a
 	// shared expanded name's (particleShape), is copied back.
-	seq := &sequence{p: run.p, index: *x, base: target}
+	seq := &sequence{p: run.p, index: *x, base: target, all: group.Compositor() == xsd.CompositorAll}
 	if err := seq.bind(run, ct, group.Particles(), at, true, goname.NewNamer(), typeSubject); err != nil {
 		return nil, err
 	}

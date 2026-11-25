@@ -1260,10 +1260,8 @@ func TestAppendDeclines(t *testing.T) {
 		{"simple content before attribute uses", entityTypeName, complexOf(`<xs:simpleContent><xs:extension base="xs:ENTITY"><xs:attribute name="a" type="xs:string" form="qualified"/></xs:extension></xs:simpleContent>`)},
 		{"mixed", "a complex type with mixed content", `<xs:element name="%[1]s"><xs:complexType mixed="true"><xs:sequence>` + a + `</xs:sequence></xs:complexType></xs:element>`},
 		{"open content", "an {open content}", complexOf(`<xs:openContent><xs:any namespace="##other" processContents="lax"/></xs:openContent><xs:sequence>` + a + `</xs:sequence>`)},
-		{"all group", "an all group", complexOf(`<xs:all>` + a + `</xs:all>`)},
 		{"flattened", "an element declaration with {nillable} true", complexOf(`<xs:sequence maxOccurs="unbounded"><xs:element name="a" type="xs:string" minOccurs="0" nillable="true"/></xs:sequence>`)},
 		{"flattened untracked", "a content model the content matcher does not track", complexOf(`<xs:sequence maxOccurs="21845"><xs:element name="a" type="xs:string" maxOccurs="2"/></xs:sequence>`)},
-		{"all group in an occurrence field", "an all group", complexOf(`<xs:all minOccurs="0">` + a + `</xs:all>`)},
 		{"nested flattened particle in an occurrence field", "a nested model group particle", complexOf(`<xs:sequence maxOccurs="2">` + a +
 			`<xs:sequence maxOccurs="unbounded"><xs:element name="b" type="xs:string" minOccurs="0"/></xs:sequence></xs:sequence>`)},
 		{"nested occurrence field in an occurrence field", "a nested model group particle", complexOf(`<xs:sequence maxOccurs="2">` + a +
@@ -4879,4 +4877,199 @@ func TestAppendValueConstraint(t *testing.T) {
 			}
 		})
 	}
+}
+
+// The all schemas Append writes beside all_test.go's, each declaring s:r:
+// allBASchema's all(b, a), its particles declared b then a;
+// allSkipFirstSchema's all(any, a), a skip wildcard of ##any declared ahead of
+// the element particle a it matches, and allOccSkipFirstSchema's the same all
+// group with {min occurs} 0, held in an occurrence field; allEmptySchema's
+// <xs:all/>; allGroupSchema's all(<element ref> to the head a, b), the head's
+// field the sealed interface over its substitution group; allUnionSchema's
+// all(b of the union u, a); allPDSchema's all(p of xs:precisionDecimal, a);
+// and allIDSchema's all(e of xs:ID, ref of xs:IDREF).
+const (
+	allBASchema           = `<xs:element name="r"><xs:complexType><xs:all><xs:element name="b" type="xs:int"/><xs:element name="a" type="xs:string"/></xs:all></xs:complexType></xs:element>`
+	allSkipFirstSchema    = `<xs:element name="r"><xs:complexType><xs:all><xs:any processContents="skip"/><xs:element name="a" type="xs:string"/></xs:all></xs:complexType></xs:element>`
+	allOccSkipFirstSchema = `<xs:element name="r"><xs:complexType><xs:all minOccurs="0"><xs:any processContents="skip"/><xs:element name="a" type="xs:string"/></xs:all></xs:complexType></xs:element>`
+	allEmptySchema        = `<xs:element name="r"><xs:complexType><xs:all/></xs:complexType></xs:element>`
+	allGroupSchema        = `<xs:element name="a" type="xs:string"/><xs:element name="m" type="xs:string" substitutionGroup="s:a"/>
+		<xs:element name="r"><xs:complexType><xs:all><xs:element ref="s:a"/><xs:element name="b" type="xs:string"/></xs:all></xs:complexType></xs:element>`
+	allUnionSchema = unionTypes + `<xs:element name="r"><xs:complexType><xs:all><xs:element name="b" type="s:u"/><xs:element name="a" type="xs:string"/></xs:all></xs:complexType></xs:element>`
+	allPDSchema    = `<xs:element name="r"><xs:complexType><xs:all><xs:element name="p" type="xs:precisionDecimal"/><xs:element name="a" type="xs:string"/></xs:all></xs:complexType></xs:element>`
+	allIDSchema    = `<xs:element name="r"><xs:complexType><xs:all><xs:element name="e" type="xs:ID"/><xs:element name="ref" type="xs:IDREF"/></xs:all></xs:complexType></xs:element>`
+)
+
+// The types codegen emits for the schemas above, which item 5 of Append's
+// doc holds each to: allSkipFirst is allSkipFirstSchema's R and the item of
+// allOccSkipFirstSchema's occurrence field.
+type (
+	allBA struct {
+		B int32
+		A string
+	}
+	allSkipFirst struct {
+		Any anyElement
+		A   string
+	}
+	allOccSkipFirst struct{ All *allSkipFirst }
+	allGroup        struct {
+		A grpAGroup
+		B string
+	}
+	allUnion struct {
+		B unionU
+		A string
+	}
+	allPD struct {
+		P tPrecisionDecimal
+		A string
+	}
+	allID struct{ E, Ref string }
+)
+
+// TestAppendAll pins the all group "# What encodes" admits, spliced and held
+// in an occurrence field: each row is written as shown, validate accepts it
+// and Decode returns it equal. Element particles are written in {particles}
+// order, all(b, a)'s b first; a <group ref>, a repeated particle, an
+// emptiable all holding nothing, an extension's merged all and <xs:all/>
+// write so too, and a wildcard particle's element follows the element
+// particles' whatever its place in {particles}: all(a, any ##other),
+// all(a, <group ref> to all(any)), and all(any skip, a), whose value Decode
+// returns for <a>x</a><a>y</a>, Any holding the second <a>, is written
+// <a>x</a><a>y</a>, spliced and in an occurrence field. A value Decode
+// returns for a permuted document re-encodes in {particles} order. A
+// sealed-interface field (a substitution group's, a union's,
+// xs:precisionDecimal's) and an xs:ID and xs:IDREF pair, which Append
+// assesses (cvc-id), are written inside an all group as anywhere else.
+func TestAppendAll(t *testing.T) {
+	w := anyElement{Space: "urn:o", Local: "w"}
+	second := anyElement{Space: "urn:s", Local: "a", Content: anyType{Text: "y"}}
+	t.Run("all(a, b)", func(t *testing.T) {
+		roundTrip(t, schemaOf(t, allABSchema), rootName, allAB{A: "x", B: 1}, `<r xmlns="urn:s"><a>x</a><b>1</b></r>`, deepEqual[allAB])
+	})
+	t.Run("all(b, a), declared b then a", func(t *testing.T) {
+		roundTrip(t, schemaOf(t, allBASchema), rootName, allBA{B: 1, A: "x"}, `<r xmlns="urn:s"><b>1</b><a>x</a></r>`, deepEqual[allBA])
+	})
+	t.Run("a <group ref> to an all group", func(t *testing.T) {
+		roundTrip(t, schemaOf(t, allRefSchema), rootName, allAB{A: "x", B: 4}, `<r xmlns="urn:s"><a>x</a><b>4</b></r>`, deepEqual[allAB])
+	})
+	t.Run("a repeated particle", func(t *testing.T) {
+		roundTrip(t, schemaOf(t, allRepSchema), rootName, allRep{A: []string{"p", "q"}, B: 3}, `<r xmlns="urn:s"><a>p</a><a>q</a><b>3</b></r>`, deepEqual[allRep])
+	})
+	t.Run("an emptiable spliced all holding nothing", func(t *testing.T) {
+		roundTrip(t, schemaOf(t, allSplicedSchema), rootName, allSpliced{}, `<r xmlns="urn:s"/>`, deepEqual[allSpliced])
+	})
+	t.Run("an extension merging two alls", func(t *testing.T) {
+		roundTrip(t, schemaOf(t, allExtSchema), rootName, allAB{A: "x", B: 6}, `<r xmlns="urn:s"><a>x</a><b>6</b></r>`, deepEqual[allAB])
+	})
+	t.Run("<xs:all/>", func(t *testing.T) {
+		roundTrip(t, schemaOf(t, allEmptySchema), rootName, struct{}{}, `<r xmlns="urn:s"/>`, deepEqual[struct{}])
+	})
+	t.Run("all(a, any ##other)", func(t *testing.T) {
+		roundTrip(t, schemaOf(t, allWildSchema), rootName, allWild{A: "x", Any: w}, `<r xmlns="urn:s"><a>x</a><w xmlns="urn:o"/></r>`, deepEqual[allWild])
+	})
+	t.Run("a wildcard inside a nested all", func(t *testing.T) {
+		roundTrip(t, schemaOf(t, allNestedWildSchema), rootName, allWild{A: "x", Any: w}, `<r xmlns="urn:s"><a>x</a><w xmlns="urn:o"/></r>`, deepEqual[allWild])
+	})
+	t.Run("all(any skip, a), the value Decode returns", func(t *testing.T) {
+		schema := schemaOf(t, allSkipFirstSchema)
+		v := decodedAs(t, schema, "<s:a>x</s:a><s:a>y</s:a>", allSkipFirst{Any: second, A: "x"})
+		roundTrip(t, schema, rootName, v, `<r xmlns="urn:s"><a>x</a><a>y</a></r>`, deepEqual[allSkipFirst])
+	})
+	t.Run("all(any skip, a) in an occurrence field, the value Decode returns", func(t *testing.T) {
+		schema := schemaOf(t, allOccSkipFirstSchema)
+		v := decodedAs(t, schema, "<s:a>x</s:a><s:a>y</s:a>", allOccSkipFirst{All: &allSkipFirst{Any: second, A: "x"}})
+		roundTrip(t, schema, rootName, v, `<r xmlns="urn:s"><a>x</a><a>y</a></r>`, deepEqual[allOccSkipFirst])
+	})
+	t.Run("a value decoded from a permuted document", func(t *testing.T) {
+		schema := schemaOf(t, allABSchema)
+		v := decodedAs(t, schema, "<s:b>1</s:b><s:a>x</s:a>", allAB{A: "x", B: 1})
+		roundTrip(t, schema, rootName, v, `<r xmlns="urn:s"><a>x</a><b>1</b></r>`, deepEqual[allAB])
+	})
+	t.Run("an occurrence field holding one item", func(t *testing.T) {
+		roundTrip(t, schemaOf(t, allOccABSchema), rootName, allOccAB{All: &allOccABItem{A: "x", B: 1}}, `<r xmlns="urn:s"><a>x</a><b>1</b></r>`, deepEqual[allOccAB])
+	})
+	t.Run("an occurrence field holding nothing", func(t *testing.T) {
+		roundTrip(t, schemaOf(t, allOccASchema), rootName, allOccA{}, `<r xmlns="urn:s"/>`, deepEqual[allOccA])
+	})
+	t.Run("an occurrence field's repeated particle", func(t *testing.T) {
+		roundTrip(t, schemaOf(t, allOccRepSchema), rootName, allOccRep{All: &allOccRepItem{A: []string{"p", "q"}, B: 3}}, `<r xmlns="urn:s"><a>p</a><a>q</a><b>3</b></r>`, deepEqual[allOccRep])
+	})
+	t.Run("an occurrence field's nested all", func(t *testing.T) {
+		roundTrip(t, schemaOf(t, allOccNestedSchema), rootName, allOccAB{All: &allOccABItem{A: "x", B: 4}}, `<r xmlns="urn:s"><a>x</a><b>4</b></r>`, deepEqual[allOccAB])
+	})
+	t.Run("an occurrence field of an extension merging two alls", func(t *testing.T) {
+		roundTrip(t, schemaOf(t, allOccExtSchema), rootName, allOccAB{All: &allOccABItem{A: "x", B: 6}}, `<r xmlns="urn:s"><a>x</a><b>6</b></r>`, deepEqual[allOccAB])
+	})
+	t.Run("a substitution group's interface", func(t *testing.T) {
+		roundTrip(t, schemaOf(t, allGroupSchema), rootName, allGroup{A: grpAGroupM{M: "y"}, B: "b"}, `<r xmlns="urn:s"><m>y</m><b>b</b></r>`, deepEqual[allGroup], grpBranches)
+	})
+	t.Run("a union's interface", func(t *testing.T) {
+		roundTrip(t, schemaOf(t, allUnionSchema), rootName, allUnion{B: unionUDate(unionDateOf(2000, 1, 2)), A: "x"}, `<r xmlns="urn:s"><b>2000-01-02</b><a>x</a></r>`, sameUnion[allUnion], unionVariants...)
+	})
+	t.Run("an xs:precisionDecimal", func(t *testing.T) {
+		roundTrip(t, schemaOf(t, allPDSchema), rootName, allPD{P: tPrecisionDecimal{tPDNotANumber{}}, A: "x"}, `<r xmlns="urn:s"><p>NaN</p><a>x</a></r>`, func(a, b allPD) bool {
+			return samePD(a.P, b.P) && a.A == b.A
+		}, pdArms)
+	})
+	t.Run("an xs:ID and an xs:IDREF", func(t *testing.T) {
+		roundTrip(t, schemaOf(t, allIDSchema), rootName, allID{E: "i", Ref: "i"}, `<r xmlns="urn:s"><e>i</e><ref>i</ref></r>`, deepEqual[allID])
+	})
+}
+
+// decodedAs returns the value Decode returns for the document s:r of schema
+// holding body, failing t unless validate accepts it and the value is want.
+func decodedAs[T any](t *testing.T, schema *xsd.Schema, body string, want T) T {
+	t.Helper()
+	data := instanceOf("", body)
+	mustAccept(t, schema, data)
+	got, err := Decode[T](schema, strict.New(), data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	v := unscoped(*got).(T)
+	if !reflect.DeepEqual(v, want) {
+		t.Fatalf("Decode = %#v, want %#v", v, want)
+	}
+	return v
+}
+
+// TestAppendAllInvalid pins item 6 of Append's doc for an all group's
+// required particle whose field is unset, spliced and in an occurrence
+// field's item: a slice of {min occurs} 1 holding no item and a nil
+// substitution group interface. Each error opens as shown and Append returns
+// dst unextended. Then item 8 for cvc-id: an xs:IDREF naming no xs:ID.
+func TestAppendAllInvalid(t *testing.T) {
+	pre := []byte("pre")
+	for _, row := range []struct {
+		name string
+		run  func(t *testing.T) ([]byte, error)
+		want string
+	}{
+		{"a repeated particle holding no item", func(t *testing.T) ([]byte, error) {
+			return appendChecked(t, pre, schemaOf(t, allRepSchema), strict.New(), rootName, allRep{B: 3})
+		}, "codec: Append: allRep.A holds 0 items, outside the occurrence 1..unbounded of the particle of "},
+		{"an occurrence field's repeated particle holding no item", func(t *testing.T) ([]byte, error) {
+			return appendChecked(t, pre, schemaOf(t, allOccRepSchema), strict.New(), rootName, allOccRep{All: &allOccRepItem{B: 3}})
+		}, "codec: Append: allOccRep.All.A holds 0 items, outside the occurrence 1..unbounded of the particle of "},
+		{"a nil substitution group interface", func(t *testing.T) ([]byte, error) {
+			return appendChecked(t, pre, schemaOf(t, allGroupSchema), strict.New(), rootName, allGroup{B: "b"}, grpBranches)
+		}, "codec: Append: allGroup.A is nil"},
+	} {
+		t.Run(row.name, func(t *testing.T) {
+			got, err := row.run(t)
+			invalidValue(t, err)
+			if !strings.HasPrefix(err.Error(), row.want) {
+				t.Errorf("error %q does not open with %q", err, row.want)
+			}
+			if string(got) != "pre" {
+				t.Errorf("Append returned %q, want dst unextended", got)
+			}
+		})
+	}
+	t.Run("an xs:IDREF naming no xs:ID", func(t *testing.T) {
+		got, err := appendChecked(t, pre, schemaOf(t, allIDSchema), strict.New(), rootName, allID{E: "i", Ref: "z"})
+		assessedCharge(t, got, err, "cvc-id", "1", `the id "z"`)
+	})
 }

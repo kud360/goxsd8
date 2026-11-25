@@ -576,29 +576,73 @@ func (c *boundChoiceRoot) write(e *encoder, v reflect.Value, at writeAt) error {
 }
 
 // write writes the elements of each of b's members from its field of v, each
-// member by its bound state (writeMembers), under the content's
-// attributionCheck (encoder.attribution), its first target the sequence's
-// base.
+// member by its bound state, in the order sequence.writeBound states, under
+// the content's attributionCheck (encoder.attribution), its first target the
+// sequence's base.
 func (b *boundSequence) write(e *encoder, v reflect.Value, at writeAt) error {
 	check := e.attribution(b.sequence.index, at.el, at.typ, membersFlatten(b.sequence.members))
-	if err := writeMembers(e, b.members, v, at, attributionSlot{check: check, target: b.sequence.base}); err != nil {
+	if err := b.sequence.writeBound(e, b.members, v, at, attributionSlot{check: check, target: b.sequence.base}); err != nil {
 		return err
 	}
 	check.end(e, at.path)
 	return nil
 }
 
+// writeBound writes the elements of each of s's members from its field of v,
+// the struct holding them, bound[i] member i's bound state: an all group's
+// (sequence.all) by writeAll, any other sequence's in member order
+// (writeMembers).
+func (s *sequence) writeBound(e *encoder, bound []boundMember, v reflect.Value, at writeAt, slot attributionSlot) error {
+	if s.all {
+		return writeAll(e, bound, v, at, slot)
+	}
+	return writeMembers(e, bound, v, at, slot)
+}
+
 // writeMembers writes the elements of each member of a sequence, of a
 // choice's alternative or of an occurrence field's item from its field of v,
-// the struct holding them, in member order, each by bound[i], its own bound
-// state (memberWriter), each taken by slot.check: member i's first
-// attribution target is slot.target, the first member's, plus the targets
-// every earlier member takes, one per sink (boundMember.sinks).
+// the struct holding them, in member order (writeMembersWhere).
 func writeMembers(e *encoder, bound []boundMember, v reflect.Value, at writeAt, slot attributionSlot) error {
+	return writeMembersWhere(e, bound, v, at, slot, func(boundMember) bool { return true })
+}
+
+// writeAll writes the elements of each member of an all group, the content's
+// spliced one or an occurrence field's item, from its field of v: every
+// element particle's member first, in member order, then every wildcard
+// particle's, in member order (particleWriter.wildcard), each at the
+// attribution target member order gives it (writeMembersWhere). Each order
+// lies in the all group's language, the interleave of its particles'
+// (§3.8.4.1.3); writing the elements first reproduces the attribution of the
+// values Decode returns, a child one of the group's element particles takes
+// going to it before a wildcard particle (codegen/doc.go "# Particles"), and
+// slot.check stays the check of every value it does not (attributionCheck).
+// An all group's members are each an element or wildcard particle's
+// (§3.8.6.2 cos-all-limited), its {open content} field declined by item 4 of
+// [Append]'s doc (contentEncodes), so that any other member is an internal
+// bug, which panics, as encoded's assertion does.
+func writeAll(e *encoder, bound []boundMember, v reflect.Value, at writeAt, slot attributionSlot) error {
+	for _, wildcards := range [...]bool{false, true} {
+		if err := writeMembersWhere(e, bound, v, at, slot, func(b boundMember) bool {
+			return encoded[boundParticle](b).writer.wildcard() == wildcards
+		}); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// writeMembersWhere writes the elements of each member of bound keep reports
+// true for, in member order, from its field of v, each by its own bound state
+// (memberWriter), each taken by slot.check: member i's first attribution
+// target is slot.target, the first member's, plus the targets every earlier
+// member takes, kept or not, one per sink (boundMember.sinks).
+func writeMembersWhere(e *encoder, bound []boundMember, v reflect.Value, at writeAt, slot attributionSlot, keep func(boundMember) bool) error {
 	target := slot.target
 	for _, b := range bound {
-		if err := encoded[memberWriter](b).writeMember(e, v, at, attributionSlot{check: slot.check, target: target}); err != nil {
-			return err
+		if keep(b) {
+			if err := encoded[memberWriter](b).writeMember(e, v, at, attributionSlot{check: slot.check, target: target}); err != nil {
+				return err
+			}
 		}
 		target += len(b.sinks())
 	}
@@ -725,7 +769,7 @@ func (b *boundContentChoice) write(e *encoder, v reflect.Value, at writeAt) erro
 // write writes the occurrence field of v, field b.index, as writeOccurring
 // states, the field's shape and its particle's occurrence read from the
 // occurrence (occurrence.shape, occurrence.own): each item it holds, in slice
-// order, as its model group's particles in order (boundItem.writeItem), all
+// order, as boundItem.writeItem writes its model group's particles, all
 // under one attributionCheck of the content (encoder.attribution), since the
 // content model's Matcher spans every occurrence, the item's targets from 0.
 // An item holds no flattened particle (flatHolder).
@@ -754,10 +798,10 @@ func contentChoiceSubject(el xsd.ElementDeclaration, typ xsd.ComplexType) string
 
 // writeItem writes the elements of each member of the sequence or all group
 // from its field of v, the item's struct, member i's field i, each by its
-// bound state (writeMembers), the first target slot.target, the sequence's
-// base.
+// bound state, in the order sequence.writeBound states, the first target
+// slot.target, the sequence's base.
 func (b boundSequenceItem) writeItem(e *encoder, v reflect.Value, at writeAt, _ string, slot attributionSlot) error {
-	return writeMembers(e, b.members, v, at, slot)
+	return b.sequence.writeBound(e, b.members, v, at, slot)
 }
 
 // writeItem writes the branch v, a value of the choice's sealed interface,
@@ -918,11 +962,20 @@ func unemptiable(alts []branchArm) string {
 // writes, a contentMember's or a branchArm's, held by the boundParticle it
 // binds (boundParticle.writeMember): writeElements writes the elements of f,
 // the field of its particle, read by s, the field's sink, at at, each taken
-// by slot's attributionCheck at slot's target, and returns a backend fault.
-// Its implementers are elementMember and wildcardMember.
+// by slot's attributionCheck at slot's target, and returns a backend fault;
+// wildcard reports whether the particle is a wildcard particle, whose
+// elements an all group writes after its element particles' (writeAll). Its
+// implementers are elementMember and wildcardMember.
 type particleWriter interface {
 	writeElements(e *encoder, s fieldSink, f reflect.Value, at writeAt, slot attributionSlot) error
+	wildcard() bool
 }
+
+// wildcard is false: the member is an element particle's.
+func (elementMember) wildcard() bool { return false }
+
+// wildcard is true: the member is a wildcard particle's.
+func (wildcardMember) wildcard() bool { return true }
 
 // writeElements writes the elements of f, the field of m's particle, as
 // writeOccurring states, each by the elementWriter s, the field's sink, reads
@@ -1250,15 +1303,14 @@ func (w *encodeWalk) complexEncodes(decl xsd.ElementDeclaration, ct xsd.ComplexT
 // hold as contentGroup, Decode's, answers them, contentGroup's errors returned
 // as they are and its construct, which §3.4.2.3.3 leaves no schema to reach,
 // as a plain error; then a model group codegen flattens as reachEncodes
-// examines it; or each particle of a spliced sequence, of a choice
-// occurring once that codegen does not flatten, or of a sequence or choice
-// held in an occurrence field, as particleEncodes admits it at its
-// particleSite, an all group spliced or held in an occurrence field
-// declining before any particle is examined; then, where a particle the
-// walk examined sets the site's matcher, a wildcard particle, a nested
-// flattened particle or a nested occurrence field at any depth, whose
-// children Append attributes through a Matcher (attributionCheck), ct's
-// content model where xsd.Schema.ContentMatcher does not track it.
+// examines it; or each particle of a spliced sequence or all group, of a
+// choice occurring once that codegen does not flatten, or of a sequence,
+// choice or all group held in an occurrence field, as particleEncodes admits
+// it at its particleSite; then, where a particle the walk examined sets the
+// site's matcher, a wildcard particle, a nested flattened particle or a nested
+// occurrence field at any depth, whose children Append attributes through a
+// Matcher (attributionCheck), ct's content model where
+// xsd.Schema.ContentMatcher does not track it.
 func (w *encodeWalk) contentEncodes(ct xsd.ComplexType, content xsd.ElementContent, subject string) error {
 	if content.Mixed {
 		return encodeDecline(constructMixed, subject)
@@ -1284,16 +1336,11 @@ func (w *encodeWalk) contentEncodes(ct xsd.ComplexType, content xsd.ElementConte
 	case goshape.OnceChoice:
 		label = alternative
 	case goshape.Occurrence:
-		if group.Compositor() == xsd.CompositorAll {
-			return encodeDecline(constructAllGroup, subject)
-		}
 		if group.Compositor() == xsd.CompositorChoice {
 			label = alternative
 		}
 	case goshape.Spliced:
-		if group.Compositor() == xsd.CompositorAll {
-			return encodeDecline(constructAllGroup, subject)
-		}
+		// A spliced sequence's or all group's particles keep label.
 	}
 	var matcher bool
 	site := particleSite{item: hold == goshape.Occurrence, alternative: label == alternative, matcher: &matcher}
@@ -1354,15 +1401,14 @@ func (w *encodeWalk) particlesEncode(particles []xsd.Particle, kind, subject str
 // alternative, goshape.BranchOccurs' (§3.7.2 declare-namedModelGroup), at
 // site, subject naming it, by the hold goshape.ParticleHold answers for it,
 // as Decode's sequence.nested binds it. Spliced examines group's particles in
-// its place, an all group declining first; OnceChoice examines its
-// alternatives, as alternatives; Flattened, inside an occurrence field's
-// item, declines by constructNestedGroup, as Decode's bind does, since the
-// item's partition reads no repetition of a model group inside it, and
-// otherwise examines each basic particle of its reach (reachEach); Occurrence,
-// inside an item, declines by constructNestedGroup too, whatever its
-// occurrence, and otherwise, an all group declining first, examines its
-// particles, a choice's as alternatives, each inside the field's item. Each
-// particle examined inside group keeps site's item, and a Flattened or
+// its place; OnceChoice examines its alternatives, as alternatives; Flattened,
+// inside an occurrence field's item, declines by constructNestedGroup, as
+// Decode's bind does, since the item's partition reads no repetition of a
+// model group inside it, and otherwise examines each basic particle of its
+// reach (reachEach); Occurrence, inside an item, declines by
+// constructNestedGroup too, whatever its occurrence, and otherwise examines
+// its particles, a choice's as alternatives, each inside the field's item.
+// Each particle examined inside group keeps site's item, and a Flattened or
 // Occurrence group sets site.matcher. ParticleHold's errors are plain,
 // prefixed by subject.
 func (w *encodeWalk) groupEncodes(group xsd.ModelGroup, occurs xsd.Occurs, subject string, site particleSite) error {
@@ -1372,9 +1418,6 @@ func (w *encodeWalk) groupEncodes(group xsd.ModelGroup, occurs xsd.Occurs, subje
 	}
 	switch hold {
 	case goshape.Spliced:
-		if group.Compositor() == xsd.CompositorAll {
-			return encodeDecline(constructAllGroup, subject)
-		}
 		return w.particlesEncode(group.Particles(), "particle", subject, particleSite{item: site.item, matcher: site.matcher})
 	case goshape.OnceChoice:
 		return w.particlesEncode(group.Particles(), "alternative", subject, particleSite{item: site.item, alternative: true, matcher: site.matcher})
@@ -1387,9 +1430,6 @@ func (w *encodeWalk) groupEncodes(group xsd.ModelGroup, occurs xsd.Occurs, subje
 	case goshape.Occurrence:
 		if site.item {
 			return encodeDecline(constructNestedGroup, subject)
-		}
-		if group.Compositor() == xsd.CompositorAll {
-			return encodeDecline(constructAllGroup, subject)
 		}
 		*site.matcher = true
 		inner := particleSite{item: true, alternative: group.Compositor() == xsd.CompositorChoice, matcher: site.matcher}

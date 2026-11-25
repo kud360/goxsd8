@@ -327,12 +327,14 @@
 //     definition} (Structures §3.4.2.2 dcl.ctd.ctsc) is a simple type that
 //     encodes, its value field (codegen's package doc, "# Complex types")
 //     written as the element's character content after its attributes, or of
-//     element-only content whose {particle} is a sequence that codegen
-//     splices, a choice occurring exactly once that codegen does not flatten,
-//     or a sequence or choice codegen holds in an occurrence field, inline or
-//     through <group ref>, each of whose particles is an element particle, a
-//     wildcard particle with {process contents} skip or lax, or a nested
-//     sequence or choice particle, inline or through <group ref>, held as
+//     element-only content whose {particle} is a sequence or all group that
+//     codegen splices, a choice occurring exactly once that codegen does not
+//     flatten, or a sequence, choice or all group codegen holds in an
+//     occurrence field, inline or through <group ref>, each of whose
+//     particles is an element particle, a wildcard particle with {process
+//     contents} skip or lax, a nested sequence or choice particle, inline or
+//     through <group ref>, or an all group's nested all group particle,
+//     through <group ref> (Structures §3.8.6.2 cos-all-limited), held as
 //     codegen's package doc "# Particles" holds it: one codegen splices, as
 //     its own particles in its place; a choice occurring exactly once that
 //     codegen does not flatten, into its sealed interface field, as its
@@ -346,17 +348,16 @@
 //     or holds in an occurrence field of its own is a [*DeclineError],
 //     whatever its occurrence, as it is for Decode ("# What decodes"). A
 //     content model holding a wildcard particle, a nested flattened particle
-//     or a nested occurrence field, at any depth, is one
-//     xsd.Schema.ContentMatcher tracks. The content {particle} may also be a
-//     sequence or choice codegen flattens, each basic particle of whose reach
-//     (codegen's package doc, "# Particles") is such an element or wildcard
-//     particle, and whose content model xsd.Schema.ContentMatcher tracks, with
-//     or without a wildcard particle. The choice occurring exactly once
-//     encodes into its sealed interface, T itself or the first field of T's
-//     struct, the sequence or choice held in an occurrence field into that
-//     field, and the flattened one into its slice field, as "# What decodes"
-//     states.
-//   - An element particle of that sequence or choice or of a model group
+//     or a nested occurrence field, at any depth, is one xsd.Schema.ContentMatcher
+//     tracks. The content {particle} may also be a sequence or choice codegen
+//     flattens, each basic particle of whose reach (codegen's package doc, "#
+//     Particles") is such an element or wildcard particle, and whose content model
+//     xsd.Schema.ContentMatcher tracks, with or without a wildcard particle. The
+//     choice occurring exactly once encodes into its sealed interface, T itself or the
+//     first field of T's struct, the sequence, choice or all group held in an
+//     occurrence field into that field, and the flattened one into its slice field, as
+//     "# What decodes" states.
+//   - An element particle of that sequence, choice or all group or of a model group
 //     nested in it, at any depth, or one a flattened sequence or choice
 //     reaches, with {max occurs} at least 1, its {term} a local element
 //     declaration or, for an <element ref>, the top-level declaration it
@@ -370,11 +371,11 @@
 //     its branch's field, and for a basic particle a flattened sequence or
 //     choice reaches, into the one field of its branch, each item of the
 //     slice one element, as "# What decodes" states.
-//   - A wildcard particle of that sequence or choice or of a model group
+//   - A wildcard particle of that sequence, choice or all group or of a model group
 //     nested in it, at any depth, or one a flattened sequence or choice
-//     reaches, with {process contents} skip or lax and {max
-//     occurs} at least 1, into the field "# What decodes" states for it, each
-//     element it holds written raw, as below.
+//     reaches, with {process contents} skip or lax and {max occurs} at least 1,
+//     into the field "# What decodes" states for it, each element it holds written
+//     raw, as below.
 //   - xs:anyType itself (Structures §3.4.7), where the bullets above admit
 //     it, into the Go type "# What decodes" states for its declaration, its
 //     content written raw, as below.
@@ -479,31 +480,34 @@
 // element per item of its slice, a flattened sequence or choice one per item of
 // its slice, in order, its branch's basic particle's, whatever the particle's
 // occurrence, an occurrence field writes each item it holds, in order, as its
-// model group's particles in order, a choice's branch writes its alternative's
-// elements, the empty match, the nil interface of a present element, writes no
-// child element, and an element with no content is written as an empty-element
-// tag, <x/>. A string value, of xs:string or xs:anyURI primitive, is written as
-// itself, its canonical representation, since xs:string's canonical mapping is
-// the identity (Datatypes §E.4 f-stringCanmap) and so is xs:anyURI's lexical
-// mapping, so that an xs:anyURI value is neither normalized nor percent-escaped
-// (§3.3.17.2), and item 6 of Append's doc holds the string to its own
-// whiteSpace-normalized form. A value of xs:anySimpleType or xs:anyAtomicType
+// model group's particles in order, an all group's, spliced or an occurrence
+// field's item, written as its element particles in order and then its
+// wildcard particles in order, which keeps the attribution codegen's package
+// doc "# Particles" states for an all group's wildcard field, a choice's branch
+// writes its alternative's elements, the empty match, the nil interface of a
+// present element, writes no child element, and an element with no content is
+// written as an empty-element tag, <x/>. A string value, of xs:string or xs:anyURI
+// primitive, is written as itself, its canonical representation, since xs:string's
+// canonical mapping is the identity (Datatypes §E.4 f-stringCanmap) and so is
+// xs:anyURI's lexical mapping, so that an xs:anyURI value is neither normalized nor
+// percent-escaped (§3.3.17.2), and item 6 of Append's doc holds the string to its
+// own whiteSpace-normalized form. A value of xs:anySimpleType or xs:anyAtomicType
 // itself is written as the string it holds, the ·literal· Decode returns, whose
 // lexical mapping is no function (Datatypes §3.2.1.2, §3.2.2.2), and item 6 of
-// Append's doc holds it to the Char production alone. A list value is written
-// as its items are written, in order, separated by single U+0020 characters
-// (Datatypes §2.4.1.2), and the empty list, nil or empty, as no content: <x/>
-// for an element, a="" for an attribute. A union value is written as its
-// variant's member value is, under that member, item 7 of Append's doc stating
-// when the text it writes would decode into another variant. It escapes '<',
-// '&' and '>' as &lt;, &amp; and &gt; everywhere, so that "]]>" is never
-// written, and CR as &#xD; everywhere, which XML 1.0 end-of-line handling
-// (§2.11) would otherwise rewrite to LF or remove; in an attribute value it
-// escapes '"' as &quot;, TAB as &#x9; and LF as &#xA;, which attribute-value
-// normalization (§3.3.3) would otherwise turn into spaces; and every other
-// character, TAB and LF in content and the apostrophe everywhere, is written as
-// itself. So the Order codegen emits for README's order.xsd, of Item {"a"} and
-// Kind "k", is written <order xmlns="urn:o" kind="k"><item>a</item></order>.
+// Append's doc holds it to the Char production alone. A list value is written as
+// its items are written, in order, separated by single U+0020 characters (Datatypes
+// §2.4.1.2), and the empty list, nil or empty, as no content: <x/> for an element,
+// a="" for an attribute. A union value is written as its variant's member value is,
+// under that member, item 7 of Append's doc stating when the text it writes would
+// decode into another variant. It escapes '<', '&' and '>' as &lt;, &amp; and &gt;
+// everywhere, so that "]]>" is never written, and CR as &#xD; everywhere, which XML
+// 1.0 end-of-line handling (§2.11) would otherwise rewrite to LF or remove; in an
+// attribute value it escapes '"' as &quot;, TAB as &#x9; and LF as &#xA;, which
+// attribute-value normalization (§3.3.3) would otherwise turn into spaces; and
+// every other character, TAB and LF in content and the apostrophe everywhere, is
+// written as itself. So the Order codegen emits for README's order.xsd, of Item
+// {"a"} and Kind "k", is written <order xmlns="urn:o"
+// kind="k"><item>a</item></order>.
 //
 // # Debuggability
 //
