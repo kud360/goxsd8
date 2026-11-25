@@ -329,9 +329,82 @@ func TestAppendEscapes(t *testing.T) {
 // carries xmlns="", no namespace writes no declaration, and a child in
 // another namespace than its parent's, here a local element of a type
 // imported from urn:b, carries that namespace's. README's qualified child
-// is TestAppendReadmeOrder's.
+// is TestAppendReadmeOrder's. It pins too how "# What encodes" names an
+// attribute use's attribute of a qualified declaration: pN:Local, never under
+// the element's default namespace though that is the attribute's, one
+// declaration serving two attributes, an xs:QName value in the attribute's
+// namespace on an element in none, whichever of the two is written first,
+// and a child's attribute in the namespace an ancestor declared a prefix for;
+// xml:Local, undeclared, for the XML namespace; and pN:Local for a location
+// hint's use, the one XSI-namespace use that writes.
 func TestAppendNamespaces(t *testing.T) {
 	type child struct{ A string }
+	type qualified struct{ A, B string }
+	t.Run("qualified attributes", func(t *testing.T) {
+		schema := schemaOf(t, `<xs:element name="r"><xs:complexType>
+		  <xs:attribute name="a" type="xs:string" form="qualified" use="required"/>
+		  <xs:attribute name="b" type="xs:string" form="qualified" use="required"/></xs:complexType></xs:element>`)
+		roundTrip(t, schema, sname("r"), qualified{A: "x", B: "y"}, `<r xmlns="urn:s" xmlns:p1="urn:s" p1:a="x" p1:b="y"/>`, deepEqual[qualified])
+	})
+	t.Run("qualified attribute beside an xs:QName value", func(t *testing.T) {
+		type nameFirst struct {
+			A string
+			Q tQName
+		}
+		type valueFirst struct {
+			Q tQName
+			A string
+		}
+		type pair struct {
+			N nameFirst
+			V valueFirst
+		}
+		schema := schemaOf(t, `<xs:element name="r"><xs:complexType><xs:sequence>
+		  <xs:element name="n" form="unqualified"><xs:complexType>
+		    <xs:attribute name="a" type="xs:string" form="qualified" use="required"/>
+		    <xs:attribute name="q" type="xs:QName" use="required"/></xs:complexType></xs:element>
+		  <xs:element name="v" form="unqualified"><xs:complexType>
+		    <xs:attribute name="q" type="xs:QName" use="required"/>
+		    <xs:attribute name="a" type="xs:string" form="qualified" use="required"/></xs:complexType></xs:element>
+		</xs:sequence></xs:complexType></xs:element>`)
+		z := tQName{Space: "urn:s", Local: "z"}
+		v := pair{N: nameFirst{A: "w", Q: z}, V: valueFirst{Q: z, A: "w"}}
+		roundTrip(t, schema, sname("r"), v,
+			`<r xmlns="urn:s"><n xmlns="" xmlns:p1="urn:s" p1:a="w" q="p1:z"/><v xmlns="" xmlns:p1="urn:s" q="p1:z" p1:a="w"/></r>`, deepEqual[pair])
+	})
+	t.Run("qualified attribute under an ancestor's prefix", func(t *testing.T) {
+		type inner struct{ B string }
+		type outer struct {
+			C inner
+			A string
+		}
+		schema := schemaOf(t, `<xs:element name="r"><xs:complexType><xs:sequence>
+		  <xs:element name="c" form="unqualified"><xs:complexType><xs:attribute name="b" type="xs:string" form="qualified" use="required"/></xs:complexType></xs:element>
+		</xs:sequence><xs:attribute name="a" type="xs:string" form="qualified" use="required"/></xs:complexType></xs:element>`)
+		roundTrip(t, schema, sname("r"), outer{C: inner{B: "y"}, A: "x"}, `<r xmlns="urn:s" xmlns:p1="urn:s" p1:a="x"><c xmlns="" p1:b="y"/></r>`, deepEqual[outer])
+	})
+	t.Run("XML namespace attribute", func(t *testing.T) {
+		type spaced struct{ Space *string }
+		schema := parseString(t, `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" targetNamespace="urn:s">
+		  <xs:import namespace="http://www.w3.org/XML/1998/namespace"/>
+		  <xs:element name="r"><xs:complexType><xs:attribute ref="xml:space"/></xs:complexType></xs:element>
+		</xs:schema>`)
+		preserve := "preserve"
+		roundTrip(t, schema, sname("r"), spaced{Space: &preserve}, `<r xmlns="urn:s" xml:space="preserve"/>`, deepEqual[spaced])
+	})
+	t.Run("xsi:noNamespaceSchemaLocation attribute use", func(t *testing.T) {
+		type hinted struct{ NoNamespaceSchemaLocation *string }
+		schema := schemaOf(t, `<xs:element name="r"><xs:complexType><xs:attribute ref="xsi:noNamespaceSchemaLocation"/></xs:complexType></xs:element>`)
+		location := "x.xsd"
+		roundTrip(t, schema, sname("r"), hinted{NoNamespaceSchemaLocation: &location},
+			`<r xmlns="urn:s" xmlns:p1="http://www.w3.org/2001/XMLSchema-instance" p1:noNamespaceSchemaLocation="x.xsd"/>`, deepEqual[hinted])
+	})
+	t.Run("xsi:schemaLocation attribute use", func(t *testing.T) {
+		type hinted struct{ SchemaLocation []string }
+		schema := schemaOf(t, `<xs:element name="r"><xs:complexType><xs:attribute ref="xsi:schemaLocation" use="required"/></xs:complexType></xs:element>`)
+		roundTrip(t, schema, sname("r"), hinted{SchemaLocation: []string{"urn:x", "x.xsd"}},
+			`<r xmlns="urn:s" xmlns:p1="http://www.w3.org/2001/XMLSchema-instance" p1:schemaLocation="urn:x x.xsd"/>`, deepEqual[hinted])
+	})
 	t.Run("unqualified child", func(t *testing.T) {
 		schema := parseString(t, `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" targetNamespace="urn:u">
 		  <xs:element name="r"><xs:complexType><xs:sequence><xs:element name="a" type="xs:string"/></xs:sequence></xs:complexType></xs:element>
@@ -1206,7 +1279,7 @@ func TestAppendDeclines(t *testing.T) {
 		{"complex particle", "a wildcard particle with {process contents} strict", sequence(`<xs:element name="a"><xs:complexType><xs:sequence><xs:any/></xs:sequence></xs:complexType></xs:element>`)},
 		{"particle type sharing its element's name", "a wildcard particle with {process contents} strict", `<xs:complexType name="%[1]s"><xs:sequence><xs:any/></xs:sequence></xs:complexType>` +
 			sequence(`<xs:element name="c" type="s:%[1]s"/>`)},
-		{"qualified attribute", "an attribute use whose declaration has a {target namespace}", complexOf(`<xs:attribute name="a" type="xs:string" form="qualified"/>`)},
+		{"xsi:type attribute use", "an attribute use whose declaration's {target namespace} is the XSI namespace, other than xsi:schemaLocation's and xsi:noNamespaceSchemaLocation's, or the one the prefix xmlns is bound to", complexOf(`<xs:attribute ref="xsi:type"/>`)},
 		{"complex assertions", "a complex type with {assertions}", complexOf(asserted)},
 		{"restricted complex assertions", "a complex type with {assertions}", `<xs:complexType name="ab%[1]s">` + asserted + `</xs:complexType>` +
 			`<xs:element name="%[1]s"><xs:complexType><xs:complexContent><xs:restriction base="s:ab%[1]s"><xs:sequence>` + a + `</xs:sequence></xs:restriction></xs:complexContent></xs:complexType></xs:element>`},
@@ -1286,6 +1359,29 @@ func TestAppendDeclines(t *testing.T) {
 			seen[row.construct] = constructs[0]
 		})
 	}
+	// An attribute use whose declaration is in the namespace the prefix xmlns
+	// is bound to, which no parser rule charges, declines by
+	// constructReservedAttributeUse, as the xsi:type row does.
+	t.Run("xmlns namespace attribute use", func(t *testing.T) {
+		const reserved = "an attribute use whose declaration's {target namespace} is the XSI namespace, other than xsi:schemaLocation's and xsi:noNamespaceSchemaLocation's, or the one the prefix xmlns is bound to"
+		schema, err := parser.Parse("a.xsd", parser.WithResolver(loader.Map(map[string]string{
+			"a.xsd": `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:n="http://www.w3.org/2000/xmlns/" targetNamespace="urn:a">
+			  <xs:import namespace="http://www.w3.org/2000/xmlns/" schemaLocation="n.xsd"/>
+			  <xs:element name="r"><xs:complexType><xs:attribute ref="n:a"/></xs:complexType></xs:element>
+			</xs:schema>`,
+			"n.xsd": `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" targetNamespace="http://www.w3.org/2000/xmlns/">
+			  <xs:attribute name="a" type="xs:string"/>
+			</xs:schema>`,
+		})))
+		if err != nil {
+			t.Fatal(err)
+		}
+		_, err = appendChecked(t, nil, schema, strict.New(), xsd.QName{Space: "urn:a", Local: "r"}, struct{}{})
+		d := asDecline(t, err, "codec does not encode "+reserved+": ")
+		if want := (Construct{constructReservedAttributeUse}); d.Construct() != want {
+			t.Errorf("Construct %v, want %v", d.Construct(), want)
+		}
+	})
 }
 
 // encodeListSchema declares, in urn:s, document elements of the list types "#

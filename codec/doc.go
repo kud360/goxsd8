@@ -378,10 +378,13 @@
 //   - xs:anyType itself (Structures §3.4.7), where the bullets above admit
 //     it, into the Go type "# What decodes" states for its declaration, its
 //     content written raw, as below.
-//   - An attribute use other than xsi:nil's, unqualified, of a simple type
-//     that encodes, with or without a value constraint, into V or *V, its
-//     value written as it is held, never omitted where it equals a default,
-//     which items 6 and 7 of Append's doc hold to a fixed one.
+//   - An attribute use other than xsi:nil's, whose declaration's {target
+//     namespace} is neither the one the prefix xmlns is bound to nor, but for
+//     xsi:schemaLocation's and xsi:noNamespaceSchemaLocation's, the XSI
+//     namespace, of a simple type that encodes, with or without a value
+//     constraint, into V or *V, its value written as it is held, never
+//     omitted where it equals a default, which items 6 and 7 of Append's doc
+//     hold to a fixed one.
 //   - An {attribute wildcard} (Structures §3.4.2.5 dcl.ctd.anyatt), the
 //     type's effective one, of any {process contents}, into the field "# What
 //     decodes" states for it, each attribute it holds written raw, as below.
@@ -441,10 +444,11 @@
 // The document Append writes has no XML declaration, so it is XML 1.0 in
 // UTF-8, and no white space between tags. It binds element names by default
 // declarations alone, never prefixing one but an element held raw, in a
-// wildcard's field or an xs:anyType element's content, at any depth, in the
-// XML namespace, written xml:Local, which is never declared, and writes an
-// attribute in the XSI namespace only where item 7 of Append's doc admits
-// one: the document element carries xmlns="ns" for its non-absent namespace ns,
+// wildcard's field or an xs:anyType element's content, at any depth,
+// in the XML namespace, written xml:Local, which is never declared,
+// and writes an attribute in the XSI namespace only where item 7
+// of Append's doc or the attribute-use bullet above admits one: the
+// document element carries xmlns="ns" for its non-absent namespace ns,
 // and nothing where it is absent, and every other element carries xmlns="ns",
 // or xmlns="" for an absent namespace, exactly where its namespace differs from
 // its parent's. An xs:QName or xs:NOTATION value, written in an attribute or as
@@ -454,11 +458,11 @@
 // prefix an open start tag, that element's or an ancestor's, declares for its
 // namespace name, or else p1, p2 and so on, the first not in scope, declared as
 // xmlns:pN="ns" on that element's start tag ahead of the attribute or content
-// that writes it. An attribute use's attribute is written unprefixed, in the
-// order of codegen's fields (codegen's package doc, "# Attributes"), each value
-// delimited by '"', and after them each attribute an {attribute wildcard}'s
-// field holds, in held order, as a raw element's attributes are written below,
-// nothing in it resolved, but for the ones item 7 of Append's doc declines. An
+// that writes it. An attribute use's attribute is written in the order of codegen's
+// fields (codegen's package doc, "# Attributes"), each value delimited by '"', and
+// after them each attribute an {attribute wildcard}'s field holds, in held order,
+// each of both named as a raw element's attributes are written below, nothing in
+// the field's resolved, but for the ones item 7 of Append's doc declines. An
 // element held raw in a skip wildcard's field, at any depth, is written raw,
 // nothing in it assessed or resolved, and so is one held in a lax wildcard's
 // field and the content of an element of type xs:anyType itself, its own
