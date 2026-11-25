@@ -444,11 +444,11 @@
 // The document Append writes has no XML declaration, so it is XML 1.0 in
 // UTF-8, and no white space between tags. It binds element names by default
 // declarations alone, never prefixing one but an element held raw, in a
-// wildcard's field or an xs:anyType element's content, at any depth, in the
-// XML namespace, written xml:Local, which is never declared, and writes an
-// attribute in the XSI namespace only where item 7 of Append's
-// doc or the attribute-use bullet above admits one: the document
-// element carries xmlns="ns" for its non-absent namespace ns,
+// wildcard's field or an xs:anyType element's content, at any depth,
+// in the XML namespace, written xml:Local, which is never declared,
+// and writes an attribute in the XSI namespace only where item 7
+// of Append's doc or the attribute-use bullet above admits one: the
+// document element carries xmlns="ns" for its non-absent namespace ns,
 // and nothing where it is absent, and every other element carries xmlns="ns",
 // or xmlns="" for an absent namespace, exactly where its namespace differs from
 // its parent's. An xs:QName or xs:NOTATION value, written in an attribute or as
@@ -458,13 +458,12 @@
 // prefix an open start tag, that element's or an ancestor's, declares for its
 // namespace name, or else p1, p2 and so on, the first not in scope, declared as
 // xmlns:pN="ns" on that element's start tag ahead of the attribute or content
-// that writes it. An attribute use's attribute is written in the
-// order of codegen's fields (codegen's package doc, "# Attributes"), each value
-// delimited by '"', and after them each attribute an {attribute wildcard}'s
-// field holds, in held order, each of both named as a raw element's
-// attributes are written below, nothing in the field's resolved,
-// but for the ones item 7 of Append's doc declines. An element held
-// raw in a skip wildcard's field, at any depth, is written raw,
+// that writes it. An attribute use's attribute is written in the order of codegen's
+// fields (codegen's package doc, "# Attributes"), each value delimited by '"', and
+// after them each attribute an {attribute wildcard}'s field holds, in held order,
+// each of both named as a raw element's attributes are written below, nothing in
+// the field's resolved, but for the ones item 7 of Append's doc declines. An
+// element held raw in a skip wildcard's field, at any depth, is written raw,
 // nothing in it assessed or resolved, and so is one held in a lax wildcard's
 // field and the content of an element of type xs:anyType itself, its own
 // attributes included, nothing in either resolved, but for the items item 7 of
