@@ -1345,6 +1345,29 @@ func TestAppendDeclines(t *testing.T) {
 			seen[row.construct] = constructs[0]
 		})
 	}
+	// An attribute use whose declaration is in the namespace the prefix xmlns
+	// is bound to, which no parser rule charges, declines by
+	// constructReservedAttributeUse, as the xsi:type row does.
+	t.Run("xmlns namespace attribute use", func(t *testing.T) {
+		const reserved = "an attribute use whose declaration's {target namespace} is the XSI namespace or the one the prefix xmlns is bound to"
+		schema, err := parser.Parse("a.xsd", parser.WithResolver(loader.Map(map[string]string{
+			"a.xsd": `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:n="http://www.w3.org/2000/xmlns/" targetNamespace="urn:a">
+			  <xs:import namespace="http://www.w3.org/2000/xmlns/" schemaLocation="n.xsd"/>
+			  <xs:element name="r"><xs:complexType><xs:attribute ref="n:a"/></xs:complexType></xs:element>
+			</xs:schema>`,
+			"n.xsd": `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" targetNamespace="http://www.w3.org/2000/xmlns/">
+			  <xs:attribute name="a" type="xs:string"/>
+			</xs:schema>`,
+		})))
+		if err != nil {
+			t.Fatal(err)
+		}
+		_, err = appendChecked(t, nil, schema, strict.New(), xsd.QName{Space: "urn:a", Local: "r"}, struct{}{})
+		d := asDecline(t, err, "codec does not encode "+reserved+": ")
+		if want := (Construct{constructReservedAttributeUse}); d.Construct() != want {
+			t.Errorf("Construct %v, want %v", d.Construct(), want)
+		}
+	})
 }
 
 // encodeListSchema declares, in urn:s, document elements of the list types "#
