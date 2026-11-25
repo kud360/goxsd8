@@ -85,9 +85,13 @@ func TestAppendID(t *testing.T) {
 // (clause 2); and, at each reach of encodeWalk.atomicEncodes, an xs:ID value
 // that binds no element, the document element's or its simple content's
 // (clause 1), and an IDREF naming no id, an attribute's, a list item's and a
-// union member's (clause 1). Each of the last five fails with the walk's
-// trigger missing that reach alone, since its schema holds no other ID or
-// IDREF.
+// union member's (clause 1). Every row fails with the walk's trigger
+// removed. With one reach's call into the walk given a walk of its own, whose
+// flag no one reads, the rows that fail are: for the element reach, element,
+// list item and union member, whose types each document element's
+// declaration reaches first; for simple content, simple content; for the
+// attribute reach, attribute and two defaults; for the list item, list item;
+// and for the union member, union member.
 func TestAppendIDViolation(t *testing.T) {
 	schema := schemaOf(t, idSchema)
 	pre := []byte("pre")
