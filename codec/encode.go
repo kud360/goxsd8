@@ -165,17 +165,19 @@ var ErrInvalidValue = errors.New("codec: Append: a value no valid document holds
 //     xs:NOTATION value whose namespace name is absent, written on an element
 //     whose namespace is not, which no unprefixed spelling resolves to there
 //     and no prefix can be bound to (Namespaces in XML §5 nsc-NoPrefixUndecl),
-//     whatever else rejects it; or an attribute in the XSI namespace on an
-//     element a wildcard particle's field holds, or in the content of an
-//     element of type xs:anyType itself, its own attributes among it, at any
-//     depth, or in an {attribute wildcard}'s field, whatever its value, since
-//     an xsi:type's may hold a prefix no binding the struct holds resolves;
-//     or, in such content of an xs:anyType element, or in an element a lax
+//     whatever else rejects it; or an attribute in the XSI namespace in an
+//     {attribute wildcard}'s field, or, other than xsi:schemaLocation and
+//     xsi:noNamespaceSchemaLocation, on an element a wildcard particle's
+//     field holds, or in the content of an element of type xs:anyType
+//     itself, its own attributes among it, at any depth, whatever its value,
+//     since an xsi:type's may hold a prefix no binding the struct holds
+//     resolves, and Decode returns neither of those two in such a field; or,
+//     in such content of an xs:anyType element, or in an element a lax
 //     wildcard particle's field holds, the element itself among it, at any
 //     depth, an element whose expanded name a top-level element declaration of
 //     schema names, or there or in a lax {attribute wildcard}'s field an
-//     attribute whose expanded name a top-level attribute declaration of
-//     schema names, whatever its content or value, since a lax wildcard,
+//     attribute other than those two whose expanded name a top-level
+//     attribute declaration of schema names, whatever its content or value, since a lax wildcard,
 //     xs:anyType's among them, assesses it against that declaration
 //     (Structures §3.4.7, §3.3.4.6 key-governing-ed clause 3, §3.2.4.2
 //     key-governing-ad clause 3); or an attribute the {attribute wildcard} field
@@ -2750,10 +2752,14 @@ func (e *encoder) writableName(name xsd.QName, path string) bool {
 // names the hold for a decline's detail; governing returns the subject of the
 // top-level declaration in schema that governs a held element, or for
 // attribute a held attribute, of the expanded name name, and true, or false
-// where none does.
+// where none does; writesHints reports whether Append writes a held
+// xsi:schemaLocation or xsi:noNamespaceSchemaLocation (locationHint), true
+// for the three holds rawContent writes and false for attributeWildcardHold,
+// whose field Decode never fills with either.
 type rawHold interface {
 	in() string
 	governing(schema *xsd.Schema, name xsd.QName, attribute bool) (string, bool)
+	writesHints() bool
 }
 
 // skipMatch is the match of the wildcard particle it names, of {process
@@ -2767,6 +2773,9 @@ func (m skipMatch) in() string { return "in the match of " + string(m) }
 // whatever its name (§3.10.4.1 key-skipped).
 func (skipMatch) governing(*xsd.Schema, xsd.QName, bool) (string, bool) { return "", false }
 
+// writesHints reports true: a skipped hint is not assessed.
+func (skipMatch) writesHints() bool { return true }
+
 // anyTypeContent is the content of an element of decl, whose {type
 // definition} is xs:anyType itself, the element's own attributes among it.
 type anyTypeContent struct{ decl xsd.ElementDeclaration }
@@ -2778,6 +2787,10 @@ func (c anyTypeContent) in() string { return "in the content of " + declSubject(
 func (anyTypeContent) governing(schema *xsd.Schema, name xsd.QName, attribute bool) (string, bool) {
 	return topLevelGoverning(schema, name, attribute)
 }
+
+// writesHints reports true: a hint's built-in declaration admits every value
+// rawAttribute writes (locationHint).
+func (anyTypeContent) writesHints() bool { return true }
 
 // laxMatch is the match of the wildcard particle it names, of {process
 // contents} lax.
@@ -2792,6 +2805,9 @@ func (m laxMatch) in() string { return "in the match of " + string(m) }
 func (laxMatch) governing(schema *xsd.Schema, name xsd.QName, attribute bool) (string, bool) {
 	return topLevelGoverning(schema, name, attribute)
 }
+
+// writesHints reports true, as anyTypeContent's does.
+func (laxMatch) writesHints() bool { return true }
 
 // attributeWildcardHold is the {attribute wildcard} field of the struct of
 // typ, the complex type of the element of el, which holds that element's
@@ -2819,6 +2835,10 @@ func (h attributeWildcardHold) governing(schema *xsd.Schema, name xsd.QName, att
 	}
 	return topLevelGoverning(schema, name, attribute)
 }
+
+// writesHints reports false: Decode never returns a hint in an {attribute
+// wildcard} field, so that one written there would not decode back.
+func (attributeWildcardHold) writesHints() bool { return false }
 
 // topLevelGoverning returns the subject of the top-level element declaration,
 // or for attribute the top-level attribute declaration, of schema named name,
@@ -2946,7 +2966,11 @@ func (e *encoder) rawContent(x reflect.Value, path string, hold rawHold) int {
 }
 
 // rawAttributes is rawContent's write of x's attributes and the tag's '>',
-// whose offset it returns.
+// whose offset it returns. It writes each attribute rawAttribute admits but
+// for one encoder.governed declines; it does not ask governed of a hint
+// (locationHint), which its built-in declaration governs (§3.2.4.2
+// key-governing-ad clause 3) and which admits every value rawAttribute writes,
+// so that writing it declines nothing.
 func (e *encoder) rawAttributes(x reflect.Value, path string, hold rawHold) int {
 	attrs := x.Field(0)
 	for i := range attrs.Len() {
@@ -2954,7 +2978,7 @@ func (e *encoder) rawAttributes(x reflect.Value, path string, hold rawHold) int 
 		apath := path + ".Attributes[" + strconv.Itoa(i) + "]"
 		name := xsd.QName{Space: a.Field(0).String(), Local: a.Field(1).String()}
 		value := a.Field(2).String()
-		if !e.rawAttribute(name, value, attrs, i, apath, hold) || e.governed(name, apath, hold, true) {
+		if !e.rawAttribute(name, value, attrs, i, apath, hold) || !locationHint(name) && e.governed(name, apath, hold, true) {
 			continue
 		}
 		e.writeRawAttribute(name, value)
@@ -3037,8 +3061,10 @@ func (e *encoder) locallyTyped(name xsd.QName, path string, hold rawHold, at wri
 // i at path, held in hold, can be written raw, recording its item 6 or item 7
 // error of [Append]'s doc where it cannot: writableName's, an unqualified
 // xmlns, an expanded name an attribute before it holds, the XSI namespace's
-// (constructXsiAttribute) and a Value of a byte that starts no Char, in that
-// order. Its callers ask whether hold governs it (encoder.governed) after it.
+// (constructXsiAttribute), but for a hint (locationHint) in a hold that
+// writes one (rawHold.writesHints), and a Value of a byte that starts no
+// Char, in that order. Its callers ask whether hold governs it
+// (encoder.governed) after it, rawAttributes but for a hint.
 func (e *encoder) rawAttribute(name xsd.QName, value string, attrs reflect.Value, i int, path string, hold rawHold) bool {
 	if !e.writableName(name, path) {
 		return false
@@ -3053,7 +3079,7 @@ func (e *encoder) rawAttribute(name xsd.QName, value string, attrs reflect.Value
 			return false
 		}
 	}
-	if name.Space == xsd.XMLSchemaInstanceNS {
+	if name.Space == xsd.XMLSchemaInstanceNS && !(hold.writesHints() && locationHint(name)) {
 		if e.declined == nil {
 			e.declined = encodeDecline(constructXsiAttribute, fmt.Sprintf("attribute %s at %s, %s", name.Display(), path, hold.in()))
 		}

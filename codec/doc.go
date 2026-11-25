@@ -442,8 +442,9 @@
 // UTF-8, and no white space between tags. It binds element names by default
 // declarations alone, never prefixing one but an element held raw, in a
 // wildcard's field or an xs:anyType element's content, at any depth, in the
-// XML namespace, written xml:Local, which is never declared, and writes no
-// attribute in the XSI namespace: the document element carries xmlns="ns" for
+// XML namespace, written xml:Local, which is never declared, and writes an
+// attribute in the XSI namespace only where item 7 of Append's doc admits
+// one: the document element carries xmlns="ns" for
 // its non-absent namespace ns, and nothing where it is absent, and every other
 // element carries xmlns="ns", or xmlns="" for an absent namespace, exactly
 // where its namespace differs from its parent's. An xs:QName or xs:NOTATION
