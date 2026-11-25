@@ -612,15 +612,16 @@ func writeMembers(e *encoder, bound []boundMember, v reflect.Value, at writeAt, 
 // particle's, in member order (particleWriter.wildcard), each at the
 // attribution target member order gives it (writeMembersWhere). Each order
 // lies in the all group's language, the interleave of its particles'
-// (§3.8.4.1.3); the elements go first because a child an element particle
-// and a wildcard particle both admit is the element particle's (§3.8.6.4
-// cos-nonambig, codegen/doc.go "# Particles"), and slot.check, set wherever
-// the group holds a wildcard particle (particleSite.matcher), stays the check
-// of every value whose attribution the order does not reproduce
-// (attributionCheck). An all group's members are each an element or wildcard
-// particle's (§3.8.6.2 cos-all-limited), its {open content} field declined by
-// item 4 of [Append]'s doc (contentEncodes), so that any other member is an
-// internal bug, which panics, as encoded's assertion does.
+// (§3.8.4.1.3); the elements go first because a child goes to the wildcard
+// particle only where no element particle could take it (codegen/doc.go
+// "# Particles"; xsd.Schema.ContentMatcher's order, xsd/contentmatcher.go),
+// and slot.check, set wherever the group holds a wildcard particle
+// (particleSite.matcher), stays the check of every value whose attribution
+// the order does not reproduce (attributionCheck). An all group's members are
+// each an element or wildcard particle's (§3.8.6.2 cos-all-limited), its
+// {open content} field declined by item 4 of [Append]'s doc (contentEncodes),
+// so that any other member is an internal bug, which panics, as encoded's
+// assertion does.
 func writeAll(e *encoder, bound []boundMember, v reflect.Value, at writeAt, slot attributionSlot) error {
 	for _, wildcards := range [...]bool{false, true} {
 		if err := writeMembersWhere(e, bound, v, at, slot, func(b boundMember) bool {
