@@ -720,9 +720,10 @@ func matcherVerdict(m *xsd.Matcher, leaves []flatLeaf, items []flatItem) int {
 var rfWildNames = []xsd.QName{{Space: "urn:o", Local: "w"}, {Space: "urn:o", Local: "w"}, {Space: "urn:p", Local: "w"}, {Local: "w"}, {Space: "urn:s", Local: "w"}, {Space: "urn:s", Local: "a"}}
 
 // drawItems returns a random draw over leaves, the reach of top: a sequence
-// genInstance draws, each child the item of its leaf, then, two times in
-// six, unchanged, and otherwise with one random item replaced or inserted,
-// one removed, or the tail from a random index cut.
+// genInstance draws, each child the item of its leaf, then, by one of six
+// ops drawn evenly, unchanged by two of them, or with one random item
+// inserted, or, where the sequence holds an item, with one random item
+// replaced or removed or the tail from a random index cut.
 func drawItems(rng *rand.Rand, top *rnode, leaves []flatLeaf) []flatItem {
 	var items []flatItem
 	for _, n := range top.genInstance(rng, nil) {
