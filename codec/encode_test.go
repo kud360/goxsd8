@@ -335,7 +335,8 @@ func TestAppendEscapes(t *testing.T) {
 // declaration serving two attributes, an xs:QName value in the attribute's
 // namespace on an element in none, whichever of the two is written first,
 // and a child's attribute in the namespace an ancestor declared a prefix for;
-// and xml:Local, undeclared, for the XML namespace.
+// xml:Local, undeclared, for the XML namespace; and pN:Local for a location
+// hint's use, the one XSI-namespace use that writes.
 func TestAppendNamespaces(t *testing.T) {
 	type child struct{ A string }
 	type qualified struct{ A, B string }
@@ -390,6 +391,19 @@ func TestAppendNamespaces(t *testing.T) {
 		</xs:schema>`)
 		preserve := "preserve"
 		roundTrip(t, schema, sname("r"), spaced{Space: &preserve}, `<r xmlns="urn:s" xml:space="preserve"/>`, deepEqual[spaced])
+	})
+	t.Run("xsi:noNamespaceSchemaLocation attribute use", func(t *testing.T) {
+		type hinted struct{ NoNamespaceSchemaLocation *string }
+		schema := schemaOf(t, `<xs:element name="r"><xs:complexType><xs:attribute ref="xsi:noNamespaceSchemaLocation"/></xs:complexType></xs:element>`)
+		location := "x.xsd"
+		roundTrip(t, schema, sname("r"), hinted{NoNamespaceSchemaLocation: &location},
+			`<r xmlns="urn:s" xmlns:p1="http://www.w3.org/2001/XMLSchema-instance" p1:noNamespaceSchemaLocation="x.xsd"/>`, deepEqual[hinted])
+	})
+	t.Run("xsi:schemaLocation attribute use", func(t *testing.T) {
+		type hinted struct{ SchemaLocation []string }
+		schema := schemaOf(t, `<xs:element name="r"><xs:complexType><xs:attribute ref="xsi:schemaLocation" use="required"/></xs:complexType></xs:element>`)
+		roundTrip(t, schema, sname("r"), hinted{SchemaLocation: []string{"urn:x", "x.xsd"}},
+			`<r xmlns="urn:s" xmlns:p1="http://www.w3.org/2001/XMLSchema-instance" p1:schemaLocation="urn:x x.xsd"/>`, deepEqual[hinted])
 	})
 	t.Run("unqualified child", func(t *testing.T) {
 		schema := parseString(t, `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" targetNamespace="urn:u">
@@ -1265,7 +1279,7 @@ func TestAppendDeclines(t *testing.T) {
 		{"complex particle", "a wildcard particle with {process contents} strict", sequence(`<xs:element name="a"><xs:complexType><xs:sequence><xs:any/></xs:sequence></xs:complexType></xs:element>`)},
 		{"particle type sharing its element's name", "a wildcard particle with {process contents} strict", `<xs:complexType name="%[1]s"><xs:sequence><xs:any/></xs:sequence></xs:complexType>` +
 			sequence(`<xs:element name="c" type="s:%[1]s"/>`)},
-		{"xsi:type attribute use", "an attribute use whose declaration's {target namespace} is the XSI namespace or the one the prefix xmlns is bound to", complexOf(`<xs:attribute ref="xsi:type"/>`)},
+		{"xsi:type attribute use", "an attribute use whose declaration's {target namespace} is the XSI namespace, other than xsi:schemaLocation's and xsi:noNamespaceSchemaLocation's, or the one the prefix xmlns is bound to", complexOf(`<xs:attribute ref="xsi:type"/>`)},
 		{"complex assertions", "a complex type with {assertions}", complexOf(asserted)},
 		{"restricted complex assertions", "a complex type with {assertions}", `<xs:complexType name="ab%[1]s">` + asserted + `</xs:complexType>` +
 			`<xs:element name="%[1]s"><xs:complexType><xs:complexContent><xs:restriction base="s:ab%[1]s"><xs:sequence>` + a + `</xs:sequence></xs:restriction></xs:complexContent></xs:complexType></xs:element>`},
@@ -1349,7 +1363,7 @@ func TestAppendDeclines(t *testing.T) {
 	// is bound to, which no parser rule charges, declines by
 	// constructReservedAttributeUse, as the xsi:type row does.
 	t.Run("xmlns namespace attribute use", func(t *testing.T) {
-		const reserved = "an attribute use whose declaration's {target namespace} is the XSI namespace or the one the prefix xmlns is bound to"
+		const reserved = "an attribute use whose declaration's {target namespace} is the XSI namespace, other than xsi:schemaLocation's and xsi:noNamespaceSchemaLocation's, or the one the prefix xmlns is bound to"
 		schema, err := parser.Parse("a.xsd", parser.WithResolver(loader.Map(map[string]string{
 			"a.xsd": `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:n="http://www.w3.org/2000/xmlns/" targetNamespace="urn:a">
 			  <xs:import namespace="http://www.w3.org/2000/xmlns/" schemaLocation="n.xsd"/>

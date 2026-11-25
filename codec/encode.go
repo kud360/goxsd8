@@ -1515,18 +1515,18 @@ func (w *encodeWalk) particleEncodes(p xsd.Particle, subject string, site partic
 }
 
 // attributeEncodes returns elementEncodes' error for the attribute use u: a
-// declaration whose {target namespace} is the XSI namespace, whose field
-// Append would write unassessed (an xsi:type it never holds to Structures
-// §3.3.4.3 cvc-elt clause 4, a location hint), or xmlnsNamespace, which no
-// prefix declaredPrefix declares may be bound to (Namespaces in XML §3), then
-// its simple type.
+// declaration whose {target namespace} is the XSI namespace, but for a
+// location hint's (locationHint), whose field Append would write unassessed
+// (an xsi:type it never holds to Structures §3.3.4.3 cvc-elt clause 4), or
+// xmlnsNamespace, which no prefix declaredPrefix declares may be bound to
+// (Namespaces in XML §3), then its simple type.
 func attributeEncodes(schema *xsd.Schema, u xsd.AttributeUse) error {
 	decl, ok := schema.ResolvedAttributeDeclaration(u)
 	if !ok {
 		return fmt.Errorf("codec: the {attribute declaration} of attribute use %s does not resolve", u.DeclarationName().Display())
 	}
 	subject := attributeSubject(decl)
-	if space := decl.Name().Space; space == xsd.XMLSchemaInstanceNS || space == xmlnsNamespace {
+	if space := decl.Name().Space; space == xsd.XMLSchemaInstanceNS && !locationHint(decl.Name()) || space == xmlnsNamespace {
 		return encodeDecline(constructReservedAttributeUse, subject)
 	}
 	st, ok := schema.ResolvedSimpleType(decl.TypeDefinition())
