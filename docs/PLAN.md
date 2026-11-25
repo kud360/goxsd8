@@ -17,17 +17,17 @@ read them. One stamp for the whole section, so a reader can tell staleness
 from wrongness at a glance. Never add a dated paragraph beside the old
 one — appending is what this replaces.
 
-## Status — 2026-11-24 (`/backlog`, on `main` at `0b74477a`)
+## Status — 2026-11-25 (`/backlog`, on `main` at `5089329f`)
 
-**M10's encode census is the north star, and #4084 holds its largest row.** `go tool encodecensus` encodes 12616 of 14475 decoded cases (11712 at the last stamp), with every defect row at 0. The largest row is "a wildcard particle with {process contents} strict or lax", 411, which is #4084's (`ready`). The next is #4076 (nested model groups, 242, `ready`). This pass filed the next three unfiled rows, all `ready`: #4115 (xs:anySimpleType or xs:anyAtomicType, 134), #4116 (a value constraint, 131) and #4117 (an {attribute wildcard}, 120).
+**M10's encode census is the north star, and #4124 is the one decision that holds its largest row.** `go tool encodecensus` encodes 13183 of 14475 decoded cases (12616 at the last stamp), with every defect row at 0. The largest row is "a wildcard particle with {process contents} strict", 355. It is #4125's, which is `blocked` on #4124 (`ready`): codegen's raw-content shape must hold a match's namespace bindings first. #4125 also holds the 71-case "strict {attribute wildcard} field" row and the 35-case governed-content row, so #4124 gates about 460 cases. This pass filed the next three unfiled rows, all `ready`: #4156 (a qualified attribute use, 121), #4157 (xs:ID and xs:IDREF, 106) and #4158 (an all group, 96).
 
-Since the 2026-11-23 stamp, ten develop sessions ran and all ten landed: #4038, #4039, #4050, #4075, #4040, #4051, #3971, #4064, #4056 and #1291. Eight were encode slices. #4051 took one reject. #4038, #4050 and #4056 each took one warden revise round, and #4039 two. #4049 closed as absorbed into #4038. Their post-land passes unblocked #4076, and filed #4084, #4085, #4088, #4089, #4092, #4093, #4094, #4099, #4102, #4105, #4110 and #4112. No lane moved.
+Since the 2026-11-24 stamp, nine develop sessions landed: #4084, #4076, #4115, #4116, #4117, #4092, #4088, #4099 and #4105. Six were encode slices and three pinned landed code with test rows. #4093 closed `not_planned` at grounding, since its census bound was 0. Seven of the nine lost at least one round: #4084 and #4076 a repair each, #4115, #4092 and #4099 a reject each, #4116 a warden revise, and #4117 a merge-forward and a revise. #4088 and #4105 were accepted first round. Their post-land passes unblocked nothing, and filed #4124, #4125, #4129, #4130, #4133, #4136, #4142, #4143, #4146, #4148, #4150 and #4153. No lane moved.
 
-**Lean: product, M10 first, with the round-costing process issues raised.** Eight of the ten landings moved encode by 904 cases. Five of them lost at least one round. Three of the causes are filed: a transcription with no gate run (#4102, at #4051), a census split reaching a bar as fact (#4085, at #4038) and a pre-flight admission census that omits §5.3 (#4110, at #4056). Those three lead Tier C.
+**Lean: product, M10 first, with this window's two round-costing process issues at the head of Tier C.** The six encode slices moved encode by 567 cases. Two of the lost rounds have filed causes: a lift that falsifies downstream precondition docs (#4133, at #4115) and a fail-open grounding that names no `GAP(` marker (#4150, at #4099).
 
 ### Conformance lanes
 
-**This table is `go tool lanestatus`, pasted verbatim, on `main` at `0b74477a`.** It is the committed expectations census, which `docs/WORKFLOW.md` names as the lane score (#1120).
+**This table is `go tool lanestatus`, pasted verbatim, on `main` at `5089329f`.** It is the committed expectations census, which `docs/WORKFLOW.md` names as the lane score (#1120).
 
 | Lane | Pass | Fail | Total |
 |---|---:|---:|---:|
@@ -38,7 +38,7 @@ Since the 2026-11-23 stamp, ten develop sessions ran and all ten landed: #4038, 
 | `schema` | 15303 | 95 | 15398 |
 | `xpath` | — | — | 0 |
 
-**No lane moved since `9caabc00`.** `git diff d81142ba 0b74477a -- conformance/testdata/expectations/` is empty. **`datatypes ⊆ instance` is intended** (#1507). **An em dash means a lane with no cases yet, not a lane scoring zero.**
+**No lane moved since `9caabc00`.** `git diff 0b74477a 5089329f -- conformance/testdata/expectations/` is empty. **`datatypes ⊆ instance` is intended** (#1507). **An em dash means a lane with no cases yet, not a lane scoring zero.**
 
 - `datatypes` is M3, and it is complete.
 - `schema` is M4, `instance` is M5 and `json` is M8, and all three are active. `json` moves only by the curated cases a landing adds.
@@ -47,7 +47,7 @@ Since the 2026-11-23 stamp, ten develop sessions ran and all ten landed: #4038, 
 
 ### What holds each lane's failures
 
-**The W3C lanes, partitioned fresh at `0b74477a`.** This pass ran `GOXSD_DECLINES=1` gate part 4 on its tree (exit 0, `ok … 268.045s`, no improved or regressed line) and fed `go tool lanepartition` that log. The classes match the `d81142ba` partition:
+**The W3C lanes, partitioned fresh at `5089329f`.** This pass ran `GOXSD_DECLINES=1` gate part 4 on its tree (exit 0, `ok … 468.059s`, no improved or regressed line) and fed `go tool lanepartition` that log. The classes match the `0b74477a` partition:
 
 - `instance` has 71 banked fails: 39 declined, 5 indeterminate and 27 decided against the suite.
 - `schema` has 95: 1 declined, 11 indeterminate and 83 decided against the suite.
@@ -57,42 +57,46 @@ The clusters of five or more are unchanged:
 - `schema`: `MS-Wildcards` 49 (#1809's recorded divergence), `MS-Schema` 6 indeterminate, `Open` 5 (#1374, `blocked`) and `Simple` 5.
 - `instance`: `MS-Regex` 18 (#1899's ruling), `MS-Attribute` 11 (#2151's ruling) and `MS-Additional` 5 (decided against the suite; `lanepartition` names no open issue).
 
+`lanepartition` now names #4125 against several clusters, because its body lists those test sets' case IDs. That is the heuristic's text match, and #4125 is an encode slice, not a lane lever.
+
 **No session lever is left on a W3C lane.** What remains are rulings: #2081, which is the owner's and which #3477 also waits on, and #1809's divergence. M4 and M5 stay active at their ruled floors.
 
-**M9: `go tool gencensus`, not re-run.** No landing in `d81142ba..0b74477a` touched `codegen` or `internal/goshape`, so the `d81142ba` figures stand: 15470 documents found, 11867 assembled, 11865 generate, 2 decline (struct-value recursion, permanent by #3256) and 0 fail any other way. #3286 makes "generated" mean the output type-checks.
+**M9: `go tool gencensus`, not re-run.** No landing in `0b74477a..5089329f` touched `codegen` or `internal/goshape`, so the `d81142ba` figures stand: 15470 documents found, 11867 assembled, 11865 generate, 2 decline (struct-value recursion, permanent by #3256) and 0 fail any other way. #3286 makes "generated" mean the output type-checks.
 
-**M10 decode: `go tool decodecensus` at `0b74477a`.** It reads 26361 cases, of which 26209 generate:
+**M10 decode: `go tool decodecensus` at `5089329f`.** It reads 26361 cases, of which 26209 generate:
 
 - **14475 decoded**, 124 declined and 4 undecided;
 - 0 rejected codegen's own type and 0 decoded where validate rejects;
 - 11606 failed other.
 
-Every figure is unchanged since `c5c1a23b`, though `codec/decode.go` changed by 397 lines in the window. **Decode is done.** Its decline rows are 122 xsi:type, which is a **ruling** (#3291 RULING R5, `codec/doc.go`), 1 nested model group (#3588's grounding) and 1 pair of one-shape branches (dismissed at #3692's post-land).
+Every figure is unchanged since `c5c1a23b`, though `codec/decode.go` changed by 458 lines in the window. **Decode is done.** Its decline rows are 122 xsi:type, which is a **ruling** (#3291 RULING R5, `codec/doc.go`), 1 nested model group (#3588's grounding) and 1 pair of one-shape branches (dismissed at #3692's post-land).
 
-**M10 encode: `go tool encodecensus` at `0b74477a`.** Of 14475 decoded, **12616 encoded** and 1859 declined. The four defect rows (append failed with no decline, re-validate rejected, re-decode failed, round trip unequal) all read 0. 33 placeholder decodes are outside the population. Each count bounds from above what lifting that construct alone makes encode. Nineteen constructs decline, down from twenty-two:
+**M10 encode: `go tool encodecensus` at `5089329f`.** Of 14475 decoded, **13183 encoded** and 1292 declined. The four defect rows (append failed with no decline, re-validate rejected, re-decode failed, round trip unequal) all read 0. 33 placeholder decodes are outside the population. Each count bounds from above what lifting that construct alone makes encode. Seventeen constructs decline, down from nineteen:
 
 | first decline | cases | held by |
 |---|---:|---|
-| a wildcard particle with {process contents} strict or lax | 411 | #4084 (`ready`; a bindings ruling first) |
-| a nested model group particle | 242 | #4076 (`ready`; up from 163, the cases earlier slices exposed) |
+| a wildcard particle with {process contents} strict | 355 | #4125 (`blocked` on #4124) |
 | a value with no canonical representation | 207 | by design: Append's item 7 |
-| xs:anySimpleType or xs:anyAtomicType as a simple type | 134 | #4115 (`ready`; filed this pass) |
-| a value constraint, default or fixed | 131 | #4116 (lifted; at `ee2dc226`'s 133, 96 encode and 37 reach a next decline) |
-| an {attribute wildcard} | 120 | #4117 (`ready`; filed this pass) |
-| an attribute use whose declaration has a {target namespace} | 105 | unfiled |
-| an all group | 96 | unfiled |
-| an attribute in the XSI namespace held in a wildcard's match or an xs:anyType element's content | 88 | #4092 (`ready`) |
-| a simple type derived from xs:ID, xs:IDREF or xs:ENTITY | 74 | unfiled |
+| an attribute use whose declaration has a {target namespace} | 121 | #4156 (`ready`; filed this pass) |
+| a simple type derived from xs:ID, xs:IDREF or xs:ENTITY | 106 | #4157 (`ready`; filed this pass; ENTITY's share unmeasured) |
+| an all group | 96 | #4158 (`ready`; filed this pass) |
+| an attribute held in a strict {attribute wildcard} field | 71 | #4125 (`blocked` on #4124) |
+| a complex type with {assertions} | 63 | unfiled |
+| an {open content} | 55 | unfiled |
+| a complex type with mixed content | 53 | unfiled |
+| an element declaration with a {type table} | 43 | unfiled |
+| an element declaration with {nillable} true | 42 | unfiled |
+| governed content: a lax match, xs:anyType content or a lax {attribute wildcard} field naming a top-level declaration | 35 | #4125 (`blocked` on #4124) |
 
-The other nine rows hold 251 cases: {open content} 55, complex {assertions} 44, {type table} 42, {nillable} true 42, an assertions facet 32, mixed content 30, an abstract complex type 3, governed xs:anyType content 2 (#4093, `ready`) and an unwritable QName spelling 1.
+The other five rows hold 45 cases: an assertions facet 32, an XSI attribute in held content 8 (#4142 holds 5, #4143 holds 1, and #4125 the 2 held xsi:type), an abstract complex type 3, a locally typed lax match 1 and an unwritable QName spelling 1 (#4124's hypothesis).
 
 ### Branch namespace, `origin` (report-only; this pass deletes no ref)
 
-**`go tool wipsurvey`, fed by `go tool issuefeed`** (`rows 4114 distinct 4114 min 1 max 4114 no gaps`). Ahead counts were read after `git fetch --unshallow --prune origin`, so they are whole-history. No `wip/issue-<N>` is LIVE or CLAIMED. Every one of this window's ten sessions had its wip branch and its post-land branch auto-deleted at merge. `meta/backlog-20261123-1406` landed as `d2c2a848` and is gone from `origin`. `meta/backlog-20261124-1405` is this pass's claim.
+**`go tool wipsurvey`, fed by `go tool issuefeed`** (`rows 4154 distinct 4154 min 1 max 4154 no gaps`). Ahead counts were read after `git fetch --unshallow --prune origin`, so they are whole-history. No `wip/issue-<N>` is LIVE or CLAIMED. Every one of this window's nine landings had its wip branch and its post-land branch auto-deleted at merge. `meta/backlog-20261124-1405` landed as `dd753e8b` and is gone from `origin`. `meta/backlog-20261125-1406` is this pass's claim.
 
-- **RETIRED, deletable now:** `wip/issue-2013`, `wip/issue-2332`, `wip/issue-2696`, `wip/issue-2699`, `wip/issue-2722`, `wip/issue-2896`, `wip/issue-2899`, `wip/issue-3577`, `wip/issue-3619` and `wip/issue-3688`. Each issue is closed, and each ref is unchanged since the last stamp.
+- **RETIRED, deletable now:** `wip/issue-4093` is new. It holds the claim commit `cbabcfa6` alone, and #4093 closed `not_planned`, so no merge deleted it. `wip/issue-2013`, `wip/issue-2332`, `wip/issue-2696`, `wip/issue-2699`, `wip/issue-2722`, `wip/issue-2896`, `wip/issue-2899`, `wip/issue-3577`, `wip/issue-3619` and `wip/issue-3688` are unchanged since the last stamp. Each issue is closed.
 - **BLOCKED:** `wip/issue-2081`, a parked grounding with no code, and `wip/issue-3477`, which holds the claim commit alone. Both wait on the owner's PRINCIPLES 25 ruling.
-- **Deletable now, superseded passes:** `meta/backlog-2026-10-01-b` (1 ahead) and `meta/backlog-20261013-0808` (2 ahead). `backlog.md`'s test decides it: `git log origin/main --since=<tip date> --grep='^meta: backlog'` prints `d2c2a848`, `71369f46`, `8a7f90e4` and older for each. This is the third consecutive pass to report them.
+- **Deletable now, superseded passes:** `meta/backlog-2026-10-01-b` (1 ahead) and `meta/backlog-20261013-0808` (2 ahead). `backlog.md`'s test decides it: `git log origin/main --since=<tip date> --grep='^meta: backlog'` prints `dd753e8b`, `d2c2a848`, `71369f46`, `8a7f90e4` and older for each. `wipsurvey` prints both, and this pass's own claim, as `STRANDED PASS`. This is the fourth consecutive pass to overrule it by hand, so #4155 files the tool defect.
 - **Deletable now, landed by squash:** `claude/gifted-bell-q4u8k8` (5 ahead). `git diff 8e670a43 origin/claude/gifted-bell-q4u8k8` is empty.
 - **Deletable now:** `post-land-3688` and `postland/3688-park`. Both have 0 commits ahead of `main`.
 - **Parked, deletable:** `parked/untriaged-20261026-084521`, `parked/untriaged-20261103-194004`, `parked/untriaged-20261106-124613`, `parked/untriaged-20261107-124629` and `parked/untriaged-20261114-234304`. Each one's single commit removes a landed `docs/LOG` entry, which is #3398. No new one appeared this window.
@@ -102,14 +106,14 @@ The other nine rows hold 251 cases: {open content} 55, complex {assertions} 44, 
 
 ### Marker census
 
-**`go tool gapaudit` on `0b74477a`, fed the same walk.** It reports 200 markers across 11 areas, unchanged, and no landing this window added or removed a `GAP(` marker.
+**`go tool gapaudit` on `5089329f`, fed the same walk.** It reports 201 markers across 11 areas, up from 200. #4099 added `codec/identity_test.go:175`'s `GAP(validate)`, which cites #4148 and resolves.
 
 - Group 1 has the same 10 rows: eight are #2719's, `value/valuespace.go:152` is #462's and `tools/landcheck/keywords.go:48` is #2541's.
 - Group 2 has the same 26 rows. #3019 stays there until it lands its markers.
 
 ### Milestones and queue
 
-**Read from GitHub after this pass: 361 open issues.** That is 353 in the `issuefeed` walk plus this pass's eight filings: #4115, #4116 and #4117, and the persona round's #4118, #4119, #4120, #4121 and #4122. The walk's 353 is the last stamp's 352, plus twelve post-land filings (#4084, #4085, #4088, #4089, #4092, #4093, #4094, #4099, #4102, #4105, #4110 and #4112), less eleven closures: the ten landings and #4049, absorbed into #4038.
+**Read from GitHub after this pass: 367 open issues.** That is 363 in the `issuefeed` walk plus this pass's four filings: #4155, #4156, #4157 and #4158. The walk's 363 is the last stamp's 361, plus twelve post-land filings (#4124, #4125, #4129, #4130, #4133, #4136, #4142, #4143, #4146, #4148, #4150 and #4153), less ten closures: the nine landings and #4093.
 
 | milestone | open | closed | state |
 |---|---:|---:|---|
@@ -122,29 +126,21 @@ The other nine rows hold 251 cases: {open content} 55, complex {assertions} 44, 
 | M7 — XPath 2.0 growth | 1 | 1 | #2619 open |
 | **M8 — JSON instance adapter** | **1** | **57** | active; #2670 `blocked` |
 | M9 — Codegen | 3 | 87 | **done**. Residue: #3286 (tooling), #3178 (low) and #2977 (`blocked`) |
-| **M10 — Codec** | **8** | **125** | **north star**: decode done; encode #4084, #4076, #4115, #4116, #4117, #4092, #4093 and #4105 (`ready`). This pass set #4084's milestone, which it was filed without |
+| **M10 — Codec** | **11** | **133** | **north star**: decode done; encode #4124 (gating #4125), #4156, #4157, #4158, #4142, #4143, #4129, #4130, #4136 and #4153 |
 | M11–M12 | 0 | 0 | not started |
 
-The open issues are **341 `ready`, 18 `blocked` and 2 `epic`**, which sums to 361. No issue is `needs-replan` or unlabelled. 270 open issues carry no milestone. Open `kind/process` is 7: #4048, #4061, #4085, #4094, #4102 and #4110 (`ready`) and #1885 (`blocked`).
+The open issues are **346 `ready`, 19 `blocked` and 2 `epic`**, which sums to 367. No issue is `needs-replan` or unlabelled. 273 open issues carry no milestone. Open `kind/process` is 9: #4048, #4061, #4085, #4094, #4102, #4110, #4133 and #4150 (`ready`) and #1885 (`blocked`).
 
-- **`blocked` is 18:** #16, #555, #1042, #1051, #1374, #1609, #1790, #1885, #2022, #2081, #2533, #2670, #2749, #2977, #3031, #3477, #3791 and #4112 (on #486 and a carrier ruling). #4076 left the list when #4075's post-land pass unblocked it.
-  - `go tool issuefeed -owner-comments` prints "no owner comment since the blocked label on any of the 18 open blocked issues".
-  - No `## Depends on` issue of a `blocked` issue closed in the window.
-  - #1609's arms read `schema` Fail 95 (arm 1 fires at 0) and Total 15398. No landing in `d81142ba..0b74477a` changed `xsd/contentrestricts.go`, so arm 3 has not fired.
+- **`blocked` is 19:** #16, #555, #1042, #1051, #1374, #1609, #1790, #1885, #2022, #2081, #2533, #2670, #2749, #2977, #3031, #3477, #3791, #4112 (on #486 and a carrier ruling) and #4125 (on #4124).
+  - `go tool issuefeed -owner-comments` prints "no owner comment since the blocked label on any of the 19 open blocked issues".
+  - No `## Depends on` issue of a `blocked` issue closed in the window. #4125's names #4084 and #4117 as closed and #4124 as open.
+  - #1609's arms read `schema` Fail 95 (arm 1 fires at 0) and Total 15398. No landing in `0b74477a..5089329f` changed `xsd/contentrestricts.go`, so arm 3 has not fired.
   - #2977's consumer trigger has not fired; no landing touched `codegen`.
-- **Measured refactors, all re-run at `0b74477a`:**
-  - **#3533 grew, 5 to 6:** #4039 added codec/encode.go's `memberName`. Its body now records the figure and the site, and it enters the band.
-  - None other grew: #3918 1, #3701 2, #3700 3, #3699 4, #3656 2, #3648 2, #3551 1, #3532 2 (six implementers), #3531 6, #3301 2, #3294 5, #3033 14/3, #2793 3, #2675 3/1, #2663 4, #2601 0, #2600 2, #2595 1/1/1/3/1, #2375 1/1, #2374 22, #2373 16, #2372 27, #2359 14, #2329 1, #2239 2, #2237 24, #2205 2, #2101 0/1, #1958 2, #1865 2, #1757 1, #1080 8 and #363 2.
-  - #3392, #3307 and #3324 are unmeasured.
+- **Measured refactors, all re-run at `5089329f`.** None grew: #3918 1, #3701 2, #3700 3, #3699 4, #3656 2, #3648 2, #3551 1, #3533 6, #3532 2, #3531 6, #3301 2, #3294 5, #3033 14/3, #2793 3, #2675 3/1, #2663 4, #2601 0, #2600 2, #2595 1/1/1/3/1, #2375 1/1, #2374 22, #2373 16, #2372 27, #2359 14, #2329 1, #2239 2, #2237 24, #2205 2, #2101 0/1, #1958 2, #1865 2, #1757 1, #1080 8 and #363 2. #4136, #3392, #3307 and #3324 are unmeasured.
 
 ### Persona consultations
 
-**Libuser was consulted 2026-11-24**, in this pass, on `main` at `0b74477a`. It read README and `go doc` for `codec`, `xsderr` and `validate`, and built a scratch module. **Cliuser was last consulted 2026-11-23** on `d81142ba`, and its trigger has not fired: nothing under `cmd/`, `loader/`, `parser/` or README changed since.
-
-- **Why this round ran while earlier findings stand unconsumed:** `go tool surface -base d81142ba` prints `surface: unchanged`, but `codec/doc.go` changed by 160 lines as eight constructs began to encode, and `xsderr/doc.go` gained #1291's sentence. The unconsumed findings are #4077–#4081, #2539, #476 and #1408.
-- **Filed:** #4119 (codec's unknown-root and abstract refusals have no class; Medium), #4118 (Decode panics on a nil backend where Append returns an error; Medium), #4120 (no documented way to read the document element's name for dispatch; Medium), #4121 (codegen's doc never says a `big.Int` or `big.Rat` field must not be shallow-copied; Low) and #4122 (xsderr's doc names neither violation list and has no example; findings 7 and 8, Low).
-- **Folded into open bodies:** finding 4 (codec's go doc reads hard to an adopter) into #4079, and finding 5 (no `go:generate` recipe for an outside module) into #4081.
-- **Checked and narrowed against the tree:** finding 3's arrival stands, though `ExampleDecode_severalRoots` does show the dispatch through an unexported helper. #4120 files the arrival. Finding 6's "vet-hostile" and `%+v` points are dismissed in #4121's body. The persona's praise (the CheckDecode and CheckAppend start-up pattern, messages with rule IDs and Locs, README's error-switch snippets) needs no action.
+**Neither persona was consulted this pass, and none was due.** `go tool surface -base dd753e8b` prints `surface: unchanged`, and README and `cmd/` are unchanged since the 2026-11-24 libuser round, whose filings #4118–#4122 stand unconsumed. Libuser was last consulted 2026-11-24 on `0b74477a`. Cliuser was last consulted 2026-11-23 on `d81142ba`, and nothing under `cmd/`, `loader/`, `parser/` or README changed since. This pass was handed no persona report, so it folded none.
 
 M10 faces the API through `codec`. M9 faces the API through `codegen` and the CLI through `goxsd8 gen`. M4, M5, M6 and M8 face the API through `parser`, `xsd`, `validate`, `value`, `xpath` and `validate/jsonsrc`, and the CLI through `goxsd8 parse` and `validate`.
 
@@ -152,75 +148,80 @@ M10 faces the API through `codec`. M9 faces the API through `codegen` and the CL
 
 This is ordered for a `/develop` session: take the highest row you can start. **Run `wipsurvey` fed before starting**; its WORKING BAND section prints each row's state. Each row names one issue (#1636).
 
-**Tier A: the north star, M10 encode.** Every row is `ready`. Rows 1, 5 and 6 write held raw content and share `rawAttribute` or the bindings question; whichever lands second merges, and the bodies say so.
+**Tier A: the north star, M10 encode.** Every row is `ready`. Rows 2, 5 and 6 edit the attribute writer, and rows 4 and 7 the content-model walk; whichever lands second merges, and the bodies say so.
 
 | # | issue | why here |
 |---|---|---|
-| 1 | #4084 | **A strict or lax wildcard particle**, 411, the census's largest row. Its grounding first rules how a match's namespace bindings are carried, which may change codegen's shape. |
-| 2 | #4076 | **A nested model group particle**, 242. It encodes by the hold codegen gives the nested particle, reusing the occurrence-field and flattened arms. |
-| 3 | #4115 | **xs:anySimpleType or xs:anyAtomicType**, 134. A warden ruling first decides whether it is lifted or folds into item 7. |
-| 4 | #4116 | **A value constraint, default or fixed**, 131. Lifted: Append writes the held value and holds it to a fixed constraint; 37 of `ee2dc226`'s 133 reach a next decline (30 xs:ID-derived, 5 mixed, 1 strict wildcard, 1 qualified attribute). |
-| 5 | #4117 | **An {attribute wildcard}**, 120. It is the attribute side of #4038's skip writer. |
-| 6 | #4092 | **A held xsi:schemaLocation or xsi:noNamespaceSchemaLocation**, 88. |
-| 7 | #4093 | **Governed xs:anyType content**, 2. It is small, so take it with row 6, which is in the same writer. |
+| 1 | #4124 | **Bindings on codegen's raw-content shape.** It writes nothing new itself, but it unblocks #4125: the strict row (355), the strict-held attribute row (71) and governed content (35). |
+| 2 | #4156 | **A qualified attribute use**, 121. Append already declares prefixes for QName values. |
+| 3 | #4157 | **xs:ID and xs:IDREF**, 106. It reuses item 9's assessment path for `cvc-id`; the grounding rules ENTITY. |
+| 4 | #4158 | **An all group**, 96. It writes in {particles} order; the grounding rules {max occurs} above 1 and wildcards. |
+| 5 | #4142 | **A held xsi:nil in a skip match**, 5. |
+| 6 | #4143 | **A non-exempt XSI attribute in an {attribute wildcard} field**, 1. It is the same `rawAttribute` step as row 5, so take them together. |
+| 7 | #4129 | **Decode returns fewer items than {min occurs} for an occurrence choice that Append then refuses.** Probe first. |
+| 8 | #4130 | **goshape's doc and code disagree on flattening a choice with an emptiable alternative.** A ruling first; #4105's grounding named it as moving the differential's population. |
 
-**Tier B: product defects and documentation.** No W3C lane has a session lever left (see above).
-
-| # | issue | why here |
-|---|---|---|
-| 8 | #4088 | **Pin the two union arms #4039 left without a row.** Untested landed code. |
-| 9 | #4099 | **Pin Append's item 9 with a `codec/identity_test.go` row.** Untested landed code. |
-| 10 | #4105 | **A randomized differential holds the flattened writer to `ContentMatcher` on the reject side.** |
-| 11 | #4119 | **Classify codec's unknown-root and abstract refusals.** Libuser's Medium finding: a multi-root service matches text today. A warden ruling first. |
-| 12 | #4118 | **Decode returns an error on a nil backend, as Append does.** Libuser's Medium finding; it is the same item-1 list as row 11. |
-| 13 | #4120 | **A documented way to read the document element's name.** Libuser's Medium finding; a warden ruling on an export first. |
-| 14 | #4077 | **`parser.Parse` of an absolute path fails "not found under `.`".** Libuser's finding. |
-| 15 | #4078 | **`loader.FS`'s invalid-path refusal: say what wrapping ErrNotFound does to `Chain` and parser.** A warden ruling on also reporting `fs.ErrInvalid` comes first. Same file as #425. |
-| 16 | #1236 | **README names FinalizeWith beside Finalize.** An outside PR, #3994, answers it, so a session reviews that PR first. |
-| 17 | #4079 | **codec's go doc opens with no quick start.** It grew this window by 160 lines. Take it between encode slices, since every Tier A row edits `# What encodes`. |
-
-**Tier C: process, tooling and refactors.** Rows 18-20 are this window's round-costing process issues. #3533's figure grew, so it enters the band. The other refactors keep the last stamp's order, since none of their figures grew.
+**Tier B: product defects, test pins and documentation.** No W3C lane has a session lever left (see above).
 
 | # | issue | why here |
 |---|---|---|
-| 18 | #4102 | **The orchestrator gates a transcribed revise before the judge.** It cost #4051 its reject round. |
-| 19 | #4085 | **A census split measured by a temporary patch is a hypothesis.** It reached a bar as fact at #4035 and #4038. |
-| 20 | #4110 | **A pre-flight's writer-admission census reads §5.3.** #3998 admitted what validate charges, and #4056 lost a pre-flight round re-ruling it. |
-| 21 | #4048 | **A warden revise finding that moves an invariant names the row pinning it.** It cost #4035's reject round. |
-| 22 | #4094 | **Measure a mason encode round's per-step wall clock.** The next encode slice's mason account reports it. |
-| 23 | #4089 | **`restatements` separates owner-level flags.** Two sightings, #4000 and #4039. |
-| 24 | #4021 | **A probe's `go build` of `cmd/goxsd8` leaves a binary `git add -A` commits.** Three sightings. |
-| 25 | #4061 | **WORKFLOW's "put a worktree at a given commit" names no fetch.** Two sightings. |
-| 26 | #4073 | **`commentwrap -fix` fills at the pre-reflow width.** It binds every reflow in Tier A. |
-| 27 | #3533 | **One home for the anonymous-type label** (6, up from 5). #4039 added codec's `memberName`. |
-| 28 | #4027 | **`restatements` reads a `.md`-only diff as clean.** Three sightings, none costing a round. |
-| 29 | #3398 | **A landed `docs/LOG` entry left as a removal and parked.** Five sightings, none new this window. |
-| 30 | #2539 | **`surface` counts an unexported receiver's method.** |
-| 31 | #3880 | **`backendtestgen` derives no `xs:string` Invalid vectors from Char's complement.** |
-| 32 | #3700 | **An opaque `validate.Inherited`** (3). It needs its own grounding first. |
-| 33 | #3701 | **One shared attribute adapter** (2). It is in the same file as row 32. |
-| 34 | #3699 | **`SchemaView`'s four methods with no consumer through the view** (4). |
-| 35 | #3656 | **One key-dflt-att clause 4 predicate** (2). |
-| 36 | #3648 | **One exported xsderr constructor for a delegating charge** (2). |
-| 37 | #3551 | **One exported `<group ref>` resolver** (1). |
-| 38 | #3918 | **`normalizedLexical`'s replace branch calls `value.ApplyWhiteSpace`** (1). |
-| 39 | #3532 | **`LookupNamespace` renamed `LookupPrefix`** (2, six implementers). |
-| 40 | #3446 | **A phrase census that sees a phrase wrapped across comment lines.** |
-| 41 | #3393 | **`rulecat` emits no dotted rule IDs.** |
-| 42 | #3363 | **Pin doc.go's `"12,50"` exemplar.** |
-| 43 | #3531 | **`UnfollowedDirective` carries its kind, schemaLocation and namespace** (6). |
-| 44 | #3286 | **`gencensus` type-checks what it counts.** It is M9's measure. |
-| 45 | #3324 | **Pin the text of `validate`'s remaining unpinned messages.** |
-| 46 | #3204 | **A § number cited beside an anchor ID is unchecked.** |
-| 47 | #2203 | **`surface` is blind to signature changes.** It is the same tool as row 30. |
-| 48 | #3294 | **Retire `xsd`'s planned Walker** (5). |
-| 49 | #3214 | **`commentwrap -fix` reflows at the edited line's width.** It is the same tool as row 26. |
-| 50 | #2748 | **`issuefeed -comments`.** |
-| 51 | #3273 | **STYLE's `exhaustive` overstatement.** |
-| 52 | #3301 | **The third whitespace copy moves onto `value.ApplyWhiteSpace`** (2). It goes with row 38. |
+| 9 | #4136 | **Pin R4 and R3(d) of #4116's value-constraint writer.** Untested landed code. |
+| 10 | #4153 | **The nested flattened differential**, #4105's draw extended. |
+| 11 | #4148 | **validate declines `cvc-identity-constraint` clause 3 as Undecided where the spec charges.** #4099's `GAP(validate)` owner. |
+| 12 | #4146 | **The empty-union `cvc-datatype-valid` message ends with an empty list.** |
+| 13 | #4119 | **Classify codec's unknown-root and abstract refusals.** Libuser's Medium finding. A warden ruling first. |
+| 14 | #4118 | **Decode returns an error on a nil backend, as Append does.** Libuser's Medium finding; it is the same item-1 list as row 13. |
+| 15 | #4120 | **A documented way to read the document element's name.** Libuser's Medium finding; a warden ruling on an export first. |
+| 16 | #4077 | **`parser.Parse` of an absolute path fails "not found under `.`".** Libuser's finding. |
+| 17 | #4078 | **`loader.FS`'s invalid-path refusal: say what wrapping ErrNotFound does to `Chain` and parser.** A warden ruling first. Same file as #425. |
+| 18 | #1236 | **README names FinalizeWith beside Finalize.** An outside PR, #3994, answers it, so a session reviews that PR first. |
+| 19 | #4079 | **codec's go doc opens with no quick start.** `codec/doc.go` changed by 216 lines this window. Take it between encode slices, since every Tier A row edits `# What encodes`. |
+
+**Tier C: process, tooling and refactors.** Rows 20 and 21 are this window's round-costing process issues. #4061 moves up, since #4105 was its third sighting. No refactor figure grew, so the refactors keep the last stamp's order.
+
+| # | issue | why here |
+|---|---|---|
+| 20 | #4150 | **A fail-open grounding names the `GAP(` marker and tracker it owes.** It cost #4099 its reject round and a mid-session filing. |
+| 21 | #4133 | **A lift's pre-flight censuses the precondition docs downstream of the widened path.** It cost #4115 its reject round. |
+| 22 | #4102 | **The orchestrator gates a transcribed revise before the judge.** It cost #4051 its reject round. |
+| 23 | #4085 | **A census split measured by a temporary patch is a hypothesis.** |
+| 24 | #4110 | **A pre-flight's writer-admission census reads §5.3.** |
+| 25 | #4048 | **A warden revise finding that moves an invariant names the row pinning it.** |
+| 26 | #4061 | **WORKFLOW's "put a worktree at a given commit" names no fetch.** Three sightings, the third at #4105. |
+| 27 | #4094 | **Measure a mason encode round's per-step wall clock.** |
+| 28 | #4089 | **`restatements` separates owner-level flags.** |
+| 29 | #4021 | **A probe's `go build` of `cmd/goxsd8` leaves a binary `git add -A` commits.** |
+| 30 | #4073 | **`commentwrap -fix` fills at the pre-reflow width.** It binds every reflow in Tier A. |
+| 31 | #4155 | **`wipsurvey` prints a superseded pass and a live claim as `STRANDED PASS`.** Four stamps overruled it by hand; no round lost. Same function as #1897. |
+| 32 | #3533 | **One home for the anonymous-type label** (6). |
+| 33 | #4027 | **`restatements` reads a `.md`-only diff as clean.** |
+| 34 | #3398 | **A landed `docs/LOG` entry left as a removal and parked.** |
+| 35 | #2539 | **`surface` counts an unexported receiver's method.** |
+| 36 | #3880 | **`backendtestgen` derives no `xs:string` Invalid vectors from Char's complement.** |
+| 37 | #3700 | **An opaque `validate.Inherited`** (3). It needs its own grounding first. |
+| 38 | #3701 | **One shared attribute adapter** (2). Same file as row 37. |
+| 39 | #3699 | **`SchemaView`'s four methods with no consumer through the view** (4). |
+| 40 | #3656 | **One key-dflt-att clause 4 predicate** (2). |
+| 41 | #3648 | **One exported xsderr constructor for a delegating charge** (2). |
+| 42 | #3551 | **One exported `<group ref>` resolver** (1). |
+| 43 | #3918 | **`normalizedLexical`'s replace branch calls `value.ApplyWhiteSpace`** (1). |
+| 44 | #3532 | **`LookupNamespace` renamed `LookupPrefix`** (2, six implementers). |
+| 45 | #3446 | **A phrase census that sees a phrase wrapped across comment lines.** |
+| 46 | #3393 | **`rulecat` emits no dotted rule IDs.** |
+| 47 | #3363 | **Pin doc.go's `"12,50"` exemplar.** |
+| 48 | #3531 | **`UnfollowedDirective` carries its kind, schemaLocation and namespace** (6). |
+| 49 | #3286 | **`gencensus` type-checks what it counts.** It is M9's measure. |
+| 50 | #3324 | **Pin the text of `validate`'s remaining unpinned messages.** |
+| 51 | #3204 | **A § number cited beside an anchor ID is unchecked.** |
+| 52 | #2203 | **`surface` is blind to signature changes.** Same tool as row 35. |
+| 53 | #3294 | **Retire `xsd`'s planned Walker** (5). |
+| 54 | #3214 | **`commentwrap -fix` reflows at the edited line's width.** Same tool as row 30. |
+| 55 | #2748 | **`issuefeed -comments`.** |
+| 56 | #3273 | **STYLE's `exhaustive` overstatement.** |
+| 57 | #3301 | **The third whitespace copy moves onto `value.ApplyWhiteSpace`** (2). It goes with row 43. |
 
 **Named below the band, on purpose.**
-- **M10, unfiled:** encode's rows "an attribute use whose declaration has a {target namespace}" (105), "an all group" (96) and "a simple type derived from xs:ID, xs:IDREF or xs:ENTITY" (74), and the nine rows under 60. Each is filed when Tier A has room. The xsi:type decode row (122) is a ruling, not unfiled work.
+- **M10, unfiled:** encode's rows "a complex type with {assertions}" (63), "an {open content}" (55), "a complex type with mixed content" (53), "an element declaration with a {type table}" (43), "an element declaration with {nillable} true" (42), "an assertions facet" (32), "an abstract complex type" (3) and "a locally typed lax match" (1). Each is filed when Tier A has room. The xsi:type decode row (122) is a ruling, not unfiled work.
 - **M9 residue:** #3178 (low). #2977 waits on a consumer. #3179 (`value/doc.go`'s "API frozen").
 - **M4:** #3306 (an oracle question first) and #3307.
 - **M8:** #2670 (it waits on #1601's ruling reopening).
@@ -244,14 +245,14 @@ This is ordered for a `/develop` session: take the highest row you can start. **
 - **Docs and bookkeeping:** #2679, #2624 with #793, #1803, #1881, #785, #1343, #1502 and #656.
 - **`value`:** #721, #2045, #462, #546 and #787.
 - **`regex`:** #2148 and #2147.
-- **Tooling, after row 50:** #1897, #2542, #2605, #2541, #1935, #2070, #2066, #678, #1464, #1838, #1794, #1735 and #839. #839 has the retro's sighting comment.
+- **Tooling, after row 55:** #1897 (same function as #4155), #2542, #2605, #2541, #1935, #2070, #2066, #678, #1464, #1838, #1794, #1735 and #839. #839 has the retro's sighting comment.
 - **Refactors:** #3033 (14/3), #2601 (0), #2600 (2), #2793 (3), #2239 (2), #2359 (14), #2329 (1), #2205 (2), #2101 (0/1), #1958 (2), #1865 (2), #1757 (1), #1080 (8), #363 (2), and the E5 list above. #3034, #989, #1736, #1701, #845, #1825, #2416, #2419, #2437 and #3307 are unmeasured.
 
 ### Next planning action
 
-1. **Take Tier A, row 1 first.** #4084's bindings ruling decides how rows 5 and 6 handle a strict or lax match too.
-2. **Take Tier B's libuser rows, 11 to 13, between encode slices.** Rows 11 and 12 share codec's item-1 list. The libuser round this pass owed has run and is folded in, and cliuser has nothing new to read.
-3. **The next `/backlog` files encode's next unfiled rows** once one of Tier A's rows lands: "an attribute use whose declaration has a {target namespace}" (105) and "an all group" (96).
+1. **Take Tier A, row 1 first.** #4124 is the one decision between the census and its three #4125 rows. Rows 2 to 4 are independent of it and start today.
+2. **When #4124 lands, its post-land pass unblocks #4125.** #4125 then leads Tier A.
+3. **The next `/backlog` files encode's next unfiled rows** once one of rows 2 to 4 lands: "a complex type with {assertions}" (63) and "an {open content}" (55). The libuser findings #4118–#4120 stay in Tier B until a session takes them; no persona round is due until the published surface or README changes.
 
 ## Milestones
 
