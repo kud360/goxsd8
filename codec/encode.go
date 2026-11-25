@@ -453,17 +453,18 @@ func (s *simpleRoot) write(e *encoder, v reflect.Value, at writeAt) error {
 }
 
 // write writes the element at.el holding v, a value of b's struct: its start
-// tag, then each attribute field's attribute, in field order, the fields after
-// the content's (binding.lead, elementContent.width), a nil *V's written as
-// none, and so is a nil union interface of a use whose {required} is false
-// and to which no value constraint supplies a value (supply), each written
-// value held to its use's and its declaration's fixed {value constraint}
-// (encoder.attributeFixed), then, for a type with an {attribute wildcard},
-// the attributes its field holds (encoder.wildcardAttributes), then the
-// content: for simple content the value field's text (texter), computed before
-// the start tag's '>', and otherwise the content's elements (b.content's
-// write), an element with no content written as an empty-element tag; or
-// nothing, where v holds itself (encoder.enter).
+// tag, then each attribute field's attribute, in field order, named by
+// writeRawAttribute, the fields after the content's (binding.lead,
+// elementContent.width), a nil *V's written as none, and so is a nil union
+// interface of a use whose {required} is false and to which no value
+// constraint supplies a value (supply), each written value held to its use's
+// and its declaration's fixed {value constraint} (encoder.attributeFixed),
+// then, for a type with an {attribute wildcard}, the attributes its field
+// holds (encoder.wildcardAttributes), then the content: for simple content the
+// value field's text (texter), computed before the start tag's '>', and
+// otherwise the content's elements (b.content's write), an element with no
+// content written as an empty-element tag; or nothing, where v holds itself
+// (encoder.enter).
 func (b *boundBinding) write(e *encoder, v reflect.Value, at writeAt) error {
 	if !e.enter(v, at.path) {
 		return nil
@@ -494,11 +495,7 @@ func (b *boundBinding) write(e *encoder, v reflect.Value, at writeAt) error {
 			return err
 		}
 		e.attributeFixed(a, w, fpath)
-		e.out = append(e.out, ' ')
-		e.out = append(e.out, a.decl.Name().Local...)
-		e.out = append(e.out, `="`...)
-		e.out = appendEscaped(e.out, w.text, true)
-		e.out = append(e.out, '"')
+		e.writeRawAttribute(a.decl.Name(), w.text)
 	}
 	if bd.anyAttribute != nil {
 		i := first + len(bd.attrs)
@@ -1518,16 +1515,19 @@ func (w *encodeWalk) particleEncodes(p xsd.Particle, subject string, site partic
 }
 
 // attributeEncodes returns elementEncodes' error for the attribute use u: a
-// qualified declaration, whose name the default namespace binding Append
-// writes cannot spell (Namespaces in XML §6.2), then its simple type.
+// declaration whose {target namespace} is the XSI namespace, whose field
+// Append would write unassessed (an xsi:type it never holds to Structures
+// §3.3.4.3 cvc-elt clause 4, a location hint), or xmlnsNamespace, which no
+// prefix declaredPrefix declares may be bound to (Namespaces in XML §3), then
+// its simple type.
 func attributeEncodes(schema *xsd.Schema, u xsd.AttributeUse) error {
 	decl, ok := schema.ResolvedAttributeDeclaration(u)
 	if !ok {
 		return fmt.Errorf("codec: the {attribute declaration} of attribute use %s does not resolve", u.DeclarationName().Display())
 	}
 	subject := attributeSubject(decl)
-	if decl.Name().Space != "" {
-		return encodeDecline(constructQualifiedAttribute, subject)
+	if space := decl.Name().Space; space == xsd.XMLSchemaInstanceNS || space == xmlnsNamespace {
+		return encodeDecline(constructReservedAttributeUse, subject)
 	}
 	st, ok := schema.ResolvedSimpleType(decl.TypeDefinition())
 	if !ok {
@@ -3003,9 +3003,12 @@ func (e *encoder) rawChildren(x reflect.Value, path string, hold rawHold) {
 }
 
 // writeRawAttribute appends to the start tag that is open the attribute name
-// of value value, held raw, as the package doc's "# What encodes" states: of
-// absent namespace unprefixed, in the XML namespace xml:Local, and otherwise
-// pN:Local, pN by declaredPrefix.
+// of value value, held raw or an attribute use's, as the package doc's "# What
+// encodes" states: of absent namespace unprefixed, in the XML namespace
+// xml:Local, and otherwise pN:Local, pN by declaredPrefix, whose declaration
+// precedes the attribute's ' '. name.Space is never xmlnsNamespace:
+// rawAttribute (writableName) refuses it upstream, and attributeEncodes
+// declines it.
 func (e *encoder) writeRawAttribute(name xsd.QName, value string) {
 	qualified := name.Local
 	switch {

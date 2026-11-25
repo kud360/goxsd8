@@ -186,7 +186,7 @@ const (
 	constructVacuousParticle
 	constructAllGroup
 	constructWildcard
-	constructQualifiedAttribute
+	constructReservedAttributeUse
 	constructComplexAssertions
 	constructEncodePrimitive
 	constructIDType
@@ -218,7 +218,7 @@ var constructNames = [...]string{
 	constructVacuousParticle:         "a particle with {max occurs} 0",
 	constructAllGroup:                "an all group",
 	constructWildcard:                "a wildcard particle with {process contents} strict",
-	constructQualifiedAttribute:      "an attribute use whose declaration has a {target namespace}",
+	constructReservedAttributeUse:    "an attribute use whose declaration's {target namespace} is the XSI namespace or the one the prefix xmlns is bound to",
 	constructComplexAssertions:       "a complex type with {assertions}",
 	constructEncodePrimitive:         "an atomic simple type whose primitive is other than " + displayList(encodedPrimitives),
 	constructIDType:                  "a simple type derived from xs:ID, xs:IDREF or xs:ENTITY",
