@@ -100,7 +100,8 @@ func TestSameSkipsHeldNamespaces(t *testing.T) {
 			Text       string
 			Children   []anyType
 		}
-		other struct {
+		fourNames struct{ Attributes, Namespaces, Text, Children string }
+		other     struct {
 			Namespaces []namespace
 			Text       string
 		}
@@ -115,6 +116,7 @@ func TestSameSkipsHeldNamespaces(t *testing.T) {
 		{"AnyType's Namespaces at depth", anyType{Children: []anyType{{Namespaces: p}}}, anyType{Children: []anyType{{}}}, true},
 		{"AnyType's Text", anyType{Namespaces: p, Text: "x"}, anyType{Namespaces: p, Text: "y"}, false},
 		{"another struct's Namespaces", other{Namespaces: p}, other{}, false},
+		{"a struct of AnyType's field names whose Namespaces is a string", fourNames{Namespaces: "p"}, fourNames{}, false},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

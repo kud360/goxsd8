@@ -197,9 +197,11 @@ func same(a, b reflect.Value) bool {
 	}
 }
 
-// unread reports whether field i of the struct type t is the Namespaces field
-// of a struct whose fields are exactly codegen's AnyType's, in order
-// (codegen/doc.go "# xs:anyType"), which [same] does not compare.
+// unread reports whether field i of the struct type t is the Namespaces field,
+// a slice of a struct of exactly Prefix and Space, each a string, of a struct
+// whose fields are exactly codegen's AnyType's, in order (codegen/doc.go "#
+// xs:anyType"), which [same] does not compare.
+//
 // GAP(codec): #4125 — codec.Append writes none of the bindings Namespaces
 // holds, so a re-decoded value holds those Append's own output puts in scope,
 // not the source's; #4125 replaces this exception with its own comparison of
@@ -214,7 +216,13 @@ func unread(t reflect.Type, i int) bool {
 			return false
 		}
 	}
-	return true
+	ns := t.Field(i).Type
+	if ns.Kind() != reflect.Slice || ns.Elem().Kind() != reflect.Struct || ns.Elem().NumField() != 2 {
+		return false
+	}
+	e := ns.Elem()
+	return e.Field(0).Name == "Prefix" && e.Field(1).Name == "Space" &&
+		e.Field(0).Type.Kind() == reflect.String && e.Field(1).Type.Kind() == reflect.String
 }
 
 // DocumentElement returns the expanded name of the document element of the
