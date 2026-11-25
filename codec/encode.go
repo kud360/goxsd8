@@ -2807,7 +2807,7 @@ func (c rawContent) write(e *encoder, v reflect.Value, at writeAt) error {
 // content is v, a struct of AnyType's shape or a named type over one, at
 // path: its start tag, then v as rawContent writes it under anyTypeContent,
 // as the package doc's "# What encodes" states, its content held to decl's
-// fixed {value constraint} after its attributes (anyTypeFixed); or nothing,
+// fixed {value constraint} after its Text (anyTypeFixed); or nothing,
 // where v holds itself (encoder.enter), taken by slot first either way. It
 // reads no simple value, so it returns no backend fault.
 func (rawContent) writeElement(e *encoder, decl xsd.ElementDeclaration, v reflect.Value, path string, slot attributionSlot) error {
@@ -2820,6 +2820,7 @@ func (rawContent) writeElement(e *encoder, decl xsd.ElementDeclaration, v reflec
 	outer, mark := e.startTag(name)
 	hold := anyTypeContent{decl: decl}
 	start := e.rawAttributes(v, path, hold)
+	e.rawText(v.Field(1).String(), path+".Text")
 	e.anyTypeFixed(decl, v, path)
 	e.rawChildren(v, path, hold)
 	e.endTag(name.Local, start, outer, mark)
@@ -2892,9 +2893,10 @@ func (e *encoder) rawStartTag(name xsd.QName) (tag, outer string, mark int) {
 // each such attribute or text, and each element rawName refuses, out of what
 // it writes; an element heldElement declines is written, so that its content
 // is examined for item 6 too, though Append returns no byte of it. It is
-// rawAttributes, then rawChildren.
+// rawAttributes, then x's Text (rawText), then rawChildren.
 func (e *encoder) rawContent(x reflect.Value, path string, hold rawHold) int {
 	start := e.rawAttributes(x, path, hold)
+	e.rawText(x.Field(1).String(), path+".Text")
 	e.rawChildren(x, path, hold)
 	return start
 }
@@ -2929,9 +2931,8 @@ func (e *encoder) rawAttributes(x reflect.Value, path string, hold rawHold) int 
 	return start
 }
 
-// rawChildren is rawContent's write of x's Text and each of its Children.
+// rawChildren is rawContent's write of each of x's Children, each followed by its Tail.
 func (e *encoder) rawChildren(x reflect.Value, path string, hold rawHold) {
-	e.rawText(x.Field(1).String(), path+".Text")
 	children := x.Field(2)
 	for i := range children.Len() {
 		c := children.Index(i)

@@ -4504,6 +4504,7 @@ func TestAppendValueConstraint(t *testing.T) {
 		{"nil union under a default", appendRow(schema, sname("un"), vcUnion{}, unionVariants...), []string{"codec: Append: vcUnion.Dflt is nil, of simple type {urn:s}u", "where a value is required"}},
 		{"anyType fixed, another text", appendRow(schema, sname("af"), anyType{Text: "y"}), []string{`codec: Append: anyType.Text holds "y", which does not match "x", the {lexical form} of the fixed {value constraint} of element {urn:s}af`, "cvc-elt clause 5.2.2.2.1"}},
 		{"anyType fixed child", appendRow(schema, sname("af"), anyType{Text: "x", Children: []anyChild{{Element: anyElement{Local: "c"}}}}), []string{`codec: Append: anyType.Children holds 1, though the fixed {value constraint} "x" of element {urn:s}af`, "admits no element child", "cvc-elt clause 5.2.2.1"}},
+		{"anyType fixed child, Text no Char", appendRow(schema, sname("af"), anyType{Text: "\x00", Children: []anyChild{{Element: anyElement{Local: "c"}}}}), []string{`codec: Append: anyType.Text holds "\x00", whose byte offset 0 starts no XML 1.0 Char`}},
 	} {
 		t.Run(row.name, func(t *testing.T) {
 			got, err := row.app(t, []byte("pre"))
