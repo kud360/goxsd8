@@ -38,7 +38,7 @@ func instanceTest(name, doc string) string {
 // cases encode (a.xml, a sequence, f.xml, of simple type, n.xml, z.xml and
 // o.xml, xs:double values NaN, −0 and 1, the last spelled other than
 // canonically, g.xml, a choice, and p.xml, of a union type), decline (l.xml,
-// a sequence codegen flattens whose particle is of xs:ID), and
+// a sequence codegen flattens whose particle's type has an assertions facet), and
 // lie outside the population: invalid.xml, which does not decode, and u.xml,
 // whose document element no declaration names, which decodes into the
 // placeholder.
@@ -55,8 +55,9 @@ var censusSuite = map[string]string{
   <xs:element name="f" type="xs:string"/>
   <xs:element name="d" type="xs:double"/>
   <xs:element name="g"><xs:complexType><xs:choice><xs:element name="h" type="xs:string"/><xs:element name="i" type="xs:string"/></xs:choice></xs:complexType></xs:element>
-  <xs:element name="l"><xs:complexType><xs:sequence maxOccurs="unbounded"><xs:element name="m" type="xs:ID" minOccurs="0"/></xs:sequence></xs:complexType></xs:element>
+  <xs:element name="l"><xs:complexType><xs:sequence maxOccurs="unbounded"><xs:element name="m" type="asserted" minOccurs="0"/></xs:sequence></xs:complexType></xs:element>
   <xs:element name="p"><xs:simpleType><xs:union memberTypes="xs:string xs:int"/></xs:simpleType></xs:element>
+  <xs:simpleType name="asserted"><xs:restriction base="xs:string"><xs:assertion test="true()"/></xs:restriction></xs:simpleType>
 </xs:schema>`,
 	"d/a.xml":       `<a><b>x</b></a>`,
 	"d/f.xml":       `<f>x</f>`,
@@ -83,7 +84,7 @@ const wantCounts = `encodecensus: 10 instance case(s) under %ROOT%
   round trip unequal: 0
 
 === First decline, by construct: 1 construct(s) ===
-       1  a simple type derived from xs:ID, xs:IDREF or xs:ENTITY
+       1  a simple type with an assertions facet
 
 === Caveats ===
 `
@@ -91,7 +92,7 @@ const wantCounts = `encodecensus: 10 instance case(s) under %ROOT%
 // wantPaths is the -paths sections over censusSuite.
 const wantPaths = `
 === Cases, by construct ===
-a simple type derived from xs:ID, xs:IDREF or xs:ENTITY (1):
+a simple type with an assertions facet (1):
   S/g/instance/flattened
 
 === Cases, by defect count ===

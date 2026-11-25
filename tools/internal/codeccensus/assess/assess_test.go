@@ -19,18 +19,21 @@ import (
 // in an occurrence field's item codec declines, p, a choice codec decodes and
 // encodes into a sealed interface, l, whose content sequence codegen
 // flattens, which codec decodes and declines to encode by its particle's
-// xs:ID type, u, a's shape with an assertion whose for expression the
+// type's assertions facet, u, a's shape with an assertion whose for expression the
 // XPath subset declines, so validate leaves it undecided (cvc-assertion), and
-// e, of empty content, whose struct has the placeholder's shape.
+// e, of empty content, whose struct has the placeholder's shape; and
+// asserted, l's particle's type, an xs:string restriction whose assertion
+// validate evaluates true.
 const fixtureSchema = `<?xml version="1.0"?>
 <xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
   <xs:element name="a"><xs:complexType><xs:sequence><xs:element name="b" type="xs:string"/></xs:sequence></xs:complexType></xs:element>
   <xs:element name="n"><xs:complexType><xs:sequence maxOccurs="2"><xs:element name="b" type="xs:string"/><xs:choice maxOccurs="2"><xs:element name="d" type="xs:string"/></xs:choice></xs:sequence></xs:complexType></xs:element>
   <xs:element name="p"><xs:complexType><xs:choice><xs:element name="q" type="xs:string"/><xs:element name="r" type="xs:string"/></xs:choice></xs:complexType></xs:element>
-  <xs:element name="l"><xs:complexType><xs:sequence maxOccurs="unbounded"><xs:element name="m" type="xs:ID" minOccurs="0"/></xs:sequence></xs:complexType></xs:element>
+  <xs:element name="l"><xs:complexType><xs:sequence maxOccurs="unbounded"><xs:element name="m" type="asserted" minOccurs="0"/></xs:sequence></xs:complexType></xs:element>
   <xs:element name="u"><xs:complexType><xs:sequence><xs:element name="b" type="xs:string"/></xs:sequence>
     <xs:assert test="(for $x in b return string-length($x)) = 1"/></xs:complexType></xs:element>
   <xs:element name="e"><xs:complexType/></xs:element>
+  <xs:simpleType name="asserted"><xs:restriction base="xs:string"><xs:assertion test="true()"/></xs:restriction></xs:simpleType>
 </xs:schema>
 `
 

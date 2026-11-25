@@ -138,34 +138,46 @@ func TestAppendIdentityViolation(t *testing.T) {
 	for _, row := range rows {
 		t.Run(row.name, func(t *testing.T) {
 			got, err := row.append()
-			if string(got) != "pre" {
-				t.Errorf("Append returned %q, want dst unextended", got)
-			}
-			var d *DeclineError
-			if !errors.Is(err, ErrInvalidValue) || errors.As(err, &d) || errors.Is(err, errors.ErrUnsupported) {
-				t.Fatalf("Append returned %v, want an error errors.Is reports as ErrInvalidValue and no decline", err)
-			}
-			const opening = "codec: the instance is invalid against the schema: ?:"
-			if !strings.HasPrefix(err.Error(), opening) {
-				t.Errorf("error %q does not open with %q", err, opening)
-			}
-			var xe *xsderr.Error
-			if rule, _ := xsderr.RuleOf(err); !errors.As(err, &xe) || rule != "cvc-identity-constraint" {
-				t.Fatalf("error %v reaches no cvc-identity-constraint *xsderr.Error", err)
-			}
-			vs := ViolationsOf(err)
-			if len(vs) == 0 || vs[0] != xe {
-				t.Fatalf("ViolationsOf = %v, want the first violation %v first", vs, xe)
-			}
-			for _, v := range vs {
-				if v.Loc.URI != "" || v.Loc.Line != 1 {
-					t.Errorf("violation %v is not charged to the written document under no URI", v)
-				}
-			}
-			if !strings.Contains(xe.Error(), row.constraint) || !strings.Contains(xe.Error(), "clause "+row.clause) {
-				t.Errorf("violation %q names neither %s nor clause %s", xe, row.constraint, row.clause)
-			}
+			assessedCharge(t, got, err, "cvc-identity-constraint", row.clause, row.constraint)
 		})
+	}
+}
+
+// assessedCharge fails t unless got and err are item 8 of Append's doc for
+// an Append after the dst "pre": got is dst unextended, and err an error
+// errors.Is reports as ErrInvalidValue, no *DeclineError and not
+// errors.ErrUnsupported, opening with codec's statement of the charge, whose
+// first violation, reached by errors.As and xsderr.RuleOf, is of rule and
+// leads ViolationsOf, every one charged to the written document under no
+// URI, and names subject and "clause " and clause.
+func assessedCharge(t *testing.T, got []byte, err error, rule xsderr.Rule, clause, subject string) {
+	t.Helper()
+	if string(got) != "pre" {
+		t.Errorf("Append returned %q, want dst unextended", got)
+	}
+	var d *DeclineError
+	if !errors.Is(err, ErrInvalidValue) || errors.As(err, &d) || errors.Is(err, errors.ErrUnsupported) {
+		t.Fatalf("Append returned %v, want an error errors.Is reports as ErrInvalidValue and no decline", err)
+	}
+	const opening = "codec: the instance is invalid against the schema: ?:"
+	if !strings.HasPrefix(err.Error(), opening) {
+		t.Errorf("error %q does not open with %q", err, opening)
+	}
+	var xe *xsderr.Error
+	if r, _ := xsderr.RuleOf(err); !errors.As(err, &xe) || r != rule {
+		t.Fatalf("error %v reaches no %s *xsderr.Error", err, rule)
+	}
+	vs := ViolationsOf(err)
+	if len(vs) == 0 || vs[0] != xe {
+		t.Fatalf("ViolationsOf = %v, want the first violation %v first", vs, xe)
+	}
+	for _, v := range vs {
+		if v.Loc.URI != "" || v.Loc.Line != 1 {
+			t.Errorf("violation %v is not charged to the written document under no URI", v)
+		}
+	}
+	if !strings.Contains(xe.Error(), subject) || !strings.Contains(xe.Error(), "clause "+clause) {
+		t.Errorf("violation %q names neither %s nor clause %s", xe, subject, clause)
 	}
 }
 
