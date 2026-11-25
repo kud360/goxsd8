@@ -4412,31 +4412,83 @@ func appendRow[T any](schema *xsd.Schema, root xsd.QName, v T, opts ...Option) f
 func TestAppendValueConstraint(t *testing.T) {
 	schema := schemaOf(t, vcSchema)
 	global := parseString(t, vcGlobalSchema)
-	t.Run("written", func(t *testing.T) {
-		roundTrip(t, schema, sname("ed"), vcInt(5), `<ed xmlns="urn:s">5</ed>`, deepEqual[vcInt])
-		roundTrip(t, schema, sname("ed"), vcInt(7), `<ed xmlns="urn:s">7</ed>`, deepEqual[vcInt])
-		roundTrip(t, schema, sname("ef"), vcInt(7), `<ef xmlns="urn:s">7</ef>`, deepEqual[vcInt])
-		roundTrip(t, schema, sname("es"), vcString("abc"), `<es xmlns="urn:s">abc</es>`, deepEqual[vcString])
-		roundTrip(t, schema, sname("fs"), vcString("abc"), `<fs xmlns="urn:s">abc</fs>`, deepEqual[vcString])
-		roundTrip(t, schema, sname("el"), vcList{1, 2}, `<el xmlns="urn:s">1 2</el>`, sameLists[vcList])
-		var one big.Rat
-		one.SetInt64(1)
-		roundTrip(t, schema, sname("dec"), vcDecimal(one), `<dec xmlns="urn:s">1</dec>`, func(a, b vcDecimal) bool { return sameRat(big.Rat(a), big.Rat(b)) })
-		roundTrip(t, schema, sname("nan"), vcDouble(math.NaN()), `<nan xmlns="urn:s">NaN</nan>`, sameDouble[vcDouble])
-		roundTrip(t, schema, sname("at"), vcAttrs{A: "y", F: 7}, `<at xmlns="urn:s" a="y" f="7"/>`, deepEqual[vcAttrs])
-		roundTrip(t, schema, sname("at"), vcAttrs{A: "x", F: 7}, `<at xmlns="urn:s" a="x" f="7"/>`, deepEqual[vcAttrs])
-		roundTrip(t, schema, sname("at"), vcAttrs{A: "", F: 7}, `<at xmlns="urn:s" a="" f="7"/>`, deepEqual[vcAttrs])
-		roundTrip(t, schema, sname("un"), vcUnion{Dflt: unionUInt(3)}, `<un xmlns="urn:s" dflt="3"/>`, deepEqual[vcUnion], unionVariants...)
-		roundTrip(t, schema, sname("ad"), anyType{Text: "y"}, `<ad xmlns="urn:s">y</ad>`, deepEqual[anyType])
-		roundTrip(t, schema, sname("ad"), anyType{Children: []anyChild{{Element: anyElement{Local: "c"}}}}, `<ad xmlns="urn:s"><c xmlns=""/></ad>`, deepEqual[anyType])
-		roundTrip(t, schema, sname("af"), anyType{Text: "x"}, `<af xmlns="urn:s">x</af>`, deepEqual[anyType])
-		roundTrip(t, schema, sname("af"), anyType{}, `<af xmlns="urn:s"/>`, deepEqual[anyType])
-		roundTrip(t, schema, sname("af"), anyType{Attributes: []anyAttribute{{Local: "k", Value: "v"}}, Text: "x"}, `<af xmlns="urn:s" k="v">x</af>`, deepEqual[anyType])
-		roundTrip(t, global, xsd.QName{Local: "r"}, vcGlobal{G: 7}, `<r g="7"/>`, deepEqual[vcGlobal])
-		var four big.Rat
-		four.SetInt64(4)
-		roundTrip(t, schemaOf(t, scFixedRoot), sname("r"), scPrice{Value: four}, `<r xmlns="urn:s">4</r>`, func(a, b scPrice) bool { return sameRat(a.Value, b.Value) && reflect.DeepEqual(a.Cur, b.Cur) })
-	})
+	var one, four big.Rat
+	one.SetInt64(1)
+	four.SetInt64(4)
+	schemaNS := "urn:schema"
+	for _, row := range []struct {
+		name string
+		run  func(t *testing.T)
+	}{
+		{"element default, another value", func(t *testing.T) {
+			roundTrip(t, schema, sname("ed"), vcInt(5), `<ed xmlns="urn:s">5</ed>`, deepEqual[vcInt])
+		}},
+		{"element default, its value", func(t *testing.T) {
+			roundTrip(t, schema, sname("ed"), vcInt(7), `<ed xmlns="urn:s">7</ed>`, deepEqual[vcInt])
+		}},
+		{"element fixed", func(t *testing.T) {
+			roundTrip(t, schema, sname("ef"), vcInt(7), `<ef xmlns="urn:s">7</ef>`, deepEqual[vcInt])
+		}},
+		{"string default", func(t *testing.T) {
+			roundTrip(t, schema, sname("es"), vcString("abc"), `<es xmlns="urn:s">abc</es>`, deepEqual[vcString])
+		}},
+		{"string fixed", func(t *testing.T) {
+			roundTrip(t, schema, sname("fs"), vcString("abc"), `<fs xmlns="urn:s">abc</fs>`, deepEqual[vcString])
+		}},
+		{"list default", func(t *testing.T) {
+			roundTrip(t, schema, sname("el"), vcList{1, 2}, `<el xmlns="urn:s">1 2</el>`, sameLists[vcList])
+		}},
+		{"decimal fixed 1.0 holding 1", func(t *testing.T) {
+			roundTrip(t, schema, sname("dec"), vcDecimal(one), `<dec xmlns="urn:s">1</dec>`, func(a, b vcDecimal) bool { return sameRat(big.Rat(a), big.Rat(b)) })
+		}},
+		{"double fixed NaN", func(t *testing.T) {
+			roundTrip(t, schema, sname("nan"), vcDouble(math.NaN()), `<nan xmlns="urn:s">NaN</nan>`, sameDouble[vcDouble])
+		}},
+		{"simple content fixed", func(t *testing.T) {
+			roundTrip(t, schemaOf(t, scFixedRoot), sname("r"), scPrice{Value: four}, `<r xmlns="urn:s">4</r>`, func(a, b scPrice) bool { return sameRat(a.Value, b.Value) && reflect.DeepEqual(a.Cur, b.Cur) })
+		}},
+		// f's fixed xs:QName p:fix, p bound to urn:schema in the schema
+		// document, is spelled p1:fix under the prefix Append declares on f's
+		// start tag, which the comparison resolves.
+		{"QName fixed", func(t *testing.T) {
+			roundTrip(t, schemaOf(t, qnameSchema), sname("r"), qnames{
+				Q: tQName{Local: "q", Space: "urn:s"}, L: []tQName{}, N: tQName{Space: "urn:s", Local: "png"}, H: qnameHead{Space: "urn:s", Local: "h"},
+				D: tQName{Space: schemaNS, Local: "d"}, F: tQName{Space: schemaNS, Local: "fix"}, Da: tQName{Space: schemaNS, Local: "att"},
+			}, "", deepEqual[qnames])
+		}},
+		{"attribute default and fixed", func(t *testing.T) {
+			roundTrip(t, schema, sname("at"), vcAttrs{A: "y", F: 7}, `<at xmlns="urn:s" a="y" f="7"/>`, deepEqual[vcAttrs])
+		}},
+		{"attribute default, its value", func(t *testing.T) {
+			roundTrip(t, schema, sname("at"), vcAttrs{A: "x", F: 7}, `<at xmlns="urn:s" a="x" f="7"/>`, deepEqual[vcAttrs])
+		}},
+		{"attribute default, empty", func(t *testing.T) {
+			roundTrip(t, schema, sname("at"), vcAttrs{A: "", F: 7}, `<at xmlns="urn:s" a="" f="7"/>`, deepEqual[vcAttrs])
+		}},
+		{"attribute declaration fixed", func(t *testing.T) {
+			roundTrip(t, global, xsd.QName{Local: "r"}, vcGlobal{G: 7}, `<r g="7"/>`, deepEqual[vcGlobal])
+		}},
+		{"union attribute default", func(t *testing.T) {
+			roundTrip(t, schema, sname("un"), vcUnion{Dflt: unionUInt(3)}, `<un xmlns="urn:s" dflt="3"/>`, deepEqual[vcUnion], unionVariants...)
+		}},
+		{"anyType default text", func(t *testing.T) {
+			roundTrip(t, schema, sname("ad"), anyType{Text: "y"}, `<ad xmlns="urn:s">y</ad>`, deepEqual[anyType])
+		}},
+		{"anyType default child", func(t *testing.T) {
+			roundTrip(t, schema, sname("ad"), anyType{Children: []anyChild{{Element: anyElement{Local: "c"}}}}, `<ad xmlns="urn:s"><c xmlns=""/></ad>`, deepEqual[anyType])
+		}},
+		{"anyType fixed text", func(t *testing.T) {
+			roundTrip(t, schema, sname("af"), anyType{Text: "x"}, `<af xmlns="urn:s">x</af>`, deepEqual[anyType])
+		}},
+		{"anyType fixed empty", func(t *testing.T) {
+			roundTrip(t, schema, sname("af"), anyType{}, `<af xmlns="urn:s"/>`, deepEqual[anyType])
+		}},
+		{"anyType fixed attributes", func(t *testing.T) {
+			roundTrip(t, schema, sname("af"), anyType{Attributes: []anyAttribute{{Local: "k", Value: "v"}}, Text: "x"}, `<af xmlns="urn:s" k="v">x</af>`, deepEqual[anyType])
+		}},
+	} {
+		t.Run(row.name, row.run)
+	}
 	var five big.Rat
 	five.SetInt64(5)
 	for _, row := range []struct {
@@ -4450,7 +4502,7 @@ func TestAppendValueConstraint(t *testing.T) {
 		{"fixed attribute use", appendRow(schema, sname("at"), vcAttrs{A: "y", F: 8}), []string{"codec: Append: vcAttrs.F, of simple type xs:int, is written ", `"8", whose value is neither equal nor identical to "7", the {value} of the fixed {value constraint} of the attribute use of attribute f`, "§3.5.4 cvc-au"}},
 		{"fixed attribute declaration", appendRow(global, xsd.QName{Local: "r"}, vcGlobal{G: 8}), []string{"codec: Append: vcGlobal.G, of simple type xs:int, is written ", `"8", whose value is neither equal nor identical to "7", the {value} of the fixed {value constraint} of attribute g`, "§3.2.4.1 cvc-attribute clause 4"}},
 		{"nil union under a default", appendRow(schema, sname("un"), vcUnion{}, unionVariants...), []string{"codec: Append: vcUnion.Dflt is nil, of simple type {urn:s}u", "where a value is required"}},
-		{"anyType fixed text", appendRow(schema, sname("af"), anyType{Text: "y"}), []string{`codec: Append: anyType.Text holds "y", which does not match "x", the {lexical form} of the fixed {value constraint} of element {urn:s}af`, "cvc-elt clause 5.2.2.2.1"}},
+		{"anyType fixed, another text", appendRow(schema, sname("af"), anyType{Text: "y"}), []string{`codec: Append: anyType.Text holds "y", which does not match "x", the {lexical form} of the fixed {value constraint} of element {urn:s}af`, "cvc-elt clause 5.2.2.2.1"}},
 		{"anyType fixed child", appendRow(schema, sname("af"), anyType{Text: "x", Children: []anyChild{{Element: anyElement{Local: "c"}}}}), []string{`codec: Append: anyType.Children holds 1, though the fixed {value constraint} "x" of element {urn:s}af`, "admits no element child", "cvc-elt clause 5.2.2.1"}},
 	} {
 		t.Run(row.name, func(t *testing.T) {
