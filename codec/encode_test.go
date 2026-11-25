@@ -62,7 +62,7 @@ func roundTrip[T any](t *testing.T, schema *xsd.Schema, name xsd.QName, v T, wan
 	if err != nil {
 		t.Fatalf("Decode(%s): %v", data, err)
 	}
-	if !eq(*got, v) {
+	if !eq(unscoped(*got).(T), unscoped(v).(T)) {
 		t.Fatalf("Decode(%s) = %#v, want %#v", data, *got, v)
 	}
 	return data

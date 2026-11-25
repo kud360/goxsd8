@@ -467,7 +467,8 @@
 // namespace unprefixed, one in the XML namespace xml:Local, and every other one
 // pN:Local, pN chosen and declared as for an xs:QName value, though its
 // namespace be that element's own; then its Text, then each of its Children,
-// written so, followed by its Tail. A nil pointer field writes nothing, and so
+// written so, followed by its Tail. Its Namespaces is not read: no binding it
+// holds is declared (GAP(codec): #4125). A nil pointer field writes nothing, and so
 // does a nil interface field where nil means absent (codegen's package doc, "#
 // Particles", "# Attributes"), a particle with {max occurs} above 1 writes one
 // element per item of its slice, a flattened sequence or choice one per item of

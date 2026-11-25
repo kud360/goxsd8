@@ -130,7 +130,7 @@ type emitter struct {
 	// substitutionType stores an entry only once every branch has its type. It
 	// is a lookup index only and never iterated (STYLE D2).
 	substitutions map[xsd.QName]string
-	// raw holds the names claimed for the four raw-content structs, which
+	// raw holds the names claimed for the five raw-content structs, which
 	// anyTypeType emits once per package; its zero value means they are
 	// unclaimed and unemitted.
 	raw rawNames
@@ -192,13 +192,13 @@ type nilledAttributes struct {
 	slot     int
 }
 
-// rawNames is the names claimed for the four raw-content structs the package
+// rawNames is the names claimed for the five raw-content structs the package
 // doc's "# xs:anyType", "# Particles" and "# Attributes" give, in that order,
 // an element of type xs:anyType (§3.4.7 any-type-itself), a wildcard particle
 // of a model group, and an {attribute wildcard} (§3.4.2.5 dcl.ctd.anyatt), in
 // claim order.
 type rawNames struct {
-	anyType, attribute, child, element string
+	anyType, attribute, child, element, namespace string
 }
 
 // emittedType is the Go type emitted for one complex type definition or
@@ -1079,7 +1079,7 @@ func (e *emitter) precisionDecimalType() string {
 // the content of an element of type xs:anyType: mixed, a lax ##any wildcard
 // any number of times, and a lax ##any {attribute wildcard} (§3.4.7
 // any-type-itself). When no earlier declaration, wildcard particle or
-// {attribute wildcard} needed them, it claims the four raw-content structs'
+// {attribute wildcard} needed them, it claims the five raw-content structs'
 // names in e.types, in rawNames' order, by the package doc's "Naming", and
 // appends their declarations to e.tailDecls in that order. No field names
 // math/big.
@@ -1092,20 +1092,24 @@ func (e *emitter) anyTypeType() string {
 		attribute: e.types.fixed("anyAttribute"),
 		child:     e.types.fixed("anyChild"),
 		element:   e.types.fixed("anyElement"),
+		namespace: e.types.fixed("anyNamespace"),
 	}
 	e.raw = n
 	from := provenance{text: "complex type " + anyTypeName.String()}
 	e.tailDecls = append(e.tailDecls,
 		declare(n.anyType, from,
 			"// Text is the characters before the first of Children, \"\" for none.\n",
-			fmt.Sprintf("type %s struct {\n\tAttributes []%s\n\tText string\n\tChildren []%s\n}\n", n.anyType, n.attribute, n.child)),
+			fmt.Sprintf("type %s struct {\n\tAttributes []%s\n\tNamespaces []%s\n\tText string\n\tChildren []%s\n}\n", n.anyType, n.attribute, n.namespace, n.child)),
 		declare(n.attribute, from, "",
 			fmt.Sprintf("type %s struct {\n\tSpace, Local, Value string\n}\n", n.attribute)),
 		declare(n.child, from,
 			"// Tail is the characters after Element, before the next child or the end.\n",
 			fmt.Sprintf("type %s struct {\n\tElement %s\n\tTail string\n}\n", n.child, n.element)),
 		declare(n.element, from, "",
-			fmt.Sprintf("type %s struct {\n\tSpace, Local string\n\tContent %s\n}\n", n.element, n.anyType)))
+			fmt.Sprintf("type %s struct {\n\tSpace, Local string\n\tContent %s\n}\n", n.element, n.anyType)),
+		declare(n.namespace, from,
+			"// Prefix is \"\" for the default namespace; Space is the namespace name.\n",
+			fmt.Sprintf("type %s struct {\n\tPrefix, Space string\n}\n", n.namespace)))
 	return n.anyType
 }
 
