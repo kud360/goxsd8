@@ -2703,7 +2703,8 @@ func (e *encoder) flattenedCheck(f *flattened, at writeAt) *attributionCheck {
 
 // end records item 6 of [Append]'s doc, at path, the content's Go path, where
 // c's Matcher is not accepting once the content's every child is taken
-// (§3.9.4.3 cvc-accept clause 1). A nil c checks nothing.
+// (§3.9.4.3 cvc-accept clause 3.3, §3.8.4.3 cvc-model-group). A nil c checks
+// nothing.
 func (c *attributionCheck) end(e *encoder, path string) {
 	if c == nil || c.a.m.Accepting() {
 		return

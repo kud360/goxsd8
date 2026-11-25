@@ -72,6 +72,19 @@ func (n *rnode) xsdOf() string {
 	return "<xs:" + n.kind + occurs + ">" + b.String() + "</xs:" + n.kind + ">"
 }
 
+// namesOf returns the child names of leaves, a sequence genInstance draws:
+// each element particle's name, "w" for the wildcard's child.
+func namesOf(leaves []*rnode) []string {
+	names := make([]string, len(leaves))
+	for i, l := range leaves {
+		names[i] = l.name
+		if l.kind == "wild" {
+			names[i] = "w"
+		}
+	}
+	return names
+}
+
 // maxString renders max as a maxOccurs value.
 func maxString(m int) string {
 	if m < 0 {
@@ -80,9 +93,10 @@ func maxString(m int) string {
 	return strconv.Itoa(m)
 }
 
-// genInstance appends to out the names of a random sequence n's particle
-// matches, "w" for a wildcard's child, its repetitions capped at min+2.
-func (n *rnode) genInstance(rng *rand.Rand, out []string) []string {
+// genInstance appends to out, one per child, the element and wildcard
+// particles of a random sequence n's particle matches, its repetitions capped
+// at min+2.
+func (n *rnode) genInstance(rng *rand.Rand, out []*rnode) []*rnode {
 	upper := n.min + 2
 	if n.max >= 0 && n.max < upper {
 		upper = n.max
@@ -93,13 +107,11 @@ func (n *rnode) genInstance(rng *rand.Rand, out []string) []string {
 	return out
 }
 
-// genOnce appends the names of one random occurrence of n's term.
-func (n *rnode) genOnce(rng *rand.Rand, out []string) []string {
+// genOnce appends the particles of one random occurrence of n's term.
+func (n *rnode) genOnce(rng *rand.Rand, out []*rnode) []*rnode {
 	switch n.kind {
-	case "elem":
-		return append(out, n.name)
-	case "wild":
-		return append(out, "w")
+	case "elem", "wild":
+		return append(out, n)
 	case "choice":
 		return n.kids[rng.IntN(len(n.kids))].genInstance(rng, out)
 	}
@@ -266,7 +278,7 @@ func TestOccurrencePartitionDifferential(t *testing.T) {
 		}
 		rt, structured := occurrenceGoType(top)
 		for range 4 {
-			names := top.genInstance(rng, nil)
+			names := namesOf(top.genInstance(rng, nil))
 			if len(names) > 10 {
 				continue
 			}
@@ -480,7 +492,7 @@ func TestAppendOccurrenceRoundTripDifferential(t *testing.T) {
 		}
 		models++
 		for range 4 {
-			names := top.genInstance(rng, nil)
+			names := namesOf(top.genInstance(rng, nil))
 			if len(names) > 10 {
 				continue
 			}
@@ -583,4 +595,290 @@ func idsOf(v reflect.Value) []int {
 		ids = append(ids, -1)
 	}
 	return ids
+}
+
+// rfItem is the sealed interface of the flattened content {particle}
+// TestAppendFlattenedDifferential writes, held by rfSequence for a sequence
+// and by rfChoice for a choice, as codegen holds one (codegen/doc.go
+// "# Particles"). Its branch family: RfItemA to RfItemC4, the branches of up
+// to four element particles of each name a, b and c, named as codegen names a
+// tie's (codegen/doc.go "# Naming") and placed by shape where no tie holds
+// them; and rfAny, the wildcard particle's.
+type (
+	rfSequence struct{ Sequence []rfItem }
+	rfChoice   struct{ Choice []rfItem }
+	rfItem     interface{ isRfItem() }
+	RfItemA    struct{ A string }
+	RfItemA2   struct{ A string }
+	RfItemA3   struct{ A string }
+	RfItemA4   struct{ A string }
+	RfItemB    struct{ B string }
+	RfItemB2   struct{ B string }
+	RfItemB3   struct{ B string }
+	RfItemB4   struct{ B string }
+	RfItemC    struct{ C string }
+	RfItemC2   struct{ C string }
+	RfItemC3   struct{ C string }
+	RfItemC4   struct{ C string }
+	rfAny      struct{ Any anyElement }
+)
+
+func (RfItemA) isRfItem()  {}
+func (RfItemA2) isRfItem() {}
+func (RfItemA3) isRfItem() {}
+func (RfItemA4) isRfItem() {}
+func (RfItemB) isRfItem()  {}
+func (RfItemB2) isRfItem() {}
+func (RfItemB3) isRfItem() {}
+func (RfItemB4) isRfItem() {}
+func (RfItemC) isRfItem()  {}
+func (RfItemC2) isRfItem() {}
+func (RfItemC3) isRfItem() {}
+func (RfItemC4) isRfItem() {}
+func (rfAny) isRfItem()    {}
+
+// rfTies holds, by element name, the branches of the first to fourth element
+// particle of that name in a reach, in reach order.
+var rfTies = map[string][]rfItem{
+	"a": {RfItemA{}, RfItemA2{}, RfItemA3{}, RfItemA4{}},
+	"b": {RfItemB{}, RfItemB2{}, RfItemB3{}, RfItemB4{}},
+	"c": {RfItemC{}, RfItemC2{}, RfItemC3{}, RfItemC4{}},
+}
+
+// flatLeaf is one basic particle of a random model's reach: node, its
+// position as xsd.Matcher.NextParticle reports one, and branch, the rfItem
+// branch the test's WithBranches set places at it.
+type flatLeaf struct {
+	node   *rnode
+	pos    []int
+	branch rfItem
+}
+
+// reachOf appends to out the leaves of n's reach, n a model group at
+// position at: depth-first through its kids in order, each element or
+// wildcard one leaf, each model group replaced by its own kids' leaves.
+func (n *rnode) reachOf(at []int, out []flatLeaf) []flatLeaf {
+	for i, k := range n.kids {
+		pos := append(slices.Clone(at), i)
+		if len(k.kids) == 0 {
+			out = append(out, flatLeaf{node: k, pos: pos})
+			continue
+		}
+		out = k.reachOf(pos, out)
+	}
+	return out
+}
+
+// flatItem is one item of a flattened slice a draw holds: the index of its
+// branch's leaf in the reach, and the expanded name of the child it writes,
+// the leaf's own for an element, the anyElement's for the wildcard.
+type flatItem struct {
+	leaf int
+	name xsd.QName
+}
+
+// The verdicts of the content model on a draw, as matcherVerdict reads them
+// from xsd.Matcher: accepted; an item whose name it admits at no particle; an
+// item it attributes to a particle other than its branch's leaf; and content
+// after whose last item it is not accepting. Each reject is §3.9.4.3
+// cvc-accept clause 3.3 through §3.8.4.3 cvc-model-group.
+const (
+	verdictAccept = iota
+	verdictNowhere
+	verdictElsewhere
+	verdictShort
+)
+
+// verdictNames names the verdicts in the test's log, by verdict.
+var verdictNames = [...]string{"accepted", "name admitted nowhere", "name attributed elsewhere", "ends short"}
+
+// matcherVerdict returns m's verdict on items, m a fresh Matcher of the
+// content whose reach is leaves: the reject at the first item m admits at no
+// particle or attributes to a position other than its leaf's, otherwise the
+// reject at the end where m is not accepting, otherwise accepted.
+func matcherVerdict(m *xsd.Matcher, leaves []flatLeaf, items []flatItem) int {
+	for _, it := range items {
+		_, pos, ok := m.NextParticle(it.name)
+		if !ok {
+			return verdictNowhere
+		}
+		if !slices.Equal(pos, leaves[it.leaf].pos) {
+			return verdictElsewhere
+		}
+	}
+	if !m.Accepting() {
+		return verdictShort
+	}
+	return verdictAccept
+}
+
+// rfWildNames are the names a wildcard item's child draws from: urn:o's w,
+// which the ##other wildcard admits, two times in six; urn:p's w, which it
+// admits too; one in no namespace and one in urn:s, which it does not
+// (§3.10.4.1 cvc-wildcard); and urn:s's a, which an element particle a
+// admits first where one is live.
+var rfWildNames = []xsd.QName{{Space: "urn:o", Local: "w"}, {Space: "urn:o", Local: "w"}, {Space: "urn:p", Local: "w"}, {Local: "w"}, {Space: "urn:s", Local: "w"}, {Space: "urn:s", Local: "a"}}
+
+// drawItems returns a random draw over leaves, the reach of top: a sequence
+// genInstance draws, each child the item of its leaf, then, by one of six
+// ops drawn evenly, unchanged by two of them, or with one random item
+// inserted, or, where the sequence holds an item, with one random item
+// replaced or removed or the tail from a random index cut.
+func drawItems(rng *rand.Rand, top *rnode, leaves []flatLeaf) []flatItem {
+	var items []flatItem
+	for _, n := range top.genInstance(rng, nil) {
+		items = append(items, randomItem(rng, leaves, slices.IndexFunc(leaves, func(l flatLeaf) bool { return l.node == n })))
+	}
+	switch op := rng.IntN(6); {
+	case op == 2 && len(items) > 0:
+		items[rng.IntN(len(items))] = randomItem(rng, leaves, rng.IntN(len(leaves)))
+	case op == 3:
+		items = slices.Insert(items, rng.IntN(len(items)+1), randomItem(rng, leaves, rng.IntN(len(leaves))))
+	case op == 4 && len(items) > 0:
+		i := rng.IntN(len(items))
+		items = slices.Delete(items, i, i+1)
+	case op == 5 && len(items) > 0:
+		items = items[:rng.IntN(len(items))]
+	}
+	return items
+}
+
+// randomItem returns an item of leaves[leaf], its name drawn from
+// rfWildNames for the wildcard.
+func randomItem(rng *rand.Rand, leaves []flatLeaf, leaf int) flatItem {
+	n := leaves[leaf].node
+	if n.kind == "wild" {
+		return flatItem{leaf: leaf, name: rfWildNames[rng.IntN(len(rfWildNames))]}
+	}
+	return flatItem{leaf: leaf, name: xsd.QName{Space: "urn:s", Local: n.name}}
+}
+
+// flatValue returns the value of rt, rfSequence or rfChoice, whose slice
+// holds items, each in its leaf's branch, the text of each child its index,
+// and is nil for no item, as Decode returns it.
+func flatValue(rt reflect.Type, leaves []flatLeaf, items []flatItem) reflect.Value {
+	v := reflect.New(rt).Elem()
+	if len(items) == 0 {
+		return v
+	}
+	slice := reflect.MakeSlice(reflect.TypeFor[[]rfItem](), len(items), len(items))
+	for i, it := range items {
+		b := reflect.New(reflect.TypeOf(leaves[it.leaf].branch)).Elem()
+		text := strconv.Itoa(i)
+		if leaves[it.leaf].node.kind == "wild" {
+			b.Field(0).Set(reflect.ValueOf(anyElement{Space: it.name.Space, Local: it.name.Local, Content: anyType{Text: text}}))
+		}
+		if leaves[it.leaf].node.kind == "elem" {
+			b.Field(0).SetString(text)
+		}
+		slice.Index(i).Set(b)
+	}
+	v.Field(0).Set(slice)
+	return v
+}
+
+// TestAppendFlattenedDifferential holds Append's flattened content
+// {particle}, boundFlattened.write, to xsd.Schema.ContentMatcher on both
+// sides (§3.9.4.3 cvc-accept clause 3.3, §3.8.4.3 cvc-model-group; item 6 of
+// Append's doc): over random content models drawn as
+// TestOccurrencePartitionDifferential draws them, seeded, kept where Finalize
+// accepts the model, goshape.ParticleHold answers Flattened for its content
+// {particle}, the rfItem family covers its reach, and CheckAppend admits
+// rfSequence or rfChoice under the WithBranches set placing it, each with
+// random draws of items (drawItems). On each draw, errors.Is(err,
+// ErrInvalidValue) on Append's answer must equal the Matcher's reject
+// (matcherVerdict), any other error failing, and each accepted draw's bytes
+// must decode, under the same set, to the value appended. The log counts
+// the models kept, the models of a Flattened content {particle} the family
+// does not cover, by reason, and the draws of each verdict; the test fails
+// where the kept models or a verdict count 0.
+func TestAppendFlattenedDifferential(t *testing.T) {
+	rng := rand.New(rand.NewPCG(4105, 1))
+	models, tries, wideTie, declined := 0, 0, 0, 0
+	var verdicts [len(verdictNames)]int
+	for ; tries < 20000; tries++ {
+		wilds := 0
+		top := genModel(rng, 0, &wilds)
+		schema, ok := randomSchema(`<xs:element name="r"><xs:complexType>` + top.xsdOf() + `</xs:complexType></xs:element>`)
+		if !ok {
+			continue
+		}
+		decl, _ := schema.Element(rootName)
+		td, _ := schema.ResolvedType(decl.TypeDefinition())
+		ct := td.(xsd.ComplexType)
+		content := ct.ContentType().(xsd.ElementContent)
+		group, _, err := goshape.ModelGroupTerm(schema, content.Particle.Term())
+		if err != nil {
+			t.Fatal(err)
+		}
+		if hold, err := goshape.ParticleHold(schema, group, content.Particle.Occurs()); err != nil || hold != goshape.Flattened {
+			continue
+		}
+		leaves := top.reachOf(nil, nil)
+		branches, covered := make([]rfItem, len(leaves)), true
+		ranks := map[string]int{}
+		for i, l := range leaves {
+			if l.node.kind == "wild" {
+				branches[i] = rfAny{}
+				leaves[i].branch = branches[i]
+				continue
+			}
+			if ranks[l.node.name] == len(rfTies[l.node.name]) {
+				covered = false
+				break
+			}
+			branches[i] = rfTies[l.node.name][ranks[l.node.name]]
+			leaves[i].branch = branches[i]
+			ranks[l.node.name]++
+		}
+		if !covered {
+			wideTie++
+			continue
+		}
+		opts := []Option{WithBranches(branches...)}
+		rt, check := reflect.TypeFor[rfSequence](), CheckAppend[rfSequence]
+		if top.kind == "choice" {
+			rt, check = reflect.TypeFor[rfChoice](), CheckAppend[rfChoice]
+		}
+		if err := check(schema, rootName, opts...); err != nil {
+			declined++
+			t.Logf("model %s: CheckAppend = %v", top.xsdOf(), err)
+			continue
+		}
+		models++
+		for range 12 {
+			items := drawItems(rng, top, leaves)
+			m, ok := schema.ContentMatcher(ct)
+			if !ok {
+				t.Fatalf("model %s: ContentMatcher declines a model CheckAppend admits", top.xsdOf())
+			}
+			verdict := matcherVerdict(m, leaves, items)
+			verdicts[verdict]++
+			v := flatValue(rt, leaves, items)
+			data, err := encodeValue(nil, schema, strict.New(), rootName, v, opts)
+			if err != nil && !errors.Is(err, ErrInvalidValue) {
+				t.Fatalf("model %s, items %v: Append = %v, want nil or ErrInvalidValue", top.xsdOf(), items, err)
+			}
+			if errors.Is(err, ErrInvalidValue) != (verdict != verdictAccept) {
+				t.Fatalf("model %s, items %v: Append = %v, the Matcher's verdict is %s", top.xsdOf(), items, err, verdictNames[verdict])
+			}
+			if err != nil {
+				continue
+			}
+			back := reflect.New(rt).Elem()
+			if err := decodeValue(schema, strict.New(), data, back, opts); err != nil {
+				t.Fatalf("model %s, items %v: Decode(%s) = %v", top.xsdOf(), items, data, err)
+			}
+			if !reflect.DeepEqual(back.Interface(), v.Interface()) {
+				t.Fatalf("model %s, items %v: Decode(%s) = %#v, Append wrote %#v", top.xsdOf(), items, data, back.Interface(), v.Interface())
+			}
+		}
+	}
+	t.Logf("%d models kept of %d drawn; not covered: %d with more than 4 element particles of one name, %d CheckAppend declines", models, tries, wideTie, declined)
+	for i, n := range verdicts {
+		t.Logf("%d draws %s", n, verdictNames[i])
+	}
+	if models == 0 || slices.Contains(verdicts[:], 0) {
+		t.Fatalf("%d models kept, verdict counts %v: want each above 0", models, verdicts)
+	}
 }
