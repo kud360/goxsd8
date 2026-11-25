@@ -4932,16 +4932,21 @@ type (
 // in an occurrence field: each row is written as shown, validate accepts it
 // and Decode returns it equal. Element particles are written in {particles}
 // order, all(b, a)'s b first; a <group ref>, a repeated particle, an
-// emptiable all holding nothing, an extension's merged all and <xs:all/>
-// write so too, and a wildcard particle's element follows the element
-// particles' whatever its place in {particles}: all(a, any ##other),
-// all(a, <group ref> to all(any)), and all(any skip, a), whose value Decode
-// returns for <a>x</a><a>y</a>, Any holding the second <a>, is written
-// <a>x</a><a>y</a>, spliced and in an occurrence field. A value Decode
-// returns for a permuted document re-encodes in {particles} order. A
-// sealed-interface field (a substitution group's, a union's,
-// xs:precisionDecimal's) and an xs:ID and xs:IDREF pair, which Append
-// assesses (cvc-id), are written inside an all group as anywhere else.
+// emptiable all holding nothing and an extension's merged all write so too,
+// and <xs:all/>, whose explicit content is empty (§3.4.2.3.3 clause 2.1.2),
+// is empty content, which Append wrote before the all group's lift; a
+// wildcard particle's element follows the element particles' whatever its
+// place in {particles}: all(a, any ##other), all(a, <group ref> to
+// all(any)), and all(any skip, a), whose value Decode returns for
+// <a>x</a><a>y</a>, Any holding the second <a>, is written <a>x</a><a>y</a>,
+// spliced and in an occurrence field: with boundSequence.write writing its
+// members in member order (writeMembers) the spliced row fails, and with
+// boundSequenceItem.writeItem doing so the occurrence row, each the one row
+// of the package that fails. A value Decode returns for a permuted
+// document re-encodes in {particles} order. A sealed-interface field (a
+// substitution group's, a union's, xs:precisionDecimal's) and an xs:ID and
+// xs:IDREF pair, which Append assesses (cvc-id), are written inside an all
+// group as anywhere else.
 func TestAppendAll(t *testing.T) {
 	w := anyElement{Space: "urn:o", Local: "w"}
 	second := anyElement{Space: "urn:s", Local: "a", Content: anyType{Text: "y"}}
@@ -5039,7 +5044,9 @@ func decodedAs[T any](t *testing.T, schema *xsd.Schema, body string, want T) T {
 // required particle whose field is unset, spliced and in an occurrence
 // field's item: a slice of {min occurs} 1 holding no item and a nil
 // substitution group interface. Each error opens as shown and Append returns
-// dst unextended. Then item 8 for cvc-id: an xs:IDREF naming no xs:ID.
+// dst unextended; with writeOccurring's length check removed the two slice
+// rows fail, Append returning no error, and no other row of this test or
+// TestAppendAll does. Then item 8 for cvc-id: an xs:IDREF naming no xs:ID.
 func TestAppendAllInvalid(t *testing.T) {
 	pre := []byte("pre")
 	for _, row := range []struct {

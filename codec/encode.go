@@ -612,14 +612,15 @@ func writeMembers(e *encoder, bound []boundMember, v reflect.Value, at writeAt, 
 // particle's, in member order (particleWriter.wildcard), each at the
 // attribution target member order gives it (writeMembersWhere). Each order
 // lies in the all group's language, the interleave of its particles'
-// (§3.8.4.1.3); writing the elements first reproduces the attribution of the
-// values Decode returns, a child one of the group's element particles takes
-// going to it before a wildcard particle (codegen/doc.go "# Particles"), and
-// slot.check stays the check of every value it does not (attributionCheck).
-// An all group's members are each an element or wildcard particle's
-// (§3.8.6.2 cos-all-limited), its {open content} field declined by item 4 of
-// [Append]'s doc (contentEncodes), so that any other member is an internal
-// bug, which panics, as encoded's assertion does.
+// (§3.8.4.1.3); the elements go first because a child an element particle
+// and a wildcard particle both admit is the element particle's (§3.8.6.4
+// cos-nonambig, codegen/doc.go "# Particles"), and slot.check, set wherever
+// the group holds a wildcard particle (particleSite.matcher), stays the check
+// of every value whose attribution the order does not reproduce
+// (attributionCheck). An all group's members are each an element or wildcard
+// particle's (§3.8.6.2 cos-all-limited), its {open content} field declined by
+// item 4 of [Append]'s doc (contentEncodes), so that any other member is an
+// internal bug, which panics, as encoded's assertion does.
 func writeAll(e *encoder, bound []boundMember, v reflect.Value, at writeAt, slot attributionSlot) error {
 	for _, wildcards := range [...]bool{false, true} {
 		if err := writeMembersWhere(e, bound, v, at, slot, func(b boundMember) bool {
@@ -963,9 +964,8 @@ func unemptiable(alts []branchArm) string {
 // binds (boundParticle.writeMember): writeElements writes the elements of f,
 // the field of its particle, read by s, the field's sink, at at, each taken
 // by slot's attributionCheck at slot's target, and returns a backend fault;
-// wildcard reports whether the particle is a wildcard particle, whose
-// elements an all group writes after its element particles' (writeAll). Its
-// implementers are elementMember and wildcardMember.
+// wildcard reports whether the particle is a wildcard particle, which
+// writeAll reads. Its implementers are elementMember and wildcardMember.
 type particleWriter interface {
 	writeElements(e *encoder, s fieldSink, f reflect.Value, at writeAt, slot attributionSlot) error
 	wildcard() bool

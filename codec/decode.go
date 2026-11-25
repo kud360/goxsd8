@@ -2593,8 +2593,8 @@ type sequence struct {
 	base int
 	// all is whether s holds the {particles} of an all group, the content's
 	// spliced one or an occurrence field's item, set from its {compositor} at
-	// bind (bindSequence, bindItem): Append writes an all group's element
-	// particles before its wildcard particles (writeAll). It is false for
+	// bind (bindSequence, bindItem), which selects the order Append writes
+	// s's members in (sequence.writeBound). It is false for
 	// every other sequence, a choice's alternative and a contentChoice's rest
 	// among them, none of which an all group can be (§3.8.6.2
 	// cos-all-limited).
