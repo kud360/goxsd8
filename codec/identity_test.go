@@ -170,11 +170,20 @@ func TestAppendIdentityViolation(t *testing.T) {
 }
 
 // laxFieldSchema declares, in urn:s, r, whose a elements, of xs:anyType, hold
-// a unique lu on their no-namespace b children. Such a b, laxly assessed
-// under xs:anyType's wildcard with no ·instance-specified type definition·,
-// has no ·governing type definition·, and validate's field assessment
-// declines it rather than contribute a value (validate/cvcidentityconstraint.go
-// icCheck.fill, icTarget.decline), leaving the document Undecided.
+// a unique lu on their no-namespace b children.
+//
+// GAP(validate): such a b is laxly assessed under xs:anyType's lax wildcard
+// with no ·instance-specified type definition·, so it is not ·skipped· and has
+// no ·governing type definition·: cvc-identity-constraint clause 3 counts it
+// among its "other nodes", and the spec's verdict on the document is invalid.
+// validate's icCheck.fill declines it instead, in its c.g.typ == nil arm
+// through icTarget.decline (validate/cvcidentityconstraint.go), leaving the
+// document Undecided. For Append that is a fail-open: assessWritten's verdict
+// maps the Undecided to an *UndecidedError, which errors.Is does not report as
+// ErrInvalidValue, where the invalid verdict the spec gives would reach
+// assessWritten's Charged arm and return an ErrInvalidValue. #4148 owns making
+// it a violation; this row fails by design once that lands, and is re-pointed
+// there.
 const laxFieldSchema = `
   <xs:element name="r">
     <xs:complexType><xs:sequence>
