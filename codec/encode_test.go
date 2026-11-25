@@ -1202,7 +1202,7 @@ func TestAppendDeclines(t *testing.T) {
 		{"nested flattened untracked", "a content model the content matcher does not track", sequence(a + `<xs:sequence maxOccurs="21845"><xs:element name="c" type="xs:string" maxOccurs="2"/></xs:sequence>`)},
 		{"strict wildcard", "a wildcard particle with {process contents} strict", sequence(`<xs:any/>`)},
 		{"ref value constraint", "a value constraint, default or fixed", `<xs:element name="x%[1]s" type="xs:string" default="x"/>` + sequence(`<xs:element ref="s:x%[1]s"/>`)},
-		{"ref simple content", "xs:anySimpleType or xs:anyAtomicType as a simple type", `<xs:element name="x%[1]s"><xs:complexType><xs:simpleContent><xs:extension base="xs:anySimpleType"/></xs:simpleContent></xs:complexType></xs:element>` +
+		{"ref simple content", "a simple type derived from xs:ID, xs:IDREF or xs:ENTITY", `<xs:element name="x%[1]s"><xs:complexType><xs:simpleContent><xs:extension base="xs:ID"/></xs:simpleContent></xs:complexType></xs:element>` +
 			sequence(`<xs:element ref="s:x%[1]s"/>`)},
 		{"complex particle", "a wildcard particle with {process contents} strict", sequence(`<xs:element name="a"><xs:complexType><xs:sequence><xs:any/></xs:sequence></xs:complexType></xs:element>`)},
 		{"particle type sharing its element's name", "a wildcard particle with {process contents} strict", `<xs:complexType name="%[1]s"><xs:sequence><xs:any/></xs:sequence></xs:complexType>` +
@@ -1212,7 +1212,6 @@ func TestAppendDeclines(t *testing.T) {
 		{"complex assertions", "a complex type with {assertions}", complexOf(asserted)},
 		{"restricted complex assertions", "a complex type with {assertions}", `<xs:complexType name="ab%[1]s">` + asserted + `</xs:complexType>` +
 			`<xs:element name="%[1]s"><xs:complexType><xs:complexContent><xs:restriction base="s:ab%[1]s"><xs:sequence>` + a + `</xs:sequence></xs:restriction></xs:complexContent></xs:complexType></xs:element>`},
-		{"special type", "xs:anySimpleType or xs:anyAtomicType as a simple type", `<xs:element name="%[1]s" type="xs:anySimpleType"/>`},
 		{"list of a minted primitive", encodePrimitiveName, simpleOf(`<xs:list itemType="s:money"/>`)},
 		{"list of union of an ID member", "a simple type derived from xs:ID, xs:IDREF or xs:ENTITY", simpleOf(`<xs:list><xs:simpleType><xs:union memberTypes="xs:int xs:IDREF"/></xs:simpleType></xs:list>`)},
 		{"IDREFS", "a simple type derived from xs:ID, xs:IDREF or xs:ENTITY", `<xs:element name="%[1]s" type="xs:IDREFS"/>`},
@@ -2343,6 +2342,53 @@ func TestAppendBinaryAndURI(t *testing.T) {
 	})
 }
 
+// TestAppendSpecial pins the special types, xs:anySimpleType and
+// xs:anyAtomicType (Datatypes §2.4.2 dt-special), written as the string each
+// holds, unchanged under either, for a document element of each, an
+// attribute use of xs:anyAtomicType and one whose declaration has no type, so
+// xs:anySimpleType (Structures §3.2.2.2 dcl.att.local), holding TAB, LF and
+// CR, simple content extending xs:anySimpleType and an <element ref> to a
+// head of it: each written as shown, accepted by validate and decoded back
+// equal. The xs:anyAtomicType document element's row fails under a writer
+// that collapses its white space. A string holding U+0000 under either is
+// item 6 of Append's doc, nothing written.
+func TestAppendSpecial(t *testing.T) {
+	t.Run("document element of xs:anySimpleType", func(t *testing.T) {
+		schema := schemaOf(t, `<xs:element name="r" type="xs:anySimpleType"/>`)
+		roundTrip(t, schema, sname("r"), spR(spSpaced), `<r xmlns="urn:s">`+spSpaced+`</r>`, deepEqual[spR])
+	})
+	t.Run("document element of xs:anyAtomicType", func(t *testing.T) {
+		schema := schemaOf(t, `<xs:element name="r" type="xs:anyAtomicType"/>`)
+		roundTrip(t, schema, sname("r"), spR(spSpaced), `<r xmlns="urn:s">`+spSpaced+`</r>`, deepEqual[spR])
+	})
+	t.Run("attribute use of xs:anyAtomicType", func(t *testing.T) {
+		schema := schemaOf(t, root(`<xs:attribute name="k" type="xs:anyAtomicType"/>`))
+		roundTrip(t, schema, sname("r"), spAttr{K: new(" 1.0  x ")}, `<r xmlns="urn:s" k=" 1.0  x "/>`, deepEqual[spAttr])
+	})
+	t.Run("attribute use of no type", func(t *testing.T) {
+		schema := schemaOf(t, root(`<xs:attribute name="k"/>`))
+		roundTrip(t, schema, sname("r"), spAttr{K: new(" x\ty\nz\r ")}, `<r xmlns="urn:s" k=" x&#x9;y&#xA;z&#xD; "/>`, deepEqual[spAttr])
+	})
+	t.Run("simple content extending xs:anySimpleType", func(t *testing.T) {
+		schema := schemaOf(t, root(`<xs:simpleContent><xs:extension base="xs:anySimpleType"/></xs:simpleContent>`))
+		roundTrip(t, schema, sname("r"), spValue{Value: spSpaced}, `<r xmlns="urn:s">`+spSpaced+`</r>`, deepEqual[spValue])
+	})
+	t.Run("element ref to a head of xs:anySimpleType", func(t *testing.T) {
+		schema := schemaOf(t, `<xs:element name="h" type="xs:anySimpleType"/>`+sequenceOf(`<xs:element ref="s:h"/><xs:element name="a" type="xs:anyAtomicType"/>`))
+		roundTrip(t, schema, sname("r"), spRef{H: spSpaced, A: "\r"}, `<r xmlns="urn:s"><h>`+spSpaced+`</h><a>&#xD;</a></r>`, deepEqual[spRef])
+	})
+	for _, typ := range []string{"anySimpleType", "anyAtomicType"} {
+		t.Run("U+0000 under xs:"+typ, func(t *testing.T) {
+			schema := schemaOf(t, `<xs:element name="r" type="xs:`+typ+`"/>`)
+			got, err := appendChecked(t, []byte("pre"), schema, strict.New(), sname("r"), spR("a\x00"))
+			invalidValue(t, err, `codec: Append: spR holds "a\x00", of simple type xs:`+typ+`, whose byte offset 1 starts no XML 1.0 Char`)
+			if string(got) != "pre" {
+				t.Errorf("Append wrote %q", got)
+			}
+		})
+	}
+}
+
 // TestAppendFloat pins xs:float down double's path at 32 bits: each value,
 // the infinities, NaN, the zeros, the largest finite float32 and its
 // smallest subnormal among them, is written as the backend's Canonical
@@ -2473,7 +2519,7 @@ func TestAppendBinaryInvalid(t *testing.T) {
 	t.Run("an xs:anyURI holding U+0000", func(t *testing.T) {
 		_, err := appendChecked(t, nil, schema, strict.New(), sname("u"), uriRoot("a\x00"))
 		invalidValue(t, err)
-		if want := `codec: Append: uriRoot holds "a\x00", of simple type xs:anyURI, whose byte offset 1 starts no XML 1.0 Char (Datatypes §3.3.1.1, §3.3.17.1)`; err.Error() != want {
+		if want := `codec: Append: uriRoot holds "a\x00", of simple type xs:anyURI, whose byte offset 1 starts no XML 1.0 Char (Datatypes §3.3.1.1, §3.3.17.1, §3.2.1.2, §3.2.2.2)`; err.Error() != want {
 			t.Errorf("error %q, want %q", err, want)
 		}
 		noRule(t, err)

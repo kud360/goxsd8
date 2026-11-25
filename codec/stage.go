@@ -64,12 +64,13 @@ type scalar struct {
 }
 
 // scalarElem is the element of the Go type codegen gives a scalar's simple
-// type, as Decode decodes it: an atomic, the atomic Go type of an atomic type
-// or of a list's atomic {item type definition}, or a *unionScalar, the basic
-// members of a union or of a list's union {item type definition}. It is a
-// closed sum, sealed by its unexported methods, so a union's scalar holds no
-// atomic Go type. list, in each method, reports whether the scalar's simple
-// type is a list of the element.
+// type, as Decode decodes it: an atomic, the atomic Go type of an atomic type,
+// of a special type (Datatypes §2.4.2 dt-special), or of a list's atomic {item
+// type definition}, or a *unionScalar, the basic members of a union or of a
+// list's union {item type definition}. It is a closed sum, sealed by its
+// unexported methods, so a union's scalar holds no atomic Go type. list, in
+// each method, reports whether the scalar's simple type is a list of the
+// element.
 type scalarElem interface {
 	// bare returns the Go type codec decodes the element's value as: an
 	// atomic's bare, and for a union, whose interface codec holds none of,

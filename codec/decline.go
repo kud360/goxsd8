@@ -158,7 +158,7 @@ type construct uint8
 // constructAbstractElement last, then by its type's as the document element's type does,
 // from constructAbstractType on, a complex type's content and attribute uses examined at
 // the particle; and an attribute use declines by constructValueConstraint after
-// constructQualifiedAttribute. The ones of a simple type, constructSpecialType to
+// constructQualifiedAttribute. The ones of a simple type, constructEncodePrimitive to
 // constructAssertions, sit after the {assertions}'s, though the document element's, a
 // particle's and an attribute use's simple type declines by them where that declaration
 // or use is examined, and a complex type's simple content, by its {simple type
@@ -184,7 +184,6 @@ const (
 	constructQualifiedAttribute
 	constructAttributeWildcard
 	constructComplexAssertions
-	constructSpecialType
 	constructEncodePrimitive
 	constructIDType
 	constructAssertions
@@ -217,7 +216,6 @@ var constructNames = [...]string{
 	constructQualifiedAttribute: "an attribute use whose declaration has a {target namespace}",
 	constructAttributeWildcard:  "an {attribute wildcard}",
 	constructComplexAssertions:  "a complex type with {assertions}",
-	constructSpecialType:        "xs:anySimpleType or xs:anyAtomicType as a simple type",
 	constructEncodePrimitive:    "an atomic simple type whose primitive is other than " + displayList(encodedPrimitives),
 	constructIDType:             "a simple type derived from xs:ID, xs:IDREF or xs:ENTITY",
 	constructAssertions:         "a simple type with an assertions facet",
