@@ -908,3 +908,71 @@ func TestNoVariantOverTwoGoTypes(t *testing.T) {
 		}
 	}
 }
+
+// pE, pERoot and pEStray are the Go types of emptyUnionSchema's e and r:
+// codegen's sealed interface for a union with no basic member and its
+// document element, which TestEmptyUnion pins, and a stray implementing it.
+type (
+	pE      interface{ isE() }
+	pERoot  pE
+	pEStray int32
+)
+
+func (pEStray) isE() {}
+
+// emptyUnionSchema returns s:r, a document element of e, a union whose
+// {member type definitions} is empty (Datatypes §4.1.1
+// std-member_type_definitions: "Must be present (but may be empty)"), which
+// no schema document yields (§4.1.3 src-union-memberTypes-or-simpleTypes):
+// the parsed e, of xs:int, replaced by one built from xsd's constructors at
+// its Loc.
+func emptyUnionSchema(t *testing.T) *xsd.Schema {
+	t.Helper()
+	parsed := schemaOf(t, `<xs:simpleType name="e"><xs:union memberTypes="xs:int"/></xs:simpleType><xs:element name="r" type="s:e"/>`)
+	declared, ok := parsed.Type(sname("e"))
+	if !ok {
+		t.Fatal("no type {urn:s}e")
+	}
+	e, err := xsd.NewSimpleType(declared.Loc(), sname("e"), xsd.UnionDerivation{Members: nil}, xsd.OwnedSimpleType{Definition: xsd.AnySimpleType()}, nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return replacedSchema(t, parsed, e)
+}
+
+// TestEmptyUnion pins a union with no basic member, whose value space is
+// empty (Datatypes Appendix I: unions with no member types are allowed):
+// codegen emits its interface; CheckAppend and CheckDecode require no
+// WithBranches set for it; Append of the nil interface where a value is
+// required and of a stray are item 6 of Append's doc; and Decode of any text,
+// the empty text included, is item 3 of Decode's doc, validate charging
+// cvc-type clause 3.1.3 over cvc-datatype-valid clause 2.3.
+func TestEmptyUnion(t *testing.T) {
+	schema := emptyUnionSchema(t)
+	gen := generated(t, schema)
+	for _, decl := range []string{"type R E\n", "type E interface {\n\tisE()\n}\n"} {
+		if !bytes.Contains(gen, []byte(decl)) {
+			t.Errorf("codegen emits\n%s\nwhich does not declare\n%s", gen, decl)
+		}
+	}
+	if err := CheckAppend[pERoot](schema, sname("r")); err != nil {
+		t.Errorf("CheckAppend = %v, want nil", err)
+	}
+	if err := CheckDecode[pERoot](schema, sname("r")); err != nil {
+		t.Errorf("CheckDecode = %v, want nil", err)
+	}
+	_, err := appendChecked(t, nil, schema, strict.New(), sname("r"), pERoot(nil))
+	invalidValue(t, err, "codec: Append: pERoot is nil, of simple type {urn:s}e defined at s.xsd:", "where a value is required, and no variant of the union's sealed interface is nil")
+	_, err = appendChecked(t, nil, schema, strict.New(), sname("r"), pERoot(pEStray(1)))
+	invalidValue(t, err, "codec: Append: pERoot holds a codec.pEStray, which the WithBranches set of codec.pERoot places at no basic member of simple type {urn:s}e defined at s.xsd:")
+	for _, text := range []string{"x", "", "5"} {
+		got, err := Decode[pERoot](schema, strict.New(), []byte(`<r xmlns="urn:s">`+text+`</r>`))
+		if got != nil || err == nil {
+			t.Fatalf("Decode of %q = (%v, %v), want no value and an error", text, got, err)
+		}
+		if !strings.HasPrefix(err.Error(), "codec: the instance is invalid against the schema: ") {
+			t.Errorf("error %q does not open as Decode's Charged error", err)
+		}
+		holds(t, err, fmt.Sprintf(`[cvc-type] element {urn:s}r's value %q is not a valid {urn:s}e, which cvc-type clause 3.1.3 requires: [cvc-datatype-valid] value %q is Datatype Valid with respect to no member of the union's 0 {member type definitions}`, text, text))
+	}
+}
