@@ -3823,12 +3823,14 @@ const (
 // admits: each attribute its field holds written after the attribute uses'
 // attributes, in held order, raw, as a wildcard particle's match's are, under
 // a skip wildcard, the effective one an extension unites with its base's
-// (awUnionSchema), and a lax one no top-level declaration governs, a use's
-// attribute ahead, on the document element, beside simple content and on a
-// particle's element; and an empty field writes no attribute, whatever the
-// {process contents}, strict included. Each document validate accepts and
-// Decode turns back into the value. Every row fails with complexEncodes'
-// static decline of a type with an {attribute wildcard} put back.
+// (awUnionSchema), and one a top-level declaration names, which governs
+// nothing a skip wildcard admits (§3.10.4.1 key-skipped), and a lax one no
+// top-level declaration governs, a use's attribute ahead, on the document
+// element, beside simple content and on a particle's element; and an empty
+// field writes no attribute, whatever the {process contents}, strict
+// included. Each document validate accepts and Decode turns back into the
+// value. Every row fails with complexEncodes' static decline of a type with
+// an {attribute wildcard} put back.
 func TestAppendAttributeWildcard(t *testing.T) {
 	one := int32(1)
 	t.Run("a skip wildcard's attribute in an admitted namespace", func(t *testing.T) {
@@ -3838,6 +3840,10 @@ func TestAppendAttributeWildcard(t *testing.T) {
 	t.Run("a lax wildcard's undeclared attributes after a use's", func(t *testing.T) {
 		roundTrip(t, schemaOf(t, awUseSchema+`<xs:attribute name="t" type="xs:int"/>`), rootName, awUse{E: "v", A: &one, AnyAttribute: []anyAttribute{{"", "y", "3"}, {"urn:p", "x", "2"}, {xmltree.XMLNamespaceURI, "lang", "en"}}},
 			`<r xmlns="urn:s" a="1" y="3" xmlns:p1="urn:p" p1:x="2" xml:lang="en"><e>v</e></r>`, deepEqual[awUse])
+	})
+	t.Run("a skip wildcard's attribute a top-level declaration names", func(t *testing.T) {
+		roundTrip(t, schemaOf(t, awNotSchema+`<xs:attribute name="t" type="xs:int"/>`), rootName, awOne{E: "v", AnyAttribute: []anyAttribute{{"urn:s", "t", "abc"}}},
+			`<r xmlns="urn:s" xmlns:p1="urn:s" p1:t="abc"><e>v</e></r>`, deepEqual[awOne])
 	})
 	t.Run("an attribute in the element's own namespace", func(t *testing.T) {
 		roundTrip(t, schemaOf(t, awUseSchema), rootName, awUse{E: "v", AnyAttribute: []anyAttribute{{"urn:s", "y", "3"}}},
