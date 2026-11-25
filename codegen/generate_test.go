@@ -908,9 +908,9 @@ func TestGenerateAttributeWildcardName(t *testing.T) {
 		{"attribute anyAttribute", `<xs:element name="e"><xs:complexType><xs:attribute name="anyAttribute" type="xs:string"/><xs:anyAttribute/></xs:complexType></xs:element>`,
 			[]string{"type E struct {\n\tAnyAttribute  *string\n\tAnyAttribute2 []AnyAttribute\n}\n"}},
 		{"element anyType", `<xs:element name="anyType"><xs:complexType><xs:anyAttribute/></xs:complexType></xs:element>`,
-			[]string{"type AnyType struct {\n\tAnyAttribute []AnyAttribute\n}\n", "type AnyType2 struct {\n\tAttributes []AnyAttribute\n"}},
+			[]string{"type AnyType struct {\n\tAnyAttribute []AnyAttribute\n}\n", "type AnyType2 struct {\n\tAttributes []AnyAttribute\n\tNamespaces []AnyNamespace\n"}},
 		{"field type anyType", `<xs:complexType name="anyType"><xs:sequence><xs:element name="s" type="xs:string"/></xs:sequence></xs:complexType><xs:element name="e"><xs:complexType><xs:sequence><xs:element name="x" type="anyType"/></xs:sequence><xs:anyAttribute/></xs:complexType></xs:element>`,
-			[]string{"type E struct {\n\tX            AnyType\n\tAnyAttribute []AnyAttribute\n}\n", "type AnyType2 struct {\n\tAttributes []AnyAttribute\n"}},
+			[]string{"type E struct {\n\tX            AnyType\n\tAnyAttribute []AnyAttribute\n}\n", "type AnyType2 struct {\n\tAttributes []AnyAttribute\n\tNamespaces []AnyNamespace\n"}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

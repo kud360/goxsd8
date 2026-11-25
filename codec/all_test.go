@@ -125,7 +125,7 @@ func TestDecodeAll(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if !reflect.DeepEqual(got, row.want) {
+			if !reflect.DeepEqual(unscoped(got), row.want) {
 				t.Errorf("Decode = %#v, want %#v", got, row.want)
 			}
 			if err := row.into.check(schema); err != nil {
@@ -263,7 +263,7 @@ func TestDecodeAllOccurrence(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if !reflect.DeepEqual(got, row.want) {
+			if !reflect.DeepEqual(unscoped(got), row.want) {
 				t.Errorf("Decode = %#v, want %#v", got, row.want)
 			}
 			if err := row.into.check(schema); err != nil {

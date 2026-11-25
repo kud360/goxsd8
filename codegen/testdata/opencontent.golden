@@ -129,6 +129,7 @@ type Flagged struct {
 // Text is the characters before the first of Children, "" for none.
 type AnyType2 struct {
 	Attributes []AnyAttribute
+	Namespaces []AnyNamespace
 	Text       string
 	Children   []AnyChild
 }
@@ -149,6 +150,12 @@ type AnyChild struct {
 type AnyElement struct {
 	Space, Local string
 	Content      AnyType2
+}
+
+// AnyNamespace is generated from complex type {http://www.w3.org/2001/XMLSchema}anyType.
+// Prefix is "" for the default namespace; Space is the namespace name.
+type AnyNamespace struct {
+	Prefix, Space string
 }
 
 // MixedChild is generated for mixed content: one child element and the characters after it.

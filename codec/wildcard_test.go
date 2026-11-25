@@ -15,10 +15,10 @@ import (
 	"github.com/kud360/goxsd8/xsd"
 )
 
-// anyElement, anyType, anyAttribute and anyChild are of the shapes of
-// codegen's AnyElement, AnyType, AnyAttribute and AnyChild, which
-// TestWildcardTypesAreCodegens pins; their names differ from codegen's,
-// which item 6 never compares.
+// anyElement, anyType, anyAttribute, anyChild and anyNamespace are of the
+// shapes of codegen's AnyElement, AnyType, AnyAttribute, AnyChild and
+// AnyNamespace, which TestWildcardTypesAreCodegens pins; their names differ
+// from codegen's, which item 6 never compares.
 type (
 	anyElement struct {
 		Space, Local string
@@ -26,17 +26,73 @@ type (
 	}
 	anyType struct {
 		Attributes []anyAttribute
+		Namespaces []anyNamespace
 		Text       string
 		Children   []anyChild
 	}
 	anyAttribute struct {
 		Space, Local, Value string
 	}
+	anyNamespace struct {
+		Prefix, Space string
+	}
 	anyChild struct {
 		Element anyElement
 		Tail    string
 	}
 )
+
+// unscoped returns a copy of v, a value Decode returns or Append is given,
+// with the Namespaces of every struct of anyType's shape in it, at any depth,
+// set to nil, so that a row comparing it pins every other field. A
+// round-trip row compares both sides so, Append writing none of the bindings
+// Namespaces holds (GAP(codec): #4125); a Decode row compares Decode's answer
+// so where TestDecodeNamespaces pins the field instead.
+func unscoped(v any) any {
+	if v == nil {
+		return nil
+	}
+	c := reflect.New(reflect.TypeOf(v)).Elem()
+	c.Set(reflect.ValueOf(v))
+	unscope(c)
+	return c.Interface()
+}
+
+// unscope sets, in place, the Namespaces of every struct of anyType's shape
+// v reaches through exported fields, slice and array items, pointers and
+// interfaces, an interface's dynamic value replaced by an unscoped copy.
+func unscope(v reflect.Value) {
+	switch v.Kind() {
+	case reflect.Pointer:
+		if !v.IsNil() {
+			unscope(v.Elem())
+		}
+	case reflect.Interface:
+		if v.IsNil() {
+			return
+		}
+		c := reflect.New(v.Elem().Type()).Elem()
+		c.Set(v.Elem())
+		unscope(c)
+		v.Set(c)
+	case reflect.Struct:
+		if fieldsNamed(v.Type(), contentFields...) {
+			v.Field(xNamespaces).SetZero()
+		}
+		for i := range v.NumField() {
+			if v.Type().Field(i).IsExported() {
+				unscope(v.Field(i))
+			}
+		}
+	case reflect.Slice, reflect.Array:
+		for i := range v.Len() {
+			unscope(v.Index(i))
+		}
+	default:
+		// The rows' types reach anyType through no other kind: codegen emits
+		// no map, and no test type mirrors one.
+	}
+}
 
 // The wildcard schemas, each declaring s:r. seqStrictSchema's wildcard is
 // strict over the target namespace, whose s:w it declares; seqLaxSchema's
@@ -154,6 +210,7 @@ type (
 	}
 	anyType2 struct {
 		Attributes []anyAttribute
+		Namespaces []anyNamespace
 		Text       string
 		Children   []anyChild2
 	}
@@ -179,10 +236,11 @@ var (
 func TestWildcardTypesAreCodegens(t *testing.T) {
 	raw := func(element string) []string {
 		return []string{
-			"type AnyType struct {\n\tAttributes []AnyAttribute\n\tText       string\n\tChildren   []AnyChild\n}\n",
+			"type AnyType struct {\n\tAttributes []AnyAttribute\n\tNamespaces []AnyNamespace\n\tText       string\n\tChildren   []AnyChild\n}\n",
 			"type AnyAttribute struct {\n\tSpace, Local, Value string\n}\n",
 			"type AnyChild struct {\n\tElement " + element + "\n\tTail    string\n}\n",
 			"type " + element + " struct {\n\tSpace, Local string\n\tContent      AnyType\n}\n",
+			"type AnyNamespace struct {\n\tPrefix, Space string\n}\n",
 		}
 	}
 	rows := []struct {
@@ -350,7 +408,7 @@ func TestDecodeWildcard(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if !reflect.DeepEqual(got, row.want) {
+			if !reflect.DeepEqual(unscoped(got), row.want) {
 				t.Errorf("Decode = %#v, want %#v", got, row.want)
 			}
 			if err := row.into.check(schema); err != nil {
@@ -374,6 +432,7 @@ func TestDecodeWildcardTypeMismatch(t *testing.T) {
 		}
 		noTailType struct {
 			Attributes []anyAttribute
+			Namespaces []anyNamespace
 			Text       string
 			Children   []noTail
 		}
@@ -405,6 +464,14 @@ func TestDecodeWildcardTypeMismatch(t *testing.T) {
 			A   string
 			Any otherBack
 		}](), "Any codec.otherBack"},
+		{"an AnyType with no Namespaces", into[struct {
+			A   string
+			Any noNamespacesElement
+		}](), "Any codec.noNamespacesElement"},
+		{"a Namespaces whose Prefix is an int", into[struct {
+			A   string
+			Any intPrefixElement
+		}](), "Any codec.intPrefixElement"},
 	}
 	pick := schemaOf(t, pickWildSchema)
 	_, err := Decode[pickWild](pick, strict.New(), instanceOf("", `<s:a>x</s:a>`), WithBranches[pickWild](pickWildA{}, pickWildOther{}))
@@ -443,6 +510,43 @@ type (
 )
 
 func (pickWildOther) isPickWild() {}
+
+// noNamespacesElement is of anyElement's shape over an AnyType with no
+// Namespaces, the shape codegen emitted before AnyNamespace, and
+// intPrefixElement over one whose Namespaces' Prefix is an int; each is
+// TestDecodeWildcardTypeMismatch's mismatch.
+type (
+	noNamespacesElement struct {
+		Space, Local string
+		Content      noNamespacesType
+	}
+	noNamespacesType struct {
+		Attributes []anyAttribute
+		Text       string
+		Children   []noNamespacesChild
+	}
+	noNamespacesChild struct {
+		Element noNamespacesElement
+		Tail    string
+	}
+	intPrefixElement struct {
+		Space, Local string
+		Content      intPrefixType
+	}
+	intPrefixType struct {
+		Attributes []anyAttribute
+		Namespaces []struct {
+			Prefix int
+			Space  string
+		}
+		Text     string
+		Children []intPrefixChild
+	}
+	intPrefixChild struct {
+		Element intPrefixElement
+		Tail    string
+	}
+)
 
 // The wildcard-tie schemas, each declaring s:r of a choice of a wildcard
 // alternative and another alternative whose branch word is any too and
@@ -600,7 +704,7 @@ func TestDecodeWildcardTie(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if !reflect.DeepEqual(got, row.want) {
+			if !reflect.DeepEqual(unscoped(got), row.want) {
 				t.Errorf("Decode = %#v, want %#v", got, row.want)
 			}
 			if err := row.into.check(schema); err != nil {
@@ -722,12 +826,80 @@ func TestDecodeMemberUnderMatcher(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if !reflect.DeepEqual(got, row.want) {
+			if !reflect.DeepEqual(unscoped(got), row.want) {
 				t.Errorf("Decode = %#v, want %#v", got, row.want)
 			}
 		})
 	}
 	if err := target.check(schema); err != nil {
 		t.Errorf("CheckDecode = %v, want nil", err)
+	}
+}
+
+// namespaces returns the bindings pairs names, prefix then namespace name,
+// as anyNamespace values in that order, nil for none.
+func namespaces(pairs ...string) []anyNamespace {
+	var out []anyNamespace
+	for i := 0; i+1 < len(pairs); i += 2 {
+		out = append(out, anyNamespace{Prefix: pairs[i], Space: pairs[i+1]})
+	}
+	return out
+}
+
+// TestDecodeNamespaces pins AnyType's Namespaces under a wildcard's match,
+// an AnyChild of mixed content and an {open content} field: each held
+// element holds every binding in scope at it (codegen/doc.go "# xs:anyType";
+// Datatypes §3.3.18), its own declarations and its ancestors' outside the
+// match alike, sorted by prefix, the default "" first, shadowed ones by their
+// innermost namespace name, and never xml. A declaration on a sibling, or on
+// an element inside the match, is not in scope at the match; two siblings
+// binding one prefix each hold their own; an undeclared default or prefix is
+// absent, so a match with no binding in scope holds nil.
+func TestDecodeNamespaces(t *testing.T) {
+	const s = `<s:r xmlns:s="urn:s"`
+	match := func(local string, ns []anyNamespace, text string, children ...anyChild) anyElement {
+		return anyElement{Local: local, Content: anyType{Namespaces: ns, Text: text, Children: children}}
+	}
+	rows := []struct {
+		name  string
+		decls string
+		doc   string
+		into  target
+		want  any
+	}{
+		{"the match's own declaration", seqSkipSchema, s + `><s:a>x</s:a><w xmlns:p="urn:p">p:x</w></s:r>`, into[seqWild](),
+			seqWild{A: "x", Any: match("w", namespaces("p", "urn:p", "s", "urn:s"), "p:x")}},
+		{"an ancestor's outside the match, the document element's", seqSkipSchema, s + ` xmlns:p="urn:p"><s:a>x</s:a><w>p:x</w></s:r>`, into[seqWild](),
+			seqWild{A: "x", Any: match("w", namespaces("p", "urn:p", "s", "urn:s"), "p:x")}},
+		{"a sibling's and a descendant's declarations out of scope at the match", seqSkipSchema, s + `><s:a xmlns:q="urn:q">x</s:a><w><c xmlns:d="urn:d"/></w></s:r>`, into[seqWild](),
+			seqWild{A: "x", Any: match("w", namespaces("s", "urn:s"), "", anyChild{Element: match("c", namespaces("d", "urn:d", "s", "urn:s"), "")})}},
+		{"sorted by prefix, a shadowed one by its innermost namespace name", seqSkipSchema, s + ` xmlns:z="urn:z0"><s:a>x</s:a><w xmlns:z="urn:z" xmlns:b="urn:b"/></s:r>`, into[seqWild](),
+			seqWild{A: "x", Any: match("w", namespaces("b", "urn:b", "s", "urn:s", "z", "urn:z"), "")}},
+		{"the default namespace first", seqRepeatedSchema, `<r xmlns="urn:s" xmlns:b="urn:b"><a>x</a><a>y</a></r>`, into[seqRepeated](),
+			seqRepeated{A: "x", Any: []anyElement{{Space: "urn:s", Local: "a", Content: anyType{Namespaces: namespaces("", "urn:s", "b", "urn:b"), Text: "y"}}}}},
+		{"a default undeclared, nil at the match and inside it", seqSkipSchema, `<r xmlns="urn:s"><a>x</a><w xmlns=""><c/></w></r>`, into[seqWild](),
+			seqWild{A: "x", Any: match("w", nil, "", anyChild{Element: match("c", nil, "")})}},
+		{"two siblings binding one prefix, each its own", seqRepeatedSchema, s + `><s:a>x</s:a><w xmlns:p="urn:1"/><w xmlns:p="urn:2"/></s:r>`, into[seqRepeated](),
+			seqRepeated{A: "x", Any: []anyElement{match("w", namespaces("p", "urn:1", "s", "urn:s"), ""), match("w", namespaces("p", "urn:2", "s", "urn:s"), "")}}},
+		{"a prefix undeclared in XML 1.1", seqSkipSchema, `<?xml version="1.1"?>` + s + ` xmlns:p="urn:p"><s:a>x</s:a><w xmlns:p=""/></s:r>`, into[seqWild](),
+			seqWild{A: "x", Any: match("w", namespaces("s", "urn:s"), "")}},
+		{"mixed content's AnyChild", mxWildSchema, s + `>t<w xmlns:p="urn:p"/></s:r>`, into[mxWild](),
+			mxWild{Text: "t", Any: anyChild{Element: match("w", namespaces("p", "urn:p", "s", "urn:s"), "")}}},
+		{"an {open content} field", ocSuffixAnySchema, s + `><s:a>1</s:a><o:x xmlns:o="urn:o"/></s:r>`, into[ocSuffixAny](),
+			ocSuffixAny{A: "1", OpenContent: []anyElement{{Space: "urn:o", Local: "x", Content: anyType{Namespaces: namespaces("o", "urn:o", "s", "urn:s")}}}}},
+	}
+	for _, row := range rows {
+		t.Run(row.name, func(t *testing.T) {
+			schema := schemaOf(t, row.decls)
+			data := []byte(row.doc)
+			mustAccept(t, schema, data)
+			got, err := row.into.decode(schema, data)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !reflect.DeepEqual(got, row.want) {
+				t.Errorf("Decode = %#v, want %#v", got, row.want)
+			}
+		})
 	}
 }

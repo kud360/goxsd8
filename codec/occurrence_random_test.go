@@ -510,7 +510,7 @@ func TestAppendOccurrenceRoundTripDifferential(t *testing.T) {
 			if err := decodeValue(schema, strict.New(), data, back, nil); err != nil {
 				t.Fatalf("model %s, instance %v: Decode(%s) = %v", top.xsdOf(), names, data, err)
 			}
-			if !reflect.DeepEqual(back.Interface(), v.Interface()) {
+			if !reflect.DeepEqual(unscoped(back.Interface()), unscoped(v.Interface())) {
 				t.Fatalf("model %s, instance %v: Decode(%s) = %#v, Append wrote %#v", top.xsdOf(), names, data, back.Interface(), v.Interface())
 			}
 		}
@@ -869,7 +869,7 @@ func TestAppendFlattenedDifferential(t *testing.T) {
 			if err := decodeValue(schema, strict.New(), data, back, opts); err != nil {
 				t.Fatalf("model %s, items %v: Decode(%s) = %v", top.xsdOf(), items, data, err)
 			}
-			if !reflect.DeepEqual(back.Interface(), v.Interface()) {
+			if !reflect.DeepEqual(unscoped(back.Interface()), unscoped(v.Interface())) {
 				t.Fatalf("model %s, items %v: Decode(%s) = %#v, Append wrote %#v", top.xsdOf(), items, data, back.Interface(), v.Interface())
 			}
 		}

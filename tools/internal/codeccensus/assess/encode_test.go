@@ -87,6 +87,46 @@ func TestDriveEncodeCountsEachRow(t *testing.T) {
 	}
 }
 
+// TestSameSkipsHeldNamespaces pins unread's exception: same does not compare
+// the Namespaces of a struct of exactly AnyType's fields, at any depth, and
+// compares every other field of it, and the Namespaces of a struct of any
+// other fields, as it compares any field.
+func TestSameSkipsHeldNamespaces(t *testing.T) {
+	type (
+		namespace struct{ Prefix, Space string }
+		anyType   struct {
+			Attributes []struct{ Space, Local, Value string }
+			Namespaces []namespace
+			Text       string
+			Children   []anyType
+		}
+		fourNames struct{ Attributes, Namespaces, Text, Children string }
+		other     struct {
+			Namespaces []namespace
+			Text       string
+		}
+	)
+	p := []namespace{{Prefix: "p", Space: "urn:p"}}
+	cases := []struct {
+		name string
+		a, b any
+		want bool
+	}{
+		{"AnyType's Namespaces", anyType{Namespaces: p}, anyType{}, true},
+		{"AnyType's Namespaces at depth", anyType{Children: []anyType{{Namespaces: p}}}, anyType{Children: []anyType{{}}}, true},
+		{"AnyType's Text", anyType{Namespaces: p, Text: "x"}, anyType{Namespaces: p, Text: "y"}, false},
+		{"another struct's Namespaces", other{Namespaces: p}, other{}, false},
+		{"a struct of AnyType's field names whose Namespaces is a string", fourNames{Namespaces: "p"}, fourNames{}, false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := same(reflect.ValueOf(tc.a), reflect.ValueOf(tc.b)); got != tc.want {
+				t.Errorf("same(%#v, %#v) = %v, want %v", tc.a, tc.b, got, tc.want)
+			}
+		})
+	}
+}
+
 // TestSameIsDatatypeIdentity pins same against the two answers Go's == and
 // reflect.DeepEqual give otherwise: NaN, of two payloads, is the same as
 // itself, and 0 is not the same as −0 (Datatypes §3.3.5.1), at a float64

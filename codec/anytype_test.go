@@ -131,7 +131,7 @@ func TestAnyTypeTypesAreCodegens(t *testing.T) {
 		decls string
 		want  []string
 	}{
-		{pairAnySchema, []string{"type R struct {\n\tA AnyType\n\tB AnyType\n}\n", "type AnyType struct {\n"}},
+		{pairAnySchema, []string{"type R struct {\n\tA AnyType\n\tB AnyType\n}\n", "type AnyType struct {\n\tAttributes []AnyAttribute\n\tNamespaces []AnyNamespace\n\tText       string\n\tChildren   []AnyChild\n}\n"}},
 		{refAnySchema, []string{"type F AnyType\n", "type R struct {\n\tF F\n}\n"}},
 		{occursAnySchema, []string{"type R struct {\n\tA []AnyType\n\tB *AnyType\n}\n"}},
 		{pickAnySchema, []string{
@@ -197,7 +197,7 @@ func TestAnyTypeTypesAreCodegens(t *testing.T) {
 // substitution group's member included, decodes into the field codegen emits
 // for it, AnyType or the named type over it by its occurrence, the element's
 // attributes, text and children held raw as a wildcard's match's are,
-// namespace declarations not represented. An xsi:schemaLocation or
+// its Namespaces left to TestDecodeAnyTypeNamespaces. An xsi:schemaLocation or
 // xsi:noNamespaceSchemaLocation on it, and an xsi:type inside it, are raw
 // attributes, the xsi:type's value unresolved. A value constraint supplies
 // nothing: an empty element's Text is "" (§3.3.5.4 sic-eltType, case 2). A
@@ -271,7 +271,7 @@ func TestDecodeAnyType(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if !reflect.DeepEqual(got, row.want) {
+			if !reflect.DeepEqual(unscoped(got), row.want) {
 				t.Errorf("Decode = %#v, want %#v", got, row.want)
 			}
 			if err := row.into.check(schema); err != nil {
@@ -334,7 +334,7 @@ func TestDecodeAnyTypeRoot(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if !reflect.DeepEqual(got, row.want) {
+			if !reflect.DeepEqual(unscoped(got), row.want) {
 				t.Errorf("Decode = %#v, want %#v", got, row.want)
 			}
 			if err := row.into.check(schema); err != nil {
@@ -462,6 +462,47 @@ func TestAnyTypeSharesBranch(t *testing.T) {
 			}
 			if !declined && !errors.Is(err, ErrTypeMismatch) {
 				t.Errorf("CheckDecode = %v, want ErrTypeMismatch past item 5", err)
+			}
+		})
+	}
+}
+
+// TestDecodeAnyTypeNamespaces pins the Namespaces of an element of type
+// xs:anyType itself, local or the document element, and of each child held
+// raw inside it: every binding in scope at it, its own declarations and its
+// ancestors' alike (codegen/doc.go "# xs:anyType"), a sibling's and a
+// child's not in scope, and never xml.
+func TestDecodeAnyTypeNamespaces(t *testing.T) {
+	const s = `<s:r xmlns:s="urn:s"`
+	rows := []struct {
+		name  string
+		decls string
+		doc   string
+		into  target
+		want  any
+	}{
+		{"a local element's own declaration", oneAnySchema, s + `><s:a xmlns:p="urn:p">p:x</s:a></s:r>`, into[oneAny](),
+			oneAny{A: anyType{Namespaces: namespaces("p", "urn:p", "s", "urn:s"), Text: "p:x"}}},
+		{"a local element's ancestor's, the document element's", oneAnySchema, s + ` xmlns:p="urn:p"><s:a>p:x</s:a></s:r>`, into[oneAny](),
+			oneAny{A: anyType{Namespaces: namespaces("p", "urn:p", "s", "urn:s"), Text: "p:x"}}},
+		{"a child's declaration out of scope at the element", oneAnySchema, s + `><s:a><c xmlns:q="urn:q"/></s:a></s:r>`, into[oneAny](),
+			oneAny{A: anyType{Namespaces: namespaces("s", "urn:s"), Children: []anyChild{{Element: anyElement{Local: "c", Content: anyType{Namespaces: namespaces("q", "urn:q", "s", "urn:s")}}}}}}},
+		{"a sibling's declaration out of scope", pairAnySchema, s + `><s:a xmlns:q="urn:q"/><s:b/></s:r>`, into[pairAny](),
+			pairAny{A: anyType{Namespaces: namespaces("q", "urn:q", "s", "urn:s")}, B: anyType{Namespaces: namespaces("s", "urn:s")}}},
+		{"the document element's own", rootAnySchema, s + ` xmlns:p="urn:p">p:x</s:r>`, into[rootAny](),
+			rootAny{Namespaces: namespaces("p", "urn:p", "s", "urn:s"), Text: "p:x"}},
+	}
+	for _, row := range rows {
+		t.Run(row.name, func(t *testing.T) {
+			schema := schemaOf(t, row.decls)
+			data := []byte(row.doc)
+			mustAccept(t, schema, data)
+			got, err := row.into.decode(schema, data)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !reflect.DeepEqual(got, row.want) {
+				t.Errorf("Decode = %#v, want %#v", got, row.want)
 			}
 		})
 	}

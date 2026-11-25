@@ -178,7 +178,7 @@
 //     and NOTATION together, and PrecisionDecimal followed by its sealed
 //     interface and that interface's four arms, each that a declaration's type
 //     or a value field is declared over
-//   - the four raw-content structs once an element's type is xs:anyType, a
+//   - the five raw-content structs once an element's type is xs:anyType, a
 //     model group holds a wildcard particle, or a type has an {attribute
 //     wildcard} or {open content}
 //   - the generic struct MixedChild once a field of mixed content holds an
@@ -318,18 +318,27 @@
 //     complex type as the complex-type bullets below state.
 //   - AnyType holds the element's [attributes], xsi: ones included, in document
 //     order as AnyAttribute values of Space, Local and Value, at most one per
-//     expanded name, which the struct does not enforce; then its mixed content
-//     as Text, the characters before the first child element, "" for none, and
-//     Children, one AnyChild per child element in order, holding that child as
-//     Element and as Tail the characters after it, before the next child or the
-//     end, so that each gap between children is one string.
+//     expanded name, which the struct does not enforce; then its in-scope
+//     namespace bindings as Namespaces, as the bullet after next states; then
+//     its mixed content as Text, the characters before the first child
+//     element, "" for none, and Children, one AnyChild per child element in
+//     order, holding that child as Element and as Tail the characters after
+//     it, before the next child or the end, so that each gap between children
+//     is one string.
 //   - An AnyElement holds a child's expanded name, Space and Local, and its own
 //     content as an AnyType: a wildcard's match is held raw, whether or not a
-//     declaration or an xsi:type would govern it. Namespace declarations are
-//     not represented, so a prefix inside a value, such as an xsi:type's, does
-//     not resolve from the struct. AnyType reaches itself only through the
-//     slice Children, so no element of type xs:anyType closes a struct-value
-//     recursion, and none of the four names math/big.
+//     declaration or an xsi:type would govern it. AnyType reaches itself only
+//     through the slice Children, so no element of type xs:anyType closes a
+//     struct-value recursion, and none of the five names math/big.
+//   - AnyType's Namespaces holds the element's [in-scope namespaces],
+//     inherited bindings included, so that a prefix inside a value, such as an
+//     xsi:type's or a QName's, resolves from the struct (Datatypes §3.3.18):
+//     one AnyNamespace per bound prefix, Prefix "" for the default namespace
+//     and Space the namespace name, sorted by Prefix, nil for none. It never
+//     holds xml, which is bound everywhere, nor xmlns, nor a prefix or a
+//     default undeclared there, so that no "" entry means an unprefixed name
+//     is in no namespace. The struct does not enforce the order, unique
+//     prefixes, a non-empty Space, or the absence of xml and xmlns.
 //
 // # Complex types
 //
@@ -951,7 +960,8 @@
 // structs a wildcard alternative first needs follow its branch and every
 // earlier one and precede every later one: alternatives type, a wildcard and
 // element of interface Any name the branches AnyType, AnyAny and AnyElement2,
-// and the raw-content structs AnyType2, AnyAttribute, AnyChild and AnyElement.
+// and the raw-content structs AnyType2, AnyAttribute, AnyChild, AnyElement and
+// AnyNamespace.
 //
 // A datatype struct is named from its datatype's local name (dateTime →
 // DateTime, gYearMonth → GYearMonth, dayTimeDuration → DayTimeDuration, QName
@@ -966,37 +976,37 @@
 // numerical, positiveInfinity, negativeInfinity or notANumber
 // (PrecisionDecimalValueNotANumber), the five claimed in that order right
 // after PrecisionDecimal's own name. The raw-content structs are named
-// AnyType, AnyAttribute, AnyChild and AnyElement, claimed together in that
-// order when the walk first reaches a declaration of type xs:anyType or a
-// wildcard particle, ahead of that declaration's own type, so that a top-level
-// element anyType with no type names its type AnyType2; or when it first
-// reaches the {open content} of a type emitted as a struct, after that
-// struct's own name and the types its particle fields first need, or its
-// {attribute wildcard}, after the types its other fields first need, so that a
-// top-level element anyType whose anonymous complex type has an <openContent>
-// or an <anyAttribute> names its type AnyType and the raw-content structs
-// AnyType2, AnyAttribute, AnyChild and AnyElement. A wildcard particle's field
-// is named as if from local name any, a model group particle's, holding its
-// occurrence type or flattened, as if from its compositor's local name,
-// sequence, choice or all, an {open content}'s as if from local name
-// openContent, and an {attribute wildcard}'s as if from local name
-// anyAttribute. Mixed content's Text field is named as if from local name
-// text, ahead of the particle fields, so that an element text in it gives the
-// field Text2. The generic struct MixedChild is named from local name
-// mixedChild, claimed when the walk first needs it as a datatype struct is:
-// for an element field of mixed content, after that struct's own name and
-// ahead of the names the field's type first claims, so that an <element ref>
-// particle there to a top-level element mixedChild that the walk has not
-// reached names the generic struct MixedChild and that element's type
-// MixedChild2. The generic sealed interface Nillable and its arms Nilled and
-// Content are named from the local names nillable, nilled and content, claimed
-// together in that order when the walk first needs them: for a field over a
-// nillable element, after the names the field's type first claims, so after
-// MixedChild's in mixed content; and at a nillable top-level declaration's own
-// position, after the names its type claims. A complex type's attributes
-// struct is named from that type's Go name followed by the local name
-// attributes (Price → PriceAttributes), claimed right after Nillable's names
-// would be at the same point.
+// AnyType, AnyAttribute, AnyChild, AnyElement and AnyNamespace, claimed
+// together in that order when the walk first reaches a declaration of type
+// xs:anyType or a wildcard particle, ahead of that declaration's own type, so
+// that a top-level element anyType with no type names its type AnyType2; or
+// when it first reaches the {open content} of a type emitted as a struct,
+// after that struct's own name and the types its particle fields first need,
+// or its {attribute wildcard}, after the types its other fields first need,
+// so that a top-level element anyType whose anonymous complex type has an
+// <openContent> or an <anyAttribute> names its type AnyType and the
+// raw-content structs AnyType2, AnyAttribute, AnyChild, AnyElement and
+// AnyNamespace. A wildcard particle's field is named as if from local name
+// any, a model group particle's, holding its occurrence type or flattened, as
+// if from its compositor's local name, sequence, choice or all, an {open
+// content}'s as if from local name openContent, and an {attribute wildcard}'s
+// as if from local name anyAttribute. Mixed content's Text field is named as
+// if from local name text, ahead of the particle fields, so that an element
+// text in it gives the field Text2. The generic struct MixedChild is named
+// from local name mixedChild, claimed when the walk first needs it as a
+// datatype struct is: for an element field of mixed content, after that
+// struct's own name and ahead of the names the field's type first claims, so
+// that an <element ref> particle there to a top-level element mixedChild that
+// the walk has not reached names the generic struct MixedChild and that
+// element's type MixedChild2. The generic sealed interface Nillable and its
+// arms Nilled and Content are named from the local names nillable, nilled and
+// content, claimed together in that order when the walk first needs them: for
+// a field over a nillable element, after the names the field's type first
+// claims, so after MixedChild's in mixed content; and at a nillable top-level
+// declaration's own position, after the names its type claims. A complex
+// type's attributes struct is named from that type's Go name followed by the
+// local name attributes (Price → PriceAttributes), claimed right after
+// Nillable's names would be at the same point.
 //
 // A union's interface is named from the type when it is named (simple type
 // size → Size), claimed when the walk first needs it as a datatype struct is:
@@ -1044,12 +1054,12 @@
 // PrecisionDecimal's interface and arms record the same QName, the numerical
 // arm then a second line stating its value's formula and that Coefficient is
 // never negative. A raw-content struct's header records xs:anyType's QName
-// alone, then, for AnyType and AnyChild, a second line stating what Text or
-// Tail holds. MixedChild's header records no declaration, since every mixed
-// content shares it, and states that it holds one child element and the
-// characters after it, then a second line stating what Tail holds. Nillable's,
-// Nilled's and Content's headers record no declaration, since every nillable
-// element shares them, and state what each holds.
+// alone, then, for AnyType, AnyChild and AnyNamespace, a second line stating
+// what Text, Tail or Prefix holds. MixedChild's header records no declaration,
+// since every mixed content shares it, and states that it holds one child
+// element and the characters after it, then a second line stating what Tail
+// holds. Nillable's, Nilled's and Content's headers record no declaration,
+// since every nillable element shares them, and state what each holds.
 //
 // A Loc whose URI filepath.IsAbs accepts renders relative to the target's Dir
 // made absolute against the working directory, slash-separated and climbing
