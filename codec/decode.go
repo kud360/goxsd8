@@ -538,21 +538,25 @@ var ErrTypeMismatch = errors.New("codec: T is not the type codegen emits for the
 //     caller's package, so E is matched by shape, every struct's name never
 //     compared, whatever codegen numbers it, such as AnyElement2 or AnyType2: E's
 //     fields exactly Space and Local, each a string, and Content, X, in that
-//     order; X's, AnyType's, exactly Attributes, a slice of A, Text, a string,
-//     and Children, a slice of C; A's, AnyAttribute's, exactly Space, Local and
-//     Value, each a string; and C's, AnyChild's, exactly Element and Tail, a
-//     string, where Element is of E itself, not another struct of E's shape.
-//     Fields are matched in name, order and Go type, none embedded, struct tags
-//     aside, and a slice named or not. Each child attributed to the wildcard (the
-//     paragraph after item 8) is one E, holding its expanded name and its content
-//     raw: Attributes its attributes in start-tag order, xsi: ones included and
-//     namespace declarations not, each value as the XML reader normalized it, any
-//     prefix in it unresolved; Text the character data before its first child
-//     element; and Children each child element, read the same way, as Element,
-//     and as Tail the character data after it, before the next child or the end,
-//     each run of character data concatenated across the comments and processing
-//     instructions that break it. In mixed content the wildcard's field holds C,
-//     *C or []C in place of E, as the mixed-content bullet below states.
+//     order; X's, AnyType's, exactly Attributes, a slice of A, Namespaces, a
+//     slice of B, Text, a string, and Children, a slice of C; A's,
+//     AnyAttribute's, exactly Space, Local and Value, each a string; B's,
+//     AnyNamespace's, exactly Prefix and Space, each a string; and C's,
+//     AnyChild's, exactly Element and Tail, a string, where Element is of E
+//     itself, not another struct of E's shape. Fields are matched in name,
+//     order and Go type, none embedded, struct tags aside, and a slice named or
+//     not. Each child attributed to the wildcard (the paragraph after item 8)
+//     is one E, holding its expanded name and its content raw: Attributes its
+//     attributes in start-tag order, xsi: ones included and namespace
+//     declarations not, each value as the XML reader normalized it, nothing in
+//     it resolved; Namespaces the namespace bindings in scope at it, inherited
+//     ones included, as codegen's package doc, "# xs:anyType", states them;
+//     Text the character data before its first child element; and Children
+//     each child element, read the same way, as Element, and as Tail the
+//     character data after it, before the next child or the end, each run of
+//     character data concatenated across the comments and processing instructions
+//     that break it. In mixed content the wildcard's field holds C, *C or []C in
+//     place of E, as the mixed-content bullet below states.
 //   - The field of a particle whose element declaration has {type definition}
 //     xs:anyType itself (Structures §3.4.7 any-type-itself), and a choice's
 //     such alternative's branch field, a type derived from xs:anyType being
@@ -1496,14 +1500,15 @@ func (a anyTypeArm) describe() string {
 
 // contentShapeOf returns the rawShape reached from x through its Children's
 // element type C and C's Element, E, as rawShapeOf matches E, when x is a
-// struct of exactly the fields Attributes, Text and Children, Children a
-// slice, and C a struct of exactly Element and Tail. Its caller holds x to
-// the shape's content; these guards only keep the walk from panicking.
+// struct of exactly the fields Attributes, Namespaces, Text and Children,
+// Children a slice, and C a struct of exactly Element and Tail. Its caller
+// holds x to the shape's content; these guards only keep the walk from
+// panicking.
 func contentShapeOf(x reflect.Type) (rawShape, bool) {
-	if !fieldsNamed(x, "Attributes", "Text", "Children") || x.Field(2).Type.Kind() != reflect.Slice {
+	if !fieldsNamed(x, contentFields...) || x.Field(xChildren).Type.Kind() != reflect.Slice {
 		return rawShape{}, false
 	}
-	c := x.Field(2).Type.Elem()
+	c := x.Field(xChildren).Type.Elem()
 	if !fieldsNamed(c, "Element", "Tail") {
 		return rawShape{}, false
 	}
@@ -1566,20 +1571,32 @@ func anyTypeShape(t reflect.Type) (rawShape, bool) {
 	return s, true
 }
 
-// rawShape is three of the four raw-content structs codegen emits
-// (codegen/doc.go "# Element declarations"), as a T holds them: element, E,
-// AnyElement's; content, X, AnyType's; and child, C, AnyChild's. The fourth,
-// A, AnyAttribute's, is the element of X's Attributes. rawShapeOf states
-// their fields.
+// rawShape is three of the five raw-content structs codegen emits
+// (codegen/doc.go "# xs:anyType"), as a T holds them: element, E,
+// AnyElement's; content, X, AnyType's; and child, C, AnyChild's. The other
+// two, A, AnyAttribute's, and B, AnyNamespace's, are the elements of X's
+// Attributes and Namespaces. rawShapeOf states their fields.
 type rawShape struct {
 	element, content, child reflect.Type
 }
 
+// contentFields is the fields of X, AnyType's shape, in order; xAttributes,
+// xNamespaces, xText and xChildren are their indices.
+var contentFields = []string{"Attributes", "Namespaces", "Text", "Children"}
+
+const (
+	xAttributes = iota
+	xNamespaces
+	xText
+	xChildren
+)
+
 // rawShapeOf returns the rawShape whose element is e, when e is a struct of
 // AnyElement's shape: e's fields exactly Space and Local, each a string, and
-// Content, X, in that order; X's exactly Attributes, a slice of A, Text, a
-// string, and Children, a slice of C; A of AnyAttribute's shape
-// (rawAttributeShaped); and C's exactly Element, of e itself, and Tail, a string.
+// Content, X, in that order; X's exactly Attributes, a slice of A,
+// Namespaces, a slice of B, Text, a string, and Children, a slice of C; A of
+// AnyAttribute's shape (rawAttributeShaped); B's exactly Prefix and Space,
+// each a string; and C's exactly Element, of e itself, and Tail, a string.
 // Each field is matched by name, order and Go type, none embedded, struct
 // tags aside, and no struct by its name, so codegen's AnyElement2 and
 // AnyType2 match; a slice may be named or not. C's Element is the one field
@@ -1590,12 +1607,15 @@ func rawShapeOf(e reflect.Type) (rawShape, bool) {
 		return rawShape{}, false
 	}
 	x := e.Field(2).Type
-	if !fieldsNamed(x, "Attributes", "Text", "Children") || x.Field(1).Type != str ||
-		x.Field(0).Type.Kind() != reflect.Slice || x.Field(2).Type.Kind() != reflect.Slice {
+	if !fieldsNamed(x, contentFields...) || x.Field(xText).Type != str || x.Field(xAttributes).Type.Kind() != reflect.Slice ||
+		x.Field(xNamespaces).Type.Kind() != reflect.Slice || x.Field(xChildren).Type.Kind() != reflect.Slice {
 		return rawShape{}, false
 	}
-	c := x.Field(2).Type.Elem()
-	if !rawAttributeShaped(x.Field(0).Type.Elem()) {
+	c := x.Field(xChildren).Type.Elem()
+	if !rawAttributeShaped(x.Field(xAttributes).Type.Elem()) {
+		return rawShape{}, false
+	}
+	if b := x.Field(xNamespaces).Type.Elem(); !fieldsNamed(b, "Prefix", "Space") || b.Field(0).Type != str || b.Field(1).Type != str {
 		return rawShape{}, false
 	}
 	if !fieldsNamed(c, "Element", "Tail") || c.Field(0).Type != e || c.Field(1).Type != str {
@@ -1623,6 +1643,30 @@ func appendRawAttribute(attrs reflect.Value, a xmltree.Attribute) {
 	v.Field(1).SetString(a.Name().Local())
 	v.Field(2).SetString(a.Value())
 	attrs.Set(reflect.Append(attrs, v))
+}
+
+// rawNamespaces sets ns, a slice of B as rawShapeOf matches it, to the
+// bindings in scope at start, against which a QName-valued item in it
+// resolves (Datatypes §3.3.18), as codegen/doc.go "# xs:anyType" states
+// Namespaces: the default namespace from xmltree.StartElement.LookupPrefix,
+// then the prefixed bindings from xmltree.StartElement.InScopePrefixes, whose
+// order is Namespaces', but xml.
+func rawNamespaces(ns reflect.Value, start *xmltree.StartElement) {
+	add := func(prefix, space string) {
+		b := reflect.New(ns.Type().Elem()).Elem()
+		b.Field(0).SetString(prefix)
+		b.Field(1).SetString(space)
+		ns.Set(reflect.Append(ns, b))
+	}
+	if space, _ := start.LookupPrefix(""); space != "" {
+		add("", space)
+	}
+	for _, n := range start.InScopePrefixes() {
+		if n.Prefix() == "xml" {
+			continue
+		}
+		add(n.Prefix(), n.URI())
+	}
 }
 
 // fieldsNamed reports whether t is a struct whose fields are exactly names,
@@ -1661,7 +1705,8 @@ func (s rawShape) read(_ *pipeline, r *xmltree.Reader, start *xmltree.StartEleme
 // start in start-tag order, xsi: ones included and namespace declarations
 // not (xmltree.StartElement.Attributes), each its expanded name and its
 // value as the reader normalized it, a prefix inside it unresolved, nil for
-// none; Text, the character data before the first child element, every
+// none; Namespaces, start's in-scope bindings as rawNamespaces reads them;
+// Text, the character data before the first child element, every
 // adjacent run concatenated, "" for none; and Children, one C per child
 // element in document order, its Element the child as read reads it and its
 // Tail the character data after it, up to the next child element or start's
@@ -1669,15 +1714,16 @@ func (s rawShape) read(_ *pipeline, r *xmltree.Reader, start *xmltree.StartEleme
 // tokens of r, so they hold no place.
 func (s rawShape) readContent(r *xmltree.Reader, start *xmltree.StartElement) (reflect.Value, error) {
 	x := reflect.New(s.content).Elem()
-	attrs := x.Field(0)
+	attrs := x.Field(xAttributes)
 	for _, a := range start.Attributes() {
 		appendRawAttribute(attrs, a)
 	}
-	children := x.Field(2)
+	rawNamespaces(x.Field(xNamespaces), start)
+	children := x.Field(xChildren)
 	// text gathers the character data due at tail: X's Text, then the last
 	// child's Tail.
 	var text bytes.Buffer
-	tail := x.Field(1)
+	tail := x.Field(xText)
 	for {
 		tok, err := r.Token()
 		if err != nil {
@@ -1810,7 +1856,7 @@ func (f field) admits(got reflect.StructField, _ branchSets) bool {
 //     structArm, true, which is conservative, since a structArm admits any
 //     struct and X and N are structs; and beside a rawArm, a scalarArm, an
 //     ifaceArm, a groupArm or a nillableArm, false, since contentShapeOf admits only a
-//     struct of the three exported fields Attributes, Text and Children,
+//     struct of the four exported fields Attributes, Namespaces, Text and Children,
 //     which no rawArm's E is, no scalar's V is but a datatype struct's, which
 //     the bullet above answers, and no interface is.
 //   - Either arm a rawArm: for two rawArms, true exactly when they have one

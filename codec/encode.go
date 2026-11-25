@@ -170,8 +170,9 @@ var ErrInvalidValue = errors.New("codec: Append: a value no valid document holds
 //     xsi:noNamespaceSchemaLocation, on an element a wildcard particle's
 //     field holds, or in the content of an element of type xs:anyType
 //     itself, its own attributes among it, at any depth, whatever its value,
-//     since an xsi:type's may hold a prefix no binding the struct holds
-//     resolves, and Decode returns neither of those two in an {attribute
+//     since an xsi:type's may hold a prefix that only a binding in AnyType's
+//     Namespaces resolves, and Append writes none of those bindings (GAP(codec):
+//     #4125), and Decode returns neither of those two in an {attribute
 //     wildcard}'s field; or, in such content of an xs:anyType element, or in an
 //     element a lax wildcard particle's field holds, the element itself among
 //     it, at any depth, an element whose expanded name a top-level element
@@ -2884,7 +2885,7 @@ func (rawContent) writeElement(e *encoder, decl xsd.ElementDeclaration, v reflec
 	outer, mark := e.startTag(name)
 	hold := anyTypeContent{decl: decl}
 	start := e.rawAttributes(v, path, hold)
-	e.rawText(v.Field(1).String(), path+".Text")
+	e.rawText(v.Field(xText).String(), path+".Text")
 	e.anyTypeFixed(decl, v, path)
 	e.rawChildren(v, path, hold)
 	e.endTag(name.Local, start, outer, mark)
@@ -2907,11 +2908,11 @@ func (e *encoder) anyTypeFixed(decl xsd.ElementDeclaration, x reflect.Value, pat
 	if !has || vc.Kind() != xsd.ValueFixed {
 		return
 	}
-	if n := x.Field(2).Len(); n > 0 {
+	if n := x.Field(xChildren).Len(); n > 0 {
 		e.invalidate(fmt.Errorf("codec: Append: %s.Children holds %d, though the fixed {value constraint} %q of %s admits no element child (Structures §3.3.4.3 cvc-elt clause 5.2.2.1)", path, n, vc.LexicalForm(), declSubject(decl)))
 		return
 	}
-	if text := x.Field(1).String(); text != "" && text != vc.LexicalForm() {
+	if text := x.Field(xText).String(); text != "" && text != vc.LexicalForm() {
 		e.invalidate(fmt.Errorf("codec: Append: %s.Text holds %q, which does not match %q, the {lexical form} of the fixed {value constraint} of %s (Structures §3.3.4.3 cvc-elt clause 5.2.2.2.1)", path, text, vc.LexicalForm(), declSubject(decl)))
 	}
 }
@@ -2960,7 +2961,7 @@ func (e *encoder) rawStartTag(name xsd.QName) (tag, outer string, mark int) {
 // rawAttributes, then x's Text (rawText), then rawChildren.
 func (e *encoder) rawContent(x reflect.Value, path string, hold rawHold) int {
 	start := e.rawAttributes(x, path, hold)
-	e.rawText(x.Field(1).String(), path+".Text")
+	e.rawText(x.Field(xText).String(), path+".Text")
 	e.rawChildren(x, path, hold)
 	return start
 }
@@ -2972,7 +2973,7 @@ func (e *encoder) rawContent(x reflect.Value, path string, hold rawHold) int {
 // key-governing-ad clause 3) and which admits every value rawAttribute writes,
 // so that writing it declines nothing.
 func (e *encoder) rawAttributes(x reflect.Value, path string, hold rawHold) int {
-	attrs := x.Field(0)
+	attrs := x.Field(xAttributes)
 	for i := range attrs.Len() {
 		a := attrs.Index(i)
 		apath := path + ".Attributes[" + strconv.Itoa(i) + "]"
@@ -2990,7 +2991,7 @@ func (e *encoder) rawAttributes(x reflect.Value, path string, hold rawHold) int 
 
 // rawChildren is rawContent's write of each of x's Children, each followed by its Tail.
 func (e *encoder) rawChildren(x reflect.Value, path string, hold rawHold) {
-	children := x.Field(2)
+	children := x.Field(xChildren)
 	for i := range children.Len() {
 		c := children.Index(i)
 		cpath := path + ".Children[" + strconv.Itoa(i) + "]"

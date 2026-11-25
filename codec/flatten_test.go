@@ -278,7 +278,7 @@ func TestDecodeFlattened(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if !reflect.DeepEqual(got, row.want) {
+			if !reflect.DeepEqual(unscoped(got), row.want) {
 				t.Errorf("Decode = %#v, want %#v", got, row.want)
 			}
 			if err := row.into.check(schema); err != nil {
@@ -312,7 +312,7 @@ func TestDecodeFlattenedXsiType(t *testing.T) {
 	}
 	want := flatWild{Sequence: []flatWildItem{flatWildA{A: "1"}, flatWildAny{Any: anyElement{Space: "urn:o", Local: "w",
 		Content: anyType{Attributes: []anyAttribute{{Space: "http://www.w3.org/2001/XMLSchema-instance", Local: "type", Value: "xs:string"}}}}}}}
-	if !reflect.DeepEqual(*got, want) {
+	if !reflect.DeepEqual(unscoped(*got), want) {
 		t.Errorf("Decode = %#v, want %#v", *got, want)
 	}
 }
@@ -356,7 +356,7 @@ func TestDecodeFlattenTie(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if !reflect.DeepEqual(got, row.want) {
+			if !reflect.DeepEqual(unscoped(got), row.want) {
 				t.Errorf("Decode = %#v, want %#v", got, row.want)
 			}
 			if err := row.into.check(schema); err != nil {

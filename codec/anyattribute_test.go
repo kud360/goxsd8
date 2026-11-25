@@ -143,7 +143,7 @@ func TestAnyAttributeTypesAreCodegens(t *testing.T) {
 		decls string
 		want  []string
 	}{
-		{awUseSchema, []string{"type R " + use, "type AnyAttribute struct {\n\tSpace, Local, Value string\n}\n"}},
+		{awUseSchema, []string{"type R " + use, "type AnyAttribute struct {\n\tSpace, Local, Value string\n}\n", "type AnyNamespace struct {\n\tPrefix, Space string\n}\n"}},
 		{awExtSchema, []string{"type R struct {\n\tE            string\n\tB            *string\n\tA            *int32\n\tAnyAttribute []AnyAttribute\n}\n"}},
 		{awUnionSchema, []string{one}},
 		{awRestrictSchema, []string{"type R struct {\n\tE string\n\tA *int32\n}\n"}},
@@ -250,7 +250,7 @@ func TestDecodeAnyAttribute(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if !reflect.DeepEqual(got, row.want) {
+			if !reflect.DeepEqual(unscoped(got), row.want) {
 				t.Errorf("Decode = %#v, want %#v", got, row.want)
 			}
 			if err := row.into.check(schema); err != nil {

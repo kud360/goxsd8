@@ -300,7 +300,7 @@ func TestDecodeMixed(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if !reflect.DeepEqual(got, row.want) {
+			if !reflect.DeepEqual(unscoped(got), row.want) {
 				t.Errorf("Decode = %#v, want %#v", got, row.want)
 			}
 			if err := row.into.check(schema); err != nil {
@@ -447,7 +447,7 @@ func TestDecodeMixedPara(t *testing.T) {
 		Choice:   mxParaChoiceSeq{Y: mixedChild[string]{Element: "y", Tail: "t9"}, Z: []mixedChild[string]{{Element: "z1", Tail: "t10"}}},
 		Sequence: []mxParaSeq{{Href: mixedChild[string]{Element: "h2", Tail: "t11"}}},
 	}
-	if !reflect.DeepEqual(*got, want) {
+	if !reflect.DeepEqual(unscoped(*got), want) {
 		t.Errorf("Decode = %#v, want %#v", *got, want)
 	}
 	if err := CheckDecode[mxPara](schema, xsd.QName{Local: "para"}, opts...); err != nil {
@@ -687,7 +687,7 @@ func TestDecodeMixedTypeTable(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if !reflect.DeepEqual(got, row.want) {
+			if !reflect.DeepEqual(unscoped(got), row.want) {
 				t.Errorf("Decode = %#v, want %#v", got, row.want)
 			}
 			if err := row.into.check(schema); err != nil {
