@@ -322,21 +322,21 @@
 //     keyref a {referenced key} whose own it compiles, whose {type
 //     definition} is a simple type that encodes, a complex type that
 //     encodes, or xs:anyType itself.
-//   - A complex type with {abstract} false, no {assertions}, no {attribute
-//     wildcard} and no {open content}, of empty content, of simple content
-//     whose {simple type definition} (Structures §3.4.2.2 dcl.ctd.ctsc) is a
-//     simple type that encodes, its value field (codegen's package doc, "#
-//     Complex types") written as the element's character content after its
-//     attributes, or of element-only content whose {particle} is a sequence
-//     that codegen splices, a choice occurring exactly once that codegen does
-//     not flatten, or a sequence or choice codegen holds in an occurrence
-//     field, inline or through <group ref>, each of whose particles is an
-//     element particle, a wildcard particle with {process contents} skip or
-//     lax, or a nested sequence or choice particle, inline or through <group
-//     ref>, held as codegen's package doc "# Particles" holds it: one codegen
-//     splices, as its own particles in its place; a choice occurring exactly
-//     once that codegen does not flatten, into its sealed interface field, as
-//     its alternatives; one codegen flattens, into its slice field, each basic
+//   - A complex type with {abstract} false, no {assertions} and no {open
+//     content}, of empty content, of simple content whose {simple type
+//     definition} (Structures §3.4.2.2 dcl.ctd.ctsc) is a simple type that
+//     encodes, its value field (codegen's package doc, "# Complex types")
+//     written as the element's character content after its attributes, or of
+//     element-only content whose {particle} is a sequence that codegen
+//     splices, a choice occurring exactly once that codegen does not flatten,
+//     or a sequence or choice codegen holds in an occurrence field, inline or
+//     through <group ref>, each of whose particles is an element particle, a
+//     wildcard particle with {process contents} skip or lax, or a nested
+//     sequence or choice particle, inline or through <group ref>, held as
+//     codegen's package doc "# Particles" holds it: one codegen splices, as
+//     its own particles in its place; a choice occurring exactly once that
+//     codegen does not flatten, into its sealed interface field, as its
+//     alternatives; one codegen flattens, into its slice field, each basic
 //     particle of its reach such an element or wildcard particle; and any
 //     other, into its occurrence field, as its own particles. A choice's
 //     alternative, the content choice's or a nested one's, is such a particle
@@ -350,8 +350,8 @@
 //     xsd.Schema.ContentMatcher tracks. The content {particle} may also be a
 //     sequence or choice codegen flattens, each basic particle of whose reach
 //     (codegen's package doc, "# Particles") is such an element or wildcard
-//     particle, and whose content model xsd.Schema.ContentMatcher tracks,
-//     with or without a wildcard particle. The choice occurring exactly once
+//     particle, and whose content model xsd.Schema.ContentMatcher tracks, with
+//     or without a wildcard particle. The choice occurring exactly once
 //     encodes into its sealed interface, T itself or the first field of T's
 //     struct, the sequence or choice held in an occurrence field into that
 //     field, and the flattened one into its slice field, as "# What decodes"
@@ -382,6 +382,9 @@
 //     that encodes, with or without a value constraint, into V or *V, its
 //     value written as it is held, never omitted where it equals a default,
 //     which items 6 and 7 of Append's doc hold to a fixed one.
+//   - An {attribute wildcard} (Structures §3.4.2.5 dcl.ctd.anyatt), the
+//     type's effective one, of any {process contents}, into the field "# What
+//     decodes" states for it, each attribute it holds written raw, as below.
 //   - xs:anySimpleType or xs:anyAtomicType itself (Datatypes §2.4.2
 //     dt-special), into string.
 //   - An atomic simple type whose {primitive type definition} is one the list
@@ -452,39 +455,42 @@
 // the first not in scope, declared as xmlns:pN="ns" on that element's start tag
 // ahead of the attribute or content that writes it. An attribute use's
 // attribute is written unprefixed, in the order of codegen's fields (codegen's
-// package doc, "# Attributes"), each value delimited by '"'. An element held
-// raw in a skip wildcard's field, at any depth, is written raw, nothing in it
-// assessed or resolved, and so is one held in a lax wildcard's field and the
-// content of an element of type xs:anyType itself, its own attributes
-// included, nothing in either resolved, but for the items item 7 of Append's
-// doc declines in it: its attributes in held order, one of absent namespace
-// unprefixed, one in the XML namespace xml:Local, and every other one pN:Local,
-// pN chosen and declared as for an xs:QName value, though its namespace be that
-// element's own; then its Text, then each of its Children, written so, followed
-// by its Tail. A nil pointer field writes nothing, and so does a nil interface
-// field where nil means absent (codegen's package doc, "# Particles", "#
-// Attributes"), a particle with {max occurs} above 1 writes one element per
-// item of its slice, a flattened sequence or choice one per item of its slice,
-// in order, its branch's basic particle's, whatever the particle's occurrence,
-// an occurrence field writes each item it holds, in order, as its model group's
-// particles in order, a choice's branch writes its alternative's elements, the
-// empty match, the nil interface of a present element, writes no child element,
-// and an element with no content is written as an empty-element tag, <x/>. A
-// string value, of xs:string or xs:anyURI primitive, is written as itself, its
+// package doc, "# Attributes"), each value delimited by '"', and after them
+// each attribute an {attribute wildcard}'s field holds, in held order, as a raw
+// element's attributes are written below, nothing in it resolved, but for the
+// ones item 7 of Append's doc declines. An element held raw in a skip
+// wildcard's field, at any depth, is written raw, nothing in it assessed or
+// resolved, and so is one held in a lax wildcard's field and the content of an
+// element of type xs:anyType itself, its own attributes included, nothing in
+// either resolved, but for the items item 7 of Append's doc declines in it: its
+// attributes in held order, one of absent namespace unprefixed, one in the XML
+// namespace xml:Local, and every other one pN:Local, pN chosen and declared as
+// for an xs:QName value, though its namespace be that element's own; then its
+// Text, then each of its Children, written so, followed by its Tail. A nil
+// pointer field writes nothing, and so does a nil interface field where nil
+// means absent (codegen's package doc, "# Particles", "# Attributes"), a
+// particle with {max occurs} above 1 writes one element per item of its slice,
+// a flattened sequence or choice one per item of its slice, in order, its
+// branch's basic particle's, whatever the particle's occurrence, an occurrence
+// field writes each item it holds, in order, as its model group's particles in
+// order, a choice's branch writes its alternative's elements, the empty match,
+// the nil interface of a present element, writes no child element, and an
+// element with no content is written as an empty-element tag, <x/>. A string
+// value, of xs:string or xs:anyURI primitive, is written as itself, its
 // canonical representation, since xs:string's canonical mapping is the identity
 // (Datatypes §E.4 f-stringCanmap) and so is xs:anyURI's lexical mapping, so
 // that an xs:anyURI value is neither normalized nor percent-escaped
 // (§3.3.17.2), and item 6 of Append's doc holds the string to its own
 // whiteSpace-normalized form. A value of xs:anySimpleType or xs:anyAtomicType
-// itself is written as the string it holds, the ·literal· Decode returns,
-// whose lexical mapping is no function (Datatypes §3.2.1.2, §3.2.2.2), and
-// item 6 of Append's doc holds it to the Char production alone. A list value is
-// written as its items are written, in order, separated by single U+0020
-// characters (Datatypes §2.4.1.2), and the empty list, nil or empty, as no
-// content: <x/> for an element, a="" for an attribute. A union value is written
-// as its variant's member value is, under that member, item 7 of Append's doc
-// stating when the text it writes would decode into another variant. It escapes
-// '<', '&' and '>' as &lt;, &amp; and &gt; everywhere, so that "]]>" is never
+// itself is written as the string it holds, the ·literal· Decode returns, whose
+// lexical mapping is no function (Datatypes §3.2.1.2, §3.2.2.2), and item 6 of
+// Append's doc holds it to the Char production alone. A list value is written
+// as its items are written, in order, separated by single U+0020 characters
+// (Datatypes §2.4.1.2), and the empty list, nil or empty, as no content: <x/>
+// for an element, a="" for an attribute. A union value is written as its
+// variant's member value is, under that member, item 7 of Append's doc stating
+// when the text it writes would decode into another variant. It escapes '<',
+// '&' and '>' as &lt;, &amp; and &gt; everywhere, so that "]]>" is never
 // written, and CR as &#xD; everywhere, which XML 1.0 end-of-line handling
 // (§2.11) would otherwise rewrite to LF or remove; in an attribute value it
 // escapes '"' as &quot;, TAB as &#x9; and LF as &#xA;, which attribute-value
