@@ -81,7 +81,7 @@ func TestParticleHold(t *testing.T) {
 		{"choiceGroupEmptiable", bounded(1, 1), Flattened},
 		{"choice", bounded(1, 1), OnceChoice},
 		{"choiceEmpty", bounded(1, 1), OnceChoice},
-		// Gate 1 tests an alternative's term, never its {min occurs}: this
+		// Pins flattens' first gate (codegen/doc.go "# Particles"): this
 		// row alone fails where flattens also flattens a choice whose model
 		// group alternative has {min occurs} 0 (#4130).
 		{"choiceGroupOptional", bounded(1, 1), OnceChoice},
