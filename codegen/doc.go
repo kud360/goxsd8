@@ -69,9 +69,9 @@
 //     members, or the types its {type table} selects) → a sealed interface,
 //     one branch per governing type ("An element declaration's governing types")
 //   - repeated model group with a repeating edge, repeated emptiable sequence,
-//     or choice with an emptiable model group alternative → a slice of a
-//     sealed interface, one branch per basic particle ("A model group particle
-//     meeting")
+//     or choice with an alternative whose term is an emptiable model group → a
+//     slice of a sealed interface, one branch per basic particle ("A model
+//     group particle meeting")
 //
 // # Coverage
 //
@@ -95,8 +95,8 @@
 //     through <group ref>
 //   - optional and repeated particles
 //   - a repeated model group with a repeating edge, a repeated emptiable
-//     sequence, and a choice with an emptiable model group alternative, each
-//     as a flattened field
+//     sequence, and a choice with an alternative whose term is an emptiable
+//     model group, each as a flattened field
 //   - wildcard particles
 //   - attribute uses and attribute wildcards, beside any content above
 //   - facets, {assertions}, value constraints and identity constraints
@@ -590,24 +590,24 @@
 //     its occurrences would hold one child sequence under more than one
 //     grouping into occurrences (§3.9.4.3 cvc-accept).
 //   - A model group particle meeting one of those three gates — a choice
-//     holding an emptiable model group alternative, a repeated emptiable
-//     sequence, a repeated model group with a repeating edge — is flattened
-//     when it is the first such particle on the walk from the content
-//     {particle} inward: the walk tests a particle before the particles of its
-//     model group, and the model groups inside a flattened one are its
-//     reach's, each given no field, no type and no gate test of its own. A
-//     flattened particle, the content {particle} or nested, inline or a
-//     <group ref>, gives one field, named as if from the local name sequence
-//     or choice ("Naming"), holding a slice of a sealed interface whatever the
-//     particle's occurrence, a choice occurring exactly once included, nil and
-//     the empty slice being one value, no child. The interface is the
-//     closed-sum exception as a choice's is: one method, unexported, "is" plus
-//     the interface's name, and one branch struct per basic particle
-//     (Structures §2.2.3.2 key-basic-particle) the particle's model group
-//     reaches, emitted after the interface in reach order, each implementing
-//     the method. The reach is a depth-first walk of the model group's
-//     {particles} in order, an element particle, local or an <element ref>, or
-//     a wildcard particle being one basic particle, and a model group
+//     with an alternative whose term is an emptiable model group, a repeated
+//     emptiable sequence, a repeated model group with a repeating edge — is
+//     flattened when it is the first such particle on the walk from the
+//     content {particle} inward: the walk tests a particle before the
+//     particles of its model group, and the model groups inside a flattened
+//     one are its reach's, each given no field, no type and no gate test of
+//     its own. A flattened particle, the content {particle} or nested, inline
+//     or a <group ref>, gives one field, named as if from the local name
+//     sequence or choice ("Naming"), holding a slice of a sealed interface
+//     whatever the particle's occurrence, a choice occurring exactly once
+//     included, nil and the empty slice being one value, no child. The
+//     interface is the closed-sum exception as a choice's is: one method,
+//     unexported, "is" plus the interface's name, and one branch struct per
+//     basic particle (Structures §2.2.3.2 key-basic-particle) the particle's
+//     model group reaches, emitted after the interface in reach order, each
+//     implementing the method. The reach is a depth-first walk of the model
+//     group's {particles} in order, an element particle, local or an <element
+//     ref>, or a wildcard particle being one basic particle, and a model group
 //     particle, inline or a <group ref>, giving in its place its own model
 //     group's; it never enters an element's type. Each point of that walk is a
 //     branch of its own, so a <group ref> reaching one group twice, or two

@@ -28,9 +28,10 @@ func TestGenerateFlattenGates(t *testing.T) {
 		name, body   string
 		want, absent []string
 	}{
-		// An emptiable model group alternative flattens its choice, inline or
-		// through a <group ref>, whatever the alternative's own {min occurs}
-		// and the choice's occurrence, the content particle included.
+		// An alternative whose term is an emptiable model group, inline or
+		// through a <group ref>, flattens its choice, whatever the
+		// alternative's own {min occurs} and the choice's occurrence, the
+		// content particle included.
 		{"emptiable group in choice", `<xs:element name="e"><xs:complexType><xs:choice><xs:element name="a" ` + str + `/><xs:sequence><xs:element name="b" minOccurs="0" ` + str + `/></xs:sequence></xs:choice></xs:complexType></xs:element>`,
 			[]string{slice("Choice"), ifc("Choice"), branch("Choice", "A", "string"), branch("Choice", "B", "string")}, []string{`EChoiceSequence`}},
 		{"emptiable choice in choice", `<xs:element name="e"><xs:complexType><xs:choice><xs:element name="a" ` + str + `/><xs:choice><xs:element name="b" ` + str + `/><xs:element name="c" minOccurs="0" ` + str + `/></xs:choice></xs:choice></xs:complexType></xs:element>`,
