@@ -272,7 +272,7 @@ func TestKeyrefChargesAgainstAnEmptyNodeTable(t *testing.T) {
 
 // A `@NameTest` field over an ANONYMOUS governing type reads that type's own
 // {attribute uses} for the same reason cvc-id does (icCheck.fieldAttributes
-// over walk.attributeType): the top-level declaration its ·expanded name·
+// over walk.attributeTyping): the top-level declaration its ·expanded name·
 // resolves to is not the ·governing type definition·, and a key-sequence member
 // compared under the wrong simple type is compared in the wrong ·value space·.
 // The two documents below are one duplicate under the top level's xs:integer
@@ -287,7 +287,7 @@ func TestFieldOverAnAnonymousTypeReadsItsOwnTypeAndNotTheTopLevelOne(t *testing.
 }
 
 // A `@NameTest` field reads the same ·governing type definition· cvc-id does
-// (icCheck.fieldAttributes over walk.attributeType), so an attribute a
+// (icCheck.fieldAttributes over walk.attributeTyping), so an attribute a
 // ***skip*** {attribute wildcard} admits lengthens no ·key-sequence· either
 // (#1043): neither ·target node· below has a key-sequence to be charged clause
 // 4.2.2 for.

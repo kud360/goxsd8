@@ -412,12 +412,14 @@
 // {referenced key}'s node table (4.3), with clause 3 charging a field that
 // selects more than one node whose ·governing type definition· is a simple type
 // definition or a complex type definition with {variety} simple, whatever their
-// values, or any node whose ·governing type definition· is neither. Two members
-// validated against different types, or against a union, are compared in the value
-// spaces of their ·primitive· datatypes, a union-typed member and each item of a
-// list of unions read by its own ·validating type· (§3.16.4). The node tables
-// clause 4.3 reads are §3.11.5's, assembled bottom-up as the walk leaves each
-// element and conflict-resolved on the way.
+// values, or any node that is not ·skipped· and whose ·governing type definition·
+// is neither or is ·absent·, as it is for a ·laxly assessed· element and for an
+// attribute with no ·governing attribute declaration·. Two members validated
+// against different types, or against a union, are compared in the value spaces of
+// their ·primitive· datatypes, a union-typed member and each item of a list of
+// unions read by its own ·validating type· (§3.16.4). The node tables clause 4.3
+// reads are §3.11.5's, assembled bottom-up as the walk leaves each element and
+// conflict-resolved on the way.
 //
 // The ninth is cvc-id (§3.3.4.5), charged at the ·validation root· alone
 // (cvc-elt clause 7): the [ID/IDREF table] of §3.17.5.2 is assembled across the

@@ -227,8 +227,9 @@ func (s *icSlot) filled() bool {
 }
 
 // icClause3 is which of cvc-identity-constraint clause 3's bounds a field's
-// node sequence broke first: none, a second simple-valued node, or a node of a
-// type clause 3 admits as none of its nodes.
+// node sequence broke first: none, a second simple-valued node, a node of a
+// type clause 3 admits as none of its nodes, or a node with no ·governing type
+// definition· at all.
 type icClause3 uint8
 
 const (
@@ -244,6 +245,10 @@ const (
 	// with {content type}.{variety} simple, one of clause 3's "other nodes",
 	// ·nilled· or not.
 	icClause3Other
+	// icClause3Absent is a node that is not ·skipped· and whose ·governing type
+	// definition· is ·absent·, one of clause 3's "other nodes"; the package
+	// doc's cvc-identity-constraint paragraph names which nodes those are.
+	icClause3Absent
 )
 
 // icKeyMember is one member of a ·key-sequence·: an ·actual value· in the value
@@ -432,21 +437,28 @@ func (c *icCheck) pendElement(t *icTarget, i int) {
 // of distinct NODES, so offering it twice would charge clause 3 for a field
 // like `@id|@*` that selects exactly one.
 //
-// An attribute whose ·governing type definition· [walk.attributeType] could not
-// name declines the slot rather than being skipped: the [schema actual value]
-// clause 3 reads is that type's, and comparing the member under the wrong
-// simple type decides clause 4.1 by the wrong ·value space·.
+// Each attribute is taken by the [attrExit] [walk.attributeTyping] reached it
+// by. An attrTyped one is offered. An attrUndetermined one declines the slot
+// rather than being passed by: the [schema actual value] clause 3 reads is its
+// type's, and comparing the member under the wrong simple type decides clause
+// 4.1 by the wrong ·value space·.
 //
-// A ·skipped· attribute is the OTHER absence and leaves the slot simply
-// unfilled: §3.11.4 clause 3's Note names a field evaluating to "a sequence
-// consisting only of ·skipped· or ·nilled· nodes" as leaving the ·key-sequence·
-// short, and a short one keeps its ·target node· out of the ·qualified node
-// set·, which for a key is [icFrame.keyOnly]'s clause 4.2.1 charge. The charge
-// is made and not withheld because the absence is the SPEC's and not this
-// processor's: [skippedAttribute] decides the ·attribution· through
-// cvc-wildcard rather than inferring it from the wildcard's presence, so an
-// attribute that wildcard does not admit is typed by key-governing-ad clause 3
-// instead and never arrives here as ·skipped·.
+// An attrAbsent one — not ·skipped·, and governed by no declaration, as an
+// attribute a ***lax*** {attribute wildcard} admits or none admits is where its
+// name ·resolves· to no top-level declaration — has an ·absent· ·governing type
+// definition·, and clause 3 admits it as none of its nodes: the slot is charged
+// at the attribute ([icSlot.absent]).
+//
+// An attrSkipped one leaves the slot simply unfilled: §3.11.4 clause 3's Note
+// names a field evaluating to "a sequence consisting only of ·skipped· or
+// ·nilled· nodes" as leaving the ·key-sequence· short, and a short one keeps
+// its ·target node· out of the ·qualified node set·, which for a key is
+// [icFrame.keyOnly]'s clause 4.2.1 charge. The charge is made and not withheld
+// because the absence is the SPEC's and not this processor's:
+// [skippedAttribute] decides the ·attribution· through cvc-wildcard rather than
+// inferring it from the wildcard's presence, so an attribute that wildcard does
+// not admit is resolved by key-governing-ad clause 3 instead and never arrives
+// here as ·skipped·.
 //
 // The ·defaulted attributes· of c's element are offered too, after the
 // attributes it carries ([icCheck.fieldDefaultedAttributes]).
@@ -456,16 +468,18 @@ func (c *icCheck) fieldAttributes(w *walk, t *icTarget, i int, sel icpath.Select
 		if !sel.SelectsAttribute(a.Name()) {
 			continue
 		}
-		st, typed := w.attributeType(c.g, a)
-		if !typed {
-			if skippedAttribute(w.schema, c.g.complexType(), a) {
-				continue
-			}
+		st, x := w.attributeTyping(c.g, a)
+		switch x {
+		case attrTyped:
+			m, present, decided := w.keyMember(st, a.Value(), elementContext{owner: c.e}, false, false)
+			t.offer(w, i, a.Name(), a.Loc(), m, present, decided)
+		case attrSkipped:
+			// Leaves the slot unfilled, as the doc states.
+		case attrAbsent:
+			t.slots[i].absent(a.Loc())
+		case attrUndetermined:
 			t.decline(w, i, a.Name(), a.Loc(), "its ·governing type definition· could not be determined")
-			continue
 		}
-		m, present, decided := w.keyMember(st, a.Value(), elementContext{owner: c.e}, false, false)
-		t.offer(w, i, a.Name(), a.Loc(), m, present, decided)
 	}
 	if ct := c.g.complexType(); ct != nil {
 		c.fieldDefaultedAttributes(w, t, i, sel, attrs, *ct)
@@ -584,15 +598,24 @@ func (w *walk) identityExit(c *icCheck) {
 }
 
 // fill records c's element as the field node it was selected as, from its own
-// ·governing type definition· and its own ·initial value·, in one of two arms
-// before any value is read.
+// ·governing type definition· and its own ·initial value·, in one of four arms,
+// three of them before any value is read.
 //
-// No ·governing type definition· at all (a {type table} carrying a {test} the
-// §3.12.6 evaluator declines, an unresolvable slot, an xsi:type whose
-// ·override· could not be decided, an element whose governance this walk could
-// not decide (undecided), or one ·laxly assessed· with no ·instance-specified type
-// definition·) declines rather than contribute a value, recorded as an
-// [Unevaluated] ([icTarget.decline]).
+// A ·governing type definition· this package could not determine
+// ([governance.typeUndetermined] names the shapes) declines the slot rather
+// than contribute a value, recorded as an [Unevaluated] ([icTarget.decline]).
+// GAP(validate): the decline withholds cvc-identity-constraint clauses 3 and 4
+// for that constraint ([icFrame.qualify] settles nothing past a declined slot,
+// and a keyref over its binding declines in turn), so it can only cost a
+// rejection. RULED permanent by #2174 (STYLE P3b), on [walk.idElement]'s
+// terms: it consumes the shapes that ruling keeps and retires with their last
+// producer.
+//
+// An element ·laxly assessed· with no ·instance-specified type definition·
+// ([governance.laxlyAssessed]) has an ·absent· ·governing type definition·
+// (key-lva clause 1, key-governing-type-elem's closing sentence), and is not
+// ·skipped·, so it is one of clause 3's "other nodes", and the slot is charged
+// for it ([icSlot.absent]).
 //
 // A determined one that is neither a simple type definition nor a complex type
 // with {content type}.{variety} simple — governance.valueType's nil — makes
@@ -617,8 +640,16 @@ func (c *icCheck) fill(w *walk) {
 	var m icKeyMember
 	present, decided := false, false
 	switch {
-	case c.g.typ == nil:
-		// decided stays false, which offer records as the decline.
+	case c.g.laxlyAssessed():
+		for _, p := range c.pending {
+			p.target.slots[p.index].absent(c.e.Loc())
+		}
+		return
+	case c.g.typeUndetermined():
+		for _, p := range c.pending {
+			p.target.decline(w, p.index, c.e.Name(), c.e.Loc(), "its ·governing type definition· could not be determined")
+		}
+		return
 	case c.g.valueType() == nil:
 		for _, p := range c.pending {
 			p.target.slots[p.index].other(c.e.Loc())
@@ -742,6 +773,13 @@ func (s *icSlot) other(loc xsderr.Loc) {
 	s.charge3(icClause3Other, loc)
 }
 
+// absent charges the slot for a field node at loc that is not ·skipped· and
+// whose ·governing type definition· is ·absent· (icClause3Absent), unless the
+// slot already carries a charge.
+func (s *icSlot) absent(loc xsderr.Loc) {
+	s.charge3(icClause3Absent, loc)
+}
+
 // charge3 records the slot's clause 3 charge as c at loc; the first charge
 // wins, and its loc is the one reported.
 func (s *icSlot) charge3(c icClause3, loc xsderr.Loc) {
@@ -810,7 +848,8 @@ func (c *icCheck) evaluate(w *walk) {
 // qualify is clause 4's ·qualified node set·: the members of the ·target node
 // set· whose ·key-sequence· is as long as {fields}. It charges clause 3 on the
 // way for a field that selected more than one node of a simple ·governing type
-// definition· or a node clause 3 admits as none of its nodes (icSlot.charge).
+// definition· or a node clause 3 admits as none of its nodes, one with an
+// ·absent· ·governing type definition· included (icSlot.charge).
 //
 // It reports ok=false where the frame must not settle any further clause: a
 // slot this processor declined (icSlot.declined), and a clause 3 charge, after
@@ -850,10 +889,16 @@ func (f *icFrame) qualify(w *walk, host Element) ([]*icTarget, bool) {
 // message is the format of the clause 3 charge c, over the ·target node·'s
 // name, the constraint's, the host's and the field's expression.
 func (c icClause3) message() string {
-	if c == icClause3Other {
+	switch c {
+	case icClause3Other:
 		return "element %s, a ·target node· of the identity constraint %s declared on %s, has its field %q select a node whose ·governing type definition· is neither a simple type definition nor a complex type definition with {variety} simple, which cvc-identity-constraint clause 3 admits as none of its nodes"
+	case icClause3Absent:
+		return "element %s, a ·target node· of the identity constraint %s declared on %s, has its field %q select a node whose ·governing type definition· is ·absent·, which cvc-identity-constraint clause 3 admits as none of its nodes"
+	case icClause3Valued:
+		return "element %s, a ·target node· of the identity constraint %s declared on %s, has its field %q select more than one node whose ·governing type definition· is a simple type definition or a complex type definition with {variety} simple, ·nilled· nodes and nodes with an ·absent· [schema actual value] included, but cvc-identity-constraint clause 3 admits at most one"
+	default:
+		panic("validate: icClause3.message: icClause3None is no charge")
 	}
-	return "element %s, a ·target node· of the identity constraint %s declared on %s, has its field %q select more than one node whose ·governing type definition· is a simple type definition or a complex type definition with {variety} simple, ·nilled· nodes and nodes with an ·absent· [schema actual value] included, but cvc-identity-constraint clause 3 admits at most one"
 }
 
 // duplicates is clause 4.1 for a unique and clause 4.2.2 for a key, which are

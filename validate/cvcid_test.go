@@ -620,7 +620,7 @@ func TestAnIDBelowALaxlyAssessedElementIsRead(t *testing.T) {
 }
 
 // An element whose governance was DECIDED keeps key-governing-ad (§3.2.4.2)
-// clause 3 for an attribute no use governs, so walk.attributeType's decline for
+// clause 3 for an attribute no use governs, so walk.attributeTyping's decline for
 // an undetermined ·governing type definition· reaches neither shape below
 // (#2192). A ·laxly assessed· <unknown> is assessed against xs:anyType, whose
 // {attribute wildcard} is lax (§3.4.7); a <num> its top-level declaration
