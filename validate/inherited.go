@@ -135,7 +135,7 @@ func handDown(schema *xsd.Schema, ct *xsd.ComplexType, at xsderr.Loc, attrs, inh
 // is ·attributed to· (clause 3.1), or where it is attributed to none, the
 // {inheritable} of its ·governing attribute declaration· (clause 3.2).
 //
-// The attribution is [walk.attributeTyping]'s (cvcid.go), arm for arm but one, and
+// The attribution is [walk.attributeTyping]'s (cvcid.go), arm for arm but two, and
 // reads the same three encodings: attributeUseNamed for clause 2.1's match,
 // skippedAttribute for the item key-governing-ad (§3.2.4.2) clause 3 leaves
 // with no declaration, and the top-level resolution for every other. The two
@@ -145,7 +145,7 @@ func handDown(schema *xsd.Schema, ct *xsd.ComplexType, at xsderr.Loc, attrs, inh
 // differ from its declaration's: a use's own inheritable attribute wins over
 // the declaration's (§3.2.2.3 ref.att.local).
 //
-// The one arm this does not share is attributeTyping's decline for an element
+// One arm this does not share is attributeTyping's decline for an element
 // whose ·governing type definition· this package could not determine
 // ([governance.typeUndetermined]): this reads such an element's attributes by
 // ·expanded name·, although key-governing-ad clause 2's ·context-determined
@@ -154,6 +154,11 @@ func handDown(schema *xsd.Schema, ct *xsd.ComplexType, at xsderr.Loc, attrs, inh
 // reads: every child of it, a ·nilled· one's included, is walked undecided
 // ([contentCheck.element], #2211). HandedDown is handed a type, never an
 // undetermined one.
+//
+// The other is attributeTyping's attrUndetermined exit for one of the four
+// §3.2.7 names whose ·expanded name· ·resolves· to no top-level declaration:
+// this reports such an attribute not ·potentially inherited·, as it does any
+// attribute that resolves to nothing.
 func inheritable(schema *xsd.Schema, ct *xsd.ComplexType, a Attribute) bool {
 	if ct != nil {
 		if u, matched := attributeUseNamed(ct.AttributeUses(), a.Name()); matched {

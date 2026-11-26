@@ -651,9 +651,11 @@ const (
 	attrAbsent
 	// attrUndetermined is an attribute whose ·governing type definition· this
 	// package could not determine: the element's own is undetermined
-	// ([governance.typeUndetermined]), the governing declaration's {type
-	// definition} is not a resolvable simple type, or the attribute is one of
-	// the four §3.2.7 names on a schema that declares none of them.
+	// ([governance.typeUndetermined]), the matching {attribute use}'s
+	// {attribute declaration} does not resolve, the governing declaration's
+	// {type definition} is not a resolvable simple type, or the attribute bears
+	// one of the four §3.2.7 names and its ·expanded name· ·resolves· to no
+	// top-level declaration (attributeTyping's GAP).
 	attrUndetermined
 )
 
