@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"maps"
 	"math/rand/v2"
 	"reflect"
 	"slices"
@@ -452,7 +453,7 @@ func idInstance(names []string) []byte {
 // seeded, kept where Finalize accepts the model, codegen holds the content
 // particle in an occurrence field, a sequence whose item holds at least one
 // nested model group particle and only nested sequences codegen splices, at
-// any depth, so that reflect builds the item's struct (splicedFields), and
+// any depth, so that reflect builds the item's struct (memberFields), and
 // Append encodes the type, each with random valid instances decoded into it.
 // Each decoded value is appended, and the written bytes are checked
 // independently by validate's verdict, which must accept them, and by
@@ -481,8 +482,8 @@ func TestAppendOccurrenceRoundTripDifferential(t *testing.T) {
 		if hold, err := goshape.ParticleHold(schema, group, content.Particle.Occurs()); err != nil || hold != goshape.Occurrence {
 			continue
 		}
-		fields, structured := splicedFields(t, schema, group, top, goname.NewNamer())
-		if !structured {
+		fields, _, why := memberFields(t, schema, group, top, goname.NewNamer(), nil, nil)
+		if why != "" || flattenedFields(fields) > 0 {
 			continue
 		}
 		rt := reflect.StructOf([]reflect.StructField{{Name: "Sequence", Type: shapedType(top.min, top.max, reflect.StructOf(fields))}})
@@ -521,18 +522,26 @@ func TestAppendOccurrenceRoundTripDifferential(t *testing.T) {
 	t.Logf("%d models of %d drawn, %d instances appended and decoded back", models, tries, instances)
 }
 
-// splicedFields returns the fields of the struct codegen emits for one
-// occurrence of group, the model group of n, a random sequence's, and true,
-// where each of its particles is an element, a wildcard or a nested sequence
-// goshape.ParticleHold answers Spliced for, whose own particles are so in
-// turn, at any depth: each element's and wildcard's field in particle order,
-// a spliced sequence's in its place, named from names, one Namer, as codegen
-// claims the fields of every particle its spliced returns (codegen/doc.go
-// "# Naming").
-func splicedFields(t *testing.T, schema *xsd.Schema, group xsd.ModelGroup, n *rnode, names *goname.Namer) ([]reflect.StructField, bool) {
+// memberFields appends to fields the fields of the struct codegen emits for
+// one occurrence of group, the model group of n, a random sequence's, and to
+// ends, for each field, the end in the reach of n's root (rnode.reachOf) of
+// the leaves its member holds, each field's first leaf the previous field's
+// end, and returns both and the empty reason, where each of n's particles is
+// an element, a wildcard, a nested sequence goshape.ParticleHold answers
+// Spliced for, whose own particles are so in turn, at any depth, or a nested
+// particle it answers Flattened for: each element's and wildcard's field in
+// particle order, holding its one leaf, a spliced sequence's in its place,
+// and a flattened particle's []rfItem, holding its whole reach, named from
+// names, one Namer, as codegen claims the fields of every particle its
+// spliced returns (codegen/doc.go "# Naming"). Otherwise the reason names the
+// first nested particle's hold that is none of these.
+func memberFields(t *testing.T, schema *xsd.Schema, group xsd.ModelGroup, n *rnode, names *goname.Namer, fields []reflect.StructField, ends []int) ([]reflect.StructField, []int, string) {
 	t.Helper()
-	var fields []reflect.StructField
 	for i, k := range n.kids {
+		end := 0
+		if len(ends) > 0 {
+			end = ends[len(ends)-1]
+		}
 		p := group.Particles()[i]
 		switch k.kind {
 		case "elem", "wild":
@@ -541,6 +550,7 @@ func splicedFields(t *testing.T, schema *xsd.Schema, group xsd.ModelGroup, n *rn
 				v, local = reflect.TypeFor[anyElement](), "any"
 			}
 			fields = append(fields, reflect.StructField{Name: names.Claim(local), Type: shapedType(k.min, k.max, v)})
+			ends = append(ends, end+1)
 			continue
 		}
 		inner, _, err := goshape.ModelGroupTerm(schema, p.Term())
@@ -551,16 +561,34 @@ func splicedFields(t *testing.T, schema *xsd.Schema, group xsd.ModelGroup, n *rn
 		if err != nil {
 			t.Fatal(err)
 		}
-		if k.kind != "sequence" || hold != goshape.Spliced {
-			return nil, false
+		switch hold {
+		case goshape.Spliced:
+			var why string
+			if fields, ends, why = memberFields(t, schema, inner, k, names, fields, ends); why != "" {
+				return nil, nil, why
+			}
+		case goshape.Flattened:
+			fields = append(fields, reflect.StructField{Name: names.Claim(k.kind), Type: reflect.TypeFor[[]rfItem]()})
+			ends = append(ends, end+len(k.reachOf(nil, nil)))
+		case goshape.OnceChoice:
+			return nil, nil, "a nested choice held once"
+		default:
+			return nil, nil, "a nested " + k.kind + " held as an occurrence field"
 		}
-		got, ok := splicedFields(t, schema, inner, k, names)
-		if !ok {
-			return nil, false
-		}
-		fields = append(fields, got...)
 	}
-	return fields, true
+	return fields, ends, ""
+}
+
+// flattenedFields returns how many of fields, memberFields', are a flattened
+// particle's.
+func flattenedFields(fields []reflect.StructField) int {
+	n := 0
+	for _, f := range fields {
+		if f.Type == reflect.TypeFor[[]rfItem]() {
+			n++
+		}
+	}
+	return n
 }
 
 // idsOf returns the child indices an item holds in field order: each string
@@ -643,6 +671,30 @@ var rfTies = map[string][]rfItem{
 	"a": {RfItemA{}, RfItemA2{}, RfItemA3{}, RfItemA4{}},
 	"b": {RfItemB{}, RfItemB2{}, RfItemB3{}, RfItemB4{}},
 	"c": {RfItemC{}, RfItemC2{}, RfItemC3{}, RfItemC4{}},
+}
+
+// placeBranches places at each of leaves[first:end], a flattened particle's
+// reach, its rfItem branch, rfAny for the wildcard and rfTies' for an
+// element, and returns them in reach order and true, or false where the
+// reach holds more element particles of one name than rfTies has branches.
+func placeBranches(leaves []flatLeaf, first, end int) ([]rfItem, bool) {
+	var branches []rfItem
+	ranks := map[string]int{}
+	for i := first; i < end; i++ {
+		l := leaves[i]
+		if l.node.kind == "wild" {
+			leaves[i].branch = rfAny{}
+			branches = append(branches, leaves[i].branch)
+			continue
+		}
+		if ranks[l.node.name] == len(rfTies[l.node.name]) {
+			return nil, false
+		}
+		leaves[i].branch = rfTies[l.node.name][ranks[l.node.name]]
+		branches = append(branches, leaves[i].branch)
+		ranks[l.node.name]++
+	}
+	return branches, true
 }
 
 // flatLeaf is one basic particle of a random model's reach: node, its
@@ -746,16 +798,25 @@ func drawItems(rng *rand.Rand, top *rnode, leaves []flatLeaf) []flatItem {
 // randomItem returns an item of leaves[leaf], its name drawn from
 // rfWildNames for the wildcard.
 func randomItem(rng *rand.Rand, leaves []flatLeaf, leaf int) flatItem {
+	if leaves[leaf].node.kind == "wild" {
+		return flatItem{leaf: leaf, name: rfWildNames[rng.IntN(len(rfWildNames))]}
+	}
+	return firstItem(leaves, leaf)
+}
+
+// firstItem returns the item of leaves[leaf] of its first name: the
+// element's own, rfWildNames' first for the wildcard.
+func firstItem(leaves []flatLeaf, leaf int) flatItem {
 	n := leaves[leaf].node
 	if n.kind == "wild" {
-		return flatItem{leaf: leaf, name: rfWildNames[rng.IntN(len(rfWildNames))]}
+		return flatItem{leaf: leaf, name: rfWildNames[0]}
 	}
 	return flatItem{leaf: leaf, name: xsd.QName{Space: "urn:s", Local: n.name}}
 }
 
 // flatValue returns the value of rt, rfSequence or rfChoice, whose slice
-// holds items, each in its leaf's branch, the text of each child its index,
-// and is nil for no item, as Decode returns it.
+// holds items, each in its leaf's branch (branchValue), the text of each
+// child its index, and is nil for no item, as Decode returns it.
 func flatValue(rt reflect.Type, leaves []flatLeaf, items []flatItem) reflect.Value {
 	v := reflect.New(rt).Elem()
 	if len(items) == 0 {
@@ -763,18 +824,27 @@ func flatValue(rt reflect.Type, leaves []flatLeaf, items []flatItem) reflect.Val
 	}
 	slice := reflect.MakeSlice(reflect.TypeFor[[]rfItem](), len(items), len(items))
 	for i, it := range items {
-		b := reflect.New(reflect.TypeOf(leaves[it.leaf].branch)).Elem()
-		text := strconv.Itoa(i)
-		if leaves[it.leaf].node.kind == "wild" {
-			b.Field(0).Set(reflect.ValueOf(anyElement{Space: it.name.Space, Local: it.name.Local, Content: anyType{Text: text}}))
-		}
-		if leaves[it.leaf].node.kind == "elem" {
-			b.Field(0).SetString(text)
-		}
-		slice.Index(i).Set(b)
+		slice.Index(i).Set(branchValue(leaves, it, strconv.Itoa(i)))
 	}
 	v.Field(0).Set(slice)
 	return v
+}
+
+// branchValue returns the value of it's leaf's branch holding the child
+// leafValue returns.
+func branchValue(leaves []flatLeaf, it flatItem, text string) reflect.Value {
+	b := reflect.New(reflect.TypeOf(leaves[it.leaf].branch)).Elem()
+	b.Field(0).Set(leafValue(leaves, it, text))
+	return b
+}
+
+// leafValue returns the child it writes, of text text: the string of an
+// element's, the anyElement of the wildcard's, of it's name.
+func leafValue(leaves []flatLeaf, it flatItem, text string) reflect.Value {
+	if leaves[it.leaf].node.kind == "wild" {
+		return reflect.ValueOf(anyElement{Space: it.name.Space, Local: it.name.Local, Content: anyType{Text: text}})
+	}
+	return reflect.ValueOf(text)
 }
 
 // TestAppendFlattenedDifferential holds Append's flattened content
@@ -815,22 +885,7 @@ func TestAppendFlattenedDifferential(t *testing.T) {
 			continue
 		}
 		leaves := top.reachOf(nil, nil)
-		branches, covered := make([]rfItem, len(leaves)), true
-		ranks := map[string]int{}
-		for i, l := range leaves {
-			if l.node.kind == "wild" {
-				branches[i] = rfAny{}
-				leaves[i].branch = branches[i]
-				continue
-			}
-			if ranks[l.node.name] == len(rfTies[l.node.name]) {
-				covered = false
-				break
-			}
-			branches[i] = rfTies[l.node.name][ranks[l.node.name]]
-			leaves[i].branch = branches[i]
-			ranks[l.node.name]++
-		}
+		branches, covered := placeBranches(leaves, 0, len(leaves))
 		if !covered {
 			wideTie++
 			continue
@@ -875,6 +930,231 @@ func TestAppendFlattenedDifferential(t *testing.T) {
 		}
 	}
 	t.Logf("%d models kept of %d drawn; not covered: %d with more than 4 element particles of one name, %d CheckAppend declines", models, tries, wideTie, declined)
+	for i, n := range verdicts {
+		t.Logf("%d draws %s", n, verdictNames[i])
+	}
+	if models == 0 || slices.Contains(verdicts[:], 0) {
+		t.Fatalf("%d models kept, verdict counts %v: want each above 0", models, verdicts)
+	}
+}
+
+// holdsFlattened reports whether a nested particle of group, the model group
+// of n, is one goshape.ParticleHold answers Flattened for, at any depth
+// outside such a particle's reach.
+func holdsFlattened(t *testing.T, schema *xsd.Schema, group xsd.ModelGroup, n *rnode) bool {
+	t.Helper()
+	for i, k := range n.kids {
+		if len(k.kids) == 0 {
+			continue
+		}
+		p := group.Particles()[i]
+		inner, _, err := goshape.ModelGroupTerm(schema, p.Term())
+		if err != nil {
+			t.Fatal(err)
+		}
+		hold, err := goshape.ParticleHold(schema, inner, p.Occurs())
+		if err != nil {
+			t.Fatal(err)
+		}
+		if hold == goshape.Flattened || holdsFlattened(t, schema, inner, k) {
+			return true
+		}
+	}
+	return false
+}
+
+// fieldLeaves returns the bounds in the reach of the leaves field i of
+// memberFields' struct holds, ends its ends.
+func fieldLeaves(ends []int, i int) (first, end int) {
+	if i > 0 {
+		first = ends[i-1]
+	}
+	return first, ends[i]
+}
+
+// nestedValue returns the value of rt, the struct memberFields builds, whose
+// field i holds the leaves fieldLeaves bounds, holding items,
+// and the children Append writes from it, in field order (writeMembers):
+// each field's items in draw order, a flattened particle's each in its
+// leaf's branch (branchValue), an element's or wildcard's (leafValue) cut to
+// the one item a pointer or a bare field holds, a bare field's missing one
+// its leaf's firstItem; the text of each child its index among them, and a
+// field of no item nil, as Decode returns it.
+func nestedValue(rt reflect.Type, ends []int, leaves []flatLeaf, items []flatItem) (reflect.Value, []flatItem) {
+	v := reflect.New(rt).Elem()
+	var written []flatItem
+	for i := range ends {
+		first, end := fieldLeaves(ends, i)
+		var held []flatItem
+		for _, it := range items {
+			if it.leaf >= first && it.leaf < end {
+				held = append(held, it)
+			}
+		}
+		f := v.Field(i)
+		flat := f.Type() == reflect.TypeFor[[]rfItem]()
+		switch {
+		case f.Kind() == reflect.Pointer:
+			held = held[:min(len(held), 1)]
+		case f.Kind() != reflect.Slice && len(held) == 0:
+			held = []flatItem{firstItem(leaves, first)}
+		case f.Kind() != reflect.Slice:
+			held = held[:1]
+		}
+		if len(held) == 0 {
+			continue
+		}
+		vals := make([]reflect.Value, len(held))
+		for k, it := range held {
+			text := strconv.Itoa(len(written))
+			vals[k] = leafValue(leaves, it, text)
+			if flat {
+				vals[k] = branchValue(leaves, it, text)
+			}
+			written = append(written, it)
+		}
+		switch f.Kind() {
+		case reflect.Slice:
+			f.Set(reflect.MakeSlice(f.Type(), len(vals), len(vals)))
+			for k, x := range vals {
+				f.Index(k).Set(x)
+			}
+		case reflect.Pointer:
+			f.Set(reflect.New(f.Type().Elem()))
+			f.Elem().Set(vals[0])
+		default:
+			f.Set(vals[0])
+		}
+	}
+	return v, written
+}
+
+// TestAppendNestedFlattenedDifferential holds Append's nested flattened
+// particle, boundFlatSlice.writeMember through writeMembers, to
+// xsd.Schema.ContentMatcher on both sides, as TestAppendFlattenedDifferential
+// holds the flattened content {particle} (§3.9.4.3 cvc-accept clause 3.3,
+// §3.8.4.3 cvc-model-group, §3.10.4.1 cvc-wildcard): over random content
+// models drawn as TestOccurrencePartitionDifferential draws them, seeded,
+// kept where Finalize accepts the model, goshape.ParticleHold answers Spliced
+// for its content {particle}, a sequence one of whose nested particles it
+// answers Flattened for, reflect builds codegen's struct (memberFields) with
+// exactly one such particle, the rfItem family covers that particle's reach,
+// and CheckAppend admits the struct under the WithBranches set placing it
+// (encodeStatic, CheckAppend's answer), each with random draws of items
+// (drawItems) held in the struct's fields (nestedValue). On each draw,
+// errors.Is(err, ErrInvalidValue) on Append's answer must equal the Matcher's
+// reject (matcherVerdict) on the children nestedValue states Append writes,
+// any other error failing, and each accepted draw's bytes must decode, under
+// the same set, to the value appended. A model whose content {particle}
+// ParticleHold answers Occurrence for, a sequence, is built as its occurrence
+// field and must be declined by item 4 of Append's doc. The log counts the
+// models kept, the declines by construct and the content {particle}'s hold,
+// the models holding a nested flattened particle not built, by reason, and
+// the draws of each verdict; the test fails where the kept models or a
+// verdict count 0.
+func TestAppendNestedFlattenedDifferential(t *testing.T) {
+	rng := rand.New(rand.NewPCG(4153, 1))
+	models, tries := 0, 0
+	unbuilt, declined := map[string]int{}, map[string]int{}
+	var verdicts [len(verdictNames)]int
+	for ; tries < 20000; tries++ {
+		wilds := 0
+		top := genModel(rng, 0, &wilds)
+		schema, ok := randomSchema(`<xs:element name="r"><xs:complexType>` + top.xsdOf() + `</xs:complexType></xs:element>`)
+		if !ok {
+			continue
+		}
+		decl, _ := schema.Element(rootName)
+		td, _ := schema.ResolvedType(decl.TypeDefinition())
+		ct := td.(xsd.ComplexType)
+		content := ct.ContentType().(xsd.ElementContent)
+		group, _, err := goshape.ModelGroupTerm(schema, content.Particle.Term())
+		if err != nil {
+			t.Fatal(err)
+		}
+		hold, err := goshape.ParticleHold(schema, group, content.Particle.Occurs())
+		if err != nil {
+			t.Fatal(err)
+		}
+		if hold == goshape.Flattened || !holdsFlattened(t, schema, group, top) {
+			continue
+		}
+		if top.kind == "choice" && hold == goshape.OnceChoice {
+			unbuilt["a content choice held once"]++
+			continue
+		}
+		if top.kind == "choice" {
+			unbuilt["a content choice held as an occurrence field"]++
+			continue
+		}
+		fields, ends, why := memberFields(t, schema, group, top, goname.NewNamer(), nil, nil)
+		if why != "" {
+			unbuilt[why]++
+			continue
+		}
+		if flattenedFields(fields) > 1 {
+			unbuilt["two or more flattened particles"]++
+			continue
+		}
+		leaves := top.reachOf(nil, nil)
+		first, end := fieldLeaves(ends, slices.IndexFunc(fields, func(f reflect.StructField) bool { return f.Type == reflect.TypeFor[[]rfItem]() }))
+		branches, covered := placeBranches(leaves, first, end)
+		if !covered {
+			unbuilt["more than 4 element particles of one name in the reach"]++
+			continue
+		}
+		rt := reflect.StructOf(fields)
+		if hold == goshape.Occurrence {
+			rt = reflect.StructOf([]reflect.StructField{{Name: "Sequence", Type: shapedType(top.min, top.max, rt)}})
+		}
+		opts := []Option{WithBranches(branches...)}
+		_, _, _, err = encodeStatic(schema, rootName, rt, newConfig(opts))
+		var de *DeclineError
+		if errors.As(err, &de) {
+			declined[fmt.Sprintf("%s, the content {particle} held %s", de.Construct(), [...]string{goshape.Spliced: "spliced", goshape.Occurrence: "as an occurrence field"}[hold])]++
+			continue
+		}
+		if err != nil {
+			t.Fatalf("model %s: CheckAppend = %v, want nil or a *DeclineError", top.xsdOf(), err)
+		}
+		if hold == goshape.Occurrence {
+			t.Fatalf("model %s: CheckAppend admits the occurrence field of a nested flattened particle, which the test draws no value of", top.xsdOf())
+		}
+		models++
+		for range 12 {
+			v, written := nestedValue(rt, ends, leaves, drawItems(rng, top, leaves))
+			m, ok := schema.ContentMatcher(ct)
+			if !ok {
+				t.Fatalf("model %s: ContentMatcher declines a model CheckAppend admits", top.xsdOf())
+			}
+			verdict := matcherVerdict(m, leaves, written)
+			verdicts[verdict]++
+			data, err := encodeValue(nil, schema, strict.New(), rootName, v, opts)
+			if err != nil && !errors.Is(err, ErrInvalidValue) {
+				t.Fatalf("model %s, children %v: Append = %v, want nil or ErrInvalidValue", top.xsdOf(), written, err)
+			}
+			if errors.Is(err, ErrInvalidValue) != (verdict != verdictAccept) {
+				t.Fatalf("model %s, children %v: Append = %v, the Matcher's verdict is %s", top.xsdOf(), written, err, verdictNames[verdict])
+			}
+			if err != nil {
+				continue
+			}
+			back := reflect.New(rt).Elem()
+			if err := decodeValue(schema, strict.New(), data, back, opts); err != nil {
+				t.Fatalf("model %s, children %v: Decode(%s) = %v", top.xsdOf(), written, data, err)
+			}
+			if !reflect.DeepEqual(unscoped(back.Interface()), unscoped(v.Interface())) {
+				t.Fatalf("model %s, children %v: Decode(%s) = %#v, Append wrote %#v", top.xsdOf(), written, data, back.Interface(), v.Interface())
+			}
+		}
+	}
+	t.Logf("%d models kept of %d drawn", models, tries)
+	for _, k := range slices.Sorted(maps.Keys(declined)) {
+		t.Logf("%d CheckAppend declines: %s", declined[k], k)
+	}
+	for _, k := range slices.Sorted(maps.Keys(unbuilt)) {
+		t.Logf("%d not built: %s", unbuilt[k], k)
+	}
 	for i, n := range verdicts {
 		t.Logf("%d draws %s", n, verdictNames[i])
 	}
