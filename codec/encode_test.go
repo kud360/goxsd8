@@ -4991,7 +4991,9 @@ func TestAppendValueConstraint(t *testing.T) {
 // <xs:all/>; allGroupSchema's all(<element ref> to the head a, b), the head's
 // field the sealed interface over its substitution group; allUnionSchema's
 // all(b of the union u, a); allPDSchema's all(p of xs:precisionDecimal, a);
-// and allIDSchema's all(e of xs:ID, ref of xs:IDREF).
+// allOccGroupSchema, allOccUnionSchema and allOccPDSchema each the all group
+// of the one before with {min occurs} 0, held in an occurrence field; and
+// allIDSchema's all(e of xs:ID, ref of xs:IDREF).
 const (
 	allBASchema           = `<xs:element name="r"><xs:complexType><xs:all><xs:element name="b" type="xs:int"/><xs:element name="a" type="xs:string"/></xs:all></xs:complexType></xs:element>`
 	allSkipFirstSchema    = `<xs:element name="r"><xs:complexType><xs:all><xs:any processContents="skip"/><xs:element name="a" type="xs:string"/></xs:all></xs:complexType></xs:element>`
@@ -5000,14 +5002,20 @@ const (
 	allEmptySchema        = `<xs:element name="r"><xs:complexType><xs:all/></xs:complexType></xs:element>`
 	allGroupSchema        = `<xs:element name="a" type="xs:string"/><xs:element name="m" type="xs:string" substitutionGroup="s:a"/>
 		<xs:element name="r"><xs:complexType><xs:all><xs:element ref="s:a"/><xs:element name="b" type="xs:string"/></xs:all></xs:complexType></xs:element>`
-	allUnionSchema = unionTypes + `<xs:element name="r"><xs:complexType><xs:all><xs:element name="b" type="s:u"/><xs:element name="a" type="xs:string"/></xs:all></xs:complexType></xs:element>`
-	allPDSchema    = `<xs:element name="r"><xs:complexType><xs:all><xs:element name="p" type="xs:precisionDecimal"/><xs:element name="a" type="xs:string"/></xs:all></xs:complexType></xs:element>`
-	allIDSchema    = `<xs:element name="r"><xs:complexType><xs:all><xs:element name="e" type="xs:ID"/><xs:element name="ref" type="xs:IDREF"/></xs:all></xs:complexType></xs:element>`
+	allUnionSchema    = unionTypes + `<xs:element name="r"><xs:complexType><xs:all><xs:element name="b" type="s:u"/><xs:element name="a" type="xs:string"/></xs:all></xs:complexType></xs:element>`
+	allPDSchema       = `<xs:element name="r"><xs:complexType><xs:all><xs:element name="p" type="xs:precisionDecimal"/><xs:element name="a" type="xs:string"/></xs:all></xs:complexType></xs:element>`
+	allOccGroupSchema = `<xs:element name="a" type="xs:string"/><xs:element name="m" type="xs:string" substitutionGroup="s:a"/>
+		<xs:element name="r"><xs:complexType><xs:all minOccurs="0"><xs:element ref="s:a"/><xs:element name="b" type="xs:string"/></xs:all></xs:complexType></xs:element>`
+	allOccUnionSchema = unionTypes + `<xs:element name="r"><xs:complexType><xs:all minOccurs="0"><xs:element name="b" type="s:u"/><xs:element name="a" type="xs:string"/></xs:all></xs:complexType></xs:element>`
+	allOccPDSchema    = `<xs:element name="r"><xs:complexType><xs:all minOccurs="0"><xs:element name="p" type="xs:precisionDecimal"/><xs:element name="a" type="xs:string"/></xs:all></xs:complexType></xs:element>`
+	allIDSchema       = `<xs:element name="r"><xs:complexType><xs:all><xs:element name="e" type="xs:ID"/><xs:element name="ref" type="xs:IDREF"/></xs:all></xs:complexType></xs:element>`
 )
 
 // The types codegen emits for the schemas above, which item 5 of Append's
 // doc holds each to: allSkipFirst is allSkipFirstSchema's R and the item of
-// allOccSkipFirstSchema's occurrence field.
+// allOccSkipFirstSchema's occurrence field, and allGroup, allUnion and allPD
+// are the items of allOccGroupSchema's, allOccUnionSchema's and
+// allOccPDSchema's.
 type (
 	allBA struct {
 		B int32
@@ -5034,7 +5042,10 @@ type (
 		P tPrecisionDecimal
 		A string
 	}
-	allID struct{ E, Ref string }
+	allID       struct{ E, Ref string }
+	allOccGroup struct{ All *allGroup }
+	allOccUnion struct{ All *allUnion }
+	allOccPD    struct{ All *allPD }
 )
 
 // TestAppendAll pins the all group "# What encodes" admits, spliced and held
@@ -5055,8 +5066,9 @@ type (
 // package, and with boundSequenceItem.writeItem doing so the occurrence row
 // alone. A value Decode returns for a permuted document re-encodes in
 // {particles} order. A sealed-interface field (a substitution group's, a
-// union's, xs:precisionDecimal's) and an xs:ID and xs:IDREF pair, which Append
-// assesses (cvc-id), are written inside an all group as anywhere else.
+// union's, xs:precisionDecimal's), spliced and in an occurrence field, and an
+// xs:ID and xs:IDREF pair, which Append assesses (cvc-id), are written inside
+// an all group as anywhere else.
 func TestAppendAll(t *testing.T) {
 	w := anyElement{Space: "urn:o", Local: "w"}
 	second := anyElement{Space: "urn:s", Local: "a", Content: anyType{Text: "y"}}
@@ -5134,6 +5146,17 @@ func TestAppendAll(t *testing.T) {
 			return samePD(a.P, b.P) && a.A == b.A
 		}, pdArms)
 	})
+	t.Run("an occurrence field's substitution group interface", func(t *testing.T) {
+		roundTrip(t, schemaOf(t, allOccGroupSchema), rootName, allOccGroup{All: &allGroup{A: grpAGroupM{M: "y"}, B: "b"}}, `<r xmlns="urn:s"><m>y</m><b>b</b></r>`, deepEqual[allOccGroup], grpBranches)
+	})
+	t.Run("an occurrence field's union interface", func(t *testing.T) {
+		roundTrip(t, schemaOf(t, allOccUnionSchema), rootName, allOccUnion{All: &allUnion{B: unionUDate(unionDateOf(2000, 1, 2)), A: "x"}}, `<r xmlns="urn:s"><b>2000-01-02</b><a>x</a></r>`, sameUnion[allOccUnion], unionVariants...)
+	})
+	t.Run("an occurrence field's xs:precisionDecimal", func(t *testing.T) {
+		roundTrip(t, schemaOf(t, allOccPDSchema), rootName, allOccPD{All: &allPD{P: tPrecisionDecimal{tPDNotANumber{}}, A: "x"}}, `<r xmlns="urn:s"><p>NaN</p><a>x</a></r>`, func(a, b allOccPD) bool {
+			return a.All != nil && b.All != nil && samePD(a.All.P, b.All.P) && a.All.A == b.All.A
+		}, pdArms)
+	})
 	t.Run("an xs:ID and an xs:IDREF", func(t *testing.T) {
 		roundTrip(t, schemaOf(t, allIDSchema), rootName, allID{E: "i", Ref: "i"}, `<r xmlns="urn:s"><e>i</e><ref>i</ref></r>`, deepEqual[allID])
 	})
@@ -5156,13 +5179,12 @@ func decodedAs[T any](t *testing.T, schema *xsd.Schema, body string, want T) T {
 	return v
 }
 
-// TestAppendAllInvalid pins item 6 of Append's doc for an all group's
-// required particle whose field is unset, spliced and in an occurrence
-// field's item: a slice of {min occurs} 1 holding no item and a nil
-// substitution group interface. Each error opens as shown and Append returns
-// dst unextended; with writeOccurring's length check removed the two slice
-// rows fail, Append returning no error, and no other row of this test or
-// TestAppendAll does. Then item 8 for cvc-id: an xs:IDREF naming no xs:ID.
+// TestAppendAllInvalid pins item 6 of Append's doc for an all group's required particle
+// whose field is unset, spliced and in an occurrence field's item: a slice of {min occurs}
+// 1 holding no item and a nil substitution group interface, each in both places. Each
+// error opens as shown and Append returns dst unextended; with writeOccurring's length
+// check removed the two slice rows fail, Append returning no error, and no other row of
+// this test or TestAppendAll does. Then item 8 for cvc-id: an xs:IDREF naming no xs:ID.
 func TestAppendAllInvalid(t *testing.T) {
 	pre := []byte("pre")
 	for _, row := range []struct {
@@ -5179,6 +5201,9 @@ func TestAppendAllInvalid(t *testing.T) {
 		{"a nil substitution group interface", func(t *testing.T) ([]byte, error) {
 			return appendChecked(t, pre, schemaOf(t, allGroupSchema), strict.New(), rootName, allGroup{B: "b"}, grpBranches)
 		}, "codec: Append: allGroup.A is nil"},
+		{"an occurrence field's nil substitution group interface", func(t *testing.T) ([]byte, error) {
+			return appendChecked(t, pre, schemaOf(t, allOccGroupSchema), strict.New(), rootName, allOccGroup{All: &allGroup{B: "b"}}, grpBranches)
+		}, "codec: Append: allOccGroup.All.A is nil"},
 	} {
 		t.Run(row.name, func(t *testing.T) {
 			got, err := row.run(t)
