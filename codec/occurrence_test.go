@@ -59,7 +59,7 @@ const (
 // for occOptSchema, over occChoice's interface, occWildMany for
 // occWildManySchema and occSkipSchema, occPick for occPickSchema,
 // occWildAltSchema and occWildOptSchema, and occWild, occPtr, occPart,
-// occInner and occFixed for the schemas so named.
+// occInner, occFixed and occGroupAlt for the schemas so named.
 type (
 	occSeq     struct{ Sequence []occSeqItem }
 	occSeqItem struct{ A, B string }
@@ -106,23 +106,31 @@ type (
 	occFixedItem interface{ isOccFixedItem() }
 	occFixedA    struct{ A []string }
 	occFixedB    struct{ B string }
+
+	occGroupAlt     struct{ Choice []occGroupAltItem }
+	occGroupAltItem interface{ isOccGroupAltItem() }
+	occGroupAltSeq  struct{ A string }
+	occGroupAltB    struct{ B string }
 )
 
-func (occChoiceA) isOccChoiceItem() {}
-func (occChoiceB) isOccChoiceItem() {}
-func (occPickA) isOccPickItem()     {}
-func (occPickAny) isOccPickItem()   {}
-func (occInnerA) isOccInnerChoice() {}
-func (occInnerB) isOccInnerChoice() {}
-func (occFixedA) isOccFixedItem()   {}
-func (occFixedB) isOccFixedItem()   {}
+func (occChoiceA) isOccChoiceItem()       {}
+func (occChoiceB) isOccChoiceItem()       {}
+func (occPickA) isOccPickItem()           {}
+func (occPickAny) isOccPickItem()         {}
+func (occInnerA) isOccInnerChoice()       {}
+func (occInnerB) isOccInnerChoice()       {}
+func (occFixedA) isOccFixedItem()         {}
+func (occFixedB) isOccFixedItem()         {}
+func (occGroupAltSeq) isOccGroupAltItem() {}
+func (occGroupAltB) isOccGroupAltItem()   {}
 
 // The branch sets of the occurrence types' interfaces.
 var (
-	occChoiceBranches = WithBranches[occChoiceItem](occChoiceA{}, occChoiceB{})
-	occPickBranches   = WithBranches[occPickItem](occPickA{}, occPickAny{})
-	occInnerBranches  = WithBranches[occInnerChoice](occInnerA{}, occInnerB{})
-	occFixedBranches  = WithBranches[occFixedItem](occFixedA{}, occFixedB{})
+	occChoiceBranches   = WithBranches[occChoiceItem](occChoiceA{}, occChoiceB{})
+	occPickBranches     = WithBranches[occPickItem](occPickA{}, occPickAny{})
+	occInnerBranches    = WithBranches[occInnerChoice](occInnerA{}, occInnerB{})
+	occFixedBranches    = WithBranches[occFixedItem](occFixedA{}, occFixedB{})
+	occGroupAltBranches = WithBranches[occGroupAltItem](occGroupAltSeq{}, occGroupAltB{})
 )
 
 // TestOccurrenceTypesAreCodegens pins the types above to those codegen emits
@@ -262,10 +270,17 @@ func TestDecodeOccurrenceItemDeclines(t *testing.T) {
 // two items, the nil []S of a sequence with {min occurs} 0, a []I of an
 // unbounded choice and of one whose alternative occurs exactly twice, so that
 // two items of it write four elements of one name, a *S and a bare I, nil
-// meaning absent, and a <group ref>; and two items of a sequence with {min
+// meaning absent, a <group ref>, and two items of a sequence with {min
 // occurs} 2, a skip wildcard's element in the first, under one attribution
-// check across both. Validate accepts each document and Decode returns the
-// value.
+// check across both. A []I of a choice one of whose alternatives has {min
+// occurs} 0, an element's, a sequence's or a wildcard's, holds fewer items
+// than the choice's {min occurs} where the occurrences it lacks match the
+// empty sequence through that alternative (§3.9.4.3 cvc-accept 3.1-3.3,
+// §3.9.6.3 cos-group-emptiable clause 2 via §3.8.6.6 cos-choice-range): one
+// item of each choice occurring 2 to 3 times, the two over a wildcard under
+// the content's attribution check, and none of one occurring 1 to unbounded
+// times, each the slice Decode returns. Validate accepts each document and
+// Decode returns the value.
 func TestAppendOccurrence(t *testing.T) {
 	const r = `<r xmlns="urn:s">`
 	for _, row := range []struct {
@@ -307,6 +322,22 @@ func TestAppendOccurrence(t *testing.T) {
 		{"a skip wildcard in a sequence occurring at least twice", func(t *testing.T) {
 			v := occWildMany{Sequence: []occWildManyItem{{A: "1", Any: []anyElement{{Space: "urn:o", Local: "w"}}}, {A: "2"}}}
 			roundTrip(t, schemaOf(t, occSkipSchema), rootName, v, r+`<a>1</a><w xmlns="urn:o"/><a>2</a></r>`, deepEqual[occWildMany])
+		}},
+		{"one item of a choice occurring 2 to 3 times, an element alternative emptiable", func(t *testing.T) {
+			roundTrip(t, schemaOf(t, occTwoThreeSchema), rootName, occChoice{Choice: []occChoiceItem{occChoiceB{B: "1"}}}, r+`<b>1</b></r>`, deepEqual[occChoice], occChoiceBranches)
+		}},
+		{"zero items of a choice occurring 1 to unbounded times, an element alternative emptiable", func(t *testing.T) {
+			roundTrip(t, schemaOf(t, occEmptyBranchSchema), rootName, occChoice{}, `<r xmlns="urn:s"/>`, deepEqual[occChoice], occChoiceBranches)
+		}},
+		{"one item of a choice occurring 2 to 3 times, a sequence alternative emptiable", func(t *testing.T) {
+			roundTrip(t, schemaOf(t, occGroupAltSchema), rootName, occGroupAlt{Choice: []occGroupAltItem{occGroupAltB{B: "1"}}}, r+`<b>1</b></r>`, deepEqual[occGroupAlt], occGroupAltBranches)
+		}},
+		{"one item of a choice occurring 2 to 3 times, an element alternative emptiable beside a wildcard", func(t *testing.T) {
+			v := occPick{Choice: []occPickItem{occPickAny{Any: anyElement{Space: "urn:o", Local: "w"}}}}
+			roundTrip(t, schemaOf(t, occWildAltSchema), rootName, v, r+`<w xmlns="urn:o"/></r>`, deepEqual[occPick], occPickBranches)
+		}},
+		{"one item of a choice occurring 2 to 3 times, its wildcard alternative emptiable", func(t *testing.T) {
+			roundTrip(t, schemaOf(t, occWildOptSchema), rootName, occPick{Choice: []occPickItem{occPickA{A: "1"}}}, r+`<a>1</a></r>`, deepEqual[occPick], occPickBranches)
 		}},
 	} {
 		t.Run(row.name, row.run)

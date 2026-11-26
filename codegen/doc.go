@@ -432,7 +432,8 @@
 //     alternative with {min occurs} 0 and {max occurs} 1 giving a value field,
 //     never a pointer. A repeated choice's slice holds one item per occurrence
 //     that matches something, so it does not count occurrences that match
-//     nothing.
+//     nothing and holds fewer items than the choice's {min occurs} where the
+//     occurrences it lacks match nothing (§3.9.4.3 cvc-accept 3.1-3.3).
 //   - A choice particle one of whose alternatives' term is a model group,
 //     inline or through <group ref>, one occurrence of which is emptiable
 //     ([xsd.Schema.ParticleEmptiable]), whatever the alternative's own {min

@@ -130,11 +130,13 @@ func TestEncodeNestedTypesAreCodegens(t *testing.T) {
 // optional, through <group ref>, holding a wildcard, a once-choice in its item,
 // and two siblings; a choice's model-group alternative, spliced, through <group
 // ref>, of the content choice, of a nested choice, of an occurrence choice's
-// item, holding a nested choice, flattened and held in an occurrence field, and
+// item, holding a nested choice, flattened and held in an occurrence field,
 // the nil interface of a content choice whose model-group alternative has {min
-// occurs} 0. Each row fails with item 4's constructNestedGroup arm in
-// particleEncodes put back (encodeWalk.groupEncodes), every row reaching a
-// nested model group.
+// occurs} 0, and one item of a nested choice occurring 2 to 3 times, the
+// occurrence it lacks matching the empty sequence through its alternative of
+// {min occurs} 0 (§3.9.4.3 cvc-accept 3.1-3.3). Each row fails with item 4's
+// constructNestedGroup arm in particleEncodes put back
+// (encodeWalk.groupEncodes), every row reaching a nested model group.
 func TestAppendNested(t *testing.T) {
 	const r = `<r xmlns="urn:s">`
 	w := anyElement{Space: "urn:o", Local: "w", Content: anyType{Text: "w"}}
@@ -267,6 +269,9 @@ func TestAppendNested(t *testing.T) {
 		}},
 		{"the nil interface of a content choice whose model-group alternative has {min occurs} 0", func(t *testing.T) {
 			roundTrip(t, schemaOf(t, cgOptSchema), rootName, cgO{}, `<r xmlns="urn:s"/>`, deepEqual[cgO], cgOBranches)
+		}},
+		{"one item of a nested choice occurring 2 to 3 times, an element alternative emptiable", func(t *testing.T) {
+			roundTrip(t, schemaOf(t, enOccChoiceSchema), rootName, enOccChoice{Choice: []occChoiceItem{occChoiceB{B: "1"}}, C: "2"}, r+`<b>1</b><c>2</c></r>`, deepEqual[enOccChoice], occChoiceBranches)
 		}},
 	} {
 		t.Run(row.name, row.run)

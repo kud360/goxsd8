@@ -76,76 +76,76 @@ var ErrInvalidValue = errors.New("codec: Append: a value no valid document holds
 //     field of a particle with {max occurs} above 1 whose length lies outside its {min occurs}
 //     and {max occurs}, a choice's alternative's {min occurs} 0 read as 1 in its branch,
 //     though never a flattened sequence's or choice's slice field, which holds one item per
-//     child, not per occurrence (codegen's package doc, "# Particles"); the nil sealed interface
-//     of a choice occurring once, the content choice or a nested one, none of whose alternatives is
-//     emptiable (Structures §3.8.4.3 cvc-model-group, §3.9.6.3 cos-group-emptiable), a choice of no
-//     {particles} among them; a nil item of an occurrence field's slice of a choice, the content
-//     {particle}'s or a nested one's, whatever its alternatives, which Decode never returns; a value of
-//     either interface whose dynamic type the [WithBranches] set in opts places at no alternative, a
-//     pointer to a branch among them, which Decode never returns; a nil item of a flattened sequence's
-//     or choice's slice, the content {particle}'s or a nested one's, which Decode never
-//     returns either, and an item of it whose dynamic type the [WithBranches] set in opts places at no
-//     alternative, a pointer to a branch among them; the nil sealed interface of an <element ref>
-//     particle's field over a substitution group (codegen's package doc, "# Substitution groups"), or of
-//     an item of its slice, wherever nil does not mean absent, that of a head with {abstract} true and
-//     no branch among them, and a value of that interface whose dynamic type the [WithBranches] set in
-//     opts places at no branch, a pointer to a branch among them, which Decode never returns; the nil
-//     sealed interface of a union simple type wherever nil does not mean absent, that is, every field
-//     but an element particle's of {min occurs} 0 and {max occurs} 1 and an optional attribute use's
-//     to which no value constraint supplies a value (codegen's package doc, "# Particles", "#
-//     Attributes"), which Decode never returns; a value of that interface whose dynamic
-//     type the [WithBranches] set in opts places at no basic member, a pointer to a variant among them,
-//     which Decode never returns; a value that holds itself, a struct or sealed interface value its own
-//     write reaches again through a *S, []S or []I field, which no finite document holds, the error
-//     naming the Go path where the value is reached again and nothing written beneath it; a string
-//     holding bytes that are not UTF-8 or a character the XML 1.0 Char production does not match, U+0000
-//     among them (Datatypes §3.3.1.1, §3.3.17.1, §3.2.1.2, §3.2.2.2), a held element's Space, an
-//     attribute's Space or Value, a Text and a Tail among them; a string that differs from its own
-//     whiteSpace-normalized form under its simple type, such as an xs:token holding "  a b"; a list
-//     item, a string, that is empty or holds TAB, LF, CR or a space, which no list item's lexical
-//     representation does (Datatypes §2.4.1.2); a big.Rat outside the decimal value space, whose
-//     denominator in lowest terms is no 2^m·5^n (§3.3.3.1), such as 1/3; an element a wildcard
-//     particle's field holds, of {process contents} skip or lax, that its content model admits at no
-//     particle where it is written, a name outside the wildcard's {namespace constraint} or in its
-//     {disallowed names} among them, or attributes to a particle other than that wildcard, an element
-//     particle taking its name first among them, or after whose content's last child the content model
-//     is not accepting, as xsd.Schema.ContentMatcher's Matcher decides (§3.9.4.3 cvc-accept, §3.10.4.1
-//     cvc-wildcard, §3.8.4.3 cvc-model-group); an attribute an {attribute wildcard}'s field holds whose
-//     expanded name an attribute use of the type names, the use's field nil or set, which Decode never
-//     returns (§3.4.4.2 cvc-complex-type clause 2.1), or, but for xsi:type, xsi:nil, xsi:schemaLocation
-//     and xsi:noNamespaceSchemaLocation, which clause 2 excepts by name, that the wildcard does not admit,
-//     a name outside its {namespace constraint} or in its {disallowed names} among them (clause 2.2.2,
-//     §3.10.4.1 cvc-wildcard); in such an element, in the content of an element of type xs:anyType
-//     itself, its own attributes among it, at any depth, and in an {attribute wildcard}'s field, a Local
-//     that is no NCName or a Space that is the namespace name the prefix xmlns is bound to, of the
-//     element or of an attribute, an attribute of absent Space named xmlns (Namespaces in XML §3), and an
-//     attribute of the expanded name of one before it (§6.3 nsc-AttrsUnique); an element an item of a
-//     flattened sequence's or choice's slice holds that its content model admits at no particle where it
-//     is written, or attributes to a basic particle other than the one whose branch the item is, or a
-//     slice after whose last item the content model is not accepting, as that Matcher decides (§3.9.4.3
-//     cvc-accept, §3.10.4.1 cvc-wildcard, §3.8.4.3 cvc-model-group); a date, time or duration datatype
-//     struct value no value of its datatype maps to, as codegen's package doc "# Simple types" states such
-//     values exist, the error naming the first property found outside it, its fields read in order, or,
-//     ahead of its Seconds, a duration's Months and Seconds of opposite signs; a PrecisionDecimal datatype
-//     struct value no value maps to, as codegen's "# Simple types" states such values exist, a nil Value
-//     or the numerical arm with a negative Coefficient, or a Value whose dynamic type the
+//     child, not per occurrence, nor below its {min occurs} the occurrence field of a choice one
+//     occurrence of which is emptiable, which holds one item per occurrence that matches
+//     something (codegen's package doc, "# Particles"); the nil sealed interface of a choice occurring
+//     once, the content choice or a nested one, none of whose alternatives is emptiable (Structures
+//     §3.8.4.3 cvc-model-group, §3.9.6.3 cos-group-emptiable), a choice of no {particles} among them; a
+//     nil item of an occurrence field's slice of a choice, the content {particle}'s or a nested one's,
+//     whatever its alternatives, which Decode never returns; a value of either interface whose dynamic
+//     type the [WithBranches] set in opts places at no alternative, a pointer to a branch among them,
+//     which Decode never returns; a nil item of a flattened sequence's or choice's slice, the content
+//     {particle}'s or a nested one's, which Decode never returns either, and an item of it whose dynamic
+//     type the [WithBranches] set in opts places at no alternative, a pointer to a branch among them; the
+//     nil sealed interface of an <element ref> particle's field over a substitution group (codegen's
+//     package doc, "# Substitution groups"), or of an item of its slice, wherever nil does not mean
+//     absent, that of a head with {abstract} true and no branch among them, and a value of that interface
+//     whose dynamic type the [WithBranches] set in opts places at no branch, a pointer to a branch among
+//     them, which Decode never returns; the nil sealed interface of a union simple type wherever nil does
+//     not mean absent, that is, every field but an element particle's of {min occurs} 0 and {max occurs} 1
+//     and an optional attribute use's to which no value constraint supplies a value (codegen's package
+//     doc, "# Particles", "# Attributes"), which Decode never returns; a value of that interface whose
+//     dynamic type the [WithBranches] set in opts places at no basic member, a pointer to a variant among
+//     them, which Decode never returns; a value that holds itself, a struct or sealed interface value its
+//     own write reaches again through a *S, []S or []I field, which no finite document holds, the error
+//     naming the Go path where the value is reached again and nothing written beneath it; a string holding
+//     bytes that are not UTF-8 or a character the XML 1.0 Char production does not match, U+0000 among
+//     them (Datatypes §3.3.1.1, §3.3.17.1, §3.2.1.2, §3.2.2.2), a held element's Space, an attribute's
+//     Space or Value, a Text and a Tail among them; a string that differs from its own
+//     whiteSpace-normalized form under its simple type, such as an xs:token holding "  a b"; a list item,
+//     a string, that is empty or holds TAB, LF, CR or a space, which no list item's lexical representation
+//     does (Datatypes §2.4.1.2); a big.Rat outside the decimal value space, whose denominator in lowest
+//     terms is no 2^m·5^n (§3.3.3.1), such as 1/3; an element a wildcard particle's field holds, of
+//     {process contents} skip or lax, that its content model admits at no particle where it is written, a
+//     name outside the wildcard's {namespace constraint} or in its {disallowed names} among them, or
+//     attributes to a particle other than that wildcard, an element particle taking its name first among
+//     them, or after whose content's last child the content model is not accepting, as
+//     xsd.Schema.ContentMatcher's Matcher decides (§3.9.4.3 cvc-accept, §3.10.4.1 cvc-wildcard, §3.8.4.3
+//     cvc-model-group); an attribute an {attribute wildcard}'s field holds whose expanded name an
+//     attribute use of the type names, the use's field nil or set, which Decode never returns (§3.4.4.2
+//     cvc-complex-type clause 2.1), or, but for xsi:type, xsi:nil, xsi:schemaLocation and
+//     xsi:noNamespaceSchemaLocation, which clause 2 excepts by name, that the wildcard does not admit, a
+//     name outside its {namespace constraint} or in its {disallowed names} among them (clause 2.2.2,
+//     §3.10.4.1 cvc-wildcard); in such an element, in the content of an element of type xs:anyType itself,
+//     its own attributes among it, at any depth, and in an {attribute wildcard}'s field, a Local that is
+//     no NCName or a Space that is the namespace name the prefix xmlns is bound to, of the element or of
+//     an attribute, an attribute of absent Space named xmlns (Namespaces in XML §3), and an attribute of
+//     the expanded name of one before it (§6.3 nsc-AttrsUnique); an element an item of a flattened
+//     sequence's or choice's slice holds that its content model admits at no particle where it is written,
+//     or attributes to a basic particle other than the one whose branch the item is, or a slice after
+//     whose last item the content model is not accepting, as that Matcher decides (§3.9.4.3 cvc-accept,
+//     §3.10.4.1 cvc-wildcard, §3.8.4.3 cvc-model-group); a date, time or duration datatype struct value no
+//     value of its datatype maps to, as codegen's package doc "# Simple types" states such values exist,
+//     the error naming the first property found outside it, its fields read in order, or, ahead of its
+//     Seconds, a duration's Months and Seconds of opposite signs; a PrecisionDecimal datatype struct value
+//     no value maps to, as codegen's "# Simple types" states such values exist, a nil Value or the
+//     numerical arm with a negative Coefficient, or a Value whose dynamic type the
 //     [WithPrecisionDecimalArms] set in opts supplies in no role, a pointer to an arm among them, which
-//     Decode never returns; an xs:QName or xs:NOTATION value whose namespace name holds a byte that
-//     starts no XML 1.0 Char or is the one the prefix xmlns is bound to (Namespaces in XML §3), or whose
-//     Local the Parse of its primitive's mapping rejects in Append's spelling, that Parse's verdict
-//     wrapped, or makes a spelling that resolves back to another expanded name; a value written as
-//     an element's character content, or as an attribute, whose value value.ConstraintMatches finds
-//     neither equal nor identical to the {value} of a fixed {value constraint} there (Datatypes
-//     §2.2.1, §2.2.2): an element's own (Structures §3.3.4.3 cvc-elt clause 5.2.2.2.2), the empty
-//     text included, which Append writes as an empty element that takes on the constraint's {lexical
-//     form} (clause 5.1, §3.3.5.4 sic-eltType), and an attribute use's and its declaration's, each
-//     (§3.5.4 cvc-au, §3.2.4.1 cvc-attribute clause 4); the content of an element of type xs:anyType
-//     itself whose declaration has a fixed {value constraint}, where it holds Children (cvc-elt
-//     clause 5.2.2.1) or a Text other than "" and the constraint's {lexical form} (clause
-//     5.2.2.2.1); or a value whose simple type rejects it, a value.ValidateLexical error
-//     value.IsDatatypeVerdict reports as a verdict, a facet's rejection or a backend Parse's among them,
-//     that error wrapped, but for item 7's pattern and union-variant cases, a list's own facets read
-//     once every item has passed its own checks.
+//     Decode never returns; an xs:QName or xs:NOTATION value whose namespace name holds a byte that starts
+//     no XML 1.0 Char or is the one the prefix xmlns is bound to (Namespaces in XML §3), or whose Local
+//     the Parse of its primitive's mapping rejects in Append's spelling, that Parse's verdict wrapped, or
+//     makes a spelling that resolves back to another expanded name; a value written as an element's
+//     character content, or as an attribute, whose value value.ConstraintMatches finds neither equal nor
+//     identical to the {value} of a fixed {value constraint} there (Datatypes §2.2.1, §2.2.2): an
+//     element's own (Structures §3.3.4.3 cvc-elt clause 5.2.2.2.2), the empty text included, which Append
+//     writes as an empty element that takes on the constraint's {lexical form} (clause 5.1, §3.3.5.4
+//     sic-eltType), and an attribute use's and its declaration's, each (§3.5.4 cvc-au, §3.2.4.1
+//     cvc-attribute clause 4); the content of an element of type xs:anyType itself whose declaration has a
+//     fixed {value constraint}, where it holds Children (cvc-elt clause 5.2.2.1) or a Text other than ""
+//     and the constraint's {lexical form} (clause 5.2.2.2.1); or a value whose simple type rejects it, a
+//     value.ValidateLexical error value.IsDatatypeVerdict reports as a verdict, a facet's rejection or a
+//     backend Parse's among them, that error wrapped, but for item 7's pattern and union-variant cases, a
+//     list's own facets read once every item has passed its own checks.
 //  7. A value with no canonical representation or no spelling Append writes,
 //     the first in document order as item 6 counts: its *DeclineError. That is
 //     a governing mapping with no Canonical, a Canonical that fails for the
@@ -701,15 +701,16 @@ func (b boundFlatSlice) writeMember(e *encoder, v reflect.Value, at writeAt, slo
 
 // writeMember writes field b.index of v, the nested occurrence field, as
 // writeOccurring states, its length held to the occurrence its shape was
-// computed at (nestedOccurrence.held) and its error naming the particle's own
-// where the two differ: each item it holds, in slice order, as its model
+// computed at (nestedOccurrence.held) under the item's floor
+// (boundItem.floor) and its error naming the particle's own where the two
+// differ: each item it holds, in slice order, as its model
 // group's particles in order (boundItem.writeItem), its targets from
 // slot.target, under slot.check, the content's.
 func (b boundNestedOccurrence) writeMember(e *encoder, v reflect.Value, at writeAt, slot attributionSlot) error {
 	o := b.occurrence
 	subject := fmt.Sprintf("a nested %s model group particle of %s", o.group.Compositor(), typeSubject(at.el, at.typ))
 	f, field := fieldOf(v, b.index, at)
-	return e.writeOccurring(o.shape, o.own, o.held, subject, f, field, func(item reflect.Value, path string) error {
+	return e.writeOccurring(o.shape, o.own, o.held, b.item.floor(), subject, f, field, func(item reflect.Value, path string) error {
 		return b.item.writeItem(e, item, writeAt{el: at.el, typ: at.typ, path: path}, subject, slot)
 	})
 }
@@ -773,18 +774,19 @@ func (b *boundContentChoice) write(e *encoder, v reflect.Value, at writeAt) erro
 
 // write writes the occurrence field of v, field b.index, as writeOccurring
 // states, the field's shape and its particle's occurrence read from the
-// occurrence (occurrence.shape, occurrence.own): each item it holds, in slice
-// order, as boundItem.writeItem writes its model group's particles, all
-// under one attributionCheck of the content (encoder.attribution), since the
-// content model's Matcher spans every occurrence, the item's targets from 0.
-// An item holds no flattened particle (flatHolder).
+// occurrence (occurrence.shape, occurrence.own), its length's floor from the
+// item (boundItem.floor): each item it holds, in slice order, as
+// boundItem.writeItem writes its model group's particles, all under one
+// attributionCheck of the content (encoder.attribution), since the content
+// model's Matcher spans every occurrence, the item's targets from 0. An item
+// holds no flattened particle (flatHolder).
 func (b boundOccurrence) write(e *encoder, v reflect.Value, at writeAt) error {
 	o := b.occurrence
 	check := e.attribution(o.index, at.el, at.typ, false)
 	subject := fmt.Sprintf("the %s content particle of %s", o.group.Compositor(), typeSubject(at.el, at.typ))
 	group := contentChoiceSubject(at.el, at.typ)
 	f, field := fieldOf(v, b.index, at)
-	if err := e.writeOccurring(o.shape, o.own, o.own, subject, f, field, func(item reflect.Value, path string) error {
+	if err := e.writeOccurring(o.shape, o.own, o.own, b.bound.floor(), subject, f, field, func(item reflect.Value, path string) error {
 		return b.bound.writeItem(e, item, writeAt{el: at.el, typ: at.typ, path: path}, group, attributionSlot{check: check})
 	}); err != nil {
 		return err
@@ -807,6 +809,26 @@ func contentChoiceSubject(el xsd.ElementDeclaration, typ xsd.ComplexType) string
 // slot.target, the sequence's base.
 func (b boundSequenceItem) writeItem(e *encoder, v reflect.Value, at writeAt, _ string, slot attributionSlot) error {
 	return b.sequence.writeBound(e, b.members, v, at, slot)
+}
+
+// floor is floorMin: no occurrence of a sequence or all group whose slice
+// writeOccurring's length check reads matches the empty sequence. That slice
+// is a shapeRepeated field's, of {max occurs} above 1, which no all group
+// takes (§3.8.6.2 cos-all-limited), and goshape.ParticleHold flattens a
+// sequence of {max occurs} above 1 whose term is emptiable, its flattens'
+// second gate (codegen/doc.go "# Particles"), so that its term's range
+// minimum is above 0 and one occurrence is not emptiable (§3.8.6.5
+// cos-seq-range, §3.9.6.3 cos-group-emptiable clause 2).
+func (boundSequenceItem) floor() lengthFloor { return floorMin }
+
+// floor is floorWaived where one occurrence of the choice matches the empty
+// sequence (choiceEmptiable), Decode's slice holding no item for such an
+// occurrence (codegen/doc.go "# Particles"), and floorMin otherwise.
+func (c boundChoiceItem) floor() lengthFloor {
+	if choiceEmptiable(c.choice.sealed.alts) {
+		return floorWaived
+	}
+	return floorMin
 }
 
 // writeItem writes the branch v, a value of the choice's sealed interface,
@@ -987,7 +1009,7 @@ func (wildcardMember) wildcard() bool { return true }
 // value holds, taken by slot.
 func (m elementMember) writeElements(e *encoder, s fieldSink, f reflect.Value, at writeAt, slot attributionSlot) error {
 	w := encoded[elementWriter](s.read)
-	return e.writeOccurring(m.shape, m.own, m.held, "the particle of "+declSubject(m.decl), f, at, func(v reflect.Value, path string) error {
+	return e.writeOccurring(m.shape, m.own, m.held, floorMin, "the particle of "+declSubject(m.decl), f, at, func(v reflect.Value, path string) error {
 		return w.writeElement(e, m.decl, v, path, slot)
 	})
 }
@@ -1014,7 +1036,7 @@ func (m wildcardMember) writeElements(e *encoder, _ fieldSink, f reflect.Value, 
 	default:
 		panic(fmt.Sprintf("codec: Append reached %s, of {process contents} %s, which item 4 of Append's doc declines", m.subject, m.process))
 	}
-	return e.writeOccurring(m.shape, m.own, m.held, m.subject, f, at, func(v reflect.Value, path string) error {
+	return e.writeOccurring(m.shape, m.own, m.held, floorMin, m.subject, f, at, func(v reflect.Value, path string) error {
 		name, ok := e.rawName(v, path)
 		if !ok {
 			return nil
@@ -1033,12 +1055,12 @@ func (m wildcardMember) writeElements(e *encoder, _ fieldSink, f reflect.Value, 
 // names, occurring as own, at.path its Go path, each by write, by sh, the
 // shape item 5 bound the field in (field.shape), computed at held, never by
 // f's Kind, since a list's V is itself a slice: one per item of a []V, which
-// is item 6 of [Append]'s doc where its length lies outside held, the error
-// naming own where a choice's alternative raised it, none for a nil *V, and
-// one for a V, but none for a nil V where held's {min occurs} is 0, which
-// shape V takes only over a sealed interface (goshape.ParticleShape), nil
-// meaning absent.
-func (e *encoder) writeOccurring(sh shape, own, held xsd.Occurs, subject string, f reflect.Value, at writeAt, write func(v reflect.Value, path string) error) error {
+// is item 6 of [Append]'s doc where its length lies outside held under floor
+// (lengthFloor.permits), the error naming own where a choice's alternative
+// raised it, none for a nil *V, and one for a V, but none for a nil V where
+// held's {min occurs} is 0, which shape V takes only over a sealed interface
+// (goshape.ParticleShape), nil meaning absent.
+func (e *encoder) writeOccurring(sh shape, own, held xsd.Occurs, floor lengthFloor, subject string, f reflect.Value, at writeAt, write func(v reflect.Value, path string) error) error {
 	switch sh {
 	case shapeOptional:
 		if f.IsNil() {
@@ -1046,7 +1068,7 @@ func (e *encoder) writeOccurring(sh shape, own, held xsd.Occurs, subject string,
 		}
 		return write(f.Elem(), at.path)
 	case shapeRepeated:
-		if !held.Permits(f.Len()) {
+		if !floor.permits(held, f.Len()) {
 			raised := ""
 			if held != own {
 				raised = fmt.Sprintf(", the occurrence %s with {min occurs} 0 read as 1 in its branch,", own)
@@ -1065,6 +1087,31 @@ func (e *encoder) writeOccurring(sh shape, own, held xsd.Occurs, subject string,
 		}
 		return write(f, at.path)
 	}
+}
+
+// A lengthFloor is the lower bound writeOccurring holds a []V's length to:
+// floorMin, held's {min occurs}, every field's but an occurrence field's
+// whose item reads otherwise (boundItem.floor); and floorWaived, none, for
+// the occurrence field of a choice one occurrence of which matches the empty
+// sequence, whose slice holds one item per occurrence that matches something
+// (codegen/doc.go "# Particles"), so that the occurrences it lacks below
+// held's {min occurs} each match the empty sequence (§3.9.4.3 cvc-accept
+// 3.1-3.3, §3.9.6.3 cos-group-emptiable clause 2 via §3.8.6.6
+// cos-choice-range). Neither waives held's {max occurs}.
+type lengthFloor int
+
+const (
+	floorMin lengthFloor = iota
+	floorWaived
+)
+
+// permits reports whether n items lie within held under f: held.Permits(n),
+// a count below held's {min occurs} read as that minimum for floorWaived.
+func (f lengthFloor) permits(held xsd.Occurs, n int) bool {
+	if f == floorWaived {
+		n = max(n, held.Min())
+	}
+	return held.Permits(n)
 }
 
 // An elementWriter is the elementReader of an element particle's field whose
