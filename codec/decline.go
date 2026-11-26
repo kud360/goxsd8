@@ -64,21 +64,21 @@ func (e *DeclineError) Loc() (xsderr.Loc, bool) {
 // paths icpath does not compile, that constraint and the part, for a keyref's
 // {referenced key} that key and its part, and, for a value with no canonical
 // representation or no spelling Append writes, the Go path of its field from T
-// and its value, and, for an attribute in the XSI namespace an element held in
-// a wildcard's match carries, the content of an element of type xs:anyType
-// itself holds, or an {attribute wildcard}'s field holds, that attribute, its
-// Go path from T and the wildcard particle, as [Decode]'s item 5 names it,
-// that element's declaration, or the field's complex type, labelled as its
-// declaration's {type definition}, with its schema Loc, and, for an element a lax
-// wildcard's match is or holds, or such content holds, whose expanded name a
-// top-level element declaration names, or an attribute other than
-// xsi:schemaLocation and xsi:noNamespaceSchemaLocation either holds, or a lax
-// {attribute wildcard}'s field holds, whose expanded name a top-level
-// attribute declaration names, that item, its Go path from T, the wildcard
-// particle, that element's declaration or that complex type, and the
+// and its value, and, for an attribute in the XSI namespace item 7 of
+// [Append]'s doc declines that an element held in a wildcard's match carries, the
+// content of an element of type xs:anyType itself holds, or an {attribute
+// wildcard}'s field holds, that attribute, its Go path from T and the wildcard
+// particle, as [Decode]'s item 5 names it, that element's declaration, or the
+// field's complex type, labelled as its declaration's {type definition}, with its
+// schema Loc, and, for an element a lax wildcard's match is or holds, or such
+// content holds, whose expanded name a top-level element declaration names, or an
+// attribute other than xsi:schemaLocation and xsi:noNamespaceSchemaLocation
+// either holds, or a lax {attribute wildcard}'s field holds, whose expanded name
+// a top-level attribute declaration names, that item, its Go path from T, the
+// wildcard particle, that element's declaration or that complex type, and the
 // top-level declaration, with its schema Loc, and, for an attribute a strict
-// {attribute wildcard}'s field holds, that attribute, its Go path from T and
-// that complex type, so labelled, and, for a lax wildcard's match with a ·locally
+// {attribute wildcard}'s field holds, that attribute, its Go path from T and that
+// complex type, so labelled, and, for a lax wildcard's match with a ·locally
 // declared type·, that element, its Go path from T, the wildcard particle and the
 // complex type, labelled as its declaration's {type definition}, with its schema
 // Loc. A type definition named in the XML Schema namespace whose schema Loc is
@@ -224,7 +224,7 @@ var constructNames = [...]string{
 	constructNoCanonical:             "a value with no canonical representation",
 	constructQNameSpelling:           "an xs:QName or xs:NOTATION value with no spelling Append writes where it is written",
 	constructValueConstraint:         "a value whose agreement with its value constraint value.ConstraintMatches does not decide, or an empty element's value its default replaces",
-	constructXsiAttribute:            "an attribute in the XSI namespace held in an {attribute wildcard} field, or, other than xsi:schemaLocation and xsi:noNamespaceSchemaLocation, in a wildcard's match or an xs:anyType element's content",
+	constructXsiAttribute:            "an attribute in the XSI namespace held in an {attribute wildcard} field, or, other than xsi:schemaLocation and xsi:noNamespaceSchemaLocation, in a lax wildcard's match or an xs:anyType element's content, or, other than those two and xsi:nil, in a skip wildcard's match",
 	constructStrictAttributeWildcard: "an attribute held in the {attribute wildcard} field of a complex type whose {attribute wildcard} has {process contents} strict",
 	constructGovernedContent:         "an element a lax wildcard's match is or holds, or an xs:anyType element's content holds, whose expanded name a top-level element declaration names, or an attribute other than xsi:schemaLocation and xsi:noNamespaceSchemaLocation either holds, or a lax {attribute wildcard} field holds, whose expanded name a top-level attribute declaration names",
 	constructLocallyTypedMatch:       "a lax wildcard's match whose expanded name has a ·locally declared type· in the complex type it is written into",
