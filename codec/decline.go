@@ -224,7 +224,7 @@ var constructNames = [...]string{
 	constructNoCanonical:             "a value with no canonical representation",
 	constructQNameSpelling:           "an xs:QName or xs:NOTATION value with no spelling Append writes where it is written",
 	constructValueConstraint:         "a value whose agreement with its value constraint value.ConstraintMatches does not decide, or an empty element's value its default replaces",
-	constructXsiAttribute:            "an attribute in the XSI namespace held in an {attribute wildcard} field, or, other than xsi:schemaLocation and xsi:noNamespaceSchemaLocation, in a lax wildcard's match or an xs:anyType element's content, or, other than those two and xsi:nil, in a skip wildcard's match",
+	constructXsiAttribute:            "xsi:type, xsi:nil, xsi:schemaLocation or xsi:noNamespaceSchemaLocation held in an {attribute wildcard} field, or xsi:type or xsi:nil in a lax wildcard's match or an xs:anyType element's content, or xsi:type in a skip wildcard's match",
 	constructStrictAttributeWildcard: "an attribute held in the {attribute wildcard} field of a complex type whose {attribute wildcard} has {process contents} strict",
 	constructGovernedContent:         "an element a lax wildcard's match is or holds, or an xs:anyType element's content holds, whose expanded name a top-level element declaration names, or an attribute other than xsi:schemaLocation and xsi:noNamespaceSchemaLocation either holds, or a lax {attribute wildcard} field holds, whose expanded name a top-level attribute declaration names",
 	constructLocallyTypedMatch:       "a lax wildcard's match whose expanded name has a ·locally declared type· in the complex type it is written into",

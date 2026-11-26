@@ -169,35 +169,36 @@ var ErrInvalidValue = errors.New("codec: Append: a value no valid document holds
 //     xs:NOTATION value whose namespace name is absent, written on an element
 //     whose namespace is not, which no unprefixed spelling resolves to there
 //     and no prefix can be bound to (Namespaces in XML §5 nsc-NoPrefixUndecl),
-//     whatever else rejects it; or an attribute in the XSI namespace in an
-//     {attribute wildcard}'s field, whatever its value, since an xsi:type's
-//     there may hold a prefix no binding the struct holds resolves, and
-//     Decode returns neither xsi:schemaLocation nor xsi:noNamespaceSchemaLocation
-//     there; or one other than those two on an element a wildcard particle's field
-//     holds, or in the content of an element of type xs:anyType itself, its own
-//     attributes among it, at any depth, whatever its value, since an xsi:type's
-//     there may hold a prefix that only a binding in the Namespaces of the
-//     AnyType holding it resolves, and Append writes none of those bindings
-//     (GAP(codec): #4125), but for xsi:nil, whatever its value, on an element a
-//     skip wildcard particle's field holds or at any depth below one, which is
-//     not assessed (§3.10.4.1 key-skipped, §3.3.4.6 cvc-assess-elt clause 2); or,
-//     in such content of an xs:anyType element, or in an element a lax wildcard
-//     particle's field holds, the element itself among it, at any depth, an element
-//     whose expanded name a top-level element declaration of schema names, or there
-//     or in a lax {attribute wildcard}'s field an attribute other than those two
-//     whose expanded name a top-level attribute declaration of schema names,
-//     whatever its content or value, since a lax wildcard, xs:anyType's among them,
-//     assesses it against that declaration (Structures §3.4.7, §3.3.4.6
-//     key-governing-ed clause 3, §3.2.4.2 key-governing-ad clause 3); or an
-//     attribute the {attribute wildcard} field of a type whose {attribute wildcard}
-//     has {process contents} strict holds, whatever its name and value, since the
-//     wildcard assesses it against the top-level attribute declaration its expanded
-//     name resolves to, where there is one, and §3.10.1 requires that there be one
-//     (§3.10.1, §3.2.4.2 key-governing-ad clause 3); or an element a lax wildcard
-//     particle's field holds that has a ·locally declared type· in the complex type
-//     whose content it is written into, an element declaration of its expanded name
-//     that type's content model, or that of a type on its {base type definition}
-//     chain, contains, whatever its content, since that type governs it (§3.3.4.6
+//     whatever else rejects it; or xsi:type, xsi:nil, xsi:schemaLocation or
+//     xsi:noNamespaceSchemaLocation in an {attribute wildcard}'s field, whatever
+//     its value, since Decode never returns one of the four there, which
+//     cvc-complex-type clause 2 attributes to no wildcard; or xsi:type on an
+//     element a wildcard particle's field holds, or in the content of an element
+//     of type xs:anyType itself, its own attributes among it, at any depth,
+//     whatever its value, since its value there may hold a prefix that only a
+//     binding in the Namespaces of the AnyType holding it resolves, and Append
+//     writes none of those bindings (GAP(codec): #4125), and xsi:nil there,
+//     whatever its value, but on an element a skip wildcard particle's field
+//     holds or at any depth below one, which is not assessed (§3.10.4.1
+//     key-skipped, §3.3.4.6 cvc-assess-elt clause 2); or, in such content of an
+//     xs:anyType element, or in an element a lax wildcard particle's field holds,
+//     the element itself among it, at any depth, an element whose expanded name a
+//     top-level element declaration of schema names, or there or in a lax
+//     {attribute wildcard}'s field an attribute other than xsi:schemaLocation and
+//     xsi:noNamespaceSchemaLocation whose expanded name a top-level attribute
+//     declaration of schema names, whatever its content or value, since a lax
+//     wildcard, xs:anyType's among them, assesses it against that declaration
+//     (Structures §3.4.7, §3.3.4.6 key-governing-ed clause 3, §3.2.4.2
+//     key-governing-ad clause 3); or an attribute the {attribute wildcard} field of
+//     a type whose {attribute wildcard} has {process contents} strict holds,
+//     whatever its name and value, since the wildcard assesses it against the
+//     top-level attribute declaration its expanded name resolves to, where there is
+//     one, and §3.10.1 requires that there be one (§3.10.1, §3.2.4.2
+//     key-governing-ad clause 3); or an element a lax wildcard particle's field
+//     holds that has a ·locally declared type· in the complex type whose content it
+//     is written into, an element declaration of its expanded name that type's
+//     content model, or that of a type on its {base type definition} chain,
+//     contains, whatever its content, since that type governs it (§3.3.4.6
 //     key-governing-type-elem clause 7, §3.4.6.4 key-ldt-elem); or a value item 6
 //     holds to a fixed {value constraint} whose comparison value.ConstraintMatches
 //     leaves undecided, such as a NOTATION {lexical form} naming no declared
@@ -3140,12 +3141,12 @@ func (e *encoder) locallyTyped(name xsd.QName, path string, hold rawHold, at wri
 // rawAttribute reports whether the attribute name of value value, attrs' item
 // i at path, held in hold, can be written raw, recording its item 6 or item 7
 // error of [Append]'s doc where it cannot: writableName's, an unqualified
-// xmlns, an expanded name an attribute before it holds, the XSI namespace's
-// (constructXsiAttribute), but for a hint (locationHint) in a hold that
-// writes one (rawHold.writesHints) and xsi:nil in a hold that writes it
-// (rawHold.writesNil), and a Value of a byte that starts no Char, in that
-// order. Its callers ask whether hold governs it (encoder.governed) after it,
-// rawAttributes but for a hint.
+// xmlns, an expanded name an attribute before it holds, one of the four
+// instanceAttribute names (constructXsiAttribute), but for a hint
+// (locationHint) in a hold that writes one (rawHold.writesHints) and xsi:nil
+// in a hold that writes it (rawHold.writesNil), and a Value of a byte that
+// starts no Char, in that order. Its callers ask whether hold governs it
+// (encoder.governed) after it, rawAttributes but for a hint.
 func (e *encoder) rawAttribute(name xsd.QName, value string, attrs reflect.Value, i int, path string, hold rawHold) bool {
 	if !e.writableName(name, path) {
 		return false

@@ -3657,10 +3657,13 @@ var skipAttrBranches = WithBranches[skipAttrChoice](skipAttrA{}, skipAttrAny{})
 // under the prefix an open start tag declares for its namespace, or a fresh pN declared on its
 // element's own, though the namespace be the element's; then its Text, then each child followed by
 // its Tail; an element in the XML namespace as xml:Local, moving no default namespace, and one in
-// the XSI namespace under a default declaration of it, an attribute in it being item 7 but for
-// xsi:schemaLocation and xsi:noNamespaceSchemaLocation, written on a skip match and on a lax one
-// as any other attribute is; both rows fail with rawAttribute's hint exemption removed, and the
-// lax one, not the skip one, with rawAttributes asking encoder.governed of a hint. xsi:nil, item 7
+// the XSI namespace under a default declaration of it; xsi:schemaLocation and
+// xsi:noNamespaceSchemaLocation written on a skip match and on a lax one as any other attribute
+// is; both rows fail with rawAttribute's hint exemption removed, and the lax one, not the skip
+// one, with rawAttributes asking encoder.governed of a hint. xsi:banana, none of the four names
+// instanceAttribute reports, is written on a skip and on a lax match and on a child of each, no
+// declaration governing it (§3.2.6 no-xsi); both rows fail with rawAttribute's XSI step keyed on
+// the XSI namespace, and with it declining such a name only below the match. xsi:nil, item 7
 // but in a skip match, is written on a skip match beside content and on a child at depth, whatever
 // its value, nothing below the match assessed (§3.10.4.1 key-skipped); both rows fail with
 // skipMatch.writesNil answering false. Each document validate accepts and Decode turns back into
@@ -3793,9 +3796,7 @@ func TestAppendWildcard(t *testing.T) {
 // on a lax match, the skip row behind an item 6 error found after it, and xsi:nil on a
 // lax match decline by constructXsiAttribute, the xsi:type skip row failing under a
 // writer that admits each of the four names cvc-complex-type clause 2 excepts in a skip
-// match, and the xsi:nil row under one that admits xsi:nil in every hold; and xsi:banana
-// on a skip and on a lax match declines by constructXsiAttribute too, the two rows failing
-// under a writer that declines only xsi:type and, outside a skip match, xsi:nil; and in a lax
+// match, and the xsi:nil row under one that admits xsi:nil in every hold; and in a lax
 // match an element or attribute a top-level declaration governs, the match itself, a child
 // and an attribute, declines by constructGovernedContent, and a match with a ·locally
 // declared type· (§3.3.4.6 key-governing-type-elem clause 7) declines by
@@ -4003,9 +4004,12 @@ const (
 // top-level declaration governs, a use's attribute ahead, on the document
 // element, beside simple content and on a particle's element; and an empty
 // field writes no attribute, whatever the {process contents}, strict
-// included. Each document validate accepts and Decode turns back into the
+// included; and xsi:banana, none of the four names instanceAttribute reports,
+// under a skip and a lax wildcard, which no declaration governs (§3.2.6
+// no-xsi). Each document validate accepts and Decode turns back into the
 // value. Every row fails with complexEncodes' static decline of a type with
-// an {attribute wildcard} put back.
+// an {attribute wildcard} put back, and the two xsi:banana rows with
+// rawAttribute's XSI step keyed on the XSI namespace.
 func TestAppendAttributeWildcard(t *testing.T) {
 	one := int32(1)
 	t.Run("a skip wildcard's attribute in an admitted namespace", func(t *testing.T) {
@@ -4075,11 +4079,14 @@ func TestAppendAttributeWildcard(t *testing.T) {
 // found after a strict wildcard's decline, which item 6 outranks. Then item 7:
 // a strict wildcard's attribute, governed by a top-level declaration or by
 // none, declines by constructStrictAttributeWildcard; a lax wildcard's
-// governed one by constructGovernedContent; and an XSI attribute, xsi:type
-// under a wildcard whose {namespace constraint} excludes the XSI namespace
-// and xsi:schemaLocation under a skip, a lax and a strict wildcard among
-// them, by constructXsiAttribute; the three xsi:schemaLocation rows fail
-// with attributeWildcardHold.writesHints answering true. So does xsi:nil
+// governed one by constructGovernedContent, and xsi:banana under a strict
+// wildcard admitting the XSI namespace by constructStrictAttributeWildcard,
+// failing under a writer that writes it ahead of the strict check; and one
+// of the four names instanceAttribute reports, xsi:type under a wildcard
+// whose {namespace constraint} excludes the XSI namespace, xsi:schemaLocation
+// under a skip, a lax and a strict wildcard and xsi:noNamespaceSchemaLocation
+// under a lax one among them, by constructXsiAttribute; the four hint rows
+// fail with attributeWildcardHold.writesHints answering true. So does xsi:nil
 // under a skip wildcard, which Decode never returns there, failing with
 // attributeWildcardHold.writesNil answering true and under a writer that
 // admits xsi:nil wherever hold governs none (rawHold.governing). Each item 6 row
@@ -4183,10 +4190,14 @@ func TestAppendAttributeWildcardInvalid(t *testing.T) {
 // local, as an <element ref> into its named type, and beside another;
 // repeated and optional, an absent optional writing nothing; and a choice's
 // local and <element ref> alternatives; and xsi:schemaLocation on the
-// document element and xsi:noNamespaceSchemaLocation on a descendant. Each
+// document element and xsi:noNamespaceSchemaLocation on a descendant; and
+// xsi:banana, none of the four names instanceAttribute reports, on the
+// document element and on a descendant, which no declaration governs (§3.2.6
+// no-xsi), failing with rawAttribute's XSI step keyed on the XSI namespace,
+// and with it declining such a name only below the document element. Each
 // document validate accepts and Decode turns back into the value. Every row
 // declines by item 4 with the arm removed (elementEncodes' xs:anyType case
-// returning a decline). The two XSI rows, and no other row here, fail with
+// returning a decline). The two hint rows, and no other row here, fail with
 // rawAttribute's hint exemption removed, and with rawAttributes asking
 // encoder.governed of a hint, which Schema.Attribute resolves to its
 // built-in declaration.
@@ -4252,23 +4263,22 @@ func TestAppendAnyType(t *testing.T) {
 // decline of its declaration. Item 6 of Append's doc: a held
 // Local that is no NCName, at depth, a Text holding a non-Char, a held
 // attribute named xmlns, and a held element's self-holding Children. Item 7:
-// xsi:type, on the element and at depth, xsi:nil, and xsi:banana on the
-// element decline by constructXsiAttribute, each xsi:type row written, and
-// charged by validate by cvc-attribute, its prefix unbound, under a writer
-// that admits every XSI attribute and asks encoder.governed of none, and the
-// xsi:banana row failing under a writer that declines only xsi:type and
-// xsi:nil; and an element whose expanded name a top-level element declaration
-// names, or an attribute but for the two schema location hints whose expanded
-// name a top-level attribute declaration names, at any depth, under an
-// ungoverned child too, declines by constructGovernedContent, whatever its
-// value, the XSI check first on one attribute, since the schema declares
-// xsi:type: a governed xs:QName child Decode returns from a valid document, a
-// governed xs:int child built invalid against its declaration, a governed
-// attribute on the element and on a descendant, and a governed child of a
-// particle's element. An item 6 error inside a governed element's content, and
-// one in a later sibling, wins over that decline. A skip wildcard's match
-// holding a governed name is still written, and a type derived from xs:anyType
-// still encodes as its own complex type.
+// xsi:type, on the element and at depth, and xsi:nil decline by
+// constructXsiAttribute, each xsi:type row written, and charged by validate
+// by cvc-attribute, its prefix unbound, under a writer that admits every XSI
+// attribute and asks encoder.governed of none; and an element whose expanded
+// name a top-level element declaration names, or an attribute but for the two
+// schema location hints whose expanded name a top-level attribute declaration
+// names, at any depth, under an ungoverned child too, declines by
+// constructGovernedContent, whatever its value, the XSI check first on one
+// attribute, since the schema declares xsi:type: a governed xs:QName child
+// Decode returns from a valid document, a governed xs:int child built invalid
+// against its declaration, a governed attribute on the element and on a
+// descendant, and a governed child of a particle's element. An item 6 error
+// inside a governed element's content, and one in a later sibling, wins over
+// that decline. A skip wildcard's match holding a governed name is still
+// written, and a type derived from xs:anyType still encodes as its own complex
+// type.
 func TestAppendAnyTypeGuards(t *testing.T) {
 	governed := schemaOf(t, governedAnySchema)
 	child := func(e anyElement) []anyChild { return []anyChild{{Element: e}} }
