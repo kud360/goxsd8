@@ -3758,6 +3758,17 @@ func TestAppendWildcard(t *testing.T) {
 		roundTrip(t, schemaOf(t, seqSkipSchema), rootName, v,
 			`<r xmlns="urn:s"><a>x</a><w xmlns="urn:o" xmlns:p1="http://www.w3.org/2001/XMLSchema-instance" p1:nil="true">abc<c p1:nil="true">t</c></w></r>`, deepEqual[seqWild])
 	})
+	banana := []anyAttribute{{xsd.XMLSchemaInstanceNS, "banana", "1"}}
+	bananaHeld := anyElement{Space: "urn:o", Local: "w", Content: anyType{Attributes: banana, Children: []anyChild{
+		{Element: anyElement{Space: "urn:o", Local: "c", Content: anyType{Attributes: []anyAttribute{{xsd.XMLSchemaInstanceNS, "banana", "2"}}}}},
+	}}}
+	const bananaWritten = `<r xmlns="urn:s"><a>x</a><w xmlns="urn:o" xmlns:p1="http://www.w3.org/2001/XMLSchema-instance" p1:banana="1"><c p1:banana="2"/></w></r>`
+	t.Run("xsi:banana on a skip match and on its child", func(t *testing.T) {
+		roundTrip(t, schemaOf(t, seqSkipSchema), rootName, seqWild{A: "x", Any: bananaHeld}, bananaWritten, deepEqual[seqWild])
+	})
+	t.Run("xsi:banana on a lax match and on its child", func(t *testing.T) {
+		roundTrip(t, lax, rootName, seqWild{A: "x", Any: bananaHeld}, bananaWritten, deepEqual[seqWild])
+	})
 	t.Run("a skip match's child holding xsi:nil no xs:boolean spells", func(t *testing.T) {
 		v := seqWild{A: "x", Any: anyElement{Space: "urn:o", Local: "w", Content: anyType{Children: []anyChild{
 			{Element: anyElement{Local: "c", Content: anyType{Attributes: []anyAttribute{{xsd.XMLSchemaInstanceNS, "nil", "banana"}}}}},
@@ -3930,8 +3941,6 @@ func TestAppendWildcardInvalid(t *testing.T) {
 	}{
 		{"xsi:type on the match", one, constructXsiAttribute, held(anyType{Attributes: []anyAttribute{{"", "k", "v"}, {xsd.XMLSchemaInstanceNS, "type", "xs:byte"}}}),
 			[]string{"attribute xsi:type at seqWild.Any.Content.Attributes[1]" + match}},
-		{"xsi:banana on the match", one, constructXsiAttribute, held(anyType{Attributes: []anyAttribute{{xsd.XMLSchemaInstanceNS, "banana", "1"}}}),
-			[]string{"attribute xsi:banana at seqWild.Any.Content.Attributes[0]" + match}},
 		{"a lax match a top-level declaration governs", lax, constructGovernedContent, seqWild{A: "x", Any: anyElement{Space: "urn:s", Local: "w", Content: anyType{Text: "abc"}}},
 			[]string{"element {urn:s}w at seqWild.Any" + match, ", governed by element {urn:s}w declared at "}},
 		{"a lax match's child a top-level declaration governs", lax, constructGovernedContent, laxHeld(anyType{Children: []anyChild{{Element: anyElement{Space: "urn:s", Local: "w", Content: anyType{Text: "abc"}}}}}),
@@ -3942,8 +3951,6 @@ func TestAppendWildcardInvalid(t *testing.T) {
 			[]string{"attribute xsi:type at seqWild.Any.Content.Attributes[0]" + match}},
 		{"xsi:nil on a lax match", lax, constructXsiAttribute, laxHeld(anyType{Attributes: []anyAttribute{{xsd.XMLSchemaInstanceNS, "nil", "true"}}, Text: "abc"}),
 			[]string{"attribute xsi:nil at seqWild.Any.Content.Attributes[0]" + match}},
-		{"xsi:banana on a lax match", lax, constructXsiAttribute, laxHeld(anyType{Attributes: []anyAttribute{{xsd.XMLSchemaInstanceNS, "banana", "1"}}}),
-			[]string{"attribute xsi:banana at seqWild.Any.Content.Attributes[0]" + match}},
 		{"a lax match named as the element particle beside it", lax, constructLocallyTypedMatch, seqWild{A: "1", Any: anyElement{Space: "urn:s", Local: "a", Content: anyType{Text: "hello"}}},
 			[]string{"element {urn:s}a at seqWild.Any" + match, ", governed by its locally declared type in the {type definition} of element {urn:s}r declared at "}},
 		{"a lax match a top-level declaration and its locally declared type both govern", schemaOf(t, seqLaxSchema+`<xs:element name="a" type="xs:string"/>`), constructGovernedContent,
@@ -3977,12 +3984,14 @@ const governedAnySchema = `<xs:element name="r"/><xs:element name="q" type="xs:Q
 
 // Schemas beside anyattribute_test.go's, each of whose s:r is of awOne's
 // shape: awNotSchema's skip wildcard names s:no in its {disallowed names},
-// awDefinedSchema's lax one ##defined beside a top-level attribute g, and
-// awLaxGovernedSchema's lax one sits beside a top-level attribute t.
+// awDefinedSchema's lax one ##defined beside a top-level attribute g,
+// awLaxGovernedSchema's lax one sits beside a top-level attribute t, and
+// awStrictAnySchema's strict one admits every namespace, the XSI one among them.
 const (
 	awNotSchema         = `<xs:element name="r"><xs:complexType><xs:sequence><xs:element name="e" type="xs:string"/></xs:sequence><xs:anyAttribute notQName="s:no" processContents="skip"/></xs:complexType></xs:element>`
 	awDefinedSchema     = `<xs:attribute name="g" type="xs:int"/><xs:element name="r"><xs:complexType><xs:sequence><xs:element name="e" type="xs:string"/></xs:sequence><xs:anyAttribute notQName="##defined" processContents="lax"/></xs:complexType></xs:element>`
 	awLaxGovernedSchema = `<xs:attribute name="t" type="xs:int"/><xs:element name="r"><xs:complexType><xs:sequence><xs:element name="e" type="xs:string"/></xs:sequence><xs:anyAttribute processContents="lax"/></xs:complexType></xs:element>`
+	awStrictAnySchema   = `<xs:element name="r"><xs:complexType><xs:sequence><xs:element name="e" type="xs:string"/></xs:sequence><xs:anyAttribute processContents="strict"/></xs:complexType></xs:element>`
 )
 
 // TestAppendAttributeWildcard pins the {attribute wildcard} "# What encodes"
@@ -4043,6 +4052,15 @@ func TestAppendAttributeWildcard(t *testing.T) {
 	t.Run("an empty field of empty content", func(t *testing.T) {
 		roundTrip(t, schemaOf(t, awEmptySchema), rootName, awEmpty{}, `<r xmlns="urn:s"/>`, deepEqual[awEmpty])
 	})
+	for _, row := range []struct{ name, decls string }{
+		{"xsi:banana under a skip wildcard", awNotSchema},
+		{"xsi:banana under a lax wildcard", awLaxGovernedSchema},
+	} {
+		t.Run(row.name, func(t *testing.T) {
+			roundTrip(t, schemaOf(t, row.decls), rootName, awOne{E: "v", AnyAttribute: []anyAttribute{{xsd.XMLSchemaInstanceNS, "banana", "1"}}},
+				`<r xmlns="urn:s" xmlns:p1="http://www.w3.org/2001/XMLSchema-instance" p1:banana="1"><e>v</e></r>`, deepEqual[awOne])
+		})
+	}
 }
 
 // TestAppendAttributeWildcardInvalid pins item 6 of Append's doc for an
@@ -4132,7 +4150,9 @@ func TestAppendAttributeWildcardInvalid(t *testing.T) {
 			[]string{"attribute xsi:nil at awOne.AnyAttribute[0]" + field}},
 		{"xsi:type under a wildcard excluding the XSI namespace", awUnionSchema, constructXsiAttribute, held(anyAttribute{xsd.XMLSchemaInstanceNS, "type", "xs:int"}),
 			[]string{"attribute xsi:type at awOne.AnyAttribute[0]" + field}},
-		{"an XSI attribute the wildcard admits", awNotSchema, constructXsiAttribute, held(anyAttribute{xsd.XMLSchemaInstanceNS, "banana", "1"}),
+		{"xsi:noNamespaceSchemaLocation under a lax wildcard", awLaxGovernedSchema, constructXsiAttribute, held(anyAttribute{xsd.XMLSchemaInstanceNS, "noNamespaceSchemaLocation", "n.xsd"}),
+			[]string{"attribute xsi:noNamespaceSchemaLocation at awOne.AnyAttribute[0]" + field}},
+		{"xsi:banana under a strict wildcard admitting the XSI namespace", awStrictAnySchema, constructStrictAttributeWildcard, held(anyAttribute{xsd.XMLSchemaInstanceNS, "banana", "1"}),
 			[]string{"attribute xsi:banana at awOne.AnyAttribute[0]" + field}},
 		{"xsi:schemaLocation under a skip wildcard", awNotSchema, constructXsiAttribute, held(anyAttribute{xsd.XMLSchemaInstanceNS, "schemaLocation", "urn:x x.xsd"}),
 			[]string{"attribute xsi:schemaLocation at awOne.AnyAttribute[0]" + field}},
@@ -4219,6 +4239,11 @@ func TestAppendAnyType(t *testing.T) {
 		roundTrip(t, schemaOf(t, rootAnySchema), rootName, v,
 			`<r xmlns="urn:s"><c xmlns="" xmlns:p1="http://www.w3.org/2001/XMLSchema-instance" p1:noNamespaceSchemaLocation="n.xsd"/></r>`, deepEqual[rootAny])
 	})
+	t.Run("xsi:banana on the document element and on a descendant", func(t *testing.T) {
+		v := rootAny{Attributes: []anyAttribute{{xsd.XMLSchemaInstanceNS, "banana", "1"}}, Children: []anyChild{{Element: anyElement{Local: "c", Content: anyType{Attributes: []anyAttribute{{xsd.XMLSchemaInstanceNS, "banana", "2"}}}}}}}
+		roundTrip(t, schemaOf(t, governedAnySchema), rootName, v,
+			`<r xmlns="urn:s" xmlns:p1="http://www.w3.org/2001/XMLSchema-instance" p1:banana="1"><c xmlns="" p1:banana="2"/></r>`, deepEqual[rootAny])
+	})
 }
 
 // TestAppendAnyTypeGuards pins what Append does with the content of an
@@ -4292,8 +4317,6 @@ func TestAppendAnyTypeGuards(t *testing.T) {
 			[]string{"attribute xsi:type at rootAny.Attributes[1], " + in}},
 		{"xsi:type at depth", constructXsiAttribute.name(), rootAny{Children: child(anyElement{Local: "c", Content: anyType{Attributes: []anyAttribute{{xsd.XMLSchemaInstanceNS, "type", "x:t"}}}})},
 			[]string{"attribute xsi:type at rootAny.Children[0].Element.Content.Attributes[0], " + in}},
-		{"xsi:banana on the element", constructXsiAttribute.name(), rootAny{Attributes: []anyAttribute{{xsd.XMLSchemaInstanceNS, "banana", "1"}}},
-			[]string{"attribute xsi:banana at rootAny.Attributes[0], " + in}},
 		{"a governed xs:QName child decoded from a valid document", constructGovernedContent.name(), *decoded,
 			[]string{"element {urn:s}q at rootAny.Children[0].Element, " + in, ", governed by element {urn:s}q declared at "}},
 		{"a governed xs:int child built invalid against its declaration", constructGovernedContent.name(), rootAny{Children: child(anyElement{Space: "urn:s", Local: "i", Content: anyType{Text: "abc"}})},

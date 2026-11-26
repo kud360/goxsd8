@@ -3160,7 +3160,7 @@ func (e *encoder) rawAttribute(name xsd.QName, value string, attrs reflect.Value
 			return false
 		}
 	}
-	if name.Space == xsd.XMLSchemaInstanceNS && (!locationHint(name) || !hold.writesHints()) && (name != (xsd.QName{Space: xsd.XMLSchemaInstanceNS, Local: "nil"}) || !hold.writesNil()) {
+	if instanceAttribute(name) && (!locationHint(name) || !hold.writesHints()) && (name != (xsd.QName{Space: xsd.XMLSchemaInstanceNS, Local: "nil"}) || !hold.writesNil()) {
 		if e.declined == nil {
 			e.declined = encodeDecline(constructXsiAttribute, fmt.Sprintf("attribute %s at %s, %s", name.Display(), path, hold.in()))
 		}
