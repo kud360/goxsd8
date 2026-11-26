@@ -77,39 +77,39 @@ var ErrInvalidValue = errors.New("codec: Append: a value no valid document holds
 //     and {max occurs}, a choice's alternative's {min occurs} 0 read as 1 in its branch,
 //     though never a flattened sequence's or choice's slice field, which holds one item per
 //     child, not per occurrence, nor below its {min occurs} the occurrence field of a choice one
-//     occurrence of which is emptiable, which holds one item per occurrence that matches
-//     something (codegen's package doc, "# Particles"); the nil sealed interface of a choice occurring
-//     once, the content choice or a nested one, none of whose alternatives is emptiable (Structures
-//     §3.8.4.3 cvc-model-group, §3.9.6.3 cos-group-emptiable), a choice of no {particles} among them; a
-//     nil item of an occurrence field's slice of a choice, the content {particle}'s or a nested one's,
-//     whatever its alternatives, which Decode never returns; a value of either interface whose dynamic
-//     type the [WithBranches] set in opts places at no alternative, a pointer to a branch among them,
-//     which Decode never returns; a nil item of a flattened sequence's or choice's slice, the content
-//     {particle}'s or a nested one's, which Decode never returns either, and an item of it whose dynamic
-//     type the [WithBranches] set in opts places at no alternative, a pointer to a branch among them; the
-//     nil sealed interface of an <element ref> particle's field over a substitution group (codegen's
-//     package doc, "# Substitution groups"), or of an item of its slice, wherever nil does not mean
-//     absent, that of a head with {abstract} true and no branch among them, and a value of that interface
-//     whose dynamic type the [WithBranches] set in opts places at no branch, a pointer to a branch among
-//     them, which Decode never returns; the nil sealed interface of a union simple type wherever nil does
-//     not mean absent, that is, every field but an element particle's of {min occurs} 0 and {max occurs} 1
-//     and an optional attribute use's to which no value constraint supplies a value (codegen's package
-//     doc, "# Particles", "# Attributes"), which Decode never returns; a value of that interface whose
-//     dynamic type the [WithBranches] set in opts places at no basic member, a pointer to a variant among
-//     them, which Decode never returns; a value that holds itself, a struct or sealed interface value its
-//     own write reaches again through a *S, []S or []I field, which no finite document holds, the error
-//     naming the Go path where the value is reached again and nothing written beneath it; a string holding
-//     bytes that are not UTF-8 or a character the XML 1.0 Char production does not match, U+0000 among
-//     them (Datatypes §3.3.1.1, §3.3.17.1, §3.2.1.2, §3.2.2.2), a held element's Space, an attribute's
-//     Space or Value, a Text and a Tail among them; a string that differs from its own
-//     whiteSpace-normalized form under its simple type, such as an xs:token holding "  a b"; a list item,
-//     a string, that is empty or holds TAB, LF, CR or a space, which no list item's lexical representation
-//     does (Datatypes §2.4.1.2); a big.Rat outside the decimal value space, whose denominator in lowest
-//     terms is no 2^m·5^n (§3.3.3.1), such as 1/3; an element a wildcard particle's field holds, of
-//     {process contents} skip or lax, that its content model admits at no particle where it is written, a
-//     name outside the wildcard's {namespace constraint} or in its {disallowed names} among them, or
-//     attributes to a particle other than that wildcard, an element particle taking its name first among
-//     them, or after whose content's last child the content model is not accepting, as
+//     occurrence of which is emptiable (codegen's package doc, "# Particles"; §3.9.4.3 cvc-accept
+//     3.1-3.3, §3.9.6.3 cos-group-emptiable clause 2 via §3.8.6.6 cos-choice-range); the nil sealed
+//     interface of a choice occurring once, the content choice or a nested one, none of whose alternatives
+//     is emptiable (Structures §3.8.4.3 cvc-model-group, §3.9.6.3 cos-group-emptiable), a choice of no
+//     {particles} among them; a nil item of an occurrence field's slice of a choice, the content
+//     {particle}'s or a nested one's, whatever its alternatives, which Decode never returns; a value of
+//     either interface whose dynamic type the [WithBranches] set in opts places at no alternative, a
+//     pointer to a branch among them, which Decode never returns; a nil item of a flattened sequence's or
+//     choice's slice, the content {particle}'s or a nested one's, which Decode never returns either, and
+//     an item of it whose dynamic type the [WithBranches] set in opts places at no alternative, a pointer
+//     to a branch among them; the nil sealed interface of an <element ref> particle's field over a
+//     substitution group (codegen's package doc, "# Substitution groups"), or of an item of its slice,
+//     wherever nil does not mean absent, that of a head with {abstract} true and no branch among them, and
+//     a value of that interface whose dynamic type the [WithBranches] set in opts places at no branch, a
+//     pointer to a branch among them, which Decode never returns; the nil sealed interface of a union
+//     simple type wherever nil does not mean absent, that is, every field but an element particle's of
+//     {min occurs} 0 and {max occurs} 1 and an optional attribute use's to which no value constraint
+//     supplies a value (codegen's package doc, "# Particles", "# Attributes"), which Decode never returns;
+//     a value of that interface whose dynamic type the [WithBranches] set in opts places at no basic
+//     member, a pointer to a variant among them, which Decode never returns; a value that holds itself, a
+//     struct or sealed interface value its own write reaches again through a *S, []S or []I field, which
+//     no finite document holds, the error naming the Go path where the value is reached again and nothing
+//     written beneath it; a string holding bytes that are not UTF-8 or a character the XML 1.0 Char
+//     production does not match, U+0000 among them (Datatypes §3.3.1.1, §3.3.17.1, §3.2.1.2, §3.2.2.2), a
+//     held element's Space, an attribute's Space or Value, a Text and a Tail among them; a string that
+//     differs from its own whiteSpace-normalized form under its simple type, such as an xs:token holding "
+//     a b"; a list item, a string, that is empty or holds TAB, LF, CR or a space, which no list item's
+//     lexical representation does (Datatypes §2.4.1.2); a big.Rat outside the decimal value space, whose
+//     denominator in lowest terms is no 2^m·5^n (§3.3.3.1), such as 1/3; an element a wildcard particle's
+//     field holds, of {process contents} skip or lax, that its content model admits at no particle where
+//     it is written, a name outside the wildcard's {namespace constraint} or in its {disallowed names}
+//     among them, or attributes to a particle other than that wildcard, an element particle taking its
+//     name first among them, or after whose content's last child the content model is not accepting, as
 //     xsd.Schema.ContentMatcher's Matcher decides (§3.9.4.3 cvc-accept, §3.10.4.1 cvc-wildcard, §3.8.4.3
 //     cvc-model-group); an attribute an {attribute wildcard}'s field holds whose expanded name an
 //     attribute use of the type names, the use's field nil or set, which Decode never returns (§3.4.4.2
@@ -814,16 +814,13 @@ func (b boundSequenceItem) writeItem(e *encoder, v reflect.Value, at writeAt, _ 
 // floor is floorMin: no occurrence of a sequence or all group whose slice
 // writeOccurring's length check reads matches the empty sequence. That slice
 // is a shapeRepeated field's, of {max occurs} above 1, which no all group
-// takes (§3.8.6.2 cos-all-limited), and goshape.ParticleHold flattens a
-// sequence of {max occurs} above 1 whose term is emptiable, its flattens'
-// second gate (codegen/doc.go "# Particles"), so that its term's range
-// minimum is above 0 and one occurrence is not emptiable (§3.8.6.5
-// cos-seq-range, §3.9.6.3 cos-group-emptiable clause 2).
+// takes (§3.8.6.2 cos-all-limited) and no sequence one occurrence of which is
+// emptiable takes either, codegen flattening it (codegen/doc.go "# Particles",
+// goshape.ParticleHold's flattens, its second gate).
 func (boundSequenceItem) floor() lengthFloor { return floorMin }
 
 // floor is floorWaived where one occurrence of the choice matches the empty
-// sequence (choiceEmptiable), Decode's slice holding no item for such an
-// occurrence (codegen/doc.go "# Particles"), and floorMin otherwise.
+// sequence (choiceEmptiable), and floorMin otherwise.
 func (c boundChoiceItem) floor() lengthFloor {
 	if choiceEmptiable(c.choice.sealed.alts) {
 		return floorWaived
@@ -1093,11 +1090,8 @@ func (e *encoder) writeOccurring(sh shape, own, held xsd.Occurs, floor lengthFlo
 // floorMin, held's {min occurs}, every field's but an occurrence field's
 // whose item reads otherwise (boundItem.floor); and floorWaived, none, for
 // the occurrence field of a choice one occurrence of which matches the empty
-// sequence, whose slice holds one item per occurrence that matches something
-// (codegen/doc.go "# Particles"), so that the occurrences it lacks below
-// held's {min occurs} each match the empty sequence (§3.9.4.3 cvc-accept
-// 3.1-3.3, §3.9.6.3 cos-group-emptiable clause 2 via §3.8.6.6
-// cos-choice-range). Neither waives held's {max occurs}.
+// sequence, whose slice's length codegen/doc.go "# Particles" states. Neither
+// waives held's {max occurs}.
 type lengthFloor int
 
 const (

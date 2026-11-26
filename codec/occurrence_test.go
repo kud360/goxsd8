@@ -272,15 +272,12 @@ func TestDecodeOccurrenceItemDeclines(t *testing.T) {
 // two items of it write four elements of one name, a *S and a bare I, nil
 // meaning absent, a <group ref>, and two items of a sequence with {min
 // occurs} 2, a skip wildcard's element in the first, under one attribution
-// check across both. A []I of a choice one of whose alternatives has {min
-// occurs} 0, an element's, a sequence's or a wildcard's, holds fewer items
-// than the choice's {min occurs} where the occurrences it lacks match the
-// empty sequence through that alternative (§3.9.4.3 cvc-accept 3.1-3.3,
-// §3.9.6.3 cos-group-emptiable clause 2 via §3.8.6.6 cos-choice-range): one
-// item of each choice occurring 2 to 3 times, the two over a wildcard under
-// the content's attribution check, and none of one occurring 1 to unbounded
-// times, each the slice Decode returns. Validate accepts each document and
-// Decode returns the value.
+// check across both. Below its {min occurs}, the []I of a choice an
+// element, sequence or wildcard alternative of which has {min occurs} 0
+// (Append's doc, item 6): one item of each such choice occurring 2 to 3
+// times, the two over a wildcard under the content's attribution check, and
+// none of one occurring 1 to unbounded times, each the slice Decode returns.
+// Validate accepts each document and Decode returns the value.
 func TestAppendOccurrence(t *testing.T) {
 	const r = `<r xmlns="urn:s">`
 	for _, row := range []struct {
