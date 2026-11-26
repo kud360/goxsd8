@@ -21,8 +21,10 @@ import (
 // emptiable; enItemGroupSchema's sequence(choice(a, sequence(b,
 // c))){1,2}, the same with a model-group alternative of {min occurs} 1; and
 // enOccChoiceSchema's sequence(choice(a?, b){2,3}, c), a nested occurrence
-// field of a choice one of whose alternatives is emptiable, and
-// enOccChoiceReqSchema's sequence(choice(a, b){2,3}, c), none of whose is.
+// field of a choice one of whose alternatives is emptiable,
+// enOccChoiceReqSchema's sequence(choice(a, b){2,3}, c), none of whose is, and
+// enBranchOccSchema's choice(x, sequence(choice(a?, b){2,3}, c)), the first
+// held in a content choice's spliced sequence alternative.
 const (
 	enFlatPairSchema = `<xs:element name="r"><xs:complexType><xs:sequence>` + cgElC + `<xs:sequence maxOccurs="2"><xs:element name="a" type="xs:string" minOccurs="0"/>` +
 		`<xs:element name="b" type="xs:string" minOccurs="0"/></xs:sequence></xs:sequence></xs:complexType></xs:element>`
@@ -39,6 +41,8 @@ const (
 		cgElB + `</xs:choice>` + cgElC + `</xs:sequence></xs:complexType></xs:element>`
 	enOccChoiceReqSchema = `<xs:element name="r"><xs:complexType><xs:sequence><xs:choice minOccurs="2" maxOccurs="3">` + cgElA + cgElB + `</xs:choice>` +
 		cgElC + `</xs:sequence></xs:complexType></xs:element>`
+	enBranchOccSchema = `<xs:element name="r"><xs:complexType><xs:choice><xs:element name="x" type="xs:string"/><xs:sequence><xs:choice minOccurs="2" maxOccurs="3">` +
+		`<xs:element name="a" type="xs:string" minOccurs="0"/>` + cgElB + `</xs:choice>` + cgElC + `</xs:sequence></xs:choice></xs:complexType></xs:element>`
 )
 
 // The types codegen emits for the nested-encode schemas' s:r, in shape,
@@ -46,7 +50,8 @@ const (
 // enFlatPair's interface, enChoiceAny over noBC, noOnceAlt for
 // enOptOccSchema, enItemChoice over noBC, enItemGroup over cgOChoice, and
 // enOccChoice over occChoiceItem for enOccChoiceSchema and
-// enOccChoiceReqSchema.
+// enOccChoiceReqSchema, and enBranchOcc for enBranchOccSchema, its
+// enBranchOccSeq branch over occChoiceItem.
 type (
 	enFlatPair struct {
 		C        string
@@ -76,13 +81,25 @@ type (
 		Choice []occChoiceItem
 		C      string
 	}
+
+	enBranchOcc    interface{ isEnBranchOcc() }
+	enBranchOccX   struct{ X string }
+	enBranchOccSeq struct {
+		Choice []occChoiceItem
+		C      string
+	}
 )
 
 func (enFlatPairA) isEnFlatPairItem() {}
 func (enFlatPairB) isEnFlatPairItem() {}
+func (enBranchOccX) isEnBranchOcc()   {}
+func (enBranchOccSeq) isEnBranchOcc() {}
 
-// enFlatPairBranches is the branch set of enFlatPairItem.
-var enFlatPairBranches = WithBranches[enFlatPairItem](enFlatPairA{}, enFlatPairB{})
+// The branch sets of enFlatPairItem and enBranchOcc.
+var (
+	enFlatPairBranches  = WithBranches[enFlatPairItem](enFlatPairA{}, enFlatPairB{})
+	enBranchOccBranches = WithBranches[enBranchOcc](enBranchOccX{}, enBranchOccSeq{})
+)
 
 // TestEncodeNestedTypesAreCodegens pins the types above to those codegen
 // emits for each nested-encode schema, in shape.
@@ -103,6 +120,10 @@ func TestEncodeNestedTypesAreCodegens(t *testing.T) {
 			branch("RSequenceChoice", "RSequenceChoiceB", "B string"), branch("RSequenceChoice", "RSequenceChoiceC", "C string")}},
 		{enItemGroupSchema, []string{"type R struct {\n\tSequence []RSequence\n}\n", "type RSequence struct {\n\tChoice RSequenceChoice\n}\n",
 			branch("RSequenceChoice", "RSequenceChoiceA", "A string"), "type RSequenceChoiceSequence struct {\n\tB string\n\tC string\n}\n\nfunc (RSequenceChoiceSequence) isRSequenceChoice() {}\n"}},
+		{enOccChoiceSchema, []string{"type R struct {\n\tChoice []RChoice\n\tC      string\n}\n", branch("RChoice", "RChoiceA", "A string"), branch("RChoice", "RChoiceB", "B string")}},
+		{enOccChoiceReqSchema, []string{"type R struct {\n\tChoice []RChoice\n\tC      string\n}\n", branch("RChoice", "RChoiceA", "A string"), branch("RChoice", "RChoiceB", "B string")}},
+		{enBranchOccSchema, []string{"type R interface {\n\tisR()\n}\n", branch("R", "RX", "X string"), "type RSequence struct {\n\tChoice []RChoice\n\tC      string\n}\n\nfunc (RSequence) isR() {}\n",
+			branch("RChoice", "RChoiceA", "A string"), branch("RChoice", "RChoiceB", "B string")}},
 	}
 	for _, row := range rows {
 		gen := generated(t, schemaOf(t, row.decls))
@@ -134,7 +155,8 @@ func TestEncodeNestedTypesAreCodegens(t *testing.T) {
 // the nil interface of a content choice whose model-group alternative has {min
 // occurs} 0, and one item of a nested choice occurring 2 to 3 times, the
 // occurrence it lacks matching the empty sequence through its alternative of
-// {min occurs} 0 (§3.9.4.3 cvc-accept 3.1-3.3). Each row fails with item 4's
+// {min occurs} 0 (§3.9.4.3 cvc-accept 3.1-3.3), in a content sequence and in
+// a content choice's spliced sequence alternative. Each row fails with item 4's
 // constructNestedGroup arm in particleEncodes put back
 // (encodeWalk.groupEncodes), every row reaching a nested model group.
 func TestAppendNested(t *testing.T) {
@@ -272,6 +294,10 @@ func TestAppendNested(t *testing.T) {
 		}},
 		{"one item of a nested choice occurring 2 to 3 times, an element alternative emptiable", func(t *testing.T) {
 			roundTrip(t, schemaOf(t, enOccChoiceSchema), rootName, enOccChoice{Choice: []occChoiceItem{occChoiceB{B: "1"}}, C: "2"}, r+`<b>1</b><c>2</c></r>`, deepEqual[enOccChoice], occChoiceBranches)
+		}},
+		{"one item of a nested choice occurring 2 to 3 times in a content choice's sequence alternative", func(t *testing.T) {
+			v := enBranchOcc(enBranchOccSeq{Choice: []occChoiceItem{occChoiceB{B: "1"}}, C: "2"})
+			roundTrip(t, schemaOf(t, enBranchOccSchema), rootName, v, r+`<b>1</b><c>2</c></r>`, deepEqual[enBranchOcc], enBranchOccBranches, occChoiceBranches)
 		}},
 	} {
 		t.Run(row.name, row.run)
