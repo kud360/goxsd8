@@ -3660,17 +3660,19 @@ var skipAttrBranches = WithBranches[skipAttrChoice](skipAttrA{}, skipAttrAny{})
 // the XSI namespace under a default declaration of it, an attribute in it being item 7 but for
 // xsi:schemaLocation and xsi:noNamespaceSchemaLocation, written on a skip match and on a lax one
 // as any other attribute is; both rows fail with rawAttribute's hint exemption removed, and the
-// lax one, not the skip one, with rawAttributes asking encoder.governed of a hint. Each document
-// validate accepts and Decode turns back into the value; an optional wildcard holding
-// nothing writes nothing, and so does the nil interface of a choice whose wildcard alternative has
-// {min occurs} 0, which is emptiable though its branch reads it as 1 (choiceEmptiable). The rows
-// of one and several held elements are the ones the static decline failed before the slice
-// (constructWildcard). A skip match named as the element particle beside it is written, no
-// ·locally declared type· read for it, and so is a lax match no declaration governs, at the
-// top and with a child at depth, unqualified and foreign attributes on each, and one holding a
-// child named as that element particle, which has no locally declared type below the match
-// (§3.4.6.4 key-ldt-elem clause 1); the three lax rows decline constructWildcard with
-// particleEncodes' narrowing to strict undone.
+// lax one, not the skip one, with rawAttributes asking encoder.governed of a hint. xsi:nil, item 7
+// but in a skip match, is written on a skip match beside content and on a child at depth, whatever
+// its value, nothing below the match assessed (§3.10.4.1 key-skipped); both rows fail with
+// skipMatch.writesNil answering false. Each document validate accepts and Decode turns back into
+// the value; an optional wildcard holding nothing writes nothing, and so does the nil interface of
+// a choice whose wildcard alternative has {min occurs} 0, which is emptiable though its branch
+// reads it as 1 (choiceEmptiable). The rows of one and several held elements are the ones the
+// static decline failed before the slice (constructWildcard). A skip match named as the element
+// particle beside it is written, no ·locally declared type· read for it, and so is a lax match no
+// declaration governs, at the top and with a child at depth, unqualified and foreign attributes on
+// each, and one holding a child named as that element particle, which has no locally declared type
+// below the match (§3.4.6.4 key-ldt-elem clause 1); the three lax rows decline constructWildcard
+// with particleEncodes' narrowing to strict undone.
 func TestAppendWildcard(t *testing.T) {
 	t.Run("one held element", func(t *testing.T) {
 		roundTrip(t, schemaOf(t, seqSkipSchema), rootName, seqWild{A: "x", Any: anyElement{Space: "urn:o", Local: "w"}},
@@ -3748,6 +3750,21 @@ func TestAppendWildcard(t *testing.T) {
 		roundTrip(t, lax, rootName, v,
 			`<r xmlns="urn:s"><a>x</a><w xmlns="urn:o" xmlns:p1="http://www.w3.org/2001/XMLSchema-instance" p1:noNamespaceSchemaLocation="n.xsd"/></r>`, deepEqual[seqWild])
 	})
+	nilled := []anyAttribute{{xsd.XMLSchemaInstanceNS, "nil", "true"}}
+	t.Run("a skip match holding xsi:nil beside content", func(t *testing.T) {
+		v := seqWild{A: "x", Any: anyElement{Space: "urn:o", Local: "w", Content: anyType{Attributes: nilled, Text: "abc", Children: []anyChild{
+			{Element: anyElement{Space: "urn:o", Local: "c", Content: anyType{Attributes: nilled, Text: "t"}}},
+		}}}}
+		roundTrip(t, schemaOf(t, seqSkipSchema), rootName, v,
+			`<r xmlns="urn:s"><a>x</a><w xmlns="urn:o" xmlns:p1="http://www.w3.org/2001/XMLSchema-instance" p1:nil="true">abc<c p1:nil="true">t</c></w></r>`, deepEqual[seqWild])
+	})
+	t.Run("a skip match's child holding xsi:nil no xs:boolean spells", func(t *testing.T) {
+		v := seqWild{A: "x", Any: anyElement{Space: "urn:o", Local: "w", Content: anyType{Children: []anyChild{
+			{Element: anyElement{Local: "c", Content: anyType{Attributes: []anyAttribute{{xsd.XMLSchemaInstanceNS, "nil", "banana"}}}}},
+		}}}}
+		roundTrip(t, schemaOf(t, seqSkipSchema), rootName, v,
+			`<r xmlns="urn:s"><a>x</a><w xmlns="urn:o"><c xmlns="" xmlns:p1="http://www.w3.org/2001/XMLSchema-instance" p1:nil="banana"/></w></r>`, deepEqual[seqWild])
+	})
 }
 
 // TestAppendWildcardInvalid pins item 6 of Append's doc for a skip wildcard's field: a
@@ -3760,18 +3777,21 @@ func TestAppendWildcard(t *testing.T) {
 // attributes of one expanded name, and a Value, Text or Tail holding a non-Char; and a
 // held element whose Children slice holds itself (encoder.enter). None carries an
 // *xsderr.Error. A lax match outside its {namespace constraint} is item 6 too, dst
-// returned unextended. Then item 7: xsi:type and xsi:nil, at any depth of a skip or a
-// lax match, decline by constructXsiAttribute, behind an item 6 error found
-// after it, and xsi:banana on a skip and on a lax match declines by
-// constructXsiAttribute too, the two rows failing under a writer that declines
-// only xsi:type and xsi:nil; and in a lax match an element or attribute a top-level
-// declaration governs, the match itself, a child and an attribute, declines by
-// constructGovernedContent, and a match with a ·locally declared type· (§3.3.4.6
-// key-governing-type-elem clause 7) declines by constructLocallyTypedMatch: named as
-// the element particle beside it in a sequence, and as an element only the base type's
-// content model contains, through a choice's and a flattened choice's branch, each
-// failing with writeAt.typ left unthreaded on its path; a top-level declaration
-// governs, by constructGovernedContent, where both govern.
+// returned unextended; so is an xsi:nil in a skip match whose Value holds a non-Char,
+// failing with skipMatch.writesNil answering false. Then item 7: xsi:type on a skip and
+// on a lax match, the skip row behind an item 6 error found after it, and xsi:nil on a
+// lax match decline by constructXsiAttribute, the xsi:type skip row failing under a
+// writer that admits each of the four names cvc-complex-type clause 2 excepts in a skip
+// match, and the xsi:nil row under one that admits xsi:nil in every hold; and xsi:banana
+// on a skip and on a lax match declines by constructXsiAttribute too, the two rows failing
+// under a writer that declines only xsi:type and, outside a skip match, xsi:nil; and in a lax
+// match an element or attribute a top-level declaration governs, the match itself, a child
+// and an attribute, declines by constructGovernedContent, and a match with a ·locally
+// declared type· (§3.3.4.6 key-governing-type-elem clause 7) declines by
+// constructLocallyTypedMatch: named as the element particle beside it in a sequence, and
+// as an element only the base type's content model contains, through a choice's and a
+// flattened choice's branch, each failing with writeAt.typ left unthreaded on its path; a
+// top-level declaration governs, by constructGovernedContent, where both govern.
 func TestAppendWildcardInvalid(t *testing.T) {
 	many, one := schemaOf(t, skipManySchema), schemaOf(t, seqSkipSchema)
 	w := anyElement{Space: "urn:o", Local: "w"}
@@ -3859,6 +3879,10 @@ func TestAppendWildcardInvalid(t *testing.T) {
 			_, err := appendChecked(t, nil, one, strict.New(), rootName, held(anyType{Children: []anyChild{{Element: w, Tail: "ok\xff"}}}))
 			return err
 		}, `codec: Append: seqWild.Any.Content.Children[0].Tail holds "ok\xff", whose byte offset 2 starts no XML 1.0 Char`},
+		{"an xsi:nil Value holding a non-Char", func(t *testing.T) error {
+			_, err := appendChecked(t, nil, one, strict.New(), rootName, held(anyType{Attributes: []anyAttribute{{xsd.XMLSchemaInstanceNS, "nil", "tr\x00ue"}}}))
+			return err
+		}, `codec: Append: seqWild.Any.Content.Attributes[0].Value holds "tr\x00ue", whose byte offset 2 starts no XML 1.0 Char`},
 		{"an XSI attribute, then a Text holding a non-Char", func(t *testing.T) error {
 			_, err := appendChecked(t, nil, one, strict.New(), rootName, held(anyType{Attributes: []anyAttribute{{xsd.XMLSchemaInstanceNS, "type", "xs:byte"}}, Text: "\x01"}))
 			return err
@@ -3906,8 +3930,6 @@ func TestAppendWildcardInvalid(t *testing.T) {
 	}{
 		{"xsi:type on the match", one, constructXsiAttribute, held(anyType{Attributes: []anyAttribute{{"", "k", "v"}, {xsd.XMLSchemaInstanceNS, "type", "xs:byte"}}}),
 			[]string{"attribute xsi:type at seqWild.Any.Content.Attributes[1]" + match}},
-		{"xsi:nil on a child of the match", one, constructXsiAttribute, held(anyType{Children: []anyChild{{Element: anyElement{Local: "c", Content: anyType{Attributes: []anyAttribute{{xsd.XMLSchemaInstanceNS, "nil", "true"}}}}}}}),
-			[]string{"attribute xsi:nil at seqWild.Any.Content.Children[0].Element.Content.Attributes[0]" + match}},
 		{"xsi:banana on the match", one, constructXsiAttribute, held(anyType{Attributes: []anyAttribute{{xsd.XMLSchemaInstanceNS, "banana", "1"}}}),
 			[]string{"attribute xsi:banana at seqWild.Any.Content.Attributes[0]" + match}},
 		{"a lax match a top-level declaration governs", lax, constructGovernedContent, seqWild{A: "x", Any: anyElement{Space: "urn:s", Local: "w", Content: anyType{Text: "abc"}}},
@@ -3918,6 +3940,8 @@ func TestAppendWildcardInvalid(t *testing.T) {
 			[]string{"attribute {urn:s}t at seqWild.Any.Content.Attributes[0]" + match, ", governed by attribute {urn:s}t declared at "}},
 		{"xsi:type on a lax match", lax, constructXsiAttribute, laxHeld(anyType{Attributes: []anyAttribute{{xsd.XMLSchemaInstanceNS, "type", "xs:int"}}, Text: "abc"}),
 			[]string{"attribute xsi:type at seqWild.Any.Content.Attributes[0]" + match}},
+		{"xsi:nil on a lax match", lax, constructXsiAttribute, laxHeld(anyType{Attributes: []anyAttribute{{xsd.XMLSchemaInstanceNS, "nil", "true"}}, Text: "abc"}),
+			[]string{"attribute xsi:nil at seqWild.Any.Content.Attributes[0]" + match}},
 		{"xsi:banana on a lax match", lax, constructXsiAttribute, laxHeld(anyType{Attributes: []anyAttribute{{xsd.XMLSchemaInstanceNS, "banana", "1"}}}),
 			[]string{"attribute xsi:banana at seqWild.Any.Content.Attributes[0]" + match}},
 		{"a lax match named as the element particle beside it", lax, constructLocallyTypedMatch, seqWild{A: "1", Any: anyElement{Space: "urn:s", Local: "a", Content: anyType{Text: "hello"}}},
@@ -4037,7 +4061,10 @@ func TestAppendAttributeWildcard(t *testing.T) {
 // under a wildcard whose {namespace constraint} excludes the XSI namespace
 // and xsi:schemaLocation under a skip, a lax and a strict wildcard among
 // them, by constructXsiAttribute; the three xsi:schemaLocation rows fail
-// with attributeWildcardHold.writesHints answering true. Each item 6 row
+// with attributeWildcardHold.writesHints answering true. So does xsi:nil
+// under a skip wildcard, which Decode never returns there, failing with
+// attributeWildcardHold.writesNil answering true and under a writer that
+// admits xsi:nil wherever hold governs none (rawHold.governing). Each item 6 row
 // returns nil, having written the attribute, under a writer that writes the
 // field unchecked.
 func TestAppendAttributeWildcardInvalid(t *testing.T) {
@@ -4101,6 +4128,8 @@ func TestAppendAttributeWildcardInvalid(t *testing.T) {
 			[]string{"attribute {urn:s}h at awOne.AnyAttribute[0]" + field}},
 		{"xsi:type under a skip wildcard", awNotSchema, constructXsiAttribute, held(anyAttribute{xsd.XMLSchemaInstanceNS, "type", "xs:int"}),
 			[]string{"attribute xsi:type at awOne.AnyAttribute[0]" + field}},
+		{"xsi:nil under a skip wildcard", awNotSchema, constructXsiAttribute, held(anyAttribute{xsd.XMLSchemaInstanceNS, "nil", "true"}),
+			[]string{"attribute xsi:nil at awOne.AnyAttribute[0]" + field}},
 		{"xsi:type under a wildcard excluding the XSI namespace", awUnionSchema, constructXsiAttribute, held(anyAttribute{xsd.XMLSchemaInstanceNS, "type", "xs:int"}),
 			[]string{"attribute xsi:type at awOne.AnyAttribute[0]" + field}},
 		{"an XSI attribute the wildcard admits", awNotSchema, constructXsiAttribute, held(anyAttribute{xsd.XMLSchemaInstanceNS, "banana", "1"}),
