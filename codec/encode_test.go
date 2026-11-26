@@ -4936,7 +4936,7 @@ func TestAppendValueConstraint(t *testing.T) {
 		// constraint} and to its declaration's, each separately: 3 satisfies
 		// the use's alone, "1 2" the declaration's alone.
 		{"fixed attribute use and declaration, the use's value", appendRow(ref, xsd.QName{Local: "r"}, vcListRef{G: []int32{3}}), []string{"codec: Append: vcListRef.G, of simple type il ", `is written "3", whose value is neither equal nor identical to "1 2", the {value} of the fixed {value constraint} of attribute g`, "§3.2.4.1 cvc-attribute clause 4"}},
-		{"fixed attribute use and declaration, the declaration's value", appendRow(ref, xsd.QName{Local: "r"}, vcListRef{G: []int32{1, 2}}), []string{"codec: Append: vcListRef.G, of simple type il ", `is written "1 2", whose value is neither equal nor identical to "3", the {value} of the fixed {value constraint} of the attribute use of attribute g`, "§3.5.4 cvc-au"}},
+		{"fixed attribute use and declaration, the declaration's value", appendRow(ref, xsd.QName{Local: "r"}, vcListRef{G: []int32{1, 2}}), []string{"codec: Append: vcListRef.G, of simple type il ", `is written "1 2", whose value is neither equal nor identical to "3", the {value} of the fixed {value constraint} of the attribute use of attribute g declared at s.xsd:2:1,`, "§3.5.4 cvc-au"}},
 		{"nil union under a default", appendRow(schema, sname("un"), vcUnion{}, unionVariants...), []string{"codec: Append: vcUnion.Dflt is nil, of simple type {urn:s}u", "where a value is required"}},
 		{"anyType fixed, another text", appendRow(schema, sname("af"), anyType{Text: "y"}), []string{`codec: Append: anyType.Text holds "y", which does not match "x", the {lexical form} of the fixed {value constraint} of element {urn:s}af`, "cvc-elt clause 5.2.2.2.1"}},
 		{"anyType fixed child", appendRow(schema, sname("af"), anyType{Text: "x", Children: []anyChild{{Element: anyElement{Local: "c"}}}}), []string{`codec: Append: anyType.Children holds 1, though the fixed {value constraint} "x" of element {urn:s}af`, "admits no element child", "cvc-elt clause 5.2.2.1"}},
@@ -4964,7 +4964,7 @@ func TestAppendValueConstraint(t *testing.T) {
 		// The two rows of vcUndecidedSchema, a gap-accepted schema no
 		// conforming schema stands for, each hold a valid value to a fixed
 		// {value constraint} value.ConstraintMatches does not decide.
-		{"fixed NOTATION naming no declared notation", appendRow(undecided, sname("nr"), qnameHead{Space: "urn:s", Local: "png"}), []string{`at qnameHead holding the value written "png": value.ConstraintMatches does not decide whether its value is equal or identical to "s:none", the {value} of the fixed {value constraint} of element {urn:s}nr`, "cvc-elt clause 5.2.2.2.2"}},
+		{"fixed NOTATION naming no declared notation", appendRow(undecided, sname("nr"), qnameHead{Space: "urn:s", Local: "png"}), []string{`at qnameHead holding the value written "png": value.ConstraintMatches does not decide whether its value is equal or identical to "s:none", the {value} of the fixed {value constraint} of element {urn:s}nr declared at s.xsd:2:1 `, "cvc-elt clause 5.2.2.2.2"}},
 		{"fixed QName of an unbound prefix", appendRow(undecided, sname("qr"), qnameHead{Space: "urn:s", Local: "x"}), []string{`at qnameHead holding the value written "x": value.ConstraintMatches does not decide whether its value is equal or identical to "q:x", the {value} of the fixed {value constraint} of element {urn:s}qr`, "cvc-elt clause 5.2.2.2.2"}},
 	} {
 		t.Run(row.name, func(t *testing.T) {
