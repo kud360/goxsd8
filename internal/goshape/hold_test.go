@@ -22,6 +22,7 @@ const holdSchema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
   <xs:group name="choice"><xs:choice><xs:element name="a"/><xs:element name="b"/></xs:choice></xs:group>
   <xs:group name="choiceEmpty"><xs:choice/></xs:group>
   <xs:group name="choiceGroupEmptiable"><xs:choice><xs:sequence><xs:element name="a" minOccurs="0"/></xs:sequence><xs:element name="b"/></xs:choice></xs:group>
+  <xs:group name="choiceGroupOptional"><xs:choice><xs:sequence minOccurs="0"><xs:element name="a"/></xs:sequence><xs:element name="b"/></xs:choice></xs:group>
   <xs:group name="choiceEdge"><xs:choice><xs:element name="a" maxOccurs="unbounded"/><xs:element name="b"/></xs:choice></xs:group>
   <xs:complexType name="root"><xs:choice><xs:element name="a"/><xs:element name="b"/></xs:choice></xs:complexType>
   <xs:complexType name="rootEmpty"><xs:choice/></xs:complexType>
@@ -80,6 +81,10 @@ func TestParticleHold(t *testing.T) {
 		{"choiceGroupEmptiable", bounded(1, 1), Flattened},
 		{"choice", bounded(1, 1), OnceChoice},
 		{"choiceEmpty", bounded(1, 1), OnceChoice},
+		// Pins flattens' first gate (codegen/doc.go "# Particles"): this
+		// row alone fails where flattens also flattens a choice whose model
+		// group alternative has {min occurs} 0 (#4130).
+		{"choiceGroupOptional", bounded(1, 1), OnceChoice},
 		{"choice", bounded(0, 1), Occurrence},
 		{"choiceEdge", unbounded, Flattened},
 		{"choice", unbounded, Occurrence},
