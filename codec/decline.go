@@ -157,18 +157,18 @@ type construct uint8
 // reaches, is examined. A particle declines by constructVacuousParticle first, as the
 // content {particle} does; where its term is a model group, then by constructNestedGroup
 // where codegen flattens it or holds it in an occurrence field inside an occurrence
-// field's item, by constructAllGroup where it is an all group, and otherwise by its own
-// particles' constructs, in its place; its element declaration, local or the top-level
-// one an <element ref> names, or, for an <element ref> whose field codegen gives a sealed
-// interface (goshape.SubstitutionSum), each declaration that interface has a branch for,
-// in group order, declines by the document element's declaration's constructs,
-// constructNillable first and constructAbstractElement last, then by its type's as the
-// document element's type does, from constructAbstractType on, a complex type's content
-// and attribute uses examined at the particle. The ones of a simple type,
-// constructEncodePrimitive to constructAssertions, sit after the {assertions}'s, though
-// the document element's, a particle's and an attribute use's simple type declines by
-// them where that declaration or use is examined, and a complex type's simple content, by
-// its {simple type definition}, where its type's content is, ahead of its attribute uses.
+// field's item, and otherwise by its own particles' constructs, in its place; its element
+// declaration, local or the top-level one an <element ref> names, or, for an <element
+// ref> whose field codegen gives a sealed interface (goshape.SubstitutionSum), each
+// declaration that interface has a branch for, in group order, declines by the document
+// element's declaration's constructs, constructNillable first and
+// constructAbstractElement last, then by its type's as the document element's type does,
+// from constructAbstractType on, a complex type's content and attribute uses examined at
+// the particle. The ones of a simple type, constructEncodePrimitive to
+// constructAssertions, sit after the {assertions}'s, though the document element's, a
+// particle's and an attribute use's simple type declines by them where that declaration
+// or use is examined, and a complex type's simple content, by its {simple type
+// definition}, where its type's content is, ahead of its attribute uses.
 const (
 	constructNillable construct = iota + 1
 	constructNestedGroup
@@ -184,7 +184,6 @@ const (
 	constructMixed
 	constructOpenContent
 	constructVacuousParticle
-	constructAllGroup
 	constructWildcard
 	constructReservedAttributeUse
 	constructComplexAssertions
@@ -216,7 +215,6 @@ var constructNames = [...]string{
 	constructMixed:                   "a complex type with mixed content",
 	constructOpenContent:             "an {open content}",
 	constructVacuousParticle:         "a particle with {max occurs} 0",
-	constructAllGroup:                "an all group",
 	constructWildcard:                "a wildcard particle with {process contents} strict",
 	constructReservedAttributeUse:    "an attribute use whose declaration's {target namespace} is the XSI namespace, other than xsi:schemaLocation's and xsi:noNamespaceSchemaLocation's, or the one the prefix xmlns is bound to",
 	constructComplexAssertions:       "a complex type with {assertions}",
