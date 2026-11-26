@@ -4772,9 +4772,35 @@ const vcSchema = unionTypes + `<xs:element name="ed" type="xs:int" default="7"/>
 const vcGlobalSchema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"><xs:attribute name="g" type="xs:int" fixed="7"/>
 <xs:element name="r"><xs:complexType><xs:attribute ref="g"/></xs:complexType></xs:element></xs:schema>`
 
-// The Go types codegen emits for vcSchema's and vcGlobalSchema's
-// declarations: a bare V for each attribute use with a value constraint
-// (codegen's package doc, "# Attributes").
+// vcRefSchema declares, in no namespace, the top-level attribute g of il, a
+// list of xs:int, fixed "1 2", and the element r whose complex type uses it by
+// ref fixed "3", so that the use's {value constraint} (Structures §3.5.4
+// cvc-au) and its declaration's (§3.2.4.1 cvc-attribute clause 4) differ. The
+// schema is not conforming, since §3.5.6 au-props-correct clause 3 requires
+// the two {value}s to be identical, and it is gap-accepted.
+//
+// GAP(xsd): clause 3 is not decided for a list or union {type definition},
+// since value's sharedMapping refuses both varieties and
+// checkAttributeUseValueConstraint accepts an undecided answer, #2087.
+const vcRefSchema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"><xs:simpleType name="il"><xs:list itemType="xs:int"/></xs:simpleType>
+<xs:attribute name="g" type="il" fixed="1 2"/>
+<xs:element name="r"><xs:complexType><xs:attribute ref="g" fixed="3"/></xs:complexType></xs:element></xs:schema>`
+
+// vcUndecidedSchema declares the fixed {value constraint}s whose comparison
+// value.ConstraintMatches leaves undecided: nr, of a restriction of
+// xs:NOTATION enumerating s:png, fixed "s:none", which names no declared
+// notation, and qr, an xs:QName element fixed "q:x", q bound nowhere. Neither
+// {lexical form} is a value of its type, so the schema is not conforming
+// (Structures §3.3.6.1 e-props-correct clause 2), and it is gap-accepted:
+// value.ValidDefault's gate 1 refuses every QName- and NOTATION-governed
+// default (GAP(value): needsContext, #667).
+const vcUndecidedSchema = `<xs:notation name="png" public="image/png"/>
+<xs:element name="nr" fixed="s:none"><xs:simpleType><xs:restriction base="xs:NOTATION"><xs:enumeration value="s:png"/></xs:restriction></xs:simpleType></xs:element>
+<xs:element name="qr" type="xs:QName" fixed="q:x"/>`
+
+// The Go types codegen emits for vcSchema's, vcGlobalSchema's and
+// vcRefSchema's declarations: a bare V for each attribute use with a value
+// constraint (codegen's package doc, "# Attributes").
 type (
 	vcInt     int32
 	vcString  string
@@ -4785,8 +4811,9 @@ type (
 		A string
 		F int32
 	}
-	vcUnion  struct{ Dflt unionU }
-	vcGlobal struct{ G int32 }
+	vcUnion   struct{ Dflt unionU }
+	vcGlobal  struct{ G int32 }
+	vcListRef struct{ G []int32 }
 )
 
 // appendRow returns the Append, through appendChecked on strict's backend,
@@ -4806,13 +4833,17 @@ func appendRow[T any](schema *xsd.Schema, root xsd.QName, v T, opts ...Option) f
 // for "NaN", among them; a value no valid document holds under a fixed one,
 // at an element, a simple content, an attribute use and an attribute
 // declaration alone, the empty text and the content of an xs:anyType
-// element among them, item 6; the empty text under an element default whose
-// value it is not, item 7; and a nil union under an attribute default, item
-// 6, since Decode supplies the default there. Each error leaves dst
-// unextended.
+// element among them, item 6, and so is one an attribute use's fixed
+// constraint and its declaration's do not both hold, each read separately;
+// the empty text under an element default whose value it is not, item 7, and
+// so is a value whose fixed constraint value.ConstraintMatches does not
+// decide; and a nil union under an attribute default, item 6, since Decode
+// supplies the default there. Each error leaves dst unextended.
 func TestAppendValueConstraint(t *testing.T) {
 	schema := schemaOf(t, vcSchema)
 	global := parseString(t, vcGlobalSchema)
+	ref := parseString(t, vcRefSchema)
+	undecided := schemaOf(t, vcUndecidedSchema)
 	var one, four big.Rat
 	one.SetInt64(1)
 	four.SetInt64(4)
@@ -4902,6 +4933,12 @@ func TestAppendValueConstraint(t *testing.T) {
 		{"fixed simple content", appendRow(schemaOf(t, scFixedRoot), sname("r"), scPrice{Value: five}), []string{"codec: Append: scPrice.Value, of ", `is written "5", whose value is neither equal nor identical to "4", the {value} of the fixed {value constraint} of element {urn:s}r`, "cvc-elt clause 5.2.2.2.2"}},
 		{"fixed attribute use", appendRow(schema, sname("at"), vcAttrs{A: "y", F: 8}), []string{"codec: Append: vcAttrs.F, of simple type xs:int, is written ", `"8", whose value is neither equal nor identical to "7", the {value} of the fixed {value constraint} of the attribute use of attribute f`, "§3.5.4 cvc-au"}},
 		{"fixed attribute declaration", appendRow(global, xsd.QName{Local: "r"}, vcGlobal{G: 8}), []string{"codec: Append: vcGlobal.G, of simple type xs:int, is written ", `"8", whose value is neither equal nor identical to "7", the {value} of the fixed {value constraint} of attribute g`, "§3.2.4.1 cvc-attribute clause 4"}},
+		// The two rows of vcRefSchema, a gap-accepted schema no conforming
+		// schema stands for, hold one value to the use's fixed {value
+		// constraint} and to its declaration's, each separately: 3 satisfies
+		// the use's alone, "1 2" the declaration's alone.
+		{"fixed attribute use and declaration, the use's value", appendRow(ref, xsd.QName{Local: "r"}, vcListRef{G: []int32{3}}), []string{"codec: Append: vcListRef.G, of simple type il ", `is written "3", whose value is neither equal nor identical to "1 2", the {value} of the fixed {value constraint} of attribute g`, "§3.2.4.1 cvc-attribute clause 4"}},
+		{"fixed attribute use and declaration, the declaration's value", appendRow(ref, xsd.QName{Local: "r"}, vcListRef{G: []int32{1, 2}}), []string{"codec: Append: vcListRef.G, of simple type il ", `is written "1 2", whose value is neither equal nor identical to "3", the {value} of the fixed {value constraint} of the attribute use of attribute g declared at s.xsd:2:1,`, "§3.5.4 cvc-au"}},
 		{"nil union under a default", appendRow(schema, sname("un"), vcUnion{}, unionVariants...), []string{"codec: Append: vcUnion.Dflt is nil, of simple type {urn:s}u", "where a value is required"}},
 		{"anyType fixed, another text", appendRow(schema, sname("af"), anyType{Text: "y"}), []string{`codec: Append: anyType.Text holds "y", which does not match "x", the {lexical form} of the fixed {value constraint} of element {urn:s}af`, "cvc-elt clause 5.2.2.2.1"}},
 		{"anyType fixed child", appendRow(schema, sname("af"), anyType{Text: "x", Children: []anyChild{{Element: anyElement{Local: "c"}}}}), []string{`codec: Append: anyType.Children holds 1, though the fixed {value constraint} "x" of element {urn:s}af`, "admits no element child", "cvc-elt clause 5.2.2.1"}},
@@ -4922,15 +4959,20 @@ func TestAppendValueConstraint(t *testing.T) {
 	for _, row := range []struct {
 		name string
 		app  func(t *testing.T, dst []byte) ([]byte, error)
-		want string
+		want []string
 	}{
-		{"empty string under a default", appendRow(schema, sname("es"), vcString("")), `simple type xs:string, at vcString holding the value written "": its value is neither equal nor identical to "abc", the {value} of the default {value constraint} of element {urn:s}es`},
-		{"empty list under a default", appendRow(schema, sname("el"), vcList{}), `at vcList holding the value written "": its value is neither equal nor identical to "1 2", the {value} of the default {value constraint} of element {urn:s}el`},
+		{"empty string under a default", appendRow(schema, sname("es"), vcString("")), []string{`simple type xs:string, at vcString holding the value written "": its value is neither equal nor identical to "abc", the {value} of the default {value constraint} of element {urn:s}es`, "cvc-elt clause 5.1, §3.3.5.4 sic-eltType"}},
+		{"empty list under a default", appendRow(schema, sname("el"), vcList{}), []string{`at vcList holding the value written "": its value is neither equal nor identical to "1 2", the {value} of the default {value constraint} of element {urn:s}el`, "cvc-elt clause 5.1, §3.3.5.4 sic-eltType"}},
+		// The two rows of vcUndecidedSchema, a gap-accepted schema no
+		// conforming schema stands for, each hold a valid value to a fixed
+		// {value constraint} value.ConstraintMatches does not decide.
+		{"fixed NOTATION naming no declared notation", appendRow(undecided, sname("nr"), qnameHead{Space: "urn:s", Local: "png"}), []string{`at qnameHead holding the value written "png": value.ConstraintMatches does not decide whether its value is equal or identical to "s:none", the {value} of the fixed {value constraint} of element {urn:s}nr declared at s.xsd:2:1 `, "cvc-elt clause 5.2.2.2.2"}},
+		{"fixed QName of an unbound prefix", appendRow(undecided, sname("qr"), qnameHead{Space: "urn:s", Local: "x"}), []string{`at qnameHead holding the value written "x": value.ConstraintMatches does not decide whether its value is equal or identical to "q:x", the {value} of the fixed {value constraint} of element {urn:s}qr`, "cvc-elt clause 5.2.2.2.2"}},
 	} {
 		t.Run(row.name, func(t *testing.T) {
 			got, err := row.app(t, []byte("pre"))
 			d := asDecline(t, err, "codec does not encode "+constructValueConstraint.name()+": ")
-			holds(t, err, row.want, "cvc-elt clause 5.1, §3.3.5.4 sic-eltType")
+			holds(t, err, row.want...)
 			if d.Construct() != (Construct{constructValueConstraint}) {
 				t.Errorf("Construct %v, want constructValueConstraint's", d.Construct())
 			}

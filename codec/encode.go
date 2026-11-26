@@ -147,70 +147,66 @@ var ErrInvalidValue = errors.New("codec: Append: a value no valid document holds
 //     backend Parse's among them, that error wrapped, but for item 7's pattern and union-variant cases, a
 //     list's own facets read once every item has passed its own checks.
 //  7. A value with no canonical representation or no spelling Append writes,
-//     the first in document order as item 6 counts: its *DeclineError. That is
-//     a governing mapping with no Canonical, a Canonical that fails for the
-//     value, such as strict's for the zero xs:yearMonthDuration (Datatypes
-//     §3.4.26.1's note), or a value with a lexical other than the one Append
-//     writes, or a list holding at least one such item, whose canonical
-//     representation, or for an xs:QName or xs:NOTATION value its spelling, a
-//     pattern facet of its type rejects (§2.1's note), such as 3/2 under an
-//     xs:decimal pattern \d+\.\d\d, which admits 1.50 but not 1.5, whatever
-//     other facet rejects it; a canonical representation that does not map back
-//     to the value; a union's variant whose member value Append writes as text
-//     whose ·active basic member· (Datatypes §2.4.1.3 dt-active-basic-member,
-//     §4.1.4 cvc-datatype-valid clause 2.3) is not that variant's member, or
-//     that no member of the union accepts, so that Decode returns another
-//     variant or none, by the construct of the clause before, or for an
-//     xs:QName or xs:NOTATION member's spelling by its spelling's construct:
-//     xs:decimal 1 under a union of xs:int and xs:decimal is written 1, which
-//     Decode returns as the xs:int variant, though 1.0 decodes into the
-//     xs:decimal variant holding 1, so that a valid document holds the value
-//     and item 6 does not apply, whatever else rejects it; or an xs:QName or
-//     xs:NOTATION value whose namespace name is absent, written on an element
-//     whose namespace is not, which no unprefixed spelling resolves to there
-//     and no prefix can be bound to (Namespaces in XML §5 nsc-NoPrefixUndecl),
-//     whatever else rejects it; or xsi:type, xsi:nil, xsi:schemaLocation or
-//     xsi:noNamespaceSchemaLocation in an {attribute wildcard}'s field, whatever
-//     its value, since Decode never returns one of the four there, which
-//     cvc-complex-type clause 2 attributes to no wildcard; or xsi:type on an
-//     element a wildcard particle's field holds, or in the content of an element
-//     of type xs:anyType itself, its own attributes among it, at any depth,
-//     whatever its value, since its value there may hold a prefix that only a
-//     binding in the Namespaces of the AnyType holding it resolves, and Append
-//     writes none of those bindings (GAP(codec): #4125), and xsi:nil there,
-//     whatever its value, since validate reads it there, under cvc-elt clause 3
-//     or the built-in nil declaration's cvc-attribute clause 3, as validate's
-//     package doc, "# Contract", states, but on an element a skip wildcard
-//     particle's field holds or at any depth below one, which is not assessed (§3.10.4.1
-//     key-skipped, §3.3.4.6 cvc-assess-elt clause 2); or, in such content of an
-//     xs:anyType element, or in an element a lax wildcard particle's field holds,
-//     the element itself among it, at any depth, an element whose expanded name a
-//     top-level element declaration of schema names, or there or in a lax
+//     or one Append declines at its {value constraint}, the first in document
+//     order as item 6 counts: its *DeclineError. That is a governing mapping
+//     with no Canonical, a Canonical that fails for the value, such as
+//     strict's for the zero xs:yearMonthDuration (Datatypes §3.4.26.1's note), or a
+//     value with a lexical other than the one Append writes, or a list holding at least
+//     one such item, whose canonical representation, or for an xs:QName or xs:NOTATION
+//     value its spelling, a pattern facet of its type rejects (§2.1's note), such as 3/2
+//     under an xs:decimal pattern \d+\.\d\d, which admits 1.50 but not 1.5, whatever
+//     other facet rejects it; a canonical representation that does not map back to the
+//     value; a union's variant whose member value Append writes as text whose ·active
+//     basic member· (Datatypes §2.4.1.3 dt-active-basic-member, §4.1.4
+//     cvc-datatype-valid clause 2.3) is not that variant's member, or that no member of
+//     the union accepts, so that Decode returns another variant or none, by the
+//     construct of the clause before, or for an xs:QName or xs:NOTATION member's
+//     spelling by its spelling's construct: xs:decimal 1 under a union of xs:int and
+//     xs:decimal is written 1, which Decode returns as the xs:int variant, though 1.0
+//     decodes into the xs:decimal variant holding 1, so that a valid document holds the
+//     value and item 6 does not apply, whatever else rejects it; or an xs:QName or
+//     xs:NOTATION value whose namespace name is absent, written on an element whose
+//     namespace is not, which no unprefixed spelling resolves to there and no prefix can
+//     be bound to (Namespaces in XML §5 nsc-NoPrefixUndecl), whatever else rejects it;
+//     or xsi:type, xsi:nil, xsi:schemaLocation or xsi:noNamespaceSchemaLocation in an
+//     {attribute wildcard}'s field, whatever its value, since Decode never returns one
+//     of the four there, which cvc-complex-type clause 2 attributes to no wildcard; or
+//     xsi:type on an element a wildcard particle's field holds, or in the content of an
+//     element of type xs:anyType itself, its own attributes among it, at any depth,
+//     whatever its value, since its value there may hold a prefix that only a binding in
+//     the Namespaces of the AnyType holding it resolves, and Append writes none of those
+//     bindings (GAP(codec): #4125), and xsi:nil there, whatever its value, since
+//     validate reads it there, under cvc-elt clause 3 or the built-in nil declaration's
+//     cvc-attribute clause 3, as validate's package doc, "# Contract", states, but on an
+//     element a skip wildcard particle's field holds or at any depth below one, which is
+//     not assessed (§3.10.4.1 key-skipped, §3.3.4.6 cvc-assess-elt clause 2); or, in
+//     such content of an xs:anyType element, or in an element a lax wildcard particle's
+//     field holds, the element itself among it, at any depth, an element whose expanded
+//     name a top-level element declaration of schema names, or there or in a lax
 //     {attribute wildcard}'s field an attribute other than xsi:schemaLocation and
 //     xsi:noNamespaceSchemaLocation whose expanded name a top-level attribute
-//     declaration of schema names, whatever its content or value, since a lax
-//     wildcard, xs:anyType's among them, assesses it against that declaration
-//     (Structures §3.4.7, §3.3.4.6 key-governing-ed clause 3, §3.2.4.2
-//     key-governing-ad clause 3); or an attribute the {attribute wildcard} field of
-//     a type whose {attribute wildcard} has {process contents} strict holds,
-//     whatever its name and value, since the wildcard assesses it against the
-//     top-level attribute declaration its expanded name resolves to, where there is
-//     one, and §3.10.1 requires that there be one (§3.10.1, §3.2.4.2 key-governing-ad
-//     clause 3); or an element a lax wildcard particle's field holds that has a ·locally
-//     declared type· in the complex type whose content it is written into, an element
-//     declaration of its expanded name that type's content model, or that of a type on
-//     its {base type definition} chain, contains, whatever its content, since that type
-//     governs it (§3.3.4.6 key-governing-type-elem clause 7, §3.4.6.4 key-ldt-elem); or
-//     a value item 6 holds to a fixed {value constraint} whose comparison
-//     value.ConstraintMatches leaves undecided, such as a NOTATION {lexical form} naming
-//     no declared notation, and the empty text of an element whose default's {value} it
-//     is not, or whose comparison is undecided, since Append writes it as an empty
-//     element that takes on the default (cvc-elt clause 5.1), though another lexical,
-//     such as a single space for an xs:token, may hold the value. The values with a
-//     lexical other than the one Append writes, the ones whose rejection by a pattern
-//     facet is this item, a union's own pattern facet among them, read once the
-//     variant's member is its text's ·active basic member·, are: a union's value whose
-//     member value is one; every xs:boolean, xs:decimal-primitive, xs:dateTime,
+//     declaration of schema names, whatever its content or value, since a lax wildcard,
+//     xs:anyType's among them, assesses it against that declaration (Structures §3.4.7,
+//     §3.3.4.6 key-governing-ed clause 3, §3.2.4.2 key-governing-ad clause 3); or an
+//     attribute the {attribute wildcard} field of a type whose {attribute wildcard} has
+//     {process contents} strict holds, whatever its name and value, since the wildcard
+//     assesses it against the top-level attribute declaration its expanded name resolves
+//     to, where there is one, and §3.10.1 requires that there be one (§3.10.1, §3.2.4.2
+//     key-governing-ad clause 3); or an element a lax wildcard particle's field holds
+//     that has a ·locally declared type· in the complex type whose content it is written
+//     into, an element declaration of its expanded name that type's content model, or
+//     that of a type on its {base type definition} chain, contains, whatever its
+//     content, since that type governs it (§3.3.4.6 key-governing-type-elem clause 7,
+//     §3.4.6.4 key-ldt-elem); or a value item 6 holds to a fixed {value constraint}
+//     whose comparison value.ConstraintMatches leaves undecided, such as a NOTATION
+//     {lexical form} naming no declared notation, and the empty text of an element whose
+//     default's {value} it is not, or whose comparison is undecided, since Append writes
+//     it as an empty element that takes on the default (cvc-elt clause 5.1), though
+//     another lexical, such as a single space for an xs:token, may hold the value. The
+//     values with a lexical other than the one Append writes, the ones whose rejection
+//     by a pattern facet is this item, a union's own pattern facet among them, read once
+//     the variant's member is its text's ·active basic member·, are: a union's value
+//     whose member value is one; every xs:boolean, xs:decimal-primitive, xs:dateTime,
 //     xs:dateTimeStamp, xs:time and xs:duration-primitive value; every xs:float,
 //     xs:double and xs:precisionDecimal value other than NaN and -INF; an xs:date,
 //     xs:gYearMonth or xs:gYear value whose timezoneOffset is 0, spelled Z, +00:00 or
@@ -2055,9 +2051,9 @@ func (e *invalidValueError) Error() string { return e.err.Error() }
 func (e *invalidValueError) Unwrap() []error { return []error{ErrInvalidValue, e.err} }
 
 // declineValue records the item 7 decline of [Append]'s doc by the construct
-// c, constructNoCanonical or constructQNameSpelling, for the value shown at
-// path, of the simple type subject names, cause saying why, unless an earlier
-// value's is recorded.
+// c, constructNoCanonical, constructQNameSpelling or
+// constructValueConstraint, for the value shown at path, of the simple type
+// subject names, cause saying why, unless an earlier value's is recorded.
 func (e *encoder) declineValue(c construct, subject, path, shown, cause string) {
 	if e.declined == nil {
 		e.declined = encodeDecline(c, fmt.Sprintf("%s, at %s holding %s: %s", subject, path, shown, cause))

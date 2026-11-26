@@ -241,6 +241,10 @@ func (s *Schema) checkAttributeUseValueConstraint(u AttributeUse, loc xsderr.Loc
 	if !hasType {
 		return nil
 	}
+	// GAP(xsd): au-props-correct clause 3 is accepted wherever
+	// ValueSpace.Identical leaves it undecided, every list and union {type
+	// definition} among them (value's sharedMapping refuses both varieties),
+	// #2087.
 	identical, decided := s.valueSpace.Identical(s, t, uvc, t, dvc)
 	if decided && !identical {
 		return xsderr.New(ruleAuPropsCorrect, at,
