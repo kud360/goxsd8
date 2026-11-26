@@ -175,29 +175,29 @@ var ErrInvalidValue = errors.New("codec: Append: a value no valid document holds
 //     Decode returns neither xsi:schemaLocation nor xsi:noNamespaceSchemaLocation
 //     there; or one other than those two on an element a wildcard particle's field
 //     holds, or in the content of an element of type xs:anyType itself, its own
-//     attributes among it, at any depth, whatever its value, but for xsi:nil on
-//     an element a skip wildcard particle's field holds or at any depth below
-//     one, which is not assessed (§3.10.4.1 key-skipped, §3.3.4.6 cvc-assess-elt
-//     clause 2), since an xsi:type's there may hold a prefix that only a binding
-//     in the Namespaces of the AnyType holding it resolves, and Append writes
-//     none of those bindings (GAP(codec): #4125); or, in such content of an
-//     xs:anyType element, or in an element a lax wildcard particle's field holds,
-//     the element itself among it, at any depth, an element whose expanded name a
-//     top-level element declaration of schema names, or there or in a lax
-//     {attribute wildcard}'s field an attribute other than those two whose expanded
-//     name a top-level attribute declaration of schema names, whatever its content
-//     or value, since a lax wildcard, xs:anyType's among them, assesses it against
-//     that declaration (Structures §3.4.7, §3.3.4.6 key-governing-ed clause 3,
-//     §3.2.4.2 key-governing-ad clause 3); or an attribute the {attribute wildcard}
-//     field of a type whose {attribute wildcard} has {process contents} strict
-//     holds, whatever its name and value, since the wildcard assesses it against
-//     the top-level attribute declaration its expanded name resolves to, where
-//     there is one, and §3.10.1 requires that there be one (§3.10.1, §3.2.4.2
-//     key-governing-ad clause 3); or an element a lax wildcard particle's field
-//     holds that has a ·locally declared type· in the complex type whose content it
-//     is written into, an element declaration of its expanded name that type's
-//     content model, or that of a type on its {base type definition} chain,
-//     contains, whatever its content, since that type governs it (§3.3.4.6
+//     attributes among it, at any depth, whatever its value, since an xsi:type's
+//     there may hold a prefix that only a binding in the Namespaces of the
+//     AnyType holding it resolves, and Append writes none of those bindings
+//     (GAP(codec): #4125), but for xsi:nil, whatever its value, on an element a
+//     skip wildcard particle's field holds or at any depth below one, which is
+//     not assessed (§3.10.4.1 key-skipped, §3.3.4.6 cvc-assess-elt clause 2); or,
+//     in such content of an xs:anyType element, or in an element a lax wildcard
+//     particle's field holds, the element itself among it, at any depth, an element
+//     whose expanded name a top-level element declaration of schema names, or there
+//     or in a lax {attribute wildcard}'s field an attribute other than those two
+//     whose expanded name a top-level attribute declaration of schema names,
+//     whatever its content or value, since a lax wildcard, xs:anyType's among them,
+//     assesses it against that declaration (Structures §3.4.7, §3.3.4.6
+//     key-governing-ed clause 3, §3.2.4.2 key-governing-ad clause 3); or an
+//     attribute the {attribute wildcard} field of a type whose {attribute wildcard}
+//     has {process contents} strict holds, whatever its name and value, since the
+//     wildcard assesses it against the top-level attribute declaration its expanded
+//     name resolves to, where there is one, and §3.10.1 requires that there be one
+//     (§3.10.1, §3.2.4.2 key-governing-ad clause 3); or an element a lax wildcard
+//     particle's field holds that has a ·locally declared type· in the complex type
+//     whose content it is written into, an element declaration of its expanded name
+//     that type's content model, or that of a type on its {base type definition}
+//     chain, contains, whatever its content, since that type governs it (§3.3.4.6
 //     key-governing-type-elem clause 7, §3.4.6.4 key-ldt-elem); or a value item 6
 //     holds to a fixed {value constraint} whose comparison value.ConstraintMatches
 //     leaves undecided, such as a NOTATION {lexical form} naming no declared
@@ -2836,9 +2836,7 @@ func (skipMatch) governing(*xsd.Schema, xsd.QName, bool) (string, bool) { return
 // writesHints reports true: a skipped hint is not assessed.
 func (skipMatch) writesHints() bool { return true }
 
-// writesNil reports true: a skipped element is not assessed (§3.10.4.1
-// key-skipped, §3.3.4.6 cvc-assess-elt clause 2), so that cvc-elt clause 3
-// reads no xsi:nil it holds, whatever its value.
+// writesNil reports true: a skipped element is not assessed, as item 7 of [Append]'s doc states.
 func (skipMatch) writesNil() bool { return true }
 
 // anyTypeContent is the content of an element of decl, whose {type
@@ -2857,9 +2855,9 @@ func (anyTypeContent) governing(schema *xsd.Schema, name xsd.QName, attribute bo
 // rawAttribute writes (locationHint).
 func (anyTypeContent) writesHints() bool { return true }
 
-// writesNil reports false: validate charges a held xsi:nil there, on an
-// element laxly assessed or governed by a declaration, as validate's package
-// doc, "# Contract", states.
+// writesNil reports false: validate reads a held xsi:nil there, under cvc-elt
+// clause 3 or the built-in nil declaration's cvc-attribute clause 3, as
+// validate's package doc, "# Contract", states.
 func (anyTypeContent) writesNil() bool { return false }
 
 // laxMatch is the match of the wildcard particle it names, of {process
