@@ -4431,6 +4431,9 @@ type boundItem interface {
 	// attributionCheck of the content the occurrence field is written into, nil
 	// for none, and returns a backend fault.
 	writeItem(e *encoder, v reflect.Value, at writeAt, group string, slot attributionSlot) error
+	// floor returns the lower bound writeOccurring holds the slice of an
+	// occurrence field of the item to (lengthFloor).
+	floor() lengthFloor
 }
 
 // bindOccurrence returns the occurrence of group, the model group of ct's
