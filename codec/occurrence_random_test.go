@@ -579,12 +579,18 @@ func memberFields(t *testing.T, schema *xsd.Schema, group xsd.ModelGroup, n *rno
 	return fields, ends, ""
 }
 
+// isFlattenedField reports whether f, a field of memberFields' struct, is a
+// flattened particle's, the []rfItem field its Flattened arm builds.
+func isFlattenedField(f reflect.StructField) bool {
+	return f.Type == reflect.TypeFor[[]rfItem]()
+}
+
 // flattenedFields returns how many of fields, memberFields', are a flattened
-// particle's.
+// particle's (isFlattenedField).
 func flattenedFields(fields []reflect.StructField) int {
 	n := 0
 	for _, f := range fields {
-		if f.Type == reflect.TypeFor[[]rfItem]() {
+		if isFlattenedField(f) {
 			n++
 		}
 	}
@@ -850,6 +856,38 @@ func leafValue(leaves []flatLeaf, it flatItem, text string) reflect.Value {
 	return reflect.ValueOf(text)
 }
 
+// checkDraw returns the Matcher's verdict (matcherVerdict) on items, the
+// children Append writes from v, under ct, the content whose reach is leaves,
+// and fails t where errors.Is(err, ErrInvalidValue) on Append's answer under
+// opts is not that verdict's reject, where Append answers any other error, or
+// where an accepted draw's bytes do not decode, under opts, to v.
+func checkDraw(t *testing.T, schema *xsd.Schema, ct xsd.ComplexType, top *rnode, leaves []flatLeaf, items []flatItem, v reflect.Value, opts []Option) int {
+	t.Helper()
+	m, ok := schema.ContentMatcher(ct)
+	if !ok {
+		t.Fatalf("model %s: ContentMatcher declines a model CheckAppend admits", top.xsdOf())
+	}
+	verdict := matcherVerdict(m, leaves, items)
+	data, err := encodeValue(nil, schema, strict.New(), rootName, v, opts)
+	if err != nil && !errors.Is(err, ErrInvalidValue) {
+		t.Fatalf("model %s, items %v: Append = %v, want nil or ErrInvalidValue", top.xsdOf(), items, err)
+	}
+	if errors.Is(err, ErrInvalidValue) != (verdict != verdictAccept) {
+		t.Fatalf("model %s, items %v: Append = %v, the Matcher's verdict is %s", top.xsdOf(), items, err, verdictNames[verdict])
+	}
+	if err != nil {
+		return verdict
+	}
+	back := reflect.New(v.Type()).Elem()
+	if err := decodeValue(schema, strict.New(), data, back, opts); err != nil {
+		t.Fatalf("model %s, items %v: Decode(%s) = %v", top.xsdOf(), items, data, err)
+	}
+	if !reflect.DeepEqual(unscoped(back.Interface()), unscoped(v.Interface())) {
+		t.Fatalf("model %s, items %v: Decode(%s) = %#v, Append wrote %#v", top.xsdOf(), items, data, back.Interface(), v.Interface())
+	}
+	return verdict
+}
+
 // TestAppendFlattenedDifferential holds Append's flattened content
 // {particle}, boundFlattened.write, to xsd.Schema.ContentMatcher on both
 // sides (§3.9.4.3 cvc-accept clause 3.3, §3.8.4.3 cvc-model-group; item 6 of
@@ -906,30 +944,7 @@ func TestAppendFlattenedDifferential(t *testing.T) {
 		models++
 		for range 12 {
 			items := drawItems(rng, top, leaves)
-			m, ok := schema.ContentMatcher(ct)
-			if !ok {
-				t.Fatalf("model %s: ContentMatcher declines a model CheckAppend admits", top.xsdOf())
-			}
-			verdict := matcherVerdict(m, leaves, items)
-			verdicts[verdict]++
-			v := flatValue(rt, leaves, items)
-			data, err := encodeValue(nil, schema, strict.New(), rootName, v, opts)
-			if err != nil && !errors.Is(err, ErrInvalidValue) {
-				t.Fatalf("model %s, items %v: Append = %v, want nil or ErrInvalidValue", top.xsdOf(), items, err)
-			}
-			if errors.Is(err, ErrInvalidValue) != (verdict != verdictAccept) {
-				t.Fatalf("model %s, items %v: Append = %v, the Matcher's verdict is %s", top.xsdOf(), items, err, verdictNames[verdict])
-			}
-			if err != nil {
-				continue
-			}
-			back := reflect.New(rt).Elem()
-			if err := decodeValue(schema, strict.New(), data, back, opts); err != nil {
-				t.Fatalf("model %s, items %v: Decode(%s) = %v", top.xsdOf(), items, data, err)
-			}
-			if !reflect.DeepEqual(unscoped(back.Interface()), unscoped(v.Interface())) {
-				t.Fatalf("model %s, items %v: Decode(%s) = %#v, Append wrote %#v", top.xsdOf(), items, data, back.Interface(), v.Interface())
-			}
+			verdicts[checkDraw(t, schema, ct, top, leaves, items, flatValue(rt, leaves, items), opts)]++
 		}
 	}
 	t.Logf("%d models kept of %d drawn; not covered: %d with more than 4 element particles of one name, %d CheckAppend declines", models, tries, wideTie, declined)
@@ -995,7 +1010,7 @@ func nestedValue(rt reflect.Type, ends []int, leaves []flatLeaf, items []flatIte
 			}
 		}
 		f := v.Field(i)
-		flat := f.Type() == reflect.TypeFor[[]rfItem]()
+		flat := isFlattenedField(rt.Field(i))
 		switch {
 		case f.Kind() == reflect.Pointer:
 			held = held[:min(len(held), 1)]
@@ -1100,7 +1115,7 @@ func TestAppendNestedFlattenedDifferential(t *testing.T) {
 			continue
 		}
 		leaves := top.reachOf(nil, nil)
-		first, end := fieldLeaves(ends, slices.IndexFunc(fields, func(f reflect.StructField) bool { return f.Type == reflect.TypeFor[[]rfItem]() }))
+		first, end := fieldLeaves(ends, slices.IndexFunc(fields, isFlattenedField))
 		branches, covered := placeBranches(leaves, first, end)
 		if !covered {
 			unbuilt["more than 4 element particles of one name in the reach"]++
@@ -1126,29 +1141,7 @@ func TestAppendNestedFlattenedDifferential(t *testing.T) {
 		models++
 		for range 12 {
 			v, written := nestedValue(rt, ends, leaves, drawItems(rng, top, leaves))
-			m, ok := schema.ContentMatcher(ct)
-			if !ok {
-				t.Fatalf("model %s: ContentMatcher declines a model CheckAppend admits", top.xsdOf())
-			}
-			verdict := matcherVerdict(m, leaves, written)
-			verdicts[verdict]++
-			data, err := encodeValue(nil, schema, strict.New(), rootName, v, opts)
-			if err != nil && !errors.Is(err, ErrInvalidValue) {
-				t.Fatalf("model %s, children %v: Append = %v, want nil or ErrInvalidValue", top.xsdOf(), written, err)
-			}
-			if errors.Is(err, ErrInvalidValue) != (verdict != verdictAccept) {
-				t.Fatalf("model %s, children %v: Append = %v, the Matcher's verdict is %s", top.xsdOf(), written, err, verdictNames[verdict])
-			}
-			if err != nil {
-				continue
-			}
-			back := reflect.New(rt).Elem()
-			if err := decodeValue(schema, strict.New(), data, back, opts); err != nil {
-				t.Fatalf("model %s, children %v: Decode(%s) = %v", top.xsdOf(), written, data, err)
-			}
-			if !reflect.DeepEqual(unscoped(back.Interface()), unscoped(v.Interface())) {
-				t.Fatalf("model %s, children %v: Decode(%s) = %#v, Append wrote %#v", top.xsdOf(), written, data, back.Interface(), v.Interface())
-			}
+			verdicts[checkDraw(t, schema, ct, top, leaves, written, v, opts)]++
 		}
 	}
 	t.Logf("%d models kept of %d drawn", models, tries)
