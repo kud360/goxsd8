@@ -174,7 +174,8 @@ func (t *idTable) charge(w *walk, root Element) {
 
 // idAttributes reads the ·eligible item set·'s attribute half off one element:
 // every attribute information item whose ·governing type definition· this
-// package can name, which is walk.attributeType's job.
+// package can name, which is walk.attributeType's job: an attribute it reports
+// false for, of any [attrExit], is not recorded.
 //
 // An attribute that matches no attribute use and resolves to no top-level
 // declaration is not a decline where the element's ·governing type definition·
@@ -262,11 +263,11 @@ func (w *walk) idDefaultedAttributes(c *icCheck, attrs []Attribute, ct xsd.Compl
 // the direction each charges in: [idTable.charge] withholds its clause 1 arm
 // (the decline sets declined), fail-open, and keeps charging clause 2 over what
 // remains, which is fail-open too: [walk.idAttributes] records none of the
-// element's attributes, [walk.attributeType] declining every one of them rather
+// element's attributes, [walk.attributeTyping] declining every one of them rather
 // than resolving it by ·expanded name· (key-governing-ad clause 2 before clause
 // 3), so a duplicate an attribute would have made is lost and none is added;
 // [icCheck.fieldAttributes] declines a field over them on the same decline.
-// walk.attributeType's own marker carries that decline. The element's
+// walk.attributeTyping's own marker carries that decline. The element's
 // [[children]] are [walk.child]'s undecided branch, whose marker names that
 // shape's consumers. An element with NO ·governing element declaration· is not
 // that shape. A ·laxly assessed· one, a declared element §5.3 falls back to
@@ -627,10 +628,50 @@ var (
 	entitiesName = xsd.QName{Space: xsd.XMLSchemaNS, Local: "ENTITIES"}
 )
 
-// attributeType is the ·governing type definition· of one attribute
+// attrExit is how [walk.attributeTyping] left one attribute information item:
+// with a simple ·governing type definition· (attrTyped), ·skipped·
+// (attrSkipped), with no ·governing type definition· because no declaration
+// governs it (attrAbsent), or with one this package could not determine
+// (attrUndetermined).
+type attrExit uint8
+
+const (
+	// attrTyped is an attribute whose ·governing type definition· is the
+	// simple type attributeTyping returns.
+	attrTyped attrExit = iota
+	// attrSkipped is an attribute ·attributed to· a ***skip*** {attribute
+	// wildcard} ([skippedAttribute]), which has no ·governing attribute
+	// declaration· (key-skipped).
+	attrSkipped
+	// attrAbsent is an attribute that is not ·skipped· and that no declaration
+	// governs: the element's ·governing type definition· is determined, no
+	// {attribute use} of it matches, and the attribute's ·expanded name·
+	// ·resolves· to no top-level declaration (key-governing-ad clause 3), so
+	// its ·governing type definition· is ·absent·.
+	attrAbsent
+	// attrUndetermined is an attribute whose ·governing type definition· this
+	// package could not determine: the element's own is undetermined
+	// ([governance.typeUndetermined]), the matching {attribute use}'s
+	// {attribute declaration} does not resolve, the governing declaration's
+	// {type definition} is not a resolvable simple type, or the attribute bears
+	// one of the four §3.2.7 names and its ·expanded name· ·resolves· to no
+	// top-level declaration (attributeTyping's GAP).
+	attrUndetermined
+)
+
+// attributeType is [walk.attributeTyping] read as cvc-id reads it: the simple
+// type, and whether there is one, every exit but attrTyped reported false
+// (#2174).
+func (w *walk) attributeType(g governance, a Attribute) (*xsd.SimpleType, bool) {
+	st, x := w.attributeTyping(g, a)
+	return st, x == attrTyped
+}
+
+// attributeTyping is the ·governing type definition· of one attribute
 // information item, narrowed to the simple type its ·actual value· is read
-// under. It is the one reading both cvc-id and a `@NameTest` identity-constraint
-// field need, and neither re-derives it (STYLE T4).
+// under, and the [attrExit] it was reached by; the type is non-nil exactly on
+// attrTyped. It is the one reading both cvc-id and a `@NameTest`
+// identity-constraint field need, and neither re-derives it (STYLE T4).
 //
 // The two arms are cvc-complex-type clause 2's own: an attribute matching an
 // attribute use of the element's ·governing type definition· is governed by
@@ -638,9 +679,23 @@ var (
 // all) by an {attribute wildcard}, whose strict and lax {process contents} both
 // ·resolve· the attribute's ·expanded name· among the top-level attribute
 // declarations (§3.10.4.1). A name that resolves to nothing under either arm
-// leaves the attribute with no governing type, which is reported false.
+// leaves the attribute with no governing declaration and so an ·absent·
+// governing type, which is attrAbsent.
 //
-// A ***skip*** {attribute wildcard} reports false without resolving anything:
+// GAP(validate): the four §3.2.7 names are the exception, and exit
+// attrUndetermined when they resolve to nothing. §3.2.7 puts their Built-in
+// Attribute Declarations in every schema, so such an attribute is always
+// governed (key-governing-ad's Note), while a schema assembled through
+// [xsd.SchemaBuilder.Finalize] seeds none, and the declaration that governs it
+// is not one this package can read. Its consumers, and the direction each
+// charges in: [icCheck.fieldAttributes] declines the field slot, withholding
+// cvc-identity-constraint clauses 3 and 4 for that constraint, so it can only
+// cost a rejection; [walk.idAttributes] adds no ·ID value· or ·IDREF value·
+// for it, and none of the four built-in types is ID-derived, so cvc-id loses
+// nothing. #1462 owns it: its reserved arm decides whether xsd seeds the four
+// in every schema.
+//
+// A ***skip*** {attribute wildcard} exits attrSkipped without resolving anything:
 // §3.10.4.1's Note performs QName resolution only for an item ·attributed to· a
 // strict or lax wildcard, so a ·skipped· item has NO ·governing· declaration,
 // key-sva (§3.3.4.6) clause 2.2 leaves it unassessed, and §3.17.5.2
@@ -653,12 +708,12 @@ var (
 // item matching neither a use nor the wildcard is ·attributed· to nothing,
 // hence not ·skipped·, hence resolved by name after all under key-governing-ad
 // (§3.2.4.2) clause 3. The guard below therefore tests skippedAttribute, which
-// asks cvc-wildcard for the ·attribution· itself, and declines only the
-// attribute that is genuinely ·skipped·. It is the attribute-side counterpart
-// of [walk.childGoverning] (assess.go), which switches on the
-// [xsd.Attribution] the content model produced; there is no attribute-side
-// Attribution to switch on, a complex type carrying at most one {attribute
-// wildcard} (§3.4.1), so the match is asked at the item instead.
+// asks cvc-wildcard for the ·attribution· itself, and exits attrSkipped only
+// for the attribute that is genuinely ·skipped·. It is the attribute-side counterpart
+// of [walk.childGoverning] (assess.go), which switches on the [xsd.Attribution] the
+// content model produced; there is no attribute-side Attribution to switch on, a
+// complex type carrying at most one {attribute wildcard} (§3.4.1), so the match is
+// asked at the item instead.
 //
 // The wildcard arm is otherwise taken WITHOUT checking that a wildcard is
 // present, and that is deliberate rather than an omission: key-governing-ad
@@ -684,7 +739,7 @@ var (
 // GAP(validate): an element whose ·governing type definition· this package
 // could not determine ([governance.typeUndetermined]) — the declined shape
 // [walk.idElement]'s marker names and the undecided one [walk.child]'s names —
-// reports false for every attribute, before either arm is asked. Its true type
+// exits attrUndetermined for every attribute, before either arm is asked. Its true type
 // is unknown, and key-governing-ad (§3.2.4.2) clause 2's ·context-determined
 // declaration·, from a use of that type, comes before clause 3's resolution by
 // ·expanded name·, while a skip {attribute wildcard} of it would leave the
@@ -694,31 +749,45 @@ var (
 // ·IDREF value· for the attribute, so [idTable.charge]'s cvc-id clause 2 can
 // only lose a duplicate, and its clause 1 arm is withheld already, every
 // producer of either shape setting w.ids.declined; [icCheck.fieldAttributes]
-// declines the field slot ([icTarget.decline]), which withholds
-// cvc-identity-constraint clauses 3 and 4 — 4.1 and 4.2.2 among them — for that
-// constraint. RULED permanent by #2174 (STYLE P3b): the decline consumes the
-// shapes that ruling keeps and retires with their last producer.
-func (w *walk) attributeType(g governance, a Attribute) (*xsd.SimpleType, bool) {
+// declines the field slot ([icTarget.decline]), which withholds cvc-identity-constraint
+// clauses 3 and 4 — 4.1 and 4.2.2 among them — for that constraint. RULED permanent by
+// #2174 (STYLE P3b): the decline consumes the shapes that ruling keeps and retires with
+// their last producer.
+func (w *walk) attributeTyping(g governance, a Attribute) (*xsd.SimpleType, attrExit) {
 	if g.typeUndetermined() {
-		return nil, false
+		return nil, attrUndetermined
 	}
 	if ct := g.complexType(); ct != nil {
 		if u, matched := attributeUseNamed(ct.AttributeUses(), a.Name()); matched {
 			d, resolved := w.schema.ResolvedAttributeDeclaration(u)
 			if !resolved {
-				return nil, false
+				return nil, attrUndetermined
 			}
-			return w.schema.ResolvedSimpleType(d.TypeDefinition())
+			return w.declaredTyping(d)
 		}
 		if skippedAttribute(w.schema, ct, a) {
-			return nil, false
+			return nil, attrSkipped
 		}
 	}
 	d, found := w.topLevelAttribute(a)
-	if !found {
-		return nil, false
+	if found {
+		return w.declaredTyping(d)
 	}
-	return w.schema.ResolvedSimpleType(d.TypeDefinition())
+	if isInstanceAttribute(a.Name()) {
+		return nil, attrUndetermined
+	}
+	return nil, attrAbsent
+}
+
+// declaredTyping is [walk.attributeTyping]'s exit for an attribute d governs:
+// attrTyped with d's {type definition} where that is a resolvable simple type,
+// and attrUndetermined for every other {type definition}.
+func (w *walk) declaredTyping(d xsd.AttributeDeclaration) (*xsd.SimpleType, attrExit) {
+	st, simple := w.schema.ResolvedSimpleType(d.TypeDefinition())
+	if !simple {
+		return nil, attrUndetermined
+	}
+	return st, attrTyped
 }
 
 // skippedAttribute reports whether a is ·skipped· (§3.10.4.1, key-skipped): it
@@ -729,10 +798,11 @@ func (w *walk) attributeType(g governance, a Attribute) (*xsd.SimpleType, bool) 
 // (§3.10.4.1) decides the second ([xsd.Schema.AllowsAttributeWildcardName]).
 //
 // It is the ONE encoding of ·skipped· on the attribute side (STYLE T4). Its
-// three readers ask it for different reasons and must not drift:
-// [walk.attributeType] withholds a ·governing type definition· for such an
-// item, [icCheck.fieldAttributes] leaves a field slot UNFILLED rather than
-// declined for it, which is §3.11.4 clause 3's Note — a field evaluating to a
+// two readers ask it for different reasons and must not drift:
+// [walk.attributeTyping] exits attrSkipped for such an item, withholding a
+// ·governing type definition·, on which [walk.idAttributes] records nothing and
+// [icCheck.fieldAttributes] leaves a field slot UNFILLED rather than declined
+// or charged, which is §3.11.4 clause 3's Note — a field evaluating to a
 // ·skipped· node leaves the ·key-sequence· short — and [inheritable] reports
 // it not ·potentially inherited·.
 //
@@ -754,7 +824,7 @@ func skippedAttribute(schema *xsd.Schema, ct *xsd.ComplexType, a Attribute) bool
 	return schema.AllowsAttributeWildcardName(wild, a.Name())
 }
 
-// topLevelAttribute is the wildcard arm of [walk.attributeType] on its own: the
+// topLevelAttribute is the wildcard arm of [walk.attributeTyping] on its own: the
 // top-level Attribute Declaration a's ·expanded name· ·resolves· to (§3.10.4.1,
 // key-governing-ad clause 3), false where the name resolves to nothing.
 //

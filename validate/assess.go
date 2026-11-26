@@ -282,8 +282,10 @@ func (g governance) laxlyAssessed() bool {
 // element's ·governing type definition·: the declined shape (hasDecl with a nil
 // typ) or the undecided one. It is false for every outcome cvc-assess-elt
 // itself gives, a ·laxly assessed· element included, whose absent type is the
-// spec's and not this package's. Its readers are [walk.attributeType] and
-// [contentCheck.element], the second for a ·nilled· element's children.
+// spec's and not this package's. Its readers are [walk.attributeTyping],
+// [icCheck.fill], [contentCheck.element] for a ·nilled· element's children,
+// and, in cvcassertion.go, [assertionAncestry.collectElement], [descendantRun],
+// [walk.attributeNodes] and [walk.childAttributes].
 func (g governance) typeUndetermined() bool {
 	return g.undecided || g.hasDecl && g.typ == nil
 }
@@ -802,7 +804,7 @@ func sameType(a, b xsd.TypeDefinition) bool {
 // both. Its other consumers are the ones the marker on [walk.child]'s undecided
 // branch names, this element being that marker's producer (c), and that marker
 // states each one's direction: [idTable.charge]'s clause 2 among them is
-// fail-open, [walk.attributeType] declining every attribute of an undecided
+// fail-open, [walk.attributeTyping] declining every attribute of an undecided
 // element rather than reading it by ·expanded name·.
 func (w *walk) localGovernance(e Element, instance, ldt xsd.TypeDefinition, err error) governance {
 	w.decline("assessing element", e.Name(), e.Loc(), ruleCvcAssessElt, "",
@@ -1517,11 +1519,11 @@ func (w *walk) child(c Child, content *contentCheck, id *icCheck, up assertionAn
 			// Its consumers, and the direction each charges in: [idTable.charge]
 			// withholds its clause 1 arm (w.ids.declined below), fail-open, since a
 			// declaration beneath the child may be one cvc-id never read. It keeps
-			// charging clause 2 over what remains, fail-open too: [walk.attributeType]
+			// charging clause 2 over what remains, fail-open too: [walk.attributeTyping]
 			// declines every attribute of the child rather than reading it by ·expanded
 			// name· (key-governing-ad clause 2 before clause 3), so [walk.idAttributes]
 			// adds no member for it and [icCheck.fieldAttributes] declines a field over
-			// it; walk.attributeType's own marker carries that decline.
+			// it; walk.attributeTyping's own marker carries that decline.
 			// [walk.instanceTypeResolves] and [walk.instanceNilLexical] charge it
 			// nothing, so cvc-attribute clauses 3 and 5 against its xsi attributes are
 			// lost, fail-open. [governance.laxlyAssessed] is false for it, so its own
