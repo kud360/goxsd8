@@ -625,9 +625,11 @@ func idsOf(v reflect.Value) []int {
 	return ids
 }
 
-// rfItem is the sealed interface of the flattened content {particle}
-// TestAppendFlattenedDifferential writes, held by rfSequence for a sequence
-// and by rfChoice for a choice, as codegen holds one (codegen/doc.go
+// rfItem is the sealed interface of the flattened particle the random
+// differentials write: the content {particle} TestAppendFlattenedDifferential
+// writes, held by rfSequence for a sequence and by rfChoice for a choice, and
+// the nested particle TestAppendNestedFlattenedDifferential writes, held by
+// memberFields' []rfItem field, as codegen holds each (codegen/doc.go
 // "# Particles"). Its branch family: RfItemA to RfItemC4, the branches of up
 // to four element particles of each name a, b and c, named as codegen names a
 // tie's (codegen/doc.go "# Naming") and placed by shape where no tie holds
@@ -699,7 +701,8 @@ func placeBranches(leaves []flatLeaf, first, end int) ([]rfItem, bool) {
 
 // flatLeaf is one basic particle of a random model's reach: node, its
 // position as xsd.Matcher.NextParticle reports one, and branch, the rfItem
-// branch the test's WithBranches set places at it.
+// branch the test's WithBranches set places at it (placeBranches), nil
+// outside the flattened particle's reach.
 type flatLeaf struct {
 	node   *rnode
 	pos    []int
