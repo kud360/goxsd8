@@ -4777,9 +4777,11 @@ const vcGlobalSchema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"><
 // ref fixed "3", so that the use's {value constraint} (Structures §3.5.4
 // cvc-au) and its declaration's (§3.2.4.1 cvc-attribute clause 4) differ. The
 // schema is not conforming, since §3.5.6 au-props-correct clause 3 requires
-// the two {value}s to be identical, and it is gap-accepted: xsd's
-// checkAttributeUseValueConstraint charges clause 3 only on a decided answer,
-// and value's sharedMapping leaves every list type's comparison undecided.
+// the two {value}s to be identical, and it is gap-accepted.
+//
+// GAP(xsd): clause 3 is not decided for a list or union {type definition},
+// since value's sharedMapping refuses both varieties and
+// checkAttributeUseValueConstraint accepts an undecided answer, #2087.
 const vcRefSchema = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"><xs:simpleType name="il"><xs:list itemType="xs:int"/></xs:simpleType>
 <xs:attribute name="g" type="il" fixed="1 2"/>
 <xs:element name="r"><xs:complexType><xs:attribute ref="g" fixed="3"/></xs:complexType></xs:element></xs:schema>`
