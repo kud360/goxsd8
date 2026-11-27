@@ -62,12 +62,15 @@ func TestAppendAssertion(t *testing.T) {
 }
 
 // inScopeE declares, in urn:s, e, of empty content and an xs:int attribute
-// x, whose type asserts the {test} it is formatted with; the raw* forms
-// declare r beside it, whose content Append writes raw: a strict wildcard,
-// a lax one, or an element a of type xs:anyType itself, each with a required
-// xs:QName attribute q, and rawStrictNoQ a strict wildcard alone.
+// x, whose type asserts the {test} it is formatted with, and inScopeW w,
+// whose content is one local c of empty content whose type asserts its own
+// formatted {test}; the raw* forms declare r beside either, whose content Append
+// writes raw: a strict wildcard, a lax one, or an element a of type
+// xs:anyType itself, each with a required xs:QName attribute q, and
+// rawStrictNoQ a strict wildcard alone.
 const (
 	inScopeE     = `<xs:element name="e"><xs:complexType><xs:sequence/><xs:attribute name="x" type="xs:int"/><xs:assert test="%s"/></xs:complexType></xs:element>`
+	inScopeW     = `<xs:element name="w"><xs:complexType><xs:sequence><xs:element name="c"><xs:complexType><xs:sequence/><xs:assert test="%s"/></xs:complexType></xs:element></xs:sequence></xs:complexType></xs:element>`
 	rawStrictQ   = `<xs:element name="r"><xs:complexType><xs:sequence><xs:any namespace="##targetNamespace"/></xs:sequence><xs:attribute name="q" type="xs:QName" use="required"/></xs:complexType></xs:element>`
 	rawLaxQ      = `<xs:element name="r"><xs:complexType><xs:sequence><xs:any namespace="##targetNamespace" processContents="lax"/></xs:sequence><xs:attribute name="q" type="xs:QName" use="required"/></xs:complexType></xs:element>`
 	rawAnyTypeQ  = `<xs:element name="r"><xs:complexType><xs:sequence><xs:element name="a"/></xs:sequence><xs:attribute name="q" type="xs:QName" use="required"/></xs:complexType></xs:element>`
@@ -89,11 +92,12 @@ type (
 
 // TestAppendInScopeAssertionRaw pins item 8 of Append's doc for a {test}
 // reading the in-scope namespaces of an element in content Append writes
-// raw, where a top-level declaration governs it at run time. The value
-// decoded from a valid document whose q is spelled x:l is charged under
-// cvc-assertion, below a strict wildcard, a lax one and an xs:anyType
-// element alike, since Append spells q with a fresh p1 it declares on r,
-// which not(in-scope-prefixes(.) = 'p1') reads at e: the charge comes from
+// raw, whether a top-level declaration governs it at run time or a local one
+// below such an element does. The value decoded from a valid document whose q
+// is spelled x:l is charged under cvc-assertion, at e below a strict wildcard,
+// a lax one and an xs:anyType element alike, and at the local c of a strict
+// wildcard's match w, since Append spells q with a fresh p1 it declares on r,
+// which not(in-scope-prefixes(.) = 'p1') reads there: the charge comes from
 // Append's binding, not from the value. The positive reader over a decoded
 // value is written and decoded back equal, since Append re-declares the
 // value's a, and a {test} reading no in-scope namespace still charges a
@@ -109,6 +113,9 @@ func TestAppendInScopeAssertionRaw(t *testing.T) {
 	})
 	t.Run("xs:anyType element", func(t *testing.T) {
 		rawCharged[assertionAnyTypeQ](t, rawAnyTypeQ+fmt.Sprintf(inScopeE, negated), `<r xmlns="urn:s" xmlns:x="urn:x" q="x:l"><a><e/></a></r>`)
+	})
+	t.Run("a local declaration below a strict wildcard's match", func(t *testing.T) {
+		rawCharged[assertionWildQ](t, rawStrictQ+fmt.Sprintf(inScopeW, negated), `<r xmlns="urn:s" xmlns:x="urn:x" q="x:l"><w><c/></w></r>`)
 	})
 	t.Run("a positive reader", func(t *testing.T) {
 		schema := schemaOf(t, rawStrictNoQ+fmt.Sprintf(inScopeE, "in-scope-prefixes(.) = 'a'"))

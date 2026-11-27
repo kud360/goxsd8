@@ -247,8 +247,7 @@ var ErrInvalidValue = errors.New("codec: Append: a value no valid document holds
 //     element or attribute, which Append spells as the opening paragraph
 //     above states, may come from that spelling rather than from the value,
 //     reported so all the same, and so may one whose {test} reads the
-//     in-scope namespaces of an element a top-level element declaration or
-//     an xsi:type governs in content Append writes raw, as
+//     in-scope namespaces of an element in content Append writes raw, as
 //     fn:in-scope-prefixes does, which may come from a namespace binding
 //     Append declares, a fresh pN among them, rather than from the value.
 //  9. An assessed document validate leaves undecided: the error item 4 of
