@@ -256,7 +256,7 @@ func (s *Schema) decideUnambiguous(build func(*automaton) ([]int, []int, bool, e
 		// a content model whose exact unfolding would exceed maxPathPositions, so
 		// two particles that ·compete· only across unfolded copies of a counted
 		// particle (§3.8.4.2, key-compete) go uncharged there and only check's
-		// per-state pairs are charged. No owner issue is filed yet. Direction, by
+		// per-state pairs are charged; #4198 owns retiring it. Direction, by
 		// consumer: SchemaBuilder.Finalize, and parser.Parse through it, loses the
 		// rejection and gains none. Schema.ContentMatcher's Matcher assumes no
 		// such pair exists. On TestUPAPastPathPositionsDeclined's model it takes
@@ -340,8 +340,8 @@ func (b *automaton) checkPaths(first []int, ctx string) error {
 		if id == maxPathSubsets {
 			// GAP(xsd): cos-nonambig's reached-subset pass stops after
 			// maxPathSubsets subsets, and a pair live only in a later one goes
-			// uncharged. No owner issue is filed yet; the direction, by
-			// consumer, is decideUnambiguous' maxPathPositions marker's.
+			// uncharged; #4198 owns retiring it. The direction, by consumer, is
+			// decideUnambiguous' maxPathPositions marker's.
 			return nil
 		}
 		subset := reached.set(id)

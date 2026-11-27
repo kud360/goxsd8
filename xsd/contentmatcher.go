@@ -310,7 +310,7 @@ type Matcher struct {
 	// maxPathSubsets (particleattribution.go). Past either, a pair competing
 	// only across unfolded copies of a counted particle is not charged, and
 	// the live set can hold two paths; decideUnambiguous' marker states the
-	// direction by consumer. No owner issue is filed yet.
+	// direction by consumer. #4198 owns retiring it.
 	path []int
 
 	// probe and reached are the search's own scratch, kept here so that a name

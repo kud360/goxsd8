@@ -407,7 +407,7 @@ func TestUPACompetitionAcrossUnfoldedCopiesInGroupDefinition(t *testing.T) {
 // sequence(sequence{2}(c?, a+), c) holds TestUPACompetitionAcrossUnfoldedCopies'
 // competing c's, but the trailing d{0,1100} puts the exact unfolding past the
 // ceiling, so checkPaths never runs and the model loads. GAP(xsd): this is the
-// marker at decideUnambiguous; no owner issue is filed yet.
+// marker at decideUnambiguous, which #4198 owns retiring.
 func TestUPAPastPathPositionsDeclined(t *testing.T) {
 	g := uGroup(t, CompositorSequence,
 		uOne(t, ResolvedTerm{Term: uCopiesThenC(t, uOccurs(t, 2, 2), 0,
