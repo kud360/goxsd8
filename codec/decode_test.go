@@ -300,8 +300,8 @@ func TestDecodeSourceFault(t *testing.T) {
 }
 
 // TestDecodeNilArguments pins item 1 of Decode's doc for a nil schema, a nil
-// backend, both at once, whose error's text it leaves open, and a nil backend
-// with malformed data, where item 1 comes before item 2.
+// backend, both at once, where the nil backend's error is returned, and a nil
+// backend with malformed data, where item 1 comes before item 2.
 func TestDecodeNilArguments(t *testing.T) {
 	got, err := Decode[shapes](nil, strict.New(), instanceOf("", ""))
 	if got != nil || err == nil {
@@ -315,6 +315,7 @@ func TestDecodeNilArguments(t *testing.T) {
 		t.Errorf("Decode(nil schema) = %q, want validate.New's %q", err, want)
 	}
 	schema := schemaOf(t, shapesSchema)
+	_, backendOnly := Decode[shapes](schema, nil, instanceOf("", ""))
 	for _, c := range []struct {
 		name   string
 		schema *xsd.Schema
@@ -336,6 +337,9 @@ func TestDecodeNilArguments(t *testing.T) {
 			}
 			plainError(t, err)
 			noRule(t, err)
+			if c.schema == nil && err != nil && err.Error() != backendOnly.Error() {
+				t.Errorf("Decode(nil schema, nil backend) = %q, want item 1's nil-backend %q", err, backendOnly)
+			}
 		})
 	}
 }

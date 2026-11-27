@@ -179,9 +179,9 @@ var ErrAbstractElement = errors.New("codec: the top-level element declaration ha
 //
 // The first of these that applies is returned:
 //
-//  1. A nil schema: validate.New's plain error. A nil backend: a plain error.
-//     backend must be the one schema was compiled with, as validate.New
-//     states.
+//  1. A nil backend: a plain error. Otherwise, a nil schema: validate.New's
+//     plain error. backend must be the one schema was compiled with, as
+//     validate.New states.
 //  2. A source fault, in either channel validate/xmlsrc.Validate carries one
 //     in, whatever the Result's Standing: that error as it is, an
 //     *xsderr.Error with rule xml-wf that xsderr.RuleOf reaches.
