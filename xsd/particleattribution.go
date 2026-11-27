@@ -240,8 +240,8 @@ func (s *Schema) checkModelGroupDefinitionUnambiguous(mgd ModelGroupDefinition) 
 //     in one SUBSET a ·path· prefix reaches, which no copy bound preserves, so
 //     that automaton unfolds every occurrence range exactly.
 //
-// check runs first so that a pair one state shows is reported as that state's,
-// whatever the second pass would add.
+// check runs first and runs on every content model; checkPaths runs only
+// within maxPathPositions, and only once check has charged nothing.
 func (s *Schema) decideUnambiguous(build func(*automaton) ([]int, []int, bool, error), positions int, ctx string) error {
 	b := &automaton{s: s, policy: attributionPolicy}
 	first, _, _, err := build(b)

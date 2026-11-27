@@ -402,10 +402,29 @@ func TestUPACompetitionAcrossUnfoldedCopiesInGroupDefinition(t *testing.T) {
 	}
 }
 
-// TestUPAPerStateCompetitionReportedFirst pins decide's order: in
+// TestUPAPastPathPositionsDeclined pins decideUnambiguous' maxPathPositions
+// decline, and the verdict it asserts is wrong: the leading
+// sequence(sequence{2}(c?, a+), c) holds TestUPACompetitionAcrossUnfoldedCopies'
+// competing c's, but the trailing d{0,1100} puts the exact unfolding past the
+// ceiling, so checkPaths never runs and the model loads. GAP(xsd): this is the
+// marker at decideUnambiguous; no owner issue is filed yet.
+func TestUPAPastPathPositionsDeclined(t *testing.T) {
+	g := uGroup(t, CompositorSequence,
+		uOne(t, ResolvedTerm{Term: uCopiesThenC(t, uOccurs(t, 2, 2), 0,
+			uParticle(t, uUnbounded(t, 1), ResolvedTerm{Term: uLocal(t, uq("a"), uq("T"))}))}),
+		uParticle(t, uOccurs(t, 0, 1100), ResolvedTerm{Term: uLocal(t, uq("d"), uq("T"))}),
+	)
+	if err := uSchemaWithModel(t, g, nil); err != nil {
+		t.Fatalf("a content model past maxPathPositions was charged: %v", err)
+	}
+}
+
+// TestUPAPerStateCompetitionReportedFirst pins the guard's message: in
 // sequence(sequence{1,2}(c?, a), c) the two c's are live together in the single
-// state after a, so check reports them there, with check's message, before
-// checkPaths runs.
+// state after a, and the rejection names that state in check's phrase. It does
+// not pin decideUnambiguous' order: checkPaths reaches the same pair at the
+// one-position subset after a, whose phrase is the same, and the model is
+// still rejected with this message when the two passes are swapped.
 func TestUPAPerStateCompetitionReportedFirst(t *testing.T) {
 	g := uCopiesThenC(t, uOccurs(t, 1, 2), 0,
 		uOne(t, ResolvedTerm{Term: uLocal(t, uq("a"), uq("T"))}))
