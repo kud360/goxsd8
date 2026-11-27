@@ -2,6 +2,8 @@ package codec
 
 import (
 	"errors"
+	"fmt"
+	"reflect"
 	"testing"
 
 	"github.com/kud360/goxsd8/builtin/strict"
@@ -59,6 +61,90 @@ func TestAppendAssertion(t *testing.T) {
 	})
 }
 
+// inScopeE declares, in urn:s, e, of empty content and an xs:int attribute
+// x, whose type asserts the {test} it is formatted with; the raw* forms
+// declare r beside it, whose content Append writes raw: a strict wildcard,
+// a lax one, or an element a of type xs:anyType itself, each with a required
+// xs:QName attribute q, and rawStrictNoQ a strict wildcard alone.
+const (
+	inScopeE     = `<xs:element name="e"><xs:complexType><xs:sequence/><xs:attribute name="x" type="xs:int"/><xs:assert test="%s"/></xs:complexType></xs:element>`
+	rawStrictQ   = `<xs:element name="r"><xs:complexType><xs:sequence><xs:any namespace="##targetNamespace"/></xs:sequence><xs:attribute name="q" type="xs:QName" use="required"/></xs:complexType></xs:element>`
+	rawLaxQ      = `<xs:element name="r"><xs:complexType><xs:sequence><xs:any namespace="##targetNamespace" processContents="lax"/></xs:sequence><xs:attribute name="q" type="xs:QName" use="required"/></xs:complexType></xs:element>`
+	rawAnyTypeQ  = `<xs:element name="r"><xs:complexType><xs:sequence><xs:element name="a"/></xs:sequence><xs:attribute name="q" type="xs:QName" use="required"/></xs:complexType></xs:element>`
+	rawStrictNoQ = `<xs:element name="r"><xs:complexType><xs:sequence><xs:any namespace="##targetNamespace"/></xs:sequence></xs:complexType></xs:element>`
+)
+
+// assertionWildQ is codegen's type for rawStrictQ's and rawLaxQ's r, and
+// assertionAnyTypeQ for rawAnyTypeQ's.
+type (
+	assertionWildQ struct {
+		Any anyElement
+		Q   tQName
+	}
+	assertionAnyTypeQ struct {
+		A anyType
+		Q tQName
+	}
+)
+
+// TestAppendInScopeAssertionRaw pins item 8 of Append's doc for a {test}
+// reading the in-scope namespaces of an element in content Append writes
+// raw, where a top-level declaration governs it at run time. The value
+// decoded from a valid document whose q is spelled x:l is charged under
+// cvc-assertion, below a strict wildcard, a lax one and an xs:anyType
+// element alike, since Append spells q with a fresh p1 it declares on r,
+// which not(in-scope-prefixes(.) = 'p1') reads at e: the charge comes from
+// Append's binding, not from the value. The positive reader over a decoded
+// value is written and decoded back equal, since Append re-declares the
+// value's a, and a {test} reading no in-scope namespace still charges a
+// hand-built value the assertion rejects.
+func TestAppendInScopeAssertionRaw(t *testing.T) {
+	const negated = "not(in-scope-prefixes(.) = 'p1')"
+	const doc = `<r xmlns="urn:s" xmlns:x="urn:x" q="x:l"><e/></r>`
+	t.Run("strict wildcard", func(t *testing.T) {
+		rawCharged[assertionWildQ](t, rawStrictQ+fmt.Sprintf(inScopeE, negated), doc)
+	})
+	t.Run("lax wildcard", func(t *testing.T) {
+		rawCharged[assertionWildQ](t, rawLaxQ+fmt.Sprintf(inScopeE, negated), doc)
+	})
+	t.Run("xs:anyType element", func(t *testing.T) {
+		rawCharged[assertionAnyTypeQ](t, rawAnyTypeQ+fmt.Sprintf(inScopeE, negated), `<r xmlns="urn:s" xmlns:x="urn:x" q="x:l"><a><e/></a></r>`)
+	})
+	t.Run("a positive reader", func(t *testing.T) {
+		schema := schemaOf(t, rawStrictNoQ+fmt.Sprintf(inScopeE, "in-scope-prefixes(.) = 'a'"))
+		v, err := Decode[wildOther](schema, strict.New(), []byte(`<r xmlns="urn:s"><e xmlns:a="urn:a"/></r>`))
+		if err != nil {
+			t.Fatal(err)
+		}
+		data := roundTrip(t, schema, sname("r"), *v, "", deepEqual[wildOther])
+		back, err := Decode[wildOther](schema, strict.New(), data)
+		if err != nil || !reflect.DeepEqual(*back, *v) {
+			t.Fatalf("Decode(%s) = %#v, %v, want %#v", data, back, err, *v)
+		}
+	})
+	t.Run("a reader of no in-scope namespace", func(t *testing.T) {
+		schema := schemaOf(t, rawStrictNoQ+fmt.Sprintf(inScopeE, "@x &gt; 0"))
+		v := wildOther{Any: anyElement{Space: "urn:s", Local: "e", Content: anyType{Attributes: []anyAttribute{{"", "x", "0"}}, Namespaces: []anyNamespace{{"", "urn:s"}}}}}
+		got, err := appendChecked(t, []byte("pre"), schema, strict.New(), sname("r"), v)
+		assessedCharge(t, got, err, "cvc-assertion", "", "")
+	})
+}
+
+// rawCharged fails t unless validate accepts data against decls' schema and
+// the T Decode returns for it is item 8 of Append's doc as r, under
+// cvc-assertion (assessedCharge), no text of validate's asserted.
+func rawCharged[T any](t *testing.T, decls, data string) {
+	t.Helper()
+	schema := schemaOf(t, decls)
+	accepts(t, schema, []byte(data))
+	v, err := Decode[T](schema, strict.New(), []byte(data))
+	if err != nil {
+		t.Fatalf("Decode(%s): %v", data, err)
+	}
+	got, err := appendChecked(t, []byte("pre"), schema, strict.New(), sname("r"), *v)
+	assessedCharge(t, got, err, "cvc-assertion", "", "")
+}
+
 // TestAppendAssertionUndecided pins item 9 of Append's doc for {assertions}:
 // over ExampleUndecidedError's schema (undecidedSchema), whose {test} the
 // XPath subset declines, a value is refused with dst unextended and an error
@@ -103,8 +189,10 @@ func TestAssertionsAssess(t *testing.T) {
 
 // TestNamesInScopeNamespaces pins namesInScopeNamespaces over {test} texts:
 // each of the three function names, prefixed or not, and the namespace axis,
-// with and without white space before "::", match; namespace-uri and a name
-// test namespace, in a comparison and as a path, do not.
+// with and without white space before "::", match; the axis with an XPath
+// comment before "::", which the package doc's "# What encodes" leaves out,
+// namespace-uri and a name test namespace, in a comparison and as a path, do
+// not.
 func TestNamesInScopeNamespaces(t *testing.T) {
 	for _, row := range []struct {
 		test string
@@ -116,6 +204,7 @@ func TestNamesInScopeNamespaces(t *testing.T) {
 		{"resolve-QName('a:b', .) = xs:QName('s:b')", true},
 		{"count(namespace::*) = 2", true},
 		{"count(./namespace ::*) = 2", true},
+		{"count(namespace (: c :) ::*) = 2", false},
 		{"namespace-uri(.) = 'urn:s'", false},
 		{"s:namespace = 'x'", false},
 		{"count(s:namespace) = 0", false},
