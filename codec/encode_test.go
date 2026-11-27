@@ -1234,7 +1234,8 @@ func TestAppendDeclines(t *testing.T) {
 		`<xs:complexType name="d%[1]s"><xs:complexContent><xs:extension base="s:b%[1]s"><xs:sequence><xs:element name="c" type="xs:string"/></xs:sequence>` +
 		`<xs:attribute name="x" type="xs:string" use="required"/></xs:extension></xs:complexContent></xs:complexType>` +
 		`<xs:element name="%[1]s" type="s:b%[1]s"/>`
-	const asserted = `<xs:sequence>` + a + `</xs:sequence><xs:assert test="false()"/>`
+	const asserted = `<xs:sequence>` + a + `</xs:sequence><xs:assert test="in-scope-prefixes(.) = 'a'"/>`
+	const inScopeAssertion = "a complex type with {assertions}, its own or inherited, one of whose {test}s names fn:in-scope-prefixes, fn:namespace-uri-for-prefix or fn:resolve-QName, or the namespace axis"
 	rows := []struct {
 		name      string
 		construct string
@@ -1282,8 +1283,8 @@ func TestAppendDeclines(t *testing.T) {
 		{"particle type sharing its element's name", "an element declaration with {nillable} true", `<xs:complexType name="%[1]s"><xs:sequence><xs:element name="n" type="xs:string" nillable="true"/></xs:sequence></xs:complexType>` +
 			sequence(`<xs:element name="c" type="s:%[1]s"/>`)},
 		{"xsi:type attribute use", "an attribute use whose declaration's {target namespace} is the XSI namespace, other than xsi:schemaLocation's and xsi:noNamespaceSchemaLocation's, or the one the prefix xmlns is bound to", complexOf(`<xs:attribute ref="xsi:type"/>`)},
-		{"complex assertions", "a complex type with {assertions}", complexOf(asserted)},
-		{"restricted complex assertions", "a complex type with {assertions}", `<xs:complexType name="ab%[1]s">` + asserted + `</xs:complexType>` +
+		{"in-scope assertion", inScopeAssertion, complexOf(asserted)},
+		{"restricted in-scope assertion", inScopeAssertion, `<xs:complexType name="ab%[1]s">` + asserted + `</xs:complexType>` +
 			`<xs:element name="%[1]s"><xs:complexType><xs:complexContent><xs:restriction base="s:ab%[1]s"><xs:sequence>` + a + `</xs:sequence></xs:restriction></xs:complexContent></xs:complexType></xs:element>`},
 		{"list of a minted primitive", encodePrimitiveName, simpleOf(`<xs:list itemType="s:money"/>`)},
 		{"list of union of an ENTITY member", entityTypeName, simpleOf(`<xs:list><xs:simpleType><xs:union memberTypes="xs:int xs:ENTITY"/></xs:simpleType></xs:list>`)},
@@ -1313,10 +1314,10 @@ func TestAppendDeclines(t *testing.T) {
 		"abstract type": func(t *testing.T, dst []byte, schema *xsd.Schema, name xsd.QName) ([]byte, error) {
 			return appendChecked(t, dst, schema, strict.New(), name, abstractMember{A: "a", C: "c", X: "x"})
 		},
-		"complex assertions": func(t *testing.T, dst []byte, schema *xsd.Schema, name xsd.QName) ([]byte, error) {
+		"in-scope assertion": func(t *testing.T, dst []byte, schema *xsd.Schema, name xsd.QName) ([]byte, error) {
 			return appendChecked(t, dst, schema, strict.New(), name, struct{ A string }{A: "a"})
 		},
-		"restricted complex assertions": func(t *testing.T, dst []byte, schema *xsd.Schema, name xsd.QName) ([]byte, error) {
+		"restricted in-scope assertion": func(t *testing.T, dst []byte, schema *xsd.Schema, name xsd.QName) ([]byte, error) {
 			return appendChecked(t, dst, schema, strict.New(), name, struct{ A string }{A: "a"})
 		},
 	}

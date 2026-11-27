@@ -154,28 +154,28 @@ type construct uint8
 // constructXsiType are Append's alone, in the order Append finds them: the document
 // element's declaration, after constructNillable, its type's {abstract}, its type's
 // content, its content {particle}, each particle in order, its attribute uses in order,
-// its {assertions}, and each value, the {attribute wildcard} field's attributes by
-// constructXsiAttribute, constructStrictAttributeWildcard and constructGovernedContent
-// among the value's. Append also declines constructEntityType after every other
-// construct, for an ·ENTITY value· held raw that the written document's assessment finds
-// (assessWritten). Append declines by constructUntrackedModel too, once every particle of
-// a content model holding a wildcard particle, a nested flattened particle or a nested
-// occurrence field, at any depth, or every basic particle a flattened content {particle}
-// reaches, is examined. A particle declines by constructVacuousParticle first, as the
-// content {particle} does; where its term is a model group, then by constructNestedGroup
-// where codegen flattens it or holds it in an occurrence field inside an occurrence
-// field's item, and otherwise by its own particles' constructs, in its place; its element
-// declaration, local or the top-level one an <element ref> names, or, for an <element
-// ref> whose field codegen gives a sealed interface (goshape.SubstitutionSum), each
-// declaration that interface has a branch for, in group order, declines by the document
-// element's declaration's constructs, constructNillable first and
-// constructAbstractElement last, then by its type's as the document element's type does,
-// from constructAbstractType on, a complex type's content and attribute uses examined at
-// the particle. The ones of a simple type, constructEncodePrimitive to
-// constructAssertions, sit after the {assertions}'s, though the document element's, a
-// particle's and an attribute use's simple type declines by them where that declaration
-// or use is examined, and a complex type's simple content, by its {simple type
-// definition}, where its type's content is, ahead of its attribute uses.
+// its {assertions} by constructInScopeAssertion, and each value, the {attribute wildcard}
+// field's attributes by constructXsiAttribute, constructStrictAttributeWildcard and
+// constructGovernedContent among the value's. Append also declines constructEntityType
+// after every other construct, for an ·ENTITY value· held raw that the written document's
+// assessment finds (assessWritten). Append declines by constructUntrackedModel too, once
+// every particle of a content model holding a wildcard particle, a nested flattened
+// particle or a nested occurrence field, at any depth, or every basic particle a
+// flattened content {particle} reaches, is examined. A particle declines by
+// constructVacuousParticle first, as the content {particle} does; where its term is a
+// model group, then by constructNestedGroup where codegen flattens it or holds it in an
+// occurrence field inside an occurrence field's item, and otherwise by its own particles'
+// constructs, in its place; its element declaration, local or the top-level one an
+// <element ref> names, or, for an <element ref> whose field codegen gives a sealed
+// interface (goshape.SubstitutionSum), each declaration that interface has a branch for,
+// in group order, declines by the document element's declaration's constructs,
+// constructNillable first and constructAbstractElement last, then by its type's as the
+// document element's type does, from constructAbstractType on, a complex type's content
+// and attribute uses examined at the particle. The ones of a simple type,
+// constructEncodePrimitive to constructAssertions, sit after the {assertions}'s, though
+// the document element's, a particle's and an attribute use's simple type declines by
+// them where that declaration or use is examined, and a complex type's simple content, by
+// its {simple type definition}, where its type's content is, ahead of its attribute uses.
 const (
 	constructNillable construct = iota + 1
 	constructNestedGroup
@@ -192,7 +192,7 @@ const (
 	constructOpenContent
 	constructVacuousParticle
 	constructReservedAttributeUse
-	constructComplexAssertions
+	constructInScopeAssertion
 	constructEncodePrimitive
 	constructEntityType
 	constructAssertions
@@ -223,7 +223,7 @@ var constructNames = [...]string{
 	constructOpenContent:             "an {open content}",
 	constructVacuousParticle:         "a particle with {max occurs} 0",
 	constructReservedAttributeUse:    "an attribute use whose declaration's {target namespace} is the XSI namespace, other than xsi:schemaLocation's and xsi:noNamespaceSchemaLocation's, or the one the prefix xmlns is bound to",
-	constructComplexAssertions:       "a complex type with {assertions}",
+	constructInScopeAssertion:        "a complex type with {assertions}, its own or inherited, one of whose {test}s names fn:in-scope-prefixes, fn:namespace-uri-for-prefix or fn:resolve-QName, or the namespace axis",
 	constructEncodePrimitive:         "an atomic simple type whose primitive is other than " + displayList(encodedPrimitives),
 	constructEntityType:              "a simple type derived from xs:ENTITY",
 	constructAssertions:              "a simple type with an assertions facet",
