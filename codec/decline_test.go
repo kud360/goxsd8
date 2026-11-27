@@ -202,11 +202,11 @@ func assertProbeDecline(t *testing.T, probe, decoded error) {
 }
 
 // TestCheckDecodePlainErrors pins items 1 to 3 of CheckDecode's doc: a nil
-// schema, a name no top-level declaration has, the zero QName included, and
-// an abstract declaration, a nillable one too, each a plain error, which is
-// no decline, no ErrTypeMismatch, no errors.ErrUnsupported and no rule. T is
-// codegen's struct for each declaration, so only the condition the row names
-// answers.
+// schema, a plain error; a name no top-level declaration has, the zero QName
+// included, an error errors.Is reports as ErrUndeclaredElement; and an
+// abstract declaration, a nillable one too, one it reports as
+// ErrAbstractElement (declarationRefusal). T is codegen's struct for each
+// declaration, so only the condition the row names answers.
 func TestCheckDecodePlainErrors(t *testing.T) {
 	const body = `<xs:complexType><xs:sequence><xs:element name="a" type="xs:string"/></xs:sequence></xs:complexType>`
 	inSlice := schemaOf(t, `<xs:element name="r">`+body+`</xs:element>`)
@@ -214,25 +214,31 @@ func TestCheckDecodePlainErrors(t *testing.T) {
 		name   string
 		schema *xsd.Schema
 		qname  xsd.QName
+		is     error // the sentinel errors.Is reports, or nil for a plain error
 		want   string
 	}{
-		{"nil schema", nil, rootName, "codec: CheckDecode: nil *xsd.Schema"},
-		{"an undeclared name", inSlice, xsd.QName{Space: "urn:s", Local: "x"},
+		{"nil schema", nil, rootName, nil, "codec: CheckDecode: nil *xsd.Schema"},
+		{"an undeclared name", inSlice, xsd.QName{Space: "urn:s", Local: "x"}, ErrUndeclaredElement,
 			`codec: no top-level element declaration has the expanded name "{urn:s}x"`},
-		{"the zero QName", inSlice, xsd.QName{}, `codec: no top-level element declaration has the expanded name ""`},
-		{"an abstract declaration", schemaOf(t, `<xs:element name="r" abstract="true">`+body+`</xs:element>`), rootName,
+		{"the zero QName", inSlice, xsd.QName{}, ErrUndeclaredElement, `codec: no top-level element declaration has the expanded name ""`},
+		{"an abstract declaration", schemaOf(t, `<xs:element name="r" abstract="true">`+body+`</xs:element>`), rootName, ErrAbstractElement,
 			"codec: element {urn:s}r declared at s.xsd:1:181 has {abstract} true, so no document element validates against it (cvc-elt clause 2)"},
-		{"an abstract nillable declaration", schemaOf(t, `<xs:element name="r" abstract="true" nillable="true">`+body+`</xs:element>`), rootName,
+		{"an abstract nillable declaration", schemaOf(t, `<xs:element name="r" abstract="true" nillable="true">`+body+`</xs:element>`), rootName, ErrAbstractElement,
 			"codec: element {urn:s}r declared at s.xsd:1:181 has {abstract} true, so no document element validates against it (cvc-elt clause 2)"},
 	}
 	for _, row := range rows {
 		t.Run(row.name, func(t *testing.T) {
 			err := CheckDecode[struct{ A string }](row.schema, row.qname)
+			if row.is != nil {
+				declarationRefusal(t, err, row.is, row.want)
+				return
+			}
 			if err == nil || err.Error() != row.want {
 				t.Fatalf("CheckDecode = %v, want %q", err, row.want)
 			}
 			var de *DeclineError
-			if _, isRule := xsderr.RuleOf(err); isRule || errors.As(err, &de) || errors.Is(err, ErrTypeMismatch) || errors.Is(err, errors.ErrUnsupported) {
+			if _, isRule := xsderr.RuleOf(err); isRule || errors.As(err, &de) || errors.Is(err, ErrTypeMismatch) || errors.Is(err, errors.ErrUnsupported) ||
+				errors.Is(err, ErrUndeclaredElement) || errors.Is(err, ErrAbstractElement) {
 				t.Errorf("CheckDecode = %v, want a plain error", err)
 			}
 		})
@@ -245,11 +251,11 @@ func TestCheckDecodePlainErrors(t *testing.T) {
 // TestCheckDecodeMaxOccursZero pins item 5's plain error for a particle with
 // {max occurs} 0, an element particle's and a wildcard particle's: CheckDecode
 // returns the text Decode returns for a valid instance, and neither is a
-// decline, ErrTypeMismatch, errors.ErrUnsupported or a rule. No schema
-// document yields such a particle (§3.3.2 and §3.10.2: an <element> or <any>
-// with minOccurs=maxOccurs=0 maps to no component), so the schema is built
-// from a parsed one with type v's one inner particle rebuilt through
-// xsd.NewParticle with the vacuous Occurs{0,0}.
+// decline, ErrTypeMismatch, ErrUndeclaredElement, ErrAbstractElement,
+// errors.ErrUnsupported or a rule. No schema document yields such a particle
+// (§3.3.2 and §3.10.2: an <element> or <any> with minOccurs=maxOccurs=0 maps
+// to no component), so the schema is built from a parsed one with type v's one
+// inner particle rebuilt through xsd.NewParticle with the vacuous Occurs{0,0}.
 func TestCheckDecodeMaxOccursZero(t *testing.T) {
 	rows := []struct{ name, particle, want string }{
 		{"element", `<xs:element name="a" type="xs:string"/>`,
@@ -309,7 +315,8 @@ func checkMaxOccursZero(t *testing.T, written, want string) {
 			t.Fatalf("%s = %v, want %q", got.name, got.err, want)
 		}
 		var de *DeclineError
-		if _, isRule := xsderr.RuleOf(got.err); isRule || errors.As(got.err, &de) || errors.Is(got.err, ErrTypeMismatch) || errors.Is(got.err, errors.ErrUnsupported) {
+		if _, isRule := xsderr.RuleOf(got.err); isRule || errors.As(got.err, &de) || errors.Is(got.err, ErrTypeMismatch) || errors.Is(got.err, errors.ErrUnsupported) ||
+			errors.Is(got.err, ErrUndeclaredElement) || errors.Is(got.err, ErrAbstractElement) {
 			t.Errorf("%s = %v, want a plain error", got.name, got.err)
 		}
 	}

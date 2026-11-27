@@ -73,21 +73,20 @@ func roundTrip[T any](t *testing.T, schema *xsd.Schema, name xsd.QName, v T, wan
 // unless CheckAppend[T]'s answer for schema, name and opts agrees with it: a
 // non-nil CheckAppend error is Append's, of equal Error text and equal class
 // (staticClass), and a nil one leaves Append nil, an item 6 or item 7 error
-// or a fault of backend: nil, item 6's ErrInvalidValue error, a plain error
-// without item 2's or item 3's text, or item 7's decline, by
-// constructNoCanonical, constructQNameSpelling, constructValueConstraint,
-// constructXsiAttribute, constructStrictAttributeWildcard,
-// constructGovernedContent, constructLocallyTypedMatch,
-// constructInterleaveParticleChild, constructLocallyTypedOpenChild,
-// constructCapturedPrefix or, for an ·ENTITY value· held raw,
-// constructEntityType.
+// or a fault of backend: nil, item 6's ErrInvalidValue error, a plain error,
+// or item 7's decline, by constructNoCanonical, constructQNameSpelling,
+// constructValueConstraint, constructXsiAttribute,
+// constructStrictAttributeWildcard, constructGovernedContent,
+// constructLocallyTypedMatch, constructInterleaveParticleChild,
+// constructLocallyTypedOpenChild, constructCapturedPrefix or, for an ·ENTITY
+// value· held raw, constructEntityType.
 func appendChecked[T any](t *testing.T, dst []byte, schema *xsd.Schema, backend value.Backend, name xsd.QName, v T, opts ...Option) ([]byte, error) {
 	t.Helper()
 	out, err := Append(dst, schema, backend, name, v, opts...)
 	checked := CheckAppend[T](schema, name, opts...)
 	if checked == nil {
 		class := staticClass(err)
-		static := class == "plain" && (strings.HasPrefix(err.Error(), "codec: no top-level element declaration") || strings.Contains(err.Error(), "{abstract} true"))
+		static := class == "undeclared" || class == "abstract"
 		if static || err != nil && class != "plain" && class != "invalid" && class != "decline "+constructNoCanonical.name() && class != "decline "+constructQNameSpelling.name() && class != "decline "+constructValueConstraint.name() && class != "decline "+constructXsiAttribute.name() && class != "decline "+constructStrictAttributeWildcard.name() && class != "decline "+constructGovernedContent.name() && class != "decline "+constructLocallyTypedMatch.name() && class != "decline "+constructInterleaveParticleChild.name() && class != "decline "+constructLocallyTypedOpenChild.name() && class != "decline "+constructCapturedPrefix.name() && class != "decline "+constructEntityType.name() {
 			t.Errorf("CheckAppend = nil, but Append returned %v, %s", err, class)
 		}
@@ -102,6 +101,7 @@ func appendChecked[T any](t *testing.T, dst []byte, schema *xsd.Schema, backend 
 // staticClass names err's class among Append's errors: "decline " and its
 // construct for a *DeclineError, "mismatch" for an error errors.Is reports as
 // ErrTypeMismatch, "invalid" for one errors.Is reports as ErrInvalidValue,
+// "undeclared" for ErrUndeclaredElement, "abstract" for ErrAbstractElement,
 // "plain" for every other non-nil error, and "nil".
 func staticClass(err error) string {
 	var d *DeclineError
@@ -114,6 +114,10 @@ func staticClass(err error) string {
 		return "mismatch"
 	case errors.Is(err, ErrInvalidValue):
 		return "invalid"
+	case errors.Is(err, ErrUndeclaredElement):
+		return "undeclared"
+	case errors.Is(err, ErrAbstractElement):
+		return "abstract"
 	}
 	return "plain"
 }
@@ -742,18 +746,48 @@ func TestAppendDst(t *testing.T) {
 
 // plainError fails t unless err, Append's or CheckAppend's, is a plain
 // error of Append's doc: no *DeclineError, wrapping none of
-// ErrTypeMismatch, ErrInvalidValue and errors.ErrUnsupported, whose text
-// holds each of want.
+// ErrTypeMismatch, ErrInvalidValue, ErrUndeclaredElement, ErrAbstractElement
+// and errors.ErrUnsupported, whose text holds each of want.
 func plainError(t *testing.T, err error, want ...string) {
 	t.Helper()
 	if err == nil {
 		t.Fatal("no error returned, want a plain error")
 	}
 	var d *DeclineError
-	if errors.As(err, &d) || errors.Is(err, errors.ErrUnsupported) || errors.Is(err, ErrTypeMismatch) || errors.Is(err, ErrInvalidValue) {
+	if errors.As(err, &d) || errors.Is(err, errors.ErrUnsupported) || errors.Is(err, ErrTypeMismatch) || errors.Is(err, ErrInvalidValue) ||
+		errors.Is(err, ErrUndeclaredElement) || errors.Is(err, ErrAbstractElement) {
 		t.Fatalf("returned %v, want a plain error", err)
 	}
 	holds(t, err, want...)
+}
+
+// declarationRefusal fails t unless err is the error of item 2 or 3 of
+// CheckDecode's and Append's doc, whose text is want: one errors.Is reports
+// as sentinel, ErrUndeclaredElement or ErrAbstractElement, and as none of the
+// other of those two, ErrTypeMismatch, ErrInvalidValue and
+// errors.ErrUnsupported, no *DeclineError, carrying no rule, whose text does
+// not hold sentinel's own.
+func declarationRefusal(t *testing.T, err, sentinel error, want string) {
+	t.Helper()
+	if err == nil || err.Error() != want {
+		t.Fatalf("returned %v, want %q", err, want)
+	}
+	if strings.Contains(err.Error(), sentinel.Error()) {
+		t.Errorf("returned %v, whose text holds %v's own", err, sentinel)
+	}
+	if !errors.Is(err, sentinel) {
+		t.Errorf("returned %v, want an error errors.Is reports as %v", err, sentinel)
+	}
+	for _, other := range []error{ErrUndeclaredElement, ErrAbstractElement, ErrTypeMismatch, ErrInvalidValue, errors.ErrUnsupported} {
+		if !errors.Is(sentinel, other) && errors.Is(err, other) {
+			t.Errorf("returned %v, which errors.Is reports as %v too", err, other)
+		}
+	}
+	var d *DeclineError
+	if errors.As(err, &d) {
+		t.Errorf("returned %v, a *DeclineError", err)
+	}
+	noRule(t, err)
 }
 
 // invalidValue fails t unless err is item 6's error of Append's doc: one
@@ -794,7 +828,10 @@ func holds(t *testing.T, err error, want ...string) {
 	}
 }
 
-// TestAppendPlainErrors pins items 1 to 3 and 5 of Append's doc.
+// TestAppendPlainErrors pins items 1 to 3 and 5 of Append's doc: item 1's
+// plain errors, item 2's ErrUndeclaredElement and item 3's
+// ErrAbstractElement errors by their exact text, and item 5's
+// ErrTypeMismatch error, which errors.Is reports as neither of those two.
 func TestAppendPlainErrors(t *testing.T) {
 	schema := schemaOf(t, shapesSchema+`<xs:element name="abs" type="xs:string" abstract="true"/>`)
 	_, err := Append[shapes](nil, nil, strict.New(), rootName, shapes{})
@@ -802,12 +839,15 @@ func TestAppendPlainErrors(t *testing.T) {
 	_, err = Append[shapes](nil, schema, nil, rootName, shapes{})
 	plainError(t, err, "nil value.Backend")
 	_, err = appendChecked[shapes](t, nil, schema, strict.New(), sname("none"), shapes{})
-	plainError(t, err, "{urn:s}none")
+	declarationRefusal(t, err, ErrUndeclaredElement, `codec: no top-level element declaration has the expanded name "{urn:s}none"`)
 	_, err = appendChecked(t, nil, schema, strict.New(), sname("abs"), strRoot("x"))
-	plainError(t, err, "{abstract} true")
+	declarationRefusal(t, err, ErrAbstractElement, "codec: element {urn:s}abs declared at s.xsd:13:16 has {abstract} true, so no document element validates against it (cvc-elt clause 2)")
 	_, err = appendChecked(t, nil, schema, strict.New(), rootName, &shapes{})
 	if want := ErrTypeMismatch.Error() + ": *codec.shapes is a pointer to codec.shapes, which matches; use codec.shapes in its place; the document element's declaration is element {urn:s}r declared at s.xsd:2:3"; !errors.Is(err, ErrTypeMismatch) || err.Error() != want {
 		t.Errorf("Append[*shapes] = %v, want ErrTypeMismatch %q", err, want)
+	}
+	if errors.Is(err, ErrUndeclaredElement) || errors.Is(err, ErrAbstractElement) {
+		t.Errorf("Append[*shapes] = %v, which errors.Is reports as item 2's or item 3's sentinel", err)
 	}
 	_, err = appendChecked(t, nil, schema, strict.New(), rootName, struct{ One string }{})
 	if !errors.Is(err, ErrTypeMismatch) {
@@ -822,8 +862,9 @@ func TestAppendPlainErrors(t *testing.T) {
 // item 5's ErrTypeMismatch with none; nil for an xs:float declaration and T
 // float32; nil for README's order.xsd and order.Order, whose zero value
 // Append refuses by item 6, and item 5's ErrTypeMismatch for *order.Order;
-// item 2's and item 3's plain errors; and item 3 before item 4 on an
-// abstract xs:ENTITY declaration. appendChecked holds each answer to Append's.
+// item 2's ErrUndeclaredElement and item 3's ErrAbstractElement errors by
+// their exact text; and item 3 before item 4 on an abstract xs:ENTITY
+// declaration. appendChecked holds each answer to Append's.
 func TestCheckAppend(t *testing.T) {
 	schema := schemaOf(t, `<xs:element name="i" type="xs:ENTITY"/><xs:element name="abs" type="xs:string" abstract="true"/>`+
 		`<xs:element name="absb" type="xs:ENTITY" abstract="true"/><xs:element name="f" type="xs:float"/><xs:element name="pd" type="xs:precisionDecimal"/>`)
@@ -846,11 +887,11 @@ func TestCheckAppend(t *testing.T) {
 		t.Errorf("CheckAppend[float32] = %v, want nil", err)
 	}
 
-	plainError(t, CheckAppend[string](schema, sname("none")), "codec: no top-level element declaration has the expanded name", "{urn:s}none")
+	declarationRefusal(t, CheckAppend[string](schema, sname("none")), ErrUndeclaredElement, `codec: no top-level element declaration has the expanded name "{urn:s}none"`)
 	_, _ = appendChecked(t, nil, schema, strict.New(), sname("none"), "x")
-	plainError(t, CheckAppend[string](schema, sname("abs")), "{abstract} true")
+	declarationRefusal(t, CheckAppend[string](schema, sname("abs")), ErrAbstractElement, "codec: element {urn:s}abs declared at s.xsd:1:220 has {abstract} true, so no document element validates against it (cvc-elt clause 2)")
 	_, _ = appendChecked(t, nil, schema, strict.New(), sname("abs"), "x")
-	plainError(t, CheckAppend[string](schema, sname("absb")), "{abstract} true")
+	declarationRefusal(t, CheckAppend[string](schema, sname("absb")), ErrAbstractElement, "codec: element {urn:s}absb declared at s.xsd:1:277 has {abstract} true, so no document element validates against it (cvc-elt clause 2)")
 	_, _ = appendChecked(t, nil, schema, strict.New(), sname("absb"), "x")
 
 	readme := filepath.Join("..", "testdata", "readme")
@@ -1077,13 +1118,14 @@ func TestAppendBackendFaults(t *testing.T) {
 }
 
 // asDecline fails t unless err is an Append or CheckAppend *DeclineError that wraps
-// errors.ErrUnsupported and not ErrInvalidValue, charged to no Loc, whose
-// text opens with prefix, and returns it.
+// errors.ErrUnsupported and none of ErrInvalidValue, ErrUndeclaredElement and
+// ErrAbstractElement, charged to no Loc, whose text opens with prefix, and returns
+// it.
 func asDecline(t *testing.T, err error, prefix string) *DeclineError {
 	t.Helper()
 	var d *DeclineError
-	if !errors.As(err, &d) || !errors.Is(err, errors.ErrUnsupported) || errors.Is(err, ErrInvalidValue) {
-		t.Fatalf("returned %v, want a *DeclineError wrapping errors.ErrUnsupported and not ErrInvalidValue", err)
+	if !errors.As(err, &d) || !errors.Is(err, errors.ErrUnsupported) || errors.Is(err, ErrInvalidValue) || errors.Is(err, ErrUndeclaredElement) || errors.Is(err, ErrAbstractElement) {
+		t.Fatalf("returned %v, want a *DeclineError wrapping errors.ErrUnsupported and none of ErrInvalidValue, ErrUndeclaredElement and ErrAbstractElement", err)
 	}
 	if !strings.HasPrefix(err.Error(), prefix) || !strings.HasSuffix(err.Error(), "; an encoder refusal, not a schema or value fault") {
 		t.Errorf("decline %q does not open with %q and close as an encoder refusal", err, prefix)
