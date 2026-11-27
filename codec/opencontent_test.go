@@ -294,3 +294,265 @@ func TestDecodeOpenContentTypeMismatch(t *testing.T) {
 		t.Errorf("Decode = %v, %v, want no value and ErrTypeMismatch", got, err)
 	}
 }
+
+// The schemas the {open content} Append rows add: ocFlatSuffixSchema and
+// ocOccSuffixSchema are ocFlatSchema's and ocOccSchema's under suffix;
+// ocFlatExtSchema and ocOccExtSchema declare r of an extension adding only an
+// attribute k to a base of ocFlatSchema's and ocOccSchema's content, so that
+// r's {content type} is its base's, {open content} and all (§3.4.2.3.3
+// dcl.ctd.ctcc.common clause 4.2.1); ocExtNoneSchema's ext adds
+// <openContent mode="none"> and sequence(b) to base, sequence(a) under an
+// {open content}, which it keeps (clause 6.1); ocResNoneSchema's res
+// restricts that base to sequence(a) under <openContent mode="none">, which
+// leaves it none (clause 4.1.2); ocAllSchema's type is all(a, any?), the
+// wildcard over urn:w, under {open content}; ocInterAnySchema's is
+// sequence(a, b?) under an interleave ##any one; ocPairSchema's is
+// flatSeqSchema's sequence(a?, b?) of {max occurs} 2, which codegen
+// flattens, under an interleave ##any one; ocSuffixWildSchema's is
+// ocWildSchema's sequence(a, any?) under a suffix ##any one; ocStrictSchema's is sequence(a) under a strict ##any one, beside the
+// top-level xs:int q; ocLocalSchema's is sequence(a, b?) under a suffix lax
+// ##any one, b a local declaration of xs:int, and ocLocalTopSchema's the same
+// beside a top-level b of xs:string; and ocSkipSchema's is ocAB under a skip
+// ##other one.
+const (
+	ocLax              = `<xs:openContent><xs:any namespace="##other" processContents="lax"/></xs:openContent>`
+	ocFlatSuffixSchema = `<xs:element name="r"><xs:complexType><xs:openContent mode="suffix"><xs:any namespace="##other" processContents="lax"/></xs:openContent><xs:sequence maxOccurs="unbounded"><xs:element name="a" type="xs:string" minOccurs="0"/><xs:element name="b" type="xs:string" minOccurs="0"/></xs:sequence></xs:complexType></xs:element>`
+	ocOccSuffixSchema  = `<xs:element name="r"><xs:complexType><xs:openContent mode="suffix"><xs:any namespace="##other" processContents="lax"/></xs:openContent><xs:sequence maxOccurs="unbounded"><xs:element name="a" type="xs:string"/><xs:element name="b" type="xs:string"/></xs:sequence></xs:complexType></xs:element>`
+	ocFlatExtSchema    = `<xs:complexType name="base">` + ocLax + `<xs:sequence maxOccurs="unbounded"><xs:element name="a" type="xs:string" minOccurs="0"/><xs:element name="b" type="xs:string" minOccurs="0"/></xs:sequence></xs:complexType>
+		<xs:complexType name="ext"><xs:complexContent><xs:extension base="s:base"><xs:attribute name="k" type="xs:string"/></xs:extension></xs:complexContent></xs:complexType>
+		<xs:element name="r" type="s:ext"/>`
+	ocOccExtSchema = `<xs:complexType name="base">` + ocLax + `<xs:sequence maxOccurs="unbounded"><xs:element name="a" type="xs:string"/><xs:element name="b" type="xs:string"/></xs:sequence></xs:complexType>
+		<xs:complexType name="ext"><xs:complexContent><xs:extension base="s:base"><xs:attribute name="k" type="xs:string"/></xs:extension></xs:complexContent></xs:complexType>
+		<xs:element name="r" type="s:ext"/>`
+	ocExtNoneSchema = `<xs:complexType name="base">` + ocLax + `<xs:sequence><xs:element name="a" type="xs:string"/></xs:sequence></xs:complexType>
+		<xs:complexType name="ext"><xs:complexContent><xs:extension base="s:base"><xs:openContent mode="none"/><xs:sequence><xs:element name="b" type="xs:string"/></xs:sequence></xs:extension></xs:complexContent></xs:complexType>
+		<xs:element name="r" type="s:ext"/>`
+	ocResNoneSchema = `<xs:complexType name="base">` + ocLax + `<xs:sequence><xs:element name="a" type="xs:string"/></xs:sequence></xs:complexType>
+		<xs:complexType name="res"><xs:complexContent><xs:restriction base="s:base"><xs:openContent mode="none"/><xs:sequence><xs:element name="a" type="xs:string"/></xs:sequence></xs:restriction></xs:complexContent></xs:complexType>
+		<xs:element name="r" type="s:res"/>`
+	ocAllSchema        = `<xs:element name="r"><xs:complexType>` + ocLax + `<xs:all><xs:element name="a" type="xs:string"/><xs:any namespace="urn:w" processContents="lax" minOccurs="0"/></xs:all></xs:complexType></xs:element>`
+	ocInterAnySchema   = `<xs:element name="r"><xs:complexType><xs:openContent><xs:any processContents="lax"/></xs:openContent><xs:sequence><xs:element name="a" type="xs:string"/><xs:element name="b" type="xs:string" minOccurs="0"/></xs:sequence></xs:complexType></xs:element>`
+	ocPairSchema       = `<xs:element name="r"><xs:complexType><xs:openContent><xs:any processContents="lax"/></xs:openContent><xs:sequence maxOccurs="2"><xs:element name="a" type="xs:string" minOccurs="0"/><xs:element name="b" type="xs:string" minOccurs="0"/></xs:sequence></xs:complexType></xs:element>`
+	ocSuffixWildSchema = `<xs:element name="r"><xs:complexType><xs:openContent mode="suffix"><xs:any processContents="lax"/></xs:openContent><xs:sequence><xs:element name="a" type="xs:string"/><xs:any namespace="urn:w" processContents="lax" minOccurs="0"/></xs:sequence></xs:complexType></xs:element>`
+	ocStrictSchema     = `<xs:element name="q" type="xs:int"/><xs:element name="r"><xs:complexType><xs:openContent><xs:any processContents="strict"/></xs:openContent><xs:sequence><xs:element name="a" type="xs:string"/></xs:sequence></xs:complexType></xs:element>`
+	ocLocalSchema      = `<xs:element name="r"><xs:complexType><xs:openContent mode="suffix"><xs:any processContents="lax"/></xs:openContent><xs:sequence><xs:element name="a" type="xs:string"/><xs:element name="b" type="xs:int" minOccurs="0"/></xs:sequence></xs:complexType></xs:element>`
+	ocLocalTopSchema   = `<xs:element name="b" type="xs:string"/>` + ocLocalSchema
+	ocSkipSchema       = `<xs:element name="r"><xs:complexType><xs:openContent><xs:any namespace="##other" processContents="skip"/></xs:openContent>` + ocAB + `</xs:complexType></xs:element>`
+)
+
+// The types codegen emits for those schemas' s:r, in shape, which
+// TestAppendOpenContentTypesAreCodegens pins: ocFlatExt ocFlatExtSchema's,
+// ocOccExt ocOccExtSchema's, ocExtNone ocExtNoneSchema's, ocResNone
+// ocResNoneSchema's, ocAll ocAllSchema's, ocPair ocPairSchema's, over
+// flatSeqSchema's interface, whose branches' shapes its alternatives' are,
+// ocA ocStrictSchema's, and ocLocal ocLocalSchema's and ocLocalTopSchema's;
+// ocInterAnySchema's is ocSuffixAny, ocFlatSuffixSchema's ocFlat and
+// ocOccSuffixSchema's ocOcc.
+type (
+	ocFlatExt struct {
+		Sequence    []flatSeqItem
+		OpenContent []anyElement
+		K           *string
+	}
+	ocOccExt struct {
+		Sequence    []occSeqItem
+		OpenContent []anyElement
+		K           *string
+	}
+	ocExtNone struct {
+		A, B        string
+		OpenContent []anyElement
+	}
+	ocResNone struct{ A string }
+	ocAll     struct {
+		A           string
+		Any         *anyElement
+		OpenContent []anyElement
+	}
+	ocPair struct {
+		Sequence    []flatSeqItem
+		OpenContent []anyElement
+	}
+	ocA struct {
+		A           string
+		OpenContent []anyElement
+	}
+	ocLocal struct {
+		A           string
+		B           *int32
+		OpenContent []anyElement
+	}
+)
+
+// TestAppendOpenContentTypesAreCodegens pins the types above to those codegen
+// emits for each of those schemas, in shape (codegen/doc.go "# Open
+// content").
+func TestAppendOpenContentTypesAreCodegens(t *testing.T) {
+	flat := "type R struct {\n\tSequence    []RSequence\n\tOpenContent []AnyElement\n}\n"
+	ext := "type R struct {\n\tSequence    []ExtSequence\n\tOpenContent []AnyElement\n\tK           *string\n}\n"
+	local := "type R struct {\n\tA           string\n\tB           *int32\n\tOpenContent []AnyElement\n}\n"
+	rows := []struct {
+		decls string
+		want  []string
+	}{
+		{ocFlatSuffixSchema, []string{flat, "type RSequenceA struct {\n\tA string\n}\n"}},
+		{ocOccSuffixSchema, []string{flat, "type RSequence struct {\n\tA string\n\tB string\n}\n"}},
+		{ocFlatExtSchema, []string{ext, "type ExtSequenceB struct {\n\tB string\n}\n"}},
+		{ocOccExtSchema, []string{ext, "type ExtSequence struct {\n\tA string\n\tB string\n}\n"}},
+		{ocExtNoneSchema, []string{"type R struct {\n\tA           string\n\tB           string\n\tOpenContent []AnyElement\n}\n"}},
+		{ocResNoneSchema, []string{"type R struct {\n\tA string\n}\n"}},
+		{ocAllSchema, []string{"type R struct {\n\tA           string\n\tAny         *AnyElement\n\tOpenContent []AnyElement\n}\n"}},
+		{ocInterAnySchema, []string{"type R struct {\n\tA           string\n\tB           *string\n\tOpenContent []AnyElement\n}\n"}},
+		{ocPairSchema, []string{flat, "type RSequenceB struct {\n\tB string\n}\n"}},
+		{ocSuffixWildSchema, []string{"type R struct {\n\tA           string\n\tAny         *AnyElement\n\tOpenContent []AnyElement\n}\n"}},
+		{ocStrictSchema, []string{"type R struct {\n\tA           string\n\tOpenContent []AnyElement\n}\n"}},
+		{ocLocalSchema, []string{local}},
+		{ocLocalTopSchema, []string{local}},
+		{ocSkipSchema, []string{"type R struct {\n\tA           string\n\tB           string\n\tOpenContent []AnyElement\n}\n"}},
+	}
+	for _, row := range rows {
+		gen := generated(t, ocSchema(t, row.decls))
+		for _, decl := range row.want {
+			if !bytes.Contains(gen, []byte(decl)) {
+				t.Errorf("codegen emits\n%s\nwhich does not declare\n%s", gen, decl)
+			}
+		}
+	}
+}
+
+// ocS is the raw element s:<local> in urn:s holding text.
+func ocS(local, text string) anyElement {
+	return anyElement{Space: "urn:s", Local: local, Content: anyType{Text: text}}
+}
+
+// ocNilled is the raw element o:n in urn:o carrying xsi:nil="true".
+var ocNilled = anyElement{Space: "urn:o", Local: "n", Content: anyType{Attributes: []anyAttribute{{Space: xsd.XMLSchemaInstanceNS, Local: "nil", Value: "true"}}}}
+
+// ocRoundTrip returns the subtest that round-trips v as s:r of the schema of
+// decls (roundTrip, by deepEqual) under opts, Append writing want where want
+// is not "".
+func ocRoundTrip[T any](decls string, v T, want string, opts ...Option) func(t *testing.T) {
+	return func(t *testing.T) {
+		roundTrip(t, ocSchema(t, decls), sname("r"), v, want, deepEqual[T], opts...)
+	}
+}
+
+// TestAppendOpenContent pins the {open content} lift: Append writes every
+// child the open-content field holds raw, after every child of the
+// {particle}, and the written document validates and decodes back equal:
+// under {mode} interleave and suffix, each child after the first a suffix
+// {open content} takes its own though the {particle} could take it
+// (§3.4.4.3 cvc-complex-content clause 2.1); an {open content} a
+// <defaultOpenContent> brings, one an extension inherits, adding a particle
+// or only an attribute, and one an extension's <openContent mode="none">
+// keeps (§3.4.2.3.3 dcl.ctd.ctcc.common clauses 4.2.1, 4.2.2, 4.2.3.3 and
+// 6.1); empty explicit content, the field alone; a nested type's own, in its
+// occurrence's struct; beside a choice, a wildcard particle, an element named
+// openContent, an all group, a flattened content model and an occurrence
+// field, the last two under each {mode}; a strict child nothing governs,
+// which validate assesses laxly; and xsi:nil on a skip one's child, which is
+// not assessed. A restriction's <openContent mode="none"> leaves its type
+// none (clause 4.1.2): no field, written as without one.
+func TestAppendOpenContent(t *testing.T) {
+	str := func(s string) *string { return &s }
+	x, y := ocX("x", "x"), ocX("y", "y")
+	const r, xy = `<r xmlns="urn:s">`, `<p1:x xmlns="" xmlns:p1="urn:o">x</p1:x><p1:y xmlns="" xmlns:p1="urn:o">y</p1:y></r>`
+	rows := []struct {
+		name string
+		run  func(t *testing.T)
+	}{
+		{"interleave, two children", ocRoundTrip(ocInterleaveSchema, ocABType{A: "1", B: "2", OpenContent: []anyElement{x, y}}, r+`<a>1</a><b>2</b>`+xy)},
+		{"suffix, two children", ocRoundTrip(ocSuffixSchema, ocABType{A: "1", B: "2", OpenContent: []anyElement{x, y}}, r+`<a>1</a><b>2</b>`+xy)},
+		{"suffix, a child after the first though the particle could take it", ocRoundTrip(ocSuffixWildSchema, ocWild{A: "1", OpenContent: []anyElement{x, {Space: "urn:w", Local: "p"}}}, "")},
+		{"a <defaultOpenContent>'s", ocRoundTrip(ocDefaultDoc, ocABType{A: "1", B: "2", OpenContent: []anyElement{x}}, "")},
+		{"an extension inheriting its base's", ocRoundTrip(ocExtSchema, ocABType{A: "1", B: "2", OpenContent: []anyElement{x, y}}, "")},
+		{"an extension's <openContent mode=\"none\"> keeping its base's", ocRoundTrip(ocExtNoneSchema, ocExtNone{A: "1", B: "2", OpenContent: []anyElement{x, y}}, "")},
+		{"empty explicit content made element-only", ocRoundTrip(ocEmptySchema, ocEmpty{OpenContent: []anyElement{x, y}}, "")},
+		{"a nested type's own", ocRoundTrip(ocNestedSchema, ocNested{C: []ocNestedC{{A: "1", OpenContent: []anyElement{x}}, {A: "2"}}, OpenContent: []anyElement{y}}, "")},
+		{"beside a choice", ocRoundTrip(ocChoiceSchema, ocChoice{Choice: awChoiceB{B: 2}, OpenContent: []anyElement{x, y}}, "", WithBranches[awChoiceI](awChoiceA{}, awChoiceB{}))},
+		{"beside a wildcard particle", ocRoundTrip(ocWildSchema, ocWild{A: "1", Any: &anyElement{Space: "urn:w", Local: "p", Content: anyType{Text: "p"}}, OpenContent: []anyElement{x, y}}, "")},
+		{"beside an element and an attribute named openContent", ocRoundTrip(ocNameSchema, ocName{OpenContent: "e", OpenContent2: []anyElement{x, y}, K: str("v")}, "")},
+		{"an all group", ocRoundTrip(ocAllSchema, ocAll{A: "1", Any: &anyElement{Space: "urn:w", Local: "p"}, OpenContent: []anyElement{x, y}}, r+`<a>1</a><p1:p xmlns="" xmlns:p1="urn:w"/>`+xy)},
+		{"flattened, interleave", ocRoundTrip(ocFlatSchema, ocFlat{Sequence: []flatSeqItem{flatSeqB{B: "2"}, flatSeqA{A: "1"}}, OpenContent: []anyElement{x, y}}, "", flatSeqBranches)},
+		{"flattened, suffix", ocRoundTrip(ocFlatSuffixSchema, ocFlat{Sequence: []flatSeqItem{flatSeqB{B: "2"}, flatSeqA{A: "1"}}, OpenContent: []anyElement{x, y}}, "", flatSeqBranches)},
+		{"flattened, inherited", ocRoundTrip(ocFlatExtSchema, ocFlatExt{Sequence: []flatSeqItem{flatSeqA{A: "1"}}, OpenContent: []anyElement{x, y}, K: str("k")}, "", flatSeqBranches)},
+		{"occurrence, interleave", ocRoundTrip(ocOccSchema, ocOcc{Sequence: []occSeqItem{{A: "1", B: "2"}, {A: "3", B: "4"}}, OpenContent: []anyElement{x, y}}, "")},
+		{"occurrence, suffix", ocRoundTrip(ocOccSuffixSchema, ocOcc{Sequence: []occSeqItem{{A: "1", B: "2"}}, OpenContent: []anyElement{x, y}}, "")},
+		{"occurrence, inherited", ocRoundTrip(ocOccExtSchema, ocOccExt{Sequence: []occSeqItem{{A: "1", B: "2"}}, OpenContent: []anyElement{x, y}}, "")},
+		{"a strict child nothing governs", ocRoundTrip(ocStrictSchema, ocA{A: "1", OpenContent: []anyElement{x, ocS("q", "7")}}, "")},
+		{"xsi:nil on a skip child", ocRoundTrip(ocSkipSchema, ocABType{A: "1", B: "2", OpenContent: []anyElement{ocNilled}}, "")},
+		{"a restriction's <openContent mode=\"none\">", ocRoundTrip(ocResNoneSchema, ocResNone{A: "1"}, r+`<a>1</a></r>`)},
+	}
+	for _, row := range rows {
+		t.Run(row.name, row.run)
+	}
+}
+
+// prefixed fails t unless err's text opens with prefix and holds each of
+// want.
+func prefixed(t *testing.T, err error, prefix string, want ...string) {
+	t.Helper()
+	if !strings.HasPrefix(err.Error(), prefix) {
+		t.Errorf("error %q does not open with %q", err, prefix)
+	}
+	holds(t, err, want...)
+}
+
+// TestAppendOpenContentRefusals pins the open-content values Append refuses:
+// a child the {particle} takes where Append writes it, after the
+// {particle}'s children, item 6 of its doc under suffix (§3.4.4.3
+// cvc-complex-content clause 2.3) and item 7 under interleave
+// (constructInterleaveParticleChild), whose value Decode returns for a
+// document placing that child first; a child neither the {particle} nor the
+// {open content}'s {wildcard} admits, item 6; an item of a flattened slice
+// the content model gives to the {open content}, item 6; a strict child
+// invalid against the top-level declaration that governs it, item 8, which
+// the assessment the {open content} sets finds; a child with a ·locally
+// declared type·, item 7 (constructLocallyTypedOpenChild), whether or not a
+// top-level declaration of its name exists (§3.3.4.6 key-governing-ed clause
+// 4.3); and xsi:nil on a lax one's child, item 7 (constructXsiAttribute).
+// Each error opens with its subject, the value's Go path among it.
+func TestAppendOpenContentRefusals(t *testing.T) {
+	t.Run("suffix, a child the particle takes at the end", func(t *testing.T) {
+		_, err := appendChecked(t, nil, ocSchema(t, ocSuffixAnySchema), strict.New(), sname("r"), ocSuffixAny{A: "1", OpenContent: []anyElement{ocS("b", "2")}})
+		invalidValue(t, err)
+		prefixed(t, err, "codec: Append: ocSuffixAny.OpenContent[0] holds element {urn:s}b, which a particle of the content model of ", "so that its suffix {open content} does not (§3.4.4.3 cvc-complex-content clause 2.3)")
+	})
+	t.Run("interleave, a child the particle takes at the end", func(t *testing.T) {
+		schema := ocSchema(t, ocInterAnySchema)
+		v := ocSuffixAny{A: "1", OpenContent: []anyElement{ocS("b", "2")}}
+		got, err := Decode[ocSuffixAny](schema, strict.New(), instanceOf("", "<s:b>2</s:b><s:a>1</s:a>"))
+		if err != nil || !reflect.DeepEqual(unscoped(*got), v) {
+			t.Fatalf("Decode = %#v, %v, want %#v", got, err, v)
+		}
+		_, err = appendChecked(t, nil, schema, strict.New(), sname("r"), v)
+		asDecline(t, err, "codec does not encode a child of an interleave {open content} that the {particle} takes where Append writes it: element {urn:s}b at ocSuffixAny.OpenContent[0], ")
+	})
+	t.Run("a child neither the particle nor the wildcard admits", func(t *testing.T) {
+		_, err := appendChecked(t, nil, ocSchema(t, ocInterleaveSchema), strict.New(), sname("r"), ocABType{A: "1", B: "2", OpenContent: []anyElement{ocS("z", "")}})
+		invalidValue(t, err)
+		prefixed(t, err, "codec: Append: ocABType.OpenContent[0] holds element {urn:s}z, which neither a particle of the content model of ")
+	})
+	t.Run("a flattened item the content model gives to the open content", func(t *testing.T) {
+		_, err := appendChecked(t, nil, ocSchema(t, ocPairSchema), strict.New(), sname("r"), ocPair{Sequence: []flatSeqItem{flatSeqA{A: "1"}, flatSeqA{A: "2"}, flatSeqA{A: "3"}}}, flatSeqBranches)
+		invalidValue(t, err)
+		prefixed(t, err, "codec: Append: ocPair.Sequence[2].(flatSeqA).A holds element {urn:s}a, which the content model of ", "attributes to its {open content} where it is written, not to the particle whose field holds it")
+	})
+	t.Run("a strict child invalid against its declaration", func(t *testing.T) {
+		got, err := appendChecked(t, []byte("pre"), ocSchema(t, ocStrictSchema), strict.New(), sname("r"), ocA{A: "1", OpenContent: []anyElement{ocS("q", "abc")}})
+		assessedCharge(t, got, err, "cvc-type", "", "")
+	})
+	for _, decls := range []string{ocLocalSchema, ocLocalTopSchema} {
+		t.Run("a child with a locally declared type", func(t *testing.T) {
+			_, err := appendChecked(t, nil, ocSchema(t, decls), strict.New(), sname("r"), ocLocal{A: "1", OpenContent: []anyElement{ocX("x", ""), ocS("b", "abc")}})
+			asDecline(t, err, "codec does not encode a child of a strict or lax {open content} that has a ·locally declared type· in the complex type it is written into: element {urn:s}b at ocLocal.OpenContent[1], in the match of the {open content} of ")
+		})
+	}
+	t.Run("xsi:nil on a lax child", func(t *testing.T) {
+		_, err := appendChecked(t, nil, ocSchema(t, ocInterleaveSchema), strict.New(), sname("r"), ocABType{A: "1", B: "2", OpenContent: []anyElement{ocNilled}})
+		d := asDecline(t, err, "codec does not encode xsi:type, xsi:nil")
+		if d.Construct() != (Construct{constructXsiAttribute}) {
+			t.Errorf("Construct = %v, want constructXsiAttribute's", d.Construct())
+		}
+	})
+}
