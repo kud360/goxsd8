@@ -331,32 +331,30 @@
 //     codegen splices, a choice occurring exactly once that codegen does not
 //     flatten, or a sequence, choice or all group codegen holds in an
 //     occurrence field, inline or through <group ref>, each of whose
-//     particles is an element particle, a wildcard particle with {process
-//     contents} skip or lax, a nested sequence or choice particle, inline or
-//     through <group ref>, or an all group's nested all group particle,
-//     through <group ref> (Structures §3.8.6.2 cos-all-limited), held as
-//     codegen's package doc "# Particles" holds it: one codegen splices, as
-//     its own particles in its place; a choice occurring exactly once that
-//     codegen does not flatten, into its sealed interface field, as its
-//     alternatives; one codegen flattens, into its slice field, each basic
-//     particle of its reach such an element or wildcard particle; and any
-//     other, into its occurrence field, as its own particles. A choice's
-//     alternative, the content choice's or a nested one's, is such a particle
-//     too, its model group held at the occurrence its branch reads, {min
-//     occurs} 0 read as 1, into its branch's fields. Inside a content particle
-//     codegen holds in an occurrence field, a nested particle codegen flattens
-//     or holds in an occurrence field of its own is a [*DeclineError],
-//     whatever its occurrence, as it is for Decode ("# What decodes"). A
-//     content model holding a wildcard particle, a nested flattened particle
-//     or a nested occurrence field, at any depth, is one xsd.Schema.ContentMatcher
-//     tracks. The content {particle} may also be a sequence or choice codegen
-//     flattens, each basic particle of whose reach (codegen's package doc, "#
-//     Particles") is such an element or wildcard particle, and whose content model
-//     xsd.Schema.ContentMatcher tracks, with or without a wildcard particle. The
-//     choice occurring exactly once encodes into its sealed interface, T itself or the
-//     first field of T's struct, the sequence, choice or all group held in an
-//     occurrence field into that field, and the flattened one into its slice field, as
-//     "# What decodes" states.
+//     particles is an element particle, a wildcard particle of any {process
+//     contents}, a nested sequence or choice particle, inline or through <group ref>,
+//     or an all group's nested all group particle, through <group ref> (Structures
+//     §3.8.6.2 cos-all-limited), held as codegen's package doc "# Particles" holds it:
+//     one codegen splices, as its own particles in its place; a choice occurring
+//     exactly once that codegen does not flatten, into its sealed interface field, as
+//     its alternatives; one codegen flattens, into its slice field, each basic
+//     particle of its reach such an element or wildcard particle; and any other, into
+//     its occurrence field, as its own particles. A choice's alternative, the content
+//     choice's or a nested one's, is such a particle too, its model group held at the
+//     occurrence its branch reads, {min occurs} 0 read as 1, into its branch's fields.
+//     Inside a content particle codegen holds in an occurrence field, a nested
+//     particle codegen flattens or holds in an occurrence field of its own is a
+//     [*DeclineError], whatever its occurrence, as it is for Decode ("# What
+//     decodes"). A content model holding a wildcard particle, a nested flattened
+//     particle or a nested occurrence field, at any depth, is one
+//     xsd.Schema.ContentMatcher tracks. The content {particle} may also be a sequence
+//     or choice codegen flattens, each basic particle of whose reach (codegen's
+//     package doc, "# Particles") is such an element or wildcard particle, and whose
+//     content model xsd.Schema.ContentMatcher tracks, with or without a wildcard
+//     particle. The choice occurring exactly once encodes into its sealed interface, T
+//     itself or the first field of T's struct, the sequence, choice or all group held
+//     in an occurrence field into that field, and the flattened one into its slice
+//     field, as "# What decodes" states.
 //   - An element particle of that sequence, choice or all group or of a model group
 //     nested in it, at any depth, or one a flattened sequence or choice
 //     reaches, with {max occurs} at least 1, its {term} a local element
@@ -373,9 +371,10 @@
 //     slice one element, as "# What decodes" states.
 //   - A wildcard particle of that sequence, choice or all group or of a model group
 //     nested in it, at any depth, or one a flattened sequence or choice
-//     reaches, with {process contents} skip or lax and {max occurs} at least 1,
-//     into the field "# What decodes" states for it, each element it holds written
-//     raw, as below.
+//     reaches, of any {process contents}, with {max occurs} at least 1, into
+//     the field "# What decodes" states for it, each element it holds written
+//     raw, as below, and, but for skip, assessed with the document, as
+//     Append's doc states.
 //   - xs:anyType itself (Structures §3.4.7), where the bullets above admit
 //     it, into the Go type "# What decodes" states for its declaration, its
 //     content written raw, as below.
@@ -464,8 +463,9 @@
 // value, though its namespace be that element's own. An element whose content Append writes
 // from an AnyType, one a wildcard's field holds, of any {process contents}, a child such an
 // element holds at any depth, and an element of type xs:anyType itself, the document element
-// among them, is written raw, nothing in it resolved, but for the items item 7 of Append's doc
-// declines in it, and nothing below a skip wildcard's match assessed, under the bindings its
+// among them, is written raw, nothing in it resolved by Append, but for the items items 6 and
+// 7 of Append's doc refuse and decline in it, and what a strict or lax match or an xs:anyType
+// element holds assessed with the document, as Append's doc states, under the bindings its
 // AnyType's Namespaces holds: the default namespace in scope there is exactly the Space of its
 // "" entry, none where it holds none, declared xmlns="S", or xmlns="" for none, where it
 // differs from its parent's as written; each prefixed entry is in scope bound to its Space,

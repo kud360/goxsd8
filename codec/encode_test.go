@@ -77,7 +77,8 @@ func roundTrip[T any](t *testing.T, schema *xsd.Schema, name xsd.QName, v T, wan
 // without item 2's or item 3's text, or item 7's decline, by
 // constructNoCanonical, constructQNameSpelling, constructValueConstraint,
 // constructXsiAttribute, constructStrictAttributeWildcard,
-// constructGovernedContent or constructLocallyTypedMatch.
+// constructGovernedContent, constructLocallyTypedMatch, constructCapturedPrefix
+// or, for an ·ENTITY value· held raw, constructEntityType.
 func appendChecked[T any](t *testing.T, dst []byte, schema *xsd.Schema, backend value.Backend, name xsd.QName, v T, opts ...Option) ([]byte, error) {
 	t.Helper()
 	out, err := Append(dst, schema, backend, name, v, opts...)
@@ -85,7 +86,7 @@ func appendChecked[T any](t *testing.T, dst []byte, schema *xsd.Schema, backend 
 	if checked == nil {
 		class := staticClass(err)
 		static := class == "plain" && (strings.HasPrefix(err.Error(), "codec: no top-level element declaration") || strings.Contains(err.Error(), "{abstract} true"))
-		if static || err != nil && class != "plain" && class != "invalid" && class != "decline "+constructNoCanonical.name() && class != "decline "+constructQNameSpelling.name() && class != "decline "+constructValueConstraint.name() && class != "decline "+constructXsiAttribute.name() && class != "decline "+constructStrictAttributeWildcard.name() && class != "decline "+constructGovernedContent.name() && class != "decline "+constructLocallyTypedMatch.name() {
+		if static || err != nil && class != "plain" && class != "invalid" && class != "decline "+constructNoCanonical.name() && class != "decline "+constructQNameSpelling.name() && class != "decline "+constructValueConstraint.name() && class != "decline "+constructXsiAttribute.name() && class != "decline "+constructStrictAttributeWildcard.name() && class != "decline "+constructGovernedContent.name() && class != "decline "+constructLocallyTypedMatch.name() && class != "decline "+constructCapturedPrefix.name() && class != "decline "+constructEntityType.name() {
 			t.Errorf("CheckAppend = nil, but Append returned %v, %s", err, class)
 		}
 		return out, err
@@ -1274,12 +1275,11 @@ func TestAppendDeclines(t *testing.T) {
 		{"nested flattened particle in a nested occurrence field's item", "a nested model group particle", sequence(a + `<xs:sequence maxOccurs="2"><xs:element name="b" type="xs:string"/>` +
 			`<xs:sequence minOccurs="0" maxOccurs="unbounded"><xs:element name="c" type="xs:string" minOccurs="0"/></xs:sequence></xs:sequence>`)},
 		{"nested flattened untracked", "a content model the content matcher does not track", sequence(a + `<xs:sequence maxOccurs="21845"><xs:element name="c" type="xs:string" maxOccurs="2"/></xs:sequence>`)},
-		{"strict wildcard", "a wildcard particle with {process contents} strict", sequence(`<xs:any/>`)},
 		{"ref type table", "an element declaration with a {type table}", `<xs:element name="x%[1]s" type="xs:string"><xs:alternative test="@a" type="xs:token"/></xs:element>` + sequence(`<xs:element ref="s:x%[1]s"/>`)},
 		{"ref simple content", entityTypeName, `<xs:element name="x%[1]s"><xs:complexType><xs:simpleContent><xs:extension base="xs:ENTITY"/></xs:simpleContent></xs:complexType></xs:element>` +
 			sequence(`<xs:element ref="s:x%[1]s"/>`)},
-		{"complex particle", "a wildcard particle with {process contents} strict", sequence(`<xs:element name="a"><xs:complexType><xs:sequence><xs:any/></xs:sequence></xs:complexType></xs:element>`)},
-		{"particle type sharing its element's name", "a wildcard particle with {process contents} strict", `<xs:complexType name="%[1]s"><xs:sequence><xs:any/></xs:sequence></xs:complexType>` +
+		{"complex particle", "an element declaration with {nillable} true", sequence(`<xs:element name="a"><xs:complexType><xs:sequence><xs:element name="n" type="xs:string" nillable="true"/></xs:sequence></xs:complexType></xs:element>`)},
+		{"particle type sharing its element's name", "an element declaration with {nillable} true", `<xs:complexType name="%[1]s"><xs:sequence><xs:element name="n" type="xs:string" nillable="true"/></xs:sequence></xs:complexType>` +
 			sequence(`<xs:element name="c" type="s:%[1]s"/>`)},
 		{"xsi:type attribute use", "an attribute use whose declaration's {target namespace} is the XSI namespace, other than xsi:schemaLocation's and xsi:noNamespaceSchemaLocation's, or the one the prefix xmlns is bound to", complexOf(`<xs:attribute ref="xsi:type"/>`)},
 		{"complex assertions", "a complex type with {assertions}", complexOf(asserted)},
@@ -3661,8 +3661,7 @@ var skipAttrBranches = WithBranches[skipAttrChoice](skipAttrA{}, skipAttrAny{})
 // its Tail; an element in the XML namespace as xml:Local, and one in the XSI namespace under a
 // fresh prefix; xsi:schemaLocation and xsi:noNamespaceSchemaLocation written on a skip match and
 // on a lax one as any other attribute is; both rows fail with rawAttribute's hint exemption
-// removed, and the lax one, not the skip one, with rawAttributes asking encoder.governed of a
-// hint. xsi:banana, none of the four names instanceAttribute reports, is written on a skip and on
+// removed. xsi:banana, none of the four names instanceAttribute reports, is written on a skip and on
 // a lax match and on a child of each, no declaration governing it (§3.2.6 no-xsi); both rows fail
 // with rawAttribute's XSI step keyed on the XSI namespace, and with it declining such a name only
 // below the match. xsi:nil, item 7 but in a skip match, is written on a skip match beside content
@@ -3670,14 +3669,11 @@ var skipAttrBranches = WithBranches[skipAttrChoice](skipAttrA{}, skipAttrAny{})
 // key-skipped); both rows fail with skipMatch.writesNil answering false. Each document validate
 // accepts and Decode turns back into the value; an optional wildcard holding nothing writes
 // nothing, and so does the nil interface of a choice whose wildcard alternative has {min occurs}
-// 0, which is emptiable though its branch reads it as 1 (choiceEmptiable). The rows of one and
-// several held elements are the ones the static decline failed before the slice
-// (constructWildcard). A skip match named as the element particle beside it is written, no
-// ·locally declared type· read for it, and so is a lax match no declaration governs, at the top
-// and with a child at depth, unqualified and foreign attributes on each, and one holding a child
-// named as that element particle, which has no locally declared type below the match (§3.4.6.4
-// key-ldt-elem clause 1); the three lax rows decline constructWildcard with particleEncodes'
-// narrowing to strict undone.
+// 0, which is emptiable though its branch reads it as 1 (choiceEmptiable). A skip match named
+// as the element particle beside it is written, no ·locally declared type· read for it, and so
+// is a lax match no declaration governs, at the top and with a child at depth, unqualified and
+// foreign attributes on each, and one holding a child named as that element particle, which has
+// no locally declared type below the match (§3.4.6.4 key-ldt-elem clause 1).
 func TestAppendWildcard(t *testing.T) {
 	t.Run("one held element", func(t *testing.T) {
 		roundTrip(t, schemaOf(t, seqSkipSchema), rootName, seqWild{A: "x", Any: anyElement{Space: "urn:o", Local: "w"}},
@@ -3842,18 +3838,12 @@ func TestAppendHeldNamespaces(t *testing.T) {
 // held element whose Children slice holds itself (encoder.enter). None carries an
 // *xsderr.Error. A lax match outside its {namespace constraint} is item 6 too, dst
 // returned unextended; so is an xsi:nil in a skip match whose Value holds a non-Char,
-// failing with skipMatch.writesNil answering false. Then item 7: xsi:type on a skip and
-// on a lax match, the skip row behind an item 6 error found after it, and xsi:nil on a
-// lax match decline by constructXsiAttribute, the xsi:type skip row failing under a
-// writer that admits each of the four names cvc-complex-type clause 2 excepts in a skip
-// match, and the xsi:nil row under one that admits xsi:nil in every hold; and in a lax
-// match an element or attribute a top-level declaration governs, the match itself, a child
-// and an attribute, declines by constructGovernedContent, and a match with a ·locally
-// declared type· (§3.3.4.6 key-governing-type-elem clause 7) declines by
-// constructLocallyTypedMatch: named as the element particle beside it in a sequence, and
-// as an element only the base type's content model contains, through a choice's and a
-// flattened choice's branch, each failing with writeAt.typ left unthreaded on its path; a
-// top-level declaration governs, by constructGovernedContent, where both govern.
+// failing with skipMatch.writesNil answering false; and so is a skip match's held xsi:type
+// behind a Text holding a non-Char. Then item 7: xsi:nil on a lax match declines by
+// constructXsiAttribute, and a lax match with a ·locally declared type· (§3.3.4.6
+// key-governing-type-elem clause 7) declines by constructLocallyTypedMatch: named as the
+// element particle beside it in a sequence, and as an element only the base type's content
+// model contains, through a choice's and a flattened choice's branch.
 func TestAppendWildcardInvalid(t *testing.T) {
 	many, one := schemaOf(t, skipManySchema), schemaOf(t, seqSkipSchema)
 	w := anyElement{Space: "urn:o", Local: "w"}
@@ -4038,23 +4028,10 @@ func TestAppendWildcardInvalid(t *testing.T) {
 		v         seqWild
 		want      []string
 	}{
-		{"xsi:type on the match", one, constructXsiAttribute, held(anyType{Attributes: []anyAttribute{{"", "k", "v"}, {xsd.XMLSchemaInstanceNS, "type", "xs:byte"}}}),
-			[]string{"attribute xsi:type at seqWild.Any.Content.Attributes[1]" + match}},
-		{"a lax match a top-level declaration governs", lax, constructGovernedContent, seqWild{A: "x", Any: anyElement{Space: "urn:s", Local: "w", Content: anyType{Text: "abc"}}},
-			[]string{"element {urn:s}w at seqWild.Any" + match, ", governed by element {urn:s}w declared at "}},
-		{"a lax match's child a top-level declaration governs", lax, constructGovernedContent, laxHeld(anyType{Children: []anyChild{{Element: anyElement{Space: "urn:s", Local: "w", Content: anyType{Text: "abc"}}}}}),
-			[]string{"element {urn:s}w at seqWild.Any.Content.Children[0].Element" + match, ", governed by element {urn:s}w declared at "}},
-		{"a lax match's attribute a top-level declaration governs", lax, constructGovernedContent, laxHeld(anyType{Attributes: []anyAttribute{{"urn:s", "t", "abc"}}}),
-			[]string{"attribute {urn:s}t at seqWild.Any.Content.Attributes[0]" + match, ", governed by attribute {urn:s}t declared at "}},
-		{"xsi:type on a lax match", lax, constructXsiAttribute, laxHeld(anyType{Attributes: []anyAttribute{{xsd.XMLSchemaInstanceNS, "type", "xs:int"}}, Text: "abc"}),
-			[]string{"attribute xsi:type at seqWild.Any.Content.Attributes[0]" + match}},
 		{"xsi:nil on a lax match", lax, constructXsiAttribute, laxHeld(anyType{Attributes: []anyAttribute{{xsd.XMLSchemaInstanceNS, "nil", "true"}}, Text: "abc"}),
 			[]string{"attribute xsi:nil at seqWild.Any.Content.Attributes[0]" + match}},
 		{"a lax match named as the element particle beside it", lax, constructLocallyTypedMatch, seqWild{A: "1", Any: anyElement{Space: "urn:s", Local: "a", Content: anyType{Text: "hello"}}},
 			[]string{"element {urn:s}a at seqWild.Any" + match, ", governed by its locally declared type in the {type definition} of element {urn:s}r declared at "}},
-		{"a lax match a top-level declaration and its locally declared type both govern", schemaOf(t, seqLaxSchema+`<xs:element name="a" type="xs:string"/>`), constructGovernedContent,
-			seqWild{A: "1", Any: anyElement{Space: "urn:s", Local: "a", Content: anyType{Text: "hello"}}},
-			[]string{"element {urn:s}a at seqWild.Any" + match, ", governed by element {urn:s}a declared at "}},
 	} {
 		t.Run(row.name, func(t *testing.T) {
 			_, err := appendChecked(t, nil, row.schema, strict.New(), rootName, row.v)
@@ -4073,6 +4050,95 @@ func TestAppendWildcardInvalid(t *testing.T) {
 		_, err := appendChecked(t, nil, schemaOf(t, laxFlatBaseSchema), strict.New(), rootName, flatPick{Choice: []flatPickItem{flatPickAny{Any: c}}}, flatPickBranches)
 		_ = asDecline(t, err, "codec does not encode "+constructLocallyTypedMatch.name()+": element {urn:s}c at flatPick.Choice[0].(flatPickAny).Any, in the match of ")
 		holds(t, err, local)
+	})
+}
+
+// TestAppendGovernedMatch pins what Append writes for a strict or lax
+// wildcard's match a declaration or a type may govern, the document assessed
+// (items 6 to 8 of Append's doc). Written, validated and decoded back: a
+// strict match a top-level declaration governs; a lax match a top-level
+// declaration governs holding an xs:QName child whose prefix the match's
+// Namespaces bind; and a lax match a top-level declaration and its locally
+// declared type both name, the declaration first. Then the guards: a strict
+// match neither a declaration nor a type governs is item 6; a governed match
+// invalid against its declaration, and a governed xs:QName child whose prefix
+// nothing binds, item 8, charged by cvc-type; a text token, an attribute
+// value and a skip match's xsi:type whose prefix only a binding Append
+// declares binds decline by constructCapturedPrefix; a strict match with a
+// ·locally declared type· and no top-level declaration declines by
+// constructLocallyTypedMatch, with or without xsi:type; and a governed
+// xs:ENTITY match declines by constructEntityType.
+func TestAppendGovernedMatch(t *testing.T) {
+	strictS := schemaOf(t, seqStrictSchema+`<xs:element name="i" type="xs:int"/>`)
+	qm := `<xs:element name="m"><xs:complexType><xs:sequence><xs:element name="c" type="xs:QName"/></xs:sequence></xs:complexType></xs:element>`
+	laxQ := schemaOf(t, seqLaxSchema+qm+`<xs:element name="q" type="xs:QName"/><xs:attribute name="qa" type="xs:QName"/>`)
+	def := []anyNamespace{{"", "urn:s"}}
+	xs := []anyNamespace{{"", "urn:s"}, {"x", "urn:x"}}
+	match := func(local string, c anyType) seqWild {
+		return seqWild{A: "x", Any: anyElement{Space: "urn:s", Local: local, Content: c}}
+	}
+	m := func(text string) seqWild {
+		return match("m", anyType{Namespaces: xs, Children: []anyChild{{Element: anyElement{Space: "urn:s", Local: "c", Content: anyType{Namespaces: xs, Text: text}}}}})
+	}
+	t.Run("a strict match a top-level declaration governs", func(t *testing.T) {
+		roundTrip(t, strictS, rootName, match("w", anyType{Namespaces: def, Text: "hi"}), `<r xmlns="urn:s"><a>x</a><w>hi</w></r>`, deepEqual[seqWild])
+	})
+	t.Run("a governed lax match holding an xs:QName child its Namespaces bind", func(t *testing.T) {
+		roundTrip(t, laxQ, rootName, m("x:v"), `<r xmlns="urn:s"><a>x</a><m xmlns:x="urn:x"><c>x:v</c></m></r>`, deepEqual[seqWild])
+	})
+	t.Run("a lax match a top-level declaration and its locally declared type both name", func(t *testing.T) {
+		roundTrip(t, schemaOf(t, seqLaxSchema+`<xs:element name="a" type="xs:string"/>`), rootName, match("a", anyType{Namespaces: def, Text: "hello"}), `<r xmlns="urn:s"><a>x</a><a>hello</a></r>`, deepEqual[seqWild])
+	})
+	t.Run("a strict match nothing governs", func(t *testing.T) {
+		got, err := appendChecked(t, []byte("pre"), strictS, strict.New(), rootName, match("z", anyType{Namespaces: def, Text: "t"}))
+		want := "codec: Append: seqWild.Any holds element {urn:s}z, in the match of wildcard particle 1 of the {type definition} of element {urn:s}r declared at "
+		invalidValue(t, err, want, "sic-e-outcome clause 1.1.3")
+		if !strings.HasPrefix(err.Error(), want) {
+			t.Errorf("error %q does not open with %q", err, want)
+		}
+		noRule(t, err)
+		if string(got) != "pre" {
+			t.Errorf("Append returned %q, want dst unextended", got)
+		}
+	})
+	t.Run("a strict match invalid against its declaration", func(t *testing.T) {
+		got, err := appendChecked(t, []byte("pre"), strictS, strict.New(), rootName, match("i", anyType{Namespaces: def, Text: "abc"}))
+		assessedCharge(t, got, err, "cvc-type", "3.1.3", `"abc"`)
+	})
+	t.Run("a governed xs:QName child whose prefix nothing binds", func(t *testing.T) {
+		got, err := appendChecked(t, []byte("pre"), laxQ, strict.New(), rootName, m("y:v"))
+		assessedCharge(t, got, err, "cvc-type", "3.1.3", `"y:v"`)
+	})
+	for _, row := range []struct {
+		name   string
+		schema *xsd.Schema
+		v      seqWild
+		want   string
+	}{
+		{"a governed match's text", laxQ, match("q", anyType{Text: "p1:v"}), `seqWild.Any.Content.Text holds the token "p1:v", whose prefix p1 no entry of its AnyType's Namespaces binds, though Append's declaration binds it to "urn:s" where it is written`},
+		{"a governed attribute's value", laxQ, match("z", anyType{Attributes: []anyAttribute{{"urn:s", "qa", "p1:v"}}}), `seqWild.Any.Content.Attributes[0].Value holds the token "p1:v", whose prefix p1`},
+		{"a skip match's xsi:type", schemaOf(t, seqSkipSchema), seqWild{A: "x", Any: anyElement{Space: "urn:o", Local: "w", Content: anyType{Attributes: []anyAttribute{{xsd.XMLSchemaInstanceNS, "type", "p1:t"}}}}},
+			`seqWild.Any.Content.Attributes[0].Value holds the token "p1:t", whose prefix p1 no entry of its AnyType's Namespaces binds, though Append's declaration binds it to "urn:o" where it is written`},
+	} {
+		t.Run("a captured prefix in "+row.name, func(t *testing.T) {
+			_, err := appendChecked(t, nil, row.schema, strict.New(), rootName, row.v)
+			_ = asDecline(t, err, "codec does not encode "+constructCapturedPrefix.name()+": "+row.want)
+		})
+	}
+	local := "codec does not encode " + constructLocallyTypedMatch.name() + ": element {urn:s}a at seqWild.Any, in the match of wildcard particle 1 of the {type definition} of element {urn:s}r declared at "
+	t.Run("a strict match with a locally declared type", func(t *testing.T) {
+		_, err := appendChecked(t, nil, strictS, strict.New(), rootName, match("a", anyType{Namespaces: def, Text: "2"}))
+		_ = asDecline(t, err, local)
+	})
+	t.Run("a strict match with a locally declared type and xsi:type", func(t *testing.T) {
+		ns := []anyNamespace{{"", "urn:s"}, {"xs", xsd.XMLSchemaNS}}
+		_, err := appendChecked(t, nil, strictS, strict.New(), rootName, match("a", anyType{Namespaces: ns, Attributes: []anyAttribute{{xsd.XMLSchemaInstanceNS, "type", "xs:string"}}, Text: "2"}))
+		_ = asDecline(t, err, local)
+	})
+	t.Run("a governed xs:ENTITY match", func(t *testing.T) {
+		_, err := appendChecked(t, nil, schemaOf(t, seqLaxSchema+`<xs:element name="e" type="xs:ENTITY"/>`), strict.New(), rootName, match("e", anyType{Namespaces: def, Text: "foo"}))
+		d := asDecline(t, err, "codec does not encode "+entityTypeName+": an ·ENTITY value· held raw")
+		holds(t, d, "[cvc-type]", "cvc-simple-type clause 3")
 	})
 }
 
@@ -4187,7 +4253,7 @@ func TestAppendAttributeWildcard(t *testing.T) {
 // fail with attributeWildcardHold.writesHints answering true. So does xsi:nil
 // under a skip wildcard, which Decode never returns there, failing with
 // attributeWildcardHold.writesNil answering true and under a writer that
-// admits xsi:nil wherever hold governs none (rawHold.governing). Each item 6 row
+// admits xsi:nil wherever no assessment reads hold (rawHold.assessed). Each item 6 row
 // returns nil, having written the attribute, under a writer that writes the
 // field unchecked.
 func TestAppendAttributeWildcardInvalid(t *testing.T) {
@@ -4356,27 +4422,24 @@ func TestAppendAnyType(t *testing.T) {
 }
 
 // TestAppendAnyTypeGuards pins what Append does with the content of an
-// element of type xs:anyType itself beyond what it writes, each row but the
-// last two answered, before Append encoded such an element, by item 4's
-// decline of its declaration. Item 6 of Append's doc: a held
-// Local that is no NCName, at depth, a Text holding a non-Char, a held
-// attribute named xmlns, and a held element's self-holding Children. Item 7:
-// xsi:type, on the element and at depth, and xsi:nil decline by
-// constructXsiAttribute, each xsi:type row written, and charged by validate
-// by cvc-attribute, its prefix unbound, under a writer that admits every XSI
-// attribute and asks encoder.governed of none; and an element whose expanded
-// name a top-level element declaration names, or an attribute but for the two
-// schema location hints whose expanded name a top-level attribute declaration
-// names, at any depth, under an ungoverned child too, declines by
-// constructGovernedContent, whatever its value, the XSI check first on one
-// attribute, since the schema declares xsi:type: a governed xs:QName child
-// Decode returns from a valid document, a governed xs:int child built invalid
-// against its declaration, a governed attribute on the element and on a
-// descendant, and a governed child of a particle's element. An item 6 error
-// inside a governed element's content, and one in a later sibling, wins over
-// that decline. A skip wildcard's match holding a governed name is still
-// written, and a type derived from xs:anyType still encodes as its own complex
-// type.
+// element of type xs:anyType itself beyond what it writes. Item 6 of Append's
+// doc: a held Local that is no NCName, at depth, a Text holding a non-Char, a
+// held attribute named xmlns, a held element's self-holding Children, and an
+// item 6 error inside a governed element's content and in a sibling after
+// one. Item 7: xsi:nil declines by constructXsiAttribute ahead of a governed
+// element. Then the governed content the document's assessment holds to its
+// declaration or type: a governed xs:QName child Decode returns from a valid
+// document, a governed attribute on a descendant whose prefix its
+// Namespaces bind, and xsi:type at depth whose prefix they bind, each written
+// and decoded back, and xsi:type on the element itself, written and
+// validated, though Decode declines an element of a declared type carrying
+// xsi:type (constructXsiType); and item 8, charged, for xsi:type on the
+// element and at depth whose prefix nothing binds (cvc-attribute clause 3 of
+// the built-in declaration), a governed xs:int child invalid against its
+// declaration, a governed xs:QName child under an ungoverned one and of a
+// particle's element whose prefix nothing binds, and a governed attribute so.
+// A skip wildcard's match holding a governed name is written, and a type
+// derived from xs:anyType still encodes as its own complex type.
 func TestAppendAnyTypeGuards(t *testing.T) {
 	governed := schemaOf(t, governedAnySchema)
 	child := func(e anyElement) []anyChild { return []anyChild{{Element: e}} }
@@ -4421,20 +4484,6 @@ func TestAppendAnyTypeGuards(t *testing.T) {
 		v               rootAny
 		want            []string
 	}{
-		{"xsi:type on the element", constructXsiAttribute.name(), rootAny{Attributes: []anyAttribute{{"", "k", "v"}, {xsd.XMLSchemaInstanceNS, "type", "xs:string"}}},
-			[]string{"attribute xsi:type at rootAny.Attributes[1], " + in}},
-		{"xsi:type at depth", constructXsiAttribute.name(), rootAny{Children: child(anyElement{Local: "c", Content: anyType{Attributes: []anyAttribute{{xsd.XMLSchemaInstanceNS, "type", "x:t"}}}})},
-			[]string{"attribute xsi:type at rootAny.Children[0].Element.Content.Attributes[0], " + in}},
-		{"a governed xs:QName child decoded from a valid document", constructGovernedContent.name(), *decoded,
-			[]string{"element {urn:s}q at rootAny.Children[0].Element, " + in, ", governed by element {urn:s}q declared at "}},
-		{"a governed xs:int child built invalid against its declaration", constructGovernedContent.name(), rootAny{Children: child(anyElement{Space: "urn:s", Local: "i", Content: anyType{Text: "abc"}})},
-			[]string{"element {urn:s}i at rootAny.Children[0].Element, " + in, ", governed by element {urn:s}i declared at "}},
-		{"a governed element under an ungoverned child", constructGovernedContent.name(), rootAny{Children: child(anyElement{Local: "c", Content: anyType{Children: child(q)}})},
-			[]string{"element {urn:s}q at rootAny.Children[0].Element.Content.Children[0].Element, " + in}},
-		{"a governed attribute on the element", constructGovernedContent.name(), rootAny{Attributes: []anyAttribute{{"urn:s", "qa", "s:x"}}},
-			[]string{"attribute {urn:s}qa at rootAny.Attributes[0], " + in, ", governed by attribute {urn:s}qa declared at "}},
-		{"a governed attribute on a descendant", constructGovernedContent.name(), rootAny{Children: child(anyElement{Local: "c", Content: anyType{Attributes: []anyAttribute{{"urn:s", "qa", "s:x"}}}})},
-			[]string{"attribute {urn:s}qa at rootAny.Children[0].Element.Content.Attributes[0], " + in}},
 		{"an XSI attribute ahead of a governed element", constructXsiAttribute.name(), rootAny{Attributes: []anyAttribute{{xsd.XMLSchemaInstanceNS, "nil", "true"}}, Children: child(q)},
 			[]string{"attribute xsi:nil at rootAny.Attributes[0], " + in}},
 	} {
@@ -4444,10 +4493,48 @@ func TestAppendAnyTypeGuards(t *testing.T) {
 			holds(t, err, row.want[1:]...)
 		})
 	}
-	t.Run("a governed child of a particle's element", func(t *testing.T) {
+	s := []anyNamespace{{"s", "urn:s"}}
+	t.Run("a governed xs:QName child decoded from a valid document", func(t *testing.T) {
+		roundTrip(t, governed, rootName, *decoded, "", deepEqual[rootAny])
+	})
+	t.Run("a governed attribute on a descendant, its prefix held", func(t *testing.T) {
+		v := rootAny{Namespaces: s, Children: child(anyElement{Local: "c", Content: anyType{Namespaces: s, Attributes: []anyAttribute{{"urn:s", "qa", "s:x"}}}})}
+		roundTrip(t, governed, rootName, v, `<s:r xmlns:s="urn:s"><c s:qa="s:x"/></s:r>`, deepEqual[rootAny])
+	})
+	t.Run("xsi:type at depth, its prefix held", func(t *testing.T) {
+		ns := []anyNamespace{{"", "urn:s"}, {"xs", xsd.XMLSchemaNS}}
+		v := rootAny{Namespaces: ns, Children: child(anyElement{Space: "urn:s", Local: "c", Content: anyType{Namespaces: ns, Attributes: []anyAttribute{{xsd.XMLSchemaInstanceNS, "type", "xs:int"}}, Text: "5"}})}
+		roundTrip(t, governed, rootName, v, `<r xmlns="urn:s" xmlns:xs="http://www.w3.org/2001/XMLSchema"><c xmlns:p1="http://www.w3.org/2001/XMLSchema-instance" p1:type="xs:int">5</c></r>`, deepEqual[rootAny])
+	})
+	t.Run("xsi:type on the element, its prefix held", func(t *testing.T) {
+		v := rootAny{Namespaces: []anyNamespace{{"", "urn:s"}, {"xs", xsd.XMLSchemaNS}}, Attributes: []anyAttribute{{xsd.XMLSchemaInstanceNS, "type", "xs:int"}}, Text: "5"}
+		data, err := appendChecked(t, nil, governed, strict.New(), rootName, v)
+		if err != nil {
+			t.Fatal(err)
+		}
+		accepts(t, governed, data)
+	})
+	for _, row := range []struct {
+		name            string
+		v               rootAny
+		rule            xsderr.Rule
+		clause, subject string
+	}{
+		{"xsi:type on the element, its prefix bound nowhere", rootAny{Attributes: []anyAttribute{{"", "k", "v"}, {xsd.XMLSchemaInstanceNS, "type", "xs:string"}}}, "cvc-attribute", "3", `"xs:string"`},
+		{"xsi:type at depth, its prefix bound nowhere", rootAny{Children: child(anyElement{Local: "c", Content: anyType{Attributes: []anyAttribute{{xsd.XMLSchemaInstanceNS, "type", "x:t"}}}})}, "cvc-attribute", "3", `"x:t"`},
+		{"a governed xs:int child built invalid against its declaration", rootAny{Children: child(anyElement{Space: "urn:s", Local: "i", Content: anyType{Text: "abc"}})}, "cvc-type", "3.1.3", `"abc"`},
+		{"a governed xs:QName under an ungoverned child, its prefix bound nowhere", rootAny{Children: child(anyElement{Local: "c", Content: anyType{Children: child(anyElement{Space: "urn:s", Local: "q", Content: anyType{Namespaces: []anyNamespace{{"", "urn:s"}}, Text: "x:y"}})}})}, "cvc-type", "3.1.3", `"x:y"`},
+		{"a governed attribute on the element, its prefix bound nowhere", rootAny{Attributes: []anyAttribute{{"urn:s", "qa", "x:y"}}}, "cvc-attribute", "3", `"x:y"`},
+	} {
+		t.Run(row.name, func(t *testing.T) {
+			got, err := appendChecked(t, []byte("pre"), governed, strict.New(), rootName, row.v)
+			assessedCharge(t, got, err, row.rule, row.clause, row.subject)
+		})
+	}
+	t.Run("a governed child of a particle's element, its prefix bound nowhere", func(t *testing.T) {
 		schema := schemaOf(t, oneAnySchema+`<xs:element name="q" type="xs:QName"/>`)
-		_, err := appendChecked(t, nil, schema, strict.New(), rootName, oneAny{A: anyType{Children: child(q)}})
-		_ = asDecline(t, err, "codec does not encode "+constructGovernedContent.name()+": element {urn:s}q at oneAny.A.Children[0].Element, in the content of element {urn:s}a declared at ")
+		got, err := appendChecked(t, []byte("pre"), schema, strict.New(), rootName, oneAny{A: anyType{Children: child(anyElement{Space: "urn:s", Local: "q", Content: anyType{Namespaces: []anyNamespace{{"", "urn:s"}}, Text: "x:y"}})}})
+		assessedCharge(t, got, err, "cvc-type", "3.1.3", `"x:y"`)
 	})
 	t.Run("a skip wildcard's match holding a governed name", func(t *testing.T) {
 		v := seqWild{A: "x", Any: anyElement{Space: "urn:o", Local: "w", Content: anyType{Children: child(anyElement{Space: "urn:s", Local: "r", Content: anyType{Text: "s:x"}})}}}
@@ -4826,21 +4913,80 @@ func TestAppendFlattenedInvalid(t *testing.T) {
 // "alternative 2 of the flattened content {particle} of" the type; and,
 // beside it, a choice occurring exactly once that codegen does not flatten
 // naming its alternative as "alternative 2 of the content {particle} of" the
-// type, so that routing that hold through the flattened arm fails here.
+// type, so that routing that hold through the flattened arm fails here. The
+// declining particle is a wildcard particle rebuilt vacuous (vacatedSchema).
 func TestAppendFlattenedDeclineSubject(t *testing.T) {
 	rows := []struct {
-		name, decls, want string
+		name, content, want string
 	}{
-		{"flattened", strings.Replace(flatWildSchema, ` processContents="lax"`, "", 1), "codec does not encode a wildcard particle with {process contents} strict: alternative 2 of the flattened content {particle} of the {type definition} of element {urn:s}r declared at "},
-		{"once choice", `<xs:element name="r"><xs:complexType><xs:choice><xs:element name="a" type="xs:string"/><xs:any/></xs:choice></xs:complexType></xs:element>`,
-			"codec does not encode a wildcard particle with {process contents} strict: alternative 2 of the content {particle} of the {type definition} of element {urn:s}r declared at "},
+		{"flattened", `<xs:sequence maxOccurs="unbounded"><xs:element name="a" type="xs:string" maxOccurs="unbounded"/><xs:any minOccurs="0" processContents="lax"/></xs:sequence>`,
+			"codec does not encode a particle with {max occurs} 0: alternative 2 of the flattened content {particle} of the {type definition} of element {urn:s}r declared at "},
+		{"once choice", `<xs:choice><xs:element name="a" type="xs:string"/><xs:any/></xs:choice>`,
+			"codec does not encode a particle with {max occurs} 0: alternative 2 of the content {particle} of the {type definition} of element {urn:s}r declared at "},
 	}
 	for _, row := range rows {
 		t.Run(row.name, func(t *testing.T) {
-			err := CheckAppend[struct{}](schemaOf(t, row.decls), rootName)
+			err := CheckAppend[struct{}](vacatedSchema(t, row.content), rootName)
 			_ = asDecline(t, err, row.want)
 		})
 	}
+}
+
+// vacatedSchema returns the schema declaring s:r of the complex type s:v whose
+// content is content, a model group, with every wildcard particle it reaches,
+// at any depth, rebuilt through xsd.NewParticle with the vacuous Occurs{0,0},
+// which no schema document yields (§3.10.2), as checkMaxOccursZero rebuilds
+// one, and every model group holding one rebuilt around it (vacated).
+func vacatedSchema(t *testing.T, content string) *xsd.Schema {
+	t.Helper()
+	parsed := schemaOf(t, `<xs:complexType name="v">`+content+`</xs:complexType><xs:element name="r" type="s:v"/>`)
+	v := xsd.QName{Space: "urn:s", Local: "v"}
+	declared, ok := parsed.Type(v)
+	if !ok {
+		t.Fatalf("the parsed schema declares no type %s", v)
+	}
+	particle := vacated(t, declared.(xsd.ComplexType).ContentType().(xsd.ElementContent).Particle)
+	ct, err := xsd.NewComplexType(declared.Loc(), v, xsd.QName{Space: xsd.XMLSchemaNS, Local: "anyType"}, nil, xsd.DerivationRestriction, false,
+		nil, nil, nil, xsd.ElementContent{Particle: particle}, nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return replacedSchema(t, parsed, ct)
+}
+
+// vacated returns p with each wildcard particle its term reaches through
+// model groups rebuilt with the vacuous Occurs{0,0}, vacatedSchema's rebuild,
+// and p itself where it reaches none.
+func vacated(t *testing.T, p xsd.Particle) xsd.Particle {
+	t.Helper()
+	term, ok := p.Term().(xsd.ResolvedTerm)
+	if !ok {
+		return p
+	}
+	occurs := p.Occurs()
+	switch inner := term.Term.(type) {
+	case xsd.Wildcard:
+		none, err := xsd.NewOccurs(xsderr.Loc{}, 0, 0)
+		if err != nil {
+			t.Fatal(err)
+		}
+		occurs = none
+	case xsd.ModelGroup:
+		particles := make([]xsd.Particle, len(inner.Particles()))
+		for i, q := range inner.Particles() {
+			particles[i] = vacated(t, q)
+		}
+		group, err := xsd.NewModelGroup(xsderr.Loc{}, inner.Compositor(), particles)
+		if err != nil {
+			t.Fatal(err)
+		}
+		term = xsd.ResolvedTerm{Term: group}
+	}
+	rebuilt, err := xsd.NewParticle(xsderr.Loc{}, occurs, term)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return rebuilt
 }
 
 // vcSchema declares the value constraints TestAppendValueConstraint writes

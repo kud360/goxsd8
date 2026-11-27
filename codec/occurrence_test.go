@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"errors"
 	"reflect"
-	"strings"
 	"testing"
 
 	"github.com/kud360/goxsd8/builtin/strict"
@@ -343,14 +342,14 @@ func TestAppendOccurrence(t *testing.T) {
 
 // TestAppendOccurrenceDeclineSubject pins the subject item 4 of Append's doc
 // names for a particle of a model group held in an occurrence field, here a
-// strict wildcard, occWildSchema's and occPickSchema's made strict: a
-// sequence's particle by its place, a choice's by its alternative, as a
-// content choice occurring once names its own.
+// wildcard particle rebuilt vacuous (vacatedSchema), in occWildSchema's and
+// occPickSchema's content: a sequence's particle by its place, a choice's by
+// its alternative, as a content choice occurring once names its own.
 func TestAppendOccurrenceDeclineSubject(t *testing.T) {
-	const wild = "codec does not encode a wildcard particle with {process contents} strict: "
-	_, err := appendChecked(t, nil, schemaOf(t, strings.Replace(occWildSchema, ` processContents="lax"`, "", 1)), strict.New(), rootName, occWild{})
+	const wild = "codec does not encode a particle with {max occurs} 0: "
+	_, err := appendChecked(t, nil, vacatedSchema(t, `<xs:sequence maxOccurs="unbounded"><xs:element name="a" type="xs:string"/><xs:any processContents="lax"/></xs:sequence>`), strict.New(), rootName, occWild{})
 	_ = asDecline(t, err, wild+"particle 2 of the content {particle} of the {type definition} of element {urn:s}r declared at ")
-	_, err = appendChecked(t, nil, schemaOf(t, strings.Replace(occPickSchema, ` processContents="lax"`, "", 1)), strict.New(), rootName, occPick{}, occPickBranches)
+	_, err = appendChecked(t, nil, vacatedSchema(t, `<xs:choice maxOccurs="unbounded"><xs:element name="a" type="xs:string"/><xs:any namespace="##other" processContents="lax"/></xs:choice>`), strict.New(), rootName, occPick{}, occPickBranches)
 	_ = asDecline(t, err, wild+"alternative 2 of the content {particle} of the {type definition} of element {urn:s}r declared at ")
 }
 

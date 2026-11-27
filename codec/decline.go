@@ -74,18 +74,19 @@ func (e *DeclineError) Loc() (xsderr.Loc, bool) {
 // xs:anyType itself holds, or an {attribute wildcard}'s field holds, that
 // attribute, its Go path from T and the wildcard particle, as [Decode]'s item 5
 // names it, that element's declaration, or the field's complex type, labelled as
-// its declaration's {type definition}, with its schema Loc, and, for an element a
-// lax wildcard's match is or holds, or such content holds, whose expanded name a
-// top-level element declaration names, or an attribute other than
-// xsi:schemaLocation and xsi:noNamespaceSchemaLocation either holds, or a lax
-// {attribute wildcard}'s field holds, whose expanded name a top-level attribute
-// declaration names, that item, its Go path from T, the wildcard particle, that
-// element's declaration or that complex type, and the top-level declaration, with
-// its schema Loc, and, for an attribute a strict {attribute wildcard}'s field
-// holds, that attribute, its Go path from T and that complex type, so labelled,
-// and, for a lax wildcard's match with a ·locally declared type·, that element,
-// its Go path from T, the wildcard particle and the complex type, labelled as its
-// declaration's {type definition}, with its schema Loc. A type definition named
+// its declaration's {type definition}, with its schema Loc, and, for an attribute
+// a lax {attribute wildcard}'s field holds whose expanded name a top-level
+// attribute declaration names, that attribute, its Go path from T, that complex
+// type, so labelled, and the top-level declaration, with its schema Loc, and, for
+// an attribute a strict {attribute wildcard}'s field holds, that attribute, its Go
+// path from T and that complex type, so labelled, and, for a strict or lax
+// wildcard's match with a ·locally declared type·, that element, its Go path from
+// T, the wildcard particle and the complex type, labelled as its declaration's
+// {type definition}, with its schema Loc, and, for text or an attribute value held
+// raw with a token whose prefix only a binding Append declares binds, the Go path
+// of that text or Value from T, the token, its prefix and the namespace name that
+// binding gives it, and, for an ·ENTITY value· held raw, the violation the
+// written document's assessment charges it with. A type definition named
 // in the XML Schema namespace whose schema Loc is the zero Loc is named by its
 // QName alone, in place of the schema Loc the sentences above give it.
 func (e *DeclineError) Error() string {
@@ -188,7 +189,6 @@ const (
 	constructMixed
 	constructOpenContent
 	constructVacuousParticle
-	constructWildcard
 	constructReservedAttributeUse
 	constructComplexAssertions
 	constructEncodePrimitive
@@ -201,6 +201,7 @@ const (
 	constructStrictAttributeWildcard
 	constructGovernedContent
 	constructLocallyTypedMatch
+	constructCapturedPrefix
 )
 
 // constructNames holds, indexed by construct, each construct's name.
@@ -219,7 +220,6 @@ var constructNames = [...]string{
 	constructMixed:                   "a complex type with mixed content",
 	constructOpenContent:             "an {open content}",
 	constructVacuousParticle:         "a particle with {max occurs} 0",
-	constructWildcard:                "a wildcard particle with {process contents} strict",
 	constructReservedAttributeUse:    "an attribute use whose declaration's {target namespace} is the XSI namespace, other than xsi:schemaLocation's and xsi:noNamespaceSchemaLocation's, or the one the prefix xmlns is bound to",
 	constructComplexAssertions:       "a complex type with {assertions}",
 	constructEncodePrimitive:         "an atomic simple type whose primitive is other than " + displayList(encodedPrimitives),
@@ -228,10 +228,11 @@ var constructNames = [...]string{
 	constructNoCanonical:             "a value with no canonical representation",
 	constructQNameSpelling:           "an xs:QName or xs:NOTATION value with no spelling Append writes where it is written",
 	constructValueConstraint:         "a value whose agreement with its value constraint value.ConstraintMatches does not decide, or an empty element's value its default replaces",
-	constructXsiAttribute:            "xsi:type, xsi:nil, xsi:schemaLocation or xsi:noNamespaceSchemaLocation held in an {attribute wildcard} field, or xsi:type or xsi:nil in a lax wildcard's match or an xs:anyType element's content, or xsi:type in a skip wildcard's match",
+	constructXsiAttribute:            "xsi:type, xsi:nil, xsi:schemaLocation or xsi:noNamespaceSchemaLocation held in an {attribute wildcard} field, or xsi:nil in a strict or lax wildcard's match or an xs:anyType element's content",
 	constructStrictAttributeWildcard: "an attribute held in the {attribute wildcard} field of a complex type whose {attribute wildcard} has {process contents} strict",
-	constructGovernedContent:         "an element a lax wildcard's match is or holds, or an xs:anyType element's content holds, whose expanded name a top-level element declaration names, or an attribute other than xsi:schemaLocation and xsi:noNamespaceSchemaLocation either holds, or a lax {attribute wildcard} field holds, whose expanded name a top-level attribute declaration names",
-	constructLocallyTypedMatch:       "a lax wildcard's match whose expanded name has a ·locally declared type· in the complex type it is written into",
+	constructGovernedContent:         "an attribute a lax {attribute wildcard} field holds whose expanded name a top-level attribute declaration names",
+	constructLocallyTypedMatch:       "a strict or lax wildcard's match whose expanded name no top-level element declaration names and has a ·locally declared type· in the complex type it is written into",
+	constructCapturedPrefix:          "text or an attribute value held raw holding a token spelled prefix:local whose prefix no binding in its AnyType's Namespaces declares, though one Append declares is in scope where it is written",
 }
 
 // displayList spells names, at least two, each by its Display, separated by

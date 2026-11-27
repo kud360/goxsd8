@@ -384,23 +384,23 @@ func TestAppendNestedInvalid(t *testing.T) {
 }
 
 // TestAppendNestedDeclineSubject pins the subject item 4 of Append's doc
-// names for a particle inside a nested model group particle, here a strict
-// wildcard: a spliced sequence's particle and a nested choice's alternative
-// by their place inside their group's, a nested flattened particle's basic
-// particle by its reach ordinal, and a nested occurrence field's particle by
-// its place.
+// names for a particle inside a nested model group particle, here a wildcard
+// particle rebuilt vacuous (vacatedSchema): a spliced sequence's particle and
+// a nested choice's alternative by their place inside their group's, a
+// nested flattened particle's basic particle by its reach ordinal, and a
+// nested occurrence field's particle by its place.
 func TestAppendNestedDeclineSubject(t *testing.T) {
-	const wild = "codec does not encode a wildcard particle with {process contents} strict: "
+	const wild = "codec does not encode a particle with {max occurs} 0: "
 	const any = `<xs:any namespace="##other"/>`
-	for _, row := range []struct{ name, decls, subject string }{
-		{"spliced", sequenceOf(cgElA + `<xs:sequence>` + cgElB + any + `</xs:sequence>`), "particle 2 of particle 2 of the content {particle} of "},
-		{"once-choice", sequenceOf(cgElA + `<xs:choice>` + cgElB + any + `</xs:choice>`), "alternative 2 of particle 2 of the content {particle} of "},
-		{"flattened", sequenceOf(cgElA + `<xs:sequence maxOccurs="unbounded"><xs:element name="b" type="xs:string" minOccurs="0"/><xs:any namespace="##other" minOccurs="0"/></xs:sequence>`),
+	for _, row := range []struct{ name, content, subject string }{
+		{"spliced", `<xs:sequence>` + cgElA + `<xs:sequence>` + cgElB + any + `</xs:sequence></xs:sequence>`, "particle 2 of particle 2 of the content {particle} of "},
+		{"once-choice", `<xs:sequence>` + cgElA + `<xs:choice>` + cgElB + any + `</xs:choice></xs:sequence>`, "alternative 2 of particle 2 of the content {particle} of "},
+		{"flattened", `<xs:sequence>` + cgElA + `<xs:sequence maxOccurs="unbounded"><xs:element name="b" type="xs:string" minOccurs="0"/><xs:any namespace="##other" minOccurs="0"/></xs:sequence></xs:sequence>`,
 			"alternative 2 of the flattened particle 2 of the content {particle} of "},
-		{"occurrence", sequenceOf(cgElA + `<xs:sequence maxOccurs="2">` + cgElB + any + `</xs:sequence>`), "particle 2 of particle 2 of the content {particle} of "},
+		{"occurrence", `<xs:sequence>` + cgElA + `<xs:sequence maxOccurs="2">` + cgElB + any + `</xs:sequence></xs:sequence>`, "particle 2 of particle 2 of the content {particle} of "},
 	} {
 		t.Run(row.name, func(t *testing.T) {
-			_, err := appendChecked(t, nil, schemaOf(t, row.decls), strict.New(), rootName, struct{}{})
+			_, err := appendChecked(t, nil, vacatedSchema(t, row.content), strict.New(), rootName, struct{}{})
 			_ = asDecline(t, err, wild+row.subject+"the {type definition} of element {urn:s}r declared at ")
 		})
 	}
