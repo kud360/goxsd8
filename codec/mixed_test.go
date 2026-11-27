@@ -42,9 +42,11 @@ type mixedChild[T any] struct {
 // mxAnyRestrictSchema's r is of a mixed restriction of xs:anyType,
 // sequence(b?); and mxNameAnySchema's is a choice of a wildcard and an
 // element any of xs:string, whose branches hold AnyChild and
-// MixedChild[string], two Go types. Of the guards, mxStrictSchema's r is of
-// an element-only restriction of a mixed base, and elementOnlyPairSchema's
-// is mxPairSchema's sequence with element-only content.
+// MixedChild[string], two Go types; mxAllSchema's is all(a, any); and
+// mxFixedSchema's is sequence(a?) under a fixed constraint on r. Of the
+// guards, mxStrictSchema's r is of an element-only restriction of a mixed
+// base, and elementOnlyPairSchema's is mxPairSchema's sequence with
+// element-only content.
 const (
 	mxSeqSchema           = `<xs:element name="r"><xs:complexType mixed="true"><xs:sequence><xs:element name="a" type="xs:string"/></xs:sequence></xs:complexType></xs:element>`
 	mxEmptySchema         = `<xs:element name="r"><xs:complexType mixed="true"><xs:attribute name="k" type="xs:string"/></xs:complexType></xs:element>`
@@ -65,20 +67,23 @@ const (
 	mxAnyRestrict         = `<xs:complexType name="dt" mixed="true"><xs:complexContent><xs:restriction base="xs:anyType"><xs:sequence><xs:element name="b" type="xs:string" minOccurs="0"/></xs:sequence></xs:restriction></xs:complexContent></xs:complexType>`
 	mxAnyRestrictSchema   = mxAnyRestrict + `<xs:element name="r" type="s:dt"/>`
 	mxNameAnySchema       = `<xs:element name="r"><xs:complexType mixed="true"><xs:choice><xs:any namespace="##other" processContents="lax"/><xs:element name="any" type="xs:string"/></xs:choice></xs:complexType></xs:element>`
+	mxAllSchema           = `<xs:element name="r"><xs:complexType mixed="true"><xs:all><xs:element name="a" type="xs:string"/><xs:any namespace="##other" processContents="lax"/></xs:all></xs:complexType></xs:element>`
+	mxFixedSchema         = `<xs:element name="r" fixed="abc"><xs:complexType mixed="true"><xs:sequence><xs:element name="a" type="xs:string" minOccurs="0"/></xs:sequence></xs:complexType></xs:element>`
 	mxStrictSchema        = mxMixedBase + `<xs:complexType name="strict"><xs:complexContent><xs:restriction base="s:base"><xs:sequence><xs:element name="a" type="xs:string"/></xs:sequence></xs:restriction></xs:complexContent></xs:complexType><xs:element name="r" type="s:strict"/>`
 	elementOnlyPairSchema = `<xs:element name="r"><xs:complexType><xs:sequence><xs:element name="a" type="xs:string"/><xs:element name="b" type="xs:int"/></xs:sequence></xs:complexType></xs:element>`
 )
 
 // The types codegen emits for those schemas' s:r, which TestMixedTypesAreCodegens
-// pins: mxSeq mxSeqSchema's; mxEmpty mxEmptySchema's; mxOpt mxOptSchema's and
-// mxDefaultSchema's; mxWild mxWildSchema's; mxPair mxExtSchema's and mxPairSchema's;
-// mxExtAttr mxExtAttrSchema's; mxOpen mxOpenSchema's; mxPick, mxPickA and mxPickB
-// mxPickSchema's, and mxRepChoice mxRepChoiceSchema's over the same interface; mxAny
-// mxAnyTypeSchema's; mxFlat and its branches mxFlatA and mxFlatB mxFlatSchema's;
-// mxSealedOpt and mxAI's branches mxAX and mxAY mxSealedOptSchema's; mxOcc and its
-// item mxOccItem mxOccSchema's; mxB mxAnyRestrictSchema's; mxNameAny and its
-// branches mxNameAnyAny and mxNameAnyAny2 mxNameAnySchema's; and of the guards,
-// mxStrict mxStrictSchema's and elementOnlyPair elementOnlyPairSchema's.
+// pins: mxSeq mxSeqSchema's; mxEmpty mxEmptySchema's; mxOpt mxOptSchema's,
+// mxDefaultSchema's and mxFixedSchema's; mxWild mxWildSchema's; mxPair mxExtSchema's
+// and mxPairSchema's; mxExtAttr mxExtAttrSchema's; mxOpen mxOpenSchema's; mxPick,
+// mxPickA and mxPickB mxPickSchema's, and mxRepChoice mxRepChoiceSchema's over the
+// same interface; mxAny mxAnyTypeSchema's; mxFlat and its branches mxFlatA and
+// mxFlatB mxFlatSchema's; mxSealedOpt and mxAI's branches mxAX and mxAY
+// mxSealedOptSchema's; mxOcc and its item mxOccItem mxOccSchema's; mxB
+// mxAnyRestrictSchema's; mxNameAny and its branches mxNameAnyAny and mxNameAnyAny2
+// mxNameAnySchema's; mxAll mxAllSchema's; and of the guards, mxStrict
+// mxStrictSchema's and elementOnlyPair elementOnlyPairSchema's.
 type (
 	mxSeq struct {
 		Text string
@@ -159,6 +164,11 @@ type (
 		Text   string
 		Choice mxNameAnyI
 	}
+	mxAll struct {
+		Text string
+		A    mixedChild[string]
+		Any  anyChild
+	}
 	mxStrict        struct{ A string }
 	elementOnlyPair struct {
 		A string
@@ -194,6 +204,8 @@ func TestMixedTypesAreCodegens(t *testing.T) {
 		{mxEmptySchema, []string{"type R struct {\n\tText string\n\tK    *string\n}\n"}},
 		{mxOptSchema, []string{opt}},
 		{mxDefaultSchema, []string{opt}},
+		{mxFixedSchema, []string{opt}},
+		{mxAllSchema, []string{"type R struct {\n\tText string\n\tA    MixedChild[string]\n\tAny  AnyChild\n}\n"}},
 		{mxWildSchema, []string{"type R struct {\n\tText string\n\tAny  AnyChild\n}\n", "type AnyChild struct {\n\tElement AnyElement\n\tTail    string\n}\n"}},
 		{mxExtSchema, []string{pair}},
 		{mxPairSchema, []string{pair}},
