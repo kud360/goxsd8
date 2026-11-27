@@ -25,18 +25,19 @@ import (
 // where codegen wraps the declaration.
 var ErrTypeMismatch = errors.New("codec: T is not the type codegen emits for the document element")
 
-// ErrUndeclaredElement is the sentinel errors.Is finds in the error of item 2
-// of [CheckDecode]'s doc and of [Append]'s, and so of [CheckAppend]'s, whose
-// text names the name no top-level element declaration has and is never this
-// sentinel's. [Decode] returns no error errors.Is reports as it; Decode's doc
-// states what it returns.
+// ErrUndeclaredElement marks the error of item 2 of [CheckDecode]'s doc and of
+// [Append]'s, and so of [CheckAppend]'s: errors.Is(err, ErrUndeclaredElement)
+// is true for it. That error's text names the expanded name and does not
+// contain this sentinel's. [Decode] never returns that error: a Decode caller
+// passes the document element's name, read as Decode's doc states, to
+// CheckDecode.
 var ErrUndeclaredElement = errors.New("codec: the schema declares no top-level element of the expanded name")
 
-// ErrAbstractElement is the sentinel errors.Is finds in the error of item 3
-// of [CheckDecode]'s doc and of [Append]'s, and so of [CheckAppend]'s, whose
-// text names the declaration with {abstract} true and is never this
-// sentinel's. [Decode] returns no error errors.Is reports as it; Decode's doc
-// states what it returns.
+// ErrAbstractElement marks the error of item 3 of [CheckDecode]'s doc and of
+// [Append]'s, and so of [CheckAppend]'s: errors.Is(err, ErrAbstractElement) is
+// true for it. That error's text names the declaration and does not contain
+// this sentinel's. [Decode] never returns that error: a Decode caller passes
+// the document element's name, read as Decode's doc states, to CheckDecode.
 var ErrAbstractElement = errors.New("codec: the top-level element declaration has {abstract} true")
 
 // Decode decodes the XML instance data into a new value of T, the type
