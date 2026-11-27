@@ -520,11 +520,9 @@ func (s *simpleRoot) write(e *encoder, v reflect.Value, at writeAt) error {
 // held to at.el's fixed {value constraint} (mixedFixed), each element of a
 // MixedChild or AnyChild followed by its Tail, an element with no content
 // written as an empty-element tag; or nothing, where v holds itself
-// (encoder.enter). Where the content's write appended anything, which it
-// does only for a child the value holds, and no item 6 error of [Append]'s
-// doc was recorded before it, a fixed {value constraint}'s cvc-elt clause
-// 5.2.2.1 error replaces whatever item 6 error the content's write recorded,
-// that child coming first in document order.
+// (encoder.enter). The first child element of mixed content, written by a
+// tailReader, raises first at.el's fixed {value constraint}'s cvc-elt clause
+// 5.2.2.1 error (encoder.fixedChild), unless an earlier one is recorded.
 func (b *boundBinding) write(e *encoder, v reflect.Value, at writeAt) error {
 	if !e.enter(v, at.path) {
 		return nil
@@ -589,14 +587,11 @@ func (b *boundBinding) write(e *encoder, v reflect.Value, at writeAt) error {
 	if err := mixedFixed(at.el, "", text, tpath); err != nil {
 		e.invalidate(err)
 	}
-	earlier, children := e.invalid, len(e.out)
-	if err := encoded[writer](b.content).write(e, v, content); err != nil {
+	e.fixedChild = &at
+	err := encoded[writer](b.content).write(e, v, content)
+	e.fixedChild = nil
+	if err != nil {
 		return err
-	}
-	if earlier == nil && len(e.out) > children {
-		if err := mixedFixed(at.el, at.path+" holds a child element", "", ""); err != nil {
-			e.invalid = &invalidValueError{err}
-		}
 	}
 	e.endTag(name.Local, start, outer, mark)
 	return nil
@@ -1171,8 +1166,11 @@ func (rawShape) withRaw(_ *encoder, v reflect.Value, path string, write func(el 
 }
 
 // withRaw calls write with v's Element, an AnyElement, by t.element's
-// withRaw, at path's Element, then writes v's Tail raw (encoder.rawText).
+// withRaw, at path's Element, after the parent's fixed {value constraint}'s
+// charge for a first child (encoder.firstChild), then writes v's Tail raw
+// (encoder.rawText).
 func (t tailReader) withRaw(e *encoder, v reflect.Value, path string, write func(el reflect.Value, path string)) {
+	e.firstChild()
 	encoded[rawWriter](t.element).withRaw(e, v.Field(0), path+".Element", write)
 	e.rawText(v.Field(1).String(), nil, path+".Tail", false)
 }
@@ -1361,15 +1359,18 @@ type elementWriter interface {
 
 // writeElement writes the element of decl v, a MixedChild, holds as its
 // Element, at path's Element, by the elementWriter t.element is, taken by
-// slot there, then v's Tail raw (encoder.rawText), as codegen's package doc
-// "# Complex types" places it. A v whose Element is a nil sealed interface,
-// which Decode never returns, is item 6 of [Append]'s doc and writes nothing,
-// its Tail included, since it is no child (codegen/doc.go "# Complex types").
+// slot there, after the parent's fixed {value constraint}'s charge for a
+// first child (encoder.firstChild), then v's Tail raw (encoder.rawText), as
+// codegen's package doc "# Complex types" places it. A v whose Element is a
+// nil sealed interface, which Decode never returns, is item 6 of [Append]'s
+// doc and writes nothing, its Tail included, since it is no child
+// (codegen/doc.go "# Complex types"), and so raises no charge.
 func (t tailReader) writeElement(e *encoder, decl xsd.ElementDeclaration, v reflect.Value, path string, slot attributionSlot) error {
 	if el := v.Field(0); el.Kind() == reflect.Interface && el.IsNil() {
 		e.invalidate(fmt.Errorf("codec: Append: %s.Element is nil, a MixedChild holding no element of %s, which Decode never returns", path, declSubject(decl)))
 		return nil
 	}
+	e.firstChild()
 	if err := encoded[elementWriter](t.element).writeElement(e, decl, v.Field(0), path+".Element", slot); err != nil {
 		return err
 	}
@@ -2141,21 +2142,24 @@ func simpleSubject(st *xsd.SimpleType, owner string) string {
 // or whose content is being written, "" outside the document element; bound,
 // the prefixed bindings the open start tags declare, outermost first, an inner
 // one of a prefix shadowing an outer one (writtenBindings); open, the values
-// whose element's write is open, outermost first (enter); and the first item 6
-// and item 7 errors of [Append]'s doc it has found, in document order. Every
-// value is written whatever was found before it, so that the walk finds an
-// item 6 error after an item 7 one.
+// whose element's write is open, outermost first (enter); fixedChild, the
+// element of mixed content and its value's Go path whose content is being
+// written and holds no child element yet, nil otherwise (boundBinding.write,
+// firstChild); and the first item 6 and item 7 errors of [Append]'s doc it
+// has found, in document order. Every value is written whatever was found
+// before it, so that the walk finds an item 6 error after an item 7 one.
 type encoder struct {
-	schema   *xsd.Schema
-	backend  value.Backend
-	decimals decimalArmSets
-	branches branchSets
-	out      []byte
-	ns       string
-	bound    []nsBinding
-	open     []openValue
-	invalid  *invalidValueError
-	declined error
+	schema     *xsd.Schema
+	backend    value.Backend
+	decimals   decimalArmSets
+	branches   branchSets
+	out        []byte
+	ns         string
+	bound      []nsBinding
+	open       []openValue
+	fixedChild *writeAt
+	invalid    *invalidValueError
+	declined   error
 }
 
 // openValue is a value of complex type whose element's write is open: ptr,
@@ -2332,6 +2336,21 @@ func (e *encoder) heldTo(vc xsd.ValueConstraint, on, rule string, st *xsd.Simple
 		e.invalidate(fmt.Errorf("codec: Append: %s, of %s, is written %q, whose value is neither equal nor identical to %q, the {value} of the fixed {value constraint} of %s, which every valid document holds there (Structures %s)", path, subject, text, vc.LexicalForm(), on, rule))
 	default:
 		e.declineValue(constructValueConstraint, subject, path, shown, fmt.Sprintf("its value is neither equal nor identical to %q, the {value} of the default {value constraint} of %s, which the empty element it is written as takes on (Structures %s)", vc.LexicalForm(), on, rule))
+	}
+}
+
+// firstChild records, through invalidate, the cvc-elt clause 5.2.2.1 error
+// mixedFixed returns for e.fixedChild's element, which a child element of its
+// mixed content is about to be written into, and clears e.fixedChild, so that
+// only its first child raises it and a nested element's write sets its own.
+func (e *encoder) firstChild() {
+	at := e.fixedChild
+	if at == nil {
+		return
+	}
+	e.fixedChild = nil
+	if err := mixedFixed(at.el, at.path+" holds a child element", "", ""); err != nil {
+		e.invalidate(err)
 	}
 }
 

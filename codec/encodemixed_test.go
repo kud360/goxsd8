@@ -105,10 +105,11 @@ func TestAppendMixedPara(t *testing.T) {
 // doc refuses, each error opening with its subject, the value's Go path
 // among it: under a fixed {value constraint}, a Text other than "" and the
 // {lexical form} (cvc-elt clause 5.2.2.2.1), and a child (clause 5.2.2.1),
-// which comes ahead of an error inside that child and after a Text's; a
-// MixedChild whose Element is a nil sealed interface; and a Text or Tail
-// holding a byte that starts no XML 1.0 Char, an {open content} child's Tail
-// among them.
+// which comes ahead of an error inside that child, whatever an AnyChild's
+// Tail holds, and after the error of a Text or of a nil-Element MixedChild
+// before it; a MixedChild whose Element is a nil sealed interface; and a
+// Text or Tail holding a byte that starts no XML 1.0 Char, an {open content}
+// child's Tail among them.
 func TestAppendMixedRefusals(t *testing.T) {
 	sealed := WithBranches[mxAI](mxAX{}, mxAY{})
 	rows := []struct {
@@ -128,6 +129,12 @@ func TestAppendMixedRefusals(t *testing.T) {
 			`codec: Append: mxOpt holds a child element, though the fixed {value constraint} "abc" of `, "cvc-elt clause 5.2.2.1"},
 		{"fixed, a Text other than the {lexical form} ahead of a child", mxFixedSchema, mxOpt{Text: "xyz", A: &mixedChild[string]{Element: "v"}},
 			`codec: Append: mxOpt.Text holds "xyz", which does not match "abc"`, "cvc-elt clause 5.2.2.2.1"},
+		{"fixed, a nil-Element MixedChild ahead of a child", mxFixedSealedSchema, mxFixedSealed{A: &mixedChild[mxAI]{Tail: "u"}, C: &mixedChild[string]{Element: "v"}},
+			"codec: Append: mxFixedSealed.A.Element is nil, a MixedChild holding no element of ", "which Decode never returns"},
+		{"fixed, a refused AnyChild with no Tail", mxFixedAnySchema, mxFixedAny{Any: &anyChild{Element: anyElement{Space: "urn:o", Local: "1bad"}}},
+			`codec: Append: mxFixedAny holds a child element, though the fixed {value constraint} "abc" of `, "cvc-elt clause 5.2.2.1"},
+		{"fixed, a refused AnyChild with a Tail", mxFixedAnySchema, mxFixedAny{Any: &anyChild{Element: anyElement{Space: "urn:o", Local: "1bad"}, Tail: "t"}},
+			`codec: Append: mxFixedAny holds a child element, though the fixed {value constraint} "abc" of `, "cvc-elt clause 5.2.2.1"},
 		{"a MixedChild whose Element is a nil sealed interface", mxSealedOptSchema, mxSealedOpt{Text: "t", A: &mixedChild[mxAI]{Tail: "u"}},
 			"codec: Append: mxSealedOpt.A.Element is nil, a MixedChild holding no element of ", "which Decode never returns"},
 		{"a Text holding no Char", mxPairSchema, mxPair{Text: "\x00"},
@@ -151,6 +158,10 @@ func TestAppendMixedRefusals(t *testing.T) {
 			case mxPair:
 				_, err = appendChecked(t, nil, schema, strict.New(), sname("r"), v)
 			case mxOpen:
+				_, err = appendChecked(t, nil, schema, strict.New(), sname("r"), v)
+			case mxFixedSealed:
+				_, err = appendChecked(t, nil, schema, strict.New(), sname("r"), v, sealed)
+			case mxFixedAny:
 				_, err = appendChecked(t, nil, schema, strict.New(), sname("r"), v)
 			}
 			invalidValue(t, err)

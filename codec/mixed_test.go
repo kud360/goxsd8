@@ -43,7 +43,9 @@ type mixedChild[T any] struct {
 // sequence(b?); and mxNameAnySchema's is a choice of a wildcard and an
 // element any of xs:string, whose branches hold AnyChild and
 // MixedChild[string], two Go types; mxAllSchema's is all(a, any); and
-// mxFixedSchema's is sequence(a?) under a fixed constraint on r. Of the
+// mxFixedSchema's is sequence(a?) under a fixed constraint on r,
+// mxFixedSealedSchema's sequence(a?, c?) under one, a of mxSealedOptSchema's
+// a's type, and mxFixedAnySchema's sequence(any?) under one. Of the
 // guards, mxStrictSchema's r is of an element-only restriction of a mixed
 // base, and elementOnlyPairSchema's is mxPairSchema's sequence with
 // element-only content.
@@ -69,6 +71,8 @@ const (
 	mxNameAnySchema       = `<xs:element name="r"><xs:complexType mixed="true"><xs:choice><xs:any namespace="##other" processContents="lax"/><xs:element name="any" type="xs:string"/></xs:choice></xs:complexType></xs:element>`
 	mxAllSchema           = `<xs:element name="r"><xs:complexType mixed="true"><xs:all><xs:element name="a" type="xs:string"/><xs:any namespace="##other" processContents="lax"/></xs:all></xs:complexType></xs:element>`
 	mxFixedSchema         = `<xs:element name="r" fixed="abc"><xs:complexType mixed="true"><xs:sequence><xs:element name="a" type="xs:string" minOccurs="0"/></xs:sequence></xs:complexType></xs:element>`
+	mxFixedSealedSchema   = `<xs:element name="r" fixed="abc"><xs:complexType mixed="true"><xs:sequence><xs:element name="a" minOccurs="0"><xs:complexType><xs:choice><xs:element name="x" type="xs:string"/><xs:element name="y" type="xs:int"/></xs:choice></xs:complexType></xs:element><xs:element name="c" type="xs:string" minOccurs="0"/></xs:sequence></xs:complexType></xs:element>`
+	mxFixedAnySchema      = `<xs:element name="r" fixed="abc"><xs:complexType mixed="true"><xs:sequence><xs:any namespace="##other" processContents="skip" minOccurs="0"/></xs:sequence></xs:complexType></xs:element>`
 	mxStrictSchema        = mxMixedBase + `<xs:complexType name="strict"><xs:complexContent><xs:restriction base="s:base"><xs:sequence><xs:element name="a" type="xs:string"/></xs:sequence></xs:restriction></xs:complexContent></xs:complexType><xs:element name="r" type="s:strict"/>`
 	elementOnlyPairSchema = `<xs:element name="r"><xs:complexType><xs:sequence><xs:element name="a" type="xs:string"/><xs:element name="b" type="xs:int"/></xs:sequence></xs:complexType></xs:element>`
 )
@@ -82,8 +86,9 @@ const (
 // mxFlatB mxFlatSchema's; mxSealedOpt and mxAI's branches mxAX and mxAY
 // mxSealedOptSchema's; mxOcc and its item mxOccItem mxOccSchema's; mxB
 // mxAnyRestrictSchema's; mxNameAny and its branches mxNameAnyAny and mxNameAnyAny2
-// mxNameAnySchema's; mxAll mxAllSchema's; and of the guards, mxStrict
-// mxStrictSchema's and elementOnlyPair elementOnlyPairSchema's.
+// mxNameAnySchema's; mxAll mxAllSchema's; mxFixedSealed mxFixedSealedSchema's;
+// mxFixedAny mxFixedAnySchema's; and of the guards, mxStrict mxStrictSchema's and
+// elementOnlyPair elementOnlyPairSchema's.
 type (
 	mxSeq struct {
 		Text string
@@ -169,6 +174,15 @@ type (
 		A    mixedChild[string]
 		Any  anyChild
 	}
+	mxFixedSealed struct {
+		Text string
+		A    *mixedChild[mxAI]
+		C    *mixedChild[string]
+	}
+	mxFixedAny struct {
+		Text string
+		Any  *anyChild
+	}
 	mxStrict        struct{ A string }
 	elementOnlyPair struct {
 		A string
@@ -205,6 +219,8 @@ func TestMixedTypesAreCodegens(t *testing.T) {
 		{mxOptSchema, []string{opt}},
 		{mxDefaultSchema, []string{opt}},
 		{mxFixedSchema, []string{opt}},
+		{mxFixedSealedSchema, []string{"type R struct {\n\tText string\n\tA    *MixedChild[A]\n\tC    *MixedChild[string]\n}\n"}},
+		{mxFixedAnySchema, []string{"type R struct {\n\tText string\n\tAny  *AnyChild\n}\n"}},
 		{mxAllSchema, []string{"type R struct {\n\tText string\n\tA    MixedChild[string]\n\tAny  AnyChild\n}\n"}},
 		{mxWildSchema, []string{"type R struct {\n\tText string\n\tAny  AnyChild\n}\n", "type AnyChild struct {\n\tElement AnyElement\n\tTail    string\n}\n"}},
 		{mxExtSchema, []string{pair}},
