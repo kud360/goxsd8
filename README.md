@@ -551,9 +551,13 @@ if err != nil {
 	case errors.Is(err, codec.ErrTypeMismatch):
 		// Append's item 5: T does not match the declaration.
 		fmt.Println(err)
+	case errors.Is(err, codec.ErrUndeclaredElement), errors.Is(err, codec.ErrAbstractElement):
+		// Append's items 2 and 3: the schema declares no top-level element
+		// of that name, or declares it abstract.
+		fmt.Println(err)
 	default:
-		// The plain errors of Append's items 1 to 3, a fault of the
-		// arguments, and a fault of the backend.
+		// The plain errors of Append's item 1, a fault of the arguments,
+		// and a fault of the backend.
 		fmt.Println(err)
 	}
 	log.Fatal(err)

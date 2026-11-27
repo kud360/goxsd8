@@ -32,6 +32,8 @@
 //	type Construct struct{ ... }
 //	func (c Construct) String() string
 //	var ErrTypeMismatch error
+//	var ErrUndeclaredElement error
+//	var ErrAbstractElement error
 //	func ViolationsOf(err error) []*xsderr.Error
 //	type UndecidedError struct{ ... }
 //	func (e *UndecidedError) Unevaluated() validate.Unevaluated
@@ -440,7 +442,7 @@
 // by that member's construct and a complex type's simple content by its
 // {simple type definition}'s construct, and so is what item 7 of Append's doc
 // states. The one exception is the declaration name names, as the document
-// element's, with {abstract} true: it is item 3, a plain error. A declaration
+// element's, with {abstract} true: it is item 3 of Append's doc. A declaration
 // with {abstract} true that a particle reaches is no exception.
 //
 // The document Append writes has no XML declaration, so it is XML 1.0 in UTF-8, and no white
