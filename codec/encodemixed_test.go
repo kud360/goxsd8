@@ -148,8 +148,7 @@ func TestAppendMixedRefusals(t *testing.T) {
 		t.Run(row.name, func(t *testing.T) {
 			schema := schemaOf(t, row.decls)
 			var err error
-			// The row's T is the dynamic type of row.v, a closed set of the
-			// types above, so the switch is STYLE T2's sealed-sum exception.
+			// The row's T is its v's own type, so that appendChecked reads it as T.
 			switch v := row.v.(type) {
 			case mxOpt:
 				_, err = appendChecked(t, nil, schema, strict.New(), sname("r"), v)
