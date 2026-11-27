@@ -66,12 +66,17 @@ var ErrInvalidValue = errors.New("codec: Append: a value no valid document holds
 // has {process contents} strict or lax, whose children Append writes raw, as
 // the package doc's "# What encodes" places them, and in which a top-level
 // declaration or an xsi:type may govern an item (key-governing-ed clause 4),
-// each of which holds for every value of T or for none, and runs no assessment
-// otherwise: a caller wanting a verdict on such a document assesses it through
-// package validate, as any document. The package doc's "# What encodes" section
-// states the slice Append encodes and the document it writes. On error Append
-// returns dst unextended, its bytes beyond len(dst) possibly overwritten, and
-// the first of these that applies:
+// or when a complex type item 4 examines has an {attribute wildcard}, the
+// effective one, with {process contents} strict or lax, whose field's
+// attributes Append writes raw and in which a top-level attribute declaration
+// governs an attribute its expanded name resolves to (§3.2.4.2
+// key-governing-ad clause 3, §3.10.4.1 cvc-wildcard), each of which holds for
+// every value of T or for none, and runs no assessment otherwise: a caller
+// wanting a verdict on such a document assesses it through package validate, as
+// any document. The package doc's "# What encodes" section states the slice
+// Append encodes and the document it writes. On error Append returns dst
+// unextended, its bytes beyond len(dst) possibly overwritten, and the first of
+// these that applies:
 //
 //  1. A nil schema or a nil backend: a plain error.
 //  2. No top-level element declaration of schema has the expanded name name:
@@ -1355,15 +1360,16 @@ func elementEncodes(schema *xsd.Schema, decl xsd.ElementDeclaration) (bool, erro
 // type it examined is derived from xs:ID or xs:IDREF (encodeWalk.atomicEncodes),
 // where a complex type it examined has {assertions} (encodeWalk.complexEncodes),
 // where a wildcard particle it examined has {process contents} strict or
-// lax (encodeWalk.particleEncodes), and where a complex type it examined has
-// an {open content} whose {wildcard} has either (encodeWalk.contentEncodes),
-// and never cleared, so that a type walked answers for its second reach too. An
-// entry is stored before its type's content is examined, so that a later reach of
-// the key, a recursive one included, examines nothing again: the first reach
-// answers for the type, and every other component it reaches carries no key of its
-// own only where it lies inside that type (bindRun). walked lives for one pass only
-// and is a lookup index never iterated (STYLE D2); an entry left by a pass that
-// declines is never read, since the decline ends the pass.
+// lax (encodeWalk.particleEncodes), where a complex type it examined has an
+// {open content} whose {wildcard} has either (encodeWalk.contentEncodes), and
+// where a complex type it examined has an {attribute wildcard} with either
+// (encodeWalk.complexEncodes), and never cleared, so that a type walked answers for
+// its second reach too. An entry is stored before its type's content is examined,
+// so that a later reach of the key, a recursive one included, examines nothing
+// again: the first reach answers for the type, and every other component it reaches
+// carries no key of its own only where it lies inside that type (bindRun). walked
+// lives for one pass only and is a lookup index never iterated (STYLE D2); an entry
+// left by a pass that declines is never read, since the decline ends the pass.
 type encodeWalk struct {
 	schema *xsd.Schema
 	walked map[unitKey]bool
@@ -1495,8 +1501,12 @@ func pathsCompile(ic xsd.IdentityConstraint) (string, bool) {
 // whose {test} namesInScopeNamespaces reports declines by
 // constructInScopeAssertion, and every other sets w.assess, so that the
 // written document is held to cvc-complex-type clause 6 (§3.4.4.2,
-// §3.13.4.1 cvc-assertion). An {attribute wildcard} declines nothing here: what its
-// field holds is examined per value (encoder.wildcardAttributes).
+// §3.13.4.1 cvc-assertion). An {attribute wildcard}, the effective one ct's
+// field holds (§3.4.2.5 dcl.ctd.anyatt), declines nothing here, what its field
+// holds being examined per value (encoder.wildcardAttributes), but sets
+// w.assess where its {process contents} is strict or lax, so that a held
+// attribute a top-level declaration governs is held to it (§3.2.4.2
+// key-governing-ad clause 3, §3.10.4.1 cvc-wildcard).
 func (w *encodeWalk) complexEncodes(decl xsd.ElementDeclaration, ct xsd.ComplexType) error {
 	subject := typeSubject(decl, ct)
 	// {content type} is a closed sum, so the switch is STYLE T2's sealed-sum
@@ -1515,6 +1525,9 @@ func (w *encodeWalk) complexEncodes(decl xsd.ElementDeclaration, ct xsd.ComplexT
 		if err := w.attributeEncodes(u); err != nil {
 			return err
 		}
+	}
+	if wild, has := ct.AttributeWildcard(); has && wild.ProcessContents() != xsd.ProcessSkip {
+		w.assess = true
 	}
 	for _, a := range ct.Assertions() {
 		if namesInScopeNamespaces(a.Test()) {
