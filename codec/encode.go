@@ -179,42 +179,46 @@ var ErrInvalidValue = errors.New("codec: Append: a value no valid document holds
 //     xs:anyType itself, its own attributes among it, at any depth, whatever its value, since validate reads it there,
 //     under cvc-elt clause 3 or the built-in nil declaration's cvc-attribute clause 3, as validate's package doc, "#
 //     Contract", states, but on an element a skip wildcard particle's field holds or at any depth below one, which is not
-//     assessed (§3.10.4.1 key-skipped, §3.3.4.6 cvc-assess-elt clause 2); or in a lax {attribute wildcard}'s field an
-//     attribute whose expanded name a top-level attribute declaration of schema names, whatever its value, since the
-//     wildcard assesses it against that declaration (§3.2.4.2 key-governing-ad clause 3); or an attribute the {attribute
-//     wildcard} field of a type whose {attribute wildcard} has {process contents} strict holds, whatever its name and
-//     value, since the wildcard assesses it against the top-level attribute declaration its expanded name resolves to,
-//     where there is one, and §3.10.1 requires that there be one (§3.10.1, §3.2.4.2 key-governing-ad clause 3); or an
-//     element a strict or lax wildcard particle's field holds whose expanded name no top-level element declaration of
-//     schema names and that has a ·locally declared type· in the complex type whose content it is written into, an
-//     element declaration of its expanded name that type's content model, or that of a type on its {base type definition}
-//     chain, contains, whatever its content and whether or not it holds xsi:type, since that type governs it (§3.3.4.6
-//     key-governing-type-elem clauses 6 and 7, §3.4.6.4 key-ldt-elem); or a token, split at XML white space, of a Text, a
-//     Tail or an attribute's Value held in an AnyType, spelled NCName:NCName, whose prefix, other than xml, no entry of
-//     that AnyType's Namespaces binds but a binding Append declares, a fresh pN or one an ancestor's, puts in scope where
-//     it is written, so that the token would resolve where the value says nothing does, where it may be typed: the Text,
-//     Tails and attribute Values of an element a top-level element declaration or an xsi:type it holds governs, in a
-//     strict or lax wildcard particle's match or an xs:anyType element's content, or at any depth below one, every
-//     element of a strict match among them, the Value of an attribute there a top-level attribute declaration governs,
-//     and every xsi:type's in any such hold, a skip one's among them (Datatypes §3.3.18); or an ·ENTITY value· in content
-//     a document element's walk reaching a strict or lax wildcard particle or an xs:anyType element holds, which the
-//     assessment of item 8 finds no ·declared entity name· (Structures §3.16.4 cvc-simple-type clause 3), the document
-//     Append writes having no DTD to declare one, its detail that violation's text, ahead of item 8; or a value item 6
-//     holds to a fixed {value constraint} whose comparison value.ConstraintMatches leaves undecided, such as a NOTATION
-//     {lexical form} naming no declared notation, and the empty text of an element whose default's {value} it is not, or
-//     whose comparison is undecided, since Append writes it as an empty element that takes on the default (cvc-elt clause
-//     5.1), though another lexical, such as a single space for an xs:token, may hold the value. The values with a lexical
-//     other than the one Append writes, the ones whose rejection by a pattern facet is this item, a union's own pattern
-//     facet among them, read once the variant's member is its text's ·active basic member·, are: a union's value whose
-//     member value is one; every xs:boolean, xs:decimal-primitive, xs:dateTime, xs:dateTimeStamp, xs:time and
-//     xs:duration-primitive value; every xs:float, xs:double and xs:precisionDecimal value other than NaN and -INF; an
-//     xs:date, xs:gYearMonth or xs:gYear value whose timezoneOffset is 0, spelled Z, +00:00 or -00:00 (§D.2.2's note), or
-//     whose year is 0, spelled 0000 or -0000; an xs:gMonthDay, xs:gDay or xs:gMonth value whose timezoneOffset is 0; an
-//     xs:hexBinary value one of whose octets holds a hex digit A to F (§3.3.15.2); every xs:base64Binary value but the
-//     empty one (§3.3.16.2); an xs:QName or xs:NOTATION value whose namespace name is not absent; and no xs:string- or
-//     xs:anyURI-primitive value, each being its own whiteSpace-normalized form. NaN and -INF, of xs:float, xs:double and
-//     xs:precisionDecimal alike, are written NaN and -INF, their only lexicals (§3.3.4.2, §3.3.5.2, precisionDecimal
-//     §3.2), so a pattern facet of their own simple type that rejects one of them is item 6, not this item.
+//     assessed (§3.10.4.1 key-skipped, §3.3.4.6 cvc-assess-elt clause 2); or xsi:type among the attributes of an
+//     element of type xs:anyType itself, whatever its value, since Decode declines an element carrying it there
+//     (constructXsiType); or in a lax {attribute wildcard}'s field an attribute whose expanded name a top-level
+//     attribute declaration of schema names, whatever its value, since the wildcard assesses it against that
+//     declaration (§3.2.4.2 key-governing-ad clause 3); or an attribute the {attribute wildcard} field of a type whose
+//     {attribute wildcard} has {process contents} strict holds, whatever its name and value, since the wildcard
+//     assesses it against the top-level attribute declaration its expanded name resolves to, where there is one, and
+//     §3.10.1 requires that there be one (§3.10.1, §3.2.4.2 key-governing-ad clause 3); or an element a strict or lax
+//     wildcard particle's field holds whose expanded name no top-level element declaration of schema names and that has
+//     a ·locally declared type· in the complex type whose content it is written into, an element declaration of its
+//     expanded name that type's content model, or that of a type on its {base type definition} chain, contains,
+//     whatever its content and whether or not it holds xsi:type, since that type governs it (§3.3.4.6
+//     key-governing-type-elem clauses 6 and 7, §3.4.6.4 key-ldt-elem); or a token, split at XML white space, of a Text,
+//     a Tail or an attribute's Value held in an AnyType, spelled NCName:NCName, whose prefix, other than xml, no entry
+//     of that AnyType's Namespaces binds but a binding Append declares, a fresh pN or one an ancestor's, puts in scope
+//     where it is written, so that the token would resolve where the value says nothing does, in a region holding every
+//     place it may be typed, and more: the Text, Tails and attribute Values of an element a top-level element
+//     declaration or an xsi:type it holds governs, in a strict or lax wildcard particle's match or an xs:anyType
+//     element's content, or at any depth below one, every element of a strict match among them, the Value of an
+//     attribute there a top-level attribute declaration governs, and every xsi:type's in any such hold, a skip one's
+//     among them (Datatypes §3.3.18); or an ·ENTITY value· in content a document element's walk reaching a strict or
+//     lax wildcard particle or an xs:anyType element holds, which the assessment of item 8 finds no ·declared entity
+//     name· (Structures §3.16.4 cvc-simple-type clause 3), the document Append writes having no DTD to declare one, its
+//     detail that violation's text, ahead of item 8; or a value item 6 holds to a fixed {value constraint} whose
+//     comparison value.ConstraintMatches leaves undecided, such as a NOTATION {lexical form} naming no declared
+//     notation, and the empty text of an element whose default's {value} it is not, or whose comparison is undecided,
+//     since Append writes it as an empty element that takes on the default (cvc-elt clause 5.1), though another
+//     lexical, such as a single space for an xs:token, may hold the value. The values with a lexical other than the one
+//     Append writes, the ones whose rejection by a pattern facet is this item, a union's own pattern facet among them,
+//     read once the variant's member is its text's ·active basic member·, are: a union's value whose member value is
+//     one; every xs:boolean, xs:decimal-primitive, xs:dateTime, xs:dateTimeStamp, xs:time and xs:duration-primitive
+//     value; every xs:float, xs:double and xs:precisionDecimal value other than NaN and -INF; an xs:date, xs:gYearMonth
+//     or xs:gYear value whose timezoneOffset is 0, spelled Z, +00:00 or -00:00 (§D.2.2's note), or whose year is 0,
+//     spelled 0000 or -0000; an xs:gMonthDay, xs:gDay or xs:gMonth value whose timezoneOffset is 0; an xs:hexBinary
+//     value one of whose octets holds a hex digit A to F (§3.3.15.2); every xs:base64Binary value but the empty one
+//     (§3.3.16.2); an xs:QName or xs:NOTATION value whose namespace name is not absent; and no xs:string- or
+//     xs:anyURI-primitive value, each being its own whiteSpace-normalized form. NaN and -INF, of xs:float, xs:double
+//     and xs:precisionDecimal alike, are written NaN and -INF, their only lexicals (§3.3.4.2, §3.3.5.2,
+//     precisionDecimal §3.2), so a pattern facet of their own simple type that rejects one of them is item 6, not this
+//     item.
 //  8. An assessed document validate charges: the error item 3 of [Decode]'s
 //     doc states for it, which errors.Is also reports as [ErrInvalidValue],
 //     each violation charged to the written document, a
@@ -222,11 +226,9 @@ var ErrInvalidValue = errors.New("codec: Append: a value no valid document holds
 //     breaks, 3, 4.1, 4.2.1, 4.2.2 or 4.3, and a cvc-id one naming the ID and
 //     the clause it breaks, 1, an ID no element is bound to or an IDREF no ID
 //     matches, or 2, an ID bound to more than one element (§3.17.5.2 sic-id).
-//     Where item 4's walk reaches no wildcard particle with {process
-//     contents} strict or lax and no element declaration whose {type
-//     definition} is xs:anyType itself, a violation of any other rule is a
-//     fault of Append's, reported so all the same; where it reaches one, every
-//     violation is the value's.
+//     Where Append assesses by neither condition but the first two above, a
+//     violation of any other rule is a fault of Append's, reported so all the
+//     same; otherwise every violation is the value's.
 //  9. An assessed document validate leaves undecided: the error item 4 of
 //     [Decode]'s doc states for it.
 //
@@ -1061,10 +1063,11 @@ func (m wildcardMember) writeElements(e *encoder, _ fieldSink, f reflect.Value, 
 // strict, an xsi:type x's Attributes hold, the assessment holding it to that
 // type, and with none item 6, its parent invalid (§3.3.5.1 sic-e-outcome
 // clause 1.1.3); and else, for lax, nothing. It reports whether the content
-// may be typed, which the captured-prefix check reads (encoder.capturedIn):
-// for strict always, and for lax where a declaration, a locally declared type
-// or an xsi:type governs it. Only the match itself has a locally declared
-// type: below it no item does (§3.4.6.4 key-ldt-elem clause 1).
+// lies in that region, which the captured-prefix check reads
+// (encoder.capturedIn): for strict always, and for lax where a declaration, a
+// locally declared type or an xsi:type governs it. Only the match itself has
+// a locally declared type: below it no item does (§3.4.6.4 key-ldt-elem
+// clause 1).
 func (e *encoder) matchGoverned(name xsd.QName, x reflect.Value, strict bool, path string, hold rawHold, at writeAt) bool {
 	if _, ok := e.schema.Element(name); ok {
 		return true
@@ -2939,18 +2942,22 @@ func (e *encoder) writableName(name xsd.QName, path string) bool {
 // contents} strict or lax (assessedMatch), the content of an element of type
 // xs:anyType itself (anyTypeContent), each of the last two assessed against
 // what governs an item, and laxly where nothing does (§3.3.4.6 key-lva,
-// §3.4.7), or the {attribute wildcard} field of a complex type's struct
-// (attributeWildcardHold). in names the hold for a decline's detail;
+// §3.4.7), the attributes of an element of type xs:anyType itself
+// (anyTypeElement), or the {attribute wildcard} field of a complex type's
+// struct (attributeWildcardHold). in names the hold for a decline's detail;
 // assessed reports whether an assessment of the document reads what it
-// holds, false for skipMatch alone of the three holds rawContent writes;
-// writesHints reports whether Append writes a held xsi:type,
-// xsi:schemaLocation or xsi:noNamespaceSchemaLocation, true for the three
-// holds rawContent writes and false for attributeWildcardHold; writesNil
-// reports whether Append writes a held xsi:nil, true for skipMatch alone.
+// holds, false for skipMatch alone of the holds rawContent writes;
+// writesHints reports whether Append writes a held xsi:schemaLocation or
+// xsi:noNamespaceSchemaLocation, true for the holds rawContent writes and
+// false for attributeWildcardHold; writesType reports whether Append writes a
+// held xsi:type, true for skipMatch, assessedMatch and anyTypeContent and
+// false for anyTypeElement and attributeWildcardHold; writesNil reports
+// whether Append writes a held xsi:nil, true for skipMatch alone.
 type rawHold interface {
 	in() string
 	assessed() bool
 	writesHints() bool
+	writesType() bool
 	writesNil() bool
 }
 
@@ -2965,8 +2972,11 @@ func (m skipMatch) in() string { return "in the match of " + string(m) }
 // whatever its name (§3.10.4.1 key-skipped).
 func (skipMatch) assessed() bool { return false }
 
-// writesHints reports true: a skipped hint or xsi:type is not assessed.
+// writesHints reports true: a skipped hint is not assessed.
 func (skipMatch) writesHints() bool { return true }
+
+// writesType reports true: a skipped xsi:type is not assessed.
+func (skipMatch) writesType() bool { return true }
 
 // writesNil reports true: a skipped element is not assessed, as item 7 of [Append]'s doc states.
 func (skipMatch) writesNil() bool { return true }
@@ -2982,13 +2992,36 @@ func (c anyTypeContent) in() string { return "in the content of " + declSubject(
 func (anyTypeContent) assessed() bool { return true }
 
 // writesHints reports true: a hint's built-in declaration admits every value
-// rawAttribute writes (locationHint), and the assessment holds an xsi:type to
-// cvc-elt clause 4.
+// rawAttribute writes (locationHint).
 func (anyTypeContent) writesHints() bool { return true }
+
+// writesType reports true: the assessment holds an xsi:type to cvc-elt clause
+// 4.
+func (anyTypeContent) writesType() bool { return true }
 
 // writesNil reports false: validate reads a held xsi:nil there, as item 7 of
 // [Append]'s doc states.
 func (anyTypeContent) writesNil() bool { return false }
+
+// anyTypeElement is the attributes of an element of decl, whose {type
+// definition} is xs:anyType itself, held as anyTypeContent holds its content
+// but for an xsi:type among them.
+type anyTypeElement struct{ decl xsd.ElementDeclaration }
+
+// in names e.decl, as anyTypeContent's does.
+func (e anyTypeElement) in() string { return anyTypeContent(e).in() }
+
+// assessed reports true, as anyTypeContent's does.
+func (anyTypeElement) assessed() bool { return true }
+
+// writesHints reports true, as anyTypeContent's does.
+func (anyTypeElement) writesHints() bool { return true }
+
+// writesType reports false, as item 7 of [Append]'s doc states.
+func (anyTypeElement) writesType() bool { return false }
+
+// writesNil reports false, as anyTypeContent's does.
+func (anyTypeElement) writesNil() bool { return false }
 
 // assessedMatch is the match of the wildcard particle it names, of {process
 // contents} strict or lax.
@@ -3004,6 +3037,9 @@ func (assessedMatch) assessed() bool { return true }
 
 // writesHints reports true, as anyTypeContent's does.
 func (assessedMatch) writesHints() bool { return true }
+
+// writesType reports true, as anyTypeContent's does.
+func (assessedMatch) writesType() bool { return true }
 
 // writesNil reports false, as anyTypeContent's does.
 func (assessedMatch) writesNil() bool { return false }
@@ -3046,10 +3082,15 @@ func (h attributeWildcardHold) governing(schema *xsd.Schema, name xsd.QName) (st
 	return attributeSubject(d), true
 }
 
-// writesHints reports false: Decode never returns a hint or xsi:type in an
-// {attribute wildcard} field ([Decode]'s doc), so that one written there would
-// not decode back.
+// writesHints reports false: Decode never returns a hint in an {attribute
+// wildcard} field ([Decode]'s doc), so that one written there would not decode
+// back.
 func (attributeWildcardHold) writesHints() bool { return false }
+
+// writesType reports false: Decode never returns xsi:type in an {attribute
+// wildcard} field ([Decode]'s doc), so that one written there would not decode
+// back.
+func (attributeWildcardHold) writesType() bool { return false }
 
 // writesNil reports false: Decode never returns xsi:nil in an {attribute
 // wildcard} field ([Decode]'s doc), so that one written there would not
@@ -3068,9 +3109,8 @@ func (c rawContent) write(e *encoder, v reflect.Value, at writeAt) error {
 // anyTypeContent, as the package doc's "# What encodes" states, its content
 // held to decl's fixed {value constraint} after its Text (anyTypeFixed); or
 // nothing, where v holds itself (encoder.enter), taken by slot first either
-// way, an xsi:type v's Attributes hold making its content one that may be
-// typed (encoder.capturedIn). It reads no simple value, so it returns no
-// backend fault.
+// way, its own attributes held in anyTypeElement. It reads no simple value, so
+// it returns no backend fault.
 func (rawContent) writeElement(e *encoder, decl xsd.ElementDeclaration, v reflect.Value, path string, slot attributionSlot) error {
 	slot.take(e, decl, path)
 	if !e.enter(v, path) {
@@ -3078,12 +3118,10 @@ func (rawContent) writeElement(e *encoder, decl xsd.ElementDeclaration, v reflec
 	}
 	defer e.leave()
 	tag, held, outer, mark := e.rawStartTag(decl.Name(), v, path)
-	hold := anyTypeContent{decl: decl}
-	typed := holdsXsiType(v)
-	start := e.rawAttributes(v, held, path, hold, typed)
-	e.rawText(v.Field(xText).String(), held, path+".Text", typed)
+	start := e.rawAttributes(v, held, path, anyTypeElement{decl: decl}, false)
+	e.rawText(v.Field(xText).String(), held, path+".Text", false)
 	e.anyTypeFixed(decl, v, path)
-	e.rawChildren(v, held, path, hold, typed)
+	e.rawChildren(v, held, path, anyTypeContent{decl: decl}, false)
 	e.endTag(tag, start, outer, mark)
 	return nil
 }
@@ -3269,7 +3307,7 @@ func (e *encoder) rawContent(x reflect.Value, held []nsBinding, path string, hol
 // rawAttributes is rawContent's write of x's attributes and the tag's '>',
 // whose offset it returns. It writes each attribute rawAttribute admits, held
 // and typed being rawContent's; once the start tag holds every declaration it
-// makes, it holds the Value of each written attribute that may be typed to
+// makes, it holds the Value of each written attribute in that region to
 // capturedIn: every one where typed holds, an xsi:type in any hold, and,
 // in a hold an assessment reads, one a top-level attribute declaration of
 // schema governs (§3.2.4.2 key-governing-ad clause 3).
@@ -3301,6 +3339,9 @@ func (e *encoder) rawAttributes(x reflect.Value, held []nsBinding, path string, 
 
 // xsiTypeName is the expanded name of xsi:type.
 var xsiTypeName = xsd.QName{Space: xsd.XMLSchemaInstanceNS, Local: "type"}
+
+// xsiNilName is the expanded name of xsi:nil.
+var xsiNilName = xsd.QName{Space: xsd.XMLSchemaInstanceNS, Local: "nil"}
 
 // capturedIn records item 7 of [Append]'s doc, constructCapturedPrefix, where
 // no decline is recorded yet and text, held at path in an element written
@@ -3394,9 +3435,9 @@ func (e *encoder) governed(name xsd.QName, path string, hold attributeWildcardHo
 // error of [Append]'s doc where it cannot: writableName's, an unqualified
 // xmlns, an expanded name an attribute before it holds, one of the four
 // instanceAttribute names (constructXsiAttribute), but for a hint
-// (locationHint) and xsi:type in a hold that writes them
-// (rawHold.writesHints) and xsi:nil in a hold that writes it
-// (rawHold.writesNil), and a Value of a byte that starts no Char, in that
+// (locationHint) in a hold that writes them (rawHold.writesHints), xsi:type
+// in a hold that writes it (rawHold.writesType) and xsi:nil in a hold that
+// writes it (rawHold.writesNil), and a Value of a byte that starts no Char, in that
 // order. wildcardAttributes asks whether hold governs it (encoder.governed)
 // after it.
 func (e *encoder) rawAttribute(name xsd.QName, value string, attrs reflect.Value, i int, path string, hold rawHold) bool {
@@ -3413,7 +3454,7 @@ func (e *encoder) rawAttribute(name xsd.QName, value string, attrs reflect.Value
 			return false
 		}
 	}
-	if instanceAttribute(name) && (!locationHint(name) && name != xsiTypeName || !hold.writesHints()) && (name != (xsd.QName{Space: xsd.XMLSchemaInstanceNS, Local: "nil"}) || !hold.writesNil()) {
+	if instanceAttribute(name) && (!locationHint(name) || !hold.writesHints()) && (name != xsiTypeName || !hold.writesType()) && (name != xsiNilName || !hold.writesNil()) {
 		if e.declined == nil {
 			e.declined = encodeDecline(constructXsiAttribute, fmt.Sprintf("attribute %s at %s, %s", name.Display(), path, hold.in()))
 		}

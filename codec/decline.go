@@ -156,8 +156,10 @@ type construct uint8
 // content, its content {particle}, each particle in order, its attribute uses in order,
 // its {assertions}, and each value, the {attribute wildcard} field's attributes by
 // constructXsiAttribute, constructStrictAttributeWildcard and constructGovernedContent
-// among the value's. Append declines by constructUntrackedModel too, once every particle
-// of a content model holding a wildcard particle, a nested flattened particle or a nested
+// among the value's. Append also declines constructEntityType after every other
+// construct, for an ·ENTITY value· held raw that the written document's assessment finds
+// (assessWritten). Append declines by constructUntrackedModel too, once every particle of
+// a content model holding a wildcard particle, a nested flattened particle or a nested
 // occurrence field, at any depth, or every basic particle a flattened content {particle}
 // reaches, is examined. A particle declines by constructVacuousParticle first, as the
 // content {particle} does; where its term is a model group, then by constructNestedGroup
@@ -228,7 +230,7 @@ var constructNames = [...]string{
 	constructNoCanonical:             "a value with no canonical representation",
 	constructQNameSpelling:           "an xs:QName or xs:NOTATION value with no spelling Append writes where it is written",
 	constructValueConstraint:         "a value whose agreement with its value constraint value.ConstraintMatches does not decide, or an empty element's value its default replaces",
-	constructXsiAttribute:            "xsi:type, xsi:nil, xsi:schemaLocation or xsi:noNamespaceSchemaLocation held in an {attribute wildcard} field, or xsi:nil in a strict or lax wildcard's match or an xs:anyType element's content",
+	constructXsiAttribute:            "xsi:type, xsi:nil, xsi:schemaLocation or xsi:noNamespaceSchemaLocation held in an {attribute wildcard} field, xsi:type in the Attributes of an element of type xs:anyType itself, or xsi:nil in a strict or lax wildcard's match or an xs:anyType element's content",
 	constructStrictAttributeWildcard: "an attribute held in the {attribute wildcard} field of a complex type whose {attribute wildcard} has {process contents} strict",
 	constructGovernedContent:         "an attribute a lax {attribute wildcard} field holds whose expanded name a top-level attribute declaration names",
 	constructLocallyTypedMatch:       "a strict or lax wildcard's match whose expanded name no top-level element declaration names and has a ·locally declared type· in the complex type it is written into",

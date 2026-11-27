@@ -4250,7 +4250,9 @@ func TestAppendAttributeWildcard(t *testing.T) {
 // whose {namespace constraint} excludes the XSI namespace, xsi:schemaLocation
 // under a skip, a lax and a strict wildcard and xsi:noNamespaceSchemaLocation
 // under a lax one among them, by constructXsiAttribute; the four hint rows
-// fail with attributeWildcardHold.writesHints answering true. So does xsi:nil
+// fail with attributeWildcardHold.writesHints answering true, and the two
+// xsi:type rows, under a skip wildcard and under one excluding the XSI
+// namespace, with attributeWildcardHold.writesType answering true. So does xsi:nil
 // under a skip wildcard, which Decode never returns there, failing with
 // attributeWildcardHold.writesNil answering true and under a writer that
 // admits xsi:nil wherever no assessment reads hold (rawHold.assessed). Each item 6 row
@@ -4427,14 +4429,14 @@ func TestAppendAnyType(t *testing.T) {
 // held attribute named xmlns, a held element's self-holding Children, and an
 // item 6 error inside a governed element's content and in a sibling after
 // one. Item 7: xsi:nil declines by constructXsiAttribute ahead of a governed
-// element. Then the governed content the document's assessment holds to its
-// declaration or type: a governed xs:QName child Decode returns from a valid
-// document, a governed attribute on a descendant whose prefix its
-// Namespaces bind, and xsi:type at depth whose prefix they bind, each written
-// and decoded back, and xsi:type on the element itself, written and
-// validated, though Decode declines an element of a declared type carrying
-// xsi:type (constructXsiType); and item 8, charged, for xsi:type on the
-// element and at depth whose prefix nothing binds (cvc-attribute clause 3 of
+// element, and so does xsi:type on the element itself, whose prefix its
+// Namespaces bind or nothing binds, Decode declining an element of a declared
+// type carrying xsi:type (constructXsiType). Then the governed content the
+// document's assessment holds to its declaration or type: a governed xs:QName
+// child Decode returns from a valid document, a governed attribute on a
+// descendant whose prefix its Namespaces bind, and xsi:type at depth whose
+// prefix they bind, each written and decoded back; and item 8, charged, for
+// xsi:type at depth whose prefix nothing binds (cvc-attribute clause 3 of
 // the built-in declaration), a governed xs:int child invalid against its
 // declaration, a governed xs:QName child under an ungoverned one and of a
 // particle's element whose prefix nothing binds, and a governed attribute so.
@@ -4486,6 +4488,10 @@ func TestAppendAnyTypeGuards(t *testing.T) {
 	}{
 		{"an XSI attribute ahead of a governed element", constructXsiAttribute.name(), rootAny{Attributes: []anyAttribute{{xsd.XMLSchemaInstanceNS, "nil", "true"}}, Children: child(q)},
 			[]string{"attribute xsi:nil at rootAny.Attributes[0], " + in}},
+		{"xsi:type on the element, its prefix held", constructXsiAttribute.name(), rootAny{Namespaces: []anyNamespace{{"", "urn:s"}, {"xs", xsd.XMLSchemaNS}}, Attributes: []anyAttribute{{xsd.XMLSchemaInstanceNS, "type", "xs:int"}}, Text: "5"},
+			[]string{"attribute xsi:type at rootAny.Attributes[0], " + in}},
+		{"xsi:type on the element, its prefix bound nowhere", constructXsiAttribute.name(), rootAny{Attributes: []anyAttribute{{"", "k", "v"}, {xsd.XMLSchemaInstanceNS, "type", "xs:string"}}},
+			[]string{"attribute xsi:type at rootAny.Attributes[1], " + in}},
 	} {
 		t.Run(row.name, func(t *testing.T) {
 			_, err := appendChecked(t, nil, governed, strict.New(), rootName, row.v)
@@ -4506,21 +4512,12 @@ func TestAppendAnyTypeGuards(t *testing.T) {
 		v := rootAny{Namespaces: ns, Children: child(anyElement{Space: "urn:s", Local: "c", Content: anyType{Namespaces: ns, Attributes: []anyAttribute{{xsd.XMLSchemaInstanceNS, "type", "xs:int"}}, Text: "5"}})}
 		roundTrip(t, governed, rootName, v, `<r xmlns="urn:s" xmlns:xs="http://www.w3.org/2001/XMLSchema"><c xmlns:p1="http://www.w3.org/2001/XMLSchema-instance" p1:type="xs:int">5</c></r>`, deepEqual[rootAny])
 	})
-	t.Run("xsi:type on the element, its prefix held", func(t *testing.T) {
-		v := rootAny{Namespaces: []anyNamespace{{"", "urn:s"}, {"xs", xsd.XMLSchemaNS}}, Attributes: []anyAttribute{{xsd.XMLSchemaInstanceNS, "type", "xs:int"}}, Text: "5"}
-		data, err := appendChecked(t, nil, governed, strict.New(), rootName, v)
-		if err != nil {
-			t.Fatal(err)
-		}
-		accepts(t, governed, data)
-	})
 	for _, row := range []struct {
 		name            string
 		v               rootAny
 		rule            xsderr.Rule
 		clause, subject string
 	}{
-		{"xsi:type on the element, its prefix bound nowhere", rootAny{Attributes: []anyAttribute{{"", "k", "v"}, {xsd.XMLSchemaInstanceNS, "type", "xs:string"}}}, "cvc-attribute", "3", `"xs:string"`},
 		{"xsi:type at depth, its prefix bound nowhere", rootAny{Children: child(anyElement{Local: "c", Content: anyType{Attributes: []anyAttribute{{xsd.XMLSchemaInstanceNS, "type", "x:t"}}}})}, "cvc-attribute", "3", `"x:t"`},
 		{"a governed xs:int child built invalid against its declaration", rootAny{Children: child(anyElement{Space: "urn:s", Local: "i", Content: anyType{Text: "abc"}})}, "cvc-type", "3.1.3", `"abc"`},
 		{"a governed xs:QName under an ungoverned child, its prefix bound nowhere", rootAny{Children: child(anyElement{Local: "c", Content: anyType{Children: child(anyElement{Space: "urn:s", Local: "q", Content: anyType{Namespaces: []anyNamespace{{"", "urn:s"}}, Text: "x:y"}})}})}, "cvc-type", "3.1.3", `"x:y"`},
