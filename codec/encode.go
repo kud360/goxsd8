@@ -129,47 +129,48 @@ var ErrInvalidValue = errors.New("codec: Append: a value no valid document holds
 //     1.1.3); an element the open-content field holds, of any {process contents}, written after every child of
 //     the {particle} as the package doc's "# What encodes" places it, that neither a particle of its content
 //     model nor its {open content}'s {wildcard} admits where it is written, or that a particle takes there
-//     under {mode} suffix, whose clause 2.3 gives the {open content} no child the {particle} can take
-//     (§3.4.4.3 cvc-complex-content, §3.10.4.1 cvc-wildcard), a strict one nothing governs not among them,
-//     which validate assesses laxly; the Namespaces of an AnyType Append writes an element's content from, at
-//     any depth, whatever holds it, that Decode never returns: an entry whose Prefix is not after the one
-//     before it, a Prefix xml or xmlns, a Prefix other than "" that is no NCName, a Space "", one holding a
-//     byte that starts no XML 1.0 Char, and one that is the XML namespace or the one the prefix xmlns is bound
-//     to (Namespaces in XML §3, §5 nsc-NoPrefixUndecl), the first such entry, then a "" entry where the
-//     element's namespace is absent, which no prefix spells (codegen's package doc, "# xs:anyType"); an
-//     attribute an {attribute wildcard}'s field holds whose expanded name an attribute use of the type names,
-//     the use's field nil or set, which Decode never returns (§3.4.4.2 cvc-complex-type clause 2.1), or, but
-//     for xsi:type, xsi:nil, xsi:schemaLocation and xsi:noNamespaceSchemaLocation, which clause 2 excepts by
-//     name, that the wildcard does not admit, a name outside its {namespace constraint} or in its {disallowed
-//     names} among them (clause 2.2.2, §3.10.4.1 cvc-wildcard); in such an element, in the content of an
-//     element of type xs:anyType itself, its own attributes among it, at any depth, and in an {attribute
-//     wildcard}'s field, a Local that is no NCName or a Space that is the namespace name the prefix xmlns is
-//     bound to, of the element or of an attribute, an attribute of absent Space named xmlns (Namespaces in XML
-//     §3), and an attribute of the expanded name of one before it (§6.3 nsc-AttrsUnique); an element an item
-//     of a flattened sequence's or choice's slice holds that its content model admits at no particle where it
-//     is written, or attributes to a basic particle other than the one whose branch the item is or to the
-//     {open content}, or a slice after whose last item the content model is not accepting, as that Matcher
-//     decides (§3.9.4.3 cvc-accept, §3.10.4.1 cvc-wildcard, §3.8.4.3 cvc-model-group); a date, time or
-//     duration datatype struct value no value of its datatype maps to, as codegen's package doc "# Simple
-//     types" states such values exist, the error naming the first property found outside it, its fields read
-//     in order, or, ahead of its Seconds, a duration's Months and Seconds of opposite signs; a
-//     PrecisionDecimal datatype struct value no value maps to, as codegen's "# Simple types" states such
-//     values exist, a nil Value or the numerical arm with a negative Coefficient, or a Value whose dynamic
-//     type the [WithPrecisionDecimalArms] set in opts supplies in no role, a pointer to an arm among them,
-//     which Decode never returns; an xs:QName or xs:NOTATION value whose namespace name holds a byte that
-//     starts no XML 1.0 Char or is the one the prefix xmlns is bound to (Namespaces in XML §3), or whose Local
-//     the Parse of its primitive's mapping rejects in Append's spelling, that Parse's verdict wrapped, or
-//     makes a spelling that resolves back to another expanded name; a value written as an element's character
-//     content, or as an attribute, whose value value.ConstraintMatches finds neither equal nor identical to
-//     the {value} of a fixed {value constraint} there (Datatypes §2.2.1, §2.2.2): an element's own (Structures
-//     §3.3.4.3 cvc-elt clause 5.2.2.2.2), the empty text included, which Append writes as an empty element
-//     that takes on the constraint's {lexical form} (clause 5.1, §3.3.5.4 sic-eltType), and an attribute use's
-//     and its declaration's, each (§3.5.4 cvc-au, §3.2.4.1 cvc-attribute clause 4); the content of an element
-//     of type xs:anyType itself whose declaration has a fixed {value constraint}, where it holds Children
-//     (cvc-elt clause 5.2.2.1) or a Text other than "" and the constraint's {lexical form} (clause 5.2.2.2.1);
-//     or a value whose simple type rejects it, a value.ValidateLexical error value.IsDatatypeVerdict reports
-//     as a verdict, a facet's rejection or a backend Parse's among them, that error wrapped, but for item 7's
-//     pattern and union-variant cases, a list's own facets read once every item has passed its own checks.
+//     under {mode} suffix, whose clause 2.3 gives the {open content} no first child that the {particle} can
+//     take after the {particle}'s children (§3.4.4.3 cvc-complex-content, §3.10.4.1 cvc-wildcard), a strict
+//     one nothing governs not among them, which validate assesses laxly; the Namespaces of an AnyType Append
+//     writes an element's content from, at any depth, whatever holds it, that Decode never returns: an entry
+//     whose Prefix is not after the one before it, a Prefix xml or xmlns, a Prefix other than "" that is no
+//     NCName, a Space "", one holding a byte that starts no XML 1.0 Char, and one that is the XML namespace or
+//     the one the prefix xmlns is bound to (Namespaces in XML §3, §5 nsc-NoPrefixUndecl), the first such
+//     entry, then a "" entry where the element's namespace is absent, which no prefix spells (codegen's
+//     package doc, "# xs:anyType"); an attribute an {attribute wildcard}'s field holds whose expanded name an
+//     attribute use of the type names, the use's field nil or set, which Decode never returns (§3.4.4.2
+//     cvc-complex-type clause 2.1), or, but for xsi:type, xsi:nil, xsi:schemaLocation and
+//     xsi:noNamespaceSchemaLocation, which clause 2 excepts by name, that the wildcard does not admit, a name
+//     outside its {namespace constraint} or in its {disallowed names} among them (clause 2.2.2, §3.10.4.1
+//     cvc-wildcard); in such an element, in the content of an element of type xs:anyType itself, its own
+//     attributes among it, at any depth, and in an {attribute wildcard}'s field, a Local that is no NCName or
+//     a Space that is the namespace name the prefix xmlns is bound to, of the element or of an attribute, an
+//     attribute of absent Space named xmlns (Namespaces in XML §3), and an attribute of the expanded name of
+//     one before it (§6.3 nsc-AttrsUnique); an element an item of a flattened sequence's or choice's slice
+//     holds that its content model admits at no particle where it is written, or attributes to a basic
+//     particle other than the one whose branch the item is or to the {open content}, or a slice after whose
+//     last item the content model is not accepting, as that Matcher decides (§3.9.4.3 cvc-accept, §3.10.4.1
+//     cvc-wildcard, §3.8.4.3 cvc-model-group); a date, time or duration datatype struct value no value of its
+//     datatype maps to, as codegen's package doc "# Simple types" states such values exist, the error naming
+//     the first property found outside it, its fields read in order, or, ahead of its Seconds, a duration's
+//     Months and Seconds of opposite signs; a PrecisionDecimal datatype struct value no value maps to, as
+//     codegen's "# Simple types" states such values exist, a nil Value or the numerical arm with a negative
+//     Coefficient, or a Value whose dynamic type the [WithPrecisionDecimalArms] set in opts supplies in no
+//     role, a pointer to an arm among them, which Decode never returns; an xs:QName or xs:NOTATION value whose
+//     namespace name holds a byte that starts no XML 1.0 Char or is the one the prefix xmlns is bound to
+//     (Namespaces in XML §3), or whose Local the Parse of its primitive's mapping rejects in Append's
+//     spelling, that Parse's verdict wrapped, or makes a spelling that resolves back to another expanded name;
+//     a value written as an element's character content, or as an attribute, whose value
+//     value.ConstraintMatches finds neither equal nor identical to the {value} of a fixed {value constraint}
+//     there (Datatypes §2.2.1, §2.2.2): an element's own (Structures §3.3.4.3 cvc-elt clause 5.2.2.2.2), the
+//     empty text included, which Append writes as an empty element that takes on the constraint's {lexical
+//     form} (clause 5.1, §3.3.5.4 sic-eltType), and an attribute use's and its declaration's, each (§3.5.4
+//     cvc-au, §3.2.4.1 cvc-attribute clause 4); the content of an element of type xs:anyType itself whose
+//     declaration has a fixed {value constraint}, where it holds Children (cvc-elt clause 5.2.2.1) or a Text
+//     other than "" and the constraint's {lexical form} (clause 5.2.2.2.1); or a value whose simple type
+//     rejects it, a value.ValidateLexical error value.IsDatatypeVerdict reports as a verdict, a facet's
+//     rejection or a backend Parse's among them, that error wrapped, but for item 7's pattern and
+//     union-variant cases, a list's own facets read once every item has passed its own checks.
 //  7. A value with no canonical representation or no spelling Append writes, or one Append declines at its {value constraint}, the first in document
 //     order as item 6 counts: its *DeclineError. That is a governing mapping with no Canonical, a Canonical that fails for the value, such as
 //     strict's for the zero xs:yearMonthDuration (Datatypes §3.4.26.1's note), or a value with a lexical other than the one Append writes, or a list
@@ -3062,14 +3063,13 @@ func (c *attributionCheck) take(e *encoder, name xsd.QName, target int, path str
 // attributed to the {open content}, it is written; admitted at no particle
 // and not by the {open content}'s {wildcard}, it is item 6 of [Append]'s doc;
 // attributed to a particle of the {particle}, it is item 6 under {mode}
-// suffix, whose clause 2.3 gives the {open content} no child the {particle}
-// can take (§3.4.4.3 cvc-complex-content), and item 7 under interleave,
-// constructInterleaveParticleChild, where no decline is recorded yet, since
-// clause 3.3 decides each child by the {particle}'s children before it and
-// Append searches no placement but this one. A nil c is an internal bug,
-// which panics: attribution returns none for a type with an {open content}.
-// xsd.Attribution is a sealed sum, so the assertion is STYLE T2's sealed-sum
-// exception.
+// suffix, whose clause 2.3 gives the {open content} no first child that the {particle}
+// can take after the {particle}'s children (§3.4.4.3 cvc-complex-content), and item 7
+// under interleave, constructInterleaveParticleChild, where no decline is recorded
+// yet, since clause 3.3 decides each child by the {particle}'s children before it and
+// Append searches no placement but this one. A nil c is an internal bug, which panics:
+// attribution returns none for a type with an {open content}. xsd.Attribution is a
+// sealed sum, so the assertion is STYLE T2's sealed-sum exception.
 func (c *attributionCheck) takeOpen(e *encoder, name xsd.QName, path string) {
 	if c == nil {
 		panic(fmt.Sprintf("codec: Append reached the open-content field at %s with no attributionCheck of its content", path))

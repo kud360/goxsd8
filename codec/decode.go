@@ -2706,12 +2706,13 @@ func (s *sequence) targets() int {
 
 // A contentMember is one field of the struct a sequence binds, a closed sum: an
 // elementMember, an element particle's field; a wildcardMember, a wildcard
-// particle's; an openField, the open-content field; a *choice, a choice's
-// sealed interface; a *flatSlice, a nested flattened particle's slice of a
-// sealed interface; or a *nestedOccurrence, a nested particle's occurrence
-// field.
+// particle's; an openField, the open-content field; a field, the one field of a
+// substitution group member's or a governing type's branch struct (branchArm); a
+// *choice, a choice's sealed interface; a *flatSlice, a nested flattened
+// particle's slice of a sealed interface; or a *nestedOccurrence, a nested
+// particle's occurrence field.
 type contentMember interface {
-	// targets is how many attribution targets the member takes: an openField and an
+	// targets is how many attribution targets the member takes: an openField, a field and an
 	// elementMember one, a *choice those of each alternative's branch members in turn
 	// (branchTargets), a *flatSlice one per alternative, and a *nestedOccurrence
 	// those of its item.
@@ -2729,8 +2730,8 @@ type contentMember interface {
 }
 
 // A boundMember is a contentMember whose check held, the member's own bound
-// state, a closed sum: a boundOpen, an openField's (openField.bindMember); a
-// boundParticle, an elementMember's or a wildcardMember's; a
+// state, a closed sum: a boundOpen, an openField's (openField.bindMember); a fieldSink,
+// a field's (field.bindMember); a boundParticle, an elementMember's or a wildcardMember's; a
 // boundNestedChoice, a *choice's; a boundFlatSlice, a *flatSlice's; or a
 // boundNestedOccurrence, a *nestedOccurrence's. A sequence, a branch struct
 // and an occurrence's struct item keep one per member, in member order, and
