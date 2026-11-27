@@ -246,7 +246,11 @@ var ErrInvalidValue = errors.New("codec: Append: a value no valid document holds
 //     cvc-assertion violation whose {test} reads the string value of an
 //     element or attribute, which Append spells as the opening paragraph
 //     above states, may come from that spelling rather than from the value,
-//     reported so all the same.
+//     reported so all the same, and so may one whose {test} reads the
+//     in-scope namespaces of an element a top-level element declaration or
+//     an xsi:type governs in content Append writes raw, as
+//     fn:in-scope-prefixes does, which may come from a namespace binding
+//     Append declares, a fresh pN among them, rather than from the value.
 //  9. An assessed document validate leaves undecided: the error item 4 of
 //     [Decode]'s doc states for it.
 //
@@ -1541,12 +1545,12 @@ func (w *encodeWalk) complexEncodes(decl xsd.ElementDeclaration, ct xsd.ComplexT
 	return nil
 }
 
-// inScopeNamespaces matches, in an XPath expression's text, the names of the
-// functions that read an element's in-scope namespaces (F&O §11.1.1
-// fn:resolve-QName, §11.2.5 fn:namespace-uri-for-prefix, §11.2.6
-// fn:in-scope-prefixes) and the namespace axis, its name followed by "::"
-// after optional whitespace (XPath 2.0 §3.2.1.1), wherever the text spells
-// them, inside a longer name too.
+// inScopeNamespaces matches, in an XPath expression's text, the spellings the
+// package doc's "# What encodes" names for the readers of an element's
+// in-scope namespaces (F&O §11.1.1 fn:resolve-QName, §11.2.5
+// fn:namespace-uri-for-prefix, §11.2.6 fn:in-scope-prefixes, XPath 2.0
+// §3.2.1.1 the namespace axis), wherever the text spells them, inside a
+// longer name too.
 var inScopeNamespaces = regexp.MustCompile(`in-scope-prefixes|namespace-uri-for-prefix|resolve-QName|namespace\s*::`)
 
 // namesInScopeNamespaces reports whether test's {expression} spells a name
