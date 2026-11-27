@@ -161,8 +161,10 @@ func validateUnion(b Backend, r xsd.TypeResolver, st *xsd.SimpleType, rawLexical
 //
 // A union whose {member type definitions} is EMPTY — xs:error (Structures
 // §3.16.7.3), whose value and lexical spaces are both empty — falls out of the
-// loop with zero candidates and so rejects every literal including "", with no
-// special case.
+// loop with zero candidates and so rejects every literal including "". The
+// verdict needs no special case; only the message does: with no member reason
+// to list, it states that the union has none and so an empty lexical space,
+// instead of ending in an empty list (cvc-datatype-valid clause 2.3).
 func dispatchUnion(b Backend, r xsd.TypeResolver, members []*xsd.SimpleType, rawLexical string, ctx Context, a AssertionEvaluator) (Value, *xsd.SimpleType, error) {
 	// Left nil so the common case — an early member accepts — allocates nothing;
 	// the slice only materializes on the path that actually reports rejections.
@@ -177,9 +179,13 @@ func dispatchUnion(b Backend, r xsd.TypeResolver, members []*xsd.SimpleType, raw
 		}
 		rejections = append(rejections, fmt.Sprintf("member %d (%s): %s", i, m.Name().Display(), xsderr.CauseText(err)))
 	}
+	reasons := ": " + strings.Join(rejections, "; ")
+	if len(members) == 0 {
+		reasons = ", and the union has none, so its lexical space is empty (Structures §3.16.7.3)"
+	}
 	return nil, nil, xsderr.New(ruleCvcDatatypeValid, xsderr.Loc{},
-		"value %q is Datatype Valid with respect to no member of the union's %d {member type definitions}, but cvc-datatype-valid clause 2.3 requires it to be valid with respect to at least one: %s",
-		rawLexical, len(members), strings.Join(rejections, "; "))
+		"value %q is Datatype Valid with respect to no member of the union's %d {member type definitions}, but cvc-datatype-valid clause 2.3 requires it to be valid with respect to at least one%s",
+		rawLexical, len(members), reasons)
 }
 
 // activeBasicMember is ValidatingType's own descent for dt-active-member /
