@@ -147,15 +147,17 @@ func tallyRoundTrip(sum *EncodeSummary, index map[codec.Construct]int, id string
 	}
 }
 
-// same reports whether a and b hold the same value, the round trip's
-// equality: of one type, each float by its bits with every NaN one, which
-// is xs:double's identity (Datatypes §3.3.5.1: 0 and −0 are not identical,
-// and NaN is identical to itself) and neither Go's == nor
-// reflect.DeepEqual; each pointer and interface nil in both or holding the
-// same value; each struct field by field, but for the Namespaces field of a
-// struct of codegen's AnyType shape (unread); each slice and array by its
-// length and items, so that a nil slice and an empty one are the same; and
-// every other kind by ==, a kind == does not compare being no same value.
+// same reports whether b, the value a re-decode of what codec.Append wrote
+// for a returns, holds the same value as a, the round trip's equality: of one
+// type, each float by its bits with every NaN one, which is xs:double's
+// identity (Datatypes §3.3.5.1: 0 and −0 are not identical, and NaN is
+// identical to itself) and neither Go's == nor reflect.DeepEqual; each
+// pointer and interface nil in both or holding the same value; each struct
+// field by field, but for the Namespaces field of a struct of codegen's
+// AnyType shape (namespacesField), compared by bindingsKept; each slice and
+// array by its length and items, so that a nil slice and an empty one are the
+// same; and every other kind by ==, a kind == does not compare being no same
+// value.
 func same(a, b reflect.Value) bool {
 	if !a.IsValid() || !b.IsValid() {
 		return a.IsValid() == b.IsValid()
@@ -174,7 +176,10 @@ func same(a, b reflect.Value) bool {
 		return same(a.Elem(), b.Elem())
 	case reflect.Struct:
 		for i := range a.NumField() {
-			if unread(a.Type(), i) {
+			if namespacesField(a.Type(), i) {
+				if !bindingsKept(a.Field(i), b.Field(i)) {
+					return false
+				}
 				continue
 			}
 			if !same(a.Field(i), b.Field(i)) {
@@ -197,16 +202,36 @@ func same(a, b reflect.Value) bool {
 	}
 }
 
-// unread reports whether field i of the struct type t is the Namespaces field,
-// a slice of a struct of exactly Prefix and Space, each a string, of a struct
-// whose fields are exactly codegen's AnyType's, in order (codegen/doc.go "#
-// xs:anyType"), which [same] does not compare.
-//
-// GAP(codec): #4125 — codec.Append writes none of the bindings Namespaces
-// holds, so a re-decoded value holds those Append's own output puts in scope,
-// not the source's; #4125 replaces this exception with its own comparison of
-// them.
-func unread(t reflect.Type, i int) bool {
+// bindingsKept reports whether b, the Namespaces of a held AnyType a re-decode
+// returns, holds a, the Namespaces codec.Append was given there, as codec's
+// package doc "# What encodes" states a re-decode holds it.
+func bindingsKept(a, b reflect.Value) bool {
+	for i := range a.Len() {
+		if space, ok := bindingOf(b, a.Index(i).Field(0).String()); !ok || space != a.Index(i).Field(1).String() {
+			return false
+		}
+	}
+	_, def := bindingOf(a, "")
+	_, kept := bindingOf(b, "")
+	return def == kept
+}
+
+// bindingOf returns the Space of the entry of ns, a Namespaces slice, whose
+// Prefix is prefix, and true, or false where none is.
+func bindingOf(ns reflect.Value, prefix string) (string, bool) {
+	for i := range ns.Len() {
+		if ns.Index(i).Field(0).String() == prefix {
+			return ns.Index(i).Field(1).String(), true
+		}
+	}
+	return "", false
+}
+
+// namespacesField reports whether field i of the struct type t is the
+// Namespaces field, a slice of a struct of exactly Prefix and Space, each a
+// string, of a struct whose fields are exactly codegen's AnyType's, in order
+// (codegen/doc.go "# xs:anyType"), which [same] compares by bindingsKept.
+func namespacesField(t reflect.Type, i int) bool {
 	names := []string{"Attributes", "Namespaces", "Text", "Children"}
 	if t.NumField() != len(names) || t.Field(i).Name != "Namespaces" {
 		return false

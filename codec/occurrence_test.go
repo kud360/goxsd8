@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"errors"
 	"reflect"
-	"strings"
 	"testing"
 
 	"github.com/kud360/goxsd8/builtin/strict"
@@ -318,7 +317,7 @@ func TestAppendOccurrence(t *testing.T) {
 		}},
 		{"a skip wildcard in a sequence occurring at least twice", func(t *testing.T) {
 			v := occWildMany{Sequence: []occWildManyItem{{A: "1", Any: []anyElement{{Space: "urn:o", Local: "w"}}}, {A: "2"}}}
-			roundTrip(t, schemaOf(t, occSkipSchema), rootName, v, r+`<a>1</a><w xmlns="urn:o"/><a>2</a></r>`, deepEqual[occWildMany])
+			roundTrip(t, schemaOf(t, occSkipSchema), rootName, v, r+`<a>1</a><p1:w xmlns="" xmlns:p1="urn:o"/><a>2</a></r>`, deepEqual[occWildMany])
 		}},
 		{"one item of a choice occurring 2 to 3 times, an element alternative emptiable", func(t *testing.T) {
 			roundTrip(t, schemaOf(t, occTwoThreeSchema), rootName, occChoice{Choice: []occChoiceItem{occChoiceB{B: "1"}}}, r+`<b>1</b></r>`, deepEqual[occChoice], occChoiceBranches)
@@ -331,7 +330,7 @@ func TestAppendOccurrence(t *testing.T) {
 		}},
 		{"one item of a choice occurring 2 to 3 times, an element alternative emptiable beside a wildcard", func(t *testing.T) {
 			v := occPick{Choice: []occPickItem{occPickAny{Any: anyElement{Space: "urn:o", Local: "w"}}}}
-			roundTrip(t, schemaOf(t, occWildAltSchema), rootName, v, r+`<w xmlns="urn:o"/></r>`, deepEqual[occPick], occPickBranches)
+			roundTrip(t, schemaOf(t, occWildAltSchema), rootName, v, r+`<p1:w xmlns="" xmlns:p1="urn:o"/></r>`, deepEqual[occPick], occPickBranches)
 		}},
 		{"one item of a choice occurring 2 to 3 times, its wildcard alternative emptiable", func(t *testing.T) {
 			roundTrip(t, schemaOf(t, occWildOptSchema), rootName, occPick{Choice: []occPickItem{occPickA{A: "1"}}}, r+`<a>1</a></r>`, deepEqual[occPick], occPickBranches)
@@ -343,14 +342,14 @@ func TestAppendOccurrence(t *testing.T) {
 
 // TestAppendOccurrenceDeclineSubject pins the subject item 4 of Append's doc
 // names for a particle of a model group held in an occurrence field, here a
-// strict wildcard, occWildSchema's and occPickSchema's made strict: a
-// sequence's particle by its place, a choice's by its alternative, as a
-// content choice occurring once names its own.
+// wildcard particle rebuilt vacuous (vacatedSchema), in occWildSchema's and
+// occPickSchema's content: a sequence's particle by its place, a choice's by
+// its alternative, as a content choice occurring once names its own.
 func TestAppendOccurrenceDeclineSubject(t *testing.T) {
-	const wild = "codec does not encode a wildcard particle with {process contents} strict: "
-	_, err := appendChecked(t, nil, schemaOf(t, strings.Replace(occWildSchema, ` processContents="lax"`, "", 1)), strict.New(), rootName, occWild{})
+	const wild = "codec does not encode a particle with {max occurs} 0: "
+	_, err := appendChecked(t, nil, vacatedSchema(t, `<xs:sequence maxOccurs="unbounded"><xs:element name="a" type="xs:string"/><xs:any processContents="lax"/></xs:sequence>`), strict.New(), rootName, occWild{})
 	_ = asDecline(t, err, wild+"particle 2 of the content {particle} of the {type definition} of element {urn:s}r declared at ")
-	_, err = appendChecked(t, nil, schemaOf(t, strings.Replace(occPickSchema, ` processContents="lax"`, "", 1)), strict.New(), rootName, occPick{}, occPickBranches)
+	_, err = appendChecked(t, nil, vacatedSchema(t, `<xs:choice maxOccurs="unbounded"><xs:element name="a" type="xs:string"/><xs:any namespace="##other" processContents="lax"/></xs:choice>`), strict.New(), rootName, occPick{}, occPickBranches)
 	_ = asDecline(t, err, wild+"alternative 2 of the content {particle} of the {type definition} of element {urn:s}r declared at ")
 }
 
