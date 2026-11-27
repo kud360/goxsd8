@@ -322,31 +322,32 @@
 //     keyref a {referenced key} whose own it compiles, whose {type
 //     definition} is a simple type that encodes, a complex type that
 //     encodes, or xs:anyType itself.
-//   - A complex type with {abstract} false, no {assertions} and no {open
-//     content}, of empty content, of simple content whose {simple type
-//     definition} (Structures §3.4.2.2 dcl.ctd.ctsc) is a simple type that
-//     encodes, its value field (codegen's package doc, "# Complex types")
+//   - A complex type with {abstract} false, no member of its {assertions},
+//     its own or inherited, whose {test} names fn:in-scope-prefixes,
+//     fn:namespace-uri-for-prefix or fn:resolve-QName, or the namespace axis,
+//     wherever in its text, and no {open content}, of empty content, of simple content
+//     whose {simple type definition} (Structures §3.4.2.2 dcl.ctd.ctsc) is a simple
+//     type that encodes, its value field (codegen's package doc, "# Complex types")
 //     written as the element's character content after its attributes, or of
-//     element-only content whose {particle} is a sequence or all group that
-//     codegen splices, a choice occurring exactly once that codegen does not
-//     flatten, or a sequence, choice or all group codegen holds in an
-//     occurrence field, inline or through <group ref>, each of whose
-//     particles is an element particle, a wildcard particle of any {process
-//     contents}, a nested sequence or choice particle, inline or through <group ref>,
-//     or an all group's nested all group particle, through <group ref> (Structures
-//     §3.8.6.2 cos-all-limited), held as codegen's package doc "# Particles" holds it:
-//     one codegen splices, as its own particles in its place; a choice occurring
-//     exactly once that codegen does not flatten, into its sealed interface field, as
-//     its alternatives; one codegen flattens, into its slice field, each basic
-//     particle of its reach such an element or wildcard particle; and any other, into
-//     its occurrence field, as its own particles. A choice's alternative, the content
-//     choice's or a nested one's, is such a particle too, its model group held at the
-//     occurrence its branch reads, {min occurs} 0 read as 1, into its branch's fields.
-//     Inside a content particle codegen holds in an occurrence field, a nested
-//     particle codegen flattens or holds in an occurrence field of its own is a
-//     [*DeclineError], whatever its occurrence, as it is for Decode ("# What
-//     decodes"). A content model holding a wildcard particle, a nested flattened
-//     particle or a nested occurrence field, at any depth, is one
+//     element-only content whose {particle} is a sequence or all group that codegen
+//     splices, a choice occurring exactly once that codegen does not flatten, or a
+//     sequence, choice or all group codegen holds in an occurrence field, inline or
+//     through <group ref>, each of whose particles is an element particle, a wildcard
+//     particle of any {process contents}, a nested sequence or choice particle, inline
+//     or through <group ref>, or an all group's nested all group particle, through
+//     <group ref> (Structures §3.8.6.2 cos-all-limited), held as codegen's package doc
+//     "# Particles" holds it: one codegen splices, as its own particles in its place;
+//     a choice occurring exactly once that codegen does not flatten, into its sealed
+//     interface field, as its alternatives; one codegen flattens, into its slice
+//     field, each basic particle of its reach such an element or wildcard particle;
+//     and any other, into its occurrence field, as its own particles. A choice's
+//     alternative, the content choice's or a nested one's, is such a particle too, its
+//     model group held at the occurrence its branch reads, {min occurs} 0 read as 1,
+//     into its branch's fields. Inside a content particle codegen holds in an
+//     occurrence field, a nested particle codegen flattens or holds in an occurrence
+//     field of its own is a [*DeclineError], whatever its occurrence, as it is for
+//     Decode ("# What decodes"). A content model holding a wildcard particle, a nested
+//     flattened particle or a nested occurrence field, at any depth, is one
 //     xsd.Schema.ContentMatcher tracks. The content {particle} may also be a sequence
 //     or choice codegen flattens, each basic particle of whose reach (codegen's
 //     package doc, "# Particles") is such an element or wildcard particle, and whose

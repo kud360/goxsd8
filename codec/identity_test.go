@@ -149,7 +149,8 @@ func TestAppendIdentityViolation(t *testing.T) {
 // errors.ErrUnsupported, opening with codec's statement of the charge, whose
 // first violation, reached by errors.As and xsderr.RuleOf, is of rule and
 // leads ViolationsOf, every one charged to the written document under no
-// URI, and names subject and "clause " and clause.
+// URI, and names subject and, where clause is other than "", "clause " and
+// clause.
 func assessedCharge(t *testing.T, got []byte, err error, rule xsderr.Rule, clause, subject string) {
 	t.Helper()
 	if string(got) != "pre" {
@@ -176,7 +177,7 @@ func assessedCharge(t *testing.T, got []byte, err error, rule xsderr.Rule, claus
 			t.Errorf("violation %v is not charged to the written document under no URI", v)
 		}
 	}
-	if !strings.Contains(xe.Error(), subject) || !strings.Contains(xe.Error(), "clause "+clause) {
+	if !strings.Contains(xe.Error(), subject) || clause != "" && !strings.Contains(xe.Error(), "clause "+clause) {
 		t.Errorf("violation %q names neither %s nor clause %s", xe, subject, clause)
 	}
 }
