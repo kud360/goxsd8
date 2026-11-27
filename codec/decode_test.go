@@ -299,8 +299,9 @@ func TestDecodeSourceFault(t *testing.T) {
 	}
 }
 
-// TestDecodeNilArguments pins item 1 of Decode's doc: a nil schema is
-// validate.New's plain error, and a nil backend panics.
+// TestDecodeNilArguments pins item 1 of Decode's doc for a nil schema, a nil
+// backend, both at once, whose error's text it leaves open, and a nil backend
+// with malformed data, where item 1 comes before item 2.
 func TestDecodeNilArguments(t *testing.T) {
 	got, err := Decode[shapes](nil, strict.New(), instanceOf("", ""))
 	if got != nil || err == nil {
@@ -313,12 +314,30 @@ func TestDecodeNilArguments(t *testing.T) {
 	if err.Error() != want.Error() {
 		t.Errorf("Decode(nil schema) = %q, want validate.New's %q", err, want)
 	}
-	defer func() {
-		if recover() == nil {
-			t.Error("Decode(nil backend) did not panic")
-		}
-	}()
-	_, _ = Decode[shapes](schemaOf(t, shapesSchema), nil, instanceOf("", ""))
+	schema := schemaOf(t, shapesSchema)
+	for _, c := range []struct {
+		name   string
+		schema *xsd.Schema
+		data   []byte
+	}{
+		{"nil backend", schema, instanceOf("", "")},
+		{"nil backend, malformed data", schema, []byte("<<<")},
+		{"nil schema and backend", nil, instanceOf("", "")},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			defer func() {
+				if r := recover(); r != nil {
+					t.Fatalf("Decode panicked: %v", r)
+				}
+			}()
+			got, err := Decode[shapes](c.schema, nil, c.data)
+			if got != nil {
+				t.Errorf("Decode = %v, want no value", got)
+			}
+			plainError(t, err)
+			noRule(t, err)
+		})
+	}
 }
 
 // TestDecodeTypeMismatch pins item 6 of Decode's doc: a T that is not the

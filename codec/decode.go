@@ -179,9 +179,9 @@ var ErrAbstractElement = errors.New("codec: the top-level element declaration ha
 //
 // The first of these that applies is returned:
 //
-//  1. A nil schema: validate.New's plain error. A nil backend panics, on
-//     validate.New's grounds. backend must be the one schema was compiled
-//     with, as validate.New states.
+//  1. A nil schema: validate.New's plain error. A nil backend: a plain error.
+//     backend must be the one schema was compiled with, as validate.New
+//     states.
 //  2. A source fault, in either channel validate/xmlsrc.Validate carries one
 //     in, whatever the Result's Standing: that error as it is, an
 //     *xsderr.Error with rule xml-wf that xsderr.RuleOf reaches.
@@ -786,6 +786,9 @@ func Decode[T any](schema *xsd.Schema, backend value.Backend, data []byte, opts 
 // filled only once items 1 to 6 hold, and an item 7 or 8 error leaves it
 // partly filled, which Decode then discards.
 func decodeValue(schema *xsd.Schema, backend value.Backend, data []byte, out reflect.Value, opts []Option) error {
+	if backend == nil {
+		return errors.New("codec: Decode: nil value.Backend")
+	}
 	cfg := newConfig(opts)
 	v, err := validate.New(schema, backend, validate.WithLogger(cfg.log))
 	if err != nil {
