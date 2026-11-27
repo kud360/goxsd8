@@ -744,8 +744,8 @@ func TestAppendDst(t *testing.T) {
 	}
 }
 
-// plainError fails t unless err, Append's or CheckAppend's, is a plain
-// error of Append's doc: no *DeclineError, wrapping none of
+// plainError fails t unless err, Append's, CheckAppend's or Decode's, is a
+// plain error of its doc: no *DeclineError, wrapping none of
 // ErrTypeMismatch, ErrInvalidValue, ErrUndeclaredElement, ErrAbstractElement
 // and errors.ErrUnsupported, whose text holds each of want.
 func plainError(t *testing.T, err error, want ...string) {
