@@ -2341,8 +2341,8 @@ func (e *encoder) heldTo(vc xsd.ValueConstraint, on, rule string, st *xsd.Simple
 
 // firstChild records, through invalidate, the cvc-elt clause 5.2.2.1 error
 // mixedFixed returns for e.fixedChild's element, which a child element of its
-// mixed content is about to be written into, and clears e.fixedChild, so that
-// only its first child raises it and a nested element's write sets its own.
+// mixed content is about to be written into, and clears e.fixedChild, the
+// element now holding a child, which its later children do not change.
 func (e *encoder) firstChild() {
 	at := e.fixedChild
 	if at == nil {
