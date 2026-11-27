@@ -326,7 +326,8 @@
 //     encodes, or xs:anyType itself.
 //   - A complex type with {abstract} false, no member of its {assertions},
 //     its own or inherited, whose {test} names fn:in-scope-prefixes,
-//     fn:namespace-uri-for-prefix or fn:resolve-QName, or the namespace axis,
+//     fn:namespace-uri-for-prefix or fn:resolve-QName, or the namespace axis
+//     spelled as its name followed by "::" after optional whitespace,
 //     wherever in its text, of empty content, of simple content whose {simple type
 //     definition} (Structures §3.4.2.2 dcl.ctd.ctsc) is a simple type that encodes,
 //     its value field (codegen's package doc, "# Complex types") written as the
