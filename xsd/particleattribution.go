@@ -258,11 +258,21 @@ func (s *Schema) decideUnambiguous(build func(*automaton) ([]int, []int, bool, e
 		// particle (§3.8.4.2, key-compete) go uncharged there and only check's
 		// per-state pairs are charged. No owner issue is filed yet. Direction, by
 		// consumer: SchemaBuilder.Finalize, and parser.Parse through it, loses the
-		// rejection and gains none. Schema.ContentMatcher's Matcher, which
-		// validate's cvc-complex-content walk and codec's Decode read, assumes no
-		// such pair exists; on sequence(sequence{2}(c?, a+), c) it was measured
-		// rejecting a a c, which the model accepts. Whether it can also accept a
-		// sequence the model rejects is unestablished.
+		// rejection and gains none. Schema.ContentMatcher's Matcher assumes no
+		// such pair exists. On TestUPAPastPathPositionsDeclined's model it takes
+		// a a c and then reports Accepting() false, though the model accepts
+		// a a c, and it accepts a c a c; whether it can also accept a sequence
+		// the model rejects is unestablished. By reader of that Matcher:
+		//   - validate (*walk).contentCheck charges cvc-complex-content on a a c,
+		//     a false rejection;
+		//   - codec (*matcherSlot).attributor and trackedMatcher: Decode rejects
+		//     a a c with that same charge; the direction of either on its own is
+		//     unestablished;
+		//   - validate/jsonsrc (*walker).govern: jsonsrc.Validate charges the
+		//     JSON spelling of a a c with that same charge; the direction of
+		//     govern's own attribution is unestablished;
+		//   - codec (*encoder).flattenedCheck, Append's attribution check, and
+		//     conformance (*subtreeGate).complex: unestablished.
 		return nil
 	}
 	x := &automaton{s: s, policy: languagePolicy}
