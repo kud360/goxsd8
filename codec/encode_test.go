@@ -765,11 +765,15 @@ func plainError(t *testing.T, err error, want ...string) {
 // CheckDecode's and Append's doc, whose text is want: one errors.Is reports
 // as sentinel, ErrUndeclaredElement or ErrAbstractElement, and as none of the
 // other of those two, ErrTypeMismatch, ErrInvalidValue and
-// errors.ErrUnsupported, no *DeclineError, carrying no rule.
+// errors.ErrUnsupported, no *DeclineError, carrying no rule, whose text does
+// not hold sentinel's own.
 func declarationRefusal(t *testing.T, err, sentinel error, want string) {
 	t.Helper()
 	if err == nil || err.Error() != want {
 		t.Fatalf("returned %v, want %q", err, want)
+	}
+	if strings.Contains(err.Error(), sentinel.Error()) {
+		t.Errorf("returned %v, whose text holds %v's own", err, sentinel)
 	}
 	if !errors.Is(err, sentinel) {
 		t.Errorf("returned %v, want an error errors.Is reports as %v", err, sentinel)

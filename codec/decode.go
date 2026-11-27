@@ -30,7 +30,7 @@ var ErrTypeMismatch = errors.New("codec: T is not the type codegen emits for the
 // text names the name no top-level element declaration has and is never this
 // sentinel's. [Decode] returns no error errors.Is reports as it; Decode's doc
 // states what it returns.
-var ErrUndeclaredElement = errors.New("codec: no top-level element declaration has the expanded name")
+var ErrUndeclaredElement = errors.New("codec: the schema declares no top-level element of the expanded name")
 
 // ErrAbstractElement is the sentinel errors.Is finds in the error of item 3
 // of [CheckDecode]'s doc and of [Append]'s, and so of [CheckAppend]'s, whose
