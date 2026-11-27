@@ -399,7 +399,8 @@
 //     hold to a fixed one.
 //   - An {attribute wildcard} (Structures §3.4.2.5 dcl.ctd.anyatt), the
 //     type's effective one, of any {process contents}, into the field "# What
-//     decodes" states for it, each attribute it holds written raw, as below.
+//     decodes" states for it, each attribute it holds written raw, as below,
+//     and, but for skip, assessed with the document, as Append's doc states.
 //   - xs:anySimpleType or xs:anyAtomicType itself (Datatypes §2.4.2
 //     dt-special), into string.
 //   - An atomic simple type whose {primitive type definition} is one the list

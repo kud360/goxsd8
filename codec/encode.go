@@ -66,12 +66,17 @@ var ErrInvalidValue = errors.New("codec: Append: a value no valid document holds
 // has {process contents} strict or lax, whose children Append writes raw, as
 // the package doc's "# What encodes" places them, and in which a top-level
 // declaration or an xsi:type may govern an item (key-governing-ed clause 4),
-// each of which holds for every value of T or for none, and runs no assessment
-// otherwise: a caller wanting a verdict on such a document assesses it through
-// package validate, as any document. The package doc's "# What encodes" section
-// states the slice Append encodes and the document it writes. On error Append
-// returns dst unextended, its bytes beyond len(dst) possibly overwritten, and
-// the first of these that applies:
+// or when a complex type item 4 examines has an {attribute wildcard}, the
+// effective one, with {process contents} strict or lax, whose field's
+// attributes Append writes raw and in which a top-level attribute declaration
+// governs an attribute its expanded name resolves to (§3.2.4.2
+// key-governing-ad clause 3, §3.10.4.1 cvc-wildcard), each of which holds for
+// every value of T or for none, and runs no assessment otherwise: a caller
+// wanting a verdict on such a document assesses it through package validate, as
+// any document. The package doc's "# What encodes" section states the slice
+// Append encodes and the document it writes. On error Append returns dst
+// unextended, its bytes beyond len(dst) possibly overwritten, and the first of
+// these that applies:
 //
 //  1. A nil schema or a nil backend: a plain error.
 //  2. No top-level element declaration of schema has the expanded name name:
@@ -191,42 +196,43 @@ var ErrInvalidValue = errors.New("codec: Append: a value no valid document holds
 //     any depth, whatever its value, since validate reads it there, under cvc-elt clause 3 or the built-in nil declaration's cvc-attribute clause 3,
 //     as validate's package doc, "# Contract", states, but on an element a skip wildcard particle's field or a skip {open content}'s field holds or
 //     at any depth below one, which is not assessed (§3.10.4.1 key-skipped, §3.3.4.6 cvc-assess-elt clause 2); or xsi:type among the attributes of
-//     an element of type xs:anyType itself, whatever its value, since Decode declines an element carrying it there; or in a lax {attribute
-//     wildcard}'s field an attribute whose expanded name a top-level attribute declaration of schema names, whatever its value, since the wildcard
-//     assesses it against that declaration (§3.2.4.2 key-governing-ad clause 3); or an attribute the {attribute wildcard} field of a type whose
-//     {attribute wildcard} has {process contents} strict holds, whatever its name and value, since the wildcard assesses it against the top-level
-//     attribute declaration its expanded name resolves to, where there is one, and §3.10.1 requires that there be one (§3.10.1, §3.2.4.2
-//     key-governing-ad clause 3); or an element a strict or lax wildcard particle's field holds whose expanded name no top-level element declaration
-//     of schema names and that has a ·locally declared type· in the complex type whose content it is written into, an element declaration of its
-//     expanded name that type's content model, or that of a type on its {base type definition} chain, contains, whatever its content and whether or
-//     not it holds xsi:type, since that type governs it (§3.3.4.6 key-governing-type-elem clauses 6 and 7, §3.4.6.4 key-ldt-elem); or an element the
-//     open-content field of a type whose {open content} has a strict or lax {wildcard} holds that has such a ·locally declared type· in that type,
-//     whether or not a top-level element declaration of schema names it, since that type governs it ahead of a declaration (key-governing-ed clause
-//     4.3); or an element the open-content field of a type whose {open content} has {mode} interleave holds that a particle of its content model
-//     takes where Append writes it, after every child of the {particle}, whatever else rejects it, since §3.4.4.3 cvc-complex-content clause 3.3
-//     decides each child by the {particle}'s children before it and Append writes no placement but that one; or a token, split at XML white space,
-//     of a Text, a Tail or an attribute's Value held in an AnyType, spelled NCName:NCName, whose prefix, other than xml, no entry of that AnyType's
-//     Namespaces binds but a binding Append declares, a fresh pN or one an ancestor's, puts in scope where it is written, so that the token would
-//     resolve where the value says nothing does, in a region holding every place it may be typed, and more: the Text, Tails and attribute Values of
-//     an element a top-level element declaration or an xsi:type it holds governs, in a strict or lax wildcard particle's match, a child of a strict
-//     or lax {open content} or an xs:anyType element's content, or at any depth below one, every element of a strict wildcard particle's match among
-//     them, the Value of an attribute there a top-level attribute declaration governs, and every xsi:type's in any such hold, a skip one's among
-//     them (Datatypes §3.3.18); or an ·ENTITY value· in content a document element's walk reaching a strict or lax wildcard particle, a strict or
-//     lax {open content} or an xs:anyType element holds, which the assessment of item 8 finds no ·declared entity name· (Structures §3.16.4
-//     cvc-simple-type clause 3), the document Append writes having no DTD to declare one, its detail that violation's text, ahead of item 8; or a
-//     value item 6 holds to a fixed {value constraint} whose comparison value.ConstraintMatches leaves undecided, such as a NOTATION {lexical form}
-//     naming no declared notation, and the empty text of an element whose default's {value} it is not, or whose comparison is undecided, since
-//     Append writes it as an empty element that takes on the default (cvc-elt clause 5.1), though another lexical, such as a single space for an
-//     xs:token, may hold the value. The values with a lexical other than the one Append writes, the ones whose rejection by a pattern facet is this
-//     item, a union's own pattern facet among them, read once the variant's member is its text's ·active basic member·, are: a union's value whose
-//     member value is one; every xs:boolean, xs:decimal-primitive, xs:dateTime, xs:dateTimeStamp, xs:time and xs:duration-primitive value; every
-//     xs:float, xs:double and xs:precisionDecimal value other than NaN and -INF; an xs:date, xs:gYearMonth or xs:gYear value whose timezoneOffset is
-//     0, spelled Z, +00:00 or -00:00 (§D.2.2's note), or whose year is 0, spelled 0000 or -0000; an xs:gMonthDay, xs:gDay or xs:gMonth value whose
-//     timezoneOffset is 0; an xs:hexBinary value one of whose octets holds a hex digit A to F (§3.3.15.2); every xs:base64Binary value but the empty
-//     one (§3.3.16.2); an xs:QName or xs:NOTATION value whose namespace name is not absent; and no xs:string- or xs:anyURI-primitive value, each
-//     being its own whiteSpace-normalized form. NaN and -INF, of xs:float, xs:double and xs:precisionDecimal alike, are written NaN and -INF, their
-//     only lexicals (§3.3.4.2, §3.3.5.2, precisionDecimal §3.2), so a pattern facet of their own simple type that rejects one of them is item 6, not
-//     this item.
+//     an element of type xs:anyType itself, whatever its value, since Decode declines an element carrying it there; or in a strict or lax
+//     {attribute wildcard}'s field an attribute whose governing top-level attribute declaration of schema, the one its expanded name resolves to
+//     (§3.2.4.2 key-governing-ad clause 3), has a {type definition} that is an atomic type whose primitive is xs:QName or xs:NOTATION, a list whose
+//     {item type definition} is one or a union with one among its basic members, whatever its value, since such a value means what the
+//     namespace bindings in scope where it is written make it mean (Datatypes §3.3.18, §3.3.19) and the field holds none beside it.
+//     GAP(codec): an xs:QName- or xs:NOTATION-dependent attribute in an {attribute wildcard} field, RULED permanent by #4161. Or an element a strict
+//     or lax wildcard particle's field holds whose expanded name no top-level element declaration of schema names and that has a ·locally declared
+//     type· in the complex type whose content it is written into, an element declaration of its expanded name that type's content model, or that of
+//     a type on its {base type definition} chain, contains, whatever its content and whether or not it holds xsi:type, since that type governs it
+//     (§3.3.4.6 key-governing-type-elem clauses 6 and 7, §3.4.6.4 key-ldt-elem); or an element the open-content field of a type whose {open content}
+//     has a strict or lax {wildcard} holds that has such a ·locally declared type· in that type, whether or not a top-level element declaration of
+//     schema names it, since that type governs it ahead of a declaration (key-governing-ed clause 4.3); or an element the open-content field of a
+//     type whose {open content} has {mode} interleave holds that a particle of its content model takes where Append writes it, after every child of
+//     the {particle}, whatever else rejects it, since §3.4.4.3 cvc-complex-content clause 3.3 decides each child by the {particle}'s children before
+//     it and Append writes no placement but that one; or a token, split at XML white space, of a Text, a Tail or an attribute's Value held in an
+//     AnyType, spelled NCName:NCName, whose prefix, other than xml, no entry of that AnyType's Namespaces binds but a binding Append declares, a
+//     fresh pN or one an ancestor's, puts in scope where it is written, so that the token would resolve where the value says nothing does, in a
+//     region holding every place it may be typed, and more: the Text, Tails and attribute Values of an element a top-level element declaration or an
+//     xsi:type it holds governs, in a strict or lax wildcard particle's match, a child of a strict or lax {open content} or an xs:anyType element's
+//     content, or at any depth below one, every element of a strict wildcard particle's match among them, the Value of an attribute there a
+//     top-level attribute declaration governs, and every xsi:type's in any such hold, a skip one's among them (Datatypes §3.3.18); or an ·ENTITY
+//     value· in content a document element's walk reaching a strict or lax wildcard particle, a strict or lax {open content} or an xs:anyType
+//     element holds, or in an attribute a strict or lax {attribute wildcard}'s field holds, which the assessment of item 8 finds no ·declared entity
+//     name· (Structures §3.16.4 cvc-simple-type clause 3), the document Append writes having no DTD to declare one, its detail that violation's
+//     text, ahead of item 8; or a value item 6 holds to a fixed {value constraint} whose comparison value.ConstraintMatches leaves undecided, such
+//     as a NOTATION {lexical form} naming no declared notation, and the empty text of an element whose default's {value} it is not, or whose
+//     comparison is undecided, since Append writes it as an empty element that takes on the default (cvc-elt clause 5.1), though another lexical,
+//     such as a single space for an xs:token, may hold the value. The values with a lexical other than the one Append writes, the ones whose
+//     rejection by a pattern facet is this item, a union's own pattern facet among them, read once the variant's member is its text's ·active basic
+//     member·, are: a union's value whose member value is one; every xs:boolean, xs:decimal-primitive, xs:dateTime, xs:dateTimeStamp, xs:time and
+//     xs:duration-primitive value; every xs:float, xs:double and xs:precisionDecimal value other than NaN and -INF; an xs:date, xs:gYearMonth or
+//     xs:gYear value whose timezoneOffset is 0, spelled Z, +00:00 or -00:00 (§D.2.2's note), or whose year is 0, spelled 0000 or -0000; an
+//     xs:gMonthDay, xs:gDay or xs:gMonth value whose timezoneOffset is 0; an xs:hexBinary value one of whose octets holds a hex digit A to F
+//     (§3.3.15.2); every xs:base64Binary value but the empty one (§3.3.16.2); an xs:QName or xs:NOTATION value whose namespace name is not absent;
+//     and no xs:string- or xs:anyURI-primitive value, each being its own whiteSpace-normalized form. NaN and -INF, of xs:float, xs:double and
+//     xs:precisionDecimal alike, are written NaN and -INF, their only lexicals (§3.3.4.2, §3.3.5.2, precisionDecimal §3.2), so a pattern facet of
+//     their own simple type that rejects one of them is item 6, not this item.
 //  8. An assessed document validate charges: the error item 3 of [Decode]'s
 //     doc states for it, which errors.Is also reports as [ErrInvalidValue],
 //     each violation charged to the written document, a
@@ -542,7 +548,9 @@ func (b *boundBinding) write(e *encoder, v reflect.Value, at writeAt) error {
 	}
 	if bd.anyAttribute != nil {
 		i := first + len(bd.attrs)
-		e.wildcardAttributes(bd, v.Field(i), at.path+"."+v.Type().Field(i).Name, at.el)
+		if err := e.wildcardAttributes(bd, v.Field(i), at.path+"."+v.Type().Field(i).Name, at.el); err != nil {
+			return err
+		}
 	}
 	content := writeAt{el: at.el, typ: bd.typ, path: at.path}
 	// {content type} is a closed sum, so the switch is STYLE T2's sealed-sum
@@ -1355,15 +1363,16 @@ func elementEncodes(schema *xsd.Schema, decl xsd.ElementDeclaration) (bool, erro
 // type it examined is derived from xs:ID or xs:IDREF (encodeWalk.atomicEncodes),
 // where a complex type it examined has {assertions} (encodeWalk.complexEncodes),
 // where a wildcard particle it examined has {process contents} strict or
-// lax (encodeWalk.particleEncodes), and where a complex type it examined has
-// an {open content} whose {wildcard} has either (encodeWalk.contentEncodes),
-// and never cleared, so that a type walked answers for its second reach too. An
-// entry is stored before its type's content is examined, so that a later reach of
-// the key, a recursive one included, examines nothing again: the first reach
-// answers for the type, and every other component it reaches carries no key of its
-// own only where it lies inside that type (bindRun). walked lives for one pass only
-// and is a lookup index never iterated (STYLE D2); an entry left by a pass that
-// declines is never read, since the decline ends the pass.
+// lax (encodeWalk.particleEncodes), where a complex type it examined has an
+// {open content} whose {wildcard} has either (encodeWalk.contentEncodes), and
+// where a complex type it examined has an {attribute wildcard} with either
+// (encodeWalk.complexEncodes), and never cleared, so that a type walked answers for
+// its second reach too. An entry is stored before its type's content is examined,
+// so that a later reach of the key, a recursive one included, examines nothing
+// again: the first reach answers for the type, and every other component it reaches
+// carries no key of its own only where it lies inside that type (bindRun). walked
+// lives for one pass only and is a lookup index never iterated (STYLE D2); an entry
+// left by a pass that declines is never read, since the decline ends the pass.
 type encodeWalk struct {
 	schema *xsd.Schema
 	walked map[unitKey]bool
@@ -1495,8 +1504,12 @@ func pathsCompile(ic xsd.IdentityConstraint) (string, bool) {
 // whose {test} namesInScopeNamespaces reports declines by
 // constructInScopeAssertion, and every other sets w.assess, so that the
 // written document is held to cvc-complex-type clause 6 (§3.4.4.2,
-// §3.13.4.1 cvc-assertion). An {attribute wildcard} declines nothing here: what its
-// field holds is examined per value (encoder.wildcardAttributes).
+// §3.13.4.1 cvc-assertion). An {attribute wildcard}, the effective one ct's
+// field holds (§3.4.2.5 dcl.ctd.anyatt), declines nothing here, what its field
+// holds being examined per value (encoder.wildcardAttributes), but sets
+// w.assess where its {process contents} is strict or lax, so that a held
+// attribute a top-level declaration governs is held to it (§3.2.4.2
+// key-governing-ad clause 3, §3.10.4.1 cvc-wildcard).
 func (w *encodeWalk) complexEncodes(decl xsd.ElementDeclaration, ct xsd.ComplexType) error {
 	subject := typeSubject(decl, ct)
 	// {content type} is a closed sum, so the switch is STYLE T2's sealed-sum
@@ -1515,6 +1528,9 @@ func (w *encodeWalk) complexEncodes(decl xsd.ElementDeclaration, ct xsd.ComplexT
 		if err := w.attributeEncodes(u); err != nil {
 			return err
 		}
+	}
+	if wild, has := ct.AttributeWildcard(); has && wild.ProcessContents() != xsd.ProcessSkip {
+		w.assess = true
 	}
 	for _, a := range ct.Assertions() {
 		if namesInScopeNamespaces(a.Test()) {
@@ -1843,12 +1859,15 @@ func (w *encodeWalk) attributeEncodes(u xsd.AttributeUse) error {
 // the primitives an atomic type that encodes has (encodeWalk.atomicEncodes),
 // in the order of Datatypes §3.3 and then xs:precisionDecimal, which §3.3 does
 // not list, the order constructEncodePrimitive's name lists them in;
-// idNames, the types a type derived from sets encodeWalk.assess; and
-// entityName, the one a type derived from declines.
+// idNames, the types a type derived from sets encodeWalk.assess;
+// entityName, the one a type derived from declines; and qnameName and
+// notationName, the primitives qnameDependent reads.
 var (
 	stringName        = xsd.QName{Space: xsd.XMLSchemaNS, Local: "string"}
 	doubleName        = xsd.QName{Space: xsd.XMLSchemaNS, Local: "double"}
 	decimalName       = xsd.QName{Space: xsd.XMLSchemaNS, Local: "decimal"}
+	qnameName         = xsd.QName{Space: xsd.XMLSchemaNS, Local: "QName"}
+	notationName      = xsd.QName{Space: xsd.XMLSchemaNS, Local: "NOTATION"}
 	encodedPrimitives = []xsd.QName{
 		stringName,
 		booleanName,
@@ -1867,8 +1886,8 @@ var (
 		{Space: xsd.XMLSchemaNS, Local: "hexBinary"},
 		{Space: xsd.XMLSchemaNS, Local: "base64Binary"},
 		{Space: xsd.XMLSchemaNS, Local: "anyURI"},
-		{Space: xsd.XMLSchemaNS, Local: "QName"},
-		{Space: xsd.XMLSchemaNS, Local: "NOTATION"},
+		qnameName,
+		notationName,
 		{Space: xsd.XMLSchemaNS, Local: "precisionDecimal"},
 	}
 	idNames = []xsd.QName{
@@ -3279,20 +3298,15 @@ func (h attributeWildcardHold) assessed() bool {
 	return wild.ProcessContents() != xsd.ProcessSkip
 }
 
-// governing returns the subject of the top-level attribute declaration in
-// schema of the expanded name name, and true, where h is assessed, an
-// attribute a strict or lax wildcard admits being governed by the one its
-// expanded name resolves to (§3.2.4.2 key-governing-ad clause 3), or false
-// where none governs it.
-func (h attributeWildcardHold) governing(schema *xsd.Schema, name xsd.QName) (string, bool) {
+// governing returns the top-level attribute declaration in schema of the
+// expanded name name, and true, where h is assessed, an attribute a strict or
+// lax wildcard admits being governed by the one its expanded name resolves to
+// (§3.2.4.2 key-governing-ad clause 3), or false where none governs it.
+func (h attributeWildcardHold) governing(schema *xsd.Schema, name xsd.QName) (xsd.AttributeDeclaration, bool) {
 	if !h.assessed() {
-		return "", false
+		return xsd.AttributeDeclaration{}, false
 	}
-	d, ok := schema.Attribute(name)
-	if !ok {
-		return "", false
-	}
-	return attributeSubject(d), true
+	return schema.Attribute(name)
 }
 
 // writesHints reports false: Decode never returns a hint in an {attribute
@@ -3628,19 +3642,92 @@ func (e *encoder) writeRawAttribute(name xsd.QName, value string, held []nsBindi
 	e.out = append(e.out, '"')
 }
 
-// governed reports whether hold governs the attribute name it holds at path
-// (attributeWildcardHold.governing), and records item 7 of [Append]'s doc,
-// constructGovernedContent, where it does and no decline is recorded yet.
-// wildcardAttributes writes no governed attribute.
-func (e *encoder) governed(name xsd.QName, path string, hold attributeWildcardHold) bool {
-	governor, ok := hold.governing(e.schema, name)
+// governed reports whether wildcardAttributes declines the attribute name
+// hold holds at path: true, recording item 7 of [Append]'s doc,
+// constructQNameGovernedAttribute, where no decline is recorded yet, where a
+// top-level attribute declaration governs it (attributeWildcardHold.governing)
+// whose {type definition} is xs:QName- or xs:NOTATION-dependent
+// (qnameDependent), and false for a governed attribute of any other type, one
+// nothing governs and one a skip wildcard holds, which wildcardAttributes
+// writes. A {type definition} that does not resolve or that qnameDependent
+// cannot read is a plain error, the attribute never written.
+//
+// GAP(codec): a QName- or NOTATION-dependent value means what the bindings in
+// scope where it is written make it mean (Datatypes §3.3.18, §3.3.19), and an
+// {attribute wildcard} field holds a raw string with no bindings beside it,
+// so that Append, whatever bindings it declared, cannot write the value the
+// field means; RULED permanent by #4161, whose grounding counts no decoded
+// suite case holding such an attribute (#4124's pre-flight struck a bindings
+// arm from the field; #4192's grounding hack H4 re-measured the count, 0).
+// The ENTITY-dependent case declines at the assessment instead
+// (assessWritten), and an ID or IDREF one is held to cvc-id there.
+func (e *encoder) governed(name xsd.QName, path string, hold attributeWildcardHold) (bool, error) {
+	decl, ok := hold.governing(e.schema, name)
 	if !ok {
-		return false
+		return false, nil
+	}
+	st, ok := e.schema.ResolvedSimpleType(decl.TypeDefinition())
+	if !ok {
+		return false, fmt.Errorf("codec: Append: the {type definition} of %s, which governs the attribute %s at %s, does not resolve", attributeSubject(decl), name.Display(), path)
+	}
+	dependent, err := qnameDependent(e.schema, st)
+	if err != nil {
+		return false, fmt.Errorf("codec: Append: the {type definition} of %s, which governs the attribute %s at %s: %w", attributeSubject(decl), name.Display(), path, err)
+	}
+	if !dependent {
+		return false, nil
 	}
 	if e.declined == nil {
-		e.declined = encodeDecline(constructGovernedContent, fmt.Sprintf("attribute %s at %s, %s, governed by %s", name.Display(), path, hold.in(), governor))
+		e.declined = encodeDecline(constructQNameGovernedAttribute, fmt.Sprintf("attribute %s at %s, %s, governed by %s", name.Display(), path, hold.in(), attributeSubject(decl)))
 	}
-	return true
+	return true, nil
+}
+
+// qnameDependent reports whether a value of st, a simple type, depends on the
+// namespace bindings in scope (Datatypes §3.3.18, §3.3.19): an atomic st
+// whose {primitive type definition} is xs:QName or xs:NOTATION, a list whose
+// {item type definition} is, a union one of whose basic members is
+// (goshape.BasicMembers), and no special type, xs:anySimpleType or
+// xs:anyAtomicType itself (§2.4.2 dt-special). An error reading st is
+// returned as is, and a list with no {item type definition} is a plain error.
+// {variety} is a closed sum, so the switch is STYLE T2's sealed-sum
+// exception.
+func qnameDependent(r xsd.TypeResolver, st *xsd.SimpleType) (bool, error) {
+	if st.IsSpecial() {
+		return false, nil
+	}
+	variety, err := st.Variety(r)
+	if err != nil {
+		return false, err
+	}
+	switch variety.(type) {
+	case xsd.List:
+		item, err := st.Item(r)
+		if err != nil {
+			return false, err
+		}
+		if item == nil {
+			return false, fmt.Errorf("codec: the list type defined at %s has no {item type definition}", st.Loc())
+		}
+		return qnameDependent(r, item)
+	case xsd.Union:
+		basic, err := goshape.BasicMembers(r, st)
+		if err != nil {
+			return false, err
+		}
+		for _, m := range basic {
+			dependent, err := qnameDependent(r, m)
+			if err != nil || dependent {
+				return dependent, err
+			}
+		}
+		return false, nil
+	}
+	primitive, err := st.Primitive(r)
+	if err != nil {
+		return false, err
+	}
+	return primitive != nil && (primitive.Name() == qnameName || primitive.Name() == notationName), nil
 }
 
 // rawAttribute reports whether the attribute name of value value, attrs' item
@@ -3651,8 +3738,8 @@ func (e *encoder) governed(name xsd.QName, path string, hold attributeWildcardHo
 // (locationHint) in a hold that writes them (rawHold.writesHints), xsi:type
 // in a hold that writes it (rawHold.writesType) and xsi:nil in a hold that
 // writes it (rawHold.writesNil), and a Value of a byte that starts no Char, in that
-// order. wildcardAttributes asks whether hold governs it (encoder.governed)
-// after it.
+// order. wildcardAttributes asks whether it declines a governed one
+// (encoder.governed) after it.
 func (e *encoder) rawAttribute(name xsd.QName, value string, attrs reflect.Value, i int, path string, hold rawHold) bool {
 	if !e.writableName(name, path) {
 		return false
@@ -3692,13 +3779,15 @@ func (e *encoder) rawAttribute(name xsd.QName, value string, attrs reflect.Value
 // xsi:schemaLocation and xsi:noNamespaceSchemaLocation, which clause 2
 // excepts by name, where the wildcard does not admit it (clause 2.2.2,
 // §3.10.4.1 cvc-wildcard, xsd.Schema.AllowsAttributeWildcardName); then
-// rawAttribute's errors; then item 7, constructStrictAttributeWildcard, where
-// the wildcard's {process contents} is strict, whatever its name, and
-// constructGovernedContent where it is lax and a top-level attribute
-// declaration governs it (encoder.governed); and writes the item where none
-// applies. It writes no attribute for an empty field, whatever the
-// {process contents}.
-func (e *encoder) wildcardAttributes(bd *binding, attrs reflect.Value, path string, el xsd.ElementDeclaration) {
+// rawAttribute's errors; then item 7, constructQNameGovernedAttribute, where
+// the wildcard is strict or lax and a top-level attribute declaration whose
+// {type definition} is xs:QName- or xs:NOTATION-dependent governs it
+// (encoder.governed), whose plain error it returns; and writes the item where
+// none applies, a strict wildcard's among them, whatever its name, governed or
+// not, the assessment holding a governed one to its declaration and leaving an
+// ungoverned one unassessed (§3.2.4.3 cvc-assess-attr clause 1). It writes no
+// attribute for an empty field, whatever the {process contents}.
+func (e *encoder) wildcardAttributes(bd *binding, attrs reflect.Value, path string, el xsd.ElementDeclaration) error {
 	wild, _ := bd.typ.AttributeWildcard()
 	hold := attributeWildcardHold{el: el, typ: bd.typ}
 	for i := range attrs.Len() {
@@ -3717,17 +3806,16 @@ func (e *encoder) wildcardAttributes(bd *binding, attrs reflect.Value, path stri
 		if !e.rawAttribute(name, value, attrs, i, apath, hold) {
 			continue
 		}
-		if wild.ProcessContents() == xsd.ProcessStrict {
-			if e.declined == nil {
-				e.declined = encodeDecline(constructStrictAttributeWildcard, fmt.Sprintf("attribute %s at %s, %s", name.Display(), apath, hold.in()))
-			}
-			continue
+		declined, err := e.governed(name, apath, hold)
+		if err != nil {
+			return err
 		}
-		if e.governed(name, apath, hold) {
+		if declined {
 			continue
 		}
 		e.writeRawAttribute(name, value, nil)
 	}
+	return nil
 }
 
 // rawText appends text, character data held raw at path, escaped as element
