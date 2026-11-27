@@ -136,9 +136,9 @@ func keptBindings(given, back reflect.Value) bool {
 	}
 }
 
-// namespacesKept reports whether back, a re-decode's Namespaces, keeps
-// given, the one Append was given: every entry of given is in back, and back
-// holds a "" entry only where given does.
+// namespacesKept reports whether back, a re-decode's Namespaces, holds
+// given, the one Append was given, as the package doc's "# What encodes"
+// states a re-decode holds it.
 func namespacesKept(given, back reflect.Value) bool {
 	for i := range given.Len() {
 		if space, ok := heldBindingOf(back, given.Index(i).Field(0).String()); !ok || space != given.Index(i).Field(1).String() {
@@ -166,6 +166,37 @@ func heldBindingOf(ns reflect.Value, prefix string) (string, bool) {
 // (unscoped), and keeping its Namespaces (keptBindings).
 func sameHeld(given, back any) bool {
 	return reflect.DeepEqual(unscoped(back), unscoped(given)) && keptBindings(reflect.ValueOf(given), reflect.ValueOf(back))
+}
+
+// TestKeptBindings pins keptBindings over held Namespaces, the value given
+// first: a prefixed entry kept beside one more, and a default kept, hold; a
+// prefixed entry or a default lost, bound elsewhere, or a default added, at
+// the top or at depth, do not. With namespacesKept's "" test removed, the rows
+// of a default only the re-decode holds, at the top and at depth, fail.
+func TestKeptBindings(t *testing.T) {
+	p := []anyNamespace{{"p", "urn:p"}}
+	d := []anyNamespace{{"", "urn:d"}}
+	for _, row := range []struct {
+		name        string
+		given, back anyType
+		want        bool
+	}{
+		{"both nil", anyType{}, anyType{}, true},
+		{"a prefix kept beside a fresh one", anyType{Namespaces: p}, anyType{Namespaces: []anyNamespace{{"p", "urn:p"}, {"p1", "urn:x"}}}, true},
+		{"a prefix bound elsewhere", anyType{Namespaces: p}, anyType{Namespaces: []anyNamespace{{"p", "urn:q"}}}, false},
+		{"a prefix lost", anyType{Namespaces: p}, anyType{}, false},
+		{"a default kept", anyType{Namespaces: d}, anyType{Namespaces: d}, true},
+		{"a default added", anyType{}, anyType{Namespaces: d}, false},
+		{"a default lost", anyType{Namespaces: d}, anyType{}, false},
+		{"a default bound elsewhere", anyType{Namespaces: d}, anyType{Namespaces: []anyNamespace{{"", "urn:e"}}}, false},
+		{"a default added at depth", anyType{Children: []anyChild{{}}}, anyType{Children: []anyChild{{Element: anyElement{Content: anyType{Namespaces: d}}}}}, false},
+	} {
+		t.Run(row.name, func(t *testing.T) {
+			if got := keptBindings(reflect.ValueOf(row.given), reflect.ValueOf(row.back)); got != row.want {
+				t.Errorf("keptBindings = %v, want %v", got, row.want)
+			}
+		})
+	}
 }
 
 // The wildcard schemas, each declaring s:r. seqStrictSchema's wildcard is

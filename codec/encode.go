@@ -3130,20 +3130,14 @@ func (e *encoder) rawElement(name xsd.QName, x reflect.Value, path string, hold 
 }
 
 // rawStartTag appends the start tag of the element name, whose content is x,
-// a struct of AnyType's shape at path, but for its attributes and its '>', as
-// the package doc's "# What encodes" states: its name, unprefixed where its
-// namespace is the default x's Namespaces gives it, xml:Local in the XML
-// namespace, and otherwise under the first prefix in Namespaces order bound to
-// its namespace, or else under the one an open start tag binds to it
-// (inScopePrefix), or else under the first of p1, p2 and so on that neither an
-// open start tag nor Namespaces binds (freshPrefix); then xmlns="S", or
-// xmlns="" for none, where that default, the Space of Namespaces' "" entry
-// and none where it holds none, differs from e.ns; then, in Namespaces order,
-// the declaration of each prefixed entry e does not already bind so, then the
-// fresh prefix's. It makes that default e.ns and pushes those bindings onto
-// e.bound, for its attributes and content, and returns the tag's name,
-// Namespaces' prefixed entries (heldNamespaces), and the e.ns and length of
-// e.bound it replaced, which endTag restores.
+// a struct of AnyType's shape at path, but for its attributes and its '>', its
+// name spelled (namePrefix) and its bindings declared under x's Namespaces
+// (heldNamespaces), as the package doc's "# What encodes" states, the
+// default's declaration first, then the prefixed ones, the fresh prefix's
+// last. It makes that default e.ns and pushes those bindings onto e.bound, for
+// its attributes and content, and returns the tag's name, Namespaces'
+// prefixed entries, and the e.ns and length of e.bound it replaced, which
+// endTag restores.
 func (e *encoder) rawStartTag(name xsd.QName, x reflect.Value, path string) (tag string, held []nsBinding, outer string, mark int) {
 	def, held := e.heldNamespaces(name, x.Field(xNamespaces), path)
 	outer, mark = e.ns, len(e.bound)

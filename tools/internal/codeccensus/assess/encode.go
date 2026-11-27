@@ -203,10 +203,8 @@ func same(a, b reflect.Value) bool {
 }
 
 // bindingsKept reports whether b, the Namespaces of a held AnyType a re-decode
-// returns, keeps a, the Namespaces codec.Append was given there, as codec's
-// package doc "# What encodes" states a re-decode holds it: every entry of a
-// is in b, and b holds a "" entry only where a does, b free to hold more
-// prefixed entries.
+// returns, holds a, the Namespaces codec.Append was given there, as codec's
+// package doc "# What encodes" states a re-decode holds it.
 func bindingsKept(a, b reflect.Value) bool {
 	for i := range a.Len() {
 		if space, ok := bindingOf(b, a.Index(i).Field(0).String()); !ok || space != a.Index(i).Field(1).String() {

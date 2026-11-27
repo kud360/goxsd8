@@ -91,9 +91,9 @@ func TestDriveEncodeCountsEachRow(t *testing.T) {
 // struct of exactly AnyType's fields, at any depth, by bindingsKept, its first
 // argument the value given, and of every other field of it, and of the
 // Namespaces of a struct of any other fields, as it compares any field. With
-// bindingsKept's "" test removed, the rows of a "" entry only one side holds
-// fail; with its loop's Space test removed, the rows of a prefix or default
-// bound elsewhere do.
+// bindingsKept's "" test removed, the row of a default only the re-decode
+// holds fails; with its loop's Space test removed, the rows of a prefix or
+// default bound elsewhere do.
 func TestSameKeepsHeldNamespaces(t *testing.T) {
 	type (
 		namespace struct{ Prefix, Space string }
