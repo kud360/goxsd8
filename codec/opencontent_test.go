@@ -309,11 +309,11 @@ func TestDecodeOpenContentTypeMismatch(t *testing.T) {
 // sequence(a, b?) under an interleave ##any one; ocPairSchema's is
 // flatSeqSchema's sequence(a?, b?) of {max occurs} 2, which codegen
 // flattens, under an interleave ##any one; ocSuffixWildSchema's is
-// ocWildSchema's sequence(a, any?) under a suffix ##any one; ocStrictSchema's is sequence(a) under a strict ##any one, beside the
-// top-level xs:int q; ocLocalSchema's is sequence(a, b?) under a suffix lax
-// ##any one, b a local declaration of xs:int, and ocLocalTopSchema's the same
-// beside a top-level b of xs:string; and ocSkipSchema's is ocAB under a skip
-// ##other one.
+// ocWildSchema's sequence(a, any?) under a suffix ##any one; ocStrictSchema's
+// is sequence(a) under a strict ##any one, beside the top-level xs:int q;
+// ocLocalSchema's is sequence(a, b?) under a suffix lax ##any one, b a local
+// declaration of xs:int, and ocLocalTopSchema's the same beside a top-level b
+// of xs:string; and ocSkipSchema's is ocAB under a skip ##other one.
 const (
 	ocLax              = `<xs:openContent><xs:any namespace="##other" processContents="lax"/></xs:openContent>`
 	ocFlatSuffixSchema = `<xs:element name="r"><xs:complexType><xs:openContent mode="suffix"><xs:any namespace="##other" processContents="lax"/></xs:openContent><xs:sequence maxOccurs="unbounded"><xs:element name="a" type="xs:string" minOccurs="0"/><xs:element name="b" type="xs:string" minOccurs="0"/></xs:sequence></xs:complexType></xs:element>`
@@ -526,7 +526,7 @@ func TestAppendOpenContentRefusals(t *testing.T) {
 			t.Fatalf("Decode = %#v, %v, want %#v", got, err, v)
 		}
 		_, err = appendChecked(t, nil, schema, strict.New(), sname("r"), v)
-		asDecline(t, err, "codec does not encode a child of an interleave {open content} that the {particle} takes where Append writes it: element {urn:s}b at ocSuffixAny.OpenContent[0], ")
+		_ = asDecline(t, err, "codec does not encode a child of an interleave {open content} that the {particle} takes where Append writes it: element {urn:s}b at ocSuffixAny.OpenContent[0], ")
 	})
 	t.Run("a child neither the particle nor the wildcard admits", func(t *testing.T) {
 		_, err := appendChecked(t, nil, ocSchema(t, ocInterleaveSchema), strict.New(), sname("r"), ocABType{A: "1", B: "2", OpenContent: []anyElement{ocS("z", "")}})
@@ -545,7 +545,7 @@ func TestAppendOpenContentRefusals(t *testing.T) {
 	for _, decls := range []string{ocLocalSchema, ocLocalTopSchema} {
 		t.Run("a child with a locally declared type", func(t *testing.T) {
 			_, err := appendChecked(t, nil, ocSchema(t, decls), strict.New(), sname("r"), ocLocal{A: "1", OpenContent: []anyElement{ocX("x", ""), ocS("b", "abc")}})
-			asDecline(t, err, "codec does not encode a child of a strict or lax {open content} that has a ·locally declared type· in the complex type it is written into: element {urn:s}b at ocLocal.OpenContent[1], in the match of the {open content} of ")
+			_ = asDecline(t, err, "codec does not encode a child of a strict or lax {open content} that has a ·locally declared type· in the complex type it is written into: element {urn:s}b at ocLocal.OpenContent[1], in the match of the {open content} of ")
 		})
 	}
 	t.Run("xsi:nil on a lax child", func(t *testing.T) {

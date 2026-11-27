@@ -2706,9 +2706,10 @@ func (s *sequence) targets() int {
 
 // A contentMember is one field of the struct a sequence binds, a closed sum: an
 // elementMember, an element particle's field; a wildcardMember, a wildcard
-// particle's; an openField, the open-content field; a *choice, a choice's sealed interface; a
-// *flatSlice, a nested flattened particle's slice of a sealed interface; or a
-// *nestedOccurrence, a nested particle's occurrence field.
+// particle's; an openField, the open-content field; a *choice, a choice's
+// sealed interface; a *flatSlice, a nested flattened particle's slice of a
+// sealed interface; or a *nestedOccurrence, a nested particle's occurrence
+// field.
 type contentMember interface {
 	// targets is how many attribution targets the member takes: an openField and an
 	// elementMember one, a *choice those of each alternative's branch members in turn
@@ -3110,9 +3111,8 @@ func openContentField(ct xsd.ComplexType, names *goname.Namer) (openField, bool)
 
 // openContentOf returns the {open content} of ct's own {content type}, nil
 // for none, as an empty or simple {content type} has none: the record the
-// finalized component carries, so that its inheritance (§3.4.2.3.3
-// dcl.ctd.ctcc.common clauses 4.2.2, 4.2.3.3 and 6.1) is the component's,
-// never recomputed, and the pointer xsd.Matcher.NextParticle answers with.
+// finalized component carries, as codegen/doc.go "# Open content" reads it,
+// and the pointer xsd.Matcher.NextParticle answers with.
 func openContentOf(ct xsd.ComplexType) *xsd.OpenContent {
 	content, isElement := ct.ContentType().(xsd.ElementContent)
 	if !isElement {
