@@ -25,6 +25,20 @@ import (
 // where codegen wraps the declaration.
 var ErrTypeMismatch = errors.New("codec: T is not the type codegen emits for the document element")
 
+// ErrUndeclaredElement is the sentinel errors.Is finds in the error of item 2
+// of [CheckDecode]'s doc and of [Append]'s, and so of [CheckAppend]'s, whose
+// text names the name no top-level element declaration has and is never this
+// sentinel's. [Decode] returns no error errors.Is reports as it; Decode's doc
+// states what it returns.
+var ErrUndeclaredElement = errors.New("codec: no top-level element declaration has the expanded name")
+
+// ErrAbstractElement is the sentinel errors.Is finds in the error of item 3
+// of [CheckDecode]'s doc and of [Append]'s, and so of [CheckAppend]'s, whose
+// text names the declaration with {abstract} true and is never this
+// sentinel's. [Decode] returns no error errors.Is reports as it; Decode's doc
+// states what it returns.
+var ErrAbstractElement = errors.New("codec: the top-level element declaration has {abstract} true")
+
 // Decode decodes the XML instance data into a new value of T, the type
 // package codegen emits for the declaration of data's document element, or
 // Nillable over that type where codegen wraps the declaration (codegen's
@@ -813,17 +827,21 @@ func decodeValue(schema *xsd.Schema, backend value.Backend, data []byte, out ref
 //
 //  1. A nil schema: a plain error.
 //  2. No top-level element declaration of schema has the expanded name name:
-//     a plain error naming name.
-//  3. The declaration has {abstract} true: a plain error, since no document
-//     element validates against it (Structures §3.3.4.3 cvc-elt clause 2).
+//     an error naming name, which errors.Is reports as
+//     [ErrUndeclaredElement].
+//  3. The declaration has {abstract} true: an error naming it, which
+//     errors.Is reports as [ErrAbstractElement], since no document element
+//     validates against it (Structures §3.3.4.3 cvc-elt clause 2).
 //  4. A construct outside the decoded slice, item 5 of Decode's doc: its
 //     *DeclineError, charged to no instance Loc ([DeclineError.Loc]), or the
 //     plain error it states in a decline's place.
 //  5. A T that is not the type codegen emits for the declaration, item 6 of
 //     Decode's doc: its error, which errors.Is reports as [ErrTypeMismatch].
 //
-// A plain error is no *DeclineError, wraps neither [ErrTypeMismatch] nor
-// errors.ErrUnsupported, and carries no xsderr rule. nil means Decode returns
+// A plain error is no *DeclineError, wraps none of [ErrTypeMismatch],
+// [ErrUndeclaredElement], [ErrAbstractElement] and errors.ErrUnsupported, and
+// carries no xsderr rule; the errors of items 2 and 3 are no *DeclineError
+// either and carry no xsderr rule. nil means Decode returns
 // neither its item 5 nor its item 6 for a document element of name; Decode's
 // items 2 to 4, 7 and 8 depend on the instance. nil does not tell whether
 // [Append] refuses name and T whatever the value; [CheckAppend] does.
@@ -833,12 +851,10 @@ func CheckDecode[T any](schema *xsd.Schema, name xsd.QName, opts ...Option) erro
 	}
 	decl, ok := schema.Element(name)
 	if !ok {
-		return fmt.Errorf("codec: no top-level element declaration has the expanded name %q", name.Display())
+		return undeclaredElement(name)
 	}
-	// An answer about the schema, no violation of an instance, so it carries
-	// no xsderr rule (STYLE E2).
 	if decl.Abstract() {
-		return fmt.Errorf("codec: %s has {abstract} true, so no document element validates against it (cvc-elt clause 2)", declSubject(decl))
+		return abstractElement(decl)
 	}
 	b, err := bindDecl(&pipeline{schema: schema}, decl)
 	if err != nil {
@@ -6118,6 +6134,38 @@ func xsiType(start *xmltree.StartElement) (xmltree.Attribute, bool) {
 		}
 	}
 	return xmltree.Attribute{}, false
+}
+
+// declarationError is the error of item 2 or 3 of [CheckDecode]'s and
+// [Append]'s doc: text, marked ErrAbstractElement where abstract and
+// ErrUndeclaredElement otherwise. An answer about the schema, no violation of
+// an instance, it carries no xsderr rule (STYLE E2).
+type declarationError struct {
+	text     string
+	abstract bool
+}
+
+// undeclaredElement returns item 2's error for name, which no top-level
+// element declaration has.
+func undeclaredElement(name xsd.QName) error {
+	return &declarationError{text: fmt.Sprintf("codec: no top-level element declaration has the expanded name %q", name.Display())}
+}
+
+// abstractElement returns item 3's error for decl, a top-level element
+// declaration with {abstract} true.
+func abstractElement(decl xsd.ElementDeclaration) error {
+	return &declarationError{text: fmt.Sprintf("codec: %s has {abstract} true, so no document element validates against it (cvc-elt clause 2)", declSubject(decl)), abstract: true}
+}
+
+// Error returns the text unchanged.
+func (e *declarationError) Error() string { return e.text }
+
+// Unwrap returns the sentinel that marks e, for errors.Is.
+func (e *declarationError) Unwrap() error {
+	if e.abstract {
+		return ErrAbstractElement
+	}
+	return ErrUndeclaredElement
 }
 
 // declSubject names the element declaration decl and its schema Loc.

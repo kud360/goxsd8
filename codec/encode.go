@@ -71,8 +71,10 @@ var ErrInvalidValue = errors.New("codec: Append: a value no valid document holds
 //
 //  1. A nil schema or a nil backend: a plain error.
 //  2. No top-level element declaration of schema has the expanded name name:
-//     a plain error naming name.
-//  3. The declaration has {abstract} true: a plain error.
+//     an error naming name, which errors.Is reports as
+//     [ErrUndeclaredElement].
+//  3. The declaration has {abstract} true: an error naming it, which
+//     errors.Is reports as [ErrAbstractElement].
 //  4. A construct outside the encoded slice: its *DeclineError, charged to
 //     no instance Loc ([DeclineError.Loc]).
 //  5. A T that is not the type codegen emits for the declaration under opts,
@@ -240,10 +242,11 @@ var ErrInvalidValue = errors.New("codec: Append: a value no valid document holds
 //     [Decode]'s doc states for it.
 //
 // A plain error is no *DeclineError and wraps none of [ErrTypeMismatch],
-// [ErrInvalidValue] and errors.ErrUnsupported; whether it wraps an
-// *xsderr.Error does not tell its item. A source fault validate/xmlsrc.Validate
-// reports in the document an assessment reads, in either channel it carries
-// one in, is a plain error in place of items 8 and 9.
+// [ErrInvalidValue], [ErrUndeclaredElement], [ErrAbstractElement] and
+// errors.ErrUnsupported; whether it wraps an *xsderr.Error does not tell its
+// item. A source fault validate/xmlsrc.Validate reports in the document an
+// assessment reads, in either channel it carries one in, is a plain error in
+// place of items 8 and 9.
 //
 // A fault of backend found at a value, in place of that value's item 6 or 7, is
 // a plain error too, returned at once and naming the value's Go path and simple
@@ -390,12 +393,10 @@ func typePath(t reflect.Type) string {
 func encodeStatic(schema *xsd.Schema, name xsd.QName, t reflect.Type, cfg config) (xsd.ElementDeclaration, filler, bool, error) {
 	decl, ok := schema.Element(name)
 	if !ok {
-		return xsd.ElementDeclaration{}, nil, false, fmt.Errorf("codec: no top-level element declaration has the expanded name %q", name.Display())
+		return xsd.ElementDeclaration{}, nil, false, undeclaredElement(name)
 	}
-	// An answer about the schema, no violation of an instance, so it carries
-	// no xsderr rule (STYLE E2).
 	if decl.Abstract() {
-		return xsd.ElementDeclaration{}, nil, false, fmt.Errorf("codec: %s has {abstract} true, so no document element validates against it (cvc-elt clause 2)", declSubject(decl))
+		return xsd.ElementDeclaration{}, nil, false, abstractElement(decl)
 	}
 	assess, err := elementEncodes(schema, decl)
 	if err != nil {
