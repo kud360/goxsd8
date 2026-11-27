@@ -327,38 +327,36 @@
 //   - A complex type with {abstract} false, no member of its {assertions},
 //     its own or inherited, whose {test} names fn:in-scope-prefixes,
 //     fn:namespace-uri-for-prefix or fn:resolve-QName, or the namespace axis
-//     spelled as its name followed by "::" after optional whitespace,
-//     wherever in its text, of empty content, of simple content whose {simple type
-//     definition} (Structures §3.4.2.2 dcl.ctd.ctsc) is a simple type that encodes,
-//     its value field (codegen's package doc, "# Complex types") written as the
-//     element's character content after its attributes, or of element-only content
-//     whose {particle} is a sequence or all group that codegen splices, a choice
-//     occurring exactly once that codegen does not flatten, or a sequence, choice or
-//     all group codegen holds in an occurrence field, inline or through <group ref>,
-//     each of whose particles is an element particle, a wildcard particle of any
-//     {process contents}, a nested sequence or choice particle, inline or through
-//     <group ref>, or an all group's nested all group particle, through <group ref>
-//     (Structures §3.8.6.2 cos-all-limited), held as codegen's package doc "#
-//     Particles" holds it: one codegen splices, as its own particles in its place; a
-//     choice occurring exactly once that codegen does not flatten, into its sealed
-//     interface field, as its alternatives; one codegen flattens, into its slice
-//     field, each basic particle of its reach such an element or wildcard particle;
-//     and any other, into its occurrence field, as its own particles. A choice's
-//     alternative, the content choice's or a nested one's, is such a particle too, its
-//     model group held at the occurrence its branch reads, {min occurs} 0 read as 1,
-//     into its branch's fields. Inside a content particle codegen holds in an
-//     occurrence field, a nested particle codegen flattens or holds in an occurrence
-//     field of its own is a [*DeclineError], whatever its occurrence, as it is for
-//     Decode ("# What decodes"). A content model holding a wildcard particle, a nested
-//     flattened particle or a nested occurrence field, at any depth, or of a type with
-//     an {open content}, is one xsd.Schema.ContentMatcher tracks. The content
-//     {particle} may also be a sequence or choice codegen flattens, each basic
-//     particle of whose reach (codegen's package doc, "# Particles") is such an
-//     element or wildcard particle, and whose content model xsd.Schema.ContentMatcher
-//     tracks, with or without a wildcard particle. The choice occurring exactly once
-//     encodes into its sealed interface, T itself or the first field of T's struct,
-//     the sequence, choice or all group held in an occurrence field into that field,
-//     and the flattened one into its slice field, as "# What decodes" states.
+//     spelled as its name followed by "::" after optional whitespace, wherever in its text,
+//     of empty content, of simple content whose {simple type definition} (Structures
+//     §3.4.2.2 dcl.ctd.ctsc) is a simple type that encodes, its value field (codegen's
+//     package doc, "# Complex types") written as the element's character content after its
+//     attributes, or of element-only or mixed content whose {particle} is a sequence or all
+//     group that codegen splices, a choice occurring exactly once that codegen does not
+//     flatten, or a sequence, choice or all group codegen holds in an occurrence field,
+//     inline or through <group ref>, each of whose particles is an element particle, a
+//     wildcard particle of any {process contents}, a nested sequence or choice particle,
+//     inline or through <group ref>, or an all group's nested all group particle, through
+//     <group ref> (Structures §3.8.6.2 cos-all-limited), held as codegen's package doc "#
+//     Particles" holds it: one codegen splices, as its own particles in its place; a choice
+//     occurring exactly once that codegen does not flatten, into its sealed interface
+//     field, as its alternatives; one codegen flattens, into its slice field, each basic
+//     particle of its reach such an element or wildcard particle; and any other, into its
+//     occurrence field, as its own particles. A choice's alternative, the content choice's
+//     or a nested one's, is such a particle too, its model group held at the occurrence its
+//     branch reads, {min occurs} 0 read as 1, into its branch's fields. Inside a content
+//     particle codegen holds in an occurrence field, a nested particle codegen flattens or
+//     holds in an occurrence field of its own is a [*DeclineError], whatever its
+//     occurrence, as it is for Decode ("# What decodes"). A content model holding a
+//     wildcard particle, a nested flattened particle or a nested occurrence field, at any
+//     depth, or of a type with an {open content}, is one xsd.Schema.ContentMatcher tracks.
+//     The content {particle} may also be a sequence or choice codegen flattens, each basic
+//     particle of whose reach (codegen's package doc, "# Particles") is such an element or
+//     wildcard particle, and whose content model xsd.Schema.ContentMatcher tracks, with or
+//     without a wildcard particle. The choice occurring exactly once encodes into its
+//     sealed interface, T itself or the first field of T's struct, the sequence, choice or
+//     all group held in an occurrence field into that field, and the flattened one into its
+//     slice field, as "# What decodes" states.
 //   - An element particle of that sequence, choice or all group or of a model group
 //     nested in it, at any depth, or one a flattened sequence or choice
 //     reaches, with {max occurs} at least 1, its {term} a local element
@@ -379,7 +377,7 @@
 //     the field "# What decodes" states for it, each element it holds written
 //     raw, as below, and, but for skip, assessed with the document, as
 //     Append's doc states.
-//   - An {open content} of such a complex type of element-only content, the one
+//   - An {open content} of such a complex type of element-only or mixed content, the one
 //     codegen's package doc "# Open content" reads, of either {mode} and any
 //     {process contents}, into the field "# What decodes" states for it, each
 //     element it holds written raw, as below, after every child element of the
@@ -457,55 +455,58 @@
 // with {abstract} true that a particle reaches is no exception.
 //
 // The document Append writes has no XML declaration, so it is XML 1.0 in UTF-8, and no white
-// space between tags. It binds the name of every element but one whose content it writes from
-// an AnyType, as below, by default declarations alone, never prefixing one, and writes an
-// attribute in the XSI namespace only where item 7 of Append's doc or the attribute-use bullet
-// above admits one: the document element carries xmlns="ns" for its non-absent namespace ns,
-// and nothing where it is absent, and every other element carries xmlns="ns", or xmlns="" for
-// an absent namespace, exactly where its namespace differs from its parent's. An xs:QName or
-// xs:NOTATION value, written in an attribute or as content of an element, is spelled Local
-// unprefixed where its namespace name is that element's namespace, the absent one included;
-// xml:Local for the XML namespace, which is never declared; and otherwise pN:Local, where pN
-// is the prefix an open start tag, that element's or an ancestor's, declares for its namespace
-// name, or else p1, p2 and so on, the first not in scope, declared as xmlns:pN="ns" on that
-// element's start tag ahead of the attribute or content that writes it. An attribute use's
-// attribute is written in the order of codegen's fields (codegen's package doc, "#
-// Attributes"), each value delimited by '"', and after them each attribute an {attribute
-// wildcard}'s field holds, in held order, nothing in the field's resolved, but for the ones
-// item 7 of Append's doc declines, each of both of absent namespace unprefixed, in the XML
-// namespace xml:Local, and otherwise pN:Local, pN chosen and declared as for an xs:QName
-// value, though its namespace be that element's own. An element whose content Append writes
-// from an AnyType, one a wildcard's or an {open content}'s field holds, of any {process
-// contents}, a child such an element holds at any depth, and an element of type xs:anyType
-// itself, the document element among them, is written raw, nothing in it resolved by Append,
-// but for the items items 6 and 7 of Append's doc refuse and decline in it, and what a strict
-// or lax match, a strict or lax {open content}'s child or an xs:anyType element holds assessed
-// with the document, as Append's doc states, under the bindings its AnyType's Namespaces
-// holds: the default namespace in scope there is exactly the Space of its "" entry, none where
-// it holds none, declared xmlns="S", or xmlns="" for none, where it differs from its parent's
-// as written; each prefixed entry is in scope bound to its Space, declared xmlns:p="S", in
-// Namespaces order, wherever p is not bound to S at its parent as written; and item 6 of
-// Append's doc refuses a Namespaces Decode never returns. Its name is spelled unprefixed where
-// its namespace is that default, xml:Local in the XML namespace, and otherwise p:Local under
-// the first prefix in Namespaces order bound to its namespace, or else the one an open start
-// tag binds to it, or else the first of p1, p2 and so on that neither an open start tag nor
-// its Namespaces binds, declared on its start tag after them. Then come its attributes in held
-// order, each of absent namespace unprefixed, in the XML namespace xml:Local, and otherwise
-// under a prefix chosen as its name's is, past its unprefixed arm; then its Text, then each of
-// its Children, written so, followed by its Tail. So Decode of the document holds, at each
-// such element, a Namespaces holding every prefixed entry of the one Append was given, bound
-// to the same Space, and its "" entry exactly, perhaps beside more prefixed ones. A nil
-// pointer field writes nothing, and so does a nil interface field where nil means absent
-// (codegen's package doc, "# Particles", "# Attributes"), a particle with {max occurs} above 1
-// writes one element per item of its slice, a flattened sequence or choice one per item of its
-// slice, in order, its branch's basic particle's, whatever the particle's occurrence, an
-// occurrence field writes each item it holds, in order, as its model group's particles in
-// order, an all group's, spliced or an occurrence field's item, written as its element
-// particles in order and then its wildcard particles in order, which keeps the attribution
-// codegen's package doc "# Particles" states for an all group's wildcard field, a choice's
-// branch writes its alternative's elements, the empty match, the nil interface of a present
-// element, writes no child element, and an element with no content is written as an
-// empty-element tag, <x/>. A string value, of xs:string or xs:anyURI primitive, is written as
+// space between tags but what a Text or a Tail holds. It binds the name of every element but
+// one whose content it writes from an AnyType, as below, by default declarations alone, never
+// prefixing one, and writes an attribute in the XSI namespace only where item 7 of Append's
+// doc or the attribute-use bullet above admits one: the document element carries xmlns="ns"
+// for its non-absent namespace ns, and nothing where it is absent, and every other element
+// carries xmlns="ns", or xmlns="" for an absent namespace, exactly where its namespace differs
+// from its parent's. An xs:QName or xs:NOTATION value, written in an attribute or as content
+// of an element, is spelled Local unprefixed where its namespace name is that element's
+// namespace, the absent one included; xml:Local for the XML namespace, which is never
+// declared; and otherwise pN:Local, where pN is the prefix an open start tag, that element's
+// or an ancestor's, declares for its namespace name, or else p1, p2 and so on, the first not
+// in scope, declared as xmlns:pN="ns" on that element's start tag ahead of the attribute or
+// content that writes it. An attribute use's attribute is written in the order of codegen's
+// fields (codegen's package doc, "# Attributes"), each value delimited by '"', and after them
+// each attribute an {attribute wildcard}'s field holds, in held order, nothing in the field's
+// resolved, but for the ones item 7 of Append's doc declines, each of both of absent namespace
+// unprefixed, in the XML namespace xml:Local, and otherwise pN:Local, pN chosen and declared
+// as for an xs:QName value, though its namespace be that element's own. An element whose
+// content Append writes from an AnyType, one a wildcard's or an {open content}'s field holds,
+// of any {process contents}, a child such an element holds at any depth, and an element of
+// type xs:anyType itself, the document element among them, is written raw, nothing in it
+// resolved by Append, but for the items items 6 and 7 of Append's doc refuse and decline in
+// it, and what a strict or lax match, a strict or lax {open content}'s child or an xs:anyType
+// element holds assessed with the document, as Append's doc states, under the bindings its
+// AnyType's Namespaces holds: the default namespace in scope there is exactly the Space of its
+// "" entry, none where it holds none, declared xmlns="S", or xmlns="" for none, where it
+// differs from its parent's as written; each prefixed entry is in scope bound to its Space,
+// declared xmlns:p="S", in Namespaces order, wherever p is not bound to S at its parent as
+// written; and item 6 of Append's doc refuses a Namespaces Decode never returns. Its name is
+// spelled unprefixed where its namespace is that default, xml:Local in the XML namespace, and
+// otherwise p:Local under the first prefix in Namespaces order bound to its namespace, or else
+// the one an open start tag binds to it, or else the first of p1, p2 and so on that neither an
+// open start tag nor its Namespaces binds, declared on its start tag after them. Then come its
+// attributes in held order, each of absent namespace unprefixed, in the XML namespace
+// xml:Local, and otherwise under a prefix chosen as its name's is, past its unprefixed arm;
+// then its Text, then each of its Children, written so, followed by its Tail. So Decode of the
+// document holds, at each such element, a Namespaces holding every prefixed entry of the one
+// Append was given, bound to the same Space, and its "" entry exactly, perhaps beside more
+// prefixed ones. A nil pointer field writes nothing, and so does a nil interface field where
+// nil means absent (codegen's package doc, "# Particles", "# Attributes"), a particle with
+// {max occurs} above 1 writes one element per item of its slice, a flattened sequence or
+// choice one per item of its slice, in order, its branch's basic particle's, whatever the
+// particle's occurrence, an occurrence field writes each item it holds, in order, as its model
+// group's particles in order, an all group's, spliced or an occurrence field's item, written
+// as its element particles in order and then its wildcard particles in order, which keeps the
+// attribution codegen's package doc "# Particles" states for an all group's wildcard field, a
+// choice's branch writes its alternative's elements, the empty match, the nil interface of a
+// present element, writes no child element, and an element with no content is written as an
+// empty-element tag, <x/>. Mixed content is written as its Text, after the attributes and
+// before the first child element, then each child element followed by the Tail of the
+// MixedChild or AnyChild holding it, each as given, never a {value constraint}'s {lexical
+// form} in its place. A string value, of xs:string or xs:anyURI primitive, is written as
 // itself, its canonical representation, since xs:string's canonical mapping is the identity
 // (Datatypes §E.4 f-stringCanmap) and so is xs:anyURI's lexical mapping, so that an xs:anyURI
 // value is neither normalized nor percent-escaped (§3.3.17.2), and item 6 of Append's doc

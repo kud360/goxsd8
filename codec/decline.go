@@ -195,7 +195,6 @@ const (
 	constructAbsentAffiliation
 	constructAbstractElement
 	constructAbstractType
-	constructMixed
 	constructVacuousParticle
 	constructReservedAttributeUse
 	constructInScopeAssertion
@@ -226,7 +225,6 @@ var constructNames = [...]string{
 	constructAbsentAffiliation:       "an element declaration with an ·absent· member of its {substitution group affiliations}",
 	constructAbstractElement:         "an element declaration with {abstract} true",
 	constructAbstractType:            "an element declaration whose {type definition} is a complex type with {abstract} true",
-	constructMixed:                   "a complex type with mixed content",
 	constructVacuousParticle:         "a particle with {max occurs} 0",
 	constructReservedAttributeUse:    "an attribute use whose declaration's {target namespace} is the XSI namespace, other than xsi:schemaLocation's and xsi:noNamespaceSchemaLocation's, or the one the prefix xmlns is bound to",
 	constructInScopeAssertion:        "a complex type with {assertions}, its own or inherited, one of whose {test}s names fn:in-scope-prefixes, fn:namespace-uri-for-prefix or fn:resolve-QName, or the namespace axis",
