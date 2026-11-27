@@ -44,10 +44,10 @@ type (
 
 // unscoped returns a copy of v, a value Decode returns or Append is given,
 // with the Namespaces of every struct of anyType's shape in it, at any depth,
-// set to nil, so that a row comparing it pins every other field. A
-// round-trip row compares both sides so, Append writing none of the bindings
-// Namespaces holds (GAP(codec): #4125); a Decode row compares Decode's answer
-// so where TestDecodeNamespaces pins the field instead.
+// set to nil, so that a row comparing it pins every other field. A Decode row
+// compares Decode's answer so where TestDecodeNamespaces pins the field
+// instead; a round-trip row compares both sides so, and their Namespaces by
+// keptBindings.
 func unscoped(v any) any {
 	if v == nil {
 		return nil
@@ -92,6 +92,80 @@ func unscope(v reflect.Value) {
 		// The rows' types reach anyType through no other kind: codegen emits
 		// no map, and no test type mirrors one.
 	}
+}
+
+// keptBindings reports whether back, the value Decode returns for the
+// document Append wrote for given, a value of back's type equal to it but for
+// Namespaces, holds, at every struct of anyType's shape given reaches as
+// unscope walks it, a Namespaces that keeps given's there, as the package
+// doc's "# What encodes" states a re-decode holds it (namespacesKept). A
+// shape the two values do not share answers false.
+func keptBindings(given, back reflect.Value) bool {
+	switch given.Kind() {
+	case reflect.Pointer, reflect.Interface:
+		if given.IsNil() || back.IsNil() {
+			return given.IsNil() == back.IsNil()
+		}
+		return keptBindings(given.Elem(), back.Elem())
+	case reflect.Struct:
+		held := fieldsNamed(given.Type(), contentFields...)
+		if held && !namespacesKept(given.Field(xNamespaces), back.Field(xNamespaces)) {
+			return false
+		}
+		for i := range given.NumField() {
+			if held && i == xNamespaces {
+				continue
+			}
+			if given.Type().Field(i).IsExported() && !keptBindings(given.Field(i), back.Field(i)) {
+				return false
+			}
+		}
+		return true
+	case reflect.Slice, reflect.Array:
+		if given.Len() != back.Len() {
+			return false
+		}
+		for i := range given.Len() {
+			if !keptBindings(given.Index(i), back.Index(i)) {
+				return false
+			}
+		}
+		return true
+	default:
+		return true
+	}
+}
+
+// namespacesKept reports whether back, a re-decode's Namespaces, keeps
+// given, the one Append was given: every entry of given is in back, and back
+// holds a "" entry only where given does.
+func namespacesKept(given, back reflect.Value) bool {
+	for i := range given.Len() {
+		if space, ok := heldBindingOf(back, given.Index(i).Field(0).String()); !ok || space != given.Index(i).Field(1).String() {
+			return false
+		}
+	}
+	_, def := heldBindingOf(given, "")
+	_, kept := heldBindingOf(back, "")
+	return def == kept
+}
+
+// heldBindingOf returns the Space of the entry of ns, a Namespaces slice,
+// whose Prefix is prefix, and true, or false where none is.
+func heldBindingOf(ns reflect.Value, prefix string) (string, bool) {
+	for i := range ns.Len() {
+		if ns.Index(i).Field(0).String() == prefix {
+			return ns.Index(i).Field(1).String(), true
+		}
+	}
+	return "", false
+}
+
+// sameHeld reports whether back, the value Decode returns for the document
+// Append wrote for given, is given: equal to it but for Namespaces
+// (unscoped), and keeping its Namespaces (keptBindings).
+func sameHeld(given, back any) bool {
+	return reflect.DeepEqual(unscoped(back), unscoped(given)) && keptBindings(reflect.ValueOf(given), reflect.ValueOf(back))
 }
 
 // The wildcard schemas, each declaring s:r. seqStrictSchema's wildcard is

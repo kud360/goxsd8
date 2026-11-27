@@ -318,7 +318,7 @@ func TestAppendOccurrence(t *testing.T) {
 		}},
 		{"a skip wildcard in a sequence occurring at least twice", func(t *testing.T) {
 			v := occWildMany{Sequence: []occWildManyItem{{A: "1", Any: []anyElement{{Space: "urn:o", Local: "w"}}}, {A: "2"}}}
-			roundTrip(t, schemaOf(t, occSkipSchema), rootName, v, r+`<a>1</a><w xmlns="urn:o"/><a>2</a></r>`, deepEqual[occWildMany])
+			roundTrip(t, schemaOf(t, occSkipSchema), rootName, v, r+`<a>1</a><p1:w xmlns="" xmlns:p1="urn:o"/><a>2</a></r>`, deepEqual[occWildMany])
 		}},
 		{"one item of a choice occurring 2 to 3 times, an element alternative emptiable", func(t *testing.T) {
 			roundTrip(t, schemaOf(t, occTwoThreeSchema), rootName, occChoice{Choice: []occChoiceItem{occChoiceB{B: "1"}}}, r+`<b>1</b></r>`, deepEqual[occChoice], occChoiceBranches)
@@ -331,7 +331,7 @@ func TestAppendOccurrence(t *testing.T) {
 		}},
 		{"one item of a choice occurring 2 to 3 times, an element alternative emptiable beside a wildcard", func(t *testing.T) {
 			v := occPick{Choice: []occPickItem{occPickAny{Any: anyElement{Space: "urn:o", Local: "w"}}}}
-			roundTrip(t, schemaOf(t, occWildAltSchema), rootName, v, r+`<w xmlns="urn:o"/></r>`, deepEqual[occPick], occPickBranches)
+			roundTrip(t, schemaOf(t, occWildAltSchema), rootName, v, r+`<p1:w xmlns="" xmlns:p1="urn:o"/></r>`, deepEqual[occPick], occPickBranches)
 		}},
 		{"one item of a choice occurring 2 to 3 times, its wildcard alternative emptiable", func(t *testing.T) {
 			roundTrip(t, schemaOf(t, occWildOptSchema), rootName, occPick{Choice: []occPickItem{occPickA{A: "1"}}}, r+`<a>1</a></r>`, deepEqual[occPick], occPickBranches)

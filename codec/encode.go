@@ -61,10 +61,10 @@ var ErrInvalidValue = errors.New("codec: Append: a value no valid document holds
 // clause 3, key-governing-type-elem clause 8, §3.4.7), each of which holds for
 // every value of T or for none, and runs no assessment otherwise: a caller
 // wanting a verdict on such a document assesses it through package validate,
-// as any document. The package
-// doc's "# What encodes" section states the slice Append encodes and the
-// document it writes. On error Append returns dst unextended, its bytes beyond
-// len(dst) possibly overwritten, and the first of these that applies:
+// as any document. The package doc's "# What encodes" section states the slice
+// Append encodes and the document it writes. On error Append returns dst
+// unextended, its bytes beyond len(dst) possibly overwritten, and the first of
+// these that applies:
 //
 //  1. A nil schema or a nil backend: a plain error.
 //  2. No top-level element declaration of schema has the expanded name name:
@@ -79,75 +79,78 @@ var ErrInvalidValue = errors.New("codec: Append: a value no valid document holds
 //     before its content: an error, which errors.Is reports as [ErrInvalidValue], naming the
 //     Go path of its field from T and, for a simple value, its simple type. It is the slice
 //     field of a particle with {max occurs} above 1 whose length lies outside its {min occurs}
-//     and {max occurs}, a choice's alternative's {min occurs} 0 read as 1 in its branch,
-//     though never a flattened sequence's or choice's slice field, which holds one item per
-//     child, not per occurrence, nor below its {min occurs} the occurrence field of a choice one
-//     occurrence of which is emptiable (codegen's package doc, "# Particles"; §3.9.4.3 cvc-accept
-//     3.1-3.3, §3.9.6.3 cos-group-emptiable clause 2 via §3.8.6.6 cos-choice-range); the nil sealed
-//     interface of a choice occurring once, the content choice or a nested one, none of whose alternatives
-//     is emptiable (Structures §3.8.4.3 cvc-model-group, §3.9.6.3 cos-group-emptiable), a choice of no
-//     {particles} among them; a nil item of an occurrence field's slice of a choice, the content
-//     {particle}'s or a nested one's, whatever its alternatives, which Decode never returns; a value of
-//     either interface whose dynamic type the [WithBranches] set in opts places at no alternative, a
-//     pointer to a branch among them, which Decode never returns; a nil item of a flattened sequence's or
-//     choice's slice, the content {particle}'s or a nested one's, which Decode never returns either, and
-//     an item of it whose dynamic type the [WithBranches] set in opts places at no alternative, a pointer
-//     to a branch among them; the nil sealed interface of an <element ref> particle's field over a
+//     and {max occurs}, a choice's alternative's {min occurs} 0 read as 1 in its branch, though never a
+//     flattened sequence's or choice's slice field, which holds one item per child, not per occurrence, nor
+//     below its {min occurs} the occurrence field of a choice one occurrence of which is emptiable (codegen's
+//     package doc, "# Particles"; §3.9.4.3 cvc-accept 3.1-3.3, §3.9.6.3 cos-group-emptiable clause 2 via
+//     §3.8.6.6 cos-choice-range); the nil sealed interface of a choice occurring once, the content choice or
+//     a nested one, none of whose alternatives is emptiable (Structures §3.8.4.3 cvc-model-group, §3.9.6.3
+//     cos-group-emptiable), a choice of no {particles} among them; a nil item of an occurrence field's slice
+//     of a choice, the content {particle}'s or a nested one's, whatever its alternatives, which Decode never
+//     returns; a value of either interface whose dynamic type the [WithBranches] set in opts places at no
+//     alternative, a pointer to a branch among them, which Decode never returns; a nil item of a flattened
+//     sequence's or choice's slice, the content {particle}'s or a nested one's, which Decode never returns
+//     either, and an item of it whose dynamic type the [WithBranches] set in opts places at no alternative, a
+//     pointer to a branch among them; the nil sealed interface of an <element ref> particle's field over a
 //     substitution group (codegen's package doc, "# Substitution groups"), or of an item of its slice,
-//     wherever nil does not mean absent, that of a head with {abstract} true and no branch among them, and
-//     a value of that interface whose dynamic type the [WithBranches] set in opts places at no branch, a
-//     pointer to a branch among them, which Decode never returns; the nil sealed interface of a union
-//     simple type wherever nil does not mean absent, that is, every field but an element particle's of
-//     {min occurs} 0 and {max occurs} 1 and an optional attribute use's to which no value constraint
-//     supplies a value (codegen's package doc, "# Particles", "# Attributes"), which Decode never returns;
-//     a value of that interface whose dynamic type the [WithBranches] set in opts places at no basic
-//     member, a pointer to a variant among them, which Decode never returns; a value that holds itself, a
-//     struct or sealed interface value its own write reaches again through a *S, []S or []I field, which
-//     no finite document holds, the error naming the Go path where the value is reached again and nothing
-//     written beneath it; a string holding bytes that are not UTF-8 or a character the XML 1.0 Char
-//     production does not match, U+0000 among them (Datatypes §3.3.1.1, §3.3.17.1, §3.2.1.2, §3.2.2.2), a
-//     held element's Space, an attribute's Space or Value, a Text and a Tail among them; a string that
-//     differs from its own whiteSpace-normalized form under its simple type, such as an xs:token holding "
-//     a b"; a list item, a string, that is empty or holds TAB, LF, CR or a space, which no list item's
-//     lexical representation does (Datatypes §2.4.1.2); a big.Rat outside the decimal value space, whose
-//     denominator in lowest terms is no 2^m·5^n (§3.3.3.1), such as 1/3; an element a wildcard particle's
-//     field holds, of {process contents} skip or lax, that its content model admits at no particle where
-//     it is written, a name outside the wildcard's {namespace constraint} or in its {disallowed names}
-//     among them, or attributes to a particle other than that wildcard, an element particle taking its
-//     name first among them, or after whose content's last child the content model is not accepting, as
-//     xsd.Schema.ContentMatcher's Matcher decides (§3.9.4.3 cvc-accept, §3.10.4.1 cvc-wildcard, §3.8.4.3
-//     cvc-model-group); an attribute an {attribute wildcard}'s field holds whose expanded name an
-//     attribute use of the type names, the use's field nil or set, which Decode never returns (§3.4.4.2
+//     wherever nil does not mean absent, that of a head with {abstract} true and no branch among them, and a
+//     value of that interface whose dynamic type the [WithBranches] set in opts places at no branch, a
+//     pointer to a branch among them, which Decode never returns; the nil sealed interface of a union simple
+//     type wherever nil does not mean absent, that is, every field but an element particle's of {min occurs}
+//     0 and {max occurs} 1 and an optional attribute use's to which no value constraint supplies a value
+//     (codegen's package doc, "# Particles", "# Attributes"), which Decode never returns; a value of that
+//     interface whose dynamic type the [WithBranches] set in opts places at no basic member, a pointer to a
+//     variant among them, which Decode never returns; a value that holds itself, a struct or sealed interface
+//     value its own write reaches again through a *S, []S or []I field, which no finite document holds, the
+//     error naming the Go path where the value is reached again and nothing written beneath it; a string
+//     holding bytes that are not UTF-8 or a character the XML 1.0 Char production does not match, U+0000
+//     among them (Datatypes §3.3.1.1, §3.3.17.1, §3.2.1.2, §3.2.2.2), a held element's Space, an attribute's
+//     Space or Value, a Text and a Tail among them; a string that differs from its own whiteSpace-normalized
+//     form under its simple type, such as an xs:token holding " a b"; a list item, a string, that is empty or
+//     holds TAB, LF, CR or a space, which no list item's lexical representation does (Datatypes §2.4.1.2); a
+//     big.Rat outside the decimal value space, whose denominator in lowest terms is no 2^m·5^n (§3.3.3.1),
+//     such as 1/3; an element a wildcard particle's field holds, of {process contents} skip or lax, that its
+//     content model admits at no particle where it is written, a name outside the wildcard's {namespace
+//     constraint} or in its {disallowed names} among them, or attributes to a particle other than that
+//     wildcard, an element particle taking its name first among them, or after whose content's last child the
+//     content model is not accepting, as xsd.Schema.ContentMatcher's Matcher decides (§3.9.4.3 cvc-accept,
+//     §3.10.4.1 cvc-wildcard, §3.8.4.3 cvc-model-group); the Namespaces of an AnyType Append writes an
+//     element's content from, at any depth, whatever holds it, that Decode never returns: an entry whose
+//     Prefix is not after the one before it, a Prefix xml or xmlns, a Prefix other than "" that is no NCName,
+//     a Space "", one holding a byte that starts no XML 1.0 Char, and one that is the XML namespace or the
+//     one the prefix xmlns is bound to (Namespaces in XML §3, §5 nsc-NoPrefixUndecl), the first such entry,
+//     then a "" entry where the element's namespace is absent, which no prefix spells (codegen's package doc,
+//     "# xs:anyType"); an attribute an {attribute wildcard}'s field holds whose expanded name an attribute
+//     use of the type names, the use's field nil or set, which Decode never returns (§3.4.4.2
 //     cvc-complex-type clause 2.1), or, but for xsi:type, xsi:nil, xsi:schemaLocation and
-//     xsi:noNamespaceSchemaLocation, which clause 2 excepts by name, that the wildcard does not admit, a
-//     name outside its {namespace constraint} or in its {disallowed names} among them (clause 2.2.2,
-//     §3.10.4.1 cvc-wildcard); in such an element, in the content of an element of type xs:anyType itself,
-//     its own attributes among it, at any depth, and in an {attribute wildcard}'s field, a Local that is
-//     no NCName or a Space that is the namespace name the prefix xmlns is bound to, of the element or of
-//     an attribute, an attribute of absent Space named xmlns (Namespaces in XML §3), and an attribute of
-//     the expanded name of one before it (§6.3 nsc-AttrsUnique); an element an item of a flattened
-//     sequence's or choice's slice holds that its content model admits at no particle where it is written,
-//     or attributes to a basic particle other than the one whose branch the item is, or a slice after
-//     whose last item the content model is not accepting, as that Matcher decides (§3.9.4.3 cvc-accept,
-//     §3.10.4.1 cvc-wildcard, §3.8.4.3 cvc-model-group); a date, time or duration datatype struct value no
-//     value of its datatype maps to, as codegen's package doc "# Simple types" states such values exist,
-//     the error naming the first property found outside it, its fields read in order, or, ahead of its
-//     Seconds, a duration's Months and Seconds of opposite signs; a PrecisionDecimal datatype struct value
-//     no value maps to, as codegen's "# Simple types" states such values exist, a nil Value or the
-//     numerical arm with a negative Coefficient, or a Value whose dynamic type the
-//     [WithPrecisionDecimalArms] set in opts supplies in no role, a pointer to an arm among them, which
-//     Decode never returns; an xs:QName or xs:NOTATION value whose namespace name holds a byte that starts
-//     no XML 1.0 Char or is the one the prefix xmlns is bound to (Namespaces in XML §3), or whose Local
-//     the Parse of its primitive's mapping rejects in Append's spelling, that Parse's verdict wrapped, or
-//     makes a spelling that resolves back to another expanded name; a value written as an element's
-//     character content, or as an attribute, whose value value.ConstraintMatches finds neither equal nor
-//     identical to the {value} of a fixed {value constraint} there (Datatypes §2.2.1, §2.2.2): an
+//     xsi:noNamespaceSchemaLocation, which clause 2 excepts by name, that the wildcard does not admit, a name
+//     outside its {namespace constraint} or in its {disallowed names} among them (clause 2.2.2, §3.10.4.1
+//     cvc-wildcard); in such an element, in the content of an element of type xs:anyType itself, its own
+//     attributes among it, at any depth, and in an {attribute wildcard}'s field, a Local that is no NCName or
+//     a Space that is the namespace name the prefix xmlns is bound to, of the element or of an attribute, an
+//     attribute of absent Space named xmlns (Namespaces in XML §3), and an attribute of the expanded name of
+//     one before it (§6.3 nsc-AttrsUnique); an element an item of a flattened sequence's or choice's slice
+//     holds that its content model admits at no particle where it is written, or attributes to a basic
+//     particle other than the one whose branch the item is, or a slice after whose last item the content
+//     model is not accepting, as that Matcher decides (§3.9.4.3 cvc-accept, §3.10.4.1 cvc-wildcard, §3.8.4.3
+//     cvc-model-group); a date, time or duration datatype struct value no value of its datatype maps to, as
+//     codegen's package doc "# Simple types" states such values exist, the error naming the first property
+//     found outside it, its fields read in order, or, ahead of its Seconds, a duration's Months and Seconds
+//     of opposite signs; a PrecisionDecimal datatype struct value no value maps to, as codegen's "# Simple
+//     types" states such values exist, a nil Value or the numerical arm with a negative Coefficient, or a
+//     Value whose dynamic type the [WithPrecisionDecimalArms] set in opts supplies in no role, a pointer to
+//     an arm among them, which Decode never returns; an xs:QName or xs:NOTATION value whose namespace name
+//     holds a byte that starts no XML 1.0 Char or is the one the prefix xmlns is bound to (Namespaces in XML
+//     §3), or whose Local the Parse of its primitive's mapping rejects in Append's spelling, that Parse's
+//     verdict wrapped, or makes a spelling that resolves back to another expanded name; a value written as an
+//     element's character content, or as an attribute, whose value value.ConstraintMatches finds neither
+//     equal nor identical to the {value} of a fixed {value constraint} there (Datatypes §2.2.1, §2.2.2): an
 //     element's own (Structures §3.3.4.3 cvc-elt clause 5.2.2.2.2), the empty text included, which Append
 //     writes as an empty element that takes on the constraint's {lexical form} (clause 5.1, §3.3.5.4
-//     sic-eltType), and an attribute use's and its declaration's, each (§3.5.4 cvc-au, §3.2.4.1
-//     cvc-attribute clause 4); the content of an element of type xs:anyType itself whose declaration has a
-//     fixed {value constraint}, where it holds Children (cvc-elt clause 5.2.2.1) or a Text other than ""
-//     and the constraint's {lexical form} (clause 5.2.2.2.1); or a value whose simple type rejects it, a
+//     sic-eltType), and an attribute use's and its declaration's, each (§3.5.4 cvc-au, §3.2.4.1 cvc-attribute
+//     clause 4); the content of an element of type xs:anyType itself whose declaration has a fixed {value
+//     constraint}, where it holds Children (cvc-elt clause 5.2.2.1) or a Text other than "" and the
+//     constraint's {lexical form} (clause 5.2.2.2.1); or a value whose simple type rejects it, a
 //     value.ValidateLexical error value.IsDatatypeVerdict reports as a verdict, a facet's rejection or a
 //     backend Parse's among them, that error wrapped, but for item 7's pattern and union-variant cases, a
 //     list's own facets read once every item has passed its own checks.
@@ -510,7 +513,7 @@ func (b *boundBinding) write(e *encoder, v reflect.Value, at writeAt) error {
 			return err
 		}
 		e.attributeFixed(a, w, fpath)
-		e.writeRawAttribute(a.decl.Name(), w.text)
+		e.writeRawAttribute(a.decl.Name(), w.text, nil)
 	}
 	if bd.anyAttribute != nil {
 		i := first + len(bd.attrs)
@@ -1188,13 +1191,14 @@ func elementEncodes(schema *xsd.Schema, decl xsd.ElementDeclaration) (bool, erro
 // definition} that is xs:anyType itself (encodeWalk.element), where a simple
 // type it examined is derived from xs:ID or xs:IDREF (encodeWalk.atomicEncodes),
 // and where a wildcard particle it examined has {process contents} strict or
-// lax (encodeWalk.particleEncodes), and never cleared, so that a type walked answers for its second reach too. An
-// entry is stored before its type's content is examined, so that a later reach of
-// the key, a recursive one included, examines nothing again: the first reach
-// answers for the type, and every other component it reaches carries no key of its
-// own only where it lies inside that type (bindRun). walked lives for one pass only
-// and is a lookup index never iterated (STYLE D2); an entry left by a pass that
-// declines is never read, since the decline ends the pass.
+// lax (encodeWalk.particleEncodes), and never cleared, so that a type walked
+// answers for its second reach too. An entry is stored before its type's content is
+// examined, so that a later reach of the key, a recursive one included, examines
+// nothing again: the first reach answers for the type, and every other component it
+// reaches carries no key of its own only where it lies inside that type (bindRun).
+// walked lives for one pass only and is a lookup index never iterated (STYLE D2);
+// an entry left by a pass that declines is never read, since the decline ends the
+// pass.
 type encodeWalk struct {
 	schema *xsd.Schema
 	walked map[unitKey]bool
@@ -1205,11 +1209,11 @@ type encodeWalk struct {
 // declaration or a particle's element declaration, examined at every reach:
 // decl's own properties (encodeWalk.declEncodes), then its {type definition},
 // which encodes as xs:anyType itself, its content written raw (rawContent's write),
-// setting w.assess, is examined as a simple type (encodeWalk.simpleEncodes) or, for a complex type,
-// declines by its {abstract} true, and else is examined by complexEncodes,
-// unless walked already holds its key. complexEncodes and the functions under
-// it read decl only to name a decline's subject, so that a type reached again
-// through another declaration answers as it did.
+// setting w.assess, is examined as a simple type (encodeWalk.simpleEncodes) or, for
+// a complex type, declines by its {abstract} true, and else is examined by
+// complexEncodes, unless walked already holds its key. complexEncodes and the
+// functions under it read decl only to name a decline's subject, so that a type
+// reached again through another declaration answers as it did.
 func (w *encodeWalk) element(decl xsd.ElementDeclaration) error {
 	if err := w.declEncodes(decl); err != nil {
 		return err
@@ -1551,20 +1555,21 @@ func (w *encodeWalk) reachEach(group xsd.ModelGroup, flattened, subject string) 
 // examines it at the occurrence site reads it at (particleSite.occurs), a
 // <group ref> naming none a plain error, prefixed by subject; a wildcard term,
 // which sets site's matcher, declines with {process contents} strict, sets
-// w.assess with lax, and is examined no further; and otherwise the element declaration, examined as the
-// document element's is (encodeWalk.element). The declaration of an <element
-// ref> is the top-level one its name resolves to through [xsd.Schema.Element]
-// (§3.3.2.4 ref.elt.global), as Decode's particleTerm follows it, a name
-// resolving to none a plain error. Where codegen gives its field a sealed
-// interface (goshape.SubstitutionSum), an abstract declaration's always, the
-// declarations examined are the members that interface has a branch for, in
-// group order, the first decline winning, since Append writes each under its
-// own expanded name (§3.9.4.3 cvc-accept clause 2.3.2), and the declaration
-// itself only as one of them, so that with none nothing is examined. Otherwise
-// the declaration alone is examined, as a local one is, an element of its own
-// expanded name matching the particle (clause 2.3.1). A member whose type
-// reaches the declaration again answers through encodeWalk.walked. {term} is a
-// closed sum, so the switches are STYLE T2's sealed-sum exception.
+// w.assess with lax, and is examined no further; and otherwise the element
+// declaration, examined as the document element's is (encodeWalk.element). The
+// declaration of an <element ref> is the top-level one its name resolves to
+// through [xsd.Schema.Element] (§3.3.2.4 ref.elt.global), as Decode's
+// particleTerm follows it, a name resolving to none a plain error. Where
+// codegen gives its field a sealed interface (goshape.SubstitutionSum), an
+// abstract declaration's always, the declarations examined are the members
+// that interface has a branch for, in group order, the first decline winning,
+// since Append writes each under its own expanded name (§3.9.4.3 cvc-accept
+// clause 2.3.2), and the declaration itself only as one of them, so that with
+// none nothing is examined. Otherwise the declaration alone is examined, as a
+// local one is, an element of its own expanded name matching the particle
+// (clause 2.3.1). A member whose type reaches the declaration again answers
+// through encodeWalk.walked. {term} is a closed sum, so the switches are STYLE
+// T2's sealed-sum exception.
 func (w *encodeWalk) particleEncodes(p xsd.Particle, subject string, site particleSite) error {
 	if upper, bounded := p.Occurs().Max(); bounded && upper == 0 {
 		return encodeDecline(constructVacuousParticle, subject)
@@ -1844,13 +1849,12 @@ func simpleSubject(st *xsd.SimpleType, owner string) string {
 // placed at its basic member (encoder.union); out, the document so far; ns,
 // the in-scope default namespace, that of the element whose start tag is open
 // or whose content is being written, "" outside the document element; bound,
-// the namespace names qname has declared a prefix for on the open elements,
-// outermost first, bound[i] under boundPrefix(i), which no field stores
-// (writtenBindings); open, the values whose element's write is open,
-// outermost first (enter); and the first item 6 and item 7 errors of
-// [Append]'s doc it has found, in document order. Every value is written
-// whatever was found before it, so that the walk finds an item 6 error after
-// an item 7 one.
+// the prefixed bindings the open start tags declare, outermost first, an inner
+// one of a prefix shadowing an outer one (writtenBindings); open, the values
+// whose element's write is open, outermost first (enter); and the first item 6
+// and item 7 errors of [Append]'s doc it has found, in document order. Every
+// value is written whatever was found before it, so that the walk finds an
+// item 6 error after an item 7 one.
 type encoder struct {
 	schema   *xsd.Schema
 	backend  value.Backend
@@ -1858,7 +1862,7 @@ type encoder struct {
 	branches branchSets
 	out      []byte
 	ns       string
-	bound    []string
+	bound    []nsBinding
 	open     []openValue
 	invalid  *invalidValueError
 	declined error
@@ -2684,13 +2688,11 @@ func (e *encoder) qname(st *xsd.SimpleType, v reflect.Value, path, subject strin
 // spellQName returns the spelling the package doc's "# What encodes" states
 // for the expanded name {space, local}, the value shown at path of the simple
 // type subject names, on the element whose start tag is open: for a space
-// other than the XML namespace and e.ns that e.bound does not hold, it appends
-// the declaration of boundPrefix(len(e.bound)) to that start tag and pushes
-// space onto e.bound, so that e.bound holds only namespace names a declaration
-// binds. Where none spells it — a space "" under a non-absent e.ns, then a
-// space holding a byte that starts no XML 1.0 Char, then xmlnsNamespace — it
-// records that value's item 7 or item 6 error of [Append]'s doc, in that
-// order, and ok is false.
+// other than the XML namespace and e.ns that no open start tag declares a
+// prefix for, it declares one on that start tag (declaredPrefix). Where none
+// spells it — a space "" under a non-absent e.ns, then a space holding a byte
+// that starts no XML 1.0 Char, then xmlnsNamespace — it records that value's
+// item 7 or item 6 error of [Append]'s doc, in that order, and ok is false.
 func (e *encoder) spellQName(space, local, path, shown, subject string) (text string, ok bool) {
 	if space == "" && e.ns != "" {
 		e.declineValue(constructQNameSpelling, subject, path, shown, fmt.Sprintf("its namespace name is absent where the default namespace in scope, its element's own, is %s, so that no unprefixed spelling resolves to it, and no prefix can be bound to no namespace (Namespaces in XML §5 nsc-NoPrefixUndecl)", e.ns))
@@ -2715,20 +2717,67 @@ func (e *encoder) spellQName(space, local, path, shown, subject string) (text st
 
 // declaredPrefix returns the prefix of space, a namespace name other than
 // the XML namespace, xmlnsNamespace and "": the one an open start tag
-// declares for it, boundPrefix(i) where e.bound[i] is space, or else, where
-// e.bound does not hold it, boundPrefix(len(e.bound)), whose declaration it
-// appends to the start tag that is open and pushes space onto e.bound, so
-// that e.bound holds only namespace names a declaration binds.
+// declares for it (inScopePrefix), or else the first of p1, p2 and so on that
+// no open start tag binds (freshPrefix), whose declaration it appends to the
+// start tag that is open and pushes onto e.bound, so that e.bound holds only
+// bindings a declaration makes.
 func (e *encoder) declaredPrefix(space string) string {
-	i := slices.Index(e.bound, space)
-	if i < 0 {
-		i = len(e.bound)
-		e.bound = append(e.bound, space)
-		e.out = append(e.out, " xmlns:"+boundPrefix(i)+`="`...)
-		e.out = appendEscaped(e.out, space, true)
-		e.out = append(e.out, '"')
+	if prefix, ok := e.inScopePrefix(space); ok {
+		return prefix
 	}
-	return boundPrefix(i)
+	b := nsBinding{prefix: e.freshPrefix(), space: space}
+	e.bound = append(e.bound, b)
+	e.out = b.declare(e.out)
+	return b.prefix
+}
+
+// inScopePrefix returns the prefix of the first binding of e.bound,
+// outermost first, to space that no binding after it of the same prefix
+// shadows, and true, or false where none is.
+func (e *encoder) inScopePrefix(space string) (string, bool) {
+	for _, b := range e.bound {
+		if b.space != space {
+			continue
+		}
+		if bound, _ := e.boundSpace(b.prefix); bound == space {
+			return b.prefix, true
+		}
+	}
+	return "", false
+}
+
+// freshPrefix returns the first of p1, p2 and so on that no binding of
+// e.bound declares.
+func (e *encoder) freshPrefix() string {
+	for i := 1; ; i++ {
+		if prefix := "p" + strconv.Itoa(i); !slices.ContainsFunc(e.bound, func(b nsBinding) bool { return b.prefix == prefix }) {
+			return prefix
+		}
+	}
+}
+
+// boundSpace returns the namespace name the innermost binding of e.bound of
+// prefix binds it to, and true, or false where none binds it.
+func (e *encoder) boundSpace(prefix string) (string, bool) {
+	for i := len(e.bound) - 1; i >= 0; i-- {
+		if e.bound[i].prefix == prefix {
+			return e.bound[i].space, true
+		}
+	}
+	return "", false
+}
+
+// nsBinding is a prefixed namespace binding a start tag Append writes
+// declares, or one a held AnyType's Namespaces holds (heldNamespaces): prefix
+// bound to space.
+type nsBinding struct{ prefix, space string }
+
+// declare appends to dst the declaration of b, xmlns:prefix="space", led by a
+// space.
+func (b nsBinding) declare(dst []byte) []byte {
+	dst = append(dst, " xmlns:"+b.prefix+`="`...)
+	dst = appendEscaped(dst, b.space, true)
+	return append(dst, '"')
 }
 
 // attributionCheck is how Append holds the children it writes into one
@@ -2995,25 +3044,24 @@ func (c rawContent) write(e *encoder, v reflect.Value, at writeAt) error {
 
 // writeElement writes the element of decl, of type xs:anyType itself, whose
 // content is v, a struct of AnyType's shape or a named type over one, at
-// path: its start tag, then v as rawContent writes it under anyTypeContent,
-// as the package doc's "# What encodes" states, its content held to decl's
-// fixed {value constraint} after its Text (anyTypeFixed); or nothing,
-// where v holds itself (encoder.enter), taken by slot first either way. It
-// reads no simple value, so it returns no backend fault.
+// path: its start tag (rawStartTag), then v as rawContent writes it under
+// anyTypeContent, as the package doc's "# What encodes" states, its content
+// held to decl's fixed {value constraint} after its Text (anyTypeFixed); or
+// nothing, where v holds itself (encoder.enter), taken by slot first either
+// way. It reads no simple value, so it returns no backend fault.
 func (rawContent) writeElement(e *encoder, decl xsd.ElementDeclaration, v reflect.Value, path string, slot attributionSlot) error {
 	slot.take(e, decl, path)
 	if !e.enter(v, path) {
 		return nil
 	}
 	defer e.leave()
-	name := decl.Name()
-	outer, mark := e.startTag(name)
+	tag, held, outer, mark := e.rawStartTag(decl.Name(), v, path)
 	hold := anyTypeContent{decl: decl}
-	start := e.rawAttributes(v, path, hold)
+	start := e.rawAttributes(v, held, path, hold)
 	e.rawText(v.Field(xText).String(), path+".Text")
 	e.anyTypeFixed(decl, v, path)
 	e.rawChildren(v, path, hold)
-	e.endTag(name.Local, start, outer, mark)
+	e.endTag(tag, start, outer, mark)
 	return nil
 }
 
@@ -3052,25 +3100,133 @@ func (e *encoder) rawElement(name xsd.QName, x reflect.Value, path string, hold 
 		return
 	}
 	defer e.leave()
-	tag, outer, mark := e.rawStartTag(name)
-	start := e.rawContent(x, path+".Content", hold)
+	tag, held, outer, mark := e.rawStartTag(name, x, path+".Content")
+	start := e.rawContent(x, held, path+".Content", hold)
 	e.endTag(tag, start, outer, mark)
 }
 
-// rawStartTag appends the start tag of the element name, but for its '>', and
-// returns the tag's name and startTag's answers: startTag's, but for a name in
-// the XML namespace, written as the package doc's "# What encodes" states,
-// which moves no default namespace, since that namespace may not be the
-// default one (Namespaces in XML §3).
-func (e *encoder) rawStartTag(name xsd.QName) (tag, outer string, mark int) {
-	if name.Space != xmltree.XMLNamespaceURI {
-		outer, mark = e.startTag(name)
-		return name.Local, outer, mark
+// rawStartTag appends the start tag of the element name, whose content is x,
+// a struct of AnyType's shape at path, but for its attributes and its '>', as
+// the package doc's "# What encodes" states: its name, unprefixed where its
+// namespace is the default x's Namespaces gives it, xml:Local in the XML
+// namespace, and otherwise under the first prefix in Namespaces order bound to
+// its namespace, or else under the one an open start tag binds to it
+// (inScopePrefix), or else under the first of p1, p2 and so on that neither an
+// open start tag nor Namespaces binds (freshPrefix); then xmlns="S", or
+// xmlns="" for none, where that default, the Space of Namespaces' "" entry
+// and none where it holds none, differs from e.ns; then, in Namespaces order,
+// the declaration of each prefixed entry e does not already bind so, then the
+// fresh prefix's. It makes that default e.ns and pushes those bindings onto
+// e.bound, for its attributes and content, and returns the tag's name,
+// Namespaces' prefixed entries (heldNamespaces), and the e.ns and length of
+// e.bound it replaced, which endTag restores.
+func (e *encoder) rawStartTag(name xsd.QName, x reflect.Value, path string) (tag string, held []nsBinding, outer string, mark int) {
+	def, held := e.heldNamespaces(name, x.Field(xNamespaces), path)
+	outer, mark = e.ns, len(e.bound)
+	for _, b := range held {
+		if space, ok := e.boundSpace(b.prefix); !ok || space != b.space {
+			e.bound = append(e.bound, b)
+		}
 	}
-	tag = "xml:" + name.Local
+	tag = name.Local
+	if prefix := e.namePrefix(name.Space, def, held); prefix != "" {
+		tag = prefix + ":" + name.Local
+	}
 	e.out = append(e.out, '<')
 	e.out = append(e.out, tag...)
-	return tag, e.ns, len(e.bound)
+	if def != outer {
+		e.out = append(e.out, ` xmlns="`...)
+		e.out = appendEscaped(e.out, def, true)
+		e.out = append(e.out, '"')
+	}
+	for _, b := range e.bound[mark:] {
+		e.out = b.declare(e.out)
+	}
+	e.ns = def
+	return tag, held, outer, mark
+}
+
+// namePrefix returns the prefix rawStartTag spells an element of namespace
+// space with, "" for none, where def is the default namespace and held the
+// prefixed bindings its Namespaces gives it, pushing a fresh one onto e.bound,
+// undeclared yet, where it needs one.
+func (e *encoder) namePrefix(space, def string, held []nsBinding) string {
+	switch space {
+	case xmltree.XMLNamespaceURI:
+		return "xml"
+	case def:
+		return ""
+	}
+	if i := slices.IndexFunc(held, func(b nsBinding) bool { return b.space == space }); i >= 0 {
+		return held[i].prefix
+	}
+	if prefix, ok := e.inScopePrefix(space); ok {
+		return prefix
+	}
+	b := nsBinding{prefix: e.freshPrefix(), space: space}
+	e.bound = append(e.bound, b)
+	return b.prefix
+}
+
+// heldNamespaces returns the default namespace, "" for none, and the prefixed
+// bindings, in order, that ns, the Namespaces of the AnyType at path holding
+// the content of the element name, gives that element, or records item 6 of
+// [Append]'s doc for the first entry of ns no Decode returns, and then for
+// name, and returns none: an entry whose Prefix is not after the one before it,
+// so that ns is not sorted by Prefix with one entry per prefix; a Prefix xml
+// or xmlns, which Namespaces never holds; a Prefix other than "" holding a
+// byte that starts no XML 1.0 Char or that is no NCName; a Space "", which no
+// prefix is bound to (Namespaces in XML §5 nsc-NoPrefixUndecl) and which no
+// "" entry holds, an absent default being no entry; a Space holding a byte
+// that starts no XML 1.0 Char; and a Space that is the XML namespace or
+// xmlnsNamespace, which no other prefix is bound to and no default is
+// (Namespaces in XML §3); then an element of absent namespace under a ""
+// entry, which no prefix spells (nsc-NoPrefixUndecl) (codegen's package doc,
+// "# xs:anyType").
+func (e *encoder) heldNamespaces(name xsd.QName, ns reflect.Value, path string) (string, []nsBinding) {
+	def := ""
+	var held []nsBinding
+	for i := range ns.Len() {
+		prefix, space := ns.Index(i).Field(0).String(), ns.Index(i).Field(1).String()
+		at := path + ".Namespaces[" + strconv.Itoa(i) + "]"
+		if err := heldBinding(prefix, space, ns, i); err != nil {
+			e.invalidate(fmt.Errorf("codec: Append: %s holds the binding of %s to %s, %w", at, strconv.Quote(prefix), strconv.Quote(space), err))
+			return "", nil
+		}
+		if prefix == "" {
+			def = space
+			continue
+		}
+		held = append(held, nsBinding{prefix: prefix, space: space})
+	}
+	if name.Space == "" && def != "" {
+		e.invalidate(fmt.Errorf("codec: Append: %s.Namespaces makes %s the default namespace of %s, an element of no namespace, which no prefix can be bound to, so that no spelling names it (Namespaces in XML §5 nsc-NoPrefixUndecl)", path, strconv.Quote(def), name.Display()))
+		return "", nil
+	}
+	return def, held
+}
+
+// heldBinding returns why the binding of prefix to space, item i of ns, a
+// held AnyType's Namespaces, is one no Decode returns, heldNamespaces states
+// which, or nil.
+func heldBinding(prefix, space string, ns reflect.Value, i int) error {
+	switch {
+	case i > 0 && prefix <= ns.Index(i-1).Field(0).String():
+		return fmt.Errorf("whose Prefix is not after %s, the one of the item before it, so that Namespaces is not sorted by Prefix with one entry per prefix (codegen's package doc, \"# xs:anyType\")", strconv.Quote(ns.Index(i-1).Field(0).String()))
+	case prefix == "xml" || prefix == "xmlns":
+		return errors.New("which Namespaces never holds, xml being bound everywhere and xmlns never declared (Namespaces in XML §3)")
+	case prefix != "" && (xmlchar.IndexNonChar(prefix) >= 0 || !xmlname.IsNCName(prefix)):
+		return errors.New("whose Prefix is no NCName, so that no declaration binds it (Namespaces in XML [4] NCName)")
+	case space == "" && prefix != "":
+		return errors.New("which undeclares the prefix, which no namespace declaration of XML 1.0 may do (Namespaces in XML §5 nsc-NoPrefixUndecl)")
+	case space == "":
+		return errors.New(`whose Space "" is no default namespace, an absent one being no entry (codegen's package doc, "# xs:anyType")`)
+	case xmlchar.IndexNonChar(space) >= 0:
+		return fmt.Errorf("whose Space's byte offset %d starts no XML 1.0 Char", xmlchar.IndexNonChar(space))
+	case space == xmltree.XMLNamespaceURI || space == xmlnsNamespace:
+		return errors.New("a namespace name no other prefix may be bound to and no default namespace may be (Namespaces in XML §3)")
+	}
+	return nil
 }
 
 // rawContent appends to the start tag that is open the attributes of x, a
@@ -3083,9 +3239,10 @@ func (e *encoder) rawStartTag(name xsd.QName) (tag, outer string, mark int) {
 // each such attribute or text, and each element rawName refuses, out of what
 // it writes; an element governed declines is written, so that its content
 // is examined for item 6 too, though Append returns no byte of it. It is
-// rawAttributes, then x's Text (rawText), then rawChildren.
-func (e *encoder) rawContent(x reflect.Value, path string, hold rawHold) int {
-	start := e.rawAttributes(x, path, hold)
+// rawAttributes, an attribute's prefix read from held, the prefixed bindings
+// of x's Namespaces, then x's Text (rawText), then rawChildren.
+func (e *encoder) rawContent(x reflect.Value, held []nsBinding, path string, hold rawHold) int {
+	start := e.rawAttributes(x, held, path, hold)
 	e.rawText(x.Field(xText).String(), path+".Text")
 	e.rawChildren(x, path, hold)
 	return start
@@ -3096,8 +3253,8 @@ func (e *encoder) rawContent(x reflect.Value, path string, hold rawHold) int {
 // for one encoder.governed declines; it does not ask governed of a hint
 // (locationHint), which its built-in declaration governs (§3.2.4.2
 // key-governing-ad clause 3) and which admits every value rawAttribute writes,
-// so that writing it declines nothing.
-func (e *encoder) rawAttributes(x reflect.Value, path string, hold rawHold) int {
+// so that writing it declines nothing. held is rawContent's.
+func (e *encoder) rawAttributes(x reflect.Value, held []nsBinding, path string, hold rawHold) int {
 	attrs := x.Field(xAttributes)
 	for i := range attrs.Len() {
 		a := attrs.Index(i)
@@ -3107,7 +3264,7 @@ func (e *encoder) rawAttributes(x reflect.Value, path string, hold rawHold) int 
 		if !e.rawAttribute(name, value, attrs, i, apath, hold) || !locationHint(name) && e.governed(name, apath, hold, true) {
 			continue
 		}
-		e.writeRawAttribute(name, value)
+		e.writeRawAttribute(name, value, held)
 	}
 	start := len(e.out)
 	e.out = append(e.out, '>')
@@ -3131,16 +3288,22 @@ func (e *encoder) rawChildren(x reflect.Value, path string, hold rawHold) {
 // writeRawAttribute appends to the start tag that is open the attribute name
 // of value value, held raw or an attribute use's, as the package doc's "# What
 // encodes" states: of absent namespace unprefixed, in the XML namespace
-// xml:Local, and otherwise pN:Local, pN by declaredPrefix, whose declaration
-// precedes the attribute's ' '. name.Space is never xmlnsNamespace:
-// rawAttribute (writableName) refuses it upstream, and attributeEncodes
-// declines it.
-func (e *encoder) writeRawAttribute(name xsd.QName, value string) {
+// xml:Local, and otherwise under the first prefix of held, the prefixed
+// bindings of the Namespaces of the AnyType holding it, nil for an attribute
+// held in no AnyType, bound to its namespace, or else under declaredPrefix's,
+// whose declaration precedes the attribute's ' '. name.Space is never
+// xmlnsNamespace: rawAttribute (writableName) refuses it upstream, and
+// attributeEncodes declines it.
+func (e *encoder) writeRawAttribute(name xsd.QName, value string, held []nsBinding) {
 	qualified := name.Local
+	i := slices.IndexFunc(held, func(b nsBinding) bool { return b.space == name.Space })
 	switch {
 	case name.Space == xmltree.XMLNamespaceURI:
 		qualified = "xml:" + name.Local
-	case name.Space != "":
+	case name.Space == "":
+	case i >= 0:
+		qualified = held[i].prefix + ":" + name.Local
+	default:
 		qualified = e.declaredPrefix(name.Space) + ":" + name.Local
 	}
 	e.out = append(e.out, ' ')
@@ -3268,7 +3431,7 @@ func (e *encoder) wildcardAttributes(bd *binding, attrs reflect.Value, path stri
 		if e.governed(name, apath, hold, true) {
 			continue
 		}
-		e.writeRawAttribute(name, value)
+		e.writeRawAttribute(name, value, nil)
 	}
 }
 
@@ -3283,9 +3446,6 @@ func (e *encoder) rawText(text, path string) {
 	e.out = appendEscaped(e.out, text, false)
 }
 
-// boundPrefix is the prefix of e.bound[i]: "p" and i+1 in decimal.
-func boundPrefix(i int) string { return "p" + strconv.Itoa(i+1) }
-
 // xmlnsNamespace is the namespace name the prefix xmlns is bound to by
 // definition (Namespaces in XML §3); xml's is xmltree.XMLNamespaceURI.
 const xmlnsNamespace = "http://www.w3.org/2000/xmlns/"
@@ -3293,8 +3453,9 @@ const xmlnsNamespace = "http://www.w3.org/2000/xmlns/"
 // writtenBindings is the value.Context of the namespace bindings in scope at
 // the element whose start tag e has open, the ones the document Append writes
 // declares there: the empty prefix bound to e.ns, "" where it is absent; xml
-// to the XML namespace; boundPrefix(i) to e.bound[i]; and every other prefix,
-// xmlns among them, unbound, as parser/xmltree answers xmlns. It reads e live,
+// to the XML namespace; each prefix e.bound binds to the namespace name its
+// innermost binding there gives it (encoder.boundSpace); and every other
+// prefix, xmlns among them, unbound, as parser/xmltree answers xmlns. It reads e live,
 // so that a prefix qname declares is bound for the checks after it. Decode's
 // elementBindings reads a parsed start tag's scope instead, which the writer
 // has none of.
@@ -3308,12 +3469,7 @@ func (b writtenBindings) LookupNamespace(prefix string) (string, bool) {
 	case "xml":
 		return xmltree.XMLNamespaceURI, true
 	}
-	for i, space := range b.e.bound {
-		if boundPrefix(i) == prefix {
-			return space, true
-		}
-	}
-	return "", false
+	return b.e.boundSpace(prefix)
 }
 
 // mapsBack reports whether strconv.ParseFloat, rounding at bits, reads c,

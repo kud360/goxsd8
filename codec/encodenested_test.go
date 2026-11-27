@@ -162,7 +162,7 @@ func TestEncodeNestedTypesAreCodegens(t *testing.T) {
 func TestAppendNested(t *testing.T) {
 	const r = `<r xmlns="urn:s">`
 	w := anyElement{Space: "urn:o", Local: "w", Content: anyType{Text: "w"}}
-	const ow = `<w xmlns="urn:o">w</w>`
+	const ow = `<p1:w xmlns="" xmlns:p1="urn:o">w</p1:w>`
 	spliced := sequenceOf(`<xs:sequence>` + cgElA + `</xs:sequence>`)
 	splicedRef := `<xs:group name="g"><xs:sequence>` + cgElA + `</xs:sequence></xs:group>` + sequenceOf(`<xs:group ref="s:g"/>`)
 	inItem := root(`<xs:sequence maxOccurs="2">` + cgElA + `<xs:sequence>` + cgElB + `</xs:sequence></xs:sequence>`)
@@ -195,7 +195,7 @@ func TestAppendNested(t *testing.T) {
 		}},
 		{"a nested choice's wildcard alternative", func(t *testing.T) {
 			roundTrip(t, schemaOf(t, ncWildSchema), rootName, ncW{Any: anyElement{Space: "urn:o", Local: "w"}, Choice: ncWAny{Any: anyElement{Space: "urn:p", Local: "p"}}},
-				r+`<w xmlns="urn:o"/><p xmlns="urn:p"/></r>`, deepEqual[ncW], ncWBranches)
+				r+`<p1:w xmlns="" xmlns:p1="urn:o"/><p1:p xmlns="" xmlns:p1="urn:p"/></r>`, deepEqual[ncW], ncWBranches)
 		}},
 		{"a nested emptiable choice's nil interface", func(t *testing.T) {
 			roundTrip(t, schemaOf(t, ncEmptiableSchema), rootName, nc{A: "1"}, r+`<a>1</a></r>`, deepEqual[nc], ncBranches)

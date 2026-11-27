@@ -47,7 +47,8 @@ func accepts(t *testing.T, schema *xsd.Schema, data []byte) {
 
 // roundTrip appends v as the document element name of schema under opts,
 // requires the bytes want when want is not empty, validate's acceptance of
-// them, and Decode's T under opts equal to v by eq, and returns the bytes.
+// them, and Decode's T under opts equal to v by eq but for Namespaces, which
+// it holds to keptBindings, and returns the bytes.
 func roundTrip[T any](t *testing.T, schema *xsd.Schema, name xsd.QName, v T, want string, eq func(a, b T) bool, opts ...Option) []byte {
 	t.Helper()
 	data, err := appendChecked(t, nil, schema, strict.New(), name, v, opts...)
@@ -62,7 +63,7 @@ func roundTrip[T any](t *testing.T, schema *xsd.Schema, name xsd.QName, v T, wan
 	if err != nil {
 		t.Fatalf("Decode(%s): %v", data, err)
 	}
-	if !eq(unscoped(*got).(T), unscoped(v).(T)) {
+	if !eq(unscoped(*got).(T), unscoped(v).(T)) || !keptBindings(reflect.ValueOf(v), reflect.ValueOf(*got)) {
 		t.Fatalf("Decode(%s) = %#v, want %#v", data, *got, v)
 	}
 	return data
@@ -672,7 +673,7 @@ func TestAppendSubstitutionGroup(t *testing.T) {
 	})
 	t.Run("a member taken at its head's particle by a Matcher", func(t *testing.T) {
 		roundTrip(t, schemaOf(t, wildGroupSchema), rootName, wcHolder{H: abs1GroupM{M: "x"}, Any: &anyElement{Space: "urn:o", Local: "w"}},
-			`<r xmlns="urn:s"><m>x</m><w xmlns="urn:o"/></r>`, deepEqual[wcHolder], abs1Branches)
+			`<r xmlns="urn:s"><m>x</m><p1:w xmlns="" xmlns:p1="urn:o"/></r>`, deepEqual[wcHolder], abs1Branches)
 	})
 	for _, s := range aloneSchemas {
 		t.Run("the interface alone, nil, optional, "+s.name, func(t *testing.T) {
@@ -3652,34 +3653,35 @@ func (skipAttrAny) isSkipAttrChoice() {}
 var skipAttrBranches = WithBranches[skipAttrChoice](skipAttrA{}, skipAttrAny{})
 
 // TestAppendWildcard pins the wildcard particle with {process contents} skip "# What encodes"
-// admits: each element its field holds is written raw, its attributes in held order, an
+// admits: each element its field holds is written raw, held with no Namespaces, so that no
+// default namespace is in scope there and its name takes the prefix an open start tag declares
+// for its namespace or a fresh pN declared on its own, its attributes in held order, an
 // unqualified one unprefixed, one in the XML namespace as xml:, undeclared, and every other one
-// under the prefix an open start tag declares for its namespace, or a fresh pN declared on its
-// element's own, though the namespace be the element's; then its Text, then each child followed by
-// its Tail; an element in the XML namespace as xml:Local, moving no default namespace, and one in
-// the XSI namespace under a default declaration of it; xsi:schemaLocation and
-// xsi:noNamespaceSchemaLocation written on a skip match and on a lax one as any other attribute
-// is; both rows fail with rawAttribute's hint exemption removed, and the lax one, not the skip
-// one, with rawAttributes asking encoder.governed of a hint. xsi:banana, none of the four names
-// instanceAttribute reports, is written on a skip and on a lax match and on a child of each, no
-// declaration governing it (§3.2.6 no-xsi); both rows fail with rawAttribute's XSI step keyed on
-// the XSI namespace, and with it declining such a name only below the match. xsi:nil, item 7
-// but in a skip match, is written on a skip match beside content and on a child at depth, whatever
-// its value, nothing below the match assessed (§3.10.4.1 key-skipped); both rows fail with
-// skipMatch.writesNil answering false. Each document validate accepts and Decode turns back into
-// the value; an optional wildcard holding nothing writes nothing, and so does the nil interface of
-// a choice whose wildcard alternative has {min occurs} 0, which is emptiable though its branch
-// reads it as 1 (choiceEmptiable). The rows of one and several held elements are the ones the
-// static decline failed before the slice (constructWildcard). A skip match named as the element
-// particle beside it is written, no ·locally declared type· read for it, and so is a lax match no
-// declaration governs, at the top and with a child at depth, unqualified and foreign attributes on
-// each, and one holding a child named as that element particle, which has no locally declared type
-// below the match (§3.4.6.4 key-ldt-elem clause 1); the three lax rows decline constructWildcard
-// with particleEncodes' narrowing to strict undone.
+// prefixed so, though the namespace be the element's; then its Text, then each child followed by
+// its Tail; an element in the XML namespace as xml:Local, and one in the XSI namespace under a
+// fresh prefix; xsi:schemaLocation and xsi:noNamespaceSchemaLocation written on a skip match and
+// on a lax one as any other attribute is; both rows fail with rawAttribute's hint exemption
+// removed, and the lax one, not the skip one, with rawAttributes asking encoder.governed of a
+// hint. xsi:banana, none of the four names instanceAttribute reports, is written on a skip and on
+// a lax match and on a child of each, no declaration governing it (§3.2.6 no-xsi); both rows fail
+// with rawAttribute's XSI step keyed on the XSI namespace, and with it declining such a name only
+// below the match. xsi:nil, item 7 but in a skip match, is written on a skip match beside content
+// and on a child at depth, whatever its value, nothing below the match assessed (§3.10.4.1
+// key-skipped); both rows fail with skipMatch.writesNil answering false. Each document validate
+// accepts and Decode turns back into the value; an optional wildcard holding nothing writes
+// nothing, and so does the nil interface of a choice whose wildcard alternative has {min occurs}
+// 0, which is emptiable though its branch reads it as 1 (choiceEmptiable). The rows of one and
+// several held elements are the ones the static decline failed before the slice
+// (constructWildcard). A skip match named as the element particle beside it is written, no
+// ·locally declared type· read for it, and so is a lax match no declaration governs, at the top
+// and with a child at depth, unqualified and foreign attributes on each, and one holding a child
+// named as that element particle, which has no locally declared type below the match (§3.4.6.4
+// key-ldt-elem clause 1); the three lax rows decline constructWildcard with particleEncodes'
+// narrowing to strict undone.
 func TestAppendWildcard(t *testing.T) {
 	t.Run("one held element", func(t *testing.T) {
 		roundTrip(t, schemaOf(t, seqSkipSchema), rootName, seqWild{A: "x", Any: anyElement{Space: "urn:o", Local: "w"}},
-			`<r xmlns="urn:s"><a>x</a><w xmlns="urn:o"/></r>`, deepEqual[seqWild])
+			`<r xmlns="urn:s"><a>x</a><p1:w xmlns="" xmlns:p1="urn:o"/></r>`, deepEqual[seqWild])
 	})
 	t.Run("several held elements, raw content", func(t *testing.T) {
 		v := seqRepeated{A: "x", Any: []anyElement{
@@ -3694,7 +3696,7 @@ func TestAppendWildcard(t *testing.T) {
 			{Space: "urn:s", Local: "a"},
 		}}
 		roundTrip(t, schemaOf(t, skipManySchema), rootName, v,
-			`<r xmlns="urn:s"><a>x</a><p xmlns="urn:o" k="v&#x9;1" xmlns:p1="urn:o" p1:q="w" xml:lang="en" xmlns:p2="urn:z" p2:z="&lt;&amp;&quot;">t <c xmlns="">c&#xD;</c> tail<d p2:y="1"/></p><a/></r>`,
+			`<r xmlns="urn:s"><a>x</a><p1:p xmlns="" xmlns:p1="urn:o" k="v&#x9;1" p1:q="w" xml:lang="en" xmlns:p2="urn:z" p2:z="&lt;&amp;&quot;">t <c>c&#xD;</c> tail<p1:d p2:y="1"/></p1:p><p1:a xmlns="" xmlns:p1="urn:s"/></r>`,
 			deepEqual[seqRepeated])
 	})
 	t.Run("elements in the XML namespace and in none", func(t *testing.T) {
@@ -3703,18 +3705,18 @@ func TestAppendWildcard(t *testing.T) {
 			{Local: "n", Content: anyType{Children: []anyChild{{Element: anyElement{Space: "urn:s", Local: "in"}}}}},
 		}}
 		roundTrip(t, schemaOf(t, skipManySchema), rootName, v,
-			`<r xmlns="urn:s"><a>x</a><xml:e><in/></xml:e><n xmlns=""><in xmlns="urn:s"/></n></r>`, deepEqual[seqRepeated])
+			`<r xmlns="urn:s"><a>x</a><xml:e xmlns=""><p1:in xmlns:p1="urn:s"/></xml:e><n xmlns=""><p1:in xmlns:p1="urn:s"/></n></r>`, deepEqual[seqRepeated])
 	})
-	t.Run("an element in the XSI namespace, under a default declaration", func(t *testing.T) {
+	t.Run("an element in the XSI namespace, under a fresh prefix", func(t *testing.T) {
 		roundTrip(t, schemaOf(t, seqSkipSchema), rootName, seqWild{A: "x", Any: anyElement{Space: xsd.XMLSchemaInstanceNS, Local: "w"}},
-			`<r xmlns="urn:s"><a>x</a><w xmlns="http://www.w3.org/2001/XMLSchema-instance"/></r>`, deepEqual[seqWild])
+			`<r xmlns="urn:s"><a>x</a><p1:w xmlns="" xmlns:p1="http://www.w3.org/2001/XMLSchema-instance"/></r>`, deepEqual[seqWild])
 	})
 	t.Run("an optional wildcard holding nothing", func(t *testing.T) {
 		roundTrip(t, schemaOf(t, skipOptionalSchema), rootName, seqOptional{A: "x"}, `<r xmlns="urn:s"><a>x</a></r>`, deepEqual[seqOptional])
 	})
 	t.Run("a choice's wildcard alternative", func(t *testing.T) {
 		roundTrip(t, schemaOf(t, skipPickSchema), rootName, pickWild(pickWildAny{Any: anyElement{Space: "urn:o", Local: "w"}}),
-			`<r xmlns="urn:s"><w xmlns="urn:o"/></r>`, deepEqual[pickWild], pickWildBranches)
+			`<r xmlns="urn:s"><p1:w xmlns="" xmlns:p1="urn:o"/></r>`, deepEqual[pickWild], pickWildBranches)
 	})
 	t.Run("the empty match of a choice of an optional wildcard", func(t *testing.T) {
 		roundTrip(t, schemaOf(t, skipEmptySchema), rootName, skipEmpty{}, `<r xmlns="urn:s"/>`, deepEqual[skipEmpty], skipAttrBranches)
@@ -3722,36 +3724,36 @@ func TestAppendWildcard(t *testing.T) {
 	t.Run("a content choice's wildcard alternative beside an attribute", func(t *testing.T) {
 		x := "v"
 		roundTrip(t, schemaOf(t, skipAttrSchema), rootName, skipAttr{Choice: skipAttrAny{Any: anyElement{Space: "urn:o", Local: "w"}}, X: &x},
-			`<r xmlns="urn:s" x="v"><w xmlns="urn:o"/></r>`, deepEqual[skipAttr], skipAttrBranches)
+			`<r xmlns="urn:s" x="v"><p1:w xmlns="" xmlns:p1="urn:o"/></r>`, deepEqual[skipAttr], skipAttrBranches)
 	})
 	t.Run("a skip match named as the element particle beside it", func(t *testing.T) {
 		roundTrip(t, schemaOf(t, seqSkipSchema), rootName, seqWild{A: "x", Any: anyElement{Space: "urn:s", Local: "a", Content: anyType{Text: "y"}}},
-			`<r xmlns="urn:s"><a>x</a><a>y</a></r>`, deepEqual[seqWild])
+			`<r xmlns="urn:s"><a>x</a><p1:a xmlns="" xmlns:p1="urn:s">y</p1:a></r>`, deepEqual[seqWild])
 	})
 	lax := schemaOf(t, laxGovernedSchema)
 	t.Run("a lax match no declaration governs", func(t *testing.T) {
 		roundTrip(t, lax, rootName, seqWild{A: "x", Any: anyElement{Space: "urn:o", Local: "w", Content: anyType{Attributes: []anyAttribute{{"", "t", "v"}}, Text: "y"}}},
-			`<r xmlns="urn:s"><a>x</a><w xmlns="urn:o" t="v">y</w></r>`, deepEqual[seqWild])
+			`<r xmlns="urn:s"><a>x</a><p1:w xmlns="" xmlns:p1="urn:o" t="v">y</p1:w></r>`, deepEqual[seqWild])
 	})
 	t.Run("a lax match holding a child no declaration governs", func(t *testing.T) {
 		v := seqWild{A: "x", Any: anyElement{Space: "urn:o", Local: "p", Content: anyType{Children: []anyChild{
 			{Element: anyElement{Space: "urn:o", Local: "w", Content: anyType{Attributes: []anyAttribute{{"urn:o", "t", "v"}}, Text: "z"}}, Tail: "tail"},
 		}}}}
-		roundTrip(t, lax, rootName, v, `<r xmlns="urn:s"><a>x</a><p xmlns="urn:o"><w xmlns:p1="urn:o" p1:t="v">z</w>tail</p></r>`, deepEqual[seqWild])
+		roundTrip(t, lax, rootName, v, `<r xmlns="urn:s"><a>x</a><p1:p xmlns="" xmlns:p1="urn:o"><p1:w p1:t="v">z</p1:w>tail</p1:p></r>`, deepEqual[seqWild])
 	})
 	t.Run("a lax match holding a child named as the element particle beside it", func(t *testing.T) {
 		v := seqWild{A: "x", Any: anyElement{Space: "urn:o", Local: "p", Content: anyType{Children: []anyChild{{Element: anyElement{Space: "urn:s", Local: "a", Content: anyType{Text: "y"}}}}}}}
-		roundTrip(t, lax, rootName, v, `<r xmlns="urn:s"><a>x</a><p xmlns="urn:o"><a xmlns="urn:s">y</a></p></r>`, deepEqual[seqWild])
+		roundTrip(t, lax, rootName, v, `<r xmlns="urn:s"><a>x</a><p1:p xmlns="" xmlns:p1="urn:o"><p2:a xmlns:p2="urn:s">y</p2:a></p1:p></r>`, deepEqual[seqWild])
 	})
 	t.Run("a skip match holding xsi:schemaLocation", func(t *testing.T) {
 		v := seqWild{A: "x", Any: anyElement{Space: "urn:o", Local: "w", Content: anyType{Attributes: []anyAttribute{{xsd.XMLSchemaInstanceNS, "schemaLocation", "urn:x x.xsd"}}}}}
 		roundTrip(t, schemaOf(t, seqSkipSchema), rootName, v,
-			`<r xmlns="urn:s"><a>x</a><w xmlns="urn:o" xmlns:p1="http://www.w3.org/2001/XMLSchema-instance" p1:schemaLocation="urn:x x.xsd"/></r>`, deepEqual[seqWild])
+			`<r xmlns="urn:s"><a>x</a><p1:w xmlns="" xmlns:p1="urn:o" xmlns:p2="http://www.w3.org/2001/XMLSchema-instance" p2:schemaLocation="urn:x x.xsd"/></r>`, deepEqual[seqWild])
 	})
 	t.Run("a lax match holding xsi:noNamespaceSchemaLocation", func(t *testing.T) {
 		v := seqWild{A: "x", Any: anyElement{Space: "urn:o", Local: "w", Content: anyType{Attributes: []anyAttribute{{xsd.XMLSchemaInstanceNS, "noNamespaceSchemaLocation", "n.xsd"}}}}}
 		roundTrip(t, lax, rootName, v,
-			`<r xmlns="urn:s"><a>x</a><w xmlns="urn:o" xmlns:p1="http://www.w3.org/2001/XMLSchema-instance" p1:noNamespaceSchemaLocation="n.xsd"/></r>`, deepEqual[seqWild])
+			`<r xmlns="urn:s"><a>x</a><p1:w xmlns="" xmlns:p1="urn:o" xmlns:p2="http://www.w3.org/2001/XMLSchema-instance" p2:noNamespaceSchemaLocation="n.xsd"/></r>`, deepEqual[seqWild])
 	})
 	nilled := []anyAttribute{{xsd.XMLSchemaInstanceNS, "nil", "true"}}
 	t.Run("a skip match holding xsi:nil beside content", func(t *testing.T) {
@@ -3759,13 +3761,13 @@ func TestAppendWildcard(t *testing.T) {
 			{Element: anyElement{Space: "urn:o", Local: "c", Content: anyType{Attributes: nilled, Text: "t"}}},
 		}}}}
 		roundTrip(t, schemaOf(t, seqSkipSchema), rootName, v,
-			`<r xmlns="urn:s"><a>x</a><w xmlns="urn:o" xmlns:p1="http://www.w3.org/2001/XMLSchema-instance" p1:nil="true">abc<c p1:nil="true">t</c></w></r>`, deepEqual[seqWild])
+			`<r xmlns="urn:s"><a>x</a><p1:w xmlns="" xmlns:p1="urn:o" xmlns:p2="http://www.w3.org/2001/XMLSchema-instance" p2:nil="true">abc<p1:c p2:nil="true">t</p1:c></p1:w></r>`, deepEqual[seqWild])
 	})
 	banana := []anyAttribute{{xsd.XMLSchemaInstanceNS, "banana", "1"}}
 	bananaHeld := anyElement{Space: "urn:o", Local: "w", Content: anyType{Attributes: banana, Children: []anyChild{
 		{Element: anyElement{Space: "urn:o", Local: "c", Content: anyType{Attributes: []anyAttribute{{xsd.XMLSchemaInstanceNS, "banana", "2"}}}}},
 	}}}
-	const bananaWritten = `<r xmlns="urn:s"><a>x</a><w xmlns="urn:o" xmlns:p1="http://www.w3.org/2001/XMLSchema-instance" p1:banana="1"><c p1:banana="2"/></w></r>`
+	const bananaWritten = `<r xmlns="urn:s"><a>x</a><p1:w xmlns="" xmlns:p1="urn:o" xmlns:p2="http://www.w3.org/2001/XMLSchema-instance" p2:banana="1"><p1:c p2:banana="2"/></p1:w></r>`
 	t.Run("xsi:banana on a skip match and on its child", func(t *testing.T) {
 		roundTrip(t, schemaOf(t, seqSkipSchema), rootName, seqWild{A: "x", Any: bananaHeld}, bananaWritten, deepEqual[seqWild])
 	})
@@ -3777,7 +3779,55 @@ func TestAppendWildcard(t *testing.T) {
 			{Element: anyElement{Local: "c", Content: anyType{Attributes: []anyAttribute{{xsd.XMLSchemaInstanceNS, "nil", "banana"}}}}},
 		}}}}
 		roundTrip(t, schemaOf(t, seqSkipSchema), rootName, v,
-			`<r xmlns="urn:s"><a>x</a><w xmlns="urn:o"><c xmlns="" xmlns:p1="http://www.w3.org/2001/XMLSchema-instance" p1:nil="banana"/></w></r>`, deepEqual[seqWild])
+			`<r xmlns="urn:s"><a>x</a><p1:w xmlns="" xmlns:p1="urn:o"><c xmlns:p2="http://www.w3.org/2001/XMLSchema-instance" p2:nil="banana"/></p1:w></r>`, deepEqual[seqWild])
+	})
+}
+
+// TestAppendHeldNamespaces pins the bindings Append writes for a held AnyType's
+// Namespaces, as the package doc's "# What encodes" states, each document validate
+// accepts and Decode turns back into the value, its Namespaces kept (keptBindings): a
+// default its element's own namespace, written as xmlns; a prefixed entry declared and
+// the element and an attribute spelled under it, a child holding the same entries
+// declaring none again; a child holding no default under a parent holding one,
+// written xmlns=""; a prefix rebound at depth, declared again; a fresh prefix taken
+// past one Namespaces binds; an xs:anyType document element under its own default;
+// and a value Decode returns, written as the document it was read from, its prefixes
+// and a QName-shaped text and attribute value among it.
+func TestAppendHeldNamespaces(t *testing.T) {
+	skip := schemaOf(t, seqSkipSchema)
+	held := func(c anyType) seqWild {
+		return seqWild{A: "x", Any: anyElement{Space: "urn:o", Local: "w", Content: c}}
+	}
+	qs := []anyNamespace{{"", "urn:o"}, {"q", "urn:q"}}
+	for _, row := range []struct {
+		name string
+		v    seqWild
+		want string
+	}{
+		{"a default its element's own", held(anyType{Namespaces: []anyNamespace{{"", "urn:o"}}}), `<r xmlns="urn:s"><a>x</a><w xmlns="urn:o"/></r>`},
+		{"a prefix declared and spelled, and held again below", held(anyType{Namespaces: qs, Attributes: []anyAttribute{{"urn:q", "k", "1"}}, Children: []anyChild{{Element: anyElement{Space: "urn:q", Local: "c", Content: anyType{Namespaces: qs}}}}}),
+			`<r xmlns="urn:s"><a>x</a><w xmlns="urn:o" xmlns:q="urn:q" q:k="1"><q:c/></w></r>`},
+		{"no default under a parent holding one", held(anyType{Namespaces: []anyNamespace{{"", "urn:o"}}, Children: []anyChild{{Element: anyElement{Local: "c"}}}}),
+			`<r xmlns="urn:s"><a>x</a><w xmlns="urn:o"><c xmlns=""/></w></r>`},
+		{"a prefix rebound at depth", held(anyType{Namespaces: []anyNamespace{{"", "urn:o"}, {"q", "urn:a"}}, Children: []anyChild{{Element: anyElement{Space: "urn:o", Local: "c", Content: anyType{Namespaces: []anyNamespace{{"", "urn:o"}, {"q", "urn:b"}}}}}}}),
+			`<r xmlns="urn:s"><a>x</a><w xmlns="urn:o" xmlns:q="urn:a"><c xmlns:q="urn:b"/></w></r>`},
+		{"a fresh prefix past one Namespaces binds", held(anyType{Namespaces: []anyNamespace{{"p1", "urn:x"}}}),
+			`<r xmlns="urn:s"><a>x</a><p2:w xmlns="" xmlns:p1="urn:x" xmlns:p2="urn:o"/></r>`},
+	} {
+		t.Run(row.name, func(t *testing.T) {
+			roundTrip(t, skip, rootName, row.v, row.want, deepEqual[seqWild])
+		})
+	}
+	t.Run("an xs:anyType document element under its own default", func(t *testing.T) {
+		roundTrip(t, schemaOf(t, rootAnySchema), rootName, rootAny{Namespaces: []anyNamespace{{"", "urn:s"}}, Text: "t"}, `<r xmlns="urn:s">t</r>`, deepEqual[rootAny])
+	})
+	t.Run("a value Decode returns, written as it was read", func(t *testing.T) {
+		doc := `<r xmlns="urn:s"><a>x</a><w xmlns="urn:o" xmlns:q="urn:q" q:k="q:v"><q:c>q:t</q:c>tail</w></r>`
+		v, err := Decode[seqWild](skip, strict.New(), []byte(doc))
+		if err != nil {
+			t.Fatal(err)
+		}
+		roundTrip(t, skip, rootName, *v, doc, deepEqual[seqWild])
 	})
 }
 
@@ -3906,6 +3956,54 @@ func TestAppendWildcardInvalid(t *testing.T) {
 			_, err := appendChecked(t, nil, one, strict.New(), rootName, held(anyType{Children: c}))
 			return err
 		}, "codec: Append: seqWild.Any.Content.Children[0].Element.Content.Children[0].Element.Content is the value at seqWild.Any.Content.Children[0].Element.Content, whose element is still being written, a value that holds itself, which no finite document holds"},
+		{"Namespaces out of Prefix order", func(t *testing.T) error {
+			_, err := appendChecked(t, nil, one, strict.New(), rootName, held(anyType{Namespaces: []anyNamespace{{"q", "urn:a"}, {"p", "urn:b"}}}))
+			return err
+		}, `codec: Append: seqWild.Any.Content.Namespaces[1] holds the binding of "p" to "urn:b", whose Prefix is not after "q", the one of the item before it`},
+		{"Namespaces binding one prefix twice", func(t *testing.T) error {
+			_, err := appendChecked(t, nil, one, strict.New(), rootName, held(anyType{Namespaces: []anyNamespace{{"p", "urn:a"}, {"p", "urn:b"}}}))
+			return err
+		}, `codec: Append: seqWild.Any.Content.Namespaces[1] holds the binding of "p" to "urn:b", whose Prefix is not after "p", the one of the item before it`},
+		{"Namespaces binding xml", func(t *testing.T) error {
+			_, err := appendChecked(t, nil, one, strict.New(), rootName, held(anyType{Namespaces: []anyNamespace{{"xml", xmltree.XMLNamespaceURI}}}))
+			return err
+		}, `codec: Append: seqWild.Any.Content.Namespaces[0] holds the binding of "xml" to "http://www.w3.org/XML/1998/namespace", which Namespaces never holds`},
+		{"Namespaces binding xmlns", func(t *testing.T) error {
+			_, err := appendChecked(t, nil, one, strict.New(), rootName, held(anyType{Namespaces: []anyNamespace{{"xmlns", xmlnsNamespace}}}))
+			return err
+		}, `codec: Append: seqWild.Any.Content.Namespaces[0] holds the binding of "xmlns" to "http://www.w3.org/2000/xmlns/", which Namespaces never holds`},
+		{"a Prefix that is no NCName", func(t *testing.T) error {
+			_, err := appendChecked(t, nil, one, strict.New(), rootName, held(anyType{Namespaces: []anyNamespace{{"1p", "urn:a"}}}))
+			return err
+		}, `codec: Append: seqWild.Any.Content.Namespaces[0] holds the binding of "1p" to "urn:a", whose Prefix is no NCName`},
+		{"a Prefix holding a byte that is not UTF-8", func(t *testing.T) error {
+			_, err := appendChecked(t, nil, one, strict.New(), rootName, held(anyType{Namespaces: []anyNamespace{{"p\xff", "urn:a"}}}))
+			return err
+		}, `codec: Append: seqWild.Any.Content.Namespaces[0] holds the binding of "p\xff" to "urn:a", whose Prefix is no NCName`},
+		{"a prefix bound to no namespace", func(t *testing.T) error {
+			_, err := appendChecked(t, nil, one, strict.New(), rootName, held(anyType{Namespaces: []anyNamespace{{"p", ""}}}))
+			return err
+		}, `codec: Append: seqWild.Any.Content.Namespaces[0] holds the binding of "p" to "", which undeclares the prefix`},
+		{"a default entry of no namespace", func(t *testing.T) error {
+			_, err := appendChecked(t, nil, one, strict.New(), rootName, held(anyType{Namespaces: []anyNamespace{{"", ""}}}))
+			return err
+		}, `codec: Append: seqWild.Any.Content.Namespaces[0] holds the binding of "" to "", whose Space "" is no default namespace`},
+		{"a Space holding a non-Char", func(t *testing.T) error {
+			_, err := appendChecked(t, nil, one, strict.New(), rootName, held(anyType{Namespaces: []anyNamespace{{"p", "urn:\x01"}}}))
+			return err
+		}, `codec: Append: seqWild.Any.Content.Namespaces[0] holds the binding of "p" to "urn:\x01", whose Space's byte offset 4 starts no XML 1.0 Char`},
+		{"a prefix bound to the XML namespace", func(t *testing.T) error {
+			_, err := appendChecked(t, nil, one, strict.New(), rootName, held(anyType{Namespaces: []anyNamespace{{"p", xmltree.XMLNamespaceURI}}}))
+			return err
+		}, `codec: Append: seqWild.Any.Content.Namespaces[0] holds the binding of "p" to "http://www.w3.org/XML/1998/namespace", a namespace name no other prefix may be bound to`},
+		{"a default bound to the xmlns namespace", func(t *testing.T) error {
+			_, err := appendChecked(t, nil, one, strict.New(), rootName, held(anyType{Namespaces: []anyNamespace{{"", xmlnsNamespace}}}))
+			return err
+		}, `codec: Append: seqWild.Any.Content.Namespaces[0] holds the binding of "" to "http://www.w3.org/2000/xmlns/", a namespace name no other prefix may be bound to`},
+		{"an element of no namespace under a default", func(t *testing.T) error {
+			_, err := appendChecked(t, nil, one, strict.New(), rootName, held(anyType{Children: []anyChild{{Element: anyElement{Local: "c", Content: anyType{Namespaces: []anyNamespace{{"", "urn:a"}}}}}}}))
+			return err
+		}, `codec: Append: seqWild.Any.Content.Children[0].Element.Content.Namespaces makes "urn:a" the default namespace of c, an element of no namespace`},
 	} {
 		t.Run(row.name, func(t *testing.T) {
 			err := row.run(t)
@@ -4210,50 +4308,50 @@ func TestAppendAnyType(t *testing.T) {
 			{Element: anyElement{Space: "urn:o", Local: "d", Content: anyType{Children: []anyChild{{Element: anyElement{Local: "e"}}}}}},
 		},
 	}
-	const written = ` k="v" xmlns:p1="urn:z" p1:y="1" xml:lang="en">t <c>in</c>out<d xmlns="urn:o"><e xmlns=""/></d>`
+	const written = ` k="v" xmlns:p2="urn:z" p2:y="1" xml:lang="en">t <p1:c>in</p1:c>out<p3:d xmlns:p3="urn:o"><e/></p3:d>`
 	t.Run("the document element", func(t *testing.T) {
-		roundTrip(t, schemaOf(t, rootAnySchema), rootName, rootAny(content), `<r xmlns="urn:s"`+written+`</r>`, deepEqual[rootAny])
+		roundTrip(t, schemaOf(t, rootAnySchema), rootName, rootAny(content), `<p1:r xmlns:p1="urn:s"`+written+`</p1:r>`, deepEqual[rootAny])
 	})
 	t.Run("the document element of type xs:anyType, into AnyType itself", func(t *testing.T) {
-		roundTrip(t, schemaOf(t, typedRootAnySchema), rootName, content, `<r xmlns="urn:s"`+written+`</r>`, deepEqual[anyType])
+		roundTrip(t, schemaOf(t, typedRootAnySchema), rootName, content, `<p1:r xmlns:p1="urn:s"`+written+`</p1:r>`, deepEqual[anyType])
 	})
 	t.Run("an empty document element", func(t *testing.T) {
-		roundTrip(t, schemaOf(t, rootAnySchema), rootName, rootAny{}, `<r xmlns="urn:s"/>`, deepEqual[rootAny])
+		roundTrip(t, schemaOf(t, rootAnySchema), rootName, rootAny{}, `<p1:r xmlns:p1="urn:s"/>`, deepEqual[rootAny])
 	})
 	t.Run("a particle once", func(t *testing.T) {
-		roundTrip(t, schemaOf(t, oneAnySchema), rootName, oneAny{A: content}, `<r xmlns="urn:s"><a`+written+`</a></r>`, deepEqual[oneAny])
+		roundTrip(t, schemaOf(t, oneAnySchema), rootName, oneAny{A: content}, `<r xmlns="urn:s"><p1:a xmlns="" xmlns:p1="urn:s"`+written+`</p1:a></r>`, deepEqual[oneAny])
 	})
 	t.Run("an <element ref> particle", func(t *testing.T) {
-		roundTrip(t, schemaOf(t, refAnySchema), rootName, refAny{F: free{Text: "x"}}, `<r xmlns="urn:s"><f>x</f></r>`, deepEqual[refAny])
+		roundTrip(t, schemaOf(t, refAnySchema), rootName, refAny{F: free{Text: "x"}}, `<r xmlns="urn:s"><p1:f xmlns="" xmlns:p1="urn:s">x</p1:f></r>`, deepEqual[refAny])
 	})
 	t.Run("two particles", func(t *testing.T) {
-		roundTrip(t, schemaOf(t, pairAnySchema), rootName, pairAny{A: anyType{Text: "1"}, B: content}, `<r xmlns="urn:s"><a>1</a><b`+written+`</b></r>`, deepEqual[pairAny])
+		roundTrip(t, schemaOf(t, pairAnySchema), rootName, pairAny{A: anyType{Text: "1"}, B: content}, `<r xmlns="urn:s"><p1:a xmlns="" xmlns:p1="urn:s">1</p1:a><p1:b xmlns="" xmlns:p1="urn:s"`+written+`</p1:b></r>`, deepEqual[pairAny])
 	})
 	t.Run("a repeated particle and an optional one", func(t *testing.T) {
-		roundTrip(t, schemaOf(t, occursAnySchema), rootName, occursAny{A: []anyType{{Text: "1"}, {}}, B: &anyType{Text: "2"}}, `<r xmlns="urn:s"><a>1</a><a/><b>2</b></r>`, deepEqual[occursAny])
+		roundTrip(t, schemaOf(t, occursAnySchema), rootName, occursAny{A: []anyType{{Text: "1"}, {}}, B: &anyType{Text: "2"}}, `<r xmlns="urn:s"><p1:a xmlns="" xmlns:p1="urn:s">1</p1:a><p1:a xmlns="" xmlns:p1="urn:s"/><p1:b xmlns="" xmlns:p1="urn:s">2</p1:b></r>`, deepEqual[occursAny])
 	})
 	t.Run("an absent optional particle", func(t *testing.T) {
-		roundTrip(t, schemaOf(t, occursAnySchema), rootName, occursAny{A: []anyType{{}}}, `<r xmlns="urn:s"><a/></r>`, deepEqual[occursAny])
+		roundTrip(t, schemaOf(t, occursAnySchema), rootName, occursAny{A: []anyType{{}}}, `<r xmlns="urn:s"><p1:a xmlns="" xmlns:p1="urn:s"/></r>`, deepEqual[occursAny])
 	})
 	t.Run("a choice's local alternative", func(t *testing.T) {
-		roundTrip(t, schemaOf(t, pickAnySchema), rootName, pickAny(pickAnyA{A: anyType{Text: "x"}}), `<r xmlns="urn:s"><a>x</a></r>`, deepEqual[pickAny], pickAnyBranches)
+		roundTrip(t, schemaOf(t, pickAnySchema), rootName, pickAny(pickAnyA{A: anyType{Text: "x"}}), `<r xmlns="urn:s"><p1:a xmlns="" xmlns:p1="urn:s">x</p1:a></r>`, deepEqual[pickAny], pickAnyBranches)
 	})
 	t.Run("a choice's <element ref> alternative", func(t *testing.T) {
-		roundTrip(t, schemaOf(t, pickRefAnySchema), rootName, pickRefAny(pickRefAnyF{F: free{Text: "x"}}), `<r xmlns="urn:s"><f>x</f></r>`, deepEqual[pickRefAny], pickRefAnyBranches)
+		roundTrip(t, schemaOf(t, pickRefAnySchema), rootName, pickRefAny(pickRefAnyF{F: free{Text: "x"}}), `<r xmlns="urn:s"><p1:f xmlns="" xmlns:p1="urn:s">x</p1:f></r>`, deepEqual[pickRefAny], pickRefAnyBranches)
 	})
 	t.Run("xsi:schemaLocation on the document element", func(t *testing.T) {
 		roundTrip(t, schemaOf(t, rootAnySchema), rootName, rootAny{Attributes: []anyAttribute{{xsd.XMLSchemaInstanceNS, "schemaLocation", "urn:x x.xsd"}}},
-			`<r xmlns="urn:s" xmlns:p1="http://www.w3.org/2001/XMLSchema-instance" p1:schemaLocation="urn:x x.xsd"/>`, deepEqual[rootAny])
+			`<p1:r xmlns:p1="urn:s" xmlns:p2="http://www.w3.org/2001/XMLSchema-instance" p2:schemaLocation="urn:x x.xsd"/>`, deepEqual[rootAny])
 	})
 	t.Run("xsi:noNamespaceSchemaLocation on a descendant", func(t *testing.T) {
 		v := rootAny{Children: []anyChild{{Element: anyElement{Local: "c", Content: anyType{Attributes: []anyAttribute{{xsd.XMLSchemaInstanceNS, "noNamespaceSchemaLocation", "n.xsd"}}}}}}}
 		roundTrip(t, schemaOf(t, rootAnySchema), rootName, v,
-			`<r xmlns="urn:s"><c xmlns="" xmlns:p1="http://www.w3.org/2001/XMLSchema-instance" p1:noNamespaceSchemaLocation="n.xsd"/></r>`, deepEqual[rootAny])
+			`<p1:r xmlns:p1="urn:s"><c xmlns:p2="http://www.w3.org/2001/XMLSchema-instance" p2:noNamespaceSchemaLocation="n.xsd"/></p1:r>`, deepEqual[rootAny])
 	})
 	t.Run("xsi:banana on the document element and on a descendant", func(t *testing.T) {
 		v := rootAny{Attributes: []anyAttribute{{xsd.XMLSchemaInstanceNS, "banana", "1"}}, Children: []anyChild{{Element: anyElement{Local: "c", Content: anyType{Attributes: []anyAttribute{{xsd.XMLSchemaInstanceNS, "banana", "2"}}}}}}}
 		roundTrip(t, schemaOf(t, governedAnySchema), rootName, v,
-			`<r xmlns="urn:s" xmlns:p1="http://www.w3.org/2001/XMLSchema-instance" p1:banana="1"><c xmlns="" p1:banana="2"/></r>`, deepEqual[rootAny])
+			`<p1:r xmlns:p1="urn:s" xmlns:p2="http://www.w3.org/2001/XMLSchema-instance" p2:banana="1"><c p2:banana="2"/></p1:r>`, deepEqual[rootAny])
 	})
 }
 
@@ -4353,7 +4451,7 @@ func TestAppendAnyTypeGuards(t *testing.T) {
 	})
 	t.Run("a skip wildcard's match holding a governed name", func(t *testing.T) {
 		v := seqWild{A: "x", Any: anyElement{Space: "urn:o", Local: "w", Content: anyType{Children: child(anyElement{Space: "urn:s", Local: "r", Content: anyType{Text: "s:x"}})}}}
-		roundTrip(t, schemaOf(t, seqSkipSchema), rootName, v, `<r xmlns="urn:s"><a>x</a><w xmlns="urn:o"><r xmlns="urn:s">s:x</r></w></r>`, deepEqual[seqWild])
+		roundTrip(t, schemaOf(t, seqSkipSchema), rootName, v, `<r xmlns="urn:s"><a>x</a><p1:w xmlns="" xmlns:p1="urn:o"><p2:r xmlns:p2="urn:s">s:x</p2:r></p1:w></r>`, deepEqual[seqWild])
 	})
 	t.Run("a type derived from xs:anyType", func(t *testing.T) {
 		roundTrip(t, schemaOf(t, derivedAnySchema), rootName, derivedAny{A: struct{ B string }{B: "x"}}, `<r xmlns="urn:s"><a><b>x</b></a></r>`, deepEqual[derivedAny])
@@ -4655,7 +4753,7 @@ func TestAppendFlattened(t *testing.T) {
 	})
 	t.Run("a skip wildcard in the reach", func(t *testing.T) {
 		v := flatWild{Sequence: []flatWildItem{flatWildA{A: "1"}, flatWildA{A: "2"}, flatWildAny{Any: anyElement{Space: "urn:o", Local: "w"}}, flatWildA{A: "3"}}}
-		roundTrip(t, schemaOf(t, efSkipSchema), rootName, v, `<r xmlns="urn:s"><a>1</a><a>2</a><w xmlns="urn:o"/><a>3</a></r>`, deepEqual[flatWild], flatWildBranches)
+		roundTrip(t, schemaOf(t, efSkipSchema), rootName, v, `<r xmlns="urn:s"><a>1</a><a>2</a><p1:w xmlns="" xmlns:p1="urn:o"/><a>3</a></r>`, deepEqual[flatWild], flatWildBranches)
 	})
 	t.Run("an <element ref> alternative", func(t *testing.T) {
 		v := efRef{Sequence: []efRefItem{efRefX{X: "1"}, efRefB{B: "2"}, efRefX{X: "3"}}}
@@ -4904,19 +5002,19 @@ func TestAppendValueConstraint(t *testing.T) {
 			roundTrip(t, schema, sname("un"), vcUnion{Dflt: unionUInt(3)}, `<un xmlns="urn:s" dflt="3"/>`, deepEqual[vcUnion], unionVariants...)
 		}},
 		{"anyType default text", func(t *testing.T) {
-			roundTrip(t, schema, sname("ad"), anyType{Text: "y"}, `<ad xmlns="urn:s">y</ad>`, deepEqual[anyType])
+			roundTrip(t, schema, sname("ad"), anyType{Text: "y"}, `<p1:ad xmlns:p1="urn:s">y</p1:ad>`, deepEqual[anyType])
 		}},
 		{"anyType default child", func(t *testing.T) {
-			roundTrip(t, schema, sname("ad"), anyType{Children: []anyChild{{Element: anyElement{Local: "c"}}}}, `<ad xmlns="urn:s"><c xmlns=""/></ad>`, deepEqual[anyType])
+			roundTrip(t, schema, sname("ad"), anyType{Children: []anyChild{{Element: anyElement{Local: "c"}}}}, `<p1:ad xmlns:p1="urn:s"><c/></p1:ad>`, deepEqual[anyType])
 		}},
 		{"anyType fixed text", func(t *testing.T) {
-			roundTrip(t, schema, sname("af"), anyType{Text: "x"}, `<af xmlns="urn:s">x</af>`, deepEqual[anyType])
+			roundTrip(t, schema, sname("af"), anyType{Text: "x"}, `<p1:af xmlns:p1="urn:s">x</p1:af>`, deepEqual[anyType])
 		}},
 		{"anyType fixed empty", func(t *testing.T) {
-			roundTrip(t, schema, sname("af"), anyType{}, `<af xmlns="urn:s"/>`, deepEqual[anyType])
+			roundTrip(t, schema, sname("af"), anyType{}, `<p1:af xmlns:p1="urn:s"/>`, deepEqual[anyType])
 		}},
 		{"anyType fixed attributes", func(t *testing.T) {
-			roundTrip(t, schema, sname("af"), anyType{Attributes: []anyAttribute{{Local: "k", Value: "v"}}, Text: "x"}, `<af xmlns="urn:s" k="v">x</af>`, deepEqual[anyType])
+			roundTrip(t, schema, sname("af"), anyType{Attributes: []anyAttribute{{Local: "k", Value: "v"}}, Text: "x"}, `<p1:af xmlns:p1="urn:s" k="v">x</p1:af>`, deepEqual[anyType])
 		}},
 	} {
 		t.Run(row.name, row.run)
@@ -5094,26 +5192,26 @@ func TestAppendAll(t *testing.T) {
 		roundTrip(t, schemaOf(t, allEmptySchema), rootName, struct{}{}, `<r xmlns="urn:s"/>`, deepEqual[struct{}])
 	})
 	t.Run("all(a, any ##other)", func(t *testing.T) {
-		roundTrip(t, schemaOf(t, allWildSchema), rootName, allWild{A: "x", Any: w}, `<r xmlns="urn:s"><a>x</a><w xmlns="urn:o"/></r>`, deepEqual[allWild])
+		roundTrip(t, schemaOf(t, allWildSchema), rootName, allWild{A: "x", Any: w}, `<r xmlns="urn:s"><a>x</a><p1:w xmlns="" xmlns:p1="urn:o"/></r>`, deepEqual[allWild])
 	})
 	t.Run("a wildcard inside a nested all", func(t *testing.T) {
-		roundTrip(t, schemaOf(t, allNestedWildSchema), rootName, allWild{A: "x", Any: w}, `<r xmlns="urn:s"><a>x</a><w xmlns="urn:o"/></r>`, deepEqual[allWild])
+		roundTrip(t, schemaOf(t, allNestedWildSchema), rootName, allWild{A: "x", Any: w}, `<r xmlns="urn:s"><a>x</a><p1:w xmlns="" xmlns:p1="urn:o"/></r>`, deepEqual[allWild])
 	})
 	t.Run("all(any skip, a), the value Decode returns", func(t *testing.T) {
 		schema := schemaOf(t, allSkipFirstSchema)
 		v := decodedAs(t, schema, "<s:a>x</s:a><s:a>y</s:a>", allSkipFirst{Any: second, A: "x"})
-		roundTrip(t, schema, rootName, v, `<r xmlns="urn:s"><a>x</a><a>y</a></r>`, deepEqual[allSkipFirst])
+		roundTrip(t, schema, rootName, v, `<r xmlns="urn:s"><a>x</a><p1:a xmlns="" xmlns:p1="urn:s">y</p1:a></r>`, deepEqual[allSkipFirst])
 	})
 	t.Run("all(any skip, a) in an occurrence field, the value Decode returns", func(t *testing.T) {
 		schema := schemaOf(t, allOccSkipFirstSchema)
 		v := decodedAs(t, schema, "<s:a>x</s:a><s:a>y</s:a>", allOccSkipFirst{All: &allSkipFirst{Any: second, A: "x"}})
-		roundTrip(t, schema, rootName, v, `<r xmlns="urn:s"><a>x</a><a>y</a></r>`, deepEqual[allOccSkipFirst])
+		roundTrip(t, schema, rootName, v, `<r xmlns="urn:s"><a>x</a><p1:a xmlns="" xmlns:p1="urn:s">y</p1:a></r>`, deepEqual[allOccSkipFirst])
 	})
 	t.Run("all(any skip, a), each of {max occurs} 2, the value Decode returns", func(t *testing.T) {
 		schema := schemaOf(t, allSkipManySchema)
 		third := anyElement{Space: "urn:s", Local: "a", Content: anyType{Text: "3"}}
 		v := decodedAs(t, schema, "<s:a>1</s:a><s:a>2</s:a><s:a>3</s:a>", allSkipMany{Any: []anyElement{third}, A: []string{"1", "2"}})
-		roundTrip(t, schema, rootName, v, `<r xmlns="urn:s"><a>1</a><a>2</a><a>3</a></r>`, deepEqual[allSkipMany])
+		roundTrip(t, schema, rootName, v, `<r xmlns="urn:s"><a>1</a><a>2</a><p1:a xmlns="" xmlns:p1="urn:s">3</p1:a></r>`, deepEqual[allSkipMany])
 	})
 	t.Run("a value decoded from a permuted document", func(t *testing.T) {
 		schema := schemaOf(t, allABSchema)

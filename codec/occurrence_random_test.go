@@ -511,7 +511,7 @@ func TestAppendOccurrenceRoundTripDifferential(t *testing.T) {
 			if err := decodeValue(schema, strict.New(), data, back, nil); err != nil {
 				t.Fatalf("model %s, instance %v: Decode(%s) = %v", top.xsdOf(), names, data, err)
 			}
-			if !reflect.DeepEqual(unscoped(back.Interface()), unscoped(v.Interface())) {
+			if !sameHeld(v.Interface(), back.Interface()) {
 				t.Fatalf("model %s, instance %v: Decode(%s) = %#v, Append wrote %#v", top.xsdOf(), names, data, back.Interface(), v.Interface())
 			}
 		}
@@ -882,7 +882,7 @@ func checkDraw(t *testing.T, schema *xsd.Schema, ct xsd.ComplexType, top *rnode,
 	if err := decodeValue(schema, strict.New(), data, back, opts); err != nil {
 		t.Fatalf("model %s, items %v: Decode(%s) = %v", top.xsdOf(), items, data, err)
 	}
-	if !reflect.DeepEqual(unscoped(back.Interface()), unscoped(v.Interface())) {
+	if !sameHeld(v.Interface(), back.Interface()) {
 		t.Fatalf("model %s, items %v: Decode(%s) = %#v, Append wrote %#v", top.xsdOf(), items, data, back.Interface(), v.Interface())
 	}
 	return verdict
