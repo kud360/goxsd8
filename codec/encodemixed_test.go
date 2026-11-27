@@ -17,8 +17,9 @@ import (
 // after Text, an empty {particle}, an {open content}'s AnyChild children
 // after the particle's child, each with its Tail, the escaping of '<', '&',
 // '>' and CR in Text and Tails, and a {value constraint}: a fixed one's
-// {lexical form} as Text, and an empty element under a fixed or default one,
-// which takes on nothing Decode returns (cvc-elt clause 5.1).
+// {lexical form} as Text, an empty element under a fixed or default one,
+// which takes on nothing Decode returns (cvc-elt clause 5.1), and a child
+// under a fixed one holding no child, whose sibling raises nothing.
 func TestAppendMixed(t *testing.T) {
 	str := func(s string) *string { return &s }
 	const r = `<r xmlns="urn:s">`
@@ -68,6 +69,8 @@ b</r>`)},
 		{"a fixed {value constraint}'s {lexical form} as Text", ocRoundTrip(mxFixedSchema, mxOpt{Text: "abc"}, r+`abc</r>`)},
 		{"an empty element under a fixed {value constraint}", ocRoundTrip(mxFixedSchema, mxOpt{}, `<r xmlns="urn:s"/>`)},
 		{"an empty element under a default", ocRoundTrip(mxDefaultSchema, mxOpt{}, `<r xmlns="urn:s"/>`)},
+		{"a child under a fixed {value constraint}, holding none, then a sibling", ocRoundTrip(mxNestFixedSchema,
+			mxNestFixed{Text: "t", A: mixedChild[mxNestA]{Element: mxNestA{Text: "abc"}, Tail: "u"}, B: mixedChild[string]{Element: "v", Tail: "w"}}, r+`t<a>abc</a>u<b>v</b>w</r>`)},
 		{"Text and a child under a default", ocRoundTrip(mxDefaultSchema, mxOpt{Text: "x", A: &mixedChild[string]{Element: "v", Tail: "y"}}, r+`x<a>v</a>y</r>`)},
 	}
 	for _, row := range rows {
@@ -105,11 +108,11 @@ func TestAppendMixedPara(t *testing.T) {
 // doc refuses, each error opening with its subject, the value's Go path
 // among it: under a fixed {value constraint}, a Text other than "" and the
 // {lexical form} (cvc-elt clause 5.2.2.2.1), and a child (clause 5.2.2.1),
-// which comes ahead of an error inside that child, whatever an AnyChild's
-// Tail holds, and after the error of a Text or of a nil-Element MixedChild
-// before it; a MixedChild whose Element is a nil sealed interface; and a
-// Text or Tail holding a byte that starts no XML 1.0 Char, an {open content}
-// child's Tail among them.
+// the document element's and a child's own, which comes ahead of an error
+// inside that child, whatever an AnyChild's Tail holds, and after the error
+// of a Text or of a nil-Element MixedChild before it; a MixedChild whose
+// Element is a nil sealed interface; and a Text or Tail holding a byte that
+// starts no XML 1.0 Char, an {open content} child's Tail among them.
 func TestAppendMixedRefusals(t *testing.T) {
 	sealed := WithBranches[mxAI](mxAX{}, mxAY{})
 	rows := []struct {
@@ -135,6 +138,8 @@ func TestAppendMixedRefusals(t *testing.T) {
 			`codec: Append: mxFixedAny holds a child element, though the fixed {value constraint} "abc" of `, "cvc-elt clause 5.2.2.1"},
 		{"fixed, a refused AnyChild with a Tail", mxFixedAnySchema, mxFixedAny{Any: &anyChild{Element: anyElement{Space: "urn:o", Local: "1bad"}, Tail: "t"}},
 			`codec: Append: mxFixedAny holds a child element, though the fixed {value constraint} "abc" of `, "cvc-elt clause 5.2.2.1"},
+		{"fixed, a child of a child", mxNestFixedSchema, mxNestFixed{A: mixedChild[mxNestA]{Element: mxNestA{X: &mixedChild[string]{Element: "v"}}}},
+			`codec: Append: mxNestFixed.A.Element holds a child element, though the fixed {value constraint} "abc" of `, "cvc-elt clause 5.2.2.1"},
 		{"a MixedChild whose Element is a nil sealed interface", mxSealedOptSchema, mxSealedOpt{Text: "t", A: &mixedChild[mxAI]{Tail: "u"}},
 			"codec: Append: mxSealedOpt.A.Element is nil, a MixedChild holding no element of ", "which Decode never returns"},
 		{"a Text holding no Char", mxPairSchema, mxPair{Text: "\x00"},
@@ -161,6 +166,8 @@ func TestAppendMixedRefusals(t *testing.T) {
 			case mxFixedSealed:
 				_, err = appendChecked(t, nil, schema, strict.New(), sname("r"), v, sealed)
 			case mxFixedAny:
+				_, err = appendChecked(t, nil, schema, strict.New(), sname("r"), v)
+			case mxNestFixed:
 				_, err = appendChecked(t, nil, schema, strict.New(), sname("r"), v)
 			}
 			invalidValue(t, err)
