@@ -288,6 +288,150 @@ func TestUPARepeatedSequenceUnfoldingPasses(t *testing.T) {
 	}
 }
 
+// uCopiesThenC builds sequence(sequence{o}(c{lead,1}, inner), c), the shape
+// whose two c's ·compete· only across two unfolded copies of the inner
+// sequence when lead is 0.
+func uCopiesThenC(t *testing.T, o Occurs, lead int, inner Particle) ModelGroup {
+	t.Helper()
+	return uGroup(t, CompositorSequence,
+		uParticle(t, o, ResolvedTerm{Term: uGroup(t, CompositorSequence,
+			uParticle(t, uOccurs(t, lead, 1), ResolvedTerm{Term: uLocal(t, uq("c"), uq("T"))}),
+			inner,
+		)}),
+		uOne(t, ResolvedTerm{Term: uLocal(t, uq("c"), uq("T"))}),
+	)
+}
+
+// TestUPACompetitionAcrossUnfoldedCopies pins the subset half of cos-nonambig
+// (checkPaths). In sequence(sequence{2}(c?, a+), c) the sequence a a c has two
+// ·paths· (§3.8.4.1, key-path) identical but for their last item: a, a, then
+// the outer c, and a, a, then the second occurrence's c, the two a's being one
+// particle whichever occurrence took them, so the two c's ·compete·
+// (§3.8.4.2, key-compete). No single state holds both c's: they are live
+// together only in the subset {copy 1's a, copy 2's a} the prefix a a reaches.
+// Every row loads with checkPaths removed from decideUnambiguous.
+func TestUPACompetitionAcrossUnfoldedCopies(t *testing.T) {
+	a := func(o Occurs) Particle { return uParticle(t, o, ResolvedTerm{Term: uLocal(t, uq("a"), uq("T"))}) }
+	choiceOfA := func(o Occurs) Particle {
+		return uParticle(t, uOccurs(t, 1, 2), ResolvedTerm{Term: uGroup(t, CompositorChoice, a(o))})
+	}
+	rows := []struct {
+		name  string
+		model ModelGroup
+	}{
+		{"seq(seq{2}(c?,a+),c)", uCopiesThenC(t, uOccurs(t, 2, 2), 0, a(uUnbounded(t, 1)))},
+		{"seq(seq{2}(c?,choice{1,2}(a)),c)", uCopiesThenC(t, uOccurs(t, 2, 2), 0, choiceOfA(uOccurs(t, 1, 1)))},
+		{"seq(seq{2}(c?,choice{1,2}(a+)),c)", uCopiesThenC(t, uOccurs(t, 2, 2), 0, choiceOfA(uUnbounded(t, 1)))},
+		{"seq(seq{2}(c?,a{1,2}),c)", uCopiesThenC(t, uOccurs(t, 2, 2), 0, a(uOccurs(t, 1, 2)))},
+		{"seq(seq{3}(c?,a+),c)", uCopiesThenC(t, uOccurs(t, 3, 3), 0, a(uUnbounded(t, 1)))},
+	}
+	for _, r := range rows {
+		t.Run(r.name, func(t *testing.T) {
+			err := uSchemaWithModel(t, r.model, nil)
+			expectRule(t, err, ruleCosNonambig)
+			want := "[cos-nonambig] after element declaration " + uq("a").Display() +
+				", where one ·path· may stand at any of "
+			if !strings.Contains(err.Error(), want) {
+				t.Fatalf("want the pair charged after a reached subset (%q), got: %v", want, err)
+			}
+			pair := " copies of it, in complex type " + uq("ct").Display() + " content model, element declaration " +
+				uq("c").Display() + " and element declaration " + uq("c").Display() + " ·compete·"
+			if !strings.Contains(err.Error(), pair) {
+				t.Fatalf("want the two c's charged (%q), got: %v", pair, err)
+			}
+		})
+	}
+}
+
+// uBlocksThenA builds sequence(choice{blocks,blocks}(b{lo,hi}, a), a): after a
+// run of b's the inner and the outer a ·compete· exactly when that run can be
+// split into blocks-1 b{lo,hi} blocks and into blocks of them.
+func uBlocksThenA(t *testing.T, blocks, lo, hi int) ModelGroup {
+	t.Helper()
+	return uGroup(t, CompositorSequence,
+		uParticle(t, uOccurs(t, blocks, blocks), ResolvedTerm{Term: uGroup(t, CompositorChoice,
+			uParticle(t, uOccurs(t, lo, hi), ResolvedTerm{Term: uLocal(t, uq("b"), uq("T"))}),
+			uOne(t, ResolvedTerm{Term: uLocal(t, uq("a"), uq("T"))}),
+		)}),
+		uOne(t, ResolvedTerm{Term: uLocal(t, uq("a"), uq("T"))}),
+	)
+}
+
+// TestUPACompetitionNeedsExactCounts pins that checkPaths reads the occurrence
+// ranges exactly (languagePolicy), not through maxMandatoryCopies' two-copy
+// bound. In sequence(choice{3,3}(b{2,3}, a), a) six b's are three blocks or two,
+// so after them the outer a and a third block's a ·compete·; choice{2,2} cannot
+// split any run of b's both ways. The row loads with checkPaths given the
+// attributionPolicy automaton.
+func TestUPACompetitionNeedsExactCounts(t *testing.T) {
+	err := uSchemaWithModel(t, uBlocksThenA(t, 3, 2, 3), nil)
+	expectRule(t, err, ruleCosNonambig)
+	if want := "[cos-nonambig] after element declaration " + uq("b").Display() + ", where one ·path· may stand at any of "; !strings.Contains(err.Error(), want) {
+		t.Fatalf("want the pair charged after a reached subset (%q), got: %v", want, err)
+	}
+}
+
+// TestUPAExactCountsPass is TestUPACompetitionNeedsExactCounts' control: in
+// sequence(choice{2,2}(b{3,5}, a), a) one block is three to five b's and two
+// are six to ten, so no run of b's splits both ways and nothing ·competes·.
+// Read through the two-copy bound, b{3,5} becomes b{2,4}, four b's split both
+// ways, and the row is rejected.
+func TestUPAExactCountsPass(t *testing.T) {
+	if err := uSchemaWithModel(t, uBlocksThenA(t, 2, 3, 5), nil); err != nil {
+		t.Fatalf("sequence(choice{2,2}(b{3,5}, a), a) was rejected: %v", err)
+	}
+}
+
+// TestUPACompetitionAcrossUnfoldedCopiesInGroupDefinition is the first row of
+// TestUPACompetitionAcrossUnfoldedCopies as an unreferenced Model Group
+// Definition, which checkModelGroupDefinitionUnambiguous charges on its own.
+func TestUPACompetitionAcrossUnfoldedCopiesInGroupDefinition(t *testing.T) {
+	inner := uCopiesThenC(t, uOccurs(t, 2, 2), 0,
+		uParticle(t, uUnbounded(t, 1), ResolvedTerm{Term: uLocal(t, uq("a"), uq("T"))}))
+	mgd, err := NewModelGroupDefinition(xsderr.Loc{}, uq("orphan"), inner)
+	if err != nil {
+		t.Fatalf("NewModelGroupDefinition: %v", err)
+	}
+	b := NewSchemaBuilder()
+	b.AddType(uNamedType(t, uq("T")))
+	b.AddModelGroup(mgd)
+	_, err = b.Finalize()
+	expectRule(t, err, ruleCosNonambig)
+	if want := " copies of it, in model group definition " + uq("orphan").Display() + ", "; !strings.Contains(err.Error(), want) {
+		t.Fatalf("want the group definition charged by checkPaths (%q), got: %v", want, err)
+	}
+}
+
+// TestUPAPerStateCompetitionReportedFirst pins decide's order: in
+// sequence(sequence{1,2}(c?, a), c) the two c's are live together in the single
+// state after a, so check reports them there, with check's message, before
+// checkPaths runs.
+func TestUPAPerStateCompetitionReportedFirst(t *testing.T) {
+	g := uCopiesThenC(t, uOccurs(t, 1, 2), 0,
+		uOne(t, ResolvedTerm{Term: uLocal(t, uq("a"), uq("T"))}))
+	err := uSchemaWithModel(t, g, nil)
+	expectRule(t, err, ruleCosNonambig)
+	want := "[cos-nonambig] after element declaration " + uq("a").Display() + " in complex type " + uq("ct").Display() +
+		" content model, element declaration " + uq("c").Display() + " and element declaration " + uq("c").Display() + " ·compete·"
+	if !strings.Contains(err.Error(), want) {
+		t.Fatalf("want check's per-state message (%q), got: %v", want, err)
+	}
+}
+
+// TestUPAMandatoryLeadAcrossCopiesPasses is the control the reached-subset
+// check must not charge: in sequence(sequence{2}(c, a+), c) a c after an a
+// opens the second occurrence until it has opened, and only the outer c after
+// that, so no prefix reaches both c's. A check that charged every pair of
+// same-named particles reachable after one prefix, without asking that both lie
+// on ·paths· of one sequence, rejects it.
+func TestUPAMandatoryLeadAcrossCopiesPasses(t *testing.T) {
+	g := uCopiesThenC(t, uOccurs(t, 2, 2), 1,
+		uParticle(t, uUnbounded(t, 1), ResolvedTerm{Term: uLocal(t, uq("a"), uq("T"))}))
+	if err := uSchemaWithModel(t, g, nil); err != nil {
+		t.Fatalf("sequence(sequence{2}(c, a+), c) was rejected: %v", err)
+	}
+}
+
 // TestUPAUnboundedThenSameName pins the loop-back edge: a* then a competes.
 func TestUPAUnboundedThenSameName(t *testing.T) {
 	g := uGroup(t, CompositorSequence,

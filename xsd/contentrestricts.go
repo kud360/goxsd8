@@ -27,23 +27,23 @@ import (
 // range (unfoldExactly) and the rendering of an <all> group (addInterleave).
 //
 // WHY THE UNFOLDING IS NOT SHARED. maxMandatoryCopies / maxOptionalCopies bound a
-// range to two copies of each kind, which is verdict-preserving for cos-nonambig
-// — whose subject is which particle- IDENTIFIER sets are live in one state, and
-// two copies realize every such set — and is NOT verdict-preserving here, because
-// as a statement about LANGUAGE the bound rewrites the range itself: e{3,6} would
-// read as e{2,4} and e{0,100} as e{0,2}. That rewrite is monotone in neither
-// direction, and both directions are reachable on a bare single element particle:
-// e{3,6} under e{0,100} is a VALID restriction whose fourth R-copy would find no
-// live B-position and be rejected, and e{5,5} under e{3,3} is an INVALID one both
-// of whose sides would collapse to two mandatory copies and become
-// indistinguishable. Nothing licenses either outcome — clause 1 is pure set
-// containment naming no algorithm, Appendix J's unfolding guidance is scoped by
-// its own text to cos-nonambig, and §3.4.6.3's "may provisionally accept the
-// derivation" (xmlschema11-1.md:2041) licenses ACCEPTANCE of an undecided case,
-// never a rejection. So the constants are not raised, which would only move the
-// same two thresholds, but replaced for this consumer: unfoldExactly emits {max
-// occurs} copies of a bounded range and {min occurs} copies plus a loop-back for
-// an unbounded one, so the automaton accepts exactly L and this walk DECIDES
+// range to two copies of each kind, which is verdict-preserving for cos-nonambig's
+// per-state check alone (maxMandatoryCopies states the argument and what it does
+// not cover) and is NOT verdict-preserving here, because as a statement about
+// LANGUAGE the bound rewrites the range itself: e{3,6} would read as e{2,4} and
+// e{0,100} as e{0,2}. That rewrite is monotone in neither direction, and both
+// directions are reachable on a bare single element particle: e{3,6} under
+// e{0,100} is a VALID restriction whose fourth R-copy would find no live
+// B-position and be rejected, and e{5,5} under e{3,3} is an INVALID one both of
+// whose sides would collapse to two mandatory copies and become indistinguishable.
+// Nothing licenses either outcome — clause 1 is pure set containment naming no
+// algorithm, Appendix J's unfolding guidance is scoped by its own text to
+// cos-nonambig, and §3.4.6.3's "may provisionally accept the derivation"
+// (xmlschema11-1.md:2041) licenses ACCEPTANCE of an undecided case, never a
+// rejection. So the constants are not raised, which would only move the same two
+// thresholds, but replaced for this consumer: unfoldExactly emits {max occurs}
+// copies of a bounded range and {min occurs} copies plus a loop-back for an
+// unbounded one, so the automaton accepts exactly L and this walk DECIDES
 // containment over the declared {min occurs}/{max occurs} instead of over a
 // truncated unfolding (#501).
 //
@@ -147,9 +147,10 @@ func (s *Schema) contentAutomatonOf(c ElementContent) (contentAutomaton, error) 
 	return contentAutomaton{automaton: b, first: first, last: last, emptiable: emptiable}, nil
 }
 
-// languagePolicy is cos-content-act-restrict's constructionPolicy: both of its
-// renderings preserve the LANGUAGE of the content model, which is the only fact a
-// containment walk reads.
+// languagePolicy is the constructionPolicy of cos-content-act-restrict and of
+// cos-nonambig's checkPaths: both of its renderings preserve the LANGUAGE of the
+// content model, which is the only fact a containment walk reads and what fixes
+// the subsets a ·path· prefix reaches.
 var languagePolicy = constructionPolicy{unfold: unfoldExactly, all: (*automaton).addInterleave}
 
 // unfoldExactly is languagePolicy's unfolding of a numeric occurrence range: the
@@ -561,7 +562,10 @@ type liveSet struct {
 }
 
 // liveGroups is liveIn with that partition computed: one pass over the union,
-// which is the only pass that consults a particle identifier.
+// which is the only pass that consults a particle identifier. checkPaths
+// (particleattribution.go) reads the same partition for its meaning rather
+// than its cost: each group is the subset a ·path· prefix extended by that
+// particle reaches.
 func (a contentAutomaton) liveGroups(states []int) liveSet {
 	positions := a.liveIn(states)
 	set := liveSet{positions: positions, group: make([]int, len(positions))}
