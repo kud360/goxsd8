@@ -19,8 +19,9 @@ import (
 const ruleCosNonambig xsderr.Rule = "cos-nonambig"
 
 // This file decides cos-nonambig by building the position automaton (the
-// Glushkov automaton) of a content model and checking that no state offers two
-// competing transitions. Appendix J sketches exactly this construction —
+// Glushkov automaton) of a content model and checking that no state, and no
+// subset of states one ·path· prefix reaches, offers two competing transitions
+// (decideUnambiguous). Appendix J sketches this construction —
 // "transcribe the content model into an automaton in the usual way using epsilon
 // transitions for optionality and unbounded maxOccurs, unfolding other numeric
 // occurrence ranges … using not element QNames as transition labels, but rather
@@ -29,9 +30,14 @@ const ruleCosNonambig xsderr.Rule = "cos-nonambig"
 // Wood's characterization of one-unambiguous regular languages ("One-Unambiguous
 // Regular Languages", Information and Computation 140(2), 1998), which Appendix
 // J's own bibliography points at: a regular expression is 1-unambiguous exactly
-// when its position automaton is deterministic. ·compete· (§3.8.4.2) — two
-// particles reachable by two ·paths· of one sequence differing only in their last
-// item — is precisely two positions live in one state of that automaton.
+// when its position automaton is deterministic. That theorem is about an
+// expression whose positions are its particles. An unfolding is not one: its
+// copies of one particle are several positions sharing one particle identifier,
+// and a ·path· (§3.8.4.1, key-path) does not say which copy it passed through.
+// ·compete· (§3.8.4.2, key-compete) — two particles reachable by two ·paths· of
+// one sequence differing only in their last item — is therefore two positions
+// live in one SUBSET of the automaton, the positions one identifier sequence
+// reaches (checkPaths); two live in one state is the special case check finds.
 //
 // The two-bullet shortcut Appendix J states first ("both in the {particles} of a
 // choice or all group", or "may ·validate· adjacent items and the first has
@@ -62,17 +68,19 @@ const ruleCosNonambig xsderr.Rule = "cos-nonambig"
 // {term} fragment the unfolding emits, so that maxOccurs="100000" does not build
 // a hundred thousand of them.
 //
-// The bound is verdict-preserving FOR cos-nonambig, the constraint this file
-// decides, and for that consumer alone — the property is quantified, not flat
-// (STYLE P3a). What it preserves is which particle-IDENTIFIER sets are live
-// together in one state; it does NOT preserve the language the automaton
-// accepts, which it demonstrably changes (e{3,6} reads as e{2,4}). The other
-// consumer of this construction, contentrestricts.go's cos-content-act-restrict
-// walk, decides language containment and therefore selects its own exact
-// unfolding through its constructionPolicy; these constants are not on its path
-// (#501).
+// The bound is verdict-preserving for check, the per-state half of
+// cos-nonambig (decideUnambiguous), and for that reader alone — the property
+// is quantified, not flat (STYLE P3a). What it preserves is which
+// particle-IDENTIFIER sets are live together in one state. It does NOT
+// preserve the language the automaton accepts, which it demonstrably changes
+// (e{3,6} reads as e{2,4}), nor the subsets one ·path· prefix reaches, which
+// it changes in both directions (checkPaths gives a shape each way). The two
+// readers of those — checkPaths, the reached-subset half of cos-nonambig, and
+// contentrestricts.go's cos-content-act-restrict walk, which decides language
+// containment — therefore build under languagePolicy's exact unfolding, and
+// these constants are on neither path (#501).
 //
-// The argument for that quantified claim: every unfolded copy of one source
+// The argument for the per-state claim: every unfolded copy of one source
 // particle replays the SAME particle identifiers (see automaton.addParticle),
 // so all copies of a fragment have identical ·first·, ·last· and internal follow
 // sets when read as sets of particle identifiers. The competition sets a chain of
@@ -87,6 +95,27 @@ const ruleCosNonambig xsderr.Rule = "cos-nonambig"
 const (
 	maxMandatoryCopies = 2
 	maxOptionalCopies  = 2
+)
+
+// maxPathPositions and maxPathSubsets bound checkPaths' work: the positions of
+// the exactly unfolded automaton it walks (unfoldedPositions' count, checked
+// before the automaton is built) and the subsets it visits. Each is a ceiling
+// on cost, never on the verdict of a walk that runs to its end, and passing
+// either leaves the reached-subset pairs uncharged under the GAP(xsd) markers
+// at decideUnambiguous and checkPaths.
+//
+// Both are measured, on this commit's construction (one machine, one run).
+// The exact unfolding of a wide optional range is cubic to walk, because a
+// copy is followed by every later one: a whole Finalize of e{0,n} took 142 ms
+// at n = 512 and 889 ms at n = 1024, and 44 µs at n = 2048, past the ceiling,
+// where check alone runs. Over the full W3C suite, run with the
+// position ceiling at 4096, the walk was reached 65096 times and charged no
+// content model; 15 of those walks were over more than 1024 positions, and so
+// are declined at this value, and every walk within 1024 positions visited at
+// most 1025 subsets.
+const (
+	maxPathPositions = 1024
+	maxPathSubsets   = 2048
 )
 
 // position is one occurrence, in a flattened content model, of an ·element
@@ -130,14 +159,16 @@ type automaton struct {
 // constructionPolicy is how one consumer's automaton renders the two constructs
 // whose faithful rendering depends on the fact being decided: a numeric
 // occurrence range (unfold, read by addParticle) and an <all> group (all, read
-// by addModelGroup). The two constraints decided over this construction need
-// different renderings and neither may be given the other's. cos-nonambig takes
+// by addModelGroup). The readers of this construction need different renderings
+// and none may be given another's. cos-nonambig's per-state check takes
 // attributionPolicy: unfoldCopies, whose two-copy bound is verdict-preserving
-// for identifier-set competition, and addAll, whose star is exact for ·compete·
-// but a strict superset of the interleave's language. contentrestricts.go's
-// cos-content-act-restrict walk takes languagePolicy: unfoldExactly and
+// for identifier-set competition in one state, and addAll, whose star is exact
+// for the pairs one state holds but a strict superset of the interleave's
+// language. cos-nonambig's reached-subset checkPaths and contentrestricts.go's
+// cos-content-act-restrict walk take languagePolicy: unfoldExactly and
 // addInterleave, because both of attributionPolicy's renderings rewrite the
-// accepted language (see maxMandatoryCopies and addAll). The two halves are one
+// accepted language and the subsets a ·path· prefix reaches (see
+// maxMandatoryCopies, addAll and checkPaths). The two halves are one
 // value so that no automaton pairs one consumer's unfolding with the other's
 // <all>, and every construction site names its policy, so none is inherited by
 // default.
@@ -146,7 +177,7 @@ type constructionPolicy struct {
 	all    func(b *automaton, g ModelGroup) ([]int, []int, bool, error)
 }
 
-// attributionPolicy is cos-nonambig's constructionPolicy.
+// attributionPolicy is the constructionPolicy of cos-nonambig's per-state check.
 var attributionPolicy = constructionPolicy{unfold: unfoldCopies, all: (*automaton).addAll}
 
 // checkContentModelsUnambiguous is the cos-nonambig half of Phase C. It walks the
@@ -186,26 +217,74 @@ func (s *Schema) checkContentModelUnambiguous(c ComplexType) error {
 	if !ok {
 		return nil
 	}
-	b := &automaton{s: s, policy: attributionPolicy}
-	first, _, _, err := b.addParticle(ec.Particle)
-	if err != nil {
-		return err
-	}
-	return b.check(first, complexTypeOwner(c)+" content model")
+	build := func(b *automaton) ([]int, []int, bool, error) { return b.addParticle(ec.Particle) }
+	return s.decideUnambiguous(build, s.unfoldedPositions(ec.Particle), complexTypeOwner(c)+" content model")
 }
 
 // checkModelGroupDefinitionUnambiguous charges cos-nonambig against one Model
 // Group Definition's {model group}.
 func (s *Schema) checkModelGroupDefinitionUnambiguous(mgd ModelGroupDefinition) error {
+	g := mgd.ModelGroup()
+	build := func(b *automaton) ([]int, []int, bool, error) { return b.addModelGroup(g) }
+	return s.decideUnambiguous(build, s.modelGroupPositions(g), "model group definition "+mgd.Name().Display())
+}
+
+// decideUnambiguous charges cos-nonambig against one content model, which build
+// emits into an automaton and whose exact unfolding emits positions positions
+// (unfoldedPositions' count). It runs two passes and reports the first
+// competing pair either finds:
+//
+//  1. check, over the attributionPolicy automaton: the pairs live together in
+//     one state, which maxMandatoryCopies' bound preserves;
+//  2. checkPaths, over the languagePolicy automaton: the pairs live together
+//     in one SUBSET a ·path· prefix reaches, which no copy bound preserves, so
+//     that automaton unfolds every occurrence range exactly.
+//
+// check runs first and runs on every content model; checkPaths runs only
+// within maxPathPositions, and only once check has charged nothing.
+func (s *Schema) decideUnambiguous(build func(*automaton) ([]int, []int, bool, error), positions int, ctx string) error {
 	b := &automaton{s: s, policy: attributionPolicy}
-	first, _, _, err := b.addModelGroup(mgd.ModelGroup())
+	first, _, _, err := build(b)
 	if err != nil {
 		return err
 	}
-	return b.check(first, "model group definition "+mgd.Name().Display())
+	if err := b.check(first, ctx); err != nil {
+		return err
+	}
+	if positions > maxPathPositions {
+		// GAP(xsd): cos-nonambig's reached-subset pass (checkPaths) is not run on
+		// a content model whose exact unfolding would exceed maxPathPositions, so
+		// two particles that ·compete· only across unfolded copies of a counted
+		// particle (§3.8.4.2, key-compete) go uncharged there and only check's
+		// per-state pairs are charged. No owner issue is filed yet. Direction, by
+		// consumer: SchemaBuilder.Finalize, and parser.Parse through it, loses the
+		// rejection and gains none. Schema.ContentMatcher's Matcher assumes no
+		// such pair exists. On TestUPAPastPathPositionsDeclined's model it takes
+		// a a c and then reports Accepting() false, though the model accepts
+		// a a c, and it accepts a c a c; whether it can also accept a sequence
+		// the model rejects is unestablished. By reader of that Matcher:
+		//   - validate (*walk).contentCheck charges cvc-complex-content on a a c,
+		//     a false rejection;
+		//   - codec (*matcherSlot).attributor and trackedMatcher: Decode rejects
+		//     a a c with that same charge; the direction of either on its own is
+		//     unestablished;
+		//   - validate/jsonsrc (*walker).govern: jsonsrc.Validate charges the
+		//     JSON spelling of a a c with that same charge; the direction of
+		//     govern's own attribution is unestablished;
+		//   - codec (*encoder).flattenedCheck, Append's attribution check, and
+		//     conformance (*subtreeGate).complex: unestablished.
+		return nil
+	}
+	x := &automaton{s: s, policy: languagePolicy}
+	first, _, _, err = build(x)
+	if err != nil {
+		return err
+	}
+	return x.checkPaths(first, ctx)
 }
 
-// check reports the first competing pair in the automaton. States are visited in
+// check reports the first competing pair live in one state of the automaton,
+// the per-state half of decideUnambiguous. States are visited in
 // a fixed order — the start state first, then the state after position 0, after
 // position 1, … — and within a state the pair with the least (i, j) by position
 // index is reported, so the reported violation is the lexicographically least
@@ -220,6 +299,77 @@ func (b *automaton) check(first []int, ctx string) error {
 		}
 	}
 	return nil
+}
+
+// checkPaths reports the first competing pair live in one reached SUBSET of the
+// automaton: the positions one ·path· prefix may stand at. A ·path· (§3.8.4.1,
+// key-path) is "the sequence of ·basic particles· which the items of S match",
+// and the unfolded copies of one particle are one particle, so a prefix that
+// two copies can each have consumed reaches both, and ·compete· (§3.8.4.2,
+// key-compete) asks about the union of what may follow them.
+// sequence(sequence{2}(c?, a+), c) is the shape no single state shows: after
+// a a, copy 1's a is followed by copy 2's c and copy 2's a by the outer c, and
+// only the subset {copy 1's a, copy 2's a} holds both c's.
+//
+// It is the subset construction over particle identifiers: from the start
+// subset, the positions live next are partitioned by particleID, and each part
+// is the subset the prefix extended by that particle reaches. The walk is
+// contentrestricts.go's B-side subset walk reused (STYLE T4):
+// contentAutomaton.liveGroups for the partition and subsetTable for the visited
+// set, whose identifier order is the breadth-first queue. Every part is interned
+// in ascending order of its first position, so the reported pair is fixed by the
+// content model alone (STYLE D1/D2). Only one representative per group is put
+// to checkState: a particleID determines the {term} (liveSet), so competes
+// answers every member of a group as it answers the representative, and two
+// members of one group never compete.
+//
+// b must be built under languagePolicy, so that the reached subsets are the
+// language's own. Over attributionPolicy's two-copy bound they are not, in
+// either direction: sequence(choice{3,3}(b{2,3}, a), a) has the competing a's
+// after b b b b b b (three b{2,3} blocks or two), which choice{2,2} cannot
+// show, and sequence(choice{2,2}(b{3,5}, a), a), which has no such pair, would
+// read b{3,5} as b{2,4} and find one after b b b b. And addAll's star would put
+// an <all> member's star and primed positions in one subset whose union offers
+// the group's successor beside the members, a competition the interleave does
+// not have.
+func (b *automaton) checkPaths(first []int, ctx string) error {
+	a := contentAutomaton{automaton: b, first: first}
+	reached := newSubsetTable()
+	reached.intern([]int{startState})
+	for id := 0; id < len(reached.sets); id++ {
+		if id == maxPathSubsets {
+			// GAP(xsd): cos-nonambig's reached-subset pass stops after
+			// maxPathSubsets subsets, and a pair live only in a later one goes
+			// uncharged. No owner issue is filed yet; the direction, by
+			// consumer, is decideUnambiguous' maxPathPositions marker's.
+			return nil
+		}
+		subset := reached.set(id)
+		live := a.liveGroups(subset)
+		if err := b.checkState(live.reps, ctx, b.reachedAt(subset)); err != nil {
+			return err
+		}
+		part := make([]bool, len(live.reps))
+		for g := range live.reps {
+			part[g] = true
+			reached.intern(live.positionsOf(part))
+			part[g] = false
+		}
+	}
+	return nil
+}
+
+// reachedAt is the "where" phrase checkState's message gives for one subset
+// checkPaths reached. Every member of a subset past the start is a copy of one
+// particle, so its first member names them all.
+func (b *automaton) reachedAt(subset []int) string {
+	if subset[0] == startState {
+		return "at the start of"
+	}
+	if len(subset) == 1 {
+		return "after " + b.describe(subset[0]) + " in"
+	}
+	return fmt.Sprintf("after %s, where one ·path· may stand at any of %d copies of it, in", b.describe(subset[0]), len(subset))
 }
 
 // checkState rejects the first competing pair live in one state of the automaton.
@@ -439,13 +589,13 @@ func (b *automaton) addParticle(p Particle) ([]int, []int, bool, error) {
 	return seq.first, seq.last, seq.emptiable, nil
 }
 
-// unfoldCopies is the unfolding cos-nonambig is decided over (attributionPolicy): how
-// many copies of a particle's {term} fragment to emit for an occurrence range,
-// how many of them are mandatory, and whether the last one carries a loop-back
-// edge. See maxMandatoryCopies for why bounding the copy count changes no
-// cos-nonambig verdict — and for why that argument is quantified over that
-// constraint alone, so a consumer deciding some other fact must supply its own
-// unfolding rather than inherit this one.
+// unfoldCopies is the unfolding cos-nonambig's per-state check is decided over
+// (attributionPolicy): how many copies of a particle's {term} fragment to emit
+// for an occurrence range, how many of them are mandatory, and whether the last
+// one carries a loop-back edge. See maxMandatoryCopies for why bounding the copy
+// count changes no verdict of check — and for why that argument is quantified
+// over that reader alone, so a consumer deciding some other fact, checkPaths
+// among them, must supply its own unfolding rather than inherit this one.
 func unfoldCopies(o Occurs) (copies, mandatory int, loop bool) {
 	bound, bounded := o.Max()
 	if bounded && bound == 0 {
@@ -647,11 +797,12 @@ func (b *automaton) addAllMembers(g ModelGroup) (allFragment, error) {
 // its ·last· positions.
 //
 // The sequences the fragment ACCEPTS are a STRICT superset of the interleave:
-// all(a, b) admits a a, and a alone. That is harmless for ·compete·, the one fact
-// attributionPolicy renders it for, and wrong for any consumer that reads the
-// language, which is why contentrestricts.go's containment walk renders an <all>
-// through addInterleave instead (languagePolicy) and never reads this fragment
-// (#1930).
+// all(a, b) admits a a, and a alone. That is harmless for the pairs one state
+// holds, the one fact attributionPolicy renders it for (check), and wrong for
+// any consumer that reads the language or the subsets a ·path· prefix reaches,
+// which is why contentrestricts.go's containment walk and checkPaths render an
+// <all> through addInterleave instead (languagePolicy) and never read this
+// fragment (#1930).
 //
 // Emptiability is NOT taken from the star form, which would always be emptiable:
 // an <all> accepts the empty sequence exactly when every member does, and that is
