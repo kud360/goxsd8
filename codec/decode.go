@@ -2722,11 +2722,13 @@ func (s *sequence) targets() int {
 
 // A contentMember is one field of the struct a sequence binds, a closed sum: an
 // elementMember, an element particle's field; a wildcardMember, a wildcard
-// particle's; a field, the open-content field; a *choice, a choice's sealed interface; a
-// *flatSlice, a nested flattened particle's slice of a sealed interface; or a
-// *nestedOccurrence, a nested particle's occurrence field.
+// particle's; an openField, the open-content field; a field, the one field of a
+// substitution group member's or a governing type's branch struct (branchArm); a
+// *choice, a choice's sealed interface; a *flatSlice, a nested flattened
+// particle's slice of a sealed interface; or a *nestedOccurrence, a nested
+// particle's occurrence field.
 type contentMember interface {
-	// targets is how many attribution targets the member takes: a field and an
+	// targets is how many attribution targets the member takes: an openField, a field and an
 	// elementMember one, a *choice those of each alternative's branch members in turn
 	// (branchTargets), a *flatSlice one per alternative, and a *nestedOccurrence
 	// those of its item.
@@ -2744,8 +2746,8 @@ type contentMember interface {
 }
 
 // A boundMember is a contentMember whose check held, the member's own bound
-// state, a closed sum: a fieldSink, a field's (field.bindMember); a
-// boundParticle, an elementMember's or a wildcardMember's; a
+// state, a closed sum: a boundOpen, an openField's (openField.bindMember); a fieldSink,
+// a field's (field.bindMember); a boundParticle, an elementMember's or a wildcardMember's; a
 // boundNestedChoice, a *choice's; a boundFlatSlice, a *flatSlice's; or a
 // boundNestedOccurrence, a *nestedOccurrence's. A sequence, a branch struct
 // and an occurrence's struct item keep one per member, in member order, and
@@ -2874,10 +2876,10 @@ func (field) targets() int { return 1 }
 // goName is f's Go name.
 func (f field) goName() string { return f.name }
 
-// bindMember holds field index of t to f, the open-content field
-// (sequence.openContent) or the one field of a substitution group member's
-// or a governing type's branch struct (branchArm), and returns its fieldSink
-// (field.bindSink). elementMember and wildcardMember shadow it.
+// bindMember holds field index of t to f, the one field of a substitution
+// group member's or a governing type's branch struct (branchArm), and returns
+// its fieldSink (field.bindSink). elementMember, wildcardMember and openField
+// shadow it.
 func (f field) bindMember(t reflect.Type, index int, cx *checkContext) (boundMember, error) {
 	s, err := f.bindSink(t, index, cx)
 	if err != nil {
@@ -3117,13 +3119,53 @@ func (s *sequence) occurrence(run *bindRun, ct xsd.ComplexType, group xsd.ModelG
 // particle fields' as codegen/doc.go "# Naming" states, and its Go type a
 // slice, never a pointer, of the arm rawChild gives ct: E, of AnyElement's
 // shape, or C, of AnyChild's in mixed content.
-func openContentField(ct xsd.ComplexType, names *goname.Namer) (field, bool) {
-	content, isElement := ct.ContentType().(xsd.ElementContent)
-	if !isElement || content.OpenContent == nil {
-		return field{}, false
+func openContentField(ct xsd.ComplexType, names *goname.Namer) (openField, bool) {
+	if openContentOf(ct) == nil {
+		return openField{}, false
 	}
-	return field{name: names.Claim("openContent"), shape: shapeRepeated, arm: rawChild(ct)}, true
+	return openField{field{name: names.Claim("openContent"), shape: shapeRepeated, arm: rawChild(ct)}}, true
 }
+
+// openContentOf returns the {open content} of ct's own {content type}, nil
+// for none, as an empty or simple {content type} has none: the record the
+// finalized component carries, as codegen/doc.go "# Open content" reads it,
+// and the pointer xsd.Matcher.NextParticle answers with.
+func openContentOf(ct xsd.ComplexType) *xsd.OpenContent {
+	content, isElement := ct.ContentType().(xsd.ElementContent)
+	if !isElement {
+		return nil
+	}
+	return content.OpenContent
+}
+
+// openField is the member the {open content} of a complex type gives the
+// struct codegen emits for it (openContentField), its field: the last member
+// of a spliced content sequence or of a content choice's rest
+// (sequence.openContent), and the field after a flattened or occurrence
+// content's one (flattened.open, occurrence.open). Append writes the children
+// it holds from its bound state (boundOpen.writeMember).
+type openField struct{ field }
+
+// bindMember holds field index of t to f (openField.bindOpen) and returns its
+// boundOpen.
+func (f openField) bindMember(t reflect.Type, index int, cx *checkContext) (boundMember, error) {
+	return f.bindOpen(t, index, cx)
+}
+
+// bindOpen holds field index of t to f's field (field.bindSink) and returns
+// the boundOpen of f held there.
+func (f openField) bindOpen(t reflect.Type, index int, cx *checkContext) (boundOpen, error) {
+	s, err := f.bindSink(t, index, cx)
+	if err != nil {
+		return boundOpen{}, err
+	}
+	return boundOpen{s}, nil
+}
+
+// boundOpen is an openField whose check held, the one bound state of the
+// open-content field in every hold of its content: its fieldSink, whose
+// sinks and put Decode reads as a field's.
+type boundOpen struct{ fieldSink }
 
 // openContent appends to s, after every particle's member, the field ct's
 // {open content} gives (openContentField), its name claimed from names, and
@@ -3965,7 +4007,7 @@ type flattened struct {
 	slice  *flatSlice
 	places []place
 	ct     xsd.ComplexType
-	open   *field
+	open   *openField
 }
 
 // bindFlattened returns the flattened content of group, the model group of
@@ -4261,7 +4303,7 @@ func (f *flattened) width() int { return 1 + openWidth(f.open) }
 
 // openWidth is the number of fields open gives a struct: 1, or 0 for a nil
 // open, a type with no {open content}.
-func openWidth(open *field) int {
+func openWidth(open *openField) int {
 	if open == nil {
 		return 0
 	}
@@ -4270,16 +4312,17 @@ func openWidth(open *field) int {
 
 // checkOpen holds field index of t, the struct's field after its one content
 // field, to open, the open-content field of a flattened or occurrence
-// content, and returns its sink, nil for a nil open.
-func checkOpen(open *field, t reflect.Type, index int, cx *checkContext) (sink, error) {
+// content (openField.bindOpen), and returns its boundOpen, nil for a nil
+// open.
+func checkOpen(open *openField, t reflect.Type, index int, cx *checkContext) (*boundOpen, error) {
 	if open == nil {
 		return nil, nil
 	}
-	b, err := open.bindMember(t, index, cx)
+	b, err := open.bindOpen(t, index, cx)
 	if err != nil {
 		return nil, err
 	}
-	return b.sinks()[0], nil
+	return &b, nil
 }
 
 // check holds field first of t to f's slice (flatSlice.checkField), and the
@@ -4299,12 +4342,12 @@ func (f *flattened) check(t reflect.Type, first int, cx *checkContext) (contentF
 
 // boundFlattened is a flattened content model whose check held, field index
 // of the struct its slice, bound its interface's branches, and open the
-// open-content field's sink, nil for none.
+// open-content field's bound state, nil for none.
 type boundFlattened struct {
 	flattened *flattened
 	index     int
 	bound     *boundChoice
-	open      sink
+	open      *boundOpen
 }
 
 // fill appends to the slice field of out, the struct, one new item per child
@@ -4418,7 +4461,7 @@ type occurrence struct {
 	index childIndex
 	ct    xsd.ComplexType
 	p     *pipeline
-	open  *field
+	open  *openField
 }
 
 // An occurrenceItem is the type for one occurrence of an occurrence field's
@@ -4768,13 +4811,14 @@ func (o *occurrence) check(t reflect.Type, first int, cx *checkContext) (content
 
 // boundOccurrence is an occurrence whose check held: field index of the
 // struct its occurrence field, item, the Go type of one occurrence, bound,
-// that item bound, and open, the open-content field's sink, nil for none.
+// that item bound, and open, the open-content field's bound state, nil for
+// none.
 type boundOccurrence struct {
 	occurrence *occurrence
 	index      int
 	item       reflect.Type
 	bound      boundItem
-	open       sink
+	open       *boundOpen
 }
 
 // fill sets the occurrence field of out, the struct, from the children of

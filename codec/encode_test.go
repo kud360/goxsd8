@@ -77,8 +77,9 @@ func roundTrip[T any](t *testing.T, schema *xsd.Schema, name xsd.QName, v T, wan
 // or item 7's decline, by constructNoCanonical, constructQNameSpelling,
 // constructValueConstraint, constructXsiAttribute,
 // constructStrictAttributeWildcard, constructGovernedContent,
-// constructLocallyTypedMatch, constructCapturedPrefix or, for an ·ENTITY value·
-// held raw, constructEntityType.
+// constructLocallyTypedMatch, constructInterleaveParticleChild,
+// constructLocallyTypedOpenChild, constructCapturedPrefix or, for an ·ENTITY
+// value· held raw, constructEntityType.
 func appendChecked[T any](t *testing.T, dst []byte, schema *xsd.Schema, backend value.Backend, name xsd.QName, v T, opts ...Option) ([]byte, error) {
 	t.Helper()
 	out, err := Append(dst, schema, backend, name, v, opts...)
@@ -86,7 +87,7 @@ func appendChecked[T any](t *testing.T, dst []byte, schema *xsd.Schema, backend 
 	if checked == nil {
 		class := staticClass(err)
 		static := class == "undeclared" || class == "abstract"
-		if static || err != nil && class != "plain" && class != "invalid" && class != "decline "+constructNoCanonical.name() && class != "decline "+constructQNameSpelling.name() && class != "decline "+constructValueConstraint.name() && class != "decline "+constructXsiAttribute.name() && class != "decline "+constructStrictAttributeWildcard.name() && class != "decline "+constructGovernedContent.name() && class != "decline "+constructLocallyTypedMatch.name() && class != "decline "+constructCapturedPrefix.name() && class != "decline "+constructEntityType.name() {
+		if static || err != nil && class != "plain" && class != "invalid" && class != "decline "+constructNoCanonical.name() && class != "decline "+constructQNameSpelling.name() && class != "decline "+constructValueConstraint.name() && class != "decline "+constructXsiAttribute.name() && class != "decline "+constructStrictAttributeWildcard.name() && class != "decline "+constructGovernedContent.name() && class != "decline "+constructLocallyTypedMatch.name() && class != "decline "+constructInterleaveParticleChild.name() && class != "decline "+constructLocallyTypedOpenChild.name() && class != "decline "+constructCapturedPrefix.name() && class != "decline "+constructEntityType.name() {
 			t.Errorf("CheckAppend = nil, but Append returned %v, %s", err, class)
 		}
 		return out, err
@@ -1301,7 +1302,7 @@ func TestAppendDeclines(t *testing.T) {
 		{"simple content", entityTypeName, complexOf(`<xs:simpleContent><xs:extension base="xs:ENTITY"/></xs:simpleContent>`)},
 		{"simple content before attribute uses", entityTypeName, complexOf(`<xs:simpleContent><xs:extension base="xs:ENTITY"><xs:attribute name="a" type="xs:string" form="qualified"/></xs:extension></xs:simpleContent>`)},
 		{"mixed", "a complex type with mixed content", `<xs:element name="%[1]s"><xs:complexType mixed="true"><xs:sequence>` + a + `</xs:sequence></xs:complexType></xs:element>`},
-		{"open content", "an {open content}", complexOf(`<xs:openContent><xs:any namespace="##other" processContents="lax"/></xs:openContent><xs:sequence>` + a + `</xs:sequence>`)},
+		{"open content untracked", "a content model the content matcher does not track", complexOf(`<xs:openContent><xs:any namespace="##other" processContents="lax"/></xs:openContent><xs:sequence maxOccurs="21845"><xs:element name="a" type="xs:string" maxOccurs="2"/></xs:sequence>`)},
 		{"flattened", "an element declaration with {nillable} true", complexOf(`<xs:sequence maxOccurs="unbounded"><xs:element name="a" type="xs:string" minOccurs="0" nillable="true"/></xs:sequence>`)},
 		{"flattened untracked", "a content model the content matcher does not track", complexOf(`<xs:sequence maxOccurs="21845"><xs:element name="a" type="xs:string" maxOccurs="2"/></xs:sequence>`)},
 		{"nested flattened particle in an occurrence field", "a nested model group particle", complexOf(`<xs:sequence maxOccurs="2">` + a +
