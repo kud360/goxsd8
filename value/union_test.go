@@ -1,6 +1,7 @@
 package value
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/kud360/goxsd8/xsd"
@@ -256,7 +257,9 @@ func TestValidateLexicalUnionEnumerationPostDispatch(t *testing.T) {
 // (Structures §3.16.7.3): the union with an empty {member type definitions} has an
 // empty value space AND an empty lexical space, so every literal — the empty string
 // included — is rejected. The dispatch loop reaches this with zero candidates and
-// no special case, which is the property under test.
+// no special case in the verdict, which is the property under test. The message
+// states the reason in place of the member list a non-empty union's fold ends
+// with (#4146); the exact-equality row fails with that clause removed.
 func TestValidateLexicalUnionEmptyMembershipRejectsEverything(t *testing.T) {
 	empty := unionType2(t, "errorLike")
 	for _, lexical := range []string{"", " ", "0", "anything"} {
@@ -266,6 +269,10 @@ func TestValidateLexicalUnionEmptyMembershipRejectsEverything(t *testing.T) {
 		}
 		if r, _ := xsderr.RuleOf(err); r != "cvc-datatype-valid" {
 			t.Errorf("ValidateLexical(empty union, %q) charged %s, want cvc-datatype-valid (§4.1.4 cl.2.3)", lexical, r)
+		}
+		want := fmt.Sprintf(`?: [cvc-datatype-valid] value %q is Datatype Valid with respect to no member of the union's 0 {member type definitions}, but cvc-datatype-valid clause 2.3 requires it to be valid with respect to at least one, and the union has none, so its lexical space is empty (Structures §3.16.7.3)`, lexical)
+		if got := err.Error(); got != want {
+			t.Errorf("ValidateLexical(empty union, %q) error =\n  %s\nwant\n  %s", lexical, got, want)
 		}
 	}
 }
