@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"math"
 	"reflect"
+	"regexp"
 	"slices"
 	"strconv"
 	"strings"
@@ -54,7 +55,9 @@ var ErrInvalidValue = errors.New("codec: Append: a value no valid document holds
 // element's, a complex type's simple content's, an attribute's, a list's item
 // type or a union's basic member, is xs:ID, xs:IDREF or a type derived from
 // either (§3.3.4.5 cvc-id, cvc-elt clause 7), whatever variant a union's value
-// holds, or when item 4's walk reaches a wildcard particle with {process
+// holds, or when a complex type item 4 examines has {assertions}, its own or
+// inherited (§3.4.4.2 cvc-complex-type clause 6, §3.13.4.1 cvc-assertion), or
+// when item 4's walk reaches a wildcard particle with {process
 // contents} strict or lax, or an element declaration whose {type definition} is
 // xs:anyType itself, whose content Append writes raw and in which a top-level
 // declaration or an xsi:type may govern an item (§3.3.4.6 key-governing-ed
@@ -226,9 +229,13 @@ var ErrInvalidValue = errors.New("codec: Append: a value no valid document holds
 //     breaks, 3, 4.1, 4.2.1, 4.2.2 or 4.3, and a cvc-id one naming the ID and
 //     the clause it breaks, 1, an ID no element is bound to or an IDREF no ID
 //     matches, or 2, an ID bound to more than one element (§3.17.5.2 sic-id).
-//     Where Append assesses by neither condition but the first two above, a
+//     Where Append assesses by no condition but the first three above, a
 //     violation of any other rule is a fault of Append's, reported so all the
-//     same; otherwise every violation is the value's.
+//     same; otherwise every violation is the value's, but for a cvc-assertion
+//     one whose {test} reads the string value of an element or attribute,
+//     which Append spells as the opening paragraph above states, so that the
+//     violation may come from that spelling rather than from the value,
+//     reported so all the same.
 //  9. An assessed document validate leaves undecided: the error item 4 of
 //     [Decode]'s doc states for it.
 //
@@ -1232,6 +1239,7 @@ func elementEncodes(schema *xsd.Schema, decl xsd.ElementDeclaration) (bool, erro
 // has {identity-constraint definitions} (encodeWalk.declEncodes) or a {type
 // definition} that is xs:anyType itself (encodeWalk.element), where a simple
 // type it examined is derived from xs:ID or xs:IDREF (encodeWalk.atomicEncodes),
+// where a complex type it examined has {assertions} (encodeWalk.complexEncodes),
 // and where a wildcard particle it examined has {process contents} strict or
 // lax (encodeWalk.particleEncodes), and never cleared, so that a type walked
 // answers for its second reach too. An entry is stored before its type's content is
@@ -1367,9 +1375,13 @@ func pathsCompile(ic xsd.IdentityConstraint) (string, bool) {
 // mixed content its content {particle}, {max occurs} 0 declined before its
 // hold is asked (#3794), then each particle in order, of a flattened one
 // each basic particle it reaches (contentEncodes); then each attribute use
-// codegen gives a field (goshape.FieldAttributeUses), then its {assertions}.
-// An {attribute wildcard} declines nothing here: what its field holds is
-// examined per value (encoder.wildcardAttributes).
+// codegen gives a field (goshape.FieldAttributeUses), then each member of its
+// {assertions}, its own and its base's (§3.4.2 {assertions}), in order: one
+// whose {test} namesInScopeNamespaces reports declines by
+// constructInScopeAssertion, and every other sets w.assess, so that the
+// written document is held to cvc-complex-type clause 6 (§3.4.4.2,
+// §3.13.4.1 cvc-assertion). An {attribute wildcard} declines nothing here: what its
+// field holds is examined per value (encoder.wildcardAttributes).
 func (w *encodeWalk) complexEncodes(decl xsd.ElementDeclaration, ct xsd.ComplexType) error {
 	subject := typeSubject(decl, ct)
 	// {content type} is a closed sum, so the switch is STYLE T2's sealed-sum
@@ -1389,10 +1401,33 @@ func (w *encodeWalk) complexEncodes(decl xsd.ElementDeclaration, ct xsd.ComplexT
 			return err
 		}
 	}
-	if len(ct.Assertions()) > 0 {
-		return encodeDecline(constructComplexAssertions, subject)
+	for _, a := range ct.Assertions() {
+		if namesInScopeNamespaces(a.Test()) {
+			return encodeDecline(constructInScopeAssertion, subject)
+		}
+		w.assess = true
 	}
 	return nil
+}
+
+// inScopeNamespaces matches, in an XPath expression's text, the names of the
+// functions that read an element's in-scope namespaces (F&O §11.1.1
+// fn:resolve-QName, §11.2.5 fn:namespace-uri-for-prefix, §11.2.6
+// fn:in-scope-prefixes) and the namespace axis, its name followed by "::"
+// after optional whitespace (XPath 2.0 §3.2.1.1), wherever the text spells
+// them, inside a longer name too.
+var inScopeNamespaces = regexp.MustCompile(`in-scope-prefixes|namespace-uri-for-prefix|resolve-QName|namespace\s*::`)
+
+// namesInScopeNamespaces reports whether test's {expression} spells a name
+// inScopeNamespaces matches, wherever it lies, a string literal or an XPath
+// comment among them. The namespace bindings of the document Append writes
+// are the ones the package doc's "# What encodes" states, chosen by Append and
+// carried by no value, so an assertion reading them would charge the value
+// under item 8 of [Append]'s doc for Append's choice; complexEncodes declines
+// it in its place (constructInScopeAssertion). A match the {test} does not
+// evaluate declines too, an item 4 refusal, never a charge.
+func namesInScopeNamespaces(test xsd.XPathExpression) bool {
+	return inScopeNamespaces.MatchString(test.Expression())
 }
 
 // contentEncodes returns complexEncodes' error for content, element-only or
