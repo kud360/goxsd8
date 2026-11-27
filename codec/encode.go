@@ -54,9 +54,14 @@ var ErrInvalidValue = errors.New("codec: Append: a value no valid document holds
 // element's, a complex type's simple content's, an attribute's, a list's item
 // type or a union's basic member, is xs:ID, xs:IDREF or a type derived from
 // either (§3.3.4.5 cvc-id, cvc-elt clause 7), whatever variant a union's value
-// holds, each of which holds for every value of T or for none, and runs no
-// assessment otherwise: a caller wanting a verdict on such a
-// document assesses it through package validate, as any document. The package
+// holds, or when item 4's walk reaches a wildcard particle with {process
+// contents} strict or lax, or an element declaration whose {type definition} is
+// xs:anyType itself, whose content Append writes raw and in which a top-level
+// declaration or an xsi:type may govern an item (§3.3.4.6 key-governing-ed
+// clause 3, key-governing-type-elem clause 8, §3.4.7), each of which holds for
+// every value of T or for none, and runs no assessment otherwise: a caller
+// wanting a verdict on such a document assesses it through package validate,
+// as any document. The package
 // doc's "# What encodes" section states the slice Append encodes and the
 // document it writes. On error Append returns dst unextended, its bytes beyond
 // len(dst) possibly overwritten, and the first of these that applies:
@@ -226,8 +231,11 @@ var ErrInvalidValue = errors.New("codec: Append: a value no valid document holds
 //     breaks, 3, 4.1, 4.2.1, 4.2.2 or 4.3, and a cvc-id one naming the ID and
 //     the clause it breaks, 1, an ID no element is bound to or an IDREF no ID
 //     matches, or 2, an ID bound to more than one element (§3.17.5.2 sic-id).
-//     A violation of any other rule is a fault of Append's, reported so all
-//     the same.
+//     Where item 4's walk reaches no wildcard particle with {process
+//     contents} strict or lax and no element declaration whose {type
+//     definition} is xs:anyType itself, a violation of any other rule is a
+//     fault of Append's, reported so all the same; where it reaches one, every
+//     violation is the value's.
 //  9. An assessed document validate leaves undecided: the error item 4 of
 //     [Decode]'s doc states for it.
 //
@@ -1176,9 +1184,11 @@ func elementEncodes(schema *xsd.Schema, decl xsd.ElementDeclaration) (bool, erro
 // whose constructs it has examined or is examining, each under the key
 // Decode's bind indexes its unit by (nestedKey); and assess, whether Append
 // assesses what it writes, set where an element declaration the pass examined
-// has {identity-constraint definitions} (encodeWalk.declEncodes) or a simple
+// has {identity-constraint definitions} (encodeWalk.declEncodes) or a {type
+// definition} that is xs:anyType itself (encodeWalk.element), where a simple
 // type it examined is derived from xs:ID or xs:IDREF (encodeWalk.atomicEncodes),
-// and never cleared, so that a type walked answers for its second reach too. An
+// and where a wildcard particle it examined has {process contents} strict or
+// lax (encodeWalk.particleEncodes), and never cleared, so that a type walked answers for its second reach too. An
 // entry is stored before its type's content is examined, so that a later reach of
 // the key, a recursive one included, examines nothing again: the first reach
 // answers for the type, and every other component it reaches carries no key of its
@@ -1195,7 +1205,7 @@ type encodeWalk struct {
 // declaration or a particle's element declaration, examined at every reach:
 // decl's own properties (encodeWalk.declEncodes), then its {type definition},
 // which encodes as xs:anyType itself, its content written raw (rawContent's write),
-// is examined as a simple type (encodeWalk.simpleEncodes) or, for a complex type,
+// setting w.assess, is examined as a simple type (encodeWalk.simpleEncodes) or, for a complex type,
 // declines by its {abstract} true, and else is examined by complexEncodes,
 // unless walked already holds its key. complexEncodes and the functions under
 // it read decl only to name a decline's subject, so that a type reached again
@@ -1209,6 +1219,7 @@ func (w *encodeWalk) element(decl xsd.ElementDeclaration) error {
 		return fmt.Errorf("codec: the {type definition} of %s does not resolve", declSubject(decl))
 	}
 	if goshape.AnyTypeItself(td) {
+		w.assess = true
 		return nil
 	}
 	if st, isSimple := td.(*xsd.SimpleType); isSimple {
@@ -1539,8 +1550,8 @@ func (w *encodeWalk) reachEach(group xsd.ModelGroup, flattened, subject string) 
 // definition a <group ref> names (goshape.ModelGroupTerm), as groupEncodes
 // examines it at the occurrence site reads it at (particleSite.occurs), a
 // <group ref> naming none a plain error, prefixed by subject; a wildcard term,
-// which sets site's matcher and declines with {process contents} strict, and is
-// examined no further; and otherwise the element declaration, examined as the
+// which sets site's matcher, declines with {process contents} strict, sets
+// w.assess with lax, and is examined no further; and otherwise the element declaration, examined as the
 // document element's is (encodeWalk.element). The declaration of an <element
 // ref> is the top-level one its name resolves to through [xsd.Schema.Element]
 // (§3.3.2.4 ref.elt.global), as Decode's particleTerm follows it, a name
@@ -1596,6 +1607,7 @@ func (w *encodeWalk) particleEncodes(p xsd.Particle, subject string, site partic
 			if term.ProcessContents() == xsd.ProcessStrict {
 				return encodeDecline(constructWildcard, subject)
 			}
+			w.assess = w.assess || term.ProcessContents() == xsd.ProcessLax
 			return nil
 		case xsd.ElementDeclaration:
 			el = term
