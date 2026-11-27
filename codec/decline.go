@@ -76,11 +76,10 @@ func (e *DeclineError) Loc() (xsderr.Loc, bool) {
 // particle, as [Decode]'s item 5 names it, the {open content} and its complex
 // type, that element's declaration, or the field's complex type, labelled as
 // its declaration's {type definition}, with its schema Loc, and, for an attribute
-// a lax {attribute wildcard}'s field holds whose expanded name a top-level
-// attribute declaration names, that attribute, its Go path from T, that complex
-// type, so labelled, and the top-level declaration, with its schema Loc, and, for
-// an attribute a strict {attribute wildcard}'s field holds, that attribute, its Go
-// path from T and that complex type, so labelled, and, for a strict or lax
+// a strict or lax {attribute wildcard}'s field holds whose governing top-level
+// attribute declaration's {type definition} is xs:QName- or xs:NOTATION-dependent,
+// that attribute, its Go path from T, that complex type, so labelled, and the
+// top-level declaration, with its schema Loc, and, for a strict or lax
 // wildcard's match with a ·locally declared type·, that element, its Go path from
 // T, the wildcard particle and the complex type, labelled as its declaration's
 // {type definition}, with its schema Loc, and, for an {open content}'s child
@@ -161,8 +160,8 @@ type construct uint8
 // element's declaration, after constructNillable, its type's {abstract}, its type's
 // content, its content {particle}, each particle in order, its attribute uses in order,
 // its {assertions} by constructInScopeAssertion, and each value, the {attribute wildcard}
-// field's attributes by constructXsiAttribute, constructStrictAttributeWildcard and
-// constructGovernedContent among the value's, and an open-content field's child by
+// field's attributes by constructXsiAttribute and constructQNameGovernedAttribute
+// among the value's, and an open-content field's child by
 // constructInterleaveParticleChild, where its content model attributes it, before
 // constructLocallyTypedOpenChild, where what governs it is read. Append also declines
 // constructEntityType after every other construct, for an ·ENTITY value· held raw that
@@ -207,8 +206,7 @@ const (
 	constructQNameSpelling
 	constructValueConstraint
 	constructXsiAttribute
-	constructStrictAttributeWildcard
-	constructGovernedContent
+	constructQNameGovernedAttribute
 	constructLocallyTypedMatch
 	constructInterleaveParticleChild
 	constructLocallyTypedOpenChild
@@ -239,8 +237,7 @@ var constructNames = [...]string{
 	constructQNameSpelling:           "an xs:QName or xs:NOTATION value with no spelling Append writes where it is written",
 	constructValueConstraint:         "a value whose agreement with its value constraint value.ConstraintMatches does not decide, or an empty element's value its default replaces",
 	constructXsiAttribute:            "xsi:type, xsi:nil, xsi:schemaLocation or xsi:noNamespaceSchemaLocation held in an {attribute wildcard} field, xsi:type in the Attributes of an element of type xs:anyType itself, or xsi:nil in a strict or lax wildcard's match, a strict or lax {open content}'s child or an xs:anyType element's content",
-	constructStrictAttributeWildcard: "an attribute held in the {attribute wildcard} field of a complex type whose {attribute wildcard} has {process contents} strict",
-	constructGovernedContent:         "an attribute a lax {attribute wildcard} field holds whose expanded name a top-level attribute declaration names",
+	constructQNameGovernedAttribute:  "an attribute a strict or lax {attribute wildcard} field holds whose governing top-level attribute declaration's {type definition} is xs:QName- or xs:NOTATION-dependent: an atomic type of either primitive, a list whose {item type definition} is one, or a union with one among its basic members",
 	constructLocallyTypedMatch:       "a strict or lax wildcard's match whose expanded name no top-level element declaration names and has a ·locally declared type· in the complex type it is written into",
 	constructInterleaveParticleChild: "a child of an interleave {open content} that the {particle} takes where Append writes it",
 	constructLocallyTypedOpenChild:   "a child of a strict or lax {open content} that has a ·locally declared type· in the complex type it is written into",
