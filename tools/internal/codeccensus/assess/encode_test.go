@@ -87,11 +87,14 @@ func TestDriveEncodeCountsEachRow(t *testing.T) {
 	}
 }
 
-// TestSameSkipsHeldNamespaces pins unread's exception: same does not compare
-// the Namespaces of a struct of exactly AnyType's fields, at any depth, and
-// compares every other field of it, and the Namespaces of a struct of any
-// other fields, as it compares any field.
-func TestSameSkipsHeldNamespaces(t *testing.T) {
+// TestSameKeepsHeldNamespaces pins same's comparison of the Namespaces of a
+// struct of exactly AnyType's fields, at any depth, by bindingsKept, its first
+// argument the value given, and of every other field of it, and of the
+// Namespaces of a struct of any other fields, as it compares any field. With
+// bindingsKept's "" test removed, the row of a default only the re-decode
+// holds fails; with its loop's Space test removed, the rows of a prefix or
+// default bound elsewhere do.
+func TestSameKeepsHeldNamespaces(t *testing.T) {
 	type (
 		namespace struct{ Prefix, Space string }
 		anyType   struct {
@@ -112,8 +115,15 @@ func TestSameSkipsHeldNamespaces(t *testing.T) {
 		a, b any
 		want bool
 	}{
-		{"AnyType's Namespaces", anyType{Namespaces: p}, anyType{}, true},
-		{"AnyType's Namespaces at depth", anyType{Children: []anyType{{Namespaces: p}}}, anyType{Children: []anyType{{}}}, true},
+		{"both nil", anyType{}, anyType{}, true},
+		{"a prefix kept beside a fresh one", anyType{Namespaces: p}, anyType{Namespaces: []namespace{{"p", "urn:p"}, {"p1", "urn:x"}}}, true},
+		{"a prefix bound elsewhere", anyType{Namespaces: p}, anyType{Namespaces: []namespace{{"p", "urn:q"}}}, false},
+		{"a prefix lost", anyType{Namespaces: p}, anyType{}, false},
+		{"a default kept", anyType{Namespaces: []namespace{{"", "urn:d"}}}, anyType{Namespaces: []namespace{{"", "urn:d"}}}, true},
+		{"a default added", anyType{}, anyType{Namespaces: []namespace{{"", "urn:d"}}}, false},
+		{"a default lost", anyType{Namespaces: []namespace{{"", "urn:d"}}}, anyType{}, false},
+		{"a default bound elsewhere", anyType{Namespaces: []namespace{{"", "urn:d"}}}, anyType{Namespaces: []namespace{{"", "urn:e"}}}, false},
+		{"a prefix lost at depth", anyType{Children: []anyType{{Namespaces: p}}}, anyType{Children: []anyType{{}}}, false},
 		{"AnyType's Text", anyType{Namespaces: p, Text: "x"}, anyType{Namespaces: p, Text: "y"}, false},
 		{"another struct's Namespaces", other{Namespaces: p}, other{}, false},
 		{"a struct of AnyType's field names whose Namespaces is a string", fourNames{Namespaces: "p"}, fourNames{}, false},

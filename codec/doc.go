@@ -331,32 +331,30 @@
 //     codegen splices, a choice occurring exactly once that codegen does not
 //     flatten, or a sequence, choice or all group codegen holds in an
 //     occurrence field, inline or through <group ref>, each of whose
-//     particles is an element particle, a wildcard particle with {process
-//     contents} skip or lax, a nested sequence or choice particle, inline or
-//     through <group ref>, or an all group's nested all group particle,
-//     through <group ref> (Structures §3.8.6.2 cos-all-limited), held as
-//     codegen's package doc "# Particles" holds it: one codegen splices, as
-//     its own particles in its place; a choice occurring exactly once that
-//     codegen does not flatten, into its sealed interface field, as its
-//     alternatives; one codegen flattens, into its slice field, each basic
-//     particle of its reach such an element or wildcard particle; and any
-//     other, into its occurrence field, as its own particles. A choice's
-//     alternative, the content choice's or a nested one's, is such a particle
-//     too, its model group held at the occurrence its branch reads, {min
-//     occurs} 0 read as 1, into its branch's fields. Inside a content particle
-//     codegen holds in an occurrence field, a nested particle codegen flattens
-//     or holds in an occurrence field of its own is a [*DeclineError],
-//     whatever its occurrence, as it is for Decode ("# What decodes"). A
-//     content model holding a wildcard particle, a nested flattened particle
-//     or a nested occurrence field, at any depth, is one xsd.Schema.ContentMatcher
-//     tracks. The content {particle} may also be a sequence or choice codegen
-//     flattens, each basic particle of whose reach (codegen's package doc, "#
-//     Particles") is such an element or wildcard particle, and whose content model
-//     xsd.Schema.ContentMatcher tracks, with or without a wildcard particle. The
-//     choice occurring exactly once encodes into its sealed interface, T itself or the
-//     first field of T's struct, the sequence, choice or all group held in an
-//     occurrence field into that field, and the flattened one into its slice field, as
-//     "# What decodes" states.
+//     particles is an element particle, a wildcard particle of any {process
+//     contents}, a nested sequence or choice particle, inline or through <group ref>,
+//     or an all group's nested all group particle, through <group ref> (Structures
+//     §3.8.6.2 cos-all-limited), held as codegen's package doc "# Particles" holds it:
+//     one codegen splices, as its own particles in its place; a choice occurring
+//     exactly once that codegen does not flatten, into its sealed interface field, as
+//     its alternatives; one codegen flattens, into its slice field, each basic
+//     particle of its reach such an element or wildcard particle; and any other, into
+//     its occurrence field, as its own particles. A choice's alternative, the content
+//     choice's or a nested one's, is such a particle too, its model group held at the
+//     occurrence its branch reads, {min occurs} 0 read as 1, into its branch's fields.
+//     Inside a content particle codegen holds in an occurrence field, a nested
+//     particle codegen flattens or holds in an occurrence field of its own is a
+//     [*DeclineError], whatever its occurrence, as it is for Decode ("# What
+//     decodes"). A content model holding a wildcard particle, a nested flattened
+//     particle or a nested occurrence field, at any depth, is one
+//     xsd.Schema.ContentMatcher tracks. The content {particle} may also be a sequence
+//     or choice codegen flattens, each basic particle of whose reach (codegen's
+//     package doc, "# Particles") is such an element or wildcard particle, and whose
+//     content model xsd.Schema.ContentMatcher tracks, with or without a wildcard
+//     particle. The choice occurring exactly once encodes into its sealed interface, T
+//     itself or the first field of T's struct, the sequence, choice or all group held
+//     in an occurrence field into that field, and the flattened one into its slice
+//     field, as "# What decodes" states.
 //   - An element particle of that sequence, choice or all group or of a model group
 //     nested in it, at any depth, or one a flattened sequence or choice
 //     reaches, with {max occurs} at least 1, its {term} a local element
@@ -373,9 +371,10 @@
 //     slice one element, as "# What decodes" states.
 //   - A wildcard particle of that sequence, choice or all group or of a model group
 //     nested in it, at any depth, or one a flattened sequence or choice
-//     reaches, with {process contents} skip or lax and {max occurs} at least 1,
-//     into the field "# What decodes" states for it, each element it holds written
-//     raw, as below.
+//     reaches, of any {process contents}, with {max occurs} at least 1, into
+//     the field "# What decodes" states for it, each element it holds written
+//     raw, as below, and, but for skip, assessed with the document, as
+//     Append's doc states.
 //   - xs:anyType itself (Structures §3.4.7), where the bullets above admit
 //     it, into the Go type "# What decodes" states for its declaration, its
 //     content written raw, as below.
@@ -443,71 +442,73 @@
 // element's, with {abstract} true: it is item 3, a plain error. A declaration
 // with {abstract} true that a particle reaches is no exception.
 //
-// The document Append writes has no XML declaration, so it is XML 1.0 in
-// UTF-8, and no white space between tags. It binds element names by default
-// declarations alone, never prefixing one but an element held raw, in a
-// wildcard's field or an xs:anyType element's content, at any depth,
-// in the XML namespace, written xml:Local, which is never declared,
-// and writes an attribute in the XSI namespace only where item 7
-// of Append's doc or the attribute-use bullet above admits one: the
-// document element carries xmlns="ns" for its non-absent namespace ns,
-// and nothing where it is absent, and every other element carries xmlns="ns",
-// or xmlns="" for an absent namespace, exactly where its namespace differs from
-// its parent's. An xs:QName or xs:NOTATION value, written in an attribute or as
-// content of an element, is spelled Local unprefixed where its namespace name
-// is that element's namespace, the absent one included; xml:Local for the XML
-// namespace, which is never declared; and otherwise pN:Local, where pN is the
-// prefix an open start tag, that element's or an ancestor's, declares for its
-// namespace name, or else p1, p2 and so on, the first not in scope, declared as
-// xmlns:pN="ns" on that element's start tag ahead of the attribute or content
-// that writes it. An attribute use's attribute is written in the order of codegen's
-// fields (codegen's package doc, "# Attributes"), each value delimited by '"', and
-// after them each attribute an {attribute wildcard}'s field holds, in held order,
-// each of both named as a raw element's attributes are written below, nothing in
-// the field's resolved, but for the ones item 7 of Append's doc declines. An
-// element held raw in a skip wildcard's field, at any depth, is written raw,
-// nothing in it assessed or resolved, and so is one held in a lax wildcard's
-// field and the content of an element of type xs:anyType itself, its own
-// attributes included, nothing in either resolved, but for the items item 7 of
-// Append's doc declines in it: its attributes in held order, one of absent
-// namespace unprefixed, one in the XML namespace xml:Local, and every other one
-// pN:Local, pN chosen and declared as for an xs:QName value, though its
-// namespace be that element's own; then its Text, then each of its Children,
-// written so, followed by its Tail. Its Namespaces is not read: no binding it
-// holds is declared (GAP(codec): #4125). A nil pointer field writes nothing, and so
-// does a nil interface field where nil means absent (codegen's package doc, "#
-// Particles", "# Attributes"), a particle with {max occurs} above 1 writes one
-// element per item of its slice, a flattened sequence or choice one per item of
-// its slice, in order, its branch's basic particle's, whatever the particle's
-// occurrence, an occurrence field writes each item it holds, in order, as its
-// model group's particles in order, an all group's, spliced or an occurrence
-// field's item, written as its element particles in order and then its
-// wildcard particles in order, which keeps the attribution codegen's package
-// doc "# Particles" states for an all group's wildcard field, a choice's branch
-// writes its alternative's elements, the empty match, the nil interface of a
-// present element, writes no child element, and an element with no content is
-// written as an empty-element tag, <x/>. A string value, of xs:string or xs:anyURI
-// primitive, is written as itself, its canonical representation, since xs:string's
-// canonical mapping is the identity (Datatypes §E.4 f-stringCanmap) and so is
-// xs:anyURI's lexical mapping, so that an xs:anyURI value is neither normalized nor
-// percent-escaped (§3.3.17.2), and item 6 of Append's doc holds the string to its
-// own whiteSpace-normalized form. A value of xs:anySimpleType or xs:anyAtomicType
-// itself is written as the string it holds, the ·literal· Decode returns, whose
-// lexical mapping is no function (Datatypes §3.2.1.2, §3.2.2.2), and item 6 of
-// Append's doc holds it to the Char production alone. A list value is written as
-// its items are written, in order, separated by single U+0020 characters (Datatypes
-// §2.4.1.2), and the empty list, nil or empty, as no content: <x/> for an element,
-// a="" for an attribute. A union value is written as its variant's member value is,
-// under that member, item 7 of Append's doc stating when the text it writes would
-// decode into another variant. It escapes '<', '&' and '>' as &lt;, &amp; and &gt;
-// everywhere, so that "]]>" is never written, and CR as &#xD; everywhere, which XML
-// 1.0 end-of-line handling (§2.11) would otherwise rewrite to LF or remove; in an
+// The document Append writes has no XML declaration, so it is XML 1.0 in UTF-8, and no white
+// space between tags. It binds the name of every element but one whose content it writes from
+// an AnyType, as below, by default declarations alone, never prefixing one, and writes an
+// attribute in the XSI namespace only where item 7 of Append's doc or the attribute-use bullet
+// above admits one: the document element carries xmlns="ns" for its non-absent namespace ns,
+// and nothing where it is absent, and every other element carries xmlns="ns", or xmlns="" for
+// an absent namespace, exactly where its namespace differs from its parent's. An xs:QName or
+// xs:NOTATION value, written in an attribute or as content of an element, is spelled Local
+// unprefixed where its namespace name is that element's namespace, the absent one included;
+// xml:Local for the XML namespace, which is never declared; and otherwise pN:Local, where pN
+// is the prefix an open start tag, that element's or an ancestor's, declares for its namespace
+// name, or else p1, p2 and so on, the first not in scope, declared as xmlns:pN="ns" on that
+// element's start tag ahead of the attribute or content that writes it. An attribute use's
+// attribute is written in the order of codegen's fields (codegen's package doc, "#
+// Attributes"), each value delimited by '"', and after them each attribute an {attribute
+// wildcard}'s field holds, in held order, nothing in the field's resolved, but for the ones
+// item 7 of Append's doc declines, each of both of absent namespace unprefixed, in the XML
+// namespace xml:Local, and otherwise pN:Local, pN chosen and declared as for an xs:QName
+// value, though its namespace be that element's own. An element whose content Append writes
+// from an AnyType, one a wildcard's field holds, of any {process contents}, a child such an
+// element holds at any depth, and an element of type xs:anyType itself, the document element
+// among them, is written raw, nothing in it resolved by Append, but for the items items 6 and
+// 7 of Append's doc refuse and decline in it, and what a strict or lax match or an xs:anyType
+// element holds assessed with the document, as Append's doc states, under the bindings its
+// AnyType's Namespaces holds: the default namespace in scope there is exactly the Space of its
+// "" entry, none where it holds none, declared xmlns="S", or xmlns="" for none, where it
+// differs from its parent's as written; each prefixed entry is in scope bound to its Space,
+// declared xmlns:p="S", in Namespaces order, wherever p is not bound to S at its parent as
+// written; and item 6 of Append's doc refuses a Namespaces Decode never returns. Its name is
+// spelled unprefixed where its namespace is that default, xml:Local in the XML namespace, and
+// otherwise p:Local under the first prefix in Namespaces order bound to its namespace, or else
+// the one an open start tag binds to it, or else the first of p1, p2 and so on that neither an
+// open start tag nor its Namespaces binds, declared on its start tag after them. Then come its
+// attributes in held order, each of absent namespace unprefixed, in the XML namespace
+// xml:Local, and otherwise under a prefix chosen as its name's is, past its unprefixed arm;
+// then its Text, then each of its Children, written so, followed by its Tail. So Decode of the
+// document holds, at each such element, a Namespaces holding every prefixed entry of the one
+// Append was given, bound to the same Space, and its "" entry exactly, perhaps beside more
+// prefixed ones. A nil pointer field writes nothing, and so does a nil interface field where
+// nil means absent (codegen's package doc, "# Particles", "# Attributes"), a particle with
+// {max occurs} above 1 writes one element per item of its slice, a flattened sequence or
+// choice one per item of its slice, in order, its branch's basic particle's, whatever the
+// particle's occurrence, an occurrence field writes each item it holds, in order, as its model
+// group's particles in order, an all group's, spliced or an occurrence field's item, written
+// as its element particles in order and then its wildcard particles in order, which keeps the
+// attribution codegen's package doc "# Particles" states for an all group's wildcard field, a
+// choice's branch writes its alternative's elements, the empty match, the nil interface of a
+// present element, writes no child element, and an element with no content is written as an
+// empty-element tag, <x/>. A string value, of xs:string or xs:anyURI primitive, is written as
+// itself, its canonical representation, since xs:string's canonical mapping is the identity
+// (Datatypes §E.4 f-stringCanmap) and so is xs:anyURI's lexical mapping, so that an xs:anyURI
+// value is neither normalized nor percent-escaped (§3.3.17.2), and item 6 of Append's doc
+// holds the string to its own whiteSpace-normalized form. A value of xs:anySimpleType or
+// xs:anyAtomicType itself is written as the string it holds, the ·literal· Decode returns,
+// whose lexical mapping is no function (Datatypes §3.2.1.2, §3.2.2.2), and item 6 of Append's
+// doc holds it to the Char production alone. A list value is written as its items are written,
+// in order, separated by single U+0020 characters (Datatypes §2.4.1.2), and the empty list,
+// nil or empty, as no content: <x/> for an element, a="" for an attribute. A union value is
+// written as its variant's member value is, under that member, item 7 of Append's doc stating
+// when the text it writes would decode into another variant. It escapes '<', '&' and '>' as
+// &lt;, &amp; and &gt; everywhere, so that "]]>" is never written, and CR as &#xD; everywhere,
+// which XML 1.0 end-of-line handling (§2.11) would otherwise rewrite to LF or remove; in an
 // attribute value it escapes '"' as &quot;, TAB as &#x9; and LF as &#xA;, which
-// attribute-value normalization (§3.3.3) would otherwise turn into spaces; and
-// every other character, TAB and LF in content and the apostrophe everywhere, is
-// written as itself. So the Order codegen emits for README's order.xsd, of Item
-// {"a"} and Kind "k", is written <order xmlns="urn:o"
-// kind="k"><item>a</item></order>.
+// attribute-value normalization (§3.3.3) would otherwise turn into spaces; and every other
+// character, TAB and LF in content and the apostrophe everywhere, is written as itself. So the
+// Order codegen emits for README's order.xsd, of Item {"a"} and Kind "k", is written <order
+// xmlns="urn:o" kind="k"><item>a</item></order>.
 //
 // # Debuggability
 //

@@ -338,7 +338,8 @@
 //     holds xml, which is bound everywhere, nor xmlns, nor a prefix or a
 //     default undeclared there, so that no "" entry means an unprefixed name
 //     is in no namespace. The struct does not enforce the order, unique
-//     prefixes, a non-empty Space, or the absence of xml and xmlns.
+//     prefixes, a non-empty Space, or the absence of xml and xmlns; codec's
+//     Append refuses a value that breaks them, its doc's item 6.
 //
 // # Complex types
 //
