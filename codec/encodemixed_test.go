@@ -10,17 +10,15 @@ import (
 )
 
 // TestAppendMixed pins the mixed-content lift of Append (§3.4.1 {variety}
-// mixed): Text after the attributes and before the first child, each child
-// of a MixedChild or AnyChild followed by its Tail (codec/doc.go "# What
-// encodes"), each written document validating and decoding back equal. The
-// rows cover every field shape mixed content gives (codegen/doc.go "# Complex
-// types"), an attribute use after the content's fields (binding.lead), a
-// choice's branch field after Text, an empty {particle}, an {open content}'s
-// AnyChild children after the particle's child, each with its Tail, the
-// escaping of '<', '&', '>' and CR in Text and Tails, and a {value
-// constraint}: a fixed one's {lexical form} as Text, and an empty element
-// under a fixed or default one, which takes on nothing Decode returns
-// (cvc-elt clause 5.1).
+// mixed), written as codec/doc.go "# What encodes" states, each written
+// document validating and decoding back equal. The rows cover every field
+// shape mixed content gives (codegen/doc.go "# Complex types"), an attribute
+// use after the content's fields (binding.lead), a choice's branch field
+// after Text, an empty {particle}, an {open content}'s AnyChild children
+// after the particle's child, each with its Tail, the escaping of '<', '&',
+// '>' and CR in Text and Tails, and a {value constraint}: a fixed one's
+// {lexical form} as Text, and an empty element under a fixed or default one,
+// which takes on nothing Decode returns (cvc-elt clause 5.1).
 func TestAppendMixed(t *testing.T) {
 	str := func(s string) *string { return &s }
 	const r = `<r xmlns="urn:s">`

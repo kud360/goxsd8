@@ -1364,8 +1364,7 @@ type elementWriter interface {
 // slot there, then v's Tail raw (encoder.rawText), as codegen's package doc
 // "# Complex types" places it. A v whose Element is a nil sealed interface,
 // which Decode never returns, is item 6 of [Append]'s doc and writes nothing,
-// its Tail included: it holds no child, so that its Tail follows none
-// (codegen/doc.go "# Complex types").
+// its Tail included, since it is no child (codegen/doc.go "# Complex types").
 func (t tailReader) writeElement(e *encoder, decl xsd.ElementDeclaration, v reflect.Value, path string, slot attributionSlot) error {
 	if el := v.Field(0); el.Kind() == reflect.Interface && el.IsNil() {
 		e.invalidate(fmt.Errorf("codec: Append: %s.Element is nil, a MixedChild holding no element of %s, which Decode never returns", path, declSubject(decl)))
