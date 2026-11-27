@@ -231,10 +231,10 @@ var ErrInvalidValue = errors.New("codec: Append: a value no valid document holds
 //     matches, or 2, an ID bound to more than one element (§3.17.5.2 sic-id).
 //     Where Append assesses by no condition but the first three above, a
 //     violation of any other rule is a fault of Append's, reported so all the
-//     same; otherwise every violation is the value's, but for a cvc-assertion
-//     one whose {test} reads the string value of an element or attribute,
-//     which Append spells as the opening paragraph above states, so that the
-//     violation may come from that spelling rather than from the value,
+//     same; otherwise every violation is the value's. Under either, a
+//     cvc-assertion violation whose {test} reads the string value of an
+//     element or attribute, which Append spells as the opening paragraph
+//     above states, may come from that spelling rather than from the value,
 //     reported so all the same.
 //  9. An assessed document validate leaves undecided: the error item 4 of
 //     [Decode]'s doc states for it.
