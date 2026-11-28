@@ -123,76 +123,78 @@ var ErrInvalidValue = errors.New("codec: Append: a value no valid document holds
 //     substitution group (codegen's package doc, "# Substitution groups"), or of an item of its slice, wherever
 //     nil does not mean absent, that of a head with {abstract} true and no branch among them, and a value of
 //     that interface whose dynamic type the [WithBranches] set in opts places at no branch, a pointer to a
-//     branch among them, which Decode never returns; the nil sealed interface of a union simple type wherever
-//     nil does not mean absent, that is, every field but an element particle's of {min occurs} 0 and {max
-//     occurs} 1 and an optional attribute use's to which no value constraint supplies a value (codegen's package
-//     doc, "# Particles", "# Attributes"), which Decode never returns; a value of that interface whose dynamic
-//     type the [WithBranches] set in opts places at no basic member, a pointer to a variant among them, which
-//     Decode never returns; a value that holds itself, a struct or sealed interface value its own write reaches
-//     again through a *S, []S or []I field, which no finite document holds, the error naming the Go path where
-//     the value is reached again and nothing written beneath it; a string holding bytes that are not UTF-8 or a
-//     character the XML 1.0 Char production does not match, U+0000 among them (Datatypes §3.3.1.1, §3.3.17.1,
-//     §3.2.1.2, §3.2.2.2), a held element's Space, an attribute's Space or Value, a Text and a Tail among them;
-//     a string that differs from its own whiteSpace-normalized form under its simple type, such as an xs:token
-//     holding "  a  b"; a list item, a string, that is empty or holds TAB, LF, CR or a space, which no list item's
-//     lexical representation does (Datatypes §2.4.1.2); a big.Rat outside the decimal value space, whose
-//     denominator in lowest terms is no 2^m·5^n (§3.3.3.1), such as 1/3; an element a wildcard particle's field
-//     holds, of any {process contents}, that its content model admits at no particle where it is written, a name
-//     outside the wildcard's {namespace constraint} or in its {disallowed names} among them, or attributes to a
-//     particle other than that wildcard or to the {open content}, an element particle taking its name first
-//     among them, or after whose content's last child the content model is not accepting, as
-//     xsd.Schema.ContentMatcher's Matcher decides (§3.9.4.3 cvc-accept, §3.10.4.1 cvc-wildcard, §3.8.4.3
-//     cvc-model-group); such an element of a wildcard particle with {process contents} strict whose expanded
-//     name no top-level element declaration of schema names, that has no ·locally declared type· where it is
-//     written (item 7), and whose Attributes hold no xsi:type, so that neither a declaration nor a type governs
-//     it and its parent is invalid (Structures §3.3.4.6 key-governing-ed clause 3, key-governing-type-elem
-//     clause 8, §3.3.5.1 sic-e-outcome clause 1.1.3); an element the open-content field holds, of any {process
-//     contents}, written after every child of the {particle} as the package doc's "# What encodes" places it,
-//     that neither a particle of its content model nor its {open content}'s {wildcard} admits where it is
-//     written, or that a particle takes there under {mode} suffix, whose clause 2.3 gives the {open content} no
-//     first child that the {particle} can take after the {particle}'s children (§3.4.4.3 cvc-complex-content,
-//     §3.10.4.1 cvc-wildcard), a strict one nothing governs not among them, which validate assesses laxly; the
-//     Namespaces of an AnyType Append writes an element's content from, at any depth, whatever holds it, that
-//     Decode never returns: an entry whose Prefix is not after the one before it, a Prefix xml or xmlns, a
-//     Prefix other than "" that is no NCName, a Space "", one holding a byte that starts no XML 1.0 Char, and
-//     one that is the XML namespace or the one the prefix xmlns is bound to (Namespaces in XML §3, §5
-//     nsc-NoPrefixUndecl), the first such entry, then a "" entry where the element's namespace is absent, which
-//     no prefix spells (codegen's package doc, "# xs:anyType"); an attribute an {attribute wildcard}'s field
-//     holds whose expanded name an attribute use of the type names, the use's field nil or set, which Decode
-//     never returns (§3.4.4.2 cvc-complex-type clause 2.1), or, but for xsi:type, xsi:nil, xsi:schemaLocation
-//     and xsi:noNamespaceSchemaLocation, which clause 2 excepts by name, that the wildcard does not admit, a
-//     name outside its {namespace constraint} or in its {disallowed names} among them (clause 2.2.2, §3.10.4.1
+//     branch among them, which Decode never returns; the nil Nillable of a nillable element (codegen's package
+//     doc, "# Element declarations") wherever nil does not mean absent, and a value of it whose dynamic type the
+//     [WithBranches] set in opts places at neither Content nor Nilled, a pointer to an arm among them, which
+//     Decode never returns; the nil sealed interface of a union simple type wherever nil does not mean absent,
+//     that is, every field but an element particle's of {min occurs} 0 and {max occurs} 1 and an optional
+//     attribute use's to which no value constraint supplies a value (codegen's package doc, "# Particles", "#
+//     Attributes"), which Decode never returns; a value of that interface whose dynamic type the [WithBranches]
+//     set in opts places at no basic member, a pointer to a variant among them, which Decode never returns; a
+//     value that holds itself, a struct or sealed interface value its own write reaches again through a *S, []S or
+//     []I field, which no finite document holds, the error naming the Go path where the value is reached again and
+//     nothing written beneath it; a string holding bytes that are not UTF-8 or a character the XML 1.0 Char
+//     production does not match, U+0000 among them (Datatypes §3.3.1.1, §3.3.17.1, §3.2.1.2, §3.2.2.2), a held
+//     element's Space, an attribute's Space or Value, a Text and a Tail among them; a string that differs from its
+//     own whiteSpace-normalized form under its simple type, such as an xs:token holding "  a  b"; a list item, a
+//     string, that is empty or holds TAB, LF, CR or a space, which no list item's lexical representation does
+//     (Datatypes §2.4.1.2); a big.Rat outside the decimal value space, whose denominator in lowest terms is no
+//     2^m·5^n (§3.3.3.1), such as 1/3; an element a wildcard particle's field holds, of any {process contents},
+//     that its content model admits at no particle where it is written, a name outside the wildcard's {namespace
+//     constraint} or in its {disallowed names} among them, or attributes to a particle other than that wildcard or
+//     to the {open content}, an element particle taking its name first among them, or after whose content's last
+//     child the content model is not accepting, as xsd.Schema.ContentMatcher's Matcher decides (§3.9.4.3
+//     cvc-accept, §3.10.4.1 cvc-wildcard, §3.8.4.3 cvc-model-group); such an element of a wildcard particle with
+//     {process contents} strict whose expanded name no top-level element declaration of schema names, that has no
+//     ·locally declared type· where it is written (item 7), and whose Attributes hold no xsi:type, so that neither
+//     a declaration nor a type governs it and its parent is invalid (Structures §3.3.4.6 key-governing-ed clause
+//     3, key-governing-type-elem clause 8, §3.3.5.1 sic-e-outcome clause 1.1.3); an element the open-content field
+//     holds, of any {process contents}, written after every child of the {particle} as the package doc's "# What
+//     encodes" places it, that neither a particle of its content model nor its {open content}'s {wildcard} admits
+//     where it is written, or that a particle takes there under {mode} suffix, whose clause 2.3 gives the {open
+//     content} no first child that the {particle} can take after the {particle}'s children (§3.4.4.3
+//     cvc-complex-content, §3.10.4.1 cvc-wildcard), a strict one nothing governs not among them, which validate
+//     assesses laxly; the Namespaces of an AnyType Append writes an element's content from, at any depth, whatever
+//     holds it, that Decode never returns: an entry whose Prefix is not after the one before it, a Prefix xml or
+//     xmlns, a Prefix other than "" that is no NCName, a Space "", one holding a byte that starts no XML 1.0 Char,
+//     and one that is the XML namespace or the one the prefix xmlns is bound to (Namespaces in XML §3, §5
+//     nsc-NoPrefixUndecl), the first such entry, then a "" entry where the element's namespace is absent, which no
+//     prefix spells (codegen's package doc, "# xs:anyType"); an attribute an {attribute wildcard}'s field holds
+//     whose expanded name an attribute use of the type names, the use's field nil or set, which Decode never
+//     returns (§3.4.4.2 cvc-complex-type clause 2.1), or, but for xsi:type, xsi:nil, xsi:schemaLocation and
+//     xsi:noNamespaceSchemaLocation, which clause 2 excepts by name, that the wildcard does not admit, a name
+//     outside its {namespace constraint} or in its {disallowed names} among them (clause 2.2.2, §3.10.4.1
 //     cvc-wildcard); in such an element, in the content of an element of type xs:anyType itself, its own
 //     attributes among it, at any depth, and in an {attribute wildcard}'s field, a Local that is no NCName or a
 //     Space that is the namespace name the prefix xmlns is bound to, of the element or of an attribute, an
 //     attribute of absent Space named xmlns (Namespaces in XML §3), and an attribute of the expanded name of one
-//     before it (§6.3 nsc-AttrsUnique); an element an item of a flattened sequence's or choice's slice holds
-//     that its content model admits at no particle where it is written, or attributes to a basic particle other
-//     than the one whose branch the item is or to the {open content}, or a slice after whose last item the
-//     content model is not accepting, as that Matcher decides (§3.9.4.3 cvc-accept, §3.10.4.1 cvc-wildcard,
-//     §3.8.4.3 cvc-model-group); a date, time or duration datatype struct value no value of its datatype maps
-//     to, as codegen's package doc "# Simple types" states such values exist, the error naming the first
-//     property found outside it, its fields read in order, or, ahead of its Seconds, a duration's Months and
-//     Seconds of opposite signs; a PrecisionDecimal datatype struct value no value maps to, as codegen's "#
-//     Simple types" states such values exist, a nil Value or the numerical arm with a negative Coefficient, or a
-//     Value whose dynamic type the [WithPrecisionDecimalArms] set in opts supplies in no role, a pointer to an
-//     arm among them, which Decode never returns; an xs:QName or xs:NOTATION value whose namespace name holds a
-//     byte that starts no XML 1.0 Char or is the one the prefix xmlns is bound to (Namespaces in XML §3), or
-//     whose Local the Parse of its primitive's mapping rejects in Append's spelling, that Parse's verdict
-//     wrapped, or makes a spelling that resolves back to another expanded name; a value written as an element's
-//     character content, or as an attribute, whose value value.ConstraintMatches finds neither equal nor
-//     identical to the {value} of a fixed {value constraint} there (Datatypes §2.2.1, §2.2.2): an element's own
-//     (Structures §3.3.4.3 cvc-elt clause 5.2.2.2.2), the empty text included, which Append writes as an empty
-//     element that takes on the constraint's {lexical form} (clause 5.1, §3.3.5.4 sic-eltType), and an attribute
-//     use's and its declaration's, each (§3.5.4 cvc-au, §3.2.4.1 cvc-attribute clause 4); the content of an
-//     element of mixed content, of type xs:anyType itself or of a complex type with mixed content, whose
-//     declaration has a fixed {value constraint}, where it holds a child element (cvc-elt clause 5.2.2.1),
-//     Children of an AnyType among them, or a Text other than "" and the constraint's {lexical form}, matched as
-//     a string (clause 5.2.2.2.1); a MixedChild whose Element is a nil sealed interface, which Decode never
-//     returns and which holds no child (codegen's package doc, "# Complex types"); or a value whose simple type
-//     rejects it, a value.ValidateLexical error value.IsDatatypeVerdict reports as a verdict, a facet's
-//     rejection or a backend Parse's among them, that error wrapped, but for item 7's pattern and union-variant
-//     cases, a list's own facets read once every item has passed its own checks.
+//     before it (§6.3 nsc-AttrsUnique); an element an item of a flattened sequence's or choice's slice holds that
+//     its content model admits at no particle where it is written, or attributes to a basic particle other than
+//     the one whose branch the item is or to the {open content}, or a slice after whose last item the content
+//     model is not accepting, as that Matcher decides (§3.9.4.3 cvc-accept, §3.10.4.1 cvc-wildcard, §3.8.4.3
+//     cvc-model-group); a date, time or duration datatype struct value no value of its datatype maps to, as
+//     codegen's package doc "# Simple types" states such values exist, the error naming the first property found
+//     outside it, its fields read in order, or, ahead of its Seconds, a duration's Months and Seconds of opposite
+//     signs; a PrecisionDecimal datatype struct value no value maps to, as codegen's "# Simple types" states such
+//     values exist, a nil Value or the numerical arm with a negative Coefficient, or a Value whose dynamic type
+//     the [WithPrecisionDecimalArms] set in opts supplies in no role, a pointer to an arm among them, which Decode
+//     never returns; an xs:QName or xs:NOTATION value whose namespace name holds a byte that starts no XML 1.0
+//     Char or is the one the prefix xmlns is bound to (Namespaces in XML §3), or whose Local the Parse of its
+//     primitive's mapping rejects in Append's spelling, that Parse's verdict wrapped, or makes a spelling that
+//     resolves back to another expanded name; a value written as an element's character content, or as an
+//     attribute, whose value value.ConstraintMatches finds neither equal nor identical to the {value} of a fixed
+//     {value constraint} there (Datatypes §2.2.1, §2.2.2): an element's own (Structures §3.3.4.3 cvc-elt clause
+//     5.2.2.2.2), the empty text included, which Append writes as an empty element that takes on the constraint's
+//     {lexical form} (clause 5.1, §3.3.5.4 sic-eltType), and an attribute use's and its declaration's, each
+//     (§3.5.4 cvc-au, §3.2.4.1 cvc-attribute clause 4); the content of an element of mixed content, of type
+//     xs:anyType itself or of a complex type with mixed content, whose declaration has a fixed {value constraint},
+//     where it holds a child element (cvc-elt clause 5.2.2.1), Children of an AnyType among them, or a Text other
+//     than "" and the constraint's {lexical form}, matched as a string (clause 5.2.2.2.1); a MixedChild whose
+//     Element is a nil sealed interface, which Decode never returns and which holds no child (codegen's package
+//     doc, "# Complex types"); or a value whose simple type rejects it, a value.ValidateLexical error
+//     value.IsDatatypeVerdict reports as a verdict, a facet's rejection or a backend Parse's among them, that
+//     error wrapped, but for item 7's pattern and union-variant cases, a list's own facets read once every item
+//     has passed its own checks.
 //  7. A value with no canonical representation or no spelling Append writes, or one Append declines at its {value constraint}, the first in document
 //     order as item 6 counts: its *DeclineError. That is a governing mapping with no Canonical, a Canonical that fails for the value, such as
 //     strict's for the zero xs:yearMonthDuration (Datatypes §3.4.26.1's note), or a value with a lexical other than the one Append writes, or a list
@@ -255,19 +257,20 @@ var ErrInvalidValue = errors.New("codec: Append: a value no valid document holds
 //     doc states for it, which errors.Is also reports as [ErrInvalidValue],
 //     each violation charged to the written document, a
 //     cvc-identity-constraint one naming its constraint and the clause it
-//     breaks, 3, 4.1, 4.2.1, 4.2.2 or 4.3, and a cvc-id one naming the ID and
-//     the clause it breaks, 1, an ID no element is bound to or an IDREF no ID
-//     matches, or 2, an ID bound to more than one element (§3.17.5.2 sic-id).
-//     Where Append assesses by no condition but the first three above, a
-//     violation of any other rule is a fault of Append's, reported so all the
-//     same; otherwise every violation is the value's. Under either, a
-//     cvc-assertion violation whose {test} reads the string value of an
-//     element or attribute, which Append spells as the paragraph after the
-//     errors summary states, may come from that spelling rather than from the
-//     value, reported so all the same, and so may one whose {test} reads the
-//     in-scope namespaces of an element in content Append writes raw, as
-//     fn:in-scope-prefixes does, which may come from a namespace binding
-//     Append declares, a fresh pN among them, rather than from the value.
+//     breaks, one of those validate's package doc states it charges, and a
+//     cvc-id one naming the ID and the clause it breaks, 1, an ID no element
+//     is bound to or an IDREF no ID matches, or 2, an ID bound to more than
+//     one element (§3.17.5.2 sic-id). Where Append assesses by no condition
+//     but the first three above, a violation of any other rule is a fault of
+//     Append's, reported so all the same; otherwise every violation is the
+//     value's. Under either, a cvc-assertion violation whose {test} reads the
+//     string value of an element or attribute, which Append spells as the
+//     paragraph after the errors summary states, may come from that spelling
+//     rather than from the value, reported so all the same, and so may one
+//     whose {test} reads the in-scope namespaces of an element in content
+//     Append writes raw, as fn:in-scope-prefixes does, which may come from a
+//     namespace binding Append declares, a fresh pN among them, rather than
+//     from the value.
 //  9. An assessed document validate leaves undecided: the error item 4 of
 //     [Decode]'s doc states for it.
 //
@@ -451,9 +454,9 @@ func encodeStatic(schema *xsd.Schema, name xsd.QName, t reflect.Type, cfg config
 // write appends to e.out the XML encoding v, a value of the Go type the arm is bound to, at at, and
 // returns a backend fault. Its implementers are exactly the arms the slice the package doc's "#
 // What encodes" states reaches: the root arms, *simpleRoot, *boundBinding, *boundChoiceRoot,
-// *boundTable and rawContent, writing the element at.el; and the content arms, *boundSequence,
-// *boundContentChoice, boundOccurrence and boundFlattened, writing at.el's content, each member's
-// elements by its bound state (memberWriter). Append reaches each through encoded.
+// *boundTable, boundNillableRoot and rawContent, writing the element at.el; and the content arms,
+// *boundSequence, *boundContentChoice, boundOccurrence and boundFlattened, writing at.el's content,
+// each member's elements by its bound state (memberWriter). Append reaches each through encoded.
 type writer interface {
 	write(e *encoder, v reflect.Value, at writeAt) error
 }
@@ -533,27 +536,21 @@ func (s *simpleRoot) write(e *encoder, v reflect.Value, at writeAt) error {
 }
 
 // write writes the element at.el holding v, a value of b's struct: its start
-// tag, then each attribute field's attribute, in field order, named by
-// writeRawAttribute, the fields after the content's (binding.lead,
-// elementContent.width), a nil *V's written as none, and so is a nil union
-// interface of a use whose {required} is false and to which no value
-// constraint supplies a value (supply), each written value held to its use's
-// and its declaration's fixed {value constraint} (encoder.attributeFixed),
-// then, for a type with an {attribute wildcard}, the attributes its field
-// holds (encoder.wildcardAttributes), then, where at.el has a {type table}, the
-// table's selection over the attributes written held to the type at.branch
-// (encoder.selects), then the content, under the [inherited attributes]
-// validate.Validator.HandedDown composes for its children from those
-// attributes (encoder.inherited): for simple content the value field's text
-// (texter), computed before the start tag's '>', and otherwise the content's
-// elements (b.content's write), for mixed content after its Text, field 0
-// (binding.lead), written raw (encoder.rawText) and held to at.el's fixed
-// {value constraint} (mixedFixed), each element of a MixedChild or AnyChild
-// followed by its Tail, an element with no content written as an empty-element
-// tag; or nothing, where v holds itself (encoder.enter). The first child
-// element of mixed content, written by a tailReader, raises first at.el's fixed
-// {value constraint}'s cvc-elt clause 5.2.2.1 error (encoder.fixedChild),
-// unless an earlier one is recorded.
+// tag, then the attributes of its attribute fields, the fields after the
+// content's (binding.lead, elementContent.width), as encoder.attributeFields
+// writes them, then, where at.el has a {type table}, the table's selection over
+// the attributes written held to the type at.branch (encoder.selects), then the
+// content, under the [inherited attributes] validate.Validator.HandedDown
+// composes for its children from those attributes (encoder.inherited): for
+// simple content the value field's text (texter), computed before the start
+// tag's '>', and otherwise the content's elements (b.content's write), for
+// mixed content after its Text, field 0 (binding.lead), written raw
+// (encoder.rawText) and held to at.el's fixed {value constraint} (mixedFixed),
+// each element of a MixedChild or AnyChild followed by its Tail, an element
+// with no content written as an empty-element tag; or nothing, where v holds
+// itself (encoder.enter). The first child element of mixed content, written by
+// a tailReader, raises first at.el's fixed {value constraint}'s cvc-elt clause
+// 5.2.2.1 error (encoder.fixedChild), unless an earlier one is recorded.
 func (b *boundBinding) write(e *encoder, v reflect.Value, at writeAt) error {
 	if !e.enter(v, at.path) {
 		return nil
@@ -562,35 +559,8 @@ func (b *boundBinding) write(e *encoder, v reflect.Value, at writeAt) error {
 	bd := b.binding
 	name := at.el.Name()
 	outer, mark := e.startTag(name)
-	first := bd.lead() + bd.content.width()
-	for i, a := range bd.attrs {
-		f, fpath := v.Field(first+i), at.path+"."+v.Type().Field(first+i).Name
-		if a.shape == shapeOptional {
-			if f.IsNil() {
-				continue
-			}
-			f = f.Elem()
-		}
-		// An optional union use's field is its bare sealed interface, nil
-		// meaning absent (codegen's package doc, "# Attributes"), but where a
-		// value constraint supplies the attribute's value, which Decode then
-		// holds there (Structures §3.4.5.1 sic-attrDefault), so that a nil one
-		// reaches union, item 6 of Append's doc.
-		if f.Kind() == reflect.Interface && f.IsNil() && !a.use.Required() && a.supplied == nil {
-			continue
-		}
-		w, err := e.scalarText(a.scalar, f, fpath, simpleSubject(a.st, attributeSubject(a.decl)))
-		if err != nil {
-			return err
-		}
-		e.attributeFixed(a, w, fpath)
-		e.writeRawAttribute(a.decl.Name(), w.text, nil)
-	}
-	if bd.anyAttribute != nil {
-		i := first + len(bd.attrs)
-		if err := e.wildcardAttributes(bd, v.Field(i), at.path+"."+v.Type().Field(i).Name, at.el); err != nil {
-			return err
-		}
+	if err := e.attributeFields(bd, v, bd.lead()+bd.content.width(), at); err != nil {
+		return err
 	}
 	if err := e.selects(at, e.tag); err != nil {
 		return err
@@ -632,6 +602,47 @@ func (b *boundBinding) write(e *encoder, v reflect.Value, at writeAt) error {
 	}
 	e.endTag(name.Local, start, outer, mark)
 	return nil
+}
+
+// attributeFields writes to the start tag that is open the attributes of bd's
+// attribute fields, held in v, a struct, from its field first on, at at.path:
+// each attribute field's attribute, in field order, named by writeRawAttribute, a
+// nil *V's written as none, and so is a nil union interface of a use whose
+// {required} is false and to which no value constraint supplies a value (supply),
+// each written value held to its use's and its declaration's fixed {value
+// constraint} (encoder.attributeFixed), then, for a type with an {attribute
+// wildcard}, the attributes its field, the one after them, holds
+// (encoder.wildcardAttributes), at.el the element they are written on. Its error
+// is a backend fault.
+func (e *encoder) attributeFields(bd *binding, v reflect.Value, first int, at writeAt) error {
+	for i, a := range bd.attrs {
+		f, fpath := v.Field(first+i), at.path+"."+v.Type().Field(first+i).Name
+		if a.shape == shapeOptional {
+			if f.IsNil() {
+				continue
+			}
+			f = f.Elem()
+		}
+		// An optional union use's field is its bare sealed interface, nil
+		// meaning absent (codegen's package doc, "# Attributes"), but where a
+		// value constraint supplies the attribute's value, which Decode then
+		// holds there (Structures §3.4.5.1 sic-attrDefault), so that a nil one
+		// reaches union, item 6 of Append's doc.
+		if f.Kind() == reflect.Interface && f.IsNil() && !a.use.Required() && a.supplied == nil {
+			continue
+		}
+		w, err := e.scalarText(a.scalar, f, fpath, simpleSubject(a.st, attributeSubject(a.decl)))
+		if err != nil {
+			return err
+		}
+		e.attributeFixed(a, w, fpath)
+		e.writeRawAttribute(a.decl.Name(), w.text, nil)
+	}
+	if bd.anyAttribute == nil {
+		return nil
+	}
+	i := first + len(bd.attrs)
+	return e.wildcardAttributes(bd, v.Field(i), at.path+"."+v.Type().Field(i).Name, at.el)
 }
 
 // text returns the text Append writes for v's value field, field b.index of
@@ -1469,9 +1480,10 @@ func (f lengthFloor) permits(held xsd.Occurs, n int) bool {
 // type, a structArm's or an ifaceArm's, rawContent, of xs:anyType itself, an
 // anyTypeArm's, groupReader, of a substitution group's sealed interface, a
 // groupArm's, which writes the element of the member its value holds in
-// at.el's place, and tailReader, of a MixedChild in mixed content, a
-// mixedArm's, which writes its Element by the reader of one of the others and
-// then its Tail.
+// at.el's place, nillableReader, of codegen's Nillable, a nillableArm's, which
+// writes its Content by the reader of one of the others, and tailReader, of a
+// MixedChild in mixed content, a mixedArm's, which writes its Element by the
+// reader of one of the others and then its Tail.
 type elementWriter interface {
 	writeElement(e *encoder, v reflect.Value, at writeAt, slot attributionSlot) error
 }
@@ -1548,7 +1560,7 @@ func (g groupReader) writeElement(e *encoder, v reflect.Value, at writeAt, slot 
 // It reads the schema alone, never the binder, and builds nothing.
 func elementEncodes(schema *xsd.Schema, decl xsd.ElementDeclaration) (bool, error) {
 	w := &encodeWalk{schema: schema, walked: map[unitKey]bool{}}
-	if err := w.element(decl); err != nil {
+	if err := w.element(decl, true); err != nil {
 		return false, err
 	}
 	return w.assess, nil
@@ -1582,7 +1594,9 @@ type encodeWalk struct {
 
 // element returns elementEncodes' error for decl, the document element's
 // declaration or a particle's element declaration, examined at every reach:
-// decl's own properties (encodeWalk.declEncodes), then each of its slots, its
+// decl's own properties (encodeWalk.declEncodes), wraps false where decl is
+// reached as a branch of a substitution group's interface, as Decode's
+// groupField binds it, and true elsewhere, then each of its slots, its
 // {type definition} or, with a {type table}, each {type table} slot in slot
 // order (goshape.TableSlot), declining by a complex type with {abstract} true
 // there, then each of its governing types (goshape.GoverningTypes) in order,
@@ -1594,8 +1608,8 @@ type encodeWalk struct {
 // two branches of one declaration are each examined. complexEncodes and the
 // functions under it read decl only to name a decline's subject, so that a type
 // reached again through another declaration answers as it did.
-func (w *encodeWalk) element(decl xsd.ElementDeclaration) error {
-	if err := w.declEncodes(decl); err != nil {
+func (w *encodeWalk) element(decl xsd.ElementDeclaration, wraps bool) error {
+	if err := w.declEncodes(decl, wraps); err != nil {
 		return err
 	}
 	if err := w.slotsEncode(decl); err != nil {
@@ -1679,9 +1693,13 @@ func (w *encodeWalk) governingEncodes(decl xsd.ElementDeclaration, td xsd.TypeDe
 }
 
 // declEncodes returns the decline of the first of decl's own properties the
-// slice excludes: {nillable} as codegen reads it (goshape.Nillable), whatever
+// slice excludes, wraps being Decode's for the site decl is reached at
+// (governingTypes): {nillable} as codegen reads it (goshape.Nillable), whatever
 // {type table} decl has, ahead of its slots and governing types
-// (encodeWalk.element), as Decode's governingTypes declines it, an identity
+// (encodeWalk.element), where Decode declines it (nillableDeclines), and
+// otherwise where its one governing type has an attribute use of xsi:nil whose
+// {required} is true (requiresXsiNil), which no value of Nillable's Content arm
+// writes, though a Nilled arm's xsi:nil true would satisfy it; then an identity
 // constraint whose paths icpath does not compile (encodeWalk.identityEncodes),
 // a member of its {substitution group affiliations} that names no top-level
 // element declaration of the schema, the first in document order, an ·absent·
@@ -1692,9 +1710,15 @@ func (w *encodeWalk) governingEncodes(decl xsd.ElementDeclaration, td xsd.TypeDe
 // particle's declines so, one the parser never builds but
 // xsd.NewElementDeclaration does. A decl whose {identity-constraint
 // definitions} it admits sets w.assess.
-func (w *encodeWalk) declEncodes(decl xsd.ElementDeclaration) error {
+func (w *encodeWalk) declEncodes(decl xsd.ElementDeclaration, wraps bool) error {
 	if goshape.Nillable(decl) {
-		return encodeDecline(constructNillable, declSubject(decl))
+		types, errorSlot, err := goshape.GoverningTypes(w.schema, decl)
+		if nillableDeclines(decl, wraps, types, errorSlot, err) {
+			return encodeDecline(constructNillable, declSubject(decl))
+		}
+		if requiresXsiNil(types[0].Type()) {
+			return encodeDecline(constructNillable, declSubject(decl)+", whose type's attribute use of xsi:nil has {required} true, which a value of its Content arm, holding no xsi:nil, breaks (Structures §3.4.4.2 cvc-complex-type clause 3)")
+		}
 	}
 	for _, ic := range decl.IdentityConstraints() {
 		if err := w.identityEncodes(decl, ic); err != nil {
@@ -1711,6 +1735,14 @@ func (w *encodeWalk) declEncodes(decl xsd.ElementDeclaration) error {
 		return encodeDecline(constructAbstractElement, declSubject(decl))
 	}
 	return nil
+}
+
+// requiresXsiNil reports whether td is a complex type with an attribute use of
+// xsi:nil whose {required} is true, matched by expanded name as
+// goshape.FieldAttributeUses drops it, so that codegen gives it no field.
+func requiresXsiNil(td xsd.TypeDefinition) bool {
+	ct, isComplex := td.(xsd.ComplexType)
+	return isComplex && slices.ContainsFunc(ct.AttributeUses(), func(u xsd.AttributeUse) bool { return u.DeclarationName() == xsiNilName && u.Required() })
 }
 
 // identityEncodes returns the decline by constructIdentityConstraint of ic, an
@@ -2066,7 +2098,7 @@ func (w *encodeWalk) particleEncodes(p xsd.Particle, subject string, site partic
 			members = []xsd.ElementDeclaration{decl}
 		}
 		for _, m := range members {
-			if err := w.element(m); err != nil {
+			if err := w.element(m, !sum); err != nil {
 				return err
 			}
 		}
@@ -2087,7 +2119,7 @@ func (w *encodeWalk) particleEncodes(p xsd.Particle, subject string, site partic
 			el = term
 		}
 	}
-	return w.element(el)
+	return w.element(el, true)
 }
 
 // attributeEncodes returns elementEncodes' error for the attribute use u: a
@@ -2364,14 +2396,15 @@ type openValue struct {
 }
 
 // enter opens the write of v, a struct or sealed interface value of complex
-// type, or the AnyType content of an element held raw, at path, and reports
-// whether to write it: false, after recording item 6 of [Append]'s doc,
-// where v is addressable and a value at its address of its Go type is open,
-// a value that holds itself, which the write would reach again without end.
-// Only a *S, []S or []I field leads to a value already open, and each of
-// them yields an addressable value, so a value that is not addressable is
-// opened unchecked; a value written twice outside one path, shared, is no
-// cycle. Where it answers true, leave closes v.
+// type, codegen's Nillable of any type among them, or the AnyType content of
+// an element held raw, at path, and reports whether to write it: false,
+// after recording item 6 of [Append]'s doc, where v is addressable and a
+// value at its address of its Go type is open, a value that holds itself,
+// which the write would reach again without end. Only a *S, []S or []I field
+// leads to a value already open, and each of them yields an addressable
+// value, so a value that is not addressable is opened unchecked; a value
+// written twice outside one path, shared, is no cycle. Where it answers
+// true, leave closes v.
 func (e *encoder) enter(v reflect.Value, path string) bool {
 	var ptr reflect.Value
 	if v.CanAddr() {
