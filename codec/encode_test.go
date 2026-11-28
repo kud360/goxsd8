@@ -4139,9 +4139,8 @@ func TestAppendWildcardInvalid(t *testing.T) {
 // nothing binds, item 8, charged by cvc-type; a text token, an attribute
 // value, a skip match's xsi:type and a child's Tail whose prefix only a
 // binding Append declares binds decline by constructCapturedPrefix; a strict
-// match with a
-// ·locally declared type· and no top-level declaration declines by
-// constructLocallyTypedMatch, with or without xsi:type; and a governed
+// match with a ·locally declared type· and no top-level declaration declines
+// by constructLocallyTypedMatch, with or without xsi:type; and a governed
 // xs:ENTITY match declines by constructEntityType.
 func TestAppendGovernedMatch(t *testing.T) {
 	strictS := schemaOf(t, seqStrictSchema+`<xs:element name="i" type="xs:int"/>`)
