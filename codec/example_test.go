@@ -1,7 +1,6 @@
 package codec_test
 
 import (
-	"bytes"
 	"errors"
 	"fmt"
 	"io"
@@ -16,7 +15,6 @@ import (
 	"github.com/kud360/goxsd8/codec/testdata/readme/order"
 	"github.com/kud360/goxsd8/loader"
 	"github.com/kud360/goxsd8/parser"
-	"github.com/kud360/goxsd8/parser/xmltree"
 	"github.com/kud360/goxsd8/xsd"
 )
 
@@ -185,8 +183,8 @@ func ExampleCheckAppend() {
 
 // ExampleDecode_severalRoots decodes documents of an inline schema's two
 // top-level element declarations, s:r into r and s:n into int32, choosing T
-// by the expanded name Decode's doc reads off each document element through
-// parser/xmltree.
+// by the expanded name codec.DocumentElementName reads off each document
+// element.
 func ExampleDecode_severalRoots() {
 	const doc = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" targetNamespace="urn:s" elementFormDefault="qualified">
   <xs:element name="r"><xs:complexType><xs:sequence><xs:element name="a" type="xs:string"/></xs:sequence></xs:complexType></xs:element>
@@ -208,7 +206,7 @@ func ExampleDecode_severalRoots() {
 		`<p:n xmlns:p="urn:s">42</p:n>`,
 	}
 	for _, data := range documents {
-		name, err := rootName([]byte(data))
+		name, err := codec.DocumentElementName([]byte(data))
 		if err != nil {
 			log.Fatal(err)
 		}
@@ -232,21 +230,6 @@ func ExampleDecode_severalRoots() {
 	// Output:
 	// {urn:s}r x
 	// {urn:s}n 42
-}
-
-// rootName returns the expanded name of data's document element, read as
-// Decode's doc states.
-func rootName(data []byte) (xsd.QName, error) {
-	rd := xmltree.NewReader("", bytes.NewReader(data))
-	for {
-		tok, err := rd.Token()
-		if err != nil {
-			return xsd.QName{}, err
-		}
-		if start, ok := tok.(*xmltree.StartElement); ok {
-			return xsd.QName{Space: start.Name().Space(), Local: start.Name().Local()}, nil
-		}
-	}
 }
 
 // ExampleUndecidedError parses an inline schema whose document element's

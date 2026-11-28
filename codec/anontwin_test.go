@@ -1,13 +1,11 @@
 package codec
 
 import (
-	"bytes"
 	"reflect"
 	"testing"
 
 	"github.com/kud360/goxsd8/builtin/strict"
 	"github.com/kud360/goxsd8/internal/goshape"
-	"github.com/kud360/goxsd8/parser/xmltree"
 	"github.com/kud360/goxsd8/xsd"
 	"github.com/kud360/goxsd8/xsderr"
 )
@@ -130,7 +128,7 @@ func TestTableMatchedUnmatched(t *testing.T) {
 	}
 	table, _ := decl.TypeTable()
 	tr := &tableRoot{selector: tableSelector{table: table}, types: types}
-	start, err := documentElement(xmltree.NewReader("", bytes.NewReader(instanceOf("", ""))))
+	_, start, err := documentElement("", instanceOf("", ""))
 	if err != nil {
 		t.Fatal(err)
 	}

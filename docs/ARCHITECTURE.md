@@ -126,7 +126,7 @@ Value implementations, parsing, validation, and generation live above them.
 identifier for either of them and they import nothing from this module, so the
 edges drawn above do not exist yet in `go list -deps`. Read every
 present-tense sentence in their sections below as "will", not "does".
-`codec` has left this note: it exports `Decode`/`CheckDecode`/`Option`/`WithURI`/`WithBranches`/`WithPrecisionDecimalArms`/`WithLogger`,
+`codec` has left this note: it exports `Decode`/`CheckDecode`/`DocumentElementName`/`Option`/`WithURI`/`WithBranches`/`WithPrecisionDecimalArms`/`WithLogger`,
 `Append`, `CheckAppend`, `ErrInvalidValue`, `DeclineError` and its `Construct`, `UndecidedError`, `ViolationsOf` and `ErrTypeMismatch`, and
 imports `parser/xmltree`, `validate`, `validate/xmlsrc`, `value`, `xsd`,
 `xsderr`, `internal/goname`, `internal/goshape`, `internal/xmlchar`, `internal/xmlname` and `internal/xmlqname` (its section says what ships).
@@ -761,7 +761,8 @@ does not. `codec` (M10) exports `Decode`, which decodes a valid XML
 instance into the type `codegen` emits for its document element, for the
 slice `codec/doc.go`'s "What decodes" states, declining every other
 construct, `CheckDecode`, which returns `Decode`'s schema-level declines and T mismatches
-for a declaration before an instance arrives, `Append`, which encodes a value of that type
+for a declaration before an instance arrives, `DocumentElementName`, which reads the expanded
+name of an instance's document element for a caller choosing T, `Append`, which encodes a value of that type
 back out in canonical form for the slice `codec/doc.go`'s "What encodes" states, declining
 every other construct, `CheckAppend`, which returns `Append`'s schema-level declines and T
 mismatches for a declaration before any value exists, `Option`/`WithURI`/`WithBranches`/`WithPrecisionDecimalArms`/`WithLogger`, `ErrInvalidValue`, `DeclineError` and its `Construct`, `UndecidedError`, `ViolationsOf`, and `ErrTypeMismatch`. `Decode`'s

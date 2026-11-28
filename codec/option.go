@@ -69,8 +69,9 @@ func WithLogger(l *slog.Logger) Option {
 }
 
 // WithURI names the instance document data holds, so every instance
-// [xsderr.Loc] an error of [Decode] carries identifies the file a reader has
-// to open. [Decode] takes a []byte, which carries no name of its own.
+// [xsderr.Loc] an error of [Decode] or of [DocumentElementName] carries
+// identifies the file a reader has to open. Each takes a []byte, which carries
+// no name of its own.
 func WithURI(uri string) Option {
 	return func(c *config) { c.uri = uri }
 }
