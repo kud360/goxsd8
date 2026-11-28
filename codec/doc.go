@@ -1,19 +1,50 @@
 // Package codec is the dataset codec: schema-directed decode of instance data
 // into Go values, and encode of Go values back out in canonical form for the
 // slice "# What encodes" states; the allocation-frugal decode paths
-// "# Planned decode paths" names are not yet built. [Decode] assesses the
-// instance itself, so no separate validate call precedes it; its doc states
-// how. [Append]'s doc states when it assesses the document it writes and how
-// a caller gets a verdict on it otherwise. Given a value from Decode that it
-// encodes without error, Append writes that value, not the input's bytes:
-// [Append]'s doc and "# What encodes" state the written form.
+// "# Planned decode paths" names are not yet built. [CheckDecode] and
+// [CheckAppend] answer, at start-up, whether a top-level element declaration
+// decodes into a Go type T and encodes from one, each within the bounds its
+// doc states. A program parses its schema with
+// [github.com/kud360/goxsd8/parser.Parse] on a backend such as
+// [github.com/kud360/goxsd8/builtin/strict.New]'s, calls CheckDecode once at
+// start-up for each declaration and T it decodes a document element into, and
+// CheckAppend for each it encodes one from, each passed the options [Decode]
+// or [Append] is passed, then calls Decode for each instance, first reading
+// its name with [DocumentElementName] where Decode's doc says, and Append for
+// each value:
 //
-// Call [CheckDecode] once at start-up for each top-level element declaration
-// and T a program decodes a document element into, and [CheckAppend] for each
-// it encodes one from. Pass CheckDecode the options [Decode] is passed and
-// CheckAppend those [Append] is passed, of which each doc names the ones it
-// reads; then call Decode for each instance and Append for each value. Each
-// Check's doc states what it reports.
+//	backend := strict.New()
+//	schema, err := parser.Parse("order.xsd", parser.WithBackend(backend))
+//	name := xsd.QName{Space: "urn:o", Local: "order"}
+//	err = codec.CheckDecode[order.Order](schema, name, opts...)
+//	err = codec.CheckAppend[order.Order](schema, name, opts...)
+//	o, err := codec.Decode[order.Order](schema, backend, data, opts...)
+//	out, err := codec.Append(nil, schema, backend, name, *o, opts...)
+//
+// Decodes today, under the conditions "# What decodes" states: atomic, list
+// and union simple types; top-level element declarations as document
+// elements; complex types of each content type; sequences, choices and all
+// groups; element and wildcard particles; substitution groups; xs:anyType;
+// nillable declarations; attribute uses, attribute wildcards and open
+// content; and value constraints.
+//
+// Encodes today, under the conditions "# What encodes" states: top-level
+// element declarations as document elements; complex types; element and
+// wildcard particles; open content; xs:anyType; attribute uses and attribute
+// wildcards; the special types; and atomic, list and union simple types.
+//
+// Declines today, with a [*DeclineError], among others: untracked content
+// models; indistinguishable branches; some nillable declarations; xsi:type,
+// item 7 of [Decode]'s doc; and, on encode, types derived from xs:ENTITY,
+// simple types with an assertions facet and the values item 7 of [Append]'s
+// doc names. "# What decodes" and "# What encodes" each list the rest.
+//
+// [Decode] assesses the instance itself, so no separate validate call
+// precedes it; its doc states how. [Append]'s doc states when it assesses the
+// document it writes and how a caller gets a verdict on it otherwise. Given a
+// value from Decode that it encodes without error, Append writes that value,
+// not the input's bytes: [Append]'s doc and "# What encodes" state the written
+// form.
 //
 // # Decode
 //
