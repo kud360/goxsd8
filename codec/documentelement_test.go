@@ -12,9 +12,10 @@ import (
 
 // TestDocumentElementName pins DocumentElementName's doc, one row per shape:
 // the namespace of a default-namespace and of a prefixed document element,
-// the comment, processing instruction and white space before it, the
-// Reader's own error returned unchanged for an unbound prefix, and the
-// xml-wf error, never io.EOF, for a document with no element.
+// the comment, processing instruction and white space before it, a document
+// ill-formed only after its start tag, the Reader's own error returned
+// unchanged for an unbound prefix, and the xml-wf error, never io.EOF, for a
+// document with no element.
 func TestDocumentElementName(t *testing.T) {
 	const uri = "i.xml"
 	for _, row := range []struct {
@@ -24,6 +25,7 @@ func TestDocumentElementName(t *testing.T) {
 		{`<r xmlns="urn:s"/>`, xsd.QName{Space: "urn:s", Local: "r"}},
 		{`<p:n xmlns:p="urn:s"/>`, xsd.QName{Space: "urn:s", Local: "n"}},
 		{"<!-- c -->\n<?p x?>\n<r xmlns=\"urn:s\"/>", xsd.QName{Space: "urn:s", Local: "r"}},
+		{`<r xmlns="urn:s"><a></r>`, xsd.QName{Space: "urn:s", Local: "r"}},
 	} {
 		got, err := DocumentElementName([]byte(row.data), WithURI(uri))
 		if err != nil || got != row.want {
