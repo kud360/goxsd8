@@ -950,10 +950,10 @@ func (e *UndecidedError) Unwrap() error { return errors.ErrUnsupported }
 //
 // It reads no further than that start tag, so a document ill-formed after it
 // still returns its name. An error is returned exactly when the name is the
-// zero QName: the Reader's own error, unchanged, for a document ill-formed
-// before the start tag, and for one with no element at all an [*xsderr.Error]
-// under [xsderr.RuleXMLWellFormed] (XML 1.0 [1] document) whose Loc carries
-// only the uri, never io.EOF.
+// zero QName: the Reader's own error, unchanged, for a document the Reader
+// finds ill-formed before that start tag ends, and for one with no element at
+// all an [*xsderr.Error] under [xsderr.RuleXMLWellFormed] (XML 1.0 [1]
+// document) whose Loc carries only the uri, never io.EOF.
 func DocumentElementName(data []byte, opts ...Option) (xsd.QName, error) {
 	_, start, err := documentElement(newConfig(opts).uri, data)
 	if err != nil {
@@ -970,7 +970,7 @@ func documentElement(uri string, data []byte) (*xmltree.Reader, *xmltree.StartEl
 	for {
 		tok, err := r.Token()
 		if errors.Is(err, io.EOF) {
-			return nil, nil, xsderr.New(xsderr.RuleXMLWellFormed, xsderr.Loc{URI: uri}, "no document element: a document holds exactly one element (XML 1.0 [1] document)")
+			return nil, nil, xsderr.New(xsderr.RuleXMLWellFormed, xsderr.Loc{URI: uri}, "document has no document element")
 		}
 		if err != nil {
 			return nil, nil, err

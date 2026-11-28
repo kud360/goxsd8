@@ -32,7 +32,7 @@ func TestDocumentElementName(t *testing.T) {
 			t.Errorf("DocumentElementName(%q) = %v, %v; want %v, nil", row.data, got, err, row.want)
 		}
 	}
-	const rootless = "i.xml: [xml-wf] no document element: a document holds exactly one element (XML 1.0 [1] document)"
+	const rootless = "i.xml: [xml-wf] document has no document element"
 	for _, row := range []struct {
 		data, prefix string
 		at           xsderr.Loc
