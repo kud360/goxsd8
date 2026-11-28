@@ -318,3 +318,80 @@ func (b boundNillableRoot) fill(r *xmltree.Reader, root *xmltree.StartElement, o
 	out.Set(b.bound.contentValue(v))
 	return nil
 }
+
+// write writes the element at.el holding v, a value of b.t, codegen's Nillable,
+// its arm told apart by its dynamic type, never by its content: the Content arm's
+// Content by content, at its Go path, which takes slot itself, and the Nilled arm
+// as writeNilled writes it, taken by slot (attributionSlot.take). A nil v, which
+// writeOccurring passes only where nil does not mean absent, and a dynamic type
+// that is neither arm, a pointer to one among them, are item 6 of [Append]'s doc
+// and write nothing: Decode returns neither. v is opened as a value of complex
+// type is (encoder.enter), so that a v its own Content reaches again through a
+// []Nillable field, which no finite document holds, is item 6 too.
+func (b boundNillable) write(e *encoder, v reflect.Value, at writeAt, slot attributionSlot, content func(c reflect.Value, at writeAt) error) error {
+	if v.IsNil() {
+		e.invalidate(fmt.Errorf("codec: Append: %s is nil, codegen's Nillable over %s, which holds no element where one is written", at.path, declSubject(at.el)))
+		return nil
+	}
+	arm := v.Elem()
+	if arm.Type() != b.content && arm.Type() != b.nilled {
+		e.invalidate(fmt.Errorf("codec: Append: %s holds a %s, which the WithBranches set of %s places at neither Content nor Nilled, so that Decode returns no such value", at.path, arm.Type(), v.Type()))
+		return nil
+	}
+	path := at.path + ".(" + typePath(arm.Type()) + ")." + arm.Type().Field(0).Name
+	if !e.enter(v, at.path) {
+		return nil
+	}
+	defer e.leave()
+	if arm.Type() == b.content {
+		return content(arm.Field(0), writeAt{el: at.el, branch: at.branch, path: path})
+	}
+	slot.take(e, at.el, at.path)
+	return b.writeNilled(e, arm.Field(0), writeAt{el: at.el, branch: at.branch, path: path})
+}
+
+// writeNilled writes the ·nilled· element at.el (§3.3.1 key-nilled) whose
+// Attributes, a value of A, is a: its start tag, then A's attribute fields'
+// attributes as encoder.attributeFields writes T's, from field 0, none for a nil
+// b.sum.attrs, since cvc-complex-type clauses 2 to 4 hold for a nilled element,
+// then xsi:nil true, the literal true of xs:boolean, the {type definition} of the
+// built-in xsi:nil declaration (§3.2.7.2), then, where at.el has a {type table},
+// the table's selection over those attributes, xsi:nil among them (§3.12.4
+// key-cta-ta-select), held to the type at.branch (encoder.selects), then no
+// character or element child (cvc-elt clause 3.2.3.1), an empty-element tag. It
+// holds nothing to at.el's {value constraint}, which supplies no value to a nilled
+// element (cvc-elt clause 5.1), and no fixed one reaches it (goshape.Nillable,
+// clause 3.2.3.2). Its error is a backend fault or selects'.
+func (b boundNillable) writeNilled(e *encoder, a reflect.Value, at writeAt) error {
+	name := at.el.Name()
+	outer, mark := e.startTag(name)
+	if b.sum.attrs != nil {
+		if err := e.attributeFields(b.sum.attrs, a, 0, at); err != nil {
+			return err
+		}
+	}
+	e.writeRawAttribute(xsiNilName, "true", nil)
+	if err := e.selects(at, e.tag); err != nil {
+		return err
+	}
+	e.textTag(name.Local, "", outer, mark)
+	return nil
+}
+
+// writeElement writes the element of at.el holding v, a value of n's Nillable
+// (boundNillable.write), taken by slot, its Content arm's Content by the
+// elementWriter n.content is.
+func (n nillableReader) writeElement(e *encoder, v reflect.Value, at writeAt, slot attributionSlot) error {
+	return n.bound.write(e, v, at, slot, func(c reflect.Value, at writeAt) error {
+		return encoded[elementWriter](n.content).writeElement(e, c, at, slot)
+	})
+}
+
+// write writes the document element at.el holding v, a value of b's Nillable
+// (boundNillable.write), taken by no slot, its Content arm's Content by the
+// writer b.content is.
+func (b boundNillableRoot) write(e *encoder, v reflect.Value, at writeAt) error {
+	return b.bound.write(e, v, at, attributionSlot{}, func(c reflect.Value, at writeAt) error {
+		return encoded[writer](b.content).write(e, c, at)
+	})
+}

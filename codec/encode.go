@@ -533,14 +533,9 @@ func (s *simpleRoot) write(e *encoder, v reflect.Value, at writeAt) error {
 }
 
 // write writes the element at.el holding v, a value of b's struct: its start
-// tag, then each attribute field's attribute, in field order, named by
-// writeRawAttribute, the fields after the content's (binding.lead,
-// elementContent.width), a nil *V's written as none, and so is a nil union
-// interface of a use whose {required} is false and to which no value
-// constraint supplies a value (supply), each written value held to its use's
-// and its declaration's fixed {value constraint} (encoder.attributeFixed),
-// then, for a type with an {attribute wildcard}, the attributes its field
-// holds (encoder.wildcardAttributes), then, where at.el has a {type table}, the
+// tag, then the attributes of its attribute fields, the fields after the
+// content's (binding.lead, elementContent.width), as encoder.attributeFields
+// writes them, then, where at.el has a {type table}, the
 // table's selection over the attributes written held to the type at.branch
 // (encoder.selects), then the content, under the [inherited attributes]
 // validate.Validator.HandedDown composes for its children from those
@@ -562,35 +557,8 @@ func (b *boundBinding) write(e *encoder, v reflect.Value, at writeAt) error {
 	bd := b.binding
 	name := at.el.Name()
 	outer, mark := e.startTag(name)
-	first := bd.lead() + bd.content.width()
-	for i, a := range bd.attrs {
-		f, fpath := v.Field(first+i), at.path+"."+v.Type().Field(first+i).Name
-		if a.shape == shapeOptional {
-			if f.IsNil() {
-				continue
-			}
-			f = f.Elem()
-		}
-		// An optional union use's field is its bare sealed interface, nil
-		// meaning absent (codegen's package doc, "# Attributes"), but where a
-		// value constraint supplies the attribute's value, which Decode then
-		// holds there (Structures §3.4.5.1 sic-attrDefault), so that a nil one
-		// reaches union, item 6 of Append's doc.
-		if f.Kind() == reflect.Interface && f.IsNil() && !a.use.Required() && a.supplied == nil {
-			continue
-		}
-		w, err := e.scalarText(a.scalar, f, fpath, simpleSubject(a.st, attributeSubject(a.decl)))
-		if err != nil {
-			return err
-		}
-		e.attributeFixed(a, w, fpath)
-		e.writeRawAttribute(a.decl.Name(), w.text, nil)
-	}
-	if bd.anyAttribute != nil {
-		i := first + len(bd.attrs)
-		if err := e.wildcardAttributes(bd, v.Field(i), at.path+"."+v.Type().Field(i).Name, at.el); err != nil {
-			return err
-		}
+	if err := e.attributeFields(bd, v, bd.lead()+bd.content.width(), at); err != nil {
+		return err
 	}
 	if err := e.selects(at, e.tag); err != nil {
 		return err
@@ -632,6 +600,47 @@ func (b *boundBinding) write(e *encoder, v reflect.Value, at writeAt) error {
 	}
 	e.endTag(name.Local, start, outer, mark)
 	return nil
+}
+
+// attributeFields writes to the start tag that is open the attributes of bd's
+// attribute fields, held in v, a struct, from its field first on, at at.path:
+// each attribute field's attribute, in field order, named by writeRawAttribute, a
+// nil *V's written as none, and so is a nil union interface of a use whose
+// {required} is false and to which no value constraint supplies a value (supply),
+// each written value held to its use's and its declaration's fixed {value
+// constraint} (encoder.attributeFixed), then, for a type with an {attribute
+// wildcard}, the attributes its field, the one after them, holds
+// (encoder.wildcardAttributes), at.el the element they are written on. Its error
+// is a backend fault.
+func (e *encoder) attributeFields(bd *binding, v reflect.Value, first int, at writeAt) error {
+	for i, a := range bd.attrs {
+		f, fpath := v.Field(first+i), at.path+"."+v.Type().Field(first+i).Name
+		if a.shape == shapeOptional {
+			if f.IsNil() {
+				continue
+			}
+			f = f.Elem()
+		}
+		// An optional union use's field is its bare sealed interface, nil
+		// meaning absent (codegen's package doc, "# Attributes"), but where a
+		// value constraint supplies the attribute's value, which Decode then
+		// holds there (Structures §3.4.5.1 sic-attrDefault), so that a nil one
+		// reaches union, item 6 of Append's doc.
+		if f.Kind() == reflect.Interface && f.IsNil() && !a.use.Required() && a.supplied == nil {
+			continue
+		}
+		w, err := e.scalarText(a.scalar, f, fpath, simpleSubject(a.st, attributeSubject(a.decl)))
+		if err != nil {
+			return err
+		}
+		e.attributeFixed(a, w, fpath)
+		e.writeRawAttribute(a.decl.Name(), w.text, nil)
+	}
+	if bd.anyAttribute == nil {
+		return nil
+	}
+	i := first + len(bd.attrs)
+	return e.wildcardAttributes(bd, v.Field(i), at.path+"."+v.Type().Field(i).Name, at.el)
 }
 
 // text returns the text Append writes for v's value field, field b.index of
@@ -1548,7 +1557,7 @@ func (g groupReader) writeElement(e *encoder, v reflect.Value, at writeAt, slot 
 // It reads the schema alone, never the binder, and builds nothing.
 func elementEncodes(schema *xsd.Schema, decl xsd.ElementDeclaration) (bool, error) {
 	w := &encodeWalk{schema: schema, walked: map[unitKey]bool{}}
-	if err := w.element(decl); err != nil {
+	if err := w.element(decl, true); err != nil {
 		return false, err
 	}
 	return w.assess, nil
@@ -1594,8 +1603,8 @@ type encodeWalk struct {
 // two branches of one declaration are each examined. complexEncodes and the
 // functions under it read decl only to name a decline's subject, so that a type
 // reached again through another declaration answers as it did.
-func (w *encodeWalk) element(decl xsd.ElementDeclaration) error {
-	if err := w.declEncodes(decl); err != nil {
+func (w *encodeWalk) element(decl xsd.ElementDeclaration, wraps bool) error {
+	if err := w.declEncodes(decl, wraps); err != nil {
 		return err
 	}
 	if err := w.slotsEncode(decl); err != nil {
@@ -1692,9 +1701,15 @@ func (w *encodeWalk) governingEncodes(decl xsd.ElementDeclaration, td xsd.TypeDe
 // particle's declines so, one the parser never builds but
 // xsd.NewElementDeclaration does. A decl whose {identity-constraint
 // definitions} it admits sets w.assess.
-func (w *encodeWalk) declEncodes(decl xsd.ElementDeclaration) error {
+func (w *encodeWalk) declEncodes(decl xsd.ElementDeclaration, wraps bool) error {
 	if goshape.Nillable(decl) {
-		return encodeDecline(constructNillable, declSubject(decl))
+		types, errorSlot, err := goshape.GoverningTypes(w.schema, decl)
+		if nillableDeclines(decl, wraps, types, errorSlot, err) {
+			return encodeDecline(constructNillable, declSubject(decl))
+		}
+		if requiresXsiNil(types[0].Type()) {
+			return encodeDecline(constructNillable, declSubject(decl)+", whose type's attribute use of xsi:nil has {required} true, which a value of its Content arm, holding no xsi:nil, breaks (Structures §3.4.4.2 cvc-complex-type clause 3)")
+		}
 	}
 	for _, ic := range decl.IdentityConstraints() {
 		if err := w.identityEncodes(decl, ic); err != nil {
@@ -1711,6 +1726,14 @@ func (w *encodeWalk) declEncodes(decl xsd.ElementDeclaration) error {
 		return encodeDecline(constructAbstractElement, declSubject(decl))
 	}
 	return nil
+}
+
+// requiresXsiNil reports whether td is a complex type with an attribute use of
+// xsi:nil whose {required} is true, matched by expanded name as
+// goshape.FieldAttributeUses drops it, so that codegen gives it no field.
+func requiresXsiNil(td xsd.TypeDefinition) bool {
+	ct, isComplex := td.(xsd.ComplexType)
+	return isComplex && slices.ContainsFunc(ct.AttributeUses(), func(u xsd.AttributeUse) bool { return u.DeclarationName() == xsiNilName && u.Required() })
 }
 
 // identityEncodes returns the decline by constructIdentityConstraint of ic, an
@@ -2066,7 +2089,7 @@ func (w *encodeWalk) particleEncodes(p xsd.Particle, subject string, site partic
 			members = []xsd.ElementDeclaration{decl}
 		}
 		for _, m := range members {
-			if err := w.element(m); err != nil {
+			if err := w.element(m, !sum); err != nil {
 				return err
 			}
 		}
@@ -2087,7 +2110,7 @@ func (w *encodeWalk) particleEncodes(p xsd.Particle, subject string, site partic
 			el = term
 		}
 	}
-	return w.element(el)
+	return w.element(el, true)
 }
 
 // attributeEncodes returns elementEncodes' error for the attribute use u: a
