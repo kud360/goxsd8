@@ -8,12 +8,12 @@ import (
 	"github.com/kud360/goxsd8/xsderr"
 )
 
-// TestDecodeURI pins WithURI's doc on Decode's errors: under WithURI every
-// instance Loc an error carries names the document, and with no option, or
-// WithURI(""), it renders "?". The violation, both source-fault channels and the
-// undecided check read their Loc from validate/xmlsrc.Validate's read, and
-// the two declines from codec's own parser/xmltree read, so each row fails
-// when the URI is dropped at the read it names.
+// TestDecodeURI pins Decode's URI paragraph and WithURI's doc under WithURI,
+// with no option and with WithURI(""). The violation, both source-fault
+// channels and the undecided check read their Loc from
+// validate/xmlsrc.Validate's read, and the two declines from codec's own
+// parser/xmltree read, so each row fails when the URI is dropped at the read
+// it names.
 func TestDecodeURI(t *testing.T) {
 	const xsiType = `<xs:complexType name="rt"><xs:sequence><xs:element name="a" type="xs:string"/></xs:sequence></xs:complexType>
 		<xs:element name="r" type="s:rt"/>`
