@@ -1,14 +1,12 @@
 package assess
 
 import (
-	"bytes"
 	"errors"
 	"io"
 	"math"
 	"reflect"
 
 	"github.com/kud360/goxsd8/codec"
-	"github.com/kud360/goxsd8/parser/xmltree"
 	"github.com/kud360/goxsd8/value"
 	"github.com/kud360/goxsd8/xsd"
 )
@@ -107,7 +105,7 @@ type encodeOutcome struct {
 // does not accept, an error of decoding it under the same options as the
 // first decode, a value that is not the same as v, and otherwise encoded.
 func roundTrip(schema *xsd.Schema, backend value.Backend, data []byte, uri string, k Codec, v any) encodeOutcome {
-	out, err := k.encode(schema, backend, DocumentElement(bytes.NewReader(data), uri), v)
+	out, err := k.encode(schema, backend, DocumentElement(data, uri), v)
 	if err != nil {
 		var de *codec.DeclineError
 		if errors.As(err, &de) {
@@ -250,19 +248,14 @@ func namespacesField(t reflect.Type, i int) bool {
 		e.Field(0).Type.Kind() == reflect.String && e.Field(1).Type.Kind() == reflect.String
 }
 
-// DocumentElement returns the expanded name of the document element of the
-// instance r reads, named uri, or the zero QName when the document is not
-// well-formed before it. The census reads it to resolve a case's type, and
-// [DriveEncode] to name the declaration it encodes as.
-func DocumentElement(r io.Reader, uri string) xsd.QName {
-	x := xmltree.NewReader(uri, r)
-	for {
-		tok, err := x.Token()
-		if err != nil {
-			return xsd.QName{}
-		}
-		if start, ok := tok.(*xmltree.StartElement); ok {
-			return xsd.QName{Space: start.Name().Space(), Local: start.Name().Local()}
-		}
+// DocumentElement returns [codec.DocumentElementName] of the instance data,
+// named uri, or the zero QName where that returns an error. The census reads
+// it to resolve a case's type, and [DriveEncode] to name the declaration it
+// encodes as.
+func DocumentElement(data []byte, uri string) xsd.QName {
+	name, err := codec.DocumentElementName(data, codec.WithURI(uri))
+	if err != nil {
+		return xsd.QName{}
 	}
+	return name
 }
