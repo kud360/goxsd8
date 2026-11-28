@@ -173,10 +173,9 @@ const (
 	// §6 f-precDecLexmap), for the reasons their bullets in the package doc's
 	// "# What decodes" give.
 	readLexical
-	// readExpanded is the expanded name the normalized lexical resolves to
-	// against the bindings Parse was given, never Canonical: QName's, which
-	// NOTATION shares (§3.3.18, §3.3.19), for the reason its bullet in the
-	// package doc's "# What decodes" gives.
+	// readExpanded is the expanded name the normalized lexical resolves to,
+	// never Canonical: QName's, which NOTATION shares (§3.3.18, §3.3.19), read
+	// as its bullet in the package doc's "# What decodes" states.
 	readExpanded
 )
 
