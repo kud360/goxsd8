@@ -19,6 +19,7 @@
 //
 //	func Decode[T any](schema *xsd.Schema, backend value.Backend, data []byte, opts ...Option) (*T, error)
 //	func CheckDecode[T any](schema *xsd.Schema, name xsd.QName, opts ...Option) error
+//	func DocumentElementName(data []byte, opts ...Option) (xsd.QName, error)
 //	type Option func(*config)
 //	func WithURI(uri string) Option
 //	func WithBranches[I any](branches ...I) Option

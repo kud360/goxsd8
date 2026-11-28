@@ -10,7 +10,6 @@ import (
 	"testing"
 
 	"github.com/kud360/goxsd8/builtin/strict"
-	"github.com/kud360/goxsd8/parser/xmltree"
 	"github.com/kud360/goxsd8/value"
 	"github.com/kud360/goxsd8/xsd"
 )
@@ -296,7 +295,7 @@ func TestListMappingReadOnlyForItems(t *testing.T) {
 		t.Fatal(err)
 	}
 	s := newScalar(simpleGo{elem: atomicInt32, item: item}, st, "the item", xsd.ValueConstraint{}, false)
-	start, err := documentElement(xmltree.NewReader("", bytes.NewReader(instanceOf("", ""))))
+	_, start, err := documentElement("", instanceOf("", ""))
 	if err != nil {
 		t.Fatal(err)
 	}

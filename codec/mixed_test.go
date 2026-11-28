@@ -749,8 +749,8 @@ func TestMixedCharAfterChildIsDefect(t *testing.T) {
 	const doc = "<r>\n<a>v</a>y</r>"
 	x := childIndex{children: map[xsd.QName]taken{{Local: "a"}: {target: 0}}}
 	for _, mixed := range []bool{false, true} {
-		r := xmltree.NewReader("", bytes.NewReader([]byte(doc)))
-		if _, err := documentElement(r); err != nil {
+		r, _, err := documentElement("", []byte(doc))
+		if err != nil {
 			t.Fatal(err)
 		}
 		st := &fillState{mixed: mixed}
@@ -761,7 +761,7 @@ func TestMixedCharAfterChildIsDefect(t *testing.T) {
 			}
 			st.pending = next
 		}
-		err := eachChild(r, nil, x, st, func(*xmltree.StartElement, int) error {
+		err = eachChild(r, nil, x, st, func(*xmltree.StartElement, int) error {
 			return skipToEnd(r)
 		})
 		if !mixed {

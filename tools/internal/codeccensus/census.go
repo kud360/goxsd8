@@ -347,12 +347,11 @@ func resolveCase(schema *xsd.Schema, types []typeDecl, name xsd.QName, dir strin
 
 // documentElement returns assess.DocumentElement of the instance at path.
 func documentElement(path string) (xsd.QName, error) {
-	f, err := os.Open(path)
+	data, err := os.ReadFile(path)
 	if err != nil {
 		return xsd.QName{}, fmt.Errorf("reading instance %s: %w", path, err)
 	}
-	defer func() { _ = f.Close() }() // read-only handle: close error cannot change what was read
-	return assess.DocumentElement(f, path), nil
+	return assess.DocumentElement(data, path), nil
 }
 
 // typeDecl is one type declaration of a generated file: its name, the first

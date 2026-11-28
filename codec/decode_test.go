@@ -17,7 +17,6 @@ import (
 	"github.com/kud360/goxsd8/codegen"
 	"github.com/kud360/goxsd8/loader"
 	"github.com/kud360/goxsd8/parser"
-	"github.com/kud360/goxsd8/parser/xmltree"
 	"github.com/kud360/goxsd8/validate"
 	"github.com/kud360/goxsd8/xsd"
 	"github.com/kud360/goxsd8/xsderr"
@@ -428,7 +427,7 @@ func TestDecodeTypeMismatch(t *testing.T) {
 	if rule, _ := xsderr.RuleOf(err); rule != "cvc-assess-elt" {
 		t.Fatalf("Decode(undeclared document element) = %v, want the validator's cvc-assess-elt", err)
 	}
-	start, err := documentElement(xmltree.NewReader("", bytes.NewReader(instanceOf("", ""))))
+	_, start, err := documentElement("", instanceOf("", ""))
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -5,6 +5,7 @@ import (
 	"cmp"
 	"errors"
 	"fmt"
+	"io"
 	"reflect"
 	"slices"
 	"strconv"
@@ -29,7 +30,7 @@ var ErrTypeMismatch = errors.New("codec: T is not the type codegen emits for the
 // [Append]'s, and so of [CheckAppend]'s: errors.Is(err, ErrUndeclaredElement)
 // is true for it. That error's text names the expanded name and does not
 // contain this sentinel's. [Decode] never returns that error: a Decode caller
-// passes the document element's name, read as Decode's doc states, to
+// passes the document element's name, read by [DocumentElementName], to
 // CheckDecode.
 var ErrUndeclaredElement = errors.New("codec: the schema declares no top-level element of the expanded name")
 
@@ -37,7 +38,7 @@ var ErrUndeclaredElement = errors.New("codec: the schema declares no top-level e
 // [Append]'s, and so of [CheckAppend]'s: errors.Is(err, ErrAbstractElement) is
 // true for it. That error's text names the declaration and does not contain
 // this sentinel's. [Decode] never returns that error: a Decode caller passes
-// the document element's name, read as Decode's doc states, to CheckDecode.
+// the document element's name, read by [DocumentElementName], to CheckDecode.
 var ErrAbstractElement = errors.New("codec: the top-level element declaration has {abstract} true")
 
 // Decode decodes the XML instance data into a new value of T, the type
@@ -49,10 +50,7 @@ var ErrAbstractElement = errors.New("codec: the top-level element declaration ha
 // T is the caller's choice: nothing dispatches a document element to its
 // generated type, and item 6 below states which T match. A caller decoding
 // documents of several roots therefore reads the document element's expanded
-// name itself before choosing T: [xmltree.NewReader] over data, read by
-// [xmltree.Reader.Token] to the first *[xmltree.StartElement], whose Name's
-// Space and Local are those of the [xsd.QName] whose top-level element
-// declaration items 5 and 6 examine, the name [CheckDecode] takes.
+// name with [DocumentElementName] before choosing T.
 //
 // The slice Decode covers is the package doc's "# What decodes". Decode first
 // assesses data against schema with package validate and decodes only an
@@ -802,8 +800,7 @@ func decodeValue(schema *xsd.Schema, backend value.Backend, data []byte, out ref
 	if err := verdict(res); err != nil {
 		return err
 	}
-	r := xmltree.NewReader(cfg.uri, bytes.NewReader(data))
-	root, err := documentElement(r)
+	r, root, err := documentElement(cfg.uri, data)
 	if err != nil {
 		return err
 	}
@@ -944,15 +941,42 @@ func (e *UndecidedError) Error() string {
 // Unwrap returns errors.ErrUnsupported.
 func (e *UndecidedError) Unwrap() error { return errors.ErrUnsupported }
 
-// documentElement returns the start tag of r's document element.
-func documentElement(r *xmltree.Reader) (*xmltree.StartElement, error) {
+// DocumentElementName returns the expanded name of data's document element:
+// the Name of the first start tag package parser/xmltree's Reader returns
+// over data, past the comments, processing instructions, DOCTYPE and white
+// space before it. Its Space and Local are those of the name whose top-level
+// element declaration items 5 and 6 of [Decode]'s doc examine, the name
+// [CheckDecode] takes. Of opts it reads only the uri [WithURI] supplies.
+//
+// It reads no further than that start tag, so a document ill-formed after it
+// still returns its name. An error is returned exactly when the name is the
+// zero QName: the Reader's own error, unchanged, for a document the Reader
+// finds ill-formed before that start tag ends, and for one with no element at
+// all an [*xsderr.Error] under [xsderr.RuleXMLWellFormed] (XML 1.0 [1]
+// document) whose Loc carries only the uri, never io.EOF.
+func DocumentElementName(data []byte, opts ...Option) (xsd.QName, error) {
+	_, start, err := documentElement(newConfig(opts).uri, data)
+	if err != nil {
+		return xsd.QName{}, err
+	}
+	return xsd.QName{Space: start.Name().Space(), Local: start.Name().Local()}, nil
+}
+
+// documentElement returns a Reader over data, named uri, that has just
+// returned the start tag of data's document element, and that start tag, or
+// the error [DocumentElementName]'s doc states.
+func documentElement(uri string, data []byte) (*xmltree.Reader, *xmltree.StartElement, error) {
+	r := xmltree.NewReader(uri, bytes.NewReader(data))
 	for {
 		tok, err := r.Token()
+		if errors.Is(err, io.EOF) {
+			return nil, nil, xsderr.New(xsderr.RuleXMLWellFormed, xsderr.Loc{URI: uri}, "document has no document element")
+		}
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		if start, ok := tok.(*xmltree.StartElement); ok {
-			return start, nil
+			return r, start, nil
 		}
 	}
 }

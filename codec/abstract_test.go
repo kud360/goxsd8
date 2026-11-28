@@ -6,7 +6,6 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/kud360/goxsd8/parser/xmltree"
 	"github.com/kud360/goxsd8/xsderr"
 )
 
@@ -324,7 +323,7 @@ func TestInstanceSelectorUnmatched(t *testing.T) {
 		{` xsi:type="s:zz"`, `codec: ?:1:1: element {urn:s}r: its xsi:type "s:zz" names no type definition, but one overriding its {type definition} (key-overrides) is required`},
 		{` xsi:type="s:ab"`, `codec: ?:1:1: element {urn:s}r: its xsi:type "s:ab" names {urn:s}ab, none of its governing types, the types that override its {type definition} (key-overrides)`},
 	} {
-		start, err := documentElement(xmltree.NewReader("", bytes.NewReader(instanceOf(row.attrs, ""))))
+		_, start, err := documentElement("", instanceOf(row.attrs, ""))
 		if err != nil {
 			t.Fatal(err)
 		}
