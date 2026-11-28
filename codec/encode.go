@@ -134,7 +134,7 @@ var ErrInvalidValue = errors.New("codec: Append: a value no valid document holds
 //     character the XML 1.0 Char production does not match, U+0000 among them (Datatypes §3.3.1.1, §3.3.17.1,
 //     §3.2.1.2, §3.2.2.2), a held element's Space, an attribute's Space or Value, a Text and a Tail among them;
 //     a string that differs from its own whiteSpace-normalized form under its simple type, such as an xs:token
-//     holding " a b"; a list item, a string, that is empty or holds TAB, LF, CR or a space, which no list item's
+//     holding "  a  b"; a list item, a string, that is empty or holds TAB, LF, CR or a space, which no list item's
 //     lexical representation does (Datatypes §2.4.1.2); a big.Rat outside the decimal value space, whose
 //     denominator in lowest terms is no 2^m·5^n (§3.3.3.1), such as 1/3; an element a wildcard particle's field
 //     holds, of any {process contents}, that its content model admits at no particle where it is written, a name
