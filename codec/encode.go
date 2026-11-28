@@ -262,9 +262,9 @@ var ErrInvalidValue = errors.New("codec: Append: a value no valid document holds
 //     violation of any other rule is a fault of Append's, reported so all the
 //     same; otherwise every violation is the value's. Under either, a
 //     cvc-assertion violation whose {test} reads the string value of an
-//     element or attribute, which Append spells as the opening paragraph
-//     above states, may come from that spelling rather than from the value,
-//     reported so all the same, and so may one whose {test} reads the
+//     element or attribute, which Append spells as the paragraph after the
+//     errors summary states, may come from that spelling rather than from the
+//     value, reported so all the same, and so may one whose {test} reads the
 //     in-scope namespaces of an element in content Append writes raw, as
 //     fn:in-scope-prefixes does, which may come from a namespace binding
 //     Append declares, a fresh pN among them, rather than from the value.
