@@ -20,6 +20,7 @@ import (
 const (
 	nilStringRootSchema = `<xs:element name="r" type="xs:string" nillable="true"/>`
 	nilFixedRootSchema  = `<xs:element name="r" type="xs:string" nillable="true" fixed="A"/>`
+	nilTestedRootSchema = `<xs:element name="r" type="xs:string" nillable="true"><xs:alternative test="@xsi:nil" type="xs:string"/><xs:alternative test="count(@k) &gt; 0" type="xs:string"/></xs:element>`
 	nilFlatSeqSchema    = `<xs:element name="r"><xs:complexType><xs:sequence maxOccurs="unbounded"><xs:element name="a" type="xs:string" minOccurs="0" nillable="true"/></xs:sequence></xs:complexType></xs:element>`
 	nilInnerSchema      = `<xs:element name="r"><xs:complexType><xs:sequence><xs:element name="a"><xs:complexType><xs:sequence><xs:element name="n" type="xs:string" nillable="true"/></xs:sequence></xs:complexType></xs:element></xs:sequence></xs:complexType></xs:element>`
 	nilSharedNameSchema = `<xs:complexType name="r"><xs:sequence><xs:element name="n" type="xs:string" nillable="true"/></xs:sequence></xs:complexType>` +
@@ -169,6 +170,15 @@ func TestAppendNillable(t *testing.T) {
 		v := wildAfter{A: nilled[string, struct{}]{}, Any: anyElement{Space: "urn:o", Local: "w"}}
 		roundTrip(t, schema, rootName, v, "", deepEqual, strArms)
 	})
+	// The Nilled arm's xsi:nil is in its {type table}'s selection input
+	// (Structures §3.12.4 key-cta-ta-select): it decides the first {test}, so
+	// the second, which package xpath leaves undecided, is never reached; the
+	// Content arm, holding no xsi:nil, reaches it and is refused.
+	t.Run("a {type table} whose first test reads xsi:nil", func(t *testing.T) {
+		schema, arms := schemaOf(t, nilTestedRootSchema), nilArms[nilStringRoot, struct{}]()
+		roundTrip(t, schema, rootName, nillable[nilStringRoot, struct{}](nilled[nilStringRoot, struct{}]{}), `<r xmlns="urn:s"`+xsiNilTrue+`/>`, deepEqual, arms)
+		ttRefused(nillable[nilStringRoot, struct{}](content[nilStringRoot, struct{}]{Content: "x"}), "element {urn:s}r declared at s.xsd:1:181, at nillable[github.com/kud360/goxsd8/codec.nilStringRoot,struct {}].(content[github.com/kud360/goxsd8/codec.nilStringRoot,struct {}]).Content written as the type of its {type table} alternative 1: its {type table}'s selection over the attributes Append writes and its [inherited attributes] is undecided, a {test} package xpath does not evaluate", arms)(t, schema)
+	})
 	t.Run("a fixed value, plain T", func(t *testing.T) {
 		roundTrip(t, schemaOf(t, nilFixedRootSchema), rootName, nilStringRoot("A"), `<r xmlns="urn:s">A</r>`, deepEqual)
 	})
@@ -237,8 +247,11 @@ func TestNillableDeclinesOnError(t *testing.T) {
 	schema := schemaOf(t, nilRootSimpleSchema)
 	decl, _ := schema.Element(rootName)
 	types, errorSlot, err := goshape.GoverningTypes(schema, decl)
-	if err != nil || nillableDeclines(decl, true, types, errorSlot, nil) {
-		t.Fatalf("GoverningTypes = %v, %v; nillableDeclines = true, want false for one governing type", types, err)
+	if err != nil {
+		t.Fatalf("GoverningTypes: %v", err)
+	}
+	if nillableDeclines(decl, true, types, errorSlot, nil) {
+		t.Fatalf("nillableDeclines = true for GoverningTypes %v, want false for one governing type", types)
 	}
 	if !nillableDeclines(decl, true, types, errorSlot, errors.New("x")) {
 		t.Errorf("nillableDeclines = false, want true where GoverningTypes errs")
