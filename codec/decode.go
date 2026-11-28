@@ -58,10 +58,8 @@ var ErrAbstractElement = errors.New("codec: the top-level element declaration ha
 //   - item 7: a [*DeclineError].
 //   - item 8: a plain error, a fault of the backend.
 //
-// T is the caller's choice: nothing dispatches a document element to its
-// generated type, and item 6 below states which T match. A caller decoding
-// documents of several roots therefore reads the document element's expanded
-// name with [DocumentElementName] before choosing T.
+// T is the caller's choice; item 6 below states which T match, and
+// [DocumentElementName]'s doc how to pick one per document.
 //
 // The slice Decode covers is the package doc's "# What decodes". Decode first
 // assesses data against schema with package validate and decodes only an
@@ -839,12 +837,19 @@ func (e *UndecidedError) Error() string {
 // Unwrap returns errors.ErrUnsupported.
 func (e *UndecidedError) Unwrap() error { return errors.ErrUnsupported }
 
-// DocumentElementName returns the expanded name of data's document element:
-// the Name of the first start tag package parser/xmltree's Reader returns
-// over data, past the comments, processing instructions, DOCTYPE and white
-// space before it. Its Space and Local are those of the name whose top-level
-// element declaration items 5 and 6 of [Decode]'s doc examine, the name
-// [CheckDecode] takes. Of opts it reads only the uri [WithURI] supplies.
+// DocumentElementName returns the expanded name of data's document element,
+// which a caller decoding documents of several roots reads to choose T before
+// calling [Decode]: codec provides no registry from a document element's name
+// to the type codegen emits for its declaration, so the caller maps each name
+// to its T, as ExampleDecode_severalRoots does.
+//
+// The name is the Name of the first start tag package parser/xmltree's Reader
+// returns over data, past the comments, processing instructions, DOCTYPE and
+// white space before it. Its Space and Local are those of the name whose
+// top-level element declaration items 5 and 6 of [Decode]'s doc examine, the
+// name [CheckDecode] takes. No schema need declare it; CheckDecode answers an
+// undeclared one with its item 2, and Decode's item 7 says what becomes of a
+// document element of one. Of opts it reads only the uri [WithURI] supplies.
 //
 // It reads no further than that start tag, so a document ill-formed after it
 // still returns its name. An error is returned exactly when the name is the
