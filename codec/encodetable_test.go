@@ -1,8 +1,8 @@
 package codec
 
 import (
-	"bytes"
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/kud360/goxsd8/builtin/strict"
@@ -18,13 +18,13 @@ import (
 // selects xs:string where lang is "en", fr, a sequence of t, where it has
 // another lang, and xs:error where it has none, read from r's. ttAnySchema's r
 // of xs:anyType selects xs:string where its k is "s", and ttAnyChildSchema's r,
-// carrying a k of its own, holds c of that table. ttAssertSchema's r of
-// base selects asserted, base extended by z and asserting a is "ok", where it
-// has a kind. ttWildSchema's r, of wb, a sequence of a with a skip {attribute
-// wildcard}, selects wn, wb extended by n, where it carries w, an attribute
-// only the wildcard admits. ttUndecidedSchema's r selects num by a {test} the CTA evaluator
-// declines. ttFixedSchema's r, an xs:string, nillable and fixed "a", which
-// goshape.Nillable reads as not nillable, selects xs:token where it carries x.
+// carrying a k of its own, holds c of that table. ttAssertSchema's r of base selects
+// asserted, base extended by z and asserting a is "ok", where it has a kind. ttWildSchema's
+// r, of wb, a sequence of a with a skip {attribute wildcard}, selects wn, wb extended by n,
+// where it carries w, an attribute only the wildcard admits. ttUndecidedSchema's r selects
+// num by a {test} the CTA evaluator declines. ttFixedSchema's r, an xs:string, nillable and
+// fixed "a", which goshape.Nillable reads as not nillable, selects xs:token where it
+// carries x.
 const (
 	ttZzSchema = `<xs:complexType name="zz"><xs:simpleContent><xs:extension base="xs:string"><xs:attribute name="type" type="xs:int"/></xs:extension></xs:simpleContent></xs:complexType>
 <xs:complexType name="zzd"><xs:simpleContent><xs:extension base="s:zz"><xs:attribute name="note" type="xs:string"/></xs:extension></xs:simpleContent></xs:complexType>
@@ -44,10 +44,11 @@ const (
 )
 
 // The types codegen emits for the schemas above, which
-// TestAppendTypeTableTypesAreCodegens pins: ttZzSchema's R, RZz, Zz, RZzd and
+// TestTypeTableTypesAreCodegens pins: ttZzSchema's R, RZz, Zz, RZzd and
 // Zzd are ttZz to ttZzdType; ttLangSchema's R, C, CString, CFr and Fr are
 // ttLang to ttFr; ttAnySchema's R, RString and RAnyType are ttAny to
-// ttAnyAnyType; ttAssertSchema's R, RAsserted, Asserted and RBase are ttAs to
+// ttAnyAnyType; ttAnyChildSchema's R, C, CString and CAnyType are ttAnyCh to
+// ttAnyCAnyType; ttAssertSchema's R, RAsserted, Asserted and RBase are ttAs to
 // ttAsBase; ttWildSchema's R, RWn, Wn, RWb and Wb are ttWd to ttWb; and
 // ttFixedSchema's R, RToken and RString are ttFx to ttFxString.
 type (
@@ -139,34 +140,6 @@ var (
 	// ttNumBaseBranches are ttR's branches for a table of num and base alone.
 	ttNumBaseBranches = WithBranches[ttR](ttRNum{}, ttRBase{})
 )
-
-// TestAppendTypeTableTypesAreCodegens pins the types above to those codegen
-// emits for each schema, in shape.
-func TestAppendTypeTableTypesAreCodegens(t *testing.T) {
-	rows := []struct {
-		decls string
-		want  []string
-	}{
-		{ttZzSchema, []string{"type R interface {\n\tisR()\n}\n", "type RZz struct {\n\tZz Zz\n}\n", "type Zz struct {\n\tValue string\n\tType  *int32\n}\n",
-			"type RZzd struct {\n\tZzd Zzd\n}\n", "type Zzd struct {\n\tValue string\n\tNote  *string\n\tType  *int32\n}\n"}},
-		{ttLangSchema, []string{"type R struct {\n\tC    []C\n\tLang *string\n}\n", "type C interface {\n\tisC()\n}\n",
-			"type CString struct {\n\tString string\n}\n", "type CFr struct {\n\tFr Fr\n}\n", "type Fr struct {\n\tT string\n}\n"}},
-		{ttAnySchema, []string{"type R interface {\n\tisR()\n}\n", "type RString struct {\n\tString string\n}\n", "type RAnyType struct {\n\tAnyType AnyType\n}\n"}},
-		{ttAnyChildSchema, []string{"type R struct {\n\tC C\n\tK *string\n}\n", "type C interface {\n\tisC()\n}\n", "type CString struct {\n\tString string\n}\n", "type CAnyType struct {\n\tAnyType AnyType\n}\n"}},
-		{ttAssertSchema, []string{"type RAsserted struct {\n\tAsserted Asserted\n}\n", "type Asserted struct {\n\tA    string\n\tZ    string\n\tKind *string\n}\n", "type RBase struct {\n\tBase Base\n}\n"}},
-		{ttWildSchema, []string{"type RWn struct {\n\tWn Wn\n}\n", "type Wn struct {\n\tA            string\n\tN            int32\n\tAnyAttribute []AnyAttribute\n}\n",
-			"type RWb struct {\n\tWb Wb\n}\n", "type Wb struct {\n\tA            string\n\tAnyAttribute []AnyAttribute\n}\n"}},
-		{ttFixedSchema, []string{"type R interface {\n\tisR()\n}\n", "type RToken struct {\n\tToken string\n}\n", "type RString struct {\n\tString string\n}\n"}},
-	}
-	for _, row := range rows {
-		gen := generated(t, schemaOf(t, row.decls))
-		for _, decl := range row.want {
-			if !bytes.Contains(gen, []byte(decl)) {
-				t.Errorf("codegen emits\n%s\nwhich does not declare\n%s", gen, decl)
-			}
-		}
-	}
-}
 
 // ttRound returns a row that round-trips v through Append and Decode under
 // opts (roundTrip), the bytes want where want is not empty.
@@ -264,10 +237,14 @@ func ttRefused[T any](v T, want string, opts ...Option) func(*testing.T, *xsd.Sc
 // written: another alternative's type, where the written document is valid
 // against the type selected and would decode into its branch (cta0042's
 // shape), and where the arm's own attributes select the other branch, an
-// xs:anyType arm's raw ones among them; xs:error, by the arm's own attribute,
-// of one governing type and of two, and by the absence of an inherited one
-// (cta0010's shape); a branch that needs xsi:type, which Append never writes;
-// and a selection the CTA evaluator leaves undecided, whatever the value.
+// xs:anyType arm's raw ones and an {attribute wildcard}'s among them, an
+// inherited one selects another arm, or the arm can carry no attribute its
+// alternative's {test} reads, a simple arm or the arm of a fixed declaration
+// goshape.Nillable reads as not nillable; xs:error, by the arm's own
+// attribute, of one governing type and of two, and by the absence of an
+// inherited one (cta0010's shape); a branch that needs xsi:type, which Append
+// never writes; and a selection the CTA evaluator leaves undecided, whatever
+// the value. The detail names the slot written and the slot selected.
 func TestAppendTypeTableRefuses(t *testing.T) {
 	str := func(s string) *string { return &s }
 	one := int32(1)
@@ -299,11 +276,26 @@ func TestAppendTypeTableRefuses(t *testing.T) {
 			row.run(t, schemaOf(t, row.decls))
 		})
 	}
-	// The detail names the slot written and the slot selected.
-	_, err := Append(nil, schemaOf(t, ttZzSchema), strict.New(), rootName, ttZz(ttZzZzd{Zzd: ttZzdType{Value: "42", Type: &one}}), ttZzBranches)
-	const want = "at ttZz.(ttZzZzd).Zzd written as the type of its {type table} alternative 2: over the attributes Append writes and its [inherited attributes], its {type table} selects the type of its {type table} alternative 1, the governing type of another branch (Structures §3.3.4.1 key-cta-select)"
-	if err == nil || !bytes.Contains([]byte(err.Error()), []byte(want)) {
-		t.Errorf("Append = %v, want a detail holding %q", err, want)
+	// The detail names the slot written and the slot selected, or the
+	// undecided selection.
+	const over = "over the attributes Append writes and its [inherited attributes], its {type table} selects the type of its "
+	for _, row := range []struct {
+		append func() ([]byte, error)
+		want   string
+	}{
+		{func() ([]byte, error) {
+			return Append(nil, schemaOf(t, ttZzSchema), strict.New(), rootName, ttZz(ttZzZzd{Zzd: ttZzdType{Value: "42", Type: &one}}), ttZzBranches)
+		}, "at ttZz.(ttZzZzd).Zzd written as the type of its {type table} alternative 2: " + over + "{type table} alternative 1, the governing type of another branch (Structures §3.3.4.1 key-cta-select); "},
+		{func() ([]byte, error) {
+			return Append(nil, schemaOf(t, ttErrorSchema), strict.New(), rootName, ttErr{A: "x", Bad: str("1")})
+		}, "at ttErr written as the type of its {default type definition}: " + over + "{type table} alternative 1, none of its governing types (Structures §3.3.4.1 key-cta-select); "},
+		{func() ([]byte, error) {
+			return Append(nil, schemaOf(t, ttUndecidedSchema), strict.New(), rootName, ttR(ttRBase{Base: ttBase{A: "x"}}), ttNumBaseBranches)
+		}, "at ttR.(ttRBase).Base written as the type of its {default type definition}: its {type table}'s selection over the attributes Append writes and its [inherited attributes] is undecided, a {test} package xpath does not evaluate (Structures §3.12.4 key-cta-ta-select); "},
+	} {
+		if _, err := row.append(); err == nil || !strings.Contains(err.Error(), row.want) {
+			t.Errorf("Append = %v, want a detail holding %q", err, row.want)
+		}
 	}
 }
 
