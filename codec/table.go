@@ -42,19 +42,30 @@ type selector interface {
 }
 
 // table returns the tableRoot of el, an element declaration whose governing
-// types, types, are zero or two or more, keyed as codegen emits its interface:
-// by el's expanded name for a top-level el, whose interface every <element
-// ref> particle to it shares, by its groupPath for a local el declared in a
-// model group definition, and under no key for any other local one, bound in
-// place inside the unit that declares it (bindRun).
+// types, types, are zero or two or more, under tableKey's key, or bound in
+// place inside the unit that declares it where that key is nil (bindRun).
 func (run *bindRun) table(el xsd.ElementDeclaration, types []goshape.GoverningType) (complexUnit, error) {
-	if el.ScopeVariety() == xsd.ScopeGlobal {
-		return bindTable(run, el, types, run.units, elementKey(el.Name()))
-	}
-	if group, inGroup := groupScope(el); inGroup {
-		return bindTable(run, el, types, run.units, groupPath{group: group, element: el.Name()})
+	if key := tableKey(el); key != nil {
+		return bindTable(run, el, types, run.units, key)
 	}
 	return bindTable(run, el, types, nil, nil)
+}
+
+// tableKey returns the key the tableRoot of el, an element declaration whose
+// governing types are zero or two or more, is stored under, keyed as codegen
+// emits its interface: el's expanded name for a top-level el, whose interface
+// every <element ref> particle to it shares, its groupPath for a local el
+// declared in a model group definition, and nil, no key, for any other local
+// one. Append's item 4 walk keys el's governing types by it too
+// (encodeWalk.element).
+func tableKey(el xsd.ElementDeclaration) unitKey {
+	if el.ScopeVariety() == xsd.ScopeGlobal {
+		return elementKey(el.Name())
+	}
+	if group, inGroup := groupScope(el); inGroup {
+		return groupPath{group: group, element: el.Name()}
+	}
+	return nil
 }
 
 // bindTable returns the tableRoot of decl, whose governing types are types,
@@ -93,16 +104,15 @@ func bindTable(run *bindRun, decl xsd.ElementDeclaration, types []goshape.Govern
 // branchField returns the one field of the branch struct of g, a governing
 // type of decl: named from g's local name (goshape.GoverningType.Local),
 // holding what typedField gives an element of g's type occurring once, the Go
-// type codegen gives a simple type itself and, of a complex type, a named
-// one's unit keyed by its QName and an anonymous one's bound in place under no
-// key.
+// type codegen gives a simple type itself and, of a complex type, its unit
+// under branchKey's key, or bound in place where that key is nil.
 func branchField(run *bindRun, decl xsd.ElementDeclaration, g goshape.GoverningType) (field, error) {
 	once := func(sealed bool) (shape, error) {
 		return occursShape(goshape.ExactlyOnce(), sealed, g.Slot().Name()+" of "+declSubject(decl))
 	}
 	f, err := typedField(run, decl, g.Type(), valueBare, once, func(ct xsd.ComplexType) (complexUnit, error) {
-		if ct.Name() != (xsd.QName{}) {
-			return bindComplex(run, decl, ct, run.units, typeKey(ct.Name()))
+		if key := branchKey(ct); key != nil {
+			return bindComplex(run, decl, ct, run.units, key)
 		}
 		return bindComplex(run, decl, ct, nil, nil)
 	})
@@ -111,6 +121,17 @@ func branchField(run *bindRun, decl xsd.ElementDeclaration, g goshape.GoverningT
 	}
 	f.name = goname.NewNamer().Claim(g.Local())
 	return f, nil
+}
+
+// branchKey returns the key branchField binds ct, the complex type of a
+// branch of a tableRoot, under: its QName for a named ct, and nil, no key, for
+// an anonymous one. Append's item 4 walk keys a branch's type by it too
+// (encodeWalk.element).
+func branchKey(ct xsd.ComplexType) unitKey {
+	if ct.Name() != (xsd.QName{}) {
+		return typeKey(ct.Name())
+	}
+	return nil
 }
 
 // field returns the field of shape s whose V is t's interface.

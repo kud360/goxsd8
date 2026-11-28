@@ -1435,8 +1435,9 @@ func elementEncodes(schema *xsd.Schema, decl xsd.ElementDeclaration) (bool, erro
 }
 
 // encodeWalk is one pass of elementEncodes: schema; walked, the complex types
-// whose constructs it has examined or is examining, each under the key
-// Decode's bind indexes its unit by (nestedKey); and assess, whether Append
+// and {type table} interfaces whose constructs it has examined or is
+// examining, each under the key Decode's bind indexes its unit by (nestedKey,
+// tableKey, branchKey; encodeWalk.element); and assess, whether Append
 // assesses what it writes, set where an element declaration the pass examined
 // has {identity-constraint definitions} (encodeWalk.declEncodes) or a {type
 // definition} that is xs:anyType itself (encodeWalk.element), where a simple
@@ -1461,21 +1462,85 @@ type encodeWalk struct {
 
 // element returns elementEncodes' error for decl, the document element's
 // declaration or a particle's element declaration, examined at every reach:
-// decl's own properties (encodeWalk.declEncodes), then its {type definition},
-// which encodes as xs:anyType itself, its content written raw (rawContent's write),
-// setting w.assess, is examined as a simple type (encodeWalk.simpleEncodes) or, for
-// a complex type, declines by its {abstract} true, and else is examined by
-// complexEncodes, unless walked already holds its key. complexEncodes and the
+// decl's own properties (encodeWalk.declEncodes), then each of its slots, its
+// {type definition} or, with a {type table}, each {type table} slot in slot
+// order (goshape.TableSlot), declining by a complex type with {abstract} true
+// there, then each of its governing types (goshape.GoverningTypes) in order,
+// as governingEncodes examines it, each keyed as Decode's bind keys its unit:
+// one governing type under nestedKey's key, as bindRun.nested binds it, and
+// two or more, or none, under the key bindRun.table stores decl's tableRoot
+// under, stored before any is examined, with each named complex type keyed by
+// its QName and each anonymous one by none, as branchField binds it, so that
+// two branches of one declaration are each examined. complexEncodes and the
 // functions under it read decl only to name a decline's subject, so that a type
 // reached again through another declaration answers as it did.
 func (w *encodeWalk) element(decl xsd.ElementDeclaration) error {
 	if err := w.declEncodes(decl); err != nil {
 		return err
 	}
-	td, ok := w.schema.ResolvedType(decl.TypeDefinition())
-	if !ok {
-		return fmt.Errorf("codec: the {type definition} of %s does not resolve", declSubject(decl))
+	if err := w.slotsEncode(decl); err != nil {
+		return err
 	}
+	types, _, err := goshape.GoverningTypes(w.schema, decl)
+	if err != nil {
+		return fmt.Errorf("codec: %w", err)
+	}
+	if len(types) == 1 {
+		return w.governingEncodes(decl, types[0].Type(), func(ct xsd.ComplexType) unitKey { return nestedKey(decl, ct) })
+	}
+	if key := tableKey(decl); key != nil {
+		if w.walked[key] {
+			return nil
+		}
+		w.walked[key] = true
+	}
+	for _, g := range types {
+		if err := w.governingEncodes(decl, g.Type(), branchKey); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// slotsEncode returns the constructAbstractType decline of the first slot of
+// decl holding a complex type with {abstract} true: its {type definition},
+// with no {type table}, or else each {type table} slot in slot order
+// (goshape.TableSlot), the slots goshape.GoverningTypes expands such a type
+// at. Append writes no xsi:type, which an instance of that type needs
+// (Structures §3.3.4.3 cvc-elt clause 4), and Decode declines one on every
+// element whose declaration has a {type table} (admitsXsiType). A slot that
+// does not resolve is a plain error.
+func (w *encodeWalk) slotsEncode(decl xsd.ElementDeclaration) error {
+	table, hasTable := decl.TypeTable()
+	for i := 0; ; i++ {
+		var slot goshape.Slot = goshape.DeclaredSlot{}
+		ref := decl.TypeDefinition()
+		if hasTable {
+			var ok bool
+			if slot, ref, ok = goshape.TableSlot(table, i); !ok {
+				return nil
+			}
+		}
+		td, ok := w.schema.ResolvedType(ref)
+		if !ok {
+			return fmt.Errorf("codec: the %s of %s does not resolve", slot.Name(), declSubject(decl))
+		}
+		if ct, isComplex := td.(xsd.ComplexType); isComplex && ct.Abstract() {
+			return encodeDecline(constructAbstractType, slotSubject(decl, slot, ct))
+		}
+		if !hasTable {
+			return nil
+		}
+	}
+}
+
+// governingEncodes returns elementEncodes' error for td, a governing type of
+// decl: xs:anyType itself, its content written raw (rawContent's write), sets
+// w.assess; a simple type is examined as encodeWalk.simpleEncodes examines it;
+// and a complex type, never abstract (slotsEncode, goshape.GoverningTypes), by
+// complexEncodes, unless walked already holds key's answer for it, nil for
+// none.
+func (w *encodeWalk) governingEncodes(decl xsd.ElementDeclaration, td xsd.TypeDefinition, key func(xsd.ComplexType) unitKey) error {
 	if goshape.AnyTypeItself(td) {
 		w.assess = true
 		return nil
@@ -1484,14 +1549,11 @@ func (w *encodeWalk) element(decl xsd.ElementDeclaration) error {
 		return w.simpleEncodes(st, declSubject(decl))
 	}
 	ct, _ := td.(xsd.ComplexType)
-	if ct.Abstract() {
-		return encodeDecline(constructAbstractType, typeSubject(decl, ct))
-	}
-	if key := nestedKey(decl, ct); key != nil {
-		if w.walked[key] {
+	if k := key(ct); k != nil {
+		if w.walked[k] {
 			return nil
 		}
-		w.walked[key] = true
+		w.walked[k] = true
 	}
 	return w.complexEncodes(decl, ct)
 }
