@@ -2988,7 +2988,8 @@ func TestAppendComplexParticleInvalid(t *testing.T) {
 // whose attribute a is of xs:QName (at); an element of that attribute and of
 // repeated xs:QName children c (pc); and an element of two unqualified
 // children in no namespace, c of xs:QName and p of prefixed, a pattern
-// admitting only a prefixed lexical (nons).
+// admitting only a prefixed lexical (nons); and an element of a child w of
+// xs:anyType, then a child q of xs:QName (rq).
 const encodeQNameSchema = `<xs:notation name="png" public="image/png"/><xs:notation name="gif" public="image/gif"/>
   <xs:simpleType name="nt"><xs:restriction base="xs:NOTATION"><xs:enumeration value="s:png"/></xs:restriction></xs:simpleType>
   <xs:simpleType name="qe"><xs:restriction base="xs:QName"><xs:enumeration value="s:x"/></xs:restriction></xs:simpleType>
@@ -3006,11 +3007,13 @@ const encodeQNameSchema = `<xs:notation name="png" public="image/png"/><xs:notat
   <xs:element name="pc"><xs:complexType><xs:sequence><xs:element name="c" type="xs:QName" maxOccurs="unbounded"/></xs:sequence>
     <xs:attribute name="a" type="xs:QName"/></xs:complexType></xs:element>
   <xs:element name="nons"><xs:complexType><xs:sequence><xs:element name="c" type="xs:QName" form="unqualified"/>
-    <xs:element name="p" type="s:prefixed" form="unqualified"/></xs:sequence></xs:complexType></xs:element>`
+    <xs:element name="p" type="s:prefixed" form="unqualified"/></xs:sequence></xs:complexType></xs:element>
+  <xs:element name="rq"><xs:complexType><xs:sequence><xs:element name="w" type="xs:anyType"/>
+    <xs:element name="q" type="xs:QName"/></xs:sequence></xs:complexType></xs:element>`
 
-// qnameList, qnameAt, qnameParent and qnameNoNS are the types codegen emits
-// for encodeQNameSchema's l, at, pc and nons, which item 5 of Append's doc
-// holds them to.
+// qnameList, qnameAt, qnameParent, qnameNoNS and qnameAfterRaw are the
+// types codegen emits for encodeQNameSchema's l, at, pc, nons and rq, which
+// item 5 of Append's doc holds them to.
 type (
 	qnameList   []tQName
 	qnameAt     struct{ A *tQName }
@@ -3018,7 +3021,11 @@ type (
 		C []tQName
 		A *tQName
 	}
-	qnameNoNS struct{ C, P tQName }
+	qnameNoNS     struct{ C, P tQName }
+	qnameAfterRaw struct {
+		W anyType
+		Q tQName
+	}
 )
 
 // TestAppendQNames pins how Append spells an xs:QName or xs:NOTATION value,
@@ -3028,9 +3035,9 @@ type (
 // otherwise under a prefix p1, p2, … declared on the start tag of the element
 // it is written on, its namespace name escaped, reused where an ancestor's or
 // an earlier value's start tag declares it in scope, and declared again by a
-// sibling, whose scope the earlier sibling's declaration has left; in an
-// attribute, an element, a list holding a prefixed and an unprefixed item,
-// and an xs:NOTATION enumeration.
+// sibling, whose scope the earlier sibling's declaration has left, a raw-held
+// sibling's Namespaces included; in an attribute, an element, a list holding
+// a prefixed and an unprefixed item, and an xs:NOTATION enumeration.
 func TestAppendQNames(t *testing.T) {
 	schema := schemaOf(t, encodeQNameSchema)
 	for _, row := range []struct {
@@ -3070,6 +3077,11 @@ func TestAppendQNames(t *testing.T) {
 	})
 	t.Run("list, one prefix twice", func(t *testing.T) {
 		roundTrip(t, schema, sname("l"), qnameList{{Space: "urn:o", Local: "a"}, {Space: "urn:o", Local: "b"}}, `<l xmlns="urn:s" xmlns:p1="urn:o">p1:a p1:b</l>`, deepEqual[qnameList])
+	})
+	// Fails with endTag leaving e.bound untruncated to mark, writing p2:y.
+	t.Run("after a raw-held sibling binding p1 elsewhere", func(t *testing.T) {
+		v := qnameAfterRaw{W: anyType{Namespaces: []anyNamespace{{"", "urn:s"}, {"p1", "urn:x"}}, Text: "t"}, Q: tQName{Space: "urn:o", Local: "y"}}
+		roundTrip(t, schema, sname("rq"), v, `<rq xmlns="urn:s"><w xmlns:p1="urn:x">t</w><q xmlns:p1="urn:o">p1:y</q></rq>`, deepEqual[qnameAfterRaw])
 	})
 }
 
@@ -4125,10 +4137,10 @@ func TestAppendWildcardInvalid(t *testing.T) {
 // match neither a declaration nor a type governs is item 6; a governed match
 // invalid against its declaration, and a governed xs:QName child whose prefix
 // nothing binds, item 8, charged by cvc-type; a text token, an attribute
-// value and a skip match's xsi:type whose prefix only a binding Append
-// declares binds decline by constructCapturedPrefix; a strict match with a
-// ·locally declared type· and no top-level declaration declines by
-// constructLocallyTypedMatch, with or without xsi:type; and a governed
+// value, a skip match's xsi:type and a child's Tail whose prefix only a
+// binding Append declares binds decline by constructCapturedPrefix; a strict
+// match with a ·locally declared type· and no top-level declaration declines
+// by constructLocallyTypedMatch, with or without xsi:type; and a governed
 // xs:ENTITY match declines by constructEntityType.
 func TestAppendGovernedMatch(t *testing.T) {
 	strictS := schemaOf(t, seqStrictSchema+`<xs:element name="i" type="xs:int"/>`)
@@ -4181,6 +4193,9 @@ func TestAppendGovernedMatch(t *testing.T) {
 		{"a governed attribute's value", laxQ, match("z", anyType{Attributes: []anyAttribute{{"urn:s", "qa", "p1:v"}}}), `seqWild.Any.Content.Attributes[0].Value holds the token "p1:v", whose prefix p1`},
 		{"a skip match's xsi:type", schemaOf(t, seqSkipSchema), seqWild{A: "x", Any: anyElement{Space: "urn:o", Local: "w", Content: anyType{Attributes: []anyAttribute{{xsd.XMLSchemaInstanceNS, "type", "p1:t"}}}}},
 			`seqWild.Any.Content.Attributes[0].Value holds the token "p1:t", whose prefix p1 no entry of its AnyType's Namespaces binds, though Append's declaration binds it to "urn:o" where it is written`},
+		// Fails with rawChildren's rawText call on a Tail passing typed false.
+		{"a governed match's child's Tail", laxQ, match("m", anyType{Children: []anyChild{{Element: anyElement{Space: "urn:s", Local: "c", Content: anyType{Namespaces: xs, Text: "x:v"}}, Tail: "p1:v"}}}),
+			`seqWild.Any.Content.Children[0].Tail holds the token "p1:v", whose prefix p1 no entry of its AnyType's Namespaces binds, though Append's declaration binds it to "urn:s" where it is written`},
 	} {
 		t.Run("a captured prefix in "+row.name, func(t *testing.T) {
 			_, err := appendChecked(t, nil, row.schema, strict.New(), rootName, row.v)
@@ -4475,8 +4490,10 @@ func TestAppendAttributeWildcardInvalid(t *testing.T) {
 // xsi:banana, none of the four names instanceAttribute reports, on the
 // document element and on a descendant, which no declaration governs (§3.2.6
 // no-xsi), failing with rawAttribute's XSI step keyed on the XSI namespace,
-// and with it declining such a name only below the document element. Each
-// document validate accepts and Decode turns back into the value. Every row
+// and with it declining such a name only below the document element; and the
+// document element's own Text and a child's Tail holding a token whose prefix
+// only Append's declaration binds, untyped and so written. Each document
+// validate accepts and Decode turns back into the value. Every row
 // declines by item 4 with the arm removed (elementEncodes' xs:anyType case
 // returning a decline). The two hint rows, and no other row here, fail with
 // rawAttribute's hint exemption removed.
@@ -4533,6 +4550,15 @@ func TestAppendAnyType(t *testing.T) {
 		v := rootAny{Attributes: []anyAttribute{{xsd.XMLSchemaInstanceNS, "banana", "1"}}, Children: []anyChild{{Element: anyElement{Local: "c", Content: anyType{Attributes: []anyAttribute{{xsd.XMLSchemaInstanceNS, "banana", "2"}}}}}}}
 		roundTrip(t, schemaOf(t, governedAnySchema), rootName, v,
 			`<p1:r xmlns:p1="urn:s" xmlns:p2="http://www.w3.org/2001/XMLSchema-instance" p2:banana="1"><c p2:banana="2"/></p1:r>`, deepEqual[rootAny])
+	})
+	// Fails with rawContent.writeElement's rawText call passing typed true.
+	t.Run("own Text holding a token Append's declaration binds", func(t *testing.T) {
+		roundTrip(t, schemaOf(t, typedRootAnySchema), rootName, anyType{Text: "p1:v"}, `<p1:r xmlns:p1="urn:s">p1:v</p1:r>`, deepEqual[anyType])
+	})
+	// Fails with rawContent.writeElement's rawChildren call passing typed true.
+	t.Run("a child's Tail holding a token Append's declaration binds", func(t *testing.T) {
+		v := anyType{Children: []anyChild{{Element: anyElement{Local: "c"}, Tail: "p1:v"}}}
+		roundTrip(t, schemaOf(t, typedRootAnySchema), rootName, v, `<p1:r xmlns:p1="urn:s"><c/>p1:v</p1:r>`, deepEqual[anyType])
 	})
 }
 
