@@ -187,8 +187,10 @@ func TestDirResolveAbsoluteMiss(t *testing.T) {
 	if !errors.Is(err, ErrNotFound) {
 		t.Fatalf("err = %v, want ErrNotFound", err)
 	}
-	if !strings.Contains(err.Error(), `opened "`+joined+`"`) {
-		t.Errorf("err = %q, want it to name the joined path %q", err, joined)
+	want := `loader: "` + absent + `" not found under "` + root +
+		`" (an absolute location is joined beneath the root: opened "` + joined + `"): loader: schema document not found`
+	if got := err.Error(); got != want {
+		t.Errorf("err = %q, want %q", got, want)
 	}
 
 	_, _, err = Dir("/").Resolve("", absent)
