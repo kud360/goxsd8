@@ -128,7 +128,7 @@ func TestDecodeRootValueConstraint(t *testing.T) {
 // on an attribute use with an effective value constraint, default or fixed
 // (key-dflt-att), whose field is a string: the attribute present, present
 // and empty, and absent, the constraint the use's own or its declaration's
-// (§3.5.4 key-evc), and a *string field ErrTypeMismatch (item 6).
+// (§3.5.4 key-evc), and a *string field ErrTypeMismatch (item 6 of Decode's doc).
 func TestDecodeAttributeValueConstraint(t *testing.T) {
 	const a = `<s:a>x</s:a>`
 	type val struct{ A, B string }
