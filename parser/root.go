@@ -47,12 +47,7 @@ type Root interface {
 // caller named a document that must exist; it is therefore never among
 // [AssemblyReport.UnfollowedRoots].
 //
-// location is the resolver's to interpret, not the filesystem's: under the
-// default loader.Dir(".") it is joined beneath the working directory, so an
-// absolute path is not honored as absolute — "/tmp/bad.xsd" names
-// ./tmp/bad.xsd, ordinarily not found. A caller holding absolute paths passes a
-// resolver rooted where they are interpreted, such as
-// WithResolver(loader.Dir(base)) with each location relative to base.
+// [ParseReport] states how location is interpreted, an absolute path included.
 func RootAt(location string) Root { return documentRoot{location: location} }
 
 // HintAt returns the Root naming the schema document at location as a schema

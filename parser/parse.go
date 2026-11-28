@@ -81,7 +81,8 @@ func WithLogger(l *slog.Logger) Option {
 }
 
 // Parse assembles the schema rooted at location and returns it finalized. It is
-// [ParseReport] without the report, for the callers that only want the schema.
+// [ParseReport] without the report, for the callers that only want the schema,
+// and takes location exactly as ParseReport does, an absolute path included.
 func Parse(location string, opts ...Option) (*xsd.Schema, error) {
 	schema, _, err := ParseReport(location, opts...)
 	return schema, err
@@ -92,6 +93,13 @@ func Parse(location string, opts ...Option) (*xsd.Schema, error) {
 // discovery order, and every ·inter-schema-document reference· it could not
 // follow to one (see [AssemblyReport]). The report is never nil and is
 // populated as far as assembly got even when an error is returned.
+//
+// location is the resolver's to interpret, not the filesystem's: under the
+// default resolver, loader.Dir("."), it is joined beneath the working directory,
+// so an absolute path is not honored as absolute: ParseReport("/tmp/a.xsd")
+// reads tmp/a.xsd under the working directory, ordinarily not found. A caller
+// holding absolute paths passes a resolver rooted where they are interpreted,
+// such as WithResolver(loader.Dir(base)) with each location relative to base.
 //
 // Every document of the assembly is ·conditional-inclusion pre-processed·
 // (§4.2.2) as it is read, before its own directives are followed, so schema(D)
