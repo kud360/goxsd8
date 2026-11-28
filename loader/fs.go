@@ -20,7 +20,16 @@ type fsResolver struct {
 // not depend on what fsys would answer; like Dir's refusal of a location
 // that escapes its root, it wraps ErrNotFound (an engineering decision, not
 // a spec rule). A valid location that fsys answers with fs.ErrNotExist also
-// maps to ErrNotFound.
+// maps to ErrNotFound. A caller that needs to tell this refusal from an
+// absent location calls fs.ValidPath on the location it passed.
+//
+// Because the refusal wraps ErrNotFound, [Chain] tries its next resolver, and
+// package parser treats a refused location as one that does not resolve. A
+// directive whose resolved location FS refuses is recorded as unfollowed,
+// and for a non-empty <redefine> it is also an error (src-redefine clause 1). A
+// [github.com/kud360/goxsd8/parser.HintAt] root so refused is recorded as an
+// unfollowed root, and a [github.com/kud360/goxsd8/parser.RootAt] root so
+// refused is an error.
 //
 // Unlike Dir, FS does NOT canonicalize the resolved location it returns: it
 // hands back location as given. fs.FS guarantees no directory-listing
