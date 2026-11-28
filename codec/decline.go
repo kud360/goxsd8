@@ -162,7 +162,8 @@ type construct uint8
 // by constructInScopeAssertion, and each value, the {attribute wildcard} field's
 // attributes by constructXsiAttribute and constructQNameGovernedAttribute among the
 // value's, then an element of a declaration with a {type table} by constructTypeTable
-// once all its attributes are written, ahead of its content, and an open-content field's
+// once all its attributes are written, ahead of its content (an xs:anyType arm's attribute
+// values are held to constructCapturedPrefix first), and an open-content field's
 // child by constructInterleaveParticleChild, where its content model attributes it,
 // before constructLocallyTypedOpenChild, where what governs it is read. Append also
 // declines constructEntityType after every other construct, for an ·ENTITY value· held
