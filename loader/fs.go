@@ -25,8 +25,9 @@ type fsResolver struct {
 //
 // Because the refusal wraps ErrNotFound, [Chain] tries its next resolver, and
 // package parser treats a refused location as one that does not resolve. A
-// directive whose resolved location FS refuses is recorded as unfollowed,
-// and for a non-empty <redefine> it is also an error (src-redefine clause 1). A
+// directive whose resolved location FS refuses is recorded as unfollowed with
+// reason [github.com/kud360/goxsd8/parser.UnfollowedLocationUnresolved], and
+// for a non-empty <redefine> it is also an error (src-redefine clause 1). A
 // [github.com/kud360/goxsd8/parser.HintAt] root so refused is recorded as an
 // unfollowed root, and a [github.com/kud360/goxsd8/parser.RootAt] root so
 // refused is an error.
