@@ -36,7 +36,22 @@ var ErrInvalidValue = errors.New("codec: Append: a value no valid document holds
 // element of the top-level element declaration name in schema, and returns
 // the extended slice; dst may be nil. Read name from the header comment of the
 // type codegen emits for that declaration, the header the "# Naming" section
-// of codegen's package doc describes. It writes each simple value in its
+// of codegen's package doc describes.
+//
+// The class of each error, by its item in the numbered list below:
+//
+//   - item 1: a plain error.
+//   - item 2: [ErrUndeclaredElement].
+//   - item 3: [ErrAbstractElement].
+//   - item 4: a [*DeclineError].
+//   - item 5: [ErrTypeMismatch].
+//   - item 6: [ErrInvalidValue].
+//   - item 7: a [*DeclineError].
+//   - item 8: item 3 of [Decode]'s doc's error, also [ErrInvalidValue].
+//   - item 9: item 4 of [Decode]'s doc's [*UndecidedError].
+//   - outside the items: a plain error, as the paragraphs after the list state.
+//
+// In the document it appends to dst, Append writes each simple value in its
 // canonical representation (Datatypes §2.3.1 dt-canonical-representation),
 // the form the Canonical of its governing mapping on backend
 // (value.GoverningMapping) renders, which for an xs:precisionDecimal zero,
@@ -119,7 +134,7 @@ var ErrInvalidValue = errors.New("codec: Append: a value no valid document holds
 //     character the XML 1.0 Char production does not match, U+0000 among them (Datatypes §3.3.1.1, §3.3.17.1,
 //     §3.2.1.2, §3.2.2.2), a held element's Space, an attribute's Space or Value, a Text and a Tail among them;
 //     a string that differs from its own whiteSpace-normalized form under its simple type, such as an xs:token
-//     holding " a b"; a list item, a string, that is empty or holds TAB, LF, CR or a space, which no list item's
+//     holding "  a  b"; a list item, a string, that is empty or holds TAB, LF, CR or a space, which no list item's
 //     lexical representation does (Datatypes §2.4.1.2); a big.Rat outside the decimal value space, whose
 //     denominator in lowest terms is no 2^m·5^n (§3.3.3.1), such as 1/3; an element a wildcard particle's field
 //     holds, of any {process contents}, that its content model admits at no particle where it is written, a name
@@ -247,9 +262,9 @@ var ErrInvalidValue = errors.New("codec: Append: a value no valid document holds
 //     violation of any other rule is a fault of Append's, reported so all the
 //     same; otherwise every violation is the value's. Under either, a
 //     cvc-assertion violation whose {test} reads the string value of an
-//     element or attribute, which Append spells as the opening paragraph
-//     above states, may come from that spelling rather than from the value,
-//     reported so all the same, and so may one whose {test} reads the
+//     element or attribute, which Append spells as the paragraph after the
+//     errors summary states, may come from that spelling rather than from the
+//     value, reported so all the same, and so may one whose {test} reads the
 //     in-scope namespaces of an element in content Append writes raw, as
 //     fn:in-scope-prefixes does, which may come from a namespace binding
 //     Append declares, a fresh pN among them, rather than from the value.

@@ -6,8 +6,9 @@ import (
 	"slices"
 )
 
-// Option configures [Decode], [CheckDecode], [Append] and [CheckAppend]. The zero set of
-// options is a complete, usable configuration: options only replace defaults.
+// Option configures [Decode], [CheckDecode], [DocumentElementName], [Append] and
+// [CheckAppend]. The zero set of options is a complete, usable configuration:
+// options only replace defaults.
 type Option func(*config)
 
 // config is the resolved configuration of [Decode] and [Append].
@@ -18,10 +19,9 @@ type config struct {
 	log      *slog.Logger
 }
 
-// newConfig applies opts over the defaults: the instance is unnamed, so
-// every instance Loc Decode's errors carry renders "?" for its URI, no
-// interface has a branch set or an arm set, and nothing is logged
-// ([slog.DiscardHandler]).
+// newConfig applies opts over the defaults: the instance is unnamed
+// ([WithURI]), no interface has a branch set or an arm set, and nothing is
+// logged ([slog.DiscardHandler]).
 func newConfig(opts []Option) config {
 	cfg := config{log: slog.New(slog.DiscardHandler)}
 	for _, opt := range opts {
@@ -54,9 +54,9 @@ func newConfig(opts []Option) config {
 //   - "conversion": rule "dt-canonical-mapping" (§2.3.1), input the canonical
 //     form the governing mapping's Canonical rendered, logged once it has;
 //     for yearMonthDuration's datatype struct, QName's and PrecisionDecimal's,
-//     which Decode's doc states are converted from the string Parse accepted,
-//     rule "dt-lexical-mapping" (§2.3), input that string, logged once Parse
-//     has accepted it.
+//     which the package doc's "# What decodes" states are converted from the
+//     string Parse accepted, rule "dt-lexical-mapping" (§2.3), input that
+//     string, logged once Parse has accepted it.
 //
 // Every record also carries type, the type as item 8 of Decode's doc names it,
 // and loc, the instance Loc of the value's source item 8 names, the whole
@@ -71,7 +71,9 @@ func WithLogger(l *slog.Logger) Option {
 // WithURI names the instance document data holds, so every instance
 // [xsderr.Loc] an error of [Decode] or of [DocumentElementName] carries
 // identifies the file a reader has to open. Each takes a []byte, which carries
-// no name of its own.
+// no name of its own. WithURI configures Decode and DocumentElementName alone;
+// [Append], [CheckAppend] and [CheckDecode] ignore it. Without WithURI, or with
+// an empty uri, that URI is empty, which [xsderr.Loc.String] renders "?".
 func WithURI(uri string) Option {
 	return func(c *config) { c.uri = uri }
 }

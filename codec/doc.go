@@ -1,19 +1,50 @@
 // Package codec is the dataset codec: schema-directed decode of instance data
 // into Go values, and encode of Go values back out in canonical form for the
 // slice "# What encodes" states; the allocation-frugal decode paths
-// "# Planned decode paths" names are not yet built. [Decode] assesses the
-// instance itself, so no separate validate call precedes it; its doc states
-// how. [Append]'s doc states when it assesses the document it writes and how
-// a caller gets a verdict on it otherwise. Given a value from Decode that it
-// encodes without error, Append writes that value, not the input's bytes:
-// [Append]'s doc and "# What encodes" state the written form.
+// "# Planned decode paths" names are not yet built. [CheckDecode] and
+// [CheckAppend] answer, at start-up, whether a top-level element declaration
+// decodes into a Go type T and encodes from one, each within the bounds its
+// doc states. A program parses its schema with
+// [github.com/kud360/goxsd8/parser.Parse] on a backend such as
+// [github.com/kud360/goxsd8/builtin/strict.New]'s, calls CheckDecode once at
+// start-up for each declaration and T it decodes a document element into, and
+// CheckAppend for each it encodes one from, each passed the options [Decode]
+// or [Append] is passed, then calls Decode for each instance, first reading
+// its name with [DocumentElementName] where Decode's doc says, and Append for
+// each value:
 //
-// Call [CheckDecode] once at start-up for each top-level element declaration
-// and T a program decodes a document element into, and [CheckAppend] for each
-// it encodes one from. Pass CheckDecode the options [Decode] is passed and
-// CheckAppend those [Append] is passed, of which each doc names the ones it
-// reads; then call Decode for each instance and Append for each value. Each
-// Check's doc states what it reports.
+//	backend := strict.New()
+//	schema, err := parser.Parse("order.xsd", parser.WithBackend(backend))
+//	name := xsd.QName{Space: "urn:o", Local: "order"}
+//	err = codec.CheckDecode[order.Order](schema, name, opts...)
+//	err = codec.CheckAppend[order.Order](schema, name, opts...)
+//	o, err := codec.Decode[order.Order](schema, backend, data, opts...)
+//	out, err := codec.Append(nil, schema, backend, name, *o, opts...)
+//
+// Decodes today, under the conditions "# What decodes" states: atomic, list
+// and union simple types; top-level element declarations as document
+// elements; complex types of each content type; sequences, choices and all
+// groups; element and wildcard particles; substitution groups; xs:anyType;
+// nillable declarations; attribute uses, attribute wildcards and open
+// content; and value constraints.
+//
+// Encodes today, under the conditions "# What encodes" states: top-level
+// element declarations as document elements; complex types; element and
+// wildcard particles; open content; xs:anyType; attribute uses and attribute
+// wildcards; the special types; and atomic, list and union simple types.
+//
+// Declines today, with a [*DeclineError], among others: untracked content
+// models; indistinguishable branches; some nillable declarations; xsi:type,
+// item 7 of [Decode]'s doc; and, on encode, types derived from xs:ENTITY,
+// simple types with an assertions facet and the values item 7 of [Append]'s
+// doc names. "# What decodes" and "# What encodes" each list the rest.
+//
+// [Decode] assesses the instance itself, so no separate validate call
+// precedes it; its doc states how. [Append]'s doc states when it assesses the
+// document it writes and how a caller gets a verdict on it otherwise. Given a
+// value from Decode that it encodes without error, Append writes that value,
+// not the input's bytes: [Append]'s doc and "# What encodes" state the written
+// form.
 //
 // # Decode
 //
@@ -117,23 +148,23 @@
 // them decode. Each decodes into the atomic Go type codegen gives it, by the
 // rules of codegen's package doc, "# Simple types", a date, time or duration
 // type into its datatype struct, an xs:QName or xs:NOTATION type into
-// QName's, the expanded name its lexical resolves to as [Decode]'s doc
-// states, and an xs:precisionDecimal type into PrecisionDecimal's, its Value
-// the arm [WithPrecisionDecimalArms] supplies for its lexical's value, with
-// that lexical's ·scale· and ·sign·, as [Decode]'s doc states. A special
-// type, xs:anySimpleType or xs:anyAtomicType, decodes into the string
-// codegen gives it (codegen's package doc, "# Simple types"), its value as
-// [Decode]'s doc states. A list type decodes when its {item type definition}
-// is such an atomic type or a union that decodes, a restriction of a list
-// taking its base's (Structures §3.16.2.3), xs:NMTOKENS among them, into
-// []A, A its item's atomic Go type, or []I, I its item's sealed interface,
-// one element per list item; the empty list is a slice of length 0.
+// QName's, the expanded name its lexical resolves to as stated below, and an
+// xs:precisionDecimal type into PrecisionDecimal's, its Value the arm
+// [WithPrecisionDecimalArms] supplies for its lexical's value, with that
+// lexical's ·scale· and ·sign·, as stated below. A special type,
+// xs:anySimpleType or xs:anyAtomicType, decodes into the string codegen
+// gives it (codegen's package doc, "# Simple types"), its value as stated
+// below. A list type decodes when its {item type definition} is such an
+// atomic type or a union that decodes, a restriction of a list taking its
+// base's (Structures §3.16.2.3), xs:NMTOKENS among them, into []A, A its
+// item's atomic Go type, or []I, I its item's sealed interface, one element
+// per list item; the empty list is a slice of length 0.
 //
 // A union type (Datatypes §2.4.1.3) decodes when each of its basic members,
 // in codegen's basic-member order (codegen's package doc, "# Simple types"),
 // is such an atomic or list type, item 5 of [Decode]'s doc stating each. It
 // decodes into codegen's sealed interface, the variant of the value's
-// ·active basic member·, as [Decode]'s doc states.
+// ·active basic member·, as stated below.
 //
 // A document element decodes when its declaration, a top-level one, has governing types that
 // decode (codegen's package doc, "An element declaration's governing types"; item 5 of
@@ -289,14 +320,129 @@
 // [Decode]'s doc states, and codec never evaluates a {test} itself.
 //
 // A value constraint of an element declaration or attribute use, default or
-// fixed, decodes; [Decode]'s doc states the value it supplies, and that it
-// supplies none to an element of type xs:anyType.
+// fixed, decodes; the paragraphs below state the value it supplies, and that
+// it supplies none to an element of type xs:anyType.
 //
-// Every error about the instance carries its instance Loc, under the URI
-// [WithURI] names: a violation's, an undecided check's, and a decline's,
-// which also names its construct and, for a construct of the schema, the
-// declining component, as [DeclineError.Error] states; and
+// Every error about the instance carries its instance Loc, as [Decode]'s doc
+// states; a decline's also names its construct and, for a construct of the
+// schema, the declining component, as [DeclineError.Error] states; and
 // [DeclineError.Construct] returns its construct.
+//
+// Each decoded value, a field's or, for a document element of
+// simple type, T's own, is read from the item's ·normalized value·
+// (Structures §3.1.4 key-nv) under its declaration's simple type, for the
+// value field of a complex type with simple content the {content type}'s
+// {simple type definition} (§3.4.4.2 cvc-complex-type clause 1.2): the string
+// [value.ApplyWhiteSpace] returns for the item's characters, an attribute's
+// as XML 1.0 §3.3.3 normalized them, an element's the concatenation of its
+// character children. Where the post-schema-validation infoset supplies a
+// value it is read from that value, the {lexical form} of a value constraint
+// under the same normalization: for an absent attribute whose use's effective
+// value constraint supplies one (codegen's package doc, "# Attributes";
+// §3.4.4.2 key-dflt-att clause 4, §3.4.5.1 sic-attrDefault), and for an
+// element with neither element nor character children, not ·nilled·, whose
+// declaration has a {value constraint} (§3.3.4.3 cvc-elt clause 5.1, §3.3.5.4
+// sic-eltType), of simple type or with simple content, whose value field
+// holds it. For a special type, whose Go type is string (codegen's package
+// doc, "# Simple types"), and for a simple type whose atomic Go type is
+// string, the value is that string. For every other it is the value backend's
+// governing mapping of the type ([value.GoverningMapping]) maps that string
+// to, through Parse with the item's namespace bindings in scope (Datatypes
+// §4.1.4 cvc-datatype-valid clause 2.1): an element's own for its content,
+// its owner element's for an attribute, and for a supplied value those in
+// scope at the schema document element that wrote the value constraint
+// ([value.ConstraintContext]), never the instance's; read back through that
+// mapping's Canonical and converted to the Go type. backend's governing
+// mapping of each such type but one whose datatype struct is
+// yearMonthDuration's, QName's or PrecisionDecimal's must therefore have a
+// non-nil Canonical, as builtin/strict's do; item 8 of [Decode]'s doc
+// states the error where one fails. The value converts so:
+//
+//   - A boolean's: its canonical form exactly "true" or "false" (§E.4
+//     f-booleanCanmap).
+//   - A float's and a double's: by strconv.ParseFloat at the Go type's width.
+//     A literal beyond the type's range is the INF or -INF its mapping rounds
+//     it to (·floatingPointRound·, Datatypes §E.1), so it decodes as ±Inf
+//     where the backend's Canonical renders that, as builtin/strict's does,
+//     and is no item 8 error of [Decode]'s doc.
+//   - A decimal's: into big.Rat, big.Int or one of the bounded Go integers
+//     int64, int32, int16, int8, uint64, uint32, uint16 and uint8 at its
+//     width.
+//   - A hexBinary's: into []byte by encoding/hex, either letter case read
+//     (§E.4.1 f-hexBinaryMap).
+//   - A base64Binary's: into []byte by encoding/base64's StdEncoding
+//     (§3.3.16.2).
+//   - A date, time or duration type's: into its datatype struct, by that
+//     datatype's lexical grammar (§3.3.6.2, §3.3.7.2–§3.3.14.2, §D.2.2), each
+//     property the local value the form shows, never converted to UTC
+//     (§D.2.1), the timezoneOffset in minutes, and a duration's Months and
+//     Seconds both of the form's one sign (§3.3.6.1, §E.2).
+//   - A type whose datatype struct is yearMonthDuration's alone: converted
+//     from the string Parse accepted, so that zero, which has no canonical
+//     representation (§3.4.26.1), decodes as Months 0; its Canonical is never
+//     consulted.
+//   - A type whose datatype struct is QName's, an xs:QName or xs:NOTATION
+//     type, neither of which has a canonical representation (§3.3.18,
+//     §3.3.19): the expanded name the string Parse accepted resolves to
+//     against the same bindings Parse was given, Space its namespace name, ""
+//     for none, and Local its local part, no prefix kept; its Canonical is
+//     never consulted either.
+//   - A type whose datatype struct is PrecisionDecimal's, an
+//     xs:precisionDecimal type: converted from the string Parse accepted by
+//     ·precisionDecimalLexicalMap· (precisionDecimal §6 f-precDecLexmap),
+//     since its canonical mapping decides no rendering of a zero
+//     (f-precDecCanmap), so a Canonical cannot be relied on to keep a zero's
+//     ·scale· or ·sign·; its Canonical is never consulted. Its Value
+//     holds the arm [WithPrecisionDecimalArms] supplies for the value's
+//     ·numericalValue· (§3.1 vp-pd-numVal): INF and +INF the positive
+//     infinity's, -INF the negative infinity's and NaN the not-a-number's,
+//     each a struct of no field; and a numeral the numerical arm, its
+//     Coefficient the numeral's digits read as one decimal integer and its
+//     Scale the numeral's ·scale· (vp-pd-precision), its digits after the '.'
+//     less its exponent, which give the value codegen's package doc states in
+//     "# Simple types", and its Negative true exactly when the
+//     numeral opens with '-' (vp-pd-sign). So 3 and 3.00 decode to Scale 0
+//     and 2, 0 and -0 to Negative false and true, and 3E2 to Coefficient 3
+//     and Scale -2.
+//   - A list type's, whose whiteSpace is collapse (Datatypes §4.3.6,
+//     §2.4.1.2): the normalized string is split at each U+0020 into its list
+//     items before any is mapped, an empty one into none (§4.1.1 dt-list), and
+//     each item is read as above under the list's {item type definition}, a
+//     restriction of a list taking its base's (Structures §3.16.2.3); the
+//     value is the []A of the items in order.
+//   - A union type's, which has no whiteSpace of its own, so that its
+//     normalized string is the characters themselves (Datatypes §4.3.6): the
+//     variant of its ·active basic member· (dt-active-member,
+//     dt-active-basic-member), the member [value.ValidatingType] identifies on
+//     that string, under the same bindings as Parse and the evaluator
+//     [validate.Result.FacetAssertions] returns for validate's assessment of
+//     the instance, the first member in order that accepts it, its assertions
+//     facets included, descended through a member that is itself a union, a
+//     {lexical form} included for a supplied value. The variant is the type of
+//     [WithBranches]' set for the union's interface that item 6 of [Decode]'s
+//     doc matches to that member, and it holds the member's value read as
+//     above, from the string normalized by the member's own whiteSpace
+//     (cvc-datatype-valid clause 2.3, the note on its pre-lexical facets),
+//     under the member as a list or an atomic type. A list of a union is []I,
+//     I the item's interface, each list item's member identified on the item.
+//
+// Since a value is read from the item's own characters, and supplied only
+// where the item has none, it is the instance's own even where a fixed value
+// constraint holds it to an equal one that is not identical (§3.5.4 cvc-au,
+// cvc-elt clause 5.2.2.2.2): -0 against fixed 0 on xs:double decodes to
+// negative zero. The field of an optional attribute use whose effective value
+// constraint supplies a value is the Go type codegen gives its simple type
+// itself, as codegen emits it, holding the supplied value when the attribute
+// is absent; a whitespace-only element has a character child and holds its
+// own value; and an element absent from the instance supplies nothing, its
+// field nil or not appended to. An element of type xs:anyType holds no such
+// value: its field, or T for the document element, holds its content raw
+// (item 6 of [Decode]'s doc), and its {value constraint} supplies none, since
+// its {content type} is mixed and it has no [schema normalized value]
+// (§3.3.5.4 sic-eltType), so an empty one's Text is "" whatever its default
+// or fixed value. Mixed content holds none either, on the same ground (item 6
+// of [Decode]'s doc): its {value constraint} supplies no Text, so an empty
+// element's is "".
 //
 // # Encode
 //

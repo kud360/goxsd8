@@ -169,16 +169,13 @@ const (
 	// value in (Datatypes §2.3.1 dt-canonical-mapping).
 	readCanonical reading = iota + 1
 	// readLexical is the normalized lexical Parse accepted, never Canonical:
-	// yearMonthDuration's, whose zero value has no canonical representation
-	// (§3.4.26.1, §2.3.1 dt-canonical-mapping's "where possible"), and
-	// precisionDecimal's, read by the lexical mapping (precisionDecimal §6
-	// f-precDecLexmap) for the reason Decode's doc gives in its
-	// PrecisionDecimal bullet.
+	// yearMonthDuration's (§3.4.26.1) and precisionDecimal's (precisionDecimal
+	// §6 f-precDecLexmap), for the reasons their bullets in the package doc's
+	// "# What decodes" give.
 	readLexical
-	// readExpanded is the expanded name the normalized lexical resolves to
-	// against the bindings Parse was given, never Canonical: QName's, which
-	// NOTATION shares, neither having a canonical representation (§3.3.18,
-	// §3.3.19).
+	// readExpanded is the expanded name the normalized lexical resolves to,
+	// never Canonical: QName's, which NOTATION shares (§3.3.18, §3.3.19), read
+	// as its bullet in the package doc's "# What decodes" states.
 	readExpanded
 )
 
@@ -217,15 +214,16 @@ func (a atomic) spell() string {
 	return fmt.Sprintf("D for the datatype struct D of xs:%s (%s)", datatype.Local, strings.Join(fields, ", "))
 }
 
-// convert returns the value of a's bare type that form denotes, read as
-// Decode's doc states, or the error for a form a's Go type does not read:
-// form is a canonical lexical form the governing mapping's Canonical
-// rendered, or where a's reading is readLexical the normalized lexical Parse
-// accepted. A boolean is never read by strconv.ParseBool, which accepts more
-// than f-booleanCanmap's two forms. PrecisionDecimal's is convertDecimal's,
-// and every atomic convert does not name is convertTemporal's, which converts
-// the date, time and duration ones and panics for the rest, atomicString and
-// atomicQName, read by expandedName, having no conversion.
+// convert returns the value of a's bare type that form denotes, read as the
+// package doc's "# What decodes" states, or the error for a form a's Go type
+// does not read: form is a canonical lexical form the governing mapping's
+// Canonical rendered, or where a's reading is readLexical the normalized
+// lexical Parse accepted. A boolean is never read by strconv.ParseBool, which
+// accepts more than f-booleanCanmap's two forms. PrecisionDecimal's is
+// convertDecimal's, and every atomic convert does not name is
+// convertTemporal's, which converts the date, time and duration ones and
+// panics for the rest, atomicString and atomicQName, read by expandedName,
+// having no conversion.
 func (a atomic) convert(form string) (reflect.Value, error) {
 	switch a {
 	case atomicPrecisionDecimal:
