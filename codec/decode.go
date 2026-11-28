@@ -5239,15 +5239,12 @@ func governingTypes(schema *xsd.Schema, decl xsd.ElementDeclaration, wraps bool)
 }
 
 // nillableDeclines reports whether Decode declines decl under constructNillable,
-// types, errorSlot and err being goshape.GoverningTypes' answers for decl and wraps
-// governingTypes': decl is nillable (goshape.Nillable), unless exactly one governing
-// type remains, no slot holds xs:error, which a ·nilled· instance is valid against
-// (cvc-type clause 3.1.3 "If E is not nilled") and which codegen's sum wraps branch
-// by branch, and, where wraps is false, a site that holds no Nillable, a substitution
-// group's branch field, that type is xs:anyType itself, goshape.GoverningTypes'
-// error declining so too. It is the one test of that domain: Append's item 4 pass
-// declines by it too (encodeWalk.declEncodes), so that Append writes no nillable
-// declaration Decode does not read.
+// as item 5 of Decode's doc states the domain, types, errorSlot and err being
+// goshape.GoverningTypes' answers for decl and wraps governingTypes', false at a
+// site that holds no Nillable, a substitution group's branch field. It is the one
+// test of that domain: Append's item 4 pass declines by it too
+// (encodeWalk.declEncodes), so that Append writes no nillable declaration Decode
+// does not read.
 func nillableDeclines(decl xsd.ElementDeclaration, wraps bool, types []goshape.GoverningType, errorSlot bool, err error) bool {
 	return goshape.Nillable(decl) && (err != nil || len(types) != 1 || errorSlot || !wraps && !goshape.AnyTypeItself(types[0].Type()))
 }
