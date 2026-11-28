@@ -232,3 +232,15 @@ func TestNillableDeclinesOnError(t *testing.T) {
 		t.Errorf("nillableDeclines = false, want true where GoverningTypes errs")
 	}
 }
+
+// TestAppendNillableKeyMember pins item 8 of Append's doc for a key whose
+// field selects an element of a nillable declaration: validate charges
+// cvc-identity-constraint clause 4.2.3, one of the clauses validate's package
+// doc states it charges, to which item 8 points.
+func TestAppendNillableKeyMember(t *testing.T) {
+	type keyed struct{ A nillable[string, struct{}] }
+	schema := schemaOf(t, `<xs:element name="r"><xs:complexType><xs:sequence><xs:element name="a" type="xs:string" nillable="true"/></xs:sequence></xs:complexType>`+
+		`<xs:key name="k"><xs:selector xpath="."/><xs:field xpath="s:a"/></xs:key></xs:element>`)
+	_, err := appendChecked(t, nil, schema, strict.New(), rootName, keyed{A: content[string, struct{}]{Content: "x"}}, nilArms[string, struct{}]())
+	invalidValue(t, err, "[cvc-identity-constraint]", "which cvc-identity-constraint clause 4.2.3 forbids for a key")
+}

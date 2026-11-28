@@ -10,14 +10,15 @@ import (
 )
 
 // nillableSum is codegen's Nillable[T, A] over one nillable element
-// declaration (goshape.Nillable), as Decode reads it (codegen/doc.go
-// "# Element declarations"): attrs, the binding whose attribute fields and
-// {attribute wildcard} field A holds, nil where A is struct{}, a T of simple
-// type or a complex type codegen emits as a bare sealed interface; and xsiNil,
-// the scalar xsi:nil is read as, of xs:boolean, the {type definition} of the
-// built-in xsi:nil declaration (§3.2.7.2). attrs is read at check time only,
-// so a binding whose attribute fields are bound after this sum, through a type
-// that reaches itself, is read whole.
+// declaration (goshape.Nillable), as Decode reads it and Append writes it
+// (codegen/doc.go "# Element declarations"; boundNillable.write): attrs, the
+// binding whose attribute fields and {attribute wildcard} field A holds, nil
+// where A is struct{}, a T of simple type or a complex type codegen emits as a
+// bare sealed interface; and xsiNil, the scalar xsi:nil is read as, of
+// xs:boolean, the {type definition} of the built-in xsi:nil declaration
+// (§3.2.7.2). attrs is read at check time only, so a binding whose attribute
+// fields are bound after this sum, through a type that reaches itself, is read
+// whole.
 type nillableSum struct {
 	p      *pipeline
 	attrs  *binding
