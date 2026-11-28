@@ -1,13 +1,11 @@
 package codec
 
 import (
-	"bytes"
 	"reflect"
 	"testing"
 
 	"github.com/kud360/goxsd8/builtin/strict"
 	"github.com/kud360/goxsd8/internal/goshape"
-	"github.com/kud360/goxsd8/parser/xmltree"
 	"github.com/kud360/goxsd8/xsd"
 	"github.com/kud360/goxsd8/xsderr"
 )
@@ -112,12 +110,12 @@ func TestDecodeAnonymousTwins(t *testing.T) {
 	}
 }
 
-// TestTableMatchedUnmatched pins tableSelector.match where the selected type is
+// TestTableMatchedUnmatched pins governing.matched where the selected type is
 // none of the table's governing types, which no instance Decode validated
 // reaches: xs:error at its slot, which goshape.GoverningTypes drops, and an
-// anonymous type at a slot no governing type holds. Each is a plain error
-// naming the element's instance Loc and pointing at key-cta-ta-select, never
-// a branch.
+// anonymous type at a slot no governing type holds, each false; and
+// governing.slotIndex's false for xs:error's slot, position 0, and its plain
+// error for a position no slot holds, each unprefixed.
 func TestTableMatchedUnmatched(t *testing.T) {
 	schema := schemaOf(t, ttTypes+`<xs:element name="r" type="s:base"><xs:alternative test="@kind = 'e'" type="xs:error"/><xs:alternative test="@kind" type="s:num"/></xs:element>`)
 	decl, ok := schema.Element(rootName)
@@ -129,11 +127,7 @@ func TestTableMatchedUnmatched(t *testing.T) {
 		t.Fatal(err)
 	}
 	table, _ := decl.TypeTable()
-	tr := &tableRoot{selector: tableSelector{table: table}, types: types}
-	start, err := documentElement(xmltree.NewReader("", bytes.NewReader(instanceOf("", ""))))
-	if err != nil {
-		t.Fatal(err)
-	}
+	gs := governing(types)
 	xsError, ok := schema.ResolvedType(xsd.TypeDefinitionRef{Name: xsd.QName{Space: xsd.XMLSchemaNS, Local: "error"}})
 	if !ok {
 		t.Fatal("xs:error does not resolve")
@@ -145,17 +139,16 @@ func TestTableMatchedUnmatched(t *testing.T) {
 	if !ok || anonymous.Name() != (xsd.QName{}) {
 		t.Fatal("atTwoSchema's first alternative holds no anonymous type")
 	}
-	for _, row := range []struct {
-		slot goshape.Slot
-		td   xsd.TypeDefinition
-		want string
-	}{
-		{goshape.AlternativeSlot(1), xsError, "codec: ?:1:1: element {urn:s}r: the type its {type table} selects (key-cta-ta-select) at its {type table} alternative 1 is none of its governing types"},
-		{goshape.AlternativeSlot(1), anonymous, "codec: ?:1:1: element {urn:s}r: the type its {type table} selects (key-cta-ta-select) at its {type table} alternative 1 is none of its governing types"},
-	} {
-		i, err := tableSelector{table: table}.match(tr, start, row.slot, row.td)
-		if err == nil || err.Error() != row.want {
-			t.Errorf("match(%s, %s) = %d, %v; want the error %q", row.slot.Name(), row.td.Name(), i, err, row.want)
+	for _, td := range []xsd.TypeDefinition{xsError, anonymous} {
+		if i, matched := gs.matched(goshape.AlternativeSlot(1), td); matched {
+			t.Errorf("matched(alternative 1, %s) = %d, true; want false", td.Name(), i)
 		}
+	}
+	if i, matched, err := gs.slotIndex(schema, table, 0); matched || err != nil {
+		t.Errorf("slotIndex(0), xs:error's slot = %d, %v, %v; want false and no error", i, matched, err)
+	}
+	const want = "its {type table} selects (key-cta-ta-select) position 3, which no slot holds"
+	if _, _, err := gs.slotIndex(schema, table, 3); err == nil || err.Error() != want {
+		t.Errorf("slotIndex(3) = %v; want the error %q", err, want)
 	}
 }

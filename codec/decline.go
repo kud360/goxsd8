@@ -38,62 +38,60 @@ func (e *DeclineError) Loc() (xsderr.Loc, bool) {
 }
 
 // Error opens with "codec does not decode" for a decline of [Decode] or
-// [CheckDecode] and "codec does not encode" for one of [Append] or
-// [CheckAppend]. For the first it names the instance Loc, where Loc reports
-// one, and the construct, then the declining declaration, the document
-// element's, a particle's element declaration's, local or a top-level one an
-// <element ref> names, or a member of that one's substitution group, at any
-// depth, or an attribute's, and, for a construct of a complex type, the
-// document element's or one a particle's element declaration has at any depth,
-// or of the document element's simple type, that type labelled as its
-// declaration's {type definition}, with no path from the document element, and,
-// for a construct of a complex type's simple content, its {content type}'s
-// {simple type definition}, and of a list type's {item type definition} or a
-// union's basic member, that item or member, by its QName where it has one,
-// each with its schema Loc; for a wildcard particle, it names the particle as
-// [Decode]'s item 5 states; for xsi:type, it names the element and the type the
-// xsi:type names. For the second it names the construct, then the declining
-// element declaration, attribute use or simple type, by its QName where it has
-// one, with its schema Loc, and, for a construct of a complex type's simple
-// content, that type labelled as its declaration's {type definition}, then its
-// {content type}'s {simple type definition}, by its QName where it has one,
-// with its schema Loc, and, for a construct of a list type's {item type
-// definition}, a union's basic member or a union among a union's {member type
-// definitions} at any depth, that item, member or member union, by its QName
-// where it has one, with its schema Loc, and, for an identity constraint whose
-// paths icpath does not compile, that constraint and the part, for a keyref's
-// {referenced key} that key and its part, and, for a value with no canonical
-// representation or no spelling Append writes, or one item 7 of [Append]'s doc
-// declines at its {value constraint}, the Go path of its field from T and its
-// value, for the last the text it is written as, quoted, then that
-// constraint's {lexical form}, its variety, default or fixed, and the element
-// declaration, attribute use or attribute declaration it is on, each named by
-// its declaration's QName with that declaration's schema Loc, and, for an
-// attribute in the XSI namespace item 7 of [Append]'s doc declines that an
-// element held in a wildcard's match or an {open content}'s field carries, the
-// content of an element of type xs:anyType itself holds, or an {attribute
-// wildcard}'s field holds, that attribute, its Go path from T and the wildcard
-// particle, as [Decode]'s item 5 names it, the {open content} and its complex
-// type, that element's declaration, or the field's complex type, labelled as
-// its declaration's {type definition}, with its schema Loc, and, for an attribute
-// a strict or lax {attribute wildcard}'s field holds whose governing top-level
-// attribute declaration's {type definition} is xs:QName- or xs:NOTATION-dependent,
-// that attribute, its Go path from T, that complex type, so labelled, and the
-// top-level declaration, with its schema Loc, and, for a strict or lax
-// wildcard's match with a ·locally declared type·, that element, its Go path from
-// T, the wildcard particle and the complex type, labelled as its declaration's
-// {type definition}, with its schema Loc, and, for an {open content}'s child
-// with a ·locally declared type·, that element, its Go path from T, the {open
-// content} and its complex type, so labelled, and the complex type again, and,
-// for an interleave {open content}'s child the {particle} takes, that element,
-// its Go path from T and the complex type, so labelled, and, for text or an
-// attribute value held raw with a token whose prefix only a binding Append
-// declares binds, the Go path of that text or Value from T, the token, its prefix
-// and the namespace name that binding gives it, and, for an ·ENTITY value· held
-// raw, the violation the written document's assessment charges it with. A type
-// definition named in the XML Schema namespace whose schema Loc is the zero Loc is
-// named by its QName alone, in place of the schema Loc the sentences above give
-// it.
+// [CheckDecode] and "codec does not encode" for one of [Append] or [CheckAppend]. For
+// the first it names the instance Loc, where Loc reports one, and the construct, then
+// the declining declaration, the document element's, a particle's element
+// declaration's, local or a top-level one an <element ref> names, or a member of that
+// one's substitution group, at any depth, or an attribute's, and, for a construct of a
+// complex type, the document element's or one a particle's element declaration has at
+// any depth, or of the document element's simple type, that type labelled as its
+// declaration's {type definition}, with no path from the document element, and, for a
+// construct of a complex type's simple content, its {content type}'s {simple type
+// definition}, and of a list type's {item type definition} or a union's basic member,
+// that item or member, by its QName where it has one, each with its schema Loc; for a
+// wildcard particle, it names the particle as [Decode]'s item 5 states; for xsi:type,
+// it names the element and the type the xsi:type names. For the second it names the
+// construct, then the declining element declaration, attribute use or simple type, by
+// its QName where it has one, with its schema Loc, and, for a construct of a complex
+// type's simple content, that type labelled as its declaration's {type definition},
+// then its {content type}'s {simple type definition}, by its QName where it has one,
+// with its schema Loc, and, for a construct of a list type's {item type definition}, a
+// union's basic member or a union among a union's {member type definitions} at any
+// depth, that item, member or member union, by its QName where it has one, with its
+// schema Loc, and, for an identity constraint whose paths icpath does not compile,
+// that constraint and the part, for a keyref's {referenced key} that key and its part,
+// and, for a value with no canonical representation or no spelling Append writes, or
+// one item 7 of [Append]'s doc declines at its {value constraint}, the Go path of its
+// field from T and its value, for the last the text it is written as, quoted, then
+// that constraint's {lexical form}, its variety, default or fixed, and the element
+// declaration, attribute use or attribute declaration it is on, each named by its
+// declaration's QName with that declaration's schema Loc, and, for an element item 7
+// of [Append]'s doc declines at its declaration's {type table}, that declaration, by
+// its QName with its schema Loc, the Go path of the element's value from T, the slot
+// of the type it is written as, and the slot of the type the table selects, or that
+// the selection is undecided, and, for an attribute in the XSI namespace item 7 of
+// [Append]'s doc declines that an element held in a wildcard's match or an {open
+// content}'s field carries, the content of an element of type xs:anyType itself holds,
+// or an {attribute wildcard}'s field holds, that attribute, its Go path from T and the
+// wildcard particle, as [Decode]'s item 5 names it, the {open content} and its complex
+// type, that element's declaration, or the field's complex type, labelled as its
+// declaration's {type definition}, with its schema Loc, and, for an attribute a strict
+// or lax {attribute wildcard}'s field holds whose governing top-level attribute
+// declaration's {type definition} is xs:QName- or xs:NOTATION-dependent, that
+// attribute, its Go path from T, that complex type, so labelled, and the top-level
+// declaration, with its schema Loc, and, for a strict or lax wildcard's match with a
+// ·locally declared type·, that element, its Go path from T, the wildcard particle and
+// the complex type, labelled as its declaration's {type definition}, with its schema
+// Loc, and, for an {open content}'s child with a ·locally declared type·, that
+// element, its Go path from T, the {open content} and its complex type, so labelled,
+// and the complex type again, and, for an interleave {open content}'s child the
+// {particle} takes, that element, its Go path from T and the complex type, so
+// labelled, and, for text or an attribute value held raw with a token whose prefix
+// only a binding Append declares binds, the Go path of that text or Value from T, the
+// token, its prefix and the namespace name that binding gives it, and, for an ·ENTITY
+// value· held raw, the violation the written document's assessment charges it with. A
+// type definition named in the XML Schema namespace whose schema Loc is the zero Loc
+// is named by its QName alone, in place of the schema Loc the sentences above give it.
 func (e *DeclineError) Error() string {
 	text := "codec does not decode " + e.construct.name() + ": " + e.detail +
 		"; a decoder refusal, not a schema or instance fault"
@@ -157,15 +155,19 @@ type construct uint8
 // basic particle a nested flattened particle reaches and every particle of a nested
 // occurrence field's item, ahead of the particles after it. The constructs after
 // constructXsiType are Append's alone, in the order Append finds them: the document
-// element's declaration, after constructNillable, its type's {abstract}, its type's
-// content, its content {particle}, each particle in order, its attribute uses in order,
-// its {assertions} by constructInScopeAssertion, and each value, the {attribute wildcard}
-// field's attributes by constructXsiAttribute and constructQNameGovernedAttribute
-// among the value's, and an open-content field's child by
-// constructInterleaveParticleChild, where its content model attributes it, before
-// constructLocallyTypedOpenChild, where what governs it is read. Append also declines
-// constructEntityType after every other construct, for an ·ENTITY value· held raw that
-// the written document's assessment finds (assessWritten). Append declines by
+// element's declaration, after constructNillable, then each of its slots, its {type
+// definition} or each {type table} slot in slot order, by its type's {abstract}, then
+// each of its governing types in slot order, each by its content, its content
+// {particle}, each particle in order, its attribute uses in order and its {assertions}
+// by constructInScopeAssertion, and each value, the {attribute wildcard} field's
+// attributes by constructXsiAttribute and constructQNameGovernedAttribute among the
+// value's, then an element of a declaration with a {type table} by constructTypeTable
+// once all its attributes are written, ahead of its content (an xs:anyType arm's attribute
+// values are held to constructCapturedPrefix first), and an open-content field's
+// child by constructInterleaveParticleChild, where its content model attributes it,
+// before constructLocallyTypedOpenChild, where what governs it is read. Append also
+// declines constructEntityType after every other construct, for an ·ENTITY value· held
+// raw that the written document's assessment finds (assessWritten). Append declines by
 // constructUntrackedModel too, once every particle of a content model holding a wildcard
 // particle, a nested flattened particle or a nested occurrence field, at any depth, or
 // every basic particle a flattened content {particle} reaches, is examined. A particle
@@ -190,7 +192,6 @@ const (
 	constructOtherPrimitive
 	constructUntrackedModel
 	constructXsiType
-	constructTypeTable
 	constructIdentityConstraint
 	constructAbsentAffiliation
 	constructAbstractElement
@@ -206,6 +207,7 @@ const (
 	constructValueConstraint
 	constructXsiAttribute
 	constructQNameGovernedAttribute
+	constructTypeTable
 	constructLocallyTypedMatch
 	constructInterleaveParticleChild
 	constructLocallyTypedOpenChild
@@ -220,11 +222,10 @@ var constructNames = [...]string{
 	constructOtherPrimitive:          "an atomic simple type whose primitive is ·implementation-defined·, other than xs:precisionDecimal",
 	constructUntrackedModel:          "a content model the content matcher does not track",
 	constructXsiType:                 "an element carrying xsi:type",
-	constructTypeTable:               "an element declaration with a {type table}",
 	constructIdentityConstraint:      "an identity constraint whose {selector} or {fields}, or whose {referenced key}'s, lie outside the path subset icpath compiles (Structures §3.11.6.2 ·selector subset·, §3.11.6.3 ·field subset·)",
 	constructAbsentAffiliation:       "an element declaration with an ·absent· member of its {substitution group affiliations}",
 	constructAbstractElement:         "an element declaration with {abstract} true",
-	constructAbstractType:            "an element declaration whose {type definition} is a complex type with {abstract} true",
+	constructAbstractType:            "an element declaration whose {type definition}, or a {type table} slot's, is a complex type with {abstract} true",
 	constructVacuousParticle:         "a particle with {max occurs} 0",
 	constructReservedAttributeUse:    "an attribute use whose declaration's {target namespace} is the XSI namespace, other than xsi:schemaLocation's and xsi:noNamespaceSchemaLocation's, or the one the prefix xmlns is bound to",
 	constructInScopeAssertion:        "a complex type with {assertions}, its own or inherited, one of whose {test}s names fn:in-scope-prefixes, fn:namespace-uri-for-prefix or fn:resolve-QName, or the namespace axis",
@@ -236,6 +237,7 @@ var constructNames = [...]string{
 	constructValueConstraint:         "a value whose agreement with its value constraint value.ConstraintMatches does not decide, or an empty element's value its default replaces",
 	constructXsiAttribute:            "xsi:type, xsi:nil, xsi:schemaLocation or xsi:noNamespaceSchemaLocation held in an {attribute wildcard} field, xsi:type in the Attributes of an element of type xs:anyType itself, or xsi:nil in a strict or lax wildcard's match, a strict or lax {open content}'s child or an xs:anyType element's content",
 	constructQNameGovernedAttribute:  "an attribute a strict or lax {attribute wildcard} field holds whose governing top-level attribute declaration's {type definition} is xs:QName- or xs:NOTATION-dependent: an atomic type of either primitive, a list whose {item type definition} is one, or a union with one among its basic members",
+	constructTypeTable:               "an element whose declaration's {type table}, over the attributes Append writes and its [inherited attributes], does not select the governing type Append writes it as, or leaves the selection undecided",
 	constructLocallyTypedMatch:       "a strict or lax wildcard's match whose expanded name no top-level element declaration names and has a ·locally declared type· in the complex type it is written into",
 	constructInterleaveParticleChild: "a child of an interleave {open content} that the {particle} takes where Append writes it",
 	constructLocallyTypedOpenChild:   "a child of a strict or lax {open content} that has a ·locally declared type· in the complex type it is written into",

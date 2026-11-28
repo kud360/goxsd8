@@ -22,9 +22,15 @@ import (
 // (branchField).
 type tableRoot struct {
 	selector selector
-	types    []goshape.GoverningType
+	types    governing
 	sealed   *sealed[field]
 }
+
+// governing is an element declaration's governing types in slot order, as
+// goshape.GoverningTypes returns them: a tableRoot's, and those of an element
+// Append writes whose declaration has a {type table} (encoder.selects), of
+// one governing type too, which no tableRoot holds.
+type governing []goshape.GoverningType
 
 // A selector returns the index in t.types of the governing type of the
 // element start, an instance of a declaration t is the tableRoot of, or a
@@ -38,19 +44,30 @@ type selector interface {
 }
 
 // table returns the tableRoot of el, an element declaration whose governing
-// types, types, are zero or two or more, keyed as codegen emits its interface:
-// by el's expanded name for a top-level el, whose interface every <element
-// ref> particle to it shares, by its groupPath for a local el declared in a
-// model group definition, and under no key for any other local one, bound in
-// place inside the unit that declares it (bindRun).
+// types, types, are zero or two or more, under tableKey's key, or bound in
+// place inside the unit that declares it where that key is nil (bindRun).
 func (run *bindRun) table(el xsd.ElementDeclaration, types []goshape.GoverningType) (complexUnit, error) {
-	if el.ScopeVariety() == xsd.ScopeGlobal {
-		return bindTable(run, el, types, run.units, elementKey(el.Name()))
-	}
-	if group, inGroup := groupScope(el); inGroup {
-		return bindTable(run, el, types, run.units, groupPath{group: group, element: el.Name()})
+	if key := tableKey(el); key != nil {
+		return bindTable(run, el, types, run.units, key)
 	}
 	return bindTable(run, el, types, nil, nil)
+}
+
+// tableKey returns the key the tableRoot of el, an element declaration whose
+// governing types are zero or two or more, is stored under, keyed as codegen
+// emits its interface: el's expanded name for a top-level el, whose interface
+// every <element ref> particle to it shares, its groupPath for a local el
+// declared in a model group definition, and nil, no key, for any other local
+// one. Append's item 4 walk keys el's governing types by it too
+// (encodeWalk.element).
+func tableKey(el xsd.ElementDeclaration) unitKey {
+	if el.ScopeVariety() == xsd.ScopeGlobal {
+		return elementKey(el.Name())
+	}
+	if group, inGroup := groupScope(el); inGroup {
+		return groupPath{group: group, element: el.Name()}
+	}
+	return nil
 }
 
 // bindTable returns the tableRoot of decl, whose governing types are types,
@@ -89,16 +106,15 @@ func bindTable(run *bindRun, decl xsd.ElementDeclaration, types []goshape.Govern
 // branchField returns the one field of the branch struct of g, a governing
 // type of decl: named from g's local name (goshape.GoverningType.Local),
 // holding what typedField gives an element of g's type occurring once, the Go
-// type codegen gives a simple type itself and, of a complex type, a named
-// one's unit keyed by its QName and an anonymous one's bound in place under no
-// key.
+// type codegen gives a simple type itself and, of a complex type, its unit
+// under branchKey's key, or bound in place where that key is nil.
 func branchField(run *bindRun, decl xsd.ElementDeclaration, g goshape.GoverningType) (field, error) {
 	once := func(sealed bool) (shape, error) {
 		return occursShape(goshape.ExactlyOnce(), sealed, g.Slot().Name()+" of "+declSubject(decl))
 	}
 	f, err := typedField(run, decl, g.Type(), valueBare, once, func(ct xsd.ComplexType) (complexUnit, error) {
-		if ct.Name() != (xsd.QName{}) {
-			return bindComplex(run, decl, ct, run.units, typeKey(ct.Name()))
+		if key := branchKey(ct); key != nil {
+			return bindComplex(run, decl, ct, run.units, key)
 		}
 		return bindComplex(run, decl, ct, nil, nil)
 	})
@@ -107,6 +123,17 @@ func branchField(run *bindRun, decl xsd.ElementDeclaration, g goshape.GoverningT
 	}
 	f.name = goname.NewNamer().Claim(g.Local())
 	return f, nil
+}
+
+// branchKey returns the key branchField binds ct, the complex type of a
+// branch of a tableRoot, under: its QName for a named ct, and nil, no key, for
+// an anonymous one. Append's item 4 walk keys a branch's type by it too
+// (encodeWalk.element).
+func branchKey(ct xsd.ComplexType) unitKey {
+	if ct.Name() != (xsd.QName{}) {
+		return typeKey(ct.Name())
+	}
+	return nil
 }
 
 // field returns the field of shape s whose V is t's interface.
@@ -166,37 +193,50 @@ type tableSelector struct{ table xsd.TypeTable }
 // ·conditionally selects· for the element start (§3.3.4.1 key-cta-select):
 // validate.Validator.ConditionallySelectedIndex's answer, the selection Assess
 // made, by position, for start's [attributes] as validate/xmlsrc presents them
-// and p.inherited, start's [inherited attributes], mapped to its slot
-// (goshape.TableSlot), resolved and matched to its branch (tableRoot.matched).
-// Decode validated the instance first, and Assess records a withheld selection
-// as undecided (item 4 of Decode's doc), so a withheld one, a position no slot
-// holds, a slot that does not resolve and a type matched to no branch (match)
-// are each a plain error naming start's instance Loc and key-cta-ta-select, a
-// defect of Decode's: no fallback to the declared or default type is ever
-// taken.
+// and p.inherited, start's [inherited attributes], mapped to its branch
+// (governing.slotIndex). Decode validated the instance first, and Assess
+// records a withheld selection as undecided (item 4 of Decode's doc), so a
+// withheld one, a position whose slot does not resolve and a type matched to
+// no branch are each a plain error naming start's instance Loc and
+// key-cta-ta-select, a defect of Decode's: no fallback to the declared or
+// default type is ever taken.
 func (s tableSelector) selected(t *tableRoot, p *pipeline, start *xmltree.StartElement) (int, error) {
 	name := expanded(start.Name())
 	index, decided := p.validator.ConditionallySelectedIndex(s.table, infosetAttributes(start), p.inherited)
 	if !decided {
 		return 0, fmt.Errorf("codec: %s: element %s: its {type table} withholds the selection (key-cta-ta-select) of an instance validate did not leave undecided", start.Loc(), name.Display())
 	}
-	slot, ref, mapped := goshape.TableSlot(s.table, index)
-	td, resolved := p.schema.ResolvedType(ref)
-	if !mapped || !resolved {
-		return 0, fmt.Errorf("codec: %s: element %s: the type its {type table} selects (key-cta-ta-select) does not resolve", start.Loc(), name.Display())
+	i, matched, err := t.types.slotIndex(p.schema, s.table, index)
+	if err != nil {
+		return 0, fmt.Errorf("codec: %s: element %s: %w", start.Loc(), name.Display(), err)
 	}
-	return s.match(t, start, slot, td)
-}
-
-// match returns tableRoot.matched's index of td, the type s.table selects for
-// the element start at slot, and in place of its false a plain error naming
-// start's instance Loc and pointing at key-cta-ta-select.
-func (tableSelector) match(t *tableRoot, start *xmltree.StartElement, slot goshape.Slot, td xsd.TypeDefinition) (int, error) {
-	i, matched := t.matched(slot, td)
 	if !matched {
-		return 0, fmt.Errorf("codec: %s: element %s: the type its {type table} selects (key-cta-ta-select) at its %s is none of its governing types", start.Loc(), expanded(start.Name()).Display(), slot.Name())
+		slot, _, _ := goshape.TableSlot(s.table, index)
+		return 0, fmt.Errorf("codec: %s: element %s: the type its {type table} selects (key-cta-ta-select) at its %s is none of its governing types", start.Loc(), name.Display(), slot.Name())
 	}
 	return i, nil
+}
+
+// slotIndex returns the index in g of the type at position index of the {type
+// table} table, a position as validate.Validator.ConditionallySelectedIndex's
+// doc numbers them, mapped to its slot (goshape.TableSlot), resolved in schema
+// and matched to its branch (governing.matched), and matched true; matched
+// false where that type is none of g, xs:error's included. A position no slot
+// holds and a slot that does not resolve are a plain error naming no element,
+// which its caller, Decode's tableSelector.selected or Append's
+// encoder.selects, prefixes with its element: neither arises for a table of a
+// schema Finalize resolved (src-resolve).
+func (g governing) slotIndex(schema *xsd.Schema, table xsd.TypeTable, index int) (i int, matched bool, err error) {
+	slot, ref, mapped := goshape.TableSlot(table, index)
+	if !mapped {
+		return 0, false, fmt.Errorf("its {type table} selects (key-cta-ta-select) position %d, which no slot holds", index)
+	}
+	td, resolved := schema.ResolvedType(ref)
+	if !resolved {
+		return 0, false, fmt.Errorf("the type its {type table} selects (key-cta-ta-select) at its %s does not resolve", slot.Name())
+	}
+	i, matched = g.matched(slot, td)
+	return i, matched, nil
 }
 
 // instanceSelector selects by the element's xsi:type.
@@ -208,7 +248,7 @@ type instanceSelector struct{}
 // bindings (xmltree.StartElement.LookupPrefix) by xmlqname.Resolve, looked up
 // among the schema's top-level type definitions, as validate's walk resolves
 // it (cvc-resolve-instance), and matched to its branch by name
-// (tableRoot.matched). Decode validated the instance first, and no instance
+// (governing.matched). Decode validated the instance first, and no instance
 // of that {type definition} is valid without an xsi:type that overrides it
 // (cvc-type clause 2), each such type being a member (codegen/doc.go "An
 // element declaration's governing types"), so no xsi:type, one that does not
@@ -225,25 +265,24 @@ func (instanceSelector) selected(t *tableRoot, p *pipeline, start *xmltree.Start
 	if !ok || !resolved {
 		return 0, fmt.Errorf("codec: %s: element %s: its xsi:type %q names no type definition, but one overriding its {type definition} (key-overrides) is required", start.Loc(), name.Display(), a.Value())
 	}
-	i, matched := t.matched(goshape.DeclaredSlot{}, td)
+	i, matched := t.types.matched(goshape.DeclaredSlot{}, td)
 	if !matched {
 		return 0, fmt.Errorf("codec: %s: element %s: its xsi:type %q names %s, none of its governing types, the types that override its {type definition} (key-overrides)", start.Loc(), name.Display(), a.Value(), td.Name().Display())
 	}
 	return i, nil
 }
 
-// matched returns the index in t.types of td, the type selected for an
-// element at slot, as codegen's identity holds types one
-// (goshape.GoverningTypes) and as Decode's doc matches them: for a named td,
-// the first type named as td is, which holds a type a later slot holds too,
-// and for an anonymous td, the type whose Slot is slot
-// (validate.Validator.ConditionallySelectedIndex's doc says why), and false
-// where td is none of t.types, xs:error's included, which GoverningTypes
-// drops. No type is compared to td by value.
-func (t *tableRoot) matched(slot goshape.Slot, td xsd.TypeDefinition) (int, bool) {
+// matched returns the index in gs of td, the type selected for an element at
+// slot, as codegen's identity holds types one (goshape.GoverningTypes) and as
+// Decode's doc matches them: for a named td, the first type named as td is,
+// which holds a type a later slot holds too, and for an anonymous td, the type
+// whose Slot is slot (validate.Validator.ConditionallySelectedIndex's doc says
+// why), and false where td is none of gs, xs:error's included, which
+// GoverningTypes drops. No type is compared to td by value.
+func (gs governing) matched(slot goshape.Slot, td xsd.TypeDefinition) (int, bool) {
 	name := td.Name()
 	anonymous := name == (xsd.QName{})
-	for i, g := range t.types {
+	for i, g := range gs {
 		if anonymous && g.Slot() == slot || !anonymous && g.Type().Name() == name {
 			return i, true
 		}
@@ -262,14 +301,23 @@ func (p *pipeline) handDown(typ xsd.TypeDefinition, start *xmltree.StartElement)
 	return own
 }
 
-// infosetAttribute is an attribute of an instance element as validate/xmlsrc
-// presents it to Assess: its expanded name, its value as parser/xmltree
-// normalized it (XML 1.0 §3.3.3), and its Loc.
-type infosetAttribute struct{ a xmltree.Attribute }
+// infosetAttribute is an attribute of an element as validate reads it: name,
+// its expanded name; value, its [normalized value]; and loc, its Loc. Decode
+// fills one per attribute of an instance element as validate/xmlsrc presents
+// it to Assess (infosetAttributes), its value as parser/xmltree normalized it
+// (XML 1.0 §3.3.3); Append one per attribute it writes on a start tag
+// (encoder.writeRawAttribute), its value the text it writes, which
+// appendEscaped escapes so that normalization gives it back, and its loc the
+// zero Loc, since no source document is read.
+type infosetAttribute struct {
+	name  xsd.QName
+	value string
+	loc   xsderr.Loc
+}
 
-func (a infosetAttribute) Name() xsd.QName { return expanded(a.a.Name()) }
-func (a infosetAttribute) Value() string   { return a.a.Value() }
-func (a infosetAttribute) Loc() xsderr.Loc { return a.a.Loc() }
+func (a infosetAttribute) Name() xsd.QName { return a.name }
+func (a infosetAttribute) Value() string   { return a.value }
+func (a infosetAttribute) Loc() xsderr.Loc { return a.loc }
 
 // infosetAttributes returns start's [attributes] in start-tag order, namespace
 // declarations excluded, as validate/xmlsrc presents them to Assess
@@ -278,7 +326,7 @@ func infosetAttributes(start *xmltree.StartElement) []validate.Attribute {
 	attrs := start.Attributes()
 	out := make([]validate.Attribute, 0, len(attrs))
 	for _, a := range attrs {
-		out = append(out, infosetAttribute{a: a})
+		out = append(out, infosetAttribute{name: expanded(a.Name()), value: a.Value(), loc: a.Loc()})
 	}
 	return out
 }

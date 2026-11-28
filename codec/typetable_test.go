@@ -242,9 +242,10 @@ var (
 	ttRefNsBranches = WithBranches[ttRefNsE](ttRefNsEE{}, ttRefNsBase{})
 )
 
-// TestTypeTableTypesAreCodegens pins the types above to those codegen emits
-// for each schema, in shape, so that the rows decoding into them decode into
-// codegen's types.
+// TestTypeTableTypesAreCodegens pins the types above, and encodetable_test.go's,
+// to those codegen emits for each schema, in shape, so that the rows decoding
+// into them decode into codegen's types and the rows appending them append
+// codegen's.
 func TestTypeTableTypesAreCodegens(t *testing.T) {
 	const (
 		base   = "type Base struct {\n\tA    string\n\tKind *string\n}\n"
@@ -296,6 +297,16 @@ func TestTypeTableTypesAreCodegens(t *testing.T) {
 		{ttRowsSchemas[2], []string{"type R AnyType\n"}},
 		{ttRowsSchemas[3], []string{"type R struct {\n\tA AnyType\n}\n"}},
 		{ttRowsSchemas[4], []string{"type R struct {\n\tA AnyType\n}\n"}},
+		{ttZzSchema, []string{r, "type RZz struct {\n\tZz Zz\n}\n", "type Zz struct {\n\tValue string\n\tType  *int32\n}\n",
+			"type RZzd struct {\n\tZzd Zzd\n}\n", "type Zzd struct {\n\tValue string\n\tNote  *string\n\tType  *int32\n}\n"}},
+		{ttLangSchema, []string{"type R struct {\n\tC    []C\n\tLang *string\n}\n", "type C interface {\n\tisC()\n}\n",
+			"type CString struct {\n\tString string\n}\n", "type CFr struct {\n\tFr Fr\n}\n", "type Fr struct {\n\tT string\n}\n"}},
+		{ttAnySchema, []string{r, "type RString struct {\n\tString string\n}\n", "type RAnyType struct {\n\tAnyType AnyType\n}\n"}},
+		{ttAnyChildSchema, []string{"type R struct {\n\tC C\n\tK *string\n}\n", "type C interface {\n\tisC()\n}\n", "type CString struct {\n\tString string\n}\n", "type CAnyType struct {\n\tAnyType AnyType\n}\n"}},
+		{ttAssertSchema, []string{"type RAsserted struct {\n\tAsserted Asserted\n}\n", "type Asserted struct {\n\tA    string\n\tZ    string\n\tKind *string\n}\n", rBase, base}},
+		{ttWildSchema, []string{"type RWn struct {\n\tWn Wn\n}\n", "type Wn struct {\n\tA            string\n\tN            int32\n\tAnyAttribute []AnyAttribute\n}\n",
+			"type RWb struct {\n\tWb Wb\n}\n", "type Wb struct {\n\tA            string\n\tAnyAttribute []AnyAttribute\n}\n"}},
+		{ttFixedSchema, []string{r, "type RToken struct {\n\tToken string\n}\n", "type RString struct {\n\tString string\n}\n"}},
 	}
 	for _, row := range rows {
 		gen := generated(t, schemaOf(t, row.decls))
