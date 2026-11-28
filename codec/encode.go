@@ -36,7 +36,22 @@ var ErrInvalidValue = errors.New("codec: Append: a value no valid document holds
 // element of the top-level element declaration name in schema, and returns
 // the extended slice; dst may be nil. Read name from the header comment of the
 // type codegen emits for that declaration, the header the "# Naming" section
-// of codegen's package doc describes. It writes each simple value in its
+// of codegen's package doc describes.
+//
+// The class of each error, by its item in the numbered list below:
+//
+//   - item 1: a plain error.
+//   - item 2: [ErrUndeclaredElement].
+//   - item 3: [ErrAbstractElement].
+//   - item 4: a [*DeclineError].
+//   - item 5: [ErrTypeMismatch].
+//   - item 6: [ErrInvalidValue].
+//   - item 7: a [*DeclineError].
+//   - item 8: item 3 of [Decode]'s doc's error, also [ErrInvalidValue].
+//   - item 9: item 4 of [Decode]'s doc's [*UndecidedError].
+//   - outside the items: a plain error, as the paragraphs after the list state.
+//
+// In the document it appends to dst, Append writes each simple value in its
 // canonical representation (Datatypes §2.3.1 dt-canonical-representation),
 // the form the Canonical of its governing mapping on backend
 // (value.GoverningMapping) renders, which for an xs:precisionDecimal zero,

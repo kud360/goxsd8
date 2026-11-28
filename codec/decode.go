@@ -47,6 +47,17 @@ var ErrAbstractElement = errors.New("codec: the top-level element declaration ha
 // package doc, "# Element declarations"; item 6), and returns it. A value is
 // returned exactly when the error is nil.
 //
+// The class of each error, by its item in the numbered list below:
+//
+//   - item 1: a plain error.
+//   - item 2: a source fault, an [*xsderr.Error].
+//   - item 3: the violations of a charged instance, [ViolationsOf].
+//   - item 4: an [*UndecidedError].
+//   - item 5: a [*DeclineError], or a plain error.
+//   - item 6: [ErrTypeMismatch].
+//   - item 7: a [*DeclineError].
+//   - item 8: a plain error, a fault of the backend.
+//
 // T is the caller's choice: nothing dispatches a document element to its
 // generated type, and item 6 below states which T match. A caller decoding
 // documents of several roots therefore reads the document element's expanded
