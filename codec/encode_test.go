@@ -78,8 +78,8 @@ func roundTrip[T any](t *testing.T, schema *xsd.Schema, name xsd.QName, v T, wan
 // constructValueConstraint, constructXsiAttribute,
 // constructQNameGovernedAttribute, constructLocallyTypedMatch,
 // constructInterleaveParticleChild, constructLocallyTypedOpenChild,
-// constructCapturedPrefix or, for an ·ENTITY value· held raw,
-// constructEntityType.
+// constructCapturedPrefix, constructTypeTable or, for an ·ENTITY value· held
+// raw, constructEntityType.
 func appendChecked[T any](t *testing.T, dst []byte, schema *xsd.Schema, backend value.Backend, name xsd.QName, v T, opts ...Option) ([]byte, error) {
 	t.Helper()
 	out, err := Append(dst, schema, backend, name, v, opts...)
@@ -87,7 +87,7 @@ func appendChecked[T any](t *testing.T, dst []byte, schema *xsd.Schema, backend 
 	if checked == nil {
 		class := staticClass(err)
 		static := class == "undeclared" || class == "abstract"
-		if static || err != nil && class != "plain" && class != "invalid" && class != "decline "+constructNoCanonical.name() && class != "decline "+constructQNameSpelling.name() && class != "decline "+constructValueConstraint.name() && class != "decline "+constructXsiAttribute.name() && class != "decline "+constructQNameGovernedAttribute.name() && class != "decline "+constructLocallyTypedMatch.name() && class != "decline "+constructInterleaveParticleChild.name() && class != "decline "+constructLocallyTypedOpenChild.name() && class != "decline "+constructCapturedPrefix.name() && class != "decline "+constructEntityType.name() {
+		if static || err != nil && class != "plain" && class != "invalid" && class != "decline "+constructNoCanonical.name() && class != "decline "+constructQNameSpelling.name() && class != "decline "+constructValueConstraint.name() && class != "decline "+constructXsiAttribute.name() && class != "decline "+constructQNameGovernedAttribute.name() && class != "decline "+constructLocallyTypedMatch.name() && class != "decline "+constructInterleaveParticleChild.name() && class != "decline "+constructLocallyTypedOpenChild.name() && class != "decline "+constructCapturedPrefix.name() && class != "decline "+constructEntityType.name() && class != "decline "+constructTypeTable.name() {
 			t.Errorf("CheckAppend = nil, but Append returned %v, %s", err, class)
 		}
 		return out, err
@@ -1249,6 +1249,9 @@ const absentAffiliationName = "an element declaration with an ·absent· member 
 // entityTypeName is constructEntityType's name.
 const entityTypeName = "a simple type derived from xs:ENTITY"
 
+// abstractTypeName is constructAbstractType's name.
+const abstractTypeName = "an element declaration whose {type definition}, or a {type table} slot's, is a complex type with {abstract} true"
+
 // TestAppendDeclines pins item 4 of Append's doc for each construct of the
 // closed set it declines: each row's two declarations, r and q, decline with
 // equal Constructs, named by the opening of the decline's text, and rows of
@@ -1287,7 +1290,7 @@ func TestAppendDeclines(t *testing.T) {
 	}{
 		{"nillable", "an element declaration with {nillable} true", `<xs:element name="%[1]s" type="xs:string" nillable="true"/>`},
 		{"nillable particle", "an element declaration with {nillable} true", sequence(`<xs:element name="a" type="xs:string" nillable="true"/>`)},
-		{"type table", "an element declaration with a {type table}", `<xs:element name="%[1]s" type="xs:string"><xs:alternative test="@a" type="xs:token"/></xs:element>`},
+		{"type table abstract slot", abstractTypeName, `<xs:complexType name="ab%[1]s" abstract="true"/><xs:element name="%[1]s"><xs:alternative test="@a" type="s:ab%[1]s"/></xs:element>`},
 		{"identity constraint", identityName, `<xs:element name="%[1]s"><xs:complexType><xs:sequence>` + a + `</xs:sequence></xs:complexType><xs:key name="k%[1]s"><xs:selector xpath="s:a[1]"/><xs:field xpath="."/></xs:key></xs:element>`},
 		{"identity constraint field", identityName, `<xs:element name="%[1]s"><xs:complexType><xs:sequence>` + a + `</xs:sequence></xs:complexType><xs:unique name="k%[1]s"><xs:selector xpath="s:a"/><xs:field xpath="."/><xs:field xpath="s:a[1]"/></xs:unique></xs:element>`},
 		{"keyref referenced key", identityName, `<xs:element name="h%[1]s"><xs:complexType><xs:sequence>` + a + `</xs:sequence></xs:complexType><xs:key name="hk%[1]s"><xs:selector xpath="s:a[1]"/><xs:field xpath="."/></xs:key></xs:element>` +
@@ -1295,14 +1298,24 @@ func TestAppendDeclines(t *testing.T) {
 		{"absent affiliation", absentAffiliationName, `<xs:element name="%[1]s" type="xs:string" substitutionGroup="s:nope%[1]s"/>`},
 		{"ref absent affiliation", absentAffiliationName, `<xs:element name="x%[1]s" type="xs:string" substitutionGroup="s:nope%[1]s"/>` +
 			sequence(`<xs:element ref="s:x%[1]s"/>`)},
-		{"member type table", "an element declaration with a {type table}", `<xs:element name="x%[1]s" type="xs:string"/><xs:element name="m%[1]s" type="xs:string" substitutionGroup="s:x%[1]s"><xs:alternative test="@a" type="xs:token"/></xs:element>` +
+		{"member type table abstract slot", abstractTypeName, `<xs:complexType name="ab%[1]s" abstract="true"/><xs:element name="x%[1]s"/><xs:element name="m%[1]s" substitutionGroup="s:x%[1]s"><xs:alternative test="@a" type="s:ab%[1]s"/></xs:element>` +
 			sequence(`<xs:element ref="s:x%[1]s"/>`)},
 		{"member absent affiliation", absentAffiliationName, `<xs:element name="x%[1]s" type="xs:string"/><xs:element name="m%[1]s" type="xs:string" substitutionGroup="s:x%[1]s s:nope%[1]s"/>` +
 			sequence(`<xs:element ref="s:x%[1]s"/>`)},
 		{"nillable anyType", "an element declaration with {nillable} true", `<xs:element name="%[1]s" nillable="true"/>`},
+		// {nillable} declines ahead of the {type table}'s slots, as Decode's
+		// governingTypes declines it: this row's abstract slot would decline
+		// by constructAbstractType were the slots examined first.
+		{"nillable type table", "an element declaration with {nillable} true", `<xs:complexType name="ab%[1]s" abstract="true"/><xs:element name="%[1]s" nillable="true"><xs:alternative test="@a" type="s:ab%[1]s"/></xs:element>`},
+		// Each named branch type is examined under its own key (branchKey):
+		// keyed as one governing type is (nestedKey), elementKey for both, the
+		// second branch, whose e is an xs:ENTITY, would go unexamined.
+		{"type table second branch", entityTypeName, `<xs:complexType name="t1%[1]s"><xs:sequence>` + a + `</xs:sequence><xs:attribute name="k" type="xs:string"/></xs:complexType>` +
+			`<xs:complexType name="t2%[1]s"><xs:complexContent><xs:extension base="s:t1%[1]s"><xs:sequence><xs:element name="e" type="xs:ENTITY"/></xs:sequence></xs:extension></xs:complexContent></xs:complexType>` +
+			`<xs:element name="%[1]s" type="s:t1%[1]s"><xs:alternative test="@k" type="s:t2%[1]s"/></xs:element>`},
 		{"anyType particle identity constraint", identityName, sequence(`<xs:element name="a"><xs:unique name="u%[1]s"><xs:selector xpath="."/><xs:field xpath="..[1]"/></xs:unique></xs:element>`)},
-		{"abstract type", "an element declaration whose {type definition} is a complex type with {abstract} true", abstractType},
-		{"abstract particle type", "an element declaration whose {type definition} is a complex type with {abstract} true", `<xs:complexType name="ab%[1]s" abstract="true"/>` + sequence(`<xs:element name="a" type="s:ab%[1]s"/>`)},
+		{"abstract type", abstractTypeName, abstractType},
+		{"abstract particle type", abstractTypeName, `<xs:complexType name="ab%[1]s" abstract="true"/>` + sequence(`<xs:element name="a" type="s:ab%[1]s"/>`)},
 		{"simple content", entityTypeName, complexOf(`<xs:simpleContent><xs:extension base="xs:ENTITY"/></xs:simpleContent>`)},
 		{"simple content before attribute uses", entityTypeName, complexOf(`<xs:simpleContent><xs:extension base="xs:ENTITY"><xs:attribute name="a" type="xs:string" form="qualified"/></xs:extension></xs:simpleContent>`)},
 		{"open content untracked", "a content model the content matcher does not track", complexOf(`<xs:openContent><xs:any namespace="##other" processContents="lax"/></xs:openContent><xs:sequence maxOccurs="21845"><xs:element name="a" type="xs:string" maxOccurs="2"/></xs:sequence>`)},
@@ -1319,7 +1332,7 @@ func TestAppendDeclines(t *testing.T) {
 		{"nested flattened particle in a nested occurrence field's item", "a nested model group particle", sequence(a + `<xs:sequence maxOccurs="2"><xs:element name="b" type="xs:string"/>` +
 			`<xs:sequence minOccurs="0" maxOccurs="unbounded"><xs:element name="c" type="xs:string" minOccurs="0"/></xs:sequence></xs:sequence>`)},
 		{"nested flattened untracked", "a content model the content matcher does not track", sequence(a + `<xs:sequence maxOccurs="21845"><xs:element name="c" type="xs:string" maxOccurs="2"/></xs:sequence>`)},
-		{"ref type table", "an element declaration with a {type table}", `<xs:element name="x%[1]s" type="xs:string"><xs:alternative test="@a" type="xs:token"/></xs:element>` + sequence(`<xs:element ref="s:x%[1]s"/>`)},
+		{"ref type table abstract slot", abstractTypeName, `<xs:complexType name="ab%[1]s" abstract="true"/><xs:element name="x%[1]s"><xs:alternative test="@a" type="s:ab%[1]s"/></xs:element>` + sequence(`<xs:element ref="s:x%[1]s"/>`)},
 		{"ref simple content", entityTypeName, `<xs:element name="x%[1]s"><xs:complexType><xs:simpleContent><xs:extension base="xs:ENTITY"/></xs:simpleContent></xs:complexType></xs:element>` +
 			sequence(`<xs:element ref="s:x%[1]s"/>`)},
 		{"complex particle", "an element declaration with {nillable} true", sequence(`<xs:element name="a"><xs:complexType><xs:sequence><xs:element name="n" type="xs:string" nillable="true"/></xs:sequence></xs:complexType></xs:element>`)},
@@ -1350,7 +1363,7 @@ func TestAppendDeclines(t *testing.T) {
 		{"boolean assertions", "a simple type with an assertions facet", simpleOf(`<xs:restriction base="xs:boolean"><xs:assertion test="true()"/></xs:restriction>`)},
 		{"date assertions", "a simple type with an assertions facet", simpleOf(`<xs:restriction base="xs:date"><xs:assertion test="true()"/></xs:restriction>`)},
 		{"inherited assertions", "a simple type with an assertions facet", `<xs:simpleType name="asserted%[1]s"><xs:restriction base="xs:string"><xs:assertion test="true()"/></xs:restriction></xs:simpleType>` + simpleOf(`<xs:restriction base="s:asserted%[1]s"><xs:maxLength value="3"/></xs:restriction>`)},
-		{"particle type table", "an element declaration with a {type table}", sequence(`<xs:element name="a" type="xs:string"><xs:alternative test="@b" type="xs:token"/></xs:element>`)},
+		{"particle type table abstract default slot", abstractTypeName, `<xs:complexType name="ab%[1]s" abstract="true"/>` + sequence(`<xs:element name="a"><xs:alternative test="@b" type="xs:anyType"/><xs:alternative type="s:ab%[1]s"/></xs:element>`)},
 		{"particle identity constraint", identityName, sequence(`<xs:element name="a" type="xs:string"><xs:unique name="u%[1]s"><xs:selector xpath="."/><xs:field xpath="..[1]"/></xs:unique></xs:element>`)},
 	}
 	appendOf := map[string]func(t *testing.T, dst []byte, schema *xsd.Schema, name xsd.QName) ([]byte, error){
@@ -1371,6 +1384,11 @@ func TestAppendDeclines(t *testing.T) {
 	subjectOf := map[string]string{
 		"nested occurrence field in a nested occurrence field's item":   nestedInItem,
 		"nested flattened particle in a nested occurrence field's item": nestedInItem,
+		"type table abstract slot":                                      "the {type table} alternative 1 of element {urn:s}",
+		"member type table abstract slot":                               "the {type table} alternative 1 of element {urn:s}m",
+		"ref type table abstract slot":                                  "the {type table} alternative 1 of element {urn:s}x",
+		"particle type table abstract default slot":                     "the {default type definition} of element {urn:s}a declared at ",
+		"abstract type": "the {type definition} of element {urn:s}",
 	}
 	seen := map[string]Construct{}
 	for _, row := range rows {

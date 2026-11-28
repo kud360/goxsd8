@@ -2287,13 +2287,19 @@ func bindTyped(run *bindRun, decl xsd.ElementDeclaration, td xsd.TypeDefinition)
 }
 
 // typeSubject names td, the {type definition} of decl, as a decline of one
-// of td's constructs labels it: by decl and its schema Loc, then td's, or
-// td's QName where located(td) does not hold.
+// of td's constructs labels it (slotSubject at goshape.DeclaredSlot).
 func typeSubject(decl xsd.ElementDeclaration, td xsd.TypeDefinition) string {
+	return slotSubject(decl, goshape.DeclaredSlot{}, td)
+}
+
+// slotSubject names td, the type decl's slot holds, as a decline labels it:
+// by the slot's Name, decl and its schema Loc, then td's, or td's QName where
+// located(td) does not hold.
+func slotSubject(decl xsd.ElementDeclaration, slot goshape.Slot, td xsd.TypeDefinition) string {
 	if !located(td) {
-		return fmt.Sprintf("the {type definition} of %s, the type %s", declSubject(decl), td.Name().Display())
+		return fmt.Sprintf("the %s of %s, the type %s", slot.Name(), declSubject(decl), td.Name().Display())
 	}
-	return fmt.Sprintf("the {type definition} of %s%s", declSubject(decl), definedAt(", a type ", td))
+	return fmt.Sprintf("the %s of %s%s", slot.Name(), declSubject(decl), definedAt(", a type ", td))
 }
 
 // bindRun is one item-5 bind of a document element declaration: p, and the

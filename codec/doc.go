@@ -316,15 +316,22 @@
 // bullet states, into the Go type the bullet names where it names one:
 //
 //   - A top-level element declaration, as the document element's, neither
-//     abstract nor nillable, with no {type table}, with or without a value
-//     constraint, default or fixed, its value written as it is held, which
-//     items 6 and 7 of Append's doc hold to that constraint, each of whose
-//     {substitution group affiliations} names a top-level element
-//     declaration of the schema, each of whose {identity-constraint
-//     definitions} has a {selector} and {fields} icpath compiles, and for a
-//     keyref a {referenced key} whose own it compiles, whose {type
-//     definition} is a simple type that encodes, a complex type that
-//     encodes, or xs:anyType itself.
+//     abstract nor nillable, with or without a value constraint, default or
+//     fixed, its value written as it is held, which items 6 and 7 of Append's
+//     doc hold to that constraint, each of whose {substitution group
+//     affiliations} names a top-level element declaration of the schema, each
+//     of whose {identity-constraint definitions} has a {selector} and {fields}
+//     icpath compiles, and for a keyref a {referenced key} whose own it
+//     compiles, none of whose slots, its {type definition} or, with a {type
+//     table}, each {type table} slot, holds a complex type with {abstract}
+//     true, and each of whose governing types (codegen's package doc, "#
+//     Element declarations") is a simple type that encodes, a complex type
+//     that encodes, or xs:anyType itself. With a {type table} of two or more
+//     governing types, or none, it encodes into codegen's sealed interface over
+//     them, whose branches [WithBranches] supplies, the branch a value holds
+//     written as an element of that branch's governing type, which item 7 of
+//     Append's doc holds to the type the table selects over the attributes it
+//     writes; with one, into that type's Go type, held so too.
 //   - A complex type with {abstract} false, no member of its {assertions},
 //     its own or inherited, whose {test} names fn:in-scope-prefixes,
 //     fn:namespace-uri-for-prefix or fn:resolve-QName, or the namespace axis
