@@ -30,8 +30,9 @@
 //
 // Encodes today, under the conditions "# What encodes" states: top-level
 // element declarations as document elements; complex types; element and
-// wildcard particles; open content; xs:anyType; attribute uses and attribute
-// wildcards; the special types; and atomic, list and union simple types.
+// wildcard particles; open content; xs:anyType; nillable declarations;
+// attribute uses and attribute wildcards; the special types; and atomic, list
+// and union simple types.
 //
 // Declines today, with a [*DeclineError], among others: untracked content
 // models; indistinguishable branches; some nillable declarations; xsi:type,
@@ -461,8 +462,10 @@
 // Append encodes each construct the list names under the conditions its
 // bullet states, into the Go type the bullet names where it names one:
 //
-//   - A top-level element declaration, as the document element's, neither
-//     abstract nor nillable, with or without a value constraint, default or
+//   - A top-level element declaration, as the document element's, not
+//     abstract, nillable or not, a nillable one where "# What decodes" admits
+//     it and its one governing type has no attribute use of xsi:nil whose
+//     {required} is true, with or without a value constraint, default or
 //     fixed, its value written as it is held, which items 6 and 7 of Append's
 //     doc hold to that constraint, each of whose {substitution group
 //     affiliations} names a top-level element declaration of the schema, each
@@ -477,7 +480,15 @@
 //     them, whose branches [WithBranches] supplies, the branch a value holds
 //     written as an element of that branch's governing type, which item 7 of
 //     Append's doc holds to the type the table selects over the attributes it
-//     writes; with one, into that type's Go type, held so too.
+//     writes; with one, into that type's Go type, held so too, or, where
+//     codegen wraps a nillable declaration (codegen's package doc, "# Element
+//     declarations"), into codegen's Nillable over it, whose arms
+//     [WithBranches] supplies, the arm a value holds told apart by its Go
+//     type: the Content arm written as that type's value is, and the Nilled
+//     arm as an element carrying its Attributes as that type's attribute
+//     fields are written, then xsi:nil="true", and no character or element
+//     child, its {type table}'s selection read over those attributes, xsi:nil
+//     among them.
 //   - A complex type with {abstract} false, no member of its {assertions},
 //     its own or inherited, whose {test} names fn:in-scope-prefixes,
 //     fn:namespace-uri-for-prefix or fn:resolve-QName, or the namespace axis
@@ -518,13 +529,14 @@
 //     names or, where codegen's package doc "# Substitution groups" gives its
 //     field a sealed interface, each declaration that interface has a branch
 //     for, each such declaration having the same restrictions as the document
-//     element's and a simple type or a complex type that encodes, or
-//     xs:anyType itself, into the field item 6 of [Decode]'s doc holds to it,
-//     the branch a value of that interface holds written as an element of its
-//     own declaration's expanded name; or, for a choice's alternative, into
-//     its branch's field, and for a basic particle a flattened sequence or
-//     choice reaches, into the one field of its branch, each item of the
-//     slice one element, as "# What decodes" states.
+//     element's, but that a nillable one that interface has a branch for
+//     encodes only of type xs:anyType itself, as "# What decodes" states, and
+//     a simple type or a complex type that encodes, or xs:anyType itself, into the
+//     field item 6 of [Decode]'s doc holds to it, the branch a value of that
+//     interface holds written as an element of its own declaration's expanded name;
+//     or, for a choice's alternative, into its branch's field, and for a basic
+//     particle a flattened sequence or choice reaches, into the one field of its
+//     branch, each item of the slice one element, as "# What decodes" states.
 //   - A wildcard particle of that sequence, choice or all group or of a model group
 //     nested in it, at any depth, or one a flattened sequence or choice
 //     reaches, of any {process contents}, with {max occurs} at least 1, into
@@ -612,7 +624,8 @@
 // space between tags but what a Text or a Tail holds. It binds the name of every element but
 // one whose content it writes from an AnyType, as below, by default declarations alone, never
 // prefixing one, and writes an attribute in the XSI namespace only where item 7 of Append's
-// doc or the attribute-use bullet above admits one: the document element carries xmlns="ns"
+// doc or the attribute-use bullet above admits one, or xsi:nil="true" on a nilled element, as
+// the document-element bullet states: the document element carries xmlns="ns"
 // for its non-absent namespace ns, and nothing where it is absent, and every other element
 // carries xmlns="ns", or xmlns="" for an absent namespace, exactly where its namespace differs
 // from its parent's. An xs:QName or xs:NOTATION value, written in an attribute or as content
@@ -626,37 +639,38 @@
 // each attribute an {attribute wildcard}'s field holds, in held order, nothing in the field's
 // resolved, but for the ones item 7 of Append's doc declines, each of both of absent namespace
 // unprefixed, in the XML namespace xml:Local, and otherwise pN:Local, pN chosen and declared
-// as for an xs:QName value, though its namespace be that element's own. An element whose
-// content Append writes from an AnyType, one a wildcard's or an {open content}'s field holds,
-// of any {process contents}, a child such an element holds at any depth, and an element of
-// type xs:anyType itself, the document element among them, is written raw, nothing in it
-// resolved by Append, but for the items items 6 and 7 of Append's doc refuse and decline in
-// it, and what a strict or lax match, a strict or lax {open content}'s child or an xs:anyType
-// element holds assessed with the document, as Append's doc states, under the bindings its
-// AnyType's Namespaces holds: the default namespace in scope there is exactly the Space of its
-// "" entry, none where it holds none, declared xmlns="S", or xmlns="" for none, where it
-// differs from its parent's as written; each prefixed entry is in scope bound to its Space,
-// declared xmlns:p="S", in Namespaces order, wherever p is not bound to S at its parent as
-// written; and item 6 of Append's doc refuses a Namespaces Decode never returns. Its name is
-// spelled unprefixed where its namespace is that default, xml:Local in the XML namespace, and
-// otherwise p:Local under the first prefix in Namespaces order bound to its namespace, or else
-// the one an open start tag binds to it, or else the first of p1, p2 and so on that neither an
-// open start tag nor its Namespaces binds, declared on its start tag after them. Then come its
-// attributes in held order, each of absent namespace unprefixed, in the XML namespace
-// xml:Local, and otherwise under a prefix chosen as its name's is, past its unprefixed arm;
-// then its Text, then each of its Children, written so, followed by its Tail. So Decode of the
-// document holds, at each such element, a Namespaces holding every prefixed entry of the one
-// Append was given, bound to the same Space, and its "" entry exactly, perhaps beside more
-// prefixed ones. A nil pointer field writes nothing, and so does a nil interface field where
-// nil means absent (codegen's package doc, "# Particles", "# Attributes"), a particle with
-// {max occurs} above 1 writes one element per item of its slice, a flattened sequence or
-// choice one per item of its slice, in order, its branch's basic particle's, whatever the
-// particle's occurrence, an occurrence field writes each item it holds, in order, as its model
-// group's particles in order, an all group's, spliced or an occurrence field's item, written
-// as its element particles in order and then its wildcard particles in order, which keeps the
-// attribution codegen's package doc "# Particles" states for an all group's wildcard field, a
-// choice's branch writes its alternative's elements, the empty match, the nil interface of a
-// present element, writes no child element, and an element with no content is written as an
+// as for an xs:QName value, though its namespace be that element's own; a nilled element's
+// xsi:nil follows them all, spelled so too. An element whose content Append writes from an
+// AnyType, one a wildcard's or an {open content}'s field holds, of any {process contents}, a
+// child such an element holds at any depth, and an element of type xs:anyType itself, the
+// document element among them, is written raw, nothing in it resolved by Append, but for the
+// items items 6 and 7 of Append's doc refuse and decline in it, and what a strict or lax
+// match, a strict or lax {open content}'s child or an xs:anyType element holds assessed with
+// the document, as Append's doc states, under the bindings its AnyType's Namespaces holds: the
+// default namespace in scope there is exactly the Space of its "" entry, none where it holds
+// none, declared xmlns="S", or xmlns="" for none, where it differs from its parent's as
+// written; each prefixed entry is in scope bound to its Space, declared xmlns:p="S", in
+// Namespaces order, wherever p is not bound to S at its parent as written; and item 6 of
+// Append's doc refuses a Namespaces Decode never returns. Its name is spelled unprefixed where
+// its namespace is that default, xml:Local in the XML namespace, and otherwise p:Local under
+// the first prefix in Namespaces order bound to its namespace, or else the one an open start
+// tag binds to it, or else the first of p1, p2 and so on that neither an open start tag nor
+// its Namespaces binds, declared on its start tag after them. Then come its attributes in held
+// order, each of absent namespace unprefixed, in the XML namespace xml:Local, and otherwise
+// under a prefix chosen as its name's is, past its unprefixed arm; then its Text, then each of
+// its Children, written so, followed by its Tail. So Decode of the document holds, at each
+// such element, a Namespaces holding every prefixed entry of the one Append was given, bound
+// to the same Space, and its "" entry exactly, perhaps beside more prefixed ones. A nil
+// pointer field writes nothing, and so does a nil interface field where nil means absent
+// (codegen's package doc, "# Particles", "# Attributes"), a particle with {max occurs} above 1
+// writes one element per item of its slice, a flattened sequence or choice one per item of its
+// slice, in order, its branch's basic particle's, whatever the particle's occurrence, an
+// occurrence field writes each item it holds, in order, as its model group's particles in
+// order, an all group's, spliced or an occurrence field's item, written as its element
+// particles in order and then its wildcard particles in order, which keeps the attribution
+// codegen's package doc "# Particles" states for an all group's wildcard field, a choice's
+// branch writes its alternative's elements, the empty match, the nil interface of a present
+// element, writes no child element, and an element with no content is written as an
 // empty-element tag, <x/>. Mixed content is written as its Text, after the attributes and
 // before the first child element, then each child element followed by the Tail of the
 // MixedChild or AnyChild holding it, each as given, never a {value constraint}'s {lexical

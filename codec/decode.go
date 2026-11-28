@@ -5228,23 +5228,30 @@ func bindSimpleRoot(p *pipeline, decl xsd.ElementDeclaration, st *xsd.SimpleType
 // decl, or T for a document element, holds codegen's Nillable over decl's one governing
 // type: decl is nillable (goshape.Nillable) and that type is not xs:anyType itself, whose
 // AnyType holds xsi:nil among its raw attributes. Or it returns the first decline item 5
-// of Decode's doc states for decl's own properties, naming decl: a nillable decl, unless
-// exactly one governing type remains, no slot holds xs:error, which a ·nilled· instance
-// is valid against (cvc-type clause 3.1.3 "If E is not nilled") and which codegen's sum
-// wraps branch by branch, and, where wraps is false, a site that holds no Nillable, a
-// substitution group's branch field, that type is xs:anyType itself,
-// goshape.GoverningTypes' error declining so too. Of a declaration that is not nillable,
-// that error is a plain error.
+// of Decode's doc states for decl's own properties, naming decl: constructNillable where
+// nillableDeclines answers true. Of a declaration that is not nillable,
+// goshape.GoverningTypes' error is a plain error.
 func governingTypes(schema *xsd.Schema, decl xsd.ElementDeclaration, wraps bool) (types []goshape.GoverningType, wrapped bool, err error) {
 	types, errorSlot, err := goshape.GoverningTypes(schema, decl)
-	nillable := goshape.Nillable(decl)
-	if nillable && (err != nil || len(types) != 1 || errorSlot || !wraps && !goshape.AnyTypeItself(types[0].Type())) {
+	if nillableDeclines(decl, wraps, types, errorSlot, err) {
 		return nil, false, decline(constructNillable, declSubject(decl))
 	}
+	nillable := goshape.Nillable(decl)
 	if err != nil {
 		return nil, false, fmt.Errorf("codec: %w", err)
 	}
 	return types, nillable && !goshape.AnyTypeItself(types[0].Type()), nil
+}
+
+// nillableDeclines reports whether Decode declines decl under constructNillable,
+// as item 5 of Decode's doc states the domain, types, errorSlot and err being
+// goshape.GoverningTypes' answers for decl and wraps governingTypes', false at a
+// site that holds no Nillable, a substitution group's branch field. It is the one
+// test of that domain: Append's item 4 pass declines by it too
+// (encodeWalk.declEncodes), so that Append writes no nillable declaration Decode
+// does not read.
+func nillableDeclines(decl xsd.ElementDeclaration, wraps bool, types []goshape.GoverningType, errorSlot bool, err error) bool {
+	return goshape.Nillable(decl) && (err != nil || len(types) != 1 || errorSlot || !wraps && !goshape.AnyTypeItself(types[0].Type()))
 }
 
 // contentGroup returns the model group of content, a complex type's
