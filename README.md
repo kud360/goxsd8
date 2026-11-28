@@ -294,7 +294,7 @@ same three values. `parser.RootAt(location)` names a document the caller
 vouches for, so failing to read it is an error, and its location is resolved
 by the `WithResolver` resolver — under the default `loader.Dir(".")` even an
 absolute path is joined beneath the working directory (`go doc
-github.com/kud360/goxsd8/parser RootAt`); `parser.HintAt(namespace,
+github.com/kud360/goxsd8/parser ParseReport`); `parser.HintAt(namespace,
 location)` names a schema location hint whose document may legally be
 absent, and is then skipped and listed by
 `AssemblyReport.UnfollowedRoots()`. `Parse` and `ParseReport` are
