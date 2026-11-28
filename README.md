@@ -484,15 +484,16 @@ github.com/kud360/goxsd8/codec` places the Check calls; `loader.FS` over an
 `embed.FS`, passed through `parser.WithResolver`, is one way to ship the
 `.xsd` documents in the binary (`go doc github.com/kud360/goxsd8/loader`
 lists it as "any fs.FS (embed, testing)").
-Once `Generate` has written `gen/order`, a program in the same module with
-`schema` and `backend` as above decodes `order.xml` into it, importing
-`github.com/kud360/goxsd8/codec`, `github.com/kud360/goxsd8/xsderr` and the
-generated package, whose import path is the one `Target.Dir`'s doc derives
-for the `Dir` that `Generate` was given, so
-`github.com/kud360/goxsd8/testdata/readme/gen/order` for the program run in
-`testdata/readme/`. That has to be a second program, or a build after
-`Generate`, `goxsd8 gen` or `go generate` has written the package: a program
-importing `gen/order` does not compile until the package exists.
+A program importing `gen/order` does not compile until `Generate`, `goxsd8 gen`
+or `go generate` has written the package, so the program that decodes is not
+the one that runs `Generate`: it is a second program, or a build made after
+the package is written. Once `Generate` has written `gen/order`, a program in
+the same module with `schema` and `backend` as above decodes `order.xml` into
+it, importing `github.com/kud360/goxsd8/codec`,
+`github.com/kud360/goxsd8/xsderr` and the generated package, whose import path
+is the one `Target.Dir`'s doc derives for the `Dir` that `Generate` was given,
+so `github.com/kud360/goxsd8/testdata/readme/gen/order` for the program run in
+`testdata/readme/`:
 
 ```go
 data, err := os.ReadFile("order.xml")
