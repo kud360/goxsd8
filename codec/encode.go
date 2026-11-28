@@ -196,43 +196,46 @@ var ErrInvalidValue = errors.New("codec: Append: a value no valid document holds
 //     any depth, whatever its value, since validate reads it there, under cvc-elt clause 3 or the built-in nil declaration's cvc-attribute clause 3,
 //     as validate's package doc, "# Contract", states, but on an element a skip wildcard particle's field or a skip {open content}'s field holds or
 //     at any depth below one, which is not assessed (§3.10.4.1 key-skipped, §3.3.4.6 cvc-assess-elt clause 2); or xsi:type among the attributes of
-//     an element of type xs:anyType itself, whatever its value, since Decode declines an element carrying it there; or in a strict or lax
-//     {attribute wildcard}'s field an attribute whose governing top-level attribute declaration of schema, the one its expanded name resolves to
-//     (§3.2.4.2 key-governing-ad clause 3), has a {type definition} that is an atomic type whose primitive is xs:QName or xs:NOTATION, a list whose
-//     {item type definition} is one or a union with one among its basic members, whatever its value, since such a value means what the
-//     namespace bindings in scope where it is written make it mean (Datatypes §3.3.18, §3.3.19) and the field holds none beside it.
-//     GAP(codec): an xs:QName- or xs:NOTATION-dependent attribute in an {attribute wildcard} field, RULED permanent by #4161. Or an element a strict
-//     or lax wildcard particle's field holds whose expanded name no top-level element declaration of schema names and that has a ·locally declared
-//     type· in the complex type whose content it is written into, an element declaration of its expanded name that type's content model, or that of
-//     a type on its {base type definition} chain, contains, whatever its content and whether or not it holds xsi:type, since that type governs it
-//     (§3.3.4.6 key-governing-type-elem clauses 6 and 7, §3.4.6.4 key-ldt-elem); or an element the open-content field of a type whose {open content}
-//     has a strict or lax {wildcard} holds that has such a ·locally declared type· in that type, whether or not a top-level element declaration of
-//     schema names it, since that type governs it ahead of a declaration (key-governing-ed clause 4.3); or an element the open-content field of a
-//     type whose {open content} has {mode} interleave holds that a particle of its content model takes where Append writes it, after every child of
-//     the {particle}, whatever else rejects it, since §3.4.4.3 cvc-complex-content clause 3.3 decides each child by the {particle}'s children before
-//     it and Append writes no placement but that one; or a token, split at XML white space, of a Text, a Tail or an attribute's Value held in an
-//     AnyType, spelled NCName:NCName, whose prefix, other than xml, no entry of that AnyType's Namespaces binds but a binding Append declares, a
-//     fresh pN or one an ancestor's, puts in scope where it is written, so that the token would resolve where the value says nothing does, in a
-//     region holding every place it may be typed, and more: the Text, Tails and attribute Values of an element a top-level element declaration or an
-//     xsi:type it holds governs, in a strict or lax wildcard particle's match, a child of a strict or lax {open content} or an xs:anyType element's
-//     content, or at any depth below one, every element of a strict wildcard particle's match among them, the Value of an attribute there a
-//     top-level attribute declaration governs, and every xsi:type's in any such hold, a skip one's among them (Datatypes §3.3.18); or an ·ENTITY
-//     value· in content a document element's walk reaching a strict or lax wildcard particle, a strict or lax {open content} or an xs:anyType
-//     element holds, or in an attribute a strict or lax {attribute wildcard}'s field holds, which the assessment of item 8 finds no ·declared entity
-//     name· (Structures §3.16.4 cvc-simple-type clause 3), the document Append writes having no DTD to declare one, its detail that violation's
-//     text, ahead of item 8; or a value item 6 holds to a fixed {value constraint} whose comparison value.ConstraintMatches leaves undecided, such
-//     as a NOTATION {lexical form} naming no declared notation, and the empty text of an element of simple type or of simple content whose default's
-//     {value} it is not, or whose comparison is undecided, since Append writes it as an empty element that takes on the default (cvc-elt clause
-//     5.1), though another lexical, such as a single space for an xs:token, may hold the value. The values with a lexical other than the one Append
-//     writes, the ones whose rejection by a pattern facet is this item, a union's own pattern facet among them, read once the variant's member is
-//     its text's ·active basic member·, are: a union's value whose member value is one; every xs:boolean, xs:decimal-primitive, xs:dateTime,
-//     xs:dateTimeStamp, xs:time and xs:duration-primitive value; every xs:float, xs:double and xs:precisionDecimal value other than NaN and -INF; an
-//     xs:date, xs:gYearMonth or xs:gYear value whose timezoneOffset is 0, spelled Z, +00:00 or -00:00 (§D.2.2's note), or whose year is 0, spelled
-//     0000 or -0000; an xs:gMonthDay, xs:gDay or xs:gMonth value whose timezoneOffset is 0; an xs:hexBinary value one of whose octets holds a hex
-//     digit A to F (§3.3.15.2); every xs:base64Binary value but the empty one (§3.3.16.2); an xs:QName or xs:NOTATION value whose namespace name is
-//     not absent; and no xs:string- or xs:anyURI-primitive value, each being its own whiteSpace-normalized form. NaN and -INF, of xs:float,
-//     xs:double and xs:precisionDecimal alike, are written NaN and -INF, their only lexicals (§3.3.4.2, §3.3.5.2, precisionDecimal §3.2), so a
-//     pattern facet of their own simple type that rejects one of them is item 6, not this item.
+//     an element of type xs:anyType itself, whatever its value, since Decode declines an element carrying it there; or in a strict or lax {attribute
+//     wildcard}'s field an attribute whose governing top-level attribute declaration of schema, the one its expanded name resolves to (§3.2.4.2
+//     key-governing-ad clause 3), has a {type definition} that is an atomic type whose primitive is xs:QName or xs:NOTATION, a list whose {item type
+//     definition} is one or a union with one among its basic members, whatever its value, since such a value means what the namespace bindings in scope where
+//     it is written make it mean (Datatypes §3.3.18, §3.3.19) and the field holds none beside it. GAP(codec): an xs:QName- or xs:NOTATION-dependent attribute
+//     in an {attribute wildcard} field, RULED permanent by #4161. Or an element a strict or lax wildcard particle's field holds whose expanded name no
+//     top-level element declaration of schema names and that has a ·locally declared type· in the complex type whose content it is written into, an element
+//     declaration of its expanded name that type's content model, or that of a type on its {base type definition} chain, contains, whatever its content and
+//     whether or not it holds xsi:type, since that type governs it (§3.3.4.6 key-governing-type-elem clauses 6 and 7, §3.4.6.4 key-ldt-elem); or an element
+//     the open-content field of a type whose {open content} has a strict or lax {wildcard} holds that has such a ·locally declared type· in that type,
+//     whether or not a top-level element declaration of schema names it, since that type governs it ahead of a declaration (key-governing-ed clause 4.3); or
+//     an element the open-content field of a type whose {open content} has {mode} interleave holds that a particle of its content model takes where Append
+//     writes it, after every child of the {particle}, whatever else rejects it, since §3.4.4.3 cvc-complex-content clause 3.3 decides each child by the
+//     {particle}'s children before it and Append writes no placement but that one; or a token, split at XML white space, of a Text, a Tail or an attribute's
+//     Value held in an AnyType, spelled NCName:NCName, whose prefix, other than xml, no entry of that AnyType's Namespaces binds but a binding Append
+//     declares, a fresh pN or one an ancestor's, puts in scope where it is written, so that the token would resolve where the value says nothing does, in a
+//     region holding every place it may be typed, and more: the Text, Tails and attribute Values of an element a top-level element declaration or an xsi:type
+//     it holds governs, in a strict or lax wildcard particle's match, a child of a strict or lax {open content} or an xs:anyType element's content, or at any
+//     depth below one, every element of a strict wildcard particle's match among them, the Value of an attribute there a top-level attribute declaration
+//     governs, and every xsi:type's in any such hold, a skip one's among them (Datatypes §3.3.18); or an ·ENTITY value· in content a document element's walk
+//     reaching a strict or lax wildcard particle, a strict or lax {open content} or an xs:anyType element holds, or in an attribute a strict or lax
+//     {attribute wildcard}'s field holds, which the assessment of item 8 finds no ·declared entity name· (Structures §3.16.4 cvc-simple-type clause 3), the
+//     document Append writes having no DTD to declare one, its detail that violation's text, ahead of item 8; or a value item 6 holds to a fixed {value
+//     constraint} whose comparison value.ConstraintMatches leaves undecided, such as a NOTATION {lexical form} naming no declared notation, and the empty
+//     text of an element of simple type or of simple content whose default's {value} it is not, or whose comparison is undecided, since Append writes it as
+//     an empty element that takes on the default (cvc-elt clause 5.1), though another lexical, such as a single space for an xs:token, may hold the value; or
+//     a value written as an element whose declaration has a {type table}, a branch of the sealed interface over its governing types (codegen's package doc,
+//     "# Element declarations") or its one governing type, whose table, over the attributes Append writes on that element and its [inherited attributes],
+//     composed as Decode composes them (validate.Validator.HandedDown), selects a type other than the one the value is written as, xs:error among them, or
+//     leaves the selection undecided, a {test} package xpath does not evaluate (Structures §3.3.4.1 key-cta-select, §3.12.4 key-cta-ta-select), whatever else
+//     rejects it, since a {test} reads the attributes as written, so that a document holding the value under another spelling, an attribute Decode supplies
+//     from a default that Append writes among them, may select the type its branch holds. The values with a lexical other than the one Append writes, the
+//     ones whose rejection by a pattern facet is this item, a union's own pattern facet among them, read once the variant's member is its text's ·active
+//     basic member·, are: a union's value whose member value is one; every xs:boolean, xs:decimal-primitive, xs:dateTime, xs:dateTimeStamp, xs:time and
+//     xs:duration-primitive value; every xs:float, xs:double and xs:precisionDecimal value other than NaN and -INF; an xs:date, xs:gYearMonth or xs:gYear
+//     value whose timezoneOffset is 0, spelled Z, +00:00 or -00:00 (§D.2.2's note), or whose year is 0, spelled 0000 or -0000; an xs:gMonthDay, xs:gDay or
+//     xs:gMonth value whose timezoneOffset is 0; an xs:hexBinary value one of whose octets holds a hex digit A to F (§3.3.15.2); every xs:base64Binary value
+//     but the empty one (§3.3.16.2); an xs:QName or xs:NOTATION value whose namespace name is not absent; and no xs:string- or xs:anyURI-primitive value,
+//     each being its own whiteSpace-normalized form. NaN and -INF, of xs:float, xs:double and xs:precisionDecimal alike, are written NaN and -INF, their only
+//     lexicals (§3.3.4.2, §3.3.5.2, precisionDecimal §3.2), so a pattern facet of their own simple type that rejects one of them is item 6, not this item.
 //  8. An assessed document validate charges: the error item 3 of [Decode]'s
 //     doc states for it, which errors.Is also reports as [ErrInvalidValue],
 //     each violation charged to the written document, a
@@ -307,7 +310,11 @@ func encodeValue(dst []byte, schema *xsd.Schema, backend value.Backend, name xsd
 	if err != nil {
 		return dst, err
 	}
-	e := &encoder{schema: schema, backend: backend, decimals: cfg.decimals, branches: cfg.branches, out: dst}
+	val, err := validate.New(schema, backend)
+	if err != nil {
+		return dst, err
+	}
+	e := &encoder{schema: schema, backend: backend, validator: val, decimals: cfg.decimals, branches: cfg.branches, out: dst}
 	if err := encoded[writer](f).write(e, v, writeAt{el: decl, path: typePath(t)}); err != nil {
 		return dst, err
 	}
@@ -425,14 +432,13 @@ func encodeStatic(schema *xsd.Schema, name xsd.QName, t reflect.Type, cfg config
 	return decl, f, assess, nil
 }
 
-// A writer is a bound arm of the filler item 5's check returns that Append
-// writes a value from: write appends to e.out the XML encoding v, a value of
-// the Go type the arm is bound to, at at, and returns a backend fault. Its
-// implementers are exactly the arms the slice the package doc's "# What encodes" states
-// reaches: the root arms, *simpleRoot, *boundBinding, *boundChoiceRoot and rawContent,
-// writing the element at.el; and the content arms, *boundSequence, *boundContentChoice,
-// boundOccurrence and boundFlattened, writing at.el's content, each member's elements by
-// its bound state (memberWriter). Append reaches each through encoded.
+// A writer is a bound arm of the filler item 5's check returns that Append writes a value from:
+// write appends to e.out the XML encoding v, a value of the Go type the arm is bound to, at at, and
+// returns a backend fault. Its implementers are exactly the arms the slice the package doc's "#
+// What encodes" states reaches: the root arms, *simpleRoot, *boundBinding, *boundChoiceRoot,
+// *boundTable and rawContent, writing the element at.el; and the content arms, *boundSequence,
+// *boundContentChoice, boundOccurrence and boundFlattened, writing at.el's content, each member's
+// elements by its bound state (memberWriter). Append reaches each through encoded.
 type writer interface {
 	write(e *encoder, v reflect.Value, at writeAt) error
 }
@@ -447,10 +453,15 @@ type texter interface {
 	text(e *encoder, v reflect.Value, at writeAt) (string, error)
 }
 
-// writeAt is what a writer, a texter or a particleWriter reads beside its
-// value: el, the element declaration of the element the value is written as,
-// for a root arm, or of the element whose content holds it, for every other
-// writer, a texter and a particleWriter; typ, for a content arm, a texter or a
+// writeAt is what a writer, an elementWriter, a texter or a particleWriter
+// reads beside its value: el, the element declaration of the element the value
+// is written as, for a root arm and an elementWriter, or of the element whose
+// content holds it, for every other writer, a texter and a particleWriter;
+// branch, for a root arm and an elementWriter where el has a {type table}, the
+// index in el's governing types (goshape.GoverningTypes) of the one the
+// element is written as, which *boundTable's write sets for its branch and
+// which is 0 for a declaration with one, and which encoder.selects holds the
+// table's selection to; typ, for a content arm, a texter or a
 // particleWriter, the complex type whose content it writes, el's, which a
 // choice's item 6 errors and a texter's value name (typeSubject) and a lax
 // wildcard's match and an {open content}'s child read their locally declared
@@ -459,9 +470,10 @@ type texter interface {
 // read (openContentOf), and the zero ComplexType for every other
 // writer, which reads none; and path, the value's Go path from T.
 type writeAt struct {
-	el   xsd.ElementDeclaration
-	typ  xsd.ComplexType
-	path string
+	el     xsd.ElementDeclaration
+	branch int
+	typ    xsd.ComplexType
+	path   string
 }
 
 // attributionSlot is the attributionCheck of the content a particle's
@@ -502,7 +514,7 @@ func encoded[C any](x any) C {
 // type (encoder.simpleElement); only the document element's type is a
 // simpleRoot.
 func (s *simpleRoot) write(e *encoder, v reflect.Value, at writeAt) error {
-	return e.simpleElement(at.el, s.scalar, v, at.path)
+	return e.simpleElement(at, s.scalar, v)
 }
 
 // write writes the element at.el holding v, a value of b's struct: its start
@@ -513,16 +525,20 @@ func (s *simpleRoot) write(e *encoder, v reflect.Value, at writeAt) error {
 // constraint supplies a value (supply), each written value held to its use's
 // and its declaration's fixed {value constraint} (encoder.attributeFixed),
 // then, for a type with an {attribute wildcard}, the attributes its field
-// holds (encoder.wildcardAttributes), then the content: for simple content the
-// value field's text (texter), computed before the start tag's '>', and
-// otherwise the content's elements (b.content's write), for mixed content
-// after its Text, field 0 (binding.lead), written raw (encoder.rawText) and
-// held to at.el's fixed {value constraint} (mixedFixed), each element of a
-// MixedChild or AnyChild followed by its Tail, an element with no content
-// written as an empty-element tag; or nothing, where v holds itself
-// (encoder.enter). The first child element of mixed content, written by a
-// tailReader, raises first at.el's fixed {value constraint}'s cvc-elt clause
-// 5.2.2.1 error (encoder.fixedChild), unless an earlier one is recorded.
+// holds (encoder.wildcardAttributes), then, where at.el has a {type table}, the
+// table's selection over the attributes written held to the type at.branch
+// (encoder.selects), then the content, under the [inherited attributes]
+// validate.Validator.HandedDown composes for its children from those
+// attributes (encoder.inherited): for simple content the value field's text
+// (texter), computed before the start tag's '>', and otherwise the content's
+// elements (b.content's write), for mixed content after its Text, field 0
+// (binding.lead), written raw (encoder.rawText) and held to at.el's fixed
+// {value constraint} (mixedFixed), each element of a MixedChild or AnyChild
+// followed by its Tail, an element with no content written as an empty-element
+// tag; or nothing, where v holds itself (encoder.enter). The first child
+// element of mixed content, written by a tailReader, raises first at.el's fixed
+// {value constraint}'s cvc-elt clause 5.2.2.1 error (encoder.fixedChild),
+// unless an earlier one is recorded.
 func (b *boundBinding) write(e *encoder, v reflect.Value, at writeAt) error {
 	if !e.enter(v, at.path) {
 		return nil
@@ -561,6 +577,12 @@ func (b *boundBinding) write(e *encoder, v reflect.Value, at writeAt) error {
 			return err
 		}
 	}
+	if err := e.selects(at, e.tag); err != nil {
+		return err
+	}
+	outerInherited := e.inherited
+	e.inherited = e.validator.HandedDown(bd.typ, xsderr.Loc{}, e.tag, outerInherited)
+	defer func() { e.inherited = outerInherited }()
 	content := writeAt{el: at.el, typ: bd.typ, path: at.path}
 	// {content type} is a closed sum, so the switch is STYLE T2's sealed-sum
 	// exception.
@@ -620,9 +642,11 @@ func (b boundValue) text(e *encoder, v reflect.Value, at writeAt) (string, error
 }
 
 // write writes the element at.el holding v, a value of the choice's sealed
-// interface: its start tag, then the branch v holds (writeChoice), an empty
-// match written as an empty-element tag; or nothing, where v holds itself
-// (encoder.enter).
+// interface: its start tag, which holds no attribute, so that a {type table}
+// of at.el selects over none (encoder.selects), then the branch v holds
+// (writeChoice), under the [inherited attributes] its children inherit
+// (encoder.inherited), an empty match written as an empty-element tag; or
+// nothing, where v holds itself (encoder.enter).
 func (c *boundChoiceRoot) write(e *encoder, v reflect.Value, at writeAt) error {
 	if !e.enter(v, at.path) {
 		return nil
@@ -630,6 +654,12 @@ func (c *boundChoiceRoot) write(e *encoder, v reflect.Value, at writeAt) error {
 	defer e.leave()
 	name := at.el.Name()
 	outer, mark := e.startTag(name)
+	if err := e.selects(at, nil); err != nil {
+		return err
+	}
+	outerInherited := e.inherited
+	e.inherited = e.validator.HandedDown(c.root.typ, xsderr.Loc{}, nil, outerInherited)
+	defer func() { e.inherited = outerInherited }()
 	start := len(e.out)
 	e.out = append(e.out, '>')
 	alts := c.root.sealed.alts
@@ -639,6 +669,78 @@ func (c *boundChoiceRoot) write(e *encoder, v reflect.Value, at writeAt) error {
 	}
 	check.end(e, at.path)
 	e.endTag(name.Local, start, outer, mark)
+	return nil
+}
+
+// write writes the element at.el holding v, a value of the sealed interface
+// codegen emits over at.el's governing types (codegen's package doc, "#
+// Element declarations"): the branch v holds, matched to its dynamic type
+// (boundChoice.branchOf), as an element of at.el written as that branch's
+// governing type, at.branch its index, from the branch's one field by the
+// elementWriter its sink reads it with, taking no attribution slot, which the
+// nestedReader that reached b took, its selection held to that type
+// (encoder.selects). A nil v, which writeOccurring passes only where nil does
+// not mean absent, and a dynamic type the WithBranches set places at no
+// branch, a pointer to a branch among them, are item 6 of [Append]'s doc and
+// write nothing: Decode returns neither.
+func (b *boundTable) write(e *encoder, v reflect.Value, at writeAt) error {
+	if v.IsNil() {
+		e.invalidate(fmt.Errorf("codec: Append: %s is nil, the sealed interface over the governing types of %s, which holds no element where one is written", at.path, declSubject(at.el)))
+		return nil
+	}
+	br := v.Elem()
+	j := b.bound.branchOf(br.Type())
+	if j < 0 {
+		e.invalidate(fmt.Errorf("codec: Append: %s holds a %s, which the WithBranches set of %s places at no branch of the governing types of %s, so that Decode returns no such value", at.path, br.Type(), v.Type(), declSubject(at.el)))
+		return nil
+	}
+	w := encoded[elementWriter](encoded[fieldSink](b.bound.branches[j].members[0]).read)
+	return w.writeElement(e, br.Field(0), writeAt{el: at.el, branch: j, path: at.path + ".(" + typePath(br.Type()) + ")." + br.Type().Field(0).Name}, attributionSlot{})
+}
+
+// selects records item 7 of [Append]'s doc, constructTypeTable, where no
+// decline is recorded yet, for the element of at.el, written as its governing
+// type at.branch (goshape.GoverningTypes) for the value at at.path, where
+// at.el has a {type table}: where the table's selection over own, the
+// element's [attributes] as Append writes them, and e.inherited, its
+// [inherited attributes] (validate.Validator.ConditionallySelectedIndex, as
+// Decode's tableSelector.selected asks it), is undecided, and where the type it
+// selects, mapped to a branch as Decode maps it (governing.slotIndex), is none
+// of at.el's governing types, xs:error's included, or another's than
+// at.branch's (Structures §3.3.4.1 key-cta-select, §3.12.4 key-cta-ta-select).
+// Decode of the element would return another branch or none, and a document
+// holding the value under another spelling of its attributes may select its
+// type, so no item 6 applies. Its error is GoverningTypes' or slotIndex's,
+// plain, prefixed with the element.
+func (e *encoder) selects(at writeAt, own []validate.Attribute) error {
+	table, has := at.el.TypeTable()
+	if !has {
+		return nil
+	}
+	types, _, err := goshape.GoverningTypes(e.schema, at.el)
+	if err != nil {
+		return fmt.Errorf("codec: Append: %w", err)
+	}
+	subject := fmt.Sprintf("%s, at %s written as the type of its %s", declSubject(at.el), at.path, types[at.branch].Slot().Name())
+	cause := "its {type table}'s selection over the attributes Append writes and its [inherited attributes] is undecided, a {test} package xpath does not evaluate (Structures §3.12.4 key-cta-ta-select)"
+	if index, decided := e.validator.ConditionallySelectedIndex(table, own, e.inherited); decided {
+		i, matched, err := governing(types).slotIndex(e.schema, table, index)
+		if err != nil {
+			return fmt.Errorf("codec: Append: %s: %w", subject, err)
+		}
+		if matched && i == at.branch {
+			return nil
+		}
+		slot, _, _ := goshape.TableSlot(table, index)
+		which := "none of its governing types"
+		if matched {
+			which = "the governing type of another branch"
+		}
+		cause = fmt.Sprintf("over the attributes Append writes and its [inherited attributes], its {type table} selects the type of its %s, %s (Structures §3.3.4.1 key-cta-select)", slot.Name(), which)
+	}
+	if e.declined == nil {
+		e.declined = encodeDecline(constructTypeTable, subject+": "+cause)
+	}
 	return nil
 }
 
@@ -756,10 +858,10 @@ func writeMembersWhere(e *encoder, bound []boundMember, v reflect.Value, at writ
 // occurrence content beside its one field (boundOpen.writeOpen); and the
 // bound states of a nested model group particle: boundNestedChoice, a choice
 // occurring once; boundFlatSlice, a flattened particle; and
-// boundNestedOccurrence, an occurrence field. A fieldSink is none: item 4
-// declines a governing type's branch field's {type table}, and Append writes
-// a substitution group member's branch field through its reader
-// (groupReader.writeElement).
+// boundNestedOccurrence, an occurrence field. A fieldSink is none: Append
+// writes the branch field of a {type table}'s interface through its reader
+// (*boundTable's write), and a substitution group member's branch field
+// through its reader too (groupReader.writeElement).
 type memberWriter interface {
 	writeMember(e *encoder, v reflect.Value, at writeAt, slot attributionSlot) error
 }
@@ -1118,7 +1220,7 @@ func (wildcardMember) allPass() writePass { return passWildcards }
 func (m elementMember) writeElements(e *encoder, s fieldSink, f reflect.Value, at writeAt, slot attributionSlot) error {
 	w := encoded[elementWriter](s.read)
 	return e.writeOccurring(m.shape, m.own, m.held, floorMin, "the particle of "+declSubject(m.decl), f, at, func(v reflect.Value, path string) error {
-		return w.writeElement(e, m.decl, v, path, slot)
+		return w.writeElement(e, v, writeAt{el: m.decl, path: path}, slot)
 	})
 }
 
@@ -1343,57 +1445,59 @@ func (f lengthFloor) permits(held xsd.Occurs, n int) bool {
 	return held.Permits(n)
 }
 
-// An elementWriter is the elementReader of an element particle's field whose
-// element Append writes: writeElement appends the element of decl holding v,
-// a V the reader reads, whose Go path from T is path, taken first by slot
-// (attributionSlot.take), and returns a backend fault. Its implementers are
-// scalarArm, of a simple type, nestedReader, of a complex type, a structArm's
-// or an ifaceArm's, rawContent, of xs:anyType itself, an anyTypeArm's,
-// groupReader, of a substitution group's sealed interface, a groupArm's,
-// which writes the element of the member its value holds in decl's place,
-// and tailReader, of a MixedChild in mixed content, a mixedArm's, which
-// writes its Element by the reader of one of the others and then its Tail.
+// An elementWriter is the elementReader of an element particle's field or of
+// a {type table} interface's branch field whose element Append writes:
+// writeElement appends the element of at.el holding v, a V the reader reads,
+// whose Go path from T is at.path, written as at.el's governing type at.branch,
+// taken first by slot (attributionSlot.take), and returns a backend fault. Its
+// implementers are scalarArm, of a simple type, nestedReader, of a complex
+// type, a structArm's or an ifaceArm's, rawContent, of xs:anyType itself, an
+// anyTypeArm's, groupReader, of a substitution group's sealed interface, a
+// groupArm's, which writes the element of the member its value holds in
+// at.el's place, and tailReader, of a MixedChild in mixed content, a
+// mixedArm's, which writes its Element by the reader of one of the others and
+// then its Tail.
 type elementWriter interface {
-	writeElement(e *encoder, decl xsd.ElementDeclaration, v reflect.Value, path string, slot attributionSlot) error
+	writeElement(e *encoder, v reflect.Value, at writeAt, slot attributionSlot) error
 }
 
-// writeElement writes the element of decl v, a MixedChild, holds as its
-// Element, at path's Element, by the elementWriter t.element is, taken by
+// writeElement writes the element of at.el v, a MixedChild, holds as its
+// Element, at at.path's Element, by the elementWriter t.element is, taken by
 // slot there, after the parent's fixed {value constraint}'s charge for a
 // first child (encoder.firstChild), then v's Tail raw (encoder.rawText), as
 // codegen's package doc "# Complex types" places it. A v whose Element is a
 // nil sealed interface, which Decode never returns, is item 6 of [Append]'s
 // doc and writes nothing, its Tail included, since it is no child
 // (codegen/doc.go "# Complex types"), and so raises no charge.
-func (t tailReader) writeElement(e *encoder, decl xsd.ElementDeclaration, v reflect.Value, path string, slot attributionSlot) error {
+func (t tailReader) writeElement(e *encoder, v reflect.Value, at writeAt, slot attributionSlot) error {
 	if el := v.Field(0); el.Kind() == reflect.Interface && el.IsNil() {
-		e.invalidate(fmt.Errorf("codec: Append: %s.Element is nil, a MixedChild holding no element of %s, which Decode never returns", path, declSubject(decl)))
+		e.invalidate(fmt.Errorf("codec: Append: %s.Element is nil, a MixedChild holding no element of %s, which Decode never returns", at.path, declSubject(at.el)))
 		return nil
 	}
 	e.firstChild()
-	if err := encoded[elementWriter](t.element).writeElement(e, decl, v.Field(0), path+".Element", slot); err != nil {
+	if err := encoded[elementWriter](t.element).writeElement(e, v.Field(0), writeAt{el: at.el, path: at.path + ".Element"}, slot); err != nil {
 		return err
 	}
-	e.rawText(v.Field(1).String(), nil, path+".Tail", false)
+	e.rawText(v.Field(1).String(), nil, at.path+".Tail", false)
 	return nil
 }
 
-// writeElement writes the element of decl holding v, a value of a's simple
+// writeElement writes the element of at.el holding v, a value of a's simple
 // type (encoder.simpleElement), taken by slot.
-func (a scalarArm) writeElement(e *encoder, decl xsd.ElementDeclaration, v reflect.Value, path string, slot attributionSlot) error {
-	slot.take(e, decl, path)
-	return e.simpleElement(decl, a.scalar, v, path)
+func (a scalarArm) writeElement(e *encoder, v reflect.Value, at writeAt, slot attributionSlot) error {
+	slot.take(e, at.el, at.path)
+	return e.simpleElement(at, a.scalar, v)
 }
 
-// writeElement writes the element of decl holding v, a value of n.t, by the
+// writeElement writes the element of at.el holding v, a value of n.t, by the
 // writer n.fill is, taken by slot.
-func (n nestedReader) writeElement(e *encoder, decl xsd.ElementDeclaration, v reflect.Value, path string, slot attributionSlot) error {
-	slot.take(e, decl, path)
-	return encoded[writer](n.fill).write(e, v, writeAt{el: decl, path: path})
+func (n nestedReader) writeElement(e *encoder, v reflect.Value, at writeAt, slot attributionSlot) error {
+	slot.take(e, at.el, at.path)
+	return encoded[writer](n.fill).write(e, v, at)
 }
 
 // writeElement writes v, a value of g.t, the sealed interface over the
-// substitution group of head, the declaration an <element ref> particle
+// substitution group of head, at.el, the declaration an <element ref> particle
 // names: the branch v holds, matched to its dynamic type
 // (boundChoice.branchOf), as an element of the member that branch is given
 // for, g.members at the branch's index, under the member's own expanded name
@@ -1404,7 +1508,8 @@ func (n nestedReader) writeElement(e *encoder, decl xsd.ElementDeclaration, v re
 // pointer to a branch among them, are item 6 of [Append]'s doc, and write
 // nothing: no element of an abstract head's own name is valid (cvc-elt clause
 // 2), and Decode returns neither.
-func (g groupReader) writeElement(e *encoder, head xsd.ElementDeclaration, v reflect.Value, path string, slot attributionSlot) error {
+func (g groupReader) writeElement(e *encoder, v reflect.Value, at writeAt, slot attributionSlot) error {
+	head, path := at.el, at.path
 	if v.IsNil() {
 		e.invalidate(fmt.Errorf("codec: Append: %s is nil, the sealed interface over the substitution group of %s, which holds no element where one is written", path, declSubject(head)))
 		return nil
@@ -1416,7 +1521,7 @@ func (g groupReader) writeElement(e *encoder, head xsd.ElementDeclaration, v ref
 		return nil
 	}
 	w := encoded[elementWriter](encoded[fieldSink](g.bound.branches[j].members[0]).read)
-	return w.writeElement(e, g.members[j], br.Field(0), path+".("+typePath(br.Type())+")."+br.Type().Field(0).Name, slot)
+	return w.writeElement(e, br.Field(0), writeAt{el: g.members[j], path: path + ".(" + typePath(br.Type()) + ")." + br.Type().Field(0).Name}, slot)
 }
 
 // elementEncodes returns the error item 4 of [Append]'s doc states for the
@@ -1559,23 +1664,22 @@ func (w *encodeWalk) governingEncodes(decl xsd.ElementDeclaration, td xsd.TypeDe
 }
 
 // declEncodes returns the decline of the first of decl's own properties the
-// slice excludes: {nillable} as codegen reads it (goshape.Nillable), a {type
-// table}, an identity constraint whose paths icpath does not compile
-// (encodeWalk.identityEncodes), a member of its {substitution group
-// affiliations} that names no top-level element declaration of the schema, the
-// first in document order, an ·absent· member Finalize keeps (§5.3), under
-// which validate assesses the element laxly, as if cvc-elt clause 1 had
-// failed, and {abstract} true, which no element validates against (cvc-elt
-// clause 2): the document element's is item 3 of [Append]'s doc, found before
-// declEncodes runs, so that only a particle's declines so, one the parser
-// never builds but xsd.NewElementDeclaration does. A decl whose
-// {identity-constraint definitions} it admits sets w.assess.
+// slice excludes: {nillable} as codegen reads it (goshape.Nillable), whatever
+// {type table} decl has, ahead of its slots and governing types
+// (encodeWalk.element), as Decode's governingTypes declines it, an identity
+// constraint whose paths icpath does not compile (encodeWalk.identityEncodes),
+// a member of its {substitution group affiliations} that names no top-level
+// element declaration of the schema, the first in document order, an ·absent·
+// member Finalize keeps (§5.3), under which validate assesses the element
+// laxly, as if cvc-elt clause 1 had failed, and {abstract} true, which no
+// element validates against (cvc-elt clause 2): the document element's is item
+// 3 of [Append]'s doc, found before declEncodes runs, so that only a
+// particle's declines so, one the parser never builds but
+// xsd.NewElementDeclaration does. A decl whose {identity-constraint
+// definitions} it admits sets w.assess.
 func (w *encodeWalk) declEncodes(decl xsd.ElementDeclaration) error {
 	if goshape.Nillable(decl) {
 		return encodeDecline(constructNillable, declSubject(decl))
-	}
-	if _, has := decl.TypeTable(); has {
-		return encodeDecline(constructTypeTable, declSubject(decl))
 	}
 	for _, ic := range decl.IdentityConstraints() {
 		if err := w.identityEncodes(decl, ic); err != nil {
@@ -2195,26 +2299,38 @@ func simpleSubject(st *xsd.SimpleType, owner string) string {
 	return "simple type " + typeLabel(st, owner) + definedAt(" ", st)
 }
 
-// encoder is one Append's write of a document: decimals, the arm sets
-// [WithPrecisionDecimalArms] supplied, and branches, the sets [WithBranches]
-// supplied, each from the config item 5's check read (encodeStatic), by
-// which a PrecisionDecimal's Value is read (decimalOf) and a union's variant
-// placed at its basic member (encoder.union); out, the document so far; ns,
-// the in-scope default namespace, that of the element whose start tag is open
-// or whose content is being written, "" outside the document element; bound,
-// the prefixed bindings the open start tags declare, outermost first, an inner
-// one of a prefix shadowing an outer one (writtenBindings); open, the values
-// whose element's write is open, outermost first (enter); fixedChild, the
-// element of mixed content and its value's Go path whose content is being
-// written and holds no child element yet, nil otherwise (boundBinding.write,
-// firstChild); and the first item 6 and item 7 errors of [Append]'s doc it
-// has found, in document order. Every value is written whatever was found
-// before it, so that the walk finds an item 6 error after an item 7 one.
+// encoder is one Append's write of a document: validator, the one on schema
+// and backend whose {type table} selections Append holds what it writes to
+// (encoder.selects) and whose [inherited attributes] it composes, never nil;
+// decimals, the arm sets [WithPrecisionDecimalArms] supplied, and branches,
+// the sets [WithBranches] supplied, each from the config item 5's check read
+// (encodeStatic), by which a PrecisionDecimal's Value is read (decimalOf) and
+// a union's variant placed at its basic member (encoder.union); inherited,
+// the [inherited attributes] of each child of the element whose content is
+// being written, nil for the document element, which *boundBinding's and
+// *boundChoiceRoot's write set for their element's content as
+// validate.Validator.HandedDown composes them, as Decode's pipeline.handDown
+// does, and restore after it; tag, the [attributes] of the start tag startTag
+// or rawStartTag opened last, each as writeRawAttribute writes it, in written
+// order; out, the document so far; ns, the in-scope default namespace, that of
+// the element whose start tag is open or whose content is being written, ""
+// outside the document element; bound, the prefixed bindings the open start
+// tags declare, outermost first, an inner one of a prefix shadowing an outer
+// one (writtenBindings); open, the values whose element's write is open,
+// outermost first (enter); fixedChild, the element of mixed content and its
+// value's Go path whose content is being written and holds no child element
+// yet, nil otherwise (boundBinding.write, firstChild); and the first item 6
+// and item 7 errors of [Append]'s doc it has found, in document order. Every
+// value is written whatever was found before it, so that the walk finds an
+// item 6 error after an item 7 one.
 type encoder struct {
 	schema     *xsd.Schema
 	backend    value.Backend
+	validator  *validate.Validator
 	decimals   decimalArmSets
 	branches   branchSets
+	inherited  []validate.Attribute
+	tag        []validate.Attribute
 	out        []byte
 	ns         string
 	bound      []nsBinding
@@ -2264,8 +2380,10 @@ func (e *encoder) leave() { e.open = e.open[:len(e.open)-1] }
 // document element's from no namespace, and makes name's namespace e.ns for
 // its attributes and content, returning the one it replaced and mark, the
 // length of e.bound, both of which endTag restores, so that a prefix qname
-// declares in this start tag is in scope until endTag.
+// declares in this start tag is in scope until endTag. It empties e.tag, so
+// that it holds this start tag's attributes.
 func (e *encoder) startTag(name xsd.QName) (outer string, mark int) {
+	e.tag = e.tag[:0]
 	e.out = append(e.out, '<')
 	e.out = append(e.out, name.Local...)
 	if name.Space != e.ns {
@@ -2303,15 +2421,20 @@ func (e *encoder) textTag(tag, text, outer string, mark int) {
 	e.endTag(tag, start, outer, mark)
 }
 
-// simpleElement writes the element of decl, holding v, a value of s's simple
-// type, whose Go path from T is path: its start tag (startTag), then its
-// value's text (scalarText), which may first declare a prefix on that start
-// tag (qname), held to decl's {value constraint} (elementConstraint), an
-// empty text written as an empty-element tag (textTag). The error is a
-// backend fault.
-func (e *encoder) simpleElement(decl xsd.ElementDeclaration, s scalar, v reflect.Value, path string) error {
+// simpleElement writes the element of decl, at.el, holding v, a value of s's
+// simple type, whose Go path from T is path, at.path: its start tag
+// (startTag), which holds no attribute, so that a {type table} of decl
+// selects over none (encoder.selects), then its value's text (scalarText),
+// which may first declare a prefix on that start tag (qname), held to decl's
+// {value constraint} (elementConstraint), an empty text written as an
+// empty-element tag (textTag). The error is a backend fault or selects'.
+func (e *encoder) simpleElement(at writeAt, s scalar, v reflect.Value) error {
+	decl, path := at.el, at.path
 	name := decl.Name()
 	outer, mark := e.startTag(name)
+	if err := e.selects(at, nil); err != nil {
+		return err
+	}
 	subject := simpleSubject(s.st, declSubject(decl))
 	w, err := e.scalarText(s, v, path, subject)
 	if err != nil {
@@ -3484,18 +3607,21 @@ func (attributeWildcardHold) writesNil() bool { return false }
 // write writes at.el, the document element, of type xs:anyType itself,
 // holding v (writeElement).
 func (c rawContent) write(e *encoder, v reflect.Value, at writeAt) error {
-	return c.writeElement(e, at.el, v, at.path, attributionSlot{})
+	return c.writeElement(e, v, at, attributionSlot{})
 }
 
-// writeElement writes the element of decl, of type xs:anyType itself, whose
-// content is v, a struct of AnyType's shape or a named type over one, at
-// path: its start tag (rawStartTag), then v as rawContent writes it under
-// anyTypeContent, as the package doc's "# What encodes" states, its content
-// held to decl's fixed {value constraint} after its Text (anyTypeFixed); or
-// nothing, where v holds itself (encoder.enter), taken by slot first either
-// way, its own attributes held in anyTypeElement. It reads no simple value, so
-// it returns no backend fault.
-func (rawContent) writeElement(e *encoder, decl xsd.ElementDeclaration, v reflect.Value, path string, slot attributionSlot) error {
+// writeElement writes the element of decl, at.el, of type xs:anyType itself,
+// whose content is v, a struct of AnyType's shape or a named type over one, at
+// path, at.path: its start tag (rawStartTag), then v as rawContent writes it
+// under anyTypeContent, as the package doc's "# What encodes" states, a {type
+// table} of decl's selection over the attributes it writes held to the type
+// at.branch (encoder.selects) before its content, its content held to decl's
+// fixed {value constraint} after its Text (anyTypeFixed); or nothing, where v
+// holds itself (encoder.enter), taken by slot first either way, its own
+// attributes held in anyTypeElement. It reads no simple value, so it returns
+// no backend fault, but selects' plain error.
+func (rawContent) writeElement(e *encoder, v reflect.Value, at writeAt, slot attributionSlot) error {
+	decl, path := at.el, at.path
 	slot.take(e, decl, path)
 	if !e.enter(v, path) {
 		return nil
@@ -3503,6 +3629,9 @@ func (rawContent) writeElement(e *encoder, decl xsd.ElementDeclaration, v reflec
 	defer e.leave()
 	tag, held, outer, mark := e.rawStartTag(decl.Name(), v, path)
 	start := e.rawAttributes(v, held, path, anyTypeElement{decl: decl}, false)
+	if err := e.selects(at, e.tag); err != nil {
+		return err
+	}
 	e.rawText(v.Field(xText).String(), held, path+".Text", false)
 	e.anyTypeFixed(decl, v, path)
 	e.rawChildren(v, held, path, anyTypeContent{decl: decl}, false)
@@ -3575,8 +3704,9 @@ func (e *encoder) rawElement(name xsd.QName, x reflect.Value, path string, hold 
 // last. It makes that default e.ns and pushes those bindings onto e.bound, for
 // its attributes and content, and returns the tag's name, Namespaces'
 // prefixed entries, and the e.ns and length of e.bound it replaced, which
-// endTag restores.
+// endTag restores. It empties e.tag, as startTag does.
 func (e *encoder) rawStartTag(name xsd.QName, x reflect.Value, path string) (tag string, held []nsBinding, outer string, mark int) {
+	e.tag = e.tag[:0]
 	def, held := e.heldNamespaces(name, x.Field(xNamespaces), path)
 	outer, mark = e.ns, len(e.bound)
 	for _, b := range held {
@@ -3795,8 +3925,11 @@ func (e *encoder) rawChildren(x reflect.Value, held []nsBinding, path string, ho
 // held in no AnyType, bound to its namespace, or else under declaredPrefix's,
 // whose declaration precedes the attribute's ' '. name.Space is never
 // xmlnsNamespace: rawAttribute (writableName) refuses it upstream, and
-// attributeEncodes declines it.
+// attributeEncodes declines it. It appends the attribute to e.tag, the open
+// start tag's [attributes], its value value, the [normalized value]
+// appendEscaped's escapes give back (infosetAttribute).
 func (e *encoder) writeRawAttribute(name xsd.QName, value string, held []nsBinding) {
+	e.tag = append(e.tag, infosetAttribute{name: name, value: value})
 	qualified := name.Local
 	i := slices.IndexFunc(held, func(b nsBinding) bool { return b.space == name.Space })
 	switch {

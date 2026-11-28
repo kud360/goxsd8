@@ -27,7 +27,9 @@ type tableRoot struct {
 }
 
 // governing is an element declaration's governing types in slot order, as
-// goshape.GoverningTypes returns them, a tableRoot's.
+// goshape.GoverningTypes returns them: a tableRoot's, and those of an element
+// Append writes whose declaration has a {type table} (encoder.selects), of
+// one governing type too, which no tableRoot holds.
 type governing []goshape.GoverningType
 
 // A selector returns the index in t.types of the governing type of the
@@ -221,8 +223,9 @@ func (s tableSelector) selected(t *tableRoot, p *pipeline, start *xmltree.StartE
 // and matched to its branch (governing.matched), and matched true; matched
 // false where that type is none of g, xs:error's included. A position no slot
 // holds and a slot that does not resolve are a plain error naming no element,
-// which its caller, tableSelector.selected, prefixes with its element: neither
-// arises for a table of a schema Finalize resolved (src-resolve).
+// which its caller, Decode's tableSelector.selected or Append's
+// encoder.selects, prefixes with its element: neither arises for a table of a
+// schema Finalize resolved (src-resolve).
 func (g governing) slotIndex(schema *xsd.Schema, table xsd.TypeTable, index int) (i int, matched bool, err error) {
 	slot, ref, mapped := goshape.TableSlot(table, index)
 	if !mapped {
@@ -302,7 +305,10 @@ func (p *pipeline) handDown(typ xsd.TypeDefinition, start *xmltree.StartElement)
 // its expanded name; value, its [normalized value]; and loc, its Loc. Decode
 // fills one per attribute of an instance element as validate/xmlsrc presents
 // it to Assess (infosetAttributes), its value as parser/xmltree normalized it
-// (XML 1.0 §3.3.3).
+// (XML 1.0 §3.3.3); Append one per attribute it writes on a start tag
+// (encoder.writeRawAttribute), its value the text it writes, which
+// appendEscaped escapes so that normalization gives it back, and its loc the
+// zero Loc, since no source document is read.
 type infosetAttribute struct {
 	name  xsd.QName
 	value string
