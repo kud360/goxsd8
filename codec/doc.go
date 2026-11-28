@@ -10,8 +10,8 @@
 // start-up for each declaration and T it decodes a document element into, and
 // CheckAppend for each it encodes one from, each passed the options [Decode]
 // or [Append] is passed, then calls Decode for each instance, first reading
-// its name with [DocumentElementName] where Decode's doc says, and Append for
-// each value:
+// its name with [DocumentElementName] where that function's doc says, and
+// Append for each value:
 //
 //	backend := strict.New()
 //	schema, err := parser.Parse("order.xsd", parser.WithBackend(backend))
