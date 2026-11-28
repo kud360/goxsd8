@@ -222,10 +222,10 @@ func TestDecodeFixedNegativeZero(t *testing.T) {
 	}
 }
 
-// TestDecodeFloatBeyondRange pins Decode's doc on a float or double literal
-// beyond its type's range: ·floatingPointRound· (Datatypes §E.1) maps it to INF
-// or -INF, strict's Canonical renders that, and it decodes as ±Inf with no
-// error, on xs:float into float32 and xs:double into float64.
+// TestDecodeFloatBeyondRange pins the package doc's "# What decodes" on a float
+// or double literal beyond its type's range: ·floatingPointRound· (Datatypes
+// §E.1) maps it to INF or -INF, strict's Canonical renders that, and it decodes
+// as ±Inf with no error, on xs:float into float32 and xs:double into float64.
 func TestDecodeFloatBeyondRange(t *testing.T) {
 	float := schemaOf(t, sequenceOf(`<xs:element name="a" type="xs:float"/>`))
 	double := schemaOf(t, sequenceOf(`<xs:element name="a" type="xs:double"/>`))

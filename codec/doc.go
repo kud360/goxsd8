@@ -117,23 +117,23 @@
 // them decode. Each decodes into the atomic Go type codegen gives it, by the
 // rules of codegen's package doc, "# Simple types", a date, time or duration
 // type into its datatype struct, an xs:QName or xs:NOTATION type into
-// QName's, the expanded name its lexical resolves to as [Decode]'s doc
-// states, and an xs:precisionDecimal type into PrecisionDecimal's, its Value
-// the arm [WithPrecisionDecimalArms] supplies for its lexical's value, with
-// that lexical's ·scale· and ·sign·, as [Decode]'s doc states. A special
-// type, xs:anySimpleType or xs:anyAtomicType, decodes into the string
-// codegen gives it (codegen's package doc, "# Simple types"), its value as
-// [Decode]'s doc states. A list type decodes when its {item type definition}
-// is such an atomic type or a union that decodes, a restriction of a list
-// taking its base's (Structures §3.16.2.3), xs:NMTOKENS among them, into
-// []A, A its item's atomic Go type, or []I, I its item's sealed interface,
-// one element per list item; the empty list is a slice of length 0.
+// QName's, the expanded name its lexical resolves to as stated below, and an
+// xs:precisionDecimal type into PrecisionDecimal's, its Value the arm
+// [WithPrecisionDecimalArms] supplies for its lexical's value, with that
+// lexical's ·scale· and ·sign·, as stated below. A special type,
+// xs:anySimpleType or xs:anyAtomicType, decodes into the string codegen
+// gives it (codegen's package doc, "# Simple types"), its value as stated
+// below. A list type decodes when its {item type definition} is such an
+// atomic type or a union that decodes, a restriction of a list taking its
+// base's (Structures §3.16.2.3), xs:NMTOKENS among them, into []A, A its
+// item's atomic Go type, or []I, I its item's sealed interface, one element
+// per list item; the empty list is a slice of length 0.
 //
 // A union type (Datatypes §2.4.1.3) decodes when each of its basic members,
 // in codegen's basic-member order (codegen's package doc, "# Simple types"),
 // is such an atomic or list type, item 5 of [Decode]'s doc stating each. It
 // decodes into codegen's sealed interface, the variant of the value's
-// ·active basic member·, as [Decode]'s doc states.
+// ·active basic member·, as stated below.
 //
 // A document element decodes when its declaration, a top-level one, has governing types that
 // decode (codegen's package doc, "An element declaration's governing types"; item 5 of
@@ -289,8 +289,8 @@
 // [Decode]'s doc states, and codec never evaluates a {test} itself.
 //
 // A value constraint of an element declaration or attribute use, default or
-// fixed, decodes; [Decode]'s doc states the value it supplies, and that it
-// supplies none to an element of type xs:anyType.
+// fixed, decodes; the paragraphs below state the value it supplies, and that
+// it supplies none to an element of type xs:anyType.
 //
 // Every error about the instance carries its instance Loc, under the URI
 // [WithURI] names: a violation's, an undecided check's, and a decline's,

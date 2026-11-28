@@ -45,10 +45,10 @@ func deref(s any) string {
 	return out + "}"
 }
 
-// TestDecodeElementValueConstraint pins Decode's doc on a child element whose
-// declaration has a {value constraint}, default or fixed (cvc-elt clause
-// 5.1): one row per occurrence shape and per kind of children, a comment, a
-// whitespace run and none.
+// TestDecodeElementValueConstraint pins the package doc's "# What decodes"
+// on a child element whose declaration has a {value constraint}, default or
+// fixed (cvc-elt clause 5.1): one row per occurrence shape and per kind of
+// children, a comment, a whitespace run and none.
 func TestDecodeElementValueConstraint(t *testing.T) {
 	str := func(s string) *string { return &s }
 	type one struct{ A string }
@@ -93,10 +93,11 @@ func TestDecodeElementValueConstraint(t *testing.T) {
 	}
 }
 
-// TestDecodeRootValueConstraint pins Decode's doc on a document element of
-// simple type whose declaration has a {value constraint}, default or fixed:
-// empty in the instance, it holds the supplied value, normalized under its
-// type (cvc-elt clause 5.1, 5.2.2.2.2); with characters, its own.
+// TestDecodeRootValueConstraint pins the package doc's "# What decodes" on
+// a document element of simple type whose declaration has a {value
+// constraint}, default or fixed: empty in the instance, it holds the
+// supplied value, normalized under its type (cvc-elt clause 5.1,
+// 5.2.2.2.2); with characters, its own.
 func TestDecodeRootValueConstraint(t *testing.T) {
 	rows := []struct {
 		name, decl, content, want string
@@ -123,11 +124,11 @@ func TestDecodeRootValueConstraint(t *testing.T) {
 	}
 }
 
-// TestDecodeAttributeValueConstraint pins Decode's doc on an attribute use
-// with an effective value constraint, default or fixed (key-dflt-att), whose
-// field is a string: the attribute present, present and empty, and absent,
-// the constraint the use's own or its declaration's (§3.5.4 key-evc), and a
-// *string field ErrTypeMismatch (item 6).
+// TestDecodeAttributeValueConstraint pins the package doc's "# What decodes"
+// on an attribute use with an effective value constraint, default or fixed
+// (key-dflt-att), whose field is a string: the attribute present, present
+// and empty, and absent, the constraint the use's own or its declaration's
+// (§3.5.4 key-evc), and a *string field ErrTypeMismatch (item 6).
 func TestDecodeAttributeValueConstraint(t *testing.T) {
 	const a = `<s:a>x</s:a>`
 	type val struct{ A, B string }

@@ -51,10 +51,10 @@ type pipeline struct {
 // its {item type definition}; st, the simple type its value is decoded under;
 // label, the type as a stage error and a trace name it (typeLabel); item,
 // st's {item type definition} where st is a list and nil otherwise; and
-// supplied, the value Decode's doc states the post-schema-validation infoset
-// supplies for it, nil exactly when there is no value constraint: an
-// element's {value constraint}, an attribute use's effective one (§3.5.4
-// key-evc).
+// supplied, the value the package doc's "# What decodes" states the
+// post-schema-validation infoset supplies for it, nil exactly when there is
+// no value constraint: an element's {value constraint}, an attribute use's
+// effective one (§3.5.4 key-evc).
 type scalar struct {
 	elem     scalarElem
 	st       *xsd.SimpleType
@@ -583,7 +583,7 @@ type source interface {
 	where() string
 	// bindings returns the namespace bindings the value's lexical is mapped
 	// under and a QName or NOTATION lexical resolves its prefix against, the
-	// ones Decode's doc names for each source.
+	// ones the package doc's "# What decodes" names for each source.
 	bindings() value.Context
 }
 

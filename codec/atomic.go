@@ -217,15 +217,16 @@ func (a atomic) spell() string {
 	return fmt.Sprintf("D for the datatype struct D of xs:%s (%s)", datatype.Local, strings.Join(fields, ", "))
 }
 
-// convert returns the value of a's bare type that form denotes, read as
-// Decode's doc states, or the error for a form a's Go type does not read:
-// form is a canonical lexical form the governing mapping's Canonical
-// rendered, or where a's reading is readLexical the normalized lexical Parse
-// accepted. A boolean is never read by strconv.ParseBool, which accepts more
-// than f-booleanCanmap's two forms. PrecisionDecimal's is convertDecimal's,
-// and every atomic convert does not name is convertTemporal's, which converts
-// the date, time and duration ones and panics for the rest, atomicString and
-// atomicQName, read by expandedName, having no conversion.
+// convert returns the value of a's bare type that form denotes, read as the
+// package doc's "# What decodes" states, or the error for a form a's Go type
+// does not read: form is a canonical lexical form the governing mapping's
+// Canonical rendered, or where a's reading is readLexical the normalized
+// lexical Parse accepted. A boolean is never read by strconv.ParseBool, which
+// accepts more than f-booleanCanmap's two forms. PrecisionDecimal's is
+// convertDecimal's, and every atomic convert does not name is
+// convertTemporal's, which converts the date, time and duration ones and
+// panics for the rest, atomicString and atomicQName, read by expandedName,
+// having no conversion.
 func (a atomic) convert(form string) (reflect.Value, error) {
 	switch a {
 	case atomicPrecisionDecimal:
