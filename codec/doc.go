@@ -323,10 +323,9 @@
 // fixed, decodes; the paragraphs below state the value it supplies, and that
 // it supplies none to an element of type xs:anyType.
 //
-// Every error about the instance carries its instance Loc, under the URI
-// [WithURI] names: a violation's, an undecided check's, and a decline's,
-// which also names its construct and, for a construct of the schema, the
-// declining component, as [DeclineError.Error] states; and
+// Every error about the instance carries its instance Loc, as [Decode]'s doc
+// states; a decline's also names its construct and, for a construct of the
+// schema, the declining component, as [DeclineError.Error] states; and
 // [DeclineError.Construct] returns its construct.
 //
 // Each decoded value, a field's or, for a document element of

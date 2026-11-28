@@ -72,8 +72,7 @@ var ErrAbstractElement = errors.New("codec: the top-level element declaration ha
 //
 // Every instance Loc an error of Decode carries — a source fault's, a
 // violation's, an undecided check's, a decline's and item 8's — names the
-// document [WithURI] gives; without it, or with an empty uri, the URI
-// renders "?".
+// document [WithURI] gives, as WithURI's doc states.
 //
 // The first of these that applies is returned:
 //
