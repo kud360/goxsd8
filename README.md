@@ -490,7 +490,9 @@ Once `Generate` has written `gen/order`, a program in the same module with
 generated package, whose import path is the one `Target.Dir`'s doc derives
 for the `Dir` that `Generate` was given, so
 `github.com/kud360/goxsd8/testdata/readme/gen/order` for the program run in
-`testdata/readme/`:
+`testdata/readme/`. That has to be a second program, or a build after
+`Generate`, `goxsd8 gen` or `go generate` has written the package: a program
+importing `gen/order` does not compile until the package exists.
 
 ```go
 data, err := os.ReadFile("order.xml")
@@ -532,6 +534,11 @@ if err != nil {
 }
 fmt.Println(o.Item, *o.Kind) // [a b] x
 ```
+
+A program whose documents have different document elements reads each one's
+name with `codec.DocumentElementName` and chooses `T` itself; `go doc
+github.com/kud360/goxsd8/codec DocumentElementName` states why and names the
+example that does it.
 
 `codec.Append` encodes a value of the generated type back into a document. It
 takes the value, not `Decode`'s pointer to it, so pass `*o`, and names the
