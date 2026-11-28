@@ -157,6 +157,18 @@ func TestAppendNillable(t *testing.T) {
 		v.C.N = content[string, struct{}]{Content: "x"}
 		roundTrip(t, schemaOf(t, nilSharedNameSchema), rootName, v, `<r xmlns="urn:s"><c><n>x</n></c></r>`, deepEqual, strArms)
 	})
+	// The Nilled element is taken by its particle's attribution slot, as the
+	// Content arm's is: untaken, the wildcard's element is attributed where
+	// the content model expects s:a, item 6.
+	t.Run("a particle before a wildcard, Nilled", func(t *testing.T) {
+		type wildAfter struct {
+			A   nillable[string, struct{}]
+			Any anyElement
+		}
+		schema := schemaOf(t, `<xs:element name="r"><xs:complexType><xs:sequence><xs:element name="a" type="xs:string" nillable="true"/><xs:any processContents="skip"/></xs:sequence></xs:complexType></xs:element>`)
+		v := wildAfter{A: nilled[string, struct{}]{}, Any: anyElement{Space: "urn:o", Local: "w"}}
+		roundTrip(t, schema, rootName, v, "", deepEqual, strArms)
+	})
 	t.Run("a fixed value, plain T", func(t *testing.T) {
 		roundTrip(t, schemaOf(t, nilFixedRootSchema), rootName, nilStringRoot("A"), `<r xmlns="urn:s">A</r>`, deepEqual)
 	})
