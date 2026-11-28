@@ -47,7 +47,8 @@ type Root interface {
 // caller named a document that must exist; it is therefore never among
 // [AssemblyReport.UnfollowedRoots].
 //
-// [ParseReport] states how location is interpreted, an absolute path included.
+// [ParseReport] says how the resolver interprets location, and what to pass for
+// an absolute one.
 func RootAt(location string) Root { return documentRoot{location: location} }
 
 // HintAt returns the Root naming the schema document at location as a schema

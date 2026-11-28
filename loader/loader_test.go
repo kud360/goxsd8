@@ -169,6 +169,32 @@ func TestDirResolve(t *testing.T) {
 	if !errors.Is(err, ErrNotFound) {
 		t.Errorf("missing err = %v, want ErrNotFound", err)
 	}
+	// A relative miss names the location and the root, nothing else (#4077).
+	if got, want := err.Error(), `loader: "missing.xsd" not found under "`+root+`": loader: schema document not found`; got != want {
+		t.Errorf("missing err = %q, want %q", got, want)
+	}
+}
+
+// TestDirResolveAbsoluteMiss pins that an absolute location's not-found error
+// names the path Dir opened beneath the root beside the location as given, and
+// names it once where the two coincide, under Dir("/") (#4077).
+func TestDirResolveAbsoluteMiss(t *testing.T) {
+	root := t.TempDir()
+	absent := filepath.Join(t.TempDir(), "absent.xsd")
+	joined := filepath.Join(root, absent)
+
+	_, _, err := Dir(root).Resolve("", absent)
+	if !errors.Is(err, ErrNotFound) {
+		t.Fatalf("err = %v, want ErrNotFound", err)
+	}
+	if !strings.Contains(err.Error(), `opened "`+joined+`"`) {
+		t.Errorf("err = %q, want it to name the joined path %q", err, joined)
+	}
+
+	_, _, err = Dir("/").Resolve("", absent)
+	if got, want := err.Error(), `loader: "`+absent+`" not found under "/": loader: schema document not found`; got != want {
+		t.Errorf("Dir(\"/\") err = %q, want %q", got, want)
+	}
 }
 
 // TestCanonicalCase exercises canonicalCase directly, so it is portable to any

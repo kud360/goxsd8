@@ -63,6 +63,13 @@ func (d dirResolver) Resolve(namespace, location string) (io.ReadCloser, string,
 	}
 
 	f, err := os.Open(full)
+	if os.IsNotExist(err) && filepath.IsAbs(location) && full != filepath.Clean(location) {
+		// An absolute location reads as "that file does not exist" unless the
+		// path Dir actually opened is named beside it; under Dir("/") the two
+		// coincide, and the plain message below already names it.
+		return nil, "", fmt.Errorf("loader: %q not found under %q (an absolute location is joined beneath the root: opened %q): %w",
+			location, d.root, full, ErrNotFound)
+	}
 	if os.IsNotExist(err) {
 		return nil, "", fmt.Errorf("loader: %q not found under %q: %w", location, d.root, ErrNotFound)
 	}
