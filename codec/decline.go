@@ -159,14 +159,14 @@ type construct uint8
 // definition} or each {type table} slot in slot order, by its type's {abstract}, then
 // each of its governing types in slot order, each by its content, its content
 // {particle}, each particle in order, its attribute uses in order and its {assertions}
-// by constructInScopeAssertion, and each value, an element of a declaration with a
-// {type table} by constructTypeTable once its attributes are written, ahead of its
-// content, the {attribute wildcard} field's attributes by constructXsiAttribute and
-// constructQNameGovernedAttribute among the value's, and an open-content field's child by
-// constructInterleaveParticleChild, where its content model attributes it, before
-// constructLocallyTypedOpenChild, where what governs it is read. Append also declines
-// constructEntityType after every other construct, for an ·ENTITY value· held raw that
-// the written document's assessment finds (assessWritten). Append declines by
+// by constructInScopeAssertion, and each value, the {attribute wildcard} field's
+// attributes by constructXsiAttribute and constructQNameGovernedAttribute among the
+// value's, then an element of a declaration with a {type table} by constructTypeTable
+// once all its attributes are written, ahead of its content, and an open-content field's
+// child by constructInterleaveParticleChild, where its content model attributes it,
+// before constructLocallyTypedOpenChild, where what governs it is read. Append also
+// declines constructEntityType after every other construct, for an ·ENTITY value· held
+// raw that the written document's assessment finds (assessWritten). Append declines by
 // constructUntrackedModel too, once every particle of a content model holding a wildcard
 // particle, a nested flattened particle or a nested occurrence field, at any depth, or
 // every basic particle a flattened content {particle} reaches, is examined. A particle
@@ -204,9 +204,9 @@ const (
 	constructNoCanonical
 	constructQNameSpelling
 	constructValueConstraint
-	constructTypeTable
 	constructXsiAttribute
 	constructQNameGovernedAttribute
+	constructTypeTable
 	constructLocallyTypedMatch
 	constructInterleaveParticleChild
 	constructLocallyTypedOpenChild
@@ -234,9 +234,9 @@ var constructNames = [...]string{
 	constructNoCanonical:             "a value with no canonical representation",
 	constructQNameSpelling:           "an xs:QName or xs:NOTATION value with no spelling Append writes where it is written",
 	constructValueConstraint:         "a value whose agreement with its value constraint value.ConstraintMatches does not decide, or an empty element's value its default replaces",
-	constructTypeTable:               "an element whose declaration's {type table}, over the attributes Append writes and its [inherited attributes], does not select the governing type Append writes it as, or leaves the selection undecided",
 	constructXsiAttribute:            "xsi:type, xsi:nil, xsi:schemaLocation or xsi:noNamespaceSchemaLocation held in an {attribute wildcard} field, xsi:type in the Attributes of an element of type xs:anyType itself, or xsi:nil in a strict or lax wildcard's match, a strict or lax {open content}'s child or an xs:anyType element's content",
 	constructQNameGovernedAttribute:  "an attribute a strict or lax {attribute wildcard} field holds whose governing top-level attribute declaration's {type definition} is xs:QName- or xs:NOTATION-dependent: an atomic type of either primitive, a list whose {item type definition} is one, or a union with one among its basic members",
+	constructTypeTable:               "an element whose declaration's {type table}, over the attributes Append writes and its [inherited attributes], does not select the governing type Append writes it as, or leaves the selection undecided",
 	constructLocallyTypedMatch:       "a strict or lax wildcard's match whose expanded name no top-level element declaration names and has a ·locally declared type· in the complex type it is written into",
 	constructInterleaveParticleChild: "a child of an interleave {open content} that the {particle} takes where Append writes it",
 	constructLocallyTypedOpenChild:   "a child of a strict or lax {open content} that has a ·locally declared type· in the complex type it is written into",
