@@ -468,9 +468,9 @@ the generated type, here `order.Order`; `go doc
 github.com/kud360/goxsd8/codec Decode` states every error it returns.
 `go doc github.com/kud360/goxsd8/codec` states when to run
 `codec.CheckDecode`, which reports whether `Decode` returns, for a
-declaration and a generated type, its item 5 error, a construct outside the
-decoded slice, or its item 6 error, a type that is not the one codegen emits
-for the declaration. `go doc github.com/kud360/goxsd8/codec CheckDecode`
+declaration and a generated type, the `*codec.DeclineError` of a construct
+outside the decoded slice or the `codec.ErrTypeMismatch` error of a type that
+is not the one codegen emits for the declaration. `go doc github.com/kud360/goxsd8/codec CheckDecode`
 states what it returns, and `ExampleCheckDecode` in `codec/example_test.go`
 runs it.
 `codec.Decode` and `codec.Append` take the compiled `*xsd.Schema`, so a
@@ -500,27 +500,27 @@ if err != nil {
 	rule, _ := xsderr.RuleOf(err)
 	switch vs := codec.ViolationsOf(err); {
 	case vs != nil:
-		// Decode's item 3: every violation of a rejected instance.
+		// A charged instance: every violation, ViolationsOf's.
 		for _, v := range vs {
 			fmt.Println(v.Loc, v.Rule)
 		}
 	case rule == xsderr.RuleXMLWellFormed:
-		// Decode's item 2: the instance's source fault.
+		// The instance's source fault, an *xsderr.Error.
 		fmt.Println(err)
 	case errors.As(err, &ue):
-		// Decode's item 4: the check the validator left undecided.
+		// An *UndecidedError: the check the validator left undecided.
 		fmt.Println(ue.Unevaluated().Loc(), ue.Unevaluated().Rule())
 	case errors.As(err, &de):
-		// Decode's items 5 and 7: the construct codec declined, charged to
-		// an instance Loc.
+		// A *DeclineError: the construct codec declined, charged to an
+		// instance Loc.
 		loc, _ := de.Loc()
 		fmt.Println(loc, de.Construct())
 	case errors.Is(err, codec.ErrTypeMismatch):
-		// Decode's item 6: T does not match the declaration.
+		// ErrTypeMismatch: T does not match the declaration.
 		fmt.Println(err)
 	default:
-		// The plain errors of Decode's items 1 and 5, and its item 8's
-		// fault of the backend.
+		// A plain error: a fault of the arguments, of the schema or of
+		// the backend.
 		fmt.Println(err)
 	}
 	log.Fatal(err)
@@ -541,23 +541,22 @@ if err != nil {
 	var de *codec.DeclineError
 	switch {
 	case errors.Is(err, codec.ErrInvalidValue):
-		// Append's item 6: a value no valid document holds, named by its Go
-		// path.
+		// ErrInvalidValue: a value no valid document holds, or a
+		// violation of the document Append wrote.
 		fmt.Println(err)
 	case errors.As(err, &de):
-		// Append's items 4 and 7: a construct, or a value, that codec
-		// declines.
+		// A *DeclineError: a construct, or a value, that codec declines.
 		fmt.Println(de.Construct())
 	case errors.Is(err, codec.ErrTypeMismatch):
-		// Append's item 5: T does not match the declaration.
+		// ErrTypeMismatch: T does not match the declaration.
 		fmt.Println(err)
 	case errors.Is(err, codec.ErrUndeclaredElement), errors.Is(err, codec.ErrAbstractElement):
-		// Append's items 2 and 3: the schema declares no top-level element
-		// of that name, or declares it abstract.
+		// ErrUndeclaredElement or ErrAbstractElement: the schema declares
+		// no top-level element of that name, or declares it abstract.
 		fmt.Println(err)
 	default:
-		// The plain errors of Append's item 1, a fault of the arguments,
-		// and a fault of the backend.
+		// Any other error: a plain error, a fault of the arguments or of
+		// the backend, or the *UndecidedError of an undecided document.
 		fmt.Println(err)
 	}
 	log.Fatal(err)
