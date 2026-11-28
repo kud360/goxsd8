@@ -17,9 +17,12 @@ import (
 // cta0010's: r, whose lang is inheritable, holds repeated c, of no type, which
 // selects xs:string where lang is "en", fr, a sequence of t, where it has
 // another lang, and xs:error where it has none, read from r's. ttAnySchema's r
-// of xs:anyType selects xs:string where its k is "s". ttAssertSchema's r of
+// of xs:anyType selects xs:string where its k is "s", and ttAnyChildSchema's r,
+// carrying a k of its own, holds c of that table. ttAssertSchema's r of
 // base selects asserted, base extended by z and asserting a is "ok", where it
-// has a kind. ttUndecidedSchema's r selects num by a {test} the CTA evaluator
+// has a kind. ttWildSchema's r, of wb, a sequence of a with a skip {attribute
+// wildcard}, selects wn, wb extended by n, where it carries w, an attribute
+// only the wildcard admits. ttUndecidedSchema's r selects num by a {test} the CTA evaluator
 // declines. ttFixedSchema's r, an xs:string, nillable and fixed "a", which
 // goshape.Nillable reads as not nillable, selects xs:token where it carries x.
 const (
@@ -29,9 +32,13 @@ const (
 	ttLangSchema = `<xs:complexType name="fr"><xs:sequence><xs:element name="t" type="xs:string"/></xs:sequence></xs:complexType>
 <xs:element name="r"><xs:complexType><xs:sequence><xs:element name="c" maxOccurs="unbounded"><xs:alternative test="@lang = 'en'" type="xs:string"/><xs:alternative test="@lang" type="s:fr"/><xs:alternative type="xs:error"/></xs:element></xs:sequence>
 <xs:attribute name="lang" type="xs:string" inheritable="true"/></xs:complexType></xs:element>`
-	ttAnySchema    = `<xs:element name="r"><xs:alternative test="@k = 's'" type="xs:string"/></xs:element>`
-	ttAssertSchema = ttTypes + `<xs:complexType name="asserted"><xs:complexContent><xs:extension base="s:base"><xs:sequence><xs:element name="z" type="xs:string"/></xs:sequence><xs:assert test="s:a = 'ok'"/></xs:extension></xs:complexContent></xs:complexType>
+	ttAnySchema      = `<xs:element name="r"><xs:alternative test="@k = 's'" type="xs:string"/></xs:element>`
+	ttAnyChildSchema = `<xs:element name="r"><xs:complexType><xs:sequence><xs:element name="c"><xs:alternative test="@k = 's'" type="xs:string"/></xs:element></xs:sequence><xs:attribute name="k" type="xs:string"/></xs:complexType></xs:element>`
+	ttAssertSchema   = ttTypes + `<xs:complexType name="asserted"><xs:complexContent><xs:extension base="s:base"><xs:sequence><xs:element name="z" type="xs:string"/></xs:sequence><xs:assert test="s:a = 'ok'"/></xs:extension></xs:complexContent></xs:complexType>
 <xs:element name="r" type="s:base"><xs:alternative test="@kind" type="s:asserted"/></xs:element>`
+	ttWildSchema = `<xs:complexType name="wb"><xs:sequence><xs:element name="a" type="xs:string"/></xs:sequence><xs:anyAttribute namespace="##local" processContents="skip"/></xs:complexType>
+<xs:complexType name="wn"><xs:complexContent><xs:extension base="s:wb"><xs:sequence><xs:element name="n" type="xs:int"/></xs:sequence></xs:extension></xs:complexContent></xs:complexType>
+<xs:element name="r" type="s:wb"><xs:alternative test="@w" type="s:wn"/></xs:element>`
 	ttUndecidedSchema = ttTypes + `<xs:element name="r" type="s:base"><xs:alternative test="count(@kind) > 0" type="s:num"/></xs:element>`
 	ttFixedSchema     = `<xs:element name="r" type="xs:string" nillable="true" fixed="a"><xs:alternative test="@x" type="xs:token"/></xs:element>`
 )
@@ -41,7 +48,8 @@ const (
 // Zzd are ttZz to ttZzdType; ttLangSchema's R, C, CString, CFr and Fr are
 // ttLang to ttFr; ttAnySchema's R, RString and RAnyType are ttAny to
 // ttAnyAnyType; ttAssertSchema's R, RAsserted, Asserted and RBase are ttAs to
-// ttAsBase; and ttFixedSchema's R, RToken and RString are ttFx to ttFxString.
+// ttAsBase; ttWildSchema's R, RWn, Wn, RWb and Wb are ttWd to ttWb; and
+// ttFixedSchema's R, RToken and RString are ttFx to ttFxString.
 type (
 	ttZz     interface{ isTtZz() }
 	ttZzZz   struct{ Zz ttZzType }
@@ -69,6 +77,14 @@ type (
 	ttAnyString  struct{ String string }
 	ttAnyAnyType struct{ AnyType anyType }
 
+	ttAnyCh struct {
+		C ttAnyC
+		K *string
+	}
+	ttAnyC        interface{ isTtAnyC() }
+	ttAnyCString  struct{ String string }
+	ttAnyCAnyType struct{ AnyType anyType }
+
 	ttAs         interface{ isTtAs() }
 	ttAsAsserted struct{ Asserted ttAsserted }
 	ttAsserted   struct {
@@ -78,29 +94,48 @@ type (
 	}
 	ttAsBase struct{ Base ttBase }
 
+	ttWd   interface{ isTtWd() }
+	ttWdWn struct{ Wn ttWn }
+	ttWn   struct {
+		A            string
+		N            int32
+		AnyAttribute []anyAttribute
+	}
+	ttWdWb struct{ Wb ttWb }
+	ttWb   struct {
+		A            string
+		AnyAttribute []anyAttribute
+	}
+
 	ttFx       interface{ isTtFx() }
 	ttFxToken  struct{ Token string }
 	ttFxString struct{ String string }
 )
 
-func (ttZzZz) isTtZz()        {}
-func (ttZzZzd) isTtZz()       {}
-func (ttCString) isTtC()      {}
-func (ttCFr) isTtC()          {}
-func (ttAnyString) isTtAny()  {}
-func (ttAnyAnyType) isTtAny() {}
-func (ttAsAsserted) isTtAs()  {}
-func (ttAsBase) isTtAs()      {}
-func (ttFxToken) isTtFx()     {}
-func (ttFxString) isTtFx()    {}
+func (ttZzZz) isTtZz()          {}
+func (ttZzZzd) isTtZz()         {}
+func (ttCString) isTtC()        {}
+func (ttCFr) isTtC()            {}
+func (ttAnyString) isTtAny()    {}
+func (ttAnyAnyType) isTtAny()   {}
+func (ttAnyCString) isTtAnyC()  {}
+func (ttAnyCAnyType) isTtAnyC() {}
+func (ttAsAsserted) isTtAs()    {}
+func (ttAsBase) isTtAs()        {}
+func (ttWdWn) isTtWd()          {}
+func (ttWdWb) isTtWd()          {}
+func (ttFxToken) isTtFx()       {}
+func (ttFxString) isTtFx()      {}
 
 // The branch sets of the interfaces above.
 var (
-	ttZzBranches  = WithBranches[ttZz](ttZzZz{}, ttZzZzd{})
-	ttCBranches   = WithBranches[ttC](ttCString{}, ttCFr{})
-	ttAnyBranches = WithBranches[ttAny](ttAnyString{}, ttAnyAnyType{})
-	ttAsBranches  = WithBranches[ttAs](ttAsAsserted{}, ttAsBase{})
-	ttFxBranches  = WithBranches[ttFx](ttFxToken{}, ttFxString{})
+	ttZzBranches   = WithBranches[ttZz](ttZzZz{}, ttZzZzd{})
+	ttCBranches    = WithBranches[ttC](ttCString{}, ttCFr{})
+	ttAnyBranches  = WithBranches[ttAny](ttAnyString{}, ttAnyAnyType{})
+	ttAnyCBranches = WithBranches[ttAnyC](ttAnyCString{}, ttAnyCAnyType{})
+	ttAsBranches   = WithBranches[ttAs](ttAsAsserted{}, ttAsBase{})
+	ttFxBranches   = WithBranches[ttFx](ttFxToken{}, ttFxString{})
+	ttWdBranches   = WithBranches[ttWd](ttWdWn{}, ttWdWb{})
 	// ttNumBaseBranches are ttR's branches for a table of num and base alone.
 	ttNumBaseBranches = WithBranches[ttR](ttRNum{}, ttRBase{})
 )
@@ -117,7 +152,10 @@ func TestAppendTypeTableTypesAreCodegens(t *testing.T) {
 		{ttLangSchema, []string{"type R struct {\n\tC    []C\n\tLang *string\n}\n", "type C interface {\n\tisC()\n}\n",
 			"type CString struct {\n\tString string\n}\n", "type CFr struct {\n\tFr Fr\n}\n", "type Fr struct {\n\tT string\n}\n"}},
 		{ttAnySchema, []string{"type R interface {\n\tisR()\n}\n", "type RString struct {\n\tString string\n}\n", "type RAnyType struct {\n\tAnyType AnyType\n}\n"}},
+		{ttAnyChildSchema, []string{"type R struct {\n\tC C\n\tK *string\n}\n", "type C interface {\n\tisC()\n}\n", "type CString struct {\n\tString string\n}\n", "type CAnyType struct {\n\tAnyType AnyType\n}\n"}},
 		{ttAssertSchema, []string{"type RAsserted struct {\n\tAsserted Asserted\n}\n", "type Asserted struct {\n\tA    string\n\tZ    string\n\tKind *string\n}\n", "type RBase struct {\n\tBase Base\n}\n"}},
+		{ttWildSchema, []string{"type RWn struct {\n\tWn Wn\n}\n", "type Wn struct {\n\tA            string\n\tN            int32\n\tAnyAttribute []AnyAttribute\n}\n",
+			"type RWb struct {\n\tWb Wb\n}\n", "type Wb struct {\n\tA            string\n\tAnyAttribute []AnyAttribute\n}\n"}},
 		{ttFixedSchema, []string{"type R interface {\n\tisR()\n}\n", "type RToken struct {\n\tToken string\n}\n", "type RString struct {\n\tString string\n}\n"}},
 	}
 	for _, row := range rows {
@@ -171,6 +209,8 @@ func TestAppendTypeTable(t *testing.T) {
 		{"one governing type beside xs:error's slot", ttErrorSchema, ttRound(ttErr{A: "x"}, `<r xmlns="urn:s"><a>x</a></r>`)},
 		{"a parent's inheritable attribute", ttInheritSchema, ttRound(ttInh{Ev: []ttEv{{When: ttWhenBoolean{Boolean: true}, Type: str("bool")}}}, "", inh...)},
 		{"a grandparent's, through a parent handing down nothing of its own", ttInheritSchema, ttRound(ttInh{Ev: []ttEv{{When: ttWhenBoolean{Boolean: true}}}, Type: str("bool")}, "", inh...)},
+		{"a sibling's own attribute, not handed to the next sibling", ttInheritSchema,
+			ttRound(ttInh{Ev: []ttEv{{When: ttWhenInt{Int: 1}, Type: str("int")}, {When: ttWhenBoolean{Boolean: true}}}, Type: str("bool")}, "", inh...)},
 		{"no inherited attribute, the default", ttInheritSchema, ttRound(ttInh{Ev: []ttEv{{When: ttWhenUt{Ut: ttUtInt(1)}}}}, "", inh...)},
 		{"a parent's defaulted attribute, written, over a grandparent's", ttInheritSchema, ttRound(ttInh{Evd: &ttEvd{When: ttWhenInt{Int: 1}, Type: "int"}, Type: str("bool")}, "", inh...)},
 		{"a branch of simple type", ttInheritSchema, ttRound(ttInh{V: ttVInt{Int: 5}, Type: str("int")}, "", inh...)},
@@ -186,6 +226,8 @@ func TestAppendTypeTable(t *testing.T) {
 		{"an inherited attribute selects a simple arm", ttLangSchema, ttRound(ttLang{C: []ttC{ttCString{String: "x"}}, Lang: str("en")}, "", ttCBranches)},
 		{"an inherited attribute selects a complex arm", ttLangSchema, ttRound(ttLang{C: []ttC{ttCFr{Fr: ttFr{T: "y"}}}, Lang: str("de")}, "", ttCBranches)},
 		{"an xs:anyType arm's raw attribute", ttAnySchema, ttRound(ttAny(ttAnyAnyType{AnyType: anyType{Attributes: []anyAttribute{{Local: "k", Value: "t"}}, Text: "u"}}), "", ttAnyBranches)},
+		{"an xs:anyType arm's own attributes, not its parent's", ttAnyChildSchema, ttRound(ttAnyCh{C: ttAnyCAnyType{AnyType: anyType{Text: "u"}}, K: str("s")}, "", ttAnyCBranches)},
+		{"an attribute an {attribute wildcard}'s field holds", ttWildSchema, ttRound(ttWd(ttWdWn{Wn: ttWn{A: "x", N: 1, AnyAttribute: []anyAttribute{{Local: "w", Value: "1"}}}}), `<r xmlns="urn:s" w="1"><a>x</a><n>1</n></r>`, ttWdBranches)},
 		{"a fixed, nillable declaration goshape.Nillable reads as not nillable", ttFixedSchema, ttRound(ttFx(ttFxString{String: "a"}), `<r xmlns="urn:s">a</r>`, ttFxBranches)},
 		{"an alternative type's {assertions}, kept", ttAssertSchema, ttRound(ttAs(ttAsAsserted{Asserted: ttAsserted{A: "ok", Z: "z", Kind: str("k")}}), "", ttAsBranches)},
 	}
@@ -247,6 +289,7 @@ func TestAppendTypeTableRefuses(t *testing.T) {
 		{"an xs:anyType arm's raw attribute selecting the simple one", ttAnySchema,
 			ttRefused(ttAny(ttAnyAnyType{AnyType: anyType{Attributes: []anyAttribute{{Local: "k", Value: "s"}}}}), r, ttAnyBranches)},
 		{"a simple arm whose {test} reads an attribute it cannot carry", ttAnySchema, ttRefused(ttAny(ttAnyString{String: "u"}), r, ttAnyBranches)},
+		{"an {attribute wildcard}'s attribute selecting the other branch", ttWildSchema, ttRefused(ttWd(ttWdWb{Wb: ttWb{A: "x", AnyAttribute: []anyAttribute{{Local: "w", Value: "1"}}}}), r, ttWdBranches)},
 		{"a branch only xsi:type selects", ttSimpleSchema, ttRefused(ttSimple(ttSimpleInteger{}), r, ttSimpleBranches)},
 		{"a fixed, nillable declaration's arm its attributes do not select", ttFixedSchema, ttRefused(ttFx(ttFxToken{Token: "a"}), r, ttFxBranches)},
 		{"an undecided selection", ttUndecidedSchema, ttRefused(ttR(ttRBase{Base: ttBase{A: "x"}}), r, ttNumBaseBranches)},
@@ -262,6 +305,21 @@ func TestAppendTypeTableRefuses(t *testing.T) {
 	if err == nil || !bytes.Contains([]byte(err.Error()), []byte(want)) {
 		t.Errorf("Append = %v, want a detail holding %q", err, want)
 	}
+}
+
+// TestAppendTypeTableInvalid pins item 6 of Append's doc for a {type table}'s
+// interface: nil, where nil does not mean absent, and a dynamic type the
+// WithBranches set places at no branch, a pointer to a branch, each of which
+// Decode never returns, and nothing is written.
+func TestAppendTypeTableInvalid(t *testing.T) {
+	schema := schemaOf(t, ttRootSchema)
+	got, err := appendChecked(t, nil, schema, strict.New(), rootName, ttR(nil), ttRBranches)
+	invalidValue(t, err, "codec: Append: ttR is nil, the sealed interface over the governing types of element {urn:s}r declared at ")
+	if got != nil {
+		t.Errorf("Append wrote %q", got)
+	}
+	_, err = appendChecked(t, nil, schema, strict.New(), rootName, ttR(&ttRNum{}), ttRBranches)
+	invalidValue(t, err, "codec: Append: ttR holds a *codec.ttRNum, which the WithBranches set of codec.ttR places at no branch of the governing types of element {urn:s}r declared at ")
 }
 
 // TestAppendTypeTableAssertions pins item 4's walk of every governing type:
